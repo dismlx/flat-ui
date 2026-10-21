@@ -1,0 +1,99 @@
+## Interface: 16001
+## Title: Flat UI
+## Notes: Thin dark borders on the default interface. /flatui
+## Version: 0.4.82
+## Author: dismlx
+## X-License: MIT
+## X-Curse-Project-ID: 1750813
+## SavedVariables: FlatUIDB
+## SavedVariablesPerCharacter: FlatUICharDB
+## AddonCompartmentFunc: FlatUI_OnAddonCompartmentClick
+## IconTexture: Interface\Icons\INV_Misc_Gear_01
+
+Config.lua
+Core.lua
+TaintScan.lua
+Scale.lua
+Fonts.lua
+Nameplates.lua
+PlateColours.lua
+PlateText.lua
+PlateClick.lua
+CombatBurst.lua
+CombatText.lua
+ScrollText.lua
+Bars.lua
+ActionBars.lua
+OwnBars.lua
+OwnPaint.lua
+ButtonText.lua
+Cooldowns.lua
+ButtonStates.lua
+ClassData.lua
+Trackers.lua
+TrackerSound.lua
+TrackerSlots.lua
+CooldownData.lua
+IconRow.lua
+Tracking.lua
+Defensives.lua
+PartyCooldowns.lua
+PartySync.lua
+EnemyCooldowns.lua
+OwnBuffs.lua
+TrackerShapes.lua
+TrackerKinds.lua
+TrackerMarks.lua
+ProcData.lua
+Procs.lua
+ProcArt.lua
+ProcGlow.lua
+ButtonEffects.lua
+ProcTriggers.lua
+TrackerShare.lua
+BagSort.lua
+Windows.lua
+Items.lua
+UnitFrames.lua
+UnitFramePortrait.lua
+UnitFrameLevel.lua
+UnitFrameCells.lua
+UnitFrameLooks.lua
+UnitFrameHead.lua
+UnitText.lua
+UnitParts.lua
+UnitExtras.lua
+Hud.lua
+XpBar.lua
+Fade.lua
+Chat.lua
+ChatText.lua
+HealthColour.lua
+CastTime.lua
+LayoutSpots.lua
+LayoutText.lua
+Movers.lua
+BarBlock.lua
+BarBlockButtons.lua
+Blocks.lua
+Tooltip.lua
+CastBarSize.lua
+PetFrameSize.lua
+ConfigGame.lua
+Options.lua
+Reload.lua
+Panel.lua
+SetupSteps.lua
+SetupProfiles.lua
+SetupDraw.lua
+SetupDrawLook.lua
+SetupDrawPlates.lua
+SetupDrawBars.lua
+SetupDrawUnits.lua
+SetupDrawCasts.lua
+SetupDrawHud.lua
+SetupDrawWindows.lua
+SetupDrawChat.lua
+SetupDrawTrackers.lua
+SetupDrawMovers.lua
+Setup.lua
