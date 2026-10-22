@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
--- The look of the options window: one table of tokens (surfaces, lines, text, accent) that every colour of the window reads, and the seven
+-- The look of the options window: one table of tokens (surfaces, lines, text, accent) that every colour of the window reads, and the eight
 -- choices that change it. The choices are held per account in FlatUIDB.panel beside the place of the window, outside every profile, so a
 -- profile switch does not reshape the window. Panel.lua draws with these functions and keeps no colour of its own.
 
@@ -11,7 +11,7 @@ local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
 local FONTS = MEDIA .. "Fonts\\"
 
 local DEFAULTS = { accent = "indigo", accentColour = "ff9a9cf0", tone = "graphite", borders = "none", corners = "square", density = "comfortable",
-	font = "sans", scale = 100 }
+	font = "sans", scale = 100, sidebar = "full" }
 
 -- Tokens ------------------------------------------------------------------------------------------
 
@@ -121,6 +121,44 @@ function Look.RowHeight()
 	return ROWS[Look.Get("density")]
 end
 
+-- The width of the sidebar: Icons and names, Names only or Icon rail.
+local SIDES = { full = 232, names = 200, rail = 56 }
+function Look.SideWidth()
+	return SIDES[Look.Get("sidebar")]
+end
+
+-- What the account remembers of the window besides its look: the page it was left on, and the groups of the sidebar that are folded.
+function Look.Page()
+	local store = Look.Store(false)
+	return store and type(store.page) == "string" and store.page or nil
+end
+
+function Look.SetPage(key)
+	local store = Look.Store(true)
+	if store and store.page ~= key then
+		store.page = key
+	end
+end
+
+function Look.Folded(id)
+	local store = Look.Store(false)
+	return store ~= nil and type(store.folded) == "table" and store.folded[id] == true
+end
+
+function Look.Fold(id, folded)
+	local store = Look.Store(folded)
+	if not store then
+		return
+	end
+	if type(store.folded) ~= "table" then
+		store.folded = {}
+	end
+	store.folded[id] = folded or nil
+	if next(store.folded) == nil then
+		store.folded = nil
+	end
+end
+
 function Look.Scale()
 	return Look.Get("scale") / 100
 end
@@ -128,9 +166,8 @@ end
 -- Colours -------------------------------------------------------------------------------------------
 
 local classRGB
--- Red, green and blue of the accent. A class colour is read while the client gives it and then kept.
-function Look.AccentRGB()
-	local id = Look.Get("accent")
+-- Red, green and blue of an accent: a preset, the class colour (read while the client gives it and then kept) or the custom colour.
+local function PresetRGB(id)
 	if id == "class" then
 		local r, g, b = ns.ClassColour()
 		if r then
@@ -144,6 +181,11 @@ function Look.AccentRGB()
 		return Hex(Look.Get("accentColour"):sub(3))
 	end
 	return Hex(ACCENTS[id])
+end
+Look.PresetRGB = PresetRGB
+
+function Look.AccentRGB()
+	return PresetRGB(Look.Get("accent"))
 end
 
 local function Accent(token)

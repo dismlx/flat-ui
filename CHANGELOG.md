@@ -1,3 +1,7 @@
+## 0.4.96
+
+- **Options window**: the sidebar has **Home**, **Flat UI setup**, **Profiles**, **Move frames** and six groups of modules with icons. The switch of a module is in the page header. **Home** shows the profile, the accent, recent changes with **Undo**, the modules and what needs a reload. New **Sidebar** setting.
+
 ## 0.4.95
 
 - **Nameplates**: **Name outline**, **Health text outline** and **Spell name outline** now offer **None**, **Thin** and **Thick**. There is a new **Text font**. **Name colour** has **Class**, and **By reaction** is now **Reaction**. **Health text format** has **Current / max**. **Level box** can be **Hidden**. Health text now follows **Number style** of the unit frames. **Health text format** choices are now **Current**, **Current and percent** and **Missing**.

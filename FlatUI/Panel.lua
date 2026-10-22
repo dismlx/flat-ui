@@ -7,10 +7,14 @@ local ADDON_NAME, ns = ...
 local NAME = "FlatUIOptionsFrame"
 local WIDTH, HEIGHT = 1040, 680
 local TITLE = 36
+-- LEFT, HEADER and RIGHT_W are the measures Setup builds its pages for (ns.PanelKit). The options pages use SIDE and CW, which follow Sidebar, and
+-- HEAD, the header with the line under the title and the module switch.
 local LEFT = 210
 local STRIP = 40
 local HEADER = 48
-local RIGHT_W, RIGHT_H = WIDTH - LEFT, HEIGHT - TITLE - STRIP - HEADER
+local HEAD = 64
+local SIDE, CW = 232, WIDTH - 232
+local RIGHT_W, RIGHT_H = WIDTH - LEFT, HEIGHT - TITLE - STRIP - HEAD
 local PAD = 16
 local ROW = 36
 local SECTION = 34
@@ -224,26 +228,35 @@ local function Chevron(parent)
 	end
 end
 
--- A flat button.
-local function Button(parent, text, width, onClick)
+-- A flat button. A primary button is in the accent.
+local function Button(parent, text, width, onClick, primary)
 	local button = Frame(parent)
 	button:SetSize(width, BUTTON)
 	local outline = ns.Outline(button, button, true)
 	local label = Label(button, "GameFontHighlight", "CENTER")
 	label:SetPoint("CENTER", button, "CENTER", 0, 0)
 	label:SetText(text)
+	if primary then
+		Tint(label, "on-accent")
+	end
 	local hover = false
+	local function Tone()
+		if primary then
+			return hover and "accent-hover" or "accent"
+		end
+		return hover and "hover" or "raised"
+	end
 	Painted(function()
-		Backing(outline, hover and "hover" or "raised", 1, "line-strong")
+		Backing(outline, Tone(), 1, "line-strong")
 	end)
 	Clickable(button, onClick)
 	button:SetScript("OnEnter", function()
 		hover = true
-		Backing(outline, "hover", 1, "line-strong")
+		Backing(outline, Tone(), 1, "line-strong")
 	end)
 	button:SetScript("OnLeave", function()
 		hover = false
-		Backing(outline, "raised", 1, "line-strong")
+		Backing(outline, Tone(), 1, "line-strong")
 	end)
 	return button, label
 end
@@ -383,7 +396,8 @@ end
 local function NewRow(parent, y, text, tip)
 	local row = { active = true, tip = tip or "" }
 	local frame = Frame(parent)
-	frame:SetSize(ROW_W, ROW)
+	-- Its width is the width of what it hangs from, less the two margins: the options pages and setup have different columns.
+	frame:SetHeight(ROW)
 	frame:EnableMouse(true)
 	row.frame = frame
 	local hover = Fill(frame, "BACKGROUND")
@@ -405,6 +419,7 @@ local function NewRow(parent, y, text, tip)
 	function row.Place(top)
 		frame:ClearAllPoints()
 		frame:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, -top)
+		frame:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -PAD, -top)
 	end
 	function row.Changed()
 		RefreshAll()
@@ -503,7 +518,12 @@ local function Write(item, value)
 	if item.write then
 		return item.write(value)
 	end
-	return ns.Set(item.path, value)
+	local before = ns.Get(item.path)
+	local result = ns.Set(item.path, value)
+	if ns.PanelHome then
+		ns.PanelHome.Noted(item, before, ns.Get(item.path))
+	end
+	return result
 end
 
 local function AddBool(row, item)
@@ -1266,58 +1286,31 @@ local function BuildModel()
 			for _, item in ipairs(page) do
 				if item.section then
 					entry.sections[#entry.sections + 1] = item.section
+				elseif item.key == "enabled" and item.kind == "bool" and not item.page and not entry.switchItem then
+					-- The switch of the module is shown in the header of the page, and not as a row.
+					entry.switchItem = item
 				end
 			end
 			model.pages[#model.pages + 1] = entry
 			model.byKey[page.key] = entry
 		end
 	end
-	model.profiles = { label = "Profiles", profiles = true, sections = { "Profile", "Share" } }
+	model.profiles = { key = "profiles", label = "Profiles", profiles = true, sections = { "Profile", "Share" } }
+	model.home = { key = "home", label = "Home", home = true, sections = {} }
 	return model
 end
 
--- The pages in the order the left column lists them: a page with a parent comes under it, indented.
-local function NavOrder()
-	local list, placed, children = {}, {}, {}
-	local function HasParent(entry)
-		return entry.parent ~= nil and entry.parent ~= entry.key and ui.model.byKey[entry.parent] ~= nil
-	end
-	for _, entry in ipairs(ui.model.pages) do
-		if HasParent(entry) then
-			children[entry.parent] = children[entry.parent] or {}
-			table.insert(children[entry.parent], entry)
-		end
-	end
-	local function Add(entry, depth)
-		if not placed[entry] then
-			placed[entry] = true
-			list[#list + 1] = { entry = entry, depth = depth }
-			for _, child in ipairs(children[entry.key] or {}) do
-				Add(child, depth + 1)
-			end
-		end
-	end
-	for _, entry in ipairs(ui.model.pages) do
-		if not HasParent(entry) then
-			Add(entry, 0)
-		end
-	end
-	-- Pages that name each other as parents are listed as they come.
-	for _, entry in ipairs(ui.model.pages) do
-		Add(entry, 0)
-	end
-	return list
-end
-
 local function BuildView(entry)
-	local scroller = Scroller(ui.right, RIGHT_W, RIGHT_H)
-	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEADER)
+	local scroller = Scroller(ui.right, CW, RIGHT_H)
+	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEAD)
 	local view = { scroller = scroller, rows = {}, sections = {} }
 	local y = 8
 	for _, item in ipairs(entry.page) do
 		if item.section then
 			view.sections[#view.sections + 1] = y
 			y = Header(scroller.child, item.section, y)
+		elseif item == entry.switchItem then
+			-- It is the switch in the header.
 		elseif item.kind == "entries" then
 			y = y + editor.Add(scroller.child, entry.page, item, y, view)
 		elseif ns.RowShown(item.path) then
@@ -1381,8 +1374,8 @@ local function Removable(name, current)
 end
 
 local function BuildProfiles()
-	local scroller = Scroller(ui.right, RIGHT_W, RIGHT_H)
-	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEADER)
+	local scroller = Scroller(ui.right, CW, RIGHT_H)
+	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEAD)
 	local child = scroller.child
 	local view = { scroller = scroller, rows = {}, sections = {} }
 	for _, name in ipairs(PROFILE_CALLS) do
@@ -1624,114 +1617,77 @@ local function BuildProfiles()
 	return view
 end
 
--- The left column --------------------------------------------------------------------------------
+-- Home, and the pages the player goes to --------------------------------------------------------------
 
-local function NavButton(index)
-	local button = ui.nav[index]
-	if button then
-		return button
-	end
-	local frame = Frame(ui.navScroller.child)
-	local fill = Fill(frame, "BACKGROUND")
-	fill:SetAllPoints(frame)
-	local mark = Fill(frame, "ARTWORK")
-	mark:SetWidth(2)
-	mark:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-	mark:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-	local text = Label(frame, "GameFontHighlight", "LEFT")
-	button = { frame = frame, text = text }
-	local function Paint()
-		fill:SetShown(button.selected == true or button.hover == true)
-		Solid(fill, button.selected and "raised" or "hover")
-		mark:SetShown(button.selected == true)
-		mark:SetColorTexture(Accent())
-		if button.selected then
-			text:SetTextColor(Accent())
-		elseif button.section then
-			text:SetTextColor(Look.Colour("text-dim"))
-		else
-			text:SetTextColor(Look.Colour("text"))
-		end
-	end
-	button.Paint = Paint
-	Painted(Paint)
-	frame:SetScript("OnEnter", function()
-		button.hover = true
-		Paint()
-	end)
-	frame:SetScript("OnLeave", function()
-		button.hover = false
-		Paint()
-	end)
-	Clickable(frame, function()
-		if button.onClick then
-			button.onClick()
-		end
-	end)
-	ui.nav[index] = button
-	return button
+local function CurrentProfile()
+	local name = Call("Profile")
+	return IsText(name) and name or ""
 end
 
--- The page entries, with the sections of the open page under it, and the Profiles entry after a gap.
+-- Flips the switch of a module, in the header or on a tile of Home.
+local function Toggle(item)
+	Write(item, Read(item) ~= true)
+	RefreshAll()
+end
+
+-- A page the player chose: opened, with its group open in the sidebar, and kept as the page the window opens on the next time.
+local function Go(entry)
+	if ui.side then
+		ui.side.Reveal(entry)
+	end
+	ShowPage(entry)
+	Look.SetPage(entry.key)
+end
+
+local function BuildHome()
+	return ns.PanelHome.Build({
+		Model = function()
+			return ui.model
+		end,
+		right = ui.right, width = CW, top = HEAD, height = RIGHT_H,
+		Show = Go,
+		Setup = function()
+			Call("OpenSetup")
+		end,
+		Call = Call,
+		Act = Act,
+		ProfileLines = function()
+			return ProfileNames(function()
+				return true
+			end)
+		end,
+		Profile = CurrentProfile,
+		Toggle = Toggle,
+	})
+end
+
+-- The line under the title of a page: the group of a module and the module of a tab, how many modules are on, the profile in use.
+local function Subtitle(entry)
+	if entry.home then
+		return ns.PanelHome.Subtitle(ui.model)
+	elseif entry.profiles then
+		local name = CurrentProfile()
+		return name ~= "" and ("Profile in use: " .. name) or ""
+	end
+	local group, top = ns.PanelNav.GroupOf(ui.model, entry), ns.PanelNav.Top(ui.model, entry)
+	if not group then
+		return ""
+	end
+	return top ~= entry and (group .. " > " .. top.label) or group
+end
+
+-- Draws the sidebar again (PanelNav.lua).
 local function LayoutNav()
-	local scroller = ui.navScroller
-	local width = LEFT - 1
-	local y, index, selectedAt = 4, 0, nil
-	local function Put(kind, text, indent, size, onClick, selected)
-		index = index + 1
-		local button = NavButton(index)
-		button.section, button.selected, button.onClick = kind == "section", selected, onClick
-		button.frame:SetSize(width, size)
-		button.frame:ClearAllPoints()
-		button.frame:SetPoint("TOPLEFT", scroller.child, "TOPLEFT", 0, -y)
-		button.text:ClearAllPoints()
-		button.text:SetPoint("LEFT", button.frame, "LEFT", indent, 0)
-		button.text:SetWidth(width - indent - 10)
-		button.text:SetFontObject(Look.FontFor(kind == "section" and "GameFontHighlightSmall" or "GameFontHighlight"))
-		button.text:SetText(text)
-		button.Paint()
-		button.frame:Show()
-		if selected then
-			selectedAt = y
-		end
-		y = y + size
-	end
-	local function Entry(entry, depth)
-		local selected = not ui.searching and ui.current == entry
-		Put("page", entry.label, PAD - 2 + depth * 12, 24, function()
-			ShowPage(entry)
-		end, selected)
-		if selected then
-			local view = ui.views[entry]
-			for number, name in ipairs(entry.sections) do
-				local at = view.sections[number]
-				if at then
-					Put("section", name, PAD + 12 + depth * 12, 18, function()
-						view.scroller.Scroll(at - 4)
-					end, false)
-				end
-			end
-		end
-	end
-	for _, item in ipairs(NavOrder()) do
-		Entry(item.entry, item.depth)
-	end
-	y = y + 14
-	Entry(ui.model.profiles, 0)
-	for hidden = index + 1, #ui.nav do
-		ui.nav[hidden].frame:Hide()
-	end
-	scroller.SetContent(y + 8)
-	if selectedAt and (selectedAt < scroller.offset or selectedAt + 24 > scroller.offset + scroller.height) then
-		scroller.Scroll(selectedAt - 40)
+	if ui.side then
+		ui.side.Layout()
 	end
 end
 
 -- Search ------------------------------------------------------------------------------------------
 
 local function BuildSearchView()
-	local scroller = Scroller(ui.right, RIGHT_W, RIGHT_H)
-	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEADER)
+	local scroller = Scroller(ui.right, CW, RIGHT_H)
+	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEAD)
 	scroller.frame:Hide()
 	local empty = Label(scroller.child, "GameFontHighlight", "LEFT", ROW_W)
 	empty:SetPoint("TOPLEFT", scroller.child, "TOPLEFT", PAD, -PAD)
@@ -1829,6 +1785,7 @@ local function Search(typed)
 	view.scroller.Scroll(0)
 	Show(view)
 	ui.title:SetText("Search")
+	ui.head.Set(nil, "")
 	ui.reset:Hide()
 	ui.tip, ui.message = "", nil
 	ShowStrip()
@@ -1856,12 +1813,13 @@ function ShowPage(entry)
 	ui.current = entry
 	local view = ui.views[entry]
 	if not view then
-		view = entry.profiles and BuildProfiles() or BuildView(entry)
+		view = entry.home and BuildHome() or entry.profiles and BuildProfiles() or BuildView(entry)
 		ui.views[entry] = view
 	end
 	Show(view)
 	ui.title:SetText(entry.label)
-	ui.reset:SetShown(not entry.profiles)
+	ui.head.Set(entry, Subtitle(entry))
+	ui.reset:SetShown(not entry.profiles and not entry.home)
 	ui.tip, ui.message = "", nil
 	ShowStrip()
 	LayoutNav()
@@ -1875,8 +1833,17 @@ function RefreshAll()
 	Repaint()
 	if ui.mode then
 		ui.mode.Update()
-	elseif ui.view then
-		ui.view.Update()
+	else
+		if ui.side and ui.head then
+			ui.side.Update()
+			ui.head.Update()
+			if ui.current and not ui.searching and (ui.current.home or ui.current.profiles) then
+				ui.head.sub:SetText(Subtitle(ui.current))
+			end
+		end
+		if ui.view then
+			ui.view.Update()
+		end
 	end
 end
 
@@ -1969,6 +1936,8 @@ local function SetParts()
 		ui.barVersion:SetShown(mode == nil)
 	end
 	ui.barCounter:SetShown(mode ~= nil)
+	-- The buttons of the options pages are at the right of the strip; a mode has the whole width.
+	ui.strip:SetWidth(mode and WIDTH - 24 or WIDTH - 24 - 330)
 end
 
 -- Gives the window to a mode (a table with title, Build(window) that returns its root frame, Enter, Update, Frame(seconds), Hidden and Close), or back
@@ -1992,8 +1961,9 @@ end
 
 local function BuildLeft(window)
 	local left = Frame(window)
-	left:SetSize(LEFT, HEIGHT - TITLE - STRIP)
+	left:SetSize(SIDE, HEIGHT - TITLE - STRIP)
 	left:SetPoint("TOPLEFT", window, "TOPLEFT", 0, -TITLE)
+	ui.left = left
 	local back = Fill(left, "BACKGROUND")
 	back:SetAllPoints(left)
 	local divider = Fill(left, "BORDER")
@@ -2005,8 +1975,10 @@ local function BuildLeft(window)
 		Solid(divider, "line")
 	end)
 
-	local box = Field(window, LEFT - 24, 40)
-	box:SetPoint("TOPLEFT", window, "TOPLEFT", 12, -(TITLE + 10))
+	-- The search field is in the title bar, so that it stays when the sidebar is a rail.
+	local box = Field(window, 360, 40)
+	box:SetHeight(22)
+	box:SetPoint("TOPLEFT", window, "TOPLEFT", 256, -7)
 	local hint = Dim(Label(box, "GameFontHighlight", "LEFT"))
 	hint:SetPoint("LEFT", box, "LEFT", 8, 0)
 	hint:SetText("Search")
@@ -2019,49 +1991,86 @@ local function BuildLeft(window)
 	end)
 	ui.search = box
 
-	local listHeight = HEIGHT - TITLE - STRIP - 46 - 46
-	ui.navScroller = Scroller(left, LEFT - 1, listHeight)
-	ui.navScroller.frame:SetPoint("TOPLEFT", left, "TOPLEFT", 0, -46)
-
 	ui.optionParts = { left, box }
-	local movers = Button(left, "Movers", 89, ToggleMovers)
-	movers:SetPoint("BOTTOMLEFT", left, "BOTTOMLEFT", 12, 10)
-	local reload = Button(left, "Reload", 89, ns.Reload)
-	reload:SetPoint("BOTTOMRIGHT", left, "BOTTOMRIGHT", -13, 10)
-	ns.SecureReload(reload)
+	ui.side = ns.PanelNav.Sidebar(left, {
+		height = HEIGHT - TITLE - STRIP,
+		Model = function()
+			return ui.model
+		end,
+		Current = function()
+			return not ui.searching and ui.current or nil
+		end,
+		Show = Go,
+		Setup = function()
+			Call("OpenSetup")
+		end,
+		Movers = ToggleMovers,
+		Sections = function(entry)
+			local view, list = ui.views[entry], {}
+			for number, name in ipairs(entry.sections or {}) do
+				if view and view.sections[number] then
+					list[#list + 1] = { name = name, number = number }
+				end
+			end
+			return list
+		end,
+		Scroll = function(entry, number)
+			local view = ui.views[entry]
+			local at = view and view.sections[number]
+			if at then
+				view.scroller.Scroll(at - 4)
+			end
+		end,
+	})
 end
 
 local function BuildRight(window)
 	local right = Frame(window)
-	right:SetSize(RIGHT_W, HEIGHT - TITLE - STRIP)
+	right:SetSize(CW, HEIGHT - TITLE - STRIP)
 	right:SetPoint("TOPRIGHT", window, "TOPRIGHT", 0, -TITLE)
 	ui.right = right
 	ui.optionParts[#ui.optionParts + 1] = right
 	local title = Label(right, "GameFontNormalLarge", "LEFT", 420)
-	title:SetPoint("TOPLEFT", right, "TOPLEFT", PAD, -15)
+	title:SetPoint("TOPLEFT", right, "TOPLEFT", PAD, -14)
 	ui.title = title
 	local line = Fill(right, "BORDER")
-	line:SetPoint("TOPLEFT", right, "TOPLEFT", 0, -(HEADER - 1))
-	line:SetPoint("TOPRIGHT", right, "TOPRIGHT", 0, -(HEADER - 1))
+	line:SetPoint("TOPLEFT", right, "TOPLEFT", 0, -(HEAD - 1))
+	line:SetPoint("TOPRIGHT", right, "TOPRIGHT", 0, -(HEAD - 1))
 	line:SetHeight(1)
 	Painted(function()
 		Solid(line, "line-faint")
 	end)
-	ui.reset = Button(right, "Reset page", 100, function()
+	ui.head = ns.PanelNav.Header(right, { Toggle = Toggle })
+end
+
+-- Reset page, Reload and Done, at the right of the strip. Reset page sets every setting of the page to its default after a question.
+local function BuildFoot(window)
+	local foot = Frame(ui.stripFrame)
+	foot:SetAllPoints(ui.stripFrame)
+	ui.optionParts[#ui.optionParts + 1] = foot
+	local done = Button(foot, "Done", 88, function()
+		window:Hide()
+	end, true)
+	done:SetPoint("RIGHT", foot, "RIGHT", -12, 0)
+	local reload = Button(foot, "Reload", 88, ns.Reload)
+	reload:SetPoint("RIGHT", done, "LEFT", -8, 0)
+	ns.SecureReload(reload)
+	ui.reset = Button(foot, "Reset page", 100, function()
 		local entry = ui.current
-		if entry and not entry.profiles then
+		if entry and not entry.profiles and not entry.home then
 			Ask("Reset every setting on this page?", function()
 				for _, item in ipairs(entry.page) do
 					-- A row the game holds is not written: its default is the game's, not this page's.
 					if item.key and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowLive(item) then
-						ns.Set(item.path, item.default)
+						Write(item, item.default)
 					end
 				end
 				RefreshAll()
 			end)
 		end
 	end)
-	ui.reset:SetPoint("TOPRIGHT", right, "TOPRIGHT", -PAD, -12)
+	ui.reset:SetPoint("RIGHT", reload, "LEFT", -8, 0)
+	ui.strip:SetWidth(WIDTH - 24 - 330)
 end
 
 local function BuildBars(window)
@@ -2125,6 +2134,7 @@ local function BuildBars(window)
 	local strip = Frame(window)
 	strip:SetSize(WIDTH, STRIP)
 	strip:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 0, 0)
+	ui.stripFrame = strip
 	local back2 = Fill(strip, "BACKGROUND")
 	back2:SetAllPoints(strip)
 	local line2 = Fill(strip, "BORDER")
@@ -2146,8 +2156,11 @@ local function Build()
 	-- The height of a row is read here, since the account is loaded by now.
 	ROW = Look.RowHeight()
 	ns.PanelKit.ROW = ROW
-	ui.density = Look.Get("density")
+	ui.shape = Look.Get("density") .. "/" .. Look.Get("sidebar")
+	SIDE = Look.SideWidth()
+	CW = WIDTH - SIDE
 	ui.model = BuildModel()
+	ns.PanelHome.Start()
 	local window = CreateFrame("Frame", NAME, UIParent)
 	ns.Own[window] = true
 	ui.window = window
@@ -2164,6 +2177,7 @@ local function Build()
 	BuildBars(window)
 	BuildLeft(window)
 	BuildRight(window)
+	BuildFoot(window)
 	window:SetScript("OnShow", RefreshAll)
 	window:SetScript("OnHide", function()
 		-- Under the setting that sends windows back when they close, the options window opens at its default place.
@@ -2205,22 +2219,28 @@ local function Build()
 		end
 	end
 	window:Hide()
-	ShowPage(ui.model.pages[1] or ui.model.profiles)
+	-- The first time it opens on Home; after that on the page it was left on.
+	local key = Look.Page()
+	ShowPage((key == "profiles" and ui.model.profiles) or ui.model.byKey[key] or ui.model.home)
 end
 
--- A change of the look while the window exists. Colours, borders and corners are painted again, a font is set again, and a Density builds the
--- rows again, since a row is built at its height. A Density seen before has its rows already.
+-- A change of the look while the window exists. Colours, borders and corners are painted again, a font is set again, and a Density or a Sidebar
+-- builds the rows again, since a row is built at its height and a page at the width of its column. A pair seen before has its pages already.
 local function Rebuild()
 	ROW = Look.RowHeight()
 	ns.PanelKit.ROW = ROW
 	for _, view in pairs(ui.views) do
 		view.scroller.frame:Hide()
 	end
-	-- The pages built at a density are kept and shown again when it comes back.
+	-- The pages built for a density and a sidebar are kept and shown again when they come back.
 	ui.sets = ui.sets or {}
-	ui.sets[ui.density or "comfortable"] = ui.views
-	ui.density = Look.Get("density")
-	ui.views, ui.view = ui.sets[ui.density] or {}, nil
+	ui.sets[ui.shape] = ui.views
+	ui.shape = Look.Get("density") .. "/" .. Look.Get("sidebar")
+	SIDE = Look.SideWidth()
+	CW = WIDTH - SIDE
+	ui.left:SetWidth(SIDE)
+	ui.right:SetWidth(CW)
+	ui.views, ui.view = ui.sets[ui.shape] or {}, nil
 	if ui.searchView then
 		ui.searchView.scroller.frame:Hide()
 		ui.searchView = nil
@@ -2247,7 +2267,7 @@ function Look.onChange(key)
 		end
 	elseif key == "font" then
 		Look.ApplyFonts()
-	elseif key == "density" then
+	elseif key == "density" or key == "sidebar" then
 		Look.ApplyFonts()
 		Rebuild()
 	else
@@ -2284,7 +2304,7 @@ end
 
 -- The widgets and measures of the window, for a mode that has the window (Setup.lua). Each is the one the options pages use.
 ns.PanelKit = {
-	Frame = Frame, Fill = Fill, Label = Label, Dim = Dim, Clickable = Clickable, Button = Button, Field = Field,
+	Frame = Frame, Fill = Fill, Label = Label, Dim = Dim, Tint = Tint, Clickable = Clickable, Button = Button, Field = Field,
 	Scroller = Scroller, Dropdown = Dropdown, NewRow = NewRow, BuildRow = BuildRow, IsOpen = IsOpen, Header = Header, Painted = Painted,
 	Solid = Solid, Backing = Backing, Accent = Accent, Shade = Shade, Clamp = Clamp, Rect = Rect, IsText = IsText, Cursor = Cursor,
 	Say = Say, Ask = Ask, CloseList = CloseList,

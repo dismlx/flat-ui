@@ -109,6 +109,8 @@ ns.PAGES = {
 			tip = "Flat UI Sans is IBM Plex Sans. If the game cannot load it, the window uses the game font." },
 		{ page = "panel", key = "scale", kind = "number", default = 100, min = 80, max = 150, step = 5, unit = "%", label = "Window scale", live = true, get = "PanelGet", set = "PanelSet",
 			changed = "PanelLookChanged", tip = "A window larger than the screen is made smaller to fit." },
+		{ page = "panel", key = "sidebar", kind = "choice", default = "full", label = "Sidebar", live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",
+			choices = { { "full", "Icons and names" }, { "names", "Names only" }, { "rail", "Icon rail" } }, tip = "The list of pages at the left of the options window." },
 		-- Flat UI setup: held per account in FlatUIDB.setup, outside every profile (Setup.lua has the functions).
 		{ section = "Setup" },
 		{ page = "setup", key = "newCharacter", kind = "choice", default = "ask", label = "Profile on a new character", live = true, get = "SetupGet", set = "SetupSet",

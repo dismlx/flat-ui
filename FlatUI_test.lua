@@ -496,6 +496,11 @@ local function newRegion(W, owner, opts)
 		note("SetTexCoord")
 		r.texCoord = { ... }
 	end
+	function r.SetRotation(_, radians)
+		argn(W, "SetRotation", radians)
+		note("SetRotation")
+		r.rotation = radians
+	end
 	-- ULx, ULy, LLx, LLy, URx, URy, LRx, LRy of the rectangle left, right, top, bottom.
 	function r.GetTexCoord()
 		local c = r.texCoord or { 0, 1, 0, 1 }
@@ -10882,7 +10887,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.95" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.96" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -10896,7 +10901,7 @@ do
 		if file == "Panel.lua" then
 			panelAt = index
 		elseif panelAt then
-			tail = tail and file:match("^Setup.*%.lua$") ~= nil
+			tail = tail and (file:match("^Setup.*%.lua$") ~= nil or file:match("^Panel.+%.lua$") ~= nil)
 		end
 		if file:match("^Setup") and not panelAt then
 			plain = false
@@ -59832,6 +59837,7 @@ do
 local PT = {}
 
 -- The font objects the window uses, with the height Fonts.xml gives them.
+PT.SIDE = 232
 PT.FONT = { GameFontNormal = 12, GameFontHighlight = 12, GameFontHighlightSmall = 10, GameFontNormalLarge = 16, GameFontNormalSmall = 10, NumberFontNormalSmall = 10, NumberFontNormal = 14, NumberFontNormalLarge = 16,
 	NumberFontNormalHuge = 30, NumberFontNormalSmallGray = 10 }
 PT.FRACTION = { TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 }, LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 }, RIGHT = { 1, 0.5 },
@@ -60218,6 +60224,11 @@ function PT.world(opts)
 	if opts.hud == nil then opts.hud = true end
 	local W = suiteKit.mw(opts)
 	PT.extend(W)
+	-- The window opens on the page it was left on: the first of the pages, unless the world is a first start (opts.firstStart), which opens on Home.
+	if not opts.firstStart then
+		local store = W.ns.PanelLook.Store(true)
+		store.page = store.page or "general"
+	end
 	return W
 end
 
@@ -60448,17 +60459,21 @@ function PT.scrollOf(W, raw)
 	return PT.clips(W, raw)[1]
 end
 
--- The page buttons of the left column and the sections under the open page, top to bottom: { raw, text, left }.
+-- The rows of the sidebar that show a text, top to bottom: the four fixed rows, the group headers, the modules, the pages of the open module and the
+-- sections of the open page. { raw, text, bottom, textLeft }. A row that is not in view of the column is left out.
 function PT.nav(W)
 	local list = {}
 	local wl = W.rectOf(PT.window(W))
-	for _, raw in ipairs(PT.frames(W)) do
-		local l, b = W.rectOf(raw)
-		if l and math.abs(l - wl) < 0.01 and raw.scripts.OnMouseUp and #raw.fonts == 1 and #raw.children == 0 and PT.shown(W, raw) and #PT.clips(W, raw) == 1 then
-			local scroll = PT.clips(W, raw)[1]
-			if PT.contains(W, scroll, l + 1, b + 1) then
-				local tl = W.rectOf(raw.fonts[1])
-				list[#list + 1] = { raw = raw, text = raw.fonts[1].text, bottom = b, textLeft = tl }
+	for _, scroll in ipairs(PT.frames(W)) do
+		local sl = W.rectOf(scroll)
+		if scroll.objectType == "ScrollFrame" and PT.shown(W, scroll) and sl and math.abs(sl - wl) < 0.01 then
+			for _, c in ipairs(scroll.scrollChild.children) do
+				local raw = W.rawOf[c]
+				local l, b = W.rectOf(raw)
+				local first = raw.fonts[1]
+				if raw.shown and raw.scripts.OnMouseUp and first and first.shown and first.text and first.text ~= "" and l and PT.contains(W, scroll, l + 1, b + 1) then
+					list[#list + 1] = { raw = raw, text = first.text, bottom = b, textLeft = W.rectOf(first) }
+				end
 			end
 		end
 	end
@@ -60474,13 +60489,15 @@ function PT.navTexts(W)
 	return texts
 end
 
--- The page button with this text.
+-- The row of the sidebar with this text. The last one when two have it: the group Action bars and the module of that name.
 function PT.page(W, text)
+	local found
 	for _, entry in ipairs(PT.nav(W)) do
 		if entry.text == text then
-			return entry.raw
+			found = entry.raw
 		end
 	end
+	return found
 end
 
 -- The control of a row and the number box beside it.
@@ -60584,12 +60601,25 @@ function PT.dump(W, state)
 end
 
 
+-- The switch of the module in the header of the page, and the label beside it: nil when the page has none.
+function PT.headSwitch(W)
+	for _, raw in ipairs(PT.frames(W)) do
+		if PT.shown(W, raw) and raw.scripts.OnMouseUp then
+			local _, _, w, h = W.rectOf(raw)
+			if w and math.abs(w - 32) < 0.01 and math.abs(h - 16) < 0.01 then
+				local up = raw.parent and W.rawOf[raw.parent]
+				return raw, up and up.fonts[1] and up.fonts[1].text
+			end
+		end
+	end
+end
+
 -- The scroll area of the right-hand side that is shown, and its content frame.
-function PT.right(W)
+function PT.right(W, side)
 	local wl = W.rectOf(PT.window(W))
 	for _, raw in ipairs(PT.frames(W)) do
 		local l = W.rectOf(raw)
-		if raw.objectType == "ScrollFrame" and PT.shown(W, raw) and l and math.abs(l - (wl + 210)) < 0.01 then
+		if raw.objectType == "ScrollFrame" and PT.shown(W, raw) and l and math.abs(l - (wl + (side or PT.SIDE))) < 0.01 then
 			return raw, raw.scrollChild
 		end
 	end
@@ -60643,9 +60673,10 @@ function PT.strip(W)
 	end
 end
 
--- Goes to a page by clicking its button in the left column, scrolling that column when the button is out of view.
-function PT.go(W, label)
-	for _, delta in ipairs({ 0, 40, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2 }) do
+-- Goes to a page by clicking its row in the sidebar, scrolling the column when the row is out of view. A page that is a tab of a module is found
+-- under the module, which is opened first.
+function PT.go(W, label, nested)
+	for _, delta in ipairs({ 0, 40, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2 }) do
 		local nav = PT.nav(W)
 		if delta ~= 0 and nav[1] then
 			PT.wheel(W, PT.clips(W, nav[1].raw)[1], delta)
@@ -60656,6 +60687,20 @@ function PT.go(W, label)
 			return button
 		end
 	end
+	if not nested then
+		local byKey = {}
+		for _, page in ipairs(W.ns.PAGES) do byKey[page.key] = page end
+		for _, page in ipairs(W.ns.PAGES) do
+			if page.label == label and page.parent and byKey[page.parent] then
+				local top = page
+				for _ = 1, 8 do
+					if top.parent and byKey[top.parent] and top.parent ~= top.key then top = byKey[top.parent] end
+				end
+				PT.go(W, top.label, true)
+				return PT.go(W, label, true)
+			end
+		end
+	end
 end
 
 -- The search box.
@@ -60663,7 +60708,7 @@ function PT.searchBox(W)
 	local wl = W.rectOf(PT.window(W))
 	for _, raw in ipairs(PT.frames(W)) do
 		local l = W.rectOf(raw)
-		if raw.objectType == "EditBox" and l and math.abs(l - (wl + 12)) < 0.01 then
+		if raw.objectType == "EditBox" and l and math.abs(l - (wl + 256)) < 0.01 then
 			return raw
 		end
 	end
@@ -60717,7 +60762,7 @@ function PT.runBuild()
 
 	-- 1. Building ---------------------------------------------------------------------------------------------------------
 	do
-		local W = PT.world()
+		local W = PT.world({ firstStart = true })
 		local ns = W.ns
 		local frames0, textures0 = #W.addonFrames, #W.addonTextures
 		check("window: not built at login, and nothing of it is saved or listed", PT.window(W) == nil and not ns.PanelShown() and #W.env.UISpecialFrames == 0
@@ -60770,7 +60815,7 @@ function PT.runBuild()
 				if f.autoFocus then autofocus = autofocus + 1 end
 			end
 		end
-		check("window: no text box takes the cursor by itself", boxes >= 2 and autofocus == 0 and not PT.searchBox(W).focus, boxes .. " " .. autofocus)
+		check("window: no text box takes the cursor by itself", boxes >= 1 and autofocus == 0 and not PT.searchBox(W).focus, boxes .. " " .. autofocus)
 		clean(W, "window opening")
 
 		local title = PT.byText(W, "Flat UI")
@@ -60789,7 +60834,7 @@ function PT.runBuild()
 				for i, name in ipairs(FILES) do at[name] = i end
 				local setupOnly = at["Panel.lua"] ~= nil
 				for i, name in ipairs(FILES) do
-					if at["Panel.lua"] and i > at["Panel.lua"] and not name:match("^Setup.*%.lua$") then setupOnly = false end
+					if at["Panel.lua"] and i > at["Panel.lua"] and not name:match("^Setup.*%.lua$") and not name:match("^Panel.+%.lua$") then setupOnly = false end
 				end
 				return setupOnly and at["Panel.lua"] > at["Reload.lua"] and at["Panel.lua"] > at["Options.lua"]
 			end)() and TOC.AddonCompartmentFunc == "FlatUI_OnAddonCompartmentClick"
@@ -60803,41 +60848,44 @@ function PT.runBuild()
 	-- 2. The left-hand side ---------------------------------------------------------------------------------------------
 	do
 		local W = PT.open()
-		local expected = { PAGES[1].label }
-		for _, r in ipairs(PAGES[1].rows) do
-			if type(r) == "string" then expected[#expected + 1] = r end
-		end
-		-- A page with a parent is listed under it, in file order, wherever it stands in the file.
-		for index = 2, #PAGES do
-			if not PAGES[index].parent or PAGES[index].parent == "general" then
-				expected[#expected + 1] = PAGES[index].label
-				for _, child in ipairs(PAGES) do
-					if child.parent == PAGES[index].key and child.parent ~= "general" then expected[#expected + 1] = child.label end
+		-- The sidebar: four fixed rows, then six groups with the 22 modules. The page that is open has its sections under it and its tabs after.
+		local GROUPS = { { "Look", { "Flat UI", "Fonts" } }, { "Frames", { "Unit frames", "Nameplates", "Personal resource display", "Cast bars", "Swing timers" } },
+			{ "Action bars", { "Action bars", "Bar block", "Bar blocks" } },
+			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Combat text" } },
+			{ "Interface", { "Minimap and buffs", "Windows", "Chat and tooltips" } }, { "Layout", { "Movers", "Fading", "Tooltip" } } }
+		local expected = { "Home", "Flat UI setup", "Profiles", "Move frames" }
+		for _, group in ipairs(GROUPS) do
+			expected[#expected + 1] = group[1]
+			for _, module in ipairs(group[2]) do
+				expected[#expected + 1] = module
+				if module == "Flat UI" then
+					for _, r in ipairs(PAGES[1].rows) do
+						if type(r) == "string" then expected[#expected + 1] = r end
+					end
+					expected[#expected + 1] = "Colours"
 				end
 			end
 		end
-		expected[#expected + 1] = "Profiles"
-		-- The column is a scroll frame: the first screen shows the pages from the top, and scrolling to the end shows Profiles after a gap.
-		-- The Party cooldowns page is one more page in a column of fixed visible height, so one more page falls below the first screen.
 		local top = PT.navTexts(W)
 		local isPrefix = #top >= 1
 		for index, text in ipairs(top) do
 			if text ~= expected[index] then isPrefix = false end
 		end
-		check("left side: the pages in order, the sections of the open page under it", isPrefix and #top >= 14, joined(top))
-		for _ = 1, 24 do
+		check("left side: the fixed rows, then the groups with their modules, the sections of the open page under it", isPrefix and #top >= 14, joined(top))
+		for _ = 1, 30 do
 			PT.wheel(W, PT.clips(W, PT.nav(W)[1].raw)[1], -2)
 		end
 		local nav = PT.nav(W)
 		local last = {}
 		for index = #expected - #nav + 1, #expected do last[#last + 1] = expected[index] end
-		check("left side: the end of the column is the last pages and Profiles", joined(PT.navTexts(W)) == joined(last), joined(PT.navTexts(W)))
-		local gap = nav[#nav - 1].bottom - nav[#nav].bottom
-		local step = nav[#nav - 2].bottom - nav[#nav - 1].bottom
-		check("left side: a gap before Profiles", gap > step + 10 and nav[#nav].text == "Profiles", g(gap) .. " " .. g(step))
-		for _ = 1, 24 do
+		check("left side: the end of the column is the last group and its modules", joined(PT.navTexts(W)) == joined(last) and nav[#nav].text == "Tooltip", joined(PT.navTexts(W)))
+		for _ = 1, 30 do
 			PT.wheel(W, PT.clips(W, PT.nav(W)[1].raw)[1], 10)
 		end
+		nav = PT.nav(W)
+		local gap = nav[4].bottom - nav[5].bottom
+		local step = nav[3].bottom - nav[4].bottom
+		check("left side: a line and a gap between the fixed rows and the first group", nav[4].text == "Move frames" and nav[5].text == "Look" and gap > step + 5, g(gap) .. " " .. g(step))
 		check("left side: the first page is open, with its title and Reset page", PT.title(W) == PAGES[1].label and PT.button(W, "Reset page") ~= nil)
 		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Options window", "Setup" }),
 			joined(PT.headers(W)))
@@ -60847,8 +60895,7 @@ function PT.runBuild()
 		PT.go(W, "Windows")
 		local scroll = PT.right(W)
 		local before = scroll.vscroll or 0
-		-- Windows comes after the Enemy cooldowns page, so its sections are below the first screen of the column.
-		for _ = 1, 24 do
+		for _ = 1, 30 do
 			if PT.page(W, "Talents and Legacy") then break end
 			PT.wheel(W, PT.clips(W, PT.nav(W)[1].raw)[1], -2)
 		end
@@ -60863,22 +60910,25 @@ function PT.runBuild()
 		check("left side: a click on a section scrolls the right side to it", before == 0 and after > 0 and headerBottom ~= nil and headerBottom >= sb - 1 and headerBottom <= sb + sh,
 			tostring(after) .. " " .. tostring(headerBottom))
 		local _, _, _, navHeight = W.rectOf(PT.clips(W, PT.page(W, "Windows"))[1])
-		check("left side: a page with many sections scrolls its column, and the open page stays in view", PT.page(W, "Windows") ~= nil and navHeight > 400)
+		check("left side: a module with many sections scrolls its column, and the open page stays in view", PT.page(W, "Windows") ~= nil and navHeight > 400)
 		PT.go(W, "Profiles")
 		check("left side: Profiles opens its own page, without Reset page", PT.title(W) == "Profiles" and PT.button(W, "Reset page") == nil)
 		local calls = {}
 		local movers = W.ns.modules.movers
 		local was = movers.slash.move
 		movers.slash.move = function(rest) calls[#calls + 1] = rest end
-		PT.press(W, PT.button(W, "Movers"))
+		for _ = 1, 30 do
+			PT.wheel(W, PT.clips(W, PT.nav(W)[1].raw)[1], 10)
+		end
+		PT.press(W, PT.page(W, "Move frames"))
 		movers.slash.move = was
-		check("left side: Movers calls the command that /flatui move runs", #calls == 1 and calls[1] == "", #calls)
+		check("left side: Move frames calls the command that /flatui move runs", #calls == 1 and calls[1] == "", #calls)
 		PT.press(W, PT.button(W, "Reload"))
 		check("left side: Reload reloads the interface", W.reloads == 1, W.reloads)
 		clean(W, "left side")
 	end
 	do
-		-- A page that names another as its parent is listed under it, indented.
+		-- A page that names another as its parent is listed under it when that page is open, indented. A page whose parent does not exist is a page of its own.
 		local W = PT.world()
 		local ns = W.ns
 		local many = {}
@@ -60893,21 +60943,24 @@ function PT.runBuild()
 		ns.PAGES[#ns.PAGES + 1] = { key = "madeup", label = "Made up", parent = "combattext",
 			{ section = "Only section" }, { key = "one", kind = "bool", default = false, label = "Made up row", path = "madeup.one" },
 			{ key = "many", kind = "choice", default = "c3", label = "Many choices", path = "madeup.many", choices = many } }
-		-- Listed second, so that it is among the buttons the column shows without scrolling.
 		table.insert(ns.PAGES, 2, { key = "orphan", label = "Orphan", parent = "nowhere",
 			{ key = "two", kind = "bool", default = false, label = "Orphan row", path = "orphan.two" } })
 		ns.OpenPanel()
+		check("page with a parent: not in the column while its parent is not open", PT.page(W, "Made up") == nil)
+		PT.go(W, "Combat text")
 		local texts = PT.navTexts(W)
-		local at
+		local at, parentAt, nextAt
 		for index, text in ipairs(texts) do
 			if text == "Made up" then at = index end
+			if text == "Combat text" then parentAt = index end
+			if text == "Interface" then nextAt = index end
 		end
-		check("page with a parent: listed right under its parent", at ~= nil and texts[at - 1] == "Combat text" and texts[at + 1] == "Action bars", joined(texts))
+		check("page with a parent: listed under its parent, before the next group", at ~= nil and parentAt ~= nil and at > parentAt and nextAt ~= nil and at < nextAt, joined(texts))
 		local parent, child = PT.page(W, "Combat text"), PT.page(W, "Made up")
 		local pl, cl = W.rectOf(parent.fonts[1]), W.rectOf(child.fonts[1])
 		-- The last page is below the column, which is scrolled to show it.
 		local orphan
-		for _, delta in ipairs({ 0, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2 }) do
+		for _, delta in ipairs({ 0, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2 }) do
 			local nav = PT.nav(W)
 			if delta ~= 0 and nav[1] then
 				PT.wheel(W, PT.clips(W, nav[1].raw)[1], delta)
@@ -60918,7 +60971,7 @@ function PT.runBuild()
 			end
 		end
 		local ol = W.rectOf(orphan.fonts[1])
-		check("page with a parent: indented under it; a page whose parent does not exist is listed as a page of its own", cl > pl + 5 and near(ol, pl, 0.01), ("%s %s %s"):format(g(pl), g(cl), g(ol)))
+		check("page with a parent: indented under it; a page whose parent does not exist is listed with the others at the end", cl > pl + 5 and near(ol, pl, 0.01), ("%s %s %s"):format(g(pl), g(cl), g(ol)))
 		PT.go(W, "Made up")
 		check("page with a parent: opens like any other page", PT.title(W) == "Made up" and #PT.shownRows(W) == 2 and PT.shownRows(W)[1].fonts[1].text == "Made up row")
 		PT.press(W, PT.control(PT.shownRows(W)[2]))
@@ -60947,10 +61000,10 @@ function PT.runBuild()
 		local ns = W.ns
 		local frames0, textures0 = #W.addonFrames, #W.addonTextures
 		ns.OpenPanel()
-		check("pages: only the open page has its rows", PT.row(W, "Restyle nameplates") == nil and PT.row(W, "Border thickness") ~= nil)
+		check("pages: only the open page has its rows", PT.row(W, "Restyle friendly nameplates") == nil and PT.row(W, "Border thickness") ~= nil)
 		local built = #W.addonFrames
 		PT.go(W, "Nameplates")
-		check("pages: a page is built when it is first shown", PT.row(W, "Restyle nameplates") ~= nil and #W.addonFrames > built)
+		check("pages: a page is built when it is first shown", PT.row(W, "Restyle friendly nameplates") ~= nil and #W.addonFrames > built)
 		local again = #W.addonFrames
 		PT.go(W, "Flat UI")
 		PT.go(W, "Nameplates")
@@ -60966,13 +61019,19 @@ function PT.runBuild()
 		local total, expectedTotal, wrong = 0, 0, {}
 		for _, page in ipairs(PAGES) do
 			PT.go(W, page.label)
-			local headers, labels = {}, {}
+			local headers, labels, own = {}, {}, nil
 			for _, r in ipairs(page.rows) do
-				if type(r) == "string" then headers[#headers + 1] = r else labels[#labels + 1] = r end
+				if type(r) == "string" then headers[#headers + 1] = r
+				elseif r.path == page.key .. ".enabled" and r.kind == "bool" then own = r
+				else labels[#labels + 1] = r end
 			end
 			-- A page of the window's own has no setting in PAGES; its block has checks of its own (tkedit:).
 			local rows = page.panelOnly and {} or PT.shownRows(W)
 			local problems = wrong
+			-- The switch of the module is in the header with its label, and is not a row.
+			local switch, switchLabel = PT.headSwitch(W)
+			if (own ~= nil) ~= (switch ~= nil) or (own and switchLabel ~= own.label) then problems[#problems + 1] = page.label .. ": switch " .. tostring(switchLabel) end
+			if own then total, expectedTotal = total + 1, expectedTotal + 1 end
 			if #rows ~= #labels then problems[#problems + 1] = page.label .. ": rows " .. #rows .. " of " .. #labels end
 			for number, def in ipairs(labels) do
 				local r = rows[number]
@@ -60989,7 +61048,7 @@ function PT.runBuild()
 		check("pages: every row of every page once, in order, with a control of its kind, under its section headers, and the title", #wrong == 0, joined(wrong))
 		check("pages: " .. expectedTotal .. " rows in all, the number of settings in PAGES", total == expectedTotal and expectedTotal == COUNT.settings, total .. " " .. expectedTotal .. " " .. COUNT.settings)
 		PT.go(W, "Unit frames")
-		PT.press(W, PT.control(need(W, "Restyle unit frames")))
+		PT.press(W, (PT.headSwitch(W)))
 		PT.press(W, PT.button(W, "Reset page"))
 		PT.type(PT.searchBox(W), "border")
 		PT.go(W, "Profiles")
@@ -61105,16 +61164,16 @@ function PT.runControls()
 		local W = PT.open()
 		local ns = W.ns
 		PT.go(W, "Nameplates")
-		local r = need(W, "Restyle nameplates")
+		local r = need(W, "Restyle friendly nameplates")
 		local box = PT.control(r)
-		check("tick box: shows the saved value", PT.marked(box) and value(W, "nameplates.enabled") == true)
+		check("tick box: shows the saved value", PT.marked(box) and value(W, "nameplates.friendly") == true)
 		PT.press(W, box)
-		check("tick box: a click sets the value through ns.Set and shows it", value(W, "nameplates.enabled") == false and not PT.marked(box), tostring(value(W, "nameplates.enabled")))
+		check("tick box: a click sets the value through ns.Set and shows it", value(W, "nameplates.friendly") == false and not PT.marked(box), tostring(value(W, "nameplates.friendly")))
 		PT.press(W, box)
-		check("tick box: and a second click puts it back", value(W, "nameplates.enabled") == true and PT.marked(box))
+		check("tick box: and a second click puts it back", value(W, "nameplates.friendly") == true and PT.marked(box))
 		PT.press(W, r, 0.1)
-		check("tick box: a click on the label does the same", value(W, "nameplates.enabled") == false and not PT.marked(box))
-		ns.Set("nameplates.enabled", true)
+		check("tick box: a click on the label does the same", value(W, "nameplates.friendly") == false and not PT.marked(box))
+		ns.Set("nameplates.friendly", true)
 		check("tick box: a value set elsewhere is not shown before the window is told", not PT.marked(box))
 		ns.RefreshPanel()
 		check("tick box: and is shown after ns.RefreshPanel", PT.marked(box))
@@ -61382,7 +61441,7 @@ function PT.runControls()
 		ns.Set("nameplates.enabled", false)
 		ns.RefreshPanel()
 		PT.go(W, "Nameplates")
-		local switched = need(W, "Restyle nameplates").alpha == 1
+		local switched = PT.headSwitch(W) ~= nil
 		PT.go(W, "Text")
 		check("needs: with the page switched off every row but the switch is dim, on its sub-pages too", switched and need(W, "Name outline").alpha < 1
 			and need(W, "Level box").alpha < 1)
@@ -61914,6 +61973,12 @@ function PT.runWindow()
 					if fs.text == "Flat UI" then list[#list + 1] = L.rgb(fs.textColor) end
 				end
 			end
+			-- The mark of the open page in the sidebar: a texture 2 units wide.
+			for _, raw in ipairs(PT.frames(L.W)) do
+				for _, r in ipairs(raw.regions) do
+					if r.kind == "Texture" and r.shown and r.width == 2 and r.color and PT.shown(L.W, raw) then list[#list + 1] = L.rgb(r.color) end
+				end
+			end
 			return list
 		end
 		L.count = function(list, hex)
@@ -61932,7 +61997,7 @@ function PT.runWindow()
 			if item.section then L.inside = item.section == "Options window" end
 			if L.inside and item.key then L.labels[#L.labels + 1] = item.label end
 		end
-		check("window look: the Flat UI page has them in a section Options window", table.concat(L.labels, ", ") == "Accent colour, Custom accent colour, Window tone, Borders, Corners, Density, Window font, Window scale", table.concat(L.labels, ", "))
+		check("window look: the Flat UI page has them in a section Options window", table.concat(L.labels, ", ") == "Accent colour, Custom accent colour, Window tone, Borders, Corners, Density, Window font, Window scale, Sidebar", table.concat(L.labels, ", "))
 		L.ns.Set("panel.tone", "ink")
 		L.ns.Set("panel.scale", 120)
 		check("window look: they are kept in FlatUIDB.panel and in no profile", L.W.env.FlatUIDB.panel.tone == "ink" and L.W.env.FlatUIDB.panel.scale == 120 and not L.has(L.W.env.FlatUIDB.profiles))
@@ -62042,7 +62107,7 @@ function PT.runWindow()
 			end
 		end
 		check("window look: the mark of a section header is a line colour and not the accent", L.mark == "494f44", tostring(L.mark))
-		check("window look: the title bar and the page title are in the text colour, and only the chosen page in the list has the accent", L.count(L.titles(), "eceee6") == 2 and L.count(L.titles(), "9a9cf0") == 1, table.concat(L.titles(), " "))
+		check("window look: the title bar, the page title and the chosen page in the list are in the text colour, and only the mark of the chosen page has the accent", L.count(L.titles(), "eceee6") == 3 and L.count(L.titles(), "9a9cf0") == 1, table.concat(L.titles(), " "))
 		-- Density, font and scale.
 		L.height = function() return PT.row(L.W, "Window scale").height end
 		L.rows = { L.height() }
@@ -62173,7 +62238,7 @@ function PT.runWindow()
 		check("position: a spot saved in an earlier session is used", near(l, 50) and near(b, 1080 - 60 - 680), ("%s %s"):format(g(l), g(b)))
 		local X = PT.open({ saved = { options = {}, panel = { point = "TOPLEFT", x = 5000, y = 300 } } })
 		l, b = X.rectOf(PT.window(X))
-		check("position: a spot off the screen is corrected, and forgotten", near(l, 440) and near(b, 200) and X.env.FlatUIDB.panel == nil, ("%s %s"):format(g(l), g(b)))
+		check("position: a spot off the screen is corrected, and forgotten", near(l, 440) and near(b, 200) and X.env.FlatUIDB.panel.point == nil, ("%s %s"):format(g(l), g(b)))
 		local Y = PT.open({ saved = { options = {}, panel = { point = "BOTTOMRIGHT", x = -2000, y = -2000 } } })
 		l, b = Y.rectOf(PT.window(Y))
 		check("position: also one below and to the left of it", near(l, 440) and near(b, 200), ("%s %s"):format(g(l), g(b)))
@@ -62193,12 +62258,12 @@ function PT.runWindow()
 		end
 		local R = PT.open({ keepDefault = true })
 		T.move(R, 100, 200)
-		local moved = R.env.FlatUIDB.panel ~= nil
+		local moved = R.env.FlatUIDB.panel.point ~= nil
 		R.ns.OpenPanel()
 		R.ns.OpenPanel()
 		l, b = R.rectOf(PT.window(R))
 		check("winreset: the setting starts as Back to default when the window closes", R.ns.Get("movers.keepSpots") == "reset")
-		check("winreset: the options window moved and closed opens at the middle again, and the spot is dropped", moved and near(l, 440) and near(b, 200) and R.env.FlatUIDB.panel == nil, ("%s %s"):format(g(l), g(b)))
+		check("winreset: the options window moved and closed opens at the middle again, and the spot is dropped", moved and near(l, 440) and near(b, 200) and R.env.FlatUIDB.panel.point == nil, ("%s %s"):format(g(l), g(b)))
 		local K = PT.open({ saved = { options = { ["movers.keepSpots"] = "kept" } } })
 		T.move(K, 100, 200)
 		K.ns.OpenPanel()
@@ -62274,7 +62339,7 @@ function PT.runWindow()
 		local Y = PT.world()
 		Y.ns.modules.movers = nil
 		Y.ns.OpenPanel()
-		PT.press(Y, PT.button(Y, "Movers"))
+		PT.press(Y, PT.page(Y, "Move frames"))
 		check("no movers module: the Movers button does nothing", #Y.errors == 0 and #Y.violations == 0)
 		local Z = PT.world()
 		Z.ns.PAGES = {}
@@ -62302,10 +62367,19 @@ function PT.runWindow()
 			for _ in text:gmatch("\n") do lines = lines + 1 end
 		end
 		check("picture: three states are drawn, each with its text and its rectangles", lines > 600, lines)
+		-- Home, a module page and the icon rail.
+		PT.type(PT.searchBox(W), "")
+		PT.go(W, "Home")
+		states[4] = PT.dump(W, "home")
+		PT.go(W, "Nameplates")
+		states[5] = PT.dump(W, "nameplates")
+		W.ns.Set("panel.sidebar", "rail")
+		W.update(1)
+		states[6] = PT.dump(W, "rail")
 		local path = os.getenv("FLATUI_PANEL_DUMP")
 		if path and path ~= "" then
 			local file = assert(io.open(path, "w"))
-			file:write("WINDOW\t900\t620\n", table.concat(states, "\n"), "\n")
+			file:write("WINDOW\t1040\t680\n", table.concat(states, "\n"), "\n")
 			file:close()
 		end
 	end
@@ -62810,6 +62884,7 @@ function PT.runMsTree()
 		local listed = "," .. table.concat(names, ",") .. ","
 		check("ms-tree: a page with no setting is not in the game's options, nor a page whose only setting the client lacks; a page with a setting is", not listed:find(",Hollow page,", 1, true)
 			and not listed:find(",Gone page,", 1, true) and listed:find(",Here page,", 1, true) ~= nil, listed)
+		PT.go(W, "Flat UI")
 		check("ms-tree: and the window leaves out the same pages", PT.page(W, "Hollow page") == nil and PT.page(W, "Gone page") == nil and PT.page(W, "Here page") ~= nil)
 		PT.go(W, "Here page")
 		check("ms-tree: a row whose CVar the client lacks is not shown, in the window or in the game's options", PT.row(W, "Present switch") ~= nil and PT.row(W, "Absent switch") == nil
@@ -63938,7 +64013,7 @@ function PT.runSetup()
 		local S = SU.open(W)
 		check("setup: opening setup builds the window and shows New profile, with the counter Start and the title of setup", ns.PanelShown() and PT.title(W) == "New profile" and SU.has(W, "Flat UI setup")
 			and SU.has(W, "Start") and S.cur == 0 and ns.PanelKit ~= nil and #W.addonFrames > frames0, tostring(PT.title(W)))
-		check("setup: the options pages and their buttons are hidden while setup has the window", PT.byText(W, "Movers")[1] == nil and PT.byText(W, "Reload")[1] == nil and PT.searchBox(W) ~= nil and not PT.shown(W, PT.searchBox(W)))
+		check("setup: the options pages and their buttons are hidden while setup has the window", PT.byText(W, "Move frames")[1] == nil and PT.byText(W, "Reload")[1] == nil and PT.searchBox(W) ~= nil and not PT.shown(W, PT.searchBox(W)))
 		check("setup: the left column lists the areas and the steps built, with New profile first and Review last", SU.has(W, "Look") and SU.has(W, "Borders and backgrounds") and SU.has(W, "Bar texture and colours")
 			and SU.has(W, "New profile") and SU.has(W, "Review") and SU.has(W, "Start") and SU.has(W, "Finish") and SU.has(W, "Nameplate health bar") and SU.has(W, "Nameplates") and SU.has(W, "Action buttons"))
 		check("setup: New profile has the name, where to start from and the two settings of setup", PT.row(W, "Profile name") ~= nil and PT.row(W, "Start from") ~= nil and SU.has(W, "Setup")
@@ -63984,7 +64059,7 @@ function PT.runSetup()
 		SU.press(O, "Close")
 		check("setup: Close with nothing chosen closes at once and keeps nothing", not O.ns.PanelShown() and O.env.FlatUIDB.setup == nil or next(O.env.FlatUIDB.setup.drafts or {}) == nil)
 		O.ns.OpenPanel()
-		check("setup: and the options window comes back as it was", PT.title(O) == "Flat UI" and PT.searchBox(O) ~= nil and PT.shown(O, PT.searchBox(O)) and PT.button(O, "Movers") ~= nil)
+		check("setup: and the options window comes back as it was", PT.title(O) == "Flat UI" and PT.searchBox(O) ~= nil and PT.shown(O, PT.searchBox(O)) and PT.page(O, "Move frames") ~= nil)
 		clean(O, "setup leave")
 	end
 
@@ -65883,6 +65958,617 @@ function PT.runForever()
 	end
 end
 
+-- 17. The sidebar, the header and Home (window nav) ---------------------------------------------------------------------------------
+function PT.runNav()
+	local clean, joined, need = PT.clean, PT.joined, PT.need
+	local N = {}
+	N.keys = { "general", "fonts", "unitframes", "nameplates", "resource", "castbars", "swing", "actionbars", "barblock", "blocks", "cooldowns", "trackers", "defensives",
+		"partycd", "enemycd", "combattext", "hud", "windows", "chat", "movers", "fade", "tooltip" }
+	N.names = { "Home", "Flat UI setup", "Profiles", "Move frames", "Look", "Flat UI", "Fonts", "Frames", "Unit frames", "Nameplates", "Personal resource display", "Cast bars",
+		"Swing timers", "Action bars", "Action bars", "Bar block", "Bar blocks", "Combat", "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns",
+		"Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Layout", "Movers", "Fading", "Tooltip" }
+	N.known = {}
+	for _, name in ipairs(N.names) do N.known[name] = true end
+	N.scroll = function(W) return PT.clips(W, PT.nav(W)[1].raw)[1] end
+	N.top = function(W) for _ = 1, 40 do PT.wheel(W, N.scroll(W), 10) end end
+	-- Every row of the sidebar that has a name in N.names, in the order the column lists them, found by scrolling it from the top to the end.
+	N.all = function(W)
+		N.top(W)
+		local seen, order = {}, {}
+		for _ = 1, 40 do
+			for _, entry in ipairs(PT.nav(W)) do
+				if not seen[entry.raw] then
+					seen[entry.raw] = true
+					if N.known[entry.text] then order[#order + 1] = entry.text end
+				end
+			end
+			PT.wheel(W, N.scroll(W), -1)
+		end
+		N.top(W)
+		return order
+	end
+	-- The shown texts of the window, from the right-hand side.
+	N.texts = function(W)
+		local list = {}
+		for _, raw in ipairs(PT.frames(W)) do
+			if PT.shown(W, raw) then
+				for _, fs in ipairs(raw.fonts) do
+					if fs.shown and fs.text and fs.text ~= "" then list[#list + 1] = fs.text end
+				end
+			end
+		end
+		return list
+	end
+	N.has = function(W, text)
+		for _, got in ipairs(N.texts(W)) do
+			if got == text then return true end
+		end
+		return false
+	end
+	-- The row of a label on Home: the frame that has the label as its first text and controls in it.
+	N.rowOf = function(W, label)
+		for _, raw in ipairs(PT.byText(W, label)) do
+			if raw.fonts[1] and raw.fonts[1].text == label and #raw.children > 0 then return raw end
+		end
+	end
+	N.count = function(W, text)
+		local n = 0
+		for _, got in ipairs(N.texts(W)) do
+			if got == text then n = n + 1 end
+		end
+		return n
+	end
+	N.on = function(ns)
+		local on = 0
+		for _, key in ipairs(N.keys) do
+			if key == "general" or ns.Get(key .. ".enabled") then on = on + 1 end
+		end
+		return on
+	end
+	N.rgb = function(c) return ("%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5)) end
+	-- The chip of a row of the sidebar: the second text of the row, when it is shown.
+	N.chip = function(W, label)
+		local row = PT.page(W, label)
+		local fs = row and row.fonts[2]
+		return fs and fs.shown and fs.text or nil
+	end
+	-- The rows of the sidebar, shown or not: the children of the scroll frame of the column.
+	N.rows = function(W)
+		local wl = W.rectOf(PT.window(W))
+		local list = {}
+		for _, scroll in ipairs(PT.frames(W)) do
+			local sl = W.rectOf(scroll)
+			if scroll.objectType == "ScrollFrame" and PT.shown(W, scroll) and sl and math.abs(sl - wl) < 0.01 then
+				for _, c in ipairs(scroll.scrollChild.children) do
+					if W.rawOf[c].shown then list[#list + 1] = W.rawOf[c] end
+				end
+			end
+		end
+		return list
+	end
+	-- The marks of the sidebar: the textures 2 units wide that are shown in its rows.
+	N.marks = function(W)
+		local list = {}
+		for _, raw in ipairs(N.rows(W)) do
+			for _, r in ipairs(raw.regions) do
+				if r.kind == "Texture" and r.shown and r.width == 2 and r.color then list[#list + 1] = N.rgb(r.color) end
+			end
+		end
+		return list
+	end
+	-- The icons of the sidebar that are shown: the textures of Panel.tga in its rows, but not the chevron of a group.
+	N.icons = function(W)
+		local n = 0
+		for _, raw in ipairs(N.rows(W)) do
+			for _, r in ipairs(raw.regions) do
+				if r.kind == "Texture" and r.shown and type(r.file) == "string" and r.file:find("Panel.tga", 1, true) and not (near(r.texCoord[1], 1 / 8) and near(r.texCoord[3] + r.texCoord[4], 7 / 4)) then n = n + 1 end
+			end
+		end
+		return n
+	end
+	-- The rotations of the chevrons of the groups that show, from the top.
+	N.turns = function(W)
+		local list = {}
+		for _, raw in ipairs(N.rows(W)) do
+			for _, r in ipairs(raw.regions) do
+				if r.kind == "Texture" and r.shown and type(r.file) == "string" and r.file:find("Panel.tga", 1, true) and near(r.texCoord[1], 1 / 8) and near(r.texCoord[3] + r.texCoord[4], 7 / 4) then
+					list[#list + 1] = r.rotation or 0
+				end
+			end
+		end
+		return list
+	end
+	-- The frame of the tile of a module on Home.
+	N.tile = function(W, name)
+		local _, child = PT.right(W)
+		for _, raw in ipairs(PT.byText(W, name)) do
+			if raw.parent and W.rawOf[raw.parent] == child then return raw end
+		end
+	end
+	N.state = function(W, name)
+		local tile = N.tile(W, name)
+		return tile and tile.fonts[2] and tile.fonts[2].text
+	end
+	N.switchOf = function(W, tile)
+		for _, c in ipairs(tile.children) do
+			local _, _, w, h = W.rectOf(c)
+			if w and math.abs(w - 32) < 0.01 and math.abs(h - 16) < 0.01 then return W.rawOf[c] end
+		end
+	end
+	-- The end of the track that the knob of a switch is at.
+	N.knob = function(raw)
+		for _, r in ipairs(raw.regions) do
+			if r.kind == "Texture" and r.layer == "ARTWORK" and r.points and r.points[1] then return r.points[1][1] end
+		end
+	end
+	N.track = function(raw)
+		for _, r in ipairs(raw.regions) do
+			if r.kind == "Texture" and r.shown and r.layer == "BACKGROUND" and r.color then return N.rgb(r.color) end
+		end
+	end
+
+	-- Home is the first page, and the window opens on the page it was left on.
+	do
+		local W = PT.world({ firstStart = true })
+		local ns = W.ns
+		ns.OpenPanel()
+		local subtitle = ("%d of 22 modules on"):format(N.on(ns))
+		check("window nav: the first time the window opens on Home, and says how many of the 22 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
+			and (W.env.FlatUIDB.panel == nil or W.env.FlatUIDB.panel.page == nil), subtitle .. " " .. tostring(PT.title(W)))
+		PT.go(W, "Nameplates")
+		check("window nav: a page chosen is kept in FlatUIDB.panel and in no profile", W.env.FlatUIDB.panel.page == "nameplates" and W.env.FlatUIDB.profiles[ns.Profile()].options.page == nil)
+		PT.press(W, PT.button(W, "Done"))
+		check("window nav: Done closes the window", not ns.PanelShown())
+		ns.OpenPanel()
+		check("window nav: and it opens on that page the next time", PT.title(W) == "Nameplates" and N.count(W, "Frames > Nameplates") + N.count(W, "Frames") >= 1)
+		PT.go(W, "Profiles")
+		check("window nav: Profiles is kept too", W.env.FlatUIDB.panel.page == "profiles")
+		clean(W, "window nav home")
+		local P = PT.open({ saved = { options = {}, panel = { page = "castbars" } } })
+		local Q = PT.open({ saved = { options = {}, panel = { page = "nowhere" } } })
+		local R = PT.open({ saved = { options = {}, panel = { page = "profiles" } } })
+		check("window nav: a page that was kept opens again in a new session, and a page that is gone opens Home", PT.title(P) == "Cast bars" and PT.title(Q) == "Home" and PT.title(R) == "Profiles",
+			tostring(PT.title(P)) .. " " .. tostring(PT.title(Q)) .. " " .. tostring(PT.title(R)))
+	end
+
+	-- The sidebar: the order of the groups and modules, folding, the Off chip, the selected row.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		check("window nav: the sidebar lists Home, Flat UI setup, Profiles and Move frames, then the six groups with the 22 modules in order", joined(N.all(W)) == joined(N.names), joined(N.all(W)))
+		check("window nav: the open page has one mark in the accent in the sidebar", joined(N.marks(W)) == "9a9cf0", joined(N.marks(W)))
+		check("window nav: every module row has its icon from Panel.tga", N.icons(W) >= 4 and #PT.byText(W, "Fonts") >= 1)
+		local nav = PT.nav(W)
+		check("window nav: the rows are 28 high and the text starts after a 16 unit icon", math.abs(nav[1].bottom - nav[2].bottom - 28) < 0.01 and nav[1].textLeft - W.rectOf(nav[1].raw) > 30, g(nav[1].bottom - nav[2].bottom))
+		-- Fold
+		local open = N.turns(W)
+		PT.press(W, PT.page(W, "Look"))
+		local folded = N.turns(W)
+		check("window nav: a folded group turns its chevron to the right, with SetRotation, and an open one points down", #open == 6 and near(open[1], 0) and near(folded[1], math.pi / 2) and near(folded[2], 0), joined(open) .. " " .. joined(folded))
+		check("window nav: a click on a group folds it, and the fold is kept in FlatUIDB.panel and in no profile", PT.page(W, "Fonts") == nil and PT.page(W, "Look") ~= nil
+			and W.env.FlatUIDB.panel.folded.Look == true and W.env.FlatUIDB.profiles[ns.Profile()].options.folded == nil)
+		check("window nav: the page of a folded group stays open", PT.title(W) == "Flat UI")
+		PT.press(W, PT.page(W, "Look"))
+		check("window nav: and a second click opens the group again, and the fold is forgotten", PT.page(W, "Fonts") ~= nil and W.env.FlatUIDB.panel.folded == nil)
+		PT.press(W, PT.page(W, "Look"))
+		PT.go(W, "Home")
+		PT.press(W, N.tile(W, "Fonts"))
+		check("window nav: a page opened from a folded group opens the group", PT.title(W) == "Fonts" and PT.page(W, "Fonts") ~= nil and W.env.FlatUIDB.panel.folded == nil)
+		-- The Off chip
+		check("window nav: a module that is off shows Off, and one that is on shows none", N.chip(W, "Fonts") == "Off" and N.chip(W, "Nameplates") == nil)
+		ns.Set("nameplates.enabled", false)
+		W.update(1)
+		check("window nav: Off follows the switch of the module", N.chip(W, "Nameplates") == "Off" and N.chip(W, "Unit frames") == nil)
+		ns.Set("nameplates.enabled", true)
+		W.update(1)
+		check("window nav: and goes when it is on again", N.chip(W, "Nameplates") == nil)
+		-- Selected, hover
+		PT.go(W, "Nameplates")
+		check("window nav: the open module has the mark in the accent, and the mark follows the page", joined(N.marks(W)) == "9a9cf0" and PT.title(W) == "Nameplates")
+		-- Tabs of the open module
+		check("window nav: the pages of the open module are under it, and the others are not", PT.page(W, "Health bar") ~= nil and PT.page(W, "Colours and threat") ~= nil and PT.page(W, "Player frame") == nil)
+		PT.go(W, "Health bar")
+		check("window nav: a tab opens like any page and keeps the module open", PT.title(W) == "Health bar" and PT.page(W, "Colours and threat") ~= nil and #N.marks(W) == 1)
+		-- Move frames
+		local calls = {}
+		local movers = ns.modules.movers
+		local was = movers.slash.move
+		movers.slash.move = function(rest) calls[#calls + 1] = rest end
+		N.top(W)
+		PT.press(W, PT.page(W, "Move frames"))
+		movers.slash.move = was
+		check("window nav: Move frames runs the command /flatui move runs", #calls == 1 and calls[1] == "", #calls)
+		check("window nav: and shows no chip out of combat", N.chip(W, "Move frames") == nil)
+		W.combat = true
+		W.update(1)
+		check("window nav: in a fight Move frames says After combat", N.chip(W, "Move frames") == "After combat")
+		W.combat = false
+		W.update(1)
+		-- Flat UI setup
+		PT.press(W, PT.page(W, "Flat UI setup"))
+		check("window nav: Flat UI setup opens setup in the same window", PT.title(W) == "New profile" and ns.PanelShown())
+		clean(W, "window nav sidebar")
+	end
+
+	-- The module switch is in the header.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		check("window nav: Flat UI and its tab Colours have no switch in the header", PT.headSwitch(W) == nil)
+		PT.go(W, "Nameplates")
+		local switch, label = PT.headSwitch(W)
+		check("window nav: Nameplates has its switch in the header, with the label of the setting, and no row of that name", switch ~= nil and label == "Restyle nameplates" and PT.row(W, "Restyle nameplates") == nil
+			and ns.Get("nameplates.enabled") == true and N.track(switch) == "9a9cf0", tostring(label))
+		PT.press(W, switch)
+		check("window nav: a click on it turns the module off through the same setting, and the track is no longer in the accent", ns.Get("nameplates.enabled") == false and N.track(switch) == "353a31"
+			and N.knob(switch) == "LEFT" and N.chip(W, "Nameplates") == "Off", tostring(N.track(switch)))
+		check("window nav: the rows of the page are dim while it is off", need(W, "Restyle friendly nameplates").alpha < 1)
+		PT.press(W, switch)
+		check("window nav: and a second click puts it back", ns.Get("nameplates.enabled") == true and N.track(switch) == "9a9cf0" and N.knob(switch) == "RIGHT" and need(W, "Restyle friendly nameplates").alpha == 1)
+		ns.Set("nameplates.enabled", false)
+		W.update(1)
+		check("window nav: a switch set elsewhere shows within half a second", N.track(switch) == "353a31")
+		ns.Set("nameplates.enabled", true)
+		PT.go(W, "Colours and threat")
+		check("window nav: a tab of a module has no switch of its own", PT.headSwitch(W) == nil and PT.title(W) == "Colours and threat")
+		PT.go(W, "Personal resource display")
+		PT.go(W, "Your buffs")
+		local own, ownLabel = PT.headSwitch(W)
+		check("window nav: a page of its own with a switch, Your buffs, shows it", own ~= nil and ownLabel == "Your buffs" and PT.row(W, "Your buffs") == nil, tostring(ownLabel))
+		PT.type(PT.searchBox(W), "restyle nameplates")
+		local found = PT.shownRows(W)[1]
+		check("window nav: a search shows no switch in the header, and still finds the row of it", PT.headSwitch(W) == nil and found ~= nil and found.fonts[1].text == "Restyle nameplates" and PT.title(W) == "Search")
+		PT.type(PT.searchBox(W), "")
+		check("window nav: the search is in the title bar", select(2, W.rectOf(PT.searchBox(W))) > select(2, W.rectOf(PT.window(W))) + 640)
+		clean(W, "window nav header")
+	end
+
+	-- A page that no group names.
+	do
+		local O = PT.world()
+		table.insert(O.ns.PAGES, { key = "stray", label = "Stray", { key = "one", kind = "bool", default = false, label = "Stray row", path = "stray.one" } })
+		O.ns.OpenPanel()
+		PT.go(O, "Stray")
+		check("window nav: a page that no group names is in the group Other, and opens", PT.page(O, "Other") ~= nil and PT.title(O) == "Stray" and #PT.shownRows(O) == 1)
+	end
+
+	-- The record keeps the last 50 changes.
+	do
+		local O = PT.open()
+		local Hm = O.ns.PanelHome
+		for i = 1, 60 do Hm.Noted({ path = "x.k" .. i, label = "K" .. i }, i, i + 1) end
+		check("window nav: the record keeps the last 50 changes, the newest first", #Hm.Log() == 50 and Hm.Log()[1].item.label == "K60" and Hm.Log()[50].item.label == "K11")
+	end
+
+	-- The Sidebar setting.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		local row
+		for _, item in ipairs(ns.PAGES[1]) do
+			if item.path == "panel.sidebar" then row = item end
+		end
+		local labels = {}
+		for _, choice in ipairs(row and row.choices or {}) do labels[#labels + 1] = choice[1] .. "=" .. choice[2] end
+		check("window nav: Sidebar is in the Options window section, starts at Icons and names, and has three choices, kept for the account", row ~= nil and row.label == "Sidebar"
+			and ns.Get("panel.sidebar") == "full" and joined(labels) == "full=Icons and names, names=Names only, rail=Icon rail", joined(labels))
+		local wl = W.rectOf(PT.window(W))
+		local function column()
+			local scroll = PT.right(W, ns.PanelLook.SideWidth())
+			local l, _, w = W.rectOf(scroll)
+			return l - wl, w
+		end
+		local full, fullWidth = column()
+		check("window nav: Icons and names is 232 wide and the page beside it is 808 wide", near(full, 232) and near(fullWidth, 808) and N.icons(W) > 5, g(full) .. " " .. g(fullWidth))
+		ns.Set("panel.sidebar", "names")
+		W.update(1)
+		local names, namesWidth = column()
+		check("window nav: Names only is 200 wide and has no icons, and the page grows", near(names, 200) and near(namesWidth, 840) and N.icons(W) == 0 and #PT.navTexts(W) > 10, g(names) .. " " .. g(namesWidth))
+		ns.Set("panel.sidebar", "rail")
+		W.update(1)
+		local rail, railWidth = column()
+		check("window nav: Icon rail is 56 wide and has icons and no text", near(rail, 56) and near(railWidth, 984) and N.icons(W) > 5 and #PT.navTexts(W) == 0 and N.count(W, "Off") == 0, g(rail) .. " " .. g(railWidth) .. " " .. #PT.navTexts(W))
+		PT.SIDE = 56
+		check("window nav: the page is built again for the column, with its rows", PT.title(W) == "Flat UI" and #PT.shownRows(W) > 5 and #N.marks(W) == 1, #PT.shownRows(W))
+		PT.SIDE = 232
+		ns.Set("panel.sidebar", "full")
+		W.update(1)
+		local again, againWidth = column()
+		check("window nav: and the first width comes back", near(again, 232) and near(againWidth, 808) and #PT.navTexts(W) > 10)
+		check("window nav: the choice is kept in FlatUIDB.panel and in no profile", W.env.FlatUIDB.panel.sidebar == "full" and W.env.FlatUIDB.profiles[ns.Profile()].options["panel.sidebar"] == nil)
+		clean(W, "window nav sidebar setting")
+	end
+
+	-- Home: the cards, the tiles, the recent changes and what needs a reload.
+	do
+		local W = PT.world({ firstStart = true })
+		local ns = W.ns
+		local state = PT.profiles(W)
+		W.ns.OpenPanel()
+		check("window nav: Home has the cards Profile, Accent and density and Recent changes, and the section Modules", N.has(W, "Profile") and N.has(W, "Accent and density") and N.has(W, "Recent changes")
+			and N.has(W, "Modules") and N.has(W, "No changes yet.") and not N.has(W, "Needs a reload"), joined(N.texts(W)):sub(1, 400))
+		check("window nav: the Profile card has the profile in use, how many characters use it and three buttons", N.has(W, "Profile in use") and N.has(W, "Default") and PT.button(W, "Edit in setup") ~= nil
+			and PT.button(W, "Export") ~= nil and PT.button(W, "Ready-made") ~= nil and N.has(W, "Used by 1 character"))
+		local ready = 0
+		ns.OpenProfiles = function() ready = ready + 1 end
+		PT.press(W, PT.button(W, "Ready-made"))
+		check("window nav: Ready-made opens the ready-made profiles", ready == 1)
+		PT.press(W, N.rowOf(W, "Profile in use").children[1])
+		local lines = PT.linesOf(W, PT.list(W))
+		PT.press(W, lines[2].raw)
+		check("window nav: the profile in use is chosen in a list and changes through ns.UseProfile", state.calls[#state.calls][1] == "UseProfile" and state.calls[#state.calls][2] == "Raid", tostring(state.calls[#state.calls] and state.calls[#state.calls][2]))
+		-- Accent and density
+		check("window nav: the card has the seven accents, Density and Corners", N.has(W, "Accent") and N.has(W, "Density") and N.has(W, "Corners") and N.has(W, "Compact") and N.has(W, "Comfortable")
+			and N.has(W, "Roomy") and N.has(W, "Square") and N.has(W, "Soft") and N.has(W, "Round"))
+		PT.press(W, PT.button(W, "Compact"))
+		check("window nav: a click on Compact sets Density and the page is built again, still Home", ns.Get("panel.density") == "compact" and N.count(W, "Home") == 2 and N.has(W, "Compact"), tostring(ns.Get("panel.density")) .. " " .. N.count(W, "Home") .. " " .. joined(W.errors) .. joined(W.violations))
+		PT.press(W, PT.button(W, "Comfortable"))
+		PT.press(W, PT.button(W, "Round"))
+		check("window nav: and Corners and Density go back with a click", ns.Get("panel.density") == "comfortable" and ns.Get("panel.corners") == "round" and PT.title(W) == "Home")
+		PT.press(W, PT.button(W, "Square"))
+		-- The accent swatches: seven frames 24 by 24 in the card.
+		local swatches = {}
+		for _, raw in ipairs(PT.frames(W)) do
+			local _, _, w, h = W.rectOf(raw)
+			if PT.shown(W, raw) and raw.scripts.OnMouseUp and w and math.abs(w - 24) < 0.01 and math.abs(h - 24) < 0.01 then swatches[#swatches + 1] = raw end
+		end
+		table.sort(swatches, function(a, b) return W.rectOf(a) < W.rectOf(b) end)
+		PT.press(W, swatches[2])
+		check("window nav: a click on the second swatch sets Accent colour to Sage, and the sidebar mark follows", #swatches == 7 and ns.Get("panel.accent") == "sage" and joined(N.marks(W)) == "8cc79a", #swatches .. " " .. joined(N.marks(W)))
+		PT.press(W, swatches[1])
+		check("window nav: and the first puts back Indigo", ns.Get("panel.accent") == "indigo" and joined(N.marks(W)) == "9a9cf0")
+		-- The tiles
+		local states = 0
+		for _, text in ipairs(N.texts(W)) do
+			if text == "Defaults" or text:find("^%d+ changed$") then states = states + 1 end
+		end
+		check("window nav: 22 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 22 and N.has(W, ("%d on"):format(N.on(ns))), states)
+		check("window nav: Flat UI and Swing timers are at their defaults", N.state(W, "Flat UI") == "Defaults" and N.state(W, "Swing timers") == "Defaults")
+		local tile = N.tile(W, "Nameplates")
+		local switch = N.switchOf(W, tile)
+		check("window nav: a tile has the icon, the name, the state and the switch of the module; Flat UI has none", tile ~= nil and switch ~= nil and N.track(switch) == "9a9cf0" and N.switchOf(W, N.tile(W, "Flat UI")) == nil)
+		PT.press(W, switch)
+		check("window nav: the switch of a tile turns the module off, and Home says one module fewer", ns.Get("nameplates.enabled") == false and N.track(switch) == "353a31"
+			and N.has(W, ("%d of 22 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
+		PT.press(W, switch)
+		ns.Set("swing.enabled", false)
+		ns.Set("general.thickness", 2)
+		W.update(1)
+		check("window nav: a tile counts the settings of its module that are not at their default", N.state(W, "Flat UI") == "1 changed" and N.state(W, "Swing timers") == "1 changed", tostring(N.state(W, "Flat UI")) .. " " .. tostring(N.state(W, "Swing timers")))
+		ns.Set("swing.enabled", true)
+		ns.Set("general.thickness", 1)
+		ns.Set("panel.borders", "hairline")
+		W.update(1)
+		check("window nav: a setting that is held outside the profile, such as Borders, is not counted", N.state(W, "Flat UI") == "Defaults", tostring(N.state(W, "Flat UI")))
+		ns.Set("panel.borders", "none")
+		PT.press(W, N.tile(W, "Cast bars"))
+		check("window nav: a click on a tile opens the page of the module", PT.title(W) == "Cast bars" and W.env.FlatUIDB.panel.page == "castbars")
+		PT.go(W, "Home")
+		PT.press(W, PT.button(W, "Edit in setup"))
+		check("window nav: Edit in setup opens setup, and the buttons of the options pages are away", PT.title(W) == "New profile" and PT.button(W, "Done") == nil and PT.button(W, "Reset page") == nil and PT.button(W, "Reload") == nil)
+		clean(W, "window nav home")
+	end
+
+	-- Recent changes with Undo, and what needs a reload.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		local function home()
+			PT.go(W, "Home")
+		end
+		PT.go(W, "Nameplates")
+		PT.press(W, PT.control(need(W, "Restyle friendly nameplates")))
+		home()
+		check("window nav: a change made in the window shows on Home with the label, where it is and Undo", N.has(W, "Restyle friendly nameplates") and N.has(W, "Nameplates") and PT.button(W, "Undo") ~= nil
+			and not N.has(W, "No changes yet.") and ns.Get("nameplates.friendly") == false)
+		PT.press(W, PT.button(W, "Undo"))
+		check("window nav: Undo puts the value back and takes the line away", ns.Get("nameplates.friendly") == true and PT.button(W, "Undo") == nil and N.has(W, "No changes yet."))
+		PT.go(W, "Health bar")
+		PT.press(W, PT.control(need(W, "Health bar border")))
+		home()
+		check("window nav: a change on a tab says the module and the tab", N.has(W, "Health bar border") and N.has(W, "Nameplates > Health bar"))
+		PT.press(W, PT.button(W, "Undo"))
+		PT.go(W, "Flat UI")
+		local thick = need(W, "Border thickness")
+		PT.press(W, PT.control(thick), 0.5)
+		PT.press(W, PT.control(thick), 1)
+		home()
+		check("window nav: a slider that moved twice is one line, and its Undo goes back to the first value", N.count(W, "Border thickness") == 1 and ns.Get("general.thickness") == 3)
+		PT.press(W, PT.button(W, "Undo"))
+		check("window nav: and Undo sets the value it had before the first move", ns.Get("general.thickness") == 1)
+		PT.go(W, "Flat UI")
+		PT.press(W, PT.control(need(W, "Border thickness")), 1)
+		PT.press(W, PT.control(need(W, "Border thickness")), 0)
+		home()
+		check("window nav: a change that is changed back leaves no line", PT.button(W, "Undo") == nil and N.has(W, "No changes yet."))
+		PT.go(W, "Flat UI")
+		PT.press(W, PT.control(need(W, "Border thickness")), 1)
+		PT.press(W, PT.button(W, "Reset page"))
+		PT.press(W, PT.button(W, "Yes"))
+		home()
+		check("window nav: Reset page goes through the record, so a setting back at its first value leaves no line", ns.Get("general.thickness") == 1 and N.has(W, "No changes yet."), tostring(ns.Get("general.thickness")))
+		-- Five changes: three show, Show all shows them all.
+		local steps = { { "Flat UI", "Borderless" }, { "Flat UI", "Flat UI button in the game menu" }, { "Nameplates", "Own border and background" },
+			{ "Nameplates", "Click through enemy nameplates" }, { "Nameplates", "Restyle friendly nameplates" } }
+		for _, step in ipairs(steps) do
+			PT.go(W, step[1])
+			PT.press(W, PT.control(need(W, step[2])))
+		end
+		home()
+		local undo = #PT.byText(W, "Undo")
+		check("window nav: three changes show, the newest first, with Show all", undo == 3 and N.has(W, "Show all") and N.has(W, "Restyle friendly nameplates") and not N.has(W, "Borderless"), undo)
+		PT.press(W, PT.button(W, "Show all"))
+		check("window nav: Show all lists every change, and Show fewer goes back", #PT.byText(W, "Undo") == 5 and N.has(W, "Borderless") and N.has(W, "Show fewer"))
+		PT.press(W, PT.button(W, "Show fewer"))
+		check("window nav: three show again", #PT.byText(W, "Undo") == 3)
+		clean(W, "window nav recent")
+		-- A reload
+		local R = PT.open()
+		local rns = R.ns
+		PT.go(R, "Windows")
+		check("window nav: nothing needs a reload while no switch has changed", not N.has(R, "Needs a reload"))
+		PT.press(R, (PT.headSwitch(R)))
+		PT.go(R, "Home")
+		check("window nav: Restyle windows turned off shows Needs a reload, with the sentence and a Reload button", rns.Get("windows.enabled") == false and N.has(R, "Needs a reload")
+			and N.has(R, "Turning off Restyle windows takes full effect after a reload.") and #PT.byText(R, "Reload") == 2, joined(N.texts(R)):sub(1, 300))
+		PT.press(R, PT.byText(R, "Reload")[1])
+		check("window nav: a Reload button reloads the interface", R.reloads == 1, R.reloads)
+		PT.go(R, "Windows")
+		PT.press(R, (PT.headSwitch(R)))
+		PT.go(R, "Home")
+		check("window nav: and the line goes when the switch is on again", not N.has(R, "Needs a reload") and #PT.byText(R, "Reload") == 1)
+		PT.go(R, "Flat UI")
+		PT.press(R, PT.control(need(R, "Leave the game's action bars alone")))
+		PT.go(R, "Home")
+		check("window nav: a row that applies after a reload when its value changes is listed too", N.has(R, "Leave the game's action bars alone applies after a reload.") and N.has(R, "Needs a reload"), joined(N.texts(R)):sub(1, 200))
+		PT.go(R, "Flat UI")
+		PT.press(R, PT.control(need(R, "Leave the game's action bars alone")))
+		PT.go(R, "Home")
+		check("window nav: and goes when the value is back", not N.has(R, "Needs a reload"))
+		clean(R, "window nav reload")
+	end
+
+	-- The record belongs to the profile it was made in, a setting has one line, and Home feeds the record too.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		local Hm = ns.PanelHome
+		local state = PT.profiles(W)
+		PT.go(W, "Nameplates")
+		PT.press(W, PT.control(need(W, "Restyle friendly nameplates")))
+		state.current = "Raid"
+		PT.go(W, "Home")
+		check("window nav: a change made in one profile is not listed in another, and has no Undo there", PT.button(W, "Undo") == nil and N.has(W, "No changes yet.") and #Hm.Log() == 0)
+		state.current = "Default"
+		PT.go(W, "Home")
+		check("window nav: and it is listed again in the profile it was made in", PT.button(W, "Undo") ~= nil and #Hm.Log() == 1)
+		local a, b = { path = "x.a", label = "A" }, { path = "x.b", label = "B" }
+		Hm.Noted(a, 1, 2)
+		Hm.Noted(b, 1, 2)
+		Hm.Noted(a, 2, 3)
+		local log = Hm.Log()
+		check("window nav: a setting has one line, the newest, with the value it had at first", #log == 3 and log[1].item == a and log[1].old == 1 and log[1].new == 3 and log[2].item == b, #log)
+		Hm.Noted(a, 3, 1)
+		check("window nav: and a change back to the first value takes it away", #Hm.Log() == 2 and Hm.Log()[1].item == b)
+		clean(W, "window nav record")
+		-- Changes made on Home
+		local H = PT.world({ firstStart = true })
+		H.ns.OpenPanel()
+		local corners0 = H.ns.Get("panel.corners")
+		PT.press(H, PT.button(H, "Compact"))
+		PT.press(H, PT.button(H, "Round"))
+		check("window nav: Density and Corners set on Home are in Recent changes with Undo", N.has(H, "Density") and N.has(H, "Corners") and #PT.byText(H, "Undo") == 2, #PT.byText(H, "Undo"))
+		PT.press(H, PT.button(H, "Undo"))
+		check("window nav: and Undo puts the value back", H.ns.Get("panel.corners") == corners0 and H.ns.Get("panel.density") == "compact", tostring(H.ns.Get("panel.corners")))
+		clean(H, "window nav home record")
+		-- The icon of a tile follows the tone and the state of the module
+		local T = PT.open()
+		PT.go(T, "Home")
+		local function iconColour()
+			for _, r in ipairs(N.tile(T, "Nameplates").regions) do
+				if r.kind == "Texture" and type(r.file) == "string" and r.file:find("Panel.tga", 1, true) then return N.rgb(r.vertex) end
+			end
+		end
+		local r1, g1, b1 = T.ns.PanelLook.Colour("text")
+		local graphite = iconColour()
+		T.ns.Set("panel.tone", "ink")
+		T.update(1)
+		local r2, g2, b2 = T.ns.PanelLook.Colour("text")
+		check("window nav: the icon of a tile is in the colour of the text, and follows Window tone", graphite == N.rgb({ r1, g1, b1 }) and iconColour() == N.rgb({ r2, g2, b2 }) and graphite ~= iconColour(), tostring(graphite) .. " " .. tostring(iconColour()))
+		T.ns.Set("panel.tone", "graphite")
+		clean(T, "window nav tile icon")
+		-- More than eight lines in Needs a reload
+		local M = PT.world({ firstStart = true })
+		M.ns.OpenPanel()
+		for _, key in ipairs({ "character", "groupfinder", "social", "npc", "bags", "spells", "menus", "auction", "guild", "inspect" }) do M.ns.Set("windows." .. key, false) end
+		PT.go(M, "Profiles")
+		PT.go(M, "Home")
+		check("window nav: more than eight lines in Needs a reload end in a line that counts the rest", N.has(M, "3 more") and not N.has(M, "and 3 more"), joined(N.texts(M)):sub(1, 300))
+		clean(M, "window nav reload overflow")
+	end
+
+	-- The footer, the fight, the icons and the frames the window makes.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		local frames0 = #W.addonFrames
+		local reset, reload, done = PT.button(W, "Reset page"), PT.button(W, "Reload"), PT.button(W, "Done")
+		local wl, wb = W.rectOf(PT.window(W))
+		local function at(raw) local l, b, w, h = W.rectOf(raw) return l - wl, b - wb, w, h end
+		local rl, rb = at(reset)
+		local el, eb = at(reload)
+		local dl, db, dw = at(done)
+		check("window nav: Reset page, Reload and Done are at the right of the strip, in that order, Done last", reset ~= nil and reload ~= nil and done ~= nil and rl < el and el < dl and dl + dw > 1000 and rb < 40 and eb < 40 and db < 40,
+			("%s %s %s"):format(g(rl), g(el), g(dl)))
+		PT.go(W, "Home")
+		check("window nav: Home has no Reset page, and Reload and Done stay", PT.button(W, "Reset page") == nil and PT.button(W, "Reload") ~= nil and PT.button(W, "Done") ~= nil)
+		PT.go(W, "Profiles")
+		check("window nav: nor has Profiles", PT.button(W, "Reset page") == nil and PT.button(W, "Done") ~= nil)
+		PT.go(W, "Nameplates")
+		check("window nav: and a module page has it again", PT.button(W, "Reset page") ~= nil)
+		-- The fight
+		W.combat = true
+		PT.go(W, "Home")
+		PT.press(W, N.tile(W, "Windows"))
+		PT.press(W, PT.page(W, "Look"))
+		PT.press(W, PT.page(W, "Look"))
+		PT.go(W, "Home")
+		PT.press(W, N.switchOf(W, N.tile(W, "Nameplates")))
+		PT.press(W, N.switchOf(W, N.tile(W, "Nameplates")))
+		ns.Set("panel.sidebar", "names")
+		W.update(1)
+		ns.Set("panel.sidebar", "full")
+		W.update(1)
+		PT.go(W, "Home")
+		PT.press(W, PT.button(W, "Done"))
+		W.combat = false
+		check("window nav: pages, the folds and Done work in a fight, and no protected function is called", #W.protectedCalls == 0 and #W.violations == 0 and #W.errors == 0 and not ns.PanelShown(),
+			joined(W.protectedCalls) .. " " .. joined(W.violations))
+		-- The atlas
+		local file = assert(io.open(ADDON_DIR .. "/Media/Panel.tga", "rb"))
+		local head = file:read(18)
+		file:close()
+		local function le(at) return head:byte(at) + head:byte(at + 1) * 256 end
+		check("window nav: Panel.tga is a 512 by 256 true colour image with 32 bits", #head == 18 and head:byte(3) == 2 and le(13) == 512 and le(15) == 256 and head:byte(17) == 32)
+		local cells, count, high = {}, 0, 0
+		for name, cell in pairs(ns.PanelNav.CELLS) do
+			if cells[cell] then count = count + 100 end
+			cells[cell] = name
+			count = count + 1
+			high = math.max(high, cell)
+		end
+		local missing = {}
+		for _, key in ipairs(N.keys) do
+			if ns.PanelNav.CELLS[key] == nil then missing[#missing + 1] = key end
+		end
+		check("window nav: the 22 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 4 atlas", count == 32 and high == 31 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
+		local texture = PT.window(W):CreateTexture(nil, "ARTWORK", nil, 0)
+		ns.PanelNav.Cell(texture, "home")
+		local tc = W.rawOf[texture].texCoord
+		check("window nav: a cell sets its quarter of the picture: Home is the seventh cell of the third row", near(tc[1], 6 / 8) and near(tc[2], 7 / 8) and near(tc[3], 2 / 4) and near(tc[4], 3 / 4), joined(tc))
+		ns.PanelNav.Cell(texture, "chevron")
+		tc = W.rawOf[texture].texCoord
+		check("window nav: the chevron cell is the second of the last row", near(tc[1], 1 / 8) and near(tc[3], 3 / 4) and near(tc[4], 1), joined(tc))
+		-- Own
+		local M = PT.open()
+		PT.go(M, "Home")
+		PT.go(M, "Nameplates")
+		PT.go(M, "Home")
+		local unowned = 0
+		for _, f in ipairs(PT.frames(M)) do
+			if not M.ns.Own[f] then unowned = unowned + 1 end
+			for _, fs in ipairs(f.fonts) do
+				if not M.ns.Own[fs] then unowned = unowned + 1 end
+			end
+		end
+		for index = 1, #M.addonTextures do
+			if not M.ns.Own[M.addonTextures[index]] then unowned = unowned + 1 end
+		end
+		check("window nav: every frame, texture and font string of the sidebar, Home and the header is in ns.Own", unowned == 0, unowned)
+		clean(M, "window nav own")
+	end
+end
+
 function PT.runAll()
 	PT.runBuild()
 	PT.runControls()
@@ -65895,6 +66581,7 @@ function PT.runAll()
 	PT.runWindow()
 	PT.runCorrect()
 	PT.runForever()
+	PT.runNav()
 	PT.runSetup()
 end
 
