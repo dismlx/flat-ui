@@ -1,3 +1,7 @@
+## 0.4.87
+
+- **Unit frames**: new **Mana bar colour** on **All frames: bars and pictures**. A mana bar next to a health bar in a blue class colour is now sky blue. **Custom power colours** on the **Colours** page now colours the power bars of the unit frames.
+
 ## 0.4.86
 
 - **Chat tabs**: new **Chat tab opacity**. The default is **Selected 100%, others 60%**. The game uses 40% and 20%.

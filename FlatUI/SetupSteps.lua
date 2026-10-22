@@ -287,6 +287,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.healthColour", "c", "mock-unit-frame" },
 		{ "unitframes.healthTexture", "c", "mock-unit-frame" },
 		{ "unitframes.powerTexture", "o", "mock-unit-frame" },
+		{ "unitframes.manaColour", "o", "behaviour", "Chooses whether a mana bar turns sky blue when the health bar is blue too." },
 		{ "unitframes.powerWidth", "o", "behaviour", "Chooses whether the power bar is as wide as the health bar or as wide as the game's bar." },
 		{ "unitframes.powerSpace", "o", "behaviour", "Sets the space between the health bar and the power bar." },
 		{ "unitframes.hideEmptyPower", "o", "behaviour", "Chooses whether a power bar with nothing to show is hidden." },

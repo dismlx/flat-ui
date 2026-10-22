@@ -10350,6 +10350,8 @@ local PAGES = {
 		S("unitframes.powerTexture", "choice", "default", "Power bar texture", nil,
 			{ needs = "unitframes.flat", choices = { { "default", "Same as the Flat UI page" }, { "flat", "Flat" }, { "soft", "Soft shade" }, { "shaded", "Shaded" }, { "gloss", "Gloss" }, { "stripes", "Stripes" }, { "edge", "Bottom edge" },
 				{ "fade", "Side fade" }, { "game", "Game status bar" }, { "skills", "Skills bar" }, { "targeting", "Targeting bar" } } }),
+		S("unitframes.manaColour", "choice", "apart", "Mana bar colour", "Custom power colours on the Colours page changes the blue this starts from.",
+			{ needs = "unitframes.flat", choices = { { "game", "As the game has it" }, { "apart", "Sky blue next to a blue health bar" } } }),
 		S("unitframes.healthByLeft", "bool", false, "Colour health bars by health left", "In the three colours of the Colours page. Not raid frames.", { needs = "unitframes.flat" }),
 		"Portraits",
 		S("unitframes.squarePortrait", "bool", true, "Square portraits",
@@ -10863,7 +10865,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.86" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.87" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -20440,6 +20442,7 @@ do local PROBES = {
 	{ "unitframes.smallRow", false, held("unitframes.smallRow"), "true/true", "false/false" },
 	{ "unitframes.nameRoom", "Fixed space", held("unitframes.nameRoom"), "fit/Only what the texts need", "fixed/Fixed space", from = "Only what the texts need" },
 	{ "unitframes.pvpWordColour", "Red", held("unitframes.pvpWordColour"), "name/Same as the name", "red/Red", from = "Same as the name" },
+	{ "unitframes.manaColour", "As the game has it", held("unitframes.manaColour"), "apart/Sky blue next to a blue health bar", "game/As the game has it", from = "Sky blue next to a blue health bar" },
 	{ "unitframes.powerWidth", "Game's width", held("unitframes.powerWidth"), "same/Same as the health bar", "game/Game's width", from = "Same as the health bar" },
 	{ "unitframes.powerSpace", 4, held("unitframes.powerSpace"), "2/2", "4/4" },
 	{ "unitframes.hideEmptyPower", false, held("unitframes.hideEmptyPower"), "true/true", "false/false" },
@@ -63393,7 +63396,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 866 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 867 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -63707,7 +63710,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 866 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 867 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -79586,6 +79589,68 @@ do
 	LK.N.ns.TextSize(LK.label, 100, nil)
 	check("bar looks: ns.TextSize does not set a font that already has the size and flags asked for", LK.N.rawOf[LK.label].calls.SetFont == LK.calls, tostring(LK.calls) .. " " .. tostring(LK.N.rawOf[LK.label].calls.SetFont))
 	check("bar looks: ns.BarFile gives the file of a bar texture by its name and nothing for a name it has not", W.ns.BarFile("soft") == LK.SOFT and W.ns.BarFile("none") == nil)
+
+	-- Mana bar colour: the fill of the power bar of the player frame for a class colour and a few settings.
+	LK.SKY, LK.GAME = "0.35,0.85,1.00", "0.00,0.00,1.00"
+	function LK.mana(o)
+		local M = LK.world()
+		M.env.RAID_CLASS_COLORS.SHAMAN = setmetatable({ r = o.shaman or 0, g = o.shamanG or 0.44, b = o.shamanB or 0.87, a = 1 }, COLOUR_MT)
+		M.env.RAID_CLASS_COLORS.REDDISH = setmetatable({ r = 1, g = 0.1, b = 0.1, a = 1 }, COLOUR_MT)
+		M.uf.who.player = { player = true, class = o.class or "SHAMAN", secret = o.secret }
+		if o.rage then
+			M.rawOf[M.player.power].powerToken = "RAGE"
+		end
+		if o.stop then
+			M.ns.PartStopped = function(key, part) return key == "unitframes" and part == "Looks" end
+		end
+		if o.curve then
+			local colour = { GetRGB = function() return 1, 0, 0 end }
+			M.env.CreateColor = function() return colour end
+			M.env.C_CurveUtil = { CreateColorCurve = function() return { AddPoint = function() end } end }
+			M.env.UnitHealthPercent = function() return colour end
+		end
+		if o.stopHealth then
+			M.ns.PartStopped = function(key, part) return key == "unitframes" and part == "health curve" end
+		end
+		for _, set in ipairs(o.set or {}) do
+			M.change(set[1], set[2])
+		end
+		if o.plain then
+			M.change("unitframes.lookMuted", true)
+			M.change("unitframes.lookMuted", false)
+		else
+			M.change("unitframes.lookClassHealth", true)
+		end
+		return LK.fill(M, M.player.powerFill)
+	end
+	LK.m = { shaman = LK.mana({}), game = LK.mana({ set = { { "unitframes.manaColour", "As the game has it" } } }), warlock = LK.mana({ class = "WARLOCK" }),
+		mage = LK.mana({ class = "MAGE" }), health = LK.mana({ plain = true }) }
+	check("mana colour: a Shaman health bar next to the mana bar makes the mana sky blue, a Warlock, a Mage and the Health colour leave it the game's blue, and As the game has it leaves it too",
+		LK.m.shaman == LK.SKY and LK.m.game == LK.GAME and LK.m.warlock == LK.GAME and LK.m.mage == LK.GAME and LK.m.health == LK.GAME,
+		table.concat({ LK.m.shaman, LK.m.game, LK.m.warlock, LK.m.mage, LK.m.health }, " "))
+	LK.o = { own = LK.mana({ set = { { "general.powerOwn", true } } }), sky = LK.mana({ set = { { "general.powerOwn", true }, { "general.powerMana", "ff59d9ff" },
+		{ "unitframes.manaColour", "As the game has it" } } }), red = LK.mana({ set = { { "general.powerOwn", true }, { "general.powerMana", "ffff0000" } } }) }
+	check("mana colour: Custom power colours reaches the power bar of the frame, sky blue next to a Shaman with the Mana colour left blue, and the colour set as it is with As the game has it",
+		LK.o.own == LK.SKY and LK.o.sky == "0.35,0.85,1.00" and LK.o.red == "1.00,0.00,0.00", table.concat({ LK.o.own, LK.o.sky, LK.o.red }, " "))
+	LK.n = { dark = LK.mana({ set = { { "unitframes.lookLostColour", true } } }), secret = LK.mana({ secret = true }), rage = LK.mana({ class = "REDDISH", rage = true }),
+		near = LK.mana({ shaman = 0.15, shamanG = 0.45, shamanB = 1 }) }
+	check("mana colour: a dark health bar, a class colour the client withholds, a Rage bar and a unit colour near sky blue as well leave the bar as it was",
+		LK.n.dark == LK.GAME and LK.n.secret == LK.GAME and LK.n.rage == "1.00,0.00,0.00" and LK.n.near == LK.GAME, table.concat({ LK.n.dark, LK.n.secret, LK.n.rage, LK.n.near }, " "))
+	LK.q = { keep = LK.mana({ set = { { "unitframes.lookLostColour", true }, { "unitframes.backdrop", false } } }), stop = LK.mana({ stop = true }),
+		reaction = LK.mana({ set = { { "unitframes.playerHealthBy", "Reaction" } }, plain = true }), left = LK.mana({ curve = true, set = { { "unitframes.healthByLeft", true } } }),
+		leftStopped = LK.mana({ curve = true, stopHealth = true, set = { { "unitframes.healthByLeft", true } } }) }
+	check("mana colour: a dark health bar with Bar background off keeps its class colour so the mana turns sky blue, a stopped Looks part, a Reaction health colour and Colour health bars by health left leave the bar as it was",
+		LK.q.keep == LK.SKY and LK.q.stop == LK.GAME and LK.q.reaction == LK.GAME and LK.q.left == LK.GAME, table.concat({ LK.q.keep, LK.q.stop, LK.q.reaction, LK.q.left }, " "))
+	check("mana colour: Colour health bars by health left with the health curve part stopped leaves the health bar its class colour so the mana turns sky blue", LK.q.leftStopped == LK.SKY, LK.q.leftStopped)
+	LK.p = LK.world()
+	LK.p.env.RAID_CLASS_COLORS.SHAMAN = setmetatable({ r = 0, g = 0.44, b = 0.87, a = 1 }, COLOUR_MT)
+	LK.p.uf.who.player.class = "SHAMAN"
+	LK.p.change("unitframes.lookClassHealth", true)
+	LK.p.change("unitframes.manaColour", "As the game has it")
+	LK.m.back = LK.fill(LK.p, LK.p.player.powerFill)
+	LK.p.change("unitframes.manaColour", "Sky blue next to a blue health bar")
+	check("mana colour: the choice is on the bars page, Sky blue next to a blue health bar by default, and changing it changes the bar at once", LK.p.control("unitframes.manaColour") ~= nil
+		and LK.p.control("unitframes.manaColour").data.name == "Mana bar colour" and LK.m.back == LK.GAME and LK.fill(LK.p, LK.p.player.powerFill) == LK.SKY and LK.m.shaman == LK.SKY)
 end
 -- >>> bar looks (end)
 -- >>> ms-10 unit frame looks (begin)

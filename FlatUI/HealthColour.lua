@@ -119,6 +119,11 @@ local function FrameOn(rec)
 		and not ns.PartStopped("unitframes", PART) and Probe(false)
 end
 
+-- True while the health fill of this unit frame is tinted by the health left (read only, for the mana bar colour).
+function ns.HealthLeftFrameOn(rec)
+	return FrameOn(rec)
+end
+
 local driver, clock = nil, 0
 local Tick
 

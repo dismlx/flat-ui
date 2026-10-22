@@ -1074,6 +1074,8 @@ ns.PAGES = {
 		{ key = "healthColour", kind = "colour", default = "ff2eb84d", label = "Health colour", needs = "flat" },
 		{ key = "healthTexture", kind = "choice", default = "default", label = "Health bar texture", needs = "flat", choices = "BarChoicesDefault" },
 		{ key = "powerTexture", kind = "choice", default = "default", label = "Power bar texture", needs = "flat", choices = "BarChoicesDefault" },
+		{ key = "manaColour", kind = "choice", default = "apart", label = "Mana bar colour", needs = "flat", tip = "Custom power colours on the Colours page changes the blue this starts from.",
+			choices = { { "game", "As the game has it" }, { "apart", "Sky blue next to a blue health bar" } } },
 		{ key = "powerWidth", kind = "choice", default = "same", label = "Power bar width", tip = "Game's width can run past the health bar on the target, focus and target of target frames.",
 			choices = { { "same", "Same as the health bar" }, { "game", "Game's width" } } },
 		{ key = "powerSpace", kind = "number", default = 2, min = 0, max = 4, step = 1, unit = " px", label = "Space between bars", tip = "0 px puts the power bar against the health bar." },

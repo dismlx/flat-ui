@@ -153,8 +153,29 @@ function X.healthColour(rec, entry)
 	return r, g, b
 end
 
--- The fill colour of a power bar, as Muted colours has it.
+-- The sky blue of a mana bar next to a blue health bar, and how near two colours must be (red, green, blue distance) to count as the same blue.
+local SKY = { 0.35, 0.85, 1.00 }
+local NEAR = 0.5
+
+local function Near(r1, g1, b1, r2, g2, b2)
+	return (r1 - r2) ^ 2 + (g1 - g2) ^ 2 + (b1 - b2) ^ 2 < NEAR * NEAR
+end
+
+-- The fill colour of a power bar. It starts from the colour of its power type on the Colours page (Custom power colours), else the game's. Mana bar colour
+-- Sky blue changes a mana bar that is near the colour of the unit its health bar has, unless sky blue is near that colour too. Then as Muted colours has it.
 function X.powerColour(rec, entry, r, g, b)
+	local token = entry ~= nil and entry.bar ~= nil and entry.bar.powerToken or nil
+	local pr, pg, pb = ns.PowerColour(token)
+	if pr ~= nil then
+		r, g, b = pr, pg, pb
+	end
+	if token ~= nil and not ns.IsSecret(token) and token == "MANA" and r ~= nil and Opt("manaColour") == "apart" and ByUnit(rec) and not Off()
+		and not (Opt("lookLostColour") == true and Opt("backdrop") == true) and not (ns.HealthLeftFrameOn ~= nil and ns.HealthLeftFrameOn(rec)) then
+		local hr, hg, hb = ByColour(rec, X.healthBy(rec))
+		if hr ~= nil and Near(r, g, b, hr, hg, hb) and not Near(SKY[1], SKY[2], SKY[3], hr, hg, hb) then
+			r, g, b = SKY[1], SKY[2], SKY[3]
+		end
+	end
 	return X.mute(r, g, b)
 end
 
