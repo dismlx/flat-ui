@@ -66,7 +66,7 @@ local KIND = {
 	party = { group = "small", pic = true, on = "party", sw = "portraitParty", pick = "partyPicture", name = "partyName", by = "partyHealthBy", ht = "party",
 		pt = "party", power = "partyPowerBar" },
 	partypet = { group = "pet2", pic = true, on = "partypet", sw = "portraitPartypet", pick = "partypetPicture", name = "partyName", ht = "party" },
-	boss = { group = "boss", on = "boss", name = "bossName", level = "bossLevel", by = "bossHealthBy", ht = "boss", power = "bossPowerBar" },
+	boss = { group = "boss", on = "boss", name = "bossName", level = "bossLevel", by = "bossHealthBy", ht = "boss", pt = "boss", power = "bossPowerBar" },
 }
 -- The frames whose text sizes are those of the player (UnitFrames.lua:114).
 local LARGE = { player = true, target = true, focus = true }
@@ -651,12 +651,12 @@ local function Settings(root)
 		nameFace = Get("nameFace"), nameSize = Get("nameSize"), nameOutline = Get("nameOutline"), nameColour = Get("nameColour"),
 		healthTextSize = Get("healthTextSize"), powerTextSize = Get("powerTextSize"), smallTextSize = Get("smallTextSize"), barTextFace = Get("barTextFace"),
 		barTextOutline = Get("barTextOutline"), barTextOwn = Get("barTextColourOwn") == true, lightText = Get("lookLightText") == true,
-		noPowerText = Get("lookNoPowerText") == true, whiteNames = Get("lookWhiteNames") == true, ownTextWhen = Get("ownTextWhen"),
+		noPowerText = Get("lookNoPowerText") == true, ownTextWhen = Get("ownTextWhen"),
 		pvpFlag = Get("pvpFlag"), pvpCorner = Get("pvpCorner"), pvpTimer = Get("pvpTimer") == true, pvpIcon = Get("pvpIcon") == true,
 		leaderIcon = Get("leaderIcon") == true, roleIcon = Get("roleIcon") == true, raidMarker = Get("raidMarker") == true, deadText = Get("deadText") == true,
 		combatIcon = Get("combatIcon") == true, petHappiness = Get("petHappiness") == true, restAnimation = Get("restAnimation"), auras = Get("auras") == true,
 		auraCrop = Get("auraCrop"), auraTypeColours = Get("auraTypeColours") == true, auraCountSize = Get("auraCountSize"),
-		auraNumbers = Get("auraNumbers") == true, lookShadow = Get("lookShadow") == true, radius = RADIUS[Get("corners")], totNameFit = Get("totNameFit") }
+		auraNumbers = Get("auraNumbers") == true, lookShadow = Get("lookShadow") == true, radius = RADIUS[Get("corners")], fit = { tot = Get("totNameFit"), pet = Get("petNameFit"), party = Get("partyNameFit"), partypet = Get("partyNameFit"), boss = Get("bossNameFit") } }
 	g.t = ns.Pixels(root, ns.Get("general.thickness"))
 	return g
 end
@@ -1025,12 +1025,11 @@ function E.row(o, g, L)
 			texture:Hide()
 		end
 	end
-	-- The colour of the name: the game's, white with White names, the unit's own, or the custom colour (UnitText.lua:56-123, UnitFrameLooks.lua:244-255).
+	-- The colour of the name: the game's, white, the unit's own, or the custom colour (UnitText.lua).
 	local nr, ng, nb = GOLD[1], GOLD[2], GOLD[3]
-	if rowOn and g.whiteNames then
+	if L.on and g.nameColour == "white" then
 		nr, ng, nb = 1, 1, 1
-	end
-	if L.on and g.nameColour == "custom" then
+	elseif L.on and g.nameColour == "custom" then
 		nr, ng, nb = ns.Colour(KEY .. ".nameCustom")
 	elseif L.on and (g.nameColour == "class" or g.nameColour == "reaction") then
 		nr, ng, nb = ByUnit(o, g.nameColour)
@@ -1047,8 +1046,8 @@ function E.row(o, g, L)
 		end
 	end
 	Style(o.name, spec)
-	-- Long names on the target of target: a name wider than the row is set smaller, down to 75% (UnitExtras.lua, FitName).
-	if s.kind == "tot" and rowOn and L.on and g.totNameFit == "shrink" then
+	-- Long names: a name wider than the row is set smaller, down to 75% (UnitExtras.lua, FitName).
+	if rowOn and L.on and g.fit[s.kind] == "shrink" then
 		local ok, need = pcall(o.name.GetUnboundedStringWidth or o.name.GetStringWidth, o.name)
 		local room = size.bar + 2 * t - 2 * ROW.pad
 		if ok and not ns.IsSecret(need) and type(need) == "number" and need > room then
@@ -1249,7 +1248,7 @@ function E.icons(o, g, L)
 	o.shade:SetShown(dim and true or false)
 	if dim then
 		Over(o.shade, root)
-		Solid(o.shade, 0, 0, 0, Get("partyRangeAlpha") / 100)
+		Solid(o.shade, 0, 0, 0, 1 - Get("partyRangeOpacity") / 100)
 	end
 end
 
@@ -1535,7 +1534,7 @@ local MARK = {
 	nameFace = { "player", "name" }, nameSize = { "player", "name" }, nameOutline = { "player", "name" }, nameColour = { "player", "name" }, nameCustom = { "player", "name" },
 	healthTextSize = { "player", "healthText" }, powerTextSize = { "player", "powerText" }, smallTextSize = { "pet", "healthText" }, barTextFace = { "player", "healthText" },
 	barTextOutline = { "player", "healthText" }, barTextColourOwn = { "player", "healthText" }, barTextColour = { "player", "healthText" },
-	lookClassHealth = { "player", "health" }, lookLostColour = { "player", "health" }, lookMuted = { "player", "health" }, lookWhiteNames = { "player", "name" },
+	lookClassHealth = { "player", "health" }, lookLostColour = { "player", "health" }, lookMuted = { "player", "health" },
 	lookLightText = { "player", "healthText" }, lookNoPowerText = { "player", "powerText" }, lookSoftShade = { "player", "health" }, lookShadow = { "player", "shadow" },
 	numberStyle = { "player", "healthText" }, ownTextWhen = { "player", "healthText" }, healthTextPos = { "player", "healthText" }, powerTextPos = { "player", "powerText" },
 	auras = { "target", "aura" }, auraCrop = { "target", "aura" }, auraTypeColours = { "target", "aura" }, auraCountSize = { "party1", "count" },
@@ -1548,13 +1547,13 @@ local MARK = {
 	targetHealthText = { "target", "healthText" }, targetPowerText = { "target", "powerText" }, targetPowerBar = { "target", "power" },
 	focusPicture = { "focus", "pic" }, focusName = { "focus", "name" }, focusLevel = { "focus", "level" }, focusHealthBy = { "focus", "health" },
 	focusHealthText = { "focus", "healthText" }, focusPowerText = { "focus", "powerText" }, focusPowerBar = { "focus", "power" },
-	petPicture = { "pet", "pic" }, petName = { "pet", "name" }, petHealthBy = { "pet", "health" }, petHealthText = { "pet", "healthText" },
+	petPicture = { "pet", "pic" }, petName = { "pet", "name" }, petNameFit = { "pet", "name" }, petHealthBy = { "pet", "health" }, petHealthText = { "pet", "healthText" },
 	petPowerText = { "pet", "powerText" }, petPowerBar = { "pet", "power" },
 	totPicture = { "tot", "pic" }, totName = { "tot", "name" }, totNameFit = { "tot", "name" }, totHealthBy = { "tot", "health" }, totPowerBar = { "tot", "power" },
-	partyPicture = { "party1", "pic" }, partypetPicture = { "partypet1", "pic" }, partyName = { "party1", "name" }, partyHealthBy = { "party1", "health" },
+	partyPicture = { "party1", "pic" }, partypetPicture = { "partypet1", "pic" }, partyName = { "party1", "name" }, partyNameFit = { "party1", "name" }, partyHealthBy = { "party1", "health" },
 	partyHealthText = { "party1", "healthText" }, partyPowerText = { "party1", "powerText" }, partyPowerBar = { "party1", "power" },
-	partyRangeDim = { "party4", "root" }, partyRangeAlpha = { "party4", "root" },
-	bossName = { "boss", "name" }, bossLevel = { "boss", "level" }, bossHealthBy = { "boss", "health" }, bossHealthText = { "boss", "healthText" },
+	partyRangeDim = { "party4", "root" }, partyRangeOpacity = { "party4", "root" },
+	bossName = { "boss", "name" }, bossNameFit = { "boss", "name" }, bossPowerText = { "boss", "powerText" }, bossLevel = { "boss", "level" }, bossHealthBy = { "boss", "health" }, bossHealthText = { "boss", "healthText" },
 	bossPowerBar = { "boss", "power" },
 	raidRangeAlpha = { "raid", "cell" }, raidRoleIcon = { "raid", "role" }, raidName = { "raid", "name" }, raidStatusText = { "raid", "status" },
 }

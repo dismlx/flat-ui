@@ -205,7 +205,29 @@ local function CleanDraft(raw)
 			draft.seen[number] = true
 		end
 	end
-	for path, value in pairs(type(raw.values) == "table" and raw.values or {}) do
+	-- A pick of Out of range dimming from an older build is Out of range opacity, on the other scale.
+	local picks = type(raw.values) == "table" and raw.values or {}
+	if Number(picks["unitframes.partyRangeAlpha"]) and picks["unitframes.partyRangeOpacity"] == nil then
+		local moved = {}
+		for path, value in pairs(picks) do
+			moved[path] = value
+		end
+		moved["unitframes.partyRangeOpacity"] = 100 - picks["unitframes.partyRangeAlpha"]
+		picks = moved
+	end
+	-- A draft of an older build also holds ticks for rows that are choices now.
+	local values = {}
+	for path, value in pairs(picks) do
+		values[path] = value
+	end
+	ns.MigrateText(values, values)
+	-- White names never beat a Name colour the profile the draft starts from has.
+	local base = draft.from and db.profiles[draft.from].options
+	if type(raw.values) == "table" and raw.values["unitframes.nameColour"] == nil and values["unitframes.nameColour"] == "white" and type(base) == "table"
+		and base["unitframes.nameColour"] ~= nil and base["unitframes.nameColour"] ~= "game" then
+		values["unitframes.nameColour"] = nil
+	end
+	for path, value in pairs(values) do
 		if IsText(path) then
 			local fitted = ns.Normalised(path, value)
 			if fitted ~= nil then

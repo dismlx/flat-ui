@@ -59,6 +59,8 @@ local READERS = {
 	["cooldowns.rows"] = "trackers",
 	-- Your buffs leaves out what Your own defensives already shows. A change of the trackers reaches it through the layout of Trackers.lua.
 	["defensives.own"] = "ownbuffs", ["defensives.enabled"] = "ownbuffs", ["defensives.place"] = "ownbuffs",
+	-- The health text of a nameplate follows Number style of the unit frames.
+	["unitframes.numberStyle"] = "nameplates",
 }
 
 local db
@@ -2169,6 +2171,21 @@ local function ReadCharacter()
 	return name .. " - " .. realm
 end
 
+-- Rows of an older build read as the rows that replaced them: the three nameplate outline rows were ticks (on is As the game has it, off is None), and White
+-- names is Name colour White on the unit frames unless a Name colour is chosen. `old` holds the values the older rows were saved with, as booleans; `options`
+-- takes the new ones (the same table for a saved profile).
+local OLD_PLATE_OUTLINES = { "nameplates.nameOutline", "nameplates.healthTextOutline", "nameplates.castTextOutline" }
+function ns.MigrateText(old, options)
+	for _, path in ipairs(OLD_PLATE_OUTLINES) do
+		if type(old[path]) == "boolean" then
+			options[path] = old[path] and "game" or "none"
+		end
+	end
+	if old["unitframes.lookWhiteNames"] == true and (options["unitframes.nameColour"] == nil or options["unitframes.nameColour"] == "game") then
+		options["unitframes.nameColour"] = "white"
+	end
+end
+
 -- Drops what is not a setting of this build, and what a setting cannot hold.
 local function NormaliseValues(options)
 	for path, value in pairs(options) do
@@ -2255,8 +2272,14 @@ local function LoadSettings()
 			if ct["combattext.ownMove"] ~= nil and ct["combattext.inStyle"] == nil then
 				ct["combattext.inStyle"] = ct["combattext.ownMove"] == "arc" and "arc" or "straight"
 			end
+			-- Out of range dimming on party frames is Out of range opacity, on the scale of the raid frames: the old value is 100 minus the new one.
+			local dimmed = ct["unitframes.partyRangeAlpha"]
+			if type(dimmed) == "number" and dimmed == dimmed and ct["unitframes.partyRangeOpacity"] == nil then
+				ct["unitframes.partyRangeOpacity"] = 100 - dimmed
+			end
 			-- The positions of the frames the player moved, by frame name.
 			saved.movers = type(saved.movers) == "table" and saved.movers or {}
+			ns.MigrateText(saved.options, saved.options)
 			NormaliseValues(saved.options)
 			NormaliseSpots(saved.movers)
 		end
@@ -2760,13 +2783,17 @@ function ns.ImportProfile(text)
 	if not lines then
 		return false, why == "prefix" and "That is not a Flat UI profile." or "The text is incomplete."
 	end
-	local options, spots, rawScale, oldWord, oldMove = {}, {}, nil, nil, nil
+	local options, spots, rawScale, oldWord, oldMove, oldDim, oldText = {}, {}, nil, nil, nil, nil, {}
 	for _, line in ipairs(lines) do
 		local fields = {}
 		for field in (line .. "|"):gmatch("([^|]*)|") do
 			fields[#fields + 1] = Unescape(field)
 		end
 		local def = fields[1] == "o" and defs[fields[2]]
+		-- A tick of an older build in a row that is a choice now.
+		if fields[1] == "o" and (fields[3] == "1" or fields[3] == "0") then
+			oldText[fields[2]] = fields[3] == "1"
+		end
 		if def and not Unsaved(def) then
 			if fields[2] == "general.scale" then
 				rawScale = Parse(def, fields[3])
@@ -2776,6 +2803,8 @@ function ns.ImportProfile(text)
 			oldWord = fields[3]
 		elseif fields[1] == "o" and fields[2] == "combattext.ownMove" then
 			oldMove = fields[3]
+		elseif fields[1] == "o" and fields[2] == "unitframes.partyRangeAlpha" then
+			oldDim = tonumber(fields[3])
 		elseif fields[1] == "m" and fields[2] ~= "" then
 			spots[fields[2]] = ns.CleanSpot({ point = fields[3], x = tonumber(fields[4]), y = tonumber(fields[5]), scale = tonumber(fields[6]),
 				kind = fields[7], label = fields[8] ~= "" and fields[8] or nil })
@@ -2788,6 +2817,11 @@ function ns.ImportProfile(text)
 	if oldMove and options["combattext.inStyle"] == nil and defs["combattext.inStyle"] then
 		options["combattext.inStyle"] = oldMove == "arc" and "arc" or "straight"
 	end
+	-- Out of range dimming on party frames is Out of range opacity, as for a saved profile (LoadSettings).
+	if oldDim and oldDim == oldDim and options["unitframes.partyRangeOpacity"] == nil and defs["unitframes.partyRangeOpacity"] then
+		options["unitframes.partyRangeOpacity"] = Normalise(defs["unitframes.partyRangeOpacity"], 100 - oldDim)
+	end
+	ns.MigrateText(oldText, options)
 	-- A custom scale under the game's own 65% moves to Small scale, as for a saved profile (LoadSettings).
 	if type(rawScale) == "number" and rawScale == rawScale and rawScale < 65 and defs["general.scaleSmall"] then
 		options["general.scaleSmall"] = Normalise(defs["general.scaleSmall"], math.floor(rawScale + 0.5))

@@ -97,7 +97,7 @@ local ROWS = {
 		emit(X.path(c, "GuideIcon"))
 	end },
 	{ opt = "roleIcon", find = function(rec, c, emit)
-		if rec.kind == "party" then
+		if rec.kind == "party" or rec.kind == "player" then
 			emit(X.path(c, "RoleIcon"))
 		end
 	end },

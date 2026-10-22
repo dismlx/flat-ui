@@ -1663,7 +1663,7 @@ local function UnitText(unit)
 	return name
 end
 
--- The PvP word is white or red, or takes the colour the name has now. It runs after the text hooks, which recolour the name (Name colour, White names).
+-- The PvP word is white or red, or takes the colour the name has now. It runs after the text hooks, which recolour the name (Name colour).
 function ROW.wordColour(rec)
 	local row = rec.row
 	local pick, wr, wg, wb = Opt("pvpWordColour"), 1, 1, 1

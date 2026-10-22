@@ -1,3 +1,8 @@
+## 0.4.95
+
+- **Nameplates**: **Name outline**, **Health text outline** and **Spell name outline** now offer **None**, **Thin** and **Thick**. There is a new **Text font**. **Name colour** has **Class**, and **By reaction** is now **Reaction**. **Health text format** has **Current / max**. **Level box** can be **Hidden**. Health text now follows **Number style** of the unit frames. **Health text format** choices are now **Current**, **Current and percent** and **Missing**.
+- **Unit frames**: new **Power text** on **Boss frames**. New **Long names** on **Pet frame**, **Party frames** and **Boss frames**, starting as **Cut with dots**. **Role icon on player and party frames** now covers the player. **Party pet picture** has **3D head**. **Out of range opacity** on **Party frames** runs 10 to 100 like **Raid frames**, and a saved dimming of 70 becomes 30. **As Square portraits** is now **As Portrait style**. With **Portrait style** at **3D head**, party pets on **As Portrait style** now show a 3D head. **White names** is now **Name colour** with the choice **White**, and it applies to name rows only. **Health text size**, **Power text size** and **Small frame text size** go from 50% to 200%.
+
 ## 0.4.94
 
 - **Options window**: the window is 1040 by 680 and starts with no borders. Ctrl and the mouse wheel over the title bar change **Window scale**.

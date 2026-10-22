@@ -62,7 +62,7 @@ local function Make(rec)
 	end)
 end
 
--- The shade is clear for a member in range and as dark as Out of range dimming says for any other answer, a withheld one included.
+-- The shade is clear for a member in range and as dark as 100 minus Out of range opacity says for any other answer, a withheld one included.
 function X.rangeLook(rec)
 	local shade = rec.rangeShade
 	if shade == nil or Off(PARTY) or Opt("partyRangeDim") ~= true then
@@ -79,7 +79,7 @@ function X.rangeLook(rec)
 		return
 	end
 	local ok, inRange = pcall(UnitInRange, unit)
-	local dark = Opt("partyRangeAlpha") / 100
+	local dark = 1 - Opt("partyRangeOpacity") / 100
 	if type(shade.SetAlphaFromBoolean) ~= "function" then
 		pcall(shade.SetAlpha, shade, 0)
 		Problem("Unit frames: Party range: this client cannot set an opacity from an answer about range, so members are not dimmed.")
@@ -348,7 +348,7 @@ function X.afterTotems()
 	end
 end
 
--- Long names on the target of target ----------------------------------------------------------------------------------------------------------
+-- Long names on small and boss frames ----------------------------------------------------------------------------------------------------------
 
 -- The name of the row is set to its own size first. With Smaller text, a name wider than the row is set at room / need of that size, down to FIT_FLOOR.
 -- The scale is a font string call that works in combat and stays out of the font call's cache. A width the client withholds, or 0, leaves the name cut.
@@ -366,27 +366,35 @@ local function FitNote(text)
 		ns.Note(KEY, text)
 	end
 end
+-- The frames whose name could not be measured; the status line stays while any of them is, and goes with the last.
+local unmeasured = setmetatable({}, { __mode = "k" })
+local function Measured(rec, ok)
+	unmeasured[rec] = not ok or nil
+	FitNote(next(unmeasured) ~= nil and "Unit frames: Long names: the game did not give the width of the name, so a long name stays cut with dots." or nil)
+end
+local FIT_ROW = { tot = "totNameFit", pet = "petNameFit", party = "partyNameFit", partypet = "partyNameFit", boss = "bossNameFit" }
 local function FitName(rec)
-	if rec.kind ~= "tot" then
+	local fit = FIT_ROW[rec.kind]
+	if fit == nil then
 		return
 	end
 	if rec.row == nil or not X.rowOn(rec) then
-		FitNote(nil)
+		Measured(rec, true)
 		return
 	end
 	local name = rec.row.name
 	pcall(name.SetTextScale, name, 1)
-	if Opt("totNameFit") ~= "shrink" then
-		FitNote(nil)
+	if Opt(fit) ~= "shrink" then
+		Measured(rec, true)
 		return
 	end
 	local okNeed, need = pcall(name.GetUnboundedStringWidth, name)
 	local okRoom, room = pcall(name.GetWidth, name)
 	if not (okNeed and okRoom and X.number(need) and X.number(room) and room > 0) then
-		FitNote("Unit frames: Long names: the game did not give the width of the name, so a long name on the target of target stays cut with dots.")
+		Measured(rec, false)
 		return
 	end
-	FitNote(nil)
+	Measured(rec, true)
 	if need > room then
 		pcall(name.SetTextScale, name, math.max(FIT_FLOOR, room / need))
 	end

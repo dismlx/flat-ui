@@ -9471,7 +9471,7 @@ local function S(path, kind, default, label, tip, more)
 	end
 	return row
 end
-local LEVELS = { { "box", "Thin border" }, { "text", "Text only" }, { "default", "Default" } }
+local LEVELS = { { "box", "Thin border" }, { "text", "Text only" }, { "default", "Default" }, { "hidden", "Hidden" } }
 local CLASS_POSITIONS = { { "left", "Left" }, { "right", "Right" }, { "above", "Above" }, { "below", "Below" } }
 local OUTLINES = { { "bar", "Bar only" }, { "frame", "Whole timer" } }
 local GROWS = { { "center", "From the middle" }, { "right", "Left to right" }, { "left", "Right to left" } }
@@ -9607,28 +9607,30 @@ local PAGES = {
 		S("nameplates.lowHealthColour", "colour", "ffff3333", "Low health border colour", nil, { needs = "nameplates.lowHealth" }),
 	} },
 	{ key = "nameplatesText", label = "Text", parent = "nameplates", owner = "nameplates", rows = {
+		"Font",
+		S("nameplates.textFace", "choice", "default", "Text font", "For the name, the health text and the spell name.", { choices = { { "default", "Game font" }, { "friz", "Friz Quadrata" }, { "arial", "Arial Narrow" }, { "morpheus", "Morpheus" }, { "skurri", "Skurri" } } }),
 		"Name",
 		S("nameplates.nameShow", "bool", true, "Show name"),
 		S("nameplates.nameSize", "number", 100, "Name size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
-		S("nameplates.nameOutline", "bool", true, "Name outline"),
-		S("nameplates.nameColour", "choice", "game", "Name colour", nil, { choices = { { "game", "As the game has it" }, { "white", "White" }, { "reaction", "By reaction" }, { "custom", "Custom" } } }),
+		S("nameplates.nameOutline", "choice", "game", "Name outline", nil, { choices = { { "game", "As the game has it" }, { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } }),
+		S("nameplates.nameColour", "choice", "game", "Name colour", nil, { choices = { { "game", "As the game has it" }, { "white", "White" }, { "class", "Class" }, { "reaction", "Reaction" }, { "custom", "Custom" } } }),
 		S("nameplates.nameCustomColour", "colour", "ffffffff", "Custom name colour", nil, { needs = "nameplates.nameColour", needsIn = { "custom" } }),
 		"Health text",
 		S("nameplates.healthText", "bool", true, "Health text", "Untick to hide the health number the game shows."),
 		S("nameplates.healthTextSize", "number", 80, "Health text size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%", needs = "nameplates.healthText" }),
-		S("nameplates.healthTextOutline", "bool", true, "Health text outline", nil, { needs = "nameplates.healthText" }),
+		S("nameplates.healthTextOutline", "choice", "game", "Health text outline", nil, { needs = "nameplates.healthText", choices = { { "game", "As the game has it" }, { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } }),
 		S("nameplates.healthTextColour", "colour", "ffffffff", "Health text colour", nil, { needs = "nameplates.healthText" }),
 		S("nameplates.healthTextWhen", "choice", "always", "Show health text", nil, { needs = "nameplates.healthText", choices = { { "always", "Always" }, { "target", "Only on the target" } } }),
 		S("nameplates.healthFormat", "choice", "game", "Health text format", nil, { needs = "nameplates.healthText",
-			choices = { { "game", "As the game has it" }, { "percent", "Percent" }, { "value", "Health" }, { "both", "Health and percent" }, { "missing", "Health missing" } } }),
+			choices = { { "game", "As the game has it" }, { "value", "Current" }, { "curmax", "Current / max" }, { "percent", "Percent" }, { "both", "Current and percent" }, { "missing", "Missing" } } }),
 		"Level",
 		S("nameplates.level", "choice", "box", "Level box", "Text only removes the box and keeps the number.", { choices = LEVELS }),
 		S("nameplates.levelShape", "choice", "square", "Level box shape", nil, { needs = "nameplates.level", needsIn = { "box", "text" },
 			choices = { { "square", "Square" }, { "game", "Game width" } } }),
 		S("nameplates.levelGap", "number", 0, "Level box gap", nil, { min = 0, max = 6, step = 1, unit = "", needs = "nameplates.level", needsIn = { "box", "text" } }),
-		S("nameplates.levelSize", "number", 100, "Level number size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
+		S("nameplates.levelSize", "number", 100, "Level number size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%", needs = "nameplates.level", needsIn = { "box", "text", "default" } }),
 		"Elite and Rare",
-		S("nameplates.kindMark", "bool", true, "Mark after the level", "+ for an Elite, R for a Rare, R+ for a Rare Elite."),
+		S("nameplates.kindMark", "bool", true, "Mark after the level", "+ for an Elite, R for a Rare, R+ for a Rare Elite.", { needs = "nameplates.level", needsIn = { "box", "text", "default" } }),
 		S("nameplates.nameRow", "bool", false, "Fading row behind the name", "The friendly, neutral or hostile colour behind the name, fading upward."),
 	} },
 	{ key = "nameplatesCast", label = "Cast bar", parent = "nameplates", owner = "nameplates", rows = {
@@ -9639,7 +9641,7 @@ local PAGES = {
 		S("nameplates.castHeight", "number", 100, "Nameplate cast bar height", "100% is the game's own height.", { min = 50, max = 200, step = 10, unit = "%" }),
 		"Spell name",
 		S("nameplates.castTextSize", "number", 100, "Spell name size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
-		S("nameplates.castTextOutline", "bool", true, "Spell name outline"),
+		S("nameplates.castTextOutline", "choice", "game", "Spell name outline", nil, { choices = { { "game", "As the game has it" }, { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } }),
 		S("nameplates.castTextColour", "colour", "ffffffff", "Spell name colour"),
 		"Parts",
 		S("nameplates.castIconSize", "number", 100, "Spell icon size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
@@ -10277,7 +10279,7 @@ local PAGES = {
 		S("unitframes.lookBackAlpha", "number", 85, "Background opacity", nil, { min = 0, max = 100, step = 5, unit = "%", needs = "unitframes.lookOwn" }),
 	} },
 	{ key = "unitframesPlayer", label = "Player frame", parent = "unitframes", owner = "unitframes", rows = {
-		S("unitframes.playerPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Square portraits" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
+		S("unitframes.playerPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
 		S("unitframes.playerName", "bool", true, "Name"),
 		S("unitframes.playerLevel", "bool", true, "Level"),
 		S("unitframes.restAnimation", "choice", "auto", "Resting animation", nil, { choices = { { "auto", "Hidden with the resting colour" }, { "show", "Shown" }, { "hide", "Hidden" } } }),
@@ -10288,7 +10290,7 @@ local PAGES = {
 		S("unitframes.playerPowerBar", "bool", true, "Power bar"),
 	} },
 	{ key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes", rows = {
-		S("unitframes.targetPicture", "choice", "auto", "Picture", "Class icon applies to players. Other units keep their face.", { needs = "unitframes.squarePortrait", choices = { { "auto", "As Square portraits" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
+		S("unitframes.targetPicture", "choice", "auto", "Picture", "Class icon applies to players. Other units keep their face.", { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
 		S("unitframes.targetName", "bool", true, "Name"),
 		S("unitframes.targetLevel", "bool", true, "Level"),
 		S("unitframes.targetHealthBy", "choice", "custom", "Health bar colour", "Class applies to players. Other units take their reaction colour.", { needs = "unitframes.flat", choices = { { "custom", "Health colour" }, { "class", "Class" }, { "reaction", "Reaction" } } }),
@@ -10297,7 +10299,7 @@ local PAGES = {
 		S("unitframes.targetPowerBar", "bool", true, "Power bar"),
 	} },
 	{ key = "unitframesFocus", label = "Focus frame", parent = "unitframes", owner = "unitframes", rows = {
-		S("unitframes.focusPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Square portraits" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
+		S("unitframes.focusPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
 		S("unitframes.focusName", "bool", true, "Name"),
 		S("unitframes.focusLevel", "bool", true, "Level"),
 		S("unitframes.focusHealthBy", "choice", "custom", "Health bar colour", nil, { needs = "unitframes.flat", choices = { { "custom", "Health colour" }, { "class", "Class" }, { "reaction", "Reaction" } } }),
@@ -10306,8 +10308,9 @@ local PAGES = {
 		S("unitframes.focusPowerBar", "bool", true, "Power bar"),
 	} },
 	{ key = "unitframesPet", label = "Pet frame", parent = "unitframes", owner = "unitframes", rows = {
-		S("unitframes.petPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Square portraits" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "none", "None" } } }),
+		S("unitframes.petPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "none", "None" } } }),
 		S("unitframes.petName", "bool", true, "Name"),
+		S("unitframes.petNameFit", "choice", "cut", "Long names", "Smaller text goes down to 75%, then cuts. Needs Name row on small frames.", { needs = "unitframes.petName", choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } }),
 		S("unitframes.petHealthBy", "choice", "custom", "Health bar colour", nil, { needs = "unitframes.flat", choices = { { "custom", "Health colour" }, { "class", "Class" }, { "reaction", "Reaction" } } }),
 		S("unitframes.petHealthText", "choice", "game", "Health text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
 		S("unitframes.petPowerText", "choice", "game", "Power text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
@@ -10315,29 +10318,32 @@ local PAGES = {
 		S("unitframes.petPowerBar", "bool", true, "Power bar"),
 	} },
 	{ key = "unitframesTot", label = "Target of target frame", parent = "unitframes", owner = "unitframes", rows = {
-		S("unitframes.totPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Square portraits" }, { "square", "Square picture" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
+		S("unitframes.totPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
 		S("unitframes.totName", "bool", true, "Name"),
-		S("unitframes.totNameFit", "choice", "shrink", "Long names", "Smaller text goes down to 75%, then cuts.", { needs = "unitframes.totName", choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } }),
+		S("unitframes.totNameFit", "choice", "shrink", "Long names", "Smaller text goes down to 75%, then cuts. Needs Name row on small frames.", { needs = "unitframes.totName", choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } }),
 		S("unitframes.totHealthBy", "choice", "class", "Health bar colour", nil, { needs = "unitframes.flat", choices = { { "custom", "Health colour" }, { "class", "Class" }, { "reaction", "Reaction" } } }),
 		S("unitframes.totPowerBar", "bool", true, "Power bar"),
 	} },
 	{ key = "unitframesParty", label = "Party frames", parent = "unitframes", owner = "unitframes", rows = {
-		S("unitframes.partyPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Square portraits" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
-		S("unitframes.partypetPicture", "choice", "auto", "Party pet picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Square portraits" }, { "square", "Square picture" }, { "game", "Game portrait" }, { "none", "None" } } }),
+		S("unitframes.partyPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
+		S("unitframes.partypetPicture", "choice", "auto", "Party pet picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "none", "None" } } }),
 		S("unitframes.partyName", "bool", true, "Name", "On party members and their pets."),
+		S("unitframes.partyNameFit", "choice", "cut", "Long names", "On party members and their pets. Smaller text goes down to 75%, then cuts. Needs Name row on small frames.", { needs = "unitframes.partyName", choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } }),
 		S("unitframes.partyHealthBy", "choice", "custom", "Health bar colour", nil, { needs = "unitframes.flat", choices = { { "custom", "Health colour" }, { "class", "Class" }, { "reaction", "Reaction" } } }),
 		S("unitframes.partyHealthText", "choice", "game", "Health text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
 		S("unitframes.partyPowerText", "choice", "game", "Power text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
 		S("unitframes.partyPowerBar", "bool", true, "Power bar"),
 		"Range",
 		S("unitframes.partyRangeDim", "bool", false, "Dim members out of range", "Also dims a member whose range the game does not report."),
-		S("unitframes.partyRangeAlpha", "number", 50, "Out of range dimming", nil, { min = 10, max = 90, step = 5, unit = "%", needs = "unitframes.partyRangeDim" }),
+		S("unitframes.partyRangeOpacity", "number", 50, "Out of range opacity", nil, { min = 10, max = 100, step = 5, unit = "%", needs = "unitframes.partyRangeDim" }),
 	} },
 	{ key = "unitframesBoss", label = "Boss frames", parent = "unitframes", owner = "unitframes", rows = {
 		S("unitframes.bossName", "bool", true, "Name"),
+		S("unitframes.bossNameFit", "choice", "cut", "Long names", "Smaller text goes down to 75%, then cuts. Needs Name row.", { needs = "unitframes.bossName", choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } }),
 		S("unitframes.bossLevel", "bool", true, "Level"),
 		S("unitframes.bossHealthBy", "choice", "custom", "Health bar colour", nil, { needs = "unitframes.flat", choices = { { "custom", "Health colour" }, { "class", "Class" }, { "reaction", "Reaction" } } }),
 		S("unitframes.bossHealthText", "choice", "game", "Health text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
+		S("unitframes.bossPowerText", "choice", "game", "Power text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
 		S("unitframes.bossPowerBar", "bool", true, "Power bar"),
 	} },
 	{ key = "unitframesRaid", label = "Raid frames", parent = "unitframes", owner = "unitframes", rows = {
@@ -10388,13 +10394,13 @@ local PAGES = {
 		S("unitframes.nameFace", "choice", "default", "Name font", nil, { choices = { { "default", "Game font" }, { "friz", "Friz Quadrata" }, { "arial", "Arial Narrow" }, { "morpheus", "Morpheus" }, { "skurri", "Skurri" } } }),
 		S("unitframes.nameSize", "number", 100, "Name size", "100% is the game's own size. On small frames it is a share of Small frame text size.", { min = 50, max = 200, step = 5, unit = "%" }),
 		S("unitframes.nameOutline", "choice", "game", "Name outline", nil, { choices = { { "game", "As the game has it" }, { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } }),
-		S("unitframes.nameColour", "choice", "game", "Name colour", "Replaces White names.", { choices = { { "game", "As the game has it" }, { "class", "Class" }, { "reaction", "Reaction" }, { "custom", "Custom" } } }),
+		S("unitframes.nameColour", "choice", "game", "Name colour", nil, { choices = { { "game", "As the game has it" }, { "white", "White" }, { "class", "Class" }, { "reaction", "Reaction" }, { "custom", "Custom" } } }),
 		S("unitframes.nameCustom", "colour", "ffffd100", "Custom name colour", nil, { needs = "unitframes.nameColour", needsIn = { "custom" } }),
 		"Bar text",
-		S("unitframes.healthTextSize", "number", 100, "Health text size", "100% is the game's own size.", { min = 60, max = 120, step = 5, unit = "%" }),
-		S("unitframes.powerTextSize", "number", 85, "Power text size", "100% is the game's own size.", { min = 60, max = 120, step = 5, unit = "%" }),
+		S("unitframes.healthTextSize", "number", 100, "Health text size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
+		S("unitframes.powerTextSize", "number", 85, "Power text size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
 		S("unitframes.smallTextSize", "number", 70, "Small frame text size", "Names and bar text on the pet, target of target, focus target, party and party pet frames. 100% is the game's own size.",
-			{ min = 60, max = 120, step = 5, unit = "%" }),
+			{ min = 50, max = 200, step = 5, unit = "%" }),
 		S("unitframes.barTextFace", "choice", "default", "Bar text font", nil, { choices = { { "default", "Game font" }, { "friz", "Friz Quadrata" }, { "arial", "Arial Narrow" }, { "morpheus", "Morpheus" }, { "skurri", "Skurri" } } }),
 		S("unitframes.barTextOutline", "choice", "game", "Bar text outline", "Replaces the outline that Smaller, lighter bar text removes.", { choices = { { "game", "As the game has it" }, { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } }),
 		S("unitframes.barTextColourOwn", "bool", false, "Own bar text colour"),
@@ -10403,7 +10409,6 @@ local PAGES = {
 		S("unitframes.lookClassHealth", "bool", false, "Health in class and reaction colour", nil, { needs = "unitframes.flat" }),
 		S("unitframes.lookLostColour", "bool", false, "Dark health bar, colour shows what is lost", nil, { needs = "unitframes.flat" }),
 		S("unitframes.lookMuted", "bool", false, "Muted colours"),
-		S("unitframes.lookWhiteNames", "bool", false, "White names", "On frames with a name row."),
 		S("unitframes.lookLightText", "bool", false, "Smaller, lighter bar text"),
 		S("unitframes.lookNoPowerText", "bool", false, "No text on the power bar"),
 		S("unitframes.lookSoftShade", "bool", false, "Soft shade on bars", "The soft bar texture on unit frames, whatever the Flat UI page chooses.", { needs = "unitframes.flat" }),
@@ -10433,7 +10438,7 @@ local PAGES = {
 		S("unitframes.pvpTimer", "bool", true, "Time until the flag drops", "On your own frame, beside the icon or the word.", { needs = "unitframes.squarePortrait" }),
 		"Icons",
 		S("unitframes.leaderIcon", "bool", true, "Leader icon"),
-		S("unitframes.roleIcon", "bool", true, "Role icon on party frames"),
+		S("unitframes.roleIcon", "bool", true, "Role icon on player and party frames"),
 		S("unitframes.pvpIcon", "bool", true, "PvP icon"),
 		S("unitframes.raidMarker", "bool", true, "Raid marker on target, focus and boss frames"),
 		S("unitframes.deadText", "bool", true, "Dead text"),
@@ -10877,7 +10882,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.94" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.95" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -20125,16 +20130,19 @@ do local PROBES = {
 	{ "nameplates.targetThickness", 4, function(S) return thick(S, S.t.healthBar) .. "," .. thick(S, S.f.healthBar) .. "," .. thick(S, S.o.healthBar) end, "1,1,1", "4,4,1" },
 	{ "nameplates.level", "Text only", function(S) return S.W.state(S.o.level) .. g(S.o.level.playerLevelDiffIcon.alpha) end, "SB0", "hb0", from = "Thin border" },
 	{ "nameplates.level", "Default", function(S) return S.W.state(S.o.level) .. g(S.o.level.playerLevelDiffIcon.alpha) .. g(S.o.level.selectedBorder.alpha) end, "SB00", "hb11", from = "Thin border" },
+	{ "nameplates.level", "Hidden", function(S) return S.W.state(S.o.level) .. g(S.o.level.alpha) end, "SB1", "hb0", from = "Thin border" },
 	{ "nameplates.cast", false, function(S) return g(S.o.castBar.Border.alpha) .. S.W.state(S.o.castBar) end, "0SB", "1hb" },
 	{ "nameplates.castBackdrop", false, function(S) return S.W.state(S.o.castBar) .. S.W.state(S.o.healthBar) end, "SBSB", "SbSB" },
 	{ "nameplates.auras", false, function(S) return auraLine(S.oa) end, AURA_ON, AURA_OFF },
 	{ "nameplates.healthFlat", false, held("nameplates.healthFlat"), "true/true", "false/false" },
 	{ "nameplates.healthHeight", 150, held("nameplates.healthHeight"), "100/100", "150/150" },
 	{ "nameplates.nameSize", 150, held("nameplates.nameSize"), "100/100", "150/150" },
-	{ "nameplates.nameOutline", false, held("nameplates.nameOutline"), "true/true", "false/false" },
+	{ "nameplates.nameOutline", "None", held("nameplates.nameOutline"), "game/As the game has it", "none/None", from = "As the game has it" },
+	{ "nameplates.nameOutline", "Thick", held("nameplates.nameOutline"), "game/As the game has it", "thick/Thick", from = "As the game has it" },
+	{ "nameplates.textFace", "Morpheus", held("nameplates.textFace"), "default/Game font", "morpheus/Morpheus", from = "Game font", world = { fontReturn = "true" } },
 	{ "nameplates.healthText", false, held("nameplates.healthText"), "true/true", "false/false" },
 	{ "nameplates.healthTextSize", 100, held("nameplates.healthTextSize"), "80/80", "100/100" },
-	{ "nameplates.healthTextOutline", false, held("nameplates.healthTextOutline"), "true/true", "false/false" },
+	{ "nameplates.healthTextOutline", "Thin", held("nameplates.healthTextOutline"), "game/As the game has it", "thin/Thin", from = "As the game has it" },
 	{ "nameplates.levelSize", 150, held("nameplates.levelSize"), "100/100", "150/150" },
 	{ "nameplates.kindMark", false, held("nameplates.kindMark"), "true/true", "false/false" },
 	{ "nameplates.kindBorder", false, held("nameplates.kindBorder"), "true/true", "false/false" },
@@ -20449,6 +20457,11 @@ do local PROBES = {
 	{ "unitframes.partyHealthText", "Current / max", held("unitframes.partyHealthText"), "game/As the game has it", "curmax/Current / max", from = "As the game has it" },
 	{ "unitframes.partyPowerText", "Current / max", held("unitframes.partyPowerText"), "game/As the game has it", "curmax/Current / max", from = "As the game has it" },
 	{ "unitframes.bossHealthText", "Current / max", held("unitframes.bossHealthText"), "game/As the game has it", "curmax/Current / max", from = "As the game has it" },
+	{ "unitframes.bossPowerText", "Current / max", held("unitframes.bossPowerText"), "game/As the game has it", "curmax/Current / max", from = "As the game has it" },
+	{ "unitframes.totNameFit", "Cut with dots", held("unitframes.totNameFit"), "shrink/Smaller text", "cut/Cut with dots", from = "Smaller text" },
+	{ "unitframes.petNameFit", "Smaller text", held("unitframes.petNameFit"), "cut/Cut with dots", "shrink/Smaller text", from = "Cut with dots" },
+	{ "unitframes.partyNameFit", "Smaller text", held("unitframes.partyNameFit"), "cut/Cut with dots", "shrink/Smaller text", from = "Cut with dots" },
+	{ "unitframes.bossNameFit", "Smaller text", held("unitframes.bossNameFit"), "cut/Cut with dots", "shrink/Smaller text", from = "Cut with dots" },
 	{ "unitframes.numberStyle", "12,345", held("unitframes.numberStyle"), "short/12.3k", "full/12,345", from = "12.3k" },
 	{ "unitframes.ownTextWhen", "Under the mouse", held("unitframes.ownTextWhen"), "always/Always", "hover/Under the mouse", from = "Always" },
 	{ "unitframes.healthTextPos", "Right", held("unitframes.healthTextPos"), "centre/Centre", "right/Right", from = "Centre" },
@@ -20485,7 +20498,7 @@ do local PROBES = {
 	{ "unitframes.lookClassHealth", true, held("unitframes.lookClassHealth"), "false/false", "true/true" },
 	{ "unitframes.lookLostColour", true, held("unitframes.lookLostColour"), "false/false", "true/true" },
 	{ "unitframes.lookMuted", true, held("unitframes.lookMuted"), "false/false", "true/true" },
-	{ "unitframes.lookWhiteNames", true, held("unitframes.lookWhiteNames"), "false/false", "true/true" },
+	{ "unitframes.nameColour", "White", held("unitframes.nameColour"), "game/As the game has it", "white/White", from = "As the game has it" },
 	{ "unitframes.lookLightText", true, held("unitframes.lookLightText"), "false/false", "true/true" },
 	{ "unitframes.lookNoPowerText", true, held("unitframes.lookNoPowerText"), "false/false", "true/true" },
 	{ "unitframes.lookSoftShade", true, held("unitframes.lookSoftShade"), "false/false", "true/true" },
@@ -20686,8 +20699,8 @@ do local PROBES = {
 }
 	-- Rows of the nameplate and unit frame pages whose effect is a value the addon holds: each is changed through its control and back.
 	-- The change is the first value other than the default; a row that needs another switch has it on first.
-	for _, path in ipairs({ "nameplates.friendly", "general.healthFull", "general.healthHalf", "general.healthLow", "nameplates.healthByLeft", "nameplates.lowHealth", "nameplates.lowHealthAt", "nameplates.lowHealthColour", "nameplates.castTime", "resource.healthByLeft", "castbars.ownTime", "unitframes.combatIcon", "unitframes.playerPowerBar", "unitframes.targetPowerBar", "unitframes.focusPowerBar", "unitframes.petHappiness", "unitframes.petPowerBar", "unitframes.totPowerBar", "unitframes.partyPowerBar", "unitframes.partyRangeDim", "unitframes.partyRangeAlpha", "unitframes.bossPowerBar", "unitframes.raidRangeAlpha", "unitframes.raidRoleIcon", "unitframes.raidName", "unitframes.raidStatusText", "unitframes.healthByLeft", "unitframes.healPrediction", "unitframes.absorbShield", "unitframes.healAbsorb", "unitframes.leaderIcon", "unitframes.roleIcon", "unitframes.pvpIcon", "unitframes.raidMarker", "unitframes.deadText", "unitframes.totemTimer", "unitframes.totemSwipe", "chat.frameBorder", "chat.inputPlace", "chat.inputIdle", "chat.inputFocus", "chat.outline", "chat.shadow", "chat.history", "chat.fade", "chat.fadeAfter", "chat.tipOwn", "chat.tipBorder", "chat.unitBorder", "chat.nameClass", "chat.tipScale", "chat.tipTitleSize", "chat.tipTextSize", "chat.barHide", "chat.barHeight", "chat.combat", "chat.combatKey", "chat.ids", "chat.count", "fonts.enabled", "fonts.outline", "fonts.shadow", "fonts.size", "fonts.minimum", "nameplates.healthTexture", "nameplates.barWidth", "nameplates.dimAmount", "nameplates.healPrediction", "nameplates.absorbs", "nameplates.healAbsorbs", "nameplates.castTexture", "nameplates.raidMarker", "nameplates.raidMarkerSize", "nameplates.raidMarkerX", "nameplates.raidMarkerY", "nameplates.offscreenIcon", "nameplates.auraCrop", "nameplates.auraBorderOwn", "nameplates.auraBorderColour", "nameplates.auraTimers", "nameplates.auraStacks", "nameplates.auraOpacity", "nameplates.aurasWhen", "unitframes.playerPicture", "unitframes.playerLevel", "unitframes.restAnimation", "unitframes.playerHealthBy", "unitframes.targetPicture", "unitframes.targetLevel", "unitframes.targetHealthBy", "unitframes.focusPicture", "unitframes.focusLevel", "unitframes.focusHealthBy", "unitframes.petPicture", "unitframes.petHealthBy", "unitframes.totPicture", "unitframes.totHealthBy", "unitframes.partyPicture", "unitframes.partypetPicture", "unitframes.partyHealthBy", "unitframes.bossLevel", "unitframes.bossHealthBy", "unitframes.healthTexture", "unitframes.powerTexture", "unitframes.stripBrightness", "unitframes.auraCrop", "unitframes.auraTypeColours", "unitframes.auraCountSize", "unitframes.auraNumbers", "trackers.mark", "trackers.art", "trackers.artSize", "trackers.artAlpha", "trackers.artY", "trackers.glow", "enemycd.show", "enemycd.ready", "enemycd.sound", "enemycd.arenaBreak", "nameplates.colours", "nameplates.colourPlayers", "nameplates.targetBar", "nameplates.targetBarColour", "nameplates.threat", "nameplates.threatRole", "nameplates.threatGood", "nameplates.threatTransition", "nameplates.threatBad", "nameplates.hover", "nameplates.hoverColour", "nameplates.kindBorder", "nameplates.eliteColour", "nameplates.rareColour", "nameplates.bossColour", "nameplates.clickThroughFriendly", "nameplates.clickThroughEnemy", "nameplates.clickExtraX", "nameplates.clickExtraY", "nameplates.nameShow", "nameplates.nameColour", "nameplates.nameCustomColour", "nameplates.healthTextColour", "nameplates.healthTextWhen", "nameplates.healthFormat", "nameplates.castTextSize", "nameplates.castTextOutline", "nameplates.castTextColour", "nameplates.castIconSize", "nameplates.castSpark", "nameplates.castShield" }) do
-		local row = ROW[path]
+	for _, path in ipairs({ "nameplates.friendly", "general.healthFull", "general.healthHalf", "general.healthLow", "nameplates.healthByLeft", "nameplates.lowHealth", "nameplates.lowHealthAt", "nameplates.lowHealthColour", "nameplates.castTime", "resource.healthByLeft", "castbars.ownTime", "unitframes.combatIcon", "unitframes.playerPowerBar", "unitframes.targetPowerBar", "unitframes.focusPowerBar", "unitframes.petHappiness", "unitframes.petPowerBar", "unitframes.totPowerBar", "unitframes.partyPowerBar", "unitframes.partyRangeDim", "unitframes.partyRangeOpacity", "unitframes.bossPowerBar", "unitframes.raidRangeAlpha", "unitframes.raidRoleIcon", "unitframes.raidName", "unitframes.raidStatusText", "unitframes.healthByLeft", "unitframes.healPrediction", "unitframes.absorbShield", "unitframes.healAbsorb", "unitframes.leaderIcon", "unitframes.roleIcon", "unitframes.pvpIcon", "unitframes.raidMarker", "unitframes.deadText", "unitframes.totemTimer", "unitframes.totemSwipe", "chat.frameBorder", "chat.inputPlace", "chat.inputIdle", "chat.inputFocus", "chat.outline", "chat.shadow", "chat.history", "chat.fade", "chat.fadeAfter", "chat.tipOwn", "chat.tipBorder", "chat.unitBorder", "chat.nameClass", "chat.tipScale", "chat.tipTitleSize", "chat.tipTextSize", "chat.barHide", "chat.barHeight", "chat.combat", "chat.combatKey", "chat.ids", "chat.count", "fonts.enabled", "fonts.outline", "fonts.shadow", "fonts.size", "fonts.minimum", "nameplates.healthTexture", "nameplates.barWidth", "nameplates.dimAmount", "nameplates.healPrediction", "nameplates.absorbs", "nameplates.healAbsorbs", "nameplates.castTexture", "nameplates.raidMarker", "nameplates.raidMarkerSize", "nameplates.raidMarkerX", "nameplates.raidMarkerY", "nameplates.offscreenIcon", "nameplates.auraCrop", "nameplates.auraBorderOwn", "nameplates.auraBorderColour", "nameplates.auraTimers", "nameplates.auraStacks", "nameplates.auraOpacity", "nameplates.aurasWhen", "unitframes.playerPicture", "unitframes.playerLevel", "unitframes.restAnimation", "unitframes.playerHealthBy", "unitframes.targetPicture", "unitframes.targetLevel", "unitframes.targetHealthBy", "unitframes.focusPicture", "unitframes.focusLevel", "unitframes.focusHealthBy", "unitframes.petPicture", "unitframes.petHealthBy", "unitframes.totPicture", "unitframes.totHealthBy", "unitframes.partyPicture", "unitframes.partypetPicture", "unitframes.partyHealthBy", "unitframes.bossLevel", "unitframes.bossHealthBy", "unitframes.healthTexture", "unitframes.powerTexture", "unitframes.stripBrightness", "unitframes.auraCrop", "unitframes.auraTypeColours", "unitframes.auraCountSize", "unitframes.auraNumbers", "trackers.mark", "trackers.art", "trackers.artSize", "trackers.artAlpha", "trackers.artY", "trackers.glow", "enemycd.show", "enemycd.ready", "enemycd.sound", "enemycd.arenaBreak", "nameplates.colours", "nameplates.colourPlayers", "nameplates.targetBar", "nameplates.targetBarColour", "nameplates.threat", "nameplates.threatRole", "nameplates.threatGood", "nameplates.threatTransition", "nameplates.threatBad", "nameplates.hover", "nameplates.hoverColour", "nameplates.kindBorder", "nameplates.eliteColour", "nameplates.rareColour", "nameplates.bossColour", "nameplates.clickThroughFriendly", "nameplates.clickThroughEnemy", "nameplates.clickExtraX", "nameplates.clickExtraY", "nameplates.nameShow", "nameplates.nameColour", "nameplates.nameCustomColour", "nameplates.healthTextColour", "nameplates.healthTextWhen", "nameplates.healthFormat", "nameplates.castTextSize", "nameplates.castTextOutline", "nameplates.castTextColour", "nameplates.castIconSize", "nameplates.castSpark", "nameplates.castShield" }) do
+		local row = assert(ROW[path], path)
 		local to, from, base, changed
 		if row.kind == "bool" then
 			to = not row.default
@@ -26810,7 +26823,7 @@ do
 			and byKey.classPosition.needs == nil and byKey.classFit.needs == nil and byKey.classGap.needs == nil and byKey.classX.needs == nil and byKey.classY.needs == nil and byKey.classBorder.needs == nil)
 		check("nameplates page: the text and bar settings that depend on another name it", byKey.healthTextSize.needs == "healthText" and byKey.healthTextOutline.needs == "healthText"
 			and byKey.healthBackdrop.needs == "health" and byKey.dim.needs == "health" and byKey.target.needs == "health" and byKey.castBackdrop.needs == "cast"
-			and byKey.healthFlat.needs == nil and byKey.healthHeight.needs == nil and byKey.nameSize.needs == nil and byKey.levelSize.needs == nil and byKey.castFlat.needs == nil and byKey.castHeight.needs == nil)
+			and byKey.healthFlat.needs == nil and byKey.healthHeight.needs == nil and byKey.nameSize.needs == nil and byKey.levelSize.needs == "level" and byKey.castFlat.needs == nil and byKey.castHeight.needs == nil)
 		check("nameplates page: the numbers, as the design gives them", byKey.healthHeight.min == 50 and byKey.healthHeight.max == 200 and byKey.healthHeight.step == 5 and byKey.healthHeight.default == 100
 			and byKey.castHeight.min == 50 and byKey.castHeight.max == 200 and byKey.castHeight.step == 10 and byKey.castHeight.default == 100
 			and byKey.nameSize.default == 100 and byKey.healthTextSize.default == 80 and byKey.levelSize.default == 100
@@ -26826,7 +26839,7 @@ do
 			and #byKey.levelShape.needsIn == 2 and byKey.levelShape.needsIn[1] == "box" and byKey.levelShape.needsIn[2] == "text"
 			and #byKey.levelGap.needsIn == 2 and byKey.levelGap.needsIn[1] == "box" and byKey.levelGap.needsIn[2] == "text")
 		check("nameplates page: the defaults that change the look, as the design gives them", byKey.healthFlat.default == true and byKey.castFlat.default == true and byKey.classEnemy.default == true
-			and byKey.classFriendly.default == false and byKey.nameOutline.default == true and byKey.healthText.default == true and byKey.healthTextOutline.default == true and byKey.classBorder.default == true)
+			and byKey.classFriendly.default == false and byKey.nameOutline.default == "game" and byKey.healthText.default == true and byKey.healthTextOutline.default == "game" and byKey.classBorder.default == true)
 		-- The page as the panel shows it: every control of it is named and described without the addon's name.
 		local seen = 0
 		for _, init in ipairs(W.controls) do
@@ -27115,6 +27128,13 @@ do
 		check("level box: default hides the border and puts Blizzard's box art back", W.state(a.level) == "hb" and a.level.playerLevelDiffIcon.alpha == 1 and a.level.selectedBorder.alpha == 1)
 		W.change("nameplates.level", "Thin border")
 		check("level box: thin border again", W.state(a.level) == "SB" and a.level.playerLevelDiffIcon.alpha == 0 and W.spanOf(a.level) == span)
+		W.change("nameplates.level", "Hidden")
+		check("gap plates: Level box Hidden fades the level frame, hides the border and leaves the game's size of the frame, not the square", a.level.alpha == 0 and W.state(a.level) == "hb"
+			and not near(a.levelr.width, 20), tostring(a.levelr.width))
+		W.change("nameplates.level", "Thin border")
+		W.flush()
+		check("gap plates: and the square and the full alpha are back with Thin border", a.level.alpha == 1 and near(a.levelr.width, 20) and W.state(a.level) == "SB",
+			tostring(a.level.alpha) .. " " .. tostring(a.levelr.width) .. " " .. tostring(W.state(a.level)))
 		W.change("nameplates.enabled", false)
 		check("level box: the page switch off hides the border and gives the art back", W.state(a.level) == "hb" and a.level.playerLevelDiffIcon.alpha == 1 and a.level.selectedBorder.alpha == 1)
 		clean(W, "level box off")
@@ -27195,7 +27215,7 @@ do
 
 		-- Every size and outline the name can have, reached from every other by its controls.
 		local combos = {
-			{ 100, true, NP.OUTLINED .. "/14" }, { 100, false, NP.PLAIN .. "/14" }, { 150, true, NP.OUTLINED .. "/21" }, { 150, false, NP.PLAIN .. "/21" },
+			{ 100, "As the game has it", NP.OUTLINED .. "/14" }, { 100, "None", NP.PLAIN .. "/14" }, { 150, "As the game has it", NP.OUTLINED .. "/21" }, { 150, "None", NP.PLAIN .. "/21" },
 		}
 		local V = NP.npWorld()
 		local b = V.npShow("nameplate1", { player = false, friend = false })
@@ -27227,18 +27247,43 @@ do
 		local O = NP.npWorld()
 		local c = O.npShow("nameplate1", { player = false, friend = false })
 		local at = #O.npLog
-		O.change("nameplates.nameOutline", false)
+		O.change("nameplates.nameOutline", "None")
 		check("name outline off: the plain font object and then the font height", NP.mine(O, c, at, "name")[1].call == "SetFontObject" and NP.mine(O, c, at, "name")[1][1] == NP.PLAIN and NP.mine(O, c, at, "name")[2].call == "SetTextHeight"
 			and NP.stateOf(c.namer) == NP.PLAIN .. "/14", NP.callsText(NP.mine(O, c, at, "name")))
 		at = #O.npLog
-		O.change("nameplates.nameOutline", true)
+		O.change("nameplates.nameOutline", "As the game has it")
 		check("name outline on again at 100: Blizzard's font object and font height", NP.stateOf(c.namer) == NP.OUTLINED .. "/14" and NP.fontThenHeight(NP.mine(O, c, at, "name")))
 		O.change("nameplates.nameSize", 150)
-		O.change("nameplates.nameOutline", false)
+		O.change("nameplates.nameOutline", "None")
 		at = #O.npLog
-		O.change("nameplates.nameOutline", true)
+		O.change("nameplates.nameOutline", "As the game has it")
 		check("name outline on again at 150: Blizzard's font object, then 150 percent of the font height", NP.stateOf(c.namer) == NP.OUTLINED .. "/21" and NP.fontThenHeight(NP.mine(O, c, at, "name")) and NP.mine(O, c, at, "name")[1][1] == NP.OUTLINED)
 		clean(O, "name outline")
+
+		-- gap plates: Thin and Thick outlines, the face, and Hidden for the level.
+		local G = NP.npWorld()
+		G.fontReturn = "true"
+		local gp = G.npShow("nameplate1", { player = false, friend = false })
+		G.change("nameplates.nameOutline", "Thick")
+		check("gap plates: Name outline Thick is the plain font object with the thick flags, then the height", NP.stateOf(gp.namer) == NP.PLAIN .. "/14" and gp.namer.font[3] == "OUTLINE, THICK", NP.stateOf(gp.namer))
+		G.change("nameplates.nameOutline", "Thin")
+		check("gap plates: Name outline Thin is the plain font object with the thin flag", NP.stateOf(gp.namer) == NP.PLAIN .. "/14" and gp.namer.font[3] == "OUTLINE", NP.stateOf(gp.namer))
+		G.change("nameplates.nameOutline", "As the game has it")
+		check("gap plates: and As the game has it is Blizzard's font object again", NP.stateOf(gp.namer) == NP.OUTLINED .. "/14", NP.stateOf(gp.namer))
+		G.change("nameplates.healthTextOutline", "Thick")
+		check("gap plates: Health text outline Thick is set on all three strings and not on the name", gp.textr.font[3] == "OUTLINE, THICK" and gp.leftr.font[3] == "OUTLINE, THICK"
+			and gp.rightr.font[3] == "OUTLINE, THICK" and NP.stateOf(gp.namer) == NP.OUTLINED .. "/14", tostring(gp.textr.font[3]))
+		G.change("nameplates.healthTextOutline", "As the game has it")
+		G.change("nameplates.textFace", "Morpheus")
+		check("gap plates: Text font sets the face on the name and the three health strings, on Blizzard's font object", gp.namer.font[1] == "Fonts\\MORPHEUS.TTF" and gp.textr.font[1] == "Fonts\\MORPHEUS.TTF"
+			and gp.rightr.font[1] == "Fonts\\MORPHEUS.TTF" and NP.stateOf(gp.namer) == NP.OUTLINED .. "/14", tostring(gp.namer.font[1]))
+		G.change("nameplates.textFace", "Game font")
+		check("gap plates: and Game font puts Blizzard's font object back", NP.stateOf(gp.namer) == NP.OUTLINED .. "/14" and NP.stateOf(gp.textr) == NP.OUTLINED .. "/11.2" and #G.errors == 0, NP.stateOf(gp.namer) .. " " .. NP.stateOf(gp.textr) .. " " .. table.concat(G.errors, "|"))
+		G.change("nameplates.level", "Hidden")
+		check("gap plates: Level box Hidden fades the level frame and the box", gp.level.alpha == 0 and gp.level.playerLevelDiffIcon.alpha == 0, tostring(gp.level.alpha))
+		G.change("nameplates.level", "Thin border")
+		check("gap plates: and any other style shows the frame again", gp.level.alpha == 1, tostring(gp.level.alpha))
+		clean(G, "gap plates text")
 	end
 
 	-- 75f2. Health text.
@@ -27251,12 +27296,12 @@ do
 		W.change("nameplates.healthTextSize", 150)
 		check("health text size: the three strings are set together and the name is not touched", NP.stateOf(a.textr) == NP.OUTLINED .. "/21" and NP.stateOf(a.leftr) == NP.OUTLINED .. "/21" and NP.stateOf(a.rightr) == NP.OUTLINED .. "/21"
 			and #NP.mine(W, a, mark, "name") == 0 and NP.stateOf(a.namer) == NP.OUTLINED .. "/14")
-		W.change("nameplates.healthTextOutline", false)
+		W.change("nameplates.healthTextOutline", "None")
 		check("health text outline off: the plain font object on all three strings, at the same height, the name unchanged", NP.stateOf(a.textr) == NP.PLAIN .. "/21" and NP.stateOf(a.leftr) == NP.PLAIN .. "/21"
 			and NP.stateOf(a.rightr) == NP.PLAIN .. "/21" and #NP.mine(W, a, mark, "name") == 0)
 		W.change("nameplates.healthTextSize", 100)
 		check("health text outline off at 100: the plain font object at the font height", NP.stateOf(a.textr) == NP.PLAIN .. "/14" and NP.stateOf(a.rightr) == NP.PLAIN .. "/14")
-		W.change("nameplates.healthTextOutline", true)
+		W.change("nameplates.healthTextOutline", "As the game has it")
 		check("health text back to the outline at 100: Blizzard's own font object and height on all three", NP.stateOf(a.textr) == NP.OUTLINED .. "/14" and NP.stateOf(a.leftr) == NP.OUTLINED .. "/14" and NP.stateOf(a.rightr) == NP.OUTLINED .. "/14")
 		W.npOptions()
 		W.flush()
@@ -27264,7 +27309,7 @@ do
 		clean(W, "health text size")
 
 		-- Every size and outline of the health text, from every other.
-		local combos = { { 80, true, NP.OUTLINED .. "/11.2" }, { 80, false, NP.PLAIN .. "/11.2" }, { 100, true, NP.OUTLINED .. "/14" }, { 100, false, NP.PLAIN .. "/14" }, { 150, false, NP.PLAIN .. "/21" }, { 200, true, NP.OUTLINED .. "/28" } }
+		local combos = { { 80, "As the game has it", NP.OUTLINED .. "/11.2" }, { 80, "None", NP.PLAIN .. "/11.2" }, { 100, "As the game has it", NP.OUTLINED .. "/14" }, { 100, "None", NP.PLAIN .. "/14" }, { 150, "None", NP.PLAIN .. "/21" }, { 200, "As the game has it", NP.OUTLINED .. "/28" } }
 		local V = NP.npWorld()
 		local b = V.npShow("nameplate1", { player = false, friend = false })
 		local problems = {}
@@ -27359,9 +27404,9 @@ do
 			W.env.NamePlateSetupOptions.levelFontHeight = v[2]
 			local mark = #W.npLog
 			W.change("nameplates.nameSize", 150)
-			W.change("nameplates.nameOutline", false)
+			W.change("nameplates.nameOutline", "None")
 			W.change("nameplates.healthTextSize", 150)
-			W.change("nameplates.healthTextOutline", false)
+			W.change("nameplates.healthTextOutline", "None")
 			W.change("nameplates.levelSize", 150)
 			local got = {}
 			for _, part in ipairs({ "name", "Text", "LeftText", "RightText", "LevelText" }) do
@@ -27384,7 +27429,7 @@ do
 			W.change("nameplates.nameSize", 150)
 			W.change("nameplates.healthHeight", 150)
 			W.change("nameplates.castHeight", 200)
-			W.change("nameplates.nameOutline", false)
+			W.change("nameplates.nameOutline", "None")
 			W.fire("CVAR_UPDATE", "nameplateDebuffPadding", "2")
 			W.flush()
 			check("text and heights with the options table " .. v[1] .. ": nothing is set on the name, the strings or the bars", #NP.mine(W, a, mark, "name") == 0 and #NP.mine(W, a, mark, "HealthBarsContainer") == 0
@@ -29033,8 +29078,8 @@ do
 		W.npAllow = true
 		local p = NP.threePlates(W)
 		-- Every setting of the page that changes a look, away from the default.
-		for _, change in ipairs({ { "healthFlat", false }, { "healthHeight", 150 }, { "nameSize", 150 }, { "nameOutline", false }, { "healthText", false }, { "healthTextSize", 120 },
-			{ "healthTextOutline", false }, { "levelSize", 130 }, { "castHeight", 200 }, { "classFriendly", true }, { "classPosition", "Above" }, { "classSize", 30 }, { "classBorder", false } }) do
+		for _, change in ipairs({ { "healthFlat", false }, { "healthHeight", 150 }, { "nameSize", 150 }, { "nameOutline", "None" }, { "healthText", false }, { "healthTextSize", 120 },
+			{ "healthTextOutline", "None" }, { "levelSize", 130 }, { "castHeight", 200 }, { "classFriendly", true }, { "classPosition", "Above" }, { "classSize", 30 }, { "classBorder", false } }) do
 			W.change("nameplates." .. change[1], change[2])
 		end
 		W.flush()
@@ -29096,14 +29141,14 @@ do
 	-- 75m. Every setting, changed through its control: on, off and on again, and Blizzard's look exactly when it is back.
 	do
 		local probes = {
-			{ "healthFlat", false }, { "healthHeight", 150 }, { "healthHeight", 50 }, { "nameSize", 150 }, { "nameSize", 50 }, { "nameOutline", false }, { "healthText", false },
-			{ "healthTextSize", 100 }, { "healthTextSize", 200 }, { "healthTextOutline", false }, { "levelSize", 150 }, { "levelSize", 50 }, { "castHeight", 200 }, { "castHeight", 50 },
+			{ "healthFlat", false }, { "healthHeight", 150 }, { "healthHeight", 50 }, { "nameSize", 150 }, { "nameSize", 50 }, { "nameOutline", "None", "none" }, { "healthText", false },
+			{ "healthTextSize", 100 }, { "healthTextSize", 200 }, { "healthTextOutline", "None", "none" }, { "levelSize", 150 }, { "levelSize", 50 }, { "castHeight", 200 }, { "castHeight", 50 },
 			{ "classEnemy", false }, { "classFriendly", true }, { "classPosition", "Right", "right" }, { "classPosition", "Above", "above" }, { "classPosition", "Below", "below" },
 			{ "classFit", "Custom", "own" }, { "classGap", 3 }, { "levelShape", "Game width", "game" }, { "levelGap", 3 },
 			{ "classSize", 32, nil, { "classFit", "Custom", "own" } }, { "classSize", 8, nil, { "classFit", "Custom", "own" } }, { "classX", 10 }, { "classY", -10 }, { "classBorder", false },
-			{ "level", "Text only", "text" }, { "level", "Default", "default" },
+			{ "level", "Text only", "text" }, { "level", "Default", "default" }, { "level", "Hidden", "hidden" }, { "nameOutline", "Thick", "thick" }, { "healthTextOutline", "Thin", "thin" },
 		}
-		local labels = { classPosition = "Left", level = "Thin border", classFit = "Health bar height", levelShape = "Square" }
+		local labels = { classPosition = "Left", level = "Thin border", classFit = "Health bar height", levelShape = "Square", nameOutline = "As the game has it", healthTextOutline = "As the game has it" }
 		for _, probe in ipairs(probes) do
 			local key, value, stored = probe[1], probe[2], probe[3] or probe[2]
 			local path = "nameplates." .. key
@@ -29293,7 +29338,7 @@ do
 		check("combat: the driver is followed in combat, and no unit frame", NP.hooksOn(W, { uf = W.env.NamePlateDriverFrame }) == 1 and NP.hooksOn(W, e) == 0 and NP.hooksOn(W, n) == 0)
 		check("combat: its bar height waits, and the status says so", near(e.hcr.height, 13) and #NP.calls(W, nil, "SetHeight", true) == 0 and count(W.status(), "Bar height: nameplates that appear in combat get their height when combat ends.") == 1, W.status())
 		W.change("nameplates.nameSize", 150)
-		W.change("nameplates.nameOutline", false)
+		W.change("nameplates.nameOutline", "None")
 		W.change("nameplates.levelSize", 120)
 		W.change("nameplates.classFit", "Custom")
 		W.change("nameplates.classSize", 30)
@@ -29371,9 +29416,9 @@ do
 			W.change("nameplates.classPosition", "Above")
 			W.change("nameplates.classSize", 22)
 			W.change("nameplates.nameSize", 150)
-			W.change("nameplates.nameOutline", false)
+			W.change("nameplates.nameOutline", "None")
 			W.change("nameplates.healthTextSize", 120)
-			W.change("nameplates.healthTextOutline", false)
+			W.change("nameplates.healthTextOutline", "None")
 			W.change("nameplates.levelSize", 130)
 			W.change("nameplates.healthHeight", 150)
 			W.change("nameplates.castHeight", 200)
@@ -29529,7 +29574,7 @@ do
 		W.npAllow = true
 		W.change("nameplates.healthHeight", 150)
 		W.change("nameplates.nameSize", 150)
-		W.change("nameplates.healthTextOutline", false)
+		W.change("nameplates.healthTextOutline", "None")
 		W.change("nameplates.levelSize", 130)
 		local a = W.npShow("nameplate1", { player = true, friend = false, class = "MAGE" })
 		local b = W.npShow("nameplate2", { player = false, friend = false })
@@ -29643,8 +29688,8 @@ do
 		C.change("nameplates.classGap", 3)
 		local c = C.npShow("nameplate1", { player = true, friend = false, class = "MAGE" })
 		C.env.NamePlateConstants = nil
-		C.change("nameplates.nameOutline", false)
-		C.change("nameplates.nameOutline", true)
+		C.change("nameplates.nameOutline", "None")
+		C.change("nameplates.nameOutline", "As the game has it")
 		C.change("nameplates.classPosition", "Above")
 		check("no NamePlateConstants: the outlined font object comes back and the icon clears the name", NP.stateOf(c.namer) == NP.OUTLINED .. "/14" and NP.iconPlace(C, c) == "BOTTOM guide TOP 0,19 20x20 n1" and #C.errors == 0 and #C.violations == 0, NP.iconPlace(C, c))
 
@@ -29744,10 +29789,10 @@ do
 				W.change("nameplates.nameSize", 100)
 				W.change("nameplates.healthTextSize", 150)
 				W.change("nameplates.healthTextSize", 100)
-				W.change("nameplates.healthTextOutline", false)
-				W.change("nameplates.healthTextOutline", true)
-				W.change("nameplates.nameOutline", false)
-				W.change("nameplates.nameOutline", true)
+				W.change("nameplates.healthTextOutline", "None")
+				W.change("nameplates.healthTextOutline", "As the game has it")
+				W.change("nameplates.nameOutline", "None")
+				W.change("nameplates.nameOutline", "As the game has it")
 				local names = { a.namer.fontObject, a.textr.fontObject, a.leftr.fontObject, a.rightr.fontObject }
 				for _, name in ipairs(names) do
 					if name ~= blizzard then
@@ -30032,10 +30077,10 @@ do
 		T.change("nameplates.healthTextSize", 100)
 		check("text that fails halfway: and they go back to Blizzard's height with the setting", near(t.textr.textHeight, 14) and near(t.leftr.textHeight, 14) and near(t.rightr.textHeight, 14),
 			g(t.textr.textHeight) .. " " .. g(t.leftr.textHeight) .. " " .. g(t.rightr.textHeight))
-		T.change("nameplates.healthTextOutline", false)
+		T.change("nameplates.healthTextOutline", "None")
 		check("text that fails halfway: the plain font object of the first two is set before the third fails", NP.stateOf(t.textr) == NP.PLAIN .. "/14" and NP.stateOf(t.leftr) == NP.PLAIN .. "/14",
 			NP.stateOf(t.textr) .. " " .. NP.stateOf(t.leftr))
-		T.change("nameplates.healthTextOutline", true)
+		T.change("nameplates.healthTextOutline", "As the game has it")
 		check("text that fails halfway: and Blizzard's font object is given back to them", NP.stateOf(t.textr) == NP.OUTLINED .. "/14" and NP.stateOf(t.leftr) == NP.OUTLINED .. "/14", NP.stateOf(t.textr) .. " " .. NP.stateOf(t.leftr))
 	end
 
@@ -30078,9 +30123,9 @@ do
 		W.flush()
 		local mark = #W.npLog
 		W.change("nameplates.healthTextSize", 120)
-		W.change("nameplates.healthTextOutline", false)
+		W.change("nameplates.healthTextOutline", "None")
 		W.change("nameplates.levelSize", 130)
-		W.change("nameplates.healthTextOutline", true)
+		W.change("nameplates.healthTextOutline", "As the game has it")
 		local extra = {}
 		for _, part in ipairs({ "Text", "LeftText", "RightText", "LevelText" }) do
 			for _ in ipairs(NP.mine(W, a, mark, part, "SetFontHeight")) do
@@ -30112,17 +30157,17 @@ do
 		local W = NP.npWorld()
 		local a = W.npShow("nameplate1", { player = false, friend = false })
 		grey(W, a)
-		W.change("nameplates.nameOutline", false)
+		W.change("nameplates.nameOutline", "None")
 		check("name colour: with the outline off the plain font object is set and the grey is given back", NP.stateOf(a.namer) == NP.PLAIN .. "/14" and vertex(a) == "0.5,0.5,0.5,1", vertex(a))
-		W.change("nameplates.nameOutline", true)
+		W.change("nameplates.nameOutline", "As the game has it")
 		check("name colour: and with the outline on again", NP.stateOf(a.namer) == NP.OUTLINED .. "/14" and vertex(a) == "0.5,0.5,0.5,1", vertex(a))
 		local calls0 = a.namer.calls.SetVertexColor
 		W.change("nameplates.nameSize", 150)
 		W.change("nameplates.nameSize", 100)
 		check("name colour: a size change sets no font object and so touches no colour", a.namer.calls.SetVertexColor == calls0, tostring(a.namer.calls.SetVertexColor) .. " " .. tostring(calls0))
-		W.change("nameplates.healthTextOutline", false)
-		W.change("nameplates.healthTextOutline", true)
-		W.change("nameplates.nameOutline", false)
+		W.change("nameplates.healthTextOutline", "None")
+		W.change("nameplates.healthTextOutline", "As the game has it")
+		W.change("nameplates.nameOutline", "None")
 		check("name colour: the health text strings are never given a colour", a.textr.calls.SetVertexColor == nil and a.leftr.calls.SetVertexColor == nil and a.rightr.calls.SetVertexColor == nil)
 		clean(W, "name colour")
 
@@ -30132,7 +30177,7 @@ do
 		local given
 		s.namer.GetVertexColor = function() return SECRET, SECRET, SECRET, SECRET end
 		s.namer.SetVertexColor = function(_, ...) given = { n = select("#", ...), ... } end
-		S.change("nameplates.nameOutline", false)
+		S.change("nameplates.nameOutline", "None")
 		check("name colour: a withheld colour is given back as four withheld values, and nothing is compared", given and given.n == 4 and rawequal(given[1], SECRET) and rawequal(given[4], SECRET)
 			and NP.stateOf(s.namer) == NP.PLAIN .. "/14" and #S.errors == 0 and #S.violations == 0 and not has(S.status(), "stopped"), S.status())
 
@@ -30147,7 +30192,7 @@ do
 			else
 				e.namer.GetVertexColor = function() end
 			end
-			E.change("nameplates.nameOutline", false)
+			E.change("nameplates.nameOutline", "None")
 			E.change("nameplates.nameSize", 150)
 			check("name colour: a colour that is " .. (how == "error" and "an error" or "nothing") .. " leaves the font object and size set and no colour given", NP.stateOf(e.namer) == NP.PLAIN .. "/21" and set == 0
 				and #E.errors == 0 and #E.violations == 0 and not has(E.status(), "stopped") and not has(E.status(), "failed"), E.status())
@@ -49925,15 +49970,14 @@ do
 		C.W.flush()
 		check("pvp word colour: and back on Same as the name it takes the colour of the name", round(C.T.flag.textColour) == "0.70,0.20,0.30", round(C.T.flag.textColour))
 		-- The name colour settings run after the word copies the name, so the word follows the name they leave.
-		C.W.change("unitframes.lookWhiteNames", true)
+		C.W.change("unitframes.nameColour", "White")
 		C.W.flush()
-		check("pvp word colour: with White names on the word is white like the name", round(C.T.name.textColour) == "1.00,1.00,1.00" and round(C.T.flag.textColour) == "1.00,1.00,1.00", round(C.T.name.textColour) .. " " .. round(C.T.flag.textColour))
+		check("pvp word colour: with Name colour White the word is white like the name", round(C.T.name.textColour) == "1.00,1.00,1.00" and round(C.T.flag.textColour) == "1.00,1.00,1.00", round(C.T.name.textColour) .. " " .. round(C.T.flag.textColour))
 		C.W.change("unitframes.nameColour", "Custom")
 		C.W.change("unitframes.nameCustom", "ff336699")
 		C.W.flush()
-		check("pvp word colour: with a Name colour set the word takes that colour, White names or not", round(C.T.name.textColour) == "0.20,0.40,0.60" and round(C.T.flag.textColour) == "0.20,0.40,0.60", round(C.T.name.textColour) .. " " .. round(C.T.flag.textColour))
+		check("pvp word colour: with a Custom Name colour set the word takes that colour", round(C.T.name.textColour) == "0.20,0.40,0.60" and round(C.T.flag.textColour) == "0.20,0.40,0.60", round(C.T.name.textColour) .. " " .. round(C.T.flag.textColour))
 		C.W.change("unitframes.nameColour", "As the game has it")
-		C.W.change("unitframes.lookWhiteNames", false)
 		C.W.flush()
 		-- An unflagged target has the word at opacity 0. When the flag comes on with no change of the name, FlagWord shows the word in the colour of the name.
 		C.W.uf.pvp.target = nil
@@ -51742,12 +51786,10 @@ do
 			end
 			check("portrait head: each of the five Picture rows has 3D head before Game portrait", #wrong == 0, table.concat(wrong, " "))
 			local none = true
-			for _, key in ipairs({ "totPicture", "partypetPicture" }) do
-				for _, label in ipairs(W.menu("unitframes." .. key)) do
-					none = none and label ~= "3D head"
-				end
+			for _, label in ipairs(W.menu("unitframes.totPicture")) do
+				none = none and label ~= "3D head"
 			end
-			check("portrait head: the target of target and party pet rows have no 3D head", none)
+			check("portrait head: the target of target row has no 3D head", none)
 		end
 
 		-- With the style, each frame has a model made once, with the unit, ClearModel before SetUnit, the picture hidden and the model one level above its frame.
@@ -51829,10 +51871,10 @@ do
 			check("portrait head: the model and the frame over it are below every frame of the game that holds marks, and below the party overlay", count == 7 and #bad == 0, count .. " " .. table.concat(bad, " "))
 		end
 
-		-- The target of target frame and the party pets keep the picture: they never get a head.
+		-- The target of target frame keeps the picture: it never gets a head. The world has no party pet frame.
 		do
 			local W = H.start()
-			check("portrait head: the target of target, the focus target and the party pets have no model and show the picture", #W.uf.models == 4 + #W.members and pic(W, W.tot.portrait).texture.shown
+			check("portrait head: the target of target and the focus target have no model and show the picture", #W.uf.models == 4 + #W.members and pic(W, W.tot.portrait).texture.shown
 				and pic(W, W.focusTot.portrait).texture.shown and H.model(W, W.tot.portrait) == nil, #W.uf.models)
 		end
 
@@ -61378,7 +61420,7 @@ function PT.runControls()
 		local ns = W.ns
 		PT.go(W, "Text")
 		local changes = { ["nameplates.nameSize"] = 120, ["nameplates.levelSize"] = 150, ["nameplates.level"] = "text", ["nameplates.healthText"] = false,
-			["nameplates.healthTextSize"] = 120, ["nameplates.nameOutline"] = false }
+			["nameplates.healthTextSize"] = 120, ["nameplates.nameOutline"] = "none" }
 		-- A row on another page of the same owner is not part of this page.
 		ns.Set("nameplates.dim", true)
 		for path, v in pairs(changes) do ns.Set(path, v) end
@@ -63862,7 +63904,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 875 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 879 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -64176,7 +64218,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 875 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 879 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -64602,7 +64644,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 754 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 755 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -65052,6 +65094,17 @@ function PT.runSetup()
 			check("setup profiles: a draft saved with a tile comes back through Load", S.Load() ~= nil and S.Load().preset == "tank" and S.Load().from == nil)
 			drafts[SU.CHARACTER] = { name = "Both", step = 0, values = {}, preset = "tank", from = "Default" }
 			check("setup profiles: a draft with a tile and a saved profile keeps the tile", S.Load().preset == "tank" and S.Load().from == nil)
+			drafts[SU.CHARACTER] = { name = "Ticks", step = 0, values = { ["nameplates.nameOutline"] = false, ["unitframes.lookWhiteNames"] = true }, preset = "tank" }
+			local ticks = S.Load()
+			check("gap plates: a draft of an older build holds the plate outline tick as None and White names as Name colour White", ticks.values["nameplates.nameOutline"] == "none"
+				and ticks.values["unitframes.nameColour"] == "white" and ticks.values["unitframes.lookWhiteNames"] == nil)
+			W.env.FlatUIDB.profiles.Default.options["unitframes.nameColour"] = "class"
+			drafts[SU.CHARACTER] = { name = "From", step = 0, values = { ["unitframes.lookWhiteNames"] = true }, from = "Default" }
+			local fromColour = S.Load()
+			check("gap plates: a draft that starts from a profile with a Name colour keeps that colour over White names", fromColour.from == "Default" and fromColour.values["unitframes.nameColour"] == nil)
+			W.env.FlatUIDB.profiles.Default.options["unitframes.nameColour"] = nil
+			drafts[SU.CHARACTER] = { name = "From", step = 0, values = { ["unitframes.lookWhiteNames"] = true }, from = "Default" }
+			check("gap plates: and White names is White when that profile has none", S.Load().values["unitframes.nameColour"] == "white")
 			clean(W, "setup profiles load")
 		end
 
@@ -65747,7 +65800,7 @@ function PT.runSetup()
 			local tank, healer, standard = card(4).parts, card(5).parts, card(1).parts
 			check("setup profiles: Tank has current and percent health text and the defensive square, Standard neither", W.rawOf[tank.healthText].text == "9,360 (78%)" and W.rawOf[tank.defensive].shown == true
 				and W.rawOf[standard.healthText].text == "9,360" and W.rawOf[standard.defensive].shown == false)
-			check("setup profiles: Healer shows missing health on the party column and dims the third member", W.rawOf[healer.party[1].text].text == "2,640" and near(W.rawOf[healer.party[3].bar.frame].alpha, 0.4)
+			check("setup profiles: Healer shows missing health on the party column and dims the third member", W.rawOf[healer.party[1].text].text == "2,640" and near(W.rawOf[healer.party[3].bar.frame].alpha, 0.6)
 				and near(W.rawOf[healer.party[1].bar.frame].alpha, 1) and near(W.rawOf[standard.party[3].bar.frame].alpha, 1))
 			local r, g, b = ns.HealthLeftColour(0.78)
 			check("setup profiles: Healer's health is coloured by health left, Standard's is the game's green", RP.near(RP.colour(W.rawOf[healer.health.fill]), r, g, b) and RP.near(RP.colour(W.rawOf[standard.health.fill]), 0.24, 0.77, 0.35))
@@ -79631,12 +79684,12 @@ end
 -- >>> deflists (end)
 -- >>> defensives (end)
 -- >>> bar looks (begin)
--- Bar looks: the eight switches of the Looks section of the Unit frames page. Every check sets its switches through W.change. The values are kept in one table: the main
+-- Bar looks: the seven switches of the Looks section of the Unit frames page. Every check sets its switches through W.change. The values are kept in one table: the main
 -- function of this file has a limit on the locals alive at once.
 do
 	local LK = { BASE = "0.18,0.72,0.30", SOFT = "Interface\\AddOns\\FlatUI\\Media\\Soft.tga", SHADOW = "Interface\\AddOns\\FlatUI\\Media\\Shadow.tga", MADE = 8,
-		KEYS = { "lookClassHealth", "lookLostColour", "lookMuted", "lookWhiteNames", "lookLightText", "lookNoPowerText", "lookSoftShade", "lookShadow" },
-		LABELS = { "Health in class and reaction colour", "Dark health bar, colour shows what is lost", "Muted colours", "White names", "Smaller, lighter bar text",
+		KEYS = { "lookClassHealth", "lookLostColour", "lookMuted", "lookLightText", "lookNoPowerText", "lookSoftShade", "lookShadow" },
+		LABELS = { "Health in class and reaction colour", "Dark health bar, colour shows what is lost", "Muted colours", "Smaller, lighter bar text",
 			"No text on the power bar", "Soft shade on bars", "Shadow behind each frame" } }
 	-- A world with the functions the game has for a unit that is a player or not: LK.who[unit] is { player, class, reaction, secret }.
 	function LK.world(opts)
@@ -79674,6 +79727,8 @@ do
 		for _, key in ipairs(LK.KEYS) do
 			W.change("unitframes." .. key, on[key] == true)
 		end
+		-- White names is the Name colour White.
+		W.change("unitframes.nameColour", on.lookWhiteNames and "White" or "As the game has it")
 	end
 	function LK.rgb(c) return c and string.format("%.2f,%.2f,%.2f", c[1], c[2], c[3]) or "-" end
 	-- The colour of the solid fill of a bar.
@@ -79737,7 +79792,7 @@ do
 		local control = W.control("unitframes." .. key)
 		LK.page = LK.page and control ~= nil and control.data.setting:GetValue() == false and control.data.name == LK.LABELS[index]
 	end
-	check("bar looks: the Looks section has the eight switches with their labels, all off", LK.page)
+	check("bar looks: the Looks section has the seven switches with their labels, all off", LK.page)
 	W.change("unitframes.flat", false)
 	check("bar looks: the three looks that need flat bars are not usable with Flat bars off, the others are", W.enabled("unitframes.lookClassHealth") == false
 		and W.enabled("unitframes.lookLostColour") == false and W.enabled("unitframes.lookSoftShade") == false and W.enabled("unitframes.lookMuted") == true
@@ -79879,7 +79934,7 @@ do
 	check("bar looks: the class colour of the border of the picture is muted with the look, and the same colour without it", LK.border1 == "0.58,0.51,0.79" and LK.border2 == "0.52,0.48,0.64"
 		and LK.border3 == "0.58,0.51,0.79", table.concat({ LK.border1, LK.border2, LK.border3 }, " "))
 
-	-- White names.
+	-- White names (Name colour White).
 	LK.set(W, "lookWhiteNames")
 	LK.white = { player = LK.col(LK.name(W, "Dxml Bozo")), target = LK.col(LK.name(W, "Target")) }
 	LK.update(W, P.frame)
@@ -79892,9 +79947,9 @@ do
 	W.change("unitframes.strip", true)
 	LK.set(W)
 	LK.white.off = LK.col(LK.name(W, "Dxml Bozo"))
-	check("bar looks: white names are white on the rows, and again after the game writes the name", LK.white.player == "1.00,1.00,1.00" and LK.white.target == "1.00,1.00,1.00"
+	check("bar looks: Name colour White is white on the rows, and again after the game writes the name", LK.white.player == "1.00,1.00,1.00" and LK.white.target == "1.00,1.00,1.00"
 		and LK.white.again == "1.00,1.00,1.00", table.concat({ LK.white.player, LK.white.target, LK.white.again }, " "))
-	check("bar looks: a level that follows the name is white too, a frame without a row keeps the game's name colour, and with the look off the name has the game's colour again",
+	check("bar looks: a level that follows the name is white too, a frame without a row keeps the game's colour, and with the look off the name has the game's colour again",
 		LK.white.level == "1.00,1.00,1.00" and LK.white.noRow == "1.00,0.82,0.00" and LK.white.off == "1.00,0.82,0.00", table.concat({ LK.white.level, LK.white.noRow, LK.white.off }, " "))
 
 	-- Smaller, lighter bar text.
@@ -79996,7 +80051,7 @@ do
 	LK.set(W)
 
 	-- Every look on and off again: the frames are as before.
-	LK.set(W, "lookClassHealth", "lookLostColour", "lookMuted", "lookWhiteNames", "lookLightText", "lookNoPowerText", "lookSoftShade", "lookShadow")
+	LK.set(W, "lookClassHealth", "lookLostColour", "lookMuted", "lookLightText", "lookNoPowerText", "lookSoftShade", "lookShadow")
 	LK.all = { fill = W.rawOf[P.healthFill].file, quiet = #W.violations == 0 and #W.errors == 0 }
 	LK.set(W)
 	check("bar looks: with every look on and then off again the fills, the words, the name and the background are as before", LK.all.quiet and LK.fill(W, P.healthFill) == LK.off.health
@@ -80244,7 +80299,7 @@ do
 		and has(MU.game.status, "Player portrait: off, the game's portrait shown") and MU.silent(W), MU.game.status:sub(1, 200))
 	W.change("unitframes.playerPicture", "None")
 	check("ms-uf1: None hides the picture and the game's portrait and leaves the slot empty", MU.pic(W, P.portrait).hidden and not W.rawOf[P.portrait].shown and has(W.status(), "Player portrait: off, no portrait"), W.status():sub(1, 200))
-	W.change("unitframes.playerPicture", "As Square portraits")
+	W.change("unitframes.playerPicture", "As Portrait style")
 	check("ms-uf1: As Square portraits is the picture again", MU.pic(W, P.portrait).shown and not W.rawOf[P.portrait].shown and MU.silent(W), MU.why(W))
 	W.change("unitframes.portraitStyle", "None")
 	check("ms-uf1: with Portrait style None the frames have no picture", MU.pic(W, P.portrait).hidden and MU.pic(W, T.portrait).hidden)
@@ -80256,23 +80311,23 @@ do
 	W.change("unitframes.targetPicture", "Class icon")
 	check("ms-uf1: Class icon on a target that is no player keeps the face", MU.pic(W, T.portrait).shown and W.rawOf[MU.pic(W, T.portrait).texture].atlas == nil, tostring(W.rawOf[MU.pic(W, T.portrait).texture].atlas))
 	W.change("unitframes.playerPicture", "Square picture")
-	W.change("unitframes.targetPicture", "As Square portraits")
+	W.change("unitframes.targetPicture", "As Portrait style")
 	check("ms-uf1: Square picture shows the face where Portrait style says Class icon", W.rawOf[MU.pic(W, P.portrait).texture].atlas == nil and W.rawOf[MU.pic(W, F.portrait).texture].atlas == "classicon-rogue")
 	W.change("unitframes.portraitStyle", "Picture")
-	W.change("unitframes.playerPicture", "As Square portraits")
+	W.change("unitframes.playerPicture", "As Portrait style")
 	W.change("unitframes.partyPicture", "None")
 	W.change("unitframes.partypetPicture", "Game portrait")
 	check("ms-uf1: the party row and the party pet row are separate", MU.pic(W, M.portrait).hidden and not W.rawOf[M.portrait].shown and MU.pic(W, T.portrait).shown, MU.why(W))
-	W.change("unitframes.partyPicture", "As Square portraits")
-	W.change("unitframes.partypetPicture", "As Square portraits")
+	W.change("unitframes.partyPicture", "As Portrait style")
+	W.change("unitframes.partypetPicture", "As Portrait style")
 	W.change("unitframes.petPicture", "None")
 	check("ms-uf1: the pet picture row hides the pet's picture", MU.pic(W, Pet.portrait).hidden and MU.pic(W, P.portrait).shown)
-	W.change("unitframes.petPicture", "As Square portraits")
+	W.change("unitframes.petPicture", "As Portrait style")
 	W.change("unitframes.squarePortrait", false)
 	W.change("unitframes.playerPicture", "Square picture")
 	check("ms-uf1: with Square portraits off the game's portraits stay whatever the rows say", W.rawOf[P.portrait].shown and MU.pic(W, P.portrait).hidden)
 	W.change("unitframes.squarePortrait", true)
-	W.change("unitframes.playerPicture", "As Square portraits")
+	W.change("unitframes.playerPicture", "As Portrait style")
 
 	-- Level.
 	W.change("unitframes.targetLevel", false)
@@ -80518,7 +80573,7 @@ do
 			deadText = { true, "unitframesIcons" }, totemTimer = { true, "unitframesIcons" }, totemSwipe = { true, "unitframesIcons" }, combatIcon = { true, "unitframesPlayer" },
 			petHappiness = { true, "unitframesPet" }, playerPowerBar = { true, "unitframesPlayer" }, targetPowerBar = { true, "unitframesTarget" }, focusPowerBar = { true, "unitframesFocus" },
 			petPowerBar = { true, "unitframesPet" }, totPowerBar = { true, "unitframesTot" }, partyPowerBar = { true, "unitframesParty" }, bossPowerBar = { true, "unitframesBoss" },
-			partyRangeDim = { false, "unitframesParty" }, partyRangeAlpha = { 50, "unitframesParty" }, raidRangeAlpha = { 50, "unitframesRaid" }, raidRoleIcon = { true, "unitframesRaid" },
+			partyRangeDim = { false, "unitframesParty" }, partyRangeOpacity = { 50, "unitframesParty" }, raidRangeAlpha = { 50, "unitframesRaid" }, raidRoleIcon = { true, "unitframesRaid" },
 			raidName = { true, "unitframesRaid" }, raidStatusText = { true, "unitframesRaid" }, healPrediction = { true, "unitframesBars" }, absorbShield = { true, "unitframesBars" },
 			healAbsorb = { true, "unitframesBars" } }
 		local wrong, count = {}, 0
@@ -80529,7 +80584,7 @@ do
 			end
 		end
 		check("ms-ufpart: the 25 rows are on their pages with their defaults", #wrong == 0 and count == 25, table.concat(wrong, " ") .. count)
-		check("ms-ufpart: Out of range dimming needs the dimming row and Out of range opacity needs nothing", not W.enabled("unitframes.partyRangeAlpha") and W.enabled("unitframes.raidRangeAlpha"))
+		check("ms-ufpart: Out of range opacity needs the dimming row and Out of range opacity needs nothing", not W.enabled("unitframes.partyRangeOpacity") and W.enabled("unitframes.raidRangeAlpha"))
 		local raid = {}
 		for _, page in ipairs(W.ns.PAGES) do
 			if page.key == "unitframesRaid" then
@@ -80555,7 +80610,7 @@ do
 	W.change("unitframes.leaderIcon", true)
 	check("ms-ufpart: and it gives them their opacity back", MP.a(W, x.p.leader) == 1 and MP.a(W, x.m.guide) == 1 and MP.faded(W) == 0 and MP.silent(W), MP.why(W))
 	W.change("unitframes.roleIcon", false)
-	check("ms-ufpart: Role icon on party frames off makes the role icon of a party member transparent and no other", MP.a(W, x.m.role) == 0 and MP.a(W, x.p.role) == 1 and MP.faded(W) == 1)
+	check("ms-ufpart: Role icon on player and party frames off makes the role icon of the player and of a party member transparent and no other", MP.a(W, x.m.role) == 0 and MP.a(W, x.p.role) == 0 and MP.faded(W) == 2)
 	W.change("unitframes.roleIcon", true)
 	W.change("unitframes.raidMarker", false)
 	check("ms-ufpart: Raid marker off makes the marker of the target and focus frames transparent and no other icon", MP.a(W, x.t.marker) == 0 and MP.a(W, x.f.marker) == 0 and MP.faded(W) == 2)
@@ -80759,9 +80814,11 @@ do
 	W.uf.inRange.party1 = true
 	MP.box.onUpdate(MP.box, 0.1)
 	check("ms-ufpart: the layer looks at range every quarter of a second and not between", MP.shade.alpha == MP.waited, tostring(MP.shade.alpha))
-	W.change("unitframes.partyRangeAlpha", 70)
-	check("ms-ufpart: Out of range dimming sets how dark the layer is", MP.look(false) == 0.7, tostring(MP.shade.alpha))
-	W.change("unitframes.partyRangeAlpha", 50)
+	W.change("unitframes.partyRangeOpacity", 30)
+	check("ms-ufpart: Out of range opacity sets how clear a dimmed member is, so the layer is as dark as the rest", MP.look(false) == 0.7, tostring(MP.shade.alpha))
+	W.change("unitframes.partyRangeOpacity", 100)
+	check("ms-ufpart: Out of range opacity 100 leaves the layer clear", MP.look(false) == 0, tostring(MP.shade.alpha))
+	W.change("unitframes.partyRangeOpacity", 50)
 	check("ms-ufpart: a withheld answer is handed on and never tested: the layer is as dark as the game's answer says", MP.look(SECRET, true) == 0 and rawequal(MP.handed, SECRET) and MP.look(SECRET, false) == 0.5, tostring(MP.shade.alpha))
 	check("ms-ufpart: a unit that answers nothing is not dimmed", MP.look(nil) == 0)
 	W.change("unitframes.partyRangeDim", false)
@@ -83755,6 +83812,21 @@ do
 			end
 		end
 		check("ms-uftext: the sixteen rows are there with their defaults", #wrong == 0 and #W.ns.PAGES > 0, table.concat(wrong, " "))
+		local sizes = {}
+		for _, page in ipairs(W.ns.PAGES) do
+			for _, item in ipairs(page) do
+				if page.key == "unitframesText" and (item.key == "healthTextSize" or item.key == "powerTextSize" or item.key == "smallTextSize") then
+					sizes[#sizes + 1] = item.key .. ":" .. item.min .. "-" .. item.max .. "/" .. item.step
+				end
+			end
+		end
+		table.sort(sizes)
+		check("gap plates: Health text size, Power text size and Small frame text size run from 50 to 200 in steps of 5", table.concat(sizes, " ") == "healthTextSize:50-200/5 powerTextSize:50-200/5 smallTextSize:50-200/5", table.concat(sizes, " "))
+		W.ns.Set("unitframes.healthTextSize", 50)
+		W.ns.Set("unitframes.smallTextSize", 200)
+		check("gap plates: and the ends are kept when they are set", W.ns.Get("unitframes.healthTextSize") == 50 and W.ns.Get("unitframes.smallTextSize") == 200)
+		W.ns.Set("unitframes.healthTextSize", 100)
+		W.ns.Set("unitframes.smallTextSize", 70)
 		for _, page in ipairs(W.ns.PAGES) do
 			for _, item in ipairs(page) do
 				if item.key then
@@ -83811,14 +83883,13 @@ do
 	W.change("unitframes.levelColour", "Same as the name")
 	check("ms-uftext: a level that follows the name has the name's colour", MX.rgb(MX.row(W, "60")) == "0.58,0.51,0.79", MX.rgb(MX.row(W, "60")))
 	W.change("unitframes.levelColour", "By difficulty")
-	W.change("unitframes.lookWhiteNames", true)
-	check("ms-uftext: a name colour other than the game's wins over White names", MX.rgb(MX.row(W, "Dxml Bozo")) == "0.58,0.51,0.79", MX.rgb(MX.row(W, "Dxml Bozo")))
+	W.change("unitframes.nameColour", "White")
+	check("ms-uftext: White makes the name of the row white", MX.rgb(MX.row(W, "Dxml Bozo")) == "1.00,1.00,1.00" and MX.rgb(MX.row(W, "Target")) == "1.00,1.00,1.00", MX.rgb(MX.row(W, "Dxml Bozo")))
+	W.change("unitframes.levelColour", "Same as the name")
+	check("ms-uftext: a level that follows the name is white with it", MX.rgb(MX.row(W, "60")) == "1.00,1.00,1.00", MX.rgb(MX.row(W, "60")))
+	W.change("unitframes.levelColour", "By difficulty")
 	W.change("unitframes.nameColour", "As the game has it")
-	W.change("unitframes.lookWhiteNames", false)
-	W.change("unitframes.lookWhiteNames", true)
-	check("ms-uftext: As the game has it leaves White names to make the name white", MX.rgb(MX.row(W, "Dxml Bozo")) == "1.00,1.00,1.00", MX.rgb(MX.row(W, "Dxml Bozo")))
-	W.change("unitframes.lookWhiteNames", false)
-	check("ms-uftext: and with that off the name has the game's colour again", MX.snap(W) == MX.off and MX.silent(W), MX.snap(W))
+	check("ms-uftext: and with As the game has it the name has the game's colour again", MX.snap(W) == MX.off and MX.silent(W), MX.snap(W))
 
 	-- A new target: the colour follows the unit.
 	W.change("unitframes.nameColour", "Class")
@@ -83850,6 +83921,9 @@ do
 	check("ms-uftext: without a name row the face, the size and the colour are set on the game's name text, on a large frame and on a small one", MX.font(W.rawOf[P.nameText]) == "Fonts\\ARIALN.TTF|15.00|"
 		and MX.font(W.rawOf[Pet.nameText]) == "Fonts\\ARIALN.TTF|10.50|" and MX.rgb(W.rawOf[P.nameText]) == "0.20,0.40,0.60" and MX.rgb(W.rawOf[Pet.nameText]) == "0.20,0.40,0.60" and MX.silent(W),
 		MX.font(W.rawOf[P.nameText]) .. " " .. MX.font(W.rawOf[Pet.nameText]) .. " " .. MX.why(W))
+	W.change("unitframes.nameColour", "White")
+	check("ms-uftext: White leaves the game's colour on a frame without a name row", MX.rgb(W.rawOf[P.nameText]) == "1.00,0.82,0.00" and MX.silent(W), MX.rgb(W.rawOf[P.nameText]))
+	W.change("unitframes.nameColour", "Custom")
 	W.change("unitframes.playerName", false)
 	W.change("unitframes.petName", false)
 	check("ms-uftext: and Name off makes that text transparent", W.rawOf[P.nameText].alpha == 0 and W.rawOf[Pet.nameText].alpha == 0 and W.rawOf[T.nameText].alpha ~= 0, tostring(W.rawOf[P.nameText].alpha))
@@ -83929,6 +84003,8 @@ do
 	local W = FH.ufWorld({ fontReturn = "true" })
 	W.change("unitframes.smallRow", true)
 	W.flush()
+	-- The focus target frame has the stand-in font string of the simulated client, which cannot measure a name: it gets one that can.
+	W.ns.UnitFrameExtra.records[W.focusTot.frame].row.name = TF.fake(60, 100)
 	local rec, fs = TF.setup(W, "tot", 120, 100)
 	check("tot name fit: the row is Smaller text by default", W.ns.Get("unitframes.totNameFit") == "shrink" and W.control("unitframes.totNameFit") ~= nil and W.ns.UnitFrameExtra.rowOn(rec) == true)
 	TF.hooks(W, rec, "rowText")
@@ -84004,9 +84080,186 @@ do
 	check("tot name fit: the drawing leaves a name that fits alone", fitSmall[#fitSmall] == cutSmall[#cutSmall], tostring(fitSmall[#fitSmall]) .. "/" .. tostring(cutSmall[#cutSmall]))
 	local r3, f3 = TF.setup(W, "pet", 200, 100)
 	TF.hooks(W, r3, "rowText")
-	check("tot name fit: the pet frame is untouched", f3.calls == 0 and f3.scale == 1, tostring(f3.calls))
+	check("tot name fit: the pet frame keeps the scale 1 while its own row is Cut with dots", f3.scale == 1, tostring(f3.scale))
 end
 -- >>> totnamefit (end)
+-- >>> gap-frames (begin)
+-- Option gaps of the unit frames: Power text on the boss frame, Long names on the pet, party, party pet and boss frames, Role icon on the player frame, 3D head on party pets,
+-- the Picture choice As Portrait style and Out of range opacity on one scale. Labels start "gap frames:". The values are kept in one table: the main function of this file has a limit on the locals alive at once.
+do
+	local GF = { fit = {} }
+	function GF.fake(need, room)
+		local f = { scale = 1, calls = 0, need = need, room = room }
+		f.SetTextScale = function(self, v) self.scale = v self.calls = self.calls + 1 end
+		f.GetUnboundedStringWidth = function(self) return self.need end
+		f.GetWidth = function(self) return self.room end
+		return f
+	end
+	-- A frame of a kind with a name row whose name string is a stand-in; the real record of the kind when the world has one.
+	function GF.rec(W, kind, need, room)
+		local real = ({ pet = W.pet, party = W.members[1] })[kind]
+		local rec = real and W.ns.UnitFrameExtra.records[real.frame] or { kind = kind, row = {} }
+		rec.row = rec.row or {}
+		rec.row.name = GF.fake(need, room)
+		return rec, rec.row.name
+	end
+	function GF.run(W, rec)
+		for _, hook in ipairs(W.ns.UnitFrameExtra.after.rowText) do
+			if hook.part == "Long names" then
+				hook.fn(rec)
+			end
+		end
+	end
+	function GF.notes(W)
+		local n = 0
+		for _, l in ipairs(W.ns.StatusLines and W.ns.StatusLines() or {}) do if tostring(l):find("Long names", 1, true) then n = n + 1 end end
+		return n
+	end
+	local W = FH.ufWorld({ fontReturn = "true" })
+	W.blizzard(function() W.env.PartyFrame:InitializePartyMemberFrames() end)
+	W.change("unitframes.smallRow", true)
+	W.flush()
+	-- The rows, their defaults and their pages.
+	do
+		local want = { petNameFit = "cut", partyNameFit = "cut", bossNameFit = "cut", totNameFit = "shrink", bossPowerText = "game", partyRangeOpacity = 50, raidRangeAlpha = 50, roleIcon = true }
+		local wrong, n = {}, 0
+		for key, default in pairs(want) do
+			n = n + 1
+			if W.ns.Get("unitframes." .. key) ~= default or W.control("unitframes." .. key) == nil then
+				wrong[#wrong + 1] = key
+			end
+		end
+		check("gap frames: Long names on the pet, party and boss frames start as Cut with dots, Power text on the boss frame as the game has it and Out of range opacity at 50", #wrong == 0 and n == 8, table.concat(wrong, " "))
+		local seven = 0
+		for _, key in ipairs({ "playerPicture", "targetPicture", "focusPicture", "petPicture", "totPicture", "partyPicture", "partypetPicture" }) do
+			local labels = W.menu("unitframes." .. key)
+			seven = seven + ((labels[1] == "As Portrait style" and not table.concat(labels, "|"):find("Square portraits", 1, true)) and 1 or 0)
+		end
+		check("gap frames: the first choice of all seven Picture rows is As Portrait style", seven == 7, tostring(seven))
+		local head = false
+		local labels = W.menu("unitframes.partypetPicture")
+		for index, label in ipairs(labels) do
+			head = head or (label == "3D head" and labels[index + 1] == "Game portrait")
+		end
+		check("gap frames: the Party pet picture row has 3D head before Game portrait", head, table.concat(labels, "|"))
+		local def
+		for _, page in ipairs(W.ns.PAGES) do
+			for _, item in ipairs(page) do
+				if item.key == "partyRangeOpacity" then def = item end
+			end
+		end
+		check("gap frames: Out of range opacity on party frames runs 10 to 100 in steps of 5 like the raid frames and needs the dimming switch", def ~= nil and def.min == 10 and def.max == 100 and def.step == 5
+			and def.label == "Out of range opacity" and def.needs == "partyRangeDim", tostring(def and def.max))
+	end
+	-- Long names: each kind has its row and the party pets share the party row.
+	do
+		-- The stand-in font strings of the simulated frames cannot measure a name, so the target of target frames are left cut.
+		W.change("unitframes.totNameFit", "Cut with dots")
+		local pet, pf = GF.rec(W, "pet", 120, 100)
+		GF.run(W, pet)
+		check("gap frames: the pet name stays cut by default", pf.scale == 1 and pf.calls == 1, tostring(pf.scale))
+		W.change("unitframes.petNameFit", "Smaller text")
+		GF.run(W, pet)
+		check("gap frames: the pet row Smaller text lowers a long name to room over need", math.abs(pf.scale - 100 / 120) < 0.0001, tostring(pf.scale))
+		pf.need = 200
+		GF.run(W, pet)
+		check("gap frames: and never under 75 percent", pf.scale == 0.75, tostring(pf.scale))
+		local member, mf = GF.rec(W, "party", 120, 100)
+		local partypet, qf = GF.rec(W, "partypet", 120, 100)
+		local boss, bf = GF.rec(W, "boss", 120, 100)
+		local others = { member, partypet, boss }
+		for _, rec in ipairs(others) do GF.run(W, rec) end
+		check("gap frames: the pet row sets no other kind: party, party pet and boss with Cut with dots keep the scale 1", mf.scale == 1 and qf.scale == 1 and bf.scale == 1, mf.scale .. " " .. qf.scale .. " " .. bf.scale)
+		W.change("unitframes.partyNameFit", "Smaller text")
+		for _, rec in ipairs(others) do GF.run(W, rec) end
+		check("gap frames: the party row sets party members and party pets and no other kind", math.abs(mf.scale - 100 / 120) < 0.0001 and math.abs(qf.scale - 100 / 120) < 0.0001 and bf.scale == 1,
+			mf.scale .. " " .. qf.scale .. " " .. bf.scale)
+		W.change("unitframes.bossNameFit", "Smaller text")
+		GF.run(W, boss)
+		check("gap frames: the boss row sets the boss frames", math.abs(bf.scale - 100 / 120) < 0.0001, tostring(bf.scale))
+		W.change("unitframes.partyNameFit", "Cut with dots")
+		GF.run(W, member)
+		GF.run(W, partypet)
+		check("gap frames: Cut with dots on the party row gives party members and party pets the scale 1 back and leaves the boss", mf.scale == 1 and qf.scale == 1 and bf.scale ~= 1, mf.scale .. " " .. qf.scale .. " " .. bf.scale)
+		-- A name whose width the client withholds keeps one status line while any frame fails, and the line goes with the last.
+		local p2, f2 = GF.rec(W, "pet", SECRET, 100)
+		GF.run(W, p2)
+		local b2, g2 = GF.rec(W, "boss", SECRET, 100)
+		GF.run(W, b2)
+		GF.run(W, b2)
+		GF.fit.both = GF.notes(W)
+		g2.need = 60
+		GF.run(W, b2)
+		GF.fit.one = GF.notes(W)
+		f2.need = 60
+		GF.run(W, p2)
+		check("gap frames: two frames that cannot measure a name share one status line, which stays until the last of them measures", GF.fit.both == 1 and GF.fit.one == 1 and GF.notes(W) == 0,
+			GF.fit.both .. " " .. GF.fit.one .. " " .. GF.notes(W))
+		W.change("unitframes.petNameFit", "Cut with dots")
+		W.change("unitframes.bossNameFit", "Cut with dots")
+	end
+	-- Power text on the boss frame.
+	do
+		local X = W.ns.UnitFrameExtra
+		local power, health = { role = "power" }, { role = "health" }
+		local boss, tot = { kind = "boss" }, { kind = "tot" }
+		check("gap frames: the boss power bar has the game's words until Power text is chosen", X.textMode(boss, power, true) == "game")
+		W.change("unitframes.bossPowerText", "Current / max")
+		check("gap frames: Power text on the boss frame sets the format of the boss power bar, not its health bar and not another frame", X.textMode(boss, power, true) == "curmax" and X.textMode(boss, health, true) == "game"
+			and X.textMode(tot, power, true) == "game", tostring(X.textMode(boss, power, true)))
+		W.change("unitframes.bossPowerText", "As the game has it")
+	end
+	-- 3D head on party pets: a picture of a party pet with the style head asks for a model, a target of target does not.
+	do
+		local hook
+		for _, each in ipairs(W.ns.UnitFrameExtra.after.picture) do
+			if each.part == "3D head" then hook = each end
+		end
+		local was = W.env.CreateFrame
+		W.env.CreateFrame = function() error("no model in this stand-in", 0) end
+		local function asked(kind)
+			local rec = { kind = kind, pic = { style = "head", texture = { SetShown = function() end, Hide = function() end }, frame = {} } }
+			hook.fn(rec, true, true)
+			return rec.pic.headNote ~= nil
+		end
+		local asks = { partypet = asked("partypet"), party = asked("party"), pet = asked("pet"), tot = asked("tot"), boss = asked("boss") }
+		W.env.CreateFrame = was
+		check("gap frames: a party pet picture in the style 3D head asks for a model as party and pet pictures do, and target of target and boss frames do not",
+			hook ~= nil and asks.partypet and asks.party and asks.pet and not asks.tot and not asks.boss, tostring(asks.partypet) .. tostring(asks.party) .. tostring(asks.pet) .. tostring(asks.tot) .. tostring(asks.boss))
+	end
+	-- Out of range opacity: a saved party value is 100 minus the old dimming, in a saved profile and in a profile text.
+	do
+		local function saved(options)
+			local V = FH.ufWorld({ saved = { options = options } })
+			return V.ns.Get("unitframes.partyRangeOpacity"), V.env.FlatUIDB.profiles.Default.options["unitframes.partyRangeAlpha"]
+		end
+		local a, a2 = saved({ ["unitframes.partyRangeAlpha"] = 70 })
+		local b = saved({ ["unitframes.partyRangeAlpha"] = 10 })
+		local c = saved({ ["unitframes.partyRangeAlpha"] = 90 })
+		local d = saved({ ["unitframes.partyRangeAlpha"] = 70, ["unitframes.partyRangeOpacity"] = 80 })
+		local e = saved({})
+		check("gap frames: a saved Out of range dimming of 70 is Out of range opacity 30, 10 is 90, 90 is 10, and the old key is dropped", a == 30 and b == 90 and c == 10 and a2 == nil, tostring(a) .. " " .. tostring(b) .. " " .. tostring(c))
+		check("gap frames: a profile that has the new row keeps it and a profile with neither has the default 50", d == 80 and e == 50, tostring(d) .. " " .. tostring(e))
+		local function imported(lines)
+			local V = FH.ufWorld({ saved = { options = {} } })
+			V.ns.ImportProfile(V.ns.PackText("FlatUI1:", lines))
+			return V.ns.Get("unitframes.partyRangeOpacity")
+		end
+		check("gap frames: a profile text from an older build imports Out of range dimming 70 as Out of range opacity 30, and the new row wins over the old one",
+			imported({ "o|unitframes.partyRangeAlpha|70" }) == 30 and imported({ "o|unitframes.partyRangeAlpha|70", "o|unitframes.partyRangeOpacity|80" }) == 80
+			and imported({ "o|unitframes.partyRangeOpacity|65" }) == 65 and imported({ "o|unitframes.partyRangeAlpha|5" }) == 95, tostring(imported({ "o|unitframes.partyRangeAlpha|70" })))
+	end
+	-- A saved setup draft of an older build keeps its Out of range dimming pick as Out of range opacity.
+	do
+		local V = FH.ufWorld({ saved = { options = {} } })
+		V.env.FlatUIDB.setup = { drafts = { [V.ns.Setup.Key()] = { step = 1, values = { ["unitframes.partyRangeAlpha"] = 70 } } } }
+		local kept = V.ns.Setup.Load()
+		check("gap frames: a saved setup draft with Out of range dimming 70 holds Out of range opacity 30 and not the old row",
+			kept ~= nil and kept.values["unitframes.partyRangeOpacity"] == 30 and kept.values["unitframes.partyRangeAlpha"] == nil)
+	end
+	check("gap frames: no violations, errors or messages", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|") .. table.concat(W.out, "|"))
+end
+-- >>> gap-frames (end)
 -- >>> ms-uffmt (begin)
 -- Health and power text formats of the unit frames (ms-12): the Health text and Power text row of each frame page, Number style, Show and the two positions. Every label starts
 -- "ms-uffmt:". The values are kept in one table: the main function of this file has a limit on the locals alive at once.
@@ -84123,7 +84376,7 @@ do
 			end
 		end
 		check("ms-uffmt: the fifteen rows are there with their defaults", #wrong == 0 and n == 15, table.concat(wrong, " "))
-		check("ms-uffmt: Power text is on every frame page but the boss frames", ROW["unitframes.bossPowerText"] == nil and ROW["unitframes.totHealthText"] == nil
+		check("ms-uffmt: Power text is on every frame page but the target of target frames", ROW["unitframes.bossPowerText"] ~= nil and ROW["unitframes.totHealthText"] == nil
 			and ROW["unitframes.partypetHealthText"] == nil and ROW["unitframes.partyPowerText"] ~= nil)
 	end
 
@@ -88763,6 +89016,13 @@ do
 		end
 		env.UnitHealth = health("UnitHealth", function() return W.hp.health end)
 		env.UnitHealthMissing = health("UnitHealthMissing", function() return W.hp.missing end)
+		env.UnitHealthMax = health("UnitHealthMax", function() return W.hp.health + W.hp.missing end)
+		env.BreakUpLargeNumbers = function(value)
+			if rawequal(value, SECRET) then
+				return SECRET
+			end
+			return (tostring(value):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", ""))
+		end
 		env.CurveConstants = { ScaleTo100 = {} }
 		env.UnitHealthPercent = function(unit, predicted, curve)
 			if curve ~= env.CurveConstants.ScaleTo100 or predicted ~= true then
@@ -88890,7 +89150,7 @@ do
 	do
 		local W = M.world()
 		local want = { nameShow = true, nameColour = "game", nameCustomColour = "ffffffff", healthTextColour = "ffffffff", healthTextWhen = "always", healthFormat = "game",
-			castTextSize = 100, castTextOutline = true, castTextColour = "ffffffff", castIconSize = 100, castSpark = true, castShield = true,
+			castTextSize = 100, castTextOutline = "game", castTextColour = "ffffffff", castIconSize = 100, castSpark = true, castShield = true,
 			clickThroughFriendly = false, clickThroughEnemy = false, clickExtraX = 0, clickExtraY = 0 }
 		local bad = {}
 		for key, value in pairs(want) do
@@ -88928,10 +89188,38 @@ do
 			and rows["nameplatesCast.castIconSize"].min == 50 and rows["nameplatesCast.castIconSize"].max == 200 and rows["nameplatesCast.castIconSize"].step == 5
 			and rows["nameplates.clickExtraX"].min == -10 and rows["nameplates.clickExtraX"].max == 30 and rows["nameplates.clickExtraX"].step == 1
 			and rows["nameplates.clickExtraY"].min == -10 and rows["nameplates.clickExtraY"].max == 20 and rows["nameplates.clickExtraY"].step == 1)
-		check("ms-ptext: the choices", ids(rows["nameplatesText.nameColour"]) == "game,white,reaction,custom" and ids(rows["nameplatesText.healthTextWhen"]) == "always,target"
-			and ids(rows["nameplatesText.healthFormat"]) == "game,percent,value,both,missing")
+		check("ms-ptext: the choices", ids(rows["nameplatesText.nameColour"]) == "game,white,class,reaction,custom" and ids(rows["nameplatesText.healthTextWhen"]) == "always,target"
+			and ids(rows["nameplatesText.healthFormat"]) == "game,value,curmax,percent,both,missing"
+			and ids(rows["nameplatesText.nameOutline"]) == "game,none,thin,thick" and ids(rows["nameplatesText.level"]) == "box,text,default,hidden"
+			and rows["nameplatesText.textFace"].default == "default")
 		check("ms-ptext: the enemy click row has its tip", rows["nameplates.clickThroughEnemy"].tip == "Target with Tab or a key binding.")
 		clean(W, "ms-ptext rows")
+	end
+
+	-- gap plates: settings of an older build. The three outline rows were ticks, and White names was a tick of the unit frames.
+	do
+		local X = M.world({ ["nameplates.nameOutline"] = false, ["nameplates.healthTextOutline"] = true, ["nameplates.castTextOutline"] = false, ["unitframes.lookWhiteNames"] = true })
+		check("gap plates: saved ticks of the three plate outline rows load as None and As the game has it", X.ns.Get("nameplates.nameOutline") == "none"
+			and X.ns.Get("nameplates.healthTextOutline") == "game" and X.ns.Get("nameplates.castTextOutline") == "none", X.ns.Get("nameplates.nameOutline") .. " " .. X.ns.Get("nameplates.healthTextOutline"))
+		check("gap plates: saved White names loads as Name colour White and the old row is dropped", X.ns.Get("unitframes.nameColour") == "white" and X.options()["unitframes.lookWhiteNames"] == nil
+			and X.options()["nameplates.nameOutline"] == "none", tostring(X.ns.Get("unitframes.nameColour")))
+		local Y = M.world({ ["nameplates.nameOutline"] = "thick", ["unitframes.lookWhiteNames"] = true, ["unitframes.nameColour"] = "custom" })
+		check("gap plates: a row saved in its new form is kept, and a Name colour that was chosen wins over White names", Y.ns.Get("nameplates.nameOutline") == "thick" and Y.ns.Get("unitframes.nameColour") == "custom")
+		local Z = M.world({ ["nameplates.nameOutline"] = true })
+		check("gap plates: a saved tick that is on loads as As the game has it and is kept as that", Z.ns.Get("nameplates.nameOutline") == "game" and Z.options()["nameplates.nameOutline"] == "game")
+		local I = M.world()
+		I.ns.ImportProfile(I.ns.PackText("FlatUI1:", { "o|nameplates.nameOutline|0", "o|nameplates.healthTextOutline|1", "o|nameplates.castTextOutline|0", "o|unitframes.lookWhiteNames|1" }))
+		check("gap plates: a profile text of an older build imports the ticks as None and As the game has it, and White names as Name colour White",
+			I.ns.Get("nameplates.nameOutline") == "none" and I.ns.Get("nameplates.healthTextOutline") == "game" and I.ns.Get("nameplates.castTextOutline") == "none" and I.ns.Get("unitframes.nameColour") == "white",
+			I.ns.Get("nameplates.nameOutline") .. " " .. I.ns.Get("unitframes.nameColour"))
+		local J = M.world()
+		J.ns.ImportProfile(J.ns.PackText("FlatUI1:", { "o|nameplates.nameOutline|thick", "o|unitframes.nameColour|class", "o|unitframes.lookWhiteNames|1" }))
+		check("gap plates: a profile text in the new form imports as it is, and a Name colour in it wins over White names", J.ns.Get("nameplates.nameOutline") == "thick" and J.ns.Get("unitframes.nameColour") == "class")
+		local T = M.world({ ["nameplates.nameOutline"] = "thin", ["nameplates.textFace"] = "arial", ["nameplates.level"] = "hidden", ["unitframes.nameColour"] = "white" })
+		local K = M.world()
+		K.ns.ImportProfile(T.ns.ExportProfile())
+		check("gap plates: the new choices export and import again", K.ns.Get("nameplates.nameOutline") == "thin" and K.ns.Get("nameplates.textFace") == "arial" and K.ns.Get("nameplates.level") == "hidden"
+			and K.ns.Get("unitframes.nameColour") == "white")
 	end
 
 	-- At the defaults the addon makes no call on any of these parts.
@@ -88976,8 +89264,19 @@ do
 		W.change("nameplates.nameColour", "Custom")
 		W.change("nameplates.nameCustomColour", "ff00ff00")
 		check("ms-ptext: Name colour Custom is the colour of the row", M.vertex(a.name) == "0.00,1.00,0.00", M.vertex(a.name))
-		W.change("nameplates.nameColour", "By reaction")
-		check("ms-ptext: Name colour By reaction is the game's colour for the unit", M.vertex(a.name) == "0.20,0.80,0.30", M.vertex(a.name))
+		W.change("nameplates.nameColour", "Reaction")
+		check("ms-ptext: Name colour Reaction is the game's colour for the unit", M.vertex(a.name) == "0.20,0.80,0.30", M.vertex(a.name))
+		W.change("nameplates.nameColour", "Class")
+		check("gap plates: Name colour Class on a unit that is no player is its reaction colour", M.vertex(a.name) == "0.20,0.80,0.30", M.vertex(a.name))
+		W.env.UnitIsPlayer = function() return true end
+		W.env.UnitClass = function() return "Mage", "MAGE", 8 end
+		W.env.RAID_CLASS_COLORS = { MAGE = { r = 0.41, g = 0.8, b = 0.94 } }
+		a.updateName()
+		check("gap plates: Name colour Class on a player is the class colour", M.vertex(a.name) == "0.41,0.80,0.94", M.vertex(a.name))
+		W.env.UnitClass = function() return SECRET, SECRET, SECRET end
+		a.updateName()
+		check("gap plates: and a class the client withholds leaves the colour the game gave", M.vertex(a.name) == "0.90,0.10,0.10" and #W.errors == 0, M.vertex(a.name))
+		W.env.UnitIsPlayer, W.env.UnitClass, W.env.RAID_CLASS_COLORS = nil, nil, nil
 		W.change("nameplates.nameColour", "As the game has it")
 		check("ms-ptext: and As the game has it gives back the colour the game had set", M.vertex(a.name) == "0.90,0.10,0.10", M.vertex(a.name))
 		local before = a.name.calls.SetVertexColor
@@ -89056,12 +89355,19 @@ do
 		W.hp.percent = 40
 		a.updateHealth()
 		check("ms-ptext: it follows the game's health update", own.text == "40%", tostring(own.text))
-		W.change("nameplates.healthFormat", "Health")
-		check("ms-ptext: Health is the health value, abbreviated", own.text == "12.5K", tostring(own.text))
-		W.change("nameplates.healthFormat", "Health and percent")
-		check("ms-ptext: Health and percent are in one text", own.text == "12.5K  40%", tostring(own.text))
-		W.change("nameplates.healthFormat", "Health missing")
-		check("ms-ptext: Health missing is the health the unit lacks", own.text == "2.5K", tostring(own.text))
+		W.change("nameplates.healthFormat", "Current")
+		check("ms-ptext: Current is the health value, abbreviated", own.text == "12.5K", tostring(own.text))
+		W.change("nameplates.healthFormat", "Current and percent")
+		check("ms-ptext: Current and percent are in one text", own.text == "12.5K  40%", tostring(own.text))
+		W.change("nameplates.healthFormat", "Current / max")
+		check("gap plates: Current / max is the health and the full health in one text", own.text == "12.5K / 15.0K", tostring(own.text))
+		W.change("unitframes.numberStyle", "12,345")
+		check("gap plates: Number style 12,345 writes the numbers in full on the plates too", own.text == "12,500 / 15,000", tostring(own.text))
+		W.change("nameplates.healthFormat", "Current")
+		check("gap plates: and Current follows it", own.text == "12,500", tostring(own.text))
+		W.change("unitframes.numberStyle", "12.3k")
+		W.change("nameplates.healthFormat", "Missing")
+		check("ms-ptext: Missing is the health the unit lacks", own.text == "2.5K", tostring(own.text))
 		check("ms-ptext: the own text sits at the right end of the health bar", own.points[1][1] == "RIGHT" and own.points[1][4] == -4 and own.points[1][2] == a.healthBar)
 		W.change("nameplates.healthTextColour", "ff00ff00")
 		check("ms-ptext: it has the health text colour", M.colour(own) == "0.00,1.00,0.00", M.colour(own))
@@ -89104,12 +89410,22 @@ do
 		local a = M.shown(W, "nameplate1")
 		W.change("nameplates.castTextSize", 150)
 		check("ms-ptext: Spell name size is a percent of the game's size, on both strings", a.castText.font[2] == 15 and a.castTarget.font[2] == 15 and a.castText.font[3] == "OUTLINE", tostring(a.castText.font[2]))
-		W.change("nameplates.castTextOutline", false)
+		W.change("nameplates.castTextOutline", "None")
 		check("ms-ptext: Spell name outline off takes the outline from both", a.castText.font[3] == "" and a.castTarget.font[3] == "")
+		W.change("nameplates.castTextOutline", "Thick")
+		check("gap plates: Spell name outline Thick sets the thick flags on both", a.castText.font[3] == "OUTLINE, THICK" and a.castTarget.font[3] == "OUTLINE, THICK", tostring(a.castText.font[3]))
+		W.change("nameplates.castTextOutline", "Thin")
+		check("gap plates: Spell name outline Thin sets the thin flag on both", a.castText.font[3] == "OUTLINE" and a.castTarget.font[3] == "OUTLINE", tostring(a.castText.font[3]))
+		W.fontReturn = "true"
+		W.change("nameplates.textFace", "Morpheus")
+		check("gap plates: Text font sets the face on both spell name strings and keeps the size", a.castText.font[1] == "Fonts\\MORPHEUS.TTF" and a.castTarget.font[1] == "Fonts\\MORPHEUS.TTF" and a.castText.font[2] == 15, tostring(a.castText.font[1]))
+		W.change("nameplates.textFace", "Game font")
+		check("gap plates: and Game font puts the game's face back", a.castText.font[1] ~= "Fonts\\MORPHEUS.TTF" and a.castTarget.font[1] ~= "Fonts\\MORPHEUS.TTF", tostring(a.castText.font[1]))
+		W.change("nameplates.castTextOutline", "None")
 		W.change("nameplates.castTextColour", "ffff0000")
 		check("ms-ptext: Spell name colour is on the spell name and not on the target name", M.colour(a.castText) == "1.00,0.00,0.00" and M.colour(a.castTarget) == "-", M.colour(a.castTarget))
 		W.change("nameplates.castTextColour", "ffffffff")
-		W.change("nameplates.castTextOutline", true)
+		W.change("nameplates.castTextOutline", "As the game has it")
 		W.change("nameplates.castTextSize", 100)
 		check("ms-ptext: at the defaults the game's font and colour are back", a.castText.font[2] == 10 and a.castText.font[3] == "OUTLINE" and M.colour(a.castText) == "0.90,0.90,0.90"
 			and a.castTarget.font[2] == 10, tostring(a.castText.font[2]) .. tostring(a.castText.font[3]) .. M.colour(a.castText))
@@ -95061,12 +95377,13 @@ do
 		{ "nameplates.healAbsorbs", "mock-nameplate", false, {} },
 		{ "nameplates.nameShow", "mock-nameplate", false, {} },
 		{ "nameplates.nameSize", "mock-nameplate", 200, {} },
-		{ "nameplates.nameOutline", "mock-nameplate", false, {} },
+		{ "nameplates.nameOutline", "mock-nameplate", "none", {} },
+		{ "nameplates.textFace", "mock-nameplate", "morpheus", {} },
 		{ "nameplates.nameColour", "mock-nameplate", "reaction", {} },
 		{ "nameplates.nameCustomColour", "mock-nameplate", "ff12ab34", { { "nameplates.nameColour", "custom" } } },
 		{ "nameplates.healthText", "mock-nameplate", false, {} },
 		{ "nameplates.healthTextSize", "mock-nameplate", 200, { { "nameplates.healthText", true } } },
-		{ "nameplates.healthTextOutline", "mock-nameplate", false, { { "nameplates.healthText", true } } },
+		{ "nameplates.healthTextOutline", "mock-nameplate", "none", { { "nameplates.healthText", true } } },
 		{ "nameplates.healthTextColour", "mock-nameplate", "ff12ab34", { { "nameplates.healthText", true } } },
 		{ "nameplates.healthFormat", "mock-nameplate", "value", { { "nameplates.healthText", true } } },
 		{ "nameplates.level", "mock-nameplate", "default", {} },
@@ -95095,7 +95412,7 @@ do
 		{ "nameplates.castTexture", "mock-nameplate-cast", "targeting", { { "nameplates.castFlat", true } } },
 		{ "nameplates.castHeight", "mock-nameplate-cast", 200, {} },
 		{ "nameplates.castTextSize", "mock-nameplate-cast", 200, {} },
-		{ "nameplates.castTextOutline", "mock-nameplate-cast", false, {} },
+		{ "nameplates.castTextOutline", "mock-nameplate-cast", "none", {} },
 		{ "nameplates.castTextColour", "mock-nameplate-cast", "ff12ab34", {} },
 		{ "nameplates.castIconSize", "mock-nameplate-cast", 200, {} },
 		{ "nameplates.castSpark", "mock-nameplate-cast", false, {} },
@@ -95141,12 +95458,13 @@ do
 	}
 	SD.DRAWINGS = { "mock-nameplate", "mock-nameplate-cast", "mock-nameplate-auras", "mock-nameplate-marks", "mock-nameplate-stack" }
 	function SD.world(hud)
-		local W = newWorld({ cooldowns = true, hud = hud })
+		local W = newWorld({ cooldowns = true, hud = hud, fontReturn = "true" })
 		local env = W.env
 		env.C_Texture = { GetAtlasExists = function() return true end }
 		env.UnitClass = function() return "Mage", "MAGE", 8 end
 		env.UnitName = function() return "Brennan" end
 		env.RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
+		env.BreakUpLargeNumbers = function(value) return (tostring(value):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")) end
 		W.login()
 		return W
 	end
@@ -95283,7 +95601,7 @@ do
 		local ns = W.ns
 		local function R(x) return W.rawOf[x] end
 		local _, S = SD.show(W, "mock-nameplate")
-		local want = { game = "70%", percent = "70%", value = "7.0K", both = "7.0K  70%", missing = "3.0K" }
+		local want = { game = "70%", percent = "70%", value = "7.0K", both = "7.0K  70%", curmax = "7.0K / 10.0K", missing = "3.0K" }
 		local bad = {}
 		for format, text in pairs(want) do
 			ns.Set("nameplates.healthFormat", format)
@@ -95293,7 +95611,30 @@ do
 			end
 		end
 		check("sdplate: the health text is 70% by default and in the formats of the row 7.0K, 7.0K  70% and 3.0K", #bad == 0, table.concat(bad, " "))
-		check("sdplate: the format strings are the ones the health text of the plates writes with", ns.PLATE_HEALTH_FORMATS.percent == "%.0f%%" and ns.PLATE_HEALTH_FORMATS.both == "%s  %.0f%%")
+		check("sdplate: the format strings are the ones the health text of the plates writes with", ns.PLATE_HEALTH_FORMATS.percent == "%.0f%%" and ns.PLATE_HEALTH_FORMATS.both == "%s  %.0f%%" and ns.PLATE_HEALTH_FORMATS.curmax == "%s / %s")
+		ns.Set("unitframes.numberStyle", "full")
+		ns.Set("nameplates.healthFormat", "value")
+		_, S = SD.show(W, "mock-nameplate")
+		check("gap plates: Number style 12,345 writes the health text of the drawing in full", R(S.plates.enemy.htext).text == "7,000", tostring(R(S.plates.enemy.htext).text))
+		ns.Set("nameplates.healthFormat", "curmax")
+		_, S = SD.show(W, "mock-nameplate")
+		check("gap plates: and Current / max writes both numbers in full", R(S.plates.enemy.htext).text == "7,000 / 10,000", tostring(R(S.plates.enemy.htext).text))
+		ns.Set("unitframes.numberStyle", "short")
+		ns.Set("nameplates.healthFormat", "game")
+		-- gap plates: Class colours the name of a player with the class colour and any other unit with its reaction colour; Hidden takes the level away.
+		ns.Set("nameplates.nameColour", "class")
+		_, S = SD.show(W, "mock-nameplate")
+		local classNames = { R(S.plates.player.name).textColour and table.concat(R(S.plates.player.name).textColour, ","), R(S.plates.enemy.name).textColour and table.concat(R(S.plates.enemy.name).textColour, ",") }
+		ns.Set("nameplates.nameColour", "reaction")
+		_, S = SD.show(W, "mock-nameplate")
+		check("gap plates: the Class name colour differs from the reaction colour for a player and equals it for another unit", classNames[1] ~= table.concat(R(S.plates.player.name).textColour, ",")
+			and classNames[2] == table.concat(R(S.plates.enemy.name).textColour, ","), tostring(classNames[1]) .. " " .. tostring(classNames[2]))
+		ns.Set("nameplates.nameColour", "game")
+		ns.Set("nameplates.level", "hidden")
+		_, S = SD.show(W, "mock-nameplate")
+		check("gap plates: Level box Hidden empties the level and hides its art and mark", R(S.plates.enemy.lvlText).text == "" and not R(S.plates.enemy.lvlArt).shown and not R(S.plates.elite.mark).shown)
+		ns.Set("nameplates.level", "box")
+		_, S = SD.show(W, "mock-nameplate")
 		local elite, enemy = S.plates.elite, S.plates.enemy
 		check("sdplate: the elite plate has + after its level 20, the plain enemy no mark",
 			R(elite.mark).text == "+" and R(elite.mark).shown and R(elite.lvlText).text == "20" and not R(enemy.mark).shown, tostring(R(elite.mark).text))
@@ -95704,7 +96045,7 @@ do
 			end
 			tried = tried + 1
 		end
-		check("sdplate: the 96 drawn settings of steps 5 to 11 were tried", tried == 96, tried)
+		check("sdplate: the 97 drawn settings of steps 5 to 11 were tried", tried == 97, tried)
 		check("sdplate: no drawn setting raises an error while its drawing is drawn", #errors == 0, table.concat(errors, " | "))
 		check("sdplate: every drawn setting changes its drawing", #misses == 0, table.concat(misses, ", "))
 		check("sdplate: every drawn setting names the region it changes", #partsMissing == 0, table.concat(partsMissing, ", "))
@@ -96226,9 +96567,11 @@ do
 	local SU = {}
 	local SD = {
 		["mock-unit-frames"] = { "enabled", "player", "target", "focus", "pet", "tot", "party", "partypet", "boss", "raid", "totem", "petSize", "petSizeBasis", "petSizePct", "playerScale", "targetScale", "focusScale", "partyScale", "bossScale", "raidScale" },
-		["mock-unit-frame"] = { "portraitStyle", "portraitSize", "portraitBorder", "portraitFade", "portraitPlayer", "portraitTarget", "portraitFocus", "portraitPet", "portraitTot", "portraitParty", "portraitPartypet", "squarePortrait", "corners", "elite", "backdrop", "flat", "healthColour", "healthTexture", "powerTexture", "healthByLeft", "status", "threat", "healPrediction", "absorbShield", "healAbsorb", "lookOwn", "lookBorder", "lookBack", "lookBackAlpha", "smallRow", "levelPosition", "levelColour", "levelSize", "strip", "stripColour", "stripFade", "stripBrightness", "kindMark", "kindWord", "kindLine", "nameFace", "nameSize", "nameOutline", "nameColour", "nameCustom", "healthTextSize", "powerTextSize", "smallTextSize", "barTextFace", "barTextOutline", "barTextColourOwn", "barTextColour", "lookClassHealth", "lookLostColour", "lookMuted", "lookWhiteNames", "lookLightText", "lookNoPowerText", "lookSoftShade", "lookShadow", "numberStyle", "ownTextWhen", "healthTextPos", "powerTextPos", "auras", "auraCrop", "auraTypeColours", "auraCountSize", "auraNumbers", "pvpFlag", "pvpCorner", "pvpTimer", "leaderIcon", "roleIcon", "pvpIcon", "raidMarker", "deadText", "totemTimer", "totemSwipe", "playerPicture", "playerName", "playerLevel", "restAnimation", "playerHealthBy", "playerHealthText", "playerPowerText", "combatIcon", "playerPowerBar", "targetPicture", "targetName", "targetLevel", "targetHealthBy", "targetHealthText", "targetPowerText", "targetPowerBar", "focusPicture", "focusName", "focusLevel", "focusHealthBy", "focusHealthText", "focusPowerText", "focusPowerBar", "petPicture", "petName", "petHealthBy", "petHealthText", "petPowerText", "petHappiness", "petPowerBar", "totPicture", "totName", "totHealthBy", "totPowerBar", "bossName", "bossLevel", "bossHealthBy", "bossHealthText", "bossPowerBar" },
+		["mock-unit-frame"] = { "portraitStyle", "portraitSize", "portraitBorder", "portraitFade", "portraitPlayer", "portraitTarget", "portraitFocus", "portraitPet", "portraitTot", "portraitParty", "portraitPartypet", "squarePortrait", "corners", "elite", "backdrop", "flat", "healthColour", "healthTexture", "powerTexture", "healthByLeft", "status", "threat", "healPrediction", "absorbShield", "healAbsorb", "lookOwn", "lookBorder", "lookBack", "lookBackAlpha", "smallRow", "levelPosition", "levelColour", "levelSize", "strip", "stripColour", "stripFade", "stripBrightness", "kindMark", "kindWord", "kindLine", "nameFace", "nameSize", "nameOutline", "nameColour", "nameCustom", "healthTextSize", "powerTextSize", "smallTextSize", "barTextFace", "barTextOutline", "barTextColourOwn", "barTextColour", "lookClassHealth", "lookLostColour", "lookMuted", "lookWhiteNames", "lookLightText", "lookNoPowerText", "lookSoftShade", "lookShadow", "numberStyle", "ownTextWhen", "healthTextPos", "powerTextPos", "auras", "auraCrop", "auraTypeColours", "auraCountSize", "auraNumbers", "pvpFlag", "pvpCorner", "pvpTimer", "leaderIcon", "roleIcon", "pvpIcon", "raidMarker", "deadText", "totemTimer", "totemSwipe", "playerPicture", "playerName", "playerLevel", "restAnimation", "playerHealthBy", "playerHealthText", "playerPowerText", "combatIcon", "playerPowerBar", "targetPicture", "targetName", "targetLevel", "targetHealthBy", "targetHealthText", "targetPowerText", "targetPowerBar", "focusPicture", "focusName", "focusLevel", "focusHealthBy", "focusHealthText", "focusPowerText", "focusPowerBar", "petPicture", "petName", "petHealthBy", "petHealthText", "petPowerText", "petHappiness", "petPowerBar", "totPicture", "totName", "totHealthBy", "totPowerBar", "bossName", "bossLevel", "bossHealthBy", "bossHealthText", "bossPowerText", "bossPowerBar" },
+
+		["mock-unit-frame"] = { "portraitStyle", "portraitSize", "portraitBorder", "portraitFade", "portraitPlayer", "portraitTarget", "portraitFocus", "portraitPet", "portraitTot", "portraitParty", "portraitPartypet", "squarePortrait", "corners", "elite", "backdrop", "flat", "healthColour", "healthTexture", "powerTexture", "healthByLeft", "status", "threat", "healPrediction", "absorbShield", "healAbsorb", "lookOwn", "lookBorder", "lookBack", "lookBackAlpha", "smallRow", "levelPosition", "levelColour", "levelSize", "strip", "stripColour", "stripFade", "stripBrightness", "kindMark", "kindWord", "kindLine", "nameFace", "nameSize", "nameOutline", "nameColour", "nameCustom", "healthTextSize", "powerTextSize", "smallTextSize", "barTextFace", "barTextOutline", "barTextColourOwn", "barTextColour", "lookClassHealth", "lookLostColour", "lookMuted", "lookLightText", "lookNoPowerText", "lookSoftShade", "lookShadow", "numberStyle", "ownTextWhen", "healthTextPos", "powerTextPos", "auras", "auraCrop", "auraTypeColours", "auraCountSize", "auraNumbers", "pvpFlag", "pvpCorner", "pvpTimer", "leaderIcon", "roleIcon", "pvpIcon", "raidMarker", "deadText", "totemTimer", "totemSwipe", "playerPicture", "playerName", "playerLevel", "restAnimation", "playerHealthBy", "playerHealthText", "playerPowerText", "combatIcon", "playerPowerBar", "targetPicture", "targetName", "targetLevel", "targetHealthBy", "targetHealthText", "targetPowerText", "targetPowerBar", "focusPicture", "focusName", "focusLevel", "focusHealthBy", "focusHealthText", "focusPowerText", "focusPowerBar", "petPicture", "petName", "petHealthBy", "petHealthText", "petPowerText", "petHappiness", "petPowerBar", "totPicture", "totName", "totHealthBy", "totPowerBar", "bossName", "bossLevel", "bossHealthBy", "bossHealthText", "bossPowerBar" },
 		["mock-raid-cells"] = { "raidCells", "raidRangeAlpha", "raidRoleIcon", "raidName", "raidStatusText" },
-		["mock-party-frames"] = { "partyPicture", "partypetPicture", "partyName", "partyHealthBy", "partyHealthText", "partyPowerText", "partyPowerBar", "partyRangeDim", "partyRangeAlpha" },
+		["mock-party-frames"] = { "partyPicture", "partypetPicture", "partyName", "partyHealthBy", "partyHealthText", "partyPowerText", "partyPowerBar", "partyRangeDim", "partyRangeOpacity" },
 	}
 	SU.SD = SD
 	SU.order = { "mock-unit-frames", "mock-unit-frame", "mock-party-frames", "mock-raid-cells" }
@@ -96588,6 +96931,24 @@ do
 		end
 		check("sdunit: " .. id .. " is still without a violation or an error after every row", #W.violations == 0 and #W.errors == 0, table.concat(W.violations, " | "):sub(1, 300) .. table.concat(W.errors, " | "):sub(1, 300))
 	end
+	-- Out of range opacity on the party card: the member out of range is dimmed by a black layer that is 100 minus the row.
+	do
+		local H = SU.world()
+		local S = SU.build(H, "mock-party-frames")
+		S.ns.Set("unitframes.partyRangeDim", true)
+		S.ns.Set("unitframes.partyRangeOpacity", 30)
+		SU.draw(S)
+		local dark, light = false, false
+		for i = S.mark.t + 1, #H.addonTextures do
+			local r = H.rawOf[H.addonTextures[i]] or H.addonTextures[i]
+			local c = r.shown and r.color
+			if c and c[1] == 0 and c[2] == 0 and c[3] == 0 and c[4] then
+				dark = dark or math.abs(c[4] - 0.7) < 0.0001
+				light = light or math.abs(c[4] - 0.3) < 0.0001
+			end
+		end
+		check("sdunit: the party card dims a member out of range by 100 minus Out of range opacity", dark and not light, tostring(dark) .. tostring(light))
+	end
 	-- Class icon shape on the player picture of the card: Round cuts the class icon and its fade to the circle, shows the disc and hides the rounded line of Corners Soft.
 	do
 		local H = newWorld({ trackers = true, fontReturn = "true", hud = true })
@@ -96640,6 +97001,18 @@ do
 		square = pictures()
 		check("sdunit: and Square again takes the mask and the disc off and the rounded line is back", all(square, function(P) return not P.masked and P.disc == nil and P.line end), #square)
 		check("sdunit: the card is drawn without a violation or an error", #H.violations == 0 and #H.errors == 0, table.concat(H.violations, "|"):sub(1, 300) .. table.concat(H.errors, "|"):sub(1, 300))
+	end
+
+	-- gap plates: Name colour White makes the name of the card white, which is neither the game's colour nor the class colour.
+	do
+		local W = SU.world()
+		local S = SU.build(W, "mock-unit-frame")
+		local game = SU.shot(S)
+		S.ns.Set("unitframes.nameColour", "white")
+		local white = SU.shot(S)
+		S.ns.Set("unitframes.nameColour", "class")
+		local class = SU.shot(S)
+		check("gap plates: the drawing of the unit frames makes the name white with Name colour White", white ~= game and white ~= class and game ~= class)
 	end
 end
 -- >>> sdunit (end)
@@ -106431,7 +106804,7 @@ do
 		local b = RU.pic(W, P.portrait)
 		return b.look.state == "SB" and next(b.texture.masks) == nil and not b.disc.shown
 	end)())
-	W.change("unitframes.playerPicture", "As Square portraits")
+	W.change("unitframes.playerPicture", "As Portrait style")
 	-- The game's own icon on a portrait is not a class icon of the addon: Portrait style Picture shows it square, and a unit that is no player keeps it square in Class icon style.
 	W.change("unitframes.portraitStyle", "Picture")
 	W.uf.icon[P.frame] = "classicon-warrior"

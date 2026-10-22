@@ -380,7 +380,7 @@ function D.Card(parent, view)
 		-- The party column.
 		local on = get("unitframes.party") == true
 		local pictureOn = square and get("unitframes.partyPicture") ~= "none"
-		local shade = get("unitframes.partyRangeDim") == true and get("unitframes.partyRangeAlpha") / 100 or 1
+		local shade = get("unitframes.partyRangeDim") == true and get("unitframes.partyRangeOpacity") / 100 or 1
 		for index, row in ipairs(party) do
 			local y = 70 + (index - 1) * 14
 			row.picture:SetPoint("TOPLEFT", root, "TOPLEFT", 0, -y)
@@ -416,12 +416,14 @@ function D.Card(parent, view)
 			end
 		end
 		local boxed = get("nameplates.level") == "box"
+		local hiddenLevel = get("nameplates.level") == "hidden"
 		-- Thin border and Text only: a square the height of the bar, at the gap chosen.
-		local square = get("nameplates.level") ~= "default" and get("nameplates.levelShape") == "square"
+		local square = get("nameplates.level") ~= "default" and not hiddenLevel and get("nameplates.levelShape") == "square"
 		level:SetSize(square and barHeight or 8, square and barHeight or 8)
 		level:SetPoint("TOPLEFT", root, "TOPLEFT", 170 + barWidth + (square and get("nameplates.levelGap") or 2), -10)
 		ns.SetOutline(levelOutline, boxed, boxed)
 		Sized(levelText, get("nameplates.nameSize"))
+		Shown(level, not hiddenLevel)
 		plateCast.frame:SetPoint("TOPLEFT", root, "TOPLEFT", 170, -(10 + barHeight + 2))
 		Resized(plateCast, barWidth, 5 * get("nameplates.castHeight") / 100)
 		D.SetBar(plateCast, 0.5, ns.Colour("castbars.castColour"))

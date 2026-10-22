@@ -75,6 +75,12 @@ local function NameColour(rec)
 	local mode = Opt("nameColour")
 	if mode == "custom" then
 		return ns.Colour(KEY .. ".nameCustom")
+	elseif mode == "white" then
+		-- White names was a look of the name rows alone, so a frame without a row keeps the game's colour.
+		if X.rowOn(rec) then
+			return 1, 1, 1
+		end
+		return nil
 	end
 	local unit = X.unitOf(rec)
 	if unit == nil then
@@ -160,7 +166,7 @@ local function RowName(rec)
 	local spec = { percent = 100 }
 	local styled = live and NameLook(rec, spec)
 	-- The colour is set on the string itself, after the call: the row copies the game's colour with each write, and a colour kept by the font call would put
-	-- an old colour back over White names.
+	-- an old colour back over a White name.
 	local r, g, b = spec.r, spec.g, spec.b
 	spec.r, spec.g, spec.b = nil, nil, nil
 	if ns.TextStyle(row.name, spec) == false and styled then
@@ -278,7 +284,7 @@ table.insert(X.after.final, { part = PART, fn = Final })
 -- calls the client refuses switch it off, and the game's words come back.
 local TEXT = "health and power text"
 local HEALTH_KEY = { player = "player", target = "target", focus = "focus", pet = "pet", party = "party", partypet = "party", boss = "boss" }
-local POWER_KEY = { player = "player", target = "target", focus = "focus", pet = "pet", party = "party", partypet = "party" }
+local POWER_KEY = { player = "player", target = "target", focus = "focus", pet = "pet", party = "party", partypet = "party", boss = "boss" }
 local ANCHOR = { left = "LEFT", centre = "CENTER", right = "RIGHT" }
 local OFFSET = { left = 3, centre = 0, right = -3 }
 local NOTE_MADE = "Health and power text: the client did not make the text, so the game's words stay"
@@ -307,6 +313,8 @@ local function Mode(rec, entry, on)
 	end
 	return mode
 end
+
+X.textMode = Mode
 
 -- 12.3k or 12,345, by Number style. The value goes through as it came.
 local function Num(value)

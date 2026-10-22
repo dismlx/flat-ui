@@ -255,6 +255,11 @@ local function Apply(unitFrame)
 	Fade(own, "cameraFade", on and not Opt("offscreenIcon"), Usable(unitFrame), ART.camera)
 	Fade(own, "markerFade", on and not Opt("raidMarker"), Usable(unitFrame.RaidTargetFrame), ART.marker)
 	if level then
+		-- Hidden fades the whole level frame: the number, the mark after it and the box.
+		if levelStyle == "hidden" or own.levelFade then
+			ns.SetFaded(level, levelStyle == "hidden")
+			own.levelFade = levelStyle == "hidden" or nil
+		end
 		ns.SetFaded(level.playerLevelDiffIcon, levelStyle ~= "default")
 		-- Blizzard's own target marker on the level box stays with its gold outline.
 		ns.SetFaded(level.selectedBorder, levelStyle ~= "default" and border and Opt("target"))
@@ -739,7 +744,7 @@ local function LevelBox(unitFrame, own, on, fresh)
 	local h, classic = BarHeight(options, on)
 	local ok, shown = pcall(level.IsShown, level)
 	shown = ok and Plain(shown, "boolean") and shown
-	local want = on and h and not classic and Opt("level") ~= "default" and Opt("levelShape") == "square" and shown
+	local want = on and h and not classic and Opt("level") ~= "default" and Opt("level") ~= "hidden" and Opt("levelShape") == "square" and shown
 	if not want then
 		own.levelKept = nil
 	end
@@ -910,31 +915,42 @@ local function SetFont(fontString, object, keepColour)
 	end
 end
 
--- Size and outline of one group of font strings. `pct` is a percent of Blizzard's size `base`, and
+-- Size, outline and face of one group of font strings. `pct` is a percent of Blizzard's size `base`, `outline` the id of the outline row (game keeps
+-- the font object Blizzard gives the group, none, thin and thick use the plain one and set the flags), `face` a font file or nil, and
 -- `font` the font object Blizzard gives the group (none for the level, which has one). own[key] is
 -- "sized" while the addon has changed the height and "plain" once it has changed the font object
 -- too, so only what was changed is put back. The name also gets the last line Blizzard runs on it,
 -- which makes the scaled text a real font height.
-local function SetText(own, key, strings, pct, outlined, base, font)
-	local changed = pct ~= 100 or not outlined
+local function SetText(own, key, strings, pct, outline, base, font, face)
+	local outlined = outline == "game"
+	local flags = ns.OUTLINE_FLAGS[outline]
+	local plain = not outlined or face ~= nil
+	local changed = pct ~= 100 or plain
 	if not base or #strings == 0 or (not changed and not own[key]) then
 		return
 	end
 	if changed then
 		-- Marked before the first call, so a failure halfway still leaves a restore to do. "plain"
 		-- stays until the end, since it is also what puts the font object back.
-		own[key] = (outlined and own[key] ~= "plain") and "sized" or "plain"
+		own[key] = (not plain and own[key] ~= "plain") and "sized" or "plain"
 	end
 	for _, fontString in ipairs(strings) do
 		if font and own[key] == "plain" then
 			SetFont(fontString, outlined and font or PLAIN_FONT, key == "name")
+		end
+		if changed and (face or (flags and flags ~= "")) then
+			-- The face and the thin or thick flags are set on the size the font object has, before the text height scales it.
+			local ok, file, size, current = pcall(fontString.GetFont, fontString)
+			if ok and Plain(file, "string") and Plain(size, "number") then
+				pcall(fontString.SetFont, fontString, face or file, size, flags or current)
+			end
 		end
 		fontString:SetTextHeight(changed and base * pct / 100 or base)
 		if key == "name" then
 			fontString:SetFontHeight(fontString:GetLineHeight())
 		end
 	end
-	own[key] = changed and (outlined and "sized" or "plain") or nil
+	own[key] = changed and (plain and "plain" or "sized") or nil
 end
 
 local function Texts(unitFrame, own, on)
@@ -945,9 +961,10 @@ local function Texts(unitFrame, own, on)
 	local healthBar, level = Parts(unitFrame)
 	local health = Strings(healthBar, HEALTH_TEXTS)
 	local font, base = BlizzardFont(options), Size(options, "healthBarFontHeight")
-	SetText(own, "name", Strings(unitFrame, NAME_TEXT), on and Opt("nameSize") or 100, not on or Opt("nameOutline"), base, font)
-	SetText(own, "healthText", health, on and Opt("healthTextSize") or 100, not on or Opt("healthTextOutline"), base, font)
-	SetText(own, "levelText", Strings(level, LEVEL_TEXT), on and Opt("levelSize") or 100, true, Size(options, "levelFontHeight"))
+	local face = on and Opt("textFace") ~= "default" and ns.FontFile(Opt("textFace")) or nil
+	SetText(own, "name", Strings(unitFrame, NAME_TEXT), on and Opt("nameSize") or 100, on and Opt("nameOutline") or "game", base, font, face)
+	SetText(own, "healthText", health, on and Opt("healthTextSize") or 100, on and Opt("healthTextOutline") or "game", base, font, face)
+	SetText(own, "levelText", Strings(level, LEVEL_TEXT), on and Opt("levelSize") or 100, "game", Size(options, "levelFontHeight"))
 	-- Blizzard shows, hides and empties the health text, and never sets its alpha.
 	local hide = on and not Opt("healthText")
 	if hide or own.textHidden then

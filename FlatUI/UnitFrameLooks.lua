@@ -1,7 +1,7 @@
 local ADDON_NAME, ns = ...
 
--- The eight looks of the Looks section of the Unit frames page: health in class and reaction colour, a dark health bar with the colour of what is lost behind it,
--- muted colours, white names, smaller and lighter bar text, no text on the power bar, the soft shade on bars and a shadow behind each frame. The fills, the
+-- The seven looks of the Looks section of the Unit frames page: health in class and reaction colour, a dark health bar with the colour of what is lost behind it,
+-- muted colours, smaller and lighter bar text, no text on the power bar, the soft shade on bars and a shadow behind each frame. The fills, the
 -- bar text and the name row of UnitFrames.lua ask this file for their colours (ns.UnitFrameExtra.healthColour, powerColour and mute), and this file adds its
 -- work after the steps of that file through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run twice with the same
 -- result. The text looks and the soft shade are in UnitFrames.lua and Core.lua, where the text and the fill are set.
@@ -226,20 +226,6 @@ function X.unitsChanged()
 	end
 end
 
--- Names ------------------------------------------------------------------------------------------------------
-
--- The name and, when the level follows the name's colour, the level of the row are white. Runs at the end of the row's text, after the game's colour was copied.
-local function White(rec)
-	local row = rec.row
-	if row == nil or Opt("lookWhiteNames") ~= true or Off() or not X.rowOn(rec) then
-		return
-	end
-	pcall(row.name.SetTextColor, row.name, 1, 1, 1, 1)
-	if Opt("levelColour") == "name" and row.levelOn then
-		pcall(row.level.SetTextColor, row.level, 1, 1, 1, 1)
-	end
-end
-
 -- The shadow ------------------------------------------------------------------------------------------------
 
 -- Keeps the middle of a texture stretching and its edges at their size. False when the client lacks either call or refuses it.
@@ -328,4 +314,3 @@ end
 table.insert(X.after.apply, { part = PART, fn = Settle })
 table.insert(X.after.apply, { part = PART, fn = Shadow })
 table.insert(X.after.layout, { part = PART, fn = Follow })
-table.insert(X.after.rowText, { part = PART, fn = White })

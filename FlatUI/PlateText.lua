@@ -160,10 +160,16 @@ local function NamePart(unitFrame, st, on, fromGame)
 		r, g, b = 1, 1, 1
 	elseif mode == "custom" then
 		r, g, b = ns.Colour(KEY .. ".nameCustomColour")
-	elseif mode == "reaction" then
+	elseif mode == "reaction" or mode == "class" then
 		local unit = unitFrame.unit
 		if Plain(unit, "string") then
-			r, g, b = ns.ReactionColour(unit)
+			-- Class is the class colour of a player and the reaction colour of any other unit, as on the unit frames. A class the client withholds leaves the game's colour.
+			local okPlayer, player = pcall(UnitIsPlayer, unit)
+			if mode == "class" and okPlayer and Plain(player, "boolean") and player then
+				r, g, b = ns.ClassColourOf(unit)
+			else
+				r, g, b = ns.ReactionColour(unit)
+			end
 		end
 	end
 	if r ~= nil then
@@ -238,18 +244,26 @@ local function HealthPart(unitFrame, st, on)
 end
 
 -- The format strings of the health text, which the drawings of Flat UI setup write with a plain sample in place of the unit's health.
-ns.PLATE_HEALTH_FORMATS = { percent = "%.0f%%", both = "%s  %.0f%%" }
+ns.PLATE_HEALTH_FORMATS = { percent = "%.0f%%", both = "%s  %.0f%%", curmax = "%s / %s" }
+
+-- 12.3k or 12,345, by Number style of the unit frames.
+local function Num(value)
+	local call = ns.Get("unitframes.numberStyle") == "full" and BreakUpLargeNumbers or AbbreviateNumbers or BreakUpLargeNumbers
+	return call(value)
+end
 
 local function SetHealthText(own, format, unit)
 	local formats = ns.PLATE_HEALTH_FORMATS
 	if format == "value" then
-		own:SetText(AbbreviateNumbers(UnitHealth(unit)))
+		own:SetText(Num(UnitHealth(unit)))
+	elseif format == "curmax" then
+		own:SetFormattedText(formats.curmax, Num(UnitHealth(unit)), Num(UnitHealthMax(unit)))
 	elseif format == "percent" then
 		own:SetFormattedText(formats.percent, UnitHealthPercent(unit, true, CurveConstants.ScaleTo100))
 	elseif format == "both" then
-		own:SetFormattedText(formats.both, AbbreviateNumbers(UnitHealth(unit)), UnitHealthPercent(unit, true, CurveConstants.ScaleTo100))
+		own:SetFormattedText(formats.both, Num(UnitHealth(unit)), UnitHealthPercent(unit, true, CurveConstants.ScaleTo100))
 	else
-		own:SetText(AbbreviateNumbers(UnitHealthMissing(unit)))
+		own:SetText(Num(UnitHealthMissing(unit)))
 	end
 end
 
@@ -321,13 +335,14 @@ local function CastPart(unitFrame, st, on)
 		return
 	end
 	local percent = on and Opt("castTextSize") or 100
-	local flags = (on and not Opt("castTextOutline")) and "" or nil
+	local flags = on and ns.OUTLINE_FLAGS[Opt("castTextOutline")] or nil
+	local face = on and Opt("textFace") ~= "default" and ns.FontFile(Opt("textFace")) or nil
 	local r, g, b
 	if on and not White(KEY .. ".castTextColour") then
 		r, g, b = ns.Colour(KEY .. ".castTextColour")
 	end
 	for _, key in ipairs(CAST_TEXTS) do
-		local spec = { percent = percent, flags = flags }
+		local spec = { percent = percent, flags = flags, face = face }
 		if key == "Text" and r ~= nil then
 			spec.r, spec.g, spec.b = r, g, b
 		end

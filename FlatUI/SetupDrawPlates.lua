@@ -105,9 +105,9 @@ function P.Face()
 	return P.face
 end
 
--- The font string at `base` height times `percent`, with or without an outline, in a colour.
-function P.Text(text, base, percent, outlined, colour)
-	text:SetFont(P.Face(), base, ns.OutlineFlags(outlined and "outline" or "none"))
+-- The font string at `base` height times `percent`, in the outline of a row (game draws the game's thin outline) and a colour, in the face of Text font.
+function P.Text(text, base, percent, outline, colour, face)
+	text:SetFont(face or P.Face(), base, outline == "game" and "OUTLINE" or ns.OUTLINE_FLAGS[outline])
 	ns.TextStyle(text, { percent = percent, r = colour[1], g = colour[2], b = colour[3] })
 end
 
@@ -135,8 +135,14 @@ function P.Player()
 	return name, token
 end
 
--- Short numbers as the game writes them, from a plain sample.
+-- Short numbers as the game writes them, from a plain sample, or in full with Number style.
 function P.Abbreviate(number)
+	if ns.Get("unitframes.numberStyle") == "full" and type(BreakUpLargeNumbers) == "function" then
+		local ok, text = pcall(BreakUpLargeNumbers, math.floor(number + 0.5))
+		if ok and type(text) == "string" then
+			return text
+		end
+	end
 	if type(AbbreviateNumbers) == "function" then
 		local ok, text = pcall(AbbreviateNumbers, number)
 		if ok and type(text) == "string" then
@@ -167,15 +173,16 @@ function P.Look(friend)
 	o.dim = o.border and Get("dim") == true
 	o.dimAmount = Get("dimAmount") / 100
 	o.heal, o.absorb, o.healAbsorb = Row("healPrediction", true), Row("absorbs", true), Row("healAbsorbs", true)
-	o.nameShow, o.nameSize, o.nameOutline, o.nameColour = Row("nameShow", true), Row("nameSize", 100), Row("nameOutline", true), Row("nameColour", "game")
+	o.nameShow, o.nameSize, o.nameOutline, o.nameColour = Row("nameShow", true), Row("nameSize", 100), Row("nameOutline", "game"), Row("nameColour", "game")
 	o.nameCustom = Rgb(KEY .. ".nameCustomColour")
 	o.nameRow = styled and Get("nameRow") == true
-	o.textShow, o.textSize, o.textOutline = Row("healthText", true), Row("healthTextSize", 100), Row("healthTextOutline", true)
+	o.textShow, o.textSize, o.textOutline = Row("healthText", true), Row("healthTextSize", 100), Row("healthTextOutline", "game")
+	o.face = styled and Get("textFace") ~= "default" and ns.FontFile(Get("textFace")) or nil
 	o.textColour = (styled and Get("healthTextColour") ~= "ffffffff") and Rgb(KEY .. ".healthTextColour") or { 1, 1, 1 }
 	o.textFormat = Row("healthFormat", "game")
 	o.level, o.levelSize = Row("level", "default"), Row("levelSize", 100)
-	-- The square box and its gap apply to Thin border and Text only, as LevelBox of Nameplates.lua does.
-	o.levelSquare = o.level ~= "default" and Get("levelShape") == "square"
+	-- The square box and its gap apply to Thin border and Text only (Hidden keeps the game's layout), as LevelBox of Nameplates.lua does.
+	o.levelSquare = o.level ~= "default" and o.level ~= "hidden" and Get("levelShape") == "square"
 	o.levelGap = Get("levelGap")
 	o.kindMark = styled and Get("kindMark") == true
 	o.targetOn = o.border and Get("target") == true
@@ -184,7 +191,7 @@ function P.Look(friend)
 	o.cast, o.castBackdrop = styled and Get("cast") == true, styled and Get("castBackdrop") == true
 	o.castFlat, o.castTexture = styled and Get("castFlat") == true, Get("castTexture")
 	o.castHeight, o.castTextSize, o.castIconSize = Row("castHeight", 100), Row("castTextSize", 100), Row("castIconSize", 100)
-	o.castOutline = Row("castTextOutline", true)
+	o.castOutline = Row("castTextOutline", "game")
 	o.castColour = (styled and Get("castTextColour") ~= "ffffffff") and Rgb(KEY .. ".castTextColour") or { 1, 1, 1 }
 	o.spark, o.shield, o.castTime = Row("castSpark", true), Row("castShield", true), styled and Get("castTime") == true
 	o.auras = styled and Get("auras") == true
@@ -441,6 +448,8 @@ function P.HealthText(o, share)
 	local format = o.textFormat
 	if format == "value" then
 		return value
+	elseif format == "curmax" then
+		return formats.curmax:format(value, P.Abbreviate(10000))
 	elseif format == "both" then
 		return formats.both:format(value, share * 100)
 	elseif format == "missing" then
@@ -449,14 +458,20 @@ function P.HealthText(o, share)
 	return formats.percent:format(share * 100)
 end
 
--- The colour of the name by the rows: the game's, white, by reaction, or the custom one.
+-- The colour of the name by the rows: the game's, white, the class of a player (the reaction colour of any other unit), by reaction, or the custom one.
 function P.NameColour(spec, o)
 	local mode = o.nameColour
 	if mode == "white" then
 		return { 1, 1, 1 }
 	elseif mode == "custom" then
 		return o.nameCustom
-	elseif mode == "reaction" then
+	elseif mode == "class" and spec.player then
+		local _, token = P.Player()
+		local colour = type(RAID_CLASS_COLORS) == "table" and RAID_CLASS_COLORS[token]
+		if type(colour) == "table" then
+			return { colour.r, colour.g, colour.b }
+		end
+	elseif mode == "reaction" or mode == "class" then
 		return P.Reaction(spec.friendly)
 	end
 	return { 1, 1, 1 }
@@ -516,6 +531,13 @@ end
 function P.Level(p, spec, o, m)
 	P.Put(p, p.lvl, "BOTTOMLEFT", m.BW - m.LW, m.center - m.LH / 2, m.LW, m.LH)
 	local style = o.level
+	if style == "hidden" then
+		ns.SetOutline(p.lvlOutline, false, false)
+		p.lvlArt:Hide()
+		p.lvlText:SetText("")
+		p.mark:Hide()
+		return
+	end
 	ns.SetOutline(p.lvlOutline, style == "box", not o.border or o.backdrop)
 	if style == "default" then
 		if P.AtlasExists(P.ATLAS.level) then
@@ -532,13 +554,13 @@ function P.Level(p, spec, o, m)
 	end
 	p.lvlText:ClearAllPoints()
 	p.lvlText:SetPoint("CENTER", p.lvl, "CENTER", 0, 0)
-	P.Text(p.lvlText, P.LEVEL_FONT * m.v, o.levelSize, true, P.LEVEL_COLOUR)
+	P.Text(p.lvlText, P.LEVEL_FONT * m.v, o.levelSize, "game", P.LEVEL_COLOUR)
 	p.lvlText:SetText(spec.level and tostring(spec.level) or "")
 	local look = o.kindMark and spec.kind and ns.KINDS[spec.kind]
 	if look and look.mark then
 		p.mark:ClearAllPoints()
 		p.mark:SetPoint("LEFT", p.lvlText, "RIGHT", 1, 0)
-		P.Text(p.mark, P.LEVEL_FONT * m.v, o.levelSize, true, look.colour)
+		P.Text(p.mark, P.LEVEL_FONT * m.v, o.levelSize, "game", look.colour)
 		p.mark:SetText(look.mark)
 		p.mark:Show()
 	else
@@ -661,7 +683,7 @@ function P.Cast(p, spec, o, m)
 	end
 	p.ctext:ClearAllPoints()
 	p.ctext:SetPoint("LEFT", p.f, "BOTTOMLEFT", iconX + m.CI + 2, iconY)
-	P.Text(p.ctext, P.CAST_FONT * m.v, o.castTextSize, o.castOutline, o.castColour)
+	P.Text(p.ctext, P.CAST_FONT * m.v, o.castTextSize, o.castOutline, o.castColour, o.face)
 	p.ctext:SetText(cast.name)
 	p.spark:ClearAllPoints()
 	p.spark:SetPoint("CENTER", p.cbar, "LEFT", m.BW * cast.share, 0)
@@ -722,12 +744,12 @@ function P.Auras(p, spec, o, m)
 		ns.SetOutlineColour(icon.outline, colour and colour[1], colour and colour[2], colour and colour[3])
 		icon.timer:ClearAllPoints()
 		icon.timer:SetPoint("CENTER", icon.frame, "CENTER", 0, 0)
-		P.Text(icon.timer, 12 * m.h, 100, true, { 1, 1, 1 })
+		P.Text(icon.timer, 12 * m.h, 100, "game", { 1, 1, 1 })
 		icon.timer:SetText("12")
 		icon.timer:SetShown(o.timers and true or false)
 		icon.count:ClearAllPoints()
 		icon.count:SetPoint("BOTTOMRIGHT", icon.frame, "BOTTOMRIGHT", -1, 1)
-		P.Text(icon.count, 10 * m.h, 100, true, { 1, 1, 1 })
+		P.Text(icon.count, 10 * m.h, 100, "game", { 1, 1, 1 })
 		icon.count:SetText("3")
 		icon.count:SetShown(o.stacks and (index == 2 or index == 4) and true or false)
 	end
@@ -790,7 +812,7 @@ function P.Plate(p, spec, sets)
 	else
 		P.Put(p, p.name, "LEFT", 4, m.center)
 	end
-	P.Text(p.name, P.FONT * m.v, o.nameSize, o.nameOutline, P.NameColour(spec, o))
+	P.Text(p.name, P.FONT * m.v, o.nameSize, o.nameOutline, P.NameColour(spec, o), o.face)
 	p.name:SetText(spec.name or "")
 	p.name:SetShown(o.nameShow and true or false)
 	-- The game cuts a name that would run into the health text or past the row.
@@ -804,7 +826,7 @@ function P.Plate(p, spec, sets)
 	end
 	p.htext:ClearAllPoints()
 	p.htext:SetPoint("RIGHT", p.bar, "RIGHT", -4, 0)
-	P.Text(p.htext, P.FONT * m.v, o.textSize, o.textOutline, o.textColour)
+	P.Text(p.htext, P.FONT * m.v, o.textSize, o.textOutline, o.textColour, o.face)
 	p.htext:SetText(P.HealthText(o, share))
 	p.htext:SetShown(o.textShow and true or false)
 	-- The row behind the name, in the colour of the bar, fading upward.
@@ -1169,7 +1191,7 @@ function P.Parts(S)
 	Set({ "healPrediction" }, plate.heal)
 	Set({ "absorbs" }, plate.absorb)
 	Set({ "healAbsorbs" }, plate.healAbsorb)
-	Set({ "nameShow", "nameSize", "nameOutline", "nameColour", "nameCustomColour" }, plate.name)
+	Set({ "textFace", "nameShow", "nameSize", "nameOutline", "nameColour", "nameCustomColour" }, plate.name)
 	Set({ "nameRow" }, plate.row)
 	Set({ "healthText", "healthTextSize", "healthTextOutline", "healthTextColour", "healthTextWhen", "healthFormat" }, plate.htext)
 	Set({ "level", "levelSize", "levelShape", "levelGap" }, plate.lvl)
