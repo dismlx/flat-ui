@@ -1,3 +1,7 @@
+## 0.4.85
+
+- **Class icon shape**: Square or Round, on the **Class icons** section of the **Target and marks** page and on the **Portraits** section of the **Unit frames** page. A round icon has a round border of **Border thickness**. Faces stay square.
+
 ## 0.4.84
 
 - **Game menu**: new **Flat UI** button, right below the gap under **Options**. It opens **Flat UI setup**, or the options window when **Flat UI button opens** is **Options window**. It does not work in combat. Untick **Flat UI button in the game menu** on the **Flat UI** page, **Game menu** section, to remove it.

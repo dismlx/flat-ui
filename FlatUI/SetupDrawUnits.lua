@@ -643,7 +643,7 @@ end
 -- The settings every frame of a draw shares.
 local function Settings(root)
 	local g = { enabled = Get("enabled") == true, square = Get("squarePortrait") == true, strip = Get("strip") == true, smallRow = Get("smallRow") == true,
-		portraitSize = Get("portraitSize"), headFraming = Get("headFraming"), portraitBorder = Get("portraitBorder"), portraitFade = Get("portraitFade") == true, stripColour = Get("stripColour"),
+		portraitSize = Get("portraitSize"), headFraming = Get("headFraming"), portraitBorder = Get("portraitBorder"), classShape = Get("classShape"), portraitFade = Get("portraitFade") == true, stripColour = Get("stripColour"),
 		stripFade = Get("stripFade"), stripBrightness = Get("stripBrightness"), flat = Get("flat") == true, healthByLeft = Get("healthByLeft") == true,
 		backdrop = Get("backdrop") == true, status = Get("status") == true, threat = Get("threat") == true, healPrediction = Get("healPrediction") == true,
 		absorbShield = Get("absorbShield") == true, healAbsorb = Get("healAbsorb") == true, levelPosition = Get("levelPosition"), levelColour = Get("levelColour"), pvpWordColour = Get("pvpWordColour"),
@@ -736,7 +736,10 @@ function E.picture(o, g, L)
 	end
 	EdgePaint(o.outline, L.drawn, true, colour)
 	ns.SetOutlineBare(o.outline, L.drawn and g.portraitBorder == "none" and not coloured)
-	Round(o.outline, L.drawn and L.radius or nil, t)
+	-- A class icon can be round: the ring takes the place of the rounded corners.
+	local icon = L.drawn and L.style == "icon" and s.player
+	local ring = icon and g.classShape == "round"
+	Round(o.outline, L.drawn and not ring and L.radius or nil, t)
 	if o.rim then
 		o.rimFrame:SetShown(look ~= nil)
 		Over(o.rimFrame, pic)
@@ -757,7 +760,6 @@ function E.picture(o, g, L)
 	else
 		Over(o.face, pic)
 	end
-	local icon = L.drawn and L.style == "icon" and s.player
 	local atlas = icon and ns.ClassAtlas(s.class) or nil
 	local plain = false
 	o.face:SetTexCoord(0, 1, 0, 1)
@@ -776,6 +778,7 @@ function E.picture(o, g, L)
 		Solid(o.face, 0.29, 0.32, 0.38, 1)
 		plain = shown
 	end
+	ns.SetOutlineRound(o.outline, o.face, ring and true or false, o.fade)
 	o.head:SetShown(plain)
 	o.body:SetShown(plain)
 	if plain then
@@ -1509,7 +1512,7 @@ local MARK = {
 	party = { "party1", "root" }, partypet = { "partypet1", "root" }, boss = { "boss", "root" }, raid = { "raid", "root" }, totem = { "totem", "root" },
 	petSize = { "pet", "root" }, petSizeBasis = { "pet", "root" }, petSizePct = { "pet", "root" }, playerScale = { "player", "root" }, targetScale = { "target", "root" },
 	focusScale = { "focus", "root" }, partyScale = { "party1", "root" }, bossScale = { "boss", "root" }, raidScale = { "raid", "root" },
-	portraitStyle = { "player", "pic" }, portraitSize = { "player", "pic" }, portraitBorder = { "player", "pic" }, portraitFade = { "player", "pic" }, headFraming = { "player", "pic" },
+	portraitStyle = { "player", "pic" }, portraitSize = { "player", "pic" }, portraitBorder = { "player", "pic" }, classShape = { "player", "pic" }, portraitFade = { "player", "pic" }, headFraming = { "player", "pic" },
 	portraitPlayer = { "player", "pic" }, portraitTarget = { "target", "pic" }, portraitFocus = { "focus", "pic" }, portraitPet = { "pet", "pic" },
 	portraitTot = { "tot", "pic" }, portraitParty = { "party1", "pic" }, portraitPartypet = { "partypet1", "pic" }, squarePortrait = { "player", "pic" },
 	corners = { "player", "health" }, elite = { "target", "pic" },

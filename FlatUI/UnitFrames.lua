@@ -500,7 +500,8 @@ local function Rim(outline)
 		return
 	end
 	local radius = rim.radius
-	local shown = radius ~= nil and outline.shown and not (ns.Get("general.borderless") == true and outline.r == nil)
+	-- A round outline is a ring, so the rounded line is not drawn while it is round.
+	local shown = radius ~= nil and not outline.roundOn and outline.shown and not (ns.Get("general.borderless") == true and outline.r == nil)
 	rim.line:SetShown(shown)
 	if shown then
 		local r, g, b = outline.r, outline.g, outline.b
@@ -647,11 +648,14 @@ end
 local function Draw(rec)
 	local texture = rec.pic.texture
 	local unit = UnitOf(rec)
-	local atlas = IconOf(rec.parts.portrait)
+	local atlas, class = IconOf(rec.parts.portrait), nil
 	if rec.pic.style == "icon" then
-		atlas = ClassAtlas(unit) or atlas
+		class = ClassAtlas(unit)
+		atlas = class or atlas
 	end
 	rec.pic.icon = atlas ~= nil
+	-- Only a class icon of a player can be round; a face and the icon of the game stay square.
+	rec.pic.class = class ~= nil or nil
 	if atlas ~= nil then
 		-- The atlas gives the box of the icon in its sheet; a coordinate set after it would show the whole sheet.
 		return pcall(texture.SetTexCoord, texture, 0, 1, 0, 1) and pcall(texture.SetAtlas, texture, atlas, false, nil, true)
@@ -782,6 +786,16 @@ local function ApplyPicture(rec, on, redraw)
 	Undrawn(rec, drawn and not shown)
 	ns.SetHidden(rec.parts.portrait, shown or none)
 	Mask.sync(rec, shown or none or false)
+	local round = shown and pic.class and Opt("classShape") == "round" or false
+	ns.SetOutlineRound(pic.outline, pic.texture, round, pic.fadeTex)
+	if round and not pic.outline.round and not ns.roundMissing and InCombatLockdown() and not pic.roundQueued then
+		-- The first round picture is made after combat, and the rounded line is drawn again then.
+		pic.roundQueued = true
+		ns.OutOfCombat(function()
+			pic.roundQueued = nil
+			pcall(Refresh)
+		end)
+	end
 	ShowOutline(pic.outline, shown, true)
 	pic.texture:SetShown(shown)
 	if shown then

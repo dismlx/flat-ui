@@ -193,6 +193,7 @@ function P.Look(friend)
 	o.auraAlpha = Row("auraOpacity", 100) / 100
 	o.classOn = styled
 	o.classBorder = Get("classBorder") == true
+	o.classRound = Get("classShape") == "round"
 	o.classFit, o.classGap = Get("classFit"), Get("classGap")
 	o.marker = Row("raidMarker", true)
 	o.markerSize = Row("raidMarkerSize", 22)
@@ -582,6 +583,7 @@ function P.ClassIcon(p, spec, o, m)
 	end
 	p.iconFrame:Show()
 	ns.SetOutline(p.iconOutline, o.classBorder, o.classBorder)
+	ns.SetOutlineRound(p.iconOutline, p.iconArt, o.classRound)
 end
 
 -- The flag and the two buffs the game hangs at the left end of an enemy player: the flag at the left edge of the icon, the buffs
@@ -1186,7 +1188,7 @@ function P.Parts(S)
 	Set({ "castTime" }, plate.ctime)
 	Set({ "auras", "auraCrop", "auraBorderOwn", "auraBorderColour", "auraTimers", "auraStacks", "auraOpacity", "aurasWhen" }, plate.auras)
 	local player = plates.player or plate
-	Set({ "classEnemy", "classPosition", "classFit", "classSize", "classGap", "classX", "classY", "classBorder" }, player.iconFrame)
+	Set({ "classEnemy", "classPosition", "classFit", "classSize", "classGap", "classX", "classY", "classBorder", "classShape" }, player.iconFrame)
 	Set({ "classFriendly" }, (plates.friend or plate).iconFrame)
 	Set({ "kindBorder", "eliteColour" }, (plates.elite or plate).bar)
 	Set({ "rareColour" }, (plates.rare or plate).bar)

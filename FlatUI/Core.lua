@@ -1244,6 +1244,14 @@ local function PlaceEdgesNow(outline)
 	right:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 0, 0)
 	right:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", 0, 0)
 	right:SetWidth(t)
+	-- A round outline is a disc one border thickness larger than the target on every side, in the units the edges use: on a plate that scales,
+	-- the disc is on a frame that ignores the scale of its parent, as the edges are.
+	local round = outline.round
+	if round then
+		local to = round.ring or outline.target
+		round.disc:SetPoint("TOPLEFT", to, "TOPLEFT", -t, t)
+		round.disc:SetPoint("BOTTOMRIGHT", to, "BOTTOMRIGHT", t, -t)
+	end
 end
 
 -- An outline of a drawing of Flat UI setup has a view (ns.SetOutlineView): it is laid out and painted from that view, never from the profile in use.
@@ -1262,6 +1270,9 @@ local function Resize(outline)
 	if outline.pixels then
 		-- One unit of the holder is one screen pixel, whatever scale its parents have.
 		outline.holder:SetScale(PixelFactor())
+		if outline.round and outline.round.ring then
+			outline.round.ring:SetScale(PixelFactor())
+		end
 	end
 	PlaceEdges(outline)
 end
@@ -1339,6 +1350,13 @@ local function PaintNow(outline)
 	if outline.bare or outline.edgesOff then
 		shown = false
 	end
+	-- While round, the disc has the colour and the visibility the edges would have, and the edges and the backdrop are hidden.
+	local round, discShown = outline.roundOn, shown
+	if round then
+		shown = false
+		outline.round.disc:SetColorTexture(r, g, b, outline.edgeAlpha or 1)
+		outline.round.disc:SetShown(discShown)
+	end
 	for _, edge in ipairs(outline.edges) do
 		edge:SetColorTexture(r, g, b, outline.edgeAlpha or 1)
 		edge:SetShown(shown)
@@ -1355,6 +1373,9 @@ local function PaintNow(outline)
 	end
 	PaintBackdrop(outline, br, bg, bb, ba)
 	outline.backdrop:SetShown(outline.shown and outline.backdropOn)
+	if round then
+		outline.backdrop:Hide()
+	end
 end
 
 local function Paint(outline)
@@ -1396,6 +1417,7 @@ function ns.Outline(owner, target, direct, prefix)
 		return nil
 	end
 	outline = { shown = true, backdropOn = true, area = running, prefix = prefix or "look" }
+	outline.owner, outline.target = owner, target
 	outline.backdrop = owner:CreateTexture(nil, "BACKGROUND", nil, -8)
 	own[outline.backdrop] = true
 	outline.backdrop:SetAllPoints(target)
@@ -1532,6 +1554,98 @@ function ns.SetOutlineThickness(outline, px)
 	if outline and outline.px ~= px then
 		outline.px = px
 		PlaceEdges(outline)
+	end
+end
+
+-- The circle the client cuts its own class icons with (RES/AtlasInfo.lua:17528-17529).
+local ROUND_MASK = "CircleMaskScalable"
+
+-- A texture of an outline that is not moved a pixel as its frame moves, as the edges are not.
+local function Unsnap(texture)
+	pcall(texture.SetSnapToPixelGrid, texture, false)
+	pcall(texture.SetTexelSnappingBias, texture, 0)
+	return texture
+end
+
+-- A circle mask over all points of `to`. Everything outside the mask file is cut.
+local function CircleMask(owner, to)
+	local mask = Unsnap(owner:CreateMaskTexture())
+	own[mask] = true
+	mask:SetAllPoints(to)
+	mask:SetAtlas(ROUND_MASK, false, nil, nil, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+	return mask
+end
+
+-- Draws an outline as a ring: a disc in the border colour, one border thickness larger than the outline on every side and cut to a circle, with
+-- the picture `art` (and `extra`, a texture over it) cut to a circle of its own size. The square edges and the square background go off while it is
+-- round. A client without masks or without the circle keeps the square outline, and ns.roundMissing says so. Nothing is made in combat: the first
+-- round outline waits for its end. Adding and removing a mask that exists is a texture call.
+function ns.SetOutlineRound(outline, art, on, extra)
+	if not outline then
+		return
+	end
+	on = on and true or false
+	outline.roundWant = on
+	local round = outline.round
+	if on and not round then
+		local owner = outline.owner
+		if type(owner.CreateMaskTexture) ~= "function" or not AtlasExists(ROUND_MASK) then
+			ns.roundMissing = true
+			return
+		end
+		local fighting = InCombatLockdown()
+		if fighting then
+			if not outline.roundQueued then
+				outline.roundQueued = true
+				ns.OutOfCombat(function()
+					outline.roundQueued = nil
+					ns.SetOutlineRound(outline, art, outline.roundWant, extra)
+				end)
+			end
+			return
+		end
+		local made, parts = pcall(function()
+			-- Under the picture: the frame of the disc has a lower level than the frame of the picture.
+			local ring
+			if outline.holder and outline.pixels then
+				ring = CreateFrame("Frame", nil, owner)
+				own[ring] = true
+				ring:SetIgnoreParentScale(true)
+				ring:SetScale(PixelFactor())
+				ring:SetAllPoints(outline.target)
+				-- A level the game withholds leaves the ring at 0, under the picture.
+				local got, level = pcall(owner.GetFrameLevel, owner)
+				ring:SetFrameLevel(got and type(level) == "number" and not ns.IsSecret(level) and math.max(0, level - 1) or 0)
+			end
+			local host = ring or owner
+			local d = Unsnap(host:CreateTexture(nil, "BACKGROUND", nil, -7))
+			own[d] = true
+			d:Hide()
+			local discMask = CircleMask(host, d)
+			d:AddMaskTexture(discMask)
+			return { disc = d, ring = ring, discMask = discMask, artMask = CircleMask(owner, art) }
+		end)
+		if not made then
+			ns.roundMissing = true
+			return
+		end
+		round = parts
+		round.art, round.extra = art, extra
+		outline.round = round
+		Unsnap(art)
+	end
+	if round and (outline.roundOn or false) ~= on then
+		outline.roundOn = on or nil
+		local method = on and "AddMaskTexture" or "RemoveMaskTexture"
+		pcall(round.art[method], round.art, round.artMask)
+		if round.extra then
+			pcall(round.extra[method], round.extra, round.artMask)
+		end
+		if not on then
+			round.disc:Hide()
+		end
+		PlaceEdges(outline)
+		Paint(outline)
 	end
 end
 
@@ -1965,6 +2079,9 @@ function ns.StatusLines()
 	end
 	if #noArt > 0 then
 		lines[#lines + 1] = "Class icons: no class art for " .. table.concat(noArt, ", ") .. "."
+	end
+	if ns.roundMissing then
+		lines[#lines + 1] = "Round class icons: this client has no circle mask, so they show square."
 	end
 	local borderMode = ns.Get("general.borderMode")
 	if borderMode == "class" or borderMode == "faction" then

@@ -9655,6 +9655,7 @@ local PAGES = {
 		S("nameplates.classGap", "number", 0, "Class icon gap", nil, { min = 0, max = 6, step = 1, unit = "" }),
 		S("nameplates.classX", "number", 0, "Class icon horizontal offset", nil, { min = -60, max = 60, step = 1, unit = "" }),
 		S("nameplates.classY", "number", 0, "Class icon vertical offset", nil, { min = -60, max = 60, step = 1, unit = "" }),
+		S("nameplates.classShape", "choice", "square", "Class icon shape", nil, { choices = { { "square", "Square" }, { "round", "Round" } } }),
 		S("nameplates.classBorder", "bool", true, "Class icon border"),
 		"Elite and Rare",
 		S("nameplates.kindBorder", "bool", true, "Border colour for Elite and Rare", "Uses the Elite, Rare and Boss colours below. Your target and focus keep their own colour.", { needs = "nameplates.health" }),
@@ -10235,6 +10236,8 @@ local PAGES = {
 			{ needs = "unitframes.squarePortrait", choices = { { "frame", "As tall as the frame" }, { "bars", "As tall as the bars" } } }),
 		S("unitframes.portraitBorder", "choice", "thin", "Portrait border", "Resting, combat and Elite colours still show with None.",
 			{ needs = "unitframes.squarePortrait", choices = { { "thin", "Thin" }, { "class", "Class or reaction colour" }, { "none", "None" } } }),
+		S("unitframes.classShape", "choice", "square", "Class icon shape", "On pictures that show a class icon. Faces stay square.",
+			{ needs = "unitframes.squarePortrait", choices = { { "square", "Square" }, { "round", "Round" } } }),
 		S("unitframes.portraitFade", "bool", true, "Portrait fades with the name row", "The top of the picture fades like the name row. Needs Name row colour set to Class or reaction colour, fading upward.",
 			{ needs = "unitframes.squarePortrait" }),
 		S("unitframes.portraitPlayer", "bool", true, "Player portrait", nil, { needs = "unitframes.squarePortrait" }),
@@ -10852,7 +10855,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.84" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.85" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -20125,6 +20128,8 @@ do local PROBES = {
 	{ "nameplates.classX", 10, held("nameplates.classX"), "0/0", "10/10" },
 	{ "nameplates.classY", -10, held("nameplates.classY"), "0/0", "-10/-10" },
 	{ "nameplates.classBorder", false, held("nameplates.classBorder"), "true/true", "false/false" },
+	{ "nameplates.classShape", "Round", held("nameplates.classShape"), "square/Square", "round/Round", from = "Square" },
+	{ "unitframes.classShape", "Round", held("unitframes.classShape"), "square/Square", "round/Round", from = "Square" },
 	{ "actionbars.main", false, function(S) return btn(S, "ActionButton1") .. "/" .. btn(S, "MultiBarLeftButton1") end, BTN_ON .. "/" .. BTN_ON, BTN_OFF .. "/" .. BTN_ON },
 	{ "actionbars.extra", false, function(S) return btn(S, "MultiBarLeftButton1") .. "/" .. btn(S, "MultiBar7Button12") .. "/" .. btn(S, "ActionButton1") end,
 		BTN_ON .. "/" .. BTN_ON .. "/" .. BTN_ON, BTN_OFF .. "/" .. BTN_OFF .. "/" .. BTN_ON },
@@ -28245,6 +28250,93 @@ do
 		W.change("nameplates.classEnemy", true)
 		check("class icon border: an icon shown after the border was switched off has none", NP.iconOf(W, e).art.shown and NP.iconOf(W, e).look.state == "hb")
 		clean(W, "class icon border")
+	end
+
+	-- 75i4b. Class icons: round. The nameplate world makes no masks unless it is built with hud = true.
+	do
+		local R = {}
+		function R.fight(W, on)
+			W.combat = on
+			W.fire(on and "PLAYER_REGEN_DISABLED" or "PLAYER_REGEN_ENABLED")
+		end
+		function R.disc(W, icon)
+			for _, t in ipairs(W.addonTextures) do
+				if (t.owner == icon or (t.owner and t.owner.parent == icon)) and t.layer == "BACKGROUND" and t.sublevel == -7 then
+					return t
+				end
+			end
+		end
+		-- The disc is on a frame that ignores the scale of the plate and has the pixel scale, so n pixels of border are n * PX / its scale units.
+		function R.px() return PX / R.disc1.owner.GetEffectiveScale() end
+		function R.world(hud, circle)
+			local W = NP.npWorld({ hud = hud })
+			W.npAtlases.CircleMaskScalable = circle
+			return W
+		end
+		function R.whole(icon)
+			local px = icon.width / (PX / icon.GetEffectiveScale())
+			return math.abs(px - math.floor(px + 0.5)) < 0.001
+		end
+		local W = R.world(true, true)
+		local e = W.npShow("nameplate1", { player = true, friend = false, class = "MAGE" })
+		local art, icon = NP.iconOf(W, e).art, NP.iconOf(W, e).icon
+		check("round class icon: square by default, with no mask and no disc", next(art.masks) == nil and R.disc(W, icon) == nil and NP.iconOf(W, e).look.state == "SB" and #W.addonMasks == 0)
+		W.change("general.border", "ff336699")
+		W.change("nameplates.classShape", "Round")
+		W.flush()
+		R.disc1, R.mask = R.disc(W, icon), next(art.masks)
+		R.discMask = R.disc1 and next(R.disc1.masks)
+		check("round class icon: the art has one mask, the circle atlas on all its points", R.mask ~= nil and next(art.masks, R.mask) == nil and R.mask.atlas == "CircleMaskScalable" and R.mask.allPoints == art)
+		check("round class icon: the disc has the other mask and the points minus and plus the border thickness", R.discMask ~= nil and R.discMask ~= R.mask and R.discMask.atlas == "CircleMaskScalable"
+			and R.discMask.allPoints == R.disc1 and #R.disc1.points == 2 and near(R.disc1.points[1][4], -R.px(icon)) and near(R.disc1.points[1][5], R.px(icon)) and near(R.disc1.points[2][4], R.px(icon))
+			and near(R.disc1.points[2][5], -R.px(icon)), R.disc1 and R.disc1.points[1] and tostring(R.disc1.points[1][4]))
+		check("round class icon: the four edges and the backdrop are hidden and the disc shows in the border colour", NP.iconOf(W, e).look.state == "hb" and R.disc1.shown
+			and near(R.disc1.color[1], 0.2) and near(R.disc1.color[2], 0.4) and near(R.disc1.color[3], 0.6), NP.iconOf(W, e).look.state)
+		check("round class icon: the disc and the masks are the addon's own", #W.addonMasks == 2 and R.disc1.addon == true)
+		check("round class icon: the disc is on a frame of its own that ignores the scale of the plate, under the icon", R.disc1.owner ~= icon and R.disc1.owner.ignoreParentScale == true and R.disc1.owner.level < icon.level
+			and R.disc1.owner.allPoints == icon, tostring(R.disc1.owner))
+		check("round class icon: the icon is a whole number of screen pixels", R.whole(icon) and not near(icon.width, 13), tostring(icon.width))
+		W.change("general.thickness", 2)
+		check("round class icon: a thicker border moves the disc out", near(R.disc1.points[1][4], -2 * R.px(icon)) and near(R.disc1.points[2][5], -2 * R.px(icon)), tostring(R.disc1.points[1][4]))
+		W.change("general.thickness", 1)
+		W.change("nameplates.classBorder", false)
+		check("round class icon: Class icon border off hides the disc and the art stays masked", not R.disc1.shown and R.mask and art.masks[R.mask] == true)
+		W.change("nameplates.classBorder", true)
+		W.change("general.borderless", true)
+		check("round class icon: Borderless hides the disc", not R.disc1.shown and art.masks[R.mask] == true)
+		W.change("general.borderless", false)
+		check("round class icon: and the disc is back with it off", R.disc1.shown)
+		W.change("nameplates.classShape", "Square")
+		W.flush()
+		check("round class icon: back to square, the art has no mask, the disc is hidden, the edges and the backdrop show", next(art.masks) == nil and not R.disc1.shown
+			and NP.iconOf(W, e).look.state == "SB" and near(icon.width, 13), NP.iconOf(W, e).look.state .. " " .. tostring(icon.width))
+		W.change("nameplates.classShape", "Round")
+		check("round class icon: and round again takes the same mask and disc, none made twice", art.masks[R.mask] == true and #W.addonMasks == 2 and R.disc(W, icon) == R.disc1)
+		clean(W, "round class icon")
+
+		-- The first round icon in combat stays square until combat ends.
+		local C = R.world(true, true)
+		local c = C.npShow("nameplate1", { player = true, friend = false, class = "MAGE" })
+		R.fight(C, true)
+		C.change("nameplates.classShape", "Round")
+		C.flush()
+		check("round class icon: a first round icon made in combat stays square, nothing is made", #C.addonMasks == 0 and next(NP.iconOf(C, c).art.masks) == nil and NP.iconOf(C, c).look.state == "SB"
+			and #C.errors == 0 and #C.violations == 0)
+		R.fight(C, false)
+		C.flush()
+		check("round class icon: after combat it is round", #C.addonMasks == 2 and next(NP.iconOf(C, c).art.masks) ~= nil and NP.iconOf(C, c).look.state == "hb")
+
+		-- A client without masks, or without the circle, keeps the square icon and says so once.
+		for _, variant in ipairs({ { "without masks", R.world(false, true) }, { "without the circle", R.world(true, false) } }) do
+			local V = variant[2]
+			local v = V.npShow("nameplate1", { player = true, friend = false, class = "MAGE" })
+			V.change("nameplates.classShape", "Round")
+			V.flush()
+			check("round class icon " .. variant[1] .. ": the icon stays square, no error, and the status says so in one line",
+				NP.iconOf(V, v).look.state == "SB" and #V.addonMasks == 0 and count(V.status(), "Round class icons: this client has no circle mask, so they show square.") == 1
+				and #V.errors == 0 and #V.violations == 0 and not has(V.status(), "stopped"), V.status())
+		end
+		check("round class icon: a client that can make masks says nothing", not has(W.status(), "Round class icons"), W.status())
 	end
 
 	-- 75i5. Class icons: the art that exists, and the art that does not.
@@ -62887,6 +62979,8 @@ function PT.runSetup()
 		local W = PT.world(opts)
 		-- The tooltip drawing makes a status bar under its frame; the client gives it a fill region. The client's font strings take a shadow.
 		W.setupBars = true
+		-- The client has the circle the drawings of round class icons are cut with.
+		W.env.C_Texture = W.env.C_Texture or { GetAtlasExists = function(name) return name == "CircleMaskScalable" end }
 		W.env.CreateColor = W.env.CreateColor or function(r, g, b, alpha) return setmetatable({ r = r, g = g, b = b, a = alpha or 1 }, COLOUR_MT) end
 		local base = W.env.CreateFrame
 		W.env.CreateFrame = function(kind, name, parent, template)
@@ -63224,7 +63318,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 863 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 865 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -63538,7 +63632,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 863 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 865 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -63900,6 +63994,7 @@ function PT.runSetup()
 			["chat.lookOwn"] = { { "chat.lookBorder", "ffff0000" }, { "chat.lookBack", "ff304050" }, { "chat.lookBackAlpha", 40 } },
 			["chat.tipShading"] = { { "chat.tipBackground", "darkblue" }, { "chat.tipOpacity", 100 } }, ["chat.tipOwn"] = { { "chat.tipBorder", "ffff0000" } },
 			["hud.lookOwn"] = { { "general.border", "ff3366cc" } },
+			["unitframes.classShape"] = { { "unitframes.portraitStyle", "icon" } },
 		}
 		for _, number in ipairs(S.built) do
 			S.Go(number)
@@ -63963,7 +64058,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 749 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 751 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -94284,8 +94379,8 @@ do
 		{ "nameplates.notSelectedAlpha", "mock-nameplate-stack", 10, {} },
 	}
 	SD.DRAWINGS = { "mock-nameplate", "mock-nameplate-cast", "mock-nameplate-auras", "mock-nameplate-marks", "mock-nameplate-stack" }
-	function SD.world()
-		local W = newWorld({ cooldowns = true })
+	function SD.world(hud)
+		local W = newWorld({ cooldowns = true, hud = hud })
 		local env = W.env
 		env.C_Texture = { GetAtlasExists = function() return true end }
 		env.UnitClass = function() return "Mage", "MAGE", 8 end
@@ -94528,6 +94623,37 @@ do
 			and not R(friend.iconFrame).shown, tostring(point and point[1]))
 		local atlas = R(player.iconArt).atlas
 		check("sdplate: and it draws the class art of the game's atlas", atlas == "classicon-mage", tostring(atlas))
+		-- Class icon shape: the card has the circle mask on the art and a disc at Round, and neither at Square.
+		do
+			local H = SD.world(true)
+			local function discOf(art)
+				for _, t in ipairs(H.addonTextures) do
+					local r = H.rawOf[t] or t
+					local owner = H.rawOf[r.owner] or r.owner
+					for m in pairs(r.masks) do
+						-- On the frame of the art or on a frame of its own under it, and of this drawing.
+						if r ~= art and (H.rawOf[m] or m).allPoints == r and (owner == H.rawOf[art.owner] or (owner and H.rawOf[owner.parent] == H.rawOf[art.owner])) then
+							return r
+						end
+					end
+				end
+			end
+			local function card(shape)
+				H.ns.Set("nameplates.classShape", shape)
+				local _, state = SD.show(H, "mock-nameplate-marks")
+				local art = H.rawOf[state.plates.player.iconArt]
+				return art, discOf(art)
+			end
+			local square, squareDisc = card("square")
+			check("sdplate: Class icon shape Square: the card art has no mask and no disc", next(square.masks) == nil and squareDisc == nil)
+			local round, roundDisc = card("round")
+			local mask = next(round.masks)
+			check("sdplate: Class icon shape Round: the card art has the circle mask and the disc shows", mask ~= nil and (H.rawOf[mask] or mask).atlas == "CircleMaskScalable" and roundDisc ~= nil and roundDisc.shown,
+				tostring(mask) .. " " .. tostring(roundDisc))
+			square, squareDisc = card("square")
+			check("sdplate: and Square again draws it with no mask and no disc", next(square.masks) == nil and squareDisc == nil)
+			check("sdplate: the cards are drawn without a violation or an error", #H.violations == 0 and #H.errors == 0, table.concat(H.violations, "|") .. table.concat(H.errors, "|"))
+		end
 		local places = { left = "RIGHT", above = "BOTTOM", below = "TOP", right = "LEFT" }
 		local bad = {}
 		for position, anchor in pairs(places) do
@@ -95689,6 +95815,59 @@ do
 			check("sdunit: " .. id .. " draws unitframes." .. path .. " differently when it is set to another value", changed ~= nil)
 		end
 		check("sdunit: " .. id .. " is still without a violation or an error after every row", #W.violations == 0 and #W.errors == 0, table.concat(W.violations, " | "):sub(1, 300) .. table.concat(W.errors, " | "):sub(1, 300))
+	end
+	-- Class icon shape on the player picture of the card: Round cuts the class icon and its fade to the circle, shows the disc and hides the rounded line of Corners Soft.
+	do
+		local H = newWorld({ trackers = true, fontReturn = "true", hud = true })
+		H.env.C_Texture = { GetAtlasExists = function() return true end }
+		H.au.unit.player = { guid = "Player-1-0001", player = true, class = "SHAMAN", race = "Troll", name = "Mine" }
+		H.login()
+		H.flush()
+		local S = SU.build(H, "mock-unit-frames")
+		S.ns.Set("unitframes.portraitStyle", "icon")
+		S.ns.Set("unitframes.corners", "soft")
+		local function raw(x) return H.rawOf[x] or x end
+		local function pictures()
+			SU.draw(S)
+			local faces = {}
+			for _, t in ipairs(H.addonTextures) do
+				local r = raw(t)
+				if r.atlas and tostring(r.atlas):find("^classicon") and r.shown then
+					local P = { face = r, masked = next(r.masks) ~= nil, line = false }
+					for _, o in ipairs(H.addonTextures) do
+						local q = raw(o)
+						if raw(q.owner) == raw(r.owner) then
+							if q.layer == "BACKGROUND" and q.sublevel == -7 and q.shown then
+								P.disc = q
+							elseif q.layer == "OVERLAY" and q.sublevel == 7 and q.file and q.shown then
+								P.line = true
+							end
+						end
+					end
+					faces[#faces + 1] = P
+				end
+			end
+			return faces
+		end
+		local function all(faces, test)
+			for _, P in ipairs(faces) do
+				if not test(P) then
+					return false
+				end
+			end
+			return #faces > 0
+		end
+		local square = pictures()
+		check("sdunit: Class icon shape Square: the class icon of the card has no mask and no disc, and the rounded line shows with Corners Soft",
+			all(square, function(P) return not P.masked and P.disc == nil and P.line end), #square)
+		S.ns.Set("unitframes.classShape", "round")
+		local round = pictures()
+		check("sdunit: Class icon shape Round: the class icon of the card has the circle mask and the disc shows, and the rounded line is hidden",
+			all(round, function(P) return P.masked and P.disc ~= nil and not P.line and (raw(next(P.face.masks)).atlas == "CircleMaskScalable") end), #round)
+		S.ns.Set("unitframes.classShape", "square")
+		square = pictures()
+		check("sdunit: and Square again takes the mask and the disc off and the rounded line is back", all(square, function(P) return not P.masked and P.disc == nil and P.line end), #square)
+		check("sdunit: the card is drawn without a violation or an error", #H.violations == 0 and #H.errors == 0, table.concat(H.violations, "|"):sub(1, 300) .. table.concat(H.errors, "|"):sub(1, 300))
 	end
 end
 -- >>> sdunit (end)
@@ -105254,6 +105433,146 @@ do
 	check("game menu button: no violation in any world", #W.violations == 0 and #W2.violations == 0 and #W3.violations == 0 and #W4.violations == 0 and #W5.violations == 0 and #W6.violations == 0, table.concat(W.violations, " | "))
 end
 -- >>> menubtn (end)
+-- >>> round class icons on unit frames (begin)
+-- Pictures that show a class icon can be round. Every label starts "round class icon". The values are kept in one table: the main function of this file has a limit on the locals alive at once.
+do
+	local RU = {}
+	function RU.world()
+		local W = FH.ufWorld()
+		W.blizzard(function() W.env.PartyFrame:InitializePartyMemberFrames() end)
+		local U, env = W.uf, W.env
+		U.who = { player = { player = true, class = "WARLOCK" }, target = { player = false, class = "WARRIOR", reaction = { 0.9, 0.1, 0.1 } },
+			focus = { player = true, class = "ROGUE" }, party1 = { player = true, class = "PRIEST" } }
+		env.UnitIsPlayer = function(unit) return U.who[unit] ~= nil and U.who[unit].player end
+		env.UnitClass = function(unit)
+			local who = U.who[unit]
+			if who == nil then
+				return "Warlock", "WARLOCK", 9
+			end
+			return who.class:sub(1, 1) .. who.class:sub(2):lower(), who.class, 1
+		end
+		env.GetClassAtlas = function(class) return "classicon-" .. class:lower() end
+		env.C_Texture = env.C_Texture or { GetAtlasExists = function(name) return name == "CircleMaskScalable" end }
+		W.change("unitframes.portraitStyle", "Class icon")
+		W.flush()
+		return W
+	end
+	-- The picture of the addon's own on the frame of a portrait: its frame, texture, fade texture, the disc under it and the rounded line of soft corners.
+	function RU.pic(W, portrait)
+		local owner, frame = W.rawOf[portrait].owner, nil
+		for _, f in ipairs(W.addonFrames) do
+			if not frame and f.parent == owner then
+				for _, t in ipairs(f.regions) do
+					if t.layer == "ARTWORK" and t.addon then
+						frame = f
+					end
+				end
+			end
+		end
+		local P = { frame = frame }
+		for _, t in ipairs(frame and frame.regions or {}) do
+			if t.layer == "ARTWORK" and t.sublevel == 7 then
+				P.fade = t
+			elseif t.layer == "ARTWORK" then
+				P.texture = t
+			elseif t.layer == "BACKGROUND" and t.sublevel == -7 then
+				P.disc = t
+			elseif t.layer == "OVERLAY" and t.file then
+				P.line = t
+			end
+		end
+		P.look = W.look(frame)
+		return P
+	end
+	function RU.silent(W) return #W.violations == 0 and #W.errors == 0 and #W.out == 0 and not has(W.status(), "stopped") end
+
+	local W = RU.world()
+	local P, T = W.player, W.target
+	local a = RU.pic(W, P.portrait)
+	check("round class icon, unit frames: square at the defaults, with no mask and no disc", a.disc == nil and a.texture ~= nil and next(a.texture.masks) == nil and a.look.state == "SB" and W.ns.Get("unitframes.classShape") == "square",
+		tostring(a.disc) .. " " .. tostring(a.texture) .. " " .. a.look.state .. " " .. tostring(W.ns.Get("unitframes.classShape")))
+	RU.square = RU.pic(W, T.portrait).look.state
+	W.change("unitframes.classShape", "Round")
+	W.flush()
+	a = RU.pic(W, P.portrait)
+	RU.mask = next(a.texture.masks)
+	check("round class icon, unit frames: the picture and the fade have the circle mask, the disc the other one", a.disc ~= nil and RU.mask ~= nil and RU.mask.atlas == "CircleMaskScalable" and RU.mask.allPoints == a.texture
+		and a.fade.masks[RU.mask] == true and next(a.disc.masks) ~= nil and next(a.disc.masks) ~= RU.mask and next(a.disc.masks).allPoints == a.disc, W.status():sub(1, 200))
+	check("round class icon, unit frames: the edges and the backdrop are hidden and the disc shows in the outline colour", a.look.state == "hb" and a.disc.shown and a.disc.color ~= nil
+		and near(a.disc.color[1], a.look.r) and near(a.disc.color[2], a.look.g) and near(a.disc.color[3], a.look.b), a.look.state)
+	W.change("unitframes.portraitBorder", "None")
+	check("round class icon, unit frames: Portrait border None hides the disc", not RU.pic(W, P.portrait).disc.shown)
+	W.change("unitframes.portraitBorder", "Thin")
+	check("round class icon, unit frames: and Thin shows it again", RU.pic(W, P.portrait).disc.shown, tostring(W.ns.Get("unitframes.portraitBorder")))
+	RU.t = RU.pic(W, T.portrait)
+	check("round class icon, unit frames: a target that is no player keeps its face, square, with the edges it had and no mask", (RU.t.disc == nil or not RU.t.disc.shown) and RU.t.look.state == RU.square
+		and next(RU.t.texture.masks) == nil, RU.t.look.state .. " " .. tostring(W.ns.Get("unitframes.portraitBorder")) .. " " .. tostring(RU.t.texture.shown) .. " " .. tostring(RU.t.disc))
+	W.change("unitframes.corners", "Soft")
+	W.flush()
+	a, RU.t = RU.pic(W, P.portrait), RU.pic(W, T.portrait)
+	check("round class icon, unit frames: with Corners Soft the rounded line is hidden while the picture is round", a.disc.shown and a.look.state == "hb"
+		and (a.line == nil or not a.line.shown), a.look.state .. " " .. tostring(a.line and a.line.shown))
+	W.change("unitframes.classShape", "Square")
+	W.flush()
+	a = RU.pic(W, P.portrait)
+	check("round class icon, unit frames: back to square, the masks are off, the disc is hidden, the edges and the rounded line show", next(a.texture.masks) == nil and next(a.fade.masks) == nil
+		and not a.disc.shown and a.line ~= nil and a.line.shown, a.look.state)
+	W.change("unitframes.corners", "Square")
+	W.change("unitframes.classShape", "Round")
+	W.flush()
+	check("round class icon, unit frames: a picture set to Square picture is not a class icon and stays square", (function()
+		W.change("unitframes.playerPicture", "Square picture")
+		W.flush()
+		local b = RU.pic(W, P.portrait)
+		return b.look.state == "SB" and next(b.texture.masks) == nil and not b.disc.shown
+	end)())
+	W.change("unitframes.playerPicture", "As Square portraits")
+	-- The game's own icon on a portrait is not a class icon of the addon: Portrait style Picture shows it square, and a unit that is no player keeps it square in Class icon style.
+	W.change("unitframes.portraitStyle", "Picture")
+	W.uf.icon[P.frame] = "classicon-warrior"
+	W.blizzard(W.env.UnitFramePortrait_Update, P.frame)
+	W.flush()
+	a = RU.pic(W, P.portrait)
+	check("round class icon, unit frames: the game's own icon under Portrait style Picture stays square, with no mask and the square edges", a.texture.atlas == "classicon-warrior" and next(a.texture.masks) == nil
+		and not (a.disc and a.disc.shown) and a.look.state == "SB", tostring(a.texture.atlas) .. " " .. a.look.state)
+	W.uf.icon[P.frame] = nil
+	W.blizzard(W.env.UnitFramePortrait_Update, P.frame)
+	W.change("unitframes.portraitStyle", "Class icon")
+	W.uf.icon[T.frame] = "classicon-warrior"
+	W.blizzard(W.env.UnitFramePortrait_Update, T.frame)
+	W.flush()
+	RU.t = RU.pic(W, T.portrait)
+	check("round class icon, unit frames: the game's own icon on a unit that is no player stays square in Class icon style", RU.t.texture.atlas == "classicon-warrior" and next(RU.t.texture.masks) == nil
+		and not (RU.t.disc and RU.t.disc.shown) and RU.t.look.state == RU.square, tostring(RU.t.texture.atlas) .. " " .. RU.t.look.state)
+	W.uf.icon[T.frame] = nil
+	W.blizzard(W.env.UnitFramePortrait_Update, T.frame)
+	-- Under Portrait border Class or reaction colour the ring is in the class colour.
+	local before = { RU.pic(W, P.portrait).disc.color[1], RU.pic(W, P.portrait).disc.color[2], RU.pic(W, P.portrait).disc.color[3] }
+	W.change("unitframes.portraitBorder", "Class or reaction colour")
+	W.flush()
+	a = RU.pic(W, P.portrait)
+	check("round class icon, unit frames: Portrait border Class or reaction colour puts the ring in the colour of the outline, which changed from the thin border", a.disc.shown and near(a.disc.color[1], a.look.r) and near(a.disc.color[2], a.look.g)
+		and near(a.disc.color[3], a.look.b) and not (near(before[1], a.look.r) and near(before[2], a.look.g) and near(before[3], a.look.b)), a.look.state .. " " .. tostring(a.look.r))
+	W.change("unitframes.portraitBorder", "Thin")
+	check("round class icon, unit frames: nothing failed", RU.silent(W), table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
+
+	-- The first round picture in combat is made after combat.
+	local C = RU.world()
+	RU.n = #C.addonMasks
+	C.combat = true
+	C.fire("PLAYER_REGEN_DISABLED")
+	C.change("unitframes.classShape", "Round")
+	C.flush()
+	RU.c = RU.pic(C, C.player.portrait)
+	check("round class icon, unit frames: a first round picture in combat stays square and makes nothing", RU.c.disc == nil and next(RU.c.texture.masks) == nil and #C.addonMasks == RU.n and RU.silent(C), tostring(RU.c.disc) .. " " .. #C.addonMasks .. " " .. table.concat(C.violations, "|") .. table.concat(C.errors, "|"))
+	C.combat = false
+	C.fire("PLAYER_REGEN_ENABLED")
+	C.flush()
+	RU.c = RU.pic(C, C.player.portrait)
+	check("round class icon, unit frames: after combat it is round", RU.c.disc ~= nil and next(RU.c.texture.masks) ~= nil and RU.c.look.state == "hb" and #C.addonMasks > RU.n and RU.silent(C),
+		tostring(RU.c.disc) .. " " .. tostring(RU.c.texture and next(RU.c.texture.masks)) .. " " .. RU.c.look.state .. " " .. #C.addonMasks .. "/" .. RU.n .. " " .. table.concat(C.violations, "|") .. table.concat(C.errors, "|") .. table.concat(C.out, "|"))
+end
+-- >>> round class icons on unit frames (end)
 io.write(("%d passed, %d failed\n"):format(passed, failed))
 if rawget(_G, "ADDON_DIR_OVERRIDE") then
 	return failed

@@ -1023,7 +1023,7 @@ end
 
 local function PlaceIcon(unitFrame, own)
 	local position, size, x, y = Opt("classPosition"), Opt("classSize"), Opt("classX"), Opt("classY")
-	local gap, fit = Opt("classGap"), Opt("classFit")
+	local gap, fit, round = Opt("classGap"), Opt("classFit"), Opt("classShape") == "round"
 	-- The bar and the level box are hidden in name-only mode, and the icon goes above the name.
 	local nameOnly = Plain(unitFrame.showOnlyName, "boolean") and unitFrame.showOnlyName
 	if nameOnly then
@@ -1039,12 +1039,17 @@ local function PlaceIcon(unitFrame, own)
 	if h then
 		size = h
 	end
+	local icon, guide = own.icon, own.guide
+	if round then
+		-- A circle at a fractional pixel size has a soft edge, so a round icon is a whole number of screen pixels.
+		local px = ns.Pixels(icon, 1)
+		size = ns.Pixels(icon, math.max(1, math.floor(size / px + 0.5)))
+	end
 	local place = ("%s:%s:%s:%s:%s:%s:%s"):format(position, size, x, y, lift, fit, gap)
 	own.iconSide, own.iconSize, own.iconGap = position, size, gap
 	if own.iconPlace == place then
 		return
 	end
-	local icon, guide = own.icon, own.guide
 	icon:SetSize(size, size)
 	icon:ClearAllPoints()
 	if position == "left" then
@@ -1093,6 +1098,7 @@ local function SetClassIcon(unitFrame, own, on)
 	end
 	PlaceIcon(unitFrame, own)
 	own.art:Show()
+	ns.SetOutlineRound(own.iconOutline, own.art, Opt("classShape") == "round")
 	local border = Opt("classBorder")
 	ns.SetOutline(own.iconOutline, border, border)
 	own.classShown = true
