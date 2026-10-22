@@ -2116,6 +2116,9 @@ function ns.StatusLines()
 	for _, line in ipairs(ns.SetupStatus and ns.SetupStatus() or {}) do
 		lines[#lines + 1] = line
 	end
+	for _, line in ipairs(ns.PanelLookStatus and ns.PanelLookStatus() or {}) do
+		lines[#lines + 1] = line
+	end
 	if #blocked > 0 then
 		lines[#lines + 1] = "Blocked by the game: " .. table.concat(blocked, ", ")
 	end

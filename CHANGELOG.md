@@ -1,3 +1,8 @@
+## 0.4.94
+
+- **Options window**: the window is 1040 by 680 and starts with no borders. Ctrl and the mouse wheel over the title bar change **Window scale**.
+- **Flat UI** page: new section **Options window** with **Accent colour**, **Custom accent colour**, **Window tone**, **Borders**, **Corners**, **Density**, **Window font** and **Window scale**. Every profile uses the same values.
+
 ## 0.4.93
 
 - **Cast bars** and **Swing timers**: the player cast bar and the swing timers now have the width of the personal resource display. Set **Bar width** of the display in Edit Mode to size all three. A saved **Player cast bar width** is not used while **Player cast bar** is **Width of the personal resource display**. Pick **Width set below** or **Width set in Edit Mode** to keep the old widths.

@@ -5,18 +5,18 @@ local ADDON_NAME, ns = ...
 -- works in combat. It is only built out of combat, since UIParent is protected.
 
 local NAME = "FlatUIOptionsFrame"
-local WIDTH, HEIGHT = 900, 620
-local TITLE = 34
+local WIDTH, HEIGHT = 1040, 680
+local TITLE = 36
 local LEFT = 210
 local STRIP = 40
 local HEADER = 48
 local RIGHT_W, RIGHT_H = WIDTH - LEFT, HEIGHT - TITLE - STRIP - HEADER
 local PAD = 16
-local ROW = 32
+local ROW = 36
 local SECTION = 34
 local ROW_W = RIGHT_W - 2 * PAD
-local LABEL = 290
-local CONTROL = 314
+local LABEL = 330
+local CONTROL = 354
 local FIELD = 230
 local SMALL = 80
 local BUTTON = 24
@@ -25,6 +25,7 @@ local LINES = 12
 local WHEEL = 48
 local REFRESH = 0.5
 local DIM = 0.4
+local Look = ns.PanelLook
 local PROFILE_CALLS = { "Profile", "Profiles", "UseProfile" }
 
 local POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true, RIGHT = true, BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true }
@@ -102,24 +103,23 @@ end
 
 -- Colours --------------------------------------------------------------------------------------
 
--- The background colour of the addon moved towards white (positive) or black (negative).
-local function Shade(delta)
-	local r, g, b = ns.Colour("general.backdrop")
-	return Clamp(r + delta, 0, 1), Clamp(g + delta, 0, 1), Clamp(b + delta, 0, 1)
+-- Every colour of the window is a token of PanelLook.lua: a name such as "card" or "text-dim", or a step of grey for the drawings of setup.
+local function Shade(spec)
+	return Look.Colour(spec)
 end
 
 local function Accent()
-	return ns.Colour("windows.accent")
+	return Look.Colour("accent")
 end
 
--- Runs fn now and again when the background or highlight colour changes.
+-- Runs fn now and again when the look of the window changes.
 local function Painted(fn)
 	ui.paints[#ui.paints + 1] = fn
 	fn()
 end
 
 local function Repaint()
-	local key = ns.Get("general.backdrop") .. ns.Get("windows.accent")
+	local key = Look.Key()
 	if key ~= ui.paintKey then
 		ui.paintKey = key
 		for _, fn in ipairs(ui.paints) do
@@ -128,15 +128,7 @@ local function Repaint()
 	end
 end
 
-local function Solid(texture, delta, alpha)
-	local r, g, b = Shade(delta)
-	texture:SetColorTexture(r, g, b, alpha or 1)
-end
-
-local function Backing(outline, delta, alpha)
-	local r, g, b = Shade(delta)
-	ns.SetOutlineFill(outline, r, g, b, alpha or 1)
-end
+local Solid, Backing = Look.Solid, Look.Backing
 
 -- Frames, textures and text ----------------------------------------------------------------------
 
@@ -152,6 +144,15 @@ local function Fill(frame, layer)
 	return texture
 end
 
+-- The token each text takes: Label gives "text" and Dim "text-dim", and a change of tone sets them again.
+local tints = setmetatable({}, { __mode = "k" })
+
+local function Tint(text, token)
+	tints[text] = token
+	text:SetTextColor(Look.Colour(token))
+	return text
+end
+
 local function Label(parent, font, justify, width, wrap)
 	local text = parent:CreateFontString(nil, "OVERLAY", font)
 	ns.Own[text] = true
@@ -160,20 +161,18 @@ local function Label(parent, font, justify, width, wrap)
 	if width then
 		text:SetWidth(width)
 	end
-	text:SetTextColor(0.92, 0.92, 0.92)
+	Painted(function()
+		text:SetTextColor(Look.Colour(tints[text] or "text"))
+	end)
+	local object = Look.Object(font)
+	if object then
+		text:SetFontObject(object)
+	end
 	return text
 end
 
 local function Dim(text)
-	text:SetTextColor(0.55, 0.55, 0.55)
-	return text
-end
-
-local function Accented(text)
-	Painted(function()
-		text:SetTextColor(Accent())
-	end)
-	return text
+	return Tint(text, "text-dim")
 end
 
 -- A frame that takes clicks: onClick runs when the left button goes down and comes up on it.
@@ -219,7 +218,9 @@ local function Chevron(parent)
 		local bar = Fill(parent, "ARTWORK")
 		bar:SetSize(10 - 2 * index, 1.5)
 		bar:SetPoint("TOP", parent, "TOPRIGHT", -16, -(9 + (index - 1) * 1.5))
-		bar:SetColorTexture(0.7, 0.7, 0.7, 1)
+		Painted(function()
+			bar:SetColorTexture(Look.Colour("text-dim"))
+		end)
 	end
 end
 
@@ -233,16 +234,16 @@ local function Button(parent, text, width, onClick)
 	label:SetText(text)
 	local hover = false
 	Painted(function()
-		Backing(outline, hover and 0.17 or 0.09)
+		Backing(outline, hover and "hover" or "raised", 1, "line-strong")
 	end)
 	Clickable(button, onClick)
 	button:SetScript("OnEnter", function()
 		hover = true
-		Backing(outline, 0.17)
+		Backing(outline, "hover", 1, "line-strong")
 	end)
 	button:SetScript("OnLeave", function()
 		hover = false
-		Backing(outline, 0.09)
+		Backing(outline, "raised", 1, "line-strong")
 	end)
 	return button, label
 end
@@ -251,19 +252,22 @@ end
 local function Field(parent, width, limit, onLost)
 	local box = Frame(parent, "EditBox")
 	box:SetSize(width, BUTTON)
-	box:SetFontObject("GameFontHighlight")
+	box:SetFontObject(Look.FontFor("GameFontHighlight"))
 	box:SetAutoFocus(false)
 	box:SetTextInsets(6, 6, 0, 0)
 	box:SetMaxLetters(limit or 0)
 	local outline = ns.Outline(box, box, true)
+	local focused = false
 	Painted(function()
-		Backing(outline, 0.05)
+		Backing(outline, "raised", 1, focused and "accent" or "line")
 	end)
 	box:SetScript("OnEditFocusGained", function()
-		ns.SetOutlineColour(outline, Accent())
+		focused = true
+		Backing(outline, "raised", 1, "accent")
 	end)
 	box:SetScript("OnEditFocusLost", function()
-		ns.SetOutlineColour(outline, nil, nil, nil)
+		focused = false
+		Backing(outline, "raised", 1, "line")
 		if onLost then
 			onLost()
 		end
@@ -290,7 +294,7 @@ local function Scroller(parent, width, height)
 	local thumb = Fill(bar, "ARTWORK")
 	thumb:SetWidth(4)
 	Painted(function()
-		Solid(thumb, 0.3)
+		Solid(thumb, "line-strong")
 	end)
 	local function Range()
 		return math.max(0, object.content - object.height)
@@ -386,14 +390,14 @@ local function NewRow(parent, y, text, tip)
 	hover:SetAllPoints(frame)
 	hover:Hide()
 	Painted(function()
-		Solid(hover, 0.04)
+		Solid(hover, "card")
 	end)
 	local line = Fill(frame, "BORDER")
 	line:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
 	line:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 	line:SetHeight(1)
 	Painted(function()
-		Solid(line, 0.07)
+		Solid(line, "line-faint")
 	end)
 	local label = Label(frame, "GameFontHighlight", "LEFT", LABEL)
 	label:SetPoint("LEFT", frame, "LEFT", 0, 0)
@@ -463,7 +467,7 @@ local function Dropdown(row, width, spec)
 	Chevron(button)
 	local hover = false
 	Painted(function()
-		Backing(outline, hover and 0.17 or 0.09)
+		Backing(outline, hover and "hover" or "raised", 1, "line")
 	end)
 	local object = { frame = button }
 	function object.SetText(value)
@@ -476,10 +480,10 @@ local function Dropdown(row, width, spec)
 	end)
 	row.Hover(button, function()
 		hover = true
-		Backing(outline, 0.17)
+		Backing(outline, "hover", 1, "line")
 	end, function()
 		hover = false
-		Backing(outline, 0.09)
+		Backing(outline, "raised", 1, "line")
 	end)
 	return object
 end
@@ -511,7 +515,7 @@ local function AddBool(row, item)
 	mark:SetPoint("TOPLEFT", box, "TOPLEFT", 4, -4)
 	mark:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -4, 4)
 	Painted(function()
-		Backing(outline, 0.05)
+		Backing(outline, "raised", 1, "line-strong")
 		mark:SetColorTexture(Accent())
 	end)
 	local function Toggle()
@@ -542,7 +546,7 @@ local function AddNumber(row, item)
 	local thumb = Fill(track, "OVERLAY")
 	thumb:SetSize(8, 16)
 	Painted(function()
-		Solid(groove, 0.12)
+		Solid(groove, "raised")
 		bar:SetColorTexture(Accent())
 		thumb:SetColorTexture(Accent())
 	end)
@@ -613,7 +617,7 @@ local function AddColour(row, item)
 	colour:SetPoint("TOPLEFT", swatch, "TOPLEFT", 3, -3)
 	colour:SetPoint("BOTTOMRIGHT", swatch, "BOTTOMRIGHT", -3, 3)
 	Painted(function()
-		Backing(outline, 0.05)
+		Backing(outline, "raised", 1, "line-strong")
 	end)
 	local hex = Dim(Label(row.frame, "GameFontHighlightSmall", "LEFT", 90))
 	hex:SetPoint("LEFT", swatch, "RIGHT", 12, 0)
@@ -1017,15 +1021,15 @@ end
 -- A section header: a mark, the text, and a line under it. Returns the top of the first row under it and the header, which
 -- can be placed at another y and hidden.
 local function Header(parent, text, y, big)
-	local label = Accented(Label(parent, big and "GameFontNormalLarge" or "GameFontNormal", "LEFT", ROW_W - 12))
+	local label = Label(parent, big and "GameFontNormalLarge" or "GameFontNormal", "LEFT", ROW_W - 12)
 	label:SetText(text)
 	local line = Fill(parent, "BORDER")
 	line:SetHeight(1)
 	local mark = Fill(parent, "ARTWORK")
 	mark:SetSize(3, big and 16 or 12)
 	Painted(function()
-		Solid(line, 0.12)
-		mark:SetColorTexture(Accent())
+		Solid(line, "line")
+		Solid(mark, "line-strong")
 	end)
 	local header = { label = label }
 	function header.Place(top)
@@ -1082,7 +1086,7 @@ local function BuildPopups()
 	list:EnableMouse(true)
 	local outline = ns.Outline(list, list, true)
 	Painted(function()
-		Backing(outline, 0.06)
+		Backing(outline, "card", 1, "line-strong")
 	end)
 	list:Hide()
 	ui.list = list
@@ -1096,7 +1100,7 @@ local function BuildPopups()
 	confirm:EnableMouse(true)
 	local box = ns.Outline(confirm, confirm, true)
 	Painted(function()
-		Backing(box, 0.06)
+		Backing(box, "card", 1, "line-strong")
 	end)
 	local question = Label(confirm, "GameFontHighlight", "CENTER", 330, true)
 	question:SetJustifyV("TOP")
@@ -1139,7 +1143,7 @@ local function ListLine(index)
 	mark:SetSize(3, 12)
 	mark:SetPoint("LEFT", frame, "LEFT", 4, 0)
 	Painted(function()
-		Solid(hover, 0.16)
+		Solid(hover, "hover")
 		mark:SetColorTexture(Accent())
 	end)
 	local text = Label(frame, "GameFontHighlight", "LEFT", FIELD - 28)
@@ -1201,7 +1205,7 @@ function OpenList(owner, spec)
 			line.value = entry and entry[1]
 			line.text:SetText(entry and entry[2] or "None")
 			if entry then
-				line.text:SetTextColor(0.92, 0.92, 0.92)
+				Tint(line.text, "text")
 			else
 				Dim(line.text)
 			end
@@ -1638,15 +1642,15 @@ local function NavButton(index)
 	button = { frame = frame, text = text }
 	local function Paint()
 		fill:SetShown(button.selected == true or button.hover == true)
-		Solid(fill, button.selected and 0.1 or 0.06)
+		Solid(fill, button.selected and "raised" or "hover")
 		mark:SetShown(button.selected == true)
 		mark:SetColorTexture(Accent())
 		if button.selected then
 			text:SetTextColor(Accent())
 		elseif button.section then
-			text:SetTextColor(0.6, 0.6, 0.6)
+			text:SetTextColor(Look.Colour("text-dim"))
 		else
-			text:SetTextColor(0.92, 0.92, 0.92)
+			text:SetTextColor(Look.Colour("text"))
 		end
 	end
 	button.Paint = Paint
@@ -1683,7 +1687,7 @@ local function LayoutNav()
 		button.text:ClearAllPoints()
 		button.text:SetPoint("LEFT", button.frame, "LEFT", indent, 0)
 		button.text:SetWidth(width - indent - 10)
-		button.text:SetFontObject(kind == "section" and "GameFontHighlightSmall" or "GameFontHighlight")
+		button.text:SetFontObject(Look.FontFor(kind == "section" and "GameFontHighlightSmall" or "GameFontHighlight"))
 		button.text:SetText(text)
 		button.Paint()
 		button.frame:Show()
@@ -1883,7 +1887,7 @@ local function SavePosition()
 	end
 	local ok, point, relativeTo, relativePoint, x, y = pcall(ui.window.GetPoint, ui.window, 1)
 	if ok and relativeTo == UIParent and POINTS[point] and POINTS[relativePoint] and Number(x) and Number(y) then
-		db.panel = { point = point, relative = relativePoint ~= point and relativePoint or nil, x = x, y = y }
+		Look.SavePosition(point, relativePoint ~= point and relativePoint or nil, x, y)
 	end
 end
 
@@ -1897,6 +1901,13 @@ local function OnScreen()
 	return left + 120 <= screenWidth and left + width - 120 >= 0 and bottom + height <= screenHeight + 20 and bottom + height - TITLE >= 0
 end
 
+-- The scale of the window: Window scale, or less when the screen is too small for the window.
+local function ApplyScale()
+	local screenWidth, screenHeight = ScreenSize()
+	local fit = screenWidth and math.min((screenWidth - 40) / WIDTH, (screenHeight - 40) / HEIGHT) or math.huge
+	ui.window:SetScale(math.min(Look.Scale(), fit))
+end
+
 local function Place()
 	local window = ui.window
 	local saved = type(FlatUIDB) == "table" and FlatUIDB.panel or nil
@@ -1906,17 +1917,14 @@ local function Place()
 		relative = POINTS[saved.relative] and saved.relative or point
 	end
 	-- A screen too small for the window gets a smaller window.
-	local screenWidth, screenHeight = ScreenSize()
-	window:SetScale(screenWidth and math.min(1, (screenWidth - 40) / WIDTH, (screenHeight - 40) / HEIGHT) or 1)
+	ApplyScale()
 	window:ClearAllPoints()
 	window:SetPoint(point, UIParent, relative, x, y)
 	window:Show()
 	if not OnScreen() then
 		window:ClearAllPoints()
 		window:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-		if type(FlatUIDB) == "table" then
-			FlatUIDB.panel = nil
-		end
+		Look.ClearPosition()
 	end
 end
 
@@ -1993,8 +2001,8 @@ local function BuildLeft(window)
 	divider:SetPoint("TOPRIGHT", left, "TOPRIGHT", 0, 0)
 	divider:SetPoint("BOTTOMRIGHT", left, "BOTTOMRIGHT", 0, 0)
 	Painted(function()
-		Solid(back, 0.045)
-		Solid(divider, 0.12)
+		Solid(back, "sidebar")
+		Solid(divider, "line")
 	end)
 
 	local box = Field(window, LEFT - 24, 40)
@@ -2029,7 +2037,7 @@ local function BuildRight(window)
 	right:SetPoint("TOPRIGHT", window, "TOPRIGHT", 0, -TITLE)
 	ui.right = right
 	ui.optionParts[#ui.optionParts + 1] = right
-	local title = Accented(Label(right, "GameFontNormalLarge", "LEFT", 420))
+	local title = Label(right, "GameFontNormalLarge", "LEFT", 420)
 	title:SetPoint("TOPLEFT", right, "TOPLEFT", PAD, -15)
 	ui.title = title
 	local line = Fill(right, "BORDER")
@@ -2037,7 +2045,7 @@ local function BuildRight(window)
 	line:SetPoint("TOPRIGHT", right, "TOPRIGHT", 0, -(HEADER - 1))
 	line:SetHeight(1)
 	Painted(function()
-		Solid(line, 0.08)
+		Solid(line, "line-faint")
 	end)
 	ui.reset = Button(right, "Reset page", 100, function()
 		local entry = ui.current
@@ -2069,6 +2077,15 @@ local function BuildBars(window)
 		window:StopMovingOrSizing()
 		SavePosition()
 	end)
+	-- Ctrl and the wheel over the title bar set Window scale, 5% a step, between 80% and 150%.
+	bar:EnableMouseWheel(true)
+	bar:SetScript("OnMouseWheel", function(_, delta)
+		local ok, held = pcall(IsControlKeyDown)
+		local scale = ns.Get("panel.scale")
+		if ok and held == true and type(delta) == "number" and not ns.IsSecret(delta) and type(scale) == "number" then
+			ns.Set("panel.scale", math.max(80, math.min(150, scale + (delta > 0 and 5 or -5))))
+		end
+	end)
 	local back = Fill(bar, "BACKGROUND")
 	back:SetAllPoints(bar)
 	local line = Fill(bar, "BORDER")
@@ -2076,10 +2093,10 @@ local function BuildBars(window)
 	line:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
 	line:SetHeight(1)
 	Painted(function()
-		Solid(back, 0.045)
-		Solid(line, 0.12)
+		Solid(back, "window")
+		Solid(line, "line")
 	end)
-	local title = Accented(Label(bar, "GameFontNormal", "LEFT"))
+	local title = Label(bar, "GameFontNormal", "LEFT")
 	title:SetPoint("LEFT", bar, "LEFT", PAD, 0)
 	title:SetText("Flat UI")
 	ui.barTitle = title
@@ -2115,8 +2132,8 @@ local function BuildBars(window)
 	line2:SetPoint("TOPRIGHT", strip, "TOPRIGHT", 0, 0)
 	line2:SetHeight(1)
 	Painted(function()
-		Solid(back2, 0.045)
-		Solid(line2, 0.12)
+		Solid(back2, "window")
+		Solid(line2, "line")
 	end)
 	local text = Label(strip, "GameFontHighlightSmall", "LEFT", WIDTH - 24, true)
 	text:SetJustifyV("MIDDLE")
@@ -2126,6 +2143,10 @@ local function BuildBars(window)
 end
 
 local function Build()
+	-- The height of a row is read here, since the account is loaded by now.
+	ROW = Look.RowHeight()
+	ns.PanelKit.ROW = ROW
+	ui.density = Look.Get("density")
 	ui.model = BuildModel()
 	local window = CreateFrame("Frame", NAME, UIParent)
 	ns.Own[window] = true
@@ -2137,17 +2158,17 @@ local function Build()
 	window:EnableMouse(true)
 	local outline = ns.Outline(window, window, true)
 	Painted(function()
-		Backing(outline, 0, 0.98)
+		Backing(outline, "window", 0.98, "line")
 	end)
-	ui.paintKey = ns.Get("general.backdrop") .. ns.Get("windows.accent")
+	ui.paintKey = Look.Key()
 	BuildBars(window)
 	BuildLeft(window)
 	BuildRight(window)
 	window:SetScript("OnShow", RefreshAll)
 	window:SetScript("OnHide", function()
 		-- Under the setting that sends windows back when they close, the options window opens at its default place.
-		if ns.Get("movers.keepSpots") == "reset" and type(FlatUIDB) == "table" then
-			FlatUIDB.panel = nil
+		if ns.Get("movers.keepSpots") == "reset" then
+			Look.ClearPosition()
 		end
 		CloseList()
 		HideConfirm()
@@ -2187,6 +2208,54 @@ local function Build()
 	ShowPage(ui.model.pages[1] or ui.model.profiles)
 end
 
+-- A change of the look while the window exists. Colours, borders and corners are painted again, a font is set again, and a Density builds the
+-- rows again, since a row is built at its height. A Density seen before has its rows already.
+local function Rebuild()
+	ROW = Look.RowHeight()
+	ns.PanelKit.ROW = ROW
+	for _, view in pairs(ui.views) do
+		view.scroller.frame:Hide()
+	end
+	-- The pages built at a density are kept and shown again when it comes back.
+	ui.sets = ui.sets or {}
+	ui.sets[ui.density or "comfortable"] = ui.views
+	ui.density = Look.Get("density")
+	ui.views, ui.view = ui.sets[ui.density] or {}, nil
+	if ui.searchView then
+		ui.searchView.scroller.frame:Hide()
+		ui.searchView = nil
+	end
+	local typed = ui.search:GetText()
+	if ui.searching and IsText(typed) and typed ~= "" then
+		Search(typed)
+	else
+		ShowPage(ui.current)
+	end
+end
+
+function Look.onChange(key)
+	if not ui.window then
+		return
+	end
+	if key == "scale" then
+		ApplyScale()
+		-- A larger window grows from its corner and may reach past the screen: it goes back to the middle.
+		if ui.window:IsShown() and not OnScreen() then
+			ui.window:ClearAllPoints()
+			ui.window:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+			Look.ClearPosition()
+		end
+	elseif key == "font" then
+		Look.ApplyFonts()
+	elseif key == "density" then
+		Look.ApplyFonts()
+		Rebuild()
+	else
+		ui.paintKey = nil
+		Repaint()
+	end
+end
+
 function ns.OpenPanel()
 	if not ui.window then
 		if InCombatLockdown() then
@@ -2215,7 +2284,7 @@ end
 
 -- The widgets and measures of the window, for a mode that has the window (Setup.lua). Each is the one the options pages use.
 ns.PanelKit = {
-	Frame = Frame, Fill = Fill, Label = Label, Dim = Dim, Accented = Accented, Clickable = Clickable, Button = Button, Field = Field,
+	Frame = Frame, Fill = Fill, Label = Label, Dim = Dim, Clickable = Clickable, Button = Button, Field = Field,
 	Scroller = Scroller, Dropdown = Dropdown, NewRow = NewRow, BuildRow = BuildRow, IsOpen = IsOpen, Header = Header, Painted = Painted,
 	Solid = Solid, Backing = Backing, Accent = Accent, Shade = Shade, Clamp = Clamp, Rect = Rect, IsText = IsText, Cursor = Cursor,
 	Say = Say, Ask = Ask, CloseList = CloseList,

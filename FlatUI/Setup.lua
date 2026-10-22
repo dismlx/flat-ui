@@ -12,7 +12,7 @@ ns.Setup = S
 
 local COMBAT_LINE = "In combat. Finish after combat."
 local NOT_FINISHED = "Flat UI setup is not finished. /flatui setup continues it."
-local BODY_Y, BODY_H, DRAW_H, BAR_H = 268, 234, 220, 44
+local BODY_Y, BODY_H, DRAW_H, BAR_H = 268, 234 + kit.HEIGHT - 620, 220, 44
 local REPORT_Y = 56
 
 local function IsText(value)
@@ -750,14 +750,14 @@ function S.ListLine(index)
 		kit.Solid(fill, line.current and 0.1 or 0.06)
 		mark:SetShown(line.current == true)
 		mark:SetColorTexture(kit.Accent())
-		box:SetColorTexture(0.5, 0.5, 0.5, line.area and 0 or 1)
-		inner:SetColorTexture(line.seen and 0.55 or 0.07, line.seen and 0.55 or 0.07, line.seen and 0.55 or 0.07, line.area and 0 or 1)
+		kit.Solid(box, "line-strong", line.area and 0 or 1)
+		kit.Solid(inner, line.seen and "text-faint" or "stage", line.area and 0 or 1)
 		if line.current then
 			text:SetTextColor(kit.Accent())
 		elseif line.area or line.skipped then
-			text:SetTextColor(0.55, 0.55, 0.55)
+			text:SetTextColor(kit.Shade("text-faint"))
 		else
-			text:SetTextColor(0.92, 0.92, 0.92)
+			text:SetTextColor(kit.Shade("text"))
 		end
 	end
 	line.Paint = Paint
@@ -989,7 +989,9 @@ function S.BuildStart()
 	view.box = box
 	view.bad = kit.Label(view.name.frame, "GameFontHighlightSmall", "LEFT", 100, true)
 	view.bad:SetPoint("LEFT", view.name.frame, "LEFT", kit.CONTROL + kit.FIELD + 10, 0)
-	view.bad:SetTextColor(0.95, 0.45, 0.4)
+	kit.Painted(function()
+		view.bad:SetTextColor(kit.Shade("danger"))
+	end)
 
 	view.from = kit.NewRow(child, 8, "Start from")
 	view.fromMenu = kit.Dropdown(view.from, kit.FIELD, {
@@ -1746,8 +1748,8 @@ function S.Build(window)
 	divider:SetPoint("TOPRIGHT", left, "TOPRIGHT", 0, 0)
 	divider:SetPoint("BOTTOMRIGHT", left, "BOTTOMRIGHT", 0, 0)
 	kit.Painted(function()
-		kit.Solid(back, 0.045)
-		kit.Solid(divider, 0.12)
+		kit.Solid(back, "sidebar")
+		kit.Solid(divider, "line")
 	end)
 	S.listScroller = kit.Scroller(left, kit.LEFT - 1, kit.HEIGHT - kit.TITLE - kit.STRIP - 8)
 	S.listScroller.frame:SetPoint("TOPLEFT", left, "TOPLEFT", 0, -4)
@@ -1756,7 +1758,7 @@ function S.Build(window)
 	right:SetSize(kit.RIGHT_W, kit.HEIGHT - kit.TITLE - kit.STRIP)
 	right:SetPoint("TOPRIGHT", root, "TOPRIGHT", 0, 0)
 	S.right = right
-	S.title = kit.Accented(kit.Label(right, "GameFontNormalLarge", "LEFT", 620))
+	S.title = kit.Label(right, "GameFontNormalLarge", "LEFT", 620)
 	S.title:SetPoint("TOPLEFT", right, "TOPLEFT", kit.PAD, -4)
 	S.sub = kit.Dim(kit.Label(right, "GameFontHighlightSmall", "LEFT", 640, true))
 	S.sub:SetPoint("TOPLEFT", right, "TOPLEFT", kit.PAD, -24)
@@ -2144,10 +2146,10 @@ function S.BuildOffer()
 	frame:EnableMouse(true)
 	local outline = ns.Outline(frame, frame, true)
 	kit.Painted(function()
-		kit.Backing(outline, 0, 0.98)
+		kit.Backing(outline, "window", 0.98)
 	end)
 	S.offer = frame
-	local title = kit.Accented(kit.Label(frame, "GameFontNormal", "LEFT", 400))
+	local title = kit.Label(frame, "GameFontNormal", "LEFT", 400)
 	title:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -10)
 	title:SetText("Flat UI setup")
 	S.offerLine = kit.Label(frame, "GameFontHighlight", "LEFT", 620)
@@ -2162,7 +2164,7 @@ function S.BuildOffer()
 		tile:SetPoint("TOPLEFT", frame, "TOPLEFT", 12 + ((index - 1) % 3) * 210, -(58 + math.floor((index - 1) / 3) * 128))
 		local edge = ns.Outline(tile, tile, true)
 		kit.Painted(function()
-			kit.Backing(edge, 0.05)
+			kit.Backing(edge, "raised")
 		end)
 		entry.frame, entry.edge = tile, edge
 		entry.card = ns.SetupDraw.Card(tile, ns.SetupDraw.CardView(function()
@@ -2185,7 +2187,7 @@ function S.BuildOffer()
 		local back = kit.Fill(tag, "BACKGROUND")
 		back:SetAllPoints(tag)
 		back:SetColorTexture(0, 0, 0, 0.75)
-		entry.tagText = kit.Accented(kit.Label(tag, "GameFontHighlightSmall", "CENTER", 88))
+		entry.tagText = kit.Label(tag, "GameFontHighlightSmall", "CENTER", 88)
 		entry.tagText:SetPoint("CENTER", tag, "CENTER", 0, 0)
 		tag:Hide()
 		entry.tag = tag
@@ -2244,7 +2246,7 @@ function S.BuildOffer()
 	S.shareLabel:SetPoint("LEFT", box, "RIGHT", 8, 0)
 	S.shareLabel:SetText("Same profile on new characters")
 	kit.Painted(function()
-		kit.Backing(boxOutline, 0.05)
+		kit.Backing(boxOutline, "raised")
 		S.mark:SetColorTexture(kit.Accent())
 	end)
 	kit.Clickable(box, function()

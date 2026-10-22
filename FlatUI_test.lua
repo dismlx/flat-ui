@@ -424,7 +424,7 @@ local function newRegion(W, owner, opts)
 			end
 		end
 		note("SetColorTexture")
-		r.color, r.atlas = { ... }, nil
+		r.color, r.atlas, r.file = { ... }, nil, nil
 		if W.opts.clearedBy == "SetColorTexture" then
 			r.gradient = nil
 		end
@@ -668,6 +668,8 @@ local function newRegion(W, owner, opts)
 				return false
 			elseif W.fontReturn == "true" then
 				return true
+			elseif W.fontProbe then
+				return W.fontFiles[file:lower()] == true
 			end
 		end
 		function r.GetFont()
@@ -10875,7 +10877,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.93" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.94" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -59822,6 +59824,10 @@ function PT.width(text, size)
 end
 
 function PT.size(fs)
+	-- A font object of the window's own (PanelLook.lua) has the height it was given with SetFont.
+	if type(fs.fontObject) == "table" then
+		return fs.fontObject.font and fs.fontObject.font[2] or 12
+	end
 	return PT.FONT[fs.fontObject or fs.template]
 end
 
@@ -59854,7 +59860,7 @@ function PT.fontMethods(W, fs)
 		end
 	end
 	function fs.SetFontObject(_, o)
-		if not PT.FONT[o] then
+		if not PT.FONT[o] and not (type(o) == "table" and o.made and o.font) then
 			bad(W, "SetFontObject: unknown font object " .. tostring(o))
 		end
 		fs.fontObject = o
@@ -59973,7 +59979,7 @@ function PT.widgets(W, raw, kind)
 		function raw.SetMaxLetters(_, n) argn(W, "SetMaxLetters", n) raw.maxLetters = n end
 		function raw.SetTextInsets(_, ...) argn(W, "SetTextInsets", ...) end
 		function raw.SetFontObject(_, o)
-			if not PT.FONT[o] then
+			if not PT.FONT[o] and not (type(o) == "table" and o.made and o.font) then
 				bad(W, "SetFontObject: unknown font object " .. tostring(o))
 			end
 			raw.fontObject = o
@@ -59986,6 +59992,26 @@ end
 function PT.extend(W)
 	local env = W.env
 	env.UISpecialFrames = {}
+	-- CreateFont as the client has it: SetFont raises for a file it cannot open (SimpleFontAPIDocumentation.lua:199-211), and the object answers GetFont.
+	W.fontObjects, W.fontSets = {}, {}
+	W.fontFiles = { ["fonts\\frizqt__.ttf"] = true, ["fonts\\arialn.ttf"] = true }
+	W.fontProbe = true
+	env.CreateFont = function(name)
+		local object = { name = name, made = true }
+		function object.GetFont()
+			if object.font then return object.font[1], object.font[2], object.font[3] end
+		end
+		function object.SetFont(_, file, height, flags)
+			W.fontSets[#W.fontSets + 1] = { name = name, file = file, height = height, flags = flags }
+			if not W.fontFiles[file:lower()] then error("Invalid font asset (" .. file .. "): file not found", 0) end
+			object.font = { file, height, flags }
+		end
+		W.fontObjects[name] = object
+		return object
+	end
+	-- The two files of Flat UI Sans are in the folder of the addon.
+	W.fontFiles["interface\\addons\\flatui\\media\\fonts\\ibmplexsans-regular.ttf"] = true
+	W.fontFiles["interface\\addons\\flatui\\media\\fonts\\ibmplexsans-semibold.ttf"] = true
 	W.reloads = 0
 	-- With W.reloadBlocked the game refuses the call from an addon: the event fires as the call is made and nothing reloads.
 	env.ReloadUI = function()
@@ -60145,6 +60171,9 @@ end
 
 -- A world that has logged in, with the widgets added. opts as for the movers worlds.
 function PT.world(opts)
+	-- The window cuts its corners with mask textures, which a world makes for the addon with opts.hud.
+	opts = opts or {}
+	if opts.hud == nil then opts.hud = true end
 	local W = suiteKit.mw(opts)
 	PT.extend(W)
 	return W
@@ -60553,7 +60582,7 @@ end
 function PT.title(W)
 	for _, raw in ipairs(PT.frames(W)) do
 		for _, fs in ipairs(raw.fonts) do
-			if fs.shown and PT.size(fs) == 16 and PT.shown(W, raw) then
+			if fs.shown and PT.size(fs) == 20 and PT.shown(W, raw) then
 				return fs.text
 			end
 		end
@@ -60661,7 +60690,7 @@ function PT.runBuild()
 		check("window: one frame of that name, built once; opening again toggles it", W.named.FlatUIOptionsFrame == 1 and PT.window(W) == frame and #W.addonFrames == built
 			and second == false and not frame.shown == false and third == true and ns.PanelShown(), tostring(second) .. " " .. tostring(third) .. " " .. #W.addonFrames .. " " .. built)
 		local l, b, w, h = W.rectOf(frame)
-		check("window: 900 by 620, in the middle of the screen the first time", near(l, 510) and near(b, 230) and near(w, 900) and near(h, 620), ("%s %s %s %s"):format(g(l), g(b), g(w), g(h)))
+		check("window: 1040 by 680, in the middle of the screen the first time", near(l, 440) and near(b, 200) and near(w, 1040) and near(h, 680), ("%s %s %s %s"):format(g(l), g(b), g(w), g(h)))
 		local raw = W.rawOf[frame]
 		local protected = select(1, frame:IsProtected())
 		check("window: its own frame, not protected, in the HIGH strata, movable and kept on the screen", protected == false and raw.strata == "HIGH" and raw.movable and raw.clamped
@@ -60768,7 +60797,7 @@ function PT.runBuild()
 			PT.wheel(W, PT.clips(W, PT.nav(W)[1].raw)[1], 10)
 		end
 		check("left side: the first page is open, with its title and Reset page", PT.title(W) == PAGES[1].label and PT.button(W, "Reset page") ~= nil)
-		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Setup" }),
+		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Options window", "Setup" }),
 			joined(PT.headers(W)))
 		PT.go(W, "Text")
 		check("left side: a click on a page opens it, with its sections under it", PT.title(W) == "Text" and PT.page(W, "Level") ~= nil and PT.page(W, "Borders and backgrounds") == nil)
@@ -61141,10 +61170,11 @@ function PT.runControls()
 		W.picker.cancel()
 		check("swatch: cancel puts the old colour back", value(W, "general.border") == "ff000000" and r.fonts[2].text == "#000000")
 		local backdrop = need(W, "Background colour")
+		ns.Set("panel.tone", "follow")
 		PT.press(W, PT.control(backdrop))
 		W.picker.choose(0.2, 0.2, 0.2)
 		W.advance(0.3)
-		check("swatch: a background colour picked repaints the window", value(W, "general.backdrop") == "ff333333" and near(PT.backdrop(W, PT.window(W))[1], 0.2, 0.01),
+		check("swatch: a background colour picked repaints the window", value(W, "general.backdrop") == "ff333333" and near(PT.backdrop(W, PT.window(W))[1], 0.21, 0.01),
 			tostring(value(W, "general.backdrop")))
 		W.picker.cancel()
 		ns.Set("general.border", "ff102030")
@@ -61818,6 +61848,261 @@ function PT.runWindow()
 		check("slash: /flatui options in combat says the options open after combat and opens nothing", B.slash("options") == "Options open after combat." and B.opened == nil and not B.ns.PanelShown())
 	end
 
+	-- 13b. Window look -----------------------------------------------------------------------------------------------
+	do
+		local L = { W = PT.open() }
+		L.ns = L.W.ns
+		L.look = L.ns.PanelLook
+		L.win = PT.window(L.W)
+		L.hex = function(token)
+			local r, g, b = L.look.Colour(token)
+			return ("%02x%02x%02x"):format(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+		end
+		L.rgb = function(c) return ("%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5)) end
+		L.has = function(t)
+			for k, v in pairs(t) do
+				if tostring(k):find("^panel%.") or (type(v) == "table" and L.has(v)) then return true end
+			end
+			return false
+		end
+		L.titles = function()
+			local list = {}
+			for _, raw in ipairs(PT.byText(L.W, "Flat UI")) do
+				for _, fs in ipairs(raw.fonts) do
+					if fs.text == "Flat UI" then list[#list + 1] = L.rgb(fs.textColor) end
+				end
+			end
+			return list
+		end
+		L.count = function(list, hex)
+			local n = 0
+			for _, got in ipairs(list) do
+				if got == hex then n = n + 1 end
+			end
+			return n
+		end
+		-- The settings and where they are kept.
+		L.defaults = L.ns.Get("panel.accent") == "indigo" and L.ns.Get("panel.tone") == "graphite" and L.ns.Get("panel.borders") == "none" and L.ns.Get("panel.corners") == "square"
+			and L.ns.Get("panel.density") == "comfortable" and L.ns.Get("panel.font") == "sans" and L.ns.Get("panel.scale") == 100 and L.ns.Get("panel.accentColour") == "ff9a9cf0"
+		check("window look: the settings start at Indigo, Graphite, no borders, Square, Comfortable, Flat UI Sans and 100%", L.defaults)
+		L.labels, L.inside = {}, false
+		for _, item in ipairs(L.ns.PAGES[1]) do
+			if item.section then L.inside = item.section == "Options window" end
+			if L.inside and item.key then L.labels[#L.labels + 1] = item.label end
+		end
+		check("window look: the Flat UI page has them in a section Options window", table.concat(L.labels, ", ") == "Accent colour, Custom accent colour, Window tone, Borders, Corners, Density, Window font, Window scale", table.concat(L.labels, ", "))
+		L.ns.Set("panel.tone", "ink")
+		L.ns.Set("panel.scale", 120)
+		check("window look: they are kept in FlatUIDB.panel and in no profile", L.W.env.FlatUIDB.panel.tone == "ink" and L.W.env.FlatUIDB.panel.scale == 120 and not L.has(L.W.env.FlatUIDB.profiles))
+		L.ns.Set("panel.tone", "graphite")
+		-- The tokens.
+		L.graphite = L.hex("window") .. " " .. L.hex("sidebar") .. " " .. L.hex("card") .. " " .. L.hex("raised") .. " " .. L.hex("hover") .. " " .. L.hex("stage") .. " " .. L.hex("line-faint")
+			.. " " .. L.hex("line") .. " " .. L.hex("line-strong") .. " " .. L.hex("text") .. " " .. L.hex("text-dim") .. " " .. L.hex("text-faint")
+		check("window look: Graphite has the lighter tones", L.graphite == "171915 141612 1f221c 272b24 2f332b 10120f 2b2f28 353a31 494f44 eceee6 a9ae9f 7a7f72", L.graphite)
+		L.ns.Set("panel.tone", "ink")
+		L.ink = L.hex("window") .. " " .. L.hex("sidebar") .. " " .. L.hex("card") .. " " .. L.hex("raised") .. " " .. L.hex("hover") .. " " .. L.hex("stage") .. " " .. L.hex("line-faint")
+			.. " " .. L.hex("line") .. " " .. L.hex("line-strong") .. " " .. L.hex("text")
+		check("window look: Ink has its own tones and text", L.ink == "13161b 101216 1b1f26 222730 2a303b 0d0f13 262c37 303745 424b5b e9ecf2", L.ink)
+		L.ns.Set("panel.tone", "follow")
+		L.ns.Set("general.backdrop", "ff404040")
+		check("window look: Follow background colour is the backdrop with a grey step on each surface", L.hex("window") == "434343" and L.hex("card") == "4f4f4f" and L.hex("sidebar") == "404040", L.hex("window") .. " " .. L.hex("card"))
+		L.ns.Set("general.backdrop", "ff0f0f0f")
+		L.ns.Set("panel.tone", "graphite")
+		-- The accent.
+		L.accents = {}
+		for _, id in ipairs({ "indigo", "sage", "amber", "rose", "ice" }) do
+			L.ns.Set("panel.accent", id)
+			L.accents[#L.accents + 1] = L.hex("accent")
+		end
+		check("window look: the accent presets are Indigo, Sage, Amber, Rose and Ice", table.concat(L.accents, " ") == "9a9cf0 8cc79a e6b85c e88fa6 7cc3e6", table.concat(L.accents, " "))
+		L.ns.Set("panel.accent", "indigo")
+		check("window look: Indigo has its hover, pressed and text-on-accent values", L.hex("accent-hover") == "b0b2f5" and L.hex("accent-pressed") == "8183df" and L.hex("on-accent") == "15172b")
+		L.ns.Set("panel.accent", "custom")
+		L.ns.Set("panel.accentColour", "ff112233")
+		check("window look: Custom is the colour of Custom accent colour, with light text on a dark colour", L.hex("accent") == "112233" and L.hex("on-accent") == "eceee6", L.hex("accent"))
+		L.def = L.ns.Def("panel.accentColour")
+		L.metCustom = L.ns.NeedMet(L.def, L.def.needsPath)
+		L.ns.Set("panel.accent", "sage")
+		L.metSage = L.ns.NeedMet(L.def, L.def.needsPath)
+		check("window look: Custom accent colour applies only while Accent colour is Custom", L.metCustom == true and L.metSage == false, tostring(L.metCustom) .. " " .. tostring(L.metSage))
+		L.ns.Set("panel.accent", "class")
+		L.classless = L.hex("accent")
+		L.W.env.RAID_CLASS_COLORS = { SHAMAN = { r = 0, g = 0.44, b = 0.87 } }
+		L.W.env.UnitClass = function() return "Shaman", "SHAMAN", 7 end
+		L.withClass = L.hex("accent")
+		L.W.env.UnitClass = function() return nil end
+		L.kept = L.hex("accent")
+		check("window look: Class colour is the class colour, Indigo before the client gives it, and kept after", L.classless == "9a9cf0" and L.withClass == "0070de" and L.kept == "0070de", L.classless .. " " .. L.withClass .. " " .. L.kept)
+		L.ns.Set("panel.accent", "indigo")
+		-- The window uses the tokens.
+		L.sizeW, L.sizeH = select(3, L.W.rectOf(L.win))
+		L.ns.OpenPanel()
+		L.ns.OpenPanel()
+		L.ns.Set("panel.accent", "sage")
+		L.W.update(1)
+		L.sage = L.titles()
+		L.ns.Set("panel.accent", "indigo")
+		L.W.update(1)
+		L.indigo = L.titles()
+		check("window look: a change of Accent colour repaints the open window", L.count(L.sage, "8cc79a") == 1 and L.count(L.sage, "9a9cf0") == 0 and L.count(L.indigo, "9a9cf0") == 1 and L.count(L.indigo, "8cc79a") == 0, table.concat(L.sage, " ") .. " | " .. table.concat(L.indigo, " "))
+		L.edges = L.W.edgesOn(L.win)
+		L.back = L.W.backdropOn(L.win)
+		check("window look: with Borders None the window border is not drawn and the window has its fill", #L.edges == 4 and not L.edges[1].shown and not L.edges[4].shown and L.back ~= nil and L.rgb(L.back.color) == "171915", #L.edges .. " " .. tostring(L.back and L.back.color and L.rgb(L.back.color)))
+		L.ns.Set("panel.borders", "hairline")
+		L.hair = L.edges[1].shown and L.edges[2].shown and L.edges[3].shown and L.edges[4].shown and L.rgb(L.edges[1].color) == "353a31"
+		check("window look: Hairline draws it in the line colour, also with Borderless on", L.hair and (L.ns.Set("general.borderless", true) or true) and L.edges[1].shown)
+		L.ns.Set("general.borderless", false)
+		L.ns.Set("panel.borders", "none")
+		check("window look: and None takes it away again", not L.edges[1].shown and not L.edges[2].shown)
+		L.field = nil
+		for _, f in ipairs(PT.frames(L.W)) do
+			if f.objectType == "EditBox" and f.scripts.OnEditFocusGained and PT.shown(L.W, f) then L.field = f end
+		end
+		L.fieldEdges = L.field and L.W.edgesOn(L.field)
+		L.before = L.fieldEdges and L.fieldEdges[1].shown
+		L.field.scripts.OnEditFocusGained(L.field)
+		L.during = L.fieldEdges[1].shown and L.rgb(L.fieldEdges[1].color)
+		L.field.scripts.OnEditFocusLost(L.field)
+		check("window look: a field with the cursor has an edge in the accent colour even with Borders None", L.field ~= nil and L.before == false and L.during == "9a9cf0" and not L.fieldEdges[1].shown, tostring(L.before) .. " " .. tostring(L.during))
+		L.maskFile = function()
+			local mask = L.back.maskList[1]
+			return mask and L.W.rawOf[mask].file
+		end
+		L.ns.Set("panel.corners", "soft")
+		L.soft = L.maskFile()
+		L.ns.Set("panel.borders", "hairline")
+		L.hairSoft = L.edges[1].shown or L.edges[2].shown or L.edges[3].shown or L.edges[4].shown
+		L.ns.Set("panel.borders", "none")
+		L.ns.Set("panel.corners", "round")
+		L.round = L.maskFile()
+		-- A change on the general page paints every outline again; the corners and the colour stay.
+		L.ns.Set("general.backdrop", "ff202020")
+		L.again = #L.back.maskList == 1 and L.maskFile() == L.round and L.rgb(L.back.color) == "171915"
+		L.ns.Set("general.backdrop", "ff0f0f0f")
+		L.ns.Set("panel.corners", "square")
+		check("window look: Soft and Round cut the window fill with a mask in the corner shape", type(L.soft) == "string" and L.soft:find("Round2.tga", 1, true) and type(L.round) == "string" and L.round:find("Round4.tga", 1, true)
+			and L.rgb(L.back.color) == "171915", tostring(L.soft) .. " " .. tostring(L.round))
+		check("window look: Square after Round takes the mask off and leaves the fill in the token, with no tint", #L.back.maskList == 0 and L.rgb(L.back.color) == "171915" and L.back.file == nil
+			and L.back.vertex[1] == 1 and L.back.vertex[2] == 1 and L.back.vertex[3] == 1 and L.back.vertex[4] == 1, L.rgb(L.back.color) .. " " .. table.concat(L.back.vertex, ","))
+		check("window look: Round survives a change on the general page", L.again)
+		check("window look: Hairline draws no straight edge while the corners are Soft or Round", L.hairSoft == false)
+		-- Text follows the tone.
+		L.rowText = function() return L.rgb(PT.row(L.W, "Window scale").fonts[1].textColor) end
+		L.graphiteText = L.rowText()
+		L.ns.Set("panel.tone", "ink")
+		L.inkText = L.rowText()
+		L.ns.Set("panel.tone", "graphite")
+		check("window look: a change of Window tone sets the text colour again", L.graphiteText == "eceee6" and L.inkText == "e9ecf2" and L.rowText() == "eceee6", L.graphiteText .. " " .. L.inkText)
+		L.mark = nil
+		for _, raw in ipairs(PT.byText(L.W, "Options window")) do
+			for _, region in ipairs(raw.regions) do
+				if region.width == 3 and region.color then L.mark = L.rgb(region.color) end
+			end
+		end
+		check("window look: the mark of a section header is a line colour and not the accent", L.mark == "494f44", tostring(L.mark))
+		check("window look: the title bar and the page title are in the text colour, and only the chosen page in the list has the accent", L.count(L.titles(), "eceee6") == 2 and L.count(L.titles(), "9a9cf0") == 1, table.concat(L.titles(), " "))
+		-- Density, font and scale.
+		L.height = function() return PT.row(L.W, "Window scale").height end
+		L.rows = { L.height() }
+		L.ns.Set("panel.density", "roomy")
+		L.rows[2] = L.height()
+		L.ns.Set("panel.density", "compact")
+		L.rows[3] = L.height()
+		L.ns.Set("panel.density", "comfortable")
+		check("window look: a row is 36 high, 44 at Roomy and 28 at Compact", table.concat(L.rows, " ") == "36 44 28", table.concat(L.rows, " "))
+		L.sets = {}
+		for _, set in ipairs(L.W.fontSets) do
+			if set.name:find("^FlatUIPanel") then L.sets[#L.sets + 1] = set end
+		end
+		L.first = {}
+		for _, set in ipairs(L.sets) do
+			L.first[set.name] = L.first[set.name] or (set.file:match("[^\\]+$") .. " " .. set.height)
+		end
+		check("window look: Flat UI Sans is IBM Plex Sans, semibold for the title and card headers, at 20, 13 and 11 units", L.first.FlatUIPanelTitle == "IBMPlexSans-SemiBold.ttf 20" and L.first.FlatUIPanelHead == "IBMPlexSans-SemiBold.ttf 13"
+			and L.first.FlatUIPanelBody == "IBMPlexSans-Regular.ttf 13" and L.first.FlatUIPanelSmall == "IBMPlexSans-Regular.ttf 11", table.concat({ L.first.FlatUIPanelTitle or "-", L.first.FlatUIPanelBody or "-" }, " | "))
+		L.ns.Set("panel.font", "arial")
+		L.last = L.W.fontSets[#L.W.fontSets]
+		L.ns.Set("panel.font", "game")
+		L.game = L.W.fontSets[#L.W.fontSets]
+		L.ns.Set("panel.font", "sans")
+		check("window look: Arial Narrow and Game font set the same objects to those faces", L.last.file == "Fonts\\ARIALN.TTF" and L.game.file == "Fonts\\FRIZQT__.TTF" and L.W.fontObjects.FlatUIPanelBody.font[1]:find("IBMPlexSans", 1, true) ~= nil, L.last.file .. " " .. L.game.file)
+		check("window look: /flatui status names the window font in one line", select(2, L.W.status():gsub("Window font: Flat UI Sans", "")) == 1)
+		L.ns.Set("panel.scale", 150)
+		L.big = select(3, L.W.rectOf(L.win))
+		L.ns.Set("panel.scale", 80)
+		L.small = select(3, L.W.rectOf(L.win))
+		L.ns.Set("panel.scale", 100)
+		check("window look: Window scale sets the size of the window", L.sizeW and math.abs(L.big - 1560) < 1 and math.abs(L.small - 832) < 1, tostring(L.big) .. " " .. tostring(L.small))
+		-- A font that does not load.
+		L.F = PT.world()
+		L.F.fontFiles["interface\\addons\\flatui\\media\\fonts\\ibmplexsans-regular.ttf"] = nil
+		L.F.fontFiles["interface\\addons\\flatui\\media\\fonts\\ibmplexsans-semibold.ttf"] = nil
+		L.F.ns.OpenPanel()
+		L.fell = {}
+		for _, set in ipairs(L.F.fontSets) do
+			if set.name == "FlatUIPanelBody" then L.fell[#L.fell + 1] = set.file end
+		end
+		check("window look: a font the game cannot load leaves the game font, and /flatui status says so in one line", L.F.fontObjects.FlatUIPanelBody.font[1] == "Fonts\\FRIZQT__.TTF" and L.F.ns.Get("panel.font") == "sans"
+			and select(2, L.F.status():gsub("Window font: game font %(Flat UI Sans did not load%)", "")) == 1 and #L.F.errors == 0 and #L.F.violations == 0, L.F.status():sub(-200))
+		-- Density seen before has its rows already.
+		L.nframes = function() return #PT.frames(L.W) end
+		L.ns.Set("panel.density", "roomy")
+		L.ns.Set("panel.density", "comfortable")
+		L.first2 = L.nframes()
+		L.ns.Set("panel.density", "roomy")
+		L.ns.Set("panel.density", "comfortable")
+		check("window look: a Density seen before builds no new rows", L.nframes() == L.first2, L.nframes() .. " " .. L.first2)
+		-- Ctrl and the wheel over the title bar.
+		L.bar = nil
+		for _, f in ipairs(PT.frames(L.W)) do
+			if f.drag and f.scripts.OnDragStart then L.bar = f end
+		end
+		L.ns.Set("panel.scale", 100)
+		L.bar.scripts.OnMouseWheel(L.bar, 1)
+		L.plain = L.ns.Get("panel.scale")
+		L.W.keys.ctrl = true
+		L.bar.scripts.OnMouseWheel(L.bar, 1)
+		L.up = L.ns.Get("panel.scale")
+		L.bar.scripts.OnMouseWheel(L.bar, -1)
+		L.bar.scripts.OnMouseWheel(L.bar, -1)
+		L.down = L.ns.Get("panel.scale")
+		L.ns.Set("panel.scale", 150)
+		L.bar.scripts.OnMouseWheel(L.bar, 1)
+		L.top = L.ns.Get("panel.scale")
+		L.ns.Set("panel.scale", 80)
+		L.bar.scripts.OnMouseWheel(L.bar, -1)
+		L.low = L.ns.Get("panel.scale")
+		L.W.keys.ctrl = false
+		L.ns.Set("panel.scale", 100)
+		check("window look: Ctrl and the wheel over the title bar change Window scale by 5, between 80 and 150, and the wheel alone does not", L.plain == 100 and L.up == 105 and L.down == 95 and L.top == 150 and L.low == 80,
+			table.concat({ L.plain, L.up, L.down, L.top, L.low }, " "))
+		-- The language of the client.
+		L.K = PT.world()
+		L.K.env.GetLocale = function() return "koKR" end
+		L.K.ns.OpenPanel()
+		L.R = PT.world()
+		L.R.env.GetLocale = function() return "ruRU" end
+		L.R.ns.OpenPanel()
+		check("window look: a client outside Latin and Cyrillic gets the game font and one status line", L.K.fontObjects.FlatUIPanelBody.font[1] == "Fonts\\FRIZQT__.TTF"
+			and select(2, L.K.status():gsub("Window font: game font %(Flat UI Sans does not cover this language%)", "")) == 1 and #L.K.errors == 0, L.K.status():sub(-200))
+		check("window look: ruRU keeps Flat UI Sans", L.R.fontObjects.FlatUIPanelBody.font[1]:find("IBMPlexSans", 1, true) ~= nil and L.R.status():find("Window font: Flat UI Sans", 1, true) ~= nil)
+		-- The load is asked of a hidden font string, whose SetFont says whether it set the font.
+		L.G = PT.world()
+		L.G.fontReturn = "false"
+		L.G.ns.OpenPanel()
+		check("window look: a font string that says no leaves the game font though the file is there", L.G.fontObjects.FlatUIPanelBody.font[1] == "Fonts\\FRIZQT__.TTF"
+			and select(2, L.G.status():gsub("Flat UI Sans did not load", "")) == 1, L.G.status():sub(-200))
+		-- The place of the window and the look.
+		L.X = PT.open({ saved = { options = {}, panel = { point = "TOPLEFT", x = 5000, y = 300, tone = "ink", accent = "rose" } } })
+		check("window look: a forgotten place keeps the look", L.X.env.FlatUIDB.panel ~= nil and L.X.env.FlatUIDB.panel.point == nil and L.X.env.FlatUIDB.panel.tone == "ink" and L.X.ns.Get("panel.accent") == "rose")
+		L.ns.Set("panel.tone", "ink")
+		L.bar.scripts.OnDragStart(L.bar)
+		L.W.rawOf[L.win].points = { { "BOTTOMLEFT", L.W.env.UIParent, "BOTTOMLEFT", 100, 200 } }
+		L.bar.scripts.OnDragStop(L.bar)
+		check("window look: a move of the window keeps the look", L.W.env.FlatUIDB.panel.point == "BOTTOMLEFT" and L.W.env.FlatUIDB.panel.tone == "ink" and L.W.env.FlatUIDB.panel.scale == 100)
+		check("window look: no error and no misuse of the game's calls", #L.W.errors == 0 and #L.W.violations == 0, table.concat(L.W.violations, " | "):sub(1, 300))
+	end
+
 	-- 14. Position ---------------------------------------------------------------------------------------------------
 	do
 		local W = PT.open()
@@ -61843,16 +62128,16 @@ function PT.runWindow()
 		check("position: and the window opens there again", near(l, 100) and near(b, 200), ("%s %s"):format(g(l), g(b)))
 		local V = PT.open({ saved = { options = {}, panel = { point = "TOPLEFT", x = 50, y = -60 } } })
 		l, b = V.rectOf(PT.window(V))
-		check("position: a spot saved in an earlier session is used", near(l, 50) and near(b, 1080 - 60 - 620), ("%s %s"):format(g(l), g(b)))
+		check("position: a spot saved in an earlier session is used", near(l, 50) and near(b, 1080 - 60 - 680), ("%s %s"):format(g(l), g(b)))
 		local X = PT.open({ saved = { options = {}, panel = { point = "TOPLEFT", x = 5000, y = 300 } } })
 		l, b = X.rectOf(PT.window(X))
-		check("position: a spot off the screen is corrected, and forgotten", near(l, 510) and near(b, 230) and X.env.FlatUIDB.panel == nil, ("%s %s"):format(g(l), g(b)))
+		check("position: a spot off the screen is corrected, and forgotten", near(l, 440) and near(b, 200) and X.env.FlatUIDB.panel == nil, ("%s %s"):format(g(l), g(b)))
 		local Y = PT.open({ saved = { options = {}, panel = { point = "BOTTOMRIGHT", x = -2000, y = -2000 } } })
 		l, b = Y.rectOf(PT.window(Y))
-		check("position: also one below and to the left of it", near(l, 510) and near(b, 230), ("%s %s"):format(g(l), g(b)))
+		check("position: also one below and to the left of it", near(l, 440) and near(b, 200), ("%s %s"):format(g(l), g(b)))
 		local Z = PT.open({ saved = { options = {}, panel = { point = "nonsense", x = "x" } } })
 		l, b = Z.rectOf(PT.window(Z))
-		check("position: a spot that is no spot is ignored", near(l, 510) and near(b, 230))
+		check("position: a spot that is no spot is ignored", near(l, 440) and near(b, 200))
 		-- winreset: under the default the options window opens at its default place after a move and a close.
 		local T = { frames = {} }
 		function T.move(M, x, y)
@@ -61871,7 +62156,7 @@ function PT.runWindow()
 		R.ns.OpenPanel()
 		l, b = R.rectOf(PT.window(R))
 		check("winreset: the setting starts as Back to default when the window closes", R.ns.Get("movers.keepSpots") == "reset")
-		check("winreset: the options window moved and closed opens at the middle again, and the spot is dropped", moved and near(l, 510) and near(b, 230) and R.env.FlatUIDB.panel == nil, ("%s %s"):format(g(l), g(b)))
+		check("winreset: the options window moved and closed opens at the middle again, and the spot is dropped", moved and near(l, 440) and near(b, 200) and R.env.FlatUIDB.panel == nil, ("%s %s"):format(g(l), g(b)))
 		local K = PT.open({ saved = { options = { ["movers.keepSpots"] = "kept" } } })
 		T.move(K, 100, 200)
 		K.ns.OpenPanel()
@@ -63556,7 +63841,7 @@ function PT.runSetup()
 		local paths = {}
 		for _, page in ipairs(ns.PAGES) do
 			for _, item in ipairs(page) do
-				if item.path and (item.page or page.owner or page.key) ~= "setup" then
+				if item.path and (item.page or page.owner or page.key) ~= "setup" and (item.page or page.owner or page.key) ~= "panel" then
 					paths[item.path] = true
 				end
 			end
@@ -63917,7 +64202,7 @@ function PT.runSetup()
 		for _, raw in ipairs(PT.frames(W)) do
 			if raw.mouse and raw.wheel and raw.scripts.OnMouseDown and raw.level >= W.rawOf[PT.window(W)].level and PT.shown(W, raw) then
 				local l, b, w, h = W.rectOf(raw)
-				if w == 900 and h == 620 then shade = raw end
+				if w == 1040 and h == 680 then shade = raw end
 			end
 		end
 		check("setup: a click outside the question returns to setup with nothing decided", shade ~= nil and (function()
@@ -64701,7 +64986,7 @@ function PT.runSetup()
 			NP.click(W, 2)
 			check("setup profiles: Minimal is selected and has no border", S.SelectedPreset() == "minimal" and S.Value("general.borderless") == true, tostring(S.Value("general.borderless")))
 			local after = look(5)
-			check("setup profiles: the edge of the card that was selected stays shown, grey and the same as the others on a borderless look", after == before and not after:find("false", 1, true) and after:find("0.40,0.40,0.40", 1, true) ~= nil and #NP.drawing(W).tiles[5].edge.edges == 4 and look(1) == before, before .. " / " .. after)
+			check("setup profiles: the edge of the card that was selected is not drawn, as for the others, with Borders None in the options window", after == before and not after:find("true", 1, true) and #NP.drawing(W).tiles[5].edge.edges == 4 and look(1) == before, before .. " / " .. after)
 			NP.click(W, 6)
 			check("setup profiles: and the edge of Minimal when it is not selected, on a look with a border", look(2) == before and look(5) == before, look(2))
 			clean(W, "setup profiles card edges")
