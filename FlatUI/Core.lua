@@ -2317,10 +2317,24 @@ function ns.UseProfile(name)
 	return true, ("Using %s."):format(found)
 end
 
+-- Copies `spots`, a table of frame name to spot, into the positions of a new profile. A spot that is not valid is left out.
+local function PutSpots(made, spots)
+	for frameName, spot in pairs(type(spots) == "table" and spots or {}) do
+		local copy = {}
+		for field, value in pairs(type(spot) == "table" and spot or {}) do
+			copy[field] = value
+		end
+		if type(frameName) == "string" and ns.CleanSpot(copy) then
+			made.movers[frameName] = copy
+		end
+	end
+end
+
 -- A profile made from the settings and positions of another, or from the defaults when copyFrom is nil. It is
 -- put in use. `picks`, a table of saved path to value, is written into the new profile before it is put in use, each value as Normalise
--- gives it; a path that is no setting, or that the game or a function holds (never a profile), is left out.
-function ns.NewProfile(name, copyFrom, picks)
+-- gives it; a path that is no setting, or that the game or a function holds (never a profile), is left out. `spots`, a table of frame name to
+-- spot, is written over the positions of the new profile.
+function ns.NewProfile(name, copyFrom, picks, spots)
 	local refusal = Refusal()
 	if refusal then
 		return false, refusal
@@ -2351,6 +2365,7 @@ function ns.NewProfile(name, copyFrom, picks)
 			end
 		end
 	end
+	PutSpots(made, spots)
 	db.profiles[clean] = made
 	Enter(clean)
 	return true, ("Made %s."):format(clean)
@@ -2364,7 +2379,8 @@ end
 -- Puts a profile in use for this character at login, before the modules start, so that they start once with it. The profile of that name when there
 -- is one, as it is; else a new one made from `picks` (a table of saved path to value, written as ns.NewProfile writes it). Nothing is applied. Returns
 -- true, or false when the modules have started, the settings are not loaded, the character is not known or the name cannot be a profile; nothing is written then.
-function ns.AssignProfile(name, picks)
+-- `spots` is written as ns.NewProfile writes it.
+function ns.AssignProfile(name, picks, spots)
 	if loggedIn or not db or type(name) ~= "string" then
 		return false
 	end
@@ -2390,6 +2406,7 @@ function ns.AssignProfile(name, picks)
 				end
 			end
 		end
+		PutSpots(made, spots)
 		db.profiles[clean] = made
 		found = clean
 	end
@@ -2873,7 +2890,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui profile - the profile in use and the others")
 		print("/flatui profile Name - switch to a profile")
 		print("/flatui setup - set up a new profile step by step")
-		print("/flatui profiles - the six ready-made profiles")
+		print("/flatui profiles - the ready-made profiles")
 		print("/flatui scale 70 - custom UI scale in percent, 65 to 115")
 		print("/flatui scale off - the game's own UI scale")
 		print("/flatui taint - the action button click path, checked for values an add-on changed")

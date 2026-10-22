@@ -510,14 +510,16 @@ D.cardMarks = {}
 -- The edge of a tile that is not selected.
 D.CARD_EDGE = { 0.4, 0.4, 0.4 }
 
--- The six cards on the stage, three to a row, each with its name: the drawing of New profile. A click on a tile goes to D.onCard(id). The selected tile
+-- The cards on the stage, four to a row so that seven fit the stage, each with its name: the drawing of New profile. A click on a tile goes to D.onCard(id). The selected tile
 -- has the accent edge and the recommended one the tag.
+D.CARD_COLS, D.CARD_W, D.CARD_GAP, D.CARD_SCALE = 4, 160, 6, 0.415
+
 local function BuildProfiles(drawing)
 	drawing.cards, drawing.tiles = {}, {}
 	for index, profile in ipairs(ns.SETUP_PROFILES or {}) do
 		local tile = kit.Frame(drawing.frame)
-		tile:SetSize(212, 98)
-		tile:SetPoint("TOPLEFT", drawing.frame, "TOPLEFT", ((index - 1) % 3) * 223, -math.floor((index - 1) / 3) * 106)
+		tile:SetSize(D.CARD_W, 98)
+		tile:SetPoint("TOPLEFT", drawing.frame, "TOPLEFT", ((index - 1) % D.CARD_COLS) * (D.CARD_W + D.CARD_GAP), -math.floor((index - 1) / D.CARD_COLS) * 106)
 		local edge = ns.Outline(tile, tile, true)
 		-- One pixel, one grey, whatever look is being drafted.
 		ns.SetOutlineThickness(edge, 1)
@@ -527,13 +529,13 @@ local function BuildProfiles(drawing)
 		local card = D.Card(tile, D.CardView(function()
 			return D.PresetValues(profile.id)
 		end))
-		card.frame:SetScale(0.55)
+		card.frame:SetScale(D.CARD_SCALE)
 		card.frame:SetPoint("TOP", tile, "TOP", 0, -3)
 		local label = Text(drawing, tile, "GameFontNormal", "LEFT", 100)
-		label:SetPoint("TOPLEFT", tile, "TOPLEFT", 13, -68)
+		label:SetPoint("TOPLEFT", tile, "TOPLEFT", 8, -54)
 		label:SetText(profile.label)
-		local tag = kit.Accented(Text(drawing, tile, "GameFontHighlightSmall", "RIGHT", 90))
-		tag:SetPoint("TOPRIGHT", tile, "TOPRIGHT", -13, -70)
+		local tag = kit.Accented(Text(drawing, tile, "GameFontHighlightSmall", "LEFT", 90))
+		tag:SetPoint("TOPLEFT", tile, "TOPLEFT", 8, -74)
 		tag:SetText("Recommended")
 		kit.Clickable(tile, function()
 			if D.onCard then

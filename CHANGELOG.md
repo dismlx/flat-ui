@@ -1,3 +1,7 @@
+## 0.4.83
+
+- New ready-made profile **Jon Default** in **Flat UI setup**, with the author's own settings and frame positions.
+
 ## 0.4.82
 
 - **Combat text**: Outgoing and Incoming numbers curve out to each side of your character by default (**Outgoing style**, **Incoming style** and **Arc width**). Your hits in the Outgoing area and the heals you cast on yourself show the icon of the spell, swing or shot (**Spell icons**). Misses show in parentheses, such as (Dodge) (**Miss words**). Maul, Heroic Strike, Cleave and Raptor Strike no longer show a Miss for the swing they replace. **Next melee ability names** can show their name. Hits of your spells and special attacks show in yellow, and swings, extra attacks and shots in white (**Colour by school of magic** and **Physical ability hits**). `/flatui combat trace` prints each hit report in chat.

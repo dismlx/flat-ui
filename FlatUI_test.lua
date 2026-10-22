@@ -105,7 +105,7 @@ function TOC.head(px)
 end
 -- The lines of /flatui help that the addon prints before the lines of the modules.
 TOC.help = "/flatui - the settings window\n/flatui options - the page in the game's options\n/flatui status - what is styled, and any error\n"
-	.. "/flatui profile - the profile in use and the others\n/flatui profile Name - switch to a profile\n/flatui setup - set up a new profile step by step\n/flatui profiles - the six ready-made profiles\n"
+	.. "/flatui profile - the profile in use and the others\n/flatui profile Name - switch to a profile\n/flatui setup - set up a new profile step by step\n/flatui profiles - the ready-made profiles\n"
 	.. "/flatui scale 70 - custom UI scale in percent, 65 to 115\n/flatui scale off - the game's own UI scale\n"
 	.. "/flatui taint - the action button click path, checked for values an add-on changed\n"
 	.. "/flatui cvar - each game setting row: value, default, secure flag\n/flatui cvar check - whether each of those can be changed, out of combat"
@@ -10849,7 +10849,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.82" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.83" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -64082,11 +64082,11 @@ function PT.runSetup()
 			local ns = W.ns
 			local S = SU.open(W)
 			local drawing = NP.drawing(W)
-			check("setup profiles: New profile shows the drawing of six tiles in the order of the table, with Standard to Large named", ns.SetupDraw.current == drawing and #drawing.tiles == 6 and #drawing.cards == 6
-				and joined({ drawing.tiles[1].id, drawing.tiles[2].id, drawing.tiles[3].id, drawing.tiles[4].id, drawing.tiles[5].id, drawing.tiles[6].id }) == "standard, minimal, damage, tank, healer, large"
-				and SU.has(W, "Standard") and SU.has(W, "Large"))
-			check("setup profiles: the recommended tile is selected and has the tag, and no other has either", S.SelectedPreset() == "healer" and NP.tags(W) == "-, -, -, -, tag, -", NP.tags(W))
-			check("setup profiles: the selected tile has the accent edge", NP.edges(W) == "-, -, -, -, accent, -", NP.edges(W))
+			check("setup profiles: New profile shows the drawing of seven tiles in the order of the table, with Standard to Jon Default named", ns.SetupDraw.current == drawing and #drawing.tiles == 7 and #drawing.cards == 7
+				and joined({ drawing.tiles[1].id, drawing.tiles[2].id, drawing.tiles[3].id, drawing.tiles[4].id, drawing.tiles[5].id, drawing.tiles[6].id, drawing.tiles[7].id }) == "standard, minimal, damage, tank, healer, large, jon"
+				and SU.has(W, "Standard") and SU.has(W, "Large") and SU.has(W, "Jon Default"))
+			check("setup profiles: the recommended tile is selected and has the tag, and no other has either", S.SelectedPreset() == "healer" and NP.tags(W) == "-, -, -, -, tag, -, -", NP.tags(W))
+			check("setup profiles: the selected tile has the accent edge", NP.edges(W) == "-, -, -, -, accent, -, -", NP.edges(W))
 			check("setup profiles: the line of the selected tile shows under the title, and Start from shows its name", SU.has(W, "Missing health on party frames.") and PT.control(PT.row(W, "Start from")).fonts[1].text == "Healer")
 			check("setup profiles: the buttons are Every step, Review and Use Healer", PT.button(W, "Every step") ~= nil and PT.button(W, "Review") ~= nil and PT.button(W, "Use Healer") ~= nil and PT.button(W, "Back") == nil)
 			check("setup profiles: opening New profile writes no draft and no profile", S.draft.preset == nil and not NP.drafts(W) and not ns.SetupHasDraft() and ns.Profile() == "Default" and W.env.FlatUIDB.profiles.Healer == nil)
@@ -64105,7 +64105,7 @@ function PT.runSetup()
 			check("setup profiles: the steps start from the tile, and the keep button names it", S.Value("unitframes.partyHealthText") == "miss" and S.StartValue("unitframes.partyHealthText") == "miss" and ns.Get("unitframes.partyHealthText") == "game"
 				and PT.button(W, "Keep the rest from Healer") ~= nil and next(S.draft.values) == nil)
 			S.Go(0)
-			check("setup profiles: New profile again shows the same tile selected", S.SelectedPreset() == "healer" and NP.tags(W) == "-, -, -, -, tag, -")
+			check("setup profiles: New profile again shows the same tile selected", S.SelectedPreset() == "healer" and NP.tags(W) == "-, -, -, -, tag, -, -")
 			SU.press(W, "Review")
 			check("setup profiles: Review from New profile opens Review from the tile", S.cur == S.REVIEW and S.draft.preset == "healer")
 			clean(W, "setup profiles every step")
@@ -64185,12 +64185,59 @@ function PT.runSetup()
 			clean(W, "setup profiles use")
 		end
 
+		-- Jon Default: finishing on its tile writes its values and its 17 positions; finishing on Minimal writes none.
+		do
+			local J = { values = { ["actionbars.empty"] = "faint", ["actionbars.emptyAlpha"] = 70, ["actionbars.rangeTint"] = true, ["actionbars.square"] = false, ["actionbars.totem"] = true, ["castbars.flat"] = false, ["castbars.ownTime"] = true, ["castbars.playerHeight"] = 18, ["castbars.playerSize"] = true, ["castbars.playerWidth"] = 266, ["chat.count"] = true, ["chat.ids"] = true, ["chat.nameClass"] = true, ["combattext.crit"] = "higher", ["combattext.friend"] = "off", ["combattext.group"] = "flat", ["combattext.height"] = 45, ["combattext.movement"] = "up", ["combattext.ownSize"] = 130, ["combattext.size"] = 200, ["combattext.spreadWidth"] = 160, ["cooldowns.dim"] = false, ["cooldowns.flash"] = true, ["cooldowns.readySound"] = true, ["defensives.own"] = true, ["defensives.place"] = "resource", ["enemycd.place"] = "plates", ["enemycd.ready"] = "sound", ["enemycd.show"] = "always", ["enemycd.sound"] = "bell", ["fade.enabled"] = true, ["fade.target"] = true, ["general.barTexture"] = "soft", ["general.borderless"] = true, ["hud.xpFrame"] = false, ["hud.xpTextSize"] = 105, ["hud.xpTexture"] = "soft", ["nameplates.castTime"] = true, ["nameplates.classFriendly"] = true, ["nameplates.colours"] = true, ["nameplates.dim"] = true, ["nameplates.dimAmount"] = 60, ["nameplates.healthHeight"] = 125, ["nameplates.hover"] = true, ["nameplates.lowHealth"] = true, ["ownbuffs.size"] = 40, ["ownbuffs.time"] = "on", ["ownbuffs.which"] = "both", ["resource.healthOwn"] = true, ["tooltip.enabled"] = true, ["tooltip.scope"] = "all", ["tooltip.x"] = 69, ["tooltip.y"] = -48, ["trackers.gameIcon"] = false, ["trackers.low"] = 0, ["trackers.place"] = "own", ["trackers.show"] = "low", ["trackers.sound"] = true, ["unitframes.corners"] = "soft", ["unitframes.focusPicture"] = "game", ["unitframes.headFraming"] = "shoulders", ["unitframes.kindWord"] = true, ["unitframes.partyHealthBy"] = "class", ["unitframes.partyPicture"] = "class", ["unitframes.petPicture"] = "game", ["unitframes.playerHealthBy"] = "class", ["unitframes.playerPicture"] = "game", ["unitframes.stripBrightness"] = 100, ["unitframes.targetHealthText"] = "pct", ["unitframes.targetPicture"] = "game", ["unitframes.totPicture"] = "game", ["windows.countSize"] = 115, ["windows.crop"] = 9, ["windows.ilvlBags"] = true, ["windows.ilvlCharacter"] = true, ["windows.ilvlSize"] = 15, ["windows.junkDim"] = true, ["windows.sortFrom"] = "other" },
+				left = { "barblock.enabled", "barblock.slot1", "barblock.slot2", "barblock.slot3", "barblock.slot4", "general.scaleOn", "general.scaleBelow", "nameplates.threat", "nameplates.classPosition", "castbars.latency" },
+				spots = { { "AlertFrame", "BOTTOM", 0, 765.33355712890625 }, { "BuffIconCooldownViewer", "CENTER", 253.74455261230469, -162.6778316497803 }, { "EncounterBar", "CENTER", 0, 181.1332950592041 }, { "EssentialCooldownViewer", "CENTER", -255.5220947265625, -160.0110836029053 }, { "ExternalDefensivesFrame", "CENTER", 0, -115.1332664489746 }, { "FlatUICombatSelf", "CENTER", 0, -20.666448593139648 }, { "FlatUICooldowns", "CENTER", -1.5318393707275391e-05, -128.888576567173 }, { "FlatUITrackers", "CENTER", 234.666484773159, -163.42223745584491 }, { "FlatUIXpBar", "BOTTOM", 0, 77.722312927246094 }, { "LootFrame", "TOP", 305.14493560791021, -365.92208862304688 }, { "LossOfControlFrame", "CENTER", 0, -69.699974060058594 }, { "PersonalResourceDisplayFrame", "CENTER", 0, -192.7110576629639 }, { "PlayerCastingBarFrame", "BOTTOM", 0, 378.23333740234381 }, { "PlayerFrame", "TOPLEFT", 3.5999998952213121, -12.400045676815351 }, { "SwingTimerMainHandFrame", "BOTTOM", 0, 325.44464111328131 }, { "SwingTimerRangedFrame", "BOTTOM", 0, 290.34463500976562 }, { "UtilityCooldownViewer", "BOTTOM", -256.65545654296881, 404.02227783203131 } } }
+			local W = NP.world(nil, nil)
+			local ns = W.ns
+			local S = SU.open(W)
+			NP.click(W, 7)
+			local tracker = S.Under(S.view, ns.Spots).FlatUITrackers
+			check("jon profile: on the Jon Default tile the drawings use its positions", tracker ~= nil and tracker.x == 234.666484773159 and tracker.y == -163.42223745584491)
+			PT.type(PT.control(PT.row(W, "Profile name")), "Tester", false)
+			SU.press(W, "Use Jon Default")
+			local made = W.env.FlatUIDB.profiles.Tester
+			local same, wrong = made ~= nil, {}
+			for path, value in pairs(J.values) do
+				if not (made and made.options[path] == ns.Normalised(path, value)) then
+					same = false
+					wrong[#wrong + 1] = path
+				end
+			end
+			local none = true
+			for _, path in ipairs(J.left) do
+				none = none and made ~= nil and made.options[path] == nil
+			end
+			check("jon profile: finishing on Jon Default writes every value of the export that a profile may hold, at the exported value", same and S.PresetOf("jon").label == "Jon Default", joined(wrong))
+			check("jon profile: none of the lines left out of the export is in its values or in the new profile", none)
+			local spots, fit = made and made.movers or {}, true
+			local count = 0
+			for _ in pairs(spots) do count = count + 1 end
+			for _, row in ipairs(J.spots) do
+				local spot = spots[row[1]]
+				fit = fit and spot ~= nil and spot.point == row[2] and spot.x == row[3] and spot.y == row[4] and spot.kind == "hud" and spot.scale == nil
+			end
+			check("jon profile: finishing on Jon Default writes its 17 positions into the profile in use", count == 17 and fit and ns.Profile() == "Tester", tostring(count))
+			check("jon profile: the positions are copies, so moving a frame does not change the ready-made profile", made ~= nil and made.movers.PlayerFrame ~= S.PresetOf("jon").movers.PlayerFrame)
+			clean(W, "jon profile finish")
+			local M = NP.world(nil, nil)
+			local SM = SU.open(M)
+			NP.click(M, 2)
+			check("jon profile: on the Minimal tile the drawings have no positions", SM.Under(SM.view, M.ns.Spots).FlatUITrackers == nil)
+			PT.type(PT.control(PT.row(M, "Profile name")), "Tester", false)
+			SU.press(M, "Use Minimal")
+			local minimal = M.env.FlatUIDB.profiles.Tester
+			check("jon profile: finishing on Minimal writes no positions", minimal ~= nil and next(minimal.movers) == nil)
+		end
+
 		-- Use Standard makes a profile of the defaults, and a taken name stays on New profile.
 		do
 			local W = NP.world(nil, nil)
 			local ns = W.ns
 			local S = SU.open(W)
-			check("setup profiles: with nothing to go by the Standard tile is selected and has the tag", S.SelectedPreset() == "standard" and NP.tags(W) == "tag, -, -, -, -, -" and PT.button(W, "Use Standard") ~= nil)
+			check("setup profiles: with nothing to go by the Standard tile is selected and has the tag", S.SelectedPreset() == "standard" and NP.tags(W) == "tag, -, -, -, -, -, -" and PT.button(W, "Use Standard") ~= nil)
 			PT.type(PT.control(PT.row(W, "Profile name")), "default", false)
 			SU.press(W, "Use Standard")
 			check("setup profiles: Use Standard on a taken name stays on New profile and says why", S.cur == 0 and PT.strip(W) == "That name is taken." and ns.Profile() == "Default")
@@ -64211,7 +64258,7 @@ function PT.runSetup()
 			S.Set("general.thickness", 3)
 			S.Set("unitframes.partyHealthText", "miss")
 			NP.click(W, 5)
-			check("setup profiles: a click on a tile sets the draft's start, selects it and clears the saved profile", S.draft.preset == "healer" and S.draft.from == nil and S.SelectedPreset() == "healer" and NP.edges(W) == "-, -, -, -, accent, -", tostring(S.draft.preset))
+			check("setup profiles: a click on a tile sets the draft's start, selects it and clears the saved profile", S.draft.preset == "healer" and S.draft.from == nil and S.SelectedPreset() == "healer" and NP.edges(W) == "-, -, -, -, accent, -, -", tostring(S.draft.preset))
 			check("setup profiles: the choices made are kept, except those the tile already has", S.draft.values["general.thickness"] == 3 and S.draft.values["unitframes.partyHealthText"] == nil)
 			check("setup profiles: a name the window filled becomes the tile's name", S.draft.name == "Healer" and PT.control(PT.row(W, "Profile name")).editText == "Healer", tostring(S.draft.name))
 			NP.click(W, 2)
@@ -64227,7 +64274,7 @@ function PT.runSetup()
 			check("setup profiles: a tile whose name is taken fills the name with 2", S.draft.name == "Damage 2", tostring(S.draft.name))
 			S.PickSaved("Default")
 			NP.click(W, 3)
-			check("setup profiles: a tile after a saved profile makes the tile the start again", S.draft.from == nil and S.draft.preset == "damage" and S.SelectedPreset() == "damage" and NP.edges(W) == "-, -, accent, -, -, -")
+			check("setup profiles: a tile after a saved profile makes the tile the start again", S.draft.from == nil and S.draft.preset == "damage" and S.SelectedPreset() == "damage" and NP.edges(W) == "-, -, accent, -, -, -, -")
 			NP.click(W, 1)
 			check("setup profiles: Standard is a tile too, and the buttons follow the tile", S.draft.preset == "standard" and PT.button(W, "Use Standard") ~= nil and S.draft.name == "Standard")
 			clean(W, "setup profiles click")
@@ -64341,8 +64388,8 @@ function PT.runSetup()
 			check("setup profiles: Start from lists saved profiles only", #PT.listLines(W, { "Default (in use)", "Main" }) == 2 and #PT.listLines(W, { "Defaults" }) == 0)
 			PT.press(W, PT.listLines(W, { "Main" })[1].raw)
 			check("setup profiles: a saved profile picked sets from, clears the tile, no tile is selected and the name goes back to the character's", S.draft.from == "Main" and S.draft.preset == nil and S.SelectedPreset() == nil
-				and NP.edges(W) == "-, -, -, -, -, -" and S.draft.name == "Tester", tostring(S.draft.name))
-			check("setup profiles: the button says Copy Main, the line of a tile is gone and the tag stays on the recommended tile", PT.button(W, "Copy Main") ~= nil and not SU.has(W, "Missing health on party frames.") and NP.tags(W) == "-, -, -, tag, -, -")
+				and NP.edges(W) == "-, -, -, -, -, -, -" and S.draft.name == "Tester", tostring(S.draft.name))
+			check("setup profiles: the button says Copy Main, the line of a tile is gone and the tag stays on the recommended tile", PT.button(W, "Copy Main") ~= nil and not SU.has(W, "Missing health on party frames.") and NP.tags(W) == "-, -, -, tag, -, -, -")
 			SU.press(W, "Copy Main")
 			check("setup profiles: Copy Main makes a copy of that profile", ns.Profile() == "Tester" and W.env.FlatUIDB.profiles.Tester ~= nil)
 			clean(W, "setup profiles start from")
@@ -64459,8 +64506,8 @@ function PT.runSetup()
 		local l, b, w, h = A.rectOf(A.env.FlatUISetupOffer)
 		check("setup: the offer is 644 wide at the top centre, in the HIGH strata and listed for Escape", #list == 1 and near(w, 644) and near(h, A.ns.Setup.OFFER_H) and A.rawOf[A.env.FlatUISetupOffer].strata == "HIGH" and near(l + w / 2, 960),
 			g(l) .. " " .. g(w) .. " " .. g(h))
-		check("setup: it has the title, the line, the six profiles and the two buttons", SU.offerHas(A, "Click a profile to use it.") ~= nil and SU.offerHas(A, "Flat UI setup") ~= nil
-			and SU.offerHas(A, "Open setup") ~= nil and SU.offerHas(A, "Keep Default") ~= nil and SU.offerHas(A, "Standard") ~= nil and SU.offerHas(A, "Large") ~= nil)
+		check("setup: it has the title, the line, the seven profiles and the two buttons", SU.offerHas(A, "Click a profile to use it.") ~= nil and SU.offerHas(A, "Flat UI setup") ~= nil
+			and SU.offerHas(A, "Open setup") ~= nil and SU.offerHas(A, "Keep Default") ~= nil and SU.offerHas(A, "Standard") ~= nil and SU.offerHas(A, "Large") ~= nil and SU.offerHas(A, "Jon Default") ~= nil)
 		PT.escape(A)
 		check("setup: Escape closes it without the flag, so it returns at the next login", not shown(A) and A.env.FlatUICharDB.setupOffered ~= true)
 		local B = offerWorld()
@@ -64564,10 +64611,10 @@ function PT.runSetup()
 				lines = lines and type(profile.line) == "string" and profile.line ~= ""
 				named = named and ns.ProfileNameCheck(profile.label) == profile.label
 			end
-			check("setup profiles: six profiles in order, each with a name Core takes and one line", joined(ids) == "standard, minimal, damage, tank, healer, large"
-				and joined(names) == "Standard, Minimal, Damage, Tank, Healer, Large" and lines and named, joined(ids))
+			check("setup profiles: seven profiles in order, each with a name Core takes and one line", joined(ids) == "standard, minimal, damage, tank, healer, large, jon"
+				and joined(names) == "Standard, Minimal, Damage, Tank, Healer, Large, Jon Default" and lines and named, joined(ids))
 			local checked, defs = S.Presets(), S.Defs()
-			local same, count, defaults, banned, picked, threat = #checked == 6, 0, true, true, true, true
+			local same, count, defaults, banned, picked, threat = #checked == 7, 0, true, true, true, true
 			for index, profile in ipairs(list) do
 				local got = checked[index]
 				same = same and got ~= nil and got.id == profile.id and RP.same(got.values, profile.values)
@@ -64576,14 +64623,14 @@ function PT.runSetup()
 					local def = defs[path]
 					defaults = defaults and def ~= nil and def.default ~= value
 					banned = banned and def ~= nil and not path:find("^setup%.") and not path:find("^barblock%.") and not RP.NEVER[path] and not ns.RowUnsaved(def)
-					picked = picked and not (RP.PICKED[path] and not (profile.id == "large" and path == "combattext.size"))
+					picked = picked and not (RP.PICKED[path] and not (profile.id == "large" and path == "combattext.size") and profile.id ~= "jon")
 					threat = threat and path ~= "nameplates.threat" and path ~= "nameplates.threatRole" and path ~= "chat.combat"
 				end
 			end
-			check("setup profiles: every value passes the check of S.Presets, so nothing is dropped, and no error is reported", same and count == 157 and #W.errors == 0, tostring(count))
+			check("setup profiles: every value passes the check of S.Presets, so nothing is dropped, and no error is reported", same and count == 235 and #W.errors == 0, tostring(count))
 			check("setup profiles: no value equals its setting's default", defaults)
 			check("setup profiles: no profile sets a scale row, a setup row, a bar block row or a setting the game holds", banned)
-			check("setup profiles: no profile changes a setting the author picked, except the size of combat text in Large", picked and list[6].values["combattext.size"] == 200)
+			check("setup profiles: no profile changes a setting the author picked, except the size of combat text in Large and every row in Jon Default", picked and list[6].values["combattext.size"] == 200)
 			check("setup profiles: no profile turns on threat colours or sets Tooltips in combat, and Standard has no values", threat and next(list[1].values) == nil and next(list[2].values) ~= nil)
 			local bad = SU.world()
 			local base = #bad.errors
@@ -64680,7 +64727,7 @@ function PT.runSetup()
 		do
 			local A = RP.world()
 			local S = A.ns.Setup
-			check("setup profiles: a character with no profile and not offered gets the panel, with six tiles, and nothing is wrong", RP.shown(A) and #S.tiles == 6 and #A.errors == 0 and #A.violations == 0)
+			check("setup profiles: a character with no profile and not offered gets the panel, with seven tiles, and nothing is wrong", RP.shown(A) and #S.tiles == 7 and #A.errors == 0 and #A.violations == 0)
 			check("setup profiles: it is not shown to a character that was offered, nor with Default profile on a new character", RP.world(nil, { char = { setupOffered = true } }).named.FlatUISetupOffer == nil
 				and RP.world(nil, { saved = { setup = { newCharacter = "default" } } }).named.FlatUISetupOffer == nil)
 			local order, lines, place = {}, true, true
@@ -64691,8 +64738,14 @@ function PT.runSetup()
 				local l, b, w, h = A.rectOf(tile.frame)
 				place = place and near(w, 200) and near(h, 118) and near(l - l1, ((index - 1) % 3) * 210) and near(b1 - b, math.floor((index - 1) / 3) * 128)
 			end
-			check("setup profiles: the tiles are Standard, Minimal, Damage, Tank, Healer and Large, three to a row, 200 by 118, 10 apart, each with its line", joined(order) == "Standard, Minimal, Damage, Tank, Healer, Large"
+			check("setup profiles: the tiles are Standard, Minimal, Damage, Tank, Healer, Large and Jon Default, three to a row, 200 by 118, 10 apart, each with its line", joined(order) == "Standard, Minimal, Damage, Tank, Healer, Large, Jon Default"
 				and lines and place, joined(order))
+			do
+				local ol, ob, ow, oh = A.rectOf(A.env.FlatUISetupOffer)
+				local l7, b7, w7, h7 = A.rectOf(S.tiles[7].frame)
+				check("jon profile: the seventh tile is on the third row, at the left, inside the panel", near(l7 - l1, 0) and near(b1 - b7, 256) and l7 >= ol and l7 + w7 <= ol + ow and b7 >= ob and b7 + h7 <= ob + oh,
+					g(l7) .. " " .. g(b7) .. " " .. g(oh))
+			end
 			local function tags(W)
 				local list = {}
 				for index, tile in ipairs(W.ns.Setup.tiles) do
@@ -64700,7 +64753,7 @@ function PT.runSetup()
 				end
 				return joined(list)
 			end
-			check("setup profiles: Recommended is on one tile, the pick for a character with nothing to go by: Standard", tags(A) == "Recommended, -, -, -, -, -", tags(A))
+			check("setup profiles: Recommended is on one tile, the pick for a character with nothing to go by: Standard", tags(A) == "Recommended, -, -, -, -, -, -", tags(A))
 			-- The tag is above every frame of the picture under it.
 			do
 				local above, seen = true, 0
@@ -64716,16 +64769,16 @@ function PT.runSetup()
 					seen = seen + 1
 					above = above and A.rawOf[tile.tag].level > floor and floor > A.rawOf[tile.frame].level
 				end
-				check("setup profiles: the tag on a tile is above every frame of the card under it", above and seen == 6)
+				check("setup profiles: the tag on a tile is above every frame of the card under it", above and seen == 7)
 			end
 			local T = RP.world(function(X)
 				X.env.UnitClassBase = function() return "WARRIOR" end
 				X.env.UnitGroupRolesAssigned = function() return "TANK" end
 			end)
-			check("setup profiles: a tank gets Recommended on Tank", tags(T) == "-, -, -, Recommended, -, -", tags(T))
+			check("setup profiles: a tank gets Recommended on Tank", tags(T) == "-, -, -, Recommended, -, -, -", tags(T))
 			local U = RP.world(nil, { saved = { profiles = RP.profiles({ Standard = {} }), profileOf = { [SU.CHARACTER] = "Standard" } } })
 			U.ns.OpenProfiles()
-			check("setup profiles: In use wins over Recommended, and a character with a profile of its own is not offered by itself", tags(U) == "In use, -, -, -, -, -" and RP.shown(U), tags(U))
+			check("setup profiles: In use wins over Recommended, and a character with a profile of its own is not offered by itself", tags(U) == "In use, -, -, -, -, -, -" and RP.shown(U), tags(U))
 			-- A click on a tile.
 			local db = A.env.FlatUIDB
 			local before = #A.cvarWrites
@@ -64744,7 +64797,7 @@ function PT.runSetup()
 			-- Every tile on its own, in a fresh world: no game setting written, no protected call, no error.
 			do
 				local bad = {}
-				for index = 1, 6 do
+				for index = 1, 7 do
 					local Z = RP.world()
 					local was = #Z.cvarWrites
 					RP.click(Z, index)
@@ -64752,7 +64805,7 @@ function PT.runSetup()
 						bad[#bad + 1] = tostring(index)
 					end
 				end
-				check("setup profiles: each of the six tiles uses its profile with no game setting written, no protected call and no error", #bad == 0, joined(bad))
+				check("setup profiles: each of the seven tiles uses its profile with no game setting written, no protected call and no error", #bad == 0, joined(bad))
 			end
 			-- A profile of the same name, made by hand, is used as it is.
 			local H = RP.world(nil, { saved = { profiles = RP.profiles({ healer = { ["general.thickness"] = 2 } }), profileOf = {} } })
@@ -64822,7 +64875,7 @@ function PT.runSetup()
 			P.env.SlashCmdList.FLATUI("profiles")
 			check("setup profiles: /flatui profiles opens the panel for a character that was offered", RP.shown(P))
 			P.env.SlashCmdList.FLATUI("help")
-			check("setup profiles: and /flatui has its help line", RP.told(P, "/flatui profiles - the six ready-made profiles") == 1)
+			check("setup profiles: and /flatui has its help line", RP.told(P, "/flatui profiles - the ready-made profiles") == 1)
 			local Q = SU.world()
 			Q.ns.OpenPanel()
 			PT.go(Q, "Profiles")
@@ -64861,7 +64914,7 @@ function PT.runSetup()
 			check("setup profiles: it says one line and writes no game setting, makes no protected call and no error", RP.told(healer, "Flat UI: using Healer.") == 1 and #healer.cvarWrites == 0
 				and #healer.errors == 0 and #healer.violations == 0)
 			local bad = {}
-			for _, id in ipairs({ "standard", "minimal", "damage", "tank", "healer", "large" }) do
+			for _, id in ipairs({ "standard", "minimal", "damage", "tank", "healer", "large", "jon" }) do
 				local Z = RP.login("preset:" .. id)
 				local label = Z.ns.Setup.PresetOf(id).label
 				if not (Z.env.FlatUIDB.profileOf[SU.CHARACTER] == label and Z.ns.Profile() == label and #Z.probe == 1 and #Z.errors == 0 and #Z.violations == 0 and #Z.cvarWrites == 0
@@ -64869,7 +64922,41 @@ function PT.runSetup()
 					bad[#bad + 1] = id
 				end
 			end
-			check("setup profiles: each of the six profiles is put in use at login the same way", #bad == 0, joined(bad))
+			check("setup profiles: each of the seven profiles is put in use at login the same way", #bad == 0, joined(bad))
+			-- Jon Default by a click on its tile and at login: the positions come with the values.
+			do
+				local Z = RP.world()
+				RP.click(Z, 7)
+				local used = Z.env.FlatUIDB.profiles["Jon Default"]
+				local clicked = 0
+				for _ in pairs(used and used.movers or {}) do clicked = clicked + 1 end
+				local L = RP.login("preset:jon")
+				local logged, spot = 0, L.env.FlatUIDB.profiles["Jon Default"]
+				for _ in pairs(spot and spot.movers or {}) do logged = logged + 1 end
+				check("jon profile: a click on its tile and Profile on a new character both put in use a profile with its 17 positions", clicked == 17 and logged == 17 and used.movers.PlayerFrame.point == "TOPLEFT"
+					and spot.movers.LootFrame.y == used.movers.LootFrame.y, tostring(clicked) .. " " .. tostring(logged))
+				local plain = RP.login("preset:healer").env.FlatUIDB.profiles.Healer
+				check("jon profile: a profile without positions gets none", plain ~= nil and next(plain.movers) == nil)
+			end
+			-- A position with a bad point, a bad name or a missing number is dropped and said once.
+			do
+				local bad = SU.world()
+				local base = #bad.errors
+				bad.ns.SETUP_PROFILES = { { id = "jon", label = "Jon Default", line = "x", values = {}, movers = {
+					{ frame = "PlayerFrame", point = "TOPLEFT", x = 1, y = 2, kind = "hud" }, { frame = "LootFrame", point = "MIDDLE", x = 1, y = 2, kind = "hud" },
+					{ frame = "TargetFrame", point = "TOP", x = "1", y = 2, kind = "hud" }, { point = "TOP", x = 1, y = 2, kind = "hud" } } } }
+				bad.ns.Setup.presets = nil
+				local one = bad.ns.Setup.Presets()[1]
+				local kept = 0
+				for _ in pairs(one.movers or {}) do kept = kept + 1 end
+				local first = #bad.errors - base
+				bad.ns.Setup.Presets()
+				bad.ns.NewProfile("Spots", nil, nil, { PlayerFrame = { point = "TOPLEFT", x = 1, y = 2, kind = "hud" }, LootFrame = { point = "MIDDLE", x = 1, y = 2, kind = "hud" } })
+				local direct = 0
+				for _ in pairs(bad.env.FlatUIDB.profiles.Spots and bad.env.FlatUIDB.profiles.Spots.movers or {}) do direct = direct + 1 end
+				check("jon profile: a new profile keeps a good position and drops one with a bad point", direct == 1 and bad.env.FlatUIDB.profiles.Spots.movers.PlayerFrame ~= nil)
+				check("jon profile: a bad position is dropped and each drop is said once", kept == 1 and one.movers.PlayerFrame ~= nil and first == 3 and #bad.errors - base == 3, tostring(kept) .. " " .. tostring(first))
+			end
 			local tank = RP.login("recommended", nil, function(X)
 				X.env.UnitClassBase = function() return "WARRIOR" end
 				X.env.UnitGroupRolesAssigned = function() return "TANK" end
@@ -64964,8 +65051,8 @@ function PT.runSetup()
 			local lists = RP.world(nil, { saved = { profiles = RP.profiles({ Mira = {}, healer = {}, Zed = {} }), profileOf = {} } })
 			local ids = {}
 			for index, choice in ipairs(lists.ns.SetupNewChoices()) do ids[index] = choice[1] end
-			check("setup profiles: Profile on a new character lists Show profiles, Default profile, Recommended profile, the six profiles and the saved ones, without Default and without a name of a tile",
-				joined(ids) == "ask, default, recommended, preset:standard, preset:minimal, preset:damage, preset:tank, preset:healer, preset:large, profile:Mira, profile:Zed", joined(ids))
+			check("setup profiles: Profile on a new character lists Show profiles, Default profile, Recommended profile, the seven profiles and the saved ones, without Default and without a name of a tile",
+				joined(ids) == "ask, default, recommended, preset:standard, preset:minimal, preset:damage, preset:tank, preset:healer, preset:large, preset:jon, profile:Mira, profile:Zed", joined(ids))
 			check("setup profiles: the lines are named as the setting has them", lists.ns.SetupNewChoices()[1][2] == "Show profiles" and lists.ns.SetupNewChoices()[2][2] == "Default profile"
 				and lists.ns.SetupNewChoices()[3][2] == "Recommended profile" and lists.ns.SetupNewChoices()[8][2] == "Healer")
 			-- The check box on the panel.
@@ -64973,10 +65060,10 @@ function PT.runSetup()
 			local PS = P.ns.Setup
 			local label = SU.offerHas(P, "Same profile on new characters")
 			local bl, bb, bw, bh = P.rectOf(PS.box)
-			local tl, tb = P.rectOf(PS.tiles[4].frame)
+			local tl, tb = P.rectOf(PS.tiles[7].frame)
 			local ol, ob, ow, oh = P.rectOf(PS.open)
 			local fl, fb, fw, fh = P.rectOf(P.env.FlatUISetupOffer)
-			check("setup profiles: the panel has Same profile on new characters, unticked, between the tiles and the buttons, and is 644 by 390", label ~= nil and PS.mark:IsShown() == false and near(fw, 644) and near(fh, 390)
+			check("setup profiles: the panel has Same profile on new characters, unticked, between the tiles and the buttons, and is 644 by 518", label ~= nil and PS.mark:IsShown() == false and near(fw, 644) and near(fh, 518)
 				and bb > ob + oh and bb + bh < tb and near(bl, fl + 12), g(bb) .. " " .. g(ob) .. " " .. g(tb))
 			SU.click(P.rawOf[PS.box])
 			local ticked = PS.mark:IsShown() == true
@@ -65049,9 +65136,18 @@ function PT.runSetup()
 			local D = ns.SetupDraw
 			local drawing = D.Show("mock-profiles")
 			ns.Viewing(S.view, D.Paint)
-			local drawn = drawing ~= nil and #drawing.cards == 6
-			check("setup profiles: the drawing mock-profiles has six cards at scale 0.55 painted from their own views", drawn and near(W.rawOf[drawing.cards[6].frame].scale, 0.55)
+			local drawn = drawing ~= nil and #drawing.cards == 7
+			check("setup profiles: the drawing mock-profiles has seven cards at scale 0.415 painted from their own views", drawn and near(W.rawOf[drawing.cards[6].frame].scale, 0.415)
 				and W.rawOf[drawing.cards[6].outlines[1].top].height == 2 and W.rawOf[drawing.cards[2].outlines[1].top].shown == false and W.rawOf[drawing.cards[1].outlines[1].top].height == 1)
+			do
+				local sl, sb, sw, sh = W.rectOf(D.stage)
+				local inside = drawn
+				for _, tile in ipairs(drawn and drawing.tiles or {}) do
+					local l, b, w, h = W.rectOf(tile.frame)
+					inside = inside and l >= sl - 0.01 and l + w <= sl + sw + 0.01 and b >= sb - 0.01 and b + h <= sb + sh + 0.01
+				end
+				check("jon profile: the seven cards of the drawing are inside the stage", inside and #drawing.tiles == 7)
+			end
 			D.Show("mock-start")
 			clean(W, "setup profiles cards")
 		end

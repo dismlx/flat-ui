@@ -86,7 +86,7 @@ function ns.SetupGet(def)
 	return value
 end
 
--- The lines of Profile on a new character: the three ways to ask or skip, the six ready-made profiles, then each saved profile that is not Default and
+-- The lines of Profile on a new character: the three ways to ask or skip, the ready-made profiles, then each saved profile that is not Default and
 -- not named after a ready-made one (that name is the ready-made profile).
 function ns.SetupNewChoices()
 	local list = { { "ask", "Show profiles" }, { "default", "Default profile" }, { "recommended", "Recommended profile" } }
@@ -809,7 +809,7 @@ function S.LayoutList()
 	S.listScroller.SetContent(y + 8)
 end
 
--- The drawing of a screen: the six ready-made profiles on New profile, the look of the profile being made on Review and after Finish.
+-- The drawing of a screen: the ready-made profiles on New profile, the look of the profile being made on Review and after Finish.
 function S.DrawingOf(number)
 	if number >= 1 and number < S.REVIEW then
 		return STEPS[number].draw
@@ -1465,7 +1465,7 @@ function S.Finish()
 			picks[path] = value
 		end
 	end
-	local ok, message = ns.NewProfile(name, draft.from, picks)
+	local ok, message = ns.NewProfile(name, draft.from, picks, profile and profile.movers)
 	if not ok then
 		S.Go(0)
 		kit.Say(message)
@@ -1867,7 +1867,7 @@ S.NEVER = {
 	["nameplates.threat"] = true, ["nameplates.threatRole"] = true,
 }
 
--- The six profiles of ns.SETUP_PROFILES with every value checked: a value stays when its setting exists, a profile holds it, no profile may set it, a step
+-- The profiles of ns.SETUP_PROFILES with every value and position checked: a value stays when its setting exists, a profile holds it, no profile may set it, a step
 -- lists it and the setting takes it exactly as it is. A value that fails is dropped and said once. Made when first read, since the lists of the choice rows
 -- are made by files that load after Core.
 function S.Presets()
@@ -1880,6 +1880,16 @@ function S.Presets()
 	local list, dropped = {}, {}
 	for _, raw in ipairs(type(ns.SETUP_PROFILES) == "table" and ns.SETUP_PROFILES or {}) do
 		local profile = { id = raw.id, label = raw.label, line = raw.line, values = {} }
+		-- Positions, by frame name; a spot that is not valid is dropped and said once, as a value is.
+		for _, spot in ipairs(type(raw.movers) == "table" and raw.movers or {}) do
+			local copy = { point = spot.point, x = spot.x, y = spot.y, scale = spot.scale, kind = spot.kind, label = spot.label }
+			if IsText(spot.frame) and ns.CleanSpot(copy) then
+				profile.movers = profile.movers or {}
+				profile.movers[spot.frame] = copy
+			else
+				dropped[#dropped + 1] = ("Flat UI: the %s profile leaves out the position of %s: not a position."):format(tostring(raw.label), tostring(spot.frame))
+			end
+		end
 		for path, value in pairs(type(raw.values) == "table" and raw.values or {}) do
 			local def = defs[path]
 			local why
@@ -1926,7 +1936,7 @@ end
 -- A ready-made profile in the shape of a saved one, which is what the draft starts from.
 function S.Preset(id)
 	local profile = S.PresetOf(id)
-	return profile and { options = profile.values, movers = S.noSpots } or nil
+	return profile and { options = profile.values, movers = profile.movers or S.noSpots } or nil
 end
 
 -- What a call of the client answers, or nil when the call is missing, raises or gives a withheld value.
@@ -2032,7 +2042,7 @@ function S.UseReady(id)
 	if found then
 		ok, why = ns.UseProfile(found)
 	else
-		ok, why = ns.NewProfile(profile.label, nil, profile.values)
+		ok, why = ns.NewProfile(profile.label, nil, profile.values, profile.movers)
 	end
 	if ok then
 		S.Flag()
@@ -2041,8 +2051,8 @@ function S.UseReady(id)
 	return ok, why
 end
 
--- The panel: six tiles, each a picture of a ready-made profile, three to a row. A click on a tile puts that profile in use.
-S.OFFER_W, S.OFFER_H, S.TILE_W, S.TILE_H = 644, 390, 200, 118
+-- The panel: a tile for each ready-made profile, each a picture of it, three to a row. A click on a tile puts that profile in use.
+S.OFFER_W, S.OFFER_H, S.TILE_W, S.TILE_H = 644, 518, 200, 118
 S.PICK_LINE = "Click a profile to use it."
 
 -- What Profile on a new character holds to share a profile that is in use: a ready-made profile is shared by its tile, any other by its name.
@@ -2294,7 +2304,7 @@ function ns.SetupAuto()
 		S.Flag()
 		return
 	end
-	local name, picks
+	local name, picks, spots
 	local id = mode == "recommended" and S.Recommend() or (mode:find("^preset:") and mode:sub(8)) or nil
 	if id then
 		local profile = S.PresetOf(id)
@@ -2303,11 +2313,12 @@ function ns.SetupAuto()
 		end
 		name = S.FindProfile(profile.label)
 		picks = not name and profile.values or nil
+		spots = not name and profile.movers or nil
 		name = name or profile.label
 	elseif mode:find("^profile:") then
 		name = S.FindProfile(mode:sub(9))
 	end
-	if name and ns.AssignProfile(name, picks) then
+	if name and ns.AssignProfile(name, picks, spots) then
 		S.Flag()
 		S.line = ("Flat UI: using %s."):format(name)
 	end
