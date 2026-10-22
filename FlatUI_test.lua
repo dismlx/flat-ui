@@ -6981,6 +6981,10 @@ local function newWorld(opts)
 	if opts.saved and not opts.unversioned and opts.saved.settingsVersion == nil then
 		opts.saved.settingsVersion = opts.saved.profiles and 2 or 1
 	end
+	-- Settings saved by a build that has the one list of sounds say so; a test of an older build's sounds sets soundsMigrated to false.
+	if opts.saved and not opts.unversioned and opts.saved.soundsMigrated == nil then
+		opts.saved.soundsMigrated = true
+	end
 	env.FlatUIDB = opts.saved
 	env.FlatUICharDB = opts.char
 	-- A character that has a name has been offered Flat UI setup, unless the test asks for the offer (opts.offer): the offer is a frame of its own.
@@ -9490,7 +9494,7 @@ local MS9 = {
 	icons = { { "game", "Left of the bar" }, { "right", "Right of the bar" }, { "hidden", "Hidden" } },
 	idles = { { "show", "Always" }, { "combat", "In combat" }, { "hide", "Only while swinging" } },
 	barChoices = { { "all", "All bars" }, { "side", "Bars 2 to 8" }, { "main", "Main bar" }, { "none", "No bars" } },
-	outlines = { { "game", "Game outline" }, { "none", "None" }, { "outline", "Thin" }, { "thick", "Thick" } },
+	outlines = { { "game", "As the game has it" }, { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } },
 }
 local TEXT_PLACES = { { "game", "As the game has it" }, { "below", "Below the bar" }, { "inside", "Inside the bar" } }
 local BLOCK_LISTS = {
@@ -9858,7 +9862,8 @@ local PAGES = {
 		S("resource.powerColour", "colour", "ff3d7dd9", "Power colour", nil, { needs = "resource.powerOwn" }),
 		S("resource.healthByLeft", "bool", false, "Colour health by health left", nil, { needs = "resource.flat" }),
 		"Text",
-		S("resource.textSize", "number", 100, "Text size", "100% is the game's own size.", { min = 60, max = 200, step = 5, unit = "%" }),
+		S("resource.textSize", "number", 100, "Text size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
+		S("resource.textOutline", "choice", "game", "Text outline", nil, { choices = MS9.outlines }),
 		S("resource.text", "bool", true, "Health and power numbers"),
 		S("resource.percent", "bool", true, "Percentage text", nil, { needs = "resource.text" }),
 		S("resource.value", "bool", true, "Value text", nil, { needs = "resource.text" }),
@@ -9873,7 +9878,7 @@ local PAGES = {
 		S("ownbuffs.trackers", "choice", "show", "Buffs that have a tracker", nil, { choices = { { "show", "Show here too" }, { "leave", "Leave out" } } }),
 		"Icons",
 		S("ownbuffs.time", "choice", "under", "Time left", nil, { choices = { { "under", "Under the icon" }, { "on", "On the icon" }, { "bar", "Thin bar under the icon" }, { "off", "Off" } } }),
-		S("ownbuffs.size", "number", 28, "Icon size", nil, { min = 16, max = 48, step = 2, unit = "" }),
+		S("ownbuffs.size", "number", 28, "Icon size", "Icons already shown change size when you log in again.", { min = 16, max = 64, step = 2, unit = "" }),
 		S("ownbuffs.tooltips", "choice", "on", "Buff tooltips", "Settings on the Tooltips page do not change this tooltip.", { choices = { { "on", "On" }, { "out", "Out of combat only" }, { "off", "Off" } } }),
 		"Position",
 		S("ownbuffs.place", "choice", "above", "Place", "Own position has a handle in /flatui move.",
@@ -9921,7 +9926,8 @@ local PAGES = {
 		S("swing.rangeAlpha", "number", 40, "Out of range opacity", nil, { min = 10, max = 100, step = 5, unit = "%" }),
 		S("swing.idle", "choice", "combat", "Show the timer", "Works with Main hand border, Off hand border or Ranged border on.", { choices = MS9.idles }),
 		"Text",
-		S("swing.textSize", "number", 100, "Text size", "100% is the game's own size.", { min = 60, max = 200, step = 5, unit = "%" }),
+		S("swing.textSize", "number", 100, "Text size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
+		S("swing.textOutline", "choice", "game", "Text outline", nil, { choices = MS9.outlines }),
 		S("swing.name", "bool", true, "Timer name"),
 		S("swing.time", "bool", true, "Time left"),
 		S("swing.textOwn", "bool", false, "Own text colour"),
@@ -9970,7 +9976,8 @@ local PAGES = {
 	} },
 	{ key = "castbarsText", label = "Text and icon", parent = "castbars", owner = "castbars", rows = {
 		"Text",
-		S("castbars.textSize", "number", 100, "Text size", "100% is the game's own size.", { min = 60, max = 200, step = 5, unit = "%" }),
+		S("castbars.textSize", "number", 100, "Text size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
+		S("castbars.textOutline", "choice", "game", "Text outline", nil, { choices = MS9.outlines }),
 		S("castbars.textShow", "bool", true, "Spell name"),
 		S("castbars.textAlign", "choice", "game", "Spell name alignment", nil, { choices = MS9.aligns }),
 		S("castbars.textOwn", "bool", false, "Own spell name colour"),
@@ -9994,9 +10001,12 @@ local PAGES = {
 		S("cooldowns.rows", "choice", "down", "Extra rows", nil, { choices = EXTRA_ROWS }),
 		S("cooldowns.crop", "number", 8, "Icon crop", nil, { min = 0, max = 15, step = 1, unit = "%" }),
 		S("cooldowns.border", "bool", true, "Icon border", "Off also removes the dark background."),
-		S("cooldowns.numbers", "bool", true, "Countdown numbers"),
+		S("cooldowns.numbers", "bool", true, "Time left"),
 		S("cooldowns.dim", "bool", true, "Dim on cooldown"),
-		S("cooldowns.readySound", "bool", false, "Sound when ready", "Plays the Sound chosen on the Low and missing page of Trackers."),
+		S("cooldowns.mounted", "bool", false, "Hide while mounted"),
+		S("cooldowns.resting", "bool", false, "Hide in cities and inns"),
+		"Ready again",
+		S("cooldowns.readySound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 		"Position",
 		S("cooldowns.place", "choice", "screen", "Position", nil, { choices = PLACES }),
 		S("cooldowns.x", "number", 0, "X offset", nil, { min = -800, max = 800, step = 1, unit = "" }),
@@ -10071,7 +10081,8 @@ local PAGES = {
 		S("trackers.counts", "bool", true, "Charges"),
 		S("trackers.names", "bool", true, "Name", "On bars and text."),
 		S("trackers.numbers", "bool", true, "Time left"),
-		S("trackers.grow", "choice", "middle", "Row direction", nil, { choices = { { "middle", "From the middle" }, { "right", "Left to right" }, { "left", "Right to left" } } }),
+		S("trackers.numbersFont", "choice", "game", "Countdown number size", nil, { choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" }, { "huge", "Huge" } }, needs = "trackers.numbers" }),
+		S("trackers.grow", "choice", "center", "Row direction", nil, { choices = { { "center", "From the middle" }, { "right", "Left to right" }, { "left", "Right to left" } } }),
 		S("trackers.spacing", "number", 3, "Spacing", nil, { min = 0, max = 20, step = 1, unit = "" }),
 		"Position",
 		S("trackers.place", "choice", "resource", "Place", "Own position: drag the Trackers handle in /flatui move.",
@@ -10087,7 +10098,7 @@ local PAGES = {
 		"Missing",
 		S("trackers.missing", "choice", "red", "When missing", nil, { choices = { { "red", "Red icon" }, { "pulse", "Red icon that pulses" }, { "word", "Red icon and the word Missing" } } }),
 		S("trackers.sound", "bool", false, "Sound when it drops"),
-		S("trackers.kit", "choice", "raid", "Sound", nil, { choices = { { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
+		S("trackers.kit", "choice", "raid", "Sound", nil, { choices = { { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 	} },
 	-- The window's own editor of one tracker: a page of the window with no setting of its own, left out of the game's options.
 	{ key = "tracker", label = "Tracker", switch = "trackers", panelOnly = true, rows = {} },
@@ -10096,6 +10107,8 @@ local PAGES = {
 		"Icons",
 		S("defensives.place", "choice", "player", "Place", "Own position has a handle in /flatui move.",
 			{ choices = { { "player", "Above the player frame" }, { "resource", "At the personal resource display" }, { "own", "Own position" }, { "off", "Off" } } }),
+		S("defensives.size", "number", 32, "Icon size", "Icons already shown change size when you log in again.", { min = 16, max = 64, step = 2, unit = "" }),
+		S("defensives.spacing", "number", 3, "Spacing", nil, { min = 0, max = 20, step = 1, unit = "" }),
 		S("defensives.caster", "bool", true, "Caster's name"),
 		S("defensives.own", "bool", false, "Your own defensives", "Shield Wall, Ice Barrier and the like that you cast on yourself."),
 		"Spells",
@@ -10107,11 +10120,13 @@ local PAGES = {
 		"Icons",
 		S("partycd.side", "choice", "right", "Party icons", nil,
 			{ choices = { { "right", "Right of each frame" }, { "left", "Left of each frame" }, { "below", "Below each frame" } } }),
-		S("partycd.show", "choice", "always", "Show", nil, { choices = { { "always", "Always, used ones dark" }, { "used", "Only while on cooldown" } } }),
+		S("partycd.show", "choice", "always", "Show", nil, { choices = { { "cooling", "Only while on cooldown" }, { "always", "Always, used ones dark" } } }),
 		S("partycd.raid", "choice", "own", "In a raid group", "Own position has a handle in /flatui move.", { choices = { { "own", "Own position" }, { "off", "Off" } } }),
 		S("partycd.ownRow", "bool", false, "Your own row", "Shown while you are in a party."),
 		S("partycd.count", "number", 6, "Icons for each member", nil, { min = 3, max = 8, step = 1, unit = "" }),
-		S("partycd.size", "number", 24, "Icon size", nil, { min = 16, max = 40, step = 2, unit = "" }),
+		S("partycd.size", "number", 24, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "" }),
+		S("partycd.seconds", "bool", true, "Time left"),
+		S("partycd.numbersFont", "choice", "game", "Countdown number size", nil, { choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" }, { "huge", "Huge" } }, needs = "partycd.seconds" }),
 		"Abilities",
 		S("partycd.interrupts", "bool", true, "Interrupts"),
 		S("partycd.defensives", "bool", true, "Defensives"),
@@ -10137,15 +10152,14 @@ local PAGES = {
 		"Icons",
 		S("enemycd.place", "choice", "both", "Place", "The two bars have handles in /flatui move.",
 			{ choices = { { "both", "Both" }, { "plates", "On enemy nameplates" }, { "bars", "Bars for target and focus" } } }),
-		S("enemycd.show", "choice", "cooling", "Show", nil, { choices = { { "cooling", "Only while on cooldown" }, { "always", "Always, ready ones bright" } } }),
-		S("enemycd.seconds", "bool", true, "Seconds on the icon"),
+		S("enemycd.show", "choice", "cooling", "Show", nil, { choices = { { "cooling", "Only while on cooldown" }, { "always", "Always, used ones dark" } } }),
+		S("enemycd.seconds", "bool", true, "Time left"),
+		S("enemycd.numbersFont", "choice", "game", "Countdown number size", nil, { choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" }, { "huge", "Huge" } }, needs = "enemycd.seconds" }),
 		S("enemycd.kindBorder", "bool", true, "Border colour by kind"),
-		S("enemycd.size", "number", 24, "Icon size", nil, { min = 16, max = 40, step = 2, unit = "" }),
+		S("enemycd.size", "number", 24, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "" }),
 		"Ready again",
-		S("enemycd.ready", "choice", "none", "When it is ready again", "The sound plays for your target and focus only.",
-			{ choices = { { "none", "Nothing" }, { "flash", "Flash" }, { "sound", "Flash and sound" } } }),
-		S("enemycd.sound", "choice", "alert", "Ready sound", nil, { needs = "enemycd.ready", needsIn = { "sound" },
-			choices = { { "alert", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "horn", "Warhorn" }, { "raid", "Raid warning" } } }),
+		S("enemycd.flash", "bool", false, "Flash when ready"),
+		S("enemycd.sound", "choice", "none", "Sound", "The sound plays for your target and focus only.", { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 	} },
 	{ key = "windows", label = "Windows", rows = {
 		S("windows.enabled", "bool", true, "Restyle windows", RELOAD),
@@ -10183,7 +10197,7 @@ local PAGES = {
 		S("windows.eye", "bool", false, "Show the eye", nil, { needs = "windows.groupfinder" }),
 		S("windows.roleArt", "bool", false, "Show role button backgrounds", nil, { needs = "windows.groupfinder" }),
 		"Title",
-		S("windows.titleSize", "number", 100, "Title size", nil, { min = 70, max = 200, step = 5, unit = "%" }),
+		S("windows.titleSize", "number", 100, "Title size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
 		S("windows.titleOwn", "bool", false, "Own title colour"),
 		S("windows.titleColour", "colour", "ffffd100", "Title colour", nil, { needs = "windows.titleOwn" }),
 	} },
@@ -10209,7 +10223,7 @@ local PAGES = {
 		S("windows.slotTints", "bool", true, "Flat highlights", RELOAD, { needs = "windows.slots" }),
 		S("windows.qualityMin", "choice", "all", "Quality border from", nil, { needs = "windows.quality",
 			choices = { { "all", "Every item" }, { "uncommon", "Green and better" }, { "rare", "Blue and better" }, { "epic", "Epic and better" } } }),
-		S("windows.countSize", "number", 100, "Stack count size", nil, { min = 60, max = 200, step = 5, unit = "%" }),
+		S("windows.countSize", "number", 100, "Stack count size", nil, { min = 50, max = 250, step = 5, unit = "%" }),
 		"Item level",
 		S("windows.ilvlBags", "bool", false, "Item level in bags and bank"),
 		S("windows.ilvlCharacter", "bool", false, "Item level on equipped gear"),
@@ -10429,7 +10443,7 @@ local PAGES = {
 		S("unitframes.auras", "bool", true, "Aura icon borders", "Square icons with a thin border. Debuffs take the colour of their type."),
 		S("unitframes.auraCrop", "number", 8, "Aura icon crop", nil, { min = 0, max = 15, step = 1, unit = "%", needs = "unitframes.auras" }),
 		S("unitframes.auraTypeColours", "bool", true, "Border colour by debuff type", nil, { needs = "unitframes.auras" }),
-		S("unitframes.auraCountSize", "number", 100, "Stack number size", "On party and pet debuffs. 100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
+		S("unitframes.auraCountSize", "number", 100, "Stack number size", "On party and pet debuffs. 100% is the game's own size.", { min = 50, max = 250, step = 5, unit = "%" }),
 		S("unitframes.auraNumbers", "bool", false, "Countdown numbers on party and pet debuffs"),
 		"Elite and Rare",
 		S("unitframes.kindMark", "bool", true, "Mark after the level", "+ for an Elite, R for a Rare, R+ for a Rare Elite.", { needs = "unitframes.levelPosition", needsIn = { "end", "before", "portrait" } }),
@@ -10470,7 +10484,7 @@ local PAGES = {
 		S("hud.dayNight", "bool", true, "Day and night icon"),
 		"Zone name",
 		S("hud.zoneText", "bool", true, "Zone name"),
-		S("hud.zoneSize", "number", 100, "Zone name size", nil, { min = 60, max = 200, step = 5, unit = "%" }),
+		S("hud.zoneSize", "number", 100, "Zone name size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
 		"Buttons",
 		S("hud.btnTracking", "bool", true, "Tracking button"),
 		S("hud.btnMail", "bool", true, "Mail icon"),
@@ -10494,7 +10508,7 @@ local PAGES = {
 		S("hud.durationSize", "number", 100, "Duration size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
 		S("hud.durationFormat", "choice", "tight", "Duration format", "Also the totem times under the player frame.", { choices = { { "game", "As the game has it (8 m)" }, { "tight", "No space (8m)" } } }),
 		S("hud.durationColour", "choice", "white", "Duration colour", "Also the totem times under the player frame.", { choices = { { "game", "As the game has it (gold, white under 90 s)" }, { "white", "White" } } }),
-		S("hud.countSize", "number", 100, "Stack count size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
+		S("hud.countSize", "number", 100, "Stack count size", nil, { min = 50, max = 250, step = 5, unit = "%" }),
 	} },
 	{ key = "hudBars", label = "Bars, bags and micro menu", parent = "hud", owner = "hud", rows = {
 		"Bags",
@@ -10516,7 +10530,7 @@ local PAGES = {
 		S("hud.xpText", "choice", "game", "Bar text", "On the game's bar, not applied while Leave the game's action bars alone is on.", { choices = { { "game", "As the game has it" }, { "percent", "Percent" }, { "both", "Value and percent" }, { "togo", "Amount to go" }, { "hide", "Hidden" } } }),
 		S("hud.xpTextWhen", "choice", "hover", "Bar text shows", "As the game has it adds the game's experience bar text setting and the character window.", { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "hover", "On mouse-over" }, { "always", "Always" }, { "game", "As the game has it" } } }),
 		S("hud.xpTextPlace", "choice", "on", "Bar text place", nil, { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "on", "On the bar" }, { "above", "Above the bar" }, { "right", "Right of the bar" } } }),
-		S("hud.xpTextSize", "number", 100, "Bar text size", "On the game's bar, not applied while Leave the game's action bars alone is on.", { min = 60, max = 200, step = 5, unit = "%" }),
+		S("hud.xpTextSize", "number", 100, "Bar text size", "On the game's bar, not applied while Leave the game's action bars alone is on.", { min = 50, max = 200, step = 5, unit = "%" }),
 		S("hud.xpTexture", "choice", "default", "Bar texture", "On the game's bar it needs Flat fill and is not applied while Leave the game's action bars alone is on.", { choices = { { "default", "Same as the Flat UI page" }, { "flat", "Flat" }, { "soft", "Soft shade" }, { "shaded", "Shaded" }, { "gloss", "Gloss" }, { "stripes", "Stripes" }, { "edge", "Bottom edge" },
 				{ "fade", "Side fade" }, { "game", "Game status bar" }, { "skills", "Skills bar" }, { "targeting", "Targeting bar" } } }),
 		S("hud.xpTooltip", "bool", true, "Tooltip", "Experience, rested and standing on mouse-over.", { needs = "hud.xpOwn", needsIn = { "flat" } }),
@@ -10533,7 +10547,7 @@ local PAGES = {
 		S("hud.trackerTexture", "choice", "default", "Tracker bar texture", nil, { needs = "hud.trackerBars", choices = { { "default", "Same as the Flat UI page" }, { "flat", "Flat" }, { "soft", "Soft shade" }, { "shaded", "Shaded" }, { "gloss", "Gloss" }, { "stripes", "Stripes" }, { "edge", "Bottom edge" },
 				{ "fade", "Side fade" }, { "game", "Game status bar" }, { "skills", "Skills bar" }, { "targeting", "Targeting bar" } } }),
 		S("hud.trackerPanel", "bool", false, "Tracker background"),
-		S("hud.trackerHeaderSize", "number", 100, "Heading size", nil, { min = 60, max = 200, step = 5, unit = "%" }),
+		S("hud.trackerHeaderSize", "number", 100, "Heading size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
 		S("hud.trackerCombat", "number", 100, "Opacity in combat", nil, { min = 0, max = 100, step = 10, unit = "%" }),
 		"Loot",
 		S("hud.lootWindow", "bool", true, "Loot window", "Flat window with thin borders on the window, the cards and the item slots."),
@@ -10578,7 +10592,7 @@ local PAGES = {
 		S("chat.classColour", "choice", "always", "Class colours in chat", nil, { choices = { { "always", "Always" }, { "never", "Never" }, { "channel", "Per channel" } } }),
 		"Font",
 		S("chat.font", "choice", "default", "Chat font", nil, { choices = { { "default", "Game font" } } }),
-		S("chat.outline", "choice", "game", "Chat text outline", nil, { choices = { { "game", "Game outline" }, { "none", "None" }, { "outline", "Thin" }, { "thick", "Thick" } } }),
+		S("chat.outline", "choice", "game", "Chat text outline", nil, { choices = MS9.outlines }),
 		S("chat.shadow", "bool", true, "Chat text shadow"),
 		"History and fading",
 		S("chat.history", "number", 128, "Lines kept per window", nil, { min = 128, max = 2048, step = 64, unit = " lines" }),
@@ -10604,8 +10618,8 @@ local PAGES = {
 		S("chat.nameClass", "bool", false, "Class colour on player names"),
 		"Size and text",
 		S("chat.tipScale", "number", 100, "Tooltip size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
-		S("chat.tipTitleSize", "number", 100, "Title size", nil, { min = 70, max = 200, step = 5, unit = "%" }),
-		S("chat.tipTextSize", "number", 100, "Text size", nil, { min = 70, max = 200, step = 5, unit = "%" }),
+		S("chat.tipTitleSize", "number", 100, "Title size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
+		S("chat.tipTextSize", "number", 100, "Text size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
 		"Tooltip health bar",
 		S("chat.health", "bool", true, "Health bar border and fill"),
 		S("chat.barHide", "bool", false, "Hide the health bar"),
@@ -10631,7 +10645,7 @@ local PAGES = {
 			{ choices = { { "default", "Game font" } } }),
 		"Style",
 		S("fonts.outline", "choice", "game", "Text outline", nil,
-			{ choices = { { "game", "Game outline" }, { "none", "None" }, { "outline", "Thin" }, { "thick", "Thick" } } }),
+			{ choices = MS9.outlines }),
 		S("fonts.shadow", "bool", true, "Text shadow"),
 		S("fonts.size", "number", 100, "Text size", "Narrow frames can clip long names.", { min = 80, max = 130, step = 5, unit = "%" }),
 		S("fonts.minimum", "number", 0, "Smallest text", "Raises any game text smaller than this. 0 leaves sizes alone.", { min = 0, max = 14, step = 1, unit = "" }),
@@ -10887,7 +10901,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.96" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.97" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -20204,6 +20218,7 @@ do local PROBES = {
 	{ "resource.powerOwn", true, held("resource.powerOwn"), "false/false", "true/true" },
 	{ "resource.powerColour", "ff336699", held("resource.powerColour"), "ff3d7dd9/ff3d7dd9", "ff336699/ff336699", pre = { { "resource.powerOwn", true } } },
 	{ "resource.textSize", 150, held("resource.textSize"), "100/100", "150/150" },
+	{ "resource.textOutline", "Thick", held("resource.textOutline"), "game/As the game has it", "thick/Thick", from = "As the game has it" },
 	{ "resource.text", false, held("resource.text"), "true/true", "false/false" },
 	{ "swing.main", false, swingAll, "falseSB/falseSB/falseSB", "truehb/falseSB/falseSB" },
 	{ "swing.off", false, swingAll, "falseSB/falseSB/falseSB", "falseSB/truehb/falseSB" },
@@ -20218,6 +20233,7 @@ do local PROBES = {
 	{ "swing.spark", false, held("swing.spark"), "true/true", "false/false" },
 	{ "swing.textShadow", true, held("swing.textShadow"), "false/false", "true/true" },
 	{ "swing.textSize", 150, held("swing.textSize"), "100/100", "150/150" },
+	{ "swing.textOutline", "Thick", held("swing.textOutline"), "game/As the game has it", "thick/Thick", from = "As the game has it" },
 	{ "swing.name", false, held("swing.name"), "true/true", "false/false" },
 	{ "swing.time", false, held("swing.time"), "true/true", "false/false" },
 	{ "castbars.player", false, function(S) return castLine(S, "PlayerCastingBarFrame") .. "/" .. castLine(S, "OverlayPlayerCastingBarFrame") .. "/" .. castLine(S, "PetCastingBarFrame") end,
@@ -20249,6 +20265,7 @@ do local PROBES = {
 	{ "castbars.focusWidth", 300, function(S) return castSize(S, "FocusFrameSpellBar") end, "150x10", "300x10", pre = { { "castbars.focusSize", true } } },
 	{ "castbars.focusHeight", 20, function(S) return castSize(S, "FocusFrameSpellBar") end, "150x10", "150x20", pre = { { "castbars.focusSize", true } } },
 	{ "castbars.textSize", 150, held("castbars.textSize"), "100/100", "150/150" },
+	{ "castbars.textOutline", "Thick", held("castbars.textOutline"), "game/As the game has it", "thick/Thick", from = "As the game has it" },
 	{ "cooldowns.enabled", false, held("cooldowns.enabled"), "true/true", "false/false" },
 	{ "cooldowns.add", "Choose a spell", held("cooldowns.add"), "0/Choose a spell", "0/Choose a spell", oneWay = true },
 	{ "cooldowns.remove", "Choose a spell", held("cooldowns.remove"), "0/Choose a spell", "0/Choose a spell", oneWay = true },
@@ -20258,7 +20275,15 @@ do local PROBES = {
 	{ "cooldowns.grow", "Left to right", held("cooldowns.grow"), "center/From the middle", "right/Left to right", from = "From the middle" },
 	{ "cooldowns.rows", "Above", held("cooldowns.rows"), "down/Below", "up/Above", from = "Below" },
 	{ "cooldowns.numbers", false, held("cooldowns.numbers"), "true/true", "false/false" },
-	{ "cooldowns.readySound", true, held("cooldowns.readySound"), "false/false", "true/true" },
+	{ "cooldowns.readySound", "Raid warning", held("cooldowns.readySound"), "none/None", "raid/Raid warning", from = "None" },
+	{ "cooldowns.mounted", true, held("cooldowns.mounted"), "false/false", "true/true" },
+	{ "cooldowns.resting", true, held("cooldowns.resting"), "false/false", "true/true" },
+	{ "trackers.numbersFont", "Large", held("trackers.numbersFont"), "game/As the game has it", "large/Large", from = "As the game has it" },
+	{ "defensives.size", 40, held("defensives.size"), "32/32", "40/40" },
+	{ "defensives.spacing", 10, held("defensives.spacing"), "3/3", "10/10" },
+	{ "partycd.seconds", false, held("partycd.seconds"), "true/true", "false/false" },
+	{ "partycd.numbersFont", "Large", held("partycd.numbersFont"), "game/As the game has it", "large/Large", from = "As the game has it" },
+	{ "enemycd.numbersFont", "Large", held("enemycd.numbersFont"), "game/As the game has it", "large/Large", from = "As the game has it" },
 	{ "cooldowns.dim", false, held("cooldowns.dim"), "true/true", "false/false" },
 	{ "cooldowns.place", "Under the personal resource display", held("cooldowns.place"), "screen/Middle of the screen", "resource/Under the personal resource display", from = "Middle of the screen" },
 	{ "cooldowns.x", 100, held("cooldowns.x"), "0/0", "100/100" },
@@ -20306,7 +20331,7 @@ do local PROBES = {
 	{ "trackers.y", -100, held("trackers.y"), "0/0", "-100/-100" },
 	{ "trackers.gameIcon", false, held("trackers.gameIcon"), "true/true", "false/false" },
 	{ "trackers.without", "Hidden", held("trackers.without"), "last/Last known", "hidden/Hidden", from = "Last known" },
-	{ "trackers.grow", "Left to right", held("trackers.grow"), "middle/From the middle", "right/Left to right", from = "From the middle" },
+	{ "trackers.grow", "Left to right", held("trackers.grow"), "center/From the middle", "right/Left to right", from = "From the middle" },
 	{ "trackers.spacing", 10, held("trackers.spacing"), "3/3", "10/10" },
 	{ "trackers.shape", "Bar", held("trackers.shape"), "icon/Icon", "bar/Bar", from = "Icon" },
 	{ "trackers.barWidth", 200, held("trackers.barWidth"), "140/140", "200/200" },
@@ -20329,7 +20354,7 @@ do local PROBES = {
 	{ "defensives.remove", "Choose a spell", held("defensives.remove"), "0/Choose a spell", "0/Choose a spell", oneWay = true },
 	{ "partycd.enabled", false, held("partycd.enabled"), "true/true", "false/false" },
 	{ "partycd.side", "Left of each frame", held("partycd.side"), "right/Right of each frame", "left/Left of each frame", from = "Right of each frame" },
-	{ "partycd.show", "Only while on cooldown", held("partycd.show"), "always/Always, used ones dark", "used/Only while on cooldown", from = "Always, used ones dark" },
+	{ "partycd.show", "Only while on cooldown", held("partycd.show"), "always/Always, used ones dark", "cooling/Only while on cooldown", from = "Always, used ones dark" },
 	{ "partycd.raid", "Off", held("partycd.raid"), "own/Own position", "off/Off", from = "Own position" },
 	{ "partycd.ownRow", true, held("partycd.ownRow"), "false/false", "true/true" },
 	{ "partycd.count", 8, held("partycd.count"), "6/6", "8/8" },
@@ -20704,7 +20729,7 @@ do local PROBES = {
 }
 	-- Rows of the nameplate and unit frame pages whose effect is a value the addon holds: each is changed through its control and back.
 	-- The change is the first value other than the default; a row that needs another switch has it on first.
-	for _, path in ipairs({ "nameplates.friendly", "general.healthFull", "general.healthHalf", "general.healthLow", "nameplates.healthByLeft", "nameplates.lowHealth", "nameplates.lowHealthAt", "nameplates.lowHealthColour", "nameplates.castTime", "resource.healthByLeft", "castbars.ownTime", "unitframes.combatIcon", "unitframes.playerPowerBar", "unitframes.targetPowerBar", "unitframes.focusPowerBar", "unitframes.petHappiness", "unitframes.petPowerBar", "unitframes.totPowerBar", "unitframes.partyPowerBar", "unitframes.partyRangeDim", "unitframes.partyRangeOpacity", "unitframes.bossPowerBar", "unitframes.raidRangeAlpha", "unitframes.raidRoleIcon", "unitframes.raidName", "unitframes.raidStatusText", "unitframes.healthByLeft", "unitframes.healPrediction", "unitframes.absorbShield", "unitframes.healAbsorb", "unitframes.leaderIcon", "unitframes.roleIcon", "unitframes.pvpIcon", "unitframes.raidMarker", "unitframes.deadText", "unitframes.totemTimer", "unitframes.totemSwipe", "chat.frameBorder", "chat.inputPlace", "chat.inputIdle", "chat.inputFocus", "chat.outline", "chat.shadow", "chat.history", "chat.fade", "chat.fadeAfter", "chat.tipOwn", "chat.tipBorder", "chat.unitBorder", "chat.nameClass", "chat.tipScale", "chat.tipTitleSize", "chat.tipTextSize", "chat.barHide", "chat.barHeight", "chat.combat", "chat.combatKey", "chat.ids", "chat.count", "fonts.enabled", "fonts.outline", "fonts.shadow", "fonts.size", "fonts.minimum", "nameplates.healthTexture", "nameplates.barWidth", "nameplates.dimAmount", "nameplates.healPrediction", "nameplates.absorbs", "nameplates.healAbsorbs", "nameplates.castTexture", "nameplates.raidMarker", "nameplates.raidMarkerSize", "nameplates.raidMarkerX", "nameplates.raidMarkerY", "nameplates.offscreenIcon", "nameplates.auraCrop", "nameplates.auraBorderOwn", "nameplates.auraBorderColour", "nameplates.auraTimers", "nameplates.auraStacks", "nameplates.auraOpacity", "nameplates.aurasWhen", "unitframes.playerPicture", "unitframes.playerLevel", "unitframes.restAnimation", "unitframes.playerHealthBy", "unitframes.targetPicture", "unitframes.targetLevel", "unitframes.targetHealthBy", "unitframes.focusPicture", "unitframes.focusLevel", "unitframes.focusHealthBy", "unitframes.petPicture", "unitframes.petHealthBy", "unitframes.totPicture", "unitframes.totHealthBy", "unitframes.partyPicture", "unitframes.partypetPicture", "unitframes.partyHealthBy", "unitframes.bossLevel", "unitframes.bossHealthBy", "unitframes.healthTexture", "unitframes.powerTexture", "unitframes.stripBrightness", "unitframes.auraCrop", "unitframes.auraTypeColours", "unitframes.auraCountSize", "unitframes.auraNumbers", "trackers.mark", "trackers.art", "trackers.artSize", "trackers.artAlpha", "trackers.artY", "trackers.glow", "enemycd.show", "enemycd.ready", "enemycd.sound", "enemycd.arenaBreak", "nameplates.colours", "nameplates.colourPlayers", "nameplates.targetBar", "nameplates.targetBarColour", "nameplates.threat", "nameplates.threatRole", "nameplates.threatGood", "nameplates.threatTransition", "nameplates.threatBad", "nameplates.hover", "nameplates.hoverColour", "nameplates.kindBorder", "nameplates.eliteColour", "nameplates.rareColour", "nameplates.bossColour", "nameplates.clickThroughFriendly", "nameplates.clickThroughEnemy", "nameplates.clickExtraX", "nameplates.clickExtraY", "nameplates.nameShow", "nameplates.nameColour", "nameplates.nameCustomColour", "nameplates.healthTextColour", "nameplates.healthTextWhen", "nameplates.healthFormat", "nameplates.castTextSize", "nameplates.castTextOutline", "nameplates.castTextColour", "nameplates.castIconSize", "nameplates.castSpark", "nameplates.castShield" }) do
+	for _, path in ipairs({ "nameplates.friendly", "general.healthFull", "general.healthHalf", "general.healthLow", "nameplates.healthByLeft", "nameplates.lowHealth", "nameplates.lowHealthAt", "nameplates.lowHealthColour", "nameplates.castTime", "resource.healthByLeft", "castbars.ownTime", "unitframes.combatIcon", "unitframes.playerPowerBar", "unitframes.targetPowerBar", "unitframes.focusPowerBar", "unitframes.petHappiness", "unitframes.petPowerBar", "unitframes.totPowerBar", "unitframes.partyPowerBar", "unitframes.partyRangeDim", "unitframes.partyRangeOpacity", "unitframes.bossPowerBar", "unitframes.raidRangeAlpha", "unitframes.raidRoleIcon", "unitframes.raidName", "unitframes.raidStatusText", "unitframes.healthByLeft", "unitframes.healPrediction", "unitframes.absorbShield", "unitframes.healAbsorb", "unitframes.leaderIcon", "unitframes.roleIcon", "unitframes.pvpIcon", "unitframes.raidMarker", "unitframes.deadText", "unitframes.totemTimer", "unitframes.totemSwipe", "chat.frameBorder", "chat.inputPlace", "chat.inputIdle", "chat.inputFocus", "chat.outline", "chat.shadow", "chat.history", "chat.fade", "chat.fadeAfter", "chat.tipOwn", "chat.tipBorder", "chat.unitBorder", "chat.nameClass", "chat.tipScale", "chat.tipTitleSize", "chat.tipTextSize", "chat.barHide", "chat.barHeight", "chat.combat", "chat.combatKey", "chat.ids", "chat.count", "fonts.enabled", "fonts.outline", "fonts.shadow", "fonts.size", "fonts.minimum", "nameplates.healthTexture", "nameplates.barWidth", "nameplates.dimAmount", "nameplates.healPrediction", "nameplates.absorbs", "nameplates.healAbsorbs", "nameplates.castTexture", "nameplates.raidMarker", "nameplates.raidMarkerSize", "nameplates.raidMarkerX", "nameplates.raidMarkerY", "nameplates.offscreenIcon", "nameplates.auraCrop", "nameplates.auraBorderOwn", "nameplates.auraBorderColour", "nameplates.auraTimers", "nameplates.auraStacks", "nameplates.auraOpacity", "nameplates.aurasWhen", "unitframes.playerPicture", "unitframes.playerLevel", "unitframes.restAnimation", "unitframes.playerHealthBy", "unitframes.targetPicture", "unitframes.targetLevel", "unitframes.targetHealthBy", "unitframes.focusPicture", "unitframes.focusLevel", "unitframes.focusHealthBy", "unitframes.petPicture", "unitframes.petHealthBy", "unitframes.totPicture", "unitframes.totHealthBy", "unitframes.partyPicture", "unitframes.partypetPicture", "unitframes.partyHealthBy", "unitframes.bossLevel", "unitframes.bossHealthBy", "unitframes.healthTexture", "unitframes.powerTexture", "unitframes.stripBrightness", "unitframes.auraCrop", "unitframes.auraTypeColours", "unitframes.auraCountSize", "unitframes.auraNumbers", "trackers.mark", "trackers.art", "trackers.artSize", "trackers.artAlpha", "trackers.artY", "trackers.glow", "enemycd.show", "enemycd.flash", "enemycd.sound", "enemycd.arenaBreak", "nameplates.colours", "nameplates.colourPlayers", "nameplates.targetBar", "nameplates.targetBarColour", "nameplates.threat", "nameplates.threatRole", "nameplates.threatGood", "nameplates.threatTransition", "nameplates.threatBad", "nameplates.hover", "nameplates.hoverColour", "nameplates.kindBorder", "nameplates.eliteColour", "nameplates.rareColour", "nameplates.bossColour", "nameplates.clickThroughFriendly", "nameplates.clickThroughEnemy", "nameplates.clickExtraX", "nameplates.clickExtraY", "nameplates.nameShow", "nameplates.nameColour", "nameplates.nameCustomColour", "nameplates.healthTextColour", "nameplates.healthTextWhen", "nameplates.healthFormat", "nameplates.castTextSize", "nameplates.castTextOutline", "nameplates.castTextColour", "nameplates.castIconSize", "nameplates.castSpark", "nameplates.castShield" }) do
 		local row = assert(ROW[path], path)
 		local to, from, base, changed
 		if row.kind == "bool" then
@@ -20783,6 +20808,8 @@ covered["general.handsOff"] = true
 covered["general.menuButton"], covered["general.menuOpens"] = true, true
 -- Action buttons has its checks in the ownset block.
 covered["actionbars.own"] = true
+-- Long names of the target of target frame has its checks in the tot name fit block.
+covered["unitframes.totNameFit"] = true
 -- Your buffs has its checks in the own buffs block.
 for _, path in ipairs({ "ownbuffs.enabled", "ownbuffs.which", "ownbuffs.limit", "ownbuffs.trackers", "ownbuffs.time", "ownbuffs.size", "ownbuffs.tooltips", "ownbuffs.place", "ownbuffs.x", "ownbuffs.y" }) do
 	covered[path] = true
@@ -31581,13 +31608,13 @@ do
 			W.fire("SPELL_UPDATE_COOLDOWN")
 		end
 		local W = T.up(nil)
-		check("tkready: Sound when ready is off by default", W.env.FlatUICharDB.cooldowns.readySound == nil and #W.heard == 0)
+		check("tkready: Sound starts on None", W.env.FlatUICharDB.cooldowns.readySound == nil and #W.heard == 0)
 		T.cool(W, SP.KIDNEY)
 		W.finishCooldown(SP.KIDNEY)
 		W.frameUpdate(0.2)
 		check("tkready: with the row off a cooldown that ends plays nothing", #W.heard == 0 and cdQuiet(W), cdTrouble(W))
 
-		W = T.up(true)
+		W = T.up("Raid warning")
 		T.cool(W, SP.KIDNEY)
 		W.frameUpdate(0.2)
 		check("tkready: while the cooldown runs nothing plays", #W.heard == 0)
@@ -31598,7 +31625,7 @@ do
 		check("tkready: and the recheck after it plays no second sound", #W.heard == 1, #W.heard)
 		check("tkready: no violation or error", cdQuiet(W), cdTrouble(W))
 
-		W = T.up(true)
+		W = T.up("Raid warning")
 		T.cool(W, SP.KIDNEY)
 		W.setCooldown(SP.KIDNEY, "ready")
 		W.frameUpdate(0.2)
@@ -31610,13 +31637,13 @@ do
 		W.finishCooldown(SP.KIDNEY)
 		check("tkready: and one more sound when it ends", #W.heard == 2, #W.heard)
 
-		W = T.up(true)
+		W = T.up("Raid warning")
 		T.cool(W, SP.KIDNEY)
 		W.setCooldown(SP.KIDNEY, "ready")
 		W.fire("SPELL_UPDATE_COOLDOWN")
 		check("tkready: an event that shows the end of the cooldown plays one sound", #W.heard == 1, #W.heard)
 
-		W = T.up(true)
+		W = T.up("Raid warning")
 		W.setCooldown(SP.BLIND, "gcd")
 		W.fire("SPELL_UPDATE_COOLDOWN")
 		W.frameUpdate(0.2)
@@ -31629,39 +31656,39 @@ do
 		W.frameUpdate(0.2)
 		check("tkready: a cooldown that gives way to the global cooldown plays one sound", #W.heard == 1, #W.heard)
 
-		W = T.up(true)
+		W = T.up("Raid warning")
 		T.cool(W, SP.KIDNEY)
 		W.finishCooldown(SP.KIDNEY)
-		check("tkready: it uses the Raid warning kit by default", W.heard[1] == 8959)
-		W = T.up(true, "Alarm")
+		check("tkready: Raid warning plays its kit", W.heard[1] == 8959)
+		W = T.up("Bell", "Alarm")
 		T.cool(W, SP.KIDNEY)
 		W.finishCooldown(SP.KIDNEY)
-		check("tkready: and the kit chosen under Trackers, Sound", W.heard[1] == 12889, tostring(W.heard[1]))
+		check("tkready: and the Sound of this row, not the one of Trackers", W.heard[1] == 316773, tostring(W.heard[1]))
 
-		W = T.up(true)
+		W = T.up("Raid warning")
 		W.env.PlaySound = function() return false end
 		T.cool(W, SP.KIDNEY)
 		W.finishCooldown(SP.KIDNEY)
-		check("tkready: a game that plays no sound is one line in the status", select(2, W.status():gsub("the game played no sound, so Sound when ready is silent", "")) == 1, W.status())
-		W = T.up(true)
+		check("tkready: a game that plays no sound is one line in the status", select(2, W.status():gsub("the game played no sound, so the ready sound is silent", "")) == 1, W.status())
+		W = T.up("Raid warning")
 		W.env.PlaySound = function() error("boom", 0) end
 		T.cool(W, SP.KIDNEY)
 		W.finishCooldown(SP.KIDNEY)
-		check("tkready: and a sound that raises raises nothing", has(W.status(), "Sound when ready is silent") and #W.errors == 0, cdTrouble(W))
+		check("tkready: and a sound that raises raises nothing", has(W.status(), "the ready sound is silent") and #W.errors == 0, cdTrouble(W))
 
-		W = T.up(true)
+		W = T.up("Raid warning")
 		W.env.PlaySound = nil
 		T.cool(W, SP.KIDNEY)
 		W.finishCooldown(SP.KIDNEY)
 		check("tkready: with no PlaySound at all nothing raises", #W.errors == 0, cdTrouble(W))
 
-		W = T.up(true)
+		W = T.up("Raid warning")
 		W.env.C_Spell.GetSpellCooldown = function() return nil end
 		W.fire("SPELL_UPDATE_COOLDOWN")
 		W.frameUpdate(0.2)
 		check("tkready: a game that answers nothing about the cooldown plays nothing", #W.heard == 0 and #W.errors == 0, cdTrouble(W))
 
-		W = T.up(true)
+		W = T.up("Raid warning")
 		T.cool(W, SP.KIDNEY)
 		W.slash("cooldown remove " .. SP.KIDNEY)
 		W.frameUpdate(0.2)
@@ -31909,7 +31936,7 @@ do
 			{ "cooldowns.rows", "Above", function(W) local p = cdShown(W)[3].frame.points[1] return p[1] .. " " .. g(p[5]) end, "TOPLEFT -39", "BOTTOMLEFT 39", from = "Below", pre = { { "cooldowns.perRow", 2 } } },
 			{ "cooldowns.numbers", false, function(W) return tostring(cdShown(W)[1].cooldown.cd.hideNumbers) end, "false", "true" },
 			{ "cooldowns.dim", false, function(W) return tostring(cdShown(W)[1].texture.desaturated) end, "true", "false", cooling = true },
-			{ "cooldowns.readySound", true, function(W)
+			{ "cooldowns.readySound", "Raid warning", function(W)
 				-- Ends the cooldown the probe started, counts the sounds, and starts it again.
 				local heard = 0
 				W.env.PlaySound = function() heard = heard + 1 return true, 1 end
@@ -31917,7 +31944,7 @@ do
 				W.setCooldown(SP.KIDNEY, "cooling")
 				W.fire("SPELL_UPDATE_COOLDOWN")
 				return tostring(heard)
-			end, "0", "1", cooling = true },
+			end, "0", "1", cooling = true, from = "None" },
 			{ "cooldowns.place", "Under the personal resource display", function(W) local p = cdHolder(W).points[1] return (p[2] == W.env.UIParent and "screen" or "display") .. " " .. g(p[5]) end, "screen -160", "display -4",
 				from = "Middle of the screen" },
 			{ "cooldowns.x", 100, function(W) return g(cdHolder(W).points[1][4]) end, "0", "100" },
@@ -31953,6 +31980,8 @@ do
 			{ "cooldowns.coolAlpha", 50, function(W) return g(cdShown(W)[1].frame.alpha) end, "1", "0.5", cooling = true },
 			{ "cooldowns.readyAlpha", 0, function(W) return g(cdShown(W)[2].frame.alpha) end, "1", "0", cooling = true },
 			{ "cooldowns.idleAlpha", 50, function(W) return g(cdHolder(W).alpha) end, "1", "0.5" },
+			{ "cooldowns.mounted", true, function(W) return g(cdHolder(W).alpha) end, "1", "0", setup = function(W) W.env.IsMounted = function() return true end end },
+			{ "cooldowns.resting", true, function(W) return g(cdHolder(W).alpha) end, "1", "0", setup = function(W) W.env.IsResting = function() return true end end },
 			{ "cooldowns.borderState", true, function(W) return string.format("%.2f", cdEdge(cdShown(W)[1]).color[1]) end, "0.00", "0.85", cooling = true },
 			{ "cooldowns.readyColour", "ff203040", function(W) return string.format("%.2f", cdEdge(cdShown(W)[2]).color[1]) end, "0.30", "0.13", pre = { { "cooldowns.borderState", true } }, cooling = true },
 			{ "cooldowns.coolingColour", "ff203040", function(W) return string.format("%.2f", cdEdge(cdShown(W)[1]).color[1]) end, "0.85", "0.13", pre = { { "cooldowns.borderState", true } }, cooling = true },
@@ -32008,6 +32037,32 @@ do
 			W.flush()
 			check(label .. ": and again", read(W) == changed, read(W))
 			check(label .. ": no violation or error", cdQuiet(W), cdTrouble(W))
+		end
+		do
+			local W = cdUp(nil, { SP.KIDNEY, SP.BLIND, SP.VANISH })
+			local state = { mounted = false, resting = false }
+			W.env.IsMounted = function() return state.mounted end
+			W.env.IsResting = function() return state.resting end
+			local alphas = {}
+			for _, case in ipairs({ { "mounted", "PLAYER_MOUNT_DISPLAY_CHANGED" }, { "resting", "PLAYER_UPDATE_RESTING" } }) do
+				W.change("cooldowns." .. case[1], true)
+				W.fire(case[2])
+				local foot = g(cdHolder(W).alpha)
+				state[case[1]] = true
+				W.fire(case[2])
+				local away = g(cdHolder(W).alpha)
+				state[case[1]] = false
+				W.fire(case[2])
+				alphas[#alphas + 1] = foot .. away .. g(cdHolder(W).alpha)
+				W.change("cooldowns." .. case[1], false)
+			end
+			check("gap icons: Hide while mounted and Hide in cities and inns hide the row when the game says so and show it again", alphas[1] == "101" and alphas[2] == "101", table.concat(alphas, ","))
+			W.change("cooldowns.idleAlpha", 50)
+			W.change("cooldowns.mounted", true)
+			state.mounted = true
+			W.fire("PLAYER_MOUNT_DISPLAY_CHANGED")
+			W.change("cooldowns.mounted", false)
+			check("gap icons: and Row opacity out of combat comes back when the hiding is off", g(cdHolder(W).alpha) == "0.5", g(cdHolder(W).alpha))
 		end
 		local missingProbe = {}
 		for _, row in ipairs(ALL) do
@@ -33795,13 +33850,13 @@ do
 			MS.gear(H, { [13] = 1001 })
 			H.heard = 0
 			H.env.PlaySound = function() H.heard = H.heard + 1 return true, 1 end
-			MS.set(H, "cooldowns.readySound", true)
+			MS.set(H, "cooldowns.readySound", "Raid warning")
 			MS.set(H, "cooldowns.trinkets", true)
 			H.itemCd[1001] = { H.now, 60 }
 			H.fire("BAG_UPDATE_COOLDOWN")
 			H.now = H.now + 61
 			H.frameUpdate(0.2)
-			check("ms-cdi: Sound when ready plays once when a trinket's cooldown ends", H.heard == 1 and cdQuiet(H), H.heard)
+			check("ms-cdi: the ready sound plays once when a trinket's cooldown ends", H.heard == 1 and cdQuiet(H), H.heard)
 		end
 	end
 end
@@ -44158,6 +44213,96 @@ do
 			Y.env.hooksecurefunc = nil
 		end)
 		check("text: a client without hooksecurefunc still has the size, and raises nothing", TX.sizes(X.castTexts) == "15,15,15,15" and TX.allClean(X), TX.problems(X))
+	end
+
+	-- gap text: the text outline rows of the personal resource display, swing timers and cast bars, and the one outline list.
+	do
+		local G = {}
+		function G.flags(list)
+			local out = {}
+			for i, raw in ipairs(list) do
+				out[i] = raw.font[3]
+			end
+			return table.concat(out, ",")
+		end
+		function G.same(list, flag)
+			local want = {}
+			for i = 1, #list do
+				want[i] = flag
+			end
+			return G.flags(list) == table.concat(want, ",")
+		end
+		local W = TX.world({})
+		check("gap text: the three outline rows start at the game's and leave the labels alone", W.ns.Get("resource.textOutline") == "game" and W.ns.Get("swing.textOutline") == "game"
+			and W.ns.Get("castbars.textOutline") == "game" and W.swingLabels[1].sets == 0 and W.resourceLabels[1].sets == 0)
+		W.change("swing.textOutline", "Thick")
+		W.change("resource.textOutline", "Thin")
+		check("gap text: Thick sets the thick flag on the swing timer text and Thin sets the thin flag on the resource text", G.same(W.swingLabels, "THICKOUTLINE") and G.same(W.resourceLabels, "OUTLINE")
+			and W.swingLabels[1].font[2] == 10, G.flags(W.swingLabels) .. " " .. G.flags(W.resourceLabels))
+		W.change("swing.textOutline", "None")
+		W.change("resource.textOutline", "None")
+		check("gap text: None takes every outline off", G.same(W.swingLabels, "") and G.same(W.resourceLabels, ""), G.flags(W.swingLabels) .. " " .. G.flags(W.resourceLabels))
+		W.change("swing.textSize", 150)
+		check("gap text: a size keeps the outline of its row", G.same(W.swingLabels, "") and W.swingLabels[1].font[2] == 15, G.flags(W.swingLabels))
+		W.change("swing.textSize", 100)
+		W.change("swing.textOutline", "As the game has it")
+		W.change("resource.textOutline", "As the game has it")
+		check("gap text: As the game has it puts the game's flags back", G.same(W.swingLabels, "OUTLINE") and G.same(W.resourceLabels, "OUTLINE") and TX.allClean(W), G.flags(W.swingLabels))
+		W.change("swing.textOutline", "Thick")
+		W.change("swing.enabled", false)
+		check("gap text: the page off gives the game's flags back", G.same(W.swingLabels, "OUTLINE") and TX.allClean(W), G.flags(W.swingLabels))
+		local C = TX.castWorld({})
+		C.change("castbars.textOutline", "Thick")
+		check("gap text: Thick sets the thick flag on the spell name of every cast bar and follows a lock or unlock of the player bar", G.same(C.castTexts, "THICKOUTLINE") and C.hooks > 0, G.flags(C.castTexts))
+		C.attach()
+		check("gap text: and a font the game sets again gets the flag again", G.same(C.castTexts, "THICKOUTLINE"), G.flags(C.castTexts))
+		C.change("castbars.textOutline", "As the game has it")
+		check("gap text: As the game has it puts the spell name flags back", G.same(C.castTexts, "OUTLINE") and TX.allClean(C), G.flags(C.castTexts))
+		-- Ranges: the widest text and count sizes.
+		local R = TX.world({})
+		R.change("swing.textSize", 50)
+		R.change("resource.textSize", 50)
+		R.change("windows.titleSize", 50)
+		R.change("hud.zoneSize", 50)
+		R.change("hud.xpTextSize", 50)
+		R.change("hud.trackerHeaderSize", 50)
+		R.change("chat.tipTitleSize", 50)
+		R.change("chat.tipTextSize", 50)
+		R.change("castbars.textSize", 50)
+		check("gap text: every text size row takes 50", R.ns.Get("swing.textSize") == 50 and R.ns.Get("resource.textSize") == 50 and R.ns.Get("windows.titleSize") == 50
+			and R.ns.Get("hud.zoneSize") == 50 and R.ns.Get("hud.xpTextSize") == 50 and R.ns.Get("hud.trackerHeaderSize") == 50 and R.ns.Get("chat.tipTitleSize") == 50
+			and R.ns.Get("chat.tipTextSize") == 50 and R.ns.Get("castbars.textSize") == 50)
+		R.change("windows.countSize", 250)
+		R.change("hud.countSize", 250)
+		R.change("unitframes.auraCountSize", 250)
+		check("gap text: every count size row takes 250", R.ns.Get("hud.countSize") == 250 and R.ns.Get("unitframes.auraCountSize") == 250 and R.ns.Get("windows.countSize") == 250)
+		-- One outline list.
+		local ids = {}
+		for _, choice in ipairs(R.ns.OutlineChoices()) do
+			ids[#ids + 1] = choice[1] .. "=" .. choice[2]
+		end
+		check("gap text: one outline list with the ids game, none, thin and thick, and the game's line named As the game has it", table.concat(ids, ",") == "game=As the game has it,none=None,thin=Thin,thick=Thick"
+			and R.ns.OutlineChoices() == R.ns.OUTLINE_CHOICES)
+		-- Saved Thin of the old list becomes thin.
+		local function loaded(options)
+			local X = newWorld({ saved = { options = options } })
+			X.login()
+			return X
+		end
+		local M = loaded({ ["fonts.outline"] = "outline", ["chat.outline"] = "outline", ["actionbars.textOutline"] = "outline" })
+		check("gap text: a saved Thin of the old list is thin on the fonts, chat and button text rows", M.ns.Get("fonts.outline") == "thin" and M.ns.Get("chat.outline") == "thin"
+			and M.ns.Get("actionbars.textOutline") == "thin" and M.options()["fonts.outline"] == "thin" and M.options()["chat.outline"] == "thin", tostring(M.options()["fonts.outline"]))
+		local K = loaded({ ["fonts.outline"] = "thick", ["chat.outline"] = "none", ["actionbars.textOutline"] = "game" })
+		check("gap text: the other saved lines stay as they were", K.ns.Get("fonts.outline") == "thick" and K.ns.Get("chat.outline") == "none" and K.ns.Get("actionbars.textOutline") == "game")
+		local N = loaded({})
+		N.ns.ImportProfile(N.ns.PackText("FlatUI1:", { "o|fonts.outline|outline", "o|chat.outline|thick", "o|actionbars.textOutline|outline" }))
+		check("gap text: a profile text with the old Thin imports as thin and the others unchanged", N.ns.Get("fonts.outline") == "thin" and N.ns.Get("chat.outline") == "thick"
+			and N.ns.Get("actionbars.textOutline") == "thin")
+		N.ns.ImportProfile(N.ns.PackText("FlatUI1:", { "o|fonts.outline|nowhere" }))
+		check("gap text: and a line that is in no list goes back to the default", N.ns.Get("fonts.outline") == "game")
+		check("gap text: a setup draft saved with the old Thin keeps it as thin", M.ns.Normalised("fonts.outline", "outline") == "thin" and M.ns.Normalised("chat.outline", "thick") == "thick")
+		local D = loaded({})
+		check("gap text: the new rows have no saved value in a fresh profile", D.options()["resource.textOutline"] == nil and D.options()["swing.textOutline"] == nil and D.options()["castbars.textOutline"] == nil)
 	end
 end
 
@@ -61366,11 +61511,11 @@ function PT.runControls()
 		ns.CooldownCandidates = function() return {} end
 		PT.press(W, PT.control(need(W, "Add a spell")))
 		list = PT.list(W)
-		check("list row: with no lines it says None", #PT.byText(W, "None") == 1 and list.height == 26)
+		check("list row: with no lines it says None, as does Sound on the page", #PT.byText(W, "None") == 2 and list.height == 26)
 		ns.CooldownCandidates = function() error("the game would not say") end
 		PT.press(W, PT.button(W, "Close"))
 		PT.press(W, PT.control(need(W, "Add a spell")))
-		check("list row: a function that fails costs no more than the lines", #W.errors == 0 and #PT.byText(W, "None") == 1)
+		check("list row: a function that fails costs no more than the lines", #W.errors == 0 and #PT.byText(W, "None") == 2)
 		PT.press(W, PT.button(W, "Close"))
 		clean(W, "list rows")
 	end
@@ -63979,7 +64124,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 879 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 890 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -64293,7 +64438,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 879 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 890 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -64719,7 +64864,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 755 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 764 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -64948,7 +65093,7 @@ function PT.runSetup()
 
 		-- Jon Default: finishing on its tile writes its values and its 17 positions; finishing on Minimal writes none.
 		do
-			local J = { values = { ["actionbars.empty"] = "faint", ["actionbars.emptyAlpha"] = 70, ["actionbars.rangeTint"] = true, ["actionbars.square"] = false, ["actionbars.totem"] = true, ["castbars.flat"] = false, ["castbars.ownTime"] = true, ["castbars.playerHeight"] = 18, ["castbars.playerSize"] = true, ["castbars.playerWidth"] = 266, ["chat.count"] = true, ["chat.ids"] = true, ["chat.nameClass"] = true, ["combattext.crit"] = "higher", ["combattext.friend"] = "off", ["combattext.group"] = "flat", ["combattext.height"] = 45, ["combattext.movement"] = "up", ["combattext.ownSize"] = 130, ["combattext.size"] = 200, ["combattext.spreadWidth"] = 160, ["cooldowns.dim"] = false, ["cooldowns.flash"] = true, ["cooldowns.readySound"] = true, ["defensives.own"] = true, ["defensives.place"] = "resource", ["enemycd.place"] = "plates", ["enemycd.ready"] = "sound", ["enemycd.show"] = "always", ["enemycd.sound"] = "bell", ["fade.enabled"] = true, ["fade.target"] = true, ["general.barTexture"] = "soft", ["general.borderless"] = true, ["hud.xpFrame"] = false, ["hud.xpTextSize"] = 105, ["hud.xpTexture"] = "soft", ["nameplates.castTime"] = true, ["nameplates.classFriendly"] = true, ["nameplates.colours"] = true, ["nameplates.dim"] = true, ["nameplates.dimAmount"] = 60, ["nameplates.healthHeight"] = 125, ["nameplates.hover"] = true, ["nameplates.lowHealth"] = true, ["ownbuffs.size"] = 40, ["ownbuffs.time"] = "on", ["ownbuffs.which"] = "both", ["resource.healthOwn"] = true, ["tooltip.enabled"] = true, ["tooltip.scope"] = "all", ["tooltip.x"] = 69, ["tooltip.y"] = -48, ["trackers.gameIcon"] = false, ["trackers.low"] = 0, ["trackers.place"] = "own", ["trackers.show"] = "low", ["trackers.sound"] = true, ["unitframes.corners"] = "soft", ["unitframes.focusPicture"] = "game", ["unitframes.headFraming"] = "shoulders", ["unitframes.kindWord"] = true, ["unitframes.partyHealthBy"] = "class", ["unitframes.partyPicture"] = "class", ["unitframes.petPicture"] = "game", ["unitframes.playerHealthBy"] = "class", ["unitframes.playerPicture"] = "game", ["unitframes.stripBrightness"] = 100, ["unitframes.targetHealthText"] = "pct", ["unitframes.targetPicture"] = "game", ["unitframes.totPicture"] = "game", ["windows.countSize"] = 115, ["windows.crop"] = 9, ["windows.ilvlBags"] = true, ["windows.ilvlCharacter"] = true, ["windows.ilvlSize"] = 15, ["windows.junkDim"] = true, ["windows.sortFrom"] = "other" },
+			local J = { values = { ["actionbars.empty"] = "faint", ["actionbars.emptyAlpha"] = 70, ["actionbars.rangeTint"] = true, ["actionbars.square"] = false, ["actionbars.totem"] = true, ["castbars.flat"] = false, ["castbars.ownTime"] = true, ["castbars.playerHeight"] = 18, ["castbars.playerSize"] = true, ["castbars.playerWidth"] = 266, ["chat.count"] = true, ["chat.ids"] = true, ["chat.nameClass"] = true, ["combattext.crit"] = "higher", ["combattext.friend"] = "off", ["combattext.group"] = "flat", ["combattext.height"] = 45, ["combattext.movement"] = "up", ["combattext.ownSize"] = 130, ["combattext.size"] = 200, ["combattext.spreadWidth"] = 160, ["cooldowns.dim"] = false, ["cooldowns.flash"] = true, ["cooldowns.readySound"] = "raid", ["defensives.own"] = true, ["defensives.place"] = "resource", ["enemycd.place"] = "plates", ["enemycd.flash"] = true, ["enemycd.show"] = "always", ["enemycd.sound"] = "bell", ["fade.enabled"] = true, ["fade.target"] = true, ["general.barTexture"] = "soft", ["general.borderless"] = true, ["hud.xpFrame"] = false, ["hud.xpTextSize"] = 105, ["hud.xpTexture"] = "soft", ["nameplates.castTime"] = true, ["nameplates.classFriendly"] = true, ["nameplates.colours"] = true, ["nameplates.dim"] = true, ["nameplates.dimAmount"] = 60, ["nameplates.healthHeight"] = 125, ["nameplates.hover"] = true, ["nameplates.lowHealth"] = true, ["ownbuffs.size"] = 40, ["ownbuffs.time"] = "on", ["ownbuffs.which"] = "both", ["resource.healthOwn"] = true, ["tooltip.enabled"] = true, ["tooltip.scope"] = "all", ["tooltip.x"] = 69, ["tooltip.y"] = -48, ["trackers.gameIcon"] = false, ["trackers.low"] = 0, ["trackers.place"] = "own", ["trackers.show"] = "low", ["trackers.sound"] = true, ["unitframes.corners"] = "soft", ["unitframes.focusPicture"] = "game", ["unitframes.headFraming"] = "shoulders", ["unitframes.kindWord"] = true, ["unitframes.partyHealthBy"] = "class", ["unitframes.partyPicture"] = "class", ["unitframes.petPicture"] = "game", ["unitframes.playerHealthBy"] = "class", ["unitframes.playerPicture"] = "game", ["unitframes.stripBrightness"] = 100, ["unitframes.targetHealthText"] = "pct", ["unitframes.targetPicture"] = "game", ["unitframes.totPicture"] = "game", ["windows.countSize"] = 115, ["windows.crop"] = 9, ["windows.ilvlBags"] = true, ["windows.ilvlCharacter"] = true, ["windows.ilvlSize"] = 15, ["windows.junkDim"] = true, ["windows.sortFrom"] = "other" },
 				left = { "barblock.enabled", "barblock.slot1", "barblock.slot2", "barblock.slot3", "barblock.slot4", "general.scaleOn", "general.scaleBelow", "nameplates.threat", "nameplates.classPosition", "castbars.latency" },
 				spots = { { "AlertFrame", "BOTTOM", 0, 765.33355712890625 }, { "BuffIconCooldownViewer", "CENTER", 253.74455261230469, -162.6778316497803 }, { "EncounterBar", "CENTER", 0, 181.1332950592041 }, { "EssentialCooldownViewer", "CENTER", -255.5220947265625, -160.0110836029053 }, { "ExternalDefensivesFrame", "CENTER", 0, -115.1332664489746 }, { "FlatUICombatSelf", "CENTER", 0, -20.666448593139648 }, { "FlatUICooldowns", "CENTER", -1.5318393707275391e-05, -128.888576567173 }, { "FlatUITrackers", "CENTER", 234.666484773159, -163.42223745584491 }, { "FlatUIXpBar", "BOTTOM", 0, 77.722312927246094 }, { "LootFrame", "TOP", 305.14493560791021, -365.92208862304688 }, { "LossOfControlFrame", "CENTER", 0, -69.699974060058594 }, { "PersonalResourceDisplayFrame", "CENTER", 0, -192.7110576629639 }, { "PlayerCastingBarFrame", "BOTTOM", 0, 378.23333740234381 }, { "PlayerFrame", "TOPLEFT", 3.5999998952213121, -12.400045676815351 }, { "SwingTimerMainHandFrame", "BOTTOM", 0, 325.44464111328131 }, { "SwingTimerRangedFrame", "BOTTOM", 0, 290.34463500976562 }, { "UtilityCooldownViewer", "BOTTOM", -256.65545654296881, 404.02227783203131 } } }
 			local W = NP.world(nil, nil)
@@ -65167,6 +65312,9 @@ function PT.runSetup()
 			check("setup profiles: an unknown tile id is dropped by CleanDraft", again ~= nil and again.preset ~= "nowhere" and again.values["general.thickness"] == 3)
 			drafts[SU.CHARACTER] = { name = "Kept", step = 0, values = {}, preset = "tank" }
 			check("setup profiles: a draft saved with a tile comes back through Load", S.Load() ~= nil and S.Load().preset == "tank" and S.Load().from == nil)
+			drafts[SU.CHARACTER] = { name = "Older", step = 0, values = { ["cooldowns.readySound"] = true, ["enemycd.ready"] = "sound", ["enemycd.sound"] = "horn" }, preset = "tank" }
+			local older = S.Load()
+			check("setup profiles: a draft of an older build keeps its sound picks as the one list", older ~= nil and older.values["cooldowns.readySound"] == "raid" and older.values["enemycd.sound"] == "warhorn" and older.values["enemycd.flash"] == true and older.values["enemycd.ready"] == nil)
 			drafts[SU.CHARACTER] = { name = "Both", step = 0, values = {}, preset = "tank", from = "Default" }
 			check("setup profiles: a draft with a tile and a saved profile keeps the tile", S.Load().preset == "tank" and S.Load().from == nil)
 			drafts[SU.CHARACTER] = { name = "Ticks", step = 0, values = { ["nameplates.nameOutline"] = false, ["unitframes.lookWhiteNames"] = true }, preset = "tank" }
@@ -65181,6 +65329,17 @@ function PT.runSetup()
 			drafts[SU.CHARACTER] = { name = "From", step = 0, values = { ["unitframes.lookWhiteNames"] = true }, from = "Default" }
 			check("gap plates: and White names is White when that profile has none", S.Load().values["unitframes.nameColour"] == "white")
 			clean(W, "setup profiles load")
+		end
+
+		-- A Sound in a draft is kept when the build is current, and loses its play once when the draft is of an older build.
+		do
+			local function sound(migrated)
+				local W = SU.world({ saved = { soundsMigrated = migrated, setup = { drafts = { [SU.CHARACTER] = { name = "S", step = 0, preset = "tank", values = { ["enemycd.sound"] = "bell" } } } } } })
+				local S = SU.open(W)
+				S.Load()
+				return S.Load().values["enemycd.sound"]
+			end
+			check("gap sounds: a draft of this build keeps its Sound after two loads, a draft of an older build loses it once", sound(true) == "bell" and sound(false) == "none", tostring(sound(true)) .. " " .. tostring(sound(false)))
 		end
 
 		-- A step opened from the list on New profile starts from the tile too.
@@ -73163,7 +73322,7 @@ do
 			{ "lowtime", "30", 30 }, { "lowtime", "7", "!" }, { "lowtime", "305", "!" },
 			{ "missing", "pulse", "pulse" }, { "missing", "blue", "!" },
 			{ "sound", "on", true }, { "sound", "off", false }, { "sound", "maybe", "!" },
-			{ "kit", "alarm", "alarm" }, { "kit", "Whisper warning", "whisper" }, { "kit", "bell", "!" },
+			{ "kit", "alarm", "alarm" }, { "kit", "Whisper warning", "whisper" }, { "kit", "bell", "bell" }, { "kit", "siren", "!" },
 			{ "size", "40", 40 }, { "size", "41", "!" }, { "size", "70", "!" },
 			{ "x", "-800", -800 }, { "x", "801", "!" }, { "y", "800", 800 }, { "y", "-801", "!" },
 		}
@@ -73227,12 +73386,21 @@ do
 				end
 			end
 			check("tkpages: each of the 14 settings of the first build has its saved path and default, on the page the design gives it", #bad == 0, table.concat(bad, ", "))
-			check("tkpages: the new settings and their defaults", W.ns.Get("trackers.grow") == "middle" and W.ns.Get("trackers.spacing") == 3 and W.ns.Get("trackers.side") == "above" and W.ns.Get("trackers.kit") == "raid"
+			check("tkpages: the new settings and their defaults", W.ns.Get("trackers.grow") == "center" and W.ns.Get("trackers.spacing") == 3 and W.ns.Get("trackers.side") == "above" and W.ns.Get("trackers.kit") == "raid"
 				and W.ns.Get("trackers.without") == "last")
 			check("tkpages: a row of Tracker look is usable with the switch of Trackers on, in the game's options", W.enabled("trackers.low") and W.enabled("trackers.grow") and W.enabled("trackers.enabled"))
 			W.change("trackers.enabled", false)
 			check("tkpages: and greyed with it off, the switch itself usable", not W.enabled("trackers.low") and not W.enabled("trackers.grow") and not W.enabled("trackers.kit") and W.enabled("trackers.enabled"))
 			W.change("trackers.enabled", true)
+			local cd = TK.parts(W, TK.list(W)[1]).cooldown.cd
+			local before = cd.fsFont[1]
+			W.change("trackers.numbersFont", "Huge")
+			TK.step(W, 0.3)
+			local huge = cd.fsFont[1]
+			W.change("trackers.numbersFont", "As the game has it")
+			TK.step(W, 0.3)
+			check("gap icons: Countdown number size of Trackers sets the font of the numbers and As the game has it puts the game's back", huge == "Fonts\\NumberFontNormalHuge.TTF" and cd.fsFont[1] == before and before == "Fonts\\ARIALN.TTF",
+				tostring(huge) .. " " .. tostring(cd.fsFont[1]))
 		end
 
 		-- Own values.
@@ -73721,7 +73889,7 @@ do
 			-- Rows with mixed shapes do not overlap.
 			do
 				local list = { TK.shield({ shape = "bar" }), TK.earth({ shape = "text" }), TK.shield({ id = "shld02", shape = "icon" }) }
-				for _, grow in ipairs({ "middle", "right", "left" }) do
+				for _, grow in ipairs({ "center", "right", "left" }) do
 					local W = B.up(list, { ["trackers.grow"] = grow })
 					check("tkshape: a bar, text and an icon in a row grown " .. grow .. " do not overlap, and are the page's spacing apart", row(W, 3))
 				end
@@ -76220,6 +76388,8 @@ do
 			local W = up({ list = { TK.shield() }, options = on() })
 			drop(W)
 			check("tksound: with every ID registered the tracker's own drop sound is skipped", #W.au.played == 0 and W.ns.TrackerGameSound.Taken(TK.list(W)[1]) == true, #W.au.played)
+			local K = up({ list = { TK.shield() }, options = { ["trackers.sound"] = true, ["trackers.kit"] = "bell" } })
+			check("tksound: a kit with no file of its own is not registered and the tracker is not taken", next(K.au.sounds) == nil and K.ns.TrackerGameSound.Taken(TK.list(K)[1]) == false, next(K.au.sounds))
 			local P = up({ list = { TK.shield() }, options = on() })
 			P.ns.TrackerGameSound.Taken = function() return false end
 			drop(P)
@@ -78500,8 +78670,8 @@ do
 		and rows.which.choices[3][2] == "Both")
 	check("own buffs: Time limit is 60 s from 10 to 600 in steps of 10, and Buffs that have a tracker starts at Show here too beside Leave out", rows.limit.default == 60 and rows.limit.min == 10 and rows.limit.max == 600 and rows.limit.step == 10 and rows.limit.unit == " s"
 		and rows.trackers.default == "show" and rows.trackers.choices[1][2] == "Show here too" and rows.trackers.choices[2][2] == "Leave out")
-	check("own buffs: Time left starts Under the icon, with On the icon, Thin bar under the icon and Off, and Icon size is 28 from 16 to 48", rows.time.default == "under" and #rows.time.choices == 4 and rows.time.choices[2][2] == "On the icon"
-		and rows.time.choices[3][2] == "Thin bar under the icon" and rows.time.choices[4][2] == "Off" and rows.size.default == 28 and rows.size.min == 16 and rows.size.max == 48 and rows.size.step == 2)
+	check("own buffs: Time left starts Under the icon, with On the icon, Thin bar under the icon and Off, and Icon size is 28 from 16 to 64", rows.time.default == "under" and #rows.time.choices == 4 and rows.time.choices[2][2] == "On the icon"
+		and rows.time.choices[3][2] == "Thin bar under the icon" and rows.time.choices[4][2] == "Off" and rows.size.default == 28 and rows.size.min == 16 and rows.size.max == 64 and rows.size.step == 2)
 	check("own buffs: Place starts Above the bars, with Under the bars, Under the swing timer and Own position, and the offsets are 0", rows.place.default == "above" and #rows.place.choices == 4 and rows.place.choices[2][2] == "Under the bars" and rows.place.choices[3][2] == "Under the swing timer"
 		and rows.place.choices[4][2] == "Own position" and rows.x.default == 0 and rows.y.default == 0)
 	check("own buffs: Restyle the personal resource display does not switch the row, and the module is in the order of the modules after the display", (function()
@@ -79684,7 +79854,7 @@ do
 	W2.advance(1.1)
 	script(flasher.cooldown)
 	check("iconrow: the sound plays at most once a second, and again after a second", twice == 1 and W2.au.played[1] == 8959 and #W2.au.played == 2 and n2.IconRow.sound == "played", twice .. " " .. #W2.au.played)
-	check("iconrow: the picks are the five sound kits, Spell alert first", #n2.SOUNDS == 5 and n2.SOUNDS[1][1] == 23287 and n2.SOUNDS[2][1] == 316736 and n2.SOUNDS[3][1] == 316773 and n2.SOUNDS[4][1] == 316723 and n2.SOUNDS[5][1] == 8959)
+	check("iconrow: the picks are the seven sound kits, Spell alert first", #n2.SOUNDS == 7 and n2.SOUNDS[6][1] == 12889 and n2.SOUNDS[7][1] == 37666 and n2.SOUNDS[1][1] == 23287 and n2.SOUNDS[2][1] == 316736 and n2.SOUNDS[3][1] == 316773 and n2.SOUNDS[4][1] == 316723 and n2.SOUNDS[5][1] == 8959)
 	local W3 = up({ without = { PlaySound = true } })
 	local n3 = W3.ns
 	local silent = n3.IconNew(holder(W3))
@@ -79774,6 +79944,15 @@ do
 	check("defensives: it has two groups, each with its own filter string, and the 56 listed buff IDs are the includeSpellIDs of one and the excludeSpellIDs of the other", listed and external and listed.filter == "HELPFUL|!PLAYER" and external.filter == "HELPFUL|EXTERNAL_DEFENSIVE"
 		and count == 56 and listed.included == true and next(listed.exclude) == nil and external.included == false and next(external.exclude) ~= nil and external.exclude[17] == true and listed.include[17] == true and listed.include[1044] == true, count)
 	check("defensives: the groups show six and four icons at most, three units apart, and make ten buttons each at once", listed.max == 6 and external.max == 4 and listed.layout.elementSpacing == 3 and listed.layout.elementWidth == 32 and #listed.slots == 10 and #external.slots == 10 and c.ac.adds == 3)
+	W.change("defensives.size", 44)
+	W.change("defensives.spacing", 8)
+	W.flush()
+	check("gap icons: Icon size and Spacing of Defensives on you reach the layout of every group", listed.layout.elementWidth == 44 and listed.layout.elementHeight == 44 and listed.layout.elementSpacing == 8
+		and external.layout.elementWidth == 44 and DF.group(W, "own").layout.elementSpacing == 8 and DF.ok(W), listed.layout.elementWidth .. " " .. DF.why(W))
+	W.change("defensives.size", 32)
+	W.change("defensives.spacing", 3)
+	W.flush()
+	check("gap icons: and back to 32 and 3", listed.layout.elementWidth == 32 and listed.layout.elementSpacing == 3 and DF.ok(W))
 	local parts = {}
 	for _, group in ipairs({ listed, external, DF.group(W, "own") }) do
 		for _, slot in ipairs(group.slots) do
@@ -82052,6 +82231,27 @@ do
 	check("partycd: Icons for each member limits the row in the order of the kinds, and drops the rest: a warrior has three icons, his two interrupts and Shield Wall", #row.icons == 3
 		and PC.keys(S, row) == "WARRIOR:Pummel,WARRIOR:Shield Bash,WARRIOR:Shield Wall", PC.keys(S, row))
 	check("partycd: Icon size sets the width and height of the icons and of the row", S.rawOf[row.icons[1].frame].width == 30 and S.rawOf[row.holder].width == 94 and S.rawOf[row.holder].height == 30, tostring(S.rawOf[row.holder].width))
+	do
+		local function cooldownOf(W)
+			local mage = PC.row(W, PC.guid[1])
+			PC.cast(W, "party1", 2139)
+			return W.rawOf[mage.icons[1].cooldown].cd
+		end
+		local N = PC.world()
+		local cd = cooldownOf(N)
+		local seconds, game = cd.hideNumbers, cd.fsFont[1]
+		N.change("partycd.seconds", false)
+		local hidden = cd.hideNumbers
+		N.change("partycd.seconds", true)
+		N.change("partycd.numbersFont", "Huge")
+		local huge = cd.fsFont[1]
+		N.change("partycd.numbersFont", "As the game has it")
+		check("gap icons: Time left of Party cooldowns is on and hides the numbers when off, and Countdown number size sets and puts back the font", seconds == false and hidden == true and cd.hideNumbers == false
+			and huge == "Fonts\\NumberFontNormalHuge.TTF" and cd.fsFont[1] == game and PC.ok(N), tostring(huge) .. " " .. PC.why(N))
+		local Big = PC.world({ opts = { saved = { options = { ["partycd.size"] = 64, ["partycd.show"] = "cooling" } } } })
+		local bigRow = PC.row(Big, PC.guid[1])
+		check("gap icons: Icon size goes to 64, and Show on Only while on cooldown shows no icon before a use", Big.rawOf[bigRow.icons[1].frame].width == 64 and PC.keys(Big, bigRow) == "", PC.keys(Big, bigRow))
+	end
 	local K = PC.world({ opts = { saved = { options = { ["partycd.interrupts"] = false, ["partycd.group"] = true, ["partycd.breaks"] = true, ["partycd.count"] = 8 } } } })
 	local kinds = PC.keys(K, PC.row(K, PC.guid[2]))
 	check("partycd: with Interrupts off, no interrupt is shown, and with Crowd control breaks and Group cooldowns on, they come after the defensives", not kinds:find("Pummel", 1, true) and kinds:find("^WARRIOR:Shield Wall") ~= nil, kinds)
@@ -83421,6 +83621,12 @@ do
 	local row = EC.row(W, rogue)
 	check("enemycd: Mobility on shows Sprint after the defensives", EC.keys(W, row) == "ROGUE:Kick,ROGUE:Cloak of Shadows,ROGUE:Evasion,ROGUE:Sprint", EC.keys(W, row))
 	check("enemycd: Seconds on the icon is on, and the border takes the colour of its kind", W.rawOf[row.icons[1].cooldown].cd.hideNumbers == false and row.icons[1].outline.r == 1 and row.icons[1].outline.g == 0.65)
+	local enemyCd = W.rawOf[row.icons[1].cooldown].cd
+	W.change("enemycd.numbersFont", "Large")
+	local large = enemyCd.fsFont[1]
+	W.change("enemycd.numbersFont", "As the game has it")
+	check("gap icons: Countdown number size of Enemy cooldowns sets the font of the numbers and As the game has it puts the game's back",
+		large == "Fonts\\NumberFontNormalLarge.TTF" and enemyCd.fsFont[1] == "Fonts\\ARIALN.TTF" and enemyCd.fsFont[2] == 14, tostring(large) .. " " .. tostring(enemyCd.fsFont[1]))
 	W.change("enemycd.defensives", false)
 	check("enemycd: a kind switched off hides its icons at once", EC.keys(W, row) == "ROGUE:Kick,ROGUE:Cloak of Shadows,ROGUE:Sprint" and EC.ok(W), EC.keys(W, row))
 	W.change("enemycd.interrupts", false)
@@ -85348,8 +85554,8 @@ do
 			ns.Get("fonts.enabled") == false and ns.Get("fonts.body") == "default" and ns.Get("fonts.numbers") == "default" and ns.Get("fonts.titles") == "default"
 			and ns.Get("fonts.outline") == "game" and ns.Get("fonts.shadow") == true and ns.Get("fonts.size") == 100 and ns.Get("fonts.minimum") == 0
 			and W.options()["fonts.enabled"] == nil)
-		check("ms-fonts: the outline row names a function and has four lines, game first", table.concat(ids, ",") == "game,none,outline,thick" and #viaRow == 4 and viaRow[1][1] == "game")
-		check("ms-fonts: a line of the outline row is the flags of the font call, the game's line is none", ns.OutlineFlags("none") == "" and ns.OutlineFlags("outline") == "OUTLINE"
+		check("ms-fonts: the outline row names a function and has four lines, game first", table.concat(ids, ",") == "game,none,thin,thick" and #viaRow == 4 and viaRow[1][1] == "game")
+		check("ms-fonts: a line of the outline row is the flags of the font call, the game's line is none", ns.OutlineFlags("none") == "" and ns.OutlineFlags("thin") == "OUTLINE" and ns.OutlineFlags("outline") == nil
 			and ns.OutlineFlags("thick") == "THICKOUTLINE" and ns.OutlineFlags("game") == nil and ns.OutlineFlags("nowhere") == nil)
 		ns.Set("fonts.size", 200)
 		ns.Set("fonts.outline", "nowhere")
@@ -85795,7 +86001,7 @@ do
 		ns.Set("chat.tipBorder", "zzz")
 		ns.Set("chat.combat", "sometimes")
 		check("ms-chat: a number is kept to the range of its row, a choice and a colour that are none are refused",
-			ns.Get("chat.tipScale") == 200 and ns.Get("chat.tipTextSize") == 70 and ns.Get("chat.barHeight") == 16 and ns.Get("chat.inputIdle") == 100
+			ns.Get("chat.tipScale") == 200 and ns.Get("chat.tipTextSize") == 50 and ns.Get("chat.barHeight") == 16 and ns.Get("chat.inputIdle") == 100
 			and ns.Get("chat.history") == 2048 and ns.Get("chat.fadeAfter") == 10 and ns.Get("chat.tipBorder") == "ff000000" and ns.Get("chat.combat") == "show",
 			ns.Get("chat.tipScale") .. " " .. ns.Get("chat.history"))
 	end
@@ -86415,7 +86621,7 @@ do
 		ns.Set("chat.history", 128)
 		-- The module off puts every value back.
 		ns.Set("chat.font", "arial")
-		ns.Set("chat.outline", "outline")
+		ns.Set("chat.outline", "thin")
 		ns.Set("chat.shadow", false)
 		ns.Set("chat.history", 1024)
 		ns.Set("chat.fade", false)
@@ -92040,7 +92246,7 @@ do
 		check("procs: Sound: None plays nothing, and each of the others plays its kit once", ok, table.concat(got, " "))
 		local sounds = loadfile(ADDON_DIR .. "/IconRow.lua") ~= nil
 		local R = Z.up({ list = {} })
-		check("procs: the first five kits of the Sound row are the five of ns.SOUNDS, in its order", sounds and R.ns.SOUNDS[1][1] == 23287 and R.ns.SOUNDS[2][1] == 316736 and R.ns.SOUNDS[3][1] == 316773 and R.ns.SOUNDS[4][1] == 316723 and R.ns.SOUNDS[5][1] == 8959
+		check("procs: the first five kits of the Sound row are the first five of ns.SOUNDS, in its order", sounds and R.ns.SOUNDS[1][1] == 23287 and R.ns.SOUNDS[2][1] == 316736 and R.ns.SOUNDS[3][1] == 316773 and R.ns.SOUNDS[4][1] == 316723 and R.ns.SOUNDS[5][1] == 8959
 			and table.concat(R.menu("trackers.procSound"), ",") == "None,Spell alert,Chimes,Bell,Warhorn,Raid warning,Alarm,Whisper warning", table.concat(R.menu("trackers.procSound"), ","))
 		local F = Z.up({ list = { Z.entry({ sound = false }) } })
 		Z.give(F)
@@ -93800,18 +94006,18 @@ do
 	-- The page.
 	local W = ER.world()
 	local rows = ER.page(W, "enemycd")
-	check("enemyready: Show starts on Only while on cooldown, When it is ready again on Nothing and Ready sound on Spell alert", W.ns.Get("enemycd.show") == "cooling" and W.ns.Get("enemycd.ready") == "none" and W.ns.Get("enemycd.sound") == "alert")
-	check("enemyready: Show has the two choices of the design", rows.show ~= nil and rows.show.kind == "choice" and rows.show.choices[1][2] == "Only while on cooldown" and rows.show.choices[2][1] == "always" and rows.show.choices[2][2] == "Always, ready ones bright")
-	check("enemyready: When it is ready again has Nothing, Flash and Flash and sound, and says who hears the sound", rows.ready ~= nil and #rows.ready.choices == 3 and rows.ready.choices[1][2] == "Nothing" and rows.ready.choices[2][2] == "Flash" and rows.ready.choices[3][2] == "Flash and sound"
-		and rows.ready.tip == "The sound plays for your target and focus only.")
-	check("enemyready: Ready sound has the five sounds of the shared list, in its order, and is greyed unless the choice is Flash and sound, with no tip", rows.sound ~= nil and #rows.sound.choices == 5 and rows.sound.choices[1][2] == "Spell alert" and rows.sound.choices[5][2] == "Raid warning"
-		and rows.sound.needs == "ready" and rows.sound.needsIn[1] == "sound" and #rows.sound.needsIn == 1 and rows.sound.tip == nil, tostring(rows.sound and rows.sound.needs))
+	check("enemyready: Show starts on Only while on cooldown, Flash when ready off and Sound on None", W.ns.Get("enemycd.show") == "cooling" and W.ns.Get("enemycd.flash") == false and W.ns.Get("enemycd.sound") == "none")
+	check("enemyready: Show has the two choices of the design", rows.show ~= nil and rows.show.kind == "choice" and rows.show.choices[1][2] == "Only while on cooldown" and rows.show.choices[2][1] == "always" and rows.show.choices[2][2] == "Always, used ones dark")
+	check("enemyready: Flash when ready is a switch, and Sound says who hears it", rows.flash ~= nil and rows.flash.kind == "bool" and rows.flash.label == "Flash when ready" and rows.ready == nil
+		and rows.sound.tip == "The sound plays for your target and focus only.")
+	check("enemyready: gap sounds: Sound has None and the seven sounds of the shared list, in its order, and is never greyed", rows.sound ~= nil and #rows.sound.choices == 8 and rows.sound.choices[1][2] == "None" and rows.sound.choices[2][2] == "Spell alert" and rows.sound.choices[6][2] == "Raid warning"
+		and rows.sound.choices[8][2] == "Whisper warning" and rows.sound.needs == nil, tostring(rows.sound and rows.sound.needs))
 	check("enemyready: Add an ability and Hide an ability are lists with the tip for a spell that is not listed", rows.add ~= nil and rows.add.kind == "list" and rows.add.items == "EnemyAbilityCandidates" and rows.add.pick == "EnemyAbilityAdd" and rows.hide ~= nil and rows.hide.kind == "list"
 		and rows.hide.items == "EnemyAbilityShown" and rows.hide.pick == "EnemyAbilityHide" and rows.add.tip == "For a spell that is not listed, type /flatui enemy add, its spell ID and its cooldown in seconds." and rows.hide.tip == nil)
-	W.change("enemycd.show", "Always, ready ones bright")
-	W.change("enemycd.ready", "Flash and sound")
+	W.change("enemycd.show", "Always, used ones dark")
+	W.change("enemycd.flash", true)
 	W.change("enemycd.sound", "Warhorn")
-	check("enemyready: the choices are saved under their keys", W.ns.Get("enemycd.show") == "always" and W.ns.Get("enemycd.ready") == "sound" and W.ns.Get("enemycd.sound") == "horn" and EC.ok(W), EC.why(W))
+	check("enemyready: the choices are saved under their keys", W.ns.Get("enemycd.show") == "always" and W.ns.Get("enemycd.flash") == true and W.ns.Get("enemycd.sound") == "warhorn" and EC.ok(W), EC.why(W))
 end
 do
 	local EC, EB, ER = TOC.ec, TOC.eb, TOC.er
@@ -93824,7 +94030,7 @@ do
 	check("enemyready: Always with the casts and buffs of the target withheld shows the interrupt alone, bright, with no sweep", row ~= nil and EC.keys(W, row) == "MAGE:Counterspell" and EC.sweep(W, row, 1) == nil and ER.bright(W, row.icons[1]), EC.keys(W, row))
 	W.au.castSecrecy[1953] = 0
 	W.change("enemycd.show", "Only while on cooldown")
-	W.change("enemycd.show", "Always, ready ones bright")
+	W.change("enemycd.show", "Always, used ones dark")
 	check("enemyready: a cast the game never hides adds that ability: Blink, which breaks a crowd control too", EC.keys(W, row) == "MAGE:Counterspell,MAGE:Blink", EC.keys(W, row))
 	W.au.hidden = false
 	W.ns.EnemyRender()
@@ -93897,7 +94103,7 @@ end
 do
 	local EC, EB, ER = TOC.ec, TOC.eb, TOC.er
 	-- The flash at the end of a timer.
-	local W = ER.world({ ["enemycd.ready"] = "flash" })
+	local W = ER.world({ ["enemycd.flash"] = true })
 	EB.used(W, EB.A, 2139, "MAGE")
 	ER.pick(W, "target", { guid = EB.A, class = "MAGE" })
 	local row = EB.bar(W, "target")
@@ -93914,7 +94120,7 @@ end
 do
 	local EC, EB, ER = TOC.ec, TOC.eb, TOC.er
 	-- The game's end of a sweep and the net a moment after it.
-	local W = ER.world({ ["enemycd.ready"] = "flash" })
+	local W = ER.world({ ["enemycd.flash"] = true })
 	EB.used(W, EB.A, 2139, "MAGE")
 	ER.pick(W, "target", { guid = EB.A, class = "MAGE" })
 	local row = EB.bar(W, "target")
@@ -93925,7 +94131,7 @@ do
 	check("enemyready: the game's OnCooldownDone makes the flash, once", icon.flashes == 1 and EC.keys(W, row) == "MAGE:Counterspell" and EC.sweep(W, row, 1) == nil, tostring(icon.flashes))
 	W.advance(2)
 	check("enemyready: and the net after it does not make a second", icon.flashes == 1 and EC.ok(W), tostring(icon.flashes))
-	local N = ER.world({ ["enemycd.ready"] = "flash" })
+	local N = ER.world({ ["enemycd.flash"] = true })
 	EB.used(N, EB.A, 2139, "MAGE")
 	ER.pick(N, "target", { guid = EB.A, class = "MAGE" })
 	local nrow = EB.bar(N, "target")
@@ -93943,7 +94149,7 @@ do
 	local zrow = EB.bar(Z, "target")
 	Z.advance(30.2)
 	check("enemyready: with Nothing the icon goes at the end of the timer and nothing flashes", EC.keys(Z, zrow) == "" and (zrow.icons[1].flashes or 0) == 0 and #Z.au.played == 0 and EC.ok(Z), EC.keys(Z, zrow))
-	local D = ER.world({ ["enemycd.show"] = "always", ["enemycd.ready"] = "flash" })
+	local D = ER.world({ ["enemycd.show"] = "always", ["enemycd.flash"] = true })
 	EB.used(D, EB.A, 2139, "MAGE")
 	ER.pick(D, "target", { guid = EB.A, class = "MAGE" })
 	local drow = EB.bar(D, "target")
@@ -93951,7 +94157,7 @@ do
 	check("enemyready: in Always the icon flashes as it turns bright, and stays", drow.icons[1].flashes == 1 and EC.keys(D, drow):find("MAGE:Counterspell", 1, true) ~= nil and ER.bright(D, ER.icon(D, drow, "MAGE:Counterspell")), tostring(drow.icons[1].flashes))
 	D.advance(3)
 	check("enemyready: and does not flash again", drow.icons[1].flashes == 1 and EC.ok(D), tostring(drow.icons[1].flashes))
-	local Q = ER.world({ ["enemycd.show"] = "always", ["enemycd.ready"] = "none" })
+	local Q = ER.world({ ["enemycd.show"] = "always" })
 	EB.used(Q, EB.A, 2139, "MAGE")
 	ER.pick(Q, "target", { guid = EB.A, class = "MAGE" })
 	local qrow = EB.bar(Q, "target")
@@ -93961,13 +94167,13 @@ end
 do
 	local EC, EB, ER = TOC.ec, TOC.eb, TOC.er
 	-- A timer that ended long before the game drew again does not flash.
-	local L = ER.world({ ["enemycd.ready"] = "sound" })
+	local L = ER.world({ ["enemycd.flash"] = true, ["enemycd.sound"] = "spell" })
 	EB.used(L, EB.A, 2139, "MAGE")
 	ER.pick(L, "target", { guid = EB.A, class = "MAGE" })
 	L.advance(60)
 	check("enemyready: a timer that ended half a minute before the game drew again flashes nothing and plays nothing", (EB.bar(L, "target").icons[1].flashes or 0) == 0 and #L.au.played == 0 and EC.keys(L, EB.bar(L, "target")) == "" and EC.ok(L), EC.why(L))
 	-- A timer that ended long ago does not flash when its player is picked later.
-	local W = ER.world({ ["enemycd.ready"] = "flash", ["enemycd.show"] = "always" })
+	local W = ER.world({ ["enemycd.flash"] = true, ["enemycd.show"] = "always" })
 	EB.used(W, EB.A, 2139, "MAGE")
 	W.advance(60)
 	ER.pick(W, "target", { guid = EB.A, class = "MAGE" })
@@ -93978,7 +94184,7 @@ end
 do
 	local EC, EB, ER = TOC.ec, TOC.eb, TOC.er
 	-- The sound: target and focus only, and once a second at most.
-	local W = ER.world({ ["enemycd.ready"] = "sound", ["enemycd.sound"] = "bell" }, nil, function(X)
+	local W = ER.world({ ["enemycd.flash"] = true, ["enemycd.sound"] = "bell" }, nil, function(X)
 		X.env.UnitIsUnit = function(unit, other)
 			return unit == "nameplate1" and other == "target"
 		end
@@ -93993,7 +94199,7 @@ do
 	W.units.target = mine
 	W.advance(30.2)
 	check("enemyready: the plate of the target plays the chosen sound, Bell", #W.au.played == 1 and W.au.played[1] == 316773 and EC.row(W, mine).icons[1].flashes == 1, #W.au.played .. " " .. tostring(W.au.played[1]))
-	local B = ER.world({ ["enemycd.ready"] = "sound", ["enemycd.sound"] = "bell" })
+	local B = ER.world({ ["enemycd.flash"] = true, ["enemycd.sound"] = "bell" })
 	EB.used(B, EB.A, 2139, "MAGE")
 	EB.used(B, EB.B, 2139, "MAGE")
 	ER.pick(B, "target", { guid = EB.A, class = "MAGE" })
@@ -94004,22 +94210,22 @@ do
 	B.ns.EnemyRender()
 	B.advance(30.2)
 	check("enemyready: and one that ends a second or more later plays again", #B.au.played == 2, #B.au.played)
-	local kits = { alert = 23287, chimes = 316736, bell = 316773, horn = 316723, raid = 8959 }
+	local kits = { spell = 23287, chimes = 316736, bell = 316773, warhorn = 316723, raid = 8959, alarm = 12889, whisper = 37666 }
 	local all = true
 	for name, kit in pairs(kits) do
-		local K = ER.world({ ["enemycd.ready"] = "sound", ["enemycd.sound"] = name })
+		local K = ER.world({ ["enemycd.flash"] = true, ["enemycd.sound"] = name })
 		EB.used(K, EB.A, 2139, "MAGE")
 		ER.pick(K, "target", { guid = EB.A, class = "MAGE" })
 		K.advance(30.2)
 		all = all and #K.au.played == 1 and K.au.played[1] == kit
 	end
-	check("enemyready: each choice of Ready sound plays its own kit of the shared list", all)
-	local F = ER.world({ ["enemycd.ready"] = "flash", ["enemycd.sound"] = "bell" })
+	check("enemyready: each choice of Sound plays its own kit of the shared list", all)
+	local F = ER.world({ ["enemycd.flash"] = true })
 	EB.used(F, EB.A, 2139, "MAGE")
 	ER.pick(F, "target", { guid = EB.A, class = "MAGE" })
 	F.advance(30.2)
-	check("enemyready: Flash with a sound chosen plays none", #F.au.played == 0 and EB.bar(F, "target").icons[1].flashes == 1)
-	local S = ER.world({ ["enemycd.ready"] = "sound" }, nil, function(X)
+	check("enemyready: Flash with Sound on None plays none", #F.au.played == 0 and EB.bar(F, "target").icons[1].flashes == 1)
+	local S = ER.world({ ["enemycd.flash"] = true, ["enemycd.sound"] = "spell" }, nil, function(X)
 		X.env.PlaySound = nil
 	end)
 	EB.used(S, EB.A, 2139, "MAGE")
@@ -94194,7 +94400,7 @@ end
 do
 	local EC, EB, ER = TOC.ec, TOC.eb, TOC.er
 	-- In a fight.
-	local W = ER.world({ ["enemycd.show"] = "always", ["enemycd.ready"] = "sound" })
+	local W = ER.world({ ["enemycd.show"] = "always", ["enemycd.flash"] = true, ["enemycd.sound"] = "spell" })
 	EB.used(W, EB.A, 2139, "MAGE")
 	ER.pick(W, "target", { guid = EB.A, class = "MAGE" })
 	W.combat = true
@@ -94204,6 +94410,87 @@ do
 	W.change("enemycd.enabled", false)
 	check("enemyready: with the page off the bar is gone", EC.keys(W, EB.bar(W, "target")) == "")
 end
+-- >>> gapsounds (begin)
+-- Sounds: the one list, and the sound rows of an older build.
+do
+	local ER = TOC.er
+	local V = {
+		-- Saved options of an older build, then "Sound of Cooldowns, Flash when ready and Sound of Enemy cooldowns" as they load.
+		loads = {
+			{ { ["cooldowns.readySound"] = true }, "raid,false,none" },
+			{ { ["cooldowns.readySound"] = true, ["trackers.kit"] = "alarm" }, "alarm,false,none" },
+			{ { ["cooldowns.readySound"] = false }, "none,false,none" },
+			{ { ["enemycd.ready"] = "flash" }, "none,true,none" },
+			{ { ["enemycd.ready"] = "none" }, "none,false,none" },
+			{ { ["enemycd.ready"] = "sound" }, "none,true,spell" },
+			{ { ["enemycd.ready"] = "sound", ["enemycd.sound"] = "alert" }, "none,true,spell" },
+			{ { ["enemycd.ready"] = "sound", ["enemycd.sound"] = "horn" }, "none,true,warhorn" },
+			{ { ["enemycd.ready"] = "sound", ["enemycd.sound"] = "bell" }, "none,true,bell" },
+			{ { ["enemycd.ready"] = "none", ["enemycd.sound"] = "bell" }, "none,false,none" },
+			{ { ["enemycd.sound"] = "chimes" }, "none,false,none" },
+		},
+		-- The same settings as a profile text of an older build.
+		imports = {
+			{ { "o|cooldowns.readySound|1" }, "raid,false,none" },
+			{ { "o|cooldowns.readySound|1", "o|trackers.kit|whisper" }, "whisper,false,none" },
+			{ { "o|cooldowns.readySound|0" }, "none,false,none" },
+			{ { "o|enemycd.ready|flash" }, "none,true,none" },
+			{ { "o|enemycd.ready|sound", "o|enemycd.sound|horn" }, "none,true,warhorn" },
+			{ { "o|enemycd.ready|sound" }, "none,true,spell" },
+			{ { "o|enemycd.ready|sound", "o|enemycd.sound|raid" }, "none,true,raid" },
+			{ { "o|cooldowns.readySound|bell", "o|enemycd.flash|1", "o|enemycd.sound|alarm" }, "bell,true,alarm" },
+			{ { "o|enemycd.sound|bell" }, "none,false,none" },
+			{ { "o|enemycd.sound|bell", "o|enemycd.flash|0" }, "none,false,bell" },
+		},
+		kits = { { "spell", 23287 }, { "chimes", 316736 }, { "bell", 316773 }, { "warhorn", 316723 }, { "raid", 8959 }, { "alarm", 12889 }, { "whisper", 37666 } },
+	}
+	local function state(X)
+		return X.ns.Get("cooldowns.readySound") .. "," .. tostring(X.ns.Get("enemycd.flash")) .. "," .. X.ns.Get("enemycd.sound")
+	end
+	local bad = {}
+	for index, case in ipairs(V.loads) do
+		local X = ER.world(nil, { options = case[1], soundsMigrated = false })
+		local saved = X.env.FlatUIDB.profiles.Default.options
+		if state(X) ~= case[2] or saved["enemycd.ready"] ~= nil or X.env.FlatUIDB.soundsMigrated ~= true then
+			bad[#bad + 1] = index .. "=" .. state(X)
+		end
+	end
+	check("gap sounds: saved sound rows of an older build load as the one list, and the old row is dropped", #bad == 0, table.concat(bad, " "))
+	bad = {}
+	for index, case in ipairs(V.imports) do
+		local X = ER.world(nil, { options = {} })
+		X.ns.ImportProfile(X.ns.PackText("FlatUI1:", case[1]))
+		if state(X) ~= case[2] then
+			bad[#bad + 1] = index .. "=" .. state(X)
+		end
+	end
+	check("gap sounds: a profile text of an older build imports the same", #bad == 0, table.concat(bad, " "))
+	local A = ER.world(nil, { options = { ["cooldowns.readySound"] = "bell", ["enemycd.flash"] = true, ["enemycd.sound"] = "chimes" } })
+	check("gap sounds: and a profile saved by this build keeps its sounds on the next load", state(A) == "bell,true,chimes", state(A))
+	local round = ER.world(nil, { options = {} })
+	round.ns.Set("cooldowns.readySound", "whisper")
+	round.ns.Set("enemycd.sound", "alarm")
+	local text = round.ns.ExportProfile()
+	local back = ER.world(nil, { options = {} })
+	back.ns.ImportProfile(text)
+	check("gap sounds: and an exported profile imports as it was", state(back) == "whisper,false,alarm", state(back))
+	check("gap sounds: and an exported Sound always comes with its Flash when ready line", table.concat(round.ns.UnpackText("FlatUI1:", text) or {}, " "):find("o|enemycd.flash|0", 1, true) ~= nil, text)
+	local rows = ER.page(ER.world(nil, { options = {} }), "trackerlow")
+	local K = ER.world(nil, { options = {} }).ns.TrackerKits
+	check("gap sounds: Sound of Trackers has the seven sounds and no None, in the order of the list", #rows.kit.choices == 7 and rows.kit.choices[1][2] == "Spell alert" and rows.kit.choices[7][2] == "Whisper warning")
+	local ok = true
+	for _, kit in ipairs(V.kits) do
+		ok = ok and K[kit[1]] == kit[2]
+	end
+	check("gap sounds: the seven choices of Sound on Cooldowns and Trackers are kits of the tracker list", ok)
+	local W = ER.world({ ["enemycd.sound"] = "alarm" })
+	local EB = TOC.eb
+	EB.used(W, EB.A, 2139, "MAGE")
+	ER.pick(W, "target", { guid = EB.A, class = "MAGE" })
+	W.advance(30.2)
+	check("gap sounds: a Sound with Flash when ready off plays the sound and does not flash", #W.au.played == 1 and W.au.played[1] == 12889 and (EB.bar(W, "target").icons[1].flashes or 0) == 0, #W.au.played .. " " .. tostring(W.au.played[1]))
+end
+-- >>> gapsounds (end)
 -- >>> enemyready (end)
 -- >>> ms-late (begin)
 -- Colour by health left, low health border and cast time (ms-22). Every label starts "ms-late:". The values are kept in one table L: the main function of this
@@ -95943,7 +96230,7 @@ do
 	ns.Set("fonts.body", "arial")
 	ns.Set("fonts.titles", "skurri")
 	ns.Set("fonts.numbers", "friz")
-	ns.Set("fonts.outline", "outline")
+	ns.Set("fonts.outline", "thin")
 	ns.Set("fonts.shadow", false)
 	D.text.draw()
 	check("sdlook: fonts on: each role takes its own face, the size is a percent of the sample size, the outline is the flag and the shadow is off",
@@ -99301,7 +99588,7 @@ do
 		check("sdchat: chat: the game's chat font is Arial Narrow 14 with no outline and a shadow, and a line has its channel colour", line and line.font[1] == "Fonts\\ARIALN.TTF" and line.font[2] == 14 and line.font[3] == ""
 			and line.textColour[1] == 1 and line.textColour[2] == 0.75 and line.shadowOff[1] == 1 and line.shadowOff[2] == -1, line and (line.font[1] .. " " .. line.font[2]))
 		ns.Set("chat.font", "morpheus")
-		ns.Set("chat.outline", "outline")
+		ns.Set("chat.outline", "thin")
 		ns.Set("chat.shadow", false)
 		drawing.draw(stage)
 		line = D.font(W, from, general)
@@ -99919,7 +100206,7 @@ do
 		{ "mock-enemy-cooldowns", "enemycd.enabled", false }, { "mock-enemy-cooldowns", "enemycd.interrupts", false }, { "mock-enemy-cooldowns", "enemycd.defensives", false },
 		{ "mock-enemy-cooldowns", "enemycd.breaks", false }, { "mock-enemy-cooldowns", "enemycd.wards", false }, { "mock-enemy-cooldowns", "enemycd.mobility", true },
 		{ "mock-enemy-cooldowns", "enemycd.offensive", true }, { "mock-enemy-cooldowns", "enemycd.place", "plates" }, { "mock-enemy-cooldowns", "enemycd.seconds", false },
-		{ "mock-enemy-cooldowns", "enemycd.kindBorder", false }, { "mock-enemy-cooldowns", "enemycd.size", 32 }, { "mock-enemy-cooldowns", "enemycd.ready", "flash" },
+		{ "mock-enemy-cooldowns", "enemycd.kindBorder", false }, { "mock-enemy-cooldowns", "enemycd.size", 32 }, { "mock-enemy-cooldowns", "enemycd.flash", true },
 	}
 	-- Other choices of the same rows, each from the default and back.
 	local more = {
@@ -100258,7 +100545,7 @@ do
 		draw()
 		x = centreOf(tr)
 		check("sdmove: the row direction decides which end of the row is at that place", near(x, UW / 2 + 150 + 10, 1e-6), x)
-		ns.Set("trackers.grow", "middle")
+		ns.Set("trackers.grow", "center")
 		ns.Set("trackers.place", "own")
 		draw()
 		x, y = centreOf(tr)
@@ -107977,6 +108264,64 @@ do
 		check("addon buttons: a forbidden map stops the pass with no error", MB.at(W2.mb.buttons.LibDBIcon10_A) == 1 and #W2.errors == 0, #W2.errors)
 	end
 end
+
+-- >>> gap icons (start)
+do
+	local G = {
+		saved = { ["trackers.grow"] = "middle", ["partycd.show"] = "used", ["enemycd.show"] = "always", ["partycd.size"] = 40, ["defensives.size"] = 99 },
+		defaults = { ["defensives.spacing"] = 3, ["cooldowns.mounted"] = false, ["cooldowns.resting"] = false, ["partycd.seconds"] = true,
+			["trackers.numbersFont"] = "game", ["partycd.numbersFont"] = "game", ["enemycd.numbersFont"] = "game" },
+		ranges = { { "ownbuffs.size", 70, 64 }, { "partycd.size", 70, 64 }, { "enemycd.size", 70, 64 }, { "defensives.size", 10, 16 }, { "defensives.spacing", 30, 20 }, { "partycd.size", 25, 26 } },
+	}
+	local W = newWorld({ saved = { options = G.saved } })
+	W.login()
+	local bad = {}
+	for path, want in pairs(G.defaults) do
+		if W.ns.Get(path) ~= want then
+			bad[#bad + 1] = path .. "=" .. tostring(W.ns.Get(path))
+		end
+	end
+	local fresh = newWorld({})
+	fresh.login()
+	check("gap icons: every new setting starts at the value that gives today's behaviour", #bad == 0 and fresh.ns.Get("defensives.size") == 32 and fresh.ns.Get("trackers.grow") == "center" and fresh.ns.Get("partycd.show") == "always",
+		table.concat(bad, ", "))
+	local ranged = {}
+	for _, r in ipairs(G.ranges) do
+		if W.ns.Normalised(r[1], r[2]) ~= r[3] then
+			ranged[#ranged + 1] = r[1] .. " " .. r[2] .. "=" .. tostring(W.ns.Normalised(r[1], r[2]))
+		end
+	end
+	check("gap icons: Icon size runs 16 to 64 in steps of 2 on Your buffs, Party cooldowns, Enemy cooldowns and Defensives on you, and Spacing 0 to 20", #ranged == 0, table.concat(ranged, ", "))
+	local saved = W.env.FlatUIDB.profiles.Default.options
+	check("gap icons: a saved Row direction middle of Trackers is center and a saved Show used of Party cooldowns is cooling, in the profile itself", W.ns.Get("trackers.grow") == "center"
+		and W.ns.Get("partycd.show") == "cooling" and saved["trackers.grow"] == "center" and saved["partycd.show"] == "cooling" and W.ns.Get("enemycd.show") == "always" and W.ns.Get("partycd.size") == 40
+		and W.ns.Get("defensives.size") == 64, tostring(saved["trackers.grow"]) .. " " .. tostring(saved["partycd.show"]))
+	local function imported(lines)
+		local X = newWorld({ saved = { options = {} } })
+		X.login()
+		X.ns.ImportProfile(X.ns.PackText("FlatUI1:", lines))
+		return X.ns.Get("trackers.grow") .. "," .. X.ns.Get("partycd.show") .. "," .. X.ns.Get("enemycd.show")
+	end
+	check("gap icons: a profile text from an older build imports middle as center and used as cooling, and keeps always", imported({ "o|trackers.grow|middle", "o|partycd.show|used", "o|enemycd.show|always" }) == "center,cooling,always"
+		and imported({ "o|trackers.grow|left", "o|partycd.show|always" }) == "left,always,cooling", imported({ "o|trackers.grow|middle", "o|partycd.show|used" }))
+	check("gap icons: a setup draft value of an old choice is fitted to the new id, so the pick stays", W.ns.Normalised("partycd.show", "used") == "cooling" and W.ns.Normalised("trackers.grow", "middle") == "center"
+		and W.ns.Normalised("partycd.show", "always") == "always" and W.ns.Normalised("partycd.show", "nope") == nil)
+	check("gap icons: Show of Party cooldowns and Enemy cooldowns have the same two ids, cooling and always, with the same two labels", (function()
+		for _, key in ipairs({ "partycd", "enemycd" }) do
+			local row = W.ns.Def(key .. ".show")
+			if #row.choices ~= 2 or row.choices[1][1] ~= "cooling" or row.choices[1][2] ~= "Only while on cooldown" or row.choices[2][1] ~= "always" or row.choices[2][2] ~= "Always, used ones dark" then
+				return false
+			end
+		end
+		return true
+	end)())
+	local labels = {}
+	for _, path in ipairs({ "cooldowns.numbers", "partycd.seconds", "enemycd.seconds", "trackers.numbers", "ownbuffs.time", "swing.time" }) do
+		labels[#labels + 1] = W.ns.Def(path).label
+	end
+	check("gap icons: the countdown rows are all named Time left", table.concat(labels, ",") == "Time left,Time left,Time left,Time left,Time left,Time left", table.concat(labels, ","))
+end
+-- >>> gap icons (end)
 io.write(("%d passed, %d failed\n"):format(passed, failed))
 if rawget(_G, "ADDON_DIR_OVERRIDE") then
 	return failed

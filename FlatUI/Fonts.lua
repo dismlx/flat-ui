@@ -15,7 +15,7 @@ local KEY = "fonts"
 -- The game's faces by the file name in lower case, and the row that picks the face for the objects that use it.
 local ROLE = { ["frizqt__.ttf"] = "body", ["arialn.ttf"] = "numbers", ["morpheus.ttf"] = "titles" }
 -- The flags of each line of the outline row. "game" is not here: it keeps the flags the game gave.
-local OUTLINE = { none = "", outline = "OUTLINE", thick = "THICKOUTLINE" }
+local OUTLINE = { none = "", thin = "OUTLINE", thick = "THICKOUTLINE" }
 -- Clients whose own fonts are Latin. A family-backed object may change only its roman member on another client, so faces are left alone there.
 local LATIN = { enUS = true, enGB = true, deDE = true, esES = true, esMX = true, frFR = true, itIT = true, ptBR = true, ptPT = true }
 local V = {
@@ -27,7 +27,7 @@ local V = {
 
 -- The lines of the outline row and the flags of a line. Nil from OutlineFlags keeps the flags the game gave.
 function ns.OutlineChoices()
-	return { { "game", "Game outline" }, { "none", "None" }, { "outline", "Thin" }, { "thick", "Thick" } }
+	return ns.OUTLINE_CHOICES
 end
 
 function ns.OutlineFlags(id)

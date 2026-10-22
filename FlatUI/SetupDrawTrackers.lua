@@ -451,6 +451,7 @@ function U.ApplyCell(cell, spec)
 	if cell.sweep then
 		U.Show(cell.sweep, shape == "icon")
 		cell.sweep:SetHideCountdownNumbers(not (spec.numbers and shape == "icon"))
+		ns.IconCountdownFont(cell, spec.font, cell.sweep)
 		if shape == "icon" and left and sample.length and not missing then
 			U.Sweep(cell.sweep, sample.length - left, sample.length)
 		else
@@ -477,7 +478,7 @@ function U.Look()
 	end
 	return { shape = read("trackers.shape"), size = read("trackers.size"), width = read("trackers.barWidth"), height = read("trackers.barHeight"),
 		fill = read("trackers.barFill"), colour = colour, counts = read("trackers.counts") == true, names = read("trackers.names") == true,
-		numbers = read("trackers.numbers") == true, missing = read("trackers.missing") }
+		numbers = read("trackers.numbers") == true, font = read("trackers.numbersFont"), missing = read("trackers.missing") }
 end
 
 function U.Spec(look, sample, state, extra)
@@ -546,7 +547,7 @@ end
 function U.DrawDefensives(part, root, x, top)
 	local read = ns.Get
 	local place, caster = read("defensives.place"), read("defensives.caster") == true
-	local size, spacing, room = 32, 3, 16
+	local size, spacing, room = read("defensives.size"), read("defensives.spacing"), 16
 	U.At(part.frame, "TOPLEFT", root, "TOPLEFT", x, -top)
 	part.label:SetWidth(200)
 	U.At(part.label, "TOPLEFT", part.frame, "TOPLEFT", 0, 0)
@@ -627,7 +628,8 @@ local function BuildTracker(stage)
 	local map = {
 		["trackers.enabled"] = s.trackers, ["trackers.shape"] = s.mark, ["trackers.size"] = icon.frame, ["trackers.barWidth"] = bar.frame,
 		["trackers.barHeight"] = bar.frame, ["trackers.barFill"] = bar.parts.bar.body, ["trackers.colour"] = bar.parts.bar.body,
-		["trackers.counts"] = icon.count, ["trackers.names"] = bar.parts.bar.name, ["trackers.numbers"] = icon.frame, ["trackers.grow"] = s.row,
+		["trackers.counts"] = icon.count, ["trackers.names"] = bar.parts.bar.name, ["trackers.numbers"] = icon.frame, ["trackers.numbersFont"] = icon.frame,
+		["trackers.grow"] = s.row, ["defensives.size"] = s.defensives.row, ["defensives.spacing"] = s.defensives.row,
 		["trackers.spacing"] = s.row, ["defensives.enabled"] = s.defensives.frame, ["defensives.place"] = s.defensives.frame,
 		["defensives.caster"] = s.defensives.row,
 	}
@@ -700,7 +702,7 @@ local function DrawTracker(s, stage)
 		s.row:SetSize(total + 12, tallest)
 		U.At(s.row, "TOPLEFT", s.trackers, "TOPLEFT", 0, -rowTop)
 		s.tick:SetSize(1, tallest + 8)
-		local tickX = 6 + (grow == "left" and total or grow == "middle" and total / 2 or 0)
+		local tickX = 6 + (grow == "left" and total or grow == "center" and total / 2 or 0)
 		U.At(s.tick, "TOPLEFT", s.row, "TOPLEFT", tickX, 4)
 		tall = rowTop + tallest + 4
 		local wide = math.max(shapesWidth, total + 12)
@@ -710,7 +712,7 @@ local function DrawTracker(s, stage)
 	local height = tall
 	if showDefensives then
 		height = math.max(height, U.DrawDefensives(s.defensives, s.root, left, PAD))
-		left = left + math.max(150, #DEFENSIVES * 35) + 0
+		left = left + math.max(150, #DEFENSIVES * (read("defensives.size") + read("defensives.spacing")))
 	end
 	U.Finish(s, left - 30 * ((showTrackers and not showDefensives) and 1 or 0) + PAD, PAD * 2 + height)
 end
@@ -1151,6 +1153,8 @@ function U.PaintItems(row, items, size, direction)
 		if icon and item then
 			icon.texture:SetTexture(ICONS .. item.icon)
 			ns.SetOutlineColour(icon.outline, ns.KindColour(item.kind))
+			icon.cooldown:SetHideCountdownNumbers(ns.Get("partycd.seconds") ~= true)
+			ns.IconCountdownFont(icon, ns.Get("partycd.numbersFont"))
 			icon.frame:Show()
 			if index % 2 == 0 then
 				U.NoSweep(icon.cooldown)
@@ -1197,7 +1201,7 @@ local function BuildParty(stage)
 	end
 	s.own = U.NewRow(s.root, 8)
 	for _, path in ipairs({ "partycd.enabled", "partycd.side", "partycd.ownRow", "partycd.count", "partycd.size", "partycd.interrupts", "partycd.defensives",
-		"partycd.externals", "partycd.breaks", "partycd.group" }) do
+		"partycd.externals", "partycd.breaks", "partycd.group", "partycd.seconds", "partycd.numbersFont" }) do
 		s.parts[path] = s.members[1].row.holder
 	end
 	s.parts["partycd.enabled"] = s.root
@@ -1299,7 +1303,7 @@ local function BuildEnemy(stage)
 		end
 	end
 	for _, path in ipairs({ "enemycd.interrupts", "enemycd.defensives", "enemycd.breaks", "enemycd.wards", "enemycd.mobility", "enemycd.offensive",
-		"enemycd.seconds", "enemycd.kindBorder", "enemycd.size", "enemycd.ready" }) do
+		"enemycd.seconds", "enemycd.numbersFont", "enemycd.kindBorder", "enemycd.size", "enemycd.flash" }) do
 		s.parts[path] = s.plateRow.holder
 	end
 	s.parts["enemycd.enabled"] = s.root
@@ -1313,7 +1317,7 @@ function U.EnemyItems(most)
 	local read = ns.Get
 	local items = {}
 	for _, sample in ipairs(ENEMY) do
-		if read("enemycd." .. sample.switch) == true and (not sample.ended or read("enemycd.ready") ~= "none") then
+		if read("enemycd." .. sample.switch) == true and (not sample.ended or read("enemycd.flash") == true) then
 			items[#items + 1] = sample
 		end
 	end
@@ -1345,13 +1349,14 @@ function U.PaintEnemy(row, items, size)
 				ns.SetOutlineColour(icon.outline, nil, nil, nil)
 			end
 			icon.cooldown:SetHideCountdownNumbers(read("enemycd.seconds") ~= true)
+			ns.IconCountdownFont(icon, read("enemycd.numbersFont"))
 			if item.ended then
 				U.NoSweep(icon.cooldown)
 				icon.texture:SetDesaturated(false)
 			else
 				U.Sweep(icon.cooldown, item.length - item.left, item.length)
 			end
-			icon.flashTex:SetShown(item.ended == true and read("enemycd.ready") ~= "none")
+			icon.flashTex:SetShown(item.ended == true and read("enemycd.flash") == true)
 			icon.frame:Show()
 			shown[#shown + 1] = icon
 		elseif icon then

@@ -235,6 +235,17 @@ local function Normalise(def, value)
 	return nil
 end
 
+-- Choice ids that were renamed, by saved path: a saved value of the old id is the new one. The text outline rows had "outline" for Thin.
+local RENAMED = { ["trackers.grow"] = { middle = "center" }, ["partycd.show"] = { used = "cooling" } }
+for _, path in ipairs({ "fonts.outline", "chat.outline", "actionbars.textOutline" }) do
+	RENAMED[path] = { outline = "thin" }
+end
+
+local function Renamed(path, value)
+	local map = RENAMED[path]
+	return map and type(value) == "string" and map[value] or value
+end
+
 -- A value as a setting of this path would hold it (clamped to its range and step, a colour in lower case, a choice that exists), or nil when the
 -- path is no setting or the value does not fit it. Nothing is written.
 function ns.Normalised(path, value)
@@ -242,7 +253,7 @@ function ns.Normalised(path, value)
 	if def == nil then
 		return nil
 	end
-	return Normalise(def, value)
+	return Normalise(def, Renamed(path, value))
 end
 
 -- The setting that must be on for this one to apply, if any.
@@ -2191,7 +2202,7 @@ local function NormaliseValues(options)
 	for path, value in pairs(options) do
 		local def = defs[path]
 		if def and not Unsaved(def) then
-			options[path] = Normalise(def, value)
+			options[path] = Normalise(def, Renamed(path, value))
 		else
 			options[path] = nil
 		end
@@ -2277,6 +2288,10 @@ local function LoadSettings()
 			if type(dimmed) == "number" and dimmed == dimmed and ct["unitframes.partyRangeOpacity"] == nil then
 				ct["unitframes.partyRangeOpacity"] = 100 - dimmed
 			end
+			-- Sound rows of an older build: one list of sounds.
+			if ns.MigrateSounds then
+				ns.MigrateSounds(saved.options, not db.soundsMigrated)
+			end
 			-- The positions of the frames the player moved, by frame name.
 			saved.movers = type(saved.movers) == "table" and saved.movers or {}
 			ns.MigrateText(saved.options, saved.options)
@@ -2284,6 +2299,13 @@ local function LoadSettings()
 			NormaliseSpots(saved.movers)
 		end
 	end
+	-- The drafts of setup hold their picks in the same form, and a Sound saved without the old row goes the same way.
+	for _, draft in pairs(type(db.setup) == "table" and type(db.setup.drafts) == "table" and db.setup.drafts or {}) do
+		if ns.MigrateSounds and type(draft) == "table" and type(draft.values) == "table" then
+			ns.MigrateSounds(draft.values, not db.soundsMigrated)
+		end
+	end
+	db.soundsMigrated = true
 	if db.profiles[DEFAULT] == nil then
 		db.profiles[DEFAULT] = { options = {}, movers = {} }
 	end
@@ -2724,6 +2746,14 @@ function ns.ExportProfile()
 			paths[#paths + 1] = path
 		end
 	end
+	-- A sound line always comes with its flash line, so an older text with a sound alone is told from this one (ImportProfile).
+	local listed = {}
+	for _, path in ipairs(paths) do
+		listed[path] = true
+	end
+	if listed["enemycd.sound"] and not listed["enemycd.flash"] and defs["enemycd.flash"] then
+		paths[#paths + 1] = "enemycd.flash"
+	end
 	table.sort(paths)
 	for _, path in ipairs(paths) do
 		local kind, value = defs[path].kind, values[path]
@@ -2783,11 +2813,16 @@ function ns.ImportProfile(text)
 	if not lines then
 		return false, why == "prefix" and "That is not a Flat UI profile." or "The text is incomplete."
 	end
-	local options, spots, rawScale, oldWord, oldMove, oldDim, oldText = {}, {}, nil, nil, nil, nil, {}
+	local options, spots, rawScale, oldWord, oldMove, oldDim, oldText, oldSound = {}, {}, nil, nil, nil, nil, {}, {}
 	for _, line in ipairs(lines) do
 		local fields = {}
 		for field in (line .. "|"):gmatch("([^|]*)|") do
 			fields[#fields + 1] = Unescape(field)
+		end
+		-- Sound rows of an older build (LoadSettings): the bool of Sound when ready is "1" or "0".
+		if fields[1] == "o" and (fields[2] == "cooldowns.readySound" or fields[2] == "enemycd.ready" or fields[2] == "enemycd.sound"
+			or fields[2] == "enemycd.flash") then
+			oldSound[fields[2]] = fields[3] == "1" and true or fields[3] == "0" and false or fields[3]
 		end
 		local def = fields[1] == "o" and defs[fields[2]]
 		-- A tick of an older build in a row that is a choice now.
@@ -2798,7 +2833,7 @@ function ns.ImportProfile(text)
 			if fields[2] == "general.scale" then
 				rawScale = Parse(def, fields[3])
 			end
-			options[fields[2]] = Normalise(def, Parse(def, fields[3]))
+			options[fields[2]] = Normalise(def, Renamed(fields[2], Parse(def, fields[3])))
 		elseif fields[1] == "o" and fields[2] == "combattext.word" then
 			oldWord = fields[3]
 		elseif fields[1] == "o" and fields[2] == "combattext.ownMove" then
@@ -2808,6 +2843,16 @@ function ns.ImportProfile(text)
 		elseif fields[1] == "m" and fields[2] ~= "" then
 			spots[fields[2]] = ns.CleanSpot({ point = fields[3], x = tonumber(fields[4]), y = tonumber(fields[5]), scale = tonumber(fields[6]),
 				kind = fields[7], label = fields[8] ~= "" and fields[8] or nil })
+		end
+	end
+	if ns.MigrateSounds then
+		oldSound["trackers.kit"] = options["trackers.kit"]
+		-- A sound line with no flash line and no ready line is an older text, whose default sound was none.
+		ns.MigrateSounds(oldSound, oldSound["enemycd.sound"] ~= nil and oldSound["enemycd.flash"] == nil)
+		for _, path in ipairs({ "cooldowns.readySound", "enemycd.flash", "enemycd.sound" }) do
+			if oldSound[path] ~= nil and defs[path] then
+				options[path] = Normalise(defs[path], oldSound[path])
+			end
 		end
 	end
 	-- Combat text rows of an older build, as for a saved profile (LoadSettings).

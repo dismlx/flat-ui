@@ -20,7 +20,56 @@ ns.SOUNDS = {
 	{ 316773, "Bell" },
 	{ 316723, "Warhorn" },
 	{ 8959, "Raid warning" },
+	{ 12889, "Alarm" },
+	{ 37666, "Whisper warning" },
 }
+
+-- The fonts of the Countdown number size choices (game is the font the game draws with).
+local COUNT_FONTS = { small = "NumberFontNormalSmall", normal = "NumberFontNormal", large = "NumberFontNormalLarge", huge = "NumberFontNormalHuge" }
+
+-- Sets the font of the countdown numbers of an icon (a table with a cooldown, or any table with the Cooldown frame as `frame`) to a choice of Countdown number size. The game's font is read once,
+-- before the first change, and game puts it back.
+function ns.IconCountdownFont(icon, choice, frame)
+	local name, cooldown = COUNT_FONTS[choice], frame or icon.cooldown
+	if icon.cdFont == name then
+		return
+	end
+	local ok, text = pcall(cooldown.GetCountdownFontString, cooldown)
+	text = ok and not IsSecret(text) and type(text) == "table" and text or nil
+	if name then
+		if icon.cdGame == nil and text then
+			local read, file, size, flags = pcall(text.GetFont, text)
+			icon.cdGame = read and not IsSecret(file) and type(file) == "string" and { file, size, flags or "" } or false
+		end
+		if pcall(cooldown.SetCountdownFont, cooldown, name) then
+			icon.cdFont = name
+		end
+	else
+		icon.cdFont = nil
+		if icon.cdGame and text then
+			pcall(text.SetFont, text, icon.cdGame[1], icon.cdGame[2], icon.cdGame[3])
+		end
+	end
+end
+
+-- Sound settings of an older build become the one list of sounds. t holds saved values by path. Sound when ready was on or off and played
+-- Sound of Trackers. When it is ready again was none, flash or sound, with Ready sound (alert and horn are now spell and warhorn). With
+-- legacy true, a Ready sound saved without the old row was never played and becomes none.
+local RENAMED = { alert = "spell", horn = "warhorn" }
+function ns.MigrateSounds(t, legacy)
+	local ready, sound, own = t["enemycd.ready"], t["enemycd.sound"], t["cooldowns.readySound"]
+	if type(own) == "boolean" then
+		t["cooldowns.readySound"] = own and (t["trackers.kit"] or "raid") or "none"
+	end
+	if ready ~= nil then
+		t["enemycd.flash"] = ready ~= "none"
+		sound = sound or "alert"
+		t["enemycd.sound"] = ready == "sound" and (RENAMED[sound] or sound) or "none"
+		t["enemycd.ready"] = nil
+	elseif sound ~= nil and legacy then
+		t["enemycd.sound"] = "none"
+	end
+end
 
 -- The colour of the border of each kind of ability (CooldownData.lua: ns.COOLDOWN_KINDS). Crowd control shares the violet of its breaks.
 local COLOURS = {
@@ -101,8 +150,8 @@ function I.Done(icon)
 end
 
 -- Puts a picture and a sweep on an icon and shows it. texture: a file or a number. seconds: a number of seconds that starts at
--- `start`, or a duration object (then start is not used). look: { numbers = false hides the countdown numbers, kind = 1 to 9 for the
--- colour of the border, flash and sound for the end of the sweep, key the module a note goes to }.
+-- `start`, or a duration object (then start is not used). look: { numbers = false hides the countdown numbers, font = a Countdown number
+-- size choice, kind = 1 to 9 for the colour of the border, flash and sound for the end of the sweep, key the module a note goes to }.
 function ns.IconSet(icon, texture, start, seconds, look)
 	look = look or {}
 	icon.look = look
@@ -111,6 +160,9 @@ function ns.IconSet(icon, texture, start, seconds, look)
 	end
 	local cooldown = icon.cooldown
 	pcall(cooldown.SetHideCountdownNumbers, cooldown, look.numbers == false)
+	if look.font ~= nil then
+		ns.IconCountdownFont(icon, look.font)
+	end
 	if type(start) == "number" and not IsSecret(start) and type(seconds) == "number" and not IsSecret(seconds) then
 		pcall(cooldown.SetCooldown, cooldown, start, seconds)
 	elseif seconds ~= nil then

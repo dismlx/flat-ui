@@ -1,3 +1,10 @@
+## 0.4.97
+
+- New **Icon size** and **Spacing** on **Defensives on you**. New **Hide while mounted** and **Hide in cities and inns** on **Cooldowns**. New **Countdown number size** on **Trackers**, **Party cooldowns** and **Enemy cooldowns**, and **Time left** on **Party cooldowns**. **Icon size** goes to 64 on every icon row.
+- **Sound** on **Cooldowns**, **Trackers** and **Enemy cooldowns** offers the same sounds, **Spell alert** to **Whisper warning**. **Enemy cooldowns** has **Flash when ready** and **Sound** as two settings. Saved choices stay as they were.
+- **Text outline**: new on **Personal resource display**, **Swing timers** and **Cast bars**. The first choice on every text outline row is now **As the game has it**.
+- Text sizes of cast bars, swing timers, the resource display, window titles, the zone name, experience bar text, tooltips and the tracker heading go down to 50%. Stack counts go up to 250%.
+
 ## 0.4.96
 
 - **Options window**: the sidebar has **Home**, **Flat UI setup**, **Profiles**, **Move frames** and six groups of modules with icons. The switch of a module is in the page header. **Home** shows the profile, the accent, recent changes with **Undo**, the modules and what needs a reload. New **Sidebar** setting.

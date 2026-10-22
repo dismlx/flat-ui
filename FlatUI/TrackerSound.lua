@@ -31,7 +31,11 @@ local function Wanted(entry)
 		return wants
 	end
 	local unit = entry.kind == "debuff" and "target" or "player"
-	local file = FILES[ns.TrackerValue(entry, "kit")] or FILES.raid
+	-- A kit with no file of its own (Spell alert, Chimes, Bell, Warhorn) is not registered: the tracker plays it itself.
+	local file = FILES[ns.TrackerValue(entry, "kit")]
+	if not file then
+		return wants
+	end
 	for _, spellID in ipairs(entry.spells) do
 		wants[#wants + 1] = { key = unit .. ":" .. spellID, unit = unit, spellID = spellID, file = file }
 	end

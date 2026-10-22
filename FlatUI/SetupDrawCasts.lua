@@ -181,9 +181,10 @@ local function ShowArt(art, shown)
 end
 
 -- Size, shown state and colour of a text. percent is the share of the size the game gave the font; a colour is nil for the game's.
-local function Look(text, percent, r, g, b)
+-- outline is the id of a text outline row, or nil for the game's flags.
+local function Look(text, percent, r, g, b, outline)
 	if text then
-		ns.TextStyle(text, { percent = percent, r = r, g = g, b = b })
+		ns.TextStyle(text, { percent = percent, r = r, g = g, b = b, flags = outline and ns.OutlineFlags(outline) or nil })
 	end
 end
 
@@ -349,7 +350,7 @@ local function BuildCast(stage)
 	p["castbars.targetCast"] = target.fill
 	p["castbars.targetChannel"] = focus.fill
 	p["castbars.playerText"] = player.text
-	for _, path in ipairs({ "textSize", "textShow", "textAlign", "textOwn", "textColour" }) do
+	for _, path in ipairs({ "textSize", "textOutline", "textShow", "textAlign", "textOwn", "textColour" }) do
 		p["castbars." .. path] = player.text
 	end
 	p["castbars.ownTime"] = target.time
@@ -400,6 +401,7 @@ function castDrawing.draw(stage)
 		file = ns.BarFile("game")
 	end
 	local percent = enabled and G("castbars.textSize") or 100
+	local outline = enabled and G("castbars.textOutline") or nil
 	local hideName = enabled and not G("castbars.textShow")
 	local justify = JUSTIFY[enabled and G("castbars.textAlign") or "game"] or "CENTER"
 	local tr, tg, tb
@@ -500,7 +502,7 @@ function castDrawing.draw(stage)
 			PlaceCastText(row.text, bar, mode)
 			row.text:SetJustifyH(justify)
 			row.text:SetShown(not hideName)
-			Look(row.text, percent, tr, tg, tb)
+			Look(row.text, percent, tr, tg, tb, outline)
 		end
 		if row.time then
 			row.time:SetShown(enabled and G("castbars.ownTime") == true)
@@ -595,7 +597,7 @@ local function BuildResource(stage)
 	p["resource.healthByLeft"] = health.fill
 	p["resource.powerOwn"] = power.fill
 	p["resource.powerColour"] = power.fill
-	for _, key in ipairs({ "textSize", "text", "percent", "textOwn", "textColour" }) do
+	for _, key in ipairs({ "textSize", "textOutline", "text", "percent", "textOwn", "textColour" }) do
 		p["resource." .. key] = health.percent
 	end
 	p["resource.value"] = health.value
@@ -646,6 +648,7 @@ function resDrawing.draw(stage)
 		powerGrey = false
 	end
 	local percent = enabled and G("resource.textSize") or 100
+	local outline = enabled and G("resource.textOutline") or nil
 	local showText = not enabled or G("resource.text") == true
 	local showPercent = not enabled or (showText and G("resource.percent") == true)
 	local showValue = not enabled or (showText and G("resource.value") == true)
@@ -684,11 +687,11 @@ function resDrawing.draw(stage)
 		inst.grey[bar.fill] = grey or nil
 		if bar.percent then
 			bar.percent:SetShown(showPercent)
-			Look(bar.percent, percent, tr, tg, tb)
+			Look(bar.percent, percent, tr, tg, tb, outline)
 		end
 		if bar.value then
 			bar.value:SetShown(showValue)
-			Look(bar.value, percent, tr, tg, tb)
+			Look(bar.value, percent, tr, tg, tb, outline)
 		end
 		if bar.label then
 			Place(bar.label, "LEFT", inst.root, "TOPLEFT", RES_LEFT + RES_WIDTH + 18, -(y + spec.height / 2))
@@ -810,7 +813,7 @@ local function BuildSwing(stage)
 	p["swing.reverse"] = main.fill
 	p["swing.rangeAlpha"] = out.bar
 	p["swing.idle"] = idle.timer
-	for _, key in ipairs({ "textSize", "name", "textOwn", "textColour" }) do
+	for _, key in ipairs({ "textSize", "textOutline", "name", "textOwn", "textColour" }) do
 		p["swing." .. key] = main.type
 	end
 	p["swing.time"] = main.time
@@ -903,6 +906,7 @@ function swingDrawing.draw(stage)
 	look.reverse = enabled and G("swing.reverse") == true
 	look.spark = not (flat and not G("swing.spark"))
 	local percent = enabled and G("swing.textSize") or 100
+	local outline = enabled and G("swing.textOutline") or nil
 	local hideName = enabled and not G("swing.name")
 	local hideTime = enabled and not G("swing.time")
 	local own = enabled and G("swing.textOwn")
@@ -935,11 +939,11 @@ function swingDrawing.draw(stage)
 		end
 		if row.type then
 			row.type:SetShown(not hideName)
-			Look(row.type, percent, r, g, b)
+			Look(row.type, percent, r, g, b, outline)
 		end
 		if row.time then
 			row.time:SetShown(not hideTime)
-			Look(row.time, percent, r, g, b)
+			Look(row.time, percent, r, g, b, outline)
 		end
 		if row.note then
 			Place(row.note, "LEFT", inst.root, "TOPLEFT", SWING_LEFT + frameW + 18, -(y + SWING_FRAME_H / 2))

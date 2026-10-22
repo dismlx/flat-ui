@@ -460,7 +460,7 @@ function P.Draw(row, slot, item)
 		if row.own and item.start then
 			seconds = P.Sweep(item.a) or seconds
 		end
-		key = ("%s:%s:%s"):format(item.a.key, tostring(item.start), type(seconds) == "table" and "object" or "number")
+		key = ("%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), type(seconds) == "table" and "object" or "number", tostring(Opt("seconds")), Opt("numbersFont"))
 	end
 	if row.drawn[slot] == key then
 		return
@@ -476,7 +476,7 @@ function P.Draw(row, slot, item)
 	if not used then
 		pcall(icon.cooldown.Clear, icon.cooldown)
 	end
-	ns.IconSet(icon, P.Texture(item.a), item.start, seconds, { kind = item.a.kind })
+	ns.IconSet(icon, P.Texture(item.a), item.start, seconds, { kind = item.a.kind, numbers = Opt("seconds") == true, font = Opt("numbersFont") })
 	local level = used and DARK or 1
 	icon.texture:SetDesaturated(used)
 	icon.texture:SetVertexColor(level, level, level)

@@ -149,10 +149,11 @@ local function Size(bar, entry)
 	end
 end
 
--- The spell name of a bar, at a percent of the size the game gave it.
+-- The spell name of a bar, at a percent of the size the game gave it and with the outline of its row.
 local function FitText(bar)
-	local percent = ns.Enabled(KEY) and ns.Get(KEY .. ".textSize") or 100
-	if ns.TextSize(Part(bar, "Text"), percent) == false then
+	local on = ns.Enabled(KEY)
+	local percent = on and ns.Get(KEY .. ".textSize") or 100
+	if ns.TextStyle(Part(bar, "Text"), { percent = percent, flags = on and ns.OutlineFlags(ns.Get(KEY .. ".textOutline")) or nil }) == false then
 		ns.Note(KEY, "Cast bars: the font of a spell name could not be changed, so it keeps its size.")
 	end
 	-- The game gives the string a new font object when it lays the bar out, which brings its own alignment and colour.
@@ -192,7 +193,7 @@ local function Resize()
 end
 
 local function Hook()
-	if hooked or type(hooksecurefunc) ~= "function" or not ns.Enabled(KEY) or not (ns.Get("castbars.playerSize") or ns.Get("castbars.playerMatch") == "resource" or ns.Get("castbars.petSize") or ns.Get("castbars.textSize") ~= 100
+	if hooked or type(hooksecurefunc) ~= "function" or not ns.Enabled(KEY) or not (ns.Get("castbars.playerSize") or ns.Get("castbars.playerMatch") == "resource" or ns.Get("castbars.petSize") or ns.Get("castbars.textOutline") ~= "game" or ns.Get("castbars.textSize") ~= 100
 		or ns.Get("castbars.textAlign") ~= "game" or ns.Get("castbars.textOwn")) then
 		return
 	end

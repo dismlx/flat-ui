@@ -221,6 +221,9 @@ local function CleanDraft(raw)
 		values[path] = value
 	end
 	ns.MigrateText(values, values)
+	if ns.MigrateSounds then
+		ns.MigrateSounds(values, false)
+	end
 	-- White names never beat a Name colour the profile the draft starts from has.
 	local base = draft.from and db.profiles[draft.from].options
 	if type(raw.values) == "table" and raw.values["unitframes.nameColour"] == nil and values["unitframes.nameColour"] == "white" and type(base) == "table"

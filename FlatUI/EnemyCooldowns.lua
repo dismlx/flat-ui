@@ -8,7 +8,7 @@ local _, ns = ...
 -- game says plainly that it is not protected, else after combat. In combat only the picture, the sweep, the colour and show or hide
 -- of icons that exist are touched. Two bars of up to eight icons, for the target and the focus, are rows of the same kind that hang
 -- from UIParent, above the target and focus frames until a spot is saved with the movers. Show can keep every ability whose use can be
--- seen at that moment on the row, ready ones bright and used ones dark; When it is ready again flashes the icon at the end of a timer and,
+-- seen at that moment on the row, ready ones bright and used ones dark; Flash when ready flashes the icon at the end of a timer and,
 -- for the target and focus, plays a sound. The Add and Hide lists and /flatui enemy are kept for the account. The helpers are in one table, E.
 
 local KEY = "enemycd"
@@ -30,8 +30,8 @@ local NET_LATE = 0.1
 -- The look of a used icon in Always, the abilities added by hand at most, and the longest cooldown and the highest spell ID that can be typed.
 local DARK = 0.6
 local MOST_ADDED, MOST_SECONDS, MOST_ID = 30, 86400, 9999999
--- The places of the Ready sound choices in ns.SOUNDS (IconRow.lua).
-local KITS = { alert = 1, chimes = 2, bell = 3, horn = 4, raid = 5 }
+-- The places of the Sound choices in ns.SOUNDS (IconRow.lua).
+local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 local HELP = {
 	"/flatui enemy add Blink 15 - an ability, a spell ID or a shift-clicked spell, and its cooldown in seconds",
 	"/flatui enemy hide 2139 - an ability or a spell ID",
@@ -322,6 +322,11 @@ function E.Held(rec, list, have)
 	end
 end
 
+-- True when a ready cue is on: the flash, a sound or both.
+local function Cue()
+	return Opt("flash") == true or KITS[Opt("sound")] ~= nil
+end
+
 -- True when the sound is for this plate or bar: the target and the focus.
 function E.Hears(rec)
 	if rec.mover then
@@ -335,9 +340,9 @@ function E.Hears(rec)
 	return false
 end
 
--- The timer of ability `key` has ended, a moment ago: with a flash chosen, its icon stays a moment, ready, so that it can flash.
+-- The timer of ability `key` has ended, a moment ago: with a flash or a sound chosen, its icon stays a moment, ready, so that it can flash.
 function E.Ended(rec, key, last)
-	if Opt("ready") == "none" or rec.owner == nil or type(last) ~= "table" or T.Now() - (last.start + last.seconds) > JUST then
+	if not (Opt("flash") == true or (KITS[Opt("sound")] ~= nil and E.Hears(rec))) or rec.owner == nil or type(last) ~= "table" or T.Now() - (last.start + last.seconds) > JUST then
 		return
 	end
 	local held = E.holds[rec.owner] or {}
@@ -352,13 +357,12 @@ function E.Ended(rec, key, last)
 	end
 end
 
--- The icon of an ability that was used is now ready: it flashes, and for the target and the focus Flash and sound plays the sound.
+-- The icon of an ability that was used is now ready: it flashes, and for the target and the focus the sound plays.
 function E.Flash(row, icon)
-	if Opt("ready") == "none" then
-		return
+	local sound = ns.SOUNDS[KITS[Opt("sound")] or 0]
+	if Opt("flash") then
+		ns.IconFlash(icon)
 	end
-	ns.IconFlash(icon)
-	local sound = Opt("ready") == "sound" and ns.SOUNDS[KITS[Opt("sound")] or 1]
 	if sound and row.rec and E.Hears(row.rec) then
 		ns.PlayKit(sound[1], KEY)
 	end
@@ -368,7 +372,7 @@ end
 -- again a moment after the timer ends.
 function E.Net(row, icon, item)
 	icon.net = nil
-	if Opt("ready") == "none" or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
+	if not Cue() or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
 		return
 	end
 	local mark = { key = item.a.key, start = item.start }
@@ -470,8 +474,8 @@ function E.Draw(row, slot, item)
 	local icon = row.icons[slot]
 	local key = "none"
 	if item then
-		key = ("%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), tostring(Opt("seconds")), tostring(Opt("kindBorder")), item.ready and "ready" or "used",
-			tostring(Opt("show")), tostring(Opt("ready")))
+		key = ("%s:%s:%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), tostring(Opt("seconds")), tostring(Opt("kindBorder")), item.ready and "ready" or "used",
+			tostring(Opt("show")), tostring(Opt("flash")), tostring(Opt("sound")), Opt("numbersFont"))
 	end
 	if row.drawn[slot] == key then
 		return
@@ -485,7 +489,7 @@ function E.Draw(row, slot, item)
 		return
 	end
 	icon.key = item.a.key
-	local look = { numbers = Opt("seconds") == true, kind = Opt("kindBorder") == true and item.a.kind or nil }
+	local look = { numbers = Opt("seconds") == true, font = Opt("numbersFont"), kind = Opt("kindBorder") == true and item.a.kind or nil }
 	if item.ready then
 		icon.net = nil
 		pcall(icon.cooldown.Clear, icon.cooldown)
@@ -720,7 +724,7 @@ end
 -- are handed on unread. Display only: no border by kind, no alert at the end of the sweep.
 function E.ArenaDraw(row, slot, n, duration)
 	local icon = row.icons[slot]
-	local key = ("arena:%s:%s:%s"):format(n, E.arena.stamp, tostring(Opt("seconds")))
+	local key = ("arena:%s:%s:%s:%s"):format(n, E.arena.stamp, tostring(Opt("seconds")), Opt("numbersFont"))
 	if row.drawn[slot] == key then
 		return
 	end
@@ -733,7 +737,7 @@ function E.ArenaDraw(row, slot, n, duration)
 	end
 	icon.texture:SetDesaturated(false)
 	icon.texture:SetVertexColor(1, 1, 1)
-	ns.IconSet(icon, nil, nil, duration, { numbers = Opt("seconds") == true })
+	ns.IconSet(icon, nil, nil, duration, { numbers = Opt("seconds") == true, font = Opt("numbersFont") })
 end
 
 -- One line for /flatui check, or nil: how the break of the target and focus bars stands in an arena.

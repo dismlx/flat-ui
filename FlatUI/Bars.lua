@@ -44,18 +44,15 @@ end
 local hiddenLabels = setmetatable({}, { __mode = "k" })
 
 -- Sets the size of a label and hides or shows it. A label is touched for its alpha only while it is
--- hidden here or was. style has the colour of the text (r, g, b) when the row has its own.
-local function StyleLabel(key, label, percent, hide, style)
+-- hidden here or was. style has the colour of the text (r, g, b) when the row has its own. outline is the id of a text outline row: the game's
+-- own flags stay for "game" or none.
+local function StyleLabel(key, label, percent, hide, style, outline)
 	if label == nil or ns.IsSecret(label) then
 		return
 	end
-	local styled
-	if style then
-		style.percent = percent
-		styled = ns.TextStyle(label, style)
-	else
-		styled = ns.TextSize(label, percent)
-	end
+	style = style or {}
+	style.percent, style.flags = percent, outline and ns.OutlineFlags(outline) or nil
+	local styled = ns.TextStyle(label, style)
 	if styled == false then
 		ns.Note(key, ("%s: the font of a label could not be changed, so it keeps its size."):format(ns.modules[key].label))
 	end
@@ -160,7 +157,8 @@ local function ApplyResourceText(bar)
 		-- The percentage is the left text, the amount the right one and the whole string.
 		local part = ns.Get(name == "LeftText" and "resource.percent" or "resource.value")
 		local hide = on and not (ns.Get("resource.text") and part)
-		StyleLabel("resource", bar[name], on and ns.Get("resource.textSize") or 100, hide, style and { r = style.r, g = style.g, b = style.b })
+		StyleLabel("resource", bar[name], on and ns.Get("resource.textSize") or 100, hide, style and { r = style.r, g = style.g, b = style.b },
+			on and ns.Get("resource.textOutline") or nil)
 	end
 end
 
@@ -404,7 +402,7 @@ local function ApplySwingText(timer)
 	end
 	local on = ns.Enabled("swing")
 	for _, entry in ipairs(SWING_TEXTS) do
-		StyleLabel("swing", bar[entry[1]], on and ns.Get("swing.textSize") or 100, on and not ns.Get(entry[2]))
+		StyleLabel("swing", bar[entry[1]], on and ns.Get("swing.textSize") or 100, on and not ns.Get(entry[2]), nil, on and ns.Get("swing.textOutline") or nil)
 	end
 end
 

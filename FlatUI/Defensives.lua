@@ -11,7 +11,6 @@ local _, ns = ...
 local KEY = "defensives"
 -- The name of the row among the saved spots of the movers.
 local MOVER = "FlatUIDefensives"
-local SIZE, SPACING = 32, 3
 -- The row hangs from the top left corner of the player frame: this far right and up. The room for the caster's name under the
 -- icons is part of the height.
 local OFFSET_X, OFFSET_Y = 0, 20
@@ -190,7 +189,7 @@ function D.Init(button)
 	D.list[#D.list + 1] = parts
 	pcall(button.EnableMouse, button, false)
 	pcall(button.SetHideTooltipInCombat, button, true)
-	pcall(button.SetSize, button, SIZE, SIZE)
+	pcall(button.SetSize, button, Opt("size"), Opt("size"))
 	local function Part(name, fn)
 		if not pcall(fn) then
 			D.refused[name] = true
@@ -287,6 +286,24 @@ function D.ApplyCaster()
 	end
 end
 
+local function Layout()
+	return { elementSpacing = Opt("spacing"), elementWidth = Opt("size"), elementHeight = Opt("size") }
+end
+
+-- The layout of the groups again where Icon size or Spacing has changed; the game places the slots from it; buttons already shown keep their size until /reload.
+function D.ApplySize()
+	local size, spacing = Opt("size"), Opt("spacing")
+	if D.sized == size .. ":" .. spacing then
+		return
+	end
+	D.sized = size .. ":" .. spacing
+	for _, group in ipairs(GROUPS) do
+		if D.container then
+			pcall(D.container.SetAuraGroupLayout, D.container, group, Layout())
+		end
+	end
+end
+
 -- The border again where its thickness or colour has changed.
 function D.ApplyBorder()
 	for _, parts in ipairs(D.list) do
@@ -298,7 +315,7 @@ function D.ApplyBorder()
 	end
 end
 
-D.apply = { caster = D.ApplyCaster, border = D.ApplyBorder }
+D.apply = { caster = D.ApplyCaster, border = D.ApplyBorder, size = D.ApplySize }
 
 -- Runs what waited, once the game says buffs are open.
 function D.Flush()
@@ -627,10 +644,6 @@ end
 
 -- The game's container --------------------------------------------------------------------------------------------------------------
 
-local function Layout()
-	return { elementSpacing = SPACING, elementWidth = SIZE, elementHeight = SIZE }
-end
-
 -- Three groups of buttons on one container for the player: the buffs the lists name that other players cast, every external defensive
 -- the game flags that the lists do not name, and the defensives the player casts on themself.
 function D.Build()
@@ -653,6 +666,7 @@ function D.Build()
 			layout = Layout(), initializeFrame = D.InitCall })
 	end)
 	D.container = container
+	D.sized = Opt("size") .. ":" .. Opt("spacing")
 	if made then
 		-- The buffs the player casts on themself, off until Your own defensives is on; a refusal of this group leaves the other two.
 		local ownMade = pcall(function()
@@ -786,7 +800,7 @@ function D.Pass()
 		ns.IconClear(D.icons[index])
 		D.icons[index].name:Hide()
 	end
-	ns.IconLayout(shown, D.Holder(), SIZE, SPACING, "right")
+	ns.IconLayout(shown, D.Holder(), Opt("size"), Opt("spacing"), "right")
 end
 
 function D.Queue()
@@ -860,6 +874,7 @@ function D.Sync()
 		D.Groups(true)
 		D.Change("caster")
 		D.Change("border")
+		D.Change("size")
 	elseif D.path == "reading" then
 		D.StartReading()
 	end
@@ -999,7 +1014,7 @@ function D.Test()
 	for index, icon in ipairs(list) do
 		ns.IconSample(icon, index, now, 2 * index, KEY)
 	end
-	ns.IconLayout(list, holder, SIZE, SPACING, "right")
+	ns.IconLayout(list, holder, Opt("size"), Opt("spacing"), "right")
 	local test = { list = list }
 	D.testing = test
 	print("Defensives on you: three sample icons for 8 seconds.")

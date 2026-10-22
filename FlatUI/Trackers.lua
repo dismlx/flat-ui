@@ -64,7 +64,7 @@ local K = {
 	HIDDEN = { state = "unknown", hidden = true },
 	-- KITS: the sound kits a tracker can play, by their saved word: 8959 RAID_WARNING, 12889 ALARM_CLOCK_WARNING_3,
 	-- 37666 UI_RAID_BOSS_WHISPER_WARNING.
-	KITS = { raid = 8959, alarm = 12889, whisper = 37666 },
+	KITS = { spell = 23287, chimes = 316736, bell = 316773, warhorn = 316723, raid = 8959, alarm = 12889, whisper = 37666 },
 	-- The places a row can be at, in the order they are laid out.
 	ORDER = { "resource", "character", "own" },
 	-- The words of /flatui tracker set, and the saved key each one stands for.
@@ -1906,6 +1906,7 @@ local function Apply(record, entry, look)
 	if record.cooldown.SetHideCountdownNumbers then
 		record.cooldown:SetHideCountdownNumbers(not (Value(entry, "numbers") and shape == "icon"))
 	end
+	ns.IconCountdownFont(record, Opt("numbersFont"))
 	Sweep(record, look)
 	-- The rim is red, or the colour a kind asked for; the colour is set again only when it changes.
 	local tint = look.rimColour and (look.rimColour[1] .. "," .. look.rimColour[2] .. "," .. look.rimColour[3]) or "red"

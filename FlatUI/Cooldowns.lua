@@ -35,7 +35,7 @@ local NO_POSITION = "Cooldown icons: the personal resource display cannot be use
 local NO_SWEEP = "Cooldown icons: the game hides cooldown times and has no other way to draw them, so icons dim without a sweep."
 local SWEEP_REFUSED = "Cooldown icons: the game refused to draw cooldown sweeps, so icons dim without a sweep."
 local NO_COOLDOWNS = "Cooldown icons: the game has no spell cooldown information, so the row shows no cooldowns."
-local NO_SOUND = "Cooldown icons: the game played no sound, so Sound when ready is silent."
+local NO_SOUND = "Cooldown icons: the game played no sound, so the ready sound is silent."
 local RAID_WARNING = 8959
 local NO_BOOK = "Cooldown icons: the game has no spell book information, so Add a spell lists nothing."
 local NO_BINDS = "Cooldown icons: the game has no action bar key information, so Keybind on icons shows no keys."
@@ -484,7 +484,8 @@ end
 -- One sound when a dimmed icon's cooldown is over. The global cooldown does not count, and a cooldown
 -- the game does not answer for plays nothing.
 local function Ready(record)
-	if not (record.dimmed and not record.readyPlayed and Opt("readySound")) then
+	local sound = Opt("readySound")
+	if not (record.dimmed and not record.readyPlayed and sound ~= "none") then
 		return
 	end
 	if record.item then
@@ -499,7 +500,7 @@ local function Ready(record)
 	end
 	record.readyPlayed = true
 	local kits = ns.TrackerKits
-	local ok, played = pcall(PlaySound, kits and kits[ns.Get("trackers.kit")] or RAID_WARNING)
+	local ok, played = pcall(PlaySound, kits and kits[sound] or RAID_WARNING)
 	if not ok or (not IsSecret(played) and played == false) then
 		ns.Note(KEY, NO_SOUND)
 	end
@@ -857,10 +858,11 @@ local function Trinkets()
 	return list
 end
 
--- The row's opacity out of combat.
+-- The row's opacity out of combat, and none while it is hidden on a mount or in a city or an inn.
 local function Idle()
 	if holder then
-		holder:SetAlpha(not fighting and Opt("idleAlpha") / 100 or 1)
+		local away = (Opt("mounted") and Ask(IsMounted) == true) or (Opt("resting") and Ask(IsResting) == true)
+		holder:SetAlpha(away and 0 or (not fighting and Opt("idleAlpha") / 100 or 1))
 	end
 end
 
@@ -1219,6 +1221,8 @@ ns.Register(KEY, {
 			fighting = false
 			Idle()
 		end,
+		PLAYER_MOUNT_DISPLAY_CHANGED = Idle,
+		PLAYER_UPDATE_RESTING = Idle,
 		SPELLS_CHANGED = Changed,
 		PLAYER_TALENT_UPDATE = Changed,
 		ACTIVE_TALENT_GROUP_CHANGED = Changed,
