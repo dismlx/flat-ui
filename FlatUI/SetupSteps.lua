@@ -396,6 +396,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.petPowerBar", "c", "mock-unit-frame" },
 		{ "unitframes.totPicture", "c", "mock-unit-frame" },
 		{ "unitframes.totName", "o", "mock-unit-frame" },
+		{ "unitframes.totNameFit", "o", "mock-unit-frame" },
 		{ "unitframes.totHealthBy", "o", "mock-unit-frame" },
 		{ "unitframes.totPowerBar", "c", "mock-unit-frame" },
 	} },

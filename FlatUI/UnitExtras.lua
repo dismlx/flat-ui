@@ -348,6 +348,52 @@ function X.afterTotems()
 	end
 end
 
+-- Long names on the target of target ----------------------------------------------------------------------------------------------------------
+
+-- The name of the row is set to its own size first. With Smaller text, a name wider than the row is set at room / need of that size, down to FIT_FLOOR.
+-- The scale is a font string call that works in combat and stays out of the font call's cache. A width the client withholds, or 0, leaves the name cut.
+local NAMEFIT, FIT_FLOOR = "Long names", 0.75
+local fitNote = nil
+local function FitNote(text)
+	if fitNote == text then
+		return
+	end
+	if fitNote ~= nil then
+		ns.ClearNote(KEY, fitNote)
+	end
+	fitNote = text
+	if text ~= nil then
+		ns.Note(KEY, text)
+	end
+end
+local function FitName(rec)
+	if rec.kind ~= "tot" then
+		return
+	end
+	if rec.row == nil or not X.rowOn(rec) then
+		FitNote(nil)
+		return
+	end
+	local name = rec.row.name
+	pcall(name.SetTextScale, name, 1)
+	if Opt("totNameFit") ~= "shrink" then
+		FitNote(nil)
+		return
+	end
+	local okNeed, need = pcall(name.GetUnboundedStringWidth, name)
+	local okRoom, room = pcall(name.GetWidth, name)
+	if not (okNeed and okRoom and X.number(need) and X.number(room) and room > 0) then
+		FitNote("Unit frames: Long names: the game did not give the width of the name, so a long name on the target of target stays cut with dots.")
+		return
+	end
+	FitNote(nil)
+	if need > room then
+		pcall(name.SetTextScale, name, math.max(FIT_FLOOR, room / need))
+	end
+end
+
+table.insert(X.after.rowText, { part = NAMEFIT, fn = FitName })
+table.insert(X.after.layout, { part = NAMEFIT, fn = FitName })
 table.insert(X.after.apply, { part = PARTY, fn = PartyRange })
 table.insert(X.after.apply, { part = RAID, fn = RaidParts })
 table.insert(X.after.apply, { part = RAIDRANGE, fn = RaidRange })

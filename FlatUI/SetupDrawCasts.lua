@@ -734,7 +734,7 @@ local SWING_ROWS = {
 	{ hand = "off", note = "In range", part = 0.4, period = 2.6 },
 	{ hand = "ranged", note = "In range", part = 0.8, period = 3.2 },
 	{ hand = "main", note = "Out of range", part = 0.55, period = 2.6, out = true },
-	{ hand = "off", note = "Not swinging", part = 0, period = 2.6, idle = true },
+	{ hand = "off", note = "Out of combat", part = 0, period = 2.6, idle = true },
 }
 
 local swingMade = setmetatable({}, { __mode = "k" })
@@ -858,7 +858,7 @@ function swingDrawing.draw(stage)
 	local enabled = G("swing.enabled") == true
 	local flat = enabled and G("swing.flat") == true
 	local whole = enabled and G("swing.outline") == "frame"
-	local idleHide = enabled and G("swing.idle") == "hide"
+	local idleHide = enabled and G("swing.idle") ~= "show"
 	local file = flat and ns.BarTexture(G("swing.texture")) or nil
 	if not flat then
 		file = ns.BarFile("game")

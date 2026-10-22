@@ -9481,7 +9481,7 @@ local MS9 = {
 		{ "stripes", "Stripes" }, { "edge", "Bottom edge" }, { "fade", "Side fade" }, { "game", "Game status bar" }, { "skills", "Skills bar" }, { "targeting", "Targeting bar" } },
 	aligns = { { "game", "As the game has it" }, { "left", "Left" }, { "center", "Centre" }, { "right", "Right" } },
 	icons = { { "game", "Left of the bar" }, { "right", "Right of the bar" }, { "hidden", "Hidden" } },
-	idles = { { "show", "Show the empty bar" }, { "hide", "Hide the bar" } },
+	idles = { { "show", "Always" }, { "combat", "In combat" }, { "hide", "Only while swinging" } },
 	barChoices = { { "all", "All bars" }, { "side", "Bars 2 to 8" }, { "main", "Main bar" }, { "none", "No bars" } },
 	outlines = { { "game", "Game outline" }, { "none", "None" }, { "outline", "Thin" }, { "thick", "Thick" } },
 }
@@ -9908,7 +9908,7 @@ local PAGES = {
 		S("swing.reverse", "bool", false, "Fill from the right"),
 		"Out of range and idle",
 		S("swing.rangeAlpha", "number", 40, "Out of range opacity", nil, { min = 10, max = 100, step = 5, unit = "%" }),
-		S("swing.idle", "choice", "show", "While not swinging", nil, { choices = MS9.idles }),
+		S("swing.idle", "choice", "combat", "Show the timer", "Works with Main hand border, Off hand border or Ranged border on.", { choices = MS9.idles }),
 		"Text",
 		S("swing.textSize", "number", 100, "Text size", "100% is the game's own size.", { min = 60, max = 200, step = 5, unit = "%" }),
 		S("swing.name", "bool", true, "Timer name"),
@@ -10311,6 +10311,7 @@ local PAGES = {
 	{ key = "unitframesTot", label = "Target of target frame", parent = "unitframes", owner = "unitframes", rows = {
 		S("unitframes.totPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Square portraits" }, { "square", "Square picture" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
 		S("unitframes.totName", "bool", true, "Name"),
+		S("unitframes.totNameFit", "choice", "shrink", "Long names", "Smaller text goes down to 75%, then cuts.", { needs = "unitframes.totName", choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } }),
 		S("unitframes.totHealthBy", "choice", "class", "Health bar colour", nil, { needs = "unitframes.flat", choices = { { "custom", "Health colour" }, { "class", "Class" }, { "reaction", "Reaction" } } }),
 		S("unitframes.totPowerBar", "bool", true, "Power bar"),
 	} },
@@ -10865,7 +10866,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.87" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.89" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -16719,7 +16720,7 @@ end
 
 -- 3. The target and the focus are marked by edge colour, found by comparing plate frames.
 do
-	local W = newWorld()
+	local W = newWorld({ saved = { options = { ["swing.idle"] = "show" } } })
 	W.login()
 	local a, b, c = W.newPlate(), W.newPlate(), W.newPlate()
 	W.showPlate("nameplate1", a)
@@ -17382,7 +17383,7 @@ do
 		and #D.addonFrames == frames0 and #D.addonTextures == textures0, D.line("Swing timers"))
 	clean(D, "swing defaults")
 
-	local W = newWorld({ missing = { SwingTimerRangedFrame = true } })
+	local W = newWorld({ missing = { SwingTimerRangedFrame = true }, saved = { options = { ["swing.idle"] = "show" } } })
 	W.login()
 	local parts = W.swing.SwingTimerMainHandFrame
 	check("swing: frame art and background hidden, not faded", parts.Border.shown == false and parts.Background.shown == false and parts.Border.alpha == 1 and parts.Background.alpha == 1
@@ -20093,7 +20094,7 @@ do local PROBES = {
 	{ "swing.texture", "Gloss", held("swing.texture"), "default/Same as the Flat UI page", "gloss/Gloss", from = "Same as the Flat UI page" },
 	{ "castbars.textAlign", "Right", held("castbars.textAlign"), "game/As the game has it", "right/Right", from = "As the game has it" },
 	{ "castbars.iconPos", "Right of the bar", held("castbars.iconPos"), "game/Left of the bar", "right/Right of the bar", from = "Left of the bar" },
-	{ "swing.idle", "Hide the bar", held("swing.idle"), "show/Show the empty bar", "hide/Hide the bar", from = "Show the empty bar" },
+	{ "swing.idle", "Only while swinging", held("swing.idle"), "combat/In combat", "hide/Only while swinging", from = "In combat" },
 	{ "castbars.targetCast", "ff336699", held("castbars.targetCast"), "ffe6b333/ffe6b333", "ff336699/ff336699" , pre = { { "castbars.targetOwn", true } } },
 	{ "castbars.targetChannel", "ff336699", held("castbars.targetChannel"), "ff4dbf59/ff4dbf59", "ff336699/ff336699" , pre = { { "castbars.targetOwn", true } } },
 	{ "castbars.textColour", "ff336699", held("castbars.textColour"), "ffffffff/ffffffff", "ff336699/ff336699" , pre = { { "castbars.textOwn", true } } },
@@ -20463,6 +20464,7 @@ do local PROBES = {
 	{ "unitframes.focusName", false, held("unitframes.focusName"), "true/true", "false/false" },
 	{ "unitframes.petName", false, held("unitframes.petName"), "true/true", "false/false" },
 	{ "unitframes.totName", false, held("unitframes.totName"), "true/true", "false/false" },
+	{ "unitframes.totNameFit", "Cut with dots", held("unitframes.totNameFit"), "shrink/Smaller text", "cut/Cut with dots", from = "Smaller text" },
 	{ "unitframes.partyName", false, held("unitframes.partyName"), "true/true", "false/false" },
 	{ "unitframes.bossName", false, held("unitframes.bossName"), "true/true", "false/false" },
 	{ "unitframes.smallRow", false, held("unitframes.smallRow"), "true/true", "false/false" },
@@ -63396,7 +63398,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 867 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 868 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -63710,7 +63712,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 867 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 868 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -64136,7 +64138,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 751 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 752 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -83436,6 +83438,111 @@ do
 	check("ms-uftext: the new file loads under Lua 5.1 rules", loadfile(ADDON_DIR .. "/UnitText.lua") ~= nil)
 end
 -- >>> ms-uftext (end)
+-- >>> totnamefit (begin)
+-- Long names on the target of target. Labels start "tot name fit:". A stand-in for the name string answers width and room; the hooks are called the way the unit frames file calls them.
+do
+	local TF = {}
+	function TF.fake(need, room)
+		local f = { scale = 1, calls = 0 }
+		f.SetTextScale = function(self, v) self.scale = v self.calls = self.calls + 1 end
+		f.GetUnboundedStringWidth = function(self) return self.need end
+		f.GetWidth = function(self) return self.room end
+		f.need, f.room = need, room
+		return f
+	end
+	function TF.setup(W, kind, need, room)
+		local rec = kind == "tot" and W.ns.UnitFrameExtra.records[W.tot.frame] or W.ns.UnitFrameExtra.records[W.pet.frame]
+		rec.row.name = TF.fake(need, room)
+		return rec, rec.row.name
+	end
+	function TF.hooks(W, rec, which)
+		for _, hook in ipairs(W.ns.UnitFrameExtra.after[which]) do
+			if hook.part == "Long names" then
+				hook.fn(rec, nil, true)
+			end
+		end
+	end
+	local W = FH.ufWorld({ fontReturn = "true" })
+	W.change("unitframes.smallRow", true)
+	W.flush()
+	local rec, fs = TF.setup(W, "tot", 120, 100)
+	check("tot name fit: the row is Smaller text by default", W.ns.Get("unitframes.totNameFit") == "shrink" and W.control("unitframes.totNameFit") ~= nil and W.ns.UnitFrameExtra.rowOn(rec) == true)
+	TF.hooks(W, rec, "rowText")
+	check("tot name fit: shrink with a long plain name lowers the scale to room over need", math.abs(fs.scale - 100 / 120) < 0.0001, tostring(fs.scale))
+	fs.need = 200
+	TF.hooks(W, rec, "rowText")
+	check("tot name fit: shrink never goes under 75 percent", fs.scale == 0.75, tostring(fs.scale))
+	fs.need = 60
+	TF.hooks(W, rec, "rowText")
+	check("tot name fit: a shorter name after a long one gives the scale 1 back", fs.scale == 1, tostring(fs.scale))
+	fs.need = 130
+	TF.hooks(W, rec, "layout")
+	check("tot name fit: the layout hook measures again", math.abs(fs.scale - 100 / 130) < 0.0001, tostring(fs.scale))
+	W.change("unitframes.totNameFit", "Cut with dots")
+	TF.hooks(W, rec, "rowText")
+	check("tot name fit: cut leaves the scale at 1", fs.scale == 1, tostring(fs.scale))
+	W.change("unitframes.totNameFit", "Smaller text")
+	for _, case in ipairs({ { "a room of 0", 120, 0 }, { "a width that is not a number", "x", 100 }, { "a room that is not a number", 120, "x" }, { "a secret width", SECRET, 100 }, { "a secret room", 120, SECRET } }) do
+		local r2, f2 = TF.setup(W, "tot", case[2], case[3])
+		TF.hooks(W, r2, "rowText")
+		check("tot name fit: " .. case[1] .. " keeps the scale 1", f2.scale == 1, tostring(f2.scale))
+	end
+	local notes = function() local n = 0 for _, l in ipairs(W.ns.StatusLines and W.ns.StatusLines() or {}) do if tostring(l):find("Long names", 1, true) then n = n + 1 end end return n end
+	local r4, f4 = TF.setup(W, "tot", SECRET, 100)
+	TF.hooks(W, r4, "rowText")
+	TF.hooks(W, r4, "rowText")
+	TF.noteCount = notes()
+	f4.need = 60
+	TF.hooks(W, r4, "rowText")
+	check("tot name fit: a failed measure writes one status line and a good one clears it", TF.noteCount == 1 and notes() == 0, tostring(TF.noteCount) .. "/" .. tostring(notes()))
+	local r5, f5 = TF.setup(W, "tot", SECRET, 100)
+	TF.hooks(W, r5, "rowText")
+	TF.noteCount = notes()
+	W.change("unitframes.totNameFit", "Cut with dots")
+	TF.hooks(W, r5, "rowText")
+	check("tot name fit: Cut with dots clears the status line", TF.noteCount == 1 and notes() == 0, tostring(TF.noteCount) .. "/" .. tostring(notes()))
+	W.change("unitframes.totNameFit", "Smaller text")
+	TF.hooks(W, r5, "rowText")
+	TF.noteCount = notes()
+	W.change("unitframes.smallRow", false)
+	TF.hooks(W, r5, "rowText")
+	check("tot name fit: a row that is off clears the status line", TF.noteCount == 1 and notes() == 0, tostring(TF.noteCount) .. "/" .. tostring(notes()))
+	W.change("unitframes.smallRow", true)
+	-- The drawing of the setup step: the name of the target of target in the mock frames.
+	local D = newWorld({ trackers = true, fontReturn = "true" })
+	D.au.unit.player = { guid = "Player-1-0001", player = true, class = "SHAMAN", race = "Troll", name = "Mine" }
+	D.login()
+	D.flush()
+	TF.draw = function(fit, size, width)
+		D.change("unitframes.totNameFit", fit)
+		D.change("unitframes.nameSize", size)
+		local stage = D.env.CreateFrame("Frame", nil, D.env.UIParent)
+		local at = #D.addonFonts
+		D.ns.SetupDrawings["mock-unit-frames"].build(stage)
+		for i = at + 1, #D.addonFonts do
+			local r = D.rawOf[D.addonFonts[i]] or D.addonFonts[i]
+			if width then r.GetStringWidth = function() return width end end
+		end
+		D.ns.SetupDrawings["mock-unit-frames"].draw(stage)
+		local h = {}
+		for i = at + 1, #D.addonFonts do
+			local r = D.rawOf[D.addonFonts[i]] or D.addonFonts[i]
+			if r.text == "Defias Pillager Captain" then
+				h[#h + 1] = select(2, r:GetFont())
+			end
+		end
+		return h
+	end
+	local cutBig, fitBig, cutSmall, fitSmall = TF.draw("Cut with dots", 100), TF.draw("Smaller text", 100), TF.draw("Cut with dots", 100, 10), TF.draw("Smaller text", 100, 10)
+	check("tot name fit: the drawing finds the name", #cutBig > 0 and #cutBig == #fitBig, tostring(#cutBig) .. "/" .. tostring(#fitBig))
+	TF.ratio = fitBig[#fitBig] / cutBig[#cutBig]
+	check("tot name fit: the drawing sets a long name smaller, not under 75 percent", TF.ratio < 1 and TF.ratio >= 0.7499, tostring(TF.ratio))
+	check("tot name fit: the drawing leaves a name that fits alone", fitSmall[#fitSmall] == cutSmall[#cutSmall], tostring(fitSmall[#fitSmall]) .. "/" .. tostring(cutSmall[#cutSmall]))
+	local r3, f3 = TF.setup(W, "pet", 200, 100)
+	TF.hooks(W, r3, "rowText")
+	check("tot name fit: the pet frame is untouched", f3.calls == 0 and f3.scale == 1, tostring(f3.calls))
+end
+-- >>> totnamefit (end)
 -- >>> ms-uffmt (begin)
 -- Health and power text formats of the unit frames (ms-12): the Health text and Power text row of each frame page, Number style, Show and the two positions. Every label starts
 -- "ms-uffmt:". The values are kept in one table: the main function of this file has a limit on the locals alive at once.
@@ -89154,11 +89261,11 @@ do
 
 	-- Swing timers: range, direction and idle.
 	do
-		local W = FH.world({ saved = { options = { ["castbars.flat"] = false } } }, M.dress)
-		local base = FH.world({ saved = { options = { ["castbars.flat"] = false } } })
+		local W = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show" } } }, M.dress)
+		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show" } } })
 		local name = FH.SWING[1]
 		local m = W.msSwing[name]
-		check("ms-cast: at the defaults no hook is added to a swing timer and nothing is set", W.hooks == base.hooks and m.s.barRaw.reverseCalls == nil and m.typeRaw.calls.SetTextColor == nil and FH.plain(W), FH.why(W))
+		check("ms-cast: at Always no hook is added to a swing timer and nothing is set", W.hooks == base.hooks and m.s.barRaw.reverseCalls == nil and m.typeRaw.calls.SetTextColor == nil and FH.plain(W), FH.why(W))
 		M.swRange(W, m, true)
 		check("ms-cast: out of range the game's own look stays", m.s.barRaw.alpha == 0.4 and FH.rgb(m.typeRaw.textColour) == "1.000,0.100,0.100")
 		M.swRange(W, m, false)
@@ -89196,16 +89303,16 @@ do
 		check("ms-cast: off puts the direction and the anchor back", m.s.barRaw.reverse == false and m.s.pipRaw.points[1][1] == "RIGHT" and m.s.pipRaw.points[1][3] == "RIGHT" and FH.plain(W), FH.why(W))
 		-- Idle.
 		M.swStart(W, m, 2)
-		W.change("swing.idle", "Hide the bar")
+		W.change("swing.idle", "Only while swinging")
 		check("ms-cast: a timer that is swinging keeps its bar", m.s.barRaw.shown == true)
 		M.swStop(W, m)
 		check("ms-cast: the bar of a timer that stopped swinging is hidden", m.s.barRaw.shown == false)
 		M.swStart(W, m, 2)
 		check("ms-cast: and shown when a swing starts", m.s.barRaw.shown == true)
 		M.swStop(W, m)
-		W.change("swing.idle", "Show the empty bar")
-		check("ms-cast: Show the empty bar shows it at once", m.s.barRaw.shown == true and FH.plain(W), FH.why(W))
-		W.change("swing.idle", "Hide the bar")
+		W.change("swing.idle", "Always")
+		check("ms-cast: Always shows the bar at once", m.s.barRaw.shown == true and FH.plain(W), FH.why(W))
+		W.change("swing.idle", "Only while swinging")
 		W.change("swing.enabled", false)
 		check("ms-cast: the module off shows it", m.s.barRaw.shown == true)
 		W.change("swing.enabled", true)
@@ -89319,6 +89426,53 @@ do
 		check("ms-cast: the outline of the whole timer is hidden while it is idle", look and not look.edges[1].shown, look and tostring(look.edges[1].shown))
 		M.swStart(O, o, 2)
 		check("ms-cast: and shown while it swings", O.look(o.timer).edges[1].shown == true)
+	end
+	-- Show the timer: In combat.
+	do
+		local fight, shown = { on = false }, function(m) return m.s.barRaw.shown end
+		local function world(options)
+			options["castbars.flat"] = false
+			return FH.world({ saved = { options = options } }, function(X)
+				M.dress(X)
+				X.env.UnitAffectingCombat = function() return fight.on end
+			end)
+		end
+		local function turn(W, on)
+			fight.on = on
+			W.fire("PLAYER_IN_COMBAT_CHANGED", on)
+			W.tick()
+		end
+		fight.on = false
+		local W = world({})
+		local m = W.msSwing[FH.SWING[1]]
+		check("swing idle: In combat is the default and hides the bar out of combat", shown(m) == false and FH.plain(W), FH.why(W))
+		turn(W, true)
+		check("swing idle: it shows the bar after the combat event", shown(m) == true and FH.plain(W), FH.why(W))
+		check("swing idle: the events are heard for In combat", M.hears(W, "PLAYER_IN_COMBAT_CHANGED") and M.hears(W, "PLAYER_SWING"))
+		M.swStart(W, m, 2)
+		M.swStop(W, m)
+		check("swing idle: in a fight the empty bar stays between swings", shown(m) == true)
+		turn(W, false)
+		check("swing idle: and goes when the fight ends", shown(m) == false)
+		m.inner.isInEditMode = true
+		turn(W, false)
+		check("swing idle: Edit Mode open shows it", shown(m) == true)
+		m.inner.isInEditMode = false
+		turn(W, false)
+		W.change("swing.idle", "Always")
+		check("swing idle: Always shows it out of combat", shown(m) == true)
+		W.change("swing.idle", "In combat")
+		check("swing idle: and In combat hides it again", shown(m) == false)
+		fight.on = false
+		local H = world({ ["swing.idle"] = "hide" })
+		local h = H.msSwing[FH.SWING[1]]
+		turn(H, true)
+		check("swing idle: Only while swinging hides the bar in a fight when no swing runs", shown(h) == false)
+		M.swStart(H, h, 2)
+		check("swing idle: and shows it while a swing runs", shown(h) == true)
+		fight.on = false
+		local S = world({ ["swing.idle"] = "show" })
+		check("swing idle: a saved Always stays Always", shown(S.msSwing[FH.SWING[1]]) == true)
 	end
 end
 -- >>> ms-cast (end)
@@ -93663,14 +93817,14 @@ do
 
 	for _, value in ipairs({ "0", "2" }) do
 		local options = { ["castbars.flat"] = false, ["swing.rangeAlpha"] = 70, ["swing.idle"] = "hide", ["swing.reverse"] = true }
-		local base = FH.world({ saved = { options = { ["castbars.flat"] = false } } }, HB.dress)
+		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show" } } }, HB.dress)
 		local W = FH.world({ saved = { options = options } }, function(Y)
 			HB.dress(Y)
 			Y.cvars.taintLog = value
 		end)
 		local m = W.hbSwing[FH.SWING[1]]
 		check("hkbars: swing timers, taintLog " .. value .. ": no method of a timer is hooked", W.hooks == base.hooks and not HB.wrapped(W, m.timer, { "ApplyRangePresentation", "ClearSwingTimer", "ResetSwingTimer", "InitializeBarPresentation" }), W.hooks - base.hooks)
-		check("hkbars: swing timers, taintLog " .. value .. ": the events are heard for a setting that is not the game's, and not at the defaults", HB.hears(W, "PLAYER_SWING") and HB.hears(W, "PLAYER_SWING_RANGE_UPDATE")
+		check("hkbars: swing timers, taintLog " .. value .. ": the events are heard for a setting that is not the game's, and not at Always", HB.hears(W, "PLAYER_SWING") and HB.hears(W, "PLAYER_SWING_RANGE_UPDATE")
 			and not HB.hears(base, "PLAYER_SWING") and not HB.hears(base, "PLAYER_SWING_RANGE_UPDATE") and not FH.polling(W))
 		-- Range.
 		W.blizzard(function() m.inner.isOutOfRange = true m.timer:ApplyRangePresentation() end)
@@ -96093,7 +96247,7 @@ do
 		{ 27, "swing.textShadow", false, true, "swing.flat" },
 		{ 27, "swing.reverse", false, true },
 		{ 27, "swing.rangeAlpha", 40, 100 },
-		{ 27, "swing.idle", "show", "hide" },
+		{ 27, "swing.idle", "combat", "show" },
 		{ 27, "swing.textSize", 100, 200 },
 		{ 27, "swing.name", true, false },
 		{ 27, "swing.time", true, false },
@@ -96460,7 +96614,7 @@ do
 		end
 		ns.Set("swing.idle", "hide")
 		d.draw(stage)
-		check("sdcast: While not swinging, Hide the bar hides the idle bar", idleBar.shown == false)
+		check("sdcast: Show the timer, Only while swinging hides the idle bar", idleBar.shown == false)
 		ns.Set("swing.idle", "show")
 		d.draw(stage)
 		local idleRegions = W.rawOf[idleBar].regions
@@ -96469,7 +96623,12 @@ do
 		ns.Set("swing.idle", "hide")
 		ns.Set("swing.idle", "show")
 		d.draw(stage)
-		check("sdcast: Show the empty bar shows it", idleBar.shown == true)
+		check("sdcast: Show the timer, Always shows the idle bar", idleBar.shown == true)
+		ns.Set("swing.idle", "combat")
+		d.draw(stage)
+		check("sdcast: Show the timer, In combat hides the idle sample bar", idleBar.shown == false)
+		ns.Set("swing.idle", "show")
+		d.draw(stage)
 		-- The border around the bar or the whole timer.
 		local o = d.outlines
 		check("sdcast: the border is around the bar by default", o[1].top.shown and not o[2].top.shown)

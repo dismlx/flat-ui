@@ -306,14 +306,19 @@ local SWING_TIMERS = {
 	{ "SwingTimerRangedFrame", "ranged" },
 }
 
--- True while the bar of a timer is hidden because it is not swinging. The game sets swingEndTime when a swing starts and clears it when it ends.
+-- True while the bar of a timer is hidden: out of combat with "combat", or not swinging with "hide". The game sets swingEndTime when a swing starts and clears it when it ends.
 local function SwingIdle(timer)
-	if not (ns.Enabled("swing") and ns.Get("swing.idle") == "hide") then
+	local mode = ns.Enabled("swing") and ns.Get("swing.idle")
+	if mode ~= "hide" and mode ~= "combat" then
 		return false
 	end
 	local ending, editing = timer.swingEndTime, timer.isInEditMode
 	if ns.IsSecret(editing) or editing == true then
 		return false
+	end
+	if mode == "combat" then
+		local ok, fighting = pcall(UnitAffectingCombat, "player")
+		return ok and fighting == false
 	end
 	return not ns.IsSecret(ending) and ending == nil
 end
@@ -573,7 +578,7 @@ local function SwingWanted()
 	if not ns.Enabled("swing") then
 		return false
 	end
-	return math.abs(ns.Get("swing.rangeAlpha") / 100 - GAME_RANGE_ALPHA) > 0.0001 or ns.Get("swing.textOwn") or ns.Get("swing.idle") == "hide"
+	return math.abs(ns.Get("swing.rangeAlpha") / 100 - GAME_RANGE_ALPHA) > 0.0001 or ns.Get("swing.textOwn") or ns.Get("swing.idle") ~= "show"
 		or ns.Get("swing.reverse") or false
 end
 
@@ -604,17 +609,24 @@ local function ResourcePass()
 	end
 end
 
+-- A timer that raises when read counts as not idle.
+local function SafeIdle(timer)
+	local ok, idle = pcall(SwingIdle, timer)
+	return ok and idle
+end
+
 -- Idle and range of the timers, which a swing or Edit Mode changes.
 local function SwingLight(timer)
-	if idleSeen[timer] ~= SwingIdle(timer) then
-		idleSeen[timer] = SwingIdle(timer)
+	local idle = SafeIdle(timer)
+	if idleSeen[timer] ~= idle then
+		idleSeen[timer] = idle
 		SwingLooks(timer)
 	end
 	ns.Each("swing", ApplySwingRange, timer)
 end
 
 local function SwingFull(timer)
-	idleSeen[timer] = SwingIdle(timer)
+	idleSeen[timer] = SafeIdle(timer)
 	SwingLooks(timer)
 	ns.Each("swing", ApplySwingRange, timer)
 	ns.Each("swing", ApplySwingReverse, timer)

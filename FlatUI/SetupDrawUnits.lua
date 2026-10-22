@@ -494,7 +494,7 @@ local function Sample(id)
 		return { kind = "pet", cap = "Pet", name = "Wolf", level = 20, class = class, react = FRIENDLY, state = COMBAT, happy = true,
 			auras = { { "debuff", "curse", false, 3, "12" } } }
 	elseif id == "tot" then
-		return { kind = "tot", cap = "Target of target", name = "Defias Pillager", level = 18, react = HOSTILE, auras = { { "debuff", "magic" } } }
+		return { kind = "tot", cap = "Target of target", name = "Defias Pillager Captain", level = 18, react = HOSTILE, auras = { { "debuff", "magic" } } }
 	elseif id == "boss" then
 		return { kind = "boss", cap = "Boss", name = "Hogger", level = "??", react = HOSTILE, lcol = { 1, 0.1, 0.1 }, marker = 1 }
 	elseif id == "boss2" then
@@ -656,7 +656,7 @@ local function Settings(root)
 		leaderIcon = Get("leaderIcon") == true, roleIcon = Get("roleIcon") == true, raidMarker = Get("raidMarker") == true, deadText = Get("deadText") == true,
 		combatIcon = Get("combatIcon") == true, petHappiness = Get("petHappiness") == true, restAnimation = Get("restAnimation"), auras = Get("auras") == true,
 		auraCrop = Get("auraCrop"), auraTypeColours = Get("auraTypeColours") == true, auraCountSize = Get("auraCountSize"),
-		auraNumbers = Get("auraNumbers") == true, lookShadow = Get("lookShadow") == true, radius = RADIUS[Get("corners")] }
+		auraNumbers = Get("auraNumbers") == true, lookShadow = Get("lookShadow") == true, radius = RADIUS[Get("corners")], totNameFit = Get("totNameFit") }
 	g.t = ns.Pixels(root, ns.Get("general.thickness"))
 	return g
 end
@@ -1047,6 +1047,15 @@ function E.row(o, g, L)
 		end
 	end
 	Style(o.name, spec)
+	-- Long names on the target of target: a name wider than the row is set smaller, down to 75% (UnitExtras.lua, FitName).
+	if s.kind == "tot" and rowOn and L.on and g.totNameFit == "shrink" then
+		local ok, need = pcall(o.name.GetUnboundedStringWidth or o.name.GetStringWidth, o.name)
+		local room = size.bar + 2 * t - 2 * ROW.pad
+		if ok and not ns.IsSecret(need) and type(need) == "number" and need > room then
+			spec.percent = spec.percent * math.max(0.75, room / need)
+			Style(o.name, spec)
+		end
+	end
 	-- The level: in the row at the end or before the name, loose beside the name while there is no row, hidden, or on the picture.
 	local rowLevel = L.levelOn and rowOn and (L.at == "end" or L.at == "before")
 	o.level:SetShown(rowLevel or (L.levelOn and not rowOn))
@@ -1541,7 +1550,7 @@ local MARK = {
 	focusHealthText = { "focus", "healthText" }, focusPowerText = { "focus", "powerText" }, focusPowerBar = { "focus", "power" },
 	petPicture = { "pet", "pic" }, petName = { "pet", "name" }, petHealthBy = { "pet", "health" }, petHealthText = { "pet", "healthText" },
 	petPowerText = { "pet", "powerText" }, petPowerBar = { "pet", "power" },
-	totPicture = { "tot", "pic" }, totName = { "tot", "name" }, totHealthBy = { "tot", "health" }, totPowerBar = { "tot", "power" },
+	totPicture = { "tot", "pic" }, totName = { "tot", "name" }, totNameFit = { "tot", "name" }, totHealthBy = { "tot", "health" }, totPowerBar = { "tot", "power" },
 	partyPicture = { "party1", "pic" }, partypetPicture = { "partypet1", "pic" }, partyName = { "party1", "name" }, partyHealthBy = { "party1", "health" },
 	partyHealthText = { "party1", "healthText" }, partyPowerText = { "party1", "powerText" }, partyPowerBar = { "party1", "power" },
 	partyRangeDim = { "party4", "root" }, partyRangeAlpha = { "party4", "root" },

@@ -1,3 +1,11 @@
+## 0.4.89
+
+- **Swing timers**: **While not swinging** is now **Show the timer**, with **Always**, **In combat** and **Only while swinging**. It starts as **In combat**, so the empty bar and its 0.0 no longer show out of combat.
+
+## 0.4.88
+
+- **Target of target frame**: new **Long names**. A name wider than the row is now set in smaller text, down to 75%. A longer name is still cut with dots.
+
 ## 0.4.87
 
 - **Unit frames**: new **Mana bar colour** on **All frames: bars and pictures**. A mana bar next to a health bar in a blue class colour is now sky blue. **Custom power colours** on the **Colours** page now colours the power bars of the unit frames.
