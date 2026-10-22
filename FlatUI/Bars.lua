@@ -528,10 +528,55 @@ local function SwingLooks(timer)
 	ns.Each("swing", ApplySwingIdle, timer)
 end
 
+-- Timers whose width Flat UI set, and the ones waiting for the end of a fight.
+local swingSized = setmetatable({}, { __mode = "k" })
+local swingQueued = setmetatable({}, { __mode = "k" })
+
+-- The width of the personal resource display, or the width Edit Mode has for the timer. Edit Mode sets the width again only for a changed setting
+-- (EditModeSystemTemplates.lua:2803-2810), and UpdateSystemSettingWidth lays the frames out again (2765-2769), so the layout value is read and set here.
+local function ApplySwingWidth(timer)
+	if ns.EditModeOpen() then
+		return
+	end
+	if InCombatLockdown() and ns.MaybeProtected(timer) then
+		if not swingQueued[timer] then
+			swingQueued[timer] = true
+			ns.OutOfCombat(function()
+				swingQueued[timer] = nil
+				ns.Each("swing", ApplySwingWidth, timer)
+			end)
+		end
+		return
+	end
+	local width = ns.Enabled("swing") and ns.Get("swing.width") == "resource" and ns.StackWidth and ns.StackWidth(timer) or nil
+	if width then
+		swingSized[timer] = true
+		timer:SetWidth(width)
+	elseif swingSized[timer] then
+		swingSized[timer] = nil
+		local ok, game = pcall(function()
+			return timer:GetSettingValue(Enum.EditModeSwingTimerSetting.Width)
+		end)
+		if ok and ns.Finite(game) and game > 0 then
+			timer:SetWidth(game)
+		end
+	end
+end
+
+function ns.SwingWidths()
+	for _, entry in ipairs(SWING_TIMERS) do
+		local timer = _G[entry[1]]
+		if timer ~= nil and not ns.Forbidden(timer) then
+			ns.Each("swing", ApplySwingWidth, timer)
+		end
+	end
+end
+
 local function RefreshSwing()
 	for _, entry in ipairs(SWING_TIMERS) do
 		local timer = _G[entry[1]]
 		if timer ~= nil and not ns.Forbidden(timer) then
+			ns.Each("swing", ApplySwingWidth, timer)
 			ns.Each("swing", ApplySwingTimer, timer, entry[2])
 			ns.Each("swing", ApplySwingFill, timer, entry[2])
 			ns.Each("swing", ApplySwingText, timer)
@@ -646,6 +691,10 @@ end
 local function RunPass()
 	passQueued = false
 	ResourcePass()
+	-- The cast bar and the swing timers take the width of the display.
+	if ns.StackWidths then
+		pcall(ns.StackWidths)
+	end
 	if gameEvents then
 		EachTimer(SwingFull)
 	end
@@ -707,6 +756,18 @@ function HookBars(display)
 	end
 end
 
+-- The pass runs on the events of Edit Mode. The cast bars call this too, so a profile with cast bars on and no swing or resource module follows the display.
+function ns.WatchEditModePass()
+	if not editWatched and type(EventRegistry) == "table" and not ns.IsSecret(EventRegistry) and type(EventRegistry.RegisterCallback) == "function" then
+		editWatched = pcall(function()
+			EventRegistry:RegisterCallback("EditMode.Enter", EditModeIn, passOwner)
+			EventRegistry:RegisterCallback("EditMode.Exit", EditModeOut, passOwner)
+			EventRegistry:RegisterCallback("EditMode.RefreshPersonalResourceDisplay", QueuePass, passOwner)
+			EventRegistry:RegisterCallback("EditMode.SavedLayouts", QueuePass, passOwner)
+		end)
+	end
+end
+
 function WatchGame(kind)
 	if gameFrame == nil then
 		gameFrame = CreateFrame("Frame")
@@ -727,14 +788,7 @@ function WatchGame(kind)
 		-- The game's own list has it too (Blizzard_SwingTimer.lua:3-12): a change of attack speed can turn the range check off, which sets the range again.
 		pcall(gameFrame.RegisterUnitEvent, gameFrame, "UNIT_ATTACK_SPEED", "player")
 	end
-	if not editWatched and type(EventRegistry) == "table" and not ns.IsSecret(EventRegistry) and type(EventRegistry.RegisterCallback) == "function" then
-		editWatched = pcall(function()
-			EventRegistry:RegisterCallback("EditMode.Enter", EditModeIn, passOwner)
-			EventRegistry:RegisterCallback("EditMode.Exit", EditModeOut, passOwner)
-			EventRegistry:RegisterCallback("EditMode.RefreshPersonalResourceDisplay", QueuePass, passOwner)
-			EventRegistry:RegisterCallback("EditMode.SavedLayouts", QueuePass, passOwner)
-		end)
-	end
+	ns.WatchEditModePass()
 	PollState()
 end
 

@@ -182,6 +182,10 @@ local function NewButton(inst, parent, size, index, full)
 		b.key = Text(b.frame, "NumberFontNormalSmallGray")
 		b.keyX, b.keyY = size == SMALL and -3 or -4, size == SMALL and -4 or -5
 		b.key:SetPoint("TOPRIGHT", b.frame, "TOPRIGHT", b.keyX, b.keyY)
+		-- The game's box: frame width - 8 by 10, right justified, one line (ActionButtonTemplate.xml:85-91, ActionButton.lua:512-515).
+		b.key:SetSize(size - 8, 10)
+		b.key:SetJustifyH("RIGHT")
+		b.key:SetWordWrap(false)
 		b.name = Text(b.frame, "GameFontHighlightSmall")
 		b.name:SetPoint("BOTTOM", b.frame, "BOTTOM", 0, size == SMALL and 2 or 4)
 		b.count = Text(b.frame, "NumberFontNormal")
@@ -368,7 +372,7 @@ local ACTION_W = 12 * SIZE + 11 * GAP + 2 * ROW_X
 local ACTION_H = 2 * ART_PAD + 2 * SIZE + 2 * SMALL + 3 * ROW_GAP
 -- Which button of a row has which state, what it counts and which slot is empty: the same on every row.
 local STATES = { [2] = "pressed", [3] = "hover", [4] = "checked", [6] = "flash" }
-local KEYS = { main = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }, extra = { "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S0" } }
+local KEYS = { main = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }, extra = { "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", KEY_BUTTON4 or "Mouse Button 4", KEY_NUMPAD1 or "Num Pad 1" } }
 local COUNTS = { main = { [5] = "20", [10] = "3" }, extra = { [2] = "5" } }
 local NAMES = { main = { [5] = "Heal", [8] = "Pot" }, extra = { [3] = "Aim" } }
 -- The bars of the Button text page by row, and where its position choices anchor the hotkey.
@@ -430,7 +434,8 @@ function ACTION.build(stage)
 				b.sweepText:SetText("8")
 			end
 			local key = KEYS[row[2]]
-			b.key:SetText(key and key[position] or "")
+			b.keyLong = key and key[position] or ""
+			b.key:SetText(b.keyLong)
 			local count = COUNTS[row[2]]
 			b.count:SetText(count and count[position] or "")
 			local names = NAMES[row[2]]
@@ -510,6 +515,7 @@ function ACTION.build(stage)
 	for _, key in ipairs({ "hotkeyShow", "hotkeySize", "hotkeyOwn", "hotkeyColour", "hotkeyPoint", "hotkeyX", "hotkeyY", "nameShow", "nameSize", "countSize", "textOutline" }) do
 		parts["actionbars." .. key] = main.buttons[5].frame
 	end
+	parts["actionbars.hotkeyText"] = inst.rows[2].buttons[9].frame
 	for _, key in ipairs({ "usableOwn", "manaColour", "unusableColour", "rangeTint", "rangeColour", "sweep", "sweepOwn", "sweepAlpha", "cdFont", "cdGrey" }) do
 		parts["actionbars." .. key] = main.buttons[1].frame
 	end
@@ -531,6 +537,7 @@ local function PaintText(entry, b, on)
 	end
 	local flags = on and type(ns.OutlineFlags) == "function" and ns.OutlineFlags(Opt("textOutline")) or nil
 	local hot, name = Shows(Opt("hotkeyShow")), Shows(Opt("nameShow"))
+	b.key:SetText(on and Opt("hotkeyText") == "short" and type(ns.HotkeyText) == "function" and ns.HotkeyText(b.keyLong) or b.keyLong)
 	b.key:SetAlpha(hot and 1 or 0)
 	b.name:SetAlpha(name and 1 or 0)
 	local spec = on and hot and { percent = Opt("hotkeySize"), flags = flags } or nil

@@ -210,6 +210,7 @@ ns.SETUP_STEPS = {
 	} },
 	{ id = "ab-text", area = "Action bars", title = "Button text", draw = "mock-action-row", built = true, rows = {
 		{ "actionbars.hotkeyShow", "o", "mock-action-row" },
+		{ "actionbars.hotkeyText", "o", "behaviour", "Chooses whether mouse button, mouse wheel, number pad and page keys show short (M4, WU, N1) or as the game has them." },
 		{ "actionbars.hotkeySize", "o", "mock-action-row" },
 		{ "actionbars.hotkeyOwn", "o", "mock-action-row" },
 		{ "actionbars.hotkeyColour", "r", "mock-action-row" },
@@ -360,6 +361,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.deadText", "o", "mock-unit-frame" },
 		{ "unitframes.totemTimer", "o", "mock-unit-frame" },
 		{ "unitframes.totemSwipe", "o", "mock-unit-frame" },
+		{ "unitframes.totemTimeSize", "o", "behaviour", "Sets the size of the time left under a totem, from 50 to 200 percent." },
 	} },
 	{ id = "uf-player", area = "Unit frames", title = "Player and target frames", draw = "mock-unit-frame", built = true, rows = {
 		{ "unitframes.playerPicture", "c", "mock-unit-frame" },
@@ -442,6 +444,7 @@ ns.SETUP_STEPS = {
 		{ "castbars.targetChannel", "r", "mock-cast-bar" },
 	} },
 	{ id = "cb-size", area = "Cast bars and timers", title = "Cast bar size", draw = "mock-cast-bar", built = true, rows = {
+		{ "castbars.playerMatch", "o", "mock-cast-bar" },
 		{ "castbars.playerSize", "c", "mock-cast-bar" },
 		{ "castbars.playerWidth", "c", "mock-cast-bar" },
 		{ "castbars.playerHeight", "c", "mock-cast-bar" },
@@ -502,6 +505,7 @@ ns.SETUP_STEPS = {
 		{ "swing.main", "c", "mock-swing" },
 		{ "swing.off", "c", "mock-swing" },
 		{ "swing.ranged", "c", "mock-swing" },
+		{ "swing.width", "o", "mock-swing" },
 		{ "swing.outline", "o", "mock-swing" },
 		{ "swing.backdrop", "o", "mock-swing" },
 		{ "swing.flat", "c", "mock-swing" },
@@ -541,6 +545,7 @@ ns.SETUP_STEPS = {
 		{ "hud.btnCalendar", "o", "mock-minimap" },
 		{ "hud.btnClock", "c", "mock-minimap" },
 		{ "hud.btnAddons", "o", "mock-minimap" },
+		{ "hud.addonButtons", "o", "behaviour", "Chooses whether the minimap buttons of other addons stay put, stand in a column beside the map, or sit in a row under it." },
 	} },
 	{ id = "hud-buffs", area = "Minimap and buffs", title = "Buffs and debuffs", draw = "mock-buff-row", built = true, rows = {
 		{ "hud.auras", "c", "mock-buff-row" },
@@ -552,6 +557,8 @@ ns.SETUP_STEPS = {
 		{ "hud.colourPoison", "r", "mock-buff-row" },
 		{ "hud.colourOther", "r", "mock-buff-row" },
 		{ "hud.durationSize", "c", "mock-buff-row" },
+		{ "hud.durationFormat", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem shows 8m with no space, or 8 m as the game has it." },
+		{ "hud.durationColour", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem is white, or gold as the game has it." },
 		{ "hud.countSize", "c", "mock-buff-row" },
 	} },
 	{ id = "hud-bars", area = "Minimap and buffs", title = "Experience bar, bags and micro menu", draw = "mock-xp-micro", built = true, rows = {

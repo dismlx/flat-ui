@@ -28,6 +28,9 @@ local _, ns = ...
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
+-- The width of the personal resource display at Bar width 100 (Blizzard_PersonalResourceDisplay.xml:41): the width of a matched cast bar and swing timer.
+local DISPLAY_WIDTH = 200
+
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local SPELL_ICON = "Interface\\Icons\\Spell_Shadow_ShadowBolt"
 -- Class colour when the client does not answer for the player: a warrior.
@@ -332,6 +335,7 @@ local function BuildCast(stage)
 	end
 	local player, target, focus = rows[1], rows[3], rows[4]
 	p["castbars.enabled"] = inst.root
+	p["castbars.playerMatch"] = player.bar
 	p["castbars.backdrop"] = player.bar
 	p["castbars.textPlate"] = player.plate
 	p["castbars.spark"] = player.spark
@@ -408,6 +412,11 @@ function castDrawing.draw(stage)
 		local w, h = row.spec.game[1], row.spec.game[2]
 		if enabled and G("castbars." .. opt .. "Size") then
 			w, h = G("castbars." .. opt .. "Width"), G("castbars." .. opt .. "Height")
+		end
+		-- The width of the personal resource display at Bar width 100 (Blizzard_PersonalResourceDisplay.xml:41); the height stays the game's or the chosen one.
+		if enabled and opt == "player" and G("castbars.playerMatch") == "resource" then
+			w = DISPLAY_WIDTH
+			h = G("castbars.playerSize") and G("castbars.playerHeight") or h
 		end
 		sizes[index] = { w, h }
 		widest = Max(widest, w)
@@ -788,6 +797,7 @@ local function BuildSwing(stage)
 	p["swing.off"] = off.timer
 	p["swing.ranged"] = ranged.timer
 	p["swing.outline"] = main.timer
+	p["swing.width"] = main.timer
 	p["swing.backdrop"] = main.timer
 	p["swing.flat"] = main.fill
 	p["swing.texture"] = main.fill
@@ -836,7 +846,7 @@ local function PaintSwing(inst)
 	for _, row in ipairs(inst.rows) do
 		local spec = row.spec
 		local run, left = SwingProgress(spec, inst.clock)
-		FillBar(row.fill, row.bar, SWING_BAR_W, run, look.reverse, look.file, look.colour[spec.hand][1], look.colour[spec.hand][2], look.colour[spec.hand][3],
+		FillBar(row.fill, row.bar, inst.barW or SWING_BAR_W, run, look.reverse, look.file, look.colour[spec.hand][1], look.colour[spec.hand][2], look.colour[spec.hand][3],
 			look.atlas[spec.hand])
 		-- The pip sits on the fill's end: its side on the fill's side (Bars.lua:507-509).
 		local side = look.reverse and "LEFT" or "RIGHT"
@@ -898,8 +908,11 @@ function swingDrawing.draw(stage)
 	local own = enabled and G("swing.textOwn")
 	local rangeAlpha = enabled and G("swing.rangeAlpha") / 100 or GAME_RANGE_ALPHA
 	local y = SWING_TOP
+	local frameW = enabled and G("swing.width") == "resource" and DISPLAY_WIDTH or SWING_FRAME_W
+	inst.barW = frameW - (SWING_FRAME_W - SWING_BAR_W)
 	for _, row in ipairs(inst.rows) do
 		local spec = row.spec
+		row.timer:SetSize(frameW, SWING_FRAME_H)
 		local on = enabled and G("swing." .. spec.hand) == true
 		local idle = idleHide and spec.idle
 		Place(row.timer, "TOPLEFT", inst.root, "TOPLEFT", SWING_LEFT, -y)
@@ -929,13 +942,13 @@ function swingDrawing.draw(stage)
 			Look(row.time, percent, r, g, b)
 		end
 		if row.note then
-			Place(row.note, "LEFT", inst.root, "TOPLEFT", SWING_LEFT + SWING_FRAME_W + 18, -(y + SWING_FRAME_H / 2))
+			Place(row.note, "LEFT", inst.root, "TOPLEFT", SWING_LEFT + frameW + 18, -(y + SWING_FRAME_H / 2))
 		end
 		y = y + SWING_FRAME_H + SWING_GAP
 	end
 	inst.paint = PaintSwing
 	PaintSwing(inst)
-	inst.root:SetSize(SWING_LEFT + SWING_FRAME_W + 140, y + SWING_TOP)
+	inst.root:SetSize(SWING_LEFT + frameW + 140, y + SWING_TOP)
 	ShowGameLook(inst)
 end
 

@@ -103,20 +103,45 @@ local function Unsize(bar, entry)
 	end
 end
 
+-- The width of the personal resource display on screen, in the units of the frame that is sized, or nil when the display, a scale or a width is
+-- missing, withheld, or not above 0. Edit Mode gives the display its width (Blizzard_PersonalResourceDisplay.lua:376-383).
+function ns.StackWidth(frame)
+	local display = PersonalResourceDisplayFrame
+	if ns.Forbidden(display) or ns.Forbidden(frame) then
+		return nil
+	end
+	local ok, width, shown, own = pcall(function()
+		return display:GetWidth(), display:GetEffectiveScale(), frame:GetEffectiveScale()
+	end)
+	if not ok or not (ns.Finite(width) and ns.Finite(shown) and ns.Finite(own)) or width <= 0 or shown <= 0 or own <= 0 then
+		return nil
+	end
+	local units = math.floor(width * shown / own + 0.5)
+	return units > 0 and units or nil
+end
+
 local function Size(bar, entry)
 	local on = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and ns.Get(KEY .. "." .. entry.key .. "Size")
+	local player = entry.key == "player"
+	local match = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and player and ns.Get("castbars.playerMatch") == "resource"
+	-- While Edit Mode is open the bar keeps the width it has; the end of Edit Mode applies the display's new width.
+	if match and ns.EditModeOpen() then
+		return
+	end
+	-- A bar locked under the player frame keeps its own width.
+	local matched = match and not Attached() and ns.StackWidth(bar) or nil
 	local custom = on and entry.key == "player" and ns.Get("castbars.playerText") or nil
 	-- As the game has it: below the bar, and inside it while the bar is locked under the player frame.
 	if custom == "game" then
 		custom = Attached() and "inside" or "below"
 	end
-	if on then
-		local width, height = ns.Get(KEY .. "." .. entry.key .. "Width"), ns.Get(KEY .. "." .. entry.key .. "Height")
+	if on or matched then
+		local width, height = matched or ns.Get(KEY .. "." .. entry.key .. "Width"), on and ns.Get(KEY .. "." .. entry.key .. "Height") or BAR_HEIGHT
 		-- Marked first: a call the game refuses after the width went through must still be undone.
 		sized[bar] = true
 		bar:SetWidth(width)
 		bar:SetHeight(height)
-		if entry.key == "player" then
+		if player then
 			FitPlayer(bar, width, height, custom)
 		end
 	elseif sized[bar] then
@@ -167,11 +192,14 @@ local function Resize()
 end
 
 local function Hook()
-	if hooked or type(hooksecurefunc) ~= "function" or not ns.Enabled(KEY) or not (ns.Get("castbars.playerSize") or ns.Get("castbars.petSize") or ns.Get("castbars.textSize") ~= 100
+	if hooked or type(hooksecurefunc) ~= "function" or not ns.Enabled(KEY) or not (ns.Get("castbars.playerSize") or ns.Get("castbars.playerMatch") == "resource" or ns.Get("castbars.petSize") or ns.Get("castbars.textSize") ~= 100
 		or ns.Get("castbars.textAlign") ~= "game" or ns.Get("castbars.textOwn")) then
 		return
 	end
 	hooked = true
+	if ns.WatchEditModePass then
+		ns.WatchEditModePass()
+	end
 	for _, name in ipairs({ "PlayerFrame_AttachCastBar", "PlayerFrame_DetachCastBar" }) do
 		if type(_G[name]) == "function" then
 			hooksecurefunc(name, Resize)
@@ -190,6 +218,25 @@ function ns.CastBarSizes()
 		end
 	end
 	Hook()
+end
+
+-- The cast bar and the swing timers take the width of the personal resource display. Only the player bar is set, and only when its width is not the
+-- display's already, because a swing runs this on every event.
+function ns.StackWidths()
+	Hook()
+	local entry = BARS[1]
+	local bar = _G[entry.name]
+	if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) then
+		local want = ns.Get("castbars.playerMatch") == "resource" and not Attached() and ns.StackWidth(bar) or nil
+		local ok, now = pcall(bar.GetWidth, bar)
+		local same = want and ok and ns.Finite(now) and now == want and sized[bar]
+		if not same and (want or sized[bar]) then
+			Apply(entry)
+		end
+	end
+	if ns.SwingWidths then
+		ns.SwingWidths()
+	end
 end
 
 -- Target and focus frames can be created after the module starts.

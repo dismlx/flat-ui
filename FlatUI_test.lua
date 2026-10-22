@@ -9893,6 +9893,8 @@ local PAGES = {
 		S("swing.main", "bool", true, "Main hand border"),
 		S("swing.off", "bool", true, "Off hand border"),
 		S("swing.ranged", "bool", true, "Ranged border"),
+		"Size",
+		S("swing.width", "choice", "resource", "Width", nil, { choices = { { "resource", "Width of the personal resource display" }, { "game", "Width set in Edit Mode" } } }),
 		"Border",
 		S("swing.outline", "choice", "bar", "Border around", nil, { choices = OUTLINES }),
 		S("swing.backdrop", "bool", true, "Timer background"),
@@ -9941,6 +9943,8 @@ local PAGES = {
 		S("castbars.targetChannel", "colour", "ff4dbf59", "Target and focus channel colour", nil, { needs = "castbars.targetOwn" }),
 	} },
 	{ key = "castbarsSize", label = "Size", parent = "castbars", owner = "castbars", rows = {
+		S("castbars.playerMatch", "choice", "resource", "Player cast bar", "Width set below is the game's 208 while Custom player cast bar size is off.",
+			{ choices = { { "resource", "Width of the personal resource display" }, { "own", "Width set below" } } }),
 		S("castbars.playerSize", "bool", false, "Custom player cast bar size"),
 		S("castbars.playerWidth", "number", 208, "Player cast bar width", nil, { min = 100, max = 400, step = 1, unit = "", needs = "castbars.playerSize" }),
 		S("castbars.playerHeight", "number", 11, "Player cast bar height", nil, { min = 6, max = 40, step = 1, unit = "", needs = "castbars.playerSize" }),
@@ -10434,6 +10438,7 @@ local PAGES = {
 		"Totems",
 		S("unitframes.totemTimer", "bool", true, "Totem time left"),
 		S("unitframes.totemSwipe", "bool", true, "Totem cooldown swipe"),
+		S("unitframes.totemTimeSize", "number", 80, "Totem time size", nil, { min = 50, max = 200, step = 5, unit = "%", needs = "unitframes.totemTimer" }),
 	} },
 	{ key = "hud", label = "Minimap and buffs", rows = {
 		S("hud.enabled", "bool", true, "Restyle the minimap, bags and buffs"),
@@ -10460,6 +10465,8 @@ local PAGES = {
 		S("hud.btnCalendar", "bool", true, "Calendar button"),
 		S("hud.btnClock", "bool", true, "Clock"),
 		S("hud.btnAddons", "bool", true, "Addon list button"),
+		S("hud.addonButtons", "choice", "edge", "Addon buttons", "Round buttons that other addons put on the minimap.",
+			{ choices = { { "leave", "Where each addon puts them" }, { "edge", "Column beside the map" }, { "bar", "Row under the map" } }, changed = "MapButtonsChanged" }),
 	} },
 	{ key = "hudBuffs", label = "Buffs and debuffs", parent = "hud", owner = "hud", rows = {
 		S("hud.auras", "bool", true, "Buff and debuff borders", "Square icons with a thin border. Debuffs take the colour of their type."),
@@ -10473,6 +10480,8 @@ local PAGES = {
 		S("hud.colourOther", "colour", "ffcc0000", "Other debuffs", "Bleeds and debuffs with no type.", { needs = "hud.auras" }),
 		"Text",
 		S("hud.durationSize", "number", 100, "Duration size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
+		S("hud.durationFormat", "choice", "tight", "Duration format", "Also the totem times under the player frame.", { choices = { { "game", "As the game has it (8 m)" }, { "tight", "No space (8m)" } } }),
+		S("hud.durationColour", "choice", "white", "Duration colour", "Also the totem times under the player frame.", { choices = { { "game", "As the game has it (gold, white under 90 s)" }, { "white", "White" } } }),
 		S("hud.countSize", "number", 100, "Stack count size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
 	} },
 	{ key = "hudBars", label = "Bars, bags and micro menu", parent = "hud", owner = "hud", rows = {
@@ -10866,7 +10875,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.89" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.93" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -20094,6 +20103,8 @@ do local PROBES = {
 	{ "swing.texture", "Gloss", held("swing.texture"), "default/Same as the Flat UI page", "gloss/Gloss", from = "Same as the Flat UI page" },
 	{ "castbars.textAlign", "Right", held("castbars.textAlign"), "game/As the game has it", "right/Right", from = "As the game has it" },
 	{ "castbars.iconPos", "Right of the bar", held("castbars.iconPos"), "game/Left of the bar", "right/Right of the bar", from = "Left of the bar" },
+	{ "swing.width", "Width set in Edit Mode", held("swing.width"), "resource/Width of the personal resource display", "game/Width set in Edit Mode", from = "Width of the personal resource display" },
+	{ "castbars.playerMatch", "Width set below", held("castbars.playerMatch"), "resource/Width of the personal resource display", "own/Width set below", from = "Width of the personal resource display" },
 	{ "swing.idle", "Only while swinging", held("swing.idle"), "combat/In combat", "hide/Only while swinging", from = "In combat" },
 	{ "castbars.targetCast", "ff336699", held("castbars.targetCast"), "ffe6b333/ffe6b333", "ff336699/ff336699" , pre = { { "castbars.targetOwn", true } } },
 	{ "castbars.targetChannel", "ff336699", held("castbars.targetChannel"), "ff4dbf59/ff4dbf59", "ff336699/ff336699" , pre = { { "castbars.targetOwn", true } } },
@@ -20208,9 +20219,9 @@ do local PROBES = {
 	{ "castbars.shieldColour", "ff336699", held("castbars.shieldColour"), "ff9a9a9a/ff9a9a9a", "ff336699/ff336699" },
 	{ "castbars.interruptedColour", "ff336699", held("castbars.interruptedColour"), "ffd94040/ffd94040", "ff336699/ff336699" },
 	{ "castbars.craftColour", "ff336699", held("castbars.craftColour"), "ff4d99e6/ff4d99e6", "ff336699/ff336699" },
-	{ "castbars.playerSize", true, function(S) return castSize(S, "PlayerCastingBarFrame") end, "100x30", "208x11", back = "208x11" },
-	{ "castbars.playerWidth", 300, function(S) return castSize(S, "PlayerCastingBarFrame") end, "208x11", "300x11", pre = { { "castbars.playerSize", true } } },
-	{ "castbars.playerHeight", 20, function(S) return castSize(S, "PlayerCastingBarFrame") end, "208x11", "208x20", pre = { { "castbars.playerSize", true } } },
+	{ "castbars.playerSize", false, function(S) return castSize(S, "PlayerCastingBarFrame") end, "300x20", "208x11", from = true, pre = { { "castbars.playerMatch", "Width set below" }, { "castbars.playerSize", true }, { "castbars.playerWidth", 300 }, { "castbars.playerHeight", 20 } } },
+	{ "castbars.playerWidth", 300, function(S) return castSize(S, "PlayerCastingBarFrame") end, "208x11", "300x11", pre = { { "castbars.playerMatch", "Width set below" }, { "castbars.playerSize", true } } },
+	{ "castbars.playerHeight", 20, function(S) return castSize(S, "PlayerCastingBarFrame") end, "208x11", "208x20", pre = { { "castbars.playerMatch", "Width set below" }, { "castbars.playerSize", true } } },
 	{ "castbars.playerText", "Inside the bar", held("castbars.playerText"), "game/As the game has it", "inside/Inside the bar", from = "As the game has it", pre = { { "castbars.playerSize", true } } },
 	{ "castbars.playerText", "Below the bar", held("castbars.playerText"), "game/As the game has it", "below/Below the bar", from = "As the game has it", pre = { { "castbars.playerSize", true } } },
 	{ "castbars.petSize", true, function(S) return castSize(S, "PetCastingBarFrame") end, "100x30", "195x13", back = "195x13" },
@@ -20627,6 +20638,7 @@ do local PROBES = {
 	{ "hud.btnCalendar", false, held("hud.btnCalendar"), "true/true", "false/false" },
 	{ "hud.btnClock", false, held("hud.btnClock"), "true/true", "false/false" },
 	{ "hud.btnAddons", false, held("hud.btnAddons"), "true/true", "false/false" },
+	{ "hud.addonButtons", "Row under the map", held("hud.addonButtons"), "edge/Column beside the map", "bar/Row under the map", from = "Column beside the map" },
 	{ "hud.crop", 12, held("hud.crop"), "8/8", "12/12" },
 	{ "hud.auraTypes", false, held("hud.auraTypes"), "true/true", "false/false" },
 	{ "hud.colourMagic", "ff336699", held("hud.colourMagic"), "ff3399ff/ff3399ff", "ff336699/ff336699" },
@@ -20741,7 +20753,7 @@ for _, P in ipairs(PROBES) do
 	check(label .. ": no violations, errors or messages", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.out, "|"))
 end
 -- Button text, button states, button effects, the Edit Mode layout rows and the Classic style rows have blocks of their own (abtext, abstate, abfx, bblayout, bbimport, ctclassic).
-for _, path in ipairs({ "combattext.style", "combattext.classicColour", "combattext.classicSigns", "combattext.where", "combattext.outStyle", "combattext.speed", "combattext.classicRise", "combattext.classicTime", "combattext.classicStack", "combattext.classicCrit", "actionbars.hotkeyShow", "actionbars.hotkeySize", "actionbars.hotkeyOwn", "actionbars.hotkeyColour", "actionbars.hotkeyPoint", "actionbars.hotkeyX", "actionbars.hotkeyY", "actionbars.nameShow", "actionbars.nameSize", "actionbars.countSize", "actionbars.textOutline", "actionbars.usableOwn", "actionbars.manaColour", "actionbars.unusableColour", "actionbars.rangeTint", "actionbars.rangeColour", "actionbars.sweep", "actionbars.sweepOwn", "actionbars.sweepAlpha", "actionbars.cdFont", "actionbars.cdGrey", "actionbars.proc", "actionbars.procColour", "actionbars.assist", "actionbars.castAnim", "actionbars.interruptAnim", "actionbars.abilityArt", "movers.presetLayout", "movers.layoutText" }) do
+for _, path in ipairs({ "combattext.style", "combattext.classicColour", "combattext.classicSigns", "combattext.where", "combattext.outStyle", "combattext.speed", "combattext.classicRise", "combattext.classicTime", "combattext.classicStack", "combattext.classicCrit", "actionbars.hotkeyShow", "actionbars.hotkeyText", "actionbars.hotkeySize", "actionbars.hotkeyOwn", "actionbars.hotkeyColour", "actionbars.hotkeyPoint", "actionbars.hotkeyX", "actionbars.hotkeyY", "actionbars.nameShow", "actionbars.nameSize", "actionbars.countSize", "actionbars.textOutline", "actionbars.usableOwn", "actionbars.manaColour", "actionbars.unusableColour", "actionbars.rangeTint", "actionbars.rangeColour", "actionbars.sweep", "actionbars.sweepOwn", "actionbars.sweepAlpha", "actionbars.cdFont", "actionbars.cdGrey", "actionbars.proc", "actionbars.procColour", "actionbars.assist", "actionbars.castAnim", "actionbars.interruptAnim", "actionbars.abilityArt", "movers.presetLayout", "movers.layoutText" }) do
 	covered[path] = true
 end
 local missingProbe = {}
@@ -20759,6 +20771,10 @@ end
 covered["combattext.extra"] = true
 -- The MSBT look rows have their checks in the msbt block.
 for _, path in ipairs({ "combattext.arcWidth", "combattext.icons", "combattext.missWords", "combattext.abilityColour", "combattext.abilityName" }) do
+	covered[path] = true
+end
+-- The time text rows have their checks in the aura time block.
+for _, path in ipairs({ "hud.durationFormat", "hud.durationColour", "unitframes.totemTimeSize" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block.
@@ -40599,6 +40615,14 @@ end
 
 -- A world with the cast bars the way Forever builds them, and the options the test gives.
 local function cw(options, extra, prep)
+	-- The checks of the sizes below were written for the width the player chose; the match with the display has its own block.
+	if options == nil or options["castbars.playerMatch"] == nil then
+		local own = { ["castbars.playerMatch"] = "own" }
+		for k, v in pairs(options or {}) do
+			own[k] = v
+		end
+		options = own
+	end
 	local o = extra or {}
 	o.layout = o.layout or {}
 	o.layout.casts = o.layout.casts or true
@@ -40629,6 +40653,161 @@ local function parts(W)
 end
 local DEFAULT_PARTS = "spark 20 mask 256x13 text " .. TEXT_DEFAULT
 local LOCKED_PARTS = "spark 20 mask 256x13 text " .. TEXT_LOCKED
+
+-- Stack widths: the player cast bar and the swing timers take the width of the personal resource display.
+do
+	local T = { swing = { "SwingTimerMainHandFrame", "SwingTimerOffHandFrame", "SwingTimerRangedFrame" }, game = 213 }
+	function T.world(options, extra, width)
+		options = options or {}
+		options["castbars.playerMatch"] = "resource"
+		return cw(options, extra, function(X)
+			if X.env.PersonalResourceDisplayFrame then
+				X.rawOf[X.env.PersonalResourceDisplayFrame].width = width or 246
+			end
+			X.env.Enum = X.env.Enum or {}
+			X.env.Enum.EditModeSwingTimerSetting = { Width = 3 }
+			for _, name in ipairs(T.swing) do
+				X.swing[name].inner.width = 120
+				X.swing[name].inner.GetSettingValue = function(_, setting)
+					return setting == 3 and T.game or nil
+				end
+			end
+		end)
+	end
+	function T.display(W)
+		return W.rawOf[W.env.PersonalResourceDisplayFrame]
+	end
+	function T.pass(W)
+		W.registry:TriggerEvent("EditMode.RefreshPersonalResourceDisplay")
+		W.flush()
+	end
+	function T.swings(W)
+		local out = {}
+		for _, name in ipairs(T.swing) do
+			out[#out + 1] = g(W.swing[name].inner.width)
+		end
+		return table.concat(out, " ")
+	end
+	local W = T.world()
+	check("stack widths: at the start the cast bar is as wide as the display and keeps the game's height", size(W, "player") == "246x11", size(W, "player"))
+	check("stack widths: and the three swing timers are as wide as the display", T.swings(W) == "246 246 246", T.swings(W))
+	check("stack widths: the spark and the mask of the cast bar are the game's", parts(W) == DEFAULT_PARTS, parts(W))
+	check("stack widths: the pet, target and focus bars are not touched", size(W, "pet") == "195x13" and size(W, "target") == "150x10" and size(W, "focus") == "150x10", sizes(W))
+	T.display(W).width = 300
+	T.pass(W)
+	check("stack widths: Bar width 150 on the display widens the cast bar and the timers at the next pass", size(W, "player") == "300x11" and T.swings(W) == "300 300 300", size(W, "player") .. " " .. T.swings(W))
+	T.display(W).width, T.display(W).scale = 246, 1.1
+	T.pass(W)
+	check("stack widths: a display scale of 1.1 gives the same width on screen", size(W, "player") == "271x11" and T.swings(W) == "271 271 271", size(W, "player") .. " " .. T.swings(W))
+	T.display(W).scale = 1
+	W.cast.PlayerCastingBarFrame.inner.scale = 1.2
+	W.swing.SwingTimerMainHandFrame.inner.scale = 1.5
+	T.pass(W)
+	check("stack widths: a bar with a scale of its own is set to the same width on screen", size(W, "player") == "205x11" and T.swings(W) == "164 246 246", size(W, "player") .. " " .. T.swings(W))
+	W.cast.PlayerCastingBarFrame.inner.scale = 1
+	W.swing.SwingTimerMainHandFrame.inner.scale = 1
+	T.pass(W)
+	W.change("castbars.playerSize", true)
+	W.change("castbars.playerHeight", 20)
+	W.flush()
+	check("stack widths: with Custom player cast bar size on the width is the display's and the height the chosen one", size(W, "player") == "246x20" and has(parts(W), "spark 29"), size(W, "player") .. " " .. parts(W))
+	W.change("castbars.playerSize", false)
+	W.flush()
+	-- A world at the defaults: the match alone installs the hooks.
+	local H = T.world()
+	H.attach()
+	check("stack widths: a bar locked under the player frame keeps the game's 150", size(H, "player") == "150x10", size(H, "player"))
+	H.detach()
+	check("stack widths: unlocked, the hook puts the width of the display back with Custom player cast bar size off", size(H, "player") == "246x11" and addonCalls(H, "player", "SetWidth") > 0, size(H, "player"))
+	W.change("castbars.playerMatch", "Width set below")
+	W.flush()
+	check("stack widths: Width set below gives the game's width back with Custom player cast bar size off", size(W, "player") == "208x11" and parts(W) == DEFAULT_PARTS, size(W, "player") .. " " .. parts(W))
+	W.change("castbars.playerSize", true)
+	W.change("castbars.playerWidth", 300)
+	W.flush()
+	check("stack widths: and the chosen width with it on", size(W, "player") == "300x20", size(W, "player"))
+	W.change("castbars.playerSize", false)
+	W.change("castbars.playerMatch", "Width of the personal resource display")
+	W.flush()
+	check("stack widths: Width of the personal resource display matches again", size(W, "player") == "246x11", size(W, "player"))
+	-- The swing timers.
+	W.change("swing.width", "Width set in Edit Mode")
+	W.flush()
+	check("stack widths: Width set in Edit Mode puts back the width the layout holds, on all three timers", T.swings(W) == "213 213 213" and size(W, "player") == "246x11", T.swings(W))
+	T.game = 233
+	W.change("swing.width", "Width of the personal resource display")
+	W.flush()
+	W.change("swing.width", "Width set in Edit Mode")
+	W.flush()
+	check("stack widths: it is read from the layout each time", T.swings(W) == "233 233 233", T.swings(W))
+	W.change("swing.width", "Width of the personal resource display")
+	W.flush()
+	W.change("swing.enabled", false)
+	W.flush()
+	check("stack widths: Restyle swing timers off puts the layout width back", T.swings(W) == "233 233 233", T.swings(W))
+	W.change("swing.enabled", true)
+	W.flush()
+	check("stack widths: and on matches them again", T.swings(W) == "246 246 246", T.swings(W))
+	check("stack widths: no violation", allClean(W), problems(W))
+	-- Edit Mode.
+	W.editMode(true)
+	T.display(W).width = 200
+	T.pass(W)
+	check("stack widths: while Edit Mode is open the cast bar and the timers keep the width they have", size(W, "player") == "246x11" and T.swings(W) == "246 246 246", size(W, "player") .. " " .. T.swings(W))
+	W.editMode(false)
+	W.flush()
+	check("stack widths: the end of Edit Mode applies the new width of the display", size(W, "player") == "200x11" and T.swings(W) == "200 200 200", size(W, "player") .. " " .. T.swings(W))
+	-- A pass that finds the width already set does not set it again.
+	local calls0 = addonCalls(W, "player", "SetWidth")
+	T.pass(W)
+	T.pass(W)
+	check("stack widths: a pass at the width the bar has sets nothing", addonCalls(W, "player", "SetWidth") == calls0 and size(W, "player") == "200x11", addonCalls(W, "player", "SetWidth") .. " " .. calls0)
+	-- The resource and swing modules off: the cast bar still follows the display.
+	local O = T.world({ ["resource.enabled"] = false, ["swing.enabled"] = false })
+	T.display(O).width = 300
+	T.pass(O)
+	check("stack widths: with the resource and swing modules off the cast bar follows a new width of the display", size(O, "player") == "300x11" and allClean(O), size(O, "player") .. problems(O))
+	-- A display that is missing, withheld or 0 wide.
+	for _, case in ipairs({ { "a width of 0", function(r) r.width = 0 end }, { "a width of 0.4", function(r) r.width = 0.4 end }, { "a width that is withheld", function(r) r.fault.size = "secret" end },
+		{ "a scale that is withheld", function(r) r.GetEffectiveScale = function() return SECRET end end }, { "a scale of 0", function(r) r.GetEffectiveScale = function() return 0 end end } }) do
+		local X = T.world()
+		case[2](T.display(X))
+		T.pass(X)
+		check("stack widths: " .. case[1] .. " leaves the game's widths", size(X, "player") == "208x11" and T.swings(X) == (g(T.game) .. " "):rep(2) .. g(T.game), size(X, "player") .. " " .. T.swings(X))
+		check("stack widths: " .. case[1] .. ": no error", allClean(X), problems(X))
+	end
+	local M = T.world(nil, { missing = { PersonalResourceDisplayFrame = true } })
+	check("stack widths: without the display the bar and the timers have the game's widths", size(M, "player") == "208x11" and T.swings(M) == "120 120 120" and allClean(M), size(M, "player") .. " " .. T.swings(M) .. problems(M))
+	-- A mover scale.
+	local calls = 0
+	local saved = opt({}, { PlayerCastingBarFrame = { point = "BOTTOM", x = 0, y = 378, scale = 1.2, kind = "hud" } })
+	local Z = cw(nil, { saved = saved, layout = { systems = true } }, function(X)
+		X.rawOf[X.env.PersonalResourceDisplayFrame].width = 246
+		local orig = X.ns.StackWidths
+		X.ns.StackWidths = function()
+			calls = calls + 1
+			return orig()
+		end
+	end)
+	Z.flush()
+	calls = 0
+	Z.slash("move")
+	Z.keys.ctrl = true
+	Z.wheel("Cast bar", 1)
+	Z.keys.ctrl = false
+	Z.flush()
+	check("stack widths: a new mover scale written for the cast bar sets the widths again", calls >= 1 and size(Z, "player") == "197x11", calls .. " " .. size(Z, "player"))
+	-- Combat.
+	local C = T.world(nil, { layout = { casts = { playerProtected = true } } })
+	C.combat = true
+	T.display(C).width = 300
+	T.pass(C)
+	check("stack widths: a protected bar is not sized in combat", size(C, "player") == "246x11", size(C, "player"))
+	C.combat = false
+	C.fire("PLAYER_REGEN_ENABLED")
+	C.flush()
+	check("stack widths: and is sized when combat ends", size(C, "player") == "300x11" and allClean(C), size(C, "player") .. problems(C))
+end
 
 -- 75z. Off by default: nothing is touched.
 do
@@ -63398,7 +63577,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 868 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 875 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -63712,7 +63891,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 868 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 875 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -64062,7 +64241,7 @@ function PT.runSetup()
 		end
 		-- Rows that change nothing alone until a sibling row differs from what the game draws: the sibling is set first.
 		local PRE = {
-			["castbars.playerSize"] = { { "castbars.playerWidth", 300 } },
+			["castbars.playerSize"] = { { "castbars.playerWidth", 300 }, { "castbars.playerMatch", "own" } }, ["castbars.playerWidth"] = { { "castbars.playerMatch", "own" } },
 			["castbars.petSize"] = { { "castbars.petWidth", 300 } },
 			["castbars.targetSize"] = { { "castbars.targetWidth", 250 } },
 			["castbars.focusSize"] = { { "castbars.focusWidth", 250 } },
@@ -64138,7 +64317,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 752 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 754 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -88888,6 +89067,9 @@ do
 		end
 	end
 	function M.world(options, opts)
+		-- The checks of the sizes were written for the width of the game, not the width of the personal resource display.
+		options = options or {}
+		options["castbars.playerMatch"] = options["castbars.playerMatch"] or "own"
 		return FH.cast(options, opts, M.dress)
 	end
 	-- The colour of the edges of the outline of a bar.
@@ -88916,7 +89098,7 @@ do
 	-- A world with every row at its default makes no call the game did not make.
 	do
 		local W = M.world()
-		local base = FH.cast()
+		local base = FH.cast({ ["castbars.playerMatch"] = "own" })
 		local textures = #W.addonTextures
 		M.start(W, "cast")
 		local calm = true
@@ -89261,8 +89443,8 @@ do
 
 	-- Swing timers: range, direction and idle.
 	do
-		local W = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show" } } }, M.dress)
-		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show" } } })
+		local W = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show", ["swing.width"] = "game", ["castbars.playerMatch"] = "own" } } }, M.dress)
+		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show", ["swing.width"] = "game", ["castbars.playerMatch"] = "own" } } })
 		local name = FH.SWING[1]
 		local m = W.msSwing[name]
 		check("ms-cast: at Always no hook is added to a swing timer and nothing is set", W.hooks == base.hooks and m.s.barRaw.reverseCalls == nil and m.typeRaw.calls.SetTextColor == nil and FH.plain(W), FH.why(W))
@@ -95452,6 +95634,17 @@ do
 		d.draw(stage.actionbars)
 		check("sdbars action: with Flat highlights off the tint is the game's own, grey where the client has no atlas for it", list(hover.tint.color) == "0.800,0.800,0.800,0.350", list(hover.tint.color))
 		ns.Set("actionbars.tints", true)
+		W.env.KEY_BUTTON4, W.env.KEY_NUMPAD1 = "Mouse Button 4", "Num Pad 1"
+		ns.Set("actionbars.hotkeyText", "short")
+		d.draw(stage.actionbars)
+		local extra = inst.rows[2].buttons
+		check("sdbars action: Hotkey text short shows M4 and N1 on the second bar, in a box of the button's width less 8 that does not wrap",
+			extra[9].key.text == "M4" and extra[10].key.text == "N1" and d.parts["actionbars.hotkeyText"] == extra[9].frame
+			and extra[9].key.width == extra[9].frame.width - 8 and extra[9].key.height == 10 and extra[9].key.wordWrap == false and extra[9].key.justify == "RIGHT", tostring(extra[9].key.text) .. " " .. tostring(extra[9].key.width))
+		ns.Set("actionbars.hotkeyText", "game")
+		d.draw(stage.actionbars)
+		check("sdbars action: Hotkey text game shows the long names", extra[9].key.text == "Mouse Button 4" and extra[10].key.text == "Num Pad 1", tostring(extra[9].key.text))
+		ns.Set("actionbars.hotkeyText", "short")
 		ns.Set("actionbars.square", false)
 		d.draw(stage.actionbars)
 		check("sdbars action: with Square icons off the icon is inset and the sweep keeps the button's size",
@@ -96191,6 +96384,7 @@ do
 		{ 23, "castbars.targetOwn", false, true, "castbars.flat" },
 		{ 23, "castbars.targetCast", "ffe6b333", "ffff00ff", "castbars.targetOwn" },
 		{ 23, "castbars.targetChannel", "ff4dbf59", "ffff00ff", "castbars.targetOwn" },
+		{ 24, "castbars.playerMatch", "resource", "own" },
 		{ 24, "castbars.playerSize", false, true },
 		{ 24, "castbars.playerWidth", 208, 400, "castbars.playerSize" },
 		{ 24, "castbars.playerHeight", 11, 40, "castbars.playerSize" },
@@ -96235,6 +96429,7 @@ do
 		{ 27, "swing.main", true, false },
 		{ 27, "swing.off", true, false },
 		{ 27, "swing.ranged", true, false },
+		{ 27, "swing.width", "resource", "game" },
 		{ 27, "swing.outline", "bar", "frame" },
 		{ 27, "swing.backdrop", true, false },
 		{ 27, "swing.flat", true, false },
@@ -96260,6 +96455,7 @@ do
 	-- colours, an own text colour equal to the game's white. The sibling is set first.
 	L.PRE = {
 		["castbars.playerSize"] = { { "castbars.playerWidth", 300 } },
+		["castbars.playerWidth"] = { { "castbars.playerMatch", "own" } },
 		["castbars.petSize"] = { { "castbars.petWidth", 300 } },
 		["castbars.targetSize"] = { { "castbars.targetWidth", 250 } },
 		["castbars.focusSize"] = { { "castbars.focusWidth", 250 } },
@@ -96415,7 +96611,7 @@ do
 		end
 		check("sdcast: " .. id .. " has no violation, error or message", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
 	end
-	check("sdcast: 80 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 80 and L.changed == 80, L.changed .. " of " .. L.total)
+	check("sdcast: 82 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 82 and L.changed == 82, L.changed .. " of " .. L.total)
 
 	-- Every frame, texture and text the drawings made is the addon's own.
 	for _, id in ipairs({ "mock-cast-bar", "mock-resource", "mock-swing" }) do
@@ -96472,11 +96668,15 @@ do
 		-- Sizes: a size of its own sets the bar, and the drawing is as big as its widest bar.
 		local root = W.rawOf[stage].children[1]
 		local wide = d.size(stage)
+		local bar = d.parts["castbars.playerWidth"]
+		check("sdcast: stack widths: the player cast bar is 200 wide, the width of the personal resource display, and 11 high", bar.width == 200 and bar.height == 11, tostring(bar.width) .. " " .. tostring(bar.height))
 		ns.Set("castbars.playerSize", true)
 		ns.Set("castbars.playerWidth", 400)
 		ns.Set("castbars.playerHeight", 30)
 		d.draw(stage)
-		local bar = d.parts["castbars.playerWidth"]
+		check("sdcast: stack widths: with a custom size the match keeps the width of the display and takes the chosen height", bar.width == 200 and bar.height == 30, tostring(bar.width) .. " " .. tostring(bar.height))
+		ns.Set("castbars.playerMatch", "own")
+		d.draw(stage)
 		check("sdcast: the player cast bar has the width and height of its rows", bar.width == 400 and bar.height == 30, tostring(bar.width) .. " " .. tostring(bar.height))
 		check("sdcast: the drawing grows with its widest bar", d.size(stage) > wide and root.width == d.size(stage), tostring(d.size(stage)) .. " " .. tostring(wide))
 		-- Text below and inside the player bar.
@@ -96589,8 +96789,15 @@ do
 		local main, off, ranged = d.parts["swing.mainColour"], d.parts["swing.offColour"], d.parts["swing.rangedColour"]
 		check("sdcast: the three timers are in the three hand colours", rgb(main.color) == hex("ffd9a640") and rgb(off.color) == hex("ff5c9fd6") and rgb(ranged.color) == hex("ff73b85c"),
 			rgb(main.color) .. " " .. rgb(off.color) .. " " .. rgb(ranged.color))
-		check("sdcast: the timers have run 64, 40 and 80 percent of 180 units", math.abs(main.width - 115.2) < 0.01 and math.abs(off.width - 72) < 0.01 and math.abs(ranged.width - 144) < 0.01,
+		check("sdcast: the timers have run 64, 40 and 80 percent of 190 units", math.abs(main.width - 121.6) < 0.01 and math.abs(off.width - 76) < 0.01 and math.abs(ranged.width - 152) < 0.01,
 			main.width .. " " .. off.width .. " " .. ranged.width)
+		ns.Set("swing.width", "game")
+		d.draw(stage)
+		check("sdcast: stack widths: Width set in Edit Mode draws the timers 190 wide with bars of 180", math.abs(main.width - 115.2) < 0.01 and W.rawOf[d.parts["swing.width"]].width == 190,
+			main.width .. " " .. tostring(W.rawOf[d.parts["swing.width"]].width))
+		ns.Set("swing.width", "resource")
+		d.draw(stage)
+		check("sdcast: stack widths: the width of the personal resource display draws the timers 200 wide", W.rawOf[d.parts["swing.width"]].width == 200, tostring(W.rawOf[d.parts["swing.width"]].width))
 		-- Moving: the fill grows with the sample clock and the time left falls.
 		local timeText = d.parts["swing.time"]
 		local first = main.width
@@ -100793,6 +101000,101 @@ do
 			hooked .. " " .. table.concat(W.violations, "|"):sub(1, 200) .. table.concat(W.errors, "|"):sub(1, 200))
 	end
 
+	-- Hotkey text: mouse button, wheel and number pad keys short (ButtonText.lua ns.HotkeyText).
+	do
+		local T = {
+			globals = { ALT_KEY_TEXT_ABBR = "a", CTRL_KEY_TEXT_ABBR = "c", META_KEY_TEXT_ABBR = "m", SHIFT_KEY_TEXT_ABBR = "s", KEY_BUTTON1 = "Left Mouse", KEY_BUTTON3 = "Middle Mouse", KEY_BUTTON4 = "Mouse Button 4",
+				KEY_BUTTON31 = "Mouse Button 31", KEY_MOUSEWHEELUP = "Mouse Wheel Up", KEY_MOUSEWHEELDOWN = "Mouse Wheel Down", KEY_NUMPAD0 = "Num Pad 0", KEY_NUMPAD1 = "Num Pad 1", KEY_NUMPAD9 = "Num Pad 9",
+				KEY_NUMPADPLUS = "Num Pad +", KEY_NUMPADMINUS = "Num Pad -", KEY_NUMPADMULTIPLY = "Num Pad *", KEY_NUMPADDIVIDE = "Num Pad /", KEY_NUMPADDECIMAL = "Num Pad .", KEY_PAGEUP = "Page Up",
+				KEY_PAGEDOWN = "Page Down", KEY_MINUS = "-" },
+			pairs = { { "Left Mouse", "M1" }, { "Middle Mouse", "M3" }, { "Mouse Button 4", "M4" }, { "Mouse Button 31", "M31" }, { "Mouse Wheel Up", "WU" }, { "Mouse Wheel Down", "WD" }, { "Num Pad 0", "N0" },
+				{ "Num Pad 1", "N1" }, { "Num Pad 9", "N9" }, { "Num Pad +", "N+" }, { "Num Pad -", "N-" }, { "Num Pad *", "N*" }, { "Num Pad /", "N/" }, { "Num Pad .", "N." }, { "Page Up", "PU" }, { "Page Down", "PD" } },
+			same = { "s--", "-", "s-X", "s-1", "6", "Num Pad Foo", "Mouse Button 4x", "s-", "BUTTON4", "F5", "c-s-=", "x-Num Pad 1" },
+			texts = { ActionButton1 = "Mouse Button 4", ActionButton2 = "s-Num Pad 1", ActionButton3 = "s--", ActionButton4 = "Num Pad Foo", ActionButton5 = "Mouse Wheel Up", MultiBarBottomLeftButton1 = "c-s-Mouse Wheel Down" },
+		}
+		local function world(options)
+			return AT.world({ options = options, prep = function(W)
+				for key, value in pairs(T.globals) do W.env[key] = value end
+				for name, text in pairs(T.texts) do W.buttons[name].fs.HotKey.text = text end
+				W.env.ChangeMultiCastActionPage = function() end
+			end })
+		end
+		local function text(W, name) return W.buttons[name].fs.HotKey.text end
+		local W = world()
+		local ns = W.ns
+		local words, prefixed, two = true, true, true
+		for _, pair in ipairs(T.pairs) do
+			words = words and ns.HotkeyText(pair[1]) == pair[2]
+			prefixed = prefixed and ns.HotkeyText("s-" .. pair[1]) == "s-" .. pair[2]
+			two = two and ns.HotkeyText("c-s-" .. pair[1]) == "c-s-" .. pair[2]
+		end
+		check("hotkey text: every mapped key name is short with no modifier", words)
+		check("hotkey text: and with one modifier and with two", prefixed and two)
+		local same = true
+		for _, one in ipairs(T.same) do same = same and ns.HotkeyText(one) == one end
+		check("hotkey text: s--, a lone minus, s-X, an unmapped key and a near miss are unchanged", same)
+		check("hotkey text: the default is short and the stand-in default is the row's", W.ns.Get("actionbars.hotkeyText") == "short")
+		check("hotkey text: at the default the game's long texts are short", text(W, "ActionButton1") == "M4" and text(W, "ActionButton2") == "s-N1" and text(W, "ActionButton5") == "WU"
+			and text(W, "MultiBarBottomLeftButton1") == "c-s-WD", text(W, "ActionButton1") .. " " .. text(W, "ActionButton2"))
+		check("hotkey text: an unmapped key, s-- and the range dot are not touched", text(W, "ActionButton3") == "s--" and text(W, "ActionButton4") == "Num Pad Foo" and text(W, "ActionButton12") == AT.DOT)
+		AT.set(W, "hotkeyText", "game")
+		check("hotkey text: game puts the long text back", text(W, "ActionButton1") == "Mouse Button 4" and text(W, "ActionButton2") == "s-Num Pad 1" and text(W, "MultiBarBottomLeftButton1") == "c-s-Mouse Wheel Down")
+		AT.set(W, "hotkeyText", "short")
+		check("hotkey text: and short again", text(W, "ActionButton1") == "M4" and text(W, "ActionButton5") == "WU")
+		W.buttons.ActionButton1.fs.HotKey.text = "Mouse Wheel Down"
+		W.fire("UPDATE_BINDINGS")
+		W.flush()
+		check("hotkey text: text the game writes after a binding change is made short again", text(W, "ActionButton1") == "WD", text(W, "ActionButton1"))
+		local V = world({ ["actionbars.hotkeyText"] = "game" })
+		check("hotkey text: with game the long texts stay and no SetText is made", text(V, "ActionButton1") == "Mouse Button 4" and AT.total(V, "SetText") == 0, AT.total(V, "SetText"))
+		local U = world({ ["actionbars.hotkeyShow"] = "side" })
+		check("hotkey text: a hotkey that is hidden is not changed", text(U, "ActionButton1") == "Mouse Button 4" and text(U, "MultiBarBottomLeftButton1") == "c-s-WD")
+		check("hotkey text: nothing was raised", #W.errors == 0 and #W.violations == 0 and #V.errors == 0 and #V.violations == 0 and #U.errors == 0 and #U.violations == 0, table.concat(W.errors, "|"))
+		check("hotkey text: a secret text is returned as it is and nothing is raised", rawequal(ns.HotkeyText(SECRET), SECRET) and rawequal(ns.HotkeyText(SECRET, W.buttons.ActionButton1), SECRET) and #W.errors == 0)
+		-- A plain string that the client calls secret is returned as it is (the table SECRET is returned by the type test alone).
+		local was = W.env.issecretvalue
+		W.env.issecretvalue = function(v) return v == "s-Num Pad 1" or was(v) end
+		check("hotkey text: a string the client calls secret is returned as it is", ns.HotkeyText("s-Num Pad 1") == "s-Num Pad 1" and ns.HotkeyText("Num Pad 1") == "N1")
+		W.env.issecretvalue = was
+		do
+			local X = world()
+			local gets, get = 0, X.ns.Get
+			X.ns.Get = function(path, ...)
+				if debug.traceback():find("ButtonText", 1, true) then gets = gets + 1 end
+				return get(path, ...)
+			end
+			X.fire("ACTIONBAR_SLOT_CHANGED")
+			X.flush()
+			X.ns.Get = get
+			check("hotkey text: at the defaults a slot change makes no Get call from Button text", gets == 0, gets)
+			X.ns.Set("actionbars.totem", true)
+			X.buttons.ActionButton1.fs.HotKey.text = "Mouse Button 4"
+			X.ns.ButtonTextRefresh()
+			X.flush()
+			check("hotkey text: turning on Totem bar buttons makes the text again", text(X, "ActionButton1") == "M4", text(X, "ActionButton1"))
+			X.ns.Set("actionbars.totem", false)
+			X.ns.Set("actionbars.ability", true)
+			X.buttons.ActionButton1.fs.HotKey.text = "Mouse Button 4"
+			X.ns.ButtonTextRefresh()
+			X.flush()
+			check("hotkey text: turning on Extra action button makes the text again", text(X, "ActionButton1") == "M4", text(X, "ActionButton1"))
+			X.buttons.ActionButton1.fs.HotKey.text = "Mouse Button 4"
+			X.blizzard(function() X.env.ChangeMultiCastActionPage(2) end)
+			X.flush()
+			check("hotkey text: a totem bar page change makes the text short again", text(X, "ActionButton1") == "M4" and #X.errors == 0 and #X.violations == 0, text(X, "ActionButton1"))
+		end
+		W.buttons.ActionButton1.fs.HotKey.text = "Mouse Button 4"
+		W.fire("UPDATE_MULTI_CAST_ACTIONBAR")
+		W.flush()
+		check("hotkey text: text the game writes on a totem bar update is made short again", text(W, "ActionButton1") == "M4", text(W, "ActionButton1"))
+		local page
+		for _, one in ipairs(W.ns.PAGES) do if one.key == "actionbarsText" then page = one end end
+		local row
+		for _, item in ipairs(page or {}) do if item.key == "hotkeyText" then row = item end end
+		check("hotkey text: the row is a choice of game or short, calls ButtonTextChanged and has the label Hotkey text", row ~= nil and row.default == "short" and row.changed == "ButtonTextChanged" and #row.choices == 2
+			and row.choices[1][1] == "game" and row.choices[2][1] == "short" and row.label == "Hotkey text")
+	end
+
 	-- Which buttons show their hotkeys and macro names for each choice. The pet, stance and possess bars follow All bars only.
 	do
 		local expect = {
@@ -103581,6 +103883,25 @@ do
 		OP.clean(W, ns, "slot, texts and keys")
 	end
 
+	-- Hotkey text on Flat UI's own buttons.
+	do
+		local W, list, env, ns = OP.world()
+		local R = function(x) return OP.raw(W, x) end
+		for key, value in pairs({ KEY_BUTTON4 = "Mouse Button 4", KEY_NUMPAD1 = "Num Pad 1", SHIFT_KEY_TEXT_ABBR = "s" }) do env[key] = value end
+		env.GetBindingText = function(key) return (key:gsub("SHIFT%-", "s-"):gsub("^BUTTON4$", "Mouse Button 4")) end
+		W.keys.ACTIONBUTTON3, W.keys.ACTIONBUTTON4 = "BUTTON4", "SHIFT-Num Pad 1"
+		OP.login(W)
+		check("hotkey text: an own button shows the short text", R(list[3].HotKey).text == "M4" and R(list[4].HotKey).text == "s-N1" and ns.OwnState(list[3]).hotkey == "M4", tostring(R(list[3].HotKey).text))
+		ns.Set("actionbars.hotkeyText", "game")
+		W.flush()
+		check("hotkey text: game repaints an own button with the long text", R(list[3].HotKey).text == "Mouse Button 4", tostring(R(list[3].HotKey).text))
+		ns.Set("actionbars.hotkeyText", "short")
+		W.flush()
+		W.fire("UPDATE_BINDINGS")
+		check("hotkey text: a repaint after a binding change keeps the short text", R(list[3].HotKey).text == "M4" and R(list[1].HotKey).text == "1")
+		OP.clean(W, ns, "hotkey text")
+	end
+
 	-- 2. Cooldown, charges and loss of control.
 	do
 		local W, list, env, ns = OP.world()
@@ -105872,6 +106193,445 @@ do
 		tostring(RU.c.disc) .. " " .. tostring(RU.c.texture and next(RU.c.texture.masks)) .. " " .. RU.c.look.state .. " " .. #C.addonMasks .. "/" .. RU.n .. " " .. table.concat(C.violations, "|") .. table.concat(C.errors, "|") .. table.concat(C.out, "|"))
 end
 -- >>> round class icons on unit frames (end)
+
+-- >>> auratime (begin)
+-- The time text of aura buttons: no space, white, and the size of the totem times. Every label starts "aura time:".
+do
+	local K = suiteKit
+	local T = { fmt = "hud.durationFormat", colour = "hud.durationColour", size = "unitframes.totemTimeSize", gold = "1,0.82,0,1", gameFmt = "As the game has it (8 m)", tightFmt = "No space (8m)", gameColour = "As the game has it (gold, white under 90 s)", whiteColour = "White" }
+	-- The game's UpdateDuration and SecondsToTimeAbbrev (BuffFrame.lua:1387-1401, TimeUtil.lua:463-483), and the strings of enUS.
+	function T.game(W, space)
+		local env = W.env
+		env.COOLDOWN_DURATION_MIN = space and "%d m" or "%dm"
+		env.SECOND_ONELETTER_ABBR, env.MINUTE_ONELETTER_ABBR, env.HOUR_ONELETTER_ABBR, env.DAY_ONELETTER_ABBR = "%d s", "%d m", "%d h", "%d d"
+		env.SecondsToTimeAbbrev = function(seconds)
+			if seconds >= 129600 then return env.DAY_ONELETTER_ABBR, math.ceil(seconds / 86400) end
+			if seconds >= 5400 then return env.HOUR_ONELETTER_ABBR, math.ceil(seconds / 3600) end
+			if seconds >= 90 then return env.MINUTE_ONELETTER_ABBR, math.ceil(seconds / 60) end
+			return env.SECOND_ONELETTER_ABBR, seconds
+		end
+		env.AuraButtonMixin = { UpdateDuration = function(self, timeLeft)
+			if rawequal(timeLeft, SECRET) then
+				self.Duration:SetText("withheld")
+				self.Duration:SetVertexColor(1, 0.82, 0)
+				return
+			end
+			self.Duration:SetShown(timeLeft ~= nil)
+			if timeLeft ~= nil then
+				self.Duration:SetFormattedText(env.SecondsToTimeAbbrev(timeLeft))
+				if timeLeft < 90 then self.Duration:SetVertexColor(1, 1, 1) else self.Duration:SetVertexColor(1, 0.82, 0) end
+			end
+		end }
+	end
+	-- A button with its time text: with the game's own copy of the function, or without one for a totem button, which calls the mixin by table.
+	function T.button(W, parent, copy)
+		local button, raw = W.bframe(nil, { parent = parent, fields = copy and { UpdateDuration = W.env.AuraButtonMixin.UpdateDuration } or nil })
+		local text = W.Rr(button, nil, { layer = "OVERLAY", sublevel = 0, kind = "FontString" })
+		raw.Duration = text
+		return button, W.rawOf[text]
+	end
+	function T.world(saved, space)
+		return K.mwBefore({ saved = K.opt(saved or {}) }, function(W)
+			T.game(W, space)
+			local buff = W.bframe("BuffFrame")
+			local one, two = T.button(W, buff, true), T.button(W, buff, true)
+			W.rawOf[buff].auraFrames = { one, two }
+			T.totem = T.button(W, W.bframe("TotemFrame"), false)
+		end)
+	end
+	function T.tick(W, button, seconds)
+		W.blizzard(function() button.UpdateDuration(button, seconds) end)
+	end
+	function T.totemTick(W, button, seconds)
+		W.blizzard(function() W.env.AuraButtonMixin.UpdateDuration(button, seconds) end)
+	end
+	function T.colourOf(raw) return table.concat(raw.vertex, ",") end
+
+	local W = T.world()
+	local buff = W.env.BuffFrame
+	local first, second = W.rawOf[buff].auraFrames[1], W.rawOf[buff].auraFrames[2]
+	local raw = W.rawOf[W.rawOf[first].Duration]
+	T.tick(W, first, 480)
+	check("aura time: 8 m becomes 8m and the gold becomes white", raw.text == "8m" and T.colourOf(raw) == "1,1,1,1", tostring(raw.text) .. " " .. T.colourOf(raw))
+	T.tick(W, first, 480)
+	check("aura time: a second tick keeps it", raw.text == "8m" and T.colourOf(raw) == "1,1,1,1", tostring(raw.text))
+	T.tick(W, first, 45)
+	check("aura time: 45 s becomes 45s", raw.text == "45s", tostring(raw.text))
+	T.tick(W, first, 7200)
+	check("aura time: hours lose the space too", raw.text == "2h", tostring(raw.text))
+	check("aura time: the game and one hook wrote the text of each tick, not two hooks", (raw.calls.SetFormattedText or 0) == 4 * 2, tostring(raw.calls.SetFormattedText))
+	-- A button the game makes after the file loads copies the followed function and is not followed again.
+	local late = T.button(W, buff, false)
+	W.rawOf[late].UpdateDuration = W.env.AuraButtonMixin.UpdateDuration
+	local list = W.rawOf[buff].auraFrames
+	list[#list + 1] = late
+	W.fire("PLAYER_ENTERING_WORLD", false, false)
+	T.tick(W, late, 480)
+	local lateRaw = W.rawOf[W.rawOf[late].Duration]
+	check("aura time: a button made later is followed once by the mixin and a second pass adds no hook", lateRaw.text == "8m" and (lateRaw.calls.SetFormattedText or 0) == 2, tostring(lateRaw.text) .. " " .. tostring(lateRaw.calls.SetFormattedText))
+	local mixinFn = W.env.AuraButtonMixin.UpdateDuration
+	check("aura time: a button made before is hooked itself, and one made later keeps the function of the mixin", INSTHOOK.wrapped(W, first, "UpdateDuration") and INSTHOOK.wrapped(W, second, "UpdateDuration")
+		and rawget(first, "UpdateDuration") ~= mixinFn and W.rawOf[late].UpdateDuration == mixinFn and rawget(late, "UpdateDuration") == nil)
+	-- The game's look.
+	W.change(T.fmt, T.gameFmt)
+	T.tick(W, first, 480)
+	check("aura time: Duration format as the game has it writes nothing", raw.text == "8 m", tostring(raw.text))
+	local before = raw.calls.SetVertexColor
+	W.change(T.colour, T.gameColour)
+	T.tick(W, first, 480)
+	check("aura time: Duration colour as the game has it leaves the gold", T.colourOf(raw) == T.gold and raw.calls.SetVertexColor == before + 1, T.colourOf(raw) .. " " .. tostring(raw.calls.SetVertexColor))
+	W.change(T.fmt, T.tightFmt)
+	W.change(T.colour, T.whiteColour)
+	-- A page that is off.
+	W.change("hud.enabled", false)
+	T.tick(W, first, 480)
+	check("aura time: with the Minimap and buffs page off the game's look stays", raw.text == "8 m" and T.colourOf(raw) == T.gold, tostring(raw.text) .. " " .. T.colourOf(raw))
+	W.change("hud.enabled", true)
+	-- A button with no time is hidden and left alone.
+	T.tick(W, first, nil)
+	check("aura time: a button with no time is left alone", raw.shown == false and raw.text == "8 m" and T.colourOf(raw) == T.gold, tostring(raw.shown) .. " " .. tostring(raw.text) .. " " .. T.colourOf(raw))
+	-- An example button in the window is left alone, and a withheld time on a buff says nothing in the status.
+	W.rawOf[first].isExample = true
+	T.tick(W, first, 480)
+	W.rawOf[first].isExample = nil
+	check("aura time: an example button keeps the game's look", raw.text == "8 m" and T.colourOf(raw) == T.gold, tostring(raw.text) .. " " .. T.colourOf(raw))
+	T.tick(W, first, SECRET)
+	check("aura time: a withheld time on a buff has no status line", not has(W.status(), "Duration format"), W.status())
+	check("aura time: no violation", K.allClean(W), K.problems(W))
+
+	-- A locale that keeps the space in its cooldown form keeps it here.
+	local S = T.world(nil, true)
+	local sButton = S.rawOf[S.env.BuffFrame].auraFrames[1]
+	local sRaw = S.rawOf[S.rawOf[sButton].Duration]
+	T.tick(S, sButton, 480)
+	check("aura time: a locale with a space in its cooldown form keeps 8 m and still gets the white", sRaw.text == "8 m" and T.colourOf(sRaw) == "1,1,1,1", tostring(sRaw.text))
+
+	-- Totems: the time size is set once, 100 gives the font back, and a page that is off gives it back too.
+	local U = T.world({ ["hud.enabled"] = false })
+	local totem = T.totem
+	local tRaw = U.rawOf[U.rawOf[totem].Duration]
+	local gets = 0
+	local getFont = tRaw.GetFont
+	tRaw.GetFont = function(...) gets = gets + 1 return getFont(...) end
+	T.totemTick(U, totem, 480)
+	check("aura time: a totem time is 80% of the game's size, white and tight, with the Minimap and buffs page off", tRaw.font ~= nil and math.abs(tRaw.font[2] - 9.6) < 0.01 and tRaw.text == "8m" and T.colourOf(tRaw) == "1,1,1,1",
+		tostring(tRaw.font and tRaw.font[2]) .. " " .. tostring(tRaw.text))
+	T.totemTick(U, totem, 479)
+	T.totemTick(U, totem, 478)
+	check("aura time: the size of a totem time is set once and not looked at on each tick", gets == 1, tostring(gets))
+	U.change(T.size, 100)
+	T.totemTick(U, totem, 477)
+	check("aura time: a totem time size of 100 gives the game's font back", math.abs(tRaw.font[2] - 12) < 0.01, tostring(tRaw.font[2]))
+	U.change(T.size, 60)
+	T.totemTick(U, totem, 476)
+	check("aura time: a totem time size of 60 sets 7.2", math.abs(tRaw.font[2] - 7.2) < 0.01, tostring(tRaw.font[2]))
+	U.change("unitframes.enabled", false)
+	T.totemTick(U, totem, 475)
+	check("aura time: with the Unit frames page off the size is back and the text is the game's", math.abs(tRaw.font[2] - 12) < 0.01 and tRaw.text == "8 m", tostring(tRaw.font[2]) .. " " .. tostring(tRaw.text))
+	U.change("unitframes.enabled", true)
+	-- A withheld totem time: the format is skipped, the colour is set, and the status says so.
+	U.change(T.size, 80)
+	T.totemTick(U, totem, SECRET)
+	check("aura time: a withheld totem time keeps the game's text, takes the white and the status says so", tRaw.text == "withheld" and T.colourOf(tRaw) == "1,1,1,1"
+		and has(U.status(), "Duration format: the game withholds totem times in fights, and they keep the game's format."), tostring(tRaw.text))
+	U.change("unitframes.totemTimer", false)
+	local greyed = U.enabled(T.size)
+	local colours = tRaw.calls.SetVertexColor
+	T.totemTick(U, totem, 474)
+	check("aura time: a totem time that Totem time left hides is not coloured, so its opacity stays 0 (only the game's own call runs)", tRaw.calls.SetVertexColor == colours + 1, tostring(tRaw.calls.SetVertexColor) .. " " .. tostring(colours))
+	-- The join with UnitExtras.lua (the opacity itself is checked in the ms-ufpart block): a Totems part that has stopped hides nothing, so it takes the white.
+	for _ = 1, 5 do U.ns.UnitFrameExtra.run("Totem timers", function() error("test") end) end
+	T.totemTick(U, totem, 473)
+	check("aura time: with the Totems part stopped the totem time takes the white", tRaw.calls.SetVertexColor == colours + 3 and T.colourOf(tRaw) == "1,1,1,1", tostring(tRaw.calls.SetVertexColor) .. " " .. tostring(colours))
+	U.change("unitframes.totemTimer", true)
+	check("aura time: Totem time size is greyed while Totem time left is off", greyed == false and U.enabled(T.size) == true, tostring(greyed))
+	check("aura time: no violation with a totem", K.allClean(U), K.problems(U))
+	-- Both pages off at login: turning one on follows the buttons without a loading screen.
+	local L = T.world({ ["hud.enabled"] = false, ["unitframes.enabled"] = false })
+	local lFirst = L.rawOf[L.env.BuffFrame].auraFrames[1]
+	local lRaw = L.rawOf[L.rawOf[lFirst].Duration]
+	T.tick(L, lFirst, 480)
+	local before = lRaw.text
+	L.change("hud.enabled", true)
+	T.tick(L, lFirst, 480)
+	check("aura time: a page turned on after login formats at once", before == "8 m" and lRaw.text == "8m", tostring(before) .. " " .. tostring(lRaw.text))
+	-- Unit frames alone turned on after login follows the totem times too.
+	local M = T.world({ ["hud.enabled"] = false, ["unitframes.enabled"] = false })
+	local mRaw = M.rawOf[M.rawOf[T.totem].Duration]
+	T.totemTick(M, T.totem, 480)
+	local mBefore = mRaw.text
+	M.change("unitframes.enabled", true)
+	T.totemTick(M, T.totem, 480)
+	check("aura time: Unit frames turned on after login formats a totem time at once", mBefore == "8 m" and mRaw.text == "8m", tostring(mBefore) .. " " .. tostring(mRaw.text))
+end
+-- >>> auratime (end)
+
+-- Round buttons that addons put on the minimap (MapButtons.lua): frames named LibDBIcon10_ that are children of Minimap.
+do
+	local MB = {}
+	-- A minimap of 176 by 174 centred at cx, with the screen centre at 1000, and buttons of 22 by 22 at the left edge. names: the button names.
+	function MB.world(cx, names, scale)
+		local W = newWorld({})
+		W.login()
+		W.flush()
+		local map, mraw = W.B(nil, {}, { name = "Minimap", width = 176, height = 174 })
+		mraw.GetCenter = function() return cx, 500 end
+		W.rawOf[W.env.UIParent].GetCenter = function() return 1000, 500 end
+		-- The effective scale of the map is 1 unless the call gives one (Edit Mode size); the screen's is 1.
+		mraw.GetEffectiveScale = function() return scale or 1 end
+		W.rawOf[W.env.UIParent].GetEffectiveScale = function() return 1 end
+		W.env.Minimap = map
+		-- C_Timer.NewTicker(seconds, fn): fn every seconds until the ticker's Cancel; W.ticker is the last one made.
+		W.env.C_Timer.NewTicker = function(delay, fn)
+			if not isnum(delay) or delay <= 0 or type(fn) ~= "function" then
+				bad(W, "C_Timer.NewTicker arguments")
+			end
+			local ticker = { stopped = false }
+			function ticker.Cancel() ticker.stopped = true end
+			local function step()
+				if not ticker.stopped then
+					W.seq = W.seq + 1
+					W.timers[#W.timers + 1] = { due = W.now + delay, seq = W.seq, fn = step, delay = delay }
+					fn()
+				end
+			end
+			W.seq = W.seq + 1
+			W.timers[#W.timers + 1] = { due = W.now + delay, seq = W.seq, fn = step, delay = delay }
+			W.ticker = ticker
+			return ticker
+		end
+		W.mb = { map = map, mraw = mraw, buttons = {}, log = {} }
+		for _, name in ipairs(names) do
+			MB.add(W, name)
+		end
+		return W
+	end
+	function MB.add(W, name, more)
+		local o = { name = name, width = 22, height = 22, objectType = "Button" }
+		for k, v in pairs(more or {}) do o[k] = v end
+		local button, raw = W.B(W.mb.map, {}, o)
+		raw.points = { { "LEFT", W.mb.map, "LEFT", 5, 6 } }
+		raw.minimapPos = { angle = 45 }
+		for k, v in pairs(more and more.fault or {}) do raw.fault[k] = v end
+		local clear, set = raw.ClearAllPoints, raw.SetPoint
+		raw.ClearAllPoints = function(...) W.mb.log[#W.mb.log + 1] = "clear"; return clear(...) end
+		raw.SetPoint = function(...) W.mb.log[#W.mb.log + 1] = "set"; return set(...) end
+		W.mb.mraw.children[#W.mb.mraw.children + 1] = button
+		W.mb.buttons[name] = raw
+		return raw
+	end
+	-- "dx,dy" of the one CENTER point of a button, or the number of its points when it is not so.
+	function MB.at(raw)
+		local p = raw.points[1]
+		if #raw.points == 1 and p[1] == "CENTER" then
+			return ("%g,%g"):format(p[4], p[5])
+		end
+		return #raw.points
+	end
+	function MB.pass(W) W.advance(1) end
+	function MB.names(n)
+		local list = {}
+		for i = 1, n do list[i] = "LibDBIcon10_" .. string.char(64 + i) end
+		return list
+	end
+
+	do
+		local W = MB.world(1894, MB.names(3))
+		check("addon buttons: the row is a choice with the default Column beside the map, and its callback is there", W.ns.Get("hud.addonButtons") == "edge" and type(W.ns.MapButtonsChanged) == "function")
+		local order = {}
+		for line in io.lines(ADDON_DIR .. "/FlatUI.toc") do
+			if line:match("%.lua%s*$") then order[#order + 1] = (line:gsub("%s+$", "")) end
+		end
+		local pos = {}
+		for index, file in ipairs(order) do pos[file] = index end
+		check("addon buttons: MapButtons.lua loads right after Hud.lua", pos["MapButtons.lua"] == pos["Hud.lua"] + 1)
+		check("addon buttons: before the first pass the buttons stay where the library put them", MB.at(W.mb.buttons.LibDBIcon10_A) == 1)
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		local a, b, c = W.mb.buttons.LibDBIcon10_A, W.mb.buttons.LibDBIcon10_B, W.mb.buttons.LibDBIcon10_C
+		check("addon buttons: edge puts the buttons in a column on the left for a map right of the screen centre, in the order of their names", MB.at(a) == "-102,76" and MB.at(b) == "-102,52"
+			and MB.at(c) == "-102,28", MB.at(a) .. " " .. MB.at(b) .. " " .. MB.at(c))
+		check("addon buttons: each point is on the centre of the map", a.points[1][2] == W.mb.map and a.points[1][3] == "CENTER")
+		local order2 = table.concat(W.mb.log, ",")
+		check("addon buttons: ClearAllPoints comes before each SetPoint", order2 == "clear,set,clear,set,clear,set", order2)
+		MB.pass(W)
+		check("addon buttons: a pass that finds the buttons in place makes no call", #W.mb.log == 6, #W.mb.log)
+		check("addon buttons: no error and the saved data of the button is unchanged", #W.errors == 0 and a.minimapPos.angle == 45 and a.minimapPos.hide == nil)
+		a.points = { { "LEFT", W.mb.map, "LEFT", 5, 6 } }
+		MB.pass(W)
+		check("addon buttons: a button the library places again is placed on the next pass", MB.at(a) == "-102,76")
+		MB.add(W, "LibDBIcon10_D")
+		MB.pass(W)
+		check("addon buttons: a button made after login is placed on the next pass", MB.at(W.mb.buttons.LibDBIcon10_D) == "-102,4", MB.at(W.mb.buttons.LibDBIcon10_D))
+		W.change("hud.addonButtons", "Row under the map")
+		W.flush()
+		check("addon buttons: bar starts below the coordinate text, at the left of the map", MB.at(a) == "-77,-122" and MB.at(b) == "-53,-122" and MB.at(c) == "-29,-122", MB.at(a) .. " " .. MB.at(b) .. " " .. MB.at(c))
+		W.change("hud.addonButtons", "Where each addon puts them")
+		W.flush()
+		check("addon buttons: leave gives back the recorded points", #a.points == 1 and a.points[1][1] == "LEFT" and a.points[1][2] == W.mb.map and a.points[1][4] == 5 and a.points[1][5] == 6
+			and #W.mb.buttons.LibDBIcon10_D.points == 1 and W.mb.buttons.LibDBIcon10_D.points[1][1] == "LEFT")
+		check("addon buttons: leave stops the ticker", W.ticker ~= nil and W.ticker.stopped == true)
+		local n = #W.mb.log
+		W.advance(1)
+		W.advance(1)
+		W.advance(1)
+		check("addon buttons: with leave no pass touches a button", #W.mb.log == n and #W.errors == 0)
+	end
+
+	-- A map left of the screen centre puts the column on the right.
+	do
+		local W = MB.world(500, MB.names(2))
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		check("addon buttons: edge puts the column on the right for a map left of the screen centre", MB.at(W.mb.buttons.LibDBIcon10_A) == "102,76" and MB.at(W.mb.buttons.LibDBIcon10_B) == "102,52",
+			MB.at(W.mb.buttons.LibDBIcon10_A))
+	end
+
+	-- A map with no button of the library sets no timer, and a button made later is found when an addon loads.
+	do
+		local W = MB.world(1894, {})
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		check("addon buttons: a map with no button of the library sets no timer", #W.timers == 0 and W.ticker == nil and #W.errors == 0)
+		local late = MB.add(W, "LibDBIcon10_A")
+		W.fire("ADDON_LOADED", "SomeAddon")
+		W.advance(0)
+		check("addon buttons: a button made later is placed when an addon loads", MB.at(late) == "-102,76" and W.ticker ~= nil and W.ticker.stopped == false)
+	end
+
+	-- The order is the order of the names, not the order the buttons were made in.
+	do
+		local W = MB.world(1894, { "LibDBIcon10_C", "LibDBIcon10_A", "LibDBIcon10_B" })
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		local B = W.mb.buttons
+		check("addon buttons: the order of the column is the order of the names, whatever order the buttons were made in", MB.at(B.LibDBIcon10_A) == "-102,76" and MB.at(B.LibDBIcon10_B) == "-102,52"
+			and MB.at(B.LibDBIcon10_C) == "-102,28")
+	end
+
+	-- A full column starts the next one, and a full row starts the next one.
+	do
+		local W = MB.world(1894, MB.names(9))
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		local B = W.mb.buttons
+		check("addon buttons: a column holds seven, and the eighth starts a second column a button width plus 2 further out", MB.at(B.LibDBIcon10_G) == "-102,-68" and MB.at(B.LibDBIcon10_H) == "-126,76"
+			and MB.at(B.LibDBIcon10_I) == "-126,52", MB.at(B.LibDBIcon10_G) .. " " .. MB.at(B.LibDBIcon10_H))
+		W.change("hud.addonButtons", "Row under the map")
+		W.flush()
+		check("addon buttons: bar wraps at the width of the map", MB.at(B.LibDBIcon10_G) == "67,-122" and MB.at(B.LibDBIcon10_H) == "-77,-146" and MB.at(B.LibDBIcon10_I) == "-53,-146",
+			MB.at(B.LibDBIcon10_G) .. " " .. MB.at(B.LibDBIcon10_H))
+	end
+
+	-- Buttons that are not touched, and answers that are withheld.
+	do
+		local W = MB.world(1894, { "LibDBIcon10_A" })
+		MB.add(W, "LibDBIcon10_B", { protected = true })
+		MB.add(W, "MyOwnButton")
+		MB.add(W, "LibDBIcon10_C", { fault = { name = "secret" } })
+		MB.add(W, "LibDBIcon10_D", { hidden = true })
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		local B = W.mb.buttons
+		check("addon buttons: a protected button, a button with another name, one with a secret name and a hidden one are skipped with no error", MB.at(B.LibDBIcon10_A) == "-102,76"
+			and #B.LibDBIcon10_B.points == 1 and B.LibDBIcon10_B.points[1][1] == "LEFT" and B.MyOwnButton.points[1][1] == "LEFT" and B.LibDBIcon10_C.points[1][1] == "LEFT"
+			and B.LibDBIcon10_D.points[1][1] == "LEFT" and #W.errors == 0, #W.errors)
+		check("addon buttons: nothing is called on a protected button", B.LibDBIcon10_B.calls.ClearAllPoints == nil and B.LibDBIcon10_B.calls.SetPoint == nil)
+		W.change("hud.addonButtons", "Where each addon puts them")
+		W.flush()
+		W.mb.mraw.fault.children = "secret"
+		W.change("hud.addonButtons", "Column beside the map")
+		W.flush()
+		check("addon buttons: a withheld list of children stops the pass with no error", MB.at(B.LibDBIcon10_A) == 1 and #W.errors == 0)
+		W.mb.mraw.fault.children = nil
+		W.mb.mraw.fault.size = "secret"
+		MB.pass(W)
+		check("addon buttons: a withheld size of the map stops the pass with no error", MB.at(B.LibDBIcon10_A) == 1 and #W.errors == 0)
+		W.mb.mraw.fault.size = nil
+		MB.pass(W)
+		check("addon buttons: the pass runs again when the answers are plain", MB.at(B.LibDBIcon10_A) == "-102,76")
+	end
+
+	-- Edit Mode size: the centres are compared in screen units.
+	do
+		local W = MB.world(600, MB.names(2), 2)
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		check("addon buttons: a map at scale 2 with centre 600 is right of the screen centre, so the column is on the left", MB.at(W.mb.buttons.LibDBIcon10_A) == "-102,76", MB.at(W.mb.buttons.LibDBIcon10_A))
+		local W2 = MB.world(1894, MB.names(1), 0.25)
+		W2.fire("PLAYER_ENTERING_WORLD")
+		W2.flush()
+		check("addon buttons: a map at scale 0.25 with centre 1894 is left of the screen centre, so the column is on the right", MB.at(W2.mb.buttons.LibDBIcon10_A) == "102,76", MB.at(W2.mb.buttons.LibDBIcon10_A))
+		local W3 = MB.world(1894, MB.names(1))
+		W3.mb.mraw.GetEffectiveScale = function() return SECRET end
+		W3.fire("PLAYER_ENTERING_WORLD")
+		W3.flush()
+		check("addon buttons: a missing scale of the map stops the pass with no error", MB.at(W3.mb.buttons.LibDBIcon10_A) == 1 and #W3.errors == 0)
+	end
+
+	-- The row follows the part switch and a change of profile.
+	do
+		local W = MB.world(1894, MB.names(2))
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		local a = W.mb.buttons.LibDBIcon10_A
+		W.change("hud.enabled", false)
+		W.flush()
+		check("addon buttons: the part off gives the recorded points back and stops the ticker", MB.at(a) == 1 and a.points[1][1] == "LEFT" and W.ticker.stopped == true and #W.errors == 0, MB.at(a) .. " " .. #W.errors)
+		W.change("hud.enabled", true)
+		W.flush()
+		check("addon buttons: the part on again places the buttons and starts the ticker", MB.at(a) == "-102,76" and W.ticker.stopped == false and #W.errors == 0, MB.at(a) .. " " .. #W.errors)
+		W.ns.NewProfile("Quiet")
+		W.ns.Set("hud.addonButtons", "leave")
+		W.flush()
+		check("addon buttons: a profile with leave gives the points back", MB.at(a) == 1)
+		W.ns.UseProfile("Default")
+		W.flush()
+		check("addon buttons: a change back to a profile with edge places the buttons at once", MB.at(a) == "-102,76" and W.ticker.stopped == false and #W.errors == 0, MB.at(a))
+		W.ns.UseProfile("Quiet")
+		W.flush()
+		check("addon buttons: a change to a profile with leave gives the points back at once", MB.at(a) == 1 and W.ticker.stopped == true)
+	end
+
+	-- A column that fits exactly does not wrap: a map 166 high holds seven buttons 22 high with 2 between.
+	do
+		local W = MB.world(1894, MB.names(8))
+		W.mb.mraw.height = 166
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		local B = W.mb.buttons
+		check("addon buttons: seven buttons fill a column exactly and the eighth starts the next", MB.at(B.LibDBIcon10_G) == "-102,-72" and MB.at(B.LibDBIcon10_H) == "-126,72",
+			MB.at(B.LibDBIcon10_G) .. " " .. MB.at(B.LibDBIcon10_H))
+	end
+
+	-- Guards: a forbidden button, a button that becomes protected, a secret size of a button, a secret or forbidden map.
+	do
+		local W = MB.world(1894, { "LibDBIcon10_A" })
+		MB.add(W, "LibDBIcon10_B", { forbidden = true })
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		check("addon buttons: a forbidden button is skipped with no error and no violation", MB.at(W.mb.buttons.LibDBIcon10_A) == "-102,76" and W.mb.buttons.LibDBIcon10_B.points[1][1] == "LEFT" and #W.errors == 0 and #W.violations == 0, #W.errors)
+		local a = W.mb.buttons.LibDBIcon10_A
+		a.protected = true
+		W.change("hud.addonButtons", "Where each addon puts them")
+		W.flush()
+		check("addon buttons: leave makes no call on a button that has become protected", MB.at(a) == "-102,76" and a.calls.ClearAllPoints == 1 and #W.errors == 0, tostring(a.calls.ClearAllPoints))
+	end
+	do
+		local W = MB.world(1894, { "LibDBIcon10_A", "LibDBIcon10_B" })
+		W.mb.buttons.LibDBIcon10_B.fault.size = "secret"
+		W.fire("PLAYER_ENTERING_WORLD")
+		W.flush()
+		W.advance(1)
+		W.advance(1)
+		check("addon buttons: a secret size of a button stops the pass with no error, every second", #W.errors == 0 and MB.at(W.mb.buttons.LibDBIcon10_B) == 1, #W.errors)
+		local W2 = MB.world(1894, { "LibDBIcon10_A" })
+		W2.mb.mraw.forbidden = true
+		W2.fire("PLAYER_ENTERING_WORLD")
+		W2.flush()
+		check("addon buttons: a forbidden map stops the pass with no error", MB.at(W2.mb.buttons.LibDBIcon10_A) == 1 and #W2.errors == 0, #W2.errors)
+	end
+end
 io.write(("%d passed, %d failed\n"):format(passed, failed))
 if rawget(_G, "ADDON_DIR_OVERRIDE") then
 	return failed

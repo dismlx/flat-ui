@@ -2051,6 +2051,10 @@ function Refresh()
 	RefreshAlerts()
 	RefreshTimers()
 	RefreshOther()
+	-- The addon buttons follow the part switch and a change of profile (MapButtons.lua).
+	if ns.MapButtonsChanged then
+		ns.MapButtonsChanged()
+	end
 end
 
 ns.Register(KEY, {

@@ -29,7 +29,7 @@ local state = { hooked = false, queued = false, place = false, waiting = false, 
 -- Buttons whose range answer came after the last pass and that wait for a colour-only pass.
 local pending = {}
 local DEFAULTS = {
-	hotkeyShow = "all", hotkeySize = 100, hotkeyOwn = false, hotkeyPoint = "topright", hotkeyX = 0, hotkeyY = 0,
+	hotkeyText = "game", hotkeyShow = "all", hotkeySize = 100, hotkeyOwn = false, hotkeyPoint = "topright", hotkeyX = 0, hotkeyY = 0,
 	nameShow = "all", nameSize = 100, countSize = 100, textOutline = "game",
 }
 
@@ -99,6 +99,70 @@ local function IsDot(hotkey)
 	return text == (RANGE_INDICATOR or "\226\151\143")
 end
 
+-- The short hotkey text. The game writes the key's name in full (GetBindingText(key, 1), ActionButton.lua:501): "Mouse Button 4", "Num Pad 1". The
+-- box holds about four characters, so a key of these names becomes M4, N1, WU. The words are the client's own globals, matched exactly.
+local MODS = { "ALT", "CTRL", "META", "SHIFT" }
+local shortWords
+local function Words()
+	if shortWords ~= nil then
+		return shortWords
+	end
+	local map = {}
+	local function Add(name, to)
+		local word = _G[name]
+		if type(word) == "string" and Plain(word) and word ~= "" then
+			map[word] = to
+		end
+	end
+	for n = 1, 31 do
+		Add("KEY_BUTTON" .. n, "M" .. n)
+	end
+	for n = 0, 9 do
+		Add("KEY_NUMPAD" .. n, "N" .. n)
+	end
+	Add("KEY_MOUSEWHEELUP", "WU")
+	Add("KEY_MOUSEWHEELDOWN", "WD")
+	Add("KEY_NUMPADPLUS", "N+")
+	Add("KEY_NUMPADMINUS", "N-")
+	Add("KEY_NUMPADMULTIPLY", "N*")
+	Add("KEY_NUMPADDIVIDE", "N/")
+	Add("KEY_NUMPADDECIMAL", "N.")
+	Add("KEY_PAGEUP", "PU")
+	Add("KEY_PAGEDOWN", "PD")
+	if next(map) ~= nil then
+		shortWords = map
+	end
+	return map
+end
+
+-- The text of a hotkey with the key name short. The modifier prefixes ("s-", "c-") stay; the text is never split on "-" (KEY_MINUS is "-").
+-- With a button, the text changes only while Hotkey text is Short and the button is restyled; Flat UI's own buttons call it this way.
+function ns.HotkeyText(text, button)
+	if type(text) ~= "string" or not Plain(text) then
+		return text
+	end
+	if button ~= nil and not (ns.Enabled(KEY) == true and Opt("hotkeyText") == "short" and ns.ButtonIsOn(button) == true) then
+		return text
+	end
+	local words = Words()
+	local prefix, rest = "", text
+	local found = true
+	while found do
+		found = false
+		for _, mod in ipairs(MODS) do
+			local abbr = _G[mod .. "_KEY_TEXT_ABBR"]
+			if type(abbr) == "string" and Plain(abbr) and abbr ~= "" then
+				local head = abbr .. "-"
+				if rest:sub(1, #head) == head and #rest > #head then
+					prefix, rest, found = prefix .. head, rest:sub(#head + 1), true
+					break
+				end
+			end
+		end
+	end
+	return prefix .. (words[rest] or rest)
+end
+
 local function Text(fontString)
 	if fontString ~= nil and Plain(fontString) and type(fontString) == "table" then
 		return fontString
@@ -111,6 +175,27 @@ local function Fade(record, key, fontString, faded)
 	if (record[key] or false) ~= faded then
 		ns.SetFaded(fontString, faded)
 		record[key] = faded
+	end
+end
+
+-- One SetText when the short text differs from what the hotkey shows. The game's text is kept to put back; text the game wrote since is the new original.
+local function Short(record, hotkey, on)
+	local ok, now = pcall(hotkey.GetText, hotkey)
+	if not ok or not Plain(now) or type(now) ~= "string" then
+		return
+	end
+	local long = now
+	if record.hotShort ~= nil and now == record.hotShort then
+		long = record.hotLong
+	end
+	local want = on and ns.HotkeyText(long) or long
+	if want ~= now then
+		pcall(hotkey.SetText, hotkey, want)
+	end
+	if want ~= long then
+		record.hotLong, record.hotShort = long, want
+	else
+		record.hotLong, record.hotShort = nil, nil
 	end
 end
 
@@ -221,7 +306,7 @@ local function Place(record, button, hotkey, custom, o)
 	end
 end
 
-local Later, Ranged, Signature
+local Later, Ranged, Signature, PageChanged
 
 -- Every button is brought to the settings. Placement is its own part: it runs when state.place is set (a setting, a binding change, the
 -- start of the world) and never in combat.
@@ -235,6 +320,10 @@ local function Pass()
 			state.hooked = ns.FollowGlobal("ActionButton_UpdateRangeIndicator", Ranged) == true
 		end
 	end
+	if not state.pageHooked and not (ns.HandsOff() and not ns.Enabled("actionbars")) then
+		-- The totem bar page change writes the totem hotkeys and fires no event (MultiCastActionBarFrame.lua:349-357, 511).
+		state.pageHooked = ns.FollowGlobal("ChangeMultiCastActionPage", PageChanged) == true
+	end
 	if state.idle and not state.dirty then
 		return
 	end
@@ -242,7 +331,8 @@ local function Pass()
 	local o, defaults = {}, true
 	for key, default in pairs(DEFAULTS) do
 		o[key] = Opt(key)
-		defaults = defaults and o[key] == default
+		-- Hotkey text is written only when the game writes the hotkey, and each such event sets dirty.
+		defaults = defaults and (key == "hotkeyText" or o[key] == default)
 	end
 	local flags = Flags(o)
 	local custom = o.hotkeyPoint ~= "topright" or o.hotkeyX ~= 0 or o.hotkeyY ~= 0
@@ -270,6 +360,9 @@ local function Pass()
 					end
 				else
 					Fade(record, "hotFaded", hotkey, not hotShown)
+					if not IsOwn(button) then
+						Short(record, hotkey, hotOn and o.hotkeyText == "short")
+					end
 					Style(hotkey, hotOn, o.hotkeySize, flags)
 					Colour(record, button, hotkey, hotOn, o)
 					local put = styled and custom
@@ -314,7 +407,7 @@ local function Pass()
 	state.idle = defaults and not state.place
 	-- The hotkey colour of Flat UI's buttons is the painter's: the buttons are painted again when what it reads has changed.
 	if ownSeen and type(ns.OwnRepaint) == "function" then
-		local colour = tostring(Opt("hotkeyOwn")) .. tostring(Opt("hotkeyColour")) .. tostring(Opt("hotkeyShow")) .. tostring(moduleOn)
+		local colour = tostring(Opt("hotkeyText")) .. tostring(Opt("hotkeyOwn")) .. tostring(Opt("hotkeyColour")) .. tostring(Opt("hotkeyShow")) .. tostring(moduleOn)
 		if state.paintSig ~= colour then
 			state.paintSig = colour
 			pcall(ns.OwnRepaint)
@@ -351,6 +444,13 @@ function Later()
 	else
 		Pass()
 	end
+end
+
+-- The body of the hook on ChangeMultiCastActionPage: the game wrote the totem hotkeys, so the text and the position are made again.
+function PageChanged()
+	state.place = true
+	state.dirty = true
+	Later()
 end
 
 -- The body of the hook on ActionButton_UpdateRangeIndicator: it records the answer. The pet bar asks about all ten of its buttons every 0.2
@@ -397,7 +497,7 @@ end
 
 -- What a pass depends on: the module switch, the bar groups and every setting of the page.
 function Signature()
-	local parts = { tostring(ns.Enabled(KEY)), tostring(Opt("main")), tostring(Opt("extra")), tostring(Opt("pet")), tostring(Opt("stance")), tostring(Opt("hotkeyColour")) }
+	local parts = { tostring(ns.Enabled(KEY)), tostring(Opt("main")), tostring(Opt("extra")), tostring(Opt("pet")), tostring(Opt("stance")), tostring(Opt("totem")), tostring(Opt("ability")), tostring(Opt("hotkeyColour")) }
 	for key in pairs(DEFAULTS) do
 		parts[#parts + 1] = key .. "=" .. tostring(Opt(key))
 	end
@@ -428,7 +528,7 @@ end
 
 local events = CreateFrame("Frame")
 ns.Own[events] = true
-for _, event in ipairs({ "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR", "PLAYER_ENTERING_WORLD", "UPDATE_BINDINGS", "GAME_PAD_ACTIVE_CHANGED", "PLAYER_REGEN_ENABLED" }) do
+for _, event in ipairs({ "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR", "PLAYER_ENTERING_WORLD", "UPDATE_BINDINGS", "GAME_PAD_ACTIVE_CHANGED", "UPDATE_MULTI_CAST_ACTIONBAR", "PLAYER_REGEN_ENABLED" }) do
 	pcall(events.RegisterEvent, events, event)
 end
 events:SetScript("OnEvent", function(_, event)

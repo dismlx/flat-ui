@@ -1896,6 +1896,21 @@ function ns.AddEvent(key, event, fn, filter)
 	return true
 end
 
+-- Runs fn after the Start of a module registered by another file, which is also what turning its page on runs. Call it while the files load.
+-- Returns false for a module with no Start.
+function ns.AddStart(key, fn)
+	local module = modules[key]
+	if type(module) ~= "table" or type(module.Start) ~= "function" or type(fn) ~= "function" then
+		return false
+	end
+	local start = module.Start
+	module.Start = function(...)
+		start(...)
+		fn(...)
+	end
+	return true
+end
+
 local function StartModule(key)
 	local module, state = modules[key], status[key]
 	if state.started or not ns.Enabled(key) then

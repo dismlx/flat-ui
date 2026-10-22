@@ -1,10 +1,23 @@
+## 0.4.93
+
+- **Cast bars** and **Swing timers**: the player cast bar and the swing timers now have the width of the personal resource display. Set **Bar width** of the display in Edit Mode to size all three. A saved **Player cast bar width** is not used while **Player cast bar** is **Width of the personal resource display**. Pick **Width set below** or **Width set in Edit Mode** to keep the old widths.
+
+## 0.4.92
+
+- **Minimap**: new **Addon buttons** for the round buttons other addons put on the map. By default they stand in a column beside the map. **Row under the map** and **Where each addon puts them** are the other choices.
+
+## 0.4.91
+
+- **Buffs and debuffs**: new **Duration format** and **Duration colour** under **Duration size**. By default the time shows 8m in white. Both also cover the totem times under the player frame. New **Totem time size** on **All frames: icons and auras**, which starts at 80%.
+
+## 0.4.90
+
+- **Button text**: new **Hotkey text**. Mouse buttons, the mouse wheel, the number pad, Page Up and Page Down show short by default, such as M4, WU, N1 and s-M4. The hotkey no longer ends in dots.
+
 ## 0.4.89
 
-- **Swing timers**: **While not swinging** is now **Show the timer**, with **Always**, **In combat** and **Only while swinging**. It starts as **In combat**, so the empty bar and its 0.0 no longer show out of combat.
-
-## 0.4.88
-
 - **Target of target frame**: new **Long names**. A name wider than the row is now set in smaller text, down to 75%. A longer name is still cut with dots.
+- **Swing timers**: **While not swinging** is now **Show the timer**, with **Always**, **In combat** and **Only while swinging**. It starts as **In combat**, so the empty bar and its 0.0 no longer show out of combat.
 
 ## 0.4.87
 

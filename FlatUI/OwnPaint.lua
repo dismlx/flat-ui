@@ -316,7 +316,7 @@ function STEP.hotkey(button, st)
 	if Plain(key, "string") then
 		local shown = Call("GetBindingText", key, 1)
 		if Plain(shown, "string") then
-			text = shown
+			text = type(ns.HotkeyText) == "function" and ns.HotkeyText(shown, button) or shown
 		end
 	end
 	st.hotkey = text
