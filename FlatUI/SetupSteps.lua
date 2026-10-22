@@ -664,6 +664,7 @@ ns.SETUP_STEPS = {
 		{ "chat.frames", "c", "mock-chat" },
 		{ "chat.opacity", "c", "mock-chat" },
 		{ "chat.tabs", "c", "mock-chat" },
+		{ "chat.tabOpacity", "r", "behaviour", "Chooses how bright the chat tab names are." },
 		{ "chat.buttons", "o", "mock-chat" },
 		{ "chat.frameBorder", "c", "mock-chat" },
 		{ "chat.editbox", "c", "mock-chat" },

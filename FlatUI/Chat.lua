@@ -172,8 +172,49 @@ local function SelectedColour(tab)
 	return ns.Colour("windows.accent")
 end
 
+-- The alpha of a tab that is not selected, for each choice of Chat tab opacity. The game's own mouse-over value for a normal tab is 0.6
+-- (FloatingChatFrame.lua:19). The game's alpha for the tab, its stored pair and ChatFrameUtil.SetTabAlphas are left alone.
+local TAB_OTHER = { clear = 0.6, full = 1 }
+
+local function Bright(region, alpha)
+	if region ~= nil and not ns.IsSecret(region) then
+		local ignored = pcall(region.SetIgnoreParentAlpha, region, alpha ~= nil)
+		if ignored or alpha == nil then
+			pcall(region.SetAlpha, region, alpha or 1)
+		end
+	end
+end
+
+local function Alerting(tab)
+	if type(ChatFrameUtil) ~= "table" or type(ChatFrameUtil.IsTabAlerting) ~= "function" then
+		return false
+	end
+	local ok, alerting = pcall(ChatFrameUtil.IsTabAlerting, tab)
+	return ok and not ns.IsSecret(alerting) and alerting == true
+end
+
+-- The label and the flat box (its edges and fill are textures of the tab) take their own alpha, so the game's 0.4 and 0.2 do not dim them.
+local function BrightTab(tab, record, on)
+	local other = on and TAB_OTHER[Opt("tabOpacity")]
+	local alpha = other and ((record.selected or Alerting(tab)) and 1 or other) or nil
+	if alpha == nil and not record.bright then
+		return
+	end
+	record.bright = alpha ~= nil
+	local ok, label = pcall(tab.GetFontString, tab)
+	Bright(ok and label or nil, alpha)
+	local outline = record.outline
+	if outline then
+		Bright(outline.backdrop, alpha)
+		for _, edge in ipairs(outline.edges) do
+			Bright(edge, alpha)
+		end
+	end
+end
+
 local function PaintTab(tab, record)
 	local on = On("tabs")
+	BrightTab(tab, record, on)
 	for _, key in ipairs(TAB_FADED) do
 		ns.SetFaded(tab[key], on)
 	end
@@ -1192,6 +1233,18 @@ local function TabColours(tab, selected)
 	StyleTab(tab, state)
 end
 
+-- The game starts and stops the flash of a tab with the chat frame as the argument; the tab is the frame's name and Tab.
+local function TabAlert(frame)
+	local ok, name = false, nil
+	if Usable(frame) and not ns.Forbidden(frame) then
+		ok, name = pcall(frame.GetName, frame)
+	end
+	local tab = ok and not ns.IsSecret(name) and type(name) == "string" and Global(name .. "Tab") or nil
+	if tab and tabs[tab] then
+		StyleTab(tab)
+	end
+end
+
 -- The game opens a temporary window (a whisper, a pet battle log) inside its own call, so the window is styled on the frame after.
 local pendingChat = false
 local function ChatLater()
@@ -1216,6 +1269,8 @@ local function Hooks()
 	Follow("FCF_FadeInChatFrame", function(frame) Hover(frame, true) end)
 	Follow("FCF_FadeOutChatFrame", function(frame) Hover(frame, false) end)
 	Follow("FCFTab_UpdateColors", TabColours)
+	Follow("FCF_StartAlertFlash", TabAlert)
+	Follow("FCF_StopAlertFlash", TabAlert)
 	Follow("FCF_OpenTemporaryWindow", ChatLater)
 	Follow("SharedTooltip_SetBackdropStyle", Backdrop)
 	ns.Each(KEY, FollowData)

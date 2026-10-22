@@ -1,3 +1,7 @@
+## 0.4.86
+
+- **Chat tabs**: new **Chat tab opacity**. The default is **Selected 100%, others 60%**. The game uses 40% and 20%.
+
 ## 0.4.85
 
 - **Class icon shape**: Square or Round, on the **Class icons** section of the **Target and marks** page and on the **Portraits** section of the **Unit frames** page. A round icon has a round border of **Border thickness**. Faces stay square.

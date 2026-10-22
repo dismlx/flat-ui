@@ -259,6 +259,12 @@ local function newRegion(W, owner, opts)
 		note("SetAlpha")
 		r.alpha = a
 	end
+	function r.SetIgnoreParentAlpha(_, v)
+		if type(v) ~= "boolean" then
+			bad(W, "SetIgnoreParentAlpha: a boolean is expected")
+		end
+		r.ignoreParentAlpha = v
+	end
 	-- A read the client answers with an error, a withheld value or a value of the wrong type (r.fault.alpha and so on).
 	local function answer(which, ...)
 		local fault = r.fault[which]
@@ -10525,6 +10531,8 @@ local PAGES = {
 		S("chat.frames", "bool", true, "Chat window background"),
 		S("chat.opacity", "number", 60, "Chat window opacity", "Replaces the opacity in the chat window settings.", { min = 0, max = 100, step = 5, unit = "%", needs = "chat.frames" }),
 		S("chat.tabs", "bool", true, "Chat tabs"),
+		S("chat.tabOpacity", "choice", "clear", "Chat tab opacity", "How bright the tab names are.", { needs = "chat.tabs",
+			choices = { { "game", "As the game has it" }, { "clear", "Selected 100%, others 60%" }, { "full", "All 100%" } } }),
 		S("chat.buttons", "bool", true, "Chat button background"),
 		S("chat.frameBorder", "bool", true, "Chat window border", nil, { needs = "chat.frames" }),
 		"Chat input",
@@ -10855,7 +10863,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.85" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.86" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -20497,6 +20505,7 @@ do local PROBES = {
 	{ "chat.frames", false, held("chat.frames"), "true/true", "false/false" },
 	{ "chat.opacity", 30, held("chat.opacity"), "60/60", "30/30" },
 	{ "chat.tabs", false, held("chat.tabs"), "true/true", "false/false" },
+	{ "chat.tabOpacity", "All 100%", held("chat.tabOpacity"), "clear/Selected 100%, others 60%", "full/All 100%", from = "Selected 100%, others 60%" },
 	{ "chat.buttons", false, held("chat.buttons"), "true/true", "false/false" },
 	{ "chat.editbox", false, held("chat.editbox"), "true/true", "false/false" },
 	{ "chat.tooltips", false, held("chat.tooltips"), "true/true", "false/false" },
@@ -53670,6 +53679,8 @@ local function world(spec)
 			region(w.tab, nil, key)
 		end
 		region(w.tab, nil, "glow", { hidden = true })
+		w.label = region(w.tab, nil, "label", { kind = "FontString" })
+		w.tabRaw.GetFontString = function() return w.label end
 		w.box, w.boxRaw = frame(ui, name .. "EditBox", { objectType = "EditBox", hidden = true })
 		fr.editBox = w.box
 		w.boxArt = {}
@@ -53717,6 +53728,15 @@ local function world(spec)
 				t[key]:SetVertexColor(1, 0.5, 0.25)
 			end
 		end)
+		-- The tab alerts: ChatFrameUtil answers IsTabAlerting, and SetTabAlphas is counted (the addon must never call it).
+		W.alerting, W.setTabAlphas = {}, 0
+		env.ChatFrameUtil = {
+			IsTabAlerting = function(tab) return W.alerting[tab] == true end,
+			SetTabAlphas = function() W.setTabAlphas = W.setTabAlphas + 1 end,
+		}
+		for _, name in ipairs({ "FCF_StartAlertFlash", "FCF_StopAlertFlash" }) do
+			env[name] = lua(name, function(frame) W.alerting[env[frame:GetName() .. "Tab"]] = name == "FCF_StartAlertFlash" end)
+		end
 		env.FCF_OpenTemporaryWindow = lua("FCF_OpenTemporaryWindow", function()
 			local w = window(#W.windows + 1)
 			env.CHAT_FRAMES[#env.CHAT_FRAMES + 1] = w.name
@@ -54472,6 +54492,61 @@ do
 	check("chat tabs: whether a tab is selected can be withheld, and the tab is styled without a mark", S.state(childOf(S, S.windows[1].tab)) == "SB" and edge(S, childOf(S, S.windows[1].tab)) == PLAIN and #S.errors == 0)
 end
 
+-- Chat tab opacity: the label and the flat box take their own alpha; the game's alpha for the tab and its stored pair are left alone.
+do
+	local T = {}
+	function T.look(W, w)
+		local function one(r) return (r.ignoreParentAlpha and "i" or "-") .. string.format("%.1f", r.alpha or 1) end
+		local out = one(W.rawOf[w.label])
+		for _, t in ipairs(wowned(W, w.tab)) do
+			if t.layer ~= "HIGHLIGHT" and one(t) ~= out then
+				return "mixed " .. out .. " " .. one(t)
+			end
+		end
+		return out
+	end
+	function T.both(W) return T.look(W, W.windows[1]) .. " " .. T.look(W, W.windows[2]) end
+	local W = started()
+	local one, two = W.windows[1], W.windows[2]
+	check("chat tab opacity: by default the selected tab is at 1.0 and the other at 0.6, with the game's alpha ignored", T.both(W) == "i1.0 i0.6", T.both(W))
+	W.game("FCF_StartAlertFlash", two.frame)
+	local alert = T.look(W, two)
+	W.game("FCF_StopAlertFlash", two.frame)
+	check("chat tab opacity: a tab that flashes is at 1.0 and goes back to 0.6 when the flash stops", alert == "i1.0" and T.look(W, two) == "i0.6", alert .. " " .. T.look(W, two))
+	W.game("FCFTab_UpdateColors", one.tab, false)
+	W.game("FCFTab_UpdateColors", two.tab, true)
+	check("chat tab opacity: the alpha follows the selected tab", T.both(W) == "i0.6 i1.0", T.both(W))
+	W.change("chat.tabOpacity", "All 100%")
+	check("chat tab opacity: All 100% puts every tab at 1.0", T.both(W) == "i1.0 i1.0", T.both(W))
+	W.change("chat.tabOpacity", "As the game has it")
+	check("chat tab opacity: As the game has it gives back the game's alpha, and the game's own tab alpha is the one it set", T.both(W) == "-1.0 -1.0" and W.rawOf[one.tab].alpha == 0.4,
+		T.both(W) .. " " .. tostring(W.rawOf[one.tab].alpha))
+	W.change("chat.tabOpacity", "Selected 100%, others 60%")
+	W.change("chat.tabs", false)
+	local off = T.both(W)
+	W.game("FCF_StartAlertFlash", one.frame)
+	check("chat tab opacity: with Chat tabs off the alpha is the game's, and a flash writes nothing", off == "-1.0 -1.0" and T.both(W) == "-1.0 -1.0", off .. " " .. T.both(W))
+	check("chat tab opacity: the row needs Chat tabs and starts on Selected 100%, others 60%", W.ns.Def("chat.tabOpacity").needs == "tabs" and W.ns.Def("chat.tabOpacity").default == "clear")
+	check("chat tab opacity: ChatFrameUtil.SetTabAlphas is never called", W.setTabAlphas == 0, W.setTabAlphas)
+	clean(W, "chat tab opacity")
+	local N = started({ saved = { options = { ["chat.tabs"] = false } } })
+	local writes = 0
+	for _, w in ipairs(N.windows) do
+		writes = writes + (N.rawOf[w.label].calls.SetAlpha or 0) + (N.rawOf[w.label].ignoreParentAlpha ~= nil and 1 or 0)
+	end
+	check("chat tab opacity: with Chat tabs off from the start nothing is written to a label", writes == 0 and #N.errors == 0, writes)
+	local B = started()
+	local lab = B.rawOf[B.windows[2].label]
+	lab.SetIgnoreParentAlpha = function() error("withheld") end
+	local before = lab.calls.SetAlpha or 0
+	B.change("chat.tabOpacity", "All 100%")
+	check("chat tab opacity: a label whose ignore call fails gets no alpha, and the box behind it still changes",
+		(lab.calls.SetAlpha or 0) == before and lab.alpha ~= 1 and #B.errors == 0 and #B.violations == 0 and T.look(B, B.windows[2]):find("mixed", 1, true) ~= nil, T.look(B, B.windows[2]))
+	local F = started({ forbidden = { ChatFrame2 = true } })
+	check("chat tab opacity: a forbidden window is skipped and the other tab is styled", T.look(F, F.windows[1]) == "i1.0" and F.rawOf[F.windows[2].label].ignoreParentAlpha == nil
+		and #F.violations == 0 and #F.errors == 0)
+end
+
 -- The input box: the game's art is transparent, a flat box is drawn on the box itself, and its border takes the colour of the focus art.
 do
 	local W = started()
@@ -54786,15 +54861,15 @@ do
 		and H.state(H.tips.GameTooltip.frame) == "SB" and edge(H, H.tips.GameTooltip.frame) == PLAIN and not has(H.status(), "stopped") and #H.errors == 0)
 end
 
--- The hooks: five on functions of the game, none on an input box or a tooltip, none twice.
+-- The hooks: seven on functions of the game, none on an input box or a tooltip, none twice.
 do
 	local control = started({ noChat = true, noTips = true })
 	local W = started()
-	local expected = control.hooks + 5
+	local expected = control.hooks + 7
 	W.change("chat.frames", false)
 	W.change("chat.frames", true)
 	W.change("general.thickness", 2)
-	check("hooks: five functions of the game, none made twice and none on an input box or a tooltip, and one call registered for the tooltip data", W.hooks == expected
+	check("hooks: seven functions of the game, none made twice and none on an input box or a tooltip, and one call registered for the tooltip data", W.hooks == expected
 		and #W.postCalls == 1 and W.postCalls[1][1] == "ALL", W.hooks .. " " .. expected)
 	check("a general setting reaches the panel and the tooltip box: the border thickness", near(W.look(W.windows[1].bg).thick, 2) and W.look(W.tips.GameTooltip.frame).thick > 1.5)
 	clean(W, "hooks")
@@ -63318,7 +63393,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 865 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 866 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -63632,7 +63707,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 865 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 866 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
