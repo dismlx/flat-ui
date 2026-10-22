@@ -574,6 +574,8 @@ ns.SETUP_STEPS = {
 		{ "hud.xpFill", "o", "mock-xp-micro" },
 		{ "hud.xpDividers", "o", "mock-xp-micro" },
 		{ "hud.micro", "c", "mock-xp-micro" },
+		{ "general.menuButton", "o", "behaviour", "Puts a Flat UI button in the game menu, under Options. It does not work in combat." },
+		{ "general.menuOpens", "o", "behaviour", "Chooses whether the game menu button opens Flat UI setup or the options window." },
 	} },
 	{ id = "hud-tracker", area = "Minimap and buffs", title = "Objectives, loot and alerts", draw = "mock-objective", built = true, rows = {
 		{ "hud.trackerHeaders", "c", "mock-objective" },

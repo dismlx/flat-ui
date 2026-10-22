@@ -1,3 +1,7 @@
+## 0.4.84
+
+- **Game menu**: new **Flat UI** button, right below the gap under **Options**. It opens **Flat UI setup**, or the options window when **Flat UI button opens** is **Options window**. It does not work in combat. Untick **Flat UI button in the game menu** on the **Flat UI** page, **Game menu** section, to remove it.
+
 ## 0.4.83
 
 - New ready-made profile **Jon Default** in **Flat UI setup**, with the author's own settings and frame positions.

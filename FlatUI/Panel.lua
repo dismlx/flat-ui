@@ -2288,3 +2288,59 @@ end
 function FlatUI_OnAddonCompartmentClick()
 	ns.OpenPanel()
 end
+
+-- A Flat UI button in the game menu, right below the gap under Options. It is a frame of its own: the menu's layout places any shown child that
+-- has a layoutIndex, so nothing of the game's menu is written. The hook runs after each build of the menu's buttons.
+do
+	local button
+	local function OpenOptions()
+		if not ns.PanelShown() then
+			ns.OpenPanel()
+		end
+	end
+	local function Click()
+		if InCombatLockdown() then
+			return
+		end
+		if type(PlaySound) == "function" and type(SOUNDKIT) == "table" then
+			PlaySound(SOUNDKIT.IG_MAINMENU_OPTION)
+		end
+		HideUIPanel(GameMenuFrame)
+		local ok, err = pcall(ns.Get("general.menuOpens") == "options" and OpenOptions or ns.OpenSetup)
+		if not ok then
+			geterrorhandler()(err)
+		end
+	end
+	local function Place(menu)
+		if not button then
+			button = CreateFrame("Button", nil, menu, "MainMenuFrameButtonTemplate")
+			button:SetText("Flat UI")
+			button:SetScript("OnClick", Click)
+			button:RegisterEvent("PLAYER_REGEN_DISABLED")
+			button:RegisterEvent("PLAYER_REGEN_ENABLED")
+			button:SetScript("OnEvent", function(self, event) self:SetEnabled(event == "PLAYER_REGEN_ENABLED") end)
+		end
+		local anchor, seen
+		if ns.Get("general.menuButton") then
+			for _, each in ipairs(menu.buttons or {}) do
+				if seen and each.topPadding and each.layoutIndex then
+					anchor = each
+					break
+				end
+				seen = seen or each:GetText() == GAMEMENU_OPTIONS
+			end
+		end
+		if anchor then
+			button.layoutIndex, button.topPadding, button.bottomPadding = anchor.layoutIndex - 0.5, anchor.topPadding, -anchor.topPadding
+			button:SetEnabled(not InCombatLockdown())
+			button:Show()
+		else
+			button.layoutIndex = nil
+			button:Hide()
+		end
+	end
+	local menu = GameMenuFrame
+	if menu and type(menu.InitButtons) == "function" then
+		hooksecurefunc(menu, "InitButtons", Place)
+	end
+end

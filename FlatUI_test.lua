@@ -9508,6 +9508,9 @@ local PAGES = {
 				{ "fade", "Side fade" }, { "game", "Game status bar" }, { "skills", "Skills bar" }, { "targeting", "Targeting bar" } } }),
 		"Game action bars",
 		S("general.handsOff", "bool", true, "Leave the game's action bars alone", "Flat UI does not move, group or fade the game's micro menu, bag bar, stance and pet bars, or the game's experience bar while Experience bar is The game's, and the game's Options page has one button that opens Flat UI. Applies after a reload."),
+		"Game menu",
+		S("general.menuButton", "bool", true, "Flat UI button in the game menu", "A Flat UI button under Options. It does not work in combat."),
+		S("general.menuOpens", "choice", "setup", "Flat UI button opens", nil, { needs = "general.menuButton", choices = { { "setup", "Flat UI setup" }, { "options", "Options window" } } }),
 		"Scale",
 		S("general.scaleOn", "bool", false, "Custom UI scale", "Sets the game's own UI scale. Applies out of combat."),
 		S("general.scale", "number", 65, "Custom scale", nil, { min = 65, max = 115, step = 1, unit = "%", needs = "general.scaleOn" }),
@@ -10849,7 +10852,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.83" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.84" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -20725,6 +20728,8 @@ end
 local missingProbe = {}
 -- Leave the game's action bars alone has its checks in the useaction block.
 covered["general.handsOff"] = true
+-- The Flat UI button in the game menu has its checks in the menubtn block.
+covered["general.menuButton"], covered["general.menuOpens"] = true, true
 -- Action buttons has its checks in the ownset block.
 covered["actionbars.own"] = true
 -- Your buffs has its checks in the own buffs block.
@@ -60412,7 +60417,7 @@ function PT.runBuild()
 			PT.wheel(W, PT.clips(W, PT.nav(W)[1].raw)[1], 10)
 		end
 		check("left side: the first page is open, with its title and Reset page", PT.title(W) == PAGES[1].label and PT.button(W, "Reset page") ~= nil)
-		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Scale", "Setup" }),
+		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Setup" }),
 			joined(PT.headers(W)))
 		PT.go(W, "Text")
 		check("left side: a click on a page opens it, with its sections under it", PT.title(W) == "Text" and PT.page(W, "Level") ~= nil and PT.page(W, "Borders and backgrounds") == nil)
@@ -63219,7 +63224,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 861 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 863 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -63533,7 +63538,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 861 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 863 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -105083,6 +105088,172 @@ do
 	check("eyes: queue eye: a client without SetEditModeScale: the half-second check puts it back", pts(N, N.env.QueueStatusButton) == "TOPRIGHT>UIParent:TOPRIGHT -200,-300 @1" and runningFrames(N) == 1, pts(N, N.env.QueueStatusButton))
 end
 -- >>> eyes (end)
+-- >>> menubtn (begin)
+-- The Flat UI button in the game menu (FlatUI/Panel.lua): the hook on InitButtons places it, and its click opens setup or the options. Every label starts "game menu button:".
+do
+	local M = { made = 0, hid = 0, writes = 0, blizz = false }
+	-- A button of the game's menu: the addon may read it and never write it.
+	local function add(list, text, gap)
+		local data = { layoutIndex = #list + 1, topPadding = gap and 20 or nil, text = text, enabled = true }
+		data.GetText = function() return data.text end
+		list[#list + 1] = setmetatable({}, { __index = data, __newindex = function() M.writes = M.writes + 1 end })
+	end
+	local function snap(list)
+		local out = {}
+		for _, b in ipairs(list) do
+			out[#out + 1] = table.concat({ b:GetText(), b.layoutIndex, tostring(b.topPadding), tostring(b.enabled) }, ",")
+		end
+		return table.concat(out, "|")
+	end
+	-- The game's InitButtons: the order of GameMenuFrame.lua with the gaps as top padding on the next button.
+	function M.build(menu)
+		M.blizz = true
+		local list = {}
+		if menu.external then
+			add(list, "Event")
+		end
+		add(list, "Options", menu.external)
+		if menu.shop then
+			add(list, "Shop")
+		end
+		add(list, "AddOns", true)
+		add(list, "Edit Mode")
+		add(list, "Support")
+		add(list, "Macros")
+		add(list, "Log Out", true)
+		add(list, "Exit Game")
+		add(list, "Return to Game", true)
+		rawset(menu, "buttons", list)
+		rawset(menu, "built", snap(list))
+		M.blizz = false
+	end
+	local function world(shop, external, saved)
+		M.made, M.hid, M.writes, M.flat = 0, 0, 0, nil
+		local menu
+		local W = newWorld({ saved = saved, beforeLoad = function(_, env)
+			env.GAMEMENU_OPTIONS = "Options"
+			menu = setmetatable({ shop = shop, external = external, buttons = {} }, { __newindex = function(t, k, v) M.writes = M.writes + 1 rawset(t, k, v) end })
+			rawset(menu, "InitButtons", M.build)
+			env.GameMenuFrame = menu
+			env.HideUIPanel = function(frame) M.hid = M.hid + 1 M.hidden = frame end
+			local base = env.CreateFrame
+			env.CreateFrame = function(kind, name, parent, template)
+				if template ~= "MainMenuFrameButtonTemplate" then
+					return base(kind, name, parent, template)
+				end
+				M.made = M.made + 1
+				local f = base("Frame", nil, parent)
+				f.text, f.enabled, M.flat = "", true, f
+				f.SetText = function(_, text) f.text = text end
+				f.GetText = function() return f.text end
+				f.SetEnabled = function(_, on) f.enabled = on end
+				local set = f.SetScript
+				f.SetScript = function(self, which, fn)
+					if which == "OnClick" then
+						f.onClick = fn
+					else
+						set(self, which, fn)
+					end
+				end
+				return f
+			end
+		end })
+		W.login()
+		return W, menu
+	end
+	local function lay(f) return table.concat({ tostring(f.layoutIndex), tostring(f.topPadding), tostring(f.bottomPadding) }, ",") end
+
+	-- 1. Place: below the gap under Options and Shop, directly above AddOns.
+	local W, menu = world(true, false)
+	menu:InitButtons()
+	local f = M.flat
+	check("game menu button: after the game builds its buttons a button Flat UI is shown", f ~= nil and f.shown ~= false and f.text == "Flat UI", f and f.text)
+	check("game menu button: it comes right before AddOns, with the gap above it and the gap of AddOns cancelled", lay(f) == "2.5,20,-20", f and lay(f))
+	check("game menu button: no button of the game changes, none is written, and none is added", M.writes == 0 and snap(menu.buttons) == menu.built and #menu.buttons == 9, M.writes .. " " .. #menu.buttons)
+	check("game menu button: it hears both ends of combat", f.events.PLAYER_REGEN_DISABLED == true and f.events.PLAYER_REGEN_ENABLED == true)
+	menu:InitButtons()
+	menu:InitButtons()
+	check("game menu button: three builds of the menu make one frame", M.made == 1 and M.flat == f, M.made)
+	check("game menu button: and it keeps its place", lay(f) == "2.5,20,-20", lay(f))
+	local W2, menu2 = world(false, false)
+	menu2:InitButtons()
+	check("game menu button: with no Shop it is still right before AddOns", lay(M.flat) == "1.5,20,-20", lay(M.flat))
+	local W3, menu3 = world(true, true)
+	menu3:InitButtons()
+	check("game menu button: with a button of an event and its gap first it is still below the gap after Options", lay(M.flat) == "3.5,20,-20", lay(M.flat))
+
+	-- 2. The setting.
+	local W4, menu4 = world(true, false)
+	menu4:InitButtons()
+	local g4 = M.flat
+	W4.change("general.menuButton", false)
+	menu4:InitButtons()
+	check("game menu button: Flat UI button in the game menu off: it is hidden and has no place", g4.shown == false and g4.layoutIndex == nil, tostring(g4.shown) .. " " .. tostring(g4.layoutIndex))
+	W4.change("general.menuButton", true)
+	menu4:InitButtons()
+	check("game menu button: on again: it is back", g4.shown ~= false and lay(g4) == "2.5,20,-20" and M.made == 1, lay(g4))
+
+	local rows = {}
+	for _, page in ipairs(W.ns.PAGES) do
+		for _, item in ipairs(page) do
+			if page.key == "general" and (item.key == "menuButton" or item.key == "menuOpens") then
+				rows[item.key] = item
+			end
+		end
+	end
+	check("game menu button: Flat UI button in the game menu starts on, and Flat UI button opens starts at Flat UI setup and needs it",
+		rows.menuButton and rows.menuButton.default == true and rows.menuOpens and rows.menuOpens.default == "setup" and rows.menuOpens.needs == "menuButton")
+
+	-- 3. The click.
+	local W5, menu5 = world(true, false)
+	local opened, shown = 0, false
+	W5.ns.OpenSetup = function() opened = opened + 1 end
+	W5.ns.PanelShown = function() return shown end
+	W5.ns.OpenPanel = function() shown = not shown return shown end
+	menu5:InitButtons()
+	local g5 = M.flat
+	g5.onClick()
+	check("game menu button: a click with Flat UI setup closes the menu and opens setup, not the options", M.hid == 1 and M.hidden == menu5 and opened == 1 and not shown, M.hid .. " " .. opened)
+	W5.change("general.menuOpens", "Options window")
+	g5.onClick()
+	check("game menu button: a click with Options window closes the menu and shows the options", M.hid == 2 and opened == 1 and shown, M.hid .. " " .. opened)
+	g5.onClick()
+	check("game menu button: a click while the options show leaves them shown", M.hid == 3 and shown)
+
+	-- 4. Combat.
+	g5.script(g5, "PLAYER_REGEN_DISABLED")
+	W5.combat = true
+	check("game menu button: combat starts: the button is off, though the lockdown starts after the event", g5.enabled == false)
+	g5.onClick()
+	check("game menu button: a click in combat does nothing", M.hid == 3 and opened == 1)
+	W5.combat = false
+	g5.script(g5, "PLAYER_REGEN_ENABLED")
+	check("game menu button: combat ends: the button is on", g5.enabled == true)
+	W5.combat = true
+	menu5:InitButtons()
+	check("game menu button: the menu builds in combat: the button is off", g5.enabled == false)
+	W5.combat = false
+
+	-- 5. A client without the menu's builder, and an error in the open.
+	local made = 0
+	local N = newWorld({ beforeLoad = function(_, env)
+		env.GameMenuFrame = {}
+		local base = env.CreateFrame
+		env.CreateFrame = function(kind, name, parent, template)
+			made = made + (template == "MainMenuFrameButtonTemplate" and 1 or 0)
+			return base(kind, name, parent, template)
+		end
+	end })
+	N.login()
+	check("game menu button: a menu with no InitButtons: the addon loads with no error and makes no button", made == 0 and #N.errors == 0 and #N.violations == 0, #N.errors)
+	local W6, menu6 = world(true, false)
+	W6.ns.OpenSetup = function() error("boom", 0) end
+	menu6:InitButtons()
+	M.flat.onClick()
+	check("game menu button: an error in the open goes to the error handler and the menu is closed", M.hid == 1 and W6.errors[1] == "boom", M.hid .. " " .. tostring(W6.errors[1]))
+	check("game menu button: no violation in any world", #W.violations == 0 and #W2.violations == 0 and #W3.violations == 0 and #W4.violations == 0 and #W5.violations == 0 and #W6.violations == 0, table.concat(W.violations, " | "))
+end
+-- >>> menubtn (end)
 io.write(("%d passed, %d failed\n"):format(passed, failed))
 if rawget(_G, "ADDON_DIR_OVERRIDE") then
 	return failed
