@@ -1888,9 +1888,9 @@ end
 
 -- Ready-made profiles ----------------------------------------------------------------------------------
 
--- Rows no ready-made profile sets: the scale rows, and the two that read a value the client withholds in a fight.
+-- Rows no ready-made profile sets: the scale rows other than Custom UI scale, and the two that read a value the client withholds in a fight.
 S.NEVER = {
-	["general.scaleOn"] = true, ["general.scale"] = true, ["general.pixelPerfect"] = true, ["general.pixelSize"] = true,
+	["general.scale"] = true, ["general.pixelPerfect"] = true, ["general.pixelSize"] = true,
 	["nameplates.threat"] = true, ["nameplates.threatRole"] = true,
 }
 

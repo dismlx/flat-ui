@@ -2385,6 +2385,11 @@ function ns.PanelShown()
 	return ui.window ~= nil and ui.window:IsShown() == true
 end
 
+-- True while a mode (setup) has the window.
+function ns.PanelInMode()
+	return ui.mode ~= nil
+end
+
 -- Reads every control on screen again.
 function ns.RefreshPanel()
 	if ui.window and ui.window:IsShown() then
@@ -2402,6 +2407,9 @@ end
 do
 	local button
 	local function OpenOptions()
+		if ns.PanelInMode() then
+			ns.PanelKit.Hide()
+		end
 		if not ns.PanelShown() then
 			ns.OpenPanel()
 		end

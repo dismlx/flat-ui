@@ -1,3 +1,7 @@
+## 0.5.0
+
+- The **Flat UI** button in the game menu opens the **Options window**. **Flat UI button opens** still offers **Flat UI setup**. **Jon Default** sets **Custom UI scale** with **Scale below 65%** at a **Small scale** of 60%.
+
 ## 0.4.99
 
 - **Options window**: the pages of a module are tabs under its title, with a breadcrumb of group, module and tab, and the sidebar lists modules only. **Unit frames** has one **Per frame** tab with a chooser for its eight frames. Tabs that do not fit go into **More**.

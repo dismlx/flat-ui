@@ -9527,7 +9527,7 @@ local PAGES = {
 		S("general.handsOff", "bool", true, "Leave the game's action bars alone", "Flat UI does not move, group or fade the game's micro menu, bag bar, stance and pet bars, or the game's experience bar while Experience bar is The game's, and the game's Options page has one button that opens Flat UI. Applies after a reload."),
 		"Game menu",
 		S("general.menuButton", "bool", true, "Flat UI button in the game menu", "A Flat UI button under Options. It does not work in combat."),
-		S("general.menuOpens", "choice", "setup", "Flat UI button opens", nil, { needs = "general.menuButton", choices = { { "setup", "Flat UI setup" }, { "options", "Options window" } } }),
+		S("general.menuOpens", "choice", "options", "Flat UI button opens", nil, { needs = "general.menuButton", choices = { { "options", "Options window" }, { "setup", "Flat UI setup" } } }),
 		"Scale",
 		S("general.scaleOn", "bool", false, "Custom UI scale", "Sets the game's own UI scale. Applies out of combat."),
 		S("general.scale", "number", 65, "Custom scale", nil, { min = 65, max = 115, step = 1, unit = "%", needs = "general.scaleOn" }),
@@ -10912,7 +10912,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.99" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.0" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -65271,14 +65271,25 @@ function PT.runSetup()
 
 		-- Jon Default: finishing on its tile writes its values and its 17 positions; finishing on Minimal writes none.
 		do
-			local J = { values = { ["actionbars.empty"] = "faint", ["actionbars.emptyAlpha"] = 70, ["actionbars.rangeTint"] = true, ["actionbars.square"] = false, ["actionbars.totem"] = true, ["castbars.flat"] = false, ["castbars.ownTime"] = true, ["castbars.playerHeight"] = 18, ["castbars.playerSize"] = true, ["castbars.playerWidth"] = 266, ["chat.count"] = true, ["chat.ids"] = true, ["chat.nameClass"] = true, ["combattext.crit"] = "higher", ["combattext.friend"] = "off", ["combattext.group"] = "flat", ["combattext.height"] = 45, ["combattext.movement"] = "up", ["combattext.ownSize"] = 130, ["combattext.size"] = 200, ["combattext.spreadWidth"] = 160, ["cooldowns.dim"] = false, ["cooldowns.flash"] = true, ["cooldowns.readySound"] = "raid", ["defensives.own"] = true, ["defensives.place"] = "resource", ["enemycd.place"] = "plates", ["enemycd.flash"] = true, ["enemycd.show"] = "always", ["enemycd.sound"] = "bell", ["fade.enabled"] = true, ["fade.target"] = true, ["general.barTexture"] = "soft", ["general.borderless"] = true, ["hud.xpFrame"] = false, ["hud.xpTextSize"] = 105, ["hud.xpTexture"] = "soft", ["nameplates.castTime"] = true, ["nameplates.classFriendly"] = true, ["nameplates.colours"] = true, ["nameplates.dim"] = true, ["nameplates.dimAmount"] = 60, ["nameplates.healthHeight"] = 125, ["nameplates.hover"] = true, ["nameplates.lowHealth"] = true, ["ownbuffs.size"] = 40, ["ownbuffs.time"] = "on", ["ownbuffs.which"] = "both", ["resource.healthOwn"] = true, ["tooltip.enabled"] = true, ["tooltip.scope"] = "all", ["tooltip.x"] = 69, ["tooltip.y"] = -48, ["trackers.gameIcon"] = false, ["trackers.low"] = 0, ["trackers.place"] = "own", ["trackers.show"] = "low", ["trackers.sound"] = true, ["unitframes.corners"] = "soft", ["unitframes.focusPicture"] = "game", ["unitframes.headFraming"] = "shoulders", ["unitframes.kindWord"] = true, ["unitframes.partyHealthBy"] = "class", ["unitframes.partyPicture"] = "class", ["unitframes.petPicture"] = "game", ["unitframes.playerHealthBy"] = "class", ["unitframes.playerPicture"] = "game", ["unitframes.stripBrightness"] = 100, ["unitframes.targetHealthText"] = "pct", ["unitframes.targetPicture"] = "game", ["unitframes.totPicture"] = "game", ["windows.countSize"] = 115, ["windows.crop"] = 9, ["windows.ilvlBags"] = true, ["windows.ilvlCharacter"] = true, ["windows.ilvlSize"] = 15, ["windows.junkDim"] = true, ["windows.sortFrom"] = "other" },
-				left = { "barblock.enabled", "barblock.slot1", "barblock.slot2", "barblock.slot3", "barblock.slot4", "general.scaleOn", "general.scaleBelow", "nameplates.threat", "nameplates.classPosition", "castbars.latency" },
+			local J = { values = { ["actionbars.empty"] = "faint", ["actionbars.emptyAlpha"] = 70, ["actionbars.rangeTint"] = true, ["actionbars.square"] = false, ["actionbars.totem"] = true, ["castbars.flat"] = false, ["castbars.ownTime"] = true, ["castbars.playerHeight"] = 18, ["castbars.playerSize"] = true, ["castbars.playerWidth"] = 266, ["chat.count"] = true, ["chat.ids"] = true, ["chat.nameClass"] = true, ["combattext.crit"] = "higher", ["combattext.friend"] = "off", ["combattext.group"] = "flat", ["combattext.height"] = 45, ["combattext.movement"] = "up", ["combattext.ownSize"] = 130, ["combattext.size"] = 200, ["combattext.spreadWidth"] = 160, ["cooldowns.dim"] = false, ["cooldowns.flash"] = true, ["cooldowns.readySound"] = "raid", ["defensives.own"] = true, ["defensives.place"] = "resource", ["enemycd.place"] = "plates", ["enemycd.flash"] = true, ["enemycd.show"] = "always", ["enemycd.sound"] = "bell", ["fade.enabled"] = true, ["fade.target"] = true, ["general.barTexture"] = "soft", ["general.borderless"] = true, ["general.scaleBelow"] = true, ["general.scaleOn"] = true, ["general.scaleSmall"] = 60, ["hud.xpFrame"] = false, ["hud.xpTextSize"] = 105, ["hud.xpTexture"] = "soft", ["nameplates.castTime"] = true, ["nameplates.classFriendly"] = true, ["nameplates.colours"] = true, ["nameplates.dim"] = true, ["nameplates.dimAmount"] = 60, ["nameplates.healthHeight"] = 125, ["nameplates.hover"] = true, ["nameplates.lowHealth"] = true, ["ownbuffs.size"] = 40, ["ownbuffs.time"] = "on", ["ownbuffs.which"] = "both", ["resource.healthOwn"] = true, ["tooltip.enabled"] = true, ["tooltip.scope"] = "all", ["tooltip.x"] = 69, ["tooltip.y"] = -48, ["trackers.gameIcon"] = false, ["trackers.low"] = 0, ["trackers.place"] = "own", ["trackers.show"] = "low", ["trackers.sound"] = true, ["unitframes.corners"] = "soft", ["unitframes.focusPicture"] = "game", ["unitframes.headFraming"] = "shoulders", ["unitframes.kindWord"] = true, ["unitframes.partyHealthBy"] = "class", ["unitframes.partyPicture"] = "class", ["unitframes.petPicture"] = "game", ["unitframes.playerHealthBy"] = "class", ["unitframes.playerPicture"] = "game", ["unitframes.stripBrightness"] = 100, ["unitframes.targetHealthText"] = "pct", ["unitframes.targetPicture"] = "game", ["unitframes.totPicture"] = "game", ["windows.countSize"] = 115, ["windows.crop"] = 9, ["windows.ilvlBags"] = true, ["windows.ilvlCharacter"] = true, ["windows.ilvlSize"] = 15, ["windows.junkDim"] = true, ["windows.sortFrom"] = "other" },
+				left = { "barblock.enabled", "barblock.slot1", "barblock.slot2", "barblock.slot3", "barblock.slot4", "nameplates.threat", "nameplates.classPosition", "castbars.latency" },
 				spots = { { "AlertFrame", "BOTTOM", 0, 765.33355712890625 }, { "BuffIconCooldownViewer", "CENTER", 253.74455261230469, -162.6778316497803 }, { "EncounterBar", "CENTER", 0, 181.1332950592041 }, { "EssentialCooldownViewer", "CENTER", -255.5220947265625, -160.0110836029053 }, { "ExternalDefensivesFrame", "CENTER", 0, -115.1332664489746 }, { "FlatUICombatSelf", "CENTER", 0, -20.666448593139648 }, { "FlatUICooldowns", "CENTER", -1.5318393707275391e-05, -128.888576567173 }, { "FlatUITrackers", "CENTER", 234.666484773159, -163.42223745584491 }, { "FlatUIXpBar", "BOTTOM", 0, 77.722312927246094 }, { "LootFrame", "TOP", 305.14493560791021, -365.92208862304688 }, { "LossOfControlFrame", "CENTER", 0, -69.699974060058594 }, { "PersonalResourceDisplayFrame", "CENTER", 0, -192.7110576629639 }, { "PlayerCastingBarFrame", "BOTTOM", 0, 378.23333740234381 }, { "PlayerFrame", "TOPLEFT", 3.5999998952213121, -12.400045676815351 }, { "SwingTimerMainHandFrame", "BOTTOM", 0, 325.44464111328131 }, { "SwingTimerRangedFrame", "BOTTOM", 0, 290.34463500976562 }, { "UtilityCooldownViewer", "BOTTOM", -256.65545654296881, 404.02227783203131 } } }
 			local W = NP.world(nil, nil)
 			local ns = W.ns
 			local S = SU.open(W)
 			NP.click(W, 7)
 			local tracker = S.Under(S.view, ns.Spots).FlatUITrackers
+			do
+				local at
+				for index, step in ipairs(ns.SETUP_STEPS) do
+					if step.id == "scale" then at = index end
+				end
+				S.Commit()
+				S.Go(at)
+				local label = ns.SetupDraw.current and ns.SetupDraw.current.id == "mock-scale" and W.rawOf[ns.SetupDrawings["mock-scale"].chosenLabel].text
+				check("menu scale: on the Jon Default tile the scale step shows Small scale 60%", label == "Small scale 60%", tostring(label))
+				S.Go(0)
+			end
 			check("jon profile: on the Jon Default tile the drawings use its positions", tracker ~= nil and tracker.x == 234.666484773159 and tracker.y == -163.42223745584491)
 			PT.type(PT.control(PT.row(W, "Profile name")), "Tester", false)
 			SU.press(W, "Use Jon Default")
@@ -65295,6 +65306,7 @@ function PT.runSetup()
 				none = none and made ~= nil and made.options[path] == nil
 			end
 			check("jon profile: finishing on Jon Default writes every value of the export that a profile may hold, at the exported value", same and S.PresetOf("jon").label == "Jon Default", joined(wrong))
+			check("menu scale: Jon Default sets Custom UI scale on, Scale below 65% on and Small scale to 60, and Finish writes them", made ~= nil and made.options["general.scaleOn"] == true and made.options["general.scaleBelow"] == true and made.options["general.scaleSmall"] == 60 and S.PresetOf("jon").values["general.scaleSmall"] == 60)
 			check("jon profile: none of the lines left out of the export is in its values or in the new profile", none)
 			local spots, fit = made and made.movers or {}, true
 			local count = 0
@@ -65666,7 +65678,7 @@ function PT.runSetup()
 			"windows.sortButton", "movers.snap", "combattext.font", "combattext.outline", "combattext.shadow", "combattext.pop", "combattext.own", "combattext.inStyle" }) do
 			RP.PICKED[path] = true
 		end
-		RP.NEVER = { ["general.scaleOn"] = true, ["general.scale"] = true, ["general.pixelPerfect"] = true, ["general.pixelSize"] = true,
+		RP.NEVER = { ["general.scale"] = true, ["general.pixelPerfect"] = true, ["general.pixelSize"] = true,
 			["nameplates.threat"] = true, ["nameplates.threatRole"] = true }
 		function RP.world(prep, opts)
 			opts = opts or {}
@@ -65730,15 +65742,15 @@ function PT.runSetup()
 				for path, value in pairs(profile.values) do
 					count = count + 1
 					local def = defs[path]
-					defaults = defaults and def ~= nil and def.default ~= value
+					defaults = defaults and def ~= nil and (def.default ~= value or (profile.id == "jon" and path == "general.scaleSmall"))
 					banned = banned and def ~= nil and not path:find("^setup%.") and not path:find("^barblock%.") and not RP.NEVER[path] and not ns.RowUnsaved(def)
 					picked = picked and not (RP.PICKED[path] and not (profile.id == "large" and path == "combattext.size") and profile.id ~= "jon")
 					threat = threat and path ~= "nameplates.threat" and path ~= "nameplates.threatRole" and path ~= "chat.combat"
 				end
 			end
-			check("setup profiles: every value passes the check of S.Presets, so nothing is dropped, and no error is reported", same and count == 235 and #W.errors == 0, tostring(count))
+			check("setup profiles: every value passes the check of S.Presets, so nothing is dropped, and no error is reported", same and count == 238 and #W.errors == 0, tostring(count))
 			check("setup profiles: no value equals its setting's default", defaults)
-			check("setup profiles: no profile sets a scale row, a setup row, a bar block row or a setting the game holds", banned)
+			check("setup profiles: no profile sets Custom scale, Pixel-perfect scale, Pixels per unit, a setup row, a bar block row or a setting the game holds", banned)
 			check("setup profiles: no profile changes a setting the author picked, except the size of combat text in Large and every row in Jon Default", picked and list[6].values["combattext.size"] == 200)
 			check("setup profiles: no profile turns on threat colours or sets Tooltips in combat, and Standard has no values", threat and next(list[1].values) == nil and next(list[2].values) ~= nil)
 			local bad = SU.world()
@@ -108261,8 +108273,9 @@ do
 			end
 		end
 	end
-	check("game menu button: Flat UI button in the game menu starts on, and Flat UI button opens starts at Flat UI setup and needs it",
-		rows.menuButton and rows.menuButton.default == true and rows.menuOpens and rows.menuOpens.default == "setup" and rows.menuOpens.needs == "menuButton")
+	check("game menu button: Flat UI button in the game menu starts on, and Flat UI button opens starts at Options window and needs it",
+		rows.menuButton and rows.menuButton.default == true and rows.menuOpens and rows.menuOpens.default == "options" and rows.menuOpens.needs == "menuButton")
+	check("menu scale: Flat UI button opens still offers Options window and Flat UI setup", rows.menuOpens and #rows.menuOpens.choices == 2 and rows.menuOpens.choices[1][1] == "options" and rows.menuOpens.choices[2][1] == "setup")
 
 	-- 3. The click.
 	local W5, menu5 = world(true, false)
@@ -108273,19 +108286,23 @@ do
 	menu5:InitButtons()
 	local g5 = M.flat
 	g5.onClick()
-	check("game menu button: a click with Flat UI setup closes the menu and opens setup, not the options", M.hid == 1 and M.hidden == menu5 and opened == 1 and not shown, M.hid .. " " .. opened)
+	check("menu scale: a click with no choice made closes the menu and shows the options window, not setup", M.hid == 1 and M.hidden == menu5 and opened == 0 and shown, M.hid .. " " .. opened)
+	W5.change("general.menuOpens", "Flat UI setup")
+	shown = false
+	g5.onClick()
+	check("game menu button: a click with Flat UI setup closes the menu and opens setup, not the options", M.hid == 2 and opened == 1 and not shown, M.hid .. " " .. opened)
 	W5.change("general.menuOpens", "Options window")
 	g5.onClick()
-	check("game menu button: a click with Options window closes the menu and shows the options", M.hid == 2 and opened == 1 and shown, M.hid .. " " .. opened)
+	check("game menu button: a click with Options window closes the menu and shows the options", M.hid == 3 and opened == 1 and shown, M.hid .. " " .. opened)
 	g5.onClick()
-	check("game menu button: a click while the options show leaves them shown", M.hid == 3 and shown)
+	check("game menu button: a click while the options show leaves them shown", M.hid == 4 and shown)
 
 	-- 4. Combat.
 	g5.script(g5, "PLAYER_REGEN_DISABLED")
 	W5.combat = true
 	check("game menu button: combat starts: the button is off, though the lockdown starts after the event", g5.enabled == false)
 	g5.onClick()
-	check("game menu button: a click in combat does nothing", M.hid == 3 and opened == 1)
+	check("game menu button: a click in combat does nothing", M.hid == 4 and opened == 1)
 	W5.combat = false
 	g5.script(g5, "PLAYER_REGEN_ENABLED")
 	check("game menu button: combat ends: the button is on", g5.enabled == true)
@@ -108308,9 +108325,28 @@ do
 	check("game menu button: a menu with no InitButtons: the addon loads with no error and makes no button", made == 0 and #N.errors == 0 and #N.violations == 0, #N.errors)
 	local W6, menu6 = world(true, false)
 	W6.ns.OpenSetup = function() error("boom", 0) end
+	W6.change("general.menuOpens", "Flat UI setup")
 	menu6:InitButtons()
 	M.flat.onClick()
 	check("game menu button: an error in the open goes to the error handler and the menu is closed", M.hid == 1 and W6.errors[1] == "boom", M.hid .. " " .. tostring(W6.errors[1]))
+	local W7, menu7 = world(true, false)
+	local up7, hid7 = true, 0
+	W7.ns.PanelInMode = function() return up7 end
+	W7.ns.PanelShown = function() return up7 end
+	W7.ns.PanelKit.Hide = function() hid7 = hid7 + 1 up7 = false end
+	W7.ns.OpenPanel = function() up7 = true return true end
+	W7.change("general.menuOpens", "Options window")
+	menu7:InitButtons()
+	local hidBefore = M.hid
+	M.flat.onClick()
+	check("menu scale: a click with Flat UI setup on screen brings the window to the options pages", M.hid == hidBefore + 1 and hid7 == 1 and up7, hid7 .. " " .. tostring(up7))
+	local W8, menu8 = world(true, false)
+	W8.ns.OpenPanel = function() error("boom8", 0) end
+	W8.ns.PanelShown = function() return false end
+	menu8:InitButtons()
+	local hid8 = M.hid
+	M.flat.onClick()
+	check("menu scale: an error in the open with Options window reaches the error handler and the menu is closed", M.hid == hid8 + 1 and W8.errors[1] == "boom8", M.hid .. " " .. tostring(W8.errors[1]))
 	check("game menu button: no violation in any world", #W.violations == 0 and #W2.violations == 0 and #W3.violations == 0 and #W4.violations == 0 and #W5.violations == 0 and #W6.violations == 0, table.concat(W.violations, " | "))
 end
 -- >>> menubtn (end)
