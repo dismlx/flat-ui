@@ -10914,7 +10914,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.2" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.3" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -60994,6 +60994,8 @@ function PT.world(opts)
 	if not opts.firstStart then
 		local store = W.ns.PanelLook.Store(true)
 		store.page = store.page or "general"
+		-- The previews have their own checks (PT.runPreview): the other windows are checked without a band above the rows.
+		store.preview = store.preview or "off"
 	end
 	return W
 end
@@ -63154,7 +63156,7 @@ function PT.runSearchProfiles()
 		W.ns.RenameProfile = function(from, to) renamed = from .. ">" .. to return true, "Renamed." end
 		W.ns.ProfilePreview = function(text)
 			if text == "FLATUI1:ok" then
-				return { name = "Healer", version = "0.5.2", width = 2560, height = 1440, scale = 1, settings = 214, spots = 31 }
+				return { name = "Healer", version = "0.4.90", width = 2560, height = 1440, scale = 1, settings = 214, spots = 31 }
 			end
 			return nil, "That is not a Flat UI profile."
 		end
@@ -63169,7 +63171,7 @@ function PT.runSearchProfiles()
 		check("profiles share: with nothing pasted the preview rows are not shown", #PT.byText(W, "Pasted profile") == 0 and #PT.byText(W, "Import selected") == 0)
 		local into = PT.control(PT.need(W, "Import profile"))
 		PT.type(into, "FLATUI1:ok")
-		check("profiles share: a pasted profile shows its name, build, settings and positions", #PT.byText(W, "Healer, Flat UI 0.5.2, 214 settings, 31 positions") == 1)
+		check("profiles share: a pasted profile shows its name, build, settings and positions", #PT.byText(W, "Healer, Flat UI 0.4.90, 214 settings, 31 positions") == 1)
 		check("profiles share: and a warning when it was made for another screen size", #PT.byText(W, "Made for 2560 x 1440. This screen is 1920 x 1080. Check the positions after the import.") == 1)
 		PT.press(W, PT.button(W, "Import selected"))
 		check("profiles share: Import selected as a new profile sends the text, the name, and both parts", imported ~= nil and imported[1] == "FLATUI1:ok" and imported[2].newName == "Healer" and imported[2].settings == true
@@ -63407,7 +63409,7 @@ function PT.runWindow()
 			if item.section then L.inside = item.section == "Options window" end
 			if L.inside and item.key then L.labels[#L.labels + 1] = item.label end
 		end
-		check("window look: the Flat UI page has them in a section Options window", table.concat(L.labels, ", ") == "Accent colour, Custom accent colour, Window tone, Borders, Corners, Density, Window font, Window scale, Sidebar, Sections, Movers grid, Samples in lists, Snap to other frames", table.concat(L.labels, ", "))
+		check("window look: the Flat UI page has them in a section Options window", table.concat(L.labels, ", ") == "Accent colour, Custom accent colour, Window tone, Borders, Corners, Density, Window font, Window scale, Sidebar, Sections, Previews, Movers grid, Samples in lists, Snap to other frames", table.concat(L.labels, ", "))
 		L.ns.Set("panel.tone", "ink")
 		L.ns.Set("panel.scale", 120)
 		check("window look: they are kept in FlatUIDB.panel and in no profile", L.W.env.FlatUIDB.panel.tone == "ink" and L.W.env.FlatUIDB.panel.scale == 120 and not L.has(L.W.env.FlatUIDB.profiles))
@@ -63795,6 +63797,140 @@ function PT.runWindow()
 			file:write("WINDOW\t1040\t680\n", table.concat(states, "\n"), "\n")
 			file:close()
 		end
+	end
+end
+
+-- The preview band above the settings of a page (PanelPreview.lua): a drawing of Flat UI setup that reads the profile in use, with a frame over each part.
+function PT.runPreview()
+	local clean = PT.clean
+	local HINT = "Point at a part to find its setting."
+	local function open(mode)
+		-- The drawings make cooldown frames, which the client's rules allow in a world that has them (as SU.world does).
+		local W = PT.world({ cooldowns = true })
+		W.ns.PanelLook.Store(true).preview = mode
+		W.ns.OpenPanel()
+		return W
+	end
+	-- The height of the rows area of the page shown.
+	local function room(W)
+		local _, _, _, h = W.rectOf((PT.right(W)))
+		return h
+	end
+	-- A frame over a part, the topmost at its middle, whose setting is on the page `page`, with its row shown when `shown`: { hit, item }.
+	local function pick(W, page, shown)
+		local band = W.ns.PanelPreview.band
+		for _, hit in ipairs(band.Hits()) do
+			if hit.path and hit:IsShown() and PT.top(W, PT.centre(W, hit)) == W.rawOf[hit] then
+				for _, each in ipairs(W.ns.PAGES) do
+					for _, item in ipairs(each) do
+						if item.path == hit.path and each.key == page and (not shown or PT.row(W, item.label)) then
+							return { hit = hit, item = item }
+						end
+					end
+				end
+			end
+		end
+	end
+	do
+		local W = PT.world()
+		local ns = W.ns
+		local item
+		for _, each in ipairs(ns.PAGES[1]) do
+			if each.key == "preview" then item = each end
+		end
+		ns.PanelLook.Store(true).preview = nil
+		check("preview: Previews is a row of the Options window section that starts at On and has On, Collapsed and Off, kept for the account",
+			item ~= nil and item.label == "Previews" and item.default == "on" and #item.choices == 3 and item.choices[2][1] == "collapsed" and item.choices[3][1] == "off"
+			and ns.Get("panel.preview") == "on" and (ns.Set("panel.preview", "collapsed") or true) and W.env.FlatUIDB.panel.preview == "collapsed"
+			and W.env.FlatUIDB.profiles[ns.Profile()].options["panel.preview"] == nil)
+	end
+	do
+		local W = open("off")
+		PT.go(W, "Nameplates")
+		local off = room(W)
+		check("preview: Off shows no band and no hint on Nameplates", #PT.byText(W, HINT) == 0 and #W.ns.PanelPreview.band.Hits() == 0)
+		local V = open("on")
+		PT.go(V, "Nameplates")
+		check("preview: On shows the hint and takes 184 units from the rows of Nameplates", #PT.byText(V, HINT) == 1 and math.abs(off - room(V) - 184) < 0.01, off - room(V))
+		check("preview: and puts a frame over each part", #V.ns.PanelPreview.band.Hits() > 0 and PT.title(V) == "Nameplates", #V.ns.PanelPreview.band.Hits())
+		PT.go(V, "Flat UI")
+		check("preview: a page with no drawing has no band", #PT.byText(V, HINT) == 0 and math.abs(room(open("off")) - room(V)) < 0.01)
+		clean(V, "preview, on")
+	end
+	do
+		local W = open("collapsed")
+		PT.go(W, "Nameplates")
+		check("preview: Collapsed leaves a bar to open and no hint", #PT.byText(W, "Show preview") == 1 and #PT.byText(W, HINT) == 0)
+		PT.press(W, PT.button(W, "Show preview"))
+		check("preview: a click on the bar opens the band", #PT.byText(W, "Hide preview") == 1 and #PT.byText(W, HINT) == 1)
+		PT.press(W, PT.button(W, "Hide preview"))
+		check("preview: and a click on it closes the band", #PT.byText(W, "Show preview") == 1 and #PT.byText(W, HINT) == 0)
+	end
+	do
+		local W = open("on")
+		local ns = W.ns
+		PT.go(W, "Nameplates")
+		local band = ns.PanelPreview.band
+		local found = pick(W, "nameplates", true)
+		check("preview: a part of the drawing has a row on the page", found ~= nil)
+		if found then
+			local x, y = PT.centre(W, found.hit)
+			PT.move(W, x, y)
+			check("preview: pointing at a part outlines it", band.over == found.hit, tostring(band.over))
+			PT.move(W, -10, -10)
+			check("preview: and moving off takes the outline away", band.over == nil)
+			PT.move(W, PT.centre(W, PT.row(W, found.item.label), 0.15))
+			check("preview: pointing at its row brackets the part", band.Marked() == true)
+			PT.move(W, -10, -10)
+			check("preview: and moving off takes the bracket away", band.Marked() == false)
+			PT.go(W, "Health bar")
+			local again = pick(W, "nameplates", false)
+			check("preview: the drawing of the Health bar tab has the same part", again ~= nil and ns.PanelLook.Page() == "nameplatesHealth", tostring(ns.PanelLook.Page()))
+			if again then
+				PT.press(W, again.hit)
+				check("preview: a click on a part opens the tab of its row and ends the hint for good",
+					ns.PanelLook.Page() == "nameplates" and ns.PanelLook.Hinted() and #PT.byText(W, HINT) == 0, tostring(ns.PanelLook.Page()))
+			end
+		end
+		clean(W, "preview, parts")
+	end
+	do
+		-- Build 8: the same band on the other pages with a drawing, and a click on a frame picks it in the Per frame chooser.
+		local W = open("on")
+		local ns = W.ns
+		for _, label in ipairs({ "Unit frames", "Cast bars", "Action bars", "Swing timers" }) do
+			PT.go(W, label)
+			check("preview: " .. label .. " has the band with the hint and a frame over each part", #PT.byText(W, HINT) == 1 and #ns.PanelPreview.band.Hits() > 0, #ns.PanelPreview.band.Hits())
+		end
+		PT.go(W, "Unit frames")
+		local target
+		for _, hit in ipairs(ns.PanelPreview.band.Hits()) do
+			if not target and hit.frame == "target" and hit:IsShown() and PT.top(W, PT.centre(W, hit)) == W.rawOf[hit] then
+				target = hit
+			end
+		end
+		check("preview: the drawing of Unit frames has a part of the target frame", target ~= nil)
+		if target then
+			PT.press(W, target)
+			check("preview: a click on it picks the target frame in the Per frame chooser", ns.PanelLook.Store(false).frame == "unitframesTarget", tostring(ns.PanelLook.Store(false).frame))
+		end
+		do
+			-- A part keyed by the bare name of its setting links to the row "unitframes.<name>", and a refresh tick adds no frame or texture.
+			PT.go(W, "Unit frames")
+			local linked = 0
+			for _, hit in ipairs(ns.PanelPreview.band.Hits()) do
+				if hit.path then
+					linked = linked + (hit.path:find("^unitframes%.") and 1 or 0)
+				end
+			end
+			local frames, textures = #W.addonFrames, #W.addonTextures
+			for _ = 1, 3 do
+				ns.RefreshPanel()
+			end
+			check("preview: the parts of Unit frames link to rows with the path of the setting", linked > 0, linked)
+			check("preview: a refresh tick makes no new frame or texture", #W.addonFrames == frames and #W.addonTextures == textures, #W.addonFrames - frames)
+		end
+		clean(W, "preview, pages")
 	end
 end
 
@@ -68419,6 +68555,7 @@ function PT.runTabs()
 			end
 		end)
 		PT.extend(W)
+		W.ns.PanelLook.Store(true).preview = "off"
 		W.ns.OpenPanel()
 		PT.go(W, "Nameplates")
 		local shown = PT.tabTexts(W)
@@ -68973,6 +69110,7 @@ function PT.runAll()
 	PT.runMsGame()
 	PT.runSearchProfiles()
 	PT.runWindow()
+	PT.runPreview()
 	PT.runCorrect()
 	PT.runForever()
 	PT.runNav()

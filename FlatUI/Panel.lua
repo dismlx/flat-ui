@@ -821,6 +821,17 @@ local ADD = { bool = AddBool, number = AddNumber, colour = AddColour, choice = A
 local function BuildRow(parent, page, item, y)
 	local row = NewRow(parent, y, item.label, item.tip)
 	row.item = item
+	-- Pointing at a row brackets the part of the preview that the setting changes. Setup sets its own.
+	row.entered = function()
+		if ui.preview then
+			ui.preview.Mark(item.path)
+		end
+	end
+	row.left = function()
+		if ui.preview then
+			ui.preview.Mark(nil)
+		end
+	end
 	local ok, show = pcall(ADD[item.kind], row, item)
 	if not ok then
 		geterrorhandler()(show)
@@ -2005,6 +2016,24 @@ local function Arrive(entry, item)
 	end
 end
 
+-- Fills the row of a setting in the accent at 10% while its part of the preview is pointed at.
+local function PartFill(path, on, shown)
+	for _, row in ipairs((shown or ui.view or {}).rows or {}) do
+		if row.item and row.item.path == path then
+			if on and not row.partFill then
+				row.partFill = Fill(row.frame, "BORDER")
+				row.partFill:SetAllPoints(row.frame)
+			end
+			if row.partFill then
+				if on then
+					Solid(row.partFill, "accent", 0.1)
+				end
+				row.partFill:SetShown(on)
+			end
+		end
+	end
+end
+
 local function Show(view)
 	if ui.view and ui.view ~= view then
 		ui.view.scroller.frame:Hide()
@@ -2142,6 +2171,7 @@ local function Search(typed)
 	ui.title:SetText("Search")
 	ui.head.Set(nil, "")
 	ui.tabs.Hide()
+	ui.preview.Set(nil, 0)
 	ui.reset:Hide()
 	ui.tip, ui.message = "", nil
 	ShowStrip()
@@ -2200,6 +2230,14 @@ function ShowPage(entry)
 	ui.title:SetText(top.label)
 	ui.head.Set(top, Subtitle(entry))
 	local band = ui.tabs.Set(entry)
+	-- The preview band is under the tabs, and the rows start under the band.
+	if view.module then
+		local lift = ui.preview.Set(entry, HEAD + ns.PanelTabs.TAB_H)
+		ui.tabs.Shift(lift)
+		band = band + lift
+	else
+		ui.preview.Set(nil, 0)
+	end
 	if view.module and view.band ~= band then
 		view.band = band
 		view.scroller.frame:ClearAllPoints()
@@ -2230,6 +2268,9 @@ function RefreshAll()
 		end
 		if ui.view then
 			ui.view.Update()
+		end
+		if ui.preview and not ui.searching then
+			ui.preview.Update()
 		end
 		ShowStrip()
 	end
@@ -2455,6 +2496,22 @@ local function BuildRight(window)
 			return CW
 		end,
 		Show = Go,
+	})
+	ui.preview = ns.PanelPreview.Build(right, {
+		Model = function()
+			return ui.model
+		end,
+		Arrive = Arrive,
+		Show = Go,
+		Fill = PartFill,
+		View = function()
+			return ui.view
+		end,
+		Relayout = function()
+			if ui.current and not ui.searching and not ui.mode then
+				ShowPage(ui.current)
+			end
+		end,
 	})
 end
 
@@ -2696,6 +2753,10 @@ function Look.onChange(key)
 		Rebuild()
 	elseif key == "sections" then
 		Rebuild()
+	elseif key == "preview" then
+		if ui.current and not ui.searching and not ui.mode then
+			ShowPage(ui.current)
+		end
 	elseif key == "samples" then
 		-- Each dropdown places its sample again when its row is refreshed.
 		RefreshAll()

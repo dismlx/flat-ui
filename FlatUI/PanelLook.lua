@@ -11,7 +11,7 @@ local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
 local FONTS = MEDIA .. "Fonts\\"
 
 local DEFAULTS = { accent = "indigo", accentColour = "ff9a9cf0", tone = "graphite", borders = "none", corners = "square", density = "comfortable", sections = "cards",
-	font = "sans", scale = 100, sidebar = "full", grid = "dim", samples = "on", snapFrames = "on" }
+	font = "sans", scale = 100, sidebar = "full", grid = "dim", samples = "on", snapFrames = "on", preview = "on" }
 
 -- Tokens ------------------------------------------------------------------------------------------
 
@@ -137,6 +137,19 @@ function Look.SetPage(key)
 	local store = Look.Store(true)
 	if store and store.page ~= key then
 		store.page = key
+	end
+end
+
+-- True once a click on a part of a preview has shown the player how the previews work: the hint under them is not shown again.
+function Look.Hinted()
+	local store = Look.Store(false)
+	return store ~= nil and store.hinted == true
+end
+
+function Look.SetHinted()
+	local store = Look.Store(true)
+	if store then
+		store.hinted = true
 	end
 end
 

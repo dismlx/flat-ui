@@ -487,6 +487,14 @@ function ns.Viewing(view, fn, ...)
 	return ViewDone(was, wasValues, pcall(fn, ...))
 end
 
+-- A view (ns.Viewing) of the profile in use, read when asked: the previews of the options window draw under it, so they show a change at once.
+ns.LiveView = setmetatable({}, { __index = function(_, key)
+	if key == "spots" then
+		return profile and profile.movers
+	end
+	return profile and profile.options and profile.options[key]
+end })
+
 -- Red, green and blue of a colour option, 0 to 1.
 function ns.Colour(path)
 	local hex = ns.Get(path)

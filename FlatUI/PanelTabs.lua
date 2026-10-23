@@ -13,6 +13,7 @@ local Nav = ns.PanelNav
 local PAD = kit.PAD
 
 local TAB_H, CHOOSE_H, INSET, GAP, CHIP_H, CRUMB_Y = 34, 32, 10, 4, 24, 42
+Tabs.TAB_H = TAB_H
 
 -- The pages of the frames of Unit frames, in the order of the chooser, and what the chooser calls them.
 Tabs.FRAMES = { "unitframesPlayer", "unitframesTarget", "unitframesFocus", "unitframesPet", "unitframesTot", "unitframesParty", "unitframesBoss",
@@ -197,6 +198,12 @@ function Tabs.Build(right, host)
 	Rule(choose)
 	bar:Hide()
 	choose:Hide()
+	-- Moves the chooser down by `lift`, so a band can sit between the tabs and the chooser.
+	function self.Shift(lift)
+		choose:ClearAllPoints()
+		choose:SetPoint("TOPLEFT", right, "TOPLEFT", 0, -(host.top + TAB_H + lift))
+		choose:SetPoint("TOPRIGHT", right, "TOPRIGHT", 0, -(host.top + TAB_H + lift))
+	end
 	local tabs, chips = {}, {}
 	local more = Button(bar, false)
 	local owner = { frame = more.frame }

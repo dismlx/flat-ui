@@ -113,6 +113,8 @@ ns.PAGES = {
 			choices = { { "full", "Icons and names" }, { "names", "Names only" }, { "rail", "Icon rail" } }, tip = "The list of pages at the left of the options window." },
 		{ page = "panel", key = "sections", kind = "choice", segments = true, default = "cards", label = "Sections", live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",
 			choices = { { "cards", "Cards" }, { "lines", "Lines" } }, tip = "Cards put the rows of a section on a panel that folds. Lines show a heading with a line under it." },
+		{ page = "panel", key = "preview", kind = "choice", default = "on", label = "Previews", segments = true, live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",
+			choices = { { "on", "On" }, { "collapsed", "Collapsed" }, { "off", "Off" } }, tip = "A drawing above the settings of a page. Collapsed leaves a bar to open it." },
 		{ page = "panel", key = "grid", kind = "choice", default = "dim", label = "Movers grid", segments = true, live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",
 			choices = { { "off", "Off" }, { "dim", "Dim" }, { "bright", "Bright" } }, tip = "Lines every 32 units behind the frames while you move them." },
 		{ page = "panel", key = "samples", kind = "choice", default = "on", label = "Samples in lists", segments = true, live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",

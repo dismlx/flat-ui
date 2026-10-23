@@ -1,3 +1,7 @@
+## 0.5.3
+
+- **Options window**: **Nameplates**, **Unit frames**, **Cast bars**, **Action bars** and **Swing timers** have a preview above their settings. Point at a part to outline it and fill its row, click it to open the row, or point at a row to bracket its part. A click on a frame in the **Unit frames** preview picks it in **Per frame**. New **Previews** setting: **On**, **Collapsed** or **Off**.
+
 ## 0.5.2
 
 - **Options window**: each section is a card that folds and counts its changed settings. New **Sections** setting: **Cards** or **Lines**. Switches replace tick boxes and a few choices are segments. **What fades** is a set of chips, sliders mark their default, and long dropdowns have a search field.

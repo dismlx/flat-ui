@@ -1693,6 +1693,11 @@ local function Register(id, spec)
 		local scene = states[stage] and states[stage][id]
 		return scene and scene.parts or nil
 	end
+	-- The frames of a stage by id, each with its root: the options window turns a click on one into the page of that frame.
+	function drawing.itemsOf(stage)
+		local scene = states[stage] and states[stage][id]
+		return scene and scene.items or nil
+	end
 	function drawing.draw(stage)
 		local scene = states[stage] and states[stage][id]
 		if scene == nil then

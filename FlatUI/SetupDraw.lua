@@ -13,6 +13,7 @@ local D = { drawings = {}, failed = {} }
 ns.SetupDraw = D
 
 local STAGE_W, STAGE_H = 658, 204
+D.STAGE_W, D.STAGE_H = STAGE_W, STAGE_H
 
 -- Colours the drawings use where the game or a setting does not give one.
 local REACTION = { hostile = { 0.77, 0.23, 0.23 }, neutral = { 0.88, 0.77, 0.29 }, friendly = { 0.24, 0.77, 0.35 }, tapped = { 0.54, 0.54, 0.54 } }
@@ -603,8 +604,14 @@ local function Adapt(drawing, registered)
 	-- A file that keeps one scene per stage gives the marks of this stage (partsOf); the others keep one table.
 	local of = registered.partsOf
 	drawing.parts = (type(of) == "function" and of(drawing.frame)) or registered.parts or {}
+	-- A stage that names its view makes the outlines of a drawing made after the build follow it too (SetupDrawPlates.lua, P.Follow).
+	drawing.frame.view = D.view
 	function drawing.draw()
 		registered.draw(drawing.frame)
+		-- A file that lays its parts out again on each draw gives the new table.
+		if type(of) == "function" then
+			drawing.parts = of(drawing.frame) or drawing.parts
+		end
 		for _, outline in ipairs(drawing.outlines) do
 			ns.RepaintOutline(outline)
 		end
@@ -629,10 +636,15 @@ end
 -- Marks the region the setting `path` changes in the drawing that is shown, or clears the mark for nil or a setting with no part.
 function D.Mark(path)
 	local drawing = D.current
+	return D.MarkRegion(drawing and path and drawing.parts and drawing.parts[path])
+end
+
+-- Marks a region of the drawing that is shown, or clears the mark for nil. A region is a frame, a texture or a text.
+function D.MarkRegion(region)
+	local drawing = D.current
 	if not drawing then
 		return false
 	end
-	local region = path and drawing.parts and drawing.parts[path]
 	if type(region) ~= "table" or type(region.SetPoint) ~= "function" then
 		if drawing.mark then
 			drawing.mark:Hide()
@@ -672,6 +684,25 @@ function D.Build(parent, view)
 	stage:SetPoint("CENTER", parent, "CENTER", 0, 0)
 	D.stage = stage
 	return stage
+end
+
+-- A place for drawings of its own (the preview band of the options window): a stage, the drawings made on it and the view they read.
+function D.Context(parent, view)
+	return { stage = kit.Frame(parent), drawings = {}, failed = {}, view = view }
+end
+
+-- Runs fn(...) with the stage, the drawings, the view and the drawing shown of `context` in place of those of setup, and puts these back.
+-- Returns what fn returned, or raises its error.
+function D.In(context, fn, ...)
+	local stage, drawings, failed, view, current = D.stage, D.drawings, D.failed, D.view, D.current
+	D.stage, D.drawings, D.failed, D.view, D.current = context.stage, context.drawings, context.failed, context.view, context.current
+	local ok, result = pcall(fn, ...)
+	context.current = D.current
+	D.stage, D.drawings, D.failed, D.view, D.current = stage, drawings, failed, view, current
+	if not ok then
+		error(result, 0)
+	end
+	return result
 end
 
 -- Shows one drawing and hides the others; makes it the first time. Returns the drawing, or nil for an id with none.
