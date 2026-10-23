@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.0
+## Version: 0.5.1
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -75,6 +75,7 @@ CastTime.lua
 LayoutSpots.lua
 LayoutText.lua
 Movers.lua
+MoversMode.lua
 BarBlock.lua
 BarBlockButtons.lua
 Blocks.lua
@@ -84,6 +85,7 @@ PetFrameSize.lua
 ConfigGame.lua
 Options.lua
 Reload.lua
+ProfileSwitch.lua
 PanelLook.lua
 Panel.lua
 PanelNav.lua
@@ -103,3 +105,4 @@ SetupDrawChat.lua
 SetupDrawTrackers.lua
 SetupDrawMovers.lua
 Setup.lua
+SetupWelcome.lua

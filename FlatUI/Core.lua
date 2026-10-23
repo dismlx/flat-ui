@@ -2627,6 +2627,9 @@ function ns.DeleteProfile(name)
 		return false, "The profile in use cannot be deleted."
 	end
 	db.profiles[found] = nil
+	if ns.ProfileSwitch then
+		ns.ProfileSwitch.Deleted(found)
+	end
 	for key, used in pairs(db.profileOf) do
 		if used == found then
 			db.profileOf[key] = nil
@@ -3044,6 +3047,13 @@ SlashCmdList["FLATUI"] = function(msg)
 		end
 		return
 	end
+	if verb and verb:lower() == "welcome" and rest == "" and type(ns.OpenWelcome) == "function" then
+		local ok, err = pcall(ns.OpenWelcome)
+		if not ok then
+			geterrorhandler()(err)
+		end
+		return
+	end
 	if verb and verb:lower() == "profiles" and rest == "" and type(ns.OpenProfiles) == "function" then
 		local ok, err = pcall(ns.OpenProfiles)
 		if not ok then
@@ -3105,6 +3115,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui profile Name - switch to a profile")
 		print("/flatui setup - set up a new profile step by step")
 		print("/flatui profiles - the ready-made profiles")
+		print("/flatui welcome - the welcome screen")
 		print("/flatui scale 70 - custom UI scale in percent, 65 to 115")
 		print("/flatui scale off - the game's own UI scale")
 		print("/flatui taint - the action button click path, checked for values an add-on changed")

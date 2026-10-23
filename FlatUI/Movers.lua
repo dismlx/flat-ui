@@ -71,7 +71,7 @@ local WIN = { height = 22, right = 28, level = 2, start = 4, corner = 18, min = 
 	controls = { "Button", "EditBox", "Slider", "Model", "ModelScene", "ColorSelect", "SimpleHTML", "MessageFrame", "ScrollingMessageFrame", "MovieFrame", "Minimap" },
 	loose = { Model = true, ModelScene = true },
 	scripts = { "OnMouseDown", "OnMouseUp", "OnDragStart" } }
-local HOW = "Every frame can be moved here. Drag a blue box or a window's title. Ctrl and scroll changes size. Right-click puts it back."
+local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back."
 -- A bag has a menu button on its portrait, and another over its title that opens the same menu. The title bar of a bag starts to the right
 -- of the portrait, like the title bar of every window two levels above it, so the title drags the bag and the portrait still opens the menu.
 local BAG_GRIP = { left = 44, level = 2 }
@@ -1550,6 +1550,7 @@ local function Changed(info)
 	if type(call) == "function" then
 		call()
 	end
+	ns.MoversMode.Changed(info.name)
 end
 
 -- Saves the spot a handle was dropped on, and moves the game frame there. A centred frame is on the middle of the screen whatever `left`
@@ -1603,7 +1604,10 @@ local function Ensure(name, info)
 	if type(saved[name]) ~= "table" and handles[name] then
 		local left, bottom, width, height = Rect(handles[name])
 		if left then
+			-- The step for Undo is the change that follows, so one action is one step.
+			ns.MoversMode.Mute(true)
 			Commit(name, info, left, bottom, width, height)
+			ns.MoversMode.Mute(false)
 		end
 	end
 	return type(saved[name]) == "table" and saved[name] or nil
@@ -1789,13 +1793,12 @@ local function MakeHandle(name)
 	handle:EnableMouseWheel(true)
 	handle:RegisterForDrag("LeftButton")
 	local outline = ns.Outline(handle, handle, true)
-	ns.SetOutlineColour(outline, 1, 0.82, 0)
-	ns.SetOutlineFill(outline, 0.1, 0.35, 0.6, 0.25)
-	ns.SetOutlineThickness(outline, 2)
 	handleLooks[name] = { outline = outline, placedByGame = false, mouse = true }
 	local text = handle:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	text:SetAllPoints(handle)
 	handleTexts[name] = text
+	-- The look of a handle, and its hover and selection, are in MoversMode.lua.
+	ns.MoversMode.Style(name, handle, outline, text)
 	handle:SetScript("OnDragStart", function(self)
 		if not InCombatLockdown() then
 			dragging = name
@@ -1818,6 +1821,7 @@ local function MakeHandle(name)
 	end)
 	handle:SetScript("OnMouseDown", function()
 		handleLooks[name].dragged = false
+		ns.Try(KEY, ns.MoversMode.Select, name)
 	end)
 	handle:SetScript("OnMouseUp", function(_, mouseButton)
 		if mouseButton == "RightButton" then
@@ -1837,7 +1841,7 @@ function ShowHandle(name)
 	end
 	local left, bottom, width, height
 	-- A handle exists only while the handles are open.
-	if info and open then
+	if info and open and not ns.MoversMode.Hidden(name) then
 		left, bottom, width, height = HandleRect(name, info)
 	end
 	if not left then
@@ -1866,13 +1870,7 @@ function ShowHandle(name)
 	local placedByGame = PlacedByGame(name, info)
 	if look.placedByGame ~= placedByGame then
 		look.placedByGame = placedByGame
-		if placedByGame then
-			ns.SetOutlineColour(look.outline, 0.6, 0.6, 0.6)
-			ns.SetOutlineFill(look.outline, 0.25, 0.25, 0.25, 0.25)
-		else
-			ns.SetOutlineColour(look.outline, 1, 0.82, 0)
-			ns.SetOutlineFill(look.outline, 0.1, 0.35, 0.6, 0.25)
-		end
+		ns.MoversMode.Paint(name)
 	end
 	SetMouse(name)
 	local text = info.label
@@ -2034,7 +2032,8 @@ function centre.MakeLine()
 	-- As the edges of the outlines: a thin line is not pulled to a pixel.
 	pcall(texture.SetSnapToPixelGrid, texture, false)
 	pcall(texture.SetTexelSnappingBias, texture, 0)
-	texture:SetColorTexture(1, 0.82, 0, 1)
+	local r, g, b = ns.PanelLook.Colour("accent")
+	texture:SetColorTexture(r, g, b, 1)
 	centre.line = line
 	return line
 end
@@ -2261,7 +2260,8 @@ function centre.MakeTickBox(handle, name, mouse)
 		ns.Try(KEY, centre.Toggle, name)
 	end)
 	local mark = centre.Picture(square, centre.size - 6, centre.size - 6)
-	mark:SetColorTexture(1, 0.82, 0, 1)
+	local r, g, b = ns.PanelLook.Colour("accent")
+	mark:SetColorTexture(r, g, b, 1)
 	mark:SetPoint("CENTER", square, "CENTER", 0, 0)
 	mark:Hide()
 	handleLooks[name].mark = mark
@@ -2612,6 +2612,7 @@ local function Take(frame)
 	end
 	saved[name] = Clean({ point = point, x = x, y = y, kind = IsWindow(name) and "window" or "hud", label = name })
 	ns.Each(KEY, ApplyEntry, name)
+	ns.MoversMode.Changed(name)
 	ShowHandle(name)
 	UpdateDriver()
 	print(("%s can be moved now."):format(name))
@@ -2704,7 +2705,7 @@ local function StartPick()
 		box:SetFrameStrata("HIGH")
 		boxOutline = ns.Outline(box, box, true)
 		ns.SetOutline(boxOutline, true, false)
-		ns.SetOutlineColour(boxOutline, 1, 0.82, 0)
+		ns.SetOutlineColour(boxOutline, ns.PanelLook.Colour("accent"))
 		ns.SetOutlineThickness(boxOutline, 2)
 	end
 	pick.on, pick.leaf, pick.cands, pick.steps = true, nil, nil, 0
@@ -4012,9 +4013,11 @@ function Open(source)
 	end
 	open, openedBy = true, source
 	ForgetPlaced()
+	ns.MoversMode.Opened(source)
 	PlaceBar(source)
 	bar:Show()
 	ShowHandles()
+	ns.MoversMode.Ready()
 	centre.Panel()
 	centre.LineLook()
 	UpdateDriver()
@@ -4038,6 +4041,7 @@ function Close()
 		HideHandle(name)
 	end
 	centre.Closed()
+	ns.MoversMode.Closed()
 	UpdateDriver()
 end
 
@@ -4114,6 +4118,7 @@ local function KeepEditModeChanges()
 				labels[#labels + 1] = Describe(name).label
 				original[frame] = nil
 				saved[name] = nil
+				ns.MoversMode.Forget(name)
 				ns.LayoutSpots.Forget(name)
 				refused[name], stopped[name], corrections[name] = nil, nil, nil
 				Uncount(name)
@@ -4236,6 +4241,7 @@ function ns.SpotsChanged(was)
 	if running then
 		DropCorners()
 		ns.Try(KEY, ResetAll, was)
+		ns.MoversMode.ProfileChanged()
 	end
 end
 
@@ -4263,6 +4269,7 @@ local function Refresh()
 		ApplyAll()
 		ns.LayoutSpots.Recheck()
 	else
+		ns.MoversMode.Abandon()
 		Close()
 		RestoreAll()
 	end
@@ -4278,6 +4285,7 @@ local function Resized()
 		ApplyAll()
 		ShowHandles()
 		centre.LineLook()
+		ns.MoversMode.Resized()
 	end
 end
 
@@ -4392,6 +4400,49 @@ function ns.WindowsReset(id)
 	end
 end
 
+-- What MoversMode.lua draws its toolbar, lists and inspector from. It holds no state of its own.
+ns.MoverKit = {
+	LIST = LIST, BY_NAME = BY_NAME, handles = handles, looks = handleLooks, Saved = Saved, Describe = Describe, Rect = Rect, ScreenSize = ScreenSize,
+	Commit = Commit, ShowHandle = function(name) ShowHandle(name) end, Cursor = function() return win.Cursor() end,
+	IsOpen = function() return open == true end, Close = function() Close() end,
+	Centre = function(name) return centre.Do(name) end,
+	-- The game's own frame, for a spot that is only known from the frame (a secret anchor makes its rectangle unreadable).
+	Readable = function(name)
+		local info = Describe(name)
+		if not info then
+			return false
+		end
+		if info.own then
+			return true
+		end
+		local frame = GameFrame(name)
+		return frame ~= nil and not ns.Forbidden(frame) and Rect(frame) ~= nil
+	end,
+	-- Puts the saved spot of a frame back as it was: nil forgets the spot.
+	Restore = function(name, entry)
+		local info = Describe(name, entry)
+		local saved = Saved()
+		if not (info and saved) then
+			return
+		end
+		if entry == nil then
+			if saved[name] ~= nil then
+				ns.Each(KEY, ResetFrame, name)
+			end
+			return
+		end
+		local was = type(saved[name]) == "table" and saved[name].scale or nil
+		saved[name] = Clean(entry)
+		ns.Each(KEY, ApplyEntry, name)
+		if was ~= entry.scale then
+			ns.ResizeAll()
+			ScaleRowMoved(name)
+		end
+		Changed(info)
+		ShowHandle(name)
+	end,
+}
+
 ns.Register(KEY, {
 	label = "Movers",
 	counted = "moved",
@@ -4420,12 +4471,18 @@ ns.Register(KEY, {
 		PLAYER_REGEN_DISABLED = function()
 			win.toldMove, win.toldSize = false, false
 			if open then
+				-- The movers wait for the end of the fight and open again then, with what was done in them.
+				ns.MoversMode.Pause()
 				Close()
-				print("Handles closed for combat.")
+				print("Movers pause for combat.")
 			end
 		end,
 		PLAYER_REGEN_ENABLED = function()
 			hold.Pass()
+			local again = ns.MoversMode.Resume()
+			if again and not open then
+				Open(again)
+			end
 			if win.waiting then
 				win.waiting = false
 				Grips()

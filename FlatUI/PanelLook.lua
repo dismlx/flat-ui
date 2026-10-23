@@ -11,7 +11,7 @@ local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
 local FONTS = MEDIA .. "Fonts\\"
 
 local DEFAULTS = { accent = "indigo", accentColour = "ff9a9cf0", tone = "graphite", borders = "none", corners = "square", density = "comfortable",
-	font = "sans", scale = 100, sidebar = "full" }
+	font = "sans", scale = 100, sidebar = "full", grid = "dim" }
 
 -- Tokens ------------------------------------------------------------------------------------------
 

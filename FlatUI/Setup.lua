@@ -1034,7 +1034,7 @@ function S.BuildStart()
 	local _, header = kit.Header(child, "Setup", 8)
 	view.header = header
 	local defs = S.Defs()
-	for _, path in ipairs({ "setup.newCharacter", "setup.choices", "setup.say" }) do
+	for _, path in ipairs({ "setup.newCharacter", "setup.welcomeLayout", "setup.welcomeWhen", "setup.welcomeSkip", "setup.welcomeSize", "setup.welcomeTick", "setup.choices", "setup.say" }) do
 		local def = defs[path]
 		local row = def and kit.BuildRow(child, S.pageOf[def], def, 8)
 		if row then
@@ -1837,6 +1837,11 @@ function S.Enter()
 	S.draft = S.Load() or S.Fresh()
 	S.pick = nil
 	S.done, S.finished = false, nil
+	-- Back from the movers: the report is as it was left.
+	if S.held then
+		S.done, S.finished = S.held[1], S.held[2]
+		S.held = nil
+	end
 	S.hist, S.skipped = {}, {}
 	S.cur = S.draft.step or 0
 	S.combatSaid = false
@@ -1850,6 +1855,9 @@ function S.Hidden()
 		S.Sync()
 	end
 	S.draft = nil
+	if ns.MoversMode and ns.MoversMode.Holding() then
+		S.held = { S.done, S.finished }
+	end
 	S.done, S.finished = false, nil
 end
 
@@ -2352,13 +2360,10 @@ function ns.SetupAuto()
 end
 
 function S.ShowOffer()
-	if S.Offerable(true) and not InCombatLockdown() then
-		local frame = S.offer or S.BuildOffer()
-		frame:Show()
-	end
+	ns.WelcomeShow()
 end
 
--- At login: the line of a profile put in use by ns.SetupAuto, else a line when a draft is kept, else the offer a second later, once the other login
+-- At login: the line of a profile put in use by ns.SetupAuto, else a line when a draft is kept, else the welcome screen a second later, once the other login
 -- windows have opened.
 function ns.SetupLogin()
 	if S.line then
@@ -2369,7 +2374,7 @@ function ns.SetupLogin()
 		print(NOT_FINISHED)
 		return
 	end
-	if S.Offerable(true) and C_Timer and C_Timer.After then
+	if ns.WelcomeWanted() and C_Timer and C_Timer.After then
 		C_Timer.After(1, function()
 			ns.OutOfCombat(S.ShowOffer)
 		end)

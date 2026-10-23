@@ -1295,7 +1295,7 @@ local function BuildModel()
 			model.byKey[page.key] = entry
 		end
 	end
-	model.profiles = { key = "profiles", label = "Profiles", profiles = true, sections = { "Profile", "Share" } }
+	model.profiles = { key = "profiles", label = "Profiles", profiles = true, sections = { "Profile", "Switch automatically", "Share" } }
 	model.home = { key = "home", label = "Home", home = true, sections = {} }
 	return model
 end
@@ -1531,8 +1531,13 @@ local function BuildProfiles()
 		reset:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 	end
 
-	if type(ns.ExportProfile) == "function" or type(ns.ImportProfile) == "function" or type(ns.TrackerExportText) == "function" or type(ns.TrackerImport) == "function" then
+	if ns.ProfileSwitch then
 		view.sections[2] = y
+		y = ns.ProfileSwitch.Build(ns.PanelKit, child, y, updates)
+	end
+
+	if type(ns.ExportProfile) == "function" or type(ns.ImportProfile) == "function" or type(ns.TrackerExportText) == "function" or type(ns.TrackerImport) == "function" then
+		view.sections[3] = y
 		y = Header(child, "Share", y)
 	end
 
@@ -2374,7 +2379,7 @@ function ns.OpenPanelShare()
 	end
 	ShowPage(ui.model.profiles)
 	local view = ui.views[ui.model.profiles]
-	local at = view and view.sections[2]
+	local at = view and view.sections[3]
 	if at then
 		view.scroller.Scroll(at - 4)
 	end
@@ -2388,6 +2393,11 @@ end
 -- True while a mode (setup) has the window.
 function ns.PanelInMode()
 	return ui.mode ~= nil
+end
+
+-- The mode that has the window now (Setup.lua), or nil for the options pages.
+function ns.PanelMode()
+	return ui.mode
 end
 
 -- Reads every control on screen again.

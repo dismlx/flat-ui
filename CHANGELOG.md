@@ -1,3 +1,9 @@
+## 0.5.1
+
+- A new character sees **Welcome to Flat UI** at login, and /flatui welcome opens it. Five settings under **Setup** change its layout, size and what **Skip** keeps.
+- **Switch automatically** on **Profiles** puts a profile in use for each character in a dungeon, a raid, a battleground or arena, and everywhere else. Each starts at **No change**.
+- **Move frames** dims the screen and draws a grid. It has a toolbar (**Grid**, **Snap**, **Frame list**, **Undo**, **Done**), a list of frames and an inspector with **X**, **Y** and **Scale**. The options window returns on **Done**. New **Movers grid** setting: **Off**, **Dim** or **Bright**. Arrow keys move the chosen frame 1 unit, and Shift moves it 10. **Escape** asks about changes before it closes. A fight pauses the movers, and they open again after it.
+
 ## 0.5.0
 
 - The **Flat UI** button in the game menu opens the **Options window**. **Flat UI button opens** still offers **Flat UI setup**. **Jon Default** sets **Custom UI scale** with **Scale below 65%** at a **Small scale** of 60%.

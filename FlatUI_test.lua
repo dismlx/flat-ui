@@ -105,7 +105,7 @@ function TOC.head(px)
 end
 -- The lines of /flatui help that the addon prints before the lines of the modules.
 TOC.help = "/flatui - the settings window\n/flatui options - the page in the game's options\n/flatui status - what is styled, and any error\n"
-	.. "/flatui profile - the profile in use and the others\n/flatui profile Name - switch to a profile\n/flatui setup - set up a new profile step by step\n/flatui profiles - the ready-made profiles\n"
+	.. "/flatui profile - the profile in use and the others\n/flatui profile Name - switch to a profile\n/flatui setup - set up a new profile step by step\n/flatui profiles - the ready-made profiles\n/flatui welcome - the welcome screen\n"
 	.. "/flatui scale 70 - custom UI scale in percent, 65 to 115\n/flatui scale off - the game's own UI scale\n"
 	.. "/flatui taint - the action button click path, checked for values an add-on changed\n"
 	.. "/flatui cvar - each game setting row: value, default, secure flag\n/flatui cvar check - whether each of those can be changed, out of combat"
@@ -2642,10 +2642,12 @@ local function newWorld(opts)
 			error("CreateFrame: unknown frame type " .. tostring(kind), 0)
 		end
 		local container = W.ac ~= nil and kind == "AuraContainer" and template == "CustomAuraContainerTemplate"
+		-- The edit boxes of the movers mode (MoversMode.lua): X, Y, scale and the search.
+		local edit = kind == "EditBox" and template == nil
 		-- A secure handler frame (SecureHandlerBaseTemplate) runs a snippet with Execute, in a restricted environment: the frame handles in it make the
 		-- engine's own calls (the Base form where Edit Mode has replaced the method with Lua), as secure code, and nothing is a call of the addon.
 		local handler = kind == "Frame" and template == "SecureHandlerBaseTemplate" and name == nil
-		if (kind ~= "Frame" and not cooldown and not bar and not container) or (name ~= nil and not (xpFile and name == "FlatUIXpBar")) or (template ~= nil and not cooldown and not container and not handler) or (parent ~= nil and (type(parent) ~= "table" or rawequal(parent, SECRET))) then
+		if (kind ~= "Frame" and not cooldown and not bar and not container and not edit) or (name ~= nil and not (xpFile and name == "FlatUIXpBar")) or (template ~= nil and not cooldown and not container and not handler) or (parent ~= nil and (type(parent) ~= "table" or rawequal(parent, SECRET))) then
 			bad(W, "CreateFrame arguments")
 		end
 		-- A frame the aura container makes (a container, or a part of a button) can be made to fail: the frames of the module itself are not.
@@ -2657,7 +2659,7 @@ local function newWorld(opts)
 			bad(W, "CreateFrame on a protected frame in combat")
 		end
 		local frame = newFrame(W, parent, cooldown and { objectType = "Cooldown", cd = true, hidden = true } or (bar and { objectType = "StatusBar", statusBar = true })
-			or (container and { objectType = "AuraContainer" }) or {})
+			or (container and { objectType = "AuraContainer" }) or (edit and { objectType = "EditBox" }) or {})
 		-- The frame of ActionBars.lua that fades the dividers of the main bar runs a script as long as the page is on. It is marked, so that the checks of
 		-- the frames that run a script can leave it out.
 		for level = 2, 5 do
@@ -10912,7 +10914,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.0" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.1" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -10936,8 +10938,8 @@ do
 	for index, file in ipairs(FILES) do
 		setupAt[file] = index
 	end
-	check("toc: load order: every file of FlatUI.toc exists and is listed once, Config.lua and Core.lua first, Panel.lua before every Setup file, the Setup files after it and Setup.lua last", #FILES > 2 and #missing == 0 and #twice == 0
-		and FILES[1] == "Config.lua" and FILES[2] == "Core.lua" and FILES[#FILES] == "Setup.lua" and panelAt ~= nil and tail and plain and #FILES - panelAt >= 3
+	check("toc: load order: every file of FlatUI.toc exists and is listed once, Config.lua and Core.lua first, Panel.lua before every Setup file, the Setup files after it, Setup.lua and then SetupWelcome.lua last", #FILES > 2 and #missing == 0 and #twice == 0
+		and FILES[1] == "Config.lua" and FILES[2] == "Core.lua" and FILES[#FILES - 1] == "Setup.lua" and FILES[#FILES] == "SetupWelcome.lua" and panelAt ~= nil and tail and plain and #FILES - panelAt >= 3
 		and setupAt["SetupSteps.lua"] and setupAt["SetupDraw.lua"] and setupAt["SetupSteps.lua"] > panelAt and setupAt["SetupDraw.lua"] > panelAt,
 		table.concat(missing, ",") .. " " .. table.concat(twice, ",") .. " " .. table.concat(FILES, ","))
 	-- The index of the last file that is not a drawing of the setup wizard: those load after Panel.lua.
@@ -37057,6 +37059,35 @@ local function extendFrame(W, f, self)
 	flag("EnableMouseWheel", "wheel")
 	flag("SetMovable", "movable")
 	flag("SetClampedToScreen", "clamped")
+	flag("EnableKeyboard", "keyboard")
+	function f.SetPropagateKeyboardInput(_, v) f.propagate = v end
+	-- An edit box of the addon's: the text, the focus and the calls that set its look.
+	if f.objectType == "EditBox" then
+		f.editText, f.focus = "", false
+		function f.SetText(_, text)
+			f.editText = text
+			if f.scripts.OnTextChanged then f.scripts.OnTextChanged(self, false) end
+		end
+		function f.GetText() return f.editText end
+		function f.SetFocus()
+			if not f.focus then
+				f.focus = true
+				if f.scripts.OnEditFocusGained then f.scripts.OnEditFocusGained(self) end
+			end
+		end
+		function f.ClearFocus()
+			if f.focus then
+				f.focus = false
+				if f.scripts.OnEditFocusLost then f.scripts.OnEditFocusLost(self) end
+			end
+		end
+		function f.HasFocus() return f.focus end
+		function f.SetAutoFocus() end
+		function f.SetTextInsets() end
+		function f.SetMaxLetters() end
+		function f.SetFontObject(_, o) f.fontObject = o end
+		function f.SetTextColor(_, ...) f.textColor = { ... } end
+	end
 	-- The clamp the game gives its own system frames: f.clamped, and f.clampInsets = { left, right, top, bottom } (zero when unset).
 	function f.IsClampedToScreen() return f.clamped == true end
 	function f.GetClampRectInsets()
@@ -38653,6 +38684,340 @@ do
 	check("handles: no violation", allClean(W), problems(W))
 end
 
+-- 75bm. Movers mode: the dim and grid, the toolbar, the handles' look, the frame list, the inspector, the keys, Done and the question on Escape.
+do
+	local M = {}
+	-- The frame of the addon's under `parent` that shows `text`.
+	function M.find(W, parent, text)
+		for _, f in ipairs(W.addonFrames) do
+			if parent == nil or f.parent == parent then
+				for _, t in ipairs(f.fonts) do
+					if t.text == text then
+						return f
+					end
+				end
+			end
+		end
+	end
+	function M.click(f) f.scripts.OnMouseUp(f, "LeftButton") end
+	function M.state(W) return W.ns.MoversMode.State() end
+	-- The textures of the grid that are shown, by opacity.
+	function M.lines(W)
+		local _, ui = M.state(W)
+		local by = {}
+		for _, line in ipairs(ui.lines) do
+			local raw = W.rawOf[line]
+			if raw.shown then
+				local alpha = ("%.2f"):format(raw.color[4])
+				by[alpha] = (by[alpha] or 0) + 1
+			end
+		end
+		return by
+	end
+	-- The options window, as a stand-in the movers mode can hide and show.
+	function M.panel(W)
+		local P = { shown = true, hid = 0, opened = 0 }
+		W.ns.PanelShown = function() return P.shown end
+		W.ns.PanelKit.Hide = function() P.shown, P.hid = false, P.hid + 1 end
+		W.ns.OpenPanel = function() P.shown, P.opened = true, P.opened + 1 end
+		return P
+	end
+	function M.key(W, key) local _, ui = M.state(W) W.rawOf[ui.keys].scripts.OnKeyDown(ui.keys, key) end
+	function M.enter(W, box, text) box:SetText(text) W.rawOf[box].scripts.OnEnterPressed(box) end
+
+	local W = mw()
+	local _, ui0 = M.state(W)
+	check("movers mode: nothing is made before the handles open", ui0.screen == nil and ui0.bar == nil)
+	local P = M.panel(W)
+	W.slash("move")
+	local S, ui = M.state(W)
+	local bar = W.rawOf[ui.bar]
+	check("movers mode: the options window is hidden while the handles are open", P.hid == 1 and not P.shown and P.opened == 0)
+	check("movers mode: the toolbar is 560 by 40 at the top centre, over the handles", bar.shown and bar.width == 560 and bar.height == 40 and bar.strata == "FULLSCREEN_DIALOG"
+		and pts(W, bar) == "TOP>UIParent:TOP 0,-8 @1", pts(W, bar))
+	local names = {}
+	-- The old Movers bar has its own title and Done, so the toolbar's are looked for under ui.bar.
+	for _, text in ipairs({ "Movers", "Off", "Dim", "Bright", "Snap", "Frame list", "Undo", "Done" }) do
+		local own = false
+		for _, t in ipairs(bar.fonts) do
+			own = own or t.text == text
+		end
+		for _, segment in ipairs(ui.segments or {}) do
+			own = own or segment.label:GetText() == text
+		end
+		names[#names + 1] = tostring(own or M.find(W, ui.bar, text) ~= nil)
+	end
+	check("movers mode: the toolbar has Grid with Off, Dim and Bright, Snap, Frame list, Undo and Done", table.concat(names, ",") == "true,true,true,true,true,true,true,true", table.concat(names, ","))
+	local dim = W.backdropOn(ui.screen)
+	check("movers mode: the screen is dimmed to 40% black on strata BACKGROUND, below the game's frames", W.rawOf[ui.screen].strata == "BACKGROUND" and dim and dim.color[1] == 0 and near(dim.color[4], 0.4)
+		and W.rawOf[ui.screen].shown, dim and tostring(dim.color[4]))
+	local lines = M.lines(W)
+	check("movers mode: Dim draws lines every 32 units from the middle at 12% of the accent, the middle lines at 40%", lines["0.12"] == 92 and lines["0.40"] == 2 and (lines["0.25"] or 0) == 0, ("%s %s %s"):format(tostring(lines["0.12"]), tostring(lines["0.40"]), tostring(lines["0.25"])))
+	local centreLine
+	for _, line in ipairs(ui.lines) do
+		local raw = W.rawOf[line]
+		if raw.shown and near(raw.color[4], 0.4) and raw.width == 1 then
+			centreLine = raw
+		end
+	end
+	check("movers mode: a line is 1 unit wide, in the accent colour, and the vertical middle line is on the middle", centreLine and near(centreLine.color[1], 0x9A / 255, 1e-3) and near(centreLine.color[2], 0x9C / 255, 1e-3)
+		and centreLine.height == 1080 and centreLine.points[1][4] == 0, centreLine and tostring(centreLine.height))
+	check("movers mode: the grid starts at Dim, kept for the account", W.ns.Get("panel.grid") == "dim")
+	M.click(M.find(W, nil, "Bright"))
+	lines = M.lines(W)
+	check("movers mode: Bright draws them at 25%, kept in FlatUIDB.panel and in no profile", W.ns.Get("panel.grid") == "bright" and W.env.FlatUIDB.panel.grid == "bright" and lines["0.25"] == 92 and lines["0.40"] == 2
+		and W.env.FlatUIDB.profiles[W.ns.Profile()].options["panel.grid"] == nil, ("%s %s"):format(tostring(lines["0.25"]), tostring(lines["0.40"])))
+	M.click(M.find(W, nil, "Off"))
+	lines = M.lines(W)
+	check("movers mode: Off draws no line", W.ns.Get("panel.grid") == "off" and next(lines) == nil)
+	M.click(M.find(W, nil, "Dim"))
+	check("movers mode: and Dim draws them again", M.lines(W)["0.12"] == 92)
+	check("movers mode: the setting is a row Movers grid in the Options window section, with three choices", (function()
+		for _, item in ipairs(W.ns.PAGES[1]) do
+			if item.path == "panel.grid" then
+				return item.label == "Movers grid" and item.default == "dim" and #item.choices == 3
+			end
+		end
+	end)())
+	local list, side = W.rawOf[ui.list], W.rawOf[ui.side]
+	check("movers mode: the frame list is 240 by 400 at the left, the inspector 224 by 196 at the right, both over the handles",
+		list.width == 240 and list.height == 400 and pts(W, list) == "TOPLEFT>UIParent:TOPLEFT 16,-64 @1" and side.width == 224 and side.height == 196
+		and pts(W, side) == "TOPRIGHT>UIParent:TOPRIGHT -16,-64 @1" and list.strata == "FULLSCREEN_DIALOG" and side.strata == "FULLSCREEN_DIALOG", pts(W, list) .. " " .. pts(W, side))
+	local snapBefore = W.ns.Get("movers.snap")
+	local toggle = W.rawOf[ui.toggle]
+	M.click(toggle)
+	check("movers mode: the Snap switch turns the snap to the middle off and on", snapBefore == "middle" and W.ns.Get("movers.snap") == "off" and (function() M.click(toggle) return W.ns.Get("movers.snap") == "middle" end)())
+
+	-- The list of frames.
+	local heads, rows = {}, {}
+	for _, e in ipairs(ui.entries) do
+		if e.head then heads[#heads + 1] = e.head else rows[#rows + 1] = e.label end
+	end
+	check("movers mode: the list has the groups that have a frame, in order, and the frames of each", table.concat(heads, ",") == "Unit frames,Action bars,Flat UI,Windows,Other" and rows[1] == "Player frame", table.concat(heads, ",") .. " | " .. table.concat(rows, ","))
+	ui.search:SetText("err")
+	check("movers mode: the search field narrows the list to the frames whose name has the letters", #ui.entries == 2 and ui.entries[1].head == "Other" and ui.entries[2].label == "Error text", #ui.entries)
+	ui.search:SetText("zzz")
+	check("movers mode: a search with no match says so", #ui.entries == 0 and ui.empty:GetText() == "No frames." and W.rawOf[ui.empty].shown)
+	ui.search:SetText("")
+	check("movers mode: and an empty search lists them all again", #ui.entries > 3 and not W.rawOf[ui.empty].shown)
+	local playerRow, eye
+	for _, row in ipairs(ui.rows) do
+		if row.entry and row.entry.label == "Player frame" then playerRow, eye = row, row.eye end
+	end
+	M.click(playerRow)
+	check("movers mode: a click on a row chooses the frame: its handle has the accent border and the inspector shows its name", S.selected == "PlayerFrame" and ui.sideTitle:GetText() == "Player frame"
+		and (function() local o = W.look(W.handle("Player frame")) return o and near(o.r, 0x9A / 255, 1e-3) and near(o.top.color[4], 1) end)())
+	M.click(eye)
+	check("movers mode: the eye hides one handle and the frame stays in the list", not W.handle("Player frame").shown and S.hidden.PlayerFrame == true and (function()
+		for _, e in ipairs(ui.entries) do if e.label == "Player frame" then return true end end
+	end)())
+	M.click(eye)
+	check("movers mode: and shows it again", W.handle("Player frame").shown and S.hidden.PlayerFrame == nil)
+	M.click(M.find(W, nil, "Frame list"))
+	check("movers mode: Frame list hides the list and shows it again", not W.rawOf[ui.list].shown and (function() M.click(M.find(W, nil, "Frame list")) return W.rawOf[ui.list].shown end)())
+
+	-- The handles.
+	local f = W.handle("Error text")
+	local o = W.look(f)
+	check("movers mode: a handle that is not chosen has a 1 pixel border in text-dim at 60% and the window colour at 45%", o and near(o.r, 0xA9 / 255, 1e-3) and near(o.thick, 768 / 1080, 1e-6) and near(o.top.color[4], 0.6)
+		and near(W.backdropOn(f).color[4], 0.45))
+	f.scripts.OnEnter(f)
+	check("movers mode: the border goes to 100% under the cursor and back to 60%", near(W.look(f).top.color[4], 1) and (function() f.scripts.OnLeave(f) return near(W.look(f).top.color[4], 0.6) end)())
+	f.scripts.OnMouseDown(f, "LeftButton")
+	o = W.look(f)
+	check("movers mode: the chosen handle has an accent border and an 18% accent fill", o and near(o.r, 0x9A / 255, 1e-3) and near(o.top.color[4], 1) and near(W.backdropOn(f).color[1], 0x9A / 255, 1e-3) and near(W.backdropOn(f).color[4], 0.18))
+	check("movers mode: the frame it was is no longer chosen", near(W.look(W.handle("Player frame")).top.color[4], 0.6))
+	check("movers mode: a chip over the chosen handle says X and Y from the middle of the screen", W.rawOf[ui.chip].shown and ui.chipText:GetText() == "X 0  Y 388"
+		and (function() local _, cb = W.rectOf(ui.chip) local _, hb, _, hh = W.rectOf(f) return near(cb, hb + hh + 4) end)(), ui.chipText:GetText())
+	check("movers mode: the inspector shows X and Y, 100%", ui.x:GetText() == "0" and ui.y:GetText() == "388" and ui.scale:GetText() == "100%" and ui.sideTitle:GetText() == "Error text",
+		ui.x:GetText() .. " " .. ui.y:GetText())
+
+	-- The inspector.
+	M.enter(W, ui.x, "100")
+	check("movers mode: X moves the frame to that distance from the middle and saves the spot", pts(W, W.env.UIErrorsFrame) == "TOP>UIParent:TOP 100,-122 @1" and entry(W, "UIErrorsFrame") ~= nil, pts(W, W.env.UIErrorsFrame))
+	M.enter(W, ui.y, "300")
+	check("movers mode: Y does the same on the other axis", pts(W, W.env.UIErrorsFrame) == "TOP>UIParent:TOP 100,-210 @1" and ui.chipText:GetText() == "X 100  Y 300", pts(W, W.env.UIErrorsFrame))
+	M.enter(W, ui.x, "abc")
+	check("movers mode: a text that is not a number changes nothing", pts(W, W.env.UIErrorsFrame) == "TOP>UIParent:TOP 100,-210 @1")
+	M.enter(W, ui.scale, "80%")
+	check("movers mode: Scale takes a percent between 50 and 200 in steps of 5", entry(W, "UIErrorsFrame").scale == 0.8 and ui.scale:GetText() == "80%", tostring(entry(W, "UIErrorsFrame").scale))
+	M.enter(W, ui.scale, "500")
+	check("movers mode: and stops at 200", entry(W, "UIErrorsFrame").scale == 2, tostring(entry(W, "UIErrorsFrame").scale))
+	local track = W.rawOf[ui.track]
+	W.cursor = { 1680 + 76 + 40, 500 }
+	track.scripts.OnMouseDown(ui.track, "LeftButton")
+	track.scripts.OnMouseUp(ui.track, "LeftButton")
+	check("movers mode: a press on the scale track sets it from the cursor: the middle of the track is 125%", entry(W, "UIErrorsFrame").scale == 1.25 and track.scripts.OnUpdate == nil, tostring(entry(W, "UIErrorsFrame").scale))
+	M.click(M.find(W, nil, "Centre"))
+	check("movers mode: Centre puts the frame on the middle of the screen across", ui.x:GetText() == "0" and ui.chipText:GetText():match("^X 0 ") ~= nil, ui.x:GetText())
+	M.click(M.find(W, nil, "Reset"))
+	check("movers mode: Reset puts the frame back where the game had it and forgets the spot", entry(W, "UIErrorsFrame") == nil and rectIs(W, "UIErrorsFrame", 704, 898, 512, 60), pts(W, W.env.UIErrorsFrame))
+
+	-- Keys.
+	local keys = W.rawOf[ui.keys]
+	local l0, b0 = W.rectOf(f)
+	M.key(W, "RIGHT")
+	local l1 = W.rectOf(f)
+	local afterRight = pts(W, W.env.UIErrorsFrame)
+	check("movers mode: an arrow moves the chosen frame 1 unit and takes the key", near(l1, l0 + 1) and keys.propagate == false, g(l1))
+	W.keys.shift = true
+	M.key(W, "UP")
+	local _, b1 = W.rectOf(f)
+	W.keys.shift = false
+	check("movers mode: Shift and an arrow move it 10", near(b1, b0 + 10), g(b1))
+	M.key(W, "A")
+	check("movers mode: any other key goes on to the game", keys.propagate == true)
+	check("movers mode: the keys frame takes keyboard input only while the handles are open", keys.keyboard == true)
+	check("movers mode: no violation", allClean(W), problems(W))
+
+	-- Undo.
+	local steps = #S.undo
+	check("movers mode: each change is a step", steps >= 3, steps)
+	local before = pts(W, W.env.UIErrorsFrame)
+	M.click(M.find(W, ui.bar, "Undo"))
+	check("movers mode: Undo takes back the last step and leaves the frame at the step before", #S.undo == steps - 1 and pts(W, W.env.UIErrorsFrame) ~= before and pts(W, W.env.UIErrorsFrame) == afterRight
+		and entry(W, "UIErrorsFrame") ~= nil, pts(W, W.env.UIErrorsFrame))
+	for _ = 1, steps do
+		M.click(M.find(W, ui.bar, "Undo"))
+	end
+	check("movers mode: and the steps before it, until the frame is where it was when the handles opened", #S.undo == 0 and entry(W, "UIErrorsFrame") == nil, pts(W, W.env.UIErrorsFrame))
+	M.click(M.find(W, ui.bar, "Undo"))
+	check("movers mode: Undo with no step does nothing", #S.undo == 0 and entry(W, "UIErrorsFrame") == nil)
+
+	-- Escape and Done.
+	W.drag("Error text", 400, 700)
+	M.key(W, "ESCAPE")
+	check("movers mode: Escape with a change asks once: 1 frame moved", ui.ask and W.rawOf[ui.ask].shown and ui.askText:GetText() == "1 frame moved." and #W.shownHandles() > 0, tostring(ui.askText and ui.askText:GetText()))
+	M.click(M.find(W, nil, "Keep moving"))
+	check("movers mode: Keep moving goes back to the handles", not W.rawOf[ui.ask].shown and #W.shownHandles() > 0 and entry(W, "UIErrorsFrame") ~= nil)
+	M.key(W, "ESCAPE")
+	M.click(M.find(W, nil, "Discard"))
+	check("movers mode: Discard puts every frame back and closes, and the options window returns", entry(W, "UIErrorsFrame") == nil and #W.shownHandles() == 0 and P.shown and P.opened == 1 and not W.rawOf[ui.bar].shown
+		and not W.rawOf[ui.screen].shown and keys.keyboard == false, tostring(P.opened))
+	W.slash("move")
+	W.drag("Error text", 400, 700)
+	M.key(W, "ESCAPE")
+	M.click(M.find(W, nil, "Keep"))
+	check("movers mode: Keep closes and keeps the spot", entry(W, "UIErrorsFrame") ~= nil and #W.shownHandles() == 0 and P.opened == 2 and P.shown)
+	local kept = pts(W, W.env.UIErrorsFrame)
+	W.slash("move")
+	W.drag("Error text", 200, 200)
+	M.key(W, "ESCAPE")
+	M.click(M.find(W, nil, "Discard"))
+	check("movers mode: Discard puts a frame back at the spot it had when the handles opened, not at the game's", pts(W, W.env.UIErrorsFrame) == kept and entry(W, "UIErrorsFrame") ~= nil and P.opened == 3, pts(W, W.env.UIErrorsFrame))
+	W.slash("move")
+	M.key(W, "ESCAPE")
+	check("movers mode: Escape with no change closes at once", #W.shownHandles() == 0 and not (ui.ask and W.rawOf[ui.ask].shown))
+	W.slash("move")
+	W.drag("Error text", 100, 100)
+	M.click(M.find(W, ui.bar, "Done"))
+	check("movers mode: Done keeps the changes, closes everything and brings the options window back", pts(W, W.env.UIErrorsFrame) == "TOP>UIParent:TOP -604,-920 @1" and #W.shownHandles() == 0 and not W.rawOf[ui.bar].shown
+		and not W.rawOf[ui.list].shown and not W.rawOf[ui.side].shown and P.opened == 5 and P.shown, pts(W, W.env.UIErrorsFrame) .. " " .. P.opened)
+	check("movers mode: the session is forgotten at Done: the handles that are hidden, the steps and the chosen frame", #S.undo == 0 and S.selected == nil and next(S.hidden) == nil)
+	check("movers mode: no frame runs something each frame once it is closed", runningFrames(W) == 1, runningFrames(W))
+
+	-- A fight pauses the movers and the end of it opens them again with the session they had.
+	local C = mw()
+	local PC = M.panel(C)
+	C.slash("move")
+	local CS, cui = M.state(C)
+	C.drag("Error text", 400, 700)
+	local ch = C.handle("Error text")
+	ch.scripts.OnMouseDown(ch, "LeftButton")
+	C.combat = true
+	C.fire("PLAYER_REGEN_DISABLED")
+	check("movers mode: a fight pauses it: the handles, the toolbar, the dim and the keys go, and the options window stays hidden", #C.shownHandles() == 0 and not C.rawOf[cui.bar].shown and not C.rawOf[cui.screen].shown
+		and not C.rawOf[cui.list].shown and not C.rawOf[cui.side].shown and C.rawOf[cui.keys].keyboard == false and PC.hid == 1 and PC.opened == 0 and not PC.shown)
+	check("movers mode: and says so once", outText(C):find("Movers pause for combat.", 1, true) ~= nil, outText(C))
+	C.slash("move")
+	check("movers mode: the command does not open them in a fight", #C.shownHandles() == 0 and outText(C):find("Movers open out of combat.", 1, true) ~= nil)
+	C.combat = false
+	C.fire("PLAYER_REGEN_ENABLED")
+	check("movers mode: after the fight they open again by themselves, with the frame that was chosen and the steps taken", #C.shownHandles() == 9 and C.rawOf[cui.bar].shown and C.rawOf[cui.screen].shown
+		and CS.selected == "UIErrorsFrame" and #CS.undo == 1 and PC.hid == 1 and PC.opened == 0 and not PC.shown, #C.shownHandles() .. " " .. tostring(CS.selected) .. " " .. #CS.undo)
+	M.key(C, "ESCAPE")
+	check("movers mode: and the changes of before the fight are still the ones it asks about", cui.askText:GetText() == "1 frame moved." and C.rawOf[cui.ask].shown)
+	M.click(M.find(C, nil, "Keep"))
+	check("movers mode: the options window returns once, at the end", PC.opened == 1 and PC.shown and #C.shownHandles() == 0)
+	check("movers mode: after a fight with nothing open, the end of it opens nothing", (function()
+		C.combat = true
+		C.fire("PLAYER_REGEN_DISABLED")
+		C.combat = false
+		C.fire("PLAYER_REGEN_ENABLED")
+		return #C.shownHandles() == 0 and PC.opened == 1
+	end)())
+
+	-- A frame whose rectangle the client withholds shows Not available in X and Y, and still has a handle that moves.
+	local N = mwBefore({}, function(world)
+		world.rawOf[world.env.UIErrorsFrame].fault.rect = "secret"
+	end)
+	N.slash("move")
+	local NS, nui = M.state(N)
+	local nh = N.handle("Error text")
+	nh.scripts.OnMouseDown(nh, "LeftButton")
+	check("movers mode: X and Y of a frame with a secret rectangle say Not available and take no typing", nui.x:GetText() == "Not available" and nui.y:GetText() == "Not available"
+		and N.rawOf[nui.x].mouse == false and N.rawOf[nui.y].mouse == false and not N.rawOf[nui.chip].shown, nui.x:GetText())
+	M.enter(N, nui.x, "100")
+	check("movers mode: a number typed there does nothing", entry(N, "UIErrorsFrame") == nil)
+	N.drag("Error text", 400, 700)
+	N.run(0.2)
+	check("movers mode: the handle still drags", entry(N, "UIErrorsFrame") ~= nil and nui.x:GetText() == "Not available", tostring(entry(N, "UIErrorsFrame")) .. " " .. nui.x:GetText())
+	check("movers mode: no violation with a secret rectangle", allClean(N), problems(N))
+
+	-- A frame that takes no scale has a scale track that takes no press, and a window is scaled between 60 and 150.
+	local A = mw()
+	A.slash("move")
+	local AS, aui = M.state(A)
+	local ah = A.handle("Alerts")
+	ah.scripts.OnMouseDown(ah, "LeftButton")
+	M.enter(A, aui.scale, "150")
+	check("movers mode: a frame that takes no scale keeps 100%, and its track takes no mouse", aui.scale:GetText() == "100%" and A.rawOf[aui.track].mouse == false and entry(A, "AlertFrame") == nil)
+	A.openWindow("CharacterFrame")
+	A.run(0.25)
+	local wh = A.handle("Character")
+	wh.scripts.OnMouseDown(wh, "LeftButton")
+	A.drag("Character", 300, 300)
+	M.enter(A, aui.scale, "500")
+	check("movers mode: a window is scaled to 150 at most", entry(A, "CharacterFrame").scale == 1.5 and aui.scale:GetText() == "150%", tostring(entry(A, "CharacterFrame").scale))
+	M.enter(A, aui.scale, "10")
+	check("movers mode: and to 60 at least", near(entry(A, "CharacterFrame").scale, 0.6), tostring(entry(A, "CharacterFrame").scale))
+	local groups = {}
+	for _, e in ipairs(aui.entries) do
+		if e.head then groups[#groups + 1] = e.head end
+	end
+	check("movers mode: an open window is listed under Windows", table.concat(groups, ",") == "Unit frames,Action bars,Flat UI,Windows,Other", table.concat(groups, ","))
+	-- A list longer than its rows scrolls with the wheel, three rows at a time.
+	local opened = 0
+	for _, info in ipairs(A.ns.MoverKit.LIST) do
+		if info.kind == "window" and not info.noBox and A.env[info.name] and info.name ~= "CharacterFrame" then
+			A.openWindow(info.name)
+			opened = opened + 1
+		end
+	end
+	A.run(0.5)
+	A.ns.MoversMode.Layout()
+	local total, shownRows = #aui.entries, 0
+	for _, row in ipairs(aui.rows) do
+		if A.rawOf[row].shown then shownRows = shownRows + 1 end
+	end
+	check("movers mode: the list shows 13 rows and has more", opened > 8 and total > 13 and shownRows == 13 and AS.offset == 0, ("%d windows, %d entries, %d rows"):format(opened, total, shownRows))
+	local first = aui.rows[1].label:GetText()
+	A.rawOf[aui.list].scripts.OnMouseWheel(aui.list, -1)
+	check("movers mode: a turn of the wheel down moves it three rows", AS.offset == 3 and aui.rows[1].label:GetText() == aui.entries[4].head or AS.offset == 3 and aui.rows[1].label:GetText() == aui.entries[4].label, tostring(AS.offset))
+	for _ = 1, total do
+		A.rawOf[aui.list].scripts.OnMouseWheel(aui.list, -1)
+	end
+	check("movers mode: and stops at the last row", AS.offset == total - 13, tostring(AS.offset))
+	A.rawOf[aui.rows[1]].scripts.OnMouseWheel(aui.rows[1], 1)
+	check("movers mode: a turn on a row scrolls too, and up moves back", AS.offset == total - 16, tostring(AS.offset))
+	for _ = 1, total do
+		A.rawOf[aui.list].scripts.OnMouseWheel(aui.list, 1)
+	end
+	check("movers mode: and stops at the first", AS.offset == 0 and aui.rows[1].label:GetText() == first, tostring(AS.offset))
+	check("movers mode: no violation with a window", allClean(A), problems(A))
+	check("movers mode: no violation at the end", allClean(W), problems(W))
+end
+
 -- 75c. Dragging a handle saves a point and offsets, and places the game frame.
 do
 	local W = mw({ saved = opt({ ["tooltip.enabled"] = true, ["tooltip.mode"] = "fixed" }) })
@@ -39212,7 +39577,7 @@ do
 	W.drag("Error text", 400, 700)
 	W.combat = true
 	W.fire("PLAYER_REGEN_DISABLED")
-	check("combat starts: the handles and the bar are closed, and the player is told", #W.shownHandles() == 0 and not W.textFrame("Movers").shown and outText(W) == "Every frame can be moved here. Drag a blue box or a window's title. Ctrl and scroll changes size. Right-click puts it back.\nHandles closed for combat.", outText(W))
+	check("combat starts: the handles and the bar are closed, and the player is told", #W.shownHandles() == 0 and not W.textFrame("Movers").shown and outText(W) == "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back.\nMovers pause for combat.", outText(W))
 	check("combat starts: the position that was saved stays", pts(W, W.env.UIErrorsFrame) == "TOP>UIParent:TOP -304,-320 @1")
 	W.out = {}
 	W.slash("move")
@@ -39226,8 +39591,7 @@ do
 	W.editMode(false)
 	W.combat = false
 	W.fire("PLAYER_REGEN_ENABLED")
-	W.slash("move")
-	check("combat ends: they open again", #W.shownHandles() == 9)
+	check("combat ends: they open again by themselves", #W.shownHandles() == 9)
 	W.fire("PLAYER_REGEN_DISABLED")
 	W.out = {}
 	W.fire("PLAYER_REGEN_DISABLED")
@@ -41474,7 +41838,7 @@ do
 	check("check: when the last saved frame is reset nothing is left to keep", runningFrames(V) == 0, runningFrames(V))
 	local N = mw()
 	N.slash("move")
-	check("check: with nothing saved the handles make it run", runningFrames(N) == 1)
+	check("check: with nothing saved the handles make it run, and so does the toolbar of the movers mode", runningFrames(N) == 2, runningFrames(N))
 	N.slash("move")
 	check("check: and closing them stops it", runningFrames(N) == 0)
 	N.slash("move")
@@ -41650,8 +42014,8 @@ do
 	check("handle size: a frame under 16 high has the nominal handle", near(w3, 200) and near(h3, 40), g(w3) .. "x" .. g(h3))
 	local f = W.handle("Error text")
 	local o = W.look(f)
-	check("handle look: a gold border two pixels thick over a light blue fill the game shows through, on a frame that is not the game's", o and near(o.r, 1) and near(o.g, 0.82) and near(o.b, 0) and near(o.thick, 2 * 768 / 1080, 1e-6) and o.backShown
-		and W.backdropOn(f).color[1] == 0.1 and W.backdropOn(f).color[2] == 0.35 and W.backdropOn(f).color[3] == 0.6 and W.backdropOn(f).color[4] == 0.25, o and g(o.thick))
+	check("handle look: a border of one pixel in the dim text colour at 60%, over the window colour at 45%, on a frame that is not the game's", o and near(o.r, 0xA9 / 255, 1e-3) and near(o.g, 0xAE / 255, 1e-3) and near(o.b, 0x9F / 255, 1e-3) and near(o.thick, 768 / 1080, 1e-6) and o.backShown
+		and near(o.top.color[4], 0.6) and near(W.backdropOn(f).color[1], 0x17 / 255, 1e-3) and near(W.backdropOn(f).color[4], 0.45), o and g(o.thick))
 	local bar = W.textFrame("Movers")
 	check("the bar: above the handles, 440 by 156, near the bottom of the screen", bar.strata == "FULLSCREEN_DIALOG" and bar.width == 440 and bar.height == 156 and pts(W, bar) == "BOTTOM>UIParent:BOTTOM 0,220 @1" and bar.mouse == true, pts(W, bar))
 	check("the bar: the hint and the line about every frame", W.textFrame("Drag to move. Scroll or Shift and scroll to nudge. Ctrl and scroll to scale. Right-click to reset.") ~= nil
@@ -41984,7 +42348,8 @@ do
 	check("picker: and the step starts again when the mouse goes to another frame", tag(W) == "TestPanel")
 	local box = W.pickBox()
 	local o = W.look(box)
-	check("picker: the box is a gold border of two pixels with no fill", o and near(o.r, 1) and near(o.g, 0.82) and near(o.b, 0) and near(o.thick, 2 * 768 / 1080, 1e-6) and not o.backShown, o and tostring(o.backShown))
+	local accR, accG, accB = W.ns.PanelLook.Colour("accent")
+	check("picker: the box is an accent border of two pixels with no fill", o and near(o.r, accR) and near(o.g, accG) and near(o.b, accB) and near(o.thick, 2 * 768 / 1080, 1e-6) and not o.backShown, o and tostring(o.backShown))
 	check("picker: the tag is a frame of 1 by 1 and the box is above the game's frames", W.pickTag().width == 1 and W.pickTag().height == 1 and box.strata == "HIGH" and W.pickTag().strata == "TOOLTIP")
 	local bar = {}
 	for _, label in ipairs({ "Pick a frame", "Reset all", "Done" }) do
@@ -42276,7 +42641,6 @@ do
 	check("a fight during a drag: the drop that follows saves nothing and shows no handle", entry(W, "UIErrorsFrame") == nil and #W.shownHandles() == 0 and not handle.shown and allClean(W), problems(W))
 	W.combat = false
 	W.fire("PLAYER_REGEN_ENABLED")
-	W.slash("move")
 	check("a fight during a drag: the handles open again over the frames, and none follows the mouse", handle.shown and handle.moving == false and #W.shownHandles() == 9, #W.shownHandles())
 end
 do
@@ -43388,7 +43752,7 @@ do
 	local on = mw({ saved = opt({ ["tooltip.enabled"] = true, ["tooltip.mode"] = "fixed" }) })
 	on.slash("move")
 	check("movers on, tooltip fixed: the command opens the handles and says how to move things", #on.shownHandles() > 0 and on.out[2] == nil
-		and on.out[1] == "Every frame can be moved here. Drag a blue box or a window's title. Ctrl and scroll changes size. Right-click puts it back.", #on.shownHandles())
+		and on.out[1] == "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back.", #on.shownHandles())
 	check("movers off: no violation", allClean(W) and allClean(cursor) and allClean(off), problems(W))
 end
 
@@ -46954,7 +47318,7 @@ end
 local function titles()
 local mwBefore, entry, pts = suiteKit.mwBefore, suiteKit.entry, suiteKit.pts
 local allClean, problems, outText = suiteKit.allClean, suiteKit.problems, suiteKit.outText
-local HOW = "Every frame can be moved here. Drag a blue box or a window's title. Ctrl and scroll changes size. Right-click puts it back."
+local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back."
 local HOME = "TOPLEFT>UIParent:TOPLEFT 16,-116 @1"
 -- The frames of the addon's that are children of a window: the title bar takes the mouse and is anchored at the top left, the corner grip is anchored at
 -- the bottom right and is 18 units square (it takes the mouse only until the game reports a press).
@@ -55552,6 +55916,10 @@ do
 	local main, leave, timer = box(W, "Main action bar (moved back by the game in combat)"), box(W, "Leave vehicle button (placed by the game)"), box(W, "Main hand swing timer (moved back by the game in combat)")
 	check("system frames: a child of a bar has a grey box that takes no mouse; a bar of the stacks and a frame a container lays out have boxes that do", main and leave and timer
 		and not leave.mouse and not leave.wheel and main.mouse == true and main.wheel == true and timer.mouse == true and timer.wheel == true)
+	check("movers mode: a handle for a frame the game places has a border in text-faint at 60% and a 25% fill", (function()
+		local o = W.look(leave)
+		return o and near(o.r, 0x7A / 255, 1e-3) and near(o.top.color[4], 0.6) and near(W.backdropOn(leave).color[4], 0.25)
+	end)())
 	check("system frames: the others take the mouse and the wheel", box(W, "Minimap").mouse == true and box(W, "Minimap").wheel == true and box(W, "Action bar 6 (moved back by the game in combat)").mouse == true)
 
 	W.drag("Minimap", 1000, 500)
@@ -59562,7 +59930,28 @@ do
 	B.before = #M.addonTextures
 	M.slash("move")
 	M.change("general.borderless", true)
-	B.shown, B.all = B.edges(M, B.before + 1)
+	-- The panels of the movers mode follow the Borders setting of the options window and not this one, so their edges are left out of the count.
+	B.shown, B.all = 0, 0
+	do
+		local _, mui = M.ns.MoversMode.State()
+		local roots = { [mui.bar] = true, [mui.list] = true, [mui.side] = true, [mui.chip] = true }
+		local function mine(frame)
+			while frame do
+				if roots[frame] then
+					return true
+				end
+				frame = M.rawOf[frame] and M.rawOf[frame].parent
+			end
+			return false
+		end
+		for index = B.before + 1, #M.addonTextures do
+			local t = M.addonTextures[index]
+			if t.layer == "OVERLAY" and t.sublevel == 7 and not mine(t.points[1] and t.points[1][2]) then
+				B.all = B.all + 1
+				B.shown = B.shown + (t.shown and 1 or 0)
+			end
+		end
+	end
 	check("borderless: the mover boxes, the bar and its buttons keep their edges", B.all >= 12 and B.shown == B.all and M.state(M.textFrame("Movers")) == "SB", B.shown .. "/" .. B.all)
 	check("borderless movers: no violations or errors", suiteKit.allClean(M), suiteKit.problems(M))
 
@@ -62000,8 +62389,8 @@ function PT.runSearchProfiles()
 		PT.go(W, "Profiles")
 		local labels = {}
 		for _, r in ipairs(PT.shownRows(W)) do labels[#labels + 1] = r.fonts[1].text end
-		check("profiles: the rows, under two headers", joined(labels) == "Profile in use, New profile, Setup, Copy from, Delete profile, Reset profile, Export profile, Import profile, Export trackers, Import trackers"
-			and joined(PT.headers(W)) == "Profile, Share", joined(labels) .. " | " .. joined(PT.headers(W)))
+		check("profiles: the rows, under three headers", joined(labels) == "Profile in use, New profile, Setup, Copy from, Delete profile, Reset profile, In a dungeon, In a raid, In a battleground or arena, Everywhere else, Export profile, Import profile, Export trackers, Import trackers"
+			and joined(PT.headers(W)) == "Profile, Switch automatically, Switches wait until the fight ends., Share", joined(labels) .. " | " .. joined(PT.headers(W)))
 		local used = PT.control(need(W, "Profile in use"))
 		check("profiles: the profile in use is the dropdown's text", used.fonts[1].text == "Default")
 		PT.press(W, used)
@@ -62135,8 +62524,8 @@ function PT.runSearchProfiles()
 		PT.go(W, "Profiles")
 		local labels = {}
 		for _, r in ipairs(PT.shownRows(W)) do labels[#labels + 1] = r.fonts[1].text end
-		check("tkshare: the Share section has Export trackers and Import trackers after Import profile", joined(labels) == "Profile in use, New profile, Setup, Copy from, Delete profile, Reset profile, Export profile, Import profile, Export trackers, Import trackers"
-			and joined(PT.headers(W)) == "Profile, Share", joined(labels))
+		check("tkshare: the Share section has Export trackers and Import trackers after Import profile", joined(labels) == "Profile in use, New profile, Setup, Copy from, Delete profile, Reset profile, In a dungeon, In a raid, In a battleground or arena, Everywhere else, Export profile, Import profile, Export trackers, Import trackers"
+			and joined(PT.headers(W)) == "Profile, Switch automatically, Switches wait until the fight ends., Share", joined(labels))
 		local out = PT.control(need(W, "Export trackers"))
 		local into = PT.control(need(W, "Import trackers"))
 		PT.press(W, PT.byText(W, "Export")[2])
@@ -62150,6 +62539,30 @@ function PT.runSearchProfiles()
 		PT.press(W, PT.byText(W, "Export")[2])
 		check("tkshare: Export with no trackers says so", PT.strip(W) == "No trackers.")
 		clean(W, "tracker share rows")
+	end
+	do
+		local P = PT.world({ character = "Tester - Realm" })
+		P.ns.NewProfile("Tank")
+		P.ns.UseProfile("Default")
+		P.ns.OpenPanel()
+		PT.go(P, "Profiles")
+		local rows = {}
+		for _, label in ipairs({ "In a dungeon", "In a raid", "In a battleground or arena", "Everywhere else" }) do
+			local row = PT.need(P, label)
+			rows[#rows + 1] = row and PT.control(row).fonts[1].text or "missing"
+		end
+		check("auto switch: the Profiles page has the four rows, each at No change", table.concat(rows, ",") == "No change,No change,No change,No change", table.concat(rows, ","))
+		local dropdown = PT.control(PT.need(P, "In a raid"))
+		PT.press(P, dropdown)
+		local picks = PT.linesOf(P, PT.list(P))
+		local names = {}
+		for _, line in ipairs(picks) do names[#names + 1] = line.text end
+		if picks[2] then PT.press(P, picks[2].raw) end
+		check("auto switch: a row lists No change and then every profile, and a pick is the rule", names[1] == "No change" and #names == #P.ns.Profiles() + 1 and P.ns.ProfileSwitch.Get("raid") == names[2]
+			and dropdown.fonts[1].text == names[2], table.concat(names, ","))
+		PT.press(P, dropdown)
+		PT.press(P, PT.linesOf(P, PT.list(P))[1].raw)
+		check("auto switch: No change clears the rule", P.ns.ProfileSwitch.Get("raid") == nil and dropdown.fonts[1].text == "No change")
 	end
 	do
 		-- Without Core's functions the page says so and shows nothing else.
@@ -62168,7 +62581,8 @@ function PT.runSearchProfiles()
 		PT.go(V, "Profiles")
 		local labels = {}
 		for _, r in ipairs(PT.shownRows(V)) do labels[#labels + 1] = r.fonts[1].text end
-		check("profiles: with only the first three, the page has the one row they serve", joined(labels) == "Profile in use" and joined(PT.headers(V)) == "Profile", joined(labels))
+		check("profiles: with only the first three, the page has the rows they serve", joined(labels) == "Profile in use, In a dungeon, In a raid, In a battleground or arena, Everywhere else"
+			and joined(PT.headers(V)) == "Profile, Switch automatically, Switches wait until the fight ends.", joined(labels))
 		local U = PT.world()
 		PT.profiles(U)
 		U.ns.UseProfile = nil
@@ -62318,7 +62732,7 @@ function PT.runWindow()
 			if item.section then L.inside = item.section == "Options window" end
 			if L.inside and item.key then L.labels[#L.labels + 1] = item.label end
 		end
-		check("window look: the Flat UI page has them in a section Options window", table.concat(L.labels, ", ") == "Accent colour, Custom accent colour, Window tone, Borders, Corners, Density, Window font, Window scale, Sidebar", table.concat(L.labels, ", "))
+		check("window look: the Flat UI page has them in a section Options window", table.concat(L.labels, ", ") == "Accent colour, Custom accent colour, Window tone, Borders, Corners, Density, Window font, Window scale, Sidebar, Movers grid", table.concat(L.labels, ", "))
 		L.ns.Set("panel.tone", "ink")
 		L.ns.Set("panel.scale", 120)
 		check("window look: they are kept in FlatUIDB.panel and in no profile", L.W.env.FlatUIDB.panel.tone == "ink" and L.W.env.FlatUIDB.panel.scale == 120 and not L.has(L.W.env.FlatUIDB.profiles))
@@ -65605,9 +66019,10 @@ function PT.runSetup()
 		clean(W, "setup picture")
 	end
 
-	-- The offer ---------------------------------------------------------------------------------------------------------------
+	-- The welcome screen (the offer of a new character) ----------------------------------------------------------------------
 	do
-		local function offerWorld(prep, opts)
+		local WS = {}
+		function WS.world(prep, opts)
 			opts = opts or {}
 			opts.character, opts.offer = opts.character or SU.CHARACTER, true
 			local W = suiteKit.mwBefore(opts, function(X)
@@ -65617,58 +66032,277 @@ function PT.runSetup()
 			W.advance(1.5)
 			return W
 		end
-		local function shown(W)
-			return W.named.FlatUISetupOffer ~= nil and W.env.FlatUISetupOffer:IsShown() == true
+		function WS.shown(W)
+			return W.named.FlatUIWelcome ~= nil and W.env.FlatUIWelcome:IsShown() == true
 		end
-		local A = offerWorld()
-		check("setup: a character with no profile of its own, not offered yet, with the switch on and no draft, is offered setup a second after login", shown(A) and #A.errors == 0 and #A.violations == 0)
+		function WS.has(W, text)
+			for _, raw in ipairs(SU.under(W, W.env.FlatUIWelcome)) do
+				for _, fs in ipairs(raw.fonts) do
+					if raw.shown ~= false and fs.shown and fs.text == text then
+						return raw
+					end
+				end
+			end
+		end
+		function WS.press(W, text)
+			SU.click(WS.has(W, text))
+		end
+		function WS.set(opts, key, value)
+			opts = opts or {}
+			opts.saved = opts.saved or {}
+			opts.saved.setup = opts.saved.setup or {}
+			opts.saved.setup[key] = value
+			return opts
+		end
+		function WS.profiles(...)
+			local list = { Default = { options = {}, movers = {} } }
+			for _, name in ipairs({ ... }) do list[name] = { options = {}, movers = {} } end
+			return list
+		end
+		function WS.count(W)
+			local count = 0
+			for _ in pairs(W.env.FlatUIDB.profiles) do count = count + 1 end
+			return count
+		end
+		function WS.size(W)
+			local _, _, w, h = W.rectOf(W.env.FlatUIWelcome)
+			return w, h
+		end
+		local A = WS.world()
+		local w, h = WS.size(A)
+		local l, b = A.rectOf(A.env.FlatUIWelcome)
 		local list = {}
-		for _, name in ipairs(A.env.UISpecialFrames) do if name == "FlatUISetupOffer" then list[#list + 1] = name end end
-		local l, b, w, h = A.rectOf(A.env.FlatUISetupOffer)
-		check("setup: the offer is 644 wide at the top centre, in the HIGH strata and listed for Escape", #list == 1 and near(w, 644) and near(h, A.ns.Setup.OFFER_H) and A.rawOf[A.env.FlatUISetupOffer].strata == "HIGH" and near(l + w / 2, 960),
-			g(l) .. " " .. g(w) .. " " .. g(h))
-		check("setup: it has the title, the line, the seven profiles and the two buttons", SU.offerHas(A, "Click a profile to use it.") ~= nil and SU.offerHas(A, "Flat UI setup") ~= nil
-			and SU.offerHas(A, "Open setup") ~= nil and SU.offerHas(A, "Keep Default") ~= nil and SU.offerHas(A, "Standard") ~= nil and SU.offerHas(A, "Large") ~= nil and SU.offerHas(A, "Jon Default") ~= nil)
+		for _, name in ipairs(A.env.UISpecialFrames) do if name == "FlatUIWelcome" then list[#list + 1] = name end end
+		check("welcome: a character with no profile of its own, not offered yet, with Show profiles and no draft, sees the welcome screen a second after login",
+			WS.shown(A) and #A.errors == 0 and #A.violations == 0 and A.named.FlatUISetupOffer == nil)
+		check("welcome: it is 520 wide at the top centre, in the HIGH strata above the options window and listed for Escape", #list == 1 and near(w, 520) and A.rawOf[A.env.FlatUIWelcome].strata == "HIGH"
+			and near(l + w / 2, 960) and A.rawOf[A.env.FlatUIWelcome].level == 200, g(l) .. " " .. g(w) .. " " .. g(h))
+		check("welcome: three buttons layout has the title, the line, the three buttons, the footer and the tick", WS.has(A, "Welcome to Flat UI") ~= nil and WS.has(A, "Pick how Flat UI looks on this character.") ~= nil
+			and WS.has(A, "Set up Flat UI") ~= nil and WS.has(A, "Use a ready-made profile") ~= nil and WS.has(A, "Skip") ~= nil and WS.has(A, "Open it later with /flatui setup.") ~= nil
+			and WS.has(A, "Do not show on new characters") ~= nil and WS.has(A, "Set up step by step") == nil and not A.ns.Welcome.tiles[1])
+		check("welcome: the buttons are stacked, each as wide as the window less the padding", (function()
+			local W = A.ns.Welcome
+			local _, b1, w1 = A.rectOf(W.setup)
+			local _, b2, w2 = A.rectOf(W.ready)
+			local _, b3, w3 = A.rectOf(W.skip)
+			return b1 > b2 and b2 > b3 and near(w1, 488) and near(w2, 488) and near(w3, 488)
+		end)())
 		PT.escape(A)
-		check("setup: Escape closes it without the flag, so it returns at the next login", not shown(A) and A.env.FlatUICharDB.setupOffered ~= true)
-		local B = offerWorld()
+		check("welcome: Escape closes it and chooses nothing, so it comes back at the next login", not WS.shown(A) and A.env.FlatUICharDB.setupOffered ~= true and A.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
+		-- Skip with Default profile.
+		local B = WS.world()
 		local account = SU.deep(B.env.FlatUIDB)
-		SU.click(SU.offerHas(B, "Keep Default"))
-		check("setup: Keep Default closes the offer and writes only the character's flag", not shown(B) and B.env.FlatUICharDB.setupOffered == true and B.env.FlatUIDB.profileOf[SU.CHARACTER] == nil
-			and not B.ns.PanelShown() and SU.same(B.env.FlatUIDB, account, "setup"))
+		WS.press(B, "Skip")
+		check("welcome: Skip keeps the Default profile, closes the screen and writes only the character flag", not WS.shown(B) and B.env.FlatUICharDB.setupOffered == true
+			and B.env.FlatUIDB.profileOf[SU.CHARACTER] == nil and not B.ns.PanelShown() and SU.same(B.env.FlatUIDB, account, "setup"))
 		local again = suiteKit.mwBefore({ character = SU.CHARACTER, offer = true, saved = SU.deep(B.env.FlatUIDB), char = SU.deep(B.env.FlatUICharDB) }, PT.extend)
 		again.advance(1.5)
-		check("setup: and it is not offered again to that character", again.named.FlatUISetupOffer == nil)
-		local C = offerWorld()
-		SU.click(SU.offerHas(C, "Open setup"))
-		check("setup: Open setup closes the offer, sets the flag and opens setup at New profile", not shown(C) and C.env.FlatUICharDB.setupOffered == true and C.ns.PanelShown() and PT.title(C) == "New profile")
-		-- The four conditions, each alone.
-		local function none(opts, prep)
-			local X = offerWorld(prep, opts)
-			return X.named.FlatUISetupOffer == nil
+		local nextOne = suiteKit.mwBefore({ character = "Other - Realm", offer = true, saved = SU.deep(WS.set(nil, "welcomeWhen", "account").saved) }, PT.extend)
+		nextOne.advance(1.5)
+		local skipA = WS.world(nil, WS.set(nil, "welcomeWhen", "account"))
+		WS.press(skipA, "Skip")
+		local newB = suiteKit.mwBefore({ character = "Other - Realm", offer = true, saved = SU.deep(skipA.env.FlatUIDB) }, PT.extend)
+		newB.advance(1.5)
+		check("welcome: First login on the account: after Skip on one character a new character gets no screen", nextOne.named.FlatUIWelcome ~= nil and newB.named.FlatUIWelcome == nil)
+		check("welcome: and it is not shown again to that character", again.named.FlatUIWelcome == nil)
+		local C = WS.world()
+		WS.press(C, "Set up Flat UI")
+		check("welcome: Set up Flat UI closes the screen, sets the flag and opens setup at New profile", not WS.shown(C) and C.env.FlatUICharDB.setupOffered == true and C.ns.PanelShown() and PT.title(C) == "New profile")
+		-- The ready-made profile step.
+		local D = WS.world()
+		local DW = D.ns.Welcome
+		local _, h1 = WS.size(D)
+		WS.press(D, "Use a ready-made profile")
+		local _, h2 = WS.size(D)
+		check("welcome: Use a ready-made profile shows the seven tiles, the box and Back in the same window, taller, and Set up Flat UI is gone", #DW.tiles == 7 and DW.tiles[1].frame:IsShown() and h2 > h1
+			and WS.has(D, "Back") ~= nil and WS.has(D, "Same profile on new characters") ~= nil and WS.has(D, "Set up Flat UI") == nil and WS.has(D, "Click a profile to use it.") ~= nil and #D.errors == 0)
+		WS.press(D, "Back")
+		check("welcome: Back shows the three buttons again", WS.has(D, "Set up Flat UI") ~= nil and not DW.tiles[1].frame:IsShown() and near(select(2, WS.size(D)), h1))
+		WS.press(D, "Use a ready-made profile")
+		local before = #D.cvarWrites
+		SU.click(D.rawOf[DW.tiles[5].frame])
+		check("welcome: a tile uses its profile, sets the flag, writes no game setting, makes no protected call and closes the screen", D.env.FlatUIDB.profileOf[SU.CHARACTER] == "Healer" and D.ns.Profile() == "Healer"
+			and D.env.FlatUICharDB.setupOffered == true and not WS.shown(D) and #D.cvarWrites == before and #D.errors == 0 and #D.violations == 0 and D.ns.Get("setup.newCharacter") == "ask")
+		local E = WS.world()
+		WS.press(E, "Use a ready-made profile")
+		SU.click(E.rawOf[E.ns.Welcome.shareBox])
+		SU.click(E.rawOf[E.ns.Welcome.tiles[4].frame])
+		check("welcome: with the box ticked a tile also makes its profile the one every new character gets", E.ns.Get("setup.newCharacter") == "preset:tank" and E.env.FlatUIDB.profileOf[SU.CHARACTER] == "Tank")
+		local F = WS.world()
+		WS.press(F, "Use a ready-made profile")
+		SU.click(F.rawOf[F.ns.Welcome.shareBox])
+		WS.press(F, "Back")
+		WS.press(F, "Use a ready-made profile")
+		check("welcome: the box is unticked again after Back", F.ns.Welcome.share == false and not F.ns.Welcome.shareMark:IsShown())
+		-- Profile tiles layout.
+		local G = WS.world(nil, WS.set(nil, "welcomeLayout", "tiles"))
+		local GW = G.ns.Welcome
+		check("welcome: the Profile tiles layout shows the tiles at once with Set up step by step and Skip, and no Back", WS.shown(G) and #GW.tiles == 7 and GW.tiles[1].frame:IsShown()
+			and WS.has(G, "Pick a profile, or set one up step by step.") ~= nil and WS.has(G, "Set up step by step") ~= nil and WS.has(G, "Skip") ~= nil and WS.has(G, "Back") == nil
+			and WS.has(G, "Use a ready-made profile") == nil and WS.has(G, "Set up Flat UI") == nil)
+		do
+			local ol, ob, ow, oh = G.rectOf(G.env.FlatUIWelcome)
+			local l7, b7, w7, h7 = G.rectOf(GW.tiles[7].frame)
+			local sl, sb = G.rectOf(GW.step)
+			local kl, kb = G.rectOf(GW.skip)
+			check("welcome: the seven tiles are inside the window, 156 wide at 520 wide, and the two buttons are in one row under the box", l7 >= ol and l7 + w7 <= ol + ow and b7 >= ob and b7 + h7 <= ob + oh
+				and near(w7, 156) and near(sb, kb) and sl < kl, g(w7) .. " " .. g(oh))
 		end
-		check("setup: no offer when the character has a profile of its own", none({ saved = { profiles = { Default = { options = {}, movers = {} }, Mine = { options = {}, movers = {} } }, profileOf = { [SU.CHARACTER] = "Mine" } } }))
-		check("setup: no offer when the character was offered already", none({ char = { setupOffered = true }, offer = true }))
-		check("setup: no offer when Profile on a new character is not Show profiles", none({ saved = { setup = { newCharacter = "default" } } }))
-		check("setup: no offer when the character has a draft, and the line says so instead", none({ saved = { setup = { drafts = { [SU.CHARACTER] = { values = { ["general.thickness"] = 2 }, step = 1 } } } } }))
-		check("setup: no offer in a client that does not say who the character is", (function()
-			local X = suiteKit.mwBefore({ offer = true }, PT.extend)
-			X.advance(1.5)
-			return X.named.FlatUISetupOffer == nil
+		WS.press(G, "Set up step by step")
+		check("welcome: Set up step by step opens setup at New profile and sets the flag", not WS.shown(G) and G.env.FlatUICharDB.setupOffered == true and G.ns.PanelShown() and PT.title(G) == "New profile")
+		local H = WS.world(nil, WS.set(nil, "welcomeLayout", "tiles"))
+		SU.click(H.rawOf[H.ns.Welcome.tiles[1].frame])
+		check("welcome: a tile of the Profile tiles layout uses its profile", H.env.FlatUIDB.profileOf[SU.CHARACTER] == "Standard" and not WS.shown(H))
+		-- Size.
+		local big = WS.world(nil, WS.set(nil, "welcomeSize", "640"))
+		local bw = WS.size(big)
+		big.ns.Welcome.view = "tiles"
+		big.ns.Welcome.Update()
+		local tw = select(3, big.rectOf(big.ns.Welcome.tiles[1].frame))
+		local fw = WS.size(big)
+		local _, sb, _, sh = big.rectOf(big.ns.Welcome.tiles[7].frame)
+		local _, mb, _, mh = big.rectOf(big.env.FlatUIWelcome)
+		check("welcome: 640 wide makes the window 640 wide, with tiles 196 wide, and the height fits the content", near(bw, 640) and near(fw, 640) and near(tw, 196) and sb >= mb and sb + sh <= mb + mh, g(bw) .. " " .. g(tw))
+		-- Skip keeps the game look.
+		local game = WS.world(nil, WS.set(nil, "welcomeSkip", "game"))
+		WS.press(game, "Skip")
+		local count, offs, bad = 0, 0, {}
+		local made = game.env.FlatUIDB.profiles["Game look"]
+		for path, def in pairs(game.ns.Setup.Defs()) do
+			if def.key == "enabled" and def.kind == "bool" and def.default == true then
+				count = count + 1
+				if made and made.options[path] == false then offs = offs + 1 else bad[#bad + 1] = path end
+			end
+		end
+		check("welcome: Skip with the game look makes the profile Game look with every module off, uses it, sets the flag and says one line", made ~= nil and count >= 10 and offs == count
+			and game.env.FlatUIDB.profileOf[SU.CHARACTER] == "Game look" and game.ns.Profile() == "Game look" and game.env.FlatUICharDB.setupOffered == true and not WS.shown(game)
+			and WS.count(game) == 2 and #game.errors == 0 and #game.violations == 0, tostring(count) .. " " .. tostring(offs) .. " " .. joined(bad))
+		local mine = { options = { ["general.thickness"] = 2 }, movers = {} }
+		local kept = WS.world(nil, WS.set({ saved = { profiles = { Default = { options = {}, movers = {} }, ["Game look"] = mine } } }, "welcomeSkip", "game"))
+		local snapshot = SU.deep(kept.env.FlatUIDB.profiles)
+		WS.press(kept, "Skip")
+		check("welcome: a profile named Game look that exists is used as it is and never written to, and no second one is made", kept.env.FlatUIDB.profileOf[SU.CHARACTER] == "Game look"
+			and SU.same(kept.env.FlatUIDB.profiles, snapshot) and WS.count(kept) == 2)
+		local other = WS.world(nil, WS.set({ saved = { profiles = WS.profiles("Mira") } }, "welcomeSkip", "game"))
+		local mira = SU.deep(other.env.FlatUIDB.profiles.Mira)
+		WS.press(other, "Skip")
+		check("welcome: Skip with the game look changes no other profile", SU.same(other.env.FlatUIDB.profiles.Mira, mira) and WS.count(other) == 3)
+		local fight = WS.world(nil, WS.set(nil, "welcomeSkip", "game"))
+		fight.combat = true
+		WS.press(fight, "Skip")
+		check("welcome: Skip with the game look in combat changes nothing and the screen stays", WS.shown(fight) and fight.env.FlatUIDB.profiles["Game look"] == nil and fight.env.FlatUICharDB.setupOffered ~= true)
+		-- The tick.
+		local T = WS.world()
+		check("welcome: the tick is shown, unticked", T.ns.Welcome.tickBox:IsShown() and not T.ns.Welcome.tickMark:IsShown())
+		SU.click(T.rawOf[T.ns.Welcome.tickBox])
+		WS.press(T, "Skip")
+		check("welcome: with the tick ticked a button sets Profile on a new character to Default profile, and the next character gets no screen", T.ns.Get("setup.newCharacter") == "default"
+			and (function()
+				local N = suiteKit.mwBefore({ character = "Other - Realm", offer = true, saved = SU.deep(T.env.FlatUIDB) }, PT.extend)
+				N.advance(1.5)
+				return N.named.FlatUIWelcome == nil
+			end)())
+		local U = WS.world()
+		WS.press(U, "Skip")
+		check("welcome: with the tick unticked a button leaves Profile on a new character at Show profiles", U.ns.Get("setup.newCharacter") == "ask")
+		local V = WS.world()
+		SU.click(V.rawOf[V.ns.Welcome.tickBox])
+		WS.press(V, "Set up Flat UI")
+		check("welcome: the tick also counts when Set up Flat UI is pressed", V.ns.Get("setup.newCharacter") == "default" and V.ns.PanelShown())
+		local X = WS.world()
+		WS.press(X, "Use a ready-made profile")
+		SU.click(X.rawOf[X.ns.Welcome.tickBox])
+		SU.click(X.rawOf[X.ns.Welcome.shareBox])
+		SU.click(X.rawOf[X.ns.Welcome.tiles[2].frame])
+		check("welcome: with both the tick and the box ticked the profile of the box is the one new characters get", X.ns.Get("setup.newCharacter") == "preset:minimal")
+		local Y = WS.world(nil, WS.set(nil, "welcomeTick", "off"))
+		check("welcome: with the tick Hidden there is no tick on the screen", WS.shown(Y) and not Y.ns.Welcome.tickBox:IsShown() and WS.has(Y, "Do not show on new characters") == nil)
+		WS.press(Y, "Skip")
+		check("welcome: and a button then leaves Profile on a new character alone", Y.ns.Get("setup.newCharacter") == "ask")
+		-- When it shows.
+		local others = { profiles = WS.profiles("Mira"), profileOf = { ["Other - Realm"] = "Mira" } }
+		check("welcome: New character with no profile shows it to a character when another character has a profile", WS.shown(WS.world(nil, { saved = SU.deep(others) })))
+		check("welcome: First login on the account shows it while no character has a profile", WS.shown(WS.world(nil, WS.set(nil, "welcomeWhen", "account"))))
+		check("welcome: First login on the account does not show it once a character has a profile", not WS.shown(WS.world(nil, WS.set({ saved = SU.deep(others) }, "welcomeWhen", "account"))))
+		local conditions = {
+			{ saved = { profiles = WS.profiles("Mine"), profileOf = { [SU.CHARACTER] = "Mine" } } }, { char = { setupOffered = true }, offer = true },
+			{ saved = { setup = { newCharacter = "default" } } },
+			{ saved = { setup = { drafts = { [SU.CHARACTER] = { values = { ["general.thickness"] = 2 }, step = 1 } } } } },
+		}
+		local none = 0
+		for _, opts in ipairs(conditions) do
+			if not WS.shown(WS.world(nil, opts)) then none = none + 1 end
+		end
+		check("welcome: it is not shown to a character with a profile, one offered already, with Profile on a new character not at Show profiles, or with a kept draft", none == 4, tostring(none))
+		do
+			local N = WS.world(nil, { saved = { setup = { newCharacter = "default" } } })
+			N.env.FlatUICharDB.setupOffered = nil
+			check("welcome: the screen is not wanted when Profile on a new character is not Show profiles, flagged or not", N.ns.WelcomeWanted() == false)
+		end
+		check("welcome: and not in a client that does not say who the character is", (function()
+			local K = suiteKit.mwBefore({ offer = true }, PT.extend)
+			K.advance(1.5)
+			return K.named.FlatUIWelcome == nil
 		end)())
-		local E = suiteKit.mwBefore({ character = SU.CHARACTER, offer = true }, function(X)
-			PT.extend(X)
-			X.combat = true
+		local Z = suiteKit.mwBefore({ character = SU.CHARACTER, offer = true }, function(K)
+			PT.extend(K)
+			K.combat = true
 		end)
-		E.advance(1.5)
-		check("setup: no offer in combat, and it comes when the fight is over", E.named.FlatUISetupOffer == nil and (function()
-			E.combat = false
-			E.fire("PLAYER_REGEN_ENABLED")
-			return E.named.FlatUISetupOffer ~= nil and E.env.FlatUISetupOffer:IsShown()
+		Z.advance(1.5)
+		check("welcome: it is not shown in combat, it comes when the fight is over and combat hides it", Z.named.FlatUIWelcome == nil and (function()
+			Z.combat = false
+			Z.fire("PLAYER_REGEN_ENABLED")
+			local came = WS.shown(Z)
+			Z.combat = true
+			Z.fire("PLAYER_REGEN_DISABLED")
+			return came and not WS.shown(Z)
 		end)())
-		clean(A, "setup offer")
+		-- /flatui welcome.
+		local P = SU.world()
+		local profileOf = SU.deep(P.env.FlatUIDB.profileOf)
+		local flag = P.env.FlatUICharDB.setupOffered
+		P.env.SlashCmdList.FLATUI("welcome")
+		check("welcome: /flatui welcome opens the screen for any character, and nothing is chosen", WS.shown(P) and P.env.FlatUICharDB.setupOffered == flag
+			and SU.same(P.env.FlatUIDB.profileOf, profileOf) and P.ns.Get("setup.newCharacter") == "ask")
+		P.env.SlashCmdList.FLATUI("help")
+		check("welcome: /flatui has its help line", (function()
+			for _, line in ipairs(P.out) do if line == "/flatui welcome - the welcome screen" then return true end end
+		end)())
+		local Q = SU.world()
+		Q.combat = true
+		Q.env.SlashCmdList.FLATUI("welcome")
+		check("welcome: /flatui welcome in combat waits for the end of the fight", Q.named.FlatUIWelcome == nil and (function()
+			Q.combat = false
+			Q.fire("PLAYER_REGEN_ENABLED")
+			return WS.shown(Q)
+		end)())
+		-- The settings.
+		do
+			local rows, want = {}, {
+				{ "welcomeLayout", "buttons", "Welcome screen layout", "buttons=Three buttons, tiles=Profile tiles" },
+				{ "welcomeWhen", "character", "Welcome screen shows", "character=New character with no profile, account=First login on the account" },
+				{ "welcomeSkip", "default", "Skip keeps", "default=Default profile, game=The game's look" },
+				{ "welcomeSize", "520", "Welcome screen size", "520=520 wide, 640=640 wide" },
+				{ "welcomeTick", "on", "Do not show tick", "on=Shown, off=Hidden" },
+			}
+			for _, page in ipairs(A.ns.PAGES) do
+				for _, item in ipairs(page) do
+					if item.page == "setup" then rows[item.key] = item end
+				end
+			end
+			local bad = {}
+			for _, spec in ipairs(want) do
+				local item, parts = rows[spec[1]], {}
+				for _, choice in ipairs(item and item.choices or {}) do parts[#parts + 1] = choice[1] .. "=" .. choice[2] end
+				if not (item and item.default == spec[2] and item.label == spec[3] and table.concat(parts, ", ") == spec[4] and item.live == true and item.get == "SetupGet" and item.set == "SetupSet") then
+					bad[#bad + 1] = spec[1]
+				end
+				if A.ns.Get("setup." .. spec[1]) ~= spec[2] then bad[#bad + 1] = spec[1] .. " default" end
+			end
+			check("welcome: the five settings are on the setup page with the picked defaults, labels, choices, account-wide and live", #bad == 0, joined(bad))
+		end
+		clean(A, "welcome")
 	end
-
 	-- Ready-made profiles: the table, the recommendation, the panel and the pictures ---------------------------------------------
 	do
 		local RP = {}
@@ -65692,6 +66326,15 @@ function PT.runSetup()
 		end
 		function RP.shown(W)
 			return W.named.FlatUISetupOffer ~= nil and W.env.FlatUISetupOffer:IsShown() == true
+		end
+		function RP.welcomeShown(W)
+			return W.named.FlatUIWelcome ~= nil and W.env.FlatUIWelcome:IsShown() == true
+		end
+		-- A login world with the panel of /flatui profiles open: for the tiles, the box and the buttons of the panel itself.
+		function RP.panel(prep, opts)
+			local W = RP.world(prep, opts)
+			W.ns.OpenProfiles()
+			return W
 		end
 		function RP.click(W, index)
 			SU.click(W.rawOf[W.ns.Setup.tiles[index].frame])
@@ -65846,11 +66489,11 @@ function PT.runSetup()
 
 		-- 3. The panel -------------------------------------------------------------------------------------------------------
 		do
-			local A = RP.world()
+			local A = RP.panel()
 			local S = A.ns.Setup
 			check("setup profiles: a character with no profile and not offered gets the panel, with seven tiles, and nothing is wrong", RP.shown(A) and #S.tiles == 7 and #A.errors == 0 and #A.violations == 0)
-			check("setup profiles: it is not shown to a character that was offered, nor with Default profile on a new character", RP.world(nil, { char = { setupOffered = true } }).named.FlatUISetupOffer == nil
-				and RP.world(nil, { saved = { setup = { newCharacter = "default" } } }).named.FlatUISetupOffer == nil)
+			check("setup profiles: it is not shown to a character that was offered, nor with Default profile on a new character", not RP.welcomeShown(RP.world(nil, { char = { setupOffered = true } }))
+				and not RP.welcomeShown(RP.world(nil, { saved = { setup = { newCharacter = "default" } } })))
 			local order, lines, place = {}, true, true
 			local l1, b1, w1, h1 = A.rectOf(S.tiles[1].frame)
 			for index, tile in ipairs(S.tiles) do
@@ -65892,14 +66535,15 @@ function PT.runSetup()
 				end
 				check("setup profiles: the tag on a tile is above every frame of the card under it", above and seen == 7)
 			end
-			local T = RP.world(function(X)
+			local T = RP.panel(function(X)
 				X.env.UnitClassBase = function() return "WARRIOR" end
 				X.env.UnitGroupRolesAssigned = function() return "TANK" end
 			end)
 			check("setup profiles: a tank gets Recommended on Tank", tags(T) == "-, -, -, Recommended, -, -, -", tags(T))
-			local U = RP.world(nil, { saved = { profiles = RP.profiles({ Standard = {} }), profileOf = { [SU.CHARACTER] = "Standard" } } })
+			local U = RP.panel(nil, { saved = { profiles = RP.profiles({ Standard = {} }), profileOf = { [SU.CHARACTER] = "Standard" } } })
 			U.ns.OpenProfiles()
-			check("setup profiles: In use wins over Recommended, and a character with a profile of its own is not offered by itself", tags(U) == "In use, -, -, -, -, -, -" and RP.shown(U), tags(U))
+			check("setup profiles: In use wins over Recommended, and a character with a profile of its own is not offered by itself", tags(U) == "In use, -, -, -, -, -, -" and RP.shown(U)
+				and not RP.welcomeShown(RP.world(nil, { saved = { profiles = RP.profiles({ Standard = {} }), profileOf = { [SU.CHARACTER] = "Standard" } } })), tags(U))
 			-- A click on a tile.
 			local db = A.env.FlatUIDB
 			local before = #A.cvarWrites
@@ -65909,7 +66553,7 @@ function PT.runSetup()
 				made ~= nil and RP.same(made.options, S.PresetOf("healer").values) and db.profileOf[SU.CHARACTER] == "Healer" and A.ns.Profile() == "Healer"
 				and A.env.FlatUICharDB.setupOffered == true and not RP.shown(A))
 			check("setup profiles: it says one line, writes no game setting and makes no protected call", RP.told(A, "Flat UI: using Healer.") == 1 and #A.cvarWrites == before and #A.errors == 0 and #A.violations == 0)
-			local X = RP.world(nil, { character = "Other - Realm", saved = SU.deep(db) })
+			local X = RP.panel(nil, { character = "Other - Realm", saved = SU.deep(db) })
 			RP.click(X, 5)
 			local count = 0
 			for _ in pairs(X.env.FlatUIDB.profiles) do count = count + 1 end
@@ -65919,7 +66563,7 @@ function PT.runSetup()
 			do
 				local bad = {}
 				for index = 1, 7 do
-					local Z = RP.world()
+					local Z = RP.panel()
 					local was = #Z.cvarWrites
 					RP.click(Z, index)
 					if not (Z.env.FlatUIDB.profileOf[SU.CHARACTER] ~= nil and #Z.cvarWrites == was and #Z.errors == 0 and #Z.violations == 0 and not RP.shown(Z)) then
@@ -65929,13 +66573,13 @@ function PT.runSetup()
 				check("setup profiles: each of the seven tiles uses its profile with no game setting written, no protected call and no error", #bad == 0, joined(bad))
 			end
 			-- A profile of the same name, made by hand, is used as it is.
-			local H = RP.world(nil, { saved = { profiles = RP.profiles({ healer = { ["general.thickness"] = 2 } }), profileOf = {} } })
+			local H = RP.panel(nil, { saved = { profiles = RP.profiles({ healer = { ["general.thickness"] = 2 } }), profileOf = {} } })
 			local shownValues = H.ns.Setup.tiles[5].values
 			RP.click(H, 5)
 			check("setup profiles: a profile named healer is used by the Healer tile as it is, and the tile shows it", H.env.FlatUIDB.profileOf[SU.CHARACTER] == "healer" and H.env.FlatUIDB.profiles.Healer == nil
 				and RP.same(H.env.FlatUIDB.profiles.healer.options, { ["general.thickness"] = 2 }) and shownValues == H.env.FlatUIDB.profiles.healer.options and RP.told(H, "Flat UI: using healer.") == 1)
 			-- Same as <profile>.
-			local C = RP.world(nil, { saved = { profiles = RP.profiles({ Mira = { ["general.thickness"] = 2 } }), profileOf = { ["Other - Realm"] = "Mira" } } })
+			local C = RP.panel(nil, { saved = { profiles = RP.profiles({ Mira = { ["general.thickness"] = 2 } }), profileOf = { ["Other - Realm"] = "Mira" } } })
 			local CS = C.ns.Setup
 			local sl, sb, sw, sh = C.rectOf(CS.same)
 			local ol, ob = C.rectOf(CS.open)
@@ -65948,7 +66592,7 @@ function PT.runSetup()
 				and RP.told(C, "Flat UI: using Mira.") == 1 and not RP.shown(C) and RP.same(C.env.FlatUIDB.profiles.Mira.options, { ["general.thickness"] = 2 }))
 			-- In combat the button changes nothing.
 			do
-				local K = RP.world(nil, { saved = { profiles = RP.profiles({ Mira = { ["general.thickness"] = 2 } }), profileOf = { ["Other - Realm"] = "Mira" } } })
+				local K = RP.panel(nil, { saved = { profiles = RP.profiles({ Mira = { ["general.thickness"] = 2 } }), profileOf = { ["Other - Realm"] = "Mira" } } })
 				K.combat = true
 				SU.click(K.rawOf[K.ns.Setup.same])
 				check("setup profiles: Same as in combat changes nothing and the line says so", K.env.FlatUIDB.profileOf[SU.CHARACTER] == nil and K.env.FlatUICharDB.setupOffered ~= true and RP.shown(K)
@@ -65956,7 +66600,7 @@ function PT.runSetup()
 			end
 			-- The profile this character uses is not offered as Same as.
 			do
-				local V = RP.world(nil, { saved = { profiles = RP.profiles({ Standard = {} }), profileOf = { [SU.CHARACTER] = "Standard", ["Other - Realm"] = "Standard" } } })
+				local V = RP.panel(nil, { saved = { profiles = RP.profiles({ Standard = {} }), profileOf = { [SU.CHARACTER] = "Standard", ["Other - Realm"] = "Standard" } } })
 				V.ns.OpenProfiles()
 				check("setup profiles: Same as leaves out the profile this character uses, and the button is hidden when none is left", V.ns.Setup.MostUsed() == nil and not V.ns.Setup.same:IsShown())
 			end
@@ -66046,7 +66690,7 @@ function PT.runSetup()
 			check("setup profiles: each of the seven profiles is put in use at login the same way", #bad == 0, joined(bad))
 			-- Jon Default by a click on its tile and at login: the positions come with the values.
 			do
-				local Z = RP.world()
+				local Z = RP.panel()
 				RP.click(Z, 7)
 				local used = Z.env.FlatUIDB.profiles["Jon Default"]
 				local clicked = 0
@@ -66093,16 +66737,16 @@ function PT.runSetup()
 				and default.env.FlatUIDB.profileOf[SU.CHARACTER] == nil and default.ns.Profile() == "Default" and default.named.FlatUISetupOffer == nil and RP.count(default) == 1
 				and RP.told(default, "Flat UI: using Default.") == 0)
 			local ask = RP.login("ask")
-			check("setup profiles: Show profiles puts nothing in use and shows the panel", ask.env.FlatUIDB.profileOf[SU.CHARACTER] == nil and ask.env.FlatUICharDB.setupOffered ~= true and RP.shown(ask)
+			check("setup profiles: Show profiles puts nothing in use and shows the panel", ask.env.FlatUIDB.profileOf[SU.CHARACTER] == nil and ask.env.FlatUICharDB.setupOffered ~= true and RP.welcomeShown(ask)
 				and RP.count(ask) == 1)
 			local gone = RP.login("profile:Gone")
-			check("setup profiles: a saved profile that was deleted reads as Show profiles", gone.ns.Get("setup.newCharacter") == "ask" and RP.shown(gone) and gone.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
+			check("setup profiles: a saved profile that was deleted reads as Show profiles", gone.ns.Get("setup.newCharacter") == "ask" and RP.welcomeShown(gone) and gone.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
 			local old = RP.world(nil, { saved = { setup = { offer = false } } })
 			check("setup profiles: a saved offer that was off reads as Default profile, and the old key goes", old.ns.Get("setup.newCharacter") == "default" and old.env.FlatUIDB.setup.offer == nil
 				and old.env.FlatUICharDB.setupOffered == true and old.named.FlatUISetupOffer == nil)
 			local oldOn = RP.world(nil, { saved = { setup = { offer = true } } })
 			local oldBoth = RP.world(nil, { saved = { setup = { offer = false, newCharacter = "preset:tank" } } })
-			check("setup profiles: a saved offer that was on reads as Show profiles, and one beside a new setting does not replace it", oldOn.ns.Get("setup.newCharacter") == "ask" and RP.shown(oldOn)
+			check("setup profiles: a saved offer that was on reads as Show profiles, and one beside a new setting does not replace it", oldOn.ns.Get("setup.newCharacter") == "ask" and RP.welcomeShown(oldOn)
 				and oldBoth.ns.Get("setup.newCharacter") == "preset:tank" and oldBoth.env.FlatUIDB.profileOf[SU.CHARACTER] == "Tank")
 			-- A character that is not new is left alone.
 			local mine = RP.login("preset:healer", { profiles = RP.profiles({ Mine = {} }), profileOf = { [SU.CHARACTER] = "Mine" } })
@@ -66177,7 +66821,7 @@ function PT.runSetup()
 			check("setup profiles: the lines are named as the setting has them", lists.ns.SetupNewChoices()[1][2] == "Show profiles" and lists.ns.SetupNewChoices()[2][2] == "Default profile"
 				and lists.ns.SetupNewChoices()[3][2] == "Recommended profile" and lists.ns.SetupNewChoices()[8][2] == "Healer")
 			-- The check box on the panel.
-			local P = RP.world()
+			local P = RP.panel()
 			local PS = P.ns.Setup
 			local label = SU.offerHas(P, "Same profile on new characters")
 			local bl, bb, bw, bh = P.rectOf(PS.box)
@@ -66195,19 +66839,19 @@ function PT.runSetup()
 			next1.advance(1.5)
 			check("setup profiles: the next character gets Healer at login with no click: the same profile, one line, no panel", next1.env.FlatUIDB.profileOf["Other - Realm"] == "Healer"
 				and RP.count(next1) == 2 and RP.told(next1, "Flat UI: using Healer.") == 1 and next1.named.FlatUISetupOffer == nil)
-			local Q = RP.world()
+			local Q = RP.panel()
 			RP.click(Q, 4)
 			check("setup profiles: with the box unticked a click leaves Profile on a new character at Show profiles", Q.ns.Get("setup.newCharacter") == "ask")
-			local R = RP.world()
+			local R = RP.panel()
 			SU.click(R.rawOf[R.ns.Setup.box])
 			R.env.FlatUISetupOffer:Hide()
 			R.ns.OpenProfiles()
 			check("setup profiles: the box is unticked again when the panel opens again", R.ns.Setup.mark:IsShown() == false and R.ns.Setup.share == false)
-			local T = RP.world(nil, { saved = { profiles = RP.profiles({ Mira = RP.mira }), profileOf = { ["Other - Realm"] = "Mira" } } })
+			local T = RP.panel(nil, { saved = { profiles = RP.profiles({ Mira = RP.mira }), profileOf = { ["Other - Realm"] = "Mira" } } })
 			SU.click(T.rawOf[T.ns.Setup.box])
 			SU.click(T.rawOf[T.ns.Setup.same])
 			check("setup profiles: with the box ticked Same as Mira sets Profile on a new character to Mira", T.env.FlatUIDB.setup.newCharacter == "profile:Mira" and T.env.FlatUIDB.profileOf[SU.CHARACTER] == "Mira")
-			local U = RP.world(nil, { saved = { profiles = RP.profiles({ Mira = RP.mira }), profileOf = { ["Other - Realm"] = "Mira" } } })
+			local U = RP.panel(nil, { saved = { profiles = RP.profiles({ Mira = RP.mira }), profileOf = { ["Other - Realm"] = "Mira" } } })
 			SU.click(U.rawOf[U.ns.Setup.same])
 			check("setup profiles: and with the box unticked it leaves the setting alone", U.ns.Get("setup.newCharacter") == "ask")
 			clean(healer, "setup profiles login")
@@ -66215,7 +66859,7 @@ function PT.runSetup()
 
 		-- 6. The cards ---------------------------------------------------------------------------------------------------------
 		do
-			local W = RP.world()
+			local W = RP.panel()
 			local ns, S = W.ns, W.ns.Setup
 			local function card(index) return S.tiles[index].card end
 			local function top(index) return W.rawOf[card(index).outlines[1].top] end
@@ -69048,7 +69692,8 @@ do
 	check("centre: it is a thin line down the screen, at the middle of it, over the handles", near(l + w / 2, K.middle) and near(b, 0) and near(h, 1080) and near(w, K.pixel, 1e-6)
 		and line.strata == "FULLSCREEN_DIALOG" and line.mouse ~= true, g(l) .. "," .. g(b) .. " " .. g(w) .. "x" .. g(h))
 	check("centre: it is dim away from the middle", near(line.alpha, 0.6))
-	check("centre: and gold, the colour of the handles", line.regions[1].color and near(line.regions[1].color[1], 1) and near(line.regions[1].color[2], 0.82) and near(line.regions[1].color[3], 0))
+	local ar, ag, ab = W.ns.PanelLook.Colour("accent")
+	check("centre: and the accent colour", line.regions[1].color and near(line.regions[1].color[1], ar) and near(line.regions[1].color[2], ag) and near(line.regions[1].color[3], ab))
 	W.dragTo(K.middle - 256 + 3, 300)
 	check("centre: and bright while the handle is snapped to it", near(line.alpha, 1))
 	W.dragTo(K.middle - 256 + 30, 300)
@@ -101565,8 +102210,19 @@ do
 				and W.status():find("Click path:", 1, true) == nil, W.line("Movers") or "")
 			W.slash("move")
 			W.flush()
-			check("useaction: handsoff: the handles show Player frame and none of the bars", W.textFrame("Player frame") ~= nil and W.textFrame("Main action bar") == nil
-				and W.textFrame("Action bar 3") == nil and W.textFrame("Experience bar") == nil)
+			-- The Frame list names every frame, so a handle is looked for outside its rows.
+			local _, mui = W.ns.MoversMode.State()
+			local function handleOf(text)
+				for _, f in ipairs(W.addonFrames) do
+					if mui.list == nil or (f.parent ~= mui.list and f.parent ~= W.rawOf[mui.list]) then
+						for _, t in ipairs(f.fonts) do
+							if t.text == text then return f end
+						end
+					end
+				end
+			end
+			check("useaction: handsoff: the handles show Player frame and none of the bars", handleOf("Player frame") ~= nil and handleOf("Main action bar") == nil
+				and handleOf("Action bar 3") == nil and handleOf("Experience bar") == nil)
 			check("useaction: handsoff: the flag reads true by default and the movers know the bars", W.ns.Get("general.handsOff") == true and W.ns.MoverHandsOff("MainActionBar") == true
 				and W.ns.MoverHandsOff("PlayerFrame") == false)
 		end
@@ -109056,6 +109712,141 @@ do
 	check("gap icons: the countdown rows are all named Time left", table.concat(labels, ",") == "Time left,Time left,Time left,Time left,Time left,Time left", table.concat(labels, ","))
 end
 -- >>> gap icons (end)
+-- >>> auto switch (start)
+-- Switch automatically: a profile for a dungeon, a raid, a battleground or arena, and everywhere else. Every label starts "auto switch:".
+do
+	local T = { key = "Tester - Realm", rules = { dungeon = "Healer", raid = "Tank", pvp = "Arena", other = "Default" }, line = "Flat UI: Switched to %s." }
+	function T.saved(rules)
+		local db = { profiles = {}, profileOf = { [T.key] = "Default" } }
+		for _, name in ipairs({ "Default", "Healer", "Tank", "Arena" }) do
+			db.profiles[name] = { options = {}, movers = {} }
+		end
+		db.profileRules = rules and { [T.key] = rules } or nil
+		return db
+	end
+	function T.world(rules, key, saved)
+		local W = newWorld({ character = key or T.key, saved = saved or T.saved(rules) })
+		W.place = nil
+		W.env.IsInInstance = function() return W.place ~= nil, W.place or "none" end
+		W.login()
+		W.out = {}
+		return W
+	end
+	function T.enter(W, place)
+		W.place = place
+		W.fire("PLAYER_ENTERING_WORLD", false, false)
+	end
+	local function copy(rules)
+		local c = {}
+		for k, v in pairs(rules) do c[k] = v end
+		return c
+	end
+
+	local none = T.world(nil)
+	local path = {}
+	for _, place in ipairs({ "party", "raid", "pvp", "arena", "scenario", "none" }) do
+		T.enter(none, place ~= "none" and place or nil)
+		path[#path + 1] = none.ns.Profile()
+	end
+	check("auto switch: a character with no rule stays on its profile in every place and prints nothing", table.concat(path, ",") == "Default,Default,Default,Default,Default,Default" and #none.out == 0
+		and none.env.FlatUIDB.profileRules == nil and #none.errors == 0, table.concat(path, ","))
+	local fresh = {}
+	for _, entry in ipairs(none.ns.ProfileSwitch.KINDS) do
+		fresh[#fresh + 1] = entry.label .. "=" .. tostring(none.ns.ProfileSwitch.Get(entry.key))
+	end
+	check("auto switch: the four places start at No change", table.concat(fresh, ",") == "In a dungeon=nil,In a raid=nil,In a battleground or arena=nil,Everywhere else=nil", table.concat(fresh, ","))
+
+	local W = T.world(copy(T.rules))
+	local seen, lines = {}, {}
+	for _, place in ipairs({ "party", "party", "raid", "pvp", "arena", "none", "scenario" }) do
+		W.out = {}
+		T.enter(W, place ~= "none" and place or nil)
+		seen[#seen + 1] = W.ns.Profile()
+		lines[#lines + 1] = #W.out == 1 and W.out[1] or tostring(#W.out)
+	end
+	check("auto switch: entering a dungeon, a raid, a battleground, an arena, the open world and a scenario puts the profile of the rule in use", table.concat(seen, ",") == "Healer,Healer,Tank,Arena,Arena,Default,Default",
+		table.concat(seen, ","))
+	check("auto switch: a switch prints one plain line naming the new profile, and a loading screen inside the same kind of place prints none",
+		table.concat(lines, "|") == table.concat({ T.line:format("Healer"), "0", T.line:format("Tank"), T.line:format("Arena"), "0", T.line:format("Default"), "0" }, "|"), table.concat(lines, "|"))
+	local F = T.world(copy(T.rules))
+	T.enter(F, "party")
+	check("auto switch: the profile choice of the character follows the switch, as it does when picked by hand", F.env.FlatUIDB.profileOf[T.key] == "Healer" and #W.errors == 0 and #W.violations == 0)
+
+	local C = T.world(copy(T.rules))
+	C.combat = true
+	T.enter(C, "party")
+	check("auto switch: a switch asked in combat waits", C.ns.Profile() == "Default" and #C.out == 0)
+	C.combat = false
+	C.fire("PLAYER_REGEN_ENABLED")
+	check("auto switch: and runs when combat ends, with its line", C.ns.Profile() == "Healer" and #C.out == 1 and C.out[1] == T.line:format("Healer"), table.concat(C.out, "|"))
+	C.ns.ProfileSwitch.Set("raid", "Healer")
+	C.out = {}
+	T.enter(C, "raid")
+	check("auto switch: a place whose rule is the profile in use changes nothing and prints nothing", C.ns.Profile() == "Healer" and #C.out == 0)
+	C.out = {}
+	C.fire("PLAYER_REGEN_ENABLED")
+	check("auto switch: and runs once", C.ns.Profile() == "Healer" and #C.out == 0)
+	local L = T.world(copy(T.rules))
+	L.combat = true
+	T.enter(L, "party")
+	T.enter(L, "raid")
+	L.combat = false
+	L.fire("PLAYER_REGEN_ENABLED")
+	check("auto switch: leaving the place before combat ends asks for the rule of the place the character is in then", L.ns.Profile() == "Tank" and #L.out == 1 and L.out[1] == T.line:format("Tank"), L.ns.Profile())
+	local M = T.world(copy(T.rules))
+	M.combat = true
+	T.enter(M, "party")
+	T.enter(M, nil)
+	M.combat = false
+	M.fire("PLAYER_REGEN_ENABLED")
+	check("auto switch: a switch asked in combat is dropped when the character is back where the profile in use is the rule", M.ns.Profile() == "Default" and #M.out == 0, M.ns.Profile())
+	local U = T.world(copy(T.rules))
+	U.ns.UseProfile("Tank")
+	U.out = {}
+	U.fire("PLAYER_ENTERING_WORLD", false, true)
+	U.fire("PLAYER_ENTERING_WORLD", true, false)
+	check("auto switch: a reload or a login keeps a profile picked by hand and prints nothing", U.ns.Profile() == "Tank" and #U.out == 0 and #U.errors == 0)
+
+	local H = T.world(copy(T.rules))
+	T.enter(H, nil)
+	H.ns.UseProfile("Tank")
+	T.enter(H, nil)
+	check("auto switch: a profile picked by hand stays through the next loading screen of the same kind of place", H.ns.Profile() == "Tank")
+
+	local R = T.world(copy(T.rules))
+	local S = R.ns.ProfileSwitch
+	R.env.FlatUIDB.profiles.Medic = R.env.FlatUIDB.profiles.Healer
+	R.env.FlatUIDB.profiles.Healer = nil
+	S.Renamed("Healer", "Medic")
+	check("auto switch: a rule follows the rename of its profile", S.Get("dungeon") == "Medic" and S.Get("raid") == "Tank")
+	local deleted = R.ns.DeleteProfile("Tank")
+	check("auto switch: a rule falls back to No change when its profile is deleted, and the others stay", deleted == true and R.env.FlatUIDB.profileRules[T.key].raid == nil and S.Get("raid") == nil
+		and S.Get("pvp") == "Arena" and S.Get("dungeon") == "Medic")
+	check("auto switch: a rule does not take a profile that does not exist or a place that is not one", S.Set("raid", "Nobody") == false and S.Set("nowhere", "Arena") == false and S.Get("raid") == nil
+		and S.Set("raid", "Arena") == true and S.Get("raid") == "Arena" and S.Set("raid", nil) == true and S.Get("raid") == nil)
+	local stale = T.world({ dungeon = "Gone", raid = 7 })
+	check("auto switch: a saved rule for a profile that is gone is No change", stale.ns.ProfileSwitch.Get("dungeon") == nil and stale.ns.ProfileSwitch.Get("raid") == nil)
+
+	local E = T.world(copy(T.rules))
+	local code = E.ns.ExportProfile()
+	local before = copy(E.env.FlatUIDB.profileRules[T.key])
+	local imported = E.ns.ImportProfile(code)
+	local lines = E.ns.UnpackText("FlatUI1:", code)
+	local all = lines and table.concat(lines, "\n"):lower() or "not unpacked"
+	local leak = lines and not all:find("healer", 1, true) and not all:find("rule", 1, true) and "" or all
+	local same = true
+	for k, v in pairs(before) do same = same and E.env.FlatUIDB.profileRules[T.key][k] == v end
+	check("auto switch: export holds no rule and import leaves the rules as they are", imported == true and leak == "" and same)
+	local B = T.world(nil, "Bob - Realm", E.env.FlatUIDB)
+	T.enter(B, "party")
+	check("auto switch: the rules belong to the character: another character on the account has none", B.ns.ProfileSwitch.Get("dungeon") == nil and B.ns.Profile() == "Default" and #B.out == 0)
+	local wrote = T.world(nil)
+	wrote.ns.ProfileSwitch.Set("pvp", "Arena")
+	local reloaded = T.world(nil, T.key, wrote.env.FlatUIDB)
+	check("auto switch: a rule is saved beside the profile choice of the character and survives a reload", wrote.env.FlatUIDB.profileRules[T.key].pvp == "Arena" and reloaded.ns.ProfileSwitch.Get("pvp") == "Arena")
+
+end
+-- >>> auto switch (end)
 io.write(("%d passed, %d failed\n"):format(passed, failed))
 if rawget(_G, "ADDON_DIR_OVERRIDE") then
 	return failed
