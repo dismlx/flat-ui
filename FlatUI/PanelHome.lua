@@ -186,7 +186,8 @@ local function Crumb(model, item)
 	if top == entry then
 		return entry.label
 	end
-	return top.label .. " > " .. entry.label
+	local frame = ns.PanelTabs.FrameName(entry)
+	return top.label .. " > " .. (ns.PanelTabs.Label(model, entry) or entry.label) .. (frame and " > " .. frame or "")
 end
 
 local function Users(name)

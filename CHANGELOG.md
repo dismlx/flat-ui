@@ -1,3 +1,7 @@
+## 0.4.99
+
+- **Options window**: the pages of a module are tabs under its title, with a breadcrumb of group, module and tab, and the sidebar lists modules only. **Unit frames** has one **Per frame** tab with a chooser for its eight frames. Tabs that do not fit go into **More**.
+
 ## 0.4.98
 
 - **Bar texture** is new on **Trackers**, on the bar of **Your buffs** and on the tooltip health bar under **Chat and tooltips**. **Icon border** is new on **Trackers**, **Your buffs**, **Defensives on you**, **Party cooldowns** and **Enemy cooldowns**.

@@ -31,7 +31,7 @@ Nav.GROUPS = {
 local FIXED = { { id = "home", label = "Home", icon = "home" }, { id = "setup", label = "Flat UI setup", icon = "setup" },
 	{ id = "profiles", label = "Profiles", icon = "profiles" }, { id = "move", label = "Move frames", icon = "movers" } }
 
-local ROW_H, GROUP_H, CHILD_H, SECTION_H = 28, 20, 24, 18
+local ROW_H, GROUP_H, SECTION_H = 28, 20, 18
 
 -- Puts a cell of the atlas on a texture, turned over when flip is set. White line art, tinted with SetVertexColor.
 function Nav.Cell(texture, name)
@@ -355,7 +355,7 @@ function Nav.Sidebar(left, host)
 			end
 			if not folded then
 				for _, entry in ipairs(group.entries) do
-					local children = Nav.Top(model, current) == entry and Nav.Children(model, entry) or {}
+					local open = Nav.Top(model, current) == entry
 					local function Under(page, depth)
 						if current == page and not rail then
 							for _, section in ipairs(host.Sections(page)) do
@@ -366,7 +366,7 @@ function Nav.Sidebar(left, host)
 						end
 					end
 					Put("module", entry.label, {
-						h = ROW_H, icon = CELLS[entry.key] and entry.key or "more", selected = current == entry,
+						h = ROW_H, icon = CELLS[entry.key] and entry.key or "more", selected = open,
 						onClick = function()
 							host.Show(entry)
 						end,
@@ -374,12 +374,9 @@ function Nav.Sidebar(left, host)
 							return not Nav.IsOn(entry) and "Off" or nil
 						end,
 					})
-					Under(entry, 32)
-					for _, child in ipairs(children) do
-						Put("child", child.label, { h = CHILD_H, indent = 32, icon = rail and "more" or nil, selected = current == child, onClick = function()
-							host.Show(child)
-						end })
-						Under(child, 44)
+					-- The tabs of the module are in the page (PanelTabs.lua); the sections of the page that shows are under the module.
+					if open then
+						Under(current, 32)
 					end
 				end
 			end

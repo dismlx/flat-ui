@@ -1243,9 +1243,9 @@ function OpenList(owner, spec)
 	local _, bottom = Rect(owner.frame)
 	local _, floor = Rect(ui.window)
 	if not (bottom and floor) or bottom - height - 2 >= floor + STRIP then
-		ui.list:SetPoint("TOPLEFT", owner.frame, "BOTTOMLEFT", 0, -2)
+		ui.list:SetPoint(spec.right and "TOPRIGHT" or "TOPLEFT", owner.frame, spec.right and "BOTTOMRIGHT" or "BOTTOMLEFT", 0, -2)
 	else
-		ui.list:SetPoint("BOTTOMLEFT", owner.frame, "TOPLEFT", 0, 2)
+		ui.list:SetPoint(spec.right and "BOTTOMRIGHT" or "BOTTOMLEFT", owner.frame, spec.right and "TOPRIGHT" or "TOPLEFT", 0, 2)
 	end
 	ui.listScroller.Scroll(at > LINES and (at - 1) * LINE or 0)
 	ui.list:Show()
@@ -1303,14 +1303,14 @@ end
 local function BuildView(entry)
 	local scroller = Scroller(ui.right, CW, RIGHT_H)
 	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEAD)
-	local view = { scroller = scroller, rows = {}, sections = {} }
+	local view = { scroller = scroller, rows = {}, sections = {}, module = true }
 	local y = 8
 	for _, item in ipairs(entry.page) do
 		if item.section then
 			view.sections[#view.sections + 1] = y
 			y = Header(scroller.child, item.section, y)
-		elseif item == entry.switchItem then
-			-- It is the switch in the header.
+		elseif item == entry.switchItem and not entry.parent then
+			-- It is the switch in the header. A tab with a switch of its own (Your buffs) shows it as its first row.
 		elseif item.kind == "entries" then
 			y = y + editor.Add(scroller.child, entry.page, item, y, view)
 		elseif ns.RowShown(item.path) then
@@ -1661,7 +1661,7 @@ local function BuildHome()
 	})
 end
 
--- The line under the title of a page: the group of a module and the module of a tab, how many modules are on, the profile in use.
+-- The line under the title of Home and Profiles: how many modules are on, the profile in use. A module page has the breadcrumb of PanelTabs.lua there.
 local function Subtitle(entry)
 	if entry.home then
 		return ns.PanelHome.Subtitle(ui.model)
@@ -1669,11 +1669,7 @@ local function Subtitle(entry)
 		local name = CurrentProfile()
 		return name ~= "" and ("Profile in use: " .. name) or ""
 	end
-	local group, top = ns.PanelNav.GroupOf(ui.model, entry), ns.PanelNav.Top(ui.model, entry)
-	if not group then
-		return ""
-	end
-	return top ~= entry and (group .. " > " .. top.label) or group
+	return ""
 end
 
 -- Draws the sidebar again (PanelNav.lua).
@@ -1786,6 +1782,7 @@ local function Search(typed)
 	Show(view)
 	ui.title:SetText("Search")
 	ui.head.Set(nil, "")
+	ui.tabs.Hide()
 	ui.reset:Hide()
 	ui.tip, ui.message = "", nil
 	ShowStrip()
@@ -1817,8 +1814,17 @@ function ShowPage(entry)
 		ui.views[entry] = view
 	end
 	Show(view)
-	ui.title:SetText(entry.label)
-	ui.head.Set(entry, Subtitle(entry))
+	-- A tab shows under the title of its module, and the module has the switch in the header.
+	local top = ns.PanelNav.Top(ui.model, entry)
+	ui.title:SetText(top.label)
+	ui.head.Set(top, Subtitle(entry))
+	local band = ui.tabs.Set(entry)
+	if view.module and view.band ~= band then
+		view.band = band
+		view.scroller.frame:ClearAllPoints()
+		view.scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -(HEAD + band))
+		view.scroller.Resize(CW, RIGHT_H - band)
+	end
 	ui.reset:SetShown(not entry.profiles and not entry.home)
 	ui.tip, ui.message = "", nil
 	ShowStrip()
@@ -2041,6 +2047,16 @@ local function BuildRight(window)
 		Solid(line, "line-faint")
 	end)
 	ui.head = ns.PanelNav.Header(right, { Toggle = Toggle })
+	ui.tabs = ns.PanelTabs.Build(right, {
+		top = HEAD,
+		Model = function()
+			return ui.model
+		end,
+		Width = function()
+			return CW
+		end,
+		Show = Go,
+	})
 end
 
 -- Reset page, Reload and Done, at the right of the strip. Reset page sets every setting of the page to its default after a question.
@@ -2267,6 +2283,9 @@ function Look.onChange(key)
 		end
 	elseif key == "font" then
 		Look.ApplyFonts()
+		if ui.current and ui.tabs and not ui.searching and not ui.mode then
+			ui.tabs.Set(ui.current)
+		end
 	elseif key == "density" or key == "sidebar" then
 		Look.ApplyFonts()
 		Rebuild()
@@ -2307,7 +2326,7 @@ ns.PanelKit = {
 	Frame = Frame, Fill = Fill, Label = Label, Dim = Dim, Tint = Tint, Clickable = Clickable, Button = Button, Field = Field,
 	Scroller = Scroller, Dropdown = Dropdown, NewRow = NewRow, BuildRow = BuildRow, IsOpen = IsOpen, Header = Header, Painted = Painted,
 	Solid = Solid, Backing = Backing, Accent = Accent, Shade = Shade, Clamp = Clamp, Rect = Rect, IsText = IsText, Cursor = Cursor,
-	Say = Say, Ask = Ask, CloseList = CloseList,
+	Say = Say, Ask = Ask, CloseList = CloseList, OpenList = OpenList,
 	Tip = function(text) ui.message, ui.tip = nil, text or "" ShowStrip() end, Refresh = function() RefreshAll() end,
 	Hide = function() if ui.window then ui.window:Hide() end end,
 	SetCounter = function(text) if ui.barCounter then ui.barCounter:SetText(text or "") end end,

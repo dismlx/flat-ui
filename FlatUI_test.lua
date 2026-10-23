@@ -10912,7 +10912,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.98" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.99" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -60900,9 +60900,86 @@ function PT.strip(W)
 	end
 end
 
+-- The tab of the open module with this name: a frame of 34 units high that takes clicks and shows the text. A chip of the frame chooser is 24 high.
+function PT.tabAt(W, label, height)
+	for _, raw in ipairs(PT.frames(W)) do
+		if raw.scripts.OnMouseUp and raw.fonts[1] and raw.fonts[1].text == label and PT.shown(W, raw) then
+			local _, _, _, h = W.rectOf(raw)
+			if h and math.abs(h - height) < 0.01 then return raw end
+		end
+	end
+end
+function PT.tab(W, label) return PT.tabAt(W, label, 34) end
+function PT.chip(W, label) return PT.tabAt(W, label, 24) end
+-- The texts of the tabs of the open module, left to right.
+function PT.tabTexts(W)
+	local list = {}
+	for _, raw in ipairs(PT.frames(W)) do
+		if raw.scripts.OnMouseUp and raw.fonts[1] and raw.fonts[1].text and PT.shown(W, raw) then
+			local l, _, _, h = W.rectOf(raw)
+			if h and math.abs(h - 34) < 0.01 and raw.parent and W.rawOf[raw.parent] and W.rawOf[raw.parent].parent and PT.inside(W, raw, W.rawOf[PT.window(W)]) and #raw.fonts == 1 then
+				list[#list + 1] = { l = l, text = raw.fonts[1].text }
+			end
+		end
+	end
+	table.sort(list, function(a, b) return a.l < b.l end)
+	local texts = {}
+	for _, item in ipairs(list) do texts[#texts + 1] = item.text end
+	return texts
+end
+PT.FRAME_CHIPS = { unitframesPlayer = "Player", unitframesTarget = "Target", unitframesFocus = "Focus", unitframesPet = "Pet", unitframesTot = "Target of target",
+	unitframesParty = "Party", unitframesBoss = "Boss", unitframesRaid = "Raid" }
+PT.TAB_NAMES = { unitframesBars = "Bars and pictures", unitframesText = "Text", unitframesIcons = "Icons and auras" }
+
+-- Goes to a page by its key: the module in the sidebar, then the tab (a frame page is a chip of the tab Per frame). Returns the module of the page.
+function PT.goPage(W, key)
+	local byKey = {}
+	for _, p in ipairs(W.ns.PAGES) do byKey[p.key] = p end
+	local page = byKey[key]
+	local top = page
+	for _ = 1, 8 do
+		local up = top.parent and byKey[top.parent]
+		if not up or up == top then break end
+		top = up
+	end
+	PT.go(W, top.label)
+	if top ~= page then
+		local chip = PT.FRAME_CHIPS[key]
+		if chip then
+			PT.press(W, PT.tab(W, "Per frame"))
+			PT.press(W, PT.chip(W, chip))
+		else
+			PT.go(W, PT.TAB_NAMES[key] or page.label, true)
+		end
+	end
+	return top
+end
+
 -- Goes to a page by clicking its row in the sidebar, scrolling the column when the row is out of view. A page that is a tab of a module is found
 -- under the module, which is opened first.
+-- A tab that does not fit is a line of the menu of More.
+function PT.more(W, label)
+	local more = PT.tab(W, "More")
+	if not more then return nil end
+	PT.press(W, more)
+	local list = PT.list(W)
+	for _, line in ipairs(list and PT.linesOf(W, list) or {}) do
+		if line.text == label then
+			PT.press(W, line.raw)
+			return line.raw
+		end
+	end
+	PT.press(W, more)
+end
+
 function PT.go(W, label, nested)
+	local tab = PT.tab(W, label)
+	if tab then
+		PT.press(W, tab)
+		return tab
+	end
+	local folded = PT.more(W, label)
+	if folded then return folded end
 	for _, delta in ipairs({ 0, 40, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2 }) do
 		local nav = PT.nav(W)
 		if delta ~= 0 and nav[1] then
@@ -60924,7 +61001,13 @@ function PT.go(W, label, nested)
 					if top.parent and byKey[top.parent] and top.parent ~= top.key then top = byKey[top.parent] end
 				end
 				PT.go(W, top.label, true)
-				return PT.go(W, label, true)
+				-- The child page is a tab of the module, and a frame page is a chip of the tab Per frame.
+				local chip = PT.FRAME_CHIPS[page.key]
+				if chip then
+					PT.press(W, PT.tab(W, "Per frame"))
+					return PT.press(W, PT.chip(W, chip))
+				end
+				return PT.go(W, PT.TAB_NAMES[page.key] or label, true)
 			end
 		end
 	end
@@ -61089,7 +61172,6 @@ function PT.runBuild()
 					for _, r in ipairs(PAGES[1].rows) do
 						if type(r) == "string" then expected[#expected + 1] = r end
 					end
-					expected[#expected + 1] = "Colours"
 				end
 			end
 		end
@@ -61117,7 +61199,7 @@ function PT.runBuild()
 		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Options window", "Setup" }),
 			joined(PT.headers(W)))
 		PT.go(W, "Text")
-		check("left side: a click on a page opens it, with its sections under it", PT.title(W) == "Text" and PT.page(W, "Level") ~= nil and PT.page(W, "Borders and backgrounds") == nil)
+		check("left side: a click on a tab opens it under the title of its module, with its sections under the module", PT.title(W) == "Nameplates" and PT.page(W, "Level") ~= nil and PT.page(W, "Borders and backgrounds") == nil)
 		-- Unit frames has no section as far down as Chat, so Windows is the long one to scroll to.
 		PT.go(W, "Windows")
 		local scroll = PT.right(W)
@@ -61173,7 +61255,7 @@ function PT.runBuild()
 		table.insert(ns.PAGES, 2, { key = "orphan", label = "Orphan", parent = "nowhere",
 			{ key = "two", kind = "bool", default = false, label = "Orphan row", path = "orphan.two" } })
 		ns.OpenPanel()
-		check("page with a parent: not in the column while its parent is not open", PT.page(W, "Made up") == nil)
+		check("page with a parent: not in the sidebar, which lists modules", PT.page(W, "Made up") == nil)
 		PT.go(W, "Combat text")
 		local texts = PT.navTexts(W)
 		local at, parentAt, nextAt
@@ -61182,9 +61264,9 @@ function PT.runBuild()
 			if text == "Combat text" then parentAt = index end
 			if text == "Interface" then nextAt = index end
 		end
-		check("page with a parent: listed under its parent, before the next group", at ~= nil and parentAt ~= nil and at > parentAt and nextAt ~= nil and at < nextAt, joined(texts))
-		local parent, child = PT.page(W, "Combat text"), PT.page(W, "Made up")
-		local pl, cl = W.rectOf(parent.fonts[1]), W.rectOf(child.fonts[1])
+		check("page with a parent: a tab of its parent, after General, and not a row of the sidebar", at == nil and parentAt ~= nil and nextAt ~= nil and joined(PT.tabTexts(W)) == "General, Made up", joined(PT.tabTexts(W)))
+		local parent = PT.page(W, "Combat text")
+		local pl = W.rectOf(parent.fonts[1])
 		-- The last page is below the column, which is scrolled to show it.
 		local orphan
 		for _, delta in ipairs({ 0, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2 }) do
@@ -61198,9 +61280,9 @@ function PT.runBuild()
 			end
 		end
 		local ol = W.rectOf(orphan.fonts[1])
-		check("page with a parent: indented under it; a page whose parent does not exist is listed with the others at the end", cl > pl + 5 and near(ol, pl, 0.01), ("%s %s %s"):format(g(pl), g(cl), g(ol)))
+		check("page with a parent: a page whose parent does not exist is listed with the modules at the end", near(ol, pl, 0.01), ("%s %s"):format(g(pl), g(ol)))
 		PT.go(W, "Made up")
-		check("page with a parent: opens like any other page", PT.title(W) == "Made up" and #PT.shownRows(W) == 2 and PT.shownRows(W)[1].fonts[1].text == "Made up row")
+		check("page with a parent: its tab opens like any page, under the title of the module", PT.title(W) == "Combat text" and #PT.shownRows(W) == 2 and PT.shownRows(W)[1].fonts[1].text == "Made up row")
 		PT.press(W, PT.control(PT.shownRows(W)[2]))
 		local list = PT.list(W)
 		local scroll = W.rawOf[list.children[1]]
@@ -61244,20 +61326,27 @@ function PT.runBuild()
 		}
 		KIND.list = KIND.choice
 		local total, expectedTotal, wrong = 0, 0, {}
+		local byTest = {}
+		for _, page in ipairs(PAGES) do byTest[page.key] = page end
 		for _, page in ipairs(PAGES) do
-			PT.go(W, page.label)
+			local top = PT.goPage(W, page.key)
 			local headers, labels, own = {}, {}, nil
+			-- A tab with a switch of its own (Your buffs) has it as a row. The header has the switch of the module.
 			for _, r in ipairs(page.rows) do
 				if type(r) == "string" then headers[#headers + 1] = r
-				elseif r.path == page.key .. ".enabled" and r.kind == "bool" then own = r
+				elseif r.path == page.key .. ".enabled" and r.kind == "bool" and not page.parent then own = r
 				else labels[#labels + 1] = r end
+			end
+			local moduleSwitch
+			for _, r in ipairs(byTest[top.key] and byTest[top.key].rows or {}) do
+				if type(r) ~= "string" and r.path == top.key .. ".enabled" and r.kind == "bool" then moduleSwitch = r end
 			end
 			-- A page of the window's own has no setting in PAGES; its block has checks of its own (tkedit:).
 			local rows = page.panelOnly and {} or PT.shownRows(W)
 			local problems = wrong
 			-- The switch of the module is in the header with its label, and is not a row.
 			local switch, switchLabel = PT.headSwitch(W)
-			if (own ~= nil) ~= (switch ~= nil) or (own and switchLabel ~= own.label) then problems[#problems + 1] = page.label .. ": switch " .. tostring(switchLabel) end
+			if (moduleSwitch ~= nil) ~= (switch ~= nil) or (moduleSwitch and switchLabel ~= moduleSwitch.label) then problems[#problems + 1] = page.label .. ": switch " .. tostring(switchLabel) end
 			if own then total, expectedTotal = total + 1, expectedTotal + 1 end
 			if #rows ~= #labels then problems[#problems + 1] = page.label .. ": rows " .. #rows .. " of " .. #labels end
 			for number, def in ipairs(labels) do
@@ -61269,7 +61358,7 @@ function PT.runBuild()
 				end
 			end
 			if joined(PT.headers(W)) ~= joined(headers) then problems[#problems + 1] = page.label .. ": headers " .. joined(PT.headers(W)) end
-			if PT.title(W) ~= page.label then problems[#problems + 1] = page.label .. ": title " .. tostring(PT.title(W)) end
+			if PT.title(W) ~= top.label then problems[#problems + 1] = page.label .. ": title " .. tostring(PT.title(W)) end
 			total, expectedTotal = total + #rows, expectedTotal + #labels
 		end
 		check("pages: every row of every page once, in order, with a control of its kind, under its section headers, and the title", #wrong == 0, joined(wrong))
@@ -61304,7 +61393,7 @@ function PT.runBuild()
 		local heights, lefts, labelLefts, controlLefts = {}, {}, {}, {}
 		local function note(set, v) set[g(math.floor(v * 100 + 0.5) / 100)] = true end
 		for _, page in ipairs(PAGES) do
-			PT.go(W, page.label)
+			PT.goPage(W, page.key)
 			for _, r in ipairs(PT.shownRows(W)) do
 				local l, b, w, h = W.rectOf(r)
 				note(heights, h)
@@ -61519,6 +61608,11 @@ function PT.runControls()
 		local dd = PT.control(r)
 		local texts = { "Flat", "Soft shade", "Shaded", "Gloss", "Stripes", "Bottom edge", "Side fade", "Game status bar", "Skills bar", "Targeting bar" }
 		check("dropdown: shows the chosen line", dd.fonts[1].text == "Flat")
+		-- The list opens under the button when the window has room for it there: the page is scrolled until the row is in the upper half.
+		for _ = 1, 20 do
+			if select(2, W.rectOf(dd)) >= select(2, W.rectOf(PT.window(W))) + 300 then break end
+			PT.wheel(W, PT.right(W), -1)
+		end
 		PT.press(W, dd)
 		local list = PT.list(W)
 		local lines = list and PT.linesOf(W, list) or {}
@@ -63049,7 +63143,7 @@ function PT.runMsTree()
 			if table.concat(labels, ",") ~= entry[2] then bad[#bad + 1] = entry[1] .. ": " .. table.concat(labels, ",") end
 		end
 		check("ms-tree: the sub-pages are listed in one run under their page, in the order of the tree", #bad == 0, joined(bad))
-		check("ms-tree: the first page and Colours are both in the window", PT.page(W, "Colours") ~= nil and PT.page(W, "Flat UI") ~= nil, joined(PT.navTexts(W)))
+		check("ms-tree: the first page and Colours are both in the window", PT.tab(W, "Colours") ~= nil and PT.page(W, "Flat UI") ~= nil, joined(PT.navTexts(W)))
 	end
 	do
 		-- A moved row keeps its saved path, whichever page lists it.
@@ -63112,7 +63206,7 @@ function PT.runMsTree()
 		check("ms-tree: a page with no setting is not in the game's options, nor a page whose only setting the client lacks; a page with a setting is", not listed:find(",Hollow page,", 1, true)
 			and not listed:find(",Gone page,", 1, true) and listed:find(",Here page,", 1, true) ~= nil, listed)
 		PT.go(W, "Flat UI")
-		check("ms-tree: and the window leaves out the same pages", PT.page(W, "Hollow page") == nil and PT.page(W, "Gone page") == nil and PT.page(W, "Here page") ~= nil)
+		check("ms-tree: and the window leaves out the same pages", PT.tab(W, "Hollow page") == nil and PT.tab(W, "Gone page") == nil and PT.tab(W, "Here page") ~= nil)
 		PT.go(W, "Here page")
 		check("ms-tree: a row whose CVar the client lacks is not shown, in the window or in the game's options", PT.row(W, "Present switch") ~= nil and PT.row(W, "Absent switch") == nil
 			and W.setting("general.msHere") ~= nil and W.setting("general.msGone") == nil and not W.ns.RowShown("general.msGone") and W.ns.RowShown("general.msHere"))
@@ -63547,7 +63641,7 @@ function PT.runTkEdit()
 		for _, label in ipairs(labels) do
 			shown[#shown + 1] = PT.row(W, label) ~= nil and "" or label
 		end
-		check("tkedit: the page is in the list of pages under Trackers", PT.page(W, "Tracker") ~= nil and PT.title(W) == "Tracker", PT.joined(PT.navTexts(W)))
+		check("tkedit: the page is a tab of Trackers", PT.tab(W, "Tracker") ~= nil and PT.title(W) == "Trackers", PT.joined(PT.tabTexts(W)))
 		check("tkedit: it has the selector, the name, the rows in order, and three rows of buttons", table.concat(rows, "|") == table.concat(labels, "|"), table.concat(rows, "|"))
 		check("tkedit: every row is there", table.concat(shown) == "", table.concat(shown, ","))
 		check("tkedit: the four buttons", PT.button(W, "Clear own settings") ~= nil and PT.button(W, "Move up") ~= nil and PT.button(W, "Move down") ~= nil and PT.button(W, "Remove") ~= nil)
@@ -66409,9 +66503,9 @@ function PT.runNav()
 		PT.go(W, "Nameplates")
 		check("window nav: the open module has the mark in the accent, and the mark follows the page", joined(N.marks(W)) == "9a9cf0" and PT.title(W) == "Nameplates")
 		-- Tabs of the open module
-		check("window nav: the pages of the open module are under it, and the others are not", PT.page(W, "Health bar") ~= nil and PT.page(W, "Colours and threat") ~= nil and PT.page(W, "Player frame") == nil)
+		check("window nav: the tabs of the open module are in its page, and the sidebar lists modules only", PT.tab(W, "Health bar") ~= nil and PT.tab(W, "Colours and threat") ~= nil and PT.tab(W, "Player frame") == nil and PT.page(W, "Health bar") == nil)
 		PT.go(W, "Health bar")
-		check("window nav: a tab opens like any page and keeps the module open", PT.title(W) == "Health bar" and PT.page(W, "Colours and threat") ~= nil and #N.marks(W) == 1)
+		check("window nav: a tab opens like any page and keeps the module open", PT.title(W) == "Nameplates" and PT.tab(W, "Colours and threat") ~= nil and #N.marks(W) == 1)
 		-- Move frames
 		local calls = {}
 		local movers = ns.modules.movers
@@ -66453,11 +66547,11 @@ function PT.runNav()
 		check("window nav: a switch set elsewhere shows within half a second", N.track(switch) == "353a31")
 		ns.Set("nameplates.enabled", true)
 		PT.go(W, "Colours and threat")
-		check("window nav: a tab of a module has no switch of its own", PT.headSwitch(W) == nil and PT.title(W) == "Colours and threat")
+		check("window nav: a tab of a module has the switch of the module in the header", select(2, PT.headSwitch(W)) == "Restyle nameplates" and PT.title(W) == "Nameplates")
 		PT.go(W, "Personal resource display")
 		PT.go(W, "Your buffs")
 		local own, ownLabel = PT.headSwitch(W)
-		check("window nav: a page of its own with a switch, Your buffs, shows it", own ~= nil and ownLabel == "Your buffs" and PT.row(W, "Your buffs") == nil, tostring(ownLabel))
+		check("window nav: a tab of its own with a switch, Your buffs, shows it as a row and the header has the switch of the module", own ~= nil and ownLabel == "Restyle the personal resource display" and PT.row(W, "Your buffs") ~= nil, tostring(ownLabel))
 		PT.type(PT.searchBox(W), "restyle nameplates")
 		local found = PT.shownRows(W)[1]
 		check("window nav: a search shows no switch in the header, and still finds the row of it", PT.headSwitch(W) == nil and found ~= nil and found.fonts[1].text == "Restyle nameplates" and PT.title(W) == "Search")
@@ -66812,6 +66906,375 @@ function PT.runNav()
 	end
 end
 
+-- 18. Child pages as tabs, the breadcrumb and the Per frame chooser (window tabs) -------------------------------------------------------
+function PT.runTabs()
+	local clean, joined, need = PT.clean, PT.joined, PT.need
+	local T = {}
+	T.rgb = function(c) return ("%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5)) end
+	-- The accent line under a tab or a chip: a texture 2 high that is shown. Its colour, or nil.
+	T.line = function(raw)
+		for _, r in ipairs(raw.regions) do
+			if r.kind == "Texture" and r.shown and r.height == 2 and r.color then return T.rgb(r.color) end
+		end
+	end
+	-- The links of the breadcrumb, left to right: frames 14 high that take clicks.
+	T.crumbs = function(W)
+		local list = {}
+		for _, raw in ipairs(PT.frames(W)) do
+			if raw.scripts.OnMouseUp and raw.fonts[1] and raw.fonts[1].text and PT.shown(W, raw) then
+				local l, _, _, h = W.rectOf(raw)
+				if h and math.abs(h - 14) < 0.01 then list[#list + 1] = { l = l, text = raw.fonts[1].text, raw = raw } end
+			end
+		end
+		table.sort(list, function(a, b) return a.l < b.l end)
+		return list
+	end
+	T.crumbTexts = function(W)
+		local list = {}
+		for _, item in ipairs(T.crumbs(W)) do list[#list + 1] = item.text end
+		return joined(list)
+	end
+	T.count = function(W, text)
+		local n = 0
+		for _, raw in ipairs(PT.frames(W)) do
+			if PT.shown(W, raw) then
+				for _, fs in ipairs(raw.fonts) do
+					if fs.shown and fs.text == text then n = n + 1 end
+				end
+			end
+		end
+		return n
+	end
+	-- The labels of the rows of a page in the list of the test, without the switch of its module.
+	T.labels = function(key)
+		local list = {}
+		for _, page in ipairs(PAGES) do
+			if page.key == key then
+				for _, r in ipairs(page.rows) do
+					if type(r) ~= "string" and not (r.path == key .. ".enabled" and not page.parent) then list[#list + 1] = r.label end
+				end
+			end
+		end
+		return list
+	end
+	T.shownLabels = function(W)
+		local list = {}
+		for _, r in ipairs(PT.shownRows(W)) do list[#list + 1] = r.fonts[1].text end
+		return list
+	end
+	-- The first row of a page that is a plain switch.
+	T.boolRow = function(key)
+		for _, page in ipairs(PAGES) do
+			if page.key == key then
+				for _, r in ipairs(page.rows) do
+					if type(r) ~= "string" and r.kind == "bool" and not r.path:find("%.enabled$") then return r.label end
+				end
+			end
+		end
+	end
+	T.TABS = {
+		{ "Flat UI", "General, Colours" },
+		{ "Unit frames", "General, Per frame, Bars and pictures, Text, Icons and auras" },
+		{ "Nameplates", "General, Health bar, Colours and threat, Text, Cast bar, Target and marks, Auras, Game settings" },
+		{ "Personal resource display", "General, Your buffs" },
+		{ "Cast bars", "General, Size, Text and icon" },
+		{ "Action bars", "General, Button text, Colours and cooldowns, Glows and animations" },
+		{ "Cooldowns", "General, States and text" },
+		{ "Trackers", "General, Tracker look, Low and missing, Tracker" },
+		{ "Minimap and buffs", "General, Minimap, Buffs and debuffs, Bars, bags and micro menu, Tracker, loot and alerts" },
+		{ "Windows", "General, Which windows, Bags and items" },
+		{ "Chat and tooltips", "General, Chat text, Tooltips" },
+	}
+
+	-- The tabs of every module, the sidebar with modules only, and the title of the module over every tab.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		local bad, children = {}, 0
+		for _, page in ipairs(ns.PAGES) do
+			if page.parent then children = children + 1 end
+		end
+		for _, item in ipairs(T.TABS) do
+			PT.go(W, item[1])
+			local got = joined(PT.tabTexts(W))
+			if got ~= item[2] then bad[#bad + 1] = item[1] .. ": " .. got end
+		end
+		for _, name in ipairs({ "Fonts", "Swing timers", "Bar block", "Bar blocks", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Combat text", "Movers", "Fading", "Tooltip" }) do
+			PT.go(W, name)
+			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
+		end
+		check("window tabs: the 37 child pages are the tabs of eleven modules, in the order of the design, and the other eleven modules have none", children == 37 and #bad == 0, children .. " " .. joined(bad))
+		PT.go(W, "Nameplates")
+		PT.go(W, "Health bar")
+		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil
+			and PT.page(W, "Colours and threat") == nil and PT.page(W, "Nameplates") ~= nil and #PT.tabTexts(W) == 8)
+		check("window tabs: the tab shows the rows of its page and the header has the switch of the module", PT.row(W, "Health bar border") ~= nil and PT.row(W, "Restyle friendly nameplates") == nil
+			and select(2, PT.headSwitch(W)) == "Restyle nameplates")
+		clean(W, "window tabs modules")
+	end
+
+	-- The look of a tab, its place and the page under it.
+	do
+		local W = PT.open()
+		PT.go(W, "Nameplates")
+		local first, second = PT.tab(W, "General"), PT.tab(W, "Health bar")
+		local fl, fb, fw, fh = W.rectOf(first)
+		local sl = W.rectOf(second)
+		local wl, wb, _, wh = W.rectOf(PT.window(W))
+		check("window tabs: a tab is 34 high under the header, starts 16 from the column, has 10 inside at each side and 4 between tabs", near(fh, 34) and near(fb + fh, wb + wh - 100)
+			and near(fl, wl + 232 + 16) and near(W.rectOf(first.fonts[1]) - fl, 10) and near(sl - (fl + fw), 4), ("%s %s %s %s"):format(g(fl - wl), g(fb + fh - wb), g(W.rectOf(first.fonts[1]) - fl), g(sl - fl - fw)))
+		check("window tabs: the open tab has the full text colour and a 2 unit line in the accent, the others a dimmer text and no line", T.line(first) == "9a9cf0" and T.line(second) == nil
+			and T.rgb(first.fonts[1].textColor) == "eceee6" and T.rgb(second.fonts[1].textColor) == "a9ae9f", tostring(T.line(first)) .. " " .. T.rgb(second.fonts[1].textColor))
+		PT.press(W, second)
+		check("window tabs: a click on a tab opens its page, and the line moves to it", T.line(PT.tab(W, "General")) == nil and T.line(PT.tab(W, "Health bar")) == "9a9cf0" and PT.row(W, "Health bar border") ~= nil
+			and W.env.FlatUIDB.panel.page == "nameplatesHealth", tostring(W.env.FlatUIDB.panel.page))
+		local scroll = PT.right(W)
+		local _, sb, _, sh = W.rectOf(scroll)
+		check("window tabs: the rows start under the tabs, and the page is 34 shorter", near(sb + sh, wb + wh - 134) and near(sh, 680 - 36 - 40 - 64 - 34), g(sb + sh - wb) .. " " .. g(sh))
+		PT.go(W, "Fonts")
+		local _, fsb, _, fsh = W.rectOf(PT.right(W))
+		check("window tabs: a module with no tab starts under the header, as before", near(fsb + fsh, wb + wh - 100) and PT.tab(W, "General") == nil and #PT.tabTexts(W) == 0, g(fsb + fsh - wb))
+		PT.go(W, "Nameplates")
+		check("window tabs: a module opens on its first tab, General", T.line(PT.tab(W, "General")) == "9a9cf0" and T.line(PT.tab(W, "Health bar")) == nil)
+		clean(W, "window tabs look")
+	end
+
+	-- The breadcrumb: group, module and tab. The module and the tab are links.
+	do
+		local W = PT.open()
+		PT.go(W, "Nameplates")
+		PT.go(W, "Health bar")
+		local list = T.crumbs(W)
+		check("window tabs: the breadcrumb says the group, the module and the tab, with a sign between the parts", T.crumbTexts(W) == "Frames, Nameplates, Health bar" and T.count(W, ">") == 2, T.crumbTexts(W))
+		check("window tabs: the module and the tab are links, the group is not", #list == 3 and list[1].raw.mouse == false and list[2].raw.mouse == true and list[3].raw.mouse == true)
+		check("window tabs: the breadcrumb is in the line under the top of the column and the parts follow each other", #list == 3 and near(W.rectOf(list[1].raw), W.rectOf(PT.window(W)) + 232 + 16) and list[2].l > list[1].l + 20 and list[3].l > list[2].l + 40)
+		check("window tabs: the last part of the breadcrumb has the full text colour and the others the dim one", T.rgb(list[3].raw.fonts[1].textColor) == "eceee6" and T.rgb(list[1].raw.fonts[1].textColor) == "a9ae9f"
+			and T.rgb(list[2].raw.fonts[1].textColor) == "a9ae9f", T.rgb(list[3].raw.fonts[1].textColor))
+		PT.press(W, list[2].raw)
+		check("window tabs: the module in the breadcrumb opens the module on its first tab", T.line(PT.tab(W, "General")) == "9a9cf0" and T.crumbTexts(W) == "Frames, Nameplates, General" and PT.title(W) == "Nameplates")
+		PT.press(W, PT.tab(W, "Auras"))
+		PT.press(W, T.crumbs(W)[3].raw)
+		check("window tabs: the tab in the breadcrumb stays on the tab", T.line(PT.tab(W, "Auras")) == "9a9cf0" and T.crumbTexts(W) == "Frames, Nameplates, Auras")
+		PT.go(W, "Fonts")
+		check("window tabs: a module with no tab has the group and the module", T.crumbTexts(W) == "Look, Fonts" and T.count(W, ">") == 1, T.crumbTexts(W))
+		PT.go(W, "Home")
+		check("window tabs: Home and Profiles have no breadcrumb, and the line under their title is the text it was", T.crumbTexts(W) == "" and T.count(W, ">") == 0)
+		clean(W, "window tabs breadcrumb")
+	end
+
+	-- Tabs that do not fit fold into More.
+	do
+		local W = suiteKit.mwBefore({}, function(V)
+			for index, label in ipairs({ "Long page name one", "Long page name two", "Long page name three" }) do
+				V.ns.PAGES[#V.ns.PAGES + 1] = { key = "tabmore" .. index, label = label, parent = "nameplates", owner = "nameplates",
+					{ key = "tabRow" .. index, kind = "bool", default = false, label = "Tab row " .. index } }
+			end
+		end)
+		PT.extend(W)
+		W.ns.OpenPanel()
+		PT.go(W, "Nameplates")
+		local shown = PT.tabTexts(W)
+		local more = PT.tab(W, "More")
+		local wl = W.rectOf(PT.window(W))
+		local hidden, seen = {}, {}
+		for _, text in ipairs(shown) do seen[text] = true end
+		for _, text in ipairs({ "Game settings", "Long page name one", "Long page name two", "Long page name three" }) do
+			if not seen[text] then hidden[#hidden + 1] = text end
+		end
+		local ml, _, mw = W.rectOf(more)
+		check("window tabs: tabs that do not fit are folded into More, in order, and More ends inside the column", more ~= nil and shown[1] == "General" and shown[#shown] == "More" and #hidden >= 3 and not seen["Long page name three"]
+			and ml + mw <= wl + 1040 - 16 + 0.01, joined(shown))
+		PT.press(W, more)
+		local list = PT.list(W)
+		local lines = {}
+		for _, line in ipairs(list and PT.linesOf(W, list) or {}) do lines[#lines + 1] = line.text end
+		check("window tabs: More opens a menu with the tabs that were folded, in order", joined(lines) == joined(hidden) and #lines >= 3, joined(lines) .. " | " .. joined(hidden))
+		local ll, _, lw = W.rectOf(list)
+		local wl2, _, ww2 = W.rectOf(PT.window(W))
+		check("window tabs: the menu of More ends inside the window and at the right edge of More", ll + lw <= wl2 + ww2 + 0.01 and math.abs((ll + lw) - (ml + mw)) < 0.01, ll .. " " .. lw .. " | " .. ml .. " " .. mw .. " | " .. wl2 .. " " .. ww2)
+		PT.press(W, PT.linesOf(W, list)[#lines].raw)
+		check("window tabs: a line of the menu opens the tab, and More has the line while the tab is folded", PT.title(W) == "Nameplates" and PT.row(W, "Tab row 3") ~= nil and T.line(PT.tab(W, "More")) == "9a9cf0" and PT.list(W) == nil
+			and T.crumbTexts(W) == "Frames, Nameplates, Long page name three", T.crumbTexts(W))
+		PT.press(W, PT.tab(W, "Auras"))
+		check("window tabs: a tab in view takes the line from More", T.line(PT.tab(W, "More")) == nil and T.line(PT.tab(W, "Auras")) == "9a9cf0")
+		clean(W, "window tabs more")
+	end
+
+	-- The Per frame tab: eight frames, one chooser, the last frame kept per account.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		local ORDER = { "Player", "Target", "Focus", "Pet", "Target of target", "Party", "Boss", "Raid" }
+		local KEYS = { "unitframesPlayer", "unitframesTarget", "unitframesFocus", "unitframesPet", "unitframesTot", "unitframesParty", "unitframesBoss", "unitframesRaid" }
+		PT.go(W, "Unit frames")
+		check("window tabs: the chooser shows on the tab Per frame only", PT.chip(W, "Player") == nil)
+		PT.press(W, PT.tab(W, "Per frame"))
+		local chips = {}
+		for _, name in ipairs(ORDER) do
+			local chip = PT.chip(W, name)
+			chips[#chips + 1] = chip and W.rectOf(chip) or -1
+		end
+		local ordered = true
+		for index = 2, #chips do
+			if chips[index] <= chips[index - 1] then ordered = false end
+		end
+		check("window tabs: Per frame has a chooser of eight frames in order, and opens the first frame", ordered and chips[1] > 0 and T.line(PT.tab(W, "Per frame")) == "9a9cf0" and T.line(PT.chip(W, "Player")) == "9a9cf0"
+			and T.line(PT.chip(W, "Raid")) == nil and joined(T.shownLabels(W)) == joined(T.labels("unitframesPlayer")), joined(T.shownLabels(W)))
+		local _, tb = W.rectOf(PT.tab(W, "Per frame"))
+		local _, cb, _, ch = W.rectOf(PT.chip(W, "Player"))
+		local _, sb, _, sh = W.rectOf(PT.right(W))
+		local _, wb, _, wh = W.rectOf(PT.window(W))
+		local pl, _, pw = W.rectOf(PT.chip(W, "Player"))
+		check("window tabs: the chips are 24 high with 10 inside at each side and 4 between them", near(W.rectOf(PT.chip(W, "Target")) - (pl + pw), 4) and near(W.rectOf(PT.chip(W, "Player").fonts[1]) - pl, 10))
+		check("window tabs: the chooser is under the tabs, and the page is 66 shorter", cb < tb and near(ch, 24) and near(sb + sh, wb + wh - 166) and near(sh, 540 - 66), g(sb + sh - wb))
+		check("window tabs: the breadcrumb says Per frame", T.crumbTexts(W) == "Frames, Unit frames, Per frame", T.crumbTexts(W))
+		local wrong = {}
+		for index, name in ipairs(ORDER) do
+			PT.press(W, PT.chip(W, name))
+			if joined(T.shownLabels(W)) ~= joined(T.labels(KEYS[index])) then wrong[#wrong + 1] = name .. ": " .. joined(T.shownLabels(W)) end
+			if W.env.FlatUIDB.panel.frame ~= KEYS[index] or W.env.FlatUIDB.panel.page ~= KEYS[index] then wrong[#wrong + 1] = name .. " kept as " .. tostring(W.env.FlatUIDB.panel.frame) end
+			if T.line(PT.chip(W, name)) ~= "9a9cf0" or PT.title(W) ~= "Unit frames" then wrong[#wrong + 1] = name .. " not marked" end
+		end
+		check("window tabs: a click on a frame opens its page and marks it, and each of the eight is kept as the last frame", #wrong == 0, joined(wrong))
+		PT.press(W, PT.tab(W, "Text"))
+		check("window tabs: another tab has no chooser, and shows its own page", PT.chip(W, "Raid") == nil and joined(T.shownLabels(W)) == joined(T.labels("unitframesText")))
+		PT.press(W, PT.tab(W, "Per frame"))
+		check("window tabs: Per frame opens the last frame again", T.line(PT.chip(W, "Raid")) == "9a9cf0" and joined(T.shownLabels(W)) == joined(T.labels("unitframesRaid")))
+		PT.press(W, PT.chip(W, "Party"))
+		PT.go(W, "Nameplates")
+		PT.go(W, "Unit frames")
+		PT.press(W, PT.tab(W, "Per frame"))
+		check("window tabs: the last frame stays across modules, and is in the account and in no profile", T.line(PT.chip(W, "Party")) == "9a9cf0" and W.env.FlatUIDB.profiles[ns.Profile()].options.frame == nil
+			and W.env.FlatUIDB.panel.frame == "unitframesParty")
+		local Q = PT.open({ saved = { options = {}, panel = { frame = "unitframesBoss" } } })
+		PT.go(Q, "Unit frames")
+		PT.press(Q, PT.tab(Q, "Per frame"))
+		local X = PT.open({ saved = { options = {}, panel = { frame = "nowhere" } } })
+		PT.go(X, "Unit frames")
+		PT.press(X, PT.tab(X, "Per frame"))
+		local Y = PT.open({ saved = { options = {}, panel = { frame = 5 } } })
+		PT.go(Y, "Unit frames")
+		PT.press(Y, PT.tab(Y, "Per frame"))
+		local Z = PT.open({ saved = { options = {}, panel = { frame = "unitframesText" } } })
+		PT.go(Z, "Unit frames")
+		PT.press(Z, PT.tab(Z, "Per frame"))
+		check("window tabs: a new session opens the frame that was kept, and a frame that is gone, not a name or not a frame opens the first", T.line(PT.chip(Q, "Boss")) == "9a9cf0" and T.line(PT.chip(X, "Player")) == "9a9cf0"
+			and T.line(PT.chip(Y, "Player")) == "9a9cf0" and T.line(PT.chip(Z, "Player")) == "9a9cf0")
+		local K = PT.open({ saved = { options = {}, panel = { page = "unitframesFocus" } } })
+		check("window tabs: a window that was left on a frame page opens on Per frame with that frame", PT.title(K) == "Unit frames" and T.line(PT.tab(K, "Per frame")) == "9a9cf0" and T.line(PT.chip(K, "Focus")) == "9a9cf0")
+		clean(W, "window tabs per frame")
+		clean(Q, "window tabs per frame kept")
+	end
+
+	-- A tab with a switch of its own: Your buffs.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		PT.go(W, "Personal resource display")
+		PT.press(W, PT.tab(W, "Your buffs"))
+		local rows = PT.shownRows(W)
+		check("window tabs: Your buffs has its own switch as the first row, and the header has the switch of the module", rows[1] and rows[1].fonts[1].text == "Your buffs" and select(2, PT.headSwitch(W)) == "Restyle the personal resource display", rows[1] and rows[1].fonts[1].text)
+		local before = ns.Get("ownbuffs.enabled")
+		PT.press(W, PT.control(rows[1]))
+		check("window tabs: and that switch sets ownbuffs.enabled", ns.Get("ownbuffs.enabled") == not before and ns.Get("resource.enabled") == true)
+		PT.press(W, PT.control(PT.shownRows(W)[1]))
+		clean(W, "window tabs your buffs")
+	end
+
+	-- Every way to a child page opens the module on its tab.
+	do
+		local W = PT.open({ saved = { options = {}, panel = { page = "nameplatesHealth" } } })
+		check("window tabs: a window that was left on a child page opens the module on that tab", PT.title(W) == "Nameplates" and T.line(PT.tab(W, "Health bar")) == "9a9cf0" and T.line(PT.tab(W, "General")) == nil
+			and T.crumbTexts(W) == "Frames, Nameplates, Health bar")
+		PT.press(W, PT.tab(W, "Auras"))
+		check("window tabs: the tab opened last is the page the window opens on the next time", W.env.FlatUIDB.panel.page == "nameplatesAuras")
+		PT.go(W, "Home")
+		local _, child = PT.right(W)
+		for _, raw in ipairs(PT.byText(W, "Nameplates")) do
+			if raw.parent and W.rawOf[raw.parent] == child then PT.press(W, raw) break end
+		end
+		check("window tabs: a tile of Home opens the module on its first tab", PT.title(W) == "Nameplates" and T.line(PT.tab(W, "General")) == "9a9cf0", tostring(PT.title(W)))
+		PT.go(W, "Colours and threat")
+		PT.press(W, PT.control(need(W, T.boolRow("nameplatesColours"))))
+		PT.go(W, "Unit frames")
+		PT.press(W, PT.tab(W, "Bars and pictures"))
+		PT.press(W, PT.control(need(W, T.boolRow("unitframesBars"))))
+		PT.press(W, PT.tab(W, "Per frame"))
+		PT.press(W, PT.chip(W, "Target"))
+		PT.press(W, PT.control(need(W, T.boolRow("unitframesTarget"))))
+		PT.go(W, "Home")
+		check("window tabs: the changes on Home say the module and the tab", T.count(W, "Nameplates > Colours and threat") == 1 and T.count(W, "Unit frames > Bars and pictures") == 1 and T.count(W, "Unit frames > Per frame > Target") == 1,
+			T.count(W, "Nameplates > Colours and threat") .. T.count(W, "Unit frames > Bars and pictures") .. T.count(W, "Unit frames > Per frame > Target"))
+		PT.go(W, "Nameplates")
+		do
+			local PTabs = W.ns.PanelTabs
+			local List, built = PTabs.List, 0
+			PTabs.List = function(model, top) if not top.home then built = built + 1 end return List(model, top) end
+			PT.go(W, "Home")
+			PTabs.List = List
+			check("window tabs: Home builds no tab list again for a change it has shown", built == 0, built)
+		end
+		PT.go(W, "Nameplates")
+		PT.press(W, PT.tab(W, "Health bar"))
+		PT.type(PT.searchBox(W), "border")
+		check("window tabs: a search takes the tabs and the breadcrumb away", PT.title(W) == "Search" and PT.tab(W, "Health bar") == nil and T.crumbTexts(W) == "" and T.count(W, ">") == 0)
+		PT.type(PT.searchBox(W), "")
+		check("window tabs: and the module comes back on the tab it was on", PT.title(W) == "Nameplates" and T.line(PT.tab(W, "Health bar")) == "9a9cf0" and T.crumbTexts(W) == "Frames, Nameplates, Health bar")
+		clean(W, "window tabs links")
+	end
+
+	-- A fight, the look of the window, and what the window owns.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		PT.go(W, "Nameplates")
+		W.combat = true
+		W.update(1)
+		PT.press(W, PT.tab(W, "Cast bar"))
+		PT.press(W, PT.tab(W, "Auras"))
+		PT.go(W, "Unit frames")
+		PT.press(W, PT.tab(W, "Per frame"))
+		PT.press(W, PT.chip(W, "Pet"))
+		check("window tabs: in a fight a click on a tab or a frame opens its page and calls nothing the client protects", PT.title(W) == "Unit frames" and T.line(PT.chip(W, "Pet")) == "9a9cf0" and #W.violations == 0 and #W.errors == 0,
+			table.concat(W.violations, "|"):sub(1, 300))
+		W.combat = false
+		W.update(1)
+		PT.go(W, "Nameplates")
+		ns.Set("panel.sidebar", "rail")
+		local wl = W.rectOf(PT.window(W))
+		check("window tabs: with the icon rail the tabs are all there and start at the rail", joined(PT.tabTexts(W)) == T.TABS[3][2] and near(W.rectOf(PT.tab(W, "General")), wl + 56 + 16), joined(PT.tabTexts(W)))
+		ns.Set("panel.sidebar", "full")
+		ns.Set("panel.density", "roomy")
+		PT.go(W, "Unit frames")
+		PT.press(W, PT.tab(W, "Per frame"))
+		check("window tabs: a change of Density builds the pages again, and the tabs and the chooser are still there", joined(PT.tabTexts(W)) == T.TABS[2][2] and PT.chip(W, "Player") ~= nil and T.crumbTexts(W) == "Frames, Unit frames, Per frame", joined(PT.tabTexts(W)) .. " | " .. T.crumbTexts(W))
+		ns.Set("panel.density", "comfortable")
+		do
+			local panel = W.env.FlatUIDB.panel
+			local frame = panel.frame
+			panel.frame = "unitframesRaid"
+			ns.Set("panel.font", "arial")
+			check("window tabs: a change of Window font lays the tabs and the breadcrumb out again", panel.frame == frame and T.crumbTexts(W) == "Frames, Unit frames, Per frame", tostring(panel.frame) .. " | " .. T.crumbTexts(W))
+			ns.Set("panel.font", "sans")
+		end
+		ns.Set("panel.accent", "sage")
+		check("window tabs: a new accent colours the line of the open tab", T.line(PT.tab(W, "Per frame")) == "8cc79a", tostring(T.line(PT.tab(W, "Per frame"))))
+		ns.Set("panel.accent", "indigo")
+		local unowned = 0
+		for _, f in ipairs(PT.frames(W)) do
+			if not ns.Own[f] then unowned = unowned + 1 end
+			for _, fs in ipairs(f.fonts) do
+				if not ns.Own[fs] then unowned = unowned + 1 end
+			end
+		end
+		for index = 1, #W.addonTextures do
+			if not ns.Own[W.addonTextures[index]] then unowned = unowned + 1 end
+		end
+		check("window tabs: every frame, texture and font string of the tabs, the breadcrumb and the chooser is in ns.Own", unowned == 0, unowned)
+		clean(W, "window tabs fight")
+	end
+end
+
 function PT.runAll()
 	PT.runBuild()
 	PT.runControls()
@@ -66825,6 +67288,7 @@ function PT.runAll()
 	PT.runCorrect()
 	PT.runForever()
 	PT.runNav()
+	PT.runTabs()
 	PT.runSetup()
 end
 
