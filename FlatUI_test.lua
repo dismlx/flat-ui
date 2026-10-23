@@ -10914,7 +10914,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.1" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.2" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -38487,6 +38487,13 @@ local function withEditMode(opts)
 		if opts.saved.options["chat.fadeOut"] == nil then
 			opts.saved.options["chat.fadeOut"] = "game"
 		end
+		-- Snap to other frames moves a dropped handle by up to 5 units; the worlds of the handles keep their exact drops unless a test sets `snapFrames`.
+		if not opts.snapFrames then
+			opts.saved.panel = opts.saved.panel or {}
+			if opts.saved.panel.snapFrames == nil then
+				opts.saved.panel.snapFrames = "off"
+			end
+		end
 		-- The page of the combat text has a handle of its own (Combat text: you), which the tests of the handles of the other frames leave out.
 		if not opts.combatText and opts.saved.options["combattext.enabled"] == nil then
 			opts.saved.options["combattext.enabled"] = false
@@ -38787,6 +38794,8 @@ do
 	local toggle = W.rawOf[ui.toggle]
 	M.click(toggle)
 	check("movers mode: the Snap switch turns the snap to the middle off and on", snapBefore == "middle" and W.ns.Get("movers.snap") == "off" and (function() M.click(toggle) return W.ns.Get("movers.snap") == "middle" end)())
+	-- The switch turned the snap to other frames on again; the drags below expect the exact spots.
+	W.ns.Set("panel.snapFrames", "off")
 
 	-- The list of frames.
 	local heads, rows = {}, {}
@@ -39061,6 +39070,117 @@ do
 	handle.scripts.OnDragStart(handle)
 	check("drag: not started in combat", not handle.moving)
 	W.combat = false
+end
+
+-- 75be. Snap to other frames: guides, the pull of 5 units, the spacing of three picked handles.
+do
+	local W = mw({ snapFrames = true, saved = opt({ ["tooltip.enabled"] = true, ["tooltip.mode"] = "fixed" }) })
+	local Z = W.ns.MoversSnap
+	local R = W.ns.PanelLook
+	local m, at = Z.Pull(100, 50, { { 103, 60 } })
+	check("snap: a start within 5 units of a start is pulled onto it", m == 3 and at == 103, tostring(m))
+	m, at = Z.Pull(100, 50, { { 200, 20 } })
+	check("snap: nothing within 5 units pulls nothing", m == nil and at == nil)
+	m, at = Z.Pull(100, 50, { { 140, 70 } })
+	check("snap: marks 10 units apart pull nothing", m == nil, tostring(m))
+	m, at = Z.Pull(100, 50, { { 155, 40 } })
+	check("snap: an end 5 units from a start is pulled, and the start is the place of the guide", m == 5 and at == 155, tostring(m))
+	m, at = Z.Pull(100, 50, { { 110, 30 } })
+	check("snap: a middle on a middle needs no move", m == 0 and at == 125, tostring(m) .. " " .. tostring(at))
+	m, at = Z.Pull(100, 50, { { 90, 30 }, { 102, 10 } })
+	check("snap: the nearest of the marks wins", m == 2 and at == 102, tostring(m))
+	local s = Z.Spread({ { 0, 10 }, { 20, 10 }, { 100, 10 } })
+	check("snap: three spans get the same gap and the outer two stay", s and s[1] == 0 and s[3] == 100 and s[2] == 50, s and tostring(s[2]))
+	s = Z.Spread({ { 100, 10 }, { 0, 10 }, { 20, 10 } })
+	check("snap: the order given does not matter", s and s[1] == 100 and s[2] == 0 and s[3] == 50, s and tostring(s[3]))
+	check("snap: two spans are not spaced", Z.Spread({ { 0, 10 }, { 20, 10 } }) == nil)
+
+	W.slash("move")
+	local S, mui = W.ns.MoversMode.State()
+	local _, zui = Z.State()
+	local function lit(texture) return texture ~= nil and W.rawOf[texture].shown == true end
+	-- Only the two handles of the drag count as others, so no other handle pulls.
+	for name in pairs(W.ns.MoverKit.handles) do
+		if name ~= "UIErrorsFrame" and name ~= "AlertFrame" then
+			S.hidden[name] = true
+		end
+	end
+	W.drag("Error text", 400, 700)
+	local errorLeft, errorBottom = W.rectOf(W.handle("Error text"))
+	W.dragStart("Alerts")
+	W.dragTo(errorLeft + 3, 300)
+	local alerts = W.handle("Alerts")
+	local l = W.rectOf(alerts)
+	check("snap: a handle dragged within 5 units of the left of another takes that left, and a vertical guide shows", near(l, errorLeft) and lit(zui.vertical) and not lit(zui.horizontal), tostring(l))
+	W.dragTo(errorLeft + 300, errorBottom + 4)
+	local b
+	l, b = W.rectOf(alerts)
+	check("snap: and the bottom, with a horizontal guide", near(b, errorBottom) and near(l, errorLeft + 300) and lit(zui.horizontal) and not lit(zui.vertical), tostring(b) .. " " .. tostring(l))
+	check("snap: a guide is 1 unit wide, in the accent colour", W.rawOf[zui.horizontal].height == 1 and near(W.rawOf[zui.horizontal].color[1], 0x9A / 255, 1e-3))
+	W.dragTo(errorLeft + 300, errorBottom + 400)
+	check("snap: a handle far from every other one is not moved and no guide shows", not lit(zui.vertical) and not lit(zui.horizontal))
+	W.dragTo(errorLeft + 3, errorBottom + 4)
+	check("snap: both guides show when both axes meet", lit(zui.vertical) and lit(zui.horizontal))
+	W.dragEnd()
+	check("snap: the drop hides the guides", not lit(zui.vertical) and not lit(zui.horizontal))
+
+	W.ns.Set("panel.snapFrames", "off")
+	W.dragStart("Alerts")
+	W.dragTo(errorLeft + 3, 300)
+	l = W.rectOf(alerts)
+	check("snap: with Snap to other frames off the drag stays where the cursor gives it", near(l, errorLeft + 3) and not lit(zui.vertical))
+	W.dragEnd()
+	W.ns.Set("panel.snapFrames", "on")
+	W.combat = true
+	local pulled = Z.Snap("AlertFrame", errorLeft + 3, 300, 200, 40, false)
+	W.combat = false
+	check("snap: in combat nothing snaps", pulled == errorLeft + 3)
+	pulled = Z.Snap("AlertFrame", errorLeft + 3, 300, 200, 40, false)
+	check("snap: out of combat it does", near(pulled, errorLeft))
+
+	-- The toolbar switch sets both snaps.
+	S.hidden = {}
+	local toggle = W.rawOf[mui.toggle]
+	toggle.scripts.OnMouseUp(toggle, "LeftButton")
+	check("snap: the Snap switch turns the snap to other frames off with the snap to the middle", W.ns.Get("movers.snap") == "off" and R.Get("snapFrames") == "off")
+	toggle.scripts.OnMouseUp(toggle, "LeftButton")
+	check("snap: and on again", W.ns.Get("movers.snap") == "middle" and R.Get("snapFrames") == "on")
+	check("snap: the setting is a row in the Options window section, On by default", (function()
+		for _, item in ipairs(W.ns.PAGES[1]) do
+			if item.path == "panel.snapFrames" then
+				return item.label == "Snap to other frames" and item.default == "on" and #item.choices == 2
+			end
+		end
+	end)())
+
+	-- Three picked handles are spaced.
+	S.hidden = {}
+	W.ns.Set("panel.snapFrames", "off")
+	W.drag("Alerts", 100, 500)
+	W.drag("Tooltip", 700, 500)
+	W.drag("Error text", 1400, 500)
+	check("snap: the spacing bar is hidden with nothing picked", mui.space ~= nil and not W.rawOf[mui.space].shown)
+	W.keys.ctrl = true
+	for _, label in ipairs({ "Alerts", "Tooltip", "Error text" }) do
+		local h = W.handle(label)
+		h.scripts.OnMouseDown(h, "LeftButton")
+	end
+	W.keys.ctrl = false
+	check("snap: three handles picked with Ctrl and click show the spacing bar", Z.Picked("AlertFrame") and Z.Picked("FlatUITooltip") and Z.Picked("UIErrorsFrame") and #Z.List() == 3
+		and W.rawOf[mui.space].shown and mui.spaceText:GetText() == "3 picked", tostring(mui.spaceText and mui.spaceText:GetText()))
+	Z.Space("x")
+	local boxes = {}
+	for _, label in ipairs({ "Alerts", "Tooltip", "Error text" }) do
+		local left, _, width = W.rectOf(W.handle(label))
+		boxes[#boxes + 1] = { left, width }
+	end
+	table.sort(boxes, function(x, y) return x[1] < y[1] end)
+	local gapA, gapB = boxes[2][1] - (boxes[1][1] + boxes[1][2]), boxes[3][1] - (boxes[2][1] + boxes[2][2])
+	check("snap: Space across leaves the outer two and makes the two gaps the same", near(boxes[1][1], 100) and near(boxes[3][1], 1400) and math.abs(gapA - gapB) < 1, tostring(gapA) .. " " .. tostring(gapB))
+	Z.Clear()
+	W.ns.MoversMode.Spacing()
+	check("snap: Clear lets every handle go and hides the bar", #Z.List() == 0 and not W.rawOf[mui.space].shown)
+	check("snap: no violation", allClean(W), problems(W))
 end
 
 -- 75d. A saved position holds after a reload, after the game moves the frame, and when the game places it again.
@@ -59934,7 +60054,7 @@ do
 	B.shown, B.all = 0, 0
 	do
 		local _, mui = M.ns.MoversMode.State()
-		local roots = { [mui.bar] = true, [mui.list] = true, [mui.side] = true, [mui.chip] = true }
+		local roots = { [mui.bar] = true, [mui.list] = true, [mui.side] = true, [mui.chip] = true, [mui.space] = true }
 		local function mine(frame)
 			while frame do
 				if roots[frame] then
@@ -60368,6 +60488,51 @@ do
 	end
 
 	do
+		-- Profiles: rename, name and version in the code, preview, export by module, import choices.
+		local R = H.world("Tester - Realm", H.saved({ Default = {}, Raid = { options = { ["general.thickness"] = 2 } } }, { ["Tester - Realm"] = "Raid" }))
+		R.ns.ProfileSwitch.Set("raid", "Raid")
+		local fine = H.r(R.ns.RenameProfile("raid", "Healer"))
+		check("profiles, rename: the profile has the new name, in use, for the character, and its rules follow", fine == "true Renamed Raid to Healer." and R.ns.Profile() == "Healer"
+			and R.env.FlatUIDB.profiles.Raid == nil and R.env.FlatUIDB.profiles.Healer.options["general.thickness"] == 2
+			and R.env.FlatUIDB.profileOf["Tester - Realm"] == "Healer" and R.ns.ProfileSwitch.Get("raid") == "Healer", fine)
+		check("profiles, rename: Default, a name that is taken, a name that is not allowed and a profile that is not there are refused",
+			H.r(R.ns.RenameProfile("Default", "Tank")) == "false Default cannot be renamed." and H.r(R.ns.RenameProfile("Healer", "default")) == "false That name is taken."
+			and H.r(R.ns.RenameProfile("Healer", "  ")) == "false Use 1 to 32 characters on one line." and H.r(R.ns.RenameProfile("Nowhere", "Tank")) == "false No such profile.")
+		check("profiles, rename: the same name in other letters is allowed, and the same name changes nothing",
+			H.r(R.ns.RenameProfile("Healer", "HEALER")) == "true Renamed Healer to HEALER." and R.ns.Profile() == "HEALER" and H.r(R.ns.RenameProfile("HEALER", "HEALER")) == "true Renamed HEALER to HEALER."
+			and R.ns.ProfileSwitch.Get("raid") == "HEALER")
+		local text = R.ns.ExportProfile({})
+		local preview = R.ns.ProfilePreview(text)
+		local width, height = R.env.GetPhysicalScreenSize()
+		check("profiles, export: a text made with options has the name, the build, the screen and the settings", preview ~= nil and preview.name == "HEALER" and preview.version == (R.env.C_AddOns.GetAddOnMetadata("FlatUI", "Version") or "")
+			and preview.width == math.floor(width + 0.5) and preview.height == math.floor(height + 0.5) and preview.settings == 1 and preview.spots == 0, tostring(preview and preview.width))
+		check("profiles, export: a text without the first line has no name and still reads", R.ns.ProfilePreview(H.BOTH).name == "" and R.ns.ProfilePreview(H.BOTH).settings == 1 and R.ns.ProfilePreview(H.BOTH).spots == 1
+			and select(2, R.ns.ProfilePreview("hello")) == "That is not a Flat UI profile.")
+		check("profiles, export: ExportProfile with no options makes the text without the first line", R.ns.ProfilePreview(R.ns.ExportProfile()).name == "" and R.ns.ProfilePreview(R.ns.ExportProfile()).settings == 1)
+		R.ns.Set("nameplates.dim", true)
+		R.spots().UIErrorsFrame = { point = "TOP", x = -304, y = -320, scale = 1.25, kind = "hud" }
+		local general = R.ns.ProfilePreview(R.ns.ExportProfile({ modules = { general = true } }))
+		local plates = R.ns.ProfilePreview(R.ns.ExportProfile({ modules = { nameplates = true }, spots = false }))
+		check("profiles, export: by module holds the settings of the modules chosen, and the positions unless they are left out", general.settings == 1 and general.spots == 1 and plates.settings == 1 and plates.spots == 0,
+			general.settings .. " " .. general.spots .. " " .. plates.settings .. " " .. plates.spots)
+		R.ns.Set("ownbuffs.limit", 90)
+		local every = {}
+		for _, module in ipairs(R.ns.ProfileShare.Modules()) do every[module.key] = true end
+		local whole, chosen = R.ns.ExportProfile({}), R.ns.ExportProfile({ modules = R.ns.ProfileShare.Cover(every) })
+		check("profiles, export: by module with every module chosen is the whole export, Your buffs included", whole == chosen and R.ns.ProfilePreview(chosen).settings >= 3
+			and R.ns.ExportProfile({ modules = R.ns.ProfileShare.Cover({ general = true }) }) ~= whole and R.ns.ProfilePreview(R.ns.ExportProfile({ modules = R.ns.ProfileShare.Cover({ resource = true }) })).settings == 1)
+		local only = H.world("Tester - Realm", H.saved({ Default = { options = { ["general.thickness"] = 3, ["nameplates.dim"] = true }, movers = { AlertFrame = { point = "BOTTOM", x = 0, y = 300, kind = "hud" } } } }))
+		check("profiles, import: the positions can be kept and only the settings replaced", H.r(only.ns.ImportProfile(H.BOTH, { spots = false })) == "true Imported into Default." and only.ns.Get("general.thickness") == 2
+			and only.ns.Get("nameplates.dim") == false and only.spots().AlertFrame ~= nil and only.spots().UIErrorsFrame == nil)
+		check("profiles, import: the settings can be kept and only the positions replaced", H.r(only.ns.ImportProfile(H.BOTH, { settings = false })) == "true Imported into Default." and only.ns.Get("general.thickness") == 2
+			and only.spots().UIErrorsFrame ~= nil and only.spots().AlertFrame == nil)
+		local made = H.r(only.ns.ImportProfile(text, { newName = "Copy" }))
+		check("profiles, import: as a new profile the old one stays as it was and the new one is in use", made == "true Imported into Copy." and only.ns.Profile() == "Copy"
+			and only.env.FlatUIDB.profiles.Default.options["general.thickness"] == 2 and only.ns.Get("general.thickness") == 2, made)
+		check("profiles, import: a name that is taken is refused and nothing is made", H.r(only.ns.ImportProfile(text, { newName = "default" })) == "false That name is taken." and only.ns.Profile() == "Copy")
+	end
+
+	do
 		-- Lines that cannot be taken.
 		local X = H.world("Tester - Realm", H.saved({ Default = { options = { ["general.thickness"] = 3 }, movers = { AlertFrame = { point = "BOTTOM", x = 0, y = 300, kind = "hud" } } } }))
 		local kept = H.copy(X.env.FlatUIDB)
@@ -60544,7 +60709,16 @@ function PT.fontMethods(W, fs)
 		setHeight(me, h)
 		fs.explicitHeight = true
 	end
-	function fs.GetStringWidth() return PT.width(fs.text or "", PT.size(fs)) end
+	-- A world with W.widthFault answers as the game does when it cannot measure: it raises, or gives a withheld value.
+	function fs.GetStringWidth()
+		if W.widthFault == "error" then
+			error("GetStringWidth failed", 0)
+		elseif W.widthFault == "secret" then
+			return SECRET
+		end
+		return PT.width(fs.text or "", PT.size(fs))
+	end
+	function fs.GetStringHeight() return fs.height or PT.size(fs) * 1.2 end
 	fs.measure()
 end
 
@@ -60801,31 +60975,6 @@ function PT.extend(W)
 		return frame
 	end
 	W.named = {}
-	-- ColorPickerFrame as Blizzard_ColorPickerFrame has it: the info is kept, the colour is what the player has picked.
-	local picker = { shown = false }
-	function picker:SetupColorPickerAndShow(info)
-		if type(info) ~= "table" or type(info.swatchFunc) ~= "function" or type(info.cancelFunc) ~= "function" then
-			bad(W, "SetupColorPickerAndShow: swatchFunc and cancelFunc are expected")
-		end
-		picker.info, picker.shown = info, true
-		picker.r, picker.g, picker.b = info.r, info.g, info.b
-		picker.previous = { r = info.r, g = info.g, b = info.b }
-		W.pickers = (W.pickers or 0) + 1
-		info.swatchFunc()
-	end
-	function picker:GetColorRGB() return picker.r, picker.g, picker.b end
-	function picker:GetPreviousValues() return picker.previous.r, picker.previous.g, picker.previous.b end
-	-- The player drags in the picker, then presses Okay or Cancel.
-	function picker.choose(r, g, b)
-		picker.r, picker.g, picker.b = r, g, b
-		picker.info.swatchFunc()
-	end
-	function picker.cancel()
-		picker.info.cancelFunc(picker.previous)
-		picker.shown = false
-	end
-	env.ColorPickerFrame = picker
-	W.picker = picker
 end
 
 -- Where the window is: the frame, or nil while it is not built.
@@ -60838,6 +60987,7 @@ function PT.world(opts)
 	-- The window cuts its corners with mask textures, which a world makes for the addon with opts.hud.
 	opts = opts or {}
 	if opts.hud == nil then opts.hud = true end
+	if opts.snapFrames == nil then opts.snapFrames = true end
 	local W = suiteKit.mw(opts)
 	PT.extend(W)
 	-- The window opens on the page it was left on: the first of the pages, unless the world is a first start (opts.firstStart), which opens on Home.
@@ -60970,6 +61120,7 @@ end
 
 -- The left button goes down and up at a point of a frame, and whatever is on top there gets it.
 function PT.press(W, frame, fx, fy)
+	if frame == nil then return nil end -- a missing button fails the check after it, not the run
 	PT.reveal(W, frame)
 	local x, y = PT.centre(W, frame, fx, fy)
 	local top = PT.move(W, x, y)
@@ -61058,6 +61209,12 @@ function PT.button(W, text)
 			return raw
 		end
 	end
+end
+
+-- The last shown frame with this text: Import profile is built after Import trackers, so its button is the last "Import".
+function PT.lastByText(W, text)
+	local list = PT.byText(W, text)
+	return list[#list]
 end
 
 -- The row of a setting: the frame in the right-hand scroll area whose first text is the label and that has controls.
@@ -61217,10 +61374,24 @@ function PT.dump(W, state)
 end
 
 
+-- True when raw hangs from a scroll area: a switch of a row is not the switch in the header.
+function PT.inScroll(W, raw)
+	for _ = 1, 40 do
+		raw = raw.parent and W.rawOf[raw.parent]
+		if raw == nil then
+			return false
+		end
+		if raw.objectType == "ScrollFrame" then
+			return true
+		end
+	end
+	return false
+end
+
 -- The switch of the module in the header of the page, and the label beside it: nil when the page has none.
 function PT.headSwitch(W)
 	for _, raw in ipairs(PT.frames(W)) do
-		if PT.shown(W, raw) and raw.scripts.OnMouseUp then
+		if PT.shown(W, raw) and raw.scripts.OnMouseUp and not PT.inScroll(W, raw) then
 			local _, _, w, h = W.rectOf(raw)
 			if w and math.abs(w - 32) < 0.01 and math.abs(h - 16) < 0.01 then
 				local up = raw.parent and W.rawOf[raw.parent]
@@ -61337,6 +61508,7 @@ function PT.goPage(W, key)
 		if chip then
 			PT.press(W, PT.tab(W, "Per frame"))
 			PT.press(W, PT.chip(W, chip))
+			PT.openMore(W)
 		else
 			PT.go(W, PT.TAB_NAMES[key] or page.label, true)
 		end
@@ -61361,7 +61533,36 @@ function PT.more(W, label)
 	PT.press(W, more)
 end
 
+-- Presses every More choices link of the page shown, so a page lists all its rows. PT.collapsed leaves them shut.
+function PT.openMore(W)
+	if PT.collapsed then return end
+	for _ = 1, 40 do
+		local link
+		for _, raw in ipairs(PT.frames(W)) do
+			local first = raw.fonts[1]
+			if PT.shown(W, raw) and raw.scripts.OnMouseUp and first and first.shown and type(first.text) == "string" and first.text:find("^More choices %(") then
+				link = raw
+				break
+			end
+		end
+		if not link then break end
+		PT.press(W, link)
+	end
+	-- The presses scrolled the page to each link: back to the top, where PT.go leaves a page.
+	local scroll = PT.right(W)
+	for _ = 1, 100 do
+		if not scroll or (scroll.vscroll or 0) == 0 then return end
+		PT.fire(scroll, "OnMouseWheel", 1)
+	end
+end
+
 function PT.go(W, label, nested)
+	local result = PT.goOnly(W, label, nested)
+	PT.openMore(W)
+	return result
+end
+
+function PT.goOnly(W, label, nested)
 	local tab = PT.tab(W, label)
 	if tab then
 		PT.press(W, tab)
@@ -61394,7 +61595,9 @@ function PT.go(W, label, nested)
 				local chip = PT.FRAME_CHIPS[page.key]
 				if chip then
 					PT.press(W, PT.tab(W, "Per frame"))
-					return PT.press(W, PT.chip(W, chip))
+					local pressed = PT.press(W, PT.chip(W, chip))
+					PT.openMore(W)
+					return pressed
 				end
 				return PT.go(W, PT.TAB_NAMES[page.key] or label, true)
 			end
@@ -61638,6 +61841,13 @@ function PT.runBuild()
 			if path == "madeup.many" then return "c15" end
 			return get(path)
 		end
+		-- What the list of Many choices picks is not kept anywhere.
+		local picked
+		local set = ns.Set
+		ns.Set = function(path, value, ...)
+			if path == "madeup.many" then picked = value return true end
+			return set(path, value, ...)
+		end
 		ns.PAGES[#ns.PAGES + 1] = { key = "madeup", label = "Made up", parent = "combattext",
 			{ section = "Only section" }, { key = "one", kind = "bool", default = false, label = "Made up row", path = "madeup.one" },
 			{ key = "many", kind = "choice", default = "c3", label = "Many choices", path = "madeup.many", choices = many } }
@@ -61680,12 +61890,32 @@ function PT.runBuild()
 		for _, line in ipairs(visible) do
 			if PT.marked(line.raw) then marked = line.text end
 		end
-		check("dropdown: twenty choices open as a list of twelve, with a bar, scrolled to the chosen one", list.height == 12 * 22 + 4 and #visible == 12 and W.rawOf[scroll.children[2]].shown
+		check("dropdown: twenty choices open as a list of ten, with a bar, scrolled to the chosen one", list.height == 10 * 24 + 4 + 28 and #visible == 10 and W.rawOf[scroll.children[2]].shown
 			and marked == "Choice 15", tostring(marked))
 		PT.wheel(W, scroll, 5)
 		local top = PT.visibleLines(W, list)[1].text
 		PT.wheel(W, scroll, -5)
-		check("dropdown: the wheel scrolls it from the first line to the last", top == "Choice 1" and PT.visibleLines(W, list)[12].text == "Choice 20", top)
+		check("dropdown: the wheel scrolls it from the first line to the last", top == "Choice 1" and PT.visibleLines(W, list)[10].text == "Choice 20", top)
+		local search
+		for _, f in ipairs(PT.frames(W)) do
+			if f.objectType == "EditBox" and PT.inside(W, f, list) then search = f end
+		end
+		check("dropdown search: a list of more than ten lines has a field over its lines", search ~= nil and PT.shown(W, search) and select(2, W.rectOf(search)) >= select(2, W.rectOf(scroll)) + select(4, W.rectOf(scroll)))
+		PT.type(search, "choice 1")
+		local typed = PT.linesOf(W, list)
+		check("dropdown search: the lines that hold the typed words stay, whatever the case", #typed == 11 and typed[1].text == "Choice 1" and typed[11].text == "Choice 19", #typed)
+		PT.type(search, "20")
+		typed = PT.linesOf(W, list)
+		check("dropdown search: one line is left for 20", #typed == 1 and typed[1].text == "Choice 20")
+		PT.press(W, typed[1].raw)
+		check("dropdown search: a line of the shortened list is chosen like any other, and the list closes", picked == "c20" and PT.list(W) == nil, tostring(picked))
+		PT.press(W, PT.control(need(W, "Many choices")))
+		list = PT.list(W)
+		check("dropdown search: the list opens again with the field empty and every line", W.rawOf[list.children[1]] ~= nil and #PT.linesOf(W, PT.list(W)) == 20 and search.editText == "")
+		PT.type(search, "zzz")
+		typed = PT.linesOf(W, list)
+		check("dropdown search: no match leaves one line, None, that chooses nothing", #typed == 1 and typed[1].text == "None" and (PT.press(W, typed[1].raw) or true) and picked == "c20" and PT.list(W) ~= nil)
+		PT.type(search, "")
 		PT.press(W, PT.button(W, "Close"))
 		local nowhere = PT.go(W, "Orphan")
 		check("page with a parent: and the page without one opens too", nowhere ~= nil and PT.title(W) == "Orphan")
@@ -61707,11 +61937,26 @@ function PT.runBuild()
 		PT.go(W, "Nameplates")
 		check("pages: and kept, not built again", #W.addonFrames == again, #W.addonFrames .. " " .. again)
 
+		-- The reset button of a changed row (an empty font, the glyph of Panel.tga) is not its control.
+		local function kids(r)
+			local list = {}
+			for _, c in ipairs(r.children) do
+				local reset = false
+				if c.objectType ~= "EditBox" and #c.fonts == 1 and c.fonts[1].text == "" then
+					for _, region in ipairs(c.regions or {}) do
+						reset = reset or tostring(region.file or ""):find("Panel.tga", 1, true) ~= nil
+					end
+				end
+				if not reset then list[#list + 1] = c end
+			end
+			return list
+		end
 		local KIND = {
-			bool = function(r) local k = r.children return #k == 1 and k[1].mouse and #k[1].fonts == 0 and not k[1].wheel and #r.fonts == 1 end,
-			number = function(r) local k = r.children return #k == 2 and k[1].wheel and k[2].objectType == "EditBox" and #r.fonts == 2 end,
-			colour = function(r) local k = r.children return #k == 1 and k[1].mouse and #k[1].fonts == 0 and #r.fonts == 2 and (r.fonts[2].text or ""):find("^#%x%x%x%x%x%x$") ~= nil end,
-			choice = function(r) local k = r.children return #k == 1 and k[1].mouse and #k[1].fonts == 1 and #r.fonts == 1 end,
+			bool = function(r) local k = kids(r) return #k == 1 and k[1].mouse and #k[1].fonts == 0 and not k[1].wheel and #r.fonts == 1 end,
+			number = function(r) local k = kids(r) return #k == 2 and k[1].wheel and k[2].objectType == "EditBox" and #r.fonts == 2 end,
+			colour = function(r) local k = kids(r) return #k == 1 and k[1].mouse and #k[1].fonts == 0 and #r.fonts == 2 and (r.fonts[2].text or ""):find("^#%x%x%x%x%x%x$") ~= nil end,
+			-- A dropdown is one frame with the chosen text. A segmented choice is one frame without text that holds a frame for each segment.
+			choice = function(r) local k = kids(r) return #k == 1 and #r.fonts == 1 and ((k[1].mouse and #k[1].fonts == 1) or (#k[1].fonts == 0 and #k[1].children >= 2)) end,
 		}
 		KIND.list = KIND.choice
 		local total, expectedTotal, wrong = 0, 0, {}
@@ -61732,13 +61977,54 @@ function PT.runBuild()
 			end
 			-- A page of the window's own has no setting in PAGES; its block has checks of its own (tkedit:).
 			local rows = page.panelOnly and {} or PT.shownRows(W)
+			-- The switches of a section that is a chip set are chips in one block and not rows.
+			local chipped = {}
+			for _, shown in ipairs(W.ns.PAGES) do
+				if shown.key == page.key then
+					local chips = false
+					for _, item in ipairs(shown) do
+						if item.section then
+							chips = item.chips == true
+						elseif item.key and chips and item.kind == "bool" then
+							chipped[item.label] = true
+						end
+					end
+				end
+			end
+			local plain, chips = {}, 0
+			for _, def in ipairs(labels) do
+				if chipped[def.label] then chips = chips + 1 else plain[#plain + 1] = def end
+			end
+			-- A card shows its plain rows and then its rare rows (More choices, pressed open by PT.go). A page with a block of its own (kind entries) is not sorted.
+			local isRare, static = W.ns.PanelCards and W.ns.PanelCards.IsRare, false
+			for _, r in ipairs(page.rows) do
+				if type(r) ~= "string" and r.kind == "entries" then static = true end
+			end
+			if isRare and not static then
+				local inPlain, out, tail = {}, {}, {}
+				for _, def in ipairs(plain) do inPlain[def] = true end
+				local function flush()
+					for _, def in ipairs(tail) do out[#out + 1] = def end
+					tail = {}
+				end
+				for _, r in ipairs(page.rows) do
+					if type(r) == "string" then
+						flush()
+					elseif inPlain[r] then
+						local list = isRare(r.path) and tail or out
+						list[#list + 1] = r
+					end
+				end
+				flush()
+				plain = out
+			end
 			local problems = wrong
 			-- The switch of the module is in the header with its label, and is not a row.
 			local switch, switchLabel = PT.headSwitch(W)
 			if (moduleSwitch ~= nil) ~= (switch ~= nil) or (moduleSwitch and switchLabel ~= moduleSwitch.label) then problems[#problems + 1] = page.label .. ": switch " .. tostring(switchLabel) end
 			if own then total, expectedTotal = total + 1, expectedTotal + 1 end
-			if #rows ~= #labels then problems[#problems + 1] = page.label .. ": rows " .. #rows .. " of " .. #labels end
-			for number, def in ipairs(labels) do
+			if #rows ~= #plain then problems[#problems + 1] = page.label .. ": rows " .. #rows .. " of " .. #plain end
+			for number, def in ipairs(plain) do
 				local r = rows[number]
 				if not r or r.fonts[1].text ~= def.label then
 					problems[#problems + 1] = page.label .. ": order at " .. number .. " " .. def.label
@@ -61748,7 +62034,7 @@ function PT.runBuild()
 			end
 			if joined(PT.headers(W)) ~= joined(headers) then problems[#problems + 1] = page.label .. ": headers " .. joined(PT.headers(W)) end
 			if PT.title(W) ~= top.label then problems[#problems + 1] = page.label .. ": title " .. tostring(PT.title(W)) end
-			total, expectedTotal = total + #rows, expectedTotal + #labels
+			total, expectedTotal = total + #rows + chips, expectedTotal + #labels
 		end
 		check("pages: every row of every page once, in order, with a control of its kind, under its section headers, and the title", #wrong == 0, joined(wrong))
 		check("pages: " .. expectedTotal .. " rows in all, the number of settings in PAGES", total == expectedTotal and expectedTotal == COUNT.settings, total .. " " .. expectedTotal .. " " .. COUNT.settings)
@@ -61773,6 +62059,67 @@ function PT.runBuild()
 		end
 		check("pages: after every page, a search, a question and a list, every frame, texture and font string is still in ns.Own", unowned == 0 and #W.addonFrames > 500, unowned .. " " .. #W.addonFrames)
 		clean(W, "pages")
+	end
+
+	do
+		-- More choices: the rare rows of a card (tier r in SetupSteps.lua) are behind a link at the end of the card, and the link opens them.
+		local W = PT.open()
+		local rareItem, rarePage
+		for _, page in ipairs(W.ns.PAGES) do
+			for _, item in ipairs(page) do
+				if not rareItem and item.path == "castbars.shieldColour" then rareItem, rarePage = item, page end
+			end
+		end
+		-- The rare rows of the card that holds the item: the rows after its section heading up to the next, in the order of the page.
+		local rareSet = {}
+		for _, step in ipairs(W.ns.SETUP_STEPS) do
+			for _, entry in ipairs(step.rows) do
+				if entry[2] == "r" then rareSet[entry[1]] = true end
+			end
+		end
+		local group, cardRare = {}, 0
+		for _, item in ipairs(rarePage) do
+			if item.section then
+				if group.has then break end
+				group = {}
+			elseif item.key then
+				group[#group + 1] = item
+				if item == rareItem then group.has = true end
+			end
+		end
+		for _, item in ipairs(group) do
+			if rareSet[item.path] and W.ns.RowShown(item.path) then cardRare = cardRare + 1 end
+		end
+		PT.collapsed = true
+		PT.goPage(W, rarePage.key)
+		PT.collapsed = false
+		local link
+		for _, raw in ipairs(PT.frames(W)) do
+			local first = raw.fonts[1]
+			if not link and PT.shown(W, raw) and raw.scripts.OnMouseUp and first and first.shown and first.text == "More choices (" .. cardRare .. ")" then link = raw end
+		end
+		check("more choices: a rare row is not shown and its card ends with More choices (N), N the rare rows of the card", rareItem ~= nil and cardRare >= 2 and link ~= nil and PT.row(W, rareItem.label) == nil, cardRare)
+		PT.press(W, link)
+		local opened = PT.row(W, rareItem.label)
+		check("more choices: the link shows the rare rows below it, and says Fewer choices", opened ~= nil and PT.button(W, "Fewer choices") ~= nil
+			and select(2, W.rectOf(opened)) < select(2, W.rectOf(link)))
+		PT.press(W, PT.button(W, "Fewer choices"))
+		check("more choices: Fewer choices hides them again", PT.row(W, rareItem.label) == nil and PT.button(W, "More choices (" .. cardRare .. ")") ~= nil)
+
+		-- A search for a rare row opens the rows behind the link.
+		local box = PT.searchBox(W)
+		PT.type(box, rareItem.label)
+		-- A result opens with the keys (Panel.lua SearchKey): Down to the row, then Enter.
+		local hit, at
+		for index, row in ipairs(PT.shownRows(W)) do
+			if not hit and row.fonts[1] and row.fonts[1].text == rareItem.label then hit, at = row, index end
+		end
+		if hit then
+			for _ = 2, at do PT.fire(box, "OnArrowPressed", "DOWN") end
+			PT.fire(box, "OnEnterPressed")
+		end
+		check("more choices: a search that finds a rare row shows it, and the link says Fewer choices", hit ~= nil and PT.row(W, rareItem.label) ~= nil and PT.button(W, "Fewer choices") ~= nil)
+		clean(W, "more choices")
 	end
 
 	do
@@ -61966,26 +62313,95 @@ function PT.runControls()
 		local r = need(W, "Border colour")
 		local swatch = PT.control(r)
 		check("swatch: shows its colour and the hex value", r.fonts[2].text == "#000000" and need(W, "Background colour").fonts[2].text == "#0F0F0F", tostring(r.fonts[2].text))
+		local PC = ns.PanelColour
 		PT.press(W, swatch)
-		local info = W.picker.info
-		check("swatch: a click opens the game's colour picker with the colour", W.pickers == 1 and info.r == 0 and info.g == 0 and info.b == 0 and W.picker.shown
-			and not ns.IsSet("general.border"))
-		W.picker.choose(1, 0.5, 0)
+		check("swatch: a click opens the colour picker of Flat UI with the colour and writes nothing", PC.Shown() and not ns.IsSet("general.border")
+			and PC.Parts().popup:IsShown() and PC.Parts().apply ~= nil and PC.Parts().cancel ~= nil)
+		PC.Pick(1, 0.5, 0)
 		check("swatch: a colour picked is set through ns.Set, with the alpha it had, and shown", value(W, "general.border") == "ffff8000" and r.fonts[2].text == "#FF8000",
 			tostring(value(W, "general.border")))
-		W.picker.cancel()
+		PC.Cancel()
 		check("swatch: cancel puts the old colour back", value(W, "general.border") == "ff000000" and r.fonts[2].text == "#000000")
 		local backdrop = need(W, "Background colour")
 		ns.Set("panel.tone", "follow")
 		PT.press(W, PT.control(backdrop))
-		W.picker.choose(0.2, 0.2, 0.2)
+		PC.Pick(0.2, 0.2, 0.2)
 		W.advance(0.3)
 		check("swatch: a background colour picked repaints the window", value(W, "general.backdrop") == "ff333333" and near(PT.backdrop(W, PT.window(W))[1], 0.21, 0.01),
 			tostring(value(W, "general.backdrop")))
-		W.picker.cancel()
+		PC.Cancel()
 		ns.Set("general.border", "ff102030")
 		ns.RefreshPanel()
 		check("swatch: a colour set elsewhere is shown after ns.RefreshPanel", r.fonts[2].text == "#102030")
+		-- The picker: Apply keeps the colour and remembers it, a typed hex works, the opacity belongs to rows that use it.
+		PT.press(W, swatch)
+		check("picker: a typed hex sets the colour, three digits too, and anything else changes nothing", PC.Hex("#0a0B0c") and value(W, "general.border") == "ff0a0b0c"
+			and PC.Hex("fa0") and value(W, "general.border") == "ffffaa00" and not PC.Hex("zz") and not PC.Hex("12345") and value(W, "general.border") == "ffffaa00")
+		PC.Pick(0, 1, 0)
+		PC.Apply()
+		check("picker: Apply keeps the colour, closes and puts it first among the recent colours", value(W, "general.border") == "ff00ff00" and not PC.Shown()
+			and PC.Recent()[1] == "ff00ff00" and not PC.Parts().popup:IsShown() and ns.Account().panel.recent[1] == "ff00ff00")
+		PT.press(W, swatch)
+		check("picker: the recent colour shows in its row", PC.Parts().recent[1].value == "ff00ff00" and PC.Parts().recent[1]:IsShown() and not PC.Parts().recent[2]:IsShown())
+		PC.Pick(1, 0, 0)
+		PC.Apply()
+		PT.press(W, swatch)
+		PC.Pick(0, 1, 0)
+		PC.Apply()
+		check("picker: a colour applied again is listed once and first", #PC.Recent() == 2 and PC.Recent()[1] == "ff00ff00" and PC.Recent()[2] == "ffff0000")
+		-- The square, the bars, the hex field, a recent colour and the shade, as the player uses them.
+		local got
+		local function byte(v, i) return tonumber(v:sub(i, i + 1), 16) end
+		local function near2(v, a, r, g, b) return v and math.abs(byte(v, 1) - a) <= 1 and math.abs(byte(v, 3) - r) <= 1 and math.abs(byte(v, 5) - g) <= 1 and math.abs(byte(v, 7) - b) <= 1 end
+		PC.Open("ff112233", true, function(v) got = v end)
+		local P = PC.Parts()
+		local raw = W.rawOf
+		check("picker: it opens with the hex text and the opening colour beside the new one", P.hex:GetText() == "#112233" and near(raw[P.old].color[1], 0x11 / 255, 0.002)
+			and near(raw[P.old].color[3], 0x33 / 255, 0.002))
+		PT.press(W, P.hue, 0.5, 1)
+		PT.press(W, P.square, 1, 1)
+		check("picker: the top right of the square is full colour", near2(got, 255, 255, 0, 0), tostring(got))
+		PT.press(W, P.square, 0, 1)
+		check("picker: the top left of the square is white", near2(got, 255, 255, 255, 255), tostring(got))
+		PT.press(W, P.square, 1, 0)
+		check("picker: the bottom right of the square is black", near2(got, 255, 0, 0, 0), tostring(got))
+		PT.press(W, P.square, 1, 1)
+		PT.press(W, P.hue, 0.5, 0.75)
+		check("picker: a quarter of the way down the hue bar is a yellow green", near2(got, 255, 128, 255, 0), tostring(got))
+		PT.press(W, P.alphaBar, 0.5, 0.25)
+		check("picker: a quarter of the way up the opacity bar is a quarter of the opacity", got and math.abs(byte(got, 1) - 64) <= 1 and near2(got, byte(got, 1), 128, 255, 0), tostring(got))
+		P.hex:SetFocus()
+		P.hex:SetText("#102030")
+		PT.fire(raw[P.hex], "OnEditFocusLost")
+		check("picker: a typed hex is taken when the field is left", near2(got, byte(got, 1), 16, 32, 48), tostring(got))
+		P.hex:SetFocus()
+		P.hex:SetText("#ffffff")
+		PT.fire(raw[P.hex], "OnEscapePressed")
+		check("picker: Escape in the field drops what was typed", P.hex:GetText() == "#102030" and near2(got, byte(got, 1), 16, 32, 48) and not P.hex:HasFocus(), tostring(P.hex:GetText()))
+		P.hex:SetFocus()
+		P.hex:SetText("#445566")
+		PC.Apply()
+		check("picker: Apply takes a hex that is typed and not yet left", near2(got, byte(got, 1), 0x44, 0x55, 0x66) and PC.Recent()[1]:sub(3) == "445566", tostring(got))
+		PC.Open("ff000000", false, function(v) got = v end)
+		PT.press(W, P.recent[1])
+		check("picker: a click on a recent colour picks it", got == "ff445566", tostring(got))
+		PT.fire(raw[P.shade], "OnMouseDown", "LeftButton")
+		check("picker: a click outside the picker is Cancel", got == "ff000000" and not PC.Shown(), tostring(got))
+		check("picker: a value that is not a colour does not open it", PC.Open("zz", false, function() end) == false and not PC.Shown())
+		PC.Open("80112233", false, function(v) got = v end)
+		PC.Pick(1, 1, 1, 0.2)
+		check("picker: a row without opacity keeps the opacity it had", got == "80ffffff" and not PC.Parts().alphaBar:IsShown(), tostring(got))
+		PC.Cancel()
+		check("picker: Cancel hands the opening value back", got == "80112233" and not PC.Shown())
+		PC.Open("80112233", true, function(v) got = v end)
+		PC.Pick(0, 0, 0, 1)
+		check("picker: a row with opacity changes it and shows the bar", got == "ff000000" and PC.Parts().alphaBar:IsShown())
+		PC.Open("ff445566", false, function(v) got = v end)
+		check("picker: a second Open cancels the first", got == "80112233")
+		PC.Cancel()
+		local hr, hs, hv = PC.ToHSV(1, 0, 0)
+		local gr, gg, gb = PC.ToRGB(0.5, 1, 1)
+		check("picker: red is hue 0 and full strength, and hue one half is cyan", hr == 0 and hs == 1 and hv == 1 and near(gr, 0, 1e-6) and near(gg, 1, 1e-6) and near(gb, 1, 1e-6))
 		clean(W, "swatches")
 	end
 
@@ -62050,15 +62466,15 @@ function PT.runControls()
 		local visible = PT.visibleLines(W, list)
 		local _, lb, _, lh = W.rectOf(list)
 		local _, wb, _, wh = W.rectOf(PT.window(W))
-		check("list row: twenty lines open as a list of twelve with a bar", list.height == 12 * 22 + 4 and #PT.linesOf(W, list) == 20 and #visible == 12 and bar.shown
-			and scroll.GetVerticalScrollRange() == 20 * 22 + 4 - list.height, list.height .. " " .. #visible)
+		check("list row: twenty lines open as a list of ten with a bar", list.height == 10 * 24 + 4 + 28 and #PT.linesOf(W, list) == 20 and #visible == 10 and bar.shown
+			and scroll.GetVerticalScrollRange() == 20 * 24 + 4 - (list.height - 28), list.height .. " " .. #visible)
 		check("list row: and it fits the window", lb >= wb and lb + lh <= wb + wh)
 		local line15 = PT.linesOf(W, list)[15].raw
 		local x, y = PT.centre(W, line15)
-		check("list row: a line below the twelfth cannot be reached before the list is scrolled", PT.top(W, x, y) ~= line15)
+		check("list row: a line below the tenth cannot be reached before the list is scrolled", PT.top(W, x, y) ~= line15)
 		for _ = 1, 5 do PT.wheel(W, scroll, -1) end
 		visible = PT.visibleLines(W, list)
-		check("list row: the wheel scrolls it to the end, where the last line can be reached", scroll.vscroll == 176 and visible[#visible].text == "Spell 20" and #visible == 12, tostring(scroll.vscroll))
+		check("list row: the wheel scrolls it to the end, where the last line can be reached", scroll.vscroll == 240 and visible[#visible].text == "Spell 20" and #visible == 10, tostring(scroll.vscroll))
 		PT.press(W, visible[#visible].raw)
 		check("list row: a line calls the function of ns with its id and prints the message it returns", #added == 1 and added[1] == 1020 and joined(W.out) == "Added."
 			and PT.list(W) == nil and dd.fonts[1].text == "Choose a spell", joined(added) .. " " .. joined(W.out))
@@ -62069,14 +62485,14 @@ function PT.runControls()
 		visible = PT.visibleLines(W, list)
 		local texts = {}
 		for _, line in ipairs(visible) do texts[#texts + 1] = line.text end
-		check("list row: the lines are asked for again each time it opens, and a short list has no bar", joined(texts) == "One, Two, Three" and list.height == 3 * 22 + 4
+		check("list row: the lines are asked for again each time it opens, and a short list has no bar", joined(texts) == "One, Two, Three" and list.height == 3 * 24 + 4
 			and not W.rawOf[scroll.children[2]].shown and #PT.byText(W, "Spell 3") == 0, joined(texts))
 		PT.escape(W)
 		ns.OpenPanel()
 		ns.CooldownCandidates = function() return {} end
 		PT.press(W, PT.control(need(W, "Add a spell")))
 		list = PT.list(W)
-		check("list row: with no lines it says None, as does Sound on the page", #PT.byText(W, "None") == 2 and list.height == 26)
+		check("list row: with no lines it says None, as does Sound on the page", #PT.byText(W, "None") == 2 and list.height == 28)
 		ns.CooldownCandidates = function() error("the game would not say") end
 		PT.press(W, PT.button(W, "Close"))
 		PT.press(W, PT.control(need(W, "Add a spell")))
@@ -62128,7 +62544,7 @@ function PT.runControls()
 			and need(W, "Class icon size").alpha == 1)
 		local target = PT.control(need(W, "Target colour"))
 		PT.press(W, target)
-		check("needs: a dimmed colour swatch does not open the picker", W.pickers == nil)
+		check("needs: a dimmed colour swatch does not open the picker", not W.ns.PanelColour.Shown())
 		PT.go(W, "Text")
 		local size = need(W, "Health text size")
 		ns.Set("nameplates.healthText", false)
@@ -62195,7 +62611,7 @@ function PT.runControls()
 		for path, v in pairs(changes) do ns.Set(path, v) end
 		ns.RefreshPanel()
 		PT.press(W, PT.button(W, "Reset page"))
-		check("reset page: asks first, in a box inside the window", #PT.byText(W, "Reset every setting on this page?") == 1 and PT.button(W, "Yes") ~= nil and PT.button(W, "No") ~= nil
+		check("reset page: asks first, in a box inside the window", #PT.byText(W, "Reset 6 settings on Text?") == 1 and PT.button(W, "Yes") ~= nil and PT.button(W, "No") ~= nil
 			and value(W, "nameplates.nameSize") == 120)
 		local scroll = PT.right(W)
 		PT.wheel(W, scroll, -1, 0.1)
@@ -62203,7 +62619,7 @@ function PT.runControls()
 		PT.press(W, PT.button(W, "No"))
 		local same = true
 		for path, v in pairs(changes) do same = same and value(W, path) == v end
-		check("reset page: No changes nothing and closes the question", same and PT.button(W, "Yes") == nil and #PT.byText(W, "Reset every setting on this page?") == 0)
+		check("reset page: No changes nothing and closes the question", same and PT.button(W, "Yes") == nil and #PT.byText(W, "Reset 6 settings on Text?") == 0)
 		PT.press(W, PT.button(W, "Reset page"))
 		PT.press(W, PT.button(W, "Yes"))
 		local wrong = {}
@@ -62231,56 +62647,185 @@ function PT.runControls()
 		clean(W, "reset page")
 	end
 
-	-- 10. The tip in the strip ----------------------------------------------------------------------------------------
+	-- 10. The tip in a tooltip ----------------------------------------------------------------------------------------
 	do
 		local W = PT.open()
 		local ns = W.ns
 		PT.go(W, "Health bar")
 		local r = need(W, "Dim other nameplates")
 		local tip = "Darkens every nameplate that is not your target or focus."
-		check("strip: empty until the mouse is over a row", PT.strip(W) == "")
+		local function current()
+			W.advance(0.4)
+			return (ns.PanelTrust.Current())
+		end
+		check("tip: no tooltip until the mouse is over a row", ns.PanelTrust.Current() == nil and PT.strip(W) == "")
 		PT.move(W, PT.centre(W, r, 0.15))
-		check("strip: the tip of the row under the mouse", PT.strip(W) == tip, tostring(PT.strip(W)))
+		check("tip: it waits a moment", ns.PanelTrust.Current() == nil)
+		check("tip: then it shows the tip of the row under the mouse, and the strip stays empty", current() == tip and PT.strip(W) == "", tostring(ns.PanelTrust.Current()))
+		check("tip: the tooltip is a frame of the window", #PT.byText(W, tip) == 1)
 		PT.move(W, PT.centre(W, PT.control(r)))
-		check("strip: and over its control", PT.strip(W) == tip)
+		check("tip: and over its control", current() == tip)
 		PT.move(W, PT.centre(W, need(W, "Health bar background"), 0.15))
-		check("strip: a row without a tip shows nothing", PT.strip(W) == "")
+		check("tip: a row without a tip shows nothing", current() == nil)
 		PT.move(W, PT.centre(W, r, 0.15))
 		PT.move(W, 1, 1)
-		check("strip: and nothing once the mouse is off the row", PT.strip(W) == "")
-		check("strip: the tip is not a game tooltip", W.env.GameTooltip == nil and #W.out == 0)
-		clean(W, "strip")
+		check("tip: and nothing once the mouse is off the row", current() == nil)
+		check("tip: the tip is not a game tooltip", W.env.GameTooltip == nil and #W.out == 0)
+		clean(W, "tip")
+	end
+
+	-- 11. Changed dot, reset on a row, the reason on a row that is off, the count in the strip -----------------------------------
+	do
+		local W = PT.open()
+		local ns = W.ns
+		PT.go(W, "Text")
+		-- The button with the reset glyph of Panel.tga (cell 29) on a row.
+		local function resetOf(label)
+			for _, proxy in ipairs(need(W, label).children) do
+				local child = W.rawOf[proxy] or proxy
+				for _, region in ipairs(child.regions or {}) do
+					if region.kind == "Texture" and type(region.file) == "string" and region.file:find("Panel.tga", 1, true) and region.texCoord
+						and near(region.texCoord[1], 5 / 8) and near(region.texCoord[3], 3 / 4) then
+						return child
+					end
+				end
+			end
+		end
+		local function plain(text) return (text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+		check("trust: a row at its default has no reset and the strip counts nothing", resetOf("Name size") == nil and PT.strip(W) == "")
+		ns.Set("nameplates.nameSize", 120)
+		ns.RefreshPanel()
+		local reset = resetOf("Name size")
+		check("trust: a changed row has a reset left of its control, and the strip counts it", reset ~= nil and reset.shown and PT.strip(W) == "1 changed on this tab", tostring(PT.strip(W)))
+		check("trust: the reset is a glyph and not a letter", reset.fonts[1].text == "")
+		ns.Set("nameplates.levelSize", 150)
+		ns.RefreshPanel()
+		check("trust: the strip counts the settings of the tab", PT.strip(W) == "2 changed on this tab", tostring(PT.strip(W)))
+		PT.press(W, reset)
+		PT.move(W, 1, 1)
+		check("trust: the reset sets the row to its default and goes", value(W, "nameplates.nameSize") == 100 and not resetOf("Name size").shown and value(W, "nameplates.levelSize") == 150
+			and PT.strip(W) == "1 changed on this tab", tostring(value(W, "nameplates.nameSize")))
+		local levelReset = resetOf("Level number size")
+		PT.reveal(W, levelReset)
+		PT.move(W, PT.centre(W, levelReset))
+		W.advance(0.4)
+		check("trust: a tooltip beside the reset says what it does", #PT.byText(W, "Reset to default") == 1)
+		PT.move(W, 1, 1)
+		ns.Set("nameplates.enabled", false)
+		ns.RefreshPanel()
+		local nameRow = need(W, "Name size")
+		PT.reveal(W, nameRow)
+		PT.move(W, PT.centre(W, nameRow, 0.15))
+		W.advance(0.4)
+		local def = ns.Def("nameplates.enabled")
+		local body, line = ns.PanelTrust.Current()
+		check("trust: a row that is off says which setting it needs, in the tooltip", line ~= nil and plain(line) == "Needs " .. (def and def.label or "nameplates.enabled") .. "." and PT.strip(W) ~= plain(line),
+			tostring(line))
+		-- A dim row does not take a reset.
+		ns.Set("nameplates.nameSize", 130)
+		ns.RefreshPanel()
+		PT.press(W, resetOf("Name size"))
+		check("trust: and a row that is off takes no reset", value(W, "nameplates.nameSize") == 130, tostring(value(W, "nameplates.nameSize")))
+		ns.Set("nameplates.enabled", true)
+		ns.RefreshPanel()
+		PT.move(W, 1, 1)
+		PT.go(W, "Fading")
+		local chip = PT.button(W, "Stance bar")
+		local _, _, chipWidth = W.rectOf(chip)
+		check("trust: a chip is as wide as its label and the two insets", chip ~= nil and chipWidth >= PT.width("Stance bar", PT.size(chip.fonts[1])) + 31.99, tostring(chipWidth))
+		clean(W, "trust")
+		for _, fault in ipairs({ "error", "secret" }) do
+			local F = PT.open()
+			F.widthFault = fault
+			PT.go(F, "Fading")
+			local guess = PT.button(F, "Stance bar")
+			local _, _, guessWidth = F.rectOf(guess)
+			check("trust: a chip has a width of its own when the game gives none (" .. fault .. ")", guess ~= nil and guessWidth >= 32 + 7 * #"Stance bar", tostring(guessWidth))
+			clean(F, "trust width " .. fault)
+		end
 	end
 end
 
 
--- What a search must show, worked out from the test's own PAGES: "#page" then the labels of its rows, for each page that has a hit.
+
+-- The rows of the Profiles page that Search lists.
+PT.PROFILE_ROWS = { "Profile in use", "New profile", "Setup", "Copy from", "Delete profile", "Rename profile", "Reset profile", "In a dungeon", "In a raid",
+	"In a battleground or arena", "Everywhere else", "Export profile", "Import profile", "Export trackers", "Import trackers", "Export by module" }
+
+-- The tier of a hit, worked out here and not by the addon: 1 the label starts with the first word and holds all, 2 the label holds all, 3 label and tip, 4 label,
+-- tip, section and page.
+function PT.tier(words, label, tip, section, page)
+	local function holds(text)
+		for _, word in ipairs(words) do
+			if not text:find(word, 1, true) then return false end
+		end
+		return true
+	end
+	label = label:lower()
+	if holds(label) then return label:find(words[1], 1, true) == 1 and 1 or 2 end
+	if holds(label .. "\n" .. (tip or ""):lower()) then return 3 end
+	if holds(label .. "\n" .. (tip or ""):lower() .. "\n" .. section:lower() .. "\n" .. page:lower()) then return 4 end
+end
+
+-- What a search must show, worked out from the test's own PAGES: "#page" then the labels of its rows, for each group that has a hit. The rows of a group are in
+-- order of tier, then the shorter label, then their place. The groups are in order of their best tier, then their place: the pages, Profiles, setup.
 function PT.expected(text)
 	local words = {}
 	for word in text:lower():gmatch("%S+") do words[#words + 1] = word end
-	local list = {}
+	local groups = {}
+	local function add(name, hits)
+		if #hits == 0 then return end
+		for place, hit in ipairs(hits) do hit.place = place end
+		table.sort(hits, function(a, b)
+			if a.tier ~= b.tier then return a.tier < b.tier end
+			if #a.label ~= #b.label then return #a.label < #b.label end
+			return a.place < b.place
+		end)
+		groups[#groups + 1] = { name = name, hits = hits, best = hits[1].tier, place = #groups + 1 }
+	end
 	for _, page in ipairs(PAGES) do
-		local section, group = "", nil
+		local section, hits = "", {}
 		for _, r in ipairs(page.rows) do
 			if type(r) == "string" then
 				section = r
 			else
-				local hay = (r.label .. "\n" .. (r.tip or "") .. "\n" .. section .. "\n" .. page.label):lower()
-				local all = true
-				for _, word in ipairs(words) do
-					if not hay:find(word, 1, true) then all = false end
-				end
-				if all then
-					if not group then
-						group = true
-						list[#list + 1] = "#" .. page.label
-					end
-					list[#list + 1] = r.label
-				end
+				local tier = PT.tier(words, r.label, r.tip, section, page.label)
+				if tier then hits[#hits + 1] = { label = r.label, tier = tier } end
 			end
 		end
+		add(page.label, hits)
+	end
+	local hits = {}
+	for _, label in ipairs(PT.PROFILE_ROWS) do
+		local tier = PT.tier(words, label, "", "Profiles", "Profiles")
+		if tier then hits[#hits + 1] = { label = label, tier = tier } end
+	end
+	add("Profiles", hits)
+	hits = {}
+	for _, step in ipairs(PT.steps or {}) do
+		local tier = step.built and PT.tier(words, step.title, "", step.area, "Flat UI setup")
+		if tier then hits[#hits + 1] = { label = step.title, tier = tier } end
+	end
+	add("Flat UI setup", hits)
+	table.sort(groups, function(a, b)
+		if a.best ~= b.best then return a.best < b.best end
+		return a.place < b.place
+	end)
+	local list = {}
+	for _, group in ipairs(groups) do
+		list[#list + 1] = "#" .. group.name
+		for _, hit in ipairs(group.hits) do list[#list + 1] = hit.label end
 	end
 	return list
+end
+
+-- The built steps of setup in an area.
+function PT.stepsIn(area)
+	local n = 0
+	for _, step in ipairs(PT.steps or {}) do
+		if step.built and step.area == area then n = n + 1 end
+	end
+	return n
 end
 
 -- The number of settings on the page of that name.
@@ -62301,7 +62846,7 @@ function PT.found(W)
 	local _, child = PT.right(W)
 	local items = {}
 	for _, fs in ipairs(child.fonts) do
-		if fs.shown and fs.text ~= "" and fs.text ~= "No settings found." then
+		if fs.shown and fs.text ~= "" and fs.text ~= "No settings match." then
 			items[#items + 1] = { "#" .. fs.text, select(2, W.rectOf(fs)) }
 		end
 	end
@@ -62321,6 +62866,7 @@ function PT.runSearchProfiles()
 	do
 		local W = PT.open()
 		local ns = W.ns
+		PT.steps = ns.SETUP_STEPS
 		local box = PT.searchBox(W)
 		local function find(text)
 			PT.type(box, text)
@@ -62332,12 +62878,12 @@ function PT.runSearchProfiles()
 		check("search: case does not matter", joined(find("BORDER")) == joined(expected))
 		check("search: by label", joined(find("thickness")) == joined(PT.expected("thickness")) and #PT.expected("thickness") == 4, joined(find("thickness")))
 		check("search: by tip", joined(find("gloss")) == joined(PT.expected("gloss")) and #PT.expected("gloss") >= 4, joined(find("gloss")))
-		check("search: by section", joined(find("cast colours")) == joined(PT.expected("cast colours")) and PT.expected("cast colours")[2] == "Cast colour", joined(find("cast colours")))
-		check("search: by page", joined(find("chat and tooltips")) == joined(PT.expected("chat and tooltips")) and #PT.expected("chat and tooltips") == PT.rowsOn("Chat and tooltips") + 1, joined(find("chat and tooltips")))
+		check("search: by section", joined(find("cast colours")) == joined(PT.expected("cast colours")) and ("," .. joined(PT.expected("cast colours")) .. ","):find(", #Colours, Cast colour,", 1, true) ~= nil, joined(find("cast colours")))
+		check("search: by page", joined(find("chat and tooltips")) == joined(PT.expected("chat and tooltips")) and #PT.expected("chat and tooltips") == PT.rowsOn("Chat and tooltips") + 1 + 1 + PT.stepsIn("Chat and tooltips"), joined(find("chat and tooltips")))
 		check("search: several words in any order", joined(find("colour cast")) == joined(PT.expected("cast colour")) and joined(find("cast colour")) == joined(PT.expected("colour cast"))
 			and #PT.expected("cast colour") < #PT.expected("cast") and #PT.expected("cast colour") > 5, joined(find("colour cast")))
-		check("search: words that are in no row show a sentence and no row", #find("zzzz") == 0 and #PT.byText(W, "No settings found.") == 1)
-		check("search: and the sentence goes with the next hit", #PT.byText(W, "No settings found.") == 1 and #find("opacity") > 0 and #PT.byText(W, "No settings found.") == 0)
+		check("search: words that are in no row show a sentence and no row", #find("zzzz") == 0 and #PT.byText(W, "No settings match.") == 1)
+		check("search: and the sentence goes with the next hit", #PT.byText(W, "No settings match.") == 1 and #find("opacity") > 0 and #PT.byText(W, "No settings match.") == 0)
 		local rows = PT.shownRows(W)
 		local opacity
 		for _, r in ipairs(rows) do
@@ -62356,7 +62902,7 @@ function PT.runSearchProfiles()
 		end
 		check("search: a row whose setting is off is dim here as well", dim ~= nil and dim.alpha < 1)
 		PT.press(W, PT.control(dim))
-		check("search: and does nothing", W.pickers == nil)
+		check("search: and does nothing", not W.ns.PanelColour.Shown())
 		ns.Set("nameplates.enabled", true)
 		ns.Set("nameplates.health", true)
 		ns.Set("nameplates.target", true)
@@ -62375,8 +62921,96 @@ function PT.runSearchProfiles()
 		check("search: clearing the box shows the page again", PT.title(W) == "Windows" and PT.button(W, "Reset page") ~= nil and #PT.shownRows(W) > 10)
 		find("zzzz")
 		find("")
-		check("search: also after a search with no hit", PT.title(W) == "Windows" and #PT.shownRows(W) > 10 and #PT.byText(W, "No settings found.") == 0)
+		check("search: also after a search with no hit", PT.title(W) == "Windows" and #PT.shownRows(W) > 10 and #PT.byText(W, "No settings match.") == 0)
 		check("search: the box shows its word until something is typed", #PT.byText(W, "Search") == 1)
+		-- Order by match, Pages, keys, the arrival flash, and the index of Profiles and setup (build 6).
+		local PS = ns.PanelSearch
+		check("search order: a label that starts with the words is tier 1, one that holds them 2, label and tip 3, section and page 4, none nil",
+			PS.Tier({ "cast" }, "Cast colour", "", "", "") == 1 and PS.Tier({ "colour", "cast" }, "Cast colour", "", "", "") == 2
+			and PS.Tier({ "gloss", "bar" }, "Bar", "Adds gloss.", "", "") == 3 and PS.Tier({ "cast", "colours" }, "Cast colour", "", "Cast colours", "") == 4
+			and PS.Tier({ "zzzz" }, "Cast colour", "tip", "section", "page") == nil)
+		local groups = PS.Sort({
+			{ label = "A", hits = { { tier = 4, label = "Longer name" }, { tier = 2, label = "Name" }, { tier = 2, label = "Nm" } } },
+			{ label = "B", hits = { { tier = 1, label = "Best" } } },
+			{ label = "C", hits = { { tier = 2, label = "Same" } } },
+		})
+		check("search order: the rows of a group go by tier and then the shorter label, the groups by their best tier and then their place",
+			groups[1].label == "B" and groups[2].label == "A" and groups[3].label == "C" and groups[2].hits[1].label == "Nm" and groups[2].hits[2].label == "Name"
+			and groups[2].hits[3].label == "Longer name")
+		find("target")
+		check("search order: the rows of a group follow the tiers and the shorter label", joined(PT.found(W)) == joined(PT.expected("target")) and #PT.expected("target") > 3, joined(PT.found(W)))
+
+		local function glow(row, alpha)
+			for _, region in ipairs(row.regions) do
+				if region.kind == "Texture" and region.shown and region.color and near(region.color[4] or 1, alpha, 0.001) then return true end
+			end
+			return false
+		end
+		local function chipsOf()
+			local list = {}
+			local holder = PT.byText(W, "Pages")[1]
+			local block = holder and W.rawOf[holder.parent]
+			for _, c in ipairs(block and block.children or {}) do
+				local raw = W.rawOf[c]
+				if raw.shown and raw.scripts.OnMouseUp and raw.fonts[1] then list[#list + 1] = raw end
+			end
+			return list
+		end
+		find("border")
+		check("search pages: no chip when no page name matches", #PT.byText(W, "Pages") == 0)
+		find("chat and tooltips")
+		local chips = chipsOf()
+		check("search pages: a page whose name matches has a chip under Pages", #PT.byText(W, "Pages") == 1 and #chips == 1 and chips[1].fonts[1].text == "Chat and tooltips")
+		PT.press(W, chips[1])
+		check("search pages: a click on the chip opens the page and leaves the search", PT.title(W) ~= "Search" and box.editText == "")
+		find("chat and tooltipz")
+		chips = chipsOf()
+		local closest = {}
+		for _, chip in ipairs(chips) do closest[#closest + 1] = chip.fonts[1].text end
+		check("search pages: no match says so and offers up to three pages with close names", #PT.byText(W, "No settings match.") == 1 and #chips >= 1 and #chips <= 3
+			and joined(closest):find("Chat and tooltips", 1, true) ~= nil, joined(closest))
+
+		find("cast colours")
+		local results = PT.shownRows(W)
+		local count = #results
+		check("search keys: the first result is selected", count >= 5 and glow(results[1], 0.14) and not glow(results[2], 0.14), count)
+		PT.fire(box, "OnArrowPressed", "DOWN")
+		check("search keys: Down selects the next result", glow(results[2], 0.14) and not glow(results[1], 0.14))
+		for _ = 1, count + 2 do PT.fire(box, "OnArrowPressed", "DOWN") end
+		check("search keys: and stops at the last", glow(results[count], 0.14) and not glow(results[1], 0.14))
+		for _ = 1, count + 2 do PT.fire(box, "OnArrowPressed", "UP") end
+		check("search keys: Up goes back and stops at the first", glow(results[1], 0.14))
+		W.combat = true
+		PT.fire(box, "OnArrowPressed", "DOWN")
+		PT.fire(box, "OnEnterPressed")
+		check("search keys: in a fight the keys do nothing", glow(results[1], 0.14) and PT.title(W) == "Search")
+		W.combat = false
+		PT.fire(box, "OnArrowPressed", "DOWN")
+		local target = results[2].fonts[1].text
+		PT.fire(box, "OnEnterPressed")
+		local arrived = PT.row(W, target)
+		check("search keys: Enter opens the tab of the result and clears the search", PT.title(W) ~= "Search" and box.editText == "" and arrived ~= nil, tostring(target))
+		check("search flash: the row opened has a fill in the accent at 24 percent", arrived ~= nil and glow(arrived, 0.24))
+		PT.fire(W.rawOf[PT.window(W)], "OnUpdate", 0.4)
+		check("search flash: it fades over 0.8 seconds", glow(arrived, 0.12))
+		PT.fire(W.rawOf[PT.window(W)], "OnUpdate", 0.5)
+		check("search flash: and goes", not glow(arrived, 0.12) and not glow(arrived, 0.24))
+		find("thickness")
+		PT.fire(box, "OnEscapePressed")
+		check("search keys: Escape clears the words and shows the page", box.editText == "" and PT.title(W) ~= "Search" and not box.focus)
+
+		find("export profile")
+		check("search index: Profiles has its rows in the results", joined(PT.found(W)) == joined(PT.expected("export profile")) and PT.row(W, "Export profile") ~= nil,
+			joined(PT.found(W)))
+		PT.press(W, PT.control(need(W, "Export profile")))
+		check("search index: a result of Profiles opens the page", PT.title(W) == "Profiles" and box.editText == "")
+		find("borders and backgrounds")
+		check("search index: and so do the steps of setup", joined(PT.found(W)) == joined(PT.expected("borders and backgrounds")) and PT.row(W, "Borders and backgrounds") ~= nil,
+			joined(PT.found(W)))
+		PT.press(W, PT.control(need(W, "Borders and backgrounds")))
+		local S = ns.Setup
+		check("search index: a result of setup opens setup at its step", S.cur ~= nil and S.cur >= 1 and ns.SETUP_STEPS[S.cur].id == "look", tostring(S.cur))
+		clean(W, "search order")
 		clean(W, "search")
 	end
 
@@ -62389,7 +63023,7 @@ function PT.runSearchProfiles()
 		PT.go(W, "Profiles")
 		local labels = {}
 		for _, r in ipairs(PT.shownRows(W)) do labels[#labels + 1] = r.fonts[1].text end
-		check("profiles: the rows, under three headers", joined(labels) == "Profile in use, New profile, Setup, Copy from, Delete profile, Reset profile, In a dungeon, In a raid, In a battleground or arena, Everywhere else, Export profile, Import profile, Export trackers, Import trackers"
+		check("profiles: the rows, under three headers", joined(labels) == "Profile in use, New profile, Setup, Copy from, Delete profile, Rename profile, Reset profile, In a dungeon, In a raid, In a battleground or arena, Everywhere else, Export profile, Export trackers, Import trackers, Export by module, Import profile"
 			and joined(PT.headers(W)) == "Profile, Switch automatically, Switches wait until the fight ends., Share", joined(labels) .. " | " .. joined(PT.headers(W)))
 		local used = PT.control(need(W, "Profile in use"))
 		check("profiles: the profile in use is the dropdown's text", used.fonts[1].text == "Default")
@@ -62472,10 +63106,10 @@ function PT.runSearchProfiles()
 			and out.focus and out.highlighted and PT.strip(W) == "Press Ctrl+C to copy.", out.editText)
 		state.calls = {}
 		local into = PT.control(need(W, "Import profile"))
-		PT.press(W, PT.button(W, "Import"))
+		PT.press(W, PT.lastByText(W, "Import"))
 		check("profiles: Import with nothing pasted says so and asks nothing", #state.calls == 0 and PT.button(W, "Yes") == nil and PT.strip(W) == "Paste the settings first.")
 		PT.type(into, "FLATUI1:pasted text")
-		PT.press(W, PT.button(W, "Import"))
+		PT.press(W, PT.lastByText(W, "Import"))
 		check("profiles: Import asks once", #PT.byText(W, ('Replace "%s" with the pasted settings?'):format(state.current)) == 1 and #state.calls == 0)
 		PT.press(W, PT.button(W, "Yes"))
 		check("profiles: Yes calls ns.ImportProfile with the pasted text, as it is", #state.calls == 1 and state.calls[1][1] == "ImportProfile" and state.calls[1][2] == "FLATUI1:pasted text"
@@ -62506,11 +63140,52 @@ function PT.runSearchProfiles()
 			and PT.strip(W) == "Press Ctrl+C to copy.", #out.editText)
 		PT.type(into, out.editText)
 		check("profiles: and into the import box as it was pasted", into.editText == line, #into.editText)
-		PT.press(W, PT.button(W, "Import"))
+		PT.press(W, PT.lastByText(W, "Import"))
 		PT.press(W, PT.button(W, "Yes"))
 		check("profiles: and ns.ImportProfile gets all of it", #state.calls == 1 and state.calls[1][1] == "ImportProfile" and state.calls[1][2] == line and into.editText == "", #state.calls)
 		check("profiles: neither box limits the number of letters", out.maxLetters == 0 and into.maxLetters == 0, tostring(out.maxLetters) .. " " .. tostring(into.maxLetters))
 		clean(W, "a long export")
+	end
+	do
+		-- Rename, the preview of a pasted profile, what to import, and the export by module.
+		local W = PT.world()
+		local state = PT.profiles(W)
+		local renamed, imported, exported
+		W.ns.RenameProfile = function(from, to) renamed = from .. ">" .. to return true, "Renamed." end
+		W.ns.ProfilePreview = function(text)
+			if text == "FLATUI1:ok" then
+				return { name = "Healer", version = "0.5.2", width = 2560, height = 1440, scale = 1, settings = 214, spots = 31 }
+			end
+			return nil, "That is not a Flat UI profile."
+		end
+		W.ns.ImportProfile = function(text, opts) imported = { text, opts } return true, "Imported." end
+		W.ns.ExportProfile = function(opts) exported = opts return "FLATUI1:made" end
+		W.ns.OpenPanel()
+		PT.go(W, "Profiles")
+		local name = PT.control(PT.need(W, "Rename profile"))
+		PT.type(name, "  Tank ")
+		PT.press(W, PT.button(W, "Rename"))
+		check("profiles share: Rename calls ns.RenameProfile with the profile in use and the name trimmed, and the field is empty after", renamed == "Default>Tank" and name.editText == "" and PT.strip(W) == "Renamed.", tostring(renamed))
+		check("profiles share: with nothing pasted the preview rows are not shown", #PT.byText(W, "Pasted profile") == 0 and #PT.byText(W, "Import selected") == 0)
+		local into = PT.control(PT.need(W, "Import profile"))
+		PT.type(into, "FLATUI1:ok")
+		check("profiles share: a pasted profile shows its name, build, settings and positions", #PT.byText(W, "Healer, Flat UI 0.5.2, 214 settings, 31 positions") == 1)
+		check("profiles share: and a warning when it was made for another screen size", #PT.byText(W, "Made for 2560 x 1440. This screen is 1920 x 1080. Check the positions after the import.") == 1)
+		PT.press(W, PT.button(W, "Import selected"))
+		check("profiles share: Import selected as a new profile sends the text, the name, and both parts", imported ~= nil and imported[1] == "FLATUI1:ok" and imported[2].newName == "Healer" and imported[2].settings == true
+			and imported[2].spots == true and into.editText == "", imported and tostring(imported[2].newName))
+		imported = nil
+		PT.type(into, "FLATUI1:ok")
+		PT.press(W, PT.lastByText(W, "Import"))
+		check("profiles share: the Import button next to the paste field takes the same way", imported ~= nil and imported[2].newName == "Healer", tostring(imported))
+		PT.type(into, "FLATUI1:bad")
+		check("profiles share: a text that cannot be read shows no preview", #PT.byText(W, "Import selected") == 0)
+		PT.press(W, PT.button(W, "Modules"))
+		check("profiles share: Modules opens the list of modules", #PT.byText(W, "Export chosen") >= 1)
+		PT.press(W, PT.button(W, "Export chosen"))
+		check("profiles share: Export chosen asks ns.ExportProfile for the modules chosen and the positions", exported ~= nil and exported.spots == true and type(exported.modules) == "table" and exported.modules.general == true,
+			tostring(exported))
+		clean(W, "profiles share")
 	end
 	do
 		-- Share: the rows for trackers, which take a text of any length that the chat box cannot.
@@ -62524,16 +63199,16 @@ function PT.runSearchProfiles()
 		PT.go(W, "Profiles")
 		local labels = {}
 		for _, r in ipairs(PT.shownRows(W)) do labels[#labels + 1] = r.fonts[1].text end
-		check("tkshare: the Share section has Export trackers and Import trackers after Import profile", joined(labels) == "Profile in use, New profile, Setup, Copy from, Delete profile, Reset profile, In a dungeon, In a raid, In a battleground or arena, Everywhere else, Export profile, Import profile, Export trackers, Import trackers"
+		check("tkshare: the Share section has Export trackers and Import trackers before Export by module and Import profile", joined(labels) == "Profile in use, New profile, Setup, Copy from, Delete profile, Rename profile, Reset profile, In a dungeon, In a raid, In a battleground or arena, Everywhere else, Export profile, Export trackers, Import trackers, Export by module, Import profile"
 			and joined(PT.headers(W)) == "Profile, Switch automatically, Switches wait until the fight ends., Share", joined(labels))
 		local out = PT.control(need(W, "Export trackers"))
 		local into = PT.control(need(W, "Import trackers"))
 		PT.press(W, PT.byText(W, "Export")[2])
 		check("tkshare: Export puts the whole text in the box, selected, for Ctrl+C", out.editText == text and out.focus and out.highlighted and out.maxLetters == 0 and PT.strip(W) == "Press Ctrl+C to copy.", #tostring(out.editText))
-		PT.press(W, PT.byText(W, "Import")[2])
+		PT.press(W, PT.byText(W, "Import")[1])
 		check("tkshare: Import with nothing pasted says so", imported == nil and PT.strip(W) == "Paste the trackers first.")
 		PT.type(into, text)
-		PT.press(W, PT.byText(W, "Import")[2])
+		PT.press(W, PT.byText(W, "Import")[1])
 		check("tkshare: Import gives ns.TrackerImport the whole pasted text, shows its line and empties the box", imported == text and PT.strip(W) == "Imported 10 trackers." and into.editText == "" and into.maxLetters == 0, tostring(imported and #imported))
 		W.ns.TrackerExportText = function() return false, "No trackers." end
 		PT.press(W, PT.byText(W, "Export")[2])
@@ -62576,7 +63251,7 @@ function PT.runSearchProfiles()
 		check("profiles: and Profiles is still in the list", PT.page(W, "Profiles") ~= nil)
 		local V = PT.world()
 		local state = PT.profiles(V)
-		for _, key in ipairs({ "NewProfile", "CopyProfile", "DeleteProfile", "ResetProfile", "ExportProfile", "ImportProfile", "TrackerExportText", "TrackerImport" }) do V.ns[key] = nil end
+		for _, key in ipairs({ "NewProfile", "CopyProfile", "DeleteProfile", "RenameProfile", "ResetProfile", "ExportProfile", "ImportProfile", "TrackerExportText", "TrackerImport" }) do V.ns[key] = nil end
 		V.ns.OpenPanel()
 		PT.go(V, "Profiles")
 		local labels = {}
@@ -62732,7 +63407,7 @@ function PT.runWindow()
 			if item.section then L.inside = item.section == "Options window" end
 			if L.inside and item.key then L.labels[#L.labels + 1] = item.label end
 		end
-		check("window look: the Flat UI page has them in a section Options window", table.concat(L.labels, ", ") == "Accent colour, Custom accent colour, Window tone, Borders, Corners, Density, Window font, Window scale, Sidebar, Movers grid", table.concat(L.labels, ", "))
+		check("window look: the Flat UI page has them in a section Options window", table.concat(L.labels, ", ") == "Accent colour, Custom accent colour, Window tone, Borders, Corners, Density, Window font, Window scale, Sidebar, Sections, Movers grid, Samples in lists, Snap to other frames", table.concat(L.labels, ", "))
 		L.ns.Set("panel.tone", "ink")
 		L.ns.Set("panel.scale", 120)
 		check("window look: they are kept in FlatUIDB.panel and in no profile", L.W.env.FlatUIDB.panel.tone == "ink" and L.W.env.FlatUIDB.panel.scale == 120 and not L.has(L.W.env.FlatUIDB.profiles))
@@ -62836,11 +63511,14 @@ function PT.runWindow()
 		L.ns.Set("panel.tone", "graphite")
 		check("window look: a change of Window tone sets the text colour again", L.graphiteText == "eceee6" and L.inkText == "e9ecf2" and L.rowText() == "eceee6", L.graphiteText .. " " .. L.inkText)
 		L.mark = nil
+		-- Cards draw no mark: the section header with a mark is the one of Lines.
+		L.ns.Set("panel.sections", "lines")
 		for _, raw in ipairs(PT.byText(L.W, "Options window")) do
 			for _, region in ipairs(raw.regions) do
 				if region.width == 3 and region.color then L.mark = L.rgb(region.color) end
 			end
 		end
+		L.ns.Set("panel.sections", "cards")
 		check("window look: the mark of a section header is a line colour and not the accent", L.mark == "494f44", tostring(L.mark))
 		check("window look: the title bar, the page title and the chosen page in the list are in the text colour, and only the mark of the chosen page has the accent", L.count(L.titles(), "eceee6") == 3 and L.count(L.titles(), "9a9cf0") == 1, table.concat(L.titles(), " "))
 		-- Density, font and scale.
@@ -63046,12 +63724,12 @@ function PT.runWindow()
 	-- 16. Clients that lack something ---------------------------------------------------------------------------------
 	do
 		local W = PT.world()
-		W.env.ColorPickerFrame = nil
 		W.ns.OpenPanel()
 		PT.press(W, PT.control(need(W, "Border colour")))
-		check("no colour picker: the swatch does nothing and the window works", W.pickers == nil and #W.errors == 0 and #W.violations == 0)
+		check("swatch: opens the picker and the window works", W.ns.PanelColour.Shown() and #W.errors == 0 and #W.violations == 0)
+		W.ns.PanelColour.Cancel()
 		PT.press(W, PT.control(need(W, "Bar texture")))
-		check("no colour picker: and the rest of the window works", PT.list(W) ~= nil)
+		check("swatch: and the rest of the window works", PT.list(W) ~= nil)
 		local V = PT.world()
 		V.env.C_AddOns = nil
 		V.ns.OpenPanel()
@@ -64098,7 +64776,8 @@ function PT.runTkEdit()
 			return T.saved(W)[1].on == nil
 		end)())
 		PT.press(W, PT.control(T.row(W, "Colour")))
-		W.picker.choose(1, 0, 0)
+		W.ns.PanelColour.Pick(1, 0, 0)
+		W.ns.PanelColour.Apply()
 		check("tkedit: a colour: the picker gives the tracker its own colour", ns.TrackerOwn(1, "colour") == "ffff0000" and ns.Get("trackers.colour") == "ff4d99e6", tostring(ns.TrackerOwn(1, "colour")))
 		check("tkedit: a change draws the tracker again and is saved with the list", T.saved(W)[1].shape == "bar" and T.saved(W)[1].low == 2)
 		clean(W, "tkedit changes")
@@ -64918,10 +65597,10 @@ function PT.runSetup()
 		PT.press(W, lines[1].raw)
 		check("setup: a choice from a dropdown writes the draft", S.draft.values["general.borderMode"] == "class" and ns.Get("general.borderMode") == "custom")
 		PT.press(W, PT.control(PT.row(W, "Border colour")))
-		W.picker.choose(0.2, 0.4, 0.6)
-		check("setup: a colour from the picker writes the draft, as it is dragged", S.draft.values["general.border"] == "ff336699" and ns.Get("general.border") == "ff000000" and W.pickers == 1,
+		W.ns.PanelColour.Pick(0.2, 0.4, 0.6)
+		check("setup: a colour from the picker writes the draft, as it is dragged", S.draft.values["general.border"] == "ff336699" and ns.Get("general.border") == "ff000000" and W.ns.PanelColour.Shown(),
 			tostring(S.draft.values["general.border"]))
-		W.picker.cancel()
+		W.ns.PanelColour.Cancel()
 		check("setup: Cancel in the picker puts the old colour back in the draft", S.draft.values["general.border"] == nil)
 		check("setup: a change back to the start value is not kept", (function()
 			S.Set("general.thickness", 1)
@@ -67025,6 +67704,16 @@ function PT.runNav()
 		local fs = row and row.fonts[2]
 		return fs and fs.shown and fs.text or nil
 	end
+	-- The shown "Off" chips in the rows of the sidebar (the page has its own "Off" choices).
+	N.chips = function(W)
+		local n = 0
+		for _, raw in ipairs(N.rows(W)) do
+			for _, fs in ipairs(raw.fonts) do
+				if fs.shown and fs.text == "Off" then n = n + 1 end
+			end
+		end
+		return n
+	end
 	-- The rows of the sidebar, shown or not: the children of the scroll frame of the column.
 	N.rows = function(W)
 		local wl = W.rectOf(PT.window(W))
@@ -67260,7 +67949,7 @@ function PT.runNav()
 		ns.Set("panel.sidebar", "rail")
 		W.update(1)
 		local rail, railWidth = column()
-		check("window nav: Icon rail is 56 wide and has icons and no text", near(rail, 56) and near(railWidth, 984) and N.icons(W) > 5 and #PT.navTexts(W) == 0 and N.count(W, "Off") == 0, g(rail) .. " " .. g(railWidth) .. " " .. #PT.navTexts(W))
+		check("window nav: Icon rail is 56 wide and has icons and no text", near(rail, 56) and near(railWidth, 984) and N.icons(W) > 5 and #PT.navTexts(W) == 0 and N.chips(W) == 0, g(rail) .. " " .. g(railWidth) .. " " .. #PT.navTexts(W))
 		PT.SIDE = 56
 		check("window nav: the page is built again for the column, with its rows", PT.title(W) == "Flat UI" and #PT.shownRows(W) > 5 and #N.marks(W) == 1, #PT.shownRows(W))
 		PT.SIDE = 232
@@ -67611,11 +68300,14 @@ function PT.runTabs()
 				end
 			end
 		end
+		table.sort(list) -- a card shows its rare rows last, so the order is not compared
 		return list
 	end
 	T.shownLabels = function(W)
+		PT.openMore(W)
 		local list = {}
 		for _, r in ipairs(PT.shownRows(W)) do list[#list + 1] = r.fonts[1].text end
+		table.sort(list)
 		return list
 	end
 	-- The first row of a page that is a plain switch.
@@ -67931,6 +68623,346 @@ function PT.runTabs()
 	end
 end
 
+-- Options window build 4: cards, the switch, the segmented choice, the chip set and the mark on a slider.
+function PT.runCards()
+	local clean, joined, need = PT.clean, PT.joined, PT.need
+	-- The number in every "N changed" that shows, added up.
+	local function changedTotal(W)
+		local n = 0
+		for _, raw in ipairs(PT.frames(W)) do
+			if PT.shown(W, raw) then
+				for _, fs in ipairs(raw.fonts) do
+					local k = fs.shown and type(fs.text) == "string" and fs.text:match("^(%d+) changed$")
+					if k then n = n + tonumber(k) end
+				end
+			end
+		end
+		return n
+	end
+	-- The click areas of the card headers of the open page, top to bottom.
+	local function heads(W)
+		local _, child = PT.right(W)
+		local list = {}
+		for _, c in ipairs(child.children) do
+			local raw = W.rawOf[c]
+			if raw.shown and raw.height == 32 and raw.scripts.OnMouseUp then list[#list + 1] = raw end
+		end
+		table.sort(list, function(a, b) return select(2, W.rectOf(a)) > select(2, W.rectOf(b)) end)
+		return list
+	end
+	-- The panels behind the rows of the open page, top to bottom: frames with no text, no child and no mouse.
+	local function backs(W)
+		local _, child = PT.right(W)
+		local list = {}
+		for _, c in ipairs(child.children) do
+			local raw = W.rawOf[c]
+			if raw.shown and #raw.fonts == 0 and #raw.children == 0 and not raw.mouse and raw.height > 1 then list[#list + 1] = raw end
+		end
+		table.sort(list, function(a, b) return select(2, W.rectOf(a)) > select(2, W.rectOf(b)) end)
+		return list
+	end
+
+	do
+		local W = PT.open()
+		local ns = W.ns
+		local item
+		for _, each in ipairs(ns.PAGES[1]) do
+			if each.key == "sections" then item = each end
+		end
+		check("cards: Sections is a row of the Options window section that starts at Cards and has Cards and Lines",
+			item ~= nil and item.default == "cards" and item.label == "Sections" and #item.choices == 2 and item.choices[1][1] == "cards" and item.choices[2][1] == "lines" and ns.Get("panel.sections") == "cards")
+		ns.Set("panel.sections", "lines")
+		check("cards: and it is kept in FlatUIDB.panel and in no profile", W.env.FlatUIDB.panel.sections == "lines" and W.env.FlatUIDB.profiles[ns.Profile()].options["panel.sections"] == nil)
+		ns.Set("panel.sections", "cards")
+
+		-- The cards of the first page: one for each section, 12 apart, each as tall as its header and its rows.
+		local counts = {}
+		local rareSet = {}
+		for _, step in ipairs(ns.SETUP_STEPS) do
+			for _, entry in ipairs(step.rows) do
+				if entry[2] == "r" then rareSet[entry[1]] = true end
+			end
+		end
+		local linked
+		for _, each in ipairs(ns.PAGES[1]) do
+			if each.section then
+				counts[#counts + 1] = 0
+				linked = false
+			elseif each.key and ns.RowShown(each.path) then
+				if rareSet[each.path] then
+					-- Rare rows are behind the link, which is one row at the end of the card.
+					if not linked then counts[#counts] = counts[#counts] + 1 end
+					linked = true
+				else
+					counts[#counts] = counts[#counts] + 1
+				end
+			end
+		end
+		local scroll, child = PT.right(W)
+		local sl = W.rectOf(scroll)
+		local panels = backs(W)
+		local ok = #panels == #counts
+		for index, panel in ipairs(panels) do
+			local _, b, _, h = W.rectOf(panel)
+			ok = ok and near(h, 32 + 36 * (counts[index] or -1), 0.01)
+			if index > 1 then
+				local _, pb = W.rectOf(panels[index - 1])
+				ok = ok and near(pb - (b + h), 12, 0.01)
+			end
+		end
+		check("cards: a section is a panel as tall as its header and rows, 12 below the one before", ok and near(W.rectOf(panels[1]) - sl, 16, 0.01), #panels .. " " .. #counts)
+		check("cards: the headers are the sections, as before", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Options window", "Setup" }), joined(PT.headers(W)))
+		check("cards: a row stands 32 in from the column", near(W.rectOf(PT.shownRows(W)[1]) - sl, 32, 0.01))
+
+		-- The count at the right of a header.
+		local before = changedTotal(W)
+		ns.Set("general.thickness", 2)
+		ns.RefreshPanel()
+		check("cards: a header counts the rows of its panel that are not at their default", changedTotal(W) == before + 1, changedTotal(W) .. " " .. before)
+		ns.Set("general.thickness", 1)
+		ns.RefreshPanel()
+		check("cards: and the count goes when the row is back at its default", changedTotal(W) == before)
+
+		-- A click on a header folds the panel.
+		local tops = heads(W)
+		local height = child.height
+		local belowBefore = select(2, W.rectOf(tops[3]))
+		check("cards: each header has a click area 32 high", #tops == #counts)
+		PT.press(W, tops[2])
+		check("cards: a click on a header folds its panel, the rows go and the panels below move up", PT.row(W, "Bar texture") == nil and PT.row(W, "Border thickness") ~= nil
+			and child.height == height - 36 * counts[2] and near(select(2, W.rectOf(tops[3])) - belowBefore, 36 * counts[2], 0.01), child.height .. " " .. height)
+		check("cards: the fold is kept for the account", W.env.FlatUIDB.panel.folded ~= nil and W.env.FlatUIDB.panel.folded["card:general:Bars"] == true)
+		PT.press(W, tops[2])
+		check("cards: a second click opens it again", PT.row(W, "Bar texture") ~= nil and child.height == height and W.env.FlatUIDB.panel.folded == nil)
+
+		-- Lines: the heading with a line under it, and the rows 16 in.
+		ns.Set("panel.sections", "lines")
+		local lscroll = PT.right(W)
+		check("lines: the same headers, no panel, no count, and a row stands 16 in from the column", #backs(W) == 0 and #heads(W) == 0 and changedTotal(W) == 0
+			and near(W.rectOf(PT.shownRows(W)[1]) - W.rectOf(lscroll), 16, 0.01) and joined(PT.headers(W)) == "Borders and backgrounds, Bars, Game action bars, Game menu, Scale, Options window, Setup", joined(PT.headers(W)))
+		ns.Set("panel.sections", "cards")
+		check("lines: and Cards puts the panels back", #backs(W) == #counts and #heads(W) == #counts)
+
+		-- The slider: 176 wide, a mark at the default value.
+		local r = need(W, "Background opacity")
+		local track = PT.control(r)
+		local tick
+		for _, region in ipairs(track.regions) do
+			if region.width == 1 and region.height == 8 then tick = region end
+		end
+		check("slider: the track is 176 wide and a mark of 1 by 8 stands at the default", track.width == 176 and tick ~= nil and tick.points[1][1] == "LEFT" and near(tick.points[1][4], 0.85 * 176, 0.01))
+		ns.Set("general.backdropAlpha", 50)
+		ns.RefreshPanel()
+		check("slider: the mark stays at the default while the thumb moves", near(tick.points[1][4], 0.85 * 176, 0.01) and near(PT.thumb(track).points[1][4], 0.5 * 176, 0.01))
+		ns.Set("general.backdropAlpha", 85)
+
+		-- The segmented choice.
+		local corners = need(W, "Corners")
+		local box = PT.control(corners)
+		local segs = {}
+		for _, c in ipairs(box.children) do segs[#segs + 1] = W.rawOf[c] end
+		local function fill(index)
+			local back = W.backdropOn(segs[index])
+			return back and back.color and back.color[4] or 0
+		end
+		check("segments: a choice of a few short lines is one frame with a segment for each line, in order", #segs == 3 and #box.fonts == 0 and box.height == 26
+			and segs[1].fonts[1].text == "Square" and segs[2].fonts[1].text == "Soft" and segs[3].fonts[1].text == "Round")
+		check("segments: the chosen one is filled with the accent at 18% and the others are not", near(fill(1), 0.18, 0.001) and fill(2) < 0.001 and fill(3) < 0.001, fill(1) .. " " .. fill(2))
+		PT.press(W, segs[2])
+		check("segments: a click chooses a segment, through ns.Set", ns.Get("panel.corners") == "soft" and near(fill(2), 0.18, 0.001) and fill(1) < 0.001 and fill(3) < 0.001, tostring(ns.Get("panel.corners")))
+		PT.move(W, -500, -500) -- the cursor leaves the segment it clicked, which is filled while it is under it
+		ns.Set("panel.corners", "square")
+		ns.RefreshPanel()
+		check("segments: a value set elsewhere shows after ns.RefreshPanel", near(fill(1), 0.18, 0.001) and fill(2) < 0.001)
+		check("segments: Sections has two segments", #PT.control(need(W, "Sections")).children == 2)
+		local sidebar = PT.control(need(W, "Sidebar"))
+		check("segments: Sidebar, with longer lines, stays a dropdown", #sidebar.children == 0 and sidebar.fonts[1].text == "Icons and names")
+		clean(W, "cards")
+	end
+
+	-- The switch.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		PT.go(W, "Nameplates")
+		local r = need(W, "Restyle friendly nameplates")
+		local box = PT.control(r)
+		local knob
+		for _, region in ipairs(box.regions) do
+			if region.layer == "OVERLAY" and region.width == 12 and region.height == 12 then knob = region end
+		end
+		local on = PT.marked(box)
+		check("switch: a track of 32 by 16 with a knob of 12 by 12", box.width == 32 and box.height == 16 and knob ~= nil)
+		check("switch: the track is filled while the setting is on, and the knob is at the right", on == (ns.Get("nameplates.friendly") == true) and knob.points[1][4] == (on and 18 or 2), tostring(knob.points[1][4]))
+		PT.press(W, box)
+		check("switch: a click moves the knob and takes the fill off", PT.marked(box) == not on and knob.points[1][4] == (on and 2 or 18) and ns.Get("nameplates.friendly") == not on)
+		PT.press(W, r, 0.1)
+		check("switch: a click on the label does the same", PT.marked(box) == on and knob.points[1][4] == (on and 18 or 2))
+		clean(W, "switch")
+	end
+
+	-- The chip set.
+	do
+		local W = PT.open()
+		local ns = W.ns
+		local labels, chips = {}, false
+		for _, page in ipairs(ns.PAGES) do
+			if page.key == "fade" then
+				for _, each in ipairs(page) do
+					if each.section then
+						chips = each.chips == true
+					elseif each.key and chips and each.kind == "bool" then
+						labels[#labels + 1] = each.label
+					end
+				end
+			end
+		end
+		PT.go(W, "Fading")
+		local scroll = PT.right(W)
+		local sl, _, sw = W.rectOf(scroll)
+		local found, bottoms, inside = 0, {}, true
+		for _, label in ipairs(labels) do
+			local chip = PT.button(W, label)
+			if chip then
+				found = found + 1
+				local l, b, w = W.rectOf(chip)
+				bottoms[g(b)] = true
+				inside = inside and l >= sl and l + w <= sl + sw
+			end
+		end
+		local lines = 0
+		for _ in pairs(bottoms) do lines = lines + 1 end
+		check("chips: What fades is a block of chips, one for each of its 15 switches, and no row is built for them", #labels == 15 and found == 15 and PT.row(W, "Stance bar") == nil
+			and joined(PT.headers(W)):find("What fades", 1, true) ~= nil, #labels .. " " .. found)
+		check("chips: they wrap inside the column", lines >= 2 and inside, lines .. " " .. tostring(inside))
+		local chip = PT.button(W, "Stance bar")
+		PT.press(W, chip)
+		check("chips: a click does nothing while the switch of the page is off", ns.Get("fade.stance") == false and not PT.marked(chip))
+		ns.Set("fade.enabled", true)
+		ns.RefreshPanel()
+		PT.press(W, chip)
+		check("chips: a chip is on after a click, through ns.Set, and shows a mark", ns.Get("fade.stance") == true and PT.marked(chip))
+		PT.press(W, chip)
+		check("chips: and off after a second", ns.Get("fade.stance") == false and not PT.marked(chip))
+		ns.Set("panel.sections", "lines")
+		check("chips: with Sections at Lines the switches are rows again", PT.row(W, "Stance bar") ~= nil)
+		ns.Set("panel.sections", "cards")
+		local unowned = 0
+		for _, f in ipairs(PT.frames(W)) do
+			if not ns.Own[f] then unowned = unowned + 1 end
+			for _, fs in ipairs(f.fonts) do
+				if not ns.Own[fs] then unowned = unowned + 1 end
+			end
+		end
+		for index = 1, #W.addonTextures do
+			if not ns.Own[W.addonTextures[index]] then unowned = unowned + 1 end
+		end
+		check("cards: every frame, texture and font string of the panels, switches, segments and chips is in ns.Own", unowned == 0, unowned)
+	end
+end
+
+-- Options window build 9: samples in the choice lists (bar textures, fonts, row directions).
+function PT.runSamples()
+	local joined = PT.joined
+	-- The sample frames (48 by 12) of a frame, and the regions of the first that are shown in the layer ARTWORK.
+	local function samples(W, raw)
+		local list = {}
+		for _, c in ipairs(raw.children) do
+			local r = W.rawOf[c] or c
+			if r.shown and r.width == 48 and r.height == 12 then list[#list + 1] = r end
+		end
+		return list
+	end
+	local function drawn(sample)
+		local list = {}
+		for _, r in ipairs(sample.regions) do
+			if r.layer == "ARTWORK" and r.shown then list[#list + 1] = r end
+		end
+		return list
+	end
+	do
+		local W = PT.open()
+		local ns = W.ns
+		local ar, ag, ab = ns.PanelKit.Accent()
+		local function accent(t) return t ~= nil and near(t[1], ar, 0.001) and near(t[2], ag, 0.001) and near(t[3], ab, 0.001) end
+		local kinds, label = {}, {}
+		for _, page in ipairs(ns.PAGES) do
+			for _, item in ipairs(page) do
+				if item.label == "Bar texture" or item.label == "Text font" or item.label == "Row direction" or item.label == "Window font" or item.label == "Sections" or item.label == "Health bar texture" then
+					kinds[item.label] = ns.PanelSamples.Kind(item) or "none"
+				end
+				if item.key == "samples" then label = item end
+			end
+		end
+		check("samples: Bar texture and Health bar texture are textures, Text font and Window font are fonts, Row direction is a growth, Sections has none",
+			kinds["Bar texture"] == "texture" and kinds["Health bar texture"] == "texture" and kinds["Text font"] == "font" and kinds["Window font"] == "font"
+			and kinds["Row direction"] == "grow" and kinds["Sections"] == "none", joined({ kinds["Bar texture"] or "?", kinds["Text font"] or "?", kinds["Row direction"] or "?", kinds["Sections"] or "?" }))
+		check("samples: Samples in lists is a row that starts at On, has On and Off, and is kept for the account and in no profile",
+			label.label == "Samples in lists" and label.default == "on" and #label.choices == 2 and ns.Get("panel.samples") == "on" and (ns.Set("panel.samples", "off") or true)
+			and W.env.FlatUIDB.panel.samples == "off" and W.env.FlatUIDB.profiles[ns.Profile()].options["panel.samples"] == nil and (ns.Set("panel.samples", "on") or true))
+
+		local dd = PT.control(PT.need(W, "Bar texture"))
+		local mine = samples(W, dd)
+		check("samples: the button of Bar texture has one, with the chosen texture drawn in the accent", #mine == 1 and #drawn(mine[1]) == 1 and drawn(mine[1])[1].file == nil and accent(drawn(mine[1])[1].color))
+		for _ = 1, 20 do
+			if select(2, W.rectOf(dd)) >= select(2, W.rectOf(PT.window(W))) + 300 then break end
+			PT.wheel(W, PT.right(W), -1)
+		end
+		PT.press(W, dd)
+		local lines = PT.linesOf(W, PT.list(W))
+		local first, fourth = lines[1] and samples(W, lines[1].raw), lines[4] and samples(W, lines[4].raw)
+		check("samples: each line of the list has one at its left, and a texture line draws its own file",
+			#lines == 10 and #first == 1 and #fourth == 1 and drawn(first[1])[1].file == nil and drawn(fourth[1])[1].file == ns.BarFile("gloss") and accent(drawn(fourth[1])[1].vertex), tostring(#lines))
+		local fl = W.rectOf(lines[4].raw)
+		check("samples: it is 14 in from the line", near(W.rectOf(fourth[1]) - fl, 14, 0.01))
+		PT.press(W, lines[4].raw)
+		mine = samples(W, dd)
+		check("samples: choosing a line draws it on the button", ns.Get("general.barTexture") == "gloss" and drawn(mine[1])[1].file == ns.BarFile("gloss"))
+
+		ns.Set("panel.samples", "off")
+		check("samples: Off takes the one off the button", #samples(W, dd) == 0 and dd.fonts[1].text == "Gloss")
+		PT.press(W, dd)
+		lines = PT.linesOf(W, PT.list(W))
+		local none = 0
+		for _, line in ipairs(lines) do none = none + #samples(W, line.raw) end
+		check("samples: and off the lines of the list", #lines == 10 and none == 0)
+		PT.escape(W)
+		ns.OpenPanel()
+		ns.Set("panel.samples", "on")
+		PT.clean(W, "samples")
+
+		-- The three kinds on their own.
+		local pic = ns.PanelSamples.New(ns.PanelKit.Window())
+		local raw = W.rawOf[pic.frame]
+		pic.Set("font", "friz")
+		check("samples: a font is Abc 123 in its own face", raw.fonts[1].shown and raw.fonts[1].text == "Abc 123" and raw.fonts[1].font[1] == "Fonts\\FRIZQT__.TTF" and #drawn(raw) == 0)
+		pic.Set("font", "sans")
+		check("samples: a font draws at the small text size of the window", raw.fonts[1].font[2] == 11)
+		pic.Set("font", "default")
+		check("samples: Game font draws in the game's own font object, not the window font", raw.fonts[1].fontObject == "GameFontHighlightSmall")
+		pic.Set("font", "game")
+		check("samples: and so does game in Window font", raw.fonts[1].fontObject == "GameFontHighlightSmall")
+		pic.Set("font", "sans")
+		check("samples: Flat UI Sans is the file of the addon", raw.fonts[1].font[1] == "Interface\\AddOns\\FlatUI\\Media\\Fonts\\IBMPlexSans-Regular.ttf")
+		pic.Set("grow", "right")
+		local right = #drawn(raw)
+		pic.Set("grow", "left")
+		local left = #drawn(raw)
+		pic.Set("grow", "center")
+		check("samples: a growth is a line, a tick and one arrow head, or two from the middle", right == 6 and left == 6 and #drawn(raw) == 10 and not raw.fonts[1].shown, joined({ right, left, #drawn(raw) }))
+		pic.Set("grow", "up")
+		local up = #drawn(raw)
+		pic.Set("grow", "down")
+		check("samples: up and down are a vertical line with one arrow head", up == 5 and #drawn(raw) == 5, joined({ up, #drawn(raw) }))
+		check("samples: Extra rows and Stack direction have a growth sample", ns.PanelSamples.Kind({ choices = { { "down", "Below" }, { "up", "Above" } } }) == "grow"
+			and ns.PanelSamples.Kind({ key = "movement", choices = { { "fall", "a" }, { "up", "b" }, { "burst", "c" } } }) == nil)
+		pic.Set("texture", "gloss")
+		pic.Set("texture", "flat")
+		local flat = drawn(raw)[1]
+		check("samples: and a texture shows only the bar, and a flat one after a file is the plain accent", #drawn(raw) == 1 and flat.vertex[1] == 1 and flat.vertex[2] == 1 and flat.vertex[3] == 1 and accent(flat.color))
+	end
+end
+
 function PT.runAll()
 	PT.runBuild()
 	PT.runControls()
@@ -67945,6 +68977,8 @@ function PT.runAll()
 	PT.runForever()
 	PT.runNav()
 	PT.runTabs()
+	PT.runCards()
+	PT.runSamples()
 	PT.runSetup()
 end
 

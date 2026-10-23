@@ -1880,9 +1880,17 @@ S.mode = {
 	Build = S.Build, Enter = S.Enter, Update = S.Update, Frame = S.Frame, Hidden = S.Hidden, Close = S.Close,
 }
 
--- Opens setup at this character's draft, or at New profile.
-function ns.OpenSetup()
-	return ns.OpenPanelMode(S.mode)
+-- Opens setup at this character's draft, or at New profile. With the id of a built step it opens at that step.
+function ns.OpenSetup(id)
+	local shown = ns.OpenPanelMode(S.mode)
+	if id and S.draft then
+		for number, step in ipairs(STEPS) do
+			if step.id == id and step.built then
+				S.Go(number)
+			end
+		end
+	end
+	return shown
 end
 
 -- The offer on a new character ------------------------------------------------------------------------

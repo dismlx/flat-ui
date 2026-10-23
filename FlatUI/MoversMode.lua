@@ -92,7 +92,7 @@ function MM.Changed(name)
 	end
 	local now = Copy((Kit().Saved() or {})[name])
 	if not Same(now, S.last[name]) then
-		S.undo[#S.undo + 1] = { name, S.last[name] or false }
+		S.undo[#S.undo + 1] = { name, S.last[name] or false, S.group }
 		if #S.undo > STEPS_KEPT then
 			table.remove(S.undo, 1)
 		end
@@ -123,16 +123,27 @@ function MM.ProfileChanged()
 	end
 end
 
+-- Steps made while a group is open undo together: Space across and Space down are one step.
+function MM.Group(on)
+	S.group = on and {} or nil
+end
+
 function MM.Undo()
 	local step = table.remove(S.undo)
 	if not step then
 		return
 	end
-	S.undoing = true
-	Kit().Restore(step[1], step[2] or nil)
-	S.undoing = false
-	S.last[step[1]] = Copy((Kit().Saved() or {})[step[1]])
-	MM.Select(step[1])
+	local last
+	repeat
+		S.undoing = true
+		Kit().Restore(step[1], step[2] or nil)
+		S.undoing = false
+		S.last[step[1]] = Copy((Kit().Saved() or {})[step[1]])
+		last = step[1]
+		local nextStep = S.undo[#S.undo]
+		step = nextStep and step[3] and nextStep[3] == step[3] and table.remove(S.undo) or nil
+	until not step
+	MM.Select(last)
 	MM.Refresh(true)
 end
 
@@ -332,6 +343,11 @@ function MM.Paint(name)
 		ns.SetOutlineAlpha(outline, 1)
 		local r, g, b = L.Colour("accent")
 		ns.SetOutlineFill(outline, r, g, b, 0.18)
+	elseif ns.MoversSnap and ns.MoversSnap.Picked(name) then
+		ns.SetOutlineColour(outline, L.Colour("accent"))
+		ns.SetOutlineAlpha(outline, 0.6)
+		local r, g, b = L.Colour("accent")
+		ns.SetOutlineFill(outline, r, g, b, 0.1)
 	elseif look.placedByGame then
 		ns.SetOutlineColour(outline, L.Colour("text-faint"))
 		ns.SetOutlineAlpha(outline, 0.6)
@@ -371,6 +387,15 @@ end
 
 function MM.Hidden(name)
 	return S.hidden[name] == true
+end
+
+-- A press on a handle. Ctrl and left click picks it for even spacing.
+function MM.Press(name, button)
+	if name and button == "LeftButton" and type(IsControlKeyDown) == "function" and IsControlKeyDown() then
+		ns.MoversSnap.Toggle(name, S.selected)
+		MM.Spacing()
+	end
+	MM.Select(name)
 end
 
 function MM.Select(name)
@@ -624,6 +649,7 @@ function MM.Refresh(force)
 		ui.chip:Hide()
 	end
 	ui.undoLabel:SetAlpha(#S.undo > 0 and 1 or 0.4)
+	MM.Spacing()
 end
 
 -- The frame list ----------------------------------------------------------------------------------------
@@ -828,8 +854,13 @@ local function PaintSegments()
 	end
 end
 
+-- Snap is on while the middle of the screen or the other frames are snapped to.
+local function SnapOn()
+	return ns.Get("movers.snap") == "middle" or Look().Get("snapFrames") == "on"
+end
+
 local function PaintToggle()
-	local on = ns.Get("movers.snap") == "middle"
+	local on = SnapOn()
 	local L = Look()
 	L.Solid(ui.trackBack, on and "accent" or "raised")
 	L.Solid(ui.knob, on and "on-accent" or "text-dim")
@@ -876,7 +907,7 @@ local function BuildToolbar()
 	local snap = Text(bar, "GameFontHighlightSmall", "text-dim")
 	snap:SetPoint("LEFT", bar, "LEFT", 238, 0)
 	snap:SetText("Snap")
-	-- Snap: a handle or a window snaps to the middle of the screen (Snap while dragging on the Movers page).
+	-- Snap: a handle snaps to the middle of the screen (Snap while dragging on the Movers page) and to other handles (Snap to other frames).
 	local toggle = Make("Frame", bar)
 	toggle:SetSize(32, 16)
 	toggle:SetPoint("LEFT", bar, "LEFT", 274, 0)
@@ -888,7 +919,9 @@ local function BuildToolbar()
 	ui.knob:SetSize(12, 12)
 	toggle:SetScript("OnMouseUp", function(_, mouseButton)
 		if mouseButton == "LeftButton" then
-			Try(ns.Set, "movers.snap", ns.Get("movers.snap") == "middle" and "off" or "middle")
+			local on = SnapOn()
+			Try(ns.Set, "movers.snap", on and "off" or "middle")
+			Try(ns.Set, "panel.snapFrames", on and "off" or "on")
 			PaintToggle()
 		end
 	end)
@@ -966,6 +999,46 @@ function MM.Request()
 	ui.ask:Show()
 end
 
+-- Three or more picked handles: a small bar with Space across, Space down and Clear.
+local function BuildSpace()
+	local bar = Make("Frame")
+	bar:SetFrameStrata("FULLSCREEN_DIALOG")
+	bar:SetFrameLevel(20)
+	bar:SetSize(404, 44)
+	bar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 24)
+	bar:EnableMouse(true)
+	Surface(bar, "card")
+	ui.space = bar
+	ui.spaceText = Text(bar, "GameFontHighlight", "text")
+	ui.spaceText:SetPoint("LEFT", bar, "LEFT", 12, 0)
+	local across = Button(bar, "Space across", 104, function()
+		ns.MoversSnap.Space("x")
+	end)
+	across:SetPoint("LEFT", bar, "LEFT", 100, 0)
+	local down = Button(bar, "Space down", 104, function()
+		ns.MoversSnap.Space("y")
+	end)
+	down:SetPoint("LEFT", bar, "LEFT", 212, 0)
+	local clear = Button(bar, "Clear", 72, function()
+		ns.MoversSnap.Clear()
+		MM.Spacing()
+	end)
+	clear:SetPoint("LEFT", bar, "LEFT", 324, 0)
+	bar:Hide()
+end
+
+-- Shows the spacing bar while three or more handles are picked.
+function MM.Spacing()
+	if not (ui.space and S.session) then
+		return
+	end
+	local count = #ns.MoversSnap.List()
+	if count >= 3 then
+		ui.spaceText:SetText(("%d picked"):format(count))
+	end
+	ui.space:SetShown(count >= 3)
+end
+
 -- Keys: the arrows move the chosen frame, Escape asks or closes. Every other key goes on to the game.
 local function BuildKeys()
 	local keys = Make("Frame")
@@ -1020,6 +1093,7 @@ local function Build()
 	BuildList()
 	BuildInspector()
 	BuildChip()
+	BuildSpace()
 	BuildKeys()
 end
 
@@ -1062,9 +1136,10 @@ local function HideAll()
 		return
 	end
 	ui.bar:SetScript("OnUpdate", nil)
+	ns.MoversSnap.Hide()
 	ui.sliding = false
 	ui.keys:EnableKeyboard(false)
-	for _, name in ipairs({ "screen", "bar", "list", "side", "chip", "keys", "ask" }) do
+	for _, name in ipairs({ "screen", "bar", "list", "side", "chip", "keys", "ask", "space" }) do
 		if ui[name] then
 			ui[name]:Hide()
 		end
@@ -1081,6 +1156,7 @@ function MM.Opened(source)
 		S.last = CopyAll(kit.Saved())
 		S.undo, S.hidden, S.selected, S.hover, S.offset = {}, {}, nil, nil, 0
 		S.panel = false
+		ns.MoversSnap.Clear()
 	end
 	-- The options window opened during a fight goes away again when the handles do.
 	if type(ns.PanelShown) == "function" and ns.PanelShown() then
@@ -1107,6 +1183,7 @@ function MM.Closed()
 	end
 	S.session = false
 	S.snapshot, S.last, S.undo, S.hidden, S.selected, S.hover = {}, {}, {}, {}, nil, nil
+	ns.MoversSnap.Clear()
 	if S.panel then
 		S.panel = false
 		local mode = S.panelMode

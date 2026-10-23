@@ -1,3 +1,14 @@
+## 0.5.2
+
+- **Options window**: each section is a card that folds and counts its changed settings. New **Sections** setting: **Cards** or **Lines**. Switches replace tick boxes and a few choices are segments. **What fades** is a set of chips, sliders mark their default, and long dropdowns have a search field.
+- **Options window**: a changed setting has a dot and a reset button, a setting that is off says which setting it needs, tips show beside the control, and **Reset page** names how many settings it resets.
+- **Options window**: search lists the best match first, shows **Pages** chips, finds the rows of **Profiles** and the steps of **Flat UI setup**, and takes Up, Down, Enter and Escape out of combat. Enter opens the tab and flashes the row.
+- **Options window**: lists of bar textures, fonts and row directions show a sample beside each line. New **Samples in lists** setting: **On** or **Off**.
+- **Options window**: rarely changed settings of a card are behind **More choices (N)** at the end of the card. Search opens them.
+- **Options window**: a colour swatch opens a colour picker of Flat UI's own with a square, a hue bar, a hex field and the last ten colours applied. A change shows at once and **Cancel** puts the old colour back.
+- **Options window**: **Profiles** has **Rename profile**, and its switch rules follow the new name. An export starts with the profile name, the Flat UI version and the screen size. A pasted profile shows what it holds and warns about another screen size. **Import as** makes a new profile or replaces the one in use, and **Export by module** limits a code to the modules chosen.
+- In **Move frames**, a handle snaps to the edges and middle of other handles within 5 units and shows a guide. **Snap** on the toolbar turns it on and off, and the **Snap to other frames** setting does the same. Ctrl and click picks handles, and **Space across** or **Space down** evens the gaps between three or more.
+
 ## 0.5.1
 
 - A new character sees **Welcome to Flat UI** at login, and /flatui welcome opens it. Five settings under **Setup** change its layout, size and what **Skip** keeps.

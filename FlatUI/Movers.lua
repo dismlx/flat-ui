@@ -1619,10 +1619,18 @@ local function Dropped(name)
 		local left, bottom, width, height = Rect(handle)
 		if left then
 			-- A handle the engine moved is snapped here, and one that followed the cursor has been.
-			Commit(name, info, left, bottom, width, height, centre.Snaps(left, width) ~= nil)
+			local middle = centre.dropMiddle
+			if middle == nil then
+				middle = centre.Snaps(left, width) ~= nil
+				left = centre.Snaps(left, width) or left
+				left, bottom = ns.MoversSnap.Snap(name, left, bottom, width, height, middle)
+			end
+			centre.dropMiddle = nil
+			Commit(name, info, left, bottom, width, height, middle)
 		end
 	end
 	dragging = nil
+	ns.MoversSnap.Hide()
 	centre.LineLook()
 	ShowHandle(name)
 end
@@ -1819,9 +1827,9 @@ local function MakeHandle(name)
 	handle:SetScript("OnMouseWheel", function(_, delta)
 		ns.Try(KEY, Wheel, name, delta)
 	end)
-	handle:SetScript("OnMouseDown", function()
+	handle:SetScript("OnMouseDown", function(_, button)
 		handleLooks[name].dragged = false
-		ns.Try(KEY, ns.MoversMode.Select, name)
+		ns.Try(KEY, ns.MoversMode.Press, name, button)
 	end)
 	handle:SetScript("OnMouseUp", function(_, mouseButton)
 		if mouseButton == "RightButton" then
@@ -2076,6 +2084,7 @@ function centre.Start(handle)
 	local left, bottom, width, height = Rect(handle)
 	if not (x and left) then
 		centre.fallback = true
+		centre.dropMiddle = nil
 		handle:StartMoving()
 	else
 		centre.drag = { handle = handle, grabX = x - left, grabY = y - bottom, width = width, height = height }
@@ -2104,6 +2113,7 @@ function centre.Step(handle)
 	local middle = centre.Snaps(left, drag.width)
 	drag.snapped = middle ~= nil
 	left = middle or left
+	left, bottom = ns.MoversSnap.Snap(dragging, left, bottom, drag.width, drag.height, middle ~= nil)
 	if left ~= drag.left or bottom ~= drag.bottom then
 		drag.left, drag.bottom = left, bottom
 		handle:ClearAllPoints()
@@ -2115,6 +2125,7 @@ end
 function centre.Stop(handle)
 	local drag = centre.drag
 	if drag and drag.handle == handle then
+		centre.dropMiddle = drag.snapped == true
 		centre.drag = nil
 		handle:SetScript("OnUpdate", nil)
 	end

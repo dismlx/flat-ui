@@ -10,8 +10,8 @@ ns.PanelLook = Look
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
 local FONTS = MEDIA .. "Fonts\\"
 
-local DEFAULTS = { accent = "indigo", accentColour = "ff9a9cf0", tone = "graphite", borders = "none", corners = "square", density = "comfortable",
-	font = "sans", scale = 100, sidebar = "full", grid = "dim" }
+local DEFAULTS = { accent = "indigo", accentColour = "ff9a9cf0", tone = "graphite", borders = "none", corners = "square", density = "comfortable", sections = "cards",
+	font = "sans", scale = 100, sidebar = "full", grid = "dim", samples = "on", snapFrames = "on" }
 
 -- Tokens ------------------------------------------------------------------------------------------
 
@@ -407,6 +407,13 @@ function Look.ApplyFonts()
 		end
 	end
 	Look.fontTried = true
+end
+
+Look.SansFile = FONTS .. "IBMPlexSans-Regular.ttf"
+
+-- The size of small text in the window at the chosen density, for the font samples.
+function Look.SampleSize()
+	return SIZES[Look.Get("density")].small
 end
 
 -- The font object that stands for a game font in the window, or nil to keep the game font.

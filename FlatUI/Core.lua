@@ -2613,6 +2613,61 @@ function ns.CopyProfile(from)
 	return true, ("Copied %s."):format(source)
 end
 
+-- A profile takes another name. The rules of Switch automatically and the profile of every character follow it.
+function ns.RenameProfile(from, to)
+	local refusal = Refusal()
+	if refusal then
+		return false, refusal
+	end
+	if not db then
+		return false, "Profiles are not ready yet."
+	end
+	local found = Find(from)
+	if not found then
+		return false, "No such profile."
+	elseif found == DEFAULT then
+		return false, "Default cannot be renamed."
+	end
+	local clean, why = CleanName(to)
+	if not clean then
+		return false, why
+	end
+	local other = Find(clean)
+	if other and other ~= found then
+		return false, "That name is taken."
+	end
+	if clean ~= found then
+		db.profiles[clean], db.profiles[found] = db.profiles[found], nil
+		for key, used in pairs(db.profileOf) do
+			if used == found then
+				db.profileOf[key] = clean
+			end
+		end
+		if current == found then
+			current = clean
+		end
+		if ns.scaleMoved and ns.scaleMoved[found] ~= nil then
+			ns.scaleMoved[clean], ns.scaleMoved[found] = ns.scaleMoved[found], nil
+		end
+		-- A saved draft of Flat UI setup that starts from this profile follows the name.
+		for _, draft in pairs(type(db.setup) == "table" and type(db.setup.drafts) == "table" and db.setup.drafts or {}) do
+			if type(draft) == "table" and draft.from == found then
+				draft.from = clean
+			end
+		end
+		if ns.ProfileSwitch then
+			ns.ProfileSwitch.Renamed(found, clean)
+		end
+		if type(ns.RefreshPanel) == "function" then
+			local ok, err = pcall(ns.RefreshPanel)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end
+	end
+	return true, ("Renamed %s to %s."):format(found, clean)
+end
+
 function ns.DeleteProfile(name)
 	local refusal = Refusal()
 	if refusal then
@@ -2738,14 +2793,35 @@ local function Parse(def, text)
 	return text
 end
 
--- One line of text that holds the profile in use.
-function ns.ExportProfile()
+-- The first line of a text that names its profile: the name, the build, the screen size in pixels and the UI scale it was made on.
+local function HeaderLine()
+	local width, height, scale = 0, 0, 0
+	if type(GetPhysicalScreenSize) == "function" then
+		local ok, w, h = pcall(GetPhysicalScreenSize)
+		if ok and type(w) == "number" and type(h) == "number" and not IsSecret(w) and not IsSecret(h) and w > 0 and w < 1e6 and h > 0 and h < 1e6 then
+			width, height = math.floor(w + 0.5), math.floor(h + 0.5)
+		end
+	end
+	if type(UIParent) == "table" and type(UIParent.GetScale) == "function" then
+		local ok, value = pcall(UIParent.GetScale, UIParent)
+		if ok and type(value) == "number" and not IsSecret(value) and value == value and value < 1e6 then
+			scale = value
+		end
+	end
+	return table.concat({ "h", Escape(current or ""), Escape(Version() or ""), ("%d"):format(width), ("%d"):format(height), ("%.4g"):format(scale) }, "|")
+end
+
+-- One line of text that holds the profile in use. With `opts` the text starts with the line of HeaderLine, `opts.modules` (a set of module keys, the
+-- part of a saved path before the dot) limits the settings to those modules, and `opts.spots` false leaves the frame positions out.
+function ns.ExportProfile(opts)
 	if not profile then
 		return ""
 	end
+	opts = type(opts) == "table" and opts or nil
+	local modules = opts and type(opts.modules) == "table" and opts.modules or nil
 	local lines, paths, names = {}, {}, {}
 	for path, value in pairs(values) do
-		if defs[path] and value ~= defs[path].default then
+		if defs[path] and value ~= defs[path].default and (not modules or modules[path:match("^[^.]*")]) then
 			paths[#paths + 1] = path
 		end
 	end
@@ -2767,7 +2843,7 @@ function ns.ExportProfile()
 		end
 		lines[#lines + 1] = table.concat({ "o", Escape(path), Escape(value) }, "|")
 	end
-	for name in pairs(profile.movers) do
+	for name in pairs(opts and opts.spots == false and {} or profile.movers) do
 		names[#names + 1] = name
 	end
 	table.sort(names)
@@ -2775,6 +2851,9 @@ function ns.ExportProfile()
 		local spot = profile.movers[name]
 		lines[#lines + 1] = table.concat({ "m", Escape(name), spot.point, ("%.17g"):format(spot.x), ("%.17g"):format(spot.y),
 			spot.scale and ("%.17g"):format(spot.scale) or "", spot.kind, Escape(spot.label or "") }, "|")
+	end
+	if opts then
+		table.insert(lines, 1, HeaderLine())
 	end
 	return ns.PackText(PREFIX, lines)
 end
@@ -2805,17 +2884,15 @@ function ns.UnpackText(prefix, text)
 	return lines
 end
 
--- The settings and positions of the profile in use are replaced by what a text from ExportProfile holds. A setting
--- the text does not name goes back to its default; a setting this build does not have is ignored.
-function ns.ImportProfile(text)
-	local refusal = Refusal()
-	if refusal then
-		return false, refusal
-	end
+-- What a text from ExportProfile holds: the settings by saved path, the positions by frame name, the fields of its first line (nil for a text of an
+-- older build, which has none) and the Small scale that a custom scale under 65% moved to (nil when none did). Nil and the sentence why not for a
+-- text that cannot be read.
+local function ReadProfile(text)
 	local lines, why = ns.UnpackText(PREFIX, text)
 	if not lines then
-		return false, why == "prefix" and "That is not a Flat UI profile." or "The text is incomplete."
+		return nil, why == "prefix" and "That is not a Flat UI profile." or "The text is incomplete."
 	end
+	local header, moved
 	local options, spots, rawScale, oldWord, oldMove, oldDim, oldText, oldSound = {}, {}, nil, nil, nil, nil, {}, {}
 	for _, line in ipairs(lines) do
 		local fields = {}
@@ -2837,6 +2914,8 @@ function ns.ImportProfile(text)
 				rawScale = Parse(def, fields[3])
 			end
 			options[fields[2]] = Normalise(def, Renamed(fields[2], Parse(def, fields[3])))
+		elseif fields[1] == "h" then
+			header = { name = fields[2], version = fields[3], width = tonumber(fields[4]) or 0, height = tonumber(fields[5]) or 0, scale = tonumber(fields[6]) or 0 }
 		elseif fields[1] == "o" and fields[2] == "combattext.word" then
 			oldWord = fields[3]
 		elseif fields[1] == "o" and fields[2] == "combattext.ownMove" then
@@ -2876,11 +2955,63 @@ function ns.ImportProfile(text)
 		options["general.scale"] = 65
 		if options["general.scaleOn"] == true then
 			options["general.scaleOn"] = false
-			ns.scaleMoved = ns.scaleMoved or {}
-			ns.scaleMoved[current] = options["general.scaleSmall"]
+			moved = options["general.scaleSmall"]
 		end
 	end
-	Replace(options, spots)
+	return options, spots, header, moved
+end
+
+-- What a text holds, for a preview before it is imported: the name and build it was made with, the screen it was made on, and how many settings
+-- and positions it has. Nil and the sentence why not for a text that cannot be read.
+function ns.ProfilePreview(text)
+	local options, spots, header = ReadProfile(text)
+	if not options then
+		return nil, spots
+	end
+	local settings, positions = 0, 0
+	for _ in pairs(options) do
+		settings = settings + 1
+	end
+	for _ in pairs(spots) do
+		positions = positions + 1
+	end
+	header = header or { name = "", version = "", width = 0, height = 0, scale = 0 }
+	return { name = header.name, version = header.version, width = header.width, height = header.height, scale = header.scale, settings = settings,
+		spots = positions }
+end
+
+-- The settings and positions of the profile in use are replaced by what a text from ExportProfile holds. A setting
+-- the text does not name goes back to its default; a setting this build does not have is ignored. With `opts`, `opts.settings` false keeps the
+-- settings in use, `opts.spots` false keeps the positions in use, and `opts.newName` puts what is left in a new profile, which is then the profile in use.
+function ns.ImportProfile(text, opts)
+	local refusal = Refusal()
+	if refusal then
+		return false, refusal
+	end
+	local options, spots, _, moved = ReadProfile(text)
+	if not options then
+		return false, spots
+	end
+	opts = type(opts) == "table" and opts or {}
+	if opts.settings == false then
+		options = nil
+	end
+	if opts.spots == false then
+		spots = nil
+	end
+	if opts.newName ~= nil then
+		local done, message = ns.NewProfile(opts.newName, nil, options or {}, spots or {})
+		if not done then
+			return false, message
+		end
+	else
+		local kept = CopyOf(profile)
+		Replace(options or kept.options, spots or kept.movers)
+	end
+	if moved and options then
+		ns.scaleMoved = ns.scaleMoved or {}
+		ns.scaleMoved[current] = moved
+	end
 	return true, ("Imported into %s."):format(current)
 end
 

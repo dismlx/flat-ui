@@ -24,9 +24,11 @@ local CONTROL = 354
 local FIELD = 230
 local SMALL = 80
 local BUTTON = 24
-local LINE = 22
-local LINES = 12
+local LINE = 24
+local LINES = 10
 local WHEEL = 48
+local TRACK = 176
+local SEARCH = 28
 local REFRESH = 0.5
 local DIM = 0.4
 local Look = ns.PanelLook
@@ -376,13 +378,17 @@ local function Needed(page, item)
 	return list
 end
 
-local function IsOpen(page, item)
+-- The first setting a row needs that is off, or nil.
+local function Unmet(page, item)
 	for _, needed in ipairs(Needed(page, item)) do
 		if not ns.NeedMet(item, needed) then
-			return false
+			return needed
 		end
 	end
-	return true
+end
+
+local function IsOpen(page, item)
+	return Unmet(page, item) == nil
 end
 
 local function Say(message)
@@ -392,9 +398,13 @@ local function Say(message)
 	end
 end
 
+-- How far the rows hung from a parent stand in from its edges: a page of cards sets it, any other parent has the margin PAD.
+local insets = setmetatable({}, { __mode = "k" })
+
 -- A row: the label on the left, room for a control on the right. The tip shows in the strip while the mouse is over it.
 local function NewRow(parent, y, text, tip)
 	local row = { active = true, tip = tip or "" }
+	local inset = insets[parent] or PAD
 	local frame = Frame(parent)
 	-- Its width is the width of what it hangs from, less the two margins: the options pages and setup have different columns.
 	frame:SetHeight(ROW)
@@ -404,7 +414,7 @@ local function NewRow(parent, y, text, tip)
 	hover:SetAllPoints(frame)
 	hover:Hide()
 	Painted(function()
-		Solid(hover, "card")
+		Solid(hover, inset == PAD and "card" or "hover")
 	end)
 	local line = Fill(frame, "BORDER")
 	line:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
@@ -417,9 +427,10 @@ local function NewRow(parent, y, text, tip)
 	label:SetPoint("LEFT", frame, "LEFT", 0, 0)
 	label:SetText(text)
 	function row.Place(top)
+		row.top = top
 		frame:ClearAllPoints()
-		frame:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, -top)
-		frame:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -PAD, -top)
+		frame:SetPoint("TOPLEFT", parent, "TOPLEFT", inset, -top)
+		frame:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -inset, -top)
 	end
 	function row.Changed()
 		RefreshAll()
@@ -429,7 +440,13 @@ local function NewRow(parent, y, text, tip)
 		target:SetScript("OnEnter", function()
 			hover:Show()
 			ui.message = nil
-			ui.tip = row.tip
+			-- Setup and the movers show the tip in the strip; the options pages show it in a tooltip.
+			if ui.mode then
+				ui.tip = row.tip
+			elseif ns.PanelTrust then
+				ui.tip = ""
+				ns.PanelTrust.Show(target, row.tip, row.need)
+			end
 			ShowStrip()
 			if row.entered then
 				row.entered()
@@ -446,6 +463,9 @@ local function NewRow(parent, y, text, tip)
 				row.left()
 			end
 			hover:Hide()
+			if ns.PanelTrust then
+				ns.PanelTrust.Hide()
+			end
 			ui.tip = ""
 			ShowStrip()
 		end)
@@ -480,6 +500,22 @@ local function Dropdown(row, width, spec)
 	local text = Label(button, "GameFontHighlight", "LEFT", width - 32)
 	text:SetPoint("LEFT", button, "LEFT", 8, 0)
 	Chevron(button)
+	-- A list with samples (spec.sample is the kind) shows the one of the chosen line at the left of the button.
+	local Samples = ns.PanelSamples
+	local picture = spec.sample and Samples and Samples.New(button) or nil
+	local function Lay()
+		local shown = picture ~= nil and Samples.On()
+		local shift = shown and Samples.WIDTH + Samples.GAP or 0
+		text:ClearAllPoints()
+		text:SetPoint("LEFT", button, "LEFT", 8 + shift, 0)
+		text:SetWidth(width - 32 - shift)
+		if picture then
+			picture.frame:ClearAllPoints()
+			picture.frame:SetPoint("LEFT", button, "LEFT", 8, 0)
+			picture.frame:SetShown(shown)
+		end
+	end
+	Lay()
 	local hover = false
 	Painted(function()
 		Backing(outline, hover and "hover" or "raised", 1, "line")
@@ -487,6 +523,12 @@ local function Dropdown(row, width, spec)
 	local object = { frame = button }
 	function object.SetText(value)
 		text:SetText(value)
+	end
+	function object.SetSample(id)
+		if picture then
+			picture.Set(spec.sample, id)
+			Lay()
+		end
 	end
 	Clickable(button, function()
 		if row.active then
@@ -526,17 +568,30 @@ local function Write(item, value)
 	return result
 end
 
+-- A switch: a track of 32 by 16 with a knob. The track is in the accent while the setting is on.
 local function AddBool(row, item)
 	local box = Frame(row.frame)
-	box:SetSize(18, 18)
+	box:SetSize(32, 16)
 	box:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 	local outline = ns.Outline(box, box, true)
 	local mark = Fill(box, "ARTWORK")
-	mark:SetPoint("TOPLEFT", box, "TOPLEFT", 4, -4)
-	mark:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -4, 4)
+	mark:SetPoint("TOPLEFT", box, "TOPLEFT", 1, -1)
+	mark:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1)
+	local knob = Fill(box, "OVERLAY")
+	knob:SetSize(12, 12)
+	local on = false
+	local function Knob()
+		knob:SetPoint("LEFT", box, "LEFT", on and 18 or 2, 0)
+		knob:SetColorTexture(Look.Colour(on and "on-accent" or "text-dim"))
+	end
+	local hovered = false
+	local function Edge()
+		Backing(outline, "line", 1, hovered and "text-faint" or "line-strong")
+	end
 	Painted(function()
-		Backing(outline, "raised", 1, "line-strong")
+		Edge()
 		mark:SetColorTexture(Accent())
+		Knob()
 	end)
 	local function Toggle()
 		if row.active then
@@ -546,15 +601,23 @@ local function AddBool(row, item)
 	end
 	Clickable(box, Toggle)
 	Clickable(row.frame, Toggle)
-	row.Hover(box)
+	row.Hover(box, function()
+		hovered = true
+		Edge()
+	end, function()
+		hovered = false
+		Edge()
+	end)
 	return function()
-		mark:SetShown(Read(item) == true)
+		on = Read(item) == true
+		mark:SetShown(on)
+		Knob()
 	end
 end
 
 local function AddNumber(row, item)
 	local track = Frame(row.frame)
-	track:SetSize(170, 18)
+	track:SetSize(TRACK, 18)
 	track:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 	local groove = Fill(track, "BACKGROUND")
 	groove:SetPoint("LEFT", track, "LEFT", 0, 0)
@@ -564,11 +627,20 @@ local function AddNumber(row, item)
 	bar:SetPoint("LEFT", track, "LEFT", 0, 0)
 	bar:SetHeight(4)
 	local thumb = Fill(track, "OVERLAY")
-	thumb:SetSize(8, 16)
+	thumb:SetSize(10, 16)
+	-- A mark at the default value, when the row has one.
+	local tick = Fill(track, "ARTWORK")
+	tick:SetSize(1, 8)
+	if Number(item.default) and Number(item.min) and Number(item.max) and item.max > item.min then
+		tick:SetPoint("LEFT", track, "LEFT", Clamp((item.default - item.min) / (item.max - item.min), 0, 1) * TRACK, 0)
+	else
+		tick:Hide()
+	end
 	Painted(function()
 		Solid(groove, "raised")
 		bar:SetColorTexture(Accent())
 		thumb:SetColorTexture(Accent())
+		Solid(tick, "text-faint")
 	end)
 	local box
 	-- A typed value is applied when the player presses Enter or leaves the box.
@@ -581,7 +653,7 @@ local function AddNumber(row, item)
 		row.Changed()
 	end
 	box = Field(row.frame, 54, 8, Commit)
-	box:SetPoint("LEFT", row.frame, "LEFT", CONTROL + 182, 0)
+	box:SetPoint("LEFT", row.frame, "LEFT", CONTROL + TRACK + 12, 0)
 	box:SetJustifyH("CENTER")
 	local unit = Dim(Label(row.frame, "GameFontHighlightSmall", "LEFT", 90))
 	unit:SetPoint("LEFT", box, "RIGHT", 10, 0)
@@ -589,8 +661,8 @@ local function AddNumber(row, item)
 	local function Show()
 		local value = Read(item)
 		local fraction = Clamp((value - item.min) / (item.max - item.min), 0, 1)
-		bar:SetWidth(math.max(1, fraction * 170))
-		thumb:SetPoint("CENTER", track, "LEFT", fraction * 170, 0)
+		bar:SetWidth(math.max(1, fraction * TRACK))
+		thumb:SetPoint("CENTER", track, "LEFT", fraction * TRACK, 0)
 		if not box:HasFocus() then
 			box:SetText(("%g"):format(value))
 		end
@@ -624,10 +696,6 @@ local function AddNumber(row, item)
 	return Show
 end
 
-local function Hex(r, g, b)
-	return ("%02x%02x%02x"):format(Clamp(math.floor(r * 255 + 0.5), 0, 255), Clamp(math.floor(g * 255 + 0.5), 0, 255), Clamp(math.floor(b * 255 + 0.5), 0, 255))
-end
-
 local function AddColour(row, item)
 	local swatch = Frame(row.frame)
 	swatch:SetSize(40, 18)
@@ -647,26 +715,10 @@ local function AddColour(row, item)
 			row.Changed()
 		end
 	end
-	-- The picker is the game's own: it changes the colour as the player drags in it, and Cancel puts the old colour back.
+	-- The picker is the one of PanelColour.lua: it changes the colour as the player drags in it, and Cancel puts the old colour back.
 	Clickable(swatch, function()
-		local picker = ColorPickerFrame
-		if not row.active or type(picker) ~= "table" or ns.IsSecret(picker) or type(picker.SetupColorPickerAndShow) ~= "function" then
-			return
-		end
-		local old = Read(item)
-		local alpha = old:sub(1, 2)
-		local info = {
-			r = tonumber(old:sub(3, 4), 16) / 255, g = tonumber(old:sub(5, 6), 16) / 255, b = tonumber(old:sub(7, 8), 16) / 255,
-			swatchFunc = function()
-				Set(alpha .. Hex(picker:GetColorRGB()))
-			end,
-			cancelFunc = function()
-				Set(old)
-			end,
-		}
-		local ok, err = pcall(picker.SetupColorPickerAndShow, picker, info)
-		if not ok then
-			geterrorhandler()(err)
+		if row.active and ns.PanelColour then
+			ns.PanelColour.Open(Read(item), item.alpha == true, Set)
 		end
 	end)
 	row.Hover(swatch)
@@ -682,6 +734,9 @@ local function AddColour(row, item)
 end
 
 local function AddChoice(row, item)
+	if item.segments and ns.PanelCards then
+		return ns.PanelCards.Segments(row, item)
+	end
 	local menu = Dropdown(row, FIELD, {
 		lines = function()
 			return ns.Choices(item)
@@ -689,6 +744,7 @@ local function AddChoice(row, item)
 		selected = function()
 			return Read(item)
 		end,
+		sample = ns.PanelSamples and ns.PanelSamples.Kind(item) or nil,
 		pick = function(value)
 			Write(item, value)
 			row.Changed()
@@ -697,6 +753,7 @@ local function AddChoice(row, item)
 	menu.frame:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 	return function()
 		menu.SetText(Chosen(ns.Choices(item), Read(item)) or "")
+		menu.SetSample(Read(item))
 	end
 end
 
@@ -763,15 +820,21 @@ local ADD = { bool = AddBool, number = AddNumber, colour = AddColour, choice = A
 -- The row of a setting. Returns nil when the client cannot build its control.
 local function BuildRow(parent, page, item, y)
 	local row = NewRow(parent, y, item.label, item.tip)
+	row.item = item
 	local ok, show = pcall(ADD[item.kind], row, item)
 	if not ok then
 		geterrorhandler()(show)
 		row.frame:Hide()
 		return nil
 	end
+	local mark = ns.PanelTrust and ns.PanelTrust.Attach(row, item)
 	function row.Update()
-		SetActive(row, IsOpen(page, item))
+		local unmet = Unmet(page, item)
+		SetActive(row, unmet == nil)
 		show()
+		if mark then
+			mark(unmet)
+		end
 	end
 	return row
 end
@@ -1112,6 +1175,15 @@ local function BuildPopups()
 	ui.list = list
 	ui.listScroller = Scroller(list, FIELD, LINE)
 	ui.listScroller.frame:SetPoint("TOPLEFT", list, "TOPLEFT", 0, 0)
+	-- A list of more than LINES lines has a field that keeps the lines holding what is typed.
+	ui.listSearch = Field(list, FIELD - 8, 40)
+	ui.listSearch:SetPoint("TOPLEFT", list, "TOPLEFT", 4, -2)
+	ui.listSearch:SetScript("OnTextChanged", function()
+		if ui.listOwner and ui.listSearch:IsShown() then
+			ui.ShowLines(false)
+		end
+	end)
+	ui.listSearch:Hide()
 
 	local confirm = Frame(window)
 	confirm:SetSize(360, 110)
@@ -1192,28 +1264,30 @@ end
 function CloseList()
 	if ui.listOwner then
 		ui.listOwner, ui.listSpec = nil, nil
+		ui.listSearch:ClearFocus()
 		ui.list:Hide()
 		SyncShade()
 	end
 end
 
-function OpenList(owner, spec)
-	BuildPopups()
-	if ui.listOwner == owner then
-		CloseList()
-		return
+-- Fills the lines of the open list with the ones that hold what is typed in its field. With first, the list opens scrolled to the chosen line.
+function ui.ShowLines(first)
+	local lines = ui.listLines
+	local selected = ui.listSpec.selected and ui.listSpec.selected()
+	local typed = ui.listSearch:IsShown() and ui.listSearch:GetText()
+	if IsText(typed) and typed ~= "" then
+		local found, want = {}, typed:lower()
+		for _, entry in ipairs(lines) do
+			if tostring(entry[2]):lower():find(want, 1, true) then
+				found[#found + 1] = entry
+			end
+		end
+		lines = found
 	end
-	CloseList()
-	HideConfirm()
-	local lines = spec.lines()
-	local selected = spec.selected and spec.selected()
 	local count = math.max(1, #lines)
-	local width = math.max(FIELD, select(3, Rect(owner.frame)) or 0)
-	local shown = math.min(count, LINES)
-	local height = shown * LINE + 4
-	ui.listOwner, ui.listSpec = owner, spec
-	ui.list:SetSize(width, height)
-	ui.listScroller.Resize(width, height)
+	local width = ui.listWidth
+	local kind = ui.listSpec.sample
+	kind = kind and ns.PanelSamples and ns.PanelSamples.On() and kind or nil
 	ui.listScroller.SetContent(count * LINE + 4)
 	local at = 1
 	for index = 1, math.max(count, #ui.lines) do
@@ -1224,6 +1298,20 @@ function OpenList(owner, spec)
 			line.live = entry ~= nil
 			line.value = entry and entry[1]
 			line.text:SetText(entry and entry[2] or "None")
+			local picture = kind and entry and (line.picture or ns.PanelSamples.New(line.frame)) or nil
+			line.picture = picture or line.picture
+			local shift = picture and ns.PanelSamples.WIDTH + ns.PanelSamples.GAP or 0
+			if line.picture then
+				line.picture.frame:SetShown(picture ~= nil)
+			end
+			if picture then
+				picture.frame:ClearAllPoints()
+				picture.frame:SetPoint("LEFT", line.frame, "LEFT", 14, 0)
+				picture.Set(kind, entry[1])
+			end
+			line.text:ClearAllPoints()
+			line.text:SetPoint("LEFT", line.frame, "LEFT", 14 + shift, 0)
+			line.text:SetWidth(width - 28 - shift)
 			if entry then
 				Tint(line.text, "text")
 			else
@@ -1239,6 +1327,33 @@ function OpenList(owner, spec)
 			ui.lines[index].frame:Hide()
 		end
 	end
+	ui.listScroller.Scroll(first and at > LINES and (at - 1) * LINE or 0)
+end
+
+function OpenList(owner, spec)
+	BuildPopups()
+	if ui.listOwner == owner then
+		CloseList()
+		return
+	end
+	CloseList()
+	HideConfirm()
+	local lines = spec.lines()
+	local width = math.max(FIELD, select(3, Rect(owner.frame)) or 0)
+	local shown = math.min(math.max(1, #lines), LINES)
+	local search = #lines > LINES and SEARCH or 0
+	local height = search + shown * LINE + 4
+	ui.listOwner, ui.listSpec, ui.listLines, ui.listWidth = owner, spec, lines, width
+	ui.list:SetSize(width, height)
+	ui.listScroller.Resize(width, shown * LINE + 4)
+	ui.listScroller.frame:ClearAllPoints()
+	ui.listScroller.frame:SetPoint("TOPLEFT", ui.list, "TOPLEFT", 0, -search)
+	ui.listSearch:SetWidth(width - 8)
+	ui.listSearch:SetShown(search > 0)
+	if search > 0 then
+		ui.listSearch:SetText("")
+	end
+	ui.ShowLines(true)
 	ui.list:ClearAllPoints()
 	local _, bottom = Rect(owner.frame)
 	local _, floor = Rect(ui.window)
@@ -1247,7 +1362,6 @@ function OpenList(owner, spec)
 	else
 		ui.list:SetPoint(spec.right and "BOTTOMRIGHT" or "BOTTOMLEFT", owner.frame, spec.right and "TOPRIGHT" or "TOPLEFT", 0, 2)
 	end
-	ui.listScroller.Scroll(at > LINES and (at - 1) * LINE or 0)
 	ui.list:Show()
 	SyncShade()
 end
@@ -1304,22 +1418,39 @@ local function BuildView(entry)
 	local scroller = Scroller(ui.right, CW, RIGHT_H)
 	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEAD)
 	local view = { scroller = scroller, rows = {}, sections = {}, module = true }
+	-- With Sections at Cards, the rows of a section stand on a card; Lines keep the heading with a line under it.
+	local cards = ns.PanelCards and ns.PanelCards.On() and ns.PanelCards.New(entry, view, scroller, CW) or nil
 	local y = 8
-	for _, item in ipairs(entry.page) do
+	for index, item in ipairs(entry.page) do
 		if item.section then
 			view.sections[#view.sections + 1] = y
-			y = Header(scroller.child, item.section, y)
+			if cards then
+				y = cards.Section(item, y, entry.page, index)
+			else
+				y = Header(scroller.child, item.section, y)
+			end
 		elseif item == entry.switchItem and not entry.parent then
 			-- It is the switch in the header. A tab with a switch of its own (Your buffs) shows it as its first row.
 		elseif item.kind == "entries" then
 			y = y + editor.Add(scroller.child, entry.page, item, y, view)
+			if cards then
+				cards.Static()
+			end
+		elseif cards and cards.chipped[item] then
+			-- It is a chip in the block under the heading of its section.
 		elseif ns.RowShown(item.path) then
 			local row = BuildRow(scroller.child, entry.page, item, y)
 			if row then
 				view.rows[#view.rows + 1] = row
+				if cards then
+					cards.Row(row, item, y)
+				end
 			end
 			y = y + ROW
 		end
+	end
+	if cards then
+		y = cards.Finish(y)
 	end
 	scroller.SetContent(y + PAD)
 	function view.Update()
@@ -1521,6 +1652,22 @@ local function BuildProfiles()
 		end
 	end
 
+	if type(ns.RenameProfile) == "function" then
+		row = Row("Rename profile")
+		local name = Field(row.frame, FIELD, 32)
+		name:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
+		local function Rename()
+			local typed = name:GetText()
+			typed = IsText(typed) and typed or ""
+			if Act("RenameProfile", Current(), (typed:match("^%s*(.-)%s*$"))) then
+				name:SetText("")
+			end
+		end
+		name:SetScript("OnEnterPressed", Rename)
+		row.Hover(name)
+		Beside(row, "Rename", Rename)
+	end
+
 	if type(ns.ResetProfile) == "function" then
 		row = Row("Reset profile")
 		local reset = Button(row.frame, "Reset", SMALL, function()
@@ -1547,7 +1694,7 @@ local function BuildProfiles()
 		out:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(out)
 		Beside(row, "Export", function()
-			local text = Call("ExportProfile")
+			local text = Call("ExportProfile", {})
 			if IsText(text) then
 				out:SetText(text)
 				out:SetFocus()
@@ -1555,25 +1702,6 @@ local function BuildProfiles()
 				Say("Press Ctrl+C to copy.")
 			else
 				Say("That did not work.")
-			end
-		end)
-	end
-
-	if type(ns.ImportProfile) == "function" then
-		row = Row("Import profile")
-		local into = Field(row.frame, FIELD, 0)
-		into:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
-		row.Hover(into)
-		Beside(row, "Import", function()
-			local text = into:GetText()
-			if IsText(text) and text:find("%S") then
-				Ask(('Replace "%s" with the pasted settings?'):format(Current()), function()
-					if Act("ImportProfile", text) then
-						into:SetText("")
-					end
-				end)
-			else
-				Say("Paste the settings first.")
 			end
 		end)
 	end
@@ -1611,6 +1739,36 @@ local function BuildProfiles()
 				Say("Paste the trackers first.")
 			end
 		end)
+	end
+
+	if type(ns.ImportProfile) == "function" then
+		row = Row("Import profile")
+		local into = Field(row.frame, FIELD, 0)
+		into:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
+		row.Hover(into)
+		if ns.ProfileShare then
+			ns.ProfileShare.Watch(into)
+		end
+		Beside(row, "Import", function()
+			local text = into:GetText()
+			if IsText(text) and text:find("%S") then
+				-- A text that can be read is imported with the choices under the paste field.
+				if ns.ProfileShare and ns.ProfileShare.Import(text) then
+					return
+				end
+				Ask(('Replace "%s" with the pasted settings?'):format(Current()), function()
+					if Act("ImportProfile", text) then
+						into:SetText("")
+					end
+				end)
+			else
+				Say("Paste the settings first.")
+			end
+		end)
+	end
+
+	if ns.ProfileShare and type(ns.ExportProfile) == "function" and type(ns.ImportProfile) == "function" then
+		y = ns.ProfileShare.Build(ns.PanelKit, child, y, updates, scroller, row)
 	end
 
 	scroller.SetContent(y + PAD)
@@ -1686,14 +1844,74 @@ end
 
 -- Search ------------------------------------------------------------------------------------------
 
+local FLASH, FLASH_ALPHA = 0.8, 0.24
+local CHIP_H = 28
+local STEPS_GROUP, PROFILES_GROUP = "Flat UI setup", "Profiles"
+
+-- The pages whose names match, as chips under a small heading. The frames of the block hold their own text, so that the block is not a row of the results.
+local function BuildChips(parent)
+	local block = { frame = Frame(parent), chips = {} }
+	local holder = Frame(block.frame)
+	holder:SetSize(120, 16)
+	holder:SetPoint("TOPLEFT", block.frame, "TOPLEFT", 0, 0)
+	block.title = Dim(Label(holder, "GameFontHighlightSmall", "LEFT", 120))
+	block.title:SetPoint("LEFT", holder, "LEFT", 0, 0)
+	block.title:SetText("Pages")
+	block.frame:Hide()
+	-- Shows a chip for each entry, wrapped inside the column. Returns the height of the block, 0 for none.
+	function block.Set(entries, y)
+		for _, chip in ipairs(block.chips) do
+			chip:Hide()
+		end
+		if #entries == 0 then
+			block.frame:Hide()
+			return 0
+		end
+		local x, line = 0, 0
+		for index, entry in ipairs(entries) do
+			local chip = block.chips[index]
+			if not chip then
+				local label
+				chip, label = Button(block.frame, entry.label, 100, function()
+					Go(block.chips[index].go)
+				end)
+				chip.text = label
+				block.chips[index] = chip
+			end
+			chip.text:SetText(entry.label)
+			chip.go = entry
+			local ok, measured = pcall(chip.text.GetStringWidth, chip.text)
+			if not (ok and Number(measured) and measured > 0) then
+				measured = 7.2 * #entry.label
+			end
+			local width = math.ceil(measured) + 24
+			if x > 0 and x + width > ROW_W then
+				x, line = 0, line + 1
+			end
+			chip:SetWidth(width)
+			chip:ClearAllPoints()
+			chip:SetPoint("TOPLEFT", block.frame, "TOPLEFT", x, -(20 + line * CHIP_H))
+			chip:Show()
+			x = x + width + 8
+		end
+		local height = 20 + (line + 1) * CHIP_H + 4
+		block.frame:SetSize(ROW_W, height)
+		block.frame:ClearAllPoints()
+		block.frame:SetPoint("TOPLEFT", parent, "TOPLEFT", PAD, -y)
+		block.frame:Show()
+		return height
+	end
+	return block
+end
+
 local function BuildSearchView()
 	local scroller = Scroller(ui.right, CW, RIGHT_H)
 	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEAD)
 	scroller.frame:Hide()
 	local empty = Label(scroller.child, "GameFontHighlight", "LEFT", ROW_W)
 	empty:SetPoint("TOPLEFT", scroller.child, "TOPLEFT", PAD, -PAD)
-	empty:SetText("No settings found.")
-	local view = { scroller = scroller, cache = {}, headers = {}, empty = empty, shown = {} }
+	empty:SetText("No settings match.")
+	local view = { scroller = scroller, cache = {}, headers = {}, empty = empty, shown = {}, picks = {}, at = 0, chips = BuildChips(scroller.child) }
 	function view.Update()
 		for _, row in ipairs(view.shown) do
 			row.Update()
@@ -1702,14 +1920,89 @@ local function BuildSearchView()
 	return view
 end
 
-local function Found(words, entry, item, section)
-	local text = table.concat({ item.label or "", item.tip or "", section, entry.label }, "\n"):lower()
-	for _, word in ipairs(words) do
-		if not text:find(word, 1, true) then
-			return false
+-- A result that opens a page or a step of setup instead of holding a control: the name and a button.
+local function BuildLink(view, hit, y)
+	local row = NewRow(view.scroller.child, y, hit.label, "")
+	local open = Button(row.frame, "Open", SMALL, function()
+		hit.Open()
+	end)
+	open:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
+	row.Hover(open)
+	function row.Update() end
+	return row
+end
+
+-- The fill of the result the keys are on.
+local function Pick(view, at)
+	local old = view.picks[view.at]
+	if old and old.row.pick then
+		old.row.pick:Hide()
+	end
+	view.at = at
+	local hit = view.picks[at]
+	if not hit then
+		return
+	end
+	local row = hit.row
+	if not row.pick then
+		row.pick = Fill(row.frame, "BACKGROUND")
+		row.pick:SetAllPoints(row.frame)
+		Painted(function()
+			Solid(row.pick, "accent", 0.14)
+		end)
+	end
+	row.pick:Show()
+	local scroller = view.scroller
+	if row.top and row.top < scroller.offset then
+		scroller.Scroll(row.top - 8)
+	elseif row.top and row.top + ROW > scroller.offset + scroller.height then
+		scroller.Scroll(row.top + ROW - scroller.height + 8)
+	end
+end
+
+-- The row that was opened glows for a moment: a fill in the accent that fades.
+local function Flash(row)
+	if not row.flash then
+		row.flash = Fill(row.frame, "ARTWORK")
+		row.flash:SetAllPoints(row.frame)
+	end
+	if ui.flash and ui.flash.row ~= row then
+		ui.flash.row.flash:Hide()
+	end
+	ui.flash = { row = row, left = FLASH }
+	Solid(row.flash, "accent", FLASH_ALPHA)
+	row.flash:Show()
+end
+
+local function Fade(seconds)
+	local flash = ui.flash
+	flash.left = flash.left - seconds
+	if flash.left <= 0 then
+		flash.row.flash:Hide()
+		ui.flash = nil
+	else
+		Solid(flash.row.flash, "accent", FLASH_ALPHA * flash.left / FLASH)
+	end
+end
+
+-- Opens the tab of a setting, scrolls to its row and flashes it.
+local function Arrive(entry, item)
+	ui.search:ClearFocus()
+	Go(entry)
+	local view = ui.views[entry]
+	if not view then
+		return
+	end
+	if view.RevealItem then
+		view.RevealItem(item)
+	end
+	for _, row in ipairs(view.rows) do
+		if row.item == item then
+			view.scroller.Scroll(math.max(0, (row.top or 0) - 2 * ROW))
+			Flash(row)
+			return
 		end
 	end
-	return true
 end
 
 local function Show(view)
@@ -1720,11 +2013,59 @@ local function Show(view)
 	view.scroller.frame:Show()
 end
 
-local function Search(typed)
-	local words = {}
-	for word in typed:lower():gmatch("%S+") do
-		words[#words + 1] = word
+-- The groups the words find: the rows of the options pages, then Profiles and the steps of setup, each in its order of match.
+local function Collect(words)
+	local groups = {}
+	for _, entry in ipairs(ui.model.pages) do
+		local section, group = "", nil
+		for _, item in ipairs(entry.page) do
+			if item.section then
+				section = item.section
+			elseif item.key and ns.RowShown(item.path) then
+				local tier = ns.PanelSearch.Tier(words, item.label, item.tip, section, entry.label)
+				if tier then
+					if not group then
+						group = { label = entry.label, entry = entry, hits = {} }
+						groups[#groups + 1] = group
+					end
+					group.hits[#group.hits + 1] = { tier = tier, label = item.label or "", item = item, key = item, Open = function()
+						Arrive(entry, item)
+					end }
+				end
+			end
+		end
 	end
+	local profiles = { label = PROFILES_GROUP, hits = {} }
+	for _, label in ipairs(ns.PanelSearch.PROFILE_ROWS) do
+		local tier = ns.PanelSearch.Tier(words, label, "", PROFILES_GROUP, PROFILES_GROUP)
+		if tier then
+			profiles.hits[#profiles.hits + 1] = { tier = tier, label = label, link = true, key = PROFILES_GROUP .. "/" .. label, Open = function()
+				Go(ui.model.profiles)
+			end }
+		end
+	end
+	local steps = { label = STEPS_GROUP, hits = {} }
+	for _, step in ipairs(type(ns.SETUP_STEPS) == "table" and ns.SETUP_STEPS or {}) do
+		local tier = step.built and ns.PanelSearch.Tier(words, step.title, "", step.area, STEPS_GROUP)
+		if tier then
+			steps.hits[#steps.hits + 1] = { tier = tier, label = step.title, link = true, key = STEPS_GROUP .. "/" .. step.id, Open = function()
+				-- The options pages are back as they were when setup closes.
+				ui.search:ClearFocus()
+				ShowPage(ui.current)
+				Call("OpenSetup", step.id)
+			end }
+		end
+	end
+	for _, group in ipairs({ profiles, steps }) do
+		if #group.hits > 0 then
+			groups[#groups + 1] = group
+		end
+	end
+	return ns.PanelSearch.Sort(groups)
+end
+
+local function Search(typed)
+	local words = ns.PanelSearch.Words(typed)
 	if #words == 0 then
 		if ui.searching then
 			ui.searching = false
@@ -1739,51 +2080,64 @@ local function Search(typed)
 	if not view then
 		view = BuildSearchView()
 		ui.searchView = view
+		ui.searchBase = Look.Get("density") .. "/" .. Look.Get("sidebar")
 	end
 	for _, row in pairs(view.cache) do
 		row.frame:Hide()
+		if row.pick then
+			row.pick:Hide()
+		end
 	end
 	for _, header in ipairs(view.headers) do
 		header.SetShown(false)
 	end
-	view.shown = {}
-	local y, groups = 8, 0
-	for _, entry in ipairs(ui.model.pages) do
-		local section, header = "", nil
-		for _, item in ipairs(entry.page) do
-			if item.section then
-				section = item.section
-			elseif item.key and ns.RowShown(item.path) and Found(words, entry, item, section) then
-				if not header then
-					groups = groups + 1
-					header = view.headers[groups]
-					if not header then
-						_, header = Header(view.scroller.child, entry.label, y, true)
-						view.headers[groups] = header
-					end
-					header.label:SetText(entry.label)
-					header.Place(y)
-					header.SetShown(true)
-					y = y + SECTION
+	view.shown, view.picks = {}, {}
+	local groups = Collect(words)
+	local y = 8
+	local chips = ns.PanelSearch.Pages(words, ui.model)
+	if #groups == 0 then
+		chips = ns.PanelSearch.Closest(words, ui.model)
+	end
+	y = y + view.chips.Set(chips, y)
+	for number, group in ipairs(groups) do
+		local header = view.headers[number]
+		if not header then
+			header = select(2, Header(view.scroller.child, group.label, y, true))
+			view.headers[number] = header
+		end
+		header.label:SetText(group.label)
+		header.Place(y)
+		header.SetShown(true)
+		y = y + SECTION
+		for _, hit in ipairs(group.hits) do
+			local row = view.cache[hit.key]
+			if row == nil then
+				if hit.link then
+					row = BuildLink(view, hit, y)
+				else
+					row = BuildRow(view.scroller.child, group.entry.page, hit.item, y) or false
 				end
-				local row = view.cache[item]
-				if row == nil then
-					row = BuildRow(view.scroller.child, entry.page, item, y) or false
-					view.cache[item] = row
-				end
-				if row then
-					row.Place(y)
-					row.frame:Show()
-					row.Update()
-					view.shown[#view.shown + 1] = row
-					y = y + ROW
-				end
+				view.cache[hit.key] = row
+			end
+			if row then
+				row.Place(y)
+				row.frame:Show()
+				row.Update()
+				view.shown[#view.shown + 1] = row
+				view.picks[#view.picks + 1] = { row = row, Open = hit.Open }
+				y = y + ROW
 			end
 		end
 	end
 	view.empty:SetShown(#view.shown == 0)
+	if #view.shown == 0 then
+		view.empty:ClearAllPoints()
+		view.empty:SetPoint("TOPLEFT", view.scroller.child, "TOPLEFT", PAD, -y)
+		y = y + 24
+	end
 	view.scroller.SetContent(math.max(y + PAD, 1))
 	view.scroller.Scroll(0)
+	Pick(view, #view.picks > 0 and 1 or 0)
 	Show(view)
 	ui.title:SetText("Search")
 	ui.head.Set(nil, "")
@@ -1794,11 +2148,33 @@ local function Search(typed)
 	LayoutNav()
 end
 
+-- Up and Down move the selection of the results, Enter opens it. Out of combat only.
+local function SearchKey(key)
+	local view = ui.searchView
+	if not (ui.searching and view and #view.picks > 0) or InCombatLockdown() then
+		return
+	end
+	if key == "ENTER" then
+		view.picks[math.max(view.at, 1)].Open()
+	elseif key == "DOWN" then
+		Pick(view, math.min(view.at + 1, #view.picks))
+	elseif key == "UP" then
+		Pick(view, math.max(view.at - 1, 1))
+	end
+end
+
 -- The window ---------------------------------------------------------------------------------------
 
 function ShowStrip()
 	if ui.strip then
-		ui.strip:SetText(ui.message or ui.tip or "")
+		local text = ui.message
+		if not text then
+			text = ui.tip or ""
+			if text == "" and not ui.searching and not ui.mode and ns.PanelTrust then
+				text = ns.PanelTrust.Status(ui.current)
+			end
+		end
+		ui.strip:SetText(text)
 	end
 end
 
@@ -1855,6 +2231,7 @@ function RefreshAll()
 		if ui.view then
 			ui.view.Update()
 		end
+		ShowStrip()
 	end
 end
 
@@ -2000,6 +2377,20 @@ local function BuildLeft(window)
 			Search(typed)
 		end
 	end)
+	box:SetScript("OnArrowPressed", function(_, key)
+		SearchKey(key)
+	end)
+	box:SetScript("OnEnterPressed", function()
+		SearchKey("ENTER")
+	end)
+	-- Escape clears the words and shows the page again.
+	box:SetScript("OnEscapePressed", function(self)
+		local typed = self:GetText()
+		if IsText(typed) and typed ~= "" then
+			self:SetText("")
+		end
+		self:ClearFocus()
+	end)
 	ui.search = box
 
 	ui.optionParts = { left, box }
@@ -2027,6 +2418,9 @@ local function BuildLeft(window)
 		end,
 		Scroll = function(entry, number)
 			local view = ui.views[entry]
+			if view and view.Reveal then
+				view.Reveal(number)
+			end
 			local at = view and view.sections[number]
 			if at then
 				view.scroller.Scroll(at - 4)
@@ -2079,7 +2473,8 @@ local function BuildFoot(window)
 	ui.reset = Button(foot, "Reset page", 100, function()
 		local entry = ui.current
 		if entry and not entry.profiles and not entry.home then
-			Ask("Reset every setting on this page?", function()
+			local name = ns.PanelTabs.Label(ui.model, entry) or entry.label
+			Ask(ns.PanelTrust.Question(entry, name), function()
 				for _, item in ipairs(entry.page) do
 					-- A row the game holds is not written: its default is the game's, not this page's.
 					if item.key and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowLive(item) then
@@ -2177,7 +2572,7 @@ local function Build()
 	-- The height of a row is read here, since the account is loaded by now.
 	ROW = Look.RowHeight()
 	ns.PanelKit.ROW = ROW
-	ui.shape = Look.Get("density") .. "/" .. Look.Get("sidebar")
+	ui.shape = Look.Get("density") .. "/" .. Look.Get("sidebar") .. "/" .. Look.Get("sections")
 	SIDE = Look.SideWidth()
 	CW = WIDTH - SIDE
 	ui.model = BuildModel()
@@ -2223,6 +2618,9 @@ local function Build()
 		if ui.mode and ui.mode.Frame then
 			ui.mode.Frame(seconds)
 		end
+		if ui.flash then
+			Fade(seconds)
+		end
 		elapsed = elapsed + seconds
 		if elapsed >= REFRESH then
 			elapsed = 0
@@ -2256,13 +2654,15 @@ local function Rebuild()
 	-- The pages built for a density and a sidebar are kept and shown again when they come back.
 	ui.sets = ui.sets or {}
 	ui.sets[ui.shape] = ui.views
-	ui.shape = Look.Get("density") .. "/" .. Look.Get("sidebar")
+	ui.shape = Look.Get("density") .. "/" .. Look.Get("sidebar") .. "/" .. Look.Get("sections")
 	SIDE = Look.SideWidth()
 	CW = WIDTH - SIDE
 	ui.left:SetWidth(SIDE)
 	ui.right:SetWidth(CW)
 	ui.views, ui.view = ui.sets[ui.shape] or {}, nil
-	if ui.searchView then
+	-- The search view has no cards, so a change of Sections keeps it.
+	local base = Look.Get("density") .. "/" .. Look.Get("sidebar")
+	if ui.searchView and ui.searchBase ~= base then
 		ui.searchView.scroller.frame:Hide()
 		ui.searchView = nil
 	end
@@ -2294,6 +2694,11 @@ function Look.onChange(key)
 	elseif key == "density" or key == "sidebar" then
 		Look.ApplyFonts()
 		Rebuild()
+	elseif key == "sections" then
+		Rebuild()
+	elseif key == "samples" then
+		-- Each dropdown places its sample again when its row is refreshed.
+		RefreshAll()
 	else
 		ui.paintKey = nil
 		Repaint()
@@ -2329,9 +2734,12 @@ end
 -- The widgets and measures of the window, for a mode that has the window (Setup.lua). Each is the one the options pages use.
 ns.PanelKit = {
 	Frame = Frame, Fill = Fill, Label = Label, Dim = Dim, Tint = Tint, Clickable = Clickable, Button = Button, Field = Field,
-	Scroller = Scroller, Dropdown = Dropdown, NewRow = NewRow, BuildRow = BuildRow, IsOpen = IsOpen, Header = Header, Painted = Painted,
-	Solid = Solid, Backing = Backing, Accent = Accent, Shade = Shade, Clamp = Clamp, Rect = Rect, IsText = IsText, Cursor = Cursor,
-	Say = Say, Ask = Ask, CloseList = CloseList, OpenList = OpenList,
+	Scroller = Scroller, Dropdown = Dropdown, NewRow = NewRow, BuildRow = BuildRow, IsOpen = IsOpen, Unmet = Unmet, Header = Header, Painted = Painted,
+	Solid = Solid, Backing = Backing, Accent = Accent, Shade = Shade, Clamp = Clamp, Rect = Rect, IsText = IsText, Cursor = Cursor, Drag = Drag,
+	Say = Say, Ask = Ask, CloseList = CloseList, OpenList = OpenList, Read = Read, Write = Write,
+	Bool = AddBool,
+	Window = function() return ui.window end,
+	Inset = function(parent, inset) insets[parent] = inset end,
 	Tip = function(text) ui.message, ui.tip = nil, text or "" ShowStrip() end, Refresh = function() RefreshAll() end,
 	Hide = function() if ui.window then ui.window:Hide() end end,
 	SetCounter = function(text) if ui.barCounter then ui.barCounter:SetText(text or "") end end,
