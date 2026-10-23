@@ -605,7 +605,7 @@ local function Init(rec, button)
 		back:SetColorTexture(PLATE[1], PLATE[2], PLATE[3], PLATE[4])
 		local host = Layer("Frame", wrapper, nil, 1)
 		local bar = Layer("StatusBar", host, nil, 0)
-		local set, done = pcall(bar.SetStatusBarTexture, bar, ns.BarTexture() or WHITE)
+		local set, done = pcall(bar.SetStatusBarTexture, bar, ns.BarTexture(ns.Get("trackers.barTexture")) or WHITE)
 		if not set or (not IsSecret(done) and done == false) then
 			error("the bar texture was refused", 0)
 		end
@@ -851,7 +851,7 @@ local function Init2(rec, button)
 	local made, wrapper, bar = pcall(function()
 		local frame = Layer("Frame", button, nil, 0)
 		local fill = Layer("StatusBar", frame, nil, 0)
-		local set, done = pcall(fill.SetStatusBarTexture, fill, ns.BarTexture() or WHITE)
+		local set, done = pcall(fill.SetStatusBarTexture, fill, ns.BarTexture(ns.Get("trackers.barTexture")) or WHITE)
 		if not set or (not IsSecret(done) and done == false) then
 			error("the bar texture was refused", 0)
 		end

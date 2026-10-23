@@ -474,8 +474,8 @@ function E.Draw(row, slot, item)
 	local icon = row.icons[slot]
 	local key = "none"
 	if item then
-		key = ("%s:%s:%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), tostring(Opt("seconds")), tostring(Opt("kindBorder")), item.ready and "ready" or "used",
-			tostring(Opt("show")), tostring(Opt("flash")), tostring(Opt("sound")), Opt("numbersFont"))
+		key = ("%s:%s:%s:%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), tostring(Opt("seconds")), tostring(Opt("kindBorder")), item.ready and "ready" or "used",
+			tostring(Opt("show")), tostring(Opt("flash")), tostring(Opt("sound")), Opt("numbersFont"), tostring(Opt("iconBorder")))
 	end
 	if row.drawn[slot] == key then
 		return
@@ -489,7 +489,7 @@ function E.Draw(row, slot, item)
 		return
 	end
 	icon.key = item.a.key
-	local look = { numbers = Opt("seconds") == true, font = Opt("numbersFont"), kind = Opt("kindBorder") == true and item.a.kind or nil }
+	local look = { numbers = Opt("seconds") == true, font = Opt("numbersFont"), kind = Opt("kindBorder") == true and item.a.kind or nil, border = Opt("iconBorder") }
 	if item.ready then
 		icon.net = nil
 		pcall(icon.cooldown.Clear, icon.cooldown)
@@ -737,7 +737,7 @@ function E.ArenaDraw(row, slot, n, duration)
 	end
 	icon.texture:SetDesaturated(false)
 	icon.texture:SetVertexColor(1, 1, 1)
-	ns.IconSet(icon, nil, nil, duration, { numbers = Opt("seconds") == true, font = Opt("numbersFont") })
+	ns.IconSet(icon, nil, nil, duration, { numbers = Opt("seconds") == true, font = Opt("numbersFont"), border = Opt("iconBorder") })
 end
 
 -- One line for /flatui check, or nil: how the break of the target and focus bars stands in an arena.

@@ -526,7 +526,7 @@ function XpMicro.build(stage)
 	parts["hud.enabled"] = root
 	parts["hud.bags"] = s.bags[1].frame
 	parts["hud.xpFrame"], parts["hud.xpFill"], parts["hud.xpTexture"] = s.xp.frame, s.xp.bar, s.xp.bar
-	parts["hud.xpDividers"] = s.xp.frame
+	parts["hud.xpDividers"], parts["hud.xpBack"] = s.xp.frame, s.xp.frame
 	parts["hud.xpOwn"], parts["hud.xpWidth"], parts["hud.xpHeight"], parts["hud.xpShow"] = s.xp.frame, s.xp.frame, s.xp.frame, s.xp.frame
 	parts["hud.xpOrder"], parts["hud.xpGap"], parts["hud.xpTicks"], parts["hud.xpTooltip"] = s.xp.frame, s.xp.frame, s.xp.frame, s.tip.frame
 	parts["hud.xpColour"], parts["hud.xpRested"], parts["hud.xpRestedColour"] = s.xp.bar, s.xp.bar, s.xp.bar
@@ -558,7 +558,7 @@ local function DrawOwn(s, mode, size, file)
 			bar.frame:ClearAllPoints()
 			At(bar.frame, bar.frame:GetParent(), x, y)
 			y = y + h + gap
-			Style(bar, frameOn, true, false)
+			Style(bar, frameOn, ns.Get("hud.xpBack") ~= false, false)
 			PlaceDividers(bar, w, ticks, ticks > 1)
 			PlaceWords(bar, place)
 			bar.words:SetShown(mode ~= "hide")

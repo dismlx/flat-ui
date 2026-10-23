@@ -1,3 +1,10 @@
+## 0.4.98
+
+- **Bar texture** is new on **Trackers**, on the bar of **Your buffs** and on the tooltip health bar under **Chat and tooltips**. **Icon border** is new on **Trackers**, **Your buffs**, **Defensives on you**, **Party cooldowns** and **Enemy cooldowns**.
+- **Bar border** is new on **Unit frames**. **Bar background** is new on the experience bar. **Class colour** is new on the health bar of the **Personal resource display**.
+- Cast bars on the player, pet, target and focus are 80 to 400 wide and 6 to 40 high.
+- **Faded opacity** on **Bar block** stops at 90, so a saved 100 now fades the block to 90%. **Aura opacity**, **Opacity in combat** and **Nameplate cast bar height** move in steps of 5.
+
 ## 0.4.97
 
 - New **Icon size** and **Spacing** on **Defensives on you**. New **Hide while mounted** and **Hide in cities and inns** on **Cooldowns**. New **Countdown number size** on **Trackers**, **Party cooldowns** and **Enemy cooldowns**, and **Time left** on **Party cooldowns**. **Icon size** goes to 64 on every icon row.

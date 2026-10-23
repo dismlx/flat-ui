@@ -151,7 +151,7 @@ end
 
 -- Puts a picture and a sweep on an icon and shows it. texture: a file or a number. seconds: a number of seconds that starts at
 -- `start`, or a duration object (then start is not used). look: { numbers = false hides the countdown numbers, font = a Countdown number
--- size choice, kind = 1 to 9 for the colour of the border, flash and sound for the end of the sweep, key the module a note goes to }.
+-- size choice, kind = 1 to 9 for the colour of the border, border = false for none, flash and sound for the end of the sweep, key the module a note goes to }.
 function ns.IconSet(icon, texture, start, seconds, look)
 	look = look or {}
 	icon.look = look
@@ -169,6 +169,8 @@ function ns.IconSet(icon, texture, start, seconds, look)
 		pcall(cooldown.SetCooldownFromDurationObject, cooldown, seconds)
 	end
 	ns.SetOutlineColour(icon.outline, ns.KindColour(look.kind))
+	-- look.border false: no border and no dark background, as Icon border on Cooldowns.
+	ns.SetOutline(icon.outline, look.border ~= false, look.border ~= false)
 	icon.frame:Show()
 	return true
 end

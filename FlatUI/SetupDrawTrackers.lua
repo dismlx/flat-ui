@@ -248,6 +248,7 @@ function U.NewCell(parent)
 	cell.tex:SetAllPoints(frame)
 	cell.tex:SetTexCoord(CROP, 1 - CROP, CROP, 1 - CROP)
 	cell.sweep = U.Cooldown(frame)
+	cell.outline = ns.Outline(frame, frame)
 	cell.top = U.Frame(frame)
 	cell.top:SetAllPoints(frame)
 	cell.top:SetFrameLevel((cell.sweep and cell.sweep:GetFrameLevel() or frame:GetFrameLevel()) + 1)
@@ -370,6 +371,7 @@ function U.ApplyCell(cell, spec)
 	else
 		cell.tex:SetVertexColor(1, 1, 1)
 	end
+	ns.SetOutline(cell.outline, spec.border ~= false, spec.border ~= false)
 	for key, other in pairs(cell.parts) do
 		other.body:SetShown(key == shape)
 	end
@@ -413,7 +415,7 @@ function U.ApplyCell(cell, spec)
 		part.count:SetText(counted)
 		part.time:SetText(timed)
 		if shape == "bar" then
-			part.bar:SetStatusBarTexture(ns.BarTexture() or WHITE)
+			part.bar:SetStatusBarTexture(ns.BarTexture(spec.texture) or WHITE)
 			part.bar:SetStatusBarColor(r, g, b, 1)
 			part.bar:SetValue(fill)
 			for _, text in ipairs({ part.name, part.count, part.time }) do
@@ -478,7 +480,8 @@ function U.Look()
 	end
 	return { shape = read("trackers.shape"), size = read("trackers.size"), width = read("trackers.barWidth"), height = read("trackers.barHeight"),
 		fill = read("trackers.barFill"), colour = colour, counts = read("trackers.counts") == true, names = read("trackers.names") == true,
-		numbers = read("trackers.numbers") == true, font = read("trackers.numbersFont"), missing = read("trackers.missing") }
+		numbers = read("trackers.numbers") == true, font = read("trackers.numbersFont"), missing = read("trackers.missing"),
+		border = read("trackers.iconBorder") ~= false, texture = read("trackers.barTexture") }
 end
 
 function U.Spec(look, sample, state, extra)
@@ -589,8 +592,9 @@ function U.DrawDefensives(part, root, x, top)
 		edges[4]:SetSize(1, h)
 		U.At(edges[4], "TOPRIGHT", part.own, "TOPRIGHT", 0, 0)
 	end
+	local border = ns.Get("defensives.iconBorder") ~= false
 	for _, icon in ipairs(part.icons) do
-		ns.SetOutline(icon.outline, true, true)
+		ns.SetOutline(icon.outline, border, border)
 	end
 	local stub = place == "resource" and 21 or place == "own" and 22 or place == "player" and 26 or 0
 	part.frame:SetSize(math.max(rowWidth, 150), anchored and (below + stub) or 16)
@@ -631,7 +635,8 @@ local function BuildTracker(stage)
 		["trackers.counts"] = icon.count, ["trackers.names"] = bar.parts.bar.name, ["trackers.numbers"] = icon.frame, ["trackers.numbersFont"] = icon.frame,
 		["trackers.grow"] = s.row, ["defensives.size"] = s.defensives.row, ["defensives.spacing"] = s.defensives.row,
 		["trackers.spacing"] = s.row, ["defensives.enabled"] = s.defensives.frame, ["defensives.place"] = s.defensives.frame,
-		["defensives.caster"] = s.defensives.row,
+		["defensives.caster"] = s.defensives.row, ["defensives.iconBorder"] = s.defensives.row, ["trackers.iconBorder"] = icon.frame,
+		["trackers.barTexture"] = bar.parts.bar.body,
 	}
 	for path, region in pairs(map) do
 		s.parts[path] = region
@@ -1152,6 +1157,8 @@ function U.PaintItems(row, items, size, direction)
 		local item = items[index]
 		if icon and item then
 			icon.texture:SetTexture(ICONS .. item.icon)
+			local border = ns.Get("partycd.iconBorder") ~= false
+			ns.SetOutline(icon.outline, border, border)
 			ns.SetOutlineColour(icon.outline, ns.KindColour(item.kind))
 			icon.cooldown:SetHideCountdownNumbers(ns.Get("partycd.seconds") ~= true)
 			ns.IconCountdownFont(icon, ns.Get("partycd.numbersFont"))
@@ -1201,7 +1208,7 @@ local function BuildParty(stage)
 	end
 	s.own = U.NewRow(s.root, 8)
 	for _, path in ipairs({ "partycd.enabled", "partycd.side", "partycd.ownRow", "partycd.count", "partycd.size", "partycd.interrupts", "partycd.defensives",
-		"partycd.externals", "partycd.breaks", "partycd.group", "partycd.seconds", "partycd.numbersFont" }) do
+		"partycd.externals", "partycd.breaks", "partycd.group", "partycd.seconds", "partycd.numbersFont", "partycd.iconBorder" }) do
 		s.parts[path] = s.members[1].row.holder
 	end
 	s.parts["partycd.enabled"] = s.root
@@ -1303,7 +1310,7 @@ local function BuildEnemy(stage)
 		end
 	end
 	for _, path in ipairs({ "enemycd.interrupts", "enemycd.defensives", "enemycd.breaks", "enemycd.wards", "enemycd.mobility", "enemycd.offensive",
-		"enemycd.seconds", "enemycd.numbersFont", "enemycd.kindBorder", "enemycd.size", "enemycd.flash" }) do
+		"enemycd.seconds", "enemycd.numbersFont", "enemycd.kindBorder", "enemycd.size", "enemycd.flash", "enemycd.iconBorder" }) do
 		s.parts[path] = s.plateRow.holder
 	end
 	s.parts["enemycd.enabled"] = s.root
@@ -1343,6 +1350,8 @@ function U.PaintEnemy(row, items, size)
 		local item = items[index]
 		if icon and item then
 			icon.texture:SetTexture(ICONS .. item.icon)
+			local border = read("enemycd.iconBorder") ~= false
+			ns.SetOutline(icon.outline, border, border)
 			if item.kind and read("enemycd.kindBorder") == true then
 				ns.SetOutlineColour(icon.outline, ns.KindColour(item.kind))
 			else

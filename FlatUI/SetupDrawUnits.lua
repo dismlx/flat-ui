@@ -357,7 +357,7 @@ end
 -- The outline of a frame in the border and background the Unit frames page asks for: its own border and background with Own border and background on, else
 -- the Flat UI page's. colour: the colour of a state (threat, resting, combat, kind), which keeps the edges with Borderless on. fill: the colour of what a dark
 -- health bar hides. Every part is set from ns.Get, so the same call draws the draft.
-local function EdgePaint(outline, shown, back, colour, fill)
+local function EdgePaint(outline, shown, back, colour, fill, bars)
 	if outline == nil then
 		return
 	end
@@ -372,7 +372,7 @@ local function EdgePaint(outline, shown, back, colour, fill)
 		r, g, b = ns.BorderRGB()
 	end
 	ns.SetOutlineColour(outline, r, g, b)
-	ns.SetOutlineEdges(outline, colour ~= nil or ns.Get("general.borderless") ~= true)
+	ns.SetOutlineEdges(outline, (colour ~= nil or ns.Get("general.borderless") ~= true) and not (bars and Get("barBorder") == false))
 	if fill then
 		ns.SetOutlineFill(outline, fill[1], fill[2], fill[3], 1)
 	elseif own then
@@ -873,7 +873,7 @@ function E.bars(o, g, L)
 		if role == "health" and L.on and g.threat then
 			colour = s.threat and THREAT or s.debuff
 		end
-		EdgePaint(o[role .. "Outline"], live and L.on, g.backdrop, colour, lost)
+		EdgePaint(o[role .. "Outline"], live and L.on, g.backdrop, colour, lost, true)
 		Round(o[role .. "Outline"], live and L.on and L.radius or nil, t)
 		local width = size.bar * (s.dead and 0 or FRACTION)
 		fill:SetShown(live and width > 0)
@@ -1468,7 +1468,7 @@ function R.draw(o, g)
 			r, gr, b = 0.5, 0.5, 0.5
 		end
 		local file = on and g.flat and FileOf("health") or ns.BarFile("game")
-		EdgePaint(cell.hOutline, on, g.backdrop, threat and g.threat and on and THREAT or nil)
+		EdgePaint(cell.hOutline, on, g.backdrop, threat and g.threat and on and THREAT or nil, nil, true)
 		Round(cell.hOutline, on and g.radius or nil, t)
 		Stretch(cell.hFill, cell.health, 0, (CELL.width - 2 * inset) * (dead and 1 or FRACTION), healthHeight)
 		Fill(cell.hFill, file, r, gr, b, 1)
@@ -1478,7 +1478,7 @@ function R.draw(o, g)
 			pr, pg, pb = 0, 0, 1
 		end
 		local pfile = cells and g.flat and FileOf("power") or ns.BarFile("game")
-		EdgePaint(cell.pOutline, cells, g.backdrop)
+		EdgePaint(cell.pOutline, cells, g.backdrop, nil, nil, true)
 		Round(cell.pOutline, cells and g.radius or nil, t)
 		Stretch(cell.pFill, cell.power, 0, (CELL.width - 2 * inset) * 0.7, powerHeight)
 		Fill(cell.pFill, pfile, Mute(pr, pg, pb))

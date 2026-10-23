@@ -141,7 +141,7 @@ end
 -- The parts of a button --------------------------------------------------------------------------------------------------------
 
 local function EdgeColour()
-	if ns.Borderless() then
+	if ns.Borderless() or not Opt("iconBorder") then
 		return 0, 0, 0, 0
 	end
 	local r, g, b = ns.Colour("general.border")
@@ -774,7 +774,7 @@ function D.Pass()
 	for index = 1, math.min(#found, MOST_LISTED) do
 		local item, icon = found[index], D.Icon(index)
 		if icon then
-			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { kind = 3 })
+			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { kind = 3, border = Opt("iconBorder") })
 			local name = nil
 			if Opt("caster") and item.source then
 				name = T.Ask(UnitName, item.source)

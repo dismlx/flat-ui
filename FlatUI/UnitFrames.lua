@@ -501,7 +501,7 @@ local function Rim(outline)
 	end
 	local radius = rim.radius
 	-- A round outline is a ring, so the rounded line is not drawn while it is round.
-	local shown = radius ~= nil and not outline.roundOn and outline.shown and not (ns.Get("general.borderless") == true and outline.r == nil)
+	local shown = radius ~= nil and not outline.roundOn and outline.shown and not outline.edgesOff and not (ns.Get("general.borderless") == true and outline.r == nil)
 	rim.line:SetShown(shown)
 	if shown then
 		local r, g, b = outline.r, outline.g, outline.b
@@ -2268,6 +2268,7 @@ function Apply(rec)
 	for _, entry in ipairs(rec.bars) do
 		-- The thin power bar of a raid frame has its own switch.
 		local live = on and (entry.role ~= "power" or rec.kind ~= "raid" or Opt("raidCells") == true)
+		ns.SetOutlineEdges(entry.outline, Opt("barBorder") ~= false)
 		ShowOutline(entry.outline, live, Opt("backdrop"))
 		local flat = ApplyFill(rec, entry, live)
 		ApplyText(rec, entry, live)

@@ -9647,7 +9647,7 @@ local PAGES = {
 		S("nameplates.castBackdrop", "bool", true, "Nameplate cast bar background", nil, { needs = "nameplates.cast" }),
 		S("nameplates.castFlat", "bool", true, "Flat nameplate cast bar", "Uses the cast colours on the Colours page."),
 		S("nameplates.castTexture", "choice", "default", "Cast bar texture", nil, { choices = MS9.textures, needs = "nameplates.castFlat" }),
-		S("nameplates.castHeight", "number", 100, "Nameplate cast bar height", "100% is the game's own height.", { min = 50, max = 200, step = 10, unit = "%" }),
+		S("nameplates.castHeight", "number", 100, "Nameplate cast bar height", "100% is the game's own height.", { min = 50, max = 200, step = 5, unit = "%" }),
 		"Spell name",
 		S("nameplates.castTextSize", "number", 100, "Spell name size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
 		S("nameplates.castTextOutline", "choice", "game", "Spell name outline", nil, { choices = { { "game", "As the game has it" }, { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } }),
@@ -9695,7 +9695,7 @@ local PAGES = {
 		S("nameplates.auraBorderColour", "colour", "ff000000", "Aura border colour", nil, { needs = "nameplates.auraBorderOwn" }),
 		S("nameplates.auraTimers", "bool", true, "Countdown numbers"),
 		S("nameplates.auraStacks", "bool", true, "Stack count"),
-		S("nameplates.auraOpacity", "number", 100, "Aura opacity", nil, { min = 10, max = 100, step = 10, unit = "%" }),
+		S("nameplates.auraOpacity", "number", 100, "Aura opacity", nil, { min = 10, max = 100, step = 5, unit = "%" }),
 		S("nameplates.aurasWhen", "choice", "always", "Show auras", nil, { choices = { { "always", "On every nameplate" }, { "target", "Only on the target" } } }),
 	} },
 	{ key = "nameplatesGame", label = "Game settings", parent = "nameplates", owner = "nameplates", rows = {
@@ -9858,6 +9858,7 @@ local PAGES = {
 		S("resource.texture", "choice", "default", "Bar texture", nil, { choices = MS9.textures, needs = "resource.flat" }),
 		S("resource.healthOwn", "bool", false, "Custom health colour"),
 		S("resource.healthColour", "colour", "ff2eb84d", "Health colour", nil, { needs = "resource.healthOwn" }),
+		S("resource.healthClass", "bool", false, "Class colour", "Your class colour on the health bar, in place of the Health colour."),
 		S("resource.powerOwn", "bool", false, "Custom power colour", "One colour for every power type."),
 		S("resource.powerColour", "colour", "ff3d7dd9", "Power colour", nil, { needs = "resource.powerOwn" }),
 		S("resource.healthByLeft", "bool", false, "Colour health by health left", nil, { needs = "resource.flat" }),
@@ -9879,6 +9880,8 @@ local PAGES = {
 		"Icons",
 		S("ownbuffs.time", "choice", "under", "Time left", nil, { choices = { { "under", "Under the icon" }, { "on", "On the icon" }, { "bar", "Thin bar under the icon" }, { "off", "Off" } } }),
 		S("ownbuffs.size", "number", 28, "Icon size", "Icons already shown change size when you log in again.", { min = 16, max = 64, step = 2, unit = "" }),
+		S("ownbuffs.iconBorder", "bool", true, "Icon border"),
+		S("ownbuffs.barTexture", "choice", "default", "Bar texture", nil, { choices = MS9.textures, needs = "ownbuffs.time", needsIn = { "bar" } }),
 		S("ownbuffs.tooltips", "choice", "on", "Buff tooltips", "Settings on the Tooltips page do not change this tooltip.", { choices = { { "on", "On" }, { "out", "Out of combat only" }, { "off", "Off" } } }),
 		"Position",
 		S("ownbuffs.place", "choice", "above", "Place", "Own position has a handle in /flatui move.",
@@ -9961,18 +9964,18 @@ local PAGES = {
 		S("castbars.playerMatch", "choice", "resource", "Player cast bar", "Width set below is the game's 208 while Custom player cast bar size is off.",
 			{ choices = { { "resource", "Width of the personal resource display" }, { "own", "Width set below" } } }),
 		S("castbars.playerSize", "bool", false, "Custom player cast bar size"),
-		S("castbars.playerWidth", "number", 208, "Player cast bar width", nil, { min = 100, max = 400, step = 1, unit = "", needs = "castbars.playerSize" }),
+		S("castbars.playerWidth", "number", 208, "Player cast bar width", nil, { min = 80, max = 400, step = 1, unit = "", needs = "castbars.playerSize" }),
 		S("castbars.playerHeight", "number", 11, "Player cast bar height", nil, { min = 6, max = 40, step = 1, unit = "", needs = "castbars.playerSize" }),
 		S("castbars.playerText", "choice", "game", "Player cast bar text", nil, { choices = TEXT_PLACES, needs = "castbars.playerSize" }),
 		S("castbars.petSize", "bool", false, "Custom pet cast bar size"),
-		S("castbars.petWidth", "number", 195, "Pet cast bar width", nil, { min = 100, max = 400, step = 1, unit = "", needs = "castbars.petSize" }),
+		S("castbars.petWidth", "number", 195, "Pet cast bar width", nil, { min = 80, max = 400, step = 1, unit = "", needs = "castbars.petSize" }),
 		S("castbars.petHeight", "number", 13, "Pet cast bar height", nil, { min = 6, max = 40, step = 1, unit = "", needs = "castbars.petSize" }),
 		S("castbars.targetSize", "bool", false, "Custom target cast bar size"),
-		S("castbars.targetWidth", "number", 150, "Target cast bar width", nil, { min = 80, max = 300, step = 1, unit = "", needs = "castbars.targetSize" }),
-		S("castbars.targetHeight", "number", 10, "Target cast bar height", nil, { min = 6, max = 30, step = 1, unit = "", needs = "castbars.targetSize" }),
+		S("castbars.targetWidth", "number", 150, "Target cast bar width", nil, { min = 80, max = 400, step = 1, unit = "", needs = "castbars.targetSize" }),
+		S("castbars.targetHeight", "number", 10, "Target cast bar height", nil, { min = 6, max = 40, step = 1, unit = "", needs = "castbars.targetSize" }),
 		S("castbars.focusSize", "bool", false, "Custom focus cast bar size"),
-		S("castbars.focusWidth", "number", 150, "Focus cast bar width", nil, { min = 80, max = 300, step = 1, unit = "", needs = "castbars.focusSize" }),
-		S("castbars.focusHeight", "number", 10, "Focus cast bar height", nil, { min = 6, max = 30, step = 1, unit = "", needs = "castbars.focusSize" }),
+		S("castbars.focusWidth", "number", 150, "Focus cast bar width", nil, { min = 80, max = 400, step = 1, unit = "", needs = "castbars.focusSize" }),
+		S("castbars.focusHeight", "number", 10, "Focus cast bar height", nil, { min = 6, max = 40, step = 1, unit = "", needs = "castbars.focusSize" }),
 	} },
 	{ key = "castbarsText", label = "Text and icon", parent = "castbars", owner = "castbars", rows = {
 		"Text",
@@ -10078,6 +10081,8 @@ local PAGES = {
 		S("trackers.barHeight", "number", 14, "Bar height", "Also the height of text.", { min = 8, max = 30, step = 1, unit = "" }),
 		S("trackers.barFill", "choice", "charges", "Bar fill", "A buff without charges fills by time left.", { choices = { { "charges", "Charges" }, { "time", "Time left" } } }),
 		S("trackers.colour", "colour", "ff4d99e6", "Colour", "Bar fill and text."),
+		S("trackers.barTexture", "choice", "default", "Bar texture", "A bar the game draws in a fight changes when you log in again.", { choices = MS9.textures }),
+		S("trackers.iconBorder", "bool", true, "Icon border", "Off also removes the dark background."),
 		S("trackers.counts", "bool", true, "Charges"),
 		S("trackers.names", "bool", true, "Name", "On bars and text."),
 		S("trackers.numbers", "bool", true, "Time left"),
@@ -10110,6 +10115,7 @@ local PAGES = {
 		S("defensives.size", "number", 32, "Icon size", "Icons already shown change size when you log in again.", { min = 16, max = 64, step = 2, unit = "" }),
 		S("defensives.spacing", "number", 3, "Spacing", nil, { min = 0, max = 20, step = 1, unit = "" }),
 		S("defensives.caster", "bool", true, "Caster's name"),
+		S("defensives.iconBorder", "bool", true, "Icon border"),
 		S("defensives.own", "bool", false, "Your own defensives", "Shield Wall, Ice Barrier and the like that you cast on yourself."),
 		"Spells",
 		S("defensives.add", "list", 0, "Add a spell", "For a buff that is not listed, type /flatui defensives add and its spell ID."),
@@ -10125,6 +10131,7 @@ local PAGES = {
 		S("partycd.ownRow", "bool", false, "Your own row", "Shown while you are in a party."),
 		S("partycd.count", "number", 6, "Icons for each member", nil, { min = 3, max = 8, step = 1, unit = "" }),
 		S("partycd.size", "number", 24, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "" }),
+		S("partycd.iconBorder", "bool", true, "Icon border", "Off also removes the dark background."),
 		S("partycd.seconds", "bool", true, "Time left"),
 		S("partycd.numbersFont", "choice", "game", "Countdown number size", nil, { choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" }, { "huge", "Huge" } }, needs = "partycd.seconds" }),
 		"Abilities",
@@ -10157,6 +10164,7 @@ local PAGES = {
 		S("enemycd.numbersFont", "choice", "game", "Countdown number size", nil, { choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" }, { "huge", "Huge" } }, needs = "enemycd.seconds" }),
 		S("enemycd.kindBorder", "bool", true, "Border colour by kind"),
 		S("enemycd.size", "number", 24, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "" }),
+		S("enemycd.iconBorder", "bool", true, "Icon border", "Off also removes the dark background."),
 		"Ready again",
 		S("enemycd.flash", "bool", false, "Flash when ready"),
 		S("enemycd.sound", "choice", "none", "Sound", "The sound plays for your target and focus only.", { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
@@ -10374,6 +10382,7 @@ local PAGES = {
 	{ key = "unitframesBars", label = "All frames: bars and pictures", parent = "unitframes", owner = "unitframes", rows = {
 		"Bars",
 		S("unitframes.backdrop", "bool", true, "Bar background"),
+		S("unitframes.barBorder", "bool", true, "Bar border"),
 		S("unitframes.flat", "bool", true, "Flat bars", "Square ends and one plain colour, in the bar texture chosen on the Flat UI page."),
 		S("unitframes.healthColour", "colour", "ff2eb84d", "Health colour", nil, { needs = "unitframes.flat" }),
 		S("unitframes.healthTexture", "choice", "default", "Health bar texture", nil,
@@ -10521,6 +10530,7 @@ local PAGES = {
 		S("hud.xpOrder", "choice", "xp", "Top bar", nil, { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "xp", "Experience" }, { "rep", "Reputation" } } }),
 		S("hud.xpGap", "number", 2, "Space between bars", nil, { min = 0, max = 10, step = 1, unit = " px", needs = "hud.xpOwn", needsIn = { "flat" } }),
 		S("hud.xpFrame", "bool", true, "Bar border", "Thin border around the bar. On the game's bar, not applied while Leave the game's action bars alone is on."),
+		S("hud.xpBack", "bool", true, "Bar background", nil, { needs = "hud.xpOwn", needsIn = { "flat" } }),
 		S("hud.xpTicks", "choice", "none", "Dividers", nil, { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "none", "None" }, { "4", "4" }, { "10", "10" }, { "20", "20" } } }),
 		S("hud.xpColour", "colour", "ff94008c", "Experience colour", nil, { needs = "hud.xpOwn", needsIn = { "flat" } }),
 		S("hud.xpRested", "bool", true, "Rested experience", "Shows how far rested experience reaches.", { needs = "hud.xpOwn", needsIn = { "flat" } }),
@@ -10548,7 +10558,7 @@ local PAGES = {
 				{ "fade", "Side fade" }, { "game", "Game status bar" }, { "skills", "Skills bar" }, { "targeting", "Targeting bar" } } }),
 		S("hud.trackerPanel", "bool", false, "Tracker background"),
 		S("hud.trackerHeaderSize", "number", 100, "Heading size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
-		S("hud.trackerCombat", "number", 100, "Opacity in combat", nil, { min = 0, max = 100, step = 10, unit = "%" }),
+		S("hud.trackerCombat", "number", 100, "Opacity in combat", nil, { min = 0, max = 100, step = 5, unit = "%" }),
 		"Loot",
 		S("hud.lootWindow", "bool", true, "Loot window", "Flat window with thin borders on the window, the cards and the item slots."),
 		S("hud.lootRolls", "bool", true, "Loot rolls", "Thin border and flat timer bar on each roll."),
@@ -10622,6 +10632,7 @@ local PAGES = {
 		S("chat.tipTextSize", "number", 100, "Text size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
 		"Tooltip health bar",
 		S("chat.health", "bool", true, "Health bar border and fill"),
+		S("chat.barTexture", "choice", "default", "Bar texture", nil, { choices = MS9.textures, needs = "chat.health" }),
 		S("chat.barHide", "bool", false, "Hide the health bar"),
 		S("chat.barHeight", "number", 8, "Health bar height", nil, { min = 2, max = 16, step = 1, unit = " px" }),
 		"Fade",
@@ -10707,7 +10718,7 @@ local PAGES = {
 		S("barblock.backgroundPad", "number", 4, "Background padding", nil, { min = 0, max = 24, step = 1, unit = " px", needs = "barblock.background" }),
 		"Fade",
 		S("barblock.fade", "bool", false, "Fade the block", "Faded bars still take clicks and are at full opacity while something is held on the cursor or a spell flyout is open."),
-		S("barblock.fadeTo", "number", 30, "Faded opacity", nil, { min = 0, max = 100, step = 5, unit = "%", needs = "barblock.fade" }),
+		S("barblock.fadeTo", "number", 30, "Faded opacity", nil, { min = 0, max = 90, step = 5, unit = "%", needs = "barblock.fade" }),
 		S("barblock.fadeCombat", "bool", true, "Full opacity in combat", nil, { needs = "barblock.fade" }),
 		S("barblock.fadeMouse", "bool", true, "Full opacity under the mouse", nil, { needs = "barblock.fade" }),
 	} },
@@ -10901,7 +10912,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.97" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.4.98" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -20139,6 +20150,17 @@ do local PROBES = {
 	{ "swing.textColour", "ff336699", held("swing.textColour"), "ffffffff/ffffffff", "ff336699/ff336699" , pre = { { "swing.textOwn", true } } },
 	{ "swing.rangeTextColour", "ff336699", held("swing.rangeTextColour"), "ffff1a1a/ffff1a1a", "ff336699/ff336699" , pre = { { "swing.textOwn", true } } },
 	{ "swing.rangeAlpha", 70, held("swing.rangeAlpha"), "40/40", "70/70" },
+	{ "resource.healthClass", true, held("resource.healthClass"), "false/false", "true/true" },
+	{ "ownbuffs.iconBorder", false, held("ownbuffs.iconBorder"), "true/true", "false/false" },
+	{ "ownbuffs.barTexture", "Gloss", held("ownbuffs.barTexture"), "default/Same as the Flat UI page", "gloss/Gloss", from = "Same as the Flat UI page" },
+	{ "trackers.barTexture", "Gloss", held("trackers.barTexture"), "default/Same as the Flat UI page", "gloss/Gloss", from = "Same as the Flat UI page" },
+	{ "trackers.iconBorder", false, held("trackers.iconBorder"), "true/true", "false/false" },
+	{ "defensives.iconBorder", false, held("defensives.iconBorder"), "true/true", "false/false" },
+	{ "partycd.iconBorder", false, held("partycd.iconBorder"), "true/true", "false/false" },
+	{ "enemycd.iconBorder", false, held("enemycd.iconBorder"), "true/true", "false/false" },
+	{ "unitframes.barBorder", false, held("unitframes.barBorder"), "true/true", "false/false" },
+	{ "hud.xpBack", false, held("hud.xpBack"), "true/true", "false/false" },
+	{ "chat.barTexture", "Gloss", held("chat.barTexture"), "default/Same as the Flat UI page", "gloss/Gloss", from = "Same as the Flat UI page" },
 	{ "nameplates.health", false, function(S) return art(S, S.o) end, "0SB", "1hb" },
 	{ "nameplates.healthBackdrop", false, function(S) return S.W.state(S.o.healthBar) .. S.W.state(S.o.level) .. S.W.state(S.o.castBar) end, "SBSBSB", "SbSbSB" },
 	{ "nameplates.dim", true, function(S) return g(S.o.healthBar.deselectedOverlay.alpha) end, "0", "1" },
@@ -26857,7 +26879,7 @@ do
 			and byKey.healthBackdrop.needs == "health" and byKey.dim.needs == "health" and byKey.target.needs == "health" and byKey.castBackdrop.needs == "cast"
 			and byKey.healthFlat.needs == nil and byKey.healthHeight.needs == nil and byKey.nameSize.needs == nil and byKey.levelSize.needs == "level" and byKey.castFlat.needs == nil and byKey.castHeight.needs == nil)
 		check("nameplates page: the numbers, as the design gives them", byKey.healthHeight.min == 50 and byKey.healthHeight.max == 200 and byKey.healthHeight.step == 5 and byKey.healthHeight.default == 100
-			and byKey.castHeight.min == 50 and byKey.castHeight.max == 200 and byKey.castHeight.step == 10 and byKey.castHeight.default == 100
+			and byKey.castHeight.min == 50 and byKey.castHeight.max == 200 and byKey.castHeight.step == 5 and byKey.castHeight.default == 100
 			and byKey.nameSize.default == 100 and byKey.healthTextSize.default == 80 and byKey.levelSize.default == 100
 			and byKey.classSize.min == 8 and byKey.classSize.max == 64 and byKey.classSize.default == 20
 			and byKey.classX.min == -60 and byKey.classX.max == 60 and byKey.classX.default == 0 and byKey.classY.min == -60 and byKey.classY.max == 60 and byKey.classY.default == 0)
@@ -30025,7 +30047,7 @@ do
 		end
 		check("class icon position: left by default, next to the bar, and right is still offered", byKey.classPosition.default == "left" and places.left == "Left"
 			and places.right == "Right" and places.above == "Above" and places.below == "Below")
-		check("cast bar height: stops at 200 percent in steps of 10", byKey.castHeight.max == 200 and byKey.castHeight.min == 50 and byKey.castHeight.step == 10)
+		check("cast bar height: stops at 200 percent in steps of 5", byKey.castHeight.max == 200 and byKey.castHeight.min == 50 and byKey.castHeight.step == 5)
 		local S = NP.npWorld({ saved = { options = { ["nameplates.castHeight"] = 300, ["nameplates.classPosition"] = "left" } } })
 		check("cast bar height: a saved 300 loads as 200, and a saved left position stays left", S.ns.Get("nameplates.castHeight") == 200 and S.ns.Get("nameplates.classPosition") == "left")
 		local D = NP.npWorld({ saved = { options = { ["nameplates.castHeight"] = 250 } } })
@@ -34516,6 +34538,44 @@ do
 	W.change("resource.healthOwn", false)
 	check("resource colour: and the class colour is what the game last set", FH.tint(W, health) == FH.WARRIOR)
 	check("resource colour: nothing is followed", not FH.polling(W))
+end
+
+do
+	-- Class colour on the health bar: before Custom health colour, and the game's colour while the class is withheld.
+	local W = FH.res({ ["resource.healthClass"] = true })
+	local health, power = FH.bars(W)
+	W.frame(5)
+	check("gap bars: resource: Class colour paints the health bar in the colour of the class", FH.tint(W, health) == FH.WARRIOR and FH.polling(W), FH.tint(W, health))
+	W.change("resource.powerOwn", true)
+	W.frame(3)
+	check("gap bars: resource: and leaves the power bar to its own colour", FH.tint(W, power) == FH.hex(FH.POWER_HEX) and FH.tint(W, health) == FH.WARRIOR, FH.tint(W, power))
+	W.change("resource.powerOwn", false)
+	W.change("resource.healthOwn", true)
+	W.frame(3)
+	check("gap bars: resource: Class colour comes before Custom health colour", FH.tint(W, health) == FH.WARRIOR)
+	W.change("resource.healthClass", false)
+	W.frame(3)
+	check("gap bars: resource: Class colour off gives the custom colour", FH.tint(W, health) == FH.hex(FH.HEALTH_HEX))
+	W.change("resource.healthOwn", false)
+	W.change("resource.healthClass", true)
+	W.frame(3)
+	W.change("resource.healthClass", false)
+	W.frame(3)
+	check("gap bars: resource: and off with nothing custom gives the colour the game had set, and nothing is followed", FH.tint(W, health) == "1.000,1.000,1.000" and not FH.polling(W), FH.tint(W, health))
+	local N = FH.res({ ["resource.healthClass"] = true, ["resource.healthOwn"] = true }, { fills = { noClass = true } })
+	local nh = FH.bars(N)
+	N.frame(3)
+	check("gap bars: resource: with the class withheld the custom colour is used", FH.tint(N, nh) == FH.hex(FH.HEALTH_HEX), FH.tint(N, nh))
+	local K = FH.res({ ["resource.healthClass"] = true }, { fills = { noClass = true } })
+	local kh = FH.bars(K)
+	K.frame(3)
+	check("gap bars: resource: with the class withheld and no custom colour the game's colour stays, nothing is followed, and /flatui status says so once",
+		FH.tint(K, kh) == "1.000,1.000,1.000" and not FH.polling(K) and select(2, K.status():gsub("the game withholds your class here", "")) == 1, FH.tint(K, kh) .. " " .. K.status())
+	check("gap bars: resource: with the class readable /flatui status has no such line", not W.status():find("withholds your class", 1, true), W.status())
+	K.change("resource.healthClass", false)
+	K.frame(3)
+	check("gap bars: resource: and the line goes when Class colour is switched off", not K.status():find("withholds your class", 1, true), K.status())
+	check("gap bars: resource: no violation or error", #W.violations == 0 and #W.errors == 0 and #N.violations == 0 and #N.errors == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
 end
 
 do
@@ -40975,7 +41035,7 @@ do
 	ns.Set("castbars.playerHeight", 90)
 	ns.Set("castbars.targetWidth", 500)
 	ns.Set("castbars.targetHeight", 2)
-	check("cast bar size: the sliders hold their ranges", ns.Get("castbars.playerWidth") == 100 and ns.Get("castbars.playerHeight") == 40 and ns.Get("castbars.targetWidth") == 300 and ns.Get("castbars.targetHeight") == 6)
+	check("cast bar size: the sliders hold their ranges", ns.Get("castbars.playerWidth") == 80 and ns.Get("castbars.playerHeight") == 40 and ns.Get("castbars.targetWidth") == 400 and ns.Get("castbars.targetHeight") == 6)
 end
 
 -- 75ab. The player bar: spark, mask and text follow the size; off puts the game's back, locked or not.
@@ -48486,6 +48546,14 @@ do
 	check("unit frames: bar background off hides the backgrounds of the bars and keeps the borders, and the picture keeps its own", W.state(P.health) == "Sb" and W.state(visible(W, T.power)) == "Sb"
 		and pic(W, P.portrait).shown)
 	W.change("unitframes.backdrop", true)
+	W.change("unitframes.barBorder", false)
+	check("gap bars: unit frames: Bar border off hides the edges of the bars and keeps their backgrounds and the picture", W.state(P.health) == "hB" and W.state(visible(W, T.power)) == "hB"
+		and pic(W, P.portrait).shown)
+	W.change("unitframes.backdrop", false)
+	check("gap bars: unit frames: Bar border and Bar background off together hide both", W.state(P.health) == "hb")
+	W.change("unitframes.backdrop", true)
+	W.change("unitframes.barBorder", true)
+	check("gap bars: unit frames: Bar border on again gives the edges back", W.state(P.health) == "SB" and W.state(visible(W, T.power)) == "SB")
 	W.change("unitframes.squarePortrait", false)
 	check("unit frames: with square portraits off the portrait of the game is back and its picture and border are hidden", masks(W, P.portrait) == 1 and alphaOf(W, P.portrait) == "1"
 		and W.rawOf[P.portrait].shown and pic(W, P.portrait).hidden)
@@ -49184,6 +49252,10 @@ do
 		W.change("unitframes.corners", "Soft")
 		check("corners: soft is the radius of two units: the row, the masks and the lines change their texture", R.grad.file:find("Round2.tga", 1, true) ~= nil and N.back.maskList[1].file:find("Round2.tga", 1, true) ~= nil
 			and N.line.file:find("Outline2.tga", 1, true) ~= nil and #W.rawOf[P.healthFill].maskList == 1 and W.rawOf[P.healthFill].maskList[1].file:find("Round2.tga", 1, true) ~= nil and silent(W), why(W))
+		W.change("unitframes.barBorder", false)
+		check("gap bars: unit frames: Bar border off takes the rounded line away with the straight edges", N.line.shown == false and silent(W), why(W))
+		W.change("unitframes.barBorder", true)
+		check("gap bars: unit frames: and on again the rounded line is back", N.line.shown == true)
 		N.frames2, N.textures2 = #W.addonFrames, #W.addonTextures
 		W.change("unitframes.corners", "Slightly soft")
 		W.change("unitframes.corners", "Soft")
@@ -55216,6 +55288,16 @@ do
 		and fill.color[1] == 1 and fill.color[2] == 1 and fill.color[3] == 1 and game.barRaw.tint[2] == 1)
 	W.blizzard(function() game.bar:SetStatusBarColor(1, 0.5, 0) end)
 	check("tooltip health bar: the colour the game sets later tints the same fill", fill.color[1] == 1 and game.barRaw.tint[2] == 0.5 and fill.file == nil)
+	W.change("chat.barTexture", "Gloss")
+	check("gap bars: tooltip health bar: Bar texture puts the chosen file on the fill, tinted by the game", fill.file == W.ns.BarFile("gloss") and fill.color == nil and game.barRaw.tint[2] == 0.5, tostring(fill.file))
+	W.change("chat.barTexture", "Same as the Flat UI page")
+	check("gap bars: tooltip health bar: and the default follows the page again", fill.file == nil and fill.color ~= nil)
+	W.change("general.barTexture", "Gloss")
+	check("gap bars: tooltip health bar: with the page on Gloss the default takes Gloss", fill.file == W.ns.BarFile("gloss"), tostring(fill.file))
+	W.change("chat.barTexture", "Flat")
+	check("gap bars: tooltip health bar: Flat gives a solid fill when the page is on Gloss", fill.file == nil and fill.color ~= nil and game.barRaw.tint[2] == 0.5, tostring(fill.file))
+	W.change("chat.barTexture", "Same as the Flat UI page")
+	W.change("general.barTexture", "Flat")
 	W.change("chat.health", false)
 	local off = fill.file == BAR_FILE and fill.color == nil and W.state(game.bar) == "hb"
 	W.change("chat.health", true)
@@ -63788,6 +63870,8 @@ function PT.runSetup()
 		-- The client has the circle the drawings of round class icons are cut with.
 		W.env.C_Texture = W.env.C_Texture or { GetAtlasExists = function(name) return name == "CircleMaskScalable" end }
 		W.env.CreateColor = W.env.CreateColor or function(r, g, b, alpha) return setmetatable({ r = r, g = g, b = b, a = alpha or 1 }, COLOUR_MT) end
+		-- The class colours of the client, for Class colour on the health bar of the personal resource display.
+		W.env.RAID_CLASS_COLORS = W.env.RAID_CLASS_COLORS or { SHAMAN = setmetatable({ r = 0, g = 0.44, b = 0.87, a = 1 }, COLOUR_MT) }
 		local base = W.env.CreateFrame
 		W.env.CreateFrame = function(kind, name, parent, template)
 			local f = base(kind, name, parent, template)
@@ -64124,7 +64208,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 890 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 901 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -64438,7 +64522,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 890 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 901 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -64864,7 +64948,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 764 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 773 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -73791,6 +73875,27 @@ do
 				check("tkshape: and 300 of 600 seconds fill half", near(fill(b), 0.5, 0.02) and b.time.text == "5:00", tostring(fill(b)) .. " " .. tostring(b.time.text))
 				check("tkshape: the cooldown of a bar tracker has no countdown numbers", TK.parts(W, TK.list(W)[1]).cooldown.cd.hideNumbers == true)
 				check("tkshape: a bar draws in the colour of the page", near(tint(a)[1], 0.302, 2e-3) and near(tint(a)[2], 0.6, 2e-3) and near(tint(a)[3], 0.902, 2e-3))
+				W.change("trackers.barTexture", "Gloss")
+				TK.step(W, 0.3)
+				check("gap bars: trackers: Bar texture puts the chosen file on a bar that is up", a.bar.bar.texture == W.ns.BarFile("gloss") and TK.ok(W), tostring(a.bar.bar.texture))
+				W.change("trackers.barTexture", "Same as the Flat UI page")
+				TK.step(W, 0.3)
+				check("gap bars: trackers: and the default follows the page again", a.bar.bar.texture == (W.ns.BarTexture() or [[Interface\Buttons\WHITE8X8]]) and TK.ok(W), tostring(a.bar.bar.texture))
+				W.change("trackers.iconBorder", false)
+				TK.step(W, 0.3)
+				local function rimOf(f)
+					for _, h in ipairs(W.addonFrames) do
+						if h.allPoints == f and #W.edgesOn(h) == 4 then
+							local shown, back = W.edgesOn(h)[1].shown, W.backdropOn(f)
+							return (shown and "S" or "h") .. (back and back.shown and "B" or "b")
+						end
+					end
+					return "."
+				end
+				check("gap bars: trackers: Icon border off hides the border and the background of a tracker", rimOf(TK.parts(W, TK.list(W)[1]).frame) == "hb" and TK.ok(W), rimOf(TK.parts(W, TK.list(W)[1]).frame))
+				W.change("trackers.iconBorder", true)
+				TK.step(W, 0.3)
+				check("gap bars: trackers: and on again", rimOf(TK.parts(W, TK.list(W)[1]).frame) == "SB" and TK.ok(W), rimOf(TK.parts(W, TK.list(W)[1]).frame))
 				W.advance(60)
 				TK.step(W, 0.3)
 				check("tkshape: the time left counts down between two events", b.time.text ~= "5:00" and fill(b) < 0.5, tostring(b.time.text) .. " " .. tostring(fill(b)))
@@ -77875,8 +77980,8 @@ do
 		check("bblook: opacity: Faded opacity 55 sets 0.55 at once", allAt(W, 0.55), allWrites(W))
 		W.change("barblock.fadeTo", 0)
 		check("bblook: opacity: 0 is fully transparent", allAt(W, 0), allWrites(W))
-		W.change("barblock.fadeTo", 100)
-		check("bblook: opacity: 100 is the same as full", allAt(W, 1), allWrites(W))
+		W.change("barblock.fadeTo", 90)
+		check("bblook: opacity: 90 is the most, as 100 is no fade", allAt(W, 0.9), allWrites(W))
 		W.change("barblock.fadeTo", 30)
 		W.change("barblock.fade", false)
 		check("bblook: off: Fade the block off gives every frame the alpha it had, the main bar 0.8", alpha(W, "MainActionBar") == 0.8 and allWrites(W):find("MainAc 0.8/", 1, true) ~= nil
@@ -78014,8 +78119,8 @@ do
 		end
 		check("bblook: page: Background panel is off and Background padding is 4, 0 to 24", row("background", "bool", false, "Background panel") and row("backgroundPad", "number", 4, "Background padding")
 			and rows.backgroundPad.min == 0 and rows.backgroundPad.max == 24 and rows.backgroundPad.step == 1)
-		check("bblook: page: Fade the block is off and Faded opacity is 30, 0 to 100 in steps of 5", row("fade", "bool", false, "Fade the block") and row("fadeTo", "number", 30, "Faded opacity")
-			and rows.fadeTo.min == 0 and rows.fadeTo.max == 100 and rows.fadeTo.step == 5 and rows.fadeTo.unit == "%")
+		check("bblook: page: Fade the block is off and Faded opacity is 30, 0 to 90 in steps of 5", row("fade", "bool", false, "Fade the block") and row("fadeTo", "number", 30, "Faded opacity")
+			and rows.fadeTo.min == 0 and rows.fadeTo.max == 90 and rows.fadeTo.step == 5 and rows.fadeTo.unit == "%")
 		check("bblook: page: Full opacity in combat and under the mouse are on", row("fadeCombat", "bool", true, "Full opacity in combat") and row("fadeMouse", "bool", true, "Full opacity under the mouse"))
 		check("bblook: page: the padding needs the panel, the other four need the fade", W.ns.Needs("barblock.backgroundPad") == "barblock.background" and W.ns.Needs("barblock.fadeTo") == "barblock.fade"
 			and W.ns.Needs("barblock.fadeCombat") == "barblock.fade" and W.ns.Needs("barblock.fadeMouse") == "barblock.fade" and W.ns.Needs("barblock.background") == nil
@@ -78911,6 +79016,21 @@ do
 	T.change("general.thickness", 2)
 	T.advance(0.3)
 	check("own buffs: the border follows the general border thickness", Tm.list[1].borderKey ~= key and DF.ok(T), DF.why(T))
+	local edge = T.rawOf[Tm.list[1].edges[1]]
+	T.change("ownbuffs.iconBorder", false)
+	T.advance(0.3)
+	check("gap bars: own buffs: Icon border off clears the edges of the buttons", edge.color[4] == 0 and DF.ok(T), tostring(edge.color and edge.color[4]))
+	T.change("ownbuffs.iconBorder", true)
+	T.advance(0.3)
+	check("gap bars: own buffs: and on again paints them", edge.color[4] == 1 and DF.ok(T))
+	T.change("ownbuffs.time", "Thin bar under the icon")
+	T.change("ownbuffs.barTexture", "Gloss")
+	T.advance(0.3)
+	check("gap bars: own buffs: Bar texture puts the chosen file on the thin bar, and the default follows the page", T.rawOf[Tm.list[1].bar].bar.texture == T.ns.BarFile("gloss") and (function()
+		T.change("ownbuffs.barTexture", "Same as the Flat UI page")
+		T.advance(0.3)
+		return T.rawOf[Tm.list[1].bar].bar.texture == (T.ns.BarTexture() or [[Interface\Buttons\WHITE8X8]])
+	end)() and DF.ok(T), tostring(T.rawOf[Tm.list[1].bar].bar.texture))
 end
 do
 	local OB, DF = TOC.ob, TOC.df
@@ -79221,6 +79341,13 @@ do
 	check("own buffs: one icon of the reading path hangs from the middle of the top of the holder", #one == 1 and at[1] == "TOPLEFT" and at[2] == B.holder and at[3] == "TOP" and at[4] == -14 and at[5] == 0, tostring(at[4]))
 	check("own buffs: the reading path asks for the buffs the player cast", R.au.listAsked and R.au.listAsked.filter == "HELPFUL|PLAYER" and R.au.listAsked.unit == "player")
 	check("own buffs: its sweep starts when the buff started, and has the numbers of the game while Time left is not Off", one[1].cooldown.cd.sweep.start == R.au.auras[20154].expires - 30 and one[1].cooldown.cd.hideNumbers == false)
+	local borderOn = one[1].outline.shown and one[1].outline.backdropOn
+	R.change("ownbuffs.iconBorder", false)
+	pass()
+	check("gap bars: own buffs: Icon border off takes the border and the dark background off the icons of the reading path", borderOn == true and shown()[1].outline.shown == false and shown()[1].outline.backdropOn == false)
+	R.change("ownbuffs.iconBorder", true)
+	pass()
+	check("gap bars: own buffs: and on again", shown()[1].outline.shown and shown()[1].outline.backdropOn)
 	R.change("ownbuffs.time", "Off")
 	pass()
 	check("own buffs: and none with Time left Off", shown()[1].cooldown.cd.hideNumbers == true)
@@ -79250,6 +79377,13 @@ do
 	pass()
 	check("own buffs: and shows them when it does", #shown() == 3)
 	-- The test shows its samples, and the icons of the reading path wait.
+	R.change("ownbuffs.iconBorder", false)
+	R.slash("test")
+	pass()
+	check("gap bars: own buffs: Icon border off takes the border and the dark background off the sample icons", B.sample[1] ~= nil and B.sample[1].outline.shown == false and B.sample[1].outline.backdropOn == false)
+	R.advance(9)
+	R.change("ownbuffs.iconBorder", true)
+	pass()
 	R.slash("test")
 	pass()
 	check("own buffs: while the test shows, the reading path leaves its icons hidden, and they come back after it", #shown() == 0 and (function()
@@ -80076,6 +80210,12 @@ do
 	T.change("general.thickness", 2)
 	T.advance(0.3)
 	check("defensives: and at once when it has", edge.height ~= nil and Tm.pending.border == nil and DF.ok(T))
+	T.change("defensives.iconBorder", false)
+	T.advance(0.3)
+	check("gap bars: defensives: Icon border off clears the edges of the buttons", edge.color[4] == 0 and Tm.pending.border == nil and DF.ok(T), tostring(edge.color and edge.color[4]))
+	T.change("defensives.iconBorder", true)
+	T.advance(0.3)
+	check("gap bars: defensives: and on again paints them", edge.color[4] == 1 and DF.ok(T))
 
 end
 do
@@ -80150,6 +80290,14 @@ do
 	R.auraChanged()
 	R.advance(0.3)
 	check("defensives: one read in each 0.2 s, however many events", R.au.listCalls == reads + 2)
+	R.change("defensives.iconBorder", false)
+	R.auraChanged()
+	R.advance(0.3)
+	check("gap bars: defensives: Icon border off takes the border and the dark background off the icons of the reading path", icon.outline.shown == false and icon.outline.backdropOn == false)
+	R.change("defensives.iconBorder", true)
+	R.auraChanged()
+	R.advance(0.3)
+	check("gap bars: defensives: and on again", icon.outline.shown and icon.outline.backdropOn)
 	R.giveBuff(17, { name = "Power Word: Shield", remaining = 30, duration = 30, fromPlayer = true, source = "player" })
 	R.auraChanged()
 	R.advance(0.3)
@@ -82200,6 +82348,12 @@ do
 		local outline = R1.icons[1].outline
 		return outline.r == r and outline.g == g and outline.b == b
 	end)())
+	W.change("partycd.iconBorder", false)
+	W.advance(1)
+	check("gap bars: partycd: Icon border off hides the border and the background of the icons", R1.icons[1].outline.shown == false and R1.icons[1].outline.backdropOn == false and PC.ok(W), PC.why(W))
+	W.change("partycd.iconBorder", true)
+	W.advance(1)
+	check("gap bars: partycd: and on again", R1.icons[1].outline.shown and R1.icons[1].outline.backdropOn and PC.ok(W), PC.why(W))
 	check("partycd: the status line is the module's name and its state while all is well", has(W.status(), "Defensives on you: on\nParty cooldowns: on\nEnemy cooldowns: on\nWindows") and not has(W.status(), "off in a raid group") and not has(W.status(), "hides party"), W.status())
 	-- Use.
 	local t0 = W.now
@@ -83621,6 +83775,10 @@ do
 	local row = EC.row(W, rogue)
 	check("enemycd: Mobility on shows Sprint after the defensives", EC.keys(W, row) == "ROGUE:Kick,ROGUE:Cloak of Shadows,ROGUE:Evasion,ROGUE:Sprint", EC.keys(W, row))
 	check("enemycd: Seconds on the icon is on, and the border takes the colour of its kind", W.rawOf[row.icons[1].cooldown].cd.hideNumbers == false and row.icons[1].outline.r == 1 and row.icons[1].outline.g == 0.65)
+	W.change("enemycd.iconBorder", false)
+	check("gap bars: enemycd: Icon border off hides the border and the background of the icons at once", row.icons[1].outline.shown == false and row.icons[1].outline.backdropOn == false and EC.ok(W), EC.why(W))
+	W.change("enemycd.iconBorder", true)
+	check("gap bars: enemycd: and on again", row.icons[1].outline.shown and row.icons[1].outline.backdropOn and EC.ok(W), EC.why(W))
 	local enemyCd = W.rawOf[row.icons[1].cooldown].cd
 	W.change("enemycd.numbersFont", "Large")
 	local large = enemyCd.fsFont[1]
@@ -88987,7 +89145,7 @@ do
 			and rows["nameplatesHealth.dimAmount"].min == 10 and rows["nameplatesHealth.dimAmount"].max == 100 and rows["nameplatesHealth.dimAmount"].step == 10
 			and rows["nameplatesMarks.raidMarkerSize"].min == 8 and rows["nameplatesMarks.raidMarkerSize"].max == 48 and rows["nameplatesMarks.raidMarkerX"].min == -40
 			and rows["nameplatesMarks.raidMarkerY"].max == 40 and rows["nameplatesAuras.auraCrop"].min == 0 and rows["nameplatesAuras.auraCrop"].max == 15
-			and rows["nameplatesAuras.auraOpacity"].min == 10 and rows["nameplatesAuras.auraOpacity"].step == 10)
+			and rows["nameplatesAuras.auraOpacity"].min == 10 and rows["nameplatesAuras.auraOpacity"].step == 5)
 		check("ms-plates: the texture rows offer the Flat UI page's texture first, and Show auras two choices", W.ns.Choices(rows["nameplatesHealth.healthTexture"])[1][1] == "default"
 			and #W.ns.Choices(rows["nameplatesCast.castTexture"]) == 11 and #rows["nameplatesAuras.aurasWhen"].choices == 2 and rows["nameplatesAuras.aurasWhen"].choices[2][1] == "target")
 		check("ms-plates: the cast bar texture row reaches the same texture function as the Flat UI page", W.ns.BarTexture(W.ns.Get("nameplates.castTexture")) == W.ns.BarTexture()
@@ -107244,6 +107402,13 @@ do
 		setOpt(H, "hud.xpFrame", false)
 		check("xpown: look: Bar border off keeps the background and hides the edges", W.state(xp) == "hB" and W.state(rep) == "hB", W.state(xp))
 		setOpt(H, "hud.xpFrame", true)
+		setOpt(H, "hud.xpBack", false)
+		check("gap bars: xp: Bar background off keeps the edges and hides the background", W.state(xp) == "Sb" and W.state(rep) == "Sb", W.state(xp))
+		setOpt(H, "hud.xpFrame", false)
+		check("gap bars: xp: and with Bar border off too the bar has neither", W.state(xp) == "hb" and W.state(rep) == "hb", W.state(xp))
+		setOpt(H, "hud.xpBack", true)
+		setOpt(H, "hud.xpFrame", true)
+		check("gap bars: xp: both on again give the border and the background back", W.state(xp) == "SB" and W.state(rep) == "SB")
 		setOpt(H, "hud.xpTicks", "4")
 		local n, first = ticks(xp)
 		check("xpown: look: Dividers 4 draws three lines, the first a quarter of the way along", n == 3 and first.points[1][4] == 417.2 / 4 - 0.5 and first.points[1][3] == "TOPLEFT", tostring(n))
@@ -107825,6 +107990,75 @@ do
 		tostring(RU.c.disc) .. " " .. tostring(RU.c.texture and next(RU.c.texture.masks)) .. " " .. RU.c.look.state .. " " .. #C.addonMasks .. "/" .. RU.n .. " " .. table.concat(C.violations, "|") .. table.concat(C.errors, "|") .. table.concat(C.out, "|"))
 end
 -- >>> round class icons on unit frames (end)
+-- >>> gap bars (begin)
+-- Option gaps, bars and looks: the new rows start at today's behaviour, the wider ranges keep saved values, and a saved Faded opacity of 100 becomes 90 on load and on import.
+-- Every label starts "gap bars". The values are kept in one table: the main function of this file has a limit on the locals alive at once.
+do
+	local GB = {}
+	GB.world = function(options)
+		local W = newWorld({ saved = { options = options } })
+		W.login()
+		return W
+	end
+	GB.defaults = { ["resource.healthClass"] = false, ["ownbuffs.iconBorder"] = true, ["ownbuffs.barTexture"] = "default", ["trackers.barTexture"] = "default", ["trackers.iconBorder"] = true,
+		["defensives.iconBorder"] = true, ["partycd.iconBorder"] = true, ["enemycd.iconBorder"] = true, ["unitframes.barBorder"] = true, ["hud.xpBack"] = true, ["chat.barTexture"] = "default" }
+	GB.d = GB.world({})
+	GB.wrong = {}
+	for path, value in pairs(GB.defaults) do
+		if GB.d.ns.Get(path) ~= value then
+			GB.wrong[#GB.wrong + 1] = path
+		end
+	end
+	table.sort(GB.wrong)
+	check("gap bars: every new row starts at the value that gives today's look", #GB.wrong == 0, table.concat(GB.wrong, " "))
+	check("gap bars: the other rows start where they did", GB.d.ns.Get("barblock.fadeTo") == 30 and GB.d.ns.Get("castbars.targetWidth") == 150 and GB.d.ns.Get("castbars.focusHeight") == 10
+		and GB.d.ns.Get("nameplates.castHeight") == 100 and GB.d.ns.Get("nameplates.auraOpacity") == 100 and GB.d.ns.Get("hud.trackerCombat") == 100)
+	GB.range = function(ns, path)
+		for _, page in ipairs(ns.PAGES) do
+			for _, row in ipairs(page) do
+				if (row.page or page.owner or page.key) .. "." .. tostring(row.key) == path then
+					return row.min, row.max, row.step
+				end
+			end
+		end
+	end
+	GB.ranges = { ["barblock.fadeTo"] = { 0, 90, 5 }, ["fade.alpha"] = { 0, 90, 5 }, ["castbars.playerWidth"] = { 80, 400, 1 }, ["castbars.petWidth"] = { 80, 400, 1 },
+		["castbars.targetWidth"] = { 80, 400, 1 }, ["castbars.focusWidth"] = { 80, 400, 1 }, ["castbars.playerHeight"] = { 6, 40, 1 }, ["castbars.petHeight"] = { 6, 40, 1 },
+		["castbars.targetHeight"] = { 6, 40, 1 }, ["castbars.focusHeight"] = { 6, 40, 1 }, ["nameplates.castHeight"] = { 50, 200, 5 }, ["nameplates.auraOpacity"] = { 10, 100, 5 },
+		["hud.trackerCombat"] = { 0, 100, 5 } }
+	GB.bad = {}
+	for path, want in pairs(GB.ranges) do
+		local min, max, step = GB.range(GB.d.ns, path)
+		if min ~= want[1] or max ~= want[2] or step ~= want[3] then
+			GB.bad[#GB.bad + 1] = path .. " " .. tostring(min) .. "," .. tostring(max) .. "," .. tostring(step)
+		end
+	end
+	table.sort(GB.bad)
+	check("gap bars: Faded opacity stops at 90 in steps of 5, cast bars are 80 to 400 wide and 6 to 40 high, and the opacity and height steps are 5", #GB.bad == 0, table.concat(GB.bad, "; "))
+	-- Saved values.
+	GB.s = GB.world({ ["barblock.fadeTo"] = 100, ["fade.alpha"] = 90, ["castbars.targetWidth"] = 400, ["castbars.focusWidth"] = 80, ["castbars.playerWidth"] = 80, ["castbars.petWidth"] = 99,
+		["castbars.targetHeight"] = 40, ["castbars.focusHeight"] = 33, ["nameplates.castHeight"] = 55, ["nameplates.auraOpacity"] = 15, ["hud.trackerCombat"] = 5 })
+	GB.get = GB.s.ns.Get
+	check("gap bars: a saved Faded opacity of 100 loads as 90, and 90 stays", GB.get("barblock.fadeTo") == 90 and GB.get("fade.alpha") == 90, tostring(GB.get("barblock.fadeTo")))
+	check("gap bars: saved cast bar sizes in the new range load as saved", GB.get("castbars.targetWidth") == 400 and GB.get("castbars.focusWidth") == 80 and GB.get("castbars.playerWidth") == 80
+		and GB.get("castbars.petWidth") == 99 and GB.get("castbars.targetHeight") == 40 and GB.get("castbars.focusHeight") == 33)
+	check("gap bars: saved opacity and height values on the new steps of 5 load as saved", GB.get("nameplates.castHeight") == 55 and GB.get("nameplates.auraOpacity") == 15 and GB.get("hud.trackerCombat") == 5)
+	GB.o = GB.world({ ["barblock.fadeTo"] = 60, ["nameplates.castHeight"] = 60, ["nameplates.auraOpacity"] = 70, ["hud.trackerCombat"] = 40 })
+	check("gap bars: values saved on the old steps of 10 are unchanged", GB.o.ns.Get("barblock.fadeTo") == 60 and GB.o.ns.Get("nameplates.castHeight") == 60 and GB.o.ns.Get("nameplates.auraOpacity") == 70
+		and GB.o.ns.Get("hud.trackerCombat") == 40)
+	-- A profile exported by an older build.
+	GB.j = GB.world({})
+	GB.imported = GB.j.ns.ImportProfile(GB.j.ns.PackText("FlatUI1:", { "o|barblock.fadeTo|100", "o|castbars.targetWidth|390", "o|castbars.focusHeight|35", "o|trackers.iconBorder|0", "o|chat.barTexture|soft" }))
+	check("gap bars: an imported Faded opacity of 100 becomes 90, and the new rows import as saved", GB.imported and GB.j.ns.Get("barblock.fadeTo") == 90 and GB.j.ns.Get("castbars.targetWidth") == 390
+		and GB.j.ns.Get("castbars.focusHeight") == 35 and GB.j.ns.Get("trackers.iconBorder") == false and GB.j.ns.Get("chat.barTexture") == "soft", tostring(GB.j.ns.Get("barblock.fadeTo")))
+	GB.k = GB.world({})
+	GB.k.ns.ImportProfile(GB.k.ns.PackText("FlatUI1:", { "o|general.thickness|2" }))
+	check("gap bars: an imported profile without the new rows leaves them at their defaults", GB.k.ns.Get("trackers.iconBorder") == true and GB.k.ns.Get("unitframes.barBorder") == true
+		and GB.k.ns.Get("resource.healthClass") == false and GB.k.ns.Get("hud.xpBack") == true)
+	check("gap bars: no violation or error in any world", #GB.d.violations + #GB.d.errors + #GB.s.violations + #GB.s.errors + #GB.j.violations + #GB.j.errors == 0)
+end
+-- >>> gap bars (end)
+
 
 -- >>> auratime (begin)
 -- The time text of aura buttons: no space, white, and the size of the totem times. Every label starts "aura time:".

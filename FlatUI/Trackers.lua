@@ -1896,6 +1896,8 @@ local function Apply(record, entry, look)
 	else
 		texture:SetVertexColor(1, 1, 1)
 	end
+	local border = Opt("iconBorder") ~= false
+	ns.SetOutline(record.outline, border, border)
 	-- A bar or text has its own count and time left, and no countdown of the sweep.
 	record.count:SetText(shape == "icon" and look.count or "")
 	if look.countRed then

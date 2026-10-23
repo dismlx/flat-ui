@@ -190,6 +190,34 @@ local function Near(a, b)
 	return math.abs(a - b) < 0.002
 end
 
+local CLASS_NOTE = "Personal resource display: the game withholds your class here, so Class colour is not used."
+
+-- The colour the player chose for the health or power bar, or nil for the game's. Class colour on the health bar comes before Custom health colour
+-- and is left to the game's colour while the class is withheld.
+local function ChosenColour(option)
+	if not ns.Enabled("resource") then
+		return nil
+	end
+	if option == "health" then
+		local wanted, r, g, b = ns.Get("resource.healthClass"), nil, nil, nil
+		if wanted then
+			r, g, b = ns.ClassColour()
+		end
+		if wanted and not r then
+			ns.Note("resource", CLASS_NOTE)
+		else
+			ns.ClearNote("resource", CLASS_NOTE)
+		end
+		if r then
+			return r, g, b
+		end
+	end
+	if ns.Get("resource." .. option .. "Own") then
+		return ns.Colour("resource." .. option .. "Colour")
+	end
+	return nil
+end
+
 -- Keeps a custom colour on the health or power bar. The game sets the colour of these bars again
 -- now and then, so a colour that is not the custom one is the game's: it is kept, and put back
 -- when the custom colour is switched off. option is "health" or "power".
@@ -199,7 +227,8 @@ local function FollowColour(bar, option)
 		return
 	end
 	local own = colours[bar]
-	local wanted = ns.Enabled("resource") and ns.Get("resource." .. option .. "Own")
+	local cr, cg, cb = ChosenColour(option)
+	local wanted = cr ~= nil
 	if not wanted and not (own and own.sr) then
 		return
 	end
@@ -212,7 +241,6 @@ local function FollowColour(bar, option)
 		own.gr, own.gg, own.gb, own.ga = r, g, b, a
 	end
 	if wanted then
-		local cr, cg, cb = ns.Colour("resource." .. option .. "Colour")
 		if not (r and Near(r, cr) and Near(g, cg) and Near(b, cb)) then
 			bar:SetStatusBarColor(cr, cg, cb)
 		end
@@ -228,7 +256,7 @@ end
 -- Applies the custom colour of a bar, or puts the game's back. A bar whose custom colour is on
 -- is followed every frame.
 local function ApplyColour(bar, option)
-	local wanted = ns.Enabled("resource") and ns.Get("resource." .. option .. "Own")
+	local wanted = ChosenColour(option) ~= nil
 	followed[bar] = wanted and type(bar.SetStatusBarColor) == "function" and option or nil
 	if followed[bar] or colours[bar] then
 		FollowColour(bar, option)

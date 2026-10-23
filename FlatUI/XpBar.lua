@@ -557,7 +557,7 @@ function F.Look(bar, index, width, height, gap)
 		frame:SetStatusBarTexture(file)
 	end
 	-- The background stays under the fill with the border off.
-	ns.SetOutline(bar.outline, true, true)
+	ns.SetOutline(bar.outline, true, Opt("xpBack"))
 	ns.SetOutlineBare(bar.outline, not Opt("xpFrame"))
 	F.Ticks(bar, width, height)
 end

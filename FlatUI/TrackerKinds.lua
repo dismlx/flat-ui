@@ -524,7 +524,7 @@ local function Frames(record, entry)
 			local bar = CreateFrame("StatusBar", nil, present)
 			ns.Own[bar] = true
 			bar:SetAllPoints(present)
-			bar:SetStatusBarTexture(ns.BarTexture() or "Interface/Buttons/WHITE8X8")
+			bar:SetStatusBarTexture(ns.BarTexture(ns.Get("trackers.barTexture")) or "Interface/Buttons/WHITE8X8")
 			bar:SetMinMaxValues(0, 1)
 			bar:SetValue(0)
 			bar:SetStatusBarColor(BarColour(entry))

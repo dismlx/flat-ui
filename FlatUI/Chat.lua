@@ -1154,7 +1154,12 @@ local function PaintBar(bar)
 	local shown = on and not (X.bar.hidden == true)
 	ns.SetOutline(barOutline, shown, shown)
 	if on then
-		local flat, refused = ns.FlatFill(bar, 1, 1, 1, BAR_FILE, true)
+		local id = ns.Get(KEY .. ".barTexture")
+		local file = nil
+		if id ~= "default" then
+			file = ns.BarTexture(id) or false -- Flat has no file: false is a solid fill, nil the texture of the Flat UI page
+		end
+		local flat, refused = ns.FlatFill(bar, 1, 1, 1, BAR_FILE, true, file)
 		if flat == false then
 			ns.Note(KEY, refused and "Chat and tooltips: the game refused a flat fill on the tooltip health bar, which keeps its default fill."
 				or "Chat and tooltips: the default fill of the tooltip health bar could not be read and is still shown.")

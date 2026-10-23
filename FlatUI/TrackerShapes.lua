@@ -110,7 +110,8 @@ local function Build(record, shape, part)
 		ns.Own[bar] = true
 		part.bar = bar
 		bar:SetAllPoints(body)
-		local ok, done = pcall(bar.SetStatusBarTexture, bar, ns.BarTexture() or K.WHITE)
+		part.file = ns.BarTexture(ns.Get(KEY .. ".barTexture")) or K.WHITE
+		local ok, done = pcall(bar.SetStatusBarTexture, bar, part.file)
 		if not ok or (not IsSecret(done) and done == false) then
 			error("the bar texture was refused", 0)
 		end
@@ -293,6 +294,12 @@ function Shapes.Apply(record, entry, look)
 	part.count:SetText(count)
 	part.time:SetText(time)
 	if part.bar then
+		-- The texture row can change while the bar is up.
+		local file = ns.BarTexture(ns.Get(KEY .. ".barTexture")) or K.WHITE
+		if part.file ~= file then
+			part.file = file
+			pcall(part.bar.SetStatusBarTexture, part.bar, file)
+		end
 		part.bar:SetStatusBarColor(r, g, b, 1)
 		if look.fill ~= nil then
 			part.bar:SetValue(look.fill)

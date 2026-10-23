@@ -495,7 +495,11 @@ do
 				U.at(bar, "BOTTOMLEFT", tip.frame, "BOTTOMLEFT", pad, pad)
 				local health = mod and ns.Get("chat.health") == true
 				if health then
-					ns.FlatFill(bar, 1, 1, 1, BAR_FILE, true)
+					local id, file = ns.Get("chat.barTexture"), nil
+					if id ~= "default" then
+						file = ns.BarTexture(id) or false
+					end
+					ns.FlatFill(bar, 1, 1, 1, BAR_FILE, true, file)
 				else
 					ns.RestoreFill(bar)
 				end
@@ -520,7 +524,7 @@ do
 		p["chat.kindWord"], p["chat.kindBorder"], p["chat.unitBorder"] = mob.frame, mob.frame, mob.frame
 		p["chat.nameClass"] = player.title
 		p["chat.tipTitleSize"], p["chat.tipTextSize"] = item.title, item.lines[1]
-		p["chat.health"], p["chat.barHide"], p["chat.barHeight"] = mob.bar, mob.bar, mob.bar
+		p["chat.health"], p["chat.barHide"], p["chat.barHeight"], p["chat.barTexture"] = mob.bar, mob.bar, mob.bar, mob.bar
 		p["chat.ids"], p["chat.count"] = item.lines[4], item.lines[5]
 		return S
 	end

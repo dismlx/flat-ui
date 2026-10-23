@@ -287,7 +287,7 @@ end
 -- The parts of a button ---------------------------------------------------------------------------------------------------------------
 
 local function EdgeColour()
-	if ns.Borderless() then
+	if ns.Borderless() or not Opt("iconBorder") then
 		return 0, 0, 0, 0
 	end
 	local r, g, b = ns.Colour("general.border")
@@ -440,7 +440,8 @@ function B.Init(button)
 		bar:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -1)
 		bar:SetPoint("TOPRIGHT", button, "BOTTOMRIGHT", 0, -1)
 		bar:SetHeight(BAR_HEIGHT)
-		bar:SetStatusBarTexture(ns.BarTexture() or WHITE)
+		parts.file = ns.BarTexture(Opt("barTexture")) or WHITE
+		bar:SetStatusBarTexture(parts.file)
 		bar:SetStatusBarColor(BLUE[1], BLUE[2], BLUE[3], 1)
 		bar:SetMinMaxValues(0, 1)
 		bar:SetValue(0)
@@ -467,7 +468,12 @@ end
 -- Time left on every button: the string under the icon, the string on it, the thin bar or none.
 function B.ApplyTime()
 	local want = Opt("time")
+	local file = ns.BarTexture(Opt("barTexture")) or WHITE
 	for _, parts in ipairs(B.list) do
+		if parts.bar and parts.file ~= file then
+			parts.file = file
+			pcall(parts.bar.SetStatusBarTexture, parts.bar, file)
+		end
 		if parts.bar and parts.bound ~= want then
 			if not pcall(B.Bind, parts, want) then
 				B.refused.time = true
@@ -703,7 +709,7 @@ function B.Pass()
 	for index = 1, #found do
 		local item, icon = found[index], B.Icon(index)
 		if icon then
-			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { numbers = Opt("time") ~= "off" })
+			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { numbers = Opt("time") ~= "off", border = Opt("iconBorder") })
 			shown[#shown + 1] = icon
 		end
 	end
@@ -913,7 +919,7 @@ function ns.OwnBuffsTest()
 		end
 		B.sample[index] = icon
 		list[index] = icon
-		ns.IconSet(icon, ({ 135940, 135964, 136089 })[index], now, 2 * index + 2, { numbers = Opt("time") ~= "off" })
+		ns.IconSet(icon, ({ 135940, 135964, 136089 })[index], now, 2 * index + 2, { numbers = Opt("time") ~= "off", border = Opt("iconBorder") })
 	end
 	B.Row(list)
 	local test = { list = list }

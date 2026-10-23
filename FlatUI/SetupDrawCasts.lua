@@ -593,7 +593,7 @@ local function BuildResource(stage)
 	p["resource.flat"] = health.fill
 	p["resource.texture"] = health.fill
 	p["resource.healthOwn"] = health.fill
-	p["resource.healthColour"] = health.fill
+	p["resource.healthColour"], p["resource.healthClass"] = health.fill, health.fill
 	p["resource.healthByLeft"] = health.fill
 	p["resource.powerOwn"] = power.fill
 	p["resource.powerColour"] = power.fill
@@ -635,7 +635,14 @@ function resDrawing.draw(stage)
 	end
 	local hr, hg, hb = GREY[1], GREY[2], GREY[3]
 	local healthGrey = true
-	if enabled and G("resource.healthOwn") then
+	local classed = false
+	if enabled and G("resource.healthClass") then
+		local cr, cg, cb = ns.ClassColour()
+		if cr then
+			hr, hg, hb, healthGrey, classed = cr, cg, cb, false, true
+		end
+	end
+	if enabled and G("resource.healthOwn") and not classed then
 		hr, hg, hb = ns.Colour("resource.healthColour")
 		healthGrey = false
 	end
