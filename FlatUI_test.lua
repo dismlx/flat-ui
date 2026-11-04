@@ -9537,6 +9537,8 @@ local PAGES = {
 		S("general.pixelSize", "number", 1, "Pixels per unit", nil, { min = 1, max = 4, step = 1, unit = " px", needs = "general.pixelPerfect" }),
 		S("general.scaleBelow", "bool", false, "Scale below 65%", "The game can refuse presses of its own action buttons at these sizes. /reload after turning it off.", { needs = "general.scaleOn" }),
 		S("general.scaleSmall", "number", 60, "Small scale", "Used instead of Custom scale.", { min = 35, max = 64, step = 1, unit = "%", needs = "general.scaleBelow" }),
+		"World",
+		S("general.questSparkle", "bool", true, "Quest item sparkle", "Quest items in the world sparkle. Sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start."),
 	} },
 	{ key = "generalColours", label = "Colours", parent = "general", owner = "general", rows = {
 		"Cast colours",
@@ -10914,7 +10916,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.3" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.4" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -18067,6 +18069,92 @@ do
 	check("scale: a client without the scale events writes from the options and checks after the wait", near(M.scale(), 0.8) and #M.errors == 0 and #M.out == 0 and has(M.status(), "Custom UI scale: 80%."), M.status())
 end
 
+-- 14d. Quest item sparkle (Sparkle.lua): the game's outlineModeShowLootEffectWhenDisabled is written to 1 at login, out of combat, and again a
+-- second after a graphics preset or anything else writes the graphics quality or the variable itself. Turned off, the value the game had is
+-- put back. A client without the variable is left alone, and default worlds do not have it.
+do
+	local SPARK = "outlineModeShowLootEffectWhenDisabled"
+	local function writes(W)
+		local n = 0
+		for _, write in ipairs(W.cvarWrites) do
+			if write.name == SPARK then
+				n = n + 1
+			end
+		end
+		return n
+	end
+	local W = newWorld({ cvars = { [SPARK] = "0", graphicsQuality = "3" } })
+	check("sparkle: on by default", W.ns.Get("general.questSparkle") == true)
+	check("sparkle: nothing is written before login", W.cvars[SPARK] == "0" and writes(W) == 0)
+	W.login()
+	check("sparkle: login writes 1 once, keeps the game's value for the account and the status says so", W.cvars[SPARK] == "1" and writes(W) == 1
+		and W.env.FlatUIDB.sparkleGame == "0" and has(W.status(), "Quest item sparkle: on."), W.cvars[SPARK] .. " " .. writes(W) .. " " .. W.status())
+	W.advance(2)
+	check("sparkle: its own write is looked at a second later and not written again", writes(W) == 1 and W.cvars[SPARK] == "1", writes(W))
+	-- A graphics preset puts the variable back: the preset writes the variable and the quality.
+	W.setCVarByPlayer(SPARK, "0")
+	W.setCVarByPlayer("graphicsQuality", "1")
+	check("sparkle: a preset that puts it back is not written at once", W.cvars[SPARK] == "0" and writes(W) == 1)
+	W.advance(0.99)
+	check("sparkle: nor before a second has passed", W.cvars[SPARK] == "0" and writes(W) == 1)
+	W.advance(0.01)
+	check("sparkle: a second after the preset it is 1 again, written once", W.cvars[SPARK] == "1" and writes(W) == 2, writes(W))
+	W.advance(2)
+	check("sparkle: and not again", writes(W) == 2)
+	-- A raid preset alone is followed too.
+	W.setCVarByPlayer(SPARK, "0")
+	W.setCVarByPlayer("raidGraphicsQuality", "2")
+	W.advance(1)
+	check("sparkle: a raid graphics preset is followed the same way", W.cvars[SPARK] == "1" and writes(W) == 3, writes(W))
+	W.setCVarByPlayer("nameplateMaxDistance", "40")
+	W.advance(2)
+	check("sparkle: a change of another variable writes nothing", writes(W) == 3)
+	W.change("general.thickness", 2)
+	W.advance(2)
+	check("sparkle: another option writes nothing", writes(W) == 3)
+	-- Turned off: the game's own value comes back, and the account keeps nothing.
+	W.change("general.questSparkle", false)
+	check("sparkle off: the game's value is written back and the account keeps nothing", W.cvars[SPARK] == "0" and writes(W) == 4 and W.env.FlatUIDB.sparkleGame == nil, writes(W))
+	check("sparkle off: the status says when it applies", has(W.status(), "Quest item sparkle: off. The game's own value applies from its next start."), W.status())
+	W.setCVarByPlayer(SPARK, "1")
+	W.advance(2)
+	check("sparkle off: a value set by hand is left alone", W.cvars[SPARK] == "1" and writes(W) == 4)
+	W.change("general.questSparkle", true)
+	check("sparkle on again: the variable already holds 1, so nothing is written", writes(W) == 4 and has(W.status(), "Quest item sparkle: on.") and W.env.FlatUIDB.sparkleGame == nil, W.status())
+	W.change("general.questSparkle", false)
+	check("sparkle off again: nothing was written, so the value set by hand stays and the status has no line", W.cvars[SPARK] == "1" and writes(W) == 4
+		and not has(W.status(), "Quest item sparkle"), W.status())
+	W.change("general.thickness", 1)
+	clean(W, "sparkle")
+	-- A login in combat waits for combat to end.
+	local C = newWorld({ combat = true, cvars = { [SPARK] = "0" } })
+	C.login()
+	check("sparkle in combat: a login in combat writes nothing and the status says it waits", C.cvars[SPARK] == "0" and writes(C) == 0
+		and has(C.status(), "Quest item sparkle: on. Waiting for combat to end."), C.status())
+	C.combat = false
+	C.fire("PLAYER_REGEN_ENABLED")
+	check("sparkle in combat: written once after combat", C.cvars[SPARK] == "1" and writes(C) == 1 and has(C.status(), "Quest item sparkle: on.")
+		and not has(C.status(), "Quest item sparkle: on. Waiting"), C.status())
+	clean(C, "sparkle in combat")
+	-- A write the game does not keep is no error, and the status says so.
+	local R = newWorld({ cvars = { [SPARK] = "0" } })
+	R.cvarRefuse[SPARK] = true
+	R.login()
+	check("sparkle refused: the status says the game kept it off", R.cvars[SPARK] == "0" and has(R.status(), "Quest item sparkle: on, but the game kept it off."), R.status())
+	clean(R, "sparkle refused")
+	-- Off in the profile: a login writes nothing.
+	local O = newWorld({ cvars = { [SPARK] = "0" }, saved = { options = { ["general.questSparkle"] = false } } })
+	O.login()
+	check("sparkle off at login: nothing is written and the status has no line", O.cvars[SPARK] == "0" and writes(O) == 0 and not has(O.status(), "Quest item sparkle"), O.status())
+	clean(O, "sparkle off at login")
+	-- A client without the variable, or one that withholds it.
+	local N = newWorld()
+	N.login()
+	check("sparkle: a client without the variable is left alone and the status has no line", N.cvars[SPARK] == nil and writes(N) == 0
+		and not has(N.status(), "Quest item sparkle"), N.status())
+	clean(N, "sparkle without the variable")
+end
+
 -- 15. Thickness, and a change of screen size.
 do
 	local W = newWorld()
@@ -20830,6 +20918,8 @@ local missingProbe = {}
 covered["general.handsOff"] = true
 -- The Flat UI button in the game menu has its checks in the menubtn block.
 covered["general.menuButton"], covered["general.menuOpens"] = true, true
+-- Quest item sparkle has its checks in block 14d.
+covered["general.questSparkle"] = true
 -- Action buttons has its checks in the ownset block.
 covered["actionbars.own"] = true
 -- Long names of the target of target frame has its checks in the tot name fit block.

@@ -88,6 +88,9 @@ ns.PAGES = {
 			tip = "The game can refuse presses of its own action buttons at these sizes. /reload after turning it off." },
 		{ key = "scaleSmall", kind = "number", default = 60, min = 35, max = 64, step = 1, unit = "%", label = "Small scale", needs = "scaleBelow", changed = "ScaleChanged",
 			tip = "Used instead of Custom scale." },
+		{ section = "World" },
+		{ key = "questSparkle", kind = "bool", default = true, label = "Quest item sparkle", changed = "SparkleChanged",
+			tip = "Quest items in the world sparkle. Sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start." },
 		-- The look of the options window: held per account in FlatUIDB.panel beside the window position, outside every profile (PanelLook.lua has the functions).
 		{ section = "Options window" },
 		{ page = "panel", key = "accent", kind = "choice", default = "indigo", label = "Accent colour", live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",

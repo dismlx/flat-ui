@@ -1,3 +1,8 @@
+## 0.5.4
+
+- For WoW: Forever 1.60.1 build 70790, released 2026-11-04. The interface number stays 16001.
+- **Quest item sparkle** is new on the **Flat UI** page, under **World**, and on by default: quest items in the world sparkle. It sets the game's `outlineModeShowLootEffectWhenDisabled`, which Forever's options do not show, at login and again a second after a graphics preset puts it back. Nothing is written in combat. Turned off, the game's own value is back from the next game start. `/flatui status` says whether the game kept it.
+
 ## 0.5.3
 
 - **Options window**: **Nameplates**, **Unit frames**, **Cast bars**, **Action bars** and **Swing timers** have a preview above their settings. Point at a part to outline it and fill its row, click it to open the row, or point at a row to bracket its part. A click on a frame in the **Unit frames** preview picks it in **Per frame**. New **Previews** setting: **On**, **Collapsed** or **Off**.
