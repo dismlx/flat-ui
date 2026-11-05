@@ -48270,7 +48270,11 @@ local function ufWorld(opts)
 	P.status = put(main, "StatusTexture", region(main, "UI-HUD-UnitFrame-Player-PortraitOn-Status", "OVERLAY", 2, { hidden = true }))
 	W.rawOf[P.status].width, W.rawOf[P.status].height = 190.4, 66
 	W.rawOf[P.art[1]].width, W.rawOf[P.art[1]].height = 232, 100
-	P.pvp = put(main, "PvpBackgroundCircle", region(main, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", 3, { hidden = true }))
+	-- Since 1.60.1.70425 the PvP icon is the round plate itself and there is no PvpBackgroundCircle (Mainline/PlayerFrame.xml:97-101). opts.pvpPlate
+	-- builds the plate of the client before, with the icon on it.
+	if opts.pvpPlate then
+		P.pvp = put(main, "PvpBackgroundCircle", region(main, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", 3, { hidden = true }))
+	end
 	P.pvpIcon = put(main, "PvpBackgroundIcon", region(main, "UI-HUD-UnitFrame-SmallCircle-Alliance", "OVERLAY", 4, { hidden = true }))
 	P.timer = region(main, nil, "OVERLAY", 4, { kind = "FontString", hidden = true })
 	env.PlayerPVPTimerText = P.timer
@@ -48303,32 +48307,48 @@ local function ufWorld(opts)
 	P.powerWords = words(P.power, { "ManaBarText", "LeftText", "RightText" })
 	P.box, P.container, P.content, P.main, P.context, P.area = box, container, content, main, context, area
 	W.player = P
-	-- The art functions place the power bar from secure code, which the game may do in combat (Mainline/PlayerFrame.lua:621, 727). U.powerY: where they put it.
-	W.rawOf[P.power].combatOk = true
+	-- The art functions lay the bars out again from secure code, which the game may do in combat: both call Camelot's PlayerFrame_UpdateHealthBarVisuals
+	-- and PlayerFrame_UpdateManaBarVisuals (Mainline/PlayerFrame.lua:598-599, 670-671), which put the slot of the health bar, 124 by 15, at 87,-46, the
+	-- health bar, 20 tall, at the top left of the slot and 3 above it, and the power bar at 87,-61, for the player and the vehicle alike
+	-- (Camelot/PlayerFrame.lua:75-96). U.powerY: where they put the power bar.
+	for _, part in ipairs({ P.power, box, P.health }) do
+		W.rawOf[part].combatOk = true
+	end
+	local function barVisuals()
+		local braw, hraw = W.rawOf[box], W.rawOf[P.health]
+		braw.width, braw.height = 124, 15
+		braw.SetPoint(box, "TOPLEFT", P.main, "TOPLEFT", 87, -46)
+		hraw.height = 20
+		hraw.ClearAllPoints(P.health)
+		hraw.SetPoint(P.health, "TOPLEFT", box, "TOPLEFT", 0, 3)
+		W.rawOf[P.power].height, W.rawOf[P.power].width = 10, 124
+		W.rawOf[P.power].SetPoint(P.power, "TOPLEFT", P.main, "TOPLEFT", 87, U.powerY or -61)
+	end
 	env.PlayerFrame_ToPlayerArt = blizz("PlayerFrame_ToPlayerArt", function()
 		P.art[1]:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn")
 		P.art[1]:Show()
 		P.art[2]:Hide()
 		P.status:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn-Status", true)
-		W.rawOf[P.power].SetPoint(P.power, "TOPLEFT", P.main, "TOPLEFT", 85, U.powerY or -61)
+		barVisuals()
 	end)
 	env.PlayerFrame_ToVehicleArt = blizz("PlayerFrame_ToVehicleArt", function()
 		P.art[1]:Hide()
 		P.art[2]:Show()
-		W.rawOf[P.power].SetPoint(P.power, "TOPLEFT", P.main, "TOPLEFT", 91, U.powerY or -61)
+		barVisuals()
 		P.status:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn-Vehicle-Status", true)
 	end)
 	-- A role icon takes the place of the level number.
 	env.PlayerFrame_UpdateRolesAssigned = blizz("PlayerFrame_UpdateRolesAssigned", function()
 		P.levelText:SetShown(not U.roleIcon)
 	end)
+	-- Combat comes before resting, and the resting animation is off in combat (Mainline/PlayerFrame.lua:487-519).
 	env.PlayerFrame_UpdateStatus = blizz("PlayerFrame_UpdateStatus", function()
-		P.restLoop:SetShown(U.resting == true)
-		if U.resting then
-			P.status:SetVertexColor(1, 0.88, 0.25, 1)
-			P.status:Show()
-		elseif U.fighting then
+		P.restLoop:SetShown(U.resting == true and not U.fighting)
+		if U.fighting then
 			P.status:SetVertexColor(1, 0, 0, 1)
+			P.status:Show()
+		elseif U.resting then
+			P.status:SetVertexColor(1, 0.88, 0.25, 1)
 			P.status:Show()
 		else
 			P.status:Hide()
@@ -48336,9 +48356,9 @@ local function ufWorld(opts)
 	end)
 
 	-- The flag of a unit: U.pvp[unit] is "faction", "ffa" or nil. UpdateUnitPvPIndicator sets the art from the style table of Camelot
-	-- (Camelot/UnitFramePvPIndicatorStyle.lua:5-7) and shows or hides the icon and the plate (Shared/UnitFrameUtil.lua:179-223). When the identity of the
-	-- unit is withheld (U.secretUnit[unit]) the value given to SetShown is withheld, and so is the answer of IsShown after it. The player's timer text is
-	-- hidden for a unit that is not flagged for a faction (Camelot/PlayerFrame.lua:36-45).
+	-- (Camelot/UnitFramePvPIndicatorStyle.lua:4-12) and shows or hides the icon (Shared/UnitFrameUtil.lua:175-214), and the plate of the client before
+	-- 1.60.1.70425 when it is given one. When the identity of the unit is withheld (U.secretUnit[unit]) the value given to SetShown is withheld, and so
+	-- is the answer of IsShown after it. The player's timer text is hidden for a unit that is not flagged for a faction (Camelot/PlayerFrame.lua:43-48).
 	U.pvp, U.secretUnit, U.timerLeft = {}, {}, nil
 	env.UnitIsPVPFreeForAll = function(unit) return U.pvp[unit] == "ffa" end
 	local STYLE = { faction = "UI-HUD-UnitFrame-SmallCircle-Horde", ffa = "UI-HUD-UnitFrame-Player-PVP-FFAIcon" }
@@ -48350,12 +48370,15 @@ local function ufWorld(opts)
 		end
 		W.rawOf[elements.pvpIcon].fault.shown = hidden
 		elements.pvpIcon:SetShown(kind ~= nil)
-		W.rawOf[elements.pvpBackground].fault.shown = hidden
-		elements.pvpBackground:SetShown(kind ~= nil)
+		if elements.pvpBackground ~= nil then
+			W.rawOf[elements.pvpBackground].fault.shown = hidden
+			elements.pvpBackground:SetShown(kind ~= nil)
+		end
 	end) }
 	env.C_GameRules = { IsGameRuleActive = function() return U.rulesOff == true end }
 	env.Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 }, GameRule = { UnitFramePvPContextualDisabled = 1 } }
 	env.PlayerFrame_UpdatePvPStatus = blizz("PlayerFrame_UpdatePvPStatus", function()
+		-- Camelot's PlayerFrame_GetPvPIndicatorElements gives the icon alone (Camelot/PlayerFrame.lua:35-40), and the plate too on the client before.
 		env.UnitFrameUtil.UpdateUnitPvPIndicator({ pvpBackground = P.pvp, pvpIcon = P.pvpIcon }, "player")
 		if U.pvp.player ~= "faction" then
 			P.timer:Hide()
@@ -48392,7 +48415,10 @@ local function ufWorld(opts)
 		W.rawOf[T.nameText].font, W.rawOf[T.nameText].textColour = { "Fonts\\FRIZQT__.TTF", 10, "" }, { 1, 0.82, 0, 1 }
 		T.container, T.content, T.main = c, tc, m
 		local context = put(tc, "TargetFrameContentContextual", B(tc, {}, {}))
-		T.pvp = put(context, "PvpBackgroundCircle", region(context, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", -1, { hidden = true }))
+		-- The icon is the plate since 1.60.1.70425 (Mainline/TargetFrame.xml:260-264, Camelot/TargetFrame.lua:51-56); opts.pvpPlate builds the plate of before.
+		if opts.pvpPlate then
+			T.pvp = put(context, "PvpBackgroundCircle", region(context, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", -1, { hidden = true }))
+		end
 		T.pvpIcon = put(context, "PvpBackgroundIcon", region(context, "UI-HUD-UnitFrame-SmallCircle-Alliance", "OVERLAY", 0, { hidden = true }))
 		T.high = put(context, "HighLevelTexture", region(context, "UI-HUD-UnitFrame-Target-HighLevelTarget_Icon", "OVERLAY", 1, { hidden = true }))
 		unitFrame(frame, name == "FocusFrame" and "focus" or "target", T.portrait)
@@ -48451,7 +48477,8 @@ local function ufWorld(opts)
 		W.rawOf[frame].CheckClassification = blizz("CheckClassification", function()
 			local class = U.class[name]
 			T.art:SetAtlas(class == "rare" and "UI-HUD-UnitFrame-Target-Rare-PortraitOn" or "UI-HUD-UnitFrame-Target-PortraitOn")
-			T.healthFill:SetAtlas(class == "minus" and "UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Health" or "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health")
+			-- Camelot's UpdateHealthBarVisuals gives every unit the standard health fill (Camelot/TargetFrame.lua:76).
+			T.healthFill:SetAtlas("UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health")
 			T.flash:SetAtlas("UI-HUD-UnitFrame-Target-PortraitOn-InCombat")
 			local dragon = ({ elite = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold", boss = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold-Winged",
 				worldboss = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold-Winged", rare = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Silver-Winged",
@@ -48462,10 +48489,13 @@ local function ufWorld(opts)
 			else
 				T.boss:Hide()
 			end
-			-- The slot is 125 by 12 for a minus unit and the bar keeps its size (Mainline/TargetFrame.lua:396-417, 432-434).
-			W.rawOf[T.box].width, W.rawOf[T.box].height = class == "minus" and 125 or 126, class == "minus" and 12 or 20
-			W.rawOf[T.box].points = { { "BOTTOMRIGHT", T.container, "LEFT", class == "minus" and 148 or 149, class == "minus" and -1 or -10 } }
+			-- Camelot's UpdateHealthBarVisuals lays the slot and the bar out the same for every unit: the slot 126 by 15 with its bottom right at 147,-9
+			-- from the left of the frame, the bar 20 tall at its top left and 3 above it (Camelot/TargetFrame.lua:71-86). Before 1.60.1.70425 the
+			-- Mainline layout made the slot 125 by 12 for a minus unit. U.fullSlot: a client whose slot is as large as the bar.
+			W.rawOf[T.box].width, W.rawOf[T.box].height = 126, U.fullSlot and 20 or 15
+			W.rawOf[T.box].points = { { "BOTTOMRIGHT", T.container, "LEFT", 147, -9 } }
 			W.rawOf[T.health].width, W.rawOf[T.health].height = 126, 20
+			W.rawOf[T.health].points = { { "TOPLEFT", T.box, "TOPLEFT", 0, U.fullSlot and 0 or 3 } }
 			if class == "minus" then
 				T.power:Hide()
 			elseif not T.power:IsShown() then
@@ -48629,13 +48659,15 @@ local function ufWorld(opts)
 	for _, f in ipairs({ container, content, main, context, area }) do
 		fill(f, player)
 	end
-	pin(box, "TOPLEFT", main, "TOPLEFT", 85, -40)
-	dim(box, 124, 20)
+	-- Camelot lays the player's bars out in PlayerFrame_UpdateHealthBarVisuals and PlayerFrame_UpdateManaBarVisuals (Camelot/PlayerFrame.lua:75-96):
+	-- the health bar is 5 units taller than its slot and hangs 2 units over the power bar.
+	pin(box, "TOPLEFT", main, "TOPLEFT", 87, -46)
+	dim(box, 124, 15)
 	for _, bar in ipairs({ P.health, P.loss }) do
-		pin(bar, "TOPLEFT", box, "TOPLEFT")
+		pin(bar, "TOPLEFT", box, "TOPLEFT", 0, 3)
 		dim(bar, 124, 20)
 	end
-	pin(P.power, "TOPLEFT", main, "TOPLEFT", 85, -61)
+	pin(P.power, "TOPLEFT", main, "TOPLEFT", 87, -61)
 	dim(P.power, 124, 10)
 	pin(P.portrait, "TOPLEFT", container, "TOPLEFT", 24, -19)
 	dim(P.portrait, 60, 60)
@@ -48643,11 +48675,18 @@ local function ufWorld(opts)
 	dim(P.nameText, 96, 12)
 	pin(P.level, "BOTTOMLEFT", main, "BOTTOMLEFT", 13, 7)
 	dim(P.level, 30, 30)
-	pin(P.pvp, "TOP", main, "TOPLEFT", 20, -50)
-	dim(P.pvp, 26, 26)
-	pin(P.pvpIcon, "CENTER", P.pvp, "CENTER", 0, 0)
-	dim(P.pvpIcon, 20, 20)
-	pin(P.timer, "RIGHT", P.pvp, "LEFT", 2, 0)
+	-- The icon hangs from the top left of the frame and the timer from the icon (Mainline/PlayerFrame.xml:97-101, Camelot/PlayerFrame.lua:17-18). The
+	-- client before had the plate there, the icon on its centre and the timer on the plate.
+	if P.pvp then
+		pin(P.pvp, "TOP", main, "TOPLEFT", 20, -50)
+		dim(P.pvp, 26, 26)
+		pin(P.pvpIcon, "CENTER", P.pvp, "CENTER", 0, 0)
+		dim(P.pvpIcon, 20, 20)
+	else
+		pin(P.pvpIcon, "TOP", main, "TOPLEFT", 22, -65)
+		dim(P.pvpIcon, 26, 26)
+	end
+	pin(P.timer, "RIGHT", P.pvp or P.pvpIcon, "LEFT", 2, 0)
 	dim(P.timer, 30, 12)
 	for index, T in ipairs({ W.target, W.focus }) do
 		pin(T.frame, "BOTTOMLEFT", ui, "BOTTOMLEFT", index == 1 and 700 or 1100, 600)
@@ -48655,11 +48694,12 @@ local function ufWorld(opts)
 		for _, f in ipairs({ T.container, T.content, T.main, T.context }) do
 			fill(f, T.frame)
 		end
-		pin(T.box, "BOTTOMRIGHT", T.container, "LEFT", 149, -10)
-		dim(T.box, 126, 20)
-		pin(T.health, "TOPLEFT", T.box, "TOPLEFT")
+		-- Camelot/TargetFrame.lua:24-27 and 71-86: the slot 126 by 15, the bar 3 above its top, and the power bar 4 past its right and 1 under it.
+		pin(T.box, "BOTTOMRIGHT", T.container, "LEFT", 147, -9)
+		dim(T.box, 126, 15)
+		pin(T.health, "TOPLEFT", T.box, "TOPLEFT", 0, 3)
 		dim(T.health, 126, 20)
-		pin(T.power, "TOPRIGHT", T.box, "BOTTOMRIGHT", 8, -1)
+		pin(T.power, "TOPRIGHT", T.box, "BOTTOMRIGHT", 4, -1)
 		dim(T.power, 134, 10)
 		pin(T.strip, "TOPRIGHT", T.main, "TOPRIGHT", -75, -25)
 		dim(T.strip, 134, 18)
@@ -48669,31 +48709,44 @@ local function ufWorld(opts)
 		dim(T.portrait, 58, 58)
 		pin(T.level, "BOTTOMRIGHT", T.main, "BOTTOMRIGHT", -13, 7)
 		dim(T.level, 30, 30)
-		pin(T.pvp, "TOP", T.context, "TOPRIGHT", -23, -50)
-		dim(T.pvp, 26, 26)
-		pin(T.pvpIcon, "CENTER", T.pvp, "CENTER", 0, 0)
-		dim(T.pvpIcon, 20, 20)
+		if T.pvp then
+			pin(T.pvp, "TOP", T.context, "TOPRIGHT", -23, -50)
+			dim(T.pvp, 26, 26)
+			pin(T.pvpIcon, "CENTER", T.pvp, "CENTER", 0, 0)
+			dim(T.pvpIcon, 20, 20)
+		else
+			pin(T.pvpIcon, "TOP", T.context, "TOPRIGHT", -24, -65)
+			dim(T.pvpIcon, 26, 26)
+		end
 	end
 	-- The target of target and the pet frame are laid out alike: the picture of the portrait, the name above the bars, the power bar under the
-	-- health bar and four units wider to the left.
+	-- health bar and three units wider to the left. Their OnLoad moves the name 1 unit down, makes the health bar 11 tall with its bottom 5 under the
+	-- middle of the portrait or 4 under the middle of the frame, and hangs the power bar 1 under it, 77 or 78 wide (Camelot/PetFrame.lua:4-22,
+	-- Camelot/TargetFrame.lua:92-108).
 	for index, S in ipairs({ W.tot, W.focusTot, Pet }) do
 		pin(S.frame, "BOTTOMLEFT", ui, "BOTTOMLEFT", 300 + 200 * index, 300)
 		dim(S.frame, 120, 49)
 		pin(S.portrait, "TOPLEFT", S.frame, "TOPLEFT", 5, -5)
 		dim(S.portrait, 37, 37)
-		pin(S.nameText, "TOPLEFT", S.portrait, "TOPRIGHT", 2, 0)
+		pin(S.nameText, "TOPLEFT", S.portrait, "TOPRIGHT", 2, -1)
 		dim(S.nameText, 68, 10)
 		if S == Pet then
-			pin(S.health, "BOTTOMLEFT", S.portrait, "RIGHT", 2, -3.5)
+			pin(S.health, "BOTTOMLEFT", S.portrait, "RIGHT", 3, -5)
 		else
-			pin(S.health, "BOTTOMRIGHT", S.frame, "RIGHT", -6, -2.5)
+			pin(S.health, "BOTTOMRIGHT", S.frame, "RIGHT", -5, -4)
 		end
-		dim(S.health, 70, 10)
-		pin(S.power, "TOPLEFT", S.health, "BOTTOMLEFT", -4, -1)
-		dim(S.power, 74, 7)
+		dim(S.health, 70, 11)
+		pin(S.power, "TOPLEFT", S.health, "BOTTOMLEFT", -3, -1)
+		dim(S.power, S == Pet and 77 or 78, 7)
 	end
 	U.region, U.pin, U.dim = region, pin, dim
-	for _, plate in ipairs({ P.pvp, P.pvpIcon, W.target.pvp, W.target.pvpIcon, W.focus.pvp, W.focus.pvpIcon }) do
+	-- The template of the icon has a scale of 0.8 (Camelot/PlayerFrameTemplates.xml:10, Camelot/TargetFrameTemplates.xml:11), and so had the plate.
+	local scaled = {}
+	for _, F in ipairs({ P, W.target, W.focus }) do
+		scaled[#scaled + 1] = F.pvpIcon
+		scaled[#scaled + 1] = F.pvp
+	end
+	for _, plate in ipairs(scaled) do
 		local raw = W.rawOf[plate]
 		local inherited = raw.GetEffectiveScale
 		raw.GetEffectiveScale = function() return 0.8 * inherited() end
@@ -48932,6 +48985,17 @@ do
 	W.uf.fighting = false
 	W.blizzard(W.env.PlayerFrame_UpdateStatus)
 	check("unit frames: resting colours the player picture border yellow, combat red, and neither plain", resting == YELLOW and fighting == RED and edgeColour(pp.edges) == PLAIN, resting .. " " .. fighting)
+	-- A resting player who enters combat: the game checks combat first and stops the resting animation (Mainline/PlayerFrame.lua:487-519).
+	W.uf.resting = true
+	W.blizzard(W.env.PlayerFrame_UpdateStatus)
+	local restLoop = W.rawOf[P.restLoop].shown
+	W.uf.fighting = true
+	W.blizzard(W.env.PlayerFrame_UpdateStatus)
+	local both, loopInCombat = edgeColour(pp.edges), W.rawOf[P.restLoop].shown
+	W.uf.resting, W.uf.fighting = false, false
+	W.blizzard(W.env.PlayerFrame_UpdateStatus)
+	check("unit frames: a resting player who enters combat has the border red, not yellow, with the game's resting animation off, and plain again after both",
+		restLoop and both == RED and not loopInCombat and edgeColour(pp.edges) == PLAIN and silent(W), both .. " " .. tostring(restLoop) .. tostring(loopInCombat) .. why(W))
 	local function bare(region) return W.rawOf[region].atlas == nil and W.rawOf[region].file == nil and W.rawOf[region].color == nil end
 	local clear = bare(P.status)
 	W.blizzard(W.env.PlayerFrame_ToVehicleArt)
@@ -49084,9 +49148,10 @@ do
 		colourOf(S, S.target.box) == "1.00,0.30,0.10" and colourOf(S, S.focus.box) == PLAIN and alphaOf(S, S.target.boss) == "0" and silent(S), why(S))
 	check("unit frames: a fill whose atlas is withheld stays the game's, with a note, and its frame is still styled", S.rawOf[S.player.healthFill].atlas == "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health"
 		and has(S.status(), "Unit frames: the default fill of a bar could not be read and is still shown.") and S.state(S.player.health) == "SB" and alphaOf(S, S.player.art[1]) == "0" and fillOf(S, S.target.healthFill) == GREEN)
+	-- The health fill of a target has the addon's mask that cuts it to its slot since 1.60.1.70425, and nothing else.
 	local R = ufWorld({ prep = function(W) W.rawOf[W.target.power].refuseFill = true end })
 	check("unit frames: a flat fill the game refuses stays the game's, with a note, and nothing else changes", has(R.status(), "Unit frames: the game refused a flat fill on a bar, which keeps its default fill.")
-		and R.rawOf[R.target.powerFill].atlas ~= nil and fillOf(R, R.target.healthFill) == GREEN and R.state(visible(R, R.target.power)) == "SB" and masks(R, R.target.powerFill) == 2 and masks(R, R.target.healthFill) == 0 and silent(R), why(R))
+		and R.rawOf[R.target.powerFill].atlas ~= nil and fillOf(R, R.target.healthFill) == GREEN and R.state(visible(R, R.target.power)) == "SB" and masks(R, R.target.powerFill) == 2 and masks(R, R.target.healthFill) == 1 and silent(R), why(R))
 	local parents = {}
 	local X = ufWorld({ prep = function(W)
 		W.refuse = setmetatable({}, { __index = function(_, k) return parents[rawget(k, "parent")] end })
@@ -49347,7 +49412,9 @@ do
 			return { pl = pl, pb = pb, pw = pw, ph = ph, rl = rl, rb = rb, rw = rw, rh = rh, sl = sl, sb = sb, sw = sw, sh = sh, wl = wl, wb = wb, ww = ww, wh = wh }
 		end
 		local P, T, F = W.player, W.target, W.focus
-		G.p, G.t, G.f = G.of(W, P.frame, P.portrait, P.box, P.power), G.of(W, T.frame, T.portrait, T.box, T.power), G.of(W, F.frame, F.portrait, F.box, F.power)
+		-- The player's health bar is outlined itself: since 1.60.1.70425 it is 20 units tall from 3 above the top of its 15 unit slot
+		-- (Camelot/PlayerFrame.lua:79-84), so the bar and not the slot is what the row and the picture line up with. A target's slot is outlined.
+		G.p, G.t, G.f = G.of(W, P.frame, P.portrait, P.health, P.power), G.of(W, T.frame, T.portrait, T.box, T.power), G.of(W, F.frame, F.portrait, F.box, F.power)
 		for _, entry in ipairs({ { "player", G.p }, { "target", G.t }, { "focus", G.f } }) do
 			local g = entry[2]
 			check("name row: on the " .. entry[1] .. " frame it has the width of the border of the health bar, sits on its top border and is 17 units high",
@@ -49386,7 +49453,7 @@ do
 		W.change("unitframes.smallRow", true)
 		-- With the name row off the picture starts at the top of the border of the health bar. A thicker border and a new scale lay it out again.
 		W.change("unitframes.strip", false)
-		G.plain, G.slot = { H.rect(W, pic(W, P.portrait).frame) }, { H.rect(W, P.box) }
+		G.plain, G.slot = { H.rect(W, pic(W, P.portrait).frame) }, { H.rect(W, P.health) }
 		check("pictures: with the name row off the top of the picture's border is the top of the border of the health bar",
 			near(G.plain[2] + G.plain[4] + t, G.slot[2] + G.slot[4] + t, 1e-6) and near(G.plain[3], G.plain[4], 1e-6), table.concat(G.plain, " "))
 		W.change("unitframes.strip", true)
@@ -49416,9 +49483,9 @@ do
 		check("name row: it has no border and no outline edges, and no frame of the addon's is left that follows a level number", #W.edgesOn(R.frame) == 0
 			and #W.edgesOn(TR.frame) == 0 and W.state(R.frame) == "." and H.follower(W.env.PlayerLevelText) == nil and H.follower(T.levelText) == nil)
 		check("name row: the game's name text, level text and level plate on the player are transparent, and so are the name text and the strip on a target, and the PvP plate is not",
-			alphaOf(W, P.nameText) == "0" and alphaOf(W, P.levelText) == "0" and alphaOf(W, P.level) == "0" and alphaOf(W, P.pvp) == "1" and alphaOf(W, T.nameText) == "0"
-			and alphaOf(W, T.strip) == "0" and alphaOf(W, T.levelText) == "0" and alphaOf(W, T.level) == "0" and alphaOf(W, T.pvp) == "1" and alphaOf(W, F.strip) == "0",
-			table.concat({ alphaOf(W, P.nameText), alphaOf(W, P.levelText), alphaOf(W, P.level), alphaOf(W, P.pvp), alphaOf(W, T.nameText), alphaOf(W, T.strip), alphaOf(W, T.levelText), alphaOf(W, T.level), alphaOf(W, T.pvp), alphaOf(W, F.strip) }, ","))
+			alphaOf(W, P.nameText) == "0" and alphaOf(W, P.levelText) == "0" and alphaOf(W, P.level) == "0" and alphaOf(W, P.pvpIcon) == "1" and alphaOf(W, T.nameText) == "0"
+			and alphaOf(W, T.strip) == "0" and alphaOf(W, T.levelText) == "0" and alphaOf(W, T.level) == "0" and alphaOf(W, T.pvpIcon) == "1" and alphaOf(W, F.strip) == "0",
+			table.concat({ alphaOf(W, P.nameText), alphaOf(W, P.levelText), alphaOf(W, P.level), alphaOf(W, P.pvpIcon), alphaOf(W, T.nameText), alphaOf(W, T.strip), alphaOf(W, T.levelText), alphaOf(W, T.level), alphaOf(W, T.pvpIcon), alphaOf(W, F.strip) }, ","))
 		-- The gradient is the class colour at seven tenths, 95 percent at the bottom and 5 percent of that at the top.
 		local top = 0.95 * (100 - 95) / 100
 		check("name row: the player's default colour is one gradient, vertical, the class colour at 70 percent, 95 percent opaque at the bottom and a twentieth of that at the top, with nothing behind it",
@@ -49505,12 +49572,12 @@ do
 		-- With the level hidden the game's plates and numbers stay transparent, and the row has no level.
 		W.change("unitframes.levelPosition", "Hidden")
 		check("name row: with the level hidden the game's plates and level numbers stay transparent and the row has no level, the PvP plate is as it was, and the name stays in the row", alphaOf(W, P.level) == "0"
-			and alphaOf(W, P.pvp) == "1" and alphaOf(W, P.levelText) == "0" and alphaOf(W, T.level) == "0" and not R.level.shown and not TR.level.shown and alphaOf(W, P.nameText) == "0")
+			and alphaOf(W, P.pvpIcon) == "1" and alphaOf(W, P.levelText) == "0" and alphaOf(W, T.level) == "0" and not R.level.shown and not TR.level.shown and alphaOf(W, P.nameText) == "0")
 		W.change("unitframes.levelPosition", "End of the name row")
 
 		-- Every switch gives the game's art back exactly, and the row hides.
 		W.change("unitframes.strip", false)
-		N.plain = alphaOf(W, P.nameText) == "1" and alphaOf(W, P.levelText) == "1" and alphaOf(W, P.level) == "1" and alphaOf(W, P.pvp) == "1" and alphaOf(W, T.nameText) == "1"
+		N.plain = alphaOf(W, P.nameText) == "1" and alphaOf(W, P.levelText) == "1" and alphaOf(W, P.level) == "1" and alphaOf(W, P.pvpIcon) == "1" and alphaOf(W, T.nameText) == "1"
 			and alphaOf(W, T.strip) == "1" and alphaOf(W, T.level) == "1" and alphaOf(W, T.levelText) == "1" and alphaOf(W, T.high) == "1" and not R.name.shown and not R.grad.shown and not R.level.shown
 		W.change("unitframes.strip", true)
 		N.left = {}
@@ -49578,18 +49645,25 @@ do
 		check("name band: a client that does not say the rectangles leaves the base under the player's row, and raises nothing", R4.base.shown and silent(W4), why(W4))
 	end
 
-	-- The bars of the target: the fill has crisp ends, and the game's mask is not on it. A minus mob's slot is smaller, and the fill is cut to it.
+	-- The bars of the target: the fill has crisp ends, and the game's mask is not on it. Since 1.60.1.70425 the slot of every target is 15 units tall and
+	-- the bar 20 (Camelot/TargetFrame.lua:71-86), so the fill is cut to the slot for every unit; before, only a minus mob's slot was smaller. A client
+	-- whose slot is as large as the bar is checked too.
 	do
 		local N, T = {}, W.target
 		N.fill = W.rawOf[T.healthFill]
-		check("target fill: the health fill of a target has no mask of the game's and none of the addon's, so its ends are square", #N.fill.maskList == 0)
+		N.cut = function() return #N.fill.maskList == 1 and N.fill.maskList[1].addon == true and N.fill.maskList[1].allPoints == T.box and N.fill.maskList[1].slice ~= nil end
+		check("target fill: the slot of a target is smaller than the bar, so the health fill has the addon's own mask cut to the slot and none of the game's", N.cut())
 		W.uf.class.TargetFrame = "minus"
 		W.blizzard(function() T.frame:CheckClassification() end)
-		check("target fill: for a minus mob the slot is smaller than the bar, and the fill has the addon's own mask cut to the slot, and the game's is still off", #N.fill.maskList == 1
-			and N.fill.maskList[1].addon == true and N.fill.maskList[1].allPoints == T.box and N.fill.maskList[1].slice ~= nil)
+		check("target fill: and so for a minus mob, whose slot the game no longer makes smaller", N.cut() and W.rawOf[T.box].height == 15)
 		W.uf.class.TargetFrame = "normal"
 		W.blizzard(function() T.frame:CheckClassification() end)
-		check("target fill: and when the slot is as large as the bar again the mask is off", #N.fill.maskList == 0 and silent(W), why(W))
+		W.uf.fullSlot = true
+		W.blizzard(function() T.frame:CheckClassification() end)
+		check("target fill: and when the slot is as large as the bar the mask is off, and its ends are square", #N.fill.maskList == 0 and silent(W), why(W))
+		W.uf.fullSlot = nil
+		W.blizzard(function() T.frame:CheckClassification() end)
+		check("target fill: and the mask is on again when the game makes the slot smaller", N.cut())
 	end
 
 	-- A client without CreateColor or SetGradient draws the row flat, and a player whose class the client withholds has the dark row without a mark.
@@ -49752,8 +49826,9 @@ do
 		W.change("unitframes.corners", "Square")
 		W.blizzard(function() P.status:SetVertexColor(1, 1, 1, 1) T.flash:SetVertexColor(1, 1, 1, 1) end)
 		N.clean = #N.back.maskList == 0 and W.look(P.health).top.alpha == 1 and #W.rawOf[P.healthFill].maskList == 0 and #W.rawOf[P.powerFill].maskList == 0 and #N.pp.texture.maskList == 0
-			and not N.line.shown and R.grad.slice == nil and R.grad.shown and #W.rawOf[T.healthFill].maskList == 0
-		check("corners: square again puts everything back: the straight edges, the square backgrounds, the fills with no mask, the picture, and the row with no margins", N.clean)
+			and not N.line.shown and R.grad.slice == nil and R.grad.shown and #W.rawOf[T.healthFill].maskList == 1 and W.rawOf[T.healthFill].maskList[1].addon == true and W.rawOf[T.healthFill].maskList[1].allPoints == T.box
+		-- The target's health fill keeps the square mask that cuts it to its smaller slot, which every target has since 1.60.1.70425.
+		check("corners: square again puts everything back: the straight edges, the square backgrounds, the fills with no mask but the square cut of the target's to its slot, the picture, and the row with no margins", N.clean)
 		-- A client that lacks or refuses the slice calls keeps square corners and says so.
 		N.fallback = {}
 		for index, case in ipairs({ { without = { SetTextureSliceMode = true } }, { without = { SetTextureSliceMargins = true } }, { refuse = true } }) do
@@ -50037,7 +50112,7 @@ do
 		N.W.blizzard(N.W.env.PlayerFrame_UpdateLevel)
 		check("name row: after the player gains a level the game's level text is transparent again and the row shows the new level, with the PvP plate left as it was",
 			alphaOf(N.W, N.W.player.levelText) == "0" and N.rows1.player.level.text == "8" and N.rows1.player.level.shown and N.rows1.player.level.alpha == 1
-			and alphaOf(N.W, N.W.player.pvp) == "1" and silent(N.W), alphaOf(N.W, N.W.player.levelText) .. " " .. tostring(N.rows1.player.level.text) .. why(N.W))
+			and alphaOf(N.W, N.W.player.pvpIcon) == "1" and silent(N.W), alphaOf(N.W, N.W.player.levelText) .. " " .. tostring(N.rows1.player.level.text) .. why(N.W))
 		N.W.uf.levels.player = 60
 		N.W.blizzard(N.W.env.PlayerFrame_UpdateLevel)
 
@@ -50192,8 +50267,10 @@ do
 		N.t = H.t
 		-- The player's picture is as tall as its two bars, so it is as much taller as the gap between them is above the game's 1 unit.
 		function N.extra(world) return math.max(1, world.ns.Pixels(world.player.power, 2)) - 1 end
+		-- The fixed numbers since 1.60.1.70425: the player 31 and the row, a target 26 and the row (Camelot/TargetFrame.lua:24-27, 71-86), the target
+		-- of target and the pet 30.5 from the top of the name (Camelot/TargetFrame.lua:92-108, Camelot/PetFrame.lua:4-22), less one border.
 		function N.fixed(t)
-			return { "48x48", "48x48", "48x48", g(30 - t) .. "x" .. g(30 - t), g(30 - t) .. "x" .. g(30 - t), g(30 - t) .. "x" .. g(30 - t), g(31 - t) .. "x" .. g(31 - t) }
+			return { "48x48", "43x43", "43x43", g(30.5 - t) .. "x" .. g(30.5 - t), g(30.5 - t) .. "x" .. g(30.5 - t), g(30.5 - t) .. "x" .. g(30.5 - t), g(31 - t) .. "x" .. g(31 - t) }
 		end
 		-- A frame's own height cannot be read until it has a width, and no tick has run.
 		N.Z = ufWorld({ saved = { options = { ["unitframes.smallRow"] = false } }, noFlush = true, prep = function(Y) Y.uf.zeroNoRect = true end })
@@ -50223,9 +50300,9 @@ do
 		for index, portrait in ipairs(N.portraits(N.Q)) do
 			N.same = N.same and pic(N.Q, portrait).frame.calls.SetPoint == N.points[index]
 		end
-		check("pending rectangles: with no rectangle yet the pictures are 48, 48, 48 and 30 less one border, the fixed numbers, at once", N.before == table.concat(N.fixed(N.t), " ") and N.nowhere, N.before)
-		check("pending rectangles: after a tick the player's picture takes the measured size, 50, and the pet's 32 less one border, with no SetPoint in between",
-			N.after[1] == g(50 + N.extra(N.Q)) .. "x" .. g(50 + N.extra(N.Q)) and N.after[6] == g(32 - N.t) .. "x" .. g(32 - N.t) and N.after[2] == "48x48" and N.same and N.square(N.Q), table.concat(N.after, " "))
+		check("pending rectangles: with no rectangle yet the pictures are 48, 43, 43 and 30.5 less one border, the fixed numbers, at once", N.before == table.concat(N.fixed(N.t), " ") and N.nowhere, N.before)
+		check("pending rectangles: after a tick the player's picture takes the measured size, 50, and the pet's 32.5 less one border, with no SetPoint in between",
+			N.after[1] == g(50 + N.extra(N.Q)) .. "x" .. g(50 + N.extra(N.Q)) and N.after[6] == g(32.5 - N.t) .. "x" .. g(32.5 - N.t) and N.after[2] == "43x43" and N.same and N.square(N.Q), table.concat(N.after, " "))
 		check("pending rectangles: and the status no longer says the sizes are from fixed numbers", not has(N.Q.status(), "sized from the default layout") and has(N.Q.status(), "Player portrait: shown, " .. g(math.floor(50 + N.extra(N.Q) + 0.5)) .. " x " .. g(math.floor(50 + N.extra(N.Q) + 0.5))), N.Q.status())
 
 		-- Every rectangle read answers nothing, or something the client withholds.
@@ -50237,7 +50314,7 @@ do
 				local p = pic(Y, portrait)
 				sizes[#sizes + 1] = p and p.shown and (g(p.frame.width) .. "x" .. g(p.frame.height)) or "hidden"
 			end
-			check("no rectangle at all: when every rectangle read gives " .. fault .. " the pictures have the fixed sizes and are shown, and the status says so", table.concat(sizes, " ") == "48x48 48x48 " .. g(30 - N.t) .. "x" .. g(30 - N.t)
+			check("no rectangle at all: when every rectangle read gives " .. fault .. " the pictures have the fixed sizes and are shown, and the status says so", table.concat(sizes, " ") == "48x48 43x43 " .. g(30.5 - N.t) .. "x" .. g(30.5 - N.t)
 				and has(Y.status(), "Player portrait: shown, 48 x 48, square corners, frame level") and has(Y.status(), ", sized from the default layout") and silent(Y), table.concat(sizes, " ") .. why(Y))
 		end
 
@@ -50352,7 +50429,8 @@ do
 		check("name size: and the sizes are back when it is on again, with nothing the client refuses", N.sizes() == "7 8.4 8.4 8.4 10 10" and silent(N.W), N.sizes() .. why(N.W))
 	end
 
-	-- /flatui status: where the name comes from, the picture and its size, the size of the pet's name and the scale of the pet frame.
+	-- /flatui status: where the name comes from, the picture and its size, the size of the pet's name and the scale of the pet frame. A target's picture is
+	-- 26 units and the row since 1.60.1.70425 (Camelot/TargetFrame.lua:24-27, 71-86), and the pet's 30.5 less one border.
 	do
 		local N = {}
 		N.W = ufWorld({ saved = { options = { ["unitframes.smallRow"] = false } } })
@@ -50360,7 +50438,7 @@ do
 		check("status: the player, target and pet frames report their names, portraits and the pet frame's scale", has(N.status, "Player name: shown, the unit's name") and has(N.status, "Target name: shown, the unit's name")
 			and has(N.status, "Pet name: size 7, Small frame text size 70%") and has(N.status, "Player portrait: shown, " .. g(math.floor(47 + math.max(1, N.W.ns.Pixels(N.W.player.power, 2)) + 0.5)) .. " x ")
 			and has(N.status, ", square corners, frame level ")
-			and has(N.status, "Target portrait: shown, 48 x 48, square corners, frame level ") and has(N.status, "Pet portrait: shown, " .. g(math.floor(30 - H.t + 0.5)) .. " x ")
+			and has(N.status, "Target portrait: shown, 43 x 43, square corners, frame level ") and has(N.status, "Pet portrait: shown, " .. g(math.floor(30.5 - H.t + 0.5)) .. " x ")
 			and has(N.status, "Pet frame: 100% of the player frame's scale"), N.status)
 		N.W.change("unitframes.corners", "Soft")
 		check("status: rounded corners are a rounded border and the picture stays square", has(N.W.status(), "Player portrait: shown, " .. g(math.floor(47 + math.max(1, N.W.ns.Pixels(N.W.player.power, 2)) + 0.5)) .. " x " .. g(math.floor(47 + math.max(1, N.W.ns.Pixels(N.W.player.power, 2)) + 0.5)) .. ", rounded border, frame level "), N.W.status())
@@ -50383,8 +50461,10 @@ do
 			and has(N.hs, "Pet frame: 100% of the player frame's scale") and has(N.hs, "Player name: shown") and has(N.hs, "Player portrait: shown"), N.hs)
 	end
 
-	-- The PvP flag: the game's round plate and icon on a corner of the picture, a word in the name row, both, or neither. The game goes on showing, hiding and
-	-- skinning the plate and the icon, and the module anchors the plate once, out of combat.
+	-- The PvP flag: the game's icon on a corner of the picture, a word in the name row, both, or neither. The game goes on showing, hiding and skinning
+	-- the icon, and the module anchors it once, out of combat. Since 1.60.1.70425 the icon is the round plate itself and there is no plate under it
+	-- (Mainline/PlayerFrame.xml:97-101, TargetFrame.xml:260-264), so the plate of these checks is the icon; the plate of the client before is checked
+	-- after them, in a world with opts.pvpPlate.
 	do
 		local N = {}
 		-- Who is flagged, drawn by the game: kind is "faction", "ffa" or nil.
@@ -50396,12 +50476,12 @@ do
 				world.blizzard(function() world[unit].frame:CheckFaction() end)
 			end
 		end
-		-- The plate, icon, timer, picture and row of the player, target and focus frames.
+		-- The plate (what moves: the icon, or the plate of the older client), icon, timer, picture and row of the player, target and focus frames.
 		function N.units(world)
 			local out = {}
 			for _, unit in ipairs({ "player", "target", "focus" }) do
 				local F = world[unit]
-				out[unit] = { plate = F.pvp, icon = F.pvpIcon, timer = F.timer, picture = pic(world, F.portrait).frame, row = H.rowOf(world, F.frame) }
+				out[unit] = { plate = F.pvp or F.pvpIcon, icon = F.pvpIcon, timer = F.timer, picture = pic(world, F.portrait).frame, row = H.rowOf(world, F.frame) }
 			end
 			return out
 		end
@@ -50433,7 +50513,7 @@ do
 		end
 
 		-- The defaults are Both, the bottom left corner and the time on; the flag is the icon on the picture and the word in the row.
-		N.W = ufWorld({ prep = function(Y) N.home = N.at(Y, Y.player.pvp) end })
+		N.W = ufWorld({ prep = function(Y) N.home = N.at(Y, Y.player.pvpIcon) end })
 		N.u = N.units(N.W)
 		check("pvp flag: the defaults are Both, the bottom left corner and the time on", N.W.ns.Get("unitframes.pvpFlag") == "both" and N.W.ns.Get("unitframes.pvpCorner") == "bl"
 			and N.W.ns.Get("unitframes.pvpTimer") == true)
@@ -50532,7 +50612,8 @@ do
 		check("pvp flag: with Off the party icon stays transparent when the game shows or changes it", N.alpha(N.W, N.M.pvpIcon) == "0" and N.W.rawOf[N.M.pvpIcon].shown
 			and N.W.rawOf[N.M.pvpIcon].atlas == "ui-hud-unitframe-player-pvp-ffaicon")
 		FH.pvp(N.W, "unitframes.pvpFlag", "both")
-		check("pvp flag: and the party icon is the game's again with any other choice", N.alpha(N.W, N.M.pvpIcon) == "1" and N.alpha(N.W, N.u.player.plate) == "1")
+		check("pvp flag: and the party icon is the game's again with any other choice", N.alpha(N.W, N.M.pvpIcon) == "1" and N.alpha(N.W, N.u.player.plate) == "1",
+			N.alpha(N.W, N.M.pvpIcon) .. " " .. N.alpha(N.W, N.u.player.plate) .. " " .. N.W.line("Player PvP flag"))
 
 		-- Square portraits off: the game draws the flag at its own place.
 		N.W.change("unitframes.squarePortrait", false)
@@ -50575,8 +50656,8 @@ do
 		N.u = {}
 		for _, unit in ipairs({ "player", "target" }) do
 			local F = N.C[unit]
-			N.u[unit] = { plate = F.pvp, icon = F.pvpIcon, picture = pic(N.C, F.portrait).frame, row = H.rowOf(N.C, F.frame) }
-			N.C.rawOf[F.pvp].protected, N.C.rawOf[F.pvpIcon].protected = true, true
+			N.u[unit] = { plate = F.pvp or F.pvpIcon, icon = F.pvpIcon, picture = pic(N.C, F.portrait).frame, row = H.rowOf(N.C, F.frame) }
+			N.C.rawOf[N.u[unit].plate].protected, N.C.rawOf[F.pvpIcon].protected = true, true
 		end
 		N.C.uf.pvp.target = "faction"
 		N.C.blizzard(function() N.C.target.frame:CheckFaction() end)
@@ -50861,9 +50942,9 @@ do
 		check("pvp flag: a client without SetAlphaFromBoolean draws no word for a withheld state, with no error", N.rowN.flag.alpha == 0 and silent(N.N), why(N.N))
 
 		N.R = ufWorld({ prep = function(Y)
-			local raw = Y.rawOf[Y.player.pvp]
+			local raw = Y.rawOf[Y.player.pvpIcon]
 			local set = raw.SetPoint
-			-- The game keeps the plate to its own frames: an anchor on a frame of the addon's is dropped without an error.
+			-- The game keeps the icon to its own frames: an anchor on a frame of the addon's is dropped without an error.
 			raw.SetPoint = function(self, point, relative, ...)
 				if Y.rawOf[relative] ~= nil and Y.rawOf[relative].addonFrame then
 					return
@@ -50871,9 +50952,9 @@ do
 				return set(self, point, relative, ...)
 			end
 		end })
-		N.home = N.R.rawOf[N.R.player.pvp].points[1]
-		check("pvp flag: when the game refuses the move the plate is back at its own point, the note is on the status, and the line says the game refused the move", N.home ~= nil
-			and N.home[2] == N.R.player.main and N.home[1] == "TOP" and has(N.R.status(), "Unit frames: the game refused to move a PvP flag, which keeps its own place.")
+		N.home = N.R.rawOf[N.R.player.pvpIcon].points[1]
+		check("pvp flag: when the game refuses the move the icon is back at its own point, the note is on the status, and the line says the game refused the move", N.home ~= nil
+			and N.home[2] == N.R.player.main and N.home[1] == "TOP" and N.home[3] == "TOPLEFT" and N.home[4] == 22 and N.home[5] == -65 and has(N.R.status(), "Unit frames: the game refused to move a PvP flag, which keeps its own place.")
 			and has(N.R.status(), "Player PvP flag: icon on the portrait and word in the name row, the game refused the move") and silent(N.R), why(N.R) .. N.R.status())
 
 		N.G = ufWorld({ prep = function(Y) Y.uf.rulesOff = true end })
@@ -50883,11 +50964,51 @@ do
 		check("pvp flag: in a client that does not draw the flag the status says so", has(N.D.status(), "Player PvP flag: the game draws none") and silent(N.D), why(N.D))
 	end
 
-	-- The PvP icon follows the plate: a client that anchors the icon to the contextual frame, not to the plate.
+	-- Since 1.60.1.70425 the icon is what moves: it is the plate itself, the player's timer hangs from it (Camelot/PlayerFrame.lua:17-18), and the
+	-- status says whether it is on the picture.
+	do
+		local N = {}
+		N.W = ufWorld()
+		N.P, N.T = N.W.player, N.W.target
+		N.pic = function(F) return pic(N.W, F.portrait).frame end
+		N.W.uf.pvp.player, N.W.uf.pvp.target = "faction", "faction"
+		N.W.blizzard(N.W.env.PlayerFrame_UpdatePvPStatus)
+		N.W.blizzard(function() N.T.frame:CheckFaction() end)
+		N.u = { plate = N.P.pvpIcon, icon = N.P.pvpIcon, picture = N.pic(N.P) }
+		N.v = { plate = N.T.pvpIcon, icon = N.T.pvpIcon, picture = N.pic(N.T) }
+		N.ip, N.it = N.W.rawOf[N.P.pvpIcon].points, N.W.rawOf[N.T.pvpIcon].points
+		check("pvp icon: with Both and Bottom left the icon itself is inside the bottom left corner of the picture of the player and the target, anchored to the picture",
+			H.corner(N.W, N.u, "bl") and H.corner(N.W, N.v, "bl") and #N.ip == 1 and N.ip[1][1] == "CENTER" and N.ip[1][2] == N.u.picture and N.ip[1][3] == "BOTTOMLEFT"
+			and #N.it == 1 and N.it[1][2] == N.v.picture and silent(N.W), why(N.W))
+		check("pvp icon: and the timer of the player still hangs from the icon, where the game put it", N.W.rawOf[N.P.timer].points[1][2] == N.P.pvpIcon
+			and N.W.rawOf[N.P.timer].calls.SetPoint == nil)
+		check("pvp icon: and the status says the icon is on the picture", has(N.W.status(), "Player PvP flag: icon on the portrait and word in the name row, shown, icon on the picture")
+			and has(N.W.status(), "Target PvP flag: icon on the portrait and word in the name row, shown, icon on the picture"), N.W.line("Player PvP flag") .. " | " .. N.W.line("Target PvP flag"))
+		FH.pvp(N.W, "unitframes.pvpFlag", "word")
+		N.ip, N.it = N.W.rawOf[N.P.pvpIcon].points[1], N.W.rawOf[N.T.pvpIcon].points[1]
+		check("pvp icon: with Word in the name row the icons go back to the points of the XML, 22,-65 from the top left of the player and -24,-65 from the top right of the target",
+			N.ip[1] == "TOP" and N.ip[2] == N.P.main and N.ip[3] == "TOPLEFT" and N.ip[4] == 22 and N.ip[5] == -65
+			and N.it[1] == "TOP" and N.it[2] == N.T.context and N.it[3] == "TOPRIGHT" and N.it[4] == -24 and N.it[5] == -65, why(N.W))
+		FH.pvp(N.W, "unitframes.pvpFlag", "icon")
+		N.W.rawOf[N.T.pvpIcon].points = { { "TOP", N.T.context, "TOPRIGHT", -24, -65 } }
+		check("pvp icon: the status says when the game has the icon apart from the picture", has(N.W.status(), "Target PvP flag: icon on the portrait, shown, icon apart from the picture"), N.W.line("Target PvP flag"))
+		-- The icon of a party member is not moved, as before.
+		N.W.blizzard(function() N.W.env.PartyFrame:InitializePartyMemberFrames() end)
+		N.M = N.W.members[1]
+		N.W.uf.pvp.party1 = "faction"
+		N.W.blizzard(function() N.M.frame:UpdatePvPStatus() end)
+		FH.pvp(N.W, "unitframes.pvpFlag", "both")
+		FH.pvp(N.W, "unitframes.pvpCorner", "tr")
+		check("pvp icon: the icon of a party member keeps the game's point and is never anchored", N.W.rawOf[N.M.pvpIcon].calls.SetPoint == nil and N.W.rawOf[N.M.pvpIcon].calls.ClearAllPoints == nil
+			and alphaOf(N.W, N.M.pvpIcon) == "1" and silent(N.W), why(N.W))
+	end
+
+	-- The PvP icon follows the plate on the client before 1.60.1.70425, which has a plate under the icon: a client that anchors the icon to the
+	-- contextual frame, not to the plate.
 	do
 		local N = {}
 		N.C = function(Y, unit) return Y.rawOf[Y[unit].pvpIcon] end
-		N.W = ufWorld({ prep = function(Y)
+		N.W = ufWorld({ pvpPlate = true, prep = function(Y)
 			N.homeAt = N.C(Y, "target").points[1]
 			N.C(Y, "target").points = { { "TOP", Y.target.context, "TOPRIGHT", -23, -50 } }
 		end })
@@ -51825,7 +51946,8 @@ do
 		W.blizzard(function() T.frame:CheckClassification() F.frame:CheckClassification() end)
 		V.fill = W.rawOf[T.healthFill]
 		V.cut = #V.fill.maskList == 1 and V.fill.maskList[1].addon == true and V.fill.maskList[1].allPoints == T.box
-		V.slot = W.holderOn(T.box) ~= nil and W.holderOn(T.health) == nil and W.rawOf[T.box].height == 12 and W.rawOf[T.health].height ~= 12
+		-- Camelot's slot is 15 units tall for every unit, the bar 20 (Camelot/TargetFrame.lua:71-86); before 1.60.1.70425 a minus mob's slot was 12.
+		V.slot = W.holderOn(T.box) ~= nil and W.holderOn(T.health) == nil and W.rawOf[T.box].height == 15 and W.rawOf[T.health].height == 20
 		V.focus = #W.rawOf[F.healthFill].maskList == 1 and W.rawOf[F.healthFill].maskList[1].allPoints == F.box
 		W.change("unitframes.flat", false)
 		check("unit frames: a minus target has its border on the slot of the health bar and its fill cut to it, also with flat bars off and also on the focus frame",
@@ -52040,9 +52162,10 @@ do
 			local s, w = { Q.rect(W, slot) }, { Q.rect(W, power) }
 			return { pl = p[1], pb = p[2], pw = p[3], ph = p[4], sb = s[2], sh = s[4], wb = w[2] }
 		end
-		local a, b = rects(P.portrait, P.box, P.power), rects(T.portrait, T.box, T.power)
+		-- The player's outlined health bar is the bar itself, which is taller than its slot since 1.60.1.70425 (Camelot/PlayerFrame.lua:79-84).
+		local a, b = rects(P.portrait, P.health, P.power), rects(T.portrait, T.box, T.power)
 		Q.set(W, { portraitSize = "bars" })
-		local c, d = rects(P.portrait, P.box, P.power), rects(T.portrait, T.box, T.power)
+		local c, d = rects(P.portrait, P.health, P.power), rects(T.portrait, T.box, T.power)
 		check("portrait look: as tall as the frame runs from the top of the name row to the bottom of the power bar, and as tall as the bars from the top of the health bar",
 			near(a.ph - c.ph, 17, 1e-6) and near(c.pb + c.ph + t, c.sb + c.sh + t, 1e-6) and near(a.pb, a.wb, 1e-6) and near(c.pb, c.wb, 1e-6) and near(c.pw, c.ph, 1e-6) and near(a.pw, a.ph, 1e-6),
 			table.concat({ a.ph, c.ph, c.pb, c.sb, c.sh }, " "))
@@ -56313,7 +56436,8 @@ local function xWorld(opts)
 		put(main, "ManaBar", T.power)
 		put(T.power, "ManaBarMask", T.powerMask)
 		local context = put(content, "TargetFrameContentContextual", B(content, {}, {}))
-		T.pvp = put(context, "PvpBackgroundCircle", region(context, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", -1, { hidden = true }))
+		-- The PvP icon is the round plate since 1.60.1.70425, which has no PvpBackgroundCircle (Mainline/TargetFrame.xml:260-264).
+		T.pvpIcon = put(context, "PvpBackgroundIcon", region(context, "UI-HUD-UnitFrame-SmallCircle-Alliance", "OVERLAY", 0, { hidden = true }))
 		T.high = put(context, "HighLevelTexture", region(context, "UI-HUD-UnitFrame-Target-HighLevelTarget_Icon", "OVERLAY", 1, { hidden = true }))
 		T.strip:SetVertexColor(0.2, 0.8, 0.4)
 		if boss then
@@ -56576,7 +56700,7 @@ local function onFrameOf(W, portrait)
 end
 local PLAIN, GREEN, BLUE, WHITE, THREAT, PANEL, MUTED = "0.00,0.00,0.00", "0.18,0.72,0.30", "0.00,0.00,1.00", "1.00,1.00,1.00", "1.00,0.50,0.00", "0.06,0.06,0.06", "0.55,0.55,0.55"
 local CURSE, MAGIC = "0.60,0.00,1.00", "0.20,0.60,1.00"
-local STRIP, LEVEL = "UI-HUD-UnitFrame-Target-PortraitOn-Type", "UI-HUD-UnitFrame-SmallCircle"
+local STRIP, LEVEL, PVP = "UI-HUD-UnitFrame-Target-PortraitOn-Type", "UI-HUD-UnitFrame-SmallCircle", "UI-HUD-UnitFrame-SmallCircle-Alliance"
 
 -- Boss frames. The slot of the health bar is outlined because the bar frame is larger, and the mask stays on its fill.
 do
@@ -56758,10 +56882,11 @@ do
 		end
 	end
 	local row = rowOf(W, T.frame)
-	check("badges: the level plate, the level number and the strip are transparent and keep the game's atlas, the PvP plate is not, and with no CreateColor the row is flat in the strip's colour at 70 percent",
-		alphaOf(W, T.level) == "0" and alphaOf(W, T.pvp) == "1" and alphaOf(W, T.levelText) == "0" and alphaOf(W, T.strip) == "0" and W.rawOf[T.level].atlas == LEVEL and W.rawOf[T.pvp].atlas == LEVEL
+	-- The PvP icon is the plate of the flag since 1.60.1.70425, with its own atlas.
+	check("badges: the level plate, the level number and the strip are transparent and keep the game's atlas, the PvP icon is not, and with no CreateColor the row is flat in the strip's colour at 70 percent",
+		alphaOf(W, T.level) == "0" and alphaOf(W, T.pvpIcon) == "1" and alphaOf(W, T.levelText) == "0" and alphaOf(W, T.strip) == "0" and W.rawOf[T.level].atlas == LEVEL and W.rawOf[T.pvpIcon].atlas == PVP
 		and W.rawOf[T.strip].atlas == STRIP and W.rawOf[T.level].color == nil and row.grad.shown == false and row.fill.shown == true and rgb(row.fill.color) == "0.14,0.56,0.28"
-		and row.fill.color[4] == 0.95 and #W.edgesOn(row.frame) == 0, tostring(row.fill.shown) .. tostring(row.fill.color and rgb(row.fill.color)) .. table.concat({ alphaOf(W, T.level), alphaOf(W, T.pvp), alphaOf(W, T.levelText), alphaOf(W, T.strip), tostring(W.rawOf[T.level].atlas == LEVEL), tostring(W.rawOf[T.pvp].atlas == LEVEL), tostring(W.rawOf[T.strip].atlas == STRIP), tostring(W.rawOf[T.level].color) }, ","))
+		and row.fill.color[4] == 0.95 and #W.edgesOn(row.frame) == 0, tostring(row.fill.shown) .. tostring(row.fill.color and rgb(row.fill.color)) .. table.concat({ alphaOf(W, T.level), alphaOf(W, T.pvpIcon), alphaOf(W, T.levelText), alphaOf(W, T.strip), tostring(W.rawOf[T.level].atlas == LEVEL), tostring(W.rawOf[T.pvpIcon].atlas == PVP), tostring(W.rawOf[T.strip].atlas == STRIP), tostring(W.rawOf[T.level].color) }, ","))
 	local boxed = false
 	for _, f in ipairs(W.addonFrames) do
 		boxed = boxed or (f.points[1] ~= nil and f.points[1][2] == T.levelText)
@@ -56797,7 +56922,7 @@ do
 	W.change("general.backdrop", "ff0f0f0f")
 	W.change("unitframes.stripColour", "Class or reaction colour")
 	W.change("unitframes.levelPosition", "Hidden")
-	check("badges: with the level hidden the plates and the number stay transparent and keep the game's atlas, the PvP plate is as it was, the row has no level, and the strip stays transparent", alphaOf(W, T.level) == "0" and alphaOf(W, T.pvp) == "1"
+	check("badges: with the level hidden the plates and the number stay transparent and keep the game's atlas, the PvP icon is as it was, the row has no level, and the strip stays transparent", alphaOf(W, T.level) == "0" and alphaOf(W, T.pvpIcon) == "1"
 		and alphaOf(W, T.levelText) == "0" and W.rawOf[T.level].atlas == LEVEL and not row.level.shown and row.fill.shown and alphaOf(W, T.strip) == "0")
 	W.change("unitframes.strip", false)
 	check("badges: and with the name row off the strip has the alpha the game gave it, with the colour the game gave it, and the row shows nothing", alphaOf(W, T.strip) == "1"
@@ -57103,12 +57228,17 @@ do
 		end
 		return table.concat(out, " ")
 	end
-	function Q.game() return Q.at(P.power, P.main, "TOPLEFT", 85, -61) end
+	-- Camelot's PlayerFrame_UpdateManaBarVisuals puts the bar at 87,-61 for the player and the vehicle (Camelot/PlayerFrame.lua:91-96); before
+	-- 1.60.1.70425 it was 85,-61, and 91,-61 for the vehicle.
+	function Q.game() return Q.at(P.power, P.main, "TOPLEFT", 87, -61) end
 	function Q.gap() return math.max(1, W.ns.Pixels(P.power, 2)) end
 	function Q.say() local gap = Q.gap() return math.abs(gap - 1) < 0.05 and "1 unit" or ("%.1f units"):format(gap) end
 	function Q.hung() return Q.at(P.power, P.health, "BOTTOMLEFT", 0, -Q.gap()) end
 	Q.status = W.status()
-	check("bar overlap: the player's power bar hangs under the health bar by the two edges of the borders at border thickness 1, at least the game's 1 unit", Q.hung() and has(Q.status, "Player bars: " .. Q.say() .. " apart") and not has(Q.status, "overlapping"), Q.show(P.power) .. " " .. Q.status:sub(-200))
+	-- The game's own layout has the 20 unit health bar hang 2 units over the power bar since 1.60.1.70425 (Camelot/PlayerFrame.lua:79-84, 94-96), and the
+	-- status says so.
+	check("bar overlap: the player's power bar hangs under the health bar by the two edges of the borders at border thickness 1, at least 1 unit, and the status says the game's layout had them overlapping by 2 units",
+		Q.hung() and has(Q.status, "Player bars: " .. Q.say() .. " apart. The game's layout had them overlapping by 2.0 units"), Q.show(P.power) .. " " .. Q.status:sub(-200))
 	Q.edge = W.ns.Pixels(P.power, 1)
 	check("bar overlap: below 1 pixel per unit the gap is at least the two edges of the borders, so neither edge covers the other bar's fill", Q.edge > 1 and Q.gap() >= 2 * Q.edge - 1e-6 and Q.hung(), Q.show(P.power) .. " " .. tostring(Q.edge))
 	Q.sizes = { power = Q.layout(P.power), health = Q.layout(P.health), box = Q.layout(P.box), area = Q.layout(P.area) }
@@ -57144,8 +57274,8 @@ do
 	W.flush()
 	Q.vehicle = Q.hung()
 	W.change("unitframes.player", false)
-	Q.vehicleOff = Q.at(P.power, P.main, "TOPLEFT", 91, -61)
-	check("bar overlap: vehicle art keeps the bar under the health bar at x 0, and the look off gives back 91,-61", Q.vehicle and Q.vehicleOff and quiet(W), Q.show(P.power))
+	Q.vehicleOff = Q.at(P.power, P.main, "TOPLEFT", 87, -61)
+	check("bar overlap: vehicle art keeps the bar under the health bar at x 0, and the look off gives back 87,-61", Q.vehicle and Q.vehicleOff and quiet(W), Q.show(P.power))
 	W.blizzard(env.PlayerFrame_ToPlayerArt)
 	W.flush()
 	check("bar overlap: with the look off the power bar goes back to the game's point", Q.game() and has(W.status(), "Player bars: the game's layout") and Q.direct == 0, Q.show(P.power) .. " " .. W.status():sub(-200))
@@ -57165,11 +57295,11 @@ do
 	check("bar overlap: in combat nothing is written, and the bar moves when combat ends", Q.inCombat and Q.quiet and Q.direct == 0 and Q.hung() and quiet(W), Q.show(P.power) .. " " .. why(W))
 	check("bar overlap: target, focus, pet and party power bars keep the game's anchors", Q.layout(T.power) == Q.others[T.power] and Q.layout(W.focus.power) == Q.others[W.focus.power]
 		and Q.layout(W.pet.power) == Q.others[W.pet.power] and Q.layout(W.members[1].power) == Q.others[W.members[1].power], Q.layout(T.power))
-	-- The game's own layout overlaps by 2 units here: the status says so.
+	-- A game layout with the power bar 3 units higher overlaps by 5 units: the status says so.
 	W.uf.powerY = -58
 	W.blizzard(env.PlayerFrame_ToPlayerArt)
 	W.flush()
-	check("bar overlap: the status line says the gap and the game's overlap", Q.hung() and has(W.status(), "Player bars: " .. Q.say() .. " apart. The game's layout had them overlapping by 2.0 units"), W.status():sub(-200))
+	check("bar overlap: the status line says the gap and the game's overlap", Q.hung() and has(W.status(), "Player bars: " .. Q.say() .. " apart. The game's layout had them overlapping by 5.0 units"), W.status():sub(-200))
 end
 
 -- Unit menu: a right-click on the target frame opens its menu at the cursor.
@@ -57180,7 +57310,7 @@ do
 	local env = W.env
 	local menu = W.B(nil, {}, {})
 	local raw = W.rawOf[menu]
-	-- What the game does: UnitPopup_OpenMenu opens the menu at the cursor, and TargetFrame_OpenMenu moves it beside the frame (Mainline/TargetFrame.lua:670-673).
+	-- What the game does: UnitPopup_OpenMenu opens the menu at the cursor, and TargetFrame_OpenMenu moves it beside the frame (Mainline/TargetFrame.lua:680-682).
 	function Q.open(beside)
 		Q.menu = menu
 		W.blizzard(function()
@@ -84047,26 +84177,26 @@ do
 			MP.wrong == 0 and MP.count == 6 and MP.faded(W) == 0 and MP.silent(W), row[1] .. " " .. MP.wrong .. " " .. MP.count .. MP.why(W))
 	end
 
-	-- The PvP flag: the icon goes and the word stays.
+	-- The PvP flag: the icon goes and the word stays. Since 1.60.1.70425 the icon is the plate, so these checks have no plate of their own.
 	W.uf.pvp.player, W.uf.pvp.target, W.uf.pvp.party1 = "faction", "faction", "faction"
 	W.blizzard(W.env.PlayerFrame_UpdatePvPStatus)
 	W.blizzard(function() T.frame:CheckFaction() end)
 	W.blizzard(function() M.frame:UpdatePvPStatus() end)
 	MP.row = FH.kindRow(W, P.frame)
-	check("ms-ufpart: with every row at its default the plate and the icon are the game's and the word is in the row", MP.a(W, P.pvp) == 1 and MP.a(W, P.pvpIcon) == 1 and MP.a(W, M.pvpIcon) == 1
-		and MP.row.flag.shown, tostring(MP.a(W, P.pvp)))
+	check("ms-ufpart: with every row at its default the icon is the game's and the word is in the row", MP.a(W, P.pvpIcon) == 1 and MP.a(W, M.pvpIcon) == 1
+		and MP.row.flag.shown, tostring(MP.a(W, P.pvpIcon)))
 	W.change("unitframes.pvpIcon", false)
-	check("ms-ufpart: PvP icon off with the flag Both makes the plate and the icon of the player, target and party frames transparent and keeps the word", MP.a(W, P.pvp) == 0
-		and MP.a(W, P.pvpIcon) == 0 and MP.a(W, T.pvpIcon) == 0 and MP.a(W, M.pvpIcon) == 0 and MP.row.flag.shown and MP.row.flag.text == "PvP", tostring(MP.row.flag.text))
+	check("ms-ufpart: PvP icon off with the flag Both makes the icon of the player, target and party frames transparent and keeps the word", MP.a(W, P.pvpIcon) == 0
+		and MP.a(W, T.pvpIcon) == 0 and MP.a(W, M.pvpIcon) == 0 and MP.row.flag.shown and MP.row.flag.text == "PvP", tostring(MP.row.flag.text))
 	FH.pvp(W, "unitframes.pvpFlag", "icon")
-	check("ms-ufpart: and with the flag Icon on the portrait it leaves nothing", MP.a(W, P.pvp) == 0 and MP.a(W, P.pvpIcon) == 0 and not MP.row.flag.shown)
+	check("ms-ufpart: and with the flag Icon on the portrait it leaves nothing", MP.a(W, P.pvpIcon) == 0 and not MP.row.flag.shown)
 	FH.pvp(W, "unitframes.pvpFlag", "word")
-	check("ms-ufpart: and with the flag Word in the name row it is the word alone, as before", MP.a(W, P.pvp) == 0 and MP.row.flag.shown)
+	check("ms-ufpart: and with the flag Word in the name row it is the word alone, as before", MP.a(W, P.pvpIcon) == 0 and MP.row.flag.shown)
 	FH.pvp(W, "unitframes.pvpFlag", "off")
-	check("ms-ufpart: and Off is off", MP.a(W, P.pvp) == 0 and not MP.row.flag.shown and MP.a(W, M.pvpIcon) == 0)
+	check("ms-ufpart: and Off is off", MP.a(W, P.pvpIcon) == 0 and not MP.row.flag.shown and MP.a(W, M.pvpIcon) == 0)
 	FH.pvp(W, "unitframes.pvpFlag", "both")
 	W.change("unitframes.pvpIcon", true)
-	check("ms-ufpart: PvP icon on again gives the game's plate, icon and the word", MP.a(W, P.pvp) == 1 and MP.a(W, P.pvpIcon) == 1 and MP.a(W, M.pvpIcon) == 1 and MP.row.flag.shown and MP.silent(W), MP.why(W))
+	check("ms-ufpart: PvP icon on again gives the game's icon and the word", MP.a(W, P.pvpIcon) == 1 and MP.a(W, M.pvpIcon) == 1 and MP.row.flag.shown and MP.silent(W), MP.why(W))
 	W.change("unitframes.pvpIcon", false)
 	W.change("unitframes.target", false)
 	check("ms-ufpart: a frame that is not restyled keeps the game's PvP icon whatever the row says", MP.a(W, T.pvpIcon) == 1 and MP.a(W, P.pvpIcon) == 0, tostring(MP.a(W, T.pvpIcon)))
@@ -84074,10 +84204,10 @@ do
 	W.change("unitframes.pvpIcon", true)
 	W.change("unitframes.squarePortrait", false)
 	W.change("unitframes.pvpIcon", false)
-	check("ms-ufpart: PvP icon off hides the game's icon on a frame that shows the game's portrait as well", MP.a(W, P.pvp) == 0 and MP.a(W, P.pvpIcon) == 0)
+	check("ms-ufpart: PvP icon off hides the game's icon on a frame that shows the game's portrait as well", MP.a(W, P.pvpIcon) == 0)
 	W.change("unitframes.pvpIcon", true)
 	W.change("unitframes.squarePortrait", true)
-	check("ms-ufpart: and gives it back", MP.a(W, P.pvp) == 1 and MP.a(W, P.pvpIcon) == 1)
+	check("ms-ufpart: and gives it back", MP.a(W, P.pvpIcon) == 1)
 	W.uf.pvp.player, W.uf.pvp.target, W.uf.pvp.party1 = nil, nil, nil
 	W.blizzard(W.env.PlayerFrame_UpdatePvPStatus)
 
