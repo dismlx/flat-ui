@@ -5,8 +5,11 @@ local _, ns = ...
 -- frame to place one, except SetAlpha for the fade below. It reads rectangles and sizes only. The module owns one frame of its own, sized to the whole block, which is the one box of
 -- /flatui move (Action bar block) and has a spot of its own saved in the profile.
 -- With Stance, pet and experience bars on Above the block, the frames the game hangs from the main bar get spots over the block too: the
--- experience bars, then the stance bar on the left and the pet bar on the right, then the possess bar. The Leave vehicle button hangs from the
--- main bar in the game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed here; /flatui block facts still lists it.
+-- experience bars, then the stance bar on the left and the pet bar on the right, then the possess bar, then the totem bar of a character that has
+-- one. Since 70425 the game stacks the totem bar last (Camelot/EditModeUtil.lua:21): in its default position it goes over the bars of the stack
+-- still in theirs, so once the block's bars are kept in the Edit Mode layout it is 4 over the top of the main bar (EditModeManager.lua:666-668,
+-- 692-716), across the next row of the block. The block holds it on a row of its own. The Leave vehicle button hangs from the main bar in the
+-- game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed here; /flatui block facts still lists it.
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
 -- Background panel: a frame of the module's own behind the rectangle of the block, in the general colours. Fade the block: the alpha of each
@@ -35,16 +38,17 @@ local FULL_WIDTH, FULL_HEIGHT, BUTTON_GAP, MAX_GAP = 562, 45, 2, 40
 local MICRO_GAP_X, MICRO_GAP_Y, BOTTOM_Y = 4.5, 4, 6
 local TOLERANCE = 0.5
 local WATCH_EVERY = 0.5
--- The frames the game hangs from the main bar and the block places, bottom to top: the two experience bars, the stance and pet bars and the
--- possess bar. EditModeManager.lua puts the second status bar under the first; the game's gap between the two is -1, not the gap of the rest.
-local XP2, XP1, STANCE, PET, POSSESS, LEAVE = "SecondaryStatusTrackingBarContainer", "MainStatusTrackingBarContainer", "StanceBar", "PetActionBar",
-	"PossessActionBar", "MainMenuBarVehicleLeaveButton"
+-- The frames the game hangs from the main bar and the block places, bottom to top: the two experience bars, the stance and pet bars, the
+-- possess bar and the totem bar. EditModeManager.lua puts the second status bar under the first; the game's gap between the two is -1, not the
+-- gap of the rest.
+local XP2, XP1, STANCE, PET, POSSESS, LEAVE, TOTEM = "SecondaryStatusTrackingBarContainer", "MainStatusTrackingBarContainer", "StanceBar", "PetActionBar",
+	"PossessActionBar", "MainMenuBarVehicleLeaveButton", "MultiCastActionBarFrame"
 local XPOWN = "FlatUIXpBar"
-local AROUND = { XP2, XP1, STANCE, PET, POSSESS }
+local AROUND = { XP2, XP1, STANCE, PET, POSSESS, TOTEM }
 -- With Flat UI's own experience bar (XpBar.lua) the one bar takes the place of the two containers.
-local AROUND_OWN = { XPOWN, STANCE, PET, POSSESS }
--- The frames /flatui block facts lists, the Leave vehicle button too.
-local FACT_FRAMES = { XP2, XP1, STANCE, PET, POSSESS, LEAVE }
+local AROUND_OWN = { XPOWN, STANCE, PET, POSSESS, TOTEM }
+-- The frames /flatui block facts lists, the Leave vehicle button and the totem bar too.
+local FACT_FRAMES = { XP2, XP1, STANCE, PET, POSSESS, LEAVE, TOTEM }
 local AROUND_SET = {}
 for _, name in ipairs(AROUND) do
 	AROUND_SET[name] = true
@@ -155,8 +159,20 @@ local function Gap(bar)
 	return BUTTON_GAP
 end
 
+-- Whether the character has a totem bar: the game shows the bar while it has an active totem slot and only then, outside Edit Mode
+-- (MultiCastActionBarFrame.lua:220, 311, 334). A count the client does not give leaves it to whether the bar is shown.
+local function HasTotems(frame)
+	local ok, slots = pcall(function()
+		return frame.numActiveSlots
+	end)
+	if ok and Number(slots) then
+		return slots > 0
+	end
+	return ns.MoverShown(frame) == true
+end
+
 -- The width and height of a frame hung from the main bar, whether it is shown and the frame. A frame that is hidden, or that has no
--- rectangle now, has the last size it had when it was shown, or none.
+-- rectangle now, has the last size it had when it was shown, or none. A character with no totem bar has none to place.
 local function AroundSize(name)
 	if name == XPOWN then
 		local width, height, shown = ns.XpBarSize()
@@ -167,7 +183,7 @@ local function AroundSize(name)
 		return width, height, shown, frame
 	end
 	local frame = GameFrame(name)
-	if not frame then
+	if not frame or (name == TOTEM and not HasTotems(frame)) then
 		return nil
 	end
 	local shown = ns.MoverShown(frame)
@@ -182,7 +198,8 @@ end
 -- The spots of the frames hung from the main bar, in rows above a block whose left edge is `left`, width `width` and top `top`, with `gap`
 -- between rows. A hidden frame has its spot too, so it shows in place; only a shown frame gives its row height. The stance bar is on the
 -- left and the pet bar on the right, and the pet bar goes on a row of its own above the stance bar when the stance bar is wider than half
--- the block. Returns the spots, the part of the signature, whether the two bars would overlap, and the top of the last shown row.
+-- the block. The totem bar is on the left of the last row. Returns the spots, the part of the signature, whether the two bars would overlap,
+-- and the top of the last shown row.
 local function AroundSpots(left, width, top, gap)
 	local spots, parts, size = {}, {}, {}
 	local own = ns.XpOwn ~= nil and ns.XpOwn()
@@ -197,10 +214,11 @@ local function AroundSpots(left, width, top, gap)
 	local stacked = stance ~= nil and stance.w > width / 2
 	local overlap = not stacked and stance ~= nil and pet ~= nil and stance.shown and pet.shown and stance.w + pet.w > width
 	parts[#parts + 1] = stacked and "stacked" or "side"
-	local rows = { { { XP2, "centre" } }, { { XP1, "centre" }, closer = true }, { { STANCE, "left" }, { PET, "right" } }, { { POSSESS, "left" } } }
+	local rows = { { { XP2, "centre" } }, { { XP1, "centre" }, closer = true }, { { STANCE, "left" }, { PET, "right" } }, { { POSSESS, "left" } },
+		{ { TOTEM, "left" } } }
 	local first = 3
 	if own then
-		rows = { { { XPOWN, "centre" } }, { { STANCE, "left" }, { PET, "right" } }, { { POSSESS, "left" } } }
+		rows = { { { XPOWN, "centre" } }, { { STANCE, "left" }, { PET, "right" } }, { { POSSESS, "left" } }, { { TOTEM, "left" } } }
 		first = 2
 	end
 	if stacked then
@@ -362,7 +380,7 @@ local function HeldNames()
 	for _, row in ipairs(state.last and state.last.rows or {}) do
 		names[#names + 1] = row.bar.frame
 	end
-	for _, name in ipairs({ XP2, XP1, XPOWN, STANCE, PET, POSSESS }) do
+	for _, name in ipairs({ XP2, XP1, XPOWN, STANCE, PET, POSSESS, TOTEM }) do
 		if state.last and state.last.spots[name] then
 			names[#names + 1] = name
 		end
