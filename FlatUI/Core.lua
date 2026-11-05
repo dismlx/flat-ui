@@ -28,8 +28,16 @@ local ADDON_NAME, ns = ...
 -- its page goes off. Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.
 -- Windows writes one game setting: the direction of the game's clean up (C_Container.SetSortBagsRightToLeft), only while Items gather is
 -- From the other end, remembered in FlatUICharDB.sortDirection before the first write and put back as the variables above are.
+-- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
+-- repairs with RepairAllItems, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on
+-- its own button, and answers summons, resurrections, invites and duels with the game's calls for them. Of the game's popups it hides only
+-- one, with StaticPopup_Hide: the group invite's, once the player is in the group, since the game leaves it up and hiding it sooner declines
+-- the invite. It follows
+-- StaticPopup_Show, StaticPopup_Hide, ClassTrainerFrame_Update, SendMailFrame_SendMail and SendMailFrame_Reset with hooksecurefunc, writes
+-- DELETE in the box of the game's delete popup (SetText, then ClearFocus) and the last recipient in the To box of the mail window (SetText),
+-- and lays frames of its own over the loot window, the trainer window and the Release Spirit button of the death popup.
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "fonts", "fade" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "fonts", "fade" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.

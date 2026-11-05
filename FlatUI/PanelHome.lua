@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- The Home page of the options window: the profile in use, the accent and density, the last changes of the session with Undo, the 22 modules
+-- The Home page of the options window: the profile in use, the accent and density, the last changes of the session with Undo, the 23 modules
 -- with their switches, and the changes that need a reload. Also the record of the changes made in the window, which Panel.lua feeds.
 
 local Home = {}
@@ -153,7 +153,7 @@ function Home.Modules(model)
 	return list
 end
 
--- "17 of 22 modules on".
+-- "17 of 23 modules on".
 function Home.Subtitle(model)
 	local on, total = 0, 0
 	for _, entry in ipairs(Home.Modules(model)) do

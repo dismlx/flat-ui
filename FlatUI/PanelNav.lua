@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
--- The sidebar of the options window: four fixed rows, then six groups with the 22 modules, each with its icon. A group folds on a click and the
+-- The sidebar of the options window: four fixed rows, then six groups with the 23 modules, each with its icon. A group folds on a click and the
 -- fold is kept per account. A module that is off shows the Off chip. Also the switch widget, and the header of a page that has the module
 -- switch. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit.
 
@@ -12,10 +12,12 @@ local Look = ns.PanelLook
 local ATLAS = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Panel.tga"
 local PAD = kit.PAD
 
--- The cell of each icon in FlatUI/Media/Panel.tga (8 columns of 64 by 64, tools/make_panel_icons.py draws them).
+-- The cell of each icon in FlatUI/Media/Panel.tga: 8 columns and 8 rows of 64 by 64. tools/make_panel_icons.py draws the first four rows; the
+-- pouch of Errands (cell 32) starts the fifth, and the rows after it are free.
 local CELLS = { general = 0, fonts = 1, unitframes = 2, nameplates = 3, resource = 4, castbars = 5, swing = 6, actionbars = 7, barblock = 8, blocks = 9,
 	cooldowns = 10, trackers = 11, defensives = 12, partycd = 13, enemycd = 14, combattext = 15, hud = 16, windows = 17, chat = 18, movers = 19, fade = 20,
-	tooltip = 21, home = 22, setup = 23, profiles = 24, chevron = 25, check = 26, search = 27, close = 28, reset = 29, eye = 30, more = 31 }
+	tooltip = 21, home = 22, setup = 23, profiles = 24, chevron = 25, check = 26, search = 27, close = 28, reset = 29, eye = 30, more = 31, errands = 32 }
+local COLUMNS, ROWS = 8, 8
 Nav.CELLS = CELLS
 
 -- The groups, and the page key of each module in them.
@@ -24,7 +26,7 @@ Nav.GROUPS = {
 	{ label = "Frames", "unitframes", "nameplates", "resource", "castbars", "swing" },
 	{ label = "Action bars", "actionbars", "barblock", "blocks" },
 	{ label = "Combat", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "combattext" },
-	{ label = "Interface", "hud", "windows", "chat" },
+	{ label = "Interface", "hud", "windows", "chat", "errands" },
 	{ label = "Layout", "movers", "fade", "tooltip" },
 }
 
@@ -36,9 +38,9 @@ local ROW_H, GROUP_H, SECTION_H = 28, 20, 18
 -- Puts a cell of the atlas on a texture, turned over when flip is set. White line art, tinted with SetVertexColor.
 function Nav.Cell(texture, name)
 	local cell = CELLS[name] or CELLS.more
-	local column, row = cell % 8, math.floor(cell / 8)
+	local column, row = cell % COLUMNS, math.floor(cell / COLUMNS)
 	texture:SetTexture(ATLAS)
-	texture:SetTexCoord(column / 8, (column + 1) / 8, row / 4, (row + 1) / 4)
+	texture:SetTexCoord(column / COLUMNS, (column + 1) / COLUMNS, row / ROWS, (row + 1) / ROWS)
 end
 
 -- Pages -----------------------------------------------------------------------------------------------
