@@ -1,10 +1,10 @@
 local _, ns = ...
 
 -- The time text of an aura button: no space between the number and the unit, white, and the size of the totem times. One function of the game writes all of
--- it: AuraButtonMixin:UpdateDuration sets the text with SecondsToTimeAbbrev and the colour with three numbers on every tick (BuffFrame.lua:1387-1401). The
+-- it: AuraButtonMixin:UpdateDuration sets the text with SecondsToTimeAbbrev and the colour with three numbers on every tick (BuffFrame.lua:1425-1439). The
 -- function is followed after the game's call (ns.FollowTable on the mixin, which the totem buttons call by table, TotemFrame.lua:70-71, and which every
 -- button made later copies). The buttons of BuffFrame, DebuffFrame and ExternalDefensivesFrame were made before this file loads with the game's own copy, so
--- each of them is followed once (ns.Follow, the same hook on the button, BuffFrame.lua:191-197, 1235); a button that already holds the followed function is
+-- each of them is followed once (ns.Follow, the same hook on the button, BuffFrame.lua:191-197, 1273); a button that already holds the followed function is
 -- left out, so nothing runs twice. Nothing is read back from the text. The unit format of a locale that keeps a space in its cooldown form keeps its space.
 -- A totem time the game withholds in a fight is not formatted, and /flatui status says so. The time size of a totem is set once and set again only when the
 -- row changes: the totem path sets no font (TotemFrame.lua:70-71).

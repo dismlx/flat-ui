@@ -436,14 +436,18 @@ end
 
 -- What this addon has set on a timer: alpha (the opacity set while out of range), colour (true while it sets the text colour), reverse, idle.
 local swingSet = setmetatable({}, { __mode = "k" })
--- The labels of a timer and the colours the game gives them: white in range, red out of range (Blizzard_SwingTimer.lua:423).
+-- The labels of a timer and the colours the game gives them: white in range, red out of range (Blizzard_SwingTimer.lua:440-447).
 local SWING_LABELS = { "TypeLabel", "TimeLabel" }
 local GAME_RANGE_ALPHA = 0.4
 
--- The game sets isOutOfRange itself and treats a timer in Edit Mode as in range (Blizzard_SwingTimer.lua:367-373).
+-- The game sets isOutOfRange itself, treats a timer in Edit Mode as in range, and keeps the in range look while a swing is in progress:
+-- swingDuration is set while it runs (Blizzard_SwingTimer.lua:306-308, 379-390).
 local function SwingOut(timer)
-	local out, editing = timer.isOutOfRange, timer.isInEditMode
-	return not ns.IsSecret(out) and out == true and not (not ns.IsSecret(editing) and editing == true)
+	local out, editing, swinging = timer.isOutOfRange, timer.isInEditMode, timer.swingDuration
+	if ns.IsSecret(out) or out ~= true or ns.IsSecret(editing) or editing == true then
+		return false
+	end
+	return not ns.IsSecret(swinging) and swinging == nil
 end
 
 local function GameTextColour(out)
@@ -548,6 +552,65 @@ local function ApplySwingIdle(timer)
 	end
 end
 
+-- Auto Shot: a shot is the reload and then half a second of aim at the end of the ranged swing. Moving or casting a spell in that half second
+-- delays the shot, which clips it. A band over the end of the ranged bar marks the half second, as long as its share of the swing: the swing that
+-- runs (swingDuration, Blizzard_SwingTimer.lua:340-346) or the speed of the ranged weapon while none runs (192-199). The band is a texture of the
+-- bar, above the fill and under the spark and the labels, and it is at the end the fill grows to: the left one with Fill from the right.
+local AUTO_SHOT_AIM = 0.5
+local AUTO_SHOT_ALPHA = 0.5
+local autoBands = setmetatable({}, { __mode = "k" })
+
+-- The length of the ranged swing in seconds, or nil when the game withholds it.
+local function RangedSwing(timer)
+	local duration = timer.swingDuration
+	if ns.Finite(duration) and duration > 0 then
+		return duration
+	end
+	if type(UnitAttackSpeed) == "function" then
+		local ok, _, _, ranged = pcall(UnitAttackSpeed, "player")
+		if ok and ns.Finite(ranged) and ranged > 0 then
+			return ranged
+		end
+	end
+	return nil
+end
+
+local function ApplyAutoShot(timer, option)
+	if option ~= "ranged" then
+		return
+	end
+	local bar = timer.StatusBar
+	if bar == nil or ns.Forbidden(bar) then
+		return
+	end
+	local band = autoBands[timer]
+	local duration, width
+	if ns.Enabled("swing") and ns.Get("swing.autoShot") then
+		duration = RangedSwing(timer)
+		local ok, w = pcall(bar.GetWidth, bar)
+		width = ok and ns.Finite(w) and w > 0 and w or nil
+	end
+	if not (duration and width) then
+		if band then
+			band:Hide()
+		end
+		return
+	end
+	if band == nil then
+		band = bar:CreateTexture(nil, "ARTWORK", nil, 7)
+		ns.Own[band] = true
+		autoBands[timer] = band
+	end
+	local r, g, b = ns.Colour("swing.autoShotColour")
+	band:SetColorTexture(r, g, b, AUTO_SHOT_ALPHA)
+	local side = ns.Get("swing.reverse") and "LEFT" or "RIGHT"
+	band:ClearAllPoints()
+	band:SetPoint("TOP" .. side, bar, "TOP" .. side, 0, 0)
+	band:SetPoint("BOTTOM" .. side, bar, "BOTTOM" .. side, 0, 0)
+	band:SetWidth(width * math.min(1, AUTO_SHOT_AIM / duration))
+	band:Show()
+end
+
 -- After the game starts, ends or lays out a timer, and sets its range look: what it did is looked at again.
 local function SwingLooks(timer)
 	ns.Each("swing", ApplySwingTimer, timer, swingOption[timer] or "main")
@@ -559,7 +622,7 @@ local swingSized = setmetatable({}, { __mode = "k" })
 local swingQueued = setmetatable({}, { __mode = "k" })
 
 -- The width of the personal resource display, or the width Edit Mode has for the timer. Edit Mode sets the width again only for a changed setting
--- (EditModeSystemTemplates.lua:2803-2810), and UpdateSystemSettingWidth lays the frames out again (2765-2769), so the layout value is read and set here.
+-- (EditModeSystemTemplates.lua:2817-2824), and UpdateSystemSettingWidth lays the frames out again (2779-2783), so the layout value is read and set here.
 local function ApplySwingWidth(timer)
 	if ns.EditModeOpen() then
 		return
@@ -609,6 +672,7 @@ local function RefreshSwing()
 			ns.Each("swing", ApplySwingRange, timer)
 			ns.Each("swing", ApplySwingReverse, timer)
 			ns.Each("swing", ApplySwingIdle, timer)
+			ns.Each("swing", ApplyAutoShot, timer, entry[2])
 		end
 	end
 	-- The game starts, ends and lays out a swing, and sets its range look, with no call that is followed: events, and a look every frame while one is needed.
@@ -653,9 +717,56 @@ local function SwingWanted()
 		or ns.Get("swing.reverse") or false
 end
 
--- True while a timer that hides its idle bar is swinging, so the end of the swing is looked for.
+-- The Auto Shot window alone needs only the length of each ranged swing and of the ranged weapon: a ranged swing that starts (PLAYER_SWING
+-- carries its length and its type, SwingTimerDocumentation.lua:43-51), and a change of attack speed or of weapon, which the game's timers follow
+-- too (Blizzard_SwingTimer.lua:142-163). No range event is heard, so at the defaults nothing else runs on a swing.
+local AUTO_SHOT_EVENTS = { "PLAYER_SWING", "WEAPON_SLOT_CHANGED", "PLAYER_ENTERING_WORLD" }
+local autoFrame
+local autoEvents = false
+local autoQueued = false
+
+local function AutoShotWanted()
+	return ns.Enabled("swing") and ns.Get("swing.autoShot") == true
+end
+
+-- On the next frame, after the game's own timer has taken the event: the band of each timer again. The full pass sets it as well.
+local function AutoShotPass()
+	autoQueued = false
+	if gameEvents then
+		return
+	end
+	EachTimer(function(timer)
+		ns.Each("swing", ApplyAutoShot, timer, swingOption[timer])
+	end)
+end
+
+local function AutoShotEvent(_, event, ...)
+	if event == "PLAYER_SWING" then
+		-- A melee swing leaves the band as it is.
+		local _, swingType = ...
+		local ranged = Enum and Enum.PlayerSwingType and Enum.PlayerSwingType.Ranged
+		if ranged ~= nil and not ns.IsSecret(swingType) and swingType ~= ranged then
+			return
+		end
+	end
+	if autoQueued then
+		return
+	end
+	autoQueued = true
+	if C_Timer and C_Timer.After then
+		C_Timer.After(0, AutoShotPass)
+	else
+		AutoShotPass()
+	end
+end
+
+-- True while a timer is swinging and the end of the swing changes what Flat UI shows: the idle bar is hidden, or the range look is not the
+-- game's. The game ends a swing from its OnUpdate and sets its range look then, with no event (Blizzard_SwingTimer.lua:310-325, 361-370).
 local function SwingInFlight()
-	if not ns.Enabled("swing") or ns.Get("swing.idle") ~= "hide" then
+	if not ns.Enabled("swing") then
+		return false
+	end
+	if ns.Get("swing.idle") ~= "hide" and not ns.Get("swing.textOwn") and math.abs(ns.Get("swing.rangeAlpha") / 100 - GAME_RANGE_ALPHA) <= 0.0001 then
 		return false
 	end
 	local found = false
@@ -701,6 +812,7 @@ local function SwingFull(timer)
 	SwingLooks(timer)
 	ns.Each("swing", ApplySwingRange, timer)
 	ns.Each("swing", ApplySwingReverse, timer)
+	ns.Each("swing", ApplyAutoShot, timer, swingOption[timer])
 end
 
 local GamePoll
@@ -811,8 +923,26 @@ function WatchGame(kind)
 		for _, event in ipairs(SWING_EVENTS) do
 			pcall(gameFrame.RegisterEvent, gameFrame, event)
 		end
-		-- The game's own list has it too (Blizzard_SwingTimer.lua:3-12): a change of attack speed can turn the range check off, which sets the range again.
+		-- The game's own list has them too (Blizzard_SwingTimer.lua:10-13, 157-163): a change of attack speed or of the player's gear shows or hides a
+		-- timer, can turn its range check off and sets its range look again.
 		pcall(gameFrame.RegisterUnitEvent, gameFrame, "UNIT_ATTACK_SPEED", "player")
+		pcall(gameFrame.RegisterUnitEvent, gameFrame, "UNIT_INVENTORY_CHANGED", "player")
+		-- The full pass sets the Auto Shot window too.
+		if autoEvents then
+			autoEvents = false
+			pcall(autoFrame.UnregisterAllEvents, autoFrame)
+		end
+	elseif kind == "swing" and not gameEvents and not autoEvents and AutoShotWanted() then
+		autoEvents = true
+		if autoFrame == nil then
+			autoFrame = CreateFrame("Frame")
+			ns.Own[autoFrame] = true
+			autoFrame:SetScript("OnEvent", AutoShotEvent)
+		end
+		for _, event in ipairs(AUTO_SHOT_EVENTS) do
+			pcall(autoFrame.RegisterEvent, autoFrame, event)
+		end
+		pcall(autoFrame.RegisterUnitEvent, autoFrame, "UNIT_ATTACK_SPEED", "player")
 	end
 	ns.WatchEditModePass()
 	PollState()
@@ -1265,7 +1395,7 @@ local function MakeMark(bar, record, name, anchor)
 end
 
 -- The spell icon and the latency zone for the cast on a bar of the player or the pet. Their numbers come from UnitCastingInfo and
--- UnitChannelInfo, which the game withholds for every unit but the player and the pet (SecretPredicatesDocumentation.lua:110-113), and each is
+-- UnitChannelInfo, which the game withholds for every unit but the player and the pet (SecretPredicatesDocumentation.lua:115-118), and each is
 -- tested before it is used.
 local function Marks(bar, record, wantIcon, wantLatency)
 	local unit = record.option == "pet" and "pet" or "player"

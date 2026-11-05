@@ -3,13 +3,13 @@ local _, ns = ...
 -- Clean up bags. A small flat button of this addon's own lies on each bag window and on the bank, and /flatui sort does the same
 -- job from the keyboard. Both call the game's sort: C_Container.SortBags for the bags and C_Container.SortBank for the bank that is
 -- shown, which sorts every tab of that bank (BANK_CONFIRM_CLEANUP_PROMPT, GlobalStrings enUS.lua:1512). ContainerDocumentation.lua
--- lists neither call with a restriction, and the game's own buttons sort with no check for combat (ContainerFrame.xml:355-358,
+-- lists neither call with a restriction, and the game's own buttons sort with no check for combat (ContainerFrame.xml:371-374,
 -- BankFrameTemplates.lua:1857-1876), so this part has none either. The game has a clean up button of its own on the backpack, the
--- combined bag and the bank (ContainerFrame.xml:345-368, BankFrameTemplates.xml:617-621); this one lies beside it and leaves it as it
--- is. The game hides its button only under the gamepad interface (ContainerFrame.lua:1132-1141), and no button of this addon is made
+-- combined bag and the bank (ContainerFrame.xml:360-383, BankFrameTemplates.xml:617-621); this one lies beside it and leaves it as it
+-- is. The game hides its button only under the gamepad interface (ContainerFrame.lua:1130-1138), and no button of this addon is made
 -- then. The button is a frame of this addon's, made out of combat on the bag window it belongs to. The bank type is read from the field
 -- BankPanel.bankType while the panel is shown, as BankFrame:GetActiveBankType does (BankFrameTemplates.lua:93-95).
--- A click plays the sound of the game's own clean up buttons (ContainerFrame.xml:357, BankFrameTemplates.lua:1858). The bank asks first
+-- A click plays the sound of the game's own clean up buttons (ContainerFrame.xml:372, BankFrameTemplates.lua:1858). The bank asks first
 -- while the game's setting for that is on, as its own button does (BankFrameTemplates.lua:1871-1875, CVars.lua:101): with a popup of
 -- this addon's own, an entry of StaticPopupDialogs shown with StaticPopup_Show (StaticPopup.lua:309-325), whose Accept sorts the bank.
 -- No frame of the game's is written: StaticPopupSpecial_Show on the game's own bank popup would set a field on it that the game reads
@@ -514,7 +514,7 @@ local function Make(name, frame, bank)
 end
 
 -- Whether the game shows the interface made for a gamepad. Its own clean up button is hidden then and the action is in the menu of the
--- backpack (ContainerFrame.lua:735-742 and 1132-1136), and a button here could not be clicked.
+-- backpack (ContainerFrame.lua:735-742 and 1130-1134), and a button here could not be clicked.
 local function Gamepad()
 	if type(InputUtil) ~= "table" or ns.IsSecret(InputUtil) or type(InputUtil.IsGamepadUIEnabled) ~= "function" then
 		return false
@@ -524,8 +524,8 @@ local function Gamepad()
 end
 
 -- Whether another bag lies under a bag window. The game puts each bag on the top right corner of the one under it, 8 units above it
--- (UpdateContainerFrameAnchors, ContainerFrame.lua:26 and 1402), so a button hanging under the window would lie over the title bar of
--- the bag below. The lowest bag of a column is anchored to the screen or to the column before it (1391-1398). A window that does not say
+-- (UpdateContainerFrameAnchors, ContainerFrame.lua:25 and 1404), so a button hanging under the window would lie over the title bar of
+-- the bag below. The lowest bag of a column is anchored to the screen or to the column before it (1394-1401). A window that does not say
 -- where it lies counts as stacked.
 local function Stacked(frame)
 	local ok, point, other, relative = pcall(frame.GetPoint, frame, 1)

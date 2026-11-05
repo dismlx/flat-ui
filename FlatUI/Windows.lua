@@ -40,7 +40,7 @@ local BAR_BACKGROUND = "common-stat-bar-BG"
 local CATEGORY_UPDATE = "LFGListingCategorySelection_UpdateCategoryButtons"
 local FLYOUT_UPDATE = "EquipmentFlyout_UpdateItems"
 -- The animated frames of the eye in the Looking For Group window, children of the eye button (Blizzard_LFGUtil/Mainline/LFGEye.xml:254-361;
--- the button is LFGParentFramePortrait, Blizzard_LFGVanilla_ParentFrame.xml:85).
+-- the button is LFGParentFramePortrait, Blizzard_LFGVanilla_ParentFrame.xml:81).
 local EYE_FRAMES = { "EyeInitial", "EyeSearchingLoop", "EyeMouseOver", "EyePokeInitial", "EyePokeLoop", "EyePokeEnd" }
 -- The picture each menu style is drawn on, and how far above the bottom of the menu the box ends: the first style leaves a
 -- larger gap below its rows than on the other sides.
@@ -329,6 +329,18 @@ local function Crop(icon, fraction)
 	local had = texcoords[icon]
 	local across, down = (had[2] - had[1]) * fraction, (had[4] - had[3]) * fraction
 	pcall(icon.SetTexCoord, icon, had[1] + across, had[2] - across, had[3] + down, had[4] - down)
+end
+
+-- Takes a mask off a texture while `off` is true and puts it back after. key: the field of own that says it is off.
+local function Unmask(own, key, texture, mask, off)
+	if not mask or not IsTexture(texture) then
+		return
+	end
+	if off and not own[key] then
+		own[key] = pcall(texture.RemoveMaskTexture, texture, mask)
+	elseif not off and own[key] then
+		own[key] = not pcall(texture.AddMaskTexture, texture, mask)
+	end
 end
 
 local function Uncrop(icon)
@@ -865,10 +877,10 @@ Kind("tab", "tabs", "tabs",
 
 -- Side tab size. The icon side in units for each choice of Side tab size; Game's size has none. The game's tab is 5 units
 -- larger than its icon: it is the common-sidetab atlas of 55 by 60 without its 5 of empty height, set once when the tab loads
--- (AtlasInfo.lua:3761-3765, SharedUIPanelTemplates.lua:309-329), around the 50 by 50 icon that every SetChecked sets again
--- (SharedUIPanelTemplates.lua:381-399). The windows chain their tabs, each from the bottom left of the one above, so a smaller
--- tab closes the column up and no anchor is written here (CharacterFrame.lua:207, BankFrame.lua:122, Blizzard_Collections.lua:128,
--- Blizzard_ProfessionsFrame.xml:29-39, Blizzard_LFGVanilla_ParentFrame.xml:113-123).
+-- (AtlasInfo.lua:3761-3765, SharedUIPanelTemplates.lua:311-331), around the 50 by 50 icon that every SetChecked sets again
+-- (SharedUIPanelTemplates.lua:383-401). The windows chain their tabs, each from the bottom left of the one above, so a smaller
+-- tab closes the column up and no anchor is written here (CharacterFrame.lua:195, BankFrame.lua:122, Blizzard_Collections.lua:128,
+-- Blizzard_ProfessionsFrame.xml:29-39, Blizzard_LFGVanilla_ParentFrame.xml:109-119).
 local TAB_ICONS = { large = 42, medium = 36, small = 30 }
 local TAB_PADDING = 5
 
@@ -914,9 +926,9 @@ end
 
 -- The mask that rounds the corners of the icon (Square side tab icons off) is the atlas of 55 by 60, centred on the tab (Blizzard_SharedXML/
 -- Mainline/SharedUIPanelTemplates.xml:1026-1033, AtlasInfo.lua:3770) while the icon sits at the offsets the game gives it, -4 and 0 on Forever
--- (SharedUIPanelTemplates.lua:331-345, Camelot/SharedUIPanelTemplates.lua:8-10), and it is cut for an icon of 50 (SharedUIPanelTemplates.lua:381-387).
+-- (SharedUIPanelTemplates.lua:333-347, Camelot/SharedUIPanelTemplates.lua:12-14), and it is cut for an icon of 50 (SharedUIPanelTemplates.lua:383-389).
 -- A smaller icon needs a mask smaller in the same ratio that lies in the same place on the icon, so the mask is scaled about the centre of the icon.
--- SetPoint on the point CENTER moves the anchor the game made, as the game moves the icon's (SharedUIPanelTemplates.lua:352-357), so none is cleared.
+-- SetPoint on the point CENTER moves the anchor the game made, as the game moves the icon's (SharedUIPanelTemplates.lua:354-359), so none is cleared.
 -- GetPoint gives withheld values only when the anchoring is withheld (SimpleScriptRegionResizingAPIDocumentation.lua:65-86).
 local ICON_EXTENT = 50
 
@@ -990,7 +1002,7 @@ end
 function Watch.ReadSideTab(frame, entry)
 	do
 		-- LargeSideTabButtonTemplate is a Frame with no GetChecked (SharedUIPanelTemplates.xml:1008); SetChecked is a Lua method that shows or
-		-- hides its SelectedTexture (SharedUIPanelTemplates.lua:389-399), so the texture is read. A check button answers GetChecked.
+		-- hides its SelectedTexture (SharedUIPanelTemplates.lua:391-401), so the texture is read. A check button answers GetChecked.
 		if type(frame.GetChecked) == "function" then
 			local ok, checked = pcall(frame.GetChecked, frame)
 			if ok and not ns.IsSecret(checked) and type(checked) == "boolean" then
@@ -1040,10 +1052,10 @@ Kind("sideTab", "side tabs", "sideTabs",
 		own.mask = Part(frame, "Mask")
 		own.selected = Tint(own, frame, own.icon, "OVERLAY", "white", HOVER[4], "ADD", true)
 		own.checked = Shown(Part(frame, "SelectedTexture"))
-		-- Blizzard sets the icon's texture coordinates and size again on every SetChecked (SharedUIPanelTemplates.lua:389-399), which its windows
+		-- Blizzard sets the icon's texture coordinates and size again on every SetChecked (SharedUIPanelTemplates.lua:391-401), which its windows
 		-- call from their own methods. A tab is looked at again a frame after it is shown or clicked and after the game's functions that
 		-- choose a tab (Watch.RefreshSideTabs, Watch.SideTabChanged), and its checked state is read then. The template has no OnClick: it
-		-- runs OnMouseUp (SharedUIPanelTemplates.lua:359).
+		-- runs OnMouseUp (SharedUIPanelTemplates.lua:361).
 		HookScript(frame, "OnMouseUp", Watch.SideTabChanged)
 		HookScript(frame, "OnShow", Watch.SideTabChanged)
 	end,
@@ -1110,9 +1122,12 @@ end
 
 -- Item slot: a box with the quality colour as its edge. The ammo slot has no quality border. With the
 -- flag "still" the icon is not cropped: the game puts a picture of an empty slot there and takes it away again.
+-- Every item button masks its icon and its pushed texture with the rounded Mask (Shared/ItemButtonTemplate.xml:18-19,
+-- Shared/ItemButtonTemplate.lua:16-20). It is off the icon while the slot is square, and off the pushed texture while that has the flat tint.
 Kind("slot", "item slots", "slots",
 	function(frame, own, flag)
 		own.icon = ItemIcon(frame)
+		own.mask = Part(frame, "Mask")
 		own.still = flag == "still"
 		own.ammo = NameOf(frame) == AMMO_SLOT
 		Outlined(own, frame, frame, "panel")
@@ -1139,6 +1154,7 @@ Kind("slot", "item slots", "slots",
 			end
 			Fade(own.ring or nil, on)
 		end
+		Unmask(own, "unmasked", own.icon, own.mask, on)
 		if on and Opt("crop") > 0 and not own.still then
 			Crop(own.icon, Opt("crop") / 100)
 		else
@@ -1167,6 +1183,7 @@ Kind("slot", "item slots", "slots",
 				Tinted()
 			end
 		end
+		Unmask(own, "pushedUnmasked", State(frame, "Pushed"), own.mask, on and Opt("slotTints") == true and own.tinted == true)
 		ns.Items.Slot(frame)
 		Reveal(own, on)
 	end)
@@ -1247,9 +1264,12 @@ Kind("dropdown", "dropdowns", "inputs",
 		Reveal(own, on)
 	end)
 
+-- Since 70425 the fill is drawn inside FillArea, a child frame 6 units in from each side of the bar, and sized on its width
+-- (Blizzard_SharedXML/Camelot/ProgressBars/ColoredProgressBar.xml:5-13, 19-24, ColoredProgressBar.lua:33), so the box goes round FillArea
+-- and the fill starts and ends with it. A bar without FillArea, as in the older clients, has the box across the whole bar.
 Kind("bar", "progress bars", "bars",
 	function(frame, own)
-		Outlined(own, frame, Box(frame, frame, 0, 0, 0, 0, 15), "window")
+		Outlined(own, frame, Box(frame, Part(frame, "FillArea") or frame, 0, 0, 0, 0, 15), "window")
 		own.fill = Part(frame, "Fill")
 		own.mask = Part(frame, "Mask")
 		own.back = ns.RegionWithAtlas(frame, BAR_BACKGROUND)
@@ -1455,8 +1475,10 @@ local function Classify(frame)
 	if Part(frame, "Left") and Part(frame, "LeftActive") and (Part(frame, "TabTextures") or Part(frame, "RotatedTextures")) then
 		return "tab"
 	end
+	-- A bag slot shows a picture of an empty slot. The 70532 template named it in emptyBackgroundAtlas; the 70790 one has an EmptyBagIcon
+	-- instead and names the picture in its GetItemButtonBackgroundTexture (ContainerFrame.xml:152-154, ContainerFrame.lua:1953-1960).
 	if Part(frame, "IconBorder") and (Part(frame, "icon") or Part(frame, "Icon")) and Part(frame, "NormalTexture") then
-		return "slot", type(Field(frame, "emptyBackgroundAtlas")) == "string" and "still" or nil
+		return "slot", (type(Field(frame, "emptyBackgroundAtlas")) == "string" or Part(frame, "EmptyBagIcon") ~= nil) and "still" or nil
 	end
 	if IsClose(frame) then
 		return "close"
@@ -1646,8 +1668,8 @@ function Rows(box, group)
 end
 
 -- The pane toggle of the character window follows the pane. Opening or closing the pane runs the game's RefreshDisplay, whose
--- SetChecked gives every mode tab icon 50 again (CharacterFrame.lua:300-301, 265-271, 217-229; the size 50 is set at
--- Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.lua:381-387), so the side tabs are sized again too.
+-- SetChecked gives every mode tab icon 50 again (CharacterFrame.lua:288-289, 253-259, 205-217; the size 50 is set at
+-- Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.lua:383-389), so the side tabs are sized again too.
 Watch.toggles = setmetatable({}, { __mode = "k" })
 
 function Watch.PaneChanged()
@@ -1691,8 +1713,8 @@ local function CharacterExtras(root, group)
 	local toggle = Part(root, "RightPaneToggleButton")
 	if toggle and pane then
 		Style("close", toggle, group, pane)
-		-- The game's UpdateRightPaneToggleButton runs when the window is shown and when the pane opens or closes (CharacterFrame.lua:306-320,
-		-- 728-732); the shape follows the pane, so the toggle is looked at again a frame after each of those.
+		-- The game's UpdateRightPaneToggleButton runs when the window is shown and when the pane opens or closes (CharacterFrame.lua:294-309,
+		-- 710-714); the shape follows the pane, so the toggle is looked at again a frame after each of those.
 		Watch.toggles[toggle] = true
 		HookScript(toggle, "OnClick", Watch.PaneChanged)
 		HookScript(pane, "OnShow", Watch.PaneChanged)
@@ -1702,7 +1724,7 @@ local function CharacterExtras(root, group)
 	-- The tab with the player's portrait gets its texture coordinates from the game again.
 	local portraitTab = Held(Held(root, "ModeTabs"), "CharacterTab")
 	if portraitTab then
-		-- The game draws it again when the window is shown and on the portrait and talent events (CharacterFrame.lua:160-164, 380-405).
+		-- The game draws it again when the window is shown and on the portrait and talent events (CharacterFrame.lua:148-152, 368-393).
 		Watch.portraitTabs[portraitTab] = true
 		HookScript(root, "OnShow", Watch.PortraitChanged)
 	end
@@ -1837,8 +1859,8 @@ end
 
 -- The bag windows are shown with a direct Show and make their item slots when they update their items.
 -- The game also sets the colour of their flat background each time a bag opens. ContainerFrame_GenerateFrame makes the slots, sets the
--- background and updates the items of a bag it opens (ContainerFrame.lua:1293-1312), and ContainerFrame_UpdateAll updates the items of every
--- open bag (:1267-1271), so a bag is looked at a frame after either, after BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED, and when it is shown.
+-- background and updates the items of a bag it opens (ContainerFrame.lua:1296-1315), and ContainerFrame_UpdateAll updates the items of every
+-- open bag (:1270-1273), so a bag is looked at a frame after either, after BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED, and when it is shown.
 Watch.bags = setmetatable({}, { __mode = "k" })
 
 function Watch.BagChanged(root)
@@ -1953,6 +1975,24 @@ local function InspectExtras(root, group)
 	end
 end
 
+-- Since 70707 the game sets the alpha of the overlay over the race pictures, by the unit's race, each time the character page or the inspect
+-- page is shown (Camelot/PaperDollFrame.lua:3367-3391, called at PaperDollFrame.lua:1522 and Blizzard_InspectUI/Mainline/InspectPaperDollFrame.lua:102),
+-- also when the player only changes tabs inside an open window and no ShowUIPanel follows (CharacterFrame.lua:106-121, Camelot/Blizzard_InspectUI.lua:154-162).
+-- The alpha it set is the one given back when the pictures come back, and the overlay is faded again at once, so it does not show for a frame.
+function Watch.RaceBackground(model)
+	if model == nil or ns.IsSecret(model) or type(model) ~= "table" or ns.Forbidden(model) or not ns.Enabled(KEY) then
+		return
+	end
+	local overlay = Part(model, "BackgroundOverlay")
+	if overlay and faded[overlay] ~= nil then
+		local ok, alpha = pcall(overlay.GetAlpha, overlay)
+		if ok and not ns.IsSecret(alpha) and type(alpha) == "number" then
+			faded[overlay] = alpha
+		end
+	end
+	Again(model, "fades")
+end
+
 local function DressUpExtras(root, group)
 	Style("fades", root, group, { unless = "raceArt", list = Pieces(Held(root, "ModelBackground")) })
 end
@@ -2002,7 +2042,10 @@ end
 -- the sweep leaves alone. bare: the window has no box of its own. solid: the fill ignores the window opacity.
 local WINDOWS = {
 	{ name = "CharacterFrame", title = "Character", group = "character", special = CharacterExtras,
-		strip = { "CharacterFrame.LeftPaneHost", { "CharacterFrame.RightPaneHost", 1 }, "PaperDollLevelInfo", "CharacterStatsPaneScrollBox", "CharacterStatsPanePetScrollBox" } },
+		-- The rock strip across the top of the left pane is a frame of PaperDollFrame's own (Camelot/PaperDollFrame.xml:556-573). The level
+		-- text in front of it has no background any more (:575-607); the older clients drew one.
+		strip = { "CharacterFrame.LeftPaneHost", { "CharacterFrame.RightPaneHost", 1 }, "PaperDollFrame.TopBackgroundStripHost", "PaperDollLevelInfo",
+			"CharacterStatsPaneScrollBox", "CharacterStatsPanePetScrollBox" } },
 	{ name = "LFGParentFrame", title = "Looking For Group", group = "groupfinder", addon = "Blizzard_GroupFinder_VanillaStyle", special = GroupFinderExtras,
 		pages = { "LFGListingFrame", "LFGBrowseFrame", "LFGWhoListFrame" },
 		strip = { "LFGListingFrame.RolesSection", "LFGListingFrame.Inset", "LFGListingFrame.DividerFrame", "LFGListingFrame.ActivityView", "LFGBrowseFrame.Inset" },
@@ -2047,7 +2090,9 @@ local WINDOWS = {
 	{ name = "FlightMapFrame", title = "Flight map", group = "maps", addon = "Blizzard_FlightMap", bare = true, skip = { "FlightMapFrame.ScrollContainer" } },
 	{ name = "TaxiFrame", title = "Flight paths", group = "maps" },
 	{ name = "CollectionsJournal", title = "Collections", group = "more", addon = "Blizzard_Collections" },
-	{ name = "PetStableFrame", title = "Stable", group = "more" },
+	-- The stable draws two bands and a border on the window itself and a divider in each of two frames over it
+	-- (Blizzard_StableUI/Camelot/Blizzard_StableUI.xml:103-127, 265-288).
+	{ name = "PetStableFrame", title = "Stable", group = "more", strip = { "PetStableFrame", "PetStableFrame.TopDividerFrame", "PetStableFrame.BottomDividerFrame" } },
 	{ name = "ItemSocketingFrame", title = "Sockets", group = "more", addon = "Blizzard_ItemSocketingUI" },
 	{ name = "ClickBindingFrame", title = "Click casting", group = "more", addon = "Blizzard_ClickBindingUI" },
 	{ name = "TimeManagerFrame", title = "Clock", group = "more", addon = "Blizzard_TimeManager" },
@@ -2064,8 +2109,10 @@ local WINDOWS = {
 	{ name = "AchievementFrame", title = "Achievements", group = "more", addon = "Blizzard_AchievementUI", solid = true },
 	{ name = "CalendarFrame", title = "Calendar", group = "more", addon = "Blizzard_Calendar", solid = true, strip = { "CalendarFrame" } },
 	{ name = "ChatConfigFrame", title = "Chat settings", group = "menus", special = DialogExtras },
-	{ name = "PVPMatchScoreboard", title = "Scoreboard", group = "more", solid = true, strip = { "PVPMatchScoreboard.Content" } },
-	{ name = "PVPMatchResults", title = "Match results", group = "more", solid = true, strip = { "PVPMatchResults.content" } },
+	-- The stone band behind the column headers is drawn on the header frame inside the content (Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:32-59,
+	-- Camelot/PVPMatchResults.xml:34-75). Only the art of each frame itself goes: the list, its scroll bar and the tabs are children of the content.
+	{ name = "PVPMatchScoreboard", title = "Scoreboard", group = "more", solid = true, strip = { "PVPMatchScoreboard.Content", "PVPMatchScoreboard.Content.ScrollCategories" } },
+	{ name = "PVPMatchResults", title = "Match results", group = "more", solid = true, strip = { "PVPMatchResults.content", "PVPMatchResults.content.scrollCategories" } },
 	{ name = "CompactRaidFrameManager", title = "Raid manager", group = "social", solid = true, strip = { "CompactRaidFrameManager" } },
 }
 for index = 1, 7 do
@@ -2219,6 +2266,17 @@ local function OnItemBorderColour(button, r, g, b)
 	Again(button, "slot")
 end
 
+-- The game puts the icon's texture coordinates back to the whole texture each time it sets the picture of an item button
+-- (SetItemButtonTexture_Base, ItemButtonTemplate.lua:76-97), on every update of a character or vendor slot (PaperDollFrame.lua:2182, 2204,
+-- MerchantFrame.lua:301), so a cropped slot is cropped again after it. A bag slot is not cropped, and the bags call the button's own
+-- method, which no hook follows (ContainerFrame.lua:1218).
+local function OnItemTexture(button)
+	local own = SlotOf(button)
+	if own and not own.still and IsOn("slot", own.group) and Opt("crop") > 0 then
+		Crop(own.icon, Opt("crop") / 100)
+	end
+end
+
 local function OnItemNormalColour(button, r, g, b)
 	local own = SlotOf(button)
 	if own and not ns.IsSecret(r) and not ns.IsSecret(g) and not ns.IsSecret(b) then
@@ -2315,6 +2373,7 @@ local function InstallHooks()
 	HookGlobal("StaticPopup_Show", OnPopup)
 	HookGlobal("SetItemButtonBorder", OnItemBorder)
 	HookGlobal("SetItemButtonBorderVertexColor", OnItemBorderColour)
+	HookGlobal("SetItemButtonTexture", OnItemTexture)
 	HookGlobal("SetItemButtonNormalTextureVertexColor", OnItemNormalColour)
 	HookGlobal("SetItemButtonSlotVertexColor", OnCellColour)
 	HookGlobal("SetItemButtonNameFrameVertexColor", OnCellColour)
@@ -2322,11 +2381,12 @@ local function InstallHooks()
 	HookGlobal(FLYOUT_UPDATE, OnFlyout)
 	HookGlobal("ContainerFrame_GenerateFrame", Watch.BagGenerated)
 	HookGlobal("ContainerFrame_UpdateAll", Watch.BagsUpdated)
-	-- The game chooses the tab of a character, collections or inspect window in these (PaperDollFrame.lua:3379-3395, CharacterFrame.lua:3,
+	-- The game chooses the tab of a character, collections or inspect window in these (PaperDollFrame.lua:3432-3458, CharacterFrame.lua:3,
 	-- Blizzard_CollectionsOverrides.lua:21-31).
 	HookGlobal("PaperDollFrame_UpdateSidebarTabs", Watch.RefreshSideTabs)
 	HookGlobal("CollectionsJournal_SetTab_Internal", Watch.RefreshSideTabs)
 	HookGlobal("ToggleCharacter", Watch.RefreshSideTabs)
+	HookGlobal("SetPaperDollBackground", Watch.RaceBackground)
 end
 
 -- The module ----------------------------------------------------------------------------------------

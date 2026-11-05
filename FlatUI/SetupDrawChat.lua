@@ -176,7 +176,7 @@ do
 	local STAMP = { none = "", hhmm = "03:27 ", hhmmss = "03:27:32 ", hhmmAm = "03:27 PM ", hhmmssAm = "03:27:32 PM ", hhmm24 = "15:27 ", hhmmss24 = "15:27:32 " }
 	local PARTY, GUILD, GENERAL = { 0.67, 0.67, 1 }, { 0.25, 1, 0.25 }, { 1, 0.75, 0.75 }
 	-- Per line: the channel label, its colour, who speaks and in which class, the message, and whether Per channel colours the name (the
-	-- legacy setting of that channel, ChatFrameUtil.lua:891-894).
+	-- legacy setting of that channel, ChatFrameUtil.lua:906-909).
 	local LINES = {
 		{ label = "[1. General]", colour = GENERAL, who = "Hunterly", class = "HUNTER", text = "any healer for Deadmines?", legacy = false },
 		{ label = "[Party]", colour = PARTY, who = false, class = false, text = "on my way", legacy = true },

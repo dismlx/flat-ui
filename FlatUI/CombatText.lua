@@ -91,7 +91,7 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- Whose hits. No source of who made a hit is open to addons: UNIT_COMBAT has no field for it (UnitDocumentation.lua:4167-4180) and the combat
 -- log is read through C_CombatLogSecure, whose environment is SecureOnly (CombatLogSecureDocumentation.lua:3-6). So a hit counts as yours
 -- from signals about you that are plain: a cast of yours or your pet's (UNIT_SPELLCAST_*, plain for the player and their pet,
--- SecretPredicatesDocumentation.lua:110-113), your swing and your shot (PLAYER_ENTER_COMBAT, START_AUTOREPEAT_SPELL, as the game's attack
+-- SecretPredicatesDocumentation.lua:115-118), your swing and your shot (PLAYER_ENTER_COMBAT, START_AUTOREPEAT_SPELL, as the game's attack
 -- button follows them, ActionButton.lua:1018-1031) and a harmful aura of yours on the enemy (the filter string of CooldownViewerItemData.lua:716-724).
 -- The numbers are chosen by eye, not the game's: cast is the seconds after a cast or the start of one that a hit on your target counts, tail
 -- the seconds after a channel ends, aura the seconds an answer about the auras of an enemy is kept, offAfter the hit reports in combat with
@@ -116,7 +116,11 @@ local MINE = { cast = 1.5, shots = { [75] = true, [2480] = true, [7918] = true, 
 	plainEvents = { "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT", "START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL", "PLAYER_ENTERING_WORLD" } }
 local mine = { castUntil = -1, castAt = 0, on = false, deaf = false, chan = false, swing = false, shoot = false, aura = {}, heard = 0, blind = 0, left = 0, kept = 0,
 	unheard = 0, off = false, last = nil, castSlots = {}, castTaken = -1, hand = { main = -math.huge, off = -math.huge }, shotAt = -math.huge, shotEnd = -math.huge, auraSlots = {}, swingAt = -math.huge, extraUsed = false,
-	castIcons = {}, healUntil = -1, nextUntil = -1, nextAt = -math.huge, trace = false }
+	castIcons = {}, healUntil = -1, nextUntil = -1, nextAt = -math.huge, trace = false,
+	crowd = setmetatable({}, { __mode = "k" }), nextPair = -1 }
+-- How long a target counts as hit by others after a physical hit on it was left out: its extra attack slot stays closed meanwhile. In the open
+-- world players who are not in your group hit the same enemy, and a swing of theirs right after yours looks like an extra attack.
+MINE.crowd = 10
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -306,7 +310,7 @@ end
 
 -- The game's own text for the player is off while Combat text for you shows the player's numbers. At login this is written at PLAYER_LOGIN,
 -- before the game registers its settings (Blizzard_SettingsRegistrar.lua:11-22) and loads its combat text only for a variable that is on
--- (CombatOverrides.lua:53, Blizzard_Settings.lua:651-663), so the game's text does not load at all. A change during a session goes through
+-- (CombatOverrides.lua:53, Blizzard_Settings.lua:667-679), so the game's text does not load at all. A change during a session goes through
 -- the callback the game's text listens to (CombatText.lua:17-28 of the game's).
 local function OwnSwitch()
 	if Opt("own") ~= "off" then
@@ -737,6 +741,33 @@ local function Suffix(flag)
 end
 ns.CombatSuffix = Suffix
 
+-- The text of an amount the game withholds, made by the client: its digits with before and after joined to them, or an empty text for a
+-- zero amount, so a full absorb or resist draws no number. C_StringUtil.TruncateWhenZero and WrapString take withheld values from addon code
+-- (StringUtilDocumentation.lua:188-219). The digits are not grouped: no call that takes a withheld value both groups the digits and leaves
+-- zero out. Returns true and the text, or false when the client lacks the calls or refuses them. before and after are plain strings or nil.
+function ns.CombatWithheld(value, before, after)
+	local util = C_StringUtil
+	if type(util) ~= "table" or type(util.TruncateWhenZero) ~= "function" then
+		return false
+	end
+	local ok, digits = pcall(util.TruncateWhenZero, value)
+	if not ok or not (ns.IsSecret(digits) or type(digits) == "string") then
+		return false
+	end
+	if before == nil and after == nil then
+		return true, digits
+	end
+	if type(util.WrapString) ~= "function" then
+		return false
+	end
+	local wrapped
+	ok, wrapped = pcall(util.WrapString, digits, before, after)
+	if not ok or not (ns.IsSecret(wrapped) or type(wrapped) == "string") then
+		return false
+	end
+	return true, wrapped
+end
+
 -- Red, green and blue of a damage number: white for physical, as the game colours the numbers of the player frame (CombatFeedback.lua:44-48).
 function ns.CombatColour(school, bySchool, palette)
 	local physical = ns.IsSecret(school) or type(school) ~= "number" or school == 1
@@ -850,6 +881,10 @@ end
 -- What a hit report shows, by the rules of CombatFeedback.lua:34-86: "amount" or "word", the amount or the word, what follows an
 -- amount, true for a critical or crushing hit, and the colour. Nothing for a report that shows nothing. event is a plain string.
 -- With a level the report is for the player's own character.
+-- From build 70755 the game withholds every amount (UnitDocumentation.lua:4178), so a hit of no amount can no longer be told from the
+-- amount. A full block still has a flag of its own: CombatFeedback.lua:51-60 shows BLOCK as a word and a partial block is BLOCK_REDUCED, so
+-- WOUND with BLOCK is the word. A full absorb or resist shares its flag with a partial one: it goes through the amount, which the client
+-- writes as nothing when it is zero (ns.CombatWithheld), and the word of Partial effects stays.
 local function Describe(event, flag, amount, school, level, friendly)
 	if ns.IsSecret(flag) then
 		stats.kind = stats.kind + 1
@@ -863,7 +898,7 @@ local function Describe(event, flag, amount, school, level, friendly)
 	elseif type(amount) ~= "number" then
 		amount = 0
 	end
-	local none = not withheld and amount == 0
+	local none = (not withheld and amount == 0) or (withheld and event == "WOUND" and flag == "BLOCK")
 	if level then
 		return DescribeOwn(level, event, flag, amount, none, school)
 	end
@@ -1319,21 +1354,33 @@ local function Fill(item, plate, unit, kind, value, extra, crit, r, g, b, class,
 	if kind == "word" then
 		text:SetText(value)
 	else
-		local shown = value
-		if type(BreakUpLargeNumbers) == "function" then
-			local ok, broken = pcall(BreakUpLargeNumbers, value)
-			if ok and (ns.IsSecret(broken) or broken ~= nil) then
-				shown = broken
-			end
+		-- A withheld amount is written by the client with its sign, and as nothing when it is zero, so a full absorb or resist shows only
+		-- the word after it.
+		local done, withheld = false, nil
+		if ns.IsSecret(value) then
+			done, withheld = ns.CombatWithheld(value, sign, extra and " " or nil)
 		end
-		if friendly and extra then
-			text:SetFormattedText((sign or "") .. "%s %s", shown, extra)
-		elseif friendly then
-			text:SetFormattedText((sign or "") .. "%s", shown)
-		elseif extra then
-			text:SetFormattedText((sign or "") .. "%s %s", shown, extra)
+		if done and extra then
+			text:SetFormattedText("%s%s", withheld, extra)
+		elseif done then
+			text:SetFormattedText("%s", withheld)
 		else
-			text:SetFormattedText((sign or "") .. "%s", shown)
+			local shown = value
+			if type(BreakUpLargeNumbers) == "function" then
+				local ok, broken = pcall(BreakUpLargeNumbers, value)
+				if ok and (ns.IsSecret(broken) or broken ~= nil) then
+					shown = broken
+				end
+			end
+			if friendly and extra then
+				text:SetFormattedText((sign or "") .. "%s %s", shown, extra)
+			elseif friendly then
+				text:SetFormattedText((sign or "") .. "%s", shown)
+			elseif extra then
+				text:SetFormattedText((sign or "") .. "%s %s", shown, extra)
+			else
+				text:SetFormattedText((sign or "") .. "%s", shown)
+			end
 		end
 	end
 	local base = TEXT_HEIGHT * Opt(friendly and "friendSize" or "size") / 100
@@ -1893,10 +1940,17 @@ local function PetOut()
 	return not (ok and Plain(there, "boolean") and not there)
 end
 
+-- True while a physical hit on this target was left out in the last MINE.crowd seconds: someone else is hitting it.
+local function Crowded(key, now)
+	local at = key ~= nil and mine.crowd[key] or nil
+	return at ~= nil and now - at <= MINE.crowd
+end
+
 -- Takes the slot of a hand for a white hit, then the extra attack slot, which opens for MINE.extra seconds after a hand slot is taken and
--- takes one hit. The extra slot is closed with a pet out, in a group, with Extra attacks Off, while a cast slot is open (an instant strike) and while a harmful aura of yours is on the enemy (a bleed tick looks the same). Returns "swing slot" or "extra slot" when
--- it took one, and true when a hand was busy.
-local function TakeSwing(now, unit)
+-- takes one hit. The extra slot is closed with a pet out, in a group, with Extra attacks Off, while a cast slot is open (an instant strike), while a harmful aura of yours is on the enemy (a bleed tick looks the same)
+-- and while others hit the target (Crowded). Returns "swing slot" or "extra slot" when it took one, and true when a hand was busy. key is the plate, or the unit
+-- without one.
+local function TakeSwing(now, unit, key)
 	local main, off = Speeds(UnitAttackSpeed, true)
 	if TakeWeapon(main, mine.hand.main, now) then
 		mine.hand.main, mine.swingAt, mine.extraUsed = now, now, false
@@ -1904,7 +1958,8 @@ local function TakeSwing(now, unit)
 	elseif off and TakeWeapon(off, mine.hand.off, now) then
 		mine.hand.off, mine.swingAt, mine.extraUsed = now, now, false
 		return "swing slot", false
-	elseif Opt("extra") == "plain" and not mine.extraUsed and now - mine.swingAt <= MINE.extra and not InGroup() and not PetOut() and not (mine.castSlots[1] and mine.castSlots[1] >= now) and AuraListFree(unit) then
+	elseif Opt("extra") == "plain" and not mine.extraUsed and now - mine.swingAt <= MINE.extra and not InGroup() and not PetOut() and not (mine.castSlots[1] and mine.castSlots[1] >= now)
+		and not Crowded(key, now) and AuraListFree(unit) then
 		mine.extraUsed = true
 		return "extra slot", false
 	end
@@ -1915,10 +1970,14 @@ end
 -- physical hit during auto-attack tries a swing slot first and a non-critical hit tries an aura slot next, so that a cast slot stays for the
 -- spell hit it was made for, which can be critical. The cast slot is the fallback for every hit. A next melee ability (Maul, Heroic Strike,
 -- Cleave, Raptor Strike) opens a next-swing slot that only the physical hit takes, and a word right after that hit (word is true) is the swing it
--- replaced and is left out. Returns true, the slot taken and the icon of the action (nil for none, by Spell icons).
-local function MineOne(plate, unit, school, flag, word)
+-- replaced and is left out. From build 70755 the game withholds the amount (blind is true for a WOUND whose amount is withheld), so the report of
+-- the swing it replaced, a hit of 0, cannot be told from the hit and may come first: the slot takes the next physical report within MINE.extra
+-- seconds as well ("next swing too", with no icon or name) unless others hit the target, and the client writes the one of 0 as nothing
+-- (ns.CombatWithheld). A physical hit left out marks its target as hit by others for MINE.crowd seconds. Returns true, the slot taken and the icon of the action (nil for none, by Spell icons).
+local function MineOne(plate, unit, school, flag, word, blind)
 	local now = GetTime()
 	local why, taken, swingTried, auraTried, icon
+	local key = plate or unit
 	if plate == Plate("target") then
 		-- In this mode castUntil is set only by the end of a channel.
 		if mine.chan or now <= mine.castUntil then
@@ -1928,11 +1987,15 @@ local function MineOne(plate, unit, school, flag, word)
 		elseif not word and now <= mine.nextUntil and Plain(school, "number") and school == 1 then
 			mine.nextUntil, mine.nextAt = -1, now
 			mine.hand.main, mine.swingAt, mine.extraUsed = now, now, true
+			mine.nextPair = blind and now + MINE.extra or -1
 			why = "next swing"
+		elseif blind and now <= mine.nextPair and Plain(school, "number") and school == 1 and not Crowded(key, now) then
+			mine.nextPair = -1
+			why = "next swing too"
 		else
 			if mine.swing and not (mine.shoot or now <= mine.shotEnd) and Plain(school, "number") and school == 1 then
 				swingTried = true
-				why, taken = TakeSwing(now, unit)
+				why, taken = TakeSwing(now, unit, key)
 			end
 			if not why and Plain(flag, "string") and flag ~= "CRITICAL" then
 				auraTried = true
@@ -1965,7 +2028,7 @@ local function MineOne(plate, unit, school, flag, word)
 				elseif mine.swing and not swingTried then
 					if Plain(school, "number") then
 						if school == 1 then
-							why, taken = TakeSwing(now, unit)
+							why, taken = TakeSwing(now, unit, key)
 						end
 					else
 						mine.blind = mine.blind + 1
@@ -2006,6 +2069,9 @@ local function MineOne(plate, unit, school, flag, word)
 	end
 	mine.left = mine.left + 1
 	mine.last = taken and "left out (slot taken)" or "left out (no cast or swing seen)"
+	if key ~= nil and Plain(school, "number") and school == 1 then
+		mine.crowd[key] = now
+	end
 	return false
 end
 
@@ -2020,6 +2086,7 @@ local function OnSignal(_, event, unit, _, spellID)
 		mine.healUntil, mine.nextUntil, mine.nextAt, mine.nextName = -1, -1, -math.huge, nil
 		mine.hand, mine.shotAt, mine.shotEnd = { main = -math.huge, off = -math.huge }, -math.huge, -math.huge
 		mine.swingAt, mine.extraUsed = -math.huge, false
+		mine.crowd, mine.nextPair = setmetatable({}, { __mode = "k" }), -1
 		if was ~= mine.off then
 			pcall(Sync)
 		end
@@ -2167,7 +2234,7 @@ local function Counts(plate, unit, school, flag, word, event, amount)
 			end
 		end
 		if not (mine.off or (Opt("units") == "target" and plate ~= Plate("target"))) then
-			keep, why, icon = (whose == "one" and MineOne or Mine)(plate, unit, school, flag, word)
+			keep, why, icon = (whose == "one" and MineOne or Mine)(plate, unit, school, flag, word, event == "WOUND" and ns.IsSecret(amount))
 			decision = mine.last
 		else
 			decision = "left out (estimate off or not the target)"
@@ -2190,7 +2257,7 @@ end
 -- school gives the colour, except that Physical ability hits Yellow makes a physical hit of a spell or special attack yellow. Without the school
 -- colours, Physical ability hits White makes a physical hit of one white. Next melee ability names After the number gives the name.
 local function Ability(why, school, r, g, b)
-	local spell = why == "cast slot" or why == "next swing" or why == "channel"
+	local spell = why == "cast slot" or why == "next swing" or why == "next swing too" or why == "channel"
 	if not (spell or why == "swing slot" or why == "extra slot" or why == "shot slot") then
 		return r, g, b
 	end
@@ -2208,9 +2275,17 @@ local function Ability(why, school, r, g, b)
 	return r, g, b, name
 end
 
--- The rule of Describe for a word: a report of a word event, or a hit of no amount.
-function MINE.IsWord(event, amount)
-	return WORDS[event] ~= nil or (event == "WOUND" and not ns.IsSecret(amount) and (type(amount) ~= "number" or amount == 0))
+-- The rule of Describe for a word: a report of a word event, or a hit of no amount. A withheld amount (every amount from build 70755 on) is a
+-- word only for a full block, which has its own flag.
+function MINE.IsWord(event, amount, flag)
+	if WORDS[event] ~= nil then
+		return true
+	elseif event ~= "WOUND" then
+		return false
+	elseif ns.IsSecret(amount) then
+		return Plain(flag, "string") and flag == "BLOCK"
+	end
+	return type(amount) ~= "number" or amount == 0
 end
 
 -- A hit report for the target with Where your hits show on Scroll area, or on Both while the target has no nameplate: Outgoing takes the
@@ -2224,7 +2299,7 @@ local function OnTarget(unit, event, flag, amount, school)
 	if ok and Plain(attackable, "boolean") and not attackable then
 		return
 	end
-	local counted, why, icon = Counts(Plate("target"), unit, school, flag, MINE.IsWord(event, amount), event, amount)
+	local counted, why, icon = Counts(Plate("target"), unit, school, flag, MINE.IsWord(event, amount, flag), event, amount)
 	if not counted then
 		return
 	end
@@ -2304,7 +2379,7 @@ local function OnCombat(unit, event, flag, amount, school)
 	local out = where == "both" and event ~= "HEAL"
 	local counted, why, icon
 	if over or out then
-		counted, why, icon = Counts(plate, unit, school, flag, MINE.IsWord(event, amount), event, amount)
+		counted, why, icon = Counts(plate, unit, school, flag, MINE.IsWord(event, amount, flag), event, amount)
 	end
 	if not counted then
 		return
@@ -2501,9 +2576,7 @@ local function Status()
 			lines[#lines + 1] = "Scrolling Combat Text for Self is ticked in the game's options, so your numbers show twice. /reload unticks it."
 		end
 	end
-	if stats.amount > 0 then
-		lines[#lines + 1] = ("Hit amounts the game would not tell: %d."):format(stats.amount)
-	end
+	-- From build 70755 the game withholds every amount (UnitDocumentation.lua:4178), so a count of them says nothing and has no line here.
 	if stats.kind > 0 then
 		lines[#lines + 1] = ("Hit types the game would not tell: %d."):format(stats.kind)
 	end

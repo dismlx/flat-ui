@@ -17,7 +17,7 @@ local _, ns = ...
 --   -27, 4, icon 16 by 16 at -5, spell name at the top -10, spark 8 by 20), CastingBarFrame.xml:399-452 (small bar: icon 20 by 20 at -2, -5, spark 6 by 16,
 --   spell name at the top -8), Blizzard_UnitFrame/Mainline/TargetFrame.xml:543-548 (target bar 150 by 10);
 --   Blizzard_SwingTimer/Blizzard_SwingTimer.xml:12-56 (the bar sits 5 and 4 inside its frame, the name shadow is 171 wide, the labels 10 from each end),
---   Blizzard_SwingTimer.lua:258-267, 336-372, 415-432 (the fill grows from 0 to 1, the pip is at its end, the time left has one decimal, the dimmed
+--   Blizzard_SwingTimer.lua:265-276, 340-377, 425-448 (the fill grows from 0 to 1, the pip is at its end, the time left has one decimal, the dimmed
 --   timer and red text out of range).
 -- The client has no personal resource display source in the public mirror, so the size and the colours of the game's own look of those bars are
 -- fixed samples here.
@@ -733,7 +733,7 @@ ns.SetupDrawings["mock-resource"] = resDrawing
 -- A timer is 190 by 22 with its bar 5 and 4 inside, so the bar is 180 by 14 (Blizzard_SwingTimer.xml:21-27).
 local SWING_FRAME_W, SWING_FRAME_H, SWING_BAR_W, SWING_BAR_H = 190, 22, 180, 14
 local SWING_LEFT, SWING_TOP, SWING_GAP, SWING_SHADOW = 14, 10, 6, 171
--- The game's range colours (Blizzard_SwingTimer.lua:423) and its atlases (Blizzard_SwingTimer.xml:12-56, 62-100).
+-- The game's range colours (Blizzard_SwingTimer.lua:440-447) and its atlases (Blizzard_SwingTimer.xml:12-56, 62-100).
 local GAME_IN, GAME_OUT, GAME_RANGE_ALPHA = { 1, 1, 1 }, { 1, 0.1, 0.1 }, 0.4
 local SWING_FILL_ATLAS = { main = "ui-swingtimerbar-filling-mainhand", off = "ui-swingtimerbar-filling-offhand", ranged = "ui-swingtimerbar-filling-ranged" }
 local SWING_ART = { frame = "ui-swingtimerbar-frame", back = "ui-swingtimerbar-background" }
@@ -772,6 +772,10 @@ local function BuildSwing(stage)
 		row.bar:SetPoint("TOPLEFT", row.timer, "TOPLEFT", 5, -4)
 		row.bar:SetPoint("BOTTOMRIGHT", row.timer, "BOTTOMRIGHT", -5, 4)
 		row.fill = NewTexture(row.bar, "ARTWORK", 0)
+		-- The Auto Shot window on the ranged timer: the last half second of its swing, over the fill (Bars.lua, ApplyAutoShot).
+		if spec.hand == "ranged" then
+			row.band = NewTexture(row.bar, "ARTWORK", 7)
+		end
 		row.shadow = NewTexture(row.bar, "OVERLAY", 0)
 		row.shadow:SetPoint("TOPLEFT", row.bar, "TOPLEFT", 0, 0)
 		row.shadow:SetPoint("BOTTOMLEFT", row.bar, "BOTTOMLEFT", 0, 0)
@@ -818,6 +822,8 @@ local function BuildSwing(stage)
 	p["swing.spark"] = main.pip
 	p["swing.textShadow"] = main.shadow
 	p["swing.reverse"] = main.fill
+	p["swing.autoShot"] = ranged.band
+	p["swing.autoShotColour"] = ranged.band
 	p["swing.rangeAlpha"] = out.bar
 	p["swing.idle"] = idle.timer
 	for _, key in ipairs({ "textSize", "textOutline", "name", "textOwn", "textColour" }) do
@@ -936,6 +942,19 @@ function swingDrawing.draw(stage)
 		GameTexture(inst, row.shadow, SWING_SHADOW_ATLAS, { 0, 0, 0, 0.45 })
 		row.bar:SetShown(not idle)
 		row.bar:SetAlpha(spec.out and rangeAlpha or 1)
+		if row.band then
+			local shown = enabled and G("swing.autoShot") == true and not idle
+			if shown then
+				local br, bg, bb = ns.Colour("swing.autoShotColour")
+				row.band:SetColorTexture(br, bg, bb, 0.5)
+				local side = look.reverse and "LEFT" or "RIGHT"
+				row.band:ClearAllPoints()
+				row.band:SetPoint("TOP" .. side, row.bar, "TOP" .. side, 0, 0)
+				row.band:SetPoint("BOTTOM" .. side, row.bar, "BOTTOM" .. side, 0, 0)
+				row.band:SetWidth(inst.barW * math.min(1, 0.5 / spec.period))
+			end
+			row.band:SetShown(shown)
+		end
 		row.shadow:SetShown(not (flat and not G("swing.textShadow")))
 		local r, g, b = GAME_IN[1], GAME_IN[2], GAME_IN[3]
 		if spec.out then

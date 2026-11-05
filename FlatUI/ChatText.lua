@@ -3,11 +3,11 @@ local _, ns = ...
 -- The text of the chat windows: the face and outline, the shadow, how many lines a window keeps and whether old messages fade. Runs with the
 -- chat module, after each pass of it and at UPDATE_CHAT_WINDOWS and PLAYER_ENTERING_WORLD, on each window named in CHAT_FRAMES. What the game
 -- gave a window is read the first time a row asks for a change and put back when the row goes back to the game's value or the module is off.
--- The size of the text stays the game's: both ways the game sets it read the face and the outline back first (FloatingChatFrame.lua:1192-1193,
--- ChatFrameOverrides.lua:121-122), so a face and an outline set here stay through a size change.
+-- The size of the text stays the game's: both ways the game sets it read the face and the outline back first (Mainline/FloatingChatFrame.lua:1097-1098,
+-- Mainline/ChatFrameOverrides.lua:121-122), so a face and an outline set here stay through a size change.
 -- A size change the player makes also copies the face and flags of ChatFrame1 to GMChatFrame and CommunitiesFrame.Chat.MessageFrame
--- (FloatingChatFrame.lua:1192-1201). Those two frames are not in CHAT_FRAMES, so a face set here spreads to them and is not put back there. The game's own values are 128 lines and
--- 120 seconds (ChatFrameOverrides.lua:2-3). ScrollingMessageFrame.lua:240-276 has the four calls for lines and fading. No message text is read, so the chat lockdown does not touch this module.
+-- (Mainline/FloatingChatFrame.lua:1097-1106). Those two frames are not in CHAT_FRAMES, so a face set here spreads to them and is not put back there. The game's own values are 128 lines and
+-- 120 seconds (Mainline/ChatFrameOverrides.lua:2-3). ScrollingMessageFrame.lua:240-276 has the four calls for lines and fading. No message text is read, so the chat lockdown does not touch this module.
 
 local KEY = "chat"
 local GAME_LINES, GAME_TIME = 128, 120
