@@ -790,7 +790,7 @@ local function Extras(tooltip, data)
 end
 
 -- The colour of a unit tooltip's border and of the name on its first line. Called by the game for the name line of a unit, after it is added
--- (TooltipDataHandler.lua:329-334); the game set the line's colour before that (TooltipDataRules.lua:6-14). Reaction takes that colour, class
+-- (TooltipDataHandler.lua:329-334); the game set the line's colour before that (TooltipDataRules.lua:7-16). Reaction takes that colour, class
 -- takes the class colour of a player and the reaction colour of any other unit, and a token or class the client withholds changes nothing.
 local function UnitLine(tooltip, lineData)
 	if not ns.Enabled(KEY) or not Usable(tooltip) or not Usable(lineData) then
