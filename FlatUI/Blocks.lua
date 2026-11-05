@@ -6,7 +6,8 @@ local _, ns = ...
 -- never calls a method of a Blizzard frame. It reads rectangles and sizes only. A bar is held by one owner: the Bar block page comes first.
 -- The pet bar can be hung from the same rectangle, above it on the right or the left.
 -- All of it is planned out of combat. Action bars 6 to 8 stay where they were put in a fight; the game stacks the pet bar and bars 2 to 5 again
--- at the start and the end of a fight until each has been moved once in Edit Mode.
+-- at the start and the end of a fight until each has been moved once in Edit Mode. It stacks the totem bar the same way (EditModeUtil.lua:21);
+-- no block here holds that bar, the Bar block page does.
 
 local KEY = "blocks"
 local BARS = ns.BarFrames
@@ -21,7 +22,7 @@ local BLOCKS = {
 local PREFIXES = { ActionButton = "main", MultiBarBottomLeftButton = "bar2", MultiBarBottomRightButton = "bar3", MultiBarRightButton = "bar4",
 	MultiBarLeftButton = "bar5", MultiBar5Button = "bar6", MultiBar6Button = "bar7", MultiBar7Button = "bar8" }
 local WATCH_EVERY = 0.5
--- The game stacks the pet bar and bars 2 to 5 itself; the others it leaves where they are put.
+-- The game stacks the pet bar and bars 2 to 5 itself, and the totem bar, which is not a bar of this page; the others it leaves where they are put.
 local STACKED_TOGGLE = 4
 
 -- queued: a replan is waiting for the next frame. pending: a fight stopped a replan. on: the page has something to place. last: the plan in
