@@ -77,7 +77,7 @@ ns.ClassTrackers = {
 ns.ClassShortBuffs = {
 	WARRIOR = {
 		{ name = "Shield Block", secs = 7, ids = { 2565 } },
-		-- 2565 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Blizzard_TutorialData.lua:48
+		-- 2565 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Mainline/Blizzard_TutorialData.lua:54 (Mainline only; Forever does not load it)
 		{ name = "Spell Reflection", secs = 5, ids = { 23920 } },
 		-- 23920: SpellName_1.60.1.70245.csv
 		{ name = "Berserker Rage", secs = 10, ids = { 18499 } },
@@ -154,7 +154,7 @@ ns.ClassShortBuffs = {
 		{ name = "Venom", secs = 6, ids = { 1310703 } },
 		-- 1310703: SpellName_1.60.1.70245.csv
 		{ name = "Sprint", secs = 15, ids = { 2983, 8696, 11305 } },
-		-- 2983 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Blizzard_TutorialData.lua:80
+		-- 2983 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Mainline/Blizzard_TutorialData.lua:86 (Mainline only; Forever does not load it)
 		-- 8696, 11305: SpellName_1.60.1.70245.csv
 		{ name = "Evasion", secs = 15, ids = { 5277 } },
 		-- 5277 in the mirror: Interface/AddOns/Blizzard_CooldownBroadcaster/TrackedCooldowns.lua:247
@@ -167,12 +167,12 @@ ns.ClassShortBuffs = {
 	},
 	PRIEST = {
 		{ name = "Power Word: Shield", secs = 30, ids = { 17, 592, 600, 3747, 6065, 6066, 10898, 10899, 10900, 10901 } },
-		-- 17 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Blizzard_TutorialData.lua:90
+		-- 17 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Mainline/Blizzard_TutorialData.lua:96 (Mainline only; Forever does not load it)
 		-- 592, 600, 3747, 6065, 6066, 10898, 10899, 10900, 10901: SpellName_1.60.1.70245.csv
 		{ name = "Power Infusion", secs = 15, ids = { 10060 } },
 		-- 10060 in the mirror: Interface/AddOns/Blizzard_CooldownBroadcaster/TrackedCooldowns.lua:221
 		{ name = "Fade", secs = 10, ids = { 586, 9578, 9579, 9592, 10941, 10942 } },
-		-- 586 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Blizzard_TutorialData.lua:95
+		-- 586 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Mainline/Blizzard_TutorialData.lua:101 (Mainline only; Forever does not load it)
 		-- 9578, 9579, 9592, 10941, 10942: SpellName_1.60.1.70245.csv
 		{ name = "Feedback", secs = 15, ids = { 13896, 19271, 19273, 19274, 19275 } },
 		-- 13896, 19271, 19273, 19274, 19275: SpellName_1.60.1.70245.csv
@@ -196,7 +196,7 @@ ns.ClassShortBuffs = {
 		{ name = "Frost Ward", secs = 30, ids = { 6143, 8461, 8462, 10177, 28609 } },
 		-- 6143, 8461, 8462, 10177, 28609: SpellName_1.60.1.70245.csv
 		{ name = "Slow Fall", secs = 30, ids = { 130 } },
-		-- 130 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Blizzard_TutorialData.lua:117
+		-- 130 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Mainline/Blizzard_TutorialData.lua:123 (Mainline only; Forever does not load it)
 		{ name = "Ice Block", secs = 10, ids = { 11958 } },
 		-- 11958: SpellName_1.60.1.70245.csv
 		{ name = "Evocation", secs = 8, ids = { 12051 } },
@@ -222,7 +222,7 @@ ns.ClassShortBuffs = {
 		{ name = "Barkskin", secs = 15, ids = { 22812 } },
 		-- 22812 in the mirror: Interface/AddOns/Blizzard_CooldownBroadcaster/TrackedCooldowns.lua:55
 		{ name = "Dash", secs = 15, ids = { 1850, 9821 } },
-		-- 1850 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Blizzard_TutorialData.lua:147
+		-- 1850 in the mirror: Interface/AddOns/Blizzard_NewPlayerExperience/Mainline/Blizzard_TutorialData.lua:153 (Mainline only; Forever does not load it)
 		-- 9821: SpellName_1.60.1.70245.csv
 		{ name = "Innervate", secs = 20, ids = { 29166 } },
 		-- 29166 in the mirror: Interface/AddOns/Blizzard_CooldownBroadcaster/TrackedCooldowns.lua:59

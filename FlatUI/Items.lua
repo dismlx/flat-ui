@@ -79,7 +79,7 @@ local function TitleOf(frame)
 end
 
 -- The game colours a title only through SetTitleColor, which sets the text colour. Its windows call it from their own methods (the
--- character window in UpdateTitle, CharacterFrame.lua:254-258, on show, on a tab change and on the name and rank events), so the colour
+-- character window in UpdateTitle, CharacterFrame.lua:242-246, on show, on a tab change and on the name and rank events), so the colour
 -- is set again a frame after each of those: when a titled window is shown, and when the windows module calls Items.Retitle.
 local titled = setmetatable({}, { __mode = "k" })
 local shownHooked = setmetatable({}, { __mode = "k" })
