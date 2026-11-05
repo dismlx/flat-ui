@@ -7,6 +7,8 @@
 - **Combat text**, **Whose hits** at **One hit for each of yours**: a next melee ability (Maul, Heroic Strike, Cleave, Raptor Strike) no longer shows as 0. The game reports the swing it replaced as a hit of 0 that can no longer be told from the hit, and it can come first: both now take the ability's slot, the hit shows its number and the 0 shows nothing.
 - **Swing timers**: new **Auto Shot window**, on by default. A band over the last half second of the ranged timer shows when moving or casting a spell would delay your next Auto Shot. Its width follows each shot, so it stays right with haste, and it sits at the end the bar fills to, also with **Fill from the right**. **Auto Shot window colour** sets its colour.
 - **Combat text**, **Extra attacks**: a hit of another player right after your swing no longer shows as your **(Extra attack)** when you are not in a group. A physical hit that is not yours marks its enemy as hit by others, and the extra attack slot stays closed on that enemy for 10 seconds.
+- **Colour health by health left** and **Low health border** work again. On build 70790 Flat UI's start-up test of the health colour failed on every character, so `/flatui status` said "Health curve: refused": colouring by health left did nothing on the unit frames, the personal resource display and nameplates, and nameplates had no low health border. The game now gives that colour only as a hidden value, and the test bar had no texture to take it.
+- **Nameplates**, **Fading row behind the name**: with **Colour health bars by health left** also on, the row no longer disappears. The game hides a bar's colour once it is tinted by health left, so the row takes the unit's friendly, neutral or hostile colour while it cannot read it.
 
 ## 0.5.3
 

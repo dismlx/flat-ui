@@ -30952,7 +30952,23 @@ do
 		a.hbr.barColor = { SECRET, SECRET, SECRET, 1 }
 		W.npOptions()
 		W.flush()
-		check("row: a colour the client withholds means no row", NP.row(W, a) == "hidden" and #W.errors == 0 and #W.violations == 0, NP.row(W, a))
+		check("row: a colour the client withholds, with no reaction colour to read, means no row", NP.row(W, a) == "hidden" and #W.errors == 0 and #W.violations == 0, NP.row(W, a))
+		-- A bar that took a withheld colour gives a withheld colour back, as every bar Colour health bars by health left tints does since build 70790:
+		-- the row has the reaction colour of the unit then.
+		W.env.UnitSelectionColor = function(unit)
+			if unit == "nameplate1" then
+				return 1, 0.5, 0.25, 1
+			end
+		end
+		W.npOptions()
+		W.flush()
+		check("row: while the client withholds the bar colour the row has the reaction colour of the unit, at 70 percent brightness",
+			NP.row(W, a) == "VERTICAL 0.700,0.350,0.175,0.95 0.700,0.350,0.175,0.05" and #W.errors == 0 and #W.violations == 0, NP.row(W, a))
+		a.hbr.barColor = { 0.2, 0.4, 0.8, 1 }
+		W.npOptions()
+		W.flush()
+		check("row: and the bar colour again once the client gives it", NP.row(W, a) == "VERTICAL 0.140,0.280,0.560,0.95 0.140,0.280,0.560,0.05", NP.row(W, a))
+		W.env.UnitSelectionColor = nil
 		W.change("nameplates.nameRow", false)
 		check("row: off, it is gone from every plate", NP.row(W, b) == "hidden" and NP.row(W, a) == "hidden")
 		W.change("nameplates.nameRow", true)
@@ -66848,7 +66864,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 773 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 775 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -97593,12 +97609,25 @@ do
 			return c:Evaluate(share)
 		end
 		env.UnitExists = function(unit) return T.exists[unit] ~= false end
-		-- The hidden status bar of the feature test: the base world makes frames only, so a bar is a frame that takes the colour.
+		-- The hidden status bar of the feature test: the base world makes frames only, so a bar is a frame that takes the colour. As on build 70790,
+		-- the colour the curve gives is withheld, and a status bar with no texture refuses it ("Object did not allow secret." in the live client);
+		-- with a texture it takes it. T.noTexture makes SetStatusBarTexture fail.
 		local create = env.CreateFrame
 		env.CreateFrame = function(kind, name, parent, template)
 			if kind == "StatusBar" and name == nil and parent == nil and template == nil then
 				local frame = create("Frame")
-				W.rawOf[frame].SetStatusBarColor = function(_, r, g, b) T.probed = { r, g, b } end
+				local raw = W.rawOf[frame]
+				raw.SetStatusBarTexture = function(_, file)
+					if T.noTexture then error("SetStatusBarTexture failed", 0) end
+					if type(file) ~= "string" then bad(W, "SetStatusBarTexture: a file is expected") end
+					raw.barTexture = file
+				end
+				raw.SetStatusBarColor = function(_, r, g, b)
+					if raw.barTexture == nil then
+						error("Object did not allow secret.", 0)
+					end
+					T.probed = { r, g, b }
+				end
 				return frame
 			end
 			local frame = create(kind, name, parent, template)
@@ -97828,6 +97857,15 @@ do
 		clean(W, "ms-late defaults")
 	end
 
+	-- Build 70790: without a texture on its hidden bar the feature test fails with the live error, and the status says refused with that error.
+	do
+		local W = L.pworld()
+		W.L.noTexture = true
+		L.set(W, "nameplates.healthByLeft", true)
+		check("ms-late: a hidden bar that takes no texture fails the feature test, and the status says refused", has(W.status(), "Health curve: refused")
+			and W.L.probed == nil, W.status())
+	end
+
 	-- Colour health bars by health left, on a plate.
 	do
 		local W = L.pworld()
@@ -97839,6 +97877,8 @@ do
 		L.set(W, "nameplates.healthByLeft", true)
 		check("ms-late: the first try goes through the curve on the player's health, and a plate at half health has the colour at half health", T.calls[1] == "player"
 			and L.is(a.colour, hr, hg, hb) and has(W.status(), "Health curve: works"), L.show(a.colour) .. " " .. tostring(T.calls[1]) .. W.status())
+		-- Build 70790: a status bar with no texture refuses the withheld colour, so the hidden bar of the feature test has a texture.
+		check("ms-late: the hidden bar of the feature test has a texture and took the colour", T.probed ~= nil, W.status())
 		T.health.nameplate1 = 1
 		L.game(W, a)
 		check("ms-late: the game's call answers with the colour at full health, in the same call", L.is(a.colour, fr, fg, fb) and a.gameSets == 1, L.show(a.colour) .. " " .. a.gameSets)

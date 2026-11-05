@@ -1294,12 +1294,22 @@ local function KindRim(unitFrame, own, on)
 	QueueMark(unitFrame)
 end
 
--- The colour of the health bar at the share of its brightness the row keeps, or nil while the game withholds it.
-local function RowColour(healthBar)
+-- The colour of the row, at the share of its brightness the row keeps: the colour of the health bar, or the reaction colour of the unit while
+-- the client withholds the bar's colour. A bar that took a withheld colour gives a withheld colour back (SimpleStatusBarAPIDocumentation.lua:105-107,
+-- 282-285), as every bar Colour health bars by health left tints does since build 70790. Nil when neither can be read.
+local function RowColour(unitFrame, healthBar)
 	local ok, r, g, b = pcall(healthBar.GetStatusBarColor, healthBar)
-	if ok and Plain(r, "number") and Plain(g, "number") and Plain(b, "number") then
-		return r * ROW_SHARE, g * ROW_SHARE, b * ROW_SHARE
+	if not (ok and Plain(r, "number") and Plain(g, "number") and Plain(b, "number")) then
+		local unit = unitFrame.unit
+		r, g, b = nil, nil, nil
+		if Plain(unit, "string") then
+			r, g, b = ns.ReactionColour(unit)
+		end
+		if r == nil then
+			return nil
+		end
 	end
+	return r * ROW_SHARE, g * ROW_SHARE, b * ROW_SHARE
 end
 
 -- Fills the row from the colour at the bottom to the same colour nearly clear at the top. Blizzard's own nameplate code gives
@@ -1317,7 +1327,7 @@ local function NameRow(unitFrame, own, on)
 	local name = Strings(unitFrame, NAME_TEXT)[1]
 	local r, g, b
 	if on and Opt("nameRow") and active[unitFrame] and healthBar and name then
-		r, g, b = RowColour(healthBar)
+		r, g, b = RowColour(unitFrame, healthBar)
 	end
 	local row = own.row
 	if r == nil then
