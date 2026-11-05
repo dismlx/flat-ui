@@ -10017,6 +10017,9 @@ local PAGES = {
 		S("swing.spark", "bool", true, "Spark", "The bright line at the end of the fill.", { needs = "swing.flat" }),
 		S("swing.textShadow", "bool", false, "Text shadow", "The dark band behind the timer's name.", { needs = "swing.flat" }),
 		S("swing.reverse", "bool", false, "Fill from the right"),
+		"Auto Shot",
+		S("swing.autoShot", "bool", true, "Auto Shot window", "Marks the last half second of the ranged timer. Moving or casting a spell then delays your next Auto Shot."),
+		S("swing.autoShotColour", "colour", "ffe04848", "Auto Shot window colour", nil, { needs = "swing.autoShot" }),
 		"Out of range and idle",
 		S("swing.rangeAlpha", "number", 40, "Out of range opacity", nil, { min = 10, max = 100, step = 5, unit = "%" }),
 		S("swing.idle", "choice", "combat", "Show the timer", "Works with Main hand border, Off hand border or Ranged border on.", { choices = MS9.idles }),
@@ -17675,6 +17678,84 @@ do
 	check("swing: and hidden when switched on", O.swing.SwingTimerRangedFrame.Border.shown == false and O.state(O.swing.SwingTimerRangedFrame.StatusBar) == "SB" and has(O.status(), "Swing timers: on, 3 styled"))
 end
 
+-- 11b. The Auto Shot window (Bars.lua, ApplyAutoShot): a band over the last half second of the ranged swing, when moving or casting a spell
+-- delays the next Auto Shot, at the end the fill grows to. Its width is that half second's share of the swing that runs, or of the speed of the
+-- ranged weapon while none runs (Blizzard_SwingTimer.lua:192-199, 340-346).
+do
+	local function band(X)
+		local bar = X.swing.SwingTimerRangedFrame.StatusBar
+		for _, t in ipairs(X.addonTextures) do
+			if (t.owner == bar or t.owner == X.rawOf[bar]) and t.layer == "ARTWORK" and t.sublevel == 7 then
+				return t
+			end
+		end
+	end
+	local function bands(X, name)
+		local bar, n = X.swing[name].StatusBar, 0
+		for _, t in ipairs(X.addonTextures) do
+			if (t.owner == bar or t.owner == X.rawOf[bar]) and t.layer == "ARTWORK" and t.sublevel == 7 then
+				n = n + 1
+			end
+		end
+		return n
+	end
+	local W = newWorld()
+	local ranged = W.swing.SwingTimerRangedFrame
+	W.rawOf[ranged.StatusBar].width = 200
+	W.env.UnitAttackSpeed = function() return 2.6, nil, 2.5 end
+	W.login()
+	local b = band(W)
+	check("autoshot: on by default: a band over the end of the ranged bar, 200 * 0.5 / 2.5 = 40 wide from the speed of the weapon, at the right",
+		b ~= nil and b.shown and near(b.width, 40, 1e-9) and b.points[1][1] == "TOPRIGHT" and b.points[2][1] == "BOTTOMRIGHT" and #b.points == 2, b and tostring(b.width))
+	check("autoshot: in the colour of the row at half opacity", b ~= nil and near(b.color[1], 0xe0 / 255, 1e-6) and near(b.color[2], 0x48 / 255, 1e-6)
+		and near(b.color[3], 0x48 / 255, 1e-6) and near(b.color[4], 0.5, 1e-9))
+	check("autoshot: only the ranged timer has one", bands(W, "SwingTimerMainHandFrame") == 0 and bands(W, "SwingTimerOffHandFrame") == 0 and bands(W, "SwingTimerRangedFrame") == 1)
+	-- A swing that runs gives the length: a swing of 2 seconds after haste.
+	ranged.inner.swingDuration, ranged.inner.swingEndTime = 2.0, W.now + 2.0
+	W.fire("PLAYER_SWING", 2.0, 3)
+	W.advance(0.01)
+	check("autoshot: a swing of 2 seconds makes it 50 wide", near(b.width, 50, 1e-9), tostring(b.width))
+	-- A swing longer than half a second is never covered whole; a swing of half a second or less is all aim.
+	ranged.inner.swingDuration = 0.4
+	W.fire("PLAYER_SWING", 0.4, 3)
+	W.advance(0.01)
+	check("autoshot: a swing of half a second or less is the whole bar", near(b.width, 200, 1e-9), tostring(b.width))
+	-- A withheld length falls back to the speed of the weapon.
+	ranged.inner.swingDuration = SECRET
+	W.fire("PLAYER_SWING", 2.0, 3)
+	W.advance(0.01)
+	check("autoshot: a withheld swing length falls back to the speed of the weapon", near(b.width, 40, 1e-9) and #W.violations == 0, tostring(b.width))
+	ranged.inner.swingDuration, ranged.inner.swingEndTime = nil, nil
+	-- Fill from the right: the swing ends at the left, so the band is there.
+	W.change("swing.reverse", true)
+	check("autoshot: with Fill from the right it is at the left", b.points[1][1] == "TOPLEFT" and b.points[2][1] == "BOTTOMLEFT" and #b.points == 2 and b.shown)
+	W.change("swing.reverse", false)
+	W.change("swing.autoShotColour", "ff3366ff")
+	check("autoshot: a new colour is used at once", near(b.color[1], 0x33 / 255, 1e-6) and near(b.color[3], 1, 1e-9) and near(b.color[4], 0.5, 1e-9))
+	W.change("swing.autoShot", false)
+	check("autoshot: off hides it", not b.shown)
+	W.change("swing.autoShot", true)
+	check("autoshot: on again shows the same band", b.shown and band(W) == b and bands(W, "SwingTimerRangedFrame") == 1)
+	W.change("swing.enabled", false)
+	check("autoshot: with Restyle swing timers off it is hidden", not b.shown)
+	W.change("swing.enabled", true)
+	check("autoshot: and back with it", b.shown)
+	check("autoshot: no violations or errors", #W.violations == 0 and #W.errors == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
+	-- A bar whose width the game does not give, and a client without a ranged weapon speed, make no band.
+	local N = newWorld()
+	N.env.UnitAttackSpeed = function() return 2.6, nil, nil end
+	N.rawOf[N.swing.SwingTimerRangedFrame.StatusBar].width = 200
+	N.login()
+	check("autoshot: no ranged weapon and no swing: no band", band(N) == nil or not band(N).shown)
+	local Z = newWorld()
+	Z.env.UnitAttackSpeed = function() return 2.6, nil, 2.5 end
+	Z.rawOf[Z.swing.SwingTimerRangedFrame.StatusBar].width = 0
+	Z.login()
+	check("autoshot: a bar with no width yet: no band", band(Z) == nil or not band(Z).shown)
+	clean(N, "autoshot no speed")
+	clean(Z, "autoshot no width")
+end
+
 -- 12. Cast bars: the target and focus bars get edges of their own, with no addon frame attached.
 do
 	local W = newWorld()
@@ -21095,6 +21176,8 @@ covered["general.handsOff"] = true
 covered["general.menuButton"], covered["general.menuOpens"] = true, true
 -- Quest item sparkle has its checks in block 14d.
 covered["general.questSparkle"] = true
+-- The Auto Shot window has its checks in block 11b.
+covered["swing.autoShot"], covered["swing.autoShotColour"] = true, true
 -- Action buttons has its checks in the ownset block.
 covered["actionbars.own"] = true
 -- Long names of the target of target frame has its checks in the tot name fit block.
@@ -66025,7 +66108,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 902 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 904 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -66339,7 +66422,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 902 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 904 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -101165,6 +101248,8 @@ do
 		{ 27, "swing.spark", true, false, "swing.flat" },
 		{ 27, "swing.textShadow", false, true, "swing.flat" },
 		{ 27, "swing.reverse", false, true },
+		{ 27, "swing.autoShot", true, false },
+		{ 27, "swing.autoShotColour", "ffe04848", "ffff00ff", "swing.autoShot" },
 		{ 27, "swing.rangeAlpha", 40, 100 },
 		{ 27, "swing.idle", "combat", "show" },
 		{ 27, "swing.textSize", 100, 200 },
@@ -101335,7 +101420,7 @@ do
 		end
 		check("sdcast: " .. id .. " has no violation, error or message", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
 	end
-	check("sdcast: 82 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 82 and L.changed == 82, L.changed .. " of " .. L.total)
+	check("sdcast: 84 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 84 and L.changed == 84, L.changed .. " of " .. L.total)
 
 	-- Every frame, texture and text the drawings made is the addon's own.
 	for _, id in ipairs({ "mock-cast-bar", "mock-resource", "mock-swing" }) do

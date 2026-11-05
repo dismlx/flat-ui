@@ -552,6 +552,65 @@ local function ApplySwingIdle(timer)
 	end
 end
 
+-- Auto Shot: a shot is the reload and then half a second of aim at the end of the ranged swing. Moving or casting a spell in that half second
+-- delays the shot, which clips it. A band over the end of the ranged bar marks the half second, as long as its share of the swing: the swing that
+-- runs (swingDuration, Blizzard_SwingTimer.lua:340-346) or the speed of the ranged weapon while none runs (192-199). The band is a texture of the
+-- bar, above the fill and under the spark and the labels, and it is at the end the fill grows to: the left one with Fill from the right.
+local AUTO_SHOT_AIM = 0.5
+local AUTO_SHOT_ALPHA = 0.5
+local autoBands = setmetatable({}, { __mode = "k" })
+
+-- The length of the ranged swing in seconds, or nil when the game withholds it.
+local function RangedSwing(timer)
+	local duration = timer.swingDuration
+	if ns.Finite(duration) and duration > 0 then
+		return duration
+	end
+	if type(UnitAttackSpeed) == "function" then
+		local ok, _, _, ranged = pcall(UnitAttackSpeed, "player")
+		if ok and ns.Finite(ranged) and ranged > 0 then
+			return ranged
+		end
+	end
+	return nil
+end
+
+local function ApplyAutoShot(timer, option)
+	if option ~= "ranged" then
+		return
+	end
+	local bar = timer.StatusBar
+	if bar == nil or ns.Forbidden(bar) then
+		return
+	end
+	local band = autoBands[timer]
+	local duration, width
+	if ns.Enabled("swing") and ns.Get("swing.autoShot") then
+		duration = RangedSwing(timer)
+		local ok, w = pcall(bar.GetWidth, bar)
+		width = ok and ns.Finite(w) and w > 0 and w or nil
+	end
+	if not (duration and width) then
+		if band then
+			band:Hide()
+		end
+		return
+	end
+	if band == nil then
+		band = bar:CreateTexture(nil, "ARTWORK", nil, 7)
+		ns.Own[band] = true
+		autoBands[timer] = band
+	end
+	local r, g, b = ns.Colour("swing.autoShotColour")
+	band:SetColorTexture(r, g, b, AUTO_SHOT_ALPHA)
+	local side = ns.Get("swing.reverse") and "LEFT" or "RIGHT"
+	band:ClearAllPoints()
+	band:SetPoint("TOP" .. side, bar, "TOP" .. side, 0, 0)
+	band:SetPoint("BOTTOM" .. side, bar, "BOTTOM" .. side, 0, 0)
+	band:SetWidth(width * math.min(1, AUTO_SHOT_AIM / duration))
+	band:Show()
+end
+
 -- After the game starts, ends or lays out a timer, and sets its range look: what it did is looked at again.
 local function SwingLooks(timer)
 	ns.Each("swing", ApplySwingTimer, timer, swingOption[timer] or "main")
@@ -613,6 +672,7 @@ local function RefreshSwing()
 			ns.Each("swing", ApplySwingRange, timer)
 			ns.Each("swing", ApplySwingReverse, timer)
 			ns.Each("swing", ApplySwingIdle, timer)
+			ns.Each("swing", ApplyAutoShot, timer, entry[2])
 		end
 	end
 	-- The game starts, ends and lays out a swing, and sets its range look, with no call that is followed: events, and a look every frame while one is needed.
@@ -653,8 +713,9 @@ local function SwingWanted()
 	if not ns.Enabled("swing") then
 		return false
 	end
+	-- The Auto Shot window follows each new swing, whose length changes with haste.
 	return math.abs(ns.Get("swing.rangeAlpha") / 100 - GAME_RANGE_ALPHA) > 0.0001 or ns.Get("swing.textOwn") or ns.Get("swing.idle") ~= "show"
-		or ns.Get("swing.reverse") or false
+		or ns.Get("swing.reverse") or ns.Get("swing.autoShot") or false
 end
 
 -- True while a timer is swinging and the end of the swing changes what Flat UI shows: the idle bar is hidden, or the range look is not the
@@ -709,6 +770,7 @@ local function SwingFull(timer)
 	SwingLooks(timer)
 	ns.Each("swing", ApplySwingRange, timer)
 	ns.Each("swing", ApplySwingReverse, timer)
+	ns.Each("swing", ApplyAutoShot, timer, swingOption[timer])
 end
 
 local GamePoll

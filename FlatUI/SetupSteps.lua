@@ -527,6 +527,8 @@ ns.SETUP_STEPS = {
 		{ "swing.spark", "r", "mock-swing" },
 		{ "swing.textShadow", "r", "mock-swing" },
 		{ "swing.reverse", "o", "mock-swing" },
+		{ "swing.autoShot", "c", "mock-swing" },
+		{ "swing.autoShotColour", "r", "mock-swing" },
 		{ "swing.rangeAlpha", "r", "mock-swing" },
 		{ "swing.idle", "o", "mock-swing" },
 		{ "swing.textSize", "o", "mock-swing" },

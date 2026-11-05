@@ -772,6 +772,10 @@ local function BuildSwing(stage)
 		row.bar:SetPoint("TOPLEFT", row.timer, "TOPLEFT", 5, -4)
 		row.bar:SetPoint("BOTTOMRIGHT", row.timer, "BOTTOMRIGHT", -5, 4)
 		row.fill = NewTexture(row.bar, "ARTWORK", 0)
+		-- The Auto Shot window on the ranged timer: the last half second of its swing, over the fill (Bars.lua, ApplyAutoShot).
+		if spec.hand == "ranged" then
+			row.band = NewTexture(row.bar, "ARTWORK", 7)
+		end
 		row.shadow = NewTexture(row.bar, "OVERLAY", 0)
 		row.shadow:SetPoint("TOPLEFT", row.bar, "TOPLEFT", 0, 0)
 		row.shadow:SetPoint("BOTTOMLEFT", row.bar, "BOTTOMLEFT", 0, 0)
@@ -818,6 +822,8 @@ local function BuildSwing(stage)
 	p["swing.spark"] = main.pip
 	p["swing.textShadow"] = main.shadow
 	p["swing.reverse"] = main.fill
+	p["swing.autoShot"] = ranged.band
+	p["swing.autoShotColour"] = ranged.band
 	p["swing.rangeAlpha"] = out.bar
 	p["swing.idle"] = idle.timer
 	for _, key in ipairs({ "textSize", "textOutline", "name", "textOwn", "textColour" }) do
@@ -936,6 +942,19 @@ function swingDrawing.draw(stage)
 		GameTexture(inst, row.shadow, SWING_SHADOW_ATLAS, { 0, 0, 0, 0.45 })
 		row.bar:SetShown(not idle)
 		row.bar:SetAlpha(spec.out and rangeAlpha or 1)
+		if row.band then
+			local shown = enabled and G("swing.autoShot") == true and not idle
+			if shown then
+				local br, bg, bb = ns.Colour("swing.autoShotColour")
+				row.band:SetColorTexture(br, bg, bb, 0.5)
+				local side = look.reverse and "LEFT" or "RIGHT"
+				row.band:ClearAllPoints()
+				row.band:SetPoint("TOP" .. side, row.bar, "TOP" .. side, 0, 0)
+				row.band:SetPoint("BOTTOM" .. side, row.bar, "BOTTOM" .. side, 0, 0)
+				row.band:SetWidth(inst.barW * math.min(1, 0.5 / spec.period))
+			end
+			row.band:SetShown(shown)
+		end
 		row.shadow:SetShown(not (flat and not G("swing.textShadow")))
 		local r, g, b = GAME_IN[1], GAME_IN[2], GAME_IN[3]
 		if spec.out then
