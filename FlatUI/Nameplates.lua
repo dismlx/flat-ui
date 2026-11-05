@@ -831,7 +831,8 @@ local function LevelBox(unitFrame, own, on, fresh)
 		end
 		-- The room UpdateAnchors keeps: none for a hidden level frame, or for anchors that are not to the RIGHT of a frame.
 		local room = (shown and home[1][3] == "RIGHT") and width + math.abs(home[1][4]) or 0
-		container:SetPoint("BOTTOMRIGHT", cast, "TOPRIGHT", -room, spacing)
+		-- 0 - room, not -room: no room at all is the game's 0, not a negative zero (which Lua 5.1, the game's Lua, keeps).
+		container:SetPoint("BOTTOMRIGHT", cast, "TOPRIGHT", 0 - room, spacing)
 		if control then
 			control:SetPoint("LEFT", container, "RIGHT", 5 + room, 0)
 		end
