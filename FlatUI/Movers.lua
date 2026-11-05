@@ -1130,7 +1130,7 @@ end
 -- (Blizzard_QueueStatusFrame/Camelot/QueueStatusFrameOverrides.lua:13-35), which Edit Mode calls when it lays the eye out and when the micro
 -- menu changes (EditModeSystemTemplates.lua:2453, 2468, 2508, 3798) and the eye calls itself when the minimap scale changes, through a callback
 -- that holds the function it had at load (QueueStatusFrame.lua:11-12), so a hook on the method does not see that path: the minimap's own
--- SetEditModeScale, which triggers it (Minimap.lua:374-382), is hooked too. A hook can run inside the game's pass over a layout, so it only
+-- SetEditModeScale, which triggers it (Minimap.lua:418-425), is hooked too. A hook can run inside the game's pass over a layout, so it only
 -- shows a hidden frame, and that frame puts the eye back in its next OnUpdate, which is still the same drawn frame.
 hold.eye = { name = "QueueStatusButton", hooked = false }
 

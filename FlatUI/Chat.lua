@@ -28,7 +28,7 @@ local BOX_ART = { "Left", "Mid", "Right" }
 local BOX_FOCUS = { "focusLeft", "focusMid", "focusRight" }
 local PIECES = { "TopLeftCorner", "TopRightCorner", "BottomLeftCorner", "BottomRightCorner", "TopEdge", "BottomEdge", "LeftEdge", "RightEdge", "Center" }
 -- The height of the health bar of a tooltip (GameTooltipStatusBar, 8 in the game's XML) and the opacity the game gives an idle input box
--- (ChatFrameEditBoxMixin:Deactivate, ChatFrameEditBox.lua:568).
+-- (ChatFrameEditBoxMixin:Deactivate, ChatFrameEditBox.lua:573).
 local BAR_HEIGHT, IDLE_ALPHA = 8, 35
 -- The font objects the game draws a tooltip with: the title line, and the other lines.
 local TIP_TITLE, TIP_TEXT = { "GameTooltipHeaderText" }, { "GameTooltipText", "GameTooltipTextSmall" }
@@ -439,19 +439,19 @@ local function SeatBox(box, restore, frame)
 	IdleBox(box, record, not restore)
 end
 
--- The passes of an input box. The game calls EventRegistry for the four moments a box changes (Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua:380,
--- 385, 398, 406): the callbacks only queue a pass for the next frame, because Deactivate, ActivateChat and the tint run inside the game's own calls.
+-- The passes of an input box. The game calls EventRegistry for the four moments a box changes (Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua:389,
+-- 394, 407, 415): the callbacks only queue a pass for the next frame, because Deactivate, ActivateChat and the tint run inside the game's own calls.
 -- No method of an input box is hooked (EllesmereUIChat/EllesmereUIChat.lua:4410-4417, 4236-4260 and the same callbacks).
 local settling = setmetatable({}, { __mode = "k" })
 local watcher, watchWait
 
--- The game has closed a box when it is hidden or its focus art is hidden (Deactivate hides the art, ChatFrameEditBox.lua:573; ActivateChat shows
--- it, ChatFrameUtil.lua:539). An empty box is closed when it loses the focus; a box with text stays open, and keeps what the game gave it.
+-- The game has closed a box when it is hidden or its focus art is hidden (Deactivate hides the art, ChatFrameEditBox.lua:586; ActivateChat shows
+-- it, ChatFrameUtil.lua:554). An empty box is closed when it loses the focus; a box with text stays open, and keeps what the game gave it.
 local function Closed(box)
 	return not IsShown(box) or not IsShown(box.focusLeft)
 end
 
--- The game calls Deactivate with no moment of its own in two places (FloatingChatFrame.lua:366, ChatFrameUtil.lua:583-586), so every box with a
+-- The game calls Deactivate with no moment of its own in two places (FloatingChatFrame.lua:270-271, ChatFrameUtil.lua:598-601), so every box with a
 -- seat is settled on any moment.
 local function Pass(box)
 	settling[box] = nil
