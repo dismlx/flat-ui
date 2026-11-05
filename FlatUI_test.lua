@@ -113350,6 +113350,54 @@ do
 	clean(G, "repair")
 end
 
+-- 2b. A bill that waits for the selling, the selling stopped early.
+do
+	local W = EQ.world({ repair = "guild" })
+	-- The cursor stops the selling after the first sale; the last try still runs and says the gold is short.
+	EQ.fill(W, { EQ.item(51, 0, 1, 500), EQ.item(52, 0, 1, 500), EQ.item(53, 0, 1, 500) })
+	W.eq.repairCost, W.eq.money, W.eq.repairs = 900, 100, {}
+	EQ.merchant(W)
+	W.eq.cursor = { bag = 0, slot = 2, id = 52, link = W.eq.bags[0].slots[2].link }
+	EQ.wait(W, 2)
+	W.eq.cursor = nil
+	check("repair: a bill that waits is still tried when the cursor stops the selling", #W.eq.repairs == 0
+		and EQ.said(W) == "Flat UI: Sold 1 item for 5s, then stopped: the cursor held something.|Flat UI: Not enough gold to repair: it costs 9s.", EQ.ids(W.eq.repairs))
+	EQ.close(W)
+	-- Sell grey items turned off after two sales that brought the money (it came before: no PLAYER_MONEY follows).
+	EQ.fill(W, { EQ.item(54, 0, 1, 500), EQ.item(55, 0, 1, 500), EQ.item(56, 0, 1, 500) })
+	W.eq.repairCost, W.eq.money, W.eq.repairs = 900, 100, {}
+	EQ.merchant(W)
+	W.advance(0.16)
+	W.change("errands.sell", false)
+	EQ.wait(W, 2)
+	check("repair: a bill that waits is paid when Sell grey items is turned off during the selling", EQ.ids(W.eq.repairs) == "own"
+		and EQ.said(W) == "Flat UI: Sold 2 items for 10s, then stopped: selling was turned off.|Flat UI: Repaired for 9s.", EQ.ids(W.eq.repairs))
+	EQ.close(W)
+	W.change("errands.sell", true)
+	-- The guild bank does not pay, and Sell grey items is turned off before its check: your gold still pays.
+	W.env.RepairAllItems = function(guild)
+		W.eq.repairs[#W.eq.repairs + 1] = guild and "guild" or "own"
+		if not guild then
+			W.eq.money, W.eq.repairCost = W.eq.money - W.eq.repairCost, 0
+		end
+	end
+	local items = {}
+	for i = 1, 12 do
+		items[i] = EQ.item(140 + i, 0, 1, 5)
+	end
+	EQ.fill(W, items)
+	W.eq.repairCost, W.eq.money, W.eq.repairs, W.eq.guildRepair, W.eq.guildMoney = 900, 100000, {}, true, -1
+	EQ.merchant(W)
+	W.advance(0.5)
+	W.change("errands.sell", false)
+	EQ.wait(W, 3)
+	check("repair: a guild bank that did not pay is followed by your gold after Sell grey items is turned off", EQ.ids(W.eq.repairs) == "guild,own"
+		and has(EQ.said(W), "The guild bank did not pay; repaired for 9s with your gold."), EQ.ids(W.eq.repairs))
+	EQ.close(W)
+	W.change("errands.sell", true)
+	clean(W, "repair, a bill that waits")
+end
+
 -- 3. The sell and keep lists.
 do
 	local W = EQ.world()

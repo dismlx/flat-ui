@@ -246,7 +246,7 @@ local function GuildCheck(at, cost)
 		E.Say(("Repaired for %s from the guild bank."):format(E.Money(cost)))
 		return
 	end
-	if at ~= visit or not MerchantOpen() then
+	if at ~= visit or not MerchantOpen() or not ns.Enabled("errands") then
 		E.Say(("The guild bank did not pay for the %s repair."):format(E.Money(left)))
 		return
 	end
@@ -380,10 +380,11 @@ E.Listen(part, "PLAYER_REGEN_ENABLED", function()
 	end
 end)
 
+-- Finish clears the run, so a queued sale does nothing; the visit goes on, and so do its repair checks. Only the merchant opening or closing
+-- starts another visit.
 function part.Refresh()
 	if run and not Wanted() then
 		Finish("selling was turned off")
-		visit = visit + 1
 	end
 end
 
