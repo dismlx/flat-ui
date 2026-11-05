@@ -109898,7 +109898,7 @@ do
 	check("eyes: a mouse the game had off stays off, and a child's own alpha comes back", eye.mouse == false and g(wa(W, eye.EyeMouseOver)) == "0.4" and g(eye.alpha) == "1", tostring(eye.mouse) .. " " .. g(wa(W, eye.EyeMouseOver)))
 end
 do
-	-- The queue eye: the game's UpdateDefaultAnchor and the minimap's SetEditModeScale put it back in the frame they run, not 0.5 seconds later.
+	-- The queue eye: the game's UpdateDefaultAnchor and the minimap's scale event put it back in the frame they run, not 0.5 seconds later.
 	local K = suiteKit
 	local mwBefore, opt, pts, allClean, problems = K.mwBefore, K.opt, K.pts, K.allClean, K.problems
 	local function calls(W, name, call) return W.rawOf[W.env[name]].calls[call] or 0 end
@@ -109913,21 +109913,37 @@ do
 		return n
 	end
 	local SPOT = { QueueStatusButton = { point = "TOPRIGHT", x = -200, y = -300, kind = "hud" } }
-	local function world(saved, noScale)
-		return mwBefore({ saved = opt({}, saved) }, function(W)
-			W.bframe("QueueStatusButton", { point = { "CENTER", W.minimap, "CENTER", -68, -68 }, width = 45, height = 45, system = true,
-				fields = { UpdateDefaultAnchor = function(self)
-					self:ClearAllPoints()
-					self:SetPoint("CENTER", W.minimap, "CENTER", -68, -68)
-				end } })
-			if not noScale then
-				W.rawOf[W.minimap].SetEditModeScale = function(_, scale) W.rawOf[W.minimap].scaleSet = scale end
+	-- The eye follows the minimap's scale with a callback on EventRegistry's Minimap.OnScaleUpdated that holds the function it had at load, not
+	-- its method (QueueStatusFrame.lua:11-12), and the minimap's SetEditModeScale fires that event (Blizzard_Minimap/Mainline/Minimap.lua:418-425).
+	-- how.noAnchor: the eye has no UpdateDefaultAnchor, and so no callback. how.cvars: the game's variables at login.
+	local function world(saved, how)
+		how = how or {}
+		return mwBefore({ saved = opt({}, saved), cvars = how.cvars }, function(W)
+			local function anchor(self)
+				self:ClearAllPoints()
+				self:SetPoint("CENTER", W.minimap, "CENTER", -68, -68)
+			end
+			local eye = W.bframe("QueueStatusButton", { point = { "CENTER", W.minimap, "CENTER", -68, -68 }, width = 45, height = 45, system = true,
+				fields = { UpdateDefaultAnchor = not how.noAnchor and anchor or nil } })
+			if not how.noAnchor then
+				W.registry:RegisterCallback("Minimap.OnScaleUpdated", anchor, eye)
+			end
+			W.rawOf[W.minimap].SetEditModeScale = function(_, scale)
+				W.rawOf[W.minimap].scaleSet = scale
+				W.registry:TriggerEvent("Minimap.OnScaleUpdated")
 			end
 		end)
+	end
+	-- Whether each of the two methods has a hook written on it, and the callbacks on the scale event, as text.
+	local function followed(W)
+		return tostring(INSTHOOK.wrapped(W, W.env.QueueStatusButton, "UpdateDefaultAnchor")) .. " " .. tostring(INSTHOOK.wrapped(W, W.env.MinimapCluster, "SetEditModeScale"))
+			.. " " .. W.registrants("Minimap.OnScaleUpdated")
 	end
 	local W = world(SPOT)
 	local kept = pts(W, W.env.QueueStatusButton)
 	check("eyes: queue eye: placed at its saved spot at login", kept == "TOPRIGHT>UIParent:TOPRIGHT -200,-300 @1", kept)
+	check("eyes: queue eye: UpdateDefaultAnchor is followed, the minimap's SetEditModeScale is not hooked, and the scale event has a callback of Flat UI's beside the eye's",
+		followed(W) == "true false 2", followed(W))
 	W.blizzard(function() W.env.QueueStatusButton:UpdateDefaultAnchor() end)
 	check("eyes: queue eye: the hook writes nothing inside the game's call", pts(W, W.env.QueueStatusButton) == "CENTER>MinimapCluster:CENTER -68,-68 @1", pts(W, W.env.QueueStatusButton))
 	W.update(0.016)
@@ -109936,7 +109952,8 @@ do
 	W.update(0.016)
 	check("eyes: queue eye: the minimap's scale change: put back in the same frame", pts(W, W.env.QueueStatusButton) == kept, pts(W, W.env.QueueStatusButton))
 	W.blizzard(function() W.env.MinimapCluster:SetEditModeScale(1.2) end)
-	W.rawOf[W.env.QueueStatusButton].points = { { "CENTER", W.minimap, "CENTER", -68, -68 } }
+	check("eyes: queue eye: the scale change alone: the eye's own callback moves it, and nothing is written inside the game's call", pts(W, W.env.QueueStatusButton) == "CENTER>MinimapCluster:CENTER -68,-68 @1",
+		pts(W, W.env.QueueStatusButton))
 	W.update(0.016)
 	check("eyes: queue eye: the scale change alone, with the eye moved by the callback the hook cannot see, is put back too", pts(W, W.env.QueueStatusButton) == kept, pts(W, W.env.QueueStatusButton))
 	check("eyes: queue eye: the half-second check is not running for it", runningFrames(W) == 0)
@@ -109945,7 +109962,7 @@ do
 	check("eyes: queue eye: a frame in place is not touched again", calls(W, "QueueStatusButton", "SetPointBase") == sets)
 	W.gamePlaces("QueueStatusButton", "CENTER", -68, -68, W.minimap)
 	W.run(1, 0.5)
-	check("eyes: queue eye: a move the two hooks do not see is not looked for every half second", pts(W, W.env.QueueStatusButton) == "CENTER>MinimapCluster:CENTER -68,-68 @1", pts(W, W.env.QueueStatusButton))
+	check("eyes: queue eye: a move the hook and the callback do not see is not looked for every half second", pts(W, W.env.QueueStatusButton) == "CENTER>MinimapCluster:CENTER -68,-68 @1", pts(W, W.env.QueueStatusButton))
 	W.blizzard(function() W.env.QueueStatusButton:UpdateDefaultAnchor() end)
 	W.update(0.016)
 	for _ = 1, 30 do
@@ -109970,22 +109987,45 @@ do
 	check("eyes: queue eye: moved by the game while hidden, it is put back when it is shown", pts(H, H.env.QueueStatusButton) == hkept, pts(H, H.env.QueueStatusButton))
 	H.run(2, 0.5)
 	check("eyes: queue eye: hidden, moved and shown: it stays there and runs no half-second check", pts(H, H.env.QueueStatusButton) == hkept and runningFrames(H) == 0, pts(H, H.env.QueueStatusButton))
-	-- With the movers off the hook shows nothing.
+	-- With the movers off the hook and the callback show nothing.
 	W.change("movers.enabled", false)
 	W.flush()
-	W.blizzard(function() W.env.QueueStatusButton:UpdateDefaultAnchor() end)
-	check("eyes: queue eye: with the movers off a call of the game starts no frame", runningFrames(W) == 0)
+	W.blizzard(function() W.env.QueueStatusButton:UpdateDefaultAnchor() W.env.MinimapCluster:SetEditModeScale(1) end)
+	check("eyes: queue eye: with the movers off a call of the game or the scale event starts no frame", runningFrames(W) == 0)
 	-- Another saved frame keeps the half-second check running, and it leaves the hooked eye alone.
 	local B = world({ QueueStatusButton = SPOT.QueueStatusButton, UIErrorsFrame = { point = "TOP", x = -304, y = -320, kind = "hud" } })
 	B.gamePlaces("QueueStatusButton", "CENTER", -68, -68, B.minimap)
 	B.gamePlaces("UIErrorsFrame", "TOP", 0, -122)
 	B.run(1, 0.5)
 	check("eyes: queue eye: the check puts the other frame back and not the hooked eye", pts(B, B.env.UIErrorsFrame) == "TOP>UIParent:TOP -304,-320 @1" and pts(B, B.env.QueueStatusButton) == "CENTER>MinimapCluster:CENTER -68,-68 @1", pts(B, B.env.QueueStatusButton))
-	-- Without the minimap's method nothing is hooked and the half-second check still keeps the eye.
-	local N = world(SPOT, true)
+	-- Without the eye's method nothing is followed and the half-second check keeps the eye.
+	local N = world(SPOT, { noAnchor = true })
 	N.gamePlaces("QueueStatusButton", "CENTER", -68, -68, N.minimap)
 	N.run(0.5)
-	check("eyes: queue eye: a client without SetEditModeScale: the half-second check puts it back", pts(N, N.env.QueueStatusButton) == "TOPRIGHT>UIParent:TOPRIGHT -200,-300 @1" and runningFrames(N) == 1, pts(N, N.env.QueueStatusButton))
+	check("eyes: queue eye: a client whose eye has no UpdateDefaultAnchor: nothing is followed, and the half-second check puts it back",
+		pts(N, N.env.QueueStatusButton) == "TOPRIGHT>UIParent:TOPRIGHT -200,-300 @1" and runningFrames(N) == 1 and followed(N) == "false false 0", pts(N, N.env.QueueStatusButton) .. " " .. followed(N))
+	-- taintLog on at login: with it on, every call of a game method that an addon hooked fails in the client's hook wrapper (Core.lua, ns.HookMethod).
+	-- Nothing is hooked on the eye or the minimap and nothing follows the scale event; the half-second check keeps the eye after either move.
+	local T = world(SPOT, { cvars = { taintLog = "2" } })
+	check("eyes: queue eye, taintLog 2: placed at its saved spot at login, no method of the eye or the minimap is hooked, and the scale event has the eye's callback only",
+		pts(T, T.env.QueueStatusButton) == kept and followed(T) == "false false 1", pts(T, T.env.QueueStatusButton) .. " " .. followed(T))
+	T.blizzard(function() T.env.QueueStatusButton:UpdateDefaultAnchor() end)
+	T.run(0.5)
+	check("eyes: queue eye, taintLog 2: the half-second check puts it back after the game's UpdateDefaultAnchor", pts(T, T.env.QueueStatusButton) == kept and runningFrames(T) == 1,
+		pts(T, T.env.QueueStatusButton) .. " " .. runningFrames(T))
+	T.blizzard(function() T.env.MinimapCluster:SetEditModeScale(1.2) end)
+	local moved = pts(T, T.env.QueueStatusButton)
+	T.run(0.5)
+	check("eyes: queue eye, taintLog 2: and after the minimap's scale change", moved == "CENTER>MinimapCluster:CENTER -68,-68 @1" and pts(T, T.env.QueueStatusButton) == kept, moved .. " " .. pts(T, T.env.QueueStatusButton))
+	check("eyes: queue eye, taintLog 2: the method left alone is counted in the status", T.ns.TaintSkipped() >= 1 and has(T.status(), "taintLog is on: "), T.ns.TaintSkipped())
+	-- With taintLog on, Reload makes its named box, which this world has no frame type for: that one CreateFrame is left out.
+	local own = {}
+	for _, v in ipairs(T.violations) do
+		if v ~= "CreateFrame arguments" then
+			own[#own + 1] = v
+		end
+	end
+	check("eyes: queue eye, taintLog 2: no violation and no error", #own == 0 and #T.violations <= 1 and #T.errors == 0, problems(T))
 end
 -- >>> eyes (end)
 -- >>> menubtn (begin)

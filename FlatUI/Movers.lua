@@ -1129,9 +1129,12 @@ end
 -- The queue eye (QueueStatusButton) is put back by what moves it, not by the half-second check. The game places it in UpdateDefaultAnchor
 -- (Blizzard_QueueStatusFrame/Camelot/QueueStatusFrameOverrides.lua:13-35), which Edit Mode calls when it lays the eye out and when the micro
 -- menu changes (EditModeSystemTemplates.lua:2453, 2468, 2508, 3798) and the eye calls itself when the minimap scale changes, through a callback
--- that holds the function it had at load (QueueStatusFrame.lua:11-12), so a hook on the method does not see that path: the minimap's own
--- SetEditModeScale, which triggers it (Minimap.lua:374-382), is hooked too. A hook can run inside the game's pass over a layout, so it only
--- shows a hidden frame, and that frame puts the eye back in its next OnUpdate, which is still the same drawn frame.
+-- on EventRegistry's Minimap.OnScaleUpdated that holds the function it had at load (QueueStatusFrame.lua:11-12), so a hook on the method does
+-- not see that path. The minimap's SetEditModeScale fires that event (Blizzard_Minimap/Mainline/Minimap.lua:418-425), and Flat UI follows the
+-- same event. SetEditModeScale itself is not hooked: on this client MinimapCluster.SetEditModeScale is the wrapper that
+-- Blizzard_Minimap/Camelot/Diel.lua:59-66 puts in place of the Mainline method, so a hook there would wrap Diel's wrapper, and it would be
+-- one more hook on a method of a game frame. A hook or callback can run inside the game's pass over a layout, so it only shows a hidden
+-- frame, and that frame puts the eye back in its next OnUpdate, which is still the same drawn frame.
 hold.eye = { name = "QueueStatusButton", hooked = false }
 
 -- True for a frame that a hook puts back, which the half-second check leaves alone.
@@ -1155,13 +1158,17 @@ local function EyeStep(driver)
 	end
 end
 
--- Hooks the two calls and the eye's OnShow. The game moves the eye while no queue is up and it is hidden (leaving a vehicle bar resets the micro
--- menu, which calls UpdateDefaultAnchor: MainActionBar.lua:14-16, MicroMenuContainer.lua:234-243, EditModeSystemTemplates.lua:394, 2466-2468), and
--- a hidden frame is not placed, so showing it puts it back (QueueStatusFrame.lua:503-513 shows and hides it). Nothing is hooked, and the half-second
--- check keeps the eye, when the game does not have all three.
-function hold.EyeHooks()
-	local eye, cluster = GameFrame(hold.eye.name), GameFrame("MinimapCluster")
-	if not (eye and cluster and Callable(eye.UpdateDefaultAnchor) and Callable(cluster.SetEditModeScale) and Callable(eye.HookScript) and Callable(hooksecurefunc)) then
+-- Follows the eye's UpdateDefaultAnchor, the minimap's scale event and the eye's OnShow. The game moves the eye while no queue is up and it is
+-- hidden (leaving a vehicle bar resets the micro menu, which calls UpdateDefaultAnchor: MainActionBar.lua:14-16, MicroMenuContainer.lua:234-243,
+-- EditModeSystemTemplates.lua:394, 2466-2468), and a hidden frame is not placed, so showing it puts it back (QueueStatusFrame.lua:503-513 shows
+-- and hides it). UpdateDefaultAnchor is hooked through ns.HookMethod, which hooks nothing while taintLog is on. Then nothing is followed and the
+-- half-second check keeps the eye, as it does when the eye has no UpdateDefaultAnchor or HookScript. owner: the registrant of Watch's callbacks.
+function hold.EyeHooks(owner)
+	local eye = GameFrame(hold.eye.name)
+	if not (eye and Callable(eye.UpdateDefaultAnchor) and Callable(eye.HookScript)) then
+		return
+	end
+	if not ns.HookMethod(eye, "UpdateDefaultAnchor", hold.EyeMark) then
 		return
 	end
 	if not hold.eye.driver then
@@ -1170,8 +1177,7 @@ function hold.EyeHooks()
 		hold.eye.driver:Hide()
 		hold.eye.driver:SetScript("OnUpdate", EyeStep)
 	end
-	hooksecurefunc(eye, "UpdateDefaultAnchor", hold.EyeMark)
-	hooksecurefunc(cluster, "SetEditModeScale", hold.EyeMark)
+	EventRegistry:RegisterCallback("Minimap.OnScaleUpdated", hold.EyeMark, owner)
 	eye:HookScript("OnShow", hold.EyeMark)
 	hold.eye.hooked = true
 end
@@ -4203,8 +4209,8 @@ local function Watch()
 		if type(hooksecurefunc) == "function" and type(UpdateContainerFrameAnchors) == "function" then
 			hooksecurefunc("UpdateContainerFrameAnchors", PanelChanged)
 		end
-		-- The queue eye is put back by the calls that move it.
-		hold.EyeHooks()
+		-- The queue eye is put back by the call and the event that move it.
+		hold.EyeHooks(owner)
 	end)
 	if ok then
 		watched = true
