@@ -110029,9 +110029,10 @@ do
 end
 -- >>> eyes (end)
 -- >>> menubtn (begin)
--- The Flat UI button in the game menu (FlatUI/Panel.lua): the hook on InitButtons places it, and its click opens setup or the options. Every label starts "game menu button:".
+-- The Flat UI button in the game menu (FlatUI/Panel.lua): the hook on InitButtons places it (with taintLog on, the hook on the menu's OnShow does),
+-- and its click opens setup or the options. Every label starts "game menu button:".
 do
-	local M = { made = 0, hid = 0, writes = 0, blizz = false }
+	local M = { made = 0, hid = 0, writes = 0, blizz = false, scripts = {} }
 	-- A button of the game's menu: the addon may read it and never write it.
 	local function add(list, text, gap)
 		local data = { layoutIndex = #list + 1, topPadding = gap and 20 or nil, text = text, enabled = true }
@@ -110067,13 +110068,24 @@ do
 		rawset(menu, "built", snap(list))
 		M.blizz = false
 	end
-	local function world(shop, external, saved)
-		M.made, M.hid, M.writes, M.flat = 0, 0, 0, nil
+	-- The game shows the menu once it has built its buttons: the functions hooked on its OnShow run, after the game's own OnShow.
+	function M.show(menu)
+		for _, hook in ipairs(M.scripts) do
+			if hook.which == "OnShow" then
+				hook.fn(menu)
+			end
+		end
+	end
+	-- cvars: the game's variables at login.
+	local function world(shop, external, saved, cvars)
+		M.made, M.hid, M.writes, M.flat, M.scripts = 0, 0, 0, nil, {}
 		local menu
-		local W = newWorld({ saved = saved, beforeLoad = function(_, env)
+		local W = newWorld({ saved = saved, cvars = cvars, beforeLoad = function(_, env)
 			env.GAMEMENU_OPTIONS = "Options"
 			menu = setmetatable({ shop = shop, external = external, buttons = {} }, { __newindex = function(t, k, v) M.writes = M.writes + 1 rawset(t, k, v) end })
 			rawset(menu, "InitButtons", M.build)
+			-- The menu is a frame: a function hooked on one of its scripts is listed in M.scripts.
+			rawset(menu, "HookScript", function(_, which, fn) M.scripts[#M.scripts + 1] = { which = which, fn = fn } end)
 			env.GameMenuFrame = menu
 			env.HideUIPanel = function(frame) M.hid = M.hid + 1 M.hidden = frame end
 			local base = env.CreateFrame
@@ -110105,6 +110117,7 @@ do
 
 	-- 1. Place: below the gap under Options and Shop, directly above AddOns.
 	local W, menu = world(true, false)
+	check("game menu button: InitButtons is followed, and no script of the menu is hooked", INSTHOOK.wrapped(W, menu, "InitButtons") and #M.scripts == 0, #M.scripts)
 	menu:InitButtons()
 	local f = M.flat
 	check("game menu button: after the game builds its buttons a button Flat UI is shown", f ~= nil and f.shown ~= false and f.text == "Flat UI", f and f.text)
@@ -110216,6 +110229,25 @@ do
 	M.flat.onClick()
 	check("menu scale: an error in the open with Options window reaches the error handler and the menu is closed", M.hid == hid8 + 1 and W8.errors[1] == "boom8", M.hid .. " " .. tostring(W8.errors[1]))
 	check("game menu button: no violation in any world", #W.violations == 0 and #W2.violations == 0 and #W3.violations == 0 and #W4.violations == 0 and #W5.violations == 0 and #W6.violations == 0, table.concat(W.violations, " | "))
+
+	-- 6. taintLog on at login: with it on, every call of a game method that an addon hooked fails in the client's hook wrapper (Core.lua, ns.HookMethod).
+	-- InitButtons is not hooked and the game's build runs nothing of Flat UI's; the hook on the menu's OnShow places the button when the menu opens.
+	local T, menuT = world(true, false, nil, { taintLog = "2" })
+	menuT:InitButtons()
+	check("game menu button: taintLog 2: InitButtons has no hook written on it, the build places nothing, and only the menu's OnShow is hooked",
+		not INSTHOOK.wrapped(T, menuT, "InitButtons") and M.flat == nil and #M.scripts == 1 and M.scripts[1].which == "OnShow", tostring(INSTHOOK.wrapped(T, menuT, "InitButtons")) .. " " .. #M.scripts)
+	M.show(menuT)
+	check("game menu button: taintLog 2: when the menu opens the button is shown right before AddOns, and no button of the game is written",
+		M.flat ~= nil and M.flat.shown ~= false and lay(M.flat) == "2.5,20,-20" and M.writes == 0 and snap(menuT.buttons) == menuT.built, M.flat and lay(M.flat))
+	M.show(menuT)
+	check("game menu button: taintLog 2: it opens again: one frame, in the same place", M.made == 1 and lay(M.flat) == "2.5,20,-20", M.made)
+	check("game menu button: taintLog 2: the method left alone is counted in the status", T.ns.TaintSkipped() >= 1 and has(T.status(), "taintLog is on: "), T.ns.TaintSkipped())
+	-- With taintLog on, Reload makes its named box, which this world has no frame type for: that one CreateFrame is left out.
+	local others = 0
+	for _, v in ipairs(T.violations) do
+		others = others + (v ~= "CreateFrame arguments" and 1 or 0)
+	end
+	check("game menu button: taintLog 2: no violation and no error", others == 0 and #T.violations <= 1 and #T.errors == 0, table.concat(T.violations, " | ") .. " ## " .. table.concat(T.errors, " | "))
 end
 -- >>> menubtn (end)
 -- >>> round class icons on unit frames (begin)
