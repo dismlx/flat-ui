@@ -38764,15 +38764,16 @@ local function mworld(opts)
 		bar("MultiBarLeft", 45, 562)
 		bframe("MainStatusTrackingBarContainer", { point = { "BOTTOMLEFT", ui, "BOTTOMLEFT", 0, 0 }, width = 562, height = 14, system = true })
 		bframe("SecondaryStatusTrackingBarContainer", { point = { "BOTTOMLEFT", ui, "BOTTOMLEFT", 0, 0 }, width = 562, height = 14, system = true })
-		-- The totem bar (MultiCastActionBarFrame.xml:101-102): 230 by 38, hidden, Enum.EditModeSystem.TotemActionBar with no index, protected by
-		-- its secure buttons, and placed by Edit Mode at its default anchor (EditModePresetLayouts.lua:767-777). The game shows it while it has an
-		-- active totem slot (MultiCastActionBarFrame.lua:334), which is the world of a Shaman (layout.totem).
+		-- The totem bar (MultiCastActionBarFrame.xml:101-105): 230 by 38, hidden, Enum.EditModeSystem.TotemActionBar with no index, protected by
+		-- its secure buttons. Since 70425 it is a bar of the bottom stack (Camelot/EditModeUtil.lua:21), so in its default position Edit Mode puts it
+		-- at the top left corner of the screen for the pass to place (EditModeSystemTemplates.lua:369-371), and a hidden one stays there. The game
+		-- shows it while it has an active totem slot (MultiCastActionBarFrame.lua:311, 334), which is the world of a Shaman (layout.totem).
 		local totem = env.MultiCastActionBarFrame or bframe("MultiCastActionBarFrame", { width = 230, height = 38, system = true, protected = true, explicit = false })
 		local totemRaw = W.rawOf[totem]
 		totemRaw.system, totemRaw.systemIndex, totemRaw.width, totemRaw.height, totemRaw.protected = 25, nil, 230, 38, true
 		totemRaw.shown = layout.totem == true
 		totemRaw.numActiveSlots = layout.totem and 4 or 0
-		W.gamePlaces("MultiCastActionBarFrame", "RIGHT", -28, 128, ui, "BOTTOM")
+		W.gamePlaces("MultiCastActionBarFrame", "TOPLEFT", 0, 0, ui, "TOPLEFT")
 		env.Enum.EditModeSystem.TotemActionBar = 25
 		-- With layout.restricted true the client lets the addon place these bars in a fight.
 		for _, name in ipairs({ "MainActionBar", "MultiBarBottomLeft", "MultiBarBottomRight", "MultiBar5", "MultiBar6", "MultiBar7", "MultiBarRight", "MultiBarLeft",
@@ -38792,10 +38793,12 @@ local function mworld(opts)
 		if layout.restricted ~= nil then
 			env.C_RestrictedActions = { CheckAllowProtectedFunctions = function() return layout.restricted end }
 		end
-		-- The bottom pass of Edit Mode (EditModeManager.lua:641-723): each shown bar of the stack (EditModeUtil.lua:11-22, the main bar first) that is
-		-- in its default position goes to the bottom left of the main bar, in by the bottomBarOffsetX of its default anchor, and one bar height and 4
-		-- above the one before. Action bar 3 is in by 606 and leaves the height to bar 2, which is in by 22 (EditModePresetLayoutConstants.lua:20-29);
-		-- the stance, pet and possess bars, the leave vehicle button and the totem bar are in by 30 (:35; EditModePresetLayouts.lua:191, 209, 226, 527, 776).
+		-- The bottom pass of Edit Mode (EditModeManager.lua:641-726): each shown bar of the stack (Camelot/EditModeUtil.lua:11-22, the main bar first)
+		-- that is in its default position goes to the bottom left of the main bar, in by the bottomBarOffsetX of its default anchor, and one bar height
+		-- and 4 above the one before (EditModeManager.lua:692-716). Action bar 3 is in by 606 and leaves the height to bar 2, which is in by 22
+		-- (Camelot/EditModePresetLayoutConstants.lua:20, 27-28); the stance, pet and possess bars, the leave vehicle button and the totem bar are in
+		-- by 30 (the same file, :35; Mainline/EditModePresetLayouts.lua:191, 209, 226, 527, 776). The game puts the second status bar 1 into the
+		-- first (EditModeManager.lua:710-711), which this pass leaves out: every step is 4.
 		W.stack = { "SecondaryStatusTrackingBarContainer", "MainStatusTrackingBarContainer", "MultiBarBottomRight", "MultiBarBottomLeft", "StanceBar", "PetActionBar",
 			"PossessActionBar", "MainMenuBarVehicleLeaveButton", "MultiCastActionBarFrame" }
 		W.stackX = { MultiBarBottomLeft = 22, MultiBarBottomRight = 606, StanceBar = 30, PetActionBar = 30, PossessActionBar = 30, MainMenuBarVehicleLeaveButton = 30,
@@ -38861,7 +38864,8 @@ local function mworld(opts)
 				W.rawOf[env[name]].systemIndex = name == "SwingTimerMainHandFrame" and 99 or #NAMES
 			end
 		end
-		-- The totem bar has a row with no index (EditModePresetLayouts.lua:767-777).
+		-- The totem bar has a row with no index, and its default anchor (Mainline/EditModePresetLayouts.lua:767-777) is used only once it is out of
+		-- the stack's default position.
 		if env.MultiCastActionBarFrame and W.rawOf[env.MultiCastActionBarFrame].system == 25 then
 			NAMES[#NAMES + 1] = "MultiCastActionBarFrame"
 		end
@@ -38938,7 +38942,7 @@ local function mworld(opts)
 			end,
 		}
 		-- The game applies the layout in use: each row is the systemInfo of its frame and the frame is placed from it. A bar in its default position is
-		-- left to the game's pass.
+		-- left to the game's pass: an action bar and, since 70425, the totem bar go to the top left corner (EditModeSystemTemplates.lua:369-371).
 		function W.emApply()
 			W.blizzard(function()
 				local current = layouts()[W.em.active]
@@ -38948,10 +38952,9 @@ local function mworld(opts)
 					local raw = W.rawOf[frame]
 					raw.systemInfo = copyTable(row)
 					frame:ClearAllPoints()
-					if row.isInDefaultPosition and raw.system == 7 then
+					if row.isInDefaultPosition and (raw.system == 7 or raw.system == 25) then
 						frame:SetPoint("TOPLEFT", ui, "TOPLEFT", 0, 0)
-					elseif not row.isInDefaultPosition or raw.system == 25 then
-						-- The totem bar in its default position is at its default anchor until the pass stacks it.
+					elseif not row.isInDefaultPosition then
 						local a, scale = row.anchorInfo, frame:GetScale()
 						frame:SetPoint(a.point, env[a.relativeTo] or ui, a.relativePoint, a.offsetX / scale, a.offsetY / scale)
 					end
@@ -59902,9 +59905,9 @@ do
 		end
 	end
 
-	-- The totem bar of a Shaman: since 70425 the game stacks it last, 30 in from the main bar (EditModeUtil.lua:21, EditModePresetLayouts.lua:776), at
-	-- each edge of a fight and each time it is shown or hidden (MultiCastActionBarFrame.lua:332-338). A saved spot is put back after each pass on the
-	-- next frame, uncounted, and the Reload click keeps it in the Edit Mode layout, which takes the bar out of the pass.
+	-- The totem bar of a Shaman: since 70425 the game stacks it last, 30 in from the main bar (Camelot/EditModeUtil.lua:21, Mainline/EditModePresetLayouts.lua:776),
+	-- at each edge of a fight and each time it is shown or hidden (MultiCastActionBarFrame.lua:332-338). A saved spot is put back after each pass on
+	-- the next frame, uncounted, and the Reload click keeps it in the Edit Mode layout, which takes the bar out of the pass.
 	do
 		local TOTEM = "MultiCastActionBarFrame"
 		local TSPOT = { point = "BOTTOM", x = 400, y = 200, kind = "hud" }
@@ -59972,9 +59975,13 @@ do
 				W.run(0.6)
 			end
 			check("totemstack: eleven times hidden and shown in a minute, it is not given up", pts(W, W.env[TOTEM]) == AT and not given(W) and allClean(W), pts(W, W.env[TOTEM]) .. W.status())
-			reload(W)
+			local clicked = noticeShown(W)
+			if clicked then
+				reload(W)
+			end
 			check("totemstack: the Reload click saves the row of the totem bar, which has no index, at the spot and not in the default position",
-				W.em.saves == 1 and rowText(W, TOTEM) == "BOTTOM>UIParent:BOTTOM 400,200 default=false" and pts(W, W.env[TOTEM]) == AT and allClean(W), W.em.saves .. " " .. rowText(W, TOTEM) .. problems(W))
+				clicked and W.em.saves == 1 and rowText(W, TOTEM) == "BOTTOM>UIParent:BOTTOM 400,200 default=false" and pts(W, W.env[TOTEM]) == AT and allClean(W),
+				tostring(clicked) .. " " .. W.em.saves .. " " .. rowText(W, TOTEM) .. problems(W))
 			W.fight(true)
 			W.flush()
 			check("totemstack: after the click the game's pass leaves the bar where it is, in a fight too", pts(W, W.env[TOTEM]) == AT and allClean(W), pts(W, W.env[TOTEM]) .. problems(W))
@@ -59984,16 +59991,26 @@ do
 			check("totemstack: and after it", pts(W, W.env[TOTEM]) == AT and not given(W) and allClean(W), pts(W, W.env[TOTEM]))
 		end
 		do
-			-- A hidden totem bar with no spot is placed by the game when it shows, so it has no handle; one with a spot has its handle there.
+			-- A hidden totem bar with no spot is placed by the game when it shows, so it has no handle, as a hidden bar of the stack has none; one with a
+			-- spot has its handle there.
 			local W = mwBefore({ layout = { systems = true, bars = true, layouts = true } }, function(X)
 				X.rawOf[X.env.MainMenuBarVehicleLeaveButton].shown = false
 				X.blizzard(X.gameStack)
 			end)
 			W.slash("move")
 			check("totemstack: a character with no totem bar has no handle for it", (W.handle("Totem bar") == nil or not W.handle("Totem bar").shown) and allClean(W), table.concat(W.shownHandles(), ","))
+			-- In a vehicle the game hides the bar where its pass last put it (MultiCastActionBarFrame.lua:334, 340-343), which is not where the pass puts it
+			-- when it shows again.
+			local V = world()
+			V.totemShown(false)
+			V.flush()
+			V.slash("move")
+			check("totemstack: a Shaman's bar hidden in a vehicle, with no spot, has no handle", pts(V, V.env[TOTEM]) == GAME and (V.handle("Totem bar") == nil or not V.handle("Totem bar").shown)
+				and allClean(V), pts(V, V.env[TOTEM]) .. " " .. table.concat(V.shownHandles(), ","))
 			local S = world({ [TOTEM] = TSPOT })
 			S.slash("move")
-			check("totemstack: a Shaman has the handle", S.handle("Totem bar") ~= nil and S.handle("Totem bar").shown == true, table.concat(S.shownHandles(), ","))
+			check("totemstack: a Shaman has the handle, which says the game moves the bar back in a fight until the Reload click", S.handle("Totem bar") ~= nil and S.handle("Totem bar").shown == true
+				and S.handleText("Totem bar") == "Totem bar (moved back by the game in combat)", tostring(S.handleText("Totem bar")) .. " " .. table.concat(S.shownHandles(), ","))
 		end
 	end
 	do
@@ -80829,7 +80846,8 @@ do
 			and at(W, T.possess, 679, 512, 120, 35)
 	end
 	-- The Leave vehicle button hangs from the main bar in the game (VehicleLeaveButton.xml:4): not held, and at the game's spot. The game's pass stacks
-	-- it 30 in from the main bar while it is shown (EditModeUtil.lua:20, EditModePresetLayouts.lua:527), so the spot is on the main bar at x 30.
+	-- it 30 in from the main bar while it is shown (Camelot/EditModeUtil.lua:20, Mainline/EditModePresetLayouts.lua:527), so the spot is on the main bar
+	-- at x 30.
 	local function leaveAtGame(W)
 		local frame = raw(W, T.leave)
 		local point = frame.points and frame.points[1]
@@ -81009,7 +81027,7 @@ do
 		local before = writes(W)
 		local text = W.slash("block facts")
 		local list = lines(text)
-		-- Since 70425 the game stacks the totem bar too (EditModeUtil.lua:21), so it has a line; a character with no totem bar has it not held.
+		-- Since 70425 the game stacks the totem bar too (Camelot/EditModeUtil.lua:21), so it has a line; a character with no totem bar has it not held.
 		check("bbaround: facts: 13 lines at most, one for the first bar and one for each frame over the block, the Leave vehicle button and the totem bar", #list == 13 and text:find("Leave vehicle button: protected no, in default position yes, placed no, not held", 1, true) ~= nil and list[1]:find("Main action bar: protected yes, in default position yes, placed yes", 1, true) == 1
 			and text:find("Pet bar: protected yes, in default position yes, placed yes", 1, true) ~= nil and text:find("Totem bar: protected yes, in default position yes, placed no, not held", 1, true) ~= nil, (text:gsub("\n", " | ")))
 		check("bbaround: facts: the layouts of both sources, the toggles and the restricted call", text:find("C_EditMode.GetLayouts: 3 layouts, active 3", 1, true) ~= nil
@@ -81109,12 +81127,16 @@ do
 		W.run(0.6)
 		check("bbaround: totem: and so does its end", at(W, TOTEM, 679, 549, 230, 38) and clear(W) and above(W) and K.allClean(W), K.rectText(W, TOTEM) .. " " .. column(W))
 		local text = W.slash("block facts")
-		check("bbaround: totem: /flatui block facts lists it as held and placed", text:find("Totem bar: protected yes, in default position no, placed yes", 1, true) ~= nil, (text:gsub("\\n", " | ")))
+		check("bbaround: totem: /flatui block facts lists it as held and placed", text:find("Totem bar: protected yes, in default position no, placed yes", 1, true) ~= nil, (text:gsub("\n", " | ")))
+		-- The rows over the block end at the top of the totem bar while it is shown (549 and 38), and at the top of the possess bar (512 and 35) while it is not.
+		local shownTop = select(5, W.ns.MainBlock())
 		W.totemShown(false)
 		W.flush()
 		W.run(0.6)
 		W.flush()
-		check("bbaround: totem: hidden in a vehicle, it keeps its spot and takes no height", held(W, TOTEM) and at(W, TOTEM, 679, 549) and K.allClean(W), K.rectText(W, TOTEM))
+		local hiddenTop = select(5, W.ns.MainBlock())
+		check("bbaround: totem: hidden in a vehicle, it keeps its spot and takes no height", held(W, TOTEM) and at(W, TOTEM, 679, 549) and shownTop ~= nil and hiddenTop ~= nil
+			and math.abs(shownTop - 587) < 1e-6 and math.abs(hiddenTop - 547) < 1e-6 and K.allClean(W), K.rectText(W, TOTEM) .. " " .. tostring(shownTop) .. " " .. tostring(hiddenTop))
 		local D = shaman({ ["barblock.direction"] = "down" })
 		check("bbaround: totem: the same over a block that stacks downward, where the main bar is the top row", at(D, TOTEM, 679, 549, 230, 38) and clear(D) and K.allClean(D), K.rectText(D, TOTEM))
 		local G = shaman({ ["barblock.others"] = "game" })

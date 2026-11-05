@@ -6,10 +6,10 @@ local _, ns = ...
 -- /flatui move (Action bar block) and has a spot of its own saved in the profile.
 -- With Stance, pet and experience bars on Above the block, the frames the game hangs from the main bar get spots over the block too: the
 -- experience bars, then the stance bar on the left and the pet bar on the right, then the possess bar, then the totem bar of a character that has
--- one. The game stacks the totem bar too (EditModeUtil.lua:21) and puts it 4 over the top of the main bar while it is in its default position
--- (EditModeManager.lua:666-668, 693-706), across the next row of the block, so the block holds it on a row of its own. The Leave vehicle button
--- hangs from the main bar in the game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed here; /flatui block facts
--- still lists it.
+-- one. Since 70425 the game stacks the totem bar last (Camelot/EditModeUtil.lua:21): in its default position it goes over the bars of the stack
+-- still in theirs, so once the block's bars are kept in the Edit Mode layout it is 4 over the top of the main bar (EditModeManager.lua:666-668,
+-- 692-716), across the next row of the block. The block holds it on a row of its own. The Leave vehicle button hangs from the main bar in the
+-- game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed here; /flatui block facts still lists it.
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
 -- Background panel: a frame of the module's own behind the rectangle of the block, in the general colours. Fade the block: the alpha of each
@@ -39,7 +39,8 @@ local MICRO_GAP_X, MICRO_GAP_Y, BOTTOM_Y = 4.5, 4, 6
 local TOLERANCE = 0.5
 local WATCH_EVERY = 0.5
 -- The frames the game hangs from the main bar and the block places, bottom to top: the two experience bars, the stance and pet bars, the
--- possess bar and the totem bar. EditModeManager.lua puts the second status bar under the first; the game's gap between the two is -1, not the gap of the rest.
+-- possess bar and the totem bar. EditModeManager.lua puts the second status bar under the first; the game's gap between the two is -1, not the
+-- gap of the rest.
 local XP2, XP1, STANCE, PET, POSSESS, LEAVE, TOTEM = "SecondaryStatusTrackingBarContainer", "MainStatusTrackingBarContainer", "StanceBar", "PetActionBar",
 	"PossessActionBar", "MainMenuBarVehicleLeaveButton", "MultiCastActionBarFrame"
 local XPOWN = "FlatUIXpBar"
@@ -213,7 +214,8 @@ local function AroundSpots(left, width, top, gap)
 	local stacked = stance ~= nil and stance.w > width / 2
 	local overlap = not stacked and stance ~= nil and pet ~= nil and stance.shown and pet.shown and stance.w + pet.w > width
 	parts[#parts + 1] = stacked and "stacked" or "side"
-	local rows = { { { XP2, "centre" } }, { { XP1, "centre" }, closer = true }, { { STANCE, "left" }, { PET, "right" } }, { { POSSESS, "left" } }, { { TOTEM, "left" } } }
+	local rows = { { { XP2, "centre" } }, { { XP1, "centre" }, closer = true }, { { STANCE, "left" }, { PET, "right" } }, { { POSSESS, "left" } },
+		{ { TOTEM, "left" } } }
 	local first = 3
 	if own then
 		rows = { { { XPOWN, "centre" } }, { { STANCE, "left" }, { PET, "right" } }, { { POSSESS, "left" } }, { { TOTEM, "left" } } }

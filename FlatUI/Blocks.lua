@@ -6,8 +6,8 @@ local _, ns = ...
 -- never calls a method of a Blizzard frame. It reads rectangles and sizes only. A bar is held by one owner: the Bar block page comes first.
 -- The pet bar can be hung from the same rectangle, above it on the right or the left.
 -- All of it is planned out of combat. Action bars 6 to 8 stay where they were put in a fight; the game stacks the pet bar and bars 2 to 5 again
--- at the start and the end of a fight until each has been moved once in Edit Mode. It stacks the totem bar the same way (EditModeUtil.lua:21);
--- no block here holds that bar, the Bar block page does.
+-- at the start and the end of a fight until each has been moved once in Edit Mode. Since 70425 it stacks the totem bar the same way
+-- (Camelot/EditModeUtil.lua:21); no block here holds that bar, the Bar block page does.
 
 local KEY = "blocks"
 local BARS = ns.BarFrames
