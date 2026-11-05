@@ -103035,6 +103035,9 @@ do
 	local m = draw("mock-minimap")
 	check("sdhud: the round minimap has its fill masked, and the ring and the north pointer are off with Hide minimap ring and header on",
 		#m.fill.maskList == 1 and m.ringTexture.shown == false and m.north.shown == false and m.disc.shown == true, #m.fill.maskList)
+	-- Since 70425 the tracking button's plate is its StateTexture, which also draws the glyph, and Hud.lua leaves it to the game.
+	check("sdhud: with Hide minimap ring and header on the zone band loses the grey game look and the tracking button keeps it",
+		m.header.rim.shown == false and m.tracking.rim.shown == true, tostring(m.header.rim.shown) .. " " .. tostring(m.tracking.rim.shown))
 	ns.Set("hud.shape", "square")
 	m = draw("mock-minimap")
 	check("sdhud: a square minimap has no mask and no disc, and its border is the four edges of the map", #m.fill.maskList == 0 and m.disc.shown == false

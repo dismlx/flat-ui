@@ -302,7 +302,9 @@ function Minimap.draw(stage)
 	end
 	Style(s.edge, border and square, false, false)
 	Style(s.header, border, true, not art)
-	Style(s.tracking, border, true, not art)
+	-- The tracking button keeps the game's plate with Hide minimap ring and header on: since 70425 that plate is the button's StateTexture,
+	-- which also draws the glyph (Camelot/MinimapTrackingButton.xml:13-16), and Hud.lua leaves it to the game.
+	Style(s.tracking, border, true, true)
 	s.tracking.frame:SetShown(Val("btnTracking") ~= false)
 	Style(s.diel, false, false, not art)
 	s.diel.frame:SetShown(Val("dayNight") ~= false)
