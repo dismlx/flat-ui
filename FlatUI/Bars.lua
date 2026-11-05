@@ -436,14 +436,18 @@ end
 
 -- What this addon has set on a timer: alpha (the opacity set while out of range), colour (true while it sets the text colour), reverse, idle.
 local swingSet = setmetatable({}, { __mode = "k" })
--- The labels of a timer and the colours the game gives them: white in range, red out of range (Blizzard_SwingTimer.lua:423).
+-- The labels of a timer and the colours the game gives them: white in range, red out of range (Blizzard_SwingTimer.lua:440-447).
 local SWING_LABELS = { "TypeLabel", "TimeLabel" }
 local GAME_RANGE_ALPHA = 0.4
 
--- The game sets isOutOfRange itself and treats a timer in Edit Mode as in range (Blizzard_SwingTimer.lua:367-373).
+-- The game sets isOutOfRange itself, treats a timer in Edit Mode as in range, and keeps the in range look while a swing is in progress:
+-- swingDuration is set while it runs (Blizzard_SwingTimer.lua:306-308, 379-390).
 local function SwingOut(timer)
-	local out, editing = timer.isOutOfRange, timer.isInEditMode
-	return not ns.IsSecret(out) and out == true and not (not ns.IsSecret(editing) and editing == true)
+	local out, editing, swinging = timer.isOutOfRange, timer.isInEditMode, timer.swingDuration
+	if ns.IsSecret(out) or out ~= true or ns.IsSecret(editing) or editing == true then
+		return false
+	end
+	return not ns.IsSecret(swinging) and swinging == nil
 end
 
 local function GameTextColour(out)
@@ -653,9 +657,13 @@ local function SwingWanted()
 		or ns.Get("swing.reverse") or false
 end
 
--- True while a timer that hides its idle bar is swinging, so the end of the swing is looked for.
+-- True while a timer is swinging and the end of the swing changes what Flat UI shows: the idle bar is hidden, or the range look is not the
+-- game's. The game ends a swing from its OnUpdate and sets its range look then, with no event (Blizzard_SwingTimer.lua:310-325, 361-370).
 local function SwingInFlight()
-	if not ns.Enabled("swing") or ns.Get("swing.idle") ~= "hide" then
+	if not ns.Enabled("swing") then
+		return false
+	end
+	if ns.Get("swing.idle") ~= "hide" and not ns.Get("swing.textOwn") and math.abs(ns.Get("swing.rangeAlpha") / 100 - GAME_RANGE_ALPHA) <= 0.0001 then
 		return false
 	end
 	local found = false
@@ -811,8 +819,10 @@ function WatchGame(kind)
 		for _, event in ipairs(SWING_EVENTS) do
 			pcall(gameFrame.RegisterEvent, gameFrame, event)
 		end
-		-- The game's own list has it too (Blizzard_SwingTimer.lua:3-12): a change of attack speed can turn the range check off, which sets the range again.
+		-- The game's own list has them too (Blizzard_SwingTimer.lua:10-13, 157-163): a change of attack speed or of the player's gear shows or hides a
+		-- timer, can turn its range check off and sets its range look again.
 		pcall(gameFrame.RegisterUnitEvent, gameFrame, "UNIT_ATTACK_SPEED", "player")
+		pcall(gameFrame.RegisterUnitEvent, gameFrame, "UNIT_INVENTORY_CHANGED", "player")
 	end
 	ns.WatchEditModePass()
 	PollState()
