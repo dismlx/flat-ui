@@ -713,9 +713,51 @@ local function SwingWanted()
 	if not ns.Enabled("swing") then
 		return false
 	end
-	-- The Auto Shot window follows each new swing, whose length changes with haste.
 	return math.abs(ns.Get("swing.rangeAlpha") / 100 - GAME_RANGE_ALPHA) > 0.0001 or ns.Get("swing.textOwn") or ns.Get("swing.idle") ~= "show"
-		or ns.Get("swing.reverse") or ns.Get("swing.autoShot") or false
+		or ns.Get("swing.reverse") or false
+end
+
+-- The Auto Shot window alone needs only the length of each ranged swing and of the ranged weapon: a ranged swing that starts (PLAYER_SWING
+-- carries its length and its type, SwingTimerDocumentation.lua:43-51), and a change of attack speed or of weapon, which the game's timers follow
+-- too (Blizzard_SwingTimer.lua:142-163). No range event is heard, so at the defaults nothing else runs on a swing.
+local AUTO_SHOT_EVENTS = { "PLAYER_SWING", "WEAPON_SLOT_CHANGED", "PLAYER_ENTERING_WORLD" }
+local autoFrame
+local autoEvents = false
+local autoQueued = false
+
+local function AutoShotWanted()
+	return ns.Enabled("swing") and ns.Get("swing.autoShot") == true
+end
+
+-- On the next frame, after the game's own timer has taken the event: the band of each timer again. The full pass sets it as well.
+local function AutoShotPass()
+	autoQueued = false
+	if gameEvents then
+		return
+	end
+	EachTimer(function(timer)
+		ns.Each("swing", ApplyAutoShot, timer, swingOption[timer])
+	end)
+end
+
+local function AutoShotEvent(_, event, ...)
+	if event == "PLAYER_SWING" then
+		-- A melee swing leaves the band as it is.
+		local _, swingType = ...
+		local ranged = Enum and Enum.PlayerSwingType and Enum.PlayerSwingType.Ranged
+		if ranged ~= nil and not ns.IsSecret(swingType) and swingType ~= ranged then
+			return
+		end
+	end
+	if autoQueued then
+		return
+	end
+	autoQueued = true
+	if C_Timer and C_Timer.After then
+		C_Timer.After(0, AutoShotPass)
+	else
+		AutoShotPass()
+	end
 end
 
 -- True while a timer is swinging and the end of the swing changes what Flat UI shows: the idle bar is hidden, or the range look is not the
@@ -885,6 +927,22 @@ function WatchGame(kind)
 		-- timer, can turn its range check off and sets its range look again.
 		pcall(gameFrame.RegisterUnitEvent, gameFrame, "UNIT_ATTACK_SPEED", "player")
 		pcall(gameFrame.RegisterUnitEvent, gameFrame, "UNIT_INVENTORY_CHANGED", "player")
+		-- The full pass sets the Auto Shot window too.
+		if autoEvents then
+			autoEvents = false
+			pcall(autoFrame.UnregisterAllEvents, autoFrame)
+		end
+	elseif kind == "swing" and not gameEvents and not autoEvents and AutoShotWanted() then
+		autoEvents = true
+		if autoFrame == nil then
+			autoFrame = CreateFrame("Frame")
+			ns.Own[autoFrame] = true
+			autoFrame:SetScript("OnEvent", AutoShotEvent)
+		end
+		for _, event in ipairs(AUTO_SHOT_EVENTS) do
+			pcall(autoFrame.RegisterEvent, autoFrame, event)
+		end
+		pcall(autoFrame.RegisterUnitEvent, autoFrame, "UNIT_ATTACK_SPEED", "player")
 	end
 	ns.WatchEditModePass()
 	PollState()

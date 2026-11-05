@@ -2954,6 +2954,8 @@ local function newWorld(opts)
 	-- Both calls are restricted in combat. W.click.calls lists every call with whether combat was on.
 	env.Enum = env.Enum or {}
 	env.Enum.NamePlateType = { Friendly = 0, Enemy = 1 }
+	-- The swing types PLAYER_SWING and PLAYER_SWING_RANGE_UPDATE carry (SwingTimerDocumentation.lua:71-81).
+	env.Enum.PlayerSwingType = { MainHand = 0, OffHand = 1, Ranged = 2 }
 	W.click = { size = { 140, 50 }, base = { 140, 50 }, sizeCalls = {}, insets = { [0] = { 0, 0, 0, 0 }, [1] = { 0, 0, 0, 0 } }, calls = {} }
 	env.C_NamePlate.GetNamePlateSize = function() return W.click.size[1], W.click.size[2] end
 	env.C_NamePlate.SetNamePlateSize = function(width, height)
@@ -17952,17 +17954,17 @@ do
 	check("autoshot: only the ranged timer has one", bands(W, "SwingTimerMainHandFrame") == 0 and bands(W, "SwingTimerOffHandFrame") == 0 and bands(W, "SwingTimerRangedFrame") == 1)
 	-- A swing that runs gives the length: a swing of 2 seconds after haste.
 	ranged.inner.swingDuration, ranged.inner.swingEndTime = 2.0, W.now + 2.0
-	W.fire("PLAYER_SWING", 2.0, 3)
+	W.fire("PLAYER_SWING", 2.0, 2)
 	W.advance(0.01)
 	check("autoshot: a swing of 2 seconds makes it 50 wide", near(b.width, 50, 1e-9), tostring(b.width))
 	-- A swing longer than half a second is never covered whole; a swing of half a second or less is all aim.
 	ranged.inner.swingDuration = 0.4
-	W.fire("PLAYER_SWING", 0.4, 3)
+	W.fire("PLAYER_SWING", 0.4, 2)
 	W.advance(0.01)
 	check("autoshot: a swing of half a second or less is the whole bar", near(b.width, 200, 1e-9), tostring(b.width))
 	-- A withheld length falls back to the speed of the weapon.
 	ranged.inner.swingDuration = SECRET
-	W.fire("PLAYER_SWING", 2.0, 3)
+	W.fire("PLAYER_SWING", 2.0, 2)
 	W.advance(0.01)
 	check("autoshot: a withheld swing length falls back to the speed of the weapon", near(b.width, 40, 1e-9) and #W.violations == 0, tostring(b.width))
 	ranged.inner.swingDuration, ranged.inner.swingEndTime = nil, nil
@@ -17981,6 +17983,48 @@ do
 	W.change("swing.enabled", true)
 	check("autoshot: and back with it", b.shown)
 	check("autoshot: no violations or errors", #W.violations == 0 and #W.errors == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
+	-- The timers as the game has them (Show the timer at Always) but for the Auto Shot window: it hears only a swing, attack speed and the weapon,
+	-- with no range event and no target change, and it looks only at a ranged swing (Enum.PlayerSwingType.Ranged, 2).
+	local G = newWorld({ saved = { options = { ["swing.idle"] = "show" } } })
+	local gr = G.swing.SwingTimerRangedFrame
+	G.rawOf[gr.StatusBar].width = 200
+	G.env.UnitAttackSpeed = function() return 2.6, nil, 2.5 end
+	G.login()
+	-- Other modules hear target changes and gear as well, so the frames that hear each event are counted against the same world with the window off.
+	-- (This world gives frames no RegisterUnitEvent, so attack speed is not counted here.)
+	local G0 = newWorld({ saved = { options = { ["swing.idle"] = "show", ["swing.autoShot"] = false } } })
+	G0.login()
+	local function hearers(X, event)
+		local n = 0
+		for _, frame in ipairs(X.eventFrames) do
+			if frame.events[event] == true then
+				n = n + 1
+			end
+		end
+		return n
+	end
+	local more, shown = {}, {}
+	for _, event in ipairs({ "PLAYER_SWING", "WEAPON_SLOT_CHANGED", "PLAYER_ENTERING_WORLD", "PLAYER_SWING_RANGE_UPDATE", "PLAYER_TARGET_CHANGED", "PLAYER_IN_COMBAT_CHANGED",
+		"UNIT_INVENTORY_CHANGED" }) do
+		more[event] = hearers(G, event) - hearers(G0, event)
+		shown[#shown + 1] = event .. "=" .. more[event]
+	end
+	check("autoshot: with the timers as the game has them, the window alone hears a swing, the weapon and the world, and no range event or target change",
+		more.PLAYER_SWING == 1 and more.WEAPON_SLOT_CHANGED == 1 and more.PLAYER_ENTERING_WORLD == 1 and more.PLAYER_SWING_RANGE_UPDATE == 0
+		and more.PLAYER_TARGET_CHANGED == 0 and more.PLAYER_IN_COMBAT_CHANGED == 0 and more.UNIT_INVENTORY_CHANGED == 0, table.concat(shown, " "))
+	clean(G0, "autoshot game timers, window off")
+	local gb = band(G)
+	gr.inner.swingDuration, gr.inner.swingEndTime = 2.0, G.now + 2.0
+	G.fire("PLAYER_SWING", 2.0, 2)
+	G.advance(0.01)
+	check("autoshot: with the timers as the game has them, a ranged swing of 2 seconds makes it 50 wide", gb ~= nil and near(gb.width, 50, 1e-9), gb and tostring(gb.width))
+	gr.inner.swingDuration = 1.0
+	G.fire("PLAYER_SWING", 1.0, 0)
+	G.advance(0.01)
+	check("autoshot: and a melee swing leaves it as it is", gb ~= nil and near(gb.width, 50, 1e-9), gb and tostring(gb.width))
+	G.change("swing.autoShot", false)
+	check("autoshot: off, the band is hidden", gb ~= nil and not gb.shown)
+	clean(G, "autoshot game timers")
 	-- A bar whose width the game does not give, and a client without a ranged weapon speed, make no band.
 	local N = newWorld()
 	N.env.UnitAttackSpeed = function() return 2.6, nil, nil end
@@ -99472,7 +99516,8 @@ do
 
 	for _, value in ipairs({ "0", "2" }) do
 		local options = { ["castbars.flat"] = false, ["swing.rangeAlpha"] = 70, ["swing.idle"] = "hide", ["swing.reverse"] = true }
-		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show" } } }, HB.dress)
+		-- The game's own look: the Auto Shot window off too, since on (the default) it hears a ranged swing and attack speed.
+		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show", ["swing.autoShot"] = false } } }, HB.dress)
 		local W = FH.world({ saved = { options = options } }, function(Y)
 			HB.dress(Y)
 			Y.cvars.taintLog = value
