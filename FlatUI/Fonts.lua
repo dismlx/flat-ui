@@ -279,7 +279,7 @@ end
 -- The game sets these objects again when the text size changes and when Edit Mode applies a layout. None of it is followed with a hook on
 -- TextSizeManager or ObjectiveTrackerManager: the text scale is the userFontScale variable (TextSizeManager.lua:12-18, 70-72), which the
 -- client announces on CVAR_UPDATE, and the tracker text size is a setting of the tracker's Edit Mode system
--- (EditModeSystemTemplates.lua:2405-2407), applied with the layout (EditModeManager.lua:193) and at the end of Edit Mode
+-- (EditModeSystemTemplates.lua:2419-2421), applied with the layout (EditModeManager.lua:193) and at the end of Edit Mode
 -- (EditModeManager.lua:124). The pass waits a frame, so it never runs inside the game's own pass.
 -- EllesmereUI hooks neither table (EllesmereUIBlizzardSkin/EllesmereUIBlizzardSkin_WindowPacks.lua:11573-11576 re-applies its own sizes each pass).
 local later = false

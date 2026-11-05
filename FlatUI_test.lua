@@ -5091,7 +5091,7 @@ local function newWorld(opts)
 			wtex(bg, part, nil)
 		end
 		closeButton(frame, "CloseButton", name .. "CloseButton")
-		-- Blizzard_UIPanels_Game/Mainline/ContainerFrame.xml:202-225, 289, 316: the coin box is a frame of three pieces.
+		-- Blizzard_UIPanels_Game/Mainline/ContainerFrame.xml:200-223, 287, 325: the coin box is a frame of three pieces.
 		local border = wframe(wframe(frame, "MoneyFrame", {}), "Border", {})
 		for _, part in ipairs({ "Left", "Right", "Middle" }) do
 			wtex(border, part, "common-coinbox-" .. part:lower())
@@ -5229,7 +5229,7 @@ local function newWorld(opts)
 				env.EventRegistry:TriggerEvent("BankPanelMixin.PageInfoChanged", 1)
 			end
 		end)
-		-- The game's global functions that update the bags (ContainerFrame.lua:1267-1312): UpdateAll updates the items of each bag, and GenerateFrame sets the
+		-- The game's global functions that update the bags (ContainerFrame.lua:1270-1315): UpdateAll updates the items of each bag, and GenerateFrame sets the
 		-- background of a bag it opens and updates its items.
 		env.ContainerFrame_UpdateAll = luaMethod("ContainerFrame_UpdateAll", function()
 			for _, name in ipairs({ "ContainerFrame1", "ContainerFrame2", "ContainerFrameCombinedBags" }) do
@@ -38056,7 +38056,7 @@ local function mworld(opts)
 	W.minimapChild = bframe("MinimapClusterChild", { parent = W.minimap, point = { "TOPRIGHT", W.minimap, "TOPRIGHT", -10, -10 }, width = 100, height = 100 })
 	W.playerFrame = bframe("PlayerFrame", { point = { "TOPLEFT", ui, "TOPLEFT", 20, -20 }, width = 232, height = 100, system = true, protected = true })
 	-- The pet frame hangs in the container under the player frame, and the game sets its scale in UpdatePetFrameScale
-	-- (EditModeSystemTemplates.lua:2686-2697): the Frame Size of the pet frame divided by the scale of the player frame, then a layout of the container.
+	-- (EditModeSystemTemplates.lua:2700-2711): the Frame Size of the pet frame divided by the scale of the player frame, then a layout of the container.
 	if layout.pet then
 		W.petMarks, W.petLayouts, W.petPct = 0, 0, layout.petPct or 100
 		local box = bframe("PlayerBottomManagedFrameContainer", { parent = W.playerFrame, point = { "TOP", W.playerFrame, "BOTTOM", 30, 25 }, width = 120, height = 49,
@@ -70520,7 +70520,7 @@ do
 end
 
 -- 6b. Under the slots, a bag with another bag under it has no button: the game stacks the bags 8 units apart, each on the top right corner
--- of the one under it (ContainerFrame.lua:1402), and a button hanging under a bag would lie over the title bar of the bag below. A button
+-- of the one under it (ContainerFrame.lua:1404), and a button hanging under a bag would lie over the title bar of the bag below. A button
 -- that goes is hidden where it was, so the reading of a hidden one is its place when it went.
 do
 	local S, H, A = SB.slots, "TOP/0,-2/hidden", SB.away
@@ -70627,7 +70627,7 @@ do
 	check("sortbags: combat ends and it has", SB.lines(C) == expect(S, S, S, S, H) and allClean(C), SB.lines(C) .. problems(C))
 end
 
--- 6c. Under the gamepad interface the game has no clean up button and its action lies in a menu (ContainerFrame.lua:735-742 and 1132-1136), and a
+-- 6c. Under the gamepad interface the game has no clean up button and its action lies in a menu (ContainerFrame.lua:735-742 and 1130-1134), and a
 -- button here could not be clicked: none is made.
 do
 	local function pad(opts, answer)
@@ -79676,7 +79676,7 @@ do
 end
 
 -- The size of the pet frame (PetFrameSize.lua). The world has the pet frame in the container under the player frame, as the game has it, and a
--- function that does what the game does when it sets the pet frame's scale (EditModeSystemTemplates.lua:2686-2697).
+-- function that does what the game does when it sets the pet frame's scale (EditModeSystemTemplates.lua:2700-2711).
 do
 local function petsize()
 local mw, mwBefore, opt, entry, pts = suiteKit.mw, suiteKit.mwBefore, suiteKit.opt, suiteKit.entry, suiteKit.pts

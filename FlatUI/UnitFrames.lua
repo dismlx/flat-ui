@@ -3501,7 +3501,7 @@ ns.Register(KEY, {
 		UNIT_TARGET = OnTargetChange, UNIT_CLASSIFICATION_CHANGED = Reclassify, PLAYER_ENTERING_WORLD = function() Reclassify() end,
 		PVP_TIMER_UPDATE = OnPlayerPvP, PLAYER_PVP_FLAG_CHANGED = OnPlayerPvP,
 		-- Edit Mode applies the layout again after a specialization change, which runs SetSmallSize and UpdateAuras of the target and focus frames
-		-- (EditModeManager.lua:202-206, EditModeSystemTemplates.lua:1473-1486).
+		-- (EditModeManager.lua:202-206, EditModeSystemTemplates.lua:1487-1500).
 		PLAYER_SPECIALIZATION_CHANGED = function() Later.editMode() end,
 		-- The colour of a unit depends on who is in the group and on how the unit stands to the player.
 		GROUP_ROSTER_UPDATE = function() ns.UnitFrameExtra.unitsChanged() end, UNIT_FACTION = function() ns.UnitFrameExtra.unitsChanged() end },

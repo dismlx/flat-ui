@@ -91,7 +91,7 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- Whose hits. No source of who made a hit is open to addons: UNIT_COMBAT has no field for it (UnitDocumentation.lua:4167-4180) and the combat
 -- log is read through C_CombatLogSecure, whose environment is SecureOnly (CombatLogSecureDocumentation.lua:3-6). So a hit counts as yours
 -- from signals about you that are plain: a cast of yours or your pet's (UNIT_SPELLCAST_*, plain for the player and their pet,
--- SecretPredicatesDocumentation.lua:110-113), your swing and your shot (PLAYER_ENTER_COMBAT, START_AUTOREPEAT_SPELL, as the game's attack
+-- SecretPredicatesDocumentation.lua:115-118), your swing and your shot (PLAYER_ENTER_COMBAT, START_AUTOREPEAT_SPELL, as the game's attack
 -- button follows them, ActionButton.lua:1018-1031) and a harmful aura of yours on the enemy (the filter string of CooldownViewerItemData.lua:716-724).
 -- The numbers are chosen by eye, not the game's: cast is the seconds after a cast or the start of one that a hit on your target counts, tail
 -- the seconds after a channel ends, aura the seconds an answer about the auras of an enemy is kept, offAfter the hit reports in combat with

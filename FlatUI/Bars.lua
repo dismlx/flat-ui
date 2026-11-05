@@ -622,7 +622,7 @@ local swingSized = setmetatable({}, { __mode = "k" })
 local swingQueued = setmetatable({}, { __mode = "k" })
 
 -- The width of the personal resource display, or the width Edit Mode has for the timer. Edit Mode sets the width again only for a changed setting
--- (EditModeSystemTemplates.lua:2803-2810), and UpdateSystemSettingWidth lays the frames out again (2765-2769), so the layout value is read and set here.
+-- (EditModeSystemTemplates.lua:2817-2824), and UpdateSystemSettingWidth lays the frames out again (2779-2783), so the layout value is read and set here.
 local function ApplySwingWidth(timer)
 	if ns.EditModeOpen() then
 		return
@@ -1337,7 +1337,7 @@ local function MakeMark(bar, record, name, anchor)
 end
 
 -- The spell icon and the latency zone for the cast on a bar of the player or the pet. Their numbers come from UnitCastingInfo and
--- UnitChannelInfo, which the game withholds for every unit but the player and the pet (SecretPredicatesDocumentation.lua:110-113), and each is
+-- UnitChannelInfo, which the game withholds for every unit but the player and the pet (SecretPredicatesDocumentation.lua:115-118), and each is
 -- tested before it is used.
 local function Marks(bar, record, wantIcon, wantLatency)
 	local unit = record.option == "pet" and "pet" or "player"

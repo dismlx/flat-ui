@@ -832,7 +832,7 @@ local function BuildProc(stage)
 		local asked, info = pcall(C_Texture.GetAtlasInfo, PROC.atlas)
 		s.glowFile = asked and info ~= nil
 		if s.glowFile and type(info) == "table" then
-			-- The flipbook is a sub-rectangle of its sheet (TextureUtilsDocumentation.lua:204-221).
+			-- The flipbook is a sub-rectangle of its sheet (TextureUtilsDocumentation.lua:207-224).
 			s.glowRect = { info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord }
 		end
 	end

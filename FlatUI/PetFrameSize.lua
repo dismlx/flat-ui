@@ -4,7 +4,7 @@ local _, ns = ...
 -- The pet frame hangs in a container under the player frame, and the container lays out its children at
 -- their own scale. The game gives the pet frame a scale only in UpdatePetFrameScale: the Frame Size of
 -- Edit Mode's pet frame divided by the scale of the player frame, then the container is laid out again
--- (EditModeSystemTemplates.lua:2686-2697). The game keeps the pet frame at its own Frame Size on screen
+-- (EditModeSystemTemplates.lua:2700-2711). The game keeps the pet frame at its own Frame Size on screen
 -- even when Flat UI has scaled the player frame, so the pet frame comes out larger than a shrunk player frame.
 -- This sets the scale with SetScaleBase, the engine's own call. No method of the pet frame is hooked: UpdatePetFrameScale is called when Edit
 -- Mode applies a layout (EDIT_MODE_LAYOUTS_UPDATED, PLAYER_SPECIALIZATION_CHANGED, the spectate override layouts, the revert buttons inside
