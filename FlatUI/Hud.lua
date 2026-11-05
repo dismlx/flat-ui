@@ -997,7 +997,7 @@ local function ApplyAura(button)
 	end
 end
 
--- The sizes of the duration and the count of a button. The game sets their text and colour and not their font (BuffFrame.lua:1338-1399), but a
+-- The sizes of the duration and the count of a button. The game sets their text and colour and not their font (BuffFrame.lua:1376-1437), but a
 -- size set before is read again when the game gives the font back, so the sizes are set after every update.
 local function AuraText(button)
 	local duration, count = Val("auras", "durationSize") or 100, Val("auras", "countSize") or 100

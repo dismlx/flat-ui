@@ -56,10 +56,11 @@ local TOT = { debuffs = 4, every = 0.2 }
 local COLOUR = { warning = { 1, 0.3, 0.1 }, mana = { 0, 0, 1 }, stealable = { 0.2, 0.6, 1 }, pet = { 0, 1, 0 }, level = { 1, 0.1, 0.1 } }
 -- The share of an aura icon or a portrait cut off at each edge.
 local CROP = 0.08
--- Where the game lays out the bars of a target in its standard layout, which the picture keeps when a minus mob moves them (Mainline\TargetFrame.lua:
--- 432-434, TargetFrame.xml:213-217): the right edge of the slot of the health bar from the left of the frame, its top above the middle of the frame,
--- and the bottom of the power bar below it.
-local STANDARD = { x = 149, top = 10, bottom = -21 }
+-- Where the game lays out the bars of a target, which the picture keeps whatever the unit is: the right edge of the slot of the health bar from the
+-- left of the frame, its top above the middle of the frame, and the bottom of the power bar below it. Camelot's UpdateHealthBarVisuals puts the slot,
+-- 126 by 15, with its bottom right 147 units right of and 9 below the middle of the left edge for every unit (Camelot\TargetFrame.lua:71-86), and its
+-- OnLoad hangs the power bar, 10 units tall, 1 unit under the slot (Camelot\TargetFrame.lua:24-27, Mainline\TargetFrame.xml:213-216).
+local STANDARD = { x = 147, top = 6, bottom = -20 }
 -- The thickness in screen pixels of the border an elite or rare picture gets, so that it is seen, and of the line inside a Rare Elite's.
 local RIM_PX, INNER_PX = 2, 1
 -- The corner radius in units of each choice of the Corners setting, and the pixels of the corner textures that keep their size.
@@ -99,15 +100,21 @@ local ROW_FONT = "GameFontNormalSmall"
 -- The line of /flatui status for a picture that could not be drawn.
 -- The unit of a frame when the game does not say which.
 local TOKENS = { player = "player", target = "target", focus = "focus", pet = "pet" }
--- Units from the top of the health slot (large frames) or of the name text (small frames) to the bottom of the power bar, for a frame whose
--- rectangles the client does not give (Mainline\PlayerFrame.xml:123-126 and 252-258, PetFrame.xml:73-78, 84-88 and 133-137,
--- TargetFrame.xml:439-451 and 486-489, PartyFrameTemplates.xml:9-51, 118-121 and 241-244).
-local SPAN = { player = 31, target = 31, focus = 31, pet = 30, tot = 30, party = 31, partypet = 22 }
--- The PvP flag. half: half the height of the round plate in its own units, for a client that does not give its size. home: where the XML anchors
--- the plate in its frame, the point of the plate, the point of the frame and the offsets (Mainline\PlayerFrame.xml:91-93, TargetFrame.xml:259-262).
--- corner: the point of the picture the plate is centred on at each choice of the Icon corner setting, and the signs of its offsets, which keep it inside.
+-- Units from the top of the health bar or its slot (large frames) or of the name text (small frames) to the bottom of the power bar, for a frame
+-- whose rectangles the client does not give. The player has the health bar 20 units tall and the power bar 10, hung 1 unit under it (Camelot\
+-- PlayerFrame.lua:75-96). The target and the focus are STANDARD. The pet and the target of target have the name 1 unit under the top of the
+-- portrait, the health bar 11 units tall with its bottom 5 under the middle of the portrait or 4 under the middle of the frame, and the power bar
+-- 7 units tall 1 unit under it (Camelot\PetFrame.lua:4-22, Camelot\TargetFrame.lua:92-108, Mainline\PetFrame.xml:11-12, 24-28 and 133-134,
+-- TargetFrame.xml:397-398, 408-411 and 479-480). The party frames are in PartyFrameTemplates.xml:9-51, 118-121 and 241-244.
+local SPAN = { player = 31, target = 26, focus = 26, pet = 30.5, tot = 30.5, party = 31, partypet = 22 }
+-- The PvP flag. Since 1.60.1.70425 the icon is the round plate itself, with the faction drawn on it, and it is the region that moves; the client
+-- before had a plate under the icon, which moved with the icon on it. half: half the height of what moves in its own units, for a client that does
+-- not give its size. home: where the XML anchors the icon in its frame, the point of the icon, the point of the frame and the offsets
+-- (Mainline\PlayerFrame.xml:97-101, TargetFrame.xml:260-264). plateHome: the same for the plate of the older client. corner: the point of the
+-- picture what moves is centred on at each choice of the Icon corner setting, and the signs of its offsets, which keep it inside.
 local FLAG = { half = 13,
-	home = { player = { "TOP", "TOPLEFT", 20, -50 }, target = { "TOP", "TOPRIGHT", -23, -50 }, focus = { "TOP", "TOPRIGHT", -23, -50 } },
+	home = { player = { "TOP", "TOPLEFT", 22, -65 }, target = { "TOP", "TOPRIGHT", -24, -65 }, focus = { "TOP", "TOPRIGHT", -24, -65 } },
+	plateHome = { player = { "TOP", "TOPLEFT", 20, -50 }, target = { "TOP", "TOPRIGHT", -23, -50 }, focus = { "TOP", "TOPRIGHT", -23, -50 } },
 	corner = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } } }
 -- /flatui status. names: how it calls the frames it reports on. none: what a frame with no unit says in place of its lines. The functions that write
 -- the lines of a frame are fields of this table.
@@ -246,11 +253,12 @@ end
 -- Where each frame keeps its parts. owner: what the picture of the portrait is made on. art: the frame
 -- art, whose alpha the game never sets. flash: the threat glow. status: the glow the game colours for resting
 -- and combat, or for an attacking pet. rest: the resting animation of the player. boss: the dragon around the portrait of an elite
--- or rare target. debuff: the glow the game colours for the top debuff of a party member. level, pvp and
--- strip: the round level plate, the round PvP plate and the strip behind the name, drawn on the frame badges; nameText and levelText:
--- the name and the level number, drawn there too; high: the skull that stands in for a level the game cannot tell. pvp is the round plate of the
--- PvP flag, pvpIcon the faction or free-for-all art on it, pvpTimer the timer text of the player's flag, and pvpHome the frame the XML anchors the
--- plate to. content: the frames the game draws its content on, which the name row is above. healthBox: the slot of a health bar that is larger
+-- or rare target. debuff: the glow the game colours for the top debuff of a party member. level and
+-- strip: the round level plate and the strip behind the name, drawn on the frame badges; nameText and levelText:
+-- the name and the level number, drawn there too; high: the skull that stands in for a level the game cannot tell. pvpIcon is the faction or
+-- free-for-all art of the PvP flag, which is a round plate of its own since 1.60.1.70425; pvp is the round plate under it on the client before,
+-- and nil since. pvpTimer is the timer text of the player's flag, and pvpHome the frame the XML anchors the icon (or the plate) to. content: the
+-- frames the game draws its content on, which the name row is above. healthBox: the slot of a health bar that is larger
 -- than its slot, cutHealth: the fill is cut to that slot. textBox: the container that holds the words of the health bar. select: the target outline of a raid frame. loss: the bar that
 -- fills red behind the health bar for the health just lost. clip: the side on which the power bar is wider than the health bar, under
 -- the portrait. side: the side of the bars the picture is on. standard: the layout the picture keeps when the bars move.
@@ -717,7 +725,7 @@ local function Unmask(rec, key, texture, mask, off)
 end
 
 -- The game's portraits get a circle mask from its XML (client/ui/Interface/AddOns/Blizzard_UnitFrame/Mainline/PlayerFrame.xml:32-40,
--- TargetFrame.xml:67-70, 421-424, PetFrame.xml:30-33, PartyFrameTemplates.xml:19-22, 92-95). SetPortraitTexture masks the image itself unless
+-- TargetFrame.xml:67-70, 414-417, PetFrame.xml:30-33, PartyFrameTemplates.xml:19-22, 92-95). SetPortraitTexture masks the image itself unless
 -- disableMasking is passed (Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:572-581), and the game passes it only for the player frame
 -- (UnitFrame.lua:195, PlayerFrame.xml:19), so on the other frames the image is round without the mask too. This is a guard: it takes the mask
 -- off the portrait of the game while the picture shows, once, and nothing in Blizzard_UnitFrame calls AddMaskTexture to put it back. The cause of
@@ -961,7 +969,7 @@ end
 
 -- The side of the picture, which is a square beside the bars: from the top of the name row, of the name text or of the health bar to the bottom of
 -- the power bar. The rectangles of the game's bars give it, and when the client gives none the numbers of SPAN do; the second answer says which. A
--- target keeps the size the standard layout gives it, so that it does not change when a minus mob moves its bars.
+-- target keeps the size the layout of STANDARD gives it, so that it does not change when a minus mob hides its power bar.
 local function SideOf(rec, t, rowOn, tall)
 	local parts = rec.parts
 	if parts.standard ~= nil then
@@ -1284,7 +1292,8 @@ end
 
 -- Fills ------------------------------------------------------------------------------------------------------
 
--- True when the slot of a bar is smaller than the bar, which the health slot of a minus target is: the fill is cut to the slot.
+-- True when the slot of a bar is smaller than the bar, which the health slot of every target is since 1.60.1.70425 (Camelot\TargetFrame.lua:71-86):
+-- the fill is cut to the slot.
 local function Smaller(entry)
 	local slot, bar = entry.slot, entry.bar
 	if slot == nil then
@@ -1979,8 +1988,8 @@ local function ApplyRow(rec)
 	end
 end
 
--- How the PvP flag of a frame is shown: "icon" has the game's plate and icon on a corner of the picture, "word" has a word in the name row and the
--- game's plate, icon and timer transparent, "both" has the plate and the icon on the picture and the word in the name row, "off" has them all
+-- How the PvP flag of a frame is shown: "icon" has the game's icon on a corner of the picture, "word" has a word in the name row and the
+-- game's icon and timer transparent, "both" has the icon on the picture and the word in the name row, "off" has them all
 -- transparent, and "game" leaves them as the game draws them, which is so while the frame shows the portrait of the game. A word needs the name
 -- row, and a frame without it shows the icon. Nil for a frame with no flag.
 local function FlagMode(rec)
@@ -1999,14 +2008,17 @@ local function FlagMode(rec)
 	return pick and pick(rec, mode) or mode
 end
 
--- Moves the round plate of the PvP flag and its icon to a corner of the picture, or back to the places the XML gives them. The plate and the icon
--- are the two regions of the game this module anchors: the icon is anchored to the plate in the XML, and on the target the live client has been seen
--- to keep it at the game's place, so the icon gets its own point on the plate. The timer of the player is anchored to the plate and follows. The game
--- goes on showing, hiding and skinning all three. They sit on protected frames, so they move out of combat. A move the game refuses, which raises
--- nothing, puts both back where the XML has them and says so on the status.
+-- Moves the PvP icon to a corner of the picture, or back to the place the XML gives it. The icon is the one region of the game this module anchors:
+-- since 1.60.1.70425 it is the round plate itself, anchored to its frame (Mainline\PlayerFrame.xml:97-101, TargetFrame.xml:260-264), and the timer of
+-- the player is anchored to it and follows (Camelot\PlayerFrame.lua:17-18). The client before had a plate under the icon: the plate is moved then,
+-- and the icon gets its own point on it, since on the target the live client was seen to keep the icon at the game's place. The game goes on
+-- showing, hiding and skinning them. They sit on protected frames, so they move out of combat. A move the game refuses, which raises nothing, puts
+-- them back where the XML has them and says so on the status.
 local ApplyFlag
 local function PlacePlate(rec, corner)
-	local parts, plate = rec.parts, rec.parts.pvp
+	local parts = rec.parts
+	-- Only the player, the target and the focus have a flag this moves; the icon of a party member stays where the game has it.
+	local plate = parts.pvp or (FLAG.home[rec.kind] ~= nil and parts.pvpIcon or nil)
 	if plate == nil or (rec.plateAt or false) == (corner or false) then
 		return
 	end
@@ -2022,14 +2034,15 @@ local function PlacePlate(rec, corner)
 	end
 	if rec.plateHome == nil then
 		local ok, point, relative, relativePoint, x, y = pcall(plate.GetPoint, plate, 1)
-		local home = FLAG.home[rec.kind]
+		local home = (parts.pvp ~= nil and FLAG.plateHome or FLAG.home)[rec.kind]
 		if ok and Plain(point) and Plain(relativePoint) and type(relative) == "table" and not ns.IsSecret(relative) and Number(x) and Number(y) then
 			rec.plateHome = { point, relative, relativePoint, x, y }
 		else
 			rec.plateHome = { home[1], parts.pvpHome, home[2], home[3], home[4] }
 		end
 	end
-	local icon = parts.pvpIcon
+	-- The icon that sits on a plate of the older client, or nil when the icon is what moves.
+	local icon = parts.pvp ~= nil and parts.pvpIcon or nil
 	if icon ~= nil and rec.iconHome == nil then
 		local ok, point, relative, relativePoint, x, y = pcall(icon.GetPoint, icon, 1)
 		if ok and Plain(point) and Plain(relativePoint) and type(relative) == "table" and not ns.IsSecret(relative) and Number(x) and Number(y) then
@@ -2829,7 +2842,7 @@ do
 		end
 	end
 	-- TargetFrameMixin:OnEvent calls CheckFaction, CheckLevel, CheckClassification and CheckBattlePet through Update and on its own
-	-- (client/ui/Interface/AddOns/Blizzard_UnitFrame/Mainline/TargetFrame.lua:143-158, 205-250). Auras again with a new target or focus (:175, :252).
+	-- (client/ui/Interface/AddOns/Blizzard_UnitFrame/Mainline/TargetFrame.lua:143-158, 205-253). Auras again with a new target or focus (:175, :255).
 	local TARGET = { "PLAYER_ENTERING_WORLD", "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UNIT_TARGETABLE_CHANGED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
 		"UNIT_LEVEL", "UNIT_FACTION", "UNIT_CLASSIFICATION_CHANGED", "GROUP_ROSTER_UPDATE" }
 	for _, kind in ipairs({ "target", "focus", "boss" }) do
@@ -3083,7 +3096,7 @@ local function InstallHooks()
 		OnPlayerArt()
 		Later.layout()
 	end)
-	-- These call PetFrame:Update and TotemFrame:Update (Mainline/PlayerFrame.lua:463, 648, 747, 756).
+	-- These call PetFrame:Update and TotemFrame:Update (Mainline/PlayerFrame.lua:463, 624, 686, 695).
 	HookGlobal("PlayerFrame_UpdateArt", Later.layout)
 	HookGlobal("PlayerFrame_UpdateStatus", OnPlayerStatus)
 	HookGlobal("PlayerFrame_UpdateRolesAssigned", OnPlayerArt)
@@ -3108,7 +3121,7 @@ local function InstallHooks()
 		end
 	end)
 	-- The party frame draws its members again in its OnShow (Shared/PartyFrame.lua:34-36), the totem frame in its OnEvent
-	-- (Mainline/TotemFrame.lua:13-15), in PetFrame's OnShow and OnHide, and in PlayerFrame_ToPlayerArt (Mainline/PlayerFrame.lua:747).
+	-- (Mainline/TotemFrame.lua:13-15), in PetFrame's OnShow and OnHide, and in PlayerFrame_ToPlayerArt (Mainline/PlayerFrame.lua:686).
 	Later.party = OnParty
 	if not ns.Forbidden(_G.PartyFrame) then
 		Later.script(_G.PartyFrame, "OnShow", function()
@@ -3295,9 +3308,15 @@ function STATUS.flag(rec, name)
 				answered, shown = pcall(icon.IsShown, icon)
 			end
 			text = shape .. (answered and not ns.IsSecret(shown) and (shown == true and "shown" or "not flagged") or "withheld by the game")
+			-- Where the icon is anchored: on the picture, or on the plate of the older client.
 			if icon ~= nil and rec.plateAt then
 				local at, _, relative = pcall(icon.GetPoint, icon, 1)
-				text = text .. (at and not ns.IsSecret(relative) and relative == rec.parts.pvp and ", icon on the plate" or ", icon apart from the plate")
+				local on = at and not ns.IsSecret(relative)
+				if rec.parts.pvp ~= nil then
+					text = text .. (on and relative == rec.parts.pvp and ", icon on the plate" or ", icon apart from the plate")
+				else
+					text = text .. (on and relative == rec.pic.frame and ", icon on the picture" or ", icon apart from the picture")
+				end
 			end
 		end
 	end

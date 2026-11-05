@@ -234,7 +234,7 @@ end
 -- Target menu -------------------------------------------------------------------------------------------------
 
 -- The game opens the menu of the target frame at the cursor and then moves it to the right side of the frame (TargetFrame_OpenMenu,
--- Blizzard_UnitFrame/Mainline/TargetFrame.lua:670-673), while the player and focus menus stay at the cursor (PlayerFrame.lua:79-97, TargetFrame.lua:1145-1153).
+-- Blizzard_UnitFrame/Mainline/TargetFrame.lua:680-682), while the player and focus menus stay at the cursor (PlayerFrame.lua:79-97, TargetFrame.lua:1158-1166).
 -- A hook on the click runs after the game's script, so the menu is open and placed by then; it is put back at the cursor with the game's own call for the
 -- player menu (Blizzard_SharedXML/InputUtil.lua:239-252). The game's attributes and scripts of the frame are not written, and a menu that hangs from a
 -- protected frame is not moved in combat.
