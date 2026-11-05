@@ -39112,6 +39112,56 @@ local function mworld(opts)
 				W.registry:TriggerEvent("EditModeManager.UpdateBottomActionBarPositions")
 			end
 		end
+		-- Totem slot 1, the totem flyout and the arrow that opens it, children of the totem bar with no ignoreParentAlpha, so each is drawn at the
+		-- bar's alpha (GetEffectiveAlpha here). The slot is 30 by 30 and 3 up (MultiCastActionBarFrame.xml:3-4, 210-214), 41 in once the bar is
+		-- updated for a Shaman who knows a summon spell (MultiCastActionBarFrame.lua:314-317, 975-983). The flyout is 32 wide on the bottom of
+		-- the bar and the arrow 28 by 18 on its top, both hidden (MultiCastActionBarFrame.xml:107-110, 156-160).
+		local slot1 = bframe("MultiCastSlotButton1", { parent = totem, width = 30, height = 30, point = { "BOTTOMLEFT", totem, "BOTTOMLEFT", 41, 3 } })
+		local flyout = bframe("MultiCastFlyoutFrame", { parent = totem, width = 32, height = 30, hidden = true, point = { "BOTTOM", totem, "BOTTOM", 0, 0 } })
+		local arrow = bframe("MultiCastFlyoutFrameOpenButton", { parent = totem, width = 28, height = 18, hidden = true, point = { "BOTTOM", totem, "TOP", 0, 0 } })
+		for _, child in ipairs({ slot1, flyout, arrow }) do
+			local raw = W.rawOf[child]
+			function raw.GetEffectiveAlpha()
+				local alpha, at = raw.alpha, raw
+				for _ = 1, 30 do
+					at = at.parent and W.rawOf[at.parent]
+					if not at then
+						break
+					end
+					alpha = alpha * (at.alpha or 1)
+				end
+				return alpha
+			end
+		end
+		-- The game's scripts on them, run as its own code. The cursor onto the slot shows the arrow on the top of it (MultiCastSlotButton_OnEnter
+		-- and MultiCastFlyoutFrameOpenButton_Show, MultiCastActionBarFrame.lua:378-381, 807-823), off it and the arrow hides it (:391-394,
+		-- 803-805, 825-830). A click on the arrow opens the slot's flyout on the top of the slot, 152 high for four totems and the empty one: 4,
+		-- five buttons of 24 with 2 between, then 2 and the close button's 18 (MultiCastFlyoutFrame_ToggleFlyout and _LoadSlotSpells, :615-648,
+		-- 715-783; :9-10; MultiCastActionBarFrame.xml:81, 131), and its OnShow hides the arrow (:567-569). A pick, a click on the close button
+		-- or one on the arrow again hides the flyout (:514-527, 602-617, 790-792).
+		function W.totemArrow(on)
+			W.blizzard(function()
+				if on then
+					arrow:SetParent(slot1)
+					arrow:SetPoint("BOTTOM", slot1, "TOP", 0, 0)
+					arrow:Show()
+				else
+					arrow:Hide()
+				end
+			end)
+		end
+		function W.totemFlyout(open)
+			W.blizzard(function()
+				if open then
+					flyout:SetPoint("BOTTOM", slot1, "TOP", 0, 0)
+					flyout:SetHeight(152)
+					flyout:Show()
+					arrow:Hide()
+				else
+					flyout:Hide()
+				end
+			end)
+		end
 		W.gameStack()
 		W.group = "static"
 	end
@@ -81712,6 +81762,113 @@ do
 		shell:Hide()
 		tick(F)
 		check("bblook: flyout: closed again, faded", allAt(F, 0.3) and K.allClean(F), allWrites(F) .. K.problems(F))
+	end
+	do
+		-- A Shaman's totem bar is held on its row over the block and fades with it. Its flyout and the arrow that opens it are children of the bar,
+		-- drawn at its alpha, and both reach over the top of the bar, out of the rectangle under the mouse (MultiCastActionBarFrame.xml:106-110,
+		-- 156-160; MultiCastActionBarFrame.lua:637-641, 819-820). The open flyout gives full opacity as the spell flyout does; the arrow, which the
+		-- game shows only while the cursor is on a totem slot or on it, counts as under the mouse.
+		local TOTEM, FLYOUT, ARROW = "MultiCastActionBarFrame", "MultiCastFlyoutFrame", "MultiCastFlyoutFrameOpenButton"
+		local HELD = { TOTEM }
+		for _, name in ipairs(T.held) do
+			HELD[#HELD + 1] = name
+		end
+		local function shaman(options)
+			local saved = { ["barblock.enabled"] = true, ["barblock.fade"] = true }
+			for key, value in pairs(options or {}) do
+				saved[key] = value
+			end
+			return K.mwBefore({ layout = { systems = true, bars = true, totem = true }, saved = K.opt(saved, T.spot) }, function(X)
+				for name, size in pairs({ StanceBar = { 200, 30 }, PetActionBar = { 150, 40 }, PossessActionBar = { 120, 35 } }) do
+					local frame = X.rawOf[X.env[name]]
+					frame.width, frame.height = size[1], size[2]
+				end
+				X.cursor = { T.away[1], T.away[2] }
+			end)
+		end
+		local function heldAt(W, value)
+			for _, name in ipairs(HELD) do
+				if math.abs(alpha(W, name) - value) > 1e-9 then
+					return false
+				end
+			end
+			return true
+		end
+		local function heldWrites(W)
+			local parts = {}
+			for _, name in ipairs(HELD) do
+				parts[#parts + 1] = ("%s %s/%d"):format(name:sub(1, 6), tostring(alpha(W, name)), writes(W, name))
+			end
+			return table.concat(parts, " ")
+		end
+		-- How the game draws a child of the totem bar: its own alpha times the bar's.
+		local function drawn(W, name)
+			return W.env[name]:GetEffectiveAlpha()
+		end
+		local W = shaman()
+		check("bblook: totem flyout: a Shaman's totem bar is held on its row over the block and faded with it, the cursor away", heldAt(W, 0.3)
+			and K.rectIs(W, TOTEM, 679, 549, 230, 38) and K.allClean(W), heldWrites(W) .. " " .. K.rectText(W, TOTEM) .. K.problems(W))
+		-- The cursor on totem slot 1, in the bar: the game shows the arrow on the top of the slot, 13 of its 18 over the top of the bar (587).
+		W.cursor = { 735, 570 }
+		W.totemArrow(true)
+		tick(W)
+		check("bblook: totem flyout: the cursor on a totem slot gives full opacity, and the game shows the arrow over the top of the bar",
+			heldAt(W, 1) and K.rectIs(W, ARROW, 721, 582, 28, 18), heldWrites(W) .. " " .. K.rectText(W, ARROW))
+		W.cursor = { 735, 595 }
+		tick(W)
+		check("bblook: totem flyout: the cursor on the arrow, over the top of the bar, keeps every held frame and the arrow at full opacity",
+			heldAt(W, 1) and drawn(W, ARROW) == 1, heldWrites(W) .. " " .. drawn(W, ARROW))
+		-- A click on the arrow opens the flyout on the top of the slot and hides the arrow; the cursor goes up to the top totem.
+		W.totemFlyout(true)
+		W.cursor = { 735, 700 }
+		tick(W)
+		check("bblook: totem flyout: open, with the cursor on its top totem over the bar, every held frame and the flyout are at full opacity",
+			heldAt(W, 1) and K.rectIs(W, FLYOUT, 719, 582, 32, 152) and drawn(W, FLYOUT) == 1, heldWrites(W) .. " " .. K.rectText(W, FLYOUT) .. " " .. drawn(W, FLYOUT))
+		-- A totem picked: the flyout closes under the cursor.
+		W.totemFlyout(false)
+		tick(W)
+		check("bblook: totem flyout: closed, every held frame fades again, and no alpha is ever written on the flyout or the arrow",
+			heldAt(W, 0.3) and writes(W, FLYOUT) == 0 and writes(W, ARROW) == 0 and K.allClean(W), heldWrites(W) .. K.problems(W))
+		local N = shaman({ ["barblock.fadeMouse"] = false })
+		N.cursor = { 735, 595 }
+		N.totemArrow(true)
+		tick(N)
+		check("bblook: totem flyout: with Full opacity under the mouse off the arrow changes nothing", heldAt(N, 0.3), heldWrites(N))
+		N.totemFlyout(true)
+		N.cursor = { 735, 700 }
+		tick(N)
+		check("bblook: totem flyout: but the open flyout gives full opacity, as the spell flyout does", heldAt(N, 1), heldWrites(N))
+		-- An override bar (a vehicle) hides the totem bar and leaves the flyout's own shown flag on (MultiCastActionBarFrame.lua:332-343): the
+		-- flyout is not drawn until the bar is back.
+		N.totemShown(false)
+		N.flush()
+		N.run(0.6)
+		N.flush()
+		check("bblook: totem flyout: a flyout left open when the game hides the totem bar is not drawn and keeps nothing at full", heldAt(N, 0.3) and K.allClean(N),
+			heldWrites(N) .. K.problems(N))
+		N.totemShown(true)
+		N.flush()
+		N.run(0.6)
+		N.flush()
+		check("bblook: totem flyout: back with the bar, it gives full opacity again", heldAt(N, 1) and K.allClean(N), heldWrites(N) .. K.problems(N))
+		local S = shaman()
+		S.totemFlyout(true)
+		S.rawOf[S.env[FLYOUT]].IsVisible = function()
+			return SECRET
+		end
+		S.cursor = { 735, 700 }
+		tick(S)
+		check("bblook: totem flyout: a withheld answer counts as closed and nothing raises", heldAt(S, 0.3) and K.allClean(S), heldWrites(S) .. K.problems(S))
+		-- Left to the game the totem bar is not in the block: the game stacks it over the stance, pet and possess bars, above the block (top 439).
+		local G = shaman({ ["barblock.others"] = "game" })
+		G.totemArrow(true)
+		local left, bottom, width, height = G.rectOf(G.env[ARROW])
+		if left then
+			G.cursor = { left + width / 2, bottom + height - 2 }
+		end
+		tick(G)
+		check("bblook: totem flyout: the cursor on the arrow of a totem bar left to the game, above the block, leaves the block faded",
+			left ~= nil and bottom > 439 and alpha(G, "MainActionBar") == 0.3 and writes(G, TOTEM) == 0 and K.allClean(G), K.rectText(G, ARROW) .. " " .. alpha(G, "MainActionBar"))
 	end
 	do
 		-- Faded opacity, and the page switches at work.
