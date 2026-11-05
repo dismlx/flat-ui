@@ -306,7 +306,7 @@ end
 
 -- The game's own text for the player is off while Combat text for you shows the player's numbers. At login this is written at PLAYER_LOGIN,
 -- before the game registers its settings (Blizzard_SettingsRegistrar.lua:11-22) and loads its combat text only for a variable that is on
--- (CombatOverrides.lua:53, Blizzard_Settings.lua:651-663), so the game's text does not load at all. A change during a session goes through
+-- (CombatOverrides.lua:53, Blizzard_Settings.lua:667-679), so the game's text does not load at all. A change during a session goes through
 -- the callback the game's text listens to (CombatText.lua:17-28 of the game's).
 local function OwnSwitch()
 	if Opt("own") ~= "off" then
@@ -737,6 +737,33 @@ local function Suffix(flag)
 end
 ns.CombatSuffix = Suffix
 
+-- The text of an amount the game withholds, made by the client: its digits with before and after joined to them, or an empty text for a
+-- zero amount, so a full absorb or resist draws no number. C_StringUtil.TruncateWhenZero and WrapString take withheld values from addon code
+-- (StringUtilDocumentation.lua:188-219). The digits are not grouped: no call that takes a withheld value both groups the digits and leaves
+-- zero out. Returns true and the text, or false when the client lacks the calls or refuses them. before and after are plain strings or nil.
+function ns.CombatWithheld(value, before, after)
+	local util = C_StringUtil
+	if type(util) ~= "table" or type(util.TruncateWhenZero) ~= "function" then
+		return false
+	end
+	local ok, digits = pcall(util.TruncateWhenZero, value)
+	if not ok or not (ns.IsSecret(digits) or type(digits) == "string") then
+		return false
+	end
+	if before == nil and after == nil then
+		return true, digits
+	end
+	if type(util.WrapString) ~= "function" then
+		return false
+	end
+	local wrapped
+	ok, wrapped = pcall(util.WrapString, digits, before, after)
+	if not ok or not (ns.IsSecret(wrapped) or type(wrapped) == "string") then
+		return false
+	end
+	return true, wrapped
+end
+
 -- Red, green and blue of a damage number: white for physical, as the game colours the numbers of the player frame (CombatFeedback.lua:44-48).
 function ns.CombatColour(school, bySchool, palette)
 	local physical = ns.IsSecret(school) or type(school) ~= "number" or school == 1
@@ -850,6 +877,10 @@ end
 -- What a hit report shows, by the rules of CombatFeedback.lua:34-86: "amount" or "word", the amount or the word, what follows an
 -- amount, true for a critical or crushing hit, and the colour. Nothing for a report that shows nothing. event is a plain string.
 -- With a level the report is for the player's own character.
+-- From build 70755 the game withholds every amount (UnitDocumentation.lua:4178), so a hit of no amount can no longer be told from the
+-- amount. A full block still has a flag of its own: CombatFeedback.lua:51-60 shows BLOCK as a word and a partial block is BLOCK_REDUCED, so
+-- WOUND with BLOCK is the word. A full absorb or resist shares its flag with a partial one: it goes through the amount, which the client
+-- writes as nothing when it is zero (ns.CombatWithheld), and the word of Partial effects stays.
 local function Describe(event, flag, amount, school, level, friendly)
 	if ns.IsSecret(flag) then
 		stats.kind = stats.kind + 1
@@ -863,7 +894,7 @@ local function Describe(event, flag, amount, school, level, friendly)
 	elseif type(amount) ~= "number" then
 		amount = 0
 	end
-	local none = not withheld and amount == 0
+	local none = (not withheld and amount == 0) or (withheld and event == "WOUND" and flag == "BLOCK")
 	if level then
 		return DescribeOwn(level, event, flag, amount, none, school)
 	end
@@ -1319,21 +1350,33 @@ local function Fill(item, plate, unit, kind, value, extra, crit, r, g, b, class,
 	if kind == "word" then
 		text:SetText(value)
 	else
-		local shown = value
-		if type(BreakUpLargeNumbers) == "function" then
-			local ok, broken = pcall(BreakUpLargeNumbers, value)
-			if ok and (ns.IsSecret(broken) or broken ~= nil) then
-				shown = broken
-			end
+		-- A withheld amount is written by the client with its sign, and as nothing when it is zero, so a full absorb or resist shows only
+		-- the word after it.
+		local done, withheld = false, nil
+		if ns.IsSecret(value) then
+			done, withheld = ns.CombatWithheld(value, sign, extra and " " or nil)
 		end
-		if friendly and extra then
-			text:SetFormattedText((sign or "") .. "%s %s", shown, extra)
-		elseif friendly then
-			text:SetFormattedText((sign or "") .. "%s", shown)
-		elseif extra then
-			text:SetFormattedText((sign or "") .. "%s %s", shown, extra)
+		if done and extra then
+			text:SetFormattedText("%s%s", withheld, extra)
+		elseif done then
+			text:SetFormattedText("%s", withheld)
 		else
-			text:SetFormattedText((sign or "") .. "%s", shown)
+			local shown = value
+			if type(BreakUpLargeNumbers) == "function" then
+				local ok, broken = pcall(BreakUpLargeNumbers, value)
+				if ok and (ns.IsSecret(broken) or broken ~= nil) then
+					shown = broken
+				end
+			end
+			if friendly and extra then
+				text:SetFormattedText((sign or "") .. "%s %s", shown, extra)
+			elseif friendly then
+				text:SetFormattedText((sign or "") .. "%s", shown)
+			elseif extra then
+				text:SetFormattedText((sign or "") .. "%s %s", shown, extra)
+			else
+				text:SetFormattedText((sign or "") .. "%s", shown)
+			end
 		end
 	end
 	local base = TEXT_HEIGHT * Opt(friendly and "friendSize" or "size") / 100
@@ -2208,9 +2251,17 @@ local function Ability(why, school, r, g, b)
 	return r, g, b, name
 end
 
--- The rule of Describe for a word: a report of a word event, or a hit of no amount.
-function MINE.IsWord(event, amount)
-	return WORDS[event] ~= nil or (event == "WOUND" and not ns.IsSecret(amount) and (type(amount) ~= "number" or amount == 0))
+-- The rule of Describe for a word: a report of a word event, or a hit of no amount. A withheld amount (every amount from build 70755 on) is a
+-- word only for a full block, which has its own flag.
+function MINE.IsWord(event, amount, flag)
+	if WORDS[event] ~= nil then
+		return true
+	elseif event ~= "WOUND" then
+		return false
+	elseif ns.IsSecret(amount) then
+		return Plain(flag, "string") and flag == "BLOCK"
+	end
+	return type(amount) ~= "number" or amount == 0
 end
 
 -- A hit report for the target with Where your hits show on Scroll area, or on Both while the target has no nameplate: Outgoing takes the
@@ -2224,7 +2275,7 @@ local function OnTarget(unit, event, flag, amount, school)
 	if ok and Plain(attackable, "boolean") and not attackable then
 		return
 	end
-	local counted, why, icon = Counts(Plate("target"), unit, school, flag, MINE.IsWord(event, amount), event, amount)
+	local counted, why, icon = Counts(Plate("target"), unit, school, flag, MINE.IsWord(event, amount, flag), event, amount)
 	if not counted then
 		return
 	end
@@ -2304,7 +2355,7 @@ local function OnCombat(unit, event, flag, amount, school)
 	local out = where == "both" and event ~= "HEAL"
 	local counted, why, icon
 	if over or out then
-		counted, why, icon = Counts(plate, unit, school, flag, MINE.IsWord(event, amount), event, amount)
+		counted, why, icon = Counts(plate, unit, school, flag, MINE.IsWord(event, amount, flag), event, amount)
 	end
 	if not counted then
 		return
@@ -2501,9 +2552,7 @@ local function Status()
 			lines[#lines + 1] = "Scrolling Combat Text for Self is ticked in the game's options, so your numbers show twice. /reload unticks it."
 		end
 	end
-	if stats.amount > 0 then
-		lines[#lines + 1] = ("Hit amounts the game would not tell: %d."):format(stats.amount)
-	end
+	-- From build 70755 the game withholds every amount (UnitDocumentation.lua:4178), so a count of them says nothing and has no line here.
 	if stats.kind > 0 then
 		lines[#lines + 1] = ("Hit types the game would not tell: %d."):format(stats.kind)
 	end

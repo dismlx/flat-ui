@@ -271,14 +271,28 @@ local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag,
 	if kind == "word" then
 		text:SetText(value)
 	else
-		local shown = value
-		if type(BreakUpLargeNumbers) == "function" then
-			local ok, broken = pcall(BreakUpLargeNumbers, value)
-			if ok and (ns.IsSecret(broken) or broken ~= nil) then
-				shown = broken
-			end
+		-- A withheld amount is written by the client with what the format puts around it, and as nothing when it is zero (CombatText.lua,
+		-- ns.CombatWithheld). The format has one %s for the amount, and %% for a percent sign in an ability name.
+		local done, withheld = false, nil
+		local spec = format or "%s"
+		local at = ns.IsSecret(value) and ns.CombatWithheld and spec:find("%s", 1, true)
+		if at then
+			local before = (spec:sub(1, at - 1):gsub("%%%%", "%%"))
+			local after = (spec:sub(at + 2):gsub("%%%%", "%%"))
+			done, withheld = ns.CombatWithheld(value, before ~= "" and before or nil, after ~= "" and after or nil)
 		end
-		text:SetFormattedText(format or "%s", shown)
+		if done then
+			text:SetFormattedText("%s", withheld)
+		else
+			local shown = value
+			if type(BreakUpLargeNumbers) == "function" then
+				local ok, broken = pcall(BreakUpLargeNumbers, value)
+				if ok and (ns.IsSecret(broken) or broken ~= nil) then
+					shown = broken
+				end
+			end
+			text:SetFormattedText(spec, shown)
+		end
 	end
 	local height = TEXT_HEIGHT * Opt(area.size) / 100 * (scale or 1) * (crit and CRIT or 1)
 	text:SetTextHeight(height)

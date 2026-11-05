@@ -73,6 +73,21 @@ local function secretUse() error("attempt to use a secret value", 0) end
 local SECRET = setmetatable({}, { __tostring = function() error("tostring on a secret value", 0) end,
 	__index = secretUse, __newindex = secretUse, __call = secretUse, __concat = secretUse, __len = secretUse,
 	__lt = secretUse, __le = secretUse, __eq = secretUse, __add = secretUse, __sub = secretUse, __mul = secretUse, __div = secretUse, __unm = secretUse })
+-- A secret value that carries what it hides, for the client's own calls to read: every UNIT_COMBAT amount from build 70755 on
+-- (UnitDocumentation.lua:4178), and the texts the client makes from such a value. It raises on the same uses as SECRET.
+local SECRETS = setmetatable({}, { __mode = "k" })
+local function Secret(truth)
+	local box = setmetatable({}, getmetatable(SECRET))
+	SECRETS[box] = truth
+	return box
+end
+-- What a secret value of this kind hides, or nil for any other value.
+local function SecretTruth(v)
+	if type(v) == "table" then
+		return SECRETS[v]
+	end
+	return nil
+end
 local passed, failed = 0, 0
 
 local function check(name, cond, detail)
@@ -751,6 +766,10 @@ local function newRegion(W, owner, opts)
 				if rawequal(v, SECRET) then
 					args[i] = "<withheld>"
 					r.withheld = (r.withheld or 0) + 1
+				elseif SecretTruth(v) ~= nil then
+					-- A secret that carries what it hides is written as the player sees it.
+					args[i] = tostring(SecretTruth(v))
+					r.withheld = (r.withheld or 0) + 1
 				elseif type(v) == "string" or type(v) == "number" then
 					args[i] = tostring(v)
 				else
@@ -765,7 +784,7 @@ local function newRegion(W, owner, opts)
 					return nil
 				end
 				position = position + 1
-				if rawequal(given[position], SECRET) then
+				if rawequal(given[position], SECRET) or SecretTruth(given[position]) ~= nil then
 					return "%s"
 				end
 			end)
@@ -2438,13 +2457,61 @@ local function newWorld(opts)
 		end,
 	}
 	env.CursorHasItem = function() return W.held == "item" end
-	env.issecretvalue = function(v) return rawequal(v, SECRET) end
+	env.issecretvalue = function(v) return rawequal(v, SECRET) or SecretTruth(v) ~= nil end
 	-- A secret value keeps the type of what it hides: type() of a secret number is "number". W.secretType says which.
 	env.type = function(v)
 		if rawequal(v, SECRET) then
 			return W.secretType or "table"
 		end
+		if SecretTruth(v) ~= nil then
+			return type(SecretTruth(v))
+		end
 		return type(v)
+	end
+	-- C_StringUtil.TruncateWhenZero and WrapString take withheld values from addon code and give a withheld text for one
+	-- (StringUtilDocumentation.lua:188-219): the digits of a number rounded down, or an empty text for zero; and prefix, infix and suffix
+	-- joined, or an empty text when the infix is empty. opts.noStringUtil is a client without them.
+	if not opts.noStringUtil then
+		env.C_StringUtil = env.C_StringUtil or {}
+		env.C_StringUtil.TruncateWhenZero = function(v)
+			if rawequal(v, SECRET) then
+				return SECRET
+			end
+			local truth = SecretTruth(v)
+			local value = truth ~= nil and truth or v
+			if not isnum(value) then
+				bad(W, "TruncateWhenZero: a number is expected")
+			end
+			local whole = math.floor(value)
+			local text = whole == 0 and "" or tostring(whole)
+			return truth ~= nil and Secret(text) or text
+		end
+		env.C_StringUtil.WrapString = function(infix, prefix, suffix)
+			local hidden = false
+			local function read(v, nilable)
+				-- A secret whose truth is not known is a text that is not empty, written as "<withheld>".
+				if rawequal(v, SECRET) then
+					hidden = true
+					return "<withheld>"
+				end
+				local truth = SecretTruth(v)
+				if truth ~= nil then
+					hidden = true
+					v = truth
+				end
+				if v == nil and nilable then
+					return ""
+				end
+				if type(v) ~= "string" then
+					bad(W, "WrapString: a string is expected")
+					return ""
+				end
+				return v
+			end
+			local i, p, s = read(infix, false), read(prefix, true), read(suffix, true)
+			local text = i == "" and "" or (p .. i .. s)
+			return hidden and Secret(text) or text
+		end
 	end
 	env.geterrorhandler = function() return function(err) W.errors[#W.errors + 1] = tostring(err) end end
 	env.print = function(...)
@@ -2798,6 +2865,18 @@ local function newWorld(opts)
 	env.SlashCmdList = {}
 
 	function W.fire(event, ...)
+		-- From build 70755 the client withholds the amount of every UNIT_COMBAT report (UnitDocumentation.lua:4178): a plain number given here
+		-- reaches the addon as a secret that carries it. opts.plainCombat is a client from before that build.
+		if event == "UNIT_COMBAT" and not opts.plainCombat and isnum((select(4, ...))) then
+			local n, args = select("#", ...), { ... }
+			args[4] = Secret(args[4])
+			for _, frame in ipairs(W.eventFrames) do
+				if frame.events[event] and frame.script then
+					frame.script(frame, event, unpack(args, 1, n))
+				end
+			end
+			return
+		end
 		for _, frame in ipairs(W.eventFrames) do
 			if frame.events[event] and frame.script then
 				frame.script(frame, event, ...)
@@ -2954,6 +3033,15 @@ local function newWorld(opts)
 		env.BreakUpLargeNumbers = function(value)
 			if rawequal(value, SECRET) then
 				return SECRET
+			end
+			-- A secret number gives a secret text (LocalizationDocumentation.lua:42-44: it takes withheld values from addon code).
+			local truth = SecretTruth(value)
+			if truth ~= nil then
+				if not isnum(truth) then
+					bad(W, "BreakUpLargeNumbers: a number is expected")
+				end
+				local hidden = tostring(math.floor(truth))
+				return Secret((hidden:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")))
 			end
 			if not isnum(value) then
 				bad(W, "BreakUpLargeNumbers: a number is expected")
@@ -11240,7 +11328,8 @@ do
 		end
 		check("combat text, kinds of hit: the word follows the amount in parentheses", table.concat(texts, "|") == "412 (Glancing)|412 (Crushing)|412 (Block)|412 (Absorb)|412 (Resist)|412", table.concat(texts, "|"))
 		check("combat text, kinds of hit: the amount and the word are given to SetFormattedText", W.addonFonts[1].calls.SetFormattedText == 1 and W.addonFonts[1].calls.SetText == nil)
-		local G = C.world({ words = { TEXT_MODE_A_STRING_RESULT_GLANCING = "(Streifend)", TEXT_MODE_A_STRING_RESULT_CRUSHING = "(Zermalmend)", BLOCK = "Blocken", ABSORB = "Absorbieren", RESIST = "Widerstehen",
+		-- G and E are clients that tell the amount (before build 70755), so a hit of no amount is the word Miss.
+		local G = C.world({ plainCombat = true, words = { TEXT_MODE_A_STRING_RESULT_GLANCING = "(Streifend)", TEXT_MODE_A_STRING_RESULT_CRUSHING = "(Zermalmend)", BLOCK = "Blocken", ABSORB = "Absorbieren", RESIST = "Widerstehen",
 			MISS = "Verfehlt" } })
 		texts = {}
 		for index, flag in ipairs({ "GLANCING", "CRUSHING", "BLOCK_REDUCED", "ABSORB", "RESIST" }) do
@@ -11249,12 +11338,16 @@ do
 		texts[6] = C.say(G, "nameplate1", "WOUND", "", 0)
 		check("combat text, kinds of hit: the client's own words are used, in its language", table.concat(texts, "|") == "412 (Streifend)|412 (Zermalmend)|412 (Blocken)|412 (Absorbieren)|412 (Widerstehen)|(Verfehlt)",
 			table.concat(texts, "|"))
-		local E = C.world({ words = true })
+		local E = C.world({ plainCombat = true, words = true })
 		check("combat text, kinds of hit: a client with the English words gives the same", C.say(E, "nameplate1", "WOUND", "GLANCING", 412) == "412 (Glancing)" and C.say(E, "nameplate1", "WOUND", "", 0) == "(Miss)")
 		W.ns.Set("combattext.partial", "off")
-		check("combat text, Partial effects off: the amount alone, and a miss still says Miss", C.say(W, "nameplate1", "WOUND", "GLANCING", 412) == "412" and C.say(W, "nameplate1", "WOUND", "ABSORB", 412) == "412"
-			and C.say(W, "nameplate1", "WOUND", "", 0) == "(Miss)" and C.say(W, "nameplate1", "WOUND", "ABSORB", 0) == "(Absorb)")
-		check("combat text, kinds of hit: no violations, errors or messages", C.quiet(W) and C.quiet(G) and C.quiet(E), C.trouble(W) .. C.trouble(G))
+		check("combat text, Partial effects off: the amount alone, and a withheld amount of 0 shows no number and no word", C.say(W, "nameplate1", "WOUND", "GLANCING", 412) == "412"
+			and C.say(W, "nameplate1", "WOUND", "ABSORB", 412) == "412" and C.say(W, "nameplate1", "WOUND", "", 0) == "" and C.say(W, "nameplate1", "WOUND", "ABSORB", 0) == "")
+		local P = C.world({ plainCombat = true })
+		P.ns.Set("combattext.partial", "off")
+		check("combat text, Partial effects off on a client that tells the amount: a miss still says Miss", C.say(P, "nameplate1", "WOUND", "", 0) == "(Miss)"
+			and C.say(P, "nameplate1", "WOUND", "ABSORB", 0) == "(Absorb)")
+		check("combat text, kinds of hit: no violations, errors or messages", C.quiet(W) and C.quiet(G) and C.quiet(E) and C.quiet(P), C.trouble(W) .. C.trouble(G) .. C.trouble(P))
 	end
 
 	-- Critical hits.
@@ -11396,9 +11489,9 @@ do
 			near(B.o[1], 12, 1e-9) and B.o[2] == 0 and near(B.d[1], B.f[1], 1e-9), g(B.o[1]) .. " " .. g(B.o[2]) .. " " .. g(B.d[1]) .. " " .. g(B.f[1]))
 	end
 
-	-- Hits that do nothing, and the other events.
+	-- Hits that do nothing, and the other events, on a client that tells the amount (before build 70755). The next block has build 70790.
 	do
-		local W = C.world()
+		local W = C.world({ plainCombat = true })
 		local texts = {}
 		for index, flag in ipairs({ "ABSORB", "BLOCK", "RESIST", "" }) do
 			texts[index] = C.say(W, "nameplate1", "WOUND", flag, 0)
@@ -11419,12 +11512,42 @@ do
 		check("combat text, events and kinds: no violations, errors or messages", C.quiet(W), C.trouble(W))
 	end
 
+	-- Build 70790: the game withholds every amount (UnitDocumentation.lua:4178, from build 70755). The client writes the number with
+	-- C_StringUtil.TruncateWhenZero and WrapString, so a full absorb or resist draws no number and keeps the word of Partial effects, a full
+	-- block is the word Block by its flag, a hit of no amount with no flag and a heal of 0 draw nothing, and the digits are not grouped.
+	do
+		local W = C.world()
+		local texts = {}
+		for index, flag in ipairs({ "ABSORB", "BLOCK", "RESIST", "" }) do
+			texts[index] = C.say(W, "nameplate1", "WOUND", flag, 0)
+		end
+		check("combat text 70790: a hit for nothing: the word of Partial effects for Absorb and Resist, the word Block, and nothing with no flag",
+			table.concat(texts, "|") == "(Absorb)|(Block)|(Resist)|", table.concat(texts, "|"))
+		local block = C.hit(W, "nameplate1", "WOUND", "BLOCK", 0)
+		check("combat text 70790: a full block is the word, in white", block ~= nil and block.text == "(Block)" and C.colour(block) == "1,1,1")
+		check("combat text 70790: a partial absorb or resist is the number and the word", C.say(W, "nameplate1", "WOUND", "ABSORB", 300) == "300 (Absorb)"
+			and C.say(W, "nameplate1", "WOUND", "RESIST", 41) == "41 (Resist)" and C.say(W, "nameplate1", "WOUND", "BLOCK_REDUCED", 18) == "18 (Block)")
+		check("combat text 70790: a heal of 0 draws nothing, a heal of 300 is 300", C.say(W, "nameplate1", "HEAL", "", 0) == "" and C.say(W, "nameplate1", "HEAL", "", 300) == "300")
+		check("combat text 70790: a large amount is not grouped, as no call that takes a withheld value groups the digits", C.say(W, "nameplate1", "WOUND", "", 12345) == "12345"
+			and C.say(W, "nameplate1", "WOUND", "GLANCING", 1234567) == "1234567 (Glancing)")
+		local F = C.world()
+		local font = C.hit(F, "nameplate1", "WOUND", "", 412)
+		check("combat text 70790: the withheld number goes to SetFormattedText and is counted as withheld", font ~= nil and font.text == "412" and font.withheld == 1
+			and font.calls.SetFormattedText == 1 and font.calls.SetText == nil)
+		check("combat text 70790: the status has no count of withheld amounts", not has(W.status(), "Hit amounts") and has(W.status(), "Combat text: on"), W.status())
+		-- A client without the calls writes the number as the client groups it, and a hit of 0 as 0.
+		local N = C.world({ noStringUtil = true })
+		check("combat text 70790: a client without C_StringUtil groups the digits and draws 0 for a hit of no amount", C.say(N, "nameplate1", "WOUND", "", 12345) == "12,345"
+			and C.say(N, "nameplate1", "WOUND", "ABSORB", 0) == "0 (Absorb)")
+		check("combat text 70790: no violations, errors or messages", C.quiet(W) and C.quiet(F) and C.quiet(N), C.trouble(W) .. C.trouble(F) .. C.trouble(N))
+	end
+
 	-- What the game withholds.
 	do
 		local W = C.world()
 		local font = C.hit(W, "nameplate1", "WOUND", "GLANCING", SECRET)
 		check("combat text, an amount the game withholds: the number is shown through SetFormattedText with the word after it", font ~= nil and font.text == "<withheld> (Glancing)" and font.withheld == 1
-			and font.calls.SetFormattedText == 1 and has(W.status(), "Hit amounts the game would not tell: 1.") and not has(W.status(), "Kinds of hit"), W.status())
+			and font.calls.SetFormattedText == 1 and not has(W.status(), "Hit amounts the game would not tell") and not has(W.status(), "Kinds of hit"), W.status())
 		check("combat text, an amount the game withholds: nothing fails and the rows are written", C.quiet(W) and C.rows(W) == "0000", C.trouble(W))
 		local plain = C.hit(W, "nameplate1", "WOUND", SECRET, 412)
 		check("combat text, a kind the game withholds: the amount at plain size and no parentheses", plain.text == "412" and plain.textHeight == 35 and has(W.status(), "Hit types the game would not tell: 1."), W.status())
@@ -11669,7 +11792,8 @@ do
 				local font = C.hit(W, "nameplate1", spec[1], spec[2], spec[3])
 				words[#words + 1] = font.text .. "=" .. g(font.textHeight)
 			end
-			check("ctclassic: kinds: Block, Absorb and Resist are drawn at 75 percent, Immune at 50 and Dodge and Miss whole", table.concat(words, "|") == "(Block)=26.25|(Absorb)=26.25|(Resist)=26.25|(Immune)=17.5|(Dodge)=35|(Miss)=35", table.concat(words, "|"))
+			-- Build 70790 withholds the amount: a full absorb or resist and a hit of no amount draw no number, and Smaller number only gives them no word.
+			check("ctclassic: kinds: Block is drawn at 75 percent, Immune at 50 and Dodge whole, and a withheld 0 draws nothing", table.concat(words, "|") == "(Block)=26.25|=35|=35|(Immune)=17.5|(Dodge)=35|=35", table.concat(words, "|"))
 			W.ns.Set("combattext.partial", "word")
 			local glancing = C.hit(W, "nameplate1", "WOUND", "GLANCING", 412)
 			local block = C.hit(W, "nameplate1", "WOUND", "BLOCK", 0)
@@ -11710,7 +11834,7 @@ do
 		do
 			local W = classicWorld({ classicSigns = true })
 			local on = { C.say(W, "nameplate1", "WOUND", "", 412), C.say(W, "nameplate1", "HEAL", "", 300), C.say(W, "nameplate1", "WOUND", "CRITICAL", 824), C.say(W, "nameplate1", "WOUND", "", 0) }
-			check("ctclassic: signs: a hit is -412, a heal +300 and a word has none with the row on", table.concat(on, "|") == "-412|+300|-824|(Miss)", table.concat(on, "|"))
+			check("ctclassic: signs: a hit is -412, a heal +300, and a withheld hit of 0 draws no lone sign with the row on", table.concat(on, "|") == "-412|+300|-824|", table.concat(on, "|"))
 			check("ctclassic: signs: the sign is in front of an amount that has a word after it", C.say(W, "nameplate1", "WOUND", "BLOCK_REDUCED", 412) == "-412 (Block)")
 			W.ns.Set("combattext.classicSigns", false)
 			local off = { C.say(W, "nameplate1", "WOUND", "", 412), C.say(W, "nameplate1", "HEAL", "", 300) }
@@ -12606,7 +12730,7 @@ do
 				M.V3.attackable.nameplate1 = false
 				M.V3.ns.Set("combattext.friendWords", true)
 				M.V3.now = M.V3.now + 1
-				M.v3 = C.hit(M.V3, "nameplate1", "WOUND", "", 0)
+				M.v3 = C.hit(M.V3, "nameplate1", "MISS", "", 0)
 				check("msbt paren: a word over a friendly unit shows (Miss)", M.v3 ~= nil and M.v3.text == "(Miss)", tostring(M.v3 and M.v3.text))
 
 				-- The colour of a hit of yours.
@@ -12731,7 +12855,7 @@ do
 				M.Y.fire("PLAYER_ENTER_COMBAT")
 				M.Y.auras.target = 1
 				M.cast(M.Y, 6807)
-				M.y = { M.hit(M.Y, 100.1), M.hit(M.Y, 100.2, "", 0) }
+				M.y = { M.hit(M.Y, 100.1), M.hit(M.Y, 100.2, "", 0, 1, "MISS") }
 				check("msbt maul: with a debuff of yours on the enemy the Miss after the Maul hit takes no aura slot", M.y[1] ~= nil and M.y[2] == nil and M.last(M.Y) == "left out (slot taken).", tostring(M.last(M.Y)))
 				M.Xa = M.world()
 				M.Xa.fire("PLAYER_ENTER_COMBAT")
@@ -12772,14 +12896,14 @@ do
 				M.Ua.attack = { 0.5, nil }
 				M.Ua.fire("PLAYER_ENTER_COMBAT")
 				M.cast(M.Ua, 6807)
-				M.ua = { M.hit(M.Ua, 100.1), M.hit(M.Ua, 100.6, "", 0) }
+				M.ua = { M.hit(M.Ua, 100.1), M.hit(M.Ua, 100.6, "", 0, 1, "MISS") }
 				check("msbt maul: a word 0.5 s after the Maul hit takes a slot again", M.ua[1] ~= nil and M.ua[2] ~= nil and M.ua[2].text == "(Miss)", tostring(M.ua[2]))
 				M.Ub = M.world()
 				M.Ub.attack = { 0.5, nil }
 				M.Ub.fire("PLAYER_ENTER_COMBAT")
 				M.Ub.now = 0
 				M.cast(M.Ub, 6807)
-				M.ub = { M.hit(M.Ub, 0), M.hit(M.Ub, 0.4, "", 0) }
+				M.ub = { M.hit(M.Ub, 0), M.hit(M.Ub, 0.4, "", 0, 1, "MISS") }
 				check("msbt maul: a word exactly 0.4 s after the Maul hit is still left out", M.ub[1] ~= nil and M.ub[2] == nil, tostring(M.ub[2]))
 				M.Ta = M.world()
 				M.Ta.fire("PLAYER_ENTER_COMBAT")
@@ -12813,7 +12937,7 @@ do
 					end
 				end
 				M.Nb.now = 100.2
-				C.hit(M.Nb, "nameplate1", "WOUND", "", 0, 1)
+				C.hit(M.Nb, "nameplate1", "MISS", "", 0, 1)
 				check("msbt maul: After the number shows 312 Maul over the enemy and in Outgoing, Off shows 312", M.na.text == "312 Maul" and table.concat(M.nb, "|") == "312 Maul|312 Maul" and M.hit(M.Nc, 100.1).text == "312",
 					tostring(M.na.text) .. " " .. table.concat(M.nb, "|"))
 				check("msbt maul: on a nameplate the Maul hit is yellow in both places and a Miss after it shows in neither", table.concat(M.nc, "|") == "1,1,0|1,1,0" and C.shownCount(M.Nb) == 2, table.concat(M.nc, "|") .. " " .. C.shownCount(M.Nb))
@@ -12823,7 +12947,7 @@ do
 				M.Nd.now = 100.1
 				C.hit(M.Nd, "nameplate1", "WOUND", "", 312, 1)
 				M.Nd.now = 100.2
-				C.hit(M.Nd, "nameplate1", "WOUND", "", 0, 1)
+				C.hit(M.Nd, "nameplate1", "MISS", "", 0, 1)
 				check("msbt maul: on a nameplate with a debuff of yours on the enemy a Miss after the Maul hit shows in neither place", C.shownCount(M.Nd) == 2, C.shownCount(M.Nd))
 				M.Oa = M.world()
 				M.Oa.slash("combat trace")
@@ -12835,7 +12959,7 @@ do
 				M.oc = M.Oa.slash("combat trace")
 				M.cast(M.Oa, 6807)
 				check("msbt maul: /flatui combat trace prints a line for each signal and report, withheld for a secret amount, and stops on the second call",
-					M.oa:find("UNIT_SPELLCAST_SUCCEEDED player 6807 Maul", 1, true) ~= nil and M.oa:find('target WOUND "" 312 school 1 -> yours (next swing) icon 135', 1, true) ~= nil
+					M.oa:find("UNIT_SPELLCAST_SUCCEEDED player 6807 Maul", 1, true) ~= nil and M.oa:find('target WOUND "" withheld school 1 -> yours (next swing) icon 135', 1, true) ~= nil
 					and M.ob:find("withheld", 1, true) ~= nil and M.oc == "Combat trace off." and #M.Oa.out == 1, M.oa .. " | " .. M.ob)
 				M.Ob = M.world()
 				M.Ob.env.C_Spell.GetSpellName = function() error("boom") end
@@ -12848,7 +12972,7 @@ do
 				M.Ea.now = 100.1
 				C.hit(M.Ea, "target", "WOUND", "", 312, 1)
 				M.Ea.now = 100.2
-				C.hit(M.Ea, "target", "WOUND", "", 0, 1)
+				C.hit(M.Ea, "target", "MISS", "", 0, 1)
 				check("msbt maul: under Both the target token without a nameplate leaves the Miss out in Outgoing", C.shownCount(M.Ea) == 1 and M.last(M.Ea) == "left out (slot taken).", C.shownCount(M.Ea))
 				check("msbt maul: icons, colour and trace raise no violation or error", #M.Z.violations + #M.Z.errors + #M.C.violations + #M.C.errors + #M.D.violations + #M.D.errors + #M.U.violations + #M.U.errors + #M.Nb.violations + #M.Nb.errors == 0,
 					table.concat(M.Z.violations, "|") .. table.concat(M.Z.errors, "|") .. table.concat(M.C.violations, "|") .. table.concat(M.D.violations, "|") .. table.concat(M.U.violations, "|"))
@@ -13889,7 +14013,7 @@ do
 		local after = W.slash("combat")
 		check("combat text, /flatui combat after a hit: the rows are written, and the report names the last hit",
 			has(after, "floatingCombatTextCombatDamage_v2: now 0, default 1, wanted 0\n") and has(after, "Hit reports: 1 for nameplates, 0 for target.") and has(after, "Shown: 1. No nameplate: 0. On friendly units: 0. Report unreadable: 0.")
-			and has(after, "Last hit report: nameplate1, WOUND, GLANCING, 412, school 1\n") and has(after, "Nameplate layer: BACKGROUND. Numbers layer: LOW."), after)
+			and has(after, "Last hit report: nameplate1, WOUND, GLANCING, withheld, school 1\n") and has(after, "Nameplate layer: BACKGROUND. Numbers layer: LOW."), after)
 		C.hit(W, "nameplate1", "WOUND", SECRET, SECRET, SECRET)
 		check("combat text, the last hit report with withheld parts says withheld", has(W.slash("combat"), "Last hit report: nameplate1, WOUND, withheld, withheld, school withheld\n"), W.slash("combat"))
 		W.change("combattext.enabled", false)
@@ -14844,9 +14968,9 @@ do
 			check("ctlook: the pop: no violations, errors or messages", C.quiet(W) and C.quiet(V) and C.quiet(P) and C.quiet(Q) and C.quiet(O) and C.quiet(F) and C.quiet(E) and C.quiet(J), C.trouble(W) .. C.trouble(P))
 		end
 
-		-- Damage and healing you take, and the rest of what Also misses, dodges and gains adds.
+		-- Damage and healing you take, and the rest of what Also misses, dodges and gains adds, on a client that tells the amount (before build 70755).
 		do
-			local W = C.world({ words = true })
+			local W = C.world({ words = true, plainCombat = true })
 			W.ns.Set("combattext.own", "take")
 			local take = { K.own(W, "WOUND", "", 412, 1), K.own(W, "WOUND", "", 412, 4), K.own(W, "HEAL", "", 300, 1), K.own(W, "WOUND", "", 0, 1), K.own(W, "HEAL", "", 0, 1),
 				K.own(W, "DODGE", "", 0, 1), K.own(W, "MISS", "", 0, 1), K.own(W, "ENERGIZE", "", 20, 1) }
@@ -14875,6 +14999,14 @@ do
 			check("ctlook: a crushing or critical hit of magic is purple and 31.25 high at 100%, and other magic damage 25", magic[1].textHeight == 31.25 and magic[2].textHeight == 31.25 and magic[3].textHeight == 25
 				and C.colour(magic[1]) == "0.79,0.3,0.85" and C.colour(magic[2]) == "0.79,0.3,0.85")
 			check("ctlook: damage to the player: no violations or errors", #W.violations == 0 and #W.errors == 0, C.trouble(W))
+			-- Build 70790 withholds the amount: a wound, a heal or a gain of 0 draws no number, and a full block is the word Block by its flag.
+			local N = C.world({ words = true })
+			N.ns.Set("combattext.own", "more")
+			local now = { K.own(N, "WOUND", "", 0, 1), K.own(N, "WOUND", "BLOCK", 0, 1), K.own(N, "HEAL", "", 0, 1), K.own(N, "ENERGIZE", "", 0, 1), K.own(N, "WOUND", "", 412, 1),
+				K.own(N, "ENERGIZE", "", 20, 1), K.own(N, "HEAL", "", 300, 1) }
+			check("ctlook 70790: a withheld 0 draws no number, a full block is Block in white, and 412, a gain of 20 and a heal of 300 are as before",
+				table.concat(now, "|") == " 1,0.1,0.1|(Block) 1,1,1| 0.1,1,0.1| 0.41,0.8,0.94|-412 1,0.1,0.1|+20 0.41,0.8,0.94|+300 0.1,1,0.1", table.concat(now, "|"))
+			check("ctlook 70790: no violations or errors", #N.violations == 0 and #N.errors == 0, C.trouble(N))
 			-- Off.
 			local F = C.world()
 			F.ns.Set("combattext.own", "off")
@@ -14887,7 +15019,7 @@ do
 			local V = C.world()
 			local secret = C.hit(V, "player", "WOUND", "", SECRET, 1)
 			check("ctlook: an amount the game withholds is shown through SetFormattedText with its sign, and counted", secret ~= nil and secret.text == "-<withheld>" and secret.withheld == 1 and secret.calls.SetFormattedText == 1
-				and has(V.status(), "Hit amounts the game would not tell: 1."), V.status())
+				and not has(V.status(), "Hit amounts the game would not tell"), V.status())
 			local gain2 = C.hit(V, "player", "ENERGIZE", "", SECRET, 1)
 			local heal2 = C.hit(V, "player", "HEAL", "", SECRET, 1)
 			check("ctlook: a withheld gain and a withheld heal are shown the same way", gain2 ~= nil and gain2.text == "+<withheld>" and heal2 ~= nil and heal2.text == "+<withheld>")
@@ -14923,7 +15055,7 @@ do
 			M.ns.Set("combattext.source", "game")
 			check("ctlook: and with As the game has them they show all the same", C.say(M, "player", "WOUND", "", 4, 1) == "-4" and C.rows(M) == "1111" and has(M.status(), "Combat text for you: 4 shown."), M.status())
 			M.ns.Set("combattext.source", "front")
-			check("ctlook: the last hit report for the player is in /flatui combat, in the form of the one for an enemy", has(M.slash("combat"), "Hit reports for you: 4. Shown: 4.\nLast hit report for you: player, WOUND, , 4, school 1\n"), M.slash("combat"))
+			check("ctlook: the last hit report for the player is in /flatui combat, in the form of the one for an enemy", has(M.slash("combat"), "Hit reports for you: 4. Shown: 4.\nLast hit report for you: player, WOUND, , withheld, school 1\n"), M.slash("combat"))
 			check("ctlook: damage and words for the player: no violations or errors", #M.violations == 0 and #M.errors == 0, C.trouble(M))
 		end
 
@@ -15108,7 +15240,8 @@ do
 				table.concat(colours, "|") == "CRUSHING=(Crushing) 1,0.4,0.2|BLOCK_REDUCED=(Block) 0.6,0.7,1|ABSORB=(Absorb) 1,0.85,0.4|RESIST=(Resist) 0.79,0.3,0.85|CRITICAL=none", table.concat(colours, "|"))
 			local absorbed = C.hit(P, "player", "WOUND", "ABSORB", 0, 1)
 			C.draw(P, P.now + 0.2)
-			check("scrolling: Partial effects: a word such as Absorb has no second word after it", absorbed.text == "(Absorb)" and not wordOf(P, absorbed).shown, absorbed.text)
+			-- Build 70790 withholds the amount: a full absorb draws no number, and the word of Partial effects stays after it.
+			check("scrolling: Partial effects: a full absorb draws no number and keeps its word", absorbed.text == "" and wordOf(P, absorbed).shown and wordOf(P, absorbed).text == "(Absorb)", absorbed.text)
 			local O = C.world(nil, { options = { ["combattext.partial"] = "off" } })
 			O.now = 0
 			local plain = C.hit(O, "player", "WOUND", "GLANCING", 20, 1)
@@ -15195,7 +15328,7 @@ do
 			local friendly = C.hit(S, "target", "WOUND", "", 5)
 			S.attackable.target = nil
 			local heal = C.hit(S, "target", "HEAL", "", 5)
-			local miss = C.hit(S, "target", "WOUND", "", 0)
+			local miss = C.hit(S, "target", "MISS", "", 0)
 			local crit = C.hit(S, "target", "WOUND", "CRITICAL", 824)
 			local magic = C.hit(S, "target", "WOUND", "", 300, 4)
 			check("scrolling: Outgoing: a friendly target and a heal show nothing, a miss is the word, a critical hit is a quarter larger (43.75), and magic is yellow",
@@ -16005,12 +16138,14 @@ do
 		-- Words.
 		do
 			local W = F.world()
-			check("ctfriend: a miss over a friendly unit shows nothing with Misses and dodges over friendly units off", C.say(W, "nameplate1", "WOUND", "", 0) == "none" and C.say(W, "nameplate1", "DODGE", "", 0) == "none")
+			check("ctfriend: a miss over a friendly unit shows nothing with Misses and dodges over friendly units off", C.say(W, "nameplate1", "MISS", "", 0) == "none" and C.say(W, "nameplate1", "DODGE", "", 0) == "none")
 			W.ns.Set("combattext.friendWords", true)
 			W.now = W.now + 1
-			local miss = C.hit(W, "nameplate1", "WOUND", "", 0)
+			local miss = C.hit(W, "nameplate1", "MISS", "", 0)
 			check("ctfriend: and Miss in white with it on", miss and miss.text == "(Miss)" and F.col(miss) == "1.00,1.00,1.00", miss and miss.text)
-			check("ctfriend: a heal of 0 shows nothing either way", C.say(W, "nameplate1", "HEAL", "", 0) == "none")
+			-- Build 70790 withholds the amount: a heal of 0 draws no number.
+			local zero = C.say(W, "nameplate1", "HEAL", "", 0)
+			check("ctfriend: a heal of 0 draws no number either way", zero == "none" or zero == "", zero)
 		end
 
 		-- The game's healing number.
@@ -16054,7 +16189,8 @@ do
 		do
 			local W = F.world()
 			local amount = C.hit(W, "nameplate1", "WOUND", "", SECRET)
-			check("ctfriend: a withheld amount is passed to the font string and counted, and raises nothing", #W.errors == 0 and #W.violations == 0 and has(W.status(), "Hit amounts the game would not tell: 1."), W.status())
+			check("ctfriend: a withheld amount is passed to the font string, raises nothing and adds no status line", #W.errors == 0 and #W.violations == 0
+				and not has(W.status(), "Hit amounts the game would not tell"), W.status())
 			W.now = W.now + 1
 			local flag = C.hit(W, "nameplate1", "WOUND", SECRET, 77)
 			check("ctfriend: a withheld flag shows with no critical and no suffix", flag and flag.text == "-77" and flag.textHeight == 25, flag and flag.text)
@@ -20189,7 +20325,7 @@ do local PROBES = {
 	{ "combattext.friendDamage", false, function(S) local f = S.fhit(nil, "WOUND", "", 412, 1) return f and f.text or "none" end, "-412", "none", world = { worldText = true } },
 	{ "combattext.friendHeal", "Off", function(S) local f = S.fhit(nil, "HEAL", "", 300, 1) return f and f.text or "none" end, "+300", "none", world = { worldText = true }, from = "Healing they take from anyone" },
 	{ "combattext.friendPet", false, function(S) S.W.owned.nameplate1 = true return S.fhit() and "shown" or "none" end, "shown", "none", world = { worldText = true } },
-	{ "combattext.friendWords", true, function(S) local f = S.fhit(nil, "WOUND", "", 0, 1) return f and f.text or "none" end, "none", "(Miss)", world = { worldText = true } },
+	{ "combattext.friendWords", true, function(S) local f = S.fhit(nil, "MISS", "", 0, 1) return f and f.text or "none" end, "none", "(Miss)", world = { worldText = true } },
 	{ "combattext.friendSigns", false, function(S) local f = S.fhit(nil, "WOUND", "", 412, 1) return f and f.text or "none" end, "-412", "412", world = { worldText = true } },
 	{ "combattext.friendDamageColour", "ff336699", function(S) local c = S.fhit(nil, "WOUND", "", 412, 1).textColour return string.format("%.2f,%.2f,%.2f", c[1], c[2], c[3]) end, "1.00,0.10,0.10", "0.20,0.40,0.60", world = { worldText = true } },
 	{ "combattext.friendHealColour", "ff336699", function(S) local c = S.fhit(nil, "HEAL", "", 300, 1).textColour return string.format("%.2f,%.2f,%.2f", c[1], c[2], c[3]) end, "0.10,1.00,0.10", "0.20,0.40,0.60", world = { worldText = true } },
@@ -67333,7 +67469,7 @@ function PT.runSetup()
 				W.cvars.userFontScale, W.cvars.useUiScale, W.cvars.uiScale, W.cvars.uiscale = o.font or "1.000000", o.useScale or "0", o.scale, o.scale or "0.64"
 				env.C_GameRules = { GetForeverExperiencePreset = fn(o.preset), IsPersonalResourceDisplayEnabled = rules and rules.IsPersonalResourceDisplayEnabled }
 				env.Enum = env.Enum or {}
-				env.Enum.ForeverExperiencePreset = { Classic = 0, Modern = 1 }
+				env.Enum.ForeverExperiencePreset = { Classic = 0, Enhanced = 1 }
 				W.height = o.height or 1080
 				return S.Recommend()
 			end

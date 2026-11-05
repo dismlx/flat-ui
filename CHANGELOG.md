@@ -2,6 +2,8 @@
 
 - For WoW: Forever 1.60.1 build 70790, released 2026-11-04. The interface number stays 16001.
 - **Quest item sparkle** is new on the **Flat UI** page, under **World**, and on by default: quest items in the world sparkle. It sets the game's `outlineModeShowLootEffectWhenDisabled`, which Forever's options do not show, at login and again a second after a graphics preset puts it back. Nothing is written in combat. Turned off, the game's own value is back from the next game start. `/flatui status` says whether the game kept it.
+- **Combat text**: from build 70755 the game no longer tells addons the amount of a hit. The game now writes each number itself, so a full absorb or resist shows only its word, a full block shows **Block**, and a hit, heal or gain of nothing shows no number, as before. Numbers of a thousand or more have no thousands separator, because the game gives no grouped text for an amount it keeps hidden. A miss that comes as a hit of nothing with no kind shows nothing.
+- `/flatui status` no longer counts hit amounts the game would not tell: it now withholds every one.
 
 ## 0.5.3
 
