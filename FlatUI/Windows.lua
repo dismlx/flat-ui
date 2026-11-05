@@ -331,6 +331,18 @@ local function Crop(icon, fraction)
 	pcall(icon.SetTexCoord, icon, had[1] + across, had[2] - across, had[3] + down, had[4] - down)
 end
 
+-- Takes a mask off a texture while `off` is true and puts it back after. key: the field of own that says it is off.
+local function Unmask(own, key, texture, mask, off)
+	if not mask or not IsTexture(texture) then
+		return
+	end
+	if off and not own[key] then
+		own[key] = pcall(texture.RemoveMaskTexture, texture, mask)
+	elseif not off and own[key] then
+		own[key] = not pcall(texture.AddMaskTexture, texture, mask)
+	end
+end
+
 local function Uncrop(icon)
 	local had = texcoords[icon]
 	if had then
@@ -1110,9 +1122,12 @@ end
 
 -- Item slot: a box with the quality colour as its edge. The ammo slot has no quality border. With the
 -- flag "still" the icon is not cropped: the game puts a picture of an empty slot there and takes it away again.
+-- Every item button masks its icon and its pushed texture with the rounded Mask (Shared/ItemButtonTemplate.xml:18-19,
+-- Shared/ItemButtonTemplate.lua:16-20). It is off the icon while the slot is square, and off the pushed texture while that has the flat tint.
 Kind("slot", "item slots", "slots",
 	function(frame, own, flag)
 		own.icon = ItemIcon(frame)
+		own.mask = Part(frame, "Mask")
 		own.still = flag == "still"
 		own.ammo = NameOf(frame) == AMMO_SLOT
 		Outlined(own, frame, frame, "panel")
@@ -1139,6 +1154,7 @@ Kind("slot", "item slots", "slots",
 			end
 			Fade(own.ring or nil, on)
 		end
+		Unmask(own, "unmasked", own.icon, own.mask, on)
 		if on and Opt("crop") > 0 and not own.still then
 			Crop(own.icon, Opt("crop") / 100)
 		else
@@ -1167,6 +1183,7 @@ Kind("slot", "item slots", "slots",
 				Tinted()
 			end
 		end
+		Unmask(own, "pushedUnmasked", State(frame, "Pushed"), own.mask, on and Opt("slotTints") == true and own.tinted == true)
 		ns.Items.Slot(frame)
 		Reveal(own, on)
 	end)
@@ -1455,8 +1472,10 @@ local function Classify(frame)
 	if Part(frame, "Left") and Part(frame, "LeftActive") and (Part(frame, "TabTextures") or Part(frame, "RotatedTextures")) then
 		return "tab"
 	end
+	-- A bag slot shows a picture of an empty slot. The 70532 template named it in emptyBackgroundAtlas; the 70790 one has an EmptyBagIcon
+	-- instead and names the picture in its GetItemButtonBackgroundTexture (ContainerFrame.xml:152-154, ContainerFrame.lua:1953-1960).
 	if Part(frame, "IconBorder") and (Part(frame, "icon") or Part(frame, "Icon")) and Part(frame, "NormalTexture") then
-		return "slot", type(Field(frame, "emptyBackgroundAtlas")) == "string" and "still" or nil
+		return "slot", (type(Field(frame, "emptyBackgroundAtlas")) == "string" or Part(frame, "EmptyBagIcon") ~= nil) and "still" or nil
 	end
 	if IsClose(frame) then
 		return "close"
@@ -2219,6 +2238,17 @@ local function OnItemBorderColour(button, r, g, b)
 	Again(button, "slot")
 end
 
+-- The game puts the icon's texture coordinates back to the whole texture each time it sets the picture of an item button
+-- (SetItemButtonTexture_Base, ItemButtonTemplate.lua:76-97), on every update of a character or vendor slot (PaperDollFrame.lua:2182, 2204,
+-- MerchantFrame.lua:301), so a cropped slot is cropped again after it. A bag slot is not cropped, and the bags call the button's own
+-- method, which no hook follows (ContainerFrame.lua:1218).
+local function OnItemTexture(button)
+	local own = SlotOf(button)
+	if own and not own.still and IsOn("slot", own.group) and Opt("crop") > 0 then
+		Crop(own.icon, Opt("crop") / 100)
+	end
+end
+
 local function OnItemNormalColour(button, r, g, b)
 	local own = SlotOf(button)
 	if own and not ns.IsSecret(r) and not ns.IsSecret(g) and not ns.IsSecret(b) then
@@ -2315,6 +2345,7 @@ local function InstallHooks()
 	HookGlobal("StaticPopup_Show", OnPopup)
 	HookGlobal("SetItemButtonBorder", OnItemBorder)
 	HookGlobal("SetItemButtonBorderVertexColor", OnItemBorderColour)
+	HookGlobal("SetItemButtonTexture", OnItemTexture)
 	HookGlobal("SetItemButtonNormalTextureVertexColor", OnItemNormalColour)
 	HookGlobal("SetItemButtonSlotVertexColor", OnCellColour)
 	HookGlobal("SetItemButtonNameFrameVertexColor", OnCellColour)

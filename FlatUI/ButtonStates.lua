@@ -20,8 +20,10 @@ local BARS = {
 }
 local FONTS = { small = "NumberFontNormalSmall", normal = "NumberFontNormal", large = "NumberFontNormalLarge", huge = "NumberFontNormalHuge" }
 local EVENTS = { "ACTION_USABLE_CHANGED", "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR", "SPELL_UPDATE_USABLE", "PLAYER_MOUNT_DISPLAY_CHANGED", "PLAYER_ENTERING_WORLD" }
--- The colours the game gives an icon (ActionButton.lua:728-733) and a swipe it has finished a cast animation on (ActionButton.lua:1843).
-local GAME = { usable = { 1, 1, 1 }, mana = { 0.5, 0.5, 1 }, unusable = { 0.4, 0.4, 0.4 } }
+-- The colours the game gives an icon (ActionButton.lua:728-733), and the opacity of the swipe: the button template's black at 0.64
+-- (ActionButtonTemplate.xml:116-118), which the game also puts back when a cast animation ends (ActionButton.lua:1843-1844 with
+-- Camelot/ActionButtonOverrides.lua:1-3).
+local GAME = { usable = { 1, 1, 1 }, mana = { 0.5, 0.5, 1 }, unusable = { 0.4, 0.4, 0.4 }, swipe = 0.64 }
 local LINES = {
 	usable = "Own usability colours: the game withholds whether an action can be used, so those buttons keep the game's colours.",
 	range = "Tint icon when out of range: the game withholds the range, so those icons keep their colour.",
@@ -227,7 +229,7 @@ local function Sweep(button)
 	if not refused.swipe then
 		local own = Opt("sweepOwn") == true
 		if own or swipeSet[cooldown] then
-			local alpha = own and Opt("sweepAlpha") / 100 or 1
+			local alpha = own and Opt("sweepAlpha") / 100 or GAME.swipe
 			if pcall(cooldown.SetSwipeColor, cooldown, 0, 0, 0, alpha) then
 				swipeSet[cooldown] = own or nil
 				touched = touched or own

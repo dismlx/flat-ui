@@ -4117,6 +4117,37 @@ local function newWorld(opts)
 				raw(r[part]):SetAlpha(alpha)
 			end
 		end)
+		-- 70790: the rounded Mask of every item button, which ItemButtonMixin:PostOnLoad puts on the normal and pushed textures and the
+		-- icon (Shared/ItemButtonTemplate.xml:18-19, Shared/ItemButtonTemplate.lua:16-20).
+		local mask = wmask(button, "Mask", nil, { r.NormalTexture, r.PushedTexture, r.icon })
+		raw(mask).file = "Interface\\Common\\common-iconmask"
+		-- ItemButtonMixin:GetItemButtonBackgroundTexture and SetItemButtonTexture (Mainline/ItemButtonTemplate.lua:59-97, 406-408, 422-424 of
+		-- 70790): the picture of an empty slot is the button's emptyBackgroundTexture or emptyBackgroundAtlas, and every picture the game sets
+		-- puts the icon's texture coordinates back to the whole texture, an atlas through SetAtlas with resetTexCoords.
+		r.GetItemButtonBackgroundTexture = luaMethod("GetItemButtonBackgroundTexture", function()
+			if r.emptyBackgroundTexture then
+				return r.emptyBackgroundTexture
+			elseif r.emptyBackgroundAtlas then
+				return r.emptyBackgroundAtlas, true
+			end
+		end)
+		r.SetItemButtonTexture = luaMethod("SetItemButtonTexture", function(self, texture)
+			local icon = r.Icon or r.icon
+			if not icon then
+				return
+			end
+			local isAtlas
+			if not texture then
+				texture, isAtlas = self:GetItemButtonBackgroundTexture()
+			end
+			icon:SetShown(texture ~= nil)
+			if isAtlas then
+				icon:SetAtlas(texture, false, nil, true)
+			else
+				icon:SetTexture(texture)
+				icon:SetTexCoord(0, 1, 0, 1)
+			end
+		end)
 		return button, r
 	end
 
@@ -4333,15 +4364,24 @@ local function newWorld(opts)
 			button.icon:SetVertexColor(r, g, b)
 		end
 	end
+	-- SetItemButtonTexture (Mainline/ItemButtonTemplate.lua:99-107): the button's own method, which on 70790 puts the icon's texture
+	-- coordinates back to the whole texture.
+	function env.SetItemButtonTexture(button, texture)
+		if button and button.SetItemButtonTexture then
+			button:SetItemButtonTexture(texture)
+		end
+	end
 	-- hollowItems: the functions exist and do nothing, so a test can hand the addon's hooks any argument at all.
 	if wopts.hollowItems then
-		for _, name in ipairs({ "SetItemButtonNormalTextureVertexColor", "SetItemButtonBorderVertexColor", "SetItemButtonBorder" }) do
+		for _, name in ipairs({ "SetItemButtonNormalTextureVertexColor", "SetItemButtonBorderVertexColor", "SetItemButtonBorder", "SetItemButtonTexture" }) do
 			env[name] = function() end
 		end
 	end
-	-- PaperDollItemSlotButton_Update (Camelot/PaperDollFrame.lua:2145-2206): what it does to the art of a slot.
+	-- PaperDollItemSlotButton_Update (Camelot/PaperDollFrame.lua:2177-2241 of 70790): what it does to the art of a slot. It sets the picture of
+	-- the item, or of the empty slot, first (2182, 2204).
 	function env.PaperDollItemSlotButton_Update(button, item)
 		item = item or {}
+		env.SetItemButtonTexture(button, item.texture or "Interface\\Paperdoll\\UI-PaperDoll-Slot-Head")
 		if item.broken then
 			env.SetItemButtonTextureVertexColor(button, 0.9, 0, 0)
 			env.SetItemButtonNormalTextureVertexColor(button, 0.9, 0, 0)
@@ -4968,7 +5008,24 @@ local function newWorld(opts)
 		for _, part in ipairs({ "Left", "Right", "Middle" }) do
 			wtex(border, part, "common-coinbox-" .. part:lower())
 		end
-		r.UpdateItems = nop
+		-- ContainerFrameMixin:UpdateItems and UpdateCooldowns (Mainline/ContainerFrame.lua:1189-1255 of 70790), as far as the picture of a slot
+		-- goes: each slot's own SetItemButtonTexture with the item's icon, then SyncAppearanceWithHasItem, which sets the picture of an empty
+		-- slot again. W.items.bag["bag:slot"].iconFileID is the icon, 134400 when a test gives none.
+		r.UpdateItems = function(self)
+			for _, slot in self:EnumerateValidItems() do
+				local info = W.items and W.items.bag[slot:GetBagID() .. ":" .. slot:GetID()]
+				local texture = info and (info.iconFileID or 134400) or nil
+				raw(slot).hasItem = texture ~= nil
+				slot:SetItemButtonTexture(texture)
+				slot:SyncAppearanceWithHasItem()
+			end
+		end
+		r.UpdateCooldowns = function(self)
+			for _, slot in self:EnumerateValidItems() do
+				slot:SyncAppearanceWithHasItem()
+			end
+		end
+		r.IsCombinedBagContainer = function() return name == "ContainerFrameCombinedBags" end
 		-- ContainerFrameMixin:EnumerateValidItems (Mainline/ContainerFrame.lua:575-577): the item buttons of the bag, in order.
 		r.EnumerateValidItems = function()
 			local list, at = {}, 0
@@ -4991,13 +5048,28 @@ local function newWorld(opts)
 		end
 		return frame, r
 	end
-	-- A bag slot: an ItemButton whose icon is a picture of an empty slot when there is no item.
+	-- A bag slot: an ItemButton whose icon is a picture of an empty slot when there is no item. 70790 dropped the emptyBackgroundAtlas key
+	-- of the template (ContainerFrame.xml:84 of 70532): the template has an EmptyBagIcon (ContainerFrame.xml:152-154), and the slot names the
+	-- picture in its own GetItemButtonBackgroundTexture, a blank one in the combined bag, where EmptyBagIcon shows the bag's icon
+	-- (ContainerFrame.lua:1921-1968, Camelot/ContainerFrame.lua:7-10).
 	function W.win.addBagSlot(bag, index)
 		local was = W.group
 		W.group = "windows"
 		local slot, sr = itemButton(bag, nil, raw(bag).fname .. "Item" .. index)
-		sr.emptyBackgroundAtlas = "bags-item-slot64"
-		-- ContainerFrameItemButtonMixin:GetBagID (Mainline/ContainerFrame.lua:1831-1833).
+		local emptyIcon = wtex(slot, "EmptyBagIcon", nil, { hidden = true })
+		local function combined() return raw(bag).fname == "ContainerFrameCombinedBags" end
+		sr.GetItemButtonBackgroundTexture = luaMethod("GetItemButtonBackgroundTexture", function()
+			return combined() and "bags-item-slot-blank" or "bags-item-slot64", true
+		end)
+		sr.SyncAppearanceWithHasItem = luaMethod("SyncAppearanceWithHasItem", function(self)
+			if sr.hasItem then
+				emptyIcon:Hide()
+			else
+				emptyIcon:SetShown(combined())
+				self:SetItemButtonTexture(nil)
+			end
+		end)
+		-- ContainerFrameItemButtonMixin:GetBagID (Mainline/ContainerFrame.lua:1845-1847 of 70790).
 		sr.slotId, sr.bagButton = index, true
 		sr.GetBagID = function() return raw(bag).bagID or 0 end
 		W.group = was
@@ -22018,6 +22090,23 @@ do
 	W.updateSlot("CharacterHeadSlot", {})
 	check("quality: the item is taken off: the border colour again", edge() == "0.00,0.00,0.00", edge())
 	check("quality: IconBorder was hidden by Blizzard and is still transparent", wraw(W, h.IconBorder).shown == false and wa(W, h.IconBorder) == 0)
+	-- 70790: every update of a slot sets its picture through SetItemButtonTexture, which puts the icon's texture coordinates back to the whole
+	-- texture (Camelot/PaperDollFrame.lua:2182, 2204, Mainline/ItemButtonTemplate.lua:88-94). The crop comes back after each, also after one
+	-- that changes no colour, and after a vendor's call of the same function (MerchantFrame.lua:301).
+	check("crop: the empty slot picture the game set again is cropped again", wtc(W, h.icon) == "0.08,0.92,0.08,0.92", wtc(W, h.icon))
+	W.updateSlot("CharacterHeadSlot", { quality = 4, texture = 133071 })
+	W.updateSlot("CharacterHeadSlot", { quality = 4, texture = 133071 })
+	check("crop: an item put on and updated again with the same colour keeps its crop", wraw(W, h.icon).file == 133071 and wtc(W, h.icon) == "0.08,0.92,0.08,0.92", wtc(W, h.icon))
+	W.blizzard(function() W.env.SetItemButtonTexture(head, 133072) end)
+	check("crop: and after the game's SetItemButtonTexture alone", wraw(W, h.icon).file == 133072 and wtc(W, h.icon) == "0.08,0.92,0.08,0.92" and #W.violations == 0, wtc(W, h.icon))
+	W.change("windows.crop", 12)
+	W.blizzard(function() W.env.SetItemButtonTexture(head, 133071) end)
+	check("crop: a new crop is the one given back", wtc(W, h.icon) == "0.12,0.88,0.12,0.88", wtc(W, h.icon))
+	W.change("windows.crop", 0)
+	W.blizzard(function() W.env.SetItemButtonTexture(head, 133072) end)
+	check("crop: with no crop the game's whole texture stays", wtc(W, h.icon) == "-", wtc(W, h.icon))
+	W.change("windows.crop", 8)
+	W.updateSlot("CharacterHeadSlot", {})
 	-- Each of the three functions alone.
 	W.blizzard(function()
 		W.env.SetItemButtonBorder(head, [[Interface\Common\WhiteIconFrame]])
@@ -22099,6 +22188,10 @@ do
 	W.env.SetItemButtonBorder(SECRET, "x")
 	W.env.SetItemButtonBorderVertexColor("a string", 1, 1, 1)
 	W.env.SetItemButtonBorderVertexColor(5, 1, 1, 1)
+	W.env.SetItemButtonTexture(SECRET, 1)
+	W.env.SetItemButtonTexture(nil)
+	W.env.SetItemButtonTexture("a string", 1)
+	W.env.SetItemButtonTexture(head, SECRET)
 	check("item hooks: a button that is withheld, nil, a string or a number is ignored", #W.errors == 0 and #W.violations == 0, table.concat(W.errors, "|"))
 	clean(W, "item hooks")
 end
@@ -22483,7 +22576,8 @@ do
 	local base = newWorld()
 	base.login()
 	local W = winWorld()
-	check("hooks: the windows add five hooks on globals and none on methods", W.hooks - base.hooks == 5, W.hooks - base.hooks)
+	-- Six since 70790: SetItemButtonTexture puts the crop of a slot back to the whole texture, and is followed too.
+	check("hooks: the windows add six hooks on globals and none on methods", W.hooks - base.hooks == 6, W.hooks - base.hooks)
 	local count = W.hooks
 	W.change("windows.opacity", 60)
 	W.change("windows.buttons", false)
@@ -22905,7 +22999,7 @@ do
 	check("a global that does not exist: the other item hooks are still made and work", o and string.format("%.2f,%.2f,%.2f", o.r, o.g, o.b) == "0.20,0.40,0.60" and #G.errors == 0 and #G.violations == 0)
 	local base = newWorld()
 	base.login()
-	check("a global that does not exist: two of the five global hooks are missing, so the others are 5 - 2", G.hooks - base.hooks == 3, G.hooks - base.hooks)
+	check("a global that does not exist: two of the six global hooks are missing, so the others are 6 - 2", G.hooks - base.hooks == 4, G.hooks - base.hooks)
 	local P = newWorld({ windows = true })
 	P.env.ShowUIPanel = nil
 	P.login()
@@ -23427,7 +23521,8 @@ do
 	W.flush()
 	local styled = tonumber(W.status():match("Windows: on, (%d+) styled"))
 	check("turned on later: the windows are styled, and the status counts them", styled and styled > 100 and W.state(names.CharacterFrame) == "SB" and W.state(names.LFGParentFrame) == "SB", W.line("Windows"))
-	check("turned on later: the item functions, the tabs and the panel are followed from then on", W.hooks - base.hooks == 6, W.hooks - base.hooks)
+	-- Seven since 70790, with SetItemButtonTexture.
+	check("turned on later: the item functions, the tabs and the panel are followed from then on", W.hooks - base.hooks == 7, W.hooks - base.hooks)
 	check("turned on later: the quality colour of an item that was on before is picked up", (function()
 		local o = W.look(names.CharacterHeadSlot)
 		return o and string.format("%.2f,%.2f,%.2f", o.r, o.g, o.b) == "0.64,0.21,0.93"
@@ -44992,19 +45087,35 @@ do
 		check("bags: the game sets the colour of the background each time a bag opens, and it is transparent again", flat() == "000")
 		check("bags: the combined bag window and the bank have a box", W.state(n.ContainerFrameCombinedBags) == "SB" and W.state(n.BankFrame) == "SB")
 		check("bags: a slot the bag has when it is swept has a box, and its icon keeps the empty slot picture uncropped", W.state(n.ContainerFrame1Item1) == "SB" and coords(W, wraw(W, n.ContainerFrame1Item1).icon) == "-")
-		local plain, withheld, later = blizz(W, function()
+		-- A bag slot of 70790 is known by its EmptyBagIcon; old is a slot of the 70532 template, which named its picture in emptyBackgroundAtlas.
+		-- withheld withholds both fields.
+		local plain, withheld, later, old = blizz(W, function()
 			local a = W.win.itemButton(bag, nil, "FlatUITestPlainSlot")
 			local b = W.win.addBagSlot(bag, 3)
 			wraw(W, b).emptyBackgroundAtlas = SECRET
-			return a, b, W.win.addBagSlot(bag, 2)
+			wraw(W, b).EmptyBagIcon = SECRET
+			local c = W.win.itemButton(bag, nil, "FlatUITestOldBagSlot")
+			wraw(W, c).emptyBackgroundAtlas = "bags-item-slot64"
+			return a, b, W.win.addBagSlot(bag, 2), c
 		end)
-		check("bags: slots the bag makes later have no box until it updates its items", W.state(plain) == "." and W.state(withheld) == "." and W.state(later) == ".")
+		check("bags: slots the bag makes later have no box until it updates its items", W.state(plain) == "." and W.state(withheld) == "." and W.state(later) == "." and W.state(old) == ".")
 		W.blizzard(function() bag:UpdateItems() end)
 		check("bags: and none inside the game's own update", W.state(later) == "." and W.state(plain) == ".")
 		W.win.updateBags()
-		check("bags: and have one afterwards; the empty slot picture stays uncropped, an icon alone is cropped, a withheld field counts as none",
+		check("bags: and have one afterwards; the empty slot picture stays uncropped on 70790 and on 70532, an icon alone is cropped, a withheld field counts as none",
 			W.state(later) == "SB" and coords(W, wraw(W, later).icon) == "-" and W.state(plain) == "SB" and coords(W, wraw(W, plain).icon) == "0.08,0.92,0.08,0.92"
-			and W.state(withheld) == "SB" and coords(W, wraw(W, withheld).icon) == "0.08,0.92,0.08,0.92")
+			and W.state(withheld) == "SB" and coords(W, wraw(W, withheld).icon) == "0.08,0.92,0.08,0.92" and W.state(old) == "SB" and coords(W, wraw(W, old).icon) == "-")
+		-- 70790: every item button masks its icon with the rounded Mask (Shared/ItemButtonTemplate.lua:16-20). The square slot takes it off the
+		-- icon and off the pushed texture it tints flat, and leaves it on the normal texture it fades.
+		local lr = wraw(W, later)
+		check("bags: the rounded Mask is off the icon and the flat pushed tint of a square slot, and still on the faded normal texture",
+			not wmasked(W, lr.icon, lr.Mask) and not wmasked(W, lr.PushedTexture, lr.Mask) and wmasked(W, lr.NormalTexture, lr.Mask)
+				and wraw(W, lr.PushedTexture).color ~= nil, tostring(wraw(W, lr.icon).maskList[1]))
+		W.change("windows.slots", false)
+		check("bags: with Item slots off the icon has the rounded Mask again, once", wmasked(W, lr.icon, lr.Mask) and #wraw(W, lr.icon).maskList == 1
+			and wraw(W, lr.icon).calls.AddMaskTexture == 1)
+		W.change("windows.slots", true)
+		check("bags: and on again it comes off again", not wmasked(W, lr.icon, lr.Mask) and wraw(W, lr.icon).calls.RemoveMaskTexture == 2)
 		local panel = wraw(W, n.BankFrame).BankPanel
 		check("bank: the picture behind the bank, the border of the panel and its shadows are transparent", wa(W, wraw(W, n.BankFrame).Background) == 0
 			and wa(W, wraw(W, wraw(W, panel).NineSlice).TopEdge) == 0 and wa(W, wraw(W, wraw(W, panel).EdgeShadows).TopShadow) == 0)
@@ -45017,6 +45128,33 @@ do
 		W.flush()
 		check("bank: a page tab and a slot have a box on the frame after the game announces a page", W.state(wraw(W, tab).Icon) == "SB" and W.state(item) == "SB")
 		check("bags and bank: no violation, error or message", #W.violations == 0 and #W.errors == 0 and #W.out == 0, wvio(W))
+	end
+
+	-- 70790: the game sets the picture of every bag slot on each update of the items, and of an empty slot on each cooldown update too, and
+	-- each time it puts the icon's texture coordinates back: the box of the empty slot atlas, or the whole item icon (ItemButtonTemplate.lua:76-97,
+	-- ContainerFrame.lua:1218-1219, 1253). A bag slot is styled without a crop, so the coordinates of the empty slot picture never reach an item.
+	do
+		local W = second()
+		W.atlasBox = { 0.25, 0.5, 0.75, 1 }
+		local n = select(2, up(W))
+		local slot = n.ContainerFrame1Item1
+		local icon = wraw(W, wraw(W, slot).icon)
+		W.win.updateBags()
+		check("bag atlas: an empty bag slot shows the empty slot atlas with the atlas's own box, uncropped", W.state(slot) == "SB" and icon.atlas == "bags-item-slot64"
+			and table.concat(icon.texCoord or {}, ",") == "0.25,0.5,0.75,1", table.concat(icon.texCoord or {}, ","))
+		W.items.bag["0:1"] = { hyperlink = "item:bagatlas", quality = 4, stackCount = 1, iconFileID = 135000 }
+		W.win.updateBags()
+		W.setQuality(slot, 4)
+		W.flush()
+		check("bag atlas: an item put in it shows its whole icon after a quality colour, not the box of the atlas", icon.file == 135000 and wtc(W, wraw(W, slot).icon) == "-",
+			wtc(W, wraw(W, slot).icon))
+		W.items.bag["0:1"] = nil
+		W.win.updateBags()
+		W.blizzard(function() n.ContainerFrame1:UpdateCooldowns() end)
+		W.flush()
+		check("bag atlas: emptied again, and after a cooldown update, it has the atlas with its box", icon.atlas == "bags-item-slot64" and table.concat(icon.texCoord or {}, ",") == "0.25,0.5,0.75,1"
+			and #W.violations == 0 and #W.errors == 0, wvio(W))
+		W.atlasBox = nil
 	end
 
 	-- Menus: a dialog keeps its border and its title plate in frames of their own, a pop-up its background in one frame.
@@ -53380,7 +53518,16 @@ do
 			local part = { icon = icon, mask = mask, normal = R(nil, "ui-hud-actionbar-iconframe-bags"), pushed = R(nil, "ui-hud-actionbar-iconframe-bags"),
 				highlight = R(nil, "ui-hud-actionbar-iconframe-bags", { alpha = 0.4 }), count = R(nil, nil, { kind = "FontString" }),
 				free = R(nil, nil, { kind = "FontString" }), slot = R(nil, "ui-hud-actionbar-iconframe-bags") }
-			local btn, raw = B(nil, { icon = icon, SquareMask = mask, NormalTexture = part.normal, PushedTexture = part.pushed, HighlightTexture = part.highlight,
+			-- 70790: the bag buttons are item buttons, and ItemButtonMixin:PostOnLoad puts the rounded Mask on the normal and pushed textures
+			-- and the icon, after the SquareMask of the template (Shared/ItemButtonTemplate.xml:18-19, Shared/ItemButtonTemplate.lua:16-20).
+			local round, roundRaw = Rr(nil, nil, { kind = "MaskTexture" })
+			roundRaw.file = "Interface\\Common\\common-iconmask"
+			for _, t in ipairs({ part.normal, part.pushed, icon }) do
+				local tr = W.rawOf[t]
+				tr.masks[round], tr.maskList[#tr.maskList + 1] = true, round
+			end
+			part.round = round
+			local btn, raw = B(nil, { icon = icon, SquareMask = mask, Mask = round, NormalTexture = part.normal, PushedTexture = part.pushed, HighlightTexture = part.highlight,
 				SlotHighlightTexture = part.slot,
 				Count = part.count, FreeSlots = part.free }, { forbidden = more.bag == name, protected = more.protect == "bags" })
 			if more.broken and index > 4 then
@@ -53547,8 +53694,9 @@ do
 		end
 		check("hud bags: each button has a thin border and a background, its frame art and highlight are transparent, and the count and free slots are not touched", all)
 		local back, key = H.bags.MainMenuBarBackpackButton, H.bags.KeyRingButton
-		check("hud bags: the rounded mask is off a plain icon and the icon is cropped; an icon drawn from an atlas is only unmasked",
-			back.icon.masks[back.mask] == nil and near(back.icon.texCoord[1], 0.08) and near(back.icon.texCoord[2], 0.92) and key.icon.texCoord == nil and key.icon.masks[key.mask] == nil)
+		check("hud bags: the rounded masks are off a plain icon and the icon is cropped; an icon drawn from an atlas is only unmasked",
+			back.icon.masks[back.mask] == nil and near(back.icon.texCoord[1], 0.08) and near(back.icon.texCoord[2], 0.92) and key.icon.texCoord == nil and key.icon.masks[key.mask] == nil
+				and back.icon.masks[back.round] == nil and key.icon.masks[key.round] == nil and #back.icon.maskList == 0)
 		local hover
 		for _, t in ipairs(W.addonTextures) do
 			if t.owner == back.btn and t.layer == "HIGHLIGHT" then
@@ -53568,6 +53716,7 @@ do
 		for _, name in ipairs(BAGS) do
 			local p = H.bags[name]
 			restored = restored and W.state(p.btn) == "hb" and p.normal.alpha == 1 and p.pushed.alpha == 1 and p.highlight.alpha == 0.4 and p.icon.maskList[1] == p.mask
+				and p.icon.maskList[2] == p.round and #p.icon.maskList == 2
 		end
 		W.blizzard(function() back.btn:UpdateTextures() end)
 		W.fire("BAG_UPDATE")
@@ -53577,7 +53726,7 @@ do
 				and W.state(back.btn) == "hb" and back.highlight.alpha == 0.4)
 		W.change("hud.bags", true)
 		check("hud bags: on again styles the same buttons, without making their parts twice", W.state(back.btn) == "SB" and back.highlight.alpha == 0 and hover.shown
-			and #W.edgesOn(W.holderOn(back.btn)) == 4)
+			and #W.edgesOn(W.holderOn(back.btn)) == 4 and #back.icon.maskList == 0 and back.icon.calls.RemoveMaskTexture == 4)
 	end
 	do
 		check("hud auras: a buff has a thin border and a cropped icon, and the debuff and enchant borders of the game are transparent",
@@ -105865,7 +106014,9 @@ do
 		W.ns.Set("actionbars.sweepOwn", false)
 		K.step(W)
 		for _, call in ipairs(spy.calls) do if call[1] == "SetSwipeColor" then alpha = call end end
-		check("abstate: Own sweep opacity off puts the game's opacity back", near(alpha[5], 1))
+		-- The game's opacity is the template's 0.64 (ActionButtonTemplate.xml:116-118), which Camelot keeps after a cast animation too
+		-- (ActionButton.lua:1843-1844, Camelot/ActionButtonOverrides.lua:1-3); this check read 1 before.
+		check("abstate: Own sweep opacity off puts the game's opacity back", near(alpha[5], 0.64), alpha and tostring(alpha[5]))
 		local names = { small = "NumberFontNormalSmall", normal = "NumberFontNormal", large = "NumberFontNormalLarge", huge = "NumberFontNormalHuge" }
 		local bad = {}
 		for choice, font in pairs(names) do
@@ -108739,6 +108890,14 @@ do
 		check("ownlook: the sweep rows are set on the cooldown of a button of Flat UI's own", cd.drawSwipe == false and cd.swipeColour ~= nil and near(cd.swipeColour[4], 0.5) and cd.font == "NumberFontNormalLarge",
 			tostring(cd.drawSwipe) .. tostring(cd.font))
 		check("ownlook: on a button of bar 2 too", W.rawOf[L.button(W, 2, 5).cooldown].cd.drawSwipe == false)
+		W.ns.Set("actionbars.sweepOwn", false)
+		W.advance(0)
+		W.advance(0)
+		check("ownlook: Own sweep opacity off gives the cooldown of a button of Flat UI's own the template's black at 0.64", cd.swipeColour ~= nil and cd.swipeColour[1] == 0
+			and near(cd.swipeColour[4], 0.64), cd.swipeColour and tostring(cd.swipeColour[4]))
+		W.ns.Set("actionbars.sweepOwn", true)
+		W.advance(0)
+		W.advance(0)
 		check("ownlook: the buttons are painted again after a change of those rows", W.S.repaints >= 1)
 		local before = W.S.repaints
 		W.ns.ButtonStatesChanged("actionbars.sweep")
