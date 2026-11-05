@@ -32,47 +32,46 @@ end
 
 local function merge(a, b) for k, v in pairs(b) do a[k] = v end return a end
 
--- 1. Auto Shot bar.
-local bar = merge(base(BAR, "hAsBar0001x", "aurabar", 0, 0), customTrigger(
+-- 1. Auto Shot ring.
+local bar = merge(base(BAR, "hAsBar0001x", "progresstexture", 0, 0), customTrigger(
   "PLAYER_SWING, START_AUTOREPEAT_SPELL, STOP_AUTOREPEAT_SPELL, PLAYER_ENTERING_WORLD, PLAYER_REGEN_DISABLED, FRAME_UPDATE, "
   .. "UNIT_SPELLCAST_SUCCEEDED:player, UNIT_SPELLCAST_START:player, UNIT_SPELLCAST_STOP:player, UNIT_SPELLCAST_FAILED:player, "
   .. "UNIT_SPELLCAST_INTERRUPTED:player, UNIT_SPELLCAST_CHANNEL_START:player, UNIT_SPELLCAST_CHANNEL_STOP:player",
   code("autoshot_trigger.lua"),
   '{ clipping = "bool", moving = "bool", windup = "bool", flash = "bool", stacks = true }'))
 merge(bar, {
-  width = 220, height = 18, orientation = "HORIZONTAL", inverse = true,
-  texture = "Blizzard", textureSource = "LSM",
-  barColor = { 0.15, 0.65, 1, 1 }, barColor2 = { 1, 1, 0, 1 }, enableGradient = false,
-  backgroundColor = { 0, 0, 0, 0.6 },
-  icon = true, icon_side = "LEFT", iconSource = -1, icon_color = { 1, 1, 1, 1 }, zoom = 0.3, desaturate = false,
-  spark = true, sparkWidth = 8, sparkHeight = 26, sparkColor = { 1, 1, 1, 1 }, sparkBlendMode = "ADD",
-  sparkTexture = "Interface\\CastingBar\\UI-CastingBar-Spark", sparkHidden = "BOTH",
-  sparkOffsetX = 0, sparkOffsetY = 0, sparkRotationMode = "AUTO", sparkRotation = 0,
+  -- A hollow ring that fills clockwise over the swing. It is nearly full in the wind-up, when the shot goes off if you stand still.
+  regionType = "progresstexture",
+  foregroundTexture = "Interface\\AddOns\\ForeverAuras\\Media\\Textures\\Ring_20px.tga",
+  backgroundTexture = "Interface\\AddOns\\ForeverAuras\\Media\\Textures\\Ring_20px.tga",
+  sameTexture = true, desaturateForeground = false, desaturateBackground = false, compress = false,
+  blendMode = "BLEND", textureWrapMode = "CLAMPTOBLACKADDITIVE", backgroundOffset = 0,
+  width = 64, height = 64, orientation = "CLOCKWISE", inverse = true, startAngle = 0, endAngle = 360,
+  foregroundColor = { 0.15, 0.65, 1, 1 }, backgroundColor = { 0.15, 0.15, 0.15, 0.6 },
+  user_x = 0, user_y = 0, crop_x = 0.41, crop_y = 0.41, rotation = 0, auraRotation = 0, mirror = false, slantMode = "INSIDE",
   alpha = 1,
   subRegions = {
-    { type = "subbackground" },
-    { type = "subtext", text_text = "%n", anchor_point = "INNER_LEFT", text_justify = "LEFT",
-      text_fontSize = 12, text_fontType = "OUTLINE", text_color = { 1, 1, 1, 1 }, text_visible = true,
-      text_selfPoint = "AUTO", anchorXOffset = 0, anchorYOffset = 0, text_shadowXOffset = 0, text_shadowYOffset = 0 },
-    { type = "subtext", text_text = "%p", anchor_point = "INNER_RIGHT", text_justify = "RIGHT",
-      text_fontSize = 12, text_fontType = "OUTLINE", text_color = { 1, 1, 1, 1 }, text_visible = true,
+    -- Seconds to the shot, inside the ring.
+    { type = "subtext", text_text = "%p", anchor_point = "CENTER", text_justify = "CENTER",
+      text_fontSize = 14, text_fontType = "OUTLINE", text_color = { 1, 1, 1, 1 }, text_visible = true,
       text_selfPoint = "AUTO", anchorXOffset = 0, anchorYOffset = 0, text_shadowXOffset = 0, text_shadowYOffset = 0,
       text_text_format_p_format = "timed", text_text_format_p_time_precision = 1, text_text_format_p_time_dynamic_threshold = 60 },
-    { type = "subborder", border_visible = true, border_edge = "Square Full White", border_color = { 0, 0, 0, 1 },
-      border_size = 1, border_offset = 1 },
+    -- What the shot waits on, under the ring.
+    { type = "subtext", text_text = "%n", anchor_point = "BOTTOM", text_justify = "CENTER",
+      text_fontSize = 12, text_fontType = "OUTLINE", text_color = { 1, 1, 1, 1 }, text_visible = true,
+      text_selfPoint = "AUTO", anchorXOffset = 0, anchorYOffset = -2, text_shadowXOffset = 0, text_shadowYOffset = 0 },
   },
-  -- Later conditions win: wind-up yellow, moving orange, clipping and a clip red.
   conditions = {
-    { check = { trigger = 1, variable = "windup", value = 1 }, changes = { { property = "barColor", value = { 1, 0.85, 0.1, 1 } } } },
-    { check = { trigger = 1, variable = "moving", value = 1 }, changes = { { property = "barColor", value = { 1, 0.5, 0, 1 } } } },
-    { check = { trigger = 1, variable = "clipping", value = 1 }, changes = { { property = "barColor", value = { 1, 0.1, 0.1, 1 } } } },
-    { check = { trigger = 1, variable = "flash", value = 1 }, changes = { { property = "barColor", value = { 1, 0.1, 0.1, 1 } } } },
+    { check = { trigger = 1, variable = "windup", value = 1 }, changes = { { property = "foregroundColor", value = { 1, 0.85, 0.1, 1 } } } },
+    { check = { trigger = 1, variable = "moving", value = 1 }, changes = { { property = "foregroundColor", value = { 1, 0.5, 0, 1 } } } },
+    { check = { trigger = 1, variable = "clipping", value = 1 }, changes = { { property = "foregroundColor", value = { 1, 0.1, 0.1, 1 } } } },
+    { check = { trigger = 1, variable = "flash", value = 1 }, changes = { { property = "foregroundColor", value = { 1, 0.1, 0.1, 1 } } } },
   },
   actions = { init = { do_custom = true, custom = code("autoshot_init.lua") }, start = {}, finish = {} },
 })
 
 -- 2. Range text, above the bar.
-local range = merge(base(RANGE, "hAsRange01x", "text", 0, 24), customTrigger(
+local range = merge(base(RANGE, "hAsRange01x", "text", 0, 48), customTrigger(
   "PLAYER_TARGET_CHANGED, PLAYER_SWING_RANGE_UPDATE, PLAYER_ENTERING_WORLD, FRAME_UPDATE",
   code("range_trigger.lua"), '{ zone = { type = "number" } }'))
 merge(range, {
@@ -84,7 +83,7 @@ merge(range, {
 })
 
 -- 3. Clips this fight, below the bar.
-local clips = merge(base(CLIPS, "hAsClips01x", "text", 0, -22), customTrigger(
+local clips = merge(base(CLIPS, "hAsClips01x", "text", 0, -62), customTrigger(
   "FA_HUNTER_CLIPS", code("clips_trigger.lua"), "{ stacks = true }"))
 merge(clips, {
   displayText = "%n", font = "Friz Quadrata TT", fontSize = 11, outline = "OUTLINE", justify = "CENTER",
@@ -107,7 +106,7 @@ local group = {
   triggers = { { trigger = { type = "aura2", unit = "player", debuffType = "HELPFUL" }, untrigger = {} } },
   conditions = {}, subRegions = {}, information = {}, authorOptions = {}, config = {}, actions = { start = {}, finish = {}, init = {} },
   animation = bar.animation,
-  desc = "Auto Shot timer with clip detection (bar turns yellow in the 0.5 s wind-up, orange while you move in it, red when a cast will clip or just clipped), a range indicator (melee / dead zone / in range / out of range), and a clip counter for the current fight.",
+  desc = "Auto Shot ring with clip detection (the ring turns yellow in the 0.5 s wind-up, orange while you move in it, red when a cast will clip or just clipped), a range indicator (melee / dead zone / in range / out of range), and a clip counter for the current fight.",
 }
 
 local transmit = { m = "d", d = group, v = 2000, s = "1.1.0", c = { bar, range, clips } }

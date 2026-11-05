@@ -12,9 +12,9 @@ The group loads for hunters only. It sits under the centre of the screen; drag t
 
 ## What it shows
 
-**Auto Shot bar.** It fills up to your next Auto Shot. The timing comes from the client's own swing timer (`PLAYER_SWING`), with `UNIT_SPELLCAST_SUCCEEDED` for Auto Shot as a backup.
+**Auto Shot ring.** A hollow ring fills clockwise up to your next Auto Shot. It is nearly full in the last 0.5 s, the window in which the shot goes off without a clip as long as you stand still and are not casting. The timing comes from the client's own swing timer (`PLAYER_SWING`), with `UNIT_SPELLCAST_SUCCEEDED` for Auto Shot as a backup.
 
-| Bar colour | Text | Meaning |
+| Ring colour | Text under the ring | Meaning |
 | --- | --- | --- |
 | Blue | Auto Shot | The swing is running. |
 | Yellow | Auto Shot | The last 0.5 s before the shot. Stand still. |
@@ -22,14 +22,14 @@ The group loads for hunters only. It sits under the centre of the screen; drag t
 | Red | CLIPPING | A cast you started ends after the shot was due. |
 | Red | CLIPPED (cast) +0.42s | The last shot fired 0.42 s late. The text says why: a cast, moving, or just DELAYED. It shows for 2 s and plays a sound. |
 
-The timer is on the right side of the bar.
+The seconds to the shot are inside the ring.
 
-**Range text**, above the bar. It shows MELEE, DEAD ZONE, IN RANGE or OUT OF RANGE for an enemy target.
+**Range text**, above the ring. It shows MELEE, DEAD ZONE, IN RANGE or OUT OF RANGE for an enemy target.
 - Melee range and shot range come from the client's weapon range checks (`C_SwingTimer.IsTargetWithinSwingRange`).
 - If those give nothing, Raptor Strike and Auto Shot range are used.
 - In combat the client can withhold the yard estimate. Then the text guesses from your last zone: leaving melee means the dead zone, leaving shot range means too far.
 
-**Clip counter**, below the bar. It shows the clips and time lost in the current fight, and resets when combat starts.
+**Clip counter**, below the ring. It shows the clips and time lost in the current fight, and resets when combat starts.
 
 ## Settings
 
