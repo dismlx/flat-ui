@@ -108830,13 +108830,14 @@ do
 		totem = "Totem and extra action buttons are the game's. A click on them can still be refused." },
 		ids = { "buttons", "waiting", "page", "keys", "flyoutkeys", "parked", "leave", "taint", "totem" },
 		reload = "Flat UI: Action buttons applies after /reload." }
+	-- A file beside the addon folder, and whether it is there. A missing file reads as "".
 	local function slurp(name)
 		local handle = io.open(ADDON_DIR .. "/../" .. name, "rb")
 		local text = handle and handle:read("*a") or ""
 		if handle then
 			handle:close()
 		end
-		return text
+		return text, handle ~= nil
 	end
 	local function said(world)
 		local n = 0
@@ -108996,18 +108997,25 @@ do
 			at[file] = index
 		end
 		check("ownset: the TOC loads OwnBars.lua then OwnPaint.lua right after ActionBars.lua", at["ActionBars.lua"] ~= nil and at["OwnBars.lua"] == at["ActionBars.lua"] + 1 and at["OwnPaint.lua"] == at["OwnBars.lua"] + 1)
-		local changelog, description = slurp("FlatUI_release/changelog.md"), slurp("FlatUI_release/description.md")
-		local top = changelog:match("\n## 0%.4%.58\n(.-)\n## ") or changelog
-		check("ownset: the changelog entry of the build that added Action buttons says what Action buttons does and what it does not yet do",
-			top:find("**Action buttons**", 1, true) ~= nil and top:find("Key presses still go through the game's buttons", 1, true) ~= nil
-			and top:find("Edit Mode still places bars 1 to 8", 1, true) ~= nil and top:find("totem and extra action buttons are still the game's", 1, true) ~= nil
-			and top:find("**Cast fill animation**", 1, true) ~= nil and top:find("game's buttons only", 1, true) ~= nil)
-		check("ownset: the description has the row, the art rows and the glow rows with the same limits", description:find("**Action buttons:**", 1, true) ~= nil
-			and description:find("They apply with **The game's** buttons.", 1, true) ~= nil and description:find("show on the game's buttons only", 1, true) ~= nil
-			and description:find("Action bars 1 to 8 follow **Action buttons**", 1, true) ~= nil)
-		check("ownset: the release text has no em dash", not top:find("\226\128\148", 1, true) and not description:find("\226\128\148", 1, true))
-		local json = slurp("FlatUI_release/settings.json")
-		check("ownset: the settings dump has the new row and its choices", json:find("Action buttons", 1, true) ~= nil and json:find("Flat UI's", 1, true) ~= nil and json:find("The game's", 1, true) ~= nil)
+		-- The release texts are kept in FlatUI_release beside the FlatUI folder on the author's machine. They are not in the repository.
+		-- With none of the three files there, the four checks of them are skipped with one line. With any of them there, all four run and a missing one fails.
+		local changelog, hasChangelog = slurp("FlatUI_release/changelog.md")
+		local description, hasDescription = slurp("FlatUI_release/description.md")
+		local json, hasJson = slurp("FlatUI_release/settings.json")
+		if hasChangelog or hasDescription or hasJson then
+			local top = changelog:match("\n## 0%.4%.58\n(.-)\n## ") or changelog
+			check("ownset: the changelog entry of the build that added Action buttons says what Action buttons does and what it does not yet do",
+				top:find("**Action buttons**", 1, true) ~= nil and top:find("Key presses still go through the game's buttons", 1, true) ~= nil
+				and top:find("Edit Mode still places bars 1 to 8", 1, true) ~= nil and top:find("totem and extra action buttons are still the game's", 1, true) ~= nil
+				and top:find("**Cast fill animation**", 1, true) ~= nil and top:find("game's buttons only", 1, true) ~= nil)
+			check("ownset: the description has the row, the art rows and the glow rows with the same limits", description:find("**Action buttons:**", 1, true) ~= nil
+				and description:find("They apply with **The game's** buttons.", 1, true) ~= nil and description:find("show on the game's buttons only", 1, true) ~= nil
+				and description:find("Action bars 1 to 8 follow **Action buttons**", 1, true) ~= nil)
+			check("ownset: the release text has no em dash", not top:find("\226\128\148", 1, true) and not description:find("\226\128\148", 1, true))
+			check("ownset: the settings dump has the new row and its choices", json:find("Action buttons", 1, true) ~= nil and json:find("Flat UI's", 1, true) ~= nil and json:find("The game's", 1, true) ~= nil)
+		else
+			io.write("SKIP  ownset: FlatUI_release/ is not here, 4 checks of the release texts did not run\n")
+		end
 	end
 	check("ownset: nothing here broke the world", #W.errors == 0)
 end
