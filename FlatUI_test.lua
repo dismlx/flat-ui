@@ -53321,7 +53321,8 @@ do
 	end
 
 	-- The frames of the page as the XML builds them. more.cluster, more.minimap, more.bag, more.protect: frames that are forbidden or protected; more.broken:
-	-- bag buttons that cannot take a texture; more.none: names of frames the client does not have; more.secret: fields that hold a withheld value.
+	-- bag buttons that cannot take a texture; more.none: names of frames the client does not have; more.secret: fields that hold a withheld value;
+	-- more.legacy: the minimap cluster of the builds before 1.60.1.70425.
 	local function hudWorld(more)
 		more = more or {}
 		local none, secret = more.none or {}, more.secret or {}
@@ -53334,32 +53335,100 @@ do
 				env[name] = value
 			end
 		end
-		local pieces = {}
-		for _, key in ipairs(PIECES) do
-			pieces[key] = R(nil, "ui-hud-minimap-button-" .. key)
-		end
-		H.header = B(nil, pieces)
 		H.compass, H.underlay = R(nil, "ui-hud-minimap-frame"), R(nil, "UI-HUD-Minimap-Frame-Circle", { hidden = true })
 		set("MinimapCompassTexture", H.compass)
 		set("MinimapCompassTextureUnderlay", H.underlay)
 		H.dielBorder, H.dielIcon = R(nil, "UI-HUD-Minimap-Frame-Cycle"), R(nil, "UI-HUD-Minimap-DayCycle")
-		local diel, dielRaw = B(nil, {})
-		dielRaw.regions[1], dielRaw.regions[2] = H.dielIcon, H.dielBorder
-		-- Minimap.xml:60-95 and InstanceDifficulty.xml:3-63, 64-96, 120-160: the plate of the tracking button is a texture of its own under the glyph of
-		-- the button, and the banner has a picture of its own, with a background, a border and a glyph, for each kind of content. The game shows one.
-		H.plate, H.glyph = R(nil, "ui-hud-minimap-button"), R(nil, "ui-hud-minimap-tracking-up")
-		H.tracking = B(nil, { Background = H.plate, Button = B(nil, { NormalTexture = H.glyph }) }, { hidden = true })
-		H.modes = {}
-		for index, key in ipairs(MODES) do
-			local part = { back = R(nil, "ui-hud-minimap-guildbanner-background-top"), border = R(nil, "ui-hud-minimap-guildbanner-border-top"),
-				glyph = R(nil, "ui-hud-minimap-guildbanner-normal-large") }
-			part.frame = B(nil, { Background = part.back, Border = part.border, NormalTexture = part.glyph }, { hidden = index > 1, forbidden = more.forbidMode and key == "Guild" })
-			H.modes[key] = part
+		H.modes, H.headerArt = {}, {}
+		local fields = { Tracking = true }
+		if more.legacy then
+			-- The cluster before 1.60.1.70425 (15666a6 Blizzard_Minimap/Mainline/Minimap.xml:24-95, InstanceDifficulty.xml:3-63, 64-96, 120-160): the zone name
+			-- sits on the nine-slice BorderTop, the plate of the tracking button is a texture of the 17 by 17 frame under the smaller button and its glyph,
+			-- and the banner has a picture of its own, with a background, a border and a glyph, for each kind of content. The game shows one.
+			local pieces = {}
+			for _, key in ipairs(PIECES) do
+				pieces[key] = R(nil, "ui-hud-minimap-button-" .. key)
+				H.headerArt[#H.headerArt + 1] = pieces[key]
+			end
+			H.header = B(nil, pieces)
+			H.plate, H.glyph = R(nil, "ui-hud-minimap-button"), R(nil, "ui-hud-minimap-tracking-up")
+			H.trackButton = B(nil, { NormalTexture = H.glyph }, { objectType = "Button", width = 13, height = 14 })
+			H.tracking = B(nil, { Background = H.plate, Button = H.trackButton }, { hidden = true, width = 17, height = 17 })
+			H.trackBox = H.tracking
+			for index, key in ipairs(MODES) do
+				local part = { back = R(nil, "ui-hud-minimap-guildbanner-background-top"), border = R(nil, "ui-hud-minimap-guildbanner-border-top"),
+					glyph = R(nil, "ui-hud-minimap-guildbanner-normal-large") }
+				part.frame = B(nil, { Background = part.back, Border = part.border, NormalTexture = part.glyph }, { hidden = index > 1, forbidden = more.forbidMode and key == "Guild" })
+				H.modes[key] = part
+			end
+			fields.BorderTop = secret.header and SECRET or H.header
+			fields.ZoneTextButton = B(nil, {}, { objectType = "Button", width = 135, height = 12 })
+			fields.InstanceDifficulty = B(nil, { ContentModes = secret.modes and SECRET or { H.modes.Default.frame, H.modes.Guild.frame, H.modes.ChallengeMode.frame } })
+		else
+			-- The cluster of 1.60.1.70425 and later (Blizzard_Minimap/Mainline/Minimap.xml:24-46). The zone name sits on the plate of its button, ZoneTextButton,
+			-- 152 by 23: StateTexture, with the glow AddTexture over it, hidden and with no opacity after OnLoad (Camelot/MinimapZoneTextButton.xml:3-38,
+			-- Camelot/MinimapZoneTextButton.lua:1-9). The tracking button is a 23 by 23 button over the 17 by 17 frame Tracking, and its plate StateTexture
+			-- draws its glyph: it has no NormalTexture (Camelot/MinimapTrackingButton.xml:3-28). There is no BorderTop, and no InstanceDifficulty
+			-- (Camelot/MinimapInstanceDifficulty.lua:1-3).
+			H.headerPlate = R(nil, "ui-hud-minimap-header-button", { layer = "BACKGROUND" })
+			H.headerGlow = R(nil, "ui-hud-minimap-header-button", { layer = "BACKGROUND", hidden = true, alpha = 0 })
+			H.zoneText = R(nil, nil, { kind = "FontString", layer = "OVERLAY", name = "MinimapZoneText" })
+			H.headerArt[1] = H.headerPlate
+			local headerRaw
+			H.header, headerRaw = B(nil, { StateTexture = H.headerPlate, AddTexture = H.headerGlow, mouseoverAddAlpha = 0.1, mousedownAddAlpha = 0.2 },
+				{ objectType = "Button", width = 152, height = 23 })
+			headerRaw.regions[1], headerRaw.regions[2], headerRaw.regions[3] = H.headerPlate, H.headerGlow, H.zoneText
+			H.plate = R(nil, "ui-hud-minimap-button", { layer = "BACKGROUND" })
+			H.glyph = R(nil, "ui-hud-minimap-tracking-button", { layer = "ARTWORK" })
+			H.trackGlow = R(nil, "ui-hud-minimap-tracking-button", { layer = "ARTWORK", hidden = true, alpha = 0 })
+			local trackRaw
+			H.trackButton, trackRaw = B(nil, { StateTexture = H.glyph, AddTexture = H.trackGlow, mouseoverAddAlpha = 0.1, mousedownAddAlpha = 0.2 },
+				{ objectType = "Button", width = 23, height = 23 })
+			trackRaw.regions[1], trackRaw.regions[2] = H.glyph, H.trackGlow
+			H.tracking = B(nil, { Background = H.plate, Button = H.trackButton }, { hidden = true, width = 17, height = 17 })
+			H.trackBox = H.trackButton
+			-- The game's OnButtonStateChanged, which ButtonStateBehaviorMixin calls through self from OnEnter, OnLeave, OnMouseDown, OnMouseUp, OnEnable and
+			-- OnDisable (Blizzard_SharedXMLBase/ButtonStateBehavior.lua:41-118): SetAtlas on the plate, and the glow shown with 0.2 while the mouse is down,
+			-- 0.1 while it is over and hidden with 0 otherwise (Camelot/MinimapZoneTextButton.lua:11-25, Camelot/MinimapTrackingButton.lua:1-15).
+			for _, pair in ipairs({ { headerRaw, H.headerPlate, H.headerGlow }, { trackRaw, H.glyph, H.trackGlow } }) do
+				local raw, plate, glow = pair[1], pair[2], pair[3]
+				raw.OnButtonStateChanged = function(self)
+					if W.inBlizzard == 0 or (W.inHook or 0) > 0 then
+						bad(W, "the addon called the Blizzard method OnButtonStateChanged")
+					end
+					plate:SetAtlas(raw == headerRaw and "ui-hud-minimap-header-button" or "ui-hud-minimap-tracking-button", true)
+					local add = (raw.down and self.mousedownAddAlpha) or (raw.over and self.mouseoverAddAlpha) or 0
+					glow:SetShown(add > 0)
+					glow:SetAlpha(add)
+				end
+			end
+			-- The mouse on a button, as the game's scripts run it: the state, then OnButtonStateChanged through the frame, then the scripts hooked with HookScript.
+			function H.mouse(button, which)
+				local raw = W.rawOf[button]
+				W.blizzard(function()
+					if which == "OnEnter" then
+						raw.over = true
+					elseif which == "OnLeave" then
+						raw.over = nil
+					elseif which == "OnMouseDown" then
+						raw.down = true
+					elseif which == "OnMouseUp" then
+						raw.down = nil
+					end
+					button:OnButtonStateChanged()
+				end)
+				W.hookRun(button, which)
+				W.flush()
+			end
+			fields.ZoneTextButton = secret.header and SECRET or H.header
 		end
-		local banner = B(nil, { ContentModes = secret.modes and SECRET or { H.modes.Default.frame, H.modes.Guild.frame, H.modes.ChallengeMode.frame } })
-		H.cluster = B(nil, { BorderTop = secret.header and SECRET or H.header, DielFrame = diel, Tracking = secret.tracking and SECRET or H.tracking, InstanceDifficulty = banner },
-			{ forbidden = more.cluster })
+		fields.Tracking = secret.tracking and SECRET or H.tracking
+		H.cluster = B(nil, fields, { forbidden = more.cluster })
 		H.container = B(H.cluster, {}, { forbidden = more.cluster })
+		-- The day and night medallion is a child of the container that the cluster holds (Camelot/Diel.lua:19-21).
+		local diel, dielRaw = B(H.container, {})
+		dielRaw.regions[1], dielRaw.regions[2] = H.dielIcon, H.dielBorder
+		W.rawOf[H.cluster].DielFrame = diel
 		local mapRaw0
 		H.map, mapRaw0 = B(H.container, { SetMaskTexture = function() H.maskCalls = H.maskCalls + 1 end }, { forbidden = more.cluster or more.minimap, protected = more.protect == "minimap" })
 		-- The minimap takes hooks on its scripts, which the test runs by hand when it shows the minimap again (H.mapHooks).
@@ -53511,14 +53580,25 @@ do
 	do
 		local ring = ringFrame(W)
 		local disc, mask = ring and ring.regions[1], W.addonMasks[1]
-		check("hud minimap: the ring, its underlay, the header pieces and the medallion border are transparent; the sun and moon stay",
-			H.compass.alpha == 0 and H.underlay.alpha == 0 and every(PIECES, function(key) return H.header[key].alpha == 0 end) and H.dielBorder.alpha == 0 and H.dielIcon.alpha == 1)
+		-- 1.60.1.70425 and later: the header is the plate StateTexture of ZoneTextButton, no longer the nine-slice BorderTop (the legacy world below has that).
+		check("hud minimap: the ring, its underlay, the plate of the zone name and the medallion border are transparent; the sun and moon stay",
+			H.compass.alpha == 0 and H.underlay.alpha == 0 and H.headerPlate.alpha == 0 and H.headerGlow.alpha == 0 and H.dielBorder.alpha == 0 and H.dielIcon.alpha == 1)
 		check("hud minimap: the border is a disc under the map, a pixel larger on every side and cut by the map's own mask, which the addon does not change",
 			ring and ring.parent == H.container and ring.allPoints == H.map and disc.color and near(disc.color[1], 0) and disc.color[4] == 1 and disc.shown
 				and #W.addonMasks == 1 and mask.atlas == MAP_MASK and mask.allPoints == disc and disc.masks[mask] and #disc.points == 2 and H.maskCalls == 0
 				and disc.points[1][1] == "TOPLEFT" and near(disc.points[1][4], -T) and near(disc.points[1][5], T) and disc.points[2][1] == "BOTTOMRIGHT" and near(disc.points[2][4], T)
 				and near(disc.points[2][5], -T), ring and disc.points[1] and tostring(disc.points[1][4]))
-		check("hud minimap: the zone name has a thin border and a background", ringOf(W, H.header, 1, 0, 0, 0) and W.state(H.header) == "SB")
+		check("hud minimap: the zone name has a thin border and a background round its button, ZoneTextButton", ringOf(W, H.header, 1, 0, 0, 0) and W.state(H.header) == "SB")
+		-- The game sets the glow over the plate again on each change of the state of the button; the plate keeps its opacity through SetAtlas.
+		H.mouse(H.header, "OnEnter")
+		local over = { H.headerGlow.alpha, H.headerGlow.shown, H.headerPlate.alpha, H.headerPlate.calls.SetAtlas }
+		H.mouse(H.header, "OnMouseDown")
+		local down = H.headerGlow.alpha
+		H.mouse(H.header, "OnMouseUp")
+		H.mouse(H.header, "OnLeave")
+		check("hud minimap: the glow over the zone name stays transparent through the mouse over, down, up and away, and the plate stays transparent",
+			over[1] == 0 and over[2] == true and over[3] == 0 and over[4] == 1 and down == 0 and H.headerGlow.alpha == 0 and H.headerGlow.shown == false and H.headerPlate.alpha == 0
+				and #W.violations == 0 and #W.errors == 0, table.concat({ tostring(over[1]), tostring(over[3]), tostring(down) }, " "))
 		W.change("general.border", "ff336699")
 		W.change("general.thickness", 3)
 		W.flush()
@@ -53534,10 +53614,19 @@ do
 		local borderOff = not disc.shown and W.state(H.header) == "hb" and H.compass.alpha == 0
 		W.change("hud.minimapBorder", true)
 		W.change("hud.minimapArt", false)
-		check("hud minimap: border off hides the disc and the header border; art off gives every piece its alpha back",
-			borderOff and H.compass.alpha == 1 and H.underlay.alpha == 1 and every(PIECES, function(key) return H.header[key].alpha == 1 end) and H.dielBorder.alpha == 1
-				and disc.shown and W.state(H.header) == "SB")
+		H.mouse(H.header, "OnEnter")
+		local gameGlow = H.headerGlow.alpha
+		H.mouse(H.header, "OnLeave")
+		check("hud minimap: border off hides the disc and the header border; art off gives every piece its alpha back, and the glow is the game's",
+			borderOff and H.compass.alpha == 1 and H.underlay.alpha == 1 and H.headerPlate.alpha == 1 and H.dielBorder.alpha == 1
+				and disc.shown and W.state(H.header) == "SB" and gameGlow == 0.1 and H.headerGlow.alpha == 0, tostring(gameGlow))
 		W.change("hud.minimapArt", true)
+		H.mouse(H.header, "OnEnter")
+		local glowHooks = W.rawOf[H.header].hookScripts or {}
+		check("hud minimap: art on again, the glow is transparent again under the mouse, and each script of the button is hooked once",
+			H.headerGlow.alpha == 0 and H.headerPlate.alpha == 0 and #(glowHooks.OnEnter or {}) == 1 and #(glowHooks.OnMouseUp or {}) == 1 and #(glowHooks.OnDisable or {}) == 1,
+			tostring(H.headerGlow.alpha))
+		H.mouse(H.header, "OnLeave")
 	end
 	do
 		local all = true
@@ -53775,31 +53864,63 @@ do
 		check("hkhud: hud, taintLog " .. tl .. ": nothing raised and nothing written in the game's frames", #TW.errors == 0 and #TW.violations == 0, table.concat(TW.violations, "|"))
 	end
 	do
-		local modes = H.modes
-		check("hud minimap buttons: the plate of the tracking button is transparent and the button has a thin border and a background",
-			H.plate.alpha == 0 and W.state(H.tracking) == "SB" and ringOf(W, H.tracking, 1, 0, 0, 0))
-		check("hud minimap buttons: each picture of the banner has a transparent background and border and a thin border and background of its own",
-			every(MODES, function(key) return modes[key].back.alpha == 0 and modes[key].border.alpha == 0 and W.state(modes[key].frame) == "SB" end))
-		check("hud minimap buttons: the glyphs are not touched, nor is what the game shows and hides",
-			H.glyph.alpha == 1 and H.glyph.calls.SetAlpha == nil and every(MODES, function(key) return modes[key].glyph.alpha == 1 and modes[key].glyph.calls.SetAlpha == nil end)
-				and H.tracking.shown == false and modes.Default.frame.shown and not modes.Guild.frame.shown and not modes.ChallengeMode.frame.shown
-				and W.rawOf[H.tracking].calls.Show == nil and W.rawOf[H.tracking].calls.Hide == nil)
+		-- 1.60.1.70425 and later: the border goes round the 23 by 23 Tracking.Button, whose plate draws the glyph and is left alone; before, it went round the
+		-- 17 by 17 frame Tracking (the legacy world below).
+		check("hud minimap buttons: the plate of the tracking frame is transparent and the tracking button has a thin border and a background, the frame none",
+			H.plate.alpha == 0 and W.state(H.trackButton) == "SB" and ringOf(W, H.trackButton, 1, 0, 0, 0) and W.look(H.tracking) == nil)
+		H.mouse(H.trackButton, "OnEnter")
+		local glow = H.trackGlow.alpha
+		H.mouse(H.trackButton, "OnLeave")
+		check("hud minimap buttons: the plate of the tracking button, which draws its glyph, is not touched, nor its glow, nor what the game shows and hides",
+			H.glyph.alpha == 1 and H.glyph.calls.SetAlpha == nil and glow == 0.1 and H.trackGlow.alpha == 0 and H.tracking.shown == false
+				and W.rawOf[H.tracking].calls.Show == nil and W.rawOf[H.tracking].calls.Hide == nil, tostring(glow))
 		W.change("general.border", "ff336699")
 		W.change("general.thickness", 2)
 		W.flush()
-		check("hud minimap buttons: the colour and thickness of the general page reach them", colour(W.look(H.tracking), 0.2, 0.4, 0.6) and W.look(H.tracking).thick == 2
-			and colour(W.look(modes.Guild.frame), 0.2, 0.4, 0.6))
+		check("hud minimap buttons: the colour and thickness of the general page reach them", colour(W.look(H.trackButton), 0.2, 0.4, 0.6) and W.look(H.trackButton).thick == 2)
 		W.change("general.border", "ff000000")
 		W.change("general.thickness", 1)
 		W.change("hud.minimapBorder", false)
-		check("hud minimap buttons: border off hides the borders and leaves the art transparent", W.state(H.tracking) == "hb" and H.plate.alpha == 0
-			and every(MODES, function(key) return W.state(modes[key].frame) == "hb" and modes[key].back.alpha == 0 end))
+		check("hud minimap buttons: border off hides the borders and leaves the art transparent", W.state(H.trackButton) == "hb" and H.plate.alpha == 0)
 		W.change("hud.minimapBorder", true)
 		W.change("hud.minimapArt", false)
-		check("hud minimap buttons: art off gives the plate and the banner back and leaves the borders", H.plate.alpha == 1 and W.state(H.tracking) == "SB"
-			and every(MODES, function(key) return modes[key].back.alpha == 1 and modes[key].border.alpha == 1 and W.state(modes[key].frame) == "SB" end))
+		check("hud minimap buttons: art off gives the plate back and leaves the borders", H.plate.alpha == 1 and W.state(H.trackButton) == "SB" and H.glyph.alpha == 1)
 		W.change("hud.minimapArt", true)
-		check("hud minimap buttons: art on again, nothing is made twice", H.plate.alpha == 0 and #W.edgesOn(W.holderOn(H.tracking)) == 4 and every(MODES, function(key) return modes[key].border.alpha == 0 end))
+		check("hud minimap buttons: art on again, nothing is made twice", H.plate.alpha == 0 and #W.edgesOn(W.holderOn(H.trackButton)) == 4 and H.glyph.alpha == 1)
+	end
+	-- The cluster of the builds before 1.60.1.70425, which Flat UI still styles: the nine-slice header, the tracking frame and the banner.
+	do
+		local L = login({ legacy = true })
+		local LW, modes = L.W, L.modes
+		check("hud legacy minimap: the header pieces are transparent and the nine-slice has a thin border and a background",
+			every(L.headerArt, function(t) return t.alpha == 0 end) and #L.headerArt == #PIECES and ringOf(LW, L.header, 1, 0, 0, 0) and LW.state(L.header) == "SB")
+		check("hud legacy minimap buttons: the plate of the tracking button is transparent and its frame has a thin border and a background",
+			L.plate.alpha == 0 and LW.state(L.tracking) == "SB" and ringOf(LW, L.tracking, 1, 0, 0, 0) and LW.look(L.trackButton) == nil)
+		check("hud legacy minimap buttons: each picture of the banner has a transparent background and border and a thin border and background of its own",
+			every(MODES, function(key) return modes[key].back.alpha == 0 and modes[key].border.alpha == 0 and LW.state(modes[key].frame) == "SB" end))
+		check("hud legacy minimap buttons: the glyphs are not touched, nor is what the game shows and hides",
+			L.glyph.alpha == 1 and L.glyph.calls.SetAlpha == nil and every(MODES, function(key) return modes[key].glyph.alpha == 1 and modes[key].glyph.calls.SetAlpha == nil end)
+				and L.tracking.shown == false and modes.Default.frame.shown and not modes.Guild.frame.shown and not modes.ChallengeMode.frame.shown
+				and LW.rawOf[L.tracking].calls.Show == nil and LW.rawOf[L.tracking].calls.Hide == nil)
+		LW.change("general.border", "ff336699")
+		LW.change("general.thickness", 2)
+		LW.flush()
+		check("hud legacy minimap buttons: the colour and thickness of the general page reach them", colour(LW.look(L.tracking), 0.2, 0.4, 0.6) and LW.look(L.tracking).thick == 2
+			and colour(LW.look(modes.Guild.frame), 0.2, 0.4, 0.6) and colour(LW.look(L.header), 0.2, 0.4, 0.6))
+		LW.change("general.border", "ff000000")
+		LW.change("general.thickness", 1)
+		LW.change("hud.minimapBorder", false)
+		check("hud legacy minimap buttons: border off hides the borders and leaves the art transparent", LW.state(L.tracking) == "hb" and L.plate.alpha == 0 and LW.state(L.header) == "hb"
+			and every(MODES, function(key) return LW.state(modes[key].frame) == "hb" and modes[key].back.alpha == 0 end))
+		LW.change("hud.minimapBorder", true)
+		LW.change("hud.minimapArt", false)
+		check("hud legacy minimap buttons: art off gives the header, the plate and the banner back and leaves the borders", L.plate.alpha == 1 and LW.state(L.tracking) == "SB"
+			and every(L.headerArt, function(t) return t.alpha == 1 end)
+			and every(MODES, function(key) return modes[key].back.alpha == 1 and modes[key].border.alpha == 1 and LW.state(modes[key].frame) == "SB" end))
+		LW.change("hud.minimapArt", true)
+		check("hud legacy minimap buttons: art on again, nothing is made twice", L.plate.alpha == 0 and #LW.edgesOn(LW.holderOn(L.tracking)) == 4 and every(MODES, function(key) return modes[key].border.alpha == 0 end))
+		check("hud legacy: no violation, error or message, and the status counts the 3 banner pictures as well (22 styled)",
+			#LW.violations == 0 and #LW.errors == 0 and #LW.out == 0 and has(LW.status(), "Minimap and buffs: on, 22 styled"), LW.line("Minimap and buffs"))
 	end
 	do
 		local cm = H.micro.CharacterMicroButton
@@ -53809,14 +53930,15 @@ do
 		W.change("hud.micro", false)
 		check("hud micro menu: off gives the plates and the menu frame back", W.state(cm.btn) == "hb" and cm.plate.alpha == 1 and cm.pushed.alpha == 1 and H.menu.BorderArt.alpha == 1)
 		W.change("hud.micro", true)
-		check("hud: no violation, error or message, and the status counts the ring, the header, the tracking button, 3 banner pictures, 7 bag buttons, 4 aura buttons, 2 bars and 3 micro buttons",
-			#W.violations == 0 and #W.errors == 0 and #W.out == 0 and has(W.status(), "Minimap and buffs: on, 22 styled"), W.line("Minimap and buffs"))
+		-- 1.60.1.70425 and later have no banner: 3 fewer than the 22 of the legacy world.
+		check("hud: no violation, error or message, and the status counts the ring, the header, the tracking button, 7 bag buttons, 4 aura buttons, 2 bars and 3 micro buttons",
+			#W.violations == 0 and #W.errors == 0 and #W.out == 0 and has(W.status(), "Minimap and buffs: on, 19 styled"), W.line("Minimap and buffs"))
 	end
 
 	-- Off for the whole page: the game's art exactly, and every outline hidden.
 	do
 		W.change("hud.enabled", false)
-		local targets = { H.header, H.tracking, H.modes.Default.frame, H.modes.Guild.frame, H.modes.ChallengeMode.frame, H.buff.icon, H.debuff.icon, H.enchant.icon, H.deadly.icon, H.exp.status, H.rep.status }
+		local targets = { H.header, H.trackButton, H.buff.icon, H.debuff.icon, H.enchant.icon, H.deadly.icon, H.exp.status, H.rep.status }
 		for _, name in ipairs(BAGS) do
 			targets[#targets + 1] = H.bags[name].btn
 		end
@@ -53835,26 +53957,30 @@ do
 			D.W.look(D.bags.KeyRingButton.btn) == nil and D.bags.KeyRingButton.normal.alpha == 1 and D.W.look(D.buff.icon) == nil and D.exp.back.alpha == 1 and D.exp.fillRaw.atlas == EXP
 				and D.micro.CharacterMicroButton.plate.alpha == 1 and D.xp.BarFrameTexture.alpha == 1 and D.compass.alpha == 0 and D.W.state(D.header) == "SB")
 		local O = login({ saved = { options = { ["hud.enabled"] = false } } })
-		check("hud: the page off at login touches nothing", #O.W.diff("hud") == 0 and ringFrame(O.W) == nil and #O.W.addonMasks == 0 and O.W.look(O.header) == nil and O.W.look(O.tracking) == nil
+		check("hud: the page off at login touches nothing", #O.W.diff("hud") == 0 and ringFrame(O.W) == nil and #O.W.addonMasks == 0 and O.W.look(O.header) == nil and O.W.look(O.tracking) == nil and O.W.look(O.trackButton) == nil
 			and O.W.line("Minimap and buffs") == "Minimap and buffs: off")
 	end
 
 	-- Frames the addon may not touch, and values the client withholds.
 	do
 		local F = login({ cluster = true, bag = "CharacterBag1Slot" })
-		local G = login({ forbidMode = true })
+		local G = login({ legacy = true, forbidMode = true })
 		check("hud: a forbidden banner picture is not touched and the others are", #G.W.violations == 0 and #G.W.errors == 0 and G.W.look(G.modes.Guild.frame) == nil and G.modes.Guild.back.alpha == 1
 			and G.W.state(G.modes.Default.frame) == "SB" and G.modes.Default.back.alpha == 0)
 		check("hud: a forbidden cluster and a forbidden bag button are not touched, and the rest is styled",
-			#F.W.violations == 0 and #F.W.errors == 0 and F.header.TopEdge.alpha == 1 and F.dielBorder.alpha == 1 and ringFrame(F.W) == nil and F.compass.alpha == 0
+			#F.W.violations == 0 and #F.W.errors == 0 and F.headerPlate.alpha == 1 and F.dielBorder.alpha == 1 and ringFrame(F.W) == nil and F.compass.alpha == 0
 				and F.W.look(F.bags.CharacterBag1Slot.btn) == nil and F.W.state(F.bags.CharacterBag2Slot.btn) == "SB", table.concat(F.W.violations, "|"))
-		local T2 = login({ secret = { tracking = true, modes = true } })
-		check("hud: a tracking button and a list of banner pictures that hold a withheld value are skipped, and the rest is styled", #T2.W.violations == 0 and #T2.W.errors == 0
-			and T2.W.look(T2.tracking) == nil and T2.plate.alpha == 1 and T2.W.look(T2.modes.Default.frame) == nil and T2.modes.Default.back.alpha == 1 and T2.W.state(T2.header) == "SB"
+		local T2 = login({ secret = { tracking = true } })
+		check("hud: a tracking button that holds a withheld value is skipped, and the rest is styled", #T2.W.violations == 0 and #T2.W.errors == 0
+			and T2.W.look(T2.tracking) == nil and T2.W.look(T2.trackButton) == nil and T2.plate.alpha == 1 and T2.W.state(T2.header) == "SB"
 			and not has(T2.W.status(), "failed"), T2.W.status())
+		local T3 = login({ legacy = true, secret = { tracking = true, modes = true } })
+		check("hud legacy: a tracking button and a list of banner pictures that hold a withheld value are skipped, and the rest is styled", #T3.W.violations == 0 and #T3.W.errors == 0
+			and T3.W.look(T3.tracking) == nil and T3.plate.alpha == 1 and T3.W.look(T3.modes.Default.frame) == nil and T3.modes.Default.back.alpha == 1 and T3.W.state(T3.header) == "SB"
+			and not has(T3.W.status(), "failed"), T3.W.status())
 		local S = login({ secret = { header = true, icon = true, list = true, status = true } })
 		check("hud: a header, an aura list, an icon and a status bar that hold a withheld value are skipped, and the rest is styled",
-			#S.W.violations == 0 and #S.W.errors == 0 and not has(S.W.status(), "failed") and S.header.TopEdge.alpha == 1 and S.W.look(S.buff.icon) == nil and S.W.look(S.deadly.icon) == nil
+			#S.W.violations == 0 and #S.W.errors == 0 and not has(S.W.status(), "failed") and S.headerPlate.alpha == 1 and S.W.look(S.header) == nil and S.W.look(S.buff.icon) == nil and S.W.look(S.deadly.icon) == nil
 				and S.W.look(S.exp.status) == nil and S.W.state(S.rep.status) == "SB" and S.W.state(S.debuff.icon) == "Sb" and ringFrame(S.W) ~= nil, S.W.status())
 	end
 
@@ -53980,9 +54106,10 @@ do
 					and back.snap == false and face.snap == false and back.bias == 0 and face.bias == 0
 					and K.tint(face, K.BACKDROP, K.BACKDROP, K.BACKDROP) and #rim.points == 2 and rim.points[1][1] == "TOPLEFT" and rim.points[1][2] == cover and near(rim.points[1][4], -T)
 					and near(rim.points[1][5], T) and rim.points[2][1] == "BOTTOMRIGHT" and near(rim.points[2][4], T) and near(rim.points[2][5], -T) and #W.addonTextures == textures + 2)
+			-- 20 since 1.60.1.70425, which has no banner and its 3 pictures (23 before).
 			check("city: the ring stays transparent with the cover, the border disc under the map is as it was, and the status counts the cover and says the city map is shown",
 				H.compass.alpha == 0 and H.underlay.alpha == 0 and ringFrame(W).regions[1].shown and W.line("Minimap in cities") == K.shown(H, true)
-					and has(W.status(), "Minimap and buffs: on, 23 styled"), W.status())
+					and has(W.status(), "Minimap and buffs: on, 20 styled"), W.status())
 			check("city: the cover, its border frame and both pictures are marked as the addon's own", W.ns.Own[cover] == true and W.ns.Own[rim] == true and W.ns.Own[back] == true
 				and W.ns.Own[face] == true)
 			K.set(H, false)
@@ -54070,7 +54197,7 @@ do
 			-- The setting changes with the city map up.
 			W.change("hud.cityMap", K.RING)
 			check("city: the ring choice while the city map shows: the cover goes and the ring and its underlay come back, the rest of the header art stays transparent",
-				cover.shown == false and H.compass.alpha == 1 and H.underlay.alpha == 1 and H.header.TopEdge.alpha == 0 and H.dielBorder.alpha == 0 and H.plate.alpha == 0)
+				cover.shown == false and H.compass.alpha == 1 and H.underlay.alpha == 1 and H.headerPlate.alpha == 0 and H.dielBorder.alpha == 0 and H.plate.alpha == 0)
 			K.set(H, false)
 			check("city: the ring choice after the city map is gone: the ring is transparent again", H.compass.alpha == 0 and H.underlay.alpha == 0 and cover.shown == false)
 			K.set(H, true)
@@ -54229,7 +54356,7 @@ do
 			R.W.fire("ADDON_LOADED", "Blizzard_HybridMinimap")
 			R.W.flush()
 			check("city: the ring choice with the city map up at login: the ring and its underlay show, the other header art is transparent, and no cover is made",
-				R.compass.alpha == 1 and R.underlay.alpha == 1 and R.header.TopEdge.alpha == 0 and K.cover(R.W) == nil and #R.W.addonFrames == frames and #R.cityRaw.hooks.OnShow == 1)
+				R.compass.alpha == 1 and R.underlay.alpha == 1 and R.headerPlate.alpha == 0 and K.cover(R.W) == nil and #R.W.addonFrames == frames and #R.cityRaw.hooks.OnShow == 1)
 			K.set(R, false)
 			K.set(R, true)
 			check("city: the ring choice: the ring goes with the city map and returns with it, and no cover is made", R.compass.alpha == 1 and K.cover(R.W) == nil and K.clean(R.W))
@@ -90183,7 +90310,8 @@ do
 		H.diel = raw[H.cluster].DielFrame
 		H.btn = {}
 		H.btn.Tracking = H.tracking
-		-- The game's Tracking and IndicatorFrame take no mouse themselves: their children do (Minimap.xml:74-93, 105, 160).
+		-- The game's Tracking and IndicatorFrame take no mouse themselves: their children do (Blizzard_Minimap/Mainline/Minimap.xml:39-43,
+		-- Camelot/MinimapIndicatorFrameTemplate.xml:12, Camelot/MinimapMailFrameTemplate.xml:3).
 		raw[H.tracking].GetAlpha = function() return raw[H.tracking].alpha end
 		local function mouseOn(frame)
 			local fr = raw[frame]
@@ -90193,10 +90321,11 @@ do
 			return frame
 		end
 		H.mice = { Tracking = { mouseOn(raw[H.tracking].Button) } }
-		local mail, crafting = M.button(W), M.button(W)
-		H.btn.IndicatorFrame = W.B(nil, { MailFrame = mail, CraftingOrderFrame = crafting })
+		-- Forever's IndicatorFrame has only MailFrame since 1.60.1.70425 (Blizzard_Minimap/Camelot/MinimapIndicatorFrameTemplate.xml:3-18); CraftingOrderFrame is gone.
+		local mail = M.button(W)
+		H.btn.IndicatorFrame = W.B(nil, { MailFrame = mail })
 		raw[H.btn.IndicatorFrame].GetAlpha = function() return raw[H.btn.IndicatorFrame].alpha end
-		H.mice.IndicatorFrame = { mail, crafting }
+		H.mice.IndicatorFrame = { mail }
 		raw[H.cluster].IndicatorFrame = H.btn.IndicatorFrame
 		for _, name in ipairs({ "GameTimeFrame", "TimeManagerClockButton", "AddonCompartmentFrame" }) do
 			H.btn[name] = M.button(W, { protected = more.protect == name })

@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
--- The minimap with the tracking button and the difficulty banner beside its zone name, the bag bar, the buff and debuff icons, the experience and reputation bars and the micro menu, and the objective
+-- The minimap with the plate of its zone name and the tracking button beside it, the bag bar, the buff and debuff icons, the experience and reputation bars and the micro menu, and the objective
 -- tracker, the loot window and rolls, alerts, breath and countdown timers, the queue panel, the damage meter and the zone event bars.
 -- A frame the game may protect has nothing made on it in combat: ns.MaybeProtected asks the client each time.
 -- Each part has its own switch and puts the game's look back when it is off. The game's frame art is made
@@ -17,8 +17,9 @@ local SQUARE_MASK = "Interface\\ChatFrame\\ChatFrameBackground"
 -- Seconds between two looks at the minimap zoom.
 local ZOOM_EVERY = 0.5
 -- The buttons round the minimap that a setting can switch off: the setting, and the field of the cluster or the global name of the frame
--- and the fields of it that take the mouse, since a parent does not turn off the mouse of its children (Minimap.xml:74-93, 105 and 160)
--- (Blizzard_Minimap/Mainline/Minimap.xml:60 and 96, GameTime.xml:3, AddonCompartment.xml:3, Blizzard_TimeManager.xml:178).
+-- and the fields of it that take the mouse, since a parent does not turn off the mouse of its children (Blizzard_Minimap/Mainline/Minimap.xml:39-43,
+-- Camelot/MinimapIndicatorFrameTemplate.xml:12) (Mainline/Minimap.xml:25 and 46, Mainline/GameTime.xml:3, Camelot/AddonCompartment.xml:3,
+-- Blizzard_TimeManager/Mainline/Blizzard_TimeManager.xml:178). CraftingOrderFrame is for a client before 1.60.1.70425: Forever has none since then.
 local MAP_BUTTONS = { { option = "btnTracking", key = "Tracking", mouse = { "Button" } },
 	{ option = "btnMail", key = "IndicatorFrame", mouse = { "MailFrame", "CraftingOrderFrame" } }, { option = "btnCalendar", name = "GameTimeFrame" },
 	{ option = "btnClock", name = "TimeManagerClockButton" }, { option = "btnAddons", name = "AddonCompartmentFrame" } }
@@ -26,15 +27,18 @@ local MAP_BUTTONS = { { option = "btnTracking", key = "Tracking", mouse = { "But
 local TYPE_ROWS = { Magic = "colourMagic", Curse = "colourCurse", Disease = "colourDisease", Poison = "colourPoison", Bleed = "colourOther", None = "colourOther" }
 local DIEL_BORDER = "UI-HUD-Minimap-Frame-Cycle"
 -- The city map. In some cities the game loads Blizzard_HybridMinimap and shows HybridMinimap, a child of the minimap that covers its whole square
--- (Blizzard_Minimap\Mainline\Minimap.lua:226-232, Blizzard_HybridMinimap.xml:5-10). It is in the lowest strata, BACKGROUND, at level 100, and both
+-- (Blizzard_Minimap\Mainline\Minimap.lua:236-242, Blizzard_HybridMinimap.xml:5-10). It is in the lowest strata, BACKGROUND, at level 100, and both
 -- are fixed (xml:5), and the game switches the ground of the minimap off while it shows (Blizzard_HybridMinimap.lua:44). The pins of its map are at
 -- levels 2000 to 9000 (Blizzard_MapCanvas\MapCanvas_PinFrameLevelsManager.lua:3-4). The cover is a child of the minimap as well, in the strata of the
--- minimap (LOW, from its cluster: Minimap.xml:3, 195-199) at the level of the minimap. That puts it over the city map and its pins, and over what
--- the minimap itself draws, and under the zoom buttons and the ring, which are children of the minimap one level up (Minimap.xml:210-262). It hides
+-- minimap (LOW, from its cluster: Minimap.xml:3, 56-60) at the level of the minimap. That puts it over the city map and its pins, and over what
+-- the minimap itself draws, and under the zoom buttons and the ring, which are children of the minimap one level up (Minimap.xml:71-125). It hides
 -- with the minimap.
 local CITY_ADDON = "Blizzard_HybridMinimap"
 local COVER_FILE = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Cover.tga"
--- The pieces of the nine-slice behind the zone name.
+-- The plate of the zone name. Since 1.60.1.70425 it is the picture StateTexture of the button that holds the zone name, ZoneTextButton, 152 by 23,
+-- with a second picture, AddTexture, that glows over it under the mouse (Blizzard_Minimap/Mainline/Minimap.xml:24,
+-- Camelot/MinimapZoneTextButton.xml:3-38). Before, it was the nine-slice BorderTop of the cluster, with these pieces; a client that still has it
+-- gets those pieces faded and the border round the nine-slice. The other nine-slices of this file have the same pieces.
 local HEADER_PIECES = { "TopLeftCorner", "TopRightCorner", "BottomLeftCorner", "BottomRightCorner", "TopEdge", "BottomEdge", "LeftEdge", "RightEdge", "Center" }
 local BAG_BUTTONS = { "MainMenuBarBackpackButton", "CharacterBag0Slot", "CharacterBag1Slot", "CharacterBag2Slot", "CharacterBag3Slot",
 	"CharacterReagentBag0Slot", "KeyRingButton" }
@@ -507,7 +511,8 @@ local function HeaderBorder(frame, on)
 	ns.SetOutline(outline, on, true)
 end
 
--- The banner under the zone name has one picture for each kind of content, and the game shows one of them.
+-- The banner under the zone name has one picture for each kind of content, and the game shows one of them. Forever has had no banner since
+-- 1.60.1.70425 (Blizzard_Minimap/Camelot/MinimapInstanceDifficulty.lua:1-3), so this is for a client that still makes one, and finds none on Forever.
 local function BannerModes(banner)
 	local modes, list = {}, banner and banner.ContentModes
 	if list ~= nil and not ns.IsSecret(list) and type(list) == "table" then
@@ -518,6 +523,71 @@ local function BannerModes(banner)
 		end
 	end
 	return modes
+end
+
+-- A picture held in a field of a frame of the game, unless it is missing or withheld.
+local function Picture(frame, key)
+	local value = frame and frame[key]
+	if value == nil or ns.IsSecret(value) or type(value) ~= "table" then
+		return nil
+	end
+	return value
+end
+
+-- The zone name: the frame that takes the border, the pictures of its plate, and the glow over the plate (see HEADER_PIECES). The button of
+-- 1.60.1.70425 and later is known by its StateTexture; without one the nine-slice BorderTop is looked for.
+local function Header(cluster)
+	local button = cluster and Child(cluster, "ZoneTextButton")
+	local plate = Picture(button, "StateTexture")
+	if plate then
+		return button, { plate }, Picture(button, "AddTexture")
+	end
+	local old = cluster and Child(cluster, "BorderTop")
+	if not old then
+		return nil, {}
+	end
+	local list = {}
+	for _, piece in ipairs(HEADER_PIECES) do
+		list[#list + 1] = Picture(old, piece)
+	end
+	return old, list
+end
+
+-- The game sets the opacity of the glow over the zone name again on each change of the state of its button, from the scripts of the mouse and
+-- of enabling (Blizzard_SharedXMLBase/ButtonStateBehavior.lua:41-118, Camelot/MinimapZoneTextButton.lua:11-25), and only SetAtlas on the plate,
+-- which keeps its opacity. A script hooked with HookScript runs after the game's own and writes nothing on the frame, so the glow is made
+-- transparent again at once, before the frame is drawn, while Hide minimap ring and header is on. With the setting off the glow is the game's:
+-- at rest it has no opacity, and the game sets the opacity again on the next change of state.
+local GLOW_SCRIPTS = { "OnEnter", "OnLeave", "OnMouseDown", "OnMouseUp", "OnEnable", "OnDisable" }
+local function FollowGlow(button, glow)
+	local done = hooked[button]
+	if done == nil then
+		done = {}
+		hooked[button] = done
+	end
+	if done.glow or type(button.HookScript) ~= "function" then
+		return
+	end
+	done.glow = true
+	local function Again()
+		if On("minimap", "minimapArt") and not ns.IsStopped(KEY) then
+			ns.SetFaded(glow, true)
+		end
+	end
+	for _, script in ipairs(GLOW_SCRIPTS) do
+		pcall(button.HookScript, button, script, Again)
+	end
+end
+
+-- The tracking button. Since 1.60.1.70425 it is a 23 by 23 button over the 17 by 17 frame Tracking, and its plate, StateTexture, draws its glyph as
+-- well (Blizzard_Minimap/Mainline/Minimap.xml:25-45, Camelot/MinimapTrackingButton.xml:3-28): the border goes round the button and its pictures stay.
+-- Before, the button was smaller than the frame, and the border went round the frame.
+local function TrackingBox(tracking)
+	local button = tracking and Child(tracking, "Button")
+	if button and Picture(button, "StateTexture") then
+		return button
+	end
+	return tracking
 end
 
 -- The square map has its border drawn as an outline of the map itself, with no background behind it.
@@ -543,8 +613,8 @@ local function SetMask(map, file)
 	return (pcall(map.SetMaskTexture, map, file))
 end
 
--- The game masks the minimap again when the rotateMinimap variable changes (Blizzard_Minimap/Camelot/Skin.lua:19-37, called from the callback of
--- the variable at :48-50), and the event of the variable comes with that call, so the square mask is put on again on the next frame after it.
+-- The game masks the minimap again when the rotateMinimap variable changes (Blizzard_Minimap/Camelot/Minimap.lua:31-59, called from the callback of
+-- the variable at :95-99), and the event of the variable comes with that call, so the square mask is put on again on the next frame after it.
 local function ReMask()
 	if not minimap.squared or ns.IsStopped(KEY) or Val("minimap", "shape") ~= "square" then
 		return
@@ -722,10 +792,10 @@ local function ApplyMinimap()
 	local art, border = On("minimap", "minimapArt"), On("minimap", "minimapBorder")
 	local choice, up = CityChoice(), CityShown() == true
 	local cluster = Frame("MinimapCluster")
-	local header, diel = cluster and cluster.BorderTop, cluster and cluster.DielFrame
-	header = header ~= nil and not ns.Forbidden(header) and header or nil
+	local header, plates, glow = Header(cluster)
+	local diel = cluster and cluster.DielFrame
 	diel = diel ~= nil and not ns.Forbidden(diel) and diel or nil
-	-- The tracking button has a plate of its own behind its glyph, and each picture of the banner has a background and a border of its own.
+	-- The frame of the tracking button has a plate of its own behind the button, and each picture of the banner has a background and a border of its own.
 	local tracking = cluster and Child(cluster, "Tracking")
 	local modes = BannerModes(cluster and Child(cluster, "InstanceDifficulty"))
 	-- The ring comes back while the city map is up, when the setting says so.
@@ -738,8 +808,12 @@ local function ApplyMinimap()
 		ns.SetFaded(_G.MinimapCompassTextureUnderlay, ring)
 	end
 	if Moves("minimap", art) then
-		for _, piece in ipairs(HEADER_PIECES) do
-			ns.SetFaded(header and header[piece], art)
+		for _, plate in ipairs(plates) do
+			ns.SetFaded(plate, art)
+		end
+		-- The glow is the game's again with the setting off (FollowGlow).
+		if glow and art then
+			ns.SetFaded(glow, true)
 		end
 		if diel then
 			-- The border of the day and night medallion has no key. The sun and moon inside it stay.
@@ -752,11 +826,14 @@ local function ApplyMinimap()
 			ns.SetFaded(mode.Border, art)
 		end
 	end
+	if glow and art then
+		FollowGlow(header, glow)
+	end
 	if header then
 		HeaderBorder(header, border)
 	end
 	if tracking then
-		HeaderBorder(tracking, border)
+		HeaderBorder(TrackingBox(tracking), border)
 	end
 	for _, mode in ipairs(modes) do
 		HeaderBorder(mode, border)

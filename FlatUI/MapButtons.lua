@@ -5,7 +5,7 @@ local _, ns = ...
 -- Only ClearAllPoints and SetPoint on frames that are not protected. No mouse, no alpha, no script of another addon, nothing written to any addon's
 -- saved data. A secret answer from a size, a centre, a point or a child list stops the pass and the buttons stay (SimpleFrameAPIDocumentation.lua:323-335,
 -- SimpleScriptRegionAPIDocumentation.lua:145-149, SimpleScriptRegionResizingAPIDocumentation.lua:65-75).
--- bar: the row starts below the coordinate text of the map (Blizzard_Minimap/Mainline/Minimap.xml:425-428).
+-- bar: the row starts below the coordinate text of the map (Blizzard_Minimap/Mainline/Minimap.xml:287-291).
 
 local PREFIX = "LibDBIcon10_"
 local GAP = 2
@@ -110,7 +110,7 @@ end
 local function Place(map, buttons, mode)
 	local mw, mh = Ask(map.GetWidth, map), Ask(map.GetHeight, map)
 	local mx, ux = Ask(map.GetCenter, map), UIParent and Ask(UIParent.GetCenter, UIParent)
-	-- A centre is in the scale of its own frame, and the Edit Mode size of the map scales its container (Blizzard_ChatFrame/Mainline/ChatConfigFrame.lua:2495).
+	-- A centre is in the scale of its own frame, and the Edit Mode size of the map scales its container (Blizzard_Minimap/Mainline/Minimap.lua:418-419).
 	local ms, us = Ask(map.GetEffectiveScale, map), UIParent and Ask(UIParent.GetEffectiveScale, UIParent)
 	if not (Num(mw) and Num(mh) and Num(mx) and Num(ux) and Num(ms) and Num(us)) then
 		return
