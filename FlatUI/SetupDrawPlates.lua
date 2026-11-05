@@ -18,17 +18,24 @@ ns.SetupDrawings = ns.SetupDrawings or {}
 
 -- Plate sizes at size 2 (the game's Medium), by nameplate size 1 to 5: horizontal and vertical scale (Camelot constants :62-68).
 P.SCALES = { { 0.75, 0.8 }, { 1, 1 }, { 1.25, 1.25 }, { 1.4, 1.4 }, { 1.6, 1.6 } }
--- Per nameplate style: the health bar height, the cast bar height and the level box height at size 2, whether the name is inside the health bar and whether
+-- Per nameplate style: the health bar height and the cast bar height at size 2, whether the name is inside the health bar and whether
 -- the spell name is inside the cast bar (Blizzard_NamePlates.lua:354-380, 452-500).
 P.STYLES = {
-	thin = { health = 13, cast = 6, level = 16, inside = false, spellInside = false },
-	modern = { health = 20, cast = 6, level = 23, inside = true, spellInside = false },
-	block = { health = 20, cast = 16, level = 23, inside = true, spellInside = true },
-	castfocus = { health = 13, cast = 16, level = 16, inside = false, spellInside = true },
+	thin = { health = 13, cast = 6, inside = false, spellInside = false },
+	modern = { health = 20, cast = 6, inside = true, spellInside = false },
+	block = { health = 20, cast = 16, inside = true, spellInside = true },
+	castfocus = { health = 13, cast = 16, inside = false, spellInside = true },
 }
 -- Plate width, the gap at each side of it, the font heights, the spell icon, the level box width and the gap before it, the aura icon (Camelot constants).
+-- The game's level box hangs from the health bar 5 past its end, 3 above it and 2 below it, and the game keeps no room for it in the row
+-- (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8, Blizzard_NamePlateUnitFrame.lua:683-708).
 P.WIDTH, P.INSET, P.FONT, P.CAST_FONT, P.LEVEL_FONT = 190, 12, 14, 10, 10
-P.ICON, P.LEVEL_W, P.LEVEL_GAP, P.AURA = 10, 28, 5, 25
+P.ICON, P.LEVEL_W, P.LEVEL_GAP, P.LEVEL_ABOVE, P.LEVEL_BELOW, P.AURA = 10, 28, 5, 3, 2, 25
+-- The game's icon of an elite, a rare and a rare elite, 20 by 20 at the left end of the bar where the raid marker would be, which an enemy plate
+-- shows since 70707 unless the game's Rarity icon option is off (Blizzard_NamePlateClassificationFrame.lua:68-75, 117-127; Blizzard_NamePlates.xml:196-199).
+P.RARITY = { elite = "nameplates-icon-elite-gold", boss = "nameplates-icon-elite-gold", rare = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star",
+	rareelite = "nameplates-icon-elite-silver" }
+P.RARITY_SIZE, P.RARITY_INDEX = 20, 3
 P.SPACING = 2
 -- The gap between a class icon and the row, and the border of an elite, a rare and a boss in screen pixels (Nameplates.lua:30, 46).
 P.GAP, P.KIND_PX = 3, 2
@@ -333,6 +340,7 @@ function P.NewPlate(S, parent)
 	p.iconOutline = P.Outline(S, p.iconFrame, p.iconFrame)
 	p.marker = Tex(p.f, "OVERLAY", 3)
 	p.flag, p.buffA, p.buffB = Tex(p.f, "OVERLAY", 3), Tex(p.f, "OVERLAY", 3), Tex(p.f, "OVERLAY", 3)
+	p.rarity = Tex(p.f, "OVERLAY", 3)
 	p.cast = Frame(p.f)
 	p.cbar = Frame(p.cast)
 	p.cfill = Tex(p.cbar, "ARTWORK", 0)
@@ -367,12 +375,6 @@ function P.Measure(o, spec, sets)
 	local m = { h = h, v = v, style = style }
 	m.BW = (P.WIDTH - 2 * P.INSET) * h * o.width / 100
 	m.HH = style.health * v * o.height / 100
-	m.LW, m.LH = P.LEVEL_W * v, style.level * v
-	m.HW = m.BW - (m.LW + P.LEVEL_GAP)
-	if o.levelSquare then
-		m.LW, m.LH = m.HH, m.HH
-		m.HW = m.BW - (m.LW + o.levelGap)
-	end
 	m.NH = P.FONT * v * o.nameSize / 100
 	m.sp = P.SPACING * v
 	m.healthY = 0
@@ -381,6 +383,17 @@ function P.Measure(o, spec, sets)
 		m.CI = P.ICON * v * o.castIconSize / 100
 		m.CC = m.CB + (style.spellInside and 0 or P.ICON * v)
 		m.healthY = m.CC + P.SPACING * v
+	end
+	-- The level box, from its bottom left corner: the game's past the end of the full row, or the square of Flat UI at the end of a shorter bar.
+	m.LW, m.LH = P.LEVEL_W * v, m.HH + P.LEVEL_ABOVE + P.LEVEL_BELOW
+	m.HW = m.BW
+	m.LX, m.LY = m.BW + P.LEVEL_GAP, m.healthY - P.LEVEL_BELOW
+	m.levelOut = true
+	if o.levelSquare then
+		m.LW, m.LH = m.HH, m.HH
+		m.HW = m.BW - (m.LW + o.levelGap)
+		m.LX, m.LY = m.BW - m.LW, m.healthY
+		m.levelOut = false
 	end
 	m.center = m.healthY + m.HH / 2
 	m.nameAbove = not style.inside
@@ -529,7 +542,7 @@ end
 
 -- The level number, its box and the mark after it.
 function P.Level(p, spec, o, m)
-	P.Put(p, p.lvl, "BOTTOMLEFT", m.BW - m.LW, m.center - m.LH / 2, m.LW, m.LH)
+	P.Put(p, p.lvl, "BOTTOMLEFT", m.LX, m.LY, m.LW, m.LH)
 	local style = o.level
 	if style == "hidden" then
 		ns.SetOutline(p.lvlOutline, false, false)
@@ -601,7 +614,9 @@ function P.ClassIcon(p, spec, o, m)
 	elseif position == "below" then
 		P.Put(p, p.iconFrame, "TOP", m.BW / 2 + x, y - P.GAP, size, size)
 	else
-		P.Put(p, p.iconFrame, "LEFT", m.BW + x + gap, m.center + y, size, size)
+		-- The game's level box hangs past the row, so the icon goes after it while it shows, as PlaceIcon of Nameplates.lua does.
+		local edge = (m.levelOut and o.level ~= "hidden") and m.LX + m.LW or m.BW
+		P.Put(p, p.iconFrame, "LEFT", edge + x + gap, m.center + y, size, size)
 	end
 	p.iconFrame:Show()
 	ns.SetOutline(p.iconOutline, o.classBorder, o.classBorder)
@@ -625,6 +640,51 @@ function P.LeftEnd(p, spec, o, m)
 	P.Put(p, p.buffB, "RIGHT", edge - 55, m.center, 25, 25)
 	p.buffA:SetColorTexture(0.35, 0.5, 0.8, 1)
 	p.buffB:SetColorTexture(0.35, 0.5, 0.8, 1)
+end
+
+-- True when the game shows its icon of an elite or a rare on an enemy plate: its option table asks for it (true since 70707 on this game,
+-- Camelot/Blizzard_NamePlateFrameOptionsOverrides.lua) and the Rarity icon bit of the nameplateInfoDisplay CVar is on.
+function P.RarityShown()
+	local options = NamePlateEnemyFrameOptions
+	if type(options) ~= "table" or ns.IsSecret(options) then
+		return false
+	end
+	local wanted = options.showClassificationIndicator
+	if ns.IsSecret(wanted) or wanted ~= true then
+		return false
+	end
+	local read = C_CVar and C_CVar.GetCVarBitfield or GetCVarBitfield
+	if type(read) ~= "function" then
+		return true
+	end
+	local index = P.RARITY_INDEX
+	if type(Enum) == "table" and type(Enum.NamePlateInfoDisplay) == "table" and type(Enum.NamePlateInfoDisplay.RarityIcon) == "number" then
+		index = Enum.NamePlateInfoDisplay.RarityIcon
+	end
+	local ok, on = pcall(read, "nameplateInfoDisplay", index)
+	if not ok or ns.IsSecret(on) then
+		return true
+	end
+	return on ~= false
+end
+
+-- The game's icon of an elite or a rare at the left end of an enemy plate, where the raid marker hangs (Flat UI's offsets of the marker move
+-- it too). A unit with a raid marker shows the marker instead (Blizzard_NamePlateClassificationFrame.lua:95-98).
+function P.Rarity(p, spec, o, m)
+	local atlas = not spec.friendly and spec.kind and not (spec.marker and o.marker) and P.RARITY[spec.kind]
+	if not (atlas and P.RarityShown()) then
+		p.rarity:Hide()
+		return
+	end
+	P.Put(p, p.rarity, "RIGHT", o.markerX - m.iconShift, m.center + o.markerY, P.RARITY_SIZE, P.RARITY_SIZE)
+	if P.AtlasExists(atlas) then
+		P.SetAtlas(p.rarity, atlas)
+		p.rarity:SetVertexColor(1, 1, 1, 1)
+	else
+		local colour = (spec.kind == "rare" or spec.kind == "rareelite") and P.SILVER or P.GOLD
+		p.rarity:SetColorTexture(colour[1], colour[2], colour[3], 1)
+	end
+	p.rarity:Show()
 end
 
 -- The cast bar under the health bar, the icon, the shield, the spell name, the spark and the time.
@@ -858,6 +918,7 @@ function P.Plate(p, spec, sets)
 		p.marker:Hide()
 	end
 	P.LeftEnd(p, spec, o, m)
+	P.Rarity(p, spec, o, m)
 	P.Cast(p, spec, o, m)
 	P.Auras(p, spec, o, m)
 	return p.box

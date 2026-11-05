@@ -26300,7 +26300,7 @@ do
 				return original(self, h)
 			end
 			-- The level box part sets a size and anchors of the same frames, and the game refuses them in combat too.
-			for _, name in ipairs({ "SetSize", "SetPoint" }) do
+			for _, name in ipairs({ "SetSize", "SetPoint", "ClearAllPoints" }) do
 				local plain = r[name]
 				r[name] = function(self, ...)
 					if W.inBlizzard == 0 and not allowed(r) then
@@ -26541,9 +26541,11 @@ do
 			F.stringsr = { textr, leftr, rightr }
 			hcr.label, ccr.label, castr.label, levelr.label, hbr.label, u.label = id .. ".HealthBarsContainer", id .. ".CastBarsContainer", id .. ".castBar",
 				id .. ".PlayerLevelDiffFrame", id .. ".healthBar", id .. ".UnitFrame"
-			-- The level frame is anchored LEFT to the health container's RIGHT at x 5, and sized by ApplyFrameOptions.
-			levelr.points = { { "LEFT", hc, "RIGHT", 5, 0 } }
-			levelr.width, levelr.height = 28, 16
+			-- Since 70425 the level frame hangs TOPLEFT and BOTTOMLEFT from the health bar, 5 past its end, 3 above and 2 below it
+			-- (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8). ApplyFrameOptions sizes it, and the height of the size is not used while
+			-- those two anchors set it (F.levelHeight, below). Before 70425 it had one LEFT anchor to the health container's RIGHT at x 5.
+			levelr.points = { { "TOPLEFT", hb, "TOPRIGHT", 5, 3 }, { "BOTTOMLEFT", hb, "BOTTOMRIGHT", 5, -2 } }
+			levelr.width, levelr.height, levelr.sizeHeight = 28, 16, 16
 			hcr.height, ccr.height, castr.height = 13, 16, 6
 			-- The bar colour is the vertex colour of the fill. Setting the fill's asset keeps it unless W.npResets names the call that resets it.
 			hbr.barColor = { 1, 1, 1, 1 }
@@ -26598,6 +26600,43 @@ do
 			NP.watch(W, lSkullr, id .. ".highLevelTexture", { "SetSize", "SetPoint" })
 			NP.watch(W, levelr, id .. ".PlayerLevelDiffFrame", { "SetSize", "SetWidth", "SetHeight", "SetPoint", "ClearAllPoints", "SetAllPoints", "Show", "Hide", "SetScale", "SetAlpha", "SetShown" })
 			NP.watch(W, u, id .. ".UnitFrame", { "SetPoint", "ClearAllPoints", "SetAllPoints", "CreateTexture", "CreateLine", "Show", "Hide", "SetAlpha", "SetScale", "SetSize", "SetHeight", "SetWidth" })
+			-- The height of the level frame: from a top and a bottom anchor to the health bar or its container when it has both (the health bar
+			-- fills the container), else the height its size gave it.
+			function F.levelHeight()
+				local top, bottom
+				for _, p in ipairs(levelr.points) do
+					if p[1]:find("^TOP") and (p[2] == hb or p[2] == hc) then
+						top = p
+					elseif p[1]:find("^BOTTOM") and (p[2] == hb or p[2] == hc) then
+						bottom = p
+					end
+				end
+				if top and bottom and hcr.height then
+					local function edge(p)
+						return (p[3]:find("^TOP") and hcr.height or p[3]:find("^BOTTOM") and 0 or hcr.height / 2) + (p[5] or 0)
+					end
+					levelr.height = edge(top) - edge(bottom)
+				else
+					levelr.height = levelr.sizeHeight
+				end
+			end
+			for _, pair in ipairs({ { levelr, "SetSize" }, { levelr, "SetHeight" }, { levelr, "SetPoint" }, { levelr, "ClearAllPoints" }, { levelr, "SetAllPoints" },
+				{ hcr, "SetHeight" }, { hcr, "SetSize" } }) do
+				local r, name = pair[1], pair[2]
+				local inner = r[name]
+				r[name] = function(...)
+					local sizing = r == levelr and (name == "SetSize" or name == "SetHeight")
+					if sizing then
+						levelr.height = levelr.sizeHeight
+					end
+					inner(...)
+					if sizing then
+						levelr.sizeHeight = levelr.height
+					end
+					F.levelHeight()
+				end
+			end
+			F.levelHeight()
 
 			-- The Lua methods of NamePlateUnitFrameMixin, copied onto the frame. Only Blizzard's own code may call them.
 			F.anchorPasses = 0
@@ -27047,7 +27086,9 @@ do
 			and O.useOutlinedFontWhenAboveHealthBar == true and near(O.playerLevelDiffHeight, 16) and near(O.playerLevelDiffWidth, 28))
 		check("simulated plate: the name and the health text take the outlined font object at the font height", n.namer.fontObject == NP.OUTLINED and near(n.namer.textHeight, 14)
 			and n.textr.fontObject == NP.OUTLINED and near(n.leftr.textHeight, 14) and near(n.rightr.textHeight, 14) and near(n.lTextr.textHeight, 10) and n.lTextr.fontObject == "SystemFont_NamePlateLevel")
-		check("simulated plate: the bars have Blizzard's heights", near(n.hcr.height, 13) and near(n.ccr.height, 16) and near(n.castr.height, 6) and near(n.levelr.width, 28) and near(n.levelr.height, 16))
+		-- Since 70425 the level frame is as high as the health bar and 5 more, from its anchors, not the 16 of its size.
+		check("simulated plate: the bars have Blizzard's heights", near(n.hcr.height, 13) and near(n.ccr.height, 16) and near(n.castr.height, 6) and near(n.levelr.width, 28) and near(n.levelr.height, 18)
+			and #n.levelr.points == 2 and n.levelr.points[1][1] == "TOPLEFT" and n.levelr.points[1][2] == n.hb and n.levelr.points[2][1] == "BOTTOMLEFT")
 		check("simulated plate: the fill is the atlas and the unit is set", n.fillr.atlas == NP.BAR_ATLAS and n.u.unit == "nameplate1" and n.u.isPlayer == true and n.u.isFriend == false
 			and n.u.showOnlyName == false and n.u.widgetsOnlyMode == false)
 		check("simulated plate: a unit assignment lays the plate out twice, once with no unit and once from UpdateShowOnlyName", n.anchorPasses == 2, n.anchorPasses)
@@ -27406,11 +27447,12 @@ do
 		end
 		local setOnly = {}
 		for _, call in ipairs(forbiddenCalls) do
-			if call ~= "SetSize" and call ~= "SetPoint" then
+			-- Since 70425 the game's two anchors are cleared before the one of the box is set.
+			if call ~= "SetSize" and call ~= "SetPoint" and call ~= "ClearAllPoints" then
 				setOnly[#setOnly + 1] = call
 			end
 		end
-		check("level box: the addon sets only the size and one anchor of Blizzard's level frame, never its scale or visibility", #setOnly == 0, table.concat(forbiddenCalls, " "))
+		check("level box: the addon sets only the size and the anchors of Blizzard's level frame, never its scale or visibility", #setOnly == 0, table.concat(forbiddenCalls, " "))
 		check("level box: the level frame is a square the height of the health bar, flush with its right end", near(a.levelr.width, 13) and near(a.levelr.height, 13) and #a.levelr.points == 1
 			and a.levelr.points[1][1] == "LEFT" and a.levelr.points[1][2] == a.hc and a.levelr.points[1][3] == "RIGHT" and a.levelr.points[1][4] == 0)
 		local frames = #W.addonFrames
@@ -27427,7 +27469,7 @@ do
 		W.npOptions(NP.STYLE.Modern, 2)
 		W.flush()
 		check("level box: after Blizzard's style change, with a taller bar, the level frame is the new square and the border has the same anchors and no new call", near(a.levelr.height, 20) and near(a.levelr.width, 20) and near(a.hcr.height, 20)
-			and span.calls.SetPoint == calls0 and span.calls.ClearAllPoints == nil and span.points[3][2] == a.hb and NP.uniq(NP.mine(W, a, mark, "PlayerLevelDiffFrame")):match("^SetSize%(20,20%) SetPoint%(LEFT,.*,RIGHT,0,0%)$") ~= nil, NP.uniq(NP.mine(W, a, mark, "PlayerLevelDiffFrame")))
+			and span.calls.SetPoint == calls0 and span.calls.ClearAllPoints == nil and span.points[3][2] == a.hb and NP.uniq(NP.mine(W, a, mark, "PlayerLevelDiffFrame")):match("^ClearAllPoints%(%) SetSize%(20,20%) SetPoint%(LEFT,.*,RIGHT,0,0%)$") ~= nil, NP.uniq(NP.mine(W, a, mark, "PlayerLevelDiffFrame")))
 		clean(W, "level box")
 
 		-- The target takes its thickness and colour on both borders.
@@ -27934,6 +27976,12 @@ do
 			end
 			return { false, false, false, 1e9, 1e9 }
 		end
+		-- True when the level frame has the two anchors the game gives it since 70425 (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8), and no other.
+		function T.home(a)
+			local p = a.levelr.points
+			return #p == 2 and p[1][1] == "TOPLEFT" and p[1][2] == a.hb and p[1][3] == "TOPRIGHT" and p[1][4] == 5 and p[1][5] == 3
+				and p[2][1] == "BOTTOMLEFT" and p[2][2] == a.hb and p[2][3] == "BOTTOMRIGHT" and p[2][4] == 5 and p[2][5] == -2
+		end
 		-- Where the right end of the box is, when the right end of the cast container is 0.
 		function T.right(a)
 			local hp, lp = T.pt(a.hcr, "BOTTOMRIGHT"), T.pt(a.levelr, "LEFT")
@@ -28052,18 +28100,21 @@ do
 			local W, a = T.world({ { "nameplates.levelGap", 1 } })
 			check("squared: a box that takes the size has no line in the status", not has(W.status(), "Level box"), W.status())
 			local V, b = T.world({ { "nameplates.levelShape", "Game width" } })
-			V.refuse[b.level] = true
+			-- The client keeps the width of its box: a size sets the height alone. The anchors are still taken, so the game's can go back.
+			local keep = b.levelr.SetSize
+			b.levelr.SetSize = function(self, w, h) return keep(self, b.levelr.width, h) end
 			V.change("nameplates.levelShape", "Square")
 			V.flush()
 			check("squared: a box that keeps the game's width is told in one line of the status", count(V.status(), "Level box: the game keeps its own box width.") == 1, V.status())
 			local o = V.env.NamePlateSetupOptions
-			check("squared: and the game's layout is back, the health end, the box offset and the aura frames", near(T.pt(b.hcr, "BOTTOMRIGHT")[4], -(o.playerLevelDiffWidth + 5)) and T.pt(b.level, "LEFT")[4] == 5
-				and near(b.ccListr.points[1][4], 5 + o.playerLevelDiffWidth + 5) and near(b.lossListr.points[1][4], 5 + o.playerLevelDiffWidth + 5), tostring(T.pt(b.hcr, "BOTTOMRIGHT")[4]))
+			-- Since 70425 the game's layout is its two anchors, with no room kept for them (see "turned off" below).
+			check("squared: and the game's layout is back, the health end, the box anchors and the aura frames", near(T.pt(b.hcr, "BOTTOMRIGHT")[4], 0) and T.home(b)
+				and near(b.levelr.width, o.playerLevelDiffWidth) and near(b.ccListr.points[1][4], 5) and near(b.lossListr.points[1][4], 5), tostring(T.pt(b.hcr, "BOTTOMRIGHT")[4]) .. " " .. #b.levelr.points)
 			local mark = #V.npLog
 			V.change("nameplates.levelGap", 2)
 			V.flush()
 			check("squared: and a later pass leaves the game's layout alone", #NP.mine(V, b, mark, "HealthBarsContainer", "SetPoint") == 0 and #NP.mine(V, b, mark, "PlayerLevelDiffFrame") == 0)
-			V.refuse[b.level] = nil
+			b.levelr.SetSize = keep
 			V.change("nameplates.levelShape", "Game width")
 			V.flush()
 			V.change("nameplates.levelShape", "Square")
@@ -28079,14 +28130,17 @@ do
 				local o = W.env.NamePlateSetupOptions
 				W.change(how[2], how[1])
 				W.flush()
-				local lp, hp = T.pt(a.levelr, "LEFT"), T.pt(a.hcr, "BOTTOMRIGHT")
+				local hp = T.pt(a.hcr, "BOTTOMRIGHT")
 				local width = o.playerLevelDiffWidth
-				if not (near(a.levelr.width, width) and near(a.levelr.height, o.playerLevelDiffHeight) and lp[4] == 5 and near(hp[4], -(width + 5))
-					and near(a.ccListr.points[1][4], 5 + width + 5) and near(a.lossListr.points[1][4], 5 + width + 5) and near(a.skullr.width, o.playerLevelDiffHeight)) then
-					bad[#bad + 1] = tostring(how[2]) .. ":" .. g(a.levelr.width) .. "," .. tostring(lp[4]) .. "," .. g(hp[4]) .. "," .. g(a.ccListr.points[1][4])
+				-- Since 70425 the game's two anchors come back, the height is the bar's and 5 more, and UpdateAnchors keeps no room for them: the
+				-- health container ends at the cast container and the aura frames hang 5 past it (Blizzard_NamePlateUnitFrame.lua:683-708, 872-878).
+				-- Before 70425 the check was one LEFT anchor at 5, the health container ending the box width and 5 before it, and the aura frames past the box.
+				if not (near(a.levelr.width, width) and T.home(a) and near(a.levelr.height, a.hcr.height + 5) and near(hp[4], 0)
+					and near(a.ccListr.points[1][4], 5) and near(a.lossListr.points[1][4], 5) and near(a.skullr.width, o.playerLevelDiffHeight)) then
+					bad[#bad + 1] = tostring(how[2]) .. ":" .. g(a.levelr.width) .. "," .. #a.levelr.points .. "," .. g(a.levelr.height) .. "," .. g(hp[4]) .. "," .. g(a.ccListr.points[1][4])
 				end
 			end
-			check("squared: turned off, the level frame has the game's size and offset 5, the health container its end, the aura frames their offset", #bad == 0, table.concat(bad, " | "))
+			check("squared: turned off, the level frame has the game's size and anchors, the health container its end, the aura frames their offset", #bad == 0, table.concat(bad, " | "))
 		end
 
 		-- In combat nothing is set on the protected frames, and everything is set when combat ends.
@@ -28462,6 +28516,51 @@ do
 			check("class icon " .. c[1] .. ", size " .. c[2] .. ", offsets " .. c[3] .. " and " .. c[4] .. ": one anchor, as designed", NP.iconPlace(W, e) == c[5], NP.iconPlace(W, e))
 		end
 		clean(W, "class icon placement")
+
+		-- Since 70425 the game's level frame keeps no room in the row and hangs 5 past the health bar (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8),
+		-- so with the game's box an icon on the right goes after the level frame; with the square box of Flat UI, which ends where the row
+		-- does, or a hidden level box, it goes after the row.
+		do
+			local R = NP.npWorld()
+			R.change("nameplates.classPosition", "Right")
+			R.change("nameplates.classGap", 3)
+			R.change("nameplates.level", "Default")
+			local r = R.npShow("nameplate1", { player = true, friend = false, class = "MAGE" })
+			R.flush()
+			local function rightEnd()
+				local I = NP.iconOf(R, r)
+				local p = I and I.guide.points[2]
+				return p and p[1] == "RIGHT" and p[3] == "RIGHT" and p[4] == 0 and p[5] == 0 and (p[2] == r.level and "level" or (p[2] == r.cc and "castContainer" or "other")) or "none"
+			end
+			check("class icon right, Default level box: the guide ends at the game's level frame, which hangs past the row", rightEnd() == "level" and NP.iconPlace(R, r) == "LEFT guide RIGHT 3,0 13x13 n1"
+				and #NP.iconOf(R, r).guide.points == 4, rightEnd() .. " " .. NP.iconPlace(R, r))
+			R.change("nameplates.level", "Thin border")
+			R.change("nameplates.levelShape", "Game width")
+			R.flush()
+			check("class icon right, Game width: the guide ends at the game's level frame too", rightEnd() == "level", rightEnd())
+			R.change("nameplates.levelShape", "Square")
+			R.flush()
+			check("class icon right, Square: the box ends where the row does, so the guide ends at the cast container", rightEnd() == "castContainer", rightEnd())
+			R.change("nameplates.level", "Hidden")
+			R.flush()
+			check("class icon right, Hidden: the guide ends at the cast container", rightEnd() == "castContainer", rightEnd())
+			R.change("nameplates.level", "Default")
+			R.change("nameplates.classPosition", "Above")
+			R.flush()
+			check("class icon above: the guide is the row again, so the icon stays over its middle", rightEnd() == "castContainer" and NP.iconPlace(R, r) == "BOTTOM guide TOP 0,19 13x13 n1", rightEnd() .. " " .. NP.iconPlace(R, r))
+			clean(R, "class icon right of the game's level frame")
+			-- A client before 70425: the level frame hangs LEFT from the health container and the game keeps room for it, so the row ends after it.
+			local O = NP.npWorld()
+			O.change("nameplates.classPosition", "Right")
+			O.change("nameplates.level", "Default")
+			local o = O.npShow("nameplate1", { player = true, friend = false, class = "MAGE" })
+			o.levelr.points = { { "LEFT", o.hc, "RIGHT", 5, 0 } }
+			O.npOptions()
+			O.flush()
+			local I = NP.iconOf(O, o)
+			check("class icon right, a client before 70425: the guide ends at the cast container", I and I.guide.points[2][2] == o.cc, I and tostring(I.guide.points[2][2]))
+			clean(O, "class icon right, level frame before 70425")
+		end
 
 		-- Above: the name's height times the name size sits between the icon and the bar, unless the name is inside the bar.
 		local A = NP.npWorld()
@@ -93255,20 +93354,24 @@ do
 			local timer = s.timer
 			local inner = s.inner
 			local function colour(out) return out and { 1, 0.1, 0.1 } or { 1, 1, 1 } end
+			-- As 70790 has them: IsOutOfRange is false in Edit Mode and while a swing is in progress, and ClearSwingTimer and ResetSwingTimer end with
+			-- ApplyRangePresentation (Blizzard_SwingTimer.lua:306-359, 379-390, 425-448).
 			inner.ApplyRangePresentation = function(self)
-				local out = inner.isOutOfRange == true
+				local out = inner.isOutOfRange == true and inner.isInEditMode ~= true and inner.swingDuration == nil
 				s.bar:SetAlpha(out and 0.4 or 1)
 				local c = colour(out)
 				typeLabel:SetTextColor(c[1], c[2], c[3])
 				timeLabel:SetTextColor(c[1], c[2], c[3])
 			end
 			inner.ClearSwingTimer = function(self)
-				inner.swingEndTime = nil
+				inner.swingDuration, inner.swingEndTime = nil, nil
 				s.pip:Hide()
+				inner.ApplyRangePresentation(self)
 			end
 			inner.ResetSwingTimer = function(self, duration)
-				inner.swingEndTime = W.now + duration
+				inner.swingDuration, inner.swingEndTime = duration, W.now + duration
 				s.pip:Show()
+				inner.ApplyRangePresentation(self)
 			end
 			inner.InitializeBarPresentation = function(self)
 				s.pipRaw.points = { { "RIGHT", s.fill, "RIGHT", 0, 0 } }
@@ -93803,7 +93906,8 @@ do
 		local m = T.msSwing[FH.SWING[1]]
 		m.inner.isInEditMode = true
 		M.swRange(T, m, true)
-		check("ms-cast: a timer in Edit Mode is in range and keeps the game's alpha", m.s.barRaw.alpha == 0.4, m.s.barRaw.alpha)
+		-- The game shows a timer in Edit Mode as in range, at full alpha (Blizzard_SwingTimer.lua:379-382), which the simulated client now does too.
+		check("ms-cast: a timer in Edit Mode is in range and keeps the game's alpha", m.s.barRaw.alpha == 1, m.s.barRaw.alpha)
 		local G = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.textOwn"] = true } } }, function(Y)
 			M.dress(Y)
 			Y.env.RED_FONT_COLOR = { GetRGB = function() return 1, 0, 0 end }
@@ -98174,21 +98278,33 @@ do
 			s.barRaw.SetReverseFill = function(_, v) s.barRaw.reverse = v end
 			s.barRaw.GetReverseFill = function() return s.barRaw.reverse end
 			local inner = s.inner
+			-- As 70790 has them (Blizzard_SwingTimer.lua:306-359, 379-390, 425-448): no out of range look in Edit Mode or while a swing is in
+			-- progress, and the look is set again when a swing starts or ends.
 			inner.ApplyRangePresentation = function()
-				s.bar:SetAlpha(inner.isOutOfRange == true and 0.4 or 1)
+				local out = inner.isOutOfRange == true and inner.isInEditMode ~= true and inner.swingDuration == nil
+				s.bar:SetAlpha(out and 0.4 or 1)
+				local c = out and { 1, 0.1, 0.1 } or { 1, 1, 1 }
+				typeLabel:SetTextColor(c[1], c[2], c[3])
+				timeLabel:SetTextColor(c[1], c[2], c[3])
 			end
-			inner.ClearSwingTimer = function()
-				inner.swingEndTime = nil
+			inner.ClearSwingTimer = function(self)
+				inner.swingDuration, inner.swingEndTime = nil, nil
 				s.pip:Hide()
+				inner.ApplyRangePresentation(self)
 			end
-			inner.ResetSwingTimer = function(_, duration)
-				inner.swingEndTime = W.now + duration
+			inner.ResetSwingTimer = function(self, duration)
+				inner.swingDuration, inner.swingEndTime = duration, W.now + duration
 				s.pip:Show()
+				inner.ApplyRangePresentation(self)
+			end
+			-- UpdateFrameState from UNIT_INVENTORY_CHANGED of the player (Blizzard_SwingTimer.lua:157-163, 292-299): the range look is set again.
+			inner.UpdateFrameState = function(self)
+				inner.ApplyRangePresentation(self)
 			end
 			inner.InitializeBarPresentation = function()
 				s.pipRaw.points = { { "RIGHT", s.fill, "RIGHT", 0, 0 } }
 			end
-			W.hbSwing[name] = { s = s, timer = s.timer, inner = inner }
+			W.hbSwing[name] = { s = s, timer = s.timer, inner = inner, typeRaw = typeRaw, timeRaw = timeRaw }
 		end
 	end
 	function HB.wrapped(W, object, names)
@@ -98346,7 +98462,8 @@ do
 		m.inner.isInEditMode = true
 		W.blizzard(function() m.timer:ApplyRangePresentation() end)
 		W.frame(1)
-		check("hkbars: swing timers, taintLog " .. value .. ": Edit Mode open: a timer in Edit Mode keeps the game's opacity", near(m.s.barRaw.alpha, 0.4), m.s.barRaw.alpha)
+		-- The game shows a timer in Edit Mode as in range (Blizzard_SwingTimer.lua:379-382), which the simulated client now does too.
+		check("hkbars: swing timers, taintLog " .. value .. ": Edit Mode open: a timer in Edit Mode keeps the game's opacity", near(m.s.barRaw.alpha, 1), m.s.barRaw.alpha)
 		m.inner.isInEditMode = false
 		W.blizzard(function() m.inner.isOutOfRange = true m.timer:ApplyRangePresentation() end)
 		W.frame(1)
@@ -98356,6 +98473,66 @@ do
 		W.change("swing.enabled", false)
 		check("hkbars: swing timers, taintLog " .. value .. ": the module off gives the game's look back", near(m.s.barRaw.alpha, 0.4) and m.s.barRaw.shown == true)
 		check("hkbars: swing timers, taintLog " .. value .. ": nothing was hooked on the way", W.hooks == base.hooks and HB.quiet(W), table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
+	end
+
+	-- Since 70532 the out of range look waits for a swing in progress to end, and the game sets the look again when a swing starts and ends, the end
+	-- coming from its OnUpdate with no event (Blizzard_SwingTimer.lua:310-325, 340-370, 379-390). Since 70707 UNIT_INVENTORY_CHANGED of the player
+	-- sets it again too (Blizzard_SwingTimer.lua:10-13, 157-163). The bar is shown at all times here, so nothing else makes a frame look.
+	do
+		local options = { ["castbars.flat"] = false, ["swing.idle"] = "show", ["swing.rangeAlpha"] = 20, ["swing.textOwn"] = true,
+			["swing.textColour"] = "ff336699", ["swing.rangeTextColour"] = "ff102030" }
+		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show" } } }, HB.dress)
+		local W = FH.world({ saved = { options = options } }, HB.dress)
+		local m = W.hbSwing[FH.SWING[1]]
+		local inColour, outColour = FH.hex("ff336699"), FH.hex("ff102030")
+		local function look(alpha, colour)
+			return near(m.s.barRaw.alpha, alpha) and FH.rgb(m.typeRaw.textColour) == colour and FH.rgb(m.timeRaw.textColour) == colour
+		end
+		local function why()
+			return tostring(m.s.barRaw.alpha) .. " " .. FH.rgb(m.typeRaw.textColour) .. " " .. FH.rgb(m.timeRaw.textColour)
+		end
+		W.blizzard(function() m.inner.isOutOfRange = true m.timer:ApplyRangePresentation() end)
+		W.fire("PLAYER_SWING_RANGE_UPDATE", 0, false, true)
+		W.tick()
+		check("hkbars: swing range: out of range with no swing, the row's opacity and range colour", look(0.2, outColour), why())
+		W.blizzard(function() m.timer:ResetSwingTimer(2) end)
+		W.fire("PLAYER_SWING", 2, 0)
+		W.tick()
+		check("hkbars: swing range: a swing starts out of range: the bar keeps full opacity and the in range colour, as the game shows it", look(1, inColour), why())
+		check("hkbars: swing range: and a frame looks for the end of the swing", FH.polling(W))
+		W.blizzard(function() m.inner.isOutOfRange = false m.timer:ApplyRangePresentation() end)
+		W.fire("PLAYER_SWING_RANGE_UPDATE", 0, true, true)
+		W.tick()
+		W.blizzard(function() m.inner.isOutOfRange = true m.timer:ApplyRangePresentation() end)
+		W.fire("PLAYER_SWING_RANGE_UPDATE", 0, false, true)
+		W.tick()
+		check("hkbars: swing range: the target leaves range during the swing: the look waits for the swing to end", look(1, inColour), why())
+		W.blizzard(function() m.timer:ClearSwingTimer() end)
+		check("hkbars: swing range: the game's own look at the end of the swing", look(0.4, "1.000,0.100,0.100"), why())
+		W.frame(1)
+		check("hkbars: swing range: on the next frame, with no event, the row's opacity and range colour", look(0.2, outColour), why())
+		check("hkbars: swing range: and nothing runs every frame any more", not FH.polling(W))
+		-- Other modules hear the event too, so the frames that hear it are counted.
+		local function hearers(X)
+			local n = 0
+			for _, frame in ipairs(X.eventFrames) do
+				if frame.events.UNIT_INVENTORY_CHANGED == true then
+					n = n + 1
+				end
+			end
+			return n
+		end
+		check("hkbars: swing range: UNIT_INVENTORY_CHANGED is heard for the player when a swing row is not the game's", hearers(W) == hearers(base) + 1, hearers(W) .. " " .. hearers(base))
+		W.blizzard(function() m.inner.isOutOfRange = false m.timer:UpdateFrameState() end)
+		W.fire("UNIT_INVENTORY_CHANGED", "player")
+		W.tick()
+		check("hkbars: swing range: back in range after a change of gear, the in range colour", look(1, inColour), why())
+		W.blizzard(function() m.inner.isOutOfRange = true m.timer:UpdateFrameState() end)
+		check("hkbars: swing range: the game's own look after a change of gear", look(0.4, "1.000,0.100,0.100"), why())
+		W.fire("UNIT_INVENTORY_CHANGED", "player")
+		W.tick()
+		check("hkbars: swing range: on the next frame after UNIT_INVENTORY_CHANGED the row's look is back", look(0.2, outColour), why())
+		check("hkbars: swing range: no error and nothing hooked", W.hooks == base.hooks and HB.quiet(W), table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
 	end
 end
 -- >>> hkbars (end)
@@ -99155,6 +99332,17 @@ do
 		env.UnitName = function() return "Brennan" end
 		env.RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
 		env.BreakUpLargeNumbers = function(value) return (tostring(value):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")) end
+		-- Since 70707 an enemy plate shows the game's icon of an elite or a rare: the Camelot override that turned it off is gone
+		-- (Camelot/Blizzard_NamePlateFrameOptionsOverrides.lua), and the Rarity icon bit (3) of nameplateInfoDisplay can turn it off
+		-- (Blizzard_NamePlateClassificationFrame.lua:68-75). W.infoBits holds the bits that are on.
+		env.NamePlateEnemyFrameOptions = { showClassificationIndicator = true }
+		W.infoBits = { [1] = true, [3] = true }
+		env.C_CVar.GetCVarBitfield = function(name, index)
+			if type(name) ~= "string" or type(index) ~= "number" then
+				bad(W, "GetCVarBitfield: a name and an index are expected")
+			end
+			return name == "nameplateInfoDisplay" and W.infoBits[index] == true
+		end
 		W.login()
 		return W
 	end
@@ -99622,6 +99810,43 @@ do
 		check("sdplate: and a view the stage names later reaches them all", #seen == 2 * first and seen[#seen] == other and repainted == 2 * count, #seen .. " " .. repainted)
 	end
 
+	-- Since 70707 the game shows its own icon of an elite, a rare or a rare elite at the left end of an enemy plate, as the preview does, unless
+	-- the Rarity icon option of the game is off or the unit has a raid marker (Blizzard_NamePlateClassificationFrame.lua:90-129).
+	do
+		local W = SD.world()
+		local ns = W.ns
+		local function R(x) return W.rawOf[x] end
+		local _, S = SD.show(W, "mock-nameplate-marks")
+		local function icon(id)
+			local r = S.plates[id].rarity and R(S.plates[id].rarity)
+			return r and r.shown and r.atlas or "hidden"
+		end
+		local elite = S.plates.elite.rarity and R(S.plates.elite.rarity) or { points = {} }
+		local at = elite.points[1]
+		check("sdplate: rarity: the elite has the game's gold icon, 20 by 20, right of it at the left end of the bar", icon("elite") == "nameplates-icon-elite-gold" and at and at[1] == "RIGHT"
+			and SD.near(at[4], 0) and SD.near(at[5], S.plates.elite.m.center) and SD.near(elite.width, 20) and SD.near(elite.height, 20), icon("elite"))
+		check("sdplate: rarity: the rare has the star and the boss the gold icon", icon("rare") == "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star" and icon("boss") == "nameplates-icon-elite-gold",
+			icon("rare") .. " " .. icon("boss"))
+		check("sdplate: rarity: a normal unit, a unit with a raid marker and a friendly player have none", icon("target") == "hidden" and icon("marked") == "hidden" and icon("friend") == "hidden")
+		ns.Set("nameplates.raidMarkerX", 5)
+		_, S = SD.show(W, "mock-nameplate-marks")
+		local moved = S.plates.elite.rarity and R(S.plates.elite.rarity).points[1]
+		check("sdplate: rarity: it moves with the offset of the raid marker, whose place it takes", moved and SD.near(moved[4], 5), tostring(moved and moved[4]))
+		ns.Set("nameplates.raidMarkerX", 0)
+		ns.Set("nameplates.enabled", false)
+		_, S = SD.show(W, "mock-nameplate-marks")
+		check("sdplate: rarity: it is the game's own, so it shows with the page off too", icon("elite") == "nameplates-icon-elite-gold")
+		ns.Set("nameplates.enabled", true)
+		W.infoBits[3] = nil
+		_, S = SD.show(W, "mock-nameplate-marks")
+		check("sdplate: rarity: the game's Rarity icon option off hides it", icon("elite") == "hidden" and icon("rare") == "hidden")
+		W.infoBits[3] = true
+		W.env.NamePlateEnemyFrameOptions.showClassificationIndicator = false
+		_, S = SD.show(W, "mock-nameplate-marks")
+		check("sdplate: rarity: a client before 70707, whose enemy plates have no such icon, shows none", icon("elite") == "hidden")
+		check("sdplate: rarity: no error", #W.errors == 0 and #W.violations == 0, table.concat(W.errors, "|") .. table.concat(W.violations, "|"))
+	end
+
 	-- The level box as a square, the class icon at the bar height and the marker moved out past it, as the preview draws them.
 	do
 		local W = SD.world()
@@ -99640,13 +99865,34 @@ do
 		ns.Set("nameplates.levelShape", "game")
 		_, S = SD.show(W, "mock-nameplate")
 		m = S.plates.enemy.m
-		check("squared: sdplate: Game width keeps the game's box and its gap of 5, whatever the gap is", SD.near(m.LW, 22.4) and SD.near(m.HW, m.BW - (22.4 + 5)), ("%s %s"):format(m.LW, m.HW))
+		-- Since 70425 the game's box hangs 5 past the end of the full row, 3 above and 2 below the bar (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8).
+		-- Before 70425 the check was a bar that ended the box width and 5 before the end of the row.
+		T.lvl = R(S.plates.enemy.lvl).points[1]
+		check("squared: sdplate: Game width keeps the game's box and its gap of 5, whatever the gap is", SD.near(m.LW, 22.4) and SD.near(m.HW, m.BW) and SD.near(T.lvl[4], m.BW + 5)
+			and SD.near(m.LH, m.HH + 5) and SD.near(T.lvl[5], m.healthY - 2) and T.lvl[1] == "BOTTOMLEFT", ("%s %s %s %s"):format(m.LW, m.HW, T.lvl[4], m.LH))
 		ns.Set("nameplates.levelShape", "square")
 		ns.Set("nameplates.level", "default")
 		_, S = SD.show(W, "mock-nameplate")
 		m = S.plates.enemy.m
-		check("squared: sdplate: the Default box is the game's whatever the shape is", SD.near(m.LW, 22.4) and SD.near(m.HW, m.BW - (22.4 + 5)), ("%s %s"):format(m.LW, m.HW))
+		check("squared: sdplate: the Default box is the game's whatever the shape is", SD.near(m.LW, 22.4) and SD.near(m.HW, m.BW) and SD.near(R(S.plates.enemy.lvl).points[1][4], m.BW + 5),
+			("%s %s"):format(m.LW, m.HW))
+		-- A class icon on the right goes after the game's box, which hangs past the row, and after the row with the square box or a hidden one.
+		ns.Set("nameplates.classPosition", "right")
+		_, S = SD.show(W, "mock-nameplate-marks")
+		local pm = S.plates.player.m
+		T.at = R(S.plates.player.iconFrame).points[1]
+		check("squared: sdplate: with the Default box a class icon on the right starts after the box", T.at[1] == "LEFT" and SD.near(T.at[4], pm.BW + 5 + pm.LW) and pm.levelOut == true,
+			("%s %s"):format(tostring(T.at[4]), pm.BW))
+		ns.Set("nameplates.level", "hidden")
+		_, S = SD.show(W, "mock-nameplate-marks")
+		pm = S.plates.player.m
+		check("squared: sdplate: with a hidden box it starts after the row", SD.near(R(S.plates.player.iconFrame).points[1][4], pm.BW), tostring(R(S.plates.player.iconFrame).points[1][4]))
 		ns.Set("nameplates.level", "box")
+		_, S = SD.show(W, "mock-nameplate-marks")
+		pm = S.plates.player.m
+		check("squared: sdplate: with the square box it starts after the row, where the box ends", SD.near(R(S.plates.player.iconFrame).points[1][4], pm.BW) and pm.levelOut == false,
+			tostring(R(S.plates.player.iconFrame).points[1][4]))
+		ns.Set("nameplates.classPosition", "left")
 		ns.Set("nameplates.levelGap", 0)
 
 		-- The class icon: the bar height or Custom, and the gap on each side.
