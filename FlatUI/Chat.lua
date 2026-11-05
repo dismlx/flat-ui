@@ -6,7 +6,7 @@ local _, ns = ...
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
 -- from the lines the kind of a unit, an ID and a count add, and nothing is created on one in combat. The size of a tooltip, the height of its
 -- health bar and the place of the input box are changed out of combat only. The fade of GameTooltip is seen as a fall of its alpha in a frame of the
--- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1026);
+-- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
 
 local KEY = "chat"
@@ -173,7 +173,7 @@ local function SelectedColour(tab)
 end
 
 -- The alpha of a tab that is not selected, for each choice of Chat tab opacity. The game's own mouse-over value for a normal tab is 0.6
--- (FloatingChatFrame.lua:19). The game's alpha for the tab, its stored pair and ChatFrameUtil.SetTabAlphas are left alone.
+-- (Mainline/FloatingChatFrame.lua:19). The game's alpha for the tab, its stored pair and ChatFrameUtil.SetTabAlphas are left alone.
 local TAB_OTHER = { clear = 0.6, full = 1 }
 
 local function Bright(region, alpha)
@@ -451,7 +451,7 @@ local function Closed(box)
 	return not IsShown(box) or not IsShown(box.focusLeft)
 end
 
--- The game calls Deactivate with no moment of its own in two places (FloatingChatFrame.lua:270-271, ChatFrameUtil.lua:598-601), so every box with a
+-- The game calls Deactivate with no moment of its own in two places (Mainline/FloatingChatFrame.lua:270-271, ChatFrameUtil.lua:598-601), so every box with a
 -- seat is settled on any moment.
 local function Pass(box)
 	settling[box] = nil
@@ -894,7 +894,7 @@ local function Combat(tooltip, data)
 end
 
 -- Fade out ----------------------------------------------------------------------------------
--- The game fades GameTooltip out when the mouse leaves a unit (UnitFrame_OnLeave, UnitFrame.lua:393) or the world (GameTooltip.lua:1026): a call in C++
+-- The game fades GameTooltip out when the mouse leaves a unit (UnitFrame_OnLeave, Mainline/UnitFrame.lua:393) or the world (GameTooltip.lua:1017): a call in C++
 -- that lowers the alpha. EllesmereUI hooks the method (EllesmereUIBlizzardSkin.lua:2841); here the fall is seen in a frame of the addon's own while the
 -- tooltip is up. Fast brings the alpha down in FADE_FAST seconds and hides the tooltip, At once hides it on the first frame of the fade. A tooltip built
 -- again (the post calls) or shown again (OnShow) is not faded.

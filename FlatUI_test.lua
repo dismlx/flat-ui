@@ -53988,7 +53988,6 @@ do
 			H.plate, H.glyph = R(nil, "ui-hud-minimap-button"), R(nil, "ui-hud-minimap-tracking-up")
 			H.trackButton = B(nil, { NormalTexture = H.glyph }, { objectType = "Button", width = 13, height = 14 })
 			H.tracking = B(nil, { Background = H.plate, Button = H.trackButton }, { hidden = true, width = 17, height = 17 })
-			H.trackBox = H.tracking
 			for index, key in ipairs(MODES) do
 				local part = { back = R(nil, "ui-hud-minimap-guildbanner-background-top"), border = R(nil, "ui-hud-minimap-guildbanner-border-top"),
 					glyph = R(nil, "ui-hud-minimap-guildbanner-normal-large") }
@@ -54020,7 +54019,6 @@ do
 				{ objectType = "Button", width = 23, height = 23 })
 			trackRaw.regions[1], trackRaw.regions[2] = H.glyph, H.trackGlow
 			H.tracking = B(nil, { Background = H.plate, Button = H.trackButton }, { hidden = true, width = 17, height = 17 })
-			H.trackBox = H.trackButton
 			-- The game's OnButtonStateChanged, which ButtonStateBehaviorMixin calls through self from OnEnter, OnLeave, OnMouseDown, OnMouseUp, OnEnable and
 			-- OnDisable (Blizzard_SharedXMLBase/ButtonStateBehavior.lua:41-118): SetAtlas on the plate, and the glow shown with 0.2 while the mouse is down,
 			-- 0.1 while it is over and hidden with 0 otherwise (Camelot/MinimapZoneTextButton.lua:11-25, Camelot/MinimapTrackingButton.lua:1-15).
@@ -54432,14 +54430,24 @@ do
 		TW.cvars.taintLog = tl
 		local back, debuff = T.bags.MainMenuBarBackpackButton, T.debuff
 		local frames = { { back.btn, "UpdateTextures" }, { T.bagBar, "UpdateDividers" }, { T.xp, "UpdateDividers" }, { debuff.btn, "Update" }, { T.map, "SetMaskTexture" },
-			{ T.exp.frame, "Update" }, { T.rep.frame, "Update" } }
+			{ T.exp.frame, "Update" }, { T.rep.frame, "Update" }, { T.header, "OnButtonStateChanged" } }
 		local written = 0
 		for _, entry in ipairs(frames) do
 			if INSTHOOK.wrapped(TW, entry[1], entry[2]) then
 				written = written + 1
 			end
 		end
-		check("hkhud: hud, taintLog " .. tl .. ": no method of a bag button, the bags bar, an aura button, the experience container or the minimap has a hook written on it", written == 0, written)
+		check("hkhud: hud, taintLog " .. tl .. ": no method of a bag button, the bags bar, an aura button, the experience container, the minimap or the zone name button has a hook written on it",
+			written == 0, written)
+		-- The zone name: the glow over its plate is made transparent again from the button's own scripts, hooked with HookScript, which taintLog leaves working.
+		T.mouse(T.header, "OnEnter")
+		local glowOver = T.headerGlow.alpha
+		T.mouse(T.header, "OnMouseDown")
+		local glowDown = T.headerGlow.alpha
+		T.mouse(T.header, "OnMouseUp")
+		T.mouse(T.header, "OnLeave")
+		check("hkhud: hud, taintLog " .. tl .. ": the glow over the zone name stays transparent under the mouse and when pressed, through the button's own scripts",
+			glowOver == 0 and glowDown == 0 and T.headerGlow.alpha == 0 and #((TW.rawOf[T.header].hookScripts or {}).OnEnter or {}) == 1, tostring(glowOver) .. " " .. tostring(glowDown))
 		local kinds = 0
 		for _ in pairs(T.bagBarRaw.scriptHooks) do
 			kinds = kinds + 1
@@ -54654,7 +54662,7 @@ do
 	end
 
 	-- Minimap in cities. In some cities the game loads Blizzard_HybridMinimap and shows its city map over the whole square of the minimap
-	-- (Minimap.lua:226-232, Blizzard_HybridMinimap.xml:5-10). The default is a cover of the addon's own over the corners, with the border round the circle.
+	-- (Mainline/Minimap.lua:236-242, Blizzard_HybridMinimap.xml:5-10). The default is a cover of the addon's own over the corners, with the border round the circle.
 	do
 		local K = { ORDER = { BACKGROUND = 1, LOW = 2, MEDIUM = 3 }, FILE = "Interface\\AddOns\\FlatUI\\Media\\Cover.tga",
 			RING = "Game's ring while the city map shows", COVER = "Flat round cover", LEAVE = "Leave as is",
@@ -54763,7 +54771,7 @@ do
 			K.set(H, true)
 			check("city: shown again: the same cover shows, and nothing is made twice or hooked twice", cover.shown and #W.addonFrames == frames + 2 and #W.addonTextures == textures + 2
 				and #raw.hooks.OnShow == 1 and #raw.hooks.OnHide == 1 and K.cover(W) == cover)
-			-- The player hides the minimap with the key binding for it (Minimap.lua:144-156): the city map is still shown, the minimap and what hangs from it are gone.
+			-- The player hides the minimap with the key binding for it (Mainline/Minimap.lua:154-167): the city map is still shown, the minimap and what hangs from it are gone.
 			mapRaw.shown = false
 			K.gone = not K.visible(W, cover) and not K.visible(W, rim) and cover.shown
 			mapRaw.shown = true
