@@ -4053,7 +4053,7 @@ local function newWorld(opts)
 
 	-- LargeSideTabButtonTemplate: a Frame. SetChecked and UpdateIconInterior are Blizzard's Lua. The tab is 55 by 55
 	-- (SidePanelTabButtonMixin:InitializeSizeForTabArt, a 55 by 60 atlas without its 5 of empty height) and the icon sits
-	-- at CENTER -4, 0 (Blizzard_SharedXML/Camelot/SharedUIPanelTemplates.lua:8-10). The icon has no size until UpdateIconInterior
+	-- at CENTER -4, 0 (Blizzard_SharedXML/Camelot/SharedUIPanelTemplates.lua:12-14). The icon has no size until UpdateIconInterior
 	-- runs, unless an OnLoad gave it one: `loaded` (30 in the Looking For Group and Professions tabs). The mask is the atlas
 	-- common-sidetab-mask of 55 by 60 at CENTER of the tab (Mainline/SharedUIPanelTemplates.xml:1026-1033, AtlasInfo.lua:3770).
 	local function sideTab(parent, key, name, id, icon, loaded)
@@ -4190,17 +4190,32 @@ local function newWorld(opts)
 		return box
 	end
 
-	-- ColoredProgressBarTemplate.
-	local function progressBar(parent, key, name)
+	-- ColoredProgressBarTemplate as 70790 has it (Blizzard_SharedXML/Camelot/ProgressBars/ColoredProgressBar.xml:5-13, 19-21, ColoredProgressBar.lua:11-35):
+	-- the fill is anchored LEFT to FillArea, a child frame 6 units in from each side, and sized on FillArea's width. A fill of width 0 is hidden,
+	-- which OnLoad's SetFillPercent(0) does. noFillArea: the template before 70425, with the fill on the bar's own left edge and its width.
+	local function progressBar(parent, key, name, noFillArea)
 		local bar, r = wframe(parent, key, { name = name, width = 160, height = 29 })
+		local area = not noFillArea and wframe(bar, "FillArea", { width = 148, height = 29 })
+		if area then
+			raw(area).points = { { "TOPLEFT", bar, "TOPLEFT", 6, 0 }, { "BOTTOMRIGHT", bar, "BOTTOMRIGHT", -6, 0 } }
+		end
 		wtex(bar, nil, "common-stat-bar-BG")
 		local fill = wtex(bar, "Fill", "common-stat-bar-white", { name = nil })
 		raw(fill).width, raw(fill).height = 0, 15
+		raw(fill).points = { { "LEFT", area or bar, "LEFT", 0, 0 } }
+		raw(fill).shown = not area
 		wmask(bar, "Mask", "common-stat-bar-Mask", { fill })
 		wfont(bar, "Text")
 		r.SetFillPercent = luaMethod("SetFillPercent", function(_, percent)
 			local p = math.min(1, math.max(0, percent))
-			raw(fill):SetWidth(p * 160)
+			if area then
+				r.fillPercent = p
+				local width = p * raw(area).width
+				raw(fill):SetShown(width > 0)
+				raw(fill):SetWidth(width)
+			else
+				raw(fill):SetWidth(p * 160)
+			end
 			raw(fill):SetTexCoord(0, p, 1, 0)
 		end)
 		r.SetFillTextureByColorType = luaMethod("SetFillTextureByColorType", function(_, colorType)
@@ -4363,6 +4378,8 @@ local function newWorld(opts)
 	-- ShowUIPanel / HideUIPanel (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:854-903): they show the frame, and the
 	-- hook of an addon runs after. A window that builds children as it opens does it in `later`. A frame that is shown already is
 	-- left alone (882-884), and the hook runs all the same.
+	-- A window whose shown pages run their OnShow as it opens names that work in W.win.onPanelShow[frame].
+	W.win.onPanelShow = {}
 	if wopts then
 	function env.ShowUIPanel(frame, force)
 		if not frame or frame:IsShown() then
@@ -4370,6 +4387,35 @@ local function newWorld(opts)
 		end
 		frame:Show()
 		W.panelShown = (W.panelShown or 0) + 1
+		if W.win.onPanelShow[frame] then
+			W.win.onPanelShow[frame]()
+		end
+	end
+	-- SetPaperDollBackground (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.lua:3367-3391, since 70707): the four race pictures, and the alpha of
+	-- the overlay over them by the unit's race, 0.85 for a race the table does not list. The character page and the inspect page call it each time
+	-- they are shown (PaperDollFrame.lua:1522, Blizzard_InspectUI/Mainline/InspectPaperDollFrame.lua:102). UnitRace's file name of each unit is
+	-- in W.win.races.
+	W.win.races = { player = "Human", target = "Human" }
+	local OVERLAY_ALPHA = { HUMAN = 1, DWARF = 0.93, NIGHTELF = 0.5, TROLL = 0.85, ORC = 0.75, SCOURGE = 0.2 }
+	function env.SetPaperDollBackground(model, unit)
+		local file = W.win.races[unit] or "Human"
+		local texture = "Interface\\DressUpFrame\\DressUpBackground-" .. file
+		model.BackgroundTopLeft:SetTexture(texture .. 1)
+		model.BackgroundTopRight:SetTexture(texture .. 2)
+		model.BackgroundBotLeft:SetTexture(texture .. 3)
+		model.BackgroundBotRight:SetTexture(texture .. 4)
+		model.BackgroundOverlay:SetAlpha(OVERLAY_ALPHA[file:upper()] or 0.85)
+	end
+	-- A page of a window is shown by the game: its OnShow, then the scripts the addon hooked on it, run only when it was hidden.
+	function W.win.showPage(page, onShow)
+		local was = raw(page).shown
+		page:Show()
+		if not was then
+			if onShow then
+				onShow()
+			end
+			W.fireScript(page, "OnShow")
+		end
 	end
 	function env.HideUIPanel(frame)
 		if frame then
@@ -4493,9 +4539,17 @@ local function newWorld(opts)
 			wtex(tab, nil, "UI-Character-Info-StatTab")
 			wstate(tab, "Checked", "UI-Character-Info-StatTab-Selected")
 		end
+		-- The rock strip across the top of the left pane, and the level text in front of it with no background of its own: one for the player
+		-- and a hidden one for the pet (Camelot/PaperDollFrame.xml:556-605, since 70291; the level ribbon CharacterLevelTextBackground went then).
+		local strip = wframe(doll, "TopBackgroundStripHost", { height = 36 })
+		raw(strip).points = { { "TOPLEFT", left, "TOPLEFT", 0, 0 }, { "TOPRIGHT", left, "TOPRIGHT", 0, 0 } }
+		local rock = wtex(strip, "TopBackgroundStrip", nil, { layer = "ARTWORK" })
+		raw(rock).file = "Interface\\FrameGeneral\\UI-Background-Rock"
+		wtex(strip, "TopBackgroundStripBottomEdge", "_UI-Frame-InnerTopTile", { layer = "ARTWORK" })
 		local level = wframe(doll, nil, { name = "PaperDollLevelInfo", width = 220, height = 20 })
-		wtex(level, nil, "UI-Character-Info-ItemLevel-Bounce", { name = "CharacterLevelTextBackground" })
 		wfont(level, nil, { name = "CharacterLevelText" })
+		local petLevel = wframe(doll, nil, { name = "PaperDollPetLevelInfo", width = 220, height = 20, hidden = true })
+		wfont(petLevel, nil, { name = "PetCharacterLevelText" })
 
 		local scene, sr = wframe(doll, "CharacterModelScene", { name = "CharacterModelScene" })
 		sr.CreateActor = function() end
@@ -4555,6 +4609,35 @@ local function newWorld(opts)
 		-- The Skills pane has a bar of its own.
 		local skills = wframe(cf, nil, { name = "SkillsFrame", hidden = true })
 		progressBar(skills, nil, "SkillBar1")
+
+		-- PaperDollFrame_OnShow (Camelot/PaperDollFrame.lua:1511-1522): what it does to the race pictures. It runs when the window opens on the
+		-- character page, and on every change back to that page inside the open window, with no ShowUIPanel (CharacterFrame.lua:3-28, 106-121).
+		local function dollShown()
+			env.SetPaperDollBackground(env.CharacterModelScene, "player")
+		end
+		local SUBFRAMES = { PaperDollFrame = dollShown, ReputationFrame = false, SkillsFrame = false }
+		cr.ShowSubFrame = luaMethod("ShowSubFrame", function(_, frameName)
+			cr.activeSubframe = frameName
+			for name in pairs(SUBFRAMES) do
+				if name ~= frameName then
+					env[name]:Hide()
+				end
+			end
+			W.win.showPage(env[frameName], SUBFRAMES[frameName] or nil)
+		end)
+		W.win.onPanelShow[cf] = function()
+			if raw(doll).shown then
+				dollShown()
+				W.fireScript(doll, "OnShow")
+			end
+		end
+		-- ToggleCharacter(tab) with the window open on another page (CharacterFrame.lua:3-28).
+		function W.win.toggleCharacter(frameName)
+			W.blizzard(function()
+				cf:ShowSubFrame(frameName)
+				cf:RefreshDisplay()
+			end)
+		end
 
 		W.win.sidebarTabs = tabs
 		-- CharacterFrameMixin:OnLoad has already set up the tabs when an addon loads: the Character tab is selected.
@@ -5391,12 +5474,43 @@ local function newWorld(opts)
 		local inspect = portraitFrame(env.UIParent, nil, { name = "InspectFrame", hidden = true, width = 338, height = 424 }, "textured")
 		closeButton(inspect, "CloseButton", "InspectFrameCloseButton")
 		inset(inspect, "Inset", "InspectFrameInset")
-		local model = wframe(inspect, nil, { name = "InspectModelFrame" })
-		for _, part in ipairs({ "BackgroundTopLeft", "BackgroundTopRight", "BackgroundBotLeft", "BackgroundBotRight", "BackgroundOverlay" }) do
-			wtex(model, part, nil)
+		-- The model is on the character page of the window (Blizzard_InspectUI/Camelot/InspectPaperDollFrame.xml:56-134); the other page here is PvP.
+		local inspectDoll = wframe(inspect, nil, { name = "InspectPaperDollFrame" })
+		raw(inspectDoll).allPoints = inspect
+		wframe(inspect, nil, { name = "InspectPVPFrame", hidden = true })
+		local model = wframe(inspectDoll, nil, { name = "InspectModelFrame" })
+		for _, part in ipairs({ "BackgroundTopLeft", "BackgroundTopRight", "BackgroundBotLeft", "BackgroundBotRight" }) do
+			wtex(model, part, nil, { name = "InspectModelFrame" .. part })
 		end
+		-- A black colour texture over the pictures.
+		local inspectOverlay = wtex(model, "BackgroundOverlay", nil, { name = "InspectModelFrameBackgroundOverlay", layer = "BORDER" })
+		raw(inspectOverlay).color = { 0, 0, 0, 1 }
 		for _, part in ipairs({ "TopLeft", "TopRight", "BottomLeft", "BottomRight", "Left", "Right", "Top", "Bottom", "Bottom2" }) do
 			named(model, "InspectModelFrameBorder" .. part)
+		end
+		raw(inspect).unit = "target"
+		-- InspectPaperDollFrameMixin:OnShow (Mainline/InspectPaperDollFrame.lua:81-107): the race pictures of the inspected unit. It runs when the
+		-- window opens on the character page and on every change back to it (Camelot/Blizzard_InspectUI.lua:41-49, 154-162).
+		local function inspectDollShown()
+			env.SetPaperDollBackground(model, raw(inspect).unit)
+		end
+		W.win.onPanelShow[inspect] = function()
+			if raw(inspectDoll).shown then
+				inspectDollShown()
+				W.fireScript(inspectDoll, "OnShow")
+			end
+		end
+		local INSPECT_PAGES = { "InspectPaperDollFrame", "InspectPVPFrame" }
+		function env.InspectSwitchTabs(newID)
+			for id, name in ipairs(INSPECT_PAGES) do
+				if id ~= newID then
+					env[name]:Hide()
+				end
+			end
+			W.win.showPage(env[INSPECT_PAGES[newID]], newID == 1 and inspectDollShown or nil)
+		end
+		function W.win.inspectTab(id)
+			W.blizzard(function() env.InspectSwitchTabs(id) end)
 		end
 		local dress = portraitFrame(env.UIParent, nil, { name = "DressUpFrame", hidden = true, width = 450, height = 545 }, "textured")
 		closeButton(dress, "CloseButton", "DressUpFrameCloseButton")
@@ -5421,15 +5535,68 @@ local function newWorld(opts)
 		-- Blizzard_ChatFrame/Mainline/ChatConfigFrame.xml:365-376: a dialog with a Border and a Header.
 		local chat = dialog("ChatConfigFrame", 745, 605)
 		panelButton(chat, nil, "ChatConfigFrameDefaultButton", 100, 22)
-		-- Blizzard_PVPMatch/PVPMatchScoreboard.xml:5-30 and PVPMatchResults.xml:50-90: a close button and a content frame with the board's art.
-		for _, case in ipairs({ { "PVPMatchScoreboard", "Content" }, { "PVPMatchResults", "content" } }) do
-			local board = wframe(env.UIParent, nil, { name = case[1], hidden = true, width = 1024, height = 420 })
-			closeButton(board, "CloseButton", case[1] .. "CloseButton")
+		-- The boards Forever loads since 70707 (Blizzard_PVPMatch.toc: [Game]\PVPMatchScoreboard.xml and [Game]\PVPMatchResults.xml for camelot):
+		-- Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:5-80 and Camelot/PVPMatchResults.xml:5-141. A close button with no name (ClosePanelButton on
+		-- the scoreboard, CloseButton on the results), a header, a NineSlice of layout ButtonFrameTemplateNoPortrait, and a content frame whose art
+		-- has no key: the Stat-BG, on the results a scroll line, and in its header frame a stone band. The results have a leave button, a
+		-- SharedButtonTemplate three-slice in a frame of its own below the content; the scoreboard has none.
+		local NO_PORTRAIT_ATLAS = { "UI-Frame-Metal-CornerTopLeft", "UI-Frame-Metal-CornerTopRight", "UI-Frame-Metal-CornerBottomLeft", "UI-Frame-Metal-CornerBottomRight",
+			"_UI-Frame-Metal-EdgeTop", "_UI-Frame-Metal-EdgeBottom", "!UI-Frame-Metal-EdgeLeft", "!UI-Frame-Metal-EdgeRight" }
+		for _, case in ipairs({ { "PVPMatchScoreboard", "Content", "ScrollCategories", "ClosePanelButton", "ScrollBox" },
+			{ "PVPMatchResults", "content", "scrollCategories", "CloseButton", "scrollBox" } }) do
+			local board, br = wframe(env.UIParent, nil, { name = case[1], hidden = true, width = 1024, height = case[1] == "PVPMatchResults" and 520 or 420 })
+			closeButton(board, case[4], nil)
+			local header = wframe(board, "HeaderContainer", { width = 400, height = 20 })
+			wfont(header, "Text", { layer = "OVERLAY" })
+			wframe(board, "NineSlice")
+			raw(br.NineSlice).layoutType = "ButtonFrameTemplateNoPortrait"
+			for index, name in ipairs(NINE) do
+				wtex(br.NineSlice, name, NO_PORTRAIT_ATLAS[index])
+			end
 			local content = wframe(board, case[2], {})
-			wtex(content, "Background", "pvpscoreboard-background")
-			wtex(content, "InsetBorderTopLeft", "UI-Frame-InnerTopLeft")
-			panelButton(content, nil, case[1] .. "LeaveButton", 100, 22)
+			wtex(content, nil, "UI-Character-Info-Stat-BG", { layer = "BACKGROUND" })
+			if case[1] == "PVPMatchResults" then
+				wtex(content, nil, "UI-Character-Info-ScrollLine", { layer = "OVERLAY" })
+			end
+			local categories = wframe(content, case[3], { height = 50 })
+			wtex(categories, nil, "UI-Character-Info-Stat-StoneBG3", { layer = "ARTWORK" })
+			wframe(content, case[5], {})
+			if case[1] == "PVPMatchResults" then
+				local buttons = wframe(board, "buttonContainer", { width = 1, height = 40 })
+				threeSlice(buttons, "leaveButton", nil, "128-RedButton")
+			end
 		end
+		-- The stable, loaded at startup (Blizzard_StableUI/Camelot/Blizzard_StableUI.xml:3-292, since 70425): a PortraitFrameTemplate window with
+		-- two bands that both take the key Background (the second keeps it, so both are only among the regions), a border across the bottom,
+		-- a pet model, the pet's experience bar, three pet slots, a buy button, and two frames over it that each draw a divider.
+		local stable = portraitFrame(env.UIParent, nil, { name = "PetStableFrame", hidden = true, width = 384, height = 522 }, "textured")
+		closeButton(stable, "CloseButton", "PetStableFrameCloseButton")
+		wfont(stable, nil, { name = "PetStableLevelText" })
+		wfont(stable, nil, { name = "PetStableSlotText" })
+		wtex(stable, "Background", "ui-stables-footer-bg", { name = "BottomBackground", layer = "BACKGROUND" })
+		wtex(stable, "Background", "ui-stables-subheader-bg", { name = "TopBackground", layer = "BACKGROUND" })
+		wtex(stable, "insideFrameBottom", "common-insideframe", { layer = "BORDER" })
+		local stableScene, ssr = wframe(stable, "modelScene", {})
+		ssr.CreateActor = function() end
+		wtex(stableScene, "Background", "ui-stables-pet-model-bg")
+		progressBar(stable, "expBar", "expBar")
+		for _, name in ipairs({ "PetStableCurrentPet", "PetStableStabledPet1", "PetStableStabledPet2" }) do
+			local slot = wbutton(stable, nil, { name = name, width = 37, height = 37, objectType = "CheckButton" })
+			named(slot, name .. "IconTexture", { layer = "BORDER" })
+			wtex(slot, "unlockedBackground", "ui-stables-pet-frame-stabled", { hidden = true })
+			wtex(slot, "currentBackground", "ui-stables-pet-frame-current", { hidden = true })
+			wtex(slot, "lockedBackground", "ui-stables-pet-frame-locked", { hidden = true })
+			wstate(slot, "Pushed", nil)
+			wstate(slot, "Highlight", nil)
+			wstate(slot, "Checked", nil)
+		end
+		panelButton(stable, "purchaseButton", nil, 105, 22)
+		for _, key in ipairs({ "BottomDividerFrame", "TopDividerFrame" }) do
+			local divider = wframe(stable, key, {})
+			raw(divider).allPoints = stable
+			wtex(divider, "horzDivider", "ui-stables-horz-divider", { layer = "OVERLAY" })
+		end
+		W.win.stable = stable
 		-- Blizzard_CompactRaidFrames/Mainline/Blizzard_CompactRaidFrameManager.xml:112-124, 391-403: a Background over the whole frame and two buttons.
 		local manager = wframe(env.UIParent, nil, { name = "CompactRaidFrameManager", hidden = true, width = 200, height = 200 })
 		wtex(manager, "Background", nil)
@@ -21325,7 +21492,7 @@ do
 	clean(W, "side tabs")
 end
 
--- 43b. Side tab size: the tab and its icon at the chosen size (SharedUIPanelTemplates.lua:309-329, 381-399: a 55 tab around a 50 icon, set again on every
+-- 43b. Side tab size: the tab and its icon at the chosen size (SharedUIPanelTemplates.lua:311-331, 383-401: a 55 tab around a 50 icon, set again on every
 -- SetChecked), the game's sizes back for Game's size, tabs without fillToInterior left alone, and nothing sized in combat on a protected tab.
 do
 	local T = {}
@@ -21603,7 +21770,7 @@ do
 
 	-- The mask that rounds the icon (Square side tab icons off) is the game's 55 by 60 at the centre of the tab, with the icon 4 to the left. It is scaled about the
 	-- centre of the icon, so a smaller icon is cut as the game cuts the large one: the mask is the icon's side over 50 of 55 by 60, at the icon's place times one minus
-	-- that ratio (Mainline/SharedUIPanelTemplates.xml:1026-1033, lua:381-387). With the icons square the mask is not used and is not written.
+	-- that ratio (Mainline/SharedUIPanelTemplates.xml:1026-1033, lua:383-389). With the icons square the mask is not used and is not written.
 	function T.mask(W, name)
 		local mask = wraw(W, T.tab(W, name).Mask)
 		local point = mask.points[1]
@@ -22183,14 +22350,38 @@ do
 		check(name .. ": the unkeyed background is found by its atlas and is transparent", back ~= nil and wa(W, back) == 0)
 		check(name .. ": the fill is not masked any more, the mask stays", not wmasked(W, b.Fill, b.Mask) and wa(W, b.Mask) == 1 and wa(W, b.Fill) == 1 and wa(W, b.Text) == 1)
 		local own = wboxes(W, bar)
-		check(name .. ": a box across the bar, 15 high, centred", #own == 1 and own[1].height == 15 and own[1].points[1][1] == "LEFT" and own[1].points[1][4] == 0 and own[1].points[2][1] == "RIGHT" and own[1].points[2][4] == 0)
+		-- Since 70425 the fill lies in FillArea, 6 units in from each side of the bar, so the box goes round FillArea and not the whole bar.
+		check(name .. ": a box across the track the fill is drawn in, 15 high, centred", #own == 1 and own[1].height == 15 and own[1].points[1][1] == "LEFT" and own[1].points[1][2] == b.FillArea
+			and own[1].points[1][4] == 0 and own[1].points[2][1] == "RIGHT" and own[1].points[2][2] == b.FillArea and own[1].points[2][4] == 0)
 		check(name .. ": the box has the window colour and a thin border", W.state(own[1]) == "SB" and wcolour(wfill(W, own[1])) == WINDOW_FILL and ringOf(W, own[1], 1, 0, 0, 0) and W.state(bar) == ".")
 	end
-	-- Blizzard changes the fill's width, coordinates and atlas. That changes nothing the addon did.
+	-- Blizzard changes the fill's width, coordinates and atlas. That changes nothing the addon did. Since 70425 the width is a share of FillArea's 148
+	-- and not of the bar's 160 (ColoredProgressBar.lua:33), and the fill starts at the left of FillArea, where the box starts.
 	local bar = wraw(W, names.ReputationBar1)
 	W.blizzard(function() names.ReputationBar1:SetFillPercent(0.5) names.ReputationBar1:SetFillTextureByColorType(2) end)
-	check("progress bar: Blizzard sets the fill's width and atlas and the mask stays off", not wmasked(W, bar.Fill, bar.Mask) and wraw(W, bar.Fill).width == 80)
+	check("progress bar: Blizzard sets the fill's width and atlas and the mask stays off", not wmasked(W, bar.Fill, bar.Mask) and wraw(W, bar.Fill).width == 74 and wraw(W, bar.Fill).shown)
+	local fillAt, box = wraw(W, bar.Fill).points[1], wboxes(W, names.ReputationBar1)[1]
+	W.blizzard(function() names.ReputationBar1:SetFillPercent(1) end)
+	check("progress bar: a full fill starts and ends with the box", fillAt[1] == "LEFT" and fillAt[2] == box.points[1][2] and fillAt[4] == box.points[1][4]
+		and wraw(W, bar.Fill).width == wraw(W, bar.FillArea).width and box.points[2][2] == bar.FillArea)
 	clean(W, "progress bars")
+end
+
+do
+	-- A bar of the template before 70425 has no FillArea: the box goes across the whole bar, as the fill does.
+	local W = newWorld({ windows = true })
+	W.group = "windows"
+	local old = W.win.progressBar(W.win.names.ReputationFrame, nil, "FlatUITestOldBar", true)
+	W.group = "static"
+	W.seal()
+	W.login()
+	W.flush()
+	local own = wboxes(W, old)
+	check("progress bar without FillArea: the box is across the bar itself", wraw(W, old).FillArea == nil and #own == 1 and own[1].points[1][2] == old and own[1].points[2][2] == old
+		and own[1].points[1][4] == 0 and own[1].points[2][4] == 0 and own[1].height == 15)
+	W.blizzard(function() old:SetFillPercent(0.5) end)
+	check("progress bar without FillArea: the fill is a share of the bar's width", wraw(W, wraw(W, old).Fill).width == 80)
+	clean(W, "progress bar without FillArea")
 end
 
 do
@@ -22244,8 +22435,17 @@ do
 	check("art: the right pane's background and stone header are transparent, and the divider art one frame down", wa(W, wraw(W, right).regions[1]) == 0 and wa(W, wraw(W, right).StoneBg) == 0
 		and wa(W, wraw(W, wraw(W, right).children[1]).regions[1]) == 0)
 	check("art: frames are never made transparent, only their textures", wa(W, left) == 1 and wa(W, right) == 1 and wa(W, wraw(W, right).children[1]) == 1)
+	-- Since 70291 the level text has no background and stands on the rock strip across the top of the left pane, a frame of PaperDollFrame's own;
+	-- the check on the old ribbon behind the level text is now one on the strip.
 	local level = names.PaperDollLevelInfo
-	check("art: the level text's background is transparent, its text is not", wa(W, wraw(W, level).regions[1]) == 0 and wa(W, wraw(W, level).regions[2]) == 1)
+	local strip = wraw(W, wraw(W, names.PaperDollFrame).TopBackgroundStripHost)
+	local function stripAlphas() return g(wa(W, strip.TopBackgroundStrip)) .. "," .. g(wa(W, strip.TopBackgroundStripBottomEdge)) end
+	check("art: the rock strip and its edge across the top of the left pane are transparent, the level texts are not",
+		stripAlphas() == "0,0" and wa(W, wraw(W, level).regions[1]) == 1 and wa(W, wraw(W, names.PaperDollPetLevelInfo).regions[1]) == 1, stripAlphas())
+	W.change("windows.character", false)
+	check("art: with the character window off the rock strip is as the game drew it", stripAlphas() == "1,1", stripAlphas())
+	W.change("windows.character", true)
+	check("art: and transparent again when it is back on", stripAlphas() == "0,0", stripAlphas())
 	local box = names.CharacterStatsPaneScrollBox
 	check("art: the stats list loses its border, its scroll line and its class picture", wa(W, wraw(W, box).Border) == 0 and wa(W, wraw(W, box).ClassBackground) == 0 and wa(W, wraw(W, box).regions[2]) == 0)
 	check("art: the frames inside the stats list are not stripped", wa(W, wraw(W, wraw(W, box).ScrollBar).Track) == 1)
@@ -22260,6 +22460,38 @@ do
 	check("race art: the four pictures and the overlay are transparent by default, the scene is not", table.concat(list, ",") == "0,0,0,0,0" and wa(W, names.CharacterModelScene) == 1)
 	check("race art: the model scene's controls are not touched", wa(W, wraw(W, wraw(W, scene.ControlFrame).children[1]).states.Normal) == 1)
 	clean(W, "panels")
+end
+
+do
+	-- Since 70707 PaperDollFrame_OnShow sets the alpha of the overlay over the race pictures by the player's race (SetPaperDollBackground,
+	-- Camelot/PaperDollFrame.lua:3367-3391, 1522), when the window opens and on every change back to the character page inside the open
+	-- window, where no ShowUIPanel follows. An Undead's overlay has 0.2.
+	local W = winWorld()
+	local names = W.win.names
+	W.win.races.player = "Scourge"
+	local overlay = wraw(W, names.CharacterModelScene).BackgroundOverlay
+	local pictures = wraw(W, names.CharacterModelScene).BackgroundTopLeft
+	W.showPanel(names.CharacterFrame)
+	W.flush()
+	check("race overlay: faded when the window opens on the character page", wa(W, overlay) == 0 and wa(W, pictures) == 0, g(wa(W, overlay)))
+	W.win.toggleCharacter("ReputationFrame")
+	W.win.toggleCharacter("PaperDollFrame")
+	check("race overlay: still faded at once after a change to the reputation page and back, with no ShowUIPanel", wa(W, overlay) == 0 and wraw(W, names.PaperDollFrame).shown
+		and not wraw(W, names.ReputationFrame).shown and wraw(W, pictures).file == "Interface\\DressUpFrame\\DressUpBackground-Scourge1", g(wa(W, overlay)))
+	W.flush()
+	check("race overlay: and on the next frame", wa(W, overlay) == 0, g(wa(W, overlay)))
+	W.change("windows.raceArt", true)
+	check("race overlay: with the race background on, it has the alpha the game gives the race, not the one it had at login", wa(W, overlay) == 0.2 and wa(W, pictures) == 1, g(wa(W, overlay)))
+	W.win.toggleCharacter("SkillsFrame")
+	W.win.toggleCharacter("PaperDollFrame")
+	check("race overlay: and keeps it after a change of page", wa(W, overlay) == 0.2, g(wa(W, overlay)))
+	W.change("windows.raceArt", false)
+	check("race overlay: faded again when the race background goes off", wa(W, overlay) == 0 and wa(W, pictures) == 0, g(wa(W, overlay)))
+	W.change("windows.enabled", false)
+	W.win.toggleCharacter("ReputationFrame")
+	W.win.toggleCharacter("PaperDollFrame")
+	check("race overlay: with the module off the game's alpha stays", wa(W, overlay) == 0.2 and wa(W, pictures) == 1, g(wa(W, overlay)))
+	clean(W, "race overlay")
 end
 
 
@@ -22393,7 +22625,8 @@ do
 	local base = newWorld()
 	base.login()
 	local W = winWorld()
-	check("hooks: the windows add five hooks on globals and none on methods", W.hooks - base.hooks == 5, W.hooks - base.hooks)
+	-- Six since 70707: SetPaperDollBackground, which sets the alpha of the overlay over the race pictures again each time a paper doll page is shown.
+	check("hooks: the windows add six hooks on globals and none on methods", W.hooks - base.hooks == 6, W.hooks - base.hooks)
 	local count = W.hooks
 	W.change("windows.opacity", 60)
 	W.change("windows.buttons", false)
@@ -22815,7 +23048,8 @@ do
 	check("a global that does not exist: the other item hooks are still made and work", o and string.format("%.2f,%.2f,%.2f", o.r, o.g, o.b) == "0.20,0.40,0.60" and #G.errors == 0 and #G.violations == 0)
 	local base = newWorld()
 	base.login()
-	check("a global that does not exist: two of the five global hooks are missing, so the others are 5 - 2", G.hooks - base.hooks == 3, G.hooks - base.hooks)
+	-- Six global hooks since 70707, with SetPaperDollBackground.
+	check("a global that does not exist: two of the six global hooks are missing, so the others are 6 - 2", G.hooks - base.hooks == 4, G.hooks - base.hooks)
 	local P = newWorld({ windows = true })
 	P.env.ShowUIPanel = nil
 	P.login()
@@ -23337,7 +23571,8 @@ do
 	W.flush()
 	local styled = tonumber(W.status():match("Windows: on, (%d+) styled"))
 	check("turned on later: the windows are styled, and the status counts them", styled and styled > 100 and W.state(names.CharacterFrame) == "SB" and W.state(names.LFGParentFrame) == "SB", W.line("Windows"))
-	check("turned on later: the item functions, the tabs and the panel are followed from then on", W.hooks - base.hooks == 6, W.hooks - base.hooks)
+	-- One more since 70707: SetPaperDollBackground, for the overlay over the race pictures.
+	check("turned on later: the item functions, the tabs, the panel and the race pictures are followed from then on", W.hooks - base.hooks == 7, W.hooks - base.hooks)
 	check("turned on later: the quality colour of an item that was on before is picked up", (function()
 		local o = W.look(names.CharacterHeadSlot)
 		return o and string.format("%.2f,%.2f,%.2f", o.r, o.g, o.b) == "0.64,0.21,0.93"
@@ -57895,7 +58130,9 @@ do
 		check("later windows: nine windows, name completion and two toasts have an outline and a fill", #bad == 0, table.concat(bad, ", "))
 		local listing = W.slash("windows")
 		check("later windows: /flatui windows lists them, and says which this client does not have", has(listing, "AuctionHouseFrame: styled") and has(listing, "WorldMapFrame: styled")
-			and has(listing, "BNToastFrame: styled") and has(listing, "PetStableFrame: not found") and has(listing, "MacroPopupFrame: loads later"))
+			-- The stable is built since this client models 70790 (it was "not found" before); the cooldown settings window is still one it does not have.
+			and has(listing, "BNToastFrame: styled") and has(listing, "PetStableFrame: styled") and has(listing, "CooldownViewerSettings: not found")
+			and has(listing, "MacroPopupFrame: loads later"), listing)
 		W.out = {}
 		local hooks = lw().hooks - winWorld().hooks
 		check("later windows: they add no hook of a method: the one scroll list is followed on its own callback registry", hooks == 0, hooks)
@@ -57971,6 +58208,45 @@ do
 		check("inspect and dressing room: the frame round the model is faded; the pictures behind the model follow the race background setting",
 			off == "0,0,0,0,0|" .. NINE .. "|0" and on == "1,1,1,1,1|" .. NINE .. "|1" and race() == off, off .. " " .. on)
 		local macro = { N.MacroFramePortrait, N.MacroHorizontalBarLeft, N.MacroFrameSelectedMacroBackground }
+		-- Since 70707 the game sets the alpha of the black overlay over the inspected unit's race pictures each time the character page of the
+		-- inspect window is shown, also on a change of tab inside the open window (SetPaperDollBackground, InspectPaperDollFrame.lua:102).
+		local I = lw()
+		local IN = I.env
+		I.win.races.target = "NightElf"
+		local overlay = wraw(I, IN.InspectModelFrame).BackgroundOverlay
+		I.showPanel(IN.InspectFrame)
+		I.flush()
+		local opened = g(wa(I, overlay))
+		I.win.inspectTab(2)
+		I.win.inspectTab(1)
+		check("inspect: the overlay over the race pictures stays faded when the window opens and after a change to another tab and back",
+			opened == "0" and wa(I, overlay) == 0 and wraw(I, IN.InspectPaperDollFrame).shown, opened .. " " .. g(wa(I, overlay)))
+		I.flush()
+		check("inspect: and on the next frame too", wa(I, overlay) == 0, g(wa(I, overlay)))
+		I.change("windows.raceArt", true)
+		local shown = g(wa(I, overlay))
+		I.win.inspectTab(2)
+		I.win.inspectTab(1)
+		check("inspect: with the race background on, the overlay has the alpha the game gives the unit's race, not the alpha it had at login",
+			shown == "0.5" and wa(I, overlay) == 0.5, shown .. " " .. g(wa(I, overlay)))
+		I.change("windows.raceArt", false)
+		check("inspect: and is faded again when it goes off", wa(I, overlay) == 0, g(wa(I, overlay)))
+		clean(I, "inspect race overlay")
+		-- The stable (Blizzard_StableUI/Camelot/Blizzard_StableUI.xml:103-127, 265-288): both bands, the border across the bottom and both dividers
+		-- go; the text, the pet slots and the model's own picture stay.
+		local st = wraw(W, N.PetStableFrame)
+		local function stableArt()
+			return alphas(W, { N.TopBackground, N.BottomBackground, st.insideFrameBottom, wraw(W, st.TopDividerFrame).horzDivider, wraw(W, st.BottomDividerFrame).horzDivider })
+		end
+		check("stable: the two bands, the border across the bottom and the two dividers are transparent, the window has a box, and its NineSlice is faded",
+			stableArt() == "0,0,0,0,0" and W.state(N.PetStableFrame) == "SB" and alphas(W, pieces(W, st.NineSlice)) == EIGHT, stableArt())
+		check("stable: its text, the model's picture and the slots' art are left alone, the experience bar is a flat bar and the buy button is flat",
+			wa(W, N.PetStableLevelText) == 1 and wa(W, wraw(W, st.modelScene).Background) == 1 and wa(W, N.PetStableCurrentPetIconTexture) == 1
+			and #wboxes(W, st.expBar) == 1 and W.state(st.purchaseButton) == "SB")
+		W.change("windows.more", false)
+		check("stable: with the group of more windows off, its art is as the game drew it", stableArt() == "1,1,1,1,1" and W.state(N.PetStableFrame) == "hb", stableArt())
+		W.change("windows.more", true)
+		check("stable: and transparent again when it is back on", stableArt() == "0,0,0,0,0", stableArt())
 		local picture = alphas(W, macro)
 		W.change("windows.portrait", true)
 		local withPortrait = alphas(W, macro)
@@ -59776,20 +60052,31 @@ do
 	-- Windows that were not listed.
 	local ach, chat, board, results, manager = wraw(W, N.AchievementFrame), wraw(W, N.ChatConfigFrame), wraw(W, N.PVPMatchScoreboard), wraw(W, N.PVPMatchResults),
 		wraw(W, N.CompactRaidFrameManager)
+	-- The scoreboard and the match results as Forever has them since 70707 (Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:5-80, Camelot/PVPMatchResults.xml:5-141):
+	-- a NineSlice, art with no key on the content (the board's background, and the scroll line of the results), and the stone band in the header frame
+	-- of the content. The old boards' keyed Background and inset corner, and their leave button with a name, are gone.
+	local function art(frame, index) return g(wa(W, wraw(W, frame).regions[index])) end
+	local scoreHeader, resultsHeader = board.Content and wraw(W, board.Content).ScrollCategories, results.content and wraw(W, results.content).scrollCategories
 	local function more()
 		return table.concat({ g(wa(W, ach.TopLeftCorner)), g(wa(W, ach.Center)), g(wa(W, W.env.CalendarFrameTopLeftTexture)), g(wa(W, wraw(W, chat.Border).TopEdge)),
-			g(wa(W, wraw(W, chat.Header).LeftBG)), g(wa(W, wraw(W, board.Content).Background)), g(wa(W, wraw(W, board.Content).InsetBorderTopLeft)),
-			g(wa(W, wraw(W, results.content).Background)), g(wa(W, manager.Background)) }, ",")
+			g(wa(W, wraw(W, chat.Header).LeftBG)), g(wa(W, wraw(W, board.NineSlice).TopEdge)), art(board.Content, 1), art(scoreHeader, 1),
+			g(wa(W, wraw(W, results.NineSlice).TopLeftCorner)), art(results.content, 1), art(results.content, 2), art(resultsHeader, 1), g(wa(W, manager.Background)) }, ",")
 	end
+	local leave = wraw(W, results.buttonContainer).leaveButton
 	check("achievements, calendar, chat settings, scoreboard, match results and raid manager: their art is transparent, each has a box, and their buttons are flat",
-		more() == "0,0,0,0,0,0,0,0,0" and W.state(N.AchievementFrame) == "SB" and W.state(N.CalendarFrame) == "SB" and W.state(N.ChatConfigFrame) == "SB"
+		more() == ("0,"):rep(12) .. "0" and W.state(N.AchievementFrame) == "SB" and W.state(N.CalendarFrame) == "SB" and W.state(N.ChatConfigFrame) == "SB"
 		and W.state(N.PVPMatchScoreboard) == "SB" and W.state(N.PVPMatchResults) == "SB" and W.state(N.CompactRaidFrameManager) == "SB"
 		and W.state(N.AchievementFrameFilterButton) == "SB" and W.state(N.CalendarCreateEventButton) == "SB" and W.state(N.ChatConfigFrameDefaultButton) == "SB"
-		and W.state(N.PVPMatchScoreboardLeaveButton) == "SB" and W.state(N.CompactRaidFrameManagerLeavePartyButton) == "SB", more())
+		and W.state(leave) == "SB" and wa(W, wraw(W, leave).Center) == 0 and W.state(N.CompactRaidFrameManagerLeavePartyButton) == "SB", more())
+	check("scoreboard and match results: the close buttons, one with no name and no CloseButton key, are found by their atlas and get the cross",
+		N.PVPMatchScoreboardLeaveButton == nil and board.CloseButton == nil and wa(W, wraw(W, board.ClosePanelButton).states.Normal) == 0
+		and wsegments(wlines(W, board.ClosePanelButton, "OVERLAY")) == X_SHAPE and wa(W, wraw(W, results.CloseButton).states.Normal) == 0
+		and wsegments(wlines(W, results.CloseButton, "OVERLAY")) == X_SHAPE)
+	check("scoreboard and match results: the header text is not faded", wa(W, wraw(W, board.HeaderContainer).Text) == 1 and wa(W, wraw(W, results.HeaderContainer).Text) == 1)
 	W.change("windows.more", false)
 	W.change("windows.social", false)
 	W.change("windows.menus", false)
-	check("those windows: with their groups off the art is as the game drew it", more() == "1,1,1,1,1,1,1,1,1", more())
+	check("those windows: with their groups off the art is as the game drew it", more() == ("1,"):rep(12) .. "1", more())
 	W.change("windows.more", true)
 	W.change("windows.social", true)
 	W.change("windows.menus", true)
