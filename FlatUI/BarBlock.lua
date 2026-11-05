@@ -14,7 +14,10 @@ local _, ns = ...
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
 -- Background panel: a frame of the module's own behind the rectangle of the block, in the general colours. Fade the block: the alpha of each
 -- held frame (SetAlpha, which the game allows in a fight) goes to the faded value except in a fight, under the mouse, with something on the
--- cursor or with the spell flyout open (the flyout is attached to its button, Flyout.lua:218, so the fade goes to full while it is open). The alpha a frame had is read once and put back when the fade goes off or the block stops.
+-- cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a child of the totem bar
+-- that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107, MultiCastActionBarFrame.lua:637-641). The
+-- arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while the game shows it. The alpha a frame had is
+-- read once and put back when the fade goes off or the block stops.
 
 local KEY = "barblock"
 local MOVER = "FlatUIBarBlock"
@@ -44,6 +47,9 @@ local WATCH_EVERY = 0.5
 local XP2, XP1, STANCE, PET, POSSESS, LEAVE, TOTEM = "SecondaryStatusTrackingBarContainer", "MainStatusTrackingBarContainer", "StanceBar", "PetActionBar",
 	"PossessActionBar", "MainMenuBarVehicleLeaveButton", "MultiCastActionBarFrame"
 local XPOWN = "FlatUIXpBar"
+-- The totem bar's flyout and the arrow that opens it, children of the totem bar (MultiCastActionBarFrame.xml:106-107, 156) that the fade reads
+-- and never writes.
+local TOTEM_FLYOUT, TOTEM_ARROW = "MultiCastFlyoutFrame", "MultiCastFlyoutFrameOpenButton"
 local AROUND = { XP2, XP1, STANCE, PET, POSSESS, TOTEM }
 -- With Flat UI's own experience bar (XpBar.lua) the one bar takes the place of the two containers.
 local AROUND_OWN = { XPOWN, STANCE, PET, POSSESS, TOTEM }
@@ -401,10 +407,32 @@ local function Cursor()
 	return nil
 end
 
--- Whether the cursor is inside the block, the frames hung from its main bar and the padding of the panel.
+-- Whether a frame of the game's answers true to the read-only IsShown or IsVisible. A missing frame, a failing call and a withheld answer
+-- are all false.
+local function Answers(name, method)
+	local frame = GameFrame(name)
+	if not frame then
+		return false
+	end
+	local ok, shown = pcall(frame[method], frame)
+	return ok and not ns.IsSecret(shown) and shown == true
+end
+
+-- Whether the cursor is inside the block, the frames hung from its main bar and the padding of the panel, or on the arrow that opens the
+-- flyout of a totem bar the block holds. The arrow is 18 high on the top of a totem slot that ends 5 under the top of the bar
+-- (MultiCastActionBarFrame.xml:3-4, 102, 156-157, 210-214; MultiCastActionBarFrame.lua:819-820), so most of it is over the bar. The game shows
+-- it only with the cursor on a totem slot or the summon button (MultiCastActionBarFrame.lua:378-381, 452-455, 604-606, 926-931) and hides it
+-- once the cursor is off them and off the arrow (:391-394, 457-460, 803-805, 825-830, 940-943), so a shown arrow is a cursor on the totem bar.
+-- It hangs from the slot, a child of the bar (MultiCastActionBarFrame.xml:210), so it is read with IsVisible.
 local function Under()
 	local plan, x, y = state.last, Cursor()
-	if not (plan and x) then
+	if not plan then
+		return false
+	end
+	if plan.spots[TOTEM] and Answers(TOTEM_ARROW, "IsVisible") then
+		return true
+	end
+	if not x then
 		return false
 	end
 	local pad = Opt("background") and Opt("backgroundPad") or 0
@@ -430,13 +458,14 @@ local function Holding()
 	return ok and (ns.IsSecret(kind) or kind ~= nil)
 end
 
+-- Whether a flyout is open: the spell flyout, or the totem bar's. The totem flyout is a child of the totem bar with no ignoreParentAlpha
+-- (MultiCastActionBarFrame.xml:101, 106-107), so it is drawn at the bar's alpha, and the game opens it on the top of its totem slot or of
+-- the summon button, its buttons stacked up from there (MultiCastActionBarFrame.lua:637-641, 745-755, 780), out of the area under the mouse.
+-- It is read with IsVisible: an override bar hides the totem bar (ActionBarController.lua:229-237, MultiCastActionBarFrame.lua:222,
+-- 332-343), which has no OnHide to close the flyout (MultiCastActionBarFrame.xml:325-329), so a flyout left open is not drawn until the bar
+-- comes back.
 local function FlyoutOpen()
-	local flyout = GameFrame("SpellFlyout")
-	if not flyout then
-		return false
-	end
-	local ok, shown = pcall(flyout.IsShown, flyout)
-	return ok and not ns.IsSecret(shown) and shown == true
+	return Answers("SpellFlyout", "IsShown") or Answers(TOTEM_FLYOUT, "IsVisible")
 end
 
 local function Full()
