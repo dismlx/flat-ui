@@ -6,7 +6,7 @@ local _, ns = ...
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
 -- from the lines the kind of a unit, an ID and a count add, and nothing is created on one in combat. The size of a tooltip, the height of its
 -- health bar and the place of the input box are changed out of combat only. The fade of GameTooltip is seen as a fall of its alpha in a frame of the
--- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1026);
+-- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
 
 local KEY = "chat"
@@ -28,7 +28,7 @@ local BOX_ART = { "Left", "Mid", "Right" }
 local BOX_FOCUS = { "focusLeft", "focusMid", "focusRight" }
 local PIECES = { "TopLeftCorner", "TopRightCorner", "BottomLeftCorner", "BottomRightCorner", "TopEdge", "BottomEdge", "LeftEdge", "RightEdge", "Center" }
 -- The height of the health bar of a tooltip (GameTooltipStatusBar, 8 in the game's XML) and the opacity the game gives an idle input box
--- (ChatFrameEditBoxMixin:Deactivate, ChatFrameEditBox.lua:568).
+-- (ChatFrameEditBoxMixin:Deactivate, ChatFrameEditBox.lua:573).
 local BAR_HEIGHT, IDLE_ALPHA = 8, 35
 -- The font objects the game draws a tooltip with: the title line, and the other lines.
 local TIP_TITLE, TIP_TEXT = { "GameTooltipHeaderText" }, { "GameTooltipText", "GameTooltipTextSmall" }
@@ -173,7 +173,7 @@ local function SelectedColour(tab)
 end
 
 -- The alpha of a tab that is not selected, for each choice of Chat tab opacity. The game's own mouse-over value for a normal tab is 0.6
--- (FloatingChatFrame.lua:19). The game's alpha for the tab, its stored pair and ChatFrameUtil.SetTabAlphas are left alone.
+-- (Mainline/FloatingChatFrame.lua:19). The game's alpha for the tab, its stored pair and ChatFrameUtil.SetTabAlphas are left alone.
 local TAB_OTHER = { clear = 0.6, full = 1 }
 
 local function Bright(region, alpha)
@@ -439,19 +439,19 @@ local function SeatBox(box, restore, frame)
 	IdleBox(box, record, not restore)
 end
 
--- The passes of an input box. The game calls EventRegistry for the four moments a box changes (Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua:380,
--- 385, 398, 406): the callbacks only queue a pass for the next frame, because Deactivate, ActivateChat and the tint run inside the game's own calls.
+-- The passes of an input box. The game calls EventRegistry for the four moments a box changes (Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua:389,
+-- 394, 407, 415): the callbacks only queue a pass for the next frame, because Deactivate, ActivateChat and the tint run inside the game's own calls.
 -- No method of an input box is hooked (EllesmereUIChat/EllesmereUIChat.lua:4410-4417, 4236-4260 and the same callbacks).
 local settling = setmetatable({}, { __mode = "k" })
 local watcher, watchWait
 
--- The game has closed a box when it is hidden or its focus art is hidden (Deactivate hides the art, ChatFrameEditBox.lua:573; ActivateChat shows
--- it, ChatFrameUtil.lua:539). An empty box is closed when it loses the focus; a box with text stays open, and keeps what the game gave it.
+-- The game has closed a box when it is hidden or its focus art is hidden (Deactivate hides the art, ChatFrameEditBox.lua:586; ActivateChat shows
+-- it, ChatFrameUtil.lua:554). An empty box is closed when it loses the focus; a box with text stays open, and keeps what the game gave it.
 local function Closed(box)
 	return not IsShown(box) or not IsShown(box.focusLeft)
 end
 
--- The game calls Deactivate with no moment of its own in two places (FloatingChatFrame.lua:366, ChatFrameUtil.lua:583-586), so every box with a
+-- The game calls Deactivate with no moment of its own in two places (Mainline/FloatingChatFrame.lua:270-271, ChatFrameUtil.lua:598-601), so every box with a
 -- seat is settled on any moment.
 local function Pass(box)
 	settling[box] = nil
@@ -790,7 +790,7 @@ local function Extras(tooltip, data)
 end
 
 -- The colour of a unit tooltip's border and of the name on its first line. Called by the game for the name line of a unit, after it is added
--- (TooltipDataHandler.lua:329-334); the game set the line's colour before that (TooltipDataRules.lua:6-14). Reaction takes that colour, class
+-- (TooltipDataHandler.lua:329-334); the game set the line's colour before that (TooltipDataRules.lua:7-16). Reaction takes that colour, class
 -- takes the class colour of a player and the reaction colour of any other unit, and a token or class the client withholds changes nothing.
 local function UnitLine(tooltip, lineData)
 	if not ns.Enabled(KEY) or not Usable(tooltip) or not Usable(lineData) then
@@ -894,7 +894,7 @@ local function Combat(tooltip, data)
 end
 
 -- Fade out ----------------------------------------------------------------------------------
--- The game fades GameTooltip out when the mouse leaves a unit (UnitFrame_OnLeave, UnitFrame.lua:393) or the world (GameTooltip.lua:1026): a call in C++
+-- The game fades GameTooltip out when the mouse leaves a unit (UnitFrame_OnLeave, Mainline/UnitFrame.lua:393) or the world (GameTooltip.lua:1017): a call in C++
 -- that lowers the alpha. EllesmereUI hooks the method (EllesmereUIBlizzardSkin.lua:2841); here the fall is seen in a frame of the addon's own while the
 -- tooltip is up. Fast brings the alpha down in FADE_FAST seconds and hides the tooltip, At once hides it on the first frame of the fade. A tooltip built
 -- again (the post calls) or shown again (OnShow) is not faded.

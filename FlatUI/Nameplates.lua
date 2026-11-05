@@ -712,6 +712,24 @@ local function Anchor(frame)
 	return false
 end
 
+-- Every anchor of a frame, as Anchor reads the first, or false when one cannot be read.
+local function Anchors(frame)
+	local ok, count = pcall(frame.GetNumPoints, frame)
+	if not ok or not Plain(count, "number") or count < 1 then
+		return false
+	end
+	local list = {}
+	for index = 1, count do
+		local read, point, relative, relativePoint, x, y = pcall(frame.GetPoint, frame, index)
+		if not (read and Plain(point, "string") and relative ~= nil and not ns.Forbidden(relative) and Plain(relativePoint, "string")
+			and Plain(x, "number") and Plain(y, "number")) then
+			return false
+		end
+		list[index] = { point, relative, relativePoint, x, y }
+	end
+	return list
+end
+
 -- The height of the health bar as Heights sets it, from the numbers the game lays plates out with (no frame size is read, since it can be
 -- withheld), and whether the Classic style is on.
 local function BarHeight(options, on)
@@ -732,8 +750,11 @@ local function ClassRoom(own, side)
 end
 
 -- The level box as a square the height of the health bar, beside the bar. UpdateAnchors keeps room for the box at its width plus the
--- offset of its anchor, so with the size and the anchor set here the right end of the plate's guide is the right end of the box. The
--- game's size, offset 5, health bar end and aura offsets go back when the part turns off (Blizzard_NamePlateUnitFrame.lua:239, 683-715, 872-878).
+-- offset of its anchor when that anchor is to the RIGHT of a frame (Blizzard_NamePlateUnitFrame.lua:683-691, 704-708, 872-878), so with the
+-- size and the one anchor set here the right end of the plate's guide is the right end of the box. Since 70425 the game anchors the frame
+-- TOPLEFT and BOTTOMLEFT to the health bar, 5 past its end (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8): those anchors set its height and
+-- keep no room, so they are cleared first. When the part turns off, the anchors the game gave the frame, its size (:239), and the health bar
+-- end and the aura offsets UpdateAnchors gives those anchors go back.
 local LEVEL_KEPT = "Level box: the game keeps its own box width."
 local function LevelBox(unitFrame, own, on, fresh)
 	local options = Setup()
@@ -761,10 +782,19 @@ local function LevelBox(unitFrame, own, on, fresh)
 	if not spacing or not CanResize("Level box", level, container, control or level, lost or level) then
 		return
 	end
+	-- The game's own anchors, read while the box is not set, to be put back.
+	if not own.levelBox then
+		local home = Anchors(level)
+		if not home then
+			return
+		end
+		own.levelHome = home
+	end
 	if want then
 		local gap = Opt("levelGap")
 		-- Marked first, so a failure between the calls still leaves a restore to do.
 		own.levelBox = true
+		level:ClearAllPoints()
 		level:SetSize(h, h)
 		level:SetPoint("LEFT", container, "RIGHT", gap, 0)
 		if skull then
@@ -789,15 +819,20 @@ local function LevelBox(unitFrame, own, on, fresh)
 		end
 	end
 	local width, height = Size(options, "playerLevelDiffWidth"), Size(options, "playerLevelDiffHeight")
-	if width and height then
+	local home = own.levelHome
+	if width and height and home then
+		level:ClearAllPoints()
+		for _, p in ipairs(home) do
+			level:SetPoint(p[1], p[2], p[3], p[4], p[5])
+		end
 		level:SetSize(width, height)
-		level:SetPoint("LEFT", container, "RIGHT", 5, 0)
 		if skull then
 			skull:SetSize(height, height)
 		end
-		-- A hidden level frame takes no room.
-		local room = shown and width + 5 or 0
-		container:SetPoint("BOTTOMRIGHT", cast, "TOPRIGHT", -room, spacing)
+		-- The room UpdateAnchors keeps: none for a hidden level frame, or for anchors that are not to the RIGHT of a frame.
+		local room = (shown and home[1][3] == "RIGHT") and width + math.abs(home[1][4]) or 0
+		-- 0 - room, not -room: no room at all is the game's 0, not a negative zero (which Lua 5.1, the game's Lua, keeps).
+		container:SetPoint("BOTTOMRIGHT", cast, "TOPRIGHT", 0 - room, spacing)
 		if control then
 			control:SetPoint("LEFT", container, "RIGHT", 5 + room, 0)
 		end
@@ -1012,7 +1047,8 @@ local function AtlasFor(token)
 end
 
 -- The frames of a class icon, made the first time one is shown on this plate. The guide is the row
--- that holds the health bar, the gap and the level box, whether or not the level box is shown.
+-- that holds the health bar, the gap and the level box, whether or not the level box is shown. PlaceIcon moves
+-- its right end to the game's level frame while that frame hangs past the row.
 local function Icon(own, unitFrame)
 	if own.icon == nil then
 		own.icon = false
@@ -1062,10 +1098,25 @@ local function PlaceIcon(unitFrame, own)
 		local px = ns.Pixels(icon, 1)
 		size = ns.Pixels(icon, math.max(1, math.floor(size / px + 0.5)))
 	end
-	local place = ("%s:%s:%s:%s:%s:%s:%s"):format(position, size, x, y, lift, fit, gap)
+	-- Since 70425 the game's level frame keeps no room in the row and hangs past its end (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8,
+	-- Blizzard_NamePlateUnitFrame.lua:683-708), so while it shows an icon on the right goes after it. The level box of Flat UI and the
+	-- level frame of earlier clients end where the row does.
+	local edge = "row"
+	local level = position == "right" and Usable(unitFrame.PlayerLevelDiffFrame)
+	if level and Opt("level") ~= "hidden" then
+		local anchor, ok, shown = Anchor(level), pcall(level.IsShown, level)
+		if anchor and anchor[3] ~= "RIGHT" and ok and Plain(shown, "boolean") and shown then
+			edge = "level"
+		end
+	end
+	local place = ("%s:%s:%s:%s:%s:%s:%s:%s"):format(position, size, x, y, lift, fit, gap, edge)
 	own.iconSide, own.iconSize, own.iconGap = position, size, gap
 	if own.iconPlace == place then
 		return
+	end
+	if (own.guideEdge or "row") ~= edge then
+		guide:SetPoint("RIGHT", edge == "level" and level or unitFrame.CastBarsContainer, "RIGHT", 0, 0)
+		own.guideEdge = edge ~= "row" and edge or nil
 	end
 	icon:SetSize(size, size)
 	icon:ClearAllPoints()
@@ -1244,12 +1295,22 @@ local function KindRim(unitFrame, own, on)
 	QueueMark(unitFrame)
 end
 
--- The colour of the health bar at the share of its brightness the row keeps, or nil while the game withholds it.
-local function RowColour(healthBar)
+-- The colour of the row, at the share of its brightness the row keeps: the colour of the health bar, or the reaction colour of the unit while
+-- the client withholds the bar's colour. A bar that took a withheld colour gives a withheld colour back (SimpleStatusBarAPIDocumentation.lua:105-107,
+-- 282-285), as every bar Colour health bars by health left tints does since build 70790. Nil when neither can be read.
+local function RowColour(unitFrame, healthBar)
 	local ok, r, g, b = pcall(healthBar.GetStatusBarColor, healthBar)
-	if ok and Plain(r, "number") and Plain(g, "number") and Plain(b, "number") then
-		return r * ROW_SHARE, g * ROW_SHARE, b * ROW_SHARE
+	if not (ok and Plain(r, "number") and Plain(g, "number") and Plain(b, "number")) then
+		local unit = unitFrame.unit
+		r, g, b = nil, nil, nil
+		if Plain(unit, "string") then
+			r, g, b = ns.ReactionColour(unit)
+		end
+		if r == nil then
+			return nil
+		end
 	end
+	return r * ROW_SHARE, g * ROW_SHARE, b * ROW_SHARE
 end
 
 -- Fills the row from the colour at the bottom to the same colour nearly clear at the top. Blizzard's own nameplate code gives
@@ -1267,7 +1328,7 @@ local function NameRow(unitFrame, own, on)
 	local name = Strings(unitFrame, NAME_TEXT)[1]
 	local r, g, b
 	if on and Opt("nameRow") and active[unitFrame] and healthBar and name then
-		r, g, b = RowColour(healthBar)
+		r, g, b = RowColour(unitFrame, healthBar)
 	end
 	local row = own.row
 	if r == nil then

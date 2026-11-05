@@ -73,6 +73,21 @@ local function secretUse() error("attempt to use a secret value", 0) end
 local SECRET = setmetatable({}, { __tostring = function() error("tostring on a secret value", 0) end,
 	__index = secretUse, __newindex = secretUse, __call = secretUse, __concat = secretUse, __len = secretUse,
 	__lt = secretUse, __le = secretUse, __eq = secretUse, __add = secretUse, __sub = secretUse, __mul = secretUse, __div = secretUse, __unm = secretUse })
+-- A secret value that carries what it hides, for the client's own calls to read: every UNIT_COMBAT amount from build 70755 on
+-- (UnitDocumentation.lua:4178), and the texts the client makes from such a value. It raises on the same uses as SECRET.
+local SECRETS = setmetatable({}, { __mode = "k" })
+local function Secret(truth)
+	local box = setmetatable({}, getmetatable(SECRET))
+	SECRETS[box] = truth
+	return box
+end
+-- What a secret value of this kind hides, or nil for any other value.
+local function SecretTruth(v)
+	if type(v) == "table" then
+		return SECRETS[v]
+	end
+	return nil
+end
 local passed, failed = 0, 0
 
 local function check(name, cond, detail)
@@ -751,6 +766,10 @@ local function newRegion(W, owner, opts)
 				if rawequal(v, SECRET) then
 					args[i] = "<withheld>"
 					r.withheld = (r.withheld or 0) + 1
+				elseif SecretTruth(v) ~= nil then
+					-- A secret that carries what it hides is written as the player sees it.
+					args[i] = tostring(SecretTruth(v))
+					r.withheld = (r.withheld or 0) + 1
 				elseif type(v) == "string" or type(v) == "number" then
 					args[i] = tostring(v)
 				else
@@ -765,7 +784,7 @@ local function newRegion(W, owner, opts)
 					return nil
 				end
 				position = position + 1
-				if rawequal(given[position], SECRET) then
+				if rawequal(given[position], SECRET) or SecretTruth(given[position]) ~= nil then
 					return "%s"
 				end
 			end)
@@ -2438,13 +2457,61 @@ local function newWorld(opts)
 		end,
 	}
 	env.CursorHasItem = function() return W.held == "item" end
-	env.issecretvalue = function(v) return rawequal(v, SECRET) end
+	env.issecretvalue = function(v) return rawequal(v, SECRET) or SecretTruth(v) ~= nil end
 	-- A secret value keeps the type of what it hides: type() of a secret number is "number". W.secretType says which.
 	env.type = function(v)
 		if rawequal(v, SECRET) then
 			return W.secretType or "table"
 		end
+		if SecretTruth(v) ~= nil then
+			return type(SecretTruth(v))
+		end
 		return type(v)
+	end
+	-- C_StringUtil.TruncateWhenZero and WrapString take withheld values from addon code and give a withheld text for one
+	-- (StringUtilDocumentation.lua:188-219): the digits of a number rounded down, or an empty text for zero; and prefix, infix and suffix
+	-- joined, or an empty text when the infix is empty. opts.noStringUtil is a client without them.
+	if not opts.noStringUtil then
+		env.C_StringUtil = env.C_StringUtil or {}
+		env.C_StringUtil.TruncateWhenZero = function(v)
+			if rawequal(v, SECRET) then
+				return SECRET
+			end
+			local truth = SecretTruth(v)
+			local value = truth ~= nil and truth or v
+			if not isnum(value) then
+				bad(W, "TruncateWhenZero: a number is expected")
+			end
+			local whole = math.floor(value)
+			local text = whole == 0 and "" or tostring(whole)
+			return truth ~= nil and Secret(text) or text
+		end
+		env.C_StringUtil.WrapString = function(infix, prefix, suffix)
+			local hidden = false
+			local function read(v, nilable)
+				-- A secret whose truth is not known is a text that is not empty, written as "<withheld>".
+				if rawequal(v, SECRET) then
+					hidden = true
+					return "<withheld>"
+				end
+				local truth = SecretTruth(v)
+				if truth ~= nil then
+					hidden = true
+					v = truth
+				end
+				if v == nil and nilable then
+					return ""
+				end
+				if type(v) ~= "string" then
+					bad(W, "WrapString: a string is expected")
+					return ""
+				end
+				return v
+			end
+			local i, p, s = read(infix, false), read(prefix, true), read(suffix, true)
+			local text = i == "" and "" or (p .. i .. s)
+			return hidden and Secret(text) or text
+		end
 	end
 	env.geterrorhandler = function() return function(err) W.errors[#W.errors + 1] = tostring(err) end end
 	env.print = function(...)
@@ -2798,6 +2865,18 @@ local function newWorld(opts)
 	env.SlashCmdList = {}
 
 	function W.fire(event, ...)
+		-- From build 70755 the client withholds the amount of every UNIT_COMBAT report (UnitDocumentation.lua:4178): a plain number given here
+		-- reaches the addon as a secret that carries it. opts.plainCombat is a client from before that build.
+		if event == "UNIT_COMBAT" and not opts.plainCombat and isnum((select(4, ...))) then
+			local n, args = select("#", ...), { ... }
+			args[4] = Secret(args[4])
+			for _, frame in ipairs(W.eventFrames) do
+				if frame.events[event] and frame.script then
+					frame.script(frame, event, unpack(args, 1, n))
+				end
+			end
+			return
+		end
 		for _, frame in ipairs(W.eventFrames) do
 			if frame.events[event] and frame.script then
 				frame.script(frame, event, ...)
@@ -2875,6 +2954,8 @@ local function newWorld(opts)
 	-- Both calls are restricted in combat. W.click.calls lists every call with whether combat was on.
 	env.Enum = env.Enum or {}
 	env.Enum.NamePlateType = { Friendly = 0, Enemy = 1 }
+	-- The swing types PLAYER_SWING and PLAYER_SWING_RANGE_UPDATE carry (SwingTimerDocumentation.lua:71-81).
+	env.Enum.PlayerSwingType = { MainHand = 0, OffHand = 1, Ranged = 2 }
 	W.click = { size = { 140, 50 }, base = { 140, 50 }, sizeCalls = {}, insets = { [0] = { 0, 0, 0, 0 }, [1] = { 0, 0, 0, 0 } }, calls = {} }
 	env.C_NamePlate.GetNamePlateSize = function() return W.click.size[1], W.click.size[2] end
 	env.C_NamePlate.SetNamePlateSize = function(width, height)
@@ -2954,6 +3035,15 @@ local function newWorld(opts)
 		env.BreakUpLargeNumbers = function(value)
 			if rawequal(value, SECRET) then
 				return SECRET
+			end
+			-- A secret number gives a secret text (LocalizationDocumentation.lua:42-44: it takes withheld values from addon code).
+			local truth = SecretTruth(value)
+			if truth ~= nil then
+				if not isnum(truth) then
+					bad(W, "BreakUpLargeNumbers: a number is expected")
+				end
+				local hidden = tostring(math.floor(truth))
+				return Secret((hidden:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")))
 			end
 			if not isnum(value) then
 				bad(W, "BreakUpLargeNumbers: a number is expected")
@@ -4053,7 +4143,7 @@ local function newWorld(opts)
 
 	-- LargeSideTabButtonTemplate: a Frame. SetChecked and UpdateIconInterior are Blizzard's Lua. The tab is 55 by 55
 	-- (SidePanelTabButtonMixin:InitializeSizeForTabArt, a 55 by 60 atlas without its 5 of empty height) and the icon sits
-	-- at CENTER -4, 0 (Blizzard_SharedXML/Camelot/SharedUIPanelTemplates.lua:8-10). The icon has no size until UpdateIconInterior
+	-- at CENTER -4, 0 (Blizzard_SharedXML/Camelot/SharedUIPanelTemplates.lua:12-14). The icon has no size until UpdateIconInterior
 	-- runs, unless an OnLoad gave it one: `loaded` (30 in the Looking For Group and Professions tabs). The mask is the atlas
 	-- common-sidetab-mask of 55 by 60 at CENTER of the tab (Mainline/SharedUIPanelTemplates.xml:1026-1033, AtlasInfo.lua:3770).
 	local function sideTab(parent, key, name, id, icon, loaded)
@@ -4115,6 +4205,37 @@ local function newWorld(opts)
 		r.SetAlpha = luaMethod("SetAlpha", function(_, alpha)
 			for _, part in ipairs({ "icon", "IconBorder", "IconOverlay", "Stock", "Count" }) do
 				raw(r[part]):SetAlpha(alpha)
+			end
+		end)
+		-- 70790: the rounded Mask of every item button, which ItemButtonMixin:PostOnLoad puts on the normal and pushed textures and the
+		-- icon (Shared/ItemButtonTemplate.xml:18-19, Shared/ItemButtonTemplate.lua:16-20).
+		local mask = wmask(button, "Mask", nil, { r.NormalTexture, r.PushedTexture, r.icon })
+		raw(mask).file = "Interface\\Common\\common-iconmask"
+		-- ItemButtonMixin:GetItemButtonBackgroundTexture and SetItemButtonTexture (Mainline/ItemButtonTemplate.lua:59-97, 406-408, 422-424 of
+		-- 70790): the picture of an empty slot is the button's emptyBackgroundTexture or emptyBackgroundAtlas, and every picture the game sets
+		-- puts the icon's texture coordinates back to the whole texture, an atlas through SetAtlas with resetTexCoords.
+		r.GetItemButtonBackgroundTexture = luaMethod("GetItemButtonBackgroundTexture", function()
+			if r.emptyBackgroundTexture then
+				return r.emptyBackgroundTexture
+			elseif r.emptyBackgroundAtlas then
+				return r.emptyBackgroundAtlas, true
+			end
+		end)
+		r.SetItemButtonTexture = luaMethod("SetItemButtonTexture", function(self, texture)
+			local icon = r.Icon or r.icon
+			if not icon then
+				return
+			end
+			local isAtlas
+			if not texture then
+				texture, isAtlas = self:GetItemButtonBackgroundTexture()
+			end
+			icon:SetShown(texture ~= nil)
+			if isAtlas then
+				icon:SetAtlas(texture, false, nil, true)
+			else
+				icon:SetTexture(texture)
+				icon:SetTexCoord(0, 1, 0, 1)
 			end
 		end)
 		return button, r
@@ -4190,17 +4311,32 @@ local function newWorld(opts)
 		return box
 	end
 
-	-- ColoredProgressBarTemplate.
-	local function progressBar(parent, key, name)
+	-- ColoredProgressBarTemplate as 70790 has it (Blizzard_SharedXML/Camelot/ProgressBars/ColoredProgressBar.xml:5-13, 19-24, ColoredProgressBar.lua:11-36):
+	-- the fill is anchored LEFT to FillArea, a child frame 6 units in from each side, and sized on FillArea's width. A fill of width 0 is hidden,
+	-- which OnLoad's SetFillPercent(0) does. noFillArea: the template before 70425, with the fill on the bar's own left edge and its width.
+	local function progressBar(parent, key, name, noFillArea)
 		local bar, r = wframe(parent, key, { name = name, width = 160, height = 29 })
+		local area = not noFillArea and wframe(bar, "FillArea", { width = 148, height = 29 })
+		if area then
+			raw(area).points = { { "TOPLEFT", bar, "TOPLEFT", 6, 0 }, { "BOTTOMRIGHT", bar, "BOTTOMRIGHT", -6, 0 } }
+		end
 		wtex(bar, nil, "common-stat-bar-BG")
 		local fill = wtex(bar, "Fill", "common-stat-bar-white", { name = nil })
 		raw(fill).width, raw(fill).height = 0, 15
+		raw(fill).points = { { "LEFT", area or bar, "LEFT", 0, 0 } }
+		raw(fill).shown = not area
 		wmask(bar, "Mask", "common-stat-bar-Mask", { fill })
 		wfont(bar, "Text")
 		r.SetFillPercent = luaMethod("SetFillPercent", function(_, percent)
 			local p = math.min(1, math.max(0, percent))
-			raw(fill):SetWidth(p * 160)
+			if area then
+				r.fillPercent = p
+				local width = p * raw(area).width
+				raw(fill):SetShown(width > 0)
+				raw(fill):SetWidth(width)
+			else
+				raw(fill):SetWidth(p * 160)
+			end
 			raw(fill):SetTexCoord(0, p, 1, 0)
 		end)
 		r.SetFillTextureByColorType = luaMethod("SetFillTextureByColorType", function(_, colorType)
@@ -4333,15 +4469,24 @@ local function newWorld(opts)
 			button.icon:SetVertexColor(r, g, b)
 		end
 	end
+	-- SetItemButtonTexture (Mainline/ItemButtonTemplate.lua:99-107): the button's own method, which on 70790 puts the icon's texture
+	-- coordinates back to the whole texture.
+	function env.SetItemButtonTexture(button, texture)
+		if button and button.SetItemButtonTexture then
+			button:SetItemButtonTexture(texture)
+		end
+	end
 	-- hollowItems: the functions exist and do nothing, so a test can hand the addon's hooks any argument at all.
 	if wopts.hollowItems then
-		for _, name in ipairs({ "SetItemButtonNormalTextureVertexColor", "SetItemButtonBorderVertexColor", "SetItemButtonBorder" }) do
+		for _, name in ipairs({ "SetItemButtonNormalTextureVertexColor", "SetItemButtonBorderVertexColor", "SetItemButtonBorder", "SetItemButtonTexture" }) do
 			env[name] = function() end
 		end
 	end
-	-- PaperDollItemSlotButton_Update (Camelot/PaperDollFrame.lua:2145-2206): what it does to the art of a slot.
+	-- PaperDollItemSlotButton_Update (Camelot/PaperDollFrame.lua:2177-2241 of 70790): what it does to the art of a slot. It sets the picture of
+	-- the item, or of the empty slot, first (2182, 2204).
 	function env.PaperDollItemSlotButton_Update(button, item)
 		item = item or {}
+		env.SetItemButtonTexture(button, item.texture or "Interface\\Paperdoll\\UI-PaperDoll-Slot-Head")
 		if item.broken then
 			env.SetItemButtonTextureVertexColor(button, 0.9, 0, 0)
 			env.SetItemButtonNormalTextureVertexColor(button, 0.9, 0, 0)
@@ -4363,6 +4508,8 @@ local function newWorld(opts)
 	-- ShowUIPanel / HideUIPanel (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:854-903): they show the frame, and the
 	-- hook of an addon runs after. A window that builds children as it opens does it in `later`. A frame that is shown already is
 	-- left alone (882-884), and the hook runs all the same.
+	-- A window whose shown pages run their OnShow as it opens names that work in W.win.onPanelShow[frame].
+	W.win.onPanelShow = {}
 	if wopts then
 	function env.ShowUIPanel(frame, force)
 		if not frame or frame:IsShown() then
@@ -4370,6 +4517,36 @@ local function newWorld(opts)
 		end
 		frame:Show()
 		W.panelShown = (W.panelShown or 0) + 1
+		if W.win.onPanelShow[frame] then
+			W.win.onPanelShow[frame]()
+		end
+	end
+	-- SetPaperDollBackground (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.lua:3367-3391, since 70707): the four race pictures, and the alpha of
+	-- the overlay over them by the unit's race, 0.85 for a race the table does not list. The character page and the inspect page call it each time
+	-- they are shown (PaperDollFrame.lua:1522, Blizzard_InspectUI/Mainline/InspectPaperDollFrame.lua:102). UnitRace's file name of each unit is
+	-- in W.win.races.
+	W.win.races = { player = "Human", target = "Human" }
+	local OVERLAY_ALPHA = { HUMAN = 1, DWARF = 0.93, NIGHTELF = 0.5, TROLL = 0.85, ORC = 0.75, SCOURGE = 0.2 }
+	function env.SetPaperDollBackground(model, unit)
+		local file = W.win.races[unit] or "Human"
+		local texture = "Interface\\DressUpFrame\\DressUpBackground-" .. file
+		model.BackgroundTopLeft:SetTexture(texture .. 1)
+		model.BackgroundTopRight:SetTexture(texture .. 2)
+		model.BackgroundBotLeft:SetTexture(texture .. 3)
+		model.BackgroundBotRight:SetTexture(texture .. 4)
+		model.BackgroundOverlay:SetAlpha(OVERLAY_ALPHA[file:upper()] or 0.85)
+	end
+	-- A page of a window is shown by the game. Its OnShow, then the scripts the addon hooked on it, run only when that makes the page visible:
+	-- a page shown in a closed window runs them when the window opens (W.win.onPanelShow).
+	function W.win.showPage(page, onShow)
+		local was = raw(page).IsVisible()
+		page:Show()
+		if not was and raw(page).IsVisible() then
+			if onShow then
+				onShow()
+			end
+			W.fireScript(page, "OnShow")
+		end
 	end
 	function env.HideUIPanel(frame)
 		if frame then
@@ -4434,14 +4611,14 @@ local function newWorld(opts)
 		raw(tr.states.Highlight).file = "Interface\\Buttons\\UI-Common-MouseHilight"
 		cr.rightPaneCollapsed = false
 
-		-- CharacterFrame.lua:125-130, 306-347.
+		-- CharacterFrame.lua:263-265, 279-337.
 		cr.IsRightPaneCollapsed = luaMethod("IsRightPaneCollapsed", function() return cr.rightPaneCollapsed == true end)
 		cr.UpdateRightPaneToggleButton = luaMethod("UpdateRightPaneToggleButton", function()
 			local collapsed = cr.IsRightPaneCollapsed()
 			raw(tr.states.Normal):SetTexture(collapsed and "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up" or "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
 			raw(tr.states.Pushed):SetTexture(collapsed and "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Down" or "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Down")
 		end)
-		-- SetShown of the pane runs its OnShow or OnHide when it changes, and the hooks of those scripts run after the game's (CharacterFrame.lua:306-320).
+		-- SetShown of the pane runs its OnShow or OnHide when it changes, and the hooks of those scripts run after the game's (CharacterFrame.lua:294-309).
 		cr.RefreshRightPane = luaMethod("RefreshRightPane", function()
 			local want, was = not cr.IsRightPaneCollapsed(), raw(right).shown
 			raw(right).shown = want
@@ -4452,7 +4629,7 @@ local function newWorld(opts)
 		end)
 		cr.SetRightPaneCollapsed = luaMethod("SetRightPaneCollapsed", function(_, collapsed)
 			if (cr.IsRightPaneCollapsed() and true or false) == (collapsed and true or false) then
-				return -- CharacterFrame.lua:292-294
+				return -- CharacterFrame.lua:280-282
 			end
 			cr.rightPaneCollapsed = collapsed
 			cf:RefreshRightPane()
@@ -4493,9 +4670,17 @@ local function newWorld(opts)
 			wtex(tab, nil, "UI-Character-Info-StatTab")
 			wstate(tab, "Checked", "UI-Character-Info-StatTab-Selected")
 		end
+		-- The rock strip across the top of the left pane, and the level text in front of it with no background of its own: one for the player
+		-- and a hidden one for the pet (Camelot/PaperDollFrame.xml:556-607, since 70291; the level ribbon CharacterLevelTextBackground went then).
+		local strip = wframe(doll, "TopBackgroundStripHost", { height = 36 })
+		raw(strip).points = { { "TOPLEFT", left, "TOPLEFT", 0, 0 }, { "TOPRIGHT", left, "TOPRIGHT", 0, 0 } }
+		local rock = wtex(strip, "TopBackgroundStrip", nil, { layer = "ARTWORK" })
+		raw(rock).file = "Interface\\FrameGeneral\\UI-Background-Rock"
+		wtex(strip, "TopBackgroundStripBottomEdge", "_UI-Frame-InnerTopTile", { layer = "ARTWORK" })
 		local level = wframe(doll, nil, { name = "PaperDollLevelInfo", width = 220, height = 20 })
-		wtex(level, nil, "UI-Character-Info-ItemLevel-Bounce", { name = "CharacterLevelTextBackground" })
 		wfont(level, nil, { name = "CharacterLevelText" })
+		local petLevel = wframe(doll, nil, { name = "PaperDollPetLevelInfo", width = 220, height = 20, hidden = true })
+		wfont(petLevel, nil, { name = "PetCharacterLevelText" })
 
 		local scene, sr = wframe(doll, "CharacterModelScene", { name = "CharacterModelScene" })
 		sr.CreateActor = function() end
@@ -4555,6 +4740,35 @@ local function newWorld(opts)
 		-- The Skills pane has a bar of its own.
 		local skills = wframe(cf, nil, { name = "SkillsFrame", hidden = true })
 		progressBar(skills, nil, "SkillBar1")
+
+		-- PaperDollFrame_OnShow (Camelot/PaperDollFrame.lua:1511-1522): what it does to the race pictures. It runs when the window opens on the
+		-- character page, and on every change back to that page inside the open window, with no ShowUIPanel (CharacterFrame.lua:3-30, 106-121).
+		local function dollShown()
+			env.SetPaperDollBackground(env.CharacterModelScene, "player")
+		end
+		local SUBFRAMES = { PaperDollFrame = dollShown, ReputationFrame = false, SkillsFrame = false }
+		cr.ShowSubFrame = luaMethod("ShowSubFrame", function(_, frameName)
+			cr.activeSubframe = frameName
+			for name in pairs(SUBFRAMES) do
+				if name ~= frameName then
+					env[name]:Hide()
+				end
+			end
+			W.win.showPage(env[frameName], SUBFRAMES[frameName] or nil)
+		end)
+		W.win.onPanelShow[cf] = function()
+			if raw(doll).shown then
+				dollShown()
+				W.fireScript(doll, "OnShow")
+			end
+		end
+		-- ToggleCharacter(tab) with the window open on another page: ShowSubFrame, then RefreshDisplay (CharacterFrame.lua:3-30).
+		function W.win.toggleCharacter(frameName)
+			W.blizzard(function()
+				cf:ShowSubFrame(frameName)
+				cf:RefreshDisplay()
+			end)
+		end
 
 		W.win.sidebarTabs = tabs
 		-- CharacterFrameMixin:OnLoad has already set up the tabs when an addon loads: the Character tab is selected.
@@ -4963,12 +5177,29 @@ local function newWorld(opts)
 			wtex(bg, part, nil)
 		end
 		closeButton(frame, "CloseButton", name .. "CloseButton")
-		-- Blizzard_UIPanels_Game/Mainline/ContainerFrame.xml:202-225, 289, 316: the coin box is a frame of three pieces.
+		-- Blizzard_UIPanels_Game/Mainline/ContainerFrame.xml:200-223, 287, 325: the coin box is a frame of three pieces.
 		local border = wframe(wframe(frame, "MoneyFrame", {}), "Border", {})
 		for _, part in ipairs({ "Left", "Right", "Middle" }) do
 			wtex(border, part, "common-coinbox-" .. part:lower())
 		end
-		r.UpdateItems = nop
+		-- ContainerFrameMixin:UpdateItems and UpdateCooldowns (Mainline/ContainerFrame.lua:1189-1255 of 70790), as far as the picture of a slot
+		-- goes: each slot's own SetItemButtonTexture with the item's icon, then SyncAppearanceWithHasItem, which sets the picture of an empty
+		-- slot again. W.items.bag["bag:slot"].iconFileID is the icon, 134400 when a test gives none.
+		r.UpdateItems = function(self)
+			for _, slot in self:EnumerateValidItems() do
+				local info = W.items and W.items.bag[slot:GetBagID() .. ":" .. slot:GetID()]
+				local texture = info and (info.iconFileID or 134400) or nil
+				raw(slot).hasItem = texture ~= nil
+				slot:SetItemButtonTexture(texture)
+				slot:SyncAppearanceWithHasItem()
+			end
+		end
+		r.UpdateCooldowns = function(self)
+			for _, slot in self:EnumerateValidItems() do
+				slot:SyncAppearanceWithHasItem()
+			end
+		end
+		r.IsCombinedBagContainer = function() return name == "ContainerFrameCombinedBags" end
 		-- ContainerFrameMixin:EnumerateValidItems (Mainline/ContainerFrame.lua:575-577): the item buttons of the bag, in order.
 		r.EnumerateValidItems = function()
 			local list, at = {}, 0
@@ -4991,13 +5222,28 @@ local function newWorld(opts)
 		end
 		return frame, r
 	end
-	-- A bag slot: an ItemButton whose icon is a picture of an empty slot when there is no item.
+	-- A bag slot: an ItemButton whose icon is a picture of an empty slot when there is no item. 70790 dropped the emptyBackgroundAtlas key
+	-- of the template (ContainerFrame.xml:84 of 70532): the template has an EmptyBagIcon (ContainerFrame.xml:152-154), and the slot names the
+	-- picture in its own GetItemButtonBackgroundTexture, a blank one in the combined bag, where EmptyBagIcon shows the bag's icon
+	-- (ContainerFrame.lua:1921-1968, Camelot/ContainerFrame.lua:7-10).
 	function W.win.addBagSlot(bag, index)
 		local was = W.group
 		W.group = "windows"
 		local slot, sr = itemButton(bag, nil, raw(bag).fname .. "Item" .. index)
-		sr.emptyBackgroundAtlas = "bags-item-slot64"
-		-- ContainerFrameItemButtonMixin:GetBagID (Mainline/ContainerFrame.lua:1831-1833).
+		local emptyIcon = wtex(slot, "EmptyBagIcon", nil, { hidden = true })
+		local function combined() return raw(bag).fname == "ContainerFrameCombinedBags" end
+		sr.GetItemButtonBackgroundTexture = luaMethod("GetItemButtonBackgroundTexture", function()
+			return combined() and "bags-item-slot-blank" or "bags-item-slot64", true
+		end)
+		sr.SyncAppearanceWithHasItem = luaMethod("SyncAppearanceWithHasItem", function(self)
+			if sr.hasItem then
+				emptyIcon:Hide()
+			else
+				emptyIcon:SetShown(combined())
+				self:SetItemButtonTexture(nil)
+			end
+		end)
+		-- ContainerFrameItemButtonMixin:GetBagID (Mainline/ContainerFrame.lua:1845-1847 of 70790).
 		sr.slotId, sr.bagButton = index, true
 		sr.GetBagID = function() return raw(bag).bagID or 0 end
 		W.group = was
@@ -5069,7 +5315,7 @@ local function newWorld(opts)
 				env.EventRegistry:TriggerEvent("BankPanelMixin.PageInfoChanged", 1)
 			end
 		end)
-		-- The game's global functions that update the bags (ContainerFrame.lua:1267-1312): UpdateAll updates the items of each bag, and GenerateFrame sets the
+		-- The game's global functions that update the bags (ContainerFrame.lua:1270-1315): UpdateAll updates the items of each bag, and GenerateFrame sets the
 		-- background of a bag it opens and updates its items.
 		env.ContainerFrame_UpdateAll = luaMethod("ContainerFrame_UpdateAll", function()
 			for _, name in ipairs({ "ContainerFrame1", "ContainerFrame2", "ContainerFrameCombinedBags" }) do
@@ -5391,12 +5637,43 @@ local function newWorld(opts)
 		local inspect = portraitFrame(env.UIParent, nil, { name = "InspectFrame", hidden = true, width = 338, height = 424 }, "textured")
 		closeButton(inspect, "CloseButton", "InspectFrameCloseButton")
 		inset(inspect, "Inset", "InspectFrameInset")
-		local model = wframe(inspect, nil, { name = "InspectModelFrame" })
-		for _, part in ipairs({ "BackgroundTopLeft", "BackgroundTopRight", "BackgroundBotLeft", "BackgroundBotRight", "BackgroundOverlay" }) do
-			wtex(model, part, nil)
+		-- The model is on the character page of the window (Blizzard_InspectUI/Camelot/InspectPaperDollFrame.xml:56-134); the other page here is PvP.
+		local inspectDoll = wframe(inspect, nil, { name = "InspectPaperDollFrame" })
+		raw(inspectDoll).allPoints = inspect
+		wframe(inspect, nil, { name = "InspectPVPFrame", hidden = true })
+		local model = wframe(inspectDoll, nil, { name = "InspectModelFrame" })
+		for _, part in ipairs({ "BackgroundTopLeft", "BackgroundTopRight", "BackgroundBotLeft", "BackgroundBotRight" }) do
+			wtex(model, part, nil, { name = "InspectModelFrame" .. part })
 		end
+		-- A black colour texture over the pictures.
+		local inspectOverlay = wtex(model, "BackgroundOverlay", nil, { name = "InspectModelFrameBackgroundOverlay", layer = "BORDER" })
+		raw(inspectOverlay).color = { 0, 0, 0, 1 }
 		for _, part in ipairs({ "TopLeft", "TopRight", "BottomLeft", "BottomRight", "Left", "Right", "Top", "Bottom", "Bottom2" }) do
 			named(model, "InspectModelFrameBorder" .. part)
+		end
+		raw(inspect).unit = "target"
+		-- InspectPaperDollFrameMixin:OnShow (Mainline/InspectPaperDollFrame.lua:81-107): the race pictures of the inspected unit. It runs when the
+		-- window opens on the character page and on every change back to it (Camelot/Blizzard_InspectUI.lua:41-50, 154-162).
+		local function inspectDollShown()
+			env.SetPaperDollBackground(model, raw(inspect).unit)
+		end
+		W.win.onPanelShow[inspect] = function()
+			if raw(inspectDoll).shown then
+				inspectDollShown()
+				W.fireScript(inspectDoll, "OnShow")
+			end
+		end
+		local INSPECT_PAGES = { "InspectPaperDollFrame", "InspectPVPFrame" }
+		function env.InspectSwitchTabs(newID)
+			for id, name in ipairs(INSPECT_PAGES) do
+				if id ~= newID then
+					env[name]:Hide()
+				end
+			end
+			W.win.showPage(env[INSPECT_PAGES[newID]], newID == 1 and inspectDollShown or nil)
+		end
+		function W.win.inspectTab(id)
+			W.blizzard(function() env.InspectSwitchTabs(id) end)
 		end
 		local dress = portraitFrame(env.UIParent, nil, { name = "DressUpFrame", hidden = true, width = 450, height = 545 }, "textured")
 		closeButton(dress, "CloseButton", "DressUpFrameCloseButton")
@@ -5421,15 +5698,68 @@ local function newWorld(opts)
 		-- Blizzard_ChatFrame/Mainline/ChatConfigFrame.xml:365-376: a dialog with a Border and a Header.
 		local chat = dialog("ChatConfigFrame", 745, 605)
 		panelButton(chat, nil, "ChatConfigFrameDefaultButton", 100, 22)
-		-- Blizzard_PVPMatch/PVPMatchScoreboard.xml:5-30 and PVPMatchResults.xml:50-90: a close button and a content frame with the board's art.
-		for _, case in ipairs({ { "PVPMatchScoreboard", "Content" }, { "PVPMatchResults", "content" } }) do
-			local board = wframe(env.UIParent, nil, { name = case[1], hidden = true, width = 1024, height = 420 })
-			closeButton(board, "CloseButton", case[1] .. "CloseButton")
+		-- The boards Forever loads since 70707, when the toc gave the shared files to standard alone and the Camelot ones to camelot (Blizzard_PVPMatch.toc:10-18):
+		-- Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:5-122 and Camelot/PVPMatchResults.xml:5-150. A close button with no name (ClosePanelButton on
+		-- the scoreboard, CloseButton on the results), a header, a NineSlice of layout ButtonFrameTemplateNoPortrait, and a content frame whose art
+		-- has no key: the Stat-BG, on the results a scroll line, and in its header frame a stone band. The results have a leave button, a
+		-- SharedButtonTemplate three-slice in a frame of its own below the content; the scoreboard has none.
+		local NO_PORTRAIT_ATLAS = { "UI-Frame-Metal-CornerTopLeft", "UI-Frame-Metal-CornerTopRight", "UI-Frame-Metal-CornerBottomLeft", "UI-Frame-Metal-CornerBottomRight",
+			"_UI-Frame-Metal-EdgeTop", "_UI-Frame-Metal-EdgeBottom", "!UI-Frame-Metal-EdgeLeft", "!UI-Frame-Metal-EdgeRight" }
+		for _, case in ipairs({ { "PVPMatchScoreboard", "Content", "ScrollCategories", "ClosePanelButton", "ScrollBox" },
+			{ "PVPMatchResults", "content", "scrollCategories", "CloseButton", "scrollBox" } }) do
+			local board, br = wframe(env.UIParent, nil, { name = case[1], hidden = true, width = 1024, height = case[1] == "PVPMatchResults" and 520 or 420 })
+			closeButton(board, case[4], nil)
+			local header = wframe(board, "HeaderContainer", { width = 400, height = 20 })
+			wfont(header, "Text", { layer = "OVERLAY" })
+			wframe(board, "NineSlice")
+			raw(br.NineSlice).layoutType = "ButtonFrameTemplateNoPortrait"
+			for index, name in ipairs(NINE) do
+				wtex(br.NineSlice, name, NO_PORTRAIT_ATLAS[index])
+			end
 			local content = wframe(board, case[2], {})
-			wtex(content, "Background", "pvpscoreboard-background")
-			wtex(content, "InsetBorderTopLeft", "UI-Frame-InnerTopLeft")
-			panelButton(content, nil, case[1] .. "LeaveButton", 100, 22)
+			wtex(content, nil, "UI-Character-Info-Stat-BG", { layer = "BACKGROUND" })
+			if case[1] == "PVPMatchResults" then
+				wtex(content, nil, "UI-Character-Info-ScrollLine", { layer = "OVERLAY" })
+			end
+			local categories = wframe(content, case[3], { height = 50 })
+			wtex(categories, nil, "UI-Character-Info-Stat-StoneBG3", { layer = "ARTWORK" })
+			wframe(content, case[5], {})
+			if case[1] == "PVPMatchResults" then
+				local buttons = wframe(board, "buttonContainer", { width = 1, height = 40 })
+				threeSlice(buttons, "leaveButton", nil, "128-RedButton")
+			end
 		end
+		-- The stable, loaded at startup (Blizzard_StableUI.toc:1-6 has no LoadOnDemand; Camelot/Blizzard_StableUI.xml:3-297, since 70425): a PortraitFrameTemplate window with
+		-- two bands that both take the key Background (the second keeps it, so both are only among the regions), a border across the bottom,
+		-- a pet model, the pet's experience bar, three pet slots, a buy button, and two frames over it that each draw a divider.
+		local stable = portraitFrame(env.UIParent, nil, { name = "PetStableFrame", hidden = true, width = 384, height = 522 }, "textured")
+		closeButton(stable, "CloseButton", "PetStableFrameCloseButton")
+		wfont(stable, nil, { name = "PetStableLevelText" })
+		wfont(stable, nil, { name = "PetStableSlotText" })
+		wtex(stable, "Background", "ui-stables-footer-bg", { name = "BottomBackground", layer = "BACKGROUND" })
+		wtex(stable, "Background", "ui-stables-subheader-bg", { name = "TopBackground", layer = "BACKGROUND" })
+		wtex(stable, "insideFrameBottom", "common-insideframe", { layer = "BORDER" })
+		local stableScene, ssr = wframe(stable, "modelScene", {})
+		ssr.CreateActor = function() end
+		wtex(stableScene, "Background", "ui-stables-pet-model-bg")
+		progressBar(stable, "expBar", "expBar")
+		for _, name in ipairs({ "PetStableCurrentPet", "PetStableStabledPet1", "PetStableStabledPet2" }) do
+			local slot = wbutton(stable, nil, { name = name, width = 37, height = 37, objectType = "CheckButton" })
+			named(slot, name .. "IconTexture", { layer = "BORDER" })
+			wtex(slot, "unlockedBackground", "ui-stables-pet-frame-stabled", { hidden = true })
+			wtex(slot, "currentBackground", "ui-stables-pet-frame-current", { hidden = true })
+			wtex(slot, "lockedBackground", "ui-stables-pet-frame-locked", { hidden = true })
+			wstate(slot, "Pushed", nil)
+			wstate(slot, "Highlight", nil)
+			wstate(slot, "Checked", nil)
+		end
+		panelButton(stable, "purchaseButton", nil, 105, 22)
+		for _, key in ipairs({ "BottomDividerFrame", "TopDividerFrame" }) do
+			local divider = wframe(stable, key, {})
+			raw(divider).allPoints = stable
+			wtex(divider, "horzDivider", "ui-stables-horz-divider", { layer = "OVERLAY" })
+		end
+		W.win.stable = stable
 		-- Blizzard_CompactRaidFrames/Mainline/Blizzard_CompactRaidFrameManager.xml:112-124, 391-403: a Background over the whole frame and two buttons.
 		local manager = wframe(env.UIParent, nil, { name = "CompactRaidFrameManager", hidden = true, width = 200, height = 200 })
 		wtex(manager, "Background", nil)
@@ -9537,6 +9867,8 @@ local PAGES = {
 		S("general.pixelSize", "number", 1, "Pixels per unit", nil, { min = 1, max = 4, step = 1, unit = " px", needs = "general.pixelPerfect" }),
 		S("general.scaleBelow", "bool", false, "Scale below 65%", "The game can refuse presses of its own action buttons at these sizes. /reload after turning it off.", { needs = "general.scaleOn" }),
 		S("general.scaleSmall", "number", 60, "Small scale", "Used instead of Custom scale.", { min = 35, max = 64, step = 1, unit = "%", needs = "general.scaleBelow" }),
+		"World",
+		S("general.questSparkle", "bool", true, "Quest item sparkle", "Quest items in the world sparkle. Sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start."),
 	} },
 	{ key = "generalColours", label = "Colours", parent = "general", owner = "general", rows = {
 		"Cast colours",
@@ -9927,6 +10259,9 @@ local PAGES = {
 		S("swing.spark", "bool", true, "Spark", "The bright line at the end of the fill.", { needs = "swing.flat" }),
 		S("swing.textShadow", "bool", false, "Text shadow", "The dark band behind the timer's name.", { needs = "swing.flat" }),
 		S("swing.reverse", "bool", false, "Fill from the right"),
+		"Auto Shot",
+		S("swing.autoShot", "bool", true, "Auto Shot window", "Marks the last half second of the ranged timer. Moving or casting a spell then delays your next Auto Shot."),
+		S("swing.autoShotColour", "colour", "ffe04848", "Auto Shot window colour", nil, { needs = "swing.autoShot" }),
 		"Out of range and idle",
 		S("swing.rangeAlpha", "number", 40, "Out of range opacity", nil, { min = 10, max = 100, step = 5, unit = "%" }),
 		S("swing.idle", "choice", "combat", "Show the timer", "Works with Main hand border, Off hand border or Ranged border on.", { choices = MS9.idles }),
@@ -10914,7 +11249,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.3" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.4" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -11238,7 +11573,8 @@ do
 		end
 		check("combat text, kinds of hit: the word follows the amount in parentheses", table.concat(texts, "|") == "412 (Glancing)|412 (Crushing)|412 (Block)|412 (Absorb)|412 (Resist)|412", table.concat(texts, "|"))
 		check("combat text, kinds of hit: the amount and the word are given to SetFormattedText", W.addonFonts[1].calls.SetFormattedText == 1 and W.addonFonts[1].calls.SetText == nil)
-		local G = C.world({ words = { TEXT_MODE_A_STRING_RESULT_GLANCING = "(Streifend)", TEXT_MODE_A_STRING_RESULT_CRUSHING = "(Zermalmend)", BLOCK = "Blocken", ABSORB = "Absorbieren", RESIST = "Widerstehen",
+		-- G and E are clients that tell the amount (before build 70755), so a hit of no amount is the word Miss.
+		local G = C.world({ plainCombat = true, words = { TEXT_MODE_A_STRING_RESULT_GLANCING = "(Streifend)", TEXT_MODE_A_STRING_RESULT_CRUSHING = "(Zermalmend)", BLOCK = "Blocken", ABSORB = "Absorbieren", RESIST = "Widerstehen",
 			MISS = "Verfehlt" } })
 		texts = {}
 		for index, flag in ipairs({ "GLANCING", "CRUSHING", "BLOCK_REDUCED", "ABSORB", "RESIST" }) do
@@ -11247,12 +11583,16 @@ do
 		texts[6] = C.say(G, "nameplate1", "WOUND", "", 0)
 		check("combat text, kinds of hit: the client's own words are used, in its language", table.concat(texts, "|") == "412 (Streifend)|412 (Zermalmend)|412 (Blocken)|412 (Absorbieren)|412 (Widerstehen)|(Verfehlt)",
 			table.concat(texts, "|"))
-		local E = C.world({ words = true })
+		local E = C.world({ plainCombat = true, words = true })
 		check("combat text, kinds of hit: a client with the English words gives the same", C.say(E, "nameplate1", "WOUND", "GLANCING", 412) == "412 (Glancing)" and C.say(E, "nameplate1", "WOUND", "", 0) == "(Miss)")
 		W.ns.Set("combattext.partial", "off")
-		check("combat text, Partial effects off: the amount alone, and a miss still says Miss", C.say(W, "nameplate1", "WOUND", "GLANCING", 412) == "412" and C.say(W, "nameplate1", "WOUND", "ABSORB", 412) == "412"
-			and C.say(W, "nameplate1", "WOUND", "", 0) == "(Miss)" and C.say(W, "nameplate1", "WOUND", "ABSORB", 0) == "(Absorb)")
-		check("combat text, kinds of hit: no violations, errors or messages", C.quiet(W) and C.quiet(G) and C.quiet(E), C.trouble(W) .. C.trouble(G))
+		check("combat text, Partial effects off: the amount alone, and a withheld amount of 0 shows no number and no word", C.say(W, "nameplate1", "WOUND", "GLANCING", 412) == "412"
+			and C.say(W, "nameplate1", "WOUND", "ABSORB", 412) == "412" and C.say(W, "nameplate1", "WOUND", "", 0) == "" and C.say(W, "nameplate1", "WOUND", "ABSORB", 0) == "")
+		local P = C.world({ plainCombat = true })
+		P.ns.Set("combattext.partial", "off")
+		check("combat text, Partial effects off on a client that tells the amount: a miss still says Miss", C.say(P, "nameplate1", "WOUND", "", 0) == "(Miss)"
+			and C.say(P, "nameplate1", "WOUND", "ABSORB", 0) == "(Absorb)")
+		check("combat text, kinds of hit: no violations, errors or messages", C.quiet(W) and C.quiet(G) and C.quiet(E) and C.quiet(P), C.trouble(W) .. C.trouble(G) .. C.trouble(P))
 	end
 
 	-- Critical hits.
@@ -11394,9 +11734,9 @@ do
 			near(B.o[1], 12, 1e-9) and B.o[2] == 0 and near(B.d[1], B.f[1], 1e-9), g(B.o[1]) .. " " .. g(B.o[2]) .. " " .. g(B.d[1]) .. " " .. g(B.f[1]))
 	end
 
-	-- Hits that do nothing, and the other events.
+	-- Hits that do nothing, and the other events, on a client that tells the amount (before build 70755). The next block has build 70790.
 	do
-		local W = C.world()
+		local W = C.world({ plainCombat = true })
 		local texts = {}
 		for index, flag in ipairs({ "ABSORB", "BLOCK", "RESIST", "" }) do
 			texts[index] = C.say(W, "nameplate1", "WOUND", flag, 0)
@@ -11417,12 +11757,42 @@ do
 		check("combat text, events and kinds: no violations, errors or messages", C.quiet(W), C.trouble(W))
 	end
 
+	-- Build 70790: the game withholds every amount (UnitDocumentation.lua:4178, from build 70755). The client writes the number with
+	-- C_StringUtil.TruncateWhenZero and WrapString, so a full absorb or resist draws no number and keeps the word of Partial effects, a full
+	-- block is the word Block by its flag, a hit of no amount with no flag and a heal of 0 draw nothing, and the digits are not grouped.
+	do
+		local W = C.world()
+		local texts = {}
+		for index, flag in ipairs({ "ABSORB", "BLOCK", "RESIST", "" }) do
+			texts[index] = C.say(W, "nameplate1", "WOUND", flag, 0)
+		end
+		check("combat text 70790: a hit for nothing: the word of Partial effects for Absorb and Resist, the word Block, and nothing with no flag",
+			table.concat(texts, "|") == "(Absorb)|(Block)|(Resist)|", table.concat(texts, "|"))
+		local block = C.hit(W, "nameplate1", "WOUND", "BLOCK", 0)
+		check("combat text 70790: a full block is the word, in white", block ~= nil and block.text == "(Block)" and C.colour(block) == "1,1,1")
+		check("combat text 70790: a partial absorb or resist is the number and the word", C.say(W, "nameplate1", "WOUND", "ABSORB", 300) == "300 (Absorb)"
+			and C.say(W, "nameplate1", "WOUND", "RESIST", 41) == "41 (Resist)" and C.say(W, "nameplate1", "WOUND", "BLOCK_REDUCED", 18) == "18 (Block)")
+		check("combat text 70790: a heal of 0 draws nothing, a heal of 300 is 300", C.say(W, "nameplate1", "HEAL", "", 0) == "" and C.say(W, "nameplate1", "HEAL", "", 300) == "300")
+		check("combat text 70790: a large amount is not grouped, as no call that takes a withheld value groups the digits", C.say(W, "nameplate1", "WOUND", "", 12345) == "12345"
+			and C.say(W, "nameplate1", "WOUND", "GLANCING", 1234567) == "1234567 (Glancing)")
+		local F = C.world()
+		local font = C.hit(F, "nameplate1", "WOUND", "", 412)
+		check("combat text 70790: the withheld number goes to SetFormattedText and is counted as withheld", font ~= nil and font.text == "412" and font.withheld == 1
+			and font.calls.SetFormattedText == 1 and font.calls.SetText == nil)
+		check("combat text 70790: the status has no count of withheld amounts", not has(W.status(), "Hit amounts") and has(W.status(), "Combat text: on"), W.status())
+		-- A client without the calls writes the number as the client groups it, and a hit of 0 as 0.
+		local N = C.world({ noStringUtil = true })
+		check("combat text 70790: a client without C_StringUtil groups the digits and draws 0 for a hit of no amount", C.say(N, "nameplate1", "WOUND", "", 12345) == "12,345"
+			and C.say(N, "nameplate1", "WOUND", "ABSORB", 0) == "0 (Absorb)")
+		check("combat text 70790: no violations, errors or messages", C.quiet(W) and C.quiet(F) and C.quiet(N), C.trouble(W) .. C.trouble(F) .. C.trouble(N))
+	end
+
 	-- What the game withholds.
 	do
 		local W = C.world()
 		local font = C.hit(W, "nameplate1", "WOUND", "GLANCING", SECRET)
 		check("combat text, an amount the game withholds: the number is shown through SetFormattedText with the word after it", font ~= nil and font.text == "<withheld> (Glancing)" and font.withheld == 1
-			and font.calls.SetFormattedText == 1 and has(W.status(), "Hit amounts the game would not tell: 1.") and not has(W.status(), "Kinds of hit"), W.status())
+			and font.calls.SetFormattedText == 1 and not has(W.status(), "Hit amounts the game would not tell") and not has(W.status(), "Kinds of hit"), W.status())
 		check("combat text, an amount the game withholds: nothing fails and the rows are written", C.quiet(W) and C.rows(W) == "0000", C.trouble(W))
 		local plain = C.hit(W, "nameplate1", "WOUND", SECRET, 412)
 		check("combat text, a kind the game withholds: the amount at plain size and no parentheses", plain.text == "412" and plain.textHeight == 35 and has(W.status(), "Hit types the game would not tell: 1."), W.status())
@@ -11667,7 +12037,8 @@ do
 				local font = C.hit(W, "nameplate1", spec[1], spec[2], spec[3])
 				words[#words + 1] = font.text .. "=" .. g(font.textHeight)
 			end
-			check("ctclassic: kinds: Block, Absorb and Resist are drawn at 75 percent, Immune at 50 and Dodge and Miss whole", table.concat(words, "|") == "(Block)=26.25|(Absorb)=26.25|(Resist)=26.25|(Immune)=17.5|(Dodge)=35|(Miss)=35", table.concat(words, "|"))
+			-- Build 70790 withholds the amount: a full absorb or resist and a hit of no amount draw no number, and Smaller number only gives them no word.
+			check("ctclassic: kinds: Block is drawn at 75 percent, Immune at 50 and Dodge whole, and a withheld 0 draws nothing", table.concat(words, "|") == "(Block)=26.25|=35|=35|(Immune)=17.5|(Dodge)=35|=35", table.concat(words, "|"))
 			W.ns.Set("combattext.partial", "word")
 			local glancing = C.hit(W, "nameplate1", "WOUND", "GLANCING", 412)
 			local block = C.hit(W, "nameplate1", "WOUND", "BLOCK", 0)
@@ -11708,7 +12079,7 @@ do
 		do
 			local W = classicWorld({ classicSigns = true })
 			local on = { C.say(W, "nameplate1", "WOUND", "", 412), C.say(W, "nameplate1", "HEAL", "", 300), C.say(W, "nameplate1", "WOUND", "CRITICAL", 824), C.say(W, "nameplate1", "WOUND", "", 0) }
-			check("ctclassic: signs: a hit is -412, a heal +300 and a word has none with the row on", table.concat(on, "|") == "-412|+300|-824|(Miss)", table.concat(on, "|"))
+			check("ctclassic: signs: a hit is -412, a heal +300, and a withheld hit of 0 draws no lone sign with the row on", table.concat(on, "|") == "-412|+300|-824|", table.concat(on, "|"))
 			check("ctclassic: signs: the sign is in front of an amount that has a word after it", C.say(W, "nameplate1", "WOUND", "BLOCK_REDUCED", 412) == "-412 (Block)")
 			W.ns.Set("combattext.classicSigns", false)
 			local off = { C.say(W, "nameplate1", "WOUND", "", 412), C.say(W, "nameplate1", "HEAL", "", 300) }
@@ -12307,10 +12678,20 @@ do
 			T.xf = C.hit(T.X2, "nameplate1", "WOUND", "", 412, 1)
 			check("extra: one swing at 100.0 gives its slot and one extra hit at 100.2, and a third hit is left out", T.x == "412,412 (Extra attack),none", T.x)
 			check("extra: the extra hit is white and the last decision names the extra slot", C.colour(T.xf):match("^1,1,1") ~= nil and has(T.X2.slash("combat"), "Last hit: yours (extra slot)."), C.colour(T.xf))
+			-- The hit at 100.5 is left out, which marks the enemy as hit by others for 10 seconds (MINE.crowd): the next swing comes after that.
 			T.X3 = T.world()
 			T.X3.fire("PLAYER_ENTER_COMBAT")
-			T.x = T.at(T.X3, { 100.0, 100.5, 101.7, 101.8, 101.9 })
+			T.x = T.at(T.X3, { 100.0, 100.5, 111.7, 111.8, 111.9 })
 			check("extra: the slot is closed after 0.4 seconds, a new swing slot opens it again, and it takes one hit", T.x == "412,none,412,412 (Extra attack),none", T.x)
+			-- Others hit the enemy: a physical hit left out keeps its extra slot closed for 10 seconds, so a hit of someone else right after your
+			-- swing is not labelled as your extra attack.
+			T.X17 = T.world()
+			T.X17.fire("PLAYER_ENTER_COMBAT")
+			T.x = T.at(T.X17, { 100.0, 100.5, 101.7, 101.8 })
+			check("extra: after a physical hit was left out the extra slot stays closed on that enemy", T.x == "412,none,412,none" and has(T.X17.slash("combat"), "Last hit: left out"), T.x)
+			-- The hit at 101.8 was left out too, so the slot opens again after 111.8.
+			T.x = T.at(T.X17, { 112.0, 112.2 })
+			check("extra: and opens again 10 seconds after the last hit left out", T.x == "412,412 (Extra attack)", T.x)
 			T.X4 = T.world()
 			T.X4.attack = { 2.0, 1.5 }
 			T.X4.fire("PLAYER_ENTER_COMBAT")
@@ -12604,7 +12985,7 @@ do
 				M.V3.attackable.nameplate1 = false
 				M.V3.ns.Set("combattext.friendWords", true)
 				M.V3.now = M.V3.now + 1
-				M.v3 = C.hit(M.V3, "nameplate1", "WOUND", "", 0)
+				M.v3 = C.hit(M.V3, "nameplate1", "MISS", "", 0)
 				check("msbt paren: a word over a friendly unit shows (Miss)", M.v3 ~= nil and M.v3.text == "(Miss)", tostring(M.v3 and M.v3.text))
 
 				-- The colour of a hit of yours.
@@ -12723,19 +13104,48 @@ do
 				M.zl = M.last(M.Z)
 				M.z[2] = M.hit(M.Z, 100.2, "", 0)
 				M.z[3] = M.hit(M.Z, 100.25, "", 0, 1, "MISS")
+				-- Build 70790 withholds the amount: the swing Maul replaced (a hit of 0 at 100.2) takes the slot with the hit and draws nothing, with no icon.
 				check("msbt maul: Maul then its hit and a Miss 0.1 s later shows one yellow number with the Maul icon and leaves the Miss out", M.z[1] ~= nil and M.z[1].text == "312" and C.colour(M.z[1]) == "1,1,0"
-					and M.file(M.Z, M.z[1]) == 135 and M.zl == "yours (next swing)." and M.z[2] == nil and M.z[3] == nil and M.last(M.Z) == "left out (slot taken).", tostring(M.zl) .. " " .. tostring(M.last(M.Z)))
+					and M.file(M.Z, M.z[1]) == 135 and M.zl == "yours (next swing)." and M.z[2] ~= nil and M.z[2].text == "" and M.file(M.Z, M.z[2]) == "none" and M.z[3] == nil
+					and M.last(M.Z) == "left out (slot taken).", tostring(M.zl) .. " " .. tostring(M.last(M.Z)))
 				M.Y = M.world()
 				M.Y.fire("PLAYER_ENTER_COMBAT")
 				M.Y.auras.target = 1
 				M.cast(M.Y, 6807)
-				M.y = { M.hit(M.Y, 100.1), M.hit(M.Y, 100.2, "", 0) }
+				M.y = { M.hit(M.Y, 100.1), M.hit(M.Y, 100.2, "", 0, 1, "MISS") }
 				check("msbt maul: with a debuff of yours on the enemy the Miss after the Maul hit takes no aura slot", M.y[1] ~= nil and M.y[2] == nil and M.last(M.Y) == "left out (slot taken).", tostring(M.last(M.Y)))
+				-- A client that tells the amount (before build 70755): the second hit is not 0, so it is not the swing Maul replaced.
 				M.Xa = M.world()
+				M.Xa.opts.plainCombat = true
 				M.Xa.fire("PLAYER_ENTER_COMBAT")
 				M.cast(M.Xa, 6807)
 				M.xa = { M.hit(M.Xa, 100.1), M.hit(M.Xa, 100.3) }
 				check("msbt maul: no extra slot opens after the Maul hit with no cast slot open", M.xa[1] ~= nil and M.xa[2] == nil, tostring(M.xa[2]))
+				-- Build 70790 withholds the amount: the game's report of the swing Maul replaced, a hit of 0, cannot be told from the hit, and it may
+				-- come first. The next-swing slot takes both: the hit shows its number in yellow, and the 0 draws nothing. The icon goes with the first.
+				M.Xb = M.world()
+				M.Xb.fire("PLAYER_ENTER_COMBAT")
+				M.cast(M.Xb, 6807)
+				M.xb = { M.hit(M.Xb, 100.1), M.hit(M.Xb, 100.3, "", 0) }
+				check("msbt maul 70790: the Maul hit is 312 in yellow with its icon, and the swing it replaced draws nothing and has no icon",
+					M.xb[1] ~= nil and M.xb[1].text == "312" and C.colour(M.xb[1]) == "1,1,0" and M.file(M.Xb, M.xb[1]) == 135
+					and M.xb[2] ~= nil and M.xb[2].text == "" and M.file(M.Xb, M.xb[2]) == "none" and M.last(M.Xb) == "yours (next swing too).",
+					tostring(M.xb[1] and M.xb[1].text) .. "|" .. tostring(M.xb[2] and M.xb[2].text) .. "|" .. tostring(M.file(M.Xb, M.xb[1])) .. "|" .. tostring(M.file(M.Xb, M.xb[2])))
+				M.Xc = M.world()
+				M.Xc.fire("PLAYER_ENTER_COMBAT")
+				M.cast(M.Xc, 6807)
+				M.xc = { M.hit(M.Xc, 100.1, "", 0), M.hit(M.Xc, 100.3) }
+				check("msbt maul 70790: when the 0 comes first it draws nothing, and the Maul hit after it still shows 312 in yellow",
+					M.xc[1] ~= nil and M.xc[1].text == "" and M.xc[2] ~= nil and M.xc[2].text == "312" and C.colour(M.xc[2]) == "1,1,0", tostring(M.xc[2] and M.xc[2].text))
+				-- On an enemy others hit, the slot takes one report only: a second one may be theirs.
+				M.Xd = M.world()
+				M.Xd.fire("PLAYER_ENTER_COMBAT")
+				M.xd0 = table.concat({ tostring(M.hit(M.Xd, 98.0) ~= nil), tostring(M.hit(M.Xd, 98.1) ~= nil), tostring(M.hit(M.Xd, 98.2) ~= nil) }, ",")
+				M.Xd.now = 100.0
+				M.cast(M.Xd, 6807)
+				M.xd = { M.hit(M.Xd, 100.1), M.hit(M.Xd, 100.3) }
+				check("msbt maul 70790: on an enemy others hit, a second report after the Maul hit is left out", M.xd[1] ~= nil and M.xd[1].text == "312" and M.xd[2] == nil,
+					M.xd0 .. " " .. tostring(M.last(M.Xd)))
 				M.Sa = M.world()
 				M.Sa.fire("PLAYER_ENTER_COMBAT")
 				M.cast(M.Sa, 6807)
@@ -12770,14 +13180,14 @@ do
 				M.Ua.attack = { 0.5, nil }
 				M.Ua.fire("PLAYER_ENTER_COMBAT")
 				M.cast(M.Ua, 6807)
-				M.ua = { M.hit(M.Ua, 100.1), M.hit(M.Ua, 100.6, "", 0) }
+				M.ua = { M.hit(M.Ua, 100.1), M.hit(M.Ua, 100.6, "", 0, 1, "MISS") }
 				check("msbt maul: a word 0.5 s after the Maul hit takes a slot again", M.ua[1] ~= nil and M.ua[2] ~= nil and M.ua[2].text == "(Miss)", tostring(M.ua[2]))
 				M.Ub = M.world()
 				M.Ub.attack = { 0.5, nil }
 				M.Ub.fire("PLAYER_ENTER_COMBAT")
 				M.Ub.now = 0
 				M.cast(M.Ub, 6807)
-				M.ub = { M.hit(M.Ub, 0), M.hit(M.Ub, 0.4, "", 0) }
+				M.ub = { M.hit(M.Ub, 0), M.hit(M.Ub, 0.4, "", 0, 1, "MISS") }
 				check("msbt maul: a word exactly 0.4 s after the Maul hit is still left out", M.ub[1] ~= nil and M.ub[2] == nil, tostring(M.ub[2]))
 				M.Ta = M.world()
 				M.Ta.fire("PLAYER_ENTER_COMBAT")
@@ -12811,7 +13221,7 @@ do
 					end
 				end
 				M.Nb.now = 100.2
-				C.hit(M.Nb, "nameplate1", "WOUND", "", 0, 1)
+				C.hit(M.Nb, "nameplate1", "MISS", "", 0, 1)
 				check("msbt maul: After the number shows 312 Maul over the enemy and in Outgoing, Off shows 312", M.na.text == "312 Maul" and table.concat(M.nb, "|") == "312 Maul|312 Maul" and M.hit(M.Nc, 100.1).text == "312",
 					tostring(M.na.text) .. " " .. table.concat(M.nb, "|"))
 				check("msbt maul: on a nameplate the Maul hit is yellow in both places and a Miss after it shows in neither", table.concat(M.nc, "|") == "1,1,0|1,1,0" and C.shownCount(M.Nb) == 2, table.concat(M.nc, "|") .. " " .. C.shownCount(M.Nb))
@@ -12821,7 +13231,7 @@ do
 				M.Nd.now = 100.1
 				C.hit(M.Nd, "nameplate1", "WOUND", "", 312, 1)
 				M.Nd.now = 100.2
-				C.hit(M.Nd, "nameplate1", "WOUND", "", 0, 1)
+				C.hit(M.Nd, "nameplate1", "MISS", "", 0, 1)
 				check("msbt maul: on a nameplate with a debuff of yours on the enemy a Miss after the Maul hit shows in neither place", C.shownCount(M.Nd) == 2, C.shownCount(M.Nd))
 				M.Oa = M.world()
 				M.Oa.slash("combat trace")
@@ -12833,7 +13243,7 @@ do
 				M.oc = M.Oa.slash("combat trace")
 				M.cast(M.Oa, 6807)
 				check("msbt maul: /flatui combat trace prints a line for each signal and report, withheld for a secret amount, and stops on the second call",
-					M.oa:find("UNIT_SPELLCAST_SUCCEEDED player 6807 Maul", 1, true) ~= nil and M.oa:find('target WOUND "" 312 school 1 -> yours (next swing) icon 135', 1, true) ~= nil
+					M.oa:find("UNIT_SPELLCAST_SUCCEEDED player 6807 Maul", 1, true) ~= nil and M.oa:find('target WOUND "" withheld school 1 -> yours (next swing) icon 135', 1, true) ~= nil
 					and M.ob:find("withheld", 1, true) ~= nil and M.oc == "Combat trace off." and #M.Oa.out == 1, M.oa .. " | " .. M.ob)
 				M.Ob = M.world()
 				M.Ob.env.C_Spell.GetSpellName = function() error("boom") end
@@ -12846,7 +13256,7 @@ do
 				M.Ea.now = 100.1
 				C.hit(M.Ea, "target", "WOUND", "", 312, 1)
 				M.Ea.now = 100.2
-				C.hit(M.Ea, "target", "WOUND", "", 0, 1)
+				C.hit(M.Ea, "target", "MISS", "", 0, 1)
 				check("msbt maul: under Both the target token without a nameplate leaves the Miss out in Outgoing", C.shownCount(M.Ea) == 1 and M.last(M.Ea) == "left out (slot taken).", C.shownCount(M.Ea))
 				check("msbt maul: icons, colour and trace raise no violation or error", #M.Z.violations + #M.Z.errors + #M.C.violations + #M.C.errors + #M.D.violations + #M.D.errors + #M.U.violations + #M.U.errors + #M.Nb.violations + #M.Nb.errors == 0,
 					table.concat(M.Z.violations, "|") .. table.concat(M.Z.errors, "|") .. table.concat(M.C.violations, "|") .. table.concat(M.D.violations, "|") .. table.concat(M.U.violations, "|"))
@@ -13887,7 +14297,7 @@ do
 		local after = W.slash("combat")
 		check("combat text, /flatui combat after a hit: the rows are written, and the report names the last hit",
 			has(after, "floatingCombatTextCombatDamage_v2: now 0, default 1, wanted 0\n") and has(after, "Hit reports: 1 for nameplates, 0 for target.") and has(after, "Shown: 1. No nameplate: 0. On friendly units: 0. Report unreadable: 0.")
-			and has(after, "Last hit report: nameplate1, WOUND, GLANCING, 412, school 1\n") and has(after, "Nameplate layer: BACKGROUND. Numbers layer: LOW."), after)
+			and has(after, "Last hit report: nameplate1, WOUND, GLANCING, withheld, school 1\n") and has(after, "Nameplate layer: BACKGROUND. Numbers layer: LOW."), after)
 		C.hit(W, "nameplate1", "WOUND", SECRET, SECRET, SECRET)
 		check("combat text, the last hit report with withheld parts says withheld", has(W.slash("combat"), "Last hit report: nameplate1, WOUND, withheld, withheld, school withheld\n"), W.slash("combat"))
 		W.change("combattext.enabled", false)
@@ -14842,9 +15252,9 @@ do
 			check("ctlook: the pop: no violations, errors or messages", C.quiet(W) and C.quiet(V) and C.quiet(P) and C.quiet(Q) and C.quiet(O) and C.quiet(F) and C.quiet(E) and C.quiet(J), C.trouble(W) .. C.trouble(P))
 		end
 
-		-- Damage and healing you take, and the rest of what Also misses, dodges and gains adds.
+		-- Damage and healing you take, and the rest of what Also misses, dodges and gains adds, on a client that tells the amount (before build 70755).
 		do
-			local W = C.world({ words = true })
+			local W = C.world({ words = true, plainCombat = true })
 			W.ns.Set("combattext.own", "take")
 			local take = { K.own(W, "WOUND", "", 412, 1), K.own(W, "WOUND", "", 412, 4), K.own(W, "HEAL", "", 300, 1), K.own(W, "WOUND", "", 0, 1), K.own(W, "HEAL", "", 0, 1),
 				K.own(W, "DODGE", "", 0, 1), K.own(W, "MISS", "", 0, 1), K.own(W, "ENERGIZE", "", 20, 1) }
@@ -14873,6 +15283,14 @@ do
 			check("ctlook: a crushing or critical hit of magic is purple and 31.25 high at 100%, and other magic damage 25", magic[1].textHeight == 31.25 and magic[2].textHeight == 31.25 and magic[3].textHeight == 25
 				and C.colour(magic[1]) == "0.79,0.3,0.85" and C.colour(magic[2]) == "0.79,0.3,0.85")
 			check("ctlook: damage to the player: no violations or errors", #W.violations == 0 and #W.errors == 0, C.trouble(W))
+			-- Build 70790 withholds the amount: a wound, a heal or a gain of 0 draws no number, and a full block is the word Block by its flag.
+			local N = C.world({ words = true })
+			N.ns.Set("combattext.own", "more")
+			local now = { K.own(N, "WOUND", "", 0, 1), K.own(N, "WOUND", "BLOCK", 0, 1), K.own(N, "HEAL", "", 0, 1), K.own(N, "ENERGIZE", "", 0, 1), K.own(N, "WOUND", "", 412, 1),
+				K.own(N, "ENERGIZE", "", 20, 1), K.own(N, "HEAL", "", 300, 1) }
+			check("ctlook 70790: a withheld 0 draws no number, a full block is Block in white, and 412, a gain of 20 and a heal of 300 are as before",
+				table.concat(now, "|") == " 1,0.1,0.1|(Block) 1,1,1| 0.1,1,0.1| 0.41,0.8,0.94|-412 1,0.1,0.1|+20 0.41,0.8,0.94|+300 0.1,1,0.1", table.concat(now, "|"))
+			check("ctlook 70790: no violations or errors", #N.violations == 0 and #N.errors == 0, C.trouble(N))
 			-- Off.
 			local F = C.world()
 			F.ns.Set("combattext.own", "off")
@@ -14885,7 +15303,7 @@ do
 			local V = C.world()
 			local secret = C.hit(V, "player", "WOUND", "", SECRET, 1)
 			check("ctlook: an amount the game withholds is shown through SetFormattedText with its sign, and counted", secret ~= nil and secret.text == "-<withheld>" and secret.withheld == 1 and secret.calls.SetFormattedText == 1
-				and has(V.status(), "Hit amounts the game would not tell: 1."), V.status())
+				and not has(V.status(), "Hit amounts the game would not tell"), V.status())
 			local gain2 = C.hit(V, "player", "ENERGIZE", "", SECRET, 1)
 			local heal2 = C.hit(V, "player", "HEAL", "", SECRET, 1)
 			check("ctlook: a withheld gain and a withheld heal are shown the same way", gain2 ~= nil and gain2.text == "+<withheld>" and heal2 ~= nil and heal2.text == "+<withheld>")
@@ -14921,7 +15339,7 @@ do
 			M.ns.Set("combattext.source", "game")
 			check("ctlook: and with As the game has them they show all the same", C.say(M, "player", "WOUND", "", 4, 1) == "-4" and C.rows(M) == "1111" and has(M.status(), "Combat text for you: 4 shown."), M.status())
 			M.ns.Set("combattext.source", "front")
-			check("ctlook: the last hit report for the player is in /flatui combat, in the form of the one for an enemy", has(M.slash("combat"), "Hit reports for you: 4. Shown: 4.\nLast hit report for you: player, WOUND, , 4, school 1\n"), M.slash("combat"))
+			check("ctlook: the last hit report for the player is in /flatui combat, in the form of the one for an enemy", has(M.slash("combat"), "Hit reports for you: 4. Shown: 4.\nLast hit report for you: player, WOUND, , withheld, school 1\n"), M.slash("combat"))
 			check("ctlook: damage and words for the player: no violations or errors", #M.violations == 0 and #M.errors == 0, C.trouble(M))
 		end
 
@@ -15106,7 +15524,8 @@ do
 				table.concat(colours, "|") == "CRUSHING=(Crushing) 1,0.4,0.2|BLOCK_REDUCED=(Block) 0.6,0.7,1|ABSORB=(Absorb) 1,0.85,0.4|RESIST=(Resist) 0.79,0.3,0.85|CRITICAL=none", table.concat(colours, "|"))
 			local absorbed = C.hit(P, "player", "WOUND", "ABSORB", 0, 1)
 			C.draw(P, P.now + 0.2)
-			check("scrolling: Partial effects: a word such as Absorb has no second word after it", absorbed.text == "(Absorb)" and not wordOf(P, absorbed).shown, absorbed.text)
+			-- Build 70790 withholds the amount: a full absorb draws no number, and the word of Partial effects stays after it.
+			check("scrolling: Partial effects: a full absorb draws no number and keeps its word", absorbed.text == "" and wordOf(P, absorbed).shown and wordOf(P, absorbed).text == "(Absorb)", absorbed.text)
 			local O = C.world(nil, { options = { ["combattext.partial"] = "off" } })
 			O.now = 0
 			local plain = C.hit(O, "player", "WOUND", "GLANCING", 20, 1)
@@ -15193,7 +15612,7 @@ do
 			local friendly = C.hit(S, "target", "WOUND", "", 5)
 			S.attackable.target = nil
 			local heal = C.hit(S, "target", "HEAL", "", 5)
-			local miss = C.hit(S, "target", "WOUND", "", 0)
+			local miss = C.hit(S, "target", "MISS", "", 0)
 			local crit = C.hit(S, "target", "WOUND", "CRITICAL", 824)
 			local magic = C.hit(S, "target", "WOUND", "", 300, 4)
 			check("scrolling: Outgoing: a friendly target and a heal show nothing, a miss is the word, a critical hit is a quarter larger (43.75), and magic is yellow",
@@ -16003,12 +16422,14 @@ do
 		-- Words.
 		do
 			local W = F.world()
-			check("ctfriend: a miss over a friendly unit shows nothing with Misses and dodges over friendly units off", C.say(W, "nameplate1", "WOUND", "", 0) == "none" and C.say(W, "nameplate1", "DODGE", "", 0) == "none")
+			check("ctfriend: a miss over a friendly unit shows nothing with Misses and dodges over friendly units off", C.say(W, "nameplate1", "MISS", "", 0) == "none" and C.say(W, "nameplate1", "DODGE", "", 0) == "none")
 			W.ns.Set("combattext.friendWords", true)
 			W.now = W.now + 1
-			local miss = C.hit(W, "nameplate1", "WOUND", "", 0)
+			local miss = C.hit(W, "nameplate1", "MISS", "", 0)
 			check("ctfriend: and Miss in white with it on", miss and miss.text == "(Miss)" and F.col(miss) == "1.00,1.00,1.00", miss and miss.text)
-			check("ctfriend: a heal of 0 shows nothing either way", C.say(W, "nameplate1", "HEAL", "", 0) == "none")
+			-- Build 70790 withholds the amount: a heal of 0 draws no number.
+			local zero = C.say(W, "nameplate1", "HEAL", "", 0)
+			check("ctfriend: a heal of 0 draws no number either way", zero == "none" or zero == "", zero)
 		end
 
 		-- The game's healing number.
@@ -16052,7 +16473,8 @@ do
 		do
 			local W = F.world()
 			local amount = C.hit(W, "nameplate1", "WOUND", "", SECRET)
-			check("ctfriend: a withheld amount is passed to the font string and counted, and raises nothing", #W.errors == 0 and #W.violations == 0 and has(W.status(), "Hit amounts the game would not tell: 1."), W.status())
+			check("ctfriend: a withheld amount is passed to the font string, raises nothing and adds no status line", #W.errors == 0 and #W.violations == 0
+				and not has(W.status(), "Hit amounts the game would not tell"), W.status())
 			W.now = W.now + 1
 			local flag = C.hit(W, "nameplate1", "WOUND", SECRET, 77)
 			check("ctfriend: a withheld flag shows with no critical and no suffix", flag and flag.text == "-77" and flag.textHeight == 25, flag and flag.text)
@@ -17498,6 +17920,126 @@ do
 	check("swing: and hidden when switched on", O.swing.SwingTimerRangedFrame.Border.shown == false and O.state(O.swing.SwingTimerRangedFrame.StatusBar) == "SB" and has(O.status(), "Swing timers: on, 3 styled"))
 end
 
+-- 11b. The Auto Shot window (Bars.lua, ApplyAutoShot): a band over the last half second of the ranged swing, when moving or casting a spell
+-- delays the next Auto Shot, at the end the fill grows to. Its width is that half second's share of the swing that runs, or of the speed of the
+-- ranged weapon while none runs (Blizzard_SwingTimer.lua:192-199, 340-346).
+do
+	local function band(X)
+		local bar = X.swing.SwingTimerRangedFrame.StatusBar
+		for _, t in ipairs(X.addonTextures) do
+			if (t.owner == bar or t.owner == X.rawOf[bar]) and t.layer == "ARTWORK" and t.sublevel == 7 then
+				return t
+			end
+		end
+	end
+	local function bands(X, name)
+		local bar, n = X.swing[name].StatusBar, 0
+		for _, t in ipairs(X.addonTextures) do
+			if (t.owner == bar or t.owner == X.rawOf[bar]) and t.layer == "ARTWORK" and t.sublevel == 7 then
+				n = n + 1
+			end
+		end
+		return n
+	end
+	local W = newWorld()
+	local ranged = W.swing.SwingTimerRangedFrame
+	W.rawOf[ranged.StatusBar].width = 200
+	W.env.UnitAttackSpeed = function() return 2.6, nil, 2.5 end
+	W.login()
+	local b = band(W)
+	check("autoshot: on by default: a band over the end of the ranged bar, 200 * 0.5 / 2.5 = 40 wide from the speed of the weapon, at the right",
+		b ~= nil and b.shown and near(b.width, 40, 1e-9) and b.points[1][1] == "TOPRIGHT" and b.points[2][1] == "BOTTOMRIGHT" and #b.points == 2, b and tostring(b.width))
+	check("autoshot: in the colour of the row at half opacity", b ~= nil and near(b.color[1], 0xe0 / 255, 1e-6) and near(b.color[2], 0x48 / 255, 1e-6)
+		and near(b.color[3], 0x48 / 255, 1e-6) and near(b.color[4], 0.5, 1e-9))
+	check("autoshot: only the ranged timer has one", bands(W, "SwingTimerMainHandFrame") == 0 and bands(W, "SwingTimerOffHandFrame") == 0 and bands(W, "SwingTimerRangedFrame") == 1)
+	-- A swing that runs gives the length: a swing of 2 seconds after haste.
+	ranged.inner.swingDuration, ranged.inner.swingEndTime = 2.0, W.now + 2.0
+	W.fire("PLAYER_SWING", 2.0, 2)
+	W.advance(0.01)
+	check("autoshot: a swing of 2 seconds makes it 50 wide", near(b.width, 50, 1e-9), tostring(b.width))
+	-- A swing longer than half a second is never covered whole; a swing of half a second or less is all aim.
+	ranged.inner.swingDuration = 0.4
+	W.fire("PLAYER_SWING", 0.4, 2)
+	W.advance(0.01)
+	check("autoshot: a swing of half a second or less is the whole bar", near(b.width, 200, 1e-9), tostring(b.width))
+	-- A withheld length falls back to the speed of the weapon.
+	ranged.inner.swingDuration = SECRET
+	W.fire("PLAYER_SWING", 2.0, 2)
+	W.advance(0.01)
+	check("autoshot: a withheld swing length falls back to the speed of the weapon", near(b.width, 40, 1e-9) and #W.violations == 0, tostring(b.width))
+	ranged.inner.swingDuration, ranged.inner.swingEndTime = nil, nil
+	-- Fill from the right: the swing ends at the left, so the band is there.
+	W.change("swing.reverse", true)
+	check("autoshot: with Fill from the right it is at the left", b.points[1][1] == "TOPLEFT" and b.points[2][1] == "BOTTOMLEFT" and #b.points == 2 and b.shown)
+	W.change("swing.reverse", false)
+	W.change("swing.autoShotColour", "ff3366ff")
+	check("autoshot: a new colour is used at once", near(b.color[1], 0x33 / 255, 1e-6) and near(b.color[3], 1, 1e-9) and near(b.color[4], 0.5, 1e-9))
+	W.change("swing.autoShot", false)
+	check("autoshot: off hides it", not b.shown)
+	W.change("swing.autoShot", true)
+	check("autoshot: on again shows the same band", b.shown and band(W) == b and bands(W, "SwingTimerRangedFrame") == 1)
+	W.change("swing.enabled", false)
+	check("autoshot: with Restyle swing timers off it is hidden", not b.shown)
+	W.change("swing.enabled", true)
+	check("autoshot: and back with it", b.shown)
+	check("autoshot: no violations or errors", #W.violations == 0 and #W.errors == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
+	-- The timers as the game has them (Show the timer at Always) but for the Auto Shot window: it hears only a swing, attack speed and the weapon,
+	-- with no range event and no target change, and it looks only at a ranged swing (Enum.PlayerSwingType.Ranged, 2).
+	local G = newWorld({ saved = { options = { ["swing.idle"] = "show" } } })
+	local gr = G.swing.SwingTimerRangedFrame
+	G.rawOf[gr.StatusBar].width = 200
+	G.env.UnitAttackSpeed = function() return 2.6, nil, 2.5 end
+	G.login()
+	-- Other modules hear target changes and gear as well, so the frames that hear each event are counted against the same world with the window off.
+	-- (This world gives frames no RegisterUnitEvent, so attack speed is not counted here.)
+	local G0 = newWorld({ saved = { options = { ["swing.idle"] = "show", ["swing.autoShot"] = false } } })
+	G0.login()
+	local function hearers(X, event)
+		local n = 0
+		for _, frame in ipairs(X.eventFrames) do
+			if frame.events[event] == true then
+				n = n + 1
+			end
+		end
+		return n
+	end
+	local more, shown = {}, {}
+	for _, event in ipairs({ "PLAYER_SWING", "WEAPON_SLOT_CHANGED", "PLAYER_ENTERING_WORLD", "PLAYER_SWING_RANGE_UPDATE", "PLAYER_TARGET_CHANGED", "PLAYER_IN_COMBAT_CHANGED",
+		"UNIT_INVENTORY_CHANGED" }) do
+		more[event] = hearers(G, event) - hearers(G0, event)
+		shown[#shown + 1] = event .. "=" .. more[event]
+	end
+	check("autoshot: with the timers as the game has them, the window alone hears a swing, the weapon and the world, and no range event or target change",
+		more.PLAYER_SWING == 1 and more.WEAPON_SLOT_CHANGED == 1 and more.PLAYER_ENTERING_WORLD == 1 and more.PLAYER_SWING_RANGE_UPDATE == 0
+		and more.PLAYER_TARGET_CHANGED == 0 and more.PLAYER_IN_COMBAT_CHANGED == 0 and more.UNIT_INVENTORY_CHANGED == 0, table.concat(shown, " "))
+	clean(G0, "autoshot game timers, window off")
+	local gb = band(G)
+	gr.inner.swingDuration, gr.inner.swingEndTime = 2.0, G.now + 2.0
+	G.fire("PLAYER_SWING", 2.0, 2)
+	G.advance(0.01)
+	check("autoshot: with the timers as the game has them, a ranged swing of 2 seconds makes it 50 wide", gb ~= nil and near(gb.width, 50, 1e-9), gb and tostring(gb.width))
+	gr.inner.swingDuration = 1.0
+	G.fire("PLAYER_SWING", 1.0, 0)
+	G.advance(0.01)
+	check("autoshot: and a melee swing leaves it as it is", gb ~= nil and near(gb.width, 50, 1e-9), gb and tostring(gb.width))
+	G.change("swing.autoShot", false)
+	check("autoshot: off, the band is hidden", gb ~= nil and not gb.shown)
+	clean(G, "autoshot game timers")
+	-- A bar whose width the game does not give, and a client without a ranged weapon speed, make no band.
+	local N = newWorld()
+	N.env.UnitAttackSpeed = function() return 2.6, nil, nil end
+	N.rawOf[N.swing.SwingTimerRangedFrame.StatusBar].width = 200
+	N.login()
+	check("autoshot: no ranged weapon and no swing: no band", band(N) == nil or not band(N).shown)
+	local Z = newWorld()
+	Z.env.UnitAttackSpeed = function() return 2.6, nil, 2.5 end
+	Z.rawOf[Z.swing.SwingTimerRangedFrame.StatusBar].width = 0
+	Z.login()
+	check("autoshot: a bar with no width yet: no band", band(Z) == nil or not band(Z).shown)
+	clean(N, "autoshot no speed")
+	clean(Z, "autoshot no width")
+end
+
 -- 12. Cast bars: the target and focus bars get edges of their own, with no addon frame attached.
 do
 	local W = newWorld()
@@ -18065,6 +18607,92 @@ do
 	M.change("general.scale", 80)
 	M.advance(0.3)
 	check("scale: a client without the scale events writes from the options and checks after the wait", near(M.scale(), 0.8) and #M.errors == 0 and #M.out == 0 and has(M.status(), "Custom UI scale: 80%."), M.status())
+end
+
+-- 14d. Quest item sparkle (Sparkle.lua): the game's outlineModeShowLootEffectWhenDisabled is written to 1 at login, out of combat, and again a
+-- second after a graphics preset or anything else writes the graphics quality or the variable itself. Turned off, the value the game had is
+-- put back. A client without the variable is left alone, and default worlds do not have it.
+do
+	local SPARK = "outlineModeShowLootEffectWhenDisabled"
+	local function writes(W)
+		local n = 0
+		for _, write in ipairs(W.cvarWrites) do
+			if write.name == SPARK then
+				n = n + 1
+			end
+		end
+		return n
+	end
+	local W = newWorld({ cvars = { [SPARK] = "0", graphicsQuality = "3" } })
+	check("sparkle: on by default", W.ns.Get("general.questSparkle") == true)
+	check("sparkle: nothing is written before login", W.cvars[SPARK] == "0" and writes(W) == 0)
+	W.login()
+	check("sparkle: login writes 1 once, keeps the game's value for the account and the status says so", W.cvars[SPARK] == "1" and writes(W) == 1
+		and W.env.FlatUIDB.sparkleGame == "0" and has(W.status(), "Quest item sparkle: on."), W.cvars[SPARK] .. " " .. writes(W) .. " " .. W.status())
+	W.advance(2)
+	check("sparkle: its own write is looked at a second later and not written again", writes(W) == 1 and W.cvars[SPARK] == "1", writes(W))
+	-- A graphics preset puts the variable back: the preset writes the variable and the quality.
+	W.setCVarByPlayer(SPARK, "0")
+	W.setCVarByPlayer("graphicsQuality", "1")
+	check("sparkle: a preset that puts it back is not written at once", W.cvars[SPARK] == "0" and writes(W) == 1)
+	W.advance(0.99)
+	check("sparkle: nor before a second has passed", W.cvars[SPARK] == "0" and writes(W) == 1)
+	W.advance(0.01)
+	check("sparkle: a second after the preset it is 1 again, written once", W.cvars[SPARK] == "1" and writes(W) == 2, writes(W))
+	W.advance(2)
+	check("sparkle: and not again", writes(W) == 2)
+	-- A raid preset alone is followed too.
+	W.setCVarByPlayer(SPARK, "0")
+	W.setCVarByPlayer("raidGraphicsQuality", "2")
+	W.advance(1)
+	check("sparkle: a raid graphics preset is followed the same way", W.cvars[SPARK] == "1" and writes(W) == 3, writes(W))
+	W.setCVarByPlayer("nameplateMaxDistance", "40")
+	W.advance(2)
+	check("sparkle: a change of another variable writes nothing", writes(W) == 3)
+	W.change("general.thickness", 2)
+	W.advance(2)
+	check("sparkle: another option writes nothing", writes(W) == 3)
+	-- Turned off: the game's own value comes back, and the account keeps nothing.
+	W.change("general.questSparkle", false)
+	check("sparkle off: the game's value is written back and the account keeps nothing", W.cvars[SPARK] == "0" and writes(W) == 4 and W.env.FlatUIDB.sparkleGame == nil, writes(W))
+	check("sparkle off: the status says when it applies", has(W.status(), "Quest item sparkle: off. The game's own value applies from its next start."), W.status())
+	W.setCVarByPlayer(SPARK, "1")
+	W.advance(2)
+	check("sparkle off: a value set by hand is left alone", W.cvars[SPARK] == "1" and writes(W) == 4)
+	W.change("general.questSparkle", true)
+	check("sparkle on again: the variable already holds 1, so nothing is written", writes(W) == 4 and has(W.status(), "Quest item sparkle: on.") and W.env.FlatUIDB.sparkleGame == nil, W.status())
+	W.change("general.questSparkle", false)
+	check("sparkle off again: nothing was written, so the value set by hand stays and the status has no line", W.cvars[SPARK] == "1" and writes(W) == 4
+		and not has(W.status(), "Quest item sparkle"), W.status())
+	W.change("general.thickness", 1)
+	clean(W, "sparkle")
+	-- A login in combat waits for combat to end.
+	local C = newWorld({ combat = true, cvars = { [SPARK] = "0" } })
+	C.login()
+	check("sparkle in combat: a login in combat writes nothing and the status says it waits", C.cvars[SPARK] == "0" and writes(C) == 0
+		and has(C.status(), "Quest item sparkle: on. Waiting for combat to end."), C.status())
+	C.combat = false
+	C.fire("PLAYER_REGEN_ENABLED")
+	check("sparkle in combat: written once after combat", C.cvars[SPARK] == "1" and writes(C) == 1 and has(C.status(), "Quest item sparkle: on.")
+		and not has(C.status(), "Quest item sparkle: on. Waiting"), C.status())
+	clean(C, "sparkle in combat")
+	-- A write the game does not keep is no error, and the status says so.
+	local R = newWorld({ cvars = { [SPARK] = "0" } })
+	R.cvarRefuse[SPARK] = true
+	R.login()
+	check("sparkle refused: the status says the game kept it off", R.cvars[SPARK] == "0" and has(R.status(), "Quest item sparkle: on, but the game kept it off."), R.status())
+	clean(R, "sparkle refused")
+	-- Off in the profile: a login writes nothing.
+	local O = newWorld({ cvars = { [SPARK] = "0" }, saved = { options = { ["general.questSparkle"] = false } } })
+	O.login()
+	check("sparkle off at login: nothing is written and the status has no line", O.cvars[SPARK] == "0" and writes(O) == 0 and not has(O.status(), "Quest item sparkle"), O.status())
+	clean(O, "sparkle off at login")
+	-- A client without the variable, or one that withholds it.
+	local N = newWorld()
+	N.login()
+	check("sparkle: a client without the variable is left alone and the status has no line", N.cvars[SPARK] == nil and writes(N) == 0
+		and not has(N.status(), "Quest item sparkle"), N.status())
+	clean(N, "sparkle without the variable")
 end
 
 -- 15. Thickness, and a change of screen size.
@@ -20101,7 +20729,7 @@ do local PROBES = {
 	{ "combattext.friendDamage", false, function(S) local f = S.fhit(nil, "WOUND", "", 412, 1) return f and f.text or "none" end, "-412", "none", world = { worldText = true } },
 	{ "combattext.friendHeal", "Off", function(S) local f = S.fhit(nil, "HEAL", "", 300, 1) return f and f.text or "none" end, "+300", "none", world = { worldText = true }, from = "Healing they take from anyone" },
 	{ "combattext.friendPet", false, function(S) S.W.owned.nameplate1 = true return S.fhit() and "shown" or "none" end, "shown", "none", world = { worldText = true } },
-	{ "combattext.friendWords", true, function(S) local f = S.fhit(nil, "WOUND", "", 0, 1) return f and f.text or "none" end, "none", "(Miss)", world = { worldText = true } },
+	{ "combattext.friendWords", true, function(S) local f = S.fhit(nil, "MISS", "", 0, 1) return f and f.text or "none" end, "none", "(Miss)", world = { worldText = true } },
 	{ "combattext.friendSigns", false, function(S) local f = S.fhit(nil, "WOUND", "", 412, 1) return f and f.text or "none" end, "-412", "412", world = { worldText = true } },
 	{ "combattext.friendDamageColour", "ff336699", function(S) local c = S.fhit(nil, "WOUND", "", 412, 1).textColour return string.format("%.2f,%.2f,%.2f", c[1], c[2], c[3]) end, "1.00,0.10,0.10", "0.20,0.40,0.60", world = { worldText = true } },
 	{ "combattext.friendHealColour", "ff336699", function(S) local c = S.fhit(nil, "HEAL", "", 300, 1).textColour return string.format("%.2f,%.2f,%.2f", c[1], c[2], c[3]) end, "0.10,1.00,0.10", "0.20,0.40,0.60", world = { worldText = true } },
@@ -20830,6 +21458,10 @@ local missingProbe = {}
 covered["general.handsOff"] = true
 -- The Flat UI button in the game menu has its checks in the menubtn block.
 covered["general.menuButton"], covered["general.menuOpens"] = true, true
+-- Quest item sparkle has its checks in block 14d.
+covered["general.questSparkle"] = true
+-- The Auto Shot window has its checks in block 11b.
+covered["swing.autoShot"], covered["swing.autoShotColour"] = true, true
 -- Action buttons has its checks in the ownset block.
 covered["actionbars.own"] = true
 -- Long names of the target of target frame has its checks in the tot name fit block.
@@ -21325,7 +21957,7 @@ do
 	clean(W, "side tabs")
 end
 
--- 43b. Side tab size: the tab and its icon at the chosen size (SharedUIPanelTemplates.lua:309-329, 381-399: a 55 tab around a 50 icon, set again on every
+-- 43b. Side tab size: the tab and its icon at the chosen size (SharedUIPanelTemplates.lua:311-331, 383-401: a 55 tab around a 50 icon, set again on every
 -- SetChecked), the game's sizes back for Game's size, tabs without fillToInterior left alone, and nothing sized in combat on a protected tab.
 do
 	local T = {}
@@ -21603,7 +22235,7 @@ do
 
 	-- The mask that rounds the icon (Square side tab icons off) is the game's 55 by 60 at the centre of the tab, with the icon 4 to the left. It is scaled about the
 	-- centre of the icon, so a smaller icon is cut as the game cuts the large one: the mask is the icon's side over 50 of 55 by 60, at the icon's place times one minus
-	-- that ratio (Mainline/SharedUIPanelTemplates.xml:1026-1033, lua:381-387). With the icons square the mask is not used and is not written.
+	-- that ratio (Mainline/SharedUIPanelTemplates.xml:1026-1033, lua:383-389). With the icons square the mask is not used and is not written.
 	function T.mask(W, name)
 		local mask = wraw(W, T.tab(W, name).Mask)
 		local point = mask.points[1]
@@ -21828,7 +22460,7 @@ do
 	clean(W, "sidebar tab without a ring")
 end
 
--- 43c. Side tabs when the right pane closes or opens: RefreshDisplay gives every mode tab icon 50 (CharacterFrame.lua:300-301, 265-271, 217-229)
+-- 43c. Side tabs when the right pane closes or opens: RefreshDisplay gives every mode tab icon 50 (CharacterFrame.lua:288-289, 253-259, 205-217)
 -- and the tabs are sized again on the next frame.
 do
 	local T = {}
@@ -21928,6 +22560,23 @@ do
 	W.updateSlot("CharacterHeadSlot", {})
 	check("quality: the item is taken off: the border colour again", edge() == "0.00,0.00,0.00", edge())
 	check("quality: IconBorder was hidden by Blizzard and is still transparent", wraw(W, h.IconBorder).shown == false and wa(W, h.IconBorder) == 0)
+	-- 70790: every update of a slot sets its picture through SetItemButtonTexture, which puts the icon's texture coordinates back to the whole
+	-- texture (Camelot/PaperDollFrame.lua:2182, 2204, Mainline/ItemButtonTemplate.lua:88-94). The crop comes back after each, also after one
+	-- that changes no colour, and after a vendor's call of the same function (MerchantFrame.lua:301).
+	check("crop: the empty slot picture the game set again is cropped again", wtc(W, h.icon) == "0.08,0.92,0.08,0.92", wtc(W, h.icon))
+	W.updateSlot("CharacterHeadSlot", { quality = 4, texture = 133071 })
+	W.updateSlot("CharacterHeadSlot", { quality = 4, texture = 133071 })
+	check("crop: an item put on and updated again with the same colour keeps its crop", wraw(W, h.icon).file == 133071 and wtc(W, h.icon) == "0.08,0.92,0.08,0.92", wtc(W, h.icon))
+	W.blizzard(function() W.env.SetItemButtonTexture(head, 133072) end)
+	check("crop: and after the game's SetItemButtonTexture alone", wraw(W, h.icon).file == 133072 and wtc(W, h.icon) == "0.08,0.92,0.08,0.92" and #W.violations == 0, wtc(W, h.icon))
+	W.change("windows.crop", 12)
+	W.blizzard(function() W.env.SetItemButtonTexture(head, 133071) end)
+	check("crop: a new crop is the one given back", wtc(W, h.icon) == "0.12,0.88,0.12,0.88", wtc(W, h.icon))
+	W.change("windows.crop", 0)
+	W.blizzard(function() W.env.SetItemButtonTexture(head, 133072) end)
+	check("crop: with no crop the game's whole texture stays", wtc(W, h.icon) == "-", wtc(W, h.icon))
+	W.change("windows.crop", 8)
+	W.updateSlot("CharacterHeadSlot", {})
 	-- Each of the three functions alone.
 	W.blizzard(function()
 		W.env.SetItemButtonBorder(head, [[Interface\Common\WhiteIconFrame]])
@@ -22009,6 +22658,10 @@ do
 	W.env.SetItemButtonBorder(SECRET, "x")
 	W.env.SetItemButtonBorderVertexColor("a string", 1, 1, 1)
 	W.env.SetItemButtonBorderVertexColor(5, 1, 1, 1)
+	W.env.SetItemButtonTexture(SECRET, 1)
+	W.env.SetItemButtonTexture(nil)
+	W.env.SetItemButtonTexture("a string", 1)
+	W.env.SetItemButtonTexture(head, SECRET)
 	check("item hooks: a button that is withheld, nil, a string or a number is ignored", #W.errors == 0 and #W.violations == 0, table.concat(W.errors, "|"))
 	clean(W, "item hooks")
 end
@@ -22183,14 +22836,38 @@ do
 		check(name .. ": the unkeyed background is found by its atlas and is transparent", back ~= nil and wa(W, back) == 0)
 		check(name .. ": the fill is not masked any more, the mask stays", not wmasked(W, b.Fill, b.Mask) and wa(W, b.Mask) == 1 and wa(W, b.Fill) == 1 and wa(W, b.Text) == 1)
 		local own = wboxes(W, bar)
-		check(name .. ": a box across the bar, 15 high, centred", #own == 1 and own[1].height == 15 and own[1].points[1][1] == "LEFT" and own[1].points[1][4] == 0 and own[1].points[2][1] == "RIGHT" and own[1].points[2][4] == 0)
+		-- Since 70425 the fill lies in FillArea, 6 units in from each side of the bar, so the box goes round FillArea and not the whole bar.
+		check(name .. ": a box across the track the fill is drawn in, 15 high, centred", #own == 1 and own[1].height == 15 and own[1].points[1][1] == "LEFT" and own[1].points[1][2] == b.FillArea
+			and own[1].points[1][4] == 0 and own[1].points[2][1] == "RIGHT" and own[1].points[2][2] == b.FillArea and own[1].points[2][4] == 0)
 		check(name .. ": the box has the window colour and a thin border", W.state(own[1]) == "SB" and wcolour(wfill(W, own[1])) == WINDOW_FILL and ringOf(W, own[1], 1, 0, 0, 0) and W.state(bar) == ".")
 	end
-	-- Blizzard changes the fill's width, coordinates and atlas. That changes nothing the addon did.
+	-- Blizzard changes the fill's width, coordinates and atlas. That changes nothing the addon did. Since 70425 the width is a share of FillArea's 148
+	-- and not of the bar's 160 (ColoredProgressBar.lua:33), and the fill starts at the left of FillArea, where the box starts.
 	local bar = wraw(W, names.ReputationBar1)
 	W.blizzard(function() names.ReputationBar1:SetFillPercent(0.5) names.ReputationBar1:SetFillTextureByColorType(2) end)
-	check("progress bar: Blizzard sets the fill's width and atlas and the mask stays off", not wmasked(W, bar.Fill, bar.Mask) and wraw(W, bar.Fill).width == 80)
+	check("progress bar: Blizzard sets the fill's width and atlas and the mask stays off", not wmasked(W, bar.Fill, bar.Mask) and wraw(W, bar.Fill).width == 74 and wraw(W, bar.Fill).shown)
+	local fillAt, box = wraw(W, bar.Fill).points[1], wboxes(W, names.ReputationBar1)[1]
+	W.blizzard(function() names.ReputationBar1:SetFillPercent(1) end)
+	check("progress bar: a full fill starts and ends with the box", fillAt[1] == "LEFT" and fillAt[2] == box.points[1][2] and fillAt[4] == box.points[1][4]
+		and wraw(W, bar.Fill).width == wraw(W, bar.FillArea).width and box.points[2][2] == bar.FillArea)
 	clean(W, "progress bars")
+end
+
+do
+	-- A bar of the template before 70425 has no FillArea: the box goes across the whole bar, as the fill does.
+	local W = newWorld({ windows = true })
+	W.group = "windows"
+	local old = W.win.progressBar(W.win.names.ReputationFrame, nil, "FlatUITestOldBar", true)
+	W.group = "static"
+	W.seal()
+	W.login()
+	W.flush()
+	local own = wboxes(W, old)
+	check("older progress bar: with no inner track the box goes across the whole bar", wraw(W, old).FillArea == nil and #own == 1 and own[1].points[1][2] == old and own[1].points[2][2] == old
+		and own[1].points[1][4] == 0 and own[1].points[2][4] == 0 and own[1].height == 15)
+	W.blizzard(function() old:SetFillPercent(0.5) end)
+	check("older progress bar: the fill is a share of the whole bar's width, as the box is", wraw(W, wraw(W, old).Fill).width == 80)
+	clean(W, "older progress bar")
 end
 
 do
@@ -22244,8 +22921,17 @@ do
 	check("art: the right pane's background and stone header are transparent, and the divider art one frame down", wa(W, wraw(W, right).regions[1]) == 0 and wa(W, wraw(W, right).StoneBg) == 0
 		and wa(W, wraw(W, wraw(W, right).children[1]).regions[1]) == 0)
 	check("art: frames are never made transparent, only their textures", wa(W, left) == 1 and wa(W, right) == 1 and wa(W, wraw(W, right).children[1]) == 1)
+	-- Since 70291 the level text has no background and stands on the rock strip across the top of the left pane, a frame of PaperDollFrame's own;
+	-- the check on the old ribbon behind the level text is now one on the strip.
 	local level = names.PaperDollLevelInfo
-	check("art: the level text's background is transparent, its text is not", wa(W, wraw(W, level).regions[1]) == 0 and wa(W, wraw(W, level).regions[2]) == 1)
+	local strip = wraw(W, wraw(W, names.PaperDollFrame).TopBackgroundStripHost)
+	local function stripAlphas() return g(wa(W, strip.TopBackgroundStrip)) .. "," .. g(wa(W, strip.TopBackgroundStripBottomEdge)) end
+	check("art: the rock strip and its edge across the top of the left pane are transparent, the level texts are not",
+		stripAlphas() == "0,0" and wa(W, wraw(W, level).regions[1]) == 1 and wa(W, wraw(W, names.PaperDollPetLevelInfo).regions[1]) == 1, stripAlphas())
+	W.change("windows.character", false)
+	check("art: with the character window off the rock strip is as the game drew it", stripAlphas() == "1,1", stripAlphas())
+	W.change("windows.character", true)
+	check("art: and transparent again when it is back on", stripAlphas() == "0,0", stripAlphas())
 	local box = names.CharacterStatsPaneScrollBox
 	check("art: the stats list loses its border, its scroll line and its class picture", wa(W, wraw(W, box).Border) == 0 and wa(W, wraw(W, box).ClassBackground) == 0 and wa(W, wraw(W, box).regions[2]) == 0)
 	check("art: the frames inside the stats list are not stripped", wa(W, wraw(W, wraw(W, box).ScrollBar).Track) == 1)
@@ -22260,6 +22946,38 @@ do
 	check("race art: the four pictures and the overlay are transparent by default, the scene is not", table.concat(list, ",") == "0,0,0,0,0" and wa(W, names.CharacterModelScene) == 1)
 	check("race art: the model scene's controls are not touched", wa(W, wraw(W, wraw(W, scene.ControlFrame).children[1]).states.Normal) == 1)
 	clean(W, "panels")
+end
+
+do
+	-- Since 70707 PaperDollFrame_OnShow sets the alpha of the overlay over the race pictures by the player's race (SetPaperDollBackground,
+	-- Camelot/PaperDollFrame.lua:3367-3391, 1522), when the window opens and on every change back to the character page inside the open
+	-- window, where no ShowUIPanel follows. An Undead's overlay has 0.2.
+	local W = winWorld()
+	local names = W.win.names
+	W.win.races.player = "Scourge"
+	local overlay = wraw(W, names.CharacterModelScene).BackgroundOverlay
+	local pictures = wraw(W, names.CharacterModelScene).BackgroundTopLeft
+	W.showPanel(names.CharacterFrame)
+	W.flush()
+	check("race overlay: faded when the window opens on the character page", wa(W, overlay) == 0 and wa(W, pictures) == 0, g(wa(W, overlay)))
+	W.win.toggleCharacter("ReputationFrame")
+	W.win.toggleCharacter("PaperDollFrame")
+	check("race overlay: still faded at once after a change to the reputation page and back, with no ShowUIPanel", wa(W, overlay) == 0 and wraw(W, names.PaperDollFrame).shown
+		and not wraw(W, names.ReputationFrame).shown and wraw(W, pictures).file == "Interface\\DressUpFrame\\DressUpBackground-Scourge1", g(wa(W, overlay)))
+	W.flush()
+	check("race overlay: and on the next frame", wa(W, overlay) == 0, g(wa(W, overlay)))
+	W.change("windows.raceArt", true)
+	check("race overlay: with the race background on, it has the alpha the game gives the race, not the one it had at login", wa(W, overlay) == 0.2 and wa(W, pictures) == 1, g(wa(W, overlay)))
+	W.win.toggleCharacter("SkillsFrame")
+	W.win.toggleCharacter("PaperDollFrame")
+	check("race overlay: and keeps it after a change of page", wa(W, overlay) == 0.2, g(wa(W, overlay)))
+	W.change("windows.raceArt", false)
+	check("race overlay: faded again when the race background goes off", wa(W, overlay) == 0 and wa(W, pictures) == 0, g(wa(W, overlay)))
+	W.change("windows.enabled", false)
+	W.win.toggleCharacter("ReputationFrame")
+	W.win.toggleCharacter("PaperDollFrame")
+	check("race overlay: with the module off the game's alpha stays", wa(W, overlay) == 0.2 and wa(W, pictures) == 1, g(wa(W, overlay)))
+	clean(W, "race overlay")
 end
 
 
@@ -22393,7 +23111,9 @@ do
 	local base = newWorld()
 	base.login()
 	local W = winWorld()
-	check("hooks: the windows add five hooks on globals and none on methods", W.hooks - base.hooks == 5, W.hooks - base.hooks)
+	-- Seven since 70790: SetPaperDollBackground (70707), which sets the alpha of the overlay over the race pictures again each time a paper doll
+	-- page is shown, and SetItemButtonTexture (70790), which puts the crop of a slot back to the whole texture.
+	check("hooks: the windows add seven hooks on globals and none on methods", W.hooks - base.hooks == 7, W.hooks - base.hooks)
 	local count = W.hooks
 	W.change("windows.opacity", 60)
 	W.change("windows.buttons", false)
@@ -22815,7 +23535,8 @@ do
 	check("a global that does not exist: the other item hooks are still made and work", o and string.format("%.2f,%.2f,%.2f", o.r, o.g, o.b) == "0.20,0.40,0.60" and #G.errors == 0 and #G.violations == 0)
 	local base = newWorld()
 	base.login()
-	check("a global that does not exist: two of the five global hooks are missing, so the others are 5 - 2", G.hooks - base.hooks == 3, G.hooks - base.hooks)
+	-- Seven global hooks since 70790, with SetPaperDollBackground and SetItemButtonTexture.
+	check("a global that does not exist: two of the seven global hooks are missing, so the others are 7 - 2", G.hooks - base.hooks == 5, G.hooks - base.hooks)
 	local P = newWorld({ windows = true })
 	P.env.ShowUIPanel = nil
 	P.login()
@@ -23337,7 +24058,8 @@ do
 	W.flush()
 	local styled = tonumber(W.status():match("Windows: on, (%d+) styled"))
 	check("turned on later: the windows are styled, and the status counts them", styled and styled > 100 and W.state(names.CharacterFrame) == "SB" and W.state(names.LFGParentFrame) == "SB", W.line("Windows"))
-	check("turned on later: the item functions, the tabs and the panel are followed from then on", W.hooks - base.hooks == 6, W.hooks - base.hooks)
+	-- Eight since 70790, with SetPaperDollBackground for the overlay over the race pictures and SetItemButtonTexture.
+	check("turned on later: the item functions, the tabs, the panel and the race pictures are followed from then on", W.hooks - base.hooks == 8, W.hooks - base.hooks)
 	check("turned on later: the quality colour of an item that was on before is picked up", (function()
 		local o = W.look(names.CharacterHeadSlot)
 		return o and string.format("%.2f,%.2f,%.2f", o.r, o.g, o.b) == "0.64,0.21,0.93"
@@ -26035,7 +26757,7 @@ do
 				return original(self, h)
 			end
 			-- The level box part sets a size and anchors of the same frames, and the game refuses them in combat too.
-			for _, name in ipairs({ "SetSize", "SetPoint" }) do
+			for _, name in ipairs({ "SetSize", "SetPoint", "ClearAllPoints" }) do
 				local plain = r[name]
 				r[name] = function(self, ...)
 					if W.inBlizzard == 0 and not allowed(r) then
@@ -26276,9 +26998,11 @@ do
 			F.stringsr = { textr, leftr, rightr }
 			hcr.label, ccr.label, castr.label, levelr.label, hbr.label, u.label = id .. ".HealthBarsContainer", id .. ".CastBarsContainer", id .. ".castBar",
 				id .. ".PlayerLevelDiffFrame", id .. ".healthBar", id .. ".UnitFrame"
-			-- The level frame is anchored LEFT to the health container's RIGHT at x 5, and sized by ApplyFrameOptions.
-			levelr.points = { { "LEFT", hc, "RIGHT", 5, 0 } }
-			levelr.width, levelr.height = 28, 16
+			-- Since 70425 the level frame hangs TOPLEFT and BOTTOMLEFT from the health bar, 5 past its end, 3 above and 2 below it
+			-- (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8). ApplyFrameOptions sizes it, and the height of the size is not used while
+			-- those two anchors set it (F.levelHeight, below). Before 70425 it had one LEFT anchor to the health container's RIGHT at x 5.
+			levelr.points = { { "TOPLEFT", hb, "TOPRIGHT", 5, 3 }, { "BOTTOMLEFT", hb, "BOTTOMRIGHT", 5, -2 } }
+			levelr.width, levelr.height, levelr.sizeHeight = 28, 16, 16
 			hcr.height, ccr.height, castr.height = 13, 16, 6
 			-- The bar colour is the vertex colour of the fill. Setting the fill's asset keeps it unless W.npResets names the call that resets it.
 			hbr.barColor = { 1, 1, 1, 1 }
@@ -26333,6 +27057,43 @@ do
 			NP.watch(W, lSkullr, id .. ".highLevelTexture", { "SetSize", "SetPoint" })
 			NP.watch(W, levelr, id .. ".PlayerLevelDiffFrame", { "SetSize", "SetWidth", "SetHeight", "SetPoint", "ClearAllPoints", "SetAllPoints", "Show", "Hide", "SetScale", "SetAlpha", "SetShown" })
 			NP.watch(W, u, id .. ".UnitFrame", { "SetPoint", "ClearAllPoints", "SetAllPoints", "CreateTexture", "CreateLine", "Show", "Hide", "SetAlpha", "SetScale", "SetSize", "SetHeight", "SetWidth" })
+			-- The height of the level frame: from a top and a bottom anchor to the health bar or its container when it has both (the health bar
+			-- fills the container), else the height its size gave it.
+			function F.levelHeight()
+				local top, bottom
+				for _, p in ipairs(levelr.points) do
+					if p[1]:find("^TOP") and (p[2] == hb or p[2] == hc) then
+						top = p
+					elseif p[1]:find("^BOTTOM") and (p[2] == hb or p[2] == hc) then
+						bottom = p
+					end
+				end
+				if top and bottom and hcr.height then
+					local function edge(p)
+						return (p[3]:find("^TOP") and hcr.height or p[3]:find("^BOTTOM") and 0 or hcr.height / 2) + (p[5] or 0)
+					end
+					levelr.height = edge(top) - edge(bottom)
+				else
+					levelr.height = levelr.sizeHeight
+				end
+			end
+			for _, pair in ipairs({ { levelr, "SetSize" }, { levelr, "SetHeight" }, { levelr, "SetPoint" }, { levelr, "ClearAllPoints" }, { levelr, "SetAllPoints" },
+				{ hcr, "SetHeight" }, { hcr, "SetSize" } }) do
+				local r, name = pair[1], pair[2]
+				local inner = r[name]
+				r[name] = function(...)
+					local sizing = r == levelr and (name == "SetSize" or name == "SetHeight")
+					if sizing then
+						levelr.height = levelr.sizeHeight
+					end
+					inner(...)
+					if sizing then
+						levelr.sizeHeight = levelr.height
+					end
+					F.levelHeight()
+				end
+			end
+			F.levelHeight()
 
 			-- The Lua methods of NamePlateUnitFrameMixin, copied onto the frame. Only Blizzard's own code may call them.
 			F.anchorPasses = 0
@@ -26782,7 +27543,9 @@ do
 			and O.useOutlinedFontWhenAboveHealthBar == true and near(O.playerLevelDiffHeight, 16) and near(O.playerLevelDiffWidth, 28))
 		check("simulated plate: the name and the health text take the outlined font object at the font height", n.namer.fontObject == NP.OUTLINED and near(n.namer.textHeight, 14)
 			and n.textr.fontObject == NP.OUTLINED and near(n.leftr.textHeight, 14) and near(n.rightr.textHeight, 14) and near(n.lTextr.textHeight, 10) and n.lTextr.fontObject == "SystemFont_NamePlateLevel")
-		check("simulated plate: the bars have Blizzard's heights", near(n.hcr.height, 13) and near(n.ccr.height, 16) and near(n.castr.height, 6) and near(n.levelr.width, 28) and near(n.levelr.height, 16))
+		-- Since 70425 the level frame is as high as the health bar and 5 more, from its anchors, not the 16 of its size.
+		check("simulated plate: the bars have Blizzard's heights", near(n.hcr.height, 13) and near(n.ccr.height, 16) and near(n.castr.height, 6) and near(n.levelr.width, 28) and near(n.levelr.height, 18)
+			and #n.levelr.points == 2 and n.levelr.points[1][1] == "TOPLEFT" and n.levelr.points[1][2] == n.hb and n.levelr.points[2][1] == "BOTTOMLEFT")
 		check("simulated plate: the fill is the atlas and the unit is set", n.fillr.atlas == NP.BAR_ATLAS and n.u.unit == "nameplate1" and n.u.isPlayer == true and n.u.isFriend == false
 			and n.u.showOnlyName == false and n.u.widgetsOnlyMode == false)
 		check("simulated plate: a unit assignment lays the plate out twice, once with no unit and once from UpdateShowOnlyName", n.anchorPasses == 2, n.anchorPasses)
@@ -27141,11 +27904,12 @@ do
 		end
 		local setOnly = {}
 		for _, call in ipairs(forbiddenCalls) do
-			if call ~= "SetSize" and call ~= "SetPoint" then
+			-- Since 70425 the game's two anchors are cleared before the one of the box is set.
+			if call ~= "SetSize" and call ~= "SetPoint" and call ~= "ClearAllPoints" then
 				setOnly[#setOnly + 1] = call
 			end
 		end
-		check("level box: the addon sets only the size and one anchor of Blizzard's level frame, never its scale or visibility", #setOnly == 0, table.concat(forbiddenCalls, " "))
+		check("level box: the addon sets only the size and the anchors of Blizzard's level frame, never its scale or visibility", #setOnly == 0, table.concat(forbiddenCalls, " "))
 		check("level box: the level frame is a square the height of the health bar, flush with its right end", near(a.levelr.width, 13) and near(a.levelr.height, 13) and #a.levelr.points == 1
 			and a.levelr.points[1][1] == "LEFT" and a.levelr.points[1][2] == a.hc and a.levelr.points[1][3] == "RIGHT" and a.levelr.points[1][4] == 0)
 		local frames = #W.addonFrames
@@ -27162,7 +27926,7 @@ do
 		W.npOptions(NP.STYLE.Modern, 2)
 		W.flush()
 		check("level box: after Blizzard's style change, with a taller bar, the level frame is the new square and the border has the same anchors and no new call", near(a.levelr.height, 20) and near(a.levelr.width, 20) and near(a.hcr.height, 20)
-			and span.calls.SetPoint == calls0 and span.calls.ClearAllPoints == nil and span.points[3][2] == a.hb and NP.uniq(NP.mine(W, a, mark, "PlayerLevelDiffFrame")):match("^SetSize%(20,20%) SetPoint%(LEFT,.*,RIGHT,0,0%)$") ~= nil, NP.uniq(NP.mine(W, a, mark, "PlayerLevelDiffFrame")))
+			and span.calls.SetPoint == calls0 and span.calls.ClearAllPoints == nil and span.points[3][2] == a.hb and NP.uniq(NP.mine(W, a, mark, "PlayerLevelDiffFrame")):match("^ClearAllPoints%(%) SetSize%(20,20%) SetPoint%(LEFT,.*,RIGHT,0,0%)$") ~= nil, NP.uniq(NP.mine(W, a, mark, "PlayerLevelDiffFrame")))
 		clean(W, "level box")
 
 		-- The target takes its thickness and colour on both borders.
@@ -27669,6 +28433,12 @@ do
 			end
 			return { false, false, false, 1e9, 1e9 }
 		end
+		-- True when the level frame has the two anchors the game gives it since 70425 (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8), and no other.
+		function T.home(a)
+			local p = a.levelr.points
+			return #p == 2 and p[1][1] == "TOPLEFT" and p[1][2] == a.hb and p[1][3] == "TOPRIGHT" and p[1][4] == 5 and p[1][5] == 3
+				and p[2][1] == "BOTTOMLEFT" and p[2][2] == a.hb and p[2][3] == "BOTTOMRIGHT" and p[2][4] == 5 and p[2][5] == -2
+		end
 		-- Where the right end of the box is, when the right end of the cast container is 0.
 		function T.right(a)
 			local hp, lp = T.pt(a.hcr, "BOTTOMRIGHT"), T.pt(a.levelr, "LEFT")
@@ -27787,18 +28557,21 @@ do
 			local W, a = T.world({ { "nameplates.levelGap", 1 } })
 			check("squared: a box that takes the size has no line in the status", not has(W.status(), "Level box"), W.status())
 			local V, b = T.world({ { "nameplates.levelShape", "Game width" } })
-			V.refuse[b.level] = true
+			-- The client keeps the width of its box: a size sets the height alone. The anchors are still taken, so the game's can go back.
+			local keep = b.levelr.SetSize
+			b.levelr.SetSize = function(self, w, h) return keep(self, b.levelr.width, h) end
 			V.change("nameplates.levelShape", "Square")
 			V.flush()
 			check("squared: a box that keeps the game's width is told in one line of the status", count(V.status(), "Level box: the game keeps its own box width.") == 1, V.status())
 			local o = V.env.NamePlateSetupOptions
-			check("squared: and the game's layout is back, the health end, the box offset and the aura frames", near(T.pt(b.hcr, "BOTTOMRIGHT")[4], -(o.playerLevelDiffWidth + 5)) and T.pt(b.level, "LEFT")[4] == 5
-				and near(b.ccListr.points[1][4], 5 + o.playerLevelDiffWidth + 5) and near(b.lossListr.points[1][4], 5 + o.playerLevelDiffWidth + 5), tostring(T.pt(b.hcr, "BOTTOMRIGHT")[4]))
+			-- Since 70425 the game's layout is its two anchors, with no room kept for them (see "turned off" below).
+			check("squared: and the game's layout is back, the health end, the box anchors and the aura frames", near(T.pt(b.hcr, "BOTTOMRIGHT")[4], 0) and T.home(b)
+				and near(b.levelr.width, o.playerLevelDiffWidth) and near(b.ccListr.points[1][4], 5) and near(b.lossListr.points[1][4], 5), tostring(T.pt(b.hcr, "BOTTOMRIGHT")[4]) .. " " .. #b.levelr.points)
 			local mark = #V.npLog
 			V.change("nameplates.levelGap", 2)
 			V.flush()
 			check("squared: and a later pass leaves the game's layout alone", #NP.mine(V, b, mark, "HealthBarsContainer", "SetPoint") == 0 and #NP.mine(V, b, mark, "PlayerLevelDiffFrame") == 0)
-			V.refuse[b.level] = nil
+			b.levelr.SetSize = keep
 			V.change("nameplates.levelShape", "Game width")
 			V.flush()
 			V.change("nameplates.levelShape", "Square")
@@ -27814,14 +28587,17 @@ do
 				local o = W.env.NamePlateSetupOptions
 				W.change(how[2], how[1])
 				W.flush()
-				local lp, hp = T.pt(a.levelr, "LEFT"), T.pt(a.hcr, "BOTTOMRIGHT")
+				local hp = T.pt(a.hcr, "BOTTOMRIGHT")
 				local width = o.playerLevelDiffWidth
-				if not (near(a.levelr.width, width) and near(a.levelr.height, o.playerLevelDiffHeight) and lp[4] == 5 and near(hp[4], -(width + 5))
-					and near(a.ccListr.points[1][4], 5 + width + 5) and near(a.lossListr.points[1][4], 5 + width + 5) and near(a.skullr.width, o.playerLevelDiffHeight)) then
-					bad[#bad + 1] = tostring(how[2]) .. ":" .. g(a.levelr.width) .. "," .. tostring(lp[4]) .. "," .. g(hp[4]) .. "," .. g(a.ccListr.points[1][4])
+				-- Since 70425 the game's two anchors come back, the height is the bar's and 5 more, and UpdateAnchors keeps no room for them: the
+				-- health container ends at the cast container and the aura frames hang 5 past it (Blizzard_NamePlateUnitFrame.lua:683-708, 872-878).
+				-- Before 70425 the check was one LEFT anchor at 5, the health container ending the box width and 5 before it, and the aura frames past the box.
+				if not (near(a.levelr.width, width) and T.home(a) and near(a.levelr.height, a.hcr.height + 5) and near(hp[4], 0)
+					and near(a.ccListr.points[1][4], 5) and near(a.lossListr.points[1][4], 5) and near(a.skullr.width, o.playerLevelDiffHeight)) then
+					bad[#bad + 1] = tostring(how[2]) .. ":" .. g(a.levelr.width) .. "," .. #a.levelr.points .. "," .. g(a.levelr.height) .. "," .. g(hp[4]) .. "," .. g(a.ccListr.points[1][4])
 				end
 			end
-			check("squared: turned off, the level frame has the game's size and offset 5, the health container its end, the aura frames their offset", #bad == 0, table.concat(bad, " | "))
+			check("squared: turned off, the level frame has the game's size and anchors, the health container its end, the aura frames their offset", #bad == 0, table.concat(bad, " | "))
 		end
 
 		-- In combat nothing is set on the protected frames, and everything is set when combat ends.
@@ -28197,6 +28973,51 @@ do
 			check("class icon " .. c[1] .. ", size " .. c[2] .. ", offsets " .. c[3] .. " and " .. c[4] .. ": one anchor, as designed", NP.iconPlace(W, e) == c[5], NP.iconPlace(W, e))
 		end
 		clean(W, "class icon placement")
+
+		-- Since 70425 the game's level frame keeps no room in the row and hangs 5 past the health bar (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8),
+		-- so with the game's box an icon on the right goes after the level frame; with the square box of Flat UI, which ends where the row
+		-- does, or a hidden level box, it goes after the row.
+		do
+			local R = NP.npWorld()
+			R.change("nameplates.classPosition", "Right")
+			R.change("nameplates.classGap", 3)
+			R.change("nameplates.level", "Default")
+			local r = R.npShow("nameplate1", { player = true, friend = false, class = "MAGE" })
+			R.flush()
+			local function rightEnd()
+				local I = NP.iconOf(R, r)
+				local p = I and I.guide.points[2]
+				return p and p[1] == "RIGHT" and p[3] == "RIGHT" and p[4] == 0 and p[5] == 0 and (p[2] == r.level and "level" or (p[2] == r.cc and "castContainer" or "other")) or "none"
+			end
+			check("class icon right, Default level box: the guide ends at the game's level frame, which hangs past the row", rightEnd() == "level" and NP.iconPlace(R, r) == "LEFT guide RIGHT 3,0 13x13 n1"
+				and #NP.iconOf(R, r).guide.points == 4, rightEnd() .. " " .. NP.iconPlace(R, r))
+			R.change("nameplates.level", "Thin border")
+			R.change("nameplates.levelShape", "Game width")
+			R.flush()
+			check("class icon right, Game width: the guide ends at the game's level frame too", rightEnd() == "level", rightEnd())
+			R.change("nameplates.levelShape", "Square")
+			R.flush()
+			check("class icon right, Square: the box ends where the row does, so the guide ends at the cast container", rightEnd() == "castContainer", rightEnd())
+			R.change("nameplates.level", "Hidden")
+			R.flush()
+			check("class icon right, Hidden: the guide ends at the cast container", rightEnd() == "castContainer", rightEnd())
+			R.change("nameplates.level", "Default")
+			R.change("nameplates.classPosition", "Above")
+			R.flush()
+			check("class icon above: the guide is the row again, so the icon stays over its middle", rightEnd() == "castContainer" and NP.iconPlace(R, r) == "BOTTOM guide TOP 0,19 13x13 n1", rightEnd() .. " " .. NP.iconPlace(R, r))
+			clean(R, "class icon right of the game's level frame")
+			-- A client before 70425: the level frame hangs LEFT from the health container and the game keeps room for it, so the row ends after it.
+			local O = NP.npWorld()
+			O.change("nameplates.classPosition", "Right")
+			O.change("nameplates.level", "Default")
+			local o = O.npShow("nameplate1", { player = true, friend = false, class = "MAGE" })
+			o.levelr.points = { { "LEFT", o.hc, "RIGHT", 5, 0 } }
+			O.npOptions()
+			O.flush()
+			local I = NP.iconOf(O, o)
+			check("class icon right, a client before 70425: the guide ends at the cast container", I and I.guide.points[2][2] == o.cc, I and tostring(I.guide.points[2][2]))
+			clean(O, "class icon right, level frame before 70425")
+		end
 
 		-- Above: the name's height times the name size sits between the icon and the bar, unless the name is inside the bar.
 		local A = NP.npWorld()
@@ -30505,7 +31326,23 @@ do
 		a.hbr.barColor = { SECRET, SECRET, SECRET, 1 }
 		W.npOptions()
 		W.flush()
-		check("row: a colour the client withholds means no row", NP.row(W, a) == "hidden" and #W.errors == 0 and #W.violations == 0, NP.row(W, a))
+		check("row: a colour the client withholds, with no reaction colour to read, means no row", NP.row(W, a) == "hidden" and #W.errors == 0 and #W.violations == 0, NP.row(W, a))
+		-- A bar that took a withheld colour gives a withheld colour back, as every bar Colour health bars by health left tints does since build 70790:
+		-- the row has the reaction colour of the unit then.
+		W.env.UnitSelectionColor = function(unit)
+			if unit == "nameplate1" then
+				return 1, 0.5, 0.25, 1
+			end
+		end
+		W.npOptions()
+		W.flush()
+		check("row: while the client withholds the bar colour the row has the reaction colour of the unit, at 70 percent brightness",
+			NP.row(W, a) == "VERTICAL 0.700,0.350,0.175,0.95 0.700,0.350,0.175,0.05" and #W.errors == 0 and #W.violations == 0, NP.row(W, a))
+		a.hbr.barColor = { 0.2, 0.4, 0.8, 1 }
+		W.npOptions()
+		W.flush()
+		check("row: and the bar colour again once the client gives it", NP.row(W, a) == "VERTICAL 0.140,0.280,0.560,0.95 0.140,0.280,0.560,0.05", NP.row(W, a))
+		W.env.UnitSelectionColor = nil
 		W.change("nameplates.nameRow", false)
 		check("row: off, it is gone from every plate", NP.row(W, b) == "hidden" and NP.row(W, a) == "hidden")
 		W.change("nameplates.nameRow", true)
@@ -37498,7 +38335,7 @@ local function mworld(opts)
 	W.minimapChild = bframe("MinimapClusterChild", { parent = W.minimap, point = { "TOPRIGHT", W.minimap, "TOPRIGHT", -10, -10 }, width = 100, height = 100 })
 	W.playerFrame = bframe("PlayerFrame", { point = { "TOPLEFT", ui, "TOPLEFT", 20, -20 }, width = 232, height = 100, system = true, protected = true })
 	-- The pet frame hangs in the container under the player frame, and the game sets its scale in UpdatePetFrameScale
-	-- (EditModeSystemTemplates.lua:2686-2697): the Frame Size of the pet frame divided by the scale of the player frame, then a layout of the container.
+	-- (EditModeSystemTemplates.lua:2700-2711): the Frame Size of the pet frame divided by the scale of the player frame, then a layout of the container.
 	if layout.pet then
 		W.petMarks, W.petLayouts, W.petPct = 0, 0, layout.petPct or 100
 		local box = bframe("PlayerBottomManagedFrameContainer", { parent = W.playerFrame, point = { "TOP", W.playerFrame, "BOTTOM", 30, 25 }, width = 120, height = 49,
@@ -38206,9 +39043,20 @@ local function mworld(opts)
 		bar("MultiBarLeft", 45, 562)
 		bframe("MainStatusTrackingBarContainer", { point = { "BOTTOMLEFT", ui, "BOTTOMLEFT", 0, 0 }, width = 562, height = 14, system = true })
 		bframe("SecondaryStatusTrackingBarContainer", { point = { "BOTTOMLEFT", ui, "BOTTOMLEFT", 0, 0 }, width = 562, height = 14, system = true })
+		-- The totem bar (MultiCastActionBarFrame.xml:101-105): 230 by 38, hidden, Enum.EditModeSystem.TotemActionBar with no index, protected by
+		-- its secure buttons. Since 70425 it is a bar of the bottom stack (Camelot/EditModeUtil.lua:21), so in its default position Edit Mode puts it
+		-- at the top left corner of the screen for the pass to place (EditModeSystemTemplates.lua:369-371), and a hidden one stays there. The game
+		-- shows it while it has an active totem slot (MultiCastActionBarFrame.lua:311, 334), which is the world of a Shaman (layout.totem).
+		local totem = env.MultiCastActionBarFrame or bframe("MultiCastActionBarFrame", { width = 230, height = 38, system = true, protected = true, explicit = false })
+		local totemRaw = W.rawOf[totem]
+		totemRaw.system, totemRaw.systemIndex, totemRaw.width, totemRaw.height, totemRaw.protected = 25, nil, 230, 38, true
+		totemRaw.shown = layout.totem == true
+		totemRaw.numActiveSlots = layout.totem and 4 or 0
+		W.gamePlaces("MultiCastActionBarFrame", "TOPLEFT", 0, 0, ui, "TOPLEFT")
+		env.Enum.EditModeSystem.TotemActionBar = 25
 		-- With layout.restricted true the client lets the addon place these bars in a fight.
 		for _, name in ipairs({ "MainActionBar", "MultiBarBottomLeft", "MultiBarBottomRight", "MultiBar5", "MultiBar6", "MultiBar7", "MultiBarRight", "MultiBarLeft",
-			"StanceBar", "PetActionBar", "PossessActionBar" }) do
+			"StanceBar", "PetActionBar", "PossessActionBar", "MultiCastActionBarFrame" }) do
 			if env[name] then
 				W.rawOf[env[name]].combatOk = layout.restricted == true
 			end
@@ -38224,23 +39072,95 @@ local function mworld(opts)
 		if layout.restricted ~= nil then
 			env.C_RestrictedActions = { CheckAllowProtectedFunctions = function() return layout.restricted end }
 		end
-		-- The bottom pass of Edit Mode (EditModeManager.lua, LayoutBottomActionBars): each shown bar of the stack that is in its default position goes
-		-- to the bottom left of the main bar, one bar height and 4 above the one before.
+		-- The bottom pass of Edit Mode (EditModeManager.lua:641-726): each shown bar of the stack (Camelot/EditModeUtil.lua:11-22, the main bar first)
+		-- that is in its default position goes to the bottom left of the main bar, in by the bottomBarOffsetX of its default anchor, and one bar height
+		-- and 4 above the one before (EditModeManager.lua:692-716). Action bar 3 is in by 606 and leaves the height to bar 2, which is in by 22
+		-- (Camelot/EditModePresetLayoutConstants.lua:20, 27-28); the stance, pet and possess bars, the leave vehicle button and the totem bar are in
+		-- by 30 (the same file, :35; Mainline/EditModePresetLayouts.lua:191, 209, 226, 527, 776). The game puts the second status bar 1 into the
+		-- first (EditModeManager.lua:710-711), which this pass leaves out: every step is 4.
 		W.stack = { "SecondaryStatusTrackingBarContainer", "MainStatusTrackingBarContainer", "MultiBarBottomRight", "MultiBarBottomLeft", "StanceBar", "PetActionBar",
-			"PossessActionBar" }
+			"PossessActionBar", "MainMenuBarVehicleLeaveButton", "MultiCastActionBarFrame" }
+		W.stackX = { MultiBarBottomLeft = 22, MultiBarBottomRight = 606, StanceBar = 30, PetActionBar = 30, PossessActionBar = 30, MainMenuBarVehicleLeaveButton = 30,
+			MultiCastActionBarFrame = 30 }
+		W.stackKeepsHeight = { MultiBarBottomRight = true }
 		function W.gameStack()
-			-- A bar that is not in its default position is skipped (EditModeManager.lua:693).
+			-- A bar that is not in its default position is skipped (EditModeManager.lua:693); the main bar then starts the stack at its top and 4 (:666-668).
 			if W.rawOf[main].systemInfo.isInDefaultPosition then
 				W.gamePlaces("MainActionBar", "BOTTOMRIGHT", -4.5, -4, micro, "BOTTOMLEFT")
 			end
 			local y = W.rawOf[main].height + 4
 			for _, name in ipairs(W.stack) do
-				local raw = W.rawOf[env[name]]
-				if raw.shown ~= false and raw.systemInfo.isInDefaultPosition then
-					W.gamePlaces(name, "BOTTOMLEFT", 0, y, main, "BOTTOMLEFT")
-					y = y + raw.height + 4
+				local raw = env[name] and W.rawOf[env[name]]
+				if raw and raw.systemInfo and raw.shown ~= false and raw.systemInfo.isInDefaultPosition then
+					W.gamePlaces(name, "BOTTOMLEFT", W.stackX[name] or 0, y, main, "BOTTOMLEFT")
+					if not W.stackKeepsHeight[name] then
+						y = y + raw.height + 4
+					end
 				end
 			end
+		end
+		-- The totem bar is shown or hidden (TotemActionBarMixin:UpdateShownState, MultiCastActionBarFrame.lua:332-338), as a vehicle or an override
+		-- bar does (:340-343) with the totem slots kept: when that changes, the game's pass runs through EventRegistry, the game's own callback first
+		-- (EditModeManager.lua:64), then the addon's.
+		function W.totemShown(on)
+			local was = totemRaw.shown ~= false
+			W.blizzard(function()
+				totem:SetShown(on)
+			end)
+			if was ~= (on == true) then
+				W.blizzard(W.gameStack)
+				W.registry:TriggerEvent("EditModeManager.UpdateBottomActionBarPositions")
+			end
+		end
+		-- Totem slot 1, the totem flyout and the arrow that opens it, children of the totem bar with no ignoreParentAlpha, so each is drawn at the
+		-- bar's alpha (GetEffectiveAlpha here). The slot is 30 by 30 and 3 up (MultiCastActionBarFrame.xml:3-4, 210-214), 41 in once the bar is
+		-- updated for a Shaman who knows a summon spell (MultiCastActionBarFrame.lua:314-317, 975-983). The flyout is 32 wide on the bottom of
+		-- the bar and the arrow 28 by 18 on its top, both hidden (MultiCastActionBarFrame.xml:107-110, 156-160).
+		local slot1 = bframe("MultiCastSlotButton1", { parent = totem, width = 30, height = 30, point = { "BOTTOMLEFT", totem, "BOTTOMLEFT", 41, 3 } })
+		local flyout = bframe("MultiCastFlyoutFrame", { parent = totem, width = 32, height = 30, hidden = true, point = { "BOTTOM", totem, "BOTTOM", 0, 0 } })
+		local arrow = bframe("MultiCastFlyoutFrameOpenButton", { parent = totem, width = 28, height = 18, hidden = true, point = { "BOTTOM", totem, "TOP", 0, 0 } })
+		for _, child in ipairs({ slot1, flyout, arrow }) do
+			local raw = W.rawOf[child]
+			function raw.GetEffectiveAlpha()
+				local alpha, at = raw.alpha, raw
+				for _ = 1, 30 do
+					at = at.parent and W.rawOf[at.parent]
+					if not at then
+						break
+					end
+					alpha = alpha * (at.alpha or 1)
+				end
+				return alpha
+			end
+		end
+		-- The game's scripts on them, run as its own code. The cursor onto the slot shows the arrow on the top of it (MultiCastSlotButton_OnEnter
+		-- and MultiCastFlyoutFrameOpenButton_Show, MultiCastActionBarFrame.lua:378-381, 807-823), off it and the arrow hides it (:391-394,
+		-- 803-805, 825-830). A click on the arrow opens the slot's flyout on the top of the slot, 152 high for four totems and the empty one: 4,
+		-- five buttons of 24 with 2 between, then 2 and the close button's 18 (MultiCastFlyoutFrame_ToggleFlyout and _LoadSlotSpells, :615-648,
+		-- 715-783; :9-10; MultiCastActionBarFrame.xml:81, 131), and its OnShow hides the arrow (:567-569). A pick, a click on the close button
+		-- or one on the arrow again hides the flyout (:514-527, 602-617, 790-792).
+		function W.totemArrow(on)
+			W.blizzard(function()
+				if on then
+					arrow:SetParent(slot1)
+					arrow:SetPoint("BOTTOM", slot1, "TOP", 0, 0)
+					arrow:Show()
+				else
+					arrow:Hide()
+				end
+			end)
+		end
+		function W.totemFlyout(open)
+			W.blizzard(function()
+				if open then
+					flyout:SetPoint("BOTTOM", slot1, "TOP", 0, 0)
+					flyout:SetHeight(152)
+					flyout:Show()
+					arrow:Hide()
+				else
+					flyout:Hide()
+				end
+			end)
 		end
 		W.gameStack()
 		W.group = "static"
@@ -38273,7 +39193,13 @@ local function mworld(opts)
 				W.rawOf[env[name]].systemIndex = name == "SwingTimerMainHandFrame" and 99 or #NAMES
 			end
 		end
-		local DEFAULT = { MainActionBar = { point = "BOTTOMRIGHT", relativeTo = "MicroMenuContainer", relativePoint = "BOTTOMLEFT", offsetX = -4.5, offsetY = -4 } }
+		-- The totem bar has a row with no index, and its default anchor (Mainline/EditModePresetLayouts.lua:767-777) is used only once it is out of
+		-- the stack's default position.
+		if env.MultiCastActionBarFrame and W.rawOf[env.MultiCastActionBarFrame].system == 25 then
+			NAMES[#NAMES + 1] = "MultiCastActionBarFrame"
+		end
+		local DEFAULT = { MainActionBar = { point = "BOTTOMRIGHT", relativeTo = "MicroMenuContainer", relativePoint = "BOTTOMLEFT", offsetX = -4.5, offsetY = -4 },
+			MultiCastActionBarFrame = { point = "RIGHT", relativeTo = "UIParent", relativePoint = "BOTTOM", offsetX = -28, offsetY = 128 } }
 		local function defaultAnchor(name)
 			return copyTable(DEFAULT[name] or { point = "BOTTOMLEFT", relativeTo = "UIParent", relativePoint = "BOTTOMLEFT", offsetX = 0, offsetY = 0 })
 		end
@@ -38345,7 +39271,7 @@ local function mworld(opts)
 			end,
 		}
 		-- The game applies the layout in use: each row is the systemInfo of its frame and the frame is placed from it. A bar in its default position is
-		-- left to the game's pass.
+		-- left to the game's pass: an action bar and, since 70425, the totem bar go to the top left corner (EditModeSystemTemplates.lua:369-371).
 		function W.emApply()
 			W.blizzard(function()
 				local current = layouts()[W.em.active]
@@ -38355,7 +39281,7 @@ local function mworld(opts)
 					local raw = W.rawOf[frame]
 					raw.systemInfo = copyTable(row)
 					frame:ClearAllPoints()
-					if row.isInDefaultPosition and raw.system == 7 then
+					if row.isInDefaultPosition and (raw.system == 7 or raw.system == 25) then
 						frame:SetPoint("TOPLEFT", ui, "TOPLEFT", 0, 0)
 					elseif not row.isInDefaultPosition then
 						local a, scale = row.anchorInfo, frame:GetScale()
@@ -44902,19 +45828,35 @@ do
 		check("bags: the game sets the colour of the background each time a bag opens, and it is transparent again", flat() == "000")
 		check("bags: the combined bag window and the bank have a box", W.state(n.ContainerFrameCombinedBags) == "SB" and W.state(n.BankFrame) == "SB")
 		check("bags: a slot the bag has when it is swept has a box, and its icon keeps the empty slot picture uncropped", W.state(n.ContainerFrame1Item1) == "SB" and coords(W, wraw(W, n.ContainerFrame1Item1).icon) == "-")
-		local plain, withheld, later = blizz(W, function()
+		-- A bag slot of 70790 is known by its EmptyBagIcon; old is a slot of the 70532 template, which named its picture in emptyBackgroundAtlas.
+		-- withheld withholds both fields.
+		local plain, withheld, later, old = blizz(W, function()
 			local a = W.win.itemButton(bag, nil, "FlatUITestPlainSlot")
 			local b = W.win.addBagSlot(bag, 3)
 			wraw(W, b).emptyBackgroundAtlas = SECRET
-			return a, b, W.win.addBagSlot(bag, 2)
+			wraw(W, b).EmptyBagIcon = SECRET
+			local c = W.win.itemButton(bag, nil, "FlatUITestOldBagSlot")
+			wraw(W, c).emptyBackgroundAtlas = "bags-item-slot64"
+			return a, b, W.win.addBagSlot(bag, 2), c
 		end)
-		check("bags: slots the bag makes later have no box until it updates its items", W.state(plain) == "." and W.state(withheld) == "." and W.state(later) == ".")
+		check("bags: slots the bag makes later have no box until it updates its items", W.state(plain) == "." and W.state(withheld) == "." and W.state(later) == "." and W.state(old) == ".")
 		W.blizzard(function() bag:UpdateItems() end)
 		check("bags: and none inside the game's own update", W.state(later) == "." and W.state(plain) == ".")
 		W.win.updateBags()
-		check("bags: and have one afterwards; the empty slot picture stays uncropped, an icon alone is cropped, a withheld field counts as none",
+		check("bags: and have one afterwards; the empty slot picture stays uncropped on 70790 and on 70532, an icon alone is cropped, a withheld field counts as none",
 			W.state(later) == "SB" and coords(W, wraw(W, later).icon) == "-" and W.state(plain) == "SB" and coords(W, wraw(W, plain).icon) == "0.08,0.92,0.08,0.92"
-			and W.state(withheld) == "SB" and coords(W, wraw(W, withheld).icon) == "0.08,0.92,0.08,0.92")
+			and W.state(withheld) == "SB" and coords(W, wraw(W, withheld).icon) == "0.08,0.92,0.08,0.92" and W.state(old) == "SB" and coords(W, wraw(W, old).icon) == "-")
+		-- 70790: every item button masks its icon with the rounded Mask (Shared/ItemButtonTemplate.lua:16-20). The square slot takes it off the
+		-- icon and off the pushed texture it tints flat, and leaves it on the normal texture it fades.
+		local lr = wraw(W, later)
+		check("bags: the rounded Mask is off the icon and the flat pushed tint of a square slot, and still on the faded normal texture",
+			not wmasked(W, lr.icon, lr.Mask) and not wmasked(W, lr.PushedTexture, lr.Mask) and wmasked(W, lr.NormalTexture, lr.Mask)
+				and wraw(W, lr.PushedTexture).color ~= nil, tostring(wraw(W, lr.icon).maskList[1]))
+		W.change("windows.slots", false)
+		check("bags: with Item slots off the icon has the rounded Mask again, once", wmasked(W, lr.icon, lr.Mask) and #wraw(W, lr.icon).maskList == 1
+			and wraw(W, lr.icon).calls.AddMaskTexture == 1)
+		W.change("windows.slots", true)
+		check("bags: and on again it comes off again", not wmasked(W, lr.icon, lr.Mask) and wraw(W, lr.icon).calls.RemoveMaskTexture == 2)
 		local panel = wraw(W, n.BankFrame).BankPanel
 		check("bank: the picture behind the bank, the border of the panel and its shadows are transparent", wa(W, wraw(W, n.BankFrame).Background) == 0
 			and wa(W, wraw(W, wraw(W, panel).NineSlice).TopEdge) == 0 and wa(W, wraw(W, wraw(W, panel).EdgeShadows).TopShadow) == 0)
@@ -44927,6 +45869,33 @@ do
 		W.flush()
 		check("bank: a page tab and a slot have a box on the frame after the game announces a page", W.state(wraw(W, tab).Icon) == "SB" and W.state(item) == "SB")
 		check("bags and bank: no violation, error or message", #W.violations == 0 and #W.errors == 0 and #W.out == 0, wvio(W))
+	end
+
+	-- 70790: the game sets the picture of every bag slot on each update of the items, and of an empty slot on each cooldown update too, and
+	-- each time it puts the icon's texture coordinates back: the box of the empty slot atlas, or the whole item icon (ItemButtonTemplate.lua:76-97,
+	-- ContainerFrame.lua:1218-1219, 1253). A bag slot is styled without a crop, so the coordinates of the empty slot picture never reach an item.
+	do
+		local W = second()
+		W.atlasBox = { 0.25, 0.5, 0.75, 1 }
+		local n = select(2, up(W))
+		local slot = n.ContainerFrame1Item1
+		local icon = wraw(W, wraw(W, slot).icon)
+		W.win.updateBags()
+		check("bag atlas: an empty bag slot shows the empty slot atlas with the atlas's own box, uncropped", W.state(slot) == "SB" and icon.atlas == "bags-item-slot64"
+			and table.concat(icon.texCoord or {}, ",") == "0.25,0.5,0.75,1", table.concat(icon.texCoord or {}, ","))
+		W.items.bag["0:1"] = { hyperlink = "item:bagatlas", quality = 4, stackCount = 1, iconFileID = 135000 }
+		W.win.updateBags()
+		W.setQuality(slot, 4)
+		W.flush()
+		check("bag atlas: an item put in it shows its whole icon after a quality colour, not the box of the atlas", icon.file == 135000 and wtc(W, wraw(W, slot).icon) == "-",
+			wtc(W, wraw(W, slot).icon))
+		W.items.bag["0:1"] = nil
+		W.win.updateBags()
+		W.blizzard(function() n.ContainerFrame1:UpdateCooldowns() end)
+		W.flush()
+		check("bag atlas: emptied again, and after a cooldown update, it has the atlas with its box", icon.atlas == "bags-item-slot64" and table.concat(icon.texCoord or {}, ",") == "0.25,0.5,0.75,1"
+			and #W.violations == 0 and #W.errors == 0, wvio(W))
+		W.atlasBox = nil
 	end
 
 	-- Menus: a dialog keeps its border and its title plate in frames of their own, a pop-up its background in one frame.
@@ -48270,7 +49239,11 @@ local function ufWorld(opts)
 	P.status = put(main, "StatusTexture", region(main, "UI-HUD-UnitFrame-Player-PortraitOn-Status", "OVERLAY", 2, { hidden = true }))
 	W.rawOf[P.status].width, W.rawOf[P.status].height = 190.4, 66
 	W.rawOf[P.art[1]].width, W.rawOf[P.art[1]].height = 232, 100
-	P.pvp = put(main, "PvpBackgroundCircle", region(main, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", 3, { hidden = true }))
+	-- Since 1.60.1.70425 the PvP icon is the round plate itself and there is no PvpBackgroundCircle (Mainline/PlayerFrame.xml:97-101). opts.pvpPlate
+	-- builds the plate of the client before, with the icon on it.
+	if opts.pvpPlate then
+		P.pvp = put(main, "PvpBackgroundCircle", region(main, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", 3, { hidden = true }))
+	end
 	P.pvpIcon = put(main, "PvpBackgroundIcon", region(main, "UI-HUD-UnitFrame-SmallCircle-Alliance", "OVERLAY", 4, { hidden = true }))
 	P.timer = region(main, nil, "OVERLAY", 4, { kind = "FontString", hidden = true })
 	env.PlayerPVPTimerText = P.timer
@@ -48303,32 +49276,48 @@ local function ufWorld(opts)
 	P.powerWords = words(P.power, { "ManaBarText", "LeftText", "RightText" })
 	P.box, P.container, P.content, P.main, P.context, P.area = box, container, content, main, context, area
 	W.player = P
-	-- The art functions place the power bar from secure code, which the game may do in combat (Mainline/PlayerFrame.lua:621, 727). U.powerY: where they put it.
-	W.rawOf[P.power].combatOk = true
+	-- The art functions lay the bars out again from secure code, which the game may do in combat: both call Camelot's PlayerFrame_UpdateHealthBarVisuals
+	-- and PlayerFrame_UpdateManaBarVisuals (Mainline/PlayerFrame.lua:598-599, 670-671), which put the slot of the health bar, 124 by 15, at 87,-46, the
+	-- health bar, 20 tall, at the top left of the slot and 3 above it, and the power bar at 87,-61, for the player and the vehicle alike
+	-- (Camelot/PlayerFrame.lua:75-96). U.powerY: where they put the power bar.
+	for _, part in ipairs({ P.power, box, P.health }) do
+		W.rawOf[part].combatOk = true
+	end
+	local function barVisuals()
+		local braw, hraw = W.rawOf[box], W.rawOf[P.health]
+		braw.width, braw.height = 124, 15
+		braw.SetPoint(box, "TOPLEFT", P.main, "TOPLEFT", 87, -46)
+		hraw.height = 20
+		hraw.ClearAllPoints(P.health)
+		hraw.SetPoint(P.health, "TOPLEFT", box, "TOPLEFT", 0, 3)
+		W.rawOf[P.power].height, W.rawOf[P.power].width = 10, 124
+		W.rawOf[P.power].SetPoint(P.power, "TOPLEFT", P.main, "TOPLEFT", 87, U.powerY or -61)
+	end
 	env.PlayerFrame_ToPlayerArt = blizz("PlayerFrame_ToPlayerArt", function()
 		P.art[1]:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn")
 		P.art[1]:Show()
 		P.art[2]:Hide()
 		P.status:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn-Status", true)
-		W.rawOf[P.power].SetPoint(P.power, "TOPLEFT", P.main, "TOPLEFT", 85, U.powerY or -61)
+		barVisuals()
 	end)
 	env.PlayerFrame_ToVehicleArt = blizz("PlayerFrame_ToVehicleArt", function()
 		P.art[1]:Hide()
 		P.art[2]:Show()
-		W.rawOf[P.power].SetPoint(P.power, "TOPLEFT", P.main, "TOPLEFT", 91, U.powerY or -61)
+		barVisuals()
 		P.status:SetAtlas("UI-HUD-UnitFrame-Player-PortraitOn-Vehicle-Status", true)
 	end)
 	-- A role icon takes the place of the level number.
 	env.PlayerFrame_UpdateRolesAssigned = blizz("PlayerFrame_UpdateRolesAssigned", function()
 		P.levelText:SetShown(not U.roleIcon)
 	end)
+	-- Combat comes before resting, and the resting animation is off in combat (Mainline/PlayerFrame.lua:487-519).
 	env.PlayerFrame_UpdateStatus = blizz("PlayerFrame_UpdateStatus", function()
-		P.restLoop:SetShown(U.resting == true)
-		if U.resting then
-			P.status:SetVertexColor(1, 0.88, 0.25, 1)
-			P.status:Show()
-		elseif U.fighting then
+		P.restLoop:SetShown(U.resting == true and not U.fighting)
+		if U.fighting then
 			P.status:SetVertexColor(1, 0, 0, 1)
+			P.status:Show()
+		elseif U.resting then
+			P.status:SetVertexColor(1, 0.88, 0.25, 1)
 			P.status:Show()
 		else
 			P.status:Hide()
@@ -48336,9 +49325,9 @@ local function ufWorld(opts)
 	end)
 
 	-- The flag of a unit: U.pvp[unit] is "faction", "ffa" or nil. UpdateUnitPvPIndicator sets the art from the style table of Camelot
-	-- (Camelot/UnitFramePvPIndicatorStyle.lua:5-7) and shows or hides the icon and the plate (Shared/UnitFrameUtil.lua:179-223). When the identity of the
-	-- unit is withheld (U.secretUnit[unit]) the value given to SetShown is withheld, and so is the answer of IsShown after it. The player's timer text is
-	-- hidden for a unit that is not flagged for a faction (Camelot/PlayerFrame.lua:36-45).
+	-- (Camelot/UnitFramePvPIndicatorStyle.lua:4-12) and shows or hides the icon (Shared/UnitFrameUtil.lua:175-214), and the plate of the client before
+	-- 1.60.1.70425 when it is given one. When the identity of the unit is withheld (U.secretUnit[unit]) the value given to SetShown is withheld, and so
+	-- is the answer of IsShown after it. The player's timer text is hidden for a unit that is not flagged for a faction (Camelot/PlayerFrame.lua:43-48).
 	U.pvp, U.secretUnit, U.timerLeft = {}, {}, nil
 	env.UnitIsPVPFreeForAll = function(unit) return U.pvp[unit] == "ffa" end
 	local STYLE = { faction = "UI-HUD-UnitFrame-SmallCircle-Horde", ffa = "UI-HUD-UnitFrame-Player-PVP-FFAIcon" }
@@ -48350,12 +49339,15 @@ local function ufWorld(opts)
 		end
 		W.rawOf[elements.pvpIcon].fault.shown = hidden
 		elements.pvpIcon:SetShown(kind ~= nil)
-		W.rawOf[elements.pvpBackground].fault.shown = hidden
-		elements.pvpBackground:SetShown(kind ~= nil)
+		if elements.pvpBackground ~= nil then
+			W.rawOf[elements.pvpBackground].fault.shown = hidden
+			elements.pvpBackground:SetShown(kind ~= nil)
+		end
 	end) }
 	env.C_GameRules = { IsGameRuleActive = function() return U.rulesOff == true end }
 	env.Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 }, GameRule = { UnitFramePvPContextualDisabled = 1 } }
 	env.PlayerFrame_UpdatePvPStatus = blizz("PlayerFrame_UpdatePvPStatus", function()
+		-- Camelot's PlayerFrame_GetPvPIndicatorElements gives the icon alone (Camelot/PlayerFrame.lua:35-40), and the plate too on the client before.
 		env.UnitFrameUtil.UpdateUnitPvPIndicator({ pvpBackground = P.pvp, pvpIcon = P.pvpIcon }, "player")
 		if U.pvp.player ~= "faction" then
 			P.timer:Hide()
@@ -48392,7 +49384,10 @@ local function ufWorld(opts)
 		W.rawOf[T.nameText].font, W.rawOf[T.nameText].textColour = { "Fonts\\FRIZQT__.TTF", 10, "" }, { 1, 0.82, 0, 1 }
 		T.container, T.content, T.main = c, tc, m
 		local context = put(tc, "TargetFrameContentContextual", B(tc, {}, {}))
-		T.pvp = put(context, "PvpBackgroundCircle", region(context, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", -1, { hidden = true }))
+		-- The icon is the plate since 1.60.1.70425 (Mainline/TargetFrame.xml:260-264, Camelot/TargetFrame.lua:51-56); opts.pvpPlate builds the plate of before.
+		if opts.pvpPlate then
+			T.pvp = put(context, "PvpBackgroundCircle", region(context, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", -1, { hidden = true }))
+		end
 		T.pvpIcon = put(context, "PvpBackgroundIcon", region(context, "UI-HUD-UnitFrame-SmallCircle-Alliance", "OVERLAY", 0, { hidden = true }))
 		T.high = put(context, "HighLevelTexture", region(context, "UI-HUD-UnitFrame-Target-HighLevelTarget_Icon", "OVERLAY", 1, { hidden = true }))
 		unitFrame(frame, name == "FocusFrame" and "focus" or "target", T.portrait)
@@ -48451,7 +49446,8 @@ local function ufWorld(opts)
 		W.rawOf[frame].CheckClassification = blizz("CheckClassification", function()
 			local class = U.class[name]
 			T.art:SetAtlas(class == "rare" and "UI-HUD-UnitFrame-Target-Rare-PortraitOn" or "UI-HUD-UnitFrame-Target-PortraitOn")
-			T.healthFill:SetAtlas(class == "minus" and "UI-HUD-UnitFrame-Target-MinusMob-PortraitOn-Bar-Health" or "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health")
+			-- Camelot's UpdateHealthBarVisuals gives every unit the standard health fill (Camelot/TargetFrame.lua:76).
+			T.healthFill:SetAtlas("UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health")
 			T.flash:SetAtlas("UI-HUD-UnitFrame-Target-PortraitOn-InCombat")
 			local dragon = ({ elite = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold", boss = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold-Winged",
 				worldboss = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Gold-Winged", rare = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Silver-Winged",
@@ -48462,10 +49458,13 @@ local function ufWorld(opts)
 			else
 				T.boss:Hide()
 			end
-			-- The slot is 125 by 12 for a minus unit and the bar keeps its size (Mainline/TargetFrame.lua:396-417, 432-434).
-			W.rawOf[T.box].width, W.rawOf[T.box].height = class == "minus" and 125 or 126, class == "minus" and 12 or 20
-			W.rawOf[T.box].points = { { "BOTTOMRIGHT", T.container, "LEFT", class == "minus" and 148 or 149, class == "minus" and -1 or -10 } }
+			-- Camelot's UpdateHealthBarVisuals lays the slot and the bar out the same for every unit: the slot 126 by 15 with its bottom right at 147,-9
+			-- from the left of the frame, the bar 20 tall at its top left and 3 above it (Camelot/TargetFrame.lua:71-86). Before 1.60.1.70425 the
+			-- Mainline layout made the slot 125 by 12 for a minus unit. U.fullSlot: a client whose slot is as large as the bar.
+			W.rawOf[T.box].width, W.rawOf[T.box].height = 126, U.fullSlot and 20 or 15
+			W.rawOf[T.box].points = { { "BOTTOMRIGHT", T.container, "LEFT", 147, -9 } }
 			W.rawOf[T.health].width, W.rawOf[T.health].height = 126, 20
+			W.rawOf[T.health].points = { { "TOPLEFT", T.box, "TOPLEFT", 0, U.fullSlot and 0 or 3 } }
 			if class == "minus" then
 				T.power:Hide()
 			elseif not T.power:IsShown() then
@@ -48629,13 +49628,15 @@ local function ufWorld(opts)
 	for _, f in ipairs({ container, content, main, context, area }) do
 		fill(f, player)
 	end
-	pin(box, "TOPLEFT", main, "TOPLEFT", 85, -40)
-	dim(box, 124, 20)
+	-- Camelot lays the player's bars out in PlayerFrame_UpdateHealthBarVisuals and PlayerFrame_UpdateManaBarVisuals (Camelot/PlayerFrame.lua:75-96):
+	-- the health bar is 5 units taller than its slot and hangs 2 units over the power bar.
+	pin(box, "TOPLEFT", main, "TOPLEFT", 87, -46)
+	dim(box, 124, 15)
 	for _, bar in ipairs({ P.health, P.loss }) do
-		pin(bar, "TOPLEFT", box, "TOPLEFT")
+		pin(bar, "TOPLEFT", box, "TOPLEFT", 0, 3)
 		dim(bar, 124, 20)
 	end
-	pin(P.power, "TOPLEFT", main, "TOPLEFT", 85, -61)
+	pin(P.power, "TOPLEFT", main, "TOPLEFT", 87, -61)
 	dim(P.power, 124, 10)
 	pin(P.portrait, "TOPLEFT", container, "TOPLEFT", 24, -19)
 	dim(P.portrait, 60, 60)
@@ -48643,11 +49644,18 @@ local function ufWorld(opts)
 	dim(P.nameText, 96, 12)
 	pin(P.level, "BOTTOMLEFT", main, "BOTTOMLEFT", 13, 7)
 	dim(P.level, 30, 30)
-	pin(P.pvp, "TOP", main, "TOPLEFT", 20, -50)
-	dim(P.pvp, 26, 26)
-	pin(P.pvpIcon, "CENTER", P.pvp, "CENTER", 0, 0)
-	dim(P.pvpIcon, 20, 20)
-	pin(P.timer, "RIGHT", P.pvp, "LEFT", 2, 0)
+	-- The icon hangs from the top left of the frame and the timer from the icon (Mainline/PlayerFrame.xml:97-101, Camelot/PlayerFrame.lua:17-18). The
+	-- client before had the plate there, the icon on its centre and the timer on the plate.
+	if P.pvp then
+		pin(P.pvp, "TOP", main, "TOPLEFT", 20, -50)
+		dim(P.pvp, 26, 26)
+		pin(P.pvpIcon, "CENTER", P.pvp, "CENTER", 0, 0)
+		dim(P.pvpIcon, 20, 20)
+	else
+		pin(P.pvpIcon, "TOP", main, "TOPLEFT", 22, -65)
+		dim(P.pvpIcon, 26, 26)
+	end
+	pin(P.timer, "RIGHT", P.pvp or P.pvpIcon, "LEFT", 2, 0)
 	dim(P.timer, 30, 12)
 	for index, T in ipairs({ W.target, W.focus }) do
 		pin(T.frame, "BOTTOMLEFT", ui, "BOTTOMLEFT", index == 1 and 700 or 1100, 600)
@@ -48655,11 +49663,12 @@ local function ufWorld(opts)
 		for _, f in ipairs({ T.container, T.content, T.main, T.context }) do
 			fill(f, T.frame)
 		end
-		pin(T.box, "BOTTOMRIGHT", T.container, "LEFT", 149, -10)
-		dim(T.box, 126, 20)
-		pin(T.health, "TOPLEFT", T.box, "TOPLEFT")
+		-- Camelot/TargetFrame.lua:24-27 and 71-86: the slot 126 by 15, the bar 3 above its top, and the power bar 4 past its right and 1 under it.
+		pin(T.box, "BOTTOMRIGHT", T.container, "LEFT", 147, -9)
+		dim(T.box, 126, 15)
+		pin(T.health, "TOPLEFT", T.box, "TOPLEFT", 0, 3)
 		dim(T.health, 126, 20)
-		pin(T.power, "TOPRIGHT", T.box, "BOTTOMRIGHT", 8, -1)
+		pin(T.power, "TOPRIGHT", T.box, "BOTTOMRIGHT", 4, -1)
 		dim(T.power, 134, 10)
 		pin(T.strip, "TOPRIGHT", T.main, "TOPRIGHT", -75, -25)
 		dim(T.strip, 134, 18)
@@ -48669,31 +49678,44 @@ local function ufWorld(opts)
 		dim(T.portrait, 58, 58)
 		pin(T.level, "BOTTOMRIGHT", T.main, "BOTTOMRIGHT", -13, 7)
 		dim(T.level, 30, 30)
-		pin(T.pvp, "TOP", T.context, "TOPRIGHT", -23, -50)
-		dim(T.pvp, 26, 26)
-		pin(T.pvpIcon, "CENTER", T.pvp, "CENTER", 0, 0)
-		dim(T.pvpIcon, 20, 20)
+		if T.pvp then
+			pin(T.pvp, "TOP", T.context, "TOPRIGHT", -23, -50)
+			dim(T.pvp, 26, 26)
+			pin(T.pvpIcon, "CENTER", T.pvp, "CENTER", 0, 0)
+			dim(T.pvpIcon, 20, 20)
+		else
+			pin(T.pvpIcon, "TOP", T.context, "TOPRIGHT", -24, -65)
+			dim(T.pvpIcon, 26, 26)
+		end
 	end
 	-- The target of target and the pet frame are laid out alike: the picture of the portrait, the name above the bars, the power bar under the
-	-- health bar and four units wider to the left.
+	-- health bar and three units wider to the left. Their OnLoad moves the name 1 unit down, makes the health bar 11 tall with its bottom 5 under the
+	-- middle of the portrait or 4 under the middle of the frame, and hangs the power bar 1 under it, 77 or 78 wide (Camelot/PetFrame.lua:4-22,
+	-- Camelot/TargetFrame.lua:92-108).
 	for index, S in ipairs({ W.tot, W.focusTot, Pet }) do
 		pin(S.frame, "BOTTOMLEFT", ui, "BOTTOMLEFT", 300 + 200 * index, 300)
 		dim(S.frame, 120, 49)
 		pin(S.portrait, "TOPLEFT", S.frame, "TOPLEFT", 5, -5)
 		dim(S.portrait, 37, 37)
-		pin(S.nameText, "TOPLEFT", S.portrait, "TOPRIGHT", 2, 0)
+		pin(S.nameText, "TOPLEFT", S.portrait, "TOPRIGHT", 2, -1)
 		dim(S.nameText, 68, 10)
 		if S == Pet then
-			pin(S.health, "BOTTOMLEFT", S.portrait, "RIGHT", 2, -3.5)
+			pin(S.health, "BOTTOMLEFT", S.portrait, "RIGHT", 3, -5)
 		else
-			pin(S.health, "BOTTOMRIGHT", S.frame, "RIGHT", -6, -2.5)
+			pin(S.health, "BOTTOMRIGHT", S.frame, "RIGHT", -5, -4)
 		end
-		dim(S.health, 70, 10)
-		pin(S.power, "TOPLEFT", S.health, "BOTTOMLEFT", -4, -1)
-		dim(S.power, 74, 7)
+		dim(S.health, 70, 11)
+		pin(S.power, "TOPLEFT", S.health, "BOTTOMLEFT", -3, -1)
+		dim(S.power, S == Pet and 77 or 78, 7)
 	end
 	U.region, U.pin, U.dim = region, pin, dim
-	for _, plate in ipairs({ P.pvp, P.pvpIcon, W.target.pvp, W.target.pvpIcon, W.focus.pvp, W.focus.pvpIcon }) do
+	-- The template of the icon has a scale of 0.8 (Camelot/PlayerFrameTemplates.xml:10, Camelot/TargetFrameTemplates.xml:11), and so had the plate.
+	local scaled = {}
+	for _, F in ipairs({ P, W.target, W.focus }) do
+		scaled[#scaled + 1] = F.pvpIcon
+		scaled[#scaled + 1] = F.pvp
+	end
+	for _, plate in ipairs(scaled) do
 		local raw = W.rawOf[plate]
 		local inherited = raw.GetEffectiveScale
 		raw.GetEffectiveScale = function() return 0.8 * inherited() end
@@ -48932,6 +49954,17 @@ do
 	W.uf.fighting = false
 	W.blizzard(W.env.PlayerFrame_UpdateStatus)
 	check("unit frames: resting colours the player picture border yellow, combat red, and neither plain", resting == YELLOW and fighting == RED and edgeColour(pp.edges) == PLAIN, resting .. " " .. fighting)
+	-- A resting player who enters combat: the game checks combat first and stops the resting animation (Mainline/PlayerFrame.lua:487-519).
+	W.uf.resting = true
+	W.blizzard(W.env.PlayerFrame_UpdateStatus)
+	local restLoop = W.rawOf[P.restLoop].shown
+	W.uf.fighting = true
+	W.blizzard(W.env.PlayerFrame_UpdateStatus)
+	local both, loopInCombat = edgeColour(pp.edges), W.rawOf[P.restLoop].shown
+	W.uf.resting, W.uf.fighting = false, false
+	W.blizzard(W.env.PlayerFrame_UpdateStatus)
+	check("unit frames: a resting player who enters combat has the border red, not yellow, with the game's resting animation off, and plain again after both",
+		restLoop and both == RED and not loopInCombat and edgeColour(pp.edges) == PLAIN and silent(W), both .. " " .. tostring(restLoop) .. tostring(loopInCombat) .. why(W))
 	local function bare(region) return W.rawOf[region].atlas == nil and W.rawOf[region].file == nil and W.rawOf[region].color == nil end
 	local clear = bare(P.status)
 	W.blizzard(W.env.PlayerFrame_ToVehicleArt)
@@ -49084,9 +50117,10 @@ do
 		colourOf(S, S.target.box) == "1.00,0.30,0.10" and colourOf(S, S.focus.box) == PLAIN and alphaOf(S, S.target.boss) == "0" and silent(S), why(S))
 	check("unit frames: a fill whose atlas is withheld stays the game's, with a note, and its frame is still styled", S.rawOf[S.player.healthFill].atlas == "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health"
 		and has(S.status(), "Unit frames: the default fill of a bar could not be read and is still shown.") and S.state(S.player.health) == "SB" and alphaOf(S, S.player.art[1]) == "0" and fillOf(S, S.target.healthFill) == GREEN)
+	-- The health fill of a target has the addon's mask that cuts it to its slot since 1.60.1.70425, and nothing else.
 	local R = ufWorld({ prep = function(W) W.rawOf[W.target.power].refuseFill = true end })
 	check("unit frames: a flat fill the game refuses stays the game's, with a note, and nothing else changes", has(R.status(), "Unit frames: the game refused a flat fill on a bar, which keeps its default fill.")
-		and R.rawOf[R.target.powerFill].atlas ~= nil and fillOf(R, R.target.healthFill) == GREEN and R.state(visible(R, R.target.power)) == "SB" and masks(R, R.target.powerFill) == 2 and masks(R, R.target.healthFill) == 0 and silent(R), why(R))
+		and R.rawOf[R.target.powerFill].atlas ~= nil and fillOf(R, R.target.healthFill) == GREEN and R.state(visible(R, R.target.power)) == "SB" and masks(R, R.target.powerFill) == 2 and masks(R, R.target.healthFill) == 1 and silent(R), why(R))
 	local parents = {}
 	local X = ufWorld({ prep = function(W)
 		W.refuse = setmetatable({}, { __index = function(_, k) return parents[rawget(k, "parent")] end })
@@ -49347,7 +50381,9 @@ do
 			return { pl = pl, pb = pb, pw = pw, ph = ph, rl = rl, rb = rb, rw = rw, rh = rh, sl = sl, sb = sb, sw = sw, sh = sh, wl = wl, wb = wb, ww = ww, wh = wh }
 		end
 		local P, T, F = W.player, W.target, W.focus
-		G.p, G.t, G.f = G.of(W, P.frame, P.portrait, P.box, P.power), G.of(W, T.frame, T.portrait, T.box, T.power), G.of(W, F.frame, F.portrait, F.box, F.power)
+		-- The player's health bar is outlined itself: since 1.60.1.70425 it is 20 units tall from 3 above the top of its 15 unit slot
+		-- (Camelot/PlayerFrame.lua:79-84), so the bar and not the slot is what the row and the picture line up with. A target's slot is outlined.
+		G.p, G.t, G.f = G.of(W, P.frame, P.portrait, P.health, P.power), G.of(W, T.frame, T.portrait, T.box, T.power), G.of(W, F.frame, F.portrait, F.box, F.power)
 		for _, entry in ipairs({ { "player", G.p }, { "target", G.t }, { "focus", G.f } }) do
 			local g = entry[2]
 			check("name row: on the " .. entry[1] .. " frame it has the width of the border of the health bar, sits on its top border and is 17 units high",
@@ -49386,7 +50422,7 @@ do
 		W.change("unitframes.smallRow", true)
 		-- With the name row off the picture starts at the top of the border of the health bar. A thicker border and a new scale lay it out again.
 		W.change("unitframes.strip", false)
-		G.plain, G.slot = { H.rect(W, pic(W, P.portrait).frame) }, { H.rect(W, P.box) }
+		G.plain, G.slot = { H.rect(W, pic(W, P.portrait).frame) }, { H.rect(W, P.health) }
 		check("pictures: with the name row off the top of the picture's border is the top of the border of the health bar",
 			near(G.plain[2] + G.plain[4] + t, G.slot[2] + G.slot[4] + t, 1e-6) and near(G.plain[3], G.plain[4], 1e-6), table.concat(G.plain, " "))
 		W.change("unitframes.strip", true)
@@ -49416,9 +50452,9 @@ do
 		check("name row: it has no border and no outline edges, and no frame of the addon's is left that follows a level number", #W.edgesOn(R.frame) == 0
 			and #W.edgesOn(TR.frame) == 0 and W.state(R.frame) == "." and H.follower(W.env.PlayerLevelText) == nil and H.follower(T.levelText) == nil)
 		check("name row: the game's name text, level text and level plate on the player are transparent, and so are the name text and the strip on a target, and the PvP plate is not",
-			alphaOf(W, P.nameText) == "0" and alphaOf(W, P.levelText) == "0" and alphaOf(W, P.level) == "0" and alphaOf(W, P.pvp) == "1" and alphaOf(W, T.nameText) == "0"
-			and alphaOf(W, T.strip) == "0" and alphaOf(W, T.levelText) == "0" and alphaOf(W, T.level) == "0" and alphaOf(W, T.pvp) == "1" and alphaOf(W, F.strip) == "0",
-			table.concat({ alphaOf(W, P.nameText), alphaOf(W, P.levelText), alphaOf(W, P.level), alphaOf(W, P.pvp), alphaOf(W, T.nameText), alphaOf(W, T.strip), alphaOf(W, T.levelText), alphaOf(W, T.level), alphaOf(W, T.pvp), alphaOf(W, F.strip) }, ","))
+			alphaOf(W, P.nameText) == "0" and alphaOf(W, P.levelText) == "0" and alphaOf(W, P.level) == "0" and alphaOf(W, P.pvpIcon) == "1" and alphaOf(W, T.nameText) == "0"
+			and alphaOf(W, T.strip) == "0" and alphaOf(W, T.levelText) == "0" and alphaOf(W, T.level) == "0" and alphaOf(W, T.pvpIcon) == "1" and alphaOf(W, F.strip) == "0",
+			table.concat({ alphaOf(W, P.nameText), alphaOf(W, P.levelText), alphaOf(W, P.level), alphaOf(W, P.pvpIcon), alphaOf(W, T.nameText), alphaOf(W, T.strip), alphaOf(W, T.levelText), alphaOf(W, T.level), alphaOf(W, T.pvpIcon), alphaOf(W, F.strip) }, ","))
 		-- The gradient is the class colour at seven tenths, 95 percent at the bottom and 5 percent of that at the top.
 		local top = 0.95 * (100 - 95) / 100
 		check("name row: the player's default colour is one gradient, vertical, the class colour at 70 percent, 95 percent opaque at the bottom and a twentieth of that at the top, with nothing behind it",
@@ -49505,12 +50541,12 @@ do
 		-- With the level hidden the game's plates and numbers stay transparent, and the row has no level.
 		W.change("unitframes.levelPosition", "Hidden")
 		check("name row: with the level hidden the game's plates and level numbers stay transparent and the row has no level, the PvP plate is as it was, and the name stays in the row", alphaOf(W, P.level) == "0"
-			and alphaOf(W, P.pvp) == "1" and alphaOf(W, P.levelText) == "0" and alphaOf(W, T.level) == "0" and not R.level.shown and not TR.level.shown and alphaOf(W, P.nameText) == "0")
+			and alphaOf(W, P.pvpIcon) == "1" and alphaOf(W, P.levelText) == "0" and alphaOf(W, T.level) == "0" and not R.level.shown and not TR.level.shown and alphaOf(W, P.nameText) == "0")
 		W.change("unitframes.levelPosition", "End of the name row")
 
 		-- Every switch gives the game's art back exactly, and the row hides.
 		W.change("unitframes.strip", false)
-		N.plain = alphaOf(W, P.nameText) == "1" and alphaOf(W, P.levelText) == "1" and alphaOf(W, P.level) == "1" and alphaOf(W, P.pvp) == "1" and alphaOf(W, T.nameText) == "1"
+		N.plain = alphaOf(W, P.nameText) == "1" and alphaOf(W, P.levelText) == "1" and alphaOf(W, P.level) == "1" and alphaOf(W, P.pvpIcon) == "1" and alphaOf(W, T.nameText) == "1"
 			and alphaOf(W, T.strip) == "1" and alphaOf(W, T.level) == "1" and alphaOf(W, T.levelText) == "1" and alphaOf(W, T.high) == "1" and not R.name.shown and not R.grad.shown and not R.level.shown
 		W.change("unitframes.strip", true)
 		N.left = {}
@@ -49578,18 +50614,25 @@ do
 		check("name band: a client that does not say the rectangles leaves the base under the player's row, and raises nothing", R4.base.shown and silent(W4), why(W4))
 	end
 
-	-- The bars of the target: the fill has crisp ends, and the game's mask is not on it. A minus mob's slot is smaller, and the fill is cut to it.
+	-- The bars of the target: the fill has crisp ends, and the game's mask is not on it. Since 1.60.1.70425 the slot of every target is 15 units tall and
+	-- the bar 20 (Camelot/TargetFrame.lua:71-86), so the fill is cut to the slot for every unit; before, only a minus mob's slot was smaller. A client
+	-- whose slot is as large as the bar is checked too.
 	do
 		local N, T = {}, W.target
 		N.fill = W.rawOf[T.healthFill]
-		check("target fill: the health fill of a target has no mask of the game's and none of the addon's, so its ends are square", #N.fill.maskList == 0)
+		N.cut = function() return #N.fill.maskList == 1 and N.fill.maskList[1].addon == true and N.fill.maskList[1].allPoints == T.box and N.fill.maskList[1].slice ~= nil end
+		check("target fill: the slot of a target is smaller than the bar, so the health fill has the addon's own mask cut to the slot and none of the game's", N.cut())
 		W.uf.class.TargetFrame = "minus"
 		W.blizzard(function() T.frame:CheckClassification() end)
-		check("target fill: for a minus mob the slot is smaller than the bar, and the fill has the addon's own mask cut to the slot, and the game's is still off", #N.fill.maskList == 1
-			and N.fill.maskList[1].addon == true and N.fill.maskList[1].allPoints == T.box and N.fill.maskList[1].slice ~= nil)
+		check("target fill: and so for a minus mob, whose slot the game no longer makes smaller", N.cut() and W.rawOf[T.box].height == 15)
 		W.uf.class.TargetFrame = "normal"
 		W.blizzard(function() T.frame:CheckClassification() end)
-		check("target fill: and when the slot is as large as the bar again the mask is off", #N.fill.maskList == 0 and silent(W), why(W))
+		W.uf.fullSlot = true
+		W.blizzard(function() T.frame:CheckClassification() end)
+		check("target fill: and when the slot is as large as the bar the mask is off, and its ends are square", #N.fill.maskList == 0 and silent(W), why(W))
+		W.uf.fullSlot = nil
+		W.blizzard(function() T.frame:CheckClassification() end)
+		check("target fill: and the mask is on again when the game makes the slot smaller", N.cut())
 	end
 
 	-- A client without CreateColor or SetGradient draws the row flat, and a player whose class the client withholds has the dark row without a mark.
@@ -49752,8 +50795,9 @@ do
 		W.change("unitframes.corners", "Square")
 		W.blizzard(function() P.status:SetVertexColor(1, 1, 1, 1) T.flash:SetVertexColor(1, 1, 1, 1) end)
 		N.clean = #N.back.maskList == 0 and W.look(P.health).top.alpha == 1 and #W.rawOf[P.healthFill].maskList == 0 and #W.rawOf[P.powerFill].maskList == 0 and #N.pp.texture.maskList == 0
-			and not N.line.shown and R.grad.slice == nil and R.grad.shown and #W.rawOf[T.healthFill].maskList == 0
-		check("corners: square again puts everything back: the straight edges, the square backgrounds, the fills with no mask, the picture, and the row with no margins", N.clean)
+			and not N.line.shown and R.grad.slice == nil and R.grad.shown and #W.rawOf[T.healthFill].maskList == 1 and W.rawOf[T.healthFill].maskList[1].addon == true and W.rawOf[T.healthFill].maskList[1].allPoints == T.box
+		-- The target's health fill keeps the square mask that cuts it to its smaller slot, which every target has since 1.60.1.70425.
+		check("corners: square again puts everything back: the straight edges, the square backgrounds, the fills with no mask but the square cut of the target's to its slot, the picture, and the row with no margins", N.clean)
 		-- A client that lacks or refuses the slice calls keeps square corners and says so.
 		N.fallback = {}
 		for index, case in ipairs({ { without = { SetTextureSliceMode = true } }, { without = { SetTextureSliceMargins = true } }, { refuse = true } }) do
@@ -50037,7 +51081,7 @@ do
 		N.W.blizzard(N.W.env.PlayerFrame_UpdateLevel)
 		check("name row: after the player gains a level the game's level text is transparent again and the row shows the new level, with the PvP plate left as it was",
 			alphaOf(N.W, N.W.player.levelText) == "0" and N.rows1.player.level.text == "8" and N.rows1.player.level.shown and N.rows1.player.level.alpha == 1
-			and alphaOf(N.W, N.W.player.pvp) == "1" and silent(N.W), alphaOf(N.W, N.W.player.levelText) .. " " .. tostring(N.rows1.player.level.text) .. why(N.W))
+			and alphaOf(N.W, N.W.player.pvpIcon) == "1" and silent(N.W), alphaOf(N.W, N.W.player.levelText) .. " " .. tostring(N.rows1.player.level.text) .. why(N.W))
 		N.W.uf.levels.player = 60
 		N.W.blizzard(N.W.env.PlayerFrame_UpdateLevel)
 
@@ -50192,8 +51236,10 @@ do
 		N.t = H.t
 		-- The player's picture is as tall as its two bars, so it is as much taller as the gap between them is above the game's 1 unit.
 		function N.extra(world) return math.max(1, world.ns.Pixels(world.player.power, 2)) - 1 end
+		-- The fixed numbers since 1.60.1.70425: the player 31 and the row, a target 26 and the row (Camelot/TargetFrame.lua:24-27, 71-86), the target
+		-- of target and the pet 30.5 from the top of the name (Camelot/TargetFrame.lua:92-108, Camelot/PetFrame.lua:4-22), less one border.
 		function N.fixed(t)
-			return { "48x48", "48x48", "48x48", g(30 - t) .. "x" .. g(30 - t), g(30 - t) .. "x" .. g(30 - t), g(30 - t) .. "x" .. g(30 - t), g(31 - t) .. "x" .. g(31 - t) }
+			return { "48x48", "43x43", "43x43", g(30.5 - t) .. "x" .. g(30.5 - t), g(30.5 - t) .. "x" .. g(30.5 - t), g(30.5 - t) .. "x" .. g(30.5 - t), g(31 - t) .. "x" .. g(31 - t) }
 		end
 		-- A frame's own height cannot be read until it has a width, and no tick has run.
 		N.Z = ufWorld({ saved = { options = { ["unitframes.smallRow"] = false } }, noFlush = true, prep = function(Y) Y.uf.zeroNoRect = true end })
@@ -50223,9 +51269,9 @@ do
 		for index, portrait in ipairs(N.portraits(N.Q)) do
 			N.same = N.same and pic(N.Q, portrait).frame.calls.SetPoint == N.points[index]
 		end
-		check("pending rectangles: with no rectangle yet the pictures are 48, 48, 48 and 30 less one border, the fixed numbers, at once", N.before == table.concat(N.fixed(N.t), " ") and N.nowhere, N.before)
-		check("pending rectangles: after a tick the player's picture takes the measured size, 50, and the pet's 32 less one border, with no SetPoint in between",
-			N.after[1] == g(50 + N.extra(N.Q)) .. "x" .. g(50 + N.extra(N.Q)) and N.after[6] == g(32 - N.t) .. "x" .. g(32 - N.t) and N.after[2] == "48x48" and N.same and N.square(N.Q), table.concat(N.after, " "))
+		check("pending rectangles: with no rectangle yet the pictures are 48, 43, 43 and 30.5 less one border, the fixed numbers, at once", N.before == table.concat(N.fixed(N.t), " ") and N.nowhere, N.before)
+		check("pending rectangles: after a tick the player's picture takes the measured size, 50, and the pet's 32.5 less one border, with no SetPoint in between",
+			N.after[1] == g(50 + N.extra(N.Q)) .. "x" .. g(50 + N.extra(N.Q)) and N.after[6] == g(32.5 - N.t) .. "x" .. g(32.5 - N.t) and N.after[2] == "43x43" and N.same and N.square(N.Q), table.concat(N.after, " "))
 		check("pending rectangles: and the status no longer says the sizes are from fixed numbers", not has(N.Q.status(), "sized from the default layout") and has(N.Q.status(), "Player portrait: shown, " .. g(math.floor(50 + N.extra(N.Q) + 0.5)) .. " x " .. g(math.floor(50 + N.extra(N.Q) + 0.5))), N.Q.status())
 
 		-- Every rectangle read answers nothing, or something the client withholds.
@@ -50237,7 +51283,7 @@ do
 				local p = pic(Y, portrait)
 				sizes[#sizes + 1] = p and p.shown and (g(p.frame.width) .. "x" .. g(p.frame.height)) or "hidden"
 			end
-			check("no rectangle at all: when every rectangle read gives " .. fault .. " the pictures have the fixed sizes and are shown, and the status says so", table.concat(sizes, " ") == "48x48 48x48 " .. g(30 - N.t) .. "x" .. g(30 - N.t)
+			check("no rectangle at all: when every rectangle read gives " .. fault .. " the pictures have the fixed sizes and are shown, and the status says so", table.concat(sizes, " ") == "48x48 43x43 " .. g(30.5 - N.t) .. "x" .. g(30.5 - N.t)
 				and has(Y.status(), "Player portrait: shown, 48 x 48, square corners, frame level") and has(Y.status(), ", sized from the default layout") and silent(Y), table.concat(sizes, " ") .. why(Y))
 		end
 
@@ -50352,7 +51398,8 @@ do
 		check("name size: and the sizes are back when it is on again, with nothing the client refuses", N.sizes() == "7 8.4 8.4 8.4 10 10" and silent(N.W), N.sizes() .. why(N.W))
 	end
 
-	-- /flatui status: where the name comes from, the picture and its size, the size of the pet's name and the scale of the pet frame.
+	-- /flatui status: where the name comes from, the picture and its size, the size of the pet's name and the scale of the pet frame. A target's picture is
+	-- 26 units and the row since 1.60.1.70425 (Camelot/TargetFrame.lua:24-27, 71-86), and the pet's 30.5 less one border.
 	do
 		local N = {}
 		N.W = ufWorld({ saved = { options = { ["unitframes.smallRow"] = false } } })
@@ -50360,7 +51407,7 @@ do
 		check("status: the player, target and pet frames report their names, portraits and the pet frame's scale", has(N.status, "Player name: shown, the unit's name") and has(N.status, "Target name: shown, the unit's name")
 			and has(N.status, "Pet name: size 7, Small frame text size 70%") and has(N.status, "Player portrait: shown, " .. g(math.floor(47 + math.max(1, N.W.ns.Pixels(N.W.player.power, 2)) + 0.5)) .. " x ")
 			and has(N.status, ", square corners, frame level ")
-			and has(N.status, "Target portrait: shown, 48 x 48, square corners, frame level ") and has(N.status, "Pet portrait: shown, " .. g(math.floor(30 - H.t + 0.5)) .. " x ")
+			and has(N.status, "Target portrait: shown, 43 x 43, square corners, frame level ") and has(N.status, "Pet portrait: shown, " .. g(math.floor(30.5 - H.t + 0.5)) .. " x ")
 			and has(N.status, "Pet frame: 100% of the player frame's scale"), N.status)
 		N.W.change("unitframes.corners", "Soft")
 		check("status: rounded corners are a rounded border and the picture stays square", has(N.W.status(), "Player portrait: shown, " .. g(math.floor(47 + math.max(1, N.W.ns.Pixels(N.W.player.power, 2)) + 0.5)) .. " x " .. g(math.floor(47 + math.max(1, N.W.ns.Pixels(N.W.player.power, 2)) + 0.5)) .. ", rounded border, frame level "), N.W.status())
@@ -50383,8 +51430,10 @@ do
 			and has(N.hs, "Pet frame: 100% of the player frame's scale") and has(N.hs, "Player name: shown") and has(N.hs, "Player portrait: shown"), N.hs)
 	end
 
-	-- The PvP flag: the game's round plate and icon on a corner of the picture, a word in the name row, both, or neither. The game goes on showing, hiding and
-	-- skinning the plate and the icon, and the module anchors the plate once, out of combat.
+	-- The PvP flag: the game's icon on a corner of the picture, a word in the name row, both, or neither. The game goes on showing, hiding and skinning
+	-- the icon, and the module anchors it once, out of combat. Since 1.60.1.70425 the icon is the round plate itself and there is no plate under it
+	-- (Mainline/PlayerFrame.xml:97-101, TargetFrame.xml:260-264), so the plate of these checks is the icon; the plate of the client before is checked
+	-- after them, in a world with opts.pvpPlate.
 	do
 		local N = {}
 		-- Who is flagged, drawn by the game: kind is "faction", "ffa" or nil.
@@ -50396,12 +51445,12 @@ do
 				world.blizzard(function() world[unit].frame:CheckFaction() end)
 			end
 		end
-		-- The plate, icon, timer, picture and row of the player, target and focus frames.
+		-- The plate (what moves: the icon, or the plate of the older client), icon, timer, picture and row of the player, target and focus frames.
 		function N.units(world)
 			local out = {}
 			for _, unit in ipairs({ "player", "target", "focus" }) do
 				local F = world[unit]
-				out[unit] = { plate = F.pvp, icon = F.pvpIcon, timer = F.timer, picture = pic(world, F.portrait).frame, row = H.rowOf(world, F.frame) }
+				out[unit] = { plate = F.pvp or F.pvpIcon, icon = F.pvpIcon, timer = F.timer, picture = pic(world, F.portrait).frame, row = H.rowOf(world, F.frame) }
 			end
 			return out
 		end
@@ -50433,7 +51482,7 @@ do
 		end
 
 		-- The defaults are Both, the bottom left corner and the time on; the flag is the icon on the picture and the word in the row.
-		N.W = ufWorld({ prep = function(Y) N.home = N.at(Y, Y.player.pvp) end })
+		N.W = ufWorld({ prep = function(Y) N.home = N.at(Y, Y.player.pvpIcon) end })
 		N.u = N.units(N.W)
 		check("pvp flag: the defaults are Both, the bottom left corner and the time on", N.W.ns.Get("unitframes.pvpFlag") == "both" and N.W.ns.Get("unitframes.pvpCorner") == "bl"
 			and N.W.ns.Get("unitframes.pvpTimer") == true)
@@ -50532,7 +51581,8 @@ do
 		check("pvp flag: with Off the party icon stays transparent when the game shows or changes it", N.alpha(N.W, N.M.pvpIcon) == "0" and N.W.rawOf[N.M.pvpIcon].shown
 			and N.W.rawOf[N.M.pvpIcon].atlas == "ui-hud-unitframe-player-pvp-ffaicon")
 		FH.pvp(N.W, "unitframes.pvpFlag", "both")
-		check("pvp flag: and the party icon is the game's again with any other choice", N.alpha(N.W, N.M.pvpIcon) == "1" and N.alpha(N.W, N.u.player.plate) == "1")
+		check("pvp flag: and the party icon is the game's again with any other choice", N.alpha(N.W, N.M.pvpIcon) == "1" and N.alpha(N.W, N.u.player.plate) == "1",
+			N.alpha(N.W, N.M.pvpIcon) .. " " .. N.alpha(N.W, N.u.player.plate) .. " " .. N.W.line("Player PvP flag"))
 
 		-- Square portraits off: the game draws the flag at its own place.
 		N.W.change("unitframes.squarePortrait", false)
@@ -50575,8 +51625,8 @@ do
 		N.u = {}
 		for _, unit in ipairs({ "player", "target" }) do
 			local F = N.C[unit]
-			N.u[unit] = { plate = F.pvp, icon = F.pvpIcon, picture = pic(N.C, F.portrait).frame, row = H.rowOf(N.C, F.frame) }
-			N.C.rawOf[F.pvp].protected, N.C.rawOf[F.pvpIcon].protected = true, true
+			N.u[unit] = { plate = F.pvp or F.pvpIcon, icon = F.pvpIcon, picture = pic(N.C, F.portrait).frame, row = H.rowOf(N.C, F.frame) }
+			N.C.rawOf[N.u[unit].plate].protected, N.C.rawOf[F.pvpIcon].protected = true, true
 		end
 		N.C.uf.pvp.target = "faction"
 		N.C.blizzard(function() N.C.target.frame:CheckFaction() end)
@@ -50861,9 +51911,9 @@ do
 		check("pvp flag: a client without SetAlphaFromBoolean draws no word for a withheld state, with no error", N.rowN.flag.alpha == 0 and silent(N.N), why(N.N))
 
 		N.R = ufWorld({ prep = function(Y)
-			local raw = Y.rawOf[Y.player.pvp]
+			local raw = Y.rawOf[Y.player.pvpIcon]
 			local set = raw.SetPoint
-			-- The game keeps the plate to its own frames: an anchor on a frame of the addon's is dropped without an error.
+			-- The game keeps the icon to its own frames: an anchor on a frame of the addon's is dropped without an error.
 			raw.SetPoint = function(self, point, relative, ...)
 				if Y.rawOf[relative] ~= nil and Y.rawOf[relative].addonFrame then
 					return
@@ -50871,9 +51921,9 @@ do
 				return set(self, point, relative, ...)
 			end
 		end })
-		N.home = N.R.rawOf[N.R.player.pvp].points[1]
-		check("pvp flag: when the game refuses the move the plate is back at its own point, the note is on the status, and the line says the game refused the move", N.home ~= nil
-			and N.home[2] == N.R.player.main and N.home[1] == "TOP" and has(N.R.status(), "Unit frames: the game refused to move a PvP flag, which keeps its own place.")
+		N.home = N.R.rawOf[N.R.player.pvpIcon].points[1]
+		check("pvp flag: when the game refuses the move the icon is back at its own point, the note is on the status, and the line says the game refused the move", N.home ~= nil
+			and N.home[2] == N.R.player.main and N.home[1] == "TOP" and N.home[3] == "TOPLEFT" and N.home[4] == 22 and N.home[5] == -65 and has(N.R.status(), "Unit frames: the game refused to move a PvP flag, which keeps its own place.")
 			and has(N.R.status(), "Player PvP flag: icon on the portrait and word in the name row, the game refused the move") and silent(N.R), why(N.R) .. N.R.status())
 
 		N.G = ufWorld({ prep = function(Y) Y.uf.rulesOff = true end })
@@ -50883,11 +51933,51 @@ do
 		check("pvp flag: in a client that does not draw the flag the status says so", has(N.D.status(), "Player PvP flag: the game draws none") and silent(N.D), why(N.D))
 	end
 
-	-- The PvP icon follows the plate: a client that anchors the icon to the contextual frame, not to the plate.
+	-- Since 1.60.1.70425 the icon is what moves: it is the plate itself, the player's timer hangs from it (Camelot/PlayerFrame.lua:17-18), and the
+	-- status says whether it is on the picture.
+	do
+		local N = {}
+		N.W = ufWorld()
+		N.P, N.T = N.W.player, N.W.target
+		N.pic = function(F) return pic(N.W, F.portrait).frame end
+		N.W.uf.pvp.player, N.W.uf.pvp.target = "faction", "faction"
+		N.W.blizzard(N.W.env.PlayerFrame_UpdatePvPStatus)
+		N.W.blizzard(function() N.T.frame:CheckFaction() end)
+		N.u = { plate = N.P.pvpIcon, icon = N.P.pvpIcon, picture = N.pic(N.P) }
+		N.v = { plate = N.T.pvpIcon, icon = N.T.pvpIcon, picture = N.pic(N.T) }
+		N.ip, N.it = N.W.rawOf[N.P.pvpIcon].points, N.W.rawOf[N.T.pvpIcon].points
+		check("pvp icon: with Both and Bottom left the icon itself is inside the bottom left corner of the picture of the player and the target, anchored to the picture",
+			H.corner(N.W, N.u, "bl") and H.corner(N.W, N.v, "bl") and #N.ip == 1 and N.ip[1][1] == "CENTER" and N.ip[1][2] == N.u.picture and N.ip[1][3] == "BOTTOMLEFT"
+			and #N.it == 1 and N.it[1][2] == N.v.picture and silent(N.W), why(N.W))
+		check("pvp icon: and the timer of the player still hangs from the icon, where the game put it", N.W.rawOf[N.P.timer].points[1][2] == N.P.pvpIcon
+			and N.W.rawOf[N.P.timer].calls.SetPoint == nil)
+		check("pvp icon: and the status says the icon is on the picture", has(N.W.status(), "Player PvP flag: icon on the portrait and word in the name row, shown, icon on the picture")
+			and has(N.W.status(), "Target PvP flag: icon on the portrait and word in the name row, shown, icon on the picture"), N.W.line("Player PvP flag") .. " | " .. N.W.line("Target PvP flag"))
+		FH.pvp(N.W, "unitframes.pvpFlag", "word")
+		N.ip, N.it = N.W.rawOf[N.P.pvpIcon].points[1], N.W.rawOf[N.T.pvpIcon].points[1]
+		check("pvp icon: with Word in the name row the icons go back to the points of the XML, 22,-65 from the top left of the player and -24,-65 from the top right of the target",
+			N.ip[1] == "TOP" and N.ip[2] == N.P.main and N.ip[3] == "TOPLEFT" and N.ip[4] == 22 and N.ip[5] == -65
+			and N.it[1] == "TOP" and N.it[2] == N.T.context and N.it[3] == "TOPRIGHT" and N.it[4] == -24 and N.it[5] == -65, why(N.W))
+		FH.pvp(N.W, "unitframes.pvpFlag", "icon")
+		N.W.rawOf[N.T.pvpIcon].points = { { "TOP", N.T.context, "TOPRIGHT", -24, -65 } }
+		check("pvp icon: the status says when the game has the icon apart from the picture", has(N.W.status(), "Target PvP flag: icon on the portrait, shown, icon apart from the picture"), N.W.line("Target PvP flag"))
+		-- The icon of a party member is not moved, as before.
+		N.W.blizzard(function() N.W.env.PartyFrame:InitializePartyMemberFrames() end)
+		N.M = N.W.members[1]
+		N.W.uf.pvp.party1 = "faction"
+		N.W.blizzard(function() N.M.frame:UpdatePvPStatus() end)
+		FH.pvp(N.W, "unitframes.pvpFlag", "both")
+		FH.pvp(N.W, "unitframes.pvpCorner", "tr")
+		check("pvp icon: the icon of a party member keeps the game's point and is never anchored", N.W.rawOf[N.M.pvpIcon].calls.SetPoint == nil and N.W.rawOf[N.M.pvpIcon].calls.ClearAllPoints == nil
+			and alphaOf(N.W, N.M.pvpIcon) == "1" and silent(N.W), why(N.W))
+	end
+
+	-- The PvP icon follows the plate on the client before 1.60.1.70425, which has a plate under the icon: a client that anchors the icon to the
+	-- contextual frame, not to the plate.
 	do
 		local N = {}
 		N.C = function(Y, unit) return Y.rawOf[Y[unit].pvpIcon] end
-		N.W = ufWorld({ prep = function(Y)
+		N.W = ufWorld({ pvpPlate = true, prep = function(Y)
 			N.homeAt = N.C(Y, "target").points[1]
 			N.C(Y, "target").points = { { "TOP", Y.target.context, "TOPRIGHT", -23, -50 } }
 		end })
@@ -51825,7 +52915,8 @@ do
 		W.blizzard(function() T.frame:CheckClassification() F.frame:CheckClassification() end)
 		V.fill = W.rawOf[T.healthFill]
 		V.cut = #V.fill.maskList == 1 and V.fill.maskList[1].addon == true and V.fill.maskList[1].allPoints == T.box
-		V.slot = W.holderOn(T.box) ~= nil and W.holderOn(T.health) == nil and W.rawOf[T.box].height == 12 and W.rawOf[T.health].height ~= 12
+		-- Camelot's slot is 15 units tall for every unit, the bar 20 (Camelot/TargetFrame.lua:71-86); before 1.60.1.70425 a minus mob's slot was 12.
+		V.slot = W.holderOn(T.box) ~= nil and W.holderOn(T.health) == nil and W.rawOf[T.box].height == 15 and W.rawOf[T.health].height == 20
 		V.focus = #W.rawOf[F.healthFill].maskList == 1 and W.rawOf[F.healthFill].maskList[1].allPoints == F.box
 		W.change("unitframes.flat", false)
 		check("unit frames: a minus target has its border on the slot of the health bar and its fill cut to it, also with flat bars off and also on the focus frame",
@@ -52040,9 +53131,10 @@ do
 			local s, w = { Q.rect(W, slot) }, { Q.rect(W, power) }
 			return { pl = p[1], pb = p[2], pw = p[3], ph = p[4], sb = s[2], sh = s[4], wb = w[2] }
 		end
-		local a, b = rects(P.portrait, P.box, P.power), rects(T.portrait, T.box, T.power)
+		-- The player's outlined health bar is the bar itself, which is taller than its slot since 1.60.1.70425 (Camelot/PlayerFrame.lua:79-84).
+		local a, b = rects(P.portrait, P.health, P.power), rects(T.portrait, T.box, T.power)
 		Q.set(W, { portraitSize = "bars" })
-		local c, d = rects(P.portrait, P.box, P.power), rects(T.portrait, T.box, T.power)
+		local c, d = rects(P.portrait, P.health, P.power), rects(T.portrait, T.box, T.power)
 		check("portrait look: as tall as the frame runs from the top of the name row to the bottom of the power bar, and as tall as the bars from the top of the health bar",
 			near(a.ph - c.ph, 17, 1e-6) and near(c.pb + c.ph + t, c.sb + c.sh + t, 1e-6) and near(a.pb, a.wb, 1e-6) and near(c.pb, c.wb, 1e-6) and near(c.pw, c.ph, 1e-6) and near(a.pw, a.ph, 1e-6),
 			table.concat({ a.ph, c.ph, c.pb, c.sb, c.sh }, " "))
@@ -53231,7 +54323,8 @@ do
 	end
 
 	-- The frames of the page as the XML builds them. more.cluster, more.minimap, more.bag, more.protect: frames that are forbidden or protected; more.broken:
-	-- bag buttons that cannot take a texture; more.none: names of frames the client does not have; more.secret: fields that hold a withheld value.
+	-- bag buttons that cannot take a texture; more.none: names of frames the client does not have; more.secret: fields that hold a withheld value;
+	-- more.legacy: the minimap cluster of the builds before 1.60.1.70425.
 	local function hudWorld(more)
 		more = more or {}
 		local none, secret = more.none or {}, more.secret or {}
@@ -53244,32 +54337,98 @@ do
 				env[name] = value
 			end
 		end
-		local pieces = {}
-		for _, key in ipairs(PIECES) do
-			pieces[key] = R(nil, "ui-hud-minimap-button-" .. key)
-		end
-		H.header = B(nil, pieces)
 		H.compass, H.underlay = R(nil, "ui-hud-minimap-frame"), R(nil, "UI-HUD-Minimap-Frame-Circle", { hidden = true })
 		set("MinimapCompassTexture", H.compass)
 		set("MinimapCompassTextureUnderlay", H.underlay)
 		H.dielBorder, H.dielIcon = R(nil, "UI-HUD-Minimap-Frame-Cycle"), R(nil, "UI-HUD-Minimap-DayCycle")
-		local diel, dielRaw = B(nil, {})
-		dielRaw.regions[1], dielRaw.regions[2] = H.dielIcon, H.dielBorder
-		-- Minimap.xml:60-95 and InstanceDifficulty.xml:3-63, 64-96, 120-160: the plate of the tracking button is a texture of its own under the glyph of
-		-- the button, and the banner has a picture of its own, with a background, a border and a glyph, for each kind of content. The game shows one.
-		H.plate, H.glyph = R(nil, "ui-hud-minimap-button"), R(nil, "ui-hud-minimap-tracking-up")
-		H.tracking = B(nil, { Background = H.plate, Button = B(nil, { NormalTexture = H.glyph }) }, { hidden = true })
-		H.modes = {}
-		for index, key in ipairs(MODES) do
-			local part = { back = R(nil, "ui-hud-minimap-guildbanner-background-top"), border = R(nil, "ui-hud-minimap-guildbanner-border-top"),
-				glyph = R(nil, "ui-hud-minimap-guildbanner-normal-large") }
-			part.frame = B(nil, { Background = part.back, Border = part.border, NormalTexture = part.glyph }, { hidden = index > 1, forbidden = more.forbidMode and key == "Guild" })
-			H.modes[key] = part
+		H.modes, H.headerArt = {}, {}
+		local fields = { Tracking = true }
+		if more.legacy then
+			-- The cluster before 1.60.1.70425 (15666a6 Blizzard_Minimap/Mainline/Minimap.xml:24-95, InstanceDifficulty.xml:3-63, 64-96, 120-160): the zone name
+			-- sits on the nine-slice BorderTop, the plate of the tracking button is a texture of the 17 by 17 frame under the smaller button and its glyph,
+			-- and the banner has a picture of its own, with a background, a border and a glyph, for each kind of content. The game shows one.
+			local pieces = {}
+			for _, key in ipairs(PIECES) do
+				pieces[key] = R(nil, "ui-hud-minimap-button-" .. key)
+				H.headerArt[#H.headerArt + 1] = pieces[key]
+			end
+			H.header = B(nil, pieces)
+			H.plate, H.glyph = R(nil, "ui-hud-minimap-button"), R(nil, "ui-hud-minimap-tracking-up")
+			H.trackButton = B(nil, { NormalTexture = H.glyph }, { objectType = "Button", width = 13, height = 14 })
+			H.tracking = B(nil, { Background = H.plate, Button = H.trackButton }, { hidden = true, width = 17, height = 17 })
+			for index, key in ipairs(MODES) do
+				local part = { back = R(nil, "ui-hud-minimap-guildbanner-background-top"), border = R(nil, "ui-hud-minimap-guildbanner-border-top"),
+					glyph = R(nil, "ui-hud-minimap-guildbanner-normal-large") }
+				part.frame = B(nil, { Background = part.back, Border = part.border, NormalTexture = part.glyph }, { hidden = index > 1, forbidden = more.forbidMode and key == "Guild" })
+				H.modes[key] = part
+			end
+			fields.BorderTop = secret.header and SECRET or H.header
+			fields.ZoneTextButton = B(nil, {}, { objectType = "Button", width = 135, height = 12 })
+			fields.InstanceDifficulty = B(nil, { ContentModes = secret.modes and SECRET or { H.modes.Default.frame, H.modes.Guild.frame, H.modes.ChallengeMode.frame } })
+		else
+			-- The cluster of 1.60.1.70425 and later (Blizzard_Minimap/Mainline/Minimap.xml:24-46). The zone name sits on the plate of its button, ZoneTextButton,
+			-- 152 by 23: StateTexture, with the glow AddTexture over it, hidden and with no opacity after OnLoad (Camelot/MinimapZoneTextButton.xml:3-38,
+			-- Camelot/MinimapZoneTextButton.lua:1-9). The tracking button is a 23 by 23 button over the 17 by 17 frame Tracking, and its plate StateTexture
+			-- draws its glyph: it has no NormalTexture (Camelot/MinimapTrackingButton.xml:3-28). There is no BorderTop, and no InstanceDifficulty
+			-- (Camelot/MinimapInstanceDifficulty.lua:1-3).
+			H.headerPlate = R(nil, "ui-hud-minimap-header-button", { layer = "BACKGROUND" })
+			H.headerGlow = R(nil, "ui-hud-minimap-header-button", { layer = "BACKGROUND", hidden = true, alpha = 0 })
+			H.zoneText = R(nil, nil, { kind = "FontString", layer = "OVERLAY", name = "MinimapZoneText" })
+			H.headerArt[1] = H.headerPlate
+			local headerRaw
+			H.header, headerRaw = B(nil, { StateTexture = H.headerPlate, AddTexture = H.headerGlow, mouseoverAddAlpha = 0.1, mousedownAddAlpha = 0.2 },
+				{ objectType = "Button", width = 152, height = 23 })
+			headerRaw.regions[1], headerRaw.regions[2], headerRaw.regions[3] = H.headerPlate, H.headerGlow, H.zoneText
+			H.plate = R(nil, "ui-hud-minimap-button", { layer = "BACKGROUND" })
+			H.glyph = R(nil, "ui-hud-minimap-tracking-button", { layer = "ARTWORK" })
+			H.trackGlow = R(nil, "ui-hud-minimap-tracking-button", { layer = "ARTWORK", hidden = true, alpha = 0 })
+			local trackRaw
+			H.trackButton, trackRaw = B(nil, { StateTexture = H.glyph, AddTexture = H.trackGlow, mouseoverAddAlpha = 0.1, mousedownAddAlpha = 0.2 },
+				{ objectType = "Button", width = 23, height = 23 })
+			trackRaw.regions[1], trackRaw.regions[2] = H.glyph, H.trackGlow
+			H.tracking = B(nil, { Background = H.plate, Button = H.trackButton }, { hidden = true, width = 17, height = 17 })
+			-- The game's OnButtonStateChanged, which ButtonStateBehaviorMixin calls through self from OnEnter, OnLeave, OnMouseDown, OnMouseUp, OnEnable and
+			-- OnDisable (Blizzard_SharedXMLBase/ButtonStateBehavior.lua:41-118): SetAtlas on the plate, and the glow shown with 0.2 while the mouse is down,
+			-- 0.1 while it is over and hidden with 0 otherwise (Camelot/MinimapZoneTextButton.lua:11-25, Camelot/MinimapTrackingButton.lua:1-15).
+			for _, pair in ipairs({ { headerRaw, H.headerPlate, H.headerGlow }, { trackRaw, H.glyph, H.trackGlow } }) do
+				local raw, plate, glow = pair[1], pair[2], pair[3]
+				raw.OnButtonStateChanged = function(self)
+					if W.inBlizzard == 0 or (W.inHook or 0) > 0 then
+						bad(W, "the addon called the Blizzard method OnButtonStateChanged")
+					end
+					plate:SetAtlas(raw == headerRaw and "ui-hud-minimap-header-button" or "ui-hud-minimap-tracking-button", true)
+					local add = (raw.down and self.mousedownAddAlpha) or (raw.over and self.mouseoverAddAlpha) or 0
+					glow:SetShown(add > 0)
+					glow:SetAlpha(add)
+				end
+			end
+			-- The mouse on a button, as the game's scripts run it: the state, then OnButtonStateChanged through the frame, then the scripts hooked with HookScript.
+			function H.mouse(button, which)
+				local raw = W.rawOf[button]
+				W.blizzard(function()
+					if which == "OnEnter" then
+						raw.over = true
+					elseif which == "OnLeave" then
+						raw.over = nil
+					elseif which == "OnMouseDown" then
+						raw.down = true
+					elseif which == "OnMouseUp" then
+						raw.down = nil
+					end
+					button:OnButtonStateChanged()
+				end)
+				W.hookRun(button, which)
+				W.flush()
+			end
+			fields.ZoneTextButton = secret.header and SECRET or H.header
 		end
-		local banner = B(nil, { ContentModes = secret.modes and SECRET or { H.modes.Default.frame, H.modes.Guild.frame, H.modes.ChallengeMode.frame } })
-		H.cluster = B(nil, { BorderTop = secret.header and SECRET or H.header, DielFrame = diel, Tracking = secret.tracking and SECRET or H.tracking, InstanceDifficulty = banner },
-			{ forbidden = more.cluster })
+		fields.Tracking = secret.tracking and SECRET or H.tracking
+		H.cluster = B(nil, fields, { forbidden = more.cluster })
 		H.container = B(H.cluster, {}, { forbidden = more.cluster })
+		-- The day and night medallion is a child of the container that the cluster holds (Camelot/Diel.lua:19-21).
+		local diel, dielRaw = B(H.container, {})
+		dielRaw.regions[1], dielRaw.regions[2] = H.dielIcon, H.dielBorder
+		W.rawOf[H.cluster].DielFrame = diel
 		local mapRaw0
 		H.map, mapRaw0 = B(H.container, { SetMaskTexture = function() H.maskCalls = H.maskCalls + 1 end }, { forbidden = more.cluster or more.minimap, protected = more.protect == "minimap" })
 		-- The minimap takes hooks on its scripts, which the test runs by hand when it shows the minimap again (H.mapHooks).
@@ -53290,7 +54449,16 @@ do
 			local part = { icon = icon, mask = mask, normal = R(nil, "ui-hud-actionbar-iconframe-bags"), pushed = R(nil, "ui-hud-actionbar-iconframe-bags"),
 				highlight = R(nil, "ui-hud-actionbar-iconframe-bags", { alpha = 0.4 }), count = R(nil, nil, { kind = "FontString" }),
 				free = R(nil, nil, { kind = "FontString" }), slot = R(nil, "ui-hud-actionbar-iconframe-bags") }
-			local btn, raw = B(nil, { icon = icon, SquareMask = mask, NormalTexture = part.normal, PushedTexture = part.pushed, HighlightTexture = part.highlight,
+			-- 70790: the bag buttons are item buttons, and ItemButtonMixin:PostOnLoad puts the rounded Mask on the normal and pushed textures
+			-- and the icon, after the SquareMask of the template (Shared/ItemButtonTemplate.xml:18-19, Shared/ItemButtonTemplate.lua:16-20).
+			local round, roundRaw = Rr(nil, nil, { kind = "MaskTexture" })
+			roundRaw.file = "Interface\\Common\\common-iconmask"
+			for _, t in ipairs({ part.normal, part.pushed, icon }) do
+				local tr = W.rawOf[t]
+				tr.masks[round], tr.maskList[#tr.maskList + 1] = true, round
+			end
+			part.round = round
+			local btn, raw = B(nil, { icon = icon, SquareMask = mask, Mask = round, NormalTexture = part.normal, PushedTexture = part.pushed, HighlightTexture = part.highlight,
 				SlotHighlightTexture = part.slot,
 				Count = part.count, FreeSlots = part.free }, { forbidden = more.bag == name, protected = more.protect == "bags" })
 			if more.broken and index > 4 then
@@ -53421,14 +54589,25 @@ do
 	do
 		local ring = ringFrame(W)
 		local disc, mask = ring and ring.regions[1], W.addonMasks[1]
-		check("hud minimap: the ring, its underlay, the header pieces and the medallion border are transparent; the sun and moon stay",
-			H.compass.alpha == 0 and H.underlay.alpha == 0 and every(PIECES, function(key) return H.header[key].alpha == 0 end) and H.dielBorder.alpha == 0 and H.dielIcon.alpha == 1)
+		-- 1.60.1.70425 and later: the header is the plate StateTexture of ZoneTextButton, no longer the nine-slice BorderTop (the legacy world below has that).
+		check("hud minimap: the ring, its underlay, the plate of the zone name and the medallion border are transparent; the sun and moon stay",
+			H.compass.alpha == 0 and H.underlay.alpha == 0 and H.headerPlate.alpha == 0 and H.headerGlow.alpha == 0 and H.dielBorder.alpha == 0 and H.dielIcon.alpha == 1)
 		check("hud minimap: the border is a disc under the map, a pixel larger on every side and cut by the map's own mask, which the addon does not change",
 			ring and ring.parent == H.container and ring.allPoints == H.map and disc.color and near(disc.color[1], 0) and disc.color[4] == 1 and disc.shown
 				and #W.addonMasks == 1 and mask.atlas == MAP_MASK and mask.allPoints == disc and disc.masks[mask] and #disc.points == 2 and H.maskCalls == 0
 				and disc.points[1][1] == "TOPLEFT" and near(disc.points[1][4], -T) and near(disc.points[1][5], T) and disc.points[2][1] == "BOTTOMRIGHT" and near(disc.points[2][4], T)
 				and near(disc.points[2][5], -T), ring and disc.points[1] and tostring(disc.points[1][4]))
-		check("hud minimap: the zone name has a thin border and a background", ringOf(W, H.header, 1, 0, 0, 0) and W.state(H.header) == "SB")
+		check("hud minimap: the zone name has a thin border and a background round its button, ZoneTextButton", ringOf(W, H.header, 1, 0, 0, 0) and W.state(H.header) == "SB")
+		-- The game sets the glow over the plate again on each change of the state of the button; the plate keeps its opacity through SetAtlas.
+		H.mouse(H.header, "OnEnter")
+		local over = { H.headerGlow.alpha, H.headerGlow.shown, H.headerPlate.alpha, H.headerPlate.calls.SetAtlas }
+		H.mouse(H.header, "OnMouseDown")
+		local down = H.headerGlow.alpha
+		H.mouse(H.header, "OnMouseUp")
+		H.mouse(H.header, "OnLeave")
+		check("hud minimap: the glow over the zone name stays transparent through the mouse over, down, up and away, and the plate stays transparent",
+			over[1] == 0 and over[2] == true and over[3] == 0 and over[4] == 1 and down == 0 and H.headerGlow.alpha == 0 and H.headerGlow.shown == false and H.headerPlate.alpha == 0
+				and #W.violations == 0 and #W.errors == 0, table.concat({ tostring(over[1]), tostring(over[3]), tostring(down) }, " "))
 		W.change("general.border", "ff336699")
 		W.change("general.thickness", 3)
 		W.flush()
@@ -53444,10 +54623,19 @@ do
 		local borderOff = not disc.shown and W.state(H.header) == "hb" and H.compass.alpha == 0
 		W.change("hud.minimapBorder", true)
 		W.change("hud.minimapArt", false)
-		check("hud minimap: border off hides the disc and the header border; art off gives every piece its alpha back",
-			borderOff and H.compass.alpha == 1 and H.underlay.alpha == 1 and every(PIECES, function(key) return H.header[key].alpha == 1 end) and H.dielBorder.alpha == 1
-				and disc.shown and W.state(H.header) == "SB")
+		H.mouse(H.header, "OnEnter")
+		local gameGlow = H.headerGlow.alpha
+		H.mouse(H.header, "OnLeave")
+		check("hud minimap: border off hides the disc and the header border; art off gives every piece its alpha back, and the glow is the game's",
+			borderOff and H.compass.alpha == 1 and H.underlay.alpha == 1 and H.headerPlate.alpha == 1 and H.dielBorder.alpha == 1
+				and disc.shown and W.state(H.header) == "SB" and gameGlow == 0.1 and H.headerGlow.alpha == 0, tostring(gameGlow))
 		W.change("hud.minimapArt", true)
+		H.mouse(H.header, "OnEnter")
+		local glowHooks = W.rawOf[H.header].hookScripts or {}
+		check("hud minimap: art on again, the glow is transparent again under the mouse, and each script of the button is hooked once",
+			H.headerGlow.alpha == 0 and H.headerPlate.alpha == 0 and #(glowHooks.OnEnter or {}) == 1 and #(glowHooks.OnMouseUp or {}) == 1 and #(glowHooks.OnDisable or {}) == 1,
+			tostring(H.headerGlow.alpha))
+		H.mouse(H.header, "OnLeave")
 	end
 	do
 		local all = true
@@ -53457,8 +54645,9 @@ do
 		end
 		check("hud bags: each button has a thin border and a background, its frame art and highlight are transparent, and the count and free slots are not touched", all)
 		local back, key = H.bags.MainMenuBarBackpackButton, H.bags.KeyRingButton
-		check("hud bags: the rounded mask is off a plain icon and the icon is cropped; an icon drawn from an atlas is only unmasked",
-			back.icon.masks[back.mask] == nil and near(back.icon.texCoord[1], 0.08) and near(back.icon.texCoord[2], 0.92) and key.icon.texCoord == nil and key.icon.masks[key.mask] == nil)
+		check("hud bags: the rounded masks are off a plain icon and the icon is cropped; an icon drawn from an atlas is only unmasked",
+			back.icon.masks[back.mask] == nil and near(back.icon.texCoord[1], 0.08) and near(back.icon.texCoord[2], 0.92) and key.icon.texCoord == nil and key.icon.masks[key.mask] == nil
+				and back.icon.masks[back.round] == nil and key.icon.masks[key.round] == nil and #back.icon.maskList == 0)
 		local hover
 		for _, t in ipairs(W.addonTextures) do
 			if t.owner == back.btn and t.layer == "HIGHLIGHT" then
@@ -53478,6 +54667,7 @@ do
 		for _, name in ipairs(BAGS) do
 			local p = H.bags[name]
 			restored = restored and W.state(p.btn) == "hb" and p.normal.alpha == 1 and p.pushed.alpha == 1 and p.highlight.alpha == 0.4 and p.icon.maskList[1] == p.mask
+				and p.icon.maskList[2] == p.round and #p.icon.maskList == 2
 		end
 		W.blizzard(function() back.btn:UpdateTextures() end)
 		W.fire("BAG_UPDATE")
@@ -53487,7 +54677,7 @@ do
 				and W.state(back.btn) == "hb" and back.highlight.alpha == 0.4)
 		W.change("hud.bags", true)
 		check("hud bags: on again styles the same buttons, without making their parts twice", W.state(back.btn) == "SB" and back.highlight.alpha == 0 and hover.shown
-			and #W.edgesOn(W.holderOn(back.btn)) == 4)
+			and #W.edgesOn(W.holderOn(back.btn)) == 4 and #back.icon.maskList == 0 and back.icon.calls.RemoveMaskTexture == 4)
 	end
 	do
 		check("hud auras: a buff has a thin border and a cropped icon, and the debuff and enchant borders of the game are transparent",
@@ -53608,14 +54798,24 @@ do
 		TW.cvars.taintLog = tl
 		local back, debuff = T.bags.MainMenuBarBackpackButton, T.debuff
 		local frames = { { back.btn, "UpdateTextures" }, { T.bagBar, "UpdateDividers" }, { T.xp, "UpdateDividers" }, { debuff.btn, "Update" }, { T.map, "SetMaskTexture" },
-			{ T.exp.frame, "Update" }, { T.rep.frame, "Update" } }
+			{ T.exp.frame, "Update" }, { T.rep.frame, "Update" }, { T.header, "OnButtonStateChanged" } }
 		local written = 0
 		for _, entry in ipairs(frames) do
 			if INSTHOOK.wrapped(TW, entry[1], entry[2]) then
 				written = written + 1
 			end
 		end
-		check("hkhud: hud, taintLog " .. tl .. ": no method of a bag button, the bags bar, an aura button, the experience container or the minimap has a hook written on it", written == 0, written)
+		check("hkhud: hud, taintLog " .. tl .. ": no method of a bag button, the bags bar, an aura button, the experience container, the minimap or the zone name button has a hook written on it",
+			written == 0, written)
+		-- The zone name: the glow over its plate is made transparent again from the button's own scripts, hooked with HookScript, which taintLog leaves working.
+		T.mouse(T.header, "OnEnter")
+		local glowOver = T.headerGlow.alpha
+		T.mouse(T.header, "OnMouseDown")
+		local glowDown = T.headerGlow.alpha
+		T.mouse(T.header, "OnMouseUp")
+		T.mouse(T.header, "OnLeave")
+		check("hkhud: hud, taintLog " .. tl .. ": the glow over the zone name stays transparent under the mouse and when pressed, through the button's own scripts",
+			glowOver == 0 and glowDown == 0 and T.headerGlow.alpha == 0 and #((TW.rawOf[T.header].hookScripts or {}).OnEnter or {}) == 1, tostring(glowOver) .. " " .. tostring(glowDown))
 		local kinds = 0
 		for _ in pairs(T.bagBarRaw.scriptHooks) do
 			kinds = kinds + 1
@@ -53685,31 +54885,63 @@ do
 		check("hkhud: hud, taintLog " .. tl .. ": nothing raised and nothing written in the game's frames", #TW.errors == 0 and #TW.violations == 0, table.concat(TW.violations, "|"))
 	end
 	do
-		local modes = H.modes
-		check("hud minimap buttons: the plate of the tracking button is transparent and the button has a thin border and a background",
-			H.plate.alpha == 0 and W.state(H.tracking) == "SB" and ringOf(W, H.tracking, 1, 0, 0, 0))
-		check("hud minimap buttons: each picture of the banner has a transparent background and border and a thin border and background of its own",
-			every(MODES, function(key) return modes[key].back.alpha == 0 and modes[key].border.alpha == 0 and W.state(modes[key].frame) == "SB" end))
-		check("hud minimap buttons: the glyphs are not touched, nor is what the game shows and hides",
-			H.glyph.alpha == 1 and H.glyph.calls.SetAlpha == nil and every(MODES, function(key) return modes[key].glyph.alpha == 1 and modes[key].glyph.calls.SetAlpha == nil end)
-				and H.tracking.shown == false and modes.Default.frame.shown and not modes.Guild.frame.shown and not modes.ChallengeMode.frame.shown
-				and W.rawOf[H.tracking].calls.Show == nil and W.rawOf[H.tracking].calls.Hide == nil)
+		-- 1.60.1.70425 and later: the border goes round the 23 by 23 Tracking.Button, whose plate draws the glyph and is left alone; before, it went round the
+		-- 17 by 17 frame Tracking (the legacy world below).
+		check("hud minimap buttons: the plate of the tracking frame is transparent and the tracking button has a thin border and a background, the frame none",
+			H.plate.alpha == 0 and W.state(H.trackButton) == "SB" and ringOf(W, H.trackButton, 1, 0, 0, 0) and W.look(H.tracking) == nil)
+		H.mouse(H.trackButton, "OnEnter")
+		local glow = H.trackGlow.alpha
+		H.mouse(H.trackButton, "OnLeave")
+		check("hud minimap buttons: the plate of the tracking button, which draws its glyph, is not touched, nor its glow, nor what the game shows and hides",
+			H.glyph.alpha == 1 and H.glyph.calls.SetAlpha == nil and glow == 0.1 and H.trackGlow.alpha == 0 and H.tracking.shown == false
+				and W.rawOf[H.tracking].calls.Show == nil and W.rawOf[H.tracking].calls.Hide == nil, tostring(glow))
 		W.change("general.border", "ff336699")
 		W.change("general.thickness", 2)
 		W.flush()
-		check("hud minimap buttons: the colour and thickness of the general page reach them", colour(W.look(H.tracking), 0.2, 0.4, 0.6) and W.look(H.tracking).thick == 2
-			and colour(W.look(modes.Guild.frame), 0.2, 0.4, 0.6))
+		check("hud minimap buttons: the colour and thickness of the general page reach them", colour(W.look(H.trackButton), 0.2, 0.4, 0.6) and W.look(H.trackButton).thick == 2)
 		W.change("general.border", "ff000000")
 		W.change("general.thickness", 1)
 		W.change("hud.minimapBorder", false)
-		check("hud minimap buttons: border off hides the borders and leaves the art transparent", W.state(H.tracking) == "hb" and H.plate.alpha == 0
-			and every(MODES, function(key) return W.state(modes[key].frame) == "hb" and modes[key].back.alpha == 0 end))
+		check("hud minimap buttons: border off hides the borders and leaves the art transparent", W.state(H.trackButton) == "hb" and H.plate.alpha == 0)
 		W.change("hud.minimapBorder", true)
 		W.change("hud.minimapArt", false)
-		check("hud minimap buttons: art off gives the plate and the banner back and leaves the borders", H.plate.alpha == 1 and W.state(H.tracking) == "SB"
-			and every(MODES, function(key) return modes[key].back.alpha == 1 and modes[key].border.alpha == 1 and W.state(modes[key].frame) == "SB" end))
+		check("hud minimap buttons: art off gives the plate back and leaves the borders", H.plate.alpha == 1 and W.state(H.trackButton) == "SB" and H.glyph.alpha == 1)
 		W.change("hud.minimapArt", true)
-		check("hud minimap buttons: art on again, nothing is made twice", H.plate.alpha == 0 and #W.edgesOn(W.holderOn(H.tracking)) == 4 and every(MODES, function(key) return modes[key].border.alpha == 0 end))
+		check("hud minimap buttons: art on again, nothing is made twice", H.plate.alpha == 0 and #W.edgesOn(W.holderOn(H.trackButton)) == 4 and H.glyph.alpha == 1)
+	end
+	-- The cluster of the builds before 1.60.1.70425, which Flat UI still styles: the nine-slice header, the tracking frame and the banner.
+	do
+		local L = login({ legacy = true })
+		local LW, modes = L.W, L.modes
+		check("hud legacy minimap: the header pieces are transparent and the nine-slice has a thin border and a background",
+			every(L.headerArt, function(t) return t.alpha == 0 end) and #L.headerArt == #PIECES and ringOf(LW, L.header, 1, 0, 0, 0) and LW.state(L.header) == "SB")
+		check("hud legacy minimap buttons: the plate of the tracking button is transparent and its frame has a thin border and a background",
+			L.plate.alpha == 0 and LW.state(L.tracking) == "SB" and ringOf(LW, L.tracking, 1, 0, 0, 0) and LW.look(L.trackButton) == nil)
+		check("hud legacy minimap buttons: each picture of the banner has a transparent background and border and a thin border and background of its own",
+			every(MODES, function(key) return modes[key].back.alpha == 0 and modes[key].border.alpha == 0 and LW.state(modes[key].frame) == "SB" end))
+		check("hud legacy minimap buttons: the glyphs are not touched, nor is what the game shows and hides",
+			L.glyph.alpha == 1 and L.glyph.calls.SetAlpha == nil and every(MODES, function(key) return modes[key].glyph.alpha == 1 and modes[key].glyph.calls.SetAlpha == nil end)
+				and L.tracking.shown == false and modes.Default.frame.shown and not modes.Guild.frame.shown and not modes.ChallengeMode.frame.shown
+				and LW.rawOf[L.tracking].calls.Show == nil and LW.rawOf[L.tracking].calls.Hide == nil)
+		LW.change("general.border", "ff336699")
+		LW.change("general.thickness", 2)
+		LW.flush()
+		check("hud legacy minimap buttons: the colour and thickness of the general page reach them", colour(LW.look(L.tracking), 0.2, 0.4, 0.6) and LW.look(L.tracking).thick == 2
+			and colour(LW.look(modes.Guild.frame), 0.2, 0.4, 0.6) and colour(LW.look(L.header), 0.2, 0.4, 0.6))
+		LW.change("general.border", "ff000000")
+		LW.change("general.thickness", 1)
+		LW.change("hud.minimapBorder", false)
+		check("hud legacy minimap buttons: border off hides the borders and leaves the art transparent", LW.state(L.tracking) == "hb" and L.plate.alpha == 0 and LW.state(L.header) == "hb"
+			and every(MODES, function(key) return LW.state(modes[key].frame) == "hb" and modes[key].back.alpha == 0 end))
+		LW.change("hud.minimapBorder", true)
+		LW.change("hud.minimapArt", false)
+		check("hud legacy minimap buttons: art off gives the header, the plate and the banner back and leaves the borders", L.plate.alpha == 1 and LW.state(L.tracking) == "SB"
+			and every(L.headerArt, function(t) return t.alpha == 1 end)
+			and every(MODES, function(key) return modes[key].back.alpha == 1 and modes[key].border.alpha == 1 and LW.state(modes[key].frame) == "SB" end))
+		LW.change("hud.minimapArt", true)
+		check("hud legacy minimap buttons: art on again, nothing is made twice", L.plate.alpha == 0 and #LW.edgesOn(LW.holderOn(L.tracking)) == 4 and every(MODES, function(key) return modes[key].border.alpha == 0 end))
+		check("hud legacy: no violation, error or message, and the status counts the 3 banner pictures as well (22 styled)",
+			#LW.violations == 0 and #LW.errors == 0 and #LW.out == 0 and has(LW.status(), "Minimap and buffs: on, 22 styled"), LW.line("Minimap and buffs"))
 	end
 	do
 		local cm = H.micro.CharacterMicroButton
@@ -53719,14 +54951,15 @@ do
 		W.change("hud.micro", false)
 		check("hud micro menu: off gives the plates and the menu frame back", W.state(cm.btn) == "hb" and cm.plate.alpha == 1 and cm.pushed.alpha == 1 and H.menu.BorderArt.alpha == 1)
 		W.change("hud.micro", true)
-		check("hud: no violation, error or message, and the status counts the ring, the header, the tracking button, 3 banner pictures, 7 bag buttons, 4 aura buttons, 2 bars and 3 micro buttons",
-			#W.violations == 0 and #W.errors == 0 and #W.out == 0 and has(W.status(), "Minimap and buffs: on, 22 styled"), W.line("Minimap and buffs"))
+		-- 1.60.1.70425 and later have no banner: 3 fewer than the 22 of the legacy world.
+		check("hud: no violation, error or message, and the status counts the ring, the header, the tracking button, 7 bag buttons, 4 aura buttons, 2 bars and 3 micro buttons",
+			#W.violations == 0 and #W.errors == 0 and #W.out == 0 and has(W.status(), "Minimap and buffs: on, 19 styled"), W.line("Minimap and buffs"))
 	end
 
 	-- Off for the whole page: the game's art exactly, and every outline hidden.
 	do
 		W.change("hud.enabled", false)
-		local targets = { H.header, H.tracking, H.modes.Default.frame, H.modes.Guild.frame, H.modes.ChallengeMode.frame, H.buff.icon, H.debuff.icon, H.enchant.icon, H.deadly.icon, H.exp.status, H.rep.status }
+		local targets = { H.header, H.trackButton, H.buff.icon, H.debuff.icon, H.enchant.icon, H.deadly.icon, H.exp.status, H.rep.status }
 		for _, name in ipairs(BAGS) do
 			targets[#targets + 1] = H.bags[name].btn
 		end
@@ -53745,26 +54978,30 @@ do
 			D.W.look(D.bags.KeyRingButton.btn) == nil and D.bags.KeyRingButton.normal.alpha == 1 and D.W.look(D.buff.icon) == nil and D.exp.back.alpha == 1 and D.exp.fillRaw.atlas == EXP
 				and D.micro.CharacterMicroButton.plate.alpha == 1 and D.xp.BarFrameTexture.alpha == 1 and D.compass.alpha == 0 and D.W.state(D.header) == "SB")
 		local O = login({ saved = { options = { ["hud.enabled"] = false } } })
-		check("hud: the page off at login touches nothing", #O.W.diff("hud") == 0 and ringFrame(O.W) == nil and #O.W.addonMasks == 0 and O.W.look(O.header) == nil and O.W.look(O.tracking) == nil
+		check("hud: the page off at login touches nothing", #O.W.diff("hud") == 0 and ringFrame(O.W) == nil and #O.W.addonMasks == 0 and O.W.look(O.header) == nil and O.W.look(O.tracking) == nil and O.W.look(O.trackButton) == nil
 			and O.W.line("Minimap and buffs") == "Minimap and buffs: off")
 	end
 
 	-- Frames the addon may not touch, and values the client withholds.
 	do
 		local F = login({ cluster = true, bag = "CharacterBag1Slot" })
-		local G = login({ forbidMode = true })
+		local G = login({ legacy = true, forbidMode = true })
 		check("hud: a forbidden banner picture is not touched and the others are", #G.W.violations == 0 and #G.W.errors == 0 and G.W.look(G.modes.Guild.frame) == nil and G.modes.Guild.back.alpha == 1
 			and G.W.state(G.modes.Default.frame) == "SB" and G.modes.Default.back.alpha == 0)
 		check("hud: a forbidden cluster and a forbidden bag button are not touched, and the rest is styled",
-			#F.W.violations == 0 and #F.W.errors == 0 and F.header.TopEdge.alpha == 1 and F.dielBorder.alpha == 1 and ringFrame(F.W) == nil and F.compass.alpha == 0
+			#F.W.violations == 0 and #F.W.errors == 0 and F.headerPlate.alpha == 1 and F.dielBorder.alpha == 1 and ringFrame(F.W) == nil and F.compass.alpha == 0
 				and F.W.look(F.bags.CharacterBag1Slot.btn) == nil and F.W.state(F.bags.CharacterBag2Slot.btn) == "SB", table.concat(F.W.violations, "|"))
-		local T2 = login({ secret = { tracking = true, modes = true } })
-		check("hud: a tracking button and a list of banner pictures that hold a withheld value are skipped, and the rest is styled", #T2.W.violations == 0 and #T2.W.errors == 0
-			and T2.W.look(T2.tracking) == nil and T2.plate.alpha == 1 and T2.W.look(T2.modes.Default.frame) == nil and T2.modes.Default.back.alpha == 1 and T2.W.state(T2.header) == "SB"
+		local T2 = login({ secret = { tracking = true } })
+		check("hud: a tracking button that holds a withheld value is skipped, and the rest is styled", #T2.W.violations == 0 and #T2.W.errors == 0
+			and T2.W.look(T2.tracking) == nil and T2.W.look(T2.trackButton) == nil and T2.plate.alpha == 1 and T2.W.state(T2.header) == "SB"
 			and not has(T2.W.status(), "failed"), T2.W.status())
+		local T3 = login({ legacy = true, secret = { tracking = true, modes = true } })
+		check("hud legacy: a tracking button and a list of banner pictures that hold a withheld value are skipped, and the rest is styled", #T3.W.violations == 0 and #T3.W.errors == 0
+			and T3.W.look(T3.tracking) == nil and T3.plate.alpha == 1 and T3.W.look(T3.modes.Default.frame) == nil and T3.modes.Default.back.alpha == 1 and T3.W.state(T3.header) == "SB"
+			and not has(T3.W.status(), "failed"), T3.W.status())
 		local S = login({ secret = { header = true, icon = true, list = true, status = true } })
 		check("hud: a header, an aura list, an icon and a status bar that hold a withheld value are skipped, and the rest is styled",
-			#S.W.violations == 0 and #S.W.errors == 0 and not has(S.W.status(), "failed") and S.header.TopEdge.alpha == 1 and S.W.look(S.buff.icon) == nil and S.W.look(S.deadly.icon) == nil
+			#S.W.violations == 0 and #S.W.errors == 0 and not has(S.W.status(), "failed") and S.headerPlate.alpha == 1 and S.W.look(S.header) == nil and S.W.look(S.buff.icon) == nil and S.W.look(S.deadly.icon) == nil
 				and S.W.look(S.exp.status) == nil and S.W.state(S.rep.status) == "SB" and S.W.state(S.debuff.icon) == "Sb" and ringFrame(S.W) ~= nil, S.W.status())
 	end
 
@@ -53793,7 +55030,7 @@ do
 	end
 
 	-- Minimap in cities. In some cities the game loads Blizzard_HybridMinimap and shows its city map over the whole square of the minimap
-	-- (Minimap.lua:226-232, Blizzard_HybridMinimap.xml:5-10). The default is a cover of the addon's own over the corners, with the border round the circle.
+	-- (Mainline/Minimap.lua:236-242, Blizzard_HybridMinimap.xml:5-10). The default is a cover of the addon's own over the corners, with the border round the circle.
 	do
 		local K = { ORDER = { BACKGROUND = 1, LOW = 2, MEDIUM = 3 }, FILE = "Interface\\AddOns\\FlatUI\\Media\\Cover.tga",
 			RING = "Game's ring while the city map shows", COVER = "Flat round cover", LEAVE = "Leave as is",
@@ -53890,9 +55127,10 @@ do
 					and back.snap == false and face.snap == false and back.bias == 0 and face.bias == 0
 					and K.tint(face, K.BACKDROP, K.BACKDROP, K.BACKDROP) and #rim.points == 2 and rim.points[1][1] == "TOPLEFT" and rim.points[1][2] == cover and near(rim.points[1][4], -T)
 					and near(rim.points[1][5], T) and rim.points[2][1] == "BOTTOMRIGHT" and near(rim.points[2][4], T) and near(rim.points[2][5], -T) and #W.addonTextures == textures + 2)
+			-- 20 since 1.60.1.70425, which has no banner and its 3 pictures (23 before).
 			check("city: the ring stays transparent with the cover, the border disc under the map is as it was, and the status counts the cover and says the city map is shown",
 				H.compass.alpha == 0 and H.underlay.alpha == 0 and ringFrame(W).regions[1].shown and W.line("Minimap in cities") == K.shown(H, true)
-					and has(W.status(), "Minimap and buffs: on, 23 styled"), W.status())
+					and has(W.status(), "Minimap and buffs: on, 20 styled"), W.status())
 			check("city: the cover, its border frame and both pictures are marked as the addon's own", W.ns.Own[cover] == true and W.ns.Own[rim] == true and W.ns.Own[back] == true
 				and W.ns.Own[face] == true)
 			K.set(H, false)
@@ -53901,7 +55139,7 @@ do
 			K.set(H, true)
 			check("city: shown again: the same cover shows, and nothing is made twice or hooked twice", cover.shown and #W.addonFrames == frames + 2 and #W.addonTextures == textures + 2
 				and #raw.hooks.OnShow == 1 and #raw.hooks.OnHide == 1 and K.cover(W) == cover)
-			-- The player hides the minimap with the key binding for it (Minimap.lua:144-156): the city map is still shown, the minimap and what hangs from it are gone.
+			-- The player hides the minimap with the key binding for it (Mainline/Minimap.lua:154-167): the city map is still shown, the minimap and what hangs from it are gone.
 			mapRaw.shown = false
 			K.gone = not K.visible(W, cover) and not K.visible(W, rim) and cover.shown
 			mapRaw.shown = true
@@ -53980,7 +55218,7 @@ do
 			-- The setting changes with the city map up.
 			W.change("hud.cityMap", K.RING)
 			check("city: the ring choice while the city map shows: the cover goes and the ring and its underlay come back, the rest of the header art stays transparent",
-				cover.shown == false and H.compass.alpha == 1 and H.underlay.alpha == 1 and H.header.TopEdge.alpha == 0 and H.dielBorder.alpha == 0 and H.plate.alpha == 0)
+				cover.shown == false and H.compass.alpha == 1 and H.underlay.alpha == 1 and H.headerPlate.alpha == 0 and H.dielBorder.alpha == 0 and H.plate.alpha == 0)
 			K.set(H, false)
 			check("city: the ring choice after the city map is gone: the ring is transparent again", H.compass.alpha == 0 and H.underlay.alpha == 0 and cover.shown == false)
 			K.set(H, true)
@@ -54139,7 +55377,7 @@ do
 			R.W.fire("ADDON_LOADED", "Blizzard_HybridMinimap")
 			R.W.flush()
 			check("city: the ring choice with the city map up at login: the ring and its underlay show, the other header art is transparent, and no cover is made",
-				R.compass.alpha == 1 and R.underlay.alpha == 1 and R.header.TopEdge.alpha == 0 and K.cover(R.W) == nil and #R.W.addonFrames == frames and #R.cityRaw.hooks.OnShow == 1)
+				R.compass.alpha == 1 and R.underlay.alpha == 1 and R.headerPlate.alpha == 0 and K.cover(R.W) == nil and #R.W.addonFrames == frames and #R.cityRaw.hooks.OnShow == 1)
 			K.set(R, false)
 			K.set(R, true)
 			check("city: the ring choice: the ring goes with the city map and returns with it, and no cover is made", R.compass.alpha == 1 and K.cover(R.W) == nil and K.clean(R.W))
@@ -56313,7 +57551,8 @@ local function xWorld(opts)
 		put(main, "ManaBar", T.power)
 		put(T.power, "ManaBarMask", T.powerMask)
 		local context = put(content, "TargetFrameContentContextual", B(content, {}, {}))
-		T.pvp = put(context, "PvpBackgroundCircle", region(context, "UI-HUD-UnitFrame-SmallCircle", "OVERLAY", -1, { hidden = true }))
+		-- The PvP icon is the round plate since 1.60.1.70425, which has no PvpBackgroundCircle (Mainline/TargetFrame.xml:260-264).
+		T.pvpIcon = put(context, "PvpBackgroundIcon", region(context, "UI-HUD-UnitFrame-SmallCircle-Alliance", "OVERLAY", 0, { hidden = true }))
 		T.high = put(context, "HighLevelTexture", region(context, "UI-HUD-UnitFrame-Target-HighLevelTarget_Icon", "OVERLAY", 1, { hidden = true }))
 		T.strip:SetVertexColor(0.2, 0.8, 0.4)
 		if boss then
@@ -56576,7 +57815,7 @@ local function onFrameOf(W, portrait)
 end
 local PLAIN, GREEN, BLUE, WHITE, THREAT, PANEL, MUTED = "0.00,0.00,0.00", "0.18,0.72,0.30", "0.00,0.00,1.00", "1.00,1.00,1.00", "1.00,0.50,0.00", "0.06,0.06,0.06", "0.55,0.55,0.55"
 local CURSE, MAGIC = "0.60,0.00,1.00", "0.20,0.60,1.00"
-local STRIP, LEVEL = "UI-HUD-UnitFrame-Target-PortraitOn-Type", "UI-HUD-UnitFrame-SmallCircle"
+local STRIP, LEVEL, PVP = "UI-HUD-UnitFrame-Target-PortraitOn-Type", "UI-HUD-UnitFrame-SmallCircle", "UI-HUD-UnitFrame-SmallCircle-Alliance"
 
 -- Boss frames. The slot of the health bar is outlined because the bar frame is larger, and the mask stays on its fill.
 do
@@ -56758,10 +57997,11 @@ do
 		end
 	end
 	local row = rowOf(W, T.frame)
-	check("badges: the level plate, the level number and the strip are transparent and keep the game's atlas, the PvP plate is not, and with no CreateColor the row is flat in the strip's colour at 70 percent",
-		alphaOf(W, T.level) == "0" and alphaOf(W, T.pvp) == "1" and alphaOf(W, T.levelText) == "0" and alphaOf(W, T.strip) == "0" and W.rawOf[T.level].atlas == LEVEL and W.rawOf[T.pvp].atlas == LEVEL
+	-- The PvP icon is the plate of the flag since 1.60.1.70425, with its own atlas.
+	check("badges: the level plate, the level number and the strip are transparent and keep the game's atlas, the PvP icon is not, and with no CreateColor the row is flat in the strip's colour at 70 percent",
+		alphaOf(W, T.level) == "0" and alphaOf(W, T.pvpIcon) == "1" and alphaOf(W, T.levelText) == "0" and alphaOf(W, T.strip) == "0" and W.rawOf[T.level].atlas == LEVEL and W.rawOf[T.pvpIcon].atlas == PVP
 		and W.rawOf[T.strip].atlas == STRIP and W.rawOf[T.level].color == nil and row.grad.shown == false and row.fill.shown == true and rgb(row.fill.color) == "0.14,0.56,0.28"
-		and row.fill.color[4] == 0.95 and #W.edgesOn(row.frame) == 0, tostring(row.fill.shown) .. tostring(row.fill.color and rgb(row.fill.color)) .. table.concat({ alphaOf(W, T.level), alphaOf(W, T.pvp), alphaOf(W, T.levelText), alphaOf(W, T.strip), tostring(W.rawOf[T.level].atlas == LEVEL), tostring(W.rawOf[T.pvp].atlas == LEVEL), tostring(W.rawOf[T.strip].atlas == STRIP), tostring(W.rawOf[T.level].color) }, ","))
+		and row.fill.color[4] == 0.95 and #W.edgesOn(row.frame) == 0, tostring(row.fill.shown) .. tostring(row.fill.color and rgb(row.fill.color)) .. table.concat({ alphaOf(W, T.level), alphaOf(W, T.pvpIcon), alphaOf(W, T.levelText), alphaOf(W, T.strip), tostring(W.rawOf[T.level].atlas == LEVEL), tostring(W.rawOf[T.pvpIcon].atlas == PVP), tostring(W.rawOf[T.strip].atlas == STRIP), tostring(W.rawOf[T.level].color) }, ","))
 	local boxed = false
 	for _, f in ipairs(W.addonFrames) do
 		boxed = boxed or (f.points[1] ~= nil and f.points[1][2] == T.levelText)
@@ -56797,7 +58037,7 @@ do
 	W.change("general.backdrop", "ff0f0f0f")
 	W.change("unitframes.stripColour", "Class or reaction colour")
 	W.change("unitframes.levelPosition", "Hidden")
-	check("badges: with the level hidden the plates and the number stay transparent and keep the game's atlas, the PvP plate is as it was, the row has no level, and the strip stays transparent", alphaOf(W, T.level) == "0" and alphaOf(W, T.pvp) == "1"
+	check("badges: with the level hidden the plates and the number stay transparent and keep the game's atlas, the PvP icon is as it was, the row has no level, and the strip stays transparent", alphaOf(W, T.level) == "0" and alphaOf(W, T.pvpIcon) == "1"
 		and alphaOf(W, T.levelText) == "0" and W.rawOf[T.level].atlas == LEVEL and not row.level.shown and row.fill.shown and alphaOf(W, T.strip) == "0")
 	W.change("unitframes.strip", false)
 	check("badges: and with the name row off the strip has the alpha the game gave it, with the colour the game gave it, and the row shows nothing", alphaOf(W, T.strip) == "1"
@@ -57103,12 +58343,17 @@ do
 		end
 		return table.concat(out, " ")
 	end
-	function Q.game() return Q.at(P.power, P.main, "TOPLEFT", 85, -61) end
+	-- Camelot's PlayerFrame_UpdateManaBarVisuals puts the bar at 87,-61 for the player and the vehicle (Camelot/PlayerFrame.lua:91-96); before
+	-- 1.60.1.70425 it was 85,-61, and 91,-61 for the vehicle.
+	function Q.game() return Q.at(P.power, P.main, "TOPLEFT", 87, -61) end
 	function Q.gap() return math.max(1, W.ns.Pixels(P.power, 2)) end
 	function Q.say() local gap = Q.gap() return math.abs(gap - 1) < 0.05 and "1 unit" or ("%.1f units"):format(gap) end
 	function Q.hung() return Q.at(P.power, P.health, "BOTTOMLEFT", 0, -Q.gap()) end
 	Q.status = W.status()
-	check("bar overlap: the player's power bar hangs under the health bar by the two edges of the borders at border thickness 1, at least the game's 1 unit", Q.hung() and has(Q.status, "Player bars: " .. Q.say() .. " apart") and not has(Q.status, "overlapping"), Q.show(P.power) .. " " .. Q.status:sub(-200))
+	-- The game's own layout has the 20 unit health bar hang 2 units over the power bar since 1.60.1.70425 (Camelot/PlayerFrame.lua:79-84, 94-96), and the
+	-- status says so.
+	check("bar overlap: the player's power bar hangs under the health bar by the two edges of the borders at border thickness 1, at least 1 unit, and the status says the game's layout had them overlapping by 2 units",
+		Q.hung() and has(Q.status, "Player bars: " .. Q.say() .. " apart. The game's layout had them overlapping by 2.0 units"), Q.show(P.power) .. " " .. Q.status:sub(-200))
 	Q.edge = W.ns.Pixels(P.power, 1)
 	check("bar overlap: below 1 pixel per unit the gap is at least the two edges of the borders, so neither edge covers the other bar's fill", Q.edge > 1 and Q.gap() >= 2 * Q.edge - 1e-6 and Q.hung(), Q.show(P.power) .. " " .. tostring(Q.edge))
 	Q.sizes = { power = Q.layout(P.power), health = Q.layout(P.health), box = Q.layout(P.box), area = Q.layout(P.area) }
@@ -57144,8 +58389,8 @@ do
 	W.flush()
 	Q.vehicle = Q.hung()
 	W.change("unitframes.player", false)
-	Q.vehicleOff = Q.at(P.power, P.main, "TOPLEFT", 91, -61)
-	check("bar overlap: vehicle art keeps the bar under the health bar at x 0, and the look off gives back 91,-61", Q.vehicle and Q.vehicleOff and quiet(W), Q.show(P.power))
+	Q.vehicleOff = Q.at(P.power, P.main, "TOPLEFT", 87, -61)
+	check("bar overlap: vehicle art keeps the bar under the health bar at x 0, and the look off gives back 87,-61", Q.vehicle and Q.vehicleOff and quiet(W), Q.show(P.power))
 	W.blizzard(env.PlayerFrame_ToPlayerArt)
 	W.flush()
 	check("bar overlap: with the look off the power bar goes back to the game's point", Q.game() and has(W.status(), "Player bars: the game's layout") and Q.direct == 0, Q.show(P.power) .. " " .. W.status():sub(-200))
@@ -57165,11 +58410,11 @@ do
 	check("bar overlap: in combat nothing is written, and the bar moves when combat ends", Q.inCombat and Q.quiet and Q.direct == 0 and Q.hung() and quiet(W), Q.show(P.power) .. " " .. why(W))
 	check("bar overlap: target, focus, pet and party power bars keep the game's anchors", Q.layout(T.power) == Q.others[T.power] and Q.layout(W.focus.power) == Q.others[W.focus.power]
 		and Q.layout(W.pet.power) == Q.others[W.pet.power] and Q.layout(W.members[1].power) == Q.others[W.members[1].power], Q.layout(T.power))
-	-- The game's own layout overlaps by 2 units here: the status says so.
+	-- A game layout with the power bar 3 units higher overlaps by 5 units: the status says so.
 	W.uf.powerY = -58
 	W.blizzard(env.PlayerFrame_ToPlayerArt)
 	W.flush()
-	check("bar overlap: the status line says the gap and the game's overlap", Q.hung() and has(W.status(), "Player bars: " .. Q.say() .. " apart. The game's layout had them overlapping by 2.0 units"), W.status():sub(-200))
+	check("bar overlap: the status line says the gap and the game's overlap", Q.hung() and has(W.status(), "Player bars: " .. Q.say() .. " apart. The game's layout had them overlapping by 5.0 units"), W.status():sub(-200))
 end
 
 -- Unit menu: a right-click on the target frame opens its menu at the cursor.
@@ -57180,7 +58425,7 @@ do
 	local env = W.env
 	local menu = W.B(nil, {}, {})
 	local raw = W.rawOf[menu]
-	-- What the game does: UnitPopup_OpenMenu opens the menu at the cursor, and TargetFrame_OpenMenu moves it beside the frame (Mainline/TargetFrame.lua:670-673).
+	-- What the game does: UnitPopup_OpenMenu opens the menu at the cursor, and TargetFrame_OpenMenu moves it beside the frame (Mainline/TargetFrame.lua:680-682).
 	function Q.open(beside)
 		Q.menu = menu
 		W.blizzard(function()
@@ -57895,7 +59140,9 @@ do
 		check("later windows: nine windows, name completion and two toasts have an outline and a fill", #bad == 0, table.concat(bad, ", "))
 		local listing = W.slash("windows")
 		check("later windows: /flatui windows lists them, and says which this client does not have", has(listing, "AuctionHouseFrame: styled") and has(listing, "WorldMapFrame: styled")
-			and has(listing, "BNToastFrame: styled") and has(listing, "PetStableFrame: not found") and has(listing, "MacroPopupFrame: loads later"))
+			-- The stable is built since this client models 70790 (it was "not found" before); the cooldown settings window is still one it does not have.
+			and has(listing, "BNToastFrame: styled") and has(listing, "PetStableFrame: styled") and has(listing, "CooldownViewerSettings: not found")
+			and has(listing, "MacroPopupFrame: loads later"), listing)
 		W.out = {}
 		local hooks = lw().hooks - winWorld().hooks
 		check("later windows: they add no hook of a method: the one scroll list is followed on its own callback registry", hooks == 0, hooks)
@@ -57971,6 +59218,45 @@ do
 		check("inspect and dressing room: the frame round the model is faded; the pictures behind the model follow the race background setting",
 			off == "0,0,0,0,0|" .. NINE .. "|0" and on == "1,1,1,1,1|" .. NINE .. "|1" and race() == off, off .. " " .. on)
 		local macro = { N.MacroFramePortrait, N.MacroHorizontalBarLeft, N.MacroFrameSelectedMacroBackground }
+		-- Since 70707 the game sets the alpha of the black overlay over the inspected unit's race pictures each time the character page of the
+		-- inspect window is shown, also on a change of tab inside the open window (SetPaperDollBackground, InspectPaperDollFrame.lua:102).
+		local I = lw()
+		local IN = I.env
+		I.win.races.target = "NightElf"
+		local overlay = wraw(I, IN.InspectModelFrame).BackgroundOverlay
+		I.showPanel(IN.InspectFrame)
+		I.flush()
+		local opened = g(wa(I, overlay))
+		I.win.inspectTab(2)
+		I.win.inspectTab(1)
+		check("inspect: the overlay over the race pictures stays faded when the window opens and after a change to another tab and back",
+			opened == "0" and wa(I, overlay) == 0 and wraw(I, IN.InspectPaperDollFrame).shown, opened .. " " .. g(wa(I, overlay)))
+		I.flush()
+		check("inspect: and on the next frame too", wa(I, overlay) == 0, g(wa(I, overlay)))
+		I.change("windows.raceArt", true)
+		local shown = g(wa(I, overlay))
+		I.win.inspectTab(2)
+		I.win.inspectTab(1)
+		check("inspect: with the race background on, the overlay has the alpha the game gives the unit's race, not the alpha it had at login",
+			shown == "0.5" and wa(I, overlay) == 0.5, shown .. " " .. g(wa(I, overlay)))
+		I.change("windows.raceArt", false)
+		check("inspect: and is faded again when it goes off", wa(I, overlay) == 0, g(wa(I, overlay)))
+		clean(I, "inspect race overlay")
+		-- The stable (Blizzard_StableUI/Camelot/Blizzard_StableUI.xml:103-127, 265-288): both bands, the border across the bottom and both dividers
+		-- go; the text, the pet slots and the model's own picture stay.
+		local st = wraw(W, N.PetStableFrame)
+		local function stableArt()
+			return alphas(W, { N.TopBackground, N.BottomBackground, st.insideFrameBottom, wraw(W, st.TopDividerFrame).horzDivider, wraw(W, st.BottomDividerFrame).horzDivider })
+		end
+		check("stable: the two bands, the border across the bottom and the two dividers are transparent, the window has a box, and its NineSlice is faded",
+			stableArt() == "0,0,0,0,0" and W.state(N.PetStableFrame) == "SB" and alphas(W, pieces(W, st.NineSlice)) == EIGHT, stableArt())
+		check("stable: its text, the model's picture and the slots' art are left alone, the experience bar is a flat bar and the buy button is flat",
+			wa(W, N.PetStableLevelText) == 1 and wa(W, wraw(W, st.modelScene).Background) == 1 and wa(W, N.PetStableCurrentPetIconTexture) == 1
+			and #wboxes(W, st.expBar) == 1 and W.state(st.purchaseButton) == "SB")
+		W.change("windows.more", false)
+		check("stable: with the group of more windows off, its art is as the game drew it", stableArt() == "1,1,1,1,1" and W.state(N.PetStableFrame) == "hb", stableArt())
+		W.change("windows.more", true)
+		check("stable: and transparent again when it is back on", stableArt() == "0,0,0,0,0", stableArt())
 		local picture = alphas(W, macro)
 		W.change("windows.portrait", true)
 		local withPortrait = alphas(W, macro)
@@ -58996,6 +60282,115 @@ do
 			check("xppos: after Reset the next pass of the game leaves the bars at the game's spots and nothing puts them back", pts(W, W.env[XP]) == GAME and pts(W, W.env[XP2]) == GAME2 and allClean(W), pts(W, W.env[XP]) .. problems(W))
 		end
 	end
+
+	-- The totem bar of a Shaman: since 70425 the game stacks it last, 30 in from the main bar (Camelot/EditModeUtil.lua:21, Mainline/EditModePresetLayouts.lua:776),
+	-- at each edge of a fight and each time it is shown or hidden (MultiCastActionBarFrame.lua:332-338). A saved spot is put back after each pass on
+	-- the next frame, uncounted, and the Reload click keeps it in the Edit Mode layout, which takes the bar out of the pass.
+	do
+		local TOTEM = "MultiCastActionBarFrame"
+		local TSPOT = { point = "BOTTOM", x = 400, y = 200, kind = "hud" }
+		local AT = "BOTTOM>UIParent:BOTTOM 400,200 @1"
+		local SHAMAN = { systems = true, bars = true, layouts = true, totem = true }
+		-- Out of a vehicle the game hides the Leave vehicle button (VehicleLeaveButton.lua:34).
+		local function world(spots)
+			return mwBefore({ layout = SHAMAN, saved = opt({}, spots) }, function(W)
+				W.rawOf[W.env.MainMenuBarVehicleLeaveButton].shown = false
+				W.blizzard(W.gameStack)
+			end)
+		end
+		local function pass(W)
+			W.blizzard(function()
+				W.gameStack()
+			end)
+			W.registry:TriggerEvent("EditModeManager.UpdateBottomActionBarPositions")
+		end
+		local function given(W)
+			return has(W.status(), "again and again")
+		end
+		local control = world()
+		-- Main bar 45 high, the two status bars 14, bar 3 beside bar 2, then the stance, pet and possess bars, 45 each, and 4 between.
+		local GAME = "BOTTOMLEFT>MainActionBar:BOTTOMLEFT 30,281 @1"
+		check("totemstack: the game stacks the shown totem bar last, 30 in from the main bar, and with no spot nothing places it", pts(control, control.env[TOTEM]) == GAME
+			and not control.ns.MoverHeld(TOTEM).held and allClean(control), pts(control, control.env[TOTEM]) .. problems(control))
+		do
+			local W = world({ [TOTEM] = TSPOT })
+			check("totemstack: the saved spot is used at login, and the bar waits for the Reload click to be kept in the layout", pts(W, W.env[TOTEM]) == AT and noticeShown(W)
+				and has(W.status(), "Kept in the Edit Mode layout after a reload:") and has(W.status(), "Totem bar") and W.em.saves == 0 and allClean(W), pts(W, W.env[TOTEM]) .. W.status() .. problems(W))
+			W.fight(true)
+			W.flush()
+			W.run(1.2)
+			check("totemstack: in a fight the game's pass takes the bar and nothing places it, as it is protected", pts(W, W.env[TOTEM]) == GAME and allClean(W), pts(W, W.env[TOTEM]) .. problems(W))
+			W.fight(false)
+			W.flush()
+			check("totemstack: when the fight ends it is put back on the next frame, with no wait for the check", pts(W, W.env[TOTEM]) == AT and allClean(W), pts(W, W.env[TOTEM]) .. problems(W))
+			-- Eleven fights in a few seconds: a counted return each time would give the bar up after ten in a minute.
+			for _ = 1, 11 do
+				W.fight(true)
+				W.run(0.6)
+				W.fight(false)
+				W.flush()
+				W.run(0.6)
+			end
+			check("totemstack: eleven fights in a minute are not counted: the bar is at its spot and not given up", pts(W, W.env[TOTEM]) == AT and not given(W) and allClean(W),
+				pts(W, W.env[TOTEM]) .. W.status() .. problems(W))
+			for _ = 1, 11 do
+				pass(W)
+				W.flush()
+				W.run(0.6)
+			end
+			check("totemstack: nor are eleven passes out of a fight", pts(W, W.env[TOTEM]) == AT and not given(W) and allClean(W), pts(W, W.env[TOTEM]) .. W.status())
+			W.totemShown(false)
+			W.flush()
+			W.totemShown(true)
+			check("totemstack: shown again, the game's pass stacks it", pts(W, W.env[TOTEM]) == GAME, pts(W, W.env[TOTEM]))
+			W.flush()
+			check("totemstack: and it is put back on the next frame", pts(W, W.env[TOTEM]) == AT and not given(W) and allClean(W), pts(W, W.env[TOTEM]) .. problems(W))
+			for _ = 1, 11 do
+				W.totemShown(false)
+				W.flush()
+				W.totemShown(true)
+				W.flush()
+				W.run(0.6)
+			end
+			check("totemstack: eleven times hidden and shown in a minute, it is not given up", pts(W, W.env[TOTEM]) == AT and not given(W) and allClean(W), pts(W, W.env[TOTEM]) .. W.status())
+			local clicked = noticeShown(W)
+			if clicked then
+				reload(W)
+			end
+			check("totemstack: the Reload click saves the row of the totem bar, which has no index, at the spot and not in the default position",
+				clicked and W.em.saves == 1 and rowText(W, TOTEM) == "BOTTOM>UIParent:BOTTOM 400,200 default=false" and pts(W, W.env[TOTEM]) == AT and allClean(W),
+				tostring(clicked) .. " " .. W.em.saves .. " " .. rowText(W, TOTEM) .. problems(W))
+			W.fight(true)
+			W.flush()
+			check("totemstack: after the click the game's pass leaves the bar where it is, in a fight too", pts(W, W.env[TOTEM]) == AT and allClean(W), pts(W, W.env[TOTEM]) .. problems(W))
+			W.fight(false)
+			W.flush()
+			W.run(0.6)
+			check("totemstack: and after it", pts(W, W.env[TOTEM]) == AT and not given(W) and allClean(W), pts(W, W.env[TOTEM]))
+		end
+		do
+			-- A hidden totem bar with no spot is placed by the game when it shows, so it has no handle, as a hidden bar of the stack has none; one with a
+			-- spot has its handle there.
+			local W = mwBefore({ layout = { systems = true, bars = true, layouts = true } }, function(X)
+				X.rawOf[X.env.MainMenuBarVehicleLeaveButton].shown = false
+				X.blizzard(X.gameStack)
+			end)
+			W.slash("move")
+			check("totemstack: a character with no totem bar has no handle for it", (W.handle("Totem bar") == nil or not W.handle("Totem bar").shown) and allClean(W), table.concat(W.shownHandles(), ","))
+			-- In a vehicle the game hides the bar where its pass last put it (MultiCastActionBarFrame.lua:334, 340-343), which is not where the pass puts it
+			-- when it shows again.
+			local V = world()
+			V.totemShown(false)
+			V.flush()
+			V.slash("move")
+			check("totemstack: a Shaman's bar hidden in a vehicle, with no spot, has no handle", pts(V, V.env[TOTEM]) == GAME and (V.handle("Totem bar") == nil or not V.handle("Totem bar").shown)
+				and allClean(V), pts(V, V.env[TOTEM]) .. " " .. table.concat(V.shownHandles(), ","))
+			local S = world({ [TOTEM] = TSPOT })
+			S.slash("move")
+			check("totemstack: a Shaman has the handle, which says the game moves the bar back in a fight until the Reload click", S.handle("Totem bar") ~= nil and S.handle("Totem bar").shown == true
+				and S.handleText("Totem bar") == "Totem bar (moved back by the game in combat)", tostring(S.handleText("Totem bar")) .. " " .. table.concat(S.shownHandles(), ","))
+		end
+	end
 	do
 		local ON = { ["barblock.enabled"] = true, ["barblock.slot1"] = "main", ["barblock.slot2"] = "bar2", ["barblock.slot3"] = "bar3", ["barblock.slot4"] = "bar4",
 			["barblock.slot5"] = "bar5", ["barblock.slot6"] = "bar6" }
@@ -59776,20 +61171,31 @@ do
 	-- Windows that were not listed.
 	local ach, chat, board, results, manager = wraw(W, N.AchievementFrame), wraw(W, N.ChatConfigFrame), wraw(W, N.PVPMatchScoreboard), wraw(W, N.PVPMatchResults),
 		wraw(W, N.CompactRaidFrameManager)
+	-- The scoreboard and the match results as Forever has them since 70707 (Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:5-122, Camelot/PVPMatchResults.xml:5-150):
+	-- a NineSlice, art with no key on the content (the board's background, and the scroll line of the results), and the stone band in the header frame
+	-- of the content. The old boards' keyed Background and inset corner, and their leave button with a name, are gone.
+	local function art(frame, index) return g(wa(W, wraw(W, frame).regions[index])) end
+	local scoreHeader, resultsHeader = board.Content and wraw(W, board.Content).ScrollCategories, results.content and wraw(W, results.content).scrollCategories
 	local function more()
 		return table.concat({ g(wa(W, ach.TopLeftCorner)), g(wa(W, ach.Center)), g(wa(W, W.env.CalendarFrameTopLeftTexture)), g(wa(W, wraw(W, chat.Border).TopEdge)),
-			g(wa(W, wraw(W, chat.Header).LeftBG)), g(wa(W, wraw(W, board.Content).Background)), g(wa(W, wraw(W, board.Content).InsetBorderTopLeft)),
-			g(wa(W, wraw(W, results.content).Background)), g(wa(W, manager.Background)) }, ",")
+			g(wa(W, wraw(W, chat.Header).LeftBG)), g(wa(W, wraw(W, board.NineSlice).TopEdge)), art(board.Content, 1), art(scoreHeader, 1),
+			g(wa(W, wraw(W, results.NineSlice).TopLeftCorner)), art(results.content, 1), art(results.content, 2), art(resultsHeader, 1), g(wa(W, manager.Background)) }, ",")
 	end
+	local leave = wraw(W, results.buttonContainer).leaveButton
 	check("achievements, calendar, chat settings, scoreboard, match results and raid manager: their art is transparent, each has a box, and their buttons are flat",
-		more() == "0,0,0,0,0,0,0,0,0" and W.state(N.AchievementFrame) == "SB" and W.state(N.CalendarFrame) == "SB" and W.state(N.ChatConfigFrame) == "SB"
+		more() == ("0,"):rep(12) .. "0" and W.state(N.AchievementFrame) == "SB" and W.state(N.CalendarFrame) == "SB" and W.state(N.ChatConfigFrame) == "SB"
 		and W.state(N.PVPMatchScoreboard) == "SB" and W.state(N.PVPMatchResults) == "SB" and W.state(N.CompactRaidFrameManager) == "SB"
 		and W.state(N.AchievementFrameFilterButton) == "SB" and W.state(N.CalendarCreateEventButton) == "SB" and W.state(N.ChatConfigFrameDefaultButton) == "SB"
-		and W.state(N.PVPMatchScoreboardLeaveButton) == "SB" and W.state(N.CompactRaidFrameManagerLeavePartyButton) == "SB", more())
+		and W.state(leave) == "SB" and wa(W, wraw(W, leave).Center) == 0 and W.state(N.CompactRaidFrameManagerLeavePartyButton) == "SB", more())
+	check("scoreboard and match results: the close buttons, one with no name and no CloseButton key, are found by their atlas and get the cross",
+		N.PVPMatchScoreboardLeaveButton == nil and board.CloseButton == nil and wa(W, wraw(W, board.ClosePanelButton).states.Normal) == 0
+		and wsegments(wlines(W, board.ClosePanelButton, "OVERLAY")) == X_SHAPE and wa(W, wraw(W, results.CloseButton).states.Normal) == 0
+		and wsegments(wlines(W, results.CloseButton, "OVERLAY")) == X_SHAPE)
+	check("scoreboard and match results: the header text is not faded", wa(W, wraw(W, board.HeaderContainer).Text) == 1 and wa(W, wraw(W, results.HeaderContainer).Text) == 1)
 	W.change("windows.more", false)
 	W.change("windows.social", false)
 	W.change("windows.menus", false)
-	check("those windows: with their groups off the art is as the game drew it", more() == "1,1,1,1,1,1,1,1,1", more())
+	check("those windows: with their groups off the art is as the game drew it", more() == ("1,"):rep(12) .. "1", more())
 	W.change("windows.more", true)
 	W.change("windows.social", true)
 	W.change("windows.menus", true)
@@ -61790,7 +63196,7 @@ function PT.runBuild()
 		local step = nav[3].bottom - nav[4].bottom
 		check("left side: a line and a gap between the fixed rows and the first group", nav[4].text == "Move frames" and nav[5].text == "Look" and gap > step + 5, g(gap) .. " " .. g(step))
 		check("left side: the first page is open, with its title and Reset page", PT.title(W) == PAGES[1].label and PT.button(W, "Reset page") ~= nil)
-		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Options window", "Setup" }),
+		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Options window", "Setup" }),
 			joined(PT.headers(W)))
 		PT.go(W, "Text")
 		check("left side: a click on a tab opens it under the title of its module, with its sections under the module", PT.title(W) == "Nameplates" and PT.page(W, "Level") ~= nil and PT.page(W, "Borders and backgrounds") == nil)
@@ -65531,7 +66937,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 901 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 904 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -65845,7 +67251,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 901 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 904 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -66271,7 +67677,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 773 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 775 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -67243,7 +68649,7 @@ function PT.runSetup()
 				W.cvars.userFontScale, W.cvars.useUiScale, W.cvars.uiScale, W.cvars.uiscale = o.font or "1.000000", o.useScale or "0", o.scale, o.scale or "0.64"
 				env.C_GameRules = { GetForeverExperiencePreset = fn(o.preset), IsPersonalResourceDisplayEnabled = rules and rules.IsPersonalResourceDisplayEnabled }
 				env.Enum = env.Enum or {}
-				env.Enum.ForeverExperiencePreset = { Classic = 0, Modern = 1 }
+				env.Enum.ForeverExperiencePreset = { Classic = 0, Enhanced = 1 }
 				W.height = o.height or 1080
 				return S.Recommend()
 			end
@@ -68848,7 +70254,7 @@ function PT.runCards()
 			end
 		end
 		check("cards: a section is a panel as tall as its header and rows, 12 below the one before", ok and near(W.rectOf(panels[1]) - sl, 16, 0.01), #panels .. " " .. #counts)
-		check("cards: the headers are the sections, as before", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Options window", "Setup" }), joined(PT.headers(W)))
+		check("cards: the headers are the sections, as before", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Options window", "Setup" }), joined(PT.headers(W)))
 		check("cards: a row stands 32 in from the column", near(W.rectOf(PT.shownRows(W)[1]) - sl, 32, 0.01))
 
 		-- The count at the right of a header.
@@ -68876,7 +70282,7 @@ function PT.runCards()
 		ns.Set("panel.sections", "lines")
 		local lscroll = PT.right(W)
 		check("lines: the same headers, no panel, no count, and a row stands 16 in from the column", #backs(W) == 0 and #heads(W) == 0 and changedTotal(W) == 0
-			and near(W.rectOf(PT.shownRows(W)[1]) - W.rectOf(lscroll), 16, 0.01) and joined(PT.headers(W)) == "Borders and backgrounds, Bars, Game action bars, Game menu, Scale, Options window, Setup", joined(PT.headers(W)))
+			and near(W.rectOf(PT.shownRows(W)[1]) - W.rectOf(lscroll), 16, 0.01) and joined(PT.headers(W)) == "Borders and backgrounds, Bars, Game action bars, Game menu, Scale, World, Options window, Setup", joined(PT.headers(W)))
 		ns.Set("panel.sections", "cards")
 		check("lines: and Cards puts the panels back", #backs(W) == #counts and #heads(W) == #counts)
 
@@ -69778,7 +71184,7 @@ do
 end
 
 -- 6b. Under the slots, a bag with another bag under it has no button: the game stacks the bags 8 units apart, each on the top right corner
--- of the one under it (ContainerFrame.lua:1402), and a button hanging under a bag would lie over the title bar of the bag below. A button
+-- of the one under it (ContainerFrame.lua:1404), and a button hanging under a bag would lie over the title bar of the bag below. A button
 -- that goes is hidden where it was, so the reading of a hidden one is its place when it went.
 do
 	local S, H, A = SB.slots, "TOP/0,-2/hidden", SB.away
@@ -69885,7 +71291,7 @@ do
 	check("sortbags: combat ends and it has", SB.lines(C) == expect(S, S, S, S, H) and allClean(C), SB.lines(C) .. problems(C))
 end
 
--- 6c. Under the gamepad interface the game has no clean up button and its action lies in a menu (ContainerFrame.lua:735-742 and 1132-1136), and a
+-- 6c. Under the gamepad interface the game has no clean up button and its action lies in a menu (ContainerFrame.lua:735-742 and 1130-1134), and a
 -- button here could not be clicked: none is made.
 do
 	local function pad(opts, answer)
@@ -78934,7 +80340,7 @@ do
 end
 
 -- The size of the pet frame (PetFrameSize.lua). The world has the pet frame in the container under the player frame, as the game has it, and a
--- function that does what the game does when it sets the pet frame's scale (EditModeSystemTemplates.lua:2686-2697).
+-- function that does what the game does when it sets the pet frame's scale (EditModeSystemTemplates.lua:2700-2711).
 do
 local function petsize()
 local mw, mwBefore, opt, entry, pts = suiteKit.mw, suiteKit.mwBefore, suiteKit.opt, suiteKit.entry, suiteKit.pts
@@ -79486,8 +80892,9 @@ do
 		-- Off: nothing is held, no frame is made, the game is not asked which bars are on.
 		local W = K.mw({ layout = LAYOUT })
 		local control = K.mw({ layout = { systems = true } })
-		check("bblock: defaults: nothing is held and the game's stack stays", not held(W, "MainActionBar") and not held(W, "MultiBarBottomLeft") and at(W, "MainActionBar", 375, 2) and at(W, "MultiBarBottomLeft", 375, 136)
-			and at(W, "MultiBarBottomRight", 375, 87), column(W))
+		-- The game puts bar 2 in by 22 and bar 3 in by 606 on the same row (EditModePresetLayoutConstants.lua:20, 27-28).
+		check("bblock: defaults: nothing is held and the game's stack stays", not held(W, "MainActionBar") and not held(W, "MultiBarBottomLeft") and at(W, "MainActionBar", 375, 2) and at(W, "MultiBarBottomLeft", 397, 87)
+			and at(W, "MultiBarBottomRight", 981, 87), column(W))
 		check("bblock: defaults: no frame of the addon's is made for the block and the game is not asked which bars are on", #W.addonFrames == #control.addonFrames and W.toggleCalls == 0 and K.allClean(W),
 			#W.addonFrames .. " " .. #control.addonFrames .. " " .. W.toggleCalls)
 		check("bblock: defaults: the page is off and no spot is saved", W.line("Bar block") == "Bar block: off" and K.entry(W, "FlatUIBarBlock") == nil and W.hooks == control.hooks)
@@ -79638,7 +81045,8 @@ do
 		W.change("barblock.enabled", false)
 		W.flush()
 		W.gameStack()
-		check("bblock: page: turned off, nothing is held, the game's stack is back and the box is gone", not held(W, "MainActionBar") and not held(W, "MultiBarBottomLeft") and at(W, "MultiBarBottomLeft", 375, 136)
+		-- Bar 2 is back at the game's spot, in by 22 beside bar 3 (EditModePresetLayoutConstants.lua:20, 27-28).
+		check("bblock: page: turned off, nothing is held, the game's stack is back and the box is gone", not held(W, "MainActionBar") and not held(W, "MultiBarBottomLeft") and at(W, "MultiBarBottomLeft", 397, 87)
 			and at(W, "MainActionBar", 375, 2) and W.line("Bar block") == "Bar block: off" and W.line("Movers") == "Movers: on, 0 moved" and K.allClean(W), column(W))
 		W.slash("move")
 		check("bblock: page: and /flatui move has no box for it", W.handle("Action bar block") == nil)
@@ -79685,7 +81093,7 @@ do
 		W.slash("profile Raid")
 		W.flush()
 		W.gameStack()
-		check("bblock: profile: a profile with the block off lets the bars go", not held(W, "MainActionBar") and at(W, "MultiBarBottomLeft", 375, 136) and K.allClean(W), column(W))
+		check("bblock: profile: a profile with the block off lets the bars go", not held(W, "MainActionBar") and at(W, "MultiBarBottomLeft", 397, 87) and K.allClean(W), column(W))
 		W.slash("profile Default")
 		W.flush()
 		check("bblock: profile: back to the profile with it on, the block is held again", held(W, "MainActionBar") and at(W, "MultiBarBottomLeft", 375, 49) and at(W, "MultiBarBottomRight", 375, 96) and K.allClean(W), column(W))
@@ -79793,7 +81201,7 @@ do
 	local T = { layout = { systems = true, bars = true }, spot = { FlatUIBarBlock = { point = "BOTTOM", x = 0, y = 300, kind = "hud" } },
 		xp2 = "SecondaryStatusTrackingBarContainer", xp1 = "MainStatusTrackingBarContainer", stance = "StanceBar", pet = "PetActionBar", possess = "PossessActionBar",
 		leave = "MainMenuBarVehicleLeaveButton", keep = "In Edit Mode press an arrow key once on each and save to keep them." }
-	-- The frames of the game's stack as the test puts them: sizes. The Leave vehicle button stays under the main bar, as the game has it.
+	-- The frames of the game's stack as the test puts them: sizes. The Leave vehicle button is shown and left to the game, which stacks it.
 	local function world(options, prep)
 		local saved = { ["barblock.enabled"] = true }
 		for key, value in pairs(options or {}) do
@@ -79826,11 +81234,13 @@ do
 		return at(W, T.xp2, 679, 441, 562, 14) and at(W, T.xp1, 679, 454, 562, 14) and at(W, T.stance, 679, 470, 200, 30) and at(W, T.pet, 1091, 470, 150, 40)
 			and at(W, T.possess, 679, 512, 120, 35)
 	end
-	-- The Leave vehicle button hangs from the main bar in the game (VehicleLeaveButton.xml:4): not held, and still at the game's spot.
+	-- The Leave vehicle button hangs from the main bar in the game (VehicleLeaveButton.xml:4): not held, and at the game's spot. The game's pass stacks
+	-- it 30 in from the main bar while it is shown (Camelot/EditModeUtil.lua:20, Mainline/EditModePresetLayouts.lua:527), so the spot is on the main bar
+	-- at x 30.
 	local function leaveAtGame(W)
 		local frame = raw(W, T.leave)
 		local point = frame.points and frame.points[1]
-		return not W.ns.MoverHeld(T.leave).held and point ~= nil and point[1] == "BOTTOMLEFT" and point[2] == W.env.MainActionBar and point[4] == 0 and point[5] == 0
+		return not W.ns.MoverHeld(T.leave).held and point ~= nil and point[1] == "BOTTOMLEFT" and point[2] == W.env.MainActionBar and point[4] == 30
 	end
 	local function held(W, name)
 		return W.ns.MoverHeld(name).held
@@ -80006,8 +81416,9 @@ do
 		local before = writes(W)
 		local text = W.slash("block facts")
 		local list = lines(text)
-		check("bbaround: facts: 12 lines at most, one for the first bar and one for each frame over the block and the Leave vehicle button", #list == 12 and text:find("Leave vehicle button: protected no, in default position yes, placed no, not held", 1, true) ~= nil and list[1]:find("Main action bar: protected yes, in default position yes, placed yes", 1, true) == 1
-			and text:find("Pet bar: protected yes, in default position yes, placed yes", 1, true) ~= nil, (text:gsub("\n", " | ")))
+		-- Since 70425 the game stacks the totem bar too (Camelot/EditModeUtil.lua:21), so it has a line; a character with no totem bar has it not held.
+		check("bbaround: facts: 13 lines at most, one for the first bar and one for each frame over the block, the Leave vehicle button and the totem bar", #list == 13 and text:find("Leave vehicle button: protected no, in default position yes, placed no, not held", 1, true) ~= nil and list[1]:find("Main action bar: protected yes, in default position yes, placed yes", 1, true) == 1
+			and text:find("Pet bar: protected yes, in default position yes, placed yes", 1, true) ~= nil and text:find("Totem bar: protected yes, in default position yes, placed no, not held", 1, true) ~= nil, (text:gsub("\n", " | ")))
 		check("bbaround: facts: the layouts of both sources, the toggles and the restricted call", text:find("C_EditMode.GetLayouts: 3 layouts, active 3", 1, true) ~= nil
 			and text:find("EditModeManagerFrame.layoutInfo: 3 layouts, active 3, named Mine, type 1", 1, true) ~= nil and text:find("GetActionBarToggles: yyynnnn. CheckAllowProtectedFunctions: missing.", 1, true) ~= nil, text)
 		check("bbaround: facts: no fight yet", text:find("Start of fight: no record yet", 1, true) ~= nil and text:find("End of fight: no record yet", 1, true) ~= nil, text)
@@ -80036,6 +81447,92 @@ do
 		local V = world({ ["barblock.enabled"] = false })
 		check("bbaround: facts: with the block off it still prints and changes nothing", #lines(V.slash("block facts")) >= 8 and K.allClean(V))
 		check("bbaround: facts: another word prints the command", N.slash("block") == "/flatui block facts")
+	end
+	do
+		-- A Shaman's totem bar: in its default position the game stacks it 4 over the top of the main bar (EditModeManager.lua:666-668, 693-706),
+		-- across the row over it, so the block holds it on a row of its own over the possess bar, on the left.
+		local TOTEM = "MultiCastActionBarFrame"
+		local function shaman(options)
+			local saved = { ["barblock.enabled"] = true }
+			for key, value in pairs(options or {}) do
+				saved[key] = value
+			end
+			return K.mwBefore({ layout = { systems = true, bars = true, layouts = true, totem = true }, saved = K.opt(saved, T.spot) }, function(W)
+				for name, size in pairs({ [T.stance] = { 200, 30 }, [T.pet] = { 150, 40 }, [T.possess] = { 120, 35 }, [T.leave] = { 32, 32 } }) do
+					local frame = W.rawOf[W.env[name]]
+					frame.width, frame.height = size[1], size[2]
+				end
+				-- Out of a vehicle the game hides the Leave vehicle button (VehicleLeaveButton.lua:34).
+				raw(W, T.leave).shown = false
+				W.blizzard(W.gameStack)
+			end)
+		end
+		local function overlaps(W, a, b)
+			local al, ab, aw, ah = W.rectOf(W.env[a])
+			local bl, bb, bw, bh = W.rectOf(W.env[b])
+			return al ~= nil and bl ~= nil and al < bl + bw and bl < al + aw and ab < bb + bh and bb < ab + ah
+		end
+		-- The rows of the block and the frames over it that the totem bar may not lie across.
+		local PLANNED = { "MainActionBar", "MultiBarBottomLeft", "MultiBarBottomRight", T.xp2, T.xp1, T.stance, T.pet, T.possess }
+		local function clear(W)
+			for _, name in ipairs(PLANNED) do
+				if overlaps(W, TOTEM, name) then
+					return false, name
+				end
+			end
+			return true
+		end
+		local function reload(W)
+			local b = W.ns.LayoutSpots.ReloadButton()
+			assert(b and W.rawOf[b].shown, "no Reload button shown")
+			W.inReloadClick = true
+			local ok, err = pcall(W.rawOf[b].scripts.OnMouseUp, b, "LeftButton")
+			W.inReloadClick = false
+			assert(ok, err)
+			W.flush()
+			W.run(0.6)
+		end
+		local W = shaman()
+		local ok, on = clear(W)
+		check("bbaround: totem: the totem bar is held on a row of its own over the possess bar, on the left, and lies across no planned row", held(W, TOTEM) and above(W)
+			and at(W, TOTEM, 679, 549, 230, 38) and ok and K.allClean(W), K.rectText(W, TOTEM) .. " " .. tostring(on) .. " " .. column(W) .. K.problems(W))
+		check("bbaround: totem: Movers count it with the three bars and the five frames", W.line("Movers") == "Movers: on, 9 moved", W.line("Movers"))
+		check("bbaround: totem: before the Reload click the status says the game still stacks it in a fight", W.status():find("In a fight the game still stacks: ", 1, true) ~= nil
+			and W.status():find("Totem bar. " .. T.keep, 1, true) ~= nil, W.status())
+		W.gameStack()
+		W.run(0.6)
+		check("bbaround: totem: after a pass of the game's stack the check has put it back", at(W, TOTEM, 679, 549, 230, 38) and clear(W) and K.allClean(W), K.rectText(W, TOTEM))
+		reload(W)
+		local row = W.emRow(TOTEM)
+		check("bbaround: totem: the Reload click keeps its spot in the Edit Mode layout, out of the default position", row ~= nil and row.isInDefaultPosition == false
+			and at(W, TOTEM, 679, 549, 230, 38) and K.allClean(W), K.rectText(W, TOTEM) .. " " .. tostring(row and row.isInDefaultPosition))
+		W.fight(true)
+		W.flush()
+		W.run(0.6)
+		ok, on = clear(W)
+		check("bbaround: totem: after the click a fight leaves it at its row, clear of the others", at(W, TOTEM, 679, 549, 230, 38) and ok and K.allClean(W), K.rectText(W, TOTEM) .. " " .. tostring(on) .. K.problems(W))
+		W.fight(false)
+		W.flush()
+		W.run(0.6)
+		check("bbaround: totem: and so does its end", at(W, TOTEM, 679, 549, 230, 38) and clear(W) and above(W) and K.allClean(W), K.rectText(W, TOTEM) .. " " .. column(W))
+		local text = W.slash("block facts")
+		check("bbaround: totem: /flatui block facts lists it as held and placed", text:find("Totem bar: protected yes, in default position no, placed yes", 1, true) ~= nil, (text:gsub("\n", " | ")))
+		-- The rows over the block end at the top of the totem bar while it is shown (549 and 38), and at the top of the possess bar (512 and 35) while it is not.
+		local shownTop = select(5, W.ns.MainBlock())
+		W.totemShown(false)
+		W.flush()
+		W.run(0.6)
+		W.flush()
+		local hiddenTop = select(5, W.ns.MainBlock())
+		check("bbaround: totem: hidden in a vehicle, it keeps its spot and takes no height", held(W, TOTEM) and at(W, TOTEM, 679, 549) and shownTop ~= nil and hiddenTop ~= nil
+			and math.abs(shownTop - 587) < 1e-6 and math.abs(hiddenTop - 547) < 1e-6 and K.allClean(W), K.rectText(W, TOTEM) .. " " .. tostring(shownTop) .. " " .. tostring(hiddenTop))
+		local D = shaman({ ["barblock.direction"] = "down" })
+		check("bbaround: totem: the same over a block that stacks downward, where the main bar is the top row", at(D, TOTEM, 679, 549, 230, 38) and clear(D) and K.allClean(D), K.rectText(D, TOTEM))
+		local G = shaman({ ["barblock.others"] = "game" })
+		check("bbaround: totem: left to the game, the totem bar is not held either", not held(G, TOTEM) and G.line("Movers") == "Movers: on, 3 moved", G.line("Movers"))
+		local N = world()
+		check("bbaround: totem: a character with no totem bar has none in the block, and nothing more is counted", not held(N, TOTEM) and N.line("Movers") == "Movers: on, 8 moved"
+			and N.status():find("Totem bar", 1, true) == nil, N.line("Movers") .. N.status())
 	end
 end
 -- Bar block, look: a background panel behind the block and a fade of the bars (BarBlock.lua).
@@ -80265,6 +81762,113 @@ do
 		shell:Hide()
 		tick(F)
 		check("bblook: flyout: closed again, faded", allAt(F, 0.3) and K.allClean(F), allWrites(F) .. K.problems(F))
+	end
+	do
+		-- A Shaman's totem bar is held on its row over the block and fades with it. Its flyout and the arrow that opens it are children of the bar,
+		-- drawn at its alpha, and both reach over the top of the bar, out of the rectangle under the mouse (MultiCastActionBarFrame.xml:106-110,
+		-- 156-160; MultiCastActionBarFrame.lua:637-641, 819-820). The open flyout gives full opacity as the spell flyout does; the arrow, which the
+		-- game shows only while the cursor is on a totem slot or on it, counts as under the mouse.
+		local TOTEM, FLYOUT, ARROW = "MultiCastActionBarFrame", "MultiCastFlyoutFrame", "MultiCastFlyoutFrameOpenButton"
+		local HELD = { TOTEM }
+		for _, name in ipairs(T.held) do
+			HELD[#HELD + 1] = name
+		end
+		local function shaman(options)
+			local saved = { ["barblock.enabled"] = true, ["barblock.fade"] = true }
+			for key, value in pairs(options or {}) do
+				saved[key] = value
+			end
+			return K.mwBefore({ layout = { systems = true, bars = true, totem = true }, saved = K.opt(saved, T.spot) }, function(X)
+				for name, size in pairs({ StanceBar = { 200, 30 }, PetActionBar = { 150, 40 }, PossessActionBar = { 120, 35 } }) do
+					local frame = X.rawOf[X.env[name]]
+					frame.width, frame.height = size[1], size[2]
+				end
+				X.cursor = { T.away[1], T.away[2] }
+			end)
+		end
+		local function heldAt(W, value)
+			for _, name in ipairs(HELD) do
+				if math.abs(alpha(W, name) - value) > 1e-9 then
+					return false
+				end
+			end
+			return true
+		end
+		local function heldWrites(W)
+			local parts = {}
+			for _, name in ipairs(HELD) do
+				parts[#parts + 1] = ("%s %s/%d"):format(name:sub(1, 6), tostring(alpha(W, name)), writes(W, name))
+			end
+			return table.concat(parts, " ")
+		end
+		-- How the game draws a child of the totem bar: its own alpha times the bar's.
+		local function drawn(W, name)
+			return W.env[name]:GetEffectiveAlpha()
+		end
+		local W = shaman()
+		check("bblook: totem flyout: a Shaman's totem bar is held on its row over the block and faded with it, the cursor away", heldAt(W, 0.3)
+			and K.rectIs(W, TOTEM, 679, 549, 230, 38) and K.allClean(W), heldWrites(W) .. " " .. K.rectText(W, TOTEM) .. K.problems(W))
+		-- The cursor on totem slot 1, in the bar: the game shows the arrow on the top of the slot, 13 of its 18 over the top of the bar (587).
+		W.cursor = { 735, 570 }
+		W.totemArrow(true)
+		tick(W)
+		check("bblook: totem flyout: the cursor on a totem slot gives full opacity, and the game shows the arrow over the top of the bar",
+			heldAt(W, 1) and K.rectIs(W, ARROW, 721, 582, 28, 18), heldWrites(W) .. " " .. K.rectText(W, ARROW))
+		W.cursor = { 735, 595 }
+		tick(W)
+		check("bblook: totem flyout: the cursor on the arrow, over the top of the bar, keeps every held frame and the arrow at full opacity",
+			heldAt(W, 1) and drawn(W, ARROW) == 1, heldWrites(W) .. " " .. drawn(W, ARROW))
+		-- A click on the arrow opens the flyout on the top of the slot and hides the arrow; the cursor goes up to the top totem.
+		W.totemFlyout(true)
+		W.cursor = { 735, 700 }
+		tick(W)
+		check("bblook: totem flyout: open, with the cursor on its top totem over the bar, every held frame and the flyout are at full opacity",
+			heldAt(W, 1) and K.rectIs(W, FLYOUT, 719, 582, 32, 152) and drawn(W, FLYOUT) == 1, heldWrites(W) .. " " .. K.rectText(W, FLYOUT) .. " " .. drawn(W, FLYOUT))
+		-- A totem picked: the flyout closes under the cursor.
+		W.totemFlyout(false)
+		tick(W)
+		check("bblook: totem flyout: closed, every held frame fades again, and no alpha is ever written on the flyout or the arrow",
+			heldAt(W, 0.3) and writes(W, FLYOUT) == 0 and writes(W, ARROW) == 0 and K.allClean(W), heldWrites(W) .. K.problems(W))
+		local N = shaman({ ["barblock.fadeMouse"] = false })
+		N.cursor = { 735, 595 }
+		N.totemArrow(true)
+		tick(N)
+		check("bblook: totem flyout: with Full opacity under the mouse off the arrow changes nothing", heldAt(N, 0.3), heldWrites(N))
+		N.totemFlyout(true)
+		N.cursor = { 735, 700 }
+		tick(N)
+		check("bblook: totem flyout: but the open flyout gives full opacity, as the spell flyout does", heldAt(N, 1), heldWrites(N))
+		-- An override bar (a vehicle) hides the totem bar and leaves the flyout's own shown flag on (MultiCastActionBarFrame.lua:332-343): the
+		-- flyout is not drawn until the bar is back.
+		N.totemShown(false)
+		N.flush()
+		N.run(0.6)
+		N.flush()
+		check("bblook: totem flyout: a flyout left open when the game hides the totem bar is not drawn and keeps nothing at full", heldAt(N, 0.3) and K.allClean(N),
+			heldWrites(N) .. K.problems(N))
+		N.totemShown(true)
+		N.flush()
+		N.run(0.6)
+		N.flush()
+		check("bblook: totem flyout: back with the bar, it gives full opacity again", heldAt(N, 1) and K.allClean(N), heldWrites(N) .. K.problems(N))
+		local S = shaman()
+		S.totemFlyout(true)
+		S.rawOf[S.env[FLYOUT]].IsVisible = function()
+			return SECRET
+		end
+		S.cursor = { 735, 700 }
+		tick(S)
+		check("bblook: totem flyout: a withheld answer counts as closed and nothing raises", heldAt(S, 0.3) and K.allClean(S), heldWrites(S) .. K.problems(S))
+		-- Left to the game the totem bar is not in the block: the game stacks it over the stance, pet and possess bars, above the block (top 439).
+		local G = shaman({ ["barblock.others"] = "game" })
+		G.totemArrow(true)
+		local left, bottom, width, height = G.rectOf(G.env[ARROW])
+		if left then
+			G.cursor = { left + width / 2, bottom + height - 2 }
+		end
+		tick(G)
+		check("bblook: totem flyout: the cursor on the arrow of a totem bar left to the game, above the block, leaves the block faded",
+			left ~= nil and bottom > 439 and alpha(G, "MainActionBar") == 0.3 and writes(G, TOTEM) == 0 and K.allClean(G), K.rectText(G, ARROW) .. " " .. alpha(G, "MainActionBar"))
 	end
 	do
 		-- Faded opacity, and the page switches at work.
@@ -80562,7 +82166,8 @@ do
 	do
 		-- The reference: the Action bar block, else the bar picked in Blocks hang from; a block that moves takes the blocks with it.
 		local W = world({ ["blocks.classBar"] = "bar6", ["blocks.classPlace"] = "aboveLeft", ["blocks.from"] = "bar2" })
-		check("bxblocks: from: with the Bar block page off the blocks hang from the bar picked", at(W, T.bar6, 375, 185), K.rectText(W, T.bar6))
+		-- Bar 2 is where the game stacks it, in by 22 beside bar 3 (EditModePresetLayoutConstants.lua:20, 27-28).
+		check("bxblocks: from: with the Bar block page off the blocks hang from the bar picked", at(W, T.bar6, 397, 136), K.rectText(W, T.bar6))
 		local S = world({ ["blocks.classBar"] = "bar2", ["blocks.classPlace"] = "aboveLeft", ["blocks.from"] = "bar2" })
 		check("bxblocks: from: the bar blocks hang from is not placed, and the status says nothing of it", not held(S, "MultiBarBottomLeft") and S.status():find("Action bar 2", 1, true) == nil and K.allClean(S), S.status())
 		local B = world({ ["blocks.classBar"] = "bar6", ["blocks.classPlace"] = "aboveLeft", ["blocks.from"] = "bar2", ["barblock.enabled"] = true, ["barblock.others"] = "game" }, nil, nil, T.spot)
@@ -84047,26 +85652,26 @@ do
 			MP.wrong == 0 and MP.count == 6 and MP.faded(W) == 0 and MP.silent(W), row[1] .. " " .. MP.wrong .. " " .. MP.count .. MP.why(W))
 	end
 
-	-- The PvP flag: the icon goes and the word stays.
+	-- The PvP flag: the icon goes and the word stays. Since 1.60.1.70425 the icon is the plate, so these checks have no plate of their own.
 	W.uf.pvp.player, W.uf.pvp.target, W.uf.pvp.party1 = "faction", "faction", "faction"
 	W.blizzard(W.env.PlayerFrame_UpdatePvPStatus)
 	W.blizzard(function() T.frame:CheckFaction() end)
 	W.blizzard(function() M.frame:UpdatePvPStatus() end)
 	MP.row = FH.kindRow(W, P.frame)
-	check("ms-ufpart: with every row at its default the plate and the icon are the game's and the word is in the row", MP.a(W, P.pvp) == 1 and MP.a(W, P.pvpIcon) == 1 and MP.a(W, M.pvpIcon) == 1
-		and MP.row.flag.shown, tostring(MP.a(W, P.pvp)))
+	check("ms-ufpart: with every row at its default the icon is the game's and the word is in the row", MP.a(W, P.pvpIcon) == 1 and MP.a(W, M.pvpIcon) == 1
+		and MP.row.flag.shown, tostring(MP.a(W, P.pvpIcon)))
 	W.change("unitframes.pvpIcon", false)
-	check("ms-ufpart: PvP icon off with the flag Both makes the plate and the icon of the player, target and party frames transparent and keeps the word", MP.a(W, P.pvp) == 0
-		and MP.a(W, P.pvpIcon) == 0 and MP.a(W, T.pvpIcon) == 0 and MP.a(W, M.pvpIcon) == 0 and MP.row.flag.shown and MP.row.flag.text == "PvP", tostring(MP.row.flag.text))
+	check("ms-ufpart: PvP icon off with the flag Both makes the icon of the player, target and party frames transparent and keeps the word", MP.a(W, P.pvpIcon) == 0
+		and MP.a(W, T.pvpIcon) == 0 and MP.a(W, M.pvpIcon) == 0 and MP.row.flag.shown and MP.row.flag.text == "PvP", tostring(MP.row.flag.text))
 	FH.pvp(W, "unitframes.pvpFlag", "icon")
-	check("ms-ufpart: and with the flag Icon on the portrait it leaves nothing", MP.a(W, P.pvp) == 0 and MP.a(W, P.pvpIcon) == 0 and not MP.row.flag.shown)
+	check("ms-ufpart: and with the flag Icon on the portrait it leaves nothing", MP.a(W, P.pvpIcon) == 0 and not MP.row.flag.shown)
 	FH.pvp(W, "unitframes.pvpFlag", "word")
-	check("ms-ufpart: and with the flag Word in the name row it is the word alone, as before", MP.a(W, P.pvp) == 0 and MP.row.flag.shown)
+	check("ms-ufpart: and with the flag Word in the name row it is the word alone, as before", MP.a(W, P.pvpIcon) == 0 and MP.row.flag.shown)
 	FH.pvp(W, "unitframes.pvpFlag", "off")
-	check("ms-ufpart: and Off is off", MP.a(W, P.pvp) == 0 and not MP.row.flag.shown and MP.a(W, M.pvpIcon) == 0)
+	check("ms-ufpart: and Off is off", MP.a(W, P.pvpIcon) == 0 and not MP.row.flag.shown and MP.a(W, M.pvpIcon) == 0)
 	FH.pvp(W, "unitframes.pvpFlag", "both")
 	W.change("unitframes.pvpIcon", true)
-	check("ms-ufpart: PvP icon on again gives the game's plate, icon and the word", MP.a(W, P.pvp) == 1 and MP.a(W, P.pvpIcon) == 1 and MP.a(W, M.pvpIcon) == 1 and MP.row.flag.shown and MP.silent(W), MP.why(W))
+	check("ms-ufpart: PvP icon on again gives the game's icon and the word", MP.a(W, P.pvpIcon) == 1 and MP.a(W, M.pvpIcon) == 1 and MP.row.flag.shown and MP.silent(W), MP.why(W))
 	W.change("unitframes.pvpIcon", false)
 	W.change("unitframes.target", false)
 	check("ms-ufpart: a frame that is not restyled keeps the game's PvP icon whatever the row says", MP.a(W, T.pvpIcon) == 1 and MP.a(W, P.pvpIcon) == 0, tostring(MP.a(W, T.pvpIcon)))
@@ -84074,10 +85679,10 @@ do
 	W.change("unitframes.pvpIcon", true)
 	W.change("unitframes.squarePortrait", false)
 	W.change("unitframes.pvpIcon", false)
-	check("ms-ufpart: PvP icon off hides the game's icon on a frame that shows the game's portrait as well", MP.a(W, P.pvp) == 0 and MP.a(W, P.pvpIcon) == 0)
+	check("ms-ufpart: PvP icon off hides the game's icon on a frame that shows the game's portrait as well", MP.a(W, P.pvpIcon) == 0)
 	W.change("unitframes.pvpIcon", true)
 	W.change("unitframes.squarePortrait", true)
-	check("ms-ufpart: and gives it back", MP.a(W, P.pvp) == 1 and MP.a(W, P.pvpIcon) == 1)
+	check("ms-ufpart: and gives it back", MP.a(W, P.pvpIcon) == 1)
 	W.uf.pvp.player, W.uf.pvp.target, W.uf.pvp.party1 = nil, nil, nil
 	W.blizzard(W.env.PlayerFrame_UpdatePvPStatus)
 
@@ -90093,7 +91698,8 @@ do
 		H.diel = raw[H.cluster].DielFrame
 		H.btn = {}
 		H.btn.Tracking = H.tracking
-		-- The game's Tracking and IndicatorFrame take no mouse themselves: their children do (Minimap.xml:74-93, 105, 160).
+		-- The game's Tracking and IndicatorFrame take no mouse themselves: their children do (Blizzard_Minimap/Mainline/Minimap.xml:39-43,
+		-- Camelot/MinimapIndicatorFrameTemplate.xml:12, Camelot/MinimapMailFrameTemplate.xml:3).
 		raw[H.tracking].GetAlpha = function() return raw[H.tracking].alpha end
 		local function mouseOn(frame)
 			local fr = raw[frame]
@@ -90103,10 +91709,11 @@ do
 			return frame
 		end
 		H.mice = { Tracking = { mouseOn(raw[H.tracking].Button) } }
-		local mail, crafting = M.button(W), M.button(W)
-		H.btn.IndicatorFrame = W.B(nil, { MailFrame = mail, CraftingOrderFrame = crafting })
+		-- Forever's IndicatorFrame has only MailFrame since 1.60.1.70425 (Blizzard_Minimap/Camelot/MinimapIndicatorFrameTemplate.xml:3-18); CraftingOrderFrame is gone.
+		local mail = M.button(W)
+		H.btn.IndicatorFrame = W.B(nil, { MailFrame = mail })
 		raw[H.btn.IndicatorFrame].GetAlpha = function() return raw[H.btn.IndicatorFrame].alpha end
-		H.mice.IndicatorFrame = { mail, crafting }
+		H.mice.IndicatorFrame = { mail }
 		raw[H.cluster].IndicatorFrame = H.btn.IndicatorFrame
 		for _, name in ipairs({ "GameTimeFrame", "TimeManagerClockButton", "AddonCompartmentFrame" }) do
 			H.btn[name] = M.button(W, { protected = more.protect == name })
@@ -92990,20 +94597,24 @@ do
 			local timer = s.timer
 			local inner = s.inner
 			local function colour(out) return out and { 1, 0.1, 0.1 } or { 1, 1, 1 } end
+			-- As 70790 has them: IsOutOfRange is false in Edit Mode and while a swing is in progress, and ClearSwingTimer and ResetSwingTimer end with
+			-- ApplyRangePresentation (Blizzard_SwingTimer.lua:306-359, 379-390, 425-448).
 			inner.ApplyRangePresentation = function(self)
-				local out = inner.isOutOfRange == true
+				local out = inner.isOutOfRange == true and inner.isInEditMode ~= true and inner.swingDuration == nil
 				s.bar:SetAlpha(out and 0.4 or 1)
 				local c = colour(out)
 				typeLabel:SetTextColor(c[1], c[2], c[3])
 				timeLabel:SetTextColor(c[1], c[2], c[3])
 			end
 			inner.ClearSwingTimer = function(self)
-				inner.swingEndTime = nil
+				inner.swingDuration, inner.swingEndTime = nil, nil
 				s.pip:Hide()
+				inner.ApplyRangePresentation(self)
 			end
 			inner.ResetSwingTimer = function(self, duration)
-				inner.swingEndTime = W.now + duration
+				inner.swingDuration, inner.swingEndTime = duration, W.now + duration
 				s.pip:Show()
+				inner.ApplyRangePresentation(self)
 			end
 			inner.InitializeBarPresentation = function(self)
 				s.pipRaw.points = { { "RIGHT", s.fill, "RIGHT", 0, 0 } }
@@ -93538,7 +95149,8 @@ do
 		local m = T.msSwing[FH.SWING[1]]
 		m.inner.isInEditMode = true
 		M.swRange(T, m, true)
-		check("ms-cast: a timer in Edit Mode is in range and keeps the game's alpha", m.s.barRaw.alpha == 0.4, m.s.barRaw.alpha)
+		-- The game shows a timer in Edit Mode as in range, at full alpha (Blizzard_SwingTimer.lua:379-382), which the simulated client now does too.
+		check("ms-cast: a timer in Edit Mode is in range and keeps the game's alpha", m.s.barRaw.alpha == 1, m.s.barRaw.alpha)
 		local G = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.textOwn"] = true } } }, function(Y)
 			M.dress(Y)
 			Y.env.RED_FONT_COLOR = { GetRGB = function() return 1, 0, 0 end }
@@ -97011,12 +98623,25 @@ do
 			return c:Evaluate(share)
 		end
 		env.UnitExists = function(unit) return T.exists[unit] ~= false end
-		-- The hidden status bar of the feature test: the base world makes frames only, so a bar is a frame that takes the colour.
+		-- The hidden status bar of the feature test: the base world makes frames only, so a bar is a frame that takes the colour. As on build 70790,
+		-- the colour the curve gives is withheld, and a status bar with no texture refuses it ("Object did not allow secret." in the live client);
+		-- with a texture it takes it. T.noTexture makes SetStatusBarTexture fail.
 		local create = env.CreateFrame
 		env.CreateFrame = function(kind, name, parent, template)
 			if kind == "StatusBar" and name == nil and parent == nil and template == nil then
 				local frame = create("Frame")
-				W.rawOf[frame].SetStatusBarColor = function(_, r, g, b) T.probed = { r, g, b } end
+				local raw = W.rawOf[frame]
+				raw.SetStatusBarTexture = function(_, file)
+					if T.noTexture then error("SetStatusBarTexture failed", 0) end
+					if type(file) ~= "string" then bad(W, "SetStatusBarTexture: a file is expected") end
+					raw.barTexture = file
+				end
+				raw.SetStatusBarColor = function(_, r, g, b)
+					if raw.barTexture == nil then
+						error("Object did not allow secret.", 0)
+					end
+					T.probed = { r, g, b }
+				end
 				return frame
 			end
 			local frame = create(kind, name, parent, template)
@@ -97246,6 +98871,15 @@ do
 		clean(W, "ms-late defaults")
 	end
 
+	-- Build 70790: without a texture on its hidden bar the feature test fails with the live error, and the status says refused with that error.
+	do
+		local W = L.pworld()
+		W.L.noTexture = true
+		L.set(W, "nameplates.healthByLeft", true)
+		check("ms-late: a hidden bar that takes no texture fails the feature test, and the status says refused", has(W.status(), "Health curve: refused")
+			and W.L.probed == nil, W.status())
+	end
+
 	-- Colour health bars by health left, on a plate.
 	do
 		local W = L.pworld()
@@ -97257,6 +98891,8 @@ do
 		L.set(W, "nameplates.healthByLeft", true)
 		check("ms-late: the first try goes through the curve on the player's health, and a plate at half health has the colour at half health", T.calls[1] == "player"
 			and L.is(a.colour, hr, hg, hb) and has(W.status(), "Health curve: works"), L.show(a.colour) .. " " .. tostring(T.calls[1]) .. W.status())
+		-- Build 70790: a status bar with no texture refuses the withheld colour, so the hidden bar of the feature test has a texture.
+		check("ms-late: the hidden bar of the feature test has a texture and took the colour", T.probed ~= nil, W.status())
 		T.health.nameplate1 = 1
 		L.game(W, a)
 		check("ms-late: the game's call answers with the colour at full health, in the same call", L.is(a.colour, fr, fg, fb) and a.gameSets == 1, L.show(a.colour) .. " " .. a.gameSets)
@@ -97909,21 +99545,33 @@ do
 			s.barRaw.SetReverseFill = function(_, v) s.barRaw.reverse = v end
 			s.barRaw.GetReverseFill = function() return s.barRaw.reverse end
 			local inner = s.inner
+			-- As 70790 has them (Blizzard_SwingTimer.lua:306-359, 379-390, 425-448): no out of range look in Edit Mode or while a swing is in
+			-- progress, and the look is set again when a swing starts or ends.
 			inner.ApplyRangePresentation = function()
-				s.bar:SetAlpha(inner.isOutOfRange == true and 0.4 or 1)
+				local out = inner.isOutOfRange == true and inner.isInEditMode ~= true and inner.swingDuration == nil
+				s.bar:SetAlpha(out and 0.4 or 1)
+				local c = out and { 1, 0.1, 0.1 } or { 1, 1, 1 }
+				typeLabel:SetTextColor(c[1], c[2], c[3])
+				timeLabel:SetTextColor(c[1], c[2], c[3])
 			end
-			inner.ClearSwingTimer = function()
-				inner.swingEndTime = nil
+			inner.ClearSwingTimer = function(self)
+				inner.swingDuration, inner.swingEndTime = nil, nil
 				s.pip:Hide()
+				inner.ApplyRangePresentation(self)
 			end
-			inner.ResetSwingTimer = function(_, duration)
-				inner.swingEndTime = W.now + duration
+			inner.ResetSwingTimer = function(self, duration)
+				inner.swingDuration, inner.swingEndTime = duration, W.now + duration
 				s.pip:Show()
+				inner.ApplyRangePresentation(self)
+			end
+			-- UpdateFrameState from UNIT_INVENTORY_CHANGED of the player (Blizzard_SwingTimer.lua:157-163, 292-299): the range look is set again.
+			inner.UpdateFrameState = function(self)
+				inner.ApplyRangePresentation(self)
 			end
 			inner.InitializeBarPresentation = function()
 				s.pipRaw.points = { { "RIGHT", s.fill, "RIGHT", 0, 0 } }
 			end
-			W.hbSwing[name] = { s = s, timer = s.timer, inner = inner }
+			W.hbSwing[name] = { s = s, timer = s.timer, inner = inner, typeRaw = typeRaw, timeRaw = timeRaw }
 		end
 	end
 	function HB.wrapped(W, object, names)
@@ -98025,7 +99673,8 @@ do
 
 	for _, value in ipairs({ "0", "2" }) do
 		local options = { ["castbars.flat"] = false, ["swing.rangeAlpha"] = 70, ["swing.idle"] = "hide", ["swing.reverse"] = true }
-		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show" } } }, HB.dress)
+		-- The game's own look: the Auto Shot window off too, since on (the default) it hears a ranged swing and attack speed.
+		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show", ["swing.autoShot"] = false } } }, HB.dress)
 		local W = FH.world({ saved = { options = options } }, function(Y)
 			HB.dress(Y)
 			Y.cvars.taintLog = value
@@ -98081,7 +99730,8 @@ do
 		m.inner.isInEditMode = true
 		W.blizzard(function() m.timer:ApplyRangePresentation() end)
 		W.frame(1)
-		check("hkbars: swing timers, taintLog " .. value .. ": Edit Mode open: a timer in Edit Mode keeps the game's opacity", near(m.s.barRaw.alpha, 0.4), m.s.barRaw.alpha)
+		-- The game shows a timer in Edit Mode as in range (Blizzard_SwingTimer.lua:379-382), which the simulated client now does too.
+		check("hkbars: swing timers, taintLog " .. value .. ": Edit Mode open: a timer in Edit Mode keeps the game's opacity", near(m.s.barRaw.alpha, 1), m.s.barRaw.alpha)
 		m.inner.isInEditMode = false
 		W.blizzard(function() m.inner.isOutOfRange = true m.timer:ApplyRangePresentation() end)
 		W.frame(1)
@@ -98091,6 +99741,66 @@ do
 		W.change("swing.enabled", false)
 		check("hkbars: swing timers, taintLog " .. value .. ": the module off gives the game's look back", near(m.s.barRaw.alpha, 0.4) and m.s.barRaw.shown == true)
 		check("hkbars: swing timers, taintLog " .. value .. ": nothing was hooked on the way", W.hooks == base.hooks and HB.quiet(W), table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
+	end
+
+	-- Since 70532 the out of range look waits for a swing in progress to end, and the game sets the look again when a swing starts and ends, the end
+	-- coming from its OnUpdate with no event (Blizzard_SwingTimer.lua:310-325, 340-370, 379-390). Since 70707 UNIT_INVENTORY_CHANGED of the player
+	-- sets it again too (Blizzard_SwingTimer.lua:10-13, 157-163). The bar is shown at all times here, so nothing else makes a frame look.
+	do
+		local options = { ["castbars.flat"] = false, ["swing.idle"] = "show", ["swing.rangeAlpha"] = 20, ["swing.textOwn"] = true,
+			["swing.textColour"] = "ff336699", ["swing.rangeTextColour"] = "ff102030" }
+		local base = FH.world({ saved = { options = { ["castbars.flat"] = false, ["swing.idle"] = "show" } } }, HB.dress)
+		local W = FH.world({ saved = { options = options } }, HB.dress)
+		local m = W.hbSwing[FH.SWING[1]]
+		local inColour, outColour = FH.hex("ff336699"), FH.hex("ff102030")
+		local function look(alpha, colour)
+			return near(m.s.barRaw.alpha, alpha) and FH.rgb(m.typeRaw.textColour) == colour and FH.rgb(m.timeRaw.textColour) == colour
+		end
+		local function why()
+			return tostring(m.s.barRaw.alpha) .. " " .. FH.rgb(m.typeRaw.textColour) .. " " .. FH.rgb(m.timeRaw.textColour)
+		end
+		W.blizzard(function() m.inner.isOutOfRange = true m.timer:ApplyRangePresentation() end)
+		W.fire("PLAYER_SWING_RANGE_UPDATE", 0, false, true)
+		W.tick()
+		check("hkbars: swing range: out of range with no swing, the row's opacity and range colour", look(0.2, outColour), why())
+		W.blizzard(function() m.timer:ResetSwingTimer(2) end)
+		W.fire("PLAYER_SWING", 2, 0)
+		W.tick()
+		check("hkbars: swing range: a swing starts out of range: the bar keeps full opacity and the in range colour, as the game shows it", look(1, inColour), why())
+		check("hkbars: swing range: and a frame looks for the end of the swing", FH.polling(W))
+		W.blizzard(function() m.inner.isOutOfRange = false m.timer:ApplyRangePresentation() end)
+		W.fire("PLAYER_SWING_RANGE_UPDATE", 0, true, true)
+		W.tick()
+		W.blizzard(function() m.inner.isOutOfRange = true m.timer:ApplyRangePresentation() end)
+		W.fire("PLAYER_SWING_RANGE_UPDATE", 0, false, true)
+		W.tick()
+		check("hkbars: swing range: the target leaves range during the swing: the look waits for the swing to end", look(1, inColour), why())
+		W.blizzard(function() m.timer:ClearSwingTimer() end)
+		check("hkbars: swing range: the game's own look at the end of the swing", look(0.4, "1.000,0.100,0.100"), why())
+		W.frame(1)
+		check("hkbars: swing range: on the next frame, with no event, the row's opacity and range colour", look(0.2, outColour), why())
+		check("hkbars: swing range: and nothing runs every frame any more", not FH.polling(W))
+		-- Other modules hear the event too, so the frames that hear it are counted.
+		local function hearers(X)
+			local n = 0
+			for _, frame in ipairs(X.eventFrames) do
+				if frame.events.UNIT_INVENTORY_CHANGED == true then
+					n = n + 1
+				end
+			end
+			return n
+		end
+		check("hkbars: swing range: UNIT_INVENTORY_CHANGED is heard for the player when a swing row is not the game's", hearers(W) == hearers(base) + 1, hearers(W) .. " " .. hearers(base))
+		W.blizzard(function() m.inner.isOutOfRange = false m.timer:UpdateFrameState() end)
+		W.fire("UNIT_INVENTORY_CHANGED", "player")
+		W.tick()
+		check("hkbars: swing range: back in range after a change of gear, the in range colour", look(1, inColour), why())
+		W.blizzard(function() m.inner.isOutOfRange = true m.timer:UpdateFrameState() end)
+		check("hkbars: swing range: the game's own look after a change of gear", look(0.4, "1.000,0.100,0.100"), why())
+		W.fire("UNIT_INVENTORY_CHANGED", "player")
+		W.tick()
+		check("hkbars: swing range: on the next frame after UNIT_INVENTORY_CHANGED the row's look is back", look(0.2, outColour), why())
+		check("hkbars: swing range: no error and nothing hooked", W.hooks == base.hooks and HB.quiet(W), table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
 	end
 end
 -- >>> hkbars (end)
@@ -98890,6 +100600,17 @@ do
 		env.UnitName = function() return "Brennan" end
 		env.RAID_CLASS_COLORS = { MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
 		env.BreakUpLargeNumbers = function(value) return (tostring(value):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")) end
+		-- Since 70707 an enemy plate shows the game's icon of an elite or a rare: the Camelot override that turned it off is gone
+		-- (Camelot/Blizzard_NamePlateFrameOptionsOverrides.lua), and the Rarity icon bit (3) of nameplateInfoDisplay can turn it off
+		-- (Blizzard_NamePlateClassificationFrame.lua:68-75). W.infoBits holds the bits that are on.
+		env.NamePlateEnemyFrameOptions = { showClassificationIndicator = true }
+		W.infoBits = { [1] = true, [3] = true }
+		env.C_CVar.GetCVarBitfield = function(name, index)
+			if type(name) ~= "string" or type(index) ~= "number" then
+				bad(W, "GetCVarBitfield: a name and an index are expected")
+			end
+			return name == "nameplateInfoDisplay" and W.infoBits[index] == true
+		end
 		W.login()
 		return W
 	end
@@ -99357,6 +101078,43 @@ do
 		check("sdplate: and a view the stage names later reaches them all", #seen == 2 * first and seen[#seen] == other and repainted == 2 * count, #seen .. " " .. repainted)
 	end
 
+	-- Since 70707 the game shows its own icon of an elite, a rare or a rare elite at the left end of an enemy plate, as the preview does, unless
+	-- the Rarity icon option of the game is off or the unit has a raid marker (Blizzard_NamePlateClassificationFrame.lua:90-129).
+	do
+		local W = SD.world()
+		local ns = W.ns
+		local function R(x) return W.rawOf[x] end
+		local _, S = SD.show(W, "mock-nameplate-marks")
+		local function icon(id)
+			local r = S.plates[id].rarity and R(S.plates[id].rarity)
+			return r and r.shown and r.atlas or "hidden"
+		end
+		local elite = S.plates.elite.rarity and R(S.plates.elite.rarity) or { points = {} }
+		local at = elite.points[1]
+		check("sdplate: rarity: the elite has the game's gold icon, 20 by 20, right of it at the left end of the bar", icon("elite") == "nameplates-icon-elite-gold" and at and at[1] == "RIGHT"
+			and SD.near(at[4], 0) and SD.near(at[5], S.plates.elite.m.center) and SD.near(elite.width, 20) and SD.near(elite.height, 20), icon("elite"))
+		check("sdplate: rarity: the rare has the star and the boss the gold icon", icon("rare") == "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star" and icon("boss") == "nameplates-icon-elite-gold",
+			icon("rare") .. " " .. icon("boss"))
+		check("sdplate: rarity: a normal unit, a unit with a raid marker and a friendly player have none", icon("target") == "hidden" and icon("marked") == "hidden" and icon("friend") == "hidden")
+		ns.Set("nameplates.raidMarkerX", 5)
+		_, S = SD.show(W, "mock-nameplate-marks")
+		local moved = S.plates.elite.rarity and R(S.plates.elite.rarity).points[1]
+		check("sdplate: rarity: it moves with the offset of the raid marker, whose place it takes", moved and SD.near(moved[4], 5), tostring(moved and moved[4]))
+		ns.Set("nameplates.raidMarkerX", 0)
+		ns.Set("nameplates.enabled", false)
+		_, S = SD.show(W, "mock-nameplate-marks")
+		check("sdplate: rarity: it is the game's own, so it shows with the page off too", icon("elite") == "nameplates-icon-elite-gold")
+		ns.Set("nameplates.enabled", true)
+		W.infoBits[3] = nil
+		_, S = SD.show(W, "mock-nameplate-marks")
+		check("sdplate: rarity: the game's Rarity icon option off hides it", icon("elite") == "hidden" and icon("rare") == "hidden")
+		W.infoBits[3] = true
+		W.env.NamePlateEnemyFrameOptions.showClassificationIndicator = false
+		_, S = SD.show(W, "mock-nameplate-marks")
+		check("sdplate: rarity: a client before 70707, whose enemy plates have no such icon, shows none", icon("elite") == "hidden")
+		check("sdplate: rarity: no error", #W.errors == 0 and #W.violations == 0, table.concat(W.errors, "|") .. table.concat(W.violations, "|"))
+	end
+
 	-- The level box as a square, the class icon at the bar height and the marker moved out past it, as the preview draws them.
 	do
 		local W = SD.world()
@@ -99375,13 +101133,34 @@ do
 		ns.Set("nameplates.levelShape", "game")
 		_, S = SD.show(W, "mock-nameplate")
 		m = S.plates.enemy.m
-		check("squared: sdplate: Game width keeps the game's box and its gap of 5, whatever the gap is", SD.near(m.LW, 22.4) and SD.near(m.HW, m.BW - (22.4 + 5)), ("%s %s"):format(m.LW, m.HW))
+		-- Since 70425 the game's box hangs 5 past the end of the full row, 3 above and 2 below the bar (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8).
+		-- Before 70425 the check was a bar that ended the box width and 5 before the end of the row.
+		T.lvl = R(S.plates.enemy.lvl).points[1]
+		check("squared: sdplate: Game width keeps the game's box and its gap of 5, whatever the gap is", SD.near(m.LW, 22.4) and SD.near(m.HW, m.BW) and SD.near(T.lvl[4], m.BW + 5)
+			and SD.near(m.LH, m.HH + 5) and SD.near(T.lvl[5], m.healthY - 2) and T.lvl[1] == "BOTTOMLEFT", ("%s %s %s %s"):format(m.LW, m.HW, T.lvl[4], m.LH))
 		ns.Set("nameplates.levelShape", "square")
 		ns.Set("nameplates.level", "default")
 		_, S = SD.show(W, "mock-nameplate")
 		m = S.plates.enemy.m
-		check("squared: sdplate: the Default box is the game's whatever the shape is", SD.near(m.LW, 22.4) and SD.near(m.HW, m.BW - (22.4 + 5)), ("%s %s"):format(m.LW, m.HW))
+		check("squared: sdplate: the Default box is the game's whatever the shape is", SD.near(m.LW, 22.4) and SD.near(m.HW, m.BW) and SD.near(R(S.plates.enemy.lvl).points[1][4], m.BW + 5),
+			("%s %s"):format(m.LW, m.HW))
+		-- A class icon on the right goes after the game's box, which hangs past the row, and after the row with the square box or a hidden one.
+		ns.Set("nameplates.classPosition", "right")
+		_, S = SD.show(W, "mock-nameplate-marks")
+		local pm = S.plates.player.m
+		T.at = R(S.plates.player.iconFrame).points[1]
+		check("squared: sdplate: with the Default box a class icon on the right starts after the box", T.at[1] == "LEFT" and SD.near(T.at[4], pm.BW + 5 + pm.LW) and pm.levelOut == true,
+			("%s %s"):format(tostring(T.at[4]), pm.BW))
+		ns.Set("nameplates.level", "hidden")
+		_, S = SD.show(W, "mock-nameplate-marks")
+		pm = S.plates.player.m
+		check("squared: sdplate: with a hidden box it starts after the row", SD.near(R(S.plates.player.iconFrame).points[1][4], pm.BW), tostring(R(S.plates.player.iconFrame).points[1][4]))
 		ns.Set("nameplates.level", "box")
+		_, S = SD.show(W, "mock-nameplate-marks")
+		pm = S.plates.player.m
+		check("squared: sdplate: with the square box it starts after the row, where the box ends", SD.near(R(S.plates.player.iconFrame).points[1][4], pm.BW) and pm.levelOut == false,
+			tostring(R(S.plates.player.iconFrame).points[1][4]))
+		ns.Set("nameplates.classPosition", "left")
 		ns.Set("nameplates.levelGap", 0)
 
 		-- The class icon: the bar height or Custom, and the gap on each side.
@@ -100524,6 +102303,8 @@ do
 		{ 27, "swing.spark", true, false, "swing.flat" },
 		{ 27, "swing.textShadow", false, true, "swing.flat" },
 		{ 27, "swing.reverse", false, true },
+		{ 27, "swing.autoShot", true, false },
+		{ 27, "swing.autoShotColour", "ffe04848", "ffff00ff", "swing.autoShot" },
 		{ 27, "swing.rangeAlpha", 40, 100 },
 		{ 27, "swing.idle", "combat", "show" },
 		{ 27, "swing.textSize", 100, 200 },
@@ -100694,7 +102475,7 @@ do
 		end
 		check("sdcast: " .. id .. " has no violation, error or message", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
 	end
-	check("sdcast: 82 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 82 and L.changed == 82, L.changed .. " of " .. L.total)
+	check("sdcast: 84 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 84 and L.changed == 84, L.changed .. " of " .. L.total)
 
 	-- Every frame, texture and text the drawings made is the addon's own.
 	for _, id in ipairs({ "mock-cast-bar", "mock-resource", "mock-swing" }) do
@@ -101254,6 +103035,9 @@ do
 	local m = draw("mock-minimap")
 	check("sdhud: the round minimap has its fill masked, and the ring and the north pointer are off with Hide minimap ring and header on",
 		#m.fill.maskList == 1 and m.ringTexture.shown == false and m.north.shown == false and m.disc.shown == true, #m.fill.maskList)
+	-- Since 70425 the tracking button's plate is its StateTexture, which also draws the glyph, and Hud.lua leaves it to the game.
+	check("sdhud: with Hide minimap ring and header on the zone band loses the grey game look and the tracking button keeps it",
+		m.header.rim.shown == false and m.tracking.rim.shown == true, tostring(m.header.rim.shown) .. " " .. tostring(m.tracking.rim.shown))
 	ns.Set("hud.shape", "square")
 	m = draw("mock-minimap")
 	check("sdhud: a square minimap has no mask and no disc, and its border is the four edges of the map", #m.fill.maskList == 0 and m.disc.shown == false
@@ -105775,7 +107559,9 @@ do
 		W.ns.Set("actionbars.sweepOwn", false)
 		K.step(W)
 		for _, call in ipairs(spy.calls) do if call[1] == "SetSwipeColor" then alpha = call end end
-		check("abstate: Own sweep opacity off puts the game's opacity back", near(alpha[5], 1))
+		-- The game's opacity is the template's 0.64 (ActionButtonTemplate.xml:116-118), which Camelot keeps after a cast animation too
+		-- (ActionButton.lua:1843-1844, Camelot/ActionButtonOverrides.lua:1-3); this check read 1 before.
+		check("abstate: Own sweep opacity off puts the game's opacity back", near(alpha[5], 0.64), alpha and tostring(alpha[5]))
 		local names = { small = "NumberFontNormalSmall", normal = "NumberFontNormal", large = "NumberFontNormalLarge", huge = "NumberFontNormalHuge" }
 		local bad = {}
 		for choice, font in pairs(names) do
@@ -108649,6 +110435,14 @@ do
 		check("ownlook: the sweep rows are set on the cooldown of a button of Flat UI's own", cd.drawSwipe == false and cd.swipeColour ~= nil and near(cd.swipeColour[4], 0.5) and cd.font == "NumberFontNormalLarge",
 			tostring(cd.drawSwipe) .. tostring(cd.font))
 		check("ownlook: on a button of bar 2 too", W.rawOf[L.button(W, 2, 5).cooldown].cd.drawSwipe == false)
+		W.ns.Set("actionbars.sweepOwn", false)
+		W.advance(0)
+		W.advance(0)
+		check("ownlook: Own sweep opacity off gives the cooldown of a button of Flat UI's own the template's black at 0.64", cd.swipeColour ~= nil and cd.swipeColour[1] == 0
+			and near(cd.swipeColour[4], 0.64), cd.swipeColour and tostring(cd.swipeColour[4]))
+		W.ns.Set("actionbars.sweepOwn", true)
+		W.advance(0)
+		W.advance(0)
 		check("ownlook: the buttons are painted again after a change of those rows", W.S.repaints >= 1)
 		local before = W.S.repaints
 		W.ns.ButtonStatesChanged("actionbars.sweep")

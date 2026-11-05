@@ -527,6 +527,8 @@ ns.SETUP_STEPS = {
 		{ "swing.spark", "r", "mock-swing" },
 		{ "swing.textShadow", "r", "mock-swing" },
 		{ "swing.reverse", "o", "mock-swing" },
+		{ "swing.autoShot", "c", "mock-swing" },
+		{ "swing.autoShotColour", "r", "mock-swing" },
 		{ "swing.rangeAlpha", "r", "mock-swing" },
 		{ "swing.idle", "o", "mock-swing" },
 		{ "swing.textSize", "o", "mock-swing" },
@@ -599,6 +601,7 @@ ns.SETUP_STEPS = {
 		{ "hud.micro", "c", "mock-xp-micro" },
 		{ "general.menuButton", "o", "behaviour", "Puts a Flat UI button in the game menu, under Options. It does not work in combat." },
 		{ "general.menuOpens", "o", "behaviour", "Chooses whether the game menu button opens Flat UI setup or the options window." },
+		{ "general.questSparkle", "o", "behaviour", "Makes quest items in the world sparkle, a game setting that the game's options do not show." },
 	} },
 	{ id = "hud-tracker", area = "Minimap and buffs", title = "Objectives, loot and alerts", draw = "mock-objective", built = true, rows = {
 		{ "hud.trackerHeaders", "c", "mock-objective" },

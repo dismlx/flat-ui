@@ -89,6 +89,8 @@ local function Tint(bar, unit)
 end
 
 -- The feature test: the player's health through the curve, onto a hidden status bar. It is tried again only when asked to, from a refresh.
+-- The colour the curve gives is withheld, and a status bar with no texture refuses a withheld colour ("Object did not allow secret.", seen on
+-- build 70790), while one with a texture takes it. Every bar this file tints has a texture, so the hidden bar gets one too.
 local function Probe(again)
 	if state.works or (state.probed and not again) then
 		return state.works
@@ -99,6 +101,10 @@ local function Probe(again)
 			state.hidden = CreateFrame("StatusBar")
 			ns.Own[state.hidden] = true
 			state.hidden:Hide()
+		end
+		if not state.textured then
+			state.hidden:SetStatusBarTexture(WHITE)
+			state.textured = true
 		end
 		Tint(state.hidden, "player")
 	end)

@@ -93,8 +93,10 @@ local function Home(bar)
 	return nil
 end
 
--- The space between the two bars in units: the two edges of the borders (each ns.Pixels(bar, thickness) outside its bar), and at least the game's own
--- 1 unit (Mainline/PlayerFrame.lua:707-727). At about 2 pixels per unit and a border of 1 pixel this is that 1 unit.
+-- The space between the two bars in units: the two edges of the borders (each ns.Pixels(bar, thickness) outside its bar), and at least 1 unit. The
+-- game's own layout has none: the 15 unit slot of the health bar ends where the power bar starts, and the health bar, 20 units tall from 3 above the
+-- top of the slot, hangs 2 units over the power bar (Camelot/PlayerFrame.lua:79-84, 94-96). At about 2 pixels per unit and a border of 1 pixel
+-- this is that 1 unit.
 local function Gap(power)
 	local thickness = ns.Get("general.thickness")
 	return math.max(1, ns.Pixels(power, 2 * thickness))
@@ -112,8 +114,8 @@ end
 
 -- Hangs the power bar of the player frame from the bottom of the health bar while the look is on, and gives the game's point back when it is off. Both
 -- bars are protected, so the point is written in a secure snippet and never in combat. The game writes the point again with each art
--- (Mainline/PlayerFrame.lua:621, 727), and this runs after that and before the picture is sized from the bars: the point it finds that is not its own is
--- the game's, kept for giving back.
+-- (Mainline/PlayerFrame.lua:599, 671 call Camelot/PlayerFrame.lua:96), and this runs after that and before the picture is sized from the bars: the
+-- point it finds that is not its own is the game's, kept for giving back.
 local function Hang(rec)
 	if rec.kind ~= "player" then
 		return

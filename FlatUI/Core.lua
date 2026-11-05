@@ -2134,6 +2134,10 @@ function ns.StatusLines()
 	if scale then
 		lines[#lines + 1] = scale
 	end
+	local sparkle = ns.SparkleStatus and ns.SparkleStatus()
+	if sparkle then
+		lines[#lines + 1] = sparkle
+	end
 	for _, line in ipairs(ns.SetupStatus and ns.SetupStatus() or {}) do
 		lines[#lines + 1] = line
 	end
@@ -2440,6 +2444,9 @@ local function Apply(wasSpots)
 	Settle()
 	if loggedIn and ns.ScaleChanged then
 		ns.ScaleChanged("general.scale")
+	end
+	if loggedIn and ns.SparkleChanged then
+		ns.SparkleChanged("general.questSparkle")
 	end
 	if ns.NotifyOption then
 		for path in pairs(defs) do
@@ -3117,6 +3124,21 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		end
 		if ns.SetupLogin then
 			local ok, err = pcall(ns.SetupLogin)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end
+		-- Quest item sparkle is written at every login (Sparkle.lua).
+		if ns.SparkleChanged then
+			local ok, err = pcall(ns.SparkleChanged)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end
+	elseif event == "CVAR_UPDATE" then
+		-- A graphics preset puts the quest item sparkle variable back (Sparkle.lua).
+		if loggedIn and ns.SparkleCVar then
+			local ok, err = pcall(ns.SparkleCVar, ...)
 			if not ok then
 				geterrorhandler()(err)
 			end
