@@ -12,17 +12,17 @@ The group loads for hunters only. It sits under the centre of the screen; drag t
 
 ## What it shows
 
-**Auto Shot ring.** A hollow ring fills clockwise up to your next Auto Shot. It is nearly full in the last 0.5 s, the window in which the shot goes off without a clip as long as you stand still and are not casting. The timing comes from the client's own swing timer (`PLAYER_SWING`), with `UNIT_SPELLCAST_SUCCEEDED` for Auto Shot as a backup.
+**Auto Shot ring.** A hollow ring fills clockwise and is full at the moment you must stop moving: 0.6 s before the shot (the 0.5 s wind-up plus 0.1 s for latency). Keep moving until the ring closes, then stand still until the shot fires. The timing comes from the client's own swing timer (`PLAYER_SWING`), with `UNIT_SPELLCAST_SUCCEEDED` for Auto Shot as a backup.
 
 | Ring colour | Text under the ring | Meaning |
 | --- | --- | --- |
 | Blue | Auto Shot | The swing is running. |
-| Yellow | Auto Shot | The last 0.5 s before the shot. Stand still. |
-| Orange | STOP MOVING | You are moving in that last 0.5 s, so the shot is held back. |
+| Yellow | STAND STILL | The ring is full: the shot is in its wind-up. |
+| Orange | STOP MOVING | You are moving in the wind-up, so the shot is held back. |
 | Red | CLIPPING | A cast you started ends after the shot was due. |
 | Red | CLIPPED (cast) +0.42s | The last shot fired 0.42 s late. The text says why: a cast, moving, or just DELAYED. It shows for 2 s and plays a sound. |
 
-The seconds to the shot are inside the ring.
+The seconds until you must stand still are inside the ring.
 
 **Range text**, above the ring. It shows MELEE, DEAD ZONE, IN RANGE or OUT OF RANGE for an enemy target.
 - Melee range and shot range come from the client's weapon range checks (`C_SwingTimer.IsTargetWithinSwingRange`).
@@ -34,7 +34,7 @@ The seconds to the shot are inside the ring.
 ## Settings
 
 Open the aura, then **Actions > On Init**:
-- **Auto Shot:** `tolerance` sets how late a shot can be before it counts as a clip (0.15 s by default). Also `maxLate`, `windup`, `flash` and `sound`.
+- **Auto Shot:** `tolerance` sets how late a shot can be before it counts as a clip (0.15 s by default). `windup` and `lead` set where the ring ends (0.5 + 0.1 s before the shot). Also `maxLate`, `flash` and `sound`.
 - **Range:** `deadMax` and `farMin` set the yard limits.
 
 ## Rebuild
