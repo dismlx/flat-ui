@@ -116,7 +116,11 @@ local MINE = { cast = 1.5, shots = { [75] = true, [2480] = true, [7918] = true, 
 	plainEvents = { "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT", "START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL", "PLAYER_ENTERING_WORLD" } }
 local mine = { castUntil = -1, castAt = 0, on = false, deaf = false, chan = false, swing = false, shoot = false, aura = {}, heard = 0, blind = 0, left = 0, kept = 0,
 	unheard = 0, off = false, last = nil, castSlots = {}, castTaken = -1, hand = { main = -math.huge, off = -math.huge }, shotAt = -math.huge, shotEnd = -math.huge, auraSlots = {}, swingAt = -math.huge, extraUsed = false,
-	castIcons = {}, healUntil = -1, nextUntil = -1, nextAt = -math.huge, trace = false }
+	castIcons = {}, healUntil = -1, nextUntil = -1, nextAt = -math.huge, trace = false,
+	crowd = setmetatable({}, { __mode = "k" }), nextPair = -1 }
+-- How long a target counts as hit by others after a physical hit on it was left out: its extra attack slot stays closed meanwhile. In the open
+-- world players who are not in your group hit the same enemy, and a swing of theirs right after yours looks like an extra attack.
+MINE.crowd = 10
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -1936,10 +1940,17 @@ local function PetOut()
 	return not (ok and Plain(there, "boolean") and not there)
 end
 
+-- True while a physical hit on this target was left out in the last MINE.crowd seconds: someone else is hitting it.
+local function Crowded(key, now)
+	local at = key ~= nil and mine.crowd[key] or nil
+	return at ~= nil and now - at <= MINE.crowd
+end
+
 -- Takes the slot of a hand for a white hit, then the extra attack slot, which opens for MINE.extra seconds after a hand slot is taken and
--- takes one hit. The extra slot is closed with a pet out, in a group, with Extra attacks Off, while a cast slot is open (an instant strike) and while a harmful aura of yours is on the enemy (a bleed tick looks the same). Returns "swing slot" or "extra slot" when
--- it took one, and true when a hand was busy.
-local function TakeSwing(now, unit)
+-- takes one hit. The extra slot is closed with a pet out, in a group, with Extra attacks Off, while a cast slot is open (an instant strike), while a harmful aura of yours is on the enemy (a bleed tick looks the same)
+-- and while others hit the target (Crowded). Returns "swing slot" or "extra slot" when it took one, and true when a hand was busy. key is the plate, or the unit
+-- without one.
+local function TakeSwing(now, unit, key)
 	local main, off = Speeds(UnitAttackSpeed, true)
 	if TakeWeapon(main, mine.hand.main, now) then
 		mine.hand.main, mine.swingAt, mine.extraUsed = now, now, false
@@ -1947,7 +1958,8 @@ local function TakeSwing(now, unit)
 	elseif off and TakeWeapon(off, mine.hand.off, now) then
 		mine.hand.off, mine.swingAt, mine.extraUsed = now, now, false
 		return "swing slot", false
-	elseif Opt("extra") == "plain" and not mine.extraUsed and now - mine.swingAt <= MINE.extra and not InGroup() and not PetOut() and not (mine.castSlots[1] and mine.castSlots[1] >= now) and AuraListFree(unit) then
+	elseif Opt("extra") == "plain" and not mine.extraUsed and now - mine.swingAt <= MINE.extra and not InGroup() and not PetOut() and not (mine.castSlots[1] and mine.castSlots[1] >= now)
+		and not Crowded(key, now) and AuraListFree(unit) then
 		mine.extraUsed = true
 		return "extra slot", false
 	end
@@ -1958,10 +1970,14 @@ end
 -- physical hit during auto-attack tries a swing slot first and a non-critical hit tries an aura slot next, so that a cast slot stays for the
 -- spell hit it was made for, which can be critical. The cast slot is the fallback for every hit. A next melee ability (Maul, Heroic Strike,
 -- Cleave, Raptor Strike) opens a next-swing slot that only the physical hit takes, and a word right after that hit (word is true) is the swing it
--- replaced and is left out. Returns true, the slot taken and the icon of the action (nil for none, by Spell icons).
-local function MineOne(plate, unit, school, flag, word)
+-- replaced and is left out. From build 70755 the game withholds the amount (blind is true for a WOUND whose amount is withheld), so the report of
+-- the swing it replaced, a hit of 0, cannot be told from the hit and may come first: the slot takes the next physical report within MINE.extra
+-- seconds as well ("next swing too", with no icon or name) unless others hit the target, and the client writes the one of 0 as nothing
+-- (ns.CombatWithheld). A physical hit left out marks its target as hit by others for MINE.crowd seconds. Returns true, the slot taken and the icon of the action (nil for none, by Spell icons).
+local function MineOne(plate, unit, school, flag, word, blind)
 	local now = GetTime()
 	local why, taken, swingTried, auraTried, icon
+	local key = plate or unit
 	if plate == Plate("target") then
 		-- In this mode castUntil is set only by the end of a channel.
 		if mine.chan or now <= mine.castUntil then
@@ -1971,11 +1987,15 @@ local function MineOne(plate, unit, school, flag, word)
 		elseif not word and now <= mine.nextUntil and Plain(school, "number") and school == 1 then
 			mine.nextUntil, mine.nextAt = -1, now
 			mine.hand.main, mine.swingAt, mine.extraUsed = now, now, true
+			mine.nextPair = blind and now + MINE.extra or -1
 			why = "next swing"
+		elseif blind and now <= mine.nextPair and Plain(school, "number") and school == 1 and not Crowded(key, now) then
+			mine.nextPair = -1
+			why = "next swing too"
 		else
 			if mine.swing and not (mine.shoot or now <= mine.shotEnd) and Plain(school, "number") and school == 1 then
 				swingTried = true
-				why, taken = TakeSwing(now, unit)
+				why, taken = TakeSwing(now, unit, key)
 			end
 			if not why and Plain(flag, "string") and flag ~= "CRITICAL" then
 				auraTried = true
@@ -2008,7 +2028,7 @@ local function MineOne(plate, unit, school, flag, word)
 				elseif mine.swing and not swingTried then
 					if Plain(school, "number") then
 						if school == 1 then
-							why, taken = TakeSwing(now, unit)
+							why, taken = TakeSwing(now, unit, key)
 						end
 					else
 						mine.blind = mine.blind + 1
@@ -2049,6 +2069,9 @@ local function MineOne(plate, unit, school, flag, word)
 	end
 	mine.left = mine.left + 1
 	mine.last = taken and "left out (slot taken)" or "left out (no cast or swing seen)"
+	if key ~= nil and Plain(school, "number") and school == 1 then
+		mine.crowd[key] = now
+	end
 	return false
 end
 
@@ -2063,6 +2086,7 @@ local function OnSignal(_, event, unit, _, spellID)
 		mine.healUntil, mine.nextUntil, mine.nextAt, mine.nextName = -1, -1, -math.huge, nil
 		mine.hand, mine.shotAt, mine.shotEnd = { main = -math.huge, off = -math.huge }, -math.huge, -math.huge
 		mine.swingAt, mine.extraUsed = -math.huge, false
+		mine.crowd, mine.nextPair = setmetatable({}, { __mode = "k" }), -1
 		if was ~= mine.off then
 			pcall(Sync)
 		end
@@ -2210,7 +2234,7 @@ local function Counts(plate, unit, school, flag, word, event, amount)
 			end
 		end
 		if not (mine.off or (Opt("units") == "target" and plate ~= Plate("target"))) then
-			keep, why, icon = (whose == "one" and MineOne or Mine)(plate, unit, school, flag, word)
+			keep, why, icon = (whose == "one" and MineOne or Mine)(plate, unit, school, flag, word, event == "WOUND" and ns.IsSecret(amount))
 			decision = mine.last
 		else
 			decision = "left out (estimate off or not the target)"
@@ -2233,7 +2257,7 @@ end
 -- school gives the colour, except that Physical ability hits Yellow makes a physical hit of a spell or special attack yellow. Without the school
 -- colours, Physical ability hits White makes a physical hit of one white. Next melee ability names After the number gives the name.
 local function Ability(why, school, r, g, b)
-	local spell = why == "cast slot" or why == "next swing" or why == "channel"
+	local spell = why == "cast slot" or why == "next swing" or why == "next swing too" or why == "channel"
 	if not (spell or why == "swing slot" or why == "extra slot" or why == "shot slot") then
 		return r, g, b
 	end

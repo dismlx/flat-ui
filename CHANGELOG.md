@@ -4,6 +4,8 @@
 - **Quest item sparkle** is new on the **Flat UI** page, under **World**, and on by default: quest items in the world sparkle. It sets the game's `outlineModeShowLootEffectWhenDisabled`, which Forever's options do not show, at login and again a second after a graphics preset puts it back. Nothing is written in combat. Turned off, the game's own value is back from the next game start. `/flatui status` says whether the game kept it.
 - **Combat text**: from build 70755 the game no longer tells addons the amount of a hit. The game now writes each number itself, so a full absorb or resist shows only its word, a full block shows **Block**, and a hit, heal or gain of nothing shows no number, as before. Numbers of a thousand or more have no thousands separator, because the game gives no grouped text for an amount it keeps hidden. A miss that comes as a hit of nothing with no kind shows nothing.
 - `/flatui status` no longer counts hit amounts the game would not tell: it now withholds every one.
+- **Combat text**, **Whose hits** at **One hit for each of yours**: a next melee ability (Maul, Heroic Strike, Cleave, Raptor Strike) no longer shows as 0. The game reports the swing it replaced as a hit of 0 that can no longer be told from the hit, and it can come first: both now take the ability's slot, the hit shows its number and the 0 shows nothing.
+- **Combat text**, **Extra attacks**: a hit of another player right after your swing no longer shows as your **(Extra attack)** when you are not in a group. A physical hit that is not yours marks its enemy as hit by others, and the extra attack slot stays closed on that enemy for 10 seconds.
 
 ## 0.5.3
 

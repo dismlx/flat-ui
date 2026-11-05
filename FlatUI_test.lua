@@ -12433,10 +12433,20 @@ do
 			T.xf = C.hit(T.X2, "nameplate1", "WOUND", "", 412, 1)
 			check("extra: one swing at 100.0 gives its slot and one extra hit at 100.2, and a third hit is left out", T.x == "412,412 (Extra attack),none", T.x)
 			check("extra: the extra hit is white and the last decision names the extra slot", C.colour(T.xf):match("^1,1,1") ~= nil and has(T.X2.slash("combat"), "Last hit: yours (extra slot)."), C.colour(T.xf))
+			-- The hit at 100.5 is left out, which marks the enemy as hit by others for 10 seconds (MINE.crowd): the next swing comes after that.
 			T.X3 = T.world()
 			T.X3.fire("PLAYER_ENTER_COMBAT")
-			T.x = T.at(T.X3, { 100.0, 100.5, 101.7, 101.8, 101.9 })
+			T.x = T.at(T.X3, { 100.0, 100.5, 111.7, 111.8, 111.9 })
 			check("extra: the slot is closed after 0.4 seconds, a new swing slot opens it again, and it takes one hit", T.x == "412,none,412,412 (Extra attack),none", T.x)
+			-- Others hit the enemy: a physical hit left out keeps its extra slot closed for 10 seconds, so a hit of someone else right after your
+			-- swing is not labelled as your extra attack.
+			T.X17 = T.world()
+			T.X17.fire("PLAYER_ENTER_COMBAT")
+			T.x = T.at(T.X17, { 100.0, 100.5, 101.7, 101.8 })
+			check("extra: after a physical hit was left out the extra slot stays closed on that enemy", T.x == "412,none,412,none" and has(T.X17.slash("combat"), "Last hit: left out"), T.x)
+			-- The hit at 101.8 was left out too, so the slot opens again after 111.8.
+			T.x = T.at(T.X17, { 112.0, 112.2 })
+			check("extra: and opens again 10 seconds after the last hit left out", T.x == "412,412 (Extra attack)", T.x)
 			T.X4 = T.world()
 			T.X4.attack = { 2.0, 1.5 }
 			T.X4.fire("PLAYER_ENTER_COMBAT")
@@ -12849,19 +12859,48 @@ do
 				M.zl = M.last(M.Z)
 				M.z[2] = M.hit(M.Z, 100.2, "", 0)
 				M.z[3] = M.hit(M.Z, 100.25, "", 0, 1, "MISS")
+				-- Build 70790 withholds the amount: the swing Maul replaced (a hit of 0 at 100.2) takes the slot with the hit and draws nothing, with no icon.
 				check("msbt maul: Maul then its hit and a Miss 0.1 s later shows one yellow number with the Maul icon and leaves the Miss out", M.z[1] ~= nil and M.z[1].text == "312" and C.colour(M.z[1]) == "1,1,0"
-					and M.file(M.Z, M.z[1]) == 135 and M.zl == "yours (next swing)." and M.z[2] == nil and M.z[3] == nil and M.last(M.Z) == "left out (slot taken).", tostring(M.zl) .. " " .. tostring(M.last(M.Z)))
+					and M.file(M.Z, M.z[1]) == 135 and M.zl == "yours (next swing)." and M.z[2] ~= nil and M.z[2].text == "" and M.file(M.Z, M.z[2]) == "none" and M.z[3] == nil
+					and M.last(M.Z) == "left out (slot taken).", tostring(M.zl) .. " " .. tostring(M.last(M.Z)))
 				M.Y = M.world()
 				M.Y.fire("PLAYER_ENTER_COMBAT")
 				M.Y.auras.target = 1
 				M.cast(M.Y, 6807)
 				M.y = { M.hit(M.Y, 100.1), M.hit(M.Y, 100.2, "", 0, 1, "MISS") }
 				check("msbt maul: with a debuff of yours on the enemy the Miss after the Maul hit takes no aura slot", M.y[1] ~= nil and M.y[2] == nil and M.last(M.Y) == "left out (slot taken).", tostring(M.last(M.Y)))
+				-- A client that tells the amount (before build 70755): the second hit is not 0, so it is not the swing Maul replaced.
 				M.Xa = M.world()
+				M.Xa.opts.plainCombat = true
 				M.Xa.fire("PLAYER_ENTER_COMBAT")
 				M.cast(M.Xa, 6807)
 				M.xa = { M.hit(M.Xa, 100.1), M.hit(M.Xa, 100.3) }
 				check("msbt maul: no extra slot opens after the Maul hit with no cast slot open", M.xa[1] ~= nil and M.xa[2] == nil, tostring(M.xa[2]))
+				-- Build 70790 withholds the amount: the game's report of the swing Maul replaced, a hit of 0, cannot be told from the hit, and it may
+				-- come first. The next-swing slot takes both: the hit shows its number in yellow, and the 0 draws nothing. The icon goes with the first.
+				M.Xb = M.world()
+				M.Xb.fire("PLAYER_ENTER_COMBAT")
+				M.cast(M.Xb, 6807)
+				M.xb = { M.hit(M.Xb, 100.1), M.hit(M.Xb, 100.3, "", 0) }
+				check("msbt maul 70790: the Maul hit is 312 in yellow with its icon, and the swing it replaced draws nothing and has no icon",
+					M.xb[1] ~= nil and M.xb[1].text == "312" and C.colour(M.xb[1]) == "1,1,0" and M.file(M.Xb, M.xb[1]) == 135
+					and M.xb[2] ~= nil and M.xb[2].text == "" and M.file(M.Xb, M.xb[2]) == "none" and M.last(M.Xb) == "yours (next swing too).",
+					tostring(M.xb[1] and M.xb[1].text) .. "|" .. tostring(M.xb[2] and M.xb[2].text) .. "|" .. tostring(M.file(M.Xb, M.xb[1])) .. "|" .. tostring(M.file(M.Xb, M.xb[2])))
+				M.Xc = M.world()
+				M.Xc.fire("PLAYER_ENTER_COMBAT")
+				M.cast(M.Xc, 6807)
+				M.xc = { M.hit(M.Xc, 100.1, "", 0), M.hit(M.Xc, 100.3) }
+				check("msbt maul 70790: when the 0 comes first it draws nothing, and the Maul hit after it still shows 312 in yellow",
+					M.xc[1] ~= nil and M.xc[1].text == "" and M.xc[2] ~= nil and M.xc[2].text == "312" and C.colour(M.xc[2]) == "1,1,0", tostring(M.xc[2] and M.xc[2].text))
+				-- On an enemy others hit, the slot takes one report only: a second one may be theirs.
+				M.Xd = M.world()
+				M.Xd.fire("PLAYER_ENTER_COMBAT")
+				M.xd0 = table.concat({ tostring(M.hit(M.Xd, 98.0) ~= nil), tostring(M.hit(M.Xd, 98.1) ~= nil), tostring(M.hit(M.Xd, 98.2) ~= nil) }, ",")
+				M.Xd.now = 100.0
+				M.cast(M.Xd, 6807)
+				M.xd = { M.hit(M.Xd, 100.1), M.hit(M.Xd, 100.3) }
+				check("msbt maul 70790: on an enemy others hit, a second report after the Maul hit is left out", M.xd[1] ~= nil and M.xd[1].text == "312" and M.xd[2] == nil,
+					M.xd0 .. " " .. tostring(M.last(M.Xd)))
 				M.Sa = M.world()
 				M.Sa.fire("PLAYER_ENTER_COMBAT")
 				M.cast(M.Sa, 6807)
@@ -62016,7 +62055,7 @@ function PT.runBuild()
 		local step = nav[3].bottom - nav[4].bottom
 		check("left side: a line and a gap between the fixed rows and the first group", nav[4].text == "Move frames" and nav[5].text == "Look" and gap > step + 5, g(gap) .. " " .. g(step))
 		check("left side: the first page is open, with its title and Reset page", PT.title(W) == PAGES[1].label and PT.button(W, "Reset page") ~= nil)
-		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Options window", "Setup" }),
+		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Options window", "Setup" }),
 			joined(PT.headers(W)))
 		PT.go(W, "Text")
 		check("left side: a click on a tab opens it under the title of its module, with its sections under the module", PT.title(W) == "Nameplates" and PT.page(W, "Level") ~= nil and PT.page(W, "Borders and backgrounds") == nil)
@@ -65757,7 +65796,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 901 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 902 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -66071,7 +66110,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 901 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 902 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -69074,7 +69113,7 @@ function PT.runCards()
 			end
 		end
 		check("cards: a section is a panel as tall as its header and rows, 12 below the one before", ok and near(W.rectOf(panels[1]) - sl, 16, 0.01), #panels .. " " .. #counts)
-		check("cards: the headers are the sections, as before", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "Options window", "Setup" }), joined(PT.headers(W)))
+		check("cards: the headers are the sections, as before", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Options window", "Setup" }), joined(PT.headers(W)))
 		check("cards: a row stands 32 in from the column", near(W.rectOf(PT.shownRows(W)[1]) - sl, 32, 0.01))
 
 		-- The count at the right of a header.
@@ -69102,7 +69141,7 @@ function PT.runCards()
 		ns.Set("panel.sections", "lines")
 		local lscroll = PT.right(W)
 		check("lines: the same headers, no panel, no count, and a row stands 16 in from the column", #backs(W) == 0 and #heads(W) == 0 and changedTotal(W) == 0
-			and near(W.rectOf(PT.shownRows(W)[1]) - W.rectOf(lscroll), 16, 0.01) and joined(PT.headers(W)) == "Borders and backgrounds, Bars, Game action bars, Game menu, Scale, Options window, Setup", joined(PT.headers(W)))
+			and near(W.rectOf(PT.shownRows(W)[1]) - W.rectOf(lscroll), 16, 0.01) and joined(PT.headers(W)) == "Borders and backgrounds, Bars, Game action bars, Game menu, Scale, World, Options window, Setup", joined(PT.headers(W)))
 		ns.Set("panel.sections", "cards")
 		check("lines: and Cards puts the panels back", #backs(W) == #counts and #heads(W) == #counts)
 
