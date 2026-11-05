@@ -1265,7 +1265,7 @@ Kind("dropdown", "dropdowns", "inputs",
 	end)
 
 -- Since 70425 the fill is drawn inside FillArea, a child frame 6 units in from each side of the bar, and sized on its width
--- (Blizzard_SharedXML/Camelot/ProgressBars/ColoredProgressBar.xml:5-13, 19-21, ColoredProgressBar.lua:33), so the box goes round FillArea
+-- (Blizzard_SharedXML/Camelot/ProgressBars/ColoredProgressBar.xml:5-13, 19-24, ColoredProgressBar.lua:33), so the box goes round FillArea
 -- and the fill starts and ends with it. A bar without FillArea, as in the older clients, has the box across the whole bar.
 Kind("bar", "progress bars", "bars",
 	function(frame, own)
@@ -1859,8 +1859,8 @@ end
 
 -- The bag windows are shown with a direct Show and make their item slots when they update their items.
 -- The game also sets the colour of their flat background each time a bag opens. ContainerFrame_GenerateFrame makes the slots, sets the
--- background and updates the items of a bag it opens (ContainerFrame.lua:1293-1312), and ContainerFrame_UpdateAll updates the items of every
--- open bag (:1267-1271), so a bag is looked at a frame after either, after BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED, and when it is shown.
+-- background and updates the items of a bag it opens (ContainerFrame.lua:1296-1315), and ContainerFrame_UpdateAll updates the items of every
+-- open bag (:1270-1273), so a bag is looked at a frame after either, after BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED, and when it is shown.
 Watch.bags = setmetatable({}, { __mode = "k" })
 
 function Watch.BagChanged(root)
@@ -1975,10 +1975,10 @@ local function InspectExtras(root, group)
 	end
 end
 
--- Since 70707 the game sets the alpha of the overlay over the race pictures each time the character page or the inspect page is shown,
--- also when the player only changes tabs inside an open window and no ShowUIPanel follows (Camelot/PaperDollFrame.lua:3367-3391, called at
--- PaperDollFrame.lua:1522 and Blizzard_InspectUI/Mainline/InspectPaperDollFrame.lua:102). The alpha it set is the one given back when the
--- pictures come back, and the overlay is faded again at once, so it does not show for a frame.
+-- Since 70707 the game sets the alpha of the overlay over the race pictures, by the unit's race, each time the character page or the inspect
+-- page is shown (Camelot/PaperDollFrame.lua:3367-3391, called at PaperDollFrame.lua:1522 and Blizzard_InspectUI/Mainline/InspectPaperDollFrame.lua:102),
+-- also when the player only changes tabs inside an open window and no ShowUIPanel follows (CharacterFrame.lua:106-121, Camelot/Blizzard_InspectUI.lua:154-162).
+-- The alpha it set is the one given back when the pictures come back, and the overlay is faded again at once, so it does not show for a frame.
 function Watch.RaceBackground(model)
 	if model == nil or ns.IsSecret(model) or type(model) ~= "table" or ns.Forbidden(model) or not ns.Enabled(KEY) then
 		return
@@ -2042,8 +2042,8 @@ end
 -- the sweep leaves alone. bare: the window has no box of its own. solid: the fill ignores the window opacity.
 local WINDOWS = {
 	{ name = "CharacterFrame", title = "Character", group = "character", special = CharacterExtras,
-		-- The rock strip across the top of the left pane is a frame of PaperDollFrame's own (Camelot/PaperDollFrame.xml:556-571). The level
-		-- text in front of it has no background any more (:573-605); the older clients drew one.
+		-- The rock strip across the top of the left pane is a frame of PaperDollFrame's own (Camelot/PaperDollFrame.xml:556-573). The level
+		-- text in front of it has no background any more (:575-607); the older clients drew one.
 		strip = { "CharacterFrame.LeftPaneHost", { "CharacterFrame.RightPaneHost", 1 }, "PaperDollFrame.TopBackgroundStripHost", "PaperDollLevelInfo",
 			"CharacterStatsPaneScrollBox", "CharacterStatsPanePetScrollBox" } },
 	{ name = "LFGParentFrame", title = "Looking For Group", group = "groupfinder", addon = "Blizzard_GroupFinder_VanillaStyle", special = GroupFinderExtras,

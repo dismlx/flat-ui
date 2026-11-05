@@ -4309,7 +4309,7 @@ local function newWorld(opts)
 		return box
 	end
 
-	-- ColoredProgressBarTemplate as 70790 has it (Blizzard_SharedXML/Camelot/ProgressBars/ColoredProgressBar.xml:5-13, 19-21, ColoredProgressBar.lua:11-35):
+	-- ColoredProgressBarTemplate as 70790 has it (Blizzard_SharedXML/Camelot/ProgressBars/ColoredProgressBar.xml:5-13, 19-24, ColoredProgressBar.lua:11-36):
 	-- the fill is anchored LEFT to FillArea, a child frame 6 units in from each side, and sized on FillArea's width. A fill of width 0 is hidden,
 	-- which OnLoad's SetFillPercent(0) does. noFillArea: the template before 70425, with the fill on the bar's own left edge and its width.
 	local function progressBar(parent, key, name, noFillArea)
@@ -4534,11 +4534,12 @@ local function newWorld(opts)
 		model.BackgroundBotRight:SetTexture(texture .. 4)
 		model.BackgroundOverlay:SetAlpha(OVERLAY_ALPHA[file:upper()] or 0.85)
 	end
-	-- A page of a window is shown by the game: its OnShow, then the scripts the addon hooked on it, run only when it was hidden.
+	-- A page of a window is shown by the game. Its OnShow, then the scripts the addon hooked on it, run only when that makes the page visible:
+	-- a page shown in a closed window runs them when the window opens (W.win.onPanelShow).
 	function W.win.showPage(page, onShow)
-		local was = raw(page).shown
+		local was = raw(page).IsVisible()
 		page:Show()
-		if not was then
+		if not was and raw(page).IsVisible() then
 			if onShow then
 				onShow()
 			end
@@ -4608,14 +4609,14 @@ local function newWorld(opts)
 		raw(tr.states.Highlight).file = "Interface\\Buttons\\UI-Common-MouseHilight"
 		cr.rightPaneCollapsed = false
 
-		-- CharacterFrame.lua:125-130, 306-347.
+		-- CharacterFrame.lua:263-265, 279-337.
 		cr.IsRightPaneCollapsed = luaMethod("IsRightPaneCollapsed", function() return cr.rightPaneCollapsed == true end)
 		cr.UpdateRightPaneToggleButton = luaMethod("UpdateRightPaneToggleButton", function()
 			local collapsed = cr.IsRightPaneCollapsed()
 			raw(tr.states.Normal):SetTexture(collapsed and "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up" or "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
 			raw(tr.states.Pushed):SetTexture(collapsed and "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Down" or "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Down")
 		end)
-		-- SetShown of the pane runs its OnShow or OnHide when it changes, and the hooks of those scripts run after the game's (CharacterFrame.lua:306-320).
+		-- SetShown of the pane runs its OnShow or OnHide when it changes, and the hooks of those scripts run after the game's (CharacterFrame.lua:294-309).
 		cr.RefreshRightPane = luaMethod("RefreshRightPane", function()
 			local want, was = not cr.IsRightPaneCollapsed(), raw(right).shown
 			raw(right).shown = want
@@ -4626,7 +4627,7 @@ local function newWorld(opts)
 		end)
 		cr.SetRightPaneCollapsed = luaMethod("SetRightPaneCollapsed", function(_, collapsed)
 			if (cr.IsRightPaneCollapsed() and true or false) == (collapsed and true or false) then
-				return -- CharacterFrame.lua:292-294
+				return -- CharacterFrame.lua:280-282
 			end
 			cr.rightPaneCollapsed = collapsed
 			cf:RefreshRightPane()
@@ -4668,7 +4669,7 @@ local function newWorld(opts)
 			wstate(tab, "Checked", "UI-Character-Info-StatTab-Selected")
 		end
 		-- The rock strip across the top of the left pane, and the level text in front of it with no background of its own: one for the player
-		-- and a hidden one for the pet (Camelot/PaperDollFrame.xml:556-605, since 70291; the level ribbon CharacterLevelTextBackground went then).
+		-- and a hidden one for the pet (Camelot/PaperDollFrame.xml:556-607, since 70291; the level ribbon CharacterLevelTextBackground went then).
 		local strip = wframe(doll, "TopBackgroundStripHost", { height = 36 })
 		raw(strip).points = { { "TOPLEFT", left, "TOPLEFT", 0, 0 }, { "TOPRIGHT", left, "TOPRIGHT", 0, 0 } }
 		local rock = wtex(strip, "TopBackgroundStrip", nil, { layer = "ARTWORK" })
@@ -4739,7 +4740,7 @@ local function newWorld(opts)
 		progressBar(skills, nil, "SkillBar1")
 
 		-- PaperDollFrame_OnShow (Camelot/PaperDollFrame.lua:1511-1522): what it does to the race pictures. It runs when the window opens on the
-		-- character page, and on every change back to that page inside the open window, with no ShowUIPanel (CharacterFrame.lua:3-28, 106-121).
+		-- character page, and on every change back to that page inside the open window, with no ShowUIPanel (CharacterFrame.lua:3-30, 106-121).
 		local function dollShown()
 			env.SetPaperDollBackground(env.CharacterModelScene, "player")
 		end
@@ -4759,7 +4760,7 @@ local function newWorld(opts)
 				W.fireScript(doll, "OnShow")
 			end
 		end
-		-- ToggleCharacter(tab) with the window open on another page (CharacterFrame.lua:3-28).
+		-- ToggleCharacter(tab) with the window open on another page: ShowSubFrame, then RefreshDisplay (CharacterFrame.lua:3-30).
 		function W.win.toggleCharacter(frameName)
 			W.blizzard(function()
 				cf:ShowSubFrame(frameName)
@@ -5650,7 +5651,7 @@ local function newWorld(opts)
 		end
 		raw(inspect).unit = "target"
 		-- InspectPaperDollFrameMixin:OnShow (Mainline/InspectPaperDollFrame.lua:81-107): the race pictures of the inspected unit. It runs when the
-		-- window opens on the character page and on every change back to it (Camelot/Blizzard_InspectUI.lua:41-49, 154-162).
+		-- window opens on the character page and on every change back to it (Camelot/Blizzard_InspectUI.lua:41-50, 154-162).
 		local function inspectDollShown()
 			env.SetPaperDollBackground(model, raw(inspect).unit)
 		end
@@ -5695,8 +5696,8 @@ local function newWorld(opts)
 		-- Blizzard_ChatFrame/Mainline/ChatConfigFrame.xml:365-376: a dialog with a Border and a Header.
 		local chat = dialog("ChatConfigFrame", 745, 605)
 		panelButton(chat, nil, "ChatConfigFrameDefaultButton", 100, 22)
-		-- The boards Forever loads since 70707 (Blizzard_PVPMatch.toc: [Game]\PVPMatchScoreboard.xml and [Game]\PVPMatchResults.xml for camelot):
-		-- Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:5-80 and Camelot/PVPMatchResults.xml:5-141. A close button with no name (ClosePanelButton on
+		-- The boards Forever loads since 70707, when the toc gave the shared files to standard alone and the Camelot ones to camelot (Blizzard_PVPMatch.toc:10-18):
+		-- Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:5-122 and Camelot/PVPMatchResults.xml:5-150. A close button with no name (ClosePanelButton on
 		-- the scoreboard, CloseButton on the results), a header, a NineSlice of layout ButtonFrameTemplateNoPortrait, and a content frame whose art
 		-- has no key: the Stat-BG, on the results a scroll line, and in its header frame a stone band. The results have a leave button, a
 		-- SharedButtonTemplate three-slice in a frame of its own below the content; the scoreboard has none.
@@ -5726,7 +5727,7 @@ local function newWorld(opts)
 				threeSlice(buttons, "leaveButton", nil, "128-RedButton")
 			end
 		end
-		-- The stable, loaded at startup (Blizzard_StableUI/Camelot/Blizzard_StableUI.xml:3-292, since 70425): a PortraitFrameTemplate window with
+		-- The stable, loaded at startup (Blizzard_StableUI.toc:1-6 has no LoadOnDemand; Camelot/Blizzard_StableUI.xml:3-297, since 70425): a PortraitFrameTemplate window with
 		-- two bands that both take the key Background (the second keeps it, so both are only among the regions), a border across the bottom,
 		-- a pet model, the pet's experience bar, three pet slots, a buy button, and two frames over it that each draw a divider.
 		local stable = portraitFrame(env.UIParent, nil, { name = "PetStableFrame", hidden = true, width = 384, height = 522 }, "textured")
@@ -22415,7 +22416,7 @@ do
 	clean(W, "sidebar tab without a ring")
 end
 
--- 43c. Side tabs when the right pane closes or opens: RefreshDisplay gives every mode tab icon 50 (CharacterFrame.lua:300-301, 265-271, 217-229)
+-- 43c. Side tabs when the right pane closes or opens: RefreshDisplay gives every mode tab icon 50 (CharacterFrame.lua:288-289, 253-259, 205-217)
 -- and the tabs are sized again on the next frame.
 do
 	local T = {}
@@ -22818,11 +22819,11 @@ do
 	W.login()
 	W.flush()
 	local own = wboxes(W, old)
-	check("progress bar without FillArea: the box is across the bar itself", wraw(W, old).FillArea == nil and #own == 1 and own[1].points[1][2] == old and own[1].points[2][2] == old
+	check("older progress bar: with no inner track the box goes across the whole bar", wraw(W, old).FillArea == nil and #own == 1 and own[1].points[1][2] == old and own[1].points[2][2] == old
 		and own[1].points[1][4] == 0 and own[1].points[2][4] == 0 and own[1].height == 15)
 	W.blizzard(function() old:SetFillPercent(0.5) end)
-	check("progress bar without FillArea: the fill is a share of the bar's width", wraw(W, wraw(W, old).Fill).width == 80)
-	clean(W, "progress bar without FillArea")
+	check("older progress bar: the fill is a share of the whole bar's width, as the box is", wraw(W, wraw(W, old).Fill).width == 80)
+	clean(W, "older progress bar")
 end
 
 do
@@ -60920,7 +60921,7 @@ do
 	-- Windows that were not listed.
 	local ach, chat, board, results, manager = wraw(W, N.AchievementFrame), wraw(W, N.ChatConfigFrame), wraw(W, N.PVPMatchScoreboard), wraw(W, N.PVPMatchResults),
 		wraw(W, N.CompactRaidFrameManager)
-	-- The scoreboard and the match results as Forever has them since 70707 (Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:5-80, Camelot/PVPMatchResults.xml:5-141):
+	-- The scoreboard and the match results as Forever has them since 70707 (Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:5-122, Camelot/PVPMatchResults.xml:5-150):
 	-- a NineSlice, art with no key on the content (the board's background, and the scroll line of the results), and the stone band in the header frame
 	-- of the content. The old boards' keyed Background and inset corner, and their leave button with a name, are gone.
 	local function art(frame, index) return g(wa(W, wraw(W, frame).regions[index])) end
