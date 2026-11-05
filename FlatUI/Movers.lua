@@ -169,7 +169,9 @@ local LIST = {
 	{ name = "StanceBar", label = "Stance bar", kind = "hud", system = true, stack = true },
 	{ name = "PetActionBar", label = "Pet bar", kind = "hud", system = true, stack = true },
 	{ name = "PossessActionBar", label = "Possess bar", kind = "hud", system = true, stack = true },
-	{ name = "MultiCastActionBarFrame", label = "Totem bar", kind = "hud", system = true },
+	-- The totem bar is the last bar of the game's bottom stack (EditModeUtil.lua:21), 30 in from the main bar (EditModePresetLayouts.lua:776), and each
+	-- time it is shown or hidden the game runs its bottom bar pass (MultiCastActionBarFrame.lua:332-338).
+	{ name = "MultiCastActionBarFrame", label = "Totem bar", kind = "hud", system = true, stack = true },
 	{ name = "MainMenuBarVehicleLeaveButton", label = "Leave vehicle button", kind = "hud", system = true, stack = true },
 	{ name = "MainStatusTrackingBarContainer", label = "Game's experience bar", kind = "hud", system = true, stack = true },
 	{ name = "SecondaryStatusTrackingBarContainer", label = "Game's second status bar", kind = "hud", system = true, stack = true },
@@ -312,7 +314,7 @@ win.scaleHooked, win.showHooked, win.guards = setmetatable({}, { __mode = "k" })
 -- frame, by name, with the first module in order winning. state: placed, waiting or refused, by name.
 local hold = { owners = {}, by = {}, state = {}, order = { "barblock", "blocks" } }
 -- The game's action bars, its two status bars and the frames its bottom bar layout hangs from (the micro menu and the bag bar, which the main bar is
--- anchored to: EditModePresetLayoutConstants.lua:5-8 and :46, and the leave vehicle button, EditModeUtil.lua:10-19). A click on an action button runs the game's own code on these frames and reads what the game
+-- anchored to: EditModePresetLayoutConstants.lua:5-8 and :46, and the bars of the bottom stack, EditModeUtil.lua:11-22, the leave vehicle button and the totem bar last). A click on an action button runs the game's own code on these frames and reads what the game
 -- laid out in them; a call of this addon that placed, scaled or laid one out, or that ran inside the game's pass over them, left the click refused
 -- (UseAction, ADDON_ACTION_FORBIDDEN, SecureTemplates.lua:357). While Leave the game's action bars alone is on, nothing here places, holds, puts back,
 -- queues a layout spot for or offers a handle for one of them, and the game's bottom bar pass is not watched. Their saved spots stay in the profile and are not used.
@@ -1196,9 +1198,11 @@ local function Check()
 end
 
 -- Edit Mode's bottom bar pass puts every shown bar of the stack that is still flagged as in its default position back on its spot in the stack
--- (EditModeManager.lua:692-706), and a mover drop never clears that flag (EditModeSystemTemplates.lua:882-883). The pass runs at each edge of a fight
--- (ActionBar.lua:266-267, :285-287, :374), at each show, switch or fade of a status bar (StatusTrackingManager.lua:226-231), and when a layout is
--- applied. Nothing is hooked: the game announces the status bar passes through EventRegistry (StatusTrackingManager.lua:230,
+-- (EditModeManager.lua:692-706), and a mover drop never clears that flag (EditModeSystemTemplates.lua:882-883). The stack is every bar of
+-- EditModeUtil.lua:11-22, the totem bar last, and each has the stack flag in LIST. The pass runs at each edge of a fight (ActionBar.lua:266-267,
+-- :285-287, :374), at each show, switch or fade of a status bar (StatusTrackingManager.lua:226-231), each time the totem bar is shown or hidden,
+-- a vehicle or override bar among the causes (MultiCastActionBarFrame.lua:332-343), and when a layout is applied. Nothing is hooked: the game
+-- announces the status bar and totem bar passes through EventRegistry (StatusTrackingManager.lua:230, MultiCastActionBarFrame.lua:336,
 -- EditModeManager.lua:64), and the fight ending is an event. The bar is placed on the next frame, out of combat, and these returns are not counted.
 function hold.PutBack()
 	hold.passing = false
