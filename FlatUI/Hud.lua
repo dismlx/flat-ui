@@ -825,6 +825,8 @@ end
 
 -- Bag bar -------------------------------------------------------------------------------------
 
+local BAG_MASKS = { "SquareMask", "Mask" }
+
 -- The game gives the highlight its alpha again on every texture update, so it is read before it is faded, and the hover
 -- tint is a picture of the addon's own in the layer the game shows on mouseover.
 local function ApplyBag(button)
@@ -834,7 +836,7 @@ local function ApplyBag(button)
 		if not on or Later(button) then
 			return
 		end
-		rec = { outline = ns.Outline(button, button), masked = true }
+		rec = { outline = ns.Outline(button, button), unmasked = {} }
 		bags[button] = rec
 		ns.Count(KEY)
 	end
@@ -864,12 +866,16 @@ local function ApplyBag(button)
 	if rec.hover then
 		rec.hover:SetShown(on)
 	end
-	local icon, mask = button.icon, button.SquareMask
+	local icon = button.icon
 	if icon ~= nil and not ns.IsSecret(icon) then
-		-- The rounded mask goes with the rounded frame.
-		if mask ~= nil and not ns.IsSecret(mask) and rec.masked ~= not on and icon.RemoveMaskTexture and icon.AddMaskTexture then
-			rec.masked = not on
-			pcall(on and icon.RemoveMaskTexture or icon.AddMaskTexture, icon, mask)
+		-- The rounded masks go with the rounded frame: the SquareMask of the bag template and the Mask every item button has
+		-- (Shared/ItemButtonTemplate.xml:18-19, Shared/ItemButtonTemplate.lua:16-20), which rounds the corners of the icon.
+		for _, key in ipairs(BAG_MASKS) do
+			local mask = button[key]
+			if mask ~= nil and not ns.IsSecret(mask) and (rec.unmasked[key] == true) ~= (on == true) and icon.RemoveMaskTexture and icon.AddMaskTexture then
+				rec.unmasked[key] = on == true
+				pcall(on and icon.RemoveMaskTexture or icon.AddMaskTexture, icon, mask)
+			end
 		end
 		-- An icon drawn from an atlas has the coordinates of the atlas, which a crop would spoil.
 		local ok, atlas = pcall(icon.GetAtlas, icon)

@@ -9,6 +9,8 @@
 - **Combat text**, **Extra attacks**: a hit of another player right after your swing no longer shows as your **(Extra attack)** when you are not in a group. A physical hit that is not yours marks its enemy as hit by others, and the extra attack slot stays closed on that enemy for 10 seconds.
 - **Colour health by health left** and **Low health border** work again. On build 70790 Flat UI's start-up test of the health colour failed on every character, so `/flatui status` said "Health curve: refused": colouring by health left did nothing on the unit frames, the personal resource display and nameplates, and nameplates had no low health border. The game now gives that colour only as a hidden value, and the test bar had no texture to take it.
 - **Nameplates**, **Fading row behind the name**: with **Colour health bars by health left** also on, the row no longer disappears. The game hides a bar's colour once it is tinted by health left, so the row takes the unit's friendly, neutral or hostile colour while it cannot read it.
+- **Bags**: with **Item slots** on, a bag slot that held the empty-slot picture no longer shows the wrong part of an item icon when its quality colour changes. Item slots and **Bag bar buttons** are square again on build 70790, which gave every item button a rounded mask.
+- **Action bars**: turning **Own sweep opacity** off gives the cooldown sweep the game's own opacity back (64 percent) instead of a fully black sweep.
 
 ## 0.5.3
 
