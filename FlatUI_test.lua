@@ -5246,6 +5246,10 @@ local function newWorld(opts)
 		-- ContainerFrameItemButtonMixin:GetBagID (Mainline/ContainerFrame.lua:1845-1847 of 70790).
 		sr.slotId, sr.bagButton = index, true
 		sr.GetBagID = function() return raw(bag).bagID or 0 end
+		-- ContainerFrameMixin:AcquireNewItemButton (Mainline/ContainerFrame.lua:1046-1056 of 70790): the bag keeps its slots in the list Items.
+		local br = raw(bag)
+		br.Items = br.Items or {}
+		br.Items[#br.Items + 1] = slot
 		W.group = was
 		W.seal()
 		return slot
@@ -23779,6 +23783,8 @@ function IP.glow(W)
 	W.group = was
 	W.seal()
 	wraw(W, bag).UpdateItems = function() wraw(W, wraw(W, slot).NewItemTexture).shown = true end
+	-- The bag is open: Flat UI dresses the slots of a bag that is shown, and a closed one when it opens.
+	W.blizzard(function() bag:Show() end)
 end
 function IP.title(S, name) return wraw(S.W, wraw(S.W, wraw(S.W, wN(S, name)).TitleContainer).TitleText) end
 function IP.size(raw) return g(raw.font and raw.font[2] or 12) end
