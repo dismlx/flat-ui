@@ -899,7 +899,7 @@ E.slash.way = function(rest)
 	OnWay(rest)
 end
 E.help[#E.help + 1] = "/flatui way 45 61 - put a pin on your map there; a zone name or #map ID may come first, and clear takes it off"
-E.help[#E.help + 1] = "/way - the same, unless another addon has /way"
+E.help[#E.help + 1] = "/way - the same, while nothing else has taken /way"
 
 -- The part --------------------------------------------------------------------------------------------------------------------------------
 
