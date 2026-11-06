@@ -10319,6 +10319,7 @@ local PAGES = {
 		S("castbars.textSize", "number", 100, "Text size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
 		S("castbars.textOutline", "choice", "game", "Text outline", nil, { choices = MS9.outlines }),
 		S("castbars.textShow", "bool", true, "Spell name"),
+		S("castbars.rank", "bool", false, "Spell rank on the player bar", "After the spell name, as Fireball (Rank 5): the rank you cast, not the highest you know.", { needs = "castbars.textShow" }),
 		S("castbars.textAlign", "choice", "game", "Spell name alignment", nil, { choices = MS9.aligns }),
 		S("castbars.textOwn", "bool", false, "Own spell name colour"),
 		S("castbars.textColour", "colour", "ffffffff", "Spell name colour", nil, { needs = "castbars.textOwn" }),
@@ -10388,7 +10389,8 @@ local PAGES = {
 		S("trackers.remove", "list", 0, "Remove a tracker"),
 		"Amounts",
 		S("trackers.itemMin", "number", 1, "Item minimum", "An item tracker is low when the bags hold fewer. /flatui tracker set 1 low 5 sets one tracker to be low at 5 or fewer.", { min = 1, max = 40, step = 1, unit = "" }),
-		S("trackers.ammoMin", "number", 200, "Ammunition minimum", "The ammunition tracker is low at this many or fewer. 0 means never.", { min = 0, max = 2000, step = 100, unit = "" }),
+		S("trackers.ammoMin", "number", 200, "Ammunition minimum", "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, it waits for the end of a fight.", { min = 0, max = 2000, step = 100, unit = "" }),
+		S("trackers.thrownMin", "number", 20, "Thrown weapon minimum", "With a thrown weapon, the ammunition tracker is low at this many or fewer. 0 means never. One that wears out is low at a fifth of its durability.", { min = 0, max = 200, step = 5, unit = "" }),
 		"When shown",
 		S("trackers.show", "choice", "always", "Show", nil, { choices = { { "always", "Always" }, { "low", "Only when low or missing" }, { "combat", "Only in combat" } } }),
 		S("trackers.mounted", "bool", true, "Hide while mounted", "Applies to trackers set to Only when low or missing."),
@@ -20815,6 +20817,7 @@ do local PROBES = {
 	{ "castbars.targetOwn", true, held("castbars.targetOwn"), "false/false", "true/true" },
 	{ "castbars.textShow", false, held("castbars.textShow"), "true/true", "false/false" },
 	{ "castbars.textOwn", true, held("castbars.textOwn"), "false/false", "true/true" },
+	{ "castbars.rank", true, held("castbars.rank"), "false/false", "true/true" },
 	{ "castbars.playerIcon", true, held("castbars.playerIcon"), "false/false", "true/true" },
 	{ "resource.percent", false, held("resource.percent"), "true/true", "false/false" },
 	{ "resource.value", false, held("resource.value"), "true/true", "false/false" },
@@ -21024,6 +21027,7 @@ do local PROBES = {
 	{ "trackers.addClass", "Choose one", held("trackers.addClass"), "0/Choose one", "0/Choose one", oneWay = true },
 	{ "trackers.itemMin", 5, held("trackers.itemMin"), "1/1", "5/5" },
 	{ "trackers.ammoMin", 500, held("trackers.ammoMin"), "200/200", "500/500" },
+	{ "trackers.thrownMin", 50, held("trackers.thrownMin"), "20/20", "50/50" },
 	{ "trackers.mounted", false, held("trackers.mounted"), "true/true", "false/false" },
 	{ "trackers.resting", true, held("trackers.resting"), "false/false", "true/true" },
 	{ "trackers.remove", "Choose a tracker", held("trackers.remove"), "0/Choose a tracker", "0/Choose a tracker", oneWay = true },
@@ -67005,7 +67009,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 56 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 56 and rows == 940 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 56 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 56 and rows == 942 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -67319,7 +67323,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 909 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 911 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -67745,7 +67749,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 778 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 779 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -102335,6 +102339,7 @@ do
 		{ 24, "castbars.focusHeight", 10, 30, "castbars.focusSize" },
 		{ 25, "castbars.textSize", 100, 200 },
 		{ 25, "castbars.textShow", true, false },
+		{ 25, "castbars.rank", false, true },
 		{ 25, "castbars.textAlign", "game", "left" },
 		{ 25, "castbars.textOwn", false, true },
 		{ 25, "castbars.textColour", "ffffffff", "ffff00ff", "castbars.textOwn" },
@@ -102548,7 +102553,7 @@ do
 		end
 		check("sdcast: " .. id .. " has no violation, error or message", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
 	end
-	check("sdcast: 84 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 84 and L.changed == 84, L.changed .. " of " .. L.total)
+	check("sdcast: 85 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 85 and L.changed == 85, L.changed .. " of " .. L.total)
 
 	-- Every frame, texture and text the drawings made is the addon's own.
 	for _, id in ipairs({ "mock-cast-bar", "mock-resource", "mock-swing" }) do

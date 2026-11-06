@@ -917,7 +917,8 @@ function editor.Row(block, parent, page, spec, y)
 		elseif own ~= nil then
 			return own
 		elseif key == "low" and block.current and block.current.kind == "ammo" then
-			return ns.Get("trackers.ammoMin")
+			-- The minimum of what the tracker read last: arrows and bullets, or a thrown weapon (TrackerKinds.lua).
+			return ns.Get(type(ns.TrackerAmmoRow) == "function" and ns.TrackerAmmoRow(block.current.id) or "trackers.ammoMin")
 		elseif key == "low" and block.current and block.current.kind == "item" then
 			return math.max(0, (ns.Get("trackers.itemMin") or 1) - 1)
 		elseif base then

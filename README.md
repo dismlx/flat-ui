@@ -43,7 +43,7 @@ The last line must say `N passed, 0 failed`.
 
 ## Credits
 
-The Errands page and the levelling stats of the experience bar adapt features of [EnhanceQoL](https://www.curseforge.com/projects/1076354) by Philipp Barth (R41Z0R), with his permission: selling junk and auto repair, quick loot and the loot window junk button, Train All, the release guard, the popup helpers, auto-accepting invites, declining duels, remembering the last mail recipient, accepting and handing in quests, gossip options, the NPC exclude list, the quest count on the tracker, the spell rank upgrade, the learned-spell chat filter, watching the reputation you gain (on Flat UI's own bar), the /way command, the unspent talent reminder, and the experience bar's quest stretch, experience per hour and time to level. Thanks to him for sharing his work.
+The Errands page, the levelling stats of the experience bar, the cast bar's spell rank and the ammunition checks adapt features of [EnhanceQoL](https://www.curseforge.com/projects/1076354) by Philipp Barth (R41Z0R), with his permission: selling junk and auto repair, quick loot and the loot window junk button, Train All, the release guard, the popup helpers, auto-accepting invites, declining duels, remembering the last mail recipient, accepting and handing in quests, gossip options, the NPC exclude list, the quest count on the tracker, the spell rank upgrade, the learned-spell chat filter, watching the reputation you gain (on Flat UI's own bar), the /way command, the unspent talent reminder, the experience bar's quest stretch, experience per hour and time to level, the spell rank on the cast bar, and the thrown weapons and the fitting ammunition of the ammunition tracker. Thanks to him for sharing his work.
 
 ## Licence
 

@@ -75,6 +75,7 @@ Chat.lua
 ChatText.lua
 HealthColour.lua
 CastTime.lua
+CastRank.lua
 LayoutSpots.lua
 LayoutText.lua
 Movers.lua

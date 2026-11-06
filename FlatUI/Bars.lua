@@ -1640,6 +1640,7 @@ local function RefreshCastBars()
 	end
 	if ns.CastBarSizes then ns.CastBarSizes() end
 	if ns.CastTimeSync then ns.CastTimeSync() end
+	if ns.CastRankSync then ns.CastRankSync() end
 end
 
 ns.Register("castbars", { label = "Cast bars", Start = RefreshCastBars, Refresh = RefreshCastBars })

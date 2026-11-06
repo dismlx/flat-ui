@@ -26,8 +26,9 @@ local K = {
 	MAX_NAME = 40, MAX_APPLY = 40, MAX_ID = 2147483647, MAX_SPELLS = 40,
 }
 -- What was known of each tracker of these kinds, by the id of its entry: the length and end of the enchant on the weapon, the last reading
--- in words for the check, the last icon of a totem, the casts of the player and the last PLAYER_TOTEM_UPDATE of each slot.
-local mem = { lengths = {}, last = {}, icons = {}, casts = {}, pending = {} }
+-- in words for the check, the last icon of a totem or of what the ammunition tracker read, the casts of the player, the last PLAYER_TOTEM_UPDATE of
+-- each slot, and the ammunition trackers whose thrown weapons were low when last read.
+local mem = { lengths = {}, last = {}, icons = {}, casts = {}, pending = {}, thrown = {} }
 
 local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
@@ -923,17 +924,27 @@ end
 -- Items, ammunition, tracking, stances and forms ---------------------------------------------------------------------------------------
 
 -- An item is counted with C_Item.GetItemCount(item, false, true) and its cooldown comes from C_Item.GetItemCooldown (ItemDocumentation.lua:434-468;
--- neither answer is withheld). The ammunition is the count of inventory slot 0 (INVSLOT_AMMO, Constants.lua:135) while UnitUsesAmmo says the
--- player uses ammunition (UnitDocumentation.lua:3359; PaperDollFrame.lua:1499, 2149). Tracking is the list of C_Minimap.GetTrackingInfo
+-- neither answer is withheld). The ammunition follows the weapon in the ranged slot (GetInventoryItemID and C_Item.GetItemInfoInstant, whose class and
+-- subclass are those of ItemConstantsDocumentation.lua:199-228, 461-490): a bow or a crossbow fires arrows and a gun bullets, the item in the
+-- ammunition slot is counted in the bags with GetItemCount, and ammunition of the other kind counts as none. A thrown weapon is the stack in the
+-- ranged slot (GetInventoryItemCount), or its durability when it wears out (GetInventoryItemDurability). This follows the low-ammunition reminder of
+-- EnhanceQoL by Philipp Barth (ClassicResources.lua:29-58), adapted with his permission. When the game says nothing of the ranged weapon, the
+-- ammunition is the count of inventory slot 0 (INVSLOT_AMMO, Constants.lua:135) while UnitUsesAmmo says the player uses ammunition
+-- (UnitDocumentation.lua:3359; PaperDollFrame.lua:1499, 2149), as before. Tracking is the list of C_Minimap.GetTrackingInfo
 -- (MinimapDocumentation.lua:61-68, 103-116, 308-319). A stance or form is GetShapeshiftFormInfo(index), which gives texture, isActive,
 -- isCastable and spellID as the stance bar takes them (StanceBar.lua:66-71). The game documents no return types of the last one, so each
 -- answer is taken by its type, and a withheld one leaves the tracker unknown.
 -- MAX_*: the most items of a tracker, the most spells of a form tracker and the most lines of the item picker.
--- ICON: the question mark, for what has no icon of its own. AMMO: the inventory slot of the ammunition.
+-- ICON: the question mark, for what has no icon of its own. AMMO and RANGED: the inventory slots of the ammunition and of the ranged weapon
+-- (Constants.lua:172, 190). WORN: the percent of its durability at which a thrown weapon that wears out is low (EnhanceQoL's default,
+-- ClassicResources.lua:3). WEAPON, PROJECTILE: the item classes, and ARROWS, BULLETS the subclasses of ammunition, which the game documents no enum
+-- of (EnhanceQoL's ClassicResources.lua:44, 51-52). FIRES: by weapon subclass, its words and the ammunition it fires; filled below from the enum.
 local I = {
-	MAX_ITEMS = 40, MAX_FORMS = 8, MAX_BAG_LINES = 100, ICON = 134400, AMMO = 0,
+	MAX_ITEMS = 40, MAX_FORMS = 8, MAX_BAG_LINES = 100, ICON = 134400, AMMO = 0, RANGED = 18, WORN = 20,
+	WEAPON = 2, PROJECTILE = 6, ARROWS = 2, BULLETS = 3,
 	NO_COUNT = "Trackers: the game gave no item count, so item trackers show a grey icon.",
 	NAMES = { ammo = "Ammunition", tracking = "Tracking", form = "Stance or form" },
+	AMMO_WORDS = { [2] = "arrows", [3] = "bullets" },
 }
 
 -- The first answer of a game call, or nil when the call is missing, raises or is withheld.
@@ -1008,15 +1019,20 @@ local function ItemCooldown(id)
 	return nil, "none"
 end
 
+-- The row of the page whose minimum a count goes by: ammo is false for an item, true for arrows and bullets, "thrown" for a thrown weapon.
+local function MinimumRow(ammo)
+	return KEY .. (ammo == "thrown" and ".thrownMin" or ammo and ".ammoMin" or ".itemMin")
+end
+
 -- Fine, low or missing for a count. A tracker's own Low at counts a count at that number or under as low, and 0 never. Without one an item
--- is low under the Item minimum and ammunition at the Ammunition minimum or under.
+-- is low under the Item minimum, arrows and bullets at the Ammunition minimum or under, and a thrown weapon at the Thrown weapon minimum or under.
 local function Level(entry, count, ammo)
 	if count <= 0 then
 		return "missing"
 	elseif entry.low ~= nil then
 		return (entry.low > 0 and count <= entry.low) and "low" or "fine"
 	end
-	local page = ns.Get(KEY .. (ammo and ".ammoMin" or ".itemMin"))
+	local page = ns.Get(MinimumRow(ammo))
 	if not Plain(page, "number") then
 		return "fine"
 	elseif ammo then
@@ -1030,7 +1046,7 @@ local function LowWords(entry, ammo)
 	if entry.low ~= nil then
 		return entry.low > 0 and ("at %d or fewer"):format(entry.low) or "never"
 	end
-	local page = ns.Get(KEY .. (ammo and ".ammoMin" or ".itemMin"))
+	local page = ns.Get(MinimumRow(ammo))
 	if not Plain(page, "number") then
 		return "not known"
 	elseif ammo then
@@ -1222,7 +1238,8 @@ local function AmmoIcon()
 	return Fileish(icon) and icon or I.ICON
 end
 
-local function AmmoRead(entry)
+-- The old way, for a client that says nothing of the ranged weapon: the count of the ammunition slot while UnitUsesAmmo says yes.
+local function SlotRead(entry)
 	local id = entry.id
 	local uses = Truth(UnitUsesAmmo, "player")
 	local icon = AmmoIcon()
@@ -1242,16 +1259,200 @@ local function AmmoRead(entry)
 	return { state = Level(entry, count, true), hidden = false, count = count, icon = icon }
 end
 
+-- A number of the game's enums (ItemConstantsDocumentation.lua), else the number it has in this build.
+local function Enumerated(enum, name, fallback)
+	local enums = type(Enum) == "table" and not IsSecret(Enum) and Enum or {}
+	local list = type(enums[enum]) == "table" and enums[enum] or {}
+	local value = list[name]
+	return Plain(value, "number") and value or fallback
+end
+
+-- By weapon subclass: its words and the subclass of the ammunition it fires (ItemConstantsDocumentation.lua:470-487).
+I.FIRES = {
+	[Enumerated("ItemWeaponSubclass", "Bows", 2)] = { word = "a bow", ammo = I.ARROWS },
+	[Enumerated("ItemWeaponSubclass", "Crossbow", 18)] = { word = "a crossbow", ammo = I.ARROWS },
+	[Enumerated("ItemWeaponSubclass", "Guns", 3)] = { word = "a gun", ammo = I.BULLETS },
+}
+I.THROWN, I.WAND = Enumerated("ItemWeaponSubclass", "Thrown", 16), Enumerated("ItemWeaponSubclass", "Wand", 19)
+
+-- The number of an inventory slot: the game's constant (Constants.lua:172, 190), else what GetInventorySlotInfo gives for its name (a global on
+-- classic_era, in C_PaperDollInfo on live: SecureTemplates.lua:458-464 and 464-470), else the number of this build.
+local function SlotNumber(constant, name, fallback)
+	if Plain(constant, "number") then
+		return constant
+	end
+	local info = type(C_PaperDollInfo) == "table" and not IsSecret(C_PaperDollInfo) and C_PaperDollInfo.GetInventorySlotInfo or nil
+	local number = Ask(GetInventorySlotInfo, name) or Ask(info, name)
+	return Plain(number, "number") and number or fallback
+end
+
+-- What the game says of an item: its slot word, icon, class and subclass (ItemDocumentation.lua:425-445). Nil when it says nothing or withholds any.
+local function ItemKind(id)
+	local items = type(C_Item) == "table" and C_Item or {}
+	if type(items.GetItemInfoInstant) ~= "function" then
+		return nil
+	end
+	local ok, _, _, _, equip, icon, class, subclass = pcall(items.GetItemInfoInstant, id)
+	if not ok or IsSecret(equip) or IsSecret(icon) or not (Plain(class, "number") and Plain(subclass, "number")) then
+		return nil
+	end
+	return { equip = Plain(equip, "string") and equip or "", icon = Fileish(icon) and icon or nil, class = class, subclass = subclass }
+end
+
+-- The item in an inventory slot of the player: { empty = true } for none, { id, kind } for one, nil when the game cannot say.
+local function Slotted(slot)
+	if type(GetInventoryItemID) ~= "function" then
+		return nil
+	end
+	local ok, id = pcall(GetInventoryItemID, "player", slot)
+	if not ok or IsSecret(id) then
+		return nil
+	elseif id == nil then
+		return { empty = true }
+	elseif not Whole(id) then
+		return nil
+	end
+	local kind = ItemKind(id)
+	return kind and { id = id, kind = kind } or nil
+end
+
+-- A thrown weapon: its durability when it wears out, else the stack in the ranged slot. A stack at or under its minimum is remembered, so that the
+-- empty slot it leaves when it runs out reads missing.
+local function ThrownRead(entry, slot, icon)
+	local id = entry.id
+	mem.icons[id] = icon or mem.icons[id]
+	local ok, now, most = pcall(GetInventoryItemDurability, slot)
+	if ok and Plain(now, "number") and Plain(most, "number") and most > 0 then
+		local percent = math.floor(math.max(0, now) / most * 100 + 0.5)
+		mem.thrown[id] = nil
+		mem.last[id] = { weapon = true, thrown = true, now = now, most = most, percent = percent }
+		local level = now <= 0 and "missing" or (percent <= I.WORN and "low" or "fine")
+		return { state = level, hidden = false, icon = mem.icons[id] }
+	end
+	local count = Ask(GetInventoryItemCount, "player", slot)
+	if not (Plain(count, "number") and count >= 0) then
+		mem.last[id] = { weapon = true, thrown = true, word = "the game gave no count" }
+		return { state = "unknown", hidden = false, icon = mem.icons[id] }
+	end
+	local level = Level(entry, count, "thrown")
+	mem.thrown[id] = (level == "low" or level == "missing") or nil
+	mem.last[id] = { weapon = true, thrown = true, count = count }
+	return { state = level, hidden = false, count = count, icon = mem.icons[id] }
+end
+
+-- A bow, a crossbow or a gun: the ammunition in the ammunition slot that it fires, counted in the bags (EnhanceQoL's ClassicResources.lua:44-56),
+-- else the count of the slot; none, or ammunition of the other kind, is missing.
+local function FiredRead(entry, fires, weaponIcon)
+	local id = entry.id
+	local slot = SlotNumber(INVSLOT_AMMO, "AmmoSlot", I.AMMO)
+	local ammo = Slotted(slot)
+	if not ammo then
+		mem.last[id] = { weapon = true, gun = fires.word, word = "the ammunition slot gave no answer" }
+		return { state = "unknown", hidden = false, icon = mem.icons[id] or weaponIcon }
+	elseif ammo.empty then
+		mem.icons[id] = weaponIcon or mem.icons[id]
+		mem.last[id] = { weapon = true, gun = fires.word, none = true }
+		return { state = "missing", hidden = false, icon = mem.icons[id] }
+	end
+	mem.icons[id] = ammo.kind.icon or weaponIcon or mem.icons[id]
+	local kind, projectile = ammo.kind, Enumerated("ItemClass", "Projectile", I.PROJECTILE)
+	if kind.class ~= projectile or kind.subclass ~= fires.ammo then
+		-- Arrows or bullets are named only when the item is ammunition: a subclass number means another thing in another class.
+		local wrong = kind.class == projectile and I.AMMO_WORDS[kind.subclass] or nil
+		mem.last[id] = { weapon = true, gun = fires.word, wrong = wrong or "ammunition of another kind" }
+		return { state = "missing", hidden = false, icon = mem.icons[id] }
+	end
+	local count = ItemCount(ammo.id)
+	if count == nil then
+		local held = Ask(GetInventoryItemCount, "player", slot)
+		count = Plain(held, "number") and held >= 0 and held or nil
+	end
+	if count == nil then
+		mem.last[id] = { weapon = true, gun = fires.word, word = "the game gave no count" }
+		return { state = "unknown", hidden = false, icon = mem.icons[id] }
+	end
+	mem.last[id] = { weapon = true, gun = fires.word, ammo = I.AMMO_WORDS[fires.ammo], count = count }
+	return { state = Level(entry, count, true), hidden = false, count = count, icon = mem.icons[id] }
+end
+
+-- The ammunition follows the weapon in the ranged slot; a client that says nothing of it is read the old way.
+local function AmmoRead(entry)
+	local id = entry.id
+	local slot = SlotNumber(INVSLOT_RANGED, "RangedSlot", I.RANGED)
+	local ranged = Slotted(slot)
+	if not ranged then
+		return SlotRead(entry)
+	elseif ranged.empty then
+		-- A thrown weapon that ran out leaves the slot empty.
+		local ranOut = mem.thrown[id] == true
+		mem.last[id] = { weapon = true, empty = true, ranOut = ranOut }
+		return { state = ranOut and "missing" or "fine", hidden = false, icon = mem.icons[id] or AmmoIcon() }
+	end
+	local kind = ranged.kind
+	local weapon = Enumerated("ItemClass", "Weapon", I.WEAPON)
+	if kind.equip == "INVTYPE_THROWN" or (kind.class == weapon and kind.subclass == I.THROWN) then
+		return ThrownRead(entry, slot, kind.icon)
+	end
+	mem.thrown[id] = nil
+	local fires = kind.class == weapon and I.FIRES[kind.subclass] or nil
+	if fires then
+		return FiredRead(entry, fires, kind.icon)
+	end
+	mem.icons[id] = kind.icon or mem.icons[id]
+	mem.last[id] = { weapon = true, needsNone = (kind.class == weapon and kind.subclass == I.WAND) and "a wand" or "something" }
+	return { state = "fine", hidden = false, icon = mem.icons[id] }
+end
+
+local function AmmoIcons(entry)
+	return mem.icons[entry.id] or AmmoIcon()
+end
+
 local function AmmoLines(entry)
 	local last = mem.last[entry.id]
 	if not last then
 		return { "Ammunition: not read yet." }
+	elseif not last.weapon then
+		-- The old way, word for word.
+		if last.word then
+			return { ("Ammunition: %s."):format(last.word) }
+		elseif not last.uses then
+			return { "Ammunition: uses ammo no." }
+		end
+		return { ("Ammunition: uses ammo yes, slot %d count %d, low %s."):format(I.AMMO, last.count, LowWords(entry, true)) }
+	elseif last.empty then
+		return { last.ranOut and "Ammunition: the thrown weapons ran out." or "Ammunition: nothing in the ranged slot." }
+	elseif last.needsNone then
+		return { ("Ammunition: %s in the ranged slot, which needs none."):format(last.needsNone) }
+	elseif last.thrown then
+		if last.word then
+			return { ("Ammunition: a thrown weapon, %s."):format(last.word) }
+		elseif last.percent then
+			return { ("Ammunition: a thrown weapon that wears out, durability %d of %d, low at %d%% or less."):format(last.now, last.most, I.WORN) }
+		end
+		return { ("Ammunition: a thrown weapon, count %d, low %s."):format(last.count, LowWords(entry, "thrown")) }
+	elseif last.none then
+		return { ("Ammunition: %s with nothing in the ammunition slot."):format(last.gun) }
+	elseif last.wrong then
+		return { ("Ammunition: %s with %s, which it cannot fire."):format(last.gun, last.wrong) }
 	elseif last.word then
-		return { ("Ammunition: %s."):format(last.word) }
-	elseif not last.uses then
-		return { "Ammunition: uses ammo no." }
+		return { ("Ammunition: %s, %s."):format(last.gun, last.word) }
 	end
-	return { ("Ammunition: uses ammo yes, slot %d count %d, low %s."):format(I.AMMO, last.count, LowWords(entry, true)) }
+	return { ("Ammunition: %s with %s, count %d, low %s."):format(last.gun, last.ammo, last.count, LowWords(entry, true)) }
+end
+
+-- Set to Only when low or missing, the ammunition waits for the end of a fight, in which nothing can be bought or swapped, as EnhanceQoL's reminder
+-- does (ClassicResources.lua:235). Every tracker is already hidden while you are dead (Trackers.lua:1937-1940).
+local function AmmoWanted(entry, _, _, fighting)
+	if fighting == true and ns.TrackerValue(entry, "show") == "low" then
+		return 0
+	end
+	return nil
+end
+
+-- The row of the page whose minimum the tracker shows in the editor of the Tracker page: the one of what it read last.
+function ns.TrackerAmmoRow(id)
+	local last = mem.last[id]
+	return last and last.thrown and MinimumRow("thrown") or MinimumRow(true)
 end
 
 -- A kind with one tracker and no fields of its own: its Clean gives the name, its Add adds it once.
@@ -1273,8 +1474,8 @@ local AmmoClean, AmmoAdd = Single("ammo")
 
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("ammo", {
-		Read = AmmoRead, Clean = AmmoClean, Add = AmmoAdd, Icon = AmmoIcon, Lines = AmmoLines,
-		events = { "UNIT_INVENTORY_CHANGED", "BAG_UPDATE_DELAYED" },
+		Read = AmmoRead, Clean = AmmoClean, Add = AmmoAdd, Icon = AmmoIcons, Lines = AmmoLines, Wanted = AmmoWanted,
+		events = { "UNIT_INVENTORY_CHANGED", "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED", "UPDATE_INVENTORY_DURABILITY" },
 		what = "ammunition", hiddenAble = false,
 	})
 end

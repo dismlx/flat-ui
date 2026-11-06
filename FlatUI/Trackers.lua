@@ -1940,7 +1940,7 @@ local function Wanted(entry, state, how)
 	end
 	local kind = KINDS[entry.kind]
 	if kind and type(kind.Wanted) == "function" then
-		local ok, alpha = pcall(kind.Wanted, entry, state, how)
+		local ok, alpha = pcall(kind.Wanted, entry, state, how, fighting)
 		if ok and not IsSecret(alpha) and (alpha == 0 or alpha == 1) then
 			return alpha
 		end
@@ -2614,11 +2614,11 @@ end
 -- event of the kind and each cast of the player, Hidden(entry, record, reading) -> true when the kind drew a hidden reading itself, and the
 -- hooks of a kind that has more to show: slot = { unit, filter } for the game's own icon of the kind, noLast (no last reading is shown: "none"
 -- in its place), noDrop (no sound for a drop), last (laid out after the other trackers), Hide(entry, reading, how) -> true to draw nothing,
--- Wanted(entry, state, how) -> 0 or 1 ahead of the rules of Show, Rim(entry, reading, how) -> red, green, blue for the rim of a tracker that is
--- up, Changed(entry, before, after) after a change of the state that was kept, Gone(id) when a tracker is no longer on, World() when the
--- player enters the world or the spells change, Test(entry, on) -> a line, for a test of 5 seconds instead of the three looks, own = { key = fn }
--- for the kind's own test of an own value, and part = the name of the part of the module the kind's calls are isolated in }. A reading is
--- { state = "fine" | "low" | "missing" | "unknown", hidden, count, expires, length, icon, id }.
+-- Wanted(entry, state, how, fighting) -> 0 or 1 ahead of the rules of Show (fighting: whether the trackers are in a fight), Rim(entry, reading,
+-- how) -> red, green, blue for the rim of a tracker that is up, Changed(entry, before, after) after a change of the state that was kept, Gone(id)
+-- when a tracker is no longer on, World() when the player enters the world or the spells change, Test(entry, on) -> a line, for a test of 5
+-- seconds instead of the three looks, own = { key = fn } for the kind's own test of an own value, and part = the name of the part of the module
+-- the kind's calls are isolated in }. A reading is { state = "fine" | "low" | "missing" | "unknown", hidden, count, expires, length, icon, id }.
 function ns.TrackerKind(name, spec)
 	if type(name) ~= "string" or name == "buff" or type(spec) ~= "table" or type(spec.Read) ~= "function" or type(spec.Clean) ~= "function" then
 		return false

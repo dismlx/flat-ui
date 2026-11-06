@@ -22,7 +22,9 @@ local ADDON_NAME, ns = ...
 -- and SetScale only, and SetAnchorType and Hide on GameTooltip: Movers places the frames the player moves,
 -- Tooltip places GameTooltip and hides it when the game fades it out while it follows the cursor. The cast
 -- bar sizes set the width and height of four cast bars, the height of the player bar's spark, the size of
--- its mask and the anchor of its text.
+-- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
+-- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
+-- still that name, and the name alone again when the row goes off.
 -- Combat text is the one module that writes console variables: nine of the game's combat number variables and the switch of its
 -- own text for the player (enableFloatingCombatText), each remembered in FlatUIDB.cvars before its first write and put back when
 -- its page goes off. Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.
