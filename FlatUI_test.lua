@@ -10973,6 +10973,9 @@ local PAGES = {
 		S("chat.history", "number", 128, "Lines kept per window", nil, { min = 128, max = 2048, step = 64, unit = " lines" }),
 		S("chat.fade", "bool", true, "Fade old messages"),
 		S("chat.fadeAfter", "number", 120, "Fade after", nil, { min = 10, max = 600, step = 10, unit = " s", needs = "chat.fade" }),
+		"Links",
+		S("chat.webLinks", "bool", true, "Web addresses as links", "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy."),
+		S("chat.linkTips", "bool", true, "Tooltips of chat links", "While the mouse is over an item, spell or achievement link in a chat window, its tooltip shows. Not in a fight."),
 	} },
 	{ key = "chatTips", label = "Tooltips", parent = "chat", owner = "chat", rows = {
 		"Tooltips",
@@ -10991,6 +10994,7 @@ local PAGES = {
 		"Unit colours",
 		S("chat.unitBorder", "choice", "plain", "Unit tooltip border", nil, { choices = { { "plain", "Plain" }, { "reaction", "Reaction colour" }, { "class", "Class colour for players" } } }),
 		S("chat.nameClass", "bool", false, "Class colour on player names"),
+		S("chat.classLine", "bool", true, "Class colour on the class line", "The line with the level, race and class of a player."),
 		"Size and text",
 		S("chat.tipScale", "number", 100, "Tooltip size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
 		S("chat.tipTitleSize", "number", 100, "Title size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
@@ -11007,7 +11011,12 @@ local PAGES = {
 		S("chat.combatKey", "choice", "none", "Show anyway while holding", nil, { choices = { { "none", "No key" }, { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } }),
 		"Extra lines",
 		S("chat.ids", "bool", false, "Item and spell IDs"),
+		S("chat.idsWhen", "choice", "always", "Show IDs", "The IDs show while the key is held: at once over bags, action bars and the Character window, and over a link once you point at it again.",
+			{ needs = "chat.ids", choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } } }),
+		S("chat.enchantId", "bool", true, "Temporary enchant ID", "On a weapon you wear: the ID of its poison, oil, stone or imbue.", { needs = "chat.ids" }),
 		S("chat.count", "bool", false, "Item count in bags and bank"),
+		S("chat.icons", "bool", true, "Item and spell icons", "The icon before the name of an item or spell."),
+		S("chat.targetLine", "bool", true, "Target of units", "A line naming what a unit targets, in its class or reaction colour: You when it is you."),
 	} },
 	{ key = "errands", label = "Errands", rows = {
 		S("errands.enabled", "bool", false, "Run errands", "Each errand below and on the Levelling tab has its own row. Selling, repairs, Make room, Train all, summons, invites, new spell ranks and talent reminders wait for the end of a fight."),
@@ -21603,6 +21612,10 @@ for _, path in ipairs({ "hud.mapCoords", "hud.mapCoordsPlace", "hud.mapCoordsDec
 end
 -- Nor do the Data panels page and the item level rows of wave 3.
 for _, path in ipairs({ "datapanels.enabled", "datapanels.top", "datapanels.top1", "datapanels.top2", "datapanels.top3", "datapanels.top4", "datapanels.top5", "datapanels.top6", "datapanels.bottom", "datapanels.bottom1", "datapanels.bottom2", "datapanels.bottom3", "datapanels.bottom4", "datapanels.bottom5", "datapanels.bottom6", "datapanels.font", "datapanels.textSize", "datapanels.background", "datapanels.tooltips", "datapanels.forgetGold", "windows.ilvlFlyout", "windows.ilvlInspect", "windows.ilvlCorner", "windows.durability" }) do
+	covered[path] = true
+end
+-- Nor do the rows of wave 4 (0.5.6): the owner asked for code without new test blocks.
+for _, path in ipairs({ "chat.webLinks", "chat.linkTips", "chat.classLine", "chat.idsWhen", "chat.enchantId", "chat.icons", "chat.targetLine" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.

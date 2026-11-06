@@ -7,7 +7,9 @@ local _, ns = ...
 -- Mainline/ChatFrameOverrides.lua:121-122), so a face and an outline set here stay through a size change.
 -- A size change the player makes also copies the face and flags of ChatFrame1 to GMChatFrame and CommunitiesFrame.Chat.MessageFrame
 -- (Mainline/FloatingChatFrame.lua:1097-1106). Those two frames are not in CHAT_FRAMES, so a face set here spreads to them and is not put back there. The game's own values are 128 lines and
--- 120 seconds (Mainline/ChatFrameOverrides.lua:2-3). ScrollingMessageFrame.lua:240-276 has the four calls for lines and fading. No message text is read, so the chat lockdown does not touch this module.
+-- 120 seconds (Mainline/ChatFrameOverrides.lua:2-3). ScrollingMessageFrame.lua:240-276 has the four calls for lines and fading. This file reads no message text. ChatLinks.lua, of
+-- the same module, reads the text of chat lines through the game's chat filters, which give it only lines an addon may read: a line of the chat
+-- lockdown is passed on untouched, so its web addresses stay plain text.
 
 local KEY = "chat"
 local GAME_LINES, GAME_TIME = 128, 120

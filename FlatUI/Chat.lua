@@ -4,10 +4,12 @@ local _, ns = ...
 -- hidden; art whose alpha the game leaves alone is made transparent. The flat boxes are textures of the addon's own. What the game sets again
 -- is followed with hooksecurefunc on a global function of the game, with HookScript on GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an ID and a count add, and nothing is created on one in combat. The size of a tooltip, the height of its
+-- from the lines the kind of a unit, an ID and a count add and what ChatTips.lua writes, and nothing is created on one in combat. The size of a tooltip, the height of its
 -- health bar and the place of the input box are changed out of combat only. The fade of GameTooltip is seen as a fall of its alpha in a frame of the
 -- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
+-- ChatLinks.lua (called at the end of each refresh) also fills GameTooltip from a chat link under the mouse: SetOwner on a frame of its own,
+-- SetHyperlink and Hide, never in a fight.
 
 local KEY = "chat"
 
@@ -765,9 +767,8 @@ local function Extras(tooltip, data)
 		return
 	end
 	local lines = {}
-	if Opt("ids") then
-		lines[1] = (item and "Item ID: " or "Spell ID: ") .. id
-	end
+	-- The ID lines, with Show IDs and the temporary enchant, come from ChatTips.lua.
+	ns.ChatTipIds(lines, data, item, id)
 	if item and Opt("count") and type(C_Item) == "table" and type(C_Item.GetItemCount) == "function" then
 		local okBags, bags = pcall(C_Item.GetItemCount, id)
 		local okAll, all = pcall(C_Item.GetItemCount, id, true)
@@ -1013,6 +1014,8 @@ local function FollowData()
 	postCall = true
 	TooltipDataProcessor.AddTooltipPostCall(TooltipDataProcessor.AllTypes, function(tooltip, data)
 		if not ns.IsStopped(KEY) then
+			-- ChatTips.lua: the target line, the class line and the icons, before the kind word so that it stays the last line.
+			ns.Each(KEY, ns.ChatTipLines, tooltip, data)
 			ns.Each(KEY, Filled, tooltip, data)
 			ns.Each(KEY, Extras, tooltip, data)
 			ns.Each(KEY, Combat, tooltip, data)
@@ -1316,6 +1319,9 @@ local function Refresh()
 		ns.OutOfCombat(Sizes)
 	end
 	ns.Each(KEY, HealthBar)
+	if type(ns.ChatLinksSync) == "function" then
+		ns.ChatLinksSync()
+	end
 end
 
 -- The words of the choice a row holds, as the page shows them.

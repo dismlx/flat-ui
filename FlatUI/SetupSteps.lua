@@ -730,6 +730,8 @@ ns.SETUP_STEPS = {
 		{ "chat.history", "r", "behaviour", "Sets how many lines each chat window keeps." },
 		{ "chat.fade", "c", "behaviour", "Fades old chat messages out." },
 		{ "chat.fadeAfter", "o", "behaviour", "Sets how many seconds a chat message waits before it fades." },
+		{ "chat.webLinks", "o", "behaviour", "Turns web addresses in chat into links that open a box to copy them." },
+		{ "chat.linkTips", "o", "behaviour", "Shows the tooltip of an item, spell or achievement link in chat while the mouse is over it." },
 	} },
 	{ id = "tips", area = "Chat and tooltips", title = "Tooltips", draw = "mock-tooltip", built = true, rows = {
 		{ "chat.tooltips", "c", "mock-tooltip" },
@@ -743,6 +745,7 @@ ns.SETUP_STEPS = {
 		{ "chat.tipBorder", "r", "mock-tooltip" },
 		{ "chat.unitBorder", "c", "mock-tooltip" },
 		{ "chat.nameClass", "c", "mock-tooltip" },
+		{ "chat.classLine", "c", "behaviour", "Colours the line with a player's level, race and class in the class colour." },
 		{ "chat.tipScale", "c", "mock-tooltip" },
 		{ "chat.tipTitleSize", "o", "mock-tooltip" },
 		{ "chat.tipTextSize", "o", "mock-tooltip" },
@@ -754,7 +757,11 @@ ns.SETUP_STEPS = {
 		{ "chat.combat", "c", "behaviour", "Chooses whether tooltips show as usual, unit tooltips hide, or every tooltip hides in combat." },
 		{ "chat.combatKey", "o", "behaviour", "Chooses a key that shows tooltips anyway while held in combat." },
 		{ "chat.ids", "c", "mock-tooltip" },
+		{ "chat.idsWhen", "o", "behaviour", "Chooses whether the ID lines show always or only while Shift, Ctrl or Alt is held." },
+		{ "chat.enchantId", "o", "behaviour", "Adds the ID of the poison, oil or stone on a weapon you wear to its tooltip." },
 		{ "chat.count", "o", "mock-tooltip" },
+		{ "chat.icons", "o", "behaviour", "Puts the icon of an item or spell before its name in its tooltip." },
+		{ "chat.targetLine", "c", "behaviour", "Adds a line naming what a unit targets to its tooltip." },
 	} },
 	{ id = "tr-list", area = "Trackers", title = "What trackers watch and when they show", draw = "mock-tracker", built = true, rows = {
 		{ "trackers.enabled", "c", "mock-tracker" },

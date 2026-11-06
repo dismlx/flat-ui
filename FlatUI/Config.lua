@@ -1474,6 +1474,11 @@ ns.PAGES = {
 		{ key = "history", kind = "number", default = 128, min = 128, max = 2048, step = 64, unit = " lines", label = "Lines kept per window" },
 		{ key = "fade", kind = "bool", default = true, label = "Fade old messages" },
 		{ key = "fadeAfter", kind = "number", default = 120, min = 10, max = 600, step = 10, unit = " s", label = "Fade after", needs = "fade" },
+		{ section = "Links" },
+		{ key = "webLinks", kind = "bool", default = true, label = "Web addresses as links",
+			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy." },
+		{ key = "linkTips", kind = "bool", default = true, label = "Tooltips of chat links",
+			tip = "While the mouse is over an item, spell or achievement link in a chat window, its tooltip shows. Not in a fight." },
 	},
 	{
 		key = "chatTips", label = "Tooltips", parent = "chat", owner = "chat",
@@ -1494,6 +1499,7 @@ ns.PAGES = {
 		{ key = "unitBorder", kind = "choice", default = "plain", label = "Unit tooltip border",
 			choices = { { "plain", "Plain" }, { "reaction", "Reaction colour" }, { "class", "Class colour for players" } } },
 		{ key = "nameClass", kind = "bool", default = false, label = "Class colour on player names" },
+		{ key = "classLine", kind = "bool", default = true, label = "Class colour on the class line", tip = "The line with the level, race and class of a player." },
 		{ section = "Size and text" },
 		{ key = "tipScale", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Tooltip size" },
 		{ key = "tipTitleSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Title size" },
@@ -1513,7 +1519,13 @@ ns.PAGES = {
 			choices = { { "none", "No key" }, { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } },
 		{ section = "Extra lines" },
 		{ key = "ids", kind = "bool", default = false, label = "Item and spell IDs" },
+		{ key = "idsWhen", kind = "choice", default = "always", label = "Show IDs", needs = "ids",
+			tip = "The IDs show while the key is held: at once over bags, action bars and the Character window, and over a link once you point at it again.",
+			choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } } },
+		{ key = "enchantId", kind = "bool", default = true, label = "Temporary enchant ID", tip = "On a weapon you wear: the ID of its poison, oil, stone or imbue.", needs = "ids" },
 		{ key = "count", kind = "bool", default = false, label = "Item count in bags and bank" },
+		{ key = "icons", kind = "bool", default = true, label = "Item and spell icons", tip = "The icon before the name of an item or spell." },
+		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you." },
 	},
 	-- Errands.lua and the Errands*.lua files: chores done when the game asks for them. Off by default; on, each row has the choice of a player
 	-- levelling on Forever.

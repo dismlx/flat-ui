@@ -1,6 +1,10 @@
 ## 0.5.6
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Chat and tooltips**, **Chat text**, new section **Links**. **Web addresses as links**, on: a web address in a chat line (http:// or https://, www., or a name with a path such as discord.gg/abc) becomes a link, and a click on it opens a small box at the mouse with the address selected, ready to copy with Ctrl+C; Enter or Escape closes it, and so does a fight. Only the plain text of a line the game lets an addon read is changed: other links, names and icons stay as they are, and a click on any other link does what the game does. **Tooltips of chat links**, on: while the mouse is over an item, spell or achievement link in a chat window, its tooltip shows, and it goes when the mouse leaves; not in a fight. `/flatui status` says how many lines had an address made a link. These follow EnhanceQoL's chat links.
+- **Chat and tooltips**, **Tooltips**, **Target of units**, on: a line naming what a unit targets, in its class or reaction colour, **You** when it is you; a withheld identity gives none. Follows EnhanceQoL's tooltip.
+- **Tooltips**, **Class colour on the class line** and **Item and spell icons**, on: a player's level, race and class line in their class colour, and the icon before the name of an item or spell.
+- **Tooltips**, under **Item and spell IDs**: **Show IDs** (**Always**, or while holding Shift, Ctrl or Alt) and **Temporary enchant ID**, on: the ID of the poison, oil, stone or imbue on a weapon you wear. `/flatui status` names the key.
 
 ## 0.5.5
 

@@ -75,6 +75,8 @@ MapText.lua
 Fade.lua
 Chat.lua
 ChatText.lua
+ChatTips.lua
+ChatLinks.lua
 HealthColour.lua
 CastTime.lua
 CastRank.lua
