@@ -1442,7 +1442,7 @@ ns.PAGES = {
 		-- tells you; on, each kind has the choice of a player levelling on Forever.
 		{ section = "Error messages" },
 		{ key = "errors", kind = "bool", default = false, label = "Hide error messages",
-			tip = "Only the kinds below that are on, with their sound and voice. Other red errors and the yellow quest messages show as usual." },
+			tip = "Only the kinds below that are on, with their sound and voice. Other red errors and the yellow quest messages show as usual, even while a macro or addon turns the game's error text off with UIErrorsFrame:UnregisterEvent." },
 		{ key = "errorMana", kind = "bool", default = true, label = "Not enough mana", needs = "errors" },
 		{ key = "errorPower", kind = "bool", default = true, label = "Not enough rage or energy", needs = "errors",
 			tip = "Also not enough focus for a hunter's pet, and no combo points for a finishing move." },

@@ -10941,7 +10941,7 @@ local PAGES = {
 		"Alerts",
 		S("hud.alerts", "bool", true, "Loot, money and honour alerts", "Flat background with a thin border."),
 		"Error messages",
-		S("hud.errors", "bool", false, "Hide error messages", "Only the kinds below that are on, with their sound and voice. Other red errors and the yellow quest messages show as usual."),
+		S("hud.errors", "bool", false, "Hide error messages", "Only the kinds below that are on, with their sound and voice. Other red errors and the yellow quest messages show as usual, even while a macro or addon turns the game's error text off with UIErrorsFrame:UnregisterEvent."),
 		S("hud.errorMana", "bool", true, "Not enough mana", nil, { needs = "hud.errors" }),
 		S("hud.errorPower", "bool", true, "Not enough rage or energy", "Also not enough focus for a hunter's pet, and no combo points for a finishing move.", { needs = "hud.errors" }),
 		S("hud.errorRange", "bool", true, "Out of range", "Also too far away to attack, too close for a ranged attack, and your pet out of range.", { needs = "hud.errors" }),
@@ -24001,9 +24001,10 @@ for _, P in ipairs(W_PROBES) do
 	check(label .. ": no violations, errors or messages", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.out, "|"))
 end
 for _, row in ipairs(ALL) do
-	-- Wave 3's item level and durability rows have no probe yet: the owner asked for code without new test blocks.
+	-- Wave 3's item level and durability rows and wave 4's bag marks have no probe yet: the owner asked for code without new test blocks.
 	if row.page == "windows" and row.path ~= "windows.slotTints" and row.live ~= true
-		and not ({ ["windows.ilvlFlyout"] = true, ["windows.ilvlInspect"] = true, ["windows.ilvlCorner"] = true, ["windows.durability"] = true })[row.path] then
+		and not ({ ["windows.ilvlFlyout"] = true, ["windows.ilvlInspect"] = true, ["windows.ilvlCorner"] = true, ["windows.durability"] = true,
+			["windows.boeMark"] = true, ["windows.unusableTint"] = true, ["windows.petFood"] = true })[row.path] then
 		check("window probes: " .. row.path .. " has one", WPROBED[row.path] == true)
 	end
 end end
@@ -63363,7 +63364,7 @@ function PT.runBuild()
 		local step = nav[3].bottom - nav[4].bottom
 		check("left side: a line and a gap between the fixed rows and the first group", nav[4].text == "Move frames" and nav[5].text == "Look" and gap > step + 5, g(gap) .. " " .. g(step))
 		check("left side: the first page is open, with its title and Reset page", PT.title(W) == PAGES[1].label and PT.button(W, "Reset page") ~= nil)
-		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Options window", "Setup" }),
+		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Cursor", "Options window", "Setup" }),
 			joined(PT.headers(W)))
 		PT.go(W, "Text")
 		check("left side: a click on a tab opens it under the title of its module, with its sections under the module", PT.title(W) == "Nameplates" and PT.page(W, "Level") ~= nil and PT.page(W, "Borders and backgrounds") == nil)
@@ -67105,7 +67106,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 57 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 57 and rows == 978 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 57 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 57 and rows == 1005 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -67419,7 +67420,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 927 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 954 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -70426,7 +70427,7 @@ function PT.runCards()
 			end
 		end
 		check("cards: a section is a panel as tall as its header and rows, 12 below the one before", ok and near(W.rectOf(panels[1]) - sl, 16, 0.01), #panels .. " " .. #counts)
-		check("cards: the headers are the sections, as before", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Options window", "Setup" }), joined(PT.headers(W)))
+		check("cards: the headers are the sections, as before", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Cursor", "Options window", "Setup" }), joined(PT.headers(W)))
 		check("cards: a row stands 32 in from the column", near(W.rectOf(PT.shownRows(W)[1]) - sl, 32, 0.01))
 
 		-- The count at the right of a header.
@@ -70454,7 +70455,7 @@ function PT.runCards()
 		ns.Set("panel.sections", "lines")
 		local lscroll = PT.right(W)
 		check("lines: the same headers, no panel, no count, and a row stands 16 in from the column", #backs(W) == 0 and #heads(W) == 0 and changedTotal(W) == 0
-			and near(W.rectOf(PT.shownRows(W)[1]) - W.rectOf(lscroll), 16, 0.01) and joined(PT.headers(W)) == "Borders and backgrounds, Bars, Game action bars, Game menu, Scale, World, Options window, Setup", joined(PT.headers(W)))
+			and near(W.rectOf(PT.shownRows(W)[1]) - W.rectOf(lscroll), 16, 0.01) and joined(PT.headers(W)) == "Borders and backgrounds, Bars, Game action bars, Game menu, Scale, World, Cursor, Options window, Setup", joined(PT.headers(W)))
 		ns.Set("panel.sections", "cards")
 		check("lines: and Cards puts the panels back", #backs(W) == #counts and #heads(W) == #counts)
 

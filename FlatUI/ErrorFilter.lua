@@ -18,7 +18,12 @@ local _, ns = ...
 -- The row off, the page off, the part or the module stopped, or a message the client withholds gives the event back with RegisterEvent, after the
 -- fight when the frame says it is protected; until it is back, every message is shown as the game would. A frame that does not listen when Flat UI
 -- looks (another addon, or the game's command) is left so, and taken once it listens again. When it listens again while Flat UI holds the event,
--- that message is the game's and Flat UI takes the event back on the next frame. A kind is a list of the game's message types (LE_GAME_ERR_*) and
+-- that message is the game's and Flat UI takes the event back on the next frame. The game's own two commands (SlashCmdList.UI_ERRORS_OFF and
+-- UI_ERRORS_ON, SlashCommands.lua:1374-1382; no slash word names them on Forever, so a macro or an addon calls them) and the /run lines of macros
+-- (RunScript, SlashCommands.lua:1224-1236) are followed once the row has been on: after the off command, nothing shows and the event is not given
+-- back; a command or a /run line that gives the frame its event back (UIErrorsFrame:RegisterEvent) has it taken again at once, before the message
+-- the macro's cast queued arrives. A call of UIErrorsFrame:UnregisterEvent by a macro or an addon cannot be seen (the frame is already deaf), so
+-- the kinds that are not hidden still show then. A kind is a list of the game's message types (LE_GAME_ERR_*) and
 -- of the words of the spell failures that come under one type for all (SPELL_FAILED_*, matched with or without a closing full stop); a type or a
 -- word this client lacks is passed over. The payload of UI_ERROR_MESSAGE is not marked secret (SystemDocumentation.lua:226-236); one that is
 -- withheld is never compared or shown. Every client call is in a pcall.
@@ -55,7 +60,9 @@ local REPEATS = { "ERR_SPELL_FAILED_TOTEMS", "ERR_SPELL_FAILED_EQUIPPED_ITEM", "
 -- refused: the frame kept the event or would not say. stuck: the frame would not take the event back. withheld: a message came withheld, so the
 -- event is the game's until /reload. missing: the client has no such frame. waiting: a take or a give-back waits for the end of a fight. soon: a
 -- look waits for the next frame. types and words: what the kinds that are on hide; kinds: how many are on; hidden: the messages hidden so far.
-local S = { types = {}, words = {}, kinds = 0, hidden = 0 }
+-- gameOff: the game's off command ran while Flat UI held the event. relistened: how many messages the game's frame heard itself while Flat UI held
+-- the event (turned back on by something neither follow sees).
+local S = { types = {}, words = {}, kinds = 0, hidden = 0, relistened = 0 }
 local frame, listening, repeats = nil, false, nil
 local Apply
 
@@ -257,11 +264,14 @@ local function OnEvent(_, event, messageType, message)
 	end
 	if Listens(errors) == true then
 		-- The game's frame heard this one itself: it listens again, or Flat UI has not taken the event yet.
+		if S.held then
+			S.relistened = S.relistened + 1
+		end
 		Soon()
 		return
 	end
 	-- The frame is deaf by another addon or by the game's command: it shows nothing, and Flat UI shows nothing either.
-	if not S.held then
+	if not S.held or S.gameOff then
 		return
 	end
 	if ns.IsSecret(messageType) or ns.IsSecret(message) then
@@ -313,19 +323,60 @@ local function Wait()
 	end)
 end
 
+-- The game's off command ran (its UnregisterEvent found the frame deaf): while Flat UI holds the event, nothing shows and nothing is given back.
+local function GameOff()
+	if S.held then
+		S.gameOff = true
+	end
+end
+
+-- The game's on command gave the frame its event back: Flat UI takes it again at once, outside the handling of any message.
+local function GameOn()
+	S.gameOff = nil
+	Apply()
+end
+
+-- After a /run line: a macro that gave the frame its event back is followed at once, before the message its cast queued reaches the frame.
+local function AfterScript()
+	if S.held or S.aside then
+		local errors = GameFrame()
+		if errors ~= nil and Listens(errors) == true then
+			Apply()
+		end
+	end
+end
+
+-- Hooked the first time the row is on; a follow the game refused (taintLog on) is tried again at the next look.
+local follows = {}
+local function FollowCommands()
+	local commands = Global("SlashCmdList")
+	if not follows.off then
+		follows.off = ns.FollowTable(commands, "UI_ERRORS_OFF", GameOff) == true
+	end
+	if not follows.on then
+		follows.on = ns.FollowTable(commands, "UI_ERRORS_ON", GameOn) == true
+	end
+	if not follows.script then
+		follows.script = ns.FollowGlobal("RunScript", AfterScript) == true
+	end
+end
+
 -- Takes the event from the game's frame or gives it back, as the rows and the page ask.
 function Apply()
 	local errors = GameFrame()
 	if errors == nil then
 		S.missing = Wanted() or nil
-		S.held = false
+		S.held, S.gameOff = false, nil
 		Listen(false)
 		return
 	end
 	S.missing = nil
 	if Wanted() and Build() then
+		FollowCommands()
 		local on = Listens(errors)
 		if on == true then
+			-- The frame listens: whatever turned its error text off, it is on again.
+			S.gameOff = nil
 			if Blocked(errors) then
 				Wait()
 				Listen(S.held)
@@ -359,7 +410,8 @@ function Apply()
 		return
 	end
 	if S.held then
-		if Listens(errors) == false then
+		-- After the game's off command the frame stays deaf, as the command left it.
+		if not S.gameOff and Listens(errors) == false then
 			if Blocked(errors) then
 				Wait()
 				Listen(true)
@@ -372,7 +424,7 @@ function Apply()
 				return
 			end
 		end
-		S.held = false
+		S.held, S.gameOff = false, nil
 	end
 	S.aside, S.refused, S.stuck = nil, nil, nil
 	Listen(false)
@@ -395,8 +447,15 @@ ns.AddStatus(KEY, function()
 		return { "Error messages: the game kept its error text, so nothing is hidden." }
 	elseif S.aside then
 		return { "Error messages: the game's error text is off already, by another addon or the game's command, so Flat UI leaves it." }
+	elseif S.gameOff then
+		return { "Error messages: the game's command turned its error text off, so none shows until it is turned on again." }
 	elseif S.held then
-		return { ("Error messages: %d of %d kinds hidden, %d messages so far."):format(S.kinds, #KINDS, S.hidden) }
+		local lines = { ("Error messages: %d of %d kinds hidden, %d messages so far."):format(S.kinds, #KINDS, S.hidden) }
+		if S.relistened > 0 then
+			lines[2] = ("Error messages: another addon gave the game its error text back, and %d messages then showed whatever their kind.")
+				:format(S.relistened)
+		end
+		return lines
 	elseif S.kinds == 0 then
 		return { "Error messages: no kind is on, so nothing is hidden." }
 	end
