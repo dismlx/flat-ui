@@ -1282,7 +1282,7 @@ local function SlotNumber(constant, name, fallback)
 		return constant
 	end
 	local info = type(C_PaperDollInfo) == "table" and not IsSecret(C_PaperDollInfo) and C_PaperDollInfo.GetInventorySlotInfo or nil
-	local number = Ask(GetInventorySlotInfo, name) or Ask(info, name)
+	local number = Ask(info, name) or Ask(GetInventorySlotInfo, name)
 	return Plain(number, "number") and number or fallback
 end
 
@@ -1362,11 +1362,11 @@ local function FiredRead(entry, fires, weaponIcon)
 		mem.last[id] = { weapon = true, gun = fires.word, wrong = wrong or "ammunition of another kind" }
 		return { state = "missing", hidden = false, icon = mem.icons[id] }
 	end
-	local count = ItemCount(ammo.id)
-	if count == nil then
-		local held = Ask(GetInventoryItemCount, "player", slot)
-		count = Plain(held, "number") and held >= 0 and held or nil
-	end
+	-- The larger of the bag count (EnhanceQoL's) and the slot's, the number on the character window (Camelot/PaperDollFrame.lua:2183-2186).
+	local bags = ItemCount(ammo.id)
+	local held = Ask(GetInventoryItemCount, "player", slot)
+	held = Plain(held, "number") and held >= 0 and held or nil
+	local count = (bags and held) and math.max(bags, held) or bags or held
 	if count == nil then
 		mem.last[id] = { weapon = true, gun = fires.word, word = "the game gave no count" }
 		return { state = "unknown", hidden = false, icon = mem.icons[id] }
@@ -1396,6 +1396,14 @@ local function AmmoRead(entry)
 	mem.thrown[id] = nil
 	local fires = kind.class == weapon and I.FIRES[kind.subclass] or nil
 	if fires then
+		-- With no ammunition wanted, Forever's character window has no ammunition slot to fill (Camelot/PaperDollFrame.lua:1517, 1952-1957):
+		-- an empty one is then no ammunition missing.
+		local papers = type(C_PaperDollInfo) == "table" and not IsSecret(C_PaperDollInfo) and C_PaperDollInfo or {}
+		if Truth(papers.AmmoNeeded) == false or Truth(UnitUsesAmmo, "player") == false then
+			mem.icons[id] = kind.icon or mem.icons[id]
+			mem.last[id] = { weapon = true, noAmmo = fires.word }
+			return { state = "fine", hidden = false, icon = mem.icons[id] }
+		end
 		return FiredRead(entry, fires, kind.icon)
 	end
 	mem.icons[id] = kind.icon or mem.icons[id]
@@ -1421,6 +1429,8 @@ local function AmmoLines(entry)
 		return { ("Ammunition: uses ammo yes, slot %d count %d, low %s."):format(I.AMMO, last.count, LowWords(entry, true)) }
 	elseif last.empty then
 		return { last.ranOut and "Ammunition: the thrown weapons ran out." or "Ammunition: nothing in the ranged slot." }
+	elseif last.noAmmo then
+		return { ("Ammunition: %s, which the game says needs no ammunition."):format(last.noAmmo) }
 	elseif last.needsNone then
 		return { ("Ammunition: %s in the ranged slot, which needs none."):format(last.needsNone) }
 	elseif last.thrown then
@@ -1440,10 +1450,11 @@ local function AmmoLines(entry)
 	return { ("Ammunition: %s with %s, count %d, low %s."):format(last.gun, last.ammo, last.count, LowWords(entry, true)) }
 end
 
--- Set to Only when low or missing, the ammunition waits for the end of a fight, in which nothing can be bought or swapped, as EnhanceQoL's reminder
--- does (ClassicResources.lua:235). Every tracker is already hidden while you are dead (Trackers.lua:1937-1940).
-local function AmmoWanted(entry, _, _, fighting)
-	if fighting == true and ns.TrackerValue(entry, "show") == "low" then
+-- Set to Only when low or missing, a low count waits for the end of a fight, in which nothing can be bought, as EnhanceQoL's reminder does
+-- (ClassicResources.lua:235); a missing reading stays up, since it is why the shots stop. Every tracker is already hidden while you are dead
+-- (Trackers.lua:1937-1940).
+local function AmmoWanted(entry, state, _, fighting)
+	if fighting == true and state == "low" and ns.TrackerValue(entry, "show") == "low" then
 		return 0
 	end
 	return nil

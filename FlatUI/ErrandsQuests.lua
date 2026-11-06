@@ -19,8 +19,12 @@ local _, ns = ...
 -- a teleport) still asks: GOSSIP_CONFIRM is left to the game's popup.
 -- A talk is the windows of one NPC until TALK_GAP seconds after its last one closed; only the close of the window that shows ends it, since the
 -- game may close the gossip just after it opened the quest window. Holding the key of Key to do it yourself at any window of a
--- talk leaves the rest of it to you, and so does a fight, a skipped NPC (/flatui npc) and more than MAX_PICKS picks. While EnhanceQoL's own quest
--- or gossip automation is on, that part is left to it. No frame of the game is touched: the windows close as the game closes them.
+-- talk leaves the rest of it to you, and so does the key pressed while the game loads the quest, a fight, a skipped NPC (/flatui npc), an NPC
+-- whose GUID the game withholds (its skip list cannot be read then) and more than MAX_PICKS picks. A quest left to you is not opened from a
+-- list again this session, until it is taken or handed in or a row changes. The quest and only-option rules are for creatures, not objects.
+-- While another addon's own automation is on (EnhanceQoL's quest or gossip automation, Questie's auto accept or auto complete), that part
+-- is left to it, and no list is answered that the other addon may answer in the same event. No frame of the game is touched: the windows
+-- close as the game closes them.
 -- These follow EnhanceQoL's quest and gossip automation, adapted with the permission of its author.
 
 local E = ns.Errands
@@ -49,13 +53,14 @@ local SAY = {
 	money = "%s takes %s to hand in, so it is left to you.",
 	currency = "%s takes a currency to hand in, so it is left to you.",
 	item = "%s takes %s, so it is left to you.",
+	unrated = "%s takes %s, and the game does not say how good it is, so it is left to you.",
 	pvp = "%s would flag you for PvP, so it is left to you.",
 }
 -- Why a quest was left to you, for /flatui status.
 local WHY = {
 	low = "it is a low-level quest", repeatable = "it can be done again", money = "it takes money", currency = "it takes a currency",
 	item = "it takes an item of green quality or better", pvp = "it flags you for PvP", full = "your quest log was full",
-	unknown = "the game did not say what it takes",
+	unknown = "the game did not say what it takes", unrated = "the game did not say how good an item it takes is",
 }
 
 -- The talk with an NPC: { guid, window ("quest" or "gossip", the one shown last), open, closes, paused, picks, tried, left, said, offered }.
@@ -70,6 +75,9 @@ local lastLeft
 -- Quests the game said were handed in (QUEST_TURNED_IN), until they leave the log (QUEST_REMOVED) or are taken again. The log lists such a
 -- quest until its next update, which can come after the follow-up quest the NPC offers at once.
 local handedIn = {}
+-- Quests left to you this session, by ID, with why: a list does not open them again until they are taken or handed in, or a row changes. The
+-- lines said about them, so one is said once a session (a full log is said once a talk). A load that failed is not kept: it may work next time.
+local kept, spoken = {}, {}
 
 local Decide
 
@@ -182,23 +190,52 @@ local function Saved()
 	return lists
 end
 
+-- Whether the game withholds the GUID of the one a window is for. The skip list cannot be read then, so the window is left to you, as
+-- Questie's Forever code leaves it (Modules/Auto/AutoQuesting.lua:223-229). A unit with no GUID (an item's offer) is not withheld.
+local function Withheld(unit)
+	if type(UnitGUID) ~= "function" then
+		return false
+	end
+	local ok, guid = pcall(UnitGUID, unit)
+	return ok and ns.IsSecret(guid)
+end
+
 local function Skipped(unit)
 	local lists = Saved()
 	local _, kind, id = Who(unit)
 	return lists ~= nil and NPC_KINDS[kind] == true and id ~= nil and type(lists.npcs[id]) == "string"
 end
 
--- Whether EnhanceQoL's own quest (autoChooseQuest) or gossip (autoChooseGossip) automation is on, read from its settings on its global table: that
--- part is left to it then, so two addons never answer the same window.
-local function Theirs(key)
-	local addon = _G.EnhanceQoL
-	if type(addon) ~= "table" or ns.IsSecret(addon) then
-		return false
-	end
-	local ok, on = pcall(function()
-		return addon.db[key]
-	end)
+-- A setting of another addon, read in a pcall: true only for a plain true.
+local function Setting(read)
+	local ok, on = pcall(read)
 	return ok and not ns.IsSecret(on) and on == true
+end
+
+local function Table(value)
+	return not ns.IsSecret(value) and type(value) == "table"
+end
+
+-- What another addon's own automation answers, read from its settings: EnhanceQoL's quest automation (autoChooseQuest, accepts and hands in)
+-- and gossip automation (autoChooseGossip) on its global table, and Questie's auto accept (Questie.db.profile.autoAccept.enabled) and auto
+-- complete (Questie.db.profile.autocomplete), both off by default (Modules/Options/QuestieOptionsDefaults.lua:144-147). That part is left to
+-- it, so two addons never answer the same window: { accept, turnIn, gossip, eqolQuests, eqolGossip, questieAccept, questieTurnIn }.
+local function Theirs()
+	local eqol, questie = _G.EnhanceQoL, _G.Questie
+	local eqolQuests = Table(eqol) and Setting(function()
+		return eqol.db.autoChooseQuest
+	end)
+	local eqolGossip = Table(eqol) and Setting(function()
+		return eqol.db.autoChooseGossip
+	end)
+	local questieAccept = Table(questie) and Setting(function()
+		return questie.db.profile.autoAccept.enabled
+	end)
+	local questieTurnIn = Table(questie) and Setting(function()
+		return questie.db.profile.autocomplete
+	end)
+	return { accept = eqolQuests or questieAccept, turnIn = eqolQuests or questieTurnIn, gossip = eqolGossip, eqolQuests = eqolQuests,
+		eqolGossip = eqolGossip, questieAccept = questieAccept, questieTurnIn = questieTurnIn }
 end
 
 -- Talks ----------------------------------------------------------------------------------------------------------------------------------
@@ -244,7 +281,8 @@ end
 
 -- Whether this part may answer a window of the talk now.
 local function MayAct(current, unit)
-	return ns.Enabled("errands") and not current.paused and current.picks < MAX_PICKS and not E.Fighting() and not Skipped(unit)
+	return ns.Enabled("errands") and not current.paused and current.picks < MAX_PICKS and not E.Fighting() and not Withheld(unit)
+		and not Skipped(unit)
 end
 
 -- Quests ---------------------------------------------------------------------------------------------------------------------------------
@@ -323,21 +361,25 @@ end
 local function Leave(current, key, why, title, a, b)
 	if why ~= "full" then
 		current.left[key] = true
+		if why ~= "unknown" and ns.Finite(key) then
+			kept[key] = why
+		end
 	end
 	title = title or Title()
 	lastLeft = { title = title, why = why }
 	local line = SAY[why]
 	local said = why == "full" and "full" or (why .. " " .. tostring(key))
-	if not line or current.said[said] then
+	local book = why == "full" and current.said or spoken
+	if not line or book[said] then
 		return
 	end
-	current.said[said] = true
+	book[said] = true
 	local named = title or "the quest"
 	if why == "full" then
 		E.Say(line:format(a, b, named))
 	elseif why == "money" then
 		E.Say(line:format(named, E.Money(a)))
-	elseif why == "item" then
+	elseif why == "item" or why == "unrated" then
 		E.Say(line:format(named, a))
 	else
 		E.Say(line:format(named))
@@ -365,6 +407,10 @@ end
 
 -- Accepts the quest of the window, or leaves it to you. final: the game has had its time to load the quest.
 Decide = function(current, id, final)
+	-- The key pressed while the game loads the quest counts as held at its window.
+	if final and talk == current and Held() ~= false then
+		current.paused = true
+	end
 	if talk ~= current or not current.open or current.window ~= "quest" or current.left[id] or E.Ask(GetQuestID) ~= id
 		or E.Opt("questAccept") ~= true or not MayAct(current, "questnpc") then
 		return
@@ -411,16 +457,19 @@ end
 
 -- QUEST_DETAIL: the quest an NPC offers, or your group shares.
 local function Detail(fromItem)
+	-- A quest an item starts, or one of an area the game accepts by itself, becomes a pop-up of the tracker and the game closes the window at
+	-- once (QuestFrame.lua:47-60 on Forever); a quest of a map of the game's has no window. None is a window of a talk.
+	local auto = E.Ask(QuestGetAutoAccept) == true
+	if ns.IsSecret(fromItem) or (fromItem ~= nil and fromItem ~= 0) or E.Ask(QuestIsFromAdventureMap) == true
+		or (auto and E.Ask(QuestIsFromAreaTrigger) == true) then
+		return
+	end
 	local current = Talk("questnpc", "quest")
-	if E.Opt("questAccept") ~= true or not MayAct(current, "questnpc") or Theirs("autoChooseQuest") then
+	if E.Opt("questAccept") ~= true or not MayAct(current, "questnpc") or Theirs().accept then
 		return
 	end
-	-- A quest an item starts becomes a pop-up of the tracker, made by the game (QuestFrame.lua:45-51).
-	if ns.IsSecret(fromItem) or (fromItem ~= nil and fromItem ~= 0) then
-		return
-	end
-	-- Accepted already (the window only asks to acknowledge it), or a quest of a map of the game's: the game's own.
-	if E.Ask(QuestGetAutoAccept) == true or E.Ask(QuestIsFromAdventureMap) == true then
+	-- Accepted already: the window only asks to acknowledge it, the game's own.
+	if auto then
 		return
 	end
 	local id = E.Ask(GetQuestID)
@@ -441,8 +490,8 @@ local function Detail(fromItem)
 	Decide(current, id, false)
 end
 
--- What handing in the quest of the window takes besides its own items: "money" (copper), "currency" (how many), "item" (its link) or
--- "unknown" when the game does not say how much money; nil when it takes none of these.
+-- What handing in the quest of the window takes besides its own items: "money" (copper), "currency" (how many), "item" (its link), "unrated"
+-- (the link of an item whose quality the game does not give) or "unknown" when the game does not say how much money; nil when it takes none.
 local function Takes()
 	local money = E.Ask(GetQuestMoneyToGet)
 	if not ns.Finite(money) then
@@ -469,7 +518,10 @@ local function Takes()
 				local _, _, linked = E.Ask(C_Item.GetItemInfo, link)
 				quality = linked
 			end
-			if ns.Finite(quality) and quality >= GREEN then
+			if not ns.Finite(quality) then
+				return "unrated", type(link) == "string" and link or "an item"
+			end
+			if quality >= GREEN then
 				return "item", type(link) == "string" and link or "an item of green quality or better"
 			end
 		end
@@ -480,7 +532,7 @@ end
 -- QUEST_PROGRESS: the window that asks for what the quest needs.
 local function Progress()
 	local current = Talk("questnpc", "quest")
-	if E.Opt("questTurnIn") ~= true or not MayAct(current, "questnpc") or Theirs("autoChooseQuest") then
+	if E.Opt("questTurnIn") ~= true or not MayAct(current, "questnpc") or Theirs().turnIn then
 		return
 	end
 	local id = E.Ask(GetQuestID)
@@ -506,7 +558,7 @@ end
 -- QUEST_COMPLETE: the reward window. One reward or none is taken as the game's own button takes it (QuestFrame.lua:145-162).
 local function Complete()
 	local current = Talk("questnpc", "quest")
-	if E.Opt("questTurnIn") ~= true or not MayAct(current, "questnpc") or Theirs("autoChooseQuest") then
+	if E.Opt("questTurnIn") ~= true or not MayAct(current, "questnpc") or Theirs().turnIn then
 		return
 	end
 	local id = E.Ask(GetQuestID)
@@ -537,7 +589,8 @@ end
 -- QUEST_GREETING: the old list of an NPC's quests.
 local function Greeting()
 	local current = Talk("questnpc", "quest")
-	if not MayAct(current, "questnpc") or Theirs("autoChooseQuest") then
+	local others = Theirs()
+	if not MayAct(current, "questnpc") or others.accept or others.turnIn then
 		return
 	end
 	if E.Opt("questTurnIn") == true then
@@ -545,7 +598,7 @@ local function Greeting()
 			local title, finished = E.Ask(GetActiveTitle, index)
 			local id = E.Ask(GetActiveQuestID, index)
 			local key = ns.Finite(id) and id or ("active " .. tostring(title))
-			if finished == true and not current.tried[key] and not current.left[key] and not Unwanted(nil, Repeats(id)) then
+			if finished == true and not current.tried[key] and not current.left[key] and not kept[key] and not Unwanted(nil, Repeats(id)) then
 				Pick(current, key, SelectActiveQuest, index)
 				return
 			end
@@ -558,7 +611,7 @@ local function Greeting()
 			local title = E.Ask(GetAvailableTitle, index)
 			local key = ns.Finite(id) and id or ("available " .. tostring(title))
 			local repeats = Repeats(id, Listed(frequency, repeatable))
-			if not current.tried[key] and not current.left[key] and not Unwanted(low, repeats) then
+			if not current.tried[key] and not current.left[key] and not kept[key] and not Unwanted(low, repeats) then
 				local quests, most = LogFull()
 				if quests then
 					Leave(current, key, "full", title, quests, most)
@@ -668,9 +721,10 @@ local function Remember(options)
 	end
 end
 
-local function Choose(current, options, quests)
+-- others: Theirs(). While another addon may pick a quest of this list in the same event, no option is picked beside it.
+local function Choose(current, options, quests, others)
 	local mode = E.Opt("gossip")
-	if (mode ~= "saved" and mode ~= "all") or Theirs("autoChooseGossip") then
+	if (mode ~= "saved" and mode ~= "all") or others.gossip or ((others.accept or others.turnIn) and quests > 0) then
 		return
 	end
 	local lists = Saved()
@@ -681,7 +735,10 @@ local function Choose(current, options, quests)
 			return
 		end
 	end
-	if mode ~= "all" or Inside() then
+	-- The quest and only-option rules are for creatures: an object's gossip can start an event or call up a foe, and /flatui npc cannot skip an
+	-- object.
+	local _, kind = Who("npc")
+	if mode ~= "all" or Inside() or NPC_KINDS[kind] ~= true then
 		return
 	end
 	local flagged, count = nil, 0
@@ -719,13 +776,18 @@ local function Gossip()
 	if not MayAct(current, "npc") then
 		return
 	end
+	-- EnhanceQoL's gossip automation picks options whatever quests the list has: nothing of this list is answered beside it.
+	local others = Theirs()
+	if others.gossip then
+		return
+	end
 	local active, available = Entries(gossip.GetActiveQuests), Entries(gossip.GetAvailableQuests)
-	if not Theirs("autoChooseQuest") then
+	if not others.accept and not others.turnIn then
 		if E.Opt("questTurnIn") == true then
 			for _, quest in ipairs(active) do
 				local id = Field(quest, "questID")
 				if ns.Finite(id) and Field(quest, "isComplete") == true and Field(quest, "isIgnored") ~= true and not current.tried[id]
-					and not current.left[id] and not Unwanted(nil, Repeats(id, Listed(Field(quest, "frequency"), Field(quest, "repeatable")))) then
+					and not current.left[id] and not kept[id] and not Unwanted(nil, Repeats(id, Listed(Field(quest, "frequency"), Field(quest, "repeatable")))) then
 					Pick(current, id, gossip.SelectActiveQuest, id)
 					return
 				end
@@ -735,8 +797,13 @@ local function Gossip()
 			for _, quest in ipairs(available) do
 				local id = Field(quest, "questID")
 				local low = Field(quest, "isTrivial")
-				local repeats = ns.Finite(id) and Repeats(id, Listed(Field(quest, "frequency"), Field(quest, "repeatable"))) or nil
-				if ns.Finite(id) and Field(quest, "isIgnored") ~= true and not current.tried[id] and not current.left[id] and not Unwanted(low, repeats) then
+				-- Not "x and Repeats() or nil": a list that says the quest does not recur gives false, which must reach the quest window.
+				local repeats
+				if ns.Finite(id) then
+					repeats = Repeats(id, Listed(Field(quest, "frequency"), Field(quest, "repeatable")))
+				end
+				if ns.Finite(id) and Field(quest, "isIgnored") ~= true and not current.tried[id] and not current.left[id] and not kept[id]
+					and not Unwanted(low, repeats) then
 					local quests, most = LogFull()
 					if quests then
 						Leave(current, id, "full", Field(quest, "title"), quests, most)
@@ -748,7 +815,7 @@ local function Gossip()
 			end
 		end
 	end
-	Choose(current, options, #active + #available)
+	Choose(current, options, #active + #available, others)
 end
 
 E.Listen(part, "GOSSIP_SHOW", Gossip)
@@ -778,7 +845,7 @@ end)
 E.Listen(part, "QUEST_ACCEPTED", function(a, b)
 	local id = ns.Finite(b) and b or a
 	if ns.Finite(id) then
-		handedIn[id] = nil
+		handedIn[id], kept[id] = nil, nil
 	end
 	if ns.Finite(id) and asked.accept[id] then
 		asked.accept[id] = nil
@@ -787,7 +854,7 @@ E.Listen(part, "QUEST_ACCEPTED", function(a, b)
 end)
 E.Listen(part, "QUEST_TURNED_IN", function(id)
 	if ns.Finite(id) then
-		handedIn[id] = true
+		handedIn[id], kept[id] = true, nil
 	end
 	if ns.Finite(id) and asked.turnIn[id] then
 		asked.turnIn[id] = nil
@@ -801,10 +868,12 @@ E.Listen(part, "QUEST_REMOVED", function(id)
 end)
 
 function part.Start()
-	talk, pending, handedIn = nil, nil, {}
+	talk, pending, handedIn, kept, spoken = nil, nil, {}, {}, {}
 end
 
 function part.Refresh()
+	-- A row may have changed: a quest left to you for it may be wanted now.
+	kept = {}
 	if not ns.Enabled("errands") or E.Opt("questAccept") ~= true then
 		pending = nil
 	end
@@ -1044,10 +1113,17 @@ function part.Status()
 	if pending then
 		lines[#lines + 1] = "Quests: waiting for the game to load the quest it offers."
 	end
-	if Theirs("autoChooseQuest") and (E.Opt("questAccept") == true or E.Opt("questTurnIn") == true) then
+	local others = Theirs()
+	if others.questieAccept and E.Opt("questAccept") == true then
+		lines[#lines + 1] = "Quests: Questie's own auto accept is on, so accepting quests is left to it."
+	end
+	if others.questieTurnIn and E.Opt("questTurnIn") == true then
+		lines[#lines + 1] = "Quests: Questie's own auto complete is on, so handing in quests is left to it."
+	end
+	if others.eqolQuests and (E.Opt("questAccept") == true or E.Opt("questTurnIn") == true) then
 		lines[#lines + 1] = "Quests: EnhanceQoL's own quest automation is on, so quests are left to it."
 	end
-	if Theirs("autoChooseGossip") and (mode == "saved" or mode == "all") then
+	if others.eqolGossip and (mode == "saved" or mode == "all") then
 		lines[#lines + 1] = "Quests: EnhanceQoL's own gossip automation is on, so gossip is left to it."
 	end
 	if E.Opt("questAccept") == true and type(AcceptQuest) ~= "function" then

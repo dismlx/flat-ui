@@ -21,7 +21,7 @@ local MAX_RANK = 1000
 -- Per bar, { name = the name the game wrote, text = what was written here }.
 local written = setmetatable({}, { __mode = "k" })
 -- What /flatui status says: the last text written, and what kept a rank away. waiting is the spell whose rank text the game had not loaded yet.
-local state = { shown = nil, noCall = false, refused = false, protected = false, waiting = nil }
+local state = { shown = nil, noCall = false, refused = false, protected = false, cut = nil, waiting = nil }
 local frame, listening, queued = nil, false, false
 local Listen
 
@@ -58,7 +58,8 @@ local function Cast()
 	if not ok or ns.IsSecret(name) or ns.IsSecret(display) or ns.IsSecret(id) then
 		return nil
 	end
-	local shown = type(display) == "string" and display ~= "" and display or name
+	-- The game writes the display name, whatever it holds (CastingBarFrame.lua:364-369, 404-406 on Forever).
+	local shown = display
 	if type(shown) ~= "string" or shown == "" or type(id) ~= "number" or id <= 0 then
 		return nil
 	end
@@ -110,6 +111,14 @@ local function Write(bar, shown, rank)
 		return
 	end
 	if pcall(text.SetText, text, want) then
+		-- A name the bar cannot show whole with its rank keeps the game's text (IsTruncated, SimpleFontStringAPIDocumentation.lua:442-454
+		-- on Forever): "Lesser Healing Wave (Ra..." says less than the name. No such call, a raise or a withheld answer is not cut.
+		local ok, cut = pcall(text.IsTruncated, text)
+		if ok and not ns.IsSecret(cut) and cut == true then
+			pcall(text.SetText, text, shown)
+			state.cut = want
+			return
+		end
 		written[bar] = { name = shown, text = want }
 		state.shown = want
 	else
@@ -192,6 +201,18 @@ local function OnEvent(_, event, first)
 	end
 end
 
+-- A start heard for the player alone when the client can (ProcTriggers.lua:313-322, Trackers.lua:2566-2575), else for every unit: OnEvent
+-- keeps the player's.
+local function Hear(event)
+	if frame.RegisterUnitEvent then
+		local ok, registered = pcall(frame.RegisterUnitEvent, frame, event, "player")
+		if ok and (ns.IsSecret(registered) or registered ~= false) then
+			return
+		end
+	end
+	pcall(frame.RegisterEvent, frame, event)
+end
+
 -- The events are heard only while the rank is wanted; at the default no frame is made.
 function Listen(on)
 	if on and not listening then
@@ -201,7 +222,7 @@ function Listen(on)
 			frame:SetScript("OnEvent", OnEvent)
 		end
 		for _, event in ipairs(STARTS) do
-			pcall(frame.RegisterUnitEvent, frame, event, "player")
+			Hear(event)
 		end
 		pcall(frame.RegisterEvent, frame, "PLAYER_ENTERING_WORLD")
 		pcall(frame.RegisterEvent, frame, "SPELL_TEXT_UPDATE")
@@ -234,6 +255,9 @@ ns.AddStatus(KEY, function()
 	end
 	if state.refused then
 		lines[#lines + 1] = "Spell rank: the game would not take the text of a cast bar, so a rank was not shown."
+	end
+	if state.cut then
+		lines[#lines + 1] = ("Spell rank: %s did not fit the bar, so the name was left as the game wrote it."):format(state.cut)
 	end
 	if state.protected then
 		lines[#lines + 1] = "Spell rank: the player bar is protected here in a fight, so a rank cast in a fight is not shown."

@@ -761,7 +761,7 @@ ns.PAGES = {
 		{ key = "itemMin", kind = "number", default = 1, min = 1, max = 40, step = 1, label = "Item minimum",
 			tip = "An item tracker is low when the bags hold fewer. /flatui tracker set 1 low 5 sets one tracker to be low at 5 or fewer." },
 		{ key = "ammoMin", kind = "number", default = 200, min = 0, max = 2000, step = 100, label = "Ammunition minimum",
-			tip = "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, it waits for the end of a fight." },
+			tip = "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, a low count waits for the end of a fight." },
 		{ key = "thrownMin", kind = "number", default = 20, min = 0, max = 200, step = 5, label = "Thrown weapon minimum",
 			tip = "With a thrown weapon, the ammunition tracker is low at this many or fewer. 0 means never. One that wears out is low at a fifth of its durability." },
 		{ section = "When shown" },

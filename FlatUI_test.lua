@@ -10389,7 +10389,7 @@ local PAGES = {
 		S("trackers.remove", "list", 0, "Remove a tracker"),
 		"Amounts",
 		S("trackers.itemMin", "number", 1, "Item minimum", "An item tracker is low when the bags hold fewer. /flatui tracker set 1 low 5 sets one tracker to be low at 5 or fewer.", { min = 1, max = 40, step = 1, unit = "" }),
-		S("trackers.ammoMin", "number", 200, "Ammunition minimum", "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, it waits for the end of a fight.", { min = 0, max = 2000, step = 100, unit = "" }),
+		S("trackers.ammoMin", "number", 200, "Ammunition minimum", "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, a low count waits for the end of a fight.", { min = 0, max = 2000, step = 100, unit = "" }),
 		S("trackers.thrownMin", "number", 20, "Thrown weapon minimum", "With a thrown weapon, the ammunition tracker is low at this many or fewer. 0 means never. One that wears out is low at a fifth of its durability.", { min = 0, max = 200, step = 5, unit = "" }),
 		"When shown",
 		S("trackers.show", "choice", "always", "Show", nil, { choices = { { "always", "Always" }, { "low", "Only when low or missing" }, { "combat", "Only in combat" } } }),

@@ -105,7 +105,31 @@ end
 -- Session ---------------------------------------------------------------------------------------------------------------------------------
 
 local function Fresh(now)
-	return { v = VERSION, started = now, savedAt = now, away = 0, gained = 0, marks = {} }
+	return { v = VERSION, started = now, savedAt = now, away = 0, gained = 0, marks = {}, spent = 0, unseen = 0 }
+end
+
+-- What a kill line and the pool update that goes with it leave to each other lasts this many seconds: the game sends them together.
+local SETTLE = 2
+
+-- The rested pool as the game shows it now, set against the kill lines: a fall that lines explained is settled (s.spent), a fall no line has
+-- explained yet waits for its line (s.unseen), and a rise (resting) settles both. Neither waits longer than SETTLE seconds, so a line that was
+-- never read leaves nothing behind.
+local function Pool()
+	local pool, now = Rest(), Now() or 0
+	local was = Finite(s.pool) and s.pool or pool
+	if s.settleBy and now > s.settleBy then
+		s.spent, s.unseen, s.settleBy = 0, 0, nil
+	end
+	if pool > was then
+		s.spent, s.unseen = 0, 0
+	else
+		local matched = math.min(was - pool, s.spent)
+		s.spent, s.unseen = s.spent - matched, s.unseen + (was - pool) - matched
+		if s.unseen > 0 then
+			s.settleBy = now + SETTLE
+		end
+	end
+	s.pool = pool
 end
 
 local function Count(list)
@@ -161,7 +185,7 @@ local function Kept(saved, now)
 	saved.quests = { list = Count(type(saved.quests) == "table" and saved.quests.list or nil) }
 	local open = Finite(saved.awaySince) and math.max(0, saved.savedAt - saved.awaySince) or 0
 	saved.away, saved.awaySince = saved.away + open + gap, nil
-	saved.pool = nil
+	saved.pool, saved.spent, saved.unseen, saved.settleBy = nil, 0, 0, nil
 	saved.resumed = true
 	return saved
 end
@@ -193,9 +217,11 @@ end
 
 -- A plain read of the level and the experience, and what it adds to the session.
 local function Read()
-	if not s then
+	-- A client without the two calls is asked nothing at all, its level included.
+	if not s or type(UnitXP) ~= "function" or type(UnitXPMax) ~= "function" then
 		return
 	end
+	Pool()
 	local level, value, total = Ask(UnitLevel, "player"), Ask(UnitXP, "player"), Ask(UnitXPMax, "player")
 	local now = Now()
 	if not (now and Finite(level) and Finite(value) and Finite(total)) or total <= 0 or value < 0 then
@@ -316,17 +342,19 @@ local function Kill(text)
 		kills = { level = level, group = group, list = {} }
 		s.kills = kills
 	end
-	local pool, rate = Rest()
+	Pool()
+	local _, rate = Rest()
 	local share = total * (rate - 1) / rate
-	local bonus = 0
-	if pool > 0 then
-		-- The pool lasted the whole kill, so the bonus was the base of the kill.
-		bonus = share
-	elseif Finite(s.pool) and s.pool > 0 then
-		-- The kill used up what was left of the pool.
-		bonus = math.min(s.pool, share)
+	-- The pool as it stood before this kill, whichever the game sent first: the pool now, what it lost that no line has explained yet (the
+	-- pool came first), less what earlier lines took that it does not show yet (the lines came first, as after an area pull). The bonus of a
+	-- kill is the base of the kill while the pool lasts, and what was left of the pool for the kill that uses it up: the smaller of the two.
+	local before = math.max(0, s.pool + s.unseen - s.spent)
+	local bonus = math.min(before, share)
+	local explained = math.min(s.unseen, bonus)
+	s.unseen, s.spent = s.unseen - explained, s.spent + bonus - explained
+	if s.spent > 0 then
+		s.settleBy = (Now() or 0) + SETTLE
 	end
-	s.pool = pool
 	local list = kills.list
 	list[#list + 1] = total - bonus
 	while #list > KILLS do
@@ -335,13 +363,31 @@ local function Kill(text)
 end
 
 local function Group()
-	local group = Ask(GetNumGroupMembers) or 0
-	if s and type(s.kills) == "table" and Finite(group) and group ~= s.kills.group then
-		s.kills = nil
+	if not (s and type(s.kills) == "table") then
+		return false
 	end
+	local group = Ask(GetNumGroupMembers) or 0
+	if Finite(group) and group ~= s.kills.group then
+		s.kills = nil
+		return true
+	end
+	return false
 end
 
-local function TurnedIn(_, xp)
+-- Quests the game said were handed in that the log may still list for a moment (the log update comes after QUEST_TURNED_IN): left out of the
+-- quests ready until QUEST_REMOVED names them or a quest is accepted.
+local handedIn = {}
+
+local function TurnedIn(id, xp)
+	local entry = Finite(id) and quest and quest.ids and quest.ids[id] or nil
+	if entry then
+		handedIn[id] = true
+		quest.ids[id] = nil
+		quest.all, quest.allXP = quest.all - 1, quest.allXP - entry.xp
+		if entry.ready then
+			quest.ready, quest.readyXP = quest.ready - 1, quest.readyXP - entry.xp
+		end
+	end
 	if not s or not Finite(xp) or xp <= 0 then
 		return
 	end
@@ -369,11 +415,18 @@ local function QuestCalls()
 		and type(log.IsComplete) == "function" and type(_G.GetQuestLogRewardXP) == "function"
 end
 
--- The quests of the log: headers and hidden lines are left out, and a quest that shows twice counts once. Collapsed headers keep their quests in
--- the list (QuestMapFrame.lua:1586-1592, 1627-1637).
+-- True while the game would show an experience bar: below the maximum level, experience not turned off (XpBar.lua, GameRulesUtil.lua:134-140).
+local function Levelling()
+	return ns.XpBarShowsXp == nil or ns.XpBarShowsXp() == true
+end
+
+-- The quests of the log, as the game's own log shows them (QuestMapFrame.lua:1575-1592): headers, hidden lines, tasks and bounties are left out,
+-- a quest that shows twice counts once, and a quest just handed in is left out until the log lets it go. Collapsed headers keep their quests in
+-- the list (QuestMapFrame.lua:1586, 1627-1637).
 local function Scan()
 	queued = false
-	if not (ns.XpOwn and ns.XpOwn()) then
+	if not (ns.XpOwn and ns.XpOwn()) or not Levelling() then
+		quest = nil
 		return
 	end
 	if not QuestCalls() then
@@ -382,16 +435,19 @@ local function Scan()
 	end
 	local log = _G.C_QuestLog
 	local count = Ask(log.GetNumQuestLogEntries)
-	local found, seen = { ready = 0, readyXP = 0, all = 0, allXP = 0 }, {}
+	local found, seen = { ready = 0, readyXP = 0, all = 0, allXP = 0, ids = {} }, {}
 	for index = 1, Finite(count) and math.min(count, MAX_ENTRIES) or 0 do
 		local info = Ask(log.GetInfo, index)
 		local id = Field(info, "questID")
-		if info and Field(info, "isHeader") ~= true and Field(info, "isHidden") ~= true and Finite(id) and id > 0 and not seen[id] then
+		if info and Field(info, "isHeader") ~= true and Field(info, "isHidden") ~= true and Field(info, "isTask") ~= true and Field(info, "isBounty") ~= true
+			and Finite(id) and id > 0 and not seen[id] and not handedIn[id] then
 			seen[id] = true
 			local xp = Ask(_G.GetQuestLogRewardXP, id)
 			xp = Finite(xp) and math.max(xp, 0) or 0
+			local ready = Ask(log.IsComplete, id) == true
+			found.ids[id] = { xp = xp, ready = ready }
 			found.all, found.allXP = found.all + 1, found.allXP + xp
-			if Ask(log.IsComplete, id) == true then
+			if ready then
 				found.ready, found.readyXP = found.ready + 1, found.readyXP + xp
 			end
 		end
@@ -407,6 +463,8 @@ local function Redraw()
 end
 
 local function Look()
+	-- Cleared here as well as in Scan, so that a look the part refused does not keep every later one away.
+	queued = false
 	Safe(Scan)
 	Redraw()
 end
@@ -627,7 +685,7 @@ local function Lines(quests, numbers)
 		lines[#lines + 1] = line
 	end
 	if n.kills then
-		lines[#lines + 1] = ("Kills to level: about %d (%s a kill%s)"):format(n.kills, Grouped(n.perKill), n.restRate == 2 and ", twice that while rested" or "")
+		lines[#lines + 1] = ("Kills to level: about %d (%s a kill%s)"):format(n.kills, Grouped(n.perKill), n.restRate and (", %s while rested"):format(Grouped(n.perKill * n.restRate)) or "")
 	end
 	if n.quests then
 		lines[#lines + 1] = ("Quests to level: about %d (%s a quest)"):format(n.quests, Grouped(n.perQuest))
@@ -641,7 +699,7 @@ end
 -- Lines for /flatui status, while Flat UI's bar is chosen and the session has read the experience.
 local function StatusLines()
 	local lines = {}
-	if not (ns.XpOwn and ns.XpOwn()) or not s or not s.last then
+	if not (ns.XpOwn and ns.XpOwn()) or not s or not s.last or not Levelling() then
 		return lines
 	end
 	local n = Numbers()
@@ -703,18 +761,26 @@ local function Listen(event, fn, filter)
 end
 
 Listen("PLAYER_ENTERING_WORLD", function()
+	-- A loading screen can hide a change of the away flag, so it is read again, but only a plain answer: in a dungeon the game withholds it, and
+	-- closing an open span on arrival would count the time still away there as play.
+	if Ask(UnitIsAFK, "player") ~= nil then
+		Away()
+	end
 	Read()
 	Queue()
 end)
 Listen("PLAYER_XP_UPDATE", Read, ForPlayer)
-Listen("UNIT_LEVEL", Read, ForPlayer)
+Listen("UNIT_LEVEL", function()
+	Read()
+	Queue()
+end, ForPlayer)
 Listen("PLAYER_LEVEL_UP", function()
 	Read()
 	Queue()
 end)
 Listen("UPDATE_EXHAUSTION", function()
 	if s then
-		s.pool = Rest()
+		Pool()
 	end
 end)
 Listen("CHAT_MSG_COMBAT_XP_GAIN", function(text)
@@ -725,12 +791,23 @@ Listen("QUEST_TURNED_IN", function(id, xp)
 	TurnedIn(id, xp)
 	Redraw()
 end)
-for _, event in ipairs({ "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_DATA_LOAD_RESULT" }) do
+for _, event in ipairs({ "QUEST_LOG_UPDATE", "QUEST_DATA_LOAD_RESULT" }) do
 	Listen(event, Queue)
 end
+Listen("QUEST_ACCEPTED", function()
+	handedIn = {}
+	Queue()
+end)
+Listen("QUEST_REMOVED", function(id)
+	if Finite(id) then
+		handedIn[id] = nil
+	end
+	Queue()
+end)
 Listen("GROUP_ROSTER_UPDATE", function()
-	Group()
-	Redraw()
+	if Group() then
+		Redraw()
+	end
 end)
 Listen("PLAYER_FLAGS_CHANGED", function()
 	Away()

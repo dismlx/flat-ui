@@ -736,12 +736,31 @@ function F.Update(layout)
 		root:Hide()
 	end
 	F.Place()
-	-- A tooltip shown for a bar under the cursor follows the new numbers.
+	-- A tooltip shown for a bar under the cursor follows the new numbers, while it is still the bar's (F.TipOwned).
 	for _, bar in pairs(S.bars) do
-		if bar.hover and bar.shown and Opt("xpTooltip") then
+		if bar.hover and bar.shown and Opt("xpTooltip") and F.TipOwned(bar) then
 			F.Tip(bar)
 		end
 	end
+end
+
+-- Whether the game's tooltip is still the bar's and the cursor still over it, as Errands.TipOwned asks (Errands.lua): only then is it written
+-- again, so a redraw never takes the tooltip from another frame or brings it back after the cursor left.
+function F.TipOwned(bar)
+	local tip = _G.GameTooltip
+	if tip == nil or ns.IsSecret(tip) then
+		return false
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, bar.frame)
+	if not ok or owned ~= true then
+		return false
+	end
+	local okShown, shown = pcall(tip.IsShown, tip)
+	if okShown and shown == false then
+		return false
+	end
+	local okOver, over = pcall(bar.frame.IsMouseOver, bar.frame)
+	return not okOver or ns.IsSecret(over) or over ~= false
 end
 
 -- Looking again ---------------------------------------------------------------------------------------------------------------------------
@@ -846,6 +865,11 @@ function ns.XpBarRedraw()
 end
 
 -- Interface for the other files -------------------------------------------------------------------------------------------------------------
+
+-- True while the game would show an experience bar: below the maximum level, experience not turned off (XpStats.lua reads the log only then).
+function ns.XpBarShowsXp()
+	return F.XpShown()
+end
 
 function ns.XpBarFrame()
 	return S.frame

@@ -6,8 +6,9 @@ local _, ns = ...
 -- Each new standing is compared with the last one seen, so a loss is never followed. Of the gains that come together (BURST seconds: a quest of a
 -- Steamwheedle Cartel town also raises the other towns by half) the largest wins, and Flat UI's reputation bar (XpBar.lua, through
 -- ns.ErrandsRepFollowed) shows that faction in place of the one the game watches. Passed over: a faction you are exalted with, one you moved to
--- Inactive, and a heading. A faction picked in the game's reputation window shows until your next gain. The faction
--- followed is kept for the character (FlatUICharDB.errandsRep). The faction the game watches is never changed, and the list of factions is only
+-- Inactive, and a heading. A faction picked in the game's reputation window shows until your next gain. The faction followed and the factions
+-- seen inactive are kept for the character (FlatUICharDB.errandsRep, FlatUICharDB.errandsRepInactive), since C_Reputation.IsFactionActive takes
+-- a row of the list and the Inactive heading is often closed. The faction the game watches is never changed, and the list of factions is only
 -- read, never expanded or collapsed: C_Reputation.SetWatchedFactionByID and the header calls raise UPDATE_FACTION inside the caller (a synchronous
 -- event), so the game's status bar manager would run inside Flat UI's call and keep the table of shown bars it wrote then, and on Forever that
 -- manager lays out the bottom stack the action bars are in.
@@ -23,7 +24,7 @@ local _, ns = ...
 -- commands last. Also in a fight, with the map closed: the calls are not protected, and the one game handler they then run, the world map's
 -- pin button, makes no restricted call. While the map is open its pin provider would draw the pin inside the call (AcquirePin calls
 -- SetPassThroughButtons, which a fight refuses, and the first pin of a session would leave the map's pin pool Flat UI's), so /way then asks
--- to close the map.
+-- to close the map; so does /way clear, whose call empties that pool under Flat UI's call.
 -- These follow EnhanceQoL's reputation bar, its /way command and its classic reminders, adapted with the permission of its author.
 
 local E = ns.Errands
@@ -48,6 +49,8 @@ local TYPE_RANK = { [3] = 1, [2] = 2, [5] = 3, [6] = 4, [4] = 5 }
 local MICRO = 5
 -- The most maps kept for names, and the most names an answer lists.
 local MOST_MAPS, MOST_NAMES = 5000, 4
+-- Map types (Enum.UIMapType) the top of a world can be: Cosmic, World.
+local WORLD_TYPES = { [0] = true, [1] = true }
 local WHY = { top = "you are exalted with it", inactive = "it is inactive", header = "it is a heading" }
 
 -- seen: by faction ID, { standing, active, name } from the list and the gains. burst, order: the gains of this moment and their order. token: counts
@@ -139,6 +142,24 @@ local function ByID()
 	return (R ~= nil and type(R.GetFactionDataByID) == "function") or type(_G.GetFactionInfoByID) == "function"
 end
 
+-- The factions seen inactive, kept for the character: C_Reputation.IsFactionActive takes a row of the list, so a faction under a collapsed heading
+-- (the Inactive heading closed) is known only from an earlier look. Nil before the saved variables are loaded, and, unless create is true, while
+-- no faction was seen inactive.
+local function Inactive(create)
+	if type(FlatUICharDB) ~= "table" then
+		return nil
+	end
+	local kept = FlatUICharDB.errandsRepInactive
+	if type(kept) ~= "table" then
+		if not create then
+			return nil
+		end
+		kept = {}
+		FlatUICharDB.errandsRepInactive = kept
+	end
+	return kept
+end
+
 -- Each faction of the list the game shows (a collapsed heading hides its own): its standing the first time it is seen, and whether it is
 -- active. Nothing is expanded. Returns how many rows were read: none before the game has the list, at the very start of a login.
 local function Walk()
@@ -179,6 +200,10 @@ local function Walk()
 			end
 			if active == true or active == false then
 				entry.active = active
+				local kept = Inactive(active == false)
+				if kept then
+					kept[f.factionID] = active == false or nil
+				end
 			end
 		end
 	end
@@ -236,8 +261,8 @@ local function PassOver(id)
 	elseif ns.Finite(f.reaction) and f.reaction >= TOP then
 		return "top", f.name
 	end
-	local entry = rep.seen[id]
-	if entry and entry.active == false then
+	local entry, kept = rep.seen[id], Inactive()
+	if (entry and entry.active == false) or ((not entry or entry.active == nil) and kept and kept[id]) then
 		return "inactive", f.name
 	end
 	return nil, f.name
@@ -517,7 +542,21 @@ local function Squash(text)
 	return (text:lower():gsub("[%s%p]", ""))
 end
 
--- Every map under the top of your world, by name: made once, at the first name asked for.
+-- The top of the chain of parents of a map.
+local function Top(id)
+	local top, steps = MapInfo(id), 0
+	while top and top.parent and steps < 10 do
+		local up = MapInfo(top.parent)
+		if not up then
+			break
+		end
+		top, steps = up, steps + 1
+	end
+	return top
+end
+
+-- Every map under the top of your world, by name: made at the first name asked for, and kept once it holds a zone. In a battleground or an
+-- instance whose maps reach no world (an orphan map) the game's fallback world map is the top.
 local function Index()
 	if way.index then
 		return way.index
@@ -526,18 +565,9 @@ local function Index()
 	if not M or type(M.GetMapChildrenInfo) ~= "function" then
 		return nil
 	end
-	local id = E.Ask(M.GetBestMapForUnit, "player")
-	if not ns.Finite(id) then
-		id = E.Ask(M.GetFallbackWorldMapID)
-	end
-	local top = MapInfo(id)
-	local steps = 0
-	while top and top.parent and steps < 10 do
-		local up = MapInfo(top.parent)
-		if not up then
-			break
-		end
-		top, steps = up, steps + 1
+	local top = Top(E.Ask(M.GetBestMapForUnit, "player"))
+	if not (top and WORLD_TYPES[top.kind]) then
+		top = Top(E.Ask(M.GetFallbackWorldMapID)) or top
 	end
 	if not top then
 		return nil
@@ -546,7 +576,7 @@ local function Index()
 	if type(list) ~= "table" then
 		return nil
 	end
-	local index = {}
+	local index, zones = {}, 0
 	for i = 1, MOST_MAPS do
 		local child = Field(list, i)
 		if child == nil then
@@ -555,9 +585,14 @@ local function Index()
 		local cid, name, kind = Field(child, "mapID"), Field(child, "name"), Field(child, "mapType")
 		if ns.Finite(cid) and type(name) == "string" and name ~= "" and TYPE_RANK[kind] then
 			index[#index + 1] = { id = cid, name = name, key = Squash(name), rank = TYPE_RANK[kind] }
+			if TYPE_RANK[kind] == 1 then
+				zones = zones + 1
+			end
 		end
 	end
-	way.index = index
+	if zones > 0 then
+		way.index = index
+	end
 	return index
 end
 
@@ -614,9 +649,23 @@ local function Number(token)
 	return tonumber(token)
 end
 
+-- A token of two numbers with a comma between them ("45,61", "45,2", "45.2,61.8"): its two parts, and whether either has a point.
+local function Comma(token)
+	if type(token) ~= "string" then
+		return nil
+	end
+	local a, b = token:match("^([%d%.]+),([%d%.]+)$")
+	if a and Number(a) and Number(b) then
+		return a, b, (a:find(".", 1, true) or b:find(".", 1, true)) ~= nil
+	end
+	return nil
+end
+
 -- What /way was given: { empty }, { clear }, or { mapID, name, x, y, note } with x and y in percent; or nil and why ("numbers", "range").
--- "45, 61" and a lone "45,61" are two numbers, as EnhanceQoL reads them; "45,2 61,8" has decimal commas. Three numbers whose first is above 100
--- are a map ID and the coordinates, as EnhanceQoL takes them; #1429 is a map ID anywhere.
+-- "45 61", "45, 61", "45,61" and "45.2,61.8" are two numbers. Decimal commas are read when both coordinates have one ("45,2 61,8"), in the
+-- second ("45 61,8"), or with one digit after the comma before a whole number ("45,2 61"); "45,61 3 wolves" is 45, 61 and a note. Three numbers
+-- whose first is a whole number above 100 are a map ID and the coordinates (EnhanceQoL takes any three); #1429 is a map ID. The words after the
+-- coordinates are a note.
 local function Parse(msg)
 	msg = (type(msg) == "string" and msg or ""):match("^%s*(.-)%s*$")
 	if msg == "" then
@@ -626,33 +675,11 @@ local function Parse(msg)
 	if word == "clear" or word == "reset" or word == "remove" or word == "off" then
 		return { clear = true }
 	end
-	msg = msg:gsub("(%d)%s*,%s+", "%1 ")
-	-- 45.2,61.8 and 45,61.8 (a comma between two numbers of which one has a decimal point), and 45 ,61.
-	msg = msg:gsub("(%.%d*),(%d)", "%1 %2"):gsub("(%d),(%d+%.)", "%1 %2"):gsub("%s+,%s*", " ")
+	-- A comma with a space beside it, after a digit, only separates: "45, 61", "45 ,61", "45 , 61".
+	msg = msg:gsub("(%d)%s*,%s+", "%1 "):gsub("(%d)%s+,(%d)", "%1 %2")
 	local tokens = {}
 	for token in msg:gmatch("%S+") do
 		tokens[#tokens + 1] = token
-	end
-	local plain, commas = 0, 0
-	for _, token in ipairs(tokens) do
-		if Number(token) then
-			plain = plain + 1
-		elseif token:match("^%d+,%d+$") then
-			commas = commas + 1
-		end
-	end
-	local split = commas == 1 and plain == 0
-	local i = 1
-	while i <= #tokens do
-		local a, b = tokens[i]:match("^(%d+),(%d+)$")
-		if a and split then
-			tokens[i] = a
-			table.insert(tokens, i + 1, b)
-			i = i + 1
-		elseif a then
-			tokens[i] = a .. "." .. b
-		end
-		i = i + 1
 	end
 	local mapID
 	local hash = tokens[1] and tokens[1]:match("^#(%d+)$")
@@ -662,7 +689,7 @@ local function Parse(msg)
 	end
 	local at
 	for index, token in ipairs(tokens) do
-		if Number(token) then
+		if Number(token) or Comma(token) then
 			at = index
 			break
 		end
@@ -671,10 +698,36 @@ local function Parse(msg)
 		return nil, "numbers"
 	end
 	local name = not mapID and at > 1 and table.concat(tokens, " ", 1, at - 1) or nil
-	local x, y = Number(tokens[at]), Number(tokens[at + 1])
-	local rest = at + 2
-	if not mapID and not name and x and x > 100 and x == math.floor(x) and y and Number(tokens[at + 2]) then
-		mapID, x, y, rest = x, y, Number(tokens[at + 2]), at + 3
+	local numbers, i, decimal = {}, at, false
+	-- Whether the numbers so far start a map ID and coordinates (1429 45 61).
+	local function MapFirst()
+		return not mapID and not name and numbers[1] ~= nil and numbers[1] > 100 and numbers[1] == math.floor(numbers[1])
+	end
+	while i <= #tokens and #numbers < (MapFirst() and 3 or 2) do
+		local token = tokens[i]
+		local a, b, dotted = Comma(token)
+		if a then
+			local want = (MapFirst() and 3 or 2) - #numbers
+			if not dotted and want == 1 then
+				-- The last coordinate: "45 61,8".
+				numbers[#numbers + 1], decimal = tonumber(a .. "." .. b), true
+			elseif not dotted and (decimal or select(3, Comma(tokens[i + 1])) == false or (#b == 1 and Number(tokens[i + 1]))) then
+				-- Both coordinates with a decimal comma ("45,2 61,8"), or one decimal digit before a whole number ("45,2 61").
+				numbers[#numbers + 1], decimal = tonumber(a .. "." .. b), true
+			else
+				numbers[#numbers + 1] = tonumber(a)
+				numbers[#numbers + 1] = tonumber(b)
+			end
+		elseif Number(token) then
+			numbers[#numbers + 1] = Number(token)
+		else
+			break
+		end
+		i = i + 1
+	end
+	local x, y = numbers[1], numbers[2]
+	if MapFirst() and numbers[3] then
+		mapID, x, y = numbers[1], numbers[2], numbers[3]
 	end
 	if not (x and y) then
 		return nil, "numbers"
@@ -682,7 +735,7 @@ local function Parse(msg)
 	if x > 100 or y > 100 then
 		return nil, "range"
 	end
-	local note = tokens[rest] and table.concat(tokens, " ", rest) or nil
+	local note = tokens[i] and table.concat(tokens, " ", i) or nil
 	return { mapID = mapID, name = name, x = x, y = y, note = note }
 end
 
@@ -743,6 +796,12 @@ local function Clear()
 	local M = Map()
 	if E.Ask(M.HasUserWaypoint) == false then
 		Tell("There is no waypoint to clear.")
+		return
+	end
+	-- ClearUserWaypoint raises USER_WAYPOINT_UPDATED inside the call too: with the map open its pin provider would empty its pool of pins under
+	-- Flat UI's call, and the map's own refresh reads that pool in a later fight.
+	if E.Shown(_G.WorldMapFrame) then
+		Tell(("close the map, then type %s clear again."):format(Command()))
 		return
 	end
 	E.Call(M.ClearUserWaypoint)
@@ -967,8 +1026,11 @@ function part.Status()
 		elseif ns.Get("hud.xpShow") == "xp" then
 			lines[#lines + 1] = "Levelling: Bars shown is Experience only, so the reputation bar is hidden."
 		end
-		local events = C_EventUtils
-		local valid = type(events) == "table" and not ns.IsSecret(events) and E.Ask(events.IsEventValid, "FACTION_STANDING_CHANGED")
+		-- Only a client that answers false lacks the event; one without C_EventUtils does not say.
+		local events, valid = C_EventUtils, nil
+		if type(events) == "table" and not ns.IsSecret(events) then
+			valid = E.Ask(events.IsEventValid, "FACTION_STANDING_CHANGED")
+		end
 		if valid == false then
 			lines[#lines + 1] = "Levelling: this client does not report reputation gains, so the bar shows the faction you watch."
 		elseif not ByID() then
