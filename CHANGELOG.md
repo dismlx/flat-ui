@@ -1,6 +1,7 @@
 ## 0.5.7
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Threat list** is a new page in the **Combat** group, off by default: your group by threat on the enemy you fight, highest first, one bar each in class colours, with pets a shade darker; 100% has aggro or takes it. It shows only in a fight, while your target or its target is an enemy, as **Show** says: **In a group** (the default), **In a dungeon or raid**, or **In a group or alone**. **Pets** (on), **Number of bars** (5), **Bar width** (180 px) and **Bar height** (16 px). `/flatui move` places it, and `/flatui threat` shows sample bars. Where the game withholds the threat (on some bosses) the bars keep the order of the group, and `/flatui status` says so. Follows the threat meter of EnhanceQoL's damage meter.
 
 ## 0.5.6
 

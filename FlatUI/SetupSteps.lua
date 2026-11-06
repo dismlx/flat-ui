@@ -1126,4 +1126,12 @@ ns.SETUP_STEPS = {
 		{ "datapanels.tooltips", "r", "behaviour", "Shows a tooltip when you point at a slot." },
 		{ "datapanels.forgetGold", "r", "behaviour", "Takes a character out of the gold tooltip." },
 	} },
+	{ id = "threat", area = "Threat list", title = "Threat list", draw = "mock-screen", built = false, rows = {
+		{ "threat.enabled", "c", "behaviour", "Shows your group by threat on the enemy you fight, in a window placed with the movers." },
+		{ "threat.show", "o", "behaviour", "Chooses whether the threat list shows in a group, in a dungeon or raid, or also when you are alone." },
+		{ "threat.pets", "o", "behaviour", "Gives each pet a bar of its own on the threat list." },
+		{ "threat.rows", "o", "behaviour", "Sets how many bars the threat list shows at most." },
+		{ "threat.barWidth", "r", "behaviour", "Sets the width of the bars of the threat list." },
+		{ "threat.barHeight", "r", "behaviour", "Sets the height of the bars of the threat list and of their text." },
+	} },
 }

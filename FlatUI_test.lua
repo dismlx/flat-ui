@@ -10519,6 +10519,16 @@ local PAGES = {
 		S("enemycd.flash", "bool", false, "Flash when ready"),
 		S("enemycd.sound", "choice", "none", "Sound", "The sound plays for your target and focus only.", { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 	} },
+	{ key = "threat", label = "Threat list", rows = {
+		S("threat.enabled", "bool", false, "Show the threat list", "Your group by threat on the enemy you fight, highest first: 100% has aggro or takes it. /flatui move places the list, /flatui threat shows a sample."),
+		"When it shows",
+		S("threat.show", "choice", "group", "Show", "Only in a fight, while your target or the target of your target is an enemy.", { choices = { { "group", "In a group" }, { "instance", "In a dungeon or raid" }, { "always", "In a group or alone" } } }),
+		"Bars",
+		S("threat.pets", "bool", true, "Pets", "A bar for each pet, a shade darker than its owner's."),
+		S("threat.rows", "number", 5, "Number of bars", "The highest threat first.", { min = 1, max = 10, step = 1, unit = "" }),
+		S("threat.barWidth", "number", 180, "Bar width", nil, { min = 100, max = 400, step = 5, unit = " px" }),
+		S("threat.barHeight", "number", 16, "Bar height", "Also the height of text.", { min = 10, max = 30, step = 1, unit = " px" }),
+	} },
 	{ key = "windows", label = "Windows", rows = {
 		S("windows.enabled", "bool", true, "Restyle windows", RELOAD),
 		"Look",
@@ -63335,10 +63345,10 @@ function PT.runBuild()
 	-- 2. The left-hand side ---------------------------------------------------------------------------------------------
 	do
 		local W = PT.open()
-		-- The sidebar: four fixed rows, then six groups with the 24 modules. The page that is open has its sections under it and its tabs after.
+		-- The sidebar: four fixed rows, then six groups with the 25 modules. The page that is open has its sections under it and its tabs after.
 		local GROUPS = { { "Look", { "Flat UI", "Fonts" } }, { "Frames", { "Unit frames", "Nameplates", "Personal resource display", "Cast bars", "Swing timers" } },
 			{ "Action bars", { "Action bars", "Bar block", "Bar blocks" } },
-			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Combat text" } },
+			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Combat text" } },
 			{ "Interface", { "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels" } }, { "Layout", { "Movers", "Fading", "Tooltip" } } }
 		local expected = { "Home", "Flat UI setup", "Profiles", "Move frames" }
 		for _, group in ipairs(GROUPS) do
@@ -67115,7 +67125,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 57 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 57 and rows == 1006 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1012 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -69355,10 +69365,10 @@ function PT.runNav()
 	local clean, joined, need = PT.clean, PT.joined, PT.need
 	local N = {}
 	N.keys = { "general", "fonts", "unitframes", "nameplates", "resource", "castbars", "swing", "actionbars", "barblock", "blocks", "cooldowns", "trackers", "defensives",
-		"partycd", "enemycd", "combattext", "hud", "windows", "chat", "errands", "datapanels", "movers", "fade", "tooltip" }
+		"partycd", "enemycd", "threat", "combattext", "hud", "windows", "chat", "errands", "datapanels", "movers", "fade", "tooltip" }
 	N.names = { "Home", "Flat UI setup", "Profiles", "Move frames", "Look", "Flat UI", "Fonts", "Frames", "Unit frames", "Nameplates", "Personal resource display", "Cast bars",
 		"Swing timers", "Action bars", "Action bars", "Bar block", "Bar blocks", "Combat", "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns",
-		"Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels", "Layout", "Movers", "Fading", "Tooltip" }
+		"Threat list", "Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels", "Layout", "Movers", "Fading", "Tooltip" }
 	N.known = {}
 	for _, name in ipairs(N.names) do N.known[name] = true end
 	N.scroll = function(W) return PT.clips(W, PT.nav(W)[1].raw)[1] end
@@ -69514,8 +69524,8 @@ function PT.runNav()
 		local W = PT.world({ firstStart = true })
 		local ns = W.ns
 		ns.OpenPanel()
-		local subtitle = ("%d of 24 modules on"):format(N.on(ns))
-		check("window nav: the first time the window opens on Home, and says how many of the 24 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
+		local subtitle = ("%d of 25 modules on"):format(N.on(ns))
+		check("window nav: the first time the window opens on Home, and says how many of the 25 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
 			and (W.env.FlatUIDB.panel == nil or W.env.FlatUIDB.panel.page == nil), subtitle .. " " .. tostring(PT.title(W)))
 		PT.go(W, "Nameplates")
 		check("window nav: a page chosen is kept in FlatUIDB.panel and in no profile", W.env.FlatUIDB.panel.page == "nameplates" and W.env.FlatUIDB.profiles[ns.Profile()].options.page == nil)
@@ -70071,11 +70081,11 @@ function PT.runTabs()
 			local got = joined(PT.tabTexts(W))
 			if got ~= item[2] then bad[#bad + 1] = item[1] .. ": " .. got end
 		end
-		for _, name in ipairs({ "Fonts", "Swing timers", "Bar block", "Bar blocks", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Combat text", "Movers", "Fading", "Tooltip" }) do
+		for _, name in ipairs({ "Fonts", "Swing timers", "Bar block", "Bar blocks", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Combat text", "Movers", "Fading", "Tooltip" }) do
 			PT.go(W, name)
 			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
 		end
-		check("window tabs: the 38 child pages are the tabs of twelve modules, in the order of the design, and the other eleven modules have none", children == 38 and #bad == 0, children .. " " .. joined(bad))
+		check("window tabs: the 38 child pages are the tabs of twelve modules, in the order of the design, and the other twelve modules have none", children == 38 and #bad == 0, children .. " " .. joined(bad))
 		PT.go(W, "Nameplates")
 		PT.go(W, "Health bar")
 		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil

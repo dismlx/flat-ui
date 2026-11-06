@@ -43,6 +43,7 @@ Defensives.lua
 PartyCooldowns.lua
 PartySync.lua
 EnemyCooldowns.lua
+Threat.lua
 OwnBuffs.lua
 TrackerShapes.lua
 TrackerKinds.lua

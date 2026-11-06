@@ -938,6 +938,20 @@ ns.PAGES = {
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
+	-- Threat.lua: a window of Flat UI's own with the group by threat on the enemy you fight. Off by default; on, it shows in a group, pets with it.
+	{
+		key = "threat", label = "Threat list",
+		{ key = "enabled", kind = "bool", default = false, label = "Show the threat list",
+			tip = "Your group by threat on the enemy you fight, highest first: 100% has aggro or takes it. /flatui move places the list, /flatui threat shows a sample." },
+		{ section = "When it shows" },
+		{ key = "show", kind = "choice", default = "group", label = "Show", tip = "Only in a fight, while your target or the target of your target is an enemy.",
+			choices = { { "group", "In a group" }, { "instance", "In a dungeon or raid" }, { "always", "In a group or alone" } } },
+		{ section = "Bars" },
+		{ key = "pets", kind = "bool", default = true, label = "Pets", tip = "A bar for each pet, a shade darker than its owner's." },
+		{ key = "rows", kind = "number", default = 5, min = 1, max = 10, step = 1, label = "Number of bars", tip = "The highest threat first." },
+		{ key = "barWidth", kind = "number", default = 180, min = 100, max = 400, step = 5, unit = " px", label = "Bar width" },
+		{ key = "barHeight", kind = "number", default = 16, min = 10, max = 30, step = 1, unit = " px", label = "Bar height", tip = "Also the height of text." },
+	},
 	{
 		key = "windows", label = "Windows",
 		{ key = "enabled", kind = "bool", default = true, label = "Restyle windows", reload = "off", tip = RELOAD },

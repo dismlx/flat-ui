@@ -58,6 +58,7 @@ local ADDON_NAME, ns = ...
 -- SetText, AddLine, AddDoubleLine, Show, Hide). It asks the server for the guild roster (C_GuildInfo.GuildRoster) while a slot shows the guild,
 -- and the game for the memory of addons (UpdateAddOnMemoryUsage) when its frame rate tooltip opens out of combat. When another addon brought
 -- LibDataBroker, it listens to that library and calls the functions of the feeds a slot shows (OnEnter, OnLeave, OnTooltipShow, OnClick).
+-- Threat list (off by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);
 -- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. While the mouse is over an item, spell or achievement
@@ -76,7 +77,7 @@ local ADDON_NAME, ns = ...
 -- the error text (SlashCmdList.UI_ERRORS_OFF and UI_ERRORS_ON) and RunScript with hooksecurefunc, so a macro or addon that turns the error
 -- text off or on is honoured and a kind it hides stays hidden.
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "fonts", "fade" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "fonts", "fade" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.

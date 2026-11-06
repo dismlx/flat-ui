@@ -151,6 +151,10 @@ local LIST = {
 		gate = "EnemyTargetBarShown", changed = "EnemyBarsMoved" },
 	{ name = "FlatUIEnemyFocus", label = "Enemy cooldowns: focus", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 30, x = 0, y = 180,
 		gate = "EnemyFocusBarShown", changed = "EnemyBarsMoved" },
+	-- The threat list (Threat.lua), which shows only in a fight: its top left corner is the top left corner of the box, which has the room of five
+	-- bars at the default size, and it grows down and to the right from there.
+	{ name = "FlatUIThreat", label = "Threat list", point = "CENTER", kind = "hud", own = true, noScale = true, width = 188, height = 112, x = 420, y = 0,
+		gate = "ThreatListShown", changed = "ThreatListMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
