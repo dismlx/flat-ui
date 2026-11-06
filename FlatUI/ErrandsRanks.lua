@@ -10,15 +10,19 @@ local _, ns = ...
 -- the same click throws all of that away before any later click or fight reads it; LayoutSpots.lua keeps its one risky write in its Reload
 -- click for the same reason.
 -- The ranks come from the spell book by name and number: the best rank the book lists of each name (the first number of its rank text), and a
--- slot is offered when it holds a spell of that name with a lower number. Only the player's own pages are read (slots 1 to 120 and 145 to 180),
--- and only spells: macros, items, flyouts, mounts and pets are never touched, nor a rank the player keeps (/flatui rank, kept for the account in
--- FlatUIDB.errands.ranks), nor a name whose top rank two spells share. Out of combat only: the line hides and its secure button leaves it before
--- the lockdown, and both come back after the fight. The click asks again about the fight, the cursor, Edit Mode and the quick keybind mode, and a
--- click that cannot uprank cancels its own reload and says why. Never under the gamepad interface. Later keeps a plan from coming back by itself
--- until the plan changes; after the reload one line in chat says what the game took.
+-- slot is offered when it holds a spell of that name with a lower number that is also the highest of that name on the slots. A lower rank kept
+-- beside a higher one (Frostbolt Rank 1 for its slow, a cheaper heal) is the player's choice and stays; the tooltip names it. Only the player's
+-- own pages are read (slots 1 to 120 and 145 to 180), and only spells: macros, items, flyouts, mounts and pets are never touched, nor a rank the
+-- player keeps (/flatui rank, kept for the account in FlatUIDB.errands.ranks), nor a name whose top rank two spells share. Out of combat only:
+-- the line hides and its secure button leaves it before the lockdown, and both come back after the fight. A line still up in the lockdown sets
+-- no attribute in its click, and its macro stops itself there (/stopmacro [combat]). The click asks again about the fight, the cursor, the
+-- game's popups, Edit Mode and the quick keybind mode, and a click that cannot uprank cancels its own reload and says why. Never under the
+-- gamepad interface. Later keeps a plan from coming back by itself until the plan changes, and so does a reload in which the game kept old
+-- ranks; after the reload one line in chat says what the game took.
 -- The lines about learned spells: the game's four (ERR_LEARN_SPELL_S, ERR_LEARN_ABILITY_S, ERR_LEARN_PASSIVE_S, ERR_SPELL_UNLEARNED_S) are dropped
 -- from the chat windows through the game's own chat filter registry (ChatFrameUtil.AddMessageEventFilter), which calls the filter securely and
--- only with a message the addon may read. No line is changed, only dropped, and by default one line in their place names what was learned.
+-- only with a message the addon may read. No line is changed, only dropped, and by default one line in their place names what was learned;
+-- with Say what was done off, the game's lines stay, since no line would take their place.
 -- Both follow EnhanceQoL (its AutoRankUp, and the learn and unlearn filter of its chat module), adapted with the permission of its author.
 
 local E = ns.Errands
@@ -37,15 +41,19 @@ local REFRESH = 0.2
 local SUMMARY_WAIT = 2
 -- Seconds after the start of the part before the note of the last click is read.
 local AFTER_RELOAD = 1
--- How many names the summary, the line, the tooltip and the line after the reload give before "and N more".
-local CHAT_NAMES, NOTICE_NAMES, TIP_SPELLS, NOTE_NAMES = 4, 2, 8, 3
--- Under the line of LayoutSpots.lua (TOP, -90, 30 high).
-local NOTICE_WIDTH, NOTICE_HEIGHT, NOTICE_Y = 360, 30, -126
+-- How many names the summary, the line, the tooltip, the line after the reload and the tooltip's lower ranks give before "and N more".
+local CHAT_NAMES, NOTICE_NAMES, TIP_SPELLS, NOTE_NAMES, LEFT_NAMES = 4, 2, 8, 3, 4
+-- Under the game's error and quest-progress text ("Not enough mana", "Kobold Vermin slain: 4/10"), which a levelling player reads all the
+-- time: UIErrorsFrame is TOP -122, 512 by 60, DIALOG (Blizzard_UIErrorsFrame/*/UIErrorsFrame.xml:3-7). The line of LayoutSpots.lua is above it
+-- (TOP -90, 30 high). What the line covers is the first line of the raid warning frame (HIGH, hidden unless a raid warning comes).
+local NOTICE_WIDTH, NOTICE_HEIGHT, NOTICE_Y = 360, 30, -186
 local UPRANK_WIDTH, LATER_WIDTH, GAP = 124, 60, 4
 local MAX_RANK = 1000
 -- The game's own words, the last one for an unlearned spell.
 local LINES = { "ERR_LEARN_SPELL_S", "ERR_LEARN_ABILITY_S", "ERR_LEARN_PASSIVE_S", "ERR_SPELL_UNLEARNED_S" }
 local FAILED = "Flat UI: Spell ranks failed. /flatui status shows why."
+-- The secure button's macro. Its first line stops it in a fight, whatever the Lua around it did, so a click in the lockdown never reloads.
+local MACRO = "/stopmacro [combat]\n/reload"
 
 -- The line: { frame, text, uprank, later, overlay }. broken: the line or its secure button could not be made, and is not tried again.
 local notice
@@ -271,35 +279,53 @@ local function Unavailable()
 	return nil
 end
 
--- What a click would do now: one item per slot that holds a lower rank of a spell the book knows higher, in slot order. A slot whose value the
--- client withholds is left out (E.Ask gives nil), and so is a pet's spell.
+-- What a click would do now, in slot order, and the lower ranks it leaves. Per spell name, only the slots at the highest rank the player's slots
+-- hold of it move up, and none when that rank is the book's best or above it: a lower rank kept beside a higher one is the player's choice
+-- (Frostbolt Rank 1 for its slow, Earth Shock Rank 1 as an interrupt, a cheaper heal), and the book may not list it to drag back. Two copies at
+-- that rank (the main page and a stance page) both move up. A slot whose value the client withholds is left out (E.Ask gives nil), and so is a
+-- pet's spell. Callers that need only the plan take the first value.
 local function Plan()
-	local plan = {}
+	local plan, left = {}, {}
 	if Unavailable() then
-		return plan
+		return plan, left
 	end
 	local best = Best()
 	if next(best) == nil then
-		return plan
+		return plan, left
 	end
+	-- The ranked spells on the slots, and the highest rank of each name among them; a kept rank counts too.
+	local held, high = {}, {}
 	for _, range in ipairs(SLOT_RANGES) do
 		for slot = range[1], range[2] do
 			local kind, id, sub = E.Ask(GetActionInfo, slot)
 			if kind == "spell" and Whole(id) and sub ~= "pet" then
 				local name = SpellName(id)
 				local top = name and best[name]
-				if top and not top.tie and id ~= top.id and id ~= top.base and not RankKept(id) then
-					local fromText = Subtext(id)
-					local from = RankNumber(fromText)
-					if from and from < top.rank then
-						plan[#plan + 1] = { slot = slot, old = id, new = top.id, base = top.base, bookSlot = top.bookSlot, name = name,
-							from = from, to = top.rank, fromText = fromText, toText = top.text }
+				if top and not top.tie then
+					local isTop = id == top.id or id == top.base
+					local text = isTop and top.text or Subtext(id)
+					local rank = isTop and top.rank or RankNumber(text)
+					if rank then
+						held[#held + 1] = { slot = slot, id = id, name = name, rank = rank, text = text, top = top }
+						high[name] = math.max(high[name] or 0, rank)
 					end
 				end
 			end
 		end
 	end
-	return plan
+	-- A slot below the book's best moves up when its rank is the highest of its name on the slots; a lower one beside it is left.
+	for _, h in ipairs(held) do
+		local top = h.top
+		if h.rank < top.rank and not RankKept(h.id) then
+			if h.rank == high[h.name] then
+				plan[#plan + 1] = { slot = h.slot, old = h.id, new = top.id, base = top.base, bookSlot = top.bookSlot, name = h.name,
+					from = h.rank, to = top.rank, fromText = h.text, toText = top.text }
+			else
+				left[#left + 1] = h
+			end
+		end
+	end
+	return plan, left
 end
 
 local function Signature(plan)
@@ -355,6 +381,9 @@ local function Refusal()
 		return "fight"
 	elseif Busy() then
 		return "cursor"
+	elseif #E.Popups() > 0 then
+		-- A reload drops a summon, a group invite, a resurrection or a battleground entry the player has not answered.
+		return "popup"
 	elseif type(ns.EditModeOpen) == "function" and ns.EditModeOpen() then
 		return "editmode"
 	elseif E.Ask(KeybindFrames_InQuickKeybindMode) == true then
@@ -371,9 +400,11 @@ local ANSWER = {
 	gamepad = "Flat UI: the Uprank button cannot be reached under the gamepad interface. Drag new ranks from the spell book.",
 	fight = "Flat UI: not in a fight. The line comes back after it.",
 	cursor = "Flat UI: put down what the cursor holds first.",
+	popup = "Flat UI: answer the game's popup first.",
 	editmode = "Flat UI: close Edit Mode first.",
 	keybind = "Flat UI: close the quick keybind mode first.",
-	nothing = "Flat UI: every spell on your bars has its highest rank.",
+	-- A lower rank left beside a higher one is not "the highest rank", so the words do not claim it.
+	nothing = "Flat UI: no button on your bars needs a new rank.",
 }
 
 local function Answer(why)
@@ -471,7 +502,7 @@ local function Build()
 		overlay:SetFrameStrata("DIALOG")
 		overlay:RegisterForClicks("LeftButtonUp")
 		overlay:SetAttribute("type", "macro")
-		overlay:SetAttribute("macrotext", "/reload")
+		overlay:SetAttribute("macrotext", MACRO)
 		-- The game runs a click on the key press by default (ActionButtonUseKeyDown); the button listens for the release.
 		overlay:SetAttribute("useOnKeyDown", false)
 		overlay:SetScript("PreClick", PreClick)
@@ -571,7 +602,9 @@ Explain = function(owner)
 	if type(tip) ~= "table" or ns.Forbidden(tip) then
 		return
 	end
-	local plan = Plan()
+	-- The button's look follows the tooltip's reason: a popup or Edit Mode opened since the line showed raises no event here.
+	Usable()
+	local plan, left = Plan()
 	tip:SetOwner(owner, "ANCHOR_BOTTOM", 0, -4)
 	tip:SetText("Uprank and reload")
 	local function Line(text)
@@ -601,6 +634,18 @@ Explain = function(owner)
 			text = text .. (", %d buttons"):format(entry.count)
 		end
 		Line(text)
+	end
+	-- The lower ranks left beside a higher one, each name and rank once.
+	local lower, seen = {}, {}
+	for _, h in ipairs(left) do
+		local label = WithRank(h.name, h.text)
+		if not seen[label] then
+			seen[label] = true
+			lower[#lower + 1] = label
+		end
+	end
+	if #lower > 0 then
+		Line(("Left, since a higher rank of the spell is on your bars too: %s."):format(Join(lower, LEFT_NAMES)))
 	end
 	Line("The interface reloads in the same click, so the game's bars stay clean.")
 	Line("Macros, items and the ranks you keep stay as they are.")
@@ -694,7 +739,9 @@ local function Uprank()
 	return touched
 end
 
--- The secure button's PreClick. A click that cannot uprank runs nothing: its type is taken away for that click, so no reload follows.
+-- The secure button's PreClick. A click that cannot uprank runs nothing: its type is taken away for that click, so no reload follows. An
+-- attribute set on a protected frame in the lockdown is refused and blamed on Flat UI, so there nothing is set: Uprank refuses in a fight, and
+-- the macro's own /stopmacro [combat] keeps the reload from running.
 PreClick = function(self)
 	touched = false
 	local go = false
@@ -704,15 +751,17 @@ PreClick = function(self)
 	if touched then
 		go = true
 	end
-	if not go then
+	if not go and not E.InCombat() then
 		pcall(self.SetAttribute, self, "type", nil)
 	end
 end
 
 -- Only reached for good when no reload followed (a cancelled click): the line is read again on the next frame, outside the click, since a frame
--- is not hidden or moved inside its own click.
+-- is not hidden or moved inside its own click. In the lockdown PreClick took nothing away, so nothing is given back.
 PostClick = function(self)
-	pcall(self.SetAttribute, self, "type", "macro")
+	if not E.InCombat() then
+		pcall(self.SetAttribute, self, "type", "macro")
+	end
 	if type(C_Timer) == "table" then
 		pcall(C_Timer.After, 0, function()
 			E.Run(part, ScheduleRefresh)
@@ -886,11 +935,16 @@ local function AfterReload()
 		local line = #names > 0 and ("Put new ranks on %d %s: %s."):format(count, Buttons(count), Join(names, NOTE_NAMES))
 			or ("Put new ranks on %d %s."):format(count, Buttons(count))
 		if kept > 0 then
-			line = line .. (" The game kept the old rank on %d."):format(kept)
+			line = line .. (" The game kept the old rank on %d. /flatui uprank tries again."):format(kept)
 		end
 		E.Say(line)
 	elseif kept > 0 then
-		E.Say(("The game kept the old rank on %d %s."):format(kept, Buttons(kept)))
+		E.Say(("The game kept the old rank on %d %s. /flatui uprank tries again."):format(kept, Buttons(kept)))
+	end
+	-- The offer at login that follows would show the slots the game just refused, and each click would be one more reload and the same line:
+	-- the plan waits as if declined, until it changes or the player asks for it.
+	if kept > 0 then
+		SetLater(Signature(Plan()))
 	end
 end
 
@@ -941,6 +995,24 @@ local function Flush(token)
 	end
 end
 
+-- A spell link whose shown text has no number ("[Fireball]", as a modern client writes it) takes the rank of its spell, so two ranks learned at
+-- once do not read the same: "[Fireball] (Rank 4)". The link itself is kept, so it stays clickable.
+local function WithLinkRank(what)
+	local id = tonumber(what:match("|Hspell:(%d+)"))
+	if not Whole(id) then
+		return what
+	end
+	local shown = what:match("|h(.-)|h") or what
+	if shown:find("%d") then
+		return what
+	end
+	local text = Subtext(id)
+	if RankNumber(text) then
+		return what .. " (" .. text .. ")"
+	end
+	return what
+end
+
 -- The filter runs once for each chat window that shows the line, so a line is counted once by its lineID (or its text and the time).
 local function Heard(what, unlearned, lineID, msg)
 	local key = Whole(lineID) and lineID or (msg .. "@" .. tostring(E.Ask(GetTime)))
@@ -948,6 +1020,7 @@ local function Heard(what, unlearned, lineID, msg)
 		return
 	end
 	heard.seen[key] = true
+	what = WithLinkRank(what)
 	local list = unlearned and heard.unlearned or heard.learned
 	local known = false
 	for _, name in ipairs(list) do
@@ -971,6 +1044,10 @@ local function Drop(msg, lineID)
 	end
 	local mode = E.Opt("learnedLines")
 	if mode ~= "hide" and mode ~= "summary" then
+		return false
+	end
+	-- One line in their place with Say what was done off would leave no line at all (E.Say is silent then): the game's lines stay.
+	if mode == "summary" and E.Opt("chat") == false then
 		return false
 	end
 	if ns.IsSecret(msg) or type(msg) ~= "string" then
@@ -1251,7 +1328,7 @@ local function RankCommand(rest)
 			labels[#labels + 1] = row[2]
 		end
 		if #labels == 0 then
-			return "Flat UI: no rank is kept, every lower rank is offered."
+			return "Flat UI: no rank is kept, so the highest rank of each spell on your bars is offered when you learn a higher one."
 		end
 		return ("Flat UI: ranks kept on your bars: %s."):format(Join(labels, #labels))
 	end
@@ -1312,9 +1389,11 @@ function part.Status()
 		end
 		does[#does + 1] = kept > 0 and ("offers new ranks for your bars after training (%d kept)"):format(kept) or "offers new ranks for your bars after training"
 	end
+	-- One line in their place with Say what was done off leaves the game's lines as they are (Drop).
+	local dropping = mode == "hide" or (mode == "summary" and E.Opt("chat") ~= false)
 	if mode == "hide" then
 		does[#does + 1] = "hides the lines about learned spells"
-	elseif mode == "summary" then
+	elseif dropping then
 		does[#does + 1] = "sums up the lines about learned spells"
 	end
 	if #does == 0 then
@@ -1348,7 +1427,7 @@ function part.Status()
 			lines[#lines + 1] = "Spell ranks: no Uprank button while the gamepad interface is on."
 		end
 	end
-	if mode ~= "game" then
+	if dropping then
 		if not Registry() then
 			lines[#lines + 1] = "Spell ranks: this client takes no chat filter from add-ons, so the lines about learned spells stay."
 		elseif #Patterns() == 0 then
