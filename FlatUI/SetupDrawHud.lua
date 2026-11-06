@@ -391,6 +391,9 @@ end
 
 local XpMicro = { parts = {} }
 local XP_TOTAL, XP_VALUE, REP_VALUE, REP_TOTAL = 10000, 3700, 6000, 12000
+-- The quests ready to hand in, and the levelling text by the row Levelling text, for the 6300 to go of the sample.
+local QUEST_SAMPLE = 1500
+local STATS_SAMPLE = { time = "1h 20m to level", rate = "4,725 an hour", both = "1h 20m to level, 4,725 an hour", kills = "26 kills to level" }
 
 -- The text a bar shows by the row Bar text: the game's own text, a percent, the value and the percent, or what is left.
 local function XpLine(mode, value, total, name)
@@ -463,6 +466,8 @@ function XpMicro.build(stage)
 	s.rep.lines = NewDividers(s.rep)
 	-- The rested stretch behind the fill of Flat UI's own bar, and the outline of the game's smallest bar, half the width of its full bar.
 	s.xp.rested = NewTexture(s.xp.bar, "BACKGROUND", 1, 0, 0.39, 0.88, 0.4)
+	-- The stretch of the quests ready to hand in, over the rested one.
+	s.xp.quest = NewTexture(s.xp.bar, "BACKGROUND", 2, 0.3, 0.9, 0.3, 0.6)
 	s.floor = NewFrame(root, XP_DRAW.width / 2, XP_DRAW.height)
 	s.floor.edges = {}
 	for index = 1, 4 do
@@ -535,6 +540,7 @@ function XpMicro.build(stage)
 	parts["hud.xpRepMode"], parts["hud.xpRepColour"] = s.rep.bar, s.rep.bar
 	parts["hud.xpTextWhen"], parts["hud.xpTextPlace"] = s.xp.words, s.xp.words
 	parts["hud.xpText"], parts["hud.xpTextSize"] = s.xp.words, s.xp.words
+	parts["hud.xpQuest"], parts["hud.xpQuestColour"], parts["hud.xpStats"] = s.xp.quest, s.xp.quest, s.xp.words
 	parts["hud.micro"] = s.micro[1].frame
 	parts["hud.mirror"], parts["hud.countdown"] = s.mirror.frame, s.countdown.frame
 	parts["hud.queue"], parts["hud.meter"], parts["hud.zoneBars"] = s.queue.frame, s.meter.frame, s.zoneBar.frame
@@ -580,6 +586,13 @@ local function DrawOwn(s, mode, size, file)
 	s.xp.rested:SetPoint("BOTTOMLEFT", s.xp.bar, "BOTTOMLEFT", 0, 0)
 	s.xp.rested:SetWidth(w * 0.6)
 	s.xp.rested:SetShown(ns.Get("hud.xpRested") == true)
+	local qr, qg, qb = ns.Colour("hud.xpQuestColour")
+	s.xp.quest:SetColorTexture(qr, qg, qb, 0.6)
+	s.xp.quest:ClearAllPoints()
+	s.xp.quest:SetPoint("TOPLEFT", s.xp.bar, "TOPLEFT", 0, 0)
+	s.xp.quest:SetPoint("BOTTOMLEFT", s.xp.bar, "BOTTOMLEFT", 0, 0)
+	s.xp.quest:SetWidth(w * (XP_VALUE + QUEST_SAMPLE) / XP_TOTAL)
+	s.xp.quest:SetShown(ns.Get("hud.xpQuest") == true)
 	local pr, pg, pb = 0, 0.6, 0.1
 	if ns.Get("hud.xpRepMode") == "one" then
 		pr, pg, pb = ns.Colour("hud.xpRepColour")
@@ -609,6 +622,7 @@ local function DrawGame(s, mode, size, file)
 	end
 	s.tip.frame:Hide()
 	s.xp.rested:Hide()
+	s.xp.quest:Hide()
 	Fill(s.xp.bar, 0.58, 0, 0.55, file)
 	Fill(s.rep.bar, 0, 0.6, 0.1, file)
 	s.floor:Hide()
@@ -630,7 +644,13 @@ function XpMicro.draw(stage)
 	else
 		DrawGame(s, mode, size, file)
 	end
-	s.xp.words:SetText(XpLine(mode, XP_VALUE, XP_TOTAL))
+	-- On Flat UI's bar the levelling text follows the bar text, or stands alone while Bar text is Hidden.
+	local extra = own and STATS_SAMPLE[ns.Get("hud.xpStats")] or nil
+	local line = mode ~= "hide" and XpLine(mode, XP_VALUE, XP_TOTAL) or nil
+	s.xp.words:SetText(line and extra and (line .. ", " .. extra) or line or extra or "")
+	if extra then
+		s.xp.words:Show()
+	end
 	s.rep.words:SetText(XpLine(mode, REP_VALUE, REP_TOTAL, "Stormwind"))
 	local bags, crop = On("bags"), Crop()
 	for _, plate in ipairs(s.bags) do

@@ -7,11 +7,16 @@ local _, ns = ...
 -- scaled, hidden, reparented, hooked or unregistered. The bar drawn here is a frame of this addon's on UIParent, any width and height, fed by the
 -- calls the game's own bar makes from insecure code (ExpBar.lua, ReputationBar.lua). Its settings are the Experience and reputation bars rows of
 -- the Bars, bags and micro menu page (module hud); this file adds its handlers to that module with ns.AddEvent.
+-- The Levelling rows of that page add what XpStats.lua counts: a stretch for the experience of the quests ready to hand in, drawn as the rested
+-- stretch is and above it, the levelling text after the bar text, and lines in the tooltip. The bar is drawn again when those numbers change
+-- (ns.XpBarRedraw), and the tooltip of a bar under the cursor is written again with each drawing.
 
 local KEY, MOVER = "hud", "FlatUIXpBar"
 -- The width of the game's full bar on Camelot, which 100% of the width row is (Camelot/StatusTrackingBarConstants.lua:1-14).
 local FULL = 1192
 local FILE = "Interface\\Buttons\\WHITE8X8"
+-- The opacity of the stretch of the quests ready to hand in; the rested stretch has 0.4.
+local QUEST_ALPHA = 0.6
 local MANAGER = "StatusTrackingBarManager"
 local CONTAINERS = { "MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer" }
 -- The reputation fills by standing, as Hud.lua colours the game's pictures (ReputationBar.lua:1-12), and the blue of a renown or paragon bar.
@@ -366,6 +371,10 @@ function F.NewBar(root, id)
 	frame:SetValue(0)
 	bar.rested = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
 	bar.rested:SetTexture(FILE)
+	-- The experience of the quests ready to hand in: over the rested stretch and under the fill.
+	bar.quest = frame:CreateTexture(nil, "BACKGROUND", nil, 2)
+	bar.quest:SetTexture(FILE)
+	bar.quest:Hide()
 	bar.ticks = {}
 	bar.outline = ns.Outline(frame, frame)
 	ns.Count(KEY)
@@ -439,6 +448,11 @@ function F.TipLines(bar)
 		if xp.rested > 0 then
 			lines[#lines + 1] = ("Rested: %d"):format(math.floor(xp.rested))
 		end
+		-- The quests ready to hand in and the levelling numbers (XpStats.lua).
+		local more = ns.XpStatsLines ~= nil and ns.XpStatsLines(Opt("xpQuest") == true, Opt("xpStatsTip") == true) or nil
+		for _, line in ipairs(type(more) == "table" and more or {}) do
+			lines[#lines + 1] = line
+		end
 	elseif bar.id == "rep" and S.rep then
 		local rep = S.rep
 		lines[1] = rep.name
@@ -452,20 +466,31 @@ function F.TipLines(bar)
 	return lines
 end
 
--- The words on a bar by the Bar text row: nothing for Hidden, the game's words for As the game has it.
+-- The words on a bar by the Bar text row: nothing for Hidden, the game's words for As the game has it. On the experience bar the levelling text
+-- follows them after a comma, or stands alone while Bar text is Hidden (Levelling text, XpStats.lua).
 function F.Line(bar)
 	local mode = Opt("xpText")
+	if bar.id == "xp" and S.xp then
+		local xp, line = S.xp, nil
+		local value, total = math.floor(xp.value), math.floor(xp.total)
+		if mode == "game" then
+			line = Fmt(_G.XP_STATUS_BAR_TEXT, "%s / %s", tostring(value), tostring(total))
+		elseif mode ~= "hide" and total > 0 then
+			line = ns.XpText(value, total, nil, mode)
+		end
+		if line == "" then
+			line = nil
+		end
+		local extra = ns.XpStatsText ~= nil and ns.XpStatsText(Opt("xpStats")) or nil
+		if type(extra) == "string" and extra ~= "" then
+			line = line and (line .. ", " .. extra) or extra
+		end
+		return line
+	end
 	if mode == "hide" then
 		return nil
 	end
-	if bar.id == "xp" and S.xp then
-		local xp = S.xp
-		local value, total = math.floor(xp.value), math.floor(xp.total)
-		if mode == "game" then
-			return Fmt(_G.XP_STATUS_BAR_TEXT, "%s / %s", tostring(value), tostring(total))
-		end
-		return total > 0 and ns.XpText(value, total, nil, mode) or nil
-	elseif bar.id == "rep" and S.rep then
+	if bar.id == "rep" and S.rep then
 		local rep = S.rep
 		local value, total = math.floor(rep.value), math.floor(rep.total)
 		if mode == "game" then
@@ -601,6 +626,21 @@ function F.Fill(bar, width)
 	else
 		stretch:Hide()
 	end
+	-- The quests ready to hand in, from the left edge as the rested stretch, so the fill covers what is already earned.
+	local quest = bar.quest
+	local ready = bar.id == "xp" and Opt("xpQuest") == true and xp ~= nil and xp.total > 0 and ns.XpQuestReady ~= nil and ns.XpQuestReady() or 0
+	if ns.Finite(ready) and ready > 0 then
+		local reach = math.max(0, math.min((xp.value + ready) / xp.total, 1))
+		local qr, qg, qb = ns.Colour(KEY .. ".xpQuestColour")
+		quest:ClearAllPoints()
+		quest:SetPoint("TOPLEFT", bar.frame, "TOPLEFT", 0, 0)
+		quest:SetPoint("BOTTOMLEFT", bar.frame, "BOTTOMLEFT", 0, 0)
+		quest:SetWidth(math.max(reach * width, 1))
+		quest:SetVertexColor(qr, qg, qb, QUEST_ALPHA)
+		quest:Show()
+	else
+		quest:Hide()
+	end
 end
 
 -- Position ---------------------------------------------------------------------------------------------------------------------------------
@@ -682,6 +722,12 @@ function F.Update(layout)
 		root:Hide()
 	end
 	F.Place()
+	-- A tooltip shown for a bar under the cursor follows the new numbers.
+	for _, bar in pairs(S.bars) do
+		if bar.hover and bar.shown and Opt("xpTooltip") then
+			F.Tip(bar)
+		end
+	end
 end
 
 -- Looking again ---------------------------------------------------------------------------------------------------------------------------
@@ -704,6 +750,10 @@ function F.Refresh()
 	if want == "flat" then
 		F.Park()
 		F.Update()
+		-- The quest log is read again for a changed row (XpStats.lua).
+		if ns.XpStatsRefresh ~= nil then
+			ns.XpStatsRefresh()
+		end
 	else
 		F.Unpark()
 	end
@@ -772,6 +822,13 @@ end
 -- The settings changed, or the page started: Hud.lua calls this at the end of its own refresh.
 function ns.XpBarRefresh()
 	F.Refresh()
+end
+
+-- The levelling numbers changed (XpStats.lua): the bar is drawn again while it is Flat UI's.
+function ns.XpBarRedraw()
+	if S.mode == "flat" and not S.waiting and ns.XpOwn() then
+		F.Update()
+	end
 end
 
 -- Interface for the other files -------------------------------------------------------------------------------------------------------------

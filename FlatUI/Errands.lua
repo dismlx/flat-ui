@@ -3,7 +3,8 @@ local _, ns = ...
 -- Errands: small chores the game leaves to the player, done when the game asks for them. Selling grey items and repairing at a merchant
 -- (ErrandsMerchant.lua), looting every slot at once and making room in full bags (ErrandsLoot.lua), training every spell a trainer offers
 -- (ErrandsTrainer.lua), the release guard, summons, resurrections and the DELETE word of the game's popups (ErrandsPopups.lua), and group
--- invites, duels and the last mail recipient (ErrandsSocial.lua). Each file is a part of this module: it adds its events with ns.AddEvent and
+-- invites, duels and the last mail recipient (ErrandsSocial.lua). On the Levelling tab: accepting and handing in quests and picking gossip
+-- options (ErrandsQuests.lua), and new spell ranks on the bars and the lines about learned spells (ErrandsRanks.lua). Each file is a part of this module: it adds its events with ns.AddEvent and
 -- names itself here with Errands.Part, so /flatui status has a line for it and a refresh reaches it.
 --
 -- Nothing here restyles anything, so the module counts nothing, and its page is off by default. Every errand is out of combat unless it

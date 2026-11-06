@@ -2,7 +2,7 @@
 
 Flat UI restyles the default interface in WoW: Forever with thin dark borders, flat backgrounds and flat bar fills. It has its own options window and profiles. It has handles to move and size frames and windows. It also draws combat numbers in front of enemy nameplates and in scroll areas beside your character.
 
-The **Errands** page, off by default, does the chores the game leaves to you: it sells grey items and repairs at merchants, loots every slot at once, makes room in full bags, learns everything at a trainer with one button, guards Release Spirit in dungeons, types DELETE for you, and can accept summons, resurrections and invites from friends or your guild, decline duels and keep the last mail recipient.
+The **Errands** page, off by default, does the chores the game leaves to you: it sells grey items and repairs at merchants, loots every slot at once, makes room in full bags, learns everything at a trainer with one button, guards Release Spirit in dungeons, types DELETE for you, and can accept summons, resurrections and invites from friends or your guild, decline duels and keep the last mail recipient. Its **Levelling** tab accepts and hands in quests, picks gossip options and offers the new ranks of your spells for your action bars.
 
 ![Flat UI in play](media/flatui-in-play.jpg)
 
@@ -21,6 +21,11 @@ The **Errands** page, off by default, does the chores the game leaves to you: it
 - `/flatui sell <item>` always sells an item at merchants (an item link or ID). Type it again to stop. `/flatui sell` alone lists the items.
 - `/flatui keep <item>` never sells a grey item, and Make room never deletes it.
 - `/flatui train` learns everything you can pay for at an open trainer, like the Train all button.
+- `/flatui npc` skips the NPC you talk to or target: its quests and gossip are left to you. Type it again to stop.
+- `/flatui gossip` lists the options of the NPC you talk to. `/flatui gossip 2` picks the second option for you from now on.
+- `/flatui uprank` offers the new ranks of your spells for your action bars.
+- `/flatui rank <spell>` keeps that rank where it is on your bars (a spell link or ID).
+- `/flatui xp` says your experience per hour, time to level and kills and quests to level. `/flatui xp reset` starts counting again.
 - `/flatui help` lists the commands.
 
 ![Movers](media/flatui-movers.jpg)
@@ -37,7 +42,7 @@ The last line must say `N passed, 0 failed`.
 
 ## Credits
 
-The Errands page adapts features of [EnhanceQoL](https://www.curseforge.com/projects/1076354) by Philipp Barth (R41Z0R), with his permission: selling junk and auto repair, quick loot and the loot window junk button, Train All, the release guard, the popup helpers, auto-accepting invites, declining duels and remembering the last mail recipient. Thanks to him for sharing his work.
+The Errands page and the levelling stats of the experience bar adapt features of [EnhanceQoL](https://www.curseforge.com/projects/1076354) by Philipp Barth (R41Z0R), with his permission: selling junk and auto repair, quick loot and the loot window junk button, Train All, the release guard, the popup helpers, auto-accepting invites, declining duels, remembering the last mail recipient, accepting and handing in quests, gossip options, the NPC exclude list, the quest count on the tracker, the spell rank upgrade, the learned-spell chat filter, and the experience bar's quest stretch, experience per hour and time to level. Thanks to him for sharing his work.
 
 ## Licence
 

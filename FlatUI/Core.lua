@@ -37,6 +37,12 @@ local ADDON_NAME, ns = ...
 -- StaticPopup_Show, StaticPopup_Hide, ClassTrainerFrame_Update, SendMailFrame_SendMail and SendMailFrame_Reset with hooksecurefunc, writes
 -- DELETE in the box of the game's delete popup (SetText, then ClearFocus) and the last recipient in the To box of the mail window (SetText),
 -- and lays frames of its own over the loot window, the trainer window and the Release Spirit button of the death popup.
+-- On its Levelling tab it accepts and hands in quests and picks gossip options with the game's calls for them (AcceptQuest, CompleteQuest,
+-- GetQuestReward, the select calls of C_GossipInfo and of the quest greeting), and asks the game to load an offered quest
+-- (C_QuestLog.RequestLoadQuestByID); it touches no frame of the quest or gossip windows. It puts a higher rank of a spell on the action
+-- slots that hold a lower one (C_Spell.PickupSpell, PlaceAction, ClearCursor) only inside the click of its own Uprank and reload button,
+-- whose secure /reload macro reloads the interface in the same click, and it adds a filter to the game's chat filters
+-- (ChatFrameUtil.AddMessageEventFilter, CHAT_MSG_SYSTEM) that drops the game's lines about learned and unlearned spells.
 
 local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "fonts", "fade" }
 -- The switches version 0.1.0 saved. This list never grows.
@@ -1923,6 +1929,49 @@ function ns.AddEvent(key, event, fn, filter)
 		end
 	end
 	list[#list + 1] = { fn = fn, filter = filter }
+	return true
+end
+
+-- Adds lines to /flatui status under a module registered by another file: fn returns a list of lines, and they come after the module's own. Call
+-- it while the files load. Returns false for a module that is not registered.
+function ns.AddStatus(key, fn)
+	local module = modules[key]
+	if type(module) ~= "table" or type(fn) ~= "function" then
+		return false
+	end
+	local status = module.Status
+	module.Status = function(...)
+		local lines = {}
+		for _, line in ipairs(type(status) == "function" and status(...) or {}) do
+			lines[#lines + 1] = line
+		end
+		local ok, more = pcall(fn)
+		if ok and type(more) == "table" then
+			for _, line in ipairs(more) do
+				lines[#lines + 1] = line
+			end
+		end
+		return lines
+	end
+	return true
+end
+
+-- Adds a word of /flatui to a module registered by another file, and the lines it gives /flatui help. Call it while the files load. Returns false
+-- for a module that is not registered or a word it has already.
+function ns.AddSlash(key, word, fn, help)
+	local module = modules[key]
+	if type(module) ~= "table" or type(word) ~= "string" or type(fn) ~= "function" then
+		return false
+	end
+	module.slash = module.slash or {}
+	if module.slash[word] then
+		return false
+	end
+	module.slash[word] = fn
+	module.help = module.help or {}
+	for _, line in ipairs(help or {}) do
+		module.help[#module.help + 1] = line
+	end
 	return true
 end
 

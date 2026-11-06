@@ -67,7 +67,9 @@ UnitExtras.lua
 Hud.lua
 MapButtons.lua
 AuraTime.lua
+XpStats.lua
 XpBar.lua
+QuestCount.lua
 Fade.lua
 Chat.lua
 ChatText.lua
@@ -88,6 +90,8 @@ ErrandsLoot.lua
 ErrandsTrainer.lua
 ErrandsPopups.lua
 ErrandsSocial.lua
+ErrandsQuests.lua
+ErrandsRanks.lua
 CastBarSize.lua
 PetFrameSize.lua
 ConfigGame.lua

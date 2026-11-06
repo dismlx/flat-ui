@@ -10883,12 +10883,18 @@ local PAGES = {
 		S("hud.xpTooltip", "bool", true, "Tooltip", "Experience, rested and standing on mouse-over.", { needs = "hud.xpOwn", needsIn = { "flat" } }),
 		S("hud.xpFill", "bool", true, "Flat fill", "One plain colour in place of the default gloss. Not applied while Leave the game's action bars alone is on.", { needs = "hud.xpOwn", needsIn = { "game" } }),
 		S("hud.xpDividers", "bool", true, "Hide bar dividers", "Not applied while Leave the game's action bars alone is on.", { needs = "hud.xpOwn", needsIn = { "game" } }),
+		"Levelling",
+		S("hud.xpQuest", "bool", true, "Quests ready to hand in", "A stretch after the fill shows the experience of the finished quests in your log. The tooltip counts them and the whole log.", { needs = "hud.xpOwn", needsIn = { "flat" } }),
+		S("hud.xpQuestColour", "colour", "ff4de64d", "Quest colour", nil, { needs = "hud.xpQuest" }),
+		S("hud.xpStats", "choice", "time", "Levelling text", "After the text of the experience bar, or alone while Bar text is Hidden. The pace is your last 30 minutes of play, without time away, and shows after 5 minutes.", { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "none", "None" }, { "time", "Time to level" }, { "rate", "Experience per hour" }, { "both", "Time to level and per hour" }, { "kills", "Kills to level" } } }),
+		S("hud.xpStatsTip", "bool", true, "Levelling in the tooltip", "Experience this session and per hour, the time to level, about how many kills and quests that takes, and the time at this level after /played.", { needs = "hud.xpTooltip" }),
 		"Micro menu",
 		S("hud.micro", "bool", true, "Micro menu buttons", "Thin border in place of the default button frames."),
 	} },
 	{ key = "hudTracker", label = "Tracker, loot and alerts", parent = "hud", owner = "hud", rows = {
 		"Objective tracker",
 		S("hud.trackerHeaders", "bool", true, "Tracker headers", "A flat band with a thin border behind each heading."),
+		S("hud.trackerCount", "bool", true, "Quest count", "Your quests and the most the log holds, as 12/20, at the right of the Quests heading. Red while the log is full."),
 		S("hud.trackerBars", "bool", true, "Tracker bars", "Thin border and flat fill on progress and timer bars."),
 		S("hud.trackerItems", "bool", true, "Tracker item buttons", "Square quest item buttons with a thin border."),
 		S("hud.trackerTexture", "choice", "default", "Tracker bar texture", nil, { needs = "hud.trackerBars", choices = { { "default", "Same as the Flat UI page" }, { "flat", "Flat" }, { "soft", "Soft shade" }, { "shaded", "Shaded" }, { "gloss", "Gloss" }, { "stripes", "Stripes" }, { "edge", "Bottom edge" },
@@ -10982,8 +10988,8 @@ local PAGES = {
 		S("chat.count", "bool", false, "Item count in bags and bank"),
 	} },
 	{ key = "errands", label = "Errands", rows = {
-		S("errands.enabled", "bool", false, "Run errands", "Each errand below has its own row. Selling, repairs, Make room, Train all, summons and invites wait for the end of a fight."),
-		S("errands.chat", "bool", true, "Say what was done", "A line in chat after selling, repairing, training, deleting, accepting and declining."),
+		S("errands.enabled", "bool", false, "Run errands", "Each errand below and on the Levelling tab has its own row. Selling, repairs, Make room, Train all, summons, invites and new spell ranks wait for the end of a fight."),
+		S("errands.chat", "bool", true, "Say what was done", "A line in chat after selling, repairing, training, deleting, accepting, declining and upranking, and when a quest is left to you."),
 		"Merchant",
 		S("errands.sell", "bool", true, "Sell grey items", "When a merchant opens. Hold Shift as it opens to keep them that time. /flatui sell and /flatui keep choose other items to sell or keep."),
 		S("errands.repair", "choice", "own", "Repair", "When a merchant who repairs opens.", { choices = { { "off", "Off" }, { "own", "With your gold" }, { "guild", "Guild gold first" } } }),
@@ -11004,6 +11010,27 @@ local PAGES = {
 			{ choices = { { "off", "Nobody" }, { "friends", "Friends" }, { "guild", "Your guild" }, { "both", "Friends and your guild" } } }),
 		S("errands.declineDuels", "bool", false, "Decline duels", "Every duel request is declined at once, also in a fight."),
 		S("errands.mailRecipient", "bool", true, "Remember the last mail recipient", "After a letter goes, the To box keeps the name until the mailbox closes."),
+	} },
+	{ key = "errandsLevelling", label = "Levelling", parent = "errands", owner = "errands", rows = {
+		"Quests",
+		S("errands.questAccept", "bool", true, "Accept quests", "When an NPC offers one, or your group shares one. A quest that would flag you for PvP, and an escort a group member starts, still ask you."),
+		S("errands.questTurnIn", "bool", true, "Hand in finished quests", "Takes the reward when there is only one; with a choice, the window stays open for you. A quest that takes money, or an item of green quality or better, is left to you."),
+		S("errands.questLow", "bool", false, "Low-level quests too", "Off: a grey quest is left to you, so the places in your quest log go to quests worth the time.", { needs = "errands.questAccept" }),
+		S("errands.questRepeat", "bool", false, "Repeatable quests too", "Off: a quest you can do again and again, such as a cloth or reputation hand-in, is left to you, so nothing you may want to keep is given away."),
+		S("errands.questKey", "choice", "shift", "Key to do it yourself", "Hold it as you talk to an NPC, and that NPC's quests and gossip are left to you until you walk away.",
+			{ choices = { { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } }),
+		S("errands.questNpcs", "list", 0, "Skipped NPCs", "Their quests and gossip are always left to you. /flatui npc skips the NPC you talk to or target."),
+		"Gossip",
+		S("errands.gossip", "choice", "all", "Gossip options", "Saved options are picked everywhere. In the open world, the one option marked (Quest), or an NPC's only option when it has no quest for you, is picked too. An option that casts a spell is never picked.",
+			{ choices = { { "off", "Off" }, { "saved", "Saved options only" }, { "all", "Saved, quest and only options" } } }),
+		S("errands.gossipSaved", "list", 0, "Saved gossip options", "/flatui gossip lists the options of the NPC you talk to, and /flatui gossip 2 saves the second one."),
+		"Spell ranks",
+		S("errands.uprank", "bool", true, "Put new ranks on your bars", "After training, a line at the top of the screen offers it. Its button reloads the interface in the same click, which keeps the game's bars clean. Macros, items and the ranks you keep stay as they are."),
+		S("errands.keepRank", "list", 0, "Keep a rank on your bars", "That rank stays where it is. The other ranks of the spell are still replaced. /flatui rank and a spell link does the same.", { needs = "errands.uprank" }),
+		S("errands.unkeepRank", "list", 0, "Stop keeping a rank", nil, { needs = "errands.uprank" }),
+		S("errands.uprankNow", "list", 0, "Uprank your bars now", "Shows the line and its button now. /flatui uprank does the same.", { needs = "errands.uprank" }),
+		S("errands.learnedLines", "choice", "summary", "Lines about learned spells", "The game's lines that start with You have learned or You have unlearned. One line in their place names what was learned, a moment after the last, unless Say what was done is off.",
+			{ choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "summary", "One line in their place" } } }),
 	} },
 	-- The faces are the ones the client loads: the panel worlds answer nothing to SetFont, so only the game's font is offered.
 	{ key = "fonts", label = "Fonts", rows = {
@@ -21509,9 +21536,14 @@ for _, path in ipairs({ "errands.enabled", "errands.chat", "errands.sell", "erra
 	"errands.releaseKey", "errands.summons", "errands.resurrect", "errands.deleteWord", "errands.invites", "errands.declineDuels", "errands.mailRecipient" }) do
 	covered[path] = true
 end
+-- The Levelling tab of Errands, and the quest count of the tracker, have their checks in the quests and ranks blocks.
+for _, path in ipairs({ "errands.questAccept", "errands.questTurnIn", "errands.questLow", "errands.questRepeat", "errands.questKey", "errands.questNpcs", "errands.gossip",
+	"errands.gossipSaved", "errands.uprank", "errands.keepRank", "errands.unkeepRank", "errands.uprankNow", "errands.learnedLines", "hud.trackerCount" }) do
+	covered[path] = true
+end
 -- Flat UI's own experience bar has its checks in the xpown block.
 for _, path in ipairs({ "hud.xpOwn", "hud.xpWidth", "hud.xpHeight", "hud.xpShow", "hud.xpOrder", "hud.xpGap", "hud.xpTicks", "hud.xpColour", "hud.xpRested", "hud.xpRestedColour",
-	"hud.xpRepMode", "hud.xpRepColour", "hud.xpTextWhen", "hud.xpTextPlace", "hud.xpTooltip" }) do
+	"hud.xpRepMode", "hud.xpRepColour", "hud.xpTextWhen", "hud.xpTextPlace", "hud.xpTooltip", "hud.xpQuest", "hud.xpQuestColour", "hud.xpStats", "hud.xpStatsTip" }) do
 	covered[path] = true
 end
 for _, row in ipairs(ALL) do
@@ -65788,7 +65820,8 @@ function PT.runMsTree()
 	local clean, joined, need = PT.clean, PT.joined, PT.need
 	local TREE = { { "general", "Colours" }, { "nameplates", "Health bar,Colours and threat,Text,Cast bar,Target and marks,Auras,Game settings" }, { "castbars", "Size,Text and icon" }, { "cooldowns", "States and text" },
 		{ "windows", "Which windows,Bags and items" }, { "unitframes", "Player frame,Target frame,Focus frame,Pet frame,Target of target frame,Party frames,Boss frames,Raid frames,All frames: bars and pictures,All frames: text,All frames: icons and auras" },
-		{ "hud", "Minimap,Buffs and debuffs,Bars, bags and micro menu,Tracker, loot and alerts" }, { "chat", "Chat text,Tooltips" } }
+		{ "hud", "Minimap,Buffs and debuffs,Bars, bags and micro menu,Tracker, loot and alerts" }, { "chat", "Chat text,Tooltips" },
+		{ "errands", "Levelling" } }
 	do
 		local W = PT.open()
 		local ns = W.ns
@@ -65814,10 +65847,10 @@ function PT.runMsTree()
 		local ns = W.ns
 		local moved = { nameplatesHealth = "health", nameplatesText = "kindMark", nameplatesCast = "castHeight", nameplatesMarks = "kindBorder", nameplatesAuras = "auras",
 			castbarsSize = "playerWidth", castbarsText = "textSize", windowsWhich = "maps", windowsItems = "slotTints", unitframesBars = "corners", unitframesText = "smallTextSize",
-			unitframesIcons = "pvpTimer", hudMinimap = "cityMap", hudBuffs = "auras", hudBars = "micro", hudTracker = "zoneBars", chatTips = "health" }
+			unitframesIcons = "pvpTimer", hudMinimap = "cityMap", hudBuffs = "auras", hudBars = "micro", hudTracker = "zoneBars", chatTips = "health", errandsLevelling = "questAccept" }
 		local owners = { nameplatesHealth = "nameplates", nameplatesText = "nameplates", nameplatesCast = "nameplates", nameplatesMarks = "nameplates", nameplatesAuras = "nameplates",
 			castbarsSize = "castbars", castbarsText = "castbars", windowsWhich = "windows", windowsItems = "windows", unitframesBars = "unitframes", unitframesText = "unitframes",
-			unitframesIcons = "unitframes", hudMinimap = "hud", hudBuffs = "hud", hudBars = "hud", hudTracker = "hud", chatTips = "chat" }
+			unitframesIcons = "unitframes", hudMinimap = "hud", hudBuffs = "hud", hudBars = "hud", hudTracker = "hud", chatTips = "chat", errandsLevelling = "errands" }
 		local bad = {}
 		for _, page in ipairs(ns.PAGES) do
 			local key = moved[page.key]
@@ -66966,7 +66999,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 56 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 56 and rows == 919 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 56 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 56 and rows == 937 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -67706,7 +67739,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 775 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 778 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
