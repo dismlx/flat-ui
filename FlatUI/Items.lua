@@ -664,7 +664,8 @@ local function OnBank(button)
 end
 
 -- The game's Refresh of a bank slot ends by setting the slot's quality (BankFrameTemplates.lua:567-571) and then its frame art
--- (Camelot/BankFrame.lua:254-262), so a slot is dressed a frame after SetItemButtonQuality is called for it.
+-- (Camelot/BankFrame.lua:254-262), so a slot is dressed a frame after SetItemButtonQuality is called for it. A bank slot that no kind of the
+-- windows module styled (Item slots or Bags and bank off) is taken up here, as Items.Bag takes up the bag slots whatever their look.
 local bankPending, bankQueued = {}, false
 
 local function BankDressed()
@@ -677,7 +678,14 @@ local function BankDressed()
 end
 
 local function OnQuality(button)
-	if Usable(button) and buttons[button] and buttons[button].kind == "bank" then
+	if not Usable(button) then
+		return
+	end
+	local entry = buttons[button]
+	if entry == nil and ns.Enabled(KEY) and not Idle() and not ns.Forbidden(button) and KindOf(button) == "bank" then
+		entry = EntryOf(button, "bank")
+	end
+	if entry and entry.kind == "bank" then
 		bankPending[button] = true
 		if not bankQueued then
 			bankQueued = true
@@ -839,12 +847,19 @@ function Items.Slot(button)
 	end
 end
 
--- Called after a bag window updates its items.
+-- Called after a bag window updates its items. Only a bag that is shown is dressed: a closed one is dressed when it opens, as the windows module
+-- looks at a bag when it is shown and after ContainerFrame_GenerateFrame. Its slots are the list Items the game fills when it opens the bag
+-- (ContainerFrameMixin:ClearItems and AcquireNewItemButton, Mainline/ContainerFrame.lua:1046-1056), read as a field: EnumerateValidItems asks
+-- GetBagSize, which writes the field size (and on the combined bag shownSlots) of a bag the game has not opened yet (:535-545, 567-578, 2917-2941).
 function Items.Bag(root)
-	if Idle() or ns.Forbidden(root) or type(root.EnumerateValidItems) ~= "function" then
+	if Idle() or ns.Forbidden(root) or not Shown(root) then
 		return
 	end
-	for _, button in root:EnumerateValidItems() do
+	local list = FieldOf(root, "Items")
+	if type(list) ~= "table" then
+		return
+	end
+	for _, button in ipairs(list) do
 		if Usable(button) and not ns.Forbidden(button) then
 			Dress(button, EntryOf(button, "bag"))
 		end
@@ -865,6 +880,10 @@ function Items.Apply()
 	ranks = nil
 	refused.qualityMin = nil
 	ns.ItemMarks.Apply()
+	-- The bank slots are followed whatever the look of the windows: Items.Slot runs only for a slot the windows module styles.
+	if ns.Enabled(KEY) and not Quiet() then
+		ns.FollowGlobal("SetItemButtonQuality", OnQuality)
+	end
 	if Opt("ilvlCharacter") then
 		ns.FollowGlobal("PaperDollItemSlotButton_Update", OnPaperDoll)
 		if Opt("ilvlFlyout") then

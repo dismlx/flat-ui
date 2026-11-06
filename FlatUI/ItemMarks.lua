@@ -10,7 +10,8 @@ local _, ns = ...
 -- level, skill, reputation, PvP rank, a recipe already known) or the slot line, of the kind EquipSlot, whose armour or weapon type is red or that
 -- the game marks as not for this character (isValidItemType, isValidInvSlot). TooltipInfoSharedDocumentation.lua:27-86 has the kinds, and the game
 -- reads the same fields in Blizzard_PerksProgram/Blizzard_PerksProgramElements.lua:898-927. The tooltip is C_TooltipInfo.GetBagItem
--- (TooltipInfoDocumentation.lua:137-152), read once per item ID once the game has loaded the item. A level, a skill and a reputation only rise for
+-- (TooltipInfoDocumentation.lua:137-152), read once per item ID once the game has loaded the item. The lines of the item a recipe makes, which
+-- the recipe's tooltip holds in the same list (Nested), say nothing of the recipe and are left out. A level, a skill and a reputation only rise for
 -- a player levelling, so after PLAYER_LEVEL_UP (read LEVEL_WAIT seconds later, once the game counts the new level), SKILL_LINES_CHANGED and
 -- UPDATE_FACTION only the items found unusable are read again; a learned spell or recipe can make an item unusable and a PvP rank can fall, so
 -- after LEARNED_SPELL_IN_SKILL_LINE, NEW_RECIPE_LEARNED and PLAYER_PVP_RANK_CHANGED every item is read again (UnitDocumentation.lua:3832, 3877;
@@ -34,9 +35,10 @@ local KEY = "windows"
 local PART = "bag marks"
 local KINDS = { "bind", "tint", "food" }
 local ROWS = { bind = "windows.boeMark", tint = "windows.unusableTint", food = "windows.petFood" }
--- Enum.ItemBind.OnEquip, and Enum.TooltipDataLineType.UsageRequirement and EquipSlot, for a client whose Enum does not say.
+-- Enum.ItemBind.OnEquip, and Enum.TooltipDataLineType.UsageRequirement, EquipSlot, NestedBlock and ItemSpellTriggerLearn, for a client whose
+-- Enum does not say.
 local BIND_ON_EQUIP = 2
-local USAGE, EQUIP_SLOT = 43, 21
+local USAGE, EQUIP_SLOT, NESTED, LEARN = 43, 21, 19, 38
 -- The game's red for a requirement not met is 1, 0.125, 0.125 (RED_FONT_COLOR); any colour this close to it counts.
 local RED_LEAST, OTHER_MOST = 0.9, 0.25
 local BIND_WORD, BIND_FONT, BIND_COLOUR = "BoE", "NumberFontNormalSmall", { 0.38, 0.82, 1 }
@@ -206,6 +208,34 @@ local function Unmet(line)
 	return false
 end
 
+-- The first and last index of the lines of the item shown inside a tooltip, or nil when it shows none. That is the item a recipe makes: in Forever
+-- a recipe's lines are its name, a NestedBlock line, the made item's own lines (its armour or weapon type, its Requires Level), then the recipe's
+-- Use: Teaches you line (ItemSpellTriggerLearn), its reagents, Requires <profession> and Already known. The made item can have a Teaches you line
+-- of its own, so the block ends before the last one after the NestedBlock line; with none, it runs to the end of the tooltip, and a red line of the
+-- recipe is missed rather than a recipe the player can learn tinted.
+local function Nested(lines)
+	local nested = EnumValue("TooltipDataLineType", "NestedBlock", NESTED)
+	local learn = EnumValue("TooltipDataLineType", "ItemSpellTriggerLearn", LEARN)
+	local first, last, count = nil, nil, 0
+	for index, line in ipairs(lines) do
+		count = index
+		local kind = Usable(line) and line.type or nil
+		if ns.Finite(kind) then
+			if first == nil then
+				if kind == nested then
+					first = index
+				end
+			elseif kind == learn then
+				last = index - 1
+			end
+		end
+	end
+	if first == nil then
+		return nil
+	end
+	return first, last or count
+end
+
 -- True when the item in this slot cannot be used, false when it can, nil when the game has not said yet. A tooltip of another item than the slot
 -- had a moment ago is not kept.
 local function Unusable(id, link, bag, slot)
@@ -229,8 +259,9 @@ local function Unusable(id, link, bag, slot)
 		return nil
 	end
 	local answer = false
-	for _, line in ipairs(lines) do
-		if Usable(line) and Unmet(line) then
+	local first, last = Nested(lines)
+	for index, line in ipairs(lines) do
+		if not (first and index >= first and index <= last) and Usable(line) and Unmet(line) then
 			answer = true
 			break
 		end

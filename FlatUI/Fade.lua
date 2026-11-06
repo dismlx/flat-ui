@@ -7,7 +7,8 @@ local _, ns = ...
 -- back when the module, the row or the part goes off. A faded frame still takes clicks and shows tooltips, since alpha does not touch the mouse.
 --
 -- One frame of the addon's own runs every 0.05 s while the module is on. A row is at full opacity while the mouse is over the row's hover frame,
--- in a fight (with In combat ticked), with a target (With a target ticked), while the cursor holds something, while the spell flyout is open and in Edit Mode.
+-- in a fight (with In combat ticked), with a target (With a target ticked; not the Target frame row, see When shown), while the cursor holds something, while
+-- the spell flyout is open and in Edit Mode.
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
 -- The frames are the game's own: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
@@ -18,7 +19,9 @@ local _, ns = ...
 --
 -- When shown: the target and focus frames, the buffs and the objective tracker each have a rule. Always (the default) leaves the frame alone. Only in
 -- combat, Only in a group, Only in an instance and Only when not mounted give it full opacity while that holds; at other times it fades as the rows
--- above do, under the mouse, the Stay visible rows and Edit Mode included. The frames: TargetFrame and FocusFrame, secure unit buttons of
+-- above do, under the mouse, the Stay visible rows and Edit Mode included, With a target aside for the target frame: the game shows that frame only
+-- while there is a target (Blizzard_UnitFrame/Shared/TargetFrame.lua:1-15, Mainline/TargetFrame.lua:130-136), so With a target would hold it at full
+-- whenever it shows and its rule would never fade it. The frames: TargetFrame and FocusFrame, secure unit buttons of
 -- TargetFrameTemplate (Blizzard_UnitFrame/Mainline/TargetFrame.xml:52, 549 and 572) whose cast bar and target of target are their children and fade
 -- with them (Mainline/TargetFrame.lua:711-718 and 738-740), as do the combo points on Forever (Camelot/ComboFrame.lua:16); BuffFrame, the buffs and
 -- weapon enchants (Blizzard_BuffFrame/BuffFrame.xml:6; the debuffs are DebuffFrame and stay); and ObjectiveTrackerFrame
@@ -45,6 +48,7 @@ local HIDDEN = 0.001
 
 -- row: the setting that switches it. frames: names in the game, a dotted name reaching down from a global. hover: the frame whose rectangle
 -- counts as under the mouse (the frames themselves when it is left out). rule: a row of When shown, whose setting is a rule (RULES) and not a switch.
+-- targeted: frames the game shows only while there is a target, which With a target does not hold at full.
 local ENTRIES = {
 	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" } },
 	{ bar = true, row = "bar2", label = "Action bar 2", frames = { "MultiBarBottomLeft" } },
@@ -62,10 +66,12 @@ local ENTRIES = {
 	{ row = "petFrame", label = "Pet frame", frames = { "PetFrame" } },
 	{ row = "minimapButtons", label = "Minimap buttons", hover = "MinimapCluster",
 		frames = { "MinimapCluster.Tracking", "MinimapCluster.IndicatorFrame", "GameTimeFrame", "TimeManagerClockButton", "AddonCompartmentFrame" } },
-	{ rule = true, row = "targetFrame", label = "Target frame", frames = { "TargetFrame" } },
+	{ rule = true, targeted = true, row = "targetFrame", label = "Target frame", frames = { "TargetFrame" } },
 	{ rule = true, row = "focusFrame", label = "Focus frame", frames = { "FocusFrame" } },
 	{ rule = true, row = "buffs", label = "Buffs", frames = { "BuffFrame" } },
-	{ rule = true, row = "objectiveTracker", label = "Objective tracker", frames = { "ObjectiveTrackerFrame" } },
+	-- The tracker's own frame runs down to the foot of the right column whatever it lists (Blizzard_ObjectiveTrackerContainer.lua:207-228,
+	-- UIParentPanelManager.lua:822-829); its NineSlice runs from its top to under the last module (Blizzard_ObjectiveTrackerContainer.lua:117-119).
+	{ rule = true, row = "objectiveTracker", label = "Objective tracker", frames = { "ObjectiveTrackerFrame" }, hover = "ObjectiveTrackerFrame.NineSlice" },
 }
 -- The forms of a druid that count as mounted, by GetShapeshiftFormID: travel, aquatic and flight form (Blizzard_FrameXMLBase/Constants.lua:329-333).
 local TRAVEL_FORMS = { [3] = true, [4] = true, [27] = true }
@@ -159,9 +165,9 @@ local function HasTarget()
 	return ok and (ns.IsSecret(exists) or exists == true)
 end
 
--- What keeps every row at full opacity, whatever the mouse does.
+-- What keeps every row at full opacity, whatever the mouse does. With a target is asked apart (Step), as it does not hold a targeted row.
 local function Wanted()
-	return (Opt("combat") and Fighting()) or (Opt("target") and HasTarget()) or Holding() or FlyoutOpen() or ns.EditModeOpen()
+	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen()
 end
 
 -- In a party or a raid.
@@ -305,7 +311,7 @@ local function Step(dt)
 	end
 	local floor, delay, seconds = Opt("alpha") / 100, Opt("delay") / 1000, math.max(Opt("time") / 1000, 0.05)
 	local step = dt / seconds
-	local always = Wanted()
+	local always, targeted = Wanted(), Opt("target") and HasTarget()
 	for rule in pairs(asked) do
 		asked[rule] = nil
 	end
@@ -337,7 +343,7 @@ local function Step(dt)
 			end
 			state.idle[entry.row] = nil
 		elseif #frames > 0 then
-			local full = always or (entry.rule == true and Holds(Opt(entry.row)))
+			local full = always or (targeted and not entry.targeted) or (entry.rule == true and Holds(Opt(entry.row)))
 			if not full then
 				local hover = entry.hover and Resolve(entry.hover)
 				if hover then
