@@ -5,7 +5,8 @@ local _, ns = ...
 -- Only ClearAllPoints and SetPoint on frames that are not protected. No mouse, no alpha, no script of another addon, nothing written to any addon's
 -- saved data. A secret answer from a size, a centre, a point or a child list stops the pass and the buttons stay (SimpleFrameAPIDocumentation.lua:323-335,
 -- SimpleScriptRegionAPIDocumentation.lua:145-149, SimpleScriptRegionResizingAPIDocumentation.lua:65-75).
--- bar: the row starts below the coordinate text of the map (Blizzard_Minimap/Mainline/Minimap.xml:287-291).
+-- bar: the row starts below the coordinate text of the map (Blizzard_Minimap/Mainline/Minimap.xml:287-291), or below the lines of MapText.lua
+-- under the map when they reach further (ns.MapTextBelow).
 
 local PREFIX = "LibDBIcon10_"
 local GAP = 2
@@ -117,6 +118,12 @@ local function Place(map, buttons, mode)
 	end
 	-- The side that faces the screen centre.
 	local sign = mx * ms > ux * us and -1 or 1
+	-- The room under the map: the game's coordinate text, or the lines of MapText.lua when they take more.
+	local room = TEXT
+	local below = ns.MapTextBelow and ns.MapTextBelow()
+	if Num(below) and below + MARGIN > room then
+		room = below + MARGIN
+	end
 	local row, col, used = 0, 0, 0
 	for _, entry in ipairs(buttons) do
 		local button = entry.frame
@@ -138,7 +145,7 @@ local function Place(map, buttons, mode)
 					row, used = row + 1, 0
 				end
 				dx = -mw / 2 + w / 2 + used
-				dy = -(mh / 2 + TEXT + h / 2 + row * (h + GAP))
+				dy = -(mh / 2 + room + h / 2 + row * (h + GAP))
 				used = used + w + GAP
 			end
 			pcall(Put, button, dx, dy, map)

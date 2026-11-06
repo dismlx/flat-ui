@@ -43,8 +43,8 @@ local SWEEP_REFUSED = "Trackers: the game refused to restart a time sweep, so th
 local K = {
 	MAX_TRACKERS = 40, MAX_SPELLS = 40, MAX_NAMES = 8, MAX_CHARS = 40, MAX_ID = 2147483647,
 	BESIDE = 150, RIM = 2, QUIET = 2, LATE = 5, STEP = 3, TEST = 5, SOUND_FILE = 567397,
-	-- LOW_MAX: the largest Low at of a tracker's own, by kind; 20 for the kinds that are not here.
-	LOW_MAX = { item = 1000, ammo = 2000 },
+	-- LOW_MAX: the largest Low at of a tracker's own, by kind; 20 for the kinds that are not here. A durability tracker's is a percent.
+	LOW_MAX = { item = 1000, ammo = 2000, durability = 100 },
 	PULSE_LOW = 0.35, PULSE_TIME = 0.6, GREY = 0.6, ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789",
 	SHOWS = { always = true, low = true, combat = true },
 	MISSING_LOOKS = { red = true, pulse = true, word = true },
@@ -91,6 +91,7 @@ local HELP = {
 	"/flatui tracker add ammo - the ammunition you carry",
 	"/flatui tracker add tracking - red when no minimap tracking is on",
 	"/flatui tracker add form Bear Form - a stance or form, red when you are in none of them",
+	"/flatui tracker add durability - your most worn item, red when one is broken",
 	"/flatui tracker add proc Shadow Trance for Shadow Bolt - a proc alert: its buff, then the spell it is for",
 	"/flatui tracker class - add the usual trackers of your class",
 	"/flatui tracker remove 1 - a number from the list, or a name",
@@ -1940,7 +1941,7 @@ local function Wanted(entry, state, how)
 	end
 	local kind = KINDS[entry.kind]
 	if kind and type(kind.Wanted) == "function" then
-		local ok, alpha = pcall(kind.Wanted, entry, state, how)
+		local ok, alpha = pcall(kind.Wanted, entry, state, how, fighting)
 		if ok and not IsSecret(alpha) and (alpha == 0 or alpha == 1) then
 			return alpha
 		end
@@ -2614,11 +2615,11 @@ end
 -- event of the kind and each cast of the player, Hidden(entry, record, reading) -> true when the kind drew a hidden reading itself, and the
 -- hooks of a kind that has more to show: slot = { unit, filter } for the game's own icon of the kind, noLast (no last reading is shown: "none"
 -- in its place), noDrop (no sound for a drop), last (laid out after the other trackers), Hide(entry, reading, how) -> true to draw nothing,
--- Wanted(entry, state, how) -> 0 or 1 ahead of the rules of Show, Rim(entry, reading, how) -> red, green, blue for the rim of a tracker that is
--- up, Changed(entry, before, after) after a change of the state that was kept, Gone(id) when a tracker is no longer on, World() when the
--- player enters the world or the spells change, Test(entry, on) -> a line, for a test of 5 seconds instead of the three looks, own = { key = fn }
--- for the kind's own test of an own value, and part = the name of the part of the module the kind's calls are isolated in }. A reading is
--- { state = "fine" | "low" | "missing" | "unknown", hidden, count, expires, length, icon, id }.
+-- Wanted(entry, state, how, fighting) -> 0 or 1 ahead of the rules of Show (fighting: whether the trackers are in a fight), Rim(entry, reading,
+-- how) -> red, green, blue for the rim of a tracker that is up, Changed(entry, before, after) after a change of the state that was kept, Gone(id)
+-- when a tracker is no longer on, World() when the player enters the world or the spells change, Test(entry, on) -> a line, for a test of 5
+-- seconds instead of the three looks, own = { key = fn } for the kind's own test of an own value, and part = the name of the part of the module
+-- the kind's calls are isolated in }. A reading is { state = "fine" | "low" | "missing" | "unknown", hidden, count, expires, length, icon, id }.
 function ns.TrackerKind(name, spec)
 	if type(name) ~= "string" or name == "buff" or type(spec) ~= "table" or type(spec.Read) ~= "function" or type(spec.Clean) ~= "function" then
 		return false

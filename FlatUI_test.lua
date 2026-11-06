@@ -10319,6 +10319,7 @@ local PAGES = {
 		S("castbars.textSize", "number", 100, "Text size", "100% is the game's own size.", { min = 50, max = 200, step = 5, unit = "%" }),
 		S("castbars.textOutline", "choice", "game", "Text outline", nil, { choices = MS9.outlines }),
 		S("castbars.textShow", "bool", true, "Spell name"),
+		S("castbars.rank", "bool", false, "Spell rank on the player bar", "After the spell name, as Fireball (Rank 5): the rank you cast, not the highest you know.", { needs = "castbars.textShow" }),
 		S("castbars.textAlign", "choice", "game", "Spell name alignment", nil, { choices = MS9.aligns }),
 		S("castbars.textOwn", "bool", false, "Own spell name colour"),
 		S("castbars.textColour", "colour", "ffffffff", "Spell name colour", nil, { needs = "castbars.textOwn" }),
@@ -10388,7 +10389,9 @@ local PAGES = {
 		S("trackers.remove", "list", 0, "Remove a tracker"),
 		"Amounts",
 		S("trackers.itemMin", "number", 1, "Item minimum", "An item tracker is low when the bags hold fewer. /flatui tracker set 1 low 5 sets one tracker to be low at 5 or fewer.", { min = 1, max = 40, step = 1, unit = "" }),
-		S("trackers.ammoMin", "number", 200, "Ammunition minimum", "The ammunition tracker is low at this many or fewer. 0 means never.", { min = 0, max = 2000, step = 100, unit = "" }),
+		S("trackers.ammoMin", "number", 200, "Ammunition minimum", "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, a low count waits for the end of a fight.", { min = 0, max = 2000, step = 100, unit = "" }),
+		S("trackers.thrownMin", "number", 20, "Thrown weapon minimum", "With a thrown weapon, the ammunition tracker is low at this many or fewer. 0 means never. One that wears out is low at a fifth of its durability.", { min = 0, max = 200, step = 5, unit = "" }),
+		S("trackers.durabilityMin", "number", 20, "Durability minimum", "The durability tracker is low when an item you wear is at this much of its durability or less, and red when one is broken. 0 means never. For 12 seconds after a ready check it is also low at 40% or less, and shows when low or broken, whatever Show says.", { min = 0, max = 100, step = 5, unit = "%" }),
 		"When shown",
 		S("trackers.show", "choice", "always", "Show", nil, { choices = { { "always", "Always" }, { "low", "Only when low or missing" }, { "combat", "Only in combat" } } }),
 		S("trackers.mounted", "bool", true, "Hide while mounted", "Applies to trackers set to Only when low or missing."),
@@ -10572,12 +10575,19 @@ local PAGES = {
 		"Item level",
 		S("windows.ilvlBags", "bool", false, "Item level in bags and bank"),
 		S("windows.ilvlCharacter", "bool", false, "Item level on equipped gear"),
+		S("windows.ilvlFlyout", "bool", true, "Item level in the equipment flyout", "The bag items that fit a slot of the Character window, shown while you hold Alt over the slot.",
+			{ needs = "windows.ilvlCharacter" }),
+		S("windows.ilvlInspect", "bool", true, "Item level on the Inspect window", "On each slot, and the player's average item level under their level."),
+		S("windows.ilvlCorner", "choice", "bottomLeft", "Item level corner on gear", "On the slots of the Character and Inspect windows. Bags and the flyout keep the bottom left.",
+			{ choices = { { "bottomLeft", "Bottom left" }, { "bottomRight", "Bottom right" }, { "topLeft", "Top left" }, { "topRight", "Top right" } } }),
 		S("windows.ilvlSize", "number", 12, "Item level size", nil, { min = 8, max = 18, step = 1, unit = "" }),
 		S("windows.ilvlColour", "choice", "quality", "Item level colour", nil, { choices = { { "quality", "Item quality colour" }, { "white", "White" }, { "gold", "Gold" } } }),
 		"Bags",
 		S("windows.newGlow", "bool", true, "New item glow"),
 		S("windows.junkDim", "bool", false, "Dim grey items", "Darkens poor items that have a vendor price."),
 		S("windows.combinedBags", "bool", false, "Combine bags"),
+		"Character window",
+		S("windows.durability", "bool", true, "Show durability", "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below."),
 	} },
 	{ key = "unitframes", label = "Unit frames", rows = {
 		S("unitframes.enabled", "bool", true, "Restyle unit frames"),
@@ -10839,6 +10849,18 @@ local PAGES = {
 		S("hud.btnAddons", "bool", true, "Addon list button"),
 		S("hud.addonButtons", "choice", "edge", "Addon buttons", "Round buttons that other addons put on the minimap.",
 			{ choices = { { "leave", "Where each addon puts them" }, { "edge", "Column beside the map" }, { "bar", "Row under the map" } }, changed = "MapButtonsChanged" }),
+		"Text around the map",
+		S("hud.mapCoords", "bool", true, "Coordinates", "Your place on the zone map. Hidden in instances and where the game gives no position."),
+		S("hud.mapCoordsPlace", "choice", "below", "Coordinates place", nil, { needs = "hud.mapCoords", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapCoordsDecimals", "choice", "1", "Coordinate decimals", nil, { needs = "hud.mapCoords", choices = { { "0", "None (45, 62)" }, { "1", "One (45.3, 62.1)" }, { "2", "Two (45.31, 62.08)" } } }),
+		S("hud.mapDurability", "bool", true, "Durability", "Your most worn equipped item. Yellow at 50% or less, red at 20% or less."),
+		S("hud.mapDurabilityPlace", "choice", "below", "Durability place", nil, { needs = "hud.mapDurability", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapPerf", "bool", false, "Frame rate and latency", "Frames per second, then your home and world latency in milliseconds."),
+		S("hud.mapPerfPlace", "choice", "below", "Frame rate place", nil, { needs = "hud.mapPerf", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapClock", "bool", false, "Time", "Your local time or the realm's. The game's clock beside the zone name has its own row, Clock, under Buttons."),
+		S("hud.mapClockPlace", "choice", "above", "Time place", nil, { needs = "hud.mapClock", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapClockTime", "choice", "local", "Local or realm time", nil, { needs = "hud.mapClock", choices = { { "local", "Local time" }, { "realm", "Realm time" } } }),
+		S("hud.mapClockHours", "choice", "24", "Time format", nil, { needs = "hud.mapClock", choices = { { "24", "24 hours (14:05)" }, { "12", "12 hours (2:05 PM)" } } }),
 	} },
 	{ key = "hudBuffs", label = "Buffs and debuffs", parent = "hud", owner = "hud", rows = {
 		S("hud.auras", "bool", true, "Buff and debuff borders", "Square icons with a thin border. Debuffs take the colour of their type."),
@@ -10883,12 +10905,18 @@ local PAGES = {
 		S("hud.xpTooltip", "bool", true, "Tooltip", "Experience, rested and standing on mouse-over.", { needs = "hud.xpOwn", needsIn = { "flat" } }),
 		S("hud.xpFill", "bool", true, "Flat fill", "One plain colour in place of the default gloss. Not applied while Leave the game's action bars alone is on.", { needs = "hud.xpOwn", needsIn = { "game" } }),
 		S("hud.xpDividers", "bool", true, "Hide bar dividers", "Not applied while Leave the game's action bars alone is on.", { needs = "hud.xpOwn", needsIn = { "game" } }),
+		"Levelling",
+		S("hud.xpQuest", "bool", true, "Quests ready to hand in", "A stretch after the fill shows the experience of the finished quests in your log. The tooltip counts them and the whole log.", { needs = "hud.xpOwn", needsIn = { "flat" } }),
+		S("hud.xpQuestColour", "colour", "ff4de64d", "Quest colour", nil, { needs = "hud.xpQuest" }),
+		S("hud.xpStats", "choice", "time", "Levelling text", "After the text of the experience bar, or alone while Bar text is Hidden. The pace is your last 30 minutes of play, without time away, and shows after 5 minutes.", { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "none", "None" }, { "time", "Time to level" }, { "rate", "Experience per hour" }, { "both", "Time to level and per hour" }, { "kills", "Kills to level" } } }),
+		S("hud.xpStatsTip", "bool", true, "Levelling in the tooltip", "Experience this session and per hour, the time to level, about how many kills and quests that takes, and the time at this level after /played.", { needs = "hud.xpTooltip" }),
 		"Micro menu",
 		S("hud.micro", "bool", true, "Micro menu buttons", "Thin border in place of the default button frames."),
 	} },
 	{ key = "hudTracker", label = "Tracker, loot and alerts", parent = "hud", owner = "hud", rows = {
 		"Objective tracker",
 		S("hud.trackerHeaders", "bool", true, "Tracker headers", "A flat band with a thin border behind each heading."),
+		S("hud.trackerCount", "bool", true, "Quest count", "Your quests and the most the log holds, as 12/20, at the right of the Quests heading. Red while the log is full."),
 		S("hud.trackerBars", "bool", true, "Tracker bars", "Thin border and flat fill on progress and timer bars."),
 		S("hud.trackerItems", "bool", true, "Tracker item buttons", "Square quest item buttons with a thin border."),
 		S("hud.trackerTexture", "choice", "default", "Tracker bar texture", nil, { needs = "hud.trackerBars", choices = { { "default", "Same as the Flat UI page" }, { "flat", "Flat" }, { "soft", "Soft shade" }, { "shaded", "Shaded" }, { "gloss", "Gloss" }, { "stripes", "Stripes" }, { "edge", "Bottom edge" },
@@ -10980,6 +11008,82 @@ local PAGES = {
 		"Extra lines",
 		S("chat.ids", "bool", false, "Item and spell IDs"),
 		S("chat.count", "bool", false, "Item count in bags and bank"),
+	} },
+	{ key = "errands", label = "Errands", rows = {
+		S("errands.enabled", "bool", false, "Run errands", "Each errand below and on the Levelling tab has its own row. Selling, repairs, Make room, Train all, summons, invites, new spell ranks and talent reminders wait for the end of a fight."),
+		S("errands.chat", "bool", true, "Say what was done", "A line in chat after selling, repairing, training, deleting, accepting, declining and upranking, and when a quest is left to you."),
+		"Merchant",
+		S("errands.sell", "bool", true, "Sell grey items", "When a merchant opens. Hold Shift as it opens to keep them that time. /flatui sell and /flatui keep choose other items to sell or keep."),
+		S("errands.repair", "choice", "own", "Repair", "When a merchant who repairs opens.", { choices = { { "off", "Off" }, { "own", "With your gold" }, { "guild", "Guild gold first" } } }),
+		"Loot and trainers",
+		S("errands.quickLoot", "bool", true, "Quick loot", "When the game loots by itself (Auto Loot, or its key held), every slot is taken at once. Rolls still ask."),
+		S("errands.makeRoom", "bool", true, "Make room in full bags", "A button under the loot window deletes the cheapest grey item while every bag is full."),
+		S("errands.trainAll", "bool", true, "Train all button", "On the trainer window: learns everything the trainer offers that you can pay for. A profession is left to Train, which asks first. /flatui train does the same."),
+		"Death and popups",
+		S("errands.releaseGuard", "choice", "instances", "Hold a key to release", "Release Spirit is covered until you hold the key, so a stray click does not send you to the graveyard. The game's own timer still releases you.",
+			{ choices = { { "off", "Off" }, { "instances", "In dungeons and raids" }, { "always", "Everywhere" } } }),
+		S("errands.releaseKey", "choice", "shift", "Key to hold", nil, { needs = "errands.releaseGuard", needsIn = { "instances", "always" },
+			choices = { { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } }),
+		S("errands.summons", "bool", false, "Accept summons", "When the game would let you take it: not in a fight, and not on a flight path."),
+		S("errands.resurrect", "bool", false, "Accept resurrections", "Not while the one who offers it is in combat or dead, and only once the game lets you after recent deaths."),
+		S("errands.deleteWord", "bool", true, "Type DELETE for you", "Writes the word the game asks for before it deletes a good item. You still click Yes."),
+		"Other players",
+		S("errands.invites", "choice", "friends", "Accept group invites from", "Battle.net friends count as friends. An invite that comes in a fight is accepted when the fight ends. One that asks for roles, or would take you out of a queue, is left to you.",
+			{ choices = { { "off", "Nobody" }, { "friends", "Friends" }, { "guild", "Your guild" }, { "both", "Friends and your guild" } } }),
+		S("errands.declineDuels", "bool", false, "Decline duels", "Every duel request is declined at once, also in a fight."),
+		S("errands.mailRecipient", "bool", true, "Remember the last mail recipient", "After a letter goes, the To box keeps the name until the mailbox closes."),
+	} },
+	{ key = "errandsLevelling", label = "Levelling", parent = "errands", owner = "errands", rows = {
+		"Quests",
+		S("errands.questAccept", "bool", true, "Accept quests", "When an NPC offers one, or your group shares one. A quest that would flag you for PvP, and an escort a group member starts, still ask you."),
+		S("errands.questTurnIn", "bool", true, "Hand in finished quests", "Takes the reward when there is only one; with a choice, the window stays open for you. A quest that takes money, or an item of green quality or better, is left to you."),
+		S("errands.questLow", "bool", false, "Low-level quests too", "Off: a grey quest is left to you, so the places in your quest log go to quests worth the time.", { needs = "errands.questAccept" }),
+		S("errands.questRepeat", "bool", false, "Repeatable quests too", "Off: a quest you can do again and again, such as a cloth or reputation hand-in, is left to you, so nothing you may want to keep is given away."),
+		S("errands.questKey", "choice", "shift", "Key to do it yourself", "Hold it as you talk to an NPC, and that NPC's quests and gossip are left to you until you walk away.",
+			{ choices = { { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } }),
+		S("errands.questNpcs", "list", 0, "Skipped NPCs", "Their quests and gossip are always left to you. /flatui npc skips the NPC you talk to or target."),
+		"Gossip",
+		S("errands.gossip", "choice", "all", "Gossip options", "Saved options are picked everywhere. In the open world, the one option marked (Quest), or an NPC's only option when it has no quest for you, is picked too. An option that casts a spell is never picked.",
+			{ choices = { { "off", "Off" }, { "saved", "Saved options only" }, { "all", "Saved, quest and only options" } } }),
+		S("errands.gossipSaved", "list", 0, "Saved gossip options", "/flatui gossip lists the options of the NPC you talk to, and /flatui gossip 2 saves the second one."),
+		"Spell ranks",
+		S("errands.uprank", "bool", true, "Put new ranks on your bars", "After training, a line at the top of the screen offers it. Its button reloads the interface in the same click, which keeps the game's bars clean. Macros, items, the ranks you keep and a lower rank beside a higher one of the same spell stay as they are."),
+		S("errands.keepRank", "list", 0, "Keep a rank on your bars", "That rank stays where it is. The other ranks of the spell are still replaced. /flatui rank and a spell link does the same.", { needs = "errands.uprank" }),
+		S("errands.unkeepRank", "list", 0, "Stop keeping a rank", nil, { needs = "errands.uprank" }),
+		S("errands.uprankNow", "list", 0, "Uprank your bars now", "Shows the line and its button now. /flatui uprank does the same.", { needs = "errands.uprank" }),
+		S("errands.learnedLines", "choice", "summary", "Lines about learned spells", "The game's lines that start with You have learned or You have unlearned. One line in their place names what was learned, a moment after the last; with Say what was done off, the game's lines stay.",
+			{ choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "summary", "One line in their place" } } }),
+		"Reputation and talents",
+		S("errands.repFollow", "bool", true, "Show the reputation you gain", "Flat UI's experience bar shows the faction you last gained reputation with. Exalted and inactive factions are passed over, and a faction you pick in the game's reputation window shows until your next gain. The faction the game watches is not changed."),
+		S("errands.talentReminder", "bool", true, "Remind you of talent points", "When you reach a level, or log in, with talent points to spend, a line in chat says how many, also with Say what was done off. A level reached in a fight is told when it ends."),
+		"Waypoints",
+		S("errands.wayCommand", "bool", true, "Add the /way command", "/way 45 61 puts a pin on your map there and the game points you to it. /way Elwynn Forest 45 61, /way #1429 45 61 and /way clear work too. When another addon has /way it keeps it, and /flatui way does the same."),
+	} },
+	{ key = "datapanels", label = "Data panels", rows = {
+		S("datapanels.enabled", "bool", false, "Show data panels", "Panels of text across the screen: bag space, gold, durability and more. Point at a slot for its tooltip. /flatui move places the panels."),
+		"Top panel",
+		S("datapanels.top", "bool", true, "Show the top panel", "At the top of the screen, under the game's battleground scores, until you move it."),
+		S("datapanels.top1", "choice", "bags", "First slot", "A slot with nothing to show takes no room. Feeds of other addons are listed when one of them brings LibDataBroker.", { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top2", "choice", "gold", "Second slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top3", "choice", "durability", "Third slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top4", "choice", "hearth", "Fourth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top5", "choice", "coords", "Fifth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top6", "choice", "fps", "Sixth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		"Bottom panel",
+		S("datapanels.bottom", "bool", false, "Show the bottom panel", "In the bottom left corner of the screen until you move it."),
+		S("datapanels.bottom1", "choice", "friends", "First slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom2", "choice", "guild", "Second slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom3", "choice", "none", "Third slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom4", "choice", "none", "Fourth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom5", "choice", "none", "Fifth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom6", "choice", "none", "Sixth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		"Look",
+		S("datapanels.font", "choice", "sans", "Font", "Flat UI Sans is IBM Plex Sans. A language it has no letters for keeps the game font.", { choices = { { "sans", "Flat UI Sans" }, { "game", "Game font" } } }),
+		S("datapanels.textSize", "number", 100, "Text size", "100% is 12 px.", { min = 50, max = 200, step = 5, unit = "%" }),
+		S("datapanels.background", "bool", true, "Background and border", "A flat background with a thin border and a line between two slots, in the colours of the Flat UI page."),
+		S("datapanels.tooltips", "bool", true, "Tooltips", "Off: the panels let clicks through, except a slot that shows another addon's feed, which keeps its own clicks."),
+		"Gold",
+		S("datapanels.forgetGold", "list", 0, "Forget a character's gold", "The gold tooltip lists each character of the account that logged in with data panels on."),
 	} },
 	-- The faces are the ones the client loads: the panel worlds answer nothing to SetFont, so only the game's font is offered.
 	{ key = "fonts", label = "Fonts", rows = {
@@ -11249,7 +11353,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.4" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.5" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -20759,6 +20863,7 @@ do local PROBES = {
 	{ "castbars.targetOwn", true, held("castbars.targetOwn"), "false/false", "true/true" },
 	{ "castbars.textShow", false, held("castbars.textShow"), "true/true", "false/false" },
 	{ "castbars.textOwn", true, held("castbars.textOwn"), "false/false", "true/true" },
+	{ "castbars.rank", true, held("castbars.rank"), "false/false", "true/true" },
 	{ "castbars.playerIcon", true, held("castbars.playerIcon"), "false/false", "true/true" },
 	{ "resource.percent", false, held("resource.percent"), "true/true", "false/false" },
 	{ "resource.value", false, held("resource.value"), "true/true", "false/false" },
@@ -20968,6 +21073,7 @@ do local PROBES = {
 	{ "trackers.addClass", "Choose one", held("trackers.addClass"), "0/Choose one", "0/Choose one", oneWay = true },
 	{ "trackers.itemMin", 5, held("trackers.itemMin"), "1/1", "5/5" },
 	{ "trackers.ammoMin", 500, held("trackers.ammoMin"), "200/200", "500/500" },
+	{ "trackers.thrownMin", 50, held("trackers.thrownMin"), "20/20", "50/50" },
 	{ "trackers.mounted", false, held("trackers.mounted"), "true/true", "false/false" },
 	{ "trackers.resting", true, held("trackers.resting"), "false/false", "true/true" },
 	{ "trackers.remove", "Choose a tracker", held("trackers.remove"), "0/Choose a tracker", "0/Choose a tracker", oneWay = true },
@@ -21480,9 +21586,28 @@ end
 for _, path in ipairs({ "hud.durationFormat", "hud.durationColour", "unitframes.totemTimeSize" }) do
 	covered[path] = true
 end
--- Flat UI's own experience bar has its checks in the xpown block.
+-- Errands has its checks in the errands block.
+for _, path in ipairs({ "errands.enabled", "errands.chat", "errands.sell", "errands.repair", "errands.quickLoot", "errands.makeRoom", "errands.trainAll", "errands.releaseGuard",
+	"errands.releaseKey", "errands.summons", "errands.resurrect", "errands.deleteWord", "errands.invites", "errands.declineDuels", "errands.mailRecipient" }) do
+	covered[path] = true
+end
+-- The Levelling tab of Errands and the quest count of the tracker have no checks yet: the owner asked for code without new test blocks.
+for _, path in ipairs({ "errands.questAccept", "errands.questTurnIn", "errands.questLow", "errands.questRepeat", "errands.questKey", "errands.questNpcs", "errands.gossip",
+	"errands.gossipSaved", "errands.uprank", "errands.keepRank", "errands.unkeepRank", "errands.uprankNow", "errands.learnedLines", "hud.trackerCount",
+	"errands.repFollow", "errands.talentReminder", "errands.wayCommand" }) do
+	covered[path] = true
+end
+-- Wave 3 (the text around the minimap and the durability tracker) has no checks yet either.
+for _, path in ipairs({ "hud.mapCoords", "hud.mapCoordsPlace", "hud.mapCoordsDecimals", "hud.mapDurability", "hud.mapDurabilityPlace", "hud.mapPerf", "hud.mapPerfPlace", "hud.mapClock", "hud.mapClockPlace", "hud.mapClockTime", "hud.mapClockHours", "trackers.durabilityMin" }) do
+	covered[path] = true
+end
+-- Nor do the Data panels page and the item level rows of wave 3.
+for _, path in ipairs({ "datapanels.enabled", "datapanels.top", "datapanels.top1", "datapanels.top2", "datapanels.top3", "datapanels.top4", "datapanels.top5", "datapanels.top6", "datapanels.bottom", "datapanels.bottom1", "datapanels.bottom2", "datapanels.bottom3", "datapanels.bottom4", "datapanels.bottom5", "datapanels.bottom6", "datapanels.font", "datapanels.textSize", "datapanels.background", "datapanels.tooltips", "datapanels.forgetGold", "windows.ilvlFlyout", "windows.ilvlInspect", "windows.ilvlCorner", "windows.durability" }) do
+	covered[path] = true
+end
+-- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
 for _, path in ipairs({ "hud.xpOwn", "hud.xpWidth", "hud.xpHeight", "hud.xpShow", "hud.xpOrder", "hud.xpGap", "hud.xpTicks", "hud.xpColour", "hud.xpRested", "hud.xpRestedColour",
-	"hud.xpRepMode", "hud.xpRepColour", "hud.xpTextWhen", "hud.xpTextPlace", "hud.xpTooltip" }) do
+	"hud.xpRepMode", "hud.xpRepColour", "hud.xpTextWhen", "hud.xpTextPlace", "hud.xpTooltip", "hud.xpQuest", "hud.xpQuestColour", "hud.xpStats", "hud.xpStatsTip" }) do
 	covered[path] = true
 end
 for _, row in ipairs(ALL) do
@@ -23836,7 +23961,9 @@ for _, P in ipairs(W_PROBES) do
 	check(label .. ": no violations, errors or messages", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.out, "|"))
 end
 for _, row in ipairs(ALL) do
-	if row.page == "windows" and row.path ~= "windows.slotTints" and row.live ~= true then
+	-- Wave 3's item level and durability rows have no probe yet: the owner asked for code without new test blocks.
+	if row.page == "windows" and row.path ~= "windows.slotTints" and row.live ~= true
+		and not ({ ["windows.ilvlFlyout"] = true, ["windows.ilvlInspect"] = true, ["windows.ilvlCorner"] = true, ["windows.durability"] = true })[row.path] then
 		check("window probes: " .. row.path .. " has one", WPROBED[row.path] == true)
 	end
 end end
@@ -63158,11 +63285,11 @@ function PT.runBuild()
 	-- 2. The left-hand side ---------------------------------------------------------------------------------------------
 	do
 		local W = PT.open()
-		-- The sidebar: four fixed rows, then six groups with the 22 modules. The page that is open has its sections under it and its tabs after.
+		-- The sidebar: four fixed rows, then six groups with the 24 modules. The page that is open has its sections under it and its tabs after.
 		local GROUPS = { { "Look", { "Flat UI", "Fonts" } }, { "Frames", { "Unit frames", "Nameplates", "Personal resource display", "Cast bars", "Swing timers" } },
 			{ "Action bars", { "Action bars", "Bar block", "Bar blocks" } },
 			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Combat text" } },
-			{ "Interface", { "Minimap and buffs", "Windows", "Chat and tooltips" } }, { "Layout", { "Movers", "Fading", "Tooltip" } } }
+			{ "Interface", { "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels" } }, { "Layout", { "Movers", "Fading", "Tooltip" } } }
 		local expected = { "Home", "Flat UI setup", "Profiles", "Move frames" }
 		for _, group in ipairs(GROUPS) do
 			expected[#expected + 1] = group[1]
@@ -64087,13 +64214,13 @@ function PT.runControls()
 		local W = PT.open()
 		local ns = W.ns
 		PT.go(W, "Text")
-		-- The button with the reset glyph of Panel.tga (cell 29) on a row.
+		-- The button with the reset glyph of Panel.tga (cell 29: the sixth of the fourth row of eight) on a row.
 		local function resetOf(label)
 			for _, proxy in ipairs(need(W, label).children) do
 				local child = W.rawOf[proxy] or proxy
 				for _, region in ipairs(child.regions or {}) do
 					if region.kind == "Texture" and type(region.file) == "string" and region.file:find("Panel.tga", 1, true) and region.texCoord
-						and near(region.texCoord[1], 5 / 8) and near(region.texCoord[3], 3 / 4) then
+						and near(region.texCoord[1], 5 / 8) and near(region.texCoord[3], 3 / 8) then
 						return child
 					end
 				end
@@ -65759,7 +65886,8 @@ function PT.runMsTree()
 	local clean, joined, need = PT.clean, PT.joined, PT.need
 	local TREE = { { "general", "Colours" }, { "nameplates", "Health bar,Colours and threat,Text,Cast bar,Target and marks,Auras,Game settings" }, { "castbars", "Size,Text and icon" }, { "cooldowns", "States and text" },
 		{ "windows", "Which windows,Bags and items" }, { "unitframes", "Player frame,Target frame,Focus frame,Pet frame,Target of target frame,Party frames,Boss frames,Raid frames,All frames: bars and pictures,All frames: text,All frames: icons and auras" },
-		{ "hud", "Minimap,Buffs and debuffs,Bars, bags and micro menu,Tracker, loot and alerts" }, { "chat", "Chat text,Tooltips" } }
+		{ "hud", "Minimap,Buffs and debuffs,Bars, bags and micro menu,Tracker, loot and alerts" }, { "chat", "Chat text,Tooltips" },
+		{ "errands", "Levelling" } }
 	do
 		local W = PT.open()
 		local ns = W.ns
@@ -65785,10 +65913,10 @@ function PT.runMsTree()
 		local ns = W.ns
 		local moved = { nameplatesHealth = "health", nameplatesText = "kindMark", nameplatesCast = "castHeight", nameplatesMarks = "kindBorder", nameplatesAuras = "auras",
 			castbarsSize = "playerWidth", castbarsText = "textSize", windowsWhich = "maps", windowsItems = "slotTints", unitframesBars = "corners", unitframesText = "smallTextSize",
-			unitframesIcons = "pvpTimer", hudMinimap = "cityMap", hudBuffs = "auras", hudBars = "micro", hudTracker = "zoneBars", chatTips = "health" }
+			unitframesIcons = "pvpTimer", hudMinimap = "cityMap", hudBuffs = "auras", hudBars = "micro", hudTracker = "zoneBars", chatTips = "health", errandsLevelling = "questAccept" }
 		local owners = { nameplatesHealth = "nameplates", nameplatesText = "nameplates", nameplatesCast = "nameplates", nameplatesMarks = "nameplates", nameplatesAuras = "nameplates",
 			castbarsSize = "castbars", castbarsText = "castbars", windowsWhich = "windows", windowsItems = "windows", unitframesBars = "unitframes", unitframesText = "unitframes",
-			unitframesIcons = "unitframes", hudMinimap = "hud", hudBuffs = "hud", hudBars = "hud", hudTracker = "hud", chatTips = "chat" }
+			unitframesIcons = "unitframes", hudMinimap = "hud", hudBuffs = "hud", hudBars = "hud", hudTracker = "hud", chatTips = "chat", errandsLevelling = "errands" }
 		local bad = {}
 		for _, page in ipairs(ns.PAGES) do
 			local key = moved[page.key]
@@ -66937,7 +67065,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 55 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 55 and rows == 904 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 57 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 57 and rows == 978 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -67251,7 +67379,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 904 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 927 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -67677,7 +67805,7 @@ function PT.runSetup()
 				end
 			end
 		end
-		check("setup: every drawn setting of every built step changes its drawing", drawn == 775 and #failed == 0, joined(failed) .. " " .. drawn)
+		check("setup: every drawn setting of every built step changes its drawing", drawn == 779 and #failed == 0, joined(failed) .. " " .. drawn)
 		clean(W, "setup drawings")
 	end
 
@@ -69177,10 +69305,10 @@ function PT.runNav()
 	local clean, joined, need = PT.clean, PT.joined, PT.need
 	local N = {}
 	N.keys = { "general", "fonts", "unitframes", "nameplates", "resource", "castbars", "swing", "actionbars", "barblock", "blocks", "cooldowns", "trackers", "defensives",
-		"partycd", "enemycd", "combattext", "hud", "windows", "chat", "movers", "fade", "tooltip" }
+		"partycd", "enemycd", "combattext", "hud", "windows", "chat", "errands", "datapanels", "movers", "fade", "tooltip" }
 	N.names = { "Home", "Flat UI setup", "Profiles", "Move frames", "Look", "Flat UI", "Fonts", "Frames", "Unit frames", "Nameplates", "Personal resource display", "Cast bars",
 		"Swing timers", "Action bars", "Action bars", "Bar block", "Bar blocks", "Combat", "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns",
-		"Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Layout", "Movers", "Fading", "Tooltip" }
+		"Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels", "Layout", "Movers", "Fading", "Tooltip" }
 	N.known = {}
 	for _, name in ipairs(N.names) do N.known[name] = true end
 	N.scroll = function(W) return PT.clips(W, PT.nav(W)[1].raw)[1] end
@@ -69285,7 +69413,7 @@ function PT.runNav()
 		local n = 0
 		for _, raw in ipairs(N.rows(W)) do
 			for _, r in ipairs(raw.regions) do
-				if r.kind == "Texture" and r.shown and type(r.file) == "string" and r.file:find("Panel.tga", 1, true) and not (near(r.texCoord[1], 1 / 8) and near(r.texCoord[3] + r.texCoord[4], 7 / 4)) then n = n + 1 end
+				if r.kind == "Texture" and r.shown and type(r.file) == "string" and r.file:find("Panel.tga", 1, true) and not (near(r.texCoord[1], 1 / 8) and near(r.texCoord[3] + r.texCoord[4], 7 / 8)) then n = n + 1 end
 			end
 		end
 		return n
@@ -69295,7 +69423,7 @@ function PT.runNav()
 		local list = {}
 		for _, raw in ipairs(N.rows(W)) do
 			for _, r in ipairs(raw.regions) do
-				if r.kind == "Texture" and r.shown and type(r.file) == "string" and r.file:find("Panel.tga", 1, true) and near(r.texCoord[1], 1 / 8) and near(r.texCoord[3] + r.texCoord[4], 7 / 4) then
+				if r.kind == "Texture" and r.shown and type(r.file) == "string" and r.file:find("Panel.tga", 1, true) and near(r.texCoord[1], 1 / 8) and near(r.texCoord[3] + r.texCoord[4], 7 / 8) then
 					list[#list + 1] = r.rotation or 0
 				end
 			end
@@ -69336,8 +69464,8 @@ function PT.runNav()
 		local W = PT.world({ firstStart = true })
 		local ns = W.ns
 		ns.OpenPanel()
-		local subtitle = ("%d of 22 modules on"):format(N.on(ns))
-		check("window nav: the first time the window opens on Home, and says how many of the 22 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
+		local subtitle = ("%d of 24 modules on"):format(N.on(ns))
+		check("window nav: the first time the window opens on Home, and says how many of the 24 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
 			and (W.env.FlatUIDB.panel == nil or W.env.FlatUIDB.panel.page == nil), subtitle .. " " .. tostring(PT.title(W)))
 		PT.go(W, "Nameplates")
 		check("window nav: a page chosen is kept in FlatUIDB.panel and in no profile", W.env.FlatUIDB.panel.page == "nameplates" and W.env.FlatUIDB.profiles[ns.Profile()].options.page == nil)
@@ -69359,7 +69487,7 @@ function PT.runNav()
 	do
 		local W = PT.open()
 		local ns = W.ns
-		check("window nav: the sidebar lists Home, Flat UI setup, Profiles and Move frames, then the six groups with the 22 modules in order", joined(N.all(W)) == joined(N.names), joined(N.all(W)))
+		check("window nav: the sidebar lists Home, Flat UI setup, Profiles and Move frames, then the six groups with the 24 modules in order", joined(N.all(W)) == joined(N.names), joined(N.all(W)))
 		check("window nav: the open page has one mark in the accent in the sidebar", joined(N.marks(W)) == "9a9cf0", joined(N.marks(W)))
 		check("window nav: every module row has its icon from Panel.tga", N.icons(W) >= 4 and #PT.byText(W, "Fonts") >= 1)
 		local nav = PT.nav(W)
@@ -69546,14 +69674,14 @@ function PT.runNav()
 		for _, text in ipairs(N.texts(W)) do
 			if text == "Defaults" or text:find("^%d+ changed$") then states = states + 1 end
 		end
-		check("window nav: 22 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 22 and N.has(W, ("%d on"):format(N.on(ns))), states)
+		check("window nav: 24 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 24 and N.has(W, ("%d on"):format(N.on(ns))), states)
 		check("window nav: Flat UI and Swing timers are at their defaults", N.state(W, "Flat UI") == "Defaults" and N.state(W, "Swing timers") == "Defaults")
 		local tile = N.tile(W, "Nameplates")
 		local switch = N.switchOf(W, tile)
 		check("window nav: a tile has the icon, the name, the state and the switch of the module; Flat UI has none", tile ~= nil and switch ~= nil and N.track(switch) == "9a9cf0" and N.switchOf(W, N.tile(W, "Flat UI")) == nil)
 		PT.press(W, switch)
 		check("window nav: the switch of a tile turns the module off, and Home says one module fewer", ns.Get("nameplates.enabled") == false and N.track(switch) == "353a31"
-			and N.has(W, ("%d of 22 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
+			and N.has(W, ("%d of 24 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
 		PT.press(W, switch)
 		ns.Set("swing.enabled", false)
 		ns.Set("general.thickness", 2)
@@ -69753,7 +69881,7 @@ function PT.runNav()
 		local head = file:read(18)
 		file:close()
 		local function le(at) return head:byte(at) + head:byte(at + 1) * 256 end
-		check("window nav: Panel.tga is a 512 by 256 true colour image with 32 bits", #head == 18 and head:byte(3) == 2 and le(13) == 512 and le(15) == 256 and head:byte(17) == 32)
+		check("window nav: Panel.tga is a 512 by 512 true colour image with 32 bits", #head == 18 and head:byte(3) == 2 and le(13) == 512 and le(15) == 512 and head:byte(17) == 32)
 		local cells, count, high = {}, 0, 0
 		for name, cell in pairs(ns.PanelNav.CELLS) do
 			if cells[cell] then count = count + 100 end
@@ -69765,14 +69893,17 @@ function PT.runNav()
 		for _, key in ipairs(N.keys) do
 			if ns.PanelNav.CELLS[key] == nil then missing[#missing + 1] = key end
 		end
-		check("window nav: the 22 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 4 atlas", count == 32 and high == 31 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
+		check("window nav: the 24 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 8 atlas", count == 34 and high == 33 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
 		local texture = PT.window(W):CreateTexture(nil, "ARTWORK", nil, 0)
 		ns.PanelNav.Cell(texture, "home")
 		local tc = W.rawOf[texture].texCoord
-		check("window nav: a cell sets its quarter of the picture: Home is the seventh cell of the third row", near(tc[1], 6 / 8) and near(tc[2], 7 / 8) and near(tc[3], 2 / 4) and near(tc[4], 3 / 4), joined(tc))
+		check("window nav: a cell sets its eighth of the picture: Home is the seventh cell of the third row", near(tc[1], 6 / 8) and near(tc[2], 7 / 8) and near(tc[3], 2 / 8) and near(tc[4], 3 / 8), joined(tc))
 		ns.PanelNav.Cell(texture, "chevron")
 		tc = W.rawOf[texture].texCoord
-		check("window nav: the chevron cell is the second of the last row", near(tc[1], 1 / 8) and near(tc[3], 3 / 4) and near(tc[4], 1), joined(tc))
+		check("window nav: the chevron cell is the second of the fourth row", near(tc[1], 1 / 8) and near(tc[3], 3 / 8) and near(tc[4], 4 / 8), joined(tc))
+		ns.PanelNav.Cell(texture, "errands")
+		tc = W.rawOf[texture].texCoord
+		check("window nav: the pouch of Errands is the first cell of the fifth row", near(tc[1], 0) and near(tc[2], 1 / 8) and near(tc[3], 4 / 8) and near(tc[4], 5 / 8), joined(tc))
 		-- Own
 		local M = PT.open()
 		PT.go(M, "Home")
@@ -69874,6 +70005,7 @@ function PT.runTabs()
 		{ "Minimap and buffs", "General, Minimap, Buffs and debuffs, Bars, bags and micro menu, Tracker, loot and alerts" },
 		{ "Windows", "General, Which windows, Bags and items" },
 		{ "Chat and tooltips", "General, Chat text, Tooltips" },
+		{ "Errands", "General, Levelling" },
 	}
 
 	-- The tabs of every module, the sidebar with modules only, and the title of the module over every tab.
@@ -69893,7 +70025,7 @@ function PT.runTabs()
 			PT.go(W, name)
 			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
 		end
-		check("window tabs: the 37 child pages are the tabs of eleven modules, in the order of the design, and the other eleven modules have none", children == 37 and #bad == 0, children .. " " .. joined(bad))
+		check("window tabs: the 38 child pages are the tabs of twelve modules, in the order of the design, and the other eleven modules have none", children == 38 and #bad == 0, children .. " " .. joined(bad))
 		PT.go(W, "Nameplates")
 		PT.go(W, "Health bar")
 		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil
@@ -73081,7 +73213,8 @@ do
 	-- The calls the game was asked, but for the lists the page offers: the spells, the items in the bags, the forms and the class of the player.
 	function TK.asked(W)
 		local n = 0
-		local offered = { IsSpellHarmful = true, IsSpellHelpful = true, GetContainerNumSlots = true, GetContainerItemInfo = true, GetNumShapeshiftForms = true, GetShapeshiftFormInfo = true, UnitClass = true }
+		-- UnitLevel and GetNumGroupMembers are also read by the levelling stats of the experience bar (XpStats.lua), on with the hud page.
+		local offered = { UnitLevel = true, GetNumGroupMembers = true, IsSpellHarmful = true, IsSpellHelpful = true, GetContainerNumSlots = true, GetContainerItemInfo = true, GetNumShapeshiftForms = true, GetShapeshiftFormInfo = true, UnitClass = true }
 		for name, calls in pairs(W.au.calls) do
 			if not offered[name] then
 				n = n + calls
@@ -74243,6 +74376,7 @@ do
 			"/flatui tracker add ammo - the ammunition you carry",
 			"/flatui tracker add tracking - red when no minimap tracking is on",
 			"/flatui tracker add form Bear Form - a stance or form, red when you are in none of them",
+			"/flatui tracker add durability - your most worn item, red when one is broken",
 			"/flatui tracker add proc Shadow Trance for Shadow Bolt - a proc alert: its buff, then the spell it is for",
 			"/flatui tracker class - add the usual trackers of your class",
 			"/flatui tracker remove 1 - a number from the list, or a name",
@@ -74258,7 +74392,7 @@ do
 			"/flatui tracker test - each look for 3 seconds: fine, low, missing, then the game's own look",
 		}
 		local want = table.concat(help, "\n")
-		check("an unknown word prints the twenty-two help lines", W.slash("tracker bogus") == want and W.slash("tracker") == want and W.slash("tracker add") == want, W.slash("tracker bogus"))
+		check("an unknown word prints the twenty-three help lines", W.slash("tracker bogus") == want and W.slash("tracker") == want and W.slash("tracker add") == want, W.slash("tracker bogus"))
 		local all = W.slash("bogus")
 		check("/flatui help has the tracker lines, after the lines of the cooldowns", has(all, want) and has(all, "/flatui cooldown list\n/flatui tracker add Lightning Shield"), all)
 		check("the commands: no violation", TK.ok(W), TK.why(W))
@@ -78059,12 +78193,12 @@ do
 			-- The page row.
 			local V = TK.up()
 			local menu = V.menu("trackers.addOther")
-			check("tkweapon: Add a check lists the three weapon slots, the four totems, the pet, the ammunition and tracking", table.concat(menu, ",") == "Choose one,Main hand enchant,Off hand enchant,Ranged enchant,Fire totem,Earth totem,Water totem,Air totem,Pet,Ammunition,Tracking", table.concat(menu, ","))
+			check("tkweapon: Add a check lists the three weapon slots, the four totems, the pet, the ammunition, tracking and durability", table.concat(menu, ",") == "Choose one,Main hand enchant,Off hand enchant,Ranged enchant,Fire totem,Earth totem,Water totem,Air totem,Pet,Ammunition,Tracking,Durability", table.concat(menu, ","))
 			V.pickAt("trackers.addOther", 3)
 			check("tkweapon: choosing a line adds it and says so, and the row is back to its first line", V.out[#V.out] == "Added Off hand enchant." and #TK.list(V) == 1 and TK.list(V)[1].slot == "off" and V.read("trackers.addOther") == "Choose one", V.out[#V.out])
 			V.pickAt("trackers.addOther", 3)
 			check("tkweapon: the same line again says Already tracked. and adds nothing", V.out[#V.out] == "Already tracked." and #TK.list(V) == 1, V.out[#V.out])
-			check("tkweapon: the id the row gives goes through ns.TrackerAddOther, and a bad one is refused", V.ns.TrackerAddOther(3) == true and V.ns.TrackerAddOther("nonsense") == false and V.ns.TrackerAddOther(11) == false
+			check("tkweapon: the id the row gives goes through ns.TrackerAddOther, and a bad one is refused", V.ns.TrackerAddOther(3) == true and V.ns.TrackerAddOther("nonsense") == false and V.ns.TrackerAddOther(12) == false
 				and V.ns.TrackerAddKind("nokind", "x") == false and #TK.list(V) == 2)
 			-- A full list.
 			local many = {}
@@ -78426,7 +78560,7 @@ do
 			check("tktotem: the row lists the totems after the weapons, and choosing one adds it", V.out[#V.out] == "Added Fire totem." and TK.list(V)[1].slot == "fire" and V.read("trackers.addOther") == "Choose one", V.out[#V.out])
 			V.pickAt("trackers.addOther", 9)
 			check("tktotem: and the last line adds the pet", V.out[#V.out] == "Added Pet." and TK.list(V)[2].kind == "pet", V.out[#V.out])
-			check("tktotem: the id the row gives goes through ns.TrackerAddOther", V.ns.TrackerAddOther(7) == true and V.ns.TrackerAddOther(11) == false and #TK.list(V) == 3)
+			check("tktotem: the id the row gives goes through ns.TrackerAddOther", V.ns.TrackerAddOther(7) == true and V.ns.TrackerAddOther(12) == false and #TK.list(V) == 3)
 			local S = TK.up({ list = { Z.totem("fire") } })
 			check("tktotem: tracker set works for a totem tracker: low time and shape", S.slash("tracker set 1 lowtime 15") == "Tracker 1: lowtime is 15." and S.slash("tracker set 1 shape text") == "Tracker 1: shape is text." and TK.list(S)[1].lowTime == 15 and TK.ok(S), TK.why(S))
 			check("tktotem: happy is the pet tracker's alone", S.slash("tracker set 1 happy on") == "Tracker 1: happy is a setting of the pet tracker." and TK.list(S)[1].happy == nil)
@@ -97586,7 +97720,7 @@ do
 			and row.label == "Glow on the action button" and section == "Proc alerts" and W.ns.Get("trackers.glow") == true)
 		check("procglow: the row has a tip that names Restyle action bars", row ~= nil and type(row.tip) == "string" and row.tip:find("Restyle action bars", 1, true) ~= nil)
 		check("procglow: the row calls ProcGlowChanged, which exists", row ~= nil and row.changed == "ProcGlowChanged" and type(W.ns.ProcGlowChanged) == "function")
-		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 22 and (function()
+		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 24 and (function()
 			local at = {}
 			for i, file in ipairs(FILES) do
 				at[file] = i
@@ -102262,6 +102396,7 @@ do
 		{ 24, "castbars.focusHeight", 10, 30, "castbars.focusSize" },
 		{ 25, "castbars.textSize", 100, 200 },
 		{ 25, "castbars.textShow", true, false },
+		{ 25, "castbars.rank", false, true },
 		{ 25, "castbars.textAlign", "game", "left" },
 		{ 25, "castbars.textOwn", false, true },
 		{ 25, "castbars.textColour", "ffffffff", "ffff00ff", "castbars.textOwn" },
@@ -102475,7 +102610,7 @@ do
 		end
 		check("sdcast: " .. id .. " has no violation, error or message", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.errors, "|"))
 	end
-	check("sdcast: 84 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 84 and L.changed == 84, L.changed .. " of " .. L.total)
+	check("sdcast: 85 drawn settings in steps 23 to 27 and each changes its drawing", L.total == 85 and L.changed == 85, L.changed .. " of " .. L.total)
 
 	-- Every frame, texture and text the drawings made is the addon's own.
 	for _, id in ipairs({ "mock-cast-bar", "mock-resource", "mock-swing" }) do
@@ -105030,7 +105165,7 @@ do
 		check("useaction: movers: and the secure frame that could not be made is asked for once, not at every check", X.handlerTries == 1, tostring(X.handlerTries))
 	end
 	do
-		-- Flat UI writes four globals, all named for it; a source scan with luac lists them.
+		-- Flat UI writes five globals, all named for it; a source scan with luac lists them.
 		local luac = os.getenv("FLATUI_LUAC")
 		if not luac then
 			for _, name in ipairs({ "luac5.4", "luac" }) do
@@ -105044,7 +105179,7 @@ do
 			end
 		end
 		luac = luac or "luac5.4"
-		local allowed = { FlatUICharDB = true, FlatUIDB = true, SLASH_FLATUI1 = true, FlatUI_OnAddonCompartmentClick = true }
+		local allowed = { FlatUICharDB = true, FlatUIDB = true, SLASH_FLATUI1 = true, SLASH_FLATUIWAY1 = true, FlatUI_OnAddonCompartmentClick = true }
 		local extra, scanned = {}, 0
 		for _, file in ipairs(FILES) do
 			local pipe = io.popen(('%s -l -p "%s/%s" 2>&1'):format(luac, ADDON_DIR, file))
@@ -105059,7 +105194,7 @@ do
 				pipe:close()
 			end
 		end
-		check("useaction: globals: the only globals the addon writes are FlatUICharDB, FlatUIDB, SLASH_FLATUI1 and FlatUI_OnAddonCompartmentClick", scanned > 1000 and #extra == 0, table.concat(extra, ","):sub(1, 200) .. " " .. scanned)
+		check("useaction: globals: the only globals the addon writes are FlatUICharDB, FlatUIDB, SLASH_FLATUI1, SLASH_FLATUIWAY1 and FlatUI_OnAddonCompartmentClick", scanned > 1000 and #extra == 0, table.concat(extra, ","):sub(1, 200) .. " " .. scanned)
 		-- The Settings registry is only registered into, through Settings.Register..., and no field of it is written.
 		local writes = {}
 		for _, file in ipairs(FILES) do
@@ -107824,7 +107959,7 @@ do
 		end
 		check("abfx: the wizard has the step Glows and animations right after Button colours and cooldowns, built, with the six settings", found ~= nil and steps[found - 1].id == "ab-colours" and steps[found].title == "Glows and animations"
 			and steps[found].area == "Action bars" and steps[found].built == true and #steps[found].rows == 6, tostring(found))
-		check("abfx: it is no module", #W.ns.MODULE_ORDER == 22)
+		check("abfx: it is no module", #W.ns.MODULE_ORDER == 24)
 		local toc = {}
 		for line in io.open(ADDON_DIR .. "/FlatUI.toc", "rb"):read("*a"):gmatch("[^\r\n]+") do
 			if line:match("%.lua$") then
@@ -112813,6 +112948,1192 @@ do
 
 end
 -- >>> auto switch (end)
+-- >>> errands (begin)
+-- Errands (Errands.lua and the Errands*.lua files): selling, repairs, quick loot, making room, Train all, the release guard, summons,
+-- resurrections, the DELETE word, invites, duels and the last mail recipient. The client calls each errand makes are simulated here: W.eq holds
+-- the bags, the money, the loot window, the trainer and what was called.
+local EQ = {}
+do
+	-- One item: { id, quality, count, price } and optional locked, noValue, quest.
+	function EQ.item(id, quality, count, price, more)
+		local it = { id = id, quality = quality, count = count or 1, price = price or 0, link = "|cff9d9d9d|Hitem:" .. id .. "::::::::|h[Item " .. id .. "]|h|r", name = "Item " .. id }
+		for k, v in pairs(more or {}) do
+			it[k] = v
+		end
+		return it
+	end
+
+	function EQ.find(W, link)
+		for _, bag in pairs(W.eq.bags) do
+			for _, it in pairs(bag.slots) do
+				if it.link == link then
+					return it
+				end
+			end
+		end
+		return nil
+	end
+
+	-- The client calls the errands use, defined before the addon loads.
+	function EQ.client(W, env)
+		local q = { bags = {}, sold = {}, repairs = {}, looted = {}, bought = {}, deleted = {}, money = 1000000, repairCost = 0, loot = {}, services = {},
+			hidden = {}, accepted = {}, shown = {}, keys = {} }
+		W.eq = q
+		env.NUM_BAG_SLOTS = 4
+		for bag = 0, 4 do
+			q.bags[bag] = { size = bag == 0 and 16 or 0, family = 0, slots = {} }
+		end
+		env.C_Container = env.C_Container or {}
+		local C = env.C_Container
+		C.GetContainerNumSlots = function(bag)
+			local b = q.bags[bag]
+			return b and b.size or 0
+		end
+		C.GetContainerItemInfo = function(bag, slot)
+			local b = q.bags[bag]
+			local it = b and b.slots[slot]
+			if not it then
+				return nil
+			end
+			return { itemID = it.id, hyperlink = it.link, quality = it.quality, stackCount = it.count, isLocked = it.locked == true, hasNoValue = it.noValue == true,
+				itemName = it.name, iconFileID = 134400 }
+		end
+		C.GetContainerNumFreeSlots = function(bag)
+			local b = q.bags[bag]
+			if not b or b.size == 0 then
+				return 0, nil
+			end
+			local used = 0
+			for _ in pairs(b.slots) do
+				used = used + 1
+			end
+			return b.size - used, b.family
+		end
+		C.GetContainerItemQuestInfo = function(bag, slot)
+			local it = q.bags[bag] and q.bags[bag].slots[slot]
+			return { isQuestItem = it ~= nil and it.quest == true, questID = nil, isActive = false }
+		end
+		C.UseContainerItem = function(bag, slot)
+			if type(bag) ~= "number" or type(slot) ~= "number" then
+				bad(W, "UseContainerItem: a bag and a slot are expected")
+			end
+			local it = q.bags[bag] and q.bags[bag].slots[slot]
+			if it and q.merchant then
+				q.sold[#q.sold + 1] = it.id
+				q.money = q.money + it.price * it.count
+				q.bags[bag].slots[slot] = nil
+			end
+		end
+		C.PickupContainerItem = function(bag, slot)
+			local it = q.bags[bag] and q.bags[bag].slots[slot]
+			if it then
+				q.cursor = { bag = bag, slot = slot, id = it.id, link = it.link }
+				W.held = "item"
+			end
+		end
+		env.GetCursorInfo = function()
+			if q.cursor then
+				return "item", q.cursor.id, q.cursor.link
+			end
+			return nil
+		end
+		env.DeleteCursorItem = function()
+			if q.refuseDelete then
+				return
+			end
+			if q.cursor then
+				q.deleted[#q.deleted + 1] = q.cursor.id
+				q.bags[q.cursor.bag].slots[q.cursor.slot] = nil
+				q.cursor, W.held = nil, nil
+			end
+		end
+		env.ClearCursor = function()
+			q.cursor, W.held = nil, nil
+		end
+		env.C_Item = env.C_Item or {}
+		env.C_Item.GetItemInfo = function(link)
+			local it = EQ.find(W, link)
+			if not it or it.uncached then
+				return nil
+			end
+			return it.name, link, it.quality, 1, 1, "Junk", "Junk", 20, "", 134400, it.price, 15, 0, it.bind or 0
+		end
+		env.C_Item.GetItemNameByID = function(id)
+			return "Item " .. id
+		end
+		env.MerchantFrame = W.B(env.UIParent, {}, { name = "MerchantFrame", width = 336, height = 444, hidden = true })
+		env.GetMoney = function() return q.money end
+		env.CanMerchantRepair = function() return q.canRepair ~= false end
+		env.GetRepairAllCost = function() return q.repairCost, q.repairCost > 0 end
+		env.RepairAllItems = function(guild)
+			q.repairs[#q.repairs + 1] = guild and "guild" or "own"
+			if not guild then
+				q.money = q.money - q.repairCost
+			end
+			q.repairCost = 0
+		end
+		env.CanGuildBankRepair = function() return q.guildRepair == true end
+		env.GetGuildBankWithdrawMoney = function() return q.guildMoney or 0 end
+		env.IsShiftKeyDown = function() return q.keys.shift == true end
+		env.IsControlKeyDown = function() return q.keys.ctrl == true end
+		env.IsAltKeyDown = function() return q.keys.alt == true end
+		-- Loot: q.loot[slot] = { name, locked }.
+		env.GetNumLootItems = function() return #q.loot end
+		env.GetLootSlotInfo = function(slot)
+			local l = q.loot[slot]
+			if not l then
+				return nil
+			end
+			return 134400, l.name, 1, nil, 1, l.locked == true
+		end
+		env.LootSlot = function(slot)
+			if type(slot) ~= "number" then
+				bad(W, "LootSlot: a slot number is expected")
+			end
+			q.looted[#q.looted + 1] = slot
+		end
+		env.IsModifiedClick = function(name)
+			if name ~= "AUTOLOOTTOGGLE" then
+				bad(W, "IsModifiedClick: only AUTOLOOTTOGGLE is asked")
+			end
+			return q.keys.autoLoot == true
+		end
+		W.cvars = W.cvars or {}
+		W.cvars.autoLootDefault = W.cvars.autoLootDefault or "1"
+		env.C_CVar = env.C_CVar or {}
+		env.C_CVar.GetCVarBool = env.C_CVar.GetCVarBool or function(name) return W.cvars[name] == "1" end
+		env.LootFrame = W.B(env.UIParent, {}, { name = "LootFrame", width = 200, height = 300, hidden = true })
+		-- Trainer: q.services[index] = { kind, price, profession }.
+		env.GetNumTrainerServices = function() return #q.services end
+		env.GetTrainerServiceInfo = function(index)
+			local s = q.services[index]
+			return s and ("Spell " .. index) or nil, s and s.kind or nil
+		end
+		env.GetTrainerServiceCost = function(index)
+			local s = q.services[index]
+			return s and s.price or 0, s and s.profession == true or false
+		end
+		env.BuyTrainerService = function(index)
+			if type(index) ~= "number" then
+				bad(W, "BuyTrainerService: an index is expected")
+			end
+			q.bought[#q.bought + 1] = index
+		end
+		env.GetProfessions = function() return q.professions and q.professions[1], q.professions and q.professions[2] end
+		env.ClassTrainerFrame_Update = function() end
+		-- Popups: StaticPopup1 to 4 with a first button and an edit box, shown by StaticPopup_Show and hidden by StaticPopup_Hide.
+		env.STATICPOPUP_NUMDIALOGS = 4
+		env.DELETE_ITEM_CONFIRM_STRING = "DELETE"
+		q.popups = {}
+		for index = 1, 4 do
+			local name = "StaticPopup" .. index
+			local popup, raw = W.B(env.UIParent, {}, { name = name, width = 320, height = 72, hidden = true })
+			env[name] = popup
+			local button = W.B(popup, {}, { name = name .. "Button1", width = 128, height = 22 })
+			env[name .. "Button1"] = button
+			local box = W.B(popup, {}, { name = name .. "EditBox", width = 130, height = 32, objectType = "EditBox" })
+			W.rawOf[box].text = ""
+			W.rawOf[box].GetText = function() return W.rawOf[box].text end
+			W.rawOf[box].SetText = function(_, text)
+				if type(text) ~= "string" then
+					bad(W, "SetText: a string is expected")
+				end
+				W.rawOf[box].text = text
+			end
+			env[name .. "EditBox"] = box
+			q.popups[index] = { frame = popup, raw = raw, button = button, box = box }
+		end
+		env.StaticPopup_Show = function(which)
+			for _, p in ipairs(q.popups) do
+				if not p.raw.shown then
+					p.raw.shown, p.raw.which = true, which
+					W.rawOf[p.box].text = ""
+					q.shown[#q.shown + 1] = which
+					return p.frame
+				end
+			end
+		end
+		env.StaticPopup_Hide = function(which)
+			q.hidden[#q.hidden + 1] = which
+			for _, p in ipairs(q.popups) do
+				if p.raw.shown and p.raw.which == which then
+					p.raw.shown, p.raw.which = false, nil
+				end
+			end
+		end
+		-- Summons, resurrections, invites, duels.
+		env.C_SummonInfo = {
+			GetSummonConfirmTimeLeft = function() return q.summonLeft or 0 end,
+			GetSummonConfirmSummoner = function() return q.summoner end,
+			GetSummonConfirmAreaName = function() return q.summonArea end,
+			ConfirmSummon = function() q.accepted[#q.accepted + 1] = "summon" end,
+		}
+		env.AcceptResurrect = function() q.accepted[#q.accepted + 1] = "resurrect" end
+		env.UnitAffectingCombat = function(unit)
+			if unit == "player" then
+				return W.combat == true
+			end
+			return q.unitCombat ~= nil and q.unitCombat[unit] == true
+		end
+		env.UnitIsDeadOrGhost = function(unit)
+			if unit == "player" then
+				return q.dead ~= false
+			end
+			return q.deadUnits ~= nil and q.deadUnits[unit] == true
+		end
+		env.AcceptGroup = function() q.accepted[#q.accepted + 1] = "group" end
+		env.CancelDuel = function() q.accepted[#q.accepted + 1] = "duel declined" end
+		env.C_FriendList = { IsFriend = function(guid) return q.friends ~= nil and q.friends[guid] == true end }
+		env.C_BattleNet = { GetGameAccountInfoByGUID = function(guid) return q.bnet ~= nil and q.bnet[guid] and {} or nil end }
+		env.IsInGuild = function() return q.guild ~= nil end
+		env.IsGuildMember = function(guid) return q.guild ~= nil and q.guild[guid] == true end
+		env.GetNumGuildMembers = function() return 0 end
+		env.GetNormalizedRealmName = function() return "Realm" end
+		-- Mail.
+		env.MailFrame = W.B(env.UIParent, {}, { name = "MailFrame", width = 338, height = 424, hidden = true })
+		env.SendMailNameEditBox = W.B(env.UIParent, {}, { name = "SendMailNameEditBox", width = 100, height = 20, objectType = "EditBox" })
+		local mailBox = W.rawOf[env.SendMailNameEditBox]
+		mailBox.text = ""
+		mailBox.GetText = function() return mailBox.text end
+		mailBox.SetText = function(_, text) mailBox.text = text end
+		env.SendMailFrame_SendMail = function() end
+		env.SendMailFrame_Reset = function() mailBox.text = "" end
+		-- Instances.
+		env.IsInInstance = function() return q.instance ~= nil, q.instance or "none" end
+	end
+
+	-- A world with the errands on and the given rows set, logged in.
+	function EQ.world(rows, opts)
+		local options = { ["errands.enabled"] = true }
+		for key, value in pairs(rows or {}) do
+			options["errands." .. key] = value
+		end
+		local world = { saved = { options = options }, beforeLoad = EQ.client }
+		for k, v in pairs(opts or {}) do
+			world[k] = v
+		end
+		local W = newWorld(world)
+		W.login()
+		W.out = {}
+		return W
+	end
+
+	-- Puts items in the backpack: EQ.fill(W, { item, item, ... }) in slots 1, 2, ...
+	function EQ.fill(W, items, bag)
+		local b = W.eq.bags[bag or 0]
+		b.slots = {}
+		for slot, it in ipairs(items) do
+			b.slots[slot] = it
+		end
+	end
+
+	function EQ.merchant(W)
+		W.eq.merchant = true
+		W.rawOf[W.env.MerchantFrame].shown = true
+		W.fire("MERCHANT_SHOW")
+	end
+	function EQ.close(W)
+		W.eq.merchant = false
+		W.rawOf[W.env.MerchantFrame].shown = false
+		W.fire("MERCHANT_CLOSED")
+	end
+	-- Time for every queued sale.
+	function EQ.wait(W, seconds)
+		for _ = 1, math.floor((seconds or 3) / 0.05) do
+			W.advance(0.05)
+		end
+	end
+	function EQ.said(W)
+		local text = table.concat(W.out, "|")
+		W.out = {}
+		return text
+	end
+	function EQ.ids(list)
+		local parts = {}
+		for _, v in ipairs(list) do
+			parts[#parts + 1] = tostring(v)
+		end
+		return table.concat(parts, ",")
+	end
+	-- The addon's own frames under a parent that take clicks.
+	function EQ.buttons(W, parent)
+		local list = {}
+		for _, f in ipairs(W.addonFrames) do
+			local raw = W.rawOf[f]
+			if raw and raw.parent == parent and raw.scripts and raw.scripts.OnMouseUp then
+				list[#list + 1] = f
+			end
+		end
+		return list
+	end
+	function EQ.click(W, button)
+		local raw = W.rawOf[button]
+		raw.scripts.OnMouseDown(button, "LeftButton")
+		raw.scripts.OnMouseUp(button, "LeftButton")
+	end
+	function EQ.shown(W, frame)
+		local raw = W.rawOf[frame]
+		while raw do
+			if not raw.shown then
+				return false
+			end
+			raw = raw.parent and W.rawOf[raw.parent]
+		end
+		return true
+	end
+end
+
+-- 1. The module: off by default, its page, its status and its commands.
+do
+	local W = newWorld({ beforeLoad = EQ.client })
+	W.login()
+	check("errands: off by default, and every row has its default", W.ns.Get("errands.enabled") == false and W.ns.Get("errands.sell") == true and W.ns.Get("errands.repair") == "own"
+		and W.ns.Get("errands.quickLoot") == true and W.ns.Get("errands.releaseGuard") == "instances" and W.ns.Get("errands.invites") == "friends" and W.ns.Get("errands.summons") == false)
+	check("errands: status says it is off and has no other line", has(W.status(), "Errands: off") and not has(W.status(), "Merchant:") and not has(W.status(), "Popups:"), W.status())
+	EQ.fill(W, { EQ.item(1, 0, 1, 10) })
+	W.eq.repairCost = 500
+	EQ.merchant(W)
+	EQ.wait(W, 1)
+	check("errands: off, a merchant sells and repairs nothing", #W.eq.sold == 0 and #W.eq.repairs == 0 and #W.out == 0, EQ.ids(W.eq.sold) .. " " .. EQ.said(W))
+	EQ.close(W)
+	W.change("errands.enabled", true)
+	check("errands: on, status has a line for each part that does something", has(W.status(), "Errands: on") and has(W.status(), "Merchant: sells grey items (0 always sold, 0 kept), repairs with your gold.")
+		and has(W.status(), "Loot: quick loot, makes room in full bags.") and has(W.status(), "Trainer: Train all button.") and has(W.status(), "Popups: hold Shift to release in dungeons and raids, types DELETE.")
+		and has(W.status(), "Social: accepts invites from friends, remembers the last mail recipient."), W.status())
+	check("errands: /flatui help lists sell and keep", has(W.slash("help"), "/flatui sell <item>") and has(W.slash("help"), "/flatui keep <item>"))
+	W.out = {}
+	clean(W, "errands module")
+end
+
+-- 2. Selling and repairs.
+do
+	local W = EQ.world()
+	EQ.fill(W, { EQ.item(10, 0, 2, 25), EQ.item(11, 1, 1, 40), EQ.item(12, 0, 1, 0, { noValue = true }), EQ.item(13, 0, 1, 7, { locked = true }), EQ.item(14, 0, 3, 100) })
+	W.eq.repairCost = 12345
+	EQ.merchant(W)
+	check("sell: repairs at once with your gold and says the cost", EQ.ids(W.eq.repairs) == "own" and has(EQ.said(W), "Flat UI: Repaired for 1g 23s 45c."))
+	check("sell: the first grey item goes at once, the next waits", EQ.ids(W.eq.sold) == "10")
+	EQ.wait(W, 2)
+	check("sell: grey items with a value are sold one after another; white, locked and worthless ones stay", EQ.ids(W.eq.sold) == "10,14", EQ.ids(W.eq.sold))
+	check("sell: one line says what was sold and for how much", EQ.said(W) == "Flat UI: Sold 2 items for 3s 50c.", EQ.said(W))
+	check("sell: status has the last visit", has(W.status(), "Last visit: repaired for 1g 23s 45c, sold 2 for 3s 50c."), W.status())
+	EQ.close(W)
+	-- Shift held as the merchant opens.
+	EQ.fill(W, { EQ.item(20, 0, 1, 5) })
+	W.eq.repairCost, W.eq.repairs = 300, {}
+	W.eq.keys.shift = true
+	EQ.merchant(W)
+	EQ.wait(W, 1)
+	W.eq.keys.shift = false
+	check("sell: Shift as the merchant opens keeps the items and still repairs", EQ.ids(W.eq.repairs) == "own" and EQ.ids(W.eq.sold) == "10,14"
+		and has(W.status(), "Last visit: repaired for 3s, kept with Shift."), W.status())
+	EQ.close(W)
+	EQ.said(W)
+	-- The merchant closes half way.
+	EQ.fill(W, { EQ.item(30, 0, 1, 5), EQ.item(31, 0, 1, 5), EQ.item(32, 0, 1, 5) })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	EQ.said(W)
+	EQ.close(W)
+	EQ.wait(W, 2)
+	check("sell: a merchant closed half way stops the selling and says why", EQ.ids(W.eq.sold) == "30" and EQ.said(W) == "Flat UI: Sold 1 item for 5c, then stopped: the merchant closed.", EQ.ids(W.eq.sold))
+	-- A merchant window that is gone though the game said nothing: nothing more is sold, since the call would use the item.
+	EQ.fill(W, { EQ.item(33, 0, 1, 5), EQ.item(34, 0, 1, 5) })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	W.rawOf[W.env.MerchantFrame].shown = false
+	EQ.wait(W, 2)
+	check("sell: a merchant window no longer shown stops the selling at once", EQ.ids(W.eq.sold) == "33" and has(EQ.said(W), "then stopped: the merchant closed."), EQ.ids(W.eq.sold))
+	EQ.close(W)
+	EQ.fill(W, { EQ.item(30, 0, 1, 5), EQ.item(31, 0, 1, 5), EQ.item(32, 0, 1, 5) })
+	-- A fight starts: the selling waits, and goes on after it with the merchant still open.
+	W.eq.sold = {}
+	EQ.merchant(W)
+	W.combat = true
+	W.fire("PLAYER_REGEN_DISABLED")
+	EQ.wait(W, 2)
+	check("sell: a fight pauses the selling", EQ.ids(W.eq.sold) == "30" and has(W.status(), "Waiting for the fight to end."), EQ.ids(W.eq.sold))
+	W.combat = false
+	W.fire("PLAYER_REGEN_ENABLED")
+	EQ.wait(W, 2)
+	check("sell: after the fight the rest is sold and one line counts it all", EQ.ids(W.eq.sold) == "30,31,32" and EQ.said(W) == "Flat UI: Sold 3 items for 15c.", EQ.ids(W.eq.sold))
+	EQ.close(W)
+	-- A merchant opened in a fight waits for its end.
+	EQ.fill(W, { EQ.item(32, 0, 1, 5) })
+	W.eq.sold, W.out, W.eq.repairs, W.eq.repairCost = {}, {}, {}, 500
+	W.combat = true
+	EQ.merchant(W)
+	EQ.wait(W, 1)
+	check("sell: a merchant opened in a fight sells and repairs nothing yet, and status says it waits", #W.eq.sold == 0 and #W.eq.repairs == 0 and has(W.status(), "Waiting for the fight to end."), W.status())
+	W.combat = false
+	W.fire("PLAYER_REGEN_ENABLED")
+	EQ.wait(W, 1)
+	check("sell: after the fight the merchant still open sells and repairs", EQ.ids(W.eq.sold) == "32" and EQ.ids(W.eq.repairs) == "own", EQ.ids(W.eq.sold))
+	EQ.close(W)
+	EQ.said(W)
+	clean(W, "sell")
+
+	-- A price the game has not given yet: the item is sold and the line has no amount. A quest item is never sold.
+	EQ.fill(W, { EQ.item(35, 0, 1, 5, { uncached = true }), EQ.item(36, 0, 1, 5, { quest = true }) })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	EQ.wait(W, 1)
+	check("sell: an item of unknown price is sold, the line has no amount, and a quest item stays", EQ.ids(W.eq.sold) == "35" and EQ.said(W) == "Flat UI: Sold 1 item.", EQ.ids(W.eq.sold))
+	EQ.close(W)
+	-- The row turned off while selling stops it.
+	EQ.fill(W, { EQ.item(37, 0, 1, 5), EQ.item(38, 0, 1, 5) })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	W.change("errands.sell", false)
+	EQ.wait(W, 1)
+	check("sell: Sell grey items turned off while selling stops it", EQ.ids(W.eq.sold) == "37" and has(EQ.said(W), "then stopped: selling was turned off."), EQ.ids(W.eq.sold))
+	EQ.close(W)
+	W.change("errands.sell", true)
+	clean(W, "sell, more")
+
+	-- A trade window opens: the same call would put the item in the trade, so the selling stops.
+	EQ.fill(W, { EQ.item(64, 0, 1, 5), EQ.item(65, 0, 1, 5) })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	W.env.TradeFrame = W.B(W.env.UIParent, {}, { name = "TradeFrame", width = 300, height = 300 })
+	EQ.wait(W, 1)
+	check("sell: a trade window stops the selling", EQ.ids(W.eq.sold) == "64" and has(EQ.said(W), "then stopped: a trade opened."), EQ.ids(W.eq.sold))
+	EQ.close(W)
+	W.env.TradeFrame = nil
+	-- A merchant that opens over another one ends the first selling with its line.
+	EQ.fill(W, { EQ.item(66, 0, 1, 5), EQ.item(67, 0, 1, 5) })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	W.fire("MERCHANT_SHOW")
+	check("sell: a merchant opening over another one ends the first selling with its line", has(EQ.said(W), "Sold 1 item for 5c, then stopped: the merchant closed."))
+	EQ.wait(W, 1)
+	EQ.close(W)
+	EQ.said(W)
+	-- The count is read again at the sale.
+	local stack = EQ.item(68, 0, 2, 5)
+	EQ.fill(W, { EQ.item(69, 0, 1, 5), stack })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	stack.count = 5
+	EQ.wait(W, 1)
+	check("sell: a stack that grew before its sale is counted as it is then", EQ.ids(W.eq.sold) == "69,68" and EQ.said(W) == "Flat UI: Sold 2 items for 30c.", EQ.ids(W.eq.sold))
+	EQ.close(W)
+
+	-- The game shows its window a moment after the event.
+	EQ.fill(W, { EQ.item(39, 0, 1, 5) })
+	W.eq.sold, W.eq.merchant = {}, true
+	W.rawOf[W.env.MerchantFrame].shown = false
+	W.fire("MERCHANT_SHOW")
+	check("sell: nothing is sold while the merchant window is not shown yet", #W.eq.sold == 0)
+	W.rawOf[W.env.MerchantFrame].shown = true
+	W.advance(0.06)
+	check("sell: once the window shows, the visit runs", EQ.ids(W.eq.sold) == "39", EQ.ids(W.eq.sold))
+	EQ.close(W)
+	EQ.said(W)
+
+	-- Repairs: guild gold first, too little gold, a merchant who does not repair, Repair off.
+	local G = EQ.world({ repair = "guild" })
+	G.eq.repairCost, G.eq.guildRepair, G.eq.guildMoney = 900, true, -1
+	EQ.merchant(G)
+	check("repair: Guild gold first asks the guild bank when the guild lets you, and says nothing yet", EQ.ids(G.eq.repairs) == "guild" and EQ.said(G) == "")
+	G.advance(2.1)
+	check("repair: once the bill reads paid it says so", has(EQ.said(G), "Repaired for 9s from the guild bank."))
+	EQ.close(G)
+	G.eq.repairCost, G.eq.guildMoney, G.eq.repairs = 900, 100, {}
+	EQ.merchant(G)
+	check("repair: a guild allowance below the cost falls back to your gold", EQ.ids(G.eq.repairs) == "own" and has(EQ.said(G), "Repaired for 9s."))
+	EQ.close(G)
+	G.eq.repairCost, G.eq.money, G.eq.repairs, G.eq.guildRepair = 900, 100, {}, false
+	EQ.merchant(G)
+	check("repair: too little gold repairs nothing and says what it costs", #G.eq.repairs == 0 and EQ.said(G) == "Flat UI: Not enough gold to repair: it costs 9s.")
+	EQ.close(G)
+	-- What the grey items fetch pays the bill.
+	EQ.fill(G, { EQ.item(50, 0, 1, 900) })
+	G.eq.repairCost, G.eq.money, G.eq.repairs = 900, 100, {}
+	EQ.merchant(G)
+	EQ.wait(G, 1)
+	check("repair: a bill too high at first waits for the money of the sale", #G.eq.repairs == 0, EQ.ids(G.eq.repairs))
+	G.fire("PLAYER_MONEY")
+	check("repair: and is paid when the money comes", EQ.ids(G.eq.repairs) == "own" and EQ.said(G) == "Flat UI: Sold 1 item for 9s.|Flat UI: Repaired for 9s.", EQ.ids(G.eq.repairs))
+	EQ.close(G)
+	-- The guild bank does not pay: two seconds later your own gold does.
+	G.env.RepairAllItems = function(guild)
+		G.eq.repairs[#G.eq.repairs + 1] = guild and "guild" or "own"
+		if not guild then
+			G.eq.repairCost = 0
+		end
+	end
+	G.eq.repairCost, G.eq.money, G.eq.repairs, G.eq.guildRepair, G.eq.guildMoney = 900, 100000, {}, true, -1
+	EQ.merchant(G)
+	G.advance(2.1)
+	check("repair: a guild bank that did not pay is followed by your gold", EQ.ids(G.eq.repairs) == "guild,own" and has(EQ.said(G), "The guild bank did not pay; repaired for 9s with your gold."), EQ.ids(G.eq.repairs))
+	EQ.close(G)
+	G.eq.guildRepair = false
+	G.eq.money, G.eq.canRepair, G.eq.repairs, G.eq.repairCost = 100000, false, {}, 900
+	EQ.merchant(G)
+	check("repair: a merchant who does not repair repairs nothing", #G.eq.repairs == 0)
+	EQ.close(G)
+	G.change("errands.repair", "Off")
+	G.eq.canRepair = true
+	EQ.merchant(G)
+	check("repair: Off repairs nothing, and the status has no repair", #G.eq.repairs == 0 and not has(G.status(), "repairs with"), G.status())
+	EQ.close(G)
+	clean(G, "repair")
+end
+
+-- 2b. A bill that waits for the selling, the selling stopped early.
+do
+	local W = EQ.world({ repair = "guild" })
+	-- The cursor stops the selling after the first sale; the last try still runs and says the gold is short.
+	EQ.fill(W, { EQ.item(51, 0, 1, 500), EQ.item(52, 0, 1, 500), EQ.item(53, 0, 1, 500) })
+	W.eq.repairCost, W.eq.money, W.eq.repairs = 900, 100, {}
+	EQ.merchant(W)
+	W.eq.cursor = { bag = 0, slot = 2, id = 52, link = W.eq.bags[0].slots[2].link }
+	EQ.wait(W, 2)
+	W.eq.cursor = nil
+	check("repair: a bill that waits is still tried when the cursor stops the selling", #W.eq.repairs == 0
+		and EQ.said(W) == "Flat UI: Sold 1 item for 5s, then stopped: the cursor held something.|Flat UI: Not enough gold to repair: it costs 9s.", EQ.ids(W.eq.repairs))
+	EQ.close(W)
+	-- Sell grey items turned off after two sales that brought the money (it came before: no PLAYER_MONEY follows).
+	EQ.fill(W, { EQ.item(54, 0, 1, 500), EQ.item(55, 0, 1, 500), EQ.item(56, 0, 1, 500) })
+	W.eq.repairCost, W.eq.money, W.eq.repairs = 900, 100, {}
+	EQ.merchant(W)
+	W.advance(0.16)
+	W.change("errands.sell", false)
+	EQ.wait(W, 2)
+	check("repair: a bill that waits is paid when Sell grey items is turned off during the selling", EQ.ids(W.eq.repairs) == "own"
+		and EQ.said(W) == "Flat UI: Sold 2 items for 10s, then stopped: selling was turned off.|Flat UI: Repaired for 9s.", EQ.ids(W.eq.repairs))
+	EQ.close(W)
+	W.change("errands.sell", true)
+	-- The guild bank does not pay, and Sell grey items is turned off before its check: your gold still pays.
+	W.env.RepairAllItems = function(guild)
+		W.eq.repairs[#W.eq.repairs + 1] = guild and "guild" or "own"
+		if not guild then
+			W.eq.money, W.eq.repairCost = W.eq.money - W.eq.repairCost, 0
+		end
+	end
+	local items = {}
+	for i = 1, 12 do
+		items[i] = EQ.item(140 + i, 0, 1, 5)
+	end
+	EQ.fill(W, items)
+	W.eq.repairCost, W.eq.money, W.eq.repairs, W.eq.guildRepair, W.eq.guildMoney = 900, 100000, {}, true, -1
+	EQ.merchant(W)
+	W.advance(0.5)
+	W.change("errands.sell", false)
+	EQ.wait(W, 3)
+	check("repair: a guild bank that did not pay is followed by your gold after Sell grey items is turned off", EQ.ids(W.eq.repairs) == "guild,own"
+		and has(EQ.said(W), "The guild bank did not pay; repaired for 9s with your gold."), EQ.ids(W.eq.repairs))
+	EQ.close(W)
+	W.change("errands.sell", true)
+	clean(W, "repair, a bill that waits")
+end
+
+-- 3. The sell and keep lists.
+do
+	local W = EQ.world()
+	check("lists: /flatui sell with an item link puts it on the sell list", has(W.slash("sell " .. EQ.item(40, 1).link), "Item 40 (40) is always sold at merchants.")
+		and W.env.FlatUIDB.errands.sell[40] == true)
+	check("lists: /flatui keep with an ID puts it on the keep list", has(W.slash("keep 41"), "Item 41 (41) is never sold.") and W.env.FlatUIDB.errands.keep[41] == true)
+	check("lists: /flatui sell alone lists both", has(W.slash("sell"), "always sold: Item 40 (40).") and has(W.slash("sell"), "never sold: Item 41 (41)."))
+	check("lists: an item moves from one list to the other", has(W.slash("sell 41"), "always sold") and W.env.FlatUIDB.errands.keep[41] == nil and W.env.FlatUIDB.errands.sell[41] == true)
+	check("lists: the same command again takes it off", has(W.slash("sell 41"), "is no longer always sold") and W.env.FlatUIDB.errands.sell[41] == nil)
+	check("lists: words that are no item say what is taken", has(W.slash("keep nothing"), "takes an item link, an item ID or the name of an item in your bags"))
+	EQ.fill(W, { EQ.item(44, 0, 1, 2, { name = "Broken Tooth" }) })
+	check("lists: the name of an item in the bags is taken too", has(W.slash("keep broken tooth"), "Item 44 (44) is never sold.") and W.env.FlatUIDB.errands.keep[44] == true)
+	W.slash("keep 44")
+	W.slash("keep 42")
+	EQ.fill(W, { EQ.item(40, 1, 5, 20), EQ.item(42, 0, 1, 9), EQ.item(43, 0, 1, 3) })
+	EQ.merchant(W)
+	EQ.wait(W, 2)
+	check("lists: a white item on the sell list is sold and a kept grey item stays", EQ.ids(W.eq.sold) == "40,43", EQ.ids(W.eq.sold))
+	check("lists: status counts the lists", has(W.status(), "(1 always sold, 1 kept)"), W.status())
+	EQ.close(W)
+	EQ.said(W)
+	clean(W, "lists")
+end
+
+-- 4. Quick loot.
+do
+	local W = EQ.world()
+	W.eq.loot = { { name = "Coins" }, { name = "Cloth" }, { name = "Sword", locked = true } }
+	W.fire("LOOT_READY", true)
+	check("quick loot: with the game looting by itself every slot that is not rolled for is taken, first to last", EQ.ids(W.eq.looted) == "1,2", EQ.ids(W.eq.looted))
+	W.fire("LOOT_READY", true)
+	check("quick loot: once per loot window", EQ.ids(W.eq.looted) == "1,2", EQ.ids(W.eq.looted))
+	W.fire("LOOT_CLOSED")
+	W.eq.looted = {}
+	W.fire("LOOT_READY", false)
+	check("quick loot: with the game not looting by itself nothing is taken", #W.eq.looted == 0)
+	W.fire("LOOT_CLOSED")
+	W.fire("LOOT_READY")
+	check("quick loot: a client that does not say reads Auto Loot", EQ.ids(W.eq.looted) == "1,2", EQ.ids(W.eq.looted))
+	W.fire("LOOT_CLOSED")
+	W.eq.looted, W.eq.keys.autoLoot = {}, true
+	W.fire("LOOT_READY")
+	check("quick loot: its key held with Auto Loot on opens the window as usual", #W.eq.looted == 0)
+	W.fire("LOOT_CLOSED")
+	-- Master loot: an item at or above the threshold is left for the loot master.
+	W.eq.keys.autoLoot = false
+	W.env.GetLootMethod = function() return "master" end
+	W.env.GetLootThreshold = function() return 2 end
+	W.env.GetLootSlotInfo = function(slot)
+		return 134400, "Item", 1, nil, slot == 2 and 3 or 1, false
+	end
+	W.fire("LOOT_READY", true)
+	check("quick loot: under master loot a rare item is left", EQ.ids(W.eq.looted) == "1,3", EQ.ids(W.eq.looted))
+	W.fire("LOOT_CLOSED")
+	W.env.GetLootMethod, W.eq.looted = nil, {}
+	-- An item that binds when picked up is left to the game's own auto loot, so that its question comes from the game's code; coins are taken.
+	W.env.GetLootSlotType = function(slot) return slot == 1 and 2 or 1 end
+	W.env.GetLootSlotLink = function(slot)
+		return slot == 2 and EQ.item(70, 3, 1, 100, { bind = 1 }).link or slot == 3 and EQ.item(71, 2, 1, 100, { bind = 2 }).link or nil
+	end
+	W.env.GetLootSlotInfo = function(slot) return 134400, "Item", 1, nil, 1, false end
+	W.eq.bags[1] = { size = 4, family = 0, slots = { EQ.item(70, 3, 1, 100, { bind = 1 }), EQ.item(71, 2, 1, 100, { bind = 2 }) } }
+	W.eq.loot = { { name = "Coins" }, { name = "Sword" }, { name = "Boots" } }
+	W.fire("LOOT_READY", true)
+	check("quick loot: coins and an item that binds when equipped are taken, an item that binds when picked up is left", EQ.ids(W.eq.looted) == "1,3", EQ.ids(W.eq.looted))
+	W.fire("LOOT_CLOSED")
+	W.eq.bags[1] = { size = 0, family = 0, slots = {} }
+	W.env.GetLootSlotType, W.env.GetLootSlotLink, W.eq.looted = nil, nil, {}
+	W.eq.loot = { { name = "Coins" }, { name = "Cloth" }, { name = "Sword", locked = true } }
+	W.env.GetLootSlotInfo = nil
+	W.change("errands.quickLoot", false)
+	W.eq.keys.autoLoot = false
+	W.fire("LOOT_READY", true)
+	check("quick loot: off, nothing is taken", #W.eq.looted == 0)
+	check("quick loot: status follows the row", not has(W.status(), "quick loot"), W.status())
+	clean(W, "quick loot")
+end
+
+-- 5. Make room.
+do
+	local W = EQ.world()
+	local full = {}
+	for slot = 1, 16 do
+		full[slot] = EQ.item(100 + slot, 1, 1, 50)
+	end
+	full[3] = EQ.item(203, 0, 2, 30)
+	full[7] = EQ.item(207, 0, 1, 12)
+	full[9] = EQ.item(209, 0, 1, 1, { quest = true })
+	EQ.fill(W, full)
+	W.eq.loot = { { name = "Cloth" } }
+	local loot = W.env.LootFrame
+	W.rawOf[loot].shown = true
+	W.fire("LOOT_OPENED")
+	local made = EQ.buttons(W, loot)
+	check("make room: with every bag full a button shows under the loot window", #made == 1 and EQ.shown(W, made[1]), #made)
+	EQ.click(W, made[1])
+	check("make room: a click deletes the cheapest grey item that is no quest item", EQ.ids(W.eq.deleted) == "207" and W.eq.bags[0].slots[7] == nil and W.held == nil, EQ.ids(W.eq.deleted))
+	check("make room: it says what was deleted", has(EQ.said(W), "Deleted |cff9d9d9d|Hitem:207::::::::|h[Item 207]|h|r, worth 12c. Loot again."))
+	check("make room: after a delete the button waits for the bags, so a second click deletes nothing", not EQ.shown(W, made[1]))
+	EQ.click(W, made[1])
+	check("make room: a click before the bags answer deletes nothing more", EQ.ids(W.eq.deleted) == "207", EQ.ids(W.eq.deleted))
+	W.fire("BAG_UPDATE_DELAYED")
+	check("make room: with a slot free the button goes", not EQ.shown(W, made[1]))
+	W.eq.bags[0].slots[7] = EQ.item(207, 0, 1, 12)
+	W.fire("BAG_UPDATE_DELAYED")
+	check("make room: full again, it comes back", EQ.shown(W, made[1]))
+	-- What it shows changed before the click: nothing is deleted.
+	W.eq.bags[0].slots[7] = EQ.item(208, 0, 1, 12)
+	W.eq.deleted = {}
+	EQ.click(W, made[1])
+	check("make room: an item that changed since it was shown is not deleted", #W.eq.deleted == 0)
+	-- The game refuses.
+	W.eq.refuseDelete = true
+	EQ.click(W, made[1])
+	check("make room: a delete the game refuses puts the item back on the bag and says so", #W.eq.deleted == 0 and W.held == nil and has(EQ.said(W), "the game did not delete the item"))
+	W.eq.refuseDelete = false
+	W.combat = true
+	W.fire("PLAYER_REGEN_DISABLED")
+	EQ.click(W, made[1])
+	check("make room: in a fight a click deletes nothing", #W.eq.deleted == 0)
+	W.combat = false
+	W.fire("PLAYER_REGEN_ENABLED")
+	W.rawOf[loot].shown = false
+	W.fire("LOOT_CLOSED")
+	check("make room: the loot window closed, the button goes", not EQ.shown(W, made[1]))
+	W.change("errands.makeRoom", false)
+	W.rawOf[loot].shown = true
+	W.fire("LOOT_OPENED")
+	check("make room: off, no button", not EQ.shown(W, made[1]))
+	W.change("errands.makeRoom", true)
+	-- A delete the server has not answered yet: the slot still holds the locked stack, and another bag change does not end the wait.
+	W.fire("LOOT_CLOSED")
+	W.eq.bags[0].slots[7] = EQ.item(207, 0, 1, 12)
+	W.fire("LOOT_OPENED")
+	local delete = W.env.DeleteCursorItem
+	W.env.DeleteCursorItem = function()
+		local c = W.eq.cursor
+		W.eq.deleted[#W.eq.deleted + 1] = c.id
+		W.eq.bags[c.bag].slots[c.slot].locked = true
+		W.eq.cursor, W.held = nil, nil
+	end
+	W.eq.deleted = {}
+	EQ.click(W, made[1])
+	W.fire("BAG_UPDATE_DELAYED")
+	check("make room: a bag change before the server answers keeps the button away", EQ.ids(W.eq.deleted) == "207" and not EQ.shown(W, made[1]), EQ.ids(W.eq.deleted))
+	W.eq.bags[0].slots[7] = nil
+	W.fire("BAG_UPDATE_DELAYED")
+	check("make room: the slot empty, the wait ends and with room in the bags there is no button", not EQ.shown(W, made[1]))
+	W.env.DeleteCursorItem = delete
+	-- A loot of money only needs no room.
+	W.eq.bags[0].slots[7] = EQ.item(207, 0, 1, 12)
+	W.env.GetLootSlotType = function() return 2 end
+	W.fire("BAG_UPDATE_DELAYED")
+	check("make room: a loot of money only has no button", not EQ.shown(W, made[1]))
+	W.env.GetLootSlotType = nil
+	W.fire("BAG_UPDATE_DELAYED")
+	check("make room: with an item to loot it is back", EQ.shown(W, made[1]))
+	-- The button hides itself once its part stops, whatever events were missed.
+	local lootPart
+	for _, part in ipairs(W.ns.Errands.parts) do
+		if part.label == "Loot" then lootPart = part end
+	end
+	for _ = 1, 3 do
+		W.ns.Errands.Run(lootPart, function() error("loot probe", 0) end)
+	end
+	W.rawOf[made[1]].onUpdate(made[1], 0.016)
+	check("make room: a stopped Loot part leaves no live button", not EQ.shown(W, made[1]))
+	W.errors = {}
+	W.out = {}
+	clean(W, "make room")
+end
+
+-- 6. Train all.
+do
+	local W = EQ.world()
+	W.env.ClassTrainerFrame = W.B(W.env.UIParent, {}, { name = "ClassTrainerFrame", width = 338, height = 424 })
+	W.env.ClassTrainerTrainButton = W.B(W.env.ClassTrainerFrame, {}, { name = "ClassTrainerTrainButton", width = 80, height = 22 })
+	W.eq.services = { { kind = "available", price = 100 }, { kind = "used", price = 0 }, { kind = "unavailable", price = 5 }, { kind = "available", price = 250 },
+		{ kind = "available", price = 50, profession = true } }
+	W.fire("ADDON_LOADED", "Blizzard_TrainerUI")
+	W.fire("TRAINER_SHOW")
+	local made = EQ.buttons(W, W.env.ClassTrainerFrame)
+	check("train all: a button beside the Train button", #made == 1 and EQ.shown(W, made[1]) and W.rawOf[made[1]].points[1][2] == W.env.ClassTrainerTrainButton, #made)
+	EQ.click(W, made[1])
+	check("train all: a click learns every available skill, last first, and leaves the profession to Train", EQ.ids(W.eq.bought) == "4,1", EQ.ids(W.eq.bought))
+	check("train all: it says what it learns", EQ.said(W) == "Flat UI: Learning 2 skills for 3s 50c.")
+	W.eq.bought = {}
+	EQ.click(W, made[1])
+	check("train all: a second click before the trainer answers asks nothing", #W.eq.bought == 0)
+	W.advance(1.1)
+	W.eq.money = 120
+	EQ.click(W, made[1])
+	check("train all: the money is spent in the order of the list", EQ.ids(W.eq.bought) == "1", EQ.ids(W.eq.bought))
+	check("train all: and it says what is left", EQ.said(W) == "Flat UI: Learning 1 skill for 1s. Not enough money for 1 more (2s 50c).")
+	W.advance(1.1)
+	W.eq.bought, W.eq.money = {}, 100000
+	W.combat = true
+	EQ.click(W, made[1])
+	check("train all: not in a fight", #W.eq.bought == 0)
+	W.combat = false
+	W.fire("PLAYER_REGEN_ENABLED")
+	-- The classic shape of the answers: name, rank, type and cost, talent points, profession points.
+	W.env.GetTrainerServiceInfo = function(index)
+		local s = W.eq.services[index]
+		return s and ("Spell " .. index) or nil, "Rank 2", s and s.kind or nil, true
+	end
+	W.env.GetTrainerServiceCost = function(index)
+		local s = W.eq.services[index]
+		return s and s.price or 0, 0, s and s.profession and 1 or 0
+	end
+	EQ.click(W, made[1])
+	check("train all: the classic shape of the answers is read too", EQ.ids(W.eq.bought) == "4,1", EQ.ids(W.eq.bought))
+	W.advance(1.1)
+	EQ.said(W)
+	-- /flatui train does the same.
+	W.eq.bought = {}
+	W.slash("train")
+	check("train all: /flatui train learns at an open trainer", EQ.ids(W.eq.bought) == "4,1", EQ.ids(W.eq.bought))
+	W.advance(1.1)
+	W.out = {}
+	-- EnhanceQoL's own Train All button in the same place: this one stands aside.
+	W.env.EQOLTrainAllButton = W.B(W.env.ClassTrainerFrame, {}, { name = "EQOLTrainAllButton", width = 80, height = 22 })
+	W.fire("TRAINER_UPDATE")
+	check("train all: with EnhanceQoL's own button shown, this one stands aside, and the status says so", not EQ.shown(W, made[1])
+		and has(W.status(), "Trainer: EnhanceQoL's Train All button is shown, so this one stands aside."), W.status())
+	W.env.EQOLTrainAllButton = nil
+	W.fire("TRAINER_UPDATE")
+	check("train all: back once it is gone", EQ.shown(W, made[1]))
+	-- A typed command answers even with Say what was done off.
+	W.change("errands.chat", false)
+	W.eq.bought = {}
+	check("train all: /flatui train says what it learns even with the chat line off", has(W.slash("train"), "Flat UI: Learning 2 skills for 3s 50c.") and EQ.ids(W.eq.bought) == "4,1")
+	W.out = {}
+	W.change("errands.chat", true)
+	W.advance(1.1)
+	-- Under the gamepad interface there is no button.
+	W.env.InputUtil = { IsGamepadUIEnabled = function() return true end }
+	W.fire("INPUT_DEVICE_INTERFACE_TRANSITION")
+	check("train all: no button under the gamepad interface, and the status says so", not EQ.shown(W, made[1]) and has(W.status(), "Trainer: no Train all button while the gamepad interface is on."), W.status())
+	W.env.InputUtil = nil
+	W.fire("INPUT_DEVICE_INTERFACE_TRANSITION")
+	W.change("errands.trainAll", false)
+	check("train all: off, the button goes", not EQ.shown(W, made[1]))
+	clean(W, "train all")
+end
+
+-- 7. The release guard, the DELETE word.
+do
+	local W = EQ.world()
+	local popups = W.eq.popups
+	W.eq.instance = "party"
+	W.env.StaticPopup_Show("DEATH")
+	local covers = {}
+	for _, f in ipairs(W.addonFrames) do
+		if W.rawOf[f].parent == popups[1].button then
+			covers[#covers + 1] = f
+		end
+	end
+	check("release: in a dungeon a cover lies over the release button and takes the clicks", #covers == 1 and EQ.shown(W, covers[1]) and W.rawOf[covers[1]].mouse == true, #covers)
+	W.eq.keys.shift = true
+	W.fire("MODIFIER_STATE_CHANGED", "LSHIFT", 1)
+	check("release: Shift held lets the clicks through to the button", EQ.shown(W, covers[1]) and W.rawOf[covers[1]].mouse == false)
+	W.eq.keys.shift = false
+	W.fire("MODIFIER_STATE_CHANGED", "LSHIFT", 0)
+	check("release: Shift let go takes the clicks again", W.rawOf[covers[1]].mouse == true)
+	W.eq.keys.shift = true
+	W.rawOf[covers[1]].onUpdate(covers[1], 0.016)
+	W.eq.keys.shift = false
+	W.rawOf[covers[1]].onUpdate(covers[1], 0.016)
+	check("release: a key let go while the game said nothing still counts: the cover asks every frame", W.rawOf[covers[1]].mouse == true and EQ.shown(W, covers[1]))
+	-- The cover fails open: the frame under it used for another popup without a word from the game, the cover takes itself away.
+	W.rawOf[popups[1].frame].which = "PARTY_INVITE"
+	W.rawOf[covers[1]].onUpdate(covers[1], 0.016)
+	check("release: a cover whose popup is no longer the death popup hides itself", not W.rawOf[covers[1]].shown)
+	W.rawOf[popups[1].frame].which = "DEATH"
+	W.fire("MODIFIER_STATE_CHANGED", "LSHIFT", 0)
+	W.change("errands.enabled", false)
+	check("release: the module off takes the cover away", not W.rawOf[covers[1]].shown)
+	W.change("errands.enabled", true)
+	W.env.StaticPopup_Hide("DEATH")
+	check("release: the popup gone, the cover goes", not W.rawOf[covers[1]].shown)
+	W.eq.instance = nil
+	W.env.StaticPopup_Show("DEATH")
+	check("release: in the world it is not covered", not W.rawOf[covers[1]].shown)
+	W.env.StaticPopup_Hide("DEATH")
+	W.change("errands.releaseGuard", "Everywhere")
+	W.change("errands.releaseKey", "Alt")
+	W.env.StaticPopup_Show("DEATH")
+	check("release: Everywhere covers it in the world too", W.rawOf[covers[1]].shown and has(W.status(), "Popups: hold Alt to release, types DELETE."), W.status())
+	W.env.StaticPopup_Hide("DEATH")
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	check("release: another popup in the same frame has no cover", not W.rawOf[covers[1]].shown)
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	W.env.InputUtil = { IsGamepadUIEnabled = function() return true end }
+	W.env.StaticPopup_Show("DEATH")
+	check("release: no cover under the gamepad interface, and the status says so", not W.rawOf[covers[1]].shown
+		and has(W.status(), "Popups: Hold a key to release does not apply under the gamepad interface."), W.status())
+	W.env.StaticPopup_Hide("DEATH")
+	W.env.InputUtil = nil
+	W.env.StaticPopup_Show("DELETE_GOOD_ITEM")
+	check("delete: the word is written in the box", W.rawOf[popups[1].box].text == "DELETE")
+	W.rawOf[popups[1].box].text = "DEL"
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	check("delete: another popup does not write over what the player typed", W.rawOf[popups[1].box].text == "DEL")
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	W.env.StaticPopup_Hide("DELETE_GOOD_ITEM")
+	-- The game does not say whether the key is held: no cover, and the status says why.
+	local shift = W.env.IsShiftKeyDown
+	W.env.IsShiftKeyDown = function() error("no key", 0) end
+	W.change("errands.releaseKey", "Shift")
+	W.env.StaticPopup_Show("DEATH")
+	check("release: a key the game does not tell leaves Release Spirit uncovered, and the status says so", not W.rawOf[covers[1]].shown
+		and has(W.status(), "Popups: Release Spirit is not covered: the game does not say whether Shift is held."), W.status())
+	W.env.StaticPopup_Hide("DEATH")
+	W.env.IsShiftKeyDown = shift
+	W.env.StaticPopup_Show("DELETE_GOOD_ITEM")
+	W.env.StaticPopup_Hide("DELETE_GOOD_ITEM")
+	W.change("errands.deleteWord", false)
+	W.env.StaticPopup_Show("DELETE_GOOD_ITEM")
+	check("delete: off, the box stays empty", W.rawOf[popups[1].box].text == "")
+	W.env.StaticPopup_Hide("DELETE_GOOD_ITEM")
+	clean(W, "release and delete")
+
+	-- Popups whose button and box are reached by their keys only, with no global names.
+	local K = EQ.world()
+	for index = 1, 4 do
+		local p = K.eq.popups[index]
+		K.env["StaticPopup" .. index .. "Button1"], K.env["StaticPopup" .. index .. "EditBox"] = nil, nil
+		local container = K.B(p.frame, { Button1 = p.button }, { width = 300, height = 30 })
+		K.rawOf[p.frame].ButtonContainer = container
+		K.rawOf[p.frame].EditBox = p.box
+	end
+	K.eq.instance = "raid"
+	K.env.StaticPopup_Show("DEATH")
+	local found = 0
+	for _, f in ipairs(K.addonFrames) do
+		if K.rawOf[f].parent == K.eq.popups[1].button and K.rawOf[f].shown then
+			found = found + 1
+		end
+	end
+	check("release: a popup whose button is in its ButtonContainer is covered too", found == 1, found)
+	K.env.StaticPopup_Hide("DEATH")
+	K.env.StaticPopup_Show("DELETE_GOOD_QUEST_ITEM")
+	check("delete: a box reached by its key gets the word", K.rawOf[K.eq.popups[1].box].text == "DELETE")
+	K.env.StaticPopup_Hide("DELETE_GOOD_QUEST_ITEM")
+	clean(K, "popups by key")
+end
+
+-- 8. Summons and resurrections.
+do
+	local W = EQ.world({ summons = true, resurrect = true })
+	W.eq.canTeleport = true
+	W.env.PlayerCanTeleport = function() return W.eq.canTeleport end
+	W.env.C_SummonInfo.ConfirmSummon = function()
+		W.eq.accepted[#W.eq.accepted + 1] = "summon"
+		W.eq.summonLeft = 0
+	end
+	W.eq.summonLeft, W.eq.summoner, W.eq.summonArea = 100, "Mira", "Stormwind"
+	W.env.StaticPopup_Show("CONFIRM_SUMMON")
+	W.fire("CONFIRM_SUMMON")
+	check("summons: accepted on the next frame, not at once", #W.eq.accepted == 0)
+	W.tick()
+	check("summons: accepted and said", EQ.ids(W.eq.accepted) == "summon" and has(EQ.said(W), "Accepted a summon from Mira to Stormwind."))
+	check("summons: the popup stays while the summon is open", #W.eq.hidden == 0, EQ.ids(W.eq.hidden))
+	W.advance(0.2)
+	check("summons: once the game says the summon is over, its popup is hidden, so a stale one cannot cancel the next", EQ.ids(W.eq.hidden) == "CONFIRM_SUMMON", EQ.ids(W.eq.hidden))
+	W.eq.hidden = {}
+	check("summons: status names the last summon", has(W.status(), "Last accepted a summon from Mira."), W.status())
+	-- A summon on a flight path, then in a fight: taken once the game would let you.
+	W.eq.accepted, W.eq.hidden, W.eq.summonLeft, W.eq.canTeleport = {}, {}, 100, false
+	W.fire("CONFIRM_SUMMON")
+	W.tick()
+	W.advance(1.1)
+	check("summons: not while you cannot be teleported", #W.eq.accepted == 0)
+	W.eq.canTeleport, W.combat = true, true
+	W.advance(1.1)
+	check("summons: nor in a fight", #W.eq.accepted == 0)
+	W.combat = false
+	W.advance(1.1)
+	check("summons: taken once both are over", EQ.ids(W.eq.accepted) == "summon")
+	EQ.said(W)
+	W.eq.accepted, W.eq.summonLeft = {}, 0
+	W.fire("CONFIRM_SUMMON")
+	W.tick()
+	W.advance(2.2)
+	check("summons: a summon that ran out is left", #W.eq.accepted == 0)
+	-- Resurrections.
+	W.env.GetCorpseRecoveryDelay = function() return W.eq.resWait or 0 end
+	W.env.ResurrectGetOfferer = function() return W.eq.offerer end
+	W.eq.offerer = "Bob"
+	W.fire("RESURRECT_REQUEST", "Bob")
+	check("resurrect: accepted and said, and the game's popups are left to the game", EQ.ids(W.eq.accepted) == "resurrect" and has(EQ.said(W), "Accepted a resurrection from Bob.") and #W.eq.hidden == 0)
+	W.eq.accepted, W.eq.resWait = {}, 10
+	W.fire("RESURRECT_REQUEST", "Bob")
+	W.advance(5)
+	check("resurrect: not while the game's wait after recent deaths runs", #W.eq.accepted == 0)
+	W.eq.resWait = 0
+	W.advance(5.3)
+	check("resurrect: taken once the wait is over", EQ.ids(W.eq.accepted) == "resurrect")
+	EQ.said(W)
+	W.eq.accepted, W.eq.resWait, W.eq.offerer = {}, 2, "Bob"
+	W.fire("RESURRECT_REQUEST", "Bob")
+	W.eq.offerer = "Ann"
+	W.advance(2.3)
+	check("resurrect: a request that changed meanwhile is left", #W.eq.accepted == 0)
+	W.eq.resWait, W.eq.unitCombat = 0, { party1 = true }
+	W.env.UnitExists = function(unit) return unit == "party1" end
+	W.eq.offerer = "party1"
+	W.fire("RESURRECT_REQUEST", "party1")
+	check("resurrect: not while the one who offers it is in combat", #W.eq.accepted == 0)
+	W.change("errands.summons", false)
+	W.change("errands.resurrect", false)
+	W.eq.summonLeft, W.eq.unitCombat, W.eq.offerer = 100, nil, "Bob"
+	W.fire("CONFIRM_SUMMON")
+	W.tick()
+	W.fire("RESURRECT_REQUEST", "Bob")
+	check("summons and resurrect: off, nothing is accepted", #W.eq.accepted == 0)
+	clean(W, "summons")
+end
+
+-- 9. Invites, duels, mail.
+do
+	local W = EQ.world()
+	W.eq.friends, W.eq.guild = { ["Player-1"] = true }, { ["Player-2"] = true }
+	W.eq.inGroup = false
+	W.env.IsInGroup = function() return W.eq.inGroup end
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	check("invites: a friend's invite is accepted", EQ.ids(W.eq.accepted) == "group")
+	check("invites: nothing is said and the game's popup stays until you are in the group, since hiding it would decline", #W.eq.hidden == 0 and #W.out == 0)
+	W.eq.inGroup = true
+	W.fire("GROUP_ROSTER_UPDATE")
+	check("invites: in the group, the popup is hidden and it is said", EQ.ids(W.eq.hidden) == "PARTY_INVITE" and EQ.said(W) == "Flat UI: Accepted the invite of Ann.", EQ.ids(W.eq.hidden))
+	check("invites: status names the last invite", has(W.status(), "Last accepted the invite of Ann."), W.status())
+	W.eq.accepted, W.eq.hidden = {}, {}
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	check("invites: in a group already, an invite is left to you", #W.eq.accepted == 0)
+	W.eq.inGroup = false
+	W.fire("PARTY_INVITE_REQUEST", "Gus", false, false, false, true, false, "Player-2")
+	check("invites: Friends leaves a guild member's invite to you", #W.eq.accepted == 0)
+	W.change("errands.invites", "Friends and your guild")
+	W.fire("PARTY_INVITE_REQUEST", "Gus", false, false, false, true, false, "Player-2")
+	check("invites: Friends and your guild accepts a guild member", EQ.ids(W.eq.accepted) == "group")
+	W.eq.accepted = {}
+	W.fire("PARTY_INVITE_REQUEST", "Ann", true, false, false, true, false, "Player-1")
+	check("invites: an invite that asks for roles is left to you", #W.eq.accepted == 0)
+	W.fire("PARTY_INVITE_REQUEST", "Zed", false, false, false, true, false, "Player-3")
+	check("invites: a stranger's invite is left to you", #W.eq.accepted == 0)
+	-- An invite in a fight waits for its end, while its popup is still open.
+	W.combat = true
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	W.advance(2)
+	check("invites: in a fight the invite waits, and the status says so", #W.eq.accepted == 0 and has(W.status(), "Social: the invite of Ann waits for the fight to end."), W.status())
+	W.combat = false
+	W.advance(1.1)
+	check("invites: after the fight it is accepted", EQ.ids(W.eq.accepted) == "group", EQ.ids(W.eq.accepted))
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	W.eq.accepted, W.combat = {}, true
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	W.fire("PARTY_INVITE_CANCEL")
+	W.combat = false
+	W.advance(2.2)
+	check("invites: an invite withdrawn during the fight is not accepted after it", #W.eq.accepted == 0)
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	-- Declined during the fight: the popup is gone, and the game says nothing an addon sees.
+	W.combat = true
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	W.combat = false
+	W.advance(2.2)
+	check("invites: an invite declined during the fight is not accepted after it", #W.eq.accepted == 0 and not has(W.status(), "waits for the fight"))
+	-- The row changed during the wait ends it.
+	W.combat = true
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	W.change("errands.invites", "Your guild")
+	W.combat = false
+	W.advance(2.2)
+	check("invites: a change of the row during the wait ends it", #W.eq.accepted == 0)
+	W.change("errands.invites", "Friends and your guild")
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	-- An invite that would take you out of a queue, and a quest-session invite, are left to you.
+	W.env.WillAcceptInviteRemoveQueues = function() return true end
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	check("invites: one that would take you out of a queue is left to you", #W.eq.accepted == 0)
+	W.env.WillAcceptInviteRemoveQueues = nil
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1", true)
+	check("invites: a quest-session invite is left to you", #W.eq.accepted == 0)
+	-- The popup is closed only while it is the one popup shown.
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	W.env.StaticPopup_Show("DUEL_REQUESTED")
+	W.eq.hidden, W.eq.inGroup = {}, true
+	W.fire("GROUP_ROSTER_UPDATE")
+	check("invites: beside another popup the invite popup is left to run out, and the line is still said", #W.eq.hidden == 0 and has(EQ.said(W), "Accepted the invite of Ann."), EQ.ids(W.eq.hidden))
+	W.env.StaticPopup_Hide("DUEL_REQUESTED")
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	W.eq.inGroup, W.eq.accepted, W.eq.hidden = false, {}, {}
+	-- Duels.
+	W.fire("DUEL_REQUESTED", "Zed")
+	check("duels: off, a duel is left to you", #W.eq.accepted == 0)
+	W.change("errands.declineDuels", true)
+	W.fire("DUEL_REQUESTED", "Zed")
+	check("duels: declined and said, and the game's popup is left to the game", EQ.ids(W.eq.accepted) == "duel declined" and EQ.said(W) == "Flat UI: Declined a duel from Zed." and #W.eq.hidden == 0)
+	W.fire("DUEL_REQUESTED", "Zed")
+	check("duels: the same player again within a minute is declined without a line", EQ.ids(W.eq.accepted) == "duel declined,duel declined" and #W.out == 0)
+	check("duels: status counts them", has(W.status(), "Declined 2 duels."), W.status())
+	-- Mail: the To box keeps the name after a letter goes, while the mail window is shown.
+	local box = W.rawOf[W.env.SendMailNameEditBox]
+	W.rawOf[W.env.MailFrame].shown = true
+	W.fire("MAIL_SHOW")
+	box.text = "Alt"
+	W.env.SendMailFrame_SendMail()
+	W.env.SendMailFrame_Reset()
+	check("mail: the last recipient is written back", box.text == "Alt", box.text)
+	W.rawOf[W.env.MailFrame].shown = false
+	W.env.SendMailFrame_Reset()
+	check("mail: with the mail window hidden nothing is written", box.text == "", box.text)
+	W.rawOf[W.env.MailFrame].shown = true
+	W.fire("MAIL_CLOSED")
+	W.env.SendMailFrame_Reset()
+	check("mail: closing the mailbox forgets it", box.text == "", box.text)
+	clean(W, "social")
+end
+
+-- 10. Say what was done off, Remember the last mail recipient off, values the game withholds, a part that keeps failing.
+do
+	local W = EQ.world({ chat = false, mailRecipient = false })
+	EQ.fill(W, { EQ.item(60, 0, 1, 5) })
+	W.eq.repairCost = 100
+	EQ.merchant(W)
+	EQ.wait(W, 1)
+	check("chat off: selling and repairs say nothing", EQ.ids(W.eq.sold) == "60" and EQ.ids(W.eq.repairs) == "own" and #W.out == 0, EQ.said(W))
+	EQ.close(W)
+	local box = W.rawOf[W.env.SendMailNameEditBox]
+	W.rawOf[W.env.MailFrame].shown = true
+	W.fire("MAIL_SHOW")
+	box.text = "Alt"
+	W.env.SendMailFrame_SendMail()
+	W.env.SendMailFrame_Reset()
+	check("mail off: the To box stays empty", box.text == "", box.text)
+	W.fire("MAIL_CLOSED")
+	-- /flatui train with the page off says what to change.
+	W.env.ClassTrainerFrame = W.B(W.env.UIParent, {}, { name = "ClassTrainerFrame", width = 338, height = 424 })
+	W.env.ClassTrainerTrainButton = W.B(W.env.ClassTrainerFrame, {}, { name = "ClassTrainerTrainButton", width = 80, height = 22 })
+	W.change("errands.enabled", false)
+	check("train: /flatui train with the page off says to tick Run errands", has(W.slash("train"), "Errands is off. Tick Run errands on the Errands page."))
+	W.out = {}
+	W.change("errands.enabled", true)
+	clean(W, "chat and mail off")
+
+	-- Values the game withholds are left, and nothing raises.
+	local Q = EQ.world()
+	Q.eq.loot = { { name = "Coins" }, { name = "Cloth" } }
+	Q.env.GetLootMethod = function() return "master" end
+	Q.env.GetLootThreshold = function() return 2 end
+	Q.env.GetLootSlotInfo = function(slot)
+		return 134400, "Item", 1, nil, slot == 1 and Secret(3) or 1, false
+	end
+	Q.fire("LOOT_READY", true)
+	check("secret: a withheld loot quality under master loot leaves that slot and raises nothing", EQ.ids(Q.eq.looted) == "2" and #Q.errors == 0, EQ.ids(Q.eq.looted))
+	Q.fire("LOOT_CLOSED")
+	local info = Q.env.C_Container.GetContainerItemInfo
+	Q.env.C_Container.GetContainerItemInfo = function(bag, slot)
+		local result = info(bag, slot)
+		if result and result.itemID == 61 then
+			result.quality = SECRET
+		end
+		return result
+	end
+	EQ.fill(Q, { EQ.item(61, 0, 1, 5), EQ.item(62, 0, 1, 5) })
+	Q.eq.repairCost = 0
+	Q.env.GetRepairAllCost = function() return SECRET, true end
+	EQ.merchant(Q)
+	EQ.wait(Q, 1)
+	check("secret: an item whose quality is withheld is not sold, a withheld bill is not paid, and nothing raises", EQ.ids(Q.eq.sold) == "62" and #Q.eq.repairs == 0 and #Q.errors == 0, EQ.ids(Q.eq.sold))
+	EQ.close(Q)
+	Q.eq.friends = { ["Player-1"] = true }
+	Q.fire("PARTY_INVITE_REQUEST", SECRET, false, false, false, true, false, "Player-1")
+	Q.fire("DUEL_REQUESTED", SECRET)
+	check("secret: an invite from a withheld name is left to you", #Q.eq.accepted == 0 and #Q.errors == 0)
+	EQ.said(Q)
+	clean(Q, "secret values")
+
+	-- A part that keeps failing is stopped alone: its line goes, the note says why, and the others go on.
+	local F = EQ.world()
+	local E = F.ns.Errands
+	local probe = E.Part({ label = "Probe", Status = function() return { "Probe: still here." } end })
+	check("stopped part: a part that works has its line", has(F.status(), "Probe: still here."))
+	for _ = 1, 3 do
+		E.Run(probe, function() error("probe broke", 0) end)
+	end
+	local text = F.status()
+	check("stopped part: three failures stop the part, the status says so and drops its line", has(text, "Errands: Probe stopped. probe broke") and not has(text, "Probe: still here."), text)
+	check("stopped part: the first error went to the error handler once", #F.errors == 1 and has(F.errors[1], "Flat UI Errands, Probe: probe broke"), F.errors[1])
+	EQ.fill(F, { EQ.item(63, 0, 1, 5) })
+	EQ.merchant(F)
+	EQ.wait(F, 1)
+	check("stopped part: the other parts go on", EQ.ids(F.eq.sold) == "63", EQ.ids(F.eq.sold))
+	EQ.close(F)
+end
+-- >>> errands (end)
 io.write(("%d passed, %d failed\n"):format(passed, failed))
 if rawget(_G, "ADDON_DIR_OVERRIDE") then
 	return failed

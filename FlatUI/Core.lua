@@ -22,14 +22,38 @@ local ADDON_NAME, ns = ...
 -- and SetScale only, and SetAnchorType and Hide on GameTooltip: Movers places the frames the player moves,
 -- Tooltip places GameTooltip and hides it when the game fades it out while it follows the cursor. The cast
 -- bar sizes set the width and height of four cast bars, the height of the player bar's spark, the size of
--- its mask and the anchor of its text.
+-- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
+-- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
+-- still that name, and the name alone again when the row goes off.
 -- Combat text is the one module that writes console variables: nine of the game's combat number variables and the switch of its
 -- own text for the player (enableFloatingCombatText), each remembered in FlatUIDB.cvars before its first write and put back when
 -- its page goes off. Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.
 -- Windows writes one game setting: the direction of the game's clean up (C_Container.SetSortBagsRightToLeft), only while Items gather is
 -- From the other end, remembered in FlatUICharDB.sortDirection before the first write and put back as the variables above are.
+-- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
+-- repairs with RepairAllItems, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on
+-- its own button, and answers summons, resurrections, invites and duels with the game's calls for them. Of the game's popups it hides only
+-- two, with StaticPopup_Hide, each once its request is over and only while it is the one popup shown, since the game leaves them up: the group
+-- invite's once the player is in the group (hiding it sooner declines the invite), and the summon's once the game says no summon is open (a
+-- stale one cancels the next). It follows
+-- StaticPopup_Show, StaticPopup_Hide, ClassTrainerFrame_Update, SendMailFrame_SendMail and SendMailFrame_Reset with hooksecurefunc, writes
+-- DELETE in the box of the game's delete popup (SetText, then ClearFocus) and the last recipient in the To box of the mail window (SetText),
+-- and lays frames of its own over the loot window, the trainer window and the Release Spirit button of the death popup.
+-- On its Levelling tab it accepts and hands in quests and picks gossip options with the game's calls for them (AcceptQuest, CompleteQuest,
+-- GetQuestReward, the select calls of C_GossipInfo and of the quest greeting), and asks the game to load an offered quest
+-- (C_QuestLog.RequestLoadQuestByID); it touches no frame of the quest or gossip windows. It puts a higher rank of a spell on the action
+-- slots that hold a lower one (C_Spell.PickupSpell, PlaceAction, ClearCursor) only inside the click of its own Uprank and reload button,
+-- whose secure /reload macro reloads the interface in the same click, and it adds a filter to the game's chat filters
+-- (ChatFrameUtil.AddMessageEventFilter, CHAT_MSG_SYSTEM) that drops the game's lines about learned and unlearned spells.
+-- It adds the slash command /way beside /flatui (SLASH_FLATUIWAY1 and SlashCmdList.FLATUIWAY) when no other addon has one, and sets a map
+-- pin and its tracking (C_Map.SetUserWaypoint, C_SuperTrack.SetSuperTrackedUserWaypoint) only when the player types it. It never changes the
+-- faction the game watches, and reads the list of factions without expanding it: Flat UI's own reputation bar shows the faction gained.
+-- Data panels (off by default) draws two panels of its own on UIParent and writes the lines of their tooltips in GameTooltip (SetOwner,
+-- SetText, AddLine, AddDoubleLine, Show, Hide). It asks the server for the guild roster (C_GuildInfo.GuildRoster) while a slot shows the guild,
+-- and the game for the memory of addons (UpdateAddOnMemoryUsage) when its frame rate tooltip opens out of combat. When another addon brought
+-- LibDataBroker, it listens to that library and calls the functions of the feeds a slot shows (OnEnter, OnLeave, OnTooltipShow, OnClick).
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "fonts", "fade" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "fonts", "fade" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.
@@ -1914,6 +1938,49 @@ function ns.AddEvent(key, event, fn, filter)
 		end
 	end
 	list[#list + 1] = { fn = fn, filter = filter }
+	return true
+end
+
+-- Adds lines to /flatui status under a module registered by another file: fn returns a list of lines, and they come after the module's own. Call
+-- it while the files load. Returns false for a module that is not registered.
+function ns.AddStatus(key, fn)
+	local module = modules[key]
+	if type(module) ~= "table" or type(fn) ~= "function" then
+		return false
+	end
+	local status = module.Status
+	module.Status = function(...)
+		local lines = {}
+		for _, line in ipairs(type(status) == "function" and status(...) or {}) do
+			lines[#lines + 1] = line
+		end
+		local ok, more = pcall(fn)
+		if ok and type(more) == "table" then
+			for _, line in ipairs(more) do
+				lines[#lines + 1] = line
+			end
+		end
+		return lines
+	end
+	return true
+end
+
+-- Adds a word of /flatui to a module registered by another file, and the lines it gives /flatui help. Call it while the files load. Returns false
+-- for a module that is not registered or a word it has already.
+function ns.AddSlash(key, word, fn, help)
+	local module = modules[key]
+	if type(module) ~= "table" or type(word) ~= "string" or type(fn) ~= "function" then
+		return false
+	end
+	module.slash = module.slash or {}
+	if module.slash[word] then
+		return false
+	end
+	module.slash[word] = fn
+	module.help = module.help or {}
+	for _, line in ipairs(help or {}) do
+		module.help[#module.help + 1] = line
+	end
 	return true
 end
 

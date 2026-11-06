@@ -1,7 +1,7 @@
 local ADDON_NAME, ns = ...
 
--- The minimap with the plate of its zone name and the tracking button beside it, the bag bar, the buff and debuff icons, the experience and reputation bars and the micro menu, and the objective
--- tracker, the loot window and rolls, alerts, breath and countdown timers, the queue panel, the damage meter and the zone event bars.
+-- The minimap with the plate of its zone name and the tracking button beside it and the text around it (MapText.lua), the bag bar, the buff and debuff icons, the experience and reputation bars and the micro menu, and the objective
+-- tracker and its quest count (QuestCount.lua), the loot window and rolls, alerts, breath and countdown timers, the queue panel, the damage meter and the zone event bars.
 -- A frame the game may protect has nothing made on it in combat: ns.MaybeProtected asks the client each time.
 -- Each part has its own switch and puts the game's look back when it is off. The game's frame art is made
 -- transparent and left in place, and thin borders and flat fills take its place. The map keeps the shape of the
@@ -1658,6 +1658,10 @@ local function RefreshTracker()
 	if Wanted("tracker items") then
 		FollowMixin("QuestObjectiveItemButtonMixin", "SetUp", ItemHook)
 	end
+	-- The quest count reads the heading's font after Heading size set it.
+	if ns.QuestCountRefresh ~= nil then
+		ns.QuestCountRefresh()
+	end
 end
 
 -- Loot window and loot rolls ----------------------------------------------------------------------------
@@ -2012,6 +2016,10 @@ local function RefreshMinimap()
 	Run("minimap", FollowCity)
 	Run("minimap", ApplyMinimap)
 	Run("minimap", ZoomSeen, minimap, false)
+	-- The text around the map follows its rows, the page, the profile and a new world (MapText.lua).
+	if ns.MapTextRefresh then
+		ns.MapTextRefresh()
+	end
 end
 
 -- Whether the game's own code has set its mask on the city map: the fields it sets on the map canvas (Blizzard_HybridMinimap.lua:11-12,

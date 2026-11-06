@@ -2432,8 +2432,9 @@ local function Refresh()
 			Style(item[1], item[2], item[3].group)
 		end
 	end
-	-- The clean up button and the sort direction follow their own settings, whatever the switches say.
+	-- The clean up button, the sort direction and the durability of the Character window follow their own settings, whatever the switches say.
 	ns.BagSort.Apply()
+	ns.CharacterDurability.Apply()
 	if ns.Enabled(KEY) and switched then
 		SweepAll()
 	end

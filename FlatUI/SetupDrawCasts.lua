@@ -9,7 +9,7 @@ local _, ns = ...
 -- What each look is built from, so it matches what the module paints (Bars.lua):
 --   cast bars: the border and background of ApplyCastBar (Bars.lua:597-622), the plate behind the spell name, the spark, the shield, the icon and
 --   the spell name of ApplyCastParts and ns.CastText (Bars.lua:707-816), the cover colour of CastColour (956-972), the marks of Marks (1020-1088),
---   the sizes and the place of the spell name of CastBarSize.lua:92-150.
+--   the sizes and the place of the spell name of CastBarSize.lua:92-150, and the rank after the spell name of CastRank.lua.
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
 --   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530).
 -- Sizes and places of the game's own parts come from the client's interface source:
@@ -259,7 +259,7 @@ end
 -- Cast bars ---------------------------------------------------------------------------------------------------
 
 local CAST_ROWS = {
-	{ opt = "player", label = "Player", name = "Shadow Bolt", state = "cast", part = 0.6, game = { 208, 11 } },
+	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 } },
 	{ opt = "pet", label = "Pet", name = "Firebolt", state = "cast", part = 0.45, game = { 195, 13 } },
 	{ opt = "target", label = "Target", name = "Fireball", state = "cast", part = 0.6, game = { 150, 10 }, small = true, time = "1.2" },
 	{ opt = "focus", label = "Focus", name = "Arcane Missiles", state = "channel", part = 0.4, game = { 150, 10 }, small = true, time = "1.8" },
@@ -350,6 +350,8 @@ local function BuildCast(stage)
 	p["castbars.targetCast"] = target.fill
 	p["castbars.targetChannel"] = focus.fill
 	p["castbars.playerText"] = player.text
+	-- Spell rank on the player bar writes the rank after the name (CastRank.lua).
+	p["castbars.rank"] = player.text
 	for _, path in ipairs({ "textSize", "textOutline", "textShow", "textAlign", "textOwn", "textColour" }) do
 		p["castbars." .. path] = player.text
 	end
@@ -500,6 +502,7 @@ function castDrawing.draw(stage)
 				mode = G("castbars.playerText") == "inside" and "inside" or "below"
 			end
 			PlaceCastText(row.text, bar, mode)
+			row.text:SetText(spec.rank and enabled and G("castbars.rank") == true and (spec.name .. " (" .. spec.rank .. ")") or spec.name)
 			row.text:SetJustifyH(justify)
 			row.text:SetShown(not hideName)
 			Look(row.text, percent, tr, tg, tb, outline)
