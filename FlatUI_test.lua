@@ -69734,14 +69734,14 @@ function PT.runNav()
 		for _, text in ipairs(N.texts(W)) do
 			if text == "Defaults" or text:find("^%d+ changed$") then states = states + 1 end
 		end
-		check("window nav: 24 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 24 and N.has(W, ("%d on"):format(N.on(ns))), states)
+		check("window nav: 25 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 25 and N.has(W, ("%d on"):format(N.on(ns))), states)
 		check("window nav: Flat UI and Swing timers are at their defaults", N.state(W, "Flat UI") == "Defaults" and N.state(W, "Swing timers") == "Defaults")
 		local tile = N.tile(W, "Nameplates")
 		local switch = N.switchOf(W, tile)
 		check("window nav: a tile has the icon, the name, the state and the switch of the module; Flat UI has none", tile ~= nil and switch ~= nil and N.track(switch) == "9a9cf0" and N.switchOf(W, N.tile(W, "Flat UI")) == nil)
 		PT.press(W, switch)
 		check("window nav: the switch of a tile turns the module off, and Home says one module fewer", ns.Get("nameplates.enabled") == false and N.track(switch) == "353a31"
-			and N.has(W, ("%d of 24 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
+			and N.has(W, ("%d of 25 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
 		PT.press(W, switch)
 		ns.Set("swing.enabled", false)
 		ns.Set("general.thickness", 2)
@@ -69953,7 +69953,7 @@ function PT.runNav()
 		for _, key in ipairs(N.keys) do
 			if ns.PanelNav.CELLS[key] == nil then missing[#missing + 1] = key end
 		end
-		check("window nav: the 24 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 8 atlas", count == 34 and high == 33 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
+		check("window nav: the 25 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 8 atlas", count == 35 and high == 34 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
 		local texture = PT.window(W):CreateTexture(nil, "ARTWORK", nil, 0)
 		ns.PanelNav.Cell(texture, "home")
 		local tc = W.rawOf[texture].texCoord
