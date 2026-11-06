@@ -10139,6 +10139,16 @@ local PAGES = {
 			{ choices = { { "take", "Damage and healing you take" }, { "more", "Also misses, dodges and gains" }, { "off", "Off" } } }),
 		S("combattext.ownSize", "number", 100, "Size of your text", "100% is the game's own size.",
 			{ min = 40, max = 400, step = 10, unit = "%", needs = "combattext.own", needsIn = { "take", "more" } }),
+		S("combattext.noTarget", "bool", false, "No target warning", "In a fight with no target, or with a dead or friendly one, No target shows in the middle of the screen after a second."),
+		S("combattext.noTargetFriendly", "bool", true, "Warn with a friendly target", "Off for healing in a group: a friendly target then keeps the warning away.", { needs = "combattext.noTarget" }),
+		S("combattext.noTargetSound", "choice", "none", "No target sound", "At most once every 3 seconds.", { needs = "combattext.noTarget",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
+		S("combattext.noTargetColour", "colour", "ffc41e3a", "No target colour", nil, { needs = "combattext.noTarget" }),
+		S("combattext.noTargetSize", "number", 100, "Size of No target", "100% is the size of the game's own combat messages.", { min = 50, max = 200, step = 10, unit = "%", needs = "combattext.noTarget" }),
+		S("combattext.combatState", "bool", false, "Entering and leaving combat", "+Combat and -Combat in the middle of the screen for a moment as a fight starts and ends."),
+		S("combattext.combatEnterColour", "colour", "ffff1a1a", "Entering combat colour", nil, { needs = "combattext.combatState" }),
+		S("combattext.combatLeaveColour", "colour", "ff1aff1a", "Leaving combat colour", nil, { needs = "combattext.combatState" }),
+		S("combattext.combatStateSize", "number", 100, "Size of +Combat and -Combat", "100% is the size of the game's own combat messages.", { min = 50, max = 200, step = 10, unit = "%", needs = "combattext.combatState" }),
 	} },
 	{ key = "actionbars", label = "Action bars", rows = {
 		"Buttons",
@@ -21691,7 +21701,9 @@ end
 -- Nor do the rows of wave 5 (0.5.7), for the same reason.
 for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.rows", "threat.barWidth", "threat.barHeight",
 	"cooldowns.addItem", "cooldowns.removeItem", "cooldowns.iconSound", "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint",
-	"cooldowns.powerColour", "pulse.enabled", "pulse.minimum", "pulse.ignore", "pulse.unignore", "pulse.size", "pulse.time", "pulse.sound", "castbars.interrupt", "castbars.interruptReady", "castbars.interruptCooling", "cooldowns.interruptGlow" }) do
+	"cooldowns.powerColour", "pulse.enabled", "pulse.minimum", "pulse.ignore", "pulse.unignore", "pulse.size", "pulse.time", "pulse.sound", "castbars.interrupt", "castbars.interruptReady", "castbars.interruptCooling", "cooldowns.interruptGlow",
+	"combattext.noTarget", "combattext.noTargetFriendly", "combattext.noTargetSound", "combattext.noTargetColour", "combattext.noTargetSize",
+	"combattext.combatState", "combattext.combatEnterColour", "combattext.combatLeaveColour", "combattext.combatStateSize" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67161,7 +67173,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1030 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1039 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67475,7 +67487,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 973 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 982 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)

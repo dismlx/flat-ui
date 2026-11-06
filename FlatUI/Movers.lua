@@ -135,6 +135,10 @@ local LIST = {
 	-- Where the Outgoing scroll area starts, to the right of the character. It has a handle while Where your hits show is not Over enemies.
 	{ name = "FlatUICombatOut", label = "Combat text: your hits", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 40, x = 170, y = -30,
 		gate = "CombatOutShown" },
+	-- Where the combat alerts show (CombatCues.lua): +Combat and -Combat above the middle of the box and No target under it, above the character.
+	-- It has a handle while No target warning or Entering and leaving combat is on.
+	{ name = "FlatUICombatCues", label = "Combat text: alerts", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 60, x = 0, y = 100,
+		gate = "CombatCuesShown", changed = "CombatCuesMoved" },
 	-- The box of the action bar block: one box that moves every bar the Bar block page lines up. It starts where BarBlock.lua puts it.
 	{ name = "FlatUIBarBlock", label = "Action bar block", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow", changed = "BarBlockMoved" },
 	-- Flat UI's own experience and reputation bar (XpBar.lua). Its box is the bar's own frame, wherever the bar is; with no spot saved it sits where XpBar.lua puts it.

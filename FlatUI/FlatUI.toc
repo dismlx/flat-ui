@@ -25,6 +25,7 @@ PlateClick.lua
 CombatBurst.lua
 CombatText.lua
 ScrollText.lua
+CombatCues.lua
 Bars.lua
 ActionBars.lua
 OwnBars.lua

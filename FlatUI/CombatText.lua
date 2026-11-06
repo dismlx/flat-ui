@@ -11,6 +11,7 @@ local _, ns = ...
 -- Self (enableFloatingCombatText) is written "0" as well.
 -- Numbers over friendly units come from the same event, for the party and raid tokens and the pet token and for friendly nameplates. They
 -- are drawn over the plate or over the unit's party or raid frame, and while they show the game's healing row is written "0".
+-- The combat alerts of the page, No target and +Combat and -Combat, are CombatCues.lua.
 
 local KEY = "combattext"
 -- 40 is the game's own height above the enemy, and every 5 points are 0.00375 of WorldTextScreenY_v2: 60 gives 0.015, the value Retail ships (CVars_live.lua:1652).
@@ -2472,6 +2473,10 @@ local function Refresh()
 		end
 	end
 	MineFrame()
+	-- The combat alerts follow their rows, the page and the profile (CombatCues.lua).
+	if ns.CombatCuesRefresh ~= nil then
+		ns.CombatCuesRefresh()
+	end
 end
 
 -- A change of the roster or of the pet: the frames are read again, and the numbers over a frame start their lanes again.

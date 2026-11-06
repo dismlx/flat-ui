@@ -61,6 +61,7 @@ local ADDON_NAME, ns = ...
 -- Threat list (off by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
 -- Cooldown pulse (off by default) is a frame of its own on UIParent that takes no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
+-- The combat alerts of Combat text (No target, +Combat and -Combat; off by default) are font strings on a frame of its own; they change nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);
 -- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. While the mouse is over an item, spell or achievement
