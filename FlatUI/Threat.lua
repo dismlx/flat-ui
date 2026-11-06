@@ -11,13 +11,14 @@ local _, ns = ...
 -- hears only the start of one: a frame of the addon's own hears the target (PLAYER_TARGET_CHANGED, UNIT_TARGET for the target:
 -- UnitDocumentation.lua:3976, 4871) only in a fight Show allows, the threat events and the pets (UNIT_THREAT_LIST_UPDATE,
 -- UNIT_THREAT_SITUATION_UPDATE, UNIT_PET: UnitDocumentation.lua:4891-4910, 4451) only while there is an enemy, and a step of one second runs
--- only while the list shows. A burst of events is drawn once, a moment after the first. The window and its bars are made the first time they
--- show.
+-- only while the list shows, or while the target of the target is an enemy nobody is on yet, as no event says when that one is pulled (T.Draw).
+-- A burst of events is drawn once, a moment after the first. The window and its bars are made the first time they show.
 -- The game withholds the threat of a member on some enemies: a query of the player, the pet or an ally against a target that is no boss is
 -- generally not secret (SecretPredicatesDocumentation.lua:165-168, ShouldUnitThreatValuesBeSecret in SecretPredicateAPIDocumentation.lua:415-430),
 -- so a boss is where it is. A withheld value is never read, compared or added: it goes as it is to SetValue of the bar and to SetFormattedText
 -- of its text, which take it (SimpleStatusBarAPIDocumentation.lua:355-365, SimpleFontStringAPIDocumentation.lua:539-548). Nothing can be sorted
--- on it, so then the bars keep the order of the group, the player and the pet first in a party, and /flatui status says so. A member's name and
+-- on it, so then the members keep the order of the group, the player first in a party, and the pets come after all of them: Number of bars
+-- leaves out a pet before a member, so the five bars of the default show every member of a party. /flatui status says so. A member's name and
 -- the enemy's go to SetText the same way when the game withholds them (SimpleFontStringAPIDocumentation.lua:664-673).
 -- The window is a child of UIParent in the LOW strata with a flat background and a thin border in the colours of the Flat UI page, as the data
 -- panels have, its bars in the bar texture of that page; it takes no mouse and hides with the interface. /flatui move places it (FlatUIThreat in
@@ -49,7 +50,7 @@ local PET = 0.7
 -- What the frame of the addon's own hears in a fight Show allows, and while there is an enemy.
 local FIGHT_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local ENEMY_EVENTS = { "UNIT_THREAT_LIST_UPDATE", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_PET" }
-local LINE_WITHHELD = "Threat list: the game withheld the threat on the last enemy, so its bars kept the order of the group."
+local LINE_WITHHELD = "Threat list: the game withheld the threat on the last enemy, so its bars kept the order of the group, the pets after the members."
 local LINE_MISSING = "Threat list: this client has no UnitDetailedThreatSituation, so the list stays hidden."
 local HELP = { "/flatui threat - sample bars of the threat list for a few seconds, out of combat" }
 -- The bars of /flatui threat: a name, a class, the share, and true for a pet. false is the player, by name and class.
@@ -179,7 +180,8 @@ end
 -- The members on the threat table of the enemy, each { member, order, scaled, value, withheld }, and true when the game withheld a value. The
 -- game answers nothing for a member who is not on the table (MayReturnNothing; isTanking, status, scaledPercentage, rawPercentage, rawThreat).
 -- Plain shares are sorted, highest first, the raw threat and then the order of the group deciding a tie. A withheld share is kept as it is for
--- the bar and its text, and then nothing is sorted.
+-- the bar and its text, and then the entries are sorted on what Flat UI knows of them alone: the members first, then the pets, each in the order
+-- of the group. T.Members puts each pet right after its owner, and in that order a pet would take the bar of the last member of a party.
 function T.Scan(mob)
 	local entries, withheld = {}, false
 	for order, member in ipairs(T.Members()) do
@@ -201,6 +203,14 @@ function T.Scan(mob)
 				return a.scaled > b.scaled
 			elseif a.value ~= b.value then
 				return a.value > b.value
+			end
+			return a.order < b.order
+		end)
+	else
+		table.sort(entries, function(a, b)
+			local petA, petB = a.member.pet == true, b.member.pet == true
+			if petA ~= petB then
+				return petB
 			end
 			return a.order < b.order
 		end)
@@ -403,14 +413,19 @@ function T.Place()
 end
 
 -- Shows the bars of the entries, as many as Number of bars allows, with the name of the enemy (Sample for /flatui threat), or hides the window
--- when there are none. The step runs while the list of an enemy shows.
+-- when there are none. The step runs while the list of an enemy shows, and also while the target of the target is an enemy nobody is on yet:
+-- the game names the enemy whose threat list changed by a token of its own (UNIT_THREAT_LIST_UPDATE, UnitDocumentation.lua:4889-4898; Blizzard
+-- hears it for a frame's own unit, CompactUnitFrame.lua:349-350, and draws its target of target in an OnUpdate, Mainline/TargetFrame.lua:893-899),
+-- never as the target of the target, and a member who fights another enemy keeps its threat situation, the highest on any enemy
+-- (CompactUnitFrame.lua:624-626). So when a healer's tank pulls the next enemy in a fight, with no nameplate on it, no event says so. The
+-- player's own target is named in that event, so for it the list waits for the event.
 function T.Draw(mob, entries)
 	local n = math.min(entries and #entries or 0, Number("rows", 5), MOST_ROWS)
 	if n < 1 then
 		if T.frame then
 			T.frame:Hide()
 		end
-		T.Tick(false)
+		T.Tick(mob == "targettarget")
 		return
 	end
 	T.Frame()
@@ -495,8 +510,9 @@ function T.Soon()
 	end
 end
 
--- A step of one second while the list of an enemy shows, for what no event announces. A client without NewTicker gets a timer that sets the next
--- one while the token is the step's, as the data panels have it (DataPanels.lua).
+-- A step of one second while the list of an enemy shows, or while the target of the target has nobody on its list yet (T.Draw), for what no event
+-- announces. A client without NewTicker gets a timer that sets the next one while the token is the step's, as the data panels have it
+-- (DataPanels.lua).
 function T.Tick(on)
 	if on and not T.ticker then
 		local token = {}
