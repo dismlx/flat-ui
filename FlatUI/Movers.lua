@@ -151,6 +151,12 @@ local LIST = {
 		gate = "EnemyTargetBarShown", changed = "EnemyBarsMoved" },
 	{ name = "FlatUIEnemyFocus", label = "Enemy cooldowns: focus", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 30, x = 0, y = 180,
 		gate = "EnemyFocusBarShown", changed = "EnemyBarsMoved" },
+	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
+	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
+	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
+		changed = "DataPanelsMoved" },
+	{ name = "FlatUIDataBottom", label = "Bottom data panel", point = "BOTTOMLEFT", kind = "hud", own = true, noScale = true, width = 0, height = 0,
+		row = "DataPanelBottomRow", changed = "DataPanelsMoved" },
 	{ name = "PlayerFrame", label = "Player frame", kind = "hud", system = true, scaled = "PetFrameSize" },
 	{ name = "TargetFrame", label = "Target frame", kind = "hud", system = true },
 	{ name = "FocusFrame", label = "Focus frame", kind = "hud", system = true },

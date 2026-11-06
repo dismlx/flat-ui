@@ -48,8 +48,12 @@ local ADDON_NAME, ns = ...
 -- It adds the slash command /way beside /flatui (SLASH_FLATUIWAY1 and SlashCmdList.FLATUIWAY) when no other addon has one, and sets a map
 -- pin and its tracking (C_Map.SetUserWaypoint, C_SuperTrack.SetSuperTrackedUserWaypoint) only when the player types it. It never changes the
 -- faction the game watches, and reads the list of factions without expanding it: Flat UI's own reputation bar shows the faction gained.
+-- Data panels (off by default) draws two panels of its own on UIParent and writes the lines of their tooltips in GameTooltip (SetOwner,
+-- SetText, AddLine, AddDoubleLine, Show, Hide). It asks the server for the guild roster (C_GuildInfo.GuildRoster) while a slot shows the guild,
+-- and the game for the memory of addons (UpdateAddOnMemoryUsage) when its frame rate tooltip opens out of combat. When another addon brought
+-- LibDataBroker, it listens to that library and calls the functions of the feeds a slot shows (OnEnter, OnLeave, OnTooltipShow, OnClick).
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "fonts", "fade" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "fonts", "fade" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.

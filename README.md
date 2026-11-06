@@ -4,6 +4,8 @@ Flat UI restyles the default interface in WoW: Forever with thin dark borders, f
 
 The **Errands** page, off by default, does the chores the game leaves to you: it sells grey items and repairs at merchants, loots every slot at once, makes room in full bags, learns everything at a trainer with one button, guards Release Spirit in dungeons, types DELETE for you, and can accept summons, resurrections and invites from friends or your guild, decline duels and keep the last mail recipient. Its **Levelling** tab accepts and hands in quests, picks gossip options, offers the new ranks of your spells for your action bars, shows the reputation you gain, reminds you of talent points and adds /way.
 
+The **Data panels** page, off by default, adds a top and a bottom panel with bag space, gold across your characters, durability, your hearthstone, coordinates, frame rate and latency, and friends and guild online.
+
 ![Flat UI in play](media/flatui-in-play.jpg)
 
 ## Install
@@ -43,7 +45,7 @@ The last line must say `N passed, 0 failed`.
 
 ## Credits
 
-The Errands page, the levelling stats of the experience bar, the cast bar's spell rank, the ammunition and durability checks and the text around the minimap adapt features of [EnhanceQoL](https://www.curseforge.com/projects/1076354) by Philipp Barth (R41Z0R), with his permission: selling junk and auto repair, quick loot and the loot window junk button, Train All, the release guard, the popup helpers, auto-accepting invites, declining duels, remembering the last mail recipient, accepting and handing in quests, gossip options, the NPC exclude list, the quest count on the tracker, the spell rank upgrade, the learned-spell chat filter, watching the reputation you gain (on Flat UI's own bar), the /way command, the unspent talent reminder, the experience bar's quest stretch, experience per hour and time to level, the spell rank on the cast bar, the thrown weapons and the fitting ammunition of the ammunition tracker, the coordinates, durability, frame rate and time around the minimap, and the durability tracker. Thanks to him for sharing his work.
+The Errands page, the levelling stats of the experience bar, the cast bar's spell rank, the ammunition and durability checks, the text around the minimap, the data panels and the character and inspect overlays adapt features of [EnhanceQoL](https://www.curseforge.com/projects/1076354) by Philipp Barth (R41Z0R), with his permission: selling junk and auto repair, quick loot and the loot window junk button, Train All, the release guard, the popup helpers, auto-accepting invites, declining duels, remembering the last mail recipient, accepting and handing in quests, gossip options, the NPC exclude list, the quest count on the tracker, the spell rank upgrade, the learned-spell chat filter, watching the reputation you gain (on Flat UI's own bar), the /way command, the unspent talent reminder, the experience bar's quest stretch, experience per hour and time to level, the spell rank on the cast bar, the thrown weapons and the fitting ammunition of the ammunition tracker, the coordinates, durability, frame rate and time around the minimap, the durability tracker, the data panels, the item levels of the equipment flyout and the Inspect window with the inspected player's average, and the durability on the Character window. Thanks to him for sharing his work.
 
 ## Licence
 

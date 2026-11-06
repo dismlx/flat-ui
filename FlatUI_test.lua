@@ -10575,12 +10575,19 @@ local PAGES = {
 		"Item level",
 		S("windows.ilvlBags", "bool", false, "Item level in bags and bank"),
 		S("windows.ilvlCharacter", "bool", false, "Item level on equipped gear"),
+		S("windows.ilvlFlyout", "bool", true, "Item level in the equipment flyout", "The bag items that fit a slot of the Character window, shown while you hold Alt over the slot.",
+			{ needs = "windows.ilvlCharacter" }),
+		S("windows.ilvlInspect", "bool", true, "Item level on the Inspect window", "On each slot, and the player's average item level under their level."),
+		S("windows.ilvlCorner", "choice", "bottomLeft", "Item level corner on gear", "On the slots of the Character and Inspect windows. Bags and the flyout keep the bottom left.",
+			{ choices = { { "bottomLeft", "Bottom left" }, { "bottomRight", "Bottom right" }, { "topLeft", "Top left" }, { "topRight", "Top right" } } }),
 		S("windows.ilvlSize", "number", 12, "Item level size", nil, { min = 8, max = 18, step = 1, unit = "" }),
 		S("windows.ilvlColour", "choice", "quality", "Item level colour", nil, { choices = { { "quality", "Item quality colour" }, { "white", "White" }, { "gold", "Gold" } } }),
 		"Bags",
 		S("windows.newGlow", "bool", true, "New item glow"),
 		S("windows.junkDim", "bool", false, "Dim grey items", "Darkens poor items that have a vendor price."),
 		S("windows.combinedBags", "bool", false, "Combine bags"),
+		"Character window",
+		S("windows.durability", "bool", true, "Show durability", "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below."),
 	} },
 	{ key = "unitframes", label = "Unit frames", rows = {
 		S("unitframes.enabled", "bool", true, "Restyle unit frames"),
@@ -11051,6 +11058,32 @@ local PAGES = {
 		S("errands.talentReminder", "bool", true, "Remind you of talent points", "When you reach a level, or log in, with talent points to spend, a line in chat says how many, also with Say what was done off. A level reached in a fight is told when it ends."),
 		"Waypoints",
 		S("errands.wayCommand", "bool", true, "Add the /way command", "/way 45 61 puts a pin on your map there and the game points you to it. /way Elwynn Forest 45 61, /way #1429 45 61 and /way clear work too. When another addon has /way it keeps it, and /flatui way does the same."),
+	} },
+	{ key = "datapanels", label = "Data panels", rows = {
+		S("datapanels.enabled", "bool", false, "Show data panels", "Panels of text across the screen: bag space, gold, durability and more. Point at a slot for its tooltip. /flatui move places the panels."),
+		"Top panel",
+		S("datapanels.top", "bool", true, "Show the top panel", "At the top of the screen until you move it."),
+		S("datapanels.top1", "choice", "bags", "First slot", "A slot with nothing to show takes no room. Feeds of other addons are listed when one of them brings LibDataBroker.", { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top2", "choice", "gold", "Second slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top3", "choice", "durability", "Third slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top4", "choice", "hearth", "Fourth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top5", "choice", "coords", "Fifth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top6", "choice", "fps", "Sixth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		"Bottom panel",
+		S("datapanels.bottom", "bool", false, "Show the bottom panel", "In the bottom left corner of the screen until you move it."),
+		S("datapanels.bottom1", "choice", "friends", "First slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom2", "choice", "guild", "Second slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom3", "choice", "none", "Third slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom4", "choice", "none", "Fourth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom5", "choice", "none", "Fifth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom6", "choice", "none", "Sixth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		"Look",
+		S("datapanels.font", "choice", "sans", "Font", "Flat UI Sans is IBM Plex Sans. A language it has no letters for keeps the game font.", { choices = { { "sans", "Flat UI Sans" }, { "game", "Game font" } } }),
+		S("datapanels.textSize", "number", 100, "Text size", "100% is 12 px.", { min = 50, max = 200, step = 5, unit = "%" }),
+		S("datapanels.background", "bool", true, "Background and border", "A flat background with a thin border and a line between two slots, in the colours of the Flat UI page."),
+		S("datapanels.tooltips", "bool", true, "Tooltips", "Off: the panels let clicks through, except a slot that shows another addon's feed, which keeps its own clicks."),
+		"Gold",
+		S("datapanels.forgetGold", "list", 0, "Forget a character's gold", "The gold tooltip lists each character of the account that logged in with data panels on."),
 	} },
 	-- The faces are the ones the client loads: the panel worlds answer nothing to SetFont, so only the game's font is offered.
 	{ key = "fonts", label = "Fonts", rows = {
@@ -21566,6 +21599,10 @@ for _, path in ipairs({ "errands.questAccept", "errands.questTurnIn", "errands.q
 end
 -- Wave 3 (the text around the minimap and the durability tracker) has no checks yet either.
 for _, path in ipairs({ "hud.mapCoords", "hud.mapCoordsPlace", "hud.mapCoordsDecimals", "hud.mapDurability", "hud.mapDurabilityPlace", "hud.mapPerf", "hud.mapPerfPlace", "hud.mapClock", "hud.mapClockPlace", "hud.mapClockTime", "hud.mapClockHours", "trackers.durabilityMin" }) do
+	covered[path] = true
+end
+-- Nor do the Data panels page and the item level rows of wave 3.
+for _, path in ipairs({ "datapanels.enabled", "datapanels.top", "datapanels.top1", "datapanels.top2", "datapanels.top3", "datapanels.top4", "datapanels.top5", "datapanels.top6", "datapanels.bottom", "datapanels.bottom1", "datapanels.bottom2", "datapanels.bottom3", "datapanels.bottom4", "datapanels.bottom5", "datapanels.bottom6", "datapanels.font", "datapanels.textSize", "datapanels.background", "datapanels.tooltips", "datapanels.forgetGold", "windows.ilvlFlyout", "windows.ilvlInspect", "windows.ilvlCorner", "windows.durability" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.

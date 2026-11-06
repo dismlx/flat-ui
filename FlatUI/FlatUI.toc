@@ -55,6 +55,7 @@ TrackerShare.lua
 BagSort.lua
 Windows.lua
 Items.lua
+CharacterDurability.lua
 UnitFrames.lua
 UnitFramePortrait.lua
 UnitFrameLevel.lua
@@ -95,6 +96,8 @@ ErrandsSocial.lua
 ErrandsQuests.lua
 ErrandsRanks.lua
 ErrandsLevelling.lua
+DataPanels.lua
+DataStreams.lua
 CastBarSize.lua
 PetFrameSize.lua
 ConfigGame.lua

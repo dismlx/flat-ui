@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
--- The sidebar of the options window: four fixed rows, then six groups with the 23 modules, each with its icon. A group folds on a click and the
+-- The sidebar of the options window: four fixed rows, then six groups with the 24 modules, each with its icon. A group folds on a click and the
 -- fold is kept per account. A module that is off shows the Off chip. Also the switch widget, and the header of a page that has the module
 -- switch. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit.
 
@@ -13,10 +13,10 @@ local ATLAS = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Panel.tga"
 local PAD = kit.PAD
 
 -- The cell of each icon in FlatUI/Media/Panel.tga: 8 columns and 8 rows of 64 by 64. tools/make_panel_icons.py draws the first four rows; the
--- pouch of Errands (cell 32) starts the fifth, and the rows after it are free.
+-- pouch of Errands (cell 32) and the three bars of Data panels (cell 33) start the fifth, and the cells after them are free.
 local CELLS = { general = 0, fonts = 1, unitframes = 2, nameplates = 3, resource = 4, castbars = 5, swing = 6, actionbars = 7, barblock = 8, blocks = 9,
 	cooldowns = 10, trackers = 11, defensives = 12, partycd = 13, enemycd = 14, combattext = 15, hud = 16, windows = 17, chat = 18, movers = 19, fade = 20,
-	tooltip = 21, home = 22, setup = 23, profiles = 24, chevron = 25, check = 26, search = 27, close = 28, reset = 29, eye = 30, more = 31, errands = 32 }
+	tooltip = 21, home = 22, setup = 23, profiles = 24, chevron = 25, check = 26, search = 27, close = 28, reset = 29, eye = 30, more = 31, errands = 32, datapanels = 33 }
 local COLUMNS, ROWS = 8, 8
 Nav.CELLS = CELLS
 
@@ -26,7 +26,7 @@ Nav.GROUPS = {
 	{ label = "Frames", "unitframes", "nameplates", "resource", "castbars", "swing" },
 	{ label = "Action bars", "actionbars", "barblock", "blocks" },
 	{ label = "Combat", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "combattext" },
-	{ label = "Interface", "hud", "windows", "chat", "errands" },
+	{ label = "Interface", "hud", "windows", "chat", "errands", "datapanels" },
 	{ label = "Layout", "movers", "fade", "tooltip" },
 }
 
