@@ -87179,6 +87179,8 @@ do
 		W.group = was
 		W.seal()
 		wraw(W, W.win.names.ContainerFrame1).UpdateItems = function() wraw(W, wraw(W, slot).NewItemTexture).shown = true end
+		-- The bag is open: Flat UI dresses the slots of a bag that is shown, and a closed one when it opens.
+		W.blizzard(function() W.win.names.ContainerFrame1:Show() end)
 	end
 	function IT.update(W) W.win.updateBags() end
 
