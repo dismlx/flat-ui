@@ -67,6 +67,9 @@ local waits = 0
 local asked = { accept = {}, turnIn = {} }
 local done = { accepted = 0, handedIn = 0, options = 0 }
 local lastLeft
+-- Quests the game said were handed in (QUEST_TURNED_IN), until they leave the log (QUEST_REMOVED) or are taken again. The log lists such a
+-- quest until its next update, which can come after the follow-up quest the NPC offers at once.
+local handedIn = {}
 
 local Decide
 
@@ -300,6 +303,14 @@ local function LogFull()
 	local most = Log("GetMaxNumQuestsCanAccept")
 	if not ns.Finite(most) or most <= 0 then
 		most = ns.Finite(_G.MAX_QUESTLOG_QUESTS) and _G.MAX_QUESTLOG_QUESTS or (ns.Finite(_G.MAX_QUESTS) and _G.MAX_QUESTS or nil)
+	end
+	if ns.Finite(quests) then
+		-- A quest handed in that the log still lists has left the server's log already.
+		for id in pairs(handedIn) do
+			if ns.Finite(Log("GetLogIndexForQuestID", id)) then
+				quests = quests - 1
+			end
+		end
 	end
 	if ns.Finite(quests) and most and quests >= most then
 		return quests, most
@@ -766,20 +777,31 @@ end)
 -- The game says what it did: the modern event gives the quest's ID, the classic one its index and then its ID.
 E.Listen(part, "QUEST_ACCEPTED", function(a, b)
 	local id = ns.Finite(b) and b or a
+	if ns.Finite(id) then
+		handedIn[id] = nil
+	end
 	if ns.Finite(id) and asked.accept[id] then
 		asked.accept[id] = nil
 		done.accepted = done.accepted + 1
 	end
 end)
 E.Listen(part, "QUEST_TURNED_IN", function(id)
+	if ns.Finite(id) then
+		handedIn[id] = true
+	end
 	if ns.Finite(id) and asked.turnIn[id] then
 		asked.turnIn[id] = nil
 		done.handedIn = done.handedIn + 1
 	end
 end)
+E.Listen(part, "QUEST_REMOVED", function(id)
+	if ns.Finite(id) then
+		handedIn[id] = nil
+	end
+end)
 
 function part.Start()
-	talk, pending = nil, nil
+	talk, pending, handedIn = nil, nil, {}
 end
 
 function part.Refresh()
