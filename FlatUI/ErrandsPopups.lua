@@ -5,17 +5,21 @@ local _, ns = ...
 -- Hold a key to release: while the game's death popup (DEATH) shows where Release guard applies, a frame of the addon's own lies over its
 -- Release Spirit button and takes the clicks, with the key to hold written on it, until the key is held (MODIFIER_STATE_CHANGED). Nothing of
 -- the game's button changes: its alpha, its script and its state are as the game left them. The second button (a soulstone or a
--- reincarnation) is not covered, and neither are the game's own timer, a macro or a gamepad press. The cover fails open: it is made hidden, and
--- it is laid, and stays (its OnUpdate looks every frame), only while the module and this part are on, the popup under it is still the death
--- popup, its button is shown, and the game says the key is not held: when the game does not say whether the key is held, there is no cover.
--- Under the gamepad interface, whose own press of the button no mouse cover can stop, there is no cover either.
+-- reincarnation) is not covered, and neither are the game's own timer, a macro or a gamepad press. The cover fails open: it is made hidden,
+-- and it stays laid (its OnUpdate looks every frame) only while the module and this part are on, the popup under it is still the death popup
+-- and its button is shown. Every frame it also asks for the key: held, or not told, its mouse, shade and label are off and a click goes to
+-- the game's button; not held, they are on. So a key-up the game did not report (a window change with Alt held) cannot leave the button
+-- uncovered for the rest of that death. When the game does not say whether the key is held as the popup shows, there is no cover. Under
+-- the gamepad interface, whose own press of the button no mouse cover can stop, there is no cover either.
 -- Accept summons: CONFIRM_SUMMON is answered with C_SummonInfo.ConfirmSummon when the game's own popup would let you: not in a fight and while
--- PlayerCanTeleport, tried every second while the summon is open (time left and a summoner).
+-- PlayerCanTeleport, tried every second while the summon is open (time left and a summoner). The game does not close its summon popup after
+-- an accept made by code, and a stale one cancels the next summon when the game reuses it; so once the game says the summon is no longer
+-- open, the popup is hidden with StaticPopup_Hide, looked for every SUMMON_LOOK seconds for SUMMON_LOOKS tries, and only while it is the one
+-- popup shown.
 -- Accept resurrections: RESURRECT_REQUEST is answered with AcceptResurrect unless the one who offers it is in combat or dead (or the game does
 -- not say), and only once the game's wait after recent deaths (GetCorpseRecoveryDelay) is over, while the request is still the same
 -- (ResurrectGetOfferer).
--- The game's popups of a summon or a resurrection are left to the game, which closes them or lets them run out: Flat UI never calls
--- StaticPopup_Hide, which would run the popup code, shared with popups whose Accept is restricted, under Flat UI's name.
+-- The game's popups of a resurrection are left to the game, which closes them when you are alive again.
 -- Type DELETE: the word the game asks for before it deletes a good item (DELETE_GOOD_ITEM and DELETE_GOOD_QUEST_ITEM) is written in its box,
 -- whose focus is then cleared, so a click on Yes deletes and a stray Enter does not.
 -- These follow EnhanceQoL's popup helpers, adapted with the permission of its author.
@@ -23,9 +27,10 @@ local _, ns = ...
 local E = ns.Errands
 local part = E.Part({ label = "Popups" })
 
-local POPUPS = 4
 -- Seconds between two tries of a summon that cannot be taken yet.
 local SUMMON_RETRY = 1
+-- After an accepted summon: how often, and how many times, the summon popup is looked at.
+local SUMMON_LOOK, SUMMON_LOOKS = 0.1, 50
 -- Seconds added to the game's wait before a resurrection is taken.
 local RES_MARGIN = 0.2
 local DELETE_WORDS = { DELETE_GOOD_ITEM = true, DELETE_GOOD_QUEST_ITEM = true }
@@ -36,6 +41,8 @@ local KEYS = {
 }
 
 local followed = false
+-- The game says the release button is protected, so it takes no cover.
+local protectedButton = false
 -- Per release button of a popup: the cover laid over it, and the popup it belongs to.
 local covers, coverPopup = {}, {}
 -- The summon being tried: counts up at each new summon, so a try of an older one stops.
@@ -45,39 +52,9 @@ local resurrection = 0
 local lastAccepted
 -- Notes said once: a popup whose button or box was not found.
 local missed = {}
--- The game did not say whether the key is held, at the last guard pass.
-local noKey = false
 
-local function Count()
-	local n = STATICPOPUP_NUMDIALOGS
-	if type(n) == "number" and not ns.IsSecret(n) and n >= 1 and n <= 10 then
-		return n
-	end
-	return POPUPS
-end
-
-local function Field(frame, key)
-	local ok, value = pcall(function()
-		return frame[key]
-	end)
-	if not ok or ns.IsSecret(value) then
-		return nil
-	end
-	return value
-end
-
--- The shown popups of the game: { frame, name, which }.
-local function Popups()
-	local list = {}
-	for index = 1, Count() do
-		local name = "StaticPopup" .. index
-		local frame = _G[name]
-		if E.Shown(frame) then
-			list[#list + 1] = { frame = frame, name = name, which = Field(frame, "which") }
-		end
-	end
-	return list
-end
+local Field = E.PopupField
+local Popups = E.Popups
 
 local function Usable(frame)
 	return type(frame) == "table" and not ns.Forbidden(frame) and frame or nil
@@ -88,7 +65,10 @@ local function FirstButton(popup)
 	local button = Usable(_G[popup.name .. "Button1"]) or Usable(Field(popup.frame, "button1")) or Usable(Field(popup.frame, "Button1"))
 	if not button then
 		local container = Field(popup.frame, "ButtonContainer")
-		button = type(container) == "table" and Usable(Field(container, "Button1")) or nil
+		if type(container) == "table" then
+			local list = Field(container, "Buttons")
+			button = Usable(Field(container, "Button1")) or (type(list) == "table" and Usable(Field(list, 1))) or nil
+		end
 	end
 	return button
 end
@@ -139,11 +119,23 @@ local function Guarded()
 	return inside == true and (kind == "party" or kind == "raid")
 end
 
--- Whether a cover may stay shown: read by the cover itself, outside the part, so a stopped part cannot leave it over another popup.
+-- Whether a cover may stay laid: read by the cover itself, outside the part, so a stopped part cannot leave it over another popup.
 local function CoverWanted(button)
 	local popup = coverPopup[button]
 	return ns.Enabled("errands") and not ns.PartStopped("errands", part.label) and popup ~= nil and E.Shown(popup)
-		and Field(popup, "which") == "DEATH" and E.Shown(button) and Guarded() and KeyState() == false
+		and Field(popup, "which") == "DEATH" and E.Shown(button) and Guarded()
+end
+
+-- The cover takes clicks only while the game says the key is not held; held, or not told, a click goes to the game's button.
+local function Arm(cover, held)
+	local armed = held == false
+	cover:EnableMouse(armed)
+	if cover.shade then
+		cover.shade:SetShown(armed)
+	end
+	if cover.label then
+		cover.label:SetShown(armed)
+	end
 end
 
 local function Cover(button)
@@ -152,7 +144,7 @@ local function Cover(button)
 		return cover
 	end
 	if ns.MaybeProtected and ns.MaybeProtected(button) then
-		Missed("the Release Spirit button of the death popup, which is protected,")
+		protectedButton = true
 		return nil
 	end
 	-- Above the button, or not at all: a cover under it would take no click.
@@ -165,7 +157,8 @@ local function Cover(button)
 	cover:Hide()
 	cover:SetAllPoints(button)
 	cover:SetFrameLevel(level + 5)
-	local shade = cover:CreateTexture(nil, "OVERLAY", nil, 0)
+	-- The shade under the label: a lower layer, so the words are always drawn over it.
+	local shade = cover:CreateTexture(nil, "ARTWORK", nil, 0)
 	ns.Own[shade] = true
 	shade:SetAllPoints(cover)
 	shade:SetColorTexture(0, 0, 0, 0.7)
@@ -173,7 +166,7 @@ local function Cover(button)
 	if label then
 		label:SetPoint("CENTER", cover, "CENTER", 0, 0)
 	end
-	cover.label = label
+	cover.shade, cover.label = shade, label
 	cover:EnableMouse(true)
 	-- The clicks the cover takes do nothing.
 	cover:SetScript("OnMouseDown", function() end)
@@ -182,7 +175,9 @@ local function Cover(button)
 		local ok, wanted = pcall(CoverWanted, button)
 		if not ok or not wanted then
 			cover:Hide()
+			return
 		end
+		Arm(cover, KeyState())
 	end)
 	covers[button] = cover
 	return cover
@@ -201,7 +196,6 @@ local function GuardNow()
 	local held
 	if wanted then
 		held = KeyState()
-		noKey = held == nil
 	end
 	local seen = {}
 	for _, popup in ipairs(Popups()) do
@@ -217,7 +211,8 @@ local function GuardNow()
 					if cover.label then
 						cover.label:SetText(("Hold %s to release"):format(Key().label))
 					end
-					cover:SetShown(not held)
+					cover:Show()
+					Arm(cover, held)
 				end
 			end
 		end
@@ -254,8 +249,9 @@ local function FillDelete()
 			if not box then
 				Missed("the box of the delete popup")
 			else
+				-- Only an empty box: the game empties it when the popup shows, and what the player typed is never written over.
 				local ok, text = pcall(box.GetText, box)
-				if ok and not ns.IsSecret(text) and text ~= word and pcall(box.SetText, box, word) then
+				if ok and not ns.IsSecret(text) and text == "" and pcall(box.SetText, box, word) then
 					-- No focus, so a stray Enter does not delete: a click on Yes does.
 					pcall(box.ClearFocus, box)
 				end
@@ -269,25 +265,30 @@ local function PopupShown()
 	FillDelete()
 end
 
+local function OnShow()
+	if ns.PartStopped("errands", part.label) then
+		HideCovers()
+		return
+	end
+	E.Run(part, PopupShown)
+end
+
+local function OnHide()
+	if ns.PartStopped("errands", part.label) then
+		HideCovers()
+		return
+	end
+	E.Run(part, Guard)
+end
+
+-- Each follow is made once (ns.FollowGlobal skips a function it already has), and tried again until both are in.
 local function Follow()
 	if followed then
 		return
 	end
-	followed = true
-	ns.FollowGlobal("StaticPopup_Show", function()
-		if ns.PartStopped("errands", part.label) then
-			HideCovers()
-			return
-		end
-		E.Run(part, PopupShown)
-	end)
-	ns.FollowGlobal("StaticPopup_Hide", function()
-		if ns.PartStopped("errands", part.label) then
-			HideCovers()
-			return
-		end
-		E.Run(part, Guard)
-	end)
+	local shown = ns.FollowGlobal("StaticPopup_Show", OnShow)
+	local hidden = ns.FollowGlobal("StaticPopup_Hide", OnHide)
+	followed = shown == true and hidden == true
 end
 
 -- Summons -----------------------------------------------------------------------------------------------------------------------------------
@@ -303,6 +304,23 @@ local function OpenSummon()
 		return nil
 	end
 	return who
+end
+
+-- After an accepted summon: once the game says it is no longer open, its popup is hidden, which runs no OnCancel; a newer summon stops the look.
+local function CloseSummon(at, tries)
+	if at ~= summon then
+		return
+	end
+	if OpenSummon() == nil then
+		-- Only while it is the one popup shown; beside another one it is left to run out (E.HideAlone).
+		E.HideAlone("CONFIRM_SUMMON")
+		return
+	end
+	if tries > 1 then
+		C_Timer.After(SUMMON_LOOK, function()
+			E.Run(part, CloseSummon, at, tries - 1)
+		end)
+	end
 end
 
 local function TrySummon(at)
@@ -334,6 +352,9 @@ local function TrySummon(at)
 	end
 	lastAccepted = "a summon from " .. who
 	E.Say(text .. ".")
+	C_Timer.After(SUMMON_LOOK, function()
+		E.Run(part, CloseSummon, at, SUMMON_LOOKS)
+	end)
 end
 
 -- Resurrections -----------------------------------------------------------------------------------------------------------------------------
@@ -435,9 +456,22 @@ E.Listen(part, "PLAYER_DEAD", function()
 	end)
 end)
 
+-- A summon or a resurrection still open at the start (after a /reload, whose loading screen sends neither event again) is tried once.
 function part.Start()
 	Follow()
 	Guard()
+	if E.Opt("summons") == true and OpenSummon() then
+		summon = summon + 1
+		local at = summon
+		C_Timer.After(0, function()
+			E.Run(part, TrySummon, at)
+		end)
+	end
+	local offerer = type(ResurrectGetOfferer) == "function" and E.Ask(ResurrectGetOfferer) or nil
+	if E.Opt("resurrect") == true and type(offerer) == "string" and offerer ~= "" then
+		resurrection = resurrection + 1
+		TryResurrection(resurrection, offerer)
+	end
 end
 
 function part.Refresh()
@@ -474,8 +508,10 @@ function part.Status()
 	local lines = { line }
 	if (where == "always" or where == "instances") and E.Gamepad() then
 		lines[#lines + 1] = "Popups: Hold a key to release does not apply under the gamepad interface."
-	elseif (where == "always" or where == "instances") and noKey then
+	elseif (where == "always" or where == "instances") and KeyState() == nil then
 		lines[#lines + 1] = ("Popups: Release Spirit is not covered: the game does not say whether %s is held."):format(Key().label)
+	elseif (where == "always" or where == "instances") and protectedButton then
+		lines[#lines + 1] = "Popups: Release Spirit is not covered: the game says its button is protected."
 	end
 	for _, line in ipairs(missed) do
 		lines[#lines + 1] = line

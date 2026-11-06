@@ -7,8 +7,9 @@ local _, ns = ...
 --
 -- Selling walks the bags (C_Container.GetContainerNumSlots and GetContainerItemInfo, bags 0 to NUM_TOTAL_EQUIPPED_BAG_SLOTS) and sells one item
 -- every SPACING seconds with C_Container.UseContainerItem, which sells while a merchant is open and uses or equips the item otherwise. So before
--- every sale the merchant window must still be shown (MerchantFrame, asked with the widget call IsShown), the module and the row still on,
--- the cursor empty, and the slot must still hold the same unlocked item. An item of poor quality (grey) is sold unless it is on the keep list;
+-- every sale the merchant window must still be shown (MerchantFrame, asked with the widget call IsShown) and no trade window open (TradeFrame:
+-- the same call puts an item in the trade), the module and the row still on, the cursor empty, and the slot must still hold the same unlocked
+-- item, whose count is read again there. An item of poor quality (grey) is sold unless it is on the keep list;
 -- an item on the sell list is sold whatever its quality. A quest item and an item the game gives no value are never sold. The lists hold item
 -- IDs for the whole account (Errands.Lists) and are changed with /flatui sell and /flatui keep. The money is counted from the sell price the
 -- game gives (C_Item.GetItemInfo) and said once at the end, with no amount when a price was not known.
@@ -40,8 +41,9 @@ local visit = 0
 local run
 -- The selling waits for a fight to end, or the whole visit does.
 local paused, waiting = false, false
--- A repair that could not be paid is tried again after the selling; then it waits for the money. The guild bank refused at this visit.
-local retryRepair, moneyWait, guildRefused = false, false, false
+-- A repair that could not be paid is tried again after the selling; then it waits for the money. The guild bank refused at this visit. A
+-- repair asked in a fight waits for its end.
+local retryRepair, moneyWait, guildRefused, repairAfterFight = false, false, false, false
 -- A visit that waits for the end of a fight: { at, keep }.
 local pending
 -- What /flatui status says about the last visit: what was repaired and sold, in that order.
@@ -113,12 +115,17 @@ local function Sale(bag, slot, lists)
 		return nil
 	end
 	count = type(count) == "number" and count > 0 and count or 1
-	return { bag = bag, slot = slot, id = id, link = link, count = count, value = price and price * count or nil }
+	return { bag = bag, slot = slot, id = id, link = link, count = count, price = price }
 end
 
+-- The count the slot holds now, when it still holds the same unlocked item, or nil.
 local function Same(sale)
 	local info = E.Ask(C_Container.GetContainerItemInfo, sale.bag, sale.slot)
-	return type(info) == "table" and Field(info, "itemID") == sale.id and Field(info, "hyperlink") == sale.link and Field(info, "isLocked") == false
+	if type(info) ~= "table" or Field(info, "itemID") ~= sale.id or Field(info, "hyperlink") ~= sale.link or Field(info, "isLocked") ~= false then
+		return nil
+	end
+	local count = Field(info, "stackCount")
+	return type(count) == "number" and count > 0 and count or 1
 end
 
 local function Scan()
@@ -192,6 +199,10 @@ local function SellNext(at)
 		Finish("the merchant closed")
 		return
 	end
+	if E.Shown(TradeFrame) then
+		Finish("a trade opened")
+		return
+	end
 	if E.Fighting() then
 		paused = true
 		return
@@ -206,10 +217,11 @@ local function SellNext(at)
 		return
 	end
 	run.next = run.next + 1
-	if Same(sale) and E.Call(C_Container.UseContainerItem, sale.bag, sale.slot) then
+	local count = Same(sale)
+	if count and E.Call(C_Container.UseContainerItem, sale.bag, sale.slot) then
 		run.sold = run.sold + 1
-		if sale.value then
-			run.value = run.value + sale.value
+		if sale.price then
+			run.value = run.value + sale.price * count
 		else
 			run.unknown = true
 		end
@@ -251,6 +263,11 @@ local function GuildCheck(at, cost)
 		return
 	end
 	guildRefused = true
+	if E.Fighting() then
+		E.Say(("The guild bank did not pay for the %s repair."):format(E.Money(left)))
+		repairAfterFight = true
+		return
+	end
 	local money = E.Ask(GetMoney)
 	if type(money) == "number" and money >= left and E.Call(RepairAllItems) then
 		notes[#notes + 1] = ("repaired for %s with your gold"):format(E.Money(left))
@@ -264,9 +281,14 @@ local function GuildCheck(at, cost)
 end
 
 -- Repairs everything. last: the try after the selling, which says when there is not enough gold; the first try waits for the selling instead.
+-- In a fight nothing is repaired: the repair waits for its end, if the merchant is still open then.
 Repair = function(last)
 	local how = E.Opt("repair")
 	if how ~= "own" and how ~= "guild" or not ns.Enabled("errands") then
+		return
+	end
+	if E.Fighting() then
+		repairAfterFight = true
 		return
 	end
 	if E.Ask(CanMerchantRepair) ~= true then
@@ -343,8 +365,12 @@ E.Listen(part, "PLAYER_MONEY", function()
 end)
 
 E.Listen(part, "MERCHANT_SHOW", function()
+	-- A merchant that opens over another one: the selling of the first ends with its line.
+	if run then
+		Finish("the merchant closed")
+	end
 	visit = visit + 1
-	open, notes, run, paused, retryRepair, moneyWait, guildRefused, pending = true, {}, nil, false, false, false, false, nil
+	open, notes, run, paused, retryRepair, moneyWait, guildRefused, pending, repairAfterFight = true, {}, nil, false, false, false, false, nil, false
 	local keep = E.Ask(IsShiftKeyDown) == true
 	if E.Opt("sell") ~= true and E.Opt("repair") == "off" then
 		return
@@ -361,8 +387,15 @@ E.Listen(part, "MERCHANT_CLOSED", function()
 	if run then
 		Finish("the merchant closed")
 	end
-	open, waiting, paused, retryRepair, moneyWait, pending = false, false, false, false, false, nil
+	open, waiting, paused, retryRepair, moneyWait, pending, repairAfterFight = false, false, false, false, false, nil, false
 	visit = visit + 1
+end)
+
+-- A trade window that opens stops the selling: the same call would put the item in the trade.
+E.Listen(part, "TRADE_SHOW", function()
+	if run then
+		Finish("a trade opened")
+	end
 end)
 
 -- A fight that ended with the merchant still open: a visit that waited runs, and paused selling goes on with what the bags hold now.
@@ -377,6 +410,10 @@ E.Listen(part, "PLAYER_REGEN_ENABLED", function()
 		end
 	elseif run and paused and MerchantOpen() and Wanted() then
 		Sell()
+	end
+	if repairAfterFight and MerchantOpen() and not E.Fighting() then
+		repairAfterFight = false
+		Repair(true)
 	end
 end)
 

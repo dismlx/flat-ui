@@ -24,7 +24,7 @@ function Errands.On(key)
 	return ns.Enabled(KEY) and Errands.Opt(key) == true
 end
 
--- A value the client gives, or nil when the call is missing, raises, or answers with a secret.
+-- Up to four values the client gives, each nil when the client withholds it (a secret); all nil when the call is missing or raises.
 function Errands.Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -32,6 +32,15 @@ function Errands.Ask(fn, ...)
 	local ok, a, b, c, d = pcall(fn, ...)
 	if not ok or ns.IsSecret(a) then
 		return nil
+	end
+	if ns.IsSecret(b) then
+		b = nil
+	end
+	if ns.IsSecret(c) then
+		c = nil
+	end
+	if ns.IsSecret(d) then
+		d = nil
 	end
 	return a, b, c, d
 end
@@ -53,6 +62,7 @@ end
 function Errands.Money(copper)
 	copper = math.floor(tonumber(copper) or 0)
 	local text = Errands.Ask(GetMoneyString, copper, true) or Errands.Ask(GetCoinTextureString, copper)
+		or (type(C_CurrencyInfo) == "table" and Errands.Ask(C_CurrencyInfo.GetCoinTextureString, copper)) or nil
 	if type(text) == "string" and text ~= "" then
 		return text
 	end
@@ -75,6 +85,25 @@ function Errands.Say(text)
 	if Errands.Opt("chat") ~= false then
 		print("Flat UI: " .. text)
 	end
+end
+
+-- Whether the game's tooltip is shown for a button and the cursor is still over it: only then is it drawn again, so an update never brings a
+-- tooltip back after the cursor left.
+function Errands.TipOwned(button)
+	local tip = GameTooltip
+	if type(tip) ~= "table" or ns.Forbidden(tip) then
+		return false
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, button)
+	if not ok or owned ~= true then
+		return false
+	end
+	local okShown, shown = pcall(tip.IsShown, tip)
+	if okShown and shown == false then
+		return false
+	end
+	local okOver, over = pcall(button.IsMouseOver, button)
+	return not okOver or ns.IsSecret(over) or over ~= false
 end
 
 -- A colour of the Background colour moved toward white by delta, for the plate of an own button.
@@ -124,7 +153,7 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 	button:SetScript("OnLeave", function()
 		hover, down = false, false
 		Paint()
-		if GameTooltip and GameTooltip:IsOwned(button) then
+		if GameTooltip and not ns.Forbidden(GameTooltip) and GameTooltip:IsOwned(button) then
 			GameTooltip:Hide()
 		end
 	end)
@@ -236,6 +265,53 @@ function Errands.Shown(frame)
 	end
 	local ok, shown = pcall(frame.IsShown, frame)
 	return ok and not ns.IsSecret(shown) and shown == true
+end
+
+-- The shown popups of the game (StaticPopup1 to 4): { frame, name, which }. Read with the widget call IsShown and the field which; no popup code
+-- is called.
+local POPUPS = 4
+
+local function PopupField(frame, key)
+	local ok, value = pcall(function()
+		return frame[key]
+	end)
+	if not ok or ns.IsSecret(value) then
+		return nil
+	end
+	return value
+end
+
+function Errands.PopupField(frame, key)
+	return PopupField(frame, key)
+end
+
+function Errands.Popups()
+	local count = STATICPOPUP_NUMDIALOGS
+	if type(count) ~= "number" or ns.IsSecret(count) or count < 1 or count > 10 then
+		count = POPUPS
+	end
+	local list = {}
+	for index = 1, count do
+		local name = "StaticPopup" .. index
+		local frame = _G[name]
+		if Errands.Shown(frame) then
+			list[#list + 1] = { frame = frame, name = name, which = PopupField(frame, "which") }
+		end
+	end
+	return list
+end
+
+-- Hides a popup of the game with StaticPopup_Hide, only when it is the one popup shown: hiding it beside another one would leave values written by
+-- Flat UI's code in the game's list of shown popups, which the game renews securely only once that list is empty. True when it was hidden.
+function Errands.HideAlone(which)
+	if type(StaticPopup_Hide) ~= "function" then
+		return false
+	end
+	local shown = Errands.Popups()
+	if #shown ~= 1 or shown[1].which ~= which then
+		return false
+	end
+	return (pcall(StaticPopup_Hide, which))
 end
 
 -- True in a fight: the lockdown, or the player in combat (UnitAffectingCombat), which can come a moment before it.

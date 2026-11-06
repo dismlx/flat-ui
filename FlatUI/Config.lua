@@ -1500,7 +1500,7 @@ ns.PAGES = {
 			tip = "Writes the word the game asks for before it deletes a good item. You still click Yes." },
 		{ section = "Other players" },
 		{ key = "invites", kind = "choice", default = "friends", label = "Accept group invites from",
-			tip = "Battle.net friends count as friends. An invite that comes in a fight is accepted when the fight ends. One that asks for roles is left to you.",
+			tip = "Battle.net friends count as friends. An invite that comes in a fight is accepted when the fight ends. One that asks for roles, or would take you out of a queue, is left to you.",
 			choices = { { "off", "Nobody" }, { "friends", "Friends" }, { "guild", "Your guild" }, { "both", "Friends and your guild" } } },
 		{ key = "declineDuels", kind = "bool", default = false, label = "Decline duels", tip = "Every duel request is declined at once, also in a fight." },
 		{ key = "mailRecipient", kind = "bool", default = true, label = "Remember the last mail recipient",

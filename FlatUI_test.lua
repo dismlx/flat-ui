@@ -11000,7 +11000,7 @@ local PAGES = {
 		S("errands.resurrect", "bool", false, "Accept resurrections", "Not while the one who offers it is in combat or dead, and only once the game lets you after recent deaths."),
 		S("errands.deleteWord", "bool", true, "Type DELETE for you", "Writes the word the game asks for before it deletes a good item. You still click Yes."),
 		"Other players",
-		S("errands.invites", "choice", "friends", "Accept group invites from", "Battle.net friends count as friends. An invite that comes in a fight is accepted when the fight ends. One that asks for roles is left to you.",
+		S("errands.invites", "choice", "friends", "Accept group invites from", "Battle.net friends count as friends. An invite that comes in a fight is accepted when the fight ends. One that asks for roles, or would take you out of a queue, is left to you.",
 			{ choices = { { "off", "Nobody" }, { "friends", "Friends" }, { "guild", "Your guild" }, { "both", "Friends and your guild" } } }),
 		S("errands.declineDuels", "bool", false, "Decline duels", "Every duel request is declined at once, also in a fight."),
 		S("errands.mailRecipient", "bool", true, "Remember the last mail recipient", "After a letter goes, the To box keeps the name until the mailbox closes."),
@@ -113288,6 +113288,34 @@ do
 	W.change("errands.sell", true)
 	clean(W, "sell, more")
 
+	-- A trade window opens: the same call would put the item in the trade, so the selling stops.
+	EQ.fill(W, { EQ.item(64, 0, 1, 5), EQ.item(65, 0, 1, 5) })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	W.env.TradeFrame = W.B(W.env.UIParent, {}, { name = "TradeFrame", width = 300, height = 300 })
+	EQ.wait(W, 1)
+	check("sell: a trade window stops the selling", EQ.ids(W.eq.sold) == "64" and has(EQ.said(W), "then stopped: a trade opened."), EQ.ids(W.eq.sold))
+	EQ.close(W)
+	W.env.TradeFrame = nil
+	-- A merchant that opens over another one ends the first selling with its line.
+	EQ.fill(W, { EQ.item(66, 0, 1, 5), EQ.item(67, 0, 1, 5) })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	W.fire("MERCHANT_SHOW")
+	check("sell: a merchant opening over another one ends the first selling with its line", has(EQ.said(W), "Sold 1 item for 5c, then stopped: the merchant closed."))
+	EQ.wait(W, 1)
+	EQ.close(W)
+	EQ.said(W)
+	-- The count is read again at the sale.
+	local stack = EQ.item(68, 0, 2, 5)
+	EQ.fill(W, { EQ.item(69, 0, 1, 5), stack })
+	W.eq.sold = {}
+	EQ.merchant(W)
+	stack.count = 5
+	EQ.wait(W, 1)
+	check("sell: a stack that grew before its sale is counted as it is then", EQ.ids(W.eq.sold) == "69,68" and EQ.said(W) == "Flat UI: Sold 2 items for 30c.", EQ.ids(W.eq.sold))
+	EQ.close(W)
+
 	-- The game shows its window a moment after the event.
 	EQ.fill(W, { EQ.item(39, 0, 1, 5) })
 	W.eq.sold, W.eq.merchant = {}, true
@@ -113618,6 +113646,21 @@ do
 	check("train all: /flatui train learns at an open trainer", EQ.ids(W.eq.bought) == "4,1", EQ.ids(W.eq.bought))
 	W.advance(1.1)
 	W.out = {}
+	-- EnhanceQoL's own Train All button in the same place: this one stands aside.
+	W.env.EQOLTrainAllButton = W.B(W.env.ClassTrainerFrame, {}, { name = "EQOLTrainAllButton", width = 80, height = 22 })
+	W.fire("TRAINER_UPDATE")
+	check("train all: with EnhanceQoL's own button shown, this one stands aside, and the status says so", not EQ.shown(W, made[1])
+		and has(W.status(), "Trainer: EnhanceQoL's Train All button is shown, so this one stands aside."), W.status())
+	W.env.EQOLTrainAllButton = nil
+	W.fire("TRAINER_UPDATE")
+	check("train all: back once it is gone", EQ.shown(W, made[1]))
+	-- A typed command answers even with Say what was done off.
+	W.change("errands.chat", false)
+	W.eq.bought = {}
+	check("train all: /flatui train says what it learns even with the chat line off", has(W.slash("train"), "Flat UI: Learning 2 skills for 3s 50c.") and EQ.ids(W.eq.bought) == "4,1")
+	W.out = {}
+	W.change("errands.chat", true)
+	W.advance(1.1)
 	-- Under the gamepad interface there is no button.
 	W.env.InputUtil = { IsGamepadUIEnabled = function() return true end }
 	W.fire("INPUT_DEVICE_INTERFACE_TRANSITION")
@@ -113641,13 +113684,18 @@ do
 			covers[#covers + 1] = f
 		end
 	end
-	check("release: in a dungeon a cover lies over the release button", #covers == 1 and EQ.shown(W, covers[1]) and W.rawOf[covers[1]].mouse == true, #covers)
+	check("release: in a dungeon a cover lies over the release button and takes the clicks", #covers == 1 and EQ.shown(W, covers[1]) and W.rawOf[covers[1]].mouse == true, #covers)
 	W.eq.keys.shift = true
 	W.fire("MODIFIER_STATE_CHANGED", "LSHIFT", 1)
-	check("release: Shift held takes the cover away", not EQ.shown(W, covers[1]))
+	check("release: Shift held lets the clicks through to the button", EQ.shown(W, covers[1]) and W.rawOf[covers[1]].mouse == false)
 	W.eq.keys.shift = false
 	W.fire("MODIFIER_STATE_CHANGED", "LSHIFT", 0)
-	check("release: Shift let go puts it back", EQ.shown(W, covers[1]))
+	check("release: Shift let go takes the clicks again", W.rawOf[covers[1]].mouse == true)
+	W.eq.keys.shift = true
+	W.rawOf[covers[1]].onUpdate(covers[1], 0.016)
+	W.eq.keys.shift = false
+	W.rawOf[covers[1]].onUpdate(covers[1], 0.016)
+	check("release: a key let go while the game said nothing still counts: the cover asks every frame", W.rawOf[covers[1]].mouse == true and EQ.shown(W, covers[1]))
 	-- The cover fails open: the frame under it used for another popup without a word from the game, the cover takes itself away.
 	W.rawOf[popups[1].frame].which = "PARTY_INVITE"
 	W.rawOf[covers[1]].onUpdate(covers[1], 0.016)
@@ -113679,6 +113727,10 @@ do
 	W.env.InputUtil = nil
 	W.env.StaticPopup_Show("DELETE_GOOD_ITEM")
 	check("delete: the word is written in the box", W.rawOf[popups[1].box].text == "DELETE")
+	W.rawOf[popups[1].box].text = "DEL"
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	check("delete: another popup does not write over what the player typed", W.rawOf[popups[1].box].text == "DEL")
+	W.env.StaticPopup_Hide("PARTY_INVITE")
 	W.env.StaticPopup_Hide("DELETE_GOOD_ITEM")
 	-- The game does not say whether the key is held: no cover, and the status says why.
 	local shift = W.env.IsShiftKeyDown
@@ -113737,8 +113789,10 @@ do
 	check("summons: accepted on the next frame, not at once", #W.eq.accepted == 0)
 	W.tick()
 	check("summons: accepted and said", EQ.ids(W.eq.accepted) == "summon" and has(EQ.said(W), "Accepted a summon from Mira to Stormwind."))
-	W.advance(2.2)
-	check("summons: the game's popup is left to the game", #W.eq.hidden == 0, EQ.ids(W.eq.hidden))
+	check("summons: the popup stays while the summon is open", #W.eq.hidden == 0, EQ.ids(W.eq.hidden))
+	W.advance(0.2)
+	check("summons: once the game says the summon is over, its popup is hidden, so a stale one cannot cancel the next", EQ.ids(W.eq.hidden) == "CONFIRM_SUMMON", EQ.ids(W.eq.hidden))
+	W.eq.hidden = {}
 	check("summons: status names the last summon", has(W.status(), "Last accepted a summon from Mira."), W.status())
 	-- A summon on a flight path, then in a fight: taken once the game would let you.
 	W.eq.accepted, W.eq.hidden, W.eq.summonLeft, W.eq.canTeleport = {}, {}, 100, false
@@ -113820,20 +113874,59 @@ do
 	check("invites: an invite that asks for roles is left to you", #W.eq.accepted == 0)
 	W.fire("PARTY_INVITE_REQUEST", "Zed", false, false, false, true, false, "Player-3")
 	check("invites: a stranger's invite is left to you", #W.eq.accepted == 0)
-	-- An invite in a fight waits for its end, while it is still open.
+	-- An invite in a fight waits for its end, while its popup is still open.
 	W.combat = true
+	W.env.StaticPopup_Show("PARTY_INVITE")
 	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
 	W.advance(2)
 	check("invites: in a fight the invite waits, and the status says so", #W.eq.accepted == 0 and has(W.status(), "Social: the invite of Ann waits for the fight to end."), W.status())
 	W.combat = false
 	W.advance(1.1)
 	check("invites: after the fight it is accepted", EQ.ids(W.eq.accepted) == "group", EQ.ids(W.eq.accepted))
+	W.env.StaticPopup_Hide("PARTY_INVITE")
 	W.eq.accepted, W.combat = {}, true
+	W.env.StaticPopup_Show("PARTY_INVITE")
 	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
 	W.fire("PARTY_INVITE_CANCEL")
 	W.combat = false
 	W.advance(2.2)
 	check("invites: an invite withdrawn during the fight is not accepted after it", #W.eq.accepted == 0)
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	-- Declined during the fight: the popup is gone, and the game says nothing an addon sees.
+	W.combat = true
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	W.combat = false
+	W.advance(2.2)
+	check("invites: an invite declined during the fight is not accepted after it", #W.eq.accepted == 0 and not has(W.status(), "waits for the fight"))
+	-- The row changed during the wait ends it.
+	W.combat = true
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	W.change("errands.invites", "Your guild")
+	W.combat = false
+	W.advance(2.2)
+	check("invites: a change of the row during the wait ends it", #W.eq.accepted == 0)
+	W.change("errands.invites", "Friends and your guild")
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	-- An invite that would take you out of a queue, and a quest-session invite, are left to you.
+	W.env.WillAcceptInviteRemoveQueues = function() return true end
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	check("invites: one that would take you out of a queue is left to you", #W.eq.accepted == 0)
+	W.env.WillAcceptInviteRemoveQueues = nil
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1", true)
+	check("invites: a quest-session invite is left to you", #W.eq.accepted == 0)
+	-- The popup is closed only while it is the one popup shown.
+	W.env.StaticPopup_Show("PARTY_INVITE")
+	W.fire("PARTY_INVITE_REQUEST", "Ann", false, false, false, true, false, "Player-1")
+	W.env.StaticPopup_Show("DUEL_REQUESTED")
+	W.eq.hidden, W.eq.inGroup = {}, true
+	W.fire("GROUP_ROSTER_UPDATE")
+	check("invites: beside another popup the invite popup is left to run out, and the line is still said", #W.eq.hidden == 0 and has(EQ.said(W), "Accepted the invite of Ann."), EQ.ids(W.eq.hidden))
+	W.env.StaticPopup_Hide("DUEL_REQUESTED")
+	W.env.StaticPopup_Hide("PARTY_INVITE")
+	W.eq.inGroup, W.eq.accepted, W.eq.hidden = false, {}, {}
 	-- Duels.
 	W.fire("DUEL_REQUESTED", "Zed")
 	check("duels: off, a duel is left to you", #W.eq.accepted == 0)

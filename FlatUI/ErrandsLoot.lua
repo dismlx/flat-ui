@@ -237,7 +237,7 @@ local function Worth(entry)
 end
 
 local function Explain(owner)
-	if not target or not GameTooltip then
+	if not target or not GameTooltip or ns.Forbidden(GameTooltip) then
 		return
 	end
 	GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
@@ -349,13 +349,15 @@ Update = function()
 			if not E.Run(part, Delete) then
 				Hide()
 			end
-		end, Explain)
+		end, function(owner)
+			E.Run(part, Explain, owner)
+		end)
 		button:SetPoint("TOP", frame, "BOTTOM", 0, -4)
 		button.Keep(Wanted)
 	end
 	button.SetUsable(not Fight() and CursorEmpty())
 	button:Show()
-	if GameTooltip and GameTooltip:IsOwned(button) then
+	if E.TipOwned(button) then
 		Explain(button)
 	end
 end

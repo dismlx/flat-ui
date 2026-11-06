@@ -31,8 +31,9 @@ local ADDON_NAME, ns = ...
 -- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- repairs with RepairAllItems, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on
 -- its own button, and answers summons, resurrections, invites and duels with the game's calls for them. Of the game's popups it hides only
--- one, with StaticPopup_Hide: the group invite's, once the player is in the group, since the game leaves it up and hiding it sooner declines
--- the invite. It follows
+-- two, with StaticPopup_Hide, each once its request is over and only while it is the one popup shown, since the game leaves them up: the group
+-- invite's once the player is in the group (hiding it sooner declines the invite), and the summon's once the game says no summon is open (a
+-- stale one cancels the next). It follows
 -- StaticPopup_Show, StaticPopup_Hide, ClassTrainerFrame_Update, SendMailFrame_SendMail and SendMailFrame_Reset with hooksecurefunc, writes
 -- DELETE in the box of the game's delete popup (SetText, then ClearFocus) and the last recipient in the To box of the mail window (SetText),
 -- and lays frames of its own over the loot window, the trainer window and the Release Spirit button of the death popup.

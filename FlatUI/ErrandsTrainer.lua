@@ -10,6 +10,7 @@ local _, ns = ...
 -- The tooltip says what a click learns and why anything is left. After a click the button waits SETTLE seconds, so a double click asks once.
 -- It follows the game's ClassTrainerFrame_Update and TRAINER_UPDATE to stay right. Not in combat: the button is made only out of the lockdown
 -- and does nothing in a fight. Never under the gamepad interface, whose navigation could not reach it; /flatui train does the same there.
+-- While EnhanceQoL's own Train All button (EQOLTrainAllButton) is shown in the same place, this one stands aside.
 -- It follows EnhanceQoL's Train All button, adapted with the permission of its author.
 
 local E = ns.Errands
@@ -37,6 +38,16 @@ local Update, Explain
 
 local function Skills(n)
 	return n == 1 and "skill" or "skills"
+end
+
+-- " for 4s", or nothing for skills that cost nothing.
+local function For(cost)
+	return cost > 0 and (" for " .. E.Money(cost)) or ""
+end
+
+-- EnhanceQoL's own Train All button, shown where this one would be.
+local function TheirsShown()
+	return E.Shown(_G.EQOLTrainAllButton)
 end
 
 -- One row of the trainer's list: { kind, name, price, profession, other }, or nil when it cannot be read.
@@ -140,17 +151,22 @@ local function Learn()
 	return asked, cost, plan
 end
 
+-- What a click says: what it learns, and what the money did not reach.
+local function Said(asked, cost, plan)
+	local text = ("Learning %d %s%s."):format(asked, Skills(asked), For(cost))
+	if plan and plan.short > 0 then
+		text = text .. (" Not enough money for %d more (%s)."):format(plan.short, E.Money(plan.shortCost))
+	end
+	return text
+end
+
 local function TrainAll()
 	local asked, cost, plan = Learn()
 	if asked > 0 then
-		local text = ("Learning %d %s for %s."):format(asked, Skills(asked), E.Money(cost))
-		if plan and plan.short > 0 then
-			text = text .. (" Not enough money for %d more (%s)."):format(plan.short, E.Money(plan.shortCost))
-		end
-		E.Say(text)
+		E.Say(Said(asked, cost, plan))
 	end
 	Update()
-	return asked
+	return asked, cost, plan
 end
 
 -- True when the trainer's filter hides the rows you can learn.
@@ -175,7 +191,9 @@ Explain = function(owner, plan)
 	if settling then
 		Line("Waiting for the trainer.")
 	elseif #plan.buy > 0 then
-		Line(("Learns %d %s for %s."):format(#plan.buy, Skills(#plan.buy), E.Money(plan.cost)))
+		Line(("Learns %d %s%s."):format(#plan.buy, Skills(#plan.buy), For(plan.cost)))
+	elseif plan.rows > 0 and plan.read == 0 then
+		Line("The game did not say what the trainer offers.")
 	else
 		Line("Nothing here you can learn now.")
 	end
@@ -238,10 +256,11 @@ local function Build(frame, train)
 		end
 		return false
 	end
+	-- The hover runs as a part of the module, so its errors count toward stopping the part and are seen.
 	local ok, made = pcall(E.Button, frame, LABEL, WIDTH, function()
 		E.Run(part, TrainAll)
 	end, function(owner)
-		Explain(owner)
+		E.Run(part, Explain, owner)
 	end)
 	if not ok or type(made) ~= "table" then
 		broken = true
@@ -250,7 +269,7 @@ local function Build(frame, train)
 	button = made
 	button:SetPoint("RIGHT", train, "LEFT", -GAP, 0)
 	button.Keep(function()
-		return E.On("trainAll") and not E.Gamepad() and not ns.PartStopped("errands", part.label)
+		return E.On("trainAll") and not E.Gamepad() and not TheirsShown() and not ns.PartStopped("errands", part.label)
 	end)
 	return true
 end
@@ -265,7 +284,7 @@ local function Follow()
 end
 
 Update = function()
-	if not E.On("trainAll") or E.Gamepad() then
+	if not E.On("trainAll") or E.Gamepad() or TheirsShown() then
 		if button then
 			button:Hide()
 		end
@@ -288,7 +307,7 @@ Update = function()
 	local plan = Plan()
 	button.SetUsable(#plan.buy > 0 and not settling and not E.Fighting())
 	button:Show()
-	if GameTooltip and not ns.Forbidden(GameTooltip) and GameTooltip:IsOwned(button) then
+	if E.TipOwned(button) then
 		Explain(button, plan)
 	end
 end
@@ -310,6 +329,7 @@ end
 
 -- At the start (the trainer UI may have been loaded before, by another addon) and at each refresh (the row, the page, the profile).
 local function Look()
+	broken = false
 	if button or ClassTrainerFrame ~= nil then
 		Update()
 	end
@@ -335,12 +355,16 @@ E.slash.train = function()
 		print("Flat UI: not in a fight.")
 		return
 	end
-	local learned = 0
-	E.Run(part, function()
-		learned = TrainAll()
-	end)
-	if learned == 0 then
+	local learned, cost, plan = 0, 0, nil
+	if not E.Run(part, function()
+		learned, cost, plan = TrainAll()
+	end) then
+		print("Flat UI: Train all failed. /flatui status shows why.")
+	elseif learned == 0 then
 		print("Flat UI: nothing here you can learn now.")
+	elseif E.Opt("chat") == false then
+		-- A typed command always answers, even with Say what was done off.
+		print("Flat UI: " .. Said(learned, cost, plan))
 	end
 end
 E.help[#E.help + 1] = "/flatui train - at an open trainer, learn everything you can pay for, as the Train all button does"
@@ -359,9 +383,12 @@ function part.Status()
 	elseif why == "train" then
 		return { "Trainer: the trainer window has no Train button here, so there is no Train all button." }
 	end
+	if TheirsShown() then
+		return { "Trainer: EnhanceQoL's Train All button is shown, so this one stands aside. /flatui train still works." }
+	end
 	local lines = { "Trainer: Train all button." }
 	if last then
-		lines[1] = ("Trainer: Train all button. Last click: %d %s for %s."):format(last.count, Skills(last.count), E.Money(last.cost))
+		lines[1] = ("Trainer: Train all button. Last click: %d %s%s."):format(last.count, Skills(last.count), For(last.cost))
 	end
 	if refusedLast then
 		lines[#lines + 1] = "Trainer: the game refused the last Train all click."
