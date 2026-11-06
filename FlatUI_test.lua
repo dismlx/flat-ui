@@ -10585,6 +10585,9 @@ local PAGES = {
 		"Bags",
 		S("windows.newGlow", "bool", true, "New item glow"),
 		S("windows.junkDim", "bool", false, "Dim grey items", "Darkens poor items that have a vendor price."),
+		S("windows.boeMark", "bool", true, "Mark bind on equip items", "BoE at the top left of an item that binds when equipped and is not bound yet."),
+		S("windows.unusableTint", "bool", true, "Tint items you cannot use", "Red over an item whose tooltip has a requirement in red: class, race, level, skill, reputation, armour or weapon type, or a recipe you already know."),
+		S("windows.petFood", "bool", true, "Mark food your pet eats", "For hunters: the Feed Pet icon at the bottom left of food your pet eats, while it is out."),
 		S("windows.combinedBags", "bool", false, "Combine bags"),
 		"Character window",
 		S("windows.durability", "bool", true, "Show durability", "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below."),
@@ -11214,6 +11217,11 @@ local PAGES = {
 		S("fade.playerFrame", "bool", false, "Player frame"),
 		S("fade.petFrame", "bool", false, "Pet frame"),
 		S("fade.minimapButtons", "bool", false, "Minimap buttons", "Shown while the mouse is over the minimap."),
+		"When shown",
+		S("fade.targetFrame", "choice", "always", "Target frame", "At other times it fades like the frames above, with its cast bar, combo points and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.focusFrame", "choice", "always", "Focus frame", "At other times it fades like the frames above, with its cast bar and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.buffs", "choice", "always", "Buffs", "Your buffs and weapon enchants, not your debuffs. At other times they fade like the frames above.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.objectiveTracker", "choice", "always", "Objective tracker", "At other times it fades like the frames above. In a fight, Opacity in combat of the tracker comes first while it is under 100%.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
 		"Fade",
 		S("fade.alpha", "number", 25, "Faded opacity", "Faded buttons still work.", { min = 0, max = 90, step = 5, unit = "%" }),
 		S("fade.delay", "number", 500, "Wait before fading", nil, { min = 0, max = 3000, step = 100, unit = " ms" }),
@@ -21615,7 +21623,8 @@ for _, path in ipairs({ "datapanels.enabled", "datapanels.top", "datapanels.top1
 	covered[path] = true
 end
 -- Nor do the rows of wave 4 (0.5.6): the owner asked for code without new test blocks.
-for _, path in ipairs({ "chat.webLinks", "chat.linkTips", "chat.classLine", "chat.idsWhen", "chat.enchantId", "chat.icons", "chat.targetLine" }) do
+for _, path in ipairs({ "chat.webLinks", "chat.linkTips", "chat.classLine", "chat.idsWhen", "chat.enchantId", "chat.icons", "chat.targetLine",
+	"windows.boeMark", "windows.unusableTint", "windows.petFood", "fade.targetFrame", "fade.focusFrame", "fade.buffs", "fade.objectiveTracker" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.

@@ -55,6 +55,9 @@ local KEPT = "Not applied while Leave the game's action bars alone is on."
 local KEPT_XP = "On the game's bar, not applied while Leave the game's action bars alone is on."
 -- Where a line of text around the minimap goes (MapText.lua).
 local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the map" } }
+-- When a frame of When shown on the Fading page is at full opacity; at other times it fades (Fade.lua has the rules).
+local FADE_WHEN = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" },
+	{ "unmounted", "Only when not mounted" } }
 
 ns.PAGES = {
 	{
@@ -1008,6 +1011,9 @@ ns.PAGES = {
 		{ section = "Bags" },
 		{ key = "newGlow", kind = "bool", default = true, label = "New item glow" },
 		{ key = "junkDim", kind = "bool", default = false, label = "Dim grey items", tip = "Darkens poor items that have a vendor price." },
+		{ key = "boeMark", kind = "bool", default = true, label = "Mark bind on equip items", tip = "BoE at the top left of an item that binds when equipped and is not bound yet." },
+		{ key = "unusableTint", kind = "bool", default = true, label = "Tint items you cannot use", tip = "Red over an item whose tooltip has a requirement in red: class, race, level, skill, reputation, armour or weapon type, or a recipe you already know." },
+		{ key = "petFood", kind = "bool", default = true, label = "Mark food your pet eats", tip = "For hunters: the Feed Pet icon at the bottom left of food your pet eats, while it is out." },
 		{ key = "combinedBags", kind = "bool", default = false, cvar = "combinedBags", label = "Combine bags" },
 		{ section = "Character window" },
 		{ key = "durability", kind = "bool", default = true, label = "Show durability",
@@ -1778,6 +1784,15 @@ ns.PAGES = {
 		{ key = "playerFrame", kind = "bool", default = false, label = "Player frame" },
 		{ key = "petFrame", kind = "bool", default = false, label = "Pet frame" },
 		{ key = "minimapButtons", kind = "bool", default = false, label = "Minimap buttons", tip = "Shown while the mouse is over the minimap." },
+		{ section = "When shown" },
+		{ key = "targetFrame", kind = "choice", default = "always", label = "Target frame",
+			tip = "At other times it fades like the frames above, with its cast bar, combo points and target of target.", choices = FADE_WHEN },
+		{ key = "focusFrame", kind = "choice", default = "always", label = "Focus frame",
+			tip = "At other times it fades like the frames above, with its cast bar and target of target.", choices = FADE_WHEN },
+		{ key = "buffs", kind = "choice", default = "always", label = "Buffs",
+			tip = "Your buffs and weapon enchants, not your debuffs. At other times they fade like the frames above.", choices = FADE_WHEN },
+		{ key = "objectiveTracker", kind = "choice", default = "always", label = "Objective tracker",
+			tip = "At other times it fades like the frames above. In a fight, Opacity in combat of the tracker comes first while it is under 100%.", choices = FADE_WHEN },
 		{ section = "Fade" },
 		{ key = "alpha", kind = "number", default = 25, min = 0, max = 90, step = 5, unit = "%", label = "Faded opacity", tip = "Faded buttons still work." },
 		{ key = "delay", kind = "number", default = 500, min = 0, max = 3000, step = 100, unit = " ms", label = "Wait before fading" },

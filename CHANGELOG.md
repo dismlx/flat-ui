@@ -5,6 +5,10 @@
 - **Chat and tooltips**, **Tooltips**, **Target of units**, on: a line naming what a unit targets, in its class or reaction colour, **You** when it is you; a withheld identity gives none. Follows EnhanceQoL's tooltip.
 - **Tooltips**, **Class colour on the class line** and **Item and spell icons**, on: a player's level, race and class line in their class colour, and the icon before the name of an item or spell.
 - **Tooltips**, under **Item and spell IDs**: **Show IDs** (**Always**, or while holding Shift, Ctrl or Alt) and **Temporary enchant ID**, on: the ID of the poison, oil, stone or imbue on a weapon you wear. `/flatui status` names the key.
+- **Fading**, new section **When shown**: **Target frame**, **Focus frame**, **Buffs** and **Objective tracker**, each **Always** (the default), **Only in combat**, **Only in a group**, **Only in an instance** or **Only when not mounted** (a druid's travel forms count as mounted). At other times the frame fades like the frames above and comes back under the mouse, in Edit Mode and as **Stay visible** says. Only the opacity changes, also in a fight. Cast bars, target of target and combo points fade with their frame; debuffs stay. In a fight the tracker's **Opacity in combat** comes first while under 100%. Follows EnhanceQoL's frame visibility rules.
+- **Bags and items**, **Mark bind on equip items**, on: BoE on bag and bank items that bind when equipped and are not bound yet.
+- **Bags and items**, **Tint items you cannot use**, on: red over items whose tooltip shows a requirement in red: class, race, level, skill, reputation, armour or weapon type, or a recipe you already know.
+- **Bags and items**, **Mark food your pet eats**, on: for hunters, the Feed Pet icon on the food your pet eats while it is out. These follow EnhanceQoL's bag overlays.
 
 ## 0.5.5
 

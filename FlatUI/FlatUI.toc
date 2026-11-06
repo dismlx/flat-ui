@@ -55,6 +55,7 @@ TrackerShare.lua
 BagSort.lua
 Windows.lua
 Items.lua
+ItemMarks.lua
 CharacterDurability.lua
 UnitFrames.lua
 UnitFramePortrait.lua

@@ -7,8 +7,9 @@ local _, ns = ...
 -- Every item button has a GetBagID, which reads the field bagID of ItemButtonMixin (Blizzard_ItemButton/Shared/ItemButtonTemplate.lua:247-253;
 -- Shared/ItemButtonTemplate.xml:4 gives the mixin to every ItemButton), so the slots of the Character and Inspect windows and the buttons of the
 -- equipment flyout are known by their names, before that.
--- Every row at its default makes no call the game does not make, and a row put back to its default gives the game's own value back, with one
--- exception: Item level on the Inspect window is on, and reads the items of the player the window shows once the game says it has them.
+-- Every row at its default makes no call the game does not make, and a row put back to its default gives the game's own value back, with two
+-- exceptions: Item level on the Inspect window is on, and reads the items of the player the window shows once the game says it has them; and the
+-- three bag marks of ItemMarks.lua are on, and read the binding and the tooltip of each bag and bank item, and with a pet out whether it eats it.
 -- The levels of the equipment flyout and of the Inspect window, the inspected player's average and the corner of a level on gear follow
 -- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
 
@@ -284,12 +285,20 @@ end
 
 -- Slots --------------------------------------------------------------------------------------
 
-local function AllDefault()
+-- True while no row wants anything of the bag, bank or character slots: each at the value that reads nothing. The bag marks are on by default and
+-- read every bag and bank slot on a client that has their calls.
+local function Quiet()
 	return Opt("countSize") == 100 and not Opt("ilvlBags") and not Opt("ilvlCharacter") and Opt("newGlow") and not Opt("junkDim")
+		and not ns.ItemMarks.Wanted()
 end
 
 local function Idle()
-	return not touched and AllDefault()
+	return not touched and Quiet()
+end
+
+local function Shown(frame)
+	local ok, visible = pcall(frame.IsVisible, frame)
+	return ok and not ns.IsSecret(visible) and visible == true
 end
 
 -- The size of the stack count of a slot.
@@ -580,6 +589,15 @@ local function Wanted(kind)
 	return Opt("ilvlInspect")
 end
 
+-- The bag marks of a bag or bank slot (ItemMarks.lua), in a part of their own, so that a failure there stops them alone; a stopped part hides every
+-- mark.
+local function Mark(button, live, info, bag, slot)
+	local marks = ns.ItemMarks
+	if not ns.EachPart(KEY, marks.PART, marks.Dress, button, live, info, bag, slot) and ns.PartStopped(KEY, marks.PART) then
+		marks.Release()
+	end
+end
+
 -- Applies the rows to one slot.
 function Dress(button, entry)
 	local live = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and not refused[PART]
@@ -588,10 +606,12 @@ function Dress(button, entry)
 	local wantLevel = live and Wanted(entry.kind) or false
 	local wantDim = live and bagLike and Opt("junkDim") or false
 	local hideGlow = live and entry.kind == "bag" and not Opt("newGlow")
-	if (wantLevel and (bagLike or entry.kind == "char")) or wantDim or hideGlow or Opt("countSize") ~= 100 then
+	local marked = bagLike and ns.ItemMarks.Needs(button)
+	if (wantLevel and (bagLike or entry.kind == "char")) or wantDim or hideGlow or Opt("countSize") ~= 100
+		or (bagLike and ns.ItemMarks.Wanted()) then
 		touched = true
 	end
-	if not (wantLevel or wantDim or entry.level or entry.dim or hideGlow or entry.hidGlow) then
+	if not (wantLevel or wantDim or entry.level or entry.dim or hideGlow or entry.hidGlow or marked) then
 		return
 	end
 	local read, link, info, bag, slot = pcall(Source, button, entry.kind)
@@ -601,6 +621,7 @@ function Dress(button, entry)
 	Level(button, entry, link, info, wantLevel)
 	if bagLike then
 		Dim(button, entry, wantDim and Junk(info))
+		Mark(button, live, info, bag, slot)
 	end
 	if entry.kind == "bag" then
 		Glow(button, entry, hideGlow, bag, slot)
@@ -843,6 +864,7 @@ end
 function Items.Apply()
 	ranks = nil
 	refused.qualityMin = nil
+	ns.ItemMarks.Apply()
 	if Opt("ilvlCharacter") then
 		ns.FollowGlobal("PaperDollItemSlotButton_Update", OnPaperDoll)
 		if Opt("ilvlFlyout") then
@@ -856,8 +878,26 @@ function Items.Apply()
 		ns.EachPart(KEY, PART, Dress, button, entry)
 	end
 	ns.EachPart(KEY, PART, InspectApplied)
-	if AllDefault() then
+	if Quiet() then
 		touched = false
+	end
+end
+
+-- Dresses a slot again, as ItemMarks.lua asks once a fight that kept a mark from being made is over.
+function Items.Redress(button)
+	local entry = buttons[button]
+	if entry then
+		ns.EachPart(KEY, PART, Dress, button, entry)
+	end
+end
+
+-- Dresses again every bag and bank slot that is shown, as ItemMarks.lua asks when an answer it kept went old. A hidden slot is dressed when its
+-- bag or the bank opens again.
+function Items.Redraw()
+	for button, entry in pairs(buttons) do
+		if (entry.kind == "bag" or entry.kind == "bank") and Shown(button) then
+			ns.EachPart(KEY, PART, Dress, button, entry)
+		end
 	end
 end
 

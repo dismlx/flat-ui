@@ -1576,7 +1576,8 @@ local function ApplyTrackerPanel(container)
 end
 
 -- The opacity of the tracker while the player is in a fight. fight is nothing when the game's own state is to be asked. The opacity the tracker had is
--- read the first time a lower one is set and put back when the fight is over or the setting goes back to 100.
+-- read the first time a lower one is set and put back when the fight is over or the setting goes back to 100. Of a tracker the Fading page holds it is
+-- the opacity that page read before its first write (ns.FadeGiven); that page leaves the tracker alone meanwhile (ns.TrackerFades).
 local function TrackerAlpha(_, fight)
 	local frame = Frame("ObjectiveTrackerFrame")
 	if not frame or type(frame.SetAlpha) ~= "function" then
@@ -1589,8 +1590,9 @@ local function TrackerAlpha(_, fight)
 	local wanted = fight and percent < 100 and percent / 100 or nil
 	if wanted ~= nil then
 		if look.alpha == nil then
+			local given = ns.FadeGiven and ns.FadeGiven(frame)
 			local ok, alpha = pcall(frame.GetAlpha, frame)
-			look.alpha = (ok and ns.Finite(alpha)) and alpha or 1
+			look.alpha = ns.Finite(given) and given or ((ok and ns.Finite(alpha)) and alpha or 1)
 		end
 		if look.sent ~= wanted then
 			frame:SetAlpha(wanted)
@@ -1600,6 +1602,11 @@ local function TrackerAlpha(_, fight)
 		frame:SetAlpha(look.alpha)
 		look.alpha, look.sent = nil, nil
 	end
+end
+
+-- True for the objective tracker while Opacity in combat holds its alpha in a fight, for the Fading page, which leaves the tracker to it then.
+function ns.TrackerFades(frame)
+	return look.sent ~= nil and frame ~= nil and frame == _G.ObjectiveTrackerFrame
 end
 
 -- The size of the heading of the tracker and of each module.
