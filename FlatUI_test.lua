@@ -67429,7 +67429,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 954 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 955 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
