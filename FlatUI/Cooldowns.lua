@@ -1452,6 +1452,20 @@ local function Layout()
 	RangeWatch()
 end
 
+-- The icons of the row after a layout, for Interrupt.lua: the class interrupt among them gets its border there.
+local function InterruptIcons()
+	if type(ns.InterruptIcons) ~= "function" then
+		return
+	end
+	local list = {}
+	for _, record in ipairs(shown) do
+		if record.spell then
+			list[#list + 1] = { frame = record.frame, spell = record.spell, top = record.top }
+		end
+	end
+	ns.InterruptIcons(list)
+end
+
 -- One layout at a time, when combat allows.
 local function QueueLayout()
 	if layoutQueued then
@@ -1465,6 +1479,7 @@ local function QueueLayout()
 		else
 			ns.Try(KEY, Layout)
 		end
+		pcall(InterruptIcons)
 	end)
 end
 

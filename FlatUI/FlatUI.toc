@@ -87,6 +87,7 @@ ItemCompare.lua
 HealthColour.lua
 CastTime.lua
 CastRank.lua
+Interrupt.lua
 LayoutSpots.lua
 LayoutText.lua
 Movers.lua

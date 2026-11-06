@@ -9887,6 +9887,11 @@ local PAGES = {
 		S("castbars.shieldColour", "colour", "ff9a9a9a", "Uninterruptible colour"),
 		S("castbars.interruptedColour", "colour", "ffd94040", "Interrupted colour", "Also shown when a cast fails."),
 		S("castbars.craftColour", "colour", "ff4d99e6", "Crafting colour"),
+		S("castbars.interrupt", "bool", true, "Colour enemy casts by your interrupt",
+			"On target, focus and nameplate cast bars with a flat fill, an enemy cast you can interrupt shows whether your class interrupt is ready. A cast that cannot be interrupted keeps its colour.",
+			{ changed = "InterruptChanged" }),
+		S("castbars.interruptReady", "colour", "ff33d959", "Interrupt ready colour", nil, { needs = "castbars.interrupt" }),
+		S("castbars.interruptCooling", "colour", "ffd9732e", "Interrupt on cooldown colour", nil, { needs = "castbars.interrupt" }),
 		"Borders",
 		S("general.borderMode", "choice", "custom", "Border colour source", nil,
 			{ choices = { { "custom", "Border colour on the Flat UI page" }, { "class", "Your class colour" }, { "faction", "Your faction colour" } } }),
@@ -10386,6 +10391,8 @@ local PAGES = {
 		S("cooldowns.readyColour", "colour", "ff4dbf59", "Ready border colour", nil, { needs = "cooldowns.borderState" }),
 		S("cooldowns.coolingColour", "colour", "ffd94040", "On cooldown border colour", nil, { needs = "cooldowns.borderState" }),
 		S("cooldowns.flash", "bool", false, "Flash when ready", nil, nil),
+		S("cooldowns.interruptGlow", "bool", true, "Glow on your interrupt",
+			"A gold border on the icon of your class interrupt while your target or focus casts something you can interrupt and the interrupt is ready."),
 		"Numbers and sweep",
 		S("cooldowns.numbersFont", "choice", "game", "Countdown number size", nil, { choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" }, { "huge", "Huge" } }, needs = "cooldowns.numbers" }),
 		S("cooldowns.sweep", "bool", true, "Cooldown sweep", nil, nil),
@@ -21684,7 +21691,7 @@ end
 -- Nor do the rows of wave 5 (0.5.7), for the same reason.
 for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.rows", "threat.barWidth", "threat.barHeight",
 	"cooldowns.addItem", "cooldowns.removeItem", "cooldowns.iconSound", "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint",
-	"cooldowns.powerColour", "pulse.enabled", "pulse.minimum", "pulse.ignore", "pulse.unignore", "pulse.size", "pulse.time", "pulse.sound" }) do
+	"cooldowns.powerColour", "pulse.enabled", "pulse.minimum", "pulse.ignore", "pulse.unignore", "pulse.size", "pulse.time", "pulse.sound", "castbars.interrupt", "castbars.interruptReady", "castbars.interruptCooling", "cooldowns.interruptGlow" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -33138,7 +33145,7 @@ do
 			check("gap icons: and Row opacity out of combat comes back when the hiding is off", g(cdHolder(W).alpha) == "0.5", g(cdHolder(W).alpha))
 		end
 		-- The rows of wave 5 (0.5.7) have no probe: the owner asked for code without new test blocks.
-		for _, path in ipairs({ "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint", "cooldowns.powerColour" }) do
+		for _, path in ipairs({ "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint", "cooldowns.powerColour", "cooldowns.interruptGlow" }) do
 			covered[path] = true
 		end
 		local missingProbe = {}
@@ -67154,10 +67161,10 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1026 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1030 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
-			and #steps[1].rows == 6 and #steps[2].rows == 20)
+			and #steps[1].rows == 6 and #steps[2].rows == 23)
 		local settings = {}
 		for _, page in ipairs(ns.PAGES) do
 			if page.key == "general" then
@@ -67468,7 +67475,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 969 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 973 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
