@@ -1,7 +1,8 @@
 local ADDON_NAME, ns = ...
 
 -- The minimap with the plate of its zone name and the tracking button beside it and the text around it (MapText.lua), the bag bar, the buff and debuff icons, the experience and reputation bars and the micro menu, and the objective
--- tracker and its quest count (QuestCount.lua), the loot window and rolls, alerts, breath and countdown timers, the queue panel, the damage meter and the zone event bars.
+-- tracker and its quest count (QuestCount.lua), the loot window and rolls, alerts, breath and countdown timers, the queue panel, the damage meter and the zone event bars,
+-- and the kinds of the game's red error messages that are hidden (ErrorFilter.lua).
 -- A frame the game may protect has nothing made on it in combat: ns.MaybeProtected asks the client each time.
 -- Each part has its own switch and puts the game's look back when it is off. The game's frame art is made
 -- transparent and left in place, and thin borders and flat fills take its place. The map keeps the shape of the
@@ -1576,7 +1577,10 @@ local function ApplyTrackerPanel(container)
 end
 
 -- The opacity of the tracker while the player is in a fight. fight is nothing when the game's own state is to be asked. The opacity the tracker had is
--- read the first time a lower one is set and put back when the fight is over or the setting goes back to 100.
+-- read the first time a lower one is set and put back when the fight is over or the setting goes back to 100. Of a tracker the Fading page holds it is
+-- the opacity that page read before its first write (ns.FadeGiven); that page leaves the tracker alone meanwhile (ns.TrackerFades). While that page fades
+-- the tracker by its row of When shown, the opacity to put back goes to it in place of the write (ns.FadeTakesBack; not an opacity of 0, which that
+-- page leaves alone), and the tracker fades on from the opacity of the fight instead of showing at full for a moment.
 local function TrackerAlpha(_, fight)
 	local frame = Frame("ObjectiveTrackerFrame")
 	if not frame or type(frame.SetAlpha) ~= "function" then
@@ -1589,17 +1593,25 @@ local function TrackerAlpha(_, fight)
 	local wanted = fight and percent < 100 and percent / 100 or nil
 	if wanted ~= nil then
 		if look.alpha == nil then
+			local given = ns.FadeGiven and ns.FadeGiven(frame)
 			local ok, alpha = pcall(frame.GetAlpha, frame)
-			look.alpha = (ok and ns.Finite(alpha)) and alpha or 1
+			look.alpha = ns.Finite(given) and given or ((ok and ns.Finite(alpha)) and alpha or 1)
 		end
 		if look.sent ~= wanted then
 			frame:SetAlpha(wanted)
 			look.sent = wanted
 		end
 	elseif look.alpha ~= nil then
-		frame:SetAlpha(look.alpha)
+		if not (ns.FadeTakesBack and ns.FadeTakesBack(frame, look.alpha)) then
+			frame:SetAlpha(look.alpha)
+		end
 		look.alpha, look.sent = nil, nil
 	end
+end
+
+-- True for the objective tracker while Opacity in combat holds its alpha in a fight, for the Fading page, which leaves the tracker to it then.
+function ns.TrackerFades(frame)
+	return look.sent ~= nil and frame ~= nil and frame == _G.ObjectiveTrackerFrame
 end
 
 -- The size of the heading of the tracker and of each module.
@@ -2140,6 +2152,10 @@ function Refresh()
 	RefreshTracker()
 	RefreshLoot()
 	RefreshAlerts()
+	-- The game's red error messages: the event is taken from its frame or given back (ErrorFilter.lua).
+	if ns.ErrorFilterRefresh ~= nil then
+		ns.ErrorFilterRefresh()
+	end
 	RefreshTimers()
 	RefreshOther()
 	-- The addon buttons follow the part switch and a change of profile (MapButtons.lua).

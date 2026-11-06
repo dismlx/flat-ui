@@ -7,14 +7,43 @@ local _, ns = ...
 -- back when the module, the row or the part goes off. A faded frame still takes clicks and shows tooltips, since alpha does not touch the mouse.
 --
 -- One frame of the addon's own runs every 0.05 s while the module is on. A row is at full opacity while the mouse is over the row's hover frame,
--- in a fight (with In combat ticked), with a target (With a target ticked), while the cursor holds something, while the spell flyout is open and in Edit Mode.
+-- in a fight (with In combat ticked), with a target (With a target ticked; not the Target frame row, see When shown), while the cursor holds something, while
+-- the spell flyout is open and in Edit Mode.
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
+-- An alpha something else gives a frame after a write is taken as the frame's own, the one put back, and the frame eases again from it.
 -- The frames are the game's own: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
 -- PetActionBar, MicroMenuContainer, BagsBar, PlayerFrame.PlayerFrameContainer and PlayerFrame.PlayerFrameContent (parentKeys of PlayerFrame with no global name: Blizzard_UnitFrame/Mainline/PlayerFrame.xml:23 and :68; the pet frame, totems and cast bar stay as they are),
 -- PetFrame, and under MinimapCluster the Tracking and IndicatorFrame frames, GameTimeFrame, TimeManagerClockButton and AddonCompartmentFrame
 -- (Blizzard_Minimap/Mainline/Minimap.xml:3, 25 and 46, GameTime.xml:3, Camelot/AddonCompartment.xml:3, Blizzard_TimeManager/Mainline/Blizzard_TimeManager.xml:178).
 -- ExtraActionBarFrame, the swing timers and the resource display are left out because the game or Edit Mode sets their alpha.
+--
+-- When shown: the target and focus frames, the buffs and the objective tracker each have a rule. Always (the default) leaves the frame alone. Only in
+-- combat, Only in a group, Only in an instance and Only when not mounted give it full opacity while that holds; at other times it fades as the rows
+-- above do, under the mouse, the Stay visible rows and Edit Mode included, With a target aside for the target frame: the game shows that frame only
+-- while there is a target (Blizzard_UnitFrame/Shared/TargetFrame.lua:1-15, Mainline/TargetFrame.lua:130-136), so With a target would hold it at full
+-- whenever it shows and its rule would never fade it. The frames: TargetFrame and FocusFrame, secure unit buttons of
+-- TargetFrameTemplate (Blizzard_UnitFrame/Mainline/TargetFrame.xml:52, 549 and 572) whose cast bar and target of target are their children and fade
+-- with them (Mainline/TargetFrame.lua:711-718 and 738-740), as do the combo points on Forever (Camelot/ComboFrame.lua:16); BuffFrame, the buffs and
+-- weapon enchants (Blizzard_BuffFrame/BuffFrame.xml:6; the debuffs are DebuffFrame and stay); and ObjectiveTrackerFrame
+-- (Blizzard_ObjectiveTracker/Blizzard_ObjectiveTracker.xml:3). The game sets the alpha of none of the four but the tracker: of the target frame's
+-- portrait and icons (Mainline/TargetFrame.lua:156, 160 and 624) and of the buff buttons (BuffFrame.lua:1268 and 1357) only. The tracker is a managed
+-- frame of the right column while Edit Mode has it in its default place (Blizzard_ObjectiveTrackerContainer.lua:34-37,
+-- Blizzard_ManagedFrameSystem/Shared/ManagedFrameSystem.lua:57-77), and each time the interface is shown again, after Alt+Z or a cinematic, the game
+-- gives it full opacity (ManagedFrameSystem.lua:79-87, 130-134 and 160; Blizzard_UIParent/UIParent.lua:5-7); Ease takes that up and fades it again.
+-- Edit Mode's Opacity sets the alpha of an aura frame only where the layout has that setting, which on Forever is the external defensives frame alone
+-- (Blizzard_EditMode/Shared/EditModeSystemTemplates.lua:2141-2144, 2158-2175; Mainline/EditModePresetLayouts.lua:434-479), and the tracker's Opacity
+-- is the alpha of its background (Blizzard_ObjectiveTrackerManager.lua:86-91, Blizzard_ObjectiveTrackerContainer.lua:187-189). As on the pet frame,
+-- the alpha is written in a fight too, since SetAlpha is not protected; nothing is shown, hidden or moved. While the tracker's Opacity in combat
+-- (Hud.lua) holds the tracker in a fight, Fading forgets the tracker with no write (ns.TrackerFades); that row reads the alpha the tracker had before
+-- Fading from ns.FadeGiven, and after the fight gives the tracker back with it (ns.FadeTakesBack): the ease goes on from the alpha of the fight, so
+-- the tracker does not show at full for a moment. The rules: in combat as for In combat below; in a group, IsInGroup, as the game's own group headers
+-- ask (Blizzard_RestrictedAddOnEnvironment/SecureGroupHeaders.lua:268); in an instance, IsInInstance (InstanceDocumentation.lua:170-178); mounted,
+-- IsMounted (PlayerScriptDocumentation.lua:1399-1406) or a druid's travel, aquatic or flight form, by GetShapeshiftFormID as the game asks it
+-- (Blizzard_SharedXMLBase/ModelSceneUtil.lua:23) and the form IDs 3, 4 and 27 (Blizzard_FrameXMLBase/Constants.lua:329-333). None of them marks a
+-- return secret; a withheld answer counts as the rule holding, so the frame stays shown, and a call that fails as the rule not holding. The
+-- skyriding, flying and Mythic+ rules are left out, as EnhanceQoL leaves them out on Forever.
+-- These rules follow the frame visibility rules of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
 
 local KEY = "fade"
 local PART = "fade"
@@ -23,7 +52,8 @@ local EVERY = 0.05
 local HIDDEN = 0.001
 
 -- row: the setting that switches it. frames: names in the game, a dotted name reaching down from a global. hover: the frame whose rectangle
--- counts as under the mouse (the frames themselves when it is left out).
+-- counts as under the mouse (the frames themselves when it is left out). rule: a row of When shown, whose setting is a rule (RULES) and not a switch.
+-- targeted: frames the game shows only while there is a target, which With a target does not hold at full.
 local ENTRIES = {
 	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" } },
 	{ bar = true, row = "bar2", label = "Action bar 2", frames = { "MultiBarBottomLeft" } },
@@ -41,7 +71,15 @@ local ENTRIES = {
 	{ row = "petFrame", label = "Pet frame", frames = { "PetFrame" } },
 	{ row = "minimapButtons", label = "Minimap buttons", hover = "MinimapCluster",
 		frames = { "MinimapCluster.Tracking", "MinimapCluster.IndicatorFrame", "GameTimeFrame", "TimeManagerClockButton", "AddonCompartmentFrame" } },
+	{ rule = true, targeted = true, row = "targetFrame", label = "Target frame", frames = { "TargetFrame" } },
+	{ rule = true, row = "focusFrame", label = "Focus frame", frames = { "FocusFrame" } },
+	{ rule = true, row = "buffs", label = "Buffs", frames = { "BuffFrame" } },
+	-- The tracker's own frame runs down to the foot of the right column whatever it lists (Blizzard_ObjectiveTrackerContainer.lua:207-228,
+	-- UIParentPanelManager.lua:822-829); its NineSlice runs from its top to under the last module (Blizzard_ObjectiveTrackerContainer.lua:117-119).
+	{ rule = true, row = "objectiveTracker", label = "Objective tracker", frames = { "ObjectiveTrackerFrame" }, hover = "ObjectiveTrackerFrame.NineSlice" },
 }
+-- The forms of a druid that count as mounted, by GetShapeshiftFormID: travel, aquatic and flight form (Blizzard_FrameXMLBase/Constants.lua:329-333).
+local TRAVEL_FORMS = { [3] = true, [4] = true, [27] = true }
 
 -- bar: a game action bar, or a frame its layout hangs from (micro menu, bag bar). While Leave the game's action bars alone is on the row does nothing, and a bar this module faded is given its alpha back.
 -- orig: the alpha a frame had before the first write. sent: the last alpha written. value: where the ease is. idle: seconds a row has had nothing to keep it
@@ -82,12 +120,13 @@ local function Resolve(name)
 	return nil
 end
 
+-- The alpha of a frame, and true when the client gave a real number; 1 and false when it did not.
 local function Alpha(frame)
 	local ok, alpha = pcall(frame.GetAlpha, frame)
 	if ok and ns.Finite(alpha) then
-		return alpha
+		return alpha, true
 	end
-	return 1
+	return 1, false
 end
 
 -- A withheld answer counts as the frame being under the mouse, so that it stays shown.
@@ -132,9 +171,73 @@ local function HasTarget()
 	return ok and (ns.IsSecret(exists) or exists == true)
 end
 
--- What keeps every row at full opacity, whatever the mouse does.
+-- What keeps every row at full opacity, whatever the mouse does. With a target is asked apart (Step), as it does not hold a targeted row.
 local function Wanted()
-	return (Opt("combat") and Fighting()) or (Opt("target") and HasTarget()) or Holding() or FlyoutOpen() or ns.EditModeOpen()
+	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen()
+end
+
+-- In a party or a raid.
+local function Grouped()
+	if type(IsInGroup) ~= "function" then
+		return false
+	end
+	local ok, grouped = pcall(IsInGroup)
+	return ok and (ns.IsSecret(grouped) or grouped == true)
+end
+
+-- In a dungeon, a raid, a battleground or an arena.
+local function Inside()
+	if type(IsInInstance) ~= "function" then
+		return false
+	end
+	local ok, inside = pcall(IsInInstance)
+	return ok and (ns.IsSecret(inside) or inside == true)
+end
+
+-- Neither on a mount nor in a druid's travel form. A withheld answer counts as not mounted.
+local function Unmounted()
+	if type(IsMounted) == "function" then
+		local ok, mounted = pcall(IsMounted)
+		if ok and not ns.IsSecret(mounted) and mounted == true then
+			return false
+		end
+	end
+	if type(GetShapeshiftFormID) == "function" then
+		local ok, form = pcall(GetShapeshiftFormID)
+		if ok and ns.Finite(form) and TRAVEL_FORMS[form] then
+			return false
+		end
+	end
+	return true
+end
+
+-- The rules of When shown, each true while its frame is to be at full opacity. Always is not one: that row leaves its frame alone.
+local RULES = { combat = Fighting, group = Grouped, instance = Inside, unmounted = Unmounted }
+-- The answers of one step, so a rule is asked at most once a step.
+local asked = {}
+
+local function Holds(rule)
+	local answer = asked[rule]
+	if answer == nil then
+		answer = RULES[rule]() == true
+		asked[rule] = answer
+	end
+	return answer
+end
+
+-- True for a row that fades its frames: a switch that is on, or a rule of When shown other than Always.
+local function Active(entry)
+	local value = Opt(entry.row)
+	if entry.rule then
+		return RULES[value] ~= nil
+	end
+	return value == true
+end
+
+-- True for a frame another part of Flat UI holds the alpha of now: a bar the action bar block fades, or the objective tracker while its Opacity in
+-- combat has it in a fight.
+local function Elsewhere(frame, name)
+	return (ns.BarBlockFades and ns.BarBlockFades(name)) or (ns.TrackerFades and ns.TrackerFades(frame)) or false
 end
 
 -- The write. It raises when the game refuses, which ns.EachPart counts for the part.
@@ -165,15 +268,31 @@ local function ReleaseAll()
 	end
 end
 
--- The alpha a frame had before this module wrote on it, for the action bar block, which takes over the bars it holds.
+-- The alpha a frame had before this module wrote on it, for the action bar block, which takes over the bars it holds, and for the minimap buttons
+-- and the tracker's Opacity in combat (Hud.lua), which take a frame over for a time.
 function ns.FadeGiven(frame)
 	return state.orig[frame]
 end
 
+-- The tracker's Opacity in combat (Hud.lua) gives the tracker back here when it lets it go (the fight is over, or that row or its page changed), while
+-- the tracker's row of When shown fades it. alpha, the one it had before Fading, is kept to be put back, and the ease goes on from the alpha the tracker
+-- has now, so it does not go to full and fade again. False when this module does not take the tracker, or alpha is one something else held hidden,
+-- which this module leaves alone (Ease): that row then puts alpha back itself.
+function ns.FadeTakesBack(frame, alpha)
+	if frame == nil or not ns.Finite(alpha) or alpha <= HIDDEN or not ns.Enabled(KEY) or ns.PartStopped(KEY, PART)
+		or RULES[Opt("objectiveTracker")] == nil or frame ~= Resolve("ObjectiveTrackerFrame") then
+		return false
+	end
+	local current = Alpha(frame)
+	state.orig[frame], state.value[frame], state.sent[frame] = alpha, current, current
+	return true
+end
+
 -- One frame toward the wanted alpha. A target of nil holds the frame where it is.
 local function Ease(frame, target, step, name)
-	-- A button the minimap page switches off stays off whatever Fading says.
-	if ns.MapButtonOff and ns.MapButtonOff(frame) then
+	-- A button the minimap page switches off stays off whatever Fading says, and the objective tracker is left to its Opacity in combat while that
+	-- holds it in a fight: that has written its own alpha, so nothing is put back.
+	if (ns.MapButtonOff and ns.MapButtonOff(frame)) or (ns.TrackerFades and ns.TrackerFades(frame)) then
 		state.orig[frame], state.sent[frame], state.value[frame] = nil, nil, nil
 		return
 	end
@@ -181,16 +300,20 @@ local function Ease(frame, target, step, name)
 		Release(frame)
 		return
 	end
-	local current = Alpha(frame)
+	local current, known = Alpha(frame)
 	if state.orig[frame] == nil then
 		if current <= HIDDEN then
 			return
 		end
 		state.orig[frame], state.value[frame] = current, current
-	elseif current <= HIDDEN and (state.sent[frame] == nil or state.sent[frame] > HIDDEN) then
-		-- Something else hides it now.
+	elseif current <= HIDDEN and (state.sent[frame] == nil or state.sent[frame] >= 0.01) then
+		-- Something else hides it now. The game keeps an alpha in steps of 1/255, so a write of this module's own below 0.01 can read back as 0.
 		state.orig[frame], state.sent[frame], state.value[frame] = nil, nil, nil
 		return
+	elseif known and state.sent[frame] ~= nil and math.abs(current - state.sent[frame]) >= 0.01 then
+		-- Something else has given it another alpha since the last write, as the game gives the tracker full opacity when the interface is shown
+		-- again: that is its alpha now, the one put back, and the ease starts from it.
+		state.orig[frame], state.value[frame], state.sent[frame] = current, current, nil
 	end
 	local value = state.value[frame]
 	if target == nil then
@@ -212,7 +335,10 @@ local function Step(dt)
 	end
 	local floor, delay, seconds = Opt("alpha") / 100, Opt("delay") / 1000, math.max(Opt("time") / 1000, 0.05)
 	local step = dt / seconds
-	local always = Wanted()
+	local always, targeted = Wanted(), Opt("target") and HasTarget()
+	for rule in pairs(asked) do
+		asked[rule] = nil
+	end
 	for _, entry in ipairs(ENTRIES) do
 		local frames = entry.cache
 		if not frames and Left(entry) then
@@ -235,13 +361,13 @@ local function Step(dt)
 				entry.cache = frames
 			end
 		end
-		if Left(entry) or not Opt(entry.row) then
+		if Left(entry) or not Active(entry) then
 			for _, held in ipairs(frames) do
 				Release(held[1])
 			end
 			state.idle[entry.row] = nil
 		elseif #frames > 0 then
-			local full = always
+			local full = always or (targeted and not entry.targeted) or (entry.rule == true and Holds(Opt(entry.row)))
 			if not full then
 				local hover = entry.hover and Resolve(entry.hover)
 				if hover then
@@ -265,17 +391,19 @@ local function Step(dt)
 	end
 end
 
--- The fight starts: every row with In combat ticked is at full opacity now, not after the ease. With In combat off a fight raises nothing.
+-- The fight starts: every row with In combat ticked, and every row of When shown at Only in combat, is at full opacity now, not after the ease.
+-- With In combat off a fight raises nothing else.
 local function FightStarts()
-	if not Opt("combat") or ns.PartStopped(KEY, PART) then
+	if ns.PartStopped(KEY, PART) then
 		return
 	end
+	local combat = Opt("combat") == true
 	for _, entry in ipairs(ENTRIES) do
-		if Opt(entry.row) and not Left(entry) then
+		if Active(entry) and not Left(entry) and (combat or (entry.rule and Opt(entry.row) == "combat")) then
 			state.idle[entry.row] = 0
 			for _, name in ipairs(entry.frames) do
 				local frame = Resolve(name)
-				if frame and state.orig[frame] ~= nil and state.value[frame] < 1 and not (ns.BarBlockFades and ns.BarBlockFades(name)) then
+				if frame and state.orig[frame] ~= nil and state.value[frame] < 1 and not Elsewhere(frame, name) then
 					ns.EachPart(KEY, PART, Put, frame, 1)
 				end
 			end
@@ -328,7 +456,7 @@ local function Status()
 	local lines = { ("Fading: %d %s, %d faded"):format(held, held == 1 and "frame" or "frames", faded) }
 	local missing = {}
 	for _, entry in ipairs(ENTRIES) do
-		if Opt(entry.row) and not Left(entry) then
+		if Active(entry) and not Left(entry) then
 			local any = false
 			for _, name in ipairs(entry.frames) do
 				any = any or Resolve(name) ~= nil

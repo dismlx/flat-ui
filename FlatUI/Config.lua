@@ -55,6 +55,9 @@ local KEPT = "Not applied while Leave the game's action bars alone is on."
 local KEPT_XP = "On the game's bar, not applied while Leave the game's action bars alone is on."
 -- Where a line of text around the minimap goes (MapText.lua).
 local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the map" } }
+-- When a frame of When shown on the Fading page is at full opacity; at other times it fades (Fade.lua has the rules).
+local FADE_WHEN = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" },
+	{ "unmounted", "Only when not mounted" } }
 
 ns.PAGES = {
 	{
@@ -93,6 +96,17 @@ ns.PAGES = {
 		{ section = "World" },
 		{ key = "questSparkle", kind = "bool", default = true, label = "Quest item sparkle", changed = "SparkleChanged",
 			tip = "Quest items in the world sparkle. Sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start." },
+		-- The game holds this one (CameraZoom.lua): it is ticked while the game's camera distance is at Flat UI's top, in every profile.
+		{ key = "cameraZoom", kind = "bool", default = false, label = "Maximum camera distance", live = true, get = "CameraZoomGet", set = "CameraZoomSet",
+			tip = "The camera zooms out to 2.6, past the 2.0 that the game's Max Camera Distance allows. A game setting, the same in every profile. Turned off, the distance you had is back." },
+		-- A ring of Flat UI's own around the mouse pointer (CursorRing.lua).
+		{ section = "Cursor" },
+		{ key = "cursorRing", kind = "choice", default = "off", label = "Cursor ring", changed = "CursorRingChanged",
+			choices = { { "always", "Always" }, { "combat", "In combat only" }, { "off", "Off" } }, tip = "A ring around the mouse pointer, so you find it at a glance. It takes no clicks." },
+		{ key = "cursorRingSize", kind = "number", default = 48, min = 16, max = 160, step = 4, label = "Cursor ring size", needs = "cursorRing", needsIn = { "always", "combat" },
+			changed = "CursorRingChanged" },
+		{ key = "cursorRingColour", kind = "colour", default = "ffffffff", label = "Cursor ring colour", needs = "cursorRing", needsIn = { "always", "combat" },
+			changed = "CursorRingChanged" },
 		-- The look of the options window: held per account in FlatUIDB.panel beside the window position, outside every profile (PanelLook.lua has the functions).
 		{ section = "Options window" },
 		{ page = "panel", key = "accent", kind = "choice", default = "indigo", label = "Accent colour", live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",
@@ -1008,6 +1022,9 @@ ns.PAGES = {
 		{ section = "Bags" },
 		{ key = "newGlow", kind = "bool", default = true, label = "New item glow" },
 		{ key = "junkDim", kind = "bool", default = false, label = "Dim grey items", tip = "Darkens poor items that have a vendor price." },
+		{ key = "boeMark", kind = "bool", default = true, label = "Mark bind on equip items", tip = "BoE at the top left of an item that binds when equipped and is not bound yet." },
+		{ key = "unusableTint", kind = "bool", default = true, label = "Tint items you cannot use", tip = "Red over an item whose tooltip has a requirement in red: class, race, level, skill, reputation, armour or weapon type, or a recipe you already know." },
+		{ key = "petFood", kind = "bool", default = true, label = "Mark food your pet eats", tip = "For hunters: the Feed Pet icon at the bottom left of food your pet eats, while it is out." },
 		{ key = "combinedBags", kind = "bool", default = false, cvar = "combinedBags", label = "Combine bags" },
 		{ section = "Character window" },
 		{ key = "durability", kind = "bool", default = true, label = "Show durability",
@@ -1276,6 +1293,7 @@ ns.PAGES = {
 		{ key = "pvpIcon", kind = "bool", default = true, label = "PvP icon" },
 		{ key = "raidMarker", kind = "bool", default = true, label = "Raid marker on target, focus and boss frames" },
 		{ key = "deadText", kind = "bool", default = true, label = "Dead text" },
+		{ key = "hitNumbers", kind = "bool", default = true, label = "Hit numbers on player and pet portraits", tip = "The damage and healing numbers that flash over your portrait and your pet's." },
 		{ section = "Totems" },
 		{ key = "totemTimer", kind = "bool", default = true, label = "Totem time left" },
 		{ key = "totemSwipe", kind = "bool", default = true, label = "Totem cooldown swipe" },
@@ -1420,6 +1438,24 @@ ns.PAGES = {
 		{ key = "lootQualityText", kind = "bool", default = true, label = "Quality word on loot", needs = "lootWindow" },
 		{ section = "Alerts" },
 		{ key = "alerts", kind = "bool", default = true, label = "Loot, money and honour alerts", tip = "Flat background with a thin border." },
+		-- ErrorFilter.lua: the game's red error messages in the middle of the screen, hidden by kind. Off by default, since it takes away what the game
+		-- tells you; on, each kind has the choice of a player levelling on Forever.
+		{ section = "Error messages" },
+		{ key = "errors", kind = "bool", default = false, label = "Hide error messages",
+			tip = "Only the kinds below that are on, with their sound and voice. Other red errors and the yellow quest messages show as usual, even while a macro or addon turns the game's error text off with UIErrorsFrame:UnregisterEvent." },
+		{ key = "errorMana", kind = "bool", default = true, label = "Not enough mana", needs = "errors" },
+		{ key = "errorPower", kind = "bool", default = true, label = "Not enough rage or energy", needs = "errors",
+			tip = "Also not enough focus for a hunter's pet, and no combo points for a finishing move." },
+		{ key = "errorRange", kind = "bool", default = true, label = "Out of range", needs = "errors",
+			tip = "Also too far away to attack, too close for a ranged attack, and your pet out of range." },
+		{ key = "errorFacing", kind = "bool", default = true, label = "Facing the wrong way", needs = "errors",
+			tip = "Also the target not in front of you or not behind it, and your pet not behind its target." },
+		{ key = "errorReady", kind = "bool", default = true, label = "Not ready yet", needs = "errors",
+			tip = "Spells, abilities, items and potions still cooling down." },
+		{ key = "errorTarget", kind = "bool", default = true, label = "No target or invalid target", needs = "errors",
+			tip = "Also nothing to attack, and a dead target." },
+		{ key = "errorMoving", kind = "bool", default = true, label = "Not while moving", needs = "errors",
+			tip = "A cast or an action that needs you to stand still." },
 		{ section = "Timers" },
 		{ key = "mirror", kind = "bool", default = true, label = "Breath and fatigue timers", tip = "Thin border and flat fill in the cast colours." },
 		{ key = "countdown", kind = "bool", default = true, label = "Countdown timers", tip = "Thin border and flat fill on pull and start timers." },
@@ -1474,6 +1510,11 @@ ns.PAGES = {
 		{ key = "history", kind = "number", default = 128, min = 128, max = 2048, step = 64, unit = " lines", label = "Lines kept per window" },
 		{ key = "fade", kind = "bool", default = true, label = "Fade old messages" },
 		{ key = "fadeAfter", kind = "number", default = 120, min = 10, max = 600, step = 10, unit = " s", label = "Fade after", needs = "fade" },
+		{ section = "Links" },
+		{ key = "webLinks", kind = "bool", default = true, label = "Web addresses as links",
+			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy." },
+		{ key = "linkTips", kind = "bool", default = true, label = "Tooltips of chat links",
+			tip = "While the mouse is over an item, spell or achievement link in a chat window, its tooltip shows. Not in a fight." },
 	},
 	{
 		key = "chatTips", label = "Tooltips", parent = "chat", owner = "chat",
@@ -1494,6 +1535,7 @@ ns.PAGES = {
 		{ key = "unitBorder", kind = "choice", default = "plain", label = "Unit tooltip border",
 			choices = { { "plain", "Plain" }, { "reaction", "Reaction colour" }, { "class", "Class colour for players" } } },
 		{ key = "nameClass", kind = "bool", default = false, label = "Class colour on player names" },
+		{ key = "classLine", kind = "bool", default = true, label = "Class colour on the class line", tip = "The line with the level, race and class of a player." },
 		{ section = "Size and text" },
 		{ key = "tipScale", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Tooltip size" },
 		{ key = "tipTitleSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Title size" },
@@ -1513,7 +1555,16 @@ ns.PAGES = {
 			choices = { { "none", "No key" }, { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } },
 		{ section = "Extra lines" },
 		{ key = "ids", kind = "bool", default = false, label = "Item and spell IDs" },
+		{ key = "idsWhen", kind = "choice", default = "always", label = "Show IDs", needs = "ids",
+			tip = "The IDs show while the key is held: at once over bags, action bars and the Character window, and over a link once you point at it again.",
+			choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } } },
+		{ key = "enchantId", kind = "bool", default = true, label = "Temporary enchant ID", tip = "On a weapon you wear: the ID of its poison, oil, stone or imbue.", needs = "ids" },
 		{ key = "count", kind = "bool", default = false, label = "Item count in bags and bank" },
+		{ key = "icons", kind = "bool", default = true, label = "Item and spell icons", tip = "The icon before the name of an item or spell." },
+		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you." },
+		{ section = "Item comparison" },
+		{ key = "compareShift", kind = "bool", default = true, label = "Compare items only while holding Shift",
+			tip = "The items you wear show beside the tooltip of an item only while you hold Shift. Sets a game setting that the game's options do not show. Turned off, the game's own value is back." },
 	},
 	-- Errands.lua and the Errands*.lua files: chores done when the game asks for them. Off by default; on, each row has the choice of a player
 	-- levelling on Forever.
@@ -1766,6 +1817,15 @@ ns.PAGES = {
 		{ key = "playerFrame", kind = "bool", default = false, label = "Player frame" },
 		{ key = "petFrame", kind = "bool", default = false, label = "Pet frame" },
 		{ key = "minimapButtons", kind = "bool", default = false, label = "Minimap buttons", tip = "Shown while the mouse is over the minimap." },
+		{ section = "When shown" },
+		{ key = "targetFrame", kind = "choice", default = "always", label = "Target frame",
+			tip = "At other times it fades like the frames above, with its cast bar, combo points and target of target.", choices = FADE_WHEN },
+		{ key = "focusFrame", kind = "choice", default = "always", label = "Focus frame",
+			tip = "At other times it fades like the frames above, with its cast bar and target of target.", choices = FADE_WHEN },
+		{ key = "buffs", kind = "choice", default = "always", label = "Buffs",
+			tip = "Your buffs and weapon enchants, not your debuffs. At other times they fade like the frames above.", choices = FADE_WHEN },
+		{ key = "objectiveTracker", kind = "choice", default = "always", label = "Objective tracker",
+			tip = "At other times it fades like the frames above. In a fight, Opacity in combat of the tracker comes first while it is under 100%.", choices = FADE_WHEN },
 		{ section = "Fade" },
 		{ key = "alpha", kind = "number", default = 25, min = 0, max = 90, step = 5, unit = "%", label = "Faded opacity", tip = "Faded buttons still work." },
 		{ key = "delay", kind = "number", default = 500, min = 0, max = 3000, step = 100, unit = " ms", label = "Wait before fading" },

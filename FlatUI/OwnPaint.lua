@@ -2,8 +2,9 @@ local _, ns = ...
 
 -- The paint of Flat UI's own action buttons (design 3.4, 3.6, 3.7, 6.3, research/own-buttons/design.md). OwnBars.lua makes the buttons; this file works out
 -- what each one shows from the slot it holds and draws it: icon, count, macro name, hotkey, cooldown, charges, loss of control, usable and range colours,
--- checked, equipped, proc, empty-slot opacity, the pressed look from a key, the tooltip and the repaint after a click. The look modules colour through
--- painters (ns.OwnPainter) and take proc changes through ns.OnOwnProc; nothing here hooks a function of the game.
+-- checked, equipped, proc, empty-slot opacity, the pressed look from a key, the tooltip (set again when a modifier key goes down or up) and the repaint
+-- after a click. The look modules colour through painters (ns.OwnPainter) and take proc changes through ns.OnOwnProc; nothing here hooks a function of
+-- the game.
 -- Calls on a button are plain ones (textures, text, alpha, SetChecked, Cooldown calls), so a pass in a fight touches nothing protected. Flat UI writes no
 -- field on a button: every table here is keyed by the button. The game's twins and OverrideActionBar are only read.
 -- Never called on a button, a twin or a game table: Update, UpdateAction, UpdateFlyout, SetShowGrid, RegisterActionUIButton, ShowAlert and
@@ -22,7 +23,7 @@ local EVENTS = { "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_UPDATE_STATE", "ACTIONBAR_
 	"SPELL_UPDATE_ICON", "ACTION_USABLE_CHANGED", "ACTION_RANGE_CHECK_UPDATE", "PLAYER_TARGET_CHANGED", "UPDATE_BINDINGS", "GAME_PAD_ACTIVE_CHANGED",
 	"UPDATE_SHAPESHIFT_FORM", "PLAYER_MOUNT_DISPLAY_CHANGED", "UPDATE_INVENTORY_ALERTS", "LOSS_OF_CONTROL_ADDED", "LOSS_OF_CONTROL_UPDATE",
 	"START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL", "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW",
-	"SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", "ACTIONBAR_SHOWGRID", "ACTIONBAR_HIDEGRID" }
+	"SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", "ACTIONBAR_SHOWGRID", "ACTIONBAR_HIDEGRID", "MODIFIER_STATE_CHANGED" }
 -- The steps one event repaints. A slot change repaints every step.
 local SETS = {
 	state = { checked = true },
@@ -653,6 +654,23 @@ function H.UNIT_INVENTORY_CHANGED(unit)
 end
 function H.UPDATE_SHAPESHIFT_FORM() All() end
 function H.PLAYER_MOUNT_DISPLAY_CHANGED() All() end
+
+-- A modifier key went down or up: the tooltip of the Flat UI button that owns it is set again, through the same calls as OnEnter. The game's buttons
+-- set theirs again every 0.2 s (UpdateTooltip, ActionButton.lua:1114-1130, GameTooltip.lua:451-463); a Flat UI button has no UpdateTooltip, so
+-- without this a line that waits for a key (Show IDs of ChatTips.lua, the comparison of an item, a macro's [mod] choice) would not follow the key.
+-- A hidden tooltip has no owner and is left alone.
+function H.MODIFIER_STATE_CHANGED()
+	local tip = GameTooltip
+	if tip == nil then
+		return
+	end
+	for _, button in ipairs(P.list) do
+		if Owns(tip, button) then
+			ShowTip(button)
+			return
+		end
+	end
+end
 
 function H.ACTION_USABLE_CHANGED(changes)
 	if type(changes) ~= "table" then

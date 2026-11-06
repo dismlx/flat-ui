@@ -5246,6 +5246,10 @@ local function newWorld(opts)
 		-- ContainerFrameItemButtonMixin:GetBagID (Mainline/ContainerFrame.lua:1845-1847 of 70790).
 		sr.slotId, sr.bagButton = index, true
 		sr.GetBagID = function() return raw(bag).bagID or 0 end
+		-- ContainerFrameMixin:AcquireNewItemButton (Mainline/ContainerFrame.lua:1046-1056 of 70790): the bag keeps its slots in the list Items.
+		local br = raw(bag)
+		br.Items = br.Items or {}
+		br.Items[#br.Items + 1] = slot
 		W.group = was
 		W.seal()
 		return slot
@@ -9869,6 +9873,12 @@ local PAGES = {
 		S("general.scaleSmall", "number", 60, "Small scale", "Used instead of Custom scale.", { min = 35, max = 64, step = 1, unit = "%", needs = "general.scaleBelow" }),
 		"World",
 		S("general.questSparkle", "bool", true, "Quest item sparkle", "Quest items in the world sparkle. Sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start."),
+		S("general.cameraZoom", "bool", false, "Maximum camera distance", "The camera zooms out to 2.6, past the 2.0 that the game's Max Camera Distance allows. A game setting, the same in every profile. Turned off, the distance you had is back.", { live = true }),
+		"Cursor",
+		S("general.cursorRing", "choice", "off", "Cursor ring", "A ring around the mouse pointer, so you find it at a glance. It takes no clicks.",
+			{ choices = { { "always", "Always" }, { "combat", "In combat only" }, { "off", "Off" } } }),
+		S("general.cursorRingSize", "number", 48, "Cursor ring size", nil, { min = 16, max = 160, step = 4, unit = "", needs = "general.cursorRing", needsIn = { "always", "combat" } }),
+		S("general.cursorRingColour", "colour", "ffffffff", "Cursor ring colour", nil, { needs = "general.cursorRing", needsIn = { "always", "combat" } }),
 	} },
 	{ key = "generalColours", label = "Colours", parent = "general", owner = "general", rows = {
 		"Cast colours",
@@ -10585,6 +10595,9 @@ local PAGES = {
 		"Bags",
 		S("windows.newGlow", "bool", true, "New item glow"),
 		S("windows.junkDim", "bool", false, "Dim grey items", "Darkens poor items that have a vendor price."),
+		S("windows.boeMark", "bool", true, "Mark bind on equip items", "BoE at the top left of an item that binds when equipped and is not bound yet."),
+		S("windows.unusableTint", "bool", true, "Tint items you cannot use", "Red over an item whose tooltip has a requirement in red: class, race, level, skill, reputation, armour or weapon type, or a recipe you already know."),
+		S("windows.petFood", "bool", true, "Mark food your pet eats", "For hunters: the Feed Pet icon at the bottom left of food your pet eats, while it is out."),
 		S("windows.combinedBags", "bool", false, "Combine bags"),
 		"Character window",
 		S("windows.durability", "bool", true, "Show durability", "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below."),
@@ -10817,6 +10830,7 @@ local PAGES = {
 		S("unitframes.pvpIcon", "bool", true, "PvP icon"),
 		S("unitframes.raidMarker", "bool", true, "Raid marker on target, focus and boss frames"),
 		S("unitframes.deadText", "bool", true, "Dead text"),
+		S("unitframes.hitNumbers", "bool", true, "Hit numbers on player and pet portraits", "The damage and healing numbers that flash over your portrait and your pet's."),
 		"Totems",
 		S("unitframes.totemTimer", "bool", true, "Totem time left"),
 		S("unitframes.totemSwipe", "bool", true, "Totem cooldown swipe"),
@@ -10930,6 +10944,15 @@ local PAGES = {
 		S("hud.lootQualityText", "bool", true, "Quality word on loot", nil, { needs = "hud.lootWindow" }),
 		"Alerts",
 		S("hud.alerts", "bool", true, "Loot, money and honour alerts", "Flat background with a thin border."),
+		"Error messages",
+		S("hud.errors", "bool", false, "Hide error messages", "Only the kinds below that are on, with their sound and voice. Other red errors and the yellow quest messages show as usual, even while a macro or addon turns the game's error text off with UIErrorsFrame:UnregisterEvent."),
+		S("hud.errorMana", "bool", true, "Not enough mana", nil, { needs = "hud.errors" }),
+		S("hud.errorPower", "bool", true, "Not enough rage or energy", "Also not enough focus for a hunter's pet, and no combo points for a finishing move.", { needs = "hud.errors" }),
+		S("hud.errorRange", "bool", true, "Out of range", "Also too far away to attack, too close for a ranged attack, and your pet out of range.", { needs = "hud.errors" }),
+		S("hud.errorFacing", "bool", true, "Facing the wrong way", "Also the target not in front of you or not behind it, and your pet not behind its target.", { needs = "hud.errors" }),
+		S("hud.errorReady", "bool", true, "Not ready yet", "Spells, abilities, items and potions still cooling down.", { needs = "hud.errors" }),
+		S("hud.errorTarget", "bool", true, "No target or invalid target", "Also nothing to attack, and a dead target.", { needs = "hud.errors" }),
+		S("hud.errorMoving", "bool", true, "Not while moving", "A cast or an action that needs you to stand still.", { needs = "hud.errors" }),
 		"Timers",
 		S("hud.mirror", "bool", true, "Breath and fatigue timers", "Thin border and flat fill in the cast colours."),
 		S("hud.countdown", "bool", true, "Countdown timers", "Thin border and flat fill on pull and start timers."),
@@ -10973,6 +10996,9 @@ local PAGES = {
 		S("chat.history", "number", 128, "Lines kept per window", nil, { min = 128, max = 2048, step = 64, unit = " lines" }),
 		S("chat.fade", "bool", true, "Fade old messages"),
 		S("chat.fadeAfter", "number", 120, "Fade after", nil, { min = 10, max = 600, step = 10, unit = " s", needs = "chat.fade" }),
+		"Links",
+		S("chat.webLinks", "bool", true, "Web addresses as links", "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy."),
+		S("chat.linkTips", "bool", true, "Tooltips of chat links", "While the mouse is over an item, spell or achievement link in a chat window, its tooltip shows. Not in a fight."),
 	} },
 	{ key = "chatTips", label = "Tooltips", parent = "chat", owner = "chat", rows = {
 		"Tooltips",
@@ -10991,6 +11017,7 @@ local PAGES = {
 		"Unit colours",
 		S("chat.unitBorder", "choice", "plain", "Unit tooltip border", nil, { choices = { { "plain", "Plain" }, { "reaction", "Reaction colour" }, { "class", "Class colour for players" } } }),
 		S("chat.nameClass", "bool", false, "Class colour on player names"),
+		S("chat.classLine", "bool", true, "Class colour on the class line", "The line with the level, race and class of a player."),
 		"Size and text",
 		S("chat.tipScale", "number", 100, "Tooltip size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
 		S("chat.tipTitleSize", "number", 100, "Title size", nil, { min = 50, max = 200, step = 5, unit = "%" }),
@@ -11007,7 +11034,15 @@ local PAGES = {
 		S("chat.combatKey", "choice", "none", "Show anyway while holding", nil, { choices = { { "none", "No key" }, { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } }),
 		"Extra lines",
 		S("chat.ids", "bool", false, "Item and spell IDs"),
+		S("chat.idsWhen", "choice", "always", "Show IDs", "The IDs show while the key is held: at once over bags, action bars and the Character window, and over a link once you point at it again.",
+			{ needs = "chat.ids", choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } } }),
+		S("chat.enchantId", "bool", true, "Temporary enchant ID", "On a weapon you wear: the ID of its poison, oil, stone or imbue.", { needs = "chat.ids" }),
 		S("chat.count", "bool", false, "Item count in bags and bank"),
+		S("chat.icons", "bool", true, "Item and spell icons", "The icon before the name of an item or spell."),
+		S("chat.targetLine", "bool", true, "Target of units", "A line naming what a unit targets, in its class or reaction colour: You when it is you."),
+		"Item comparison",
+		S("chat.compareShift", "bool", true, "Compare items only while holding Shift",
+			"The items you wear show beside the tooltip of an item only while you hold Shift. Sets a game setting that the game's options do not show. Turned off, the game's own value is back."),
 	} },
 	{ key = "errands", label = "Errands", rows = {
 		S("errands.enabled", "bool", false, "Run errands", "Each errand below and on the Levelling tab has its own row. Selling, repairs, Make room, Train all, summons, invites, new spell ranks and talent reminders wait for the end of a fight."),
@@ -11205,6 +11240,11 @@ local PAGES = {
 		S("fade.playerFrame", "bool", false, "Player frame"),
 		S("fade.petFrame", "bool", false, "Pet frame"),
 		S("fade.minimapButtons", "bool", false, "Minimap buttons", "Shown while the mouse is over the minimap."),
+		"When shown",
+		S("fade.targetFrame", "choice", "always", "Target frame", "At other times it fades like the frames above, with its cast bar, combo points and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.focusFrame", "choice", "always", "Focus frame", "At other times it fades like the frames above, with its cast bar and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.buffs", "choice", "always", "Buffs", "Your buffs and weapon enchants, not your debuffs. At other times they fade like the frames above.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.objectiveTracker", "choice", "always", "Objective tracker", "At other times it fades like the frames above. In a fight, Opacity in combat of the tracker comes first while it is under 100%.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
 		"Fade",
 		S("fade.alpha", "number", 25, "Faded opacity", "Faded buttons still work.", { min = 0, max = 90, step = 5, unit = "%" }),
 		S("fade.delay", "number", 500, "Wait before fading", nil, { min = 0, max = 3000, step = 100, unit = " ms" }),
@@ -11353,7 +11393,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.5" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.6" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -21605,6 +21645,13 @@ end
 for _, path in ipairs({ "datapanels.enabled", "datapanels.top", "datapanels.top1", "datapanels.top2", "datapanels.top3", "datapanels.top4", "datapanels.top5", "datapanels.top6", "datapanels.bottom", "datapanels.bottom1", "datapanels.bottom2", "datapanels.bottom3", "datapanels.bottom4", "datapanels.bottom5", "datapanels.bottom6", "datapanels.font", "datapanels.textSize", "datapanels.background", "datapanels.tooltips", "datapanels.forgetGold", "windows.ilvlFlyout", "windows.ilvlInspect", "windows.ilvlCorner", "windows.durability" }) do
 	covered[path] = true
 end
+-- Nor do the rows of wave 4 (0.5.6): the owner asked for code without new test blocks.
+for _, path in ipairs({ "chat.webLinks", "chat.linkTips", "chat.classLine", "chat.idsWhen", "chat.enchantId", "chat.icons", "chat.targetLine",
+	"windows.boeMark", "windows.unusableTint", "windows.petFood", "fade.targetFrame", "fade.focusFrame", "fade.buffs", "fade.objectiveTracker",
+	"hud.errors", "hud.errorMana", "hud.errorPower", "hud.errorRange", "hud.errorFacing", "hud.errorReady", "hud.errorTarget", "hud.errorMoving",
+	"general.cursorRing", "general.cursorRingSize", "general.cursorRingColour", "unitframes.hitNumbers", "chat.compareShift" }) do
+	covered[path] = true
+end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
 for _, path in ipairs({ "hud.xpOwn", "hud.xpWidth", "hud.xpHeight", "hud.xpShow", "hud.xpOrder", "hud.xpGap", "hud.xpTicks", "hud.xpColour", "hud.xpRested", "hud.xpRestedColour",
 	"hud.xpRepMode", "hud.xpRepColour", "hud.xpTextWhen", "hud.xpTextPlace", "hud.xpTooltip", "hud.xpQuest", "hud.xpQuestColour", "hud.xpStats", "hud.xpStatsTip" }) do
@@ -23739,6 +23786,8 @@ function IP.glow(W)
 	W.group = was
 	W.seal()
 	wraw(W, bag).UpdateItems = function() wraw(W, wraw(W, slot).NewItemTexture).shown = true end
+	-- The bag is open: Flat UI dresses the slots of a bag that is shown, and a closed one when it opens.
+	W.blizzard(function() bag:Show() end)
 end
 function IP.title(S, name) return wraw(S.W, wraw(S.W, wraw(S.W, wN(S, name)).TitleContainer).TitleText) end
 function IP.size(raw) return g(raw.font and raw.font[2] or 12) end
@@ -23961,9 +24010,10 @@ for _, P in ipairs(W_PROBES) do
 	check(label .. ": no violations, errors or messages", #W.violations == 0 and #W.errors == 0 and #W.out == 0, table.concat(W.violations, "|") .. table.concat(W.out, "|"))
 end
 for _, row in ipairs(ALL) do
-	-- Wave 3's item level and durability rows have no probe yet: the owner asked for code without new test blocks.
+	-- Wave 3's item level and durability rows and wave 4's bag marks have no probe yet: the owner asked for code without new test blocks.
 	if row.page == "windows" and row.path ~= "windows.slotTints" and row.live ~= true
-		and not ({ ["windows.ilvlFlyout"] = true, ["windows.ilvlInspect"] = true, ["windows.ilvlCorner"] = true, ["windows.durability"] = true })[row.path] then
+		and not ({ ["windows.ilvlFlyout"] = true, ["windows.ilvlInspect"] = true, ["windows.ilvlCorner"] = true, ["windows.durability"] = true,
+			["windows.boeMark"] = true, ["windows.unusableTint"] = true, ["windows.petFood"] = true })[row.path] then
 		check("window probes: " .. row.path .. " has one", WPROBED[row.path] == true)
 	end
 end end
@@ -63323,7 +63373,7 @@ function PT.runBuild()
 		local step = nav[3].bottom - nav[4].bottom
 		check("left side: a line and a gap between the fixed rows and the first group", nav[4].text == "Move frames" and nav[5].text == "Look" and gap > step + 5, g(gap) .. " " .. g(step))
 		check("left side: the first page is open, with its title and Reset page", PT.title(W) == PAGES[1].label and PT.button(W, "Reset page") ~= nil)
-		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Options window", "Setup" }),
+		check("left side: the first page's sections are the headers on the right", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Cursor", "Options window", "Setup" }),
 			joined(PT.headers(W)))
 		PT.go(W, "Text")
 		check("left side: a click on a tab opens it under the title of its module, with its sections under the module", PT.title(W) == "Nameplates" and PT.page(W, "Level") ~= nil and PT.page(W, "Borders and backgrounds") == nil)
@@ -67065,7 +67115,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 57 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 57 and rows == 978 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 57 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 57 and rows == 1006 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -67379,7 +67429,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 927 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 955 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -70386,7 +70436,7 @@ function PT.runCards()
 			end
 		end
 		check("cards: a section is a panel as tall as its header and rows, 12 below the one before", ok and near(W.rectOf(panels[1]) - sl, 16, 0.01), #panels .. " " .. #counts)
-		check("cards: the headers are the sections, as before", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Options window", "Setup" }), joined(PT.headers(W)))
+		check("cards: the headers are the sections, as before", joined(PT.headers(W)) == joined({ "Borders and backgrounds", "Bars", "Game action bars", "Game menu", "Scale", "World", "Cursor", "Options window", "Setup" }), joined(PT.headers(W)))
 		check("cards: a row stands 32 in from the column", near(W.rectOf(PT.shownRows(W)[1]) - sl, 32, 0.01))
 
 		-- The count at the right of a header.
@@ -70414,7 +70464,7 @@ function PT.runCards()
 		ns.Set("panel.sections", "lines")
 		local lscroll = PT.right(W)
 		check("lines: the same headers, no panel, no count, and a row stands 16 in from the column", #backs(W) == 0 and #heads(W) == 0 and changedTotal(W) == 0
-			and near(W.rectOf(PT.shownRows(W)[1]) - W.rectOf(lscroll), 16, 0.01) and joined(PT.headers(W)) == "Borders and backgrounds, Bars, Game action bars, Game menu, Scale, World, Options window, Setup", joined(PT.headers(W)))
+			and near(W.rectOf(PT.shownRows(W)[1]) - W.rectOf(lscroll), 16, 0.01) and joined(PT.headers(W)) == "Borders and backgrounds, Bars, Game action bars, Game menu, Scale, World, Cursor, Options window, Setup", joined(PT.headers(W)))
 		ns.Set("panel.sections", "cards")
 		check("lines: and Cards puts the panels back", #backs(W) == #counts and #heads(W) == #counts)
 
@@ -87132,6 +87182,8 @@ do
 		W.group = was
 		W.seal()
 		wraw(W, W.win.names.ContainerFrame1).UpdateItems = function() wraw(W, wraw(W, slot).NewItemTexture).shown = true end
+		-- The bag is open: Flat UI dresses the slots of a bag that is shown, and a closed one when it opens.
+		W.blizzard(function() W.win.names.ContainerFrame1:Show() end)
 	end
 	function IT.update(W) W.win.updateBags() end
 

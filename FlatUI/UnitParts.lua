@@ -1,11 +1,21 @@
 local ADDON_NAME, ns = ...
 
 -- The icons and the power bars of the unit frames that each have a switch: the leader, role, PvP and raid marker icons, the dead text, the combat icon and
--- the pet's happiness face, and the power bar of each frame. Each is a region or a bar the game shows, hides and draws again and never fades, so off is a
--- change of its opacity to 0, and on gives it the opacity it had before. Nothing is called for a region that is not switched off and was not made
--- transparent here. This file adds its work after the steps of UnitFrames.lua through ns.UnitFrameExtra: a part that stops on errors counts as off here,
--- and every function can run twice with the same result. The PvP icon is the one switch that goes through the PvP flag of UnitFrames.lua (pvpMode), which
--- sets the opacity of the game's plate and icon itself. A power bar also goes when its unit has no power (Hide empty power bar).
+-- the pet's happiness face, the hit numbers of the player and the pet, and the power bar of each frame. Each is a region or a bar the game shows, hides and
+-- draws again and never fades, so off is a change of its opacity to 0, and on gives it the opacity it had before. Nothing is called for a region that is not
+-- switched off and was not made transparent here. This file adds its work after the steps of UnitFrames.lua through ns.UnitFrameExtra: a part that stops on
+-- errors counts as off here, and every function can run twice with the same result. The PvP icon is the one switch that goes through the PvP flag of
+-- UnitFrames.lua (pvpMode), which sets the opacity of the game's plate and icon itself. A power bar also goes when its unit has no power (Hide empty power bar).
+-- The hit numbers are the damage and heal numbers the game flashes over the player and pet portraits (CombatFeedback_OnCombatEvent, Mainline/
+-- CombatFeedback.lua:26-95, called for UNIT_COMBAT by PlayerFrame_OnEvent and PetFrameMixin:OnEvent, Mainline/PlayerFrame.lua:121-124 and PetFrame.lua:111-114).
+-- The game sets the opacity of the number itself while it fades (CombatFeedback_OnUpdate, :97-119), so the player's goes with the frame that holds it
+-- alone, HitIndicator (Mainline/PlayerFrame.xml:106-116), whose opacity the game never sets. The pet's PetHitIndicator shares its frame with the pet's
+-- name (Mainline/PetFrame.xml:63-81), so it is hidden again after each call that shows it (ns.FollowGlobal, as the new item glow of a bag slot is in
+-- Items.lua), from the first pass of the module with the numbers off; once they are on, the game shows the next one as before. The hit numbers go with
+-- the module's switch, not with the switch of their frame: the game flashes them over its own player and pet frames as well, so they are set after each
+-- pass of the module over its frames (after.refresh), whether Flat UI styles those frames or not. This follows EnhanceQoL by Philipp Barth (R41Z0R),
+-- adapted with his permission (EnhanceQoLUnitFrames/UnitFrameRuntime.lua:95-103), whose options act on the game's frames: opacity and visibility in place
+-- of its Hide of the player's frame and its hook on the Show method of the pet's number.
 
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
@@ -137,6 +147,53 @@ local ROWS = {
 	end },
 }
 
+-- The pet's hit number: hidden after the call that showed it, while the module is on and the numbers are off, whatever the switch of the pet frame.
+local followed = false
+
+local function NumbersOff()
+	return ns.Enabled(KEY) and not Off(MARKS) and Opt("hitNumbers") == false
+end
+
+local function PetNumberOff(rec)
+	return rec.kind == "pet" and NumbersOff()
+end
+
+local function HidePetNumber(rec)
+	if PetNumberOff(rec) then
+		ns.SetHidden(X.path(_G, "PetHitIndicator"), true)
+	end
+end
+
+local function OnFeedback(frame)
+	local rec = X.known(frame)
+	if rec ~= nil and rec.kind == "pet" then
+		X.run(MARKS, HidePetNumber, rec)
+	end
+end
+
+local function PetNumber(rec)
+	if rec.kind ~= "pet" or not PetNumberOff(rec) then
+		return
+	end
+	if not followed then
+		followed = ns.FollowGlobal("CombatFeedback_OnCombatEvent", OnFeedback) == true
+	end
+	-- A number that shows as the numbers go off goes at once.
+	HidePetNumber(rec)
+end
+
+-- After each pass of the module over its frames: the frame of the player's hit number, which holds nothing else, and the pet's number, on the frames
+-- the module knows whether it styles them or not.
+local function HitNumbers()
+	local player, pet = X.known(_G.PlayerFrame), X.known(_G.PetFrame)
+	if player ~= nil then
+		Fade(MARKS, X.path(player.frame, "PlayerFrameContent", "PlayerFrameContentMain", "HitIndicator"), NumbersOff())
+	end
+	if pet ~= nil then
+		PetNumber(pet)
+	end
+end
+
 local function Marks(rec, on)
 	local live = on and not Off(MARKS)
 	local c = Contextual(rec)
@@ -228,3 +285,4 @@ end)
 
 table.insert(X.after.apply, { part = MARKS, fn = Marks })
 table.insert(X.after.apply, { part = POWER, fn = Power })
+table.insert(X.after.refresh, { part = MARKS, fn = HitNumbers })
