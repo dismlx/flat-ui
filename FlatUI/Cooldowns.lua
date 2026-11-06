@@ -1617,14 +1617,15 @@ function ns.CooldownRemove(spellID)
 	return false, ("%s is not picked."):format(Name(spellID))
 end
 
--- The kinds of potions and healthstones that are not on the row and that the game has an item of, by their place in ns.COOLDOWN_ITEMS.
+-- The kinds of potions and healthstones that are not on the row, by their place in ns.COOLDOWN_ITEMS. The game is asked about their items only
+-- when one is added, not each time the list is filled.
 function ns.CooldownItemCandidates()
 	local rows, picked = {}, {}
 	for _, key in ipairs(Kinds()) do
 		picked[key] = true
 	end
 	for index, kind in ipairs(type(ns.COOLDOWN_ITEMS) == "table" and ns.COOLDOWN_ITEMS or {}) do
-		if type(kind) == "table" and not picked[kind.key] and Kind(kind.key) == kind and #Ranks(kind) > 0 then
+		if type(kind) == "table" and not picked[kind.key] and Kind(kind.key) == kind then
 			rows[#rows + 1] = { index, kind.name }
 		end
 	end
@@ -1646,6 +1647,9 @@ function ns.CooldownAddItem(index)
 	local kind = KindAt(index)
 	if not kind then
 		return false, "No such potion or healthstone."
+	end
+	if #Ranks(kind) == 0 then
+		return false, ("%s: this client has none."):format(kind.name)
 	end
 	local list = Kinds(true)
 	for _, key in ipairs(list) do
