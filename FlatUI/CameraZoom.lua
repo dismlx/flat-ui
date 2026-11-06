@@ -125,11 +125,15 @@ local function Apply(on)
 	end
 end
 
--- The row's value: true while the variable is at the top, nil when it cannot be read (the row then shows its default, off).
+-- The row's value: true while the variable is at the top, nil when it cannot be read (the row then shows its default, off). In a fight it is the
+-- choice that waits for its end, so the switch follows a click at once and a second click takes the choice back.
 function ns.CameraZoomGet()
 	local number = Factor(Text())
 	if number == nil then
 		return nil
+	end
+	if pending ~= nil then
+		return pending
 	end
 	return AtTop(number)
 end

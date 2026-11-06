@@ -1578,7 +1578,9 @@ end
 
 -- The opacity of the tracker while the player is in a fight. fight is nothing when the game's own state is to be asked. The opacity the tracker had is
 -- read the first time a lower one is set and put back when the fight is over or the setting goes back to 100. Of a tracker the Fading page holds it is
--- the opacity that page read before its first write (ns.FadeGiven); that page leaves the tracker alone meanwhile (ns.TrackerFades).
+-- the opacity that page read before its first write (ns.FadeGiven); that page leaves the tracker alone meanwhile (ns.TrackerFades). While that page fades
+-- the tracker by its row of When shown, the opacity to put back goes to it in place of the write (ns.FadeTakesBack; not an opacity of 0, which that
+-- page leaves alone), and the tracker fades on from the opacity of the fight instead of showing at full for a moment.
 local function TrackerAlpha(_, fight)
 	local frame = Frame("ObjectiveTrackerFrame")
 	if not frame or type(frame.SetAlpha) ~= "function" then
@@ -1600,7 +1602,9 @@ local function TrackerAlpha(_, fight)
 			look.sent = wanted
 		end
 	elseif look.alpha ~= nil then
-		frame:SetAlpha(look.alpha)
+		if not (ns.FadeTakesBack and ns.FadeTakesBack(frame, look.alpha)) then
+			frame:SetAlpha(look.alpha)
+		end
 		look.alpha, look.sent = nil, nil
 	end
 end

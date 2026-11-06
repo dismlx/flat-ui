@@ -11,8 +11,10 @@ local ADDON_NAME, ns = ...
 -- The game sets the opacity of the number itself while it fades (CombatFeedback_OnUpdate, :97-119), so the player's goes with the frame that holds it
 -- alone, HitIndicator (Mainline/PlayerFrame.xml:106-116), whose opacity the game never sets. The pet's PetHitIndicator shares its frame with the pet's
 -- name (Mainline/PetFrame.xml:63-81), so it is hidden again after each call that shows it (ns.FollowGlobal, as the new item glow of a bag slot is in
--- Items.lua), from the first time the pet frame is drawn with the numbers off; once they are on, the game shows the next one as before. This follows
--- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLUnitFrames/UnitFrameRuntime.lua:95-103): opacity and visibility in place
+-- Items.lua), from the first pass of the module with the numbers off; once they are on, the game shows the next one as before. The hit numbers go with
+-- the module's switch, not with the switch of their frame: the game flashes them over its own player and pet frames as well, so they are set after each
+-- pass of the module over its frames (after.refresh), whether Flat UI styles those frames or not. This follows EnhanceQoL by Philipp Barth (R41Z0R),
+-- adapted with his permission (EnhanceQoLUnitFrames/UnitFrameRuntime.lua:95-103), whose options act on the game's frames: opacity and visibility in place
 -- of its Hide of the player's frame and its hook on the Show method of the pet's number.
 
 local X = ns.UnitFrameExtra
@@ -143,19 +145,17 @@ local ROWS = {
 			emit(X.path(_G, "PetFrameHappiness"))
 		end
 	end },
-	-- The frame of the player's hit number, which holds nothing else.
-	{ opt = "hitNumbers", find = function(rec, c, emit)
-		if rec.kind == "player" then
-			emit(X.path(rec.frame, "PlayerFrameContent", "PlayerFrameContentMain", "HitIndicator"))
-		end
-	end },
 }
 
--- The pet's hit number: hidden after the call that showed it, while the pet frame is drawn and the numbers are off.
+-- The pet's hit number: hidden after the call that showed it, while the module is on and the numbers are off, whatever the switch of the pet frame.
 local followed = false
 
+local function NumbersOff()
+	return ns.Enabled(KEY) and not Off(MARKS) and Opt("hitNumbers") == false
+end
+
 local function PetNumberOff(rec)
-	return rec.kind == "pet" and X.active(rec) and not Off(MARKS) and Opt("hitNumbers") == false
+	return rec.kind == "pet" and NumbersOff()
 end
 
 local function HidePetNumber(rec)
@@ -166,7 +166,7 @@ end
 
 local function OnFeedback(frame)
 	local rec = X.known(frame)
-	if rec ~= nil and rec.kind == "pet" and rec.made then
+	if rec ~= nil and rec.kind == "pet" then
 		X.run(MARKS, HidePetNumber, rec)
 	end
 end
@@ -182,6 +182,18 @@ local function PetNumber(rec)
 	HidePetNumber(rec)
 end
 
+-- After each pass of the module over its frames: the frame of the player's hit number, which holds nothing else, and the pet's number, on the frames
+-- the module knows whether it styles them or not.
+local function HitNumbers()
+	local player, pet = X.known(_G.PlayerFrame), X.known(_G.PetFrame)
+	if player ~= nil then
+		Fade(MARKS, X.path(player.frame, "PlayerFrameContent", "PlayerFrameContentMain", "HitIndicator"), NumbersOff())
+	end
+	if pet ~= nil then
+		PetNumber(pet)
+	end
+end
+
 local function Marks(rec, on)
 	local live = on and not Off(MARKS)
 	local c = Contextual(rec)
@@ -190,9 +202,6 @@ local function Marks(rec, on)
 		row.find(rec, c, function(region)
 			Fade(MARKS, region, hide)
 		end)
-	end
-	if live then
-		PetNumber(rec)
 	end
 end
 
@@ -276,3 +285,4 @@ end)
 
 table.insert(X.after.apply, { part = MARKS, fn = Marks })
 table.insert(X.after.apply, { part = POWER, fn = Power })
+table.insert(X.after.refresh, { part = MARKS, fn = HitNumbers })

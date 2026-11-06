@@ -17,7 +17,8 @@ local ADDON_NAME, ns = ...
 -- followed with hooksecurefunc through ns.Follow, ns.FollowGlobal and ns.FollowTable, which run after the game's call and never change what it returns.
 -- BarBlock gives Movers the spots of the action bars. The one thing it writes on a Blizzard frame is the alpha of the bars of the block
 -- (SetAlpha, only with Fade the block on), put back when the fade goes off. Fade does the same for the frames of the Fading page, the alpha only
--- (SetAlpha), read before the first write and put back when its page, its row or the module goes off. With Hit numbers on player and pet
+-- (SetAlpha), read before the first write (and again when something else gives the frame another alpha after one) and put back when its page,
+-- its row or the module goes off. With Hit numbers on player and pet
 -- portraits off, Unit frames does the same for the frame that holds the player's hit number (HitIndicator), and hides the pet's (PetHitIndicator,
 -- SetShown) each time CombatFeedback_OnCombatEvent has shown it; the game shows the next one again once the row is on.
 -- Movers and Tooltip are the exceptions that move Blizzard frames, with ClearAllPoints, SetPoint
@@ -63,7 +64,9 @@ local ADDON_NAME, ns = ...
 -- link in a chat window (EventRegistry: ChatFrame.OnHyperlinkEnter and ChatFrame.OnHyperlinkLeave) it fills GameTooltip from the link
 -- (SetOwner on a frame of its own, SetHyperlink) and hides it when the mouse leaves (Hide), only while that frame owns it and never in a fight.
 -- Inside the game's build of a tooltip, Chat and tooltips colours a player's class line (SetTextColor) and, with Item and spell icons, writes
--- the first line (SetText): the icon before the name, only while the line still holds that name. With Compare items only while holding Shift
+-- the first line (SetText): the icon before the name, only while the line still holds that name. With Target of units, while the mouse stays on
+-- a unit whose target changes, a frame of its own writes the target line again (SetText) and has the tooltip take its size (Show), only while the
+-- line still holds the text it wrote. With Compare items only while holding Shift
 -- (on by default) it writes the game's alwaysCompareItems, out of combat: 0, its text before that kept in FlatUIDB.compareGame, and that text
 -- again when the row, its page or the module goes off while the variable is still 0.
 -- Minimap and buffs, with Hide error messages on (off by default), takes the game's red error messages from UIErrorsFrame: it reads with

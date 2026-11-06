@@ -16,9 +16,15 @@ local _, ns = ...
 -- UPDATE_FACTION only the items found unusable are read again; a learned spell or recipe can make an item unusable and a PvP rank can fall, so
 -- after LEARNED_SPELL_IN_SKILL_LINE, NEW_RECIPE_LEARNED and PLAYER_PVP_RANK_CHANGED every item is read again (UnitDocumentation.lua:3832, 3877;
 -- SkillInfoDocumentation.lua:105; PaperDollInfoDocumentation.lua:432; SpellBookDocumentation.lua:851; TradeSkillUIDocumentation.lua:1239). So are
--- the unusable ones whenever the windows module applies its settings, since it hears no event while it is off. The red is a texture with the MOD
--- blend just above the icon (the icon is in the BORDER layer, Blizzard_ItemButton/Shared/ItemButtonTemplate.xml:17-21), so it darkens the icon as
--- the game's own red on an item does, under the stack count, the search overlay and the other marks.
+-- the unusable ones whenever the windows module applies its settings, since it hears no event while it is off. A skill is lost only to a profession
+-- the player abandons (C_SkillInfo.AbandonSkill, SkillInfoDocumentation.lua:11-18, from the Unlearn button of the professions book,
+-- Blizzard_ProfessionsBook/Camelot/Blizzard_ProfessionsBook.lua:63-69 and Blizzard_StaticPopup_Game/Mainline/GameDialogDefs.lua:1101-1112), which
+-- takes its line out of the skills window: when SKILL_LINES_CHANGED or the settings find fewer lines there than at the last look
+-- (C_SkillInfo.GetNumSkillLines, SkillInfoDocumentation.lua:41-47), every item is read again. The window does not count the lines of a closed
+-- header, so closing one only has the items read once more, and a profession abandoned under a closed header that keeps other lines goes unseen.
+-- The red is a texture with the MOD blend just above the icon (the icon is in the BORDER layer,
+-- Blizzard_ItemButton/Shared/ItemButtonTemplate.xml:17-21), so it darkens the icon as the game's own red on an item does, under the stack count, the
+-- search overlay and the other marks.
 -- Mark food your pet eats: the Feed Pet icon at the bottom left of food the pet that is out eats. The answer is C_PetInfo.CanPetEatItem, the call
 -- of the game's own Feed Pet item context and of its gamepad Feed To Pet (Blizzard_FrameXMLUtil/ItemUtil.lua:235-236,
 -- Blizzard_UIPanels_Game/Mainline/ContainerFrame.lua:3287-3301), kept per item ID while the diet of the pet (C_PetInfo.GetPetFoodTypes,
@@ -62,6 +68,8 @@ local pet = { diet = nil, foods = nil, eats = {} }
 local refused = {}
 local foodIcon
 local redrawQueued = false
+-- The number of lines of the skills window at the last look, or nil before the first.
+local skillLines
 
 local ItemMarks = { PART = PART }
 ns.ItemMarks = ItemMarks
@@ -321,6 +329,22 @@ local function Eats(id)
 	return pet.eats[id]
 end
 
+-- True when the skills window has fewer lines than at the last look, which is now (see the top of this file). A count the game withholds changes
+-- nothing.
+local function FewerSkills()
+	local call = Call("C_SkillInfo", "GetNumSkillLines")
+	if call == nil then
+		return false
+	end
+	local ok, count = pcall(call)
+	if not ok or not ns.Finite(count) then
+		return false
+	end
+	local fewer = skillLines ~= nil and count < skillLines
+	skillLines = count
+	return fewer
+end
+
 -- Drawing ---------------------------------------------------------------------------------------
 
 -- The icon of Feed Pet, read once, or nil.
@@ -491,10 +515,11 @@ function ItemMarks.Dress(button, live, info, bag, slot)
 end
 
 -- Called when the windows module applies its settings, before the slots are dressed: the module heard no event while it was off, so the answers a
--- change of the character can turn are read again, and so is the pet.
+-- change of the character can turn are read again, every one when the skills window lost a line, and so is the pet.
 function ItemMarks.Apply()
+	local all = FewerSkills()
 	for id, answer in pairs(blocked) do
-		if answer == true then
+		if all or answer == true then
 			blocked[id] = nil
 		end
 	end
@@ -577,9 +602,15 @@ ns.AddEvent(KEY, "PLAYER_LEVEL_UP", function()
 		ForgetUnusable()
 	end
 end)
-for _, event in ipairs({ "SKILL_LINES_CHANGED", "UPDATE_FACTION" }) do
-	ns.AddEvent(KEY, event, ForgetUnusable)
-end
+-- A skill that rose, or a profession abandoned (see the top of this file).
+ns.AddEvent(KEY, "SKILL_LINES_CHANGED", function()
+	if FewerSkills() then
+		ForgetAll()
+	else
+		ForgetUnusable()
+	end
+end)
+ns.AddEvent(KEY, "UPDATE_FACTION", ForgetUnusable)
 for _, event in ipairs({ "LEARNED_SPELL_IN_SKILL_LINE", "NEW_RECIPE_LEARNED", "PLAYER_PVP_RANK_CHANGED" }) do
 	ns.AddEvent(KEY, event, ForgetAll)
 end
@@ -592,16 +623,22 @@ end, function(id)
 	return ns.Finite(id) and waiting[id] == true
 end)
 
--- /flatui status: how many slots each mark shows, the diet of the pet, and the marks the client cannot make. A stopped part has its note.
+-- /flatui status: how many slots on screen show each mark, the diet of the pet, and the marks the client cannot make. A stopped part has its note.
+-- A slot keeps its marks while it is hidden: in a closed bag or bank, in the frames of the other bag layout (combined or one frame per bag), and
+-- after its bag gave it back to its pool, which hides it (Mainline/ContainerFrame.lua:1053-1056, Mainline/BankFrameTemplates.lua:691-694,
+-- 1076-1077, Blizzard_SharedXMLBase/Pools.lua:519-522). Only a slot the game shows is counted.
 ns.AddStatus(KEY, function()
 	if not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) then
 		return {}
 	end
 	local counts = { bind = 0, tint = 0, food = 0 }
-	for _, rec in pairs(marks) do
-		for _, kind in ipairs(KINDS) do
-			if rec[kind .. "On"] then
-				counts[kind] = counts[kind] + 1
+	for button, rec in pairs(marks) do
+		local ok, visible = pcall(button.IsVisible, button)
+		if ok and not ns.IsSecret(visible) and visible == true then
+			for _, kind in ipairs(KINDS) do
+				if rec[kind .. "On"] then
+					counts[kind] = counts[kind] + 1
+				end
 			end
 		end
 	end
@@ -619,7 +656,7 @@ ns.AddStatus(KEY, function()
 	end
 	local lines = {}
 	if #said > 0 then
-		lines[#lines + 1] = ("Bag marks: %s."):format(table.concat(said, ", "))
+		lines[#lines + 1] = ("Bag marks on screen: %s."):format(table.concat(said, ", "))
 	end
 	if #missing > 0 then
 		local list = table.concat(missing, ", ", 1, #missing - 1)

@@ -36,9 +36,10 @@ local function Proxy(category, item, varType, default, get, set)
 end
 
 -- What the game's Defaults button sets. A row the game holds has the value the game has when the button is pressed, so Defaults writes no
--- game setting. The client asks a default given as a function each time (Blizzard_Setting.lua:1-9, 358-359).
+-- game setting. Maximum camera distance is one: it shows the game's camera distance (CameraZoom.lua), and Reset page leaves it too. The client
+-- asks a default given as a function each time (Blizzard_Setting.lua:1-9, 358-359).
 local function Initial(item)
-	if item.cvar then
+	if item.cvar or item.set == "CameraZoomSet" then
 		return function()
 			local value = ns.Get(item.path)
 			if value == nil then

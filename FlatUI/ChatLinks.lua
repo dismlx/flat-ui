@@ -12,7 +12,8 @@ local _, ns = ...
 -- whose handler for addon links (Shared/ItemRefHandlersShared.lua:279-282) fires EventRegistry's SetItemRef and counts the click as handled, so the
 -- ItemRef tooltip stays shut. Flat UI listens to that callback: no function of the game is hooked or replaced, nothing is written in its link
 -- handlers, and a click on any other link takes the game's own path. The click opens a small box of Flat UI's own at the cursor, with the address
--- selected; Enter or Escape closes it, and so does the loss of its focus or the start of a fight. Typing in it puts the address back.
+-- selected; Enter or Escape closes it, and so does the loss of its focus or the start of a fight. Typing in it puts the address back. A click in a
+-- fight opens none: the box takes the keyboard, and in a fight the keys stay with the game.
 -- Link tooltips: every chat window fires ChatFrame.OnHyperlinkEnter and ChatFrame.OnHyperlinkLeave through EventRegistry (Shared/ChatFrame.lua:27-33,
 -- the scripts of ChatFrameTemplate, Mainline/ChatFrame.xml:16-18), so no script of a chat window is hooked, and a window the game opens later counts
 -- too. GameTooltip gets a frame of Flat UI's own as its owner, at the cursor, and is filled from the link with SetHyperlink, a secure accessor of the
@@ -59,7 +60,7 @@ local function Wanted(part)
 end
 
 -- A part run as ChatText.lua runs one: with the module on and the part not stopped, a failure counts toward stopping the part alone; otherwise a
--- failure is let go, since the part is only putting things away.
+-- failure is let go, since the part is only putting things away or opening the copy box of an address made before.
 local function Part(part, fn, ...)
 	if ns.Enabled(KEY) and not ns.PartStopped(KEY, part) then
 		ns.EachPart(KEY, part, fn, ...)
@@ -301,7 +302,8 @@ local function Help()
 	return ("Press %s to copy it. Enter or Escape closes this."):format(mac and "Cmd+C" or "Ctrl+C")
 end
 
--- Built the first time an address is clicked: a frame of Flat UI's own on UIParent, its look from the chat page, a line of help and the box.
+-- Built the first time an address is clicked: a frame of Flat UI's own on UIParent, its look from the chat page, a line of help and the box. Its
+-- outlines name that page, since a click on an address made before can build the box outside ns.EachPart (see Clicked).
 local function BuildBox()
 	local frame = CreateFrame("Frame", nil, UIParent)
 	ns.Own[frame] = true
@@ -309,7 +311,7 @@ local function BuildBox()
 	frame:SetFrameStrata("DIALOG")
 	pcall(frame.SetClampedToScreen, frame, true)
 	frame:EnableMouse(true)
-	ns.SetOutlineAlpha(ns.Outline(frame, frame, true), nil, 0.95)
+	ns.SetOutlineAlpha(ns.SetOutlineArea(ns.Outline(frame, frame, true), KEY), nil, 0.95)
 	local help = ns.OwnText(frame, "OVERLAY", "GameFontNormalSmall")
 	if help then
 		help:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -7)
@@ -328,7 +330,7 @@ local function BuildBox()
 	-- No limit, so a long address is never cut.
 	pcall(edit.SetMaxLetters, edit, 0)
 	pcall(edit.SetMaxBytes, edit, 0)
-	ns.SetOutlineFill(ns.Outline(edit, edit, true), 0, 0, 0, 0.5)
+	ns.SetOutlineFill(ns.SetOutlineArea(ns.Outline(edit, edit, true), KEY), 0, 0, 0, 0.5)
 	local box = { frame = frame, edit = edit }
 	edit:SetScript("OnEscapePressed", CloseBox)
 	edit:SetScript("OnEnterPressed", CloseBox)
@@ -363,6 +365,10 @@ local function Place(frame)
 end
 
 local function OpenBox(_, address)
+	-- None opens in a fight: the box would hold the keyboard, which goes back to the game when a fight starts.
+	if Fighting() then
+		return
+	end
 	if not S.box then
 		S.box = BuildBox()
 	end
@@ -390,14 +396,15 @@ local function OpenBox(_, address)
 end
 
 -- EventRegistry's SetItemRef: the game fires it for every addon link clicked, with the link, its text, the mouse button and the window. A link
--- that is not one of Flat UI's addresses is left to whoever made it. An address made while the row was on still opens while the module is on.
+-- that is not one of Flat UI's addresses is left to whoever made it. An address made before stays a link in its window, and the game counts a
+-- click on it as handled, so it still opens with its row or the module off, and with the module or this part stopped.
 local function Clicked(_, link, _, _, frame)
-	if not Plain(link, "string") or link:sub(1, #PREFIX) ~= PREFIX or not ns.Enabled(KEY) or ns.PartStopped(KEY, LINKS) then
+	if not Plain(link, "string") or link:sub(1, #PREFIX) ~= PREFIX then
 		return
 	end
 	local address = link:sub(#PREFIX + 1)
 	if address ~= "" then
-		ns.EachPart(KEY, LINKS, OpenBox, Plain(frame, "table") and frame or Clicked, address)
+		Part(LINKS, OpenBox, Plain(frame, "table") and frame or Clicked, address)
 	end
 end
 

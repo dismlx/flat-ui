@@ -6,7 +6,8 @@ local _, ns = ...
 -- data (TooltipDataProcessor.AddTooltipPostCall, the one path its lines go through), before its own work so that the Elite and Rare word stays the
 -- last line, and its extra lines ask ns.ChatTipIds for the ID lines. The game runs the post calls once it has added its lines and before it shows
 -- the tooltip (TooltipDataHandler.lua:283-300), and sets the index of each line in the data as it adds it (TooltipDataHandler.lua:319-336).
--- What is written on a tooltip: the target line with AddLine, once for each build as Chat.lua adds its lines; the colour of the class line with
+-- What is written on a tooltip: the target line with AddLine, once for each build as Chat.lua adds its lines, and with SetText and Show when the
+-- target of the unit changes while the mouse stays on it (The target line while the mouse stays on the unit); the colour of the class line with
 -- SetTextColor; and with Item and spell icons the text of the first line with SetText: the icon of the item or the spell (C_Item.GetItemIconByID,
 -- ItemDocumentation.lua:611-624; C_Spell.GetSpellTexture, SpellDocumentation.lua:595-612) before the name the game wrote, only when the first line of
 -- the data is the first line of the tooltip and that line still holds the same text, so a second post call for one build adds none. A text the
@@ -34,8 +35,9 @@ local KEY, PART = "chat", "tooltip lines"
 local GREY = { 0.8, 0.8, 0.8 }
 -- The inventory slots of the player's weapons: main hand, off hand and ranged (INVSLOT_MAINHAND, INVSLOT_OFFHAND, INVSLOT_RANGED).
 local WEAPONS = { [16] = true, [17] = true, [18] = true }
--- Per tooltip: { data, lines } of the target line, so that the post calls of one build add it once. The same data with that line still there is
--- the same build.
+-- Per tooltip: { data, lines, text } of the target line. lines is the index of the line, so that the post calls of one build add it once: the same
+-- data with that line still there is the same build. text is what the line holds while it is kept current ("" while the unit targets nothing), nil
+-- once it is not.
 local added = setmetatable({}, { __mode = "k" })
 
 local IsSecret = ns.IsSecret
@@ -214,7 +216,92 @@ local function TargetText(unit)
 	return "Target: " .. name
 end
 
--- Adds the line once for each build of the tooltip.
+-- The target line while the mouse stays on the unit ----------------------------------------------------------------------------
+-- The game builds the tooltip of a unit in the world once, as the mouse comes onto it (WORLD_CURSOR_TOOLTIP_UPDATE, CursorDocumentation.lua:50-59,
+-- Mainline/EventImplementation.lua:889-891, GameTooltip.lua:978-1022), and again only for the UpdateTooltip of its owner or a TOOLTIP_DATA_UPDATE,
+-- a lookup of its data that has resolved (GameTooltip.lua:451-463, 969-976; TooltipInfoDocumentation.lua:1391-1400): a new target is neither. So
+-- while a tooltip holds the target line and its unit is still under the mouse, a frame of the addon's own reads the target again every 0.2
+-- seconds, as often as the game builds the tooltip of a unit frame again (TOOLTIP_UPDATE_TIME, SharedConstants.lua:145;
+-- Mainline/UnitFrame.lua:396-407). A new target is written on the line with SetText, and Show gives the tooltip the size of the new text as the
+-- game does after its own lines (Mainline/UnitFrame.lua:400-402). While the unit targets nothing the line is empty, and the next target it takes
+-- is written there. The line is written only while it still holds the text written here: a tooltip that is hidden, has fewer lines or other text
+-- there, or whose unit has left the mouse (the game fades it then, GameTooltip.lua:1012-1020) is left alone until a new build adds the line again.
+-- A unit with no target at its build gets no line until then.
+local KEEP_EVERY = 0.2
+local keeper, keepWait = nil, 0
+
+-- Writes the target line of a tooltip again when the target of its unit changed. The record stays current only while this gives it its text back.
+local function Keep(tooltip, record)
+	local text = record.text
+	record.text = nil
+	if not text or not ns.Enabled(KEY) or Opt("targetLine") ~= true or ns.Forbidden(tooltip) then
+		return
+	end
+	local okShown, shown = pcall(tooltip.IsShown, tooltip)
+	local okCount, count = pcall(tooltip.NumLines, tooltip)
+	if not okShown or IsSecret(shown) or shown ~= true or not okCount or not Plain(count, "number") or count < record.lines then
+		return
+	end
+	local line = LeftLine(tooltip, record.lines)
+	local okText, now = false, nil
+	if line then
+		okText, now = pcall(line.GetText, line)
+	end
+	-- A line emptied here may read back as nil.
+	if not okText or IsSecret(now) or (now or "") ~= text then
+		return
+	end
+	local unit = UnitOf(record.data)
+	if not unit or Ask(UnitIsUnit, unit, "mouseover") ~= true then
+		return
+	end
+	local new = TargetText(unit) or ""
+	if new == text then
+		record.text = text
+	elseif pcall(line.SetText, line, new) then
+		pcall(tooltip.Show, tooltip)
+		record.text = new
+	end
+end
+
+-- Runs every 0.2 seconds while a line is kept current, and stops once none is.
+local function KeepAll(frame, elapsed)
+	keepWait = keepWait + (Plain(elapsed, "number") and elapsed or 0)
+	if keepWait < KEEP_EVERY then
+		return
+	end
+	keepWait = 0
+	local kept = false
+	for tooltip, record in pairs(added) do
+		if record.text ~= nil then
+			if ns.IsStopped(KEY) or not ns.EachPart(KEY, PART, Keep, tooltip, record) then
+				record.text = nil
+			end
+			kept = kept or record.text ~= nil
+		end
+	end
+	if not kept then
+		frame:Hide()
+	end
+end
+
+-- Starts the frame that keeps the target lines current.
+local function Watch()
+	if not keeper and type(CreateFrame) == "function" then
+		local ok, frame = pcall(CreateFrame, "Frame")
+		if ok and Plain(frame, "table") then
+			ns.Own[frame] = true
+			keeper = frame
+			frame:SetScript("OnUpdate", KeepAll)
+		end
+	end
+	if keeper then
+		keepWait = 0
+		keeper:Show()
+	end
+end
+
+-- Adds the line once for each build of the tooltip, and keeps it current.
 local function AddOnce(tooltip, data, text)
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	if not ok or not Plain(shown, "number") then
@@ -225,7 +312,8 @@ local function AddOnce(tooltip, data, text)
 		return
 	end
 	if pcall(tooltip.AddLine, tooltip, text, GREY[1], GREY[2], GREY[3]) then
-		added[tooltip] = { data = data, lines = shown + 1 }
+		added[tooltip] = { data = data, lines = shown + 1, text = text }
+		Watch()
 	end
 end
 

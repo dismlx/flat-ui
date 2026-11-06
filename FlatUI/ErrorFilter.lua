@@ -34,12 +34,13 @@ local KEY, PART, ROW = "hud", "error messages", "hud.errors"
 local EVENT = "UI_ERROR_MESSAGE"
 -- The game's red when its colour cannot be read (RED_FONT_COLOR comes from the game's colour table: Blizzard_SharedXMLBase/Color.lua:82-86).
 local RED = { 1, 0.1, 0.1 }
--- Each kind: its row, the game's message types (the names after LE_GAME_) and the words of the spell failures of that kind.
+-- Each kind: its row, the game's message types (the names after LE_GAME_) and the words of the spell failures of that kind. Out of range
+-- also takes ERR_USE_TOO_FAR, the "You are too far away." of a chest, a quest object or a mailbox clicked from too far, as EnhanceQoL's list does.
 local KINDS = {
 	{ row = "errorMana", types = { "ERR_OUT_OF_MANA" } },
 	{ row = "errorPower", types = { "ERR_OUT_OF_RAGE", "ERR_OUT_OF_ENERGY", "ERR_OUT_OF_FOCUS", "ERR_OUT_OF_COMBO_POINTS" },
 		words = { "SPELL_FAILED_NO_COMBO_POINTS" } },
-	{ row = "errorRange", types = { "ERR_OUT_OF_RANGE", "ERR_SPELL_OUT_OF_RANGE", "ERR_BADATTACKPOS", "ERR_PET_SPELL_OUT_OF_RANGE" },
+	{ row = "errorRange", types = { "ERR_OUT_OF_RANGE", "ERR_SPELL_OUT_OF_RANGE", "ERR_BADATTACKPOS", "ERR_USE_TOO_FAR", "ERR_PET_SPELL_OUT_OF_RANGE" },
 		words = { "SPELL_FAILED_OUT_OF_RANGE", "SPELL_FAILED_TOO_CLOSE" } },
 	{ row = "errorFacing", types = { "ERR_BADATTACKFACING", "ERR_PET_SPELL_NOT_BEHIND" },
 		words = { "SPELL_FAILED_UNIT_NOT_INFRONT", "SPELL_FAILED_NOT_INFRONT", "SPELL_FAILED_NOT_BEHIND", "SPELL_FAILED_UNIT_NOT_BEHIND" } },
