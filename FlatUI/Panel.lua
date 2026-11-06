@@ -2885,7 +2885,9 @@ function FlatUI_OnAddonCompartmentClick()
 end
 
 -- A Flat UI button in the game menu, right below the gap under Options. It is a frame of its own: the menu's layout places any shown child that
--- has a layoutIndex, so nothing of the game's menu is written. The hook runs after each build of the menu's buttons.
+-- has a layoutIndex, so nothing of the game's menu is written. It is placed after each build of the menu's buttons: InitButtons is hooked through
+-- ns.HookMethod, which hooks nothing while taintLog is on. Then the menu's OnShow is followed with HookScript instead, which runs after the game's
+-- own OnShow, so the button is placed each time the menu opens.
 do
 	local button
 	local function OpenOptions()
@@ -2938,7 +2940,7 @@ do
 		end
 	end
 	local menu = GameMenuFrame
-	if menu and type(menu.InitButtons) == "function" then
-		hooksecurefunc(menu, "InitButtons", Place)
+	if menu and type(menu.InitButtons) == "function" and not ns.HookMethod(menu, "InitButtons", Place) and type(menu.HookScript) == "function" then
+		menu:HookScript("OnShow", Place)
 	end
 end
