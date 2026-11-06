@@ -43,8 +43,8 @@ local SWEEP_REFUSED = "Trackers: the game refused to restart a time sweep, so th
 local K = {
 	MAX_TRACKERS = 40, MAX_SPELLS = 40, MAX_NAMES = 8, MAX_CHARS = 40, MAX_ID = 2147483647,
 	BESIDE = 150, RIM = 2, QUIET = 2, LATE = 5, STEP = 3, TEST = 5, SOUND_FILE = 567397,
-	-- LOW_MAX: the largest Low at of a tracker's own, by kind; 20 for the kinds that are not here.
-	LOW_MAX = { item = 1000, ammo = 2000 },
+	-- LOW_MAX: the largest Low at of a tracker's own, by kind; 20 for the kinds that are not here. A durability tracker's is a percent.
+	LOW_MAX = { item = 1000, ammo = 2000, durability = 100 },
 	PULSE_LOW = 0.35, PULSE_TIME = 0.6, GREY = 0.6, ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789",
 	SHOWS = { always = true, low = true, combat = true },
 	MISSING_LOOKS = { red = true, pulse = true, word = true },
@@ -91,6 +91,7 @@ local HELP = {
 	"/flatui tracker add ammo - the ammunition you carry",
 	"/flatui tracker add tracking - red when no minimap tracking is on",
 	"/flatui tracker add form Bear Form - a stance or form, red when you are in none of them",
+	"/flatui tracker add durability - your most worn item, red when one is broken",
 	"/flatui tracker add proc Shadow Trance for Shadow Bolt - a proc alert: its buff, then the spell it is for",
 	"/flatui tracker class - add the usual trackers of your class",
 	"/flatui tracker remove 1 - a number from the list, or a name",

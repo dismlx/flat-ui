@@ -70,6 +70,7 @@ AuraTime.lua
 XpStats.lua
 XpBar.lua
 QuestCount.lua
+MapText.lua
 Fade.lua
 Chat.lua
 ChatText.lua

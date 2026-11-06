@@ -10391,6 +10391,7 @@ local PAGES = {
 		S("trackers.itemMin", "number", 1, "Item minimum", "An item tracker is low when the bags hold fewer. /flatui tracker set 1 low 5 sets one tracker to be low at 5 or fewer.", { min = 1, max = 40, step = 1, unit = "" }),
 		S("trackers.ammoMin", "number", 200, "Ammunition minimum", "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, a low count waits for the end of a fight.", { min = 0, max = 2000, step = 100, unit = "" }),
 		S("trackers.thrownMin", "number", 20, "Thrown weapon minimum", "With a thrown weapon, the ammunition tracker is low at this many or fewer. 0 means never. One that wears out is low at a fifth of its durability.", { min = 0, max = 200, step = 5, unit = "" }),
+		S("trackers.durabilityMin", "number", 20, "Durability minimum", "The durability tracker is low when an item you wear is at this much of its durability or less, and red when one is broken. 0 means never. For 12 seconds after a ready check it shows when low or broken, whatever Show says.", { min = 0, max = 100, step = 5, unit = "%" }),
 		"When shown",
 		S("trackers.show", "choice", "always", "Show", nil, { choices = { { "always", "Always" }, { "low", "Only when low or missing" }, { "combat", "Only in combat" } } }),
 		S("trackers.mounted", "bool", true, "Hide while mounted", "Applies to trackers set to Only when low or missing."),
@@ -10841,6 +10842,18 @@ local PAGES = {
 		S("hud.btnAddons", "bool", true, "Addon list button"),
 		S("hud.addonButtons", "choice", "edge", "Addon buttons", "Round buttons that other addons put on the minimap.",
 			{ choices = { { "leave", "Where each addon puts them" }, { "edge", "Column beside the map" }, { "bar", "Row under the map" } }, changed = "MapButtonsChanged" }),
+		"Text around the map",
+		S("hud.mapCoords", "bool", true, "Coordinates", "Your place on the zone map. Hidden in instances and where the game gives no position."),
+		S("hud.mapCoordsPlace", "choice", "below", "Coordinates place", nil, { needs = "hud.mapCoords", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapCoordsDecimals", "choice", "1", "Coordinate decimals", nil, { needs = "hud.mapCoords", choices = { { "0", "None (45, 62)" }, { "1", "One (45.3, 62.1)" }, { "2", "Two (45.31, 62.08)" } } }),
+		S("hud.mapDurability", "bool", true, "Durability", "Your most worn equipped item. Yellow at 50% or less, red at 20% or less."),
+		S("hud.mapDurabilityPlace", "choice", "below", "Durability place", nil, { needs = "hud.mapDurability", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapPerf", "bool", false, "Frame rate and latency", "Frames per second, then your home and world latency in milliseconds."),
+		S("hud.mapPerfPlace", "choice", "below", "Frame rate place", nil, { needs = "hud.mapPerf", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapClock", "bool", false, "Time", "Your local time or the realm's. The game's clock beside the zone name has its own row, Clock, under Buttons."),
+		S("hud.mapClockPlace", "choice", "above", "Time place", nil, { needs = "hud.mapClock", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapClockTime", "choice", "local", "Local or realm time", nil, { needs = "hud.mapClock", choices = { { "local", "Local time" }, { "realm", "Realm time" } } }),
+		S("hud.mapClockHours", "choice", "24", "Time format", nil, { needs = "hud.mapClock", choices = { { "24", "24 hours (14:05)" }, { "12", "12 hours (2:05 PM)" } } }),
 	} },
 	{ key = "hudBuffs", label = "Buffs and debuffs", parent = "hud", owner = "hud", rows = {
 		S("hud.auras", "bool", true, "Buff and debuff borders", "Square icons with a thin border. Debuffs take the colour of their type."),
@@ -21545,13 +21558,17 @@ for _, path in ipairs({ "errands.enabled", "errands.chat", "errands.sell", "erra
 	"errands.releaseKey", "errands.summons", "errands.resurrect", "errands.deleteWord", "errands.invites", "errands.declineDuels", "errands.mailRecipient" }) do
 	covered[path] = true
 end
--- The Levelling tab of Errands, and the quest count of the tracker, have their checks in the quests, ranks and levelling blocks.
+-- The Levelling tab of Errands and the quest count of the tracker have no checks yet: the owner asked for code without new test blocks.
 for _, path in ipairs({ "errands.questAccept", "errands.questTurnIn", "errands.questLow", "errands.questRepeat", "errands.questKey", "errands.questNpcs", "errands.gossip",
 	"errands.gossipSaved", "errands.uprank", "errands.keepRank", "errands.unkeepRank", "errands.uprankNow", "errands.learnedLines", "hud.trackerCount",
 	"errands.repFollow", "errands.talentReminder", "errands.wayCommand" }) do
 	covered[path] = true
 end
--- Flat UI's own experience bar has its checks in the xpown block.
+-- Wave 3 (the text around the minimap and the durability tracker) has no checks yet either.
+for _, path in ipairs({ "hud.mapCoords", "hud.mapCoordsPlace", "hud.mapCoordsDecimals", "hud.mapDurability", "hud.mapDurabilityPlace", "hud.mapPerf", "hud.mapPerfPlace", "hud.mapClock", "hud.mapClockPlace", "hud.mapClockTime", "hud.mapClockHours", "trackers.durabilityMin" }) do
+	covered[path] = true
+end
+-- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
 for _, path in ipairs({ "hud.xpOwn", "hud.xpWidth", "hud.xpHeight", "hud.xpShow", "hud.xpOrder", "hud.xpGap", "hud.xpTicks", "hud.xpColour", "hud.xpRested", "hud.xpRestedColour",
 	"hud.xpRepMode", "hud.xpRepColour", "hud.xpTextWhen", "hud.xpTextPlace", "hud.xpTooltip", "hud.xpQuest", "hud.xpQuestColour", "hud.xpStats", "hud.xpStatsTip" }) do
 	covered[path] = true

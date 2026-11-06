@@ -921,6 +921,8 @@ function editor.Row(block, parent, page, spec, y)
 			return ns.Get(type(ns.TrackerAmmoRow) == "function" and ns.TrackerAmmoRow(block.current.id) or "trackers.ammoMin")
 		elseif key == "low" and block.current and block.current.kind == "item" then
 			return math.max(0, (ns.Get("trackers.itemMin") or 1) - 1)
+		elseif key == "low" and block.current and block.current.kind == "durability" then
+			return ns.Get("trackers.durabilityMin")
 		elseif base then
 			return ns.Get(base.path)
 		end

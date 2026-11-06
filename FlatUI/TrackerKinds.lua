@@ -943,7 +943,7 @@ local I = {
 	MAX_ITEMS = 40, MAX_FORMS = 8, MAX_BAG_LINES = 100, ICON = 134400, AMMO = 0, RANGED = 18, WORN = 20,
 	WEAPON = 2, PROJECTILE = 6, ARROWS = 2, BULLETS = 3,
 	NO_COUNT = "Trackers: the game gave no item count, so item trackers show a grey icon.",
-	NAMES = { ammo = "Ammunition", tracking = "Tracking", form = "Stance or form" },
+	NAMES = { ammo = "Ammunition", tracking = "Tracking", form = "Stance or form", durability = "Durability" },
 	AMMO_WORDS = { [2] = "arrows", [3] = "bullets" },
 }
 
@@ -1551,6 +1551,154 @@ if type(ns.TrackerKind) == "function" then
 	})
 end
 
+-- Durability: the most worn item the player wears. GetInventoryItemDurability(slot) gives the durability an item has left and its most, and nothing
+-- for an item without durability (Camelot/PaperDollFrame.lua:1598, 1748); it is asked for each slot from INVSLOT_FIRST_EQUIPPED to
+-- INVSLOT_LAST_EQUIPPED (Constants.lua:136-155). No documentation gives its return types or a secret predicate for it, so each answer is taken by its
+-- type, and a withheld one leaves the tracker unknown. The count is the share of its durability the most worn item has left: low at the Durability
+-- minimum or under, missing while an item is broken, and fine while nothing worn has durability or the game turns repairs off
+-- (Enum.GameRule.RepairArmorDisabled, with which the game hides its own durability figure: DurabilityFrame.lua:52, 127; GameRulesDocumentation.lua:225-238).
+-- UPDATE_INVENTORY_DURABILITY and PLAYER_EQUIPMENT_CHANGED (PaperDollInfoDocumentation.lua:384-393, 442-446) read it again, and the pass of the
+-- trackers when the player enters the world reads it at login. For READY seconds after READY_CHECK (PartyInfoDocumentation.lua:838-848; its payload,
+-- which can be withheld, is not read) a low or missing durability tracker is shown whatever Show, Hide while mounted and Hide in cities and inns say.
+-- This follows the low durability warning of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (ItemInventory.lua:46-59, 216-232,
+-- 314-325, 700-711).
+-- FIRST, LAST: the slots when the constants are missing. READY: EnhanceQoL's time on screen after a ready check (ItemInventory.lua:51). ICON: the
+-- anvil EnhanceQoL shows for durability (Init.lua:586). SLOTS: the words of the check for the slots whose items wear. ready: when the window ends.
+local D = {
+	FIRST = 1, LAST = 19, READY = 12, ICON = 136241,
+	NO_CALL = "Trackers: the game gave no durability, so the durability tracker shows a grey icon.",
+	SLOTS = { [1] = "head", [3] = "shoulders", [5] = "chest", [6] = "waist", [7] = "legs", [8] = "feet", [9] = "wrists", [10] = "hands",
+		[16] = "main hand", [17] = "off hand", [18] = "ranged weapon" },
+	ready = 0,
+}
+
+-- An equipment slot of the game's constants, else the number of this build.
+local function EquipSlot(value, fallback)
+	return (Plain(value, "number") and value >= 0 and value <= 30 and value == math.floor(value)) and value or fallback
+end
+
+-- The most worn item the player wears: { slot, now, most } of the one with the smallest share of its durability left, or nil when nothing worn
+-- has durability; else nil and the words of the check when the game has no call, answers for no slot or withholds an answer.
+local function MostWorn()
+	if type(GetInventoryItemDurability) ~= "function" then
+		return nil, "the game has no durability call"
+	end
+	local worn, answered = nil, false
+	for slot = EquipSlot(INVSLOT_FIRST_EQUIPPED, D.FIRST), EquipSlot(INVSLOT_LAST_EQUIPPED, D.LAST) do
+		local ok, now, most = pcall(GetInventoryItemDurability, slot)
+		if ok and (IsSecret(now) or IsSecret(most)) then
+			return nil, "an answer was withheld"
+		elseif ok then
+			answered = true
+			if ns.Finite(now) and ns.Finite(most) and most > 0 then
+				now = math.max(0, math.min(now, most))
+				if not worn or now * worn.most < worn.now * most then
+					worn = { slot = slot, now = now, most = most }
+				end
+			end
+		end
+	end
+	if not answered then
+		return nil, "the game gave no answer"
+	end
+	return worn
+end
+
+-- True while the game turns repairs off: Enum.GameRule.RepairArmorDisabled, asked of C_GameRules.IsGameRuleActive.
+local function RepairsOff()
+	local rule = Enumerated("GameRule", "RepairArmorDisabled", nil)
+	local rules = type(C_GameRules) == "table" and not IsSecret(C_GameRules) and C_GameRules or {}
+	return rule ~= nil and Ask(rules.IsGameRuleActive, rule) == true
+end
+
+-- The share at or under which the tracker is low: its own Low at, else the Durability minimum. 0 is never.
+local function DurabilityLow(entry)
+	if Plain(entry.low, "number") then
+		return entry.low
+	end
+	local page = ns.Get(KEY .. ".durabilityMin")
+	return Plain(page, "number") and page or 0
+end
+
+local function DurabilityRead(entry)
+	local id = entry.id
+	if RepairsOff() then
+		mem.last[id] = { word = "the game turns repairs off here" }
+		return { state = "fine", hidden = false, icon = D.ICON }
+	end
+	local worn, why = MostWorn()
+	if why then
+		ns.Note(KEY, D.NO_CALL)
+		mem.last[id] = { word = why }
+		return { state = "unknown", hidden = false, icon = D.ICON }
+	elseif not worn then
+		mem.last[id] = { none = true }
+		return { state = "fine", hidden = false, icon = D.ICON }
+	end
+	-- Rounded as the count shows it, and never 0 for an item that is not broken.
+	local percent = worn.now > 0 and math.max(1, math.floor(worn.now / worn.most * 100 + 0.5)) or 0
+	local low = DurabilityLow(entry)
+	mem.last[id] = { slot = worn.slot, now = worn.now, most = worn.most, percent = percent }
+	local state = percent == 0 and "missing" or ((low > 0 and percent <= low) and "low" or "fine")
+	return { state = state, hidden = false, count = percent, top = 100, icon = D.ICON }
+end
+
+local DurabilityClean, OneDurability = Single("durability")
+
+-- A new durability tracker shows only when low or missing: one that is always up says nothing most of the time.
+local function DurabilityAdd(argument, entries)
+	local fields, message = OneDurability(argument, entries)
+	if type(fields) == "table" then
+		fields.show = "low"
+	end
+	return fields, message
+end
+
+-- 1 for a low or missing tracker until the window of a ready check ends; nil leaves it to the rules of Show.
+local function DurabilityWanted(_, state)
+	if (state == "low" or state == "missing") and Now() < D.ready then
+		return 1
+	end
+	return nil
+end
+
+-- A ready check opens the window, and each durability tracker is looked at again when it ends.
+local function DurabilityEvent(event)
+	if event ~= "READY_CHECK" then
+		return
+	end
+	D.ready = Now() + D.READY
+	for _, entry in ipairs(type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}) do
+		if entry.kind == "durability" and type(ns.TrackerWake) == "function" then
+			ns.TrackerWake(entry, D.ready)
+		end
+	end
+end
+
+local function DurabilityLines(entry)
+	local last = mem.last[entry.id]
+	if not last then
+		return { "Durability: not read yet." }
+	elseif last.word then
+		return { ("Durability: %s."):format(last.word) }
+	elseif last.none then
+		return { "Durability: nothing you wear has durability." }
+	end
+	local low = DurabilityLow(entry)
+	local ready = Now() < D.ready and ", shown for the ready check" or ""
+	return { ("Durability: lowest %d%%, %s, %d of %d, low %s%s."):format(last.percent, D.SLOTS[last.slot] or ("slot %d"):format(last.slot),
+		math.floor(last.now), math.floor(last.most), low > 0 and ("at %d%% or less"):format(low) or "never", ready) }
+end
+
+if type(ns.TrackerKind) == "function" then
+	ns.TrackerKind("durability", {
+		Read = DurabilityRead, Clean = DurabilityClean, Add = DurabilityAdd, Icon = function() return D.ICON end, Lines = DurabilityLines,
+		Wanted = DurabilityWanted, Event = DurabilityEvent,
+		events = { "UPDATE_INVENTORY_DURABILITY", "PLAYER_EQUIPMENT_CHANGED", "READY_CHECK" },
+		what = "durability", hiddenAble = false,
+	})
+end
+
 -- Stances and forms: GetShapeshiftFormInfo(index) for each of GetNumShapeshiftForms() gives { texture, isActive, isCastable, spellID }. An
 -- active flag is a boolean, 1 or 0, and anything else leaves the tracker unknown.
 local function FormInfo(index)
@@ -1821,6 +1969,7 @@ end
 PICKS[#PICKS + 1] = { "pet", "", P.NAME }
 PICKS[#PICKS + 1] = { "ammo", "", I.NAMES.ammo }
 PICKS[#PICKS + 1] = { "tracking", "", I.NAMES.tracking }
+PICKS[#PICKS + 1] = { "durability", "", I.NAMES.durability }
 
 function ns.TrackerOtherCandidates()
 	local rows = {}

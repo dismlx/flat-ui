@@ -53,6 +53,8 @@ ns.NAME_COLOUR_CHOICES = { { "game", "As the game has it" }, { "white", "White" 
 local KEPT = "Not applied while Leave the game's action bars alone is on."
 -- The same for the rows that apply to both experience bars: Flat UI's own bar is not held back by that setting.
 local KEPT_XP = "On the game's bar, not applied while Leave the game's action bars alone is on."
+-- Where a line of text around the minimap goes (MapText.lua).
+local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the map" } }
 
 ns.PAGES = {
 	{
@@ -764,6 +766,8 @@ ns.PAGES = {
 			tip = "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, a low count waits for the end of a fight." },
 		{ key = "thrownMin", kind = "number", default = 20, min = 0, max = 200, step = 5, label = "Thrown weapon minimum",
 			tip = "With a thrown weapon, the ammunition tracker is low at this many or fewer. 0 means never. One that wears out is low at a fifth of its durability." },
+		{ key = "durabilityMin", kind = "number", default = 20, min = 0, max = 100, step = 5, unit = "%", label = "Durability minimum",
+			tip = "The durability tracker is low when an item you wear is at this much of its durability or less, and red when one is broken. 0 means never. For 12 seconds after a ready check it shows when low or broken, whatever Show says." },
 		{ section = "When shown" },
 		{ key = "show", kind = "choice", default = "always", label = "Show",
 			choices = { { "always", "Always" }, { "low", "Only when low or missing" }, { "combat", "Only in combat" } } },
@@ -1297,6 +1301,20 @@ ns.PAGES = {
 		{ key = "btnAddons", kind = "bool", default = true, label = "Addon list button" },
 		{ key = "addonButtons", kind = "choice", default = "edge", label = "Addon buttons", tip = "Round buttons that other addons put on the minimap.", changed = "MapButtonsChanged",
 			choices = { { "leave", "Where each addon puts them" }, { "edge", "Column beside the map" }, { "bar", "Row under the map" } } },
+		-- MapText.lua draws these: lines of text above and below the map.
+		{ section = "Text around the map" },
+		{ key = "mapCoords", kind = "bool", default = true, label = "Coordinates", tip = "Your place on the zone map. Hidden in instances and where the game gives no position." },
+		{ key = "mapCoordsPlace", kind = "choice", default = "below", label = "Coordinates place", needs = "mapCoords", choices = MAP_TEXT_PLACES },
+		{ key = "mapCoordsDecimals", kind = "choice", default = "1", label = "Coordinate decimals", needs = "mapCoords",
+			choices = { { "0", "None (45, 62)" }, { "1", "One (45.3, 62.1)" }, { "2", "Two (45.31, 62.08)" } } },
+		{ key = "mapDurability", kind = "bool", default = true, label = "Durability", tip = "Your most worn equipped item. Yellow at 50% or less, red at 20% or less." },
+		{ key = "mapDurabilityPlace", kind = "choice", default = "below", label = "Durability place", needs = "mapDurability", choices = MAP_TEXT_PLACES },
+		{ key = "mapPerf", kind = "bool", default = false, label = "Frame rate and latency", tip = "Frames per second, then your home and world latency in milliseconds." },
+		{ key = "mapPerfPlace", kind = "choice", default = "below", label = "Frame rate place", needs = "mapPerf", choices = MAP_TEXT_PLACES },
+		{ key = "mapClock", kind = "bool", default = false, label = "Time", tip = "Your local time or the realm's. The game's clock beside the zone name has its own row, Clock, under Buttons." },
+		{ key = "mapClockPlace", kind = "choice", default = "above", label = "Time place", needs = "mapClock", choices = MAP_TEXT_PLACES },
+		{ key = "mapClockTime", kind = "choice", default = "local", label = "Local or realm time", needs = "mapClock", choices = { { "local", "Local time" }, { "realm", "Realm time" } } },
+		{ key = "mapClockHours", kind = "choice", default = "24", label = "Time format", needs = "mapClock", choices = { { "24", "24 hours (14:05)" }, { "12", "12 hours (2:05 PM)" } } },
 	},
 	{
 		key = "hudBuffs", label = "Buffs and debuffs", parent = "hud", owner = "hud",
