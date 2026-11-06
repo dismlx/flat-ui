@@ -10395,6 +10395,17 @@ local PAGES = {
 		S("cooldowns.keybind", "bool", false, "Keybind on icons", "The key bound to the spell on your action bars.", nil),
 		S("cooldowns.keybindSize", "number", 100, "Keybind size", nil, { min = 50, max = 250, step = 5, unit = "%", needs = "cooldowns.keybind" }),
 	} },
+	{ key = "pulse", label = "Cooldown pulse", parent = "cooldowns", rows = {
+		S("pulse.enabled", "bool", false, "Cooldown pulse", "When a spell of your spell book, a trinket you wear or an item you use is ready again, its icon fades in and out in the middle of the screen. /flatui move places it."),
+		"What pulses",
+		S("pulse.minimum", "number", 20, "Shortest cooldown", "A shorter cooldown does not pulse, nor does the global cooldown.", { min = 0, max = 600, step = 5, unit = " s" }),
+		S("pulse.ignore", "list", 0, "Leave out", "A spell is left out with all its ranks. For one that is not listed, type /flatui pulse ignore and its name."),
+		S("pulse.unignore", "list", 0, "Put back"),
+		"Look",
+		S("pulse.size", "number", 72, "Icon size", nil, { min = 32, max = 160, step = 4, unit = "" }),
+		S("pulse.time", "number", 1, "How long it shows", "Cooldowns that end together pulse one after another. /flatui pulse test shows one.", { min = 1, max = 5, step = 1, unit = " s" }),
+		S("pulse.sound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
+	} },
 	{ key = "trackers", label = "Trackers", rows = {
 		S("trackers.enabled", "bool", true, "Trackers"),
 		"List",
@@ -21673,7 +21684,7 @@ end
 -- Nor do the rows of wave 5 (0.5.7), for the same reason.
 for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.rows", "threat.barWidth", "threat.barHeight",
 	"cooldowns.addItem", "cooldowns.removeItem", "cooldowns.iconSound", "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint",
-	"cooldowns.powerColour" }) do
+	"cooldowns.powerColour", "pulse.enabled", "pulse.minimum", "pulse.ignore", "pulse.unignore", "pulse.size", "pulse.time", "pulse.sound" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67143,7 +67154,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1019 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1026 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -67457,7 +67468,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 962 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 969 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -70078,7 +70089,7 @@ function PT.runTabs()
 		{ "Personal resource display", "General, Your buffs" },
 		{ "Cast bars", "General, Size, Text and icon" },
 		{ "Action bars", "General, Button text, Colours and cooldowns, Glows and animations" },
-		{ "Cooldowns", "General, States and text" },
+		{ "Cooldowns", "General, States and text, Cooldown pulse" },
 		{ "Trackers", "General, Tracker look, Low and missing, Tracker" },
 		{ "Minimap and buffs", "General, Minimap, Buffs and debuffs, Bars, bags and micro menu, Tracker, loot and alerts" },
 		{ "Windows", "General, Which windows, Bags and items" },
@@ -70103,7 +70114,7 @@ function PT.runTabs()
 			PT.go(W, name)
 			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
 		end
-		check("window tabs: the 38 child pages are the tabs of twelve modules, in the order of the design, and the other twelve modules have none", children == 38 and #bad == 0, children .. " " .. joined(bad))
+		check("window tabs: the 39 child pages are the tabs of twelve modules, in the order of the design, and the other twelve modules have none", children == 39 and #bad == 0, children .. " " .. joined(bad))
 		PT.go(W, "Nameplates")
 		PT.go(W, "Health bar")
 		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil
@@ -97800,7 +97811,7 @@ do
 			and row.label == "Glow on the action button" and section == "Proc alerts" and W.ns.Get("trackers.glow") == true)
 		check("procglow: the row has a tip that names Restyle action bars", row ~= nil and type(row.tip) == "string" and row.tip:find("Restyle action bars", 1, true) ~= nil)
 		check("procglow: the row calls ProcGlowChanged, which exists", row ~= nil and row.changed == "ProcGlowChanged" and type(W.ns.ProcGlowChanged) == "function")
-		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 24 and (function()
+		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 26 and (function()
 			local at = {}
 			for i, file in ipairs(FILES) do
 				at[file] = i
@@ -108039,7 +108050,7 @@ do
 		end
 		check("abfx: the wizard has the step Glows and animations right after Button colours and cooldowns, built, with the six settings", found ~= nil and steps[found - 1].id == "ab-colours" and steps[found].title == "Glows and animations"
 			and steps[found].area == "Action bars" and steps[found].built == true and #steps[found].rows == 6, tostring(found))
-		check("abfx: it is no module", #W.ns.MODULE_ORDER == 24)
+		check("abfx: it is no module", #W.ns.MODULE_ORDER == 26)
 		local toc = {}
 		for line in io.open(ADDON_DIR .. "/FlatUI.toc", "rb"):read("*a"):gmatch("[^\r\n]+") do
 			if line:match("%.lua$") then

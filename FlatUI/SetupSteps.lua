@@ -871,6 +871,13 @@ ns.SETUP_STEPS = {
 		{ "cooldowns.x", "r", "mock-screen" },
 		{ "cooldowns.y", "r", "mock-screen" },
 		{ "cooldowns.manager", "c", "mock-cooldown-row" },
+		{ "pulse.enabled", "o", "behaviour", "Fades the icon of a spell or item in and out in the middle of the screen when it is ready again." },
+		{ "pulse.minimum", "o", "behaviour", "Sets the shortest cooldown that pulses." },
+		{ "pulse.ignore", "r", "behaviour", "Leaves a spell or item out of the pulse." },
+		{ "pulse.unignore", "r", "behaviour", "Puts a spell or item back in the pulse." },
+		{ "pulse.size", "o", "behaviour", "Sets the size of the pulse." },
+		{ "pulse.time", "r", "behaviour", "Sets how long the pulse shows." },
+		{ "pulse.sound", "r", "behaviour", "Plays a sound with the pulse." },
 	} },
 	{ id = "cd-states", area = "Cooldowns", title = "Cooldown states and numbers", draw = "mock-cooldown-row", built = true, rows = {
 		{ "cooldowns.dimDesat", "c", "mock-cooldown-row" },
