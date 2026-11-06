@@ -9887,7 +9887,7 @@ local PAGES = {
 		S("castbars.shieldColour", "colour", "ff9a9a9a", "Uninterruptible colour"),
 		S("castbars.interruptedColour", "colour", "ffd94040", "Interrupted colour", "Also shown when a cast fails."),
 		S("castbars.craftColour", "colour", "ff4d99e6", "Crafting colour"),
-		S("castbars.interrupt", "bool", true, "Interrupt colours on enemy casts",
+		S("castbars.interrupt", "bool", true, "Interrupt readiness on enemy casts",
 			"On target, focus and nameplate cast bars with a flat fill, an enemy cast you can interrupt shows whether your class interrupt is ready. A cast that cannot be interrupted keeps its colour.",
 			{ changed = "InterruptChanged" }),
 		S("castbars.interruptReady", "colour", "ff33d959", "Interrupt ready colour", nil, { needs = "castbars.interrupt" }),
