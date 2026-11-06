@@ -6,7 +6,7 @@ local _, ns = ...
 -- Each new standing is compared with the last one seen, so a loss is never followed. Of the gains that come together (BURST seconds: a quest of a
 -- Steamwheedle Cartel town also raises the other towns by half) the largest wins, and Flat UI's reputation bar (XpBar.lua, through
 -- ns.ErrandsRepFollowed) shows that faction in place of the one the game watches. Passed over: a faction you are exalted with, one you moved to
--- Inactive, one you are at war with, and a heading. A faction picked in the game's reputation window shows until your next gain. The faction
+-- Inactive, and a heading. A faction picked in the game's reputation window shows until your next gain. The faction
 -- followed is kept for the character (FlatUICharDB.errandsRep). The faction the game watches is never changed, and the list of factions is only
 -- read, never expanded or collapsed: C_Reputation.SetWatchedFactionByID and the header calls raise UPDATE_FACTION inside the caller (a synchronous
 -- event), so the game's status bar manager would run inside Flat UI's call and keep the table of shown bars it wrote then, and on Forever that
@@ -20,8 +20,10 @@ local _, ns = ...
 -- (C_SuperTrack.SetSuperTrackedUserWaypoint). They take x and y in percent, with a zone name or #map ID before them, and clear. /way is added
 -- WAY_WAIT seconds after the start, once every addon that loads with the game has made its commands, and only when no other command is /way
 -- (any SLASH_ global, or the game's own list of commands); an addon that adds /way later takes it over by itself, since the game reads new
--- commands last. Also in a fight: the calls are not protected, and the game's handlers they run (the world map's pin and its pin button) touch
--- no protected frame.
+-- commands last. Also in a fight, with the map closed: the calls are not protected, and the one game handler they then run, the world map's
+-- pin button, makes no restricted call. While the map is open its pin provider would draw the pin inside the call (AcquirePin calls
+-- SetPassThroughButtons, which a fight refuses, and the first pin of a session would leave the map's pin pool Flat UI's), so /way then asks
+-- to close the map.
 -- These follow EnhanceQoL's reputation bar, its /way command and its classic reminders, adapted with the permission of its author.
 
 local E = ns.Errands
@@ -46,7 +48,7 @@ local TYPE_RANK = { [3] = 1, [2] = 2, [5] = 3, [6] = 4, [4] = 5 }
 local MICRO = 5
 -- The most maps kept for names, and the most names an answer lists.
 local MOST_MAPS, MOST_NAMES = 5000, 4
-local WHY = { top = "you are exalted with it", inactive = "it is inactive", war = "you are at war with it", header = "it is a heading" }
+local WHY = { top = "you are exalted with it", inactive = "it is inactive", header = "it is a heading" }
 
 -- seen: by faction ID, { standing, active, name } from the list and the gains. burst, order: the gains of this moment and their order. token: counts
 -- bursts, so an old timer does nothing. followed: the faction shown (false for none, nil before the saved one is read). watched: the faction the
@@ -231,8 +233,6 @@ local function PassOver(id)
 		return "unknown", nil
 	elseif f.isHeader and not f.isHeaderWithRep then
 		return "header", f.name
-	elseif f.atWarWith then
-		return "war", f.name
 	elseif ns.Finite(f.reaction) and f.reaction >= TOP then
 		return "top", f.name
 	end
@@ -290,7 +290,7 @@ local function Gained(id, standing)
 	end
 	local gain = 0
 	if before and standing then
-		if standing < before then
+		if standing <= before then
 			return
 		end
 		gain = standing - before
@@ -324,9 +324,13 @@ local function Look()
 		return
 	end
 	if watched ~= rep.watched then
+		local was = rep.watched
 		rep.watched = watched
 		if watched and E.On("repFollow") and watched ~= Followed() then
 			Follow(watched)
+		elseif not watched and was and E.On("repFollow") and was == Followed() then
+			-- Show as Experience Bar unticked on the faction the bar shows: the bar shows what the game watches, nothing, until the next gain.
+			Follow(false)
 		end
 	end
 end
@@ -623,6 +627,8 @@ local function Parse(msg)
 		return { clear = true }
 	end
 	msg = msg:gsub("(%d)%s*,%s+", "%1 ")
+	-- 45.2,61.8 and 45,61.8 (a comma between two numbers of which one has a decimal point), and 45 ,61.
+	msg = msg:gsub("(%.%d*),(%d)", "%1 %2"):gsub("(%d),(%d+%.)", "%1 %2"):gsub("%s+,%s*", " ")
 	local tokens = {}
 	for token in msg:gmatch("%S+") do
 		tokens[#tokens + 1] = token
@@ -820,6 +826,13 @@ local function Way(msg)
 	local point = Point(map.id, p.x / 100, p.y / 100)
 	if not point then
 		Tell("this client has no map pins, so there is no waypoint to set.")
+		return
+	end
+	-- While the world map is open its pin provider takes USER_WAYPOINT_UPDATED, which the game raises inside SetUserWaypoint: the map would draw
+	-- its pin under this call, and AcquirePin calls SetPassThroughButtons, which a fight refuses; the first pin of a session would also leave the
+	-- map's pool of pins Flat UI's until a reload. So the pin is set only with the map closed.
+	if E.Shown(_G.WorldMapFrame) then
+		Tell(("close the map, then type %s again."):format(Command()))
 		return
 	end
 	local ok, set = pcall(M.SetUserWaypoint, point)

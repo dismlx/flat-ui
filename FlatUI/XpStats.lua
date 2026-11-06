@@ -225,12 +225,16 @@ local function Read()
 	end
 end
 
--- The away flag: a span opens when the game flags the player away and closes when it takes the flag off. A withheld answer changes nothing.
+-- The away flag: a span opens when the game flags the player away and closes when it takes the flag off. A withheld answer (UnitIsAFK is secret
+-- in a dungeon, a raid or a battleground) opens nothing and closes a span opened outside: a change of the flags there means the player acted.
 local function Away()
 	local now = Now()
 	local away = Ask(UnitIsAFK, "player")
-	if not s or not now or (away ~= true and away ~= false) then
+	if not s or not now then
 		return
+	end
+	if away ~= true and away ~= false then
+		away = false
 	end
 	if away and not s.awaySince then
 		s.awaySince = now
