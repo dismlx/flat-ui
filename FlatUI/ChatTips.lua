@@ -21,9 +21,10 @@ local _, ns = ...
 -- The enchant: the game must say the item of the tooltip is in a weapon slot of yours (C_Item.GetItemLocation, ItemDocumentation.lua:786-799, read
 -- by its field), and the enchant is what it says of that slot (C_PaperDollInfo.GetTemporaryEnchantmentInfo, PaperDollInfoDocumentation.lua:226-241,
 -- 491-500). An item in a bag, or a link, has none.
--- Show IDs is read as the tooltip is built. The game builds the tooltips of bag slots, action buttons and the slots of the Character window again
--- every 0.2 seconds (UpdateTooltip, GameTooltip.lua:451-463; Mainline/ContainerFrame.lua:1655, ActionButton.lua:1126, Camelot/PaperDollFrame.lua:1972),
--- so there the IDs come as the key goes down. No tooltip is built again here: that would call a Lua method of GameTooltip.
+-- Show IDs is read as the tooltip is built. The game builds the tooltips of bag slots, its own action buttons and the slots of the Character window
+-- again every 0.2 seconds (UpdateTooltip, GameTooltip.lua:451-463; Mainline/ContainerFrame.lua:1655, ActionButton.lua:1126,
+-- Camelot/PaperDollFrame.lua:1972), and OwnPaint.lua sets the tooltip of Flat UI's own action buttons (which have no UpdateTooltip) again when a
+-- modifier key goes down or up, so there the IDs come as the key goes down. No tooltip is built again here: that would call a Lua method of GameTooltip.
 -- These follow the tooltip of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLTooltip.lua:206-224, 493-534, 895-979,
 -- 1118-1133, 1194-1200, 1485-1551). Left out: a choice of icon size (the icon is the height of the title), the realm of a target, and building
 -- a tooltip again when the key goes down.
