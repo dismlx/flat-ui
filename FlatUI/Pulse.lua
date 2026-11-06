@@ -169,10 +169,11 @@ end
 
 -- What is left out -------------------------------------------------------------------------------------------------------------------
 
--- What this character left out: spell IDs, and item IDs below 0, none twice, at most 100.
-function P.Left()
+-- What this character left out: spell IDs, and item IDs below 0, none twice, at most 100. Nothing is saved for a character who left
+-- nothing out; make is true to start the list.
+function P.Left(make)
 	local saved = ns.Character()
-	if type(saved) ~= "table" then
+	if type(saved) ~= "table" or (saved.pulseLeftOut == nil and not make) then
 		return {}
 	end
 	local list, seen = {}, {}
@@ -182,7 +183,7 @@ function P.Left()
 			list[#list + 1] = id
 		end
 	end
-	saved.pulseLeftOut = list
+	saved.pulseLeftOut = (#list > 0 or make) and list or nil
 	return list
 end
 
@@ -1010,7 +1011,7 @@ function ns.PulseIgnore(id)
 	if type(id) ~= "number" or not P.Whole(math.abs(id)) then
 		return false, "Choose a spell or an item."
 	end
-	local list = P.Left()
+	local list = P.Left(true)
 	if #P.Matches(list, id) > 0 then
 		return false, ("%s is already left out."):format(P.Label(id))
 	end
@@ -1033,6 +1034,11 @@ function ns.PulseUnignore(id)
 	end
 	for index = #found, 1, -1 do
 		table.remove(list, found[index])
+	end
+	-- The last one put back takes the list with it.
+	local saved = ns.Character()
+	if #list == 0 and type(saved) == "table" then
+		saved.pulseLeftOut = nil
 	end
 	P.Changed()
 	return true, ("%s pulses again."):format(P.Label(id))

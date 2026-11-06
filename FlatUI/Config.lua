@@ -170,7 +170,7 @@ ns.PAGES = {
 		{ page = "castbars", key = "shieldColour", kind = "colour", default = "ff9a9a9a", label = "Uninterruptible colour" },
 		{ page = "castbars", key = "interruptedColour", kind = "colour", default = "ffd94040", label = "Interrupted colour", tip = "Also shown when a cast fails." },
 		{ page = "castbars", key = "craftColour", kind = "colour", default = "ff4d99e6", label = "Crafting colour" },
-		{ page = "castbars", key = "interrupt", kind = "bool", default = true, label = "Colour enemy casts by your interrupt", changed = "InterruptChanged",
+		{ page = "castbars", key = "interrupt", kind = "bool", default = true, label = "Interrupt colours on enemy casts", changed = "InterruptChanged",
 			tip = "On target, focus and nameplate cast bars with a flat fill, an enemy cast you can interrupt shows whether your class interrupt is ready. A cast that cannot be interrupted keeps its colour." },
 		{ page = "castbars", key = "interruptReady", kind = "colour", default = "ff33d959", label = "Interrupt ready colour", needs = "interrupt" },
 		{ page = "castbars", key = "interruptCooling", kind = "colour", default = "ffd9732e", label = "Interrupt on cooldown colour", needs = "interrupt" },

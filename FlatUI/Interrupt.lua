@@ -618,7 +618,7 @@ local function SafeSync()
 end
 ns.InterruptSync = SafeSync
 
--- The row Colour enemy casts by your interrupt changed: the covers read it on their next frame, and the events start or stop.
+-- The row Interrupt colours on enemy casts changed: the covers read it on their next frame, and the events start or stop.
 function ns.InterruptChanged()
 	SafeSync()
 end

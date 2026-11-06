@@ -9887,7 +9887,7 @@ local PAGES = {
 		S("castbars.shieldColour", "colour", "ff9a9a9a", "Uninterruptible colour"),
 		S("castbars.interruptedColour", "colour", "ffd94040", "Interrupted colour", "Also shown when a cast fails."),
 		S("castbars.craftColour", "colour", "ff4d99e6", "Crafting colour"),
-		S("castbars.interrupt", "bool", true, "Colour enemy casts by your interrupt",
+		S("castbars.interrupt", "bool", true, "Interrupt colours on enemy casts",
 			"On target, focus and nameplate cast bars with a flat fill, an enemy cast you can interrupt shows whether your class interrupt is ready. A cast that cannot be interrupted keeps its colour.",
 			{ changed = "InterruptChanged" }),
 		S("castbars.interruptReady", "colour", "ff33d959", "Interrupt ready colour", nil, { needs = "castbars.interrupt" }),
@@ -44936,7 +44936,12 @@ do
 		end
 	end
 	local want = { "castColour", "channelColour", "shieldColour", "interruptedColour", "craftColour" }
-	local ok = from ~= nil and #page >= from + 5 and page[from + 6] ~= nil and page[from + 6].section == "Borders"
+	-- After them the interrupt rows of 0.5.7: the switch, then its two colours, which need it.
+	local ok = from ~= nil and #page >= from + 8 and page[from + 9] ~= nil and page[from + 9].section == "Borders"
+	for k, row in ipairs({ { "interrupt", "bool" }, { "interruptReady", "colour", "interrupt" }, { "interruptCooling", "colour", "interrupt" } }) do
+		local item = from and page[from + 5 + k]
+		ok = ok and item ~= nil and item.key == row[1] and item.page == "castbars" and item.path == "castbars." .. row[1] and item.kind == row[2] and item.needs == row[3]
+	end
 	for k, key in ipairs(want) do
 		local item = from and page[from + k]
 		ok = ok and item ~= nil and item.key == key and item.page == "castbars" and item.path == "castbars." .. key and item.kind == "colour" and item.needs == nil and item.needsPath == nil
@@ -66046,7 +66051,7 @@ function PT.runMsTree()
 			end
 		end
 		check("ms-tree: the cast colours on Colours are still saved as castbars.<key>", table.concat(colours, ",") == "castbars.castColour,castbars.channelColour,castbars.shieldColour,castbars.interruptedColour,castbars.craftColour"
-			.. ",general.borderMode,general.reactionOwn,general.reactionHostile,general.reactionNeutral,general.reactionFriendly,general.reactionTapped,general.powerOwn"
+			.. ",castbars.interrupt,castbars.interruptReady,castbars.interruptCooling,general.borderMode,general.reactionOwn,general.reactionHostile,general.reactionNeutral,general.reactionFriendly,general.reactionTapped,general.powerOwn"
 			.. ",general.powerMana,general.powerRage,general.powerEnergy,general.powerFocus,general.powerRunic,general.healthFull,general.healthHalf,general.healthLow", table.concat(colours, ","))
 		ns.Set("hud.cityMap", "leave")
 		ns.Set("nameplates.health", false)
@@ -67391,15 +67396,15 @@ function PT.runSetup()
 		for _, label in ipairs({ "Bar texture", "Cast colour", "Channel colour", "Custom reaction colours", "Custom power colours", "Colour at full health", "Colour at half health", "Colour at low health" }) do
 			if not PT.row(W, label) then two[#two + 1] = label end
 		end
-		check("setup: step 2 shows its eight main rows, not the rare ones, and a button for the three rare rows that are open", #two == 0 and PT.row(W, "Uninterruptible colour") == nil
-			and PT.row(W, "Hostile") == nil and PT.button(W, "More choices (3)") ~= nil, joined(two))
-		SU.press(W, "More choices (3)")
+		check("setup: step 2 shows its eight main rows, not the rare ones, and a button for the six rare rows that are open", #two == 0 and PT.row(W, "Uninterruptible colour") == nil
+			and PT.row(W, "Hostile") == nil and PT.button(W, "More choices (6)") ~= nil, joined(two))
+		SU.press(W, "More choices (6)")
 		check("setup: More choices shows the open rare rows, and Fewer choices takes them away, and the setting follows", PT.row(W, "Uninterruptible colour") ~= nil and PT.row(W, "Crafting colour") ~= nil
 			and PT.row(W, "Hostile") == nil and PT.button(W, "Fewer choices") ~= nil and ns.Get("setup.choices") == "all")
 		PT.press(W, PT.control(PT.row(W, "Custom reaction colours")))
 		check("setup: a row behind a switch appears when its switch is on in the draft", PT.row(W, "Hostile") ~= nil and PT.row(W, "Tapped by another player") ~= nil and PT.row(W, "Mana") == nil)
 		SU.press(W, "Fewer choices")
-		check("setup: and the same on the main rows, closing the rare ones again", PT.row(W, "Hostile") == nil and ns.Get("setup.choices") == "main" and PT.button(W, "More choices (7)") ~= nil)
+		check("setup: and the same on the main rows, closing the rare ones again", PT.row(W, "Hostile") == nil and ns.Get("setup.choices") == "main" and PT.button(W, "More choices (10)") ~= nil)
 		SU.press(W, "Back")
 		check("setup: Back returns to the step before", S.cur == 1 and PT.title(W) == "Borders and backgrounds" and S.draft.seen[2] == true)
 		SU.press(W, "Skip this area")
@@ -91503,7 +91508,9 @@ do
 	function X.hearing(W, event)
 		local n = 0
 		for _, frame in ipairs(W.eventFrames) do
-			if frame.events[event] and frame.events.SPELLS_CHANGED then
+			-- The frame of Core.lua hears the events of every module (the cooldown icons hear SPELL_UPDATE_USABLE and SPELLS_CHANGED for their
+			-- tint), ADDON_LOADED among them: it is not the frame of the triggers.
+			if frame.events[event] and frame.events.SPELLS_CHANGED and not frame.events.ADDON_LOADED then
 				n = n + 1
 			end
 		end
