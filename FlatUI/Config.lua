@@ -1562,6 +1562,9 @@ ns.PAGES = {
 		{ key = "count", kind = "bool", default = false, label = "Item count in bags and bank" },
 		{ key = "icons", kind = "bool", default = true, label = "Item and spell icons", tip = "The icon before the name of an item or spell." },
 		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you." },
+		{ section = "Item comparison" },
+		{ key = "compareShift", kind = "bool", default = true, label = "Compare items only while holding Shift",
+			tip = "The items you wear show beside the tooltip of an item only while you hold Shift. Sets a game setting that the game's options do not show. Turned off, the game's own value is back." },
 	},
 	-- Errands.lua and the Errands*.lua files: chores done when the game asks for them. Off by default; on, each row has the choice of a player
 	-- levelling on Forever.

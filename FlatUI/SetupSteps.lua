@@ -778,6 +778,7 @@ ns.SETUP_STEPS = {
 		{ "chat.count", "o", "mock-tooltip" },
 		{ "chat.icons", "o", "behaviour", "Puts the icon of an item or spell before its name in its tooltip." },
 		{ "chat.targetLine", "c", "behaviour", "Adds a line naming what a unit targets to its tooltip." },
+		{ "chat.compareShift", "c", "behaviour", "Shows the items you wear beside an item's tooltip only while Shift is held." },
 	} },
 	{ id = "tr-list", area = "Trackers", title = "What trackers watch and when they show", draw = "mock-tracker", built = true, rows = {
 		{ "trackers.enabled", "c", "mock-tracker" },

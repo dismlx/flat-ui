@@ -63,7 +63,9 @@ local ADDON_NAME, ns = ...
 -- link in a chat window (EventRegistry: ChatFrame.OnHyperlinkEnter and ChatFrame.OnHyperlinkLeave) it fills GameTooltip from the link
 -- (SetOwner on a frame of its own, SetHyperlink) and hides it when the mouse leaves (Hide), only while that frame owns it and never in a fight.
 -- Inside the game's build of a tooltip, Chat and tooltips colours a player's class line (SetTextColor) and, with Item and spell icons, writes
--- the first line (SetText): the icon before the name, only while the line still holds that name.
+-- the first line (SetText): the icon before the name, only while the line still holds that name. With Compare items only while holding Shift
+-- (on by default) it writes the game's alwaysCompareItems, out of combat: 0, its text before that kept in FlatUIDB.compareGame, and that text
+-- again when the row, its page or the module goes off while the variable is still 0.
 -- Minimap and buffs, with Hide error messages on (off by default), takes the game's red error messages from UIErrorsFrame: it reads with
 -- IsEventRegistered that the frame listens, stops it hearing UI_ERROR_MESSAGE with UnregisterEvent and hears that event on a frame of its own,
 -- puts each message of a kind it does not hide back in the frame with AddMessage (ResetMessageFadeByID for a repeat that still shows) with the
@@ -3234,6 +3236,13 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		-- The cursor ring shows from the login (CursorRing.lua).
 		if ns.CursorRingChanged then
 			local ok, err = pcall(ns.CursorRingChanged)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end
+		-- Compare items only while holding Shift is written at every login, whatever the switch of Chat and tooltips (ItemCompare.lua).
+		if ns.ItemCompareSync then
+			local ok, err = pcall(ns.ItemCompareSync)
 			if not ok then
 				geterrorhandler()(err)
 			end

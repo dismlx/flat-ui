@@ -9,7 +9,7 @@ local _, ns = ...
 -- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
 -- ChatLinks.lua (called at the end of each refresh) also fills GameTooltip from a chat link under the mouse: SetOwner on a frame of its own,
--- SetHyperlink and Hide, never in a fight.
+-- SetHyperlink and Hide, never in a fight. ItemCompare.lua (called at the start of each refresh) writes the game's alwaysCompareItems.
 
 local KEY = "chat"
 
@@ -1304,6 +1304,10 @@ local function Hooks()
 end
 
 local function Refresh()
+	-- First: it touches no frame, so a failure further on does not keep the game's own value from coming back when the module stops.
+	if type(ns.ItemCompareSync) == "function" then
+		ns.ItemCompareSync()
+	end
 	Hooks()
 	Chat()
 	for _, name in ipairs(TOOLTIPS) do

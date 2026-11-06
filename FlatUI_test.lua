@@ -11040,6 +11040,9 @@ local PAGES = {
 		S("chat.count", "bool", false, "Item count in bags and bank"),
 		S("chat.icons", "bool", true, "Item and spell icons", "The icon before the name of an item or spell."),
 		S("chat.targetLine", "bool", true, "Target of units", "A line naming what a unit targets, in its class or reaction colour: You when it is you."),
+		"Item comparison",
+		S("chat.compareShift", "bool", true, "Compare items only while holding Shift",
+			"The items you wear show beside the tooltip of an item only while you hold Shift. Sets a game setting that the game's options do not show. Turned off, the game's own value is back."),
 	} },
 	{ key = "errands", label = "Errands", rows = {
 		S("errands.enabled", "bool", false, "Run errands", "Each errand below and on the Levelling tab has its own row. Selling, repairs, Make room, Train all, summons, invites, new spell ranks and talent reminders wait for the end of a fight."),
@@ -21646,7 +21649,7 @@ end
 for _, path in ipairs({ "chat.webLinks", "chat.linkTips", "chat.classLine", "chat.idsWhen", "chat.enchantId", "chat.icons", "chat.targetLine",
 	"windows.boeMark", "windows.unusableTint", "windows.petFood", "fade.targetFrame", "fade.focusFrame", "fade.buffs", "fade.objectiveTracker",
 	"hud.errors", "hud.errorMana", "hud.errorPower", "hud.errorRange", "hud.errorFacing", "hud.errorReady", "hud.errorTarget", "hud.errorMoving",
-	"general.cursorRing", "general.cursorRingSize", "general.cursorRingColour", "unitframes.hitNumbers" }) do
+	"general.cursorRing", "general.cursorRingSize", "general.cursorRingColour", "unitframes.hitNumbers", "chat.compareShift" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67112,7 +67115,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 57 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 57 and rows == 1005 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 57 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 57 and rows == 1006 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)

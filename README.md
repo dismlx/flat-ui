@@ -6,7 +6,7 @@ The **Errands** page, off by default, does the chores the game leaves to you: it
 
 The **Data panels** page, off by default, adds a top and a bottom panel with bag space, gold across your characters, durability, your hearthstone, coordinates, frame rate and latency, and friends and guild online.
 
-In the chat windows, a web address becomes a link that opens a box to copy it, and an item, spell or achievement link shows its tooltip while the mouse is over it. The **Tooltips** tab names what a unit targets, colours a player's class line and puts icons before item and spell names; with IDs on it shows the ID of the poison, oil or stone on your weapon, and **Show IDs** can wait for Shift, Ctrl or Alt.
+In the chat windows, a web address becomes a link that opens a box to copy it, and an item, spell or achievement link shows its tooltip while the mouse is over it. The **Tooltips** tab names what a unit targets, colours a player's class line and puts icons before item and spell names; with IDs on it shows the ID of the poison, oil or stone on your weapon, and **Show IDs** can wait for Shift, Ctrl or Alt. The items you wear show beside an item's tooltip only while you hold Shift.
 
 The **Fading** page, off by default, fades bars and frames while nothing needs them, and can show the target and focus frames, your buffs and the objective tracker only in combat, in a group, in an instance or when not mounted.
 
