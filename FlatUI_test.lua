@@ -9869,6 +9869,12 @@ local PAGES = {
 		S("general.scaleSmall", "number", 60, "Small scale", "Used instead of Custom scale.", { min = 35, max = 64, step = 1, unit = "%", needs = "general.scaleBelow" }),
 		"World",
 		S("general.questSparkle", "bool", true, "Quest item sparkle", "Quest items in the world sparkle. Sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start."),
+		S("general.cameraZoom", "bool", false, "Maximum camera distance", "The camera zooms out to 2.6, past the 2.0 that the game's Max Camera Distance allows. A game setting, the same in every profile. Turned off, the distance you had is back.", { live = true }),
+		"Cursor",
+		S("general.cursorRing", "choice", "off", "Cursor ring", "A ring around the mouse pointer, so you find it at a glance. It takes no clicks.",
+			{ choices = { { "always", "Always" }, { "combat", "In combat only" }, { "off", "Off" } } }),
+		S("general.cursorRingSize", "number", 48, "Cursor ring size", nil, { min = 16, max = 160, step = 4, unit = "", needs = "general.cursorRing", needsIn = { "always", "combat" } }),
+		S("general.cursorRingColour", "colour", "ffffffff", "Cursor ring colour", nil, { needs = "general.cursorRing", needsIn = { "always", "combat" } }),
 	} },
 	{ key = "generalColours", label = "Colours", parent = "general", owner = "general", rows = {
 		"Cast colours",
@@ -10820,6 +10826,7 @@ local PAGES = {
 		S("unitframes.pvpIcon", "bool", true, "PvP icon"),
 		S("unitframes.raidMarker", "bool", true, "Raid marker on target, focus and boss frames"),
 		S("unitframes.deadText", "bool", true, "Dead text"),
+		S("unitframes.hitNumbers", "bool", true, "Hit numbers on player and pet portraits", "The damage and healing numbers that flash over your portrait and your pet's."),
 		"Totems",
 		S("unitframes.totemTimer", "bool", true, "Totem time left"),
 		S("unitframes.totemSwipe", "bool", true, "Totem cooldown swipe"),
@@ -10933,6 +10940,15 @@ local PAGES = {
 		S("hud.lootQualityText", "bool", true, "Quality word on loot", nil, { needs = "hud.lootWindow" }),
 		"Alerts",
 		S("hud.alerts", "bool", true, "Loot, money and honour alerts", "Flat background with a thin border."),
+		"Error messages",
+		S("hud.errors", "bool", false, "Hide error messages", "Only the kinds below that are on, with their sound and voice. Other red errors and the yellow quest messages show as usual."),
+		S("hud.errorMana", "bool", true, "Not enough mana", nil, { needs = "hud.errors" }),
+		S("hud.errorPower", "bool", true, "Not enough rage or energy", "Also not enough focus for a hunter's pet, and no combo points for a finishing move.", { needs = "hud.errors" }),
+		S("hud.errorRange", "bool", true, "Out of range", "Also too far away to attack, too close for a ranged attack, and your pet out of range.", { needs = "hud.errors" }),
+		S("hud.errorFacing", "bool", true, "Facing the wrong way", "Also the target not in front of you or not behind it, and your pet not behind its target.", { needs = "hud.errors" }),
+		S("hud.errorReady", "bool", true, "Not ready yet", "Spells, abilities, items and potions still cooling down.", { needs = "hud.errors" }),
+		S("hud.errorTarget", "bool", true, "No target or invalid target", "Also nothing to attack, and a dead target.", { needs = "hud.errors" }),
+		S("hud.errorMoving", "bool", true, "Not while moving", "A cast or an action that needs you to stand still.", { needs = "hud.errors" }),
 		"Timers",
 		S("hud.mirror", "bool", true, "Breath and fatigue timers", "Thin border and flat fill in the cast colours."),
 		S("hud.countdown", "bool", true, "Countdown timers", "Thin border and flat fill on pull and start timers."),
@@ -21624,7 +21640,9 @@ for _, path in ipairs({ "datapanels.enabled", "datapanels.top", "datapanels.top1
 end
 -- Nor do the rows of wave 4 (0.5.6): the owner asked for code without new test blocks.
 for _, path in ipairs({ "chat.webLinks", "chat.linkTips", "chat.classLine", "chat.idsWhen", "chat.enchantId", "chat.icons", "chat.targetLine",
-	"windows.boeMark", "windows.unusableTint", "windows.petFood", "fade.targetFrame", "fade.focusFrame", "fade.buffs", "fade.objectiveTracker" }) do
+	"windows.boeMark", "windows.unusableTint", "windows.petFood", "fade.targetFrame", "fade.focusFrame", "fade.buffs", "fade.objectiveTracker",
+	"hud.errors", "hud.errorMana", "hud.errorPower", "hud.errorRange", "hud.errorFacing", "hud.errorReady", "hud.errorTarget", "hud.errorMoving",
+	"general.cursorRing", "general.cursorRingSize", "general.cursorRingColour", "unitframes.hitNumbers" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.

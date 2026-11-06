@@ -17,7 +17,9 @@ local ADDON_NAME, ns = ...
 -- followed with hooksecurefunc through ns.Follow, ns.FollowGlobal and ns.FollowTable, which run after the game's call and never change what it returns.
 -- BarBlock gives Movers the spots of the action bars. The one thing it writes on a Blizzard frame is the alpha of the bars of the block
 -- (SetAlpha, only with Fade the block on), put back when the fade goes off. Fade does the same for the frames of the Fading page, the alpha only
--- (SetAlpha), read before the first write and put back when its page, its row or the module goes off.
+-- (SetAlpha), read before the first write and put back when its page, its row or the module goes off. With Hit numbers on player and pet
+-- portraits off, Unit frames does the same for the frame that holds the player's hit number (HitIndicator), and hides the pet's (PetHitIndicator,
+-- SetShown) each time CombatFeedback_OnCombatEvent has shown it; the game shows the next one again once the row is on.
 -- Movers and Tooltip are the exceptions that move Blizzard frames, with ClearAllPoints, SetPoint
 -- and SetScale only, and SetAnchorType and Hide on GameTooltip: Movers places the frames the player moves,
 -- Tooltip places GameTooltip and hides it when the game fades it out while it follows the cursor. The cast
@@ -30,6 +32,9 @@ local ADDON_NAME, ns = ...
 -- its page goes off. Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.
 -- Windows writes one game setting: the direction of the game's clean up (C_Container.SetSortBagsRightToLeft), only while Items gather is
 -- From the other end, remembered in FlatUICharDB.sortDirection before the first write and put back as the variables above are.
+-- Maximum camera distance, on the Flat UI page, writes the game's cameraDistanceMaxZoomFactor only when the player ticks or unticks it, out of
+-- combat: 2.6 when ticked, its text before that kept in FlatUIDB.cameraGame, and that text again (or the client's default) when unticked while
+-- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.
 -- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- repairs with RepairAllItems, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on
 -- its own button, and answers summons, resurrections, invites and duels with the game's calls for them. Of the game's popups it hides only
@@ -59,6 +64,10 @@ local ADDON_NAME, ns = ...
 -- (SetOwner on a frame of its own, SetHyperlink) and hides it when the mouse leaves (Hide), only while that frame owns it and never in a fight.
 -- Inside the game's build of a tooltip, Chat and tooltips colours a player's class line (SetTextColor) and, with Item and spell icons, writes
 -- the first line (SetText): the icon before the name, only while the line still holds that name.
+-- Minimap and buffs, with Hide error messages on (off by default), takes the game's red error messages from UIErrorsFrame: it reads with
+-- IsEventRegistered that the frame listens, stops it hearing UI_ERROR_MESSAGE with UnregisterEvent and hears that event on a frame of its own,
+-- puts each message of a kind it does not hide back in the frame with AddMessage (ResetMessageFadeByID for a repeat that still shows) with the
+-- game's sound for it (PlaySound, C_Sound.PlayVocalErrorSound), and gives the event back with RegisterEvent when the row, its page or the module goes off.
 
 local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "fonts", "fade" }
 -- The switches version 0.1.0 saved. This list never grows.
@@ -2212,6 +2221,14 @@ function ns.StatusLines()
 	if sparkle then
 		lines[#lines + 1] = sparkle
 	end
+	local camera = ns.CameraZoomStatus and ns.CameraZoomStatus()
+	if camera then
+		lines[#lines + 1] = camera
+	end
+	local ring = ns.CursorRingStatus and ns.CursorRingStatus()
+	if ring then
+		lines[#lines + 1] = ring
+	end
 	for _, line in ipairs(ns.SetupStatus and ns.SetupStatus() or {}) do
 		lines[#lines + 1] = line
 	end
@@ -2521,6 +2538,9 @@ local function Apply(wasSpots)
 	end
 	if loggedIn and ns.SparkleChanged then
 		ns.SparkleChanged("general.questSparkle")
+	end
+	if loggedIn and ns.CursorRingChanged then
+		ns.CursorRingChanged("general.cursorRing")
 	end
 	if ns.NotifyOption then
 		for path in pairs(defs) do
@@ -3205,6 +3225,13 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		-- Quest item sparkle is written at every login (Sparkle.lua).
 		if ns.SparkleChanged then
 			local ok, err = pcall(ns.SparkleChanged)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end
+		-- The cursor ring shows from the login (CursorRing.lua).
+		if ns.CursorRingChanged then
+			local ok, err = pcall(ns.CursorRingChanged)
 			if not ok then
 				geterrorhandler()(err)
 			end
