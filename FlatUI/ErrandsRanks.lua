@@ -10,8 +10,9 @@ local _, ns = ...
 -- the same click throws all of that away before any later click or fight reads it; LayoutSpots.lua keeps its one risky write in its Reload
 -- click for the same reason.
 -- The ranks come from the spell book by name and number: the best rank the book lists of each name (the first number of its rank text), and a
--- slot is offered when it holds a spell of that name with a lower number that is also the highest of that name on the slots. A lower rank kept
--- beside a higher one (Frostbolt Rank 1 for its slow, a cheaper heal) is the player's choice and stays; the tooltip names it. Only the player's
+-- slot is offered when it holds a spell of that name with a lower number that is also the highest of that name on its pages (each stance or
+-- form page on its own, the other pages together). A lower rank kept beside a higher one (Frostbolt Rank 1 for its slow, a cheaper heal) is the
+-- player's choice and stays; the tooltip names it. A copy on another stance or form page is not beside it, so it moves up. Only the player's
 -- own pages are read (slots 1 to 120 and 145 to 180), and only spells: macros, items, flyouts, mounts and pets are never touched, nor a rank the
 -- player keeps (/flatui rank, kept for the account in FlatUIDB.errands.ranks), nor a name whose top rank two spells share. Out of combat only:
 -- the line hides and its secure button leaves it before the lockdown, and both come back after the fight. A line still up in the lockdown sets
@@ -31,6 +32,14 @@ local part = E.Part({ label = "Spell ranks" })
 -- The action slots of the player's own pages: the six pages of the main bar and its four stance and form pages, then bars 6 to 8 (OwnBars.lua's
 -- bases 144, 156, 168). The possess, vehicle and override pages between them are the game's own.
 local SLOT_RANGES = { { 1, 120 }, { 145, 180 } }
+-- A lower rank is left only beside a higher one on the same pages: each stance or form page (73-84, 85-96, 97-108, 109-120) is a set of its
+-- own, since only one of them shows at a time, and the other pages are one set. A copy on another stance page is not beside it.
+local function PageSet(slot)
+	if slot >= 73 and slot <= 120 then
+		return math.floor((slot - 73) / 12) + 1
+	end
+	return 0
+end
 -- Seconds after the last learned rank before the line is offered.
 local OFFER_WAIT = 1.5
 -- Seconds between two looks at the trainer window, and the looks before the wait gives up.
@@ -279,11 +288,11 @@ local function Unavailable()
 	return nil
 end
 
--- What a click would do now, in slot order, and the lower ranks it leaves. Per spell name, only the slots at the highest rank the player's slots
--- hold of it move up, and none when that rank is the book's best or above it: a lower rank kept beside a higher one is the player's choice
--- (Frostbolt Rank 1 for its slow, Earth Shock Rank 1 as an interrupt, a cheaper heal), and the book may not list it to drag back. Two copies at
--- that rank (the main page and a stance page) both move up. A slot whose value the client withholds is left out (E.Ask gives nil), and so is a
--- pet's spell. Callers that need only the plan take the first value.
+-- What a click would do now, in slot order, and the lower ranks it leaves. Per spell name and page set (PageSet), only the slots at the highest
+-- rank those slots hold of it move up, and none when that rank is the book's best or above it: a lower rank kept beside a higher one is the
+-- player's choice (Frostbolt Rank 1 for its slow, Earth Shock Rank 1 as an interrupt, a cheaper heal), and the book may not list it to drag
+-- back. A copy on another stance or form page is not beside it. Two copies at that rank (the main page and a stance page) both move up. A slot
+-- whose value the client withholds is left out (E.Ask gives nil), and so is a pet's spell. Callers that need only the plan take the first value.
 local function Plan()
 	local plan, left = {}, {}
 	if Unavailable() then
@@ -306,8 +315,10 @@ local function Plan()
 					local text = isTop and top.text or Subtext(id)
 					local rank = isTop and top.rank or RankNumber(text)
 					if rank then
-						held[#held + 1] = { slot = slot, id = id, name = name, rank = rank, text = text, top = top }
-						high[name] = math.max(high[name] or 0, rank)
+						local set = PageSet(slot)
+						high[set] = high[set] or {}
+						held[#held + 1] = { slot = slot, set = set, id = id, name = name, rank = rank, text = text, top = top }
+						high[set][name] = math.max(high[set][name] or 0, rank)
 					end
 				end
 			end
@@ -317,7 +328,7 @@ local function Plan()
 	for _, h in ipairs(held) do
 		local top = h.top
 		if h.rank < top.rank and not RankKept(h.id) then
-			if h.rank == high[h.name] then
+			if h.rank == high[h.set][h.name] then
 				plan[#plan + 1] = { slot = h.slot, old = h.id, new = top.id, base = top.base, bookSlot = top.bookSlot, name = h.name,
 					from = h.rank, to = top.rank, fromText = h.text, toText = top.text }
 			else
@@ -610,13 +621,14 @@ Explain = function(owner)
 	local function Line(text)
 		tip:AddLine(text, 1, 1, 1, true)
 	end
-	-- One line per spell, in plan order.
+	-- One line per spell and old rank, in plan order: two stance pages can hold two ranks of one spell.
 	local order, byName = {}, {}
 	for _, item in ipairs(plan) do
-		local entry = byName[item.name]
+		local key = item.name .. "\0" .. item.from
+		local entry = byName[key]
 		if not entry then
 			entry = { item = item, count = 0 }
-			byName[item.name] = entry
+			byName[key] = entry
 			order[#order + 1] = entry
 		end
 		entry.count = entry.count + 1
