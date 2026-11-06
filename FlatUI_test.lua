@@ -10344,6 +10344,8 @@ local PAGES = {
 		S("cooldowns.add", "list", 0, "Add a spell", "For a spell that is not listed, type /flatui cooldown add and its name."),
 		S("cooldowns.remove", "list", 0, "Remove a spell"),
 		S("cooldowns.trinkets", "bool", false, "Equipped trinkets", "Adds your two trinket slots after the picked spells."),
+		S("cooldowns.addItem", "list", 0, "Add a potion or healthstone", "Every rank shares one icon: the best one in your bags, with how many you carry. It comes after the spells and trinkets."),
+		S("cooldowns.removeItem", "list", 0, "Remove a potion or healthstone"),
 		"Icons",
 		S("cooldowns.size", "number", 36, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "" }),
 		S("cooldowns.spacing", "number", 3, "Spacing", nil, { min = 0, max = 20, step = 1, unit = "" }),
@@ -10358,6 +10360,7 @@ local PAGES = {
 		S("cooldowns.resting", "bool", false, "Hide in cities and inns"),
 		"Ready again",
 		S("cooldowns.readySound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
+		S("cooldowns.iconSound", "list", 0, "Sound of one icon", "Choose an icon, then open the list again for its own sound. An icon without one plays Sound."),
 		"Position",
 		S("cooldowns.place", "choice", "screen", "Position", nil, { choices = PLACES }),
 		S("cooldowns.x", "number", 0, "X offset", nil, { min = -800, max = 800, step = 1, unit = "" }),
@@ -10369,6 +10372,11 @@ local PAGES = {
 		"On cooldown",
 		S("cooldowns.dimDesat", "bool", true, "Grey out on cooldown", nil, { needs = "cooldowns.dim" }),
 		S("cooldowns.dimDarkness", "number", 40, "Darkness on cooldown", nil, { min = 0, max = 80, step = 5, unit = "%", needs = "cooldowns.dim" }),
+		"Range and power",
+		S("cooldowns.rangeTint", "bool", true, "Tint when out of range", "A spell your target is out of range of, as the game's cooldown manager shows it."),
+		S("cooldowns.rangeColour", "colour", "ffa32626", "Out of range colour", nil, { needs = "cooldowns.rangeTint" }),
+		S("cooldowns.powerTint", "bool", true, "Tint without enough power", "A spell you lack the mana, rage or energy for."),
+		S("cooldowns.powerColour", "colour", "ff8080ff", "Not enough power colour", nil, { needs = "cooldowns.powerTint" }),
 		"Opacity",
 		S("cooldowns.coolAlpha", "number", 100, "Opacity on cooldown", nil, { min = 0, max = 100, step = 5, unit = "%" }),
 		S("cooldowns.readyAlpha", "number", 100, "Opacity when ready", "0 hides ready icons. The row keeps its spacing.", { min = 0, max = 100, step = 5, unit = "%" }),
@@ -21660,6 +21668,12 @@ for _, path in ipairs({ "chat.webLinks", "chat.linkTips", "chat.classLine", "cha
 	"windows.boeMark", "windows.unusableTint", "windows.petFood", "fade.targetFrame", "fade.focusFrame", "fade.buffs", "fade.objectiveTracker",
 	"hud.errors", "hud.errorMana", "hud.errorPower", "hud.errorRange", "hud.errorFacing", "hud.errorReady", "hud.errorTarget", "hud.errorMoving",
 	"general.cursorRing", "general.cursorRingSize", "general.cursorRingColour", "unitframes.hitNumbers", "chat.compareShift" }) do
+	covered[path] = true
+end
+-- Nor do the rows of wave 5 (0.5.7), for the same reason.
+for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.rows", "threat.barWidth", "threat.barHeight",
+	"cooldowns.addItem", "cooldowns.removeItem", "cooldowns.iconSound", "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint",
+	"cooldowns.powerColour" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -33111,6 +33125,10 @@ do
 			W.fire("PLAYER_MOUNT_DISPLAY_CHANGED")
 			W.change("cooldowns.mounted", false)
 			check("gap icons: and Row opacity out of combat comes back when the hiding is off", g(cdHolder(W).alpha) == "0.5", g(cdHolder(W).alpha))
+		end
+		-- The rows of wave 5 (0.5.7) have no probe: the owner asked for code without new test blocks.
+		for _, path in ipairs({ "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint", "cooldowns.powerColour" }) do
+			covered[path] = true
 		end
 		local missingProbe = {}
 		for _, row in ipairs(ALL) do
@@ -67125,7 +67143,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1012 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1019 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -67439,7 +67457,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 955 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 962 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
