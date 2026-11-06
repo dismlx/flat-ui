@@ -1488,7 +1488,7 @@ ns.PAGES = {
 	{
 		key = "errands", label = "Errands",
 		{ key = "enabled", kind = "bool", default = false, label = "Run errands",
-			tip = "Each errand below and on the Levelling tab has its own row. Selling, repairs, Make room, Train all, summons, invites and new spell ranks wait for the end of a fight." },
+			tip = "Each errand below and on the Levelling tab has its own row. Selling, repairs, Make room, Train all, summons, invites, new spell ranks and talent reminders wait for the end of a fight." },
 		{ key = "chat", kind = "bool", default = true, label = "Say what was done", tip = "A line in chat after selling, repairing, training, deleting, accepting, declining and upranking, and when a quest is left to you." },
 		{ section = "Merchant" },
 		{ key = "sell", kind = "bool", default = true, label = "Sell grey items",
@@ -1553,6 +1553,14 @@ ns.PAGES = {
 		{ key = "learnedLines", kind = "choice", default = "summary", label = "Lines about learned spells",
 			tip = "The game's lines that start with You have learned or You have unlearned. One line in their place names what was learned, a moment after the last, unless Say what was done is off.",
 			choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "summary", "One line in their place" } } },
+		{ section = "Reputation and talents" },
+		{ key = "repFollow", kind = "bool", default = true, label = "Show the reputation you gain",
+			tip = "Flat UI's experience bar shows the faction you last gained reputation with. Exalted and inactive factions are passed over, and a faction you pick in the game's reputation window shows until your next gain. The faction the game watches is not changed." },
+		{ key = "talentReminder", kind = "bool", default = true, label = "Remind you of talent points",
+			tip = "When you reach a level, or log in, with talent points to spend, a line in chat says how many, also with Say what was done off. A level reached in a fight is told when it ends." },
+		{ section = "Waypoints" },
+		{ key = "wayCommand", kind = "bool", default = true, label = "Add the /way command",
+			tip = "/way 45 61 puts a pin on your map there and the game points you to it. /way Elwynn Forest 45 61, /way #1429 45 61 and /way clear work too. When another addon has /way it keeps it, and /flatui way does the same." },
 	},
 	{
 		key = "fonts", label = "Fonts",

@@ -43,6 +43,9 @@ local ADDON_NAME, ns = ...
 -- slots that hold a lower one (C_Spell.PickupSpell, PlaceAction, ClearCursor) only inside the click of its own Uprank and reload button,
 -- whose secure /reload macro reloads the interface in the same click, and it adds a filter to the game's chat filters
 -- (ChatFrameUtil.AddMessageEventFilter, CHAT_MSG_SYSTEM) that drops the game's lines about learned and unlearned spells.
+-- It adds the slash command /way beside /flatui (SLASH_FLATUIWAY1 and SlashCmdList.FLATUIWAY) when no other addon has one, and sets a map
+-- pin and its tracking (C_Map.SetUserWaypoint, C_SuperTrack.SetSuperTrackedUserWaypoint) only when the player types it. It never changes the
+-- faction the game watches, and reads the list of factions without expanding it: Flat UI's own reputation bar shows the faction gained.
 
 local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "fonts", "fade" }
 -- The switches version 0.1.0 saved. This list never grows.

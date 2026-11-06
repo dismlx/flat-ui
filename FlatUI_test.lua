@@ -10988,7 +10988,7 @@ local PAGES = {
 		S("chat.count", "bool", false, "Item count in bags and bank"),
 	} },
 	{ key = "errands", label = "Errands", rows = {
-		S("errands.enabled", "bool", false, "Run errands", "Each errand below and on the Levelling tab has its own row. Selling, repairs, Make room, Train all, summons, invites and new spell ranks wait for the end of a fight."),
+		S("errands.enabled", "bool", false, "Run errands", "Each errand below and on the Levelling tab has its own row. Selling, repairs, Make room, Train all, summons, invites, new spell ranks and talent reminders wait for the end of a fight."),
 		S("errands.chat", "bool", true, "Say what was done", "A line in chat after selling, repairing, training, deleting, accepting, declining and upranking, and when a quest is left to you."),
 		"Merchant",
 		S("errands.sell", "bool", true, "Sell grey items", "When a merchant opens. Hold Shift as it opens to keep them that time. /flatui sell and /flatui keep choose other items to sell or keep."),
@@ -11031,6 +11031,11 @@ local PAGES = {
 		S("errands.uprankNow", "list", 0, "Uprank your bars now", "Shows the line and its button now. /flatui uprank does the same.", { needs = "errands.uprank" }),
 		S("errands.learnedLines", "choice", "summary", "Lines about learned spells", "The game's lines that start with You have learned or You have unlearned. One line in their place names what was learned, a moment after the last, unless Say what was done is off.",
 			{ choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "summary", "One line in their place" } } }),
+		"Reputation and talents",
+		S("errands.repFollow", "bool", true, "Show the reputation you gain", "Flat UI's experience bar shows the faction you last gained reputation with. Exalted and inactive factions are passed over, and a faction you pick in the game's reputation window shows until your next gain. The faction the game watches is not changed."),
+		S("errands.talentReminder", "bool", true, "Remind you of talent points", "When you reach a level, or log in, with talent points to spend, a line in chat says how many, also with Say what was done off. A level reached in a fight is told when it ends."),
+		"Waypoints",
+		S("errands.wayCommand", "bool", true, "Add the /way command", "/way 45 61 puts a pin on your map there and the game points you to it. /way Elwynn Forest 45 61, /way #1429 45 61 and /way clear work too. When another addon has /way it keeps it, and /flatui way does the same."),
 	} },
 	-- The faces are the ones the client loads: the panel worlds answer nothing to SetFont, so only the game's font is offered.
 	{ key = "fonts", label = "Fonts", rows = {
@@ -21536,9 +21541,10 @@ for _, path in ipairs({ "errands.enabled", "errands.chat", "errands.sell", "erra
 	"errands.releaseKey", "errands.summons", "errands.resurrect", "errands.deleteWord", "errands.invites", "errands.declineDuels", "errands.mailRecipient" }) do
 	covered[path] = true
 end
--- The Levelling tab of Errands, and the quest count of the tracker, have their checks in the quests and ranks blocks.
+-- The Levelling tab of Errands, and the quest count of the tracker, have their checks in the quests, ranks and levelling blocks.
 for _, path in ipairs({ "errands.questAccept", "errands.questTurnIn", "errands.questLow", "errands.questRepeat", "errands.questKey", "errands.questNpcs", "errands.gossip",
-	"errands.gossipSaved", "errands.uprank", "errands.keepRank", "errands.unkeepRank", "errands.uprankNow", "errands.learnedLines", "hud.trackerCount" }) do
+	"errands.gossipSaved", "errands.uprank", "errands.keepRank", "errands.unkeepRank", "errands.uprankNow", "errands.learnedLines", "hud.trackerCount",
+	"errands.repFollow", "errands.talentReminder", "errands.wayCommand" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block.
@@ -66999,7 +67005,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 56 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 56 and rows == 937 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 56 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 56 and rows == 940 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 20)
@@ -67313,7 +67319,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 904 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 909 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -69939,6 +69945,7 @@ function PT.runTabs()
 		{ "Minimap and buffs", "General, Minimap, Buffs and debuffs, Bars, bags and micro menu, Tracker, loot and alerts" },
 		{ "Windows", "General, Which windows, Bags and items" },
 		{ "Chat and tooltips", "General, Chat text, Tooltips" },
+		{ "Errands", "General, Levelling" },
 	}
 
 	-- The tabs of every module, the sidebar with modules only, and the title of the module over every tab.
@@ -69958,7 +69965,7 @@ function PT.runTabs()
 			PT.go(W, name)
 			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
 		end
-		check("window tabs: the 37 child pages are the tabs of eleven modules, in the order of the design, and the other eleven modules have none", children == 37 and #bad == 0, children .. " " .. joined(bad))
+		check("window tabs: the 38 child pages are the tabs of twelve modules, in the order of the design, and the other eleven modules have none", children == 38 and #bad == 0, children .. " " .. joined(bad))
 		PT.go(W, "Nameplates")
 		PT.go(W, "Health bar")
 		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil
@@ -73146,7 +73153,8 @@ do
 	-- The calls the game was asked, but for the lists the page offers: the spells, the items in the bags, the forms and the class of the player.
 	function TK.asked(W)
 		local n = 0
-		local offered = { IsSpellHarmful = true, IsSpellHelpful = true, GetContainerNumSlots = true, GetContainerItemInfo = true, GetNumShapeshiftForms = true, GetShapeshiftFormInfo = true, UnitClass = true }
+		-- UnitLevel and GetNumGroupMembers are also read by the levelling stats of the experience bar (XpStats.lua), on with the hud page.
+		local offered = { UnitLevel = true, GetNumGroupMembers = true, IsSpellHarmful = true, IsSpellHelpful = true, GetContainerNumSlots = true, GetContainerItemInfo = true, GetNumShapeshiftForms = true, GetShapeshiftFormInfo = true, UnitClass = true }
 		for name, calls in pairs(W.au.calls) do
 			if not offered[name] then
 				n = n + calls
@@ -105095,7 +105103,7 @@ do
 		check("useaction: movers: and the secure frame that could not be made is asked for once, not at every check", X.handlerTries == 1, tostring(X.handlerTries))
 	end
 	do
-		-- Flat UI writes four globals, all named for it; a source scan with luac lists them.
+		-- Flat UI writes five globals, all named for it; a source scan with luac lists them.
 		local luac = os.getenv("FLATUI_LUAC")
 		if not luac then
 			for _, name in ipairs({ "luac5.4", "luac" }) do
@@ -105109,7 +105117,7 @@ do
 			end
 		end
 		luac = luac or "luac5.4"
-		local allowed = { FlatUICharDB = true, FlatUIDB = true, SLASH_FLATUI1 = true, FlatUI_OnAddonCompartmentClick = true }
+		local allowed = { FlatUICharDB = true, FlatUIDB = true, SLASH_FLATUI1 = true, SLASH_FLATUIWAY1 = true, FlatUI_OnAddonCompartmentClick = true }
 		local extra, scanned = {}, 0
 		for _, file in ipairs(FILES) do
 			local pipe = io.popen(('%s -l -p "%s/%s" 2>&1'):format(luac, ADDON_DIR, file))
@@ -105124,7 +105132,7 @@ do
 				pipe:close()
 			end
 		end
-		check("useaction: globals: the only globals the addon writes are FlatUICharDB, FlatUIDB, SLASH_FLATUI1 and FlatUI_OnAddonCompartmentClick", scanned > 1000 and #extra == 0, table.concat(extra, ","):sub(1, 200) .. " " .. scanned)
+		check("useaction: globals: the only globals the addon writes are FlatUICharDB, FlatUIDB, SLASH_FLATUI1, SLASH_FLATUIWAY1 and FlatUI_OnAddonCompartmentClick", scanned > 1000 and #extra == 0, table.concat(extra, ","):sub(1, 200) .. " " .. scanned)
 		-- The Settings registry is only registered into, through Settings.Register..., and no field of it is written.
 		local writes = {}
 		for _, file in ipairs(FILES) do

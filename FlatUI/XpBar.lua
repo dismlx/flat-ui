@@ -10,6 +10,8 @@ local _, ns = ...
 -- The Levelling rows of that page add what XpStats.lua counts: a stretch for the experience of the quests ready to hand in, drawn as the rested
 -- stretch is and above it, the levelling text after the bar text, and lines in the tooltip. The bar is drawn again when those numbers change
 -- (ns.XpBarRedraw), and the tooltip of a bar under the cursor is written again with each drawing.
+-- Its reputation bar shows the faction the Levelling errands follow, when they follow one (ErrandsLevelling.lua); the faction the game watches
+-- is not changed.
 
 local KEY, MOVER = "hud", "FlatUIXpBar"
 -- The width of the game's full bar on Camelot, which 100% of the width row is (Camelot/StatusTrackingBarConstants.lua:1-14).
@@ -145,9 +147,18 @@ end
 
 -- The watched faction as a bar: name, value, total, the colour index, blue for renown and paragon, the standing and whether it is at the top. The
 -- game's order, each step only when its call exists (ReputationBar.lua:51-130). Nothing when no faction is watched; the last one while withheld.
+-- With Errands' Show the reputation you gain on, the faction you last gained reputation with comes first (ErrandsLevelling.lua gives it in the shape
+-- of the game's FactionData); the faction the game watches is not changed.
 function F.ReadRep()
 	local R = _G.C_Reputation
-	local ok, data = Ask(type(R) == "table" and R.GetWatchedFactionData or nil)
+	local followed = ns.ErrandsRepFollowed ~= nil and ns.ErrandsRepFollowed() or nil
+	local ok, data
+	if type(followed) == "table" then
+		ok, data = "ok", followed
+	else
+		followed = nil
+		ok, data = Ask(type(R) == "table" and R.GetWatchedFactionData or nil)
+	end
 	if ok == "secret" then
 		S.reread = true
 		return S.rep
@@ -159,7 +170,7 @@ function F.ReadRep()
 		return nil
 	end
 	local id = data.factionID
-	local rep = { name = data.name, reaction = ns.Finite(data.reaction) and data.reaction or 5 }
+	local rep = { name = data.name, reaction = ns.Finite(data.reaction) and data.reaction or 5, followed = followed ~= nil and data.isWatched ~= true }
 	local low, high, value = data.currentReactionThreshold, data.nextReactionThreshold, data.currentStanding
 	local level, top = rep.reaction, 8
 	local function Call(table, name, ...)
@@ -461,6 +472,9 @@ function F.TipLines(bar)
 		end
 		if not rep.capped then
 			lines[#lines + 1] = ("%d / %d"):format(math.floor(rep.value), math.floor(rep.total))
+		end
+		if rep.followed then
+			lines[#lines + 1] = "The last faction you gained reputation with."
 		end
 	end
 	return lines

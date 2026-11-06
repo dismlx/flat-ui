@@ -92,6 +92,7 @@ ErrandsPopups.lua
 ErrandsSocial.lua
 ErrandsQuests.lua
 ErrandsRanks.lua
+ErrandsLevelling.lua
 CastBarSize.lua
 PetFrameSize.lua
 ConfigGame.lua

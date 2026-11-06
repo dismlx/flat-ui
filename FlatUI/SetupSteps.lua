@@ -1054,5 +1054,8 @@ ns.SETUP_STEPS = {
 		{ "errands.unkeepRank", "r", "behaviour", "Stops keeping a rank of a spell." },
 		{ "errands.uprankNow", "r", "behaviour", "Offers the new spell ranks for your bars now." },
 		{ "errands.learnedLines", "o", "behaviour", "Puts one line in place of the game's lines about learned spells." },
+		{ "errands.repFollow", "c", "behaviour", "Shows on Flat UI's experience bar the faction you last gained reputation with." },
+		{ "errands.talentReminder", "o", "behaviour", "Says in chat when you have talent points to spend." },
+		{ "errands.wayCommand", "o", "behaviour", "Adds /way, which puts a pin on your map at the coordinates you give." },
 	} },
 }
