@@ -674,15 +674,35 @@ function P.Layout(panel)
 	end
 end
 
+-- The game's widgets at the top of the screen (the scores of a battleground or of a world PvP zone: UIWidgetTopCenterContainerFrame, TOP 0,-15
+-- of UIParent on MEDIUM, Blizzard_UIWidgetTopCenterFrame.xml:3-7), while they are where the game puts them; nil once the movers placed them.
+local function TopWidgets()
+	local widgets = _G.UIWidgetTopCenterContainerFrame
+	if ns.Forbidden(widgets) then
+		return nil
+	end
+	if ns.Enabled("movers") and type(ns.MoverSaved) == "function" and ns.MoverSaved("UIWidgetTopCenterContainerFrame") then
+		return nil
+	end
+	return widgets
+end
+
 -- Puts a panel at the spot of its handle, else where it starts. A handle that was centred keeps the panel on the middle of the screen at any width.
+-- With no spot the top panel hangs under the top widgets, 4 below their bottom as the game hangs its GhostFrame (GhostFrame.lua:21), so a
+-- battleground's scores push it down instead of being drawn over it. Only Flat UI's own frame gets a point.
 function P.Place(panel)
 	local spec, frame = panel.spec, panel.frame
-	local point = type(ns.MoverCentred) == "function" and ns.MoverCentred(spec.mover, spec.point) or spec.point
+	-- The handle has no box of its own, so the panel hangs from the point its spot was saved by: a centred handle keeps the panel on the middle
+	-- of the screen at any width, and a nudge from there moves it by the nudge.
+	local spots = type(ns.Spots) == "function" and ns.Spots()
+	local entry = type(spots) == "table" and type(ns.CleanSpot) == "function" and ns.CleanSpot(spots[spec.mover]) or nil
+	local point = entry and entry.point or spec.point
 	local x, y
 	if type(ns.MoverSpot) == "function" then
 		x, y = ns.MoverSpot(spec.mover, point)
 	end
-	local key = x and ("%s:%.2f:%.2f"):format(point, x, y) or "start"
+	local widgets = not x and spec.id == "top" and TopWidgets() or nil
+	local key = x and ("%s:%.2f:%.2f"):format(point, x, y) or widgets and "widgets" or "start"
 	if panel.placed == key then
 		return
 	end
@@ -690,7 +710,8 @@ function P.Place(panel)
 	frame:ClearAllPoints()
 	if x then
 		frame:SetPoint(point, UIParent, "BOTTOMLEFT", x, y)
-	else
+	elseif not (widgets and pcall(frame.SetPoint, frame, "TOP", widgets, "BOTTOM", 0, -4)) then
+		frame:ClearAllPoints()
 		frame:SetPoint(spec.point, UIParent, spec.relative, spec.x, spec.y)
 	end
 end

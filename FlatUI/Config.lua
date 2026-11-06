@@ -1601,7 +1601,7 @@ ns.PAGES = {
 		{ key = "enabled", kind = "bool", default = false, label = "Show data panels",
 			tip = "Panels of text across the screen: bag space, gold, durability and more. Point at a slot for its tooltip. /flatui move places the panels." },
 		{ section = "Top panel" },
-		{ key = "top", kind = "bool", default = true, label = "Show the top panel", tip = "At the top of the screen until you move it." },
+		{ key = "top", kind = "bool", default = true, label = "Show the top panel", tip = "At the top of the screen, under the game's battleground scores, until you move it." },
 		{ key = "top1", kind = "choice", default = "bags", label = "First slot", needs = "top", choices = "DataPanelChoices",
 			tip = "A slot with nothing to show takes no room. Feeds of other addons are listed when one of them brings LibDataBroker." },
 		{ key = "top2", kind = "choice", default = "gold", label = "Second slot", needs = "top", choices = "DataPanelChoices" },

@@ -11062,7 +11062,7 @@ local PAGES = {
 	{ key = "datapanels", label = "Data panels", rows = {
 		S("datapanels.enabled", "bool", false, "Show data panels", "Panels of text across the screen: bag space, gold, durability and more. Point at a slot for its tooltip. /flatui move places the panels."),
 		"Top panel",
-		S("datapanels.top", "bool", true, "Show the top panel", "At the top of the screen until you move it."),
+		S("datapanels.top", "bool", true, "Show the top panel", "At the top of the screen, under the game's battleground scores, until you move it."),
 		S("datapanels.top1", "choice", "bags", "First slot", "A slot with nothing to show takes no room. Feeds of other addons are listed when one of them brings LibDataBroker.", { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
 		S("datapanels.top2", "choice", "gold", "Second slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
 		S("datapanels.top3", "choice", "durability", "Third slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),

@@ -253,13 +253,13 @@ local function Worn(percent)
 	return whole > 80 and GOOD or whole > 50 and WARN or BAD
 end
 
--- The durability of all the equipped items together, in percent, and each item: { slot, percent }. 100 with no item that wears, and nothing
--- when the client withholds an answer.
+-- The durability of all the equipped items together, in percent, each item: { slot, percent }, and how many items are nearly broken (at 50% or
+-- less, red in the tooltip). 100 with no item that wears, and nothing when the client withholds an answer.
 local function Durability()
 	if type(GetInventoryItemDurability) ~= "function" then
 		return nil
 	end
-	local items, now, most = {}, 0, 0
+	local items, now, most, broken = {}, 0, 0, 0
 	for slot = 1, 19 do
 		local hidden, current, maximum = Read(GetInventoryItemDurability, slot)
 		current, maximum = Count(current), Count(maximum)
@@ -269,17 +269,25 @@ local function Durability()
 			current = math.min(current, maximum)
 			now, most = now + current, most + maximum
 			items[#items + 1] = { slot = slot, percent = current / maximum * 100 }
+			if Worn(current / maximum * 100) == BAD then
+				broken = broken + 1
+			end
 		end
 	end
-	return most > 0 and now / most * 100 or 100, items
+	return most > 0 and now / most * 100 or 100, items, broken
 end
 
 P.Stream({
 	id = "durability", label = "Durability", sample = "Durability 100%",
 	events = { UPDATE_INVENTORY_DURABILITY = true, PLAYER_EQUIPMENT_CHANGED = true },
 	Text = function()
-		local percent = Durability()
-		return percent and Labelled("Durability", ("%s%d%%|r"):format(Worn(percent), math.floor(percent + 0.5))) or nil
+		local percent, _, broken = Durability()
+		if not percent then
+			return nil
+		end
+		local text = Labelled("Durability", ("%s%d%%|r"):format(Worn(percent), math.floor(percent + 0.5)))
+		-- One broken item hardly moves the average, so the items at 50% or less are counted after it in red, as EnhanceQoL does by default.
+		return broken > 0 and ("%s  %s%d|r%s at 50%% or less|r"):format(text, BAD, broken, DIM) or text
 	end,
 	Tip = function()
 		local percent, items = Durability()
