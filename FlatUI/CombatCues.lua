@@ -5,13 +5,18 @@ local _, ns = ...
 -- stops alone after a few failures. Not a module: CombatText.lua calls ns.CombatCuesRefresh in every refresh of the page, and the events come
 -- through the module (ns.AddEvent), so nothing runs while the page is off. Both rows are off by default and nothing is made until a line first shows.
 -- No target warning: in a fight, from PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED (Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:3885-3895),
--- with no target, a dead one or one the player cannot attack (UnitExists, UnitIsDead and UnitCanAttack, UnitDocumentation.lua:1192-1205, 1916-1929,
+-- with no target, a dead one or one the player cannot attack (UnitExists, UnitIsDeadOrGhost and UnitCanAttack, UnitDocumentation.lua:1192-1205, 1931-1944,
 -- 763-777), No target shows after a second and stays until a target that can be attacked is taken or the fight ends. With Warn with a friendly
 -- target off, a living target that cannot be attacked keeps it away too. The target is judged again when it changes (PLAYER_TARGET_CHANGED,
 -- :3974-3978) and, in a fight, when its health, flags or faction change (UNIT_HEALTH, UNIT_FLAGS and UNIT_FACTION, :4318-4327, 4267-4275 and
 -- 4257-4265), which a frame of the addon's own hears for the target alone, and only in a fight. None of these is marked secret, but an answer the
 -- game withholds is never compared: the warning stays away until the game says. As it shows, the sound of No target sound (ns.SOUNDS, IconRow.lua)
--- plays, at most every 3 seconds.
+-- plays, at most every 3 seconds. ns.PlayKit plays no sound within a second of the last it played for any module and keeps none for later
+-- (IconRow.lua:12 and 244-249), so a sound it did not play for that is tried again a second later (C_Timer.After, UITimerDocumentation.lua:11-20),
+-- for as long as the same No target shows. A ghost counts as dead, as it does for the game's own Target dead alert and its raid frames
+-- (Blizzard_CombatAudioAlerts/Blizzard_CombatAudioAlertManager.lua:661 and 679-681, Blizzard_UnitFrame/Shared/CompactUnitFrame.lua:1097-1098):
+-- a party or raid member stays a target on another map too (Blizzard_UnitFrame/Shared/TargetFrame.lua:2-5 and 14), so one who has released
+-- can still be the target, and UnitIsDead is false for a ghost (Blizzard_UnitFrame/Mainline/TargetFrame.lua:762-765 tints the two apart).
 -- Entering and leaving combat: +Combat as a fight starts and -Combat as it ends, in the words the game's own combat text has for the two
 -- (COMBAT_TEXT_ENTERING_COMBAT or ENTERING_COMBAT, and the same for LEAVING_COMBAT: Blizzard_CombatText/Shared/CombatText.lua:99-102 and 284-288),
 -- so in the language of the client, for as long as the game shows its own: whole for 1.3 seconds, then fading out until 1.9
@@ -43,6 +48,8 @@ local NO_TARGET = "No target"
 local LOOKS = { enter = { "combatEnterColour", "combatStateSize" }, leave = { "combatLeaveColour", "combatStateSize" }, warn = { "noTargetColour", "noTargetSize" } }
 -- The places of the No target sound choices in ns.SOUNDS (IconRow.lua), as EnemyCooldowns.lua has them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
+-- The seconds after a sound in which ns.PlayKit plays no other (IconRow.lua:12): a No target sound it held back is tried again this long after.
+local AGAIN = 1
 -- The events of the target heard in a fight.
 local TARGET_EVENTS = { "UNIT_HEALTH", "UNIT_FLAGS", "UNIT_FACTION" }
 
@@ -50,7 +57,8 @@ local TARGET_EVENTS = { "UNIT_HEALTH", "UNIT_FLAGS", "UNIT_FACTION" }
 -- flashAt and flashKind: when +Combat or -Combat started, and which. ticker: the token of the fade timer. fighting: between PLAYER_REGEN_DISABLED
 -- and PLAYER_REGEN_ENABLED. missingAt: since when the target is missing; waiting: the token of the timer that judges again when the second is up.
 -- warned: No target shows. soundAt: when its sound last played. listener and listening: the frame that hears the target, and whether it does.
--- flashes, warnings, withheld and silent: what /flatui status counts. blind: the last judgement had an answer the game withheld.
+-- flashes, warnings and withheld: what /flatui status counts. silent: the No target sounds the game has not played since it last played one;
+-- /flatui status says so while there are any. blind: the last judgement had an answer the game withheld.
 local S = { fighting = false, warned = false, listening = false, blind = false, flashes = 0, warnings = 0, withheld = 0, silent = 0 }
 
 local function Opt(key)
@@ -306,8 +314,14 @@ local function HideWarning()
 	end
 end
 
--- The sound of No target sound, at most every SOUND_GAP seconds, and none while the interface is hidden. A sound the game does not play is
--- counted for the status; one that waits for another sound of the addon's (ns.PlayKit plays one a second) is not.
+-- The sound of No target sound, at most every SOUND_GAP seconds, and none while the interface is hidden. A sound the game does not play is counted
+-- for the status. One that ns.PlayKit held back, as it played a sound of another module less than a second before, is not: it is tried again AGAIN
+-- seconds later while the same No target shows (S.warnings counts each one shown), and S.soundAt is set only when one plays. A sound the game plays
+-- clears the count, so the status is about the last try. PlaySound says whether it played (success, Blizzard_APIDocumentationGenerated/
+-- SoundDocumentation.lua:52-71), and the player can turn the sound off and on again in a session: the Toggle Sound key turns sound effects off and
+-- on (Blizzard_FrameXML/Bindings_Camelot.xml:1301-1303, Blizzard_SharedXML/Mainline/Sound.lua:19-35), which the game's own code counts as muting a
+-- PlaySound on the default channel, as ns.PlayKit's is (Blizzard_CustomizationUI/Blizzard_CustomizationAudioInterface.lua:1-3 and 35-44), and
+-- Enable Sound turns all sound off and on (Blizzard_SettingsDefinitions_Shared/Audio.lua:496).
 local function Sound()
 	local sound = ns.SOUNDS and ns.SOUNDS[KITS[Opt("noTargetSound")] or 0]
 	local now = Now()
@@ -315,9 +329,16 @@ local function Sound()
 		return
 	end
 	if ns.PlayKit(sound[1]) then
-		S.soundAt = now
+		S.soundAt, S.silent = now, 0
 	elseif not (ns.IconRow and ns.IconRow.sound == "throttled") then
 		S.silent = S.silent + 1
+	elseif type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+		local shown = S.warnings
+		pcall(C_Timer.After, AGAIN, function()
+			if S.warned and S.warnings == shown then
+				Run(Sound)
+			end
+		end)
 	end
 end
 
@@ -336,8 +357,8 @@ local function ShowWarning()
 	Sound()
 end
 
--- True when the player has nothing to fight: no target, a dead one, or one that cannot be attacked while Warn with a friendly target is on. Nil
--- while the game withholds an answer.
+-- True when the player has nothing to fight: no target, a dead one or a ghost, or one that cannot be attacked while Warn with a friendly target
+-- is on. Nil while the game withholds an answer.
 local function Missing()
 	local exists = Ask(UnitExists, "target")
 	if type(exists) ~= "boolean" then
@@ -345,7 +366,7 @@ local function Missing()
 	elseif not exists then
 		return true
 	end
-	local dead = Ask(UnitIsDead, "target")
+	local dead = Ask(UnitIsDeadOrGhost, "target")
 	if type(dead) ~= "boolean" then
 		return nil
 	elseif dead then

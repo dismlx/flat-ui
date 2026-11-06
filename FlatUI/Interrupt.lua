@@ -12,8 +12,10 @@ local _, ns = ...
 -- Ready is a plain answer: GetSpellCooldown never withholds isEnabled, isActive and isOnGCD (SpellSharedDocumentation.lua:19-31), though it withholds
 -- the times in a fight (SpellDocumentation.lua:309-325), and an interrupt is ready while its cooldown is off or is the global cooldown alone, as the
 -- game's cooldown manager tells the two apart (CooldownViewer.lua:986-993). isOnGCD is to be trusted only in SPELL_UPDATE_COOLDOWN
--- (SpellSharedDocumentation.lua:30), so only that event turns an interrupt to not ready; between events a look, at most every 0.2 s while a bar or
--- the row asks, turns it back to ready once its cooldown is over. A withheld answer is no answer: the bars keep their colours and no border shows.
+-- (SpellSharedDocumentation.lua:30), so only that event turns an interrupt to not ready. No event comes when a cooldown runs out (the game's
+-- cooldown manager refreshes itself then, CooldownViewer.lua:517-519), so between events a look, at most every 0.2 s while a bar, the row or
+-- /flatui status asks, turns it back to ready once its cooldown is over. A withheld answer is no answer: the bars keep their colours and no border
+-- shows.
 -- Whether a cast can be interrupted is withheld for every unit but the player and the pet (UnitDocumentation.lua:828-893,
 -- SecretPredicatesDocumentation.lua:115-118). It goes to the texture untouched, as the shield of a bar does (Bars.lua, SetVertexColorFromBoolean),
 -- and to the border with SetAlphaFromBoolean (SimpleFrameAPIDocumentation.lua:1145-1155; SetShown takes no withheld value from an addon,
@@ -662,13 +664,13 @@ if type(ns.PlateExtra) == "table" and type(ns.PlateExtra.refresh) == "table" the
 	ns.PlateExtra.refresh[#ns.PlateExtra.refresh + 1] = SafeSync
 end
 
--- One line while an interrupt is known: its name and whether it is ready. A failure has a line of its own.
+-- One line while an interrupt is known: its name and whether it is ready. A failure has a line of its own. The line takes the look the bars and
+-- the row take first (Recheck, which reads the book again while it is dirty): a cooldown that ran out while no bar or row asked sent no event
+-- (CooldownViewer.lua:517-519), so without it the line would still say on cooldown.
 ns.AddStatus(BARS, function()
 	local lines = {}
 	if S.full then
-		if S.dirty then
-			pcall(Rescan)
-		end
+		pcall(Recheck)
 		local names = {}
 		for _, ab in ipairs(Abilities()) do
 			if ab.id ~= nil then

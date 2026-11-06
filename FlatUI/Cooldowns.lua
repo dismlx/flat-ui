@@ -195,14 +195,25 @@ local function Name(spellID)
 	return SpellName(spellID) or ("Spell " .. spellID)
 end
 
--- A spell the character has lost stays in the list and comes back when it is known again.
+-- The pet's book (SpellBookConstantsDocumentation.lua:35-45), 1 where the client gives no enum.
+local function PetBank()
+	local banks = type(Enum) == "table" and Enum.SpellBookSpellBank or nil
+	local value = type(banks) == "table" and banks.Pet or nil
+	return Plain(value, "number") and value or 1
+end
+
+-- A spell the character has lost stays in the list and comes back when it is known again. The book is asked about the player's spells (its
+-- default) and, when it says no, about the pet's (the spellBank argument, SpellBookDocumentation.lua:738-771): a spell of the pet, as the
+-- Felhunter's Spell Lock that Glow on your interrupt borders (Interrupt.lua), is on the row while the pet knows it. The row is laid out again on
+-- SPELLS_CHANGED, the event on which the open spell book shows or hides its Pet tab (Blizzard_SpellBookFrame.lua:141-142, 480-506,
+-- Camelot/SpellBook/Blizzard_SpellBookFrame.lua:146-148, Blizzard_SpellBookCategory.lua:344-346).
 local function Known(spellID)
 	local book = C_SpellBook
 	if book then
 		for _, call in ipairs({ "IsSpellKnownOrInSpellBook", "IsSpellKnown" }) do
 			local known = Ask(book[call], spellID)
 			if type(known) == "boolean" then
-				return known
+				return known or Ask(book[call], spellID, PetBank()) == true
 			end
 		end
 	end
