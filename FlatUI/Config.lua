@@ -767,7 +767,7 @@ ns.PAGES = {
 		{ key = "thrownMin", kind = "number", default = 20, min = 0, max = 200, step = 5, label = "Thrown weapon minimum",
 			tip = "With a thrown weapon, the ammunition tracker is low at this many or fewer. 0 means never. One that wears out is low at a fifth of its durability." },
 		{ key = "durabilityMin", kind = "number", default = 20, min = 0, max = 100, step = 5, unit = "%", label = "Durability minimum",
-			tip = "The durability tracker is low when an item you wear is at this much of its durability or less, and red when one is broken. 0 means never. For 12 seconds after a ready check it shows when low or broken, whatever Show says." },
+			tip = "The durability tracker is low when an item you wear is at this much of its durability or less, and red when one is broken. 0 means never. For 12 seconds after a ready check it is also low at 40% or less, and shows when low or broken, whatever Show says." },
 		{ section = "When shown" },
 		{ key = "show", kind = "choice", default = "always", label = "Show",
 			choices = { { "always", "Always" }, { "low", "Only when low or missing" }, { "combat", "Only in combat" } } },

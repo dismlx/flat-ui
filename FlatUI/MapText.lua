@@ -372,14 +372,54 @@ local function Height(text)
 	return ns.Finite(height) and height > 0 and height or LINE
 end
 
--- Puts the lines that show one after another, out from the map on each side, when which lines show or where has changed.
+-- The plate of the zone name, MinimapCluster.ZoneTextButton, 152 by 23 (Blizzard_Minimap/Mainline/Minimap.xml:24,
+-- Camelot/MinimapZoneTextButton.xml:9-12). The game puts it over the map; Edit Mode's Header Underneath puts it under the map
+-- (Camelot/Minimap.lua:68-80, Blizzard_EditMode/Shared/EditModeSystemTemplates.lua:1794-1797). Its side of the map and how far its near and
+-- its far edge are from that edge of the map, in the units of the frame of the lines; nil while it is beside the map, hidden, or the client
+-- does not say where it is. Only region calls of the client are made on it, and nothing is written.
+local function Plate()
+	local button = Field(_G.MinimapCluster, "ZoneTextButton")
+	if ns.Forbidden(button) or Ask(button.IsVisible, button) ~= true then
+		return nil
+	end
+	local top, bottom, scale = Ask(button.GetTop, button), Ask(button.GetBottom, button), Ask(button.GetEffectiveScale, button)
+	local frame = S.frame
+	local mapTop, mapBottom, own = Ask(frame.GetTop, frame), Ask(frame.GetBottom, frame), Ask(frame.GetEffectiveScale, frame)
+	if not (ns.Finite(top) and ns.Finite(bottom) and ns.Finite(scale) and ns.Finite(mapTop) and ns.Finite(mapBottom) and ns.Finite(own))
+		or scale <= 0 or own <= 0 then
+		return nil
+	end
+	top, bottom = top * scale / own, bottom * scale / own
+	if bottom >= mapTop then
+		return "above", bottom - mapTop, top - mapTop
+	elseif top <= mapBottom then
+		return "below", mapBottom - top, mapBottom - bottom
+	end
+	return nil
+end
+
+-- Puts the lines that show one after another, out from the map on each side, when which lines show, where, or the plate of the zone name has
+-- changed. Over the map, where the game puts the plate, the screen ends above it: the lines above that do not fit between the map and the plate
+-- go below. Under the map (Header Underneath), a line below that would reach the plate goes on under it.
 local function Layout()
 	local places, sig = {}, { S.game and "game" or "" }
+	local side, near, far = Plate()
+	local used
 	for _, line in ipairs(LINES) do
 		if S.shown[line.id] then
-			places[line.id] = Opt(line.place) == "above" and "above" or "below"
-			sig[#sig + 1] = line.id .. "=" .. places[line.id]
+			local place = Opt(line.place) == "above" and "above" or "below"
+			if place == "above" and side == "above" then
+				used = (used and used + SPACING or GAP) + Height(S.text[line.id])
+				if used > near then
+					place = "below"
+				end
+			end
+			places[line.id] = place
+			sig[#sig + 1] = line.id .. "=" .. place
 		end
+	end
+	if side then
+		sig[#sig + 1] = ("plate=%s %d %d"):format(side, math.floor(near + 0.5), math.floor(far + 0.5))
 	end
 	sig = table.concat(sig, " ")
 	if sig == S.sig then
@@ -399,12 +439,13 @@ local function Layout()
 				else
 					text:SetPoint("BOTTOM", S.frame, "TOP", 0, GAP)
 				end
-			elseif before then
-				text:SetPoint("TOP", before, "BOTTOM", 0, -SPACING)
-				room = room + SPACING + Height(text)
 			else
-				text:SetPoint("TOP", S.frame, "BOTTOM", 0, -first)
-				room = first + Height(text)
+				local at = before and room + SPACING or first
+				if side == "below" and at + Height(text) > near and at < far + GAP then
+					at = far + GAP
+				end
+				text:SetPoint("TOP", S.frame, "BOTTOM", 0, -at)
+				room = at + Height(text)
 			end
 			last[place] = text
 		end

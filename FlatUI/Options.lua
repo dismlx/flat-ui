@@ -119,9 +119,19 @@ local function AddChoice(category, item)
 		end
 		return 1
 	end
+	-- The game asks for the lines when the dropdown is shown, not when it is registered. A list made by a function of ns, such as the faces the
+	-- client loads, is not asked for before that, so a client that is asked at registration gets its first line, and so does its default. After
+	-- that the default is the place of the row's own default in the list, asked each time Defaults is pressed (Blizzard_Setting.lua:1-9,
+	-- 358-359): a slot of the data panels whose default is not the first line keeps it.
+	local registering = type(item.choices) == "string"
 	local setting = Proxy(category, item, Settings.VarType.Number, item.cvar and function()
 			return Index(ns.Get(item.path))
-		end or (type(item.choices) == "string" and 1 or Index(item.default)),
+		end or (type(item.choices) == "string" and function()
+			if registering then
+				return 1
+			end
+			return Index(item.default)
+		end or Index(item.default)),
 		function()
 			return Index(ns.Get(item.path))
 		end,
@@ -131,9 +141,6 @@ local function AddChoice(category, item)
 				ns.Set(item.path, choice[1])
 			end
 		end)
-	-- The game asks for the lines when the dropdown is shown, not when it is registered. A list made by a function of ns, such as the faces the
-	-- client loads, is not asked for before that, so a client that is asked at registration gets its first line.
-	local registering = type(item.choices) == "string"
 	local function Choices()
 		local container = Settings.CreateControlTextContainer()
 		if registering then

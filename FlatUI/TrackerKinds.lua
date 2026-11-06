@@ -1559,13 +1559,15 @@ end
 -- (Enum.GameRule.RepairArmorDisabled, with which the game hides its own durability figure: DurabilityFrame.lua:52, 127; GameRulesDocumentation.lua:225-238).
 -- UPDATE_INVENTORY_DURABILITY and PLAYER_EQUIPMENT_CHANGED (PaperDollInfoDocumentation.lua:384-393, 442-446) read it again, and the pass of the
 -- trackers when the player enters the world reads it at login. For READY seconds after READY_CHECK (PartyInfoDocumentation.lua:838-848; its payload,
--- which can be withheld, is not read) a low or missing durability tracker is shown whatever Show, Hide while mounted and Hide in cities and inns say.
+-- which can be withheld, is not read) the tracker is low at READY_LOW or under as well, and a low or missing durability tracker is shown whatever
+-- Show, Hide while mounted and Hide in cities and inns say.
 -- This follows the low durability warning of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (ItemInventory.lua:46-59, 216-232,
 -- 314-325, 700-711).
--- FIRST, LAST: the slots when the constants are missing. READY: EnhanceQoL's time on screen after a ready check (ItemInventory.lua:51). ICON: the
+-- FIRST, LAST: the slots when the constants are missing. READY: EnhanceQoL's time on screen after a ready check (ItemInventory.lua:51). READY_LOW:
+-- its threshold for that time, above its usual 20 (ItemInventory.lua:48, 50; a tracker that is never low stays so). ICON: the
 -- anvil EnhanceQoL shows for durability (Init.lua:586). SLOTS: the words of the check for the slots whose items wear. ready: when the window ends.
 local D = {
-	FIRST = 1, LAST = 19, READY = 12, ICON = 136241,
+	FIRST = 1, LAST = 19, READY = 12, READY_LOW = 40, ICON = 136241,
 	NO_CALL = "Trackers: the game gave no durability, so the durability tracker shows a grey icon.",
 	SLOTS = { [1] = "head", [3] = "shoulders", [5] = "chest", [6] = "waist", [7] = "legs", [8] = "feet", [9] = "wrists", [10] = "hands",
 		[16] = "main hand", [17] = "off hand", [18] = "ranged weapon" },
@@ -1611,13 +1613,20 @@ local function RepairsOff()
 	return rule ~= nil and Ask(rules.IsGameRuleActive, rule) == true
 end
 
--- The share at or under which the tracker is low: its own Low at, else the Durability minimum. 0 is never.
+-- The share at or under which the tracker is low: its own Low at, else the Durability minimum, and at least READY_LOW until the window of a
+-- ready check ends. 0 is never.
 local function DurabilityLow(entry)
+	local low = 0
 	if Plain(entry.low, "number") then
-		return entry.low
+		low = entry.low
+	else
+		local page = ns.Get(KEY .. ".durabilityMin")
+		low = Plain(page, "number") and page or 0
 	end
-	local page = ns.Get(KEY .. ".durabilityMin")
-	return Plain(page, "number") and page or 0
+	if low > 0 and Now() < D.ready then
+		low = math.max(low, D.READY_LOW)
+	end
+	return low
 end
 
 local function DurabilityRead(entry)
@@ -1685,7 +1694,8 @@ local function DurabilityLines(entry)
 		return { "Durability: nothing you wear has durability." }
 	end
 	local low = DurabilityLow(entry)
-	local ready = Now() < D.ready and ", shown for the ready check" or ""
+	local shown = last.percent == 0 or (low > 0 and last.percent <= low)
+	local ready = (shown and Now() < D.ready) and ", shown for the ready check" or ""
 	return { ("Durability: lowest %d%%, %s, %d of %d, low %s%s."):format(last.percent, D.SLOTS[last.slot] or ("slot %d"):format(last.slot),
 		math.floor(last.now), math.floor(last.most), low > 0 and ("at %d%% or less"):format(low) or "never", ready) }
 end
