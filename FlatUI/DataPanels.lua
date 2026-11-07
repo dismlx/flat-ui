@@ -2,18 +2,18 @@ local ADDON_NAME, ns = ...
 
 -- Data panels: two panels of Flat UI's own, the top panel and the bottom panel, each a row of up to six slots on a flat background with a thin
 -- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, the hearthstone,
--- coordinates, frame rate and latency, friends or guild members online, or the feed of another addon through LibDataBroker, when an addon that
--- is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no library, and shows feeds of the kind "data source" only). A slot
--- with nothing to show takes no room, a panel with nothing to show is hidden, and a panel makes its frames only once a slot has something to
--- show. The panels are children of UIParent, so they hide with the interface, and they are hidden in a pet battle (PET_BATTLE_OPENING_START to
--- PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading screen). /flatui move places them: each is in the list of the movers
--- (FlatUIDataTop and FlatUIDataBottom) with the panel itself as its box.
+-- coordinates, frame rate and latency, friends or guild members online, the equipment set worn, or the feed of another addon through
+-- LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no library, and shows feeds of the
+-- kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to show is hidden, and a panel makes its frames
+-- only once a slot has something to show. The panels are children of UIParent, so they hide with the interface, and they are hidden in a pet
+-- battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading screen). /flatui move places them: each is
+-- in the list of the movers (FlatUIDataTop and FlatUIDataBottom) with the panel itself as its box.
 -- A stream is drawn again on its events, once for a burst of them, and the few that change by themselves (coordinates, frame rate and latency,
 -- the cooldown of the hearthstone) on a ticker that runs only while a shown panel holds one of them. Pointing at a slot writes its lines in
 -- GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide when the cursor leaves). No click casts anything: a slot of Flat UI's
--- own takes no click, and a click on a feed goes to the feed's own OnClick. Every value of the game is read in pcall, and one it withholds is
--- left out, with the count it belongs to: no part of a count is shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line
--- for /flatui status.
+-- own takes no click but the equipment set's, which opens a menu of Flat UI's own (Menus, below), and a click on a feed goes to the feed's own
+-- OnClick. Every value of the game is read in pcall, and one it withholds is left out, with the count it belongs to: no part of a count is
+-- shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line for /flatui status.
 -- The gold of the account's characters is kept in FlatUIDB.datapanels.gold by "Name - Realm", and the feeds a slot of any profile shows in
 -- FlatUIDB.datapanels.feeds, so a slot keeps its feed while the addon that makes it loads after Flat UI.
 -- Built on the data panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission: its streams, the bridge to LibDataBroker
@@ -542,6 +542,9 @@ function P.MakeSlot(panel, slot)
 	end))
 	frame:SetScript("OnHide", Guard(function()
 		P.Leave(slot)
+		if P.MenuOpen(slot) then
+			P.CloseMenu()
+		end
 	end))
 	frame:SetScript("OnMouseDown", function(_, button)
 		slot.down = button
@@ -755,7 +758,9 @@ function P.Fill(panel, wanted)
 			slot.fontKey, slot.size, slot.shownText = P.fontKey, size, nil
 		end
 		P.Draw(slot, texts[index])
-		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil))
+		-- A feed and a stream with a click of its own (Equipment set) keep their clicks while the tooltips are off.
+		local stream = P.StreamOf(slot.id)
+		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil or (stream ~= nil and type(stream.Click) == "function")))
 	end
 	ns.SetOutline(panel.outline, Opt("background") == true, Opt("background") == true)
 	P.Layout(panel)
@@ -795,6 +800,11 @@ function P.Refresh()
 			panel.wanted = wanted
 			P.Fill(panel, wanted)
 		end
+	end
+	-- A menu stays open only while the module is on and its slot still shows the stream that opened it.
+	local menu = P.menu
+	if menu and menu.slot and not (on and menu.slot.panel.wanted and menu.slot.width and P.StreamOf(menu.slot.id) == menu.stream) then
+		P.CloseMenu()
 	end
 	P.Used()
 	P.dirty = {}
@@ -1060,7 +1070,8 @@ end
 
 function P.Enter(slot)
 	slot.over = true
-	if not slot.id or not Opt("tooltips") then
+	-- The slot's menu lies where its tooltip would.
+	if not slot.id or not Opt("tooltips") or P.MenuOpen(slot) then
 		return
 	end
 	if slot.feed then
@@ -1089,9 +1100,14 @@ function P.Leave(slot)
 	end
 end
 
--- A click on a slot: a feed's own OnClick, with the slot and the button. A slot of Flat UI's own does nothing.
+-- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment
+-- set), with the slot and the button. Any other slot of Flat UI's own does nothing.
 function P.Click(slot, button)
 	if not slot.feed then
+		local stream = P.StreamOf(slot.id)
+		if stream and type(stream.Click) == "function" and not ns.PartStopped(KEY, stream.label) then
+			P.Run(stream, stream.Click, slot, button)
+		end
 		return
 	end
 	local object = P.FeedObject(slot.feed)
@@ -1099,6 +1115,174 @@ function P.Click(slot, button)
 	if type(click) == "function" then
 		P.Call(slot.feed, click, slot.frame, button)
 	end
+end
+
+-- Menus -------------------------------------------------------------------------------------------------------------------------------------------
+
+-- A menu of Flat UI's own that a stream opens from its slot (Equipment set): a title and a column of lines in the face and size of the panels, on
+-- a flat background with a thin border, under the slot when the panel is in the upper half of the screen and over it in the lower half, as its
+-- tooltip opens. A line is { text, pick = function, inert = true for a line that does nothing }. A click on a line closes the menu and runs its
+-- pick as a part of the stream. A press anywhere else (GLOBAL_MOUSE_DOWN, heard on a frame of Flat UI's own only while the menu is shown), a
+-- second click on the slot, the start of a fight, the slot hiding or showing another stream and the module going off close it. Nothing of the
+-- game's is used for it: neither the game's menus nor its list of the windows that Escape closes.
+local EDGE = 4
+-- The light behind the line under the cursor.
+local LIGHT = { 1, 1, 1, 0.08 }
+
+local function Over(frame)
+	local ok, over = pcall(frame.IsMouseOver, frame)
+	return ok and not ns.IsSecret(over) and over == true
+end
+
+-- True while the menu is open, on that slot when one is given.
+function P.MenuOpen(slot)
+	local menu = P.menu
+	return menu ~= nil and menu.slot ~= nil and (slot == nil or menu.slot == slot)
+end
+
+function P.CloseMenu()
+	local menu = P.menu
+	if not (menu and menu.slot) then
+		return
+	end
+	menu.slot, menu.stream = nil, nil
+	pcall(menu.listener.UnregisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
+	menu.frame:Hide()
+end
+
+-- A press of a mouse button while the menu is open: one outside the menu and its slot closes it. A press on the slot is the slot's own click,
+-- which closes the menu as the button comes up.
+local function Pressed()
+	local menu = P.menu
+	if menu and menu.slot and not Over(menu.frame) and not Over(menu.slot.frame) then
+		P.CloseMenu()
+	end
+end
+
+local function MenuFrame()
+	if P.menu then
+		return P.menu
+	end
+	local frame = Own(CreateFrame("Frame", nil, UIParent))
+	frame:SetFrameStrata("DIALOG")
+	frame:SetSize(1, 1)
+	-- A click on the edge of the menu stays on it.
+	frame:EnableMouse(true)
+	pcall(frame.SetClampedToScreen, frame, true)
+	frame:Hide()
+	local menu = { frame = frame, outline = ns.Outline(frame, frame, true), lines = {} }
+	menu.title = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
+	menu.title:SetJustifyH("LEFT")
+	menu.title:SetWordWrap(false)
+	menu.listener = Own(CreateFrame("Frame"))
+	menu.listener:SetScript("OnEvent", Guard(Pressed))
+	P.menu = menu
+	return menu
+end
+
+local function MenuLine(menu, index)
+	local line = menu.lines[index]
+	if line then
+		return line
+	end
+	local frame = Own(CreateFrame("Frame", nil, menu.frame))
+	frame:EnableMouse(true)
+	line = { frame = frame }
+	line.light = Own(frame:CreateTexture(nil, "ARTWORK", nil, 0))
+	line.light:SetAllPoints(frame)
+	line.light:SetColorTexture(LIGHT[1], LIGHT[2], LIGHT[3], LIGHT[4])
+	line.light:Hide()
+	line.text = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
+	line.text:SetPoint("LEFT", frame, "LEFT", PAD_X, 0)
+	line.text:SetJustifyH("LEFT")
+	line.text:SetWordWrap(false)
+	pcall(line.text.SetShadowOffset, line.text, 1, -1)
+	pcall(line.text.SetShadowColor, line.text, 0, 0, 0, 1)
+	frame:SetScript("OnEnter", function()
+		line.light:SetShown(line.item ~= nil and not line.item.inert)
+	end)
+	frame:SetScript("OnLeave", function()
+		line.light:Hide()
+	end)
+	frame:SetScript("OnMouseDown", function(_, button)
+		line.down = button
+	end)
+	frame:SetScript("OnMouseUp", Guard(function(_, button)
+		local pressed, item, stream = line.down == button, line.item, menu.stream
+		line.down = nil
+		if not pressed or button ~= "LeftButton" or not item then
+			return
+		end
+		P.CloseMenu()
+		if not item.inert and stream and type(item.pick) == "function" and not ns.PartStopped(KEY, stream.label) then
+			P.Run(stream, item.pick)
+		end
+	end))
+	menu.lines[index] = line
+	return line
+end
+
+-- The width of a text of the menu: measured, else guessed from its length.
+local function Measure(text, value, size)
+	local ok, width = pcall(text.GetStringWidth, text)
+	if ok and ns.Finite(width) then
+		return width
+	end
+	return #value * size / 2
+end
+
+-- Opens the menu of a stream on its slot with a title and lines, or closes it when it is open on that slot already. True when it opened.
+function P.OpenMenu(slot, stream, title, items)
+	if P.MenuOpen(slot) then
+		P.CloseMenu()
+		return false
+	end
+	if type(items) ~= "table" or #items == 0 or not slot.frame then
+		return false
+	end
+	local menu = MenuFrame()
+	P.CloseMenu()
+	local file, size = P.Font()
+	local height = P.height or math.ceil(size + 2 * PAD_Y)
+	P.SetFont(menu.title, file, size)
+	menu.title:SetText(DIM .. title .. "|r")
+	menu.title:ClearAllPoints()
+	menu.title:SetPoint("LEFT", menu.frame, "TOPLEFT", PAD_X, -(EDGE + height / 2))
+	local width, y = Measure(menu.title, title, size), EDGE + height
+	for index, item in ipairs(items) do
+		local line = MenuLine(menu, index)
+		line.item = item
+		P.SetFont(line.text, file, size)
+		line.text:SetText(item.text)
+		width = math.max(width, Measure(line.text, item.text, size))
+		line.light:Hide()
+		line.frame:ClearAllPoints()
+		line.frame:SetPoint("TOPLEFT", menu.frame, "TOPLEFT", 0, -y)
+		line.frame:SetPoint("TOPRIGHT", menu.frame, "TOPRIGHT", 0, -y)
+		line.frame:SetHeight(height)
+		line.frame:Show()
+		y = y + height
+	end
+	for index = #items + 1, #menu.lines do
+		menu.lines[index].item = nil
+		menu.lines[index].frame:Hide()
+	end
+	menu.frame:SetSize(math.ceil(width) + 2 * PAD_X, y + EDGE)
+	menu.frame:ClearAllPoints()
+	if P.Anchor(slot.panel) == "ANCHOR_BOTTOM" then
+		menu.frame:SetPoint("TOP", slot.frame, "BOTTOM", 0, -2)
+	else
+		menu.frame:SetPoint("BOTTOM", slot.frame, "TOP", 0, 2)
+	end
+	ns.SetOutline(menu.outline, true, true)
+	menu.slot, menu.stream = slot, stream
+	menu.frame:Show()
+	pcall(menu.listener.RegisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
+	-- The slot's tooltip would lie over the menu.
+	if Owned(slot) then
+		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
+	end
+	return true
 end
 
 -- The module --------------------------------------------------------------------------------------------------------------------------------------
@@ -1213,5 +1397,7 @@ ns.Register(KEY, {
 			P.PetBattle(false)
 		end,
 		ADDON_LOADED = P.OnAddon,
+		-- Nothing is offered in a fight (DataStreams.lua, Equipment set).
+		PLAYER_REGEN_DISABLED = P.CloseMenu,
 	},
 })
