@@ -1005,6 +1005,19 @@ ns.PAGES = {
 		{ key = "barWidth", kind = "number", default = 180, min = 100, max = 400, step = 5, unit = " px", label = "Bar width" },
 		{ key = "barHeight", kind = "number", default = 16, min = 10, max = 30, step = 1, unit = " px", label = "Bar height", tip = "Also the height of text." },
 	},
+	-- HealerMana.lua: a window of Flat UI's own with the mana of the healers of the group. Off by default; on, it shows in a dungeon or raid.
+	{
+		key = "healermana", label = "Healer mana",
+		{ key = "enabled", kind = "bool", default = false, label = "Show healer mana",
+			tip = "The mana of the healers in your group, by their role, or by class for a member with no role. /flatui move places the list, /flatui healers shows a sample." },
+		{ section = "When it shows" },
+		{ key = "show", kind = "choice", default = "instance", label = "Show", tip = "While your group has a healer.",
+			choices = { { "instance", "In a dungeon or raid" }, { "group", "In a group" } } },
+		{ section = "Bars" },
+		{ key = "rows", kind = "number", default = 5, min = 1, max = 10, step = 1, label = "Number of bars", tip = "In the order of your group." },
+		{ key = "barWidth", kind = "number", default = 150, min = 100, max = 400, step = 5, unit = " px", label = "Bar width" },
+		{ key = "barHeight", kind = "number", default = 16, min = 10, max = 30, step = 1, unit = " px", label = "Bar height", tip = "Also the height of text." },
+	},
 	{
 		key = "windows", label = "Windows",
 		{ key = "enabled", kind = "bool", default = true, label = "Restyle windows", reload = "off", tip = RELOAD },
@@ -1365,6 +1378,13 @@ ns.PAGES = {
 		{ key = "totemTimer", kind = "bool", default = true, label = "Totem time left" },
 		{ key = "totemSwipe", kind = "bool", default = true, label = "Totem cooldown swipe" },
 		{ key = "totemTimeSize", kind = "number", default = 80, min = 50, max = 200, step = 5, unit = "%", label = "Totem time size", needs = "totemTimer" },
+		-- UnitGroupMarks.lua: the colour and the type of a debuff you can dispel, and the raid marker of a raid frame.
+		{ section = "Party and raid frames" },
+		{ key = "dispelBorder", kind = "bool", default = true, label = "Border colour of a debuff you can dispel",
+			tip = "The border of the health bar takes the colour of Magic, Curse, Disease or Poison while the member has a debuff of that type you can dispel." },
+		{ key = "dispelIcon", kind = "bool", default = true, label = "Debuff type icon on party frames",
+			tip = "The type of a debuff you can dispel, at the right end of the health bar. The game's raid frames show their own." },
+		{ key = "raidFrameMarker", kind = "bool", default = true, label = "Raid marker on raid frames", tip = "The game's raid frames show none." },
 	},
 	{
 		key = "hud", label = "Minimap and buffs",

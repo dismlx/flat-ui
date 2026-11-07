@@ -367,6 +367,9 @@ ns.SETUP_STEPS = {
 		{ "unitframes.totemTimer", "o", "mock-unit-frame" },
 		{ "unitframes.totemSwipe", "o", "mock-unit-frame" },
 		{ "unitframes.totemTimeSize", "o", "behaviour", "Sets the size of the time left under a totem, from 50 to 200 percent." },
+		{ "unitframes.dispelBorder", "c", "behaviour", "Colours the border of a party or raid member's health bar by the type of a debuff you can dispel." },
+		{ "unitframes.dispelIcon", "o", "behaviour", "Shows the type of a debuff you can dispel at the right end of a party member's health bar." },
+		{ "unitframes.raidFrameMarker", "o", "behaviour", "Shows the raid marker of a member on the game's raid frames." },
 	} },
 	{ id = "uf-player", area = "Unit frames", title = "Player and target frames", draw = "mock-unit-frame", built = true, rows = {
 		{ "unitframes.playerPicture", "c", "mock-unit-frame" },
@@ -1160,5 +1163,12 @@ ns.SETUP_STEPS = {
 		{ "threat.rows", "o", "behaviour", "Sets how many bars the threat list shows at most." },
 		{ "threat.barWidth", "r", "behaviour", "Sets the width of the bars of the threat list." },
 		{ "threat.barHeight", "r", "behaviour", "Sets the height of the bars of the threat list and of their text." },
+	} },
+	{ id = "healermana", area = "Healer mana", title = "Healer mana", draw = "mock-screen", built = false, rows = {
+		{ "healermana.enabled", "c", "behaviour", "Shows the mana of the healers in your group, in a window placed with the movers." },
+		{ "healermana.show", "o", "behaviour", "Chooses whether the healer mana list shows in a dungeon or raid, or in any group." },
+		{ "healermana.rows", "o", "behaviour", "Sets how many bars the healer mana list shows at most." },
+		{ "healermana.barWidth", "r", "behaviour", "Sets the width of the bars of the healer mana list." },
+		{ "healermana.barHeight", "r", "behaviour", "Sets the height of the bars of the healer mana list and of their text." },
 	} },
 }

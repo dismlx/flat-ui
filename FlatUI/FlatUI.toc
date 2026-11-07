@@ -45,6 +45,7 @@ PartyCooldowns.lua
 PartySync.lua
 EnemyCooldowns.lua
 Threat.lua
+HealerMana.lua
 OwnBuffs.lua
 TrackerShapes.lua
 TrackerKinds.lua
@@ -71,6 +72,7 @@ UnitFrameHead.lua
 UnitText.lua
 UnitParts.lua
 UnitExtras.lua
+UnitGroupMarks.lua
 Hud.lua
 MapButtons.lua
 AuraTime.lua

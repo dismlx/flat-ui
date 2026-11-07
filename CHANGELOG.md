@@ -1,6 +1,8 @@
 ## 0.5.8
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Unit frames**, **All frames: icons and auras**, new section **Party and raid frames**: **Border colour of a debuff you can dispel**, **Debuff type icon on party frames** and **Raid marker on raid frames**, all on. The border of a party or raid member's health bar takes the colour of Magic, Curse, Disease or Poison while they have a debuff of that type you can dispel (the client's own filter for what you can dispel); party frames show its type at the right end of the health bar, as the game's raid frames already do; and raid frames show the member's raid marker, which the game's lack. Follows EnhanceQoL's dispel indicator and raid marker.
+- **Healer mana** is a new page in the **Combat** group, off by default: the mana of your group's healers, by their role or by class for a member with no role, one bar each in class colours. **Show** (**In a dungeon or raid**, or **In a group**), **Number of bars** (5), **Bar width** (150 px) and **Bar height** (16 px). `/flatui move` places it, and `/flatui healers` shows a sample. Follows EnhanceQoL's Healer Mana indicator.
 
 ## 0.5.7
 
