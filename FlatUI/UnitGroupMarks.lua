@@ -1,8 +1,8 @@
 local _, ns = ...
 
--- Marks on the game's party and raid frames: the colour of a debuff the player can dispel on the border of the health bar, with the icon of its type
--- on a party frame, and the raid marker of the unit of a raid frame. All are textures of the addon's own on a frame of its own over the game's frame,
--- made and anchored out of combat; in a fight only their colour, opacity and visibility change.
+-- Marks on the game's party and raid frames: the colour of a debuff the player can dispel on a border just inside the health bar, with the icon of its
+-- type on a party frame, and the raid marker of the unit of a raid frame. All are textures of the addon's own on a frame of its own over the game's
+-- frame, made and anchored out of combat; in a fight only their colour, opacity and visibility change.
 --
 -- What the player can dispel is the client's own aura filter HARMFUL|RAID: "harmful auras the player can dispel" (Blizzard_FrameXMLUtil/
 -- AuraUtil.lua:275), which the game's party frames (Shared/PartyMemberFrame.lua:143) and raid frames (Blizzard_PrivateAurasUI.lua:486) use for their
@@ -16,7 +16,8 @@ local _, ns = ...
 -- the instance ID of the aura is withheld the border is white and no icon shows; /flatui status says so. The game's raid frames draw their own type
 -- icons and overlay for dispellable debuffs (raidFramesDispelIndicatorType, Blizzard_PrivateAurasUI.lua:421-435, 650-688), so the icon is on party
 -- frames only. Each frame hears UNIT_AURA for its own unit on a frame of the addon's own (RegisterUnitEvent), so the payload, which the game may
--- withhold (UnitAuraDocumentation.lua:644-655), is never read; a burst is read once, a moment after the first.
+-- withhold (UnitAuraDocumentation.lua:644-655), is never read; a burst is read once, a moment after the first. A frame the game hid hears nothing until
+-- the game draws it again.
 --
 -- The game's raid frames have no raid marker (Shared/CompactUnitFrame.xml:3-111). The game gives the index of a marker to addons only withheld
 -- (GetRaidTargetIndex, RaidMarkersDocumentation.lua:55-69, SecretReturns), and SetSpriteSheetCell takes a withheld index (SimpleTextureBaseAPIDocumentation
@@ -25,7 +26,11 @@ local _, ns = ...
 -- draws the markers again.
 --
 -- The ready check and the aggro highlight are the game's own on its raid frames (CompactUnitFrame.lua:907-932, 1366-1446): Flat UI keeps the
--- ready check as it is and already gives the colour of the aggro highlight to the health bar border (Threat border, UnitFrames.lua).
+-- ready check as it is and already gives the colour of the aggro highlight to the health bar border (Threat border, UnitFrames.lua). That border,
+-- just outside the bar, also has the colour of the target on a raid frame and of the top debuff on a party frame (UnitFrames.lua:1480-1497), and the
+-- game's own outlines for aggro and the target are faded under it (UnitFrames.lua:332-336, 2293-2295, 2302), so the dispel border lies inside the
+-- bar and never over it. The game too keeps its dispel overlay, a frame of its own (Blizzard_PrivateAurasUI.lua:841-846,
+-- Blizzard_PrivateAurasUI.xml:33-41), apart from the textures of its aggro and target outlines (Shared/CompactUnitFrame.xml:46-51).
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLUnitFrames/UF_GroupFrames.lua:8833-8862, 11626-11780;
 -- UF_GroupFrames_Helper.lua:1990-2077): its dispel tint by a step colour curve over GetAuraDispelTypeColor and its raid icon on group frames, drawn
 -- here on the game's frames. Its own group frames, glows, overlays and the filter token are left out, as said above.
@@ -207,8 +212,8 @@ local function First(unit)
 	return true, aura
 end
 
--- The border, four edges of an image file just outside the slot of the health bar, and on a party frame the four type icons at the right end of
--- the bar. Made out of combat, as a child of the slot, above the outline of Flat UI.
+-- The border, four edges of an image file just inside the slot of the health bar, and on a party frame the four type icons at the right end of
+-- the bar, a sublevel over the edges, which cross them. Made out of combat, as a child of the slot, above the outline of Flat UI.
 local function MakeDispel(rec)
 	local entry = rec.byRole.health
 	local box = entry and entry.target
@@ -220,8 +225,11 @@ local function MakeDispel(rec)
 	holder:SetAllPoints(box)
 	local d = { holder = holder, box = box, edges = {} }
 	for index = 1, 4 do
-		local edge = Own(holder:CreateTexture(nil, "OVERLAY", nil, 7))
+		local edge = Own(holder:CreateTexture(nil, "OVERLAY", nil, 6))
 		edge:SetTexture(WHITE)
+		-- Not snapped, as the edges of the outline are not (Edge, Core.lua): snapping could move an edge a pixel onto the outline.
+		pcall(edge.SetSnapToPixelGrid, edge, false)
+		pcall(edge.SetTexelSnappingBias, edge, 0)
 		edge:Hide()
 		d.edges[index] = edge
 	end
@@ -234,7 +242,6 @@ local function MakeDispel(rec)
 				icon:SetTexture(WHITE)
 			end
 			icon:SetSize(ICON, ICON)
-			icon:SetPoint("RIGHT", box, "RIGHT", -1, 0)
 			icon:Hide()
 			d.icons[kind] = icon
 		end
@@ -243,7 +250,10 @@ local function MakeDispel(rec)
 	return d
 end
 
--- The edges, in the thickness of the border in screen pixels, laid out again out of combat when that thickness changed.
+-- The edges, in the thickness of the border in screen pixels, laid out again out of combat when that thickness changed. They lie inside the slot:
+-- Flat UI's outline lies just outside it on a frame under this one (PlaceEdgesNow, Core.lua) and keeps its colour of threat or the target.
+-- Inside the bar the edges also stay inside a raid frame, whose bar is 1 unit in from its edges (Shared/CompactUnitFrame.lua:1906-1907), while
+-- raid frames touch (Shared/CompactRaidGroup.lua:113, 142). A type icon sits 1 unit left of the right edge, over the top and bottom edges.
 local function PlaceDispel(d)
 	local t = ns.Pixels(d.holder, RIM_PX)
 	if d.placed == t then
@@ -252,18 +262,21 @@ local function PlaceDispel(d)
 	d.placed = t
 	local box = d.box
 	local top, bottom, left, right = d.edges[1], d.edges[2], d.edges[3], d.edges[4]
-	top:SetPoint("BOTTOMLEFT", box, "TOPLEFT", -t, 0)
-	top:SetPoint("BOTTOMRIGHT", box, "TOPRIGHT", t, 0)
+	top:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+	top:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
 	top:SetHeight(t)
-	bottom:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -t, 0)
-	bottom:SetPoint("TOPRIGHT", box, "BOTTOMRIGHT", t, 0)
+	bottom:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 0, 0)
+	bottom:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
 	bottom:SetHeight(t)
-	left:SetPoint("TOPRIGHT", box, "TOPLEFT", 0, 0)
-	left:SetPoint("BOTTOMRIGHT", box, "BOTTOMLEFT", 0, 0)
+	left:SetPoint("TOPLEFT", box, "TOPLEFT", 0, -t)
+	left:SetPoint("BOTTOMLEFT", box, "BOTTOMLEFT", 0, t)
 	left:SetWidth(t)
-	right:SetPoint("TOPLEFT", box, "TOPRIGHT", 0, 0)
-	right:SetPoint("BOTTOMLEFT", box, "BOTTOMRIGHT", 0, 0)
+	right:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, -t)
+	right:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, t)
 	right:SetWidth(t)
+	for _, icon in pairs(d.icons or {}) do
+		icon:SetPoint("RIGHT", box, "RIGHT", -1 - t, 0)
+	end
 end
 
 local function Clear(d)
@@ -342,7 +355,22 @@ local function Draw(rec, d, unit, id, aura)
 	end
 end
 
--- Reads the unit of a frame and draws what it found.
+-- True when the game hid the frame itself: a party frame in a raid or beside raid-style party frames, which keeps its party unit and the game's
+-- UNIT_AURA for it (PartyMemberFrameMixin:UpdateMember, Mainline/PartyMemberFrame.lua:403, 446-451; Shared/PartyFrame.lua:47-49, 160-169), or a raid
+-- frame whose unit is gone (CompactUnitFrame_UpdateVisible, Shared/CompactUnitFrame.lua:520-535). Nothing on it can be seen, so it hears no auras.
+-- Each time the game shows a party frame it runs UnitFrame_Update after (Mainline/PartyMemberFrame.lua:463-471, Shared/PartyFrame.lua:64-69, 163-165),
+-- and it shows a raid frame only in CompactUnitFrame_UpdateAll (Shared/CompactUnitFrame.lua:435-441); Flat UI follows both to Dispel
+-- (UnitFrames.lua:2366-2372, 3105, 3115-3121), which hears the unit again. The frame's own flag is read, not whether it can be seen: the raid frame
+-- manager shows the container of the raid frames again with no call Flat UI follows (Blizzard_CompactRaidFrames/Mainline/
+-- Blizzard_CompactRaidFrameManager.lua:995-1004, 1027-1032; Blizzard_CompactRaidFrameContainer.lua:80-84).
+local function Hidden(rec)
+	local ok, shown = pcall(rec.frame.IsShown, rec.frame)
+	return ok and not IsSecret(shown) and shown == false
+end
+
+local Hear
+
+-- Reads the unit of a frame and draws what it found. A frame with nothing to show, or that the game hid, stops hearing its unit.
 local function Read(rec)
 	local d = rec.dispel
 	if d == nil then
@@ -350,12 +378,16 @@ local function Read(rec)
 	end
 	local border, icon = Wanted(rec, X.active(rec))
 	local unit = d.unit
-	if not (border or icon) or unit == nil then
+	if not (border or icon) or unit == nil or Hidden(rec) then
+		d.withheld = nil
 		Clear(d)
+		Hear(rec, d, nil)
 		Quiet(rec)
 		return
 	end
 	local id, aura = First(unit)
+	-- The game would not say, or withheld the debuff it has: read again once it stops withholding (Reread, below).
+	d.withheld = id == false or id == true
 	Say(NOTE_BLIND, rec, id == false)
 	if not id then
 		Clear(d)
@@ -391,8 +423,37 @@ local function Soon(rec)
 	end
 end
 
+-- What the game withholds of a debuff ends with the restriction that withholds it: a fight, an encounter, a challenge mode or a PvP match
+-- (SecretWhenUnitAuraRestricted, SecretPredicatesDocumentation.lua:80-82). A debuff that stays sends no UNIT_AURA then, so a frame read while it was
+-- withheld would keep its white border (or none), its hidden icon and its line in /flatui status until its auras next change. Each such frame is
+-- read again when the fight ends, as the game's raid frames and aura containers read all their auras again then (Blizzard_PrivateAurasUI.lua:
+-- 542-544, 712-713; Blizzard_CustomAuraContainer.lua:589-605), and when one of those restrictions is over, which the game says once it has ended
+-- (ADDON_RESTRICTION_STATE_CHANGED, RestrictedActionsDocumentation.lua:96-107; RestrictedActionsConstantsDocumentation.lua:13, 26-29), for an
+-- encounter or a match that outlasts the fight. Both come at the end of a fight, as one burst. A frame read plainly keeps what it shows: read at
+-- the end of a fight inside an encounter, it would only be withheld.
+local function Reread()
+	for _, rec in pairs(X.records) do
+		if rec.dispel and rec.dispel.withheld then
+			Soon(rec)
+		end
+	end
+end
+
+-- True when a restriction that withholds auras has ended.
+local function AurasOpenAgain(kind, state)
+	local kinds = type(Enum) == "table" and Enum.AddOnRestrictionType or nil
+	local states = type(Enum) == "table" and Enum.AddOnRestrictionState or nil
+	if IsSecret(kind) or IsSecret(state) or type(kinds) ~= "table" or type(states) ~= "table" or state ~= states.Inactive then
+		return false
+	end
+	return kind == kinds.Combat or kind == kinds.Encounter or kind == kinds.ChallengeMode or kind == kinds.PvPMatch
+end
+
+ns.AddEvent(KEY, "PLAYER_REGEN_ENABLED", Reread)
+ns.AddEvent(KEY, "ADDON_RESTRICTION_STATE_CHANGED", Reread, AurasOpenAgain)
+
 -- The frame of the addon's own that hears UNIT_AURA for the unit of one game frame, and nothing once it has no unit.
-local function Hear(rec, d, unit)
+function Hear(rec, d, unit)
 	if d.unit == unit and (d.heard or unit == nil) then
 		return
 	end
@@ -453,7 +514,7 @@ local function Dispel(rec, on)
 	elseif not InCombatLockdown() then
 		PlaceDispel(d)
 	end
-	Hear(rec, d, UnitOfFrame(rec))
+	Hear(rec, d, not Hidden(rec) and UnitOfFrame(rec) or nil)
 	Soon(rec)
 end
 
@@ -550,21 +611,15 @@ function X.unitChanged(rec)
 	end
 end
 
-local wasUnits = X.unitsChanged
-function X.unitsChanged()
-	if wasUnits ~= nil then
-		wasUnits()
-	end
-	for _, rec in pairs(X.records) do
-		if rec.dispel then
-			X.run(DISPEL, Dispel, rec, X.active(rec))
-		end
-		if rec.marker then
-			X.run(MARKER, Marker, rec, X.active(rec))
-		end
-	end
-end
-
+-- X.unitsChanged is not followed. UnitFrames.lua runs it for a new target or focus, a new target of either, a change of faction and a change of
+-- the group. The first three change neither the debuffs of a member nor its marker: on a new target the game's raid frames redo only their
+-- highlight, name, border and widgets (Shared/CompactUnitFrame.lua:79-83), and on UNIT_FACTION its party frames only their PvP icon
+-- (Mainline/PartyMemberFrame.lua:657-660). A change of the group reaches every frame through the game's own calls. A raid frame or a raid-style
+-- party frame runs CompactUnitFrame_UpdateAll, and so after.raid below, on GROUP_ROSTER_UPDATE (CompactUnitFrame.lua:73-74; CompactRaidGroup.lua:47,
+-- CompactPartyFrame.lua:181, Blizzard_CompactRaidFrameContainer.lua:448), when it is given a new unit (CompactUnitFrame.lua:276) and each time it
+-- is set up (:313-315), which the raid-style party frame does with all its frames, its pets included, on GROUP_ROSTER_UPDATE (CompactPartyFrame.lua
+-- :9, 35-37, 175-209). A party frame runs UnitFrame_Update, and so X.unitChanged above, from UpdateMember on GROUP_ROSTER_UPDATE (Mainline/
+-- PartyMemberFrame.lua:446-471, 650-651); one it hides there (:447-450, 472-477) is read again when it shows.
 table.insert(X.after.apply, { part = DISPEL, fn = Dispel })
 table.insert(X.after.apply, { part = MARKER, fn = Marker })
 table.insert(X.after.raid, { part = DISPEL, fn = Dispel })
