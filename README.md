@@ -8,7 +8,7 @@ The **Data panels** page, off by default, adds a top and a bottom panel with bag
 
 The **Threat list** page, off by default, lists your group by threat on the enemy you fight, highest first, in class colours; at 100% a member has aggro. The **Healer mana** page, off by default, shows your healers' mana in dungeons and raids.
 
-The **Drink and health macros** page, off by default, keeps two macros up to date with your bags and level: one drinks your best drink, conjured water first, and the other takes a healthstone, then a healing potion, and eats out of combat.
+The **Drink and health macros** page, off by default, keeps two macros up to date with your bags and level: one drinks your best drink, conjured water first when it is as good, and the other takes a healthstone, then a healing potion, and eats out of combat.
 
 The **Mount key** page, off by default, gives you one key in the game's Key Bindings that mounts a random mount you can ride, favourites first; a druid takes Aquatic or Travel Form and a shaman Ghost Wolf where a mount cannot go, and pressed again it dismounts or leaves the form.
 

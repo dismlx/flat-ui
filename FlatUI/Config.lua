@@ -1772,7 +1772,7 @@ ns.PAGES = {
 	{
 		key = "consumables", label = "Drink and health macros",
 		{ key = "enabled", kind = "bool", default = false, label = "Keep drink and health macros",
-			tip = "Two macros in your account's macro list, Flat UI Drink and Flat UI Health, written again out of combat when your bags or your level change. Drag them onto a bar from the game's macro window (/macro). Turned off, they are deleted, and a bar slot that held one is empty." },
+			tip = "Two macros in your account's macro list, Flat UI Drink and Flat UI Health, written again out of combat when your bags or your level change. Drag them onto a bar from the game's macro window (/macro). Turned off, they are deleted, but one still on a bar stays until you drag it off." },
 		{ section = "Drink" },
 		{ key = "drink", kind = "bool", default = true, label = "Drink macro",
 			tip = "Flat UI Drink drinks the best drink in your bags that your level allows, conjured water first. A character without mana leaves it as it is." },

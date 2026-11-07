@@ -11175,7 +11175,7 @@ local PAGES = {
 		S("errands.wayCommand", "bool", true, "Add the /way command", "/way 45 61 puts a pin on your map there and the game points you to it. /way Elwynn Forest 45 61, /way #1429 45 61 and /way clear work too. When another addon has /way it keeps it, and /flatui way does the same."),
 	} },
 	{ key = "consumables", label = "Drink and health macros", rows = {
-		S("consumables.enabled", "bool", false, "Keep drink and health macros", "Two macros in your account's macro list, Flat UI Drink and Flat UI Health, written again out of combat when your bags or your level change. Drag them onto a bar from the game's macro window (/macro). Turned off, they are deleted, and a bar slot that held one is empty."),
+		S("consumables.enabled", "bool", false, "Keep drink and health macros", "Two macros in your account's macro list, Flat UI Drink and Flat UI Health, written again out of combat when your bags or your level change. Drag them onto a bar from the game's macro window (/macro). Turned off, they are deleted, but one still on a bar stays until you drag it off."),
 		"Drink",
 		S("consumables.drink", "bool", true, "Drink macro", "Flat UI Drink drinks the best drink in your bags that your level allows, conjured water first. A character without mana leaves it as it is."),
 		S("consumables.manaPotion", "bool", true, "Mana potion in a fight", "In a fight, where you cannot drink, Flat UI Drink takes your best mana potion.", { needs = "consumables.drink" }),
