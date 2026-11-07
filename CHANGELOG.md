@@ -5,6 +5,7 @@
 - **Healer mana** is a new page in the **Combat** group, off by default: the mana of your group's healers, by their role or by class for a member with no role, one bar each in class colours. **Show** (**In a dungeon or raid**, or **In a group**), **Number of bars** (5), **Bar width** (150 px) and **Bar height** (16 px). `/flatui move` places it, and `/flatui healers` shows a sample. Follows EnhanceQoL's Healer Mana indicator.
 - **Data panels**: a slot can show **Equipment set**, the set you wear with its icon. Its tooltip lists your sets, the one you wear in green and one with an item missing in red, and a click opens a menu to put one on, not in a fight; the slot keeps its click with **Tooltips** off. Follows EnhanceQoL's Equipment Sets stream.
 - **Tracker, loot and alerts**, new section **Zone name and talking head**: **Hide the zone name**, **Hide the subzone name** and **Hide the talking head** (with its voice), all off. Each comes back as soon as its row is turned off, without /reload. Follows EnhanceQoL's options for the zone text and the talking head.
+- **Drink and health macros** is a new page in **Interface**, off by default: **Flat UI Drink** and **Flat UI Health** in your account's macro list, written again out of combat when your bags or level change; turned off, they are deleted.
 
 ## 0.5.7
 

@@ -110,6 +110,8 @@ ErrandsSocial.lua
 ErrandsQuests.lua
 ErrandsRanks.lua
 ErrandsLevelling.lua
+ConsumableData.lua
+Consumables.lua
 DataPanels.lua
 DataStreams.lua
 CastBarSize.lua

@@ -1741,6 +1741,23 @@ ns.PAGES = {
 		{ key = "wayCommand", kind = "bool", default = true, label = "Add the /way command",
 			tip = "/way 45 61 puts a pin on your map there and the game points you to it. /way Elwynn Forest 45 61, /way #1429 45 61 and /way clear work too. When another addon has /way it keeps it, and /flatui way does the same." },
 	},
+	-- Consumables.lua: two macros of Flat UI's own in the account's macro list, written again out of combat when the bags or the level change.
+	-- Off by default; on, both macros are kept, with the choices of a player levelling on Forever.
+	{
+		key = "consumables", label = "Drink and health macros",
+		{ key = "enabled", kind = "bool", default = false, label = "Keep drink and health macros",
+			tip = "Two macros in your account's macro list, Flat UI Drink and Flat UI Health, written again out of combat when your bags or your level change. Drag them onto a bar from the game's macro window (/macro). Turned off, they are deleted, and a bar slot that held one is empty." },
+		{ section = "Drink" },
+		{ key = "drink", kind = "bool", default = true, label = "Drink macro",
+			tip = "Flat UI Drink drinks the best drink in your bags that your level allows, conjured water first. A character without mana leaves it as it is." },
+		{ key = "manaPotion", kind = "bool", default = true, label = "Mana potion in a fight", needs = "drink",
+			tip = "In a fight, where you cannot drink, Flat UI Drink takes your best mana potion." },
+		{ section = "Health" },
+		{ key = "health", kind = "bool", default = true, label = "Health macro",
+			tip = "Flat UI Health takes a healthstone, then at the next press your best healing potion, and starts with the healthstone again after the fight." },
+		{ key = "food", kind = "bool", default = true, label = "Eat out of combat", needs = "health",
+			tip = "Out of combat Flat UI Health eats the best food in your bags that your level allows, conjured food first." },
+	},
 	-- DataPanels.lua and DataStreams.lua: two panels of Flat UI's own, each a row of slots. Off by default; on, the top panel shows what a player
 	-- levelling on Forever looks at most, and the bottom panel, once shown, who is online.
 	{

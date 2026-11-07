@@ -1174,4 +1174,11 @@ ns.SETUP_STEPS = {
 		{ "healermana.barWidth", "r", "behaviour", "Sets the width of the bars of the healer mana list." },
 		{ "healermana.barHeight", "r", "behaviour", "Sets the height of the bars of the healer mana list and of their text." },
 	} },
+	{ id = "consumables", area = "Drink and health macros", title = "Drink and health macros", draw = "mock-screen", built = false, rows = {
+		{ "consumables.enabled", "c", "behaviour", "Keeps two macros in your macro list, one that drinks and one that heals, up to date with your bags and level." },
+		{ "consumables.drink", "c", "behaviour", "Keeps a macro that drinks the best drink your level allows, conjured water first." },
+		{ "consumables.manaPotion", "o", "behaviour", "Has the drink macro take your best mana potion in a fight." },
+		{ "consumables.health", "c", "behaviour", "Keeps a macro that takes a healthstone, then your best healing potion." },
+		{ "consumables.food", "o", "behaviour", "Has the health macro eat your best food out of combat." },
+	} },
 }
