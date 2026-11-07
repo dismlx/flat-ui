@@ -81,6 +81,7 @@ XpBar.lua
 QuestCount.lua
 MapText.lua
 ErrorFilter.lua
+ScreenText.lua
 Fade.lua
 Chat.lua
 ChatText.lua

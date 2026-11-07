@@ -2156,6 +2156,10 @@ function Refresh()
 	if ns.ErrorFilterRefresh ~= nil then
 		ns.ErrorFilterRefresh()
 	end
+	-- The zone name and the talking head: the opacity of the zone text, the event of the talking head (ScreenText.lua).
+	if ns.ScreenTextRefresh ~= nil then
+		ns.ScreenTextRefresh()
+	end
 	RefreshTimers()
 	RefreshOther()
 	-- The addon buttons follow the part switch and a change of profile (MapButtons.lua).
