@@ -1181,4 +1181,8 @@ ns.SETUP_STEPS = {
 		{ "consumables.health", "c", "behaviour", "Keeps a macro that takes a healthstone, then your best healing potion." },
 		{ "consumables.food", "o", "behaviour", "Has the health macro eat your best food out of combat." },
 	} },
+	{ id = "mount", area = "Mount key", title = "Mount key", draw = "mock-screen", built = false, rows = {
+		{ "mount.enabled", "c", "behaviour", "Gives you one key in the game's Key Bindings that mounts a random mount or takes a travel form, and dismounts or leaves the form when pressed again." },
+		{ "mount.favourites", "o", "behaviour", "Picks the mount among your favourites while one of them can be used." },
+	} },
 }

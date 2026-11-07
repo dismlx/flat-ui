@@ -1898,6 +1898,14 @@ ns.PAGES = {
 		{ key = "petPlace", kind = "choice", default = "game", label = "Pet bar position", tip = "In Edit Mode press an arrow key once on the pet bar and save so the game stops stacking it.",
 			choices = { { "game", "Where the game puts it" }, { "aboveRight", "Above, right" }, { "aboveLeft", "Above, left" } } },
 	},
+	-- MountKey.lua: one key of the game's Key Bindings for a mount or a travel form. Off by default.
+	{
+		key = "mount", label = "Mount key",
+		{ key = "enabled", kind = "bool", default = false, label = "Mount key",
+			tip = "Bind a key to Mount or travel form under Flat UI in the game's Key Bindings. It mounts a random mount you can ride; a druid takes Aquatic Form in water, and Travel Form in a fight, on the move or with no mount; a shaman takes Ghost Wolf in a fight or with no mount. Pressed again, it dismounts or leaves the form." },
+		{ key = "favourites", kind = "bool", default = true, label = "Favourite mounts first",
+			tip = "Picks among the mounts you marked as favourites in the mount journal (right-click a mount there), or among all of them while none of those can be used." },
+	},
 	{
 		key = "tooltip", label = "Tooltip",
 		{ key = "enabled", kind = "bool", default = false, label = "Place the tooltip" },

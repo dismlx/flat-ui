@@ -1,0 +1,5 @@
+<Bindings>
+	<!-- MountKey.lua: the key of the Mount key page. It clicks the secure button Flat UI makes once the page is on and a key is bound. -->
+	<Binding name="CLICK FlatUIMountButton:LeftButton" category="Flat UI">
+	</Binding>
+</Bindings>

@@ -100,6 +100,7 @@ MoversSnap.lua
 BarBlock.lua
 BarBlockButtons.lua
 Blocks.lua
+MountKey.lua
 Tooltip.lua
 Errands.lua
 ErrandsMerchant.lua

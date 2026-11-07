@@ -64,6 +64,9 @@ local ADDON_NAME, ns = ...
 -- debuff type icon and the raid marker of the party and raid frames are textures of Flat UI's own over the game's frames.
 -- Drink and health macros (off by default) makes, writes and deletes two macros of its own (CreateMacro, EditMacro, DeleteMacro), named in
 -- FlatUIDB.consumables, only out of combat and with the game's macro window closed.
+-- Mount key (off by default) makes one secure button, FlatUIMountButton, once a key is bound to it in the game's Key Bindings (Bindings.xml names the
+-- binding, BINDING_NAME_CLICK FlatUIMountButton:LeftButton), writes its type and macrotext only out of combat and takes them away when off; it writes
+-- no binding or macro.
 -- Cooldown pulse (off by default) is a frame of its own on UIParent that takes no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
 -- The combat alerts of Combat text (No target, +Combat and -Combat; off by default) are font strings on a frame of its own; they change nothing.
@@ -87,7 +90,7 @@ local ADDON_NAME, ns = ...
 -- With Hide the zone name or Hide the subzone name it sets the alpha of the game's zone text strings (SetAlpha), read first and put back when
 -- the row goes off; with Hide the talking head it takes TALKINGHEAD_REQUESTED from TalkingHeadFrame (UnregisterEvent) and gives it back, as above.
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "fonts", "fade" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "fonts", "fade" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.
