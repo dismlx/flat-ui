@@ -8,9 +8,9 @@ local _, ns = ...
 -- has though Blizzard's documentation does not list it) is Shortest cooldown or longer, the ranks of a spell counted as one by their name as
 -- on the Cooldown icons list (Cooldowns.lua); the two trinkets worn; any item the player uses, which the game names in its cooldown event
 -- (SPELL_UPDATE_COOLDOWN gives the item of a cast, SpellBookDocumentation.lua:924-936, and the game's own cooldown manager reads it so,
--- CooldownViewer.lua:2182-2186); and, when the page goes on and after a loading screen, the items in the bags whose cooldown runs, one for
--- each cooldown they share. A cooldown read out of combat that is shorter than Shortest cooldown does not pulse, nor the global cooldown, nor
--- what is left out.
+-- CooldownViewer.lua:2182-2186), until that cooldown is over; and, when the page goes on and after a loading screen, the items in the bags
+-- whose cooldown runs, one for each cooldown they share. A cooldown read out of combat that is shorter than Shortest cooldown does not pulse,
+-- nor the global cooldown, nor what is left out.
 --
 -- The end of a cooldown is found without reading what the game withholds in a fight. The flags of a spell's cooldown are never withheld
 -- (isEnabled, isActive and isOnGCD, SpellSharedDocumentation.lua:19-31), and isOnGCD is believed only inside SPELL_UPDATE_COOLDOWN, the one
@@ -66,8 +66,9 @@ local IsSecret = ns.IsSecret
 -- waiting to pulse; current: the one that pulses; token: the pulse a timer belongs to. watching: the entry of each Cooldown frame; free: the
 -- Cooldown frames no entry holds. left: what is left out, by spell ID, spell name and item ID. An entry is { kind = "spell" or "item", key,
 -- id, name, ranks (spells), cooling (true, false, or nil when unknown), last (the rank whose cooldown runs), length, start (items), short,
--- charged, observer, and for items worn, used (when), seen (its cooldown ran) and held (the game holds its cooldown) }.
-local P = { spells = {}, ids = {}, items = {}, queue = {}, token = 0, watching = setmetatable({}, { __mode = "k" }), free = {},
+-- charged, observer, and for items worn, used (when), seen (its cooldown ran) and held (the game holds its cooldown) }. known: the IDs of
+-- the items whose cooldown was watched to its end and that are watched no longer, which the lists still show (P.Listed).
+local P = { spells = {}, ids = {}, items = {}, known = {}, queue = {}, token = 0, watching = setmetatable({}, { __mode = "k" }), free = {},
 	left = { ids = {}, names = {}, items = {} } }
 ns.Pulse = P
 
@@ -350,7 +351,9 @@ function P.Entry(id)
 	return entry or nil
 end
 
--- The entry of an item, made for one the player wears or uses while there is room. Nil for an item left out.
+-- The entry of an item, made for one the player wears or uses. Nil for an item left out. When 40 are kept, the one used longest ago that is
+-- not worn and whose cooldown neither runs nor is held by the game is forgotten to make room: the game names an item each time it is used
+-- (SpellBookDocumentation.lua:935), so it is watched again then (P.Used). Nil when none of the 40 can go.
 function P.Item(id)
 	local entry = P.items[id]
 	if entry then
@@ -359,12 +362,19 @@ function P.Item(id)
 	if P.left.items[id] then
 		return nil
 	end
-	local count = 0
-	for _ in pairs(P.items) do
+	local count, oldest = 0, nil
+	for _, other in pairs(P.items) do
 		count = count + 1
+		if not (other.worn or other.held or other.cooling == true) and (oldest == nil or (other.used or 0) < (oldest.used or 0)) then
+			oldest = other
+		end
 	end
 	if count >= MOST_ITEMS then
-		return nil
+		if not oldest then
+			return nil
+		end
+		P.Disarm(oldest)
+		P.items[oldest.id] = nil
 	end
 	entry = { kind = "item", key = "item:" .. id, id = id, name = P.ItemName(id) }
 	P.items[id] = entry
@@ -707,10 +717,17 @@ function P.Done(entry)
 	P.Ready(entry)
 end
 
--- A cooldown is over: it pulses, unless it was shorter than Shortest cooldown or is left out.
+-- A cooldown is over: it pulses, unless it was shorter than Shortest cooldown or is left out. An item not worn is watched no longer then,
+-- only listed (known), and is watched again when the game names it once more (P.Used). The cooldown of an item is the one of its spell's
+-- category, which every item of the category reads, used or not: the game names the item that started it (CooldownViewerItemData.lua:174-186,
+-- SpellDocumentation.lua:154-170), and the bags show it on each one (Blizzard_UIPanels_Game/Mainline/ContainerFrame.lua:1994). A potion
+-- still watched would pulse again with every potion drunk after it, and with one left out.
 function P.Ready(entry)
 	entry.cooling = false
 	P.Disarm(entry)
+	if entry.kind == "item" and not entry.worn and P.items[entry.id] == entry then
+		P.items[entry.id], P.known[entry.id] = nil, true
+	end
 	if not entry.short and not P.LeftOut(entry) then
 		P.Queue(entry)
 	end
@@ -939,7 +956,7 @@ function P.Stop()
 	for _, entry in pairs(P.items) do
 		P.Disarm(entry)
 	end
-	P.spells, P.ids, P.items, P.queue, P.current, P.on = {}, {}, {}, {}, nil, false
+	P.spells, P.ids, P.items, P.known, P.queue, P.current, P.on = {}, {}, {}, {}, {}, nil, false
 	P.token = P.token + 1
 	if P.frame then
 		P.Hide()
@@ -976,13 +993,28 @@ local function Sorted(rows)
 	return rows
 end
 
+-- The items of Leave out, /flatui pulse list and the status: those watched, and those whose cooldown was watched to its end, which pulse
+-- again when the game names them; none left out.
+function P.Listed()
+	local ids = {}
+	for id in pairs(P.known) do
+		if not P.left.items[id] then
+			ids[id] = true
+		end
+	end
+	for id in pairs(P.items) do
+		ids[id] = true
+	end
+	return ids
+end
+
 -- What pulses now, spells first: a spell by the ID of its highest rank, an item by its ID below 0.
 function ns.PulseCandidates()
 	local spells, items = {}, {}
 	for name, entry in pairs(P.spells) do
 		spells[#spells + 1] = { entry.id, name }
 	end
-	for id in pairs(P.items) do
+	for id in pairs(P.Listed()) do
 		items[#items + 1] = { -id, P.ItemName(id) }
 	end
 	Sorted(spells)
@@ -1096,7 +1128,7 @@ function P.List()
 	for name in pairs(P.spells) do
 		names[#names + 1] = name
 	end
-	for id in pairs(P.items) do
+	for id in pairs(P.Listed()) do
 		items[#items + 1] = P.ItemName(id)
 	end
 	for _, row in ipairs(ns.PulseIgnored()) do
@@ -1148,7 +1180,7 @@ function P.Status()
 	for _ in pairs(P.spells) do
 		spells = spells + 1
 	end
-	for _ in pairs(P.items) do
+	for _ in pairs(P.Listed()) do
 		items = items + 1
 	end
 	lines[1] = ("Cooldown pulse: %s and %s watched%s."):format(Many(spells, "spell"), Many(items, "item"), left > 0 and (", " .. left .. " left out") or "")

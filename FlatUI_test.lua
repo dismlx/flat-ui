@@ -10359,7 +10359,7 @@ local PAGES = {
 		S("cooldowns.add", "list", 0, "Add a spell", "For a spell that is not listed, type /flatui cooldown add and its name."),
 		S("cooldowns.remove", "list", 0, "Remove a spell"),
 		S("cooldowns.trinkets", "bool", false, "Equipped trinkets", "Adds your two trinket slots after the picked spells."),
-		S("cooldowns.addItem", "list", 0, "Add a potion or healthstone", "Every rank shares one icon: the best one in your bags, with how many you carry. It comes after the spells and trinkets."),
+		S("cooldowns.addItem", "list", 0, "Add a potion or healthstone", "Every rank shares one icon: the best one in your bags that your level allows, with how many you carry. It comes after the spells and trinkets."),
 		S("cooldowns.removeItem", "list", 0, "Remove a potion or healthstone"),
 		"Icons",
 		S("cooldowns.size", "number", 36, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "" }),

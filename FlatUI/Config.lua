@@ -731,7 +731,7 @@ ns.PAGES = {
 		{ key = "remove", kind = "list", default = 0, label = "Remove a spell", none = "Choose a spell", items = "CooldownPicked", pick = "CooldownRemove" },
 		{ key = "trinkets", kind = "bool", default = false, label = "Equipped trinkets", tip = "Adds your two trinket slots after the picked spells." },
 		{ key = "addItem", kind = "list", default = 0, label = "Add a potion or healthstone", none = "Choose one", items = "CooldownItemCandidates", pick = "CooldownAddItem",
-			tip = "Every rank shares one icon: the best one in your bags, with how many you carry. It comes after the spells and trinkets." },
+			tip = "Every rank shares one icon: the best one in your bags that your level allows, with how many you carry. It comes after the spells and trinkets." },
 		{ key = "removeItem", kind = "list", default = 0, label = "Remove a potion or healthstone", none = "Choose one", items = "CooldownItemPicked", pick = "CooldownRemoveItem" },
 		{ section = "Icons" },
 		{ key = "size", kind = "number", default = 36, min = 16, max = 64, step = 2, label = "Icon size" },

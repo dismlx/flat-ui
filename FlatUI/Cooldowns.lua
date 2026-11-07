@@ -43,6 +43,14 @@ local SWEEP_REFUSED = "Cooldown icons: the game refused to draw cooldown sweeps,
 local NO_COOLDOWNS = "Cooldown icons: the game has no spell cooldown information, so the row shows no cooldowns."
 local NO_SOUND = "Cooldown icons: the game played no sound, so the ready sound is silent."
 local RAID_WARNING = 8959
+-- The ready sound plays on the channel the game's cooldown manager plays its own ready sounds on, Chimes, Bell and Warhorn among them
+-- (Blizzard_CooldownViewer/CooldownViewer.lua:497-506, CooldownViewerAlert.lua:171-179, CooldownViewerSoundAlertData.lua:55, 91, 103),
+-- and EnhanceQoL plays these kits on it too (CooldownPanels_SoundData.lua:184-192). In the game's sound options it is Gameplay Sound
+-- Effects, a switch and a volume of its own beside Sound Effects, not under it as Pet Sounds and Emote Sounds are
+-- (Blizzard_SettingsDefinitions_Shared/Audio.lua:565-589, Blizzard_Settings_Shared/Mainline/AudioOverrides.lua:74-82). Without a channel
+-- PlaySound plays on Sound Effects (SoundDocumentation.lua:52-60), which the game counts as muted while Sound Effects is off
+-- (Blizzard_CustomizationUI/Blizzard_CustomizationAudioInterface.lua:1-3, 35-38), and a player with Sound Effects off would hear no ready sound.
+local READY_CHANNEL = "Gameplay SFX"
 local NO_BOOK = "Cooldown icons: the game has no spell book information, so Add a spell lists nothing."
 local NO_BINDS = "Cooldown icons: the game has no action bar key information, so Keybind on icons shows no keys."
 local NO_TRINKETS = "Cooldown icons: the game has no equipment information, so Equipped trinkets shows nothing."
@@ -370,19 +378,34 @@ local function Ranks(kind)
 	return list
 end
 
+-- True for an item the player's level is too low to use: the level it needs, the fifth answer of C_Item.GetItemInfo (ItemDocumentation.lua:626-642),
+-- is above level, the player's (UnitLevel, UnitDocumentation.lua:2474-2487). False when either is no plain number, as for an item the game has not
+-- loaded yet (MayReturnNothing there): such a rank counts as usable.
+local function TooLow(itemID, level)
+	local call = C_Item and C_Item.GetItemInfo
+	if level == nil or type(call) ~= "function" then
+		return false
+	end
+	local ok, _, _, _, _, needs = pcall(call, itemID)
+	return ok and Plain(needs, "number") and needs > level
+end
+
 -- The rank of a kind to show and how many the bags hold of it (C_Item.GetItemCount with uses, as the trackers count, ItemDocumentation.lua:451-468):
--- the highest rank there is one of, else the rank shown before or the lowest, with 0. The count is nil when the game gives none.
+-- the highest rank there is one of that the player's level allows, as EnhanceQoL keeps only the potions the level allows (Health.lua:223), else
+-- the rank shown before when the level allows it, or the lowest, with 0. The count is nil when the game gives none.
 local function Best(kind, before)
 	local ranks = Ranks(kind)
 	if #ranks == 0 then
 		return nil
 	end
 	local call = C_Item and C_Item.GetItemCount
+	local level = Ask(UnitLevel, "player")
+	level = Plain(level, "number") and level or nil
 	local known = true
 	for index = #ranks, 1, -1 do
 		local count = Ask(call, ranks[index], false, true)
 		if Plain(count, "number") then
-			if count > 0 then
+			if count > 0 and not TooLow(ranks[index], level) then
 				return ranks[index], count
 			end
 		else
@@ -391,7 +414,7 @@ local function Best(kind, before)
 	end
 	local shown = ranks[1]
 	for _, id in ipairs(ranks) do
-		if id == before then
+		if id == before and not TooLow(id, level) then
 			shown = id
 		end
 	end
@@ -786,7 +809,7 @@ local function UpdateItem(record)
 end
 
 -- A potion or healthstone: the best rank in the bags, how many of it, and the cooldown the kind shares, with the look of a trinket. With
--- none in the bags the icon is grey with a 0, and it neither flashes nor plays a sound.
+-- none in the bags that the player's level allows, the icon is grey with a 0, and it neither flashes nor plays a sound.
 local function UpdateKind(record)
 	local kind = Kind(record.kind)
 	local item, count
@@ -873,7 +896,7 @@ local function Update(record)
 end
 
 -- One sound when a dimmed icon's cooldown is over: the icon's own, else Sound. The global cooldown does not count, a cooldown the game
--- does not answer for plays nothing, and a potion or healthstone with none in the bags lets the moment pass.
+-- does not answer for plays nothing, and a potion or healthstone with none in the bags that the player's level allows lets the moment pass.
 local function Ready(record)
 	local sound = SoundOf(record)
 	if not (record.dimmed and not record.readyPlayed and sound ~= "none") then
@@ -893,7 +916,7 @@ local function Ready(record)
 	if record.empty then
 		return
 	end
-	local ok, played = pcall(PlaySound, Kit(sound))
+	local ok, played = pcall(PlaySound, Kit(sound), READY_CHANNEL)
 	if not ok or (not IsSecret(played) and played == false) then
 		ns.Note(KEY, NO_SOUND)
 	end
@@ -1773,9 +1796,20 @@ local function SoundCommand(text)
 		end
 		name = kind.name
 	else
+		-- A rank trained since has another ID and the same name, and the row keeps the rank that was picked (ns.CooldownCandidates). The
+		-- spell book links the rank it shows, the highest while ShowAllSpellRanks is off, as it is by default (Blizzard_SpellBookItem.lua:634-640,
+		-- Blizzard_SpellBookFrame.lua:567-569, 589-593; wowless, data/products/wowf/cvars.yaml), and a name without its rank text finds the
+		-- rank the game chooses (C_Spell.GetSpellInfo takes a name or a name(subtext), SpellDocumentation.lua:424). So the spell itself is
+		-- taken first, else the first picked spell of its name.
 		local id = Parse(name) or Resolve(name)
+		local same = id and SpellName(id)
 		for _, picked in ipairs(List()) do
-			key = picked == id and picked or key
+			if picked == id then
+				key = picked
+				break
+			elseif key == nil and same and SpellName(picked) == same then
+				key = picked
+			end
 		end
 		name = id and Name(id) or name
 	end
@@ -1858,7 +1892,10 @@ local function UpdateItems()
 end
 
 -- The bags changed: each potion and healthstone shows its best rank and count again. BAG_UPDATE_DELAYED is a unique event after the updates
--- of the bags (ContainerDocumentation.lua:675-679), and the game's bag buttons update on it (MainMenuBarBagButtons.lua:30, 52).
+-- of the bags (ContainerDocumentation.lua:675-679), and the game's bag buttons update on it (MainMenuBarBagButtons.lua:30, 52). So does a new
+-- level, which can let the player use a rank the bags hold: PLAYER_LEVEL_CHANGED comes once the game has the new level, and PLAYER_LEVEL_UP
+-- before it (UnitDocumentation.lua:3818-3828; Blizzard_MicroMenu/Shared/MicroMenuContainer.lua:5-6), and the game's player frame reads
+-- UnitLevel on it (Blizzard_UnitFrame/Mainline/PlayerFrame.lua:54, 119-120, 305-307, 319-321).
 local function KindsChanged()
 	for _, record in ipairs(shown) do
 		if record.kind then
@@ -1899,6 +1936,7 @@ ns.Register(KEY, {
 		PLAYER_TARGET_CHANGED = TargetChanged,
 		SPELL_UPDATE_USABLE = TintAll,
 		BAG_UPDATE_DELAYED = KindsChanged,
+		PLAYER_LEVEL_CHANGED = KindsChanged,
 		SPELLS_CHANGED = Changed,
 		PLAYER_TALENT_UPDATE = Changed,
 		ACTIVE_TALENT_GROUP_CHANGED = Changed,
