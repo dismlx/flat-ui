@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.6
+## Version: 0.5.7
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -25,6 +25,7 @@ PlateClick.lua
 CombatBurst.lua
 CombatText.lua
 ScrollText.lua
+CombatCues.lua
 Bars.lua
 ActionBars.lua
 OwnBars.lua
@@ -43,6 +44,7 @@ Defensives.lua
 PartyCooldowns.lua
 PartySync.lua
 EnemyCooldowns.lua
+Threat.lua
 OwnBuffs.lua
 TrackerShapes.lua
 TrackerKinds.lua
@@ -54,6 +56,7 @@ ProcGlow.lua
 ButtonEffects.lua
 ProcTriggers.lua
 TrackerShare.lua
+Pulse.lua
 BagSort.lua
 Windows.lua
 Items.lua
@@ -85,6 +88,7 @@ ItemCompare.lua
 HealthColour.lua
 CastTime.lua
 CastRank.lua
+Interrupt.lua
 LayoutSpots.lua
 LayoutText.lua
 Movers.lua

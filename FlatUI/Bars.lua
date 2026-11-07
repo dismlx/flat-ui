@@ -1329,8 +1329,14 @@ local function CastState(bar, record)
 end
 
 -- The colour of a state of a cast on one bar, and a key that changes with it: the class colour for casts and channels on the player bar, the own
--- colours of the target and focus bars, otherwise the cast colours of the Flat UI page.
+-- colours of the target and focus bars, otherwise the cast colours of the Flat UI page. An enemy's cast or channel takes the colour of the player's
+-- interrupt before those, ready or on cooldown, while record.kick holds that answer (PaintCast).
 local function CastColour(record, state)
+	if record.kick ~= nil and (state == "cast" or state == "channel") then
+		local path = record.kick and "castbars.interruptReady" or "castbars.interruptCooling"
+		local r, g, b = ns.Colour(path)
+		return r, g, b, ns.Get(path)
+	end
 	local option = record.key == "castbars" and record.option
 	if option == "player" and (state == "cast" or state == "channel") and ns.Get("castbars.playerClass") then
 		local r, g, b = ns.ClassColour()
@@ -1492,6 +1498,29 @@ local function CoverArt(record)
 	end
 end
 
+local function BarUnit(bar)
+	return bar.unit
+end
+
+-- Whether the player's interrupt is ready for the cast on a bar, from Interrupt.lua: true or false for the target and focus bars and the bar of a
+-- nameplate, whose unit is the field the game set (CastingBarFrame.lua:224-226), while their unit is an enemy; nil for any other bar or state.
+local function Kick(bar, record, state)
+	if (state ~= "cast" and state ~= "channel" and state ~= "withheld") or type(ns.InterruptReady) ~= "function" then
+		return nil
+	end
+	local unit
+	if record.key == "castbars" then
+		unit = (record.option == "target" or record.option == "focus") and record.option or nil
+	elseif record.key == "nameplates" then
+		local ok, value = pcall(BarUnit, bar)
+		unit = ok and not ns.IsSecret(value) and type(value) == "string" and value or nil
+	end
+	if unit == nil then
+		return nil
+	end
+	return ns.InterruptReady(unit)
+end
+
 -- Colours the cover for the state of the cast. The texture is called only when the state or its
 -- colour changed.
 local function PaintCast(bar, record)
@@ -1514,6 +1543,7 @@ local function PaintCast(bar, record)
 	if state == "withheld" and not (CreateColor and cover.SetVertexColorFromBoolean) then
 		state = otherwise
 	end
+	record.kick = Kick(bar, record, state)
 	if state == "withheld" then
 		-- The answer goes to the texture untouched, so it is asked every frame.
 		cover:SetVertexColorFromBoolean(shield, ColourObject(record, "shield"), ColourObject(record, otherwise))
@@ -1641,6 +1671,7 @@ local function RefreshCastBars()
 	if ns.CastBarSizes then ns.CastBarSizes() end
 	if ns.CastTimeSync then ns.CastTimeSync() end
 	if ns.CastRankSync then ns.CastRankSync() end
+	if ns.InterruptSync then ns.InterruptSync() end
 end
 
 ns.Register("castbars", { label = "Cast bars", Start = RefreshCastBars, Refresh = RefreshCastBars })

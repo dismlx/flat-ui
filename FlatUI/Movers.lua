@@ -125,6 +125,9 @@ local LIST = {
 	-- The row of Cooldown icons. It has no spot until one is saved.
 	{ name = ROW, label = "Cooldown icons", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
 		row = "CooldownRow", changed = "CooldownsMoved" },
+	-- The icon of the cooldown pulse (Pulse.lua): its middle is the middle of the box, at any Icon size. It starts in the middle of the screen.
+	{ name = "FlatUIPulse", label = "Cooldown pulse", point = "CENTER", kind = "hud", own = true, noScale = true, width = 72, height = 72, x = 0, y = 0,
+		gate = "PulseShown", changed = "PulseMoved" },
 	-- Where the player's own combat text starts: the middle of its first number is the middle of the box. The default is left of and
 	-- below the middle of the screen, where the character stands.
 	{ name = "FlatUICombatSelf", label = "Combat text: you", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 40, x = -170, y = -30,
@@ -132,6 +135,10 @@ local LIST = {
 	-- Where the Outgoing scroll area starts, to the right of the character. It has a handle while Where your hits show is not Over enemies.
 	{ name = "FlatUICombatOut", label = "Combat text: your hits", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 40, x = 170, y = -30,
 		gate = "CombatOutShown" },
+	-- Where the combat alerts show (CombatCues.lua): +Combat and -Combat above the middle of the box and No target under it, above the character.
+	-- It has a handle while No target warning or Entering and leaving combat is on.
+	{ name = "FlatUICombatCues", label = "Combat text: alerts", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 60, x = 0, y = 100,
+		gate = "CombatCuesShown", changed = "CombatCuesMoved" },
 	-- The box of the action bar block: one box that moves every bar the Bar block page lines up. It starts where BarBlock.lua puts it.
 	{ name = "FlatUIBarBlock", label = "Action bar block", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow", changed = "BarBlockMoved" },
 	-- Flat UI's own experience and reputation bar (XpBar.lua). Its box is the bar's own frame, wherever the bar is; with no spot saved it sits where XpBar.lua puts it.
@@ -151,6 +158,10 @@ local LIST = {
 		gate = "EnemyTargetBarShown", changed = "EnemyBarsMoved" },
 	{ name = "FlatUIEnemyFocus", label = "Enemy cooldowns: focus", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 30, x = 0, y = 180,
 		gate = "EnemyFocusBarShown", changed = "EnemyBarsMoved" },
+	-- The threat list (Threat.lua), which shows only in a fight: its top left corner is the top left corner of the box, which has the room of five
+	-- bars at the default size, and it grows down and to the right from there.
+	{ name = "FlatUIThreat", label = "Threat list", point = "CENTER", kind = "hud", own = true, noScale = true, width = 188, height = 112, x = 420, y = 0,
+		gate = "ThreatListShown", changed = "ThreatListMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",

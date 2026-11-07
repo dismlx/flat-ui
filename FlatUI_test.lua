@@ -9887,6 +9887,11 @@ local PAGES = {
 		S("castbars.shieldColour", "colour", "ff9a9a9a", "Uninterruptible colour"),
 		S("castbars.interruptedColour", "colour", "ffd94040", "Interrupted colour", "Also shown when a cast fails."),
 		S("castbars.craftColour", "colour", "ff4d99e6", "Crafting colour"),
+		S("castbars.interrupt", "bool", true, "Interrupt readiness on enemy casts",
+			"On target, focus and nameplate cast bars with a flat fill, an enemy cast you can interrupt shows whether your class interrupt is ready. A cast that cannot be interrupted keeps its colour.",
+			{ changed = "InterruptChanged" }),
+		S("castbars.interruptReady", "colour", "ff33d959", "Interrupt ready colour", nil, { needs = "castbars.interrupt" }),
+		S("castbars.interruptCooling", "colour", "ffd9732e", "Interrupt on cooldown colour", nil, { needs = "castbars.interrupt" }),
 		"Borders",
 		S("general.borderMode", "choice", "custom", "Border colour source", nil,
 			{ choices = { { "custom", "Border colour on the Flat UI page" }, { "class", "Your class colour" }, { "faction", "Your faction colour" } } }),
@@ -10134,6 +10139,16 @@ local PAGES = {
 			{ choices = { { "take", "Damage and healing you take" }, { "more", "Also misses, dodges and gains" }, { "off", "Off" } } }),
 		S("combattext.ownSize", "number", 100, "Size of your text", "100% is the game's own size.",
 			{ min = 40, max = 400, step = 10, unit = "%", needs = "combattext.own", needsIn = { "take", "more" } }),
+		S("combattext.noTarget", "bool", false, "No target warning", "In a fight with no target, or with a dead or friendly one, No target shows in the middle of the screen after a second."),
+		S("combattext.noTargetFriendly", "bool", true, "Warn with a friendly target", "Off for healing in a group: a friendly target then keeps the warning away.", { needs = "combattext.noTarget" }),
+		S("combattext.noTargetSound", "choice", "none", "No target sound", "At most once every 3 seconds.", { needs = "combattext.noTarget",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
+		S("combattext.noTargetColour", "colour", "ffc41e3a", "No target colour", nil, { needs = "combattext.noTarget" }),
+		S("combattext.noTargetSize", "number", 100, "Size of No target", "100% is the size of the game's own combat messages.", { min = 50, max = 200, step = 10, unit = "%", needs = "combattext.noTarget" }),
+		S("combattext.combatState", "bool", false, "Entering and leaving combat", "+Combat and -Combat in the middle of the screen for a moment as a fight starts and ends."),
+		S("combattext.combatEnterColour", "colour", "ffff1a1a", "Entering combat colour", nil, { needs = "combattext.combatState" }),
+		S("combattext.combatLeaveColour", "colour", "ff1aff1a", "Leaving combat colour", nil, { needs = "combattext.combatState" }),
+		S("combattext.combatStateSize", "number", 100, "Size of +Combat and -Combat", "100% is the size of the game's own combat messages.", { min = 50, max = 200, step = 10, unit = "%", needs = "combattext.combatState" }),
 	} },
 	{ key = "actionbars", label = "Action bars", rows = {
 		"Buttons",
@@ -10344,6 +10359,8 @@ local PAGES = {
 		S("cooldowns.add", "list", 0, "Add a spell", "For a spell that is not listed, type /flatui cooldown add and its name."),
 		S("cooldowns.remove", "list", 0, "Remove a spell"),
 		S("cooldowns.trinkets", "bool", false, "Equipped trinkets", "Adds your two trinket slots after the picked spells."),
+		S("cooldowns.addItem", "list", 0, "Add a potion or healthstone", "Every rank shares one icon: the best one in your bags that your level allows, with how many you carry. It comes after the spells and trinkets."),
+		S("cooldowns.removeItem", "list", 0, "Remove a potion or healthstone"),
 		"Icons",
 		S("cooldowns.size", "number", 36, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "" }),
 		S("cooldowns.spacing", "number", 3, "Spacing", nil, { min = 0, max = 20, step = 1, unit = "" }),
@@ -10358,6 +10375,7 @@ local PAGES = {
 		S("cooldowns.resting", "bool", false, "Hide in cities and inns"),
 		"Ready again",
 		S("cooldowns.readySound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
+		S("cooldowns.iconSound", "list", 0, "Sound of one icon", "Choose an icon, then open the list again for its own sound. An icon without one plays Sound."),
 		"Position",
 		S("cooldowns.place", "choice", "screen", "Position", nil, { choices = PLACES }),
 		S("cooldowns.x", "number", 0, "X offset", nil, { min = -800, max = 800, step = 1, unit = "" }),
@@ -10369,6 +10387,11 @@ local PAGES = {
 		"On cooldown",
 		S("cooldowns.dimDesat", "bool", true, "Grey out on cooldown", nil, { needs = "cooldowns.dim" }),
 		S("cooldowns.dimDarkness", "number", 40, "Darkness on cooldown", nil, { min = 0, max = 80, step = 5, unit = "%", needs = "cooldowns.dim" }),
+		"Range and power",
+		S("cooldowns.rangeTint", "bool", true, "Tint when out of range", "A spell your target is out of range of, as the game's cooldown manager shows it."),
+		S("cooldowns.rangeColour", "colour", "ffa32626", "Out of range colour", nil, { needs = "cooldowns.rangeTint" }),
+		S("cooldowns.powerTint", "bool", true, "Tint without enough power", "A spell you lack the mana, rage or energy for."),
+		S("cooldowns.powerColour", "colour", "ff8080ff", "Not enough power colour", nil, { needs = "cooldowns.powerTint" }),
 		"Opacity",
 		S("cooldowns.coolAlpha", "number", 100, "Opacity on cooldown", nil, { min = 0, max = 100, step = 5, unit = "%" }),
 		S("cooldowns.readyAlpha", "number", 100, "Opacity when ready", "0 hides ready icons. The row keeps its spacing.", { min = 0, max = 100, step = 5, unit = "%" }),
@@ -10378,6 +10401,8 @@ local PAGES = {
 		S("cooldowns.readyColour", "colour", "ff4dbf59", "Ready border colour", nil, { needs = "cooldowns.borderState" }),
 		S("cooldowns.coolingColour", "colour", "ffd94040", "On cooldown border colour", nil, { needs = "cooldowns.borderState" }),
 		S("cooldowns.flash", "bool", false, "Flash when ready", nil, nil),
+		S("cooldowns.interruptGlow", "bool", true, "Glow on your interrupt",
+			"A gold border on the icon of your class interrupt while your target or focus casts something you can interrupt and the interrupt is ready."),
 		"Numbers and sweep",
 		S("cooldowns.numbersFont", "choice", "game", "Countdown number size", nil, { choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" }, { "huge", "Huge" } }, needs = "cooldowns.numbers" }),
 		S("cooldowns.sweep", "bool", true, "Cooldown sweep", nil, nil),
@@ -10386,6 +10411,17 @@ local PAGES = {
 		"Keybind",
 		S("cooldowns.keybind", "bool", false, "Keybind on icons", "The key bound to the spell on your action bars.", nil),
 		S("cooldowns.keybindSize", "number", 100, "Keybind size", nil, { min = 50, max = 250, step = 5, unit = "%", needs = "cooldowns.keybind" }),
+	} },
+	{ key = "pulse", label = "Cooldown pulse", parent = "cooldowns", rows = {
+		S("pulse.enabled", "bool", false, "Cooldown pulse", "When a spell of your spell book, a trinket you wear or an item you use is ready again, its icon fades in and out in the middle of the screen. /flatui move places it."),
+		"What pulses",
+		S("pulse.minimum", "number", 20, "Shortest cooldown", "A shorter cooldown does not pulse, nor does the global cooldown.", { min = 0, max = 600, step = 5, unit = " s" }),
+		S("pulse.ignore", "list", 0, "Leave out", "A spell is left out with all its ranks. For one that is not listed, type /flatui pulse ignore and its name."),
+		S("pulse.unignore", "list", 0, "Put back"),
+		"Look",
+		S("pulse.size", "number", 72, "Icon size", nil, { min = 32, max = 160, step = 4, unit = "" }),
+		S("pulse.time", "number", 1, "How long it shows", "Cooldowns that end together pulse one after another. /flatui pulse test shows one.", { min = 1, max = 5, step = 1, unit = " s" }),
+		S("pulse.sound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 	} },
 	{ key = "trackers", label = "Trackers", rows = {
 		S("trackers.enabled", "bool", true, "Trackers"),
@@ -10518,6 +10554,16 @@ local PAGES = {
 		"Ready again",
 		S("enemycd.flash", "bool", false, "Flash when ready"),
 		S("enemycd.sound", "choice", "none", "Sound", "The sound plays for your target and focus only.", { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
+	} },
+	{ key = "threat", label = "Threat list", rows = {
+		S("threat.enabled", "bool", false, "Show the threat list", "Your group by threat on the enemy you fight, highest first: 100% has aggro or takes it. /flatui move places the list, /flatui threat shows a sample."),
+		"When it shows",
+		S("threat.show", "choice", "group", "Show", "Only in a fight, while your target or the target of your target is an enemy.", { choices = { { "group", "In a group" }, { "instance", "In a dungeon or raid" }, { "always", "In a group or alone" } } }),
+		"Bars",
+		S("threat.pets", "bool", true, "Pets", "A bar for each pet, a shade darker than its owner's."),
+		S("threat.rows", "number", 5, "Number of bars", "The highest threat first.", { min = 1, max = 10, step = 1, unit = "" }),
+		S("threat.barWidth", "number", 180, "Bar width", nil, { min = 100, max = 400, step = 5, unit = " px" }),
+		S("threat.barHeight", "number", 16, "Bar height", "Also the height of text.", { min = 10, max = 30, step = 1, unit = " px" }),
 	} },
 	{ key = "windows", label = "Windows", rows = {
 		S("windows.enabled", "bool", true, "Restyle windows", RELOAD),
@@ -11393,7 +11439,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.6" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.7" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -21650,6 +21696,14 @@ for _, path in ipairs({ "chat.webLinks", "chat.linkTips", "chat.classLine", "cha
 	"windows.boeMark", "windows.unusableTint", "windows.petFood", "fade.targetFrame", "fade.focusFrame", "fade.buffs", "fade.objectiveTracker",
 	"hud.errors", "hud.errorMana", "hud.errorPower", "hud.errorRange", "hud.errorFacing", "hud.errorReady", "hud.errorTarget", "hud.errorMoving",
 	"general.cursorRing", "general.cursorRingSize", "general.cursorRingColour", "unitframes.hitNumbers", "chat.compareShift" }) do
+	covered[path] = true
+end
+-- Nor do the rows of wave 5 (0.5.7), for the same reason.
+for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.rows", "threat.barWidth", "threat.barHeight",
+	"cooldowns.addItem", "cooldowns.removeItem", "cooldowns.iconSound", "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint",
+	"cooldowns.powerColour", "pulse.enabled", "pulse.minimum", "pulse.ignore", "pulse.unignore", "pulse.size", "pulse.time", "pulse.sound", "castbars.interrupt", "castbars.interruptReady", "castbars.interruptCooling", "cooldowns.interruptGlow",
+	"combattext.noTarget", "combattext.noTargetFriendly", "combattext.noTargetSound", "combattext.noTargetColour", "combattext.noTargetSize",
+	"combattext.combatState", "combattext.combatEnterColour", "combattext.combatLeaveColour", "combattext.combatStateSize" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -33101,6 +33155,10 @@ do
 			W.fire("PLAYER_MOUNT_DISPLAY_CHANGED")
 			W.change("cooldowns.mounted", false)
 			check("gap icons: and Row opacity out of combat comes back when the hiding is off", g(cdHolder(W).alpha) == "0.5", g(cdHolder(W).alpha))
+		end
+		-- The rows of wave 5 (0.5.7) have no probe: the owner asked for code without new test blocks.
+		for _, path in ipairs({ "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint", "cooldowns.powerColour", "cooldowns.interruptGlow" }) do
+			covered[path] = true
 		end
 		local missingProbe = {}
 		for _, row in ipairs(ALL) do
@@ -44878,7 +44936,12 @@ do
 		end
 	end
 	local want = { "castColour", "channelColour", "shieldColour", "interruptedColour", "craftColour" }
-	local ok = from ~= nil and #page >= from + 5 and page[from + 6] ~= nil and page[from + 6].section == "Borders"
+	-- After them the interrupt rows of 0.5.7: the switch, then its two colours, which need it.
+	local ok = from ~= nil and #page >= from + 8 and page[from + 9] ~= nil and page[from + 9].section == "Borders"
+	for k, row in ipairs({ { "interrupt", "bool" }, { "interruptReady", "colour", "interrupt" }, { "interruptCooling", "colour", "interrupt" } }) do
+		local item = from and page[from + 5 + k]
+		ok = ok and item ~= nil and item.key == row[1] and item.page == "castbars" and item.path == "castbars." .. row[1] and item.kind == row[2] and item.needs == row[3]
+	end
 	for k, key in ipairs(want) do
 		local item = from and page[from + k]
 		ok = ok and item ~= nil and item.key == key and item.page == "castbars" and item.path == "castbars." .. key and item.kind == "colour" and item.needs == nil and item.needsPath == nil
@@ -63335,10 +63398,10 @@ function PT.runBuild()
 	-- 2. The left-hand side ---------------------------------------------------------------------------------------------
 	do
 		local W = PT.open()
-		-- The sidebar: four fixed rows, then six groups with the 24 modules. The page that is open has its sections under it and its tabs after.
+		-- The sidebar: four fixed rows, then six groups with the 25 modules. The page that is open has its sections under it and its tabs after.
 		local GROUPS = { { "Look", { "Flat UI", "Fonts" } }, { "Frames", { "Unit frames", "Nameplates", "Personal resource display", "Cast bars", "Swing timers" } },
 			{ "Action bars", { "Action bars", "Bar block", "Bar blocks" } },
-			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Combat text" } },
+			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Combat text" } },
 			{ "Interface", { "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels" } }, { "Layout", { "Movers", "Fading", "Tooltip" } } }
 		local expected = { "Home", "Flat UI setup", "Profiles", "Move frames" }
 		for _, group in ipairs(GROUPS) do
@@ -65988,7 +66051,7 @@ function PT.runMsTree()
 			end
 		end
 		check("ms-tree: the cast colours on Colours are still saved as castbars.<key>", table.concat(colours, ",") == "castbars.castColour,castbars.channelColour,castbars.shieldColour,castbars.interruptedColour,castbars.craftColour"
-			.. ",general.borderMode,general.reactionOwn,general.reactionHostile,general.reactionNeutral,general.reactionFriendly,general.reactionTapped,general.powerOwn"
+			.. ",castbars.interrupt,castbars.interruptReady,castbars.interruptCooling,general.borderMode,general.reactionOwn,general.reactionHostile,general.reactionNeutral,general.reactionFriendly,general.reactionTapped,general.powerOwn"
 			.. ",general.powerMana,general.powerRage,general.powerEnergy,general.powerFocus,general.powerRunic,general.healthFull,general.healthHalf,general.healthLow", table.concat(colours, ","))
 		ns.Set("hud.cityMap", "leave")
 		ns.Set("nameplates.health", false)
@@ -67115,10 +67178,10 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 57 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 57 and rows == 1006 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1039 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
-			and #steps[1].rows == 6 and #steps[2].rows == 20)
+			and #steps[1].rows == 6 and #steps[2].rows == 23)
 		local settings = {}
 		for _, page in ipairs(ns.PAGES) do
 			if page.key == "general" then
@@ -67333,15 +67396,15 @@ function PT.runSetup()
 		for _, label in ipairs({ "Bar texture", "Cast colour", "Channel colour", "Custom reaction colours", "Custom power colours", "Colour at full health", "Colour at half health", "Colour at low health" }) do
 			if not PT.row(W, label) then two[#two + 1] = label end
 		end
-		check("setup: step 2 shows its eight main rows, not the rare ones, and a button for the three rare rows that are open", #two == 0 and PT.row(W, "Uninterruptible colour") == nil
-			and PT.row(W, "Hostile") == nil and PT.button(W, "More choices (3)") ~= nil, joined(two))
-		SU.press(W, "More choices (3)")
+		check("setup: step 2 shows its eight main rows, not the rare ones, and a button for the six rare rows that are open", #two == 0 and PT.row(W, "Uninterruptible colour") == nil
+			and PT.row(W, "Hostile") == nil and PT.button(W, "More choices (6)") ~= nil, joined(two))
+		SU.press(W, "More choices (6)")
 		check("setup: More choices shows the open rare rows, and Fewer choices takes them away, and the setting follows", PT.row(W, "Uninterruptible colour") ~= nil and PT.row(W, "Crafting colour") ~= nil
 			and PT.row(W, "Hostile") == nil and PT.button(W, "Fewer choices") ~= nil and ns.Get("setup.choices") == "all")
 		PT.press(W, PT.control(PT.row(W, "Custom reaction colours")))
 		check("setup: a row behind a switch appears when its switch is on in the draft", PT.row(W, "Hostile") ~= nil and PT.row(W, "Tapped by another player") ~= nil and PT.row(W, "Mana") == nil)
 		SU.press(W, "Fewer choices")
-		check("setup: and the same on the main rows, closing the rare ones again", PT.row(W, "Hostile") == nil and ns.Get("setup.choices") == "main" and PT.button(W, "More choices (7)") ~= nil)
+		check("setup: and the same on the main rows, closing the rare ones again", PT.row(W, "Hostile") == nil and ns.Get("setup.choices") == "main" and PT.button(W, "More choices (10)") ~= nil)
 		SU.press(W, "Back")
 		check("setup: Back returns to the step before", S.cur == 1 and PT.title(W) == "Borders and backgrounds" and S.draft.seen[2] == true)
 		SU.press(W, "Skip this area")
@@ -67429,7 +67492,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 955 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 982 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -69355,10 +69418,10 @@ function PT.runNav()
 	local clean, joined, need = PT.clean, PT.joined, PT.need
 	local N = {}
 	N.keys = { "general", "fonts", "unitframes", "nameplates", "resource", "castbars", "swing", "actionbars", "barblock", "blocks", "cooldowns", "trackers", "defensives",
-		"partycd", "enemycd", "combattext", "hud", "windows", "chat", "errands", "datapanels", "movers", "fade", "tooltip" }
+		"partycd", "enemycd", "threat", "combattext", "hud", "windows", "chat", "errands", "datapanels", "movers", "fade", "tooltip" }
 	N.names = { "Home", "Flat UI setup", "Profiles", "Move frames", "Look", "Flat UI", "Fonts", "Frames", "Unit frames", "Nameplates", "Personal resource display", "Cast bars",
 		"Swing timers", "Action bars", "Action bars", "Bar block", "Bar blocks", "Combat", "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns",
-		"Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels", "Layout", "Movers", "Fading", "Tooltip" }
+		"Threat list", "Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels", "Layout", "Movers", "Fading", "Tooltip" }
 	N.known = {}
 	for _, name in ipairs(N.names) do N.known[name] = true end
 	N.scroll = function(W) return PT.clips(W, PT.nav(W)[1].raw)[1] end
@@ -69514,8 +69577,8 @@ function PT.runNav()
 		local W = PT.world({ firstStart = true })
 		local ns = W.ns
 		ns.OpenPanel()
-		local subtitle = ("%d of 24 modules on"):format(N.on(ns))
-		check("window nav: the first time the window opens on Home, and says how many of the 24 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
+		local subtitle = ("%d of 25 modules on"):format(N.on(ns))
+		check("window nav: the first time the window opens on Home, and says how many of the 25 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
 			and (W.env.FlatUIDB.panel == nil or W.env.FlatUIDB.panel.page == nil), subtitle .. " " .. tostring(PT.title(W)))
 		PT.go(W, "Nameplates")
 		check("window nav: a page chosen is kept in FlatUIDB.panel and in no profile", W.env.FlatUIDB.panel.page == "nameplates" and W.env.FlatUIDB.profiles[ns.Profile()].options.page == nil)
@@ -69724,14 +69787,14 @@ function PT.runNav()
 		for _, text in ipairs(N.texts(W)) do
 			if text == "Defaults" or text:find("^%d+ changed$") then states = states + 1 end
 		end
-		check("window nav: 24 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 24 and N.has(W, ("%d on"):format(N.on(ns))), states)
+		check("window nav: 25 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 25 and N.has(W, ("%d on"):format(N.on(ns))), states)
 		check("window nav: Flat UI and Swing timers are at their defaults", N.state(W, "Flat UI") == "Defaults" and N.state(W, "Swing timers") == "Defaults")
 		local tile = N.tile(W, "Nameplates")
 		local switch = N.switchOf(W, tile)
 		check("window nav: a tile has the icon, the name, the state and the switch of the module; Flat UI has none", tile ~= nil and switch ~= nil and N.track(switch) == "9a9cf0" and N.switchOf(W, N.tile(W, "Flat UI")) == nil)
 		PT.press(W, switch)
 		check("window nav: the switch of a tile turns the module off, and Home says one module fewer", ns.Get("nameplates.enabled") == false and N.track(switch) == "353a31"
-			and N.has(W, ("%d of 24 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
+			and N.has(W, ("%d of 25 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
 		PT.press(W, switch)
 		ns.Set("swing.enabled", false)
 		ns.Set("general.thickness", 2)
@@ -69943,7 +70006,7 @@ function PT.runNav()
 		for _, key in ipairs(N.keys) do
 			if ns.PanelNav.CELLS[key] == nil then missing[#missing + 1] = key end
 		end
-		check("window nav: the 24 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 8 atlas", count == 34 and high == 33 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
+		check("window nav: the 25 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 8 atlas", count == 35 and high == 34 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
 		local texture = PT.window(W):CreateTexture(nil, "ARTWORK", nil, 0)
 		ns.PanelNav.Cell(texture, "home")
 		local tc = W.rawOf[texture].texCoord
@@ -70050,7 +70113,7 @@ function PT.runTabs()
 		{ "Personal resource display", "General, Your buffs" },
 		{ "Cast bars", "General, Size, Text and icon" },
 		{ "Action bars", "General, Button text, Colours and cooldowns, Glows and animations" },
-		{ "Cooldowns", "General, States and text" },
+		{ "Cooldowns", "General, States and text, Cooldown pulse" },
 		{ "Trackers", "General, Tracker look, Low and missing, Tracker" },
 		{ "Minimap and buffs", "General, Minimap, Buffs and debuffs, Bars, bags and micro menu, Tracker, loot and alerts" },
 		{ "Windows", "General, Which windows, Bags and items" },
@@ -70071,11 +70134,11 @@ function PT.runTabs()
 			local got = joined(PT.tabTexts(W))
 			if got ~= item[2] then bad[#bad + 1] = item[1] .. ": " .. got end
 		end
-		for _, name in ipairs({ "Fonts", "Swing timers", "Bar block", "Bar blocks", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Combat text", "Movers", "Fading", "Tooltip" }) do
+		for _, name in ipairs({ "Fonts", "Swing timers", "Bar block", "Bar blocks", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Combat text", "Movers", "Fading", "Tooltip" }) do
 			PT.go(W, name)
 			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
 		end
-		check("window tabs: the 38 child pages are the tabs of twelve modules, in the order of the design, and the other eleven modules have none", children == 38 and #bad == 0, children .. " " .. joined(bad))
+		check("window tabs: the 39 child pages are the tabs of twelve modules, in the order of the design, and the other twelve modules have none", children == 39 and #bad == 0, children .. " " .. joined(bad))
 		PT.go(W, "Nameplates")
 		PT.go(W, "Health bar")
 		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil
@@ -91445,7 +91508,9 @@ do
 	function X.hearing(W, event)
 		local n = 0
 		for _, frame in ipairs(W.eventFrames) do
-			if frame.events[event] and frame.events.SPELLS_CHANGED then
+			-- The frame of Core.lua hears the events of every module (the cooldown icons hear SPELL_UPDATE_USABLE and SPELLS_CHANGED for their
+			-- tint), ADDON_LOADED among them: it is not the frame of the triggers.
+			if frame.events[event] and frame.events.SPELLS_CHANGED and not frame.events.ADDON_LOADED then
 				n = n + 1
 			end
 		end
@@ -97772,7 +97837,7 @@ do
 			and row.label == "Glow on the action button" and section == "Proc alerts" and W.ns.Get("trackers.glow") == true)
 		check("procglow: the row has a tip that names Restyle action bars", row ~= nil and type(row.tip) == "string" and row.tip:find("Restyle action bars", 1, true) ~= nil)
 		check("procglow: the row calls ProcGlowChanged, which exists", row ~= nil and row.changed == "ProcGlowChanged" and type(W.ns.ProcGlowChanged) == "function")
-		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 24 and (function()
+		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 26 and (function()
 			local at = {}
 			for i, file in ipairs(FILES) do
 				at[file] = i
@@ -108011,7 +108076,7 @@ do
 		end
 		check("abfx: the wizard has the step Glows and animations right after Button colours and cooldowns, built, with the six settings", found ~= nil and steps[found - 1].id == "ab-colours" and steps[found].title == "Glows and animations"
 			and steps[found].area == "Action bars" and steps[found].built == true and #steps[found].rows == 6, tostring(found))
-		check("abfx: it is no module", #W.ns.MODULE_ORDER == 24)
+		check("abfx: it is no module", #W.ns.MODULE_ORDER == 26)
 		local toc = {}
 		for line in io.open(ADDON_DIR .. "/FlatUI.toc", "rb"):read("*a"):gmatch("[^\r\n]+") do
 			if line:match("%.lua$") then
