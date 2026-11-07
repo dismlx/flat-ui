@@ -14,6 +14,14 @@ local _, ns = ...
 -- name (Hud.lua): the opacity each string had is read before the first write and given back when the row, the page or the part goes off. The
 -- frames take no mouse, so a name that is hidden is in nobody's way. A string this client lacks is passed over, and a change of opacity the
 -- game refuses gives back the strings of that row, which then shows as usual until /reload, and /flatui status says so.
+-- The smaller line holds the zone's own name too: when the player leaves a part of the zone for the open zone (a town, a mine, a building)
+-- once the big name has faded, the part's name is empty and the game writes the zone's name in SubZoneTextString and shows that frame
+-- (ZoneText.lua:96-110), many times an hour while levelling. That is the zone name, so Hide the zone name hides the smaller line while it holds
+-- the zone's name (the text read with GetText equal to GetZoneText, both in a pcall; a withheld one counts as another name) and gives it back
+-- when it holds another, while Hide the subzone name hides it whatever it holds. The game writes the line, then calls SetZoneText, then shows
+-- the frame (:105-108 and 115-118), so Flat UI follows the game's global SetZoneText (ns.FollowGlobal, run after the call, from the first time
+-- the row is on, and doing nothing while it is off) and the line is decided before it is drawn. The opacity is kept once for each string,
+-- whichever rows hide it, so that one row never keeps the 0 of the other as the string's own.
 -- The talking head is the portrait that speaks at the bottom of the screen (TalkingHeadFrame, Blizzard_FrameXML/TalkingHeadUI.xml:3, loaded for
 -- the mainline client that Forever is, Blizzard_FrameXML.toc:147-148). It hears TALKINGHEAD_REQUESTED (TalkingHeadUI.lua:3-8), and shows itself
 -- and plays the voice in PlayCurrent (:25-28, 128-217). It is a button that takes clicks, so it is not made transparent: while the row is on,
@@ -25,20 +33,25 @@ local _, ns = ...
 -- the game's is written but the opacity of the four strings and the event of the talking head.
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL.lua:4017-4019 and 4921-4929, the options
 -- ignoreTalkingHead and hideZoneText). Its talking head is hidden with Hide after the game's PlayCurrent, through a hook on that method of the
--- frame, and its zone text loses every event of its frame until a reload. Here no method of the game's is hooked, every change is given back at
--- once, the voice is silent too, and the zone name and the name of the part of a zone have a row each.
+-- frame, and its zone text loses every event of its frame until a reload. Here no method of the game's is hooked (only the global SetZoneText
+-- is followed, above), every change is given back at once, the voice is silent too, and the zone name and the name of the part of a zone have
+-- a row each.
 
 local KEY, PART = "hud", "zone name and talking head"
 local EVENT = "TALKINGHEAD_REQUESTED"
--- The rows that make font strings transparent, and the strings of each by their global names.
+-- The rows that make font strings transparent, and the strings of each by their global names. SMALL, the subzone row's line, is the zone
+-- row's too while it holds the zone's own name (see above).
 local ROWS = { "zoneTitle", "subzoneTitle" }
 local STRINGS = { zoneTitle = { "ZoneTextString", "PVPInfoTextString" }, subzoneTitle = { "SubZoneTextString", "PVPArenaTextString" } }
 local LABELS = { zoneTitle = "Zone name", subzoneTitle = "Subzone name" }
+local SMALL = "SubZoneTextString"
 
--- kept: per row, the opacity each string had before Flat UI made it transparent. refused: the rows whose change the game refused. missing: the
--- rows whose strings this client lacks.
-local kept = { zoneTitle = {}, subzoneTitle = {} }
+-- kept: the opacity each string had before Flat UI made it transparent, once for each string whichever rows hide it. hides: per row, the
+-- strings it hides. refused: the rows whose change the game refused. missing: the rows whose strings this client lacks. followed: the game's
+-- SetZoneText is followed.
+local kept, hides = {}, { zoneTitle = {}, subzoneTitle = {} }
 local refused, missing = {}, {}
+local followed = false
 -- The talking head. held: Flat UI took the event and owes it back. aside: the frame did not listen when Flat UI looked. refused: the frame kept
 -- the event or would not say. stuck: the frame would not take the event back. absent: the client has no such frame. waiting: a change waits
 -- for the end of a fight.
@@ -60,12 +73,65 @@ local function Wanted(row)
 	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and ns.Get(KEY .. "." .. row) == true
 end
 
--- Gives back the opacity of the strings of a row.
-local function Release(row)
-	local list = kept[row]
-	for text, alpha in pairs(list) do
-		list[text] = nil
+-- A row stops hiding a string: the string gets back the opacity it had once no row hides it.
+local function Drop(row, text)
+	hides[row][text] = nil
+	for _, other in ipairs(ROWS) do
+		if hides[other][text] then
+			return
+		end
+	end
+	local alpha = kept[text]
+	kept[text] = nil
+	if alpha ~= nil then
 		pcall(text.SetAlpha, text, alpha)
+	end
+end
+
+-- Gives back the strings of a row.
+local function Release(row)
+	for text in pairs(hides[row]) do
+		Drop(row, text)
+	end
+end
+
+-- A row hides a string, whose opacity is read first when no row hides it yet. False when the game refuses.
+local function Take(row, text)
+	if kept[text] == nil then
+		local ok, alpha = pcall(text.GetAlpha, text)
+		kept[text] = ok and ns.Finite(alpha) and alpha >= 0 and alpha <= 1 and alpha or 1
+	end
+	hides[row][text] = true
+	return (pcall(text.SetAlpha, text, 0))
+end
+
+-- True while the smaller line holds the zone's own name. A text the game withholds, or does not give, counts as another name.
+local function HoldsZone(text)
+	local okText, shown = pcall(text.GetText, text)
+	local okZone, zone = pcall(GetZoneText)
+	return okText and okZone and not ns.IsSecret(shown) and not ns.IsSecret(zone) and type(shown) == "string" and shown ~= "" and shown == zone
+end
+
+-- The smaller line for the zone row: hidden while the row is on and the line holds the zone's name, given back when it holds another.
+local function Small()
+	local text = Global(SMALL)
+	if text == nil or type(text.SetAlpha) ~= "function" then
+		return
+	end
+	if Wanted("zoneTitle") and not refused.zoneTitle and HoldsZone(text) then
+		if not Take("zoneTitle", text) then
+			refused.zoneTitle = true
+			Release("zoneTitle")
+		end
+	elseif hides.zoneTitle[text] then
+		Drop("zoneTitle", text)
+	end
+end
+
+-- After each SetZoneText of the game: it has written the smaller line and shows it next (ZoneText.lua:105-108 and 115-118).
+local function OnZoneText()
+	if Wanted("zoneTitle") then
+		ns.EachPart(KEY, PART, Small, {})
 	end
 end
 
@@ -76,16 +142,12 @@ local function Strings(row)
 		Release(row)
 		return
 	end
-	local list, found = kept[row], 0
+	local found = 0
 	for _, name in ipairs(STRINGS[row]) do
 		local text = Global(name)
 		if text ~= nil and type(text.SetAlpha) == "function" then
 			found = found + 1
-			if list[text] == nil then
-				local ok, alpha = pcall(text.GetAlpha, text)
-				list[text] = ok and ns.Finite(alpha) and alpha >= 0 and alpha <= 1 and alpha or 1
-			end
-			if not pcall(text.SetAlpha, text, 0) then
+			if not Take(row, text) then
 				refused[row] = true
 				Release(row)
 				return
@@ -93,6 +155,12 @@ local function Strings(row)
 		end
 	end
 	missing[row] = found == 0 or nil
+	if row == "zoneTitle" then
+		if not followed then
+			followed = ns.FollowGlobal("SetZoneText", OnZoneText) == true
+		end
+		Small()
+	end
 end
 
 -- The talking head, or nil on a client without it.

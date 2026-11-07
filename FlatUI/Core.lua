@@ -91,8 +91,9 @@ local ADDON_NAME, ns = ...
 -- game's sound for it (PlaySound, C_Sound.PlayVocalErrorSound), and gives the event back with RegisterEvent when the row, its page or the module goes off. It follows the game's two commands for
 -- the error text (SlashCmdList.UI_ERRORS_OFF and UI_ERRORS_ON) and RunScript with hooksecurefunc, so a macro or addon that turns the error
 -- text off or on is honoured and a kind it hides stays hidden.
--- With Hide the zone name or Hide the subzone name it sets the alpha of the game's zone text strings (SetAlpha), read first and put back when
--- the row goes off; with Hide the talking head it takes TALKINGHEAD_REQUESTED from TalkingHeadFrame (UnregisterEvent) and gives it back, as above.
+-- With Hide the zone name or Hide the subzone name it sets the alpha of the game's zone text strings (SetAlpha), read first and put back when the row
+-- goes off, and once Hide the zone name has been on it follows SetZoneText with hooksecurefunc, to hide the zone's name in the smaller line; with
+-- Hide the talking head it takes TALKINGHEAD_REQUESTED from TalkingHeadFrame (UnregisterEvent) and gives it back, as above.
 
 local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade" }
 -- The switches version 0.1.0 saved. This list never grows.
