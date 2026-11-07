@@ -2,7 +2,8 @@ local _, ns = ...
 
 -- Healer mana: a small window of Flat UI's own with the mana of the healers of the group, one bar each in the order of the group, in the class
 -- colour of the member, with the share of mana left. A healer is a member whose role is healer (UnitGroupRolesAssigned, UnitDocumentation.lua:
--- 1318-1332), or, while the member has no role, of a class that heals (Priest, Paladin, Shaman and Druid, as Setup.lua lists them). The share is
+-- 1318-1332), or, while nobody in the group has that role, a member with no role of a class that heals (Priest, Paladin, Shaman and Druid, as
+-- Setup.lua lists them): in a group that uses the healer role, a member who set none is most likely no healer, as H.Read says. The share is
 -- UnitPowerPercent of the member's mana through the game's curve to 100 (UnitDocumentation.lua:2838-2857, CurveConstants.lua:9-12), as
 -- UnitText.lua writes a power share, so a druid in a form shows mana too. The game may withhold it (SecretWhenUnitPowerRestricted): it is never
 -- read, compared or added, and goes as it is to SetValue of the bar and to SetFormattedText of its text, which take it
@@ -16,8 +17,8 @@ local _, ns = ...
 -- seconds. Nothing of the game is changed.
 -- This follows the Healer Mana indicator of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/
 -- GroupTools.lua:485-713): the healers of the group by their role, their mana share through UnitPowerPercent and the curve to 100, and the
--- dungeon or raid rule. Its lines of text, fonts, alignment and name width are bars in the look of the Threat list here, and a member with no
--- role is counted by class, since groups on Forever often have no roles.
+-- dungeon or raid rule. Its lines of text, fonts, alignment and name width are bars in the look of the Threat list here, and while nobody in the
+-- group has the healer role a member with no role is counted by class, since groups on Forever often have no roles.
 
 local KEY = "healermana"
 local MOVER = "FlatUIHealerMana"
@@ -28,7 +29,10 @@ local BOX_W, BOX_H, BOX_X, BOX_Y = 158, 76, 420, -130
 local PAD, GAP, INSET = 4, 2, 4
 -- A burst of events is read once, this long after the first. The step while the list shows. How long /flatui healers shows.
 local STEP, TICK, TEST_TIME = 0.2, 0.5, 8
-local MOST_ROWS = 10
+-- The most bars: one for each member of a full raid (MAX_RAID_MEMBERS, Blizzard_FrameXMLBase/Shared/Constants.lua:1), as H.Read reads raid1
+-- to raid40. A raid of forty often has more than ten healers, and more than twenty by class when nobody has a role, so Number of bars can show
+-- each of them, as EnhanceQoL writes a line for every healer (EnhanceQoL/Submodules/GroupTools.lua:680-686).
+local MOST_ROWS = 40
 local FONT = "GameFontHighlightSmall"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local TITLE = "Healer mana"
@@ -121,24 +125,35 @@ function H.Allowed()
 	return ok and not IsSecret(inside) and inside == true and not IsSecret(kind) and (kind == "party" or kind == "raid")
 end
 
--- True for a healer: the role says so, or the member has no role and is of a class that heals. A withheld role counts as none.
+-- True for a healer: the role says so, or the member has no role and is of a class that heals, and then the second answer is true. A withheld
+-- role counts as none.
 function H.Healer(unit)
 	local role = Ask(UnitGroupRolesAssigned, unit)
 	if role == "HEALER" then
-		return true
+		return true, false
 	elseif role == "TANK" or role == "DAMAGER" then
-		return false
+		return false, false
 	end
 	local class = Ask(UnitClassBase, unit)
-	return type(class) == "string" and HEALERS[class] == true
+	return type(class) == "string" and HEALERS[class] == true, true
 end
 
--- The healers of the group in its order: in a raid raid1 to raid40, the player among them; else the player, then party1 to party4.
+-- The healers of the group in its order: in a raid raid1 to raid40, the player among them; else the player, then party1 to party4. A member with
+-- no role counts by class only while nobody in the group has the healer role. Each player sets their own role, in the listing of the group finder
+-- or in the poll the leader starts (Blizzard_GroupFinder_VanillaStyle/Blizzard_LFGVanilla_Listing.lua:579-593, 626-629, Mainline/RolePoll.lua:
+-- 131-135), and one who sets none reads as NONE (Blizzard_LFGVanilla_Listing.lua:597-600). In a group where someone took the healer role, a
+-- member with none is most likely no healer: the game counts one as damage (Blizzard_FrameXMLUtil/PartyUtil.lua:110-115) and shows the power
+-- bars of healers by the role alone (Blizzard_UnitFrame/Shared/CompactUnitFrame.lua:1889-1891), as EnhanceQoL counts the role only
+-- (EnhanceQoL/Submodules/GroupTools.lua:636-641). So a guess by class neither adds a bar nor takes the place of a healer under Number of bars.
 function H.Read()
-	local list = {}
+	local byRole, byClass = {}, {}
 	local function Member(unit)
-		if Ask(UnitExists, unit) == true and H.Healer(unit) then
-			list[#list + 1] = unit
+		if Ask(UnitExists, unit) == true then
+			local healer, guessed = H.Healer(unit)
+			if healer then
+				local list = guessed and byClass or byRole
+				list[#list + 1] = unit
+			end
 		end
 	end
 	if Ask(IsInRaid) == true then
@@ -151,7 +166,7 @@ function H.Read()
 			Member("party" .. index)
 		end
 	end
-	return list
+	return #byRole > 0 and byRole or byClass
 end
 
 -- Drawing -----------------------------------------------------------------------------------------------------------------------------------

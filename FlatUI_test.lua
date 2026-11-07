@@ -10568,11 +10568,11 @@ local PAGES = {
 		S("threat.barHeight", "number", 16, "Bar height", "Also the height of text.", { min = 10, max = 30, step = 1, unit = " px" }),
 	} },
 	{ key = "healermana", label = "Healer mana", rows = {
-		S("healermana.enabled", "bool", false, "Show healer mana", "The mana of the healers in your group, by their role, or by class for a member with no role. /flatui move places the list, /flatui healers shows a sample."),
+		S("healermana.enabled", "bool", false, "Show healer mana", "The mana of the healers in your group, by their role. While nobody has the healer role, a member with no role counts by class. /flatui move places the list, /flatui healers shows a sample."),
 		"When it shows",
 		S("healermana.show", "choice", "instance", "Show", "While your group has a healer.", { choices = { { "instance", "In a dungeon or raid" }, { "group", "In a group" } } }),
 		"Bars",
-		S("healermana.rows", "number", 5, "Number of bars", "In the order of your group.", { min = 1, max = 10, step = 1, unit = "" }),
+		S("healermana.rows", "number", 5, "Number of bars", "In the order of your group.", { min = 1, max = 40, step = 1, unit = "" }),
 		S("healermana.barWidth", "number", 150, "Bar width", nil, { min = 100, max = 400, step = 5, unit = " px" }),
 		S("healermana.barHeight", "number", 16, "Bar height", "Also the height of text.", { min = 10, max = 30, step = 1, unit = " px" }),
 	} },
