@@ -14,8 +14,17 @@ local ADDON_NAME, ns = ...
 --   Friends online: counted as the game's own button counts them (BNGetNumFriends, C_FriendList.GetNumOnlineFriends); the tooltip lists who.
 --   Guild online: GetNumGuildMembers; the tooltip lists who (GetGuildRosterInfo). The roster is asked for (C_GuildInfo.GuildRoster) when the client
 --     holds none, when the game says it may be asked again, and when the tooltip opens, at most every ROSTER_EVERY seconds.
+--   Equipment set: the set of the game's equipment manager that the player wears, with its icon (C_EquipmentSet.GetEquipmentSetIDs and
+--     GetEquipmentSetInfo, in the game's order). The tooltip lists the sets, the one worn in green and one with items missing in red, as the
+--     character window colours them (Camelot/PaperDollFrame.lua:3159-3181). A left click opens a menu of Flat UI's own (DataPanels.lua) whose
+--     lines put a set on with C_EquipmentSet.UseEquipmentSet, which is neither protected nor restricted (EquipmentManagerDocumentation.lua:
+--     286-300) and which the game's own Equip button calls from its own code, after the same two checks made here: not while an item of the
+--     set is locked and not while the player casts (EquipmentManager_EquipSet, Blizzard_FrameXML/Mainline/EquipmentManager.lua:259-266). In a
+--     fight the game changes only the weapons (INVSLOTS_EQUIPABLE_IN_COMBAT, Blizzard_FrameXMLBase/Constants.lua:158-162), so nothing is
+--     offered then: the menu does not open and closes as a fight starts, and a line clicked in one does nothing.
 -- Built on the streams of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission. Left out: the warband, the options of each
--- stream, and the click of the hearthstone, which used it through a secure button: on Flat UI's panels no click casts anything.
+-- stream, the click of the hearthstone, which used it through a secure button (on Flat UI's panels no click casts anything), the order and
+-- the specialisation of the equipment sets (Stream_EquipmentSets.lua:64-74), and its refusal in the game's red error text: Flat UI says it in chat.
 
 local P = ns.DataPanels
 local Ask, Read, Count, Field, Text, Labelled = P.Ask, P.Read, P.Count, P.Field, P.Text, P.Labelled
@@ -622,5 +631,154 @@ P.Stream({
 		lines[#lines + 1] = { " " }
 		lines[#lines + 1] = { "Online", ("%d of %d"):format(Count(online) or #found, total) }
 		return lines
+	end,
+})
+
+-- Equipment set ---------------------------------------------------------------------------------------------------------------------------------
+
+-- The game's icon for a set that has none (INV_Misc_QuestionMark, Camelot/PaperDollFrame.lua:3167-3171).
+local NO_ICON = 134400
+-- At most this many sets are read: the game keeps far fewer.
+local MOST_SETS = 100
+local REFUSED = "Flat UI: a set is not put on while you cast or while one of its items is locked."
+
+local function SetsApi()
+	local api = _G.C_EquipmentSet
+	return type(api) == "table" and not ns.IsSecret(api) and api or nil
+end
+
+-- The sets of the equipment manager in the game's order: { id, name, icon, worn, lost }. Nothing on a client without the manager or when it
+-- withholds the list; a set whose name it withholds is left out.
+local function EquipmentSets()
+	local api = SetsApi()
+	if not api or type(api.GetEquipmentSetInfo) ~= "function" then
+		return nil
+	end
+	local hidden, ids = Read(api.GetEquipmentSetIDs)
+	if hidden or type(ids) ~= "table" then
+		return nil
+	end
+	local list = {}
+	for index = 1, math.min(#ids, MOST_SETS) do
+		local id = Count(Field(ids, index))
+		local ok, name, icon, worn, lost = false, nil, nil, nil, nil
+		if id then
+			local _
+			ok, name, icon, _, worn, _, _, _, lost = pcall(api.GetEquipmentSetInfo, id)
+		end
+		name = ok and Text(P.Plain(name)) or nil
+		if name then
+			icon = Count(P.Plain(icon))
+			list[#list + 1] = { id = id, name = name, icon = icon and icon > 0 and icon or NO_ICON, worn = P.Plain(worn) == true,
+				lost = Count(P.Plain(lost)) or 0 }
+		end
+	end
+	return list
+end
+
+local function WornSet(list)
+	for _, set in ipairs(list) do
+		if set.worn then
+			return set
+		end
+	end
+	return nil
+end
+
+-- The icon and the name of a set.
+local function Named(set)
+	return ("|T%d:0|t %s"):format(set.icon, set.name)
+end
+
+-- True in a fight, when no set is offered.
+local function Fighting()
+	return P.InCombat() or Ask(UnitAffectingCombat, "player") == true
+end
+
+-- Puts a set on as the game's own Equip button does (EquipmentManager.lua:259-266), never in a fight. A check whose answer the client withholds
+-- leaves the set to the game.
+local function PutOn(set)
+	local api = SetsApi()
+	if not api or type(api.UseEquipmentSet) ~= "function" or Fighting() then
+		return
+	end
+	local _, locked = Read(api.EquipmentSetContainsLockedItems, set.id)
+	local _, casting = Read(UnitCastingInfo, "player")
+	if locked == true or casting ~= nil then
+		if type(print) == "function" then
+			print(REFUSED)
+		end
+		return
+	end
+	Ask(api.UseEquipmentSet, set.id)
+end
+
+P.Stream({
+	id = "sets", label = "Equipment set",
+	events = { EQUIPMENT_SETS_CHANGED = true, EQUIPMENT_SWAP_FINISHED = true, PLAYER_EQUIPMENT_CHANGED = true,
+		-- The last line of a tooltip that shows says whether a set can be put on now.
+		PLAYER_REGEN_DISABLED = true, PLAYER_REGEN_ENABLED = true },
+	Text = function()
+		local list = EquipmentSets()
+		if not list then
+			return nil
+		end
+		local set = WornSet(list)
+		if set then
+			return Named(set)
+		end
+		return DIM .. (#list > 0 and "No set worn" or "No sets") .. "|r"
+	end,
+	Tip = function()
+		local list = EquipmentSets()
+		if not list then
+			return { title = "Equipment sets", UNSAID }
+		end
+		local lines = { title = "Equipment sets" }
+		if #list == 0 then
+			lines[1] = { DIM .. "You have no sets. The equipment manager of the character window saves them.|r" }
+			return lines
+		end
+		for index = 1, math.min(#list, MOST) do
+			local set = list[index]
+			if set.lost > 0 then
+				lines[#lines + 1] = { BAD .. Named(set) .. "|r", ("%s%d missing|r"):format(BAD, set.lost) }
+			elseif set.worn then
+				lines[#lines + 1] = { GOOD .. Named(set) .. "|r", GOOD .. "Worn|r" }
+			else
+				lines[#lines + 1] = { Named(set) }
+			end
+		end
+		More(lines, #list - MOST)
+		lines[#lines + 1] = { " " }
+		lines[#lines + 1] = { DIM .. (Fighting() and "No set can be put on in a fight." or "Click to put on another set.") .. "|r" }
+		return lines
+	end,
+	-- A left click opens the menu of the sets, or closes it. The set worn is in it, and does nothing.
+	Click = function(slot, button)
+		if button ~= "LeftButton" then
+			return
+		end
+		if P.MenuOpen(slot) then
+			P.CloseMenu()
+			return
+		end
+		local list = not Fighting() and EquipmentSets() or nil
+		if not list or #list == 0 then
+			return
+		end
+		local items = {}
+		for _, set in ipairs(list) do
+			local text = Named(set)
+			if set.lost > 0 then
+				text = BAD .. text .. "|r"
+			elseif set.worn then
+				text = GOOD .. text .. "|r"
+			end
+			items[#items + 1] = { text = text, inert = set.worn, pick = function()
+				PutOn(set)
+			end }
+		end
+		P.OpenMenu(slot, P.streams.sets, "Equipment sets", items)
 	end,
 })

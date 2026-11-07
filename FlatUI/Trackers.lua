@@ -1781,16 +1781,29 @@ local function How(entry, reading)
 end
 
 -- How full a bar is, 0 to 1: charges over the most charges seen when the bar is filled by charges and the tracker has them, else the
--- time left over the length, else full.
+-- time left over the length, else full. The count of a kind that writes its own (Count) is no number of charges: the reading of
+-- TrackerGroup.lua counts the members who lack a group buff, 0 while all have it, so its bar runs by the time left on the buff that ends
+-- first, as the Bar fill row says a buff without charges does (Config.lua:878).
 local function Fill(entry, reading)
 	local top = reading.top or entry.top
-	if Value(entry, "barFill") == "charges" and entry.charged and reading.count and top and top >= 1 then
+	local kind = KINDS[entry.kind]
+	local charges = not (kind and type(kind.Count) == "function")
+	if charges and Value(entry, "barFill") == "charges" and entry.charged and reading.count and top and top >= 1 then
 		return math.min(1, reading.count / top)
 	end
 	if reading.expires and reading.length then
 		return math.max(0, math.min(1, (reading.expires - Now()) / reading.length))
 	end
 	return 1
+end
+
+-- The count a kind writes itself, while the page shows charges: text such as "2/5" for a group buff (TrackerGroup.lua), or nil.
+function K.KindCount(kind, entry, reading, how)
+	if not (kind and type(kind.Count) == "function" and Value(entry, "counts")) then
+		return nil
+	end
+	local ok, text = pcall(kind.Count, entry, reading, how)
+	return ok and Plain(text, "string") and text ~= "" and text or nil
 end
 
 -- What the frame of a tracker shows: icon, tint, count, sweep, rim, word and pulse, and for a bar or text the name, the fill and the
@@ -1826,6 +1839,9 @@ local function Looks(entry, reading, how)
 		look.rim = true
 		look.pulse = Value(entry, "missing") == "pulse"
 		look.word = Value(entry, "missing") == "word"
+		-- A kind may count what is missing, such as the members who lack a group buff.
+		look.count = K.KindCount(kind, entry, reading, how)
+		look.countRed = look.count ~= nil
 		return look
 	end
 	look.icon = reading.icon or EntryIcon(entry)
@@ -1848,6 +1864,7 @@ local function Looks(entry, reading, how)
 			look.count = ("%d"):format(reading.count)
 		end
 	end
+	look.count = K.KindCount(kind, entry, reading, how) or look.count
 	if how ~= "last" and reading.expires and reading.length then
 		look.sweep, look.start, look.length = "set", reading.expires - reading.length, reading.length
 	end
@@ -2006,6 +2023,10 @@ local function Draw(entry, reading)
 	-- A border on the action button that fixes a low or missing tracker (TrackerMarks.lua).
 	if ns.TrackerMarkStep then
 		ns.TrackerMarkStep(entry, reading, how)
+	end
+	-- Out of combat, the secure button of a click that fixes the tracker (TrackerClicks.lua).
+	if ns.TrackerClickStep then
+		ns.TrackerClickStep(entry, reading, how, record, fighting)
 	end
 end
 
@@ -2421,6 +2442,9 @@ local function Pass()
 	if ns.TrackerMarkSweep then
 		ns.TrackerMarkSweep(entries)
 	end
+	if ns.TrackerClickSweep then
+		ns.TrackerClickSweep(entries)
+	end
 	if #entries == 0 then
 		return
 	end
@@ -2616,7 +2640,9 @@ end
 -- hooks of a kind that has more to show: slot = { unit, filter } for the game's own icon of the kind, noLast (no last reading is shown: "none"
 -- in its place), noDrop (no sound for a drop), last (laid out after the other trackers), Hide(entry, reading, how) -> true to draw nothing,
 -- Wanted(entry, state, how, fighting) -> 0 or 1 ahead of the rules of Show (fighting: whether the trackers are in a fight), Rim(entry, reading,
--- how) -> red, green, blue for the rim of a tracker that is up, Changed(entry, before, after) after a change of the state that was kept, Gone(id)
+-- how) -> red, green, blue for the rim of a tracker that is up, Count(entry, reading, how) -> the text of its count in place of the number, drawn
+-- on the missing look too (its bar fills by the time left, never by the count), Changed(entry, before, after) after a change of the state that
+-- was kept, Gone(id)
 -- when a tracker is no longer on, World() when the player enters the world or the spells change, Test(entry, on) -> a line, for a test of 5
 -- seconds instead of the three looks, own = { key = fn } for the kind's own test of an own value, and part = the name of the part of the module
 -- the kind's calls are isolated in }. A reading is { state = "fine" | "low" | "missing" | "unknown", hidden, count, expires, length, icon, id }.
@@ -3122,7 +3148,9 @@ local function Number(value)
 	return value ~= nil and ("%d"):format(value) or "none"
 end
 
-local function NowText(reading)
+-- The reading in words. The count of a group buff is how many members lack the buff, and its total how many count (TrackerGroup.lua's Read),
+-- so it is said in the words of the tracker's own line, not as charges.
+local function NowText(reading, entry)
 	local state = reading.state
 	if state == "missing" then
 		return "missing"
@@ -3130,7 +3158,9 @@ local function NowText(reading)
 		return reading.hidden and "not known, the game is hiding it" or "not known, the game gave no answer"
 	end
 	local charges = "no charges"
-	if reading.count then
+	if entry.kind == "group" and Plain(reading.count, "number") and Plain(reading.total, "number") then
+		charges = ("%d of %d lack it"):format(reading.count, reading.total)
+	elseif reading.count then
 		charges = ("%s (stacks %s, charges field %s)"):format(Plural(reading.count, "charge"), Number(reading.stacks), Number(reading.charges))
 	end
 	local left = "no time limit"
@@ -3184,7 +3214,7 @@ local function EntryLines(index, entry)
 	local reading = Read(entry)
 	local kind = KINDS[entry.kind]
 	lines[1] = ("%d. %s, %s%s"):format(index, Label(entry), kind and kind.what or "buff on you", entry.on == false and ", off" or "")
-	lines[2] = "   Now: " .. NowText(reading) .. "."
+	lines[2] = "   Now: " .. NowText(reading, entry) .. "."
 	local how = (records[entry.id] and records[entry.id].how == "drawn") and "drawn" or How(entry, reading)
 	local shownAs = K.SHOWN_AS[how]
 	if how == "live" and reading.state == "unknown" then
@@ -3247,6 +3277,11 @@ local function EntryLines(index, entry)
 	end
 	if ns.TrackerMarkLine then
 		lines[#lines + 1] = "   " .. ns.TrackerMarkLine(entry)
+	end
+	-- A kind that takes a click while Click to apply lets it says what a click does (TrackerClicks.lua); the others have no line.
+	local click = ns.TrackerClickLine and ns.TrackerClickLine(entry)
+	if Plain(click, "string") then
+		lines[#lines + 1] = "   " .. click
 	end
 	local own = Own(entry)
 	if own ~= "" then
@@ -3658,11 +3693,25 @@ local function Refresh()
 	ClassLabel()
 	if ns.Enabled(KEY) then
 		Watch()
+		-- A fight that ended while the page was off, or while the module was stopped, was not heard: Core.lua gives PLAYER_REGEN_ENABLED only to
+		-- a module that is on, and Watch reads the fight only when it makes the watcher. Refresh never runs while PLAYER_REGEN_DISABLED is handled,
+		-- the one moment of a fight before the lockdown (InCombatLockdown, RestrictedActionsDocumentation.lua:45-53), so out of the lockdown that
+		-- fight is over: the trackers leave it here, a click is offered again (TrackerClicks.lua) and a tracker set to Only in combat hides.
+		if fighting and not InCombatLockdown() then
+			fighting = false
+			EndFight()
+		end
 	end
 	if not ns.Enabled(KEY) then
 		HideHolders()
 		if ns.TrackerMarkSweep then
 			ns.TrackerMarkSweep()
+		end
+		-- The secure buttons of the clicks are freed out of combat (TrackerClicks.lua); in a fight they are off their trackers already.
+		if ns.TrackerClickSweep then
+			ns.OutOfCombat(function()
+				ns.TrackerClickSweep()
+			end)
 		end
 	else
 		for _, record in ipairs(shown) do

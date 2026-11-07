@@ -158,10 +158,18 @@ local LIST = {
 		gate = "EnemyTargetBarShown", changed = "EnemyBarsMoved" },
 	{ name = "FlatUIEnemyFocus", label = "Enemy cooldowns: focus", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 30, x = 0, y = 180,
 		gate = "EnemyFocusBarShown", changed = "EnemyBarsMoved" },
+	-- The row of the group tools (GroupTools.lua), which shows in a group: its top left corner is the top left corner of the box, which has the room
+	-- of every button at the default size in a row, and it grows down and to the right from there. It starts under the top of the screen.
+	{ name = "FlatUIGroupTools", label = "Group tools", point = "TOP", kind = "hud", own = true, noScale = true, width = 327, height = 24, x = 0, y = -100,
+		gate = "GroupToolsShown", changed = "GroupToolsMoved" },
 	-- The threat list (Threat.lua), which shows only in a fight: its top left corner is the top left corner of the box, which has the room of five
 	-- bars at the default size, and it grows down and to the right from there.
 	{ name = "FlatUIThreat", label = "Threat list", point = "CENTER", kind = "hud", own = true, noScale = true, width = 188, height = 112, x = 420, y = 0,
 		gate = "ThreatListShown", changed = "ThreatListMoved" },
+	-- The healer mana list (HealerMana.lua), which shows in a group that has a healer: its top left corner is the top left corner of the box, which has
+	-- the room of three bars at the default size, under the Threat list, and it grows down and to the right from there.
+	{ name = "FlatUIHealerMana", label = "Healer mana", point = "CENTER", kind = "hud", own = true, noScale = true, width = 158, height = 76, x = 420, y = -130,
+		gate = "HealerManaShown", changed = "HealerManaMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",

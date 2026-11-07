@@ -10447,6 +10447,8 @@ local PAGES = {
 		S("trackers.without", "choice", "last", "In fights without the game's icon", nil, { choices = { { "last", "Last known" }, { "hidden", "Hidden" } } }),
 		"Action buttons",
 		S("trackers.mark", "bool", false, "Mark action buttons", "A red border on the action button that fixes a low or missing tracker. Needs Restyle action bars."),
+		"Clicks",
+		S("trackers.click", "choice", "group", "Click to apply", "Out of combat, a click on a tracker that needs it: a group buff is cast on a member who lacks it, or a poison, stone or oil goes on the weapon. /flatui tracker use 1 and an item sets what a weapon tracker uses.", { choices = { { "none", "Off" }, { "group", "Group buffs" }, { "all", "Group buffs and weapons" } } }),
 		"Proc alerts",
 		S("trackers.addProc", "list", 0, "Add a proc", "For another spell, type /flatui tracker add proc and its name."),
 		S("trackers.removeProc", "list", 0, "Remove a proc"),
@@ -10564,6 +10566,30 @@ local PAGES = {
 		S("threat.rows", "number", 5, "Number of bars", "The highest threat first.", { min = 1, max = 10, step = 1, unit = "" }),
 		S("threat.barWidth", "number", 180, "Bar width", nil, { min = 100, max = 400, step = 5, unit = " px" }),
 		S("threat.barHeight", "number", 16, "Bar height", "Also the height of text.", { min = 10, max = 30, step = 1, unit = " px" }),
+	} },
+	{ key = "healermana", label = "Healer mana", rows = {
+		S("healermana.enabled", "bool", false, "Show healer mana", "The mana of the healers in your group, by their role. While nobody has the healer role, a member with no role counts by class. /flatui move places the list, /flatui healers shows a sample."),
+		"When it shows",
+		S("healermana.show", "choice", "instance", "Show", "While your group has a healer.", { choices = { { "instance", "In a dungeon or raid" }, { "group", "In a group" } } }),
+		"Bars",
+		S("healermana.rows", "number", 5, "Number of bars", "In the order of your group.", { min = 1, max = 40, step = 1, unit = "" }),
+		S("healermana.barWidth", "number", 150, "Bar width", nil, { min = 100, max = 400, step = 5, unit = " px" }),
+		S("healermana.barHeight", "number", 16, "Bar height", "Also the height of text.", { min = 10, max = 30, step = 1, unit = " px" }),
+	} },
+	{ key = "grouptools", label = "Group tools", rows = {
+		S("grouptools.enabled", "bool", false, "Show the group tools", "A row of buttons: the eight raid markers and a clear for your target, a ready check, a role poll and a pull countdown. /flatui move places it."),
+		"When it shows",
+		S("grouptools.show", "choice", "group", "Show", "A button you cannot use now is greyed, and its tooltip says why.", { choices = { { "group", "In a group" }, { "lead", "As the leader or an assistant" }, { "always", "In a group or alone" } } }),
+		"Buttons",
+		S("grouptools.marks", "bool", true, "Raid markers", "Left-click puts a marker on your target or takes it off, right-click takes it off. In a raid only the leader and assistants can mark."),
+		S("grouptools.readyCheck", "bool", true, "Ready check", "Only the leader or an assistant can start one."),
+		S("grouptools.rolePoll", "bool", true, "Role poll", "Asks everyone to pick a role. Only the leader or an assistant can start one."),
+		S("grouptools.pull", "bool", true, "Pull countdown", "Left-click counts down for the group, right-click stops it. Only the leader or an assistant can start one."),
+		S("grouptools.pullTime", "number", 10, "Countdown length", nil, { min = 3, max = 60, step = 1, unit = " s", needs = "grouptools.pull" }),
+		"Look",
+		S("grouptools.size", "number", 24, "Icon size", nil, { min = 16, max = 40, step = 2, unit = "" }),
+		S("grouptools.spacing", "number", 3, "Spacing", nil, { min = 0, max = 12, step = 1, unit = "" }),
+		S("grouptools.layout", "choice", "row", "Layout", nil, { choices = { { "row", "In a row" }, { "rows", "Markers above the rest" }, { "column", "In a column" } } }),
 	} },
 	{ key = "windows", label = "Windows", rows = {
 		S("windows.enabled", "bool", true, "Restyle windows", RELOAD),
@@ -10881,6 +10907,10 @@ local PAGES = {
 		S("unitframes.totemTimer", "bool", true, "Totem time left"),
 		S("unitframes.totemSwipe", "bool", true, "Totem cooldown swipe"),
 		S("unitframes.totemTimeSize", "number", 80, "Totem time size", nil, { min = 50, max = 200, step = 5, unit = "%", needs = "unitframes.totemTimer" }),
+		"Party and raid frames",
+		S("unitframes.dispelBorder", "bool", true, "Border colour of a debuff you can dispel", "The border of the health bar takes the colour of Magic, Curse, Disease or Poison while the member has a debuff of that type you can dispel."),
+		S("unitframes.dispelIcon", "bool", true, "Debuff type icon on party frames", "The type of a debuff you can dispel, at the right end of the health bar. The game's raid frames show their own."),
+		S("unitframes.raidFrameMarker", "bool", true, "Raid marker on raid frames", "The game's raid frames show none."),
 	} },
 	{ key = "hud", label = "Minimap and buffs", rows = {
 		S("hud.enabled", "bool", true, "Restyle the minimap, bags and buffs"),
@@ -10999,6 +11029,10 @@ local PAGES = {
 		S("hud.errorReady", "bool", true, "Not ready yet", "Spells, abilities, items and potions still cooling down.", { needs = "hud.errors" }),
 		S("hud.errorTarget", "bool", true, "No target or invalid target", "Also nothing to attack, and a dead target.", { needs = "hud.errors" }),
 		S("hud.errorMoving", "bool", true, "Not while moving", "A cast or an action that needs you to stand still.", { needs = "hud.errors" }),
+		"Zone name and talking head",
+		S("hud.zoneTitle", "bool", false, "Hide the zone name", "The big name that fades in near the top of the screen as you enter a zone, and its PvP line. The zone name on the minimap has its own row."),
+		S("hud.subzoneTitle", "bool", false, "Hide the subzone name", "The smaller name of a part of a zone, such as a town, that fades in under it."),
+		S("hud.talkingHead", "bool", false, "Hide the talking head", "The portrait that speaks at the bottom of the screen, and its voice. One that already shows plays to its end."),
 		"Timers",
 		S("hud.mirror", "bool", true, "Breath and fatigue timers", "Thin border and flat fill in the cast colours."),
 		S("hud.countdown", "bool", true, "Countdown timers", "Thin border and flat fill on pull and start timers."),
@@ -11140,29 +11174,38 @@ local PAGES = {
 		"Waypoints",
 		S("errands.wayCommand", "bool", true, "Add the /way command", "/way 45 61 puts a pin on your map there and the game points you to it. /way Elwynn Forest 45 61, /way #1429 45 61 and /way clear work too. When another addon has /way it keeps it, and /flatui way does the same."),
 	} },
+	{ key = "consumables", label = "Drink and health macros", rows = {
+		S("consumables.enabled", "bool", false, "Keep drink and health macros", "Two macros in your account's macro list, Flat UI Drink and Flat UI Health, written again out of combat when your bags or your level change. Drag them onto a bar from the game's macro window (/macro). Turned off, they are deleted, but one still on a bar stays until you drag it off."),
+		"Drink",
+		S("consumables.drink", "bool", true, "Drink macro", "Flat UI Drink drinks the best drink in your bags that your level allows, conjured water first. A character without mana leaves it as it is."),
+		S("consumables.manaPotion", "bool", true, "Mana potion in a fight", "In a fight, where you cannot drink, Flat UI Drink takes your best mana potion.", { needs = "consumables.drink" }),
+		"Health",
+		S("consumables.health", "bool", true, "Health macro", "Flat UI Health takes a healthstone, then at the next press your best healing potion, and starts with the healthstone again after the fight."),
+		S("consumables.food", "bool", true, "Eat out of combat", "Out of combat Flat UI Health eats the best food in your bags that your level allows, conjured food first.", { needs = "consumables.health" }),
+	} },
 	{ key = "datapanels", label = "Data panels", rows = {
 		S("datapanels.enabled", "bool", false, "Show data panels", "Panels of text across the screen: bag space, gold, durability and more. Point at a slot for its tooltip. /flatui move places the panels."),
 		"Top panel",
 		S("datapanels.top", "bool", true, "Show the top panel", "At the top of the screen, under the game's battleground scores, until you move it."),
-		S("datapanels.top1", "choice", "bags", "First slot", "A slot with nothing to show takes no room. Feeds of other addons are listed when one of them brings LibDataBroker.", { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.top2", "choice", "gold", "Second slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.top3", "choice", "durability", "Third slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.top4", "choice", "hearth", "Fourth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.top5", "choice", "coords", "Fifth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.top6", "choice", "fps", "Sixth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.top1", "choice", "bags", "First slot", "A slot with nothing to show takes no room. Feeds of other addons are listed when one of them brings LibDataBroker.", { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.top2", "choice", "gold", "Second slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.top3", "choice", "durability", "Third slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.top4", "choice", "hearth", "Fourth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.top5", "choice", "coords", "Fifth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.top6", "choice", "fps", "Sixth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		"Bottom panel",
 		S("datapanels.bottom", "bool", false, "Show the bottom panel", "In the bottom left corner of the screen until you move it."),
-		S("datapanels.bottom1", "choice", "friends", "First slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.bottom2", "choice", "guild", "Second slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.bottom3", "choice", "none", "Third slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.bottom4", "choice", "none", "Fourth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.bottom5", "choice", "none", "Fifth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
-		S("datapanels.bottom6", "choice", "none", "Sixth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" } } }),
+		S("datapanels.bottom1", "choice", "friends", "First slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.bottom2", "choice", "guild", "Second slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.bottom3", "choice", "none", "Third slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.bottom4", "choice", "none", "Fourth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.bottom5", "choice", "none", "Fifth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.bottom6", "choice", "none", "Sixth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		"Look",
 		S("datapanels.font", "choice", "sans", "Font", "Flat UI Sans is IBM Plex Sans. A language it has no letters for keeps the game font.", { choices = { { "sans", "Flat UI Sans" }, { "game", "Game font" } } }),
 		S("datapanels.textSize", "number", 100, "Text size", "100% is 12 px.", { min = 50, max = 200, step = 5, unit = "%" }),
 		S("datapanels.background", "bool", true, "Background and border", "A flat background with a thin border and a line between two slots, in the colours of the Flat UI page."),
-		S("datapanels.tooltips", "bool", true, "Tooltips", "Off: the panels let clicks through, except a slot that shows another addon's feed, which keeps its own clicks."),
+		S("datapanels.tooltips", "bool", true, "Tooltips", "Off: the panels let clicks through, except Equipment set and a slot that shows another addon's feed, which keep their own clicks."),
 		"Gold",
 		S("datapanels.forgetGold", "list", 0, "Forget a character's gold", "The gold tooltip lists each character of the account that logged in with data panels on."),
 	} },
@@ -11267,6 +11310,10 @@ local PAGES = {
 		S("tooltip.x", "number", 16, "X offset", "Positive moves the tooltip right when it follows the cursor.", { min = -200, max = 200, step = 1, unit = "" }),
 		S("tooltip.y", "number", 16, "Y offset", "Positive moves the tooltip up when it follows the cursor.", { min = -200, max = 200, step = 1, unit = "" }),
 		S("tooltip.scope", "choice", "common", "Applies to", nil, { choices = TOOLTIP_SCOPES }),
+	} },
+	{ key = "mount", label = "Mount key", rows = {
+		S("mount.enabled", "bool", false, "Mount key", "Bind a key to Mount or travel form under Flat UI in the game's Key Bindings. It mounts a random mount you can ride; a druid takes Aquatic Form in water, and Travel Form in a fight, on the move or with no mount; a shaman takes Ghost Wolf in a fight or with no mount. Pressed again, it dismounts or leaves the form."),
+		S("mount.favourites", "bool", true, "Favourite mounts first", "Picks among the mounts you marked as favourites in the mount journal (right-click a mount there), or among all of them while none of those can be used."),
 	} },
 	{ key = "fade", label = "Fading", rows = {
 		S("fade.enabled", "bool", false, "Fade frames when idle"),
@@ -11439,7 +11486,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.7" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.8" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -21698,12 +21745,19 @@ for _, path in ipairs({ "chat.webLinks", "chat.linkTips", "chat.classLine", "cha
 	"general.cursorRing", "general.cursorRingSize", "general.cursorRingColour", "unitframes.hitNumbers", "chat.compareShift" }) do
 	covered[path] = true
 end
--- Nor do the rows of wave 5 (0.5.7), for the same reason.
+-- Nor do the rows of waves 5 and 6 (0.5.7 and 0.5.8), for the same reason.
 for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.rows", "threat.barWidth", "threat.barHeight",
 	"cooldowns.addItem", "cooldowns.removeItem", "cooldowns.iconSound", "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint",
 	"cooldowns.powerColour", "pulse.enabled", "pulse.minimum", "pulse.ignore", "pulse.unignore", "pulse.size", "pulse.time", "pulse.sound", "castbars.interrupt", "castbars.interruptReady", "castbars.interruptCooling", "cooldowns.interruptGlow",
 	"combattext.noTarget", "combattext.noTargetFriendly", "combattext.noTargetSound", "combattext.noTargetColour", "combattext.noTargetSize",
-	"combattext.combatState", "combattext.combatEnterColour", "combattext.combatLeaveColour", "combattext.combatStateSize" }) do
+	"combattext.combatState", "combattext.combatEnterColour", "combattext.combatLeaveColour", "combattext.combatStateSize",
+	"unitframes.dispelBorder", "unitframes.dispelIcon", "unitframes.raidFrameMarker",
+	"healermana.enabled", "healermana.show", "healermana.rows", "healermana.barWidth", "healermana.barHeight",
+	"hud.zoneTitle", "hud.subzoneTitle", "hud.talkingHead",
+	"consumables.enabled", "consumables.drink", "consumables.manaPotion", "consumables.health", "consumables.food",
+	"mount.enabled", "mount.favourites", "trackers.click",
+	"grouptools.enabled", "grouptools.show", "grouptools.marks", "grouptools.readyCheck", "grouptools.rolePoll", "grouptools.pull", "grouptools.pullTime",
+	"grouptools.size", "grouptools.spacing", "grouptools.layout" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -63398,11 +63452,11 @@ function PT.runBuild()
 	-- 2. The left-hand side ---------------------------------------------------------------------------------------------
 	do
 		local W = PT.open()
-		-- The sidebar: four fixed rows, then six groups with the 25 modules. The page that is open has its sections under it and its tabs after.
+		-- The sidebar: four fixed rows, then six groups with the 29 modules. The page that is open has its sections under it and its tabs after.
 		local GROUPS = { { "Look", { "Flat UI", "Fonts" } }, { "Frames", { "Unit frames", "Nameplates", "Personal resource display", "Cast bars", "Swing timers" } },
-			{ "Action bars", { "Action bars", "Bar block", "Bar blocks" } },
-			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Combat text" } },
-			{ "Interface", { "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels" } }, { "Layout", { "Movers", "Fading", "Tooltip" } } }
+			{ "Action bars", { "Action bars", "Bar block", "Bar blocks", "Mount key" } },
+			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Healer mana", "Group tools", "Combat text" } },
+			{ "Interface", { "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Drink and health macros", "Data panels" } }, { "Layout", { "Movers", "Fading", "Tooltip" } } }
 		local expected = { "Home", "Flat UI setup", "Profiles", "Move frames" }
 		for _, group in ipairs(GROUPS) do
 			expected[#expected + 1] = group[1]
@@ -67178,7 +67232,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 58 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 58 and rows == 1039 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1068 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67492,7 +67546,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 982 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 989 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -69417,11 +69471,11 @@ end
 function PT.runNav()
 	local clean, joined, need = PT.clean, PT.joined, PT.need
 	local N = {}
-	N.keys = { "general", "fonts", "unitframes", "nameplates", "resource", "castbars", "swing", "actionbars", "barblock", "blocks", "cooldowns", "trackers", "defensives",
-		"partycd", "enemycd", "threat", "combattext", "hud", "windows", "chat", "errands", "datapanels", "movers", "fade", "tooltip" }
+	N.keys = { "general", "fonts", "unitframes", "nameplates", "resource", "castbars", "swing", "actionbars", "barblock", "blocks", "mount", "cooldowns", "trackers", "defensives",
+		"partycd", "enemycd", "threat", "healermana", "grouptools", "combattext", "hud", "windows", "chat", "errands", "consumables", "datapanels", "movers", "fade", "tooltip" }
 	N.names = { "Home", "Flat UI setup", "Profiles", "Move frames", "Look", "Flat UI", "Fonts", "Frames", "Unit frames", "Nameplates", "Personal resource display", "Cast bars",
-		"Swing timers", "Action bars", "Action bars", "Bar block", "Bar blocks", "Combat", "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns",
-		"Threat list", "Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Data panels", "Layout", "Movers", "Fading", "Tooltip" }
+		"Swing timers", "Action bars", "Action bars", "Bar block", "Bar blocks", "Mount key", "Combat", "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns",
+		"Threat list", "Healer mana", "Group tools", "Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Drink and health macros", "Data panels", "Layout", "Movers", "Fading", "Tooltip" }
 	N.known = {}
 	for _, name in ipairs(N.names) do N.known[name] = true end
 	N.scroll = function(W) return PT.clips(W, PT.nav(W)[1].raw)[1] end
@@ -69577,8 +69631,8 @@ function PT.runNav()
 		local W = PT.world({ firstStart = true })
 		local ns = W.ns
 		ns.OpenPanel()
-		local subtitle = ("%d of 25 modules on"):format(N.on(ns))
-		check("window nav: the first time the window opens on Home, and says how many of the 25 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
+		local subtitle = ("%d of 29 modules on"):format(N.on(ns))
+		check("window nav: the first time the window opens on Home, and says how many of the 29 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
 			and (W.env.FlatUIDB.panel == nil or W.env.FlatUIDB.panel.page == nil), subtitle .. " " .. tostring(PT.title(W)))
 		PT.go(W, "Nameplates")
 		check("window nav: a page chosen is kept in FlatUIDB.panel and in no profile", W.env.FlatUIDB.panel.page == "nameplates" and W.env.FlatUIDB.profiles[ns.Profile()].options.page == nil)
@@ -69787,14 +69841,14 @@ function PT.runNav()
 		for _, text in ipairs(N.texts(W)) do
 			if text == "Defaults" or text:find("^%d+ changed$") then states = states + 1 end
 		end
-		check("window nav: 25 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 25 and N.has(W, ("%d on"):format(N.on(ns))), states)
+		check("window nav: 29 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 29 and N.has(W, ("%d on"):format(N.on(ns))), states)
 		check("window nav: Flat UI and Swing timers are at their defaults", N.state(W, "Flat UI") == "Defaults" and N.state(W, "Swing timers") == "Defaults")
 		local tile = N.tile(W, "Nameplates")
 		local switch = N.switchOf(W, tile)
 		check("window nav: a tile has the icon, the name, the state and the switch of the module; Flat UI has none", tile ~= nil and switch ~= nil and N.track(switch) == "9a9cf0" and N.switchOf(W, N.tile(W, "Flat UI")) == nil)
 		PT.press(W, switch)
 		check("window nav: the switch of a tile turns the module off, and Home says one module fewer", ns.Get("nameplates.enabled") == false and N.track(switch) == "353a31"
-			and N.has(W, ("%d of 25 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
+			and N.has(W, ("%d of 29 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
 		PT.press(W, switch)
 		ns.Set("swing.enabled", false)
 		ns.Set("general.thickness", 2)
@@ -70006,7 +70060,7 @@ function PT.runNav()
 		for _, key in ipairs(N.keys) do
 			if ns.PanelNav.CELLS[key] == nil then missing[#missing + 1] = key end
 		end
-		check("window nav: the 25 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 8 atlas", count == 35 and high == 34 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
+		check("window nav: the 29 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 8 atlas", count == 39 and high == 38 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
 		local texture = PT.window(W):CreateTexture(nil, "ARTWORK", nil, 0)
 		ns.PanelNav.Cell(texture, "home")
 		local tc = W.rawOf[texture].texCoord
@@ -70134,11 +70188,11 @@ function PT.runTabs()
 			local got = joined(PT.tabTexts(W))
 			if got ~= item[2] then bad[#bad + 1] = item[1] .. ": " .. got end
 		end
-		for _, name in ipairs({ "Fonts", "Swing timers", "Bar block", "Bar blocks", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Combat text", "Movers", "Fading", "Tooltip" }) do
+		for _, name in ipairs({ "Fonts", "Swing timers", "Bar block", "Bar blocks", "Mount key", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Healer mana", "Group tools", "Combat text", "Drink and health macros", "Movers", "Fading", "Tooltip" }) do
 			PT.go(W, name)
 			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
 		end
-		check("window tabs: the 39 child pages are the tabs of twelve modules, in the order of the design, and the other twelve modules have none", children == 39 and #bad == 0, children .. " " .. joined(bad))
+		check("window tabs: the 39 child pages are the tabs of twelve modules, in the order of the design, and the other sixteen modules have none", children == 39 and #bad == 0, children .. " " .. joined(bad))
 		PT.go(W, "Nameplates")
 		PT.go(W, "Health bar")
 		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil
@@ -97837,7 +97891,7 @@ do
 			and row.label == "Glow on the action button" and section == "Proc alerts" and W.ns.Get("trackers.glow") == true)
 		check("procglow: the row has a tip that names Restyle action bars", row ~= nil and type(row.tip) == "string" and row.tip:find("Restyle action bars", 1, true) ~= nil)
 		check("procglow: the row calls ProcGlowChanged, which exists", row ~= nil and row.changed == "ProcGlowChanged" and type(W.ns.ProcGlowChanged) == "function")
-		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 26 and (function()
+		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 30 and (function()
 			local at = {}
 			for i, file in ipairs(FILES) do
 				at[file] = i
@@ -105282,7 +105336,8 @@ do
 		check("useaction: movers: and the secure frame that could not be made is asked for once, not at every check", X.handlerTries == 1, tostring(X.handlerTries))
 	end
 	do
-		-- Flat UI writes five globals, all named for it; a source scan with luac lists them.
+		-- Flat UI writes five globals, all named for it; a source scan with luac lists them. The Mount key also names its binding for the game's Key
+		-- Bindings window (BINDING_NAME_CLICK FlatUIMountButton:LeftButton, through _G, which this scan does not see) and its button FlatUIMountButton.
 		local luac = os.getenv("FLATUI_LUAC")
 		if not luac then
 			for _, name in ipairs({ "luac5.4", "luac" }) do
@@ -108076,7 +108131,7 @@ do
 		end
 		check("abfx: the wizard has the step Glows and animations right after Button colours and cooldowns, built, with the six settings", found ~= nil and steps[found - 1].id == "ab-colours" and steps[found].title == "Glows and animations"
 			and steps[found].area == "Action bars" and steps[found].built == true and #steps[found].rows == 6, tostring(found))
-		check("abfx: it is no module", #W.ns.MODULE_ORDER == 26)
+		check("abfx: it is no module", #W.ns.MODULE_ORDER == 30)
 		local toc = {}
 		for line in io.open(ADDON_DIR .. "/FlatUI.toc", "rb"):read("*a"):gmatch("[^\r\n]+") do
 			if line:match("%.lua$") then
