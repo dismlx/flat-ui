@@ -29,7 +29,7 @@ local _, ns = ...
 -- countdown out of a group or unless the player is the leader or an assistant; the role poll also in a group the dungeon finder made
 -- (HasLFGRestrictions) and in a battleground. An answer the game withholds (UnitIsGroupLeader and UnitIsGroupAssistant may be secret,
 -- UnitDocumentation.lua:2023-2055) greys nothing and is not read: the click lets the game decide, and the game refuses what it does not allow.
--- The greying follows the group, its leader and the target (GROUP_ROSTER_UPDATE, PARTY_LEADER_CHANGED, PARTY_LFG_RESTRICTED:
+-- The greying follows the group, its leader and the target while the row shows (GROUP_ROSTER_UPDATE, PARTY_LEADER_CHANGED, PARTY_LFG_RESTRICTED:
 -- PartyInfoDocumentation.lua:680, 784, 790; PLAYER_TARGET_CHANGED: UnitDocumentation.lua:3976). Pointing at a button writes its lines in
 -- GameTooltip (SetOwner on the icon, SetText, AddLine, Show, and Hide when the mouse leaves), as the data panels do.
 -- Adapted from the Mark Bar of the data panels and the Group Tools panel of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
@@ -90,7 +90,8 @@ SPECS[#SPECS + 1] = { kind = "pull", row = "pull", group = 2 }
 local IsSecret = ns.IsSecret
 -- panel: the frame of the row. buttons: one entry for each of SPECS, { kind, row, group, marker, frame (the icon), art, text (the countdown's
 -- number), outline, cover (the secure button over the icon; none for the role poll), usable, why, hover, seconds }. placed: the spot the row
--- was put at. queued: a change waits for the end of a fight. broken: the game made no secure button.
+-- was put at. laid: the buttons, size, spacing and layout the row was laid out for. queued: a change waits for the end of a fight. broken: the
+-- game made no secure button.
 local G = { buttons = {}, queued = false, broken = false }
 ns.GroupTools = G
 
@@ -383,9 +384,21 @@ end
 -- Laying out ----------------------------------------------------------------------------------------------------------------------------------
 
 -- Puts the buttons of the list in a row, in a column, or the markers above the rest, each secure button on the very spot of its icon, hides the
--- others and sizes the row to them.
+-- others and sizes the row to them. A layout already in place is left as it is, as Threat.lua leaves its own: GROUP_ROSTER_UPDATE says nothing
+-- of what changed (it has no payload, PartyInfoDocumentation.lua:678-682), and most changes of a group leave the same buttons at the same size.
+-- Only the countdown's number is given its height each time, one call: Fonts, which starts after this module at login (MODULE_ORDER in
+-- Core.lua), may set the font object of the number again (Fonts.lua:159-194), and a string can take its font object's height back, as it does
+-- from a new font object (CombatText.lua:630-631).
 function G.Layout(list)
 	local size, spacing, layout = Number("size", BOX_H), Number("spacing", 3), Opt("layout")
+	local pull = G.Entry("pull")
+	if pull and pull.text then
+		pull.text:SetTextHeight(math.max(8, math.floor(size / 2 + 0.5)))
+	end
+	local key = ("%s|%s|%s|%s"):format(table.concat(list, ","), size, spacing, tostring(layout))
+	if G.laid == key then
+		return
+	end
 	local shown = {}
 	local x, y, width, height, last = 0, 0, 0, 0, nil
 	for _, index in ipairs(list) do
@@ -419,14 +432,11 @@ function G.Layout(list)
 		end
 	end
 	G.panel:SetSize(math.max(1, width), math.max(1, height))
-	local pull = G.Entry("pull")
-	if pull and pull.text then
-		pull.text:SetTextHeight(math.max(8, math.floor(size / 2 + 0.5)))
-	end
+	G.laid = key
 end
 
--- The countdown's button counts down Countdown length, and its number says how long. The attribute is written out of combat only, and only when
--- the length changed.
+-- The countdown's button counts down Countdown length, and its number says how long. The attribute and the number are written out of combat
+-- only, and only when the length changed.
 function G.Countdown()
 	local entry = G.Entry("pull")
 	if not entry then
@@ -436,9 +446,9 @@ function G.Countdown()
 	if entry.seconds ~= seconds then
 		entry.cover:SetAttribute("macrotext", "/countdown " .. seconds)
 		entry.seconds = seconds
-	end
-	if entry.text then
-		entry.text:SetText(tostring(seconds))
+		if entry.text then
+			entry.text:SetText(tostring(seconds))
+		end
 	end
 end
 
@@ -525,9 +535,15 @@ function G.Shade(entry)
 end
 
 -- Greys the buttons that cannot work now, and writes again the tooltip of the one under the mouse. Only the icons change, which are no secure
--- frames, so this runs in a fight too.
+-- frames, so this runs in a fight too. A hidden row is left as it is: it shows only in G.Lay, which G.Apply follows with this, so a target
+-- changed or a fight ended while it is hidden asks the game only IsShown. IsShown has no restriction, in a fight too, and its answer is secret
+-- only for a frame shown with a secret value (SimpleFrameAPIDocumentation.lua:914-926, 1484-1488); a withheld answer paints.
 function G.Paint()
 	if not G.panel then
+		return
+	end
+	local asked, shown = pcall(G.panel.IsShown, G.panel)
+	if asked and not IsSecret(shown) and shown == false then
 		return
 	end
 	local grouped, raid, lead = G.State()
@@ -631,7 +647,7 @@ end
 -- The module ---------------------------------------------------------------------------------------------------------------------------------
 
 function G.Refresh()
-	G.placed = nil
+	G.placed, G.laid = nil, nil
 	G.Apply()
 end
 
