@@ -10447,6 +10447,8 @@ local PAGES = {
 		S("trackers.without", "choice", "last", "In fights without the game's icon", nil, { choices = { { "last", "Last known" }, { "hidden", "Hidden" } } }),
 		"Action buttons",
 		S("trackers.mark", "bool", false, "Mark action buttons", "A red border on the action button that fixes a low or missing tracker. Needs Restyle action bars."),
+		"Clicks",
+		S("trackers.click", "choice", "group", "Click to apply", "Out of combat, a click on a tracker that needs it: a group buff is cast on a member who lacks it, an item is used, a poison, stone or oil goes on the weapon. /flatui tracker use 1 and an item sets what a weapon tracker uses.", { choices = { { "none", "Off" }, { "group", "Group buffs" }, { "all", "Group buffs, items and weapons" } } }),
 		"Proc alerts",
 		S("trackers.addProc", "list", 0, "Add a proc", "For another spell, type /flatui tracker add proc and its name."),
 		S("trackers.removeProc", "list", 0, "Remove a proc"),
@@ -21738,7 +21740,7 @@ for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.
 	"healermana.enabled", "healermana.show", "healermana.rows", "healermana.barWidth", "healermana.barHeight",
 	"hud.zoneTitle", "hud.subzoneTitle", "hud.talkingHead",
 	"consumables.enabled", "consumables.drink", "consumables.manaPotion", "consumables.health", "consumables.food",
-	"mount.enabled", "mount.favourites" }) do
+	"mount.enabled", "mount.favourites", "trackers.click" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67213,7 +67215,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 61 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 61 and rows == 1057 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 61 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 61 and rows == 1058 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67527,7 +67529,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 988 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 989 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)

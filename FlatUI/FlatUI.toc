@@ -57,6 +57,8 @@ ProcGlow.lua
 ButtonEffects.lua
 ProcTriggers.lua
 TrackerShare.lua
+TrackerGroup.lua
+TrackerClicks.lua
 Pulse.lua
 BagSort.lua
 Windows.lua

@@ -1793,6 +1793,15 @@ local function Fill(entry, reading)
 	return 1
 end
 
+-- The count a kind writes itself, while the page shows charges: text such as "2/5" for a group buff (TrackerGroup.lua), or nil.
+function K.KindCount(kind, entry, reading, how)
+	if not (kind and type(kind.Count) == "function" and Value(entry, "counts")) then
+		return nil
+	end
+	local ok, text = pcall(kind.Count, entry, reading, how)
+	return ok and Plain(text, "string") and text ~= "" and text or nil
+end
+
 -- What the frame of a tracker shows: icon, tint, count, sweep, rim, word and pulse, and for a bar or text the name, the fill and the
 -- seconds left. A fill of nil keeps the fill drawn last.
 local function Looks(entry, reading, how)
@@ -1826,6 +1835,9 @@ local function Looks(entry, reading, how)
 		look.rim = true
 		look.pulse = Value(entry, "missing") == "pulse"
 		look.word = Value(entry, "missing") == "word"
+		-- A kind may count what is missing, such as the members who lack a group buff.
+		look.count = K.KindCount(kind, entry, reading, how)
+		look.countRed = look.count ~= nil
 		return look
 	end
 	look.icon = reading.icon or EntryIcon(entry)
@@ -1848,6 +1860,7 @@ local function Looks(entry, reading, how)
 			look.count = ("%d"):format(reading.count)
 		end
 	end
+	look.count = K.KindCount(kind, entry, reading, how) or look.count
 	if how ~= "last" and reading.expires and reading.length then
 		look.sweep, look.start, look.length = "set", reading.expires - reading.length, reading.length
 	end
@@ -2006,6 +2019,10 @@ local function Draw(entry, reading)
 	-- A border on the action button that fixes a low or missing tracker (TrackerMarks.lua).
 	if ns.TrackerMarkStep then
 		ns.TrackerMarkStep(entry, reading, how)
+	end
+	-- Out of combat, the secure button of a click that fixes the tracker (TrackerClicks.lua).
+	if ns.TrackerClickStep then
+		ns.TrackerClickStep(entry, reading, how, record, fighting)
 	end
 end
 
@@ -2421,6 +2438,9 @@ local function Pass()
 	if ns.TrackerMarkSweep then
 		ns.TrackerMarkSweep(entries)
 	end
+	if ns.TrackerClickSweep then
+		ns.TrackerClickSweep(entries)
+	end
 	if #entries == 0 then
 		return
 	end
@@ -2616,7 +2636,8 @@ end
 -- hooks of a kind that has more to show: slot = { unit, filter } for the game's own icon of the kind, noLast (no last reading is shown: "none"
 -- in its place), noDrop (no sound for a drop), last (laid out after the other trackers), Hide(entry, reading, how) -> true to draw nothing,
 -- Wanted(entry, state, how, fighting) -> 0 or 1 ahead of the rules of Show (fighting: whether the trackers are in a fight), Rim(entry, reading,
--- how) -> red, green, blue for the rim of a tracker that is up, Changed(entry, before, after) after a change of the state that was kept, Gone(id)
+-- how) -> red, green, blue for the rim of a tracker that is up, Count(entry, reading, how) -> the text of its count in place of the number, drawn
+-- on the missing look too, Changed(entry, before, after) after a change of the state that was kept, Gone(id)
 -- when a tracker is no longer on, World() when the player enters the world or the spells change, Test(entry, on) -> a line, for a test of 5
 -- seconds instead of the three looks, own = { key = fn } for the kind's own test of an own value, and part = the name of the part of the module
 -- the kind's calls are isolated in }. A reading is { state = "fine" | "low" | "missing" | "unknown", hidden, count, expires, length, icon, id }.
@@ -3248,6 +3269,11 @@ local function EntryLines(index, entry)
 	if ns.TrackerMarkLine then
 		lines[#lines + 1] = "   " .. ns.TrackerMarkLine(entry)
 	end
+	-- A kind that takes a click while Click to apply lets it says what a click does (TrackerClicks.lua); the others have no line.
+	local click = ns.TrackerClickLine and ns.TrackerClickLine(entry)
+	if Plain(click, "string") then
+		lines[#lines + 1] = "   " .. click
+	end
 	local own = Own(entry)
 	if own ~= "" then
 		lines[#lines + 1] = "   Own settings: " .. own .. "."
@@ -3663,6 +3689,12 @@ local function Refresh()
 		HideHolders()
 		if ns.TrackerMarkSweep then
 			ns.TrackerMarkSweep()
+		end
+		-- The secure buttons of the clicks are freed out of combat (TrackerClicks.lua); in a fight they are off their trackers already.
+		if ns.TrackerClickSweep then
+			ns.OutOfCombat(function()
+				ns.TrackerClickSweep()
+			end)
 		end
 	else
 		for _, record in ipairs(shown) do

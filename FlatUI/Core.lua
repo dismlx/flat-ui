@@ -67,6 +67,8 @@ local ADDON_NAME, ns = ...
 -- Mount key (off by default) makes one secure button, FlatUIMountButton, once a key is bound to it in the game's Key Bindings (Bindings.xml names the
 -- binding, BINDING_NAME_CLICK FlatUIMountButton:LeftButton), writes its type and macrotext only out of combat and takes them away when off; it writes
 -- no binding or macro.
+-- Trackers lays secure buttons of its own (SecureActionButtonTemplate) over its icons, given attributes only out of combat; each leaves its icon at
+-- PLAYER_REGEN_DISABLED (Hide, ClearAllPoints, SetParent UIParent), and writes its tooltip in GameTooltip.
 -- Cooldown pulse (off by default) is a frame of its own on UIParent that takes no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
 -- The combat alerts of Combat text (No target, +Combat and -Combat; off by default) are font strings on a frame of its own; they change nothing.

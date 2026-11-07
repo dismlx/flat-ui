@@ -20,6 +20,8 @@ local K = {
 	RED = { 0.851, 0.251, 0.251 }, GREY = { 0.6, 0.6, 0.6 }, BLUE = { 0.302, 0.6, 0.902 },
 	WHITE = "Interface\\Buttons\\WHITE8X8", FONT = "GameFontHighlightSmall",
 	PAD = 3, GAP = 4, TICK = 0.25, SAMPLE_COUNT = "20", SAMPLE_TIME = "10:00",
+	-- The widest count of a group buff tracker (TrackerGroup.lua): how many of a full raid lack the buff.
+	SAMPLE_GROUP = "40/40",
 	REFUSED = {
 		bar = "Trackers: the game refused a bar, so a tracker set to Bar is drawn as an icon.",
 		text = "Trackers: the game refused a text plate, so a tracker set to Text is drawn as an icon.",
@@ -189,7 +191,7 @@ function Shapes.Size(entry, shape)
 			Add(ns.TrackerLabel(entry))
 		end
 		if value(entry, "counts") and entry.charged then
-			Add(K.SAMPLE_COUNT)
+			Add(entry.kind == "group" and K.SAMPLE_GROUP or K.SAMPLE_COUNT)
 		end
 		if value(entry, "numbers") then
 			Add(K.SAMPLE_TIME)
@@ -238,7 +240,8 @@ function Shapes.Fit(record, entry)
 	end
 	if shape == "bar" then
 		-- The name stops before the strings on the right.
-		local room = ns.Get(KEY .. ".barWidth") - K.PAD * 2 - K.GAP * 2 - Width(K.SAMPLE_COUNT, size) - Width(K.SAMPLE_TIME, size)
+		local room = ns.Get(KEY .. ".barWidth") - K.PAD * 2 - K.GAP * 2 - Width(entry.kind == "group" and K.SAMPLE_GROUP or K.SAMPLE_COUNT, size)
+			- Width(K.SAMPLE_TIME, size)
 		part.name:SetWidth(math.max(1, math.floor(room)))
 	end
 	part.row = nil

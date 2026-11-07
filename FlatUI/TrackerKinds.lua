@@ -221,13 +221,19 @@ local function Read(entry)
 end
 
 -- True when the entry is a weapon tracker with a slot of the three; the name is the slot's own when none was given, and the spells that put
--- the enchant on are whole numbers.
+-- the enchant on are whole numbers. The item or spell a click uses (use, useSpell: /flatui tracker use, TrackerClicks.lua) is a whole number too.
 local function Clean(entry)
 	if not K.SLOTS[entry.slot] then
 		return false
 	end
 	if not (type(entry.name) == "string" and #entry.name >= 1 and #entry.name <= K.MAX_NAME) then
 		entry.name = K.SLOTS[entry.slot].name
+	end
+	for _, key in ipairs({ "use", "useSpell" }) do
+		local id = entry[key]
+		if id ~= nil and not (type(id) == "number" and id >= 1 and id <= K.MAX_ID and id == math.floor(id)) then
+			entry[key] = nil
+		end
 	end
 	if entry.apply ~= nil then
 		local apply, seen = {}, {}
@@ -1981,16 +1987,43 @@ PICKS[#PICKS + 1] = { "ammo", "", I.NAMES.ammo }
 PICKS[#PICKS + 1] = { "tracking", "", I.NAMES.tracking }
 PICKS[#PICKS + 1] = { "durability", "", I.NAMES.durability }
 
+-- The checks a kind of another file adds, after the ones here: each fn gives { { kind, argument, name }, ... } when the list is read, so a check
+-- can depend on the class and the spells known (TrackerGroup.lua). The numbers of the checks here never change.
+local MORE = {}
+function ns.TrackerAddPicks(fn)
+	if type(fn) ~= "function" then
+		return false
+	end
+	MORE[#MORE + 1] = fn
+	return true
+end
+
+local function AllPicks()
+	local all = {}
+	for _, pick in ipairs(PICKS) do
+		all[#all + 1] = pick
+	end
+	for _, fn in ipairs(MORE) do
+		local ok, rows = pcall(fn)
+		for _, row in ipairs(ok and type(rows) == "table" and rows or {}) do
+			if type(row) == "table" and type(row[1]) == "string" and type(row[2]) == "string" and type(row[3]) == "string" then
+				all[#all + 1] = row
+			end
+		end
+	end
+	return all
+end
+
 function ns.TrackerOtherCandidates()
 	local rows = {}
-	for number, pick in ipairs(PICKS) do
+	for number, pick in ipairs(AllPicks()) do
 		rows[#rows + 1] = { number, pick[3] }
 	end
 	return rows
 end
 
 function ns.TrackerAddOther(number)
-	local pick = type(number) == "number" and PICKS[number]
+	local pick = type(number) == "number" and AllPicks()[number]
 	if not pick then
 		return false, "Not added."
 	end

@@ -808,6 +808,7 @@ ns.SETUP_STEPS = {
 		{ "trackers.gameIcon", "o", "behaviour", "Uses the game's own icon in fights; with it off, charges and time left stop updating in a fight." },
 		{ "trackers.without", "o", "behaviour", "Chooses what a tracker shows in a fight when the game gives no icon: the last known state or nothing." },
 		{ "trackers.mark", "o", "mock-action-row" },
+		{ "trackers.click", "o", "behaviour", "Chooses which trackers a click fixes out of combat: group buffs, and items and weapon enchants." },
 	} },
 	{ id = "tr-look", area = "Trackers", title = "Tracker look and position", draw = "mock-tracker", built = true, rows = {
 		{ "trackers.shape", "c", "mock-tracker" },
