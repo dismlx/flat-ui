@@ -46,6 +46,7 @@ PartySync.lua
 EnemyCooldowns.lua
 Threat.lua
 HealerMana.lua
+GroupTools.lua
 OwnBuffs.lua
 TrackerShapes.lua
 TrackerKinds.lua

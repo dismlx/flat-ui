@@ -10576,6 +10576,21 @@ local PAGES = {
 		S("healermana.barWidth", "number", 150, "Bar width", nil, { min = 100, max = 400, step = 5, unit = " px" }),
 		S("healermana.barHeight", "number", 16, "Bar height", "Also the height of text.", { min = 10, max = 30, step = 1, unit = " px" }),
 	} },
+	{ key = "grouptools", label = "Group tools", rows = {
+		S("grouptools.enabled", "bool", false, "Show the group tools", "A row of buttons: the eight raid markers and a clear for your target, a ready check, a role poll and a pull countdown. /flatui move places it."),
+		"When it shows",
+		S("grouptools.show", "choice", "group", "Show", "A button you cannot use now is greyed, and its tooltip says why.", { choices = { { "group", "In a group" }, { "lead", "As the leader or an assistant" }, { "always", "In a group or alone" } } }),
+		"Buttons",
+		S("grouptools.marks", "bool", true, "Raid markers", "Left-click puts a marker on your target or takes it off, right-click takes it off. In a raid only the leader and assistants can mark."),
+		S("grouptools.readyCheck", "bool", true, "Ready check", "Only the leader or an assistant can start one."),
+		S("grouptools.rolePoll", "bool", true, "Role poll", "Asks everyone to pick a role. Only the leader or an assistant can start one."),
+		S("grouptools.pull", "bool", true, "Pull countdown", "Left-click counts down for the group, right-click stops it. Only the leader or an assistant can start one."),
+		S("grouptools.pullTime", "number", 10, "Countdown length", nil, { min = 3, max = 60, step = 1, unit = " s", needs = "grouptools.pull" }),
+		"Look",
+		S("grouptools.size", "number", 24, "Icon size", nil, { min = 16, max = 40, step = 2, unit = "" }),
+		S("grouptools.spacing", "number", 3, "Spacing", nil, { min = 0, max = 12, step = 1, unit = "" }),
+		S("grouptools.layout", "choice", "row", "Layout", nil, { choices = { { "row", "In a row" }, { "rows", "Markers above the rest" }, { "column", "In a column" } } }),
+	} },
 	{ key = "windows", label = "Windows", rows = {
 		S("windows.enabled", "bool", true, "Restyle windows", RELOAD),
 		"Look",
@@ -21740,7 +21755,9 @@ for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.
 	"healermana.enabled", "healermana.show", "healermana.rows", "healermana.barWidth", "healermana.barHeight",
 	"hud.zoneTitle", "hud.subzoneTitle", "hud.talkingHead",
 	"consumables.enabled", "consumables.drink", "consumables.manaPotion", "consumables.health", "consumables.food",
-	"mount.enabled", "mount.favourites", "trackers.click" }) do
+	"mount.enabled", "mount.favourites", "trackers.click",
+	"grouptools.enabled", "grouptools.show", "grouptools.marks", "grouptools.readyCheck", "grouptools.rolePoll", "grouptools.pull", "grouptools.pullTime",
+	"grouptools.size", "grouptools.spacing", "grouptools.layout" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -63435,10 +63452,10 @@ function PT.runBuild()
 	-- 2. The left-hand side ---------------------------------------------------------------------------------------------
 	do
 		local W = PT.open()
-		-- The sidebar: four fixed rows, then six groups with the 28 modules. The page that is open has its sections under it and its tabs after.
+		-- The sidebar: four fixed rows, then six groups with the 29 modules. The page that is open has its sections under it and its tabs after.
 		local GROUPS = { { "Look", { "Flat UI", "Fonts" } }, { "Frames", { "Unit frames", "Nameplates", "Personal resource display", "Cast bars", "Swing timers" } },
 			{ "Action bars", { "Action bars", "Bar block", "Bar blocks", "Mount key" } },
-			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Healer mana", "Combat text" } },
+			{ "Combat", { "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Healer mana", "Group tools", "Combat text" } },
 			{ "Interface", { "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Drink and health macros", "Data panels" } }, { "Layout", { "Movers", "Fading", "Tooltip" } } }
 		local expected = { "Home", "Flat UI setup", "Profiles", "Move frames" }
 		for _, group in ipairs(GROUPS) do
@@ -67215,7 +67232,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 61 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 61 and rows == 1058 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1068 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -69455,10 +69472,10 @@ function PT.runNav()
 	local clean, joined, need = PT.clean, PT.joined, PT.need
 	local N = {}
 	N.keys = { "general", "fonts", "unitframes", "nameplates", "resource", "castbars", "swing", "actionbars", "barblock", "blocks", "mount", "cooldowns", "trackers", "defensives",
-		"partycd", "enemycd", "threat", "healermana", "combattext", "hud", "windows", "chat", "errands", "consumables", "datapanels", "movers", "fade", "tooltip" }
+		"partycd", "enemycd", "threat", "healermana", "grouptools", "combattext", "hud", "windows", "chat", "errands", "consumables", "datapanels", "movers", "fade", "tooltip" }
 	N.names = { "Home", "Flat UI setup", "Profiles", "Move frames", "Look", "Flat UI", "Fonts", "Frames", "Unit frames", "Nameplates", "Personal resource display", "Cast bars",
 		"Swing timers", "Action bars", "Action bars", "Bar block", "Bar blocks", "Mount key", "Combat", "Cooldowns", "Trackers", "Defensives on you", "Party cooldowns", "Enemy cooldowns",
-		"Threat list", "Healer mana", "Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Drink and health macros", "Data panels", "Layout", "Movers", "Fading", "Tooltip" }
+		"Threat list", "Healer mana", "Group tools", "Combat text", "Interface", "Minimap and buffs", "Windows", "Chat and tooltips", "Errands", "Drink and health macros", "Data panels", "Layout", "Movers", "Fading", "Tooltip" }
 	N.known = {}
 	for _, name in ipairs(N.names) do N.known[name] = true end
 	N.scroll = function(W) return PT.clips(W, PT.nav(W)[1].raw)[1] end
@@ -69614,8 +69631,8 @@ function PT.runNav()
 		local W = PT.world({ firstStart = true })
 		local ns = W.ns
 		ns.OpenPanel()
-		local subtitle = ("%d of 28 modules on"):format(N.on(ns))
-		check("window nav: the first time the window opens on Home, and says how many of the 28 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
+		local subtitle = ("%d of 29 modules on"):format(N.on(ns))
+		check("window nav: the first time the window opens on Home, and says how many of the 29 modules are on", PT.title(W) == "Home" and N.count(W, subtitle) == 1 and PT.button(W, "Reset page") == nil
 			and (W.env.FlatUIDB.panel == nil or W.env.FlatUIDB.panel.page == nil), subtitle .. " " .. tostring(PT.title(W)))
 		PT.go(W, "Nameplates")
 		check("window nav: a page chosen is kept in FlatUIDB.panel and in no profile", W.env.FlatUIDB.panel.page == "nameplates" and W.env.FlatUIDB.profiles[ns.Profile()].options.page == nil)
@@ -69824,14 +69841,14 @@ function PT.runNav()
 		for _, text in ipairs(N.texts(W)) do
 			if text == "Defaults" or text:find("^%d+ changed$") then states = states + 1 end
 		end
-		check("window nav: 28 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 28 and N.has(W, ("%d on"):format(N.on(ns))), states)
+		check("window nav: 29 tiles each say Defaults or how many of their settings changed, and the section says how many modules are on", states == 29 and N.has(W, ("%d on"):format(N.on(ns))), states)
 		check("window nav: Flat UI and Swing timers are at their defaults", N.state(W, "Flat UI") == "Defaults" and N.state(W, "Swing timers") == "Defaults")
 		local tile = N.tile(W, "Nameplates")
 		local switch = N.switchOf(W, tile)
 		check("window nav: a tile has the icon, the name, the state and the switch of the module; Flat UI has none", tile ~= nil and switch ~= nil and N.track(switch) == "9a9cf0" and N.switchOf(W, N.tile(W, "Flat UI")) == nil)
 		PT.press(W, switch)
 		check("window nav: the switch of a tile turns the module off, and Home says one module fewer", ns.Get("nameplates.enabled") == false and N.track(switch) == "353a31"
-			and N.has(W, ("%d of 28 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
+			and N.has(W, ("%d of 29 modules on"):format(N.on(ns))) and N.chip(W, "Nameplates") == "Off", tostring(ns.Get("nameplates.enabled")))
 		PT.press(W, switch)
 		ns.Set("swing.enabled", false)
 		ns.Set("general.thickness", 2)
@@ -70043,7 +70060,7 @@ function PT.runNav()
 		for _, key in ipairs(N.keys) do
 			if ns.PanelNav.CELLS[key] == nil then missing[#missing + 1] = key end
 		end
-		check("window nav: the 28 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 8 atlas", count == 38 and high == 37 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
+		check("window nav: the 29 modules, Home, setup, Profiles and seven glyphs each have a cell of their own in the 8 by 8 atlas", count == 39 and high == 38 and #missing == 0, count .. " " .. high .. " " .. joined(missing))
 		local texture = PT.window(W):CreateTexture(nil, "ARTWORK", nil, 0)
 		ns.PanelNav.Cell(texture, "home")
 		local tc = W.rawOf[texture].texCoord
@@ -70171,11 +70188,11 @@ function PT.runTabs()
 			local got = joined(PT.tabTexts(W))
 			if got ~= item[2] then bad[#bad + 1] = item[1] .. ": " .. got end
 		end
-		for _, name in ipairs({ "Fonts", "Swing timers", "Bar block", "Bar blocks", "Mount key", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Healer mana", "Combat text", "Drink and health macros", "Movers", "Fading", "Tooltip" }) do
+		for _, name in ipairs({ "Fonts", "Swing timers", "Bar block", "Bar blocks", "Mount key", "Defensives on you", "Party cooldowns", "Enemy cooldowns", "Threat list", "Healer mana", "Group tools", "Combat text", "Drink and health macros", "Movers", "Fading", "Tooltip" }) do
 			PT.go(W, name)
 			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
 		end
-		check("window tabs: the 39 child pages are the tabs of twelve modules, in the order of the design, and the other fifteen modules have none", children == 39 and #bad == 0, children .. " " .. joined(bad))
+		check("window tabs: the 39 child pages are the tabs of twelve modules, in the order of the design, and the other sixteen modules have none", children == 39 and #bad == 0, children .. " " .. joined(bad))
 		PT.go(W, "Nameplates")
 		PT.go(W, "Health bar")
 		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil
@@ -97874,7 +97891,7 @@ do
 			and row.label == "Glow on the action button" and section == "Proc alerts" and W.ns.Get("trackers.glow") == true)
 		check("procglow: the row has a tip that names Restyle action bars", row ~= nil and type(row.tip) == "string" and row.tip:find("Restyle action bars", 1, true) ~= nil)
 		check("procglow: the row calls ProcGlowChanged, which exists", row ~= nil and row.changed == "ProcGlowChanged" and type(W.ns.ProcGlowChanged) == "function")
-		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 29 and (function()
+		check("procglow: it is no module, and the file loads after ProcArt.lua", #W.ns.MODULE_ORDER == 30 and (function()
 			local at = {}
 			for i, file in ipairs(FILES) do
 				at[file] = i
@@ -108114,7 +108131,7 @@ do
 		end
 		check("abfx: the wizard has the step Glows and animations right after Button colours and cooldowns, built, with the six settings", found ~= nil and steps[found - 1].id == "ab-colours" and steps[found].title == "Glows and animations"
 			and steps[found].area == "Action bars" and steps[found].built == true and #steps[found].rows == 6, tostring(found))
-		check("abfx: it is no module", #W.ns.MODULE_ORDER == 29)
+		check("abfx: it is no module", #W.ns.MODULE_ORDER == 30)
 		local toc = {}
 		for line in io.open(ADDON_DIR .. "/FlatUI.toc", "rb"):read("*a"):gmatch("[^\r\n]+") do
 			if line:match("%.lua$") then

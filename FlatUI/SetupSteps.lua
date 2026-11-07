@@ -1186,4 +1186,16 @@ ns.SETUP_STEPS = {
 		{ "mount.enabled", "c", "behaviour", "Gives you one key in the game's Key Bindings that mounts a random mount or takes a travel form, and dismounts or leaves the form when pressed again." },
 		{ "mount.favourites", "o", "behaviour", "Picks the mount among your favourites while one of them can be used." },
 	} },
+	{ id = "grouptools", area = "Group tools", title = "Group tools", draw = "mock-screen", built = false, rows = {
+		{ "grouptools.enabled", "c", "behaviour", "Shows a row of buttons for raid markers, a ready check, a role poll and a pull countdown, placed with the movers." },
+		{ "grouptools.show", "o", "behaviour", "Chooses whether the buttons show in a group, only while you are its leader or an assistant, or also when you are alone." },
+		{ "grouptools.marks", "o", "behaviour", "Shows the eight raid markers and a clear for your target." },
+		{ "grouptools.readyCheck", "o", "behaviour", "Shows the button that starts a ready check." },
+		{ "grouptools.rolePoll", "o", "behaviour", "Shows the button that asks everyone to pick a role." },
+		{ "grouptools.pull", "o", "behaviour", "Shows the button that starts and stops a pull countdown." },
+		{ "grouptools.pullTime", "o", "behaviour", "Sets how many seconds the pull countdown counts." },
+		{ "grouptools.size", "o", "behaviour", "Sets the size of the buttons." },
+		{ "grouptools.spacing", "r", "behaviour", "Sets the room between the buttons." },
+		{ "grouptools.layout", "o", "behaviour", "Lays the buttons out in a row, in two rows or in a column." },
+	} },
 }

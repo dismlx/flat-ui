@@ -8,6 +8,7 @@
 - **Drink and health macros** is a new page in **Interface**, off by default: **Flat UI Drink** and **Flat UI Health** in your account's macro list, written again out of combat when your bags or level change; turned off, they are deleted. Follows EnhanceQoL's drink and health macros.
 - **Mount key** is a new page in the **Action bars** group, off by default, with **Favourite mounts first** (on). Bind **Mount or travel form** under **Flat UI** in Key Bindings: a random usable mount, a new one each mount-up; a druid takes **Aquatic Form** in water and **Travel Form** in a fight, on the move or with no mount; a shaman **Ghost Wolf**. Pressed again, it dismounts or leaves the form. `/flatui status` names the next mount. Follows EnhanceQoL's random mount key.
 - **Trackers**: a group buff tracker, members lacking your class buff as 2/5, read out of combat. New section **Clicks**, **Click to apply** (**Group buffs**): out of combat a click casts it on one who lacks it; with items and weapons it uses an item or puts a poison, stone or oil on the weapon. Follows EnhanceQoL's Class Buff Reminder.
+- **Group tools** is a new page in the **Combat** group, off by default: the eight raid markers and a clear for your target, **Ready check**, **Role poll** and **Pull countdown** (10 s; right-click stops it). A button you cannot use is greyed and says why. **Show**, **Icon size**, **Spacing**, **Layout**. `/flatui move` places it. Follows EnhanceQoL's Mark Bar and Group Tools.
 
 ## 0.5.7
 
