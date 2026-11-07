@@ -10448,7 +10448,7 @@ local PAGES = {
 		"Action buttons",
 		S("trackers.mark", "bool", false, "Mark action buttons", "A red border on the action button that fixes a low or missing tracker. Needs Restyle action bars."),
 		"Clicks",
-		S("trackers.click", "choice", "group", "Click to apply", "Out of combat, a click on a tracker that needs it: a group buff is cast on a member who lacks it, an item is used, a poison, stone or oil goes on the weapon. /flatui tracker use 1 and an item sets what a weapon tracker uses.", { choices = { { "none", "Off" }, { "group", "Group buffs" }, { "all", "Group buffs, items and weapons" } } }),
+		S("trackers.click", "choice", "group", "Click to apply", "Out of combat, a click on a tracker that needs it: a group buff is cast on a member who lacks it, or a poison, stone or oil goes on the weapon. /flatui tracker use 1 and an item sets what a weapon tracker uses.", { choices = { { "none", "Off" }, { "group", "Group buffs" }, { "all", "Group buffs and weapons" } } }),
 		"Proc alerts",
 		S("trackers.addProc", "list", 0, "Add a proc", "For another spell, type /flatui tracker add proc and its name."),
 		S("trackers.removeProc", "list", 0, "Remove a proc"),

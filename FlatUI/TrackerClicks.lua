@@ -1,10 +1,14 @@
 local _, ns = ...
 
 -- Click to apply: out of combat, a click on a tracker fixes what it shows. A group buff tracker (TrackerGroup.lua) casts its buff on a member who
--- lacks it, a weapon tracker puts a poison, stone or oil on its weapon, and an item tracker uses its item. This follows the click-to-apply icons
--- of the Class Buff Reminder of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLClassBuffReminder/
--- ClassBuffReminder.lua:1960-2063): a secure button over the icon, given its attributes out of combat. Where EnhanceQoL writes a macro that uses
--- the item and then the hand's slot, the button here has the item and the slot as attributes of the template's own, and runs no macro text.
+-- lacks it, and a weapon tracker puts a poison, stone or oil on its weapon. This follows the click-to-apply icons of the Class Buff Reminder of
+-- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLClassBuffReminder/ClassBuffReminder.lua:1960-2063): a secure
+-- button over the icon, given its attributes out of combat. Where EnhanceQoL writes a macro that uses the item and then the hand's slot, the
+-- button here has the item and the slot as attributes of the template's own, and runs no macro text. An item tracker takes no click: it counts
+-- an item in the bags (C_Item.GetItemCount, ItemDocumentation.lua:451-468; TrackerKinds.lua:1121-1153), and a use (type item, below) only
+-- lowers that count, so a click on a Healthstone or Mana gem tracker that is fine would spend the stone or the gem, and one that is missing has
+-- nothing to use. EnhanceQoL's healthstone icon likewise shows only while the bags hold no stone, and its click casts Create Healthstone
+-- (ClassBuffReminder.lua:3827-3839).
 -- The click is a secure button of Flat UI's own (SecureActionButtonTemplate), made as Reload.lua:93 and ErrandsRanks.lua:510 make theirs: made,
 -- shown, hidden, moved and given attributes only out of combat. It lies over a tracker's frame, as its child, only while the tracker is drawn
 -- live and shown and has something to fix. A secure child makes the frames above it protected (Reload.lua:14-17), so at PLAYER_REGEN_DISABLED,
@@ -26,8 +30,23 @@ local IsSecret = ns.IsSecret
 -- its own in the bags uses, each kind from its strongest; the class lists of ClassData.lua name the strongest of some, and every ID was checked
 -- against the classic item table of Questie (classicItemDB 10.0.0). A click uses only one the bags hold. KINDS: by the saved word of the Click to
 -- apply row, the kinds of tracker that take a click. ATTRIBUTES: the attributes a click sets; the others stay as the template has them.
+-- EDGED: the sharpening stones that only an edged weapon takes, and EDGES the subclasses of an edged weapon; BLUNT: the weightstones that only a
+-- blunt weapon takes, and BLUNTS the subclasses of a blunt one (Enum.ItemWeaponSubclass, ItemConstantsDocumentation.lua:618-648). The game puts
+-- the spell of such an item only on a weapon whose subclass is in the spell's mask (SpellEquippedItems of the classic era tables, build
+-- 1.15.7.61582; the table that JustAC generates from Forever's own client data gives the same masks, Data/ForeverConsumables.lua:208-243):
+-- Sharpen Blade I to V (2828, 2829, 2830, 9900, 16138), the spells of the Rough to the Dense Sharpening Stone and of Forever's second Rough
+-- Sharpening Stone, 287978, have mask 33219, the one- and two-handed axes and swords, polearms and daggers; Enhance Blunt Weapon I to V (3112,
+-- 3113, 3114, 9903, 16622), the spells of the Rough to the Dense Weightstone, have mask 9264, the one- and two-handed maces, staves and fist
+-- weapons. The Elemental Sharpening Stone (its spell 22756, mask 42483, also that of Forever's second one, 287980), the Consecrated Sharpening
+-- Stone (28891, mask 1097203), the poisons and the oils take every melee weapon, and are in neither list. WEAPON: the item class of a weapon
+-- (Enum.ItemClass.Weapon, ItemConstantsDocumentation.lua:278).
 local K = {
 	SLOTS = { main = { 16, "main hand" }, off = { 17, "off hand" }, ranged = { 18, "ranged weapon" } },
+	EDGED = { [12404] = true, [7964] = true, [2871] = true, [2863] = true, [2862] = true, [287978] = true },
+	EDGES = { [0] = true, [1] = true, [6] = true, [7] = true, [8] = true, [15] = true },
+	BLUNT = { [12643] = true, [7965] = true, [3241] = true, [3240] = true, [3239] = true },
+	BLUNTS = { [4] = true, [5] = true, [10] = true, [13] = true },
+	WEAPON = 2,
 	CONSUMABLES = {
 		-- Instant Poison VI to I, Deadly Poison V to I, Wound Poison IV to I, Mind-numbing Poison III to I, Crippling Poison II and I.
 		8928, 8927, 8926, 6950, 6949, 6947, 20844, 8985, 8984, 2893, 2892, 10922, 10921, 10920, 10918, 9186, 6951, 5237, 3776, 3775,
@@ -36,7 +55,7 @@ local K = {
 		-- Blessed, Brilliant, Wizard, Lesser and Minor Wizard Oil; Brilliant, Lesser and Minor Mana Oil; Shadow Oil and Frost Oil.
 		23123, 20749, 20750, 20746, 20744, 20748, 20747, 20745, 3824, 3829,
 	},
-	KINDS = { none = {}, group = { group = true }, all = { group = true, weapon = true, item = true } },
+	KINDS = { none = {}, group = { group = true }, all = { group = true, weapon = true } },
 	ATTRIBUTES = { "type", "spell", "unit", "item", "target-slot" },
 	REFUSED = "Trackers: the game would not make a secure button, so a click on a tracker does nothing.",
 	MAX_ID = 2147483647, LEVEL = 10,
@@ -97,6 +116,13 @@ local function Known(id)
 	return Ask(book.IsSpellKnown, id) == true or Ask(book.IsSpellKnownOrInSpellBook, id) == true
 end
 
+-- True when the spell has a place in the player's spell book (C_SpellBook.FindSpellBookSlotForSpell, SpellBookDocumentation.lua:73-93), as a
+-- class spell has. A profession's recipe the player has learnt is a spell the player knows, but it is not in the spell book.
+local function InBook(id)
+	local book = type(C_SpellBook) == "table" and C_SpellBook or {}
+	return Plain(Ask(book.FindSpellBookSlotForSpell, id), "number")
+end
+
 -- What a click does --------------------------------------------------------------------------------------------------------------------
 
 local function PutOn(id, slot)
@@ -111,52 +137,79 @@ local function Cast(id)
 	return { type = "spell", spell = name }, ("casts %s"):format(name)
 end
 
--- A weapon tracker: the item or spell set with /flatui tracker use, else the first item of its list in the bags, else the last spell of its list the
--- player knows (a shaman's imbue, the newest last in the class list), else the strongest weapon poison, stone or oil in the bags (not for a ranged
--- weapon, which takes none).
+-- The subclass of the weapon in the hand's slot (GetInventoryItemID, and the class and subclass, the sixth and seventh answers of
+-- C_Item.GetItemInfoInstant, ItemDocumentation.lua:659-680), or nil when the slot holds no weapon or the game does not say.
+local function Held(slot)
+	local ok, id = pcall(GetInventoryItemID, "player", slot[1])
+	if not ok or not Whole(id) then
+		return nil
+	end
+	local got, _, _, _, _, _, class, subclass = pcall(Items().GetItemInfoInstant, id)
+	if got and Plain(class, "number") and class == K.WEAPON and Plain(subclass, "number") then
+		return subclass
+	end
+	return nil
+end
+
+-- True when the weapon held takes the item: a sharpening stone of EDGED only an edged weapon, a weightstone of BLUNT only a blunt one, any other
+-- item every weapon. A weapon the game does not name is taken to take every item.
+local function Fits(id, held)
+	if held == nil then
+		return true
+	elseif K.EDGED[id] then
+		return K.EDGES[held] == true
+	elseif K.BLUNT[id] then
+		return K.BLUNTS[held] == true
+	end
+	return true
+end
+
+-- A weapon tracker: the item or spell set with /flatui tracker use, else the spell of its list that last put an enchant on the hand (a shaman's
+-- imbue, kept in the entry as applied by TrackerKinds.lua), else the last spell of its list the player knows and has in the spell book (the
+-- newest last in the class list), else the first item of its list in the bags, else the strongest weapon poison, stone or oil in the bags (not
+-- for a ranged weapon, which takes none). An item the weapon in the hand cannot take is passed over (Fits). A shaman's list holds spell IDs and
+-- the other class lists hold item IDs, and one ID can be both. Taken as an item, an imbue's ID has the click equip or use that item in place of
+-- the imbue: type item equips an item that can be worn and is not worn yet, and uses any other (Blizzard_FrameXML/SecureTemplates.lua:431-437).
+-- Rockbiter Weapon rank 4 and the Blackened Defias Armor are both 10399, Flametongue Weapon rank 3 and the Plans: Ebon Shiv both 8030,
+-- Flametongue Weapon rank 5 and the Sergeant's Cloak both 16341. So the spells come first: every shaman has Rockbiter Weapon from level 1, and a
+-- shaman's list never gets to its items. Taken as a spell, an item's ID has the click cast that spell: Crippling Poison II and the Leatherworking
+-- recipe Green Leather Bracers are both 3776, the Greater Firestone and the Enchanting recipe Enchant Chest - Lesser Stats both 13700, and a
+-- learnt recipe is a known spell. So a spell counts only from the spell book, which holds no recipe. Instant Poison VI, 8928, is also the
+-- druid's Moonfire, a rogue never has.
 local function Weapon(entry)
 	local slot = K.SLOTS[entry.slot]
 	if not slot then
 		return nil
 	end
-	if Whole(entry.use) and Carried(entry.use) then
+	local held = Held(slot)
+	if Whole(entry.use) and Carried(entry.use) and Fits(entry.use, held) then
 		return PutOn(entry.use, slot)
 	end
 	if Whole(entry.useSpell) and Known(entry.useSpell) then
 		return Cast(entry.useSpell)
 	end
-	local apply = type(entry.apply) == "table" and entry.apply or {}
-	for _, id in ipairs(apply) do
-		if Whole(id) and Carried(id) then
-			return PutOn(id, slot)
-		end
+	if Whole(entry.applied) and Known(entry.applied) then
+		return Cast(entry.applied)
 	end
+	local apply = type(entry.apply) == "table" and entry.apply or {}
 	local spell
 	for _, id in ipairs(apply) do
-		if Whole(id) and Known(id) then
+		if Whole(id) and Known(id) and InBook(id) then
 			spell = id
 		end
 	end
 	if spell then
 		return Cast(spell)
 	end
-	if entry.slot ~= "ranged" then
-		for _, id in ipairs(K.CONSUMABLES) do
-			if Carried(id) then
-				return PutOn(id, slot)
-			end
+	for _, id in ipairs(apply) do
+		if Whole(id) and Carried(id) and Fits(id, held) then
+			return PutOn(id, slot)
 		end
 	end
-	return nil
-end
-
--- An item tracker: the first of its items the bags hold that the game gives a use for (C_Item.GetItemSpell, ItemDocumentation.lua:970-985).
-local function Item(entry)
-	for _, id in ipairs(type(entry.items) == "table" and entry.items or {}) do
-		if Whole(id) and Carried(id) then
-			local name = Ask(Items().GetItemSpell, id)
-			if Plain(name, "string") and name ~= "" then
-				return { type = "item", item = "item:" .. id }, ("uses %s"):format(ItemName(id))
+	if entry.slot ~= "ranged" then
+		for _, id in ipairs(K.CONSUMABLES) do
+			if Carried(id) and Fits(id, held) then
+				return PutOn(id, slot)
 			end
 		end
 	end
@@ -168,8 +221,6 @@ end
 local function Choose(entry, now)
 	if entry.kind == "weapon" then
 		return Weapon(entry)
-	elseif entry.kind == "item" then
-		return Item(entry)
 	elseif entry.kind == "group" and type(ns.TrackerGroupChoice) == "function" then
 		return ns.TrackerGroupChoice(entry, now)
 	end
@@ -182,15 +233,12 @@ local function Allowed(entry)
 	return ns.Enabled(KEY) and entry.on ~= false and kinds[entry.kind] == true
 end
 
--- The tracker has something a click fixes, as it is drawn now: live and shown, a weapon or group buff that is low or missing, an item the bags hold.
+-- The tracker has something a click fixes, as it is drawn now: live and shown, a weapon or group buff that is low or missing.
 local function Fixable(entry, reading, how, record)
 	if how ~= "live" or type(record) ~= "table" or record.alpha ~= 1 or type(reading) ~= "table" then
 		return false
 	end
 	local state = reading.state
-	if entry.kind == "item" then
-		return state == "fine" or state == "low"
-	end
 	return state == "low" or state == "missing"
 end
 

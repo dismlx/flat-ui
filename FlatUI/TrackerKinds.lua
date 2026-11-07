@@ -14,6 +14,7 @@ local IsSecret = ns.IsSecret
 -- ORDER: the slots as the page lists them.
 -- ENCHANT: the types of Enum.ItemEnchantType that are counted when the enum is missing: Permanent 1, Temporary 2, Imbue 3.
 -- NO_CALL: the line of the status when the game has no answer for a weapon.
+-- WINDOW: seconds between a cast of the player and a new enchant on a hand within which the cast is taken as the one that put it on.
 local K = {
 	SLOTS = {
 		main = { name = "Main hand enchant", words = { "main", "main hand", "mainhand" }, slot = 0, item = 16, hand = "main hand" },
@@ -23,12 +24,13 @@ local K = {
 	ORDER = { "main", "off", "ranged" },
 	PERMANENT = 1, NONE = 0,
 	NO_CALL = "Trackers: the game gave no weapon enchant information, so weapon trackers show a grey icon.",
-	MAX_NAME = 40, MAX_APPLY = 40, MAX_ID = 2147483647, MAX_SPELLS = 40,
+	MAX_NAME = 40, MAX_APPLY = 40, MAX_ID = 2147483647, MAX_SPELLS = 40, WINDOW = 1,
 }
 -- What was known of each tracker of these kinds, by the id of its entry: the length and end of the enchant on the weapon, the last reading
 -- in words for the check, the last icon of a totem or of what the ammunition tracker read, the casts of the player, the last PLAYER_TOTEM_UPDATE of
--- each slot, and the ammunition trackers whose thrown weapons were low when last read.
-local mem = { lengths = {}, last = {}, icons = {}, casts = {}, pending = {}, thrown = {} }
+-- each slot, and the ammunition trackers whose thrown weapons were low when last read. cast: the last cast of the player, { id, at }; fresh: the
+-- moment a new enchant was read on the hand of a weapon tracker.
+local mem = { lengths = {}, last = {}, icons = {}, casts = {}, pending = {}, thrown = {}, cast = nil, fresh = {} }
 
 local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
@@ -145,6 +147,59 @@ local function Remember(entry, found)
 	mem.last[entry.id] = found
 end
 
+-- True when the spell has a slot in the player's spell book (C_SpellBook.FindSpellBookSlotForSpell, SpellBookDocumentation.lua:73-93), as a
+-- class spell has. A recipe of a profession the player has learnt has none: the profession's window holds it.
+local function InBook(id)
+	local book = type(C_SpellBook) == "table" and C_SpellBook or {}
+	if type(book.FindSpellBookSlotForSpell) ~= "function" then
+		return false
+	end
+	local ok, slot = pcall(book.FindSpellBookSlotForSpell, id)
+	return ok and Plain(slot, "number")
+end
+
+-- The spell a shaman last put on a hand, for a click that puts the same imbue back (TrackerClicks.lua) and not the newest the player knows: when
+-- the last cast of the player came within WINDOW of a new enchant on the tracker's hand, is a spell of the tracker's list and has a slot in the
+-- spell book, it is kept in the entry as applied, saved with it so that it comes back after a reload. An ID of a list of items can be a spell
+-- too: Crippling Poison II of the rogue's list and the Greater Firestone of the warlock's, 3776 and 13700, are a Leatherworking and an Enchanting
+-- recipe (SkillLineAbility of the classic era tables, build 1.15.7.61582). A craft puts nothing on the weapon, but a new enchant also comes with
+-- no cast of the player's: a weapon put on with an enchant of its own, or the enchant a Windfury Totem renews on the main hand of each party
+-- member every few seconds. So the cast must meet the enchant and be in the spell book, which holds no recipe. The use of a stone, a poison or an
+-- oil is the cast of the item's own spell, whose ID no list holds, so nothing is kept for it.
+local function Match(entry)
+	local cast, fresh = mem.cast, mem.fresh[entry.id]
+	if not (cast and fresh and math.abs(cast.at - fresh) <= K.WINDOW and type(entry.apply) == "table") then
+		return
+	end
+	for _, id in ipairs(entry.apply) do
+		if id == cast.id and InBook(id) then
+			entry.applied = id
+			mem.fresh[entry.id] = nil
+			return
+		end
+	end
+end
+
+-- A cast of the player, as Trackers.lua hands on each UNIT_SPELLCAST_SUCCEEDED of the player whose spell ID is not withheld; a new enchant read
+-- within WINDOW before it is matched now, and an older one is forgotten.
+local function WeaponCast(spellID)
+	local now = Now()
+	mem.cast = { id = spellID, at = now }
+	for id, at in pairs(mem.fresh) do
+		if now - at > K.WINDOW then
+			mem.fresh[id] = nil
+		end
+	end
+	if next(mem.fresh) == nil then
+		return
+	end
+	for _, entry in ipairs(type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}) do
+		if entry.kind == "weapon" and mem.fresh[entry.id] then
+			Match(entry)
+		end
+	end
+end
+
 -- The reading of the enchant on the weapon of a tracker's slot: { state, hidden = false, count, expires, length, icon, id }. The game never hides
 -- a weapon enchant, so hidden is always false.
 local function Read(entry)
@@ -194,14 +249,15 @@ local function Read(entry)
 		return reading
 	end
 	-- The end of the enchant is kept while it moves by a second or less, so that one timer is set for it and not one for each look; a
-	-- longer move is a new enchant, or a new application of the same one, and the length is seen again.
+	-- longer move is a new enchant, or a new application of the same one, and the length is seen again. Its moment is met with the player's
+	-- last cast (Match).
 	local now = Now()
 	local ends = now + seconds
 	local kept = mem.lengths[id]
-	if not kept or kept.id ~= reading.id then
+	if not kept or kept.id ~= reading.id or ends > kept.ends + 1 then
 		kept = { id = reading.id, length = seconds, ends = ends }
-	elseif ends > kept.ends + 1 then
-		kept = { id = reading.id, length = seconds, ends = ends }
+		mem.fresh[id] = now
+		Match(entry)
 	elseif ends < kept.ends - 1 then
 		kept.ends = ends
 	else
@@ -221,7 +277,8 @@ local function Read(entry)
 end
 
 -- True when the entry is a weapon tracker with a slot of the three; the name is the slot's own when none was given, and the spells that put
--- the enchant on are whole numbers. The item or spell a click uses (use, useSpell: /flatui tracker use, TrackerClicks.lua) is a whole number too.
+-- the enchant on are whole numbers. The item or spell a click uses (use, useSpell: /flatui tracker use, TrackerClicks.lua) is a whole number too,
+-- and so is the spell of its list that last put an enchant on the hand (applied, kept by Match).
 local function Clean(entry)
 	if not K.SLOTS[entry.slot] then
 		return false
@@ -229,7 +286,7 @@ local function Clean(entry)
 	if not (type(entry.name) == "string" and #entry.name >= 1 and #entry.name <= K.MAX_NAME) then
 		entry.name = K.SLOTS[entry.slot].name
 	end
-	for _, key in ipairs({ "use", "useSpell" }) do
+	for _, key in ipairs({ "use", "useSpell", "applied" }) do
 		local id = entry[key]
 		if id ~= nil and not (type(id) == "number" and id >= 1 and id <= K.MAX_ID and id == math.floor(id)) then
 			entry[key] = nil
@@ -306,7 +363,7 @@ end
 
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("weapon", {
-		Read = Read, Clean = Clean, Add = Add, Label = Label, Icon = Icon, Lines = Lines,
+		Read = Read, Clean = Clean, Add = Add, Label = Label, Icon = Icon, Lines = Lines, Cast = WeaponCast,
 		events = { "WEAPON_ENCHANT_CHANGED", "WEAPON_SLOT_CHANGED", "UNIT_INVENTORY_CHANGED" },
 		what = "weapon enchant", hiddenAble = false,
 	})

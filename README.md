@@ -12,7 +12,7 @@ The **Drink and health macros** page, off by default, keeps two macros up to dat
 
 The **Mount key** page, off by default, gives you one key in the game's Key Bindings that mounts a random mount you can ride, favourites first; a druid takes Aquatic or Travel Form and a shaman Ghost Wolf where a mount cannot go, and pressed again it dismounts or leaves the form.
 
-The **Trackers** can count who in your group lacks your class buff (2/5 on its icon), and out of combat a click casts it on them; **Click to apply** can also use items and put poisons, stones or oils on your weapon.
+The **Trackers** can count who in your group lacks your class buff (2/5 on its icon), and out of combat a click casts it on them; **Click to apply** can also put poisons, stones or oils on your weapon, or cast a shaman's weapon imbue.
 
 The **Group tools** page, off by default, adds a row of buttons for your group: the eight raid markers and a clear for your target, a ready check, a role poll and a pull countdown.
 
