@@ -11303,10 +11303,6 @@ local PAGES = {
 		S("blocks.petPlace", "choice", "game", "Pet bar position", "In Edit Mode press an arrow key once on the pet bar and save so the game stops stacking it.",
 			{ choices = { { "game", "Where the game puts it" }, { "aboveRight", "Above, right" }, { "aboveLeft", "Above, left" } } }),
 	} },
-	{ key = "mount", label = "Mount key", rows = {
-		S("mount.enabled", "bool", false, "Mount key", "Bind a key to Mount or travel form under Flat UI in the game's Key Bindings. It mounts a random mount you can ride; a druid takes Aquatic Form in water, and Travel Form in a fight, on the move or with no mount; a shaman takes Ghost Wolf in a fight or with no mount. Pressed again, it dismounts or leaves the form."),
-		S("mount.favourites", "bool", true, "Favourite mounts first", "Picks among the mounts you marked as favourites in the mount journal (right-click a mount there), or among all of them while none of those can be used."),
-	} },
 	{ key = "tooltip", label = "Tooltip", rows = {
 		S("tooltip.enabled", "bool", false, "Place the tooltip"),
 		S("tooltip.mode", "choice", "cursor", "Position", "The Tooltip handle shows with /flatui move while Fixed is chosen.", { choices = TOOLTIP_MODES }),
@@ -11314,6 +11310,10 @@ local PAGES = {
 		S("tooltip.x", "number", 16, "X offset", "Positive moves the tooltip right when it follows the cursor.", { min = -200, max = 200, step = 1, unit = "" }),
 		S("tooltip.y", "number", 16, "Y offset", "Positive moves the tooltip up when it follows the cursor.", { min = -200, max = 200, step = 1, unit = "" }),
 		S("tooltip.scope", "choice", "common", "Applies to", nil, { choices = TOOLTIP_SCOPES }),
+	} },
+	{ key = "mount", label = "Mount key", rows = {
+		S("mount.enabled", "bool", false, "Mount key", "Bind a key to Mount or travel form under Flat UI in the game's Key Bindings. It mounts a random mount you can ride; a druid takes Aquatic Form in water, and Travel Form in a fight, on the move or with no mount; a shaman takes Ghost Wolf in a fight or with no mount. Pressed again, it dismounts or leaves the form."),
+		S("mount.favourites", "bool", true, "Favourite mounts first", "Picks among the mounts you marked as favourites in the mount journal (right-click a mount there), or among all of them while none of those can be used."),
 	} },
 	{ key = "fade", label = "Fading", rows = {
 		S("fade.enabled", "bool", false, "Fade frames when idle"),
