@@ -33,7 +33,10 @@ local _, ns = ...
 -- Its type and macrotext (SecureTemplates.lua:450-463) are written only out of combat, after a fight for a change heard in one (ns.OutOfCombat),
 -- and only when the macro changes: when the mounts, the forms, the bindings, the moving or the rows change. Nothing of Flat UI's runs in its click
 -- (no PreClick, no PostClick): the moving is heard (PLAYER_STARTED_MOVING and PLAYER_STOPPED_MOVING, UnitDocumentation.lua:3944-3966) by a frame of
--- the addon's own, only while the macro on the move differs, and read a frame later (IsPlayerMoving, PlayerScriptDocumentation.lua:1453-1460).
+-- the addon's own, only while the button is made, a key is bound to it and the macro on the move differs, and read a frame later (IsPlayerMoving,
+-- PlayerScriptDocumentation.lua:1453-1460). The game sends UPDATE_BINDINGS when a key is set or cleared, as the rows of its Key Bindings window read
+-- their keys again on it (KeyBindingsDocumentation.lua:175-179, Blizzard_Settings_Shared/Blizzard_SettingsPanel.lua:107, 153-154 and 975-977,
+-- Blizzard_Keybindings.lua:453), so the moving is read when a key is bound, and no longer heard once none is.
 -- With the module off its type and macro are taken away, so the key does nothing; the binding is the player's and stays. It writes no binding, no
 -- macro of the game's macro list and no field of a frame, and no global but the button's name and BINDING_NAME_CLICK FlatUIMountButton:LeftButton,
 -- the name of the binding.
@@ -54,6 +57,10 @@ local STEP = 0.2
 local MOVING = { "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING" }
 local LINE_UNBOUND = "Mount key: no key is bound yet. Bind one to Mount or travel form, under Flat UI in the game's Key Bindings."
 local LINE_NOTHING = "Mount key: no mount or travel form to use yet."
+-- The character has mounts in the journal, but the game lets none of them be used now: GetMountUsabilityByID answers false with the reason as
+-- useError (MountJournalDocumentation.lua:340-357), and the journal shows that reason on the tooltip of its Mount button, also while the button
+-- is disabled (Mainline/Blizzard_MountCollection.lua:853-859, Mainline/Blizzard_MountCollection.xml:568 and 575).
+local LINE_UNUSABLE = "Mount key: none of your mounts can be used here and now. The tooltip of the Mount button in the mount journal says why."
 local LINE_BROKEN = "Mount key: the game did not make the button of the key, so the key does nothing until /reload."
 local LINE_JOURNAL = "Mount key: this client has no mount journal, so the key takes travel forms only."
 local LINE_WAITS = "Mount key: a change of the key waits for the end of the fight."
@@ -354,7 +361,7 @@ local function OnMove()
 	end
 end
 
--- Hears the moving only while the macro on the move is another.
+-- Hears the moving, or stops: M.Update asks it only while a key can press the button and the macro on the move is another.
 local function Hear(on)
 	if on == S.hearing then
 		return
@@ -415,10 +422,13 @@ function M.Update()
 	local still, cast = Macro(plan, false)
 	local moving = Macro(plan, true)
 	S.texts, S.cast, S.mount = { still = still, moving = moving }, cast, plan.mount
-	Hear(moving ~= still)
-	if not S.button and Bound() and not Build() and not S.broken then
+	local bound = Bound()
+	if not S.button and bound and not Build() and not S.broken then
 		Later()
 	end
+	-- No key presses the button while none is bound or the button is not made, so the moving is not heard then. Setting or clearing the key runs
+	-- this again (UPDATE_BINDINGS, KeyBindingsDocumentation.lua:175-179), and the hearing reads the moving as it starts.
+	Hear(moving ~= still and S.button ~= nil and bound)
 	Apply()
 end
 
@@ -460,7 +470,10 @@ function M.Status()
 	if not Journal() then
 		lines[#lines + 1] = LINE_JOURNAL
 	end
-	if not S.cast then
+	-- The mounts as the last update read them for the macro, so the line matches the macro and the status reads nothing of the journal.
+	if not S.cast and S.list and #S.list > 0 then
+		lines[#lines + 1] = LINE_UNUSABLE
+	elseif not S.cast then
 		lines[#lines + 1] = LINE_NOTHING
 	elseif S.mount then
 		lines[#lines + 1] = ("Mount key: the next mount is %s."):format(S.mount)
