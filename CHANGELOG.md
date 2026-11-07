@@ -1,3 +1,7 @@
+## 0.5.9
+
+- For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+
 ## 0.5.8
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
