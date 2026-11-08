@@ -43,10 +43,11 @@ local ADDON_NAME, ns = ...
 -- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- repairs with RepairAllItems, buys with BuyMerchantItem, sells the cursor item with SellCursorItem, loots with LootSlot, learns with
 -- BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on its own button, and answers summons, resurrections, invites
--- and duels with the game's calls for them. Of the game's popups it hides only four, with StaticPopup_Hide, each once its request is over and
--- only while it is the one popup shown, since the game leaves them up: the group invite's once the player is in the group (hiding it sooner
--- declines the invite), the summon's once the game says no summon is open (a stale one cancels the next), the token purchase's question before
--- it buys and the tradeable sale's after it sells. For Buy in bulk it asks with a popup of its own (FLATUI_BULK_BUY, an entry of
+-- and duels with the game's calls for them. Of the game's popups it hides only four, with StaticPopup_Hide and only while it is the one popup
+-- shown: the group invite's once the player is in the group and the summon's once the game says no summon is open, since the game leaves both
+-- up after an accept made by code (hiding the invite sooner declines it, and a stale summon cancels the next); the token purchase's question
+-- just before it buys in its place (the game would leave it up, and its Yes would buy again); and the tradeable sale's right after it sells
+-- (the game closes that one too, once the cursor is empty). For Buy in bulk it asks with a popup of its own (FLATUI_BULK_BUY, an entry of
 -- StaticPopupDialogs shown with StaticPopup_Show, as Clean up bags' is) and calls nothing on the game's split box. It follows
 -- StaticPopup_Show, StaticPopup_Hide, ClassTrainerFrame_Update, SendMailFrame_SendMail, SendMailFrame_Reset and
 -- MerchantItemButton_OnModifiedClick with hooksecurefunc, writes DELETE in the box of the game's delete popup (SetText, then ClearFocus) and
