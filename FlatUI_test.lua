@@ -11101,6 +11101,9 @@ local PAGES = {
 		S("chat.history", "number", 128, "Lines kept per window", nil, { min = 128, max = 2048, step = 64, unit = " lines" }),
 		S("chat.fade", "bool", true, "Fade old messages"),
 		S("chat.fadeAfter", "number", 120, "Fade after", nil, { min = 10, max = 600, step = 10, unit = " s", needs = "chat.fade" }),
+		S("chat.restore", "bool", false, "Show recent chat after a reload", "After a reload or a login, the lines of the last hour in your main chat window: say, yell, emotes, party, raid, guild, officer and whispers. They are kept in Flat UI's saved settings of this character; lines the game withholds in fights and dungeons are not kept."),
+		S("chat.restoreLines", "number", 50, "Lines to show again", "None older than an hour, and no more than three quarters of Lines kept per window, so that the other lines of a login stay in the window.", { min = 10, max = 200, step = 10, unit = " lines", needs = "chat.restore" }),
+		S("chat.restoreChannels", "bool", false, "Numbered channels too", "General, Trade and the other numbered channels.", { needs = "chat.restore" }),
 		"Links",
 		S("chat.webLinks", "bool", true, "Web addresses as links", "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy."),
 		S("chat.linkTips", "bool", true, "Tooltips of chat links", "While the mouse is over an item, spell or achievement link in a chat window, its tooltip shows. Not in a fight."),
@@ -11137,13 +11140,28 @@ local PAGES = {
 		"Combat",
 		S("chat.combat", "choice", "show", "Tooltips in combat", nil, { choices = { { "show", "Show as usual" }, { "units", "Hide unit tooltips" }, { "all", "Hide every tooltip" } } }),
 		S("chat.combatKey", "choice", "none", "Show anyway while holding", nil, { choices = { { "none", "No key" }, { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } }),
+		S("chat.combatUnits", "choice", "all", "Unit tooltips hidden", "A unit the game will not say about is shown.", { needs = "chat.combat", needsIn = { "units" },
+			choices = { { "all", "Every unit" }, { "enemies", "Enemies" }, { "friends", "Friendly units" } } }),
+		S("chat.combatWhere", "choice", "combat", "Where", "With In combat in dungeons and raids, tooltips show in fights in the open world.", { needs = "chat.combat", needsIn = { "units", "all" },
+			choices = { { "combat", "In combat" }, { "instance", "In combat in dungeons and raids" } } }),
+		S("chat.spellTips", "choice", "show", "Spell tooltips", "Show anyway while holding still shows them.",
+			{ choices = { { "show", "Show" }, { "combat", "Hide in combat" }, { "instance", "Hide in dungeons and raids" }, { "always", "Hide always" } } }),
+		S("chat.auraTips", "choice", "show", "Buff and debuff tooltips", "Your own buffs and debuffs, and those on party and raid frames. The target and focus frames show theirs in a tooltip of the game's own that Flat UI cannot hide. Show anyway while holding still shows them.",
+			{ choices = { { "show", "Show" }, { "combat", "Hide in combat" }, { "instance", "Hide in dungeons and raids" }, { "always", "Hide always" } } }),
+		S("chat.itemTips", "choice", "show", "Item tooltips", "Show anyway while holding still shows them.",
+			{ choices = { { "show", "Show" }, { "combat", "Hide in combat" }, { "instance", "Hide in dungeons and raids" }, { "always", "Hide always" } } }),
+		S("chat.groupTips", "choice", "other", "Party and raid frame tooltips", "The unit tooltips of the game's party and raid frames, whose clicks do not change. The box of buffs and debuffs that opens beside a party frame still shows.",
+			{ choices = { { "other", "As other units" }, { "ooc", "Out of combat only" }, { "key", "Only with a key" }, { "off", "Off" } } }),
+		S("chat.groupTipKey", "choice", "shift", "Key for party and raid frames", "Hold it as you point at one of these frames, and its tooltip shows, unless Tooltips in combat hides it.", { needs = "chat.groupTips", needsIn = { "key" },
+			choices = { { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } }),
 		"Extra lines",
 		S("chat.ids", "bool", false, "Item and spell IDs"),
+		S("chat.iconId", "bool", false, "Icon ID", "The number of the icon file, after the ID line.", { needs = "chat.ids" }),
 		S("chat.idsWhen", "choice", "always", "Show IDs", "The IDs show while the key is held: at once over bags, action bars and the Character window, and over a link once you point at it again.",
 			{ needs = "chat.ids", choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } } }),
 		S("chat.enchantId", "bool", true, "Temporary enchant ID", "On a weapon you wear: the ID of its poison, oil, stone or imbue.", { needs = "chat.ids" }),
 		S("chat.count", "bool", false, "Item count in bags and bank"),
-		S("chat.icons", "bool", true, "Item and spell icons", "The icon before the name of an item or spell."),
+		S("chat.icons", "bool", true, "Item and spell icons", "The icon before the name of an item, a spell, a buff or a debuff: not on the target and focus frames, whose buff tooltip is the game's own."),
 		S("chat.targetLine", "bool", true, "Target of units", "A line naming what a unit targets, in its class or reaction colour: You when it is you."),
 		"Item comparison",
 		S("chat.compareShift", "bool", true, "Compare items only while holding Shift",
@@ -21814,7 +21832,9 @@ for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour"
 	"general.cursorRingCast", "general.cursorRingCastColour", "general.cursorRingGcd", "general.cursorRingGcdColour",
 	"errands.sellTwelve", "errands.sellList", "errands.keepList", "errands.guildWhere", "errands.bulkBuy", "errands.confirmTokens", "errands.confirmTradeable",
 	"unitframes.threatTanks", "unitframes.roleIconRoles", "unitframes.dispelSelf", "unitframes.partyFrameMarker", "unitframes.raidLeaderIcon",
-	"unitframes.targetBorder", "unitframes.targetColour" }) do
+	"unitframes.targetBorder", "unitframes.targetColour",
+	"chat.restore", "chat.restoreLines", "chat.restoreChannels", "chat.combatUnits", "chat.combatWhere", "chat.spellTips", "chat.auraTips",
+	"chat.itemTips", "chat.groupTips", "chat.groupTipKey", "chat.iconId" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67289,7 +67309,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1108 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1119 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67603,7 +67623,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1011 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1022 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)

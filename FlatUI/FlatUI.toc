@@ -94,6 +94,7 @@ ChatText.lua
 ChatTips.lua
 ChatLinks.lua
 ItemCompare.lua
+ChatHistory.lua
 HealthColour.lua
 CastTime.lua
 CastRank.lua

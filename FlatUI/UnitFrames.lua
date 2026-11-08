@@ -3081,6 +3081,28 @@ local function IsRaidFrame(frame)
 	return false
 end
 
+-- True for one of the game's party and raid frames: a raid frame or a raid-style party frame by its name (RAID_NAMES), or a frame of the party
+-- frame's pool or the pet frame of one (FramesOf). Only the name and the pool are read. Chat.lua asks it of the owner of a unit tooltip for Party and
+-- raid frame tooltips: these frames own the tooltips they show (UnitFrame_OnEnter, Mainline/UnitFrame.lua:387-397, and GameTooltip_SetDefaultAnchor,
+-- SharedTooltipTemplates.lua:87-88, from CompactUnitFrame.xml:105 and Mainline/PartyMemberFrame.lua:730-731, 822-823). The player, target and focus
+-- frames are none of them.
+function ns.UnitFrameExtra.isGroupFrame(frame)
+	if ns.Forbidden(frame) then
+		return false
+	end
+	if IsRaidFrame(frame) then
+		return true
+	end
+	for _, kind in ipairs({ "party", "partypet" }) do
+		for _, member in ipairs(FramesOf(kind)) do
+			if rawequal(member, frame) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- Every frame the game sets up is looked at once, and a raid frame is styled.
 local function OnRaidSetUp(frame)
 	if ns.Enabled(KEY) and not ns.Forbidden(frame) and IsRaidFrame(frame) then

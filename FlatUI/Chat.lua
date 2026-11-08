@@ -10,6 +10,11 @@ local _, ns = ...
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
 -- ChatLinks.lua (called at the end of each refresh) also fills GameTooltip from a chat link under the mouse: SetOwner on a frame of its own,
 -- SetHyperlink and Hide, never in a fight. ItemCompare.lua (called at the start of each refresh) writes the game's alwaysCompareItems.
+-- ChatHistory.lua (called at the end of each refresh) keeps recent chat lines for this character and prints them after a reload.
+-- Tooltips hidden by their kind, by hostility and place, and by the party and raid frames that own them follow the tooltip and the group frames of
+-- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLTooltip/EnhanceQoLTooltip.lua:226-233, 973-977, 1420-1440, 1590-1594,
+-- 1633-1636; EnhanceQoLUnitFrames/UF_GroupFrames.lua:6507-6536). They are hidden as the rows of Tooltips in combat are, with Hide on the tooltip
+-- from the post call and from the OnShow of GameTooltip, so nothing more is hooked.
 
 local KEY = "chat"
 
@@ -65,9 +70,11 @@ local tips = setmetatable({}, { __mode = "k" })
 local queued = setmetatable({}, { __mode = "k" })
 -- Per input box: { points = the two points the game gave it, placed = true while it is above the window, idleSet = true while its idle opacity is set here }
 -- Per tooltip: { base = the scale the game gave it }. Per font object of a tooltip: { base = its height, set = the height set here }.
--- Per tooltip: { data, lines } of the ID and count lines, and unit = the owner of the last build of a unit (true when it could not be read).
+-- Per tooltip: { data, lines } of the ID and count lines, and built = what its last build was: { owner = its owner then (true when it could not
+-- be read), unit = true for the data of a unit, kind = "spell", "aura" or "item" (only with the owner read), hostile = whether you can attack the
+-- unit (nil when the game will not say or no row asks), group = true when the owner is one of the game's party or raid frames }.
 local X = { seats = setmetatable({}, { __mode = "k" }), scales = setmetatable({}, { __mode = "k" }), fonts = setmetatable({}, { __mode = "k" }),
-	extras = setmetatable({}, { __mode = "k" }), unit = setmetatable({}, { __mode = "k" }), bar = {} }
+	extras = setmetatable({}, { __mode = "k" }), built = setmetatable({}, { __mode = "k" }), bar = {} }
 local hooked = {}
 local postCall = false
 local barOutline
@@ -756,12 +763,13 @@ local function Filled(tooltip, data)
 end
 
 -- Extra lines: the ID of an item or a spell, and how many of an item the player has, after the lines the game made. The same data with the
--- lines of the first call still there is the same build.
+-- lines of the first call still there is the same build. A buff or debuff counts as a spell: the id of its data is the spell's, and the game
+-- withholds it while it restricts auras (C_TooltipInfo.GetUnitAura is SecretWhenUnitAuraRestricted, TooltipInfoDocumentation.lua:1197-1216).
 local function Extras(tooltip, data)
 	if not ns.Enabled(KEY) or not (Opt("ids") or Opt("count")) or not Usable(tooltip) or ns.Forbidden(tooltip) then
 		return
 	end
-	local item, spell = IsData(data, "Item"), IsData(data, "Spell")
+	local item, spell = IsData(data, "Item"), IsData(data, "Spell") or IsData(data, "UnitAura")
 	local id = (item or spell) and data.id
 	if not IsNumber(id) then
 		return
@@ -835,8 +843,7 @@ local function UnitLine(tooltip, lineData)
 	end
 end
 
--- Whether a tooltip is held back: in combat, as the row says, unless the chosen key is down. Units are the tooltips of a unit's data and the
--- ones the game owns by the screen itself (a unit under the cursor).
+-- True while the chosen key is down: Shift, Ctrl or Alt. A key the game does not say is down counts as up.
 local function KeyDown(key)
 	local down = key == "shift" and IsShiftKeyDown or key == "ctrl" and IsControlKeyDown or key == "alt" and IsAltKeyDown
 	if type(down) ~= "function" then
@@ -855,22 +862,153 @@ local function OwnerOf(tooltip)
 	return nil
 end
 
+-- True in a fight. An answer the game does not give counts as none, so nothing is hidden for it.
+local function Fighting()
+	if type(InCombatLockdown) ~= "function" then
+		return false
+	end
+	local ok, fighting = pcall(InCombatLockdown)
+	return ok and not ns.IsSecret(fighting) and fighting == true
+end
+
+-- True in a dungeon or a raid: the game says the player is in an instance of the party or the raid kind (IsInInstance, InstanceDocumentation.lua:170-178).
+local function InDungeon()
+	if type(IsInInstance) ~= "function" then
+		return false
+	end
+	local ok, inside, kind = pcall(IsInInstance)
+	return ok and not ns.IsSecret(inside) and inside == true and not ns.IsSecret(kind) and (kind == "party" or kind == "raid")
+end
+
+-- The kinds of tooltip with a row of their own, by the type of the data (Enum.TooltipDataType: Spell 1, PetAction 11 and Macro 25 are spells, UnitAura 7
+-- a buff or a debuff, Item 0 an item). A type the client withholds gives none (FOREVER.md, fact 24).
+local KIND_OF = { Spell = "spell", PetAction = "spell", Macro = "spell", UnitAura = "aura", Item = "item" }
+local KIND_ROW = { spell = "spellTips", aura = "auraTips", item = "itemTips" }
+
+local function KindOf(data)
+	for name, kind in pairs(KIND_OF) do
+		if IsData(data, name) then
+			return kind
+		end
+	end
+	return nil
+end
+
+-- Whether you can attack the unit of a unit tooltip (UnitCanAttack, UnitDocumentation.lua:763-777): true or false, nil when the game will not say. The
+-- token of the guid of the data comes first, as the game finds the unit of a tooltip (TooltipUtil.lua:34-42), since a tooltip of a frame need not be
+-- the unit under the mouse; "mouseover" only when there is no such token.
+local function Hostile(data)
+	local token, guid = nil, nil
+	if Usable(data) then
+		guid = data.guid
+	end
+	if not ns.IsSecret(guid) and type(guid) == "string" and guid ~= "" and type(UnitTokenFromGUID) == "function" then
+		local ok, found = pcall(UnitTokenFromGUID, guid)
+		if ok and not ns.IsSecret(found) and type(found) == "string" and found ~= "" then
+			token = found
+		end
+	end
+	if not token then
+		if type(UnitExists) ~= "function" then
+			return nil
+		end
+		local ok, exists = pcall(UnitExists, "mouseover")
+		if not ok or ns.IsSecret(exists) or exists ~= true then
+			return nil
+		end
+		token = "mouseover"
+	end
+	if type(UnitCanAttack) ~= "function" then
+		return nil
+	end
+	local ok, can = pcall(UnitCanAttack, "player", token)
+	if not ok or ns.IsSecret(can) or type(can) ~= "boolean" then
+		return nil
+	end
+	return can
+end
+
+-- True when the owner of a tooltip is one of the game's party or raid frames (UnitFrames.lua reads only their names and the pool of the party frame).
+local function GroupOwned(owner)
+	local extra = ns.UnitFrameExtra
+	local test = type(extra) == "table" and extra.isGroupFrame or nil
+	if owner == nil or type(test) ~= "function" then
+		return false
+	end
+	local ok, yes = pcall(test, owner)
+	return ok and yes == true
+end
+
+-- True while a row can hold a tooltip back. At the defaults none can, and a tooltip is never looked at.
+local function Rules()
+	return Opt("combat") ~= "show" or Opt("groupTips") ~= "other" or Opt("spellTips") ~= "show" or Opt("auraTips") ~= "show" or Opt("itemTips") ~= "show"
+end
+
+-- In this order: the row of the party and raid frames for a unit tooltip they own (Off, Out of combat only, Only with a key); then the key of Show
+-- anyway while holding, which shows every other tooltip; then the row of the kind of a spell, aura or item tooltip (in combat, in dungeons and raids,
+-- always); then Tooltips in combat, in combat and with Where also in a dungeon or a raid. A frame's tooltip the row of the group frames lets through,
+-- its key held among them, still meets Tooltips in combat, as EnhanceQoL's group frames leave theirs to its tooltip rules (UF_GroupFrames.lua:6514-6536,
+-- EnhanceQoLTooltip.lua:1420-1440). The rows of a kind and of the group frames are for GameTooltip, the tooltip of what is under the mouse: your own
+-- buffs (Blizzard_BuffFrame/BuffFrame.lua:1211-1219) and those of the party and raid frames (Shared/PartyMemberFrame.lua:191-208,
+-- Shared/CompactUnitFrame.lua:2056-2087) show there, while the target and focus frames show theirs in AuraButtonTooltip (Blizzard_AuraButton.lua:
+-- 185-199), which is forbidden and out of the global names (Blizzard_AuraContainer/Mainline/Blizzard_AuraButtonTooltip.xml:3-4) and so is left as it
+-- is. Hide unit tooltips holds back the tooltip of a unit's data, and one the game owns by the screen itself (a unit under the cursor), by Unit
+-- tooltips hidden: every one, or only those of a unit you can attack (Enemies) or cannot (Friendly units). A unit the game will not say about is shown.
 local function Withheld(tooltip)
+	if not Rules() or not ns.Enabled(KEY) or ns.Forbidden(tooltip) then
+		return false
+	end
+	local owner = OwnerOf(tooltip)
+	local built = X.built[tooltip]
+	if built ~= nil and built.owner ~= true and owner ~= nil and not rawequal(built.owner, owner) then
+		-- Another owner has the tooltip since its build: what was built is not this tooltip. A nil owner is a hidden tooltip, not another owner.
+		X.built[tooltip] = nil
+		built = nil
+	end
+	local game = rawequal(tooltip, Global("GameTooltip"))
+	local fighting = Fighting()
+	if game and built ~= nil and built.group then
+		local rule = Opt("groupTips")
+		if rule == "off" or (rule == "ooc" and fighting) or (rule == "key" and not KeyDown(Opt("groupTipKey"))) then
+			return true
+		end
+	end
+	if KeyDown(Opt("combatKey")) then
+		return false
+	end
+	local row = game and built ~= nil and built.kind and KIND_ROW[built.kind] or nil
+	if row then
+		local when = Opt(row)
+		if when == "always" or (when == "combat" and fighting) or (when == "instance" and InDungeon()) then
+			return true
+		end
+	end
 	local mode = Opt("combat")
-	if mode == "show" or not ns.Enabled(KEY) or not InCombatLockdown() or KeyDown(Opt("combatKey")) or ns.Forbidden(tooltip) then
+	if mode == "show" or not fighting or (Opt("combatWhere") == "instance" and not InDungeon()) then
 		return false
 	end
 	if mode == "all" then
 		return true
 	end
-	local owner = OwnerOf(tooltip)
-	local unit = X.unit[tooltip]
-	if unit ~= nil and unit ~= true and owner ~= nil and not rawequal(unit, owner) then
-		-- Another owner has the tooltip since the build of a unit: it is not that unit's tooltip. A nil owner is a hidden tooltip, not another owner.
-		X.unit[tooltip] = nil
-		unit = nil
+	local unit = built ~= nil and built.unit == true
+	if not (unit or rawequal(owner, UIParent)) then
+		return false
 	end
-	return unit ~= nil or rawequal(owner, UIParent)
+	local which = Opt("combatUnits")
+	if which ~= "enemies" and which ~= "friends" then
+		return true
+	end
+	local hostile
+	if unit then
+		hostile = built.hostile
+	else
+		-- A tooltip the game owns by the screen with no unit's data built for it: the unit under the cursor, if there is one.
+		hostile = Hostile(nil)
+	end
+	if which == "enemies" then
+		return hostile == true
+	end
+	return hostile == false
 end
 
 local function Shown(tooltip)
@@ -879,16 +1017,29 @@ local function Shown(tooltip)
 	end
 end
 
--- Notes whether the data of a build is a unit, then holds the tooltip back if it is to be.
+-- Notes what the data of a build is, then holds the tooltip back if it is to be. The owner is the owner of the build, or true when it cannot be
+-- read: then any later tooltip is held back as a unit's, and no kind is noted, so a tooltip of a kind is shown.
 local function Combat(tooltip, data)
 	if Usable(tooltip) and not ns.Forbidden(tooltip) then
-		if IsData(data, "Unit") then
-			-- The owner of the unit's tooltip, or true when it cannot be read: then any later tooltip is held back as a unit's.
-			X.unit[tooltip] = OwnerOf(tooltip) or true
-		else
-			X.unit[tooltip] = nil
+		local owner = OwnerOf(tooltip)
+		local built = X.built[tooltip]
+		if not built then
+			built = {}
+			X.built[tooltip] = built
 		end
-		if Opt("combat") ~= "show" and IsShown(tooltip) then
+		built.owner, built.unit, built.kind, built.group, built.hostile = owner or true, IsData(data, "Unit"), nil, nil, nil
+		if owner ~= nil then
+			built.kind = KindOf(data)
+		end
+		if built.unit then
+			if Opt("groupTips") ~= "other" then
+				built.group = GroupOwned(owner)
+			end
+			if Opt("combat") == "units" and (Opt("combatUnits") == "enemies" or Opt("combatUnits") == "friends") then
+				built.hostile = Hostile(data)
+			end
+		end
+		if Rules() and IsShown(tooltip) then
 			Shown(tooltip)
 		end
 	end
@@ -1326,6 +1477,9 @@ local function Refresh()
 	if type(ns.ChatLinksSync) == "function" then
 		ns.ChatLinksSync()
 	end
+	if type(ns.ChatHistorySync) == "function" then
+		ns.ChatHistorySync()
+	end
 end
 
 -- The words of the choice a row holds, as the page shows them.
@@ -1339,16 +1493,49 @@ local function Word(path)
 	return tostring(value)
 end
 
--- The line of /flatui status: what Tooltips in combat holds, and the key that shows them anyway.
+-- What a row of a kind of tooltip says when it hides them.
+local HIDDEN = { combat = "hidden in combat", instance = "hidden in dungeons and raids", always = "always hidden" }
+
+-- The lines of /flatui status: what Tooltips in combat holds, the units it hides and where, and the key that shows them anyway; the kinds of
+-- tooltip hidden and when; and the rule of the party and raid frames.
 local function Status()
 	if not ns.Enabled(KEY) or ns.IsStopped(KEY) then
 		return {}
 	end
+	local mode, key = Opt("combat"), Opt("combatKey")
 	local line = "Tooltips in combat: " .. Word(KEY .. ".combat")
-	if Opt("combat") ~= "show" and Opt("combatKey") ~= "none" then
+	if mode == "units" and Opt("combatUnits") ~= "all" then
+		line = line .. " (" .. Word(KEY .. ".combatUnits") .. ")"
+	end
+	if mode ~= "show" and Opt("combatWhere") == "instance" then
+		line = line .. ", only in dungeons and raids"
+	end
+	if mode ~= "show" and key ~= "none" then
 		line = line .. ", shown while you hold " .. Word(KEY .. ".combatKey")
 	end
-	return { line }
+	local lines = { line }
+	local kinds = {}
+	-- The buffs and debuffs of the target and focus frames are in a tooltip of the game's own, which stays (see Withheld).
+	for _, kind in ipairs({ { "spellTips", "spell" }, { "auraTips", "buff and debuff", " (not on the target and focus frames)" }, { "itemTips", "item" } }) do
+		local phrase = HIDDEN[Opt(kind[1])]
+		if phrase then
+			kinds[#kinds + 1] = kind[2] .. " tooltips " .. phrase .. (kind[3] or "")
+		end
+	end
+	if #kinds > 0 then
+		local text = "Tooltips by kind: " .. table.concat(kinds, ", ")
+		if key ~= "none" then
+			text = text .. ", shown while you hold " .. Word(KEY .. ".combatKey")
+		end
+		lines[#lines + 1] = text
+	end
+	local group = Opt("groupTips")
+	if group == "key" then
+		lines[#lines + 1] = "Party and raid frame tooltips: only while you hold " .. Word(KEY .. ".groupTipKey")
+	elseif group ~= "other" then
+		lines[#lines + 1] = "Party and raid frame tooltips: " .. Word(KEY .. ".groupTips")
+	end
+	return lines
 end
 
 ns.Register(KEY, { label = "Chat and tooltips", Start = Refresh, Refresh = Refresh, Status = Status })
