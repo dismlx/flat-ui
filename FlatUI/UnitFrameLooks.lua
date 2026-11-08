@@ -4,7 +4,9 @@ local ADDON_NAME, ns = ...
 -- muted colours, smaller and lighter bar text, no text on the power bar, the soft shade on bars and a shadow behind each frame. The fills, the
 -- bar text and the name row of UnitFrames.lua ask this file for their colours (ns.UnitFrameExtra.healthColour, powerColour and mute), and this file adds its
 -- work after the steps of that file through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run twice with the same
--- result. The text looks and the soft shade are in UnitFrames.lua and Core.lua, where the text and the fill are set.
+-- result. The text looks and the soft shade are in UnitFrames.lua and Core.lua, where the text and the fill are set. With Frame style One frame, this file
+-- also gives the background of each bar the trough, a strip a little lighter than the plate behind the frame (darker on a light plate), so that an empty
+-- bar still reads as a bar, and puts the shadow round the frame's body (ns.UnitFrameExtra.joined and body, UnitFrames.lua).
 
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
@@ -14,8 +16,11 @@ local PART = "Looks"
 local MUTE = { colour = 0.65, bright = 0.9 }
 -- The grey of the health bar while the colour shows what is lost, and its notes for /flatui status.
 local DARK = 0.10
-local NOTE = { class = "Looks: Health in class and reaction colour: class withheld on ", lost = "Looks: Dark health bar, colour shows what is lost: needs Bar background",
+local NOTE = { class = "Looks: Health in class and reaction colour: class withheld on ", lost = "Looks: Dark health bar, colour shows what is lost: needs Background",
 	shadow = "Looks: Shadow behind each frame: the game refused the texture" }
+-- The trough of a bar in one frame: white at this opacity over the plate, black on a plate at least this light (0.30 red + 0.59 green + 0.11 blue).
+-- 8% is a stand-in until the author picks it.
+local TROUGH = { alpha = 0.08, light = 0.5 }
 -- The shadow: the file, the margins that keep its soft edge at its size, how far it reaches outside the frame in units, and its colour. 8 units at 55% black are
 -- stand-ins until the author picks them.
 local SHADOW = { file = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Shadow.tga", margin = 16, out = 8, alpha = 0.55 }
@@ -114,9 +119,25 @@ local function Key(r, g, b)
 	return r ~= nil and ("%.3f:%.3f:%.3f"):format(r, g, b) or "none"
 end
 
+-- The fill of a bar's background while the frame is one frame: the trough, white at a little opacity over the plate, or black when the plate is light.
+-- Nil, which gives the bar the general background again, while the frame is not one frame or this part is off. The plate's colour is the one
+-- UnitFrames.lua paints (ns.UnitFrameExtra.backColour).
+local function Trough(rec)
+	if Off() or type(X.joined) ~= "function" or type(X.backColour) ~= "function" or not X.joined(rec) then
+		return nil
+	end
+	local r, g, b = X.backColour()
+	local shade = 1
+	if ns.Finite(r) and ns.Finite(g) and ns.Finite(b) and 0.30 * r + 0.59 * g + 0.11 * b >= TROUGH.light then
+		shade = 0
+	end
+	return shade, shade, shade, TROUGH.alpha
+end
+
 -- The fill colour of a health bar. Health colour, or the colour of the unit with Health in class and reaction colour, as Muted colours has it. With Dark
--- health bar the fill is dark and the colour is the fill of the bar's border, which shows behind the part of the bar that is empty. A raid frame is not asked: the
--- game colours it. rec.looksKey says which colour of the unit the frame has now.
+-- health bar the fill is dark and the colour is the fill of the bar's border, which shows behind the part of the bar that is empty; without it the bar's
+-- background is the trough in one frame, else the general background. A raid frame is not asked: the game colours it. rec.looksKey says which colour of
+-- the unit the frame has now.
 function X.healthColour(rec, entry)
 	local r, g, b = ns.Colour(KEY .. ".healthColour")
 	local live = not Off()
@@ -134,7 +155,7 @@ function X.healthColour(rec, entry)
 	rec.looksKey = unit
 	r, g, b = X.mute(r, g, b)
 	local lost = live and Opt("lookLostColour") == true
-	-- The fill of the border is the background of the bar: with Bar background off there is none, and a dark bar would show nothing behind it.
+	-- The fill of the border is the background of the bar: with Background off there is none, and a dark bar would show nothing behind it.
 	if lost and Opt("backdrop") ~= true then
 		Say(rec, "lost", NOTE.lost)
 		lost = false
@@ -148,7 +169,7 @@ function X.healthColour(rec, entry)
 		return DARK, DARK, DARK
 	end
 	if entry ~= nil then
-		ns.SetOutlineFill(entry.outline, nil, nil, nil, nil)
+		ns.SetOutlineFill(entry.outline, Trough(rec))
 	end
 	return r, g, b
 end
@@ -179,8 +200,8 @@ function X.powerColour(rec, entry, r, g, b)
 	return X.mute(r, g, b)
 end
 
--- A frame whose health bar is not flat, or that is not styled, or whose look is off, has the general background and no line about the look. Gives back what
--- healthColour set.
+-- A frame whose health bar is not flat, or that is not styled, or whose look is off, has the trough in one frame, else the general background, and no line
+-- about the look. Gives back what healthColour set. The power bar has no colour of its own behind it, so it takes the trough on every pass.
 local function Settle(rec, on)
 	if rec.kind == "raid" then
 		return
@@ -194,8 +215,12 @@ local function Settle(rec, on)
 		Say(rec, "lost", nil)
 		local entry = rec.byRole.health
 		if entry ~= nil then
-			ns.SetOutlineFill(entry.outline, nil, nil, nil, nil)
+			ns.SetOutlineFill(entry.outline, Trough(rec))
 		end
+	end
+	local power = rec.byRole.power
+	if power ~= nil then
+		ns.SetOutlineFill(power.outline, Trough(rec))
 	end
 end
 
@@ -239,10 +264,15 @@ local function SliceShadow(texture)
 	return pcall(texture.SetTextureSliceMargins, texture, margin, margin, margin, margin) and pcall(texture.SetTextureSliceMode, texture, mode)
 end
 
--- The frame and the texture of the shadow of one frame, at the level of the frame, behind its bars. False when the game refuses the texture.
+-- The frame and the texture of the shadow of one frame, one level under the frame's body (UnitFrames.lua makes it), or under the frame itself where there is
+-- none, so it is behind the plate and the bars. A level of 0 stays 0. False when the game refuses the texture.
 local function Make(rec)
-	local ok, level = pcall(rec.frame.GetFrameLevel, rec.frame)
-	local box = X.frame(rec.frame, ok and X.number(level) and level or nil)
+	local under = type(X.body) == "function" and X.body(rec) or nil
+	if under == nil then
+		under = rec.frame
+	end
+	local ok, level = pcall(under.GetFrameLevel, under)
+	local box = X.frame(rec.frame, ok and X.number(level) and math.max(0, level - 1) or nil)
 	local texture = X.layer(box, "BACKGROUND", -8, true)
 	rec.shadowBox, rec.shadowTexture = box, texture
 	local out = SHADOW.out
@@ -255,15 +285,28 @@ local function Make(rec)
 	return false
 end
 
--- Puts the box from the left edge of the picture, or of the health bar's slot when there is none, and the top of the name row, or of the slot, to the right
--- edge of the slot and the bottom of the power bar, or of the slot. A pair of points each way, on regions of the game and of the addon's own frames. Out of combat
--- only, since the regions are protected.
+-- Puts the box round the frame. In one frame it is the frame's body, and rec.shadowAt is "body". Otherwise its left edge is the picture's on a frame with the
+-- picture on the left, its right edge the picture's on a frame with the picture on the right (a target or focus), and the edges of the health bar's slot
+-- where there is no picture; its top is the name row's, or the slot's, and its bottom the power bar's, or the slot's. A point each way, on regions of the game
+-- and of the addon's own frames. Out of combat only, since the regions are protected.
 local function Place(rec)
 	local box, parts, pic, row, power = rec.shadowBox, rec.parts, rec.pic, rec.row, rec.byRole.power
+	local body = type(X.joined) == "function" and type(X.body) == "function" and X.joined(rec) and X.body(rec) or nil
+	if body ~= nil then
+		if rec.shadowAt ~= "body" then
+			box:ClearAllPoints()
+			box:SetAllPoints(body)
+			rec.shadowAt = "body"
+		end
+		return
+	end
 	local slot = parts.healthBox or parts.health
-	local at = { pic ~= nil and pic.drawn == true and pic.frame or slot, slot, row ~= nil and X.rowOn(rec) and row.frame or slot, power ~= nil and power.bar or slot }
+	local drawn = pic ~= nil and pic.drawn == true
+	local at = { drawn and parts.side == "left" and pic.frame or slot, drawn and parts.side == "right" and pic.frame or slot,
+		row ~= nil and X.rowOn(rec) and row.frame or slot, power ~= nil and power.bar or slot }
+	-- A box that was the body, or not placed yet, is placed again.
 	local was = rec.shadowAt
-	if was ~= nil and was[1] == at[1] and was[2] == at[2] and was[3] == at[3] and was[4] == at[4] then
+	if type(was) == "table" and was[1] == at[1] and was[2] == at[2] and was[3] == at[3] and was[4] == at[4] then
 		return
 	end
 	box:ClearAllPoints()

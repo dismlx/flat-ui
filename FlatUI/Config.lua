@@ -58,6 +58,8 @@ local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the ma
 -- When a frame of When shown on the Fading page is at full opacity; at other times it fades (Fade.lua has the rules).
 local FADE_WHEN = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" },
 	{ "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } }
+-- The tip of the Picture row of each unit frame: what Game portrait is in each Frame style (UnitFrames.lua draws it).
+local GAME_PORTRAIT = "Game portrait is drawn round in One frame. In Separate parts the game draws it in its own place."
 
 ns.PAGES = {
 	{
@@ -185,7 +187,7 @@ ns.PAGES = {
 		{ key = "borderMode", kind = "choice", default = "custom", label = "Border colour source",
 			choices = { { "custom", "Border colour on the Flat UI page" }, { "class", "Your class colour" }, { "faction", "Your faction colour" } } },
 		{ section = "Reaction" },
-		{ key = "reactionOwn", kind = "bool", default = false, label = "Custom reaction colours", tip = "Used by unit frames that colour by reaction, except the background of the target and focus name rows." },
+		{ key = "reactionOwn", kind = "bool", default = false, label = "Custom reaction colours", tip = "Used by unit frames that colour by reaction, name rows too." },
 		{ key = "reactionHostile", kind = "colour", default = "ffff0000", label = "Hostile", needs = "reactionOwn" },
 		{ key = "reactionNeutral", kind = "colour", default = "ffffff00", label = "Neutral", needs = "reactionOwn" },
 		{ key = "reactionFriendly", kind = "colour", default = "ff00ff00", label = "Friendly", needs = "reactionOwn" },
@@ -1371,14 +1373,15 @@ ns.PAGES = {
 		{ key = "raidScale", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Raid frame scale", live = true, get = "MoverScale", set = "SetMoverScale", frame = "CompactRaidFrameContainer" },
 		{ section = "Portraits" },
 		{ key = "portraitStyle", kind = "choice", default = "picture", label = "Portrait style", tip = "Class icon shows on players. Other units keep their face.", needs = "squarePortrait",
-			choices = { { "picture", "Picture" }, { "head", "3D head" }, { "icon", "Class icon" }, { "none", "None" } } },
+			choices = { { "picture", "Face" }, { "head", "3D head" }, { "icon", "Class icon" }, { "none", "None" } } },
 		{ key = "headFraming", kind = "choice", default = "head", label = "3D head framing",
 			choices = { { "face", "Face" }, { "head", "Head" }, { "shoulders", "Head and shoulders" } } },
-		{ key = "portraitSize", kind = "choice", default = "frame", label = "Portrait size", needs = "squarePortrait",
-			choices = { { "frame", "As tall as the frame" }, { "bars", "As tall as the bars" } } },
-		{ key = "portraitBorder", kind = "choice", default = "thin", label = "Portrait border", tip = "Resting, combat and Elite colours still show with None.", needs = "squarePortrait",
+		{ key = "portraitSize", kind = "choice", default = "frame", label = "Portrait size", tip = "In One frame, As tall as the bars puts the name row over the portrait too.",
+			needs = "squarePortrait", choices = { { "frame", "As tall as the frame" }, { "bars", "As tall as the bars" } } },
+		{ key = "portraitBorder", kind = "choice", default = "thin", label = "Portrait border",
+			tip = "In One frame, the colour of the whole frame's border. Resting, combat and Elite colours still show with None.", needs = "squarePortrait",
 			choices = { { "thin", "Thin" }, { "class", "Class or reaction colour" }, { "none", "None" } } },
-		{ key = "classShape", kind = "choice", default = "square", label = "Class icon shape", tip = "On pictures that show a class icon. Faces stay square.", needs = "squarePortrait",
+		{ key = "classShape", kind = "choice", default = "square", label = "Portrait shape", tip = "Faces and class icons, on every frame. A 3D head stays square.", needs = "squarePortrait",
 			choices = { { "square", "Square" }, { "round", "Round" } } },
 		{ key = "portraitFade", kind = "bool", default = true, label = "Portrait fades with the name row", tip = "The top of the picture fades like the name row. Needs Name row colour set to Class or reaction colour, fading upward.", needs = "squarePortrait" },
 		{ key = "portraitPlayer", kind = "bool", default = true, label = "Player portrait", needs = "squarePortrait" },
@@ -1411,8 +1414,8 @@ ns.PAGES = {
 	},
 	{
 		key = "unitframesPlayer", label = "Player frame", parent = "unitframes", owner = "unitframes",
-		{ key = "playerPicture", kind = "choice", default = "auto", label = "Picture", needs = "squarePortrait",
-			choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
+		{ key = "playerPicture", kind = "choice", default = "auto", label = "Picture", tip = GAME_PORTRAIT, needs = "squarePortrait",
+			choices = { { "auto", "As Portrait style" }, { "square", "Face" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
 		{ key = "playerName", kind = "bool", default = true, label = "Name" },
 		{ key = "playerLevel", kind = "bool", default = true, label = "Level" },
 		{ key = "restAnimation", kind = "choice", default = "auto", label = "Resting animation",
@@ -1429,8 +1432,9 @@ ns.PAGES = {
 	},
 	{
 		key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes",
-		{ key = "targetPicture", kind = "choice", default = "auto", label = "Picture", tip = "Class icon applies to players. Other units keep their face.", needs = "squarePortrait",
-			choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
+		{ key = "targetPicture", kind = "choice", default = "auto", label = "Picture", needs = "squarePortrait",
+			tip = "Class icon applies to players. Other units keep their face. " .. GAME_PORTRAIT,
+			choices ={ { "auto", "As Portrait style" }, { "square", "Face" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
 		{ key = "targetName", kind = "bool", default = true, label = "Name" },
 		{ key = "targetLevel", kind = "bool", default = true, label = "Level" },
 		{ key = "targetHealthBy", kind = "choice", default = "custom", label = "Health bar colour", tip = "Class applies to players. Other units take their reaction colour.", needs = "flat",
@@ -1441,8 +1445,8 @@ ns.PAGES = {
 	},
 	{
 		key = "unitframesFocus", label = "Focus frame", parent = "unitframes", owner = "unitframes",
-		{ key = "focusPicture", kind = "choice", default = "auto", label = "Picture", needs = "squarePortrait",
-			choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
+		{ key = "focusPicture", kind = "choice", default = "auto", label = "Picture", tip = GAME_PORTRAIT, needs = "squarePortrait",
+			choices = { { "auto", "As Portrait style" }, { "square", "Face" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
 		{ key = "focusName", kind = "bool", default = true, label = "Name" },
 		{ key = "focusLevel", kind = "bool", default = true, label = "Level" },
 		{ key = "focusHealthBy", kind = "choice", default = "custom", label = "Health bar colour", needs = "flat",
@@ -1453,8 +1457,8 @@ ns.PAGES = {
 	},
 	{
 		key = "unitframesPet", label = "Pet frame", parent = "unitframes", owner = "unitframes",
-		{ key = "petPicture", kind = "choice", default = "auto", label = "Picture", needs = "squarePortrait",
-			choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "none", "None" } } },
+		{ key = "petPicture", kind = "choice", default = "auto", label = "Picture", tip = GAME_PORTRAIT, needs = "squarePortrait",
+			choices = { { "auto", "As Portrait style" }, { "square", "Face" }, { "head", "3D head" }, { "game", "Game portrait" }, { "none", "None" } } },
 		{ key = "petName", kind = "bool", default = true, label = "Name" },
 		{ key = "petNameFit", kind = "choice", default = "cut", label = "Long names", needs = "petName", tip = "Smaller text goes down to 75%, then cuts. Needs Name row on small frames.",
 			choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } },
@@ -1472,8 +1476,8 @@ ns.PAGES = {
 	},
 	{
 		key = "unitframesTot", label = "Target of target frame", parent = "unitframes", owner = "unitframes",
-		{ key = "totPicture", kind = "choice", default = "auto", label = "Picture", needs = "squarePortrait",
-			choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
+		{ key = "totPicture", kind = "choice", default = "auto", label = "Picture", tip = GAME_PORTRAIT, needs = "squarePortrait",
+			choices = { { "auto", "As Portrait style" }, { "square", "Face" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
 		{ key = "totName", kind = "bool", default = true, label = "Name" },
 		{ key = "totNameFit", kind = "choice", default = "shrink", label = "Long names", needs = "totName", tip = "Smaller text goes down to 75%, then cuts. Needs Name row on small frames.",
 			choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } },
@@ -1483,10 +1487,10 @@ ns.PAGES = {
 	},
 	{
 		key = "unitframesParty", label = "Party frames", parent = "unitframes", owner = "unitframes",
-		{ key = "partyPicture", kind = "choice", default = "auto", label = "Picture", needs = "squarePortrait",
-			choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
-		{ key = "partypetPicture", kind = "choice", default = "auto", label = "Party pet picture", needs = "squarePortrait",
-			choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "none", "None" } } },
+		{ key = "partyPicture", kind = "choice", default = "auto", label = "Picture", tip = GAME_PORTRAIT, needs = "squarePortrait",
+			choices = { { "auto", "As Portrait style" }, { "square", "Face" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
+		{ key = "partypetPicture", kind = "choice", default = "auto", label = "Party pet picture", tip = GAME_PORTRAIT, needs = "squarePortrait",
+			choices = { { "auto", "As Portrait style" }, { "square", "Face" }, { "head", "3D head" }, { "game", "Game portrait" }, { "none", "None" } } },
 		{ key = "partyName", kind = "bool", default = true, label = "Name", tip = "On party members and their pets." },
 		{ key = "partyNameFit", kind = "choice", default = "cut", label = "Long names", needs = "partyName", tip = "On party members and their pets. Smaller text goes down to 75%, then cuts. Needs Name row on small frames.",
 			choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } },
@@ -1520,9 +1524,19 @@ ns.PAGES = {
 	},
 	{
 		key = "unitframesBars", label = "All frames: bars and pictures", parent = "unitframes", owner = "unitframes",
+		-- UnitFrames.lua: One frame draws a body of Flat UI's own behind each unit frame but the raid frames, with one background and one border
+		-- round the portrait, the name row and the bars; Separate parts gives each part its own.
+		{ section = "Frame" },
+		{ key = "frameStyle", kind = "choice", default = "one", label = "Frame style",
+			tip = "One frame puts the portrait, the name row and the bars in one border and one background. Separate parts gives each its own.",
+			choices = { { "one", "One frame" }, { "parts", "Separate parts" } } },
+		{ key = "backdrop", kind = "bool", default = true, label = "Background", tip = "Behind the whole frame. In Separate parts, behind each bar." },
+		{ key = "barBorder", kind = "bool", default = true, label = "Border", tip = "Round the whole frame. In Separate parts, round each bar." },
+		{ key = "powerSpace", kind = "number", default = 2, min = 0, max = 4, step = 1, unit = " px", label = "Space between parts",
+			tip = "Between the portrait, the name row and the bars, and round them. In Separate parts, only between the two bars." },
+		{ key = "corners", kind = "choice", default = "square", label = "Corners", tip = "Rounds the corners of the frame. In Separate parts, of the name row, each bar and the portrait border.",
+			choices = { { "square", "Square" }, { "slight", "Slightly soft" }, { "soft", "Soft" } } },
 		{ section = "Bars" },
-		{ key = "backdrop", kind = "bool", default = true, label = "Bar background" },
-		{ key = "barBorder", kind = "bool", default = true, label = "Bar border" },
 		{ key = "flat", kind = "bool", default = true, label = "Flat bars", tip = "Square ends and one plain colour, in the bar texture chosen on the Flat UI page." },
 		{ key = "healthColour", kind = "colour", default = "ff2eb84d", label = "Health colour", needs = "flat" },
 		{ key = "healthTexture", kind = "choice", default = "default", label = "Health bar texture", needs = "flat", choices = "BarChoicesDefault" },
@@ -1530,31 +1544,33 @@ ns.PAGES = {
 		{ key = "manaColour", kind = "choice", default = "apart", label = "Mana bar colour", needs = "flat", tip = "Custom power colours on the Colours page changes the blue this starts from.",
 			choices = { { "game", "As the game has it" }, { "apart", "Sky blue next to a blue health bar" } } },
 		{ key = "powerWidth", kind = "choice", default = "same", label = "Power bar width", tip = "Game's width can run past the health bar on the target, focus and target of target frames.",
-			choices = { { "same", "Same as the health bar" }, { "game", "Game's width" } } },
-		{ key = "powerSpace", kind = "number", default = 2, min = 0, max = 4, step = 1, unit = " px", label = "Space between bars", tip = "0 px puts the power bar against the health bar." },
+			needs = "frameStyle", needsIn = { "parts" }, choices = { { "same", "Same as the health bar" }, { "game", "Game's width" } } },
 		{ key = "hideEmptyPower", kind = "bool", default = true, label = "Hide empty power bar", tip = "Hides the power bar of a unit that has no power." },
 		{ key = "healthByLeft", kind = "bool", default = false, label = "Colour health bars by health left", needs = "flat", tip = "In the three colours of the Colours page. Not raid frames." },
 		{ section = "Portraits" },
-		{ key = "squarePortrait", kind = "bool", default = true, label = "Square portraits",
-			tip = "A square portrait with a thin border on every unit frame. Off keeps the game's portraits." },
-		{ section = "Corners" },
-		{ key = "corners", kind = "choice", default = "square", label = "Corners", tip = "Rounds the corners of the name row, the bars and the portrait borders on unit frames.",
-			choices = { { "square", "Square" }, { "slight", "Slightly soft" }, { "soft", "Soft" } } },
+		{ key = "squarePortrait", kind = "bool", default = true, label = "Flat UI portraits",
+			tip = "Portraits and the name row drawn by Flat UI. Off keeps the game's portraits where the game puts them, with no name row." },
 		{ section = "Name row" },
 		{ key = "strip", kind = "bool", default = true, label = "Name row", tip = "A row with the name above the health bar on the player, target, focus and boss frames.", needs = "squarePortrait" },
 		{ key = "stripColour", kind = "choice", default = "gradient", label = "Name row colour", needs = "strip",
 			choices = { { "gradient", "Class or reaction colour, fading upward" }, { "flat", "Class or reaction colour" }, { "dark", "Dark with a colour mark" } } },
 		{ key = "stripFade", kind = "number", default = 95, min = 0, max = 100, step = 5, unit = "%", label = "Name row fade",
 			tip = "How far the colour fades toward the top of the name row. 0 is one flat colour.", needs = "strip" },
-		{ key = "stripBrightness", kind = "number", default = 70, min = 20, max = 100, step = 5, unit = "%", label = "Name background brightness", needs = "strip" },
+		{ key = "stripBrightness", kind = "number", default = 70, min = 20, max = 100, step = 5, unit = "%", label = "Name background brightness",
+			tip = "A light colour stays dark enough for the name to read.", needs = "strip" },
 		{ section = "Status colours" },
-		{ key = "status", kind = "bool", default = true, label = "Resting and combat colour", tip = "Colours the border of the player and pet portraits: yellow while resting, red in combat. The game's glow stays hidden when this is off.", needs = "squarePortrait" },
-		{ key = "threat", kind = "bool", default = true, label = "Threat border", tip = "Colours the health bar border while a unit has threat. A party member's border takes the colour of their top debuff." },
+		{ key = "status", kind = "bool", default = true, label = "Resting and combat colour",
+			tip = "Colours the border of the player and pet portraits, or of the whole frame in One frame: yellow while resting, red in combat. The game's glow stays hidden when this is off.",
+			needs = "squarePortrait" },
+		{ key = "threat", kind = "bool", default = true, label = "Threat border",
+			tip = "Colours the health bar border, or the whole frame's border in One frame, while a unit has threat. A party member's border takes the colour of their top debuff." },
 		{ key = "threatTanks", kind = "choice", default = "shown", label = "Threat border on tanks", needs = "threat",
 			tip = "A tank who holds aggro as planned keeps a plain border. A tank is a member with the tank role, or the Main Tank of a raid.",
 			choices = { { "shown", "Shown" }, { "hidden", "Not shown" } } },
 		{ section = "Elite and Rare" },
-		{ key = "elite", kind = "bool", default = true, label = "Portrait border colour", tip = "Gold for an Elite, silver for a Rare, silver with a gold inner line for a Rare Elite, red for a Boss.", needs = "squarePortrait" },
+		{ key = "elite", kind = "bool", default = true, label = "Portrait border colour",
+			tip = "Gold for an Elite, silver for a Rare, silver with a gold inner line for a Rare Elite, red for a Boss. In One frame the whole frame's border shows it, without the inner line.",
+			needs = "squarePortrait" },
 		{ section = "Heal prediction and shields" },
 		{ key = "healPrediction", kind = "bool", default = true, label = "Incoming heals" },
 		{ key = "absorbShield", kind = "bool", default = true, label = "Absorb shields" },
@@ -2295,3 +2311,24 @@ ns.PAGES = {
 		{ key = "target", kind = "bool", default = false, label = "With a target" },
 	},
 }
+
+-- The frame styles Flat UI setup offers for the unit frames, each { id, label, line, values }. values is a table of saved path to value; every style
+-- sets the same paths, so its card shows what you get whatever you start from.
+ns.SETUP_FRAME_STYLES = {
+	{ id = "one", label = "One frame", line = "Portrait, name and bars in one frame.", values = {
+		["unitframes.frameStyle"] = "one", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "square" } },
+	{ id = "round", label = "Round portrait", line = "One frame with a round portrait.", values = {
+		["unitframes.frameStyle"] = "one", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "round" } },
+	{ id = "bars", label = "No portrait", line = "One frame with just the name and the bars.", values = {
+		["unitframes.frameStyle"] = "one", ["unitframes.portraitStyle"] = "none", ["unitframes.classShape"] = "square" } },
+	{ id = "parts", label = "Separate parts", line = "Portrait, name and bars apart, each with its own border.", values = {
+		["unitframes.frameStyle"] = "parts", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "square" } },
+}
+-- Every style also turns on Flat UI portraits and each frame's portrait, and puts each frame's Picture at As Portrait style.
+for _, style in ipairs(ns.SETUP_FRAME_STYLES) do
+	style.values["unitframes.squarePortrait"] = true
+	for _, kind in ipairs({ "player", "target", "focus", "pet", "tot", "party", "partypet" }) do
+		style.values["unitframes.portrait" .. kind:sub(1, 1):upper() .. kind:sub(2)] = true
+		style.values["unitframes." .. kind .. "Picture"] = "auto"
+	end
+end

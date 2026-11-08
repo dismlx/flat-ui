@@ -163,7 +163,8 @@ local MAX_NAME = 32
 local RESET_SETTINGS = { "unitframes.squarePortrait", "unitframes.badges", "unitframes.strip", "unitframes.elite", "unitframes.status", "unitframes.lossFlash" }
 -- A slider or a colour picker changes a general setting on every step. The work that follows waits for the last step.
 local SETTLE = 0.2
--- Modules that read a setting of another page, so a change of it refreshes them too.
+-- Modules that read a setting of another page, or a border or background row of their own page that only repaints the outlines (Changed), so a
+-- change of it refreshes them too.
 local READERS = {
 	["castbars.castColour"] = "hud", ["castbars.channelColour"] = "hud", ["castbars.craftColour"] = "hud",
 	["windows.accent"] = "chat",
@@ -176,6 +177,9 @@ local READERS = {
 	["defensives.own"] = "ownbuffs", ["defensives.enabled"] = "ownbuffs", ["defensives.place"] = "ownbuffs",
 	-- The health text of a nameplate follows Number style of the unit frames.
 	["unitframes.numberStyle"] = "nameplates",
+	-- The name row, the fade, the trough and the rounded lines of unit frames follow them.
+	["unitframes.lookOwn"] = "unitframes", ["unitframes.lookBorder"] = "unitframes", ["unitframes.lookBack"] = "unitframes",
+	["unitframes.lookBackAlpha"] = "unitframes",
 }
 
 local db
@@ -1512,6 +1516,23 @@ local function PaintNow(outline)
 	if round then
 		outline.backdrop:Hide()
 	end
+end
+
+-- Red, green and blue of the edges of an outline, as PaintNow gives them: its own colour, else the border colour of its page while that page has a
+-- border and background of its own, else the general border colour. For a line a module draws in place of the edges, such as the rounded line of a
+-- unit frame, so that it takes the same colour.
+function ns.OutlineEdgeRGB(outline)
+	if outline == nil then
+		return ns.BorderRGB()
+	end
+	if outline.r ~= nil then
+		return outline.r, outline.g, outline.b
+	end
+	local area, prefix = AreaOf(outline)
+	if area then
+		return ns.Colour(area .. "." .. prefix .. "Border")
+	end
+	return ns.BorderRGB()
 end
 
 local function Paint(outline)
