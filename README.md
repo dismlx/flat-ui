@@ -10,7 +10,7 @@ The **Threat list** page, off by default, lists your group by threat on the enem
 
 The **Drink and health macros** page, off by default, keeps two macros up to date with your bags and level: one drinks your best drink, conjured water first when it is as good, and the other takes a healthstone, then a healing potion, and eats out of combat.
 
-The **Mount key** page, off by default, gives you one key in the game's Key Bindings that mounts a random mount you can ride, favourites first; a druid takes Aquatic or Travel Form and a shaman Ghost Wolf where a mount cannot go, and pressed again it dismounts or leaves the form. With **Slow Fall or Levitate while falling** on, a mage or priest who presses it while falling casts that spell on themselves instead.
+The **Mount key** page, off by default, gives you one key in the game's Key Bindings that mounts a random mount you can ride, favourites first; a druid takes Aquatic or Travel Form and a shaman Ghost Wolf where a mount cannot go, and pressed again it dismounts or leaves the form. With **Slow Fall or Levitate while falling** on, a mage or priest who presses it while falling, out of a fight and not mounted, casts that spell on themselves instead.
 
 The **Trackers** can count who in your group lacks your class buff (2/5 on its icon), and out of combat a click casts it on them; it also casts your own buff, stance or form, and calls, revives or sets your pet to fight. **Click to apply** can also put poisons, stones or oils on your weapon, or cast a shaman's weapon imbue. A pet tracker shows your pet's health in red while it is low. Trackers can warn minutes ahead of a long buff or poison, earlier in dungeons and raids, and play a sound when a buff comes back or gains a stack.
 

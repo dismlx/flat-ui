@@ -1259,7 +1259,7 @@ ns.SETUP_STEPS = {
 	{ id = "mount", area = "Mount key", title = "Mount key", draw = "mock-screen", built = false, rows = {
 		{ "mount.enabled", "c", "behaviour", "Gives you one key in the game's Key Bindings that mounts a random mount or takes a travel form, and dismounts or leaves the form when pressed again." },
 		{ "mount.favourites", "o", "behaviour", "Picks the mount among your favourites while one of them can be used." },
-		{ "mount.falling", "o", "behaviour", "For a mage or a priest: pressed while you fall and are not mounted, the key casts Slow Fall or Levitate on you." },
+		{ "mount.falling", "o", "behaviour", "For a mage or a priest: pressed while you fall, out of a fight and not mounted, the key casts Slow Fall or Levitate on you." },
 	} },
 	{ id = "grouptools", area = "Group tools", title = "Group tools", draw = "mock-screen", built = false, rows = {
 		{ "grouptools.enabled", "c", "behaviour", "Shows a row of buttons for raid markers, a ready check, a role poll and a pull countdown, placed with the movers." },
