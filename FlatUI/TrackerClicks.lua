@@ -1,26 +1,32 @@
 local _, ns = ...
 
 -- Click to apply: out of combat, a click on a tracker fixes what it shows. A group buff tracker (TrackerGroup.lua) casts its buff on a member who
--- lacks it, and a weapon tracker puts a poison, stone or oil on its weapon. This follows the click-to-apply icons of the Class Buff Reminder of
--- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLClassBuffReminder/ClassBuffReminder.lua:1960-2063): a secure
--- button over the icon, given its attributes out of combat. Where EnhanceQoL writes a macro that uses the item and then the hand's slot, the
--- button here has the item and the slot as attributes of the template's own, and runs no macro text. An item tracker takes no click: it counts
--- an item in the bags (C_Item.GetItemCount, ItemDocumentation.lua:451-468; TrackerKinds.lua:1121-1153), and a use (type item, below) only
+-- lacks it; a buff, stance or form tracker casts your own buff, stance or form on you; a pet tracker calls, revives, summons or sets the mode of
+-- your pet; and a weapon tracker puts a poison, stone or oil on its weapon. This follows the click-to-apply icons of the Class Buff Reminder of
+-- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLClassBuffReminder/ClassBuffReminder.lua:1960-2063, the buttons
+-- that cast the buff, use the item, apply it to the slot and summon the pet; 2043-2046, type pet with a pet bar slot; 3718-3760, what a pet click
+-- does; 1586-1621, the item chosen for each weapon slot): a secure button over the icon, given its attributes out of combat. Where EnhanceQoL
+-- writes a macro that uses the item and then the hand's slot, the button here has the item and the slot as attributes of the template's own, and
+-- runs no macro text; the one macro text is a hunter's Call Pet, then Revive Pet. An item tracker takes no click: it counts
+-- an item in the bags (C_Item.GetItemCount, ItemDocumentation.lua:451-468; TrackerKinds.lua:1467-1499), and a use (type item, below) only
 -- lowers that count, so a click on a Healthstone or Mana gem tracker that is fine would spend the stone or the gem, and one that is missing has
 -- nothing to use. EnhanceQoL's healthstone icon likewise shows only while the bags hold no stone, and its click casts Create Healthstone
--- (ClassBuffReminder.lua:3827-3839).
+-- (ClassBuffReminder.lua:3827-3839). A debuff tracker takes none either: the debuff is on the target, cast in a fight.
 -- The click is a secure button of Flat UI's own (SecureActionButtonTemplate), made as Reload.lua:93 and ErrandsRanks.lua:510 make theirs: made,
 -- shown, hidden, moved and given attributes only out of combat. It lies over a tracker's frame, as its child, only while the tracker is drawn
 -- live and shown and has something to fix. A secure child makes the frames above it protected (Reload.lua:14-17), so at PLAYER_REGEN_DISABLED,
 -- before the lockdown, every button leaves its tracker as Reload.lua's Detach does: hidden, its points cleared, its parent UIParent. Nothing of
 -- the trackers is protected in a fight, and nothing on the buttons changes there. The game's secure code does the rest (Blizzard_FrameXML/
--- SecureTemplates.lua): type spell casts the spell attribute by name on the unit attribute (396-405), type item uses an item string through
+-- SecureTemplates.lua): type spell casts the spell attribute by name on the unit attribute (396-405), so a buff cast by its name is its highest
+-- rank; type pet runs CastPetAction, which the game protects, with the pet bar slot of the action attribute (370-377); type macro runs the
+-- macrotext attribute (450-463), as MountKey.lua's and GroupTools.lua's buttons do; type item uses an item string through
 -- C_Item.UseItemByName (418-439; Blizzard_ChatFrameBase/Shared/ChatFrameUtil.lua:1212-1236), and target-slot then puts what the item asks a
 -- target for on that inventory slot, in the same click (759-784). The button takes the release of the left button (useOnKeyDown false, 802-829).
--- PreClick, which runs before that code and out of combat, chooses again from what the bags, the spell book and the group hold now, and takes the
--- type away when nothing is left to do, as ErrandsRanks.lua's PreClick does (754-770). No field is written on a button and none of the game's
--- frames is touched; the button reads and writes nothing of the click path of the game's action buttons (TaintScan.lua). Only GameTooltip is
--- written, the lines of the button's own tooltip while the mouse is over it.
+-- PreClick, which runs before that code and out of combat, chooses again from what the bags, the spell book, the pet bar, the group and the
+-- player's power hold now, and takes the type away when nothing is left to do, as ErrandsRanks.lua's PreClick does (754-770); the slot of a
+-- pet click is read again there from the tokens of the pet bar (TrackerKinds.lua's PetModes), so a click never runs another pet action. No
+-- field is written on a button and none of the game's frames is touched; the button reads and writes nothing of the click path of the game's
+-- action buttons (TaintScan.lua). Only GameTooltip is written, the lines of the button's own tooltip while the mouse is over it.
 
 local KEY = "trackers"
 local IsSecret = ns.IsSecret
@@ -40,6 +46,13 @@ local IsSecret = ns.IsSecret
 -- weapons. The Elemental Sharpening Stone (its spell 22756, mask 42483, also that of Forever's second one, 287980), the Consecrated Sharpening
 -- Stone (28891, mask 1097203), the poisons and the oils take every melee weapon, and are in neither list. WEAPON: the item class of a weapon
 -- (Enum.ItemClass.Weapon, ItemConstantsDocumentation.lua:278).
+-- SINGLE: by the ID of a group version, which uses a reagent, the first rank of the single-target buff a click casts in its place, so that a
+-- group buff another player cast on you is answered with your own: Prayer of Fortitude as Power Word: Fortitude, Prayer of Spirit as Divine
+-- Spirit, Prayer of Shadow Protection as Shadow Protection, Arcane Brilliance as Arcane Intellect, Gift of the Wild as Mark of the Wild, and the
+-- greater blessings of Might, Wisdom, Kings, Salvation and Light as the blessings (the IDs of ClassData.lua:16, 35-37, 53, 68). DAZE: Aspect of
+-- the Cheetah and Aspect of the Pack, which daze, never cast by a click (Forever's ranks 2 to 4 of Aspect of the Beast, 1299445-1299447, do not).
+-- CALL, REVIVE: Call Pet and Revive Pet, the hunter's (ClassData.lua:23; ClassBuffReminder.lua:463-464). MODES: what a pet click sets, by the
+-- word of TrackerKinds.lua's PetModes, and its words.
 local K = {
 	SLOTS = { main = { 16, "main hand" }, off = { 17, "off hand" }, ranged = { 18, "ranged weapon" } },
 	EDGED = { [12404] = true, [7964] = true, [2871] = true, [2863] = true, [2862] = true, [287978] = true },
@@ -55,19 +68,26 @@ local K = {
 		-- Blessed, Brilliant, Wizard, Lesser and Minor Wizard Oil; Brilliant, Lesser and Minor Mana Oil; Shadow Oil and Frost Oil.
 		23123, 20749, 20750, 20746, 20744, 20748, 20747, 20745, 3824, 3829,
 	},
-	KINDS = { none = {}, group = { group = true }, all = { group = true, weapon = true } },
-	ATTRIBUTES = { "type", "spell", "unit", "item", "target-slot" },
+	KINDS = { none = {}, group = { group = true, buff = true, form = true, pet = true },
+		all = { group = true, buff = true, form = true, pet = true, weapon = true } },
+	ATTRIBUTES = { "type", "spell", "unit", "item", "target-slot", "action", "macrotext" },
+	SINGLE = { [21562] = 1243, [21564] = 1243, [27681] = 14752, [27683] = 976, [23028] = 1459, [21849] = 1126, [21850] = 1126, [25782] = 19740,
+		[25916] = 19740, [25894] = 19742, [25918] = 19742, [25898] = 20217, [25895] = 1038, [25890] = 19977 },
+	DAZE = { [5118] = true, [13159] = true },
+	CALL = 883, REVIVE = 982,
+	MODES = { defensive = "Defensive", assist = "Assist" },
 	REFUSED = "Trackers: the game would not make a secure button, so a click on a tracker does nothing.",
 	MAX_ID = 2147483647, LEVEL = 10,
-	USAGE = "/flatui tracker use 1 Instant Poison - the item a click on weapon tracker 1 puts on the weapon, or clear for the first one the bags hold",
+	USAGE = "/flatui tracker use 1 Instant Poison - the item a click on weapon tracker 1 puts on the weapon, or clear for nothing chosen",
 }
 -- buttons: the button of each tracker that has one, by the id of its entry; free: buttons no tracker has. owner, set, parent, shown and level, by
 -- button: the id it is for, the attributes it was given, the frame it lies over, whether it is shown and the frame level it was given. fighting:
--- between PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED. refused: the game would not make a button.
+-- between PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED. refused: the game would not make a button. useFor: the id of the weapon tracker chosen
+-- in the first step of Item a click puts on a weapon.
 local S = {
 	buttons = {}, free = {}, owner = setmetatable({}, { __mode = "k" }), set = setmetatable({}, { __mode = "k" }),
 	parent = setmetatable({}, { __mode = "k" }), shown = setmetatable({}, { __mode = "k" }), level = setmetatable({}, { __mode = "k" }),
-	fighting = false, watcher = nil, refused = false,
+	fighting = false, watcher = nil, refused = false, useFor = nil,
 }
 
 local function Plain(value, kind)
@@ -216,24 +236,199 @@ local function Weapon(entry)
 	return nil
 end
 
+-- The families of a buff tracker: the spells of its list grouped by their name (C_Spell.GetSpellName), in list order, which is the order of its
+-- names, each { name, ids, has, daze }; and the family of each ID. A group version of SINGLE joins the family of its single-target buff, with that
+-- buff's first rank in place of its own, so its own ID, which uses a reagent, is never known to the family. An ID is in a family once, so its
+-- IDs keep the order of the ranks of the list, the newest last.
+local function Families(entry)
+	local families, of, named = {}, {}, {}
+	for _, id in ipairs(type(entry.spells) == "table" and entry.spells or {}) do
+		local cast = Whole(id) and (K.SINGLE[id] or id)
+		local name = cast and SpellName(cast)
+		if name then
+			local family = named[name]
+			if not family then
+				family = { name = name, ids = {}, has = {}, daze = false }
+				named[name] = family
+				families[#families + 1] = family
+			end
+			if not family.has[cast] then
+				family.has[cast] = true
+				family.ids[#family.ids + 1] = cast
+			end
+			family.daze = family.daze or K.DAZE[id] == true
+			of[id] = family
+		end
+	end
+	return families, of
+end
+
+-- A family takes the click when it does not daze and the player knows one of its spells and has it in the spell book (a recipe is a known
+-- spell that is not, as Weapon says).
+local function Castable(family)
+	if not family or family.daze then
+		return false
+	end
+	for _, id in ipairs(family.ids) do
+		if Known(id) and InBook(id) then
+			return true
+		end
+	end
+	return false
+end
+
+-- The newest spell of a family that the player knows and has in the spell book: the last one of its IDs, as Weapon takes the newest of its
+-- list. It is the rank a cast by the family's name gives. Nil when there is none.
+local function Newest(family)
+	local newest = nil
+	for _, id in ipairs(family and family.ids or {}) do
+		if Known(id) and InBook(id) then
+			newest = id
+		end
+	end
+	return newest
+end
+
+-- True when the game plainly says that power alone keeps the player from casting the spell now: the second answer of C_Spell.IsSpellUsable,
+-- insufficientPower (SpellDocumentation.lua:980-995, no withheld answers), asked by ID as Cooldowns.lua's power tint asks it. A missing call, an
+-- error or a withheld answer does not stop a click.
+local function Short(id)
+	local call = type(C_Spell) == "table" and C_Spell.IsSpellUsable
+	if not Whole(id) or type(call) ~= "function" then
+		return false
+	end
+	local ok, _, short = pcall(call, id)
+	return ok and not IsSecret(short) and short == true
+end
+
+-- A buff tracker: the family of the buff it last saw on the player (seen, any spell of its list, Trackers.lua's Settle), else the first family
+-- of its list the player can cast, cast by its name on the player, so the game takes its highest rank. Unlike Weapon, a click never takes the
+-- last family: the class lists end with the group versions, the dazing aspects and the resistance auras (ClassData.lua:15-16, 21, 35-37, 53,
+-- 68). So a hunter whose tracker last saw Aspect of the Wild gets it again, and one that last saw Aspect of the Cheetah gets the first aspect
+-- left. A buff the player cannot cast takes no click, nor does the family chosen while the player lacks the power for it (Short): a warrior
+-- has no rage out of combat for Battle Shout, and the click would only give the game's error. The click is not moved to a cheaper family; a pass
+-- or the click itself (PreClick) asks again, so a warrior with rage left from a fight still gets it.
+local function Buff(entry)
+	local families, of = Families(entry)
+	local family = Whole(entry.seen) and of[entry.seen] or nil
+	if not Castable(family) then
+		family = nil
+		for _, each in ipairs(families) do
+			if not family and Castable(each) then
+				family = each
+			end
+		end
+	end
+	if not family then
+		return nil
+	elseif Short(Newest(family)) then
+		return nil, ("would cast %s on you, but you lack the power for it now"):format(family.name)
+	end
+	return { type = "spell", spell = family.name, unit = "player" }, ("casts %s on you"):format(family.name)
+end
+
+-- A stance or form tracker: the form of its list it last saw the player in (seen, kept by TrackerKinds.lua's FormRead), else the first spell of
+-- its list the player knows. One with no spells takes none.
+local function Form(entry)
+	local spells = type(entry.spells) == "table" and entry.spells or {}
+	for _, id in ipairs(spells) do
+		if id == entry.seen and Known(id) then
+			return Cast(id)
+		end
+	end
+	for _, id in ipairs(spells) do
+		if Whole(id) and Known(id) then
+			return Cast(id)
+		end
+	end
+	return nil
+end
+
+-- A pet tracker that is not set to happy, read afresh: a hunter's pet that is out and dead is revived; a hunter with no pet out casts Call Pet,
+-- then Revive Pet in the same click for a pet that died (a macro text of those he knows: the first that the game takes is cast); a warlock with
+-- no demon casts the summon he cast last (FlatUICharDB.petSummon, kept by TrackerKinds.lua's PetCast), else the first summon of the list he
+-- knows; a pet low by its mode is set to Defensive, or to Assist while Defensive counts as low too, with type pet and the pet bar slot whose
+-- token is that mode (TrackerKinds.lua's PetModes), and with no such slot there is no click. A pet low only by its health takes none, nor does a
+-- pet a flight path or a buff excuses (fine, so nothing to fix).
+local function Pet(entry)
+	if entry.happy == true then
+		return nil
+	end
+	local exists, dead = Ask(UnitExists, "pet"), nil
+	if exists == true then
+		dead = Ask(UnitIsDead, "pet")
+	end
+	if exists == true and dead == false then
+		local mode, slots = nil, {}
+		if type(ns.TrackerPetModes) == "function" then
+			mode, slots = ns.TrackerPetModes()
+		end
+		local passive, defensive = ns.Get(KEY .. ".petPassive") == true, ns.Get(KEY .. ".petDefensive") == true
+		if not ((mode == "passive" and passive) or (mode == "defensive" and defensive)) then
+			return nil
+		end
+		local want = defensive and "assist" or "defensive"
+		local slot = type(slots) == "table" and slots[want]
+		if not Whole(slot) then
+			return nil
+		end
+		return { type = "pet", action = slot }, ("sets your pet to %s"):format(K.MODES[want])
+	elseif exists == true and dead == true and Known(K.REVIVE) then
+		return Cast(K.REVIVE)
+	elseif exists ~= false and dead ~= true then
+		return nil
+	end
+	-- No pet, or a dead one that is not a hunter's.
+	local lines, names = {}, {}
+	for _, id in ipairs({ K.CALL, K.REVIVE }) do
+		local name = Known(id) and SpellName(id)
+		if name then
+			lines[#lines + 1] = "/cast " .. name
+			names[#names + 1] = name
+		end
+	end
+	if #names > 0 then
+		return { type = "macro", macrotext = table.concat(lines, "\n") }, ("casts %s"):format(table.concat(names, ", or when your pet is dead "))
+	end
+	local saved = ns.Character()
+	local last = type(saved) == "table" and saved.petSummon or nil
+	if Whole(last) and Known(last) then
+		return Cast(last)
+	end
+	for _, id in ipairs(type(entry.summon) == "table" and entry.summon or {}) do
+		if Whole(id) and Known(id) then
+			return Cast(id)
+		end
+	end
+	return nil
+end
+
 -- The attributes a click on the tracker sets now and what it does in words ("casts Arcane Intellect on Jaina"), or nil when there is nothing to do.
--- With now set (a click, the mouse over the button) a group is looked at afresh; a pass takes the look the tracker was drawn from.
+-- With now set (a click, the mouse over the button) a group is looked at afresh; a pass takes the look the tracker was drawn from. The pet and the
+-- spell book are read afresh each time.
 local function Choose(entry, now)
 	if entry.kind == "weapon" then
 		return Weapon(entry)
 	elseif entry.kind == "group" and type(ns.TrackerGroupChoice) == "function" then
 		return ns.TrackerGroupChoice(entry, now)
+	elseif entry.kind == nil or entry.kind == "buff" then
+		return Buff(entry)
+	elseif entry.kind == "form" then
+		return Form(entry)
+	elseif entry.kind == "pet" then
+		return Pet(entry)
 	end
 	return nil
 end
 
--- The kind takes a click: the page is on, the tracker is on and the Click to apply row names its kind.
+-- The kind takes a click: the page is on, the tracker is on and the Click to apply row names its kind (a buff's kind is buff, or none).
 local function Allowed(entry)
 	local kinds = K.KINDS[ns.Get(KEY .. ".click")] or K.KINDS.none
-	return ns.Enabled(KEY) and entry.on ~= false and kinds[entry.kind] == true
+	return ns.Enabled(KEY) and entry.on ~= false and kinds[entry.kind or "buff"] == true
 end
 
--- The tracker has something a click fixes, as it is drawn now: live and shown, a weapon or group buff that is low or missing.
+-- The tracker has something a click fixes, as it is drawn now: live and shown (a plain alpha of 1, so never a pet tracker shown by its pet's
+-- health alone, TrackerKinds.lua's PetOver), and low or missing.
 local function Fixable(entry, reading, how, record)
 	if how ~= "live" or type(record) ~= "table" or record.alpha ~= 1 or type(reading) ~= "table" then
 		return false
@@ -473,7 +668,7 @@ function ns.TrackerClickLine(entry)
 		local _, text = Choose(entry)
 		return "Click: " .. (text and (text .. ".") or "nothing to do now.")
 	end
-	return "Click: none now. A click is offered out of combat while the tracker has something to fix."
+	return "Click: none now. A click is offered out of combat while the tracker has something to fix, and for a buff while you have the power to cast it."
 end
 
 -- /flatui tracker use: the item a click on a weapon tracker puts on the weapon, or a spell it casts. An item by ID, link or name (the bags
@@ -509,6 +704,55 @@ local function SpellOf(text)
 	return Whole(id) and SpellName(id) and id or nil
 end
 
+-- What a click on a weapon tracker takes while nothing is chosen for it, as Weapon decides it now (asked with a copy of the entry that has no use
+-- and no useSpell): the name of the item or the spell, or nil when the bags and the spell book hold nothing for it. So what the check
+-- (TrackerKinds.lua's Chosen), Item a click puts on a weapon and /flatui tracker use say of a tracker with nothing chosen is what a click does:
+-- a shaman's imbue, a rogue's poison of the list or the strongest one of CONSUMABLES.
+local function OwnPick(entry)
+	if type(entry) ~= "table" then
+		return nil
+	end
+	local copy = {}
+	for key, value in pairs(entry) do
+		copy[key] = value
+	end
+	copy.use, copy.useSpell = nil, nil
+	local action = Weapon(copy)
+	if type(action) ~= "table" then
+		return nil
+	elseif action.type == "spell" then
+		return action.spell
+	end
+	local id = tonumber(type(action.item) == "string" and action.item:match("^item:(%d+)$") or nil)
+	return Whole(id) and ItemName(id) or nil
+end
+ns.TrackerWeaponOwn = OwnPick
+
+-- A weapon tracker with nothing chosen, in the words of the lines of Item a click puts on a weapon.
+local function Unchosen(entry)
+	local name = OwnPick(entry)
+	return name and ("nothing chosen (%s now)"):format(name) or "nothing chosen (nothing to use now)"
+end
+
+-- What a click on weapon tracker number index uses from now on: the item (use) or the spell (useSpell), or with neither what it takes itself
+-- (OwnPick). The line /flatui tracker use and Item a click puts on a weapon print.
+local function SetUse(index, entry, item, spell)
+	entry.use, entry.useSpell = item, spell
+	if type(ns.TrackerDirty) == "function" then
+		ns.TrackerDirty()
+	end
+	local line
+	if item then
+		line = ("a click puts %s on the weapon."):format(ItemName(item))
+	elseif spell then
+		line = ("a click casts %s."):format(SpellName(spell) or ("spell " .. spell))
+	else
+		local name = OwnPick(entry)
+		line = name and ("nothing chosen, so a click uses %s now."):format(name) or "nothing chosen, and a click finds nothing to use now."
+	end
+	return ("Tracker %s: %s"):format(index, line)
+end
+
 if type(ns.TrackerWord) == "function" then
 	ns.TrackerWord("use", function(text)
 		local number, rest = text:match("^(%d+)%s*(.-)$")
@@ -521,28 +765,141 @@ if type(ns.TrackerWord) == "function" then
 		elseif entry.kind ~= "weapon" then
 			return ("Tracker %s is not a weapon tracker."):format(number)
 		end
-		local function Done(line)
-			if type(ns.TrackerDirty) == "function" then
-				ns.TrackerDirty()
-			end
-			return ("Tracker %s: %s"):format(number, line)
-		end
 		if rest == "" or rest:lower() == "clear" then
-			entry.use, entry.useSpell = nil, nil
-			return Done("a click uses the first item of its list that the bags hold.")
+			return SetUse(number, entry, nil, nil)
 		end
 		local item = ItemOf(rest)
 		if item then
-			entry.use, entry.useSpell = item, nil
-			return Done(("a click puts %s on the weapon."):format(ItemName(item)))
+			return SetUse(number, entry, item, nil)
 		end
 		local spell = SpellOf(rest)
 		if spell then
-			entry.use, entry.useSpell = nil, spell
-			return Done(("a click casts %s."):format(SpellName(spell)))
+			return SetUse(number, entry, nil, spell)
 		end
 		return ('No item or spell found for "%s".'):format(rest)
 	end)
+end
+
+-- Item a click puts on a weapon is one list for two choices, made again each time it opens, as Sound of one icon is (Cooldowns.lua:1739-1782):
+-- the weapon trackers, each with what it uses now; once one is chosen, what a click can put on its weapon, then Nothing chosen and Another
+-- weapon tracker. A pick sets use or useSpell as /flatui tracker use does (SetUse). The lines of the second step are an item by its ID
+-- and a spell by minus its ID, beside FIRST and BACK. This follows the item EnhanceQoL lets a player choose for each weapon slot
+-- (ClassBuffReminder.lua:1586-1621).
+local USE = { FIRST = -1, BACK = -2 }
+
+-- The weapon trackers, { index, entry }, and the one chosen first, or nil when none is or it has left the list.
+local function WeaponTrackers()
+	local rows, chosen = {}, nil
+	for index, entry in ipairs(type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}) do
+		if entry.kind == "weapon" then
+			rows[#rows + 1] = { index = index, entry = entry }
+			if S.useFor ~= nil and entry.id == S.useFor then
+				chosen = rows[#rows]
+			end
+		end
+	end
+	if not chosen then
+		S.useFor = nil
+	end
+	return rows, chosen
+end
+
+local function TrackerName(entry)
+	return type(ns.TrackerLabel) == "function" and ns.TrackerLabel(entry) or "Weapon tracker"
+end
+
+-- What a click can put on the tracker's weapon now, { id, text }: the items of its list and the weapon poisons, stones and oils of CONSUMABLES
+-- (not for a ranged weapon) that the bags hold and that weapon takes (Fits), then the spells of its list the player knows and has in the spell
+-- book, one line for each name, by its last ID there (the newest rank). As Weapon does, a list with such a spell (a shaman's) offers none of its
+-- items: its other IDs are ranks not learnt yet, and taken as items, Rockbiter Weapon rank 4 would be the Blackened Defias Armor, Flametongue
+-- Weapon rank 3 the Plans: Ebon Shiv and rank 5 the Sergeant's Cloak, which a click would then put on or use (Weapon's header). The poisons,
+-- stones and oils of CONSUMABLES are offered all the same.
+local function UseChoices(entry)
+	local slot = K.SLOTS[entry.slot]
+	local held = slot and Held(slot)
+	local apply = type(entry.apply) == "table" and entry.apply or {}
+	local rows, items, spells, taken, named = {}, {}, {}, {}, {}
+	for _, id in ipairs(apply) do
+		if Whole(id) and Known(id) and InBook(id) then
+			spells[#spells + 1] = id
+		else
+			items[#items + 1] = id
+		end
+	end
+	if #spells > 0 then
+		items = {}
+	end
+	if entry.slot ~= "ranged" then
+		for _, id in ipairs(K.CONSUMABLES) do
+			items[#items + 1] = id
+		end
+	end
+	for _, id in ipairs(items) do
+		if Whole(id) and not taken[id] and Carried(id) and Fits(id, held) then
+			taken[id] = true
+			rows[#rows + 1] = { id, ItemName(id) }
+		end
+	end
+	for _, id in ipairs(spells) do
+		local name = SpellName(id)
+		if name and named[name] then
+			rows[named[name]][1] = -id
+		elseif name then
+			rows[#rows + 1] = { -id, name }
+			named[name] = #rows
+		end
+	end
+	return rows
+end
+
+-- What a weapon tracker uses now, in words: the item or spell chosen for it, else what a click takes itself (Unchosen).
+local function UseWords(entry)
+	if Whole(entry.use) then
+		return ItemName(entry.use)
+	elseif Whole(entry.useSpell) then
+		return SpellName(entry.useSpell) or ("spell " .. entry.useSpell)
+	end
+	return Unchosen(entry)
+end
+
+function ns.TrackerUseLines()
+	local rows, chosen = WeaponTrackers()
+	local lines = {}
+	if not chosen then
+		for _, row in ipairs(rows) do
+			lines[#lines + 1] = { row.index, ("%d. %s: %s"):format(row.index, TrackerName(row.entry), UseWords(row.entry)) }
+		end
+		return lines
+	end
+	local label = TrackerName(chosen.entry)
+	for _, row in ipairs(UseChoices(chosen.entry)) do
+		lines[#lines + 1] = { row[1], label .. ": " .. row[2] }
+	end
+	lines[#lines + 1] = { USE.FIRST, label .. ": " .. Unchosen(chosen.entry) }
+	lines[#lines + 1] = { USE.BACK, "Another weapon tracker" }
+	return lines
+end
+
+function ns.TrackerUsePick(id)
+	local rows, chosen = WeaponTrackers()
+	if not chosen then
+		for _, row in ipairs(rows) do
+			if row.index == id then
+				S.useFor = row.entry.id
+				return true, ("%s: open the list again to choose what a click puts on it."):format(TrackerName(row.entry))
+			end
+		end
+		return false, "That weapon tracker is not on the list."
+	end
+	S.useFor = nil
+	if id == USE.FIRST then
+		return true, SetUse(chosen.index, chosen.entry, nil, nil)
+	elseif Whole(id) then
+		return true, SetUse(chosen.index, chosen.entry, id, nil)
+	elseif Plain(id, "number") and id ~= USE.BACK and Whole(-id) then
+		return true, SetUse(chosen.index, chosen.entry, nil, -id)
+	end
+	return true, nil
 end
 
 ns.AddStatus(KEY, function()

@@ -1157,7 +1157,7 @@ function ns.TrackerSet(index, word, text)
 		for key in pairs(OWN) do
 			entry[key] = nil
 		end
-		entry.happy = nil
+		entry.happy, entry.health = nil, nil
 		return Done(("Tracker %d: every setting follows the pages."):format(index))
 	end
 	if word == "clear" then
@@ -1175,6 +1175,20 @@ function ns.TrackerSet(index, word, text)
 			return Done(("Tracker %d: happy is off."):format(index))
 		end
 		return false, ('Tracker %d: "%s" is not a value for happy.'):format(index, text)
+	end
+	-- A pet tracker's own Pet health minimum, 0 to 90 (TrackerKinds.lua's PetClean keeps it so), or clear for the page's.
+	if word == "health" then
+		local value = tonumber((text:gsub("%%$", "")))
+		if entry.kind ~= "pet" then
+			return false, ("Tracker %d: health is a setting of the pet tracker."):format(index)
+		elseif text:lower() == "clear" then
+			entry.health = nil
+			return Done(("Tracker %d: health follows the page."):format(index))
+		elseif value and value >= 0 and value <= 90 and value == math.floor(value) then
+			entry.health = value
+			return Done(("Tracker %d: health is %d%%."):format(index, value))
+		end
+		return false, ('Tracker %d: "%s" is not a value for health, which is 0 to 90.'):format(index, text)
 	end
 	local key = K.WORDS[word]
 	if not key then
@@ -1950,7 +1964,9 @@ local function Apply(record, entry, look)
 	end
 end
 
--- 1 when the tracker is wanted on screen now, else 0.
+-- 1 when the tracker is wanted on screen now, else 0; and a second answer, the reason "fine", for the one 0 that comes from the state of a
+-- tracker set to Only when low or missing alone: drawn live and fine. Draw hands it to a kind's Over, which may draw by it (the pet's health,
+-- TrackerKinds.lua); every other 0, of the death, a kind's own Wanted, the three rows or Only in combat, has no reason.
 local function Wanted(entry, state, how)
 	local ok, dead = pcall(UnitIsDeadOrGhost, "player")
 	if ok and not IsSecret(dead) and dead == true then
@@ -1965,11 +1981,17 @@ local function Wanted(entry, state, how)
 	end
 	local show = Value(entry, "show")
 	if show == "low" then
-		-- Trackers that show only when low or missing are hidden on a mount and in a city or an inn, as the two rows say.
-		if (Opt("mounted") and Ask(IsMounted) == true) or (Opt("resting") and Ask(IsResting) == true) then
+		-- Trackers that show only when low or missing are hidden on a mount, in a city or an inn and in a fight, as the three rows say; in a fight
+		-- by the trackers' own word for it, set at PLAYER_REGEN_DISABLED. Hide in combat follows the Only out of combat filter of EnhanceQoL's
+		-- Class Buff Reminder (ClassBuffReminder.lua:2667-2673), whose rested filter (2505-2510) Hide in cities and inns is. Its role filter
+		-- (2683-2764) is left out: groups on Forever often have no roles (HealerMana.lua), and its class rule alone would silence a mage in a raid.
+		if (Opt("mounted") and Ask(IsMounted) == true) or (Opt("resting") and Ask(IsResting) == true) or (Opt("combatHide") and fighting) then
 			return 0
 		end
-		return (how ~= "live" or state == "low" or state == "missing") and 1 or 0
+		if how ~= "live" or state == "low" or state == "missing" then
+			return 1
+		end
+		return 0, state == "fine" and "fine" or nil
 	elseif show == "combat" then
 		return fighting and 1 or 0
 	end
@@ -1999,6 +2021,10 @@ local function Drawn(entry, reading)
 end
 
 -- Allowed in combat: only texture, text, alpha, Cooldown and animation calls.
+-- A kind may draw over its tracker last, with Over(entry, record, how, reason): the pet kind's health (TrackerKinds.lua), which for the reason
+-- fine of Wanted alone gives the frame an alpha the game withholds in place of the 0, marks the record curved and answers true. record.alpha
+-- stays a plain number: whenever Over does not answer true, a curved record gets that alpha back at once, so a tracker that is dead, mounted,
+-- missing, in a fight with Hide in combat or wanted for any other reason is drawn by the rules of Show again.
 local function Draw(entry, reading)
 	if testing[entry.id] then
 		return
@@ -2007,16 +2033,26 @@ local function Draw(entry, reading)
 	local record = records[entry.id]
 	if record then
 		record.how = how
-		local alpha = 0
+		local alpha, reason = 0, nil
 		if how == "hidden" then
 			Pulse(record, false)
 		else
 			Apply(record, entry, Looks(entry, reading, how))
-			alpha = Wanted(entry, reading.state, how)
+			alpha, reason = Wanted(entry, reading.state, how)
 		end
 		if record.alpha ~= alpha then
 			record.frame:SetAlpha(alpha)
 			record.alpha = alpha
+		end
+		local kind, curved = KINDS[entry.kind], false
+		if kind and type(kind.Over) == "function" then
+			ns.EachPart(KEY, Part(entry.kind), function()
+				curved = kind.Over(entry, record, how, reason) == true
+			end)
+		end
+		if record.curved and not curved then
+			record.curved = nil
+			record.frame:SetAlpha(record.alpha)
 		end
 	end
 	Slot("Show", entry, how == "game", record and record.alpha)

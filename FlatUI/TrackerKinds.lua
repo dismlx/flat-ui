@@ -344,26 +344,72 @@ local function Icon(entry)
 	return K.SLOTS[entry.slot] and ItemTexture(entry.slot) or nil
 end
 
--- The line of the check: the slot, whether an enchant was found, its type and the time left with the number the game gave.
+-- What a click on the tracker uses on its hand (use, useSpell: /flatui tracker use and Item a click puts on a weapon, TrackerClicks.lua), in
+-- words: the item's name (C_Item.GetItemNameByID) or the spell's (C_Spell.GetSpellName), so that a poison chosen for the main hand and another
+-- for the off hand stay apart in the check. With nothing chosen, what a click takes itself now, as TrackerClicks.lua's Weapon decides it
+-- (ns.TrackerWeaponOwn): a shaman's imbue, else an item of the list or the strongest poison, stone or oil in the bags.
+local function Chosen(entry)
+	local id, call = entry.use, type(C_Item) == "table" and C_Item.GetItemNameByID
+	local word = "item %d"
+	if not Plain(id, "number") then
+		id, call, word = entry.useSpell, type(C_Spell) == "table" and C_Spell.GetSpellName, "spell %d"
+	end
+	if not Plain(id, "number") then
+		if type(ns.TrackerWeaponOwn) ~= "function" then
+			return "nothing"
+		end
+		local own = ns.TrackerWeaponOwn(entry)
+		return Plain(own, "string") and ("nothing, so a click uses %s now"):format(own) or "nothing, and a click finds nothing to use now"
+	end
+	local ok, name = false, nil
+	if type(call) == "function" then
+		ok, name = pcall(call, id)
+	end
+	if ok and Plain(name, "string") and name ~= "" then
+		return name
+	end
+	return word:format(id)
+end
+
+-- The line of the check: the slot, whether an enchant was found, its type and the time left with the number the game gave; then what a click
+-- puts on that hand.
 local function Lines(entry)
 	local info = K.SLOTS[entry.slot]
 	local last = mem.last[entry.id]
 	local hand = info and info.hand or "unknown slot"
+	local chosen = ("Chosen for the %s: %s."):format(hand, Chosen(entry))
 	if not last then
-		return { ("Weapon enchant: %s, not read yet."):format(hand) }
+		return { ("Weapon enchant: %s, not read yet."):format(hand), chosen }
 	elseif last.word then
-		return { ("Weapon enchant: %s, %s."):format(hand, last.word) }
+		return { ("Weapon enchant: %s, %s."):format(hand, last.word), chosen }
 	elseif not last.found then
-		return { ("Weapon enchant: %s, found no."):format(hand) }
+		return { ("Weapon enchant: %s, found no."):format(hand), chosen }
 	end
 	local time = last.seconds and ("%d s left (the game gave %d)"):format(math.floor(last.seconds), math.floor(last.raw)) or "no time limit"
 	local charges = last.count and (", %d charges"):format(last.count) or ""
-	return { ("Weapon enchant: %s, found yes, type %s, %s%s."):format(hand, last.type and ("%d"):format(last.type) or "not given", time, charges) }
+	return { ("Weapon enchant: %s, found yes, type %s, %s%s."):format(hand, last.type and ("%d"):format(last.type) or "not given", time, charges),
+		chosen }
+end
+
+-- 0 for an off hand tracker while the game plainly says the off hand holds no weapon (C_PaperDollInfo.OffhandHasWeapon, PaperDollInfoDocumentation.lua:
+-- 276-283, which withholds nothing), so a rogue with one weapon sees no grey icon for the other hand; this follows EnhanceQoL's reminder for
+-- each hand while it holds a weapon (ClassBuffReminder.lua:3503-3537). nil leaves the tracker to the rules of Show (Trackers.lua's Wanted),
+-- also while the game does not answer. Read keeps its words for the check.
+local function WeaponWanted(entry)
+	local call = entry.slot == "off" and type(C_PaperDollInfo) == "table" and C_PaperDollInfo.OffhandHasWeapon
+	if type(call) ~= "function" then
+		return nil
+	end
+	local ok, has = pcall(call)
+	if ok and not IsSecret(has) and has == false then
+		return 0
+	end
+	return nil
 end
 
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("weapon", {
-		Read = Read, Clean = Clean, Add = Add, Label = Label, Icon = Icon, Lines = Lines, Cast = WeaponCast,
+		Read = Read, Clean = Clean, Add = Add, Label = Label, Icon = Icon, Lines = Lines, Cast = WeaponCast, Wanted = WeaponWanted,
 		events = { "WEAPON_ENCHANT_CHANGED", "WEAPON_SLOT_CHANGED", "UNIT_INVENTORY_CHANGED" },
 		what = "weapon enchant", hiddenAble = false,
 	})
@@ -871,7 +917,48 @@ end
 -- (PetInfoDocumentation.lua:35-45): 1 mad, 2 neutral, 3 happy, as PetHappiness.lua:1-6 names them; it is low under 3 (not happy) when the tracker has happy.
 -- UNIT_PET is heard for the player and UNIT_HAPPINESS for the pet (Blizzard_FrameXML/PetHappiness.lua:29-32); the death and the return of the player are
 -- events of the trackers already.
-local P = { NAME = "Pet", HAPPY = 3, MAX_UNLESS = 8 }
+-- A pet tracker that is not set to happy (the class sets' Pet and Demon, not Pet happiness) also follows the pet's mode and its health. This follows the
+-- pet reminder of the Class Buff Reminder of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLClassBuffReminder/
+-- ClassBuffReminder.lua:446-476, 2283-2341, 3572-3620, 6723-6877, 8159-8181; EnhanceQoL/Core/Streams/Stream_PetTracker.lua:77-83, 141-151):
+-- - The mode is read from the pet bar as the game's own reads it, GetPetActionInfo(slot) giving name, texture, isToken and isActive for each of
+--   NUM_PET_ACTION_SLOTS slots (Blizzard_ActionBar/Shared/PetActionBar.lua:1, 354-385). A mode's slot has a token for a name: PET_MODE_PASSIVE,
+--   PET_MODE_DEFENSIVEASSIST and PET_MODE_ASSIST on Forever's pet bar (Blizzard_GamepadActionBars/Camelot/PetClassFlyouts.xml:51-68, read by
+--   PetActionFlyout.lua:22-38), and the classic PET_MODE_DEFENSIVE and PET_MODE_AGGRESSIVE, which the client may still give (it has
+--   PetDefensiveMode and PetAggressiveMode beside PetDefensiveAssistMode and PetPassiveMode). The call has no generated documentation, so every
+--   answer is tested with IsSecret: a withheld answer, or a pet bar that names no mode, gives no mode, and the mode then counts as neither, with no
+--   click. The tracker is low while the pet is on Passive with Pet on Passive counts as low on, or on Defensive with Pet on Defensive counts as low.
+--   PET_BAR_UPDATE tells a change of mode, as it tells the game's pet bar (PetActionBar.lua:55, 70-81).
+-- - A missing pet is excused while UnitOnTaxi or UnitInVehicle plainly says the player is on a flight path or in a vehicle (UnitDocumentation.lua:
+--   1733-1746, 2570-2583; neither is withheld), since the game takes the pet away there and brings it back; PLAYER_CONTROL_LOST and
+--   PLAYER_CONTROL_GAINED, which come as a flight starts and ends and which the game's pet bar hears too (PetActionBar.lua:50-51, 82-83), have
+--   the tracker read again.
+-- - Its health is never read: UnitHealthPercent is SecretReturns (UnitDocumentation.lua:1506-1524). While the pet is out and alive an overlay of
+--   the tracker's own lies on its frame, whatever its shape: a red tint and the pet's percent, written with SetFormattedText and
+--   UnitHealthPercent("pet", true, CurveConstants.ScaleTo100) as PlateText.lua:262 writes a nameplate's (Blizzard_SharedXMLBase/CurveConstants.lua:
+--   9-12). Its alpha is UnitHealthPercent("pet", true, step), a step curve of C_CurveUtil.CreateCurve (1 under the minimum, 0 from it) made as
+--   HealthColour.lua's Step makes its own, handed unread to SetAlpha, which takes a withheld value (SimpleFrameAPIDocumentation.lua:1134-1142), as
+--   HealthColour.lua's low health border is. The minimum is the tracker's own health (/flatui tracker set N health 40), else Pet health minimum; 0
+--   draws no overlay. A tracker set to Only when low or missing that is otherwise fine gives its own frame the same alpha, so it shows only
+--   while the pet is low: Trackers.lua's Draw calls Over with the reason of Wanted's 0, and the curve is written only for the reason fine; any
+--   other time Draw writes the plain alpha again. UNIT_HEALTH and UNIT_MAXHEALTH of the pet are heard on a frame of this section's own
+--   (RegisterUnitEvent), registered only while an overlay is drawn, since a pass of the trackers for each change of the pet's health in a fight
+--   would be many passes; it writes the overlays drawn and those frames' curve alphas, and asks for one pass only when the pet died. An overlay is
+--   made out of combat, the first time a record needs it, kept with the record and never hidden in a pass: alpha 0 takes it away.
+-- - The summon a warlock casts last is kept in FlatUICharDB.petSummon for a click (TrackerClicks.lua).
+-- MODES: the tokens of the modes and their words. HUNTER: Call Pet and Revive Pet, never a summon to keep. SLOTS: the pet bar slots when the game
+-- does not say (NUM_PET_ACTION_SLOTS is 10). MAX_HEALTH: the largest minimum. TINT: the red of a low tracker (Trackers.lua's RED) at 45%.
+-- drawn: by the id of a tracker, the record and the overlay of each pet tracker whose overlay is drawn now; overlays: by record, its overlay, or
+-- false when the game would not make one; curves: by minimum, its step curve, or false; frame and heard: the frame that hears the pet's health
+-- and whether it does; summons: every summon a pet tracker's list has held this session, so that a cast that is none is passed over at once.
+local P = {
+	NAME = "Pet", HAPPY = 3, MAX_UNLESS = 8, SLOTS = 10, MAX_HEALTH = 90,
+	MODES = { PET_MODE_PASSIVE = "passive", PET_MODE_DEFENSIVEASSIST = "defensive", PET_MODE_DEFENSIVE = "defensive", PET_MODE_ASSIST = "assist",
+		PET_MODE_AGGRESSIVE = "aggressive" },
+	HUNTER = { [883] = true, [982] = true },
+	TINT = { 0.851, 0.251, 0.251, 0.45 },
+	NO_HEALTH = "Trackers: the game gave no pet health, so a pet tracker shows no health.",
+	drawn = {}, overlays = setmetatable({}, { __mode = "k" }), curves = {}, frame = nil, heard = false, summons = {},
+}
 
 local function Happiness()
 	local call = type(C_PetInfo) == "table" and C_PetInfo.GetPetHappiness
@@ -895,6 +982,57 @@ local function SummonIcon(entry)
 	return nil
 end
 
+-- The pet's mode ("passive", "defensive", "assist", "aggressive" or nil), the pet bar slot of each mode by its word, and whether the bar named a mode
+-- at all. A slot counts only when its name is one of the tokens of MODES, and the mode only when its isActive is true (or 1, as the classic API
+-- gave it). TrackerClicks.lua takes the slot of a click from here, so a click never runs another pet action.
+local function PetModes()
+	local slots, mode, named = {}, nil, false
+	local count = NUM_PET_ACTION_SLOTS
+	if not (Plain(count, "number") and count >= 1 and count <= 20) then
+		count = P.SLOTS
+	end
+	for index = 1, math.floor(count) do
+		local ok, name, _, _, active = pcall(GetPetActionInfo, index)
+		local word = ok and Plain(name, "string") and P.MODES[name] or nil
+		if word then
+			named = true
+			slots[word] = slots[word] or index
+			if not IsSecret(active) and (active == true or active == 1) then
+				mode = mode or word
+			end
+		end
+	end
+	return mode, slots, named
+end
+ns.TrackerPetModes = PetModes
+
+-- Where the player is that the game takes the pet away, in words, or nil.
+local function Away()
+	if Truth(UnitOnTaxi, "player") == true then
+		return "on a flight path"
+	elseif Truth(UnitInVehicle, "player") == true then
+		return "in a vehicle"
+	end
+	return nil
+end
+
+-- True when the client has the calls that draw the pet's health: UnitHealthPercent, C_CurveUtil.CreateCurve and CurveConstants.ScaleTo100. A
+-- client without them draws no overlay and says so in the check, with no note.
+local function HealthCalls()
+	return type(UnitHealthPercent) == "function" and type(C_CurveUtil) == "table" and type(C_CurveUtil.CreateCurve) == "function"
+		and type(CurveConstants) == "table" and CurveConstants.ScaleTo100 ~= nil
+end
+
+-- The health under which the tracker shows the pet's health: its own, else the page's. 0 shows none.
+local function HealthMin(entry)
+	local own = entry.health
+	if Plain(own, "number") then
+		return own
+	end
+	local page = ns.Get(KEY .. ".petHealthMin")
+	return Plain(page, "number") and page >= 0 and page or 0
+end
+
 local function PetRead(entry)
 	local id = entry.id
 	local exists = Truth(UnitExists, "pet")
@@ -913,15 +1051,27 @@ local function PetRead(entry)
 		return { state = "unknown", hidden = false, icon = icon }
 	elseif exists and not dead then
 		local state = "fine"
-		if entry.happy == true and happiness and happiness < P.HAPPY then
-			state = "low"
+		if entry.happy == true then
+			if happiness and happiness < P.HAPPY then
+				state = "low"
+			end
+		else
+			last.mode, last.slots, last.named = PetModes()
+			if (last.mode == "passive" and ns.Get(KEY .. ".petPassive") == true) or (last.mode == "defensive" and ns.Get(KEY .. ".petDefensive") == true) then
+				state, last.byMode = "low", true
+			end
 		end
 		return { state = state, hidden = false, icon = icon }
+	end
+	local away = exists == false and Away() or nil
+	if away then
+		last.excused = away
+		return { state = "fine", hidden = false, icon = icon }
 	end
 	if type(entry.unless) == "table" and #entry.unless > 0 and type(ns.TrackerBuffOn) == "function" then
 		local on = ns.TrackerBuffOn(entry.unless)
 		if on == true then
-			last.excused = true
+			last.excused = "by a buff"
 			return { state = "fine", hidden = false, icon = icon }
 		elseif on == nil then
 			return { state = "unknown", hidden = false, icon = icon }
@@ -930,6 +1080,7 @@ local function PetRead(entry)
 	return { state = "missing", hidden = false, icon = icon }
 end
 
+-- A tracker's own health minimum is a whole number from 0 to MAX_HEALTH.
 local function PetClean(entry)
 	if not (type(entry.name) == "string" and #entry.name >= 1 and #entry.name <= K.MAX_NAME) then
 		entry.name = P.NAME
@@ -938,6 +1089,13 @@ local function PetClean(entry)
 	entry.unless = WholeList(entry.unless, P.MAX_UNLESS)
 	if entry.happy ~= true then
 		entry.happy = nil
+	end
+	for _, id in ipairs(entry.summon or {}) do
+		P.summons[id] = true
+	end
+	local health = entry.health
+	if not (type(health) == "number" and health >= 0 and health <= P.MAX_HEALTH and health == math.floor(health)) then
+		entry.health = nil
 	end
 	return true
 end
@@ -969,16 +1127,228 @@ local function PetLines(entry)
 	end
 	local happiness = last.happiness and ("%d"):format(last.happiness) or "not given"
 	local text = ("Pet: exists %s, dead %s, happiness %s"):format(Say(last.exists), Say(last.dead), happiness)
-	if last.excused then
-		text = text .. ", excused by a buff"
+	if last.mode then
+		text = text .. ", mode " .. last.mode .. (last.byMode and ", low by its mode" or "")
+	elseif last.named then
+		text = text .. ", mode not given"
+	elseif last.slots then
+		text = text .. ", mode not given: the pet bar names none of its modes, so the mode counts as neither"
 	end
-	return { text .. "." }
+	if last.excused then
+		text = text .. ", excused " .. last.excused
+	end
+	local lines = { text .. "." }
+	if entry.happy ~= true then
+		local least = HealthMin(entry)
+		if not HealthCalls() then
+			lines[2] = "Pet health: not shown, the game has no call for it."
+		elseif least > 0 then
+			lines[2] = ("Pet health: red under %d%%%s, health drawn by the game, not read%s."):format(least, entry.health ~= nil and " (its own)" or "",
+				P.drawn[entry.id] and ", drawn now" or "")
+		else
+			lines[2] = "Pet health: not shown, the minimum is 0."
+		end
+	end
+	return lines
+end
+
+-- A cast of the player that is a summon of a pet tracker's list is the warlock's last summon, kept for the character (ns.Character).
+local function PetCast(spellID)
+	if not P.summons[spellID] or P.HUNTER[spellID] then
+		return
+	end
+	for _, entry in ipairs(type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}) do
+		if entry.kind == "pet" and entry.happy ~= true then
+			for _, id in ipairs(type(entry.summon) == "table" and entry.summon or {}) do
+				local saved = id == spellID and ns.Character()
+				if type(saved) == "table" then
+					saved.petSummon = spellID
+					return
+				end
+			end
+		end
+	end
+end
+
+-- The step curve of a minimum: 1 under it, 0 from it, or nil when the game makes none.
+local function Step(least)
+	local curve = P.curves[least]
+	if curve == nil then
+		local ok, made = pcall(function()
+			local made = C_CurveUtil.CreateCurve()
+			made:SetType(Enum.LuaCurveType.Step)
+			made:AddPoint(0, 1)
+			made:AddPoint(least / 100, 0)
+			if least < 100 then
+				made:AddPoint(1, 0)
+			end
+			return made
+		end)
+		curve = ok and made or false
+		P.curves[least] = curve
+	end
+	return curve or nil
+end
+
+-- The overlay of a record: { frame, tint, text }, made once out of combat, the first time it is drawn, on the frame above the record's icon,
+-- sweep and bar (top), at alpha 0. Nil in combat before it is made, and for good when the game refuses it.
+local function Overlay(record)
+	local made = P.overlays[record]
+	if made ~= nil or InCombatLockdown() then
+		return made or nil
+	end
+	local overlay = {}
+	local ok = pcall(function()
+		local frame = CreateFrame("Frame", nil, record.top)
+		ns.Own[frame] = true
+		overlay.frame = frame
+		frame:SetAllPoints(record.frame)
+		frame:SetAlpha(0)
+		local tint = frame:CreateTexture(nil, "ARTWORK", nil, 0)
+		ns.Own[tint] = true
+		tint:SetAllPoints(frame)
+		tint:SetColorTexture(P.TINT[1], P.TINT[2], P.TINT[3], P.TINT[4])
+		overlay.text = ns.OwnText(frame, "OVERLAY", "NumberFontNormal")
+		overlay.text:SetPoint("CENTER", frame, "CENTER", 0, 0)
+	end)
+	if not ok then
+		if overlay.frame then
+			pcall(overlay.frame.SetAlpha, overlay.frame, 0)
+		end
+		overlay = false
+	end
+	P.overlays[record] = overlay
+	return overlay or nil
+end
+
+-- Writes the percent and the alpha of one drawn overlay, and the curve alpha of its tracker's frame with curve set (the record keeps a plain alpha
+-- of 0 then; a test that drew the frame at 1 is left alone). False when the game refused, and the overlay is taken away.
+local function Paint(drawn, curve)
+	local step = Step(drawn.least)
+	local ok = step ~= nil and pcall(function()
+		drawn.overlay.text:SetFormattedText("%.0f%%", UnitHealthPercent("pet", true, CurveConstants.ScaleTo100))
+		drawn.overlay.frame:SetAlpha(UnitHealthPercent("pet", true, step))
+		if curve and drawn.record.alpha == 0 then
+			drawn.record.frame:SetAlpha(UnitHealthPercent("pet", true, step))
+		end
+	end)
+	if not ok then
+		ns.Note(KEY, P.NO_HEALTH)
+		pcall(drawn.overlay.frame.SetAlpha, drawn.overlay.frame, 0)
+		return false
+	end
+	return true
+end
+
+-- The pet's health changed: the overlays drawn now, and the frames that show by it, are written again. A pet that died or is gone asks for one
+-- pass (UnitIsDead and UnitExists are never withheld), so that its tracker turns missing at once rather than at the next event of the trackers.
+local function HealthChanged()
+	if not ns.Enabled(KEY) then
+		return
+	end
+	for _, drawn in pairs(P.drawn) do
+		Paint(drawn, drawn.record.curved == true)
+	end
+	if (Truth(UnitExists, "pet") == false or Truth(UnitIsDead, "pet") == true) and type(ns.TrackerDirty) == "function" then
+		ns.TrackerDirty()
+	end
+end
+
+-- The frame hears the pet's health while an overlay is drawn, and not otherwise.
+local function Hear()
+	local want = next(P.drawn) ~= nil and ns.Enabled(KEY)
+	if want == P.heard then
+		return
+	end
+	if want and not P.frame then
+		local ok, frame = pcall(CreateFrame, "Frame")
+		if not ok or type(frame) ~= "table" then
+			return
+		end
+		ns.Own[frame] = true
+		frame:SetScript("OnEvent", function()
+			ns.EachPart(KEY, "pet", HealthChanged)
+		end)
+		P.frame = frame
+	end
+	local frame = P.frame
+	for _, event in ipairs({ "UNIT_HEALTH", "UNIT_MAXHEALTH" }) do
+		if want then
+			pcall(frame.RegisterUnitEvent, frame, event, "pet")
+		else
+			pcall(frame.UnregisterEvent, frame, event)
+		end
+	end
+	P.heard = want
+end
+
+-- The overlay of a tracker is taken away (alpha 0) and the tracker is no longer drawn with it.
+local function Drop(id)
+	local drawn = P.drawn[id]
+	if drawn then
+		P.drawn[id] = nil
+		pcall(drawn.overlay.frame.SetAlpha, drawn.overlay.frame, 0)
+	end
+end
+
+-- Called by Trackers.lua's Draw at its end with the way the tracker is drawn and the reason of a 0 of Wanted: the overlay while the pet is out and
+-- alive, and for the reason fine the curve alpha on the frame, marked on the record (curved) and answered true; Draw writes the plain alpha again
+-- whenever this does not answer true. Missing, dead, unhappy and a minimum of 0 draw no overlay.
+local function PetOver(entry, record, how, reason)
+	local id, last = entry.id, mem.last[entry.id]
+	local least = HealthMin(entry)
+	local out = entry.happy ~= true and least > 0 and how == "live" and type(last) == "table" and last.exists == true and last.dead == false
+		and HealthCalls()
+	local curve = out and reason == "fine"
+	local overlay = out and (curve or record.alpha == 1) and Overlay(record) or nil
+	if not overlay then
+		Drop(id)
+		local made = P.overlays[record]
+		if made then
+			pcall(made.frame.SetAlpha, made.frame, 0)
+		end
+		Hear()
+		return false
+	end
+	local drawn = P.drawn[id]
+	if not drawn or drawn.record ~= record then
+		Drop(id)
+		drawn = { record = record, overlay = overlay }
+		P.drawn[id] = drawn
+	end
+	drawn.least = least
+	-- The overlay stays above the parts of the shape, which a layout can raise (TrackerShapes.lua's Build); out of combat only.
+	if not InCombatLockdown() then
+		pcall(function()
+			local level = record.top:GetFrameLevel() + 1
+			if overlay.frame:GetFrameLevel() ~= level then
+				overlay.frame:SetFrameLevel(level)
+			end
+		end)
+	end
+	local wrote = Paint(drawn, curve)
+	if not wrote then
+		Drop(id)
+	end
+	Hear()
+	if curve and wrote then
+		record.curved = true
+		return true
+	end
+	return false
+end
+
+-- A tracker that is no longer on takes its overlay away.
+local function PetGone(id)
+	Drop(id)
+	Hear()
 end
 
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("pet", {
-		Read = PetRead, Clean = PetClean, Add = PetAdd, Label = PetLabel, Icon = SummonIcon, Lines = PetLines,
-		events = { "UNIT_PET", "UNIT_HAPPINESS" },
+		Read = PetRead, Clean = PetClean, Add = PetAdd, Label = PetLabel, Icon = SummonIcon, Lines = PetLines, Cast = PetCast, Over = PetOver,
+		Gone = PetGone,
+		events = { "UNIT_PET", "UNIT_HAPPINESS", "PET_BAR_UPDATE", "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED" },
 		unitEvents = { UNIT_PET = "player", UNIT_HAPPINESS = "pet" },
 		what = "pet", hiddenAble = false,
 	})
@@ -1821,6 +2191,11 @@ local function FormRead(entry)
 	mem.last[id] = { forms = count, active = active }
 	if found then
 		mem.icons[id] = found.texture or mem.icons[id]
+		-- The form of its list the tracker last saw the player in is kept in the entry, saved with it, as a buff tracker keeps the buff it last
+		-- saw (seen, Trackers.lua's Settle): a click casts it again (TrackerClicks.lua), and the missing look shows its icon.
+		if any and found.spell and entry.seen ~= found.spell then
+			entry.seen = found.spell
+		end
 		return { state = "fine", hidden = false, icon = mem.icons[id] }
 	elseif hidden then
 		mem.last[id].word = "an answer was withheld"

@@ -10442,17 +10442,23 @@ local PAGES = {
 		S("trackers.ammoMin", "number", 200, "Ammunition minimum", "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, a low count waits for the end of a fight.", { min = 0, max = 2000, step = 100, unit = "" }),
 		S("trackers.thrownMin", "number", 20, "Thrown weapon minimum", "With a thrown weapon, the ammunition tracker is low at this many or fewer. 0 means never. One that wears out is low at a fifth of its durability.", { min = 0, max = 200, step = 5, unit = "" }),
 		S("trackers.durabilityMin", "number", 20, "Durability minimum", "The durability tracker is low when an item you wear is at this much of its durability or less, and red when one is broken. 0 means never. For 12 seconds after a ready check it is also low at 40% or less, and shows when low or broken, whatever Show says.", { min = 0, max = 100, step = 5, unit = "%" }),
+		"Pet",
+		S("trackers.petHealthMin", "number", 30, "Pet health minimum", "A Pet or Demon tracker shows your pet's health in red while it is under this. 0 means never. /flatui tracker set 1 health 40 sets one tracker's own.", { min = 0, max = 90, step = 5, unit = "%" }),
+		S("trackers.petPassive", "bool", true, "Pet on Passive counts as low", "A Pet or Demon tracker is low while your pet is out and set to Passive, when it does not fight for you."),
+		S("trackers.petDefensive", "bool", false, "Pet on Defensive counts as low", "Defensive is a usual choice on classic content. On, a click sets your pet to Assist."),
 		"When shown",
 		S("trackers.show", "choice", "always", "Show", nil, { choices = { { "always", "Always" }, { "low", "Only when low or missing" }, { "combat", "Only in combat" } } }),
 		S("trackers.mounted", "bool", true, "Hide while mounted", "Applies to trackers set to Only when low or missing."),
 		S("trackers.resting", "bool", false, "Hide in cities and inns", "Applies to trackers set to Only when low or missing."),
+		S("trackers.combatHide", "bool", false, "Hide in combat", "Applies to trackers set to Only when low or missing: a low or missing tracker shows only between fights."),
 		"In fights",
 		S("trackers.gameIcon", "bool", true, "Game's own icon in fights", "Off: charges and time left stop updating in a fight."),
 		S("trackers.without", "choice", "last", "In fights without the game's icon", nil, { choices = { { "last", "Last known" }, { "hidden", "Hidden" } } }),
 		"Action buttons",
 		S("trackers.mark", "bool", false, "Mark action buttons", "A red border on the action button that fixes a low or missing tracker. Needs Restyle action bars."),
 		"Clicks",
-		S("trackers.click", "choice", "group", "Click to apply", "Out of combat, a click on a tracker that needs it: a group buff is cast on a member who lacks it, or a poison, stone or oil goes on the weapon. /flatui tracker use 1 and an item sets what a weapon tracker uses.", { choices = { { "none", "Off" }, { "group", "Group buffs" }, { "all", "Group buffs and weapons" } } }),
+		S("trackers.click", "choice", "group", "Click to apply", "Out of combat, a click on a tracker that needs it fixes it: your buff, stance or form is cast, your pet is called, revived or set to fight, and a group buff is cast on a member who lacks it; with weapons, a poison, stone or oil goes on the weapon too. /flatui tracker use 1 and an item sets what a weapon tracker uses.", { choices = { { "none", "Off" }, { "group", "Buffs, forms and the pet" }, { "all", "Buffs, forms, the pet and weapons" } } }),
+		S("trackers.clickUse", "list", 0, "Item a click puts on a weapon", "Choose a weapon tracker, then open the list again for what a click puts on that weapon. /flatui tracker use does the same.", { needs = "trackers.click", needsIn = { "all" } }),
 		"Proc alerts",
 		S("trackers.addProc", "list", 0, "Add a proc", "For another spell, type /flatui tracker add proc and its name."),
 		S("trackers.removeProc", "list", 0, "Remove a proc"),
@@ -21834,7 +21840,8 @@ for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour"
 	"unitframes.threatTanks", "unitframes.roleIconRoles", "unitframes.dispelSelf", "unitframes.partyFrameMarker", "unitframes.raidLeaderIcon",
 	"unitframes.targetBorder", "unitframes.targetColour",
 	"chat.restore", "chat.restoreLines", "chat.restoreChannels", "chat.combatUnits", "chat.combatWhere", "chat.spellTips", "chat.auraTips",
-	"chat.itemTips", "chat.groupTips", "chat.groupTipKey", "chat.iconId" }) do
+	"chat.itemTips", "chat.groupTips", "chat.groupTipKey", "chat.iconId",
+	"trackers.petHealthMin", "trackers.petPassive", "trackers.petDefensive", "trackers.combatHide", "trackers.clickUse" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67309,7 +67316,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1119 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1124 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67623,7 +67630,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1022 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1027 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -79826,7 +79833,7 @@ do
 
 	-- 27. Class starting lists (tkclass:). ClassData.lua is generated; the values and helpers sit in the table CL.
 	do
-		local CL = { COUNTS = { WARRIOR = 3, PALADIN = 5, HUNTER = 5, ROGUE = 3, PRIEST = 7, SHAMAN = 7, MAGE = 5, WARLOCK = 7, DRUID = 3 },
+		local CL = { COUNTS = { WARRIOR = 3, PALADIN = 5, HUNTER = 5, ROGUE = 4, PRIEST = 7, SHAMAN = 7, MAGE = 5, WARLOCK = 7, DRUID = 3 },
 			KINDS = { buff = true, form = true, item = true, weapon = true, totem = true, pet = true, ammo = true } }
 		-- Every ID of an entry: spells, items, the ways to put on an enchant, the summons and the auras.
 		function CL.ids(row)
@@ -79838,10 +79845,11 @@ do
 			end
 			return ids
 		end
-		-- A world of one class that knows the spells and carries the items of its list, or only the IDs of o.known: o.list the saved list, o.set the rest.
+		-- A world of one class that knows the spells and carries the items of its list, or only the IDs of o.known: o.list the saved list, o.set the rest,
+		-- o.options the saved options.
 		function CL.up(class, o)
 			o = o or {}
-			local W = TK.up({ list = o.list or {}, noClass = o.noClass, prep = function(P)
+			local W = TK.up({ list = o.list or {}, noClass = o.noClass, options = o.options, prep = function(P)
 				if class then
 					P.au.unit.player = { guid = "Player-1-0001", player = true, class = class, race = "Troll", name = "Mine" }
 				end
@@ -79899,7 +79907,7 @@ do
 					end
 				end
 			end
-			check("tkclass: nine classes and 45 entries", classes == 9 and total == 45, classes .. "/" .. total)
+			check("tkclass: nine classes and 46 entries", classes == 9 and total == 46, classes .. "/" .. total)
 			check("tkclass: every entry has a kind of the engine, a name and whole IDs", #bad == 0, table.concat(bad, ", "))
 			check("tkclass: at most 8 names, 40 spells, and a time that is a multiple of 5", #caps == 0, table.concat(caps, ", "))
 			local shaman = data.SHAMAN
@@ -79916,11 +79924,12 @@ do
 			check("tkclass: ClassData.lua is a generated table and has no function", text:find("^local _, ns = %.%.%.") ~= nil and text:find("Generated by tools/make_classdata.py", 1, true) ~= nil and not text:find("function", 1, true) and loadfile(ADDON_DIR .. "/ClassData.lua") ~= nil)
 		end
 
-		-- Every class gets its whole list when it knows and carries everything.
+		-- Every class gets its whole list when it knows and carries everything. Click to apply is off: the test worlds of the trackers make no secure
+		-- buttons, and a Pet or Demon tracker takes a click by default.
 		do
 			local failures = {}
 			for token, list in pairs(data) do
-				local W = CL.up(token)
+				local W = CL.up(token, { options = { ["trackers.click"] = "none" } })
 				local ok, message = W.ns.TrackerAddClass(1)
 				local want = {}
 				for _, row in ipairs(list) do
