@@ -16,9 +16,15 @@ local _, ns = ...
 -- Kills to level spends what is left of the pool first. The count starts again at a new level or a new size of group. Quests come from
 -- QUEST_TURNED_IN, whose second value is the experience the game gave. The quests ready to hand in are those of the log that C_QuestLog.IsComplete
 -- calls done, as the game's own log marks them (QuestMapFrame.lua:2097), each with GetQuestLogRewardXP(questID).
+-- The reputation pace is kept for the faction the reputation bar shows (ns.XpRepNow, XpBar.lua, from C_Reputation.GetWatchedFactionData or the
+-- faction Errands follows), on the same play clock: a rise of its standing on the faction's own scale is a gain at the drawing of the bar that
+-- sees it, and the bar is drawn on UPDATE_FACTION. Its count starts again when the bar shows another faction or the standing falls, so a time to
+-- the next standing never mixes two factions or scales. The pace is that of the last WINDOW seconds of play with the faction, given after
+-- MIN_PLAY seconds of them; the time to the next standing is what is left of the standing over the pace, none at the top standing. A withheld
+-- read counts nothing and the next plain one counts the gap, as for experience.
 -- Nothing of the game's is written or hooked and no frame is made here. The played time is never asked for, since RequestTimePlayed prints two
 -- lines in every chat window (ChatFrameUtil.lua:184-196): the time at this level is known after a level up, or after a /played of the player's own.
--- These follow EnhanceQoL's experience bar by Philipp Barth, adapted with his permission.
+-- These follow EnhanceQoL's experience and reputation bars by Philipp Barth (R41Z0R), adapted with his permission.
 
 local KEY, PART = "hud", "levelling stats"
 -- Seconds of play the pace is taken over, and before it is given.
@@ -34,8 +40,8 @@ local MAX_ENTRIES = 100
 local VERSION, SAVED = 1, "xpSession"
 
 -- s: the session, { v, started, savedAt, away, awaySince, gained, marks = { { play, gained } }, last = { level, value, total }, levelSince,
--- played = { level, at, seconds }, kills = { level, group, list }, quests = { list }, pool, resumed }. In memory while the module runs, and in
--- FlatUICharDB.xpSession from the logout or reload on, until the next start reads it.
+-- played = { level, at, seconds }, kills = { level, group, list }, quests = { list }, pool, resumed, rep = { id, at, started, gained, marks } }.
+-- In memory while the module runs, and in FlatUICharDB.xpSession from the logout or reload on, until the next start reads it.
 local s
 -- What the last look at the quest log found: { ready, readyXP, all, allXP }, or { missing = true } on a client without the calls.
 local quest
@@ -183,6 +189,16 @@ local function Kept(saved, now)
 		saved.kills = nil
 	end
 	saved.quests = { list = Count(type(saved.quests) == "table" and saved.quests.list or nil) }
+	-- The reputation count goes on only when it is whole; else it starts again at the next drawing of the bar.
+	local rep = saved.rep
+	local whole = type(rep) == "table" and Finite(rep.id) and Finite(rep.at) and Finite(rep.started) and Finite(rep.gained) and rep.gained >= 0
+		and type(rep.marks) == "table" and #rep.marks <= MAX_MARKS
+	for _, mark in ipairs(whole and rep.marks or {}) do
+		whole = whole and type(mark) == "table" and Finite(mark[1]) and Finite(mark[2])
+	end
+	if not whole then
+		saved.rep = nil
+	end
 	local open = Finite(saved.awaySince) and math.max(0, saved.savedAt - saved.awaySince) or 0
 	saved.away, saved.awaySince = saved.away + open + gap, nil
 	saved.pool, saved.spent, saved.unseen, saved.settleBy = nil, 0, 0, nil
@@ -696,6 +712,120 @@ local function Lines(quests, numbers)
 	return lines
 end
 
+-- Reputation ---------------------------------------------------------------------------------------------------------------------------------
+
+-- Looks at the faction the reputation bar shows (ns.XpRepNow) and keeps its count: s.rep is started again for another faction or a fall of the
+-- standing, and a rise is a gain at this moment of play, kept in marks as the experience is (Gain). The count, the seconds of play now, the
+-- reputation to the next standing (nil at the top) and the faction's name; nil while the bar shows no faction or the session has not begun.
+local function Track()
+	if not s or ns.XpRepNow == nil then
+		return nil
+	end
+	local id, at, toGo, name = ns.XpRepNow()
+	local now = Now()
+	if not (Finite(id) and Finite(at) and now) then
+		return nil
+	end
+	local play, r = Play(now), s.rep
+	if type(r) ~= "table" or r.id ~= id or at < r.at then
+		r = { id = id, at = at, started = play, gained = 0, marks = {} }
+		s.rep = r
+	elseif at > r.at then
+		r.at, r.gained = at, r.gained + (at - r.at)
+		local marks = r.marks
+		local last = marks[#marks]
+		if last and play - last[1] < STEP then
+			last[2] = r.gained
+		else
+			marks[#marks + 1] = { play, r.gained }
+		end
+		-- The last mark at or before the start of the window stays: it holds the reputation of the count then.
+		while #marks > 1 and marks[2][1] <= play - WINDOW do
+			table.remove(marks, 1)
+		end
+		while #marks > MAX_MARKS do
+			table.remove(marks, 1)
+		end
+	end
+	return r, play, toGo, name
+end
+
+-- Reputation an hour over the last WINDOW seconds of play with the faction, or all of them while fewer; nil before MIN_PLAY seconds of them. The
+-- seconds of play with the faction come second.
+local function RepPace(r, play)
+	local span = math.max(0, play - r.started)
+	if span < MIN_PLAY then
+		return nil, span
+	end
+	local from, base = math.max(r.started, play - WINDOW), 0
+	if from > r.started then
+		for _, mark in ipairs(r.marks) do
+			if mark[1] <= from then
+				base = mark[2]
+			else
+				break
+			end
+		end
+	end
+	return math.max(0, r.gained - base) * 3600 / (play - from), span
+end
+
+-- The reputation numbers of the faction shown, or nil; nothing either at its top standing, where there is no next standing to reach.
+local function RepNumbers()
+	local r, play, toGo, name = Track()
+	if not r or not toGo then
+		return nil
+	end
+	local n = { gained = r.gained, toGo = toGo, name = type(name) == "string" and name or "the faction" }
+	n.pace, n.play = RepPace(r, play)
+	if n.pace and n.pace > 0 and toGo > 0 then
+		n.eta = toGo * 3600 / n.pace
+	end
+	return n
+end
+
+-- The text after the reputation bar's own by the row Reputation text, or nil when there is nothing to say yet. It looks at the bar first, so the
+-- count follows every drawing of the bar, whatever the row says.
+local function RepText(mode)
+	local n = RepNumbers()
+	if not n or mode == "none" then
+		return nil
+	end
+	local time = n.eta and (Duration(n.eta, true) .. " to next standing") or nil
+	local rate = n.pace and n.pace > 0 and (Grouped(n.pace) .. " an hour") or nil
+	if mode == "time" then
+		return time
+	elseif mode == "rate" then
+		return rate
+	elseif mode == "both" then
+		return (time and rate) and (time .. ", " .. rate) or time or rate
+	end
+	return nil
+end
+
+-- The lines of the reputation tooltip with Levelling in the tooltip: the reputation this session, per hour, and the time to the next standing.
+local function RepLines()
+	local lines = {}
+	local n = RepNumbers()
+	if not n then
+		return lines
+	end
+	if n.gained > 0 then
+		lines[#lines + 1] = ("This session: %s reputation in %s"):format(Grouped(n.gained), Elapsed(n.play))
+	end
+	if not n.pace then
+		lines[#lines + 1] = ("Reputation per hour: after %d minutes of play"):format(MIN_PLAY / 60)
+	elseif n.pace <= 0 then
+		lines[#lines + 1] = "Reputation per hour: none lately"
+	else
+		lines[#lines + 1] = ("Reputation per hour: %s (%s)"):format(Grouped(n.pace), n.play > WINDOW and ("the last %d minutes"):format(WINDOW / 60) or "this session")
+	end
+	if n.eta then
+		lines[#lines + 1] = "Next standing in: " .. Duration(n.eta, true)
+	end
+	return lines
+end
+
 -- Lines for /flatui status, while Flat UI's bar is chosen and the session has read the experience.
 local function StatusLines()
 	local lines = {}
@@ -734,6 +864,16 @@ end
 -- The lines of the tooltip: quests with Quests ready to hand in, numbers with Levelling in the tooltip.
 function ns.XpStatsLines(quests, numbers)
 	return Safe(Lines, quests, numbers) or {}
+end
+
+-- The text after the reputation bar's own by the row Reputation text, or nil. The count of the faction shown follows each call.
+function ns.XpStatsRepText(mode)
+	return Safe(RepText, mode)
+end
+
+-- The reputation lines of the tooltip, for Levelling in the tooltip.
+function ns.XpStatsRepLines()
+	return Safe(RepLines) or {}
 end
 
 -- The experience of the quests ready to hand in, 0 when there is none or nothing is known.
@@ -882,9 +1022,23 @@ local function Slash(rest)
 	if n.ready and n.ready > 0 then
 		Say(("ready to hand in: %s, %s experience."):format(Quests(n.ready), Plain(n.readyXP)))
 	end
+	-- One line for the faction the reputation bar shows.
+	local rep = Safe(RepNumbers)
+	if rep then
+		local said = rep.gained > 0 and ("%s reputation with %s in %s of play"):format(Plain(rep.gained), rep.name, Elapsed(rep.play))
+			or ("no reputation with %s yet"):format(rep.name)
+		if rep.pace and rep.pace > 0 then
+			said = said .. (", %s an hour"):format(Plain(rep.pace))
+		end
+		if rep.eta then
+			said = said .. (", %s to the next standing"):format(Duration(rep.eta, true))
+		end
+		Say(said .. ".")
+	end
 end
 
-ns.AddSlash(KEY, "xp", Slash, { "/flatui xp - experience this session, the pace and the time to level", "/flatui xp reset - count this session from now" })
+ns.AddSlash(KEY, "xp", Slash, { "/flatui xp - experience and reputation this session, their pace and the time to level and to the next standing",
+	"/flatui xp reset - count this session from now" })
 ns.AddStatus(KEY, function()
 	return Safe(StatusLines) or {}
 end)

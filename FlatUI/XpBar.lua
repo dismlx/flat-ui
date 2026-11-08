@@ -8,7 +8,8 @@ local _, ns = ...
 -- calls the game's own bar makes from insecure code (ExpBar.lua, ReputationBar.lua). Its settings are the Experience and reputation bars rows of
 -- the Bars, bags and micro menu page (module hud); this file adds its handlers to that module with ns.AddEvent.
 -- The Levelling rows of that page add what XpStats.lua counts: a stretch for the experience of the quests ready to hand in, drawn as the rested
--- stretch is and above it, the levelling text after the bar text, and lines in the tooltip. The bar is drawn again when those numbers change
+-- stretch is and above it, the levelling text after the bar text, and lines in the tooltip; on the reputation bar, Reputation text after its bar
+-- text and the reputation pace in its tooltip, from the faction the bar shows (ns.XpRepNow). The bar is drawn again when those numbers change
 -- (ns.XpBarRedraw), and the tooltip of a bar under the cursor is written again with each drawing.
 -- Its reputation bar shows the faction the Levelling errands follow, when they follow one (ErrandsLevelling.lua); the faction the game watches
 -- is not changed.
@@ -173,6 +174,9 @@ function F.ReadRep()
 	local rep = { name = data.name, reaction = ns.Finite(data.reaction) and data.reaction or 5, followed = followed ~= nil and data.isWatched ~= true }
 	local low, high, value = data.currentReactionThreshold, data.nextReactionThreshold, data.currentStanding
 	local level, top = rep.reaction, 8
+	-- The standing on the faction's own scale, which only grows as reputation is gained: the faction's reputation, a paragon faction's whole
+	-- paragon value (the bar shows it modulo the threshold), a friendship's standing. XpStats.lua takes the pace from it (rep.at).
+	local at
 	local function Call(table, name, ...)
 		local state, a, b, c, d = Ask(type(table) == "table" and table[name] or nil, ...)
 		if state == "secret" then
@@ -187,7 +191,7 @@ function F.ReadRep()
 		local current, threshold = Call(R, "GetFactionParagonInfo", id)
 		low, high = 0, threshold
 		if ns.Finite(current) and ns.Finite(threshold) and threshold > 0 then
-			value = current % threshold
+			value, at = current % threshold, current
 		end
 		level, top = nil, nil
 		rep.blue = major
@@ -211,6 +215,7 @@ function F.ReadRep()
 		else
 			low, high, value = 0, 1, 1
 		end
+		at = friend.standing
 		rep.reaction = 5
 		rep.standing = type(friend.reaction) == "string" and friend.reaction or nil
 	end
@@ -219,6 +224,7 @@ function F.ReadRep()
 		return nil
 	end
 	rep.total, rep.value = high - low, value - low
+	rep.id, rep.at = id, ns.Finite(at) and at or value
 	rep.capped = level ~= nil and top ~= nil and level >= top
 	if rep.capped and rep.total == 0 then
 		rep.total, rep.value = 1, 1
@@ -473,6 +479,11 @@ function F.TipLines(bar)
 		if not rep.capped then
 			lines[#lines + 1] = ("%d / %d"):format(math.floor(rep.value), math.floor(rep.total))
 		end
+		-- The reputation this session, per hour and the time to the next standing, with Levelling in the tooltip (XpStats.lua).
+		local more = Opt("xpStatsTip") == true and ns.XpStatsRepLines ~= nil and ns.XpStatsRepLines() or nil
+		for _, line in ipairs(type(more) == "table" and more or {}) do
+			lines[#lines + 1] = line
+		end
 		if rep.followed then
 			lines[#lines + 1] = "The last faction you gained reputation with."
 		end
@@ -481,7 +492,8 @@ function F.TipLines(bar)
 end
 
 -- The words on a bar by the Bar text row: nothing for Hidden, the game's words for As the game has it. On the experience bar the levelling text
--- follows them after a comma, or stands alone while Bar text is Hidden (Levelling text, XpStats.lua).
+-- follows them after a comma, or stands alone while Bar text is Hidden (Levelling text, XpStats.lua); on the reputation bar Reputation text does
+-- the same.
 function F.Line(bar)
 	local mode = Opt("xpText")
 	if bar.id == "xp" and S.xp then
@@ -501,16 +513,19 @@ function F.Line(bar)
 		end
 		return line
 	end
-	if mode == "hide" then
-		return nil
-	end
 	if bar.id == "rep" and S.rep then
-		local rep = S.rep
+		local rep, line = S.rep, nil
 		local value, total = math.floor(rep.value), math.floor(rep.total)
 		if mode == "game" then
-			return rep.capped and rep.name or ("%s %d / %d"):format(rep.name, value, total)
+			line = rep.capped and rep.name or ("%s %d / %d"):format(rep.name, value, total)
+		elseif mode ~= "hide" then
+			line = rep.capped and rep.name or (total > 0 and ns.XpText(value, total, rep.name, mode) or rep.name)
 		end
-		return rep.capped and rep.name or (total > 0 and ns.XpText(value, total, rep.name, mode) or rep.name)
+		local extra = ns.XpStatsRepText ~= nil and ns.XpStatsRepText(Opt("xpRepStats")) or nil
+		if type(extra) == "string" and extra ~= "" then
+			line = line and (line .. ", " .. extra) or extra
+		end
+		return line
 	end
 	return nil
 end
@@ -869,6 +884,17 @@ end
 -- True while the game would show an experience bar: below the maximum level, experience not turned off (XpStats.lua reads the log only then).
 function ns.XpBarShowsXp()
 	return F.XpShown()
+end
+
+-- The faction the reputation bar showed at its last drawing, for the reputation pace of XpStats.lua: its id, its standing on the faction's own
+-- scale (rep.at, F.ReadRep), the reputation still to the next standing (nil at the top) and its name. While the game withholds the faction the
+-- last plain read stands, so nothing is counted until the next one. Nothing while Flat UI's bar or its reputation bar is not shown.
+function ns.XpRepNow()
+	local rep, bar = S.rep, S.bars.rep
+	if not (rep and bar and bar.shown and S.mode == "flat" and ns.XpOwn() and ns.Finite(rep.id) and ns.Finite(rep.at)) then
+		return nil
+	end
+	return rep.id, rep.at, not rep.capped and math.max(rep.total - rep.value, 0) or nil, rep.name
 end
 
 function ns.XpBarFrame()

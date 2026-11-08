@@ -10,7 +10,8 @@ local ADDON_NAME, ns = ...
 --   Coordinates: of the player on the map of the zone (C_Map.GetBestMapForUnit, GetPlayerMapPosition, read from the fields x and y of the
 --     answer); none where the game gives none, as in a dungeon.
 --   Frame rate and latency: GetFramerate, and the higher of the home and world latency (GetNetStats). The tooltip has both latencies and the
---     memory Flat UI uses (UpdateAddOnMemoryUsage and GetAddOnMemoryUsage, read out of combat when the tooltip opens).
+--     memory Flat UI uses (UpdateAddOnMemoryUsage and GetAddOnMemoryUsage, read out of combat when the tooltip opens). With Colour frame rate
+--     and latency on, each number is in the panels' green, gold or red by the steps of the minimap's line (ns.PerfColour, MapText.lua).
 --   Friends online: counted as the game's own button counts them (BNGetNumFriends, C_FriendList.GetNumOnlineFriends); the tooltip lists who.
 --   Guild online: GetNumGuildMembers; the tooltip lists who (GetGuildRosterInfo). The roster is asked for (C_GuildInfo.GuildRoster) when the client
 --     holds none, when the game says it may be asked again, and when the tooltip opens, at most every ROSTER_EVERY seconds.
@@ -439,6 +440,17 @@ local function Memory(fresh)
 	return memory >= 1024 and ("%.1f MB"):format(memory / 1024) or ("%d KB"):format(math.floor(memory + 0.5))
 end
 
+-- The colours of the panels for a good, a middling and a poor frame rate or latency; ns.PerfColour (MapText.lua) has the steps.
+local PERF = { GOOD, WARN, BAD }
+
+-- A number of the frame rate or the latency, written as text (the value itself without it), in its colour while Colour frame rate and latency is
+-- on. The code is in the text only, so the slot is as wide as the same digits without it.
+local function Perf(kind, value, text)
+	text = text or tostring(value)
+	local code = ns.Get("datapanels.perfColour") == true and type(ns.PerfColour) == "function" and ns.PerfColour(kind, value, PERF) or nil
+	return code and (code .. text .. "|r") or text
+end
+
 P.Stream({
 	id = "fps", label = "Frame rate and latency", sample = "888 fps  888 ms",
 	every = 1,
@@ -448,10 +460,10 @@ P.Stream({
 		local home, world = Latency()
 		local parts = {}
 		if ns.Finite(rate) and rate >= 0 then
-			parts[#parts + 1] = math.floor(rate + 0.5) .. DIM .. " fps|r"
+			parts[#parts + 1] = Perf("fps", math.floor(rate + 0.5)) .. DIM .. " fps|r"
 		end
 		if home or world then
-			parts[#parts + 1] = math.max(home or 0, world or 0) .. DIM .. " ms|r"
+			parts[#parts + 1] = Perf("ms", math.max(home or 0, world or 0)) .. DIM .. " ms|r"
 		end
 		return #parts > 0 and table.concat(parts, "  ") or nil
 	end,
@@ -460,10 +472,10 @@ P.Stream({
 		local home, world = Latency()
 		local lines = { title = "Frame rate and latency" }
 		if ns.Finite(rate) and rate >= 0 then
-			lines[#lines + 1] = { "Frame rate", ("%.1f fps"):format(rate) }
+			lines[#lines + 1] = { "Frame rate", Perf("fps", rate, ("%.1f"):format(rate)) .. " fps" }
 		end
-		lines[#lines + 1] = { "Home latency", home and (home .. " ms") or "Unknown" }
-		lines[#lines + 1] = { "World latency", world and (world .. " ms") or "Unknown" }
+		lines[#lines + 1] = { "Home latency", home and (Perf("ms", home) .. " ms") or "Unknown" }
+		lines[#lines + 1] = { "World latency", world and (Perf("ms", world) .. " ms") or "Unknown" }
 		local used = Memory(fresh)
 		if used then
 			lines[#lines + 1] = { "Flat UI memory", used }

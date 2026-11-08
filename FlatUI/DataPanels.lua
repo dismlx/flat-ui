@@ -16,9 +16,19 @@ local ADDON_NAME, ns = ...
 -- shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line for /flatui status.
 -- The gold of the account's characters is kept in FlatUIDB.datapanels.gold by "Name - Realm", and the feeds a slot of any profile shows in
 -- FlatUIDB.datapanels.feeds, so a slot keeps its feed while the addon that makes it loads after Flat UI.
--- Built on the data panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission: its streams, the bridge to LibDataBroker
--- and the ticker that runs only for the streams that are shown. Panels made in Edit Mode, their many looks and the secure buttons of its
--- streams are left out.
+-- The looks of the Look rows are calls on Flat UI's own frames and font strings only: the outline of the text in the flags of SetFont, its shadow
+-- (SetShadowOffset) and its colour (SetTextColor: white, the player's class colour, white while the game withholds the class, or an own colour),
+-- under the colour codes of the streams, which keep the parts they colour; the menu of Equipment set keeps its own look. Panel width shares the
+-- room a panel has beyond what its slots need evenly among the slots shown; Layer is the strata of the panel's frame (SetFrameStrata), and the
+-- slots follow it. Opacity in combat and out of combat are the alpha of the panel's frame (SetAlpha, which the game does not protect:
+-- SimpleFrameAPIDocumentation.lua:1133-1143), set at the start and the end of a fight (PLAYER_REGEN_DISABLED, PLAYER_REGEN_ENABLED), at each
+-- refresh, which asks InCombatLockdown, and when a stream drawn again makes a panel or shows it again. A panel under the mouse, or whose menu is
+-- open, is at full opacity: the frame is asked IsMouseOver, which needs no mouse on it, on a ticker every HOVER seconds that runs only while a
+-- shown panel rests below full opacity, so slots that let clicks through still do. The alpha is written only when it changes.
+-- Built on the data panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission: its streams, the bridge to LibDataBroker,
+-- the ticker that runs only for the streams that are shown, and its looks: font style and colour, width, strata and the opacity in and out of
+-- combat (Core/DataPanel.lua:414-433, 1127-1180, 1484-1617). Panels made in Edit Mode, its height (Text size covers it), its fonts of other
+-- addons and the secure buttons of its streams are left out, and its colours wrap the text in a code where Flat UI sets the colour of the text.
 
 local KEY = "datapanels"
 local SLOTS = 6
@@ -26,6 +36,10 @@ local SLOTS = 6
 local BASE, PAD_X, PAD_Y = 12, 8, 4
 -- A burst of events is drawn once, this long after the first. The ticker's step. A live tooltip is written again this often.
 local SETTLE, STEP, LIVE = 0.1, 0.5, 1
+-- How often the mouse is looked for while a shown panel rests below full opacity.
+local HOVER = 0.1
+-- The strata of a panel by its Layer row.
+local STRATA = { low = "LOW", medium = "MEDIUM", high = "HIGH" }
 local SANS = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Fonts\\IBMPlexSans-Regular.ttf"
 local GAME_FONT = "Fonts\\FRIZQT__.TTF"
 local FEED = "ldb:"
@@ -490,17 +504,20 @@ local function GameFile()
 	return GAME_FONT
 end
 
--- The face and size of the text, and the height of a panel.
+-- The face and size of the text, the height of a panel, and the flags of Text outline ("" for none: ns.OUTLINE_FLAGS, Config.lua).
 function P.Font()
 	local size = BASE * Opt("textSize") / 100
 	local file = Opt("font") == "sans" and Covers() and SANS or nil
-	return file, size, math.ceil(size + 2 * PAD_Y)
+	return file, size, math.ceil(size + 2 * PAD_Y), ns.OUTLINE_FLAGS[Opt("outline")] or ""
 end
 
--- Sets the face on a text of a slot. A face the game refuses (an answer of false, or an error) leaves the game's font, and the status says so.
-function P.SetFont(text, file, size)
+-- Sets the face, the size and the outline on a text of a slot, and the face and the size on one of the menu, which keeps no outline (flags nil).
+-- A face the game refuses (an answer of false, or an error) leaves the game's font with the same outline, and the status says so; a language
+-- Flat UI Sans has no letters for takes the game's font (Covers).
+function P.SetFont(text, file, size, flags)
+	flags = type(flags) == "string" and flags or ""
 	if file then
-		local ok, set = pcall(text.SetFont, text, file, size, "")
+		local ok, set = pcall(text.SetFont, text, file, size, flags)
 		if ok and (ns.IsSecret(set) or set ~= false) then
 			ns.ClearNote(KEY, NOTE_SANS)
 			return
@@ -509,7 +526,38 @@ function P.SetFont(text, file, size)
 	else
 		ns.ClearNote(KEY, NOTE_SANS)
 	end
-	pcall(text.SetFont, text, GameFile(), size, "")
+	pcall(text.SetFont, text, GameFile(), size, flags)
+end
+
+-- The shadow and the colour of the text by Text shadow and Text colour: white, the player's class colour, or the own colour. The class is read
+-- with UnitClass, which the game withholds while unit identity is restricted (UnitDocumentation.lua:911-915); ns.ClassColour gives nothing then,
+-- and the text is white.
+function P.TextStyle()
+	local shadow = Opt("shadow") == true
+	local r, g, b = 1, 1, 1
+	local colour = Opt("textColour")
+	if colour == "class" then
+		local cr, cg, cb = ns.ClassColour()
+		if cr then
+			r, g, b = cr, cg, cb
+		end
+	elseif colour == "custom" then
+		r, g, b = ns.Colour(KEY .. ".textCustom")
+	end
+	return { shadow = shadow, r = r, g = g, b = b, key = ("%s:%.3f:%.3f:%.3f"):format(shadow and "shadow" or "plain", r, g, b) }
+end
+
+-- Gives the text of a slot the shadow and the colour of P.style, when they changed. The colour is the text's own: the codes of a stream colour
+-- their parts over it (DIM, GOOD, WARN, BAD), so worn gear stays red whatever the row says.
+function P.Style(slot)
+	local style, text = P.style, slot.text
+	if not style or not text or slot.styleKey == style.key then
+		return
+	end
+	slot.styleKey = style.key
+	pcall(text.SetShadowOffset, text, style.shadow and 1 or 0, style.shadow and -1 or 0)
+	pcall(text.SetShadowColor, text, 0, 0, 0, style.shadow and 1 or 0)
+	pcall(text.SetTextColor, text, style.r, style.g, style.b, 1)
 end
 
 -- Panels ------------------------------------------------------------------------------------------------------------------------------------------
@@ -529,8 +577,8 @@ function P.MakeSlot(panel, slot)
 	slot.text:SetPoint("CENTER", frame, "CENTER", 0, 0)
 	slot.text:SetJustifyH("CENTER")
 	slot.text:SetWordWrap(false)
-	pcall(slot.text.SetShadowOffset, slot.text, 1, -1)
-	pcall(slot.text.SetShadowColor, slot.text, 0, 0, 0, 1)
+	-- The shadow and the colour of Text shadow and Text colour (P.Fill gives them again when a row changes).
+	P.Style(slot)
 	-- The line between this slot and the one before it.
 	slot.line = Own(panel.frame:CreateTexture(nil, "ARTWORK", nil, 0))
 	slot.line:Hide()
@@ -571,13 +619,15 @@ function P.Panel(spec)
 	return panel
 end
 
--- The frame of a panel, on UIParent, with a flat background and a thin border, and the frames of its slots.
+-- The frame of a panel, on UIParent in the strata of Layer, with a flat background and a thin border, and the frames of its slots. It starts at
+-- full opacity, which P.Fade knows, so a panel at 100% in and out of combat is never given an alpha.
 function P.Build(panel)
 	local frame = Own(CreateFrame("Frame", nil, UIParent))
-	frame:SetFrameStrata("LOW")
+	panel.strata = STRATA[Opt("strata")] or "LOW"
+	frame:SetFrameStrata(panel.strata)
 	frame:SetSize(1, 1)
 	frame:Hide()
-	panel.frame = frame
+	panel.frame, panel.alpha = frame, 1
 	panel.outline = ns.Outline(frame, frame, true)
 	for _, slot in ipairs(panel.slots) do
 		P.MakeSlot(panel, slot)
@@ -615,7 +665,8 @@ function P.Draw(slot, text)
 		-- A width the game does not give keeps the last one.
 		width = math.max(width, slot.width - 2 * PAD_X)
 	else
-		width = math.max(width, #text * slot.size / 2)
+		-- Guessed from the letters shown: the colour codes of a stream take no room.
+		width = math.max(width, #(text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) * slot.size / 2)
 	end
 	width = math.ceil(width) + 2 * PAD_X
 	slot.shownText = text
@@ -639,18 +690,31 @@ function P.Width(slot, sample)
 	return P.samples[key]
 end
 
--- Lays the slots of a panel out from the left, each as wide as its text, with a thin line between two. A panel with no slot to show is hidden.
+-- Lays the slots of a panel out from the left, each as wide as its text, with a thin line between two. A Panel width larger than the slots need
+-- shares the room left over evenly among the slots shown, in whole units, the first ones taking what does not divide: each slot grows with its
+-- text centred and the lines stay between slots. A smaller width is ignored, so no slot is cut. A panel with no slot to show is hidden.
 function P.Layout(panel)
 	local frame, height = panel.frame, P.height
 	local x, shown = 0, 0
 	local line = Opt("background")
 	local r, g, b = ns.BorderRGB()
 	local thin = ns.Pixels(frame, 1)
+	local need, count = 0, 0
 	for _, slot in ipairs(panel.slots) do
 		if slot.width then
+			need, count = need + slot.width, count + 1
+		end
+	end
+	local wide = Opt(panel.spec.id .. "Width")
+	local extra = count > 0 and ns.Finite(wide) and wide > need and math.floor(wide - need + 0.5) or 0
+	local each = count > 0 and math.floor(extra / count) or 0
+	local left = extra - each * count
+	for _, slot in ipairs(panel.slots) do
+		if slot.width then
+			local width = slot.width + each + (shown < left and 1 or 0)
 			slot.frame:ClearAllPoints()
 			slot.frame:SetPoint("TOPLEFT", frame, "TOPLEFT", x, 0)
-			slot.frame:SetSize(slot.width, height)
+			slot.frame:SetSize(width, height)
 			slot.frame:Show()
 			if shown > 0 and line then
 				slot.line:ClearAllPoints()
@@ -661,7 +725,7 @@ function P.Layout(panel)
 			else
 				slot.line:Hide()
 			end
-			x = x + slot.width
+			x = x + width
 			shown = shown + 1
 		else
 			slot.frame:Hide()
@@ -750,19 +814,26 @@ function P.Fill(panel, wanted)
 		end
 		P.Build(panel)
 	end
-	local file, size = P.Font()
+	local file, size, _, flags = P.Font()
 	local tips = Opt("tooltips") == true
 	for index, slot in ipairs(panel.slots) do
 		if slot.fontKey ~= P.fontKey then
-			P.SetFont(slot.text, file, size)
+			P.SetFont(slot.text, file, size, flags)
 			slot.fontKey, slot.size, slot.shownText = P.fontKey, size, nil
 		end
+		P.Style(slot)
 		P.Draw(slot, texts[index])
 		-- A feed and a stream with a click of its own (Equipment set) keep their clicks while the tooltips are off.
 		local stream = P.StreamOf(slot.id)
 		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil or (stream ~= nil and type(stream.Click) == "function")))
 	end
 	ns.SetOutline(panel.outline, Opt("background") == true, Opt("background") == true)
+	-- The layer of the panel's own frame; its slots follow it.
+	local strata = STRATA[Opt("strata")] or "LOW"
+	if panel.strata ~= strata then
+		panel.frame:SetFrameStrata(strata)
+		panel.strata = strata
+	end
 	P.Layout(panel)
 	P.Place(panel)
 end
@@ -790,9 +861,14 @@ function P.Refresh()
 	if on then
 		P.Listen()
 		P.Remember()
+	else
+		-- The events of a fight are not heard while the module is off: the next start asks the game again.
+		P.fight = nil
 	end
-	local file, size, height = P.Font()
-	P.fontKey, P.height, P.size = ("%s:%.2f"):format(tostring(file), size), height, size
+	-- The outline is in the key, so P.Width measures the samples again with it: an outline makes a text wider.
+	local file, size, height, flags = P.Font()
+	P.fontKey, P.height, P.size = ("%s:%.2f:%s"):format(tostring(file), size, flags), height, size
+	P.style = P.TextStyle()
 	for _, spec in ipairs(PANELS) do
 		local wanted = on and Opt(spec.id) == true and not P.petBattle
 		local panel = wanted and P.Panel(spec) or P.panels[spec.id]
@@ -809,6 +885,7 @@ function P.Refresh()
 	P.Used()
 	P.dirty = {}
 	P.Ticker()
+	P.FadeAll()
 end
 
 -- A refresh a moment later, for a burst of changes.
@@ -823,6 +900,109 @@ function P.Soon()
 			ns.Try(KEY, P.Refresh)
 		end
 	end)
+end
+
+-- Opacity ---------------------------------------------------------------------------------------------------------------------------------------
+
+-- The opacity a shown panel rests at: Opacity in combat in a fight, Opacity out of combat otherwise. The fight is what PLAYER_REGEN_DISABLED and
+-- PLAYER_REGEN_ENABLED last said (P.fight), and InCombatLockdown before either was heard.
+function P.Rest()
+	local fight = P.fight
+	if fight == nil then
+		fight = P.InCombat()
+	end
+	local percent = Opt(fight and "combatAlpha" or "idleAlpha")
+	if not ns.Finite(percent) then
+		return 1
+	end
+	return math.max(0, math.min(100, percent)) / 100
+end
+
+-- True while the frame is under the mouse. IsMouseOver measures the frame and needs no mouse on it; an answer the game withholds counts as under
+-- the mouse, so the panel stays readable.
+local function Under(frame)
+	local ok, over = pcall(frame.IsMouseOver, frame)
+	return ok and (ns.IsSecret(over) or over == true)
+end
+
+-- Gives a panel's frame the opacity it should have now: full while it is shown under the mouse or its menu is open, so its tooltips and clicks
+-- stay usable at 0%, else the resting one. Written only when it changes.
+function P.Fade(panel)
+	local frame = panel.frame
+	if not frame then
+		return
+	end
+	local alpha = P.Rest()
+	local menu = P.menu
+	if alpha < 1 and panel.shown and ((menu and menu.slot and menu.slot.panel == panel) or Under(frame)) then
+		alpha = 1
+	end
+	if panel.alpha ~= alpha then
+		panel.alpha = alpha
+		frame:SetAlpha(alpha)
+	end
+end
+
+-- True while the module is on and a shown panel rests below full opacity: only then is the mouse looked for.
+function P.Dimmed()
+	if not ns.Enabled(KEY) or P.Rest() >= 1 then
+		return false
+	end
+	for _, panel in pairs(P.panels) do
+		if panel.wanted and panel.shown and panel.frame then
+			return true
+		end
+	end
+	return false
+end
+
+local function StopHover()
+	local ticker = P.hover
+	P.hover = nil
+	if type(ticker) == "table" and type(ticker.Cancel) == "function" then
+		pcall(ticker.Cancel, ticker)
+	end
+end
+
+-- Starts the ticker that looks for the mouse while a panel is dimmed, and stops it once none is, or once the module stopped on an error.
+function P.HoverTicker()
+	local want = P.Dimmed()
+	if want and not P.hover then
+		if type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
+			local ok, ticker = pcall(C_Timer.NewTicker, HOVER, function()
+				if not ns.Try(KEY, P.HoverTick) then
+					StopHover()
+				end
+			end)
+			P.hover = ok and ticker or nil
+		end
+	elseif not want and P.hover then
+		StopHover()
+	end
+end
+
+function P.HoverTick()
+	for _, panel in pairs(P.panels) do
+		P.Fade(panel)
+	end
+	if not P.Dimmed() then
+		P.HoverTicker()
+	end
+end
+
+-- Every panel takes its opacity, and the ticker starts or stops.
+function P.FadeAll()
+	for _, panel in pairs(P.panels) do
+		P.Fade(panel)
+	end
+	P.HoverTicker()
+end
+
+-- The start (true) or the end (false) of a fight. The events are taken as they come: in the handlers of PLAYER_REGEN_DISABLED the game's lockdown
+-- has not begun yet (the trackers still move their secure buttons then, Core.lua), so InCombatLockdown would say no fight.
+function P.Combat(on)
+	P.fight = on
+	P.FadeAll()
 end
 
 -- Drawing again --------------------------------------------------------------------------------------------------------------------------------
@@ -875,6 +1055,9 @@ function P.Flush()
 		end
 	end
 	P.Ticker()
+	-- A panel made here (P.Build starts it at full opacity) or shown again takes the opacity it rests at, and the ticker that looks for the mouse,
+	-- which stopped while no dimmed panel was shown, starts again. An alpha that did not change is not written again.
+	P.FadeAll()
 end
 
 -- The step of a stream: seconds between two drawings while it is shown, or nil.
@@ -1070,6 +1253,8 @@ end
 
 function P.Enter(slot)
 	slot.over = true
+	-- A dimmed panel is at full opacity at once, before the ticker sees the mouse.
+	P.Fade(slot.panel)
 	-- The slot's menu lies where its tooltip would.
 	if not slot.id or not Opt("tooltips") or P.MenuOpen(slot) then
 		return
@@ -1098,6 +1283,7 @@ function P.Leave(slot)
 	if Owned(slot) then
 		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 	end
+	P.Fade(slot.panel)
 end
 
 -- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment
@@ -1145,9 +1331,14 @@ function P.CloseMenu()
 	if not (menu and menu.slot) then
 		return
 	end
+	local panel = menu.slot.panel
 	menu.slot, menu.stream = nil, nil
 	pcall(menu.listener.UnregisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
 	menu.frame:Hide()
+	-- The panel held at full opacity for its menu rests again once the mouse is off it.
+	if panel then
+		P.Fade(panel)
+	end
 end
 
 -- A press of a mouse button while the menu is open: one outside the menu and its slot closes it. A press on the slot is the slot's own click,
@@ -1242,6 +1433,7 @@ function P.OpenMenu(slot, stream, title, items)
 	end
 	local menu = MenuFrame()
 	P.CloseMenu()
+	-- The menu keeps its own look: the face and the size of the panels, without Text outline.
 	local file, size = P.Font()
 	local height = P.height or math.ceil(size + 2 * PAD_Y)
 	P.SetFont(menu.title, file, size)
@@ -1277,6 +1469,8 @@ function P.OpenMenu(slot, stream, title, items)
 	ns.SetOutline(menu.outline, true, true)
 	menu.slot, menu.stream = slot, stream
 	menu.frame:Show()
+	-- The panel stays at full opacity while its menu is open, wherever the mouse goes.
+	P.Fade(slot.panel)
 	pcall(menu.listener.RegisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
 	-- The slot's tooltip would lie over the menu.
 	if Owned(slot) then
@@ -1309,6 +1503,8 @@ end
 -- asked for), which a slot it holds needs to be drawn first for.
 function P.Start()
 	PetBattleNow()
+	-- Whether a fight is on is asked again (P.Rest): a loading screen may have ended one unheard.
+	P.fight = nil
 	P.Refresh()
 	EachStream("Start")
 end
@@ -1397,7 +1593,13 @@ ns.Register(KEY, {
 			P.PetBattle(false)
 		end,
 		ADDON_LOADED = P.OnAddon,
-		-- Nothing is offered in a fight (DataStreams.lua, Equipment set).
-		PLAYER_REGEN_DISABLED = P.CloseMenu,
+		-- The panels take Opacity in combat, and nothing is offered in a fight (DataStreams.lua, Equipment set).
+		PLAYER_REGEN_DISABLED = function()
+			P.Combat(true)
+			P.CloseMenu()
+		end,
+		PLAYER_REGEN_ENABLED = function()
+			P.Combat(false)
+		end,
 	},
 })

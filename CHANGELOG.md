@@ -1,6 +1,9 @@
 ## 0.5.9
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Minimap**, **Text around the map**: **Show** picks **Frame rate and latency** (as before), **Frame rate only** or **Latency only**, and **Latency** picks **Home and world** (as before), **The higher one**, **Home only** or **World only**. **Colour by value**, on: a number is green, yellow when the frame rate is under 60 or the latency over 100 ms, and red under 30 or over 200 ms; fps, ms and the slashes stay white. Follows EnhanceQoL's minimap stats.
+- **Data panels**: **Panel width** for each panel (0 fits the slots; wider shares the spare room between them). Under **Look**: **Text outline** (none), **Text shadow** (on), **Text colour** (white, your class colour or **Own text colour**; a slot's own colours, such as red for worn gear, stay), **Colour frame rate and latency** (on, in the steps used by the minimap), **Opacity in combat** and **Opacity out of combat** (100%; a panel is at full opacity under the mouse and while its menu is open) and **Layer** (**Under the game's windows**, **Over the unit frames and the minimap** or **Over the game's windows**). Follows EnhanceQoL's data panels.
+- **Bars, bags and micro menu**, **Levelling**, **Reputation text** (**None**): **Time to next standing**, **Reputation per hour** or **Both** on Flat UI's reputation bar, after its text or alone while **Bar text** is **Hidden**. The pace is your last 30 minutes of play without time away and shows after 5 minutes; it starts again for another faction or a fall of standing, and shows nothing at the top standing. **Levelling in the tooltip** and `/flatui xp` give it too, and `/flatui xp reset` starts it again. Follows EnhanceQoL's reputation bar.
 
 ## 0.5.8
 

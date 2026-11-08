@@ -10947,6 +10947,9 @@ local PAGES = {
 		S("hud.mapDurabilityPlace", "choice", "below", "Durability place", nil, { needs = "hud.mapDurability", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
 		S("hud.mapPerf", "bool", false, "Frame rate and latency", "Frames per second, then your home and world latency in milliseconds."),
 		S("hud.mapPerfPlace", "choice", "below", "Frame rate place", nil, { needs = "hud.mapPerf", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapPerfShow", "choice", "both", "Show", "What the line by the minimap shows.", { needs = "hud.mapPerf", choices = { { "both", "Frame rate and latency" }, { "fps", "Frame rate only" }, { "ms", "Latency only" } } }),
+		S("hud.mapLatency", "choice", "both", "Latency", "Home is chat and the auction house, world is combat and other players.", { needs = "hud.mapPerfShow", needsIn = { "both", "ms" }, choices = { { "both", "Home and world" }, { "max", "The higher one" }, { "home", "Home only" }, { "world", "World only" } } }),
+		S("hud.mapPerfColour", "bool", true, "Colour by value", "Frame rate red under 30 and yellow under 60; latency yellow over 100 ms and red over 200 ms.", { needs = "hud.mapPerf" }),
 		S("hud.mapClock", "bool", false, "Time", "Your local time or the realm's. The game's clock beside the zone name has its own row, Clock, under Buttons."),
 		S("hud.mapClockPlace", "choice", "above", "Time place", nil, { needs = "hud.mapClock", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
 		S("hud.mapClockTime", "choice", "local", "Local or realm time", nil, { needs = "hud.mapClock", choices = { { "local", "Local time" }, { "realm", "Realm time" } } }),
@@ -10999,7 +11002,8 @@ local PAGES = {
 		S("hud.xpQuest", "bool", true, "Quests ready to hand in", "A stretch after the fill shows the experience of the finished quests in your log. The tooltip counts them and the whole log.", { needs = "hud.xpOwn", needsIn = { "flat" } }),
 		S("hud.xpQuestColour", "colour", "ff4de64d", "Quest colour", nil, { needs = "hud.xpQuest" }),
 		S("hud.xpStats", "choice", "time", "Levelling text", "After the text of the experience bar, or alone while Bar text is Hidden. The pace is your last 30 minutes of play, without time away, and shows after 5 minutes.", { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "none", "None" }, { "time", "Time to level" }, { "rate", "Experience per hour" }, { "both", "Time to level and per hour" }, { "kills", "Kills to level" } } }),
-		S("hud.xpStatsTip", "bool", true, "Levelling in the tooltip", "Experience this session and per hour, the time to level, about how many kills and quests that takes, and the time at this level after /played.", { needs = "hud.xpTooltip" }),
+		S("hud.xpRepStats", "choice", "none", "Reputation text", "After the text of the reputation bar, or alone while Bar text is Hidden. The pace is your last 30 minutes of play, without time away, and shows after 5 minutes.", { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "none", "None" }, { "time", "Time to next standing" }, { "rate", "Reputation per hour" }, { "both", "Both" } } }),
+		S("hud.xpStatsTip", "bool", true, "Levelling in the tooltip", "Experience this session and per hour, the time to level, about how many kills and quests that takes, and the time at this level after /played. On the reputation bar, the reputation this session and per hour and the time to the next standing.", { needs = "hud.xpTooltip" }),
 		"Micro menu",
 		S("hud.micro", "bool", true, "Micro menu buttons", "Thin border in place of the default button frames."),
 	} },
@@ -11193,6 +11197,7 @@ local PAGES = {
 		S("datapanels.top4", "choice", "hearth", "Fourth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		S("datapanels.top5", "choice", "coords", "Fifth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		S("datapanels.top6", "choice", "fps", "Sixth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.topWidth", "number", 0, "Panel width", "0 fits the slots.", { min = 0, max = 2000, step = 10, unit = " px", needs = "datapanels.top" }),
 		"Bottom panel",
 		S("datapanels.bottom", "bool", false, "Show the bottom panel", "In the bottom left corner of the screen until you move it."),
 		S("datapanels.bottom1", "choice", "friends", "First slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
@@ -11201,11 +11206,20 @@ local PAGES = {
 		S("datapanels.bottom4", "choice", "none", "Fourth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		S("datapanels.bottom5", "choice", "none", "Fifth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		S("datapanels.bottom6", "choice", "none", "Sixth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.bottomWidth", "number", 0, "Panel width", "0 fits the slots.", { min = 0, max = 2000, step = 10, unit = " px", needs = "datapanels.bottom" }),
 		"Look",
 		S("datapanels.font", "choice", "sans", "Font", "Flat UI Sans is IBM Plex Sans. A language it has no letters for keeps the game font.", { choices = { { "sans", "Flat UI Sans" }, { "game", "Game font" } } }),
 		S("datapanels.textSize", "number", 100, "Text size", "100% is 12 px.", { min = 50, max = 200, step = 5, unit = "%" }),
 		S("datapanels.background", "bool", true, "Background and border", "A flat background with a thin border and a line between two slots, in the colours of the Flat UI page."),
 		S("datapanels.tooltips", "bool", true, "Tooltips", "Off: the panels let clicks through, except Equipment set and a slot that shows another addon's feed, which keep their own clicks."),
+		S("datapanels.outline", "choice", "none", "Text outline", "An outline makes a slot a little wider.", { choices = { { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } }),
+		S("datapanels.shadow", "bool", true, "Text shadow"),
+		S("datapanels.textColour", "choice", "white", "Text colour", "A slot's own colours stay, such as red for worn gear.", { choices = { { "white", "White" }, { "class", "Class colour" }, { "custom", "Own colour" } } }),
+		S("datapanels.textCustom", "colour", "ffffffff", "Own text colour", nil, { needs = "datapanels.textColour", needsIn = { "custom" } }),
+		S("datapanels.perfColour", "bool", true, "Colour frame rate and latency", "As by the minimap: frame rate red under 30, latency red over 200 ms."),
+		S("datapanels.combatAlpha", "number", 100, "Opacity in combat", "Under the mouse a panel is at full opacity.", { min = 0, max = 100, step = 5, unit = "%" }),
+		S("datapanels.idleAlpha", "number", 100, "Opacity out of combat", "Under the mouse a panel is at full opacity.", { min = 0, max = 100, step = 5, unit = "%" }),
+		S("datapanels.strata", "choice", "low", "Layer", "Over the game's windows, a panel can cover your bags and the map.", { choices = { { "low", "Under the game's windows" }, { "medium", "Over the unit frames and the minimap" }, { "high", "Over the game's windows" } } }),
 		"Gold",
 		S("datapanels.forgetGold", "list", 0, "Forget a character's gold", "The gold tooltip lists each character of the account that logged in with data panels on."),
 	} },
@@ -21758,6 +21772,12 @@ for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.
 	"mount.enabled", "mount.favourites", "trackers.click",
 	"grouptools.enabled", "grouptools.show", "grouptools.marks", "grouptools.readyCheck", "grouptools.rolePoll", "grouptools.pull", "grouptools.pullTime",
 	"grouptools.size", "grouptools.spacing", "grouptools.layout" }) do
+	covered[path] = true
+end
+-- Nor do the rows of wave 7 (0.5.9), for the same reason.
+for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour", "hud.xpRepStats",
+	"datapanels.topWidth", "datapanels.bottomWidth", "datapanels.outline", "datapanels.shadow", "datapanels.textColour", "datapanels.textCustom",
+	"datapanels.perfColour", "datapanels.combatAlpha", "datapanels.idleAlpha", "datapanels.strata" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67232,7 +67252,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1068 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1082 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
