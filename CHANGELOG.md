@@ -1,3 +1,8 @@
+## 0.5.11
+
+- For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Nameplates**, **Threat**, **Threat glow**: the ring round an enemy's health bar no longer turns into a large red box around the plate. Its gap from the bar was worked out in the plate's units once, when the ring was made, so when the game scaled the plate up afterwards (by distance or as your target) the gap grew with it. The ring's frame now ignores the plate's scale, as Flat UI's outlines do, so the gap stays a few pixels, and a ring far larger than its bar is anchored again, or hidden in a fight until it can be.
+
 ## 0.5.10
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.

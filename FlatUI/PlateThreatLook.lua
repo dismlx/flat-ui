@@ -132,17 +132,41 @@ end
 
 -- The ring -------------------------------------------------------------------------------------------------------------------------------------------
 
--- The ring's distance from the health bar, in the bar's units: the general border thickness and two pixels more.
-local function Gap(bar)
+-- The ring's distance from the health bar: the general border thickness and two pixels more, in the units of the ring's own frame. That frame ignores
+-- the plate's scale (Make), so the distance stays the same on screen while the game scales the plate with distance and selection; a gap worked out
+-- in the bar's units at one scale grew with the plate at the next, and drew the ring far out around it.
+local function Gap(ring, bar)
 	local thickness = ns.Get("general.thickness")
-	return ns.Pixels(bar, (ns.Finite(thickness) and thickness or 1) + GAP_PX)
+	local base = ring ~= nil and ring.pixels and ring.frame or bar
+	return ns.Pixels(base, (ns.Finite(thickness) and thickness or 1) + GAP_PX)
+end
+
+-- The size of a frame on screen, or nil when it cannot be read plainly.
+local function ScreenSize(frame)
+	local ok, w, h = pcall(frame.GetSize, frame)
+	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
+	if ok and okScale and ns.Finite(w) and ns.Finite(h) and ns.Finite(scale) and scale > 0 then
+		return w * scale, h * scale
+	end
+	return nil
+end
+
+-- False while the ring is far larger than the bar it goes round (more than three times as wide or six times as high, which no gap gives): an anchor
+-- the game resolved elsewhere. Unknown sizes count as sane.
+local function Sane(ring, bar)
+	local rw, rh = ScreenSize(ring.frame)
+	local bw, bh = ScreenSize(bar)
+	if rw == nil or bw == nil or bw <= 0 or bh <= 0 then
+		return true
+	end
+	return rw <= bw * 3 and rh <= bh * 6
 end
 
 -- Four points, as the frame of the level box border has them (LevelSpan, Nameplates.lua): the left, top and bottom of the health bar and the right of
 -- the bar, or of the level frame while Flat UI's square level box sits beside the bar, each moved out by the gap. Each SetPoint replaces the point of
 -- its name, so a refused call leaves the anchors the ring had.
 local function Anchor(ring, bar, right)
-	local d = Gap(bar)
+	local d = Gap(ring, bar)
 	local holder = ring.frame
 	local ok = pcall(function()
 		holder:SetPoint("LEFT", bar, "LEFT", -d, 0)
@@ -173,7 +197,8 @@ local function Make(frame, rec)
 	end
 	local holder = CreateFrame("Frame", nil, bar)
 	ns.Own[holder] = true
-	local ring = { frame = holder }
+	-- The ring's own frame ignores the plate's scale, as the edges of an outline do (Core.lua's ns.Outline), so its gap is in screen pixels.
+	local ring = { frame = holder, pixels = pcall(holder.SetIgnoreParentScale, holder, true) }
 	rec.ring = ring
 	Anchor(ring, bar, level or bar)
 	-- Four edges just outside the frame, on a holder that ignores the plate's scale, without a backdrop, and drawn without borders too.
@@ -192,7 +217,7 @@ local function Place(frame, rec)
 		return
 	end
 	local right = rec.levelBox and Level(frame) or bar
-	if ring.right == right and ring.d ~= nil and math.abs(ring.d - Gap(bar)) < 0.01 then
+	if ring.right == right and ring.d ~= nil and math.abs(ring.d - Gap(ring, bar)) < 0.01 and Sane(ring, bar) then
 		return
 	end
 	if InCombatLockdown() then
@@ -232,6 +257,21 @@ local function Ring(frame, rec, state, place)
 	local ring = rec.ring or Make(frame, rec)
 	if ring == nil then
 		return
+	end
+	-- A ring far larger than its bar is anchored again out of combat; in a fight, or when that does not help, it stays hidden until it is.
+	local bar = Bar(frame)
+	if bar ~= nil and not Sane(ring, bar) then
+		if not InCombatLockdown() then
+			Anchor(ring, bar, rec.levelBox and Level(frame) or bar)
+		end
+		if not Sane(ring, bar) then
+			-- Only a fight waits: out of combat ns.OutOfCombat runs at once, and the next layout or refresh of the plate tries again.
+			HideRing(frame, rec)
+			if InCombatLockdown() then
+				Wait(frame, rec)
+			end
+			return
+		end
 	end
 	ns.SetOutlineColour(ring.outline, r, g, b)
 	if not ring.shown then
