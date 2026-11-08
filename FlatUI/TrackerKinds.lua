@@ -929,7 +929,7 @@ end
 --   PetActionFlyout.lua:22-38), and the classic PET_MODE_DEFENSIVE and PET_MODE_AGGRESSIVE, which the client may still give (it has
 --   PetDefensiveMode and PetAggressiveMode beside PetDefensiveAssistMode and PetPassiveMode). The call has no generated documentation, so every
 --   answer is tested with IsSecret: a withheld answer, or a pet bar that names no mode, gives no mode, and the mode then counts as neither, with no
---   click. The tracker is low while the pet is on Passive with Pet on Passive counts as low on, or on Defensive with Pet on Defensive counts as low.
+--   click. The tracker is low while the pet is on Passive with Pet on passive counts as low on, or on Defensive with Pet on defensive counts as low.
 --   PET_BAR_UPDATE tells a change of mode, as it tells the game's pet bar (PetActionBar.lua:55, 70-81).
 -- - A missing pet is excused while UnitOnTaxi or UnitInVehicle plainly says the player is on a flight path or in a vehicle (UnitDocumentation.lua:
 --   1733-1746, 2570-2583; neither is withheld), since the game takes the pet away there and brings it back; PLAYER_CONTROL_LOST and
