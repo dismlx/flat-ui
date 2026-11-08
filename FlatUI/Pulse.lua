@@ -24,10 +24,13 @@ local _, ns = ...
 -- is an animation group of the game's: an Alpha animation sets the opacity itself, from a frame at none, as the game's own alerts fade in
 -- (Blizzard_FrameXML/Mainline/AlertFrameSystems.xml:1090, 1205-1206), so the frame is unseen once it ends. A timer of the length of a pulse
 -- starts the next. Nothing of the module runs while nothing shows but the events it hears and the Cooldown frames, which the game runs.
+-- A pulse plays Sound, or the sound a spell or item has of its own (Sound of one spell or item, /flatui pulse sound): one of the seven sounds or
+-- none, kept for the character in FlatUICharDB.pulseSounds by the key of its entry, a spell by its name, so every rank shares it, an item by its ID.
 --
 -- Adapted from the Cooldown Pulse of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLCooldownPulse/Runtime.lua
 -- and Observers.lua): its tracking of the whole spell book and the trinkets, its list of what is left out, its observers fed duration objects
--- and its queue. Flat UI has one look in place of its groups, styles, text, glows, growth and editor.
+-- and its queue, and its sound for one spell over the one of all (Runtime.lua:89-101, Core.lua:114-123, Editor.lua:171-207). Flat UI has one
+-- look in place of its groups, styles, text, glows, growth and editor, and the sounds of its other pages in place of a choice of files and channels.
 
 local KEY = "pulse"
 local MOVER = "FlatUIPulse"
@@ -47,11 +50,16 @@ local TRINKETS = { 13, 14 }
 local UNKNOWN_ICON = 134400
 -- The places of the Sound choices in ns.SOUNDS (IconRow.lua), as EnemyCooldowns.lua has them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
+-- The lines of Sound of one spell or item once one is chosen: the page's sound, no sound, then each sound of ns.SOUNDS from 3 on, and the line back
+-- to what pulses, as Sound of one icon has them (Cooldowns.lua).
+local SOUND_PAGE, SOUND_NONE, SOUND_BACK = 1, 2, -1
+local SOUND_HELP = "/flatui pulse sound Frost Nova bell - its own sound when it pulses: page, none, spell, chimes, bell, warhorn, raid, alarm or whisper"
 local HELP = {
 	"/flatui pulse test - a pulse where it shows",
 	"/flatui pulse ignore Frost Nova - a spell or an item that is not to pulse: a name, an ID or a shift-clicked link",
 	"/flatui pulse watch Frost Nova - it pulses again",
-	"/flatui pulse list - what pulses and what is left out",
+	SOUND_HELP,
+	"/flatui pulse list - what pulses, what is left out and the own sounds",
 }
 local NO_BOOK = "Cooldown pulse: the game has no spell book information, so only items pulse."
 local NO_COOLDOWNS = "Cooldown pulse: the game has no spell cooldown information, so only items pulse."
@@ -71,6 +79,12 @@ local IsSecret = ns.IsSecret
 local P = { spells = {}, ids = {}, items = {}, known = {}, queue = {}, token = 0, watching = setmetatable({}, { __mode = "k" }), free = {},
 	left = { ids = {}, names = {}, items = {} } }
 ns.Pulse = P
+-- The words of the sounds in the order of ns.SOUNDS. P.soundFor, set by Sound of one spell or item, is the key of the entry whose sound it offers
+-- next; nil while it offers what pulses.
+P.WORDS = {}
+for word, index in pairs(KITS) do
+	P.WORDS[index] = word
+end
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -819,7 +833,7 @@ function P.Hide()
 	P.frame:SetAlpha(0)
 end
 
--- Shows an entry for Opt("time") seconds, with its sound, then the next one.
+-- Shows an entry for Opt("time") seconds, with its sound (its own, none, else Sound), then the next one.
 function P.Show(entry)
 	if not P.Timers() then
 		P.current, P.queue = nil, {}
@@ -835,7 +849,7 @@ function P.Show(entry)
 	if not P.Fade(seconds) then
 		frame:SetAlpha(PEAK)
 	end
-	local sound = ns.SOUNDS and ns.SOUNDS[KITS[Opt("sound")] or 0]
+	local sound = ns.SOUNDS and ns.SOUNDS[KITS[P.OwnSound(entry.key) or Opt("sound")] or 0]
 	if sound and ns.PlayKit then
 		ns.PlayKit(sound[1], KEY)
 	end
@@ -1076,6 +1090,157 @@ function ns.PulseUnignore(id)
 	return true, ("%s pulses again."):format(P.Label(id))
 end
 
+-- Sounds of their own ------------------------------------------------------------------------------------------------------------------
+
+-- The sounds this character gave spells and items (FlatUICharDB.pulseSounds), by the key of an entry: "spell:" and its name, "item:" and its ID.
+-- Nothing is saved for a character who gave none; make is true to start the table.
+function P.Sounds(make)
+	local saved = ns.Character()
+	if type(saved) ~= "table" then
+		return nil
+	end
+	if type(saved.pulseSounds) ~= "table" then
+		saved.pulseSounds = make and {} or nil
+	end
+	return saved.pulseSounds
+end
+
+-- The sound an entry pulses with of its own: a word of KITS, or none. Nil plays Sound.
+function P.OwnSound(key)
+	local sounds = P.Sounds()
+	local word = sounds and type(key) == "string" and sounds[key] or nil
+	if word == "none" or (type(word) == "string" and KITS[word]) then
+		return word
+	end
+	return nil
+end
+
+-- Gives an entry its own sound, or with nil takes it back to Sound. The table goes with the last one.
+function P.SetOwnSound(key, word)
+	local sounds = P.Sounds(word ~= nil)
+	if not sounds then
+		return
+	end
+	sounds[key] = word
+	if next(sounds) == nil then
+		ns.Character().pulseSounds = nil
+	end
+end
+
+-- The name of a sound of ns.SOUNDS (IconRow.lua:17-25) by its word.
+function P.SoundName(word)
+	if word == "none" then
+		return "no sound"
+	end
+	local sound = ns.SOUNDS and ns.SOUNDS[KITS[word] or 0]
+	return type(sound) == "table" and sound[2] or tostring(word)
+end
+
+-- What a change of a sound is answered with.
+function P.SoundSaid(name, word)
+	if word == nil then
+		return ("%s plays the page's sound when it pulses."):format(name)
+	end
+	return ("%s plays %s when it pulses."):format(name, P.SoundName(word))
+end
+
+-- What pulses, as Sound of one spell or item lists it: { line ID, name, key }, a spell by the ID of its highest rank and an item by its ID below 0,
+-- as Leave out lists them. With one chosen first, the one whose sound comes next; nil when none is, or it pulses no longer.
+function P.SoundRows()
+	local rows, chosen = {}, nil
+	for _, row in ipairs(ns.PulseCandidates()) do
+		local id = row[1]
+		local key = id > 0 and ("spell:" .. row[2]) or ("item:" .. -id)
+		rows[#rows + 1] = { id, row[2], key }
+		if P.soundFor ~= nil and key == P.soundFor then
+			chosen = rows[#rows]
+		end
+	end
+	if not chosen then
+		P.soundFor = nil
+	end
+	return rows, chosen
+end
+
+-- Sound of one spell or item is one list for two choices, made again each time it opens: what pulses, each with its own sound when it has one,
+-- and once one is chosen, the sounds for it (Sound of one icon of Cooldowns.lua works so).
+function ns.PulseSoundLines()
+	local rows, chosen = P.SoundRows()
+	local lines = {}
+	if not chosen then
+		for _, row in ipairs(rows) do
+			local own = P.OwnSound(row[3])
+			lines[#lines + 1] = { row[1], own and ("%s (%s)"):format(row[2], P.SoundName(own)) or row[2] }
+		end
+		return lines
+	end
+	lines[1] = { SOUND_PAGE, chosen[2] .. ": the page's sound" }
+	lines[2] = { SOUND_NONE, chosen[2] .. ": no sound" }
+	for index, word in ipairs(P.WORDS) do
+		lines[#lines + 1] = { SOUND_NONE + index, chosen[2] .. ": " .. P.SoundName(word) }
+	end
+	lines[#lines + 1] = { SOUND_BACK, "Another spell or item" }
+	return lines
+end
+
+-- Works in combat and with the page off, since it changes what is saved.
+function ns.PulseSoundPick(id)
+	local rows, chosen = P.SoundRows()
+	if not chosen then
+		for _, row in ipairs(rows) do
+			if row[1] == id then
+				P.soundFor = row[3]
+				return true, ("%s: open the list again to choose its sound."):format(row[2])
+			end
+		end
+		return false, "That spell or item does not pulse."
+	end
+	P.soundFor = nil
+	local word
+	if id == SOUND_NONE then
+		word = "none"
+	elseif type(id) == "number" and id > SOUND_NONE and P.WORDS[id - SOUND_NONE] then
+		word = P.WORDS[id - SOUND_NONE]
+	elseif id ~= SOUND_PAGE then
+		return true, nil
+	end
+	P.SetOwnSound(chosen[3], word)
+	return true, P.SoundSaid(chosen[2], word)
+end
+
+-- /flatui pulse sound: a spell or an item, then page, none or the word of a sound. A spell keeps its sound by its name, so every rank shares it.
+function P.SoundCommand(text)
+	local name, said = text:match("^%s*(.-)%s+(%S+)%s*$")
+	said = said and said:lower()
+	if not (name and name ~= "" and (said == "page" or said == "none" or KITS[said])) then
+		return SOUND_HELP
+	end
+	local id = P.Resolve(name)
+	if not id then
+		return ('No spell or item found for "%s".'):format(name)
+	end
+	local label = P.Label(id)
+	local key = id > 0 and ("spell:" .. label) or ("item:" .. -id)
+	local word = said ~= "page" and said or nil
+	P.SetOwnSound(key, word)
+	return P.SoundSaid(label, word)
+end
+
+-- The own sounds as the list says them: "Frost Nova (Bell)", sorted.
+function P.SoundList()
+	local own = {}
+	for key in pairs(P.Sounds() or {}) do
+		local word = P.OwnSound(key)
+		local kind, rest = tostring(key):match("^(%a+):(.+)$")
+		local label = kind == "item" and P.ItemName(tonumber(rest) or 0) or rest
+		if word and label then
+			own[#own + 1] = ("%s (%s)"):format(label, P.SoundName(word))
+		end
+	end
+	table.sort(own)
+	return own
+end
+
 -- True while the pulse has a handle in the movers: while its page is on.
 function ns.PulseShown()
 	return ns.Enabled(KEY)
@@ -1139,6 +1304,8 @@ function P.List()
 	print(("Cooldown pulse, spells: %s"):format(#names > 0 and table.concat(names, ", ") or "none"))
 	print(("Cooldown pulse, items: %s"):format(#items > 0 and table.concat(items, ", ") or "none"))
 	print(("Cooldown pulse, left out: %s"):format(#left > 0 and table.concat(left, ", ") or "none"))
+	local own = P.SoundList()
+	print(("Cooldown pulse, own sounds: %s"):format(#own > 0 and table.concat(own, ", ") or "none"))
 end
 
 function P.Slash(rest)
@@ -1152,6 +1319,9 @@ function P.Slash(rest)
 		end
 		local _, message = (word == "ignore" and ns.PulseIgnore or ns.PulseUnignore)(id)
 		print(message)
+	elseif word == "sound" then
+		-- It changes what is saved, so it works with the page off, as ignore and watch do.
+		print(P.SoundCommand(text))
 	elseif word == "test" or word == "list" then
 		if not ns.Enabled(KEY) then
 			print("Cooldown pulse is off. Its page is under Cooldowns.")

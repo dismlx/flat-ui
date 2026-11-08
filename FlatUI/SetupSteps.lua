@@ -868,9 +868,12 @@ ns.SETUP_STEPS = {
 		{ "trackers.y", "r", "mock-screen" },
 		{ "trackers.low", "o", "mock-tracker-states" },
 		{ "trackers.lowTime", "o", "mock-tracker-states" },
+		{ "trackers.lowTimeInstance", "o", "behaviour", "Warns earlier in a dungeon or raid for a buff or weapon enchant that lasts 10 minutes or more." },
 		{ "trackers.missing", "c", "mock-tracker-states" },
 		{ "trackers.sound", "c", "behaviour", "Plays a sound when a tracker drops to low or missing." },
-		{ "trackers.kit", "r", "behaviour", "Chooses the sound that plays when a tracker drops." },
+		{ "trackers.comes", "r", "behaviour", "Plays a sound when the buff or debuff of a tracker comes." },
+		{ "trackers.stacks", "r", "behaviour", "Plays a sound when the buff or debuff of a tracker gains a stack." },
+		{ "trackers.kit", "r", "behaviour", "Chooses the sound a tracker plays when it drops, comes or stacks." },
 	} },
 	{ id = "tr-proc", area = "Trackers", title = "Proc alerts", draw = "mock-proc", built = true, rows = {
 		{ "trackers.addProc", "c", "behaviour", "Adds a proc to the alert list." },
@@ -925,6 +928,7 @@ ns.SETUP_STEPS = {
 		{ "pulse.size", "o", "behaviour", "Sets the size of the pulse." },
 		{ "pulse.time", "r", "behaviour", "Sets how long the pulse shows." },
 		{ "pulse.sound", "r", "behaviour", "Plays a sound with the pulse." },
+		{ "pulse.iconSound", "r", "behaviour", "Gives one spell or item of the pulse a sound of its own." },
 	} },
 	{ id = "cd-states", area = "Cooldowns", title = "Cooldown states and numbers", draw = "mock-cooldown-row", built = true, rows = {
 		{ "cooldowns.dimDesat", "c", "mock-cooldown-row" },

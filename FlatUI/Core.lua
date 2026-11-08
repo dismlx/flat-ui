@@ -89,6 +89,9 @@ local ADDON_NAME, ns = ...
 -- Those buttons also cast your own buffs, stances and forms on you, run a macro of Call Pet and Revive Pet, and set the pet's mode with the pet
 -- action type, all given out of combat. Trackers draws the pet's health on frames of its own through UnitHealthPercent and a curve, read by widget
 -- calls only.
+-- Trackers registers the game's own sound for a tracked aura that ends, comes or stacks (C_UnitAuras.AddAuraSound, triggers Removed, Added and
+-- ApplicationsIncreased; RemoveAuraSound), only out of combat and while aura values are open; a change that waits is heard on a frame of its own,
+-- also with the page off, so the registrations are taken back once it can be made.
 -- Group tools (off by default) lays secure buttons of its own over its icons, made, placed, shown and given attributes only out of combat: the game's
 -- raidtarget action, /readycheck and /countdown. A plain button asks for a role poll, and it writes tooltips in GameTooltip.
 -- Cooldown pulse (off by default) is a frame of its own on UIParent that takes no mouse, told when cooldowns end by invisible Cooldown frames of

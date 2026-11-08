@@ -23,6 +23,9 @@
 - **Trackers**, new section **Pet**: **Pet health minimum** (30%), **Pet on Passive counts as low** (on) and **Pet on Defensive counts as low** (off). Under the minimum a Pet or Demon tracker shows your pet's health in red, drawn by the game, which Flat UI cannot read; `/flatui tracker set 1 health 40` sets one tracker's own. A pet away on a flight path or in a vehicle counts as fine. Follows EnhanceQoL's pet reminders and Pet Tracker stream.
 - **Trackers**: a rogue gets **Off hand poison** (**Add class trackers**), shown while the off hand holds a weapon; **Item a click puts on a weapon** picks each hand's poison, stone, oil or imbue, and `/flatui tracker check` names it. Follows EnhanceQoL's poison reminder.
 - **Trackers**, **When shown**, **Hide in combat** (off): a tracker set to **Only when low or missing** shows only between fights. Follows EnhanceQoL's tracking filters.
+- **Trackers**, **Low and missing**: **Low at (seconds left)** goes up to 30 minutes, and the new **Low in dungeons and raids (seconds left)** (120 s) warns earlier there for buffs and weapon enchants that last 10 minutes or more. `/flatui tracker check` says which applies. Follows EnhanceQoL's expiration warnings.
+- **Trackers**: **Sound when it comes** and **Sound when it stacks** (off) for a buff or debuff tracker, in the kit of **Sound**; the game plays Raid warning, Alarm and Whisper itself, also in fights, and `/flatui status` counts them. Follows EnhanceQoL's aura sounds.
+- **Cooldown pulse**: **Sound of one spell or item** and `/flatui pulse sound` give a spell or item a pulse sound of its own, or none. Follows EnhanceQoL's Cooldown Pulse.
 
 ## 0.5.8
 

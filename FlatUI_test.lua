@@ -10426,6 +10426,7 @@ local PAGES = {
 		S("pulse.size", "number", 72, "Icon size", nil, { min = 32, max = 160, step = 4, unit = "" }),
 		S("pulse.time", "number", 1, "How long it shows", "Cooldowns that end together pulse one after another. /flatui pulse test shows one.", { min = 1, max = 5, step = 1, unit = " s" }),
 		S("pulse.sound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
+		S("pulse.iconSound", "list", 0, "Sound of one spell or item", "Choose one, then open the list again for its own sound. One without it plays Sound."),
 	} },
 	{ key = "trackers", label = "Trackers", rows = {
 		S("trackers.enabled", "bool", true, "Trackers"),
@@ -10497,10 +10498,13 @@ local PAGES = {
 	{ key = "trackerlow", label = "Low and missing", switch = "trackers", rows = {
 		"Low",
 		S("trackers.low", "number", 1, "Low at (charges)", "0 means never.", { min = 0, max = 20, step = 1, unit = "" }),
-		S("trackers.lowTime", "number", 0, "Low at (seconds left)", "0 means never.", { min = 0, max = 300, step = 5, unit = " s" }),
+		S("trackers.lowTime", "number", 0, "Low at (seconds left)", "0 means never. Up to 30 minutes, for long buffs and poisons.", { min = 0, max = 1800, step = 5, unit = " s" }),
+		S("trackers.lowTimeInstance", "number", 120, "Low in dungeons and raids (seconds left)", "For a buff or weapon enchant that lasts 10 minutes or more, in a dungeon or raid: the larger of this and Low at. 0 means the same as elsewhere. In a fight, a tracker set to Only when low or missing still hides while its buff is up, so the warning shows between pulls.", { min = 0, max = 1800, step = 5, unit = " s" }),
 		"Missing",
 		S("trackers.missing", "choice", "red", "When missing", nil, { choices = { { "red", "Red icon" }, { "pulse", "Red icon that pulses" }, { "word", "Red icon and the word Missing" } } }),
 		S("trackers.sound", "bool", false, "Sound when it drops"),
+		S("trackers.comes", "bool", false, "Sound when it comes", "For a buff or debuff tracker, in the kit of Sound."),
+		S("trackers.stacks", "bool", false, "Sound when it stacks", "For a buff or debuff tracker, in the kit of Sound."),
 		S("trackers.kit", "choice", "raid", "Sound", nil, { choices = { { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 	} },
 	-- The window's own editor of one tracker: a page of the window with no setting of its own, left out of the game's options.
@@ -21841,7 +21845,8 @@ for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour"
 	"unitframes.targetBorder", "unitframes.targetColour",
 	"chat.restore", "chat.restoreLines", "chat.restoreChannels", "chat.combatUnits", "chat.combatWhere", "chat.spellTips", "chat.auraTips",
 	"chat.itemTips", "chat.groupTips", "chat.groupTipKey", "chat.iconId",
-	"trackers.petHealthMin", "trackers.petPassive", "trackers.petDefensive", "trackers.combatHide", "trackers.clickUse" }) do
+	"trackers.petHealthMin", "trackers.petPassive", "trackers.petDefensive", "trackers.combatHide", "trackers.clickUse",
+	"trackers.lowTimeInstance", "trackers.comes", "trackers.stacks", "pulse.iconSound" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -66645,7 +66650,7 @@ function PT.runTkEdit()
 	do
 		local W = T.up()
 		local ns = W.ns
-		local labels = { "Tracker", "Name", "On", "Spell IDs", "Shape", "Place", "Show", "Low at (charges)", "Low at (seconds left)", "When missing", "Sound when it drops", "Colour",
+		local labels = { "Tracker", "Name", "On", "Spell IDs", "Shape", "Place", "Show", "Low at (charges)", "Low at (seconds left)", "When missing", "Sound when it drops", "Sound when it comes", "Sound when it stacks", "Colour",
 			"Icon size", "X offset", "Y offset", "Mark action buttons", "Order", "Own settings", "Remove this tracker" }
 		local rows, shown = {}, {}
 		for _, r in ipairs(PT.shownRows(W)) do
@@ -66911,7 +66916,7 @@ function PT.runTkEdit()
 			rows[#rows + 1] = r.fonts[1].text
 		end
 		check("tkedit: a row added with ns.TrackerEditorRow is after the template, once, with the label and the choices of the page", W.added[1] == true and W.added[2] == true and W.added[3] == false and W.added[4] == false
-			and rows[16] == "Mark action buttons" and rows[17] == "Sound" and rows[18] == "Order" and #rows == 20 and T.shown(W, "Sound") == "Raid warning", table.concat(rows, "|"))
+			and rows[18] == "Mark action buttons" and rows[19] == "Sound" and rows[20] == "Order" and #rows == 22 and T.shown(W, "Sound") == "Raid warning", table.concat(rows, "|"))
 		check("tkedit: and writes the tracker's own value", T.pick(W, "Sound", "Alarm") and W.ns.TrackerOwn(1, "kit") == "alarm" and W.ns.Get("trackers.kit") == "raid" and T.row(W, "Sound").alpha == 1)
 		W.ns.TrackerSetOwn(1, "shape", "bar")
 		PT.type(PT.searchBox(W), "spell ids")
@@ -67316,7 +67321,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1124 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1128 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67630,7 +67635,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1027 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1031 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -74637,13 +74642,14 @@ do
 			"/flatui tracker set 1 low 2 - one tracker's own value for a setting, or clear to use the page's",
 			"/flatui tracker set 1 shape bar - icon, bar or text, and colour 4d99e6 for a bar or text",
 			"/flatui tracker set 1 happy on - a pet tracker is low while a hunter's pet is not happy",
+			"/flatui tracker set 1 health 40 - a pet tracker shows your pet's health in red under 40%, or clear to use the page's",
 			"/flatui tracker proc colour 1 ffd100 - one proc's colour, time (proc time 1 10) or trigger (proc trigger 1 overlay)",
 			"/flatui tracker check - what each tracker shows and why, and what happened in the last fight",
 			"/flatui tracker check sound - the game's own sound when a tracked buff ends, until /reload",
 			"/flatui tracker test - each look for 3 seconds: fine, low, missing, then the game's own look",
 		}
 		local want = table.concat(help, "\n")
-		check("an unknown word prints the twenty-three help lines", W.slash("tracker bogus") == want and W.slash("tracker") == want and W.slash("tracker add") == want, W.slash("tracker bogus"))
+		check("an unknown word prints the twenty-four help lines", W.slash("tracker bogus") == want and W.slash("tracker") == want and W.slash("tracker add") == want, W.slash("tracker bogus"))
 		local all = W.slash("bogus")
 		check("/flatui help has the tracker lines, after the lines of the cooldowns", has(all, want) and has(all, "/flatui cooldown list\n/flatui tracker add Lightning Shield"), all)
 		check("the commands: no violation", TK.ok(W), TK.why(W))
@@ -77487,7 +77493,7 @@ do
 			{ "place", "own", "own" }, { "place", "Beside the character", "character" }, { "place", "nowhere", "!" },
 			{ "show", "low", "low" }, { "show", "Only in combat", "combat" }, { "show", "never", "!" },
 			{ "low", "2", 2 }, { "low", "0", 0 }, { "low", "21", "!" }, { "low", "1.5", "!" }, { "low", "many", "!" },
-			{ "lowtime", "30", 30 }, { "lowtime", "7", "!" }, { "lowtime", "305", "!" },
+			{ "lowtime", "30", 30 }, { "lowtime", "7", "!" }, { "lowtime", "1805", "!" },
 			{ "missing", "pulse", "pulse" }, { "missing", "blue", "!" },
 			{ "sound", "on", true }, { "sound", "off", false }, { "sound", "maybe", "!" },
 			{ "kit", "alarm", "alarm" }, { "kit", "Whisper warning", "whisper" }, { "kit", "bell", "bell" }, { "kit", "siren", "!" },
@@ -77611,7 +77617,7 @@ do
 			local ok, message = S.ns.TrackerSet(9, "low", "2")
 			check("tkpages: a number with no tracker is refused", ok == false and message == "No tracker numbered 9.", message)
 			ok, message = S.ns.TrackerSet(1, "tint", "red")
-			check("tkpages: a word that is no setting is refused and the settings are listed", ok == false and has(message, "Settings: colour, kit, low, lowtime, missing, name, on, place, shape, show, size, sound, x, y."), message)
+			check("tkpages: a word that is no setting is refused and the settings are listed", ok == false and has(message, "Settings: colour, comes, kit, low, lowtime, missing, name, on, place, shape, show, size, sound, stacks, x, y."), message)
 			check("tkpages: the slash command answers in one line", S.slash("tracker set 1 low 2") == "Tracker 1: low is 2." and S.slash("tracker set 1 low 40") == 'Tracker 1: "40" is not a value for low.'
 				and S.slash("tracker set 1 low clear") == "Tracker 1: low follows the page." and S.slash("tracker set 1 clear") == "Tracker 1: every setting follows the pages.", S.slash("tracker set 1 low 2"))
 			S.ns.TrackerSet(1, "name", "clear")

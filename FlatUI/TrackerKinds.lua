@@ -241,7 +241,6 @@ local function Read(entry)
 	local reading = { state = "fine", hidden = false, count = count, icon = icon, id = Plain(enchantID, "number") and enchantID or nil }
 	Remember(entry, { found = true, type = kind, seconds = (not isPermanent) and seconds or nil, raw = raw, count = count })
 	local low = ns.TrackerValue(entry, "low")
-	local lowTime = ns.TrackerValue(entry, "lowTime")
 	if count and low > 0 and count <= low then
 		reading.state = "low"
 	end
@@ -266,6 +265,9 @@ local function Read(entry)
 	kept.length = math.max(kept.length, seconds)
 	mem.lengths[id] = kept
 	reading.expires, reading.length = ends, kept.length
+	-- The Low at here (ns.TrackerLowTime, Trackers.lua): in a dungeon or raid an enchant of 10 minutes or more, a poison, stone or oil, warns as Low
+	-- in dungeons and raids says, its length being the longest time left seen since it was put on; a shaman's imbue of 5 minutes keeps its own.
+	local lowTime = ns.TrackerLowTime(entry, kept.length)
 	if lowTime > 0 then
 		if ends - now <= lowTime then
 			reading.state = "low"
@@ -511,7 +513,8 @@ local function TotemRead(entry)
 	if info.start and info.duration and info.duration > 0 then
 		reading.expires, reading.length = info.start + info.duration, info.duration
 		seconds = reading.expires - Now()
-		local lowTime = ns.TrackerValue(entry, "lowTime")
+		-- The Low at here (ns.TrackerLowTime, Trackers.lua), which for a totem is its own: Low in dungeons and raids is for buffs and enchants.
+		local lowTime = ns.TrackerLowTime(entry, info.duration)
 		if lowTime > 0 then
 			if seconds <= lowTime then
 				reading.state = "low"
@@ -752,7 +755,7 @@ local function TotemHidden(entry, record, reading)
 		end
 		if ns.TrackerValue(entry, "numbers") then
 			Try("time", function()
-				Binding(hid, ns.TrackerValue(entry, "lowTime"))
+				Binding(hid, ns.TrackerLowTime(entry))
 				hid.binding:SetDuration(duration)
 				hid.binding:Enable()
 			end)

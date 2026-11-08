@@ -36,7 +36,7 @@ local IsSecret = ns.IsSecret
 -- and of the one cast on the whole group or class, all of which count as the buff), blessing (a paladin's blessing, of which he keeps one of his
 -- own on a member; not Salvation), check (the buff is offered only while C_Spell.DoesSpellExist, SpellDocumentation.lua:46-60, says its spell
 -- exists: the Forever build of EnhanceQoL takes Blessing of Light and Blessing of Salvation out, Core/Cleanup.lua:1236-1244). The IDs are those
--- of ClassData.lua (lines 16, 34-36, 52, 67), from the DB2 tables of build 1.60.1.70245, the Blessing split by its name.
+-- of ClassData.lua (lines 16, 35-37, 53, 68), from the DB2 tables of build 1.60.1.70245, the Blessing split by its name.
 -- PICK: the words of the Add a check line. MAX_UNITS: the largest raid. MAX_NAMES: the members the check names. RECHECK: the seconds after
 -- which an event of any member reads the whole group again, for a change that no event of its own member tells, such as a member going out of
 -- sight: the game's own unit watch reads UnitExists and UnitIsVisible again every 0.2 seconds rather than on an event (SecureStateDriver.lua:56-63,
@@ -436,7 +436,9 @@ local function Read(entry)
 	local soonest = read.soonest
 	if soonest and reading.state == "fine" then
 		reading.expires, reading.length = soonest.expires, soonest.length
-		local lowTime = ns.TrackerValue(entry, "lowTime")
+		-- The Low at here (ns.TrackerLowTime, Trackers.lua): in a dungeon or raid a group buff of 10 minutes or more warns as Low in dungeons and raids
+		-- says, by the full length of the buff that ends first.
+		local lowTime = ns.TrackerLowTime(entry, soonest.length)
 		if Plain(lowTime, "number") and lowTime > 0 then
 			if soonest.expires - Now() <= lowTime then
 				reading.state = "low"
@@ -609,7 +611,8 @@ function ns.TrackerGroupChoice(entry, now)
 	else
 		read = Fresh(entry)
 	end
-	local lowTime = ns.TrackerValue(entry, "lowTime")
+	-- Low by the Low at the tracker is drawn with (Read).
+	local lowTime = ns.TrackerLowTime(entry, read.soonest and read.soonest.length)
 	local low = read.soonest and Plain(lowTime, "number") and lowTime > 0 and read.soonest.expires - Now() <= lowTime
 	if read.missing == 0 and not low then
 		return nil

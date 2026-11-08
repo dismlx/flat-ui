@@ -97,6 +97,12 @@ local function Value(entry, key)
 	return ns.TrackerValue(entry, key)
 end
 
+-- The Low at (seconds left) the tracker has here (ns.TrackerLowTime, Trackers.lua): in a dungeon or raid the larger one of dungeons and raids for a
+-- buff of 10 minutes or more, by the length kept at its last reading, so the game's own icon colours its time by the value the tracker turns low at.
+local function LowTime(entry)
+	return ns.TrackerLowTime(entry)
+end
+
 local function Own(object)
 	ns.Own[object] = true
 	return object
@@ -203,7 +209,7 @@ local function Want(rec)
 	local shape = ShapeOf(entry)
 	local label = type(ns.TrackerLabel) == "function" and Opt("names") and ns.TrackerLabel(entry) or nil
 	local hex = Value(entry, "colour")
-	return { charged = charged, counts = Value(entry, "counts") and true or false, low = low, lowTime = Value(entry, "lowTime"), numbers = Value(entry, "numbers") and true or false,
+	return { charged = charged, counts = Value(entry, "counts") and true or false, low = low, lowTime = LowTime(entry), numbers = Value(entry, "numbers") and true or false,
 		art = entry.seen or entry.spells[1], thick = ns.Pixels(rec.frame, RIM), shape = shape, fill = FillOf(entry, shape), top = Top(entry),
 		height = Number("barHeight", 14), width = Number("barWidth", 140), name = Plain(label, "string") and label or "",
 		hex = Plain(hex, "string") and hex or "" }
@@ -372,7 +378,7 @@ local function Time(rec, entry)
 	end
 	parts.plainText = nil
 	if Value(entry, "numbers") then
-		local seconds = Value(entry, "lowTime")
+		local seconds = LowTime(entry)
 		local options = seconds > 0 and Colours(seconds) or nil
 		local ok = pcall(button.SetDurationText, button, text, options)
 		-- The colour is the part a client may refuse in a fight: the time shows without it.
@@ -1042,6 +1048,10 @@ end
 -- since the cover shows only above Low at, else the icon's wrapper). The answer is withheld, so it goes unread to the frame of the tracker:
 -- alpha 0 while fine, 1 while low or missing. Only while the container is drawn and the probe found that the game takes such an answer.
 -- A tracker with Low at (seconds left) stays shown, since the game's icon does not follow the time left. Without that the tracker stays shown, and one note says so. Back at the alpha the tracker's own drawing has: given by the caller.
+-- That Low at is the stored one (Value), not the larger one of dungeons and raids (LowTime): Wanted in Trackers.lua gives 1 to a tracker set to Only
+-- when low or missing that is not drawn live in a fight, so fed that value every buff of 10 minutes or more set so (Mark of the Wild, Fortitude,
+-- Arcane Intellect, the armors, Inner Fire) would stay shown through every fight in a dungeon or raid, whatever its time left. On the stored value
+-- such a tracker still hides in a fight while its buff is up, and the warning of dungeons and raids shows between pulls, where the buff can be cast.
 local function Hide(rec, entry, alpha)
 	local want = Value(entry, "show") == "low" and rec.now.alpha == 1 and rec.goal.alpha == 1 and Plain(alpha, "number") and alpha == 1
 		and Value(entry, "lowTime") == 0
