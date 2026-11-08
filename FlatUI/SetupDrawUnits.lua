@@ -903,8 +903,8 @@ local function Cut(o, on)
 end
 
 -- The picture: its border, the face, the fade and the rest glow (UnitFrames.lua ApplyPicture, Draw and Colour, UnitFramePortrait.lua).
--- Separate parts: the border takes the colour of a state or a kind, else of the class or reaction, over the picture's own background, and an Elite or Rare
--- picture gets its 2 px rim and a Rare Elite its inner line.
+-- Separate parts: the border takes the colour of a state or a kind, else of the class or reaction, over the picture's own background, and a square Elite or
+-- Rare picture gets its 2 px rim and a Rare Elite its inner line.
 -- One frame: a square picture is a cell with no border and no background of its own; a round one keeps its ring in the one colour of the frame (E.draw), with
 -- Border and Portrait border None as for the body. There is no rim or inner line: the mark after the level tells a Rare Elite.
 -- The game's own portrait is a black disc with the face over it, both cut round, with no ring line: the game's ring art is faded.
@@ -939,16 +939,18 @@ function E.picture(o, g, L)
 		Round(o.outline, L.drawn and not L.round and L.radius or nil, t)
 	end
 	if o.rim then
-		o.rimFrame:SetShown(look ~= nil)
+		-- The rim and the inner line are square, so they go round a square picture only: a round one shows the kind's colour on its ring (UnitFrames.lua Colour).
+		local rim = not L.round and look or nil
+		o.rimFrame:SetShown(rim ~= nil)
 		Over(o.rimFrame, pic)
-		EdgePaint(o.rim, look ~= nil, false, look and look.colour or nil)
+		EdgePaint(o.rim, rim ~= nil, false, rim and rim.colour or nil)
 		-- EdgePaint gives an outline the general thickness: the rim is 2 px and the inner line 1 px, as on the game's frames (UnitFrames.lua RIM_PX, INNER_PX).
 		ns.SetOutlineThickness(o.rim, 2)
-		Round(o.rim, look ~= nil and L.radius or nil, t)
-		local inner = look ~= nil and look.inner ~= nil
+		Round(o.rim, rim ~= nil and L.radius or nil, t)
+		local inner = rim ~= nil and rim.inner ~= nil
 		o.innerFrame:SetShown(inner)
 		Over(o.innerFrame, pic, ns.Pixels(o.root, 1))
-		EdgePaint(o.inner, inner, false, inner and look.inner or nil)
+		EdgePaint(o.inner, inner, false, inner and rim.inner or nil)
 		ns.SetOutlineThickness(o.inner, 1)
 	end
 	-- The face fills the square: the player's portrait unmasked, as UnitFrames.lua Draw draws it, a class icon on a player, else a plain silhouette. Under the
