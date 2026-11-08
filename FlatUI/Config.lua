@@ -1728,7 +1728,7 @@ ns.PAGES = {
 		{ key = "fade", kind = "bool", default = true, label = "Fade old messages" },
 		{ key = "fadeAfter", kind = "number", default = 120, min = 10, max = 600, step = 10, unit = " s", label = "Fade after", needs = "fade" },
 		{ key = "restore", kind = "bool", default = false, label = "Show recent chat after a reload",
-			tip = "After a reload or a login, the lines of the last hour in your main chat window: say, yell, emotes, party, raid, guild, officer and whispers. They are kept in Flat UI's saved settings of this character; lines the game withholds in fights and dungeons are not kept." },
+			tip = "Each time you reload or log in, the lines of the last hour show again in your main chat window: say, yell, emotes, party, raid, guild, officer and whispers. They are kept in Flat UI's saved settings of this character; lines the game withholds in fights and dungeons are not kept." },
 		{ key = "restoreLines", kind = "number", default = 50, min = 10, max = 200, step = 10, unit = " lines", label = "Lines to show again",
 			tip = "None older than an hour, and no more than three quarters of Lines kept per window, so that the other lines of a login stay in the window.", needs = "restore" },
 		{ key = "restoreChannels", kind = "bool", default = false, label = "Numbered channels too", tip = "General, Trade and the other numbered channels.", needs = "restore" },

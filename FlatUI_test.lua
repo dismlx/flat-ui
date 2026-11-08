@@ -11126,7 +11126,7 @@ local PAGES = {
 		S("chat.history", "number", 128, "Lines kept per window", nil, { min = 128, max = 2048, step = 64, unit = " lines" }),
 		S("chat.fade", "bool", true, "Fade old messages"),
 		S("chat.fadeAfter", "number", 120, "Fade after", nil, { min = 10, max = 600, step = 10, unit = " s", needs = "chat.fade" }),
-		S("chat.restore", "bool", false, "Show recent chat after a reload", "After a reload or a login, the lines of the last hour in your main chat window: say, yell, emotes, party, raid, guild, officer and whispers. They are kept in Flat UI's saved settings of this character; lines the game withholds in fights and dungeons are not kept."),
+		S("chat.restore", "bool", false, "Show recent chat after a reload", "Each time you reload or log in, the lines of the last hour show again in your main chat window: say, yell, emotes, party, raid, guild, officer and whispers. They are kept in Flat UI's saved settings of this character; lines the game withholds in fights and dungeons are not kept."),
 		S("chat.restoreLines", "number", 50, "Lines to show again", "None older than an hour, and no more than three quarters of Lines kept per window, so that the other lines of a login stay in the window.", { min = 10, max = 200, step = 10, unit = " lines", needs = "chat.restore" }),
 		S("chat.restoreChannels", "bool", false, "Numbered channels too", "General, Trade and the other numbered channels.", { needs = "chat.restore" }),
 		"Links",
