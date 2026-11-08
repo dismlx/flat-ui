@@ -26,6 +26,7 @@ PlateText.lua
 PlateClick.lua
 PlateThreatText.lua
 CombatBurst.lua
+CombatTextSpells.lua
 CombatText.lua
 ScrollText.lua
 CombatCues.lua
