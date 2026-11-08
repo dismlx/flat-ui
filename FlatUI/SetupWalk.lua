@@ -29,6 +29,17 @@ local function IsText(value)
 	return not ns.IsSecret(value) and type(value) == "string"
 end
 
+-- The width of a text as the game draws it, or a guess of `per` units a letter while the game gives none (a font not loaded yet), as the chips of
+-- the options window guess.
+function Walk.TextWidth(text, per)
+	local ok, width = pcall(text.GetStringWidth, text)
+	if ok and ns.Finite(width) and width > 0 then
+		return width
+	end
+	local okText, shown = pcall(text.GetText, text)
+	return per * (okText and IsText(shown) and #shown or 0)
+end
+
 -- Labels in a sentence, each once: "A", "A and B", "A, B and C", "A, B, C and 2 more". Nil when there is none.
 function Walk.Join(labels)
 	local list, seen = {}, {}
@@ -526,19 +537,19 @@ function Walk.Context(box, view)
 	return nil
 end
 
--- Paints drawing `id` into a box of w by h units with D.PaintIn (SetupDraw.lua), at most `most` times its size. False when it could not, so that a
--- drawing that is missing or fails is not tried again; true while SetupDraw.lua has no D.PaintIn, and the box keeps its ground.
-function Walk.PaintIn(context, id, w, h, most)
+-- Paints drawing `id` on the context of a card or picture (`tile.ctx`) into a box of w by h units with D.PaintIn (SetupDraw.lua), at most `most` times
+-- its size. A drawing that is missing leaves the ground; one that fails is said by D.PaintIn once for the card and tried again at the next paint, so a
+-- card whose drawing failed under one view draws under the next. An error of D.PaintIn's own is said once and the card keeps its ground from then.
+function Walk.PaintIn(tile, id, w, h, most)
 	local D = ns.SetupDraw
-	if not context or not IsText(id) or type(D) ~= "table" or type(D.PaintIn) ~= "function" then
-		return true
+	if tile.broken or not tile.ctx or not IsText(id) or type(D) ~= "table" or type(D.PaintIn) ~= "function" then
+		return
 	end
-	local ok, painted = pcall(D.PaintIn, context, id, w, h, most)
+	local ok, err = pcall(D.PaintIn, tile.ctx, id, w, h, most)
 	if not ok then
-		geterrorhandler()(painted)
-		return false
+		tile.broken = true
+		geterrorhandler()(err)
 	end
-	return painted == true
 end
 
 -- A tag (Now, Suggested) on a frame of its own, in the window colour.
@@ -561,8 +572,7 @@ function Walk.SetTag(tag, text)
 	tag.frame:SetShown(text ~= nil)
 	if text then
 		tag.text:SetText(text)
-		local ok, width = pcall(tag.text.GetStringWidth, tag.text)
-		tag.frame:SetWidth((ok and ns.Finite(width) and width > 0 and width or 40) + 12)
+		tag.frame:SetWidth(math.ceil(Walk.TextWidth(tag.text, 6)) + 12)
 	end
 end
 
@@ -710,8 +720,7 @@ end
 
 -- The width of a chip: its text and 28 more, at least 90.
 function Walk.ChipWidth(chip)
-	local ok, width = pcall(chip.text.GetStringWidth, chip.text)
-	return math.max(90, math.ceil((ok and ns.Finite(width) and width or 0) + 28))
+	return math.max(90, math.ceil(Walk.TextWidth(chip.text, 7.2) + 28))
 end
 
 -- Shows a chip on every card of its stop while it is pointed at, or takes it off for nil. The cards are drawn again on the next frame (S.dirty).
@@ -933,8 +942,8 @@ function Walk.PaintStop(view)
 		if entry.part.kind == "cards" then
 			for _, card in ipairs(entry.shown) do
 				local tile = entry.tiles[card]
-				if tile and tile.w and not tile.failed then
-					tile.failed = not Walk.PaintIn(tile.ctx, view.stop.draw, tile.w - 8, tile.h - 54, 2.2)
+				if tile and tile.w then
+					Walk.PaintIn(tile, view.stop.draw, tile.w - 8, tile.h - 54, 2.2)
 				end
 			end
 		end
@@ -942,7 +951,8 @@ function Walk.PaintStop(view)
 end
 
 -- The first visit of a stop: it is marked seen, and each part of cards or chips takes the card it suggests while the profile in use has every path of
--- the part at its default (a new character on Default, or a part never changed). Only the draft is written. Ticks are only tagged.
+-- the part at its default (a new character on Default, or a part never changed) and the draft holds none of them: a choice made in More settings or
+-- Every setting before the stop was seen, or kept from an older setup, stays. Only the draft is written. Ticks are only tagged.
 function Walk.FirstVisit(stop)
 	local draft = S.draft
 	if type(draft) ~= "table" then
@@ -956,12 +966,13 @@ function Walk.FirstVisit(stop)
 	end
 	draft.seen[stop.id] = true
 	local defs = S.Defs()
+	local values = type(draft.values) == "table" and draft.values or {}
 	for _, part in ipairs(stop.parts) do
 		local card = part.kind ~= "ticks" and Walk.Suggested(part) or nil
 		if card then
 			local plain = true
 			for _, path in ipairs(part.list) do
-				if S.StartValue(path) ~= defs[path].default then
+				if values[path] ~= nil or S.StartValue(path) ~= defs[path].default then
 					plain = false
 					break
 				end
@@ -1192,11 +1203,21 @@ function Walk.LayoutNotes(view, notes)
 	view.scroller.SetContent(y)
 end
 
--- Reads the save rows again: where Finish saves, the tick, the name and why it cannot be used.
+-- True when the draft holds a value or an action queued for Finish: Finish then saves (S.Has in Setup.lua).
+function Walk.Chosen()
+	local draft = S.draft
+	return type(draft) == "table" and ((type(draft.values) == "table" and next(draft.values) ~= nil)
+		or (type(draft.actions) == "table" and #draft.actions > 0)) or false
+end
+
+-- Reads the save rows again: where Finish saves, the tick, the name and why it cannot be used. They show only while something is chosen.
 function Walk.UpdateSave(view)
 	local draft = S.draft
 	local using = ns.Profile()
 	local default = using == "Default"
+	-- With nothing chosen Finish only closes setup and saves nothing (Setup.lua, S.Finish), so the rows of the save would say what does not happen.
+	local chosen = Walk.Chosen()
+	view.saveLine:SetShown(chosen)
 	if default then
 		view.saveLine:SetWidth(kit.RIGHT_W - 2 * Walk.PAD)
 		view.saveLine:SetText("Finish makes a profile of your own: Default stays as it is for other characters.")
@@ -1209,9 +1230,9 @@ function Walk.UpdateSave(view)
 		end
 		view.saveLine:SetText(text)
 	end
-	view.toggle:SetShown(not default)
+	view.toggle:SetShown(chosen and not default)
 	view.newMark:SetShown(draft.saveNew == true)
-	local named = default or draft.saveNew == true
+	local named = chosen and (default or draft.saveNew == true)
 	view.nameLabel:SetShown(named)
 	view.field:SetShown(named)
 	view.why:SetShown(named)
@@ -1233,10 +1254,8 @@ end
 -- Reads Your screen again: the line under its title, what each stop has picked and its dot, the notes, the save rows, and Finish (S.Buttons dims it
 -- in a fight and while the name is refused).
 function Walk.UpdateYours(view)
-	local draft = S.draft
-	local chosen = (type(draft.values) == "table" and next(draft.values) ~= nil) or (type(draft.actions) == "table" and #draft.actions > 0)
 	if S.sub then
-		S.sub:SetText(chosen and "Nothing has changed yet. Finish puts this on your screen." or "Nothing is chosen yet. Finish closes setup.")
+		S.sub:SetText(Walk.Chosen() and "Nothing has changed yet. Finish puts this on your screen." or "Nothing is chosen yet. Finish closes setup.")
 	end
 	for _, tile in ipairs(view.tiles) do
 		local summary = Walk.Summary(tile.stop.id)
@@ -1271,9 +1290,7 @@ end
 -- Draws every picture of Your screen again under the draft.
 function Walk.PaintYours(view)
 	for _, tile in ipairs(view.tiles) do
-		if tile.ctx and not tile.failed then
-			tile.failed = not Walk.PaintIn(tile.ctx, tile.stop.draw, 250, 88, 1.2)
-		end
+		Walk.PaintIn(tile, tile.stop.draw, 250, 88, 1.2)
 	end
 end
 
