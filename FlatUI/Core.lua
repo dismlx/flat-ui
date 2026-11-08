@@ -49,6 +49,8 @@ local ADDON_NAME, ns = ...
 -- of combat on a plate that may be protected, written with SetText, SetFormattedText, SetTextColor and SetAlphaFromBoolean from the game's answers
 -- as they are; with Threat colour on the name, the name takes the threat colour with SetVertexColor, as Name colour does, kept and put back the
 -- same way.
+-- With Health text in the name's colour, the game's health text takes that colour with SetTextColor, as Health text colour does, kept and put back
+-- the same way.
 -- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- repairs with RepairAllItems, buys with BuyMerchantItem, sells the cursor item with SellCursorItem, loots with LootSlot, learns with
 -- BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on its own button, and answers summons, resurrections, invites
@@ -80,7 +82,7 @@ local ADDON_NAME, ns = ...
 -- Threat list (off by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
 -- Healer mana (off by default) is a window of its own on UIParent; it only reads mana (UnitPowerPercent) and changes nothing. The dispel border, the
 -- debuff type icon and the raid marker of the party and raid frames, the leader and assistant icons of the raid frames and the dispel border of the
--- player, target and focus frames are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a
+-- player, target and focus frames, and the heal over time squares of the party and raid frames, are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a
 -- frame of Flat UI's own with an outline; all are made and anchored out of combat, and in a fight only their colour, opacity and visibility
 -- change, and which raid marker shows, from the game's answers as they are.
 -- With Pet target frame on (off by default), Unit frames makes one secure button of its own (SecureActionButtonTemplate, no global name, type1
@@ -104,13 +106,16 @@ local ADDON_NAME, ns = ...
 -- also with the page off, so the registrations are taken back once it can be made.
 -- Group tools (off by default) lays secure buttons of its own over its icons, made, placed, shown and given attributes only out of combat: the game's
 -- raidtarget action, /readycheck and /countdown. A plain button asks for a role poll, and it writes tooltips in GameTooltip.
--- Cooldown pulse (off by default) is a frame of its own on UIParent that takes no mouse, told when cooldowns end by invisible Cooldown frames of
+-- Cooldown pulse (off by default) is up to three frames of its own on UIParent that take no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
 -- Cooldown icons, with Tooltips on icons, let their own icons hear the mouse and take no click (SetMouseMotionEnabled, SetMouseClickEnabled:
 -- protected functions, called on its own icons only while InCombatLockdown() is false), and write GameTooltip (GameTooltip_SetDefaultAnchor or
 -- SetOwner, SetSpellByID, SetItemByID, SetInventoryItem, Show, and Hide while an icon owns it). The game is asked once to load each item of Add an
 -- item, and each worn item it checks for a use, that the client has not loaded yet (C_Item.RequestLoadItemDataByID). Add the spells of a bar only
 -- reads action slots and the bar page.
+-- Cooldown icons hangs a row from the game's PlayerFrame or TargetFrame by SetPoint on a frame of its own, out of combat, as Your buffs does, and
+-- writes nothing on them; its glows and buff time are frames of its own, and it hears the player's UNIT_AURA on a frame of its own while Buff time on
+-- icons is on.
 -- With Clear the damage meter on (off by default), Minimap and buffs calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
 -- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
 -- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.

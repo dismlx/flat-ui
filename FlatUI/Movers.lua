@@ -125,9 +125,21 @@ local LIST = {
 	-- The row of Cooldown icons. It has no spot until one is saved.
 	{ name = ROW, label = "Cooldown icons", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
 		row = "CooldownRow", changed = "CooldownsMoved" },
+	-- Rows 2 to 4 of Cooldown icons (Cooldowns.lua), each with a handle while it is on and has icons, and no spot until one is saved.
+	{ name = "FlatUICooldowns2", label = "Cooldown icons: row 2", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
+		row = "CooldownRow2", changed = "CooldownsMoved" },
+	{ name = "FlatUICooldowns3", label = "Cooldown icons: row 3", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
+		row = "CooldownRow3", changed = "CooldownsMoved" },
+	{ name = "FlatUICooldowns4", label = "Cooldown icons: row 4", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
+		row = "CooldownRow4", changed = "CooldownsMoved" },
 	-- The icon of the cooldown pulse (Pulse.lua): its middle is the middle of the box, at any Icon size. It starts in the middle of the screen.
 	{ name = "FlatUIPulse", label = "Cooldown pulse", point = "CENTER", kind = "hud", own = true, noScale = true, width = 72, height = 72, x = 0, y = 0,
 		gate = "PulseShown", changed = "PulseMoved" },
+	-- Spots 2 and 3 of the cooldown pulse, with a handle while Pulse spots has them. They start left and right of spot 1 (Pulse.lua, SPOTS).
+	{ name = "FlatUIPulse2", label = "Cooldown pulse, spot 2", point = "CENTER", kind = "hud", own = true, noScale = true, width = 72, height = 72, x = -120, y = 0,
+		gate = "PulseShown2", changed = "PulseMoved" },
+	{ name = "FlatUIPulse3", label = "Cooldown pulse, spot 3", point = "CENTER", kind = "hud", own = true, noScale = true, width = 72, height = 72, x = 120, y = 0,
+		gate = "PulseShown3", changed = "PulseMoved" },
 	-- Where the player's own combat text starts: the middle of its first number is the middle of the box. The default is left of and
 	-- below the middle of the screen, where the character stands.
 	{ name = "FlatUICombatSelf", label = "Combat text: you", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 40, x = -170, y = -30,

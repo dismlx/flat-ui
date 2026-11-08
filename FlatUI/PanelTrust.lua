@@ -45,13 +45,17 @@ function Trust.Question(entry, name)
 	return ("Reset %d setting%s on %s?"):format(count, count == 1 and "" or "s", name)
 end
 
--- The line a row that is off shows: the setting it needs, with the value when the row needs one choice of a setting. The name is in the accent.
+-- The line a row that is off shows: the setting it needs, with the value when the row needs one choice of a setting, or off when it needs a switch
+-- off. The values a row lists are those of the setting it names itself, not of one further along. The name is in the accent.
 function Trust.Reason(path, item)
 	local def = ns.Def(path)
 	local name = def and def.label or path
 	local r, g, b = ns.PanelLook.Colour("accent")
 	local line = ("Needs |cff%02x%02x%02x%s|r"):format(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), name)
-	local wanted = item and item.needsIn
+	local wanted = item and item.needsPath == path and item.needsIn or nil
+	if def and type(wanted) == "table" and #wanted == 1 and type(wanted[1]) == "boolean" then
+		return line .. (wanted[1] and " on." or " off.")
+	end
 	if def and type(wanted) == "table" and #wanted == 1 then
 		local shown = wanted[1]
 		for _, choice in ipairs(type(def.choices) == "table" and def.choices or {}) do

@@ -20,6 +20,12 @@ local _, ns = ...
 -- CooldownPanels_Helper.lua:3746-3893; EnhanceQoL/General/DurationText.lua:1038-1049). The import reads Flat UI's own table of slots and
 -- the game's page calls, never a field of a game button; the tooltips are written in GameTooltip on icons of Flat UI's own, which hear the
 -- mouse move and take no click.
+-- Up to three more rows, each off until it is switched on, have a Position, offsets, an icon size, a direction and a spot in /flatui move of their
+-- own; an icon goes to one of them by Row of one icon, and every other setting of these pages is the same for all four. Each row has a Show rule,
+-- and a row can hang under the player frame or the target frame. These follow the panels, their anchors and their visibility rules in EnhanceQoL's
+-- Cooldown Panels by Philipp Barth (R41Z0R), adapted with his permission (CooldownPanels.lua:2553-2722, 26865-26940, 26942-27267, 28581-28593):
+-- a frame of Flat UI's own hangs from the game's PlayerFrame or TargetFrame by SetPoint on Flat UI's frame, out of combat, as Your buffs hangs
+-- from the player frame (OwnBuffs.lua). CooldownLooks.lua has the rules, the lists of one icon, the glows and the buff time.
 
 local KEY = "cooldowns"
 local PART = "cooldown manager icons"
@@ -134,6 +140,16 @@ local CD = {
 	-- The commands of Add an item and Add the spells of a bar, said when one is typed without what it needs, as the sound command's.
 	ITEM_HELP = "/flatui cooldown add item 6948 - an item ID, a name or a shift-clicked item; /flatui cooldown remove item 6948 takes it off",
 	IMPORT_HELP = "/flatui cooldown import 1 - the spells with a cooldown on action bar 1 to 8",
+	-- The rows: how many, the key of each setting of rows 2 to 4 after "row" and the row's number (row2Place for row 1's place), and the name of each
+	-- row among the saved spots of the movers (Movers.lua lists all four).
+	MAX_ROWS = 4, ROW_KEYS = { show = "Show", place = "Place", x = "X", y = "Y", size = "Size", grow = "Grow" },
+	MOVERS = { MOVER, "FlatUICooldowns2", "FlatUICooldowns3", "FlatUICooldowns4" },
+	-- The unit frames a row can hang under, by Position: the game's frame by its global name (Blizzard_UnitFrame/Mainline/PlayerFrame.xml:13 and
+	-- TargetFrame.xml:549, the [Family] files Blizzard_UnitFrame.toc:34 and 57 loads) and the line /flatui status shows while it cannot be used.
+	UNIT_FRAMES = {
+		player = { frame = "PlayerFrame", note = "Cooldown icons: the player frame cannot be used, so a row is in the middle of the screen." },
+		target = { frame = "TargetFrame", note = "Cooldown icons: the target frame cannot be used, so a row is in the middle of the screen." },
+	},
 }
 for slot, name in pairs(CD.SLOT_NAMES) do
 	CD.SLOT_BY_NAME[name:lower()] = slot
@@ -170,6 +186,11 @@ local consumable = {}
 -- game was asked to load.
 local Own = { uses = {}, stacks = {}, loading = {} }
 local Tip, Bar, Looks, Counts = {}, {}, {}, {}
+-- The rows: pools[n] every icon made for row n (row 1's is icons), shownOf[n] the icons of row n on the screen, holders[n] the frame row n hangs
+-- from (row 1's is holder, which also drives the looks of all four), hidden[n] true while the Show rule of row n hides it. CooldownLooks.lua adds
+-- the Show rules, the lists of one icon, the glows and the buff time to this table, and reads the module through it.
+local R = { pools = { icons }, shownOf = { {} }, holders = {}, hidden = {} }
+ns.CooldownShared = R
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -213,6 +234,28 @@ end
 
 local function Whole(value)
 	return Plain(value, "number") and value > 0 and value <= MAX_ID and value == math.floor(value)
+end
+
+-- A setting of one row: row 1's own key, or for rows 2 to 4 "row", the number and the key (row2Place for place).
+function R.Opt(row, key)
+	if row == nil or row == 1 then
+		return Opt(key)
+	end
+	return Opt("row" .. row .. CD.ROW_KEYS[key])
+end
+
+-- True for row 1, and for a row of 2 to 4 that is switched on.
+function R.RowOn(row)
+	return row == 1 or Opt("row" .. row) == true
+end
+
+-- Calls a function CooldownLooks.lua adds, when it is there.
+function R.Call(name, ...)
+	local fn = R[name]
+	if type(fn) == "function" then
+		return fn(...)
+	end
+	return nil
 end
 
 -- The spells ----------------------------------------------------------------------------------
@@ -1048,6 +1091,13 @@ local function Look(record, cooling, secret, active)
 	record.level = level
 	Paint(record, level)
 	local coolAlpha, readyAlpha = Opt("coolAlpha") / 100, Opt("readyAlpha") / 100
+	-- When one icon shows (CooldownLooks.lua): Only on cooldown takes the opacity when ready to none, Only when ready the opacity on cooldown.
+	local only = R.Call("ShowOf", record)
+	if only == "cooling" then
+		readyAlpha = 0
+	elseif only == "ready" then
+		coolAlpha = 0
+	end
 	if secret and frame.SetAlphaFromBoolean then
 		frame:SetAlphaFromBoolean(active, coolAlpha, readyAlpha)
 		record.unseen = false
@@ -1063,6 +1113,8 @@ local function Look(record, cooling, secret, active)
 	else
 		ns.SetOutlineColour(record.outline, nil, nil, nil)
 	end
+	-- Border on cooldown, the ready glow and the proc glow are frames of CooldownLooks.lua over the icon.
+	R.Call("Glows", record, only == "border", cooling, secret, active)
 	if cooldown.SetHideCountdownNumbers then
 		cooldown:SetHideCountdownNumbers(not Opt("numbers"))
 	end
@@ -1363,7 +1415,7 @@ local function RangeWanted()
 		return false
 	end
 	for _, record in ipairs(shown) do
-		if record.spell and record.hasRange ~= false then
+		if record.spell and record.hasRange ~= false and not R.hidden[record.row or 1] then
 			return true
 		end
 	end
@@ -1577,8 +1629,29 @@ local function Holder()
 		ns.Own[holder] = true
 		holder:SetSize(1, 1)
 		holder:SetScript("OnUpdate", OnUpdate)
+		R.holders[1] = holder
 	end
 	return holder
+end
+
+-- The frame a row hangs from, made once. Rows 2 to 4 have no script: row 1's holder, shown while any row has icons, looks at all of them.
+function R.Holder(row)
+	if row == nil or row == 1 then
+		return Holder()
+	end
+	local made = R.holders[row]
+	if not made then
+		made = CreateFrame("Frame", nil, UIParent)
+		ns.Own[made] = true
+		made:SetSize(1, 1)
+		R.holders[row] = made
+	end
+	return made
+end
+
+-- The current list of the icons on the screen, of every row in row order.
+function R.Shown()
+	return shown
 end
 
 -- Tooltips on icons --------------------------------------------------------------------------------
@@ -1627,7 +1700,7 @@ function Tip.Show(record)
 		return
 	end
 	local tip = Tip.Get()
-	if not tip or not (record.spell or record.item) or record.unseen or away then
+	if not tip or not (record.spell or record.item) or record.unseen or away or R.hidden[record.row or 1] then
 		return
 	end
 	local frame, placed = record.frame, false
@@ -1672,7 +1745,8 @@ function Tip.Mouse(record)
 		return
 	end
 	local mode = Opt("tooltips")
-	local seen = not away and (Opt("idleAlpha") > 0 or (fighting and mode == "on"))
+	-- A row its Show rule hides is unseen too; Idle asks the rules before the mouse, also at PLAYER_REGEN_DISABLED.
+	local seen = not away and not R.hidden[record.row or 1] and (Opt("idleAlpha") > 0 or (fighting and mode == "on"))
 	local want = mode ~= "off" and seen and not ns.PartStopped(KEY, CD.TIP_PART)
 	if record.mouse == want or (record.mouse == nil and not want) then
 		return
@@ -1713,29 +1787,37 @@ function Tip.MouseAll()
 		end
 		return
 	end
-	for _, record in ipairs(icons) do
-		ns.Each(KEY, Tip.Mouse, record)
-	end
-end
-
--- A tooltip an icon owns goes when a fight starts with Out of combat only, and when the row hides on a mount or in a city or an inn. Only an icon
--- that has heard the mouse can own one.
-function Tip.Leave()
-	if away or (fighting and Opt("tooltips") == "combat") then
-		for _, record in ipairs(shown) do
-			if record.tipScripts then
-				Tip.Hide(record)
-			end
+	for row = 1, CD.MAX_ROWS do
+		for _, record in ipairs(R.pools[row] or {}) do
+			ns.Each(KEY, Tip.Mouse, record)
 		end
 	end
 end
 
-local function Acquire(index)
-	local record = icons[index]
+-- A tooltip an icon owns goes when a fight starts with Out of combat only, and when the row hides on a mount or in a city or an inn, or by its
+-- Show rule. Only an icon that has heard the mouse can own one.
+function Tip.Leave()
+	local all = away or (fighting and Opt("tooltips") == "combat")
+	for _, record in ipairs(shown) do
+		if record.tipScripts and (all or R.hidden[record.row or 1]) then
+			Tip.Hide(record)
+		end
+	end
+end
+
+-- An icon of a row's pool, made the first time: each row has icons of its own, on its own holder.
+local function Acquire(index, row)
+	row = row or 1
+	local pool = R.pools[row]
+	if not pool then
+		pool = {}
+		R.pools[row] = pool
+	end
+	local record = pool[index]
 	if record then
 		return record
 	end
-	local frame = CreateFrame("Frame", nil, holder)
+	local frame = CreateFrame("Frame", nil, R.Holder(row))
 	ns.Own[frame] = true
 	local texture = frame:CreateTexture(nil, "ARTWORK", nil, 0)
 	ns.Own[texture] = true
@@ -1758,7 +1840,7 @@ local function Acquire(index)
 	ns.Own[count] = true
 	count:SetPoint("BOTTOMRIGHT", top, "BOTTOMRIGHT", -2, 2)
 	record = { frame = frame, texture = texture, cooldown = cooldown, count = count, top = top, outline = ns.Outline(frame, frame),
-		sweep = true, swipe = Looks.SwipeKey(), edge = false, corner = "br" }
+		sweep = true, swipe = Looks.SwipeKey(), edge = false, corner = "br", row = row }
 	-- The game says when a cooldown has ended through this script and no event.
 	cooldown:SetScript("OnCooldownDone", function()
 		if ns.Enabled(KEY) then
@@ -1766,7 +1848,7 @@ local function Acquire(index)
 			ns.Each(KEY, Update, record)
 		end
 	end)
-	icons[index] = record
+	pool[index] = record
 	ns.Count(KEY)
 	return record
 end
@@ -1783,43 +1865,56 @@ local function LowestBar(display)
 	return display
 end
 
--- At the spot set with the movers, else under the personal resource display, or in the middle of the
--- screen when that is missing, forbidden or has no position.
-local function Place()
-	local x, y = Opt("x"), Opt("y")
-	local spotX, spotY = ns.MoverSpot(MOVER, "CENTER")
+-- A frame anchored to one that has no position has no rectangle either. A client that cannot say is taken to have one.
+local function Anchored(frame)
+	local ok, left = pcall(frame.GetLeft, frame)
+	return not ok or IsSecret(left) or left ~= nil
+end
+
+-- One row at the spot set with the movers, else by its Position: under the personal resource display, or under the player or the target frame,
+-- or in the middle of the screen, also when the frame it hangs from is missing, forbidden or has no position. Under a unit frame the row starts at
+-- the frame's left edge with Left to right, ends at its right edge with Right to left and is in its middle from the middle, as EnhanceQoL hangs a
+-- panel from the frame it is anchored to by the panel's top left and the frame's bottom left (CooldownPanels.lua:28581-28593). The row hangs from
+-- the middle of its holder, so the offsets move it from there; rows 2 to 4 have their own. The line /flatui status should show comes back: one of
+-- a Position that cannot be used, or nothing.
+local function Place(row)
+	row = row or 1
+	local frame = R.Holder(row)
+	local x, y = R.Opt(row, "x"), R.Opt(row, "y")
+	local spotX, spotY = ns.MoverSpot(CD.MOVERS[row], "CENTER")
 	if spotX then
-		ns.ClearNote(KEY, NO_POSITION)
-		holder:SetPoint("CENTER", UIParent, "BOTTOMLEFT", spotX, spotY)
-		return
+		frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", spotX, spotY)
+		return nil
 	end
-	local anchored = false
-	if Opt("place") == "resource" then
+	local place, anchored, note = R.Opt(row, "place"), false, nil
+	if place == "resource" then
+		note = NO_POSITION
 		local display = PersonalResourceDisplayFrame
 		if display ~= nil and not ns.Forbidden(display) then
 			-- Under the bars, the row hangs from the Your buffs row when that is there.
 			local over = type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder("below") or nil
 			if over then
-				holder:SetPoint("CENTER", over, "BOTTOM", x, y - GAP)
+				frame:SetPoint("CENTER", over, "BOTTOM", x, y - GAP)
 			else
-				holder:SetPoint("CENTER", LowestBar(display), "BOTTOM", x, y - GAP)
+				frame:SetPoint("CENTER", LowestBar(display), "BOTTOM", x, y - GAP)
 			end
-			-- A frame anchored to one that has no position has no rectangle either. A client
-			-- that cannot say is taken to have one.
-			local ok, left = pcall(holder.GetLeft, holder)
-			anchored = not ok or IsSecret(left) or left ~= nil
+			anchored = Anchored(frame)
 		end
-		if anchored then
-			ns.ClearNote(KEY, NO_POSITION)
-		else
-			ns.Note(KEY, NO_POSITION)
+	elseif CD.UNIT_FRAMES[place] then
+		local info = CD.UNIT_FRAMES[place]
+		note = info.note
+		local unitFrame = _G[info.frame]
+		if unitFrame ~= nil and not ns.Forbidden(unitFrame) then
+			local grow = R.Opt(row, "grow")
+			local point = grow == "right" and "BOTTOMLEFT" or (grow == "left" and "BOTTOMRIGHT" or "BOTTOM")
+			frame:SetPoint("CENTER", unitFrame, point, x, y - GAP)
+			anchored = Anchored(frame)
 		end
-	else
-		ns.ClearNote(KEY, NO_POSITION)
 	end
 	if not anchored then
-		holder:SetPoint("CENTER", UIParent, "CENTER", x, y + SCREEN_Y)
+		frame:SetPoint("CENTER", UIParent, "CENTER", x, y + SCREEN_Y)
 	end
+	return not anchored and note or nil
 end
 
 local function SpellIcon(spellID)
@@ -1872,16 +1967,30 @@ local function Trinkets()
 	return list
 end
 
--- The row's opacity out of combat, and none while it is hidden on a mount or in a city or an inn.
+-- The row's opacity out of combat, and none while it is hidden on a mount or in a city or an inn, or by its Show rule (CooldownLooks.lua). Every
+-- row has the opacity of row 1's rows; the holders are frames of Flat UI's own, so their alpha is written in a fight too.
 local function Idle()
 	if holder then
 		away = (Opt("mounted") and Ask(IsMounted) == true) or (Opt("resting") and Ask(IsResting) == true)
-		holder:SetAlpha(away and 0 or (not fighting and Opt("idleAlpha") / 100 or 1))
+	end
+	local alpha = away and 0 or (not fighting and Opt("idleAlpha") / 100 or 1)
+	for row = 1, CD.MAX_ROWS do
+		local frame = R.holders[row]
+		if frame then
+			R.hidden[row] = R.Call("Shows", row) == false
+			frame:SetAlpha(R.hidden[row] and 0 or alpha)
+		end
 	end
 	RangeWatch()
 	-- A row at no opacity takes no mouse, and one hidden or in a fight with Out of combat only shows no tooltip.
 	Tip.MouseAll()
 	Tip.Leave()
+end
+R.Idle = Idle
+
+-- True from PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED, which the Show rules In combat and Out of combat read.
+function R.Fighting()
+	return fighting
 end
 
 -- The key bound to the first action bar button that holds a spell, as the game writes it on its own buttons
@@ -1968,34 +2077,80 @@ local function Layout()
 	for _, id in ipairs(on and not ns.PartStopped(KEY, CD.OWN_PART) and Own.List() or {}) do
 		entries[#entries + 1] = { item = id, own = id }
 	end
-	if #entries == 0 then
-		ns.ClearNote(KEY, NO_POSITION)
-	end
 	if #entries == 0 and not (on and Opt("manager") and HasViewer()) then
-		if holder then
-			holder:Hide()
+		for row = 1, CD.MAX_ROWS do
+			if R.holders[row] then
+				R.holders[row]:Hide()
+			end
+			R.shownOf[row] = {}
+			for _, record in ipairs(R.pools[row] or {}) do
+				record.dimmed, record.readyPlayed = nil, nil
+			end
 		end
 		shown = {}
-		for _, record in ipairs(icons) do
-			record.dimmed, record.readyPlayed = nil, nil
-		end
+		R.Notes({})
 		RangeWatch()
+		R.Call("AfterLayout")
 		return
 	end
 	Holder():Show()
 	if #spells > 0 then
 		CheckGame()
 	end
-	if #entries > 0 then
-		Place()
+	-- Each entry is on the row Row of one icon gives it, or on row 1 while that row is off (CooldownLooks.lua), in the order of the list. Row 1's
+	-- holder stays shown while any row has icons, for its OnUpdate.
+	local lists, missing = {}, {}
+	for row = 1, CD.MAX_ROWS do
+		lists[row] = {}
 	end
+	for _, entry in ipairs(entries) do
+		local row = R.Call("RowOf", entry) or 1
+		local list = lists[lists[row] and R.RowOn(row) and row or 1]
+		list[#list + 1] = entry
+	end
+	for row = 1, CD.MAX_ROWS do
+		if #lists[row] > 0 then
+			R.Holder(row):Show()
+			local note = Place(row)
+			if note then
+				missing[note] = true
+			end
+		elseif row > 1 and R.holders[row] then
+			R.holders[row]:Hide()
+		end
+	end
+	R.Notes(missing)
 	Idle()
-	local size, spacing, perRow = Opt("size"), Opt("spacing"), Opt("perRow")
-	local step, grow, above = size + spacing, Opt("grow"), Opt("rows") == "up"
 	shown = {}
 	local crop = Crop()
-	for index, entry in ipairs(entries) do
-		local record = Acquire(index)
+	for row = 1, CD.MAX_ROWS do
+		R.LayoutRow(row, lists[row], crop)
+	end
+	UpdateAll()
+	Binds()
+	RangeWatch()
+	R.Call("AfterLayout")
+end
+
+-- The lines of the Positions that cannot be used, set or taken back after a layout: a line stays while any row with icons wants that frame.
+function R.Notes(missing)
+	for _, note in ipairs({ NO_POSITION, CD.UNIT_FRAMES.player.note, CD.UNIT_FRAMES.target.note }) do
+		if missing[note] then
+			ns.Note(KEY, note)
+		else
+			ns.ClearNote(KEY, note)
+		end
+	end
+end
+
+-- Runs out of combat, for one row after Place: icon i of a row of k icons is a step of size plus spacing from the one before it, from the middle of
+-- the row's holder. The size and the direction are the row's own; spacing, icons per row and extra rows are those of the page.
+function R.LayoutRow(row, list, crop)
+	local anchor, rowShown = R.holders[row], {}
+	local size, spacing, perRow = R.Opt(row, "size"), Opt("spacing"), Opt("perRow")
+	local step, grow, above = size + spacing, R.Opt(row, "grow"), Opt("rows") == "up"
+	for index, entry in ipairs(list) do
+		local record = Acquire(index, row)
 		if record.spell ~= entry.spell or record.item ~= entry.item or record.kind ~= entry.kind or record.slot ~= entry.slot or record.own ~= entry.own then
 			record.dimmed, record.readyPlayed = nil, nil
 		end
@@ -2005,12 +2160,13 @@ local function Layout()
 		if entry.spell then
 			record.hasRange = HasRange(entry.spell)
 		end
-		record.texture:SetTexture(entry.spell and SpellIcon(entry.spell) or ItemIcon(entry.item))
+		record.picture = entry.spell and SpellIcon(entry.spell) or ItemIcon(entry.item)
+		record.texture:SetTexture(record.picture)
 		record.texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
 		local frame = record.frame
 		frame:SetSize(size, size)
-		local row, column = math.floor((index - 1) / perRow), (index - 1) % perRow
-		local inRow = math.min(perRow, #entries - row * perRow)
+		local line, column = math.floor((index - 1) / perRow), (index - 1) % perRow
+		local inRow = math.min(perRow, #list - line * perRow)
 		local x
 		if grow == "right" then
 			x = column * step
@@ -2021,19 +2177,21 @@ local function Layout()
 		end
 		frame:ClearAllPoints()
 		if above then
-			frame:SetPoint("BOTTOMLEFT", holder, "CENTER", x, row * step)
+			frame:SetPoint("BOTTOMLEFT", anchor, "CENTER", x, line * step)
 		else
-			frame:SetPoint("TOPLEFT", holder, "CENTER", x, -row * step)
+			frame:SetPoint("TOPLEFT", anchor, "CENTER", x, -line * step)
 		end
 		frame:Show()
+		-- The frames of Border on cooldown, the glows and the buff time, made and sized here out of combat (CooldownLooks.lua).
+		R.Call("Decorate", record, size)
+		rowShown[#rowShown + 1] = record
 		shown[#shown + 1] = record
 	end
-	for index = #entries + 1, #icons do
-		icons[index].frame:Hide()
+	local pool = R.pools[row] or {}
+	for index = #list + 1, #pool do
+		pool[index].frame:Hide()
 	end
-	UpdateAll()
-	Binds()
-	RangeWatch()
+	R.shownOf[row] = rowShown
 end
 
 -- The icons of the row after a layout, for Interrupt.lua: the class interrupt among them gets its border there.
@@ -2068,15 +2226,28 @@ local function QueueLayout()
 end
 
 -- The frames of the icons on the row and the frame they hang from, for the handle of the movers.
--- Nothing while the page is off.
+-- Nothing while the page is off. Row 1 here; rows 2 to 4 below.
 function ns.CooldownRow()
 	local frames = {}
 	if holder and ns.Enabled(KEY) then
-		for _, record in ipairs(shown) do
+		for _, record in ipairs(R.shownOf[1] or {}) do
 			frames[#frames + 1] = record.frame
 		end
 	end
 	return frames, holder
+end
+
+-- The same for rows 2 to 4 (FlatUICooldowns2 to 4 in Movers.lua): nothing while the row is off or has no icon, so it has no handle.
+for row = 2, CD.MAX_ROWS do
+	ns["CooldownRow" .. row] = function()
+		local frames, anchor = {}, R.holders[row]
+		if anchor and ns.Enabled(KEY) and R.RowOn(row) then
+			for _, record in ipairs(R.shownOf[row] or {}) do
+				frames[#frames + 1] = record.frame
+			end
+		end
+		return frames, anchor
+	end
 end
 
 -- The movers set or put back the spot of the row.
@@ -2194,6 +2365,7 @@ function ns.CooldownRemove(spellID)
 		if id == spellID then
 			table.remove(list, index)
 			SetOwnSound(id, nil)
+			R.Call("Forget", id)
 			QueueLayout()
 			return true, ("Removed %s."):format(Name(spellID))
 		end
@@ -2256,6 +2428,7 @@ function ns.CooldownRemoveItem(index)
 		if key == kind.key then
 			table.remove(list, at)
 			SetOwnSound(key, nil)
+			R.Call("Forget", key)
 			QueueLayout()
 			return true, ("Removed %s."):format(kind.name)
 		end
@@ -2336,13 +2509,14 @@ function ns.CooldownAddOwnItem(itemID)
 	return true, ("Added %s."):format(name)
 end
 
--- Its own ready sound goes with it.
+-- Its own ready sound goes with it, and so do its row and its When one icon shows.
 function ns.CooldownRemoveOwnItem(itemID)
 	local list = Own.List()
 	for at, id in ipairs(list) do
 		if id == itemID then
 			table.remove(list, at)
 			SetOwnSound(ItemKey(id), nil)
+			R.Call("Forget", ItemKey(id))
 			QueueLayout()
 			return true, ("Removed %s."):format(Own.Name(id))
 		end
@@ -2475,10 +2649,10 @@ end
 
 -- The icons a sound can be given to, in row order: { line ID, name, key }. A spell has its ID; a trinket or gear minus SLOT_LINE and its slot, named
 -- by the slot, whose sound stays with the slot when the item in it changes; a kind minus its place in ns.COOLDOWN_ITEMS; an item of Add an item minus
--- ITEM_LINE and its ID (EnhanceQoL gives every entry a ready sound, CooldownPanels.lua:2828-2859). With an icon chosen first, the one whose sound
--- comes next; nil when none is, or it has left the row.
-local function SoundEntries()
-	local rows, chosen = {}, nil
+-- ITEM_LINE and its ID (EnhanceQoL gives every entry a ready sound, CooldownPanels.lua:2828-2859). Row of one icon and When one icon shows list
+-- the same icons by the same keys (CooldownLooks.lua).
+function R.Entries()
+	local rows = {}
 	for _, id in ipairs(List()) do
 		rows[#rows + 1] = { id, Name(id), id }
 	end
@@ -2493,6 +2667,12 @@ local function SoundEntries()
 	for _, id in ipairs(Own.List()) do
 		rows[#rows + 1] = { -(CD.ITEM_LINE + id), Own.Name(id), ItemKey(id) }
 	end
+	return rows
+end
+
+-- The icons, and with an icon chosen first, the one whose sound comes next; nil when none is, or it has left the row.
+local function SoundEntries()
+	local rows, chosen = R.Entries(), nil
 	for _, row in ipairs(rows) do
 		if soundFor ~= nil and row[3] == soundFor then
 			chosen = row
@@ -2631,7 +2811,7 @@ end
 -- ", plays Bell" for an icon with a sound of its own in /flatui cooldown list.
 local function OwnSaid(key)
 	local own = OwnSound(key)
-	return own and (", plays %s"):format(SoundName(own)) or ""
+	return (own and (", plays %s"):format(SoundName(own)) or "") .. (R.Call("Said", key) or "")
 end
 
 local function Slash(rest)
@@ -2690,11 +2870,20 @@ end
 
 local function Refresh()
 	-- The row goes at once when the page is switched off in combat and comes back at once when it
-	-- is switched on; the layout waits.
-	if holder and not ns.Enabled(KEY) then
+	-- is switched on; the layout waits. So do rows 2 to 4.
+	local on = ns.Enabled(KEY)
+	if holder and not on then
 		holder:Hide()
 	elseif holder and shown[1] then
 		holder:Show()
+	end
+	for row = 2, CD.MAX_ROWS do
+		local frame = R.holders[row]
+		if frame and not on then
+			frame:Hide()
+		elseif frame and (R.shownOf[row] or {})[1] then
+			frame:Show()
+		end
 	end
 	fighting = InCombatLockdown() == true
 	Idle()
@@ -2772,7 +2961,8 @@ local function ItemLoaded(itemID)
 	end
 	for _, record in ipairs(shown) do
 		if record.own == itemID then
-			record.texture:SetTexture(ItemIcon(itemID))
+			record.picture = ItemIcon(itemID)
+			record.texture:SetTexture(record.picture)
 			ns.Each(KEY, Update, record)
 		end
 	end
@@ -2784,6 +2974,11 @@ local function Changed()
 	QueueLayout()
 	QueueSweepSoon()
 end
+
+-- What CooldownLooks.lua reads of this file.
+R.KEY, R.Get, R.Ask, R.Field, R.Plain, R.Whole, R.IsTrue = KEY, Opt, Ask, Field, Plain, Whole, IsTrue
+R.SpellName, R.KeyOf, R.Crop, R.QueueLayout, R.UpdateAll = SpellName, SoundKey, Crop, QueueLayout, UpdateAll
+R.NumbersFont, R.Numbers, R.FONT_PART, R.NUMBERS_PART = NumbersFont, Looks.Numbers, FONT_PART, CD.NUMBERS_PART
 
 ns.Register(KEY, {
 	label = "Cooldowns",
