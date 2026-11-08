@@ -757,7 +757,8 @@ local function AddChoice(row, item)
 	end
 end
 
--- A dropdown that acts: the lines come from a function of ns each time it opens, and choosing one calls another with its id.
+-- A dropdown that acts: the lines come from a function of ns each time it opens, and choosing one calls another with its id. A row of Flat UI
+-- setup has an act of its own (Setup.lua, S.Item), which queues the line for Finish: then nothing is called now.
 local function AddList(row, item)
 	local menu = Dropdown(row, FIELD, {
 		lines = function()
@@ -769,6 +770,14 @@ local function AddList(row, item)
 			return ok and type(lines) == "table" and lines or {}
 		end,
 		pick = function(id)
+			if type(item.act) == "function" then
+				local ok, err = pcall(item.act, id)
+				if not ok then
+					geterrorhandler()(err)
+				end
+				row.Changed()
+				return
+			end
 			local call = ns[item.pick]
 			if type(call) ~= "function" then
 				return
@@ -1586,15 +1595,16 @@ local function BuildProfiles()
 		Beside(row, "Create", Create)
 		if type(ns.OpenSetup) == "function" then
 			row = Row("Setup")
-			local start, text = Button(row.frame, "Set up a new profile", 170, function()
+			local start, text = Button(row.frame, "Set up my screen", 170, function()
 				Call("OpenSetup")
 			end)
 			start:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 			row.Hover(start)
 			updates[#updates + 1] = function()
-				text:SetText(Call("SetupHasDraft") and "Continue setup" or "Set up a new profile")
+				text:SetText(Call("SetupHasDraft") and "Continue setup" or "Set up my screen")
 			end
-			local ready = Button(row.frame, "Ready-made profiles", 170, function()
+			-- The welcome screen's ready-made looks (SetupWelcome.lua, ns.OpenProfiles).
+			local ready = Button(row.frame, "Ready-made looks", 170, function()
 				Call("OpenProfiles")
 			end)
 			ready:SetPoint("LEFT", start, "RIGHT", 8, 0)

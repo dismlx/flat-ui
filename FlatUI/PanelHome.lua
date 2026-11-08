@@ -301,12 +301,17 @@ function Home.Build(host)
 	menu.frame:SetPoint("RIGHT", row.frame, "RIGHT", 0, 0)
 	local users = kit.Dim(kit.Label(profile, "GameFontHighlightSmall", "LEFT", half - 32))
 	users:SetPoint("TOPLEFT", profile, "TOPLEFT", 16, -(32 + rowH + 8))
-	local across = math.floor((half - 32 - 16) / 3)
-	local buttons = { { "Edit in setup", function() host.Setup() end }, { "Export", function() ns.OpenPanelShare() end },
-		{ "Ready-made", function() host.Call("OpenProfiles") end } }
-	for index, spec in ipairs(buttons) do
-		local button = kit.Button(profile, spec[1], across, spec[2])
-		button:SetPoint("TOPLEFT", profile, "TOPLEFT", 16 + (index - 1) * (across + 8), -(cardH - 36))
+	-- The three buttons share the room by the length of their text (the third field, in twelfths), so Set up my screen fits at every density.
+	-- Ready-made opens the welcome screen's ready-made looks (SetupWelcome.lua).
+	local room = half - 32 - 16
+	local buttons = { { "Set up my screen", function() host.Setup() end, 5 }, { "Export", function() ns.OpenPanelShare() end, 3 },
+		{ "Ready-made", function() host.Call("OpenProfiles") end, 4 } }
+	local x = 16
+	for _, spec in ipairs(buttons) do
+		local width = math.floor(room * spec[3] / 12)
+		local button = kit.Button(profile, spec[1], width, spec[2])
+		button:SetPoint("TOPLEFT", profile, "TOPLEFT", x, -(cardH - 36))
+		x = x + width + 8
 	end
 	refreshers[#refreshers + 1] = function()
 		menu.SetText(host.Profile())
