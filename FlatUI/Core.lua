@@ -2818,6 +2818,32 @@ function ns.CopyProfile(from)
 	return true, ("Copied %s."):format(source)
 end
 
+-- The profile in use takes `picks`, a table of saved path to value, and is applied once. Each value is written as Normalise gives it; a value equal to
+-- the setting's default takes the path out, so the default applies; a path that is no setting, or that the game or a function holds, is left out. The
+-- positions stay. Returns true and a line, or false and why (in combat nothing changes). Flat UI setup's Finish calls it.
+function ns.ChangeProfile(picks)
+	local refusal = Refusal()
+	if refusal then
+		return false, refusal
+	end
+	local copy = CopyOf(profile)
+	for path, value in pairs(type(picks) == "table" and picks or {}) do
+		local def = defs[path]
+		if def and not Unsaved(def) then
+			local fitted = Normalise(def, value)
+			if fitted ~= nil then
+				if fitted == def.default then
+					copy.options[path] = nil
+				else
+					copy.options[path] = fitted
+				end
+			end
+		end
+	end
+	Replace(copy.options, profile.movers)
+	return true, ("Saved %s."):format(current)
+end
+
 -- A profile takes another name. The rules of Switch automatically and the profile of every character follow it.
 function ns.RenameProfile(from, to)
 	local refusal = Refusal()
