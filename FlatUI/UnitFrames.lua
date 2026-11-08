@@ -842,7 +842,6 @@ local function ApplyPicture(rec, on, redraw)
 	ns.SetHidden(rec.parts.portrait, shown or none)
 	Mask.sync(rec, shown or none or false)
 	local round = shown and pic.style ~= "head" and (gameRound or Opt("classShape") == "round") or false
-	pic.round = round
 	ns.SetOutlineRound(pic.outline, pic.texture, round, pic.fadeTex)
 	if round and not pic.outline.round and not ns.roundMissing and InCombatLockdown() and not pic.roundQueued then
 		-- The first round picture is made after combat, and the rounded line is drawn again then.
@@ -852,9 +851,12 @@ local function ApplyPicture(rec, on, redraw)
 			pcall(Refresh)
 		end)
 	end
+	-- Round once the client has cut it: a client without the circle keeps the picture square, and so does the first round picture until combat
+	-- ends. The ring, the PvP plate and the level go by what is drawn.
+	pic.round = pic.outline.roundOn == true
 	if rec.joined == true then
 		-- The ring of a round cell is a line of the frame's border, so Border off hides it as it hides the body's.
-		ns.SetOutlineEdges(pic.outline, round and Opt("barBorder") ~= false)
+		ns.SetOutlineEdges(pic.outline, pic.round and Opt("barBorder") ~= false)
 		ShowOutline(pic.outline, shown, false)
 	else
 		ns.SetOutlineEdges(pic.outline, true)
@@ -1147,17 +1149,27 @@ end
 
 -- One point of the picture, on a region of the game: its top left from the portrait frame for a target, else its top right from the left end of the
 -- name row, of the name text or of the health bar. Its border and the border of the bars are one border thickness apart. In One frame (g) the picture
--- is a gap from the bars and its top is the top of the name row or of the name text.
+-- is a gap from the bars and its top is the top of the name row or of the name text. The game puts the name of a small frame a unit or more to the side
+-- of its health bar (Camelot\PetFrame.lua:6, 15; Mainline\PartyFrameTemplates.xml:42, 51, 121, 140), so in One frame a picture beside a name takes its
+-- top from the name and its side from the slot, with two points.
 local function AnchorPicture(rec, t, rowOn, tall, g)
 	local parts, frame = rec.parts, rec.pic.frame
 	local apart = g or 3 * t
 	local row = tall and ROW.of(rec) + (g or 0) or 0
+	-- The points are set again from nothing, since the two styles use different points.
+	frame:ClearAllPoints()
 	if parts.standard ~= nil then
 		frame:SetPoint("TOPLEFT", parts.owner, "LEFT", parts.standard.x + apart, parts.standard.top + row)
 		return
 	end
+	local slot = parts.healthBox or parts.health
 	local named = not rowOn and parts.nameText ~= nil and not LARGE[rec.kind]
-	frame:SetPoint("TOPRIGHT", named and parts.nameText or parts.healthBox or parts.health, "TOPLEFT", -apart, tall and row or (named and g == nil and -t or 0))
+	if named and g ~= nil then
+		frame:SetPoint("TOP", parts.nameText, "TOP", 0, 0)
+		frame:SetPoint("RIGHT", slot, "LEFT", -g, 0)
+		return
+	end
+	frame:SetPoint("TOPRIGHT", named and parts.nameText or slot, "TOPLEFT", -apart, tall and row or (named and -t or 0))
 end
 
 -- The size of the picture is set from numbers and never read back, since a frame has no width until the client has laid it out.
@@ -1767,10 +1779,12 @@ local function Colour(rec, on)
 			-- Whether a state, a kind or a look gave the picture's border a colour: the files after this one colour it by class or reaction only if not.
 			pic.coloured = r ~= nil
 			ColourOutline(pic.outline, r, g, b)
+			-- The thick border and the line inside a Rare Elite's are square, so they go round a square picture only: a round one shows the kind's
+			-- colour on its ring.
 			ColourOutline(pic.rim, Rgb(look and look.colour))
-			ShowOutline(pic.rim, look ~= nil, false)
+			ShowOutline(pic.rim, look ~= nil and not pic.round, false)
 			ColourOutline(pic.inner, Rgb(look and look.inner))
-			ShowOutline(pic.inner, look ~= nil and look.inner ~= nil, false)
+			ShowOutline(pic.inner, look ~= nil and look.inner ~= nil and not pic.round, false)
 		end
 	end
 	for _, hook in ipairs(ns.UnitFrameExtra.after.colour) do
