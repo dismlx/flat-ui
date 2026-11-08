@@ -10445,12 +10445,13 @@ local PAGES = {
 		S("cooldowns.dim", "bool", true, "Dim on cooldown"),
 		S("cooldowns.mounted", "bool", false, "Hide while mounted"),
 		S("cooldowns.resting", "bool", false, "Hide in cities and inns"),
+		S("cooldowns.show", "choice", "always", "When the row shows", "Row 1, the row of this page. Rows 2 to 4 have their own on the More rows tab. Hide while mounted, Hide in cities and inns and Row opacity out of combat still apply.", { choices = { { "always", "Always" }, { "combat", "In combat" }, { "nocombat", "Out of combat" }, { "group", "In a group" }, { "dungeon", "In a dungeon or raid" }, { "unmounted", "Not mounted" } } }),
 		S("cooldowns.tooltips", "choice", "off", "Tooltips on icons", "With tooltips the icons catch the mouse, but clicks still go through to the world.", { choices = { { "off", "Off" }, { "combat", "Out of combat only" }, { "on", "On" } } }),
 		"Ready again",
 		S("cooldowns.readySound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 		S("cooldowns.iconSound", "list", 0, "Sound of one icon", "Choose an icon, then open the list again for its own sound. An icon without one plays Sound."),
 		"Position",
-		S("cooldowns.place", "choice", "screen", "Position", nil, { choices = PLACES }),
+		S("cooldowns.place", "choice", "screen", "Position", "Under a frame, Left to right starts at its left edge and Right to left ends at its right edge. /flatui move places the row anywhere.", { choices = { { "screen", "Middle of the screen" }, { "resource", "Under the personal resource display" }, { "player", "Under the player frame" }, { "target", "Under the target frame" } } }),
 		S("cooldowns.x", "number", 0, "X offset", nil, { min = -800, max = 800, step = 1, unit = "" }),
 		S("cooldowns.y", "number", 0, "Y offset", nil, { min = -800, max = 800, step = 1, unit = "" }),
 		"Cooldown manager",
@@ -10469,6 +10470,8 @@ local PAGES = {
 		S("cooldowns.coolAlpha", "number", 100, "Opacity on cooldown", nil, { min = 0, max = 100, step = 5, unit = "%" }),
 		S("cooldowns.readyAlpha", "number", 100, "Opacity when ready", "0 hides ready icons. The row keeps its spacing.", { min = 0, max = 100, step = 5, unit = "%" }),
 		S("cooldowns.idleAlpha", "number", 100, "Row opacity out of combat", nil, { min = 0, max = 100, step = 5, unit = "%" }),
+		S("cooldowns.iconShow", "list", 0, "When one icon shows", "Choose an icon, then open the list again: as its row, only on cooldown, only when ready, or with a border while it cools down. A hidden icon keeps its place."),
+		S("cooldowns.coolBorderColour", "colour", "ffd94040", "Border on cooldown colour", "For the icons set to Border on cooldown in When one icon shows."),
 		"Border",
 		S("cooldowns.borderState", "bool", false, "Border colour by state", nil, { needs = "cooldowns.border" }),
 		S("cooldowns.readyColour", "colour", "ff4dbf59", "Ready border colour", nil, { needs = "cooldowns.borderState" }),
@@ -10476,6 +10479,12 @@ local PAGES = {
 		S("cooldowns.flash", "bool", false, "Flash when ready", nil, nil),
 		S("cooldowns.interruptGlow", "bool", true, "Glow on your interrupt",
 			"A gold border on the icon of your class interrupt while your target or focus casts something you can interrupt and the interrupt is ready."),
+		"Glow and buff time",
+		S("cooldowns.readyGlow", "bool", false, "Glow when ready", "A pulsing border round an icon from the end of its cooldown until you use it again."),
+		S("cooldowns.readyGlowColour", "colour", "ffffd133", "Ready glow colour", nil, { needs = "cooldowns.readyGlow" }),
+		S("cooldowns.procGlow", "bool", false, "Glow on procs", "The game's proc glow on the icon of a spell while a proc alert of the Trackers page for it is up."),
+		S("cooldowns.auraTime", "bool", false, "Buff time on icons", "While the buff a spell or trinket gives is on you, its icon shows the time the buff has left. Nothing shows for a buff the game hides in a fight."),
+		S("cooldowns.auraColour", "colour", "ffffdb40", "Buff time colour", nil, { needs = "cooldowns.auraTime" }),
 		"Numbers and sweep",
 		S("cooldowns.numbersFont", "choice", "game", "Countdown number size", nil, { choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" }, { "huge", "Huge" } }, needs = "cooldowns.numbers" }),
 		S("cooldowns.sweep", "bool", true, "Cooldown sweep", nil, nil),
@@ -10494,6 +10503,34 @@ local PAGES = {
 		"Keybind",
 		S("cooldowns.keybind", "bool", false, "Keybind on icons", "The key bound to the spell on your action bars.", nil),
 		S("cooldowns.keybindSize", "number", 100, "Keybind size", nil, { min = 50, max = 250, step = 5, unit = "%", needs = "cooldowns.keybind" }),
+	} },
+	{ key = "cooldownsRows", label = "More rows", parent = "cooldowns", owner = "cooldowns", rows = {
+		"Icons",
+		S("cooldowns.rowOf", "list", 0, "Row of one icon", "Choose an icon, then open the list again for its row. The icons of a row that is off are on row 1. /flatui move places each row."),
+		"Row 2",
+		S("cooldowns.row2", "bool", false, "Show row 2", "Its icons come from Row of one icon. It has the looks of row 1, and its own place, size, direction and rule below."),
+		S("cooldowns.row2Show", "choice", "always", "When it shows", nil, { choices = { { "always", "Always" }, { "combat", "In combat" }, { "nocombat", "Out of combat" }, { "group", "In a group" }, { "dungeon", "In a dungeon or raid" }, { "unmounted", "Not mounted" } }, needs = "cooldowns.row2" }),
+		S("cooldowns.row2Place", "choice", "screen", "Position", nil, { choices = { { "screen", "Middle of the screen" }, { "resource", "Under the personal resource display" }, { "player", "Under the player frame" }, { "target", "Under the target frame" } }, needs = "cooldowns.row2" }),
+		S("cooldowns.row2X", "number", 0, "X offset", nil, { min = -800, max = 800, step = 1, unit = "", needs = "cooldowns.row2" }),
+		S("cooldowns.row2Y", "number", -50, "Y offset", nil, { min = -800, max = 800, step = 1, unit = "", needs = "cooldowns.row2" }),
+		S("cooldowns.row2Size", "number", 36, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "", needs = "cooldowns.row2" }),
+		S("cooldowns.row2Grow", "choice", "center", "Row direction", nil, { choices = { { "center", "From the middle" }, { "right", "Left to right" }, { "left", "Right to left" } }, needs = "cooldowns.row2" }),
+		"Row 3",
+		S("cooldowns.row3", "bool", false, "Show row 3", "Its icons come from Row of one icon. It has the looks of row 1, and its own place, size, direction and rule below."),
+		S("cooldowns.row3Show", "choice", "always", "When it shows", nil, { choices = { { "always", "Always" }, { "combat", "In combat" }, { "nocombat", "Out of combat" }, { "group", "In a group" }, { "dungeon", "In a dungeon or raid" }, { "unmounted", "Not mounted" } }, needs = "cooldowns.row3" }),
+		S("cooldowns.row3Place", "choice", "screen", "Position", nil, { choices = { { "screen", "Middle of the screen" }, { "resource", "Under the personal resource display" }, { "player", "Under the player frame" }, { "target", "Under the target frame" } }, needs = "cooldowns.row3" }),
+		S("cooldowns.row3X", "number", 0, "X offset", nil, { min = -800, max = 800, step = 1, unit = "", needs = "cooldowns.row3" }),
+		S("cooldowns.row3Y", "number", -100, "Y offset", nil, { min = -800, max = 800, step = 1, unit = "", needs = "cooldowns.row3" }),
+		S("cooldowns.row3Size", "number", 36, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "", needs = "cooldowns.row3" }),
+		S("cooldowns.row3Grow", "choice", "center", "Row direction", nil, { choices = { { "center", "From the middle" }, { "right", "Left to right" }, { "left", "Right to left" } }, needs = "cooldowns.row3" }),
+		"Row 4",
+		S("cooldowns.row4", "bool", false, "Show row 4", "Its icons come from Row of one icon. It has the looks of row 1, and its own place, size, direction and rule below."),
+		S("cooldowns.row4Show", "choice", "always", "When it shows", nil, { choices = { { "always", "Always" }, { "combat", "In combat" }, { "nocombat", "Out of combat" }, { "group", "In a group" }, { "dungeon", "In a dungeon or raid" }, { "unmounted", "Not mounted" } }, needs = "cooldowns.row4" }),
+		S("cooldowns.row4Place", "choice", "screen", "Position", nil, { choices = { { "screen", "Middle of the screen" }, { "resource", "Under the personal resource display" }, { "player", "Under the player frame" }, { "target", "Under the target frame" } }, needs = "cooldowns.row4" }),
+		S("cooldowns.row4X", "number", 0, "X offset", nil, { min = -800, max = 800, step = 1, unit = "", needs = "cooldowns.row4" }),
+		S("cooldowns.row4Y", "number", -150, "Y offset", nil, { min = -800, max = 800, step = 1, unit = "", needs = "cooldowns.row4" }),
+		S("cooldowns.row4Size", "number", 36, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "", needs = "cooldowns.row4" }),
+		S("cooldowns.row4Grow", "choice", "center", "Row direction", nil, { choices = { { "center", "From the middle" }, { "right", "Left to right" }, { "left", "Right to left" } }, needs = "cooldowns.row4" }),
 	} },
 	{ key = "pulse", label = "Cooldown pulse", parent = "cooldowns", rows = {
 		S("pulse.enabled", "bool", false, "Cooldown pulse", "When a spell of your spell book, a trinket you wear or an item you use is ready again, its icon fades in and out in the middle of the screen. /flatui move places it."),
@@ -21960,6 +21997,14 @@ for _, path in ipairs({ "nameplates.threatSameColours", "nameplates.threatDamage
 	"nameplates.threatHealthText" }) do
 	covered[path] = true
 end
+-- Nor do the cooldown rows and the per-icon looks of wave 9 (0.5.11), for the same reason.
+for _, path in ipairs({ "cooldowns.show", "cooldowns.rowOf", "cooldowns.row2", "cooldowns.row2Show", "cooldowns.row2Place", "cooldowns.row2X", "cooldowns.row2Y",
+	"cooldowns.row2Size", "cooldowns.row2Grow", "cooldowns.row3", "cooldowns.row3Show", "cooldowns.row3Place", "cooldowns.row3X", "cooldowns.row3Y",
+	"cooldowns.row3Size", "cooldowns.row3Grow", "cooldowns.row4", "cooldowns.row4Show", "cooldowns.row4Place", "cooldowns.row4X", "cooldowns.row4Y",
+	"cooldowns.row4Size", "cooldowns.row4Grow", "cooldowns.iconShow", "cooldowns.coolBorderColour", "cooldowns.readyGlow", "cooldowns.readyGlowColour", "cooldowns.procGlow",
+	"cooldowns.auraTime", "cooldowns.auraColour" }) do
+	covered[path] = true
+end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
 for _, path in ipairs({ "hud.xpOwn", "hud.xpWidth", "hud.xpHeight", "hud.xpShow", "hud.xpOrder", "hud.xpGap", "hud.xpTicks", "hud.xpColour", "hud.xpRested", "hud.xpRestedColour",
 	"hud.xpRepMode", "hud.xpRepColour", "hud.xpTextWhen", "hud.xpTextPlace", "hud.xpTooltip", "hud.xpQuest", "hud.xpQuestColour", "hud.xpStats", "hud.xpStatsTip" }) do
@@ -33418,7 +33463,12 @@ do
 		-- The rows of waves 5 and 7 (0.5.7 and 0.5.9) have no probe: the owner asked for code without new test blocks.
 		for _, path in ipairs({ "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint", "cooldowns.powerColour", "cooldowns.interruptGlow",
 			"cooldowns.gear", "cooldowns.tooltips", "cooldowns.sweepColour", "cooldowns.edge", "cooldowns.edgeColour", "cooldowns.gcd", "cooldowns.numbersColour",
-			"cooldowns.numbersPlace", "cooldowns.tenths", "cooldowns.useCount", "cooldowns.countColour", "cooldowns.countCorner" }) do
+			"cooldowns.numbersPlace", "cooldowns.tenths", "cooldowns.useCount", "cooldowns.countColour", "cooldowns.countCorner",
+			"cooldowns.show", "cooldowns.row2", "cooldowns.row2Show", "cooldowns.row2Place", "cooldowns.row2X", "cooldowns.row2Y", "cooldowns.row2Size",
+			"cooldowns.row2Grow", "cooldowns.row3", "cooldowns.row3Show", "cooldowns.row3Place", "cooldowns.row3X", "cooldowns.row3Y", "cooldowns.row3Size",
+			"cooldowns.row3Grow", "cooldowns.row4", "cooldowns.row4Show", "cooldowns.row4Place", "cooldowns.row4X", "cooldowns.row4Y", "cooldowns.row4Size",
+			"cooldowns.row4Grow", "cooldowns.coolBorderColour", "cooldowns.readyGlow", "cooldowns.readyGlowColour", "cooldowns.procGlow",
+			"cooldowns.auraTime", "cooldowns.auraColour" }) do
 			covered[path] = true
 		end
 		local missingProbe = {}
@@ -67439,7 +67489,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1168 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1220 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67753,7 +67803,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1071 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1123 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)

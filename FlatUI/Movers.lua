@@ -125,6 +125,13 @@ local LIST = {
 	-- The row of Cooldown icons. It has no spot until one is saved.
 	{ name = ROW, label = "Cooldown icons", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
 		row = "CooldownRow", changed = "CooldownsMoved" },
+	-- Rows 2 to 4 of Cooldown icons (Cooldowns.lua), each with a handle while it is on and has icons, and no spot until one is saved.
+	{ name = "FlatUICooldowns2", label = "Cooldown icons: row 2", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
+		row = "CooldownRow2", changed = "CooldownsMoved" },
+	{ name = "FlatUICooldowns3", label = "Cooldown icons: row 3", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
+		row = "CooldownRow3", changed = "CooldownsMoved" },
+	{ name = "FlatUICooldowns4", label = "Cooldown icons: row 4", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
+		row = "CooldownRow4", changed = "CooldownsMoved" },
 	-- The icon of the cooldown pulse (Pulse.lua): its middle is the middle of the box, at any Icon size. It starts in the middle of the screen.
 	{ name = "FlatUIPulse", label = "Cooldown pulse", point = "CENTER", kind = "hud", own = true, noScale = true, width = 72, height = 72, x = 0, y = 0,
 		gate = "PulseShown", changed = "PulseMoved" },

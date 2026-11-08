@@ -1,7 +1,8 @@
 local _, ns = ...
 
 -- Glow on the action button: while a proc is up, the button that casts the spell it is for gets the proc's border colour and the game's own
--- glow animation (ActionButtonSpellAlerts.xml:3-33). Procs.lua calls ns.ProcGlowStart(entry) and ns.ProcGlowStop(entry). The border is
+-- glow animation (ActionButtonSpellAlerts.xml:3-33). Procs.lua calls ns.ProcGlowStart(entry) and ns.ProcGlowStop(entry), which tell the cooldown
+-- rows too (ns.CooldownProcs, CooldownLooks.lua). The border is
 -- drawn by ns.SetButtonMark in ActionBars.lua. The glow is a frame of this addon next to the button (a child of the button's parent,
 -- anchored to the button), made out of combat and kept at alpha 0; in a fight only SetAlpha and SetScript run on it. A button the game glows itself is left alone. This file is not a module.
 
@@ -361,6 +362,10 @@ function ns.ProcGlowStart(entry)
 	if type(entry) ~= "table" or entry.id == nil then
 		return
 	end
+	-- The icons of its spells on the cooldown rows glow too, with Glow on procs (CooldownLooks.lua).
+	if type(ns.CooldownProcs) == "function" then
+		pcall(ns.CooldownProcs, entry, true)
+	end
 	Hook()
 	local rec = active[entry.id]
 	if not rec then
@@ -393,6 +398,9 @@ function ns.ProcGlowOwn(button, on)
 end
 
 function ns.ProcGlowStop(entry)
+	if type(ns.CooldownProcs) == "function" then
+		pcall(ns.CooldownProcs, entry, false)
+	end
 	local rec = type(entry) == "table" and active[entry.id]
 	if rec then
 		active[entry.id] = nil

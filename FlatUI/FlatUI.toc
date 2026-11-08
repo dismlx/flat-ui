@@ -36,6 +36,7 @@ OwnBars.lua
 OwnPaint.lua
 ButtonText.lua
 Cooldowns.lua
+CooldownLooks.lua
 ButtonStates.lua
 ClassData.lua
 Trackers.lua

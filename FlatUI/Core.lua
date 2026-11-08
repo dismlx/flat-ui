@@ -113,6 +113,9 @@ local ADDON_NAME, ns = ...
 -- SetOwner, SetSpellByID, SetItemByID, SetInventoryItem, Show, and Hide while an icon owns it). The game is asked once to load each item of Add an
 -- item, and each worn item it checks for a use, that the client has not loaded yet (C_Item.RequestLoadItemDataByID). Add the spells of a bar only
 -- reads action slots and the bar page.
+-- Cooldown icons hangs a row from the game's PlayerFrame or TargetFrame by SetPoint on a frame of its own, out of combat, as Your buffs does, and
+-- writes nothing on them; its glows and buff time are frames of its own, and it hears the player's UNIT_AURA on a frame of its own while Buff time on
+-- icons is on.
 -- With Clear the damage meter on (off by default), Minimap and buffs calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
 -- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
 -- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.
