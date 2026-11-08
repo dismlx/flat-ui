@@ -79,6 +79,7 @@ local K = {
 	REFUSED = "Trackers: the game would not make a secure button, so a click on a tracker does nothing.",
 	MAX_ID = 2147483647, LEVEL = 10,
 	USAGE = "/flatui tracker use 1 Instant Poison - the item a click on weapon tracker 1 puts on the weapon, or clear for nothing chosen",
+	UNCLICKED = "a click puts nothing on a weapon unless Click to apply is Buffs, forms, the pet and weapons",
 }
 -- buttons: the button of each tracker that has one, by the id of its entry; free: buttons no tracker has. owner, set, parent, shown and level, by
 -- button: the id it is for, the attributes it was given, the frame it lies over, whether it is shown and the frame level it was given. fighting:
@@ -658,7 +659,9 @@ function ns.TrackerClickSweep(entries)
 	end
 end
 
--- The line of /flatui tracker check, for a tracker of a kind that takes a click while the row lets it.
+-- The line of /flatui tracker check, for a tracker of a kind that takes a click while the row lets it. A buff or form tracker to which Choose
+-- gives neither an action nor words, since the player can cast none of its spells (a dazing aspect is never cast), has no click to offer
+-- whatever it shows, and no line, as a kind that takes none; for a pet or group tracker, nil only means that nothing needs a click now.
 function ns.TrackerClickLine(entry)
 	if type(entry) ~= "table" or not Allowed(entry) then
 		return nil
@@ -667,6 +670,13 @@ function ns.TrackerClickLine(entry)
 	if button and S.shown[button] then
 		local _, text = Choose(entry)
 		return "Click: " .. (text and (text .. ".") or "nothing to do now.")
+	end
+	local kind = entry.kind or "buff"
+	if kind == "buff" or kind == "form" then
+		local action, text = Choose(entry)
+		if not action and not text then
+			return nil
+		end
 	end
 	return "Click: none now. A click is offered out of combat while the tracker has something to fix, and for a buff while you have the power to cast it."
 end
@@ -707,10 +717,13 @@ end
 -- What a click on a weapon tracker takes while nothing is chosen for it, as Weapon decides it now (asked with a copy of the entry that has no use
 -- and no useSpell): the name of the item or the spell, or nil when the bags and the spell book hold nothing for it. So what the check
 -- (TrackerKinds.lua's Chosen), Item a click puts on a weapon and /flatui tracker use say of a tracker with nothing chosen is what a click does:
--- a shaman's imbue, a rogue's poison of the list or the strongest one of CONSUMABLES.
+-- a shaman's imbue, a rogue's poison of the list or the strongest one of CONSUMABLES. While Click to apply gives a weapon no click (of KINDS, only
+-- all has weapon), a click takes nothing: nil, and UNCLICKED, the words of why, as a second answer.
 local function OwnPick(entry)
 	if type(entry) ~= "table" then
 		return nil
+	elseif not (K.KINDS[ns.Get(KEY .. ".click")] or K.KINDS.none).weapon then
+		return nil, K.UNCLICKED
 	end
 	local copy = {}
 	for key, value in pairs(entry) do
@@ -747,8 +760,9 @@ local function SetUse(index, entry, item, spell)
 	elseif spell then
 		line = ("a click casts %s."):format(SpellName(spell) or ("spell " .. spell))
 	else
-		local name = OwnPick(entry)
-		line = name and ("nothing chosen, so a click uses %s now."):format(name) or "nothing chosen, and a click finds nothing to use now."
+		local name, why = OwnPick(entry)
+		line = why and ("nothing chosen, and %s."):format(why) or name and ("nothing chosen, so a click uses %s now."):format(name)
+			or "nothing chosen, and a click finds nothing to use now."
 	end
 	return ("Tracker %s: %s"):format(index, line)
 end

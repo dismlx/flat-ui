@@ -349,7 +349,8 @@ end
 -- What a click on the tracker uses on its hand (use, useSpell: /flatui tracker use and Item a click puts on a weapon, TrackerClicks.lua), in
 -- words: the item's name (C_Item.GetItemNameByID) or the spell's (C_Spell.GetSpellName), so that a poison chosen for the main hand and another
 -- for the off hand stay apart in the check. With nothing chosen, what a click takes itself now, as TrackerClicks.lua's Weapon decides it
--- (ns.TrackerWeaponOwn): a shaman's imbue, else an item of the list or the strongest poison, stone or oil in the bags.
+-- (ns.TrackerWeaponOwn): a shaman's imbue, else an item of the list or the strongest poison, stone or oil in the bags. While Click to apply gives
+-- a weapon no click, its second answer says why a click puts nothing on it, and the line names nothing a click would use.
 local function Chosen(entry)
 	local id, call = entry.use, type(C_Item) == "table" and C_Item.GetItemNameByID
 	local word = "item %d"
@@ -360,7 +361,10 @@ local function Chosen(entry)
 		if type(ns.TrackerWeaponOwn) ~= "function" then
 			return "nothing"
 		end
-		local own = ns.TrackerWeaponOwn(entry)
+		local own, why = ns.TrackerWeaponOwn(entry)
+		if Plain(why, "string") then
+			return "nothing, and " .. why
+		end
 		return Plain(own, "string") and ("nothing, so a click uses %s now"):format(own) or "nothing, and a click finds nothing to use now"
 	end
 	local ok, name = false, nil
