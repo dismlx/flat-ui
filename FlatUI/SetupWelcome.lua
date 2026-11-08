@@ -79,18 +79,26 @@ function W.Done(named, keep)
 	end
 end
 
+-- The screen closes and Flat UI setup opens (Setup.lua), at this character's draft or at its first stop.
+function W.OpenSetup()
+	W.frame:Hide()
+	if type(ns.OpenSetup) == "function" then
+		ns.OpenSetup()
+	end
+end
+
 -- Set up my screen sets no flag: setup left without a choice keeps no draft, so the screen comes back at the next login. The tick still counts.
 function W.Setup()
 	if W.tick then
 		ns.Set("setup.newCharacter", "default")
 	end
-	W.frame:Hide()
-	ns.OpenSetup()
+	W.OpenSetup()
 end
 
 -- Keep this look: the profile in use as it is, or with Keep this look uses at The game's look, the profile named Game look.
 function W.Keep()
-	if ns.Get("setup.welcomeSkip") == "game" then
+	local game = ns.Get("setup.welcomeSkip") == "game"
+	if game then
 		if InCombatLockdown() then
 			W.line:SetText(COMBAT)
 			return
@@ -103,10 +111,13 @@ function W.Keep()
 		print(("Flat UI: using %s. Restyled action bars and windows change after /reload."):format(S.FindProfile(GAME) or GAME))
 	end
 	W.Done()
+	if game then
+		W.Used()
+	end
 end
 
--- After a look is put in use from the tiles: setup, while it has the options window, closes so the screen shows the look. Its draft is kept, and
--- Change it opens setup on the look.
+-- After a look is put in use here (a tile, Same as, Use the game's look): setup, while it has the options window, closes so the screen shows the look.
+-- Its draft is kept, and the next opening (Change it) starts it on the look.
 function W.Used()
 	if type(ns.PanelInMode) == "function" and ns.PanelInMode() then
 		kit.Hide()
@@ -188,14 +199,16 @@ function W.ReloadButton()
 		W.reload = kit.Button(W.frame, "Reload", 90, function()
 			ns.Reload()
 		end)
-		ns.SecureReload(W.reload)
+		if type(ns.SecureReload) == "function" then
+			ns.SecureReload(W.reload)
+		end
 	end
 	return W.reload
 end
 
 -- What the after view says first: the look put in use, the new profile, or the profile saved and how many characters use it.
 function W.AfterLine(finished)
-	local name = IsText(finished.name) and finished.name or tostring(ns.Profile())
+	local name = IsText(finished.name) and finished.name ~= "" and finished.name or tostring(ns.Profile())
 	if finished.ready then
 		return ("%s is in use."):format(name)
 	elseif finished.new then
@@ -208,24 +221,27 @@ function W.AfterLine(finished)
 	return ("%s is saved."):format(name)
 end
 
--- The notes of the after view, one a line: each setting that needs a reload (S.ReloadText), each game setting the game kept, each problem of the
--- lists that ran at Finish. The second answer is true when a reload is needed.
+-- The notes of the after view, one a line: each setting that needs a reload (S.ReloadText of an entry of S.ReloadLines, or the sentence itself), each
+-- game setting the game kept (its text, or an entry { text, path, value }), each problem of the lists that ran at Finish. The second answer is true
+-- when a reload is needed.
 function W.AfterNotes(finished)
 	local texts, reload = {}, false
 	local function List(value)
 		return type(value) == "table" and value or {}
 	end
 	for _, entry in ipairs(List(finished.reloadLines)) do
+		local ok, text = IsText(entry), entry
 		if type(entry) == "table" and type(S.ReloadText) == "function" then
-			local ok, text = pcall(S.ReloadText, entry)
-			if ok and IsText(text) then
-				texts[#texts + 1] = text
-				reload = true
-			end
+			ok, text = pcall(S.ReloadText, entry)
+		end
+		if ok and IsText(text) and text ~= "" then
+			texts[#texts + 1] = text
+			reload = true
 		end
 	end
-	for _, text in ipairs(List(finished.kept)) do
-		if IsText(text) then
+	for _, entry in ipairs(List(finished.kept)) do
+		local text = type(entry) == "table" and entry.text or entry
+		if IsText(text) and text ~= "" then
 			texts[#texts + 1] = ("The game kept %s."):format(text)
 		end
 	end
@@ -402,10 +418,7 @@ function W.Build()
 		W.shareMark:SetShown(W.share)
 	end)
 	-- The after view: Reload is made the first time a reload is needed (W.ReloadButton).
-	W.change = kit.Button(frame, "Change it", 110, function()
-		frame:Hide()
-		ns.OpenSetup()
-	end)
+	W.change = kit.Button(frame, "Change it", 110, W.OpenSetup)
 	W.move = kit.Button(frame, "Move frames", 110, W.Move)
 	W.options = kit.Button(frame, "Options", 90, W.Options)
 	W.done = kit.Button(frame, "Done", 90, function()
