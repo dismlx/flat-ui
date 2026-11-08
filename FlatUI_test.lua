@@ -9945,7 +9945,7 @@ local PAGES = {
 		S("nameplates.absorbs", "bool", true, "Absorb shields"),
 		S("nameplates.healAbsorbs", "bool", true, "Heal absorbs"),
 	} },
-	{ key = "nameplatesColours", label = "Colours and threat", parent = "nameplates", owner = "nameplates", rows = {
+	{ key = "nameplatesColours", label = "Colours", parent = "nameplates", owner = "nameplates", rows = {
 		"Reaction",
 		S("nameplates.colours", "bool", false, "Reaction colours on health bars", "Hostile, neutral and friendly, in the colours of the Colours page. Tapped and dead units keep the game's grey unless Custom reaction colours is on."),
 		S("nameplates.colourPlayers", "choice", "game", "Players", "As the game has it keeps class colours when the game's class colour setting is on.",
@@ -9953,12 +9953,6 @@ local PAGES = {
 		"Target",
 		S("nameplates.targetBar", "bool", false, "Colour the target's health bar"),
 		S("nameplates.targetBarColour", "colour", "ff66b3ff", "Target health bar colour", nil, { needs = "nameplates.targetBar" }),
-		"Threat",
-		S("nameplates.threat", "bool", false, "Threat colours", "Colours enemy health bars by the threat you have on them."),
-		S("nameplates.threatRole", "choice", "auto", "Your role", nil, { choices = { { "auto", "From your group role" }, { "tank", "Tank" }, { "damage", "Damage or healer" } }, needs = "nameplates.threat" }),
-		S("nameplates.threatGood", "colour", "ff4dbf59", "Threat you want", nil, { needs = "nameplates.threat" }),
-		S("nameplates.threatTransition", "colour", "ffe6c133", "Threat changing hands", nil, { needs = "nameplates.threat" }),
-		S("nameplates.threatBad", "colour", "ffd94040", "Threat you do not want", nil, { needs = "nameplates.threat" }),
 		"Mouseover",
 		S("nameplates.hover", "bool", false, "Mouseover border", nil, { needs = "nameplates.health" }),
 		S("nameplates.hoverColour", "colour", "ffd9d9d9", "Mouseover colour", nil, { needs = "nameplates.hover" }),
@@ -9967,6 +9961,52 @@ local PAGES = {
 		S("nameplates.lowHealth", "bool", false, "Low health border"),
 		S("nameplates.lowHealthAt", "number", 20, "Low health below", nil, { min = 5, max = 50, step = 5, unit = "%", needs = "nameplates.lowHealth" }),
 		S("nameplates.lowHealthColour", "colour", "ffff3333", "Low health border colour", nil, { needs = "nameplates.lowHealth" }),
+	} },
+	{ key = "nameplatesThreat", label = "Threat", parent = "nameplates", owner = "nameplates", rows = {
+		"Threat",
+		S("nameplates.threat", "bool", true, "Threat on nameplates", "Shows your threat on each enemy with the parts below."),
+		S("nameplates.threatBar", "bool", true, "Colour health bars by threat", "The target's own colour still wins while Colour the target's health bar is on.", { needs = "nameplates.threat" }),
+		S("nameplates.threatRole", "choice", "auto", "Your role", "From your role, stance or form takes the role your group gave you, else Defensive Stance, Bear Form or Righteous Fury make you a tank.",
+			{ choices = { { "auto", "From your role, stance or form" }, { "tank", "Tank" }, { "damage", "Damage or healer" } }, needs = "nameplates.threat" }),
+		"Threat colours",
+		S("nameplates.threatGood", "colour", "ff4dbf59", "Threat you want", "As a tank an enemy you hold securely, as damage or healer one on someone else.", { needs = "nameplates.threat" }),
+		S("nameplates.threatTransition", "colour", "ffe6c133", "Threat changing hands", "An enemy close to turning to you or away from you.", { needs = "nameplates.threat" }),
+		S("nameplates.threatBad", "colour", "ffd94040", "Threat you do not want", "As a tank an enemy on someone else, as damage or healer one on you.", { needs = "nameplates.threat" }),
+		S("nameplates.threatTanks", "bool", true, "Enemies held by another tank", "As a tank, an enemy another tank of your group or your pet holds takes the colour below, so it is not taken for a loose one.", { needs = "nameplates.threat" }),
+		S("nameplates.threatTankColour", "colour", "ff0faac8", "Another tank's colour", nil, { needs = "nameplates.threatTanks" }),
+		"Whose threat",
+		S("nameplates.threatPet", "bool", true, "Your pet's threat counts", "An enemy your pet holds shows as held for you before you hit it.", { needs = "nameplates.threat" }),
+		S("nameplates.threatLead", "bool", false, "Early warning while tanking", "As a tank, an enemy you hold securely shows as changing hands while someone else comes close to your threat.", { needs = "nameplates.threat" }),
+		"Which enemies",
+		S("nameplates.threatNormal", "bool", true, "Normal enemies", nil, { needs = "nameplates.threat" }),
+		S("nameplates.threatElite", "bool", true, "Elite and Rare enemies", nil, { needs = "nameplates.threat" }),
+		S("nameplates.threatBoss", "bool", true, "Bosses", "Enemies whose level shows as a skull.", { needs = "nameplates.threat" }),
+		S("nameplates.threatMinor", "bool", true, "Minor enemies", "Totems and other units the game counts as minor or trivial.", { needs = "nameplates.threat" }),
+		S("nameplates.threatNeutral", "bool", true, "Neutral enemies", "Units that do not attack until you do.", { needs = "nameplates.threat" }),
+		S("nameplates.threatTapped", "bool", true, "Enemies tapped by others", "Their health bar keeps the game's grey.", { needs = "nameplates.threat" }),
+		S("nameplates.threatInstances", "bool", false, "Only in dungeons and raids", nil, { needs = "nameplates.threat" }),
+		"Glow and opacity",
+		S("nameplates.threatGlow", "choice", "needs", "Threat glow", "A ring in the threat colour around the health bar; When the enemy needs you leaves out threat you want.",
+			{ choices = { { "off", "Off" }, { "needs", "When the enemy needs you" }, { "all", "Every threat state" } }, needs = "nameplates.threat" }),
+		S("nameplates.threatBorder", "bool", false, "Threat colour on the health bar border", "Your target, focus and mouseover keep their border colour, and it needs Health bar border.",
+			{ needs = "nameplates.threat" }),
+		S("nameplates.threatFade", "bool", true, "Fade enemies held for you", "Enemies whose threat you want fade so the ones that need you stand out, while your target and focus stay clear.",
+			{ needs = "nameplates.threat" }),
+		S("nameplates.threatFadeAlpha", "number", 75, "Opacity of enemies held for you", nil, { min = 10, max = 100, step = 5, unit = "%", needs = "nameplates.threatFade" }),
+		"Threat text",
+		S("nameplates.threatValue", "choice", "scaled", "Threat value", "Left of the health bar, where 100% share of aggro is the point at which the enemy turns to you.",
+			{ choices = { { "off", "Off" }, { "scaled", "Share of aggro" }, { "raw", "Share of the tank's threat" }, { "lead", "Lead while tanking" } }, needs = "nameplates.threat" }),
+		S("nameplates.threatValueWhen", "choice", "group", "Show threat value", nil, { needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" },
+			choices = { { "always", "Always" }, { "group", "In a group or with a pet" }, { "party", "Only in a group" } } }),
+		S("nameplates.threatValueColour", "bool", true, "Threat value in the threat colour", "Off, the value is white.", { needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatValueSize", "number", 100, "Threat value size", "100% is the size of the game's health text.",
+			{ min = 50, max = 200, step = 5, unit = "%", needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatName", "bool", false, "Threat colour on the name", "While an enemy shows threat, its name takes the threat colour in place of Name colour.", { needs = "nameplates.threat" }),
+		"Enemy's target",
+		S("nameplates.aggroTarget", "bool", false, "Name of the enemy's target", "Who the enemy attacks, right of the health bar, in the class colour of a player.", { needs = "nameplates.threat" }),
+		S("nameplates.aggroTargetCombat", "bool", true, "Only in combat", nil, { needs = "nameplates.aggroTarget" }),
+		S("nameplates.aggroTargetOnly", "bool", false, "Only on your target", nil, { needs = "nameplates.aggroTarget" }),
+		S("nameplates.aggroTargetNotMe", "bool", true, "Not when it attacks you", nil, { needs = "nameplates.aggroTarget" }),
 	} },
 	{ key = "nameplatesText", label = "Text", parent = "nameplates", owner = "nameplates", rows = {
 		"Font",
@@ -21848,6 +21888,12 @@ for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.
 	"grouptools.size", "grouptools.spacing", "grouptools.layout" }) do
 	covered[path] = true
 end
+-- Nor do the threat rows of wave 8 (0.5.9), for the same reason.
+for _, path in ipairs({ "nameplates.threatBar", "nameplates.threatTanks", "nameplates.threatTankColour", "nameplates.threatPet", "nameplates.threatLead",
+	"nameplates.threatNormal", "nameplates.threatElite", "nameplates.threatBoss", "nameplates.threatMinor", "nameplates.threatNeutral", "nameplates.threatTapped",
+	"nameplates.threatInstances" }) do
+	covered[path] = true
+end
 -- Nor do the rows of wave 7 (0.5.9), for the same reason.
 for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour", "hud.xpRepStats",
 	"datapanels.topWidth", "datapanels.bottomWidth", "datapanels.outline", "datapanels.shadow", "datapanels.textColour", "datapanels.textCustom",
@@ -21867,9 +21913,18 @@ for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour"
 	"cooldowns.countCorner" }) do
 	covered[path] = true
 end
+-- Nor do the glow and fade rows of wave 8 (0.5.9), for the same reason.
+for _, path in ipairs({ "nameplates.threatGlow", "nameplates.threatBorder", "nameplates.threatFade", "nameplates.threatFadeAlpha" }) do
+	covered[path] = true
+end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
 for _, path in ipairs({ "hud.xpOwn", "hud.xpWidth", "hud.xpHeight", "hud.xpShow", "hud.xpOrder", "hud.xpGap", "hud.xpTicks", "hud.xpColour", "hud.xpRested", "hud.xpRestedColour",
 	"hud.xpRepMode", "hud.xpRepColour", "hud.xpTextWhen", "hud.xpTextPlace", "hud.xpTooltip", "hud.xpQuest", "hud.xpQuestColour", "hud.xpStats", "hud.xpStatsTip" }) do
+	covered[path] = true
+end
+-- Nor do the threat text rows of wave 8 (0.5.9), for the same reason.
+for _, path in ipairs({ "nameplates.threatValue", "nameplates.threatValueWhen", "nameplates.threatValueColour", "nameplates.threatValueSize",
+	"nameplates.threatName", "nameplates.aggroTarget", "nameplates.aggroTargetCombat", "nameplates.aggroTargetOnly", "nameplates.aggroTargetNotMe" }) do
 	covered[path] = true
 end
 for _, row in ipairs(ALL) do
@@ -66160,7 +66215,7 @@ end
 -- The page tree and the rows that hold no value of their own. Every label starts "ms-tree:".
 function PT.runMsTree()
 	local clean, joined, need = PT.clean, PT.joined, PT.need
-	local TREE = { { "general", "Colours" }, { "nameplates", "Health bar,Colours and threat,Text,Cast bar,Target and marks,Auras,Game settings" }, { "castbars", "Size,Text and icon" }, { "cooldowns", "States and text" },
+	local TREE = { { "general", "Colours" }, { "nameplates", "Health bar,Colours,Threat,Text,Cast bar,Target and marks,Auras,Game settings" }, { "castbars", "Size,Text and icon" }, { "cooldowns", "States and text" },
 		{ "windows", "Which windows,Bags and items" }, { "unitframes", "Player frame,Target frame,Focus frame,Pet frame,Target of target frame,Party frames,Boss frames,Raid frames,All frames: bars and pictures,All frames: text,All frames: icons and auras" },
 		{ "hud", "Minimap,Buffs and debuffs,Bars, bags and micro menu,Tracker, loot and alerts" }, { "chat", "Chat text,Tooltips" },
 		{ "errands", "Levelling" } }
@@ -67341,7 +67396,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1143 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1168 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67655,7 +67710,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1046 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1071 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -69794,9 +69849,9 @@ function PT.runNav()
 		PT.go(W, "Nameplates")
 		check("window nav: the open module has the mark in the accent, and the mark follows the page", joined(N.marks(W)) == "9a9cf0" and PT.title(W) == "Nameplates")
 		-- Tabs of the open module
-		check("window nav: the tabs of the open module are in its page, and the sidebar lists modules only", PT.tab(W, "Health bar") ~= nil and PT.tab(W, "Colours and threat") ~= nil and PT.tab(W, "Player frame") == nil and PT.page(W, "Health bar") == nil)
+		check("window nav: the tabs of the open module are in its page, and the sidebar lists modules only", PT.tab(W, "Health bar") ~= nil and PT.tab(W, "Colours") ~= nil and PT.tab(W, "Player frame") == nil and PT.page(W, "Health bar") == nil)
 		PT.go(W, "Health bar")
-		check("window nav: a tab opens like any page and keeps the module open", PT.title(W) == "Nameplates" and PT.tab(W, "Colours and threat") ~= nil and #N.marks(W) == 1)
+		check("window nav: a tab opens like any page and keeps the module open", PT.title(W) == "Nameplates" and PT.tab(W, "Colours") ~= nil and #N.marks(W) == 1)
 		-- Move frames
 		local calls = {}
 		local movers = ns.modules.movers
@@ -69837,7 +69892,7 @@ function PT.runNav()
 		W.update(1)
 		check("window nav: a switch set elsewhere shows within half a second", N.track(switch) == "353a31")
 		ns.Set("nameplates.enabled", true)
-		PT.go(W, "Colours and threat")
+		PT.go(W, "Colours")
 		check("window nav: a tab of a module has the switch of the module in the header", select(2, PT.headSwitch(W)) == "Restyle nameplates" and PT.title(W) == "Nameplates")
 		PT.go(W, "Personal resource display")
 		PT.go(W, "Your buffs")
@@ -70272,7 +70327,7 @@ function PT.runTabs()
 	T.TABS = {
 		{ "Flat UI", "General, Colours" },
 		{ "Unit frames", "General, Per frame, Bars and pictures, Text, Icons and auras" },
-		{ "Nameplates", "General, Health bar, Colours and threat, Text, Cast bar, Target and marks, Auras, Game settings" },
+		{ "Nameplates", "General, Health bar, Colours, Threat, Text, Cast bar, Target and marks, Auras, Game settings" },
 		{ "Personal resource display", "General, Your buffs" },
 		{ "Cast bars", "General, Size, Text and icon" },
 		{ "Action bars", "General, Button text, Colours and cooldowns, Glows and animations" },
@@ -70301,11 +70356,11 @@ function PT.runTabs()
 			PT.go(W, name)
 			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
 		end
-		check("window tabs: the 39 child pages are the tabs of twelve modules, in the order of the design, and the other sixteen modules have none", children == 39 and #bad == 0, children .. " " .. joined(bad))
+		check("window tabs: the 40 child pages are the tabs of twelve modules, in the order of the design, and the other sixteen modules have none", children == 40 and #bad == 0, children .. " " .. joined(bad))
 		PT.go(W, "Nameplates")
 		PT.go(W, "Health bar")
 		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil
-			and PT.page(W, "Colours and threat") == nil and PT.page(W, "Nameplates") ~= nil and #PT.tabTexts(W) == 8)
+			and PT.page(W, "Colours") == nil and PT.page(W, "Nameplates") ~= nil and #PT.tabTexts(W) == 9)
 		check("window tabs: the tab shows the rows of its page and the header has the switch of the module", PT.row(W, "Health bar border") ~= nil and PT.row(W, "Restyle friendly nameplates") == nil
 			and select(2, PT.headSwitch(W)) == "Restyle nameplates")
 		clean(W, "window tabs modules")
@@ -70493,7 +70548,7 @@ function PT.runTabs()
 			if raw.parent and W.rawOf[raw.parent] == child then PT.press(W, raw) break end
 		end
 		check("window tabs: a tile of Home opens the module on its first tab", PT.title(W) == "Nameplates" and T.line(PT.tab(W, "General")) == "9a9cf0", tostring(PT.title(W)))
-		PT.go(W, "Colours and threat")
+		PT.go(W, "Colours")
 		PT.press(W, PT.control(need(W, T.boolRow("nameplatesColours"))))
 		PT.go(W, "Unit frames")
 		PT.press(W, PT.tab(W, "Bars and pictures"))
@@ -70502,8 +70557,8 @@ function PT.runTabs()
 		PT.press(W, PT.chip(W, "Target"))
 		PT.press(W, PT.control(need(W, T.boolRow("unitframesTarget"))))
 		PT.go(W, "Home")
-		check("window tabs: the changes on Home say the module and the tab", T.count(W, "Nameplates > Colours and threat") == 1 and T.count(W, "Unit frames > Bars and pictures") == 1 and T.count(W, "Unit frames > Per frame > Target") == 1,
-			T.count(W, "Nameplates > Colours and threat") .. T.count(W, "Unit frames > Bars and pictures") .. T.count(W, "Unit frames > Per frame > Target"))
+		check("window tabs: the changes on Home say the module and the tab", T.count(W, "Nameplates > Colours") == 1 and T.count(W, "Unit frames > Bars and pictures") == 1 and T.count(W, "Unit frames > Per frame > Target") == 1,
+			T.count(W, "Nameplates > Colours") .. T.count(W, "Unit frames > Bars and pictures") .. T.count(W, "Unit frames > Per frame > Target"))
 		PT.go(W, "Nameplates")
 		do
 			local PTabs = W.ns.PanelTabs
@@ -94023,7 +94078,7 @@ do
 		-- The rows: where they are saved, their defaults, what they need and their choices.
 		do
 			local W = P.world()
-			local want = { colours = false, colourPlayers = "game", targetBar = false, targetBarColour = "ff66b3ff", threat = false, threatRole = "auto", threatGood = "ff4dbf59",
+			local want = { colours = false, colourPlayers = "game", targetBar = false, targetBarColour = "ff66b3ff", threat = true, threatRole = "auto", threatGood = "ff4dbf59",
 				threatTransition = "ffe6c133", threatBad = "ffd94040", hover = false, hoverColour = "ffd9d9d9", eliteColour = "ffffd100", rareColour = "ffc7ccd6", bossColour = "ffff593d" }
 			local bad = {}
 			for key, value in pairs(want) do
@@ -94044,23 +94099,24 @@ do
 					end
 				end
 			end
-			check("ms-pcol: the page Colours and threat holds fifteen rows in order",
-				table.concat(order, ",") == "colours,colourPlayers,targetBar,targetBarColour,threat,threatRole,threatGood,threatTransition,threatBad,hover,hoverColour,healthByLeft,lowHealth,lowHealthAt,lowHealthColour", table.concat(order, ","))
+			check("ms-pcol: the page Colours holds ten rows in order",
+				table.concat(order, ",") == "colours,colourPlayers,targetBar,targetBarColour,hover,hoverColour,healthByLeft,lowHealth,lowHealthAt,lowHealthColour", table.concat(order, ","))
 			check("ms-pcol: the rows that need another name it", rows["nameplatesColours.colourPlayers"].needs == "colours" and rows["nameplatesColours.targetBarColour"].needs == "targetBar"
-				and rows["nameplatesColours.threatRole"].needs == "threat" and rows["nameplatesColours.threatBad"].needs == "threat" and rows["nameplatesColours.hoverColour"].needs == "hover"
+				and rows["nameplatesThreat.threatRole"].needs == "threat" and rows["nameplatesThreat.threatBad"].needs == "threat" and rows["nameplatesColours.hoverColour"].needs == "hover"
 				and rows["nameplatesMarks.eliteColour"].needs == "kindBorder" and rows["nameplatesMarks.rareColour"].needs == "kindBorder" and rows["nameplatesMarks.bossColour"].needs == "kindBorder"
-				and rows["nameplatesColours.colours"].needs == nil and rows["nameplatesColours.threat"].needs == nil and rows["nameplatesColours.hover"].needs == "health")
+				and rows["nameplatesColours.colours"].needs == nil and rows["nameplatesThreat.threat"].needs == nil and rows["nameplatesColours.hover"].needs == "health")
 			check("ms-pcol: the choices", #rows["nameplatesColours.colourPlayers"].choices == 2 and rows["nameplatesColours.colourPlayers"].choices[2][1] == "reaction"
-				and #rows["nameplatesColours.threatRole"].choices == 3 and rows["nameplatesColours.threatRole"].choices[2][1] == "tank" and rows["nameplatesColours.threatRole"].choices[3][1] == "damage")
+				and #rows["nameplatesThreat.threatRole"].choices == 3 and rows["nameplatesThreat.threatRole"].choices[2][1] == "tank" and rows["nameplatesThreat.threatRole"].choices[3][1] == "damage")
 			W.ns.Set("nameplates.threatRole", "healer")
 			W.ns.Set("nameplates.hoverColour", "red")
 			check("ms-pcol: a choice outside its list and a colour that is no colour are refused", W.ns.Get("nameplates.threatRole") == "auto" and W.ns.Get("nameplates.hoverColour") == "ffd9d9d9")
 			clean(W, "ms-pcol rows")
 		end
 
-		-- At the defaults nothing is hooked, read or set, and no timer runs.
+		-- With every colour row off nothing is hooked, read or set, and no timer runs.
 		do
 			local W = P.world()
+			P.set(W, "nameplates.threat", false)
 			local a = P.plate(W, "nameplate1", { friend = false, attack = true, reaction = 2, threat = 3, class = "elite" })
 			local d = P.plate(W, "nameplate2", { friend = false, attack = true })
 			local hooks, gets, sets, border, plain = W.hooks, a.gets, a.sets, P.border(W, a), P.border(W, d)
@@ -94071,7 +94127,7 @@ do
 			a.game = { 0.5, 0.5, 0.5, 1 }
 			P.game(W, a)
 			W.flush()
-			check("ms-pcol: at the defaults the game's call is not followed and the addon never reads or sets the bar's colour", W.hooks == hooks and a.gets == gets and a.sets == sets and P.c(a) == P.HALF,
+			check("ms-pcol: with every colour row off no hook is added and the addon never reads or sets the bar's colour", W.hooks == hooks and a.gets == gets and a.sets == sets and P.c(a) == P.HALF,
 				W.hooks .. " " .. hooks .. " " .. a.gets .. " " .. gets .. " " .. a.sets .. " " .. sets)
 			check("ms-pcol: the mouseover starts no timer and the plates keep their borders", #W.timers == 0 and border == "1.00,0.82,0.00" and P.border(W, a) == "1.00,1.00,1.00" and P.border(W, d) == plain,
 				border .. " " .. P.border(W, a) .. " " .. P.border(W, d))
@@ -94138,6 +94194,7 @@ do
 		-- The target's colour, and the order of the three.
 		do
 			local W = P.world()
+			P.set(W, "nameplates.threat", false)
 			local a = P.plate(W, "nameplate1", { friend = false, attack = true, reaction = 2, sel = { 0.9, 0.1, 0.1 }, threat = 3 })
 			local b = P.plate(W, "nameplate2", { friend = false, attack = true, reaction = 2, sel = { 0.9, 0.1, 0.1 }, threat = 0 })
 			P.set(W, "nameplates.targetBar", true)
@@ -94173,18 +94230,18 @@ do
 			P.set(W, "nameplates.threat", true)
 			P.set(W, "nameplates.threatRole", "tank")
 			local t3, t2, t1, t0 = at(3), at(2), at(1), at(0)
-			check("ms-pcol: a tank wants 3, has 2 as changing hands and 0 or 1 as unwanted", t3 == P.GOOD and t2 == P.CHANGE and t1 == P.BAD and t0 == P.BAD, t3 .. " " .. t2 .. " " .. t1 .. " " .. t0)
+			check("ms-pcol: a tank wants 3, has 1 and 2 as changing hands and 0 as unwanted", t3 == P.GOOD and t2 == P.CHANGE and t1 == P.CHANGE and t0 == P.BAD, t3 .. " " .. t2 .. " " .. t1 .. " " .. t0)
 			P.set(W, "nameplates.threatRole", "damage")
 			t0, t1, t2, t3 = at(0), at(1), at(2), at(3)
 			check("ms-pcol: another role wants 0, has 1 and 2 as changing hands and 3 as unwanted", t0 == P.GOOD and t1 == P.CHANGE and t2 == P.CHANGE and t3 == P.BAD, t0 .. " " .. t1 .. " " .. t2 .. " " .. t3)
-			at(1)
+			at(0)
 			P.set(W, "nameplates.threatRole", "auto")
 			local calls = W.T.calls
 			P.roles(W, "TANK")
 			local asTank = P.c(a)
 			P.roles(W, "HEALER")
-			check("ms-pcol: From your group role is a tank for a role of TANK and not for another, and a change of roles applies without a call of the game",
-				asTank == P.BAD and P.c(a) == P.CHANGE and W.T.calls == calls, asTank .. " " .. P.c(a))
+			check("ms-pcol: From your role, stance or form is a tank for a group role of TANK and not for another, and a change of roles applies without a call of the game",
+				asTank == P.BAD and P.c(a) == P.GOOD and W.T.calls == calls, asTank .. " " .. P.c(a))
 			a.game = { 0.5, 0.5, 0.5, 1 }
 			check("ms-pcol: no threat at all leaves the game's colour", at(nil) == P.HALF, at(nil))
 			P.set(W, "nameplates.colours", true)
@@ -94204,7 +94261,7 @@ do
 			P.set(W, "nameplates.threatRole", "damage")
 			check("ms-pcol: a threat colour changed on the page applies at once", at(0) == "0.00,0.00,1.00", at(0))
 			P.set(W, "nameplates.threat", false)
-			check("ms-pcol: Threat colours off gives the game's colour back", P.c(a) == P.HALF, P.c(a))
+			check("ms-pcol: Threat on nameplates off gives the game's colour back", P.c(a) == P.HALF, P.c(a))
 			clean(W, "ms-pcol threat")
 		end
 
@@ -100950,7 +101007,7 @@ do
 		{ "nameplates.colourPlayers", "mock-nameplate", "reaction", { { "nameplates.colours", true }, { "general.reactionOwn", true }, { "general.reactionHostile", "ff3366ff" } } },
 		{ "nameplates.targetBar", "mock-nameplate", true, {} },
 		{ "nameplates.targetBarColour", "mock-nameplate", "ff12ab34", { { "nameplates.targetBar", true } } },
-		{ "nameplates.threat", "mock-nameplate", true, {} },
+		{ "nameplates.threat", "mock-nameplate", false, {} },
 		{ "nameplates.threatGood", "mock-nameplate", "ff12ab34", { { "nameplates.threat", true } } },
 		{ "nameplates.threatTransition", "mock-nameplate", "ff12ab34", { { "nameplates.threat", true } } },
 		{ "nameplates.threatBad", "mock-nameplate", "ff12ab34", { { "nameplates.threat", true } } },

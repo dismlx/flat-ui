@@ -294,8 +294,9 @@ local function KindColour(kind, inner)
 	return ns.Colour(path)
 end
 
--- The colour and thickness of the border of one plate: the target and the focus have their own, and so does the kind of
--- unit on every other plate. The health border gets the kind's colour, and a Rare Elite's line inside it shows with it.
+-- The colour and thickness of the border of one plate: the target and the focus have their own, then the mouseover (ns.PlateBorder) and the threat
+-- colour (ns.PlateThreatBorder), and the kind of unit on every other plate. The health border gets the kind's colour, and a Rare Elite's line inside
+-- it shows with it.
 local function Mark(unitFrame, mark, target, focus, kinds)
 	local own = plates[unitFrame]
 	if not own then
@@ -313,6 +314,9 @@ local function Mark(unitFrame, mark, target, focus, kinds)
 	ns.SetOutlineThickness(own.level, px)
 	if r == nil and own.base then
 		r, g, b, px = own.base[1], own.base[2], own.base[3], own.base[4]
+	end
+	if r == nil and own.threat then
+		r, g, b, px = own.threat[1], own.threat[2], own.threat[3], own.threat[4] or KIND_PX
 	end
 	local look = kinds and own.kind and KINDS[own.kind]
 	local inner = false
@@ -1663,6 +1667,19 @@ function ns.PlateBorder(unitFrame, r, g, b, px)
 		return false
 	end
 	own.base = type(r) == "number" and type(g) == "number" and type(b) == "number" and { r, g, b, px } or nil
+	QueueMark(unitFrame)
+	return true
+end
+
+-- The threat colour of a plate's border (PlateThreatLook.lua): after the target, the focus and the mouseover, before the colours of Elite, Rare and
+-- Boss, KIND_PX thick unless px is given. False for anything that is not a styled plate; no colour clears it. It stays on a recycled plate unless the
+-- leave hook of the caller clears it.
+function ns.PlateThreatBorder(unitFrame, r, g, b, px)
+	local own = unitFrame ~= nil and not ns.IsSecret(unitFrame) and plates[unitFrame]
+	if not own then
+		return false
+	end
+	own.threat = type(r) == "number" and type(g) == "number" and type(b) == "number" and { r, g, b, px } or nil
 	QueueMark(unitFrame)
 	return true
 end

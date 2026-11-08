@@ -1,27 +1,25 @@
 local _, ns = ...
 
--- Nameplate health bar colours (Nameplates, Colours and threat) and the mouseover border. The game colours a plate's health bar in
--- CompactUnitFrame_UpdateHealthColor (Shared\CompactUnitFrame.lua:645-700), which it runs on health, threat, name and group events and not on a
--- change of target (Shared\CompactUnitFrame.lua:104-145). This file follows that call and answers in the same call, in this order: the target's
--- colour, a threat colour, a reaction colour. The colour the game set is kept and never compared, and given back when every part is off.
--- A plate's border takes the mouseover colour through ns.PlateBorder, so the target and the focus keep theirs.
+-- Nameplate health bar colours (Nameplates, Colours, and Colour health bars by threat on the Threat tab) and the mouseover border. The game colours a
+-- plate's health bar in CompactUnitFrame_UpdateHealthColor (Shared\CompactUnitFrame.lua:644-710), which it runs on health, threat, name and group
+-- events and not on a change of target (Shared\CompactUnitFrame.lua:101-146). This file follows that call and answers in the same call, in this order:
+-- the target's colour, a threat colour, a reaction colour. The threat colour is the colour of the state the threat core keeps for the plate
+-- (PlateThreat.lua); a tapped enemy keeps the game's grey, as Threat Plates puts the tapped colour before the threat colour (Modules/Color.lua:325-358),
+-- and a change of the state outside the game's call paints the plate at once. The colour the game set is kept and never compared, and given back
+-- when every part is off. A plate's border takes the mouseover colour through ns.PlateBorder, so the target and the focus keep theirs.
 
 local KEY = "nameplates"
 local PART, HOVER_PART = "plate colours", "mouseover border"
 local HOOK = "CompactUnitFrame_UpdateHealthColor"
+local MISSING = "Plate colours: the game's health colour call was not found, so nameplate health bars keep the game's colours."
 -- How often, in seconds, the mouseover is looked at while a plate has the mouseover border.
 local EVERY = 0.1
 
--- recs: per unit frame, the colour the game gave the bar (game) and whether this file has painted over it (painted), and the threat read last
--- (threat: true when read, false when the game withheld or refused it, nil when there is none). hovered: the plate that has the mouseover border.
+-- recs: per unit frame, the colour the game gave the bar (game) and whether this file has painted over it (painted). hovered: the plate that has the
+-- mouseover border. applying: the plate whose colour is being worked out here, so a change of its threat heard meanwhile does not paint it twice.
+-- missing: the client has no colour call to follow; noted: /flatui status has said so.
 local recs = setmetatable({}, { __mode = "k" })
-local hovered, ticking, missing = nil, false, false
-
--- True while this file has painted a plate's health bar, so a later colour step skips that plate.
-function ns.PlateOverride(frame)
-	local rec = recs[frame]
-	return rec ~= nil and rec.painted == true
-end
+local hovered, ticking, missing, noted, applying = nil, false, false, false, nil
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -58,43 +56,26 @@ end
 
 -- Whether the rows ask for any colour at all.
 local function Asked()
-	return Opt("colours") == true or Opt("targetBar") == true or Opt("threat") == true
+	return Opt("colours") == true or Opt("targetBar") == true or (Opt("threat") == true and Opt("threatBar") == true)
 end
 
-local function TankRole()
-	local role = Opt("threatRole")
-	if role ~= "auto" then
-		return role == "tank"
-	end
-	return Call(UnitGroupRolesAssigned, "player") == "TANK"
-end
-
--- The colour for the threat the player has on an enemy plate: a tank wants 3, has 2 as changing hands and 0 or 1 as unwanted; any other role
--- wants 0, has 1 and 2 as changing hands and 3 as unwanted. Nothing for a unit the player cannot attack and for an answer that is missing or
--- withheld.
-local function ThreatColour(rec, unit)
-	if Call(UnitCanAttack, "player", unit) ~= true then
-		rec.threat = nil
+-- The colour of the threat state of an enemy plate, or nothing for no state and for a tapped enemy. own: the colour is worked out to paint the
+-- plate here, so a change the threat core hears in this call is painted by this call alone.
+local function FromThreat(frame, own)
+	local PT = ns.PlateThreat
+	if PT == nil then
 		return nil
 	end
-	local ok, situation = pcall(UnitThreatSituation, "player", unit)
-	if not ok or ns.IsSecret(situation) or (situation ~= nil and type(situation) ~= "number") then
-		rec.threat = false
-		return nil
+	local was = applying
+	if own then
+		applying = frame
 	end
-	-- Nil is the game's answer for an enemy the player is not on the threat table of.
-	if situation == nil then
-		rec.threat = nil
-		return nil
+	local ok, state = pcall(PT.Read, frame)
+	applying = was
+	if ok and type(state) == "table" and state.tapped ~= true then
+		return PT.Colour(state)
 	end
-	rec.threat = true
-	local row
-	if TankRole() then
-		row = situation >= 3 and "threatGood" or situation == 2 and "threatTransition" or "threatBad"
-	else
-		row = situation <= 0 and "threatGood" or situation >= 3 and "threatBad" or "threatTransition"
-	end
-	return ns.Colour(KEY .. "." .. row)
+	return nil
 end
 
 -- The colour of the plate's units by reaction. Players keep the game's colour while Players is As the game has it, and when the game withholds
@@ -122,8 +103,8 @@ local function Styled(frame)
 	return Opt("friendly") == true or not Is(frame.isFriend, true)
 end
 
--- Red, green and blue to paint the plate's health bar, or nil to leave the game's colour.
-local function Want(frame, rec)
+-- Red, green and blue to paint the plate's health bar, or nil to leave the game's colour. own: as for FromThreat.
+local function Want(frame, own)
 	if missing or not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) or not ns.IsPlate(frame) or not Styled(frame) then
 		return nil
 	end
@@ -132,16 +113,15 @@ local function Want(frame, rec)
 		return nil
 	end
 	if Opt("targetBar") == true and ns.PlateUnitFrame("target") == frame then
-		rec.threat = nil
 		return ns.Colour(KEY .. ".targetBarColour")
 	end
-	if Opt("threat") == true then
-		local r, g, b = ThreatColour(rec, unit)
+	-- Threat Plates leaves threat out in its By Health mode (Modules/Color.lua:399-402); here Colour health bars by health left yields to it
+	-- through ns.PlateOverride.
+	if Opt("threat") == true and Opt("threatBar") == true then
+		local r, g, b = FromThreat(frame, own)
 		if r then
 			return r, g, b
 		end
-	else
-		rec.threat = nil
 	end
 	if Opt("colours") == true then
 		return ReactionColour(unit)
@@ -160,7 +140,7 @@ local function Apply(frame, fromGame)
 		rec = {}
 		recs[frame] = rec
 	end
-	local r, g, b = Want(frame, rec)
+	local r, g, b = Want(frame, true)
 	local bar = Bar(frame)
 	if bar == nil then
 		return
@@ -186,7 +166,7 @@ function ns.PlateOverride(frame)
 	if not Asked() then
 		return false
 	end
-	return Want(frame, recs[frame] or {}) ~= nil
+	return Want(frame, false) ~= nil
 end
 
 -- The same inside the part that stops after repeated failures, whose colours then go back.
@@ -204,20 +184,39 @@ local function OnColour(frame)
 	end
 end
 
--- Follows the game's call, once. A game without it leaves the colours off, with a line for /flatui status.
+-- Whether a plate has had a threat answer this session.
+local function ThreatSeen()
+	local PT = ns.PlateThreat
+	return PT ~= nil and type(PT.Seen) == "function" and PT.Seen() == true
+end
+
+-- Follows the game's call, once. A game without it leaves the colours off, with a line for /flatui status once a row of colours is on or a plate has
+-- had a threat answer: Threat on nameplates alone, on by default, says nothing in a client that never gives one.
 local function Install()
-	if missing or not Asked() then
-		return
-	end
-	if not ns.FollowGlobal(HOOK, OnColour) then
+	if not missing and Asked() and not ns.FollowGlobal(HOOK, OnColour) then
 		missing = true
-		ns.Note(KEY, "Plate colours: the game's health colour call was not found, so nameplate health bars keep the game's colours.")
+	end
+	if missing and not noted and (Opt("colours") == true or Opt("targetBar") == true or ThreatSeen()) then
+		noted = true
+		ns.Note(KEY, MISSING)
 	end
 end
 
 local function Reapply()
 	Install()
 	ns.EachPlate(Run, false)
+end
+
+-- A plate's threat changed outside the game's colour call (the game's threat update, a role change, the end of a fight): it is painted now. A change
+-- heard while this file works the colour out, or while the threat core reads inside the game's colour call, is painted by that call.
+local function OnThreat(frame)
+	local PT = ns.PlateThreat
+	if applying == frame or (PT ~= nil and type(PT.InColourCall) == "function" and PT.InColourCall()) or Opt("threatBar") ~= true then
+		return
+	end
+	if ns.IsPlate(frame) then
+		Run(frame, false)
+	end
 end
 
 -- The mouseover border -------------------------------------------------------------------------------------
@@ -296,29 +295,12 @@ extra.refresh[#extra.refresh + 1] = function()
 	pcall(Unhover)
 	Mouseover()
 end
-extra.status[#extra.status + 1] = function()
-	if not ns.Enabled(KEY) or Opt("threat") ~= true or ns.PartStopped(KEY, PART) then
-		return nil
-	end
-	local read, withheld = 0, 0
-	ns.EachPlate(function(frame)
-		local rec = recs[frame]
-		if rec ~= nil and rec.threat == true then
-			read = read + 1
-		elseif rec ~= nil and rec.threat == false then
-			withheld = withheld + 1
-		end
-	end)
-	return ("Nameplate threat: plates read %d, without an answer %d."):format(read, withheld)
-end
 
+if ns.PlateThreat ~= nil then
+	ns.PlateThreat.OnChange(OnThreat)
+end
 ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
 	if Opt("targetBar") == true then
-		ns.EachPlate(Run, false)
-	end
-end)
-ns.AddEvent(KEY, "PLAYER_ROLES_ASSIGNED", function()
-	if Opt("threat") == true then
 		ns.EachPlate(Run, false)
 	end
 end)

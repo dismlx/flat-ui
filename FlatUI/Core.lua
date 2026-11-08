@@ -40,6 +40,15 @@ local ADDON_NAME, ns = ...
 -- combat: 2.6 when ticked, its text before that kept in FlatUIDB.cameraGame, and that text again (or the client's default) when unticked while
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.
 -- Its cast and global cooldown progress are Cooldown frames of its own fed the game's duration objects.
+-- Nameplate threat follows CompactUnitFrame_UpdateAggroHighlight with hooksecurefunc and only reads threat, roles, stances, forms and auras; a
+-- frame of its own hears UPDATE_SHAPESHIFT_FORM for a warrior or druid, and /flatui role sets Your role. With Fade enemies held for you, Nameplates
+-- writes the alpha of the game's nameplate unit frame (SetAlpha), read first and put back when the plate loses its fade, leaves, or the row, page
+-- or module goes off, and sets it again after CompactUnitFrame_UpdateCenterStatusIcon, which it follows with hooksecurefunc. The threat ring is an
+-- outline of its own on a frame of its own on the health bar, made and anchored out of combat, and Mark gives the health bar border a threat colour
+-- through ns.PlateThreatBorder. The threat value and the name of the enemy's target are font strings of its own on the plate, made and placed out
+-- of combat on a plate that may be protected, written with SetText, SetFormattedText, SetTextColor and SetAlphaFromBoolean from the game's answers
+-- as they are; with Threat colour on the name, the name takes the threat colour with SetVertexColor, as Name colour does, kept and put back the
+-- same way.
 -- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- repairs with RepairAllItems, buys with BuyMerchantItem, sells the cursor item with SellCursorItem, loots with LootSlot, learns with
 -- BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on its own button, and answers summons, resurrections, invites

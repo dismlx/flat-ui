@@ -19,9 +19,12 @@ CameraZoom.lua
 CursorRing.lua
 Fonts.lua
 Nameplates.lua
+PlateThreat.lua
 PlateColours.lua
+PlateThreatLook.lua
 PlateText.lua
 PlateClick.lua
+PlateThreatText.lua
 CombatBurst.lua
 CombatText.lua
 ScrollText.lua
