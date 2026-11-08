@@ -1474,21 +1474,37 @@ local function Rgb(colour)
 	end
 end
 
+-- With Threat border on tanks at Not shown, a party or raid member who is a tank (UnitParts.lua) keeps a plain border while it holds aggro: the colour of the
+-- game's threat glow is left out, and the glow stays as the game draws it from UnitThreatSituation (Shared/CompactUnitFrame.lua:907-932). Only whether the
+-- member is a tank is read; whether it has aggro is the game's glow, whose colour is read as before, so nothing withheld is compared. The top debuff of a
+-- party member still colours the border. This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLUnitFrames/
+-- UF_GroupFrames.lua:1634-1653, 9274-9298): its aggro highlight for members who are not tanks, here on the game's own highlight.
+function ns.UnitFrameExtra.calmTank(rec)
+	local isTank = ns.UnitFrameExtra.isTank
+	return (rec.kind == "party" or rec.kind == "raid") and Opt("threatTanks") == "hidden" and isTank ~= nil and isTank(UnitOf(rec)) == true
+end
+
 -- Threat, or the top debuff of a party member, on the health bar border, resting and combat or an attacking pet on the border of
 -- the picture, the kind of a target or focus on both borders of the picture, the thicker one shown only then, and a Rare Elite's line inside
--- them. A raid frame that is the target shows it on the health bar border over threat.
+-- them. A raid frame that is the target shows it on the health bar border over threat: in the colour of the game's selection highlight, which the game
+-- lights for the target (Shared/CompactUnitFrame.lua:893-905), in a colour of the player's own with Border for your target at Own colour, and not at all
+-- with Off, so the threat colour shows. EnhanceQoL's target highlight (UF_GroupFrames.lua:9230-9318) is the model of the choice.
 local function Colour(rec, on)
 	local parts = rec.parts
 	local r, g, b
-	if on and Opt("threat") and parts.flash ~= nil then
+	if on and Opt("threat") and parts.flash ~= nil and not ns.UnitFrameExtra.calmTank(rec) then
 		r, g, b = Lit(parts.flash)
 	end
 	if r == nil and on and Opt("threat") and parts.debuff ~= nil then
 		r, g, b = Lit(parts.debuff)
 	end
-	if on and parts.select ~= nil then
+	local aim = Opt("targetBorder")
+	if on and parts.select ~= nil and aim ~= "off" then
 		local sr, sg, sb = Lit(parts.select)
 		if sr ~= nil then
+			if aim == "own" then
+				sr, sg, sb = ns.Colour(KEY .. ".targetColour")
+			end
 			r, g, b = sr, sg, sb
 		end
 	end
@@ -3491,6 +3507,7 @@ ns.UnitFrameExtra.apply = Apply
 ns.UnitFrameExtra.layout = Layout
 ns.UnitFrameExtra.outline = ShowOutline
 ns.UnitFrameExtra.colourOutline = ColourOutline
+ns.UnitFrameExtra.colour = Colour
 
 ns.Register(KEY, {
 	label = "Unit frames", Start = Refresh, Refresh = Refresh, Resized = Refresh, Status = StatusLines,

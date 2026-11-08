@@ -69,7 +69,10 @@ local ADDON_NAME, ns = ...
 -- Its Equipment set slot opens a menu of its own whose lines call C_EquipmentSet.UseEquipmentSet, never in a fight.
 -- Threat list (off by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
 -- Healer mana (off by default) is a window of its own on UIParent; it only reads mana (UnitPowerPercent) and changes nothing. The dispel border, the
--- debuff type icon and the raid marker of the party and raid frames are textures of Flat UI's own over the game's frames.
+-- debuff type icon and the raid marker of the party and raid frames, the leader and assistant icons of the raid frames and the dispel border of the
+-- player, target and focus frames are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a
+-- frame of Flat UI's own with an outline; all are made and anchored out of combat, and in a fight only their colour, opacity and visibility
+-- change, and which raid marker shows, from the game's answers as they are.
 -- With Pet target frame on (off by default), Unit frames makes one secure button of its own (SecureActionButtonTemplate, no global name, type1
 -- target, unit pettarget, useOnKeyDown false), made, sized, placed and watched only out of combat; the game shows and hides it (RegisterUnitWatch,
 -- taken back with UnregisterUnitWatch). With Druid mana in forms, a druid gets a bar of its own on a frame of its own under the player frame's power bar.

@@ -10848,6 +10848,8 @@ local PAGES = {
 		S("unitframes.status", "bool", true, "Resting and combat colour", "Colours the border of the player and pet portraits: yellow while resting, red in combat. The game's glow stays hidden when this is off.",
 			{ needs = "unitframes.squarePortrait" }),
 		S("unitframes.threat", "bool", true, "Threat border", "Colours the health bar border while a unit has threat. A party member's border takes the colour of their top debuff."),
+		S("unitframes.threatTanks", "choice", "shown", "Threat border on tanks", "A tank who holds aggro as planned keeps a plain border. A tank is a member with the tank role, or the Main Tank of a raid.",
+			{ needs = "unitframes.threat", choices = { { "shown", "Shown" }, { "hidden", "Not shown" } } }),
 		"Elite and Rare",
 		S("unitframes.elite", "bool", true, "Portrait border colour", "Gold for an Elite, silver for a Rare, silver with a gold inner line for a Rare Elite, red for a Boss.",
 			{ needs = "unitframes.squarePortrait" }),
@@ -10906,6 +10908,8 @@ local PAGES = {
 		"Icons",
 		S("unitframes.leaderIcon", "bool", true, "Leader icon"),
 		S("unitframes.roleIcon", "bool", true, "Role icon on player and party frames"),
+		S("unitframes.roleIconRoles", "choice", "all", "Role icons for", "On player, party and raid frames. Main Tank and Main Assist keep their icon.",
+			{ choices = { { "all", "Every role" }, { "support", "Tanks and healers" }, { "healer", "Healers only" } } }),
 		S("unitframes.pvpIcon", "bool", true, "PvP icon"),
 		S("unitframes.raidMarker", "bool", true, "Raid marker on target, focus and boss frames"),
 		S("unitframes.deadText", "bool", true, "Dead text"),
@@ -10916,8 +10920,14 @@ local PAGES = {
 		S("unitframes.totemTimeSize", "number", 80, "Totem time size", nil, { min = 50, max = 200, step = 5, unit = "%", needs = "unitframes.totemTimer" }),
 		"Party and raid frames",
 		S("unitframes.dispelBorder", "bool", true, "Border colour of a debuff you can dispel", "The border of the health bar takes the colour of Magic, Curse, Disease or Poison while the member has a debuff of that type you can dispel."),
+		S("unitframes.dispelSelf", "bool", true, "Also on your player, target and focus frames", "A target or focus you cannot assist shows none.", { needs = "unitframes.dispelBorder" }),
 		S("unitframes.dispelIcon", "bool", true, "Debuff type icon on party frames", "The type of a debuff you can dispel, at the right end of the health bar. The game's raid frames show their own."),
 		S("unitframes.raidFrameMarker", "bool", true, "Raid marker on raid frames", "The game's raid frames show none."),
+		S("unitframes.partyFrameMarker", "bool", true, "Raid marker on party frames", "The game's party frames show none."),
+		S("unitframes.raidLeaderIcon", "bool", true, "Leader and assistant icons on raid frames", "The game's raid frames show none."),
+		S("unitframes.targetBorder", "choice", "game", "Border for your target", "On raid frames, the border of your target. With Own colour the game's party frames get one too.",
+			{ choices = { { "game", "As the game has it" }, { "own", "Own colour" }, { "off", "Off" } } }),
+		S("unitframes.targetColour", "colour", "ffffffff", "Target border colour", nil, { needs = "unitframes.targetBorder", needsIn = { "own" } }),
 	} },
 	{ key = "hud", label = "Minimap and buffs", rows = {
 		S("hud.enabled", "bool", true, "Restyle the minimap, bags and buffs"),
@@ -21802,7 +21812,9 @@ for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour"
 	"unitframes.druidMana", "unitframes.petTarget", "unitframes.petTargetWidth", "mount.falling",
 	"fade.damageMeter", "hud.addonButtonsKeep", "hud.meterClear", "hud.meterClearBoss",
 	"general.cursorRingCast", "general.cursorRingCastColour", "general.cursorRingGcd", "general.cursorRingGcdColour",
-	"errands.sellTwelve", "errands.sellList", "errands.keepList", "errands.guildWhere", "errands.bulkBuy", "errands.confirmTokens", "errands.confirmTradeable" }) do
+	"errands.sellTwelve", "errands.sellList", "errands.keepList", "errands.guildWhere", "errands.bulkBuy", "errands.confirmTokens", "errands.confirmTradeable",
+	"unitframes.threatTanks", "unitframes.roleIconRoles", "unitframes.dispelSelf", "unitframes.partyFrameMarker", "unitframes.raidLeaderIcon",
+	"unitframes.targetBorder", "unitframes.targetColour" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67277,7 +67289,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1101 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1108 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67591,7 +67603,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1004 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1011 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)

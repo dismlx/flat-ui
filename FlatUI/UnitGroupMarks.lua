@@ -1,8 +1,10 @@
 local _, ns = ...
 
 -- Marks on the game's party and raid frames: the colour of a debuff the player can dispel on a border just inside the health bar, with the icon of its
--- type on a party frame, and the raid marker of the unit of a raid frame. All are textures of the addon's own on a frame of its own over the game's
--- frame, made and anchored out of combat; in a fight only their colour, opacity and visibility change.
+-- type on a party frame, the raid marker of the unit of a raid frame or a party frame, the leader and assistant icons of a raid frame and an outline round
+-- the party frame of your target. With Also on your player, target and focus frames the border is on those frames too. All are textures of the addon's own
+-- on a frame of its own over the game's frame, made and anchored out of combat; in a fight only their colour, opacity and visibility change, and which
+-- raid marker shows.
 --
 -- What the player can dispel is the client's own aura filter HARMFUL|RAID: "harmful auras the player can dispel" (Blizzard_FrameXMLUtil/
 -- AuraUtil.lua:275), which the game's party frames (Shared/PartyMemberFrame.lua:143) and raid frames (Blizzard_PrivateAurasUI.lua:486) use for their
@@ -33,16 +35,31 @@ local _, ns = ...
 -- Blizzard_PrivateAurasUI.xml:33-41), apart from the textures of its aggro and target outlines (Shared/CompactUnitFrame.xml:46-51).
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLUnitFrames/UF_GroupFrames.lua:8833-8862, 11626-11780;
 -- UF_GroupFrames_Helper.lua:1990-2077): its dispel tint by a step colour curve over GetAuraDispelTypeColor and its raid icon on group frames, drawn
--- here on the game's frames. Its own group frames, glows, overlays and the filter token are left out, as said above.
+-- here on the game's frames. Its own group frames, glows, overlays and the filter token are left out, as said above. The leader and assistant icons, the
+-- marker on party frames, the outline of your target and the border on your own, your target's and your focus's frames follow it too (UF_GroupFrames.lua:
+-- 8833-8862, 8929-9009, 9230-9272, 15419-15433, 15464-15478; EnhanceQoLUnitFrames/UF.lua:1971-1996, 8194-8300; UF_Helper.lua:192-302): its leader
+-- and assistant icons and raid icon on each member, its target highlight, and its dispel tint on the player, target and focus frames, here as marks of the
+-- addon's own on the game's frames. Its Main Tank and Main Assist icon is left out, as the game's raid frames show those in their role icon.
 
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
-local DISPEL, MARKER = "Dispel highlight", "Raid frame marker"
+local DISPEL, MARKER, LEADER, AIM = "Dispel highlight", "Raid frame marker", "Leader icons", "Target border"
 local FILTER = "HARMFUL|RAID"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local MARKER_FILE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 -- The thickness of the border in screen pixels, the size of a type icon and of a raid marker in units, and the wait before a burst of events is read.
 local RIM_PX, ICON, MARK, SOON = 2, 12, 14, 0.1
+-- The size in units of a raid marker on a party frame and of a leader or assistant icon, and how far the icons sit in from the side of a raid frame and
+-- down from its top: just under the game's row of type icons, 2 units down and 14 high (Blizzard_PrivateAurasUI.lua:899-902, CompactUnitFrameUtil.lua:13).
+local PARTY_MARK, LEAD, LEAD_IN, LEAD_DOWN = 16, 10, 3, 16
+-- The leader art of the game's party frames (Mainline/PartyFrameTemplates.xml:302), and the leader and assistant files of its chat rosters (Blizzard_Channels/
+-- Mainline/RosterButton.lua:306-309), the first for a client without the atlas.
+local LEADER_ATLAS, LEADER_FILE, ASSISTANT_FILE = "UI-HUD-UnitFrame-Player-Group-LeaderIcon", "Interface\\GroupFrame\\UI-Group-LeaderIcon", "Interface\\GroupFrame\\UI-Group-AssistantIcon"
+-- The frames of your own, your target and your focus, which take the border with Also on your player, target and focus frames, and the unit of each. The
+-- frame's own unit is not used: the player frame shows the vehicle while you are in one (Mainline/PlayerFrame.lua:579-585).
+local SELF = { player = "player", target = "target", focus = "focus" }
+-- The row of the raid marker of each kind of frame.
+local MARKER_ROWS = { raid = "raidFrameMarker", party = "partyFrameMarker" }
 -- The dispel types, the number the game gives each (the x of the curves), and their colours: the game's DEBUFF_TYPE colours (AuraUtil.lua:4-10), as
 -- Hud.lua has them. A debuff whose type the game withholds with its instance ID has the border in white.
 local TYPES = { "Magic", "Curse", "Disease", "Poison" }
@@ -53,6 +70,8 @@ local LAST_ID = 5
 local ATLAS = "RaidFrame-Icon-Debuff"
 local NOTE_BLIND = "Unit frames: Dispel highlight: the game would not say which debuffs a member has, so no border shows."
 local NOTE_TYPE = "Unit frames: Dispel highlight: the game withheld the type of a debuff you can dispel, so its border is white."
+local NOTE_LEAD = "Unit frames: Leader icons: the game would not set the icons from its answer about the leader, so they do not show."
+local NOTE_AIM = "Unit frames: Border for your target: the game would not set the outline from its answer about your target, so the party frames have none."
 
 local IsSecret = ns.IsSecret
 
@@ -80,7 +99,8 @@ local function Field(object, key)
 end
 
 -- A line for /flatui status while what it says holds for any frame: per line, the frames it holds for.
-local saying = { [NOTE_BLIND] = setmetatable({}, { __mode = "k" }), [NOTE_TYPE] = setmetatable({}, { __mode = "k" }) }
+local saying = { [NOTE_BLIND] = setmetatable({}, { __mode = "k" }), [NOTE_TYPE] = setmetatable({}, { __mode = "k" }), [NOTE_LEAD] = setmetatable({}, { __mode = "k" }),
+	[NOTE_AIM] = setmetatable({}, { __mode = "k" }) }
 
 local function Say(text, rec, on)
 	saying[text][rec] = on or nil
@@ -97,8 +117,11 @@ local function Quiet(rec)
 	Say(NOTE_TYPE, rec, false)
 end
 
--- The unit a frame shows: the one a raid frame displays (a vehicle), else its own.
+-- The unit a frame shows: you, your target or your focus on those frames, the one a raid frame displays (a vehicle), else its own.
 local function UnitOfFrame(rec)
+	if SELF[rec.kind] then
+		return SELF[rec.kind]
+	end
 	local shown = Field(rec.frame, "displayedUnit")
 	if type(shown) == "string" and shown ~= "" then
 		return shown
@@ -280,6 +303,7 @@ local function PlaceDispel(d)
 end
 
 local function Clear(d)
+	d.rim = nil
 	for _, edge in ipairs(d.edges) do
 		edge:Hide()
 	end
@@ -288,10 +312,13 @@ local function Clear(d)
 	end
 end
 
--- The rows that apply to a frame now: the border, and the icon on a party frame.
+-- The rows that apply to a frame now: the border, and the icon on a party frame. Your own, your target's and your focus's frames take the border with
+-- Also on your player, target and focus frames, and no icon.
 local function Wanted(rec, on)
 	if not on or not rec.made or ns.PartStopped(KEY, DISPEL) or not Readable() then
 		return false, false
+	elseif SELF[rec.kind] then
+		return Opt("dispelBorder") == true and Opt("dispelSelf") == true, false
 	end
 	return Opt("dispelBorder") == true, rec.kind == "party" and Opt("dispelIcon") == true
 end
@@ -332,6 +359,7 @@ local function Draw(rec, d, unit, id, aura)
 	for _, edge in ipairs(d.edges) do
 		edge:SetShown(border)
 	end
+	d.rim = border or nil
 	if d.icons == nil then
 		return
 	end
@@ -363,9 +391,25 @@ end
 -- (UnitFrames.lua:2366-2372, 3105, 3115-3121), which hears the unit again. The frame's own flag is read, not whether it can be seen: the raid frame
 -- manager shows the container of the raid frames again with no call Flat UI follows (Blizzard_CompactRaidFrames/Mainline/
 -- Blizzard_CompactRaidFrameManager.lua:995-1004, 1027-1032; Blizzard_CompactRaidFrameContainer.lua:80-84).
+-- Your own, your target's and your focus's frames hear their unit whether they are shown or not: the game hides the target and focus frames while there is
+-- none (TargetFrameMixin:Update, Mainline/TargetFrame.lua:130-136), and the border with them, and shows them in its own handler of the event after which
+-- they are read again here (Retarget, below), which may run after this one.
 local function Hidden(rec)
+	if SELF[rec.kind] then
+		return false
+	end
 	local ok, shown = pcall(rec.frame.IsShown, rec.frame)
 	return ok and not IsSecret(shown) and shown == false
+end
+
+-- True for a target or focus that you cannot assist, in a plain answer: it shows no border (UnitCanAssist carries no secret predicate,
+-- UnitDocumentation.lua:745-761).
+local function Foe(rec, unit)
+	if (rec.kind ~= "target" and rec.kind ~= "focus") or type(UnitCanAssist) ~= "function" then
+		return false
+	end
+	local ok, can = pcall(UnitCanAssist, "player", unit)
+	return ok and not IsSecret(can) and can == false
 end
 
 local Hear
@@ -382,6 +426,12 @@ local function Read(rec)
 		d.withheld = nil
 		Clear(d)
 		Hear(rec, d, nil)
+		Quiet(rec)
+		return
+	end
+	if Foe(rec, unit) then
+		d.withheld = nil
+		Clear(d)
 		Quiet(rec)
 		return
 	end
@@ -481,7 +531,7 @@ function Hear(rec, d, unit)
 end
 
 local function Dispel(rec, on)
-	if rec.kind ~= "party" and rec.kind ~= "raid" then
+	if rec.kind ~= "party" and rec.kind ~= "raid" and SELF[rec.kind] == nil then
 		return
 	end
 	local border, icon = Wanted(rec, on)
@@ -518,19 +568,104 @@ local function Dispel(rec, on)
 	Soon(rec)
 end
 
+-- A new target or focus: the frame of that kind is read again, a moment later, as the game sends no UNIT_AURA for the unit that is new.
+local function Retarget(kind)
+	for _, rec in pairs(X.records) do
+		if rec.kind == kind and rec.dispel then
+			Soon(rec)
+		end
+	end
+end
+
+-- Marks over a frame --------------------------------------------------------------------------------------------------------------------------------
+
+-- Runs a step of a mark again once the fight is over, once however often it is asked in the fight.
+local function AfterFight(rec, flag, part, fn)
+	if rec[flag] then
+		return
+	end
+	rec[flag] = true
+	ns.OutOfCombat(function()
+		rec[flag] = nil
+		X.run(part, fn, rec, X.active(rec))
+	end)
+end
+
+-- The frame of the addon's own over a party or raid frame that holds its raid marker and, on a raid frame, its leader and assistant icons: six levels above
+-- the game's frame, made out of combat by the first row that needs it.
+local function Holder(rec)
+	if rec.over == nil then
+		local frame = rec.frame
+		local ok, level = pcall(frame.GetFrameLevel, frame)
+		local holder = X.frame(frame, ok and X.number(level) and level + 6 or nil)
+		holder:SetAllPoints(frame)
+		rec.over = holder
+	end
+	return rec.over
+end
+
+-- An answer of the game, as it is, onto the opacity of a region of the addon's own: 1 for true and 0 for false. SetAlphaFromBoolean takes a withheld boolean
+-- (SimpleRegionAPIDocumentation.lua:134-145, SimpleFrameAPIDocumentation.lua:1145-1156), so the answer is never read. True when the game took the answer,
+-- false when it refused it or the client cannot set an opacity from one, nil when there was no answer; the region is clear unless it took one.
+local function FromAnswer(region, call, ...)
+	local set = nil
+	if type(call) == "function" and type(region.SetAlphaFromBoolean) ~= "function" then
+		set = false
+	elseif type(call) == "function" then
+		local ok, answer = pcall(call, ...)
+		if ok and (IsSecret(answer) or type(answer) == "boolean") then
+			set = pcall(region.SetAlphaFromBoolean, region, answer, 1, 0)
+		end
+	end
+	if set ~= true then
+		pcall(region.SetAlpha, region, 0)
+	end
+	return set
+end
+
 -- Raid markers -------------------------------------------------------------------------------------------------------------------------------------
 
+-- Where the marker of a frame sits: at the top of a raid frame, and on a party frame at the top of the picture Flat UI draws, or of the game's portrait
+-- while that shows, as the game centres the marker of its target frame on the top of the portrait (Mainline/TargetFrame.xml:282-287), or at the top of
+-- the health bar of a frame that shows neither. The game's classic party frames have no marker (Mainline/PartyFrameTemplates.xml:79-368).
+local function MarkerSpot(rec)
+	if rec.kind ~= "party" then
+		return rec.frame, "TOP", -1
+	end
+	local pic, portrait = rec.pic, rec.parts.portrait
+	if pic ~= nil and pic.drawn then
+		return pic.frame, "CENTER", 0
+	elseif portrait ~= nil and not (pic ~= nil and pic.none and not pic.game) then
+		return portrait, "CENTER", 0
+	end
+	local entry = rec.byRole.health
+	return entry and entry.target or rec.parts.health, "CENTER", 0
+end
+
+-- Anchors the marker, out of combat and again only when its spot changed. False when the spot changed in a fight: the marker keeps its place until the end.
+local function PlaceMarker(rec)
+	local m = rec.marker
+	local to, point, y = MarkerSpot(rec)
+	if to == nil or m.to == to then
+		return true
+	elseif InCombatLockdown() then
+		return false
+	end
+	m.icon:ClearAllPoints()
+	m.icon:SetPoint(point, to, "TOP", 0, y)
+	m.to = to
+	return true
+end
+
 local function MakeMarker(rec)
-	local frame = rec.frame
-	local ok, level = pcall(frame.GetFrameLevel, frame)
-	local holder = X.frame(frame, ok and X.number(level) and level + 6 or nil)
-	holder:SetAllPoints(frame)
+	local holder = Holder(rec)
 	local icon = Own(holder:CreateTexture(nil, "OVERLAY", nil, 7))
 	icon:SetTexture(MARKER_FILE)
-	icon:SetSize(MARK, MARK)
-	icon:SetPoint("TOP", frame, "TOP", 0, -1)
+	local size = rec.kind == "party" and PARTY_MARK or MARK
+	icon:SetSize(size, size)
 	icon:Hide()
 	rec.marker = { holder = holder, icon = icon }
+	PlaceMarker(rec)
 	return rec.marker
 end
 
@@ -562,10 +697,11 @@ local function DrawMarker(rec)
 end
 
 local function Marker(rec, on)
-	if rec.kind ~= "raid" then
+	local row = MARKER_ROWS[rec.kind]
+	if row == nil then
 		return
 	end
-	local live = on and rec.made and not ns.PartStopped(KEY, MARKER) and Opt("raidFrameMarker") == true and type(GetRaidTargetIndex) == "function"
+	local live = on and rec.made and not ns.PartStopped(KEY, MARKER) and Opt(row) == true and type(GetRaidTargetIndex) == "function"
 	local m = rec.marker
 	if not live then
 		if m then
@@ -575,26 +711,220 @@ local function Marker(rec, on)
 	end
 	if m == nil then
 		if InCombatLockdown() then
-			if not rec.markerQueued then
-				rec.markerQueued = true
-				ns.OutOfCombat(function()
-					rec.markerQueued = nil
-					X.run(MARKER, Marker, rec, X.active(rec))
-				end)
-			end
+			AfterFight(rec, "markerQueued", MARKER, Marker)
 			return
 		end
 		MakeMarker(rec)
+	elseif not PlaceMarker(rec) then
+		AfterFight(rec, "markerQueued", MARKER, Marker)
 	end
 	DrawMarker(rec)
 end
 
+-- The picture of a party frame was drawn again, or the game's portrait is shown in its place: the marker follows it, out of combat.
+local function Follow(rec)
+	if rec.marker ~= nil and not PlaceMarker(rec) then
+		AfterFight(rec, "markerQueued", MARKER, Marker)
+	end
+end
+
 ns.AddEvent(KEY, "RAID_TARGET_UPDATE", function()
 	for _, rec in pairs(X.records) do
-		if rec.kind == "raid" and rec.marker then
+		if MARKER_ROWS[rec.kind] and rec.marker then
 			X.run(MARKER, Marker, rec, X.active(rec))
 		end
 	end
+end)
+
+-- Leaders and assistants on raid frames --------------------------------------------------------------------------------------------------------------
+
+-- The game's raid frames show no leader or assistant (Shared/CompactUnitFrame.xml:3-111). Two textures of the addon's own on the holder of the marks, 10
+-- units, show them: the leader art of the game's party frames and, a sublevel under it, the assistant's file. The top of a raid frame is full. In the
+-- game's default layout, Legacy (Blizzard_EditMode/Shared/EditModeManager.lua:554-557, Mainline/EditModePresetLayouts.lua:302), the role icon is at the top
+-- left and the name runs from it to 3 units short of the right edge (Shared/CompactUnitFrame.lua:1799-1812); the game's type icons of a dispellable debuff,
+-- 14 units, sit at the top right from 2 units down (Blizzard_PrivateAurasUI.lua:899-902), for every type by default (DisplayAll,
+-- Mainline/CompactUnitFrameOptions.lua:21; Blizzard_PrivateAurasUI.lua:421-435); and the marker is at the top centre. So the icons sit at the right edge
+-- just under that row, 16 units down, clear of the name, the role icon, the type icons, the status text and the icons of the centre. Only the game's auras,
+-- which fill the bottom corners (Blizzard_PrivateAurasUI.lua:879-897), reach that spot, on frames far above the holder (:790-799, 823-827): an aura hides
+-- the icons, never the reverse. Buffs right, debuffs left puts the role icon at the top right and the type icons at the top left
+-- (CompactUnitFrame.lua:1830-1845; Blizzard_PrivateAurasUI.lua:970-973), so there the icons go to the left edge, under the type icons. The side follows the
+-- anchor of the game's role icon, read as it is each time the icons are drawn (GetPoint, SecretWhenAnchoringSecret,
+-- SimpleScriptRegionResizingAPIDocumentation.lua:64-86; a withheld one counts as the default layout), and the icons move only out of combat. A change of
+-- layout in Edit Mode sets the game's frames up again (Blizzard_EditMode/Shared/EditModeSystemTemplates.lua:1570-1572; CompactUnitFrame.lua:435-438,
+-- 478-482), after which the icons are drawn (after.raid, below). Buffs top, debuffs bottom puts the name at the centre (CompactUnitFrame.lua:1815-1828),
+-- where the icons can cover the end of a long one. UnitIsGroupLeader and UnitIsGroupAssistant are withheld for a unit outside the group
+-- (SecretWhenUnitIdentityRestricted, UnitDocumentation.lua:2023-2055): each answer goes to the opacity of its icon as it is (FromAnswer). Main Tank and
+-- Main Assist stay in the game's role icon (displayRaidRoleIcon, Mainline/CompactUnitFrameOptions.lua:14; Shared/UnitFrameUtil.lua:237-276), and party
+-- frames keep the game's leader icon (UnitParts.lua).
+
+-- The side of a raid frame the icons go on, away from the game's role icon, and how far in from it.
+local function LeaderSide(rec)
+	local role = X.path(rec.frame, "roleIcon")
+	if role ~= nil and X.ask(role, "GetPoint", 1) == "TOPRIGHT" then
+		return "TOPLEFT", LEAD_IN
+	end
+	return "TOPRIGHT", -LEAD_IN
+end
+
+-- Anchors the icons, out of combat and again only when their side changed. False when it changed in a fight: they keep their place until the end.
+local function PlaceLeader(rec)
+	local l = rec.leader
+	local point, x = LeaderSide(rec)
+	if l.point == point then
+		return true
+	elseif InCombatLockdown() then
+		return false
+	end
+	for _, icon in ipairs(l.icons) do
+		icon:ClearAllPoints()
+		icon:SetPoint(point, rec.frame, point, x, -LEAD_DOWN)
+	end
+	l.point = point
+	return true
+end
+
+local function MakeLeader(rec)
+	local holder = Holder(rec)
+	local function Icon(sublevel)
+		local icon = Own(holder:CreateTexture(nil, "OVERLAY", nil, sublevel))
+		icon:SetSize(LEAD, LEAD)
+		icon:SetAlpha(0)
+		icon:Hide()
+		return icon
+	end
+	local l = { assistant = Icon(5), leader = Icon(6) }
+	l.icons = { l.assistant, l.leader }
+	if not (AtlasExists(LEADER_ATLAS) and pcall(l.leader.SetAtlas, l.leader, LEADER_ATLAS)) then
+		l.leader:SetTexture(LEADER_FILE)
+	end
+	l.assistant:SetTexture(ASSISTANT_FILE)
+	rec.leader = l
+	PlaceLeader(rec)
+	return l
+end
+
+local function Leader(rec, on)
+	if rec.kind ~= "raid" then
+		return
+	end
+	local l = rec.leader
+	if not (on and rec.made and not ns.PartStopped(KEY, LEADER) and Opt("raidLeaderIcon") == true and type(_G.UnitIsGroupLeader) == "function") then
+		if l then
+			l.leader:Hide()
+			l.assistant:Hide()
+		end
+		Say(NOTE_LEAD, rec, false)
+		return
+	end
+	if l == nil then
+		if InCombatLockdown() then
+			AfterFight(rec, "leaderQueued", LEADER, Leader)
+			return
+		end
+		l = MakeLeader(rec)
+	elseif not PlaceLeader(rec) then
+		AfterFight(rec, "leaderQueued", LEADER, Leader)
+	end
+	-- The member of the frame, not a vehicle it is in.
+	local unit = X.unitOf(rec)
+	local lead, help = nil, nil
+	if unit ~= nil then
+		lead = FromAnswer(l.leader, _G.UnitIsGroupLeader, unit)
+		help = FromAnswer(l.assistant, _G.UnitIsGroupAssistant, unit)
+	else
+		pcall(l.leader.SetAlpha, l.leader, 0)
+		pcall(l.assistant.SetAlpha, l.assistant, 0)
+	end
+	l.leader:Show()
+	l.assistant:Show()
+	Say(NOTE_LEAD, rec, lead == false or help == false)
+end
+
+-- Your target on party frames ------------------------------------------------------------------------------------------------------------------------
+
+-- The game's classic party frames have no highlight for your target (Mainline/PartyFrameTemplates.xml:79-368). With Border for your target at Own colour
+-- each gets an outline of Flat UI's own round the frame (ns.Outline) in the colour of the row, on a frame of its own one level above the game's frame, made
+-- and anchored out of combat, under the frame of the dispel border, which calls for action. Whether the member is your target is UnitIsUnit, withheld where
+-- the game restricts the comparison of units (SecretWhenUnitComparisonRestricted, UnitDocumentation.lua:2410-2426): the answer goes to the opacity of that
+-- frame as it is (FromAnswer), on a new target, a change of the group and a new member of the frame. Raid frames show it on their health bar border
+-- (UnitFrames.lua).
+local function MakeAim(rec)
+	local frame = rec.frame
+	local ok, level = pcall(frame.GetFrameLevel, frame)
+	local box = X.frame(frame, ok and X.number(level) and level + 1 or nil)
+	box:SetAllPoints(frame)
+	box:SetAlpha(0)
+	local outline = ns.Outline(box, box)
+	if outline == nil then
+		box:Hide()
+		return nil
+	end
+	-- The outline of a tool, drawn whatever the borders of the look say, with no background.
+	ns.KeepOutline(outline)
+	ns.SetOutline(outline, true, false)
+	rec.aim = { box = box, outline = outline }
+	return rec.aim
+end
+
+local function Aim(rec, on)
+	if rec.kind ~= "party" then
+		return
+	end
+	local a = rec.aim
+	if not (on and rec.made and not ns.PartStopped(KEY, AIM) and Opt("targetBorder") == "own" and type(_G.UnitIsUnit) == "function") then
+		if a then
+			a.box:Hide()
+		end
+		Say(NOTE_AIM, rec, false)
+		return
+	end
+	if a == nil then
+		if InCombatLockdown() then
+			AfterFight(rec, "aimQueued", AIM, Aim)
+			return
+		end
+		a = MakeAim(rec)
+		if a == nil then
+			return
+		end
+	end
+	ns.SetOutlineColour(a.outline, ns.Colour(KEY .. ".targetColour"))
+	local unit = X.unitOf(rec)
+	local set = nil
+	if unit ~= nil then
+		set = FromAnswer(a.box, _G.UnitIsUnit, unit, "target")
+	else
+		pcall(a.box.SetAlpha, a.box, 0)
+	end
+	a.box:Show()
+	Say(NOTE_AIM, rec, set == false)
+end
+
+-- The leader, an assistant or the group changed: the icons of the raid frames and the outline of your target are drawn again. A raid frame gets them again
+-- in its own update too (after.raid, below), which the game runs on GROUP_ROSTER_UPDATE once it gave the frame its unit.
+local function GroupChanged()
+	for _, rec in pairs(X.records) do
+		if rec.leader then
+			X.run(LEADER, Leader, rec, X.active(rec))
+		end
+		if rec.aim then
+			X.run(AIM, Aim, rec, X.active(rec))
+		end
+	end
+end
+
+ns.AddEvent(KEY, "GROUP_ROSTER_UPDATE", GroupChanged)
+ns.AddEvent(KEY, "PARTY_LEADER_CHANGED", GroupChanged)
+ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
+	Retarget("target")
+	for _, rec in pairs(X.records) do
+		if rec.aim then
+			X.run(AIM, Aim, rec, X.active(rec))
+		end
+	end
+end)
+ns.AddEvent(KEY, "PLAYER_FOCUS_CHANGED", function()
+	Retarget("focus")
 end)
 
 -- A frame that has a new unit hears that unit, and is read and marked again.
@@ -609,12 +939,46 @@ function X.unitChanged(rec)
 	if rec.marker then
 		X.run(MARKER, Marker, rec, X.active(rec))
 	end
+	if rec.aim then
+		X.run(AIM, Aim, rec, X.active(rec))
+	end
 end
+
+-- The lines of /flatui status: the frames that show the dispel border now, and Border for your target while a party or raid frame is styled.
+ns.AddStatus(KEY, function()
+	if not ns.Enabled(KEY) or ns.IsStopped(KEY) then
+		return {}
+	end
+	local rims, aims, group = 0, 0, false
+	for _, rec in pairs(X.records) do
+		group = group or (rec.made == true and (rec.kind == "party" or rec.kind == "raid"))
+		if rec.dispel and rec.dispel.rim then
+			rims = rims + 1
+		end
+		if rec.aim and X.ask(rec.aim.box, "IsShown") == true then
+			aims = aims + 1
+		end
+	end
+	local lines = {}
+	if rims > 0 then
+		lines[#lines + 1] = ("Dispel border: on %d %s now"):format(rims, rims == 1 and "frame" or "frames")
+	end
+	if group then
+		local aim = Opt("targetBorder")
+		if aim == "own" then
+			lines[#lines + 1] = ("Border for your target: own colour, with an outline ready on %d party %s"):format(aims, aims == 1 and "frame" or "frames")
+		else
+			lines[#lines + 1] = "Border for your target: " .. (aim == "off" and "off" or "as the game has it")
+		end
+	end
+	return lines
+end)
 
 -- X.unitsChanged is not followed. UnitFrames.lua runs it for a new target or focus, a new target of either, a change of faction and a change of
 -- the group. The first three change neither the debuffs of a member nor its marker: on a new target the game's raid frames redo only their
 -- highlight, name, border and widgets (Shared/CompactUnitFrame.lua:79-83), and on UNIT_FACTION its party frames only their PvP icon
--- (Mainline/PartyMemberFrame.lua:657-660). A change of the group reaches every frame through the game's own calls. A raid frame or a raid-style
+-- (Mainline/PartyMemberFrame.lua:657-660); the frame of a new target or focus is read on its own event, above. A change of the group reaches every
+-- frame through the game's own calls. A raid frame or a raid-style
 -- party frame runs CompactUnitFrame_UpdateAll, and so after.raid below, on GROUP_ROSTER_UPDATE (CompactUnitFrame.lua:73-74; CompactRaidGroup.lua:47,
 -- CompactPartyFrame.lua:181, Blizzard_CompactRaidFrameContainer.lua:448), when it is given a new unit (CompactUnitFrame.lua:276) and each time it
 -- is set up (:313-315), which the raid-style party frame does with all its frames, its pets included, on GROUP_ROSTER_UPDATE (CompactPartyFrame.lua
@@ -622,5 +986,9 @@ end
 -- PartyMemberFrame.lua:446-471, 650-651); one it hides there (:447-450, 472-477) is read again when it shows.
 table.insert(X.after.apply, { part = DISPEL, fn = Dispel })
 table.insert(X.after.apply, { part = MARKER, fn = Marker })
+table.insert(X.after.apply, { part = LEADER, fn = Leader })
+table.insert(X.after.apply, { part = AIM, fn = Aim })
 table.insert(X.after.raid, { part = DISPEL, fn = Dispel })
 table.insert(X.after.raid, { part = MARKER, fn = Marker })
+table.insert(X.after.raid, { part = LEADER, fn = Leader })
+table.insert(X.after.picture, { part = MARKER, fn = Follow })

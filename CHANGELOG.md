@@ -15,6 +15,8 @@
 - **Errands**, **Guild gold where** (**Everywhere**): elsewhere your own gold pays, and chat says why. Follows EnhanceQoL's auto repair.
 - **Errands**, **Buy in bulk** (off): Shift-click an item at a merchant; beside the game's box, **Stack** buys a full stack and **Most** as many as your gold, the merchant's stock and your bags allow. Both ask first, and the game's box stays open. Follows EnhanceQoL's bulk buy.
 - **Errands**, **Buy with tokens without asking** and **Sell loot still tradeable without asking** (off); a purchase that also costs 150 gold or more still asks. Follows EnhanceQoL's popup helpers.
+- **Unit frames**, **All frames: bars and pictures**, **Threat border on tanks** (**Shown**): with **Not shown** a tank (the tank role or the raid's Main Tank) keeps a plain border while holding aggro; a party member's top debuff still colours it, and a member with no known role keeps the threat colour. `/flatui status` counts the tanks. Follows EnhanceQoL's aggro highlight for non-tanks.
+- **Unit frames**, **All frames: icons and auras**: **Role icons for** (**Every role**, **Tanks and healers** or **Healers only**) on the player, party and raid frames; Main Tank and Main Assist keep theirs. **Party and raid frames** adds **Also on your player, target and focus frames** (the dispel border, without the type icon, and only on a target or focus you can help), **Raid marker on party frames**, **Leader and assistant icons on raid frames** (all on) and **Border for your target** (**As the game has it**; **Own colour** with **Target border colour**, which also outlines your target's party frame; or **Off**). Follows EnhanceQoL's role filter, raid icon, leader icons, target highlight and dispel tint.
 
 ## 0.5.8
 
