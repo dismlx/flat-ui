@@ -2001,3 +2001,5 @@ Register("mock-party-frames", { ids = { "party1", "party2", "party3", "party4", 
 Register("mock-raid-cells", { ids = { "raid", "boss", "boss2" }, raid = { 5, 2 }, rows = { { "raid", { "boss", "boss2" } } } })
 -- The player's frame alone, for the frame style cards of the setup (Config.lua ns.SETUP_FRAME_STYLES).
 Register("mock-player", { ids = { "player" }, rows = { { "player" } } })
+-- Flat UI setup's stop Your target and party: the target beside four party members, the fourth out of range.
+Register("mock-group-frames", { ids = { "target", "party1", "party2", "party3", "party4" }, rows = { { "target", { "party1", "party2", "party3", "party4" } } } })
