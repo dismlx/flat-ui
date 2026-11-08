@@ -96,6 +96,11 @@ local ADDON_NAME, ns = ...
 -- raidtarget action, /readycheck and /countdown. A plain button asks for a role poll, and it writes tooltips in GameTooltip.
 -- Cooldown pulse (off by default) is a frame of its own on UIParent that takes no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
+-- Cooldown icons, with Tooltips on icons, let their own icons hear the mouse and take no click (SetMouseMotionEnabled, SetMouseClickEnabled:
+-- protected functions, called on its own icons only while InCombatLockdown() is false), and write GameTooltip (GameTooltip_SetDefaultAnchor or
+-- SetOwner, SetSpellByID, SetItemByID, SetInventoryItem, Show, and Hide while an icon owns it). The game is asked once to load each item of Add an
+-- item, and each worn item it checks for a use, that the client has not loaded yet (C_Item.RequestLoadItemDataByID). Add the spells of a bar only
+-- reads action slots and the bar page.
 -- With Clear the damage meter on (off by default), Minimap and buffs calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
 -- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
 -- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.
