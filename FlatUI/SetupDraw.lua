@@ -3,9 +3,13 @@ local _, ns = ...
 -- The drawings of Flat UI setup: what a choice looks like, drawn on frames of the addon's own from the settings a module would read. They read through
 -- ns.Get, so the caller runs a drawing inside ns.Viewing with the draft, and a border, a fill, a colour or a texture in a drawing is the one the
 -- addon puts on the game's frames. The numbers are fixed samples: the game withholds a unit's health, power and cast times (UnitDocumentation.lua:1526-1529).
--- A drawing is { frame, regions, draw, parts, mark }: its frame holds its parts, regions lists every texture and text it made, draw paints them all again,
--- and parts says which region a setting changes (hovering the row of the setting marks it). A file of drawings (SetupDraw<Area>.lua) registers
--- ns.SetupDrawings["<id>"] = { build(stage), draw(stage), parts = { [path] = region }, partsOf(stage) }; Adapt makes a drawing of the framework from it.
+-- A drawing is { frame, regions, draw, parts, mark, width, height }: its frame holds its parts, regions lists every texture and text it made, draw paints
+-- them all again, parts says which region a setting changes (hovering the row of the setting marks it), and width and height are the size of what it
+-- last drew when its file says one, else nil. A file of drawings (SetupDraw<Area>.lua) registers ns.SetupDrawings["<id>"] = { build(stage), draw(stage),
+-- parts = { [path] = region }, partsOf(stage) }, whose draw may return that width and height; Adapt makes a drawing of the framework from it.
+-- The step pages show one drawing at a time on the stage of D.Build. A place of its own (D.Context) has its own stage, drawings and view: the preview band
+-- of the options window, each card of setup's stops and the picture of the welcome screen. D.PaintIn paints a drawing there and scales it to fit a box,
+-- and D.GROUND is the ground behind the cards. D.Card is a small picture of a whole profile, for the ready-made looks of the welcome screen.
 
 local kit = ns.PanelKit
 
@@ -14,6 +18,10 @@ ns.SetupDraw = D
 
 local STAGE_W, STAGE_H = 658, 204
 D.STAGE_W, D.STAGE_H = STAGE_W, STAGE_H
+
+-- The ground behind every card of setup and behind the picture of the welcome screen: a dark earth, the colour the unit frame drawings put behind
+-- their frames, so a see-through background looks as it does in the world.
+D.GROUND = { 0.32, 0.27, 0.20 }
 
 -- Colours the drawings use where the game or a setting does not give one.
 local REACTION = { hostile = { 0.77, 0.23, 0.23 }, neutral = { 0.88, 0.77, 0.29 }, friendly = { 0.24, 0.77, 0.35 }, tapped = { 0.54, 0.54, 0.54 } }
@@ -168,38 +176,12 @@ local function BuildBars(drawing)
 	end
 end
 
--- The look of the profile being made: the panel, and three bars beside it.
-local function BuildStart(drawing)
-	local panel, draw = Panel(drawing, drawing.frame, 280)
-	panel:SetPoint("LEFT", drawing.frame, "LEFT", 40, 0)
-	local rows = {
-		{ "Health", SAMPLE_HEALTH, function() return ns.HealthLeftColour(SAMPLE_HEALTH) end },
-		{ "Power", SAMPLE_POWER, function() return Power("MANA") end },
-		{ "Cast", 0.6, function() return ns.Colour("castbars.castColour") end },
-	}
-	local bars = {}
-	for index, row in ipairs(rows) do
-		local label = Text(drawing, drawing.frame, "GameFontHighlightSmall", "LEFT", 50)
-		label:SetPoint("LEFT", drawing.frame, "LEFT", 360, 34 - (index - 1) * 28)
-		label:SetText(row[1])
-		local bar = NewBar(drawing, drawing.frame, 200, 12)
-		bar.frame:SetPoint("LEFT", drawing.frame, "LEFT", 414, 34 - (index - 1) * 28)
-		bars[index] = { bar = bar, row = row }
-	end
-	function drawing.draw()
-		draw()
-		for _, entry in ipairs(bars) do
-			local r, g, b = entry.row[3]()
-			D.SetBar(entry.bar, entry.row[2], r, g, b)
-		end
-	end
-end
-
 -- Pictures of a ready-made profile ----------------------------------------------------------------
 
 -- A card is a 336 by 112 scene of one profile: a player frame with a cast bar, a party column, two nameplates, a combat number and two rows of action
 -- buttons. D.Card makes it from the settings of the view it is given (ns.Viewing), never from the profile in use, and shows the settings that tell the
--- profiles apart. The caller scales the frame (0.595 on the setup panel). Its outlines are pixels whatever the scale (ns.Outline, not direct).
+-- profiles apart. The caller scales the frame (the tiles of the welcome screen fit it to their width). Its outlines are pixels whatever the scale
+-- (ns.Outline, not direct).
 local CARD_W, CARD_H = 336, 112
 local CURRENT, MISSING = "9,360", "2,640"
 local FRIENDLY, GREY, PLAIN = REACTION.friendly, { 0.55, 0.55, 0.55 }, { 0.12, 0.12, 0.12 }
@@ -495,87 +477,7 @@ function D.CardView(valuesOf)
 	end })
 end
 
--- The values of a ready-made profile as Setup.lua checked them, else as the table has them.
-function D.PresetValues(id)
-	local setup = ns.Setup
-	local list = setup and setup.Presets and setup.Presets() or ns.SETUP_PROFILES or {}
-	for _, profile in ipairs(list) do
-		if profile.id == id then
-			return profile.values
-		end
-	end
-	return nil
-end
-
--- Which tile of mock-profiles has the accent edge and which has the tag, set by Setup before each paint.
-D.cardMarks = {}
-
--- The edge of a tile that is not selected.
-D.CARD_EDGE = { 0.4, 0.4, 0.4 }
-
--- The cards on the stage, four to a row so that seven fit the stage, each with its name: the drawing of New profile. A click on a tile goes to D.onCard(id). The selected tile
--- has the accent edge and the recommended one the tag.
-D.CARD_COLS, D.CARD_W, D.CARD_GAP, D.CARD_SCALE = 4, 160, 6, 0.415
-
-local function BuildProfiles(drawing)
-	drawing.cards, drawing.tiles = {}, {}
-	for index, profile in ipairs(ns.SETUP_PROFILES or {}) do
-		local tile = kit.Frame(drawing.frame)
-		tile:SetSize(D.CARD_W, 98)
-		tile:SetPoint("TOPLEFT", drawing.frame, "TOPLEFT", ((index - 1) % D.CARD_COLS) * (D.CARD_W + D.CARD_GAP), -math.floor((index - 1) / D.CARD_COLS) * 106)
-		local edge = ns.Outline(tile, tile, true)
-		-- One pixel, one grey, whatever look is being drafted.
-		ns.SetOutlineThickness(edge, 1)
-		kit.Painted(function()
-			kit.Backing(edge, "raised")
-		end)
-		local card = D.Card(tile, D.CardView(function()
-			return D.PresetValues(profile.id)
-		end))
-		card.frame:SetScale(D.CARD_SCALE)
-		card.frame:SetPoint("TOP", tile, "TOP", 0, -3)
-		local label = Text(drawing, tile, "GameFontNormal", "LEFT", 100)
-		label:SetPoint("TOPLEFT", tile, "TOPLEFT", 8, -54)
-		label:SetText(profile.label)
-		local tag = Text(drawing, tile, "GameFontHighlightSmall", "LEFT", 90)
-		tag:SetPoint("TOPLEFT", tile, "TOPLEFT", 8, -74)
-		tag:SetText("Recommended")
-		kit.Clickable(tile, function()
-			if D.onCard then
-				D.onCard(profile.id)
-			end
-		end)
-		drawing.cards[#drawing.cards + 1] = card
-		drawing.tiles[#drawing.tiles + 1] = { id = profile.id, frame = tile, edge = edge, tag = tag }
-	end
-	function drawing.draw()
-		local marks = D.cardMarks
-		for _, tile in ipairs(drawing.tiles) do
-			if marks.selected == tile.id then
-				ns.SetOutlineColour(tile.edge, kit.Accent())
-			else
-				ns.SetOutlineColour(tile.edge, D.CARD_EDGE[1], D.CARD_EDGE[2], D.CARD_EDGE[3])
-			end
-			tile.tag:SetShown(marks.tag == tile.id)
-		end
-		for _, card in ipairs(drawing.cards) do
-			card.Paint()
-		end
-	end
-end
-
--- The picture of the profile being made, large: Review and the screen after Finish. It reads the view of the setup window.
-local function BuildProfile(drawing)
-	local card = D.Card(drawing.frame, D.view)
-	card.frame:SetScale(1.8)
-	card.frame:SetPoint("CENTER", drawing.frame, "CENTER", 0, 0)
-	drawing.card = card
-	function drawing.draw()
-		card.Paint()
-	end
-end
-
-local BUILDERS = { ["mock-panel"] = BuildPanel, ["mock-bars"] = BuildBars, ["mock-start"] = BuildStart, ["mock-profiles"] = BuildProfiles, ["mock-profile"] = BuildProfile }
+local BUILDERS = { ["mock-panel"] = BuildPanel, ["mock-bars"] = BuildBars }
 
 -- Registered drawings ----------------------------------------------------------------------------
 
@@ -607,7 +509,13 @@ local function Adapt(drawing, registered)
 	-- A stage that names its view makes the outlines of a drawing made after the build follow it too (SetupDrawPlates.lua, P.Follow).
 	drawing.frame.view = D.view
 	function drawing.draw()
-		registered.draw(drawing.frame)
+		-- A draw that returns a width and a height says the size of what it drew, which D.PaintIn fits to its box; any other answer says none.
+		local width, height = registered.draw(drawing.frame)
+		if ns.Finite(width) and ns.Finite(height) and width > 0 and height > 0 then
+			drawing.width, drawing.height = width, height
+		else
+			drawing.width, drawing.height = nil, nil
+		end
 		-- A file that lays its parts out again on each draw gives the new table.
 		if type(of) == "function" then
 			drawing.parts = of(drawing.frame) or drawing.parts
@@ -686,7 +594,8 @@ function D.Build(parent, view)
 	return stage
 end
 
--- A place for drawings of its own (the preview band of the options window): a stage, the drawings made on it and the view they read.
+-- A place for drawings of its own (the preview band of the options window, a card of setup, the picture of the welcome screen): a stage, the drawings
+-- made on it and the view they read.
 function D.Context(parent, view)
 	return { stage = kit.Frame(parent), drawings = {}, failed = {}, view = view }
 end
@@ -740,4 +649,54 @@ function D.Paint()
 	if drawing and drawing.draw then
 		drawing.draw()
 	end
+end
+
+-- Shows drawing `id` on the stage of `context`, paints it under the context's view, and scales the stage so the drawing, with `pad` units round it
+-- (8 when nil, room for a scene's own ground), fits a box of w by h units of the stage's parent, at most `most` times its size (1 when nil), centred.
+-- A drawing that says its size is fitted by it, any other by the stage's 658 by 204. A paint that changes the scale is done once more at the new one,
+-- since a drawing works out its lines in screen pixels from the scale it is painted at (ns.Pixels). Returns true when it painted. An error is reported,
+-- not raised, and once for each drawing of a context, as a card of D.Card is: the cards of a stop paint again each time a choice is pointed at.
+function D.PaintIn(context, id, w, h, most, pad)
+	local stage = context.stage
+	if not context.sized then
+		stage:SetSize(STAGE_W, STAGE_H)
+		context.sized = true
+	end
+	local function Paint()
+		local shown = D.Show(id)
+		if shown then
+			local done, err = ns.Viewing(context.view, D.Paint)
+			if not done then
+				error(err, 0)
+			end
+		end
+		return shown
+	end
+	pad = pad or 8
+	for _ = 1, 2 do
+		local before = stage:GetScale()
+		local ok, drawing = pcall(D.In, context, Paint)
+		if not ok then
+			context.reported = context.reported or {}
+			local key = tostring(id)
+			if not context.reported[key] then
+				context.reported[key] = true
+				geterrorhandler()(drawing)
+			end
+			return false
+		end
+		if not drawing then
+			return false
+		end
+		local dw, dh = drawing.width or STAGE_W, drawing.height or STAGE_H
+		local scale = math.max(0.05, math.min(w / (dw + 2 * pad), h / (dh + 2 * pad), most or 1))
+		stage:SetSize(dw, dh)
+		stage:SetScale(scale)
+		stage:ClearAllPoints()
+		stage:SetPoint("CENTER", stage:GetParent(), "CENTER", 0, 0)
+		if math.abs(scale - before) < 0.001 then
+			break
+		end
+	end
+	return true
 end

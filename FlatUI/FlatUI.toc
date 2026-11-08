@@ -149,6 +149,7 @@ PanelHome.lua
 PanelPreview.lua
 SetupSteps.lua
 SetupProfiles.lua
+SetupStops.lua
 SetupDraw.lua
 SetupDrawLook.lua
 SetupDrawPlates.lua
@@ -161,4 +162,5 @@ SetupDrawChat.lua
 SetupDrawTrackers.lua
 SetupDrawMovers.lua
 Setup.lua
+SetupWalk.lua
 SetupWelcome.lua
