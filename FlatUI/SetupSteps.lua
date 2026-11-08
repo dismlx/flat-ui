@@ -381,6 +381,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.playerPowerText", "c", "mock-unit-frame" },
 		{ "unitframes.combatIcon", "o", "mock-unit-frame" },
 		{ "unitframes.playerPowerBar", "c", "mock-unit-frame" },
+		{ "unitframes.druidMana", "o", "behaviour", "Shows a druid's mana in a thin bar under the player frame while in Bear or Cat Form." },
 		{ "unitframes.targetPicture", "c", "mock-unit-frame" },
 		{ "unitframes.targetName", "o", "mock-unit-frame" },
 		{ "unitframes.targetLevel", "o", "mock-unit-frame" },
@@ -405,6 +406,8 @@ ns.SETUP_STEPS = {
 		{ "unitframes.petPowerText", "o", "mock-unit-frame" },
 		{ "unitframes.petHappiness", "o", "mock-unit-frame" },
 		{ "unitframes.petPowerBar", "c", "mock-unit-frame" },
+		{ "unitframes.petTarget", "o", "behaviour", "Shows a small frame with the health and name of what your pet attacks, which a click targets." },
+		{ "unitframes.petTargetWidth", "r", "behaviour", "Sets the width of the pet target frame." },
 		{ "unitframes.totPicture", "c", "mock-unit-frame" },
 		{ "unitframes.totName", "o", "mock-unit-frame" },
 		{ "unitframes.totNameFit", "o", "mock-unit-frame" },
@@ -1199,6 +1202,7 @@ ns.SETUP_STEPS = {
 	{ id = "mount", area = "Mount key", title = "Mount key", draw = "mock-screen", built = false, rows = {
 		{ "mount.enabled", "c", "behaviour", "Gives you one key in the game's Key Bindings that mounts a random mount or takes a travel form, and dismounts or leaves the form when pressed again." },
 		{ "mount.favourites", "o", "behaviour", "Picks the mount among your favourites while one of them can be used." },
+		{ "mount.falling", "o", "behaviour", "For a mage or a priest: pressed while you fall and are not mounted, the key casts Slow Fall or Levitate on you." },
 	} },
 	{ id = "grouptools", area = "Group tools", title = "Group tools", draw = "mock-screen", built = false, rows = {
 		{ "grouptools.enabled", "c", "behaviour", "Shows a row of buttons for raid markers, a ready check, a role poll and a pull countdown, placed with the movers." },

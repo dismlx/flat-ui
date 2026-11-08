@@ -1217,6 +1217,9 @@ ns.PAGES = {
 		{ key = "playerPowerText", kind = "choice", default = "game", label = "Power text", choices = ns.TEXT_FORMAT_CHOICES },
 		{ key = "combatIcon", kind = "bool", default = true, label = "Combat icon" },
 		{ key = "playerPowerBar", kind = "bool", default = true, label = "Power bar" },
+		-- UnitDruidMana.lua: a thin bar of Flat UI's own under the power bar of the player frame.
+		{ key = "druidMana", kind = "bool", default = true, label = "Druid mana in forms",
+			tip = "For a druid in Bear or Cat Form: a thin mana bar under the player frame's bars. In the other forms the frame's own bar shows mana." },
 	},
 	{
 		key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes",
@@ -1255,6 +1258,11 @@ ns.PAGES = {
 		{ key = "petPowerText", kind = "choice", default = "game", label = "Power text", choices = ns.TEXT_FORMAT_CHOICES },
 		{ key = "petHappiness", kind = "bool", default = true, label = "Happiness face" },
 		{ key = "petPowerBar", kind = "bool", default = true, label = "Power bar" },
+		-- UnitPetTarget.lua: a secure button of Flat UI's own for the pet's target, which the game shows while there is one. Off by default.
+		{ key = "petTarget", kind = "bool", default = false, label = "Pet target frame",
+			tip = "A small frame for what your pet attacks, with its health and name. A click targets it. /flatui move places it." },
+		{ key = "petTargetWidth", kind = "number", default = 120, min = 60, max = 240, step = 10, unit = " px", label = "Pet target width", tip = "Changed out of combat.",
+			needs = "petTarget" },
 	},
 	{
 		key = "unitframesTot", label = "Target of target frame", parent = "unitframes", owner = "unitframes",
@@ -1970,6 +1978,8 @@ ns.PAGES = {
 			tip = "Bind a key to Mount or travel form under Flat UI in the game's Key Bindings. It mounts a random mount you can ride; a druid takes Aquatic Form in water, and Travel Form in a fight, on the move or with no mount; a shaman takes Ghost Wolf in a fight or with no mount. Pressed again, it dismounts or leaves the form." },
 		{ key = "favourites", kind = "bool", default = true, label = "Favourite mounts first",
 			tip = "Picks among the mounts you marked as favourites in the mount journal (right-click a mount there), or among all of them while none of those can be used." },
+		{ key = "falling", kind = "bool", default = false, label = "Slow Fall or Levitate while falling",
+			tip = "For a mage or a priest who knows it: pressed while you fall and are not mounted, the key casts Slow Fall or Levitate on you instead. Not in a fight." },
 	},
 	{
 		key = "fade", label = "Fading",

@@ -10747,6 +10747,7 @@ local PAGES = {
 		S("unitframes.playerPowerText", "choice", "game", "Power text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
 		S("unitframes.combatIcon", "bool", true, "Combat icon"),
 		S("unitframes.playerPowerBar", "bool", true, "Power bar"),
+		S("unitframes.druidMana", "bool", true, "Druid mana in forms", "For a druid in Bear or Cat Form: a thin mana bar under the player frame's bars. In the other forms the frame's own bar shows mana."),
 	} },
 	{ key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes", rows = {
 		S("unitframes.targetPicture", "choice", "auto", "Picture", "Class icon applies to players. Other units keep their face.", { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
@@ -10775,6 +10776,8 @@ local PAGES = {
 		S("unitframes.petPowerText", "choice", "game", "Power text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
 		S("unitframes.petHappiness", "bool", true, "Happiness face"),
 		S("unitframes.petPowerBar", "bool", true, "Power bar"),
+		S("unitframes.petTarget", "bool", false, "Pet target frame", "A small frame for what your pet attacks, with its health and name. A click targets it. /flatui move places it."),
+		S("unitframes.petTargetWidth", "number", 120, "Pet target width", "Changed out of combat.", { min = 60, max = 240, step = 10, unit = " px", needs = "unitframes.petTarget" }),
 	} },
 	{ key = "unitframesTot", label = "Target of target frame", parent = "unitframes", owner = "unitframes", rows = {
 		S("unitframes.totPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
@@ -11328,6 +11331,7 @@ local PAGES = {
 	{ key = "mount", label = "Mount key", rows = {
 		S("mount.enabled", "bool", false, "Mount key", "Bind a key to Mount or travel form under Flat UI in the game's Key Bindings. It mounts a random mount you can ride; a druid takes Aquatic Form in water, and Travel Form in a fight, on the move or with no mount; a shaman takes Ghost Wolf in a fight or with no mount. Pressed again, it dismounts or leaves the form."),
 		S("mount.favourites", "bool", true, "Favourite mounts first", "Picks among the mounts you marked as favourites in the mount journal (right-click a mount there), or among all of them while none of those can be used."),
+		S("mount.falling", "bool", false, "Slow Fall or Levitate while falling", "For a mage or a priest who knows it: pressed while you fall and are not mounted, the key casts Slow Fall or Levitate on you instead. Not in a fight."),
 	} },
 	{ key = "fade", label = "Fading", rows = {
 		S("fade.enabled", "bool", false, "Fade frames when idle"),
@@ -21777,7 +21781,8 @@ end
 -- Nor do the rows of wave 7 (0.5.9), for the same reason.
 for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour", "hud.xpRepStats",
 	"datapanels.topWidth", "datapanels.bottomWidth", "datapanels.outline", "datapanels.shadow", "datapanels.textColour", "datapanels.textCustom",
-	"datapanels.perfColour", "datapanels.combatAlpha", "datapanels.idleAlpha", "datapanels.strata" }) do
+	"datapanels.perfColour", "datapanels.combatAlpha", "datapanels.idleAlpha", "datapanels.strata",
+	"unitframes.druidMana", "unitframes.petTarget", "unitframes.petTargetWidth", "mount.falling" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67252,7 +67257,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1082 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1086 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67566,7 +67571,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 993 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 996 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)

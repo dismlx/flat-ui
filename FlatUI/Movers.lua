@@ -170,6 +170,11 @@ local LIST = {
 	-- the room of three bars at the default size, under the Threat list, and it grows down and to the right from there.
 	{ name = "FlatUIHealerMana", label = "Healer mana", point = "CENTER", kind = "hud", own = true, noScale = true, width = 158, height = 76, x = 420, y = -130,
 		gate = "HealerManaShown", changed = "HealerManaMoved" },
+	-- The pet target frame (UnitPetTarget.lua), which the game shows while the pet has a target: its top left corner is the top left corner of the box,
+	-- which has the room of the frame at the default width, right of the pet frame where the game's default layout puts it. A secure frame: it
+	-- takes a spot out of combat.
+	{ name = "FlatUIPetTarget", label = "Pet target", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 120, height = 20, x = -246, y = 238,
+		gate = "PetTargetShown", changed = "PetTargetMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
