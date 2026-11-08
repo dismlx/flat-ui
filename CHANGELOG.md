@@ -1,3 +1,8 @@
+## 0.5.10
+
+- For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Combat text**, **Whose hits** at **One hit for each of yours**: the game names no spell for a hit (only its school), so Flat UI still matches each hit to one of your casts, now by school and kind from a table of the class spells. A cast that does no damage (Hunter's Mark, Sunder Armor, Faerie Fire, a curse that only weakens, a shout, Polymorph, a totem, a heal) no longer gives the next hit its icon. Damage over time opens no slot when cast and gives its icon to its ticks; a tick of a poison or proc still shows, without an icon. A spell that flies keeps its slot for 3 seconds, an area spell takes up to 10 hits of its school, a channel takes only hits of its school, and a direct hit is no longer taken for a tick. `/flatui combat trace` names each hit's school and spell.
+
 ## 0.5.9
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.

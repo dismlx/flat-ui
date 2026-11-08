@@ -98,26 +98,46 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- the seconds after a channel ends, aura the seconds an answer about the auras of an enemy is kept, offAfter the hit reports in combat with
 -- no signal heard that switch the estimate off. The events heard are for the player and the pet (UnitDocumentation.lua:4614, 4628, 4818,
 -- 4846) and about the player's own attack (UnitDocumentation.lua:3770, 3814, SpellBookDocumentation.lua:974, 980) and the zone.
--- One hit for each of yours gives each action of yours a slot, and a hit fills one free slot: a successful cast of yours or your pet's a slot
--- on the target plate for cast seconds, each hand a slot that frees swingShare of its speed after it was used (UnitAttackSpeed,
--- UnitDocumentation.lua:682-697), a shot the same by UnitRangedDamage (UnitDocumentation.lua:2962-2974), and each harmful aura of yours,
--- up to auraMax, one non-critical hit in each window of swingShare x tick seconds. On the target plate a swing slot and then an aura slot
--- are tried before the cast slot, which stays for a spell hit that can be critical. extra: seconds after a swing slot in which one more physical hit is an
--- extra attack, when no cast slot is open. swingGap is the speed used when the game withholds it. Like the other numbers
--- they are chosen by eye, not the game's.
+-- One hit for each of yours gives each action of yours a slot, and a hit fills one free slot. A successful cast of yours or your pet's is looked
+-- up by its name in ns.CombatSpells (CombatTextSpells.lua, the classic class abilities cast on an enemy, so every rank and language): a spell that
+-- hits (kind hit, both or area) opens a cast slot of its school for cast seconds, or travel seconds when its missile flies, and the slot of an
+-- area spell takes up to areaMax hits of its school, on your target and on the enemies around it; a damage-over-time spell (dot or both) is
+-- recorded on the plate of your target (your pet's for the pet) with its school, icon and time, for dotKeep seconds or until the list of your
+-- auras on that enemy reads none (not in the first travel seconds, while its aura may not be on yet); a channel takes only the hits of its school;
+-- and a spell that does no damage (none), such as a mark, a curse that only weakens, a shout or a totem, opens nothing. A spell not in the table
+-- opens a slot of any school only when the game plainly says it is harmful (C_Spell.IsSpellHarmful, SpellDocumentation.lua:900-913), and a channel
+-- of one takes any hit only then. A hit takes the oldest open cast slot whose school shares a bit with its own (bit.band): a slot of unknown
+-- school takes any hit, and a hit whose school is withheld takes only such a slot. Each hand has a slot that frees swingShare of its speed after
+-- it was used (UnitAttackSpeed, UnitDocumentation.lua:682-697), a shot the same by UnitRangedDamage (UnitDocumentation.lua:2962-2974), and each
+-- harmful aura of yours, up to auraMax, takes one non-critical hit in each window of swingShare x tick seconds: with damage over time of yours
+-- recorded on the enemy, only a hit of the school of one of them, which gets that spell's icon when it is the only one of that school (with no
+-- record, such as a spell cast before a reload, any non-critical hit). On the target plate a swing slot is tried first. A non-critical hit then
+-- tries the cast slot first when its school fits an open cast slot and no recorded damage over time, the aura slot first when it is the other way
+-- round, and else an aura slot and then the cast slot, which stays for a spell hit that can be critical: a critical hit takes no aura slot, as
+-- damage over time cannot be critical in the classic game. extra: seconds after a swing slot in which one more physical hit is an extra attack,
+-- when no cast slot is open. swingGap is the speed used when the game withholds it. travel (3 seconds: a Firebolt flies 16 yards a second and a
+-- Shadow Bolt 20, SpellMisc Speed), areaMax (10 enemies) and dotKeep (30 seconds, the length of most classic damage over time) are chosen by eye
+-- like the other numbers, not the game's.
+-- It is still a guess. The game names no spell and no source for a hit, so the match goes by school, kind and time: two spells of yours of one
+-- school, or a hit of another player of the school of a slot of yours, cannot be told apart, and the damage over time of a weapon poison or
+-- a proc is not cast, so it is never recorded. Details! does not match hits at all: on this client it shows the game's own totals for each spell
+-- (C_DamageMeter, DamageMeterDocumentation.lua), which are secret in combat.
 -- heard: signals heard. blind: answers the game withheld. left and kept: hits left out and shown. unheard: reports in combat with no signal
 -- heard. off: the estimate is off and the game's own numbers show. deaf: no cast event could be registered. last: the last decision, as
--- text. castAt: when the last cast or channel ended. on: the frame that hears the signals is registered.
+-- text, with the school of the hit and the spell it was matched to. castAt: when the last cast or channel ended. on: the frame that hears
+-- the signals is registered.
 -- nextSwing: the first rank of Maul, Heroic Strike, Cleave and Raptor Strike. A cast of one of them (by name, so every rank and language) opens
 -- a next-swing slot for cast seconds that only the physical hit takes, and a word in the extra seconds after that hit is the swing it replaced.
--- castIcons holds the icon of each cast slot at the same index (false for none), chanIcon the icon of the channel, nextIcon and nextName those of the
+-- castSlots holds each open cast slot in the order made: { at = when it closes, school (nil for any), icon (false for none), area = true for an
+-- area spell, left = hits it takes yet, name }. dots holds the damage over time recorded on each plate (or token) as { school, icon, name, at }.
+-- chanIcon, chanName and chanSchool are those of the channel and chanTakes is true when it does damage; nextIcon and nextName those of the
 -- next-swing ability, healIcon the icon of a helpful cast of yours until healUntil, swingIcon and shotIcon those of a swing and a shot.
-local MINE = { cast = 1.5, shots = { [75] = true, [2480] = true, [7918] = true, [2764] = true, [7919] = true, [5019] = true }, tail = 0.5, aura = 0.5, offAfter = 10, swingGap = 1.0, tick = 3.0, swingShare = 0.8, auraMax = 4, extra = 0.4, nextSwing = { 6807, 78, 845, 2973 },
+local MINE = { cast = 1.5, travel = 3.0, areaMax = 10, dotKeep = 30, shots = { [75] = true, [2480] = true, [7918] = true, [2764] = true, [7919] = true, [5019] = true }, tail = 0.5, aura = 0.5, offAfter = 10, swingGap = 1.0, tick = 3.0, swingShare = 0.8, auraMax = 4, extra = 0.4, nextSwing = { 6807, 78, 845, 2973 },
 	unitEvents = { "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" },
 	plainEvents = { "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT", "START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL", "PLAYER_ENTERING_WORLD" } }
 local mine = { castUntil = -1, castAt = 0, on = false, deaf = false, chan = false, swing = false, shoot = false, aura = {}, heard = 0, blind = 0, left = 0, kept = 0,
 	unheard = 0, off = false, last = nil, castSlots = {}, castTaken = -1, hand = { main = -math.huge, off = -math.huge }, shotAt = -math.huge, shotEnd = -math.huge, auraSlots = {}, swingAt = -math.huge, extraUsed = false,
-	castIcons = {}, healUntil = -1, nextUntil = -1, nextAt = -math.huge, trace = false,
+	dots = setmetatable({}, { __mode = "k" }), chanTakes = false, healUntil = -1, nextUntil = -1, nextAt = -math.huge, trace = false,
 	crowd = setmetatable({}, { __mode = "k" }), nextPair = -1 }
 -- How long a target counts as hit by others after a physical hit on it was left out: its extra attack slot stays closed meanwhile. In the open
 -- world players who are not in your group hit the same enemy, and a swing of theirs right after yours looks like an extra attack.
@@ -1835,6 +1855,84 @@ local function NextSwing(id)
 	return nil
 end
 
+-- The entries of ns.CombatSpells (CombatTextSpells.lua) by the name the client gives the first rank, so that every rank and every language of a
+-- spell matches. Made at load from plain names only; when the client gave none then, it is made again at the next cast.
+MINE.byName = {}
+function MINE.SpellNames()
+	if next(MINE.byName) ~= nil or type(ns.CombatSpells) ~= "table" or type(C_Spell) ~= "table" or type(C_Spell.GetSpellName) ~= "function" then
+		return MINE.byName
+	end
+	for id, entry in pairs(ns.CombatSpells) do
+		local ok, name = pcall(C_Spell.GetSpellName, id)
+		if ok and Plain(name, "string") and name ~= "" then
+			MINE.byName[name] = entry
+		end
+	end
+	return MINE.byName
+end
+MINE.SpellNames()
+
+-- The entry of a spell in ns.CombatSpells and the spell's name, found by the name (SpellDocumentation.lua:516-532). The entry is nil for a spell
+-- not in the table, and both are nil for an id or a name the game withholds.
+function MINE.SpellOf(id)
+	if not Plain(id, "number") or type(C_Spell) ~= "table" or type(C_Spell.GetSpellName) ~= "function" then
+		return nil, nil
+	end
+	local ok, name = pcall(C_Spell.GetSpellName, id)
+	if not ok or not Plain(name, "string") then
+		return nil, nil
+	end
+	return MINE.SpellNames()[name], name
+end
+
+-- True only when the game plainly says the spell can be cast on an enemy (C_Spell.IsSpellHarmful, SpellDocumentation.lua:900-913).
+function MINE.Harmful(id)
+	if type(C_Spell) ~= "table" or type(C_Spell.IsSpellHarmful) ~= "function" then
+		return false
+	end
+	local ok, harmful = pcall(C_Spell.IsSpellHarmful, id)
+	return ok and Plain(harmful, "boolean") and harmful
+end
+
+-- True when a hit of the school mask hit can be one of a spell of the school mask slot: the two masks share a bit. A slot of unknown school (nil)
+-- fits any hit, and a hit whose school is withheld fits only such a slot.
+function MINE.SchoolFits(slot, hit)
+	if slot == nil then
+		return true
+	end
+	if not Plain(hit, "number") then
+		return false
+	end
+	if type(bit) ~= "table" or type(bit.band) ~= "function" then
+		return slot == hit
+	end
+	return bit.band(slot, hit) ~= 0
+end
+
+-- The schools of a mask in words (LuaEnum.lua:2538), for the decision text and the trace.
+MINE.schoolWords = { { 1, "physical" }, { 2, "holy" }, { 4, "fire" }, { 8, "nature" }, { 16, "frost" }, { 32, "shadow" }, { 64, "arcane" } }
+function MINE.SchoolWords(mask)
+	if not Plain(mask, "number") then
+		return "withheld"
+	end
+	local words = {}
+	for _, pair in ipairs(MINE.schoolWords) do
+		if mask == pair[1] then
+			return pair[2]
+		elseif type(bit) == "table" and type(bit.band) == "function" and bit.band(mask, pair[1]) ~= 0 then
+			words[#words + 1] = pair[2]
+		end
+	end
+	return #words > 0 and table.concat(words, " and ") or ("mask " .. tostring(mask))
+end
+
+-- The decision as text: "yours" or "left out", the slot or the reason, the spell matched when there is one and the school of the hit, such
+-- as "yours (cast slot of Fireball; fire hit)".
+function MINE.Decision(head, why, school, spell)
+	local hit = Plain(school, "number") and (MINE.SchoolWords(school) .. " hit") or "hit of a withheld school"
+	return ("%s (%s%s; %s)"):format(head, why, Plain(spell, "string") and (" of " .. spell) or "", hit)
+end
+
 -- True when the hit counts as yours (see MINE). Every value is tested for being withheld first. The decision is counted and kept as text.
 local function Mine(plate, unit, school, flag)
 	local now = GetTime()
@@ -1899,25 +1997,138 @@ local function TakeWeapon(speed, last, now)
 	return now - last >= speed * MINE.swingShare
 end
 
--- Takes a cast slot of yours that has not run out. Returns true when it did, and the icon of the cast (nil for none).
-local function TakeCast(now)
-	local list, icons = mine.castSlots, mine.castIcons
-	while list[1] and list[1] < now do
-		table.remove(list, 1)
-		table.remove(icons, 1)
+-- Drops the cast slots whose time is past. A slot of a spell that travels lives longer than one of an instant spell, so the list is in the
+-- order the slots were made and not in the order they close.
+function MINE.DropCasts(now)
+	local list = mine.castSlots
+	for index = #list, 1, -1 do
+		if list[index].at < now then
+			table.remove(list, index)
+		end
 	end
-	if list[1] then
-		mine.castTaken = math.max(mine.castTaken, table.remove(list, 1))
-		return true, table.remove(icons, 1) or nil
+end
+
+-- True while a cast slot of yours is open, whatever its school.
+function MINE.CastOpen(now)
+	for _, slot in ipairs(mine.castSlots) do
+		if slot.at >= now then
+			return true
+		end
 	end
 	return false
 end
 
--- Takes one of the aura slots of an enemy. Returns true when it did, and whether there was a slot to take at all.
-local function TakeAura(unit, now)
+-- The oldest open cast slot a hit of this school can take (SchoolFits) and its place in the list, or nil; with area, only the slot of an
+-- area spell. Nothing is taken.
+function MINE.CastFor(now, school, area)
+	for index, slot in ipairs(mine.castSlots) do
+		if slot.at >= now and (slot.area or not area) and MINE.SchoolFits(slot.school, school) then
+			return slot, index
+		end
+	end
+	return nil
+end
+
+-- Opens a cast slot for a spell of yours that hits: for MINE.cast seconds, or MINE.travel when its missile flies, of the spell's school, taken
+-- by one hit or, for an area spell, by up to MINE.areaMax hits. entry is nil for a harmful spell not in the table: a slot of any school.
+function MINE.OpenCast(now, entry, spellID, name)
+	local list = mine.castSlots
+	local area = entry ~= nil and entry.kind == "area"
+	list[#list + 1] = { at = now + ((entry and entry.travel) and MINE.travel or MINE.cast), school = entry and entry.school or nil,
+		icon = Icon(spellID) or false, area = area, left = area and MINE.areaMax or 1, name = name }
+end
+
+-- Takes the oldest open cast slot of yours a hit of this school can take, with area only that of an area spell. Returns true when it did,
+-- the icon of the cast (nil for none) and the name of the spell. The slot of an area spell stays open until it has taken its hits.
+local function TakeCast(now, school, area)
+	MINE.DropCasts(now)
+	local slot, index = MINE.CastFor(now, school, area)
+	if not slot then
+		return false
+	end
+	mine.castTaken = math.max(mine.castTaken, slot.at)
+	slot.left = slot.left - 1
+	if slot.left <= 0 then
+		table.remove(mine.castSlots, index)
+	end
+	return true, slot.icon or nil, slot.name
+end
+
+-- Records a damage-over-time spell of yours on the enemy you target, or the pet's target for the pet, under the key MineOne judges its hits
+-- by: the plate, or the token when it has none. A new cast of the same spell takes the place of its record.
+function MINE.RecordDot(unit, now, entry, spellID, name)
+	local token = unit == "pet" and "pettarget" or "target"
+	local key = Plate(token) or token
+	local list = mine.dots[key]
+	if not list then
+		list = {}
+		mine.dots[key] = list
+	end
+	for index = #list, 1, -1 do
+		if list[index].name == name then
+			table.remove(list, index)
+		end
+	end
+	list[#list + 1] = { school = entry.school, icon = Icon(spellID) or false, name = name, at = now }
+end
+
+-- The damage over time of yours recorded on an enemy, or nil when there is none. A record goes after MINE.dotKeep seconds, and every record
+-- goes once the list of your auras on the unit reads none, except one younger than MINE.travel seconds, whose aura may not be on yet.
+function MINE.DotsOn(key, unit, now)
+	local list = key ~= nil and mine.dots[key] or nil
+	if not list then
+		return nil
+	end
+	for index = #list, 1, -1 do
+		if now - list[index].at > MINE.dotKeep then
+			table.remove(list, index)
+		end
+	end
+	if list[1] then
+		local number, read = AuraOfYours(unit)
+		if read and number == 0 then
+			for index = #list, 1, -1 do
+				if now - list[index].at > MINE.travel then
+					table.remove(list, index)
+				end
+			end
+		end
+	end
+	if not list[1] then
+		mine.dots[key] = nil
+		return nil
+	end
+	return list
+end
+
+-- How many of the recorded damage-over-time spells a hit of this school can be a tick of, and the one when there is only one.
+function MINE.DotFor(list, school)
+	local count, found = 0, nil
+	if list and Plain(school, "number") then
+		for _, dot in ipairs(list) do
+			if MINE.SchoolFits(dot.school, school) then
+				count, found = count + 1, dot
+			end
+		end
+	end
+	return count, count == 1 and found or nil
+end
+
+-- Takes one of the aura slots of an enemy. With damage over time of yours recorded on it (key, see DotsOn), a hit of the school of one of
+-- them gets its icon and name when it is the only one of that school; a hit of another school takes a slot without them. Returns true when
+-- it did, whether there was a slot to take at all, and the icon (nil for none) and name of the recorded spell.
+local function TakeAura(unit, now, key, school)
+	local dots = MINE.DotsOn(key, unit, now)
 	local number = AuraOfYours(unit)
 	if number == 0 then
 		return false, false
+	end
+	local dot
+	if dots then
+		-- A tick of a school none of them has (a poison or a proc of yours, which is never cast and never recorded) still takes a slot, as
+		-- before the record, but gets no icon.
+		local _
+		_, dot = MINE.DotFor(dots, school)
 	end
 	local slots = mine.auraSlots[unit]
 	if not slots or TakeWeapon(MINE.tick, slots.at, now) then
@@ -1926,7 +2137,7 @@ local function TakeAura(unit, now)
 	end
 	if slots.used < number then
 		slots.used = slots.used + 1
-		return true, true
+		return true, true, dot and dot.icon or nil, dot and dot.name or nil
 	end
 	return false, true
 end
@@ -1959,7 +2170,7 @@ local function TakeSwing(now, unit, key)
 	elseif off and TakeWeapon(off, mine.hand.off, now) then
 		mine.hand.off, mine.swingAt, mine.extraUsed = now, now, false
 		return "swing slot", false
-	elseif Opt("extra") == "plain" and not mine.extraUsed and now - mine.swingAt <= MINE.extra and not InGroup() and not PetOut() and not (mine.castSlots[1] and mine.castSlots[1] >= now)
+	elseif Opt("extra") == "plain" and not mine.extraUsed and now - mine.swingAt <= MINE.extra and not InGroup() and not PetOut() and not MINE.CastOpen(now)
 		and not Crowded(key, now) and AuraListFree(unit) then
 		mine.extraUsed = true
 		return "extra slot", false
@@ -1968,28 +2179,31 @@ local function TakeSwing(now, unit, key)
 end
 
 -- True when the hit takes a slot of yours (see MINE), and true again when that slot is the extra attack slot: one hit for each action. A hit with no free slot is left out. On the target plate a
--- physical hit during auto-attack tries a swing slot first and a non-critical hit tries an aura slot next, so that a cast slot stays for the
--- spell hit it was made for, which can be critical. The cast slot is the fallback for every hit. A next melee ability (Maul, Heroic Strike,
--- Cleave, Raptor Strike) opens a next-swing slot that only the physical hit takes, and a word right after that hit (word is true) is the swing it
+-- physical hit during auto-attack tries a swing slot first. A non-critical hit then tries the cast slot first when its school fits an open cast
+-- slot and no damage over time of yours recorded on the enemy, and else an aura slot first, so that a cast slot stays for the spell hit it was
+-- made for, which can be critical. The cast slot is the fallback for every hit, and each slot and the channel take only a hit of their school
+-- (SchoolFits). On another enemy only an aura slot and the slot of an area spell are tried, in the same order. A next melee ability (Maul,
+-- Heroic Strike, Cleave, Raptor Strike) opens a next-swing slot that only the physical hit takes, and a word right after that hit (word is true) is the swing it
 -- replaced and is left out. From build 70755 the game withholds the amount (blind is true for a WOUND whose amount is withheld), so the report of
 -- the swing it replaced, a hit of 0, cannot be told from the hit and may come first: the slot takes the next physical report within MINE.extra
 -- seconds as well ("next swing too", with no icon or name) unless others hit the target, and the client writes the one of 0 as nothing
 -- (ns.CombatWithheld). A physical hit left out marks its target as hit by others for MINE.crowd seconds. Returns true, the slot taken and the icon of the action (nil for none, by Spell icons).
 local function MineOne(plate, unit, school, flag, word, blind)
 	local now = GetTime()
-	local why, taken, swingTried, auraTried, icon
+	local why, taken, swingTried, auraTried, icon, spell
 	local key = plate or unit
-	if plate == Plate("target") then
-		-- In this mode castUntil is set only by the end of a channel.
-		if mine.chan or now <= mine.castUntil then
-			why = "channel"
+	local onTarget = plate == Plate("target")
+	if onTarget then
+		-- In this mode castUntil is set only by the end of a channel. A channel takes only a hit of its school, and one that does no damage none.
+		if (mine.chan or now <= mine.castUntil) and mine.chanTakes and MINE.SchoolFits(mine.chanSchool, school) then
+			why, spell = "channel", mine.chanName
 		elseif word and now - mine.nextAt <= MINE.extra then
 			taken, auraTried = true, true
 		elseif not word and now <= mine.nextUntil and Plain(school, "number") and school == 1 then
 			mine.nextUntil, mine.nextAt = -1, now
 			mine.hand.main, mine.swingAt, mine.extraUsed = now, now, true
 			mine.nextPair = blind and now + MINE.extra or -1
-			why = "next swing"
+			why, spell = "next swing", mine.nextName
 		elseif blind and now <= mine.nextPair and Plain(school, "number") and school == 1 and not Crowded(key, now) then
 			mine.nextPair = -1
 			why = "next swing too"
@@ -1999,22 +2213,27 @@ local function MineOne(plate, unit, school, flag, word, blind)
 				why, taken = TakeSwing(now, unit, key)
 			end
 			if not why and Plain(flag, "string") and flag ~= "CRITICAL" then
-				auraTried = true
-				local got, slot = TakeAura(unit, now)
-				if got then
-					why = "aura slot"
-				elseif slot then
-					taken = true
+				-- The cast slot first when only it fits the school of the hit, as a direct hit is no tick of a spell of another school.
+				MINE.DropCasts(now)
+				local castFirst = MINE.CastFor(now, school) ~= nil and MINE.DotFor(MINE.DotsOn(key, unit, now), school) == 0
+				if not castFirst then
+					auraTried = true
+					local got, slot, dotIcon, dotName = TakeAura(unit, now, key, school)
+					if got then
+						why, icon, spell = "aura slot", dotIcon, dotName
+					elseif slot then
+						taken = true
+					end
 				end
 			end
-			local cast, castIcon
+			local cast, castIcon, castName
 			if not why then
-				cast, castIcon = TakeCast(now)
+				cast, castIcon, castName = TakeCast(now, school)
 			end
 			if why then
 				-- A slot was taken above.
 			elseif cast then
-				why, icon = "cast slot", castIcon
+				why, icon, spell = "cast slot", castIcon, castName
 			else
 				taken = taken or now <= mine.castTaken
 				if mine.shoot or now <= mine.shotEnd then
@@ -2038,12 +2257,25 @@ local function MineOne(plate, unit, school, flag, word, blind)
 			end
 		end
 	end
+	-- An area spell of yours hits the enemies around your target too: on another enemy its slot takes a hit of its school, before the aura
+	-- slot when no damage over time recorded there has that school, and else after it.
+	local areaFirst = false
+	if not why and not onTarget then
+		MINE.DropCasts(now)
+		areaFirst = MINE.CastFor(now, school, true) ~= nil and MINE.DotFor(MINE.DotsOn(key, unit, now), school) == 0
+		if areaFirst then
+			local cast, castIcon, castName = TakeCast(now, school, true)
+			if cast then
+				why, icon, spell = "cast slot", castIcon, castName
+			end
+		end
+	end
 	if not why and not auraTried then
 		if Plain(flag, "string") then
 			if flag ~= "CRITICAL" then
-				local got, slot = TakeAura(unit, now)
+				local got, slot, dotIcon, dotName = TakeAura(unit, now, key, school)
 				if got then
-					why = "aura slot"
+					why, icon, spell = "aura slot", dotIcon, dotName
 				elseif slot then
 					taken = true
 				end
@@ -2052,8 +2284,14 @@ local function MineOne(plate, unit, school, flag, word, blind)
 			mine.blind = mine.blind + 1
 		end
 	end
+	if not why and not onTarget and not areaFirst then
+		local cast, castIcon, castName = TakeCast(now, school, true)
+		if cast then
+			why, icon, spell = "cast slot", castIcon, castName
+		end
+	end
 	if why then
-		mine.kept, mine.last = mine.kept + 1, "yours (" .. why .. ")"
+		mine.kept, mine.last = mine.kept + 1, MINE.Decision("yours", why, school, spell)
 		local mode = Opt("icons")
 		if why == "channel" then
 			icon = mine.chanIcon
@@ -2069,21 +2307,23 @@ local function MineOne(plate, unit, school, flag, word, blind)
 		return true, why, mode ~= "off" and icon or nil
 	end
 	mine.left = mine.left + 1
-	mine.last = taken and "left out (slot taken)" or "left out (no cast or swing seen)"
+	mine.last = MINE.Decision("left out", taken and "slot taken" or "no cast or swing seen", school)
 	if key ~= nil and Plain(school, "number") and school == 1 then
 		mine.crowd[key] = now
 	end
 	return false
 end
 
--- A signal about you. Only the time is kept, and nothing of the payload but the unit, which must be the player or the pet.
+-- A signal about you. Only the time is kept, and nothing of the payload but the unit, which must be the player or the pet, and the spell: its
+-- icon, its name and its entry in ns.CombatSpells.
 local function OnSignal(_, event, unit, _, spellID)
 	if event == "PLAYER_ENTERING_WORLD" then
 		local was = mine.off
 		mine.heard, mine.unheard, mine.off = 0, 0, mine.deaf
 		mine.chan, mine.swing, mine.shoot = false, false, false
-		mine.castSlots, mine.castTaken, mine.auraSlots = {}, -1, {}
-		mine.castIcons, mine.chanIcon, mine.nextIcon, mine.healIcon, mine.swingIcon, mine.shotIcon = {}, nil, nil, nil, nil, nil
+		mine.castSlots, mine.castTaken, mine.auraSlots, mine.dots = {}, -1, {}, setmetatable({}, { __mode = "k" })
+		mine.chanIcon, mine.chanName, mine.chanSchool, mine.chanTakes = nil, nil, nil, false
+		mine.nextIcon, mine.healIcon, mine.swingIcon, mine.shotIcon = nil, nil, nil, nil
 		mine.healUntil, mine.nextUntil, mine.nextAt, mine.nextName = -1, -1, -math.huge, nil
 		mine.hand, mine.shotAt, mine.shotEnd = { main = -math.huge, off = -math.huge }, -math.huge, -math.huge
 		mine.swingAt, mine.extraUsed = -math.huge, false
@@ -2116,7 +2356,16 @@ local function OnSignal(_, event, unit, _, spellID)
 			return
 		end
 		if event == "UNIT_SPELLCAST_CHANNEL_START" then
-			mine.chan, mine.chanIcon = true, Icon(spellID)
+			-- The channel takes only the hits of the school of the spell (MineOne): any hit for a spell not in ns.CombatSpells that the game
+			-- plainly calls harmful, and none for a channel that does no damage (Drain Mana, Mind Control, Seduction) or one the game does not
+			-- call harmful, such as Evocation or a bandage.
+			local entry, spell = MINE.SpellOf(spellID)
+			mine.chan, mine.chanIcon, mine.chanName = true, Icon(spellID), spell
+			if entry then
+				mine.chanTakes, mine.chanSchool = entry.kind == "channel", entry.school
+			else
+				mine.chanTakes, mine.chanSchool = MINE.Harmful(spellID), nil
+			end
 		elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
 			mine.chan, mine.castUntil, mine.castAt = false, now + MINE.tail, now
 		else
@@ -2124,12 +2373,8 @@ local function OnSignal(_, event, unit, _, spellID)
 			-- that succeeded, and none at a start.
 			if Opt("whose") == "one" then
 				if event == "UNIT_SPELLCAST_SUCCEEDED" then
-					-- Slots run out in the order they were made, so the ones past are dropped here and the list stays short.
-					local list, icons = mine.castSlots, mine.castIcons
-					while list[1] and list[1] < now do
-						table.remove(list, 1)
-						table.remove(icons, 1)
-					end
+					-- The slots past their time are dropped here, so the list stays short.
+					MINE.DropCasts(now)
 					-- A next melee ability of the player opens a next-swing slot and no cast slot.
 					local name = unit == "player" and NextSwing(spellID)
 					-- A shot opens no cast slot either: it stays white from the shot slot (HostileTargetingActionBar.lua:4-11).
@@ -2143,8 +2388,19 @@ local function OnSignal(_, event, unit, _, spellID)
 					elseif name then
 						mine.nextUntil, mine.nextName, mine.nextIcon = now + MINE.cast, name, Icon(spellID)
 					else
-						list[#list + 1] = now + MINE.cast
-						icons[#icons + 1] = Icon(spellID) or false
+						-- The spell by its name in ns.CombatSpells: one that hits opens a cast slot of its school, damage over time is recorded on
+						-- the enemy, and a channel (set at its start) or a spell that does no damage opens nothing. A spell not in the table opens
+						-- a slot of any school only when the game plainly says it is harmful, so a buff, a heal or a summon opens none.
+						local entry, spell = MINE.SpellOf(spellID)
+						local kind = entry and entry.kind
+						if kind == "hit" or kind == "both" or kind == "area" then
+							MINE.OpenCast(now, entry, spellID, spell)
+						elseif not entry and MINE.Harmful(spellID) then
+							MINE.OpenCast(now, nil, spellID, spell)
+						end
+						if kind == "dot" or kind == "both" then
+							MINE.RecordDot(unit, now, entry, spellID, spell)
+						end
 					end
 					-- A helpful cast of yours gives the next heal on you its icon.
 					local helpful = unit == "player" and Plain(spellID, "number") and type(C_Spell) == "table" and type(C_Spell.IsSpellHelpful) == "function"
@@ -2161,12 +2417,9 @@ local function OnSignal(_, event, unit, _, spellID)
 		return
 	end
 	if mine.trace then
-		local name
-		if Plain(spellID, "number") and type(C_Spell) == "table" and type(C_Spell.GetSpellName) == "function" then
-			local ok, got = pcall(C_Spell.GetSpellName, spellID)
-			name = ok and Plain(got, "string") and got or nil
-		end
-		Trace(event, unit, spellID, name)
+		-- The spell, its kind and its school in ns.CombatSpells.
+		local entry, name = MINE.SpellOf(spellID)
+		Trace(event, unit, spellID, name, entry and ("kind " .. entry.kind) or (name and "not in the table") or nil, entry and MINE.SchoolWords(entry.school) or nil)
 	end
 	mine.heard = mine.heard + 1
 	if mine.off then
@@ -2215,7 +2468,7 @@ local function MineFrame()
 		end
 		mine.on, mine.deaf = false, false
 		mine.chan, mine.swing, mine.shoot = false, false, false
-		mine.castSlots, mine.castTaken, mine.auraSlots, mine.castIcons = {}, -1, {}, {}
+		mine.castSlots, mine.castTaken, mine.auraSlots, mine.dots = {}, -1, {}, setmetatable({}, { __mode = "k" })
 	end
 end
 
@@ -2409,13 +2662,14 @@ local function OnCombat(unit, event, flag, amount, school)
 	end
 end
 
--- A plate that gets a unit starts its numbers again, and shows none from the unit before.
+-- A plate that gets a unit starts its numbers again, and shows none from the unit before, and the damage over time of yours recorded on the
+-- unit before goes too.
 local function OnAdded(unit)
 	plateOf.at = nil
 	if Plain(unit, "string") then
 		local plate = Plate(unit)
 		if plate then
-			count[plate] = nil
+			count[plate], mine.dots[plate] = nil, nil
 			for index = #live, 1, -1 do
 				if live[index].plate == plate then
 					Release(index)
