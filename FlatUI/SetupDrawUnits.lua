@@ -127,7 +127,7 @@ end
 -- then the picture and the bars, then the name row, then the icons and texts. Returns the frame.
 local function Above(frame, root, levels)
 	local ok, level = pcall(root.GetFrameLevel, root)
-	if ok and type(level) == "number" then
+	if ok and not ns.IsSecret(level) and type(level) == "number" then
 		pcall(frame.SetFrameLevel, frame, level + levels)
 	end
 	return frame
@@ -739,9 +739,10 @@ end
 -- One frame: the picture, the name row and the bars are cells the gap apart and the gap in from the body's edge, and the body keeps a border's width inside the
 -- root for its border, as every part does in Separate parts. The row is as wide as the bars, or with As tall as the bars runs on over the picture's column. The
 -- picture is a square as tall as the cells beside it, from the row's top (As tall as the frame), the name's (a small frame without a row) or the health bar's to
--- the power bar's bottom; it is on the bars' left, or their right on the target and focus. None leaves no cell.
--- Separate parts: each part's border is t outside it, the row sits on the health bar's top border band, the power bar is 2t under the health bar, and the
--- picture is 3t from the bars, its place kept, empty, with None.
+-- the power bar's bottom; it is on the bars' left, or their right on the target and focus. None leaves no cell. The body wraps the name of a small frame or a
+-- boss frame without a row; the player, target and focus keep theirs above it.
+-- Separate parts: each part's border is t outside it, the row sits on the health bar's top border band, the power bar is 2t under the health bar and, on
+-- every frame but the player's, Space between parts further, and the picture is 3t from the bars, its place kept, empty, with None.
 -- The game's own portrait is a disc of the game's size and gap beside the bars (GAME): the bars move right, and everything moves down, until it fits in the root.
 local function Layout(o, g)
 	local k, s = o.k, o.s
@@ -776,11 +777,19 @@ local function Layout(o, g)
 	local start, seam, nameSeam, drop, apart, inside = t, t, 0, 2 * t, 3 * t, t
 	if L.joined then
 		start, seam, nameSeam, drop, apart, inside = t + g.gap, g.gap, g.gap, g.gap, g.gap, 0
+	elseif L.on and s.kind ~= "player" and g.space > 0 and not ((L.right or L.boss) and Get("powerWidth") == "game") then
+		-- Separate parts: Space between parts lowers the power bar by that much more on every frame but the player's, whose bar hangs by the two borders
+		-- alone; a power bar of the game's width on the target, focus or boss keeps the game's place (UnitFrames.lua FRAME.partsCut and PowerSpan).
+		drop = 2 * t + g.space
 	end
 	local y = start
 	if L.rowOn then
 		L.rowTop = y
 		y = y + L.rowH + seam
+	elseif L.joined and L.large then
+		-- The player, target and focus without a name row keep the game's name above the body, which starts at the bars (UnitFrames.lua FRAME.place).
+		L.nameTop = 0
+		y = NAMEH + start
 	else
 		L.nameTop = y
 		y = y + NAMEH + nameSeam
@@ -832,7 +841,7 @@ local function Layout(o, g)
 	if L.joined then
 		local left = math.min(L.barsLeft, L.rowLeft or L.barsLeft, L.cell and L.picLeft or L.barsLeft)
 		local right = math.max(L.barsLeft + bar, L.rowLeft and (L.rowLeft + L.rowWidth) or 0, L.cell and (L.picLeft + L.side) or 0)
-		local top = L.rowTop or L.nameTop or L.healthTop
+		local top = L.rowTop or (not L.large and L.nameTop) or L.healthTop
 		L.bodyLeft, L.bodyTop = left - g.gap, top - g.gap
 		L.bodyWidth, L.bodyHeight = right - left + 2 * g.gap, L.bottom - top + 2 * g.gap
 	else
@@ -854,8 +863,8 @@ end
 
 -- The one colour of the border round the body and round a round picture in One frame, the first that applies: threat or a party member's top debuff;
 -- resting, combat or an attacking pet; Elite, Rare or Boss; the class or reaction colour of Portrait border Class or reaction colour. Nil leaves the border
--- colour, which Borderless hides. All but threat need Flat UI portraits and a frame with a picture, as on the game's frames (UnitFrames.lua Colour,
--- UnitFramePortrait.lua Colour).
+-- colour, which Borderless hides. The states and the kinds need Flat UI portraits and a frame with a picture (UnitFrames.lua FRAME.colour); Portrait border
+-- needs Flat UI portraits only, so it reaches a boss frame too (UnitFramePortrait.lua Colour).
 local function FrameColour(o, g)
 	local s, k = o.s, o.k
 	local threat = g.threat and (s.threat and THREAT or s.debuff) or nil
@@ -870,7 +879,7 @@ local function FrameColour(o, g)
 	if look then
 		return look.colour
 	end
-	if square and g.portraitBorder == "class" then
+	if g.square and g.portraitBorder == "class" then
 		local r, gr, b = Mute(UnitColour(o))
 		return { r, gr, b }
 	end
@@ -1539,10 +1548,10 @@ function E.draw(o, g)
 		Solid(o.plate, 0.13, 0.12, 0.11, 1)
 	end
 	-- One frame: the one colour of the frame's border (FrameColour), worked out first so that a round picture's ring takes it too, and Portrait border None,
-	-- which leaves the plain border off on a frame with a picture (UnitFramePortrait.lua Colour).
+	-- which leaves the plain border off with Flat UI portraits on, a boss frame's too (UnitFramePortrait.lua Colour).
 	if L.joined then
 		L.colour = FrameColour(o, g)
-		L.bare = (g.square and k.pic and g.portraitBorder == "none" and L.colour == nil) and true or false
+		L.bare = (g.square and g.portraitBorder == "none" and L.colour == nil) and true or false
 	end
 	-- The body: in One frame the plate behind every part, at Background, and the frame's one border, with Border, Borderless and the corners. In Separate
 	-- parts there is none: it is hidden, so that the options window finds the frame under the pointer, and placed for the mark of its rows.
