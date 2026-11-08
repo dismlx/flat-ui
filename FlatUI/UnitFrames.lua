@@ -1474,21 +1474,37 @@ local function Rgb(colour)
 	end
 end
 
+-- With Threat border on tanks at Not shown, a party or raid member who is a tank (UnitParts.lua) keeps a plain border while it holds aggro: the colour of the
+-- game's threat glow is left out, and the glow stays as the game draws it from UnitThreatSituation (Shared/CompactUnitFrame.lua:907-932). Only whether the
+-- member is a tank is read; whether it has aggro is the game's glow, whose colour is read as before, so nothing withheld is compared. The top debuff of a
+-- party member still colours the border. This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLUnitFrames/
+-- UF_GroupFrames.lua:1634-1653, 9274-9298): its aggro highlight for members who are not tanks, here on the game's own highlight.
+function ns.UnitFrameExtra.calmTank(rec)
+	local isTank = ns.UnitFrameExtra.isTank
+	return (rec.kind == "party" or rec.kind == "raid") and Opt("threatTanks") == "hidden" and isTank ~= nil and isTank(UnitOf(rec)) == true
+end
+
 -- Threat, or the top debuff of a party member, on the health bar border, resting and combat or an attacking pet on the border of
 -- the picture, the kind of a target or focus on both borders of the picture, the thicker one shown only then, and a Rare Elite's line inside
--- them. A raid frame that is the target shows it on the health bar border over threat.
+-- them. A raid frame that is the target shows it on the health bar border over threat: in the colour of the game's selection highlight, which the game
+-- lights for the target (Shared/CompactUnitFrame.lua:893-905), in a colour of the player's own with Border for your target at Own colour, and not at all
+-- with Off, so the threat colour shows. EnhanceQoL's target highlight (UF_GroupFrames.lua:9230-9318) is the model of the choice.
 local function Colour(rec, on)
 	local parts = rec.parts
 	local r, g, b
-	if on and Opt("threat") and parts.flash ~= nil then
+	if on and Opt("threat") and parts.flash ~= nil and not ns.UnitFrameExtra.calmTank(rec) then
 		r, g, b = Lit(parts.flash)
 	end
 	if r == nil and on and Opt("threat") and parts.debuff ~= nil then
 		r, g, b = Lit(parts.debuff)
 	end
-	if on and parts.select ~= nil then
+	local aim = Opt("targetBorder")
+	if on and parts.select ~= nil and aim ~= "off" then
 		local sr, sg, sb = Lit(parts.select)
 		if sr ~= nil then
+			if aim == "own" then
+				sr, sg, sb = ns.Colour(KEY .. ".targetColour")
+			end
 			r, g, b = sr, sg, sb
 		end
 	end
@@ -3065,6 +3081,28 @@ local function IsRaidFrame(frame)
 	return false
 end
 
+-- True for one of the game's party and raid frames: a raid frame or a raid-style party frame by its name (RAID_NAMES), or a frame of the party
+-- frame's pool or the pet frame of one (FramesOf). Only the name and the pool are read. Chat.lua asks it of the owner of a unit tooltip for Party and
+-- raid frame tooltips: these frames own the tooltips they show (UnitFrame_OnEnter, Mainline/UnitFrame.lua:387-397, and GameTooltip_SetDefaultAnchor,
+-- SharedTooltipTemplates.lua:87-88, from CompactUnitFrame.xml:105 and Mainline/PartyMemberFrame.lua:730-731, 822-823). The player, target and focus
+-- frames are none of them.
+function ns.UnitFrameExtra.isGroupFrame(frame)
+	if ns.Forbidden(frame) then
+		return false
+	end
+	if IsRaidFrame(frame) then
+		return true
+	end
+	for _, kind in ipairs({ "party", "partypet" }) do
+		for _, member in ipairs(FramesOf(kind)) do
+			if rawequal(member, frame) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- Every frame the game sets up is looked at once, and a raid frame is styled.
 local function OnRaidSetUp(frame)
 	if ns.Enabled(KEY) and not ns.Forbidden(frame) and IsRaidFrame(frame) then
@@ -3491,6 +3529,7 @@ ns.UnitFrameExtra.apply = Apply
 ns.UnitFrameExtra.layout = Layout
 ns.UnitFrameExtra.outline = ShowOutline
 ns.UnitFrameExtra.colourOutline = ColourOutline
+ns.UnitFrameExtra.colour = Colour
 
 ns.Register(KEY, {
 	label = "Unit frames", Start = Refresh, Refresh = Refresh, Resized = Refresh, Status = StatusLines,

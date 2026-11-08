@@ -12,6 +12,14 @@ local _, ns = ...
 -- follow the Cooldown Panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (CooldownPanels.lua:324-604, 7260-7401,
 -- 32609-32766, CooldownPanels_ReadySounds.lua). Only this addon's own icon textures are tinted, with SetVertexColor, or with
 -- SetVertexColorFromBoolean when the game withholds an answer; no range check of the game is switched on or off.
+-- Any item with a use (Add an item, /flatui cooldown add item), the on-use gear of other slots, Add the spells of a bar, the reagent counts,
+-- the tooltips of the icons, the colour and corner of the counts, the colour, edge line and global cooldown of the sweep, the colour, place
+-- and tenths of the countdown, and ready sounds of their own for trinkets, gear and items follow the Cooldown Panels of EnhanceQoL by
+-- Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLCooldownPanels/CooldownPanels.lua:2828-2859, 4048-4069, 7950-8069,
+-- 8070-8570, 8996-9045, 12310-12334, 12974-13042, 14196-14331, 14585-14694, 15012-15039; CooldownPanels_AddEntryPicker.lua;
+-- CooldownPanels_Helper.lua:3746-3893; EnhanceQoL/General/DurationText.lua:1038-1049). The import reads Flat UI's own table of slots and
+-- the game's page calls, never a field of a game button; the tooltips are written in GameTooltip on icons of Flat UI's own, which hear the
+-- mouse move and take no click.
 
 local KEY = "cooldowns"
 local PART = "cooldown manager icons"
@@ -91,6 +99,46 @@ local BAR_SLOTS = { { 1, "ACTIONBUTTON" }, { 13, "ACTIONBUTTON" }, { 73, "ACTION
 	{ 109, "ACTIONBUTTON" }, { 121, "ACTIONBUTTON" }, { 25, "MULTIACTIONBAR3BUTTON" }, { 37, "MULTIACTIONBAR4BUTTON" }, { 49, "MULTIACTIONBAR2BUTTON" },
 	{ 61, "MULTIACTIONBAR1BUTTON" }, { 145, "MULTIACTIONBAR5BUTTON" }, { 157, "MULTIACTIONBAR6BUTTON" }, { 169, "MULTIACTIONBAR7BUTTON" } }
 
+-- The constants of the items with a use, the on-use gear, the import, the tooltips and the looks of the counts and the countdown, in one table so the
+-- file keeps under the client's count of locals.
+local CD = {
+	-- The items of Add an item a character can have on the row, and the most lines of the list to pick them from.
+	MAX_OWN_ITEMS = 12, MAX_BAG_LINES = 100,
+	-- An item cooldown of this many seconds or fewer is the global cooldown (Pulse.lua counts items the same way, after
+	-- EnhanceQoLCooldownPulse/Runtime.lua:254).
+	GCD = 2,
+	-- The slots On-use gear in other slots walks, in slot order: 1 to 19 but the shirt (4), the trinkets (13, 14) and the tabard (19).
+	GEAR_SLOTS = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18 },
+	-- What the row calls each slot: in /flatui cooldown list, in Sound of one icon and in /flatui cooldown sound.
+	SLOT_NAMES = { [1] = "Head", [2] = "Neck", [3] = "Shoulders", [5] = "Chest", [6] = "Waist", [7] = "Legs", [8] = "Feet", [9] = "Wrists",
+		[10] = "Hands", [11] = "Finger 1", [12] = "Finger 2", [13] = "Trinket 1", [14] = "Trinket 2", [15] = "Back", [16] = "Main hand", [17] = "Off hand",
+		[18] = "Ranged" },
+	SLOT_BY_NAME = {},
+	-- The line IDs of Sound of one icon for a slot and for an item are these minus the slot or the item ID, below the kinds' (minus their place).
+	SLOT_LINE = 1000, ITEM_LINE = 2000,
+	-- The first slot of action bars 2 to 8: pages 6, 5, 3, 4, 13, 14 and 15 (Blizzard_ActionBar/Shared/MultiActionBars.lua:1-8; slot =
+	-- (page - 1) * 12 + 1), the numbering EnhanceQoL imports by (CooldownPanels.lua:14585-14594). Bar 1 is the page the main bar shows.
+	IMPORT_FIRST = { false, 61, 49, 25, 37, 145, 157, 169 },
+	MAX_PAGE = 15,
+	-- Where a count sits, 2 units in from its corner; the key moves to the top left while the count is at the top right.
+	CORNERS = { br = { "BOTTOMRIGHT", -2, 2 }, bl = { "BOTTOMLEFT", 2, 2 }, tl = { "TOPLEFT", 2, -2 }, tr = { "TOPRIGHT", -2, -2 } },
+	-- Where the countdown sits on its icon.
+	NUMBER_PLACES = { middle = { "CENTER", 0 }, top = { "TOP", -2 }, bottom = { "BOTTOM", 2 } },
+	WHITE = "ffffffff",
+	OWN_PART = "items", TIP_PART = "icon tooltips", NUMBERS_PART = "countdown look",
+	NO_ITEM_SPELL = "Cooldown icons: the game does not say which items have a use, so On-use gear in other slots and Add an item show nothing.",
+	NO_BAR = "Cooldown icons: the game has no action bar information, so Add the spells of a bar adds nothing.",
+	NO_MOUSE = "Cooldown icons: the game refused the mouse on the icons, so Tooltips on icons may show none.",
+	NO_EDGE = "Cooldown icons: the game refused the colour of the edge line, so Edge colour is not applied.",
+	NO_COUNTDOWN_LOOK = "Cooldown icons: the game refused the countdown's colour, place or tenths, so Countdown colour, Countdown place or Tenths below is not applied.",
+	-- The commands of Add an item and Add the spells of a bar, said when one is typed without what it needs, as the sound command's.
+	ITEM_HELP = "/flatui cooldown add item 6948 - an item ID, a name or a shift-clicked item; /flatui cooldown remove item 6948 takes it off",
+	IMPORT_HELP = "/flatui cooldown import 1 - the spells with a cooldown on action bar 1 to 8",
+}
+for slot, name in pairs(CD.SLOT_NAMES) do
+	CD.SLOT_BY_NAME[name:lower()] = slot
+end
+
 local HELP = {
 	"/flatui cooldown add 2094 - a spell ID, a name or a shift-clicked spell",
 	"/flatui cooldown remove 2094",
@@ -117,6 +165,11 @@ local colourObjects, colourCount = {}, 0
 local soundFor
 -- The item IDs the game has said are consumables.
 local consumable = {}
+-- The helpers of the items with a use (Own), the tooltips (Tip), the import (Bar), the looks of the counts, the sweep and the countdown (Looks) and
+-- the counts of spells (Counts). Own holds, by item ID, whether the item has a use and whether it stacks, once the game has said, and the items the
+-- game was asked to load.
+local Own = { uses = {}, stacks = {}, loading = {} }
+local Tip, Bar, Looks, Counts = {}, {}, {}, {}
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -430,6 +483,170 @@ local function ItemIcon(itemID)
 	return UNKNOWN_ICON
 end
 
+-- Items with a use ----------------------------------------------------------------------------------
+
+-- The kind of ns.COOLDOWN_ITEMS an item is a rank of, and the kind's place in that list; nil for any other item.
+function Own.KindOf(itemID)
+	for index, kind in ipairs(type(ns.COOLDOWN_ITEMS) == "table" and ns.COOLDOWN_ITEMS or {}) do
+		if type(kind) == "table" and type(kind.items) == "table" and Kind(kind.key) == kind then
+			for _, id in ipairs(kind.items) do
+				if id == itemID then
+					return kind, index
+				end
+			end
+		end
+	end
+	return nil
+end
+
+-- Asks the game once to load an item it has not loaded (C_Item.RequestLoadItemDataByID, ItemDocumentation.lua:1710-1718); GET_ITEM_INFO_RECEIVED says
+-- when it has.
+function Own.Load(itemID)
+	if not Own.loading[itemID] and C_Item and type(C_Item.RequestLoadItemDataByID) == "function" then
+		Own.loading[itemID] = true
+		pcall(C_Item.RequestLoadItemDataByID, itemID)
+	end
+end
+
+-- The name of an item (C_Item.GetItemNameByID, ItemDocumentation.lua:846-859, nil while the client has not loaded it), else "Item" and its ID.
+function Own.Name(itemID)
+	local name = Ask(C_Item and C_Item.GetItemNameByID, itemID)
+	if Plain(name, "string") and name ~= "" then
+		return name
+	end
+	Own.Load(itemID)
+	return ("Item %d"):format(itemID)
+end
+
+-- Whether an item has a use: the spell C_Item.GetItemSpell gives (ItemDocumentation.lua:970-985; nothing for an item without one, or one the client
+-- has not loaded). True with a spell; false when the client has the item (C_Item.IsItemDataCachedByID, 1520-1533) and it has none; nil while that is
+-- not known, and the game is asked to load it. EnhanceQoL asks the same way (CooldownPanels.lua:12336-12353).
+function Own.HasUse(itemID)
+	if Own.uses[itemID] ~= nil then
+		return Own.uses[itemID]
+	end
+	local call = C_Item and C_Item.GetItemSpell
+	if type(call) ~= "function" then
+		return nil
+	end
+	local ok, _, spellID = pcall(call, itemID)
+	if ok and Whole(spellID) then
+		Own.uses[itemID] = true
+		return true
+	end
+	if ok and not IsSecret(spellID) and Ask(C_Item.IsItemDataCachedByID, itemID) == true then
+		Own.uses[itemID] = false
+		return false
+	end
+	Own.Load(itemID)
+	return nil
+end
+
+-- Whether the icon of an item shows how many are carried: an item that stacks (C_Item.GetItemMaxStackSizeByID, ItemDocumentation.lua:816-829) or is used
+-- up (C_Item.IsConsumableItem, 1217-1230), as an action button counts an item that is consumable or stackable.
+function Own.Stacks(itemID)
+	if Own.stacks[itemID] ~= nil then
+		return Own.stacks[itemID]
+	end
+	local most = Ask(C_Item and C_Item.GetItemMaxStackSizeByID, itemID)
+	local spent = Ask(C_Item and C_Item.IsConsumableItem, itemID) == true
+	if Plain(most, "number") then
+		Own.stacks[itemID] = most > 1 or spent
+	end
+	return spent or (Plain(most, "number") and most > 1)
+end
+
+-- The items of Add an item for this character (FlatUICharDB.cooldownOwnItems): item IDs, none twice, at most 12, in the order they were added.
+-- Nothing is saved for a character who has added none; make is true to start the list.
+function Own.List(make)
+	local saved = ns.Character()
+	if not saved then
+		return {}
+	end
+	local old = saved.cooldownOwnItems
+	if type(old) ~= "table" and not make then
+		return {}
+	end
+	local list, seen = {}, {}
+	if type(old) == "table" then
+		for _, id in ipairs(old) do
+			if Whole(id) and not seen[id] and #list < CD.MAX_OWN_ITEMS then
+				seen[id] = true
+				list[#list + 1] = id
+			end
+		end
+		local same = #list == #old
+		for key in pairs(old) do
+			same = same and list[key] ~= nil and list[key] == old[key]
+		end
+		if same then
+			return old
+		end
+	end
+	saved.cooldownOwnItems = list
+	return list
+end
+
+-- The items in the bags, each once: { id, name }. Bags 0 to NUM_BAG_SLOTS and the reagent bag after them (Constants.lua:168-170), with
+-- C_Container.GetContainerNumSlots and GetContainerItemInfo (ContainerDocumentation.lua:192-206, 313-326), as TrackerKinds.lua walks them.
+function Own.Bags()
+	local rows, seen = {}, {}
+	local containers = type(C_Container) == "table" and C_Container or {}
+	local bags = Plain(NUM_BAG_SLOTS, "number") and NUM_BAG_SLOTS or 4
+	if Plain(NUM_REAGENTBAG_SLOTS, "number") and NUM_REAGENTBAG_SLOTS > 0 then
+		bags = bags + NUM_REAGENTBAG_SLOTS
+	end
+	for bag = 0, bags do
+		local slots = Ask(containers.GetContainerNumSlots, bag)
+		for slot = 1, Plain(slots, "number") and slots or 0 do
+			local info = Ask(containers.GetContainerItemInfo, bag, slot)
+			if type(info) == "table" then
+				local id, name = Field(info, "itemID"), Field(info, "itemName")
+				if Whole(id) and not seen[id] then
+					seen[id] = true
+					rows[#rows + 1] = { id, Plain(name, "string") and name ~= "" and name or nil }
+				end
+			end
+		end
+	end
+	return rows
+end
+
+-- The ID of an item typed as an ID, a shift-clicked link, item:ID or a name: a name is looked for among the items of the row and in the bags first, then
+-- asked of the game (C_Item.GetItemInfoInstant takes a name, ItemDocumentation.lua:659-680), as TrackerKinds.lua's ItemId finds one.
+function Own.From(text)
+	text = text:match("^%s*(.-)%s*$")
+	local id = tonumber(text:match("^%d+$") or text:match("|Hitem:(%d+)") or text:match("^[Ii]tem:(%d+)"))
+	if Whole(id) then
+		return id
+	end
+	local wanted = text:lower()
+	if wanted == "" then
+		return nil
+	end
+	for _, picked in ipairs(Own.List()) do
+		if Own.Name(picked):lower() == wanted then
+			return picked
+		end
+	end
+	for _, row in ipairs(Own.Bags()) do
+		if row[2] and row[2]:lower() == wanted then
+			return row[1]
+		end
+	end
+	local known = Ask(C_Item and C_Item.GetItemInfoInstant, text)
+	return Whole(known) and known or nil
+end
+
+-- The keys of the ready sound of a slot and of an item in FlatUICharDB.cooldownSounds, beside spell IDs and the keys of kinds.
+local function SlotKey(slot)
+	return "slot:" .. slot
+end
+
+local function ItemKey(itemID)
+	return "item:" .. itemID
+end
+
 -- Ready sounds -------------------------------------------------------------------------------------
 
 -- The sound an icon has of its own, by spell ID or by the key of a kind (FlatUICharDB.cooldownSounds): a word of SOUND_WORDS, or none. Nil
@@ -485,9 +702,21 @@ local function Kit(word)
 	return kits and kits[word] or RAID_WARNING
 end
 
--- The sound an icon plays when its cooldown is over: its own, else Sound. A trinket plays Sound.
+-- The key of an icon's own sound: its spell, its kind, its slot for a trinket or gear (the item the slot holds may change), or its item.
+local function SoundKey(record)
+	if record.spell or record.kind then
+		return record.spell or record.kind
+	elseif record.slot then
+		return SlotKey(record.slot)
+	elseif record.own then
+		return ItemKey(record.own)
+	end
+	return nil
+end
+
+-- The sound an icon plays when its cooldown is over: its own, else Sound.
 local function SoundOf(record)
-	return OwnSound(record.spell or record.kind) or Opt("readySound")
+	return OwnSound(SoundKey(record)) or Opt("readySound")
 end
 
 -- What a change of an icon's sound is answered with.
@@ -500,25 +729,28 @@ end
 
 -- The icons ------------------------------------------------------------------------------------
 
-local function DrawSweep(record, info, cooling, recharging)
+-- With Show the global cooldown on, the sweep runs for the global cooldown too (onGCD: the global cooldown alone runs); cooling, which
+-- the dimming, the flash and the ready sound follow, still leaves it out.
+local function DrawSweep(record, info, cooling, recharging, onGCD)
 	local spells, cooldown, spellID = C_Spell, record.cooldown, record.spell
 	if info == nil then
 		cooldown:Clear()
 		return
 	end
+	local gcd = Opt("gcd") == true
 	if spells.GetSpellCooldownDuration and cooldown.SetCooldownFromDurationObject then
 		local ok, duration
 		if recharging and spells.GetSpellChargeDuration then
 			ok, duration = pcall(spells.GetSpellChargeDuration, spellID)
 		else
-			-- True leaves the global cooldown out.
-			ok, duration = pcall(spells.GetSpellCooldownDuration, spellID, true)
+			-- True leaves the global cooldown out, false keeps it in (SpellDocumentation.lua:327-343).
+			ok, duration = pcall(spells.GetSpellCooldownDuration, spellID, not gcd)
 		end
 		if ok and duration ~= nil then
 			-- The game may refuse a duration object; the icon then dims without a sweep.
 			if pcall(cooldown.SetCooldownFromDurationObject, cooldown, duration, true) then
 				-- The template hides the frame, and nothing says this call shows it.
-				if cooling or recharging then
+				if cooling or recharging or (gcd and onGCD) then
 					cooldown:Show()
 				end
 			else
@@ -532,7 +764,7 @@ local function DrawSweep(record, info, cooling, recharging)
 	end
 	-- The numbers are drawn only where the game has no duration object and withholds nothing.
 	local start, length, rate = info.startTime, info.duration, info.modRate
-	if cooling and Plain(start, "number") and Plain(length, "number") then
+	if (cooling or (gcd and onGCD)) and Plain(start, "number") and Plain(length, "number") then
 		cooldown:SetCooldown(start, length, Plain(rate, "number") and rate or 1)
 	else
 		cooldown:Clear()
@@ -567,13 +799,38 @@ local function Flash(record)
 	flash.group:Play()
 end
 
--- The text sizes of the icon: the charge count, and the key when there is one.
+-- The corner of the count, set when Count corner changes (Acquire puts it at the bottom right), and the key's: the top right, or the top left while
+-- the count is there. Font strings of this addon's own, so allowed in combat.
+function Looks.PlaceTexts(record)
+	local corner = CD.CORNERS[Opt("countCorner")] and Opt("countCorner") or "br"
+	if record.corner ~= corner then
+		record.corner = corner
+		local at = CD.CORNERS[corner]
+		record.count:ClearAllPoints()
+		record.count:SetPoint(at[1], record.top, at[1], at[2], at[3])
+	end
+	local bindAt = corner == "tr" and "tl" or "tr"
+	if record.bind and record.bindCorner ~= bindAt then
+		record.bindCorner = bindAt
+		local at = CD.CORNERS[bindAt]
+		record.bind:ClearAllPoints()
+		record.bind:SetPoint(at[1], record.top, at[1], at[2], at[3])
+	end
+end
+
+-- The text of the icon: the size and colour of the count (charges, items carried and reagent counts, whose text is handed on unread) and the size of the
+-- key when there is one. Count colour at white writes no colour, and puts the game's back once one was set (ns.TextStyle remembers it).
 local function TextSizes(record)
-	local count = ns.TextStyle(record.count, { percent = Opt("countSize") })
+	local spec = { percent = Opt("countSize") }
+	if Opt("countColour") ~= CD.WHITE then
+		spec.r, spec.g, spec.b = ns.Colour(KEY .. ".countColour")
+	end
+	local count = ns.TextStyle(record.count, spec)
 	local key = record.bind == nil or ns.TextStyle(record.bind, { percent = Opt("keybindSize") })
 	if count == false or key == false then
 		ns.Note(KEY, NO_COUNT_FONT)
 	end
+	Looks.PlaceTexts(record)
 end
 
 -- The countdown font, set when the choice changes. The game's own font is read once from the countdown's
@@ -614,6 +871,66 @@ local function NumbersFont(record)
 	record.font = name
 	if not (cooldown.SetCountdownFont and pcall(cooldown.SetCountdownFont, cooldown, name)) then
 		ns.Note(KEY, NO_NUMBERS_FONT)
+	end
+end
+
+-- The colour, place and tenths of the countdown, run after NumbersFont. Each is written when its value changes and again after a new countdown font,
+-- so a size change keeps them; at the defaults (white, Middle, 0) nothing is written and the countdown stays as the game draws it. The countdown is a
+-- font string of this addon's Cooldown frame (Cooldown:GetCountdownFontString, FrameAPICooldownDocumentation.lua:78-89) and tenths are
+-- SetCountdownMillisecondsThreshold (379-386), as EnhanceQoL sets them (EnhanceQoL/General/DurationText.lua:1038-1049; CooldownPanels.lua:8070-8316).
+function Looks.Numbers(record)
+	local cooldown = record.cooldown
+	local colour, place, tenths = Opt("numbersColour"), Opt("numbersPlace"), Opt("tenths")
+	place = CD.NUMBER_PLACES[place] and place or "middle"
+	local font, refused, fs = tostring(record.font), false, nil
+	local function String()
+		if fs == nil then
+			fs = Ask(cooldown.GetCountdownFontString, cooldown) or false
+		end
+		return fs or nil
+	end
+	local colourKey = colour .. "|" .. font
+	if record.numbersColour ~= colourKey and not (record.numbersColour == nil and colour == CD.WHITE) then
+		record.numbersColour = colourKey
+		local text = String()
+		local r, g, b = ns.Colour(KEY .. ".numbersColour")
+		refused = not (text and pcall(text.SetTextColor, text, r, g, b, 1)) or refused
+	end
+	local placeKey = place .. "|" .. font
+	if record.numbersPlace ~= placeKey and not (record.numbersPlace == nil and place == "middle") then
+		record.numbersPlace = placeKey
+		local text, at = String(), CD.NUMBER_PLACES[place]
+		refused = not (text and pcall(text.ClearAllPoints, text) and pcall(text.SetPoint, text, at[1], cooldown, at[1], 0, at[2])) or refused
+	end
+	if record.tenths ~= tenths and not (record.tenths == nil and tenths == 0) then
+		record.tenths = tenths
+		refused = not (cooldown.SetCountdownMillisecondsThreshold and pcall(cooldown.SetCountdownMillisecondsThreshold, cooldown, tenths)) or refused
+	end
+	if refused then
+		ns.Note(KEY, CD.NO_COUNTDOWN_LOOK)
+	end
+end
+
+-- The colour of the sweep and its opacity, as one value, so SetSwipeColor is called only when either changes.
+function Looks.SwipeKey()
+	return Opt("sweepColour") .. ":" .. Opt("sweepAlpha")
+end
+
+-- The edge line of the sweep (Cooldown:SetDrawEdge and SetEdgeColor, FrameAPICooldownDocumentation.lua:401-435), each written when its value changes:
+-- Acquire draws none, and Edge colour at white writes no colour until another was set. EnhanceQoL sets them so (CooldownPanels.lua:12974-12991).
+function Looks.Edge(record)
+	local cooldown, edge = record.cooldown, Opt("edge") == true
+	if record.edge ~= edge then
+		record.edge = edge
+		cooldown:SetDrawEdge(edge)
+	end
+	local colour = Opt("edgeColour")
+	if edge and record.edgeColour ~= colour and not (record.edgeColour == nil and colour == CD.WHITE) then
+		record.edgeColour = colour
+		local r, g, b = ns.Colour(KEY .. ".edgeColour")
+		if not (cooldown.SetEdgeColor and pcall(cooldown.SetEdgeColor, cooldown, r, g, b, 1)) then
+			ns.Note(KEY, CD.NO_EDGE)
+		end
 	end
 end
 
@@ -733,8 +1050,11 @@ local function Look(record, cooling, secret, active)
 	local coolAlpha, readyAlpha = Opt("coolAlpha") / 100, Opt("readyAlpha") / 100
 	if secret and frame.SetAlphaFromBoolean then
 		frame:SetAlphaFromBoolean(active, coolAlpha, readyAlpha)
+		record.unseen = false
 	else
 		frame:SetAlpha(cooling and coolAlpha or readyAlpha)
+		-- An icon at no opacity shows no tooltip (Tooltips on icons).
+		record.unseen = (cooling and coolAlpha or readyAlpha) == 0
 	end
 	local border = Opt("border")
 	ns.SetOutline(record.outline, border, border)
@@ -747,15 +1067,20 @@ local function Look(record, cooling, secret, active)
 		cooldown:SetHideCountdownNumbers(not Opt("numbers"))
 	end
 	ns.EachPart(KEY, FONT_PART, NumbersFont, record)
-	local sweep, sweepAlpha = Opt("sweep"), Opt("sweepAlpha")
+	ns.EachPart(KEY, CD.NUMBERS_PART, Looks.Numbers, record)
+	local sweep = Opt("sweep")
 	if record.sweep ~= sweep then
 		record.sweep = sweep
 		cooldown:SetDrawSwipe(sweep)
 	end
-	if record.sweepAlpha ~= sweepAlpha then
-		record.sweepAlpha = sweepAlpha
-		cooldown:SetSwipeColor(0, 0, 0, sweepAlpha / 100)
+	-- Sweep colour, with Sweep opacity as its alpha (SetSwipeColor, FrameAPICooldownDocumentation.lua:512).
+	local swipe = Looks.SwipeKey()
+	if record.swipe ~= swipe then
+		record.swipe = swipe
+		local r, g, b = ns.Colour(KEY .. ".sweepColour")
+		cooldown:SetSwipeColor(r, g, b, Opt("sweepAlpha") / 100)
 	end
+	Looks.Edge(record)
 	TextSizes(record)
 	if cooling then
 		record.readyPlayed = nil
@@ -789,23 +1114,52 @@ local function ItemCooling(itemID)
 	return duration > 0 and start + duration > now, start, duration
 end
 
--- A trinket: the sweep from the item's cooldown, and the same look as a spell's.
-local function UpdateItem(record)
+-- The sweep of a trinket, of gear or of an item of Add an item, from the item's cooldown, and whether it cools; nil when the game does not say. An
+-- answer of the global cooldown or less is the global cooldown, or an item's own cooldown that the game briefly answers as the global one (EnhanceQoL,
+-- CooldownPanels.lua:12324-12332): the icon keeps the state and the sweep it had, so neither the dimming nor the ready sound follows the global cooldown.
+local function ItemSweep(record)
 	local cooldown = record.cooldown
 	local cooling, start, duration = ItemCooling(record.item)
-	if cooling ~= nil then
-		ns.ClearNote(KEY, NO_ITEM_SWEEP)
+	if cooling and duration <= CD.GCD then
+		-- An icon just laid out has no state of its own yet: no sweep of the item it showed before stays.
+		if record.dimmed == nil then
+			cooldown:Clear()
+		end
+		return record.dimmed == true
 	end
 	if cooling then
 		cooldown:SetCooldown(start, duration)
 	else
 		cooldown:Clear()
-		if cooling == nil then
-			ns.Note(KEY, type(C_Item) == "table" and C_Item.GetItemCooldown and NO_ITEM_SWEEP or NO_TRINKETS)
-		end
+	end
+	return cooling
+end
+
+-- A trinket or gear: the sweep from the item's cooldown, and the same look as a spell's.
+local function UpdateItem(record)
+	local cooling = ItemSweep(record)
+	if cooling ~= nil then
+		ns.ClearNote(KEY, NO_ITEM_SWEEP)
+	else
+		ns.Note(KEY, type(C_Item) == "table" and C_Item.GetItemCooldown and NO_ITEM_SWEEP or NO_TRINKETS)
 	end
 	record.count:SetText("")
 	Look(record, cooling == true, false, cooling == true)
+end
+
+-- An item of Add an item, drawn as a kind with one rank: how many are carried with their uses (C_Item.GetItemCount, ItemDocumentation.lua:451-468),
+-- shown when the item stacks or is used up, and the sweep of its cooldown. With none carried the icon is grey and neither flashes nor plays a sound.
+local function UpdateOwn(record)
+	local id = record.item
+	local count = Ask(C_Item and C_Item.GetItemCount, id, false, true)
+	count = Plain(count, "number") and count or nil
+	record.empty = count == 0
+	local cooling = ItemSweep(record)
+	record.count:SetText(count and Own.Stacks(id) and tostring(count) or "")
+	Look(record, cooling == true, false, cooling == true)
+	if record.empty then
+		record.texture:SetDesaturated(true)
+	end
 end
 
 -- A potion or healthstone: the best rank in the bags, how many of it, and the cooldown the kind shares, with the look of a trinket. With
@@ -845,10 +1199,43 @@ local function UpdateKind(record)
 	end
 end
 
+-- The charges of a spell, asked once: the table, and true when the game plainly gives none (GetSpellCharges, SpellDocumentation.lua:291-306: nil for a
+-- spell that is not charge-based). A withheld or failed answer is neither; a client without the call has no charges.
+function Counts.Charges(spellID)
+	local call = C_Spell and C_Spell.GetSpellCharges
+	if type(call) ~= "function" then
+		return nil, true
+	end
+	local ok, charges = pcall(call, spellID)
+	if not ok or IsSecret(charges) then
+		return nil, false
+	end
+	return type(charges) == "table" and charges or nil, charges == nil
+end
+
+-- The count of a spell icon: with more than one charge, the charges; with Reagent counts on and no charges, the count an action button shows for a spell
+-- that uses a reagent, C_Spell.GetSpellDisplayCount (SpellDocumentation.lua:379-397: the use count or the charges, withheld while cooldowns are
+-- restricted), as the game's spell flyout writes it (Blizzard_ActionBar/Shared/SpellFlyout.lua:161) and EnhanceQoL shows it (CooldownPanels_Helper.lua:3746-3757,
+-- 3832-3893). The text the game formats is handed on unread.
+function Counts.Spell(record, hasCharges, none)
+	local text = ""
+	if hasCharges or (none and Opt("useCount")) then
+		local counted, answer = pcall(C_Spell and C_Spell.GetSpellDisplayCount, record.spell)
+		if counted and (IsSecret(answer) or type(answer) == "string") then
+			text = answer
+		end
+	end
+	record.count:SetText(text)
+end
+
 -- Safe in combat: only the sweep, the dimming, the tint and the count change.
 local function Update(record)
 	if record.kind then
 		ns.EachPart(KEY, ITEM_PART, UpdateKind, record)
+		return
+	end
+	if record.own then
+		ns.EachPart(KEY, CD.OWN_PART, UpdateOwn, record)
 		return
 	end
 	if record.item then
@@ -872,21 +1259,12 @@ local function Update(record)
 	local active = info and info.isActive
 	local secret = IsSecret(active)
 	local cooling = not secret and active == true and not IsTrue(info.isOnGCD)
-	local charges = Ask(spells.GetSpellCharges, spellID)
+	local onGCD = not secret and active == true and IsTrue(info.isOnGCD)
+	local charges, none = Counts.Charges(spellID)
 	local maximum = type(charges) == "table" and charges.maxCharges
 	local hasCharges = Plain(maximum, "number") and maximum > 1
-	DrawSweep(record, info, cooling, hasCharges and not cooling and IsTrue(charges.isActive))
-	if hasCharges then
-		-- The count is text the game formats, handed on unread.
-		local counted, text = pcall(spells.GetSpellDisplayCount, spellID)
-		if counted and (IsSecret(text) or type(text) == "string") then
-			record.count:SetText(text)
-		else
-			record.count:SetText("")
-		end
-	else
-		record.count:SetText("")
-	end
+	DrawSweep(record, info, cooling, hasCharges and not cooling and IsTrue(charges.isActive), onGCD)
+	Counts.Spell(record, hasCharges, none)
 	if ns.PartStopped(KEY, TINT_PART) then
 		record.range, record.power = nil, nil
 	else
@@ -1203,6 +1581,155 @@ local function Holder()
 	return holder
 end
 
+-- Tooltips on icons --------------------------------------------------------------------------------
+
+function Tip.Get()
+	local tip = GameTooltip
+	if type(tip) ~= "table" or IsSecret(tip) or ns.Forbidden(tip) then
+		return nil
+	end
+	return tip
+end
+
+-- Whether GameTooltip is the icon's (IsOwned), as Errands.TipOwned asks (Errands.lua:94-110). An owner that cannot be read is not.
+function Tip.Owned(tip, frame)
+	local ok, owned = pcall(tip.IsOwned, tip, frame)
+	return ok and not IsSecret(owned) and owned == true
+end
+
+-- The point of the tooltip box GameTooltip_SetDefaultAnchor reads and compares (Blizzard_SharedXML/SharedTooltipTemplates.lua:87-114). Called by the
+-- addon the function runs tainted, so a withheld point there would raise; OwnPaint.lua's BoxReadable asks the same.
+function Tip.BoxReadable()
+	local box = GameTooltipDefaultContainer or SharedTooltipDefaultContainer
+	if type(box) ~= "table" or IsSecret(box) or type(box.GetPoint) ~= "function" then
+		return false
+	end
+	local ok, point, _, _, x, y = pcall(box.GetPoint, box, 1)
+	return ok and Plain(point, "string") and Plain(x, "number") and Plain(y, "number")
+end
+
+function Tip.Hide(record)
+	local tip = Tip.Get()
+	if tip and Tip.Owned(tip, record.frame) then
+		pcall(tip.Hide, tip)
+	end
+end
+
+-- The game's tooltip of an icon, placed as OwnPaint.lua's ShowTip places one (OwnPaint.lua:497-523): at the game's default spot with Enhanced tooltips
+-- on and a box that can be read, else to the right of the icon. A spell's with SetSpellByID; a trinket's or gear's with SetInventoryItem, the item worn
+-- as it is, as EnhanceQoL shows a slot (CooldownPanels.lua:7987-7990), else SetItemByID; a potion's, a healthstone's or an item's with SetItemByID.
+-- These are the game's secure delegates for addon callers (Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:488-520, 522-609). None with
+-- Out of combat only in a fight, and none while the row is hidden on a mount or in a city or an inn: hidden in a fight, its icons keep the mouse
+-- till the fight ends (Tip.Mouse).
+function Tip.Show(record)
+	local mode = Opt("tooltips")
+	if mode == "off" or not ns.Enabled(KEY) or (mode == "combat" and (fighting or Ask(InCombatLockdown) == true)) then
+		return
+	end
+	local tip = Tip.Get()
+	if not tip or not (record.spell or record.item) or record.unseen or away then
+		return
+	end
+	local frame, placed = record.frame, false
+	if Ask(GetCVar, "UberTooltips") == "1" and type(GameTooltip_SetDefaultAnchor) == "function" and Tip.BoxReadable() then
+		placed = pcall(GameTooltip_SetDefaultAnchor, tip, frame)
+	end
+	if not placed and not pcall(tip.SetOwner, tip, frame, "ANCHOR_RIGHT") then
+		return
+	end
+	local ok, err
+	if record.spell then
+		ok, err = pcall(tip.SetSpellByID, tip, record.spell)
+	else
+		local worn = false
+		if record.slot then
+			local okWorn, shown = pcall(tip.SetInventoryItem, tip, "player", record.slot)
+			worn = okWorn and not IsSecret(shown) and shown == true
+		end
+		ok = worn
+		if not worn then
+			ok, err = pcall(tip.SetItemByID, tip, record.item)
+		end
+	end
+	if not ok then
+		pcall(tip.Hide, tip)
+		error(err, 0)
+	end
+	pcall(tip.Show, tip)
+end
+
+-- The mouse on an icon. With Tooltips on icons not Off the icon hears the mouse move and takes no click, as the game's cooldown manager has its icons
+-- (Blizzard_CooldownViewer/CooldownViewer.lua:326-329), so a click goes through to the world; Off gives the mouse up again, and so does a row nobody
+-- sees (hidden on a mount or in a city, or out of combat at Row opacity out of combat 0%), so an icon unseen takes no mouse. EnableMouse and its kin
+-- are protected functions (SimpleScriptRegionAPIDocumentation.lua:631-651), so like the layout the mouse changes only out of combat: the icons are
+-- made there, and a change asked for in a fight waits for its end. PLAYER_REGEN_DISABLED comes before the lockdown (the game shows and hides its
+-- protected action bars in it, Blizzard_ActionBar/Shared/ActionBar.lua:284-289, 356-364; TrackerClicks.lua moves its buttons there), so with On a row
+-- seen only in fights takes the mouse as a fight starts and gives it up at PLAYER_REGEN_ENABLED; with Out of combat only it shows no tooltip in a
+-- fight and takes no mouse for one. Nothing is written while the row stays Off, and once the tooltips stop on errors the icons give the mouse up at
+-- the next change.
+function Tip.Mouse(record)
+	if Ask(InCombatLockdown) == true then
+		return
+	end
+	local mode = Opt("tooltips")
+	local seen = not away and (Opt("idleAlpha") > 0 or (fighting and mode == "on"))
+	local want = mode ~= "off" and seen and not ns.PartStopped(KEY, CD.TIP_PART)
+	if record.mouse == want or (record.mouse == nil and not want) then
+		return
+	end
+	local frame = record.frame
+	if want and not record.tipScripts then
+		record.tipScripts = true
+		frame:SetScript("OnEnter", function()
+			ns.EachPart(KEY, CD.TIP_PART, Tip.Show, record)
+		end)
+		frame:SetScript("OnLeave", function()
+			Tip.Hide(record)
+		end)
+		frame:SetScript("OnHide", function()
+			Tip.Hide(record)
+		end)
+	end
+	local ok = pcall(frame.SetMouseClickEnabled, frame, false)
+	ok = pcall(frame.SetMouseMotionEnabled, frame, want) and ok
+	record.mouse = want
+	if not ok then
+		ns.Note(KEY, CD.NO_MOUSE)
+	end
+	if not want then
+		Tip.Hide(record)
+	end
+end
+
+-- Every icon made takes the mouse as the row says; in a fight once it is over.
+function Tip.MouseAll()
+	if Ask(InCombatLockdown) == true then
+		if not Tip.waiting then
+			Tip.waiting = true
+			ns.OutOfCombat(function()
+				Tip.waiting = false
+				Tip.MouseAll()
+			end)
+		end
+		return
+	end
+	for _, record in ipairs(icons) do
+		ns.Each(KEY, Tip.Mouse, record)
+	end
+end
+
+-- A tooltip an icon owns goes when a fight starts with Out of combat only, and when the row hides on a mount or in a city or an inn. Only an icon
+-- that has heard the mouse can own one.
+function Tip.Leave()
+	if away or (fighting and Opt("tooltips") == "combat") then
+		for _, record in ipairs(shown) do
+			if record.tipScripts then
+				Tip.Hide(record)
+			end
+		end
+	end
+end
+
 local function Acquire(index)
 	local record = icons[index]
 	if record then
@@ -1215,13 +1742,13 @@ local function Acquire(index)
 	texture:SetAllPoints(frame)
 	local crop = Crop()
 	texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
-	-- A plain square sweep: the template's has no file, and no edge line or flash is drawn.
+	-- A plain square sweep: the template's has no file, and no flash is drawn; the edge line only with Edge line on (Look).
 	local cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
 	ns.Own[cooldown] = true
 	cooldown:SetDrawEdge(false)
 	cooldown:SetDrawBling(false)
-	local sweepAlpha = Opt("sweepAlpha")
-	cooldown:SetSwipeColor(0, 0, 0, sweepAlpha / 100)
+	local r, g, b = ns.Colour(KEY .. ".sweepColour")
+	cooldown:SetSwipeColor(r, g, b, Opt("sweepAlpha") / 100)
 	-- The count sits on a frame above the sweep.
 	local top = CreateFrame("Frame", nil, frame)
 	ns.Own[top] = true
@@ -1231,7 +1758,7 @@ local function Acquire(index)
 	ns.Own[count] = true
 	count:SetPoint("BOTTOMRIGHT", top, "BOTTOMRIGHT", -2, 2)
 	record = { frame = frame, texture = texture, cooldown = cooldown, count = count, top = top, outline = ns.Outline(frame, frame),
-		sweep = true, sweepAlpha = sweepAlpha }
+		sweep = true, swipe = Looks.SwipeKey(), edge = false, corner = "br" }
 	-- The game says when a cooldown has ended through this script and no event.
 	cooldown:SetScript("OnCooldownDone", function()
 		if ns.Enabled(KEY) then
@@ -1311,10 +1838,13 @@ local function CheckGame()
 	end
 end
 
--- The item IDs of the equipped trinkets, in slot order, when the row is to show them.
+-- The trinkets and the on-use gear the row shows, in slot order: { item, slot }. The two trinket slots with Equipped trinkets on; with On-use gear in other
+-- slots on, then each slot of GEAR_SLOTS whose item has a use (C_Item.GetItemSpell), a slot entry being the item it holds, as EnhanceQoL has it
+-- (CooldownPanels.lua:3995-3996, 4048-4069, 10885-10888). The row is laid out again on PLAYER_EQUIPMENT_CHANGED.
 local function Trinkets()
 	local list = {}
-	if not Opt("trinkets") or ns.PartStopped(KEY, TRINKET_PART) then
+	local trinkets, gear = Opt("trinkets") == true, Opt("gear") == true
+	if not (trinkets or gear) or ns.PartStopped(KEY, TRINKET_PART) then
 		return list
 	end
 	if type(GetInventoryItemID) ~= "function" then
@@ -1322,10 +1852,21 @@ local function Trinkets()
 		return list
 	end
 	ns.ClearNote(KEY, NO_TRINKETS)
-	for _, slot in ipairs(TRINKET_SLOTS) do
+	for _, slot in ipairs(trinkets and TRINKET_SLOTS or {}) do
 		local id = Ask(GetInventoryItemID, "player", slot)
 		if Whole(id) then
-			list[#list + 1] = id
+			list[#list + 1] = { item = id, slot = slot }
+		end
+	end
+	if gear and not (C_Item and type(C_Item.GetItemSpell) == "function") then
+		ns.Note(KEY, CD.NO_ITEM_SPELL)
+	elseif gear then
+		ns.ClearNote(KEY, CD.NO_ITEM_SPELL)
+		for _, slot in ipairs(CD.GEAR_SLOTS) do
+			local id = Ask(GetInventoryItemID, "player", slot)
+			if Whole(id) and Own.HasUse(id) then
+				list[#list + 1] = { item = id, slot = slot }
+			end
 		end
 	end
 	return list
@@ -1338,6 +1879,9 @@ local function Idle()
 		holder:SetAlpha(away and 0 or (not fighting and Opt("idleAlpha") / 100 or 1))
 	end
 	RangeWatch()
+	-- A row at no opacity takes no mouse, and one hidden or in a fight with Out of combat only shows no tooltip.
+	Tip.MouseAll()
+	Tip.Leave()
 end
 
 -- The key bound to the first action bar button that holds a spell, as the game writes it on its own buttons
@@ -1376,7 +1920,7 @@ local function Keybind(record)
 		local bind = record.top:CreateFontString(nil, "OVERLAY", KEYBIND_FONT)
 		ns.Own[bind] = true
 		bind:SetPoint("TOPRIGHT", record.top, "TOPRIGHT", -2, -2)
-		record.bind = bind
+		record.bind, record.bindCorner = bind, "tr"
 	end
 	record.bind:SetText(BindingText(record.spell))
 	TextSizes(record)
@@ -1403,8 +1947,8 @@ local function Layout()
 	for _, id in ipairs(spells) do
 		entries[#entries + 1] = { spell = id }
 	end
-	for _, id in ipairs(on and Trinkets() or {}) do
-		entries[#entries + 1] = { item = id }
+	for _, entry in ipairs(on and Trinkets() or {}) do
+		entries[#entries + 1] = entry
 	end
 	-- Potions and healthstones come last, each kind with the rank it shows: the one it showed before while the bags hold none.
 	local before = {}
@@ -1419,6 +1963,10 @@ local function Layout()
 		if item then
 			entries[#entries + 1] = { kind = key, item = item }
 		end
+	end
+	-- The items of Add an item come after them, so no icon a player had moves. One the client has not loaded yet is there with a question mark.
+	for _, id in ipairs(on and not ns.PartStopped(KEY, CD.OWN_PART) and Own.List() or {}) do
+		entries[#entries + 1] = { item = id, own = id }
 	end
 	if #entries == 0 then
 		ns.ClearNote(KEY, NO_POSITION)
@@ -1448,10 +1996,12 @@ local function Layout()
 	local crop = Crop()
 	for index, entry in ipairs(entries) do
 		local record = Acquire(index)
-		if record.spell ~= entry.spell or record.item ~= entry.item or record.kind ~= entry.kind then
+		if record.spell ~= entry.spell or record.item ~= entry.item or record.kind ~= entry.kind or record.slot ~= entry.slot or record.own ~= entry.own then
 			record.dimmed, record.readyPlayed = nil, nil
 		end
 		record.spell, record.item, record.kind, record.empty, record.hasRange = entry.spell, entry.item, entry.kind, nil, nil
+		record.slot, record.own = entry.slot, entry.own
+		Tip.Mouse(record)
 		if entry.spell then
 			record.hasRange = HasRange(entry.spell)
 		end
@@ -1713,17 +2263,235 @@ function ns.CooldownRemoveItem(index)
 	return false, ("%s is not picked."):format(kind.name)
 end
 
--- The icons a sound can be given to, in row order: { line ID, name, key }. A spell has its ID; a kind minus its place in ns.COOLDOWN_ITEMS.
--- With an icon chosen first, the one whose sound comes next; nil when none is, or it has left the row.
+-- Any item with a use ------------------------------------------------------------------------------
+
+-- The items in the bags that have a use and are not on the row, by name: the Hearthstone, a mana gem, Thistle Tea, an engineering device. A rank of a
+-- potion or healthstone kind is left out, since it has a row of its own. EnhanceQoL offers items in its picker so (CooldownPanels_AddEntryPicker.lua:1-235).
+-- The lines are made when the options are built, before any list opens, so a client without C_Item.GetItemSpell gets an empty list and no status line
+-- (On-use gear in other slots says it when ticked).
+function ns.CooldownOwnItemCandidates()
+	local rows, seen = {}, {}
+	if not (C_Item and type(C_Item.GetItemSpell) == "function") then
+		return rows
+	end
+	for _, id in ipairs(Own.List()) do
+		seen[id] = true
+	end
+	for _, item in ipairs(Own.Bags()) do
+		local id = item[1]
+		if not seen[id] then
+			seen[id] = true
+			if not Own.KindOf(id) and Own.HasUse(id) then
+				rows[#rows + 1] = { id, item[2] or Own.Name(id) }
+			end
+		end
+	end
+	table.sort(rows, function(a, b)
+		local first, second = a[2]:lower(), b[2]:lower()
+		if first ~= second then
+			return first < second
+		end
+		return a[1] < b[1]
+	end)
+	while #rows > CD.MAX_BAG_LINES do
+		rows[#rows] = nil
+	end
+	return rows
+end
+
+-- The items of Add an item, in row order.
+function ns.CooldownOwnItemPicked()
+	local rows = {}
+	for _, id in ipairs(Own.List()) do
+		rows[#rows + 1] = { id, Own.Name(id) }
+	end
+	return rows
+end
+
+-- Both work in combat and with the page off, as CooldownAdd and CooldownRemove do. An item the client has not loaded is taken and shows once it has; one
+-- it has without a use, and a rank of a potion or healthstone kind, are refused.
+function ns.CooldownAddOwnItem(itemID)
+	if not Whole(itemID) or (C_Item and type(C_Item.GetItemInfoInstant) == "function" and Ask(C_Item.GetItemInfoInstant, itemID) == nil) then
+		return false, ('No item found for "%s".'):format(tostring(itemID))
+	end
+	local name = Own.Name(itemID)
+	local kind = Own.KindOf(itemID)
+	if kind then
+		return false, ("%s is a rank of %s, which has an icon of its own: /flatui cooldown add %s."):format(name, kind.name, kind.key)
+	end
+	if Own.HasUse(itemID) == false then
+		return false, ("%s has no use."):format(name)
+	end
+	local list = Own.List(true)
+	for _, id in ipairs(list) do
+		if id == itemID then
+			return false, ("%s is already on the row."):format(name)
+		end
+	end
+	if #list >= CD.MAX_OWN_ITEMS then
+		return false, ("%d items is the most."):format(CD.MAX_OWN_ITEMS)
+	end
+	list[#list + 1] = itemID
+	QueueLayout()
+	return true, ("Added %s."):format(name)
+end
+
+-- Its own ready sound goes with it.
+function ns.CooldownRemoveOwnItem(itemID)
+	local list = Own.List()
+	for at, id in ipairs(list) do
+		if id == itemID then
+			table.remove(list, at)
+			SetOwnSound(ItemKey(id), nil)
+			QueueLayout()
+			return true, ("Removed %s."):format(Own.Name(id))
+		end
+	end
+	return false, ("%s is not on the row."):format(Whole(itemID) and Own.Name(itemID) or tostring(itemID))
+end
+
+-- Add the spells of a bar ----------------------------------------------------------------------------
+
+function ns.CooldownImportLines()
+	local rows = {}
+	for bar = 1, #CD.IMPORT_FIRST do
+		rows[bar] = { bar, ("Action bar %d"):format(bar) }
+	end
+	return rows
+end
+
+-- The page the main bar shows, picked as the game picks it (Blizzard_ActionBarController/ActionBarController.lua:159-171): the bonus bar of a stance, a
+-- form or Stealth while there is one and the bar is on page 1, else the page. None of the three calls is withheld (ActionBarFrameDocumentation.lua:121-128,
+-- 303-310, 499-506); a failed or strange answer is page 1. The vehicle, override and temporary shapeshift bars the game checks before them hold no spells
+-- of the player's own and are left out.
+function Bar.MainPage()
+	local bars = type(C_ActionBar) == "table" and C_ActionBar or {}
+	local page = Ask(bars.GetActionBarPage)
+	if page == 1 and Ask(bars.HasBonusActionBar) == true then
+		page = Ask(bars.GetBonusBarIndex)
+	end
+	if Whole(page) and page <= CD.MAX_PAGE then
+		return page
+	end
+	return 1
+end
+
+-- What an action slot holds (GetActionInfo, read as Blizzard_ActionBar/Shared/ActionButton.lua:958-962 and 1037-1058 read it): "spell" and a spell
+-- ID, also for a macro that shows a spell, else for a macro the spell GetMacroSpell gives it; "item" and an item ID; another kind alone; nothing for an
+-- empty slot or a withheld answer.
+function Bar.SlotAction(slot)
+	local ok, kind, id, sub = pcall(GetActionInfo, slot)
+	if not ok or IsSecret(kind) or IsSecret(id) or IsSecret(sub) or kind == nil then
+		return nil
+	end
+	if kind == "macro" then
+		if sub == "spell" then
+			return "spell", id
+		end
+		local spell = (sub == nil or sub == "") and Plain(id, "number") and Ask(GetMacroSpell, id) or nil
+		if Whole(spell) then
+			return "spell", spell
+		end
+	end
+	return kind, id
+end
+
+-- Adds each spell with a cooldown on one action bar that the row does not have yet, by ns.CooldownAdd, so the 40-spell cap and the layout queue hold;
+-- an item that is a rank of a potion or healthstone kind adds that kind. A spell whose name is on the row already, a rank trained since, counts as there,
+-- as Add a spell keeps it out. Once: later changes to the bar are not followed. EnhanceQoL imports bars 1 to 8 so (CooldownPanels.lua:14585-14694,
+-- 15012-15039), from the action of each button; Flat UI counts the slots from its own table and the page calls, and reads no field of a game button.
+function ns.CooldownImport(bar)
+	if not (Whole(bar) and bar <= #CD.IMPORT_FIRST) then
+		return false, CD.IMPORT_HELP
+	end
+	if type(GetActionInfo) ~= "function" then
+		ns.Note(KEY, CD.NO_BAR)
+		return false, CD.NO_BAR
+	end
+	local first = bar == 1 and (Bar.MainPage() - 1) * 12 + 1 or CD.IMPORT_FIRST[bar]
+	local added, left, had, full = 0, 0, 0, false
+	local picked, named, seen, kinds = {}, {}, {}, {}
+	for _, id in ipairs(List()) do
+		picked[id] = true
+		if Known(id) then
+			named[Name(id)] = true
+		end
+	end
+	for _, key in ipairs(Kinds()) do
+		kinds[key] = true
+	end
+	for slot = first, first + 11 do
+		local kind, id = Bar.SlotAction(slot)
+		if kind == "spell" and Whole(id) then
+			local name = SpellName(id)
+			if seen[id] then
+				-- The same spell twice on the bar counts once.
+			elseif picked[id] or (name and named[name]) then
+				had = had + 1
+			elseif name and HasCooldown(id) and ns.CooldownAdd(id) then
+				added = added + 1
+				picked[id], named[name] = true, true
+			else
+				full = full or (name ~= nil and HasCooldown(id) and #List() >= MAX_SPELLS)
+				left = left + 1
+			end
+			seen[id] = true
+		elseif kind == "item" and Whole(id) then
+			local itemKind, index = Own.KindOf(id)
+			if itemKind and seen[itemKind.key] then
+				-- Two ranks of one kind on the bar count once.
+			elseif itemKind and kinds[itemKind.key] then
+				had = had + 1
+			elseif itemKind and ns.CooldownAddItem(index) then
+				added = added + 1
+				kinds[itemKind.key] = true
+			else
+				left = left + 1
+			end
+			if itemKind then
+				seen[itemKind.key] = true
+			end
+		elseif kind ~= nil then
+			left = left + 1
+		end
+	end
+	if added + left + had == 0 then
+		return true, ("Action bar %d has nothing to add."):format(bar)
+	end
+	local said = ("Action bar %d: %d added, %d left out."):format(bar, added, left)
+	if had > 0 then
+		said = said .. (" %d %s already on the row."):format(had, had == 1 and "was" or "were")
+	end
+	if full then
+		said = said .. (" %d spells is the most."):format(MAX_SPELLS)
+	end
+	return true, said
+end
+
+-- A line of Add the spells of a bar: the bar's number.
+function ns.CooldownImportPick(bar)
+	return ns.CooldownImport(bar)
+end
+
+-- The icons a sound can be given to, in row order: { line ID, name, key }. A spell has its ID; a trinket or gear minus SLOT_LINE and its slot, named
+-- by the slot, whose sound stays with the slot when the item in it changes; a kind minus its place in ns.COOLDOWN_ITEMS; an item of Add an item minus
+-- ITEM_LINE and its ID (EnhanceQoL gives every entry a ready sound, CooldownPanels.lua:2828-2859). With an icon chosen first, the one whose sound
+-- comes next; nil when none is, or it has left the row.
 local function SoundEntries()
 	local rows, chosen = {}, nil
 	for _, id in ipairs(List()) do
 		rows[#rows + 1] = { id, Name(id), id }
 	end
 	Distinguish(rows)
+	for _, entry in ipairs(Trinkets()) do
+		rows[#rows + 1] = { -(CD.SLOT_LINE + entry.slot), CD.SLOT_NAMES[entry.slot], SlotKey(entry.slot) }
+	end
 	for _, key in ipairs(Kinds()) do
 		local kind, index = Kind(key)
 		rows[#rows + 1] = { -index, kind.name, key }
+	end
+	for _, id in ipairs(Own.List()) do
+		rows[#rows + 1] = { -(CD.ITEM_LINE + id), Own.Name(id), ItemKey(id) }
 	end
 	for _, row in ipairs(rows) do
 		if soundFor ~= nil and row[3] == soundFor then
@@ -1782,19 +2550,45 @@ function ns.CooldownSoundPick(id)
 end
 
 -- /flatui cooldown sound: an icon on the row, then row, none or the word of a sound.
-local SOUND_HELP = "/flatui cooldown sound 2094 bell - a picked spell, healing, mana or healthstone, then row, none, spell, chimes, bell, warhorn, raid, alarm or whisper"
+local SOUND_HELP = "/flatui cooldown sound 2094 bell - a picked spell, healing, mana or healthstone, a slot such as trinket 1 or feet, or item and an item's"
+	.. " name, then row, none, spell, chimes, bell, warhorn, raid, alarm or whisper"
+
+-- An item of Add an item by its name, whatever the capitals.
+function Own.Named(text)
+	local wanted = text:lower()
+	for _, id in ipairs(Own.List()) do
+		if Own.Name(id):lower() == wanted then
+			return id
+		end
+	end
+	return nil
+end
+
 local function SoundCommand(text)
 	local name, said = text:match("^%s*(.-)%s+(%S+)%s*$")
 	said = said and said:lower()
 	if not (name and name ~= "" and (said == "row" or said == "none" or SOUND_INDEX[said])) then
 		return SOUND_HELP
 	end
-	local key, kind = nil, KindNamed(name)
-	if kind then
+	local key, kind, slot = nil, KindNamed(name), CD.SLOT_BY_NAME[name:lower()]
+	local itemText = name:match("^[Ii][Tt][Ee][Mm]%s+(.+)$") or (name:find("|Hitem:", 1, true) and name) or name:match("^[Ii]tem:%d+$")
+	local itemID = itemText and Own.From(itemText) or (not slot and not kind and Own.Named(name)) or nil
+	if slot then
+		-- A trinket or gear on the row now, by the name of its slot: its sound stays with the slot.
+		for _, entry in ipairs(Trinkets()) do
+			key = entry.slot == slot and SlotKey(slot) or key
+		end
+		name = CD.SLOT_NAMES[slot]
+	elseif kind then
 		for _, picked in ipairs(Kinds()) do
 			key = picked == kind.key and picked or key
 		end
 		name = kind.name
+	elseif itemText or itemID then
+		for _, picked in ipairs(Own.List()) do
+			key = picked == itemID and ItemKey(picked) or key
+		end
+		name = itemID and Own.Name(itemID) or itemText
 	else
 		-- A rank trained since has another ID and the same name, and the row keeps the rank that was picked (ns.CooldownCandidates). The
 		-- spell book links the rank it shows, the highest while ShowAllSpellRanks is off, as it is by default (Blizzard_SpellBookItem.lua:634-640,
@@ -1814,11 +2608,24 @@ local function SoundCommand(text)
 		name = id and Name(id) or name
 	end
 	if key == nil then
-		return ("%s is not picked."):format(name)
+		return ((slot or itemText or itemID) and "%s is not on the row." or "%s is not picked."):format(name)
 	end
 	local word = said ~= "row" and said or nil
 	SetOwnSound(key, word)
 	return SoundSaid(name, word)
+end
+
+-- /flatui cooldown add item and remove item: an item by ID, link or name.
+function Own.Command(word, text)
+	if text:match("^%s*$") then
+		return CD.ITEM_HELP
+	end
+	local id = Own.From(text)
+	if not id then
+		return ('No item found for "%s".'):format(text:match("^%s*(.-)%s*$"))
+	end
+	local _, message = (word == "add" and ns.CooldownAddOwnItem or ns.CooldownRemoveOwnItem)(id)
+	return message
 end
 
 -- ", plays Bell" for an icon with a sound of its own in /flatui cooldown list.
@@ -1830,11 +2637,19 @@ end
 local function Slash(rest)
 	local word, text = rest:match("^(%S*)%s*(.-)$")
 	word = word:lower()
-	local kind, place
+	local kind, place, itemText
 	if (word == "add" or word == "remove") and text ~= "" then
 		kind, place = KindNamed(text)
+		-- add item <ID, link or name>, or a shift-clicked item or item:ID alone.
+		itemText = text:match("^[Ii][Tt][Ee][Mm]%s+(.-)$") or (text:lower() == "item" and "") or ((text:find("|Hitem:", 1, true) or text:match("^[Ii]tem:%d+$"))
+			and text) or nil
 	end
-	if kind then
+	if itemText and not kind then
+		print(Own.Command(word, itemText))
+	elseif word == "import" then
+		local _, message = ns.CooldownImport(tonumber(text:match("^%s*(%d+)%s*$") or ""))
+		print(message)
+	elseif kind then
 		local _, message = (word == "add" and ns.CooldownAddItem or ns.CooldownRemoveItem)(place)
 		print(message)
 	elseif (word == "add" or word == "remove") and text ~= "" then
@@ -1849,15 +2664,22 @@ local function Slash(rest)
 	elseif word == "sound" and text ~= "" then
 		print(SoundCommand(text))
 	elseif word == "list" then
-		local list, kinds = List(), Kinds()
-		if #list == 0 and #kinds == 0 then
+		-- In row order: the spells, the trinkets and gear by their slot, the potions and healthstones, the items.
+		local list, slots, kinds, own = List(), Trinkets(), Kinds(), Own.List()
+		if #list == 0 and #slots == 0 and #kinds == 0 and #own == 0 then
 			print("No spells picked.")
 		end
 		for index, id in ipairs(list) do
 			print(("%d. %s (%d)%s%s"):format(index, Name(id), id, Known(id) and "" or ", not known", OwnSaid(id)))
 		end
+		for index, entry in ipairs(slots) do
+			print(("%d. %s: %s (item %d)%s"):format(#list + index, CD.SLOT_NAMES[entry.slot], Own.Name(entry.item), entry.item, OwnSaid(SlotKey(entry.slot))))
+		end
 		for index, key in ipairs(kinds) do
-			print(("%d. %s%s"):format(#list + index, Kind(key).name, OwnSaid(key)))
+			print(("%d. %s%s"):format(#list + #slots + index, Kind(key).name, OwnSaid(key)))
+		end
+		for index, id in ipairs(own) do
+			print(("%d. %s (item %d)%s"):format(#list + #slots + #kinds + index, Own.Name(id), id, OwnSaid(ItemKey(id))))
 		end
 	else
 		for _, line in ipairs(HELP) do
@@ -1880,6 +2702,7 @@ local function Refresh()
 	QueueSweep()
 	UpdateAll()
 	Binds()
+	Tip.MouseAll()
 end
 
 local function UpdateItems()
@@ -1899,6 +2722,57 @@ end
 local function KindsChanged()
 	for _, record in ipairs(shown) do
 		if record.kind then
+			ns.Each(KEY, Update, record)
+		end
+	end
+end
+
+-- The count of one spell icon alone, when the count of a reagent may have changed.
+function Counts.One(record)
+	local charges, none = Counts.Charges(record.spell)
+	local maximum = type(charges) == "table" and charges.maxCharges
+	Counts.Spell(record, Plain(maximum, "number") and maximum > 1, none)
+end
+
+-- Reagent counts follow SPELL_UPDATE_USES (SpellBookDocumentation.lua:955-964, which the game sends when the uses of a spell change) and the bags;
+-- nothing else of a spell icon changes with them.
+function Counts.All()
+	if Opt("useCount") then
+		for _, record in ipairs(shown) do
+			if record.spell then
+				ns.Each(KEY, Counts.One, record)
+			end
+		end
+	end
+end
+
+-- The bags changed: the potions and healthstones, the counts of the items of Add an item, and the reagent counts.
+local function BagsChanged()
+	KindsChanged()
+	for _, record in ipairs(shown) do
+		if record.own then
+			ns.Each(KEY, Ready, record)
+			ns.Each(KEY, Update, record)
+		end
+	end
+	Counts.All()
+end
+
+-- An item the client has now loaded (GET_ITEM_INFO_RECEIVED: the item ID, then whether it was found): an item of the row takes its icon, and the row is
+-- laid out again when it was waiting for whether a worn item has a use.
+local function ItemLoaded(itemID)
+	if not Whole(itemID) then
+		return
+	end
+	Own.stacks[itemID] = nil
+	local waited = Own.loading[itemID] and Own.uses[itemID] == nil
+	Own.loading[itemID] = nil
+	if waited and Opt("gear") then
+		QueueLayout()
+	end
+	for _, record in ipairs(shown) do
+		if record.own == itemID then
+			record.texture:SetTexture(ItemIcon(itemID))
 			ns.Each(KEY, Update, record)
 		end
 	end
@@ -1935,7 +2809,9 @@ ns.Register(KEY, {
 		PLAYER_UPDATE_RESTING = Idle,
 		PLAYER_TARGET_CHANGED = TargetChanged,
 		SPELL_UPDATE_USABLE = TintAll,
-		BAG_UPDATE_DELAYED = KindsChanged,
+		BAG_UPDATE_DELAYED = BagsChanged,
+		SPELL_UPDATE_USES = Counts.All,
+		GET_ITEM_INFO_RECEIVED = ItemLoaded,
 		PLAYER_LEVEL_CHANGED = KindsChanged,
 		SPELLS_CHANGED = Changed,
 		PLAYER_TALENT_UPDATE = Changed,

@@ -69,7 +69,7 @@ local K = {
 	ORDER = { "resource", "character", "own" },
 	-- The words of /flatui tracker set, and the saved key each one stands for.
 	WORDS = { place = "place", show = "show", low = "low", lowtime = "lowTime", missing = "missing", sound = "sound", kit = "kit",
-		size = "size", x = "x", y = "y", name = "name", on = "on", shape = "shape", colour = "colour" },
+		size = "size", x = "x", y = "y", name = "name", on = "on", shape = "shape", colour = "colour", comes = "comes", stacks = "stacks" },
 	-- Where each place put its row at the last layout, in words.
 	where = {},
 	-- The rows other files add to the Tracker page's editor, each { key, kind }, in the order they were added.
@@ -101,6 +101,7 @@ local HELP = {
 	"/flatui tracker set 1 low 2 - one tracker's own value for a setting, or clear to use the page's",
 	"/flatui tracker set 1 shape bar - icon, bar or text, and colour 4d99e6 for a bar or text",
 	"/flatui tracker set 1 happy on - a pet tracker is low while a hunter's pet is not happy",
+	"/flatui tracker set 1 health 40 - a pet tracker shows your pet's health in red under 40%, or clear to use the page's",
 	"/flatui tracker proc colour 1 ffd100 - one proc's colour, time (proc time 1 10) or trigger (proc trigger 1 overlay)",
 	"/flatui tracker check - what each tracker shows and why, and what happened in the last fight",
 	"/flatui tracker check sound - the game's own sound when a tracked buff ends, until /reload",
@@ -285,13 +286,20 @@ local OWN = {
 		local top = entry and K.LOW_MAX[entry.kind] or 20
 		return Plain(value, "number") and value >= 0 and value <= top and value == math.floor(value)
 	end,
+	-- Up to 30 minutes, so a long buff or a poison can warn minutes ahead; still in steps of 5, so every value saved before stays valid.
 	lowTime = function(value)
-		return Plain(value, "number") and value >= 0 and value <= 300 and value % 5 == 0
+		return Plain(value, "number") and value >= 0 and value <= 1800 and value % 5 == 0
 	end,
 	missing = function(value)
 		return K.MISSING_LOOKS[value] == true
 	end,
 	sound = function(value)
+		return type(value) == "boolean"
+	end,
+	comes = function(value)
+		return type(value) == "boolean"
+	end,
+	stacks = function(value)
 		return type(value) == "boolean"
 	end,
 	size = function(value)
@@ -531,6 +539,50 @@ local function Value(entry, key)
 end
 ns.TrackerValue = Value
 ns.TrackerKits = K.KITS
+
+-- Low at ahead of a long buff in a dungeon or raid. LONG: the shortest full length, in seconds, of a buff or enchant that takes Low in dungeons and
+-- raids; LASTING: the kinds that can (a buff, a group buff, a weapon enchant); TIMED: the kinds whose check says the Low at that applies. inside:
+-- "party" or "raid" while the player is in a dungeon or raid, false outside one, nil until it is asked again after a loading screen. gap: the
+-- trackers whose last reading was unknown, so a change seen next happened out of sight (K.Came).
+K.LONG, K.LASTING, K.TIMED, K.inside, K.gap = 600, { buff = true, weapon = true, group = true },
+	{ buff = true, debuff = true, weapon = true, totem = true, group = true }, nil, {}
+
+-- The kind of instance the player is in: "party" or "raid" while IsInInstance says so (InstanceDocumentation.lua:170-177: plain answers, true and
+-- the type), else false. Asked once after each loading screen, the one way into or out of a dungeon or raid, and only when a Low at needs it; asked
+-- again after a Refresh, since a loading screen crossed while the page was off was not heard (Entered), and each time while the page is off.
+function K.Inside()
+	if K.inside == nil or not ns.Enabled(KEY) then
+		local ok, inside, kind = pcall(IsInInstance)
+		K.inside = ok and not IsSecret(inside) and inside == true and not IsSecret(kind) and (kind == "party" or kind == "raid") and kind or false
+	end
+	return K.inside
+end
+
+-- The Low at (seconds left) of a tracker here: its own or the page's, and in a dungeon or raid the larger of that and Low in dungeons and raids for a
+-- buff, a group buff or a weapon enchant whose full length is 10 minutes or more, so the warning comes while it can still be cast again between
+-- pulls; Battle Shout, seals, Slice and Dice and a shaman's imbues of 5 minutes keep their own. length: the full length read now, else the one kept
+-- at the last reading (mem.lengths). The second answer is "dungeon" or "raid" when the value of dungeons and raids applies. The editor, /flatui
+-- tracker set, the exports and TrackerSlots.lua's Hide keep the stored value. Follows the expiration warnings of the Class Buff Reminder of
+-- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLClassBuffReminder/ClassBuffReminder.lua:811-895, a warning for
+-- the open world, dungeons and raids picked by the place).
+function K.LowTime(entry, length)
+	local own = Value(entry, "lowTime")
+	own = Plain(own, "number") and own or 0
+	local deep = Opt("lowTimeInstance")
+	if not (Plain(deep, "number") and deep > own and K.LASTING[entry.kind]) then
+		return own
+	end
+	length = length or mem.lengths[entry.id]
+	if not (Plain(length, "number") and length >= K.LONG) then
+		return own
+	end
+	local inside = K.Inside()
+	if not inside then
+		return own
+	end
+	return deep, inside == "raid" and "raid" or "dungeon"
+end
+ns.TrackerLowTime = K.LowTime
 
 local function Label(entry)
 	local kind = KINDS[entry.kind]
@@ -1157,7 +1209,7 @@ function ns.TrackerSet(index, word, text)
 		for key in pairs(OWN) do
 			entry[key] = nil
 		end
-		entry.happy = nil
+		entry.happy, entry.health = nil, nil
 		return Done(("Tracker %d: every setting follows the pages."):format(index))
 	end
 	if word == "clear" then
@@ -1175,6 +1227,20 @@ function ns.TrackerSet(index, word, text)
 			return Done(("Tracker %d: happy is off."):format(index))
 		end
 		return false, ('Tracker %d: "%s" is not a value for happy.'):format(index, text)
+	end
+	-- A pet tracker's own Pet health minimum, 0 to 90 (TrackerKinds.lua's PetClean keeps it so), or clear for the page's.
+	if word == "health" then
+		local value = tonumber((text:gsub("%%$", "")))
+		if entry.kind ~= "pet" then
+			return false, ("Tracker %d: health is a setting of the pet tracker."):format(index)
+		elseif text:lower() == "clear" then
+			entry.health = nil
+			return Done(("Tracker %d: health follows the page."):format(index))
+		elseif value and value >= 0 and value <= 90 and value == math.floor(value) then
+			entry.health = value
+			return Done(("Tracker %d: health is %d%%."):format(index, value))
+		end
+		return false, ('Tracker %d: "%s" is not a value for health, which is 0 to 90.'):format(index, text)
 	end
 	local key = K.WORDS[word]
 	if not key then
@@ -1464,7 +1530,8 @@ local function Settle(entry, aura, auraID, failed)
 		edited = true
 	end
 	local state = "fine"
-	local low, lowTime = Value(entry, "low"), Value(entry, "lowTime")
+	-- The Low at here: in a dungeon or raid a buff of 10 minutes or more, read by its full length, warns as Low in dungeons and raids says.
+	local low, lowTime = Value(entry, "low"), K.LowTime(entry, length)
 	if entry.charged and low > 0 and count and count <= low then
 		state = "low"
 	elseif lowTime > 0 and expires then
@@ -1950,7 +2017,9 @@ local function Apply(record, entry, look)
 	end
 end
 
--- 1 when the tracker is wanted on screen now, else 0.
+-- 1 when the tracker is wanted on screen now, else 0; and a second answer, the reason "fine", for the one 0 that comes from the state of a
+-- tracker set to Only when low or missing alone: drawn live and fine. Draw hands it to a kind's Over, which may draw by it (the pet's health,
+-- TrackerKinds.lua); every other 0, of the death, a kind's own Wanted, the three rows or Only in combat, has no reason.
 local function Wanted(entry, state, how)
 	local ok, dead = pcall(UnitIsDeadOrGhost, "player")
 	if ok and not IsSecret(dead) and dead == true then
@@ -1965,11 +2034,17 @@ local function Wanted(entry, state, how)
 	end
 	local show = Value(entry, "show")
 	if show == "low" then
-		-- Trackers that show only when low or missing are hidden on a mount and in a city or an inn, as the two rows say.
-		if (Opt("mounted") and Ask(IsMounted) == true) or (Opt("resting") and Ask(IsResting) == true) then
+		-- Trackers that show only when low or missing are hidden on a mount, in a city or an inn and in a fight, as the three rows say; in a fight
+		-- by the trackers' own word for it, set at PLAYER_REGEN_DISABLED. Hide in combat follows the Only out of combat filter of EnhanceQoL's
+		-- Class Buff Reminder (ClassBuffReminder.lua:2667-2673), whose rested filter (2505-2510) Hide in cities and inns is. Its role filter
+		-- (2683-2764) is left out: groups on Forever often have no roles (HealerMana.lua), and its class rule alone would silence a mage in a raid.
+		if (Opt("mounted") and Ask(IsMounted) == true) or (Opt("resting") and Ask(IsResting) == true) or (Opt("combatHide") and fighting) then
 			return 0
 		end
-		return (how ~= "live" or state == "low" or state == "missing") and 1 or 0
+		if how ~= "live" or state == "low" or state == "missing" then
+			return 1
+		end
+		return 0, state == "fine" and "fine" or nil
 	elseif show == "combat" then
 		return fighting and 1 or 0
 	end
@@ -1999,6 +2074,10 @@ local function Drawn(entry, reading)
 end
 
 -- Allowed in combat: only texture, text, alpha, Cooldown and animation calls.
+-- A kind may draw over its tracker last, with Over(entry, record, how, reason): the pet kind's health (TrackerKinds.lua), which for the reason
+-- fine of Wanted alone gives the frame an alpha the game withholds in place of the 0, marks the record curved and answers true. record.alpha
+-- stays a plain number: whenever Over does not answer true, a curved record gets that alpha back at once, so a tracker that is dead, mounted,
+-- missing, in a fight with Hide in combat or wanted for any other reason is drawn by the rules of Show again.
 local function Draw(entry, reading)
 	if testing[entry.id] then
 		return
@@ -2007,16 +2086,26 @@ local function Draw(entry, reading)
 	local record = records[entry.id]
 	if record then
 		record.how = how
-		local alpha = 0
+		local alpha, reason = 0, nil
 		if how == "hidden" then
 			Pulse(record, false)
 		else
 			Apply(record, entry, Looks(entry, reading, how))
-			alpha = Wanted(entry, reading.state, how)
+			alpha, reason = Wanted(entry, reading.state, how)
 		end
 		if record.alpha ~= alpha then
 			record.frame:SetAlpha(alpha)
 			record.alpha = alpha
+		end
+		local kind, curved = KINDS[entry.kind], false
+		if kind and type(kind.Over) == "function" then
+			ns.EachPart(KEY, Part(entry.kind), function()
+				curved = kind.Over(entry, record, how, reason) == true
+			end)
+		end
+		if record.curved and not curved then
+			record.curved = nil
+			record.frame:SetAlpha(record.alpha)
 		end
 	end
 	Slot("Show", entry, how == "game", record and record.alpha)
@@ -2367,10 +2456,41 @@ local function GameSound()
 	end
 end
 
--- True when the game plays the tracker's drop sound itself, so its own is skipped.
-local function GameTaken(entry)
+-- True when the game plays the tracker's sound for a trigger itself, so its own is skipped: Removed (the drop, when none is given), Added or
+-- ApplicationsIncreased (TrackerSound.lua).
+local function GameTaken(entry, trigger)
 	local call = ns.TrackerGameSound and ns.TrackerGameSound.Taken
-	return type(call) == "function" and call(entry) == true
+	return type(call) == "function" and call(entry, trigger) == true
+end
+
+-- Sound when it comes and Sound when it stacks, in the kit of Sound, for a buff or debuff tracker: once when it goes from missing to fine or low,
+-- and once when its count rises. old: the reading kept before this one; pending: a drop seen and not yet confirmed (Track). Nothing in the first
+-- seconds after a loading screen, when every buff seems to come at once (Quiet); nothing for a change seen only after the tracker could not be
+-- read (gap), since it happened out of sight, where the game plays its own sound when it is registered; nothing for a buff back before its drop
+-- was confirmed, since it never left; and nothing where the game plays that sound itself (TrackerSound.lua). Follows the sounds for an aura
+-- applied and for one that gains an application of the Cooldown Panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
+-- (EnhanceQoLCooldownPanels/CooldownPanels.lua:2828-2859).
+function K.Came(entry, old, reading, pending)
+	local id = entry.id
+	local gap = K.gap[id]
+	K.gap[id] = nil
+	if gap or not old or (entry.kind ~= "buff" and entry.kind ~= "debuff") or reading.state == "missing" then
+		return
+	end
+	local row, trigger
+	if old.state == "missing" then
+		if pending then
+			return
+		end
+		row, trigger = "comes", "Added"
+	elseif Plain(reading.count, "number") and Plain(old.count, "number") and reading.count > old.count then
+		row, trigger = "stacks", "ApplicationsIncreased"
+	else
+		return
+	end
+	if Value(entry, row) == true and not Quiet(Now()) and not GameTaken(entry, trigger) then
+		Ding(K.KITS[Value(entry, "kit")] or K.KITS.raid)
+	end
 end
 
 -- Keeps a reading and plays the sound for a drop: a tracker that goes from fine or low to missing, and
@@ -2379,9 +2499,12 @@ local function Track(entry, reading)
 	local id, state = entry.id, reading.state
 	if state == "unknown" then
 		mem.drops[id] = nil
+		K.gap[id] = true
 		return
 	end
-	local before = mem.kept[id] and mem.kept[id].state
+	-- The kept state and count, and a drop that waits for its second pass, are read before this reading takes their place.
+	local old, pending = mem.kept[id], mem.drops[id]
+	local before = old and old.state
 	mem.kept[id] = reading
 	if reading.length then
 		mem.lengths[id] = reading.length
@@ -2389,6 +2512,7 @@ local function Track(entry, reading)
 	if reading.count and reading.count > (entry.top or 0) then
 		entry.top = math.min(20, math.max(1, math.floor(reading.count)))
 	end
+	K.Came(entry, old, reading, pending)
 	-- A kind is told of a change of the state it has shown, once, and does its own sounds: it has no sound for a drop when it says noDrop.
 	local kind = KINDS[entry.kind]
 	if kind and before ~= state and type(kind.Changed) == "function" then
@@ -2786,6 +2910,9 @@ end
 
 local function Entered()
 	entered = Now()
+	-- A loading screen is the way into or out of a dungeon or raid: the place is asked again when a Low at next needs it (K.Inside), and the pass
+	-- and the flush below read every tracker, and the game's own icons, with it.
+	K.inside = nil
 	World()
 	Dirty()
 	Slot("Flush")
@@ -3258,6 +3385,11 @@ local function EntryLines(index, entry)
 			lines[#lines + 1] = "   " .. tostring(line)
 		end
 	end
+	-- The Low at (seconds left) that applies here, and the place when it is the one of dungeons and raids.
+	local lowTime, here = K.LowTime(entry)
+	if lowTime > 0 and K.TIMED[entry.kind] then
+		lines[#lines + 1] = ("   Low at %d s here%s."):format(lowTime, here and (": " .. here) or "")
+	end
 	local place = Value(entry, "place")
 	lines[#lines + 1] = ("   Place: %s, %s."):format(Shown("place", place), K.where[place] or "not laid out yet")
 	-- The shape the tracker is drawn in, and what the game refused of it.
@@ -3691,6 +3823,8 @@ ClassLabel()
 
 local function Refresh()
 	ClassLabel()
+	-- The place is asked again when a Low at next needs it (K.Inside): the page may come back on after a loading screen it did not hear.
+	K.inside = nil
 	if ns.Enabled(KEY) then
 		Watch()
 		-- A fight that ended while the page was off, or while the module was stopped, was not heard: Core.lua gives PLAYER_REGEN_ENABLED only to

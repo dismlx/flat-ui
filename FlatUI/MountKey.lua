@@ -32,26 +32,41 @@ local _, ns = ...
 -- ActionButtonUseKeyDown decides which acts, as for its own action buttons (Blizzard_FrameXML/SecureTemplates.lua:792-811, ActionButton.lua:468).
 -- Its type and macrotext (SecureTemplates.lua:450-463) are written only out of combat, after a fight for a change heard in one (ns.OutOfCombat),
 -- and only when the macro changes: when the mounts, the forms, the bindings, the moving or the rows change. Nothing of Flat UI's runs in its click
--- (no PreClick, no PostClick): the moving is heard (PLAYER_STARTED_MOVING and PLAYER_STOPPED_MOVING, UnitDocumentation.lua:3944-3966) by a frame of
--- the addon's own, only while the button is made, a key is bound to it and the macro on the move differs, and read a frame later (IsPlayerMoving,
--- PlayerScriptDocumentation.lua:1453-1460). The game sends UPDATE_BINDINGS when a key is set or cleared, as the rows of its Key Bindings window read
+-- (no PreClick, no PostClick), but for the two exceptions of Slow Fall or Levitate while falling below, which exist only while that row is on. The
+-- moving is heard (PLAYER_STARTED_MOVING and PLAYER_STOPPED_MOVING, UnitDocumentation.lua:3944-3966) by a frame of the addon's own, only while the
+-- button is made, a key is bound to it and the macro on the move differs, and read a frame later (IsPlayerMoving, PlayerScriptDocumentation.lua:
+-- 1453-1460). The game sends UPDATE_BINDINGS when a key is set or cleared, as the rows of its Key Bindings window read
 -- their keys again on it (KeyBindingsDocumentation.lua:175-179, Blizzard_Settings_Shared/Blizzard_SettingsPanel.lua:107, 153-154 and 975-977,
 -- Blizzard_Keybindings.lua:453), so the moving is read when a key is bound, and no longer heard once none is.
+-- Slow Fall or Levitate while falling (off by default): while the row is on and the spell book knows Slow Fall (130) or Levitate (1706), each a
+-- spell this client has (C_Spell.DoesSpellExist, SpellDocumentation.lua:46-59; C_SpellBook.IsSpellKnown, as for the forms), the button has a
+-- PreClick and a PostClick of the addon's own, which the game runs before and after its secure code runs a press, as for Flat UI's other secure
+-- buttons (ErrandsRanks.lua and TrackerClicks.lua). The PreClick, only out of combat, puts /cast [@player] and the spell's name in the macrotext
+-- while IsFalling plainly says the player falls and IsMounted plainly says the player is not mounted (UnitDocumentation.lua:405-418,
+-- PlayerScriptDocumentation.lua:1399-1406, neither with a secret tag), so a press while mounted still dismounts, as EnhanceQoL puts the dismount
+-- before the fall; any other answer, a withheld one included, leaves the key's macro. The PostClick, only out of combat too, puts the key's macro
+-- back right after the press, so the falling macro never stays on the button for a fight that starts after the fall: in a fight neither changes an
+-- attribute and the key does what its macro says. Each press is a press and a release, and each has its PreClick and its PostClick. Both scripts
+-- are set and taken away out of combat only: when the row or the module goes off (the module also takes the macro away, as above) and when the
+-- spell is no longer known. Both spells take a Light Feather, and the game says so when the bags have none.
 -- With the module off its type and macro are taken away, so the key does nothing; the binding is the player's and stays. It writes no binding, no
 -- macro of the game's macro list and no field of a frame, and no global but the button's name and BINDING_NAME_CLICK FlatUIMountButton:LeftButton,
 -- the name of the binding.
 -- This follows the random mount key of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/MountActions.lua:
--- 106-132, 261-336, 376-424, 426-499, 553-569, 580-602; EnhanceQoL/Bindings.xml:12-15): the button the binding clicks, the usable mounts of the
--- journal and its favourites, the random pick, the combat lines and the druid and shaman forms while moving. Left out on Forever, as its own Forever
--- build leaves out Dracthyr Visage (MountActions.lua:245): the G-99 Breakneck, flying and swimming mounts, the target's mount, Slow Fall and
--- Levitate while falling, Cat Form indoors (a cat is no faster on classic content) and /leavevehicle. Its macro is written in a PreClick before each
--- press; here it is written when what it depends on changes, so no code of Flat UI's runs in the click.
+-- 25-26, 106-132, 225-246, 261-336, 376-424, 426-499, 553-569, 580-602; EnhanceQoL/Bindings.xml:12-15): the button the binding clicks, the usable
+-- mounts of the journal and its favourites, the random pick, the combat lines, the druid and shaman forms while moving, and Slow Fall and Levitate
+-- while falling. Left out on Forever, as its own Forever build leaves out Dracthyr Visage (MountActions.lua:245): the G-99 Breakneck, flying and
+-- swimming mounts, the target's mount, Travel Form for a falling druid (MountActions.lua:230, the row is for the two spells that slow a fall),
+-- Cat Form indoors (a cat is no faster on classic content) and /leavevehicle. Its macro is written in a PreClick before each press; here it is
+-- written when what it depends on changes, so no code of Flat UI's runs in the click but the falling safety's.
 
 local KEY = "mount"
 local BUTTON = "FlatUIMountButton"
 local BINDING = "CLICK " .. BUTTON .. ":LeftButton"
 -- Travel Form, Aquatic Form and Ghost Wolf.
 local TRAVEL, AQUATIC, WOLF = 783, 1066, 2645
+-- Slow Fall and Levitate, in the order they are looked for (EnhanceQoL/Submodules/MountActions.lua:25-26).
+local FALLS = { 130, 1706 }
 -- A burst of events writes the macro once, this long after the first.
 local STEP = 0.2
 local MOVING = { "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING" }
@@ -64,6 +79,8 @@ local LINE_UNUSABLE = "Mount key: none of your mounts can be used here and now. 
 local LINE_BROKEN = "Mount key: the game did not make the button of the key, so the key does nothing until /reload."
 local LINE_JOURNAL = "Mount key: this client has no mount journal, so the key takes travel forms only."
 local LINE_WAITS = "Mount key: a change of the key waits for the end of the fight."
+local LINE_FALL = "Mount key: falling safety armed: out of a fight, pressed while you fall and are not mounted, the key casts %s on you. It takes a Light Feather."
+local LINE_NO_FALL = "Mount key: falling safety on, but this character knows neither Slow Fall nor Levitate."
 
 -- The name of the binding in the game's Key Bindings.
 _G["BINDING_NAME_" .. BINDING] = "Mount or travel form"
@@ -74,9 +91,10 @@ local IsSecret = ns.IsSecret
 -- texts: the macro standing (still) and on the move (moving). cast: the macro casts something. mount: the spell name of the mount it casts.
 -- list: the character's mounts of the journal, read again when dirty. pick: the name of the mount picked. moving: the player moves, as last read.
 -- listener: the frame that hears the moving, hearing: it does, soonMove: a read of the moving waits for the next frame. soon: a write waits a
--- moment; later: one waits for the end of the fight.
+-- moment; later: one waits for the end of the fight. fall: the name of the spell of the falling safety, nil while it is off; fallText: its macro.
+-- scripted: the button has the PreClick and the PostClick of the safety. held: the button holds the falling macro, which the PostClick takes away.
 local S = { button = nil, broken = false, text = nil, texts = nil, cast = false, mount = nil, list = nil, dirty = true, pick = nil, moving = false,
-	listener = nil, hearing = false, soonMove = false, soon = false, later = false }
+	listener = nil, hearing = false, soonMove = false, soon = false, later = false, fall = nil, fallText = nil, scripted = false, held = false }
 local M = {}
 
 local function Opt(key)
@@ -161,6 +179,23 @@ local function Instant(id)
 	end
 	local cast = info.castTime
 	return ns.Finite(cast) and cast == 0
+end
+
+-- The name of Slow Fall or Levitate when this client has the spell and the spell book knows it, else nil.
+local function Fall()
+	local spells = C_Spell
+	if type(spells) ~= "table" then
+		return nil
+	end
+	for _, id in ipairs(FALLS) do
+		if Yes(Ask(spells.DoesSpellExist, id)) then
+			local name = Form(id)
+			if name then
+				return name
+			end
+		end
+	end
+	return nil
 end
 
 -- The class file of the player (UnitDocumentation.lua:911-928).
@@ -326,7 +361,7 @@ local function Apply()
 		return
 	end
 	local text = S.moving and S.texts.moving or S.texts.still
-	if text == S.text then
+	if text == S.text and not S.held then
 		return
 	end
 	if Fighting() then
@@ -338,7 +373,57 @@ local function Apply()
 		S.button:SetAttribute("macrotext", text)
 	end)
 	if ok then
-		S.text = text
+		S.text, S.held = text, false
+	end
+end
+
+-- The falling safety ---------------------------------------------------------------------------------------------------------------------------
+
+-- Before the game's secure code runs a press or a release, out of combat: the falling macro in place of the key's while the player plainly falls
+-- and is plainly not mounted. Any other answer leaves the key's macro.
+local function PreClick(self)
+	if S.fallText == nil or S.text == nil or Fighting() then
+		return
+	end
+	if not Yes(Ask(IsFalling)) or Ask(IsMounted) ~= false then
+		return
+	end
+	if pcall(self.SetAttribute, self, "macrotext", S.fallText) then
+		S.held = true
+	end
+end
+
+-- Right after the press or the release, out of combat: the key's macro back on the button. A fight cannot start between the two, which run in
+-- one click; if the game refuses the write, the next write after the fight puts the macro back (Apply).
+local function PostClick(self)
+	if not S.held then
+		return
+	end
+	if Fighting() or not pcall(self.SetAttribute, self, "macrotext", S.text) then
+		Later()
+		return
+	end
+	S.held = false
+end
+
+-- The PreClick and the PostClick on the button while the safety has a spell, none while it has not. Set and taken away out of combat only.
+local function Arm(name)
+	S.fall = name
+	S.fallText = name and ("/cast [@player] " .. name) or nil
+	local want = name ~= nil
+	if not S.button or S.scripted == want then
+		return
+	end
+	if Fighting() then
+		Later()
+		return
+	end
+	local ok = pcall(function()
+		S.button:SetScript("PreClick", want and PreClick or nil)
+		S.button:SetScript("PostClick", want and PostClick or nil)
+	end)
+	if ok then
+		S.scripted = want
 	end
 end
 
@@ -396,6 +481,7 @@ end
 function M.Off()
 	Hear(false)
 	S.texts, S.cast, S.mount = nil, false, nil
+	Arm(nil)
 	if not S.button or S.text == nil then
 		return
 	end
@@ -408,7 +494,7 @@ function M.Off()
 		S.button:SetAttribute("macrotext", nil)
 	end)
 	if ok then
-		S.text = nil
+		S.text, S.held = nil, false
 	end
 end
 
@@ -430,6 +516,8 @@ function M.Update()
 	-- this again (UPDATE_BINDINGS, KeyBindingsDocumentation.lua:175-179), and the hearing reads the moving as it starts.
 	Hear(moving ~= still and S.button ~= nil and bound)
 	Apply()
+	-- The falling safety, with the spell the book knows now: learning or losing it runs this again (SPELLS_CHANGED).
+	Arm(Opt("falling") == true and Fall() or nil)
 end
 
 -- Writes again a moment later, once for a burst of events.
@@ -477,6 +565,13 @@ function M.Status()
 		lines[#lines + 1] = LINE_NOTHING
 	elseif S.mount then
 		lines[#lines + 1] = ("Mount key: the next mount is %s."):format(S.mount)
+	end
+	if Opt("falling") == true then
+		if S.fall == nil then
+			lines[#lines + 1] = LINE_NO_FALL
+		elseif S.scripted then
+			lines[#lines + 1] = LINE_FALL:format(S.fall)
+		end
 	end
 	if S.later then
 		lines[#lines + 1] = LINE_WAITS

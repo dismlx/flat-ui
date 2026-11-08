@@ -158,13 +158,13 @@ local function RaidRange(rec, on)
 	end
 end
 
--- The role icon, the name and the status text of a raid frame.
+-- The role icon, the name and the status text of a raid frame. The role icon also goes for a role that Role icons for leaves out (UnitParts.lua).
 local function RaidParts(rec, on)
 	if rec.kind ~= "raid" then
 		return
 	end
 	local frame, live = rec.frame, on and not Off(RAID)
-	Fade(RAID, X.path(frame, "roleIcon"), live and Opt("raidRoleIcon") == false)
+	Fade(RAID, X.path(frame, "roleIcon"), live and (Opt("raidRoleIcon") == false or X.roleLeftOut(rec)))
 	Fade(RAID, X.path(frame, "name"), live and Opt("raidName") == false)
 	Fade(RAID, X.path(frame, "statusText"), live and Opt("raidStatusText") == false)
 end

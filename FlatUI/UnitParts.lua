@@ -16,6 +16,16 @@ local ADDON_NAME, ns = ...
 -- pass of the module over its frames (after.refresh), whether Flat UI styles those frames or not. This follows EnhanceQoL by Philipp Barth (R41Z0R),
 -- adapted with his permission (EnhanceQoLUnitFrames/UnitFrameRuntime.lua:95-103), whose options act on the game's frames: opacity and visibility in place
 -- of its Hide of the player's frame and its hook on the Show method of the pet's number.
+-- Role icons for leaves the game's role icon of a member at its opacity only for the roles chosen, on the player, party and raid frames (UnitExtras.lua),
+-- with the same change of opacity as the switch of the icon. The role is the game's plain answer of UnitGroupRolesAssigned, which is withheld for a unit
+-- outside the group (SecretWhenUnitIdentityRestricted, UnitDocumentation.lua:1318-1332): a withheld answer, NONE and no answer keep the icon. The game
+-- draws the icon of the player and of a party member from the same role (Mainline/PlayerFrame.lua:428-450, Mainline/PartyMemberFrame.lua:555-571), and on a
+-- raid frame it shows a vehicle, a Main Tank or a Main Assist before the role (Shared/UnitFrameUtil.lua:237-276): a raid member in a vehicle or with one of
+-- those assignments keeps the icon. The assignment is GetPartyAssignment, asked as the game's group headers ask it (Blizzard_RestrictedAddOnEnvironment/
+-- SecureGroupHeaders.lua:306-308); a withheld answer counts as none. The same answers say who is a tank for Threat border on tanks (UnitFrames.lua): a
+-- member with the tank role or the Main Tank of a raid. This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
+-- (EnhanceQoLUnitFrames/UF_GroupFrames.lua:2583-2620, 8773-8831, 8915-8927): its role of a unit, its filter of the roles shown and its raid assignment,
+-- on the game's icons. Its three icon styles are left out, as Flat UI keeps the game's art.
 
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
@@ -100,13 +110,13 @@ local function Contextual(rec)
 	return nil
 end
 
--- Per row: the regions it switches, given to emit. The party frame's PvP icon is the PvP flag's own.
+-- Per row: the regions it switches, given to emit. The party frame's PvP icon is the PvP flag's own. left: true when the region is to go with its row on.
 local ROWS = {
 	{ opt = "leaderIcon", find = function(rec, c, emit)
 		emit(X.path(c, "LeaderIcon"))
 		emit(X.path(c, "GuideIcon"))
 	end },
-	{ opt = "roleIcon", find = function(rec, c, emit)
+	{ opt = "roleIcon", left = function(rec) return X.roleLeftOut(rec) end, find = function(rec, c, emit)
 		if rec.kind == "party" or rec.kind == "player" then
 			emit(X.path(c, "RoleIcon"))
 		end
@@ -198,7 +208,7 @@ local function Marks(rec, on)
 	local live = on and not Off(MARKS)
 	local c = Contextual(rec)
 	for _, row in ipairs(ROWS) do
-		local hide = live and Opt(row.opt) == false
+		local hide = live and (Opt(row.opt) == false or (row.left ~= nil and row.left(rec) == true))
 		row.find(rec, c, function(region)
 			Fade(MARKS, region, hide)
 		end)
@@ -216,6 +226,61 @@ function X.pvpMode(rec, mode)
 		return "off"
 	end
 	return mode
+end
+
+-- Roles ------------------------------------------------------------------------------------------------------
+
+-- The role the group gave a unit, as the game says it plainly: TANK, HEALER or DAMAGER, or nil for NONE, a withheld answer and a client without the call.
+function X.role(unit)
+	if unit == nil or type(UnitGroupRolesAssigned) ~= "function" then
+		return nil
+	end
+	local ok, role = pcall(UnitGroupRolesAssigned, unit)
+	if ok and not ns.IsSecret(role) and (role == "TANK" or role == "HEALER" or role == "DAMAGER") then
+		return role
+	end
+	return nil
+end
+
+-- True when the raid gave a unit the assignment, MAINTANK or MAINASSIST: a plain answer that the game's own test (if GetPartyAssignment(...) then)
+-- takes as true. The client has the call (apis.yaml) and no documentation of it; a withheld answer counts as none.
+function X.assigned(assignment, unit)
+	if unit == nil or type(GetPartyAssignment) ~= "function" then
+		return false
+	end
+	local ok, yes = pcall(GetPartyAssignment, assignment, unit)
+	return ok and not ns.IsSecret(yes) and yes ~= nil and yes ~= false
+end
+
+-- True for a tank of the group: a unit with the tank role, or the Main Tank of a raid. Groups on Forever often have no roles, so the raid's mark is the second
+-- source; a unit whose role is withheld or unknown is no tank.
+function X.isTank(unit)
+	return unit ~= nil and (X.role(unit) == "TANK" or X.assigned("MAINTANK", unit))
+end
+
+-- The roles each choice of Role icons for leaves out.
+local LEFT_OUT = { support = { DAMAGER = true }, healer = { TANK = true, DAMAGER = true } }
+
+-- True while a unit is in a vehicle with a bar of its own, when the game's raid frame shows the vehicle in place of the role (UnitFrameUtil.lua:259-260).
+local function InVehicle(unit)
+	if type(UnitInVehicle) ~= "function" or type(UnitHasVehicleUI) ~= "function" then
+		return false
+	end
+	local ok, inside = pcall(UnitInVehicle, unit)
+	local fine, bar = pcall(UnitHasVehicleUI, unit)
+	return ok and fine and not ns.IsSecret(inside) and not ns.IsSecret(bar) and inside == true and bar == true
+end
+
+-- True when the game's role icon of a frame shows a role that Role icons for leaves out. The player's own icon is of the player, as the game draws it
+-- (PlayerFrame.lua:435). UnitExtras.lua asks this for the role icon of a raid frame.
+function X.roleLeftOut(rec)
+	local out = (rec.kind == "player" or rec.kind == "party" or rec.kind == "raid") and LEFT_OUT[Opt("roleIconRoles")] or nil
+	local unit = out ~= nil and (rec.kind == "player" and "player" or X.unitOf(rec)) or nil
+	local role = unit ~= nil and X.role(unit) or nil
+	if role == nil or not out[role] then
+		return false
+	end
+	return rec.kind ~= "raid" or not (X.assigned("MAINTANK", unit) or X.assigned("MAINASSIST", unit) or InVehicle(unit))
 end
 
 -- Power bars -------------------------------------------------------------------------------------------------
@@ -263,7 +328,48 @@ function X.unitChanged(rec)
 		wasUnit(rec)
 	end
 	X.run(POWER, Recheck, rec)
+	-- A new member on a party frame: its role icon follows the member's role.
+	if rec.made and rec.kind == "party" then
+		X.run(MARKS, Marks, rec, X.active(rec))
+	end
 end
+
+-- A role, a raid assignment or the group changed: the threat border of the party and raid frames (Threat border on tanks) and the role icons of the player
+-- and party frames are drawn again. The game draws the role icon of a raid frame again on both events itself (Shared/CompactUnitFrame.lua:73-74, 89-90), and
+-- UnitExtras.lua follows that call; it draws the player's on PLAYER_ROLES_ASSIGNED (Mainline/PlayerFrame.lua:197-198) and a party member's on
+-- GROUP_ROSTER_UPDATE (Mainline/PartyMemberFrame.lua:650-653), with no call for a party member's on PLAYER_ROLES_ASSIGNED.
+local function RolesChanged()
+	for _, rec in pairs(X.records) do
+		if rec.made then
+			local on = X.active(rec)
+			if on and (rec.kind == "party" or rec.kind == "raid") and X.colour ~= nil then
+				X.run(X.labels[rec.kind], X.colour, rec, true)
+			end
+			if rec.kind == "party" or rec.kind == "player" then
+				X.run(MARKS, Marks, rec, on)
+			end
+		end
+	end
+end
+
+ns.AddEvent(KEY, "PLAYER_ROLES_ASSIGNED", RolesChanged)
+ns.AddEvent(KEY, "GROUP_ROSTER_UPDATE", RolesChanged)
+
+-- The line of /flatui status while Threat border on tanks is Not shown: the tanks the party and raid frames on screen know.
+ns.AddStatus(KEY, function()
+	if not ns.Enabled(KEY) or ns.IsStopped(KEY) or Opt("threat") ~= true or Opt("threatTanks") ~= "hidden" then
+		return {}
+	end
+	local seen, tanks = {}, 0
+	for _, rec in pairs(X.records) do
+		local unit = rec.made and (rec.kind == "party" or rec.kind == "raid") and X.unitOf(rec) or nil
+		if unit ~= nil and not seen[unit] and X.ask(rec.frame, "IsShown") == true and X.isTank(unit) then
+			seen[unit] = true
+			tanks = tanks + 1
+		end
+	end
+	return { ("Threat border: not on tanks (%s known)"):format(tanks == 0 and "no tank" or tanks == 1 and "1 tank" or (tanks .. " tanks")) }
+end)
 
 local wasUnits = X.unitsChanged
 function X.unitsChanged()

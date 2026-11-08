@@ -14,7 +14,11 @@ local _, ns = ...
 --     white, yellow at 50% or less and red at 20% or less, in the colours of the game's damaged and broken items (INVENTORY_ALERT_COLORS,
 --     Blizzard_DurabilityFrame/DurabilityFrame.lua:14-16). It is read on the game's durability and equipment events and a second after a
 --     death or a release, never on a timer, and not at all where the game rule RepairArmorDisabled is on (DurabilityFrame.lua:51-55).
---   Frame rate and latency: GetFramerate, and the home and world latency of GetNetStats.
+--   Frame rate and latency: GetFramerate, and the home and world latency of GetNetStats (its values 3 and 4), neither of which marks a return
+--     secret (ClientDocumentation.lua:44-51, ConnectionDocumentation.lua:40-49). Show picks the frame rate, the latency or both, and Latency
+--     picks home and world, the higher one, or one of them. With Colour by value each number is green, yellow or red by ns.PerfColour, which the
+--     data panels use too: frame rate red under 30 and yellow under 60, latency yellow over 100 ms and red over 200 ms. fps, ms and the
+--     separators stay white: the colours are codes around the numbers, in the text of Flat UI's own line.
 --   Time: local time (date, as GameTime_GetLocalTime) or realm time (GetGameTime), 12 or 24 hours, in the game's own formats when it has
 --     them (Blizzard_FrameXMLUtil/GameTimeUtil.lua:9-33).
 -- The coordinates, the frame rate and the time are read by one ticker (C_Timer.NewTicker): every 0.2 seconds while coordinates are wanted, every
@@ -39,6 +43,8 @@ local GAP, SPACING, UNDER_GAME, LINE = 4, 2, 21, 10
 -- The frame of the lines is this many levels over the map, over the ring of the game's minimap.
 local RAISE = 5
 local WHITE, YELLOW, RED = { 1, 1, 1 }, { 1, 0.82, 0.18 }, { 0.93, 0.07, 0.07 }
+-- A frame rate under these is middling, then poor; a latency over these, in milliseconds.
+local FPS_MIDDLING, FPS_POOR, MS_MIDDLING, MS_POOR = 60, 30, 100, 200
 -- The equipped slots (INVSLOT_FIRST_EQUIPPED to INVSLOT_LAST_EQUIPPED).
 local FIRST_SLOT, LAST_SLOT = 1, 19
 -- The seconds between two reads of the lines that change once a second or less.
@@ -109,7 +115,8 @@ local function Available(line)
 	elseif line.id == "durability" then
 		return type(_G.GetInventoryItemDurability) == "function"
 	elseif line.id == "perf" then
-		return type(_G.GetFramerate) == "function" or type(_G.GetNetStats) == "function"
+		local show = Opt("mapPerfShow")
+		return (show ~= "ms" and type(_G.GetFramerate) == "function") or (show ~= "fps" and type(_G.GetNetStats) == "function")
 	elseif LocalTime() then
 		return type(_G.date) == "function"
 	end
@@ -178,20 +185,62 @@ local function Durability()
 	return ("%s %d%%"):format(word, lowest), (lowest <= 20 and RED) or (lowest <= 50 and YELLOW) or WHITE
 end
 
-local function Perf()
-	local rate, net = _G.GetFramerate, _G.GetNetStats
-	if type(rate) ~= "function" and type(net) ~= "function" then
+-- The colour code of red, green and blue, 0 to 1.
+local function Code(rgb)
+	return ("|cff%02x%02x%02x"):format(math.floor(rgb[1] * 255 + 0.5), math.floor(rgb[2] * 255 + 0.5), math.floor(rgb[3] * 255 + 0.5))
+end
+-- The minimap's codes for a good, a middling and a poor frame rate or latency: green, and the yellow and red of the durability line.
+local PERF_CODES = { Code({ 0.1, 1, 0.1 }), Code(YELLOW), Code(RED) }
+
+-- The colour code of a frame rate (kind "fps") or a latency in milliseconds (kind "ms") by how good it is: a frame rate is middling under 60 and
+-- poor under 30, a latency middling over 100 ms and poor over 200 ms. codes, when given, are the caller's own { good, middling, poor } (the data
+-- panels have colours of their own); else they are the minimap's, green, yellow and red. Nil for a value that is not a plain number.
+function ns.PerfColour(kind, value, codes)
+	if not ns.Finite(value) then
 		return nil
 	end
-	local parts = {}
-	local fps = Ask(rate)
-	if ns.Finite(fps) and fps >= 0 then
-		parts[#parts + 1] = ("%d fps"):format(math.floor(fps + 0.5))
+	local level
+	if kind == "fps" then
+		level = (value < FPS_POOR and 3) or (value < FPS_MIDDLING and 2) or 1
+	else
+		level = (value > MS_POOR and 3) or (value > MS_MIDDLING and 2) or 1
 	end
-	if type(net) == "function" then
+	return (type(codes) == "table" and codes or PERF_CODES)[level]
+end
+
+-- The frame rate, the latency or both, as Show and Latency choose: the latency as home and world, the higher one, or one of them, each wanted
+-- value plain or the part is left out. With Colour by value each number is wrapped in its colour, and the words and separators stay white.
+local function Perf()
+	local rate, net = _G.GetFramerate, _G.GetNetStats
+	local show = Opt("mapPerfShow")
+	local wantRate, wantNet = show ~= "ms", show ~= "fps"
+	if not ((wantRate and type(rate) == "function") or (wantNet and type(net) == "function")) then
+		return nil
+	end
+	local colour = Opt("mapPerfColour") == true
+	local function Number(kind, value)
+		local whole = math.floor(value + 0.5)
+		local code = colour and ns.PerfColour(kind, whole) or nil
+		return code and (code .. whole .. "|r") or tostring(whole)
+	end
+	local parts = {}
+	local fps = wantRate and Ask(rate) or nil
+	if ns.Finite(fps) and fps >= 0 then
+		parts[#parts + 1] = Number("fps", fps) .. " fps"
+	end
+	if wantNet and type(net) == "function" then
 		local ok, _, _, home, world = pcall(net)
-		if ok and ns.Finite(home) and ns.Finite(world) and home >= 0 and world >= 0 then
-			parts[#parts + 1] = ("%d / %d ms"):format(math.floor(home + 0.5), math.floor(world + 0.5))
+		home = ok and ns.Finite(home) and home >= 0 and home or nil
+		world = ok and ns.Finite(world) and world >= 0 and world or nil
+		local which = Opt("mapLatency")
+		if which == "home" and home then
+			parts[#parts + 1] = Number("ms", home) .. " ms"
+		elseif which == "world" and world then
+			parts[#parts + 1] = Number("ms", world) .. " ms"
+		elseif which == "max" and home and world then
+			parts[#parts + 1] = Number("ms", math.max(home, world)) .. " ms"
+		elseif which ~= "home" and which ~= "world" and which ~= "max" and home and world then
+			parts[#parts + 1] = Number("ms", home) .. " / " .. Number("ms", world) .. " ms"
 		end
 	end
 	if #parts == 0 then

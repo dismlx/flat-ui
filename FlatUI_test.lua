@@ -9879,6 +9879,10 @@ local PAGES = {
 			{ choices = { { "always", "Always" }, { "combat", "In combat only" }, { "off", "Off" } } }),
 		S("general.cursorRingSize", "number", 48, "Cursor ring size", nil, { min = 16, max = 160, step = 4, unit = "", needs = "general.cursorRing", needsIn = { "always", "combat" } }),
 		S("general.cursorRingColour", "colour", "ffffffff", "Cursor ring colour", nil, { needs = "general.cursorRing", needsIn = { "always", "combat" } }),
+		S("general.cursorRingCast", "bool", true, "Cast progress on the ring", "Your cast or channel runs round the ring.", { needs = "general.cursorRing", needsIn = { "always", "combat" } }),
+		S("general.cursorRingCastColour", "colour", "ffe6b333", "Cast progress colour", nil, { needs = "general.cursorRingCast" }),
+		S("general.cursorRingGcd", "bool", false, "Global cooldown on the ring", "Just inside the cast's ring.", { needs = "general.cursorRing", needsIn = { "always", "combat" } }),
+		S("general.cursorRingGcdColour", "colour", "ffffffff", "Global cooldown colour", nil, { needs = "general.cursorRingGcd" }),
 	} },
 	{ key = "generalColours", label = "Colours", parent = "general", owner = "general", rows = {
 		"Cast colours",
@@ -9941,7 +9945,7 @@ local PAGES = {
 		S("nameplates.absorbs", "bool", true, "Absorb shields"),
 		S("nameplates.healAbsorbs", "bool", true, "Heal absorbs"),
 	} },
-	{ key = "nameplatesColours", label = "Colours and threat", parent = "nameplates", owner = "nameplates", rows = {
+	{ key = "nameplatesColours", label = "Colours", parent = "nameplates", owner = "nameplates", rows = {
 		"Reaction",
 		S("nameplates.colours", "bool", false, "Reaction colours on health bars", "Hostile, neutral and friendly, in the colours of the Colours page. Tapped and dead units keep the game's grey unless Custom reaction colours is on."),
 		S("nameplates.colourPlayers", "choice", "game", "Players", "As the game has it keeps class colours when the game's class colour setting is on.",
@@ -9949,12 +9953,6 @@ local PAGES = {
 		"Target",
 		S("nameplates.targetBar", "bool", false, "Colour the target's health bar"),
 		S("nameplates.targetBarColour", "colour", "ff66b3ff", "Target health bar colour", nil, { needs = "nameplates.targetBar" }),
-		"Threat",
-		S("nameplates.threat", "bool", false, "Threat colours", "Colours enemy health bars by the threat you have on them."),
-		S("nameplates.threatRole", "choice", "auto", "Your role", nil, { choices = { { "auto", "From your group role" }, { "tank", "Tank" }, { "damage", "Damage or healer" } }, needs = "nameplates.threat" }),
-		S("nameplates.threatGood", "colour", "ff4dbf59", "Threat you want", nil, { needs = "nameplates.threat" }),
-		S("nameplates.threatTransition", "colour", "ffe6c133", "Threat changing hands", nil, { needs = "nameplates.threat" }),
-		S("nameplates.threatBad", "colour", "ffd94040", "Threat you do not want", nil, { needs = "nameplates.threat" }),
 		"Mouseover",
 		S("nameplates.hover", "bool", false, "Mouseover border", nil, { needs = "nameplates.health" }),
 		S("nameplates.hoverColour", "colour", "ffd9d9d9", "Mouseover colour", nil, { needs = "nameplates.hover" }),
@@ -9963,6 +9961,52 @@ local PAGES = {
 		S("nameplates.lowHealth", "bool", false, "Low health border"),
 		S("nameplates.lowHealthAt", "number", 20, "Low health below", nil, { min = 5, max = 50, step = 5, unit = "%", needs = "nameplates.lowHealth" }),
 		S("nameplates.lowHealthColour", "colour", "ffff3333", "Low health border colour", nil, { needs = "nameplates.lowHealth" }),
+	} },
+	{ key = "nameplatesThreat", label = "Threat", parent = "nameplates", owner = "nameplates", rows = {
+		"Threat",
+		S("nameplates.threat", "bool", true, "Threat on nameplates", "Shows your threat on each enemy with the parts below."),
+		S("nameplates.threatBar", "bool", true, "Colour health bars by threat", "The target's own colour still wins while Colour the target's health bar is on.", { needs = "nameplates.threat" }),
+		S("nameplates.threatRole", "choice", "auto", "Your role", "From your role, stance or form takes the role your group gave you, else Defensive Stance, Bear Form or Righteous Fury make you a tank.",
+			{ choices = { { "auto", "From your role, stance or form" }, { "tank", "Tank" }, { "damage", "Damage or healer" } }, needs = "nameplates.threat" }),
+		"Threat colours",
+		S("nameplates.threatGood", "colour", "ff4dbf59", "Threat you want", "As a tank an enemy you hold securely, as damage or healer one on someone else.", { needs = "nameplates.threat" }),
+		S("nameplates.threatTransition", "colour", "ffe6c133", "Threat changing hands", "An enemy close to turning to you or away from you.", { needs = "nameplates.threat" }),
+		S("nameplates.threatBad", "colour", "ffd94040", "Threat you do not want", "As a tank an enemy on someone else, as damage or healer one on you.", { needs = "nameplates.threat" }),
+		S("nameplates.threatTanks", "bool", true, "Enemies held by another tank", "As a tank, an enemy another tank of your group or your pet holds takes the colour below, so it is not taken for a loose one.", { needs = "nameplates.threat" }),
+		S("nameplates.threatTankColour", "colour", "ff0faac8", "Another tank's colour", nil, { needs = "nameplates.threatTanks" }),
+		"Whose threat",
+		S("nameplates.threatPet", "bool", true, "Your pet's threat counts", "An enemy your pet holds shows as held for you before you hit it.", { needs = "nameplates.threat" }),
+		S("nameplates.threatLead", "bool", false, "Early warning while tanking", "As a tank, an enemy you hold securely shows as changing hands while someone else comes close to your threat.", { needs = "nameplates.threat" }),
+		"Which enemies",
+		S("nameplates.threatNormal", "bool", true, "Normal enemies", nil, { needs = "nameplates.threat" }),
+		S("nameplates.threatElite", "bool", true, "Elite and Rare enemies", nil, { needs = "nameplates.threat" }),
+		S("nameplates.threatBoss", "bool", true, "Bosses", "Enemies whose level shows as a skull.", { needs = "nameplates.threat" }),
+		S("nameplates.threatMinor", "bool", true, "Minor enemies", "Totems and other units the game counts as minor or trivial.", { needs = "nameplates.threat" }),
+		S("nameplates.threatNeutral", "bool", true, "Neutral enemies", "Units that do not attack until you do.", { needs = "nameplates.threat" }),
+		S("nameplates.threatTapped", "bool", true, "Enemies tapped by others", "Their health bar keeps the game's grey.", { needs = "nameplates.threat" }),
+		S("nameplates.threatInstances", "bool", false, "Only in dungeons and raids", nil, { needs = "nameplates.threat" }),
+		"Glow and opacity",
+		S("nameplates.threatGlow", "choice", "needs", "Threat glow", "A ring in the threat colour around the health bar; When the enemy needs you leaves out threat you want.",
+			{ choices = { { "off", "Off" }, { "needs", "When the enemy needs you" }, { "all", "Every threat state" } }, needs = "nameplates.threat" }),
+		S("nameplates.threatBorder", "bool", false, "Threat colour on the health bar border", "Your target, focus and mouseover keep their border colour, and it needs Health bar border.",
+			{ needs = "nameplates.threat" }),
+		S("nameplates.threatFade", "bool", true, "Fade enemies held for you", "Enemies whose threat you want fade so the ones that need you stand out, while your target and focus stay clear.",
+			{ needs = "nameplates.threat" }),
+		S("nameplates.threatFadeAlpha", "number", 75, "Opacity of enemies held for you", nil, { min = 10, max = 100, step = 5, unit = "%", needs = "nameplates.threatFade" }),
+		"Threat text",
+		S("nameplates.threatValue", "choice", "scaled", "Threat value", "Left of the health bar, where 100% share of aggro is the point at which the enemy turns to you.",
+			{ choices = { { "off", "Off" }, { "scaled", "Share of aggro" }, { "raw", "Share of the tank's threat" }, { "lead", "Lead while tanking" } }, needs = "nameplates.threat" }),
+		S("nameplates.threatValueWhen", "choice", "group", "Show threat value", nil, { needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" },
+			choices = { { "always", "Always" }, { "group", "In a group or with a pet" }, { "party", "Only in a group" } } }),
+		S("nameplates.threatValueColour", "bool", true, "Threat value in the threat colour", "Off, the value is white.", { needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatValueSize", "number", 100, "Threat value size", "100% is the size of the game's health text.",
+			{ min = 50, max = 200, step = 5, unit = "%", needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatName", "bool", false, "Threat colour on the name", "While an enemy shows threat, its name takes the threat colour in place of Name colour.", { needs = "nameplates.threat" }),
+		"Enemy's target",
+		S("nameplates.aggroTarget", "bool", false, "Name of the enemy's target", "Who the enemy attacks, right of the health bar, in the class colour of a player.", { needs = "nameplates.threat" }),
+		S("nameplates.aggroTargetCombat", "bool", true, "Only in combat", nil, { needs = "nameplates.aggroTarget" }),
+		S("nameplates.aggroTargetOnly", "bool", false, "Only on your target", nil, { needs = "nameplates.aggroTarget" }),
+		S("nameplates.aggroTargetNotMe", "bool", true, "Not when it attacks you", nil, { needs = "nameplates.aggroTarget" }),
 	} },
 	{ key = "nameplatesText", label = "Text", parent = "nameplates", owner = "nameplates", rows = {
 		"Font",
@@ -10359,8 +10403,12 @@ local PAGES = {
 		S("cooldowns.add", "list", 0, "Add a spell", "For a spell that is not listed, type /flatui cooldown add and its name."),
 		S("cooldowns.remove", "list", 0, "Remove a spell"),
 		S("cooldowns.trinkets", "bool", false, "Equipped trinkets", "Adds your two trinket slots after the picked spells."),
+		S("cooldowns.gear", "bool", false, "On-use gear in other slots", "Adds the items you wear in other slots that have a use, such as engineering goggles or boots, after the trinkets."),
 		S("cooldowns.addItem", "list", 0, "Add a potion or healthstone", "Every rank shares one icon: the best one in your bags that your level allows, with how many you carry. It comes after the spells and trinkets."),
 		S("cooldowns.removeItem", "list", 0, "Remove a potion or healthstone"),
+		S("cooldowns.addOwnItem", "list", 0, "Add an item", "An item in your bags that has a use, such as the Hearthstone, a mana gem or an engineering device, with how many you carry. For one that is not listed, type /flatui cooldown add item and its name. Potions and healthstones have their own row."),
+		S("cooldowns.removeOwnItem", "list", 0, "Remove an item", "Its own ready sound goes with it."),
+		S("cooldowns.importBar", "list", 0, "Add the spells of a bar", "Adds each spell with a cooldown on that bar that the row does not have yet. Action bar 1 is the one the main bar shows now, such as a warrior's stance bar. Later changes to the bar are not followed. /flatui cooldown import 1 does the same."),
 		"Icons",
 		S("cooldowns.size", "number", 36, "Icon size", nil, { min = 16, max = 64, step = 2, unit = "" }),
 		S("cooldowns.spacing", "number", 3, "Spacing", nil, { min = 0, max = 20, step = 1, unit = "" }),
@@ -10373,6 +10421,7 @@ local PAGES = {
 		S("cooldowns.dim", "bool", true, "Dim on cooldown"),
 		S("cooldowns.mounted", "bool", false, "Hide while mounted"),
 		S("cooldowns.resting", "bool", false, "Hide in cities and inns"),
+		S("cooldowns.tooltips", "choice", "off", "Tooltips on icons", "With tooltips the icons catch the mouse, but clicks still go through to the world.", { choices = { { "off", "Off" }, { "combat", "Out of combat only" }, { "on", "On" } } }),
 		"Ready again",
 		S("cooldowns.readySound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 		S("cooldowns.iconSound", "list", 0, "Sound of one icon", "Choose an icon, then open the list again for its own sound. An icon without one plays Sound."),
@@ -10407,7 +10456,17 @@ local PAGES = {
 		S("cooldowns.numbersFont", "choice", "game", "Countdown number size", nil, { choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" }, { "huge", "Huge" } }, needs = "cooldowns.numbers" }),
 		S("cooldowns.sweep", "bool", true, "Cooldown sweep", nil, nil),
 		S("cooldowns.sweepAlpha", "number", 70, "Sweep opacity", nil, { min = 0, max = 100, step = 5, unit = "%", needs = "cooldowns.sweep" }),
+		S("cooldowns.sweepColour", "colour", "ff000000", "Sweep colour", "Its opacity is Sweep opacity.", { needs = "cooldowns.sweep" }),
+		S("cooldowns.edge", "bool", false, "Edge line", "A bright line along the edge of the sweep."),
+		S("cooldowns.edgeColour", "colour", "ffffffff", "Edge colour", nil, { needs = "cooldowns.edge" }),
+		S("cooldowns.gcd", "bool", false, "Show the global cooldown", "The sweep also runs for the global cooldown. Dimming, Flash when ready and the ready sound still leave it out."),
+		S("cooldowns.numbersColour", "colour", "ffffffff", "Countdown colour", nil, { needs = "cooldowns.numbers" }),
+		S("cooldowns.numbersPlace", "choice", "middle", "Countdown place", "Where the time left sits on the icon.", { choices = { { "middle", "Middle" }, { "top", "Top" }, { "bottom", "Bottom" } }, needs = "cooldowns.numbers" }),
+		S("cooldowns.tenths", "number", 0, "Tenths below", "Under this many seconds the countdown shows tenths. 0 means never.", { min = 0, max = 10, step = 1, unit = " s", needs = "cooldowns.numbers" }),
 		S("cooldowns.countSize", "number", 100, "Charge count size", nil, { min = 50, max = 250, step = 5, unit = "%" }),
+		S("cooldowns.useCount", "bool", true, "Reagent counts", "The count the game shows on an action button for a spell that uses a reagent, such as Vanish or Rebirth."),
+		S("cooldowns.countColour", "colour", "ffffffff", "Count colour", "Charges, items carried and reagent counts."),
+		S("cooldowns.countCorner", "choice", "br", "Count corner", "With Top right the keybind moves to the top left.", { choices = { { "br", "Bottom right" }, { "bl", "Bottom left" }, { "tl", "Top left" }, { "tr", "Top right" } } }),
 		"Keybind",
 		S("cooldowns.keybind", "bool", false, "Keybind on icons", "The key bound to the spell on your action bars.", nil),
 		S("cooldowns.keybindSize", "number", 100, "Keybind size", nil, { min = 50, max = 250, step = 5, unit = "%", needs = "cooldowns.keybind" }),
@@ -10422,6 +10481,7 @@ local PAGES = {
 		S("pulse.size", "number", 72, "Icon size", nil, { min = 32, max = 160, step = 4, unit = "" }),
 		S("pulse.time", "number", 1, "How long it shows", "Cooldowns that end together pulse one after another. /flatui pulse test shows one.", { min = 1, max = 5, step = 1, unit = " s" }),
 		S("pulse.sound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
+		S("pulse.iconSound", "list", 0, "Sound of one spell or item", "Choose one, then open the list again for its own sound. One without it plays Sound."),
 	} },
 	{ key = "trackers", label = "Trackers", rows = {
 		S("trackers.enabled", "bool", true, "Trackers"),
@@ -10438,17 +10498,23 @@ local PAGES = {
 		S("trackers.ammoMin", "number", 200, "Ammunition minimum", "With a bow, crossbow or gun, the ammunition tracker is low at this many arrows or bullets or fewer. 0 means never. Set to Only when low or missing, a low count waits for the end of a fight.", { min = 0, max = 2000, step = 100, unit = "" }),
 		S("trackers.thrownMin", "number", 20, "Thrown weapon minimum", "With a thrown weapon, the ammunition tracker is low at this many or fewer. 0 means never. One that wears out is low at a fifth of its durability.", { min = 0, max = 200, step = 5, unit = "" }),
 		S("trackers.durabilityMin", "number", 20, "Durability minimum", "The durability tracker is low when an item you wear is at this much of its durability or less, and red when one is broken. 0 means never. For 12 seconds after a ready check it is also low at 40% or less, and shows when low or broken, whatever Show says.", { min = 0, max = 100, step = 5, unit = "%" }),
+		"Pet",
+		S("trackers.petHealthMin", "number", 30, "Pet health minimum", "A Pet or Demon tracker shows your pet's health in red while it is under this. 0 means never. /flatui tracker set 1 health 40 sets one tracker's own.", { min = 0, max = 90, step = 5, unit = "%" }),
+		S("trackers.petPassive", "bool", true, "Pet on passive counts as low", "A Pet or Demon tracker is low while your pet is out and set to Passive, when it does not fight for you."),
+		S("trackers.petDefensive", "bool", false, "Pet on defensive counts as low", "Defensive is a usual choice on classic content. On, a click sets your pet to Assist."),
 		"When shown",
 		S("trackers.show", "choice", "always", "Show", nil, { choices = { { "always", "Always" }, { "low", "Only when low or missing" }, { "combat", "Only in combat" } } }),
 		S("trackers.mounted", "bool", true, "Hide while mounted", "Applies to trackers set to Only when low or missing."),
 		S("trackers.resting", "bool", false, "Hide in cities and inns", "Applies to trackers set to Only when low or missing."),
+		S("trackers.combatHide", "bool", false, "Hide in combat", "Applies to trackers set to Only when low or missing: a low or missing tracker shows only between fights."),
 		"In fights",
 		S("trackers.gameIcon", "bool", true, "Game's own icon in fights", "Off: charges and time left stop updating in a fight."),
 		S("trackers.without", "choice", "last", "In fights without the game's icon", nil, { choices = { { "last", "Last known" }, { "hidden", "Hidden" } } }),
 		"Action buttons",
 		S("trackers.mark", "bool", false, "Mark action buttons", "A red border on the action button that fixes a low or missing tracker. Needs Restyle action bars."),
 		"Clicks",
-		S("trackers.click", "choice", "group", "Click to apply", "Out of combat, a click on a tracker that needs it: a group buff is cast on a member who lacks it, or a poison, stone or oil goes on the weapon. /flatui tracker use 1 and an item sets what a weapon tracker uses.", { choices = { { "none", "Off" }, { "group", "Group buffs" }, { "all", "Group buffs and weapons" } } }),
+		S("trackers.click", "choice", "group", "Click to apply", "Out of combat, a click on a tracker that needs it fixes it: your buff, stance or form is cast, your pet is called, revived or set to fight, and a group buff is cast on a member who lacks it; with weapons, a poison, stone or oil goes on the weapon too. /flatui tracker use 1 and an item sets what a weapon tracker uses.", { choices = { { "none", "Off" }, { "group", "Buffs, forms and the pet" }, { "all", "Buffs, forms, the pet and weapons" } } }),
+		S("trackers.clickUse", "list", 0, "Item a click puts on a weapon", "Choose a weapon tracker, then open the list again for what a click puts on that weapon. /flatui tracker use does the same.", { needs = "trackers.click", needsIn = { "all" } }),
 		"Proc alerts",
 		S("trackers.addProc", "list", 0, "Add a proc", "For another spell, type /flatui tracker add proc and its name."),
 		S("trackers.removeProc", "list", 0, "Remove a proc"),
@@ -10487,10 +10553,13 @@ local PAGES = {
 	{ key = "trackerlow", label = "Low and missing", switch = "trackers", rows = {
 		"Low",
 		S("trackers.low", "number", 1, "Low at (charges)", "0 means never.", { min = 0, max = 20, step = 1, unit = "" }),
-		S("trackers.lowTime", "number", 0, "Low at (seconds left)", "0 means never.", { min = 0, max = 300, step = 5, unit = " s" }),
+		S("trackers.lowTime", "number", 0, "Low at (seconds left)", "0 means never. Up to 30 minutes, for long buffs and poisons.", { min = 0, max = 1800, step = 5, unit = " s" }),
+		S("trackers.lowTimeInstance", "number", 120, "Low in dungeons and raids (seconds left)", "For a buff or weapon enchant that lasts 10 minutes or more, in a dungeon or raid: the larger of this and Low at. 0 means the same as elsewhere. In a fight, a tracker set to Only when low or missing still hides while its buff is up, so the warning shows between pulls.", { min = 0, max = 1800, step = 5, unit = " s" }),
 		"Missing",
 		S("trackers.missing", "choice", "red", "When missing", nil, { choices = { { "red", "Red icon" }, { "pulse", "Red icon that pulses" }, { "word", "Red icon and the word Missing" } } }),
 		S("trackers.sound", "bool", false, "Sound when it drops"),
+		S("trackers.comes", "bool", false, "Sound when it comes", "For a buff or debuff tracker, in the kit of Sound."),
+		S("trackers.stacks", "bool", false, "Sound when it stacks", "For a buff or debuff tracker, in the kit of Sound."),
 		S("trackers.kit", "choice", "raid", "Sound", nil, { choices = { { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 	} },
 	-- The window's own editor of one tracker: a page of the window with no setting of its own, left out of the game's options.
@@ -10747,6 +10816,7 @@ local PAGES = {
 		S("unitframes.playerPowerText", "choice", "game", "Power text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
 		S("unitframes.combatIcon", "bool", true, "Combat icon"),
 		S("unitframes.playerPowerBar", "bool", true, "Power bar"),
+		S("unitframes.druidMana", "bool", true, "Druid mana in forms", "For a druid in Bear or Cat Form: a thin mana bar under the player frame's bars. In the other forms the frame's own bar shows mana."),
 	} },
 	{ key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes", rows = {
 		S("unitframes.targetPicture", "choice", "auto", "Picture", "Class icon applies to players. Other units keep their face.", { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
@@ -10775,6 +10845,8 @@ local PAGES = {
 		S("unitframes.petPowerText", "choice", "game", "Power text", nil, { choices = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" }, { "curpct", "Current and percent" }, { "miss", "Missing" } } }),
 		S("unitframes.petHappiness", "bool", true, "Happiness face"),
 		S("unitframes.petPowerBar", "bool", true, "Power bar"),
+		S("unitframes.petTarget", "bool", false, "Pet target frame", "A small frame for what your pet attacks, with its health and name. A click targets it. /flatui move places it."),
+		S("unitframes.petTargetWidth", "number", 120, "Pet target width", "Changed out of combat.", { min = 60, max = 240, step = 10, unit = " px", needs = "unitframes.petTarget" }),
 	} },
 	{ key = "unitframesTot", label = "Target of target frame", parent = "unitframes", owner = "unitframes", rows = {
 		S("unitframes.totPicture", "choice", "auto", "Picture", nil, { needs = "unitframes.squarePortrait", choices = { { "auto", "As Portrait style" }, { "square", "Square picture" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } }),
@@ -10841,6 +10913,8 @@ local PAGES = {
 		S("unitframes.status", "bool", true, "Resting and combat colour", "Colours the border of the player and pet portraits: yellow while resting, red in combat. The game's glow stays hidden when this is off.",
 			{ needs = "unitframes.squarePortrait" }),
 		S("unitframes.threat", "bool", true, "Threat border", "Colours the health bar border while a unit has threat. A party member's border takes the colour of their top debuff."),
+		S("unitframes.threatTanks", "choice", "shown", "Threat border on tanks", "A tank who holds aggro as planned keeps a plain border. A tank is a member with the tank role, or the Main Tank of a raid.",
+			{ needs = "unitframes.threat", choices = { { "shown", "Shown" }, { "hidden", "Not shown" } } }),
 		"Elite and Rare",
 		S("unitframes.elite", "bool", true, "Portrait border colour", "Gold for an Elite, silver for a Rare, silver with a gold inner line for a Rare Elite, red for a Boss.",
 			{ needs = "unitframes.squarePortrait" }),
@@ -10899,6 +10973,8 @@ local PAGES = {
 		"Icons",
 		S("unitframes.leaderIcon", "bool", true, "Leader icon"),
 		S("unitframes.roleIcon", "bool", true, "Role icon on player and party frames"),
+		S("unitframes.roleIconRoles", "choice", "all", "Role icons for", "On player, party and raid frames. Main Tank and Main Assist keep their icon.",
+			{ choices = { { "all", "Every role" }, { "support", "Tanks and healers" }, { "healer", "Healers only" } } }),
 		S("unitframes.pvpIcon", "bool", true, "PvP icon"),
 		S("unitframes.raidMarker", "bool", true, "Raid marker on target, focus and boss frames"),
 		S("unitframes.deadText", "bool", true, "Dead text"),
@@ -10909,8 +10985,14 @@ local PAGES = {
 		S("unitframes.totemTimeSize", "number", 80, "Totem time size", nil, { min = 50, max = 200, step = 5, unit = "%", needs = "unitframes.totemTimer" }),
 		"Party and raid frames",
 		S("unitframes.dispelBorder", "bool", true, "Border colour of a debuff you can dispel", "The border of the health bar takes the colour of Magic, Curse, Disease or Poison while the member has a debuff of that type you can dispel."),
+		S("unitframes.dispelSelf", "bool", true, "Also on your player, target and focus frames", "A target or focus you cannot assist shows none.", { needs = "unitframes.dispelBorder" }),
 		S("unitframes.dispelIcon", "bool", true, "Debuff type icon on party frames", "The type of a debuff you can dispel, at the right end of the health bar. The game's raid frames show their own."),
 		S("unitframes.raidFrameMarker", "bool", true, "Raid marker on raid frames", "The game's raid frames show none."),
+		S("unitframes.partyFrameMarker", "bool", true, "Raid marker on party frames", "The game's party frames show none."),
+		S("unitframes.raidLeaderIcon", "bool", true, "Leader and assistant icons on raid frames", "The game's raid frames show none."),
+		S("unitframes.targetBorder", "choice", "game", "Border for your target", "On raid frames, the border of your target. With Own colour the game's party frames get one too.",
+			{ choices = { { "game", "As the game has it" }, { "own", "Own colour" }, { "off", "Off" } } }),
+		S("unitframes.targetColour", "colour", "ffffffff", "Target border colour", nil, { needs = "unitframes.targetBorder", needsIn = { "own" } }),
 	} },
 	{ key = "hud", label = "Minimap and buffs", rows = {
 		S("hud.enabled", "bool", true, "Restyle the minimap, bags and buffs"),
@@ -10939,6 +11021,7 @@ local PAGES = {
 		S("hud.btnAddons", "bool", true, "Addon list button"),
 		S("hud.addonButtons", "choice", "edge", "Addon buttons", "Round buttons that other addons put on the minimap.",
 			{ choices = { { "leave", "Where each addon puts them" }, { "edge", "Column beside the map" }, { "bar", "Row under the map" } }, changed = "MapButtonsChanged" }),
+		S("hud.addonButtonsKeep", "list", 0, "Leave in place", "A button you tick stays where its addon puts it.", { needs = "hud.addonButtons", needsIn = { "edge", "bar" } }),
 		"Text around the map",
 		S("hud.mapCoords", "bool", true, "Coordinates", "Your place on the zone map. Hidden in instances and where the game gives no position."),
 		S("hud.mapCoordsPlace", "choice", "below", "Coordinates place", nil, { needs = "hud.mapCoords", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
@@ -10947,6 +11030,9 @@ local PAGES = {
 		S("hud.mapDurabilityPlace", "choice", "below", "Durability place", nil, { needs = "hud.mapDurability", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
 		S("hud.mapPerf", "bool", false, "Frame rate and latency", "Frames per second, then your home and world latency in milliseconds."),
 		S("hud.mapPerfPlace", "choice", "below", "Frame rate place", nil, { needs = "hud.mapPerf", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
+		S("hud.mapPerfShow", "choice", "both", "Show", "What the line by the minimap shows.", { needs = "hud.mapPerf", choices = { { "both", "Frame rate and latency" }, { "fps", "Frame rate only" }, { "ms", "Latency only" } } }),
+		S("hud.mapLatency", "choice", "both", "Latency", "Home is chat and the auction house, world is combat and other players.", { needs = "hud.mapPerfShow", needsIn = { "both", "ms" }, choices = { { "both", "Home and world" }, { "max", "The higher one" }, { "home", "Home only" }, { "world", "World only" } } }),
+		S("hud.mapPerfColour", "bool", true, "Colour by value", "Frame rate red under 30 and yellow under 60; latency yellow over 100 ms and red over 200 ms.", { needs = "hud.mapPerf" }),
 		S("hud.mapClock", "bool", false, "Time", "Your local time or the realm's. The game's clock beside the zone name has its own row, Clock, under Buttons."),
 		S("hud.mapClockPlace", "choice", "above", "Time place", nil, { needs = "hud.mapClock", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
 		S("hud.mapClockTime", "choice", "local", "Local or realm time", nil, { needs = "hud.mapClock", choices = { { "local", "Local time" }, { "realm", "Realm time" } } }),
@@ -10999,7 +11085,8 @@ local PAGES = {
 		S("hud.xpQuest", "bool", true, "Quests ready to hand in", "A stretch after the fill shows the experience of the finished quests in your log. The tooltip counts them and the whole log.", { needs = "hud.xpOwn", needsIn = { "flat" } }),
 		S("hud.xpQuestColour", "colour", "ff4de64d", "Quest colour", nil, { needs = "hud.xpQuest" }),
 		S("hud.xpStats", "choice", "time", "Levelling text", "After the text of the experience bar, or alone while Bar text is Hidden. The pace is your last 30 minutes of play, without time away, and shows after 5 minutes.", { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "none", "None" }, { "time", "Time to level" }, { "rate", "Experience per hour" }, { "both", "Time to level and per hour" }, { "kills", "Kills to level" } } }),
-		S("hud.xpStatsTip", "bool", true, "Levelling in the tooltip", "Experience this session and per hour, the time to level, about how many kills and quests that takes, and the time at this level after /played.", { needs = "hud.xpTooltip" }),
+		S("hud.xpRepStats", "choice", "none", "Reputation text", "After the text of the reputation bar, or alone while Bar text is Hidden. The pace is your last 30 minutes of play, without time away, and shows after 5 minutes.", { needs = "hud.xpOwn", needsIn = { "flat" }, choices = { { "none", "None" }, { "time", "Time to next standing" }, { "rate", "Reputation per hour" }, { "both", "Both" } } }),
+		S("hud.xpStatsTip", "bool", true, "Levelling in the tooltip", "Experience this session and per hour, the time to level, about how many kills and quests that takes, and the time at this level after /played. On the reputation bar, the reputation this session and per hour and the time to the next standing.", { needs = "hud.xpTooltip" }),
 		"Micro menu",
 		S("hud.micro", "bool", true, "Micro menu buttons", "Thin border in place of the default button frames."),
 	} },
@@ -11039,6 +11126,9 @@ local PAGES = {
 		"Queue, damage meter and zone bars",
 		S("hud.queue", "bool", true, "Queue status panel", "Thin border in place of the default frame."),
 		S("hud.meter", "bool", true, "Damage meter header", "A flat band with a thin border in place of the default header."),
+		S("hud.meterClear", "choice", "off", "Clear the damage meter", "Not again for the same instance within an hour, so a reload or a run back after a wipe keeps the numbers.",
+			{ choices = { { "off", "Off" }, { "enter", "When you enter a dungeon or raid" }, { "ask", "Ask when you enter one" } } }),
+		S("hud.meterClearBoss", "bool", false, "At each raid boss", "Clears as a raid boss fight starts, without asking.", { needs = "hud.meterClear", needsIn = { "enter", "ask" } }),
 		S("hud.zoneBars", "bool", true, "Zone event bars", "Thin border on score and progress bars."),
 	} },
 	{ key = "chat", label = "Chat and tooltips", rows = {
@@ -11076,6 +11166,9 @@ local PAGES = {
 		S("chat.history", "number", 128, "Lines kept per window", nil, { min = 128, max = 2048, step = 64, unit = " lines" }),
 		S("chat.fade", "bool", true, "Fade old messages"),
 		S("chat.fadeAfter", "number", 120, "Fade after", nil, { min = 10, max = 600, step = 10, unit = " s", needs = "chat.fade" }),
+		S("chat.restore", "bool", false, "Show recent chat after a reload", "Each time you reload or log in, the lines of the last hour show again in your main chat window: say, yell, emotes, party, raid, guild, officer and whispers. They are kept in Flat UI's saved settings of this character; lines the game withholds in fights and dungeons are not kept."),
+		S("chat.restoreLines", "number", 50, "Lines to show again", "None older than an hour, and no more than three quarters of Lines kept per window, so that the other lines of a login stay in the window.", { min = 10, max = 200, step = 10, unit = " lines", needs = "chat.restore" }),
+		S("chat.restoreChannels", "bool", false, "Numbered channels too", "General, Trade and the other numbered channels.", { needs = "chat.restore" }),
 		"Links",
 		S("chat.webLinks", "bool", true, "Web addresses as links", "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy."),
 		S("chat.linkTips", "bool", true, "Tooltips of chat links", "While the mouse is over an item, spell or achievement link in a chat window, its tooltip shows. Not in a fight."),
@@ -11112,13 +11205,28 @@ local PAGES = {
 		"Combat",
 		S("chat.combat", "choice", "show", "Tooltips in combat", nil, { choices = { { "show", "Show as usual" }, { "units", "Hide unit tooltips" }, { "all", "Hide every tooltip" } } }),
 		S("chat.combatKey", "choice", "none", "Show anyway while holding", nil, { choices = { { "none", "No key" }, { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } }),
+		S("chat.combatUnits", "choice", "all", "Unit tooltips hidden", "A unit the game will not say about is shown.", { needs = "chat.combat", needsIn = { "units" },
+			choices = { { "all", "Every unit" }, { "enemies", "Enemies" }, { "friends", "Friendly units" } } }),
+		S("chat.combatWhere", "choice", "combat", "Where", "With In combat in dungeons and raids, tooltips show in fights in the open world.", { needs = "chat.combat", needsIn = { "units", "all" },
+			choices = { { "combat", "In combat" }, { "instance", "In combat in dungeons and raids" } } }),
+		S("chat.spellTips", "choice", "show", "Spell tooltips", "Show anyway while holding still shows them.",
+			{ choices = { { "show", "Show" }, { "combat", "Hide in combat" }, { "instance", "Hide in dungeons and raids" }, { "always", "Hide always" } } }),
+		S("chat.auraTips", "choice", "show", "Buff and debuff tooltips", "Your own buffs and debuffs, and those on party and raid frames. The target and focus frames show theirs in a tooltip of the game's own that Flat UI cannot hide. Show anyway while holding still shows them.",
+			{ choices = { { "show", "Show" }, { "combat", "Hide in combat" }, { "instance", "Hide in dungeons and raids" }, { "always", "Hide always" } } }),
+		S("chat.itemTips", "choice", "show", "Item tooltips", "Show anyway while holding still shows them.",
+			{ choices = { { "show", "Show" }, { "combat", "Hide in combat" }, { "instance", "Hide in dungeons and raids" }, { "always", "Hide always" } } }),
+		S("chat.groupTips", "choice", "other", "Party and raid frame tooltips", "The unit tooltips of the game's party and raid frames, whose clicks do not change. The box of buffs and debuffs that opens beside a party frame still shows.",
+			{ choices = { { "other", "As other units" }, { "ooc", "Out of combat only" }, { "key", "Only with a key" }, { "off", "Off" } } }),
+		S("chat.groupTipKey", "choice", "shift", "Key for party and raid frames", "Hold it as you point at one of these frames, and its tooltip shows, unless Tooltips in combat hides it.", { needs = "chat.groupTips", needsIn = { "key" },
+			choices = { { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } } }),
 		"Extra lines",
 		S("chat.ids", "bool", false, "Item and spell IDs"),
+		S("chat.iconId", "bool", false, "Icon ID", "The number of the icon file, after the ID line.", { needs = "chat.ids" }),
 		S("chat.idsWhen", "choice", "always", "Show IDs", "The IDs show while the key is held: at once over bags, action bars and the Character window, and over a link once you point at it again.",
 			{ needs = "chat.ids", choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } } }),
 		S("chat.enchantId", "bool", true, "Temporary enchant ID", "On a weapon you wear: the ID of its poison, oil, stone or imbue.", { needs = "chat.ids" }),
 		S("chat.count", "bool", false, "Item count in bags and bank"),
-		S("chat.icons", "bool", true, "Item and spell icons", "The icon before the name of an item or spell."),
+		S("chat.icons", "bool", true, "Item and spell icons", "The icon before the name of an item, a spell, a buff or a debuff: not on the target and focus frames, whose buff tooltip is the game's own."),
 		S("chat.targetLine", "bool", true, "Target of units", "A line naming what a unit targets, in its class or reaction colour: You when it is you."),
 		"Item comparison",
 		S("chat.compareShift", "bool", true, "Compare items only while holding Shift",
@@ -11129,7 +11237,15 @@ local PAGES = {
 		S("errands.chat", "bool", true, "Say what was done", "A line in chat after selling, repairing, training, deleting, accepting, declining and upranking, and when a quest is left to you."),
 		"Merchant",
 		S("errands.sell", "bool", true, "Sell grey items", "When a merchant opens. Hold Shift as it opens to keep them that time. /flatui sell and /flatui keep choose other items to sell or keep."),
+		S("errands.sellTwelve", "bool", true, "Sell at most 12 at a time", "Grey items are sold in one go. Items of your sell list that are not grey come after them, at most 12 at a time, so the merchant's buyback still holds them; Sell next 12 sells the next ones.", { needs = "errands.sell" }),
+		S("errands.sellList", "list", 0, "Items always sold", "/flatui sell and an item adds one."),
+		S("errands.keepList", "list", 0, "Items never sold", "/flatui keep and an item adds one. Make room never deletes them either."),
 		S("errands.repair", "choice", "own", "Repair", "When a merchant who repairs opens.", { choices = { { "off", "Off" }, { "own", "With your gold" }, { "guild", "Guild gold first" } } }),
+		S("errands.guildWhere", "choice", "everywhere", "Guild gold where", "Elsewhere the repair is paid with your own gold.", { needs = "errands.repair", needsIn = { "guild" },
+			choices = { { "everywhere", "Everywhere" }, { "group", "In a group or an instance" }, { "instance", "In dungeons, raids and battlegrounds" }, { "raid", "In raids" } } }),
+		S("errands.bulkBuy", "bool", false, "Buy in bulk", "Shift-click an item at a merchant: beside the game's box, Stack buys a full stack and Most as many as your gold, the merchant's stock and your bags allow, a stack at a time. Both ask first, and the game's box stays open. Not for items bought with tokens."),
+		S("errands.confirmTokens", "bool", false, "Buy with tokens without asking", "Answers Yes when the game asks before it takes items or currency for a purchase. One that also costs 150 gold or more is left to you."),
+		S("errands.confirmTradeable", "bool", false, "Sell loot still tradeable without asking", "Answers Okay when the game asks before you sell an item you could still trade to your group."),
 		"Loot and trainers",
 		S("errands.quickLoot", "bool", true, "Quick loot", "When the game loots by itself (Auto Loot, or its key held), every slot is taken at once. Rolls still ask."),
 		S("errands.makeRoom", "bool", true, "Make room in full bags", "A button under the loot window deletes the cheapest grey item while every bag is full."),
@@ -11193,6 +11309,7 @@ local PAGES = {
 		S("datapanels.top4", "choice", "hearth", "Fourth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		S("datapanels.top5", "choice", "coords", "Fifth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		S("datapanels.top6", "choice", "fps", "Sixth slot", nil, { needs = "datapanels.top", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.topWidth", "number", 0, "Panel width", "0 fits the slots.", { min = 0, max = 2000, step = 10, unit = " px", needs = "datapanels.top" }),
 		"Bottom panel",
 		S("datapanels.bottom", "bool", false, "Show the bottom panel", "In the bottom left corner of the screen until you move it."),
 		S("datapanels.bottom1", "choice", "friends", "First slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
@@ -11201,11 +11318,20 @@ local PAGES = {
 		S("datapanels.bottom4", "choice", "none", "Fourth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		S("datapanels.bottom5", "choice", "none", "Fifth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
 		S("datapanels.bottom6", "choice", "none", "Sixth slot", nil, { needs = "datapanels.bottom", choices = { { "none", "None" }, { "bags", "Bag space" }, { "gold", "Gold" }, { "durability", "Durability" }, { "hearth", "Hearthstone" }, { "coords", "Coordinates" }, { "fps", "Frame rate and latency" }, { "friends", "Friends online" }, { "guild", "Guild online" }, { "sets", "Equipment set" } } }),
+		S("datapanels.bottomWidth", "number", 0, "Panel width", "0 fits the slots.", { min = 0, max = 2000, step = 10, unit = " px", needs = "datapanels.bottom" }),
 		"Look",
 		S("datapanels.font", "choice", "sans", "Font", "Flat UI Sans is IBM Plex Sans. A language it has no letters for keeps the game font.", { choices = { { "sans", "Flat UI Sans" }, { "game", "Game font" } } }),
 		S("datapanels.textSize", "number", 100, "Text size", "100% is 12 px.", { min = 50, max = 200, step = 5, unit = "%" }),
 		S("datapanels.background", "bool", true, "Background and border", "A flat background with a thin border and a line between two slots, in the colours of the Flat UI page."),
 		S("datapanels.tooltips", "bool", true, "Tooltips", "Off: the panels let clicks through, except Equipment set and a slot that shows another addon's feed, which keep their own clicks."),
+		S("datapanels.outline", "choice", "none", "Text outline", "An outline makes a slot a little wider.", { choices = { { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } }),
+		S("datapanels.shadow", "bool", true, "Text shadow"),
+		S("datapanels.textColour", "choice", "white", "Text colour", "A slot's own colours stay, such as red for worn gear.", { choices = { { "white", "White" }, { "class", "Class colour" }, { "custom", "Own colour" } } }),
+		S("datapanels.textCustom", "colour", "ffffffff", "Own text colour", nil, { needs = "datapanels.textColour", needsIn = { "custom" } }),
+		S("datapanels.perfColour", "bool", true, "Colour frame rate and latency", "As by the minimap: frame rate red under 30, latency red over 200 ms."),
+		S("datapanels.combatAlpha", "number", 100, "Opacity in combat", "Under the mouse a panel is at full opacity.", { min = 0, max = 100, step = 5, unit = "%" }),
+		S("datapanels.idleAlpha", "number", 100, "Opacity out of combat", "Under the mouse a panel is at full opacity.", { min = 0, max = 100, step = 5, unit = "%" }),
+		S("datapanels.strata", "choice", "low", "Layer", "Over the game's windows, a panel can cover your bags and the map.", { choices = { { "low", "Under the game's windows" }, { "medium", "Over the unit frames and the minimap" }, { "high", "Over the game's windows" } } }),
 		"Gold",
 		S("datapanels.forgetGold", "list", 0, "Forget a character's gold", "The gold tooltip lists each character of the account that logged in with data panels on."),
 	} },
@@ -11314,6 +11440,7 @@ local PAGES = {
 	{ key = "mount", label = "Mount key", rows = {
 		S("mount.enabled", "bool", false, "Mount key", "Bind a key to Mount or travel form under Flat UI in the game's Key Bindings. It mounts a random mount you can ride; a druid takes Aquatic Form in water, and Travel Form in a fight, on the move or with no mount; a shaman takes Ghost Wolf in a fight or with no mount. Pressed again, it dismounts or leaves the form."),
 		S("mount.favourites", "bool", true, "Favourite mounts first", "Picks among the mounts you marked as favourites in the mount journal (right-click a mount there), or among all of them while none of those can be used."),
+		S("mount.falling", "bool", false, "Slow Fall or Levitate while falling", "For a mage or a priest who knows it: pressed while you fall and are not mounted, the key casts Slow Fall or Levitate on you instead. Not in a fight."),
 	} },
 	{ key = "fade", label = "Fading", rows = {
 		S("fade.enabled", "bool", false, "Fade frames when idle"),
@@ -11332,12 +11459,13 @@ local PAGES = {
 		S("fade.bags", "bool", false, "Bag bar", "Not applied while Leave the game's action bars alone is on."),
 		S("fade.playerFrame", "bool", false, "Player frame"),
 		S("fade.petFrame", "bool", false, "Pet frame"),
-		S("fade.minimapButtons", "bool", false, "Minimap buttons", "Shown while the mouse is over the minimap."),
+		S("fade.minimapButtons", "bool", false, "Minimap buttons", "The game's and other addons' minimap buttons, shown while the mouse is over the minimap."),
 		"When shown",
-		S("fade.targetFrame", "choice", "always", "Target frame", "At other times it fades like the frames above, with its cast bar, combo points and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
-		S("fade.focusFrame", "choice", "always", "Focus frame", "At other times it fades like the frames above, with its cast bar and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
-		S("fade.buffs", "choice", "always", "Buffs", "Your buffs and weapon enchants, not your debuffs. At other times they fade like the frames above.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
-		S("fade.objectiveTracker", "choice", "always", "Objective tracker", "At other times it fades like the frames above. In a fight, Opacity in combat of the tracker comes first while it is under 100%.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.targetFrame", "choice", "always", "Target frame", "At other times it fades like the frames above, with its cast bar, combo points and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.focusFrame", "choice", "always", "Focus frame", "At other times it fades like the frames above, with its cast bar and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.buffs", "choice", "always", "Buffs", "Your buffs and weapon enchants, not your debuffs. At other times they fade like the frames above.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.objectiveTracker", "choice", "always", "Objective tracker", "At other times it fades like the frames above. Only outside an instance with Faded opacity at 0% takes it away in dungeons and raids until the mouse is over it. In a fight, Opacity in combat of the tracker comes first while it is under 100%.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.damageMeter", "choice", "always", "Damage meter", "At other times it fades like the frames above. The game's own Visibility in Edit Mode still applies.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
 		"Fade",
 		S("fade.alpha", "number", 25, "Faded opacity", "Faded buttons still work.", { min = 0, max = 90, step = 5, unit = "%" }),
 		S("fade.delay", "number", 500, "Wait before fading", nil, { min = 0, max = 3000, step = 100, unit = " ms" }),
@@ -11486,7 +11614,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.8" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.9" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -21760,9 +21888,43 @@ for _, path in ipairs({ "threat.enabled", "threat.show", "threat.pets", "threat.
 	"grouptools.size", "grouptools.spacing", "grouptools.layout" }) do
 	covered[path] = true
 end
+-- Nor do the threat rows of wave 8 (0.5.9), for the same reason.
+for _, path in ipairs({ "nameplates.threatBar", "nameplates.threatTanks", "nameplates.threatTankColour", "nameplates.threatPet", "nameplates.threatLead",
+	"nameplates.threatNormal", "nameplates.threatElite", "nameplates.threatBoss", "nameplates.threatMinor", "nameplates.threatNeutral", "nameplates.threatTapped",
+	"nameplates.threatInstances" }) do
+	covered[path] = true
+end
+-- Nor do the rows of wave 7 (0.5.9), for the same reason.
+for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour", "hud.xpRepStats",
+	"datapanels.topWidth", "datapanels.bottomWidth", "datapanels.outline", "datapanels.shadow", "datapanels.textColour", "datapanels.textCustom",
+	"datapanels.perfColour", "datapanels.combatAlpha", "datapanels.idleAlpha", "datapanels.strata",
+	"unitframes.druidMana", "unitframes.petTarget", "unitframes.petTargetWidth", "mount.falling",
+	"fade.damageMeter", "hud.addonButtonsKeep", "hud.meterClear", "hud.meterClearBoss",
+	"general.cursorRingCast", "general.cursorRingCastColour", "general.cursorRingGcd", "general.cursorRingGcdColour",
+	"errands.sellTwelve", "errands.sellList", "errands.keepList", "errands.guildWhere", "errands.bulkBuy", "errands.confirmTokens", "errands.confirmTradeable",
+	"unitframes.threatTanks", "unitframes.roleIconRoles", "unitframes.dispelSelf", "unitframes.partyFrameMarker", "unitframes.raidLeaderIcon",
+	"unitframes.targetBorder", "unitframes.targetColour",
+	"chat.restore", "chat.restoreLines", "chat.restoreChannels", "chat.combatUnits", "chat.combatWhere", "chat.spellTips", "chat.auraTips",
+	"chat.itemTips", "chat.groupTips", "chat.groupTipKey", "chat.iconId",
+	"trackers.petHealthMin", "trackers.petPassive", "trackers.petDefensive", "trackers.combatHide", "trackers.clickUse",
+	"trackers.lowTimeInstance", "trackers.comes", "trackers.stacks", "pulse.iconSound",
+	"cooldowns.gear", "cooldowns.addOwnItem", "cooldowns.removeOwnItem", "cooldowns.importBar", "cooldowns.tooltips", "cooldowns.sweepColour", "cooldowns.edge",
+	"cooldowns.edgeColour", "cooldowns.gcd", "cooldowns.numbersColour", "cooldowns.numbersPlace", "cooldowns.tenths", "cooldowns.useCount", "cooldowns.countColour",
+	"cooldowns.countCorner" }) do
+	covered[path] = true
+end
+-- Nor do the glow and fade rows of wave 8 (0.5.9), for the same reason.
+for _, path in ipairs({ "nameplates.threatGlow", "nameplates.threatBorder", "nameplates.threatFade", "nameplates.threatFadeAlpha" }) do
+	covered[path] = true
+end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
 for _, path in ipairs({ "hud.xpOwn", "hud.xpWidth", "hud.xpHeight", "hud.xpShow", "hud.xpOrder", "hud.xpGap", "hud.xpTicks", "hud.xpColour", "hud.xpRested", "hud.xpRestedColour",
 	"hud.xpRepMode", "hud.xpRepColour", "hud.xpTextWhen", "hud.xpTextPlace", "hud.xpTooltip", "hud.xpQuest", "hud.xpQuestColour", "hud.xpStats", "hud.xpStatsTip" }) do
+	covered[path] = true
+end
+-- Nor do the threat text rows of wave 8 (0.5.9), for the same reason.
+for _, path in ipairs({ "nameplates.threatValue", "nameplates.threatValueWhen", "nameplates.threatValueColour", "nameplates.threatValueSize",
+	"nameplates.threatName", "nameplates.aggroTarget", "nameplates.aggroTargetCombat", "nameplates.aggroTargetOnly", "nameplates.aggroTargetNotMe" }) do
 	covered[path] = true
 end
 for _, row in ipairs(ALL) do
@@ -33210,8 +33372,10 @@ do
 			W.change("cooldowns.mounted", false)
 			check("gap icons: and Row opacity out of combat comes back when the hiding is off", g(cdHolder(W).alpha) == "0.5", g(cdHolder(W).alpha))
 		end
-		-- The rows of wave 5 (0.5.7) have no probe: the owner asked for code without new test blocks.
-		for _, path in ipairs({ "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint", "cooldowns.powerColour", "cooldowns.interruptGlow" }) do
+		-- The rows of waves 5 and 7 (0.5.7 and 0.5.9) have no probe: the owner asked for code without new test blocks.
+		for _, path in ipairs({ "cooldowns.rangeTint", "cooldowns.rangeColour", "cooldowns.powerTint", "cooldowns.powerColour", "cooldowns.interruptGlow",
+			"cooldowns.gear", "cooldowns.tooltips", "cooldowns.sweepColour", "cooldowns.edge", "cooldowns.edgeColour", "cooldowns.gcd", "cooldowns.numbersColour",
+			"cooldowns.numbersPlace", "cooldowns.tenths", "cooldowns.useCount", "cooldowns.countColour", "cooldowns.countCorner" }) do
 			covered[path] = true
 		end
 		local missingProbe = {}
@@ -66051,7 +66215,7 @@ end
 -- The page tree and the rows that hold no value of their own. Every label starts "ms-tree:".
 function PT.runMsTree()
 	local clean, joined, need = PT.clean, PT.joined, PT.need
-	local TREE = { { "general", "Colours" }, { "nameplates", "Health bar,Colours and threat,Text,Cast bar,Target and marks,Auras,Game settings" }, { "castbars", "Size,Text and icon" }, { "cooldowns", "States and text" },
+	local TREE = { { "general", "Colours" }, { "nameplates", "Health bar,Colours,Threat,Text,Cast bar,Target and marks,Auras,Game settings" }, { "castbars", "Size,Text and icon" }, { "cooldowns", "States and text" },
 		{ "windows", "Which windows,Bags and items" }, { "unitframes", "Player frame,Target frame,Focus frame,Pet frame,Target of target frame,Party frames,Boss frames,Raid frames,All frames: bars and pictures,All frames: text,All frames: icons and auras" },
 		{ "hud", "Minimap,Buffs and debuffs,Bars, bags and micro menu,Tracker, loot and alerts" }, { "chat", "Chat text,Tooltips" },
 		{ "errands", "Levelling" } }
@@ -66561,7 +66725,7 @@ function PT.runTkEdit()
 	do
 		local W = T.up()
 		local ns = W.ns
-		local labels = { "Tracker", "Name", "On", "Spell IDs", "Shape", "Place", "Show", "Low at (charges)", "Low at (seconds left)", "When missing", "Sound when it drops", "Colour",
+		local labels = { "Tracker", "Name", "On", "Spell IDs", "Shape", "Place", "Show", "Low at (charges)", "Low at (seconds left)", "When missing", "Sound when it drops", "Sound when it comes", "Sound when it stacks", "Colour",
 			"Icon size", "X offset", "Y offset", "Mark action buttons", "Order", "Own settings", "Remove this tracker" }
 		local rows, shown = {}, {}
 		for _, r in ipairs(PT.shownRows(W)) do
@@ -66827,7 +66991,7 @@ function PT.runTkEdit()
 			rows[#rows + 1] = r.fonts[1].text
 		end
 		check("tkedit: a row added with ns.TrackerEditorRow is after the template, once, with the label and the choices of the page", W.added[1] == true and W.added[2] == true and W.added[3] == false and W.added[4] == false
-			and rows[16] == "Mark action buttons" and rows[17] == "Sound" and rows[18] == "Order" and #rows == 20 and T.shown(W, "Sound") == "Raid warning", table.concat(rows, "|"))
+			and rows[18] == "Mark action buttons" and rows[19] == "Sound" and rows[20] == "Order" and #rows == 22 and T.shown(W, "Sound") == "Raid warning", table.concat(rows, "|"))
 		check("tkedit: and writes the tracker's own value", T.pick(W, "Sound", "Alarm") and W.ns.TrackerOwn(1, "kit") == "alarm" and W.ns.Get("trackers.kit") == "raid" and T.row(W, "Sound").alpha == 1)
 		W.ns.TrackerSetOwn(1, "shape", "bar")
 		PT.type(PT.searchBox(W), "spell ids")
@@ -67232,7 +67396,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1068 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1168 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67546,7 +67710,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 989 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1071 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)
@@ -69685,9 +69849,9 @@ function PT.runNav()
 		PT.go(W, "Nameplates")
 		check("window nav: the open module has the mark in the accent, and the mark follows the page", joined(N.marks(W)) == "9a9cf0" and PT.title(W) == "Nameplates")
 		-- Tabs of the open module
-		check("window nav: the tabs of the open module are in its page, and the sidebar lists modules only", PT.tab(W, "Health bar") ~= nil and PT.tab(W, "Colours and threat") ~= nil and PT.tab(W, "Player frame") == nil and PT.page(W, "Health bar") == nil)
+		check("window nav: the tabs of the open module are in its page, and the sidebar lists modules only", PT.tab(W, "Health bar") ~= nil and PT.tab(W, "Colours") ~= nil and PT.tab(W, "Player frame") == nil and PT.page(W, "Health bar") == nil)
 		PT.go(W, "Health bar")
-		check("window nav: a tab opens like any page and keeps the module open", PT.title(W) == "Nameplates" and PT.tab(W, "Colours and threat") ~= nil and #N.marks(W) == 1)
+		check("window nav: a tab opens like any page and keeps the module open", PT.title(W) == "Nameplates" and PT.tab(W, "Colours") ~= nil and #N.marks(W) == 1)
 		-- Move frames
 		local calls = {}
 		local movers = ns.modules.movers
@@ -69728,7 +69892,7 @@ function PT.runNav()
 		W.update(1)
 		check("window nav: a switch set elsewhere shows within half a second", N.track(switch) == "353a31")
 		ns.Set("nameplates.enabled", true)
-		PT.go(W, "Colours and threat")
+		PT.go(W, "Colours")
 		check("window nav: a tab of a module has the switch of the module in the header", select(2, PT.headSwitch(W)) == "Restyle nameplates" and PT.title(W) == "Nameplates")
 		PT.go(W, "Personal resource display")
 		PT.go(W, "Your buffs")
@@ -70163,7 +70327,7 @@ function PT.runTabs()
 	T.TABS = {
 		{ "Flat UI", "General, Colours" },
 		{ "Unit frames", "General, Per frame, Bars and pictures, Text, Icons and auras" },
-		{ "Nameplates", "General, Health bar, Colours and threat, Text, Cast bar, Target and marks, Auras, Game settings" },
+		{ "Nameplates", "General, Health bar, Colours, Threat, Text, Cast bar, Target and marks, Auras, Game settings" },
 		{ "Personal resource display", "General, Your buffs" },
 		{ "Cast bars", "General, Size, Text and icon" },
 		{ "Action bars", "General, Button text, Colours and cooldowns, Glows and animations" },
@@ -70192,11 +70356,11 @@ function PT.runTabs()
 			PT.go(W, name)
 			if #PT.tabTexts(W) ~= 0 then bad[#bad + 1] = name .. " has tabs: " .. joined(PT.tabTexts(W)) end
 		end
-		check("window tabs: the 39 child pages are the tabs of twelve modules, in the order of the design, and the other sixteen modules have none", children == 39 and #bad == 0, children .. " " .. joined(bad))
+		check("window tabs: the 40 child pages are the tabs of twelve modules, in the order of the design, and the other sixteen modules have none", children == 40 and #bad == 0, children .. " " .. joined(bad))
 		PT.go(W, "Nameplates")
 		PT.go(W, "Health bar")
 		check("window tabs: a tab shows under the title of its module, and the sidebar lists the module and no tab", PT.title(W) == "Nameplates" and PT.page(W, "Health bar") == nil
-			and PT.page(W, "Colours and threat") == nil and PT.page(W, "Nameplates") ~= nil and #PT.tabTexts(W) == 8)
+			and PT.page(W, "Colours") == nil and PT.page(W, "Nameplates") ~= nil and #PT.tabTexts(W) == 9)
 		check("window tabs: the tab shows the rows of its page and the header has the switch of the module", PT.row(W, "Health bar border") ~= nil and PT.row(W, "Restyle friendly nameplates") == nil
 			and select(2, PT.headSwitch(W)) == "Restyle nameplates")
 		clean(W, "window tabs modules")
@@ -70384,7 +70548,7 @@ function PT.runTabs()
 			if raw.parent and W.rawOf[raw.parent] == child then PT.press(W, raw) break end
 		end
 		check("window tabs: a tile of Home opens the module on its first tab", PT.title(W) == "Nameplates" and T.line(PT.tab(W, "General")) == "9a9cf0", tostring(PT.title(W)))
-		PT.go(W, "Colours and threat")
+		PT.go(W, "Colours")
 		PT.press(W, PT.control(need(W, T.boolRow("nameplatesColours"))))
 		PT.go(W, "Unit frames")
 		PT.press(W, PT.tab(W, "Bars and pictures"))
@@ -70393,8 +70557,8 @@ function PT.runTabs()
 		PT.press(W, PT.chip(W, "Target"))
 		PT.press(W, PT.control(need(W, T.boolRow("unitframesTarget"))))
 		PT.go(W, "Home")
-		check("window tabs: the changes on Home say the module and the tab", T.count(W, "Nameplates > Colours and threat") == 1 and T.count(W, "Unit frames > Bars and pictures") == 1 and T.count(W, "Unit frames > Per frame > Target") == 1,
-			T.count(W, "Nameplates > Colours and threat") .. T.count(W, "Unit frames > Bars and pictures") .. T.count(W, "Unit frames > Per frame > Target"))
+		check("window tabs: the changes on Home say the module and the tab", T.count(W, "Nameplates > Colours") == 1 and T.count(W, "Unit frames > Bars and pictures") == 1 and T.count(W, "Unit frames > Per frame > Target") == 1,
+			T.count(W, "Nameplates > Colours") .. T.count(W, "Unit frames > Bars and pictures") .. T.count(W, "Unit frames > Per frame > Target"))
 		PT.go(W, "Nameplates")
 		do
 			local PTabs = W.ns.PanelTabs
@@ -73350,10 +73514,14 @@ do
 			opts.char = { trackers = o.list }
 			opts.list = nil
 		end
-		if o.options then
-			opts.saved = { options = o.options }
-			opts.options = nil
+		-- Click to apply is off unless the world asks for it (o.options): the worlds of the trackers make no secure buttons, and a buff, form or
+		-- pet tracker takes a click by default.
+		local options = { ["trackers.click"] = "none" }
+		for k, v in pairs(o.options or {}) do
+			options[k] = v
 		end
+		opts.saved = { options = options }
+		opts.options = nil
 		local W = newWorld(opts)
 		-- The tests of the list, the watcher and the frames run without the game's own icons unless a world asks for them (o.real) or brings
 		-- a stand-in (TK.slots); the real ones are tried in the sections that follow.
@@ -74553,13 +74721,14 @@ do
 			"/flatui tracker set 1 low 2 - one tracker's own value for a setting, or clear to use the page's",
 			"/flatui tracker set 1 shape bar - icon, bar or text, and colour 4d99e6 for a bar or text",
 			"/flatui tracker set 1 happy on - a pet tracker is low while a hunter's pet is not happy",
+			"/flatui tracker set 1 health 40 - a pet tracker shows your pet's health in red under 40%, or clear to use the page's",
 			"/flatui tracker proc colour 1 ffd100 - one proc's colour, time (proc time 1 10) or trigger (proc trigger 1 overlay)",
 			"/flatui tracker check - what each tracker shows and why, and what happened in the last fight",
 			"/flatui tracker check sound - the game's own sound when a tracked buff ends, until /reload",
 			"/flatui tracker test - each look for 3 seconds: fine, low, missing, then the game's own look",
 		}
 		local want = table.concat(help, "\n")
-		check("an unknown word prints the twenty-three help lines", W.slash("tracker bogus") == want and W.slash("tracker") == want and W.slash("tracker add") == want, W.slash("tracker bogus"))
+		check("an unknown word prints the twenty-four help lines", W.slash("tracker bogus") == want and W.slash("tracker") == want and W.slash("tracker add") == want, W.slash("tracker bogus"))
 		local all = W.slash("bogus")
 		check("/flatui help has the tracker lines, after the lines of the cooldowns", has(all, want) and has(all, "/flatui cooldown list\n/flatui tracker add Lightning Shield"), all)
 		check("the commands: no violation", TK.ok(W), TK.why(W))
@@ -77403,7 +77572,7 @@ do
 			{ "place", "own", "own" }, { "place", "Beside the character", "character" }, { "place", "nowhere", "!" },
 			{ "show", "low", "low" }, { "show", "Only in combat", "combat" }, { "show", "never", "!" },
 			{ "low", "2", 2 }, { "low", "0", 0 }, { "low", "21", "!" }, { "low", "1.5", "!" }, { "low", "many", "!" },
-			{ "lowtime", "30", 30 }, { "lowtime", "7", "!" }, { "lowtime", "305", "!" },
+			{ "lowtime", "30", 30 }, { "lowtime", "7", "!" }, { "lowtime", "1805", "!" },
 			{ "missing", "pulse", "pulse" }, { "missing", "blue", "!" },
 			{ "sound", "on", true }, { "sound", "off", false }, { "sound", "maybe", "!" },
 			{ "kit", "alarm", "alarm" }, { "kit", "Whisper warning", "whisper" }, { "kit", "bell", "bell" }, { "kit", "siren", "!" },
@@ -77527,7 +77696,7 @@ do
 			local ok, message = S.ns.TrackerSet(9, "low", "2")
 			check("tkpages: a number with no tracker is refused", ok == false and message == "No tracker numbered 9.", message)
 			ok, message = S.ns.TrackerSet(1, "tint", "red")
-			check("tkpages: a word that is no setting is refused and the settings are listed", ok == false and has(message, "Settings: colour, kit, low, lowtime, missing, name, on, place, shape, show, size, sound, x, y."), message)
+			check("tkpages: a word that is no setting is refused and the settings are listed", ok == false and has(message, "Settings: colour, comes, kit, low, lowtime, missing, name, on, place, shape, show, size, sound, stacks, x, y."), message)
 			check("tkpages: the slash command answers in one line", S.slash("tracker set 1 low 2") == "Tracker 1: low is 2." and S.slash("tracker set 1 low 40") == 'Tracker 1: "40" is not a value for low.'
 				and S.slash("tracker set 1 low clear") == "Tracker 1: low follows the page." and S.slash("tracker set 1 clear") == "Tracker 1: every setting follows the pages.", S.slash("tracker set 1 low 2"))
 			S.ns.TrackerSet(1, "name", "clear")
@@ -79749,7 +79918,7 @@ do
 
 	-- 27. Class starting lists (tkclass:). ClassData.lua is generated; the values and helpers sit in the table CL.
 	do
-		local CL = { COUNTS = { WARRIOR = 3, PALADIN = 5, HUNTER = 5, ROGUE = 3, PRIEST = 7, SHAMAN = 7, MAGE = 5, WARLOCK = 7, DRUID = 3 },
+		local CL = { COUNTS = { WARRIOR = 3, PALADIN = 5, HUNTER = 5, ROGUE = 4, PRIEST = 7, SHAMAN = 7, MAGE = 5, WARLOCK = 7, DRUID = 3 },
 			KINDS = { buff = true, form = true, item = true, weapon = true, totem = true, pet = true, ammo = true } }
 		-- Every ID of an entry: spells, items, the ways to put on an enchant, the summons and the auras.
 		function CL.ids(row)
@@ -79822,7 +79991,7 @@ do
 					end
 				end
 			end
-			check("tkclass: nine classes and 45 entries", classes == 9 and total == 45, classes .. "/" .. total)
+			check("tkclass: nine classes and 46 entries", classes == 9 and total == 46, classes .. "/" .. total)
 			check("tkclass: every entry has a kind of the engine, a name and whole IDs", #bad == 0, table.concat(bad, ", "))
 			check("tkclass: at most 8 names, 40 spells, and a time that is a multiple of 5", #caps == 0, table.concat(caps, ", "))
 			local shaman = data.SHAMAN
@@ -93909,7 +94078,7 @@ do
 		-- The rows: where they are saved, their defaults, what they need and their choices.
 		do
 			local W = P.world()
-			local want = { colours = false, colourPlayers = "game", targetBar = false, targetBarColour = "ff66b3ff", threat = false, threatRole = "auto", threatGood = "ff4dbf59",
+			local want = { colours = false, colourPlayers = "game", targetBar = false, targetBarColour = "ff66b3ff", threat = true, threatRole = "auto", threatGood = "ff4dbf59",
 				threatTransition = "ffe6c133", threatBad = "ffd94040", hover = false, hoverColour = "ffd9d9d9", eliteColour = "ffffd100", rareColour = "ffc7ccd6", bossColour = "ffff593d" }
 			local bad = {}
 			for key, value in pairs(want) do
@@ -93930,23 +94099,24 @@ do
 					end
 				end
 			end
-			check("ms-pcol: the page Colours and threat holds fifteen rows in order",
-				table.concat(order, ",") == "colours,colourPlayers,targetBar,targetBarColour,threat,threatRole,threatGood,threatTransition,threatBad,hover,hoverColour,healthByLeft,lowHealth,lowHealthAt,lowHealthColour", table.concat(order, ","))
+			check("ms-pcol: the page Colours holds ten rows in order",
+				table.concat(order, ",") == "colours,colourPlayers,targetBar,targetBarColour,hover,hoverColour,healthByLeft,lowHealth,lowHealthAt,lowHealthColour", table.concat(order, ","))
 			check("ms-pcol: the rows that need another name it", rows["nameplatesColours.colourPlayers"].needs == "colours" and rows["nameplatesColours.targetBarColour"].needs == "targetBar"
-				and rows["nameplatesColours.threatRole"].needs == "threat" and rows["nameplatesColours.threatBad"].needs == "threat" and rows["nameplatesColours.hoverColour"].needs == "hover"
+				and rows["nameplatesThreat.threatRole"].needs == "threat" and rows["nameplatesThreat.threatBad"].needs == "threat" and rows["nameplatesColours.hoverColour"].needs == "hover"
 				and rows["nameplatesMarks.eliteColour"].needs == "kindBorder" and rows["nameplatesMarks.rareColour"].needs == "kindBorder" and rows["nameplatesMarks.bossColour"].needs == "kindBorder"
-				and rows["nameplatesColours.colours"].needs == nil and rows["nameplatesColours.threat"].needs == nil and rows["nameplatesColours.hover"].needs == "health")
+				and rows["nameplatesColours.colours"].needs == nil and rows["nameplatesThreat.threat"].needs == nil and rows["nameplatesColours.hover"].needs == "health")
 			check("ms-pcol: the choices", #rows["nameplatesColours.colourPlayers"].choices == 2 and rows["nameplatesColours.colourPlayers"].choices[2][1] == "reaction"
-				and #rows["nameplatesColours.threatRole"].choices == 3 and rows["nameplatesColours.threatRole"].choices[2][1] == "tank" and rows["nameplatesColours.threatRole"].choices[3][1] == "damage")
+				and #rows["nameplatesThreat.threatRole"].choices == 3 and rows["nameplatesThreat.threatRole"].choices[2][1] == "tank" and rows["nameplatesThreat.threatRole"].choices[3][1] == "damage")
 			W.ns.Set("nameplates.threatRole", "healer")
 			W.ns.Set("nameplates.hoverColour", "red")
 			check("ms-pcol: a choice outside its list and a colour that is no colour are refused", W.ns.Get("nameplates.threatRole") == "auto" and W.ns.Get("nameplates.hoverColour") == "ffd9d9d9")
 			clean(W, "ms-pcol rows")
 		end
 
-		-- At the defaults nothing is hooked, read or set, and no timer runs.
+		-- With every colour row off nothing is hooked, read or set, and no timer runs.
 		do
 			local W = P.world()
+			P.set(W, "nameplates.threat", false)
 			local a = P.plate(W, "nameplate1", { friend = false, attack = true, reaction = 2, threat = 3, class = "elite" })
 			local d = P.plate(W, "nameplate2", { friend = false, attack = true })
 			local hooks, gets, sets, border, plain = W.hooks, a.gets, a.sets, P.border(W, a), P.border(W, d)
@@ -93957,7 +94127,7 @@ do
 			a.game = { 0.5, 0.5, 0.5, 1 }
 			P.game(W, a)
 			W.flush()
-			check("ms-pcol: at the defaults the game's call is not followed and the addon never reads or sets the bar's colour", W.hooks == hooks and a.gets == gets and a.sets == sets and P.c(a) == P.HALF,
+			check("ms-pcol: with every colour row off no hook is added and the addon never reads or sets the bar's colour", W.hooks == hooks and a.gets == gets and a.sets == sets and P.c(a) == P.HALF,
 				W.hooks .. " " .. hooks .. " " .. a.gets .. " " .. gets .. " " .. a.sets .. " " .. sets)
 			check("ms-pcol: the mouseover starts no timer and the plates keep their borders", #W.timers == 0 and border == "1.00,0.82,0.00" and P.border(W, a) == "1.00,1.00,1.00" and P.border(W, d) == plain,
 				border .. " " .. P.border(W, a) .. " " .. P.border(W, d))
@@ -94024,6 +94194,7 @@ do
 		-- The target's colour, and the order of the three.
 		do
 			local W = P.world()
+			P.set(W, "nameplates.threat", false)
 			local a = P.plate(W, "nameplate1", { friend = false, attack = true, reaction = 2, sel = { 0.9, 0.1, 0.1 }, threat = 3 })
 			local b = P.plate(W, "nameplate2", { friend = false, attack = true, reaction = 2, sel = { 0.9, 0.1, 0.1 }, threat = 0 })
 			P.set(W, "nameplates.targetBar", true)
@@ -94059,18 +94230,18 @@ do
 			P.set(W, "nameplates.threat", true)
 			P.set(W, "nameplates.threatRole", "tank")
 			local t3, t2, t1, t0 = at(3), at(2), at(1), at(0)
-			check("ms-pcol: a tank wants 3, has 2 as changing hands and 0 or 1 as unwanted", t3 == P.GOOD and t2 == P.CHANGE and t1 == P.BAD and t0 == P.BAD, t3 .. " " .. t2 .. " " .. t1 .. " " .. t0)
+			check("ms-pcol: a tank wants 3, has 1 and 2 as changing hands and 0 as unwanted", t3 == P.GOOD and t2 == P.CHANGE and t1 == P.CHANGE and t0 == P.BAD, t3 .. " " .. t2 .. " " .. t1 .. " " .. t0)
 			P.set(W, "nameplates.threatRole", "damage")
 			t0, t1, t2, t3 = at(0), at(1), at(2), at(3)
 			check("ms-pcol: another role wants 0, has 1 and 2 as changing hands and 3 as unwanted", t0 == P.GOOD and t1 == P.CHANGE and t2 == P.CHANGE and t3 == P.BAD, t0 .. " " .. t1 .. " " .. t2 .. " " .. t3)
-			at(1)
+			at(0)
 			P.set(W, "nameplates.threatRole", "auto")
 			local calls = W.T.calls
 			P.roles(W, "TANK")
 			local asTank = P.c(a)
 			P.roles(W, "HEALER")
-			check("ms-pcol: From your group role is a tank for a role of TANK and not for another, and a change of roles applies without a call of the game",
-				asTank == P.BAD and P.c(a) == P.CHANGE and W.T.calls == calls, asTank .. " " .. P.c(a))
+			check("ms-pcol: From your role, stance or form is a tank for a group role of TANK and not for another, and a change of roles applies without a call of the game",
+				asTank == P.BAD and P.c(a) == P.GOOD and W.T.calls == calls, asTank .. " " .. P.c(a))
 			a.game = { 0.5, 0.5, 0.5, 1 }
 			check("ms-pcol: no threat at all leaves the game's colour", at(nil) == P.HALF, at(nil))
 			P.set(W, "nameplates.colours", true)
@@ -94090,7 +94261,7 @@ do
 			P.set(W, "nameplates.threatRole", "damage")
 			check("ms-pcol: a threat colour changed on the page applies at once", at(0) == "0.00,0.00,1.00", at(0))
 			P.set(W, "nameplates.threat", false)
-			check("ms-pcol: Threat colours off gives the game's colour back", P.c(a) == P.HALF, P.c(a))
+			check("ms-pcol: Threat on nameplates off gives the game's colour back", P.c(a) == P.HALF, P.c(a))
 			clean(W, "ms-pcol threat")
 		end
 
@@ -100836,7 +101007,7 @@ do
 		{ "nameplates.colourPlayers", "mock-nameplate", "reaction", { { "nameplates.colours", true }, { "general.reactionOwn", true }, { "general.reactionHostile", "ff3366ff" } } },
 		{ "nameplates.targetBar", "mock-nameplate", true, {} },
 		{ "nameplates.targetBarColour", "mock-nameplate", "ff12ab34", { { "nameplates.targetBar", true } } },
-		{ "nameplates.threat", "mock-nameplate", true, {} },
+		{ "nameplates.threat", "mock-nameplate", false, {} },
 		{ "nameplates.threatGood", "mock-nameplate", "ff12ab34", { { "nameplates.threat", true } } },
 		{ "nameplates.threatTransition", "mock-nameplate", "ff12ab34", { { "nameplates.threat", true } } },
 		{ "nameplates.threatBad", "mock-nameplate", "ff12ab34", { { "nameplates.threat", true } } },

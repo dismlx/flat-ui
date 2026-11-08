@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.8
+## Version: 0.5.9
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -19,9 +19,12 @@ CameraZoom.lua
 CursorRing.lua
 Fonts.lua
 Nameplates.lua
+PlateThreat.lua
 PlateColours.lua
+PlateThreatLook.lua
 PlateText.lua
 PlateClick.lua
+PlateThreatText.lua
 CombatBurst.lua
 CombatText.lua
 ScrollText.lua
@@ -76,6 +79,8 @@ UnitText.lua
 UnitParts.lua
 UnitExtras.lua
 UnitGroupMarks.lua
+UnitDruidMana.lua
+UnitPetTarget.lua
 Hud.lua
 MapButtons.lua
 AuraTime.lua
@@ -85,12 +90,14 @@ QuestCount.lua
 MapText.lua
 ErrorFilter.lua
 ScreenText.lua
+MeterClear.lua
 Fade.lua
 Chat.lua
 ChatText.lua
 ChatTips.lua
 ChatLinks.lua
 ItemCompare.lua
+ChatHistory.lua
 HealthColour.lua
 CastTime.lua
 CastRank.lua
@@ -114,6 +121,7 @@ ErrandsSocial.lua
 ErrandsQuests.lua
 ErrandsRanks.lua
 ErrandsLevelling.lua
+ErrandsBulkBuy.lua
 ConsumableData.lua
 Consumables.lua
 DataPanels.lua

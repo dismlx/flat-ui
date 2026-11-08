@@ -156,7 +156,27 @@ local function NamePart(unitFrame, st, on, fromGame)
 	end
 	local mode = on and Opt("nameColour") or "game"
 	local r, g, b
-	if mode == "white" then
+	-- Threat colour on the name: while the threat of the nameplates (ns.PlateThreat, PlateThreat.lua) keeps a state for the plate that is not of
+	-- a unit tapped by someone else, its colour takes the place of Name colour's (Threat Plates' names By reaction and By class,
+	-- Modules/Color.lua:431-440). It is kept and put back as Name colour's is.
+	local tr, tg, tb
+	local threat = on and Opt("threatName") == true and ns.PlateThreat
+	if type(threat) == "table" then
+		local okActive, active = pcall(threat.Active)
+		local okState, current = false, nil
+		if okActive and active == true then
+			okState, current = pcall(threat.Get, unitFrame)
+		end
+		if okState and type(current) == "table" and current.tapped ~= true then
+			local okColour, cr, cg, cb = pcall(threat.Colour, current)
+			if okColour and ns.Finite(cr) and ns.Finite(cg) and ns.Finite(cb) then
+				tr, tg, tb = cr, cg, cb
+			end
+		end
+	end
+	if tr ~= nil then
+		r, g, b = tr, tg, tb
+	elseif mode == "white" then
 		r, g, b = 1, 1, 1
 	elseif mode == "custom" then
 		r, g, b = ns.Colour(KEY .. ".nameCustomColour")
@@ -466,9 +486,27 @@ local function Retarget()
 	end)
 end
 
+-- Threat colour on the name follows each change of a plate's threat (ns.PlateThreat). On UNIT_THREAT_LIST_UPDATE the game names the plate before
+-- its aggro update (Shared/CompactUnitFrame.lua:136-140), which is what the threat core follows, so the name is coloured again after a change.
+-- The listener is added the first time a hook finds the core; a row turned off reaches every plate through the refresh.
+local threatFollowed = false
+local function OnThreat(frame)
+	if Opt("threatName") == true and ns.IsPlate(frame) and not ns.Forbidden(frame) then
+		Run(NAME, NamePart, frame)
+	end
+end
+local function FollowThreat()
+	local threat = ns.PlateThreat
+	if not threatFollowed and type(threat) == "table" and type(threat.OnChange) == "function" then
+		threatFollowed = pcall(threat.OnChange, OnThreat)
+	end
+end
+
 EXTRA.layout[#EXTRA.layout + 1] = Layout
+EXTRA.show[#EXTRA.show + 1] = FollowThreat
 EXTRA.show[#EXTRA.show + 1] = Layout
 EXTRA.leave[#EXTRA.leave + 1] = Leave
+EXTRA.refresh[#EXTRA.refresh + 1] = FollowThreat
 followName = ns.FollowGlobal("CompactUnitFrame_UpdateName", OnName) == true
 followHealth = ns.FollowGlobal("CompactUnitFrame_UpdateHealth", OnHealth) == true
 ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", Retarget)

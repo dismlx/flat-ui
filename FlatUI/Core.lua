@@ -21,6 +21,7 @@ local ADDON_NAME, ns = ...
 -- its row or the module goes off. With Hit numbers on player and pet
 -- portraits off, Unit frames does the same for the frame that holds the player's hit number (HitIndicator), and hides the pet's (PetHitIndicator,
 -- SetShown) each time CombatFeedback_OnCombatEvent has shown it; the game shows the next one again once the row is on.
+-- Fade's frames include the game's DamageMeter and other addons' minimap buttons (LibDBIcon10_), whose alpha it reads first and puts back the same way.
 -- Movers and Tooltip are the exceptions that move Blizzard frames, with ClearAllPoints, SetPoint
 -- and SetScale only, and SetAnchorType and Hide on GameTooltip: Movers places the frames the player moves,
 -- Tooltip places GameTooltip and hides it when the game fades it out while it follows the cursor. The cast
@@ -28,6 +29,8 @@ local ADDON_NAME, ns = ...
 -- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
 -- still that name, and the name alone again when the row goes off.
+-- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
+-- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
 -- Combat text is the one module that writes console variables: nine of the game's combat number variables and the switch of its
 -- own text for the player (enableFloatingCombatText), each remembered in FlatUIDB.cvars before its first write and put back when
 -- its page goes off. Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.
@@ -36,15 +39,30 @@ local ADDON_NAME, ns = ...
 -- Maximum camera distance, on the Flat UI page, writes the game's cameraDistanceMaxZoomFactor only when the player ticks or unticks it, out of
 -- combat: 2.6 when ticked, its text before that kept in FlatUIDB.cameraGame, and that text again (or the client's default) when unticked while
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.
+-- Its cast and global cooldown progress are Cooldown frames of its own fed the game's duration objects.
+-- Nameplate threat follows CompactUnitFrame_UpdateAggroHighlight with hooksecurefunc and only reads threat, roles, stances, forms and auras; a
+-- frame of its own hears UPDATE_SHAPESHIFT_FORM for a warrior or druid, and /flatui role sets Your role. With Fade enemies held for you, Nameplates
+-- writes the alpha of the game's nameplate unit frame (SetAlpha), read first and put back when the plate loses its fade, leaves, or the row, page
+-- or module goes off, and sets it again after CompactUnitFrame_UpdateCenterStatusIcon, which it follows with hooksecurefunc. The threat ring is an
+-- outline of its own on a frame of its own on the health bar, made and anchored out of combat, and Mark gives the health bar border a threat colour
+-- through ns.PlateThreatBorder. The threat value and the name of the enemy's target are font strings of its own on the plate, made and placed out
+-- of combat on a plate that may be protected, written with SetText, SetFormattedText, SetTextColor and SetAlphaFromBoolean from the game's answers
+-- as they are; with Threat colour on the name, the name takes the threat colour with SetVertexColor, as Name colour does, kept and put back the
+-- same way.
 -- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
--- repairs with RepairAllItems, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on
--- its own button, and answers summons, resurrections, invites and duels with the game's calls for them. Of the game's popups it hides only
--- two, with StaticPopup_Hide, each once its request is over and only while it is the one popup shown, since the game leaves them up: the group
--- invite's once the player is in the group (hiding it sooner declines the invite), and the summon's once the game says no summon is open (a
--- stale one cancels the next). It follows
--- StaticPopup_Show, StaticPopup_Hide, ClassTrainerFrame_Update, SendMailFrame_SendMail and SendMailFrame_Reset with hooksecurefunc, writes
--- DELETE in the box of the game's delete popup (SetText, then ClearFocus) and the last recipient in the To box of the mail window (SetText),
--- and lays frames of its own over the loot window, the trainer window and the Release Spirit button of the death popup.
+-- repairs with RepairAllItems, buys with BuyMerchantItem, sells the cursor item with SellCursorItem, loots with LootSlot, learns with
+-- BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on its own button, and answers summons, resurrections, invites
+-- and duels with the game's calls for them. Of the game's popups it hides only four, with StaticPopup_Hide and only while it is the one popup
+-- shown: the group invite's once the player is in the group and the summon's once the game says no summon is open, since the game leaves both
+-- up after an accept made by code (hiding the invite sooner declines it, and a stale summon cancels the next); the token purchase's question
+-- just before it buys in its place (the game would leave it up, and its Yes would buy again); and the tradeable sale's right after it sells
+-- (the game closes that one too, once the cursor is empty). For Buy in bulk it asks with a popup of its own (FLATUI_BULK_BUY, an entry of
+-- StaticPopupDialogs shown with StaticPopup_Show, as Clean up bags' is) and calls nothing on the game's split box. It follows
+-- StaticPopup_Show, StaticPopup_Hide, ClassTrainerFrame_Update, SendMailFrame_SendMail, SendMailFrame_Reset and
+-- MerchantItemButton_OnModifiedClick with hooksecurefunc, writes DELETE in the box of the game's delete popup (SetText, then ClearFocus) and
+-- the last recipient in the To box of the mail window (SetText), and lays frames of its own over the loot window, the trainer window and the
+-- Release Spirit button of the death popup, a bar beside the game's split box (StackSplitFrame) and a Sell next 12 button under the merchant
+-- window.
 -- On its Levelling tab it accepts and hands in quests and picks gossip options with the game's calls for them (AcceptQuest, CompleteQuest,
 -- GetQuestReward, the select calls of C_GossipInfo and of the quest greeting), and asks the game to load an offered quest
 -- (C_QuestLog.RequestLoadQuestByID); it touches no frame of the quest or gossip windows. It puts a higher rank of a spell on the action
@@ -61,20 +79,41 @@ local ADDON_NAME, ns = ...
 -- Its Equipment set slot opens a menu of its own whose lines call C_EquipmentSet.UseEquipmentSet, never in a fight.
 -- Threat list (off by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
 -- Healer mana (off by default) is a window of its own on UIParent; it only reads mana (UnitPowerPercent) and changes nothing. The dispel border, the
--- debuff type icon and the raid marker of the party and raid frames are textures of Flat UI's own over the game's frames.
+-- debuff type icon and the raid marker of the party and raid frames, the leader and assistant icons of the raid frames and the dispel border of the
+-- player, target and focus frames are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a
+-- frame of Flat UI's own with an outline; all are made and anchored out of combat, and in a fight only their colour, opacity and visibility
+-- change, and which raid marker shows, from the game's answers as they are.
+-- With Pet target frame on (off by default), Unit frames makes one secure button of its own (SecureActionButtonTemplate, no global name, type1
+-- target, unit pettarget, useOnKeyDown false), made, sized, placed and watched only out of combat; the game shows and hides it (RegisterUnitWatch,
+-- taken back with UnregisterUnitWatch). With Druid mana in forms, a druid gets a bar of its own on a frame of its own under the player frame's power bar.
 -- Drink and health macros (off by default) makes, writes and deletes two macros of its own (CreateMacro, EditMacro, DeleteMacro), named in
 -- FlatUIDB.consumables, or of its names with a body Flat UI writes (made on another computer: macros are the account's), only out of combat and with
 -- the game's macro window closed; it reads the game's action slots and the cursor first (GetActionInfo, C_ActionBar.GetActionText, GetCursorInfo) and
 -- deletes no macro that one of them still holds.
 -- Mount key (off by default) makes one secure button, FlatUIMountButton, once a key is bound to it in the game's Key Bindings (Bindings.xml names the
 -- binding, BINDING_NAME_CLICK FlatUIMountButton:LeftButton), writes its type and macrotext only out of combat and takes them away when off; it writes
--- no binding or macro.
+-- no binding or macro. With Slow Fall or Levitate while falling on, it sets a PreClick and a PostClick on the button, out of combat, that swap the
+-- falling macro in and back around each press.
 -- Trackers lays secure buttons of its own (SecureActionButtonTemplate) over its icons, given attributes only out of combat; each leaves its icon at
 -- PLAYER_REGEN_DISABLED (Hide, ClearAllPoints, SetParent UIParent), and writes its tooltip in GameTooltip.
+-- Those buttons also cast your own buffs, stances and forms on you, run a macro of Call Pet and Revive Pet, and set the pet's mode with the pet
+-- action type, all given out of combat. Trackers draws the pet's health on frames of its own through UnitHealthPercent and a curve, read by widget
+-- calls only.
+-- Trackers registers the game's own sound for a tracked aura that ends, comes or stacks (C_UnitAuras.AddAuraSound, triggers Removed, Added and
+-- ApplicationsIncreased; RemoveAuraSound), only out of combat and while aura values are open; a change that waits is heard on a frame of its own,
+-- also with the page off, so the registrations are taken back once it can be made.
 -- Group tools (off by default) lays secure buttons of its own over its icons, made, placed, shown and given attributes only out of combat: the game's
 -- raidtarget action, /readycheck and /countdown. A plain button asks for a role poll, and it writes tooltips in GameTooltip.
 -- Cooldown pulse (off by default) is a frame of its own on UIParent that takes no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
+-- Cooldown icons, with Tooltips on icons, let their own icons hear the mouse and take no click (SetMouseMotionEnabled, SetMouseClickEnabled:
+-- protected functions, called on its own icons only while InCombatLockdown() is false), and write GameTooltip (GameTooltip_SetDefaultAnchor or
+-- SetOwner, SetSpellByID, SetItemByID, SetInventoryItem, Show, and Hide while an icon owns it). The game is asked once to load each item of Add an
+-- item, and each worn item it checks for a use, that the client has not loaded yet (C_Item.RequestLoadItemDataByID). Add the spells of a bar only
+-- reads action slots and the bar page.
+-- With Clear the damage meter on (off by default), Minimap and buffs calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
+-- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
+-- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.
 -- The combat alerts of Combat text (No target, +Combat and -Combat; off by default) are font strings on a frame of its own; they change nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);
@@ -87,6 +126,9 @@ local ADDON_NAME, ns = ...
 -- line still holds the text it wrote. With Compare items only while holding Shift
 -- (on by default) it writes the game's alwaysCompareItems, out of combat: 0, its text before that kept in FlatUIDB.compareGame, and that text
 -- again when the row, its page or the module goes off while the variable is still 0.
+-- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
+-- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
+-- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
 -- Minimap and buffs, with Hide error messages on (off by default), takes the game's red error messages from UIErrorsFrame: it reads with
 -- IsEventRegistered that the frame listens, stops it hearing UI_ERROR_MESSAGE with UnregisterEvent and hears that event on a frame of its own,
 -- puts each message of a kind it does not hide back in the frame with AddMessage (ResetMessageFadeByID for a repeat that still shows) with the

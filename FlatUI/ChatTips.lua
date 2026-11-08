@@ -1,8 +1,11 @@
 local _, ns = ...
 
 -- More on tooltips, for the Tooltips page of Chat and tooltips: a line naming what a unit targets, the class colour on the line with a player's
--- class, the icon of an item or a spell before its name, the ID of the temporary enchant on a weapon you wear, and Show IDs, the key the ID lines
--- wait for. This file adds to the chat module and has no switch of its own. Chat.lua calls ns.ChatTipLines from its post call of the game's tooltip
+-- class, the icon of an item, a spell or a buff before its name, the ID of the temporary enchant on a weapon you wear, the ID of the icon file, and
+-- Show IDs, the key the ID lines wait for. A buff or a debuff counts as a spell: its data has the spell's id (Enum.TooltipDataType.UnitAura), which
+-- the game withholds while it restricts auras, and then it gets nothing. So do the buffs of the target and focus frames, whose tooltip is forbidden
+-- (Blizzard_AuraContainer/Mainline/Blizzard_AuraButtonTooltip.xml:3-4). This file adds to the chat module and has no switch of its own. Chat.lua
+-- calls ns.ChatTipLines from its post call of the game's tooltip
 -- data (TooltipDataProcessor.AddTooltipPostCall, the one path its lines go through), before its own work so that the Elite and Rare word stays the
 -- last line, and its extra lines ask ns.ChatTipIds for the ID lines. The game runs the post calls once it has added its lines and before it shows
 -- the tooltip (TooltipDataHandler.lua:283-300), and sets the index of each line in the data as it adds it (TooltipDataHandler.lua:319-336).
@@ -27,8 +30,9 @@ local _, ns = ...
 -- Camelot/PaperDollFrame.lua:1972), and OwnPaint.lua sets the tooltip of Flat UI's own action buttons (which have no UpdateTooltip) again when a
 -- modifier key goes down or up, so there the IDs come as the key goes down. No tooltip is built again here: that would call a Lua method of GameTooltip.
 -- These follow the tooltip of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLTooltip.lua:206-224, 493-534, 895-979,
--- 1118-1133, 1194-1200, 1485-1551). Left out: a choice of icon size (the icon is the height of the title), the realm of a target, and building
--- a tooltip again when the key goes down.
+-- 1118-1133, 1194-1200, 1485-1551, 1597-1636, 1705-1747). Left out: a choice of icon size (the icon is the height of the title), the realm of a
+-- target, building a tooltip again when the key goes down, and the game's own line of aura IDs (tooltipShowAuraSpellIDs, EnhanceQoLTooltip.lua:
+-- 1046-1052), which would not wait for the key of Show IDs.
 
 local KEY, PART = "chat", "tooltip lines"
 -- The colour of the target line: the grey of the ID and count lines of Chat.lua.
@@ -71,7 +75,7 @@ local function Call(space, name)
 	return type(fn) == "function" and fn or nil
 end
 
--- Whether the data is of a kind of the game's tooltip data, as Chat.lua tells them: "Item", "Spell" or "Unit".
+-- Whether the data is of a kind of the game's tooltip data, as Chat.lua tells them: "Item", "Spell", "UnitAura" or "Unit".
 local function IsData(data, name)
 	if type(Enum) ~= "table" or type(Enum.TooltipDataType) ~= "table" then
 		return false
@@ -152,13 +156,33 @@ local function EnchantId(data)
 	return nil
 end
 
--- Asked by the extra lines of Chat.lua for an item or a spell: the ID line while Item and spell IDs is on and Show IDs lets it show, and after it
--- the ID of the temporary enchant of a weapon you wear. lines is the list Chat.lua adds after the game's lines; id is a plain number.
+-- The number of the icon file of an item or a spell (C_Item.GetItemIconByID, ItemDocumentation.lua:611-624; C_Spell.GetSpellTexture,
+-- SpellDocumentation.lua:595-612), or nil when the game gives no plain number.
+local function IconNumber(id, item)
+	local icon
+	if item then
+		icon = Ask(Call(C_Item, "GetItemIconByID"), id)
+	else
+		icon = Ask(Call(C_Spell, "GetSpellTexture"), id)
+	end
+	if Plain(icon, "number") and icon > 0 and icon == math.floor(icon) then
+		return icon
+	end
+	return nil
+end
+
+-- Asked by the extra lines of Chat.lua for an item, a spell or a buff: the ID line while Item and spell IDs is on and Show IDs lets it show, after
+-- it with Icon ID the number of the icon file, and the ID of the temporary enchant of a weapon you wear. lines is the list Chat.lua adds after the
+-- game's lines; id is a plain number.
 function ns.ChatTipIds(lines, data, item, id)
 	if Opt("ids") ~= true or not KeyHeld(Opt("idsWhen")) then
 		return
 	end
 	lines[#lines + 1] = (item and "Item ID: " or "Spell ID: ") .. id
+	local icon = Opt("iconId") == true and IconNumber(id, item)
+	if icon then
+		lines[#lines + 1] = ("Icon ID: %d"):format(icon)
+	end
 	local enchant = item and Opt("enchantId") == true and EnchantId(data)
 	if enchant then
 		lines[#lines + 1] = "Temporary enchant ID: " .. enchant
@@ -427,8 +451,9 @@ local function Lines(tooltip, data)
 			AddOnce(tooltip, data, text)
 		end
 	elseif Opt("icons") == true then
+		-- A buff or a debuff has the icon of its spell before its name, as a spell does.
 		local item = IsData(data, "Item")
-		if item or IsData(data, "Spell") then
+		if item or IsData(data, "Spell") or IsData(data, "UnitAura") then
 			Icon(tooltip, data, item)
 		end
 	end
