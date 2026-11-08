@@ -910,20 +910,35 @@ function S.More()
 	end
 end
 
--- Asks a question in the window. Enter does nothing while it shows, so that it is not taken for an answer.
-function S.Question(question, onYes, onNo, yesText, noText)
-	S.asking = true
-	kit.Ask(question, function()
-		S.asking = false
-		if onYes then
-			onYes()
+-- True while something shows over setup that Enter and the arrow keys must not act under: a list, a question or the colour picker of the window,
+-- which puts them and the shade under them 40 levels and more above itself (Panel.lua, PanelColour.lua), or the welcome screen with the ready-made
+-- looks (SetupWelcome.lua). It is read when a key comes, so it is right however a box closed, by a click outside it too.
+function S.Covered()
+	local welcome = _G.FlatUIWelcome
+	if type(welcome) == "table" and type(welcome.IsShown) == "function" then
+		local ok, shown = pcall(welcome.IsShown, welcome)
+		if ok and not ns.IsSecret(shown) and shown == true then
+			return true
 		end
-	end, function()
-		S.asking = false
-		if onNo then
-			onNo()
+	end
+	local window = kit.Window()
+	if not window then
+		return false
+	end
+	local ok, base = pcall(window.GetFrameLevel, window)
+	local children = { pcall(window.GetChildren, window) }
+	if not ok or not Number(base) or children[1] ~= true then
+		return false
+	end
+	for index = 2, #children do
+		local child = children[index]
+		local read, level = pcall(child.GetFrameLevel, child)
+		local seen, shown = pcall(child.IsShown, child)
+		if read and seen and Number(level) and level >= base + 40 and not ns.IsSecret(shown) and shown == true then
+			return true
 		end
-	end, yesText, noText)
+	end
+	return false
 end
 
 -- Start over: every choice goes, and the walk starts again at its first stop.
@@ -937,7 +952,7 @@ end
 -- Start over on Your screen asks first when there is something to lose.
 function S.StartOver()
 	if S.Has(S.draft) then
-		S.Question("Start over. Every choice made here goes.", S.Reset, nil, "Start over", "Keep choices")
+		kit.Ask("Start over. Every choice made here goes.", S.Reset, nil, "Start over", "Keep choices")
 	else
 		S.Reset()
 	end
@@ -1470,7 +1485,6 @@ function S.Show()
 	if not S.root or not S.draft or not screen then
 		return
 	end
-	S.asking = false
 	kit.CloseList()
 	kit.Tip("")
 	for _, other in pairs(S.views) do
@@ -1637,15 +1651,17 @@ function S.BuildKeys(root)
 	keys:Hide()
 	keys:SetScript("OnKeyDown", function(self, key)
 		local enter = key == "ENTER" or key == "NUMPADENTER"
+		local arrow = key == "LEFT" or key == "RIGHT"
+		local covered = (enter or arrow) and Reported(pcall(S.Covered)) == true
 		local handled = enter
-		if not enter and (key == "LEFT" or key == "RIGHT") and S.screen and S.screen.kind == "stop" and not S.asking then
+		if arrow and not covered and S.screen and S.screen.kind == "stop" then
 			handled = S.Walk("Key", key) == true
 		end
 		if not InCombatLockdown() then
 			Reported(pcall(self.SetPropagateKeyboardInput, self, not handled))
 		end
-		-- Enter is always taken, so that it never opens chat while setup has the keys; while a question shows it does nothing.
-		if enter and not S.asking then
+		-- Enter is always taken, so that it never opens chat while setup has the keys; under a list, a question or the welcome screen it does nothing.
+		if enter and not covered then
 			Reported(pcall(S.Primary))
 		end
 	end)
@@ -1684,7 +1700,7 @@ function S.Enter()
 	S.draft = S.Load() or S.Fresh()
 	local moved = S.Rebase()
 	S.Walk("Begin")
-	S.screen, S.walkAt, S.combatSaid, S.asking = nil, nil, false, false
+	S.screen, S.walkAt, S.combatSaid = nil, nil, false
 	S.showAll = {}
 	S.Keys(true)
 	S.Go(S.Opening())
@@ -1699,7 +1715,7 @@ function S.Hidden()
 	if S.draft then
 		S.Sync()
 	end
-	S.draft, S.screen, S.asking = nil, nil, false
+	S.draft, S.screen = nil, nil
 	S.Keys(false)
 end
 
@@ -1709,7 +1725,7 @@ function S.Close()
 		kit.Hide()
 		return
 	end
-	S.Question("Close setup.", function()
+	kit.Ask("Close setup.", function()
 		kit.Hide()
 	end, function()
 		S.Drop()
