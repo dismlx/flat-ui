@@ -9879,6 +9879,10 @@ local PAGES = {
 			{ choices = { { "always", "Always" }, { "combat", "In combat only" }, { "off", "Off" } } }),
 		S("general.cursorRingSize", "number", 48, "Cursor ring size", nil, { min = 16, max = 160, step = 4, unit = "", needs = "general.cursorRing", needsIn = { "always", "combat" } }),
 		S("general.cursorRingColour", "colour", "ffffffff", "Cursor ring colour", nil, { needs = "general.cursorRing", needsIn = { "always", "combat" } }),
+		S("general.cursorRingCast", "bool", true, "Cast progress on the ring", "Your cast or channel runs round the ring.", { needs = "general.cursorRing", needsIn = { "always", "combat" } }),
+		S("general.cursorRingCastColour", "colour", "ffe6b333", "Cast progress colour", nil, { needs = "general.cursorRingCast" }),
+		S("general.cursorRingGcd", "bool", false, "Global cooldown on the ring", "Just inside the cast's ring.", { needs = "general.cursorRing", needsIn = { "always", "combat" } }),
+		S("general.cursorRingGcdColour", "colour", "ffffffff", "Global cooldown colour", nil, { needs = "general.cursorRingGcd" }),
 	} },
 	{ key = "generalColours", label = "Colours", parent = "general", owner = "general", rows = {
 		"Cast colours",
@@ -10942,6 +10946,7 @@ local PAGES = {
 		S("hud.btnAddons", "bool", true, "Addon list button"),
 		S("hud.addonButtons", "choice", "edge", "Addon buttons", "Round buttons that other addons put on the minimap.",
 			{ choices = { { "leave", "Where each addon puts them" }, { "edge", "Column beside the map" }, { "bar", "Row under the map" } }, changed = "MapButtonsChanged" }),
+		S("hud.addonButtonsKeep", "list", 0, "Leave in place", "A button you tick stays where its addon puts it.", { needs = "hud.addonButtons", needsIn = { "edge", "bar" } }),
 		"Text around the map",
 		S("hud.mapCoords", "bool", true, "Coordinates", "Your place on the zone map. Hidden in instances and where the game gives no position."),
 		S("hud.mapCoordsPlace", "choice", "below", "Coordinates place", nil, { needs = "hud.mapCoords", choices = { { "above", "Above the map" }, { "below", "Below the map" } } }),
@@ -11046,6 +11051,9 @@ local PAGES = {
 		"Queue, damage meter and zone bars",
 		S("hud.queue", "bool", true, "Queue status panel", "Thin border in place of the default frame."),
 		S("hud.meter", "bool", true, "Damage meter header", "A flat band with a thin border in place of the default header."),
+		S("hud.meterClear", "choice", "off", "Clear the damage meter", "Not again for the same instance within an hour, so a reload or a run back after a wipe keeps the numbers.",
+			{ choices = { { "off", "Off" }, { "enter", "When you enter a dungeon or raid" }, { "ask", "Ask when you enter one" } } }),
+		S("hud.meterClearBoss", "bool", false, "At each raid boss", "Clears as a raid boss fight starts, without asking.", { needs = "hud.meterClear", needsIn = { "enter", "ask" } }),
 		S("hud.zoneBars", "bool", true, "Zone event bars", "Thin border on score and progress bars."),
 	} },
 	{ key = "chat", label = "Chat and tooltips", rows = {
@@ -11350,12 +11358,13 @@ local PAGES = {
 		S("fade.bags", "bool", false, "Bag bar", "Not applied while Leave the game's action bars alone is on."),
 		S("fade.playerFrame", "bool", false, "Player frame"),
 		S("fade.petFrame", "bool", false, "Pet frame"),
-		S("fade.minimapButtons", "bool", false, "Minimap buttons", "Shown while the mouse is over the minimap."),
+		S("fade.minimapButtons", "bool", false, "Minimap buttons", "The game's and other addons' minimap buttons, shown while the mouse is over the minimap."),
 		"When shown",
-		S("fade.targetFrame", "choice", "always", "Target frame", "At other times it fades like the frames above, with its cast bar, combo points and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
-		S("fade.focusFrame", "choice", "always", "Focus frame", "At other times it fades like the frames above, with its cast bar and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
-		S("fade.buffs", "choice", "always", "Buffs", "Your buffs and weapon enchants, not your debuffs. At other times they fade like the frames above.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
-		S("fade.objectiveTracker", "choice", "always", "Objective tracker", "At other times it fades like the frames above. In a fight, Opacity in combat of the tracker comes first while it is under 100%.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.targetFrame", "choice", "always", "Target frame", "At other times it fades like the frames above, with its cast bar, combo points and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.focusFrame", "choice", "always", "Focus frame", "At other times it fades like the frames above, with its cast bar and target of target.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.buffs", "choice", "always", "Buffs", "Your buffs and weapon enchants, not your debuffs. At other times they fade like the frames above.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.objectiveTracker", "choice", "always", "Objective tracker", "At other times it fades like the frames above. Only outside an instance with Faded opacity at 0% takes it away in dungeons and raids until the mouse is over it. In a fight, Opacity in combat of the tracker comes first while it is under 100%.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
+		S("fade.damageMeter", "choice", "always", "Damage meter", "At other times it fades like the frames above. The game's own Visibility in Edit Mode still applies.", { choices = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" }, { "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } } }),
 		"Fade",
 		S("fade.alpha", "number", 25, "Faded opacity", "Faded buttons still work.", { min = 0, max = 90, step = 5, unit = "%" }),
 		S("fade.delay", "number", 500, "Wait before fading", nil, { min = 0, max = 3000, step = 100, unit = " ms" }),
@@ -21782,7 +21791,9 @@ end
 for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour", "hud.xpRepStats",
 	"datapanels.topWidth", "datapanels.bottomWidth", "datapanels.outline", "datapanels.shadow", "datapanels.textColour", "datapanels.textCustom",
 	"datapanels.perfColour", "datapanels.combatAlpha", "datapanels.idleAlpha", "datapanels.strata",
-	"unitframes.druidMana", "unitframes.petTarget", "unitframes.petTargetWidth", "mount.falling" }) do
+	"unitframes.druidMana", "unitframes.petTarget", "unitframes.petTargetWidth", "mount.falling",
+	"fade.damageMeter", "hud.addonButtonsKeep", "hud.meterClear", "hud.meterClearBoss",
+	"general.cursorRingCast", "general.cursorRingCastColour", "general.cursorRingGcd", "general.cursorRingGcdColour" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67257,7 +67268,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1086 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1094 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
@@ -67571,7 +67582,7 @@ function PT.runSetup()
 		S.Set("nameplates.maxDistance", 20)
 		S.Set("unitframes.playerScale", 150)
 		SU.frame(W)
-		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 996 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
+		check("setup: a walk through every built step writing a value on each row puts a value in the draft for each", written == 1004 and S.draft.values["general.thickness"] ~= nil and S.draft.values["general.barTexture"] ~= nil
 			and S.draft.values["nameplates.maxDistance"] == 20, tostring(written))
 		check("setup: and the saved variables hold only the draft: the profiles, the positions, the character data and the profile of the character are as they were", SU.same(W.env.FlatUIDB, db, "setup")
 			and SU.same(W.env.FlatUICharDB, char) and W.env.FlatUIDB.profileOf[SU.CHARACTER] == nil)

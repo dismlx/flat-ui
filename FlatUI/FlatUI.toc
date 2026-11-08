@@ -87,6 +87,7 @@ QuestCount.lua
 MapText.lua
 ErrorFilter.lua
 ScreenText.lua
+MeterClear.lua
 Fade.lua
 Chat.lua
 ChatText.lua

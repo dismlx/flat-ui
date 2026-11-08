@@ -57,7 +57,7 @@ local KEPT_XP = "On the game's bar, not applied while Leave the game's action ba
 local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the map" } }
 -- When a frame of When shown on the Fading page is at full opacity; at other times it fades (Fade.lua has the rules).
 local FADE_WHEN = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" },
-	{ "unmounted", "Only when not mounted" } }
+	{ "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } }
 
 ns.PAGES = {
 	{
@@ -107,6 +107,13 @@ ns.PAGES = {
 			changed = "CursorRingChanged" },
 		{ key = "cursorRingColour", kind = "colour", default = "ffffffff", label = "Cursor ring colour", needs = "cursorRing", needsIn = { "always", "combat" },
 			changed = "CursorRingChanged" },
+		-- Two swipes of the ring's own fed the game's duration objects (CursorRing.lua).
+		{ key = "cursorRingCast", kind = "bool", default = true, label = "Cast progress on the ring", needs = "cursorRing", needsIn = { "always", "combat" },
+			changed = "CursorRingChanged", tip = "Your cast or channel runs round the ring." },
+		{ key = "cursorRingCastColour", kind = "colour", default = "ffe6b333", label = "Cast progress colour", needs = "cursorRingCast", changed = "CursorRingChanged" },
+		{ key = "cursorRingGcd", kind = "bool", default = false, label = "Global cooldown on the ring", needs = "cursorRing", needsIn = { "always", "combat" },
+			changed = "CursorRingChanged", tip = "Just inside the cast's ring." },
+		{ key = "cursorRingGcdColour", kind = "colour", default = "ffffffff", label = "Global cooldown colour", needs = "cursorRingGcd", changed = "CursorRingChanged" },
 		-- The look of the options window: held per account in FlatUIDB.panel beside the window position, outside every profile (PanelLook.lua has the functions).
 		{ section = "Options window" },
 		{ page = "panel", key = "accent", kind = "choice", default = "indigo", label = "Accent colour", live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",
@@ -1450,6 +1457,9 @@ ns.PAGES = {
 		{ key = "btnAddons", kind = "bool", default = true, label = "Addon list button" },
 		{ key = "addonButtons", kind = "choice", default = "edge", label = "Addon buttons", tip = "Round buttons that other addons put on the minimap.", changed = "MapButtonsChanged",
 			choices = { { "leave", "Where each addon puts them" }, { "edge", "Column beside the map" }, { "bar", "Row under the map" } } },
+		-- Kept per account in FlatUIDB.mapButtons.keep (MapButtons.lua).
+		{ key = "addonButtonsKeep", kind = "list", default = 0, label = "Leave in place", none = "Choose a button", items = "MapButtonLines", pick = "MapButtonPick",
+			needs = "addonButtons", needsIn = { "edge", "bar" }, tip = "A button you tick stays where its addon puts it." },
 		-- MapText.lua draws these: lines of text above and below the map.
 		{ section = "Text around the map" },
 		{ key = "mapCoords", kind = "bool", default = true, label = "Coordinates", tip = "Your place on the zone map. Hidden in instances and where the game gives no position." },
@@ -1602,6 +1612,12 @@ ns.PAGES = {
 		{ section = "Queue, damage meter and zone bars" },
 		{ key = "queue", kind = "bool", default = true, label = "Queue status panel", tip = "Thin border in place of the default frame." },
 		{ key = "meter", kind = "bool", default = true, label = "Damage meter header", tip = "A flat band with a thin border in place of the default header." },
+		-- MeterClear.lua: the game's damage meter cleared as the player enters a dungeon or raid.
+		{ key = "meterClear", kind = "choice", default = "off", label = "Clear the damage meter",
+			choices = { { "off", "Off" }, { "enter", "When you enter a dungeon or raid" }, { "ask", "Ask when you enter one" } },
+			tip = "Not again for the same instance within an hour, so a reload or a run back after a wipe keeps the numbers." },
+		{ key = "meterClearBoss", kind = "bool", default = false, label = "At each raid boss", needs = "meterClear", needsIn = { "enter", "ask" },
+			tip = "Clears as a raid boss fight starts, without asking." },
 		{ key = "zoneBars", kind = "bool", default = true, label = "Zone event bars", tip = "Thin border on score and progress bars." },
 	},
 	{
@@ -1999,7 +2015,7 @@ ns.PAGES = {
 		{ key = "bags", kind = "bool", default = false, label = "Bag bar", tip = KEPT },
 		{ key = "playerFrame", kind = "bool", default = false, label = "Player frame" },
 		{ key = "petFrame", kind = "bool", default = false, label = "Pet frame" },
-		{ key = "minimapButtons", kind = "bool", default = false, label = "Minimap buttons", tip = "Shown while the mouse is over the minimap." },
+		{ key = "minimapButtons", kind = "bool", default = false, label = "Minimap buttons", tip = "The game's and other addons' minimap buttons, shown while the mouse is over the minimap." },
 		{ section = "When shown" },
 		{ key = "targetFrame", kind = "choice", default = "always", label = "Target frame",
 			tip = "At other times it fades like the frames above, with its cast bar, combo points and target of target.", choices = FADE_WHEN },
@@ -2008,7 +2024,10 @@ ns.PAGES = {
 		{ key = "buffs", kind = "choice", default = "always", label = "Buffs",
 			tip = "Your buffs and weapon enchants, not your debuffs. At other times they fade like the frames above.", choices = FADE_WHEN },
 		{ key = "objectiveTracker", kind = "choice", default = "always", label = "Objective tracker",
-			tip = "At other times it fades like the frames above. In a fight, Opacity in combat of the tracker comes first while it is under 100%.", choices = FADE_WHEN },
+			tip = "At other times it fades like the frames above. Only outside an instance with Faded opacity at 0% takes it away in dungeons and raids until the mouse is over it. In a fight, Opacity in combat of the tracker comes first while it is under 100%.",
+			choices = FADE_WHEN },
+		{ key = "damageMeter", kind = "choice", default = "always", label = "Damage meter",
+			tip = "At other times it fades like the frames above. The game's own Visibility in Edit Mode still applies.", choices = FADE_WHEN },
 		{ section = "Fade" },
 		{ key = "alpha", kind = "number", default = 25, min = 0, max = 90, step = 5, unit = "%", label = "Faded opacity", tip = "Faded buttons still work." },
 		{ key = "delay", kind = "number", default = 500, min = 0, max = 3000, step = 100, unit = " ms", label = "Wait before fading" },

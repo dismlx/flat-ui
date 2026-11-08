@@ -7,6 +7,10 @@
 - **Unit frames**, **Player frame**, **Druid mana in forms**, on: in Bear, Dire Bear or Cat Form a thin mana bar shows under the player frame's power bar; in the other forms the frame's own bar shows mana. Follows EnhanceQoL's fixed druid mana.
 - **Unit frames**, **Pet frame**, **Pet target frame**, off, with **Pet target width** (120 px): what your pet attacks, with its health and name; a click targets it. The game shows it only while there is one, in a fight too. `/flatui move` places it. Follows EnhanceQoL's pet target frame.
 - **Mount key**, **Slow Fall or Levitate while falling**, off: for a mage or priest, pressed while you fall and are not mounted, the key casts it on you (it takes a Light Feather). Not in a fight. `/flatui status` says whether it is armed.
+- **Fading**, **When shown**: every row can be **Only outside an instance**; with **Faded opacity** at 0% that takes the objective tracker away in dungeons and raids until the mouse is over it. New row **Damage meter** (**Always**): the mouse over any of its windows, even one moved away from the meter, or over a window's breakdown brings it back, and the game's own **Visibility** in Edit Mode still applies. **Minimap buttons** fades other addons' minimap buttons too. Follows EnhanceQoL's visibility rules.
+- **Minimap**, **Buttons**, **Leave in place**: a button you tick stays where its addon puts it, out of the column or row, and goes back there at once. Follows EnhanceQoL's Button Sink exclusion list.
+- **Tracker, loot and alerts**, **Queue, damage meter and zone bars**, **Clear the damage meter** (**Off**, **When you enter a dungeon or raid** or **Ask when you enter one**) with **At each raid boss** (off): not again for the same instance within an hour, so a reload or a run back after a wipe keeps the numbers; `/flatui status` names the last clear. Follows EnhanceQoL's automatic data clear.
+- **Flat UI**, **Cursor**: **Cast progress on the ring** (on) and **Global cooldown on the ring** (off), each with its colour: your cast or channel runs round the cursor ring, and the global cooldown just inside it. Follows EnhanceQoL's cursor ring.
 
 ## 0.5.8
 
