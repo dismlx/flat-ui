@@ -142,6 +142,37 @@ end
 
 -- Name -------------------------------------------------------------------------------------
 
+-- Threat colour on the name: while the threat of the nameplates (ns.PlateThreat, PlateThreat.lua) keeps a state for the plate that is not of a unit
+-- tapped by someone else, the colour of that state, which takes the place of Name colour's (Threat Plates' names By reaction and By class,
+-- Modules/Color.lua:431-440). With Health text in the name's colour the health text takes it too, as Threat Plates' status text takes the name's
+-- colour with SubtextColorUseHeadline (Elements/StatusText.lua:482-486). Nil while the row is off or the plate shows no threat.
+local function ThreatColour(unitFrame)
+	local threat = Opt("threatName") == true and ns.PlateThreat
+	if type(threat) ~= "table" then
+		return nil
+	end
+	local okActive, active = pcall(threat.Active)
+	if not (okActive and active == true) then
+		return nil
+	end
+	local okState, current = pcall(threat.Get, unitFrame)
+	if okState and type(current) == "table" and current.tapped ~= true then
+		local okColour, cr, cg, cb = pcall(threat.Colour, current)
+		if okColour and ns.Finite(cr) and ns.Finite(cg) and ns.Finite(cb) then
+			return cr, cg, cb
+		end
+	end
+	return nil
+end
+
+-- The threat colour of the health text, while Health text in the name's colour is on and the name has the threat colour.
+local function HealthThreatColour(unitFrame)
+	if Opt("threatHealthText") ~= true then
+		return nil
+	end
+	return ThreatColour(unitFrame)
+end
+
 -- Whether the name shows and what colour it has. The game colours the name again after each of its updates and this runs after that
 -- (fromGame), so the colour read then is the game's own and is kept for putting it back.
 local function NamePart(unitFrame, st, on, fromGame)
@@ -156,23 +187,10 @@ local function NamePart(unitFrame, st, on, fromGame)
 	end
 	local mode = on and Opt("nameColour") or "game"
 	local r, g, b
-	-- Threat colour on the name: while the threat of the nameplates (ns.PlateThreat, PlateThreat.lua) keeps a state for the plate that is not of
-	-- a unit tapped by someone else, its colour takes the place of Name colour's (Threat Plates' names By reaction and By class,
-	-- Modules/Color.lua:431-440). It is kept and put back as Name colour's is.
+	-- The threat colour is kept and put back as Name colour's is.
 	local tr, tg, tb
-	local threat = on and Opt("threatName") == true and ns.PlateThreat
-	if type(threat) == "table" then
-		local okActive, active = pcall(threat.Active)
-		local okState, current = false, nil
-		if okActive and active == true then
-			okState, current = pcall(threat.Get, unitFrame)
-		end
-		if okState and type(current) == "table" and current.tapped ~= true then
-			local okColour, cr, cg, cb = pcall(threat.Colour, current)
-			if okColour and ns.Finite(cr) and ns.Finite(cg) and ns.Finite(cb) then
-				tr, tg, tb = cr, cg, cb
-			end
-		end
+	if on then
+		tr, tg, tb = ThreatColour(unitFrame)
 	end
 	if tr ~= nil then
 		r, g, b = tr, tg, tb
@@ -236,11 +254,15 @@ local function AnyShown(strings)
 	return false
 end
 
--- The colour of the game's three health text strings, and which plates have them. Nameplates.lua fades them when Health text is off.
+-- The colour of the game's three health text strings, and which plates have them. Nameplates.lua fades them when Health text is off. The threat
+-- colour of the name comes before Health text colour, kept and put back the same way.
 local function HealthPart(unitFrame, st, on)
 	local strings = Strings(HealthBarOf(unitFrame), HEALTH_TEXTS)
 	local r, g, b
-	if on and not White(KEY .. ".healthTextColour") then
+	if on then
+		r, g, b = HealthThreatColour(unitFrame)
+	end
+	if r == nil and on and not White(KEY .. ".healthTextColour") then
 		r, g, b = ns.Colour(KEY .. ".healthTextColour")
 	end
 	for _, fontString in ipairs(strings) do
@@ -332,9 +354,12 @@ local function FormatPart(unitFrame, st, on)
 		ns.Note(KEY, "Health text format: the game's health update cannot be followed, so the text may not change with the health.")
 	end
 	local own = OwnHealthText(unitFrame, st, healthBar)
-	local colourR, colourG, colourB = 1, 1, 1
-	if not White(KEY .. ".healthTextColour") then
-		colourR, colourG, colourB = ns.Colour(KEY .. ".healthTextColour")
+	local colourR, colourG, colourB = HealthThreatColour(unitFrame)
+	if colourR == nil then
+		colourR, colourG, colourB = 1, 1, 1
+		if not White(KEY .. ".healthTextColour") then
+			colourR, colourG, colourB = ns.Colour(KEY .. ".healthTextColour")
+		end
 	end
 	own:SetTextColor(colourR, colourG, colourB, 1)
 	local unit = unitFrame.unit
@@ -487,12 +512,17 @@ local function Retarget()
 end
 
 -- Threat colour on the name follows each change of a plate's threat (ns.PlateThreat). On UNIT_THREAT_LIST_UPDATE the game names the plate before
--- its aggro update (Shared/CompactUnitFrame.lua:136-140), which is what the threat core follows, so the name is coloured again after a change.
--- The listener is added the first time a hook finds the core; a row turned off reaches every plate through the refresh.
+-- its aggro update (Shared/CompactUnitFrame.lua:136-140), which is what the threat core follows, so the name is coloured again after a change,
+-- and with Health text in the name's colour the health text too. The listener is added the first time a hook finds the core; a row turned off
+-- reaches every plate through the refresh.
 local threatFollowed = false
 local function OnThreat(frame)
 	if Opt("threatName") == true and ns.IsPlate(frame) and not ns.Forbidden(frame) then
 		Run(NAME, NamePart, frame)
+		if Opt("threatHealthText") == true then
+			Run(HEALTH, HealthPart, frame)
+			Run(FORMAT, FormatPart, frame)
+		end
 	end
 end
 local function FollowThreat()

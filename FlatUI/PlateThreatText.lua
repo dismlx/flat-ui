@@ -1,18 +1,23 @@
 local _, ns = ...
 
--- Threat text on nameplates, parts of Nameplates.lua (ns.PlateExtra): the threat value left of the health bar and the name of the enemy's target
--- right of it. Both follow the threat that PlateThreat.lua keeps for each plate (ns.PlateThreat): the state after a change (OnChange) and every
--- threat update the game makes on the plate (OnUpdate); this file never asks the game for the threat level. The core is found the first time a
--- hook of this file runs, and without it the rows do nothing. Each text is a font string of the addon's own on the plate's unit frame, so both
--- fade with the plate, made the first time the plate needs it and, on a frame that may be protected, only out of combat (as CastTime.lua makes
--- its text), in the font of the game's health text. The game's answers go to the texts as they are: a withheld number, name, colour or answer is
--- never read, compared or joined in Lua, since SetFormattedText, SetTextColor and SetAlphaFromBoolean take them
+-- Threat text on nameplates, parts of Nameplates.lua (ns.PlateExtra): the threat value beside the health bar (left of it by default) and the name of
+-- the enemy's target right of it. Both follow the threat that PlateThreat.lua keeps for each plate (ns.PlateThreat): the state after a change
+-- (OnChange) and every threat update the game makes on the plate (OnUpdate); this file never asks the game for the threat level. The core is
+-- found the first time a hook of this file runs, and without it the rows do nothing. Each text is a font string of the addon's own on the plate's
+-- unit frame, so both fade with the plate, made the first time the plate needs it and, on a frame that may be protected, made and placed only out
+-- of combat (as CastTime.lua makes its text), in the font of the game's health text. The game's answers go to the texts as they are: a withheld
+-- number, name, colour or answer is never read, compared or joined in Lua, since SetFormattedText, SetTextColor and SetAlphaFromBoolean take them
 -- (SimpleFontStringAPIDocumentation.lua:539-548, 675-688; SimpleRegionAPIDocumentation.lua:133-145). Every call is in a pcall; a part that fails
 -- on enough plates stops alone and hides its text on every plate.
 -- The value follows Threat Plates' threat widget (Widgets/ThreatWidget.lua:352-408): the share of aggro (scaledPercentage) or the share of the
 -- tank's threat (rawPercentage) of UnitDetailedThreatSituation, or the game's own threat number, the lead while tanking and the share of the
 -- tank's threat otherwise (Blizzard_UnitFrame/Mainline/UnitFrame.lua:1028-1046), in place of Threat Plates' value types that compare units,
 -- which show nothing on this client (ThreatWidget.lua:417-426). The enemy's target follows its TargetUnit (Elements/Healthbar.lua:258-342).
+-- The value's place follows Threat Plates' layout of it (Constants.lua:2080-2103): outside the bar on the side of Threat value position, which
+-- Threat Plates sets with the point of the text opposite that side (Modules/Font.lua:94-104), moved by the two offsets, with Threat value outline
+-- and, while Threat value in the threat colour is off, Threat value colour (its CustomColor, Widgets/ThreatWidget.lua:398-406). Right of the bar
+-- it sits after the level frame, as the enemy's target does, and the enemy's target then sits after it; above the bar it clears the name and below
+-- it the cast bar, as Nameplates.lua places a class icon (PlaceIcon).
 
 local KEY = "nameplates"
 local EXTRA = ns.PlateExtra
@@ -26,17 +31,20 @@ local FONT_OBJECT = "SystemFont_NamePlate"
 local GAP = 4
 -- The kinds of Threat value that show a number.
 local SHOWN = { scaled = true, raw = true, lead = true }
+-- How the value is aligned on each side of the bar: away from the bar, and centred above or below it (Threat Plates aligns its value right on the
+-- left of the bar, Constants.lua:2100).
+local JUSTIFY = { left = "RIGHT", right = "LEFT", above = "CENTER", below = "CENTER" }
 
 -- Per unit frame: value and target (the font strings), valueShown and targetShown (false once hidden), base (the font object's font, for a plate
--- whose health text cannot be read), fonts (per font string, the font it was given), place (what the target text is anchored to), colourFor and
--- colourThreat (the state and the setting the value was coloured for), own (what Nameplates.lua keeps of the plate), waiting (the plate waits for
--- the end of combat to get its texts).
+-- whose health text cannot be read), fonts (per font string, the font it was given), place (what the target text is anchored to), valuePlace and
+-- valueSide (the place the value was anchored for, and its side), colourFor and colourThreat (the state and the setting the value was coloured
+-- for), own (what Nameplates.lua keeps of the plate), waiting (the plate waits for the end of combat to get its texts).
 local recs = setmetatable({}, { __mode = "k" })
 -- subscribed: the listeners are on the core. heard: UNIT_TARGET is heard. fighting: between PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED.
--- placeWaiting: the target texts wait for the end of combat to be placed again.
+-- placeWaiting: the texts wait for the end of combat to be placed again.
 local subscribed, heard, fighting, placeWaiting = false, false, false, false
 local listener
-local Draw, OnChange, OnUpdate
+local Draw, OnChange, OnUpdate, Beside
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -107,6 +115,17 @@ local function CanPlace(unitFrame, text)
 	return not (InCombatLockdown() and (MayBeProtected(unitFrame) or (text ~= nil and MayBeProtected(text))))
 end
 
+-- In a fight a text that may be protected keeps its anchor, and every plate is placed again when the fight ends.
+local function PlaceLater()
+	if not placeWaiting then
+		placeWaiting = true
+		ns.OutOfCombat(function()
+			placeWaiting = false
+			ns.EachPlate(Draw, true)
+		end)
+	end
+end
+
 -- The threat core ----------------------------------------------------------------------------
 
 -- The listeners are added to the threat of the nameplates (PlateThreat.lua) the first time a hook finds it; the core adds each once however often
@@ -174,11 +193,8 @@ local function Text(unitFrame, rec, which)
 	end
 	text:SetText("")
 	text:Hide()
-	if which == "value" then
-		-- Threat Plates' value: left of the bar, outside it, aligned right (Constants.lua:2080-2103).
-		text:SetJustifyH("RIGHT")
-		text:SetPoint("RIGHT", healthBar, "LEFT", -GAP, 0)
-	else
+	-- The value is placed by PlaceValue, on the side Threat value position gives.
+	if which ~= "value" then
 		text:SetJustifyH("LEFT")
 	end
 	rec[which] = text
@@ -194,9 +210,10 @@ local function Clear(rec, which)
 	end
 end
 
--- The font of the game's health text at Threat value size, with the game's flags, as the health text of the addon's own takes it (PlateText.lua).
--- A plate whose health text cannot be read keeps the font object's font at that size.
-local function Font(unitFrame, rec, text)
+-- The font of the game's health text at Threat value size, with the game's flags, as the health text of the addon's own takes it (PlateText.lua),
+-- or with the flags of an outline (Threat value outline, as the other outline rows give them: ns.OUTLINE_FLAGS). A plate whose health text cannot
+-- be read keeps the font object's font at that size.
+local function Font(unitFrame, rec, text, outline)
 	local file, size, flags
 	local game = Region(HealthBarOf(unitFrame), "RightText")
 	if game then
@@ -211,6 +228,10 @@ local function Font(unitFrame, rec, text)
 	end
 	if file == nil then
 		return
+	end
+	local chosen = outline ~= nil and outline ~= "game" and ns.OUTLINE_FLAGS[outline] or nil
+	if type(chosen) == "string" then
+		flags = chosen
 	end
 	local percent = Opt("threatValueSize")
 	local key = ("%s|%s|%s|%s"):format(file, size, flags, percent)
@@ -261,8 +282,9 @@ local function Write(text, value)
 	text:SetText("")
 end
 
--- The threat colour of the state with Threat value in the threat colour, else white (Threat Plates' UseThreatColor and its custom white), set when
--- the state or the setting changes.
+-- The threat colour of the state with Threat value in the threat colour, else Threat value colour (Threat Plates' UseThreatColor and its
+-- CustomColor, white by default: Constants.lua:2081-2082; ThreatWidget.lua:398-406), set when the state or the setting changes. A threat colour
+-- that cannot be read is white.
 local function ValueColour(PT, rec, text, state)
 	local threat = Opt("threatValueColour") == true
 	if rec.colourFor == state and rec.colourThreat == threat then
@@ -274,13 +296,87 @@ local function ValueColour(PT, rec, text, state)
 		if ok and ns.Finite(cr) and ns.Finite(cg) and ns.Finite(cb) then
 			r, g, b = cr, cg, cb
 		end
+	else
+		r, g, b = ns.Colour(KEY .. ".threatValueCustom")
 	end
 	text:SetTextColor(r, g, b, 1)
 	rec.colourFor, rec.colourThreat = state, threat
 end
 
+-- How far above the health bar the name reaches, which a value above the bar clears, as Nameplates.lua lifts a class icon over it (PlaceIcon): the
+-- game's spacing and the name's height at Name size (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:226, 761-770), and nothing while the
+-- game puts the name inside the bar (InsideHealthBar, Camelot/Blizzard_NamePlateConstants.lua:80-85; Blizzard_NamePlateUnitFrame.lua:754-760).
+-- A number the game does not give plainly counts as none.
+local function Lift()
+	local options, constants = NamePlateSetupOptions, NamePlateConstants
+	if not Plain(options, "table") then
+		return 0
+	end
+	local styles = Plain(constants, "table") and constants.NAME_ANCHOR_STYLES or nil
+	local inside = Plain(styles, "table") and styles.InsideHealthBar or nil
+	local style = options.unitNameAnchorStyle
+	if Plain(inside, "number") and Plain(style, "number") and style == inside then
+		return 0
+	end
+	local spacing, height, size = options.healthBarToNameAboveSpacing, options.healthBarFontHeight, Opt("nameSize")
+	return (ns.Finite(spacing) and spacing or 0) + (ns.Finite(height) and height or 0) * (ns.Finite(size) and size or 100) / 100
+end
+
+-- Anchors the value on the side Threat value position gives, moved by its offsets: left of the bar and aligned right (as Threat Plates has it, and
+-- as before), right of what ends the bar and aligned left, centred above the name, or centred below the cast bar, whose frame the game keeps under
+-- the health bar (Blizzard_NamePlateUnitFrame.lua:699-700, 714-715). Done again only when the place changes. The first anchors of a text just made
+-- follow the rule it was made by (Text); a text placed before keeps its anchors in a fight on a plate that may be protected, as the enemy's target
+-- does, until the fight ends.
+local function PlaceValue(unitFrame, rec, text)
+	local healthBar = HealthBarOf(unitFrame)
+	if healthBar == nil then
+		return
+	end
+	local place = Opt("threatValuePlace")
+	if JUSTIFY[place] == nil then
+		place = "left"
+	end
+	local x, y = Opt("threatValueX"), Opt("threatValueY")
+	x, y = ns.Finite(x) and x or 0, ns.Finite(y) and y or 0
+	local frame, key = healthBar, "bar"
+	if place == "right" then
+		frame, key = Beside(unitFrame, rec)
+	elseif place == "below" then
+		local cast = Frame(unitFrame, "CastBarsContainer")
+		if cast then
+			frame, key = cast, "cast"
+		end
+	end
+	if frame == nil then
+		return
+	end
+	local lift = place == "above" and Lift() or 0
+	local wanted = ("%s:%s:%s:%s:%s"):format(place, x, y, key, lift)
+	if rec.valuePlace == wanted then
+		return
+	end
+	if not CanPlace(unitFrame, rec.valuePlace ~= nil and text or nil) then
+		PlaceLater()
+		return
+	end
+	text:ClearAllPoints()
+	text:SetJustifyH(JUSTIFY[place])
+	if place == "left" then
+		text:SetPoint("RIGHT", healthBar, "LEFT", x - GAP, y)
+	elseif place == "right" then
+		text:SetPoint("LEFT", frame, "RIGHT", x + GAP, y)
+	elseif place == "above" then
+		text:SetPoint("BOTTOM", healthBar, "TOP", x, y + lift + GAP)
+	else
+		text:SetPoint("TOP", frame, "BOTTOM", x, y - GAP)
+	end
+	rec.valuePlace, rec.valueSide = wanted, place
+end
+
 -- Shown while the plate has a state, Threat value shows a number, the plate shows its health bar and Show threat value allows. The number is
--- written on every threat update of the plate, as Threat Plates does on each UNIT_THREAT_LIST_UPDATE (ThreatWidget.lua:357).
+-- written on every threat update of the plate, as Threat Plates does on each UNIT_THREAT_LIST_UPDATE (ThreatWidget.lua:357); the place and the
+-- font are looked at again when the plate is shown or laid out, the rows change, or the value shows again, since a hidden value may have missed
+-- one of the others.
 local function ValuePart(unitFrame, rec, on, full)
 	local PT = on and Core() or nil
 	local mode = Opt("threatValue")
@@ -294,8 +390,12 @@ local function ValuePart(unitFrame, rec, on, full)
 	if text == nil then
 		return
 	end
-	if full or rec.fonts[text] == nil then
-		Font(unitFrame, rec, text)
+	local again = full or rec.valueShown ~= true
+	if again then
+		PlaceValue(unitFrame, rec, text)
+	end
+	if again or rec.fonts[text] == nil then
+		Font(unitFrame, rec, text, Opt("threatValueOutline"))
 	end
 	ValueColour(PT, rec, text, state)
 	Write(text, Number(mode, unit))
@@ -305,9 +405,10 @@ end
 
 -- The enemy's target -------------------------------------------------------------------------
 
--- What the target text sits after: a class icon on the right of the bar, else the level frame while it shows (the game's hangs past the end of the
--- bar, Camelot/Blizzard_NamePlateLevelFrame.xml:5-8, and Flat UI's square box ends the bar), else the bar.
-local function Beside(unitFrame, rec)
+-- What ends the bar on the right, which the value on the right and the target text sit after: a class icon on the right of the bar, else the level
+-- frame while it shows (the game's hangs past the end of the bar, Camelot/Blizzard_NamePlateLevelFrame.xml:5-8, and Flat UI's square box ends the
+-- bar), else the bar.
+function Beside(unitFrame, rec)
 	local own = rec.own
 	own = type(own) == "table" and own or {}
 	if own.classShown and own.iconSide == "right" and type(own.icon) == "table" then
@@ -323,20 +424,23 @@ local function Beside(unitFrame, rec)
 	return HealthBarOf(unitFrame), "bar"
 end
 
+-- What the target text sits after: the threat value while it is anchored right of the bar and Threat value shows a number, so the two never lie
+-- over each other, else what ends the bar. A value with nothing to show is an empty text, so the target text then sits a gap further.
+local function After(unitFrame, rec)
+	if rec.value ~= nil and rec.valueSide == "right" and SHOWN[Opt("threatValue")] and not ns.PartStopped(KEY, VALUE) then
+		return rec.value, "value"
+	end
+	return Beside(unitFrame, rec)
+end
+
 -- In a fight a text that may be protected keeps its anchor, and every plate is placed again when the fight ends.
 local function Place(unitFrame, rec, text)
-	local frame, key = Beside(unitFrame, rec)
+	local frame, key = After(unitFrame, rec)
 	if frame == nil or rec.place == key then
 		return
 	end
 	if not CanPlace(unitFrame, text) then
-		if not placeWaiting then
-			placeWaiting = true
-			ns.OutOfCombat(function()
-				placeWaiting = false
-				ns.EachPlate(Draw, true)
-			end)
-		end
+		PlaceLater()
 		return
 	end
 	text:ClearAllPoints()

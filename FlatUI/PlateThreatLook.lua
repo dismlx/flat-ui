@@ -1,8 +1,9 @@
 local _, ns = ...
 
 -- The threat look of a nameplate (Nameplates, Threat): a ring in the threat colour around the health bar, the threat colour on the health bar
--- border and a fade of the enemies whose threat you want. The threat core (PlateThreat.lua, ns.PlateThreat) reads the threat of each plate and says
--- when it changes; this file draws what that state says and asks the game nothing about threat. Before the core is there every row here does nothing.
+-- border and background, and a fade of the enemies whose threat you want. The threat core (PlateThreat.lua, ns.PlateThreat) reads the threat of each
+-- plate and says when it changes; this file draws what that state says and asks the game nothing about threat. Before the core is there every row
+-- here does nothing.
 -- The ring is a frame of Flat UI's own on the health bar with an outline of its own (ns.Outline), made and anchored out of combat on a plate the game
 -- may protect, as the low health border is (HealthColour.lua); in a fight only its colour and visibility change, which are texture calls.
 -- The border is a slot of the plate's border colour in Nameplates.lua (ns.PlateThreatBorder): below the target, the focus and the mouseover, above
@@ -15,18 +16,34 @@ local _, ns = ...
 -- UNIT_CTR_OPTIONS, UNIT_OTHER_PARTY_CHANGED and the INCOMING_ events (CompactUnitFrame.lua:154-168) and in UpdateAll (463 and 472), which a plate
 -- runs when it gets its unit (Blizzard_NamePlates/Blizzard_NamePlateBase.lua:69, CompactUnitFrame.lua:276). That call is followed and the fade set
 -- again after it, as the raid frames' range opacity is (UnitExtras.lua). The fade multiplies with the game's own nameplate alphas and with Dim other
--- nameplates, which stay as they are.
+-- nameplates, which stay as they are. Its opacity is by want and role, as Threat Plates' threat transparency is a table per role and level
+-- (Constants.lua:2114-2139; Modules/Transparency.lua:102-123): enemies held for you (one opacity, or one for a tank and one for damage or healer) and
+-- threat changing hands; threat you do not want never fades. With Raid-marked enemies stay clear an enemy with a raid marker never fades, as
+-- Threat Plates' threat.marked.alpha puts its opacity of marked units (1 by default) in place of the threat one while that opacity is on
+-- (Constants.lua:2140-2144, 2160 and 2199; Modules/Transparency.lua:43-48 and 109-114); its colour, ring and value stay.
+-- The background is the backdrop of Flat UI's own outline of the health bar (Nameplates.lua), given a fill of its own (ns.SetOutlineFill, a texture
+-- call) while threat colours the bar, as Threat Plates draws a bar's background in the bar's colour with BackgroundUseForegroundColor
+-- (Elements/Healthbar.lua:356-359), and given back to the background colour of the page or of the Flat UI page when the plate loses it.
 
 local KEY = "nameplates"
-local RING, BORDER, FADE = "threat ring", "threat border", "threat fade"
+local RING, BORDER, BACK, FADE = "threat ring", "threat border", "threat background", "threat fade"
 local HOOK = "CompactUnitFrame_UpdateCenterStatusIcon"
 -- The edges of the ring in screen pixels, and its gap from the health bar beyond the border thickness, which clears the 2 px border of an Elite or a Rare.
 local RING_PX, GAP_PX = 2, 2
+-- The share of the threat colour's brightness the background has. Threat Plates draws the bar's colour behind it at 30% opacity (its background
+-- opacity of 70%, Constants.lua:624-626); here it is a dark shade of the colour at the opacity the background already has, so the empty part of
+-- the bar stays apart from the full part.
+local BACK_SHARE = 0.3
+-- The game's health colour call, which Flat UI follows to colour a health bar (PlateColours.lua).
+local HEALTH_HOOK = "CompactUnitFrame_UpdateHealthColor"
 
 -- Per unit frame: levelBox (Flat UI's square level box sits beside the bar, from the layout hook), ring ({ frame, outline, right: the frame its right
--- side follows, d: its gap, shown }), waiting (the plate waits for the end of a fight), border (the colour given to Nameplates.lua) and fade ({ orig:
--- the alpha the frame had, sent: the alpha written }). A record is kept when the plate leaves, so its ring is made once.
+-- side follows, d: its gap, shown }), waiting (the plate waits for the end of a fight), border (the colour given to Nameplates.lua), back ({ r, g, b,
+-- a, outline: the fill given to the outline of the health bar }) and fade ({ orig: the alpha the frame had, sent: the alpha written }). A record is
+-- kept when the plate leaves, so its ring is made once.
 local recs = setmetatable({}, { __mode = "k" })
+-- What Nameplates.lua keeps of each plate, from its show and layout hooks: own.health is its outline of the health bar.
+local owns = setmetatable({}, { __mode = "k" })
 -- followed: the game's opacity call is followed; missing: the client has none. subscribed: the core tells this file of each change.
 local followed, missing, subscribed = false, false, false
 local RunPart, Wait, OnStatusIcon
@@ -327,6 +344,61 @@ local function Border(frame, rec, state)
 	rec.border = ns.PlateThreatBorder(frame, r, g, b) and { r, g, b } or nil
 end
 
+-- The background --------------------------------------------------------------------------------------------------------------------------------------
+
+-- True while Flat UI gives the plate's health bar its threat colour, in PlateColours.lua's order (Want): Colour health bars by threat on and its part
+-- running in a client with the game's colour call, an enemy not tapped by others (whose bar keeps the game's grey), and not the target's bar while
+-- Colour the target's health bar gives it the target's colour. The colour of a bar the game draws may be withheld, so it is never read.
+local function Painted(frame, state, marks)
+	if Opt("threatBar") ~= true or state.tapped == true or ns.PartStopped(KEY, "plate colours") or type(_G[HEALTH_HOOK]) ~= "function" then
+		return false
+	end
+	if Opt("targetBar") == true then
+		marks = marks or Marks()
+		if frame == marks.target then
+			return false
+		end
+	end
+	return true
+end
+
+-- The outline gets the background colour of the page or of the Flat UI page back.
+local function ClearBack(_, rec)
+	local back = rec.back
+	if back ~= nil then
+		rec.back = nil
+		ns.SetOutlineFill(back.outline, nil, nil, nil, nil)
+	end
+end
+
+-- Health bar background in the threat colour: a dark shade of the bar's threat colour behind it, at the opacity of the background (the Look rows of
+-- the page while Own border and background is on, else the Flat UI page's, ns.OutlineBackdropAlpha). It shows only while Health bar background is
+-- on, since that switch shows the backdrop.
+local function Back(frame, rec, state, marks)
+	local own = owns[frame]
+	local outline = type(own) == "table" and own.health or nil
+	local r, g, b
+	if state ~= nil and type(outline) == "table" and Opt("threatBackground") == true and not Off(BACK) and PlateOn(frame) and Painted(frame, state, marks) then
+		r, g, b = StateColour(state)
+	end
+	if r == nil then
+		ClearBack(frame, rec)
+		return
+	end
+	r, g, b = r * BACK_SHARE, g * BACK_SHARE, b * BACK_SHARE
+	local a = ns.OutlineBackdropAlpha(outline)
+	local now = rec.back
+	if now ~= nil and now.outline == outline and now[1] == r and now[2] == g and now[3] == b and now[4] == a then
+		return
+	end
+	if now ~= nil and now.outline ~= outline then
+		ClearBack(frame, rec)
+	end
+	-- Kept before the call, so a failure still leaves the fill to take back.
+	rec.back = { r, g, b, a, outline = outline }
+	ns.SetOutlineFill(outline, r, g, b, a)
+end
+
 -- The fade --------------------------------------------------------------------------------------------------------------------------------------------
 
 -- The alpha of a frame when the client gives a real number, else 1.
@@ -368,21 +440,50 @@ local function Install()
 	end
 end
 
--- The alpha of an enemy held for you: a plate whose threat you want (good, or held by another tank) that is neither your target nor your focus takes
--- Opacity of enemies held for you; nil for every other plate, which keeps its own. At 100% nothing is written.
+-- The opacity row of a state: for an enemy held for you (threat you want, or held by another tank) Opacity of enemies held for you, or Opacity as
+-- damage or healer for a state read as damage or healer while Same opacity for both roles is off; Opacity of enemies changing hands for threat
+-- changing hands; none for threat you do not want.
+local function FadeRow(state)
+	if state.want == "good" or state.want == "offtank" then
+		if state.tank ~= true and Opt("threatFadeSame") == false then
+			return "threatFadeDamage"
+		end
+		return "threatFadeAlpha"
+	elseif state.want == "changing" then
+		return "threatFadeChanging"
+	end
+	return nil
+end
+
+-- True while the plate's unit has a raid marker. The game gives addons the index of a marker only withheld (GetRaidTargetIndex, SecretReturns,
+-- RaidMarkersDocumentation.lua:55-69) and a unit with none answers nothing (UnitGroupMarks.lua:24-28), so a withheld answer says there is one,
+-- never which; the game's own plate asks the same of its unit (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:439-446). A unit the client
+-- withholds is not asked, since the call takes a withheld argument only from the game's own code (AllowedWhenUntainted).
+local function Marked(frame)
+	local unit = frame.unit
+	if ns.IsSecret(unit) or type(unit) ~= "string" or type(GetRaidTargetIndex) ~= "function" then
+		return false
+	end
+	local ok, index = pcall(GetRaidTargetIndex, unit)
+	return ok and (ns.IsSecret(index) or (ns.Finite(index) and index >= 1))
+end
+
+-- The alpha of a plate that fades: its opacity row below 100%, neither your target nor your focus nor, with Raid-marked enemies stay clear, an enemy
+-- with a raid marker. Nil for every other plate, which keeps its own; at 100% nothing is written.
 local function FadeAlpha(frame, state, marks)
 	if state == nil or Opt("threatFade") ~= true or Off(FADE) or not PlateOn(frame) then
 		return nil
 	end
-	if state.want ~= "good" and state.want ~= "offtank" then
+	local row = FadeRow(state)
+	local percent = row and Opt(row)
+	if not ns.Finite(percent) or percent >= 100 then
 		return nil
 	end
 	marks = marks or Marks()
 	if frame == marks.target or frame == marks.focus then
 		return nil
 	end
-	local percent = Opt("threatFadeAlpha")
-	if not ns.Finite(percent) or percent >= 100 then
+	if Opt("threatMarked") == true and Marked(frame) then
 		return nil
 	end
 	return math.max(percent, 0) / 100
@@ -426,7 +527,7 @@ end
 -- Drawing ---------------------------------------------------------------------------------------------------------------------------------------------
 
 -- What each part puts back on a plate.
-local PUT_BACK = { [RING] = HideRing, [BORDER] = ClearBorder, [FADE] = Release }
+local PUT_BACK = { [RING] = HideRing, [BORDER] = ClearBorder, [BACK] = ClearBack, [FADE] = Release }
 
 -- Runs one part on one plate inside its own failure count. While the part or the module is stopped it only puts its look back, and a part that has just
 -- stopped puts it back on every plate, as PlateColours.lua does.
@@ -441,10 +542,11 @@ function RunPart(part, fn, frame, rec, ...)
 	end
 end
 
--- The three parts of one plate from its state. No state puts each back.
+-- The four parts of one plate from its state. No state puts each back.
 local function Draw(frame, rec, state, marks, place)
 	RunPart(RING, Ring, frame, rec, state, place)
 	RunPart(BORDER, Border, frame, rec, state)
+	RunPart(BACK, Back, frame, rec, state, marks)
 	RunPart(FADE, Fade, frame, rec, state, marks)
 end
 
@@ -465,7 +567,8 @@ local function DrawAll(place)
 	end
 end
 
--- The target or the focus changed: they never fade, and the plate that was one may fade now.
+-- The target or the focus changed: they never fade, and the plate that was one may fade now. A raid marker came or went: with Raid-marked enemies
+-- stay clear the plates fade again.
 local function FadeAll()
 	if Opt("threatFade") ~= true then
 		return
@@ -475,6 +578,21 @@ local function FadeAll()
 		local state, rec = StateOf(frame), recs[frame]
 		if rec ~= nil or state ~= nil then
 			RunPart(FADE, Fade, frame, rec or Record(frame), state, marks)
+		end
+	end)
+end
+
+-- The target changed: while Colour the target's health bar gives the target's bar its own colour, the background of the new target and of the old one
+-- follows its bar.
+local function BackAll()
+	if Opt("threatBackground") ~= true or Opt("targetBar") ~= true then
+		return
+	end
+	local marks = Marks()
+	ns.EachPlate(function(frame)
+		local state, rec = StateOf(frame), recs[frame]
+		if rec ~= nil or state ~= nil then
+			RunPart(BACK, Back, frame, rec or Record(frame), state, marks)
 		end
 	end)
 end
@@ -509,7 +627,11 @@ end
 
 local extra = ns.PlateExtra
 -- Runs after LevelBox, with Nameplates.lua's own record of the plate: the ring follows the level box, and hides on a plate that shows its name alone.
+-- The record is kept for the outline of the health bar, which the plate's layout runs before its show hooks (Nameplates.lua, Show).
 extra.layout[#extra.layout + 1] = function(frame, own)
+	if type(own) == "table" then
+		owns[frame] = own
+	end
 	local box = type(own) == "table" and own.levelBox == true
 	local rec = recs[frame]
 	if rec == nil then
@@ -526,6 +648,9 @@ extra.layout[#extra.layout + 1] = function(frame, own)
 end
 extra.show[#extra.show + 1] = function(frame, own)
 	Subscribe()
+	if type(own) == "table" then
+		owns[frame] = own
+	end
 	local state, rec = StateOf(frame), recs[frame]
 	if rec == nil and state == nil then
 		return
@@ -537,7 +662,7 @@ extra.show[#extra.show + 1] = function(frame, own)
 	Draw(frame, rec, state)
 end
 extra.leave[#extra.leave + 1] = function(frame)
-	-- The game takes the plate back for another unit: the ring hides, the border slot is cleared and the alpha goes back.
+	-- The game takes the plate back for another unit: the ring hides, the border slot and the background are cleared and the alpha goes back.
 	local rec = recs[frame]
 	if rec ~= nil then
 		Draw(frame, rec, nil)
@@ -548,5 +673,14 @@ extra.refresh[#extra.refresh + 1] = function()
 	DrawAll(true)
 end
 
-ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", FadeAll)
+ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
+	FadeAll()
+	BackAll()
+end)
 ns.AddEvent(KEY, "PLAYER_FOCUS_CHANGED", FadeAll)
+-- The game's plates hear the same event to show their marker (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:126-127, 148).
+ns.AddEvent(KEY, "RAID_TARGET_UPDATE", function()
+	if Opt("threatMarked") == true then
+		FadeAll()
+	end
+end)

@@ -49,6 +49,8 @@ local ADDON_NAME, ns = ...
 -- of combat on a plate that may be protected, written with SetText, SetFormattedText, SetTextColor and SetAlphaFromBoolean from the game's answers
 -- as they are; with Threat colour on the name, the name takes the threat colour with SetVertexColor, as Name colour does, kept and put back the
 -- same way.
+-- With Health text in the name's colour, the game's health text takes that colour with SetTextColor, as Health text colour does, kept and put back
+-- the same way.
 -- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- repairs with RepairAllItems, buys with BuyMerchantItem, sells the cursor item with SellCursorItem, loots with LootSlot, learns with
 -- BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on its own button, and answers summons, resurrections, invites

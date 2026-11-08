@@ -33,9 +33,11 @@ end
 
 local PART = "nameplate threat"
 local AGGRO, HEALTH = "CompactUnitFrame_UpdateAggroHighlight", "CompactUnitFrame_UpdateHealthColor"
--- The row of each kind of enemy, and the row of the colour of each want.
+-- The row of each kind of enemy, and the row of the colour of each want. While Same colours for both roles is off the first three are a tank's and
+-- damage or healer has three of its own, as Threat Plates keeps a colour table for each role (Options.lua:11405-11495; Constants.lua:2051-2065).
 local KIND_ROWS = { tapped = "threatTapped", neutral = "threatNeutral", boss = "threatBoss", elite = "threatElite", normal = "threatNormal", minor = "threatMinor" }
 local COLOUR_ROWS = { good = "threatGood", changing = "threatTransition", bad = "threatBad", offtank = "threatTankColour" }
+local DAMAGE_ROWS = { good = "threatDamageGood", changing = "threatDamageTransition", bad = "threatDamageBad" }
 -- The classifications of the game counted as elite (Threat Plates puts rares with them, Modules/Threat.lua:32-41) and as minor.
 local ELITE = { worldboss = true, rareelite = true, elite = true, rare = true }
 local MINOR = { minus = true, trivial = true }
@@ -525,9 +527,16 @@ function PT.OnUpdate(fn)
 	return Listen(updateFns, fn)
 end
 
--- Red, green and blue of the colour row of a state's want.
+-- Red, green and blue of the colour row of a state's want: the damage and healer's row for a state read as damage or healer while Same colours for
+-- both roles is off, else the row both roles share. Another tank's colour is a tank's alone.
 function PT.Colour(state)
-	local row = type(state) == "table" and COLOUR_ROWS[state.want] or nil
+	if type(state) ~= "table" then
+		return nil
+	end
+	local row = COLOUR_ROWS[state.want]
+	if state.tank ~= true and Opt("threatSameColours") == false then
+		row = DAMAGE_ROWS[state.want] or row
+	end
 	if row == nil then
 		return nil
 	end

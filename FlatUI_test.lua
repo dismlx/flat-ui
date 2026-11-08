@@ -9972,6 +9972,12 @@ local PAGES = {
 		S("nameplates.threatGood", "colour", "ff4dbf59", "Threat you want", "As a tank an enemy you hold securely, as damage or healer one on someone else.", { needs = "nameplates.threat" }),
 		S("nameplates.threatTransition", "colour", "ffe6c133", "Threat changing hands", "An enemy close to turning to you or away from you.", { needs = "nameplates.threat" }),
 		S("nameplates.threatBad", "colour", "ffd94040", "Threat you do not want", "As a tank an enemy on someone else, as damage or healer one on you.", { needs = "nameplates.threat" }),
+		S("nameplates.threatSameColours", "bool", true, "Same colours for both roles", "Off, the three colours above are a tank's and the three below are for damage or healing.",
+			{ needs = "nameplates.threat" }),
+		S("nameplates.threatDamageGood", "colour", "ff4dbf59", "Threat you want as damage or healer", "An enemy on someone else.", { needs = "nameplates.threatSameColours", needsIn = { false } }),
+		S("nameplates.threatDamageTransition", "colour", "ffe6c133", "Threat changing hands as damage or healer", "An enemy close to turning to you or away from you.",
+			{ needs = "nameplates.threatSameColours", needsIn = { false } }),
+		S("nameplates.threatDamageBad", "colour", "ffd94040", "Threat you do not want as damage or healer", "An enemy on you.", { needs = "nameplates.threatSameColours", needsIn = { false } }),
 		S("nameplates.threatTanks", "bool", true, "Enemies held by another tank", "As a tank, an enemy another tank of your group or your pet holds takes the colour below, so it is not taken for a loose one.", { needs = "nameplates.threat" }),
 		S("nameplates.threatTankColour", "colour", "ff0faac8", "Another tank's colour", nil, { needs = "nameplates.threatTanks" }),
 		"Whose threat",
@@ -9990,18 +9996,36 @@ local PAGES = {
 			{ choices = { { "off", "Off" }, { "needs", "When the enemy needs you" }, { "all", "Every threat state" } }, needs = "nameplates.threat" }),
 		S("nameplates.threatBorder", "bool", false, "Threat colour on the health bar border", "Your target, focus and mouseover keep their border colour, and it needs Health bar border.",
 			{ needs = "nameplates.threat" }),
+		S("nameplates.threatBackground", "bool", false, "Health bar background in the threat colour",
+			"A dark shade of the threat colour behind the health bar while threat colours the bar, and it needs Health bar background.", { needs = "nameplates.threatBar" }),
 		S("nameplates.threatFade", "bool", true, "Fade enemies held for you", "Enemies whose threat you want fade so the ones that need you stand out, while your target and focus stay clear.",
 			{ needs = "nameplates.threat" }),
 		S("nameplates.threatFadeAlpha", "number", 75, "Opacity of enemies held for you", nil, { min = 10, max = 100, step = 5, unit = "%", needs = "nameplates.threatFade" }),
+		S("nameplates.threatFadeSame", "bool", true, "Same opacity for both roles", "Off, the opacity above is a tank's and the one below is for damage or healing.",
+			{ needs = "nameplates.threatFade" }),
+		S("nameplates.threatFadeDamage", "number", 75, "Opacity as damage or healer", "For enemies held for you while you count as damage or healer.",
+			{ min = 10, max = 100, step = 5, unit = "%", needs = "nameplates.threatFadeSame", needsIn = { false } }),
+		S("nameplates.threatFadeChanging", "number", 100, "Opacity of enemies changing hands", "At 100% they stay clear.", { min = 10, max = 100, step = 5, unit = "%", needs = "nameplates.threatFade" }),
+		S("nameplates.threatMarked", "bool", false, "Raid-marked enemies stay clear", "An enemy with a raid marker never fades, like your target and focus, and keeps its colour, glow and threat value.",
+			{ needs = "nameplates.threatFade" }),
 		"Threat text",
-		S("nameplates.threatValue", "choice", "scaled", "Threat value", "Left of the health bar, where 100% share of aggro is the point at which the enemy turns to you.",
+		S("nameplates.threatValue", "choice", "scaled", "Threat value", "Next to the health bar, where 100% share of aggro is the point at which the enemy turns to you.",
 			{ choices = { { "off", "Off" }, { "scaled", "Share of aggro" }, { "raw", "Share of the tank's threat" }, { "lead", "Lead while tanking" } }, needs = "nameplates.threat" }),
 		S("nameplates.threatValueWhen", "choice", "group", "Show threat value", nil, { needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" },
 			choices = { { "always", "Always" }, { "group", "In a group or with a pet" }, { "party", "Only in a group" } } }),
-		S("nameplates.threatValueColour", "bool", true, "Threat value in the threat colour", "Off, the value is white.", { needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatValueColour", "bool", true, "Threat value in the threat colour", "Off, the value takes Threat value colour.", { needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatValueCustom", "colour", "ffffffff", "Threat value colour", nil, { needs = "nameplates.threatValueColour", needsIn = { false } }),
 		S("nameplates.threatValueSize", "number", 100, "Threat value size", "100% is the size of the game's health text.",
 			{ min = 50, max = 200, step = 5, unit = "%", needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatValuePlace", "choice", "left", "Threat value position", "Outside the health bar; above it clears the name, and below it the cast bar.",
+			{ choices = CLASS_POSITIONS, needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatValueX", "number", 0, "Threat value horizontal offset", nil, { min = -40, max = 40, step = 1, unit = "", needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatValueY", "number", 0, "Threat value vertical offset", nil, { min = -40, max = 40, step = 1, unit = "", needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" } }),
+		S("nameplates.threatValueOutline", "choice", "game", "Threat value outline", nil, { needs = "nameplates.threatValue", needsIn = { "scaled", "raw", "lead" },
+			choices = { { "game", "As the game has it" }, { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } }),
 		S("nameplates.threatName", "bool", false, "Threat colour on the name", "While an enemy shows threat, its name takes the threat colour in place of Name colour.", { needs = "nameplates.threat" }),
+		S("nameplates.threatHealthText", "bool", false, "Health text in the name's colour", "While an enemy's name has the threat colour, its health text has it too.",
+			{ needs = "nameplates.threatName" }),
 		"Enemy's target",
 		S("nameplates.aggroTarget", "bool", false, "Name of the enemy's target", "Who the enemy attacks, right of the health bar, in the class colour of a player.", { needs = "nameplates.threat" }),
 		S("nameplates.aggroTargetCombat", "bool", true, "Only in combat", nil, { needs = "nameplates.aggroTarget" }),
@@ -21927,6 +21951,13 @@ for _, path in ipairs({ "nameplates.threatGlow", "nameplates.threatBorder", "nam
 end
 -- Nor do the pulse spots and the heal over time squares of wave 9 (0.5.11), for the same reason.
 for _, path in ipairs({ "pulse.spots", "pulse.size2", "pulse.size3", "pulse.iconSpot", "unitframes.hotSquares", "unitframes.hotCorner", "unitframes.hotSize" }) do
+	covered[path] = true
+end
+-- Nor do the threat rows of wave 9 (0.5.11), for the same reason.
+for _, path in ipairs({ "nameplates.threatSameColours", "nameplates.threatDamageGood", "nameplates.threatDamageTransition", "nameplates.threatDamageBad",
+	"nameplates.threatBackground", "nameplates.threatFadeSame", "nameplates.threatFadeDamage", "nameplates.threatFadeChanging", "nameplates.threatMarked",
+	"nameplates.threatValueCustom", "nameplates.threatValuePlace", "nameplates.threatValueX", "nameplates.threatValueY", "nameplates.threatValueOutline",
+	"nameplates.threatHealthText" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
