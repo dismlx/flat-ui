@@ -41,14 +41,18 @@ local ADDON_NAME, ns = ...
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.
 -- Its cast and global cooldown progress are Cooldown frames of its own fed the game's duration objects.
 -- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
--- repairs with RepairAllItems, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on
--- its own button, and answers summons, resurrections, invites and duels with the game's calls for them. Of the game's popups it hides only
--- two, with StaticPopup_Hide, each once its request is over and only while it is the one popup shown, since the game leaves them up: the group
--- invite's once the player is in the group (hiding it sooner declines the invite), and the summon's once the game says no summon is open (a
--- stale one cancels the next). It follows
--- StaticPopup_Show, StaticPopup_Hide, ClassTrainerFrame_Update, SendMailFrame_SendMail and SendMailFrame_Reset with hooksecurefunc, writes
--- DELETE in the box of the game's delete popup (SetText, then ClearFocus) and the last recipient in the To box of the mail window (SetText),
--- and lays frames of its own over the loot window, the trainer window and the Release Spirit button of the death popup.
+-- repairs with RepairAllItems, buys with BuyMerchantItem, sells the cursor item with SellCursorItem, loots with LootSlot, learns with
+-- BuyTrainerService, deletes one grey item with DeleteCursorItem from a click on its own button, and answers summons, resurrections, invites
+-- and duels with the game's calls for them. Of the game's popups it hides only four, with StaticPopup_Hide, each once its request is over and
+-- only while it is the one popup shown, since the game leaves them up: the group invite's once the player is in the group (hiding it sooner
+-- declines the invite), the summon's once the game says no summon is open (a stale one cancels the next), the token purchase's question before
+-- it buys and the tradeable sale's after it sells. For Buy in bulk it asks with a popup of its own (FLATUI_BULK_BUY, an entry of
+-- StaticPopupDialogs shown with StaticPopup_Show, as Clean up bags' is) and calls nothing on the game's split box. It follows
+-- StaticPopup_Show, StaticPopup_Hide, ClassTrainerFrame_Update, SendMailFrame_SendMail, SendMailFrame_Reset and
+-- MerchantItemButton_OnModifiedClick with hooksecurefunc, writes DELETE in the box of the game's delete popup (SetText, then ClearFocus) and
+-- the last recipient in the To box of the mail window (SetText), and lays frames of its own over the loot window, the trainer window and the
+-- Release Spirit button of the death popup, a bar beside the game's split box (StackSplitFrame) and a Sell next 12 button under the merchant
+-- window.
 -- On its Levelling tab it accepts and hands in quests and picks gossip options with the game's calls for them (AcceptQuest, CompleteQuest,
 -- GetQuestReward, the select calls of C_GossipInfo and of the quest greeting), and asks the game to load an offered quest
 -- (C_QuestLog.RequestLoadQuestByID); it touches no frame of the quest or gossip windows. It puts a higher rank of a spell on the action

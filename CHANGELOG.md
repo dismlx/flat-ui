@@ -11,6 +11,10 @@
 - **Minimap**, **Buttons**, **Leave in place**: a button you tick stays where its addon puts it, out of the column or row, and goes back there at once. Follows EnhanceQoL's Button Sink exclusion list.
 - **Tracker, loot and alerts**, **Queue, damage meter and zone bars**, **Clear the damage meter** (**Off**, **When you enter a dungeon or raid** or **Ask when you enter one**) with **At each raid boss** (off): not again for the same instance within an hour, so a reload or a run back after a wipe keeps the numbers; `/flatui status` names the last clear. Follows EnhanceQoL's automatic data clear.
 - **Flat UI**, **Cursor**: **Cast progress on the ring** (on) and **Global cooldown on the ring** (off), each with its colour: your cast or channel runs round the cursor ring, and the global cooldown just inside it. Follows EnhanceQoL's cursor ring.
+- **Errands**, **Sell at most 12 at a time** (on): grey items go first, all of them, then at most 12 items of your sell list, so the merchant's buyback still holds them; **Sell next 12** under the merchant window sells the next ones, and under the gamepad interface they wait until you next open a merchant. A grey item in a bag the game's bag menu leaves out of junk selling now stays; `/flatui status` names those bags. **Items always sold** and **Items never sold** list both lists; a pick takes one off. Follows EnhanceQoL's vendor.
+- **Errands**, **Guild gold where** (**Everywhere**): elsewhere your own gold pays, and chat says why. Follows EnhanceQoL's auto repair.
+- **Errands**, **Buy in bulk** (off): Shift-click an item at a merchant; beside the game's box, **Stack** buys a full stack and **Most** as many as your gold, the merchant's stock and your bags allow. Both ask first, and the game's box stays open. Follows EnhanceQoL's bulk buy.
+- **Errands**, **Buy with tokens without asking** and **Sell loot still tradeable without asking** (off); a purchase that also costs 150 gold or more still asks. Follows EnhanceQoL's popup helpers.
 
 ## 0.5.8
 

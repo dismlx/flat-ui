@@ -22,7 +22,20 @@ local _, ns = ...
 -- The game's popups of a resurrection are left to the game, which closes them when you are alive again.
 -- Type DELETE: the word the game asks for before it deletes a good item (DELETE_GOOD_ITEM and DELETE_GOOD_QUEST_ITEM) is written in its box,
 -- whose focus is then cleared, so a click on Yes deletes and a stray Enter does not.
--- These follow EnhanceQoL's popup helpers, adapted with the permission of its author.
+-- Buy with tokens without asking: the game's question before it takes items or currency for a purchase (CONFIRM_PURCHASE_TOKEN_ITEM,
+-- Blizzard_StaticPopup_Game/GameDialogDefs.lua:383-399, shown from Blizzard_UIPanels_Game/Mainline/MerchantFrame.lua:786-877) buys
+-- BuyMerchantItem(MerchantFrame.itemIndex, MerchantFrame.count) on Yes; count may be nil, one purchase. The two fields are read, never written,
+-- the popup is hidden with StaticPopup_Hide, and only once that hid it is the item bought with the same call: the popup has no OnUpdate that
+-- closes it, so a purchase made first could leave its Yes up to buy again. One that also costs 150 gold or more (the price of
+-- C_MerchantFrame.GetItemInfo for the count over its bundle, at or over MERCHANT_HIGH_PRICE_COST, MerchantFrame.lua:672) is left to the
+-- player, since for an item with an extended cost the game never asks about its gold (MerchantFrame.lua:790-799, 836-876).
+-- Sell loot still tradeable without asking: the game's question before it sells loot you could still trade (CONFIRM_MERCHANT_TRADE_TIMER_REMOVAL,
+-- GameDialogDefs.lua:2213-2231, shown on MERCHANT_CONFIRM_TRADE_TIMER_REMOVAL, MerchantFrame.lua:110-112) sells the item on the cursor with
+-- SellCursorItem while CursorHasItem plainly says it holds one; the popup is hidden after, and closes by itself once the cursor is empty (its
+-- OnUpdate). Both act only on the one popup shown, while the merchant window is open and never in a fight; no button of a popup is clicked.
+-- CONFIRM_HIGH_COST_ITEM and CONFIRM_ACCEPT_SOCKETS stay with the player.
+-- These follow EnhanceQoL's popup helpers, adapted with the permission of its author. The two merchant answers follow EnhanceQoL by Philipp Barth
+-- (R41Z0R), adapted with his permission (EnhanceQoL/EnhanceQoL.lua:3862-3866, 3912-3975).
 
 local E = ns.Errands
 local part = E.Part({ label = "Popups" })
@@ -34,6 +47,10 @@ local SUMMON_LOOK, SUMMON_LOOKS = 0.1, 50
 -- Seconds added to the game's wait before a resurrection is taken.
 local RES_MARGIN = 0.2
 local DELETE_WORDS = { DELETE_GOOD_ITEM = true, DELETE_GOOD_QUEST_ITEM = true }
+-- The merchant's questions the two rows answer, and the row of each.
+local CONFIRMS = { CONFIRM_PURCHASE_TOKEN_ITEM = "confirmTokens", CONFIRM_MERCHANT_TRADE_TIMER_REMOVAL = "confirmTradeable" }
+-- The gold from which a purchase is left to the player, when the game does not say (MERCHANT_HIGH_PRICE_COST, MerchantFrame.lua:672).
+local HIGH_COST = 1500000
 local KEYS = {
 	shift = { label = "Shift", down = function() return IsShiftKeyDown end },
 	ctrl = { label = "Ctrl", down = function() return IsControlKeyDown end },
@@ -260,9 +277,89 @@ local function FillDelete()
 	end
 end
 
+-- Buy with tokens and Sell loot still tradeable without asking ------------------------------------------------------------------------------
+
+local function HighCost()
+	local n = MERCHANT_HIGH_PRICE_COST
+	return ns.Finite(n) and n > 0 and n or HIGH_COST
+end
+
+-- The token popup: the item it names is bought once the popup is hidden, unless its gold reaches HighCost or anything about it is unclear.
+local function BuyTokens(popup)
+	local frame = MerchantFrame
+	local index, count = Field(frame, "itemIndex"), Field(frame, "count")
+	if not ns.Finite(index) or index < 1 or (count ~= nil and (not ns.Finite(count) or count < 1)) then
+		return
+	end
+	-- The popup's data names the item the game asked about (MerchantFrame.lua:856-877): a field left from an older question is no answer.
+	local data = Field(popup.frame, "data")
+	if type(data) == "table" then
+		local named = Field(data, "index")
+		if named ~= nil and named ~= index then
+			return
+		end
+	end
+	local info = type(C_MerchantFrame) == "table" and E.Ask(C_MerchantFrame.GetItemInfo, index) or nil
+	if type(info) ~= "table" then
+		return
+	end
+	local price, bundle = Field(info, "price"), Field(info, "stackCount")
+	if not ns.Finite(price) or price < 0 or not ns.Finite(bundle) or bundle < 1 then
+		return
+	end
+	local items = count or bundle
+	if price * items / bundle >= HighCost() then
+		return
+	end
+	local link = E.Ask(GetMerchantItemLink, index)
+	if type(BuyMerchantItem) ~= "function" or not E.HideAlone(popup.which) then
+		return
+	end
+	if not E.Call(BuyMerchantItem, index, count) then
+		return
+	end
+	local what = (items > 1 and (items .. " ") or "") .. (type(link) == "string" and link ~= "" and link or "the item")
+	lastAccepted = "a purchase of " .. what
+	E.Say(("Bought %s with items or currency."):format(what))
+end
+
+-- The question before a sale of loot you could still trade: the item on the cursor is sold, then the popup hidden.
+local function SellTradeable(popup)
+	if type(SellCursorItem) ~= "function" or E.Ask(CursorHasItem) ~= true then
+		return
+	end
+	local kind, _, link = E.Ask(GetCursorInfo)
+	if not E.Call(SellCursorItem) then
+		return
+	end
+	E.HideAlone(popup.which)
+	local what = kind == "item" and type(link) == "string" and link ~= "" and link or "the item"
+	lastAccepted = "the sale of " .. what
+	E.Say(("Sold %s, which you could still have traded."):format(what))
+end
+
+-- Only the one popup shown, only while the merchant window is open, never in a fight.
+local function Confirm()
+	local shown = Popups()
+	if #shown ~= 1 then
+		return
+	end
+	local popup = shown[1]
+	local row = CONFIRMS[popup.which]
+	if not row or not E.On(row) or E.Fighting() or not E.Shown(MerchantFrame) then
+		return
+	end
+	if popup.which == "CONFIRM_PURCHASE_TOKEN_ITEM" then
+		BuyTokens(popup)
+	else
+		SellTradeable(popup)
+	end
+end
+
 local function PopupShown()
 	Guard()
 	FillDelete()
+	Confirm()
 end
 
 local function OnShow()
@@ -497,6 +594,12 @@ function part.Status()
 	end
 	if E.Opt("deleteWord") == true then
 		does[#does + 1] = "types DELETE"
+	end
+	if E.Opt("confirmTokens") == true then
+		does[#does + 1] = "buys with tokens without asking"
+	end
+	if E.Opt("confirmTradeable") == true then
+		does[#does + 1] = "sells loot still tradeable without asking"
 	end
 	if #does == 0 then
 		return {}

@@ -117,6 +117,7 @@ ErrandsSocial.lua
 ErrandsQuests.lua
 ErrandsRanks.lua
 ErrandsLevelling.lua
+ErrandsBulkBuy.lua
 ConsumableData.lua
 Consumables.lua
 DataPanels.lua

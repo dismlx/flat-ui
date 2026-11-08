@@ -11144,7 +11144,15 @@ local PAGES = {
 		S("errands.chat", "bool", true, "Say what was done", "A line in chat after selling, repairing, training, deleting, accepting, declining and upranking, and when a quest is left to you."),
 		"Merchant",
 		S("errands.sell", "bool", true, "Sell grey items", "When a merchant opens. Hold Shift as it opens to keep them that time. /flatui sell and /flatui keep choose other items to sell or keep."),
+		S("errands.sellTwelve", "bool", true, "Sell at most 12 at a time", "Grey items are sold in one go. Items of your sell list that are not grey come after them, at most 12 at a time, so the merchant's buyback still holds them; Sell next 12 sells the next ones.", { needs = "errands.sell" }),
+		S("errands.sellList", "list", 0, "Items always sold", "/flatui sell and an item adds one."),
+		S("errands.keepList", "list", 0, "Items never sold", "/flatui keep and an item adds one. Make room never deletes them either."),
 		S("errands.repair", "choice", "own", "Repair", "When a merchant who repairs opens.", { choices = { { "off", "Off" }, { "own", "With your gold" }, { "guild", "Guild gold first" } } }),
+		S("errands.guildWhere", "choice", "everywhere", "Guild gold where", "Elsewhere the repair is paid with your own gold.", { needs = "errands.repair", needsIn = { "guild" },
+			choices = { { "everywhere", "Everywhere" }, { "group", "In a group or an instance" }, { "instance", "In dungeons, raids and battlegrounds" }, { "raid", "In raids" } } }),
+		S("errands.bulkBuy", "bool", false, "Buy in bulk", "Shift-click an item at a merchant: beside the game's box, Stack buys a full stack and Most as many as your gold, the merchant's stock and your bags allow, a stack at a time. Both ask first, and the game's box stays open. Not for items bought with tokens."),
+		S("errands.confirmTokens", "bool", false, "Buy with tokens without asking", "Answers Yes when the game asks before it takes items or currency for a purchase. One that also costs 150 gold or more is left to you."),
+		S("errands.confirmTradeable", "bool", false, "Sell loot still tradeable without asking", "Answers Okay when the game asks before you sell an item you could still trade to your group."),
 		"Loot and trainers",
 		S("errands.quickLoot", "bool", true, "Quick loot", "When the game loots by itself (Auto Loot, or its key held), every slot is taken at once. Rolls still ask."),
 		S("errands.makeRoom", "bool", true, "Make room in full bags", "A button under the loot window deletes the cheapest grey item while every bag is full."),
@@ -21793,7 +21801,8 @@ for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour"
 	"datapanels.perfColour", "datapanels.combatAlpha", "datapanels.idleAlpha", "datapanels.strata",
 	"unitframes.druidMana", "unitframes.petTarget", "unitframes.petTargetWidth", "mount.falling",
 	"fade.damageMeter", "hud.addonButtonsKeep", "hud.meterClear", "hud.meterClearBoss",
-	"general.cursorRingCast", "general.cursorRingCastColour", "general.cursorRingGcd", "general.cursorRingGcdColour" }) do
+	"general.cursorRingCast", "general.cursorRingCastColour", "general.cursorRingGcd", "general.cursorRingGcdColour",
+	"errands.sellTwelve", "errands.sellList", "errands.keepList", "errands.guildWhere", "errands.bulkBuy", "errands.confirmTokens", "errands.confirmTradeable" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.
@@ -67268,7 +67277,7 @@ function PT.runSetup()
 		for number, step in ipairs(steps) do
 			if step.built then built[#built + 1] = number end
 		end
-		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1094 and doubled == 0 and unknown == 0 and missing == 0,
+		check("setup: SetupSteps.lua has 62 steps and every setting of Config.lua in one of them, and none that is not a setting", #steps == 62 and rows == 1101 and doubled == 0 and unknown == 0 and missing == 0,
 			#steps .. " " .. rows .. " " .. doubled .. " " .. unknown .. " " .. missing)
 		check("setup: steps 1 to 55 are the ones built, Look, Nameplates, Action buttons, the unit frames, cast bars, hud, windows, chat, trackers and movers among them", joined(built) == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55" and steps[1].title == "Borders and backgrounds" and steps[2].title == "Bar texture and colours"
 			and #steps[1].rows == 6 and #steps[2].rows == 23)
