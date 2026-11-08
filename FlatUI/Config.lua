@@ -1434,7 +1434,7 @@ ns.PAGES = {
 		key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes",
 		{ key = "targetPicture", kind = "choice", default = "auto", label = "Picture", needs = "squarePortrait",
 			tip = "Class icon applies to players. Other units keep their face. " .. GAME_PORTRAIT,
-			choices ={ { "auto", "As Portrait style" }, { "square", "Face" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
+			choices = { { "auto", "As Portrait style" }, { "square", "Face" }, { "head", "3D head" }, { "game", "Game portrait" }, { "class", "Class icon" }, { "none", "None" } } },
 		{ key = "targetName", kind = "bool", default = true, label = "Name" },
 		{ key = "targetLevel", kind = "bool", default = true, label = "Level" },
 		{ key = "targetHealthBy", kind = "choice", default = "custom", label = "Health bar colour", tip = "Class applies to players. Other units take their reaction colour.", needs = "flat",
