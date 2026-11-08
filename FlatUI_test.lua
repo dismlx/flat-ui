@@ -10482,6 +10482,11 @@ local PAGES = {
 		S("pulse.time", "number", 1, "How long it shows", "Cooldowns that end together pulse one after another. /flatui pulse test shows one.", { min = 1, max = 5, step = 1, unit = " s" }),
 		S("pulse.sound", "choice", "none", "Sound", nil, { choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" }, { "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } }),
 		S("pulse.iconSound", "list", 0, "Sound of one spell or item", "Choose one, then open the list again for its own sound. One without it plays Sound."),
+		"Spots",
+		S("pulse.spots", "choice", "1", "Pulse spots", "Each spot has its own handle in /flatui move and pulses on its own. Icon size is the size at spot 1.", { choices = { { "1", "One" }, { "2", "Two" }, { "3", "Three" } } }),
+		S("pulse.size2", "number", 72, "Icon size at spot 2", nil, { min = 32, max = 160, step = 4, unit = "", needs = "pulse.spots", needsIn = { "2", "3" } }),
+		S("pulse.size3", "number", 72, "Icon size at spot 3", nil, { min = 32, max = 160, step = 4, unit = "", needs = "pulse.spots", needsIn = { "3" } }),
+		S("pulse.iconSpot", "list", 0, "Spot of one spell or item", "Choose one, then open the list again for its spot. One without it pulses at spot 1.", { needs = "pulse.spots", needsIn = { "2", "3" } }),
 	} },
 	{ key = "trackers", label = "Trackers", rows = {
 		S("trackers.enabled", "bool", true, "Trackers"),
@@ -10993,6 +10998,9 @@ local PAGES = {
 		S("unitframes.targetBorder", "choice", "game", "Border for your target", "On raid frames, the border of your target. With Own colour the game's party frames get one too.",
 			{ choices = { { "game", "As the game has it" }, { "own", "Own colour" }, { "off", "Off" } } }),
 		S("unitframes.targetColour", "colour", "ffffffff", "Target border colour", nil, { needs = "unitframes.targetBorder", needsIn = { "own" } }),
+		S("unitframes.hotSquares", "bool", false, "Squares for your heals over time", "A small square in a corner of a party or raid member's health bar for each heal over time of yours on them, such as Renew, Rejuvenation or Regrowth, each in its own colour. In a fight the game may keep your auras from addons; a square then waits for the end of it."),
+		S("unitframes.hotCorner", "choice", "tr", "Square corner", nil, { choices = { { "tl", "Top left" }, { "tr", "Top right" }, { "bl", "Bottom left" }, { "br", "Bottom right" } }, needs = "unitframes.hotSquares" }),
+		S("unitframes.hotSize", "number", 6, "Square size", nil, { min = 4, max = 14, step = 1, unit = "", needs = "unitframes.hotSquares" }),
 	} },
 	{ key = "hud", label = "Minimap and buffs", rows = {
 		S("hud.enabled", "bool", true, "Restyle the minimap, bags and buffs"),
@@ -21915,6 +21923,10 @@ for _, path in ipairs({ "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour"
 end
 -- Nor do the glow and fade rows of wave 8 (0.5.9), for the same reason.
 for _, path in ipairs({ "nameplates.threatGlow", "nameplates.threatBorder", "nameplates.threatFade", "nameplates.threatFadeAlpha" }) do
+	covered[path] = true
+end
+-- Nor do the pulse spots and the heal over time squares of wave 9 (0.5.11), for the same reason.
+for _, path in ipairs({ "pulse.spots", "pulse.size2", "pulse.size3", "pulse.iconSpot", "unitframes.hotSquares", "unitframes.hotCorner", "unitframes.hotSize" }) do
 	covered[path] = true
 end
 -- Flat UI's own experience bar has its checks in the xpown block; its levelling rows (xpQuest, xpQuestColour, xpStats, xpStatsTip) have none yet.

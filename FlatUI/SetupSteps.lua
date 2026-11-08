@@ -402,6 +402,9 @@ ns.SETUP_STEPS = {
 		{ "unitframes.raidLeaderIcon", "o", "behaviour", "Shows the leader and the assistants of the group on the game's raid frames." },
 		{ "unitframes.targetBorder", "o", "behaviour", "Chooses the border of your target on the raid frames, and with Own colour an outline on the party frames." },
 		{ "unitframes.targetColour", "r", "behaviour", "Sets the colour of the border of your target." },
+		{ "unitframes.hotSquares", "o", "behaviour", "Shows a small square in its own colour on a party or raid member's health bar for each heal over time of yours on them." },
+		{ "unitframes.hotCorner", "r", "behaviour", "Chooses the corner of the health bar the heal over time squares sit in." },
+		{ "unitframes.hotSize", "r", "behaviour", "Sets the size of the heal over time squares." },
 	} },
 	{ id = "uf-player", area = "Unit frames", title = "Player and target frames", draw = "mock-unit-frame", built = true, rows = {
 		{ "unitframes.playerPicture", "c", "mock-unit-frame" },
@@ -959,6 +962,10 @@ ns.SETUP_STEPS = {
 		{ "pulse.time", "r", "behaviour", "Sets how long the pulse shows." },
 		{ "pulse.sound", "r", "behaviour", "Plays a sound with the pulse." },
 		{ "pulse.iconSound", "r", "behaviour", "Gives one spell or item of the pulse a sound of its own." },
+		{ "pulse.spots", "r", "behaviour", "Pulses at up to three spots, each with its own handle in /flatui move." },
+		{ "pulse.size2", "r", "behaviour", "Sets the size of the pulse at spot 2." },
+		{ "pulse.size3", "r", "behaviour", "Sets the size of the pulse at spot 3." },
+		{ "pulse.iconSpot", "r", "behaviour", "Gives one spell or item of the pulse a spot of its own." },
 	} },
 	{ id = "cd-states", area = "Cooldowns", title = "Cooldown states and numbers", draw = "mock-cooldown-row", built = true, rows = {
 		{ "cooldowns.dimDesat", "c", "mock-cooldown-row" },

@@ -893,6 +893,14 @@ ns.PAGES = {
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 		{ key = "iconSound", kind = "list", default = 0, label = "Sound of one spell or item", none = "Choose a spell or item", items = "PulseSoundLines", pick = "PulseSoundPick",
 			tip = "Choose one, then open the list again for its own sound. One without it plays Sound." },
+		-- Spots 2 and 3 have handles of their own in /flatui move (FlatUIPulse2 and FlatUIPulse3 in Movers.lua); Icon size above is spot 1's.
+		{ section = "Spots" },
+		{ key = "spots", kind = "choice", default = "1", label = "Pulse spots", choices = { { "1", "One" }, { "2", "Two" }, { "3", "Three" } },
+			tip = "Each spot has its own handle in /flatui move and pulses on its own. Icon size is the size at spot 1." },
+		{ key = "size2", kind = "number", default = 72, min = 32, max = 160, step = 4, label = "Icon size at spot 2", needs = "spots", needsIn = { "2", "3" } },
+		{ key = "size3", kind = "number", default = 72, min = 32, max = 160, step = 4, label = "Icon size at spot 3", needs = "spots", needsIn = { "3" } },
+		{ key = "iconSpot", kind = "list", default = 0, label = "Spot of one spell or item", none = "Choose a spell or item", items = "PulseSpotLines", pick = "PulseSpotPick",
+			needs = "spots", needsIn = { "2", "3" }, tip = "Choose one, then open the list again for its spot. One without it pulses at spot 1." },
 	},
 	{
 		key = "trackers", label = "Trackers",
@@ -1535,6 +1543,12 @@ ns.PAGES = {
 			tip = "On raid frames, the border of your target. With Own colour the game's party frames get one too.",
 			choices = { { "game", "As the game has it" }, { "own", "Own colour" }, { "off", "Off" } } },
 		{ key = "targetColour", kind = "colour", default = "ffffffff", label = "Target border colour", needs = "targetBorder", needsIn = { "own" } },
+		-- UnitHots.lua: a square of its own colour for each heal over time of yours on a party or raid member.
+		{ key = "hotSquares", kind = "bool", default = false, label = "Squares for your heals over time",
+			tip = "A small square in a corner of a party or raid member's health bar for each heal over time of yours on them, such as Renew, Rejuvenation or Regrowth, each in its own colour. In a fight the game may keep your auras from addons; a square then waits for the end of it." },
+		{ key = "hotCorner", kind = "choice", default = "tr", label = "Square corner", needs = "hotSquares",
+			choices = { { "tl", "Top left" }, { "tr", "Top right" }, { "bl", "Bottom left" }, { "br", "Bottom right" } } },
+		{ key = "hotSize", kind = "number", default = 6, min = 4, max = 14, step = 1, label = "Square size", needs = "hotSquares" },
 	},
 	{
 		key = "hud", label = "Minimap and buffs",

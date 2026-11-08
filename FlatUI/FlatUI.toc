@@ -82,6 +82,7 @@ UnitExtras.lua
 UnitGroupMarks.lua
 UnitDruidMana.lua
 UnitPetTarget.lua
+UnitHots.lua
 Hud.lua
 MapButtons.lua
 AuraTime.lua
