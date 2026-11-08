@@ -11614,7 +11614,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.9" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.10" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
