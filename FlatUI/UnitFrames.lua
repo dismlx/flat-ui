@@ -1479,6 +1479,15 @@ local function Make(rec, made)
 			local outline = ns.Outline(box, target)
 			if outline then
 				made[#made + 1] = outline
+				-- A party pet's health bar lies under its owner's debuff icons, whose buttons are one level above the pet frame and so at the bar's own
+				-- level (RowLevel). The holder of the bar's border is a child of the bar, a level above them, so its edges and rounded line, which lie
+				-- outside the bar, crossed the first two icons: it is put at the pet frame's level, under them.
+				if rec.kind == "partypet" and outline.holder ~= nil then
+					local okLevel, level = pcall(rec.frame.GetFrameLevel, rec.frame)
+					if okLevel and Number(level) then
+						pcall(outline.holder.SetFrameLevel, outline.holder, level)
+					end
+				end
 				local entry = { role = role, bar = bar, mask = parts[role .. "Mask"], outline = outline, cut = cut, target = target,
 					slot = role == "health" and parts.cutHealth and box or nil }
 				rec.bars[#rec.bars + 1] = entry

@@ -182,7 +182,7 @@ local function PartyAura(owner)
 	local ok, container = pcall(function()
 		return frame.AuraFrameContainer
 	end)
-	if not ok or not rawequal(container, row) then
+	if not ok or ns.IsSecret(container) or not rawequal(container, row) then
 		return false
 	end
 	-- A party member hangs from the party frame, and a party pet from its member; the pet frame of the player does neither.
