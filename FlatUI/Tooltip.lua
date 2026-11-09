@@ -4,8 +4,9 @@ local _, ns = ...
 -- GameTooltip_SetDefaultAnchor. A hook on that function marks GameTooltip as placed by this module, and
 -- a frame of the addon's own places it again each frame at the cursor or at the Tooltip handle of the
 -- movers. No method of GameTooltip is hooked: the scripts of GameTooltip are followed with HookScript (OnShow, OnHide), so with Every
--- tooltip a tooltip anchored beside its owner is placed before it is drawn there, and the frame of the addon's own that places the tooltip
--- sees the game fade it (the alpha falls) and hides a tooltip at the cursor at once. SetOwner is never called, and Edit Mode's
+-- tooltip a tooltip anchored beside its owner is placed before it is drawn there (but for a buff or debuff icon of the party frames, PartyAura),
+-- and the frame of the addon's own that places the tooltip sees the game fade it (the alpha falls) and hides a tooltip at the cursor at once.
+-- SetOwner is never called, and Edit Mode's
 -- tooltip box is never touched. An owner is tested with IsForbidden before it is used (EllesmereUIBlizzardSkin/EllesmereUIBlizzardSkin.lua:2705-2760).
 
 local KEY = "tooltip"
@@ -155,14 +156,49 @@ local function Holds(tooltip)
 	return true
 end
 
--- Every tooltip: one that the game anchors beside its owner is made a tooltip with no anchor type, and placed.
+-- The parent of a frame, or nil when it cannot be read, is withheld or may not be touched.
+local function ParentOf(frame)
+	local ok, parent = pcall(frame.GetParent, frame)
+	if ok and parent ~= nil and not ns.IsSecret(parent) and not ns.Forbidden(parent) then
+		return parent
+	end
+	return nil
+end
+
+-- True for a buff or debuff icon of the game's party frames: a button of the row of icons under a party member or under its pet (its parent is that
+-- frame's AuraFrameContainer: Mainline\PartyFrameTemplates.xml:60-67 and 369-376, Mainline\PartyMemberFrame.lua:369-370), or of the box of buffs and
+-- debuffs the game opens over a party frame (PartyMemberBuffTooltip, Shared\PartyFrame.xml:42-56, Shared\PartyFrame.lua:179-182). The game opens the
+-- tooltip of such an icon beside it (ANCHOR_RIGHT, Shared\PartyMemberFrame.lua:191-193), and Every tooltip leaves it there: at the cursor, with its
+-- offsets, it lay over the icons and the frames next to the one pointed at, and seemed to be theirs. Only parents and the container are read.
+local function PartyAura(owner)
+	local row = ParentOf(owner)
+	local frame = row and ParentOf(row)
+	if frame == nil then
+		return false
+	end
+	if rawequal(frame, _G.PartyMemberBuffTooltip) then
+		return true
+	end
+	local ok, container = pcall(function()
+		return frame.AuraFrameContainer
+	end)
+	if not ok or not rawequal(container, row) then
+		return false
+	end
+	-- A party member hangs from the party frame, and a party pet from its member; the pet frame of the player does neither.
+	local party, up = _G.PartyFrame, ParentOf(frame)
+	return party ~= nil and up ~= nil and (rawequal(up, party) or rawequal(ParentOf(up), party))
+end
+
+-- Every tooltip: one that the game anchors beside its owner is made a tooltip with no anchor type, and placed. A buff or debuff icon of the party
+-- frames keeps its tooltip beside it (PartyAura).
 -- The caller has tested the anchor type with ns.IsSecret. A tooltip not yet shown is not armed as shown.
 local function Take(tooltip, anchor, shown)
 	if not BESIDE_OWNER[anchor] or ns.EditModeOpen() then
 		return
 	end
 	local okOwner, owner = pcall(tooltip.GetOwner, tooltip)
-	if not okOwner or owner == nil or ns.IsSecret(owner) or ns.Forbidden(owner) then
+	if not okOwner or owner == nil or ns.IsSecret(owner) or ns.Forbidden(owner) or PartyAura(owner) then
 		return
 	end
 	-- A tooltip that cannot be placed now stays where the game puts it beside its owner.

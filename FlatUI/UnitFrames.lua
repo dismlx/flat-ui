@@ -1019,10 +1019,18 @@ local function Picture(parts, made)
 	return pic
 end
 
--- The level of the name row: above the frames the game draws its content on, so that the row covers what the game draws in that row.
-local function RowLevel(parts)
+-- The level of the name row: above the frames the game draws its content on, so that the row covers what the game draws in that row. A party pet's
+-- row is at the level of the pet frame itself. The game hangs the pet frame 43 units under its owner's top, where it also hangs its owner's row of
+-- debuff icons (Mainline\PartyFrameTemplates.xml:366-376), so in Separate parts the pet's row lies over the top of the first two icons; their buttons
+-- are one level above the pet frame (children of the owner's AuraFrameContainer, Mainline\PartyMemberFrame.lua:369), so at the pet frame's level the
+-- icons are drawn over the row. The row takes no mouse: one level higher it hid the icons while the mouse over them still gave their tooltip.
+local function RowLevel(rec)
+	if rec.kind == "partypet" then
+		local ok, level = pcall(rec.frame.GetFrameLevel, rec.frame)
+		return ok and Number(level) and level or nil
+	end
 	local top
-	for _, frame in ipairs(parts.content or {}) do
+	for _, frame in ipairs(rec.parts.content or {}) do
 		local ok, level = pcall(frame.GetFrameLevel, frame)
 		if ok and Number(level) and (top == nil or level > top) then
 			top = level
@@ -1038,7 +1046,7 @@ end
 -- the kind. A unit with no kind leaves both empty, so the texts inside them move out to the edge without anything being anchored again. The level
 -- of the player is anchored to the row. Before the name, the level is at the left end, the mark hangs from it and the name from the mark.
 local function NameRow(rec)
-	local frame = Frame(rec.frame, RowLevel(rec.parts))
+	local frame = Frame(rec.frame, RowLevel(rec))
 	local row = { frame = frame, base = Layer(frame, "BACKGROUND", -8), grad = Layer(frame, "BACKGROUND", 0), fill = Layer(frame, "BACKGROUND", 0),
 		mark = Layer(frame, "ARTWORK", 0, true), line = Layer(frame, "ARTWORK", 1, true) }
 	row.mark:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
