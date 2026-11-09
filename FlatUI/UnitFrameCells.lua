@@ -1,7 +1,8 @@
 local ADDON_NAME, ns = ...
 
 -- The cell of a raid frame, and of a party frame in raid style: a thin power bar under the health bar, and a grey health bar for a unit that is dead or offline.
--- It also hangs the power bar of the player frame from the bottom of the health bar, in a secure snippet.
+-- It also hangs the power bar of the player frame from the bottom of the health bar, in a secure snippet: in One frame by the frame's one gap, in
+-- Separate parts by the two borders.
 -- The border of the power bar, its flat fill and the switch of the look are in UnitFrames.lua, which outlines the game's power bar like any other bar. This
 -- file adds its work after the steps of that file through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run
 -- twice with the same result. It never writes a field of the game's frame; it only moves the bottom edge of the health bar, which leaves the rest of the
@@ -93,12 +94,17 @@ local function Home(bar)
 	return nil
 end
 
--- The space between the two bars in units: the two edges of the borders (each ns.Pixels(bar, thickness) outside its bar), and at least 1 unit. The
+-- The space between the two bars in units. In One frame (Frame style; no value counts as One frame) it is the frame's one gap:
+-- Border thickness and Space between parts in screen pixels, as between every cell of the frame (UnitFrames.lua, FRAME.gap). In Separate parts it is
+-- the two edges of the borders (each ns.Pixels(bar, thickness) outside its bar), and at least 1 unit. The
 -- game's own layout has none: the 15 unit slot of the health bar ends where the power bar starts, and the health bar, 20 units tall from 3 above the
 -- top of the slot, hangs 2 units over the power bar (Camelot/PlayerFrame.lua:79-84, 94-96). At about 2 pixels per unit and a border of 1 pixel
 -- this is that 1 unit.
 local function Gap(power)
 	local thickness = ns.Get("general.thickness")
+	if X.opt("frameStyle") ~= "parts" then
+		return ns.Pixels(power, thickness + (tonumber(X.opt("powerSpace")) or 0))
+	end
 	return math.max(1, ns.Pixels(power, 2 * thickness))
 end
 

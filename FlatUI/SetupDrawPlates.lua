@@ -1,6 +1,8 @@
 local _, ns = ...
 
--- The nameplate drawings of Flat UI setup: mock-nameplate, mock-nameplate-cast, mock-nameplate-auras, mock-nameplate-marks and mock-nameplate-stack.
+-- The nameplate drawings of Flat UI setup: mock-nameplate, mock-nameplate-cast, mock-nameplate-auras, mock-nameplate-marks, mock-nameplate-stack and
+-- mock-nameplate-walk, the cards of the nameplate stop of setup's walk round the screen, whose draw returns the size of a canvas of its own for the
+-- card to fit.
 -- A drawing is { build(stage), draw(stage), parts = { [path] = region } }. build makes the frames of the drawing once for a stage, all marked ns.Own, so no
 -- module restyles them. draw reads the settings through ns.Get only (the caller runs it inside ns.Viewing, so it draws the draft) and paints every part again.
 -- parts maps a saved path to the region that setting changes, for the bracket that follows the row under the mouse; parts.of(stage) gives the parts of one
@@ -1040,9 +1042,9 @@ function P.Columns(S, columns)
 	return width, height
 end
 
--- Fits a grid of this size to the canvas: scales it down when it is larger, and says by how much.
-function P.Fit(S, width, height)
-	local fit = math.min(1, (P.CANVAS_W - 2 * P.MARGIN) / math.max(1, width), (P.CANVAS_H - 2 * P.MARGIN) / math.max(1, height))
+-- Fits a grid of this size to the canvas, or to a canvas of cw by ch: scales it down when it is larger, and says by how much.
+function P.Fit(S, width, height, cw, ch)
+	local fit = math.min(1, ((cw or P.CANVAS_W) - 2 * P.MARGIN) / math.max(1, width), ((ch or P.CANVAS_H) - 2 * P.MARGIN) / math.max(1, height))
 	S.grid:SetSize(math.max(1, width), math.max(1, height))
 	S.grid:ClearAllPoints()
 	S.grid:SetPoint("CENTER", S.root, "CENTER", 0, 0)
@@ -1095,11 +1097,19 @@ function P.Repaint(S)
 	end
 end
 
-function P.Common(stage, cellsOf, arrange)
+-- Lays out and paints the cells of one drawing on a stage. With canvas, a function of the nameplate style and size that gives a width and a height, the
+-- drawing keeps a canvas of that size, which S.width and S.height say, and is not fitted to the stage: whoever shows it scales the stage to that size.
+function P.Common(stage, cellsOf, arrange, canvas)
 	local S = P.Build(stage)
 	P.Follow(S)
-	P.Canvas(S)
 	local sets = P.Sets()
+	local cw, ch
+	if canvas then
+		cw, ch = canvas(sets)
+		S.root:SetScale(1)
+	else
+		P.Canvas(S)
+	end
 	local cells = cellsOf(S, sets)
 	local columns, layout = P.Place(S, cells, sets)
 	local width, height
@@ -1108,10 +1118,19 @@ function P.Common(stage, cellsOf, arrange)
 	else
 		width, height = P.Columns(S, columns)
 	end
-	P.Fit(S, width, height)
+	P.Fit(S, width, height, cw, ch)
+	S.width, S.height = cw, ch
 	P.Parts(S)
 	P.Repaint(S)
 	return S
+end
+
+-- The canvas of the cards of setup's nameplate stop: the label column, and room for its two plates at their largest (Taller, with cast times, in any
+-- nameplate style) at the nameplate size chosen. Every card of the stop has the same canvas, so the plates of one card are drawn at the scale of the
+-- others' and a smaller plate looks smaller.
+function P.WalkCanvas(sets)
+	local scale = P.SCALES[sets.size] or P.SCALES[2]
+	return 84 + 250 * scale[1], 30 + 130 * scale[2]
 end
 
 -- The names an enemy and a friendly plate carry.
@@ -1161,6 +1180,12 @@ function P.Cells(kind)
 				{ id = "elite", label = "Elite", col = 2, spec = Enemy({ name = names.elite, level = 20, kind = "elite" }) },
 				{ id = "rare", label = "Rare", col = 2, spec = Enemy({ name = "Old Blanchy", level = 20, kind = "rare" }) },
 				{ id = "boss", label = "Boss", col = 2, spec = Enemy({ name = "Edwin VanCleef", level = 20, kind = "boss" }) },
+			}
+		elseif kind == "walk" then
+			-- Flat UI setup's nameplate stop: an enemy casting with auras on it, and one at low health.
+			return {
+				{ id = "cast", label = "Casting", col = 1, spec = Enemy({ cast = { name = "Shadow Bolt", share = 0.6, left = 1.2 }, auras = { count = 3 } }) },
+				{ id = "low", label = "Low health", col = 1, spec = Enemy({ health = 0.18 }) },
 			}
 		end
 		-- The stack: the target, a plate near and a plate far, nearly on top of one another.
@@ -1283,16 +1308,20 @@ function P.Parts(S)
 	S.parts = parts
 end
 
--- Makes the table of one drawing from the cells it lays out.
-local function Drawing(kind, arrange)
+-- Makes the table of one drawing from the cells it lays out. A drawing with a canvas of its own (P.Common) returns from draw the width and height of
+-- that canvas, which the box that shows it fits (SetupDraw.lua, D.PaintIn); the others return their state.
+local function Drawing(kind, arrange, canvas)
 	local cellsOf = P.Cells(kind)
 	local drawing = { parts = {} }
 	function drawing.build(stage)
 		return P.Build(stage)
 	end
 	function drawing.draw(stage)
-		local S = P.Common(stage, cellsOf, arrange)
+		local S = P.Common(stage, cellsOf, arrange, canvas)
 		drawing.parts = S.parts
+		if canvas then
+			return S.width, S.height
+		end
 		return S
 	end
 	-- The parts of one stage, and the share of its size the drawing is shown at.
@@ -1312,4 +1341,5 @@ ns.SetupDrawings["mock-nameplate-cast"] = Drawing("cast")
 ns.SetupDrawings["mock-nameplate-auras"] = Drawing("auras")
 ns.SetupDrawings["mock-nameplate-marks"] = Drawing("marks")
 ns.SetupDrawings["mock-nameplate-stack"] = Drawing("stack", P.Stack)
+ns.SetupDrawings["mock-nameplate-walk"] = Drawing("walk", nil, P.WalkCanvas)
 ns.SetupDrawPlates = P

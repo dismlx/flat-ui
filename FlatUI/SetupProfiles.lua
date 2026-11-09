@@ -1,9 +1,9 @@
 local _, ns = ...
 
--- The ready-made profiles of Flat UI setup. Written by tools/dev/setup_profiles.py from research/flatui-profiles/profiles.json; change the JSON and
--- write the file again. A profile is { id, label, line, values, movers }; values is a table of saved path to value, only the settings that differ from the
--- defaults. movers, when a profile has positions, is a list of { frame, point, x, y, scale, kind, label }. Setup.lua checks every value again when it
--- first reads them (S.Presets).
+-- The ready-made profiles of Flat UI setup. Kept by hand, since tools/dev/setup_profiles.py, which first wrote it from
+-- research/flatui-profiles/profiles.json, is not in the repository, and neither is that file. A profile is { id, label, line, values, movers };
+-- values is a table of saved path to value, only the settings that differ from the defaults. movers, when a profile has positions, is a list of
+-- { frame, point, x, y, scale, kind, label }. Setup.lua checks every value again when it first reads them (S.Presets).
 
 ns.SETUP_PROFILES = {
 	{ id = "standard", label = "Standard", line = "Every setting at its default.", values = {
@@ -237,6 +237,7 @@ ns.SETUP_PROFILES = {
 		["trackers.place"] = "own",
 		["trackers.show"] = "low",
 		["trackers.sound"] = true,
+		["unitframes.classShape"] = "round",
 		["unitframes.corners"] = "soft",
 		["unitframes.focusPicture"] = "game",
 		["unitframes.headFraming"] = "shoulders",

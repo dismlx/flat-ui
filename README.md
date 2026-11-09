@@ -2,6 +2,8 @@
 
 Flat UI restyles the default interface in WoW: Forever with thin dark borders, flat backgrounds and flat bar fills. It has its own options window and profiles. It has handles to move and size frames and windows. It also draws combat numbers in front of enemy nameplates and in scroll areas beside your character. In your bags and bank it marks items that bind when equipped, tints items you cannot use red and marks the food a hunter's pet eats.
 
+A new character is welcomed with a picture of their own frame and a short setup that walks round the screen: your frame, your target and party, action bars, nameplates, chat and helpers, each with its choices drawn side by side. Nothing changes until you finish, and every setting stays in the options window.
+
 The **Errands** page, off by default, does the chores the game leaves to you: it sells grey items at merchants, and your sell list twelve at a time so the buyback still holds them, repairs with your gold or the guild's where you choose, buys a full stack or as many as your gold, the stock and your bags allow after a Shift-click and a question, can answer the merchant's questions before a purchase with tokens or the sale of tradeable loot, loots every slot at once, makes room in full bags, learns everything at a trainer with one button, guards Release Spirit in dungeons, types DELETE for you, and can accept summons, resurrections and invites from friends or your guild, decline duels and keep the last mail recipient. Its **Levelling** tab accepts and hands in quests, picks gossip options, offers the new ranks of your spells for your action bars, shows the reputation you gain, reminds you of talent points and adds /way.
 
 The **Data panels** page, off by default, adds a top and a bottom panel with bag space, gold across your characters, durability, your hearthstone, coordinates, frame rate and latency, friends and guild online, and the equipment set you wear, which a click changes. Each panel can be wider than its slots and sit over the game's windows, its text can take an outline, a shadow and your class colour or your own, and it can fade in or out of combat, back to full under the mouse. Frame rate and latency on the panels and by the minimap turn yellow and red when poor, and Flat UI's reputation bar can show reputation per hour and the time to the next standing.
@@ -15,6 +17,8 @@ The **Mount key** page, off by default, gives you one key in the game's Key Bind
 The **Trackers** can count who in your group lacks your class buff (2/5 on its icon), and out of combat a click casts it on them; it also casts your own buff, stance or form, and calls, revives or sets your pet to fight. **Click to apply** can also put poisons, stones or oils on your weapon, or cast a shaman's weapon imbue. A pet tracker shows your pet's health in red while it is low. Trackers can warn minutes ahead of a long buff or poison, earlier in dungeons and raids, and play a sound when a buff comes back or gains a stack.
 
 The **Group tools** page, off by default, adds a row of buttons for your group: the eight raid markers and a clear for your target, a ready check, a role poll and a pull countdown.
+
+Each unit frame is one frame: its portrait, name row and bars sit on one background inside one border, the same few pixels apart. The portrait can be your face, square or round, a 3D head, a class icon or none, and **Frame style** on the **All frames: bars and pictures** tab of **Unit frames** gives each part its own border again.
 
 On party and raid frames, a debuff you can dispel colours the border of the health bar, also on your own, your target's and your focus's frames, with its type icon on party frames. Party and raid frames show raid markers, raid frames the leader and assistants; a tank can keep a plain border while holding aggro, role icons can be limited to the roles you choose, and your target's border can take a colour of your own. With **Squares for your heals over time** (off by default), each heal over time of yours on a member, such as Renew, Rejuvenation or Regrowth, shows as a small square of its own colour in a corner of the health bar.
 
@@ -47,7 +51,8 @@ The **Flat UI** page can let the camera zoom out farther than the game's own opt
 ## Commands
 
 - `/flatui` opens the settings window.
-- `/flatui setup` sets up a new profile step by step.
+- `/flatui setup` walks round your screen in six short stops and saves what you pick.
+- `/flatui profiles` shows the ready-made looks. A click puts one in use.
 - `/flatui move` shows a box for every frame. Drag a box to move its frame.
 - `/flatui status` says what is styled, and any error.
 - `/flatui sell <item>` always sells an item at merchants (an item link or ID). Type it again to stop. `/flatui sell` alone lists the items. **Items always sold** on the Errands page takes one off.

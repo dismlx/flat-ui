@@ -1,20 +1,29 @@
 local ADDON_NAME, ns = ...
 
 -- Player, target, focus, pet, target of target, party, party pet, boss and raid frames. The frame art of each is one atlas
--- that cannot be thinned, so it is made transparent and a thin border with a dark background is drawn around the health
--- bar and the power bar. The unit buttons and their bars are protected: art, fills and colours change at
--- any time, and borders are made and anchored out of combat. What the art said is kept as the colour of a
+-- that cannot be thinned, so it is made transparent and the addon draws its own look over the game's bars, in one of two Frame styles.
+-- One frame (the default) makes every frame but a raid frame one frame: a body of the addon's own,
+-- a frame on the unit button one level under the frame the portrait is on, with one background (the plate) and one border round the portrait,
+-- the name row and the bars. These sit inside it as cells with no border and no background of their own, one gap apart and one gap in from
+-- its edge, the gap being Border thickness and Space between parts together; the portrait is a square as tall as the cells beside it. Separate
+-- parts is the look before 0.5.12: a thin border with a dark background around the health bar, the power bar and the portrait each, and the
+-- body hidden. The unit buttons and their bars are protected: art, fills and colours change at any time, and the body, the borders and the
+-- cells are made and anchored out of combat, so a change of Frame style in a fight waits for its end. What the art said is kept as the colour of a
 -- border: resting and combat on the picture of the player, an attacking pet on the picture of the pet, the kind of a target or focus
--- (elite, rare, rare elite or boss) on the picture of a target, threat on the health bar, and target as well on a raid frame. A portrait is drawn
--- again as a square picture of the addon's own with a thin border beside the bars, and the portrait of the game is hidden. The picture is a frame
+-- (elite, rare, rare elite or boss) on the picture of a target, threat on the health bar, and target as well on a raid frame. In One frame the
+-- first of these that applies is the one colour of the body's border and of a round portrait's ring. A portrait is drawn again as a picture of the
+-- addon's own beside the bars, and the portrait of the game is hidden: square, or a face or a class icon cut to a circle with Portrait shape
+-- Round, whatever the unit; a 3D head stays square. In One frame Game portrait is the same face drawn by the addon and cut round, in its cell; in
+-- Separate parts the game draws its own portrait in its own place. The picture is a frame
 -- with one anchor on a region of the game and a size set from numbers, the rectangles of the game's bars when the client gives them and fixed
--- numbers when it does not, and its texture has no mask at any corner setting. The player, target, focus and boss frames get a name row of the
--- addon's own above the health bar (the pet, target of target, party and party pet frames get a lower one), with the name of the unit (the game's text when the client withholds it), the level copied from the
+-- numbers when it does not, and its texture has no mask at any corner setting but the circle. The player, target, focus and boss frames get a name row of the
+-- addon's own above the health bar (the pet, target of target, party and party pet frames get a lower one, but a party pet has none in One frame,
+-- where its body wraps its picture and its bar alone, clear of its owner's), with the name of the unit (the game's text when the client withholds it), the level copied from the
 -- game's text and a colour that fades upward; the round level plate and the art behind the name are made transparent. What a target or focus
 -- is (an elite, a rare, a rare elite or a boss, read from its classification) is the colour of the border of its picture, and the name row can
 -- have a mark after the level, a word after the name and a line under it in that colour. The round PvP plate of the game is the one region this
--- module anchors: it sits on a corner of the picture with the icon and the timer of the player following it, or the flag is a word in the name
--- row, or both. Corners can be rounded with sliced textures of the addon's own. Totem buttons and the debuff icons of the target of target,
+-- module anchors: it sits on a corner of the picture (on the circle of a round one) with the icon and the timer of the player following it, or the
+-- flag is a word in the name row, or both. Corners can be rounded with sliced textures of the addon's own: the body's in One frame, each part's in Separate parts. Totem buttons and the debuff icons of the target of target,
 -- party and pet frames are made square with a thin border. The aura icons of the target and focus frames are made in a part of the game that
 -- addon code may not reach, and are styled only if the game hands them over; the buffs and debuffs of raid frames are drawn there too.
 
@@ -59,8 +68,9 @@ local CROP = 0.08
 -- Where the game lays out the bars of a target, which the picture keeps whatever the unit is: the right edge of the slot of the health bar from the
 -- left of the frame, its top above the middle of the frame, and the bottom of the power bar below it. Camelot's UpdateHealthBarVisuals puts the slot,
 -- 126 by 15, with its bottom right 147 units right of and 9 below the middle of the left edge for every unit (Camelot\TargetFrame.lua:71-86), and its
--- OnLoad hangs the power bar, 10 units tall, 1 unit under the slot (Camelot\TargetFrame.lua:24-27, Mainline\TargetFrame.xml:213-216).
-local STANDARD = { x = 147, top = 6, bottom = -20 }
+-- OnLoad hangs the power bar, 10 units tall, 1 unit under the slot (Camelot\TargetFrame.lua:24-27, Mainline\TargetFrame.xml:213-216). slotBottom: the
+-- bottom of the slot itself (Camelot\TargetFrame.lua:79-81), where a picture in One frame ends while the frame's Power bar row is off.
+local STANDARD = { x = 147, top = 6, bottom = -20, slotBottom = -9 }
 -- The thickness in screen pixels of the border an elite or rare picture gets, so that it is seen, and of the line inside a Rare Elite's.
 local RIM_PX, INNER_PX = 2, 1
 -- The corner radius in units of each choice of the Corners setting, and the pixels of the corner textures that keep their size.
@@ -105,8 +115,9 @@ local TOKENS = { player = "player", target = "target", focus = "focus", pet = "p
 -- PlayerFrame.lua:75-96). The target and the focus are STANDARD. The pet and the target of target have the name 1 unit under the top of the
 -- portrait, the health bar 11 units tall with its bottom 5 under the middle of the portrait or 4 under the middle of the frame, and the power bar
 -- 7 units tall 1 unit under it (Camelot\PetFrame.lua:4-22, Camelot\TargetFrame.lua:92-108, Mainline\PetFrame.xml:11-12, 24-28 and 133-134,
--- TargetFrame.xml:397-398, 408-411 and 479-480). The party frames are in PartyFrameTemplates.xml:9-51, 118-121 and 241-244.
-local SPAN = { player = 31, target = 26, focus = 26, pet = 30.5, tot = 30.5, party = 31, partypet = 22 }
+-- TargetFrame.xml:397-398, 408-411 and 479-480). The party frames are in PartyFrameTemplates.xml:9-51, 118-121 and 241-244. petBar: the party pet's
+-- health bar alone, 10 units tall at a scale of 0.5 (PartyFrameTemplates.xml:48-49), which its picture spans in One frame, where it has no name row.
+local SPAN = { player = 31, target = 26, focus = 26, pet = 30.5, tot = 30.5, party = 31, partypet = 22, petBar = 5 }
 -- The PvP flag. Since 1.60.1.70425 the icon is the round plate itself, with the faction drawn on it, and it is the region that moves; the client
 -- before had a plate under the icon, which moved with the icon on it. half: half the height of what moves in its own units, for a client that does
 -- not give its size. home: where the XML anchors the icon in its frame, the point of the icon, the point of the frame and the offsets
@@ -123,8 +134,17 @@ local STATUS = { names = { player = "Player", target = "Target", pet = "Pet", to
 	notDrawn = "Unit frames: a portrait could not be drawn on one frame, which keeps the game's portrait.",
 	-- The number of frames whose picture could not be drawn.
 	undrawn = 0 }
+-- One frame: the body of each frame and the cells in it. Its functions are fields of this table, which is one local: the main chunk of this file is
+-- near Lua's limit of 200.
+-- POWER: the row of each frame's power bar (UnitParts.lua, POWER_ROWS); the party pet has none. INSET: the share of the side of a round picture
+-- between a corner of its square and the point of the circle at 45 degrees, (1 - 1/sqrt 2) / 2, where the PvP plate and the level go. CAP: the
+-- lightness, 0.30 red + 0.59 green + 0.11 blue, that a flat and a fading name row are kept under so the name reads on them; stand-ins until the
+-- author picks them.
+local FRAME = { POWER = { player = "playerPowerBar", target = "targetPowerBar", focus = "focusPowerBar", pet = "petPowerBar", tot = "totPowerBar",
+	party = "partyPowerBar", boss = "bossPowerBar" }, INSET = 0.1464, CAP = { flat = 0.45, gradient = 0.75 } }
 
--- Per frame: { kind, frame, parts, made, refused, queued, bars, byRole, unmasked, pic, row, glowAtlas, radius, bands, rank }
+-- Per frame: { kind, frame, parts, made, refused, queued, bars, byRole, unmasked, pic, row, body, joined, glowAtlas, radius, cornerKey, bands, rank }.
+-- body: { frame, outline } of One frame; joined: true while the frame is laid out and drawn as one frame, which changes out of combat only.
 local records = setmetatable({}, { __mode = "k" })
 -- The threat glow, the power bar and the health bar of a party pet, to find its record from a hook on a global function.
 local byFlash = setmetatable({}, { __mode = "k" })
@@ -142,16 +162,21 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- The height of the name row of a frame: the large height on the player, target and focus frames, else the small one.
+-- The height of the name row of a frame: the large height on the player, target and focus frames, else the small one, and none on a frame whose
+-- style has no row (ROW.none).
 function ROW.of(rec)
+	if ROW.none(rec) then
+		return 0
+	end
 	return (LARGE[rec.kind] and ROW.height) or ROW.small
 end
 
 -- Where the level shows: "end" of the name row, "before" the name, "portrait" or "hidden".
--- A frame with no picture has nothing to put a level on, so "portrait" shows the level at the end there.
+-- A frame with no picture of the addon's own has nothing to put a level on, so "portrait" shows the level at the end there: a frame with no
+-- picture at all, or one whose picture is None or the game's portrait.
 function ROW.at(rec)
 	local at = Opt("levelPosition")
-	if at == "portrait" and rec ~= nil and rec.pic == nil then
+	if at == "portrait" and rec ~= nil and (rec.pic == nil or rec.pic.none) then
 		return "end"
 	end
 	return at
@@ -261,7 +286,8 @@ end
 -- frames the game draws its content on, which the name row is above. healthBox: the slot of a health bar that is larger
 -- than its slot, cutHealth: the fill is cut to that slot. textBox: the container that holds the words of the health bar. select: the target outline of a raid frame. loss: the bar that
 -- fills red behind the health bar for the health just lost. clip: the side on which the power bar is wider than the health bar, under
--- the portrait. side: the side of the bars the picture is on. standard: the layout the picture keeps when the bars move.
+-- the portrait, or for a boss the side of a bar that is cut though it is not wider. side: the side of the bars the picture is on. standard: the
+-- layout the picture keeps when the bars move.
 local function Describe(kind, frame)
 	if kind == "player" then
 		local container, content = Path(frame, "PlayerFrameContainer"), Path(frame, "PlayerFrameContent")
@@ -297,12 +323,13 @@ local function Describe(kind, frame)
 		}
 	elseif kind == "boss" then
 		-- The target frame without its portrait. The game sizes the slot of the health bar and not the bar itself, so the
-		-- health fill keeps its mask.
+		-- health fill keeps its mask. The power bar is not wider than the slot: both are 84 units wide, the bar 1 unit under it (Mainline\
+		-- TargetFrame.lua:1003-1018). It is cut all the same, so that Space between parts lowers its top as it does on the other frames.
 		local container = Path(frame, "TargetFrameContainer")
 		local main = Path(frame, "TargetFrameContent", "TargetFrameContentMain")
 		local box, power = Path(main, "HealthBarsContainer"), Path(main, "ManaBar")
 		return {
-			owner = container, art = List(Path(container, "FrameTexture")), flash = Path(container, "Flash"),
+			owner = container, art = List(Path(container, "FrameTexture")), flash = Path(container, "Flash"), clip = "right",
 			content = List(container, Path(frame, "TargetFrameContent"), main),
 			health = Path(box, "HealthBar"), healthBox = box, power = power, powerMask = Path(power, "ManaBarMask"),
 			badges = main, level = Path(main, "LevelBackgroundCircle"), levelText = Path(main, "LevelText"), strip = Path(main, "ReputationColor"),
@@ -500,8 +527,28 @@ local function Unslice(texture)
 	end
 end
 
+-- The colour the straight edges of an outline have: its own colour, else what Core.lua paints the edges in (ns.OutlineEdgeRGB, where that
+-- exists), else the Own border colour of the Unit frames page for an outline of this page while Own border and background is on, else the
+-- general border colour. The rounded line takes it, so it agrees with the edges it stands in for.
+function FRAME.edge(outline)
+	if outline.r ~= nil then
+		return outline.r, outline.g, outline.b
+	end
+	if type(ns.OutlineEdgeRGB) == "function" then
+		local r, g, b = ns.OutlineEdgeRGB(outline)
+		if r ~= nil then
+			return r, g, b
+		end
+	end
+	if Opt("lookOwn") == true and outline.area == KEY then
+		return ns.Colour(KEY .. ".lookBorder")
+	end
+	return ns.BorderRGB()
+end
+
 -- Puts the rounded line of an outline in place of its straight edges, at the colour and in the state of the outline. The straight edges are
--- transparent while the corners are rounded and the line has its points, and the line is not drawn in the plain colour while the border is off.
+-- transparent while the corners are rounded and the line has its points, and the line is not drawn in the plain colour while the border is off,
+-- nor while the outline is drawn bare (Portrait border None).
 local function Rim(outline)
 	local rim = rims[outline]
 	if rim == nil then
@@ -509,13 +556,11 @@ local function Rim(outline)
 	end
 	local radius = rim.radius
 	-- A round outline is a ring, so the rounded line is not drawn while it is round.
-	local shown = radius ~= nil and not outline.roundOn and outline.shown and not outline.edgesOff and not (ns.Get("general.borderless") == true and outline.r == nil)
+	local shown = radius ~= nil and not outline.roundOn and outline.shown and not outline.edgesOff and not outline.bare
+		and not (ns.Get("general.borderless") == true and outline.r == nil)
 	rim.line:SetShown(shown)
 	if shown then
-		local r, g, b = outline.r, outline.g, outline.b
-		if r == nil then
-			r, g, b = ns.BorderRGB()
-		end
+		local r, g, b = FRAME.edge(outline)
 		rim.line:SetVertexColor(r, g, b, 1)
 		local t = outline.px or ns.Get("general.thickness")
 		if not outline.pixels then
@@ -662,8 +707,7 @@ local function Draw(rec)
 		atlas = class or atlas
 	end
 	rec.pic.icon = atlas ~= nil
-	-- Only a class icon of a player can be round; a face and the icon of the game stay square.
-	rec.pic.class = class ~= nil or nil
+	-- Portrait shape decides the shape of a face and of a class icon alike (ApplyPicture), whatever the unit is.
 	if atlas ~= nil then
 		-- The atlas gives the box of the icon in its sheet; a coordinate set after it would show the whole sheet.
 		return pcall(texture.SetTexCoord, texture, 0, 1, 0, 1) and pcall(texture.SetAtlas, texture, atlas, false, nil, true)
@@ -771,6 +815,9 @@ end
 -- Draws the picture, and the portrait of the game is hidden while it shows: the game writes its alpha, and a hidden region keeps
 -- the place its marks are anchored to. A picture that is shown is drawn again only when asked: the game draws its portrait once
 -- for each new unit. A portrait the addon cannot draw stays as it is, and so does a portrait whose picture has no size.
+-- The picture is round with Portrait shape Round, and a Game portrait in One frame is always round; a 3D head stays square, also when the face
+-- takes its place. In One frame a square cell has no border and no background of its own, and a round one keeps only its ring, in the colour of
+-- the body's border; in Separate parts the picture has its own border and background.
 local function ApplyPicture(rec, on, redraw)
 	local pic = rec.pic
 	if pic == nil then
@@ -780,6 +827,12 @@ local function ApplyPicture(rec, on, redraw)
 	-- No picture at all: the style None, or the switch of this kind of frame is off. The game's portrait stays hidden and the space stays empty.
 	local style, none, game = ns.UnitFrameExtra.pictureMode(rec)
 	none, game = square and none, square and game
+	-- In One frame the game's portrait is the face drawn by the addon, cut round, in the frame's cell.
+	local gameRound = game and rec.joined == true
+	if gameRound then
+		style, game = "picture", false
+	end
+	pic.gameRound = gameRound or nil
 	if pic.style ~= style then
 		pic.style, redraw = style, true
 	end
@@ -794,7 +847,7 @@ local function ApplyPicture(rec, on, redraw)
 	Undrawn(rec, drawn and not shown)
 	ns.SetHidden(rec.parts.portrait, shown or none)
 	Mask.sync(rec, shown or none or false)
-	local round = shown and pic.class and Opt("classShape") == "round" or false
+	local round = shown and pic.style ~= "head" and (gameRound or Opt("classShape") == "round") or false
 	ns.SetOutlineRound(pic.outline, pic.texture, round, pic.fadeTex)
 	if round and not pic.outline.round and not ns.roundMissing and InCombatLockdown() and not pic.roundQueued then
 		-- The first round picture is made after combat, and the rounded line is drawn again then.
@@ -804,7 +857,17 @@ local function ApplyPicture(rec, on, redraw)
 			pcall(Refresh)
 		end)
 	end
-	ShowOutline(pic.outline, shown, true)
+	-- Round once the client has cut it: a client without the circle keeps the picture square, and so does the first round picture until combat
+	-- ends. The ring, the PvP plate and the level go by what is drawn.
+	pic.round = pic.outline.roundOn == true
+	if rec.joined == true then
+		-- The ring of a round cell is a line of the frame's border, so Border off hides it as it hides the body's.
+		ns.SetOutlineEdges(pic.outline, pic.round and Opt("barBorder") ~= false)
+		ShowOutline(pic.outline, shown, false)
+	else
+		ns.SetOutlineEdges(pic.outline, true)
+		ShowOutline(pic.outline, shown, true)
+	end
 	pic.texture:SetShown(shown)
 	if shown then
 		Tint(rec)
@@ -841,6 +904,94 @@ local function Layer(frame, layer, sublevel, partial)
 	end
 	texture:Hide()
 	return texture
+end
+
+-- The body ----------------------------------------------------------------------------------------------------
+
+-- True while a frame is to be one frame: Frame style is not Separate parts (no value counts as One frame), the frame is not a raid frame, its body
+-- was made and the frame is styled. rec.joined keeps the answer, and changes only out of combat (Apply and Layout).
+function FRAME.want(rec)
+	return Opt("frameStyle") ~= "parts" and rec.kind ~= "raid" and rec.body ~= nil and Active(rec)
+end
+
+-- The one gap of a frame in its units: Border thickness and Space between parts, in screen pixels. Cells are this far apart and this far in from the
+-- body's edge, whose border is outside the body.
+function FRAME.gap(rec)
+	return ns.Pixels(rec.frame, ns.Get("general.thickness") + (tonumber(Opt("powerSpace")) or 0))
+end
+
+-- True when the frame has a power bar laid out as a cell: a power bar it outlines, with the frame's Power bar row on. A unit with no power keeps its
+-- cell (Hide empty power bar hides only the bar), since the frame would otherwise change its size in a fight.
+function FRAME.powerOn(rec)
+	local row = FRAME.POWER[rec.kind]
+	return rec.byRole.power ~= nil and (row == nil or Opt(row) ~= false)
+end
+
+-- True when the frame lays out a portrait cell: it has a picture, Flat UI portraits is on and its Picture is not None. A Game portrait is a cell in
+-- One frame only, where the addon draws it; in Separate parts the game draws it in its own place.
+function FRAME.cell(rec)
+	if rec.pic == nil or Opt("squarePortrait") ~= true then
+		return false
+	end
+	local _, none, game = ns.UnitFrameExtra.pictureMode(rec)
+	return not none and (not game or FRAME.want(rec))
+end
+
+-- The red, green, blue and opacity of the plate: the Own background of the Unit frames page while Own border and background is on, else the
+-- general background colour and opacity. The fade of a picture and the dark parts of the name row take it too.
+function FRAME.back()
+	if Opt("lookOwn") == true then
+		local r, g, b = ns.Colour(KEY .. ".lookBack")
+		return r, g, b, (tonumber(Opt("lookBackAlpha")) or 100) / 100
+	end
+	local r, g, b = ns.Colour("general.backdrop")
+	return r, g, b, (tonumber(ns.Get("general.backdropAlpha")) or 100) / 100
+end
+
+-- The outlines that carry the colour of the frame's border: the body's and the picture's in One frame, the picture's in Separate parts.
+function FRAME.outlines(rec)
+	local pic = rec.pic and rec.pic.outline
+	if rec.joined == true and rec.body ~= nil then
+		return List(rec.body.outline, pic)
+	end
+	return List(pic)
+end
+
+-- True while the picture of a frame is round, and how far a corner of its square is from the circle at 45 degrees, in units (0 while square).
+function FRAME.round(rec)
+	return rec.pic ~= nil and rec.pic.round == true
+end
+
+function FRAME.inset(rec)
+	return FRAME.round(rec) and FRAME.INSET * (rec.pic.side or 0) or 0
+end
+
+-- True while the frame is drawn as one frame: laid out so, made, and styled.
+function FRAME.joined(rec)
+	return rec.joined == true and rec.made == true and Active(rec)
+end
+
+-- The body of a frame: a frame of the addon's own on the unit button, one level under the frame the portrait is on (the rule of the ring of
+-- ns.SetOutlineRound, Core.lua), so the plate is under the game's art, the portrait, the bars and the name row. Its outline is not direct, so its
+-- edges are whole pixels: the backdrop is the plate, and the holder of the edges and of the rounded line is one level above the body. Made out of
+-- combat, with the frame's other borders, and added to `made`.
+function FRAME.make(rec, made)
+	local owner = rec.parts.owner or rec.frame
+	local ok, level = pcall(owner.GetFrameLevel, owner)
+	local frame = Frame(rec.frame, ok and Number(level) and math.max(0, level - 1) or nil)
+	local outline = ns.Outline(frame, frame)
+	if outline == nil then
+		return nil
+	end
+	made[#made + 1] = outline
+	return { frame = frame, outline = outline }
+end
+
+-- The width mode and the drop of the power cut in Separate parts: Power bar width, and Space between parts lowering the top of the span under the
+-- slot by the two borders and the space (no space leaves the bar's top as the top).
+function FRAME.partsCut(bar)
+	local space = tonumber(Opt("powerSpace")) or 0
+	return Opt("powerWidth") == "game" and "game" or "same", space > 0 and ns.Pixels(bar, 2 * ns.Get("general.thickness") + space) or 0
 end
 
 -- The picture of a portrait: a frame beside the bars, on the frame the portrait is on, in its level. The level number, the marks
@@ -933,10 +1084,26 @@ local function HideRow(row)
 	end
 end
 
--- True while the frame has a name row: the page, the frame, Name row and Square portraits are on, and on a small frame other than a boss frame
--- Name row on small frames too.
+-- True for a frame whose style has no name row, whatever Name row and Name row on small frames say: a party pet in One frame. A 13-unit row over its
+-- 5-unit bar was out of proportion, and the game leaves about 14 units between its owner's power bar and its health bar (the member's power bar 7 tall
+-- and 31 under its top, the pet frame 43 under it and the pet's bar 9 further: Mainline\PartyFrameTemplates.xml:48-51, 242 and 364-366, Mainline\
+-- PartyMemberFrame.lua:166, Camelot\PartyMemberFrame.lua:17-23), which the row with the gaps of One frame round it overfills. So its body wraps its
+-- picture and its bar alone, and clears its owner's. The game hides the pet's own name (Mainline\PartyMemberFrame.lua:810), so it shows none. rec.joined
+-- decides, so this changes out of combat only, with the layout, and Separate parts gives the row back.
+function ROW.none(rec)
+	return rec.kind == "partypet" and rec.joined == true
+end
+
+-- True when the picture and the body of a frame without a name row start at the top of the game's name text: a small frame, but not one whose style
+-- has no row, which wraps its picture and its bars alone.
+function ROW.named(rec, rowOn)
+	return not rowOn and rec.parts.nameText ~= nil and not LARGE[rec.kind] and not ROW.none(rec)
+end
+
+-- True while the frame has a name row: the page, the frame, Name row and Square portraits are on, its style has a row (ROW.none), and on a small frame
+-- other than a boss frame Name row on small frames too.
 local function RowOn(rec)
-	if rec.row == nil or not Active(rec) or Opt("strip") ~= true or Opt("squarePortrait") ~= true then
+	if rec.row == nil or not Active(rec) or Opt("strip") ~= true or Opt("squarePortrait") ~= true or ROW.none(rec) then
 		return false
 	end
 	return LARGE[rec.kind] or rec.kind == "boss" or Opt("smallRow") == true
@@ -970,38 +1137,70 @@ end
 -- The side of the picture, which is a square beside the bars: from the top of the name row, of the name text or of the health bar to the bottom of
 -- the power bar. The rectangles of the game's bars give it, and when the client gives none the numbers of SPAN do; the second answer says which. A
 -- target keeps the size the layout of STANDARD gives it, so that it does not change when a minus mob hides its power bar.
-local function SideOf(rec, t, rowOn, tall)
+-- g is the gap of One frame, and nil in Separate parts. In One frame the name row is a gap above the slot, so a picture as tall as the frame is a gap
+-- taller; the picture starts at the top of a name text, not a border below it; and with the frame's Power bar row off it ends at the bottom of the
+-- slot (STANDARD.slotBottom on a target). The player hangs the power bar the gap under the health bar (UnitFrameCells.lua), so without rectangles it
+-- spans its health bar, 20 units tall, the gap and its power bar, 10 units tall (Camelot\PlayerFrame.lua:82, 94), or the health bar alone. A party pet
+-- in One frame has neither a row nor a name (ROW.none), so its picture is as tall as its health bar, SPAN.petBar without rectangles.
+local function SideOf(rec, t, rowOn, tall, g)
 	local parts = rec.parts
+	local row = tall and ROW.of(rec) + (g or 0) or 0
+	local power = rec.byRole.power
+	if g ~= nil and not FRAME.powerOn(rec) then
+		power = nil
+	end
 	if parts.standard ~= nil then
-		return parts.standard.top + (tall and ROW.of(rec) or 0) - parts.standard.bottom, true
+		local bottom = parts.standard.bottom
+		if g ~= nil and power == nil then
+			bottom = parts.standard.slotBottom
+		end
+		return parts.standard.top + row - bottom, true
 	end
 	local slot = parts.healthBox or parts.health
-	local named = not rowOn and parts.nameText ~= nil and not LARGE[rec.kind]
-	local power = rec.byRole.power
+	local named = ROW.named(rec, rowOn)
 	local span = Span(named and parts.nameText or slot, power and power.bar or slot, rec.pic.frame)
-	local side = (span or SPAN[rec.kind]) + (tall and ROW.of(rec) or 0) - (named and t or 0)
+	local fallback = SPAN[rec.kind]
+	if g ~= nil and rec.kind == "player" then
+		fallback = 20 + (power and g + 10 or 0)
+	elseif ROW.none(rec) then
+		fallback = SPAN.petBar
+	end
+	local side = (span or fallback) + row - (named and g == nil and t or 0)
 	if side <= 1 then
-		return SPAN[rec.kind], false
+		return fallback, false
 	end
 	return side, span ~= nil
 end
 
 -- One point of the picture, on a region of the game: its top left from the portrait frame for a target, else its top right from the left end of the
--- name row, of the name text or of the health bar. Its border and the border of the bars are one border thickness apart.
-local function AnchorPicture(rec, t, rowOn, tall)
+-- name row, of the name text or of the health bar. Its border and the border of the bars are one border thickness apart. In One frame (g) the picture
+-- is a gap from the bars and its top is the top of the name row or of the name text. The game puts the name of a small frame a unit or more to the side
+-- of its health bar (Camelot\PetFrame.lua:6, 15; Mainline\PartyFrameTemplates.xml:42, 51, 121, 140), so in One frame a picture beside a name takes its
+-- top from the name and its side from the slot, with two points. A party pet in One frame has no name (ROW.named), and its picture's top is its slot's.
+local function AnchorPicture(rec, t, rowOn, tall, g)
 	local parts, frame = rec.parts, rec.pic.frame
+	local apart = g or 3 * t
+	local row = tall and ROW.of(rec) + (g or 0) or 0
+	-- The points are set again from nothing, since the two styles use different points.
+	frame:ClearAllPoints()
 	if parts.standard ~= nil then
-		frame:SetPoint("TOPLEFT", parts.owner, "LEFT", parts.standard.x + 3 * t, parts.standard.top + (tall and ROW.of(rec) or 0))
+		frame:SetPoint("TOPLEFT", parts.owner, "LEFT", parts.standard.x + apart, parts.standard.top + row)
 		return
 	end
-	local named = not rowOn and parts.nameText ~= nil and not LARGE[rec.kind]
-	frame:SetPoint("TOPRIGHT", named and parts.nameText or parts.healthBox or parts.health, "TOPLEFT", -3 * t, tall and ROW.of(rec) or (named and -t or 0))
+	local slot = parts.healthBox or parts.health
+	local named = ROW.named(rec, rowOn)
+	if named and g ~= nil then
+		frame:SetPoint("TOP", parts.nameText, "TOP", 0, 0)
+		frame:SetPoint("RIGHT", slot, "LEFT", -g, 0)
+		return
+	end
+	frame:SetPoint("TOPRIGHT", named and parts.nameText or slot, "TOPLEFT", -apart, tall and row or (named and -t or 0))
 end
 
 -- The size of the picture is set from numbers and never read back, since a frame has no width until the client has laid it out.
-local function SizePicture(rec, t, rowOn, tall)
+local function SizePicture(rec, t, rowOn, tall, g)
 	local pic = rec.pic
-	local side, measured = SideOf(rec, t, rowOn, tall)
+	local side, measured = SideOf(rec, t, rowOn, tall, g)
 	if pic.side == nil or math.abs(pic.side - side) > 0.01 or NoArea(pic.frame) then
 		pic.frame:SetSize(side, side)
 		pic.side = side
@@ -1018,25 +1217,53 @@ local function Rooms(rec, rowOn)
 	return shows and ROW.at(rec) == "end" and ROW.levelRoom or 0, (pvp and ROW.flagRoom or 0) + (pvp and rec.kind == "player" and Opt("pvpTimer") == true and ROW.timerRoom or 0)
 end
 
--- What decides the anchors of the row and the picture. They are set again only when it changes.
+-- What decides the anchors of the row, the picture and the body. They are set again only when it changes.
 local function LayoutKey(rec)
 	local rowOn = RowOn(rec)
 	local level, pvp = Rooms(rec, rowOn)
-	return table.concat({ tostring(ns.Pixels(rec.frame, ns.Get("general.thickness"))), tostring(rowOn), level, pvp, tostring(Opt("smallTextSize")), tostring(Opt("portraitSize")), tostring(ROW.at(rec)), tostring(Opt("powerWidth")), tostring(Opt("nameRoom")), tostring(Opt("powerSpace")) }, ":")
+	return table.concat({ tostring(ns.Pixels(rec.frame, ns.Get("general.thickness"))), tostring(rowOn), level, pvp, tostring(Opt("smallTextSize")), tostring(Opt("portraitSize")), tostring(ROW.at(rec)), tostring(Opt("powerWidth")), tostring(Opt("nameRoom")), tostring(Opt("powerSpace")),
+		tostring(Opt("frameStyle")), tostring(FRAME.want(rec)), tostring(FRAME.cell(rec)), tostring(FRAME.powerOn(rec)), tostring(FRAME.gap(rec)) }, ":")
 end
 
--- Lays out what hangs from the bars: the name row above the health bar, as wide as the border of the bar, and the picture. The anchors are set again
--- only when the border thickness, the name row, the room for the texts or the text size has changed; the size of the picture is worked out each time.
+-- Anchors the body round the cells, a gap outside them on every side: its top from the name row (else the name text of a small frame, else the slot),
+-- its bottom from the power cell (else the slot), its near side from the outer edge of the portrait cell (else the slot) and its far side from the
+-- slot. One point each way, LEFT, RIGHT, TOP and BOTTOM, as the shadow has (UnitFrameLooks.lua). Out of combat only, from Layout. A party pet in One frame
+-- has neither row nor name (ROW.none), so its body is its slot and its picture with the gap round them: its top is the gap over its health bar, which
+-- the game hangs about 14 units under its owner's power bar, whose body ends the gap under it.
+function FRAME.place(rec, g, rowOn)
+	local parts, body = rec.parts, rec.body.frame
+	local slot = parts.healthBox or parts.health
+	local named = ROW.named(rec, rowOn)
+	local top = rowOn and rec.row.frame or (named and parts.nameText) or slot
+	local bottom = FRAME.powerOn(rec) and rec.byRole.power.target or slot
+	local near = FRAME.cell(rec) and rec.pic.frame or slot
+	local right = parts.side == "right"
+	body:ClearAllPoints()
+	body:SetPoint("LEFT", right and slot or near, "LEFT", -g, 0)
+	body:SetPoint("RIGHT", right and near or slot, "RIGHT", g, 0)
+	body:SetPoint("TOP", top, "TOP", 0, g)
+	body:SetPoint("BOTTOM", bottom, "BOTTOM", 0, -g)
+end
+
+-- Lays out what hangs from the bars: the name row above the health bar, the picture and the body. In Separate parts the row is as wide as the border
+-- of the bar and sits on its top border band; in One frame it is as wide as the slot and a gap above it, and with Portrait size As tall as the bars
+-- its near end runs on over the portrait's column. A party pet has no row in One frame (ROW.none): its row frame is placed with no height and shows
+-- nothing, and the key holds whether the row is on, so a change of Frame style lays it out again. The anchors are set again
+-- only when the border thickness, the name row, the room for the texts, the text size or what One frame lays out has changed; the size of the picture is worked out each time.
 -- At the end of the row, on a target or focus the word of the kind stands the room of the level inside the mark, and the PvP word and the name
 -- stand inside the word; on the player they stand that far from the edge. In the other positions no room is kept for the level at the right.
 -- rec.pvpRoom says whether the PvP word has its room in the row as laid out. With Name room on Only what the texts need the rooms are not
 -- widths: the PvP word hangs from the level, and the name from the PvP word, so each is as wide as its text and the name gets the rest.
+-- Layout runs out of combat only (from Make, from Apply out of combat and from the retry below), so rec.joined changes only then.
 local function Layout(rec)
 	for _, hook in ipairs(ns.UnitFrameExtra.before.layout) do
 		Run(hook.part, hook.fn, rec)
 	end
 	local row, pic = rec.row, rec.pic
+	rec.joined = FRAME.want(rec)
 	local t = ns.Pixels(rec.frame, ns.Get("general.thickness"))
+	-- The gap of One frame, or nil in Separate parts.
+	local g = rec.joined and FRAME.gap(rec) or nil
 	local rowOn = RowOn(rec)
 	-- The picture includes the height of the name row unless Portrait size says as tall as the bars.
 	local tall = rowOn and Opt("portraitSize") ~= "bars"
@@ -1049,12 +1276,26 @@ local function Layout(rec)
 	rec.pvpRoom = pvp > 0
 	local power = rec.byRole and rec.byRole.power
 	if again and power ~= nil and power.cut ~= nil and power.cut.place ~= nil then
-		power.cut.place(Opt("powerWidth") == "game" and "game" or "same")
+		-- In One frame the cut is as wide as the slot and starts the gap under it, and never above the game's bar, which hangs 1 unit under the slot
+		-- (Camelot\TargetFrame.lua:23-27, 103-107).
+		if g ~= nil then
+			power.cut.place("same", math.max(g, 1))
+		else
+			power.cut.place(FRAME.partsCut(power.bar))
+		end
 	end
 	if again and row ~= nil then
 		local slot = rec.parts.healthBox or rec.parts.health
-		row.frame:SetPoint("BOTTOMLEFT", slot, "TOPLEFT", -t, t)
-		row.frame:SetPoint("BOTTOMRIGHT", slot, "TOPRIGHT", t, t)
+		if g ~= nil then
+			-- With the portrait as tall as the bars the row runs on over the portrait's column, whose top is the slot's top.
+			local over = not tall and FRAME.cell(rec) and pic.frame or nil
+			local right = rec.parts.side == "right"
+			row.frame:SetPoint("BOTTOMLEFT", (not right and over) or slot, "TOPLEFT", 0, g)
+			row.frame:SetPoint("BOTTOMRIGHT", (right and over) or slot, "TOPRIGHT", 0, g)
+		else
+			row.frame:SetPoint("BOTTOMLEFT", slot, "TOPLEFT", -t, t)
+			row.frame:SetPoint("BOTTOMRIGHT", slot, "TOPRIGHT", t, t)
+		end
 		row.frame:SetHeight(ROW.of(rec))
 		row.line:SetHeight(t)
 		-- Each text is placed again from nothing, so that a change of the level position leaves no old anchor.
@@ -1118,7 +1359,7 @@ local function Layout(rec)
 	end
 	if pic ~= nil then
 		if again then
-			AnchorPicture(rec, t, rowOn, tall)
+			AnchorPicture(rec, t, rowOn, tall, g)
 			if pic.innerFrame ~= nil then
 				-- The line inside a Rare Elite's border is the outermost pixel of the picture.
 				local inset = ns.Pixels(rec.frame, INNER_PX)
@@ -1126,7 +1367,7 @@ local function Layout(rec)
 				pic.innerFrame:SetPoint("BOTTOMRIGHT", pic.frame, "BOTTOMRIGHT", -inset, inset)
 			end
 		end
-		SizePicture(rec, t, rowOn, tall)
+		SizePicture(rec, t, rowOn, tall, g)
 		pic.sized = true
 		if pic.noSize and not NoArea(pic.frame) then
 			-- The dragon, the resting glow and the colour of the border follow whether the portrait is shown.
@@ -1141,6 +1382,10 @@ local function Layout(rec)
 				end)
 			end)
 		end
+	end
+	-- The body is anchored in both styles, so it is in place when the style changes; it shows only in One frame.
+	if again and rec.body ~= nil then
+		FRAME.place(rec, g or FRAME.gap(rec), rowOn)
 	end
 	for _, hook in ipairs(ns.UnitFrameExtra.after.layout) do
 		Run(hook.part, hook.fn, rec, t, rowOn)
@@ -1161,17 +1406,16 @@ end
 -- to it. A corner takes both its sides from one frame, so the corner that has the edge of the health bar and the other edge of the power bar
 -- is taken from a frame that spans from the one bar to the other.
 -- Power bar width "same": both sides come from the health slot and the top and bottom from the power bar, whatever width the game gave the bar.
--- "game": one side comes from the game's power bar, the side the game made it wider on. Space between bars lowers the top in "same" and on the left-clipped frames.
+-- "game": one side comes from the game's power bar, the side the game made it wider on. The drop lowers the top in "same" and on the left-clipped
+-- frames: in Separate parts the two borders and Space between parts (FRAME.partsCut), in One frame the gap (Layout).
 local function PowerSpan(parts)
 	local bar, slot = parts.power, parts.healthBox or parts.health
 	local parent = parts.badges or parts.owner
 	local across, side, frame = Frame(parent), Frame(parent), Frame(parent)
 	local cut = { across = across, side = side, frame = frame, mask = CutMask(bar, frame), always = true }
-	-- Anchors the three frames for a width mode. They are frames of the addon's own, so nothing protected is written.
-	function cut.place(mode)
-		-- Space between bars: the span starts below the slot by the two borders and the space. None leaves the bar's top as the top.
-		local space = tonumber(Opt("powerSpace")) or 0
-		local drop = space > 0 and ns.Pixels(bar, 2 * ns.Get("general.thickness") + space) or 0
+	-- Anchors the three frames for a width mode, with the span starting `drop` units below the slot, or at the bar's top for 0. They are frames of
+	-- the addon's own, so nothing protected is written.
+	function cut.place(mode, drop)
 		local key = mode .. ":" .. tostring(drop)
 		if cut.mode == key then
 			return
@@ -1207,11 +1451,12 @@ local function PowerSpan(parts)
 			frame:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
 		end
 	end
-	cut.place(Opt("powerWidth") == "game" and "game" or "same")
+	-- The look of Separate parts first; Layout, which runs next, places it for One frame.
+	cut.place(FRAME.partsCut(bar))
 	return cut
 end
 
--- Makes the borders of a frame, each added to `made` as it is made. False when the game refuses one.
+-- Makes the borders, the picture, the name row and the body of a frame, each outline added to `made` as it is made. False when the game refuses one.
 local function Make(rec, made)
 	local parts = rec.parts
 	local placed = {}
@@ -1245,12 +1490,19 @@ local function Make(rec, made)
 	if ROW.kinds[rec.kind] and not ns.Forbidden(parts.badges or rec.frame) then
 		rec.row = NameRow(rec)
 	end
+	-- Every frame but a raid frame has a body, shown in One frame.
+	if rec.kind ~= "raid" and not ns.Forbidden(rec.frame) then
+		rec.body = FRAME.make(rec, made)
+	end
 	Layout(rec)
 	if rec.pic then
 		placed[#placed + 1] = rec.pic.frame
 	end
 	if rec.row then
 		placed[#placed + 1] = rec.row.frame
+	end
+	if rec.body then
+		placed[#placed + 1] = rec.body.frame
 	end
 	for _, outline in ipairs(made) do
 		placed[#placed + 1] = outline.top
@@ -1484,11 +1736,38 @@ function ns.UnitFrameExtra.calmTank(rec)
 	return (rec.kind == "party" or rec.kind == "raid") and Opt("threatTanks") == "hidden" and isTank ~= nil and isTank(UnitOf(rec)) == true
 end
 
+-- One frame has one colour of its border, on the body and on the picture (a round picture's ring), the first that applies: threat or the top debuff
+-- of a party member (r, g, b, as Colour found them), resting and combat or an attacking pet, then the kind of a target or focus. With none the
+-- border has the border colour (and the files after this one may give it the class or reaction colour). The health bar has no border of its own,
+-- and the thick border of an elite picture and the line inside a Rare Elite's are not drawn: the mark in the name row tells a Rare Elite.
+function FRAME.colour(rec, on, r, g, b)
+	local parts, pic = rec.parts, rec.pic
+	local square = Squared(rec, on)
+	if r == nil and square and parts.status ~= nil and Opt("status") then
+		r, g, b = Lit(parts.status)
+	end
+	local look = r == nil and square and parts.boss ~= nil and Opt("elite") and rec.rank and RANKS[rec.rank] or nil
+	if look then
+		r, g, b = Rgb(look.colour)
+	end
+	if rec.byRole.health then
+		ColourOutline(rec.byRole.health.outline, nil, nil, nil)
+	end
+	ColourOutline(rec.body.outline, r, g, b)
+	if pic ~= nil then
+		pic.coloured = r ~= nil
+		ColourOutline(pic.outline, r, g, b)
+		ShowOutline(pic.rim, false, false)
+		ShowOutline(pic.inner, false, false)
+	end
+end
+
 -- Threat, or the top debuff of a party member, on the health bar border, resting and combat or an attacking pet on the border of
 -- the picture, the kind of a target or focus on both borders of the picture, the thicker one shown only then, and a Rare Elite's line inside
 -- them. A raid frame that is the target shows it on the health bar border over threat: in the colour of the game's selection highlight, which the game
 -- lights for the target (Shared/CompactUnitFrame.lua:893-905), in a colour of the player's own with Border for your target at Own colour, and not at all
--- with Off, so the threat colour shows. EnhanceQoL's target highlight (UF_GroupFrames.lua:9230-9318) is the model of the choice.
+-- with Off, so the threat colour shows. EnhanceQoL's target highlight (UF_GroupFrames.lua:9230-9318) is the model of the choice. In One frame the
+-- colours go to the frame's border instead (FRAME.colour).
 local function Colour(rec, on)
 	local parts = rec.parts
 	local r, g, b
@@ -1508,27 +1787,33 @@ local function Colour(rec, on)
 			r, g, b = sr, sg, sb
 		end
 	end
-	if rec.byRole.health then
-		ColourOutline(rec.byRole.health.outline, r, g, b)
-	end
 	local pic = rec.pic
-	if pic ~= nil then
-		local square = Squared(rec, on)
-		r, g, b = nil, nil, nil
-		if square and parts.status ~= nil and Opt("status") then
-			r, g, b = Lit(parts.status)
+	if rec.joined == true then
+		FRAME.colour(rec, on, r, g, b)
+	else
+		if rec.byRole.health then
+			ColourOutline(rec.byRole.health.outline, r, g, b)
 		end
-		local look = square and not pic.none and parts.boss ~= nil and Opt("elite") and rec.rank and RANKS[rec.rank] or nil
-		if look then
-			r, g, b = Rgb(look.colour)
+		if pic ~= nil then
+			local square = Squared(rec, on)
+			r, g, b = nil, nil, nil
+			if square and parts.status ~= nil and Opt("status") then
+				r, g, b = Lit(parts.status)
+			end
+			local look = square and not pic.none and parts.boss ~= nil and Opt("elite") and rec.rank and RANKS[rec.rank] or nil
+			if look then
+				r, g, b = Rgb(look.colour)
+			end
+			-- Whether a state, a kind or a look gave the picture's border a colour: the files after this one colour it by class or reaction only if not.
+			pic.coloured = r ~= nil
+			ColourOutline(pic.outline, r, g, b)
+			-- The thick border and the line inside a Rare Elite's are square, so they go round a square picture only: a round one shows the kind's
+			-- colour on its ring.
+			ColourOutline(pic.rim, Rgb(look and look.colour))
+			ShowOutline(pic.rim, look ~= nil and not pic.round, false)
+			ColourOutline(pic.inner, Rgb(look and look.inner))
+			ShowOutline(pic.inner, look ~= nil and look.inner ~= nil and not pic.round, false)
 		end
-		-- Whether a state, a kind or a look gave the picture's border a colour: the files after this one colour it by class or reaction only if not.
-		pic.coloured = r ~= nil
-		ColourOutline(pic.outline, r, g, b)
-		ColourOutline(pic.rim, Rgb(look and look.colour))
-		ShowOutline(pic.rim, look ~= nil, false)
-		ColourOutline(pic.inner, Rgb(look and look.inner))
-		ShowOutline(pic.inner, look ~= nil and look.inner ~= nil, false)
 	end
 	for _, hook in ipairs(ns.UnitFrameExtra.after.colour) do
 		Run(hook.part, hook.fn, rec, on)
@@ -1537,9 +1822,11 @@ end
 
 -- The name row ---------------------------------------------------------------------------------------------------
 
--- The colour of the name row at part of its brightness: the class colour of the player, of the pet's owner, of a party member or a target of
--- target that is a player, the reaction colour of any other unit, or the colour the game gives the strip behind the name of a target or boss.
--- Nil while the strip is hidden or the client withholds the colour. rec.colourFrom says where the colour came from, for /flatui status.
+-- The colour of the name row at part of its brightness: the class colour of the player, of the pet's owner, of a party member or of a target of
+-- target, target, focus or boss that is a player, the reaction colour of any other unit (Custom reaction colours too), or the colour the game gives
+-- the strip behind the name of a target or boss while the client withholds what decides the others. Nil while the strip is hidden or the client
+-- withholds the colour. rec.colourFrom says where the colour came from, for /flatui status. A light colour is kept dark enough for the yellow name to
+-- read on it: on a flat or fading row its lightness is scaled down to FRAME.CAP; the dark row shows the colour only as its mark and keeps it whole.
 local function RowColour(rec)
 	local r, g, b
 	local kind, from = rec.kind, nil
@@ -1553,7 +1840,7 @@ local function RowColour(rec)
 		local owner = (UnitOf(rec) or ""):match("^partypet(%d+)$")
 		r, g, b = ns.ClassColourOf(owner and "party" .. owner or nil)
 		from = "class"
-	elseif kind == "tot" then
+	elseif kind == "tot" or kind == "target" or kind == "focus" or kind == "boss" then
 		local unit = UnitOf(rec)
 		local ok, player = pcall(UnitIsPlayer, unit)
 		if ok and not ns.IsSecret(player) and player == true then
@@ -1583,7 +1870,14 @@ local function RowColour(rec)
 		r, g, b = ns.UnitFrameExtra.mute(r, g, b)
 	end
 	local bright = Opt("stripBrightness") / 100
-	return r * bright, g * bright, b * bright
+	r, g, b = r * bright, g * bright, b * bright
+	local cap = FRAME.CAP[Opt("stripColour")]
+	local light = 0.30 * r + 0.59 * g + 0.11 * b
+	if cap ~= nil and light > cap then
+		local scale = cap / light
+		r, g, b = r * scale, g * scale, b * scale
+	end
+	return r, g, b
 end
 
 -- A solid colour on a texture of the row, the rounded rectangle tinted when the corners are rounded.
@@ -1610,17 +1904,17 @@ local function Gradient(texture, radius, r, g, b, bottom, top)
 	end)
 end
 
--- Paints the layers of the row: the colour fading upward, the colour whole, or the general background with a mark of the colour at the left
+-- Paints the layers of the row: the colour fading upward, the colour whole, or the background of the frame with a mark of the colour at the left
 -- end. A row without a colour is the dark one, without the mark. The base is the opaque background of the player's row while the band
--- of the game may show through.
+-- of the game may show through. The background is the plate's colour (FRAME.back), Own background too. In One frame the row sits on the plate, so
+-- the dark row is its mark alone, with no fill, and no row has a base.
 local function PaintRow(rec)
 	local row = rec.row
 	local r, g, b = RowColour(rec)
 	local mode = r ~= nil and Opt("stripColour") or "dark"
 	local top = ROW.strong * (100 - Opt("stripFade")) / 100
-	local br, bg, bb = ns.Colour("general.backdrop")
-	local alpha = ns.Get("general.backdropAlpha") / 100
-	local key = table.concat({ mode, tostring(r), tostring(g), tostring(b), tostring(row.radius), top, br, bg, bb, alpha, tostring(rec.opaque) }, ":")
+	local br, bg, bb, alpha = FRAME.back()
+	local key = table.concat({ mode, tostring(r), tostring(g), tostring(b), tostring(row.radius), top, br, bg, bb, alpha, tostring(rec.opaque), tostring(rec.joined) }, ":")
 	if row.paint == key then
 		return
 	end
@@ -1630,7 +1924,7 @@ local function PaintRow(rec)
 		mode = "flat"
 	end
 	row.grad:SetShown(gradient)
-	row.fill:SetShown(not gradient)
+	row.fill:SetShown(not gradient and not (mode == "dark" and rec.joined == true))
 	if mode == "flat" then
 		Solid(row.fill, row.radius, r, g, b, ROW.strong)
 	elseif mode == "dark" then
@@ -1982,7 +2276,8 @@ local function ApplyRow(rec)
 	if shown and rec.kind == "player" and not InCombatLockdown() then
 		Sweep(rec)
 	end
-	rec.opaque = rec.kind == "player" and shown and (not rec.swept or next(rec.bands) == nil)
+	-- The player's row has an opaque base in Separate parts only: in One frame it sits on the plate, which is the frame's one background.
+	rec.opaque = rec.kind == "player" and shown and not rec.joined and (not rec.swept or next(rec.bands) == nil)
 	ns.SetFaded(parts.nameText, shown)
 	ns.SetFaded(parts.strip, shown)
 	-- The game's level number, round plate and skull stay hidden in every level position while the row is on.
@@ -2029,13 +2324,16 @@ end
 -- the player is anchored to it and follows (Camelot\PlayerFrame.lua:17-18). The client before had a plate under the icon: the plate is moved then,
 -- and the icon gets its own point on it, since on the target the live client was seen to keep the icon at the game's place. The game goes on
 -- showing, hiding and skinning them. They sit on protected frames, so they move out of combat. A move the game refuses, which raises nothing, puts
--- them back where the XML has them and says so on the status.
+-- them back where the XML has them and says so on the status. On a round picture the plate moves in from the corner of the square by the inset
+-- of the circle on both axes, onto the circle at 45 degrees; rec.plateAt names the corner and the inset, so a change of shape or size moves it again.
 local ApplyFlag
 local function PlacePlate(rec, corner)
 	local parts = rec.parts
 	-- Only the player, the target and the focus have a flag this moves; the icon of a party member stays where the game has it.
 	local plate = parts.pvp or (FLAG.home[rec.kind] ~= nil and parts.pvpIcon or nil)
-	if plate == nil or (rec.plateAt or false) == (corner or false) then
+	local inset = corner and FRAME.inset(rec) or 0
+	local spot = corner and (inset > 0 and ("%s:round:%.1f"):format(corner, inset) or corner) or false
+	if plate == nil or (rec.plateAt or false) == spot then
 		return
 	end
 	if InCombatLockdown() then
@@ -2075,7 +2373,7 @@ local function PlacePlate(rec, corner)
 		local halfHeight = Number(height) and height > 0 and height / 2 or FLAG.half
 		moved = pcall(function()
 			plate:ClearAllPoints()
-			plate:SetPoint("CENTER", rec.pic.frame, at[1], at[2] * halfWidth, at[3] * halfHeight)
+			plate:SetPoint("CENTER", rec.pic.frame, at[1], at[2] * (halfWidth + inset), at[3] * (halfHeight + inset))
 			if icon ~= nil then
 				icon:ClearAllPoints()
 				icon:SetPoint("CENTER", plate, "CENTER", 0, 0)
@@ -2093,7 +2391,7 @@ local function PlacePlate(rec, corner)
 		end)
 	end
 	if moved and Placed(plate) and (icon == nil or Placed(icon)) then
-		rec.plateAt = corner or false
+		rec.plateAt = spot
 		rec.plateRefused = nil
 	else
 		pcall(function()
@@ -2194,7 +2492,7 @@ local function ApplyLoss(rec, on)
 	ns.SetFaded(rec.parts.loss and ns.FillRegion(rec.parts.loss), on)
 end
 
--- The outlines of a frame: its bars and its picture.
+-- The outlines of a frame: its bars, its picture and its body.
 local function Outlines(rec)
 	local list = {}
 	for _, entry in ipairs(rec.bars) do
@@ -2205,43 +2503,55 @@ local function Outlines(rec)
 		list[#list + 1] = rec.pic.rim
 		list[#list + 1] = rec.pic.inner
 	end
+	if rec.body ~= nil then
+		list[#list + 1] = rec.body.outline
+	end
 	return list
 end
 
--- Rounds the corners of the bars, and the borders of the picture, of a frame, or makes them square again. The picture itself stays square. False
--- when the client refuses the slicing.
-local function Reshape(rec, radius)
+-- Rounds the corners of a frame, or makes them square again. In One frame (joined) only the body is rounded: the cells stay square, the cut masks of
+-- the bars crisp and the row's textures flat, and no cut mask is made, since no cell is rounded. In Separate parts the bars, the borders of the
+-- picture and the row are rounded, and the body is square. The picture itself stays square. False when the client refuses the slicing.
+local function Reshape(rec, radius, joined)
 	local ok = true
+	-- The radius of the cells: the bars, the borders of the picture and the row.
+	local cells = not joined and radius or nil
 	for _, entry in ipairs(rec.bars) do
-		if entry.cut == nil and radius then
+		if entry.cut == nil and cells then
 			entry.cut = { mask = CutMask(entry.bar, entry.target) }
 		end
 		if entry.cut then
-			ok = Shape(entry.cut.mask, radius, false, true) and ok
+			ok = Shape(entry.cut.mask, cells, false, true) and ok
 		end
 	end
+	local body = rec.body and rec.body.outline
 	for _, outline in ipairs(Outlines(rec)) do
-		if radius then
-			ok = Round(outline, radius) and ok
+		local shape = cells
+		if outline == body then
+			shape = joined and radius or nil
+		end
+		if shape then
+			ok = Round(outline, shape) and ok
 		else
 			Unround(outline)
 		end
 	end
 	if rec.row then
-		rec.row.radius = radius
+		rec.row.radius = cells
 		rec.row.paint = nil
 		-- The line under the row stops where the rounded corners begin.
-		rec.row.line:SetPoint("BOTTOMLEFT", rec.row.frame, "BOTTOMLEFT", radius or 0, 0)
-		rec.row.line:SetPoint("BOTTOMRIGHT", rec.row.frame, "BOTTOMRIGHT", -(radius or 0), 0)
+		rec.row.line:SetPoint("BOTTOMLEFT", rec.row.frame, "BOTTOMLEFT", cells or 0, 0)
+		rec.row.line:SetPoint("BOTTOMRIGHT", rec.row.frame, "BOTTOMRIGHT", -(cells or 0), 0)
 	end
 	return ok
 end
 
--- The corners follow the setting. Nothing is made until they are rounded, and nothing is made or anchored in combat: a change waits for its
--- end. A client that refuses the slicing keeps square corners.
+-- The corners follow the setting and the Frame style. Nothing is made until they are rounded, and nothing is made or anchored in combat: a change
+-- waits for its end. A client that refuses the slicing keeps square corners. rec.cornerKey is the radius and the style the corners have now.
 local function Corners(rec, on)
 	local radius = on and Radius() or nil
-	if radius ~= rec.radius then
+	local joined = rec.joined == true
+	if tostring(radius) .. ":" .. tostring(joined) ~= (rec.cornerKey or "nil:false") then
 		if InCombatLockdown() then
 			if not rec.cornersQueued then
 				rec.cornersQueued = true
@@ -2252,15 +2562,16 @@ local function Corners(rec, on)
 			end
 			return
 		end
-		if radius and not Reshape(rec, radius) then
+		if radius and not Reshape(rec, radius, joined) then
 			noSlice = true
 			ns.Note(KEY, "Unit frames: the game refused sliced textures, so corners stay square.")
 			radius = nil
-			Reshape(rec, nil)
+			Reshape(rec, nil, joined)
 		elseif radius == nil then
-			Reshape(rec, nil)
+			Reshape(rec, nil, joined)
 		end
 		rec.radius = radius
+		rec.cornerKey = tostring(radius) .. ":" .. tostring(joined)
 		for _, entry in ipairs(rec.bars) do
 			Clip(entry, entry.fill, on)
 		end
@@ -2271,7 +2582,8 @@ local function Corners(rec, on)
 end
 
 -- Applies the options to one frame, and puts Blizzard's look back when they say so. A frame keeps its art until its
--- borders are made, which waits for the end of combat.
+-- borders are made, which waits for the end of combat. Off, the body's outline is hidden and the bars, fills, masks and picture go back as for
+-- Separate parts.
 function Apply(rec)
 	local on = Active(rec)
 	if not rec.made then
@@ -2293,17 +2605,27 @@ function Apply(rec)
 			return
 		end
 	end
+	-- The Frame style changes out of combat only, with the layout that goes with it; in a fight the frame keeps the style it has.
+	if not InCombatLockdown() then
+		rec.joined = FRAME.want(rec)
+	end
 	local parts = rec.parts
 	for _, entry in ipairs(rec.bars) do
-		-- The thin power bar of a raid frame has its own switch.
+		-- The thin power bar of a raid frame has its own switch. In One frame a bar is a cell with no border of its own; its background is the
+		-- empty part of the bar, which UnitFrameLooks.lua paints as a strip a little lighter than the plate.
 		local live = on and (entry.role ~= "power" or rec.kind ~= "raid" or Opt("raidCells") == true)
-		ns.SetOutlineEdges(entry.outline, Opt("barBorder") ~= false)
+		ns.SetOutlineEdges(entry.outline, not rec.joined and Opt("barBorder") ~= false)
 		ShowOutline(entry.outline, live, Opt("backdrop"))
 		local flat = ApplyFill(rec, entry, live)
 		ApplyText(rec, entry, live)
 		if rec.kind == "partypet" then
 			PetTint(rec, flat)
 		end
+	end
+	-- The body: Background is its plate and Border its border, shown in One frame.
+	if rec.body ~= nil then
+		ns.SetOutlineEdges(rec.body.outline, Opt("barBorder") ~= false)
+		ShowOutline(rec.body.outline, on and rec.joined == true, Opt("backdrop"))
 	end
 	ApplyNameSize(rec, on)
 	for _, region in ipairs(parts.art) do
@@ -3274,7 +3596,8 @@ local function PrintArt()
 	end
 end
 
--- The line of /flatui status for the square portrait of a frame.
+-- The line of /flatui status for the portrait of a frame: its size, round or square, and whether it is in one frame or has a rounded border or
+-- square corners of its own.
 function STATUS.picture(rec, name)
 	local pic = rec.pic
 	if pic == nil then
@@ -3295,7 +3618,8 @@ function STATUS.picture(rec, name)
 		local width, height = Ask(pic.frame, "GetSize")
 		local size = Number(width) and Number(height) and ("shown, %s x %s"):format(Size(width), Size(height))
 			or ("shown, size not given, set %s x %s"):format(Size(pic.side), Size(pic.side))
-		text = ("%s, %s, frame level %s%s%s, %s"):format(size, rec.radius and "rounded border" or "square corners", Size(Ask(pic.frame, "GetFrameLevel")),
+		text = ("%s, %s, %s, frame level %s%s%s, %s"):format(size, pic.round and "round" or "square",
+			rec.joined and "one frame" or rec.radius and "rounded border" or "square corners", Size(Ask(pic.frame, "GetFrameLevel")),
 			pic.measured == false and ", sized from the default layout" or "", Ask(pic.frame, "IsRectValid") == false and ", no place on screen" or "", pic.icon and "class icon" or "face")
 	end
 	return ("%s portrait: %s"):format(name, text)
@@ -3530,6 +3854,38 @@ ns.UnitFrameExtra.layout = Layout
 ns.UnitFrameExtra.outline = ShowOutline
 ns.UnitFrameExtra.colourOutline = ColourOutline
 ns.UnitFrameExtra.colour = Colour
+-- One frame: whether a frame is drawn as one frame, its body, whether its picture is round and the inset of the circle, the plate's colour, the
+-- outlines that carry the frame's border colour, and Portrait border None on one of them with its rounded line.
+ns.UnitFrameExtra.joined = FRAME.joined
+ns.UnitFrameExtra.body = function(rec)
+	return rec.body and rec.body.frame
+end
+ns.UnitFrameExtra.roundPicture = FRAME.round
+ns.UnitFrameExtra.pictureInset = FRAME.inset
+ns.UnitFrameExtra.backColour = FRAME.back
+ns.UnitFrameExtra.frameOutlines = FRAME.outlines
+ns.UnitFrameExtra.bareOutline = function(outline, bare)
+	ns.SetOutlineBare(outline, bare)
+	Rim(outline)
+end
+
+-- The frames of the addon's own that sit on the unit button of a kind's frames itself, and not on a frame of the game inside it, each { frame = frame }:
+-- the body (FRAME.make), the name row (NameRow) and the shadow (UnitFrameLooks.lua), of every frame of the kind that is styled or was. Fading fades
+-- the player frame through its container and its content (Fade.lua), which do not hold these, so it fades them with those. Everything else the addon
+-- draws on the player frame is inside them, so it is not listed and fades once: the picture, the level on it and the 3D head are on the container (the
+-- frame the portrait is on), and the borders of the bars, the bar texts and the druid's mana bar on the content. Each frame is a child of the button,
+-- and what it holds (the body's outline and rounded line) fades with it.
+ns.UnitFrameExtra.pieces = function(kind)
+	local list = {}
+	for _, rec in pairs(records) do
+		if rec.kind == kind and rec.made then
+			for _, frame in ipairs(List(rec.body and rec.body.frame, rec.row and rec.row.frame, rec.shadowBox)) do
+				list[#list + 1] = { frame = frame }
+			end
+		end
+	end
+	return list
+end
 
 ns.Register(KEY, {
 	label = "Unit frames", Start = Refresh, Refresh = Refresh, Resized = Refresh, Status = StatusLines,

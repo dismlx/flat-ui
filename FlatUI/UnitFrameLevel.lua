@@ -1,18 +1,26 @@
 local ADDON_NAME, ns = ...
 
 -- The level on the portrait of the player, target and focus frames, for the level position On the portrait. The other positions, the colour and the
--- size of the level are in UnitFrames.lua, in the functions that lay out and write the name row. This file adds its work after the steps of that file
--- through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run twice with the same result.
+-- size of the level are in UnitFrames.lua, in the functions that lay out and write the name row; a frame that shows no picture of Flat UI's has its
+-- level at the end of the row there. On a round picture the number moves in from the corner of the square onto the circle. This file adds its work after
+-- the steps of that file through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run twice with the same result.
 
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local PART = "Level options"
 local KIND_PART = "Elite and Rare"
--- Where the number sits on the picture, in units from its bottom right corner.
+-- Where the number sits on the picture, in units from its bottom right corner. A round picture adds the way in from the corner of its square to the
+-- circle (ns.UnitFrameExtra.pictureInset, UnitFrames.lua).
 local INSET = 2
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
+end
+
+-- How far in from the bottom right corner of the picture the number sits, in units.
+local function Inset(rec)
+	local more = type(X.pictureInset) == "function" and X.pictureInset(rec) or 0
+	return INSET + (ns.Finite(more) and more or 0)
 end
 
 -- The text on the picture, made once on a frame of the addon's own above the picture, its inner line and its rim. It waits for the end of combat.
@@ -38,12 +46,27 @@ local function Make(rec)
 	text:SetPoint("BOTTOMRIGHT", pic.frame, "BOTTOMRIGHT", -INSET, INSET)
 	text:Hide()
 	pic.levelText = text
+	pic.levelInset = INSET
 	return true
+end
+
+local Update
+
+-- Runs Update once more when the fight is over.
+local function Later(rec)
+	if not rec.levelQueued then
+		rec.levelQueued = true
+		ns.OutOfCombat(function()
+			rec.levelQueued = nil
+			Update(rec)
+		end)
+	end
 end
 
 -- The level as the name row has it, with the mark of a target's kind after it, in the colour and the font of the row's level with an outline.
 -- A level the client withholds is passed on unread and gets no mark. Nothing shows unless the level position is On the portrait and the row shows a level.
-local function Update(rec)
+-- The number is anchored again, out of combat, when the picture turns round or square or changes size.
+function Update(rec)
 	local pic, row = rec.pic, rec.row
 	if pic == nil or row == nil then
 		return
@@ -56,16 +79,19 @@ local function Update(rec)
 		return
 	end
 	if not Make(rec) then
-		if not rec.levelQueued then
-			rec.levelQueued = true
-			ns.OutOfCombat(function()
-				rec.levelQueued = nil
-				Update(rec)
-			end)
-		end
+		Later(rec)
 		return
 	end
 	local text = pic.levelText
+	local inset = Inset(rec)
+	if pic.levelInset == nil or math.abs(pic.levelInset - inset) > 0.01 then
+		if InCombatLockdown() then
+			Later(rec)
+		else
+			text:SetPoint("BOTTOMRIGHT", pic.frame, "BOTTOMRIGHT", -inset, inset)
+			pic.levelInset = inset
+		end
+	end
 	local ok, value = pcall(row.level.GetText, row.level)
 	local withheld = ok and ns.IsSecret(value)
 	if not ok or not (withheld or type(value) == "string" or X.number(value)) then

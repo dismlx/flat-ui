@@ -1,19 +1,29 @@
 local _, ns = ...
 
--- Flat UI setup: a mode of the options window (Panel.lua gives it the window) that makes a new profile step by step, with a drawing of what each choice
--- looks like. Every choice goes into a draft kept for this character in FlatUIDB.setup.drafts. Nothing reaches a profile, a game setting or a list
--- before Finish: the drawings read the draft through ns.Viewing, and Finish makes the profile in one call. Everything here is in the table S, so that the
--- file keeps few locals.
+-- Flat UI setup: a mode of the options window (Panel.lua gives it the window) that walks round the player's own screen, one stop for each part of
+-- it (SetupStops.lua), then Your screen and Finish. SetupWalk.lua draws the cards of a stop and of Your screen in the body of the window; this file
+-- has the window round them: the screen map and the list at the left, the title, the bar of buttons and the keys, the step pages of SetupSteps.lua
+-- behind More settings and Every setting, the draft and Finish. Every choice goes into a draft kept for this character in FlatUIDB.setup.drafts.
+-- Nothing reaches a profile, a game setting or a list before Finish: the drawings read the draft through ns.Viewing, and a list row queues its pick.
+-- Finish saves the draft into the profile in use in one call (ns.ChangeProfile), or makes a profile of the character's own from it while the
+-- character is on Default (ns.NewProfile), then closes the window so that the real screen shows the change. Enter and the arrow keys come through
+-- a frame of Flat UI's own that has the keyboard only out of combat. Everything here is in the table S, so that the file keeps few locals.
 
 local kit = ns.PanelKit
 local STEPS = ns.SETUP_STEPS
-local S = { views = {}, lines = {}, hist = {}, skipped = {}, quiet = false }
+local S = { views = {}, lines = {}, boxes = {}, showAll = {}, everyOpen = false, version = 0 }
 ns.Setup = S
 
 local COMBAT_LINE = "In combat. Finish after combat."
 local NOT_FINISHED = "Flat UI setup is not finished. /flatui setup continues it."
-local BODY_Y, BODY_H, DRAW_H, BAR_H = 268, 234 + kit.HEIGHT - 620, 220, 44
-local REPORT_Y = 56
+-- A page has the drawing band under the title and its rows under the band; the bar of buttons is at the bottom of the column.
+local DRAW_H, BAR_H = 220, 44
+local PAGE_Y, PAGE_H = kit.HEADER + DRAW_H, 234 + kit.HEIGHT - 620
+-- The left column: the screen map at the top and the list under it, whose lines are as high as their kind.
+local MAP_W, MAP_H, LIST_Y = 186, 104, 122
+local LINE_H = { stop = 36, yours = 24, every = 24, area = 20, step = 22, ready = 24 }
+-- The body under the title, where SetupWalk.lua shows a stop or Your screen.
+S.TOP, S.BODY_H = kit.HEADER, kit.HEIGHT - kit.TITLE - kit.STRIP - kit.HEADER - BAR_H
 
 local function IsText(value)
 	return not ns.IsSecret(value) and type(value) == "string"
@@ -23,17 +33,23 @@ local function Number(value)
 	return not ns.IsSecret(value) and type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
 
--- Every step is in STEPS; the ones the wizard shows are the built ones, in order. Steps are numbered by their place in STEPS. 0 is New profile
--- and REVIEW is Review.
-S.REVIEW = #STEPS + 1
-S.built, S.position = {}, {}
+-- What pcall gave: an error is said, not raised.
+local function Reported(ok, ...)
+	if not ok then
+		geterrorhandler()((...))
+		return nil
+	end
+	return ...
+end
+
+-- The built steps are the pages of More settings and Every setting, in order. Steps are numbered by their place in STEPS.
+S.built, S.numberOf = {}, {}
 for number, step in ipairs(STEPS) do
 	if step.built then
 		S.built[#S.built + 1] = number
-		S.position[number] = #S.built
+		S.numberOf[step.id] = number
 	end
 end
-S.total = #S.built
 
 -- Where each setting is: its step number and tier.
 S.where = {}
@@ -57,6 +73,56 @@ function S.Defs()
 		end
 	end
 	return S.defs
+end
+
+-- The walk ---------------------------------------------------------------------------------------------
+
+-- Calls a function of the walk (ns.SetupWalk, which SetupWalk.lua makes after this file loads) when it has one, and says an error it raises. Returns
+-- what the function returned, or nil.
+function S.Walk(name, ...)
+	local walk = ns.SetupWalk
+	local fn = type(walk) == "table" and walk[name] or nil
+	if type(fn) ~= "function" then
+		return nil
+	end
+	return Reported(pcall(fn, ...))
+end
+
+-- The stops of the walk as SetupWalk.lua checked them, or none while it is missing.
+function S.Stops()
+	local stops = S.Walk("Stops")
+	return type(stops) == "table" and stops or {}
+end
+
+function S.Stop(id)
+	local stop = S.Walk("Stop", id)
+	return type(stop) == "table" and stop or nil
+end
+
+-- The place of a stop in the walk, or nil.
+function S.StopIndex(id)
+	for index, stop in ipairs(S.Stops()) do
+		if stop.id == id then
+			return index
+		end
+	end
+	return nil
+end
+
+-- The screen of the stop at a place of the walk, or nil.
+function S.StopScreen(index)
+	local stop = S.Stops()[index]
+	return stop and { kind = "stop", id = stop.id } or nil
+end
+
+-- The first screen of the walk: its first stop, or Your screen while the walk has none.
+function S.FirstScreen()
+	return S.StopScreen(1) or { kind = "yours" }
+end
+
+-- The built steps More settings opens from a stop, in order.
+function S.Pages(stop)
+	return type(stop) == "table" and type(stop.pages) == "table" and stop.pages or {}
 end
 
 -- The settings of setup itself --------------------------------------------------------------------
@@ -89,7 +155,7 @@ end
 -- The lines of Profile on a new character: the three ways to ask or skip, the ready-made profiles, then each saved profile that is not Default and
 -- not named after a ready-made one (that name is the ready-made profile).
 function ns.SetupNewChoices()
-	local list = { { "ask", "Show profiles" }, { "default", "Default profile" }, { "recommended", "Recommended profile" } }
+	local list = { { "ask", "Show the welcome screen" }, { "default", "Default profile" }, { "recommended", "Suggested profile" } }
 	local named = {}
 	for _, profile in ipairs(type(ns.SETUP_PROFILES) == "table" and ns.SETUP_PROFILES or {}) do
 		list[#list + 1] = { "preset:" .. profile.id, profile.label }
@@ -166,44 +232,31 @@ function S.DefaultName()
 	return S.FreeName(S.PlayerName())
 end
 
--- True when a name is one the window filled in: the character's name, or the label of the tile the draft starts from, with the " 2", " 3" FreeName adds.
-function S.Filled(name, preset)
-	if not IsText(name) then
-		return false
-	end
-	local base = name:match("^(.-) %d+$") or name
-	local profile = IsText(preset) and S.PresetOf(preset) or nil
-	return base == S.PlayerName() or (profile ~= nil and (name == profile.label or base == profile.label))
-end
-
+-- A new draft: over the profile in use, at the first stop, with nothing chosen. The name is for the profile Finish makes on Default.
 function S.Fresh()
-	return { name = S.DefaultName(), step = 0, seen = {}, values = {}, actions = {} }
+	local first = S.Stops()[1]
+	return { v = 2, from = ns.Profile(), stop = first and first.id or "yours", seen = {}, values = {}, actions = {}, name = S.DefaultName(), saveNew = false }
 end
 
--- A draft as the saved variables hold it, made safe: every value a setting can hold, every step a step, every action a pick and a plain id.
+-- A draft as the saved variables hold it, made safe: every value a setting can hold, every action a pick and a plain id, the stop one the walk has.
+-- A draft of 0.5.11 or older keeps only its values and actions, which now change the profile in use.
 local function CleanDraft(raw)
 	if type(raw) ~= "table" then
 		return nil
 	end
-	local draft = { name = IsText(raw.name) and raw.name or S.DefaultName(), step = 0, seen = {}, values = {}, actions = {} }
-	local db = ns.Account()
-	if IsText(raw.preset) and S.PresetOf(raw.preset) then
-		draft.preset = raw.preset
-	elseif IsText(raw.from) and db and db.profiles and db.profiles[raw.from] then
-		draft.from = raw.from
-	end
-	local function Screen(number)
-		if Number(number) and number >= 0 and number <= S.REVIEW and number == math.floor(number) then
-			return (number == 0 or number == S.REVIEW or (STEPS[number] and STEPS[number].built)) and number or 0
+	local draft = S.Fresh()
+	if raw.v == 2 then
+		draft.from = IsText(raw.from) and raw.from or draft.from
+		if raw.stop == "yours" or (IsText(raw.stop) and S.Stop(raw.stop)) then
+			draft.stop = raw.stop
 		end
-		return 0
-	end
-	draft.step = Screen(raw.step)
-	draft.at = Screen(raw.at) > 0 and Screen(raw.at) or nil
-	for number, seen in pairs(type(raw.seen) == "table" and raw.seen or {}) do
-		if Number(number) and STEPS[number] and seen == true then
-			draft.seen[number] = true
+		for id, seen in pairs(type(raw.seen) == "table" and raw.seen or {}) do
+			if seen == true and IsText(id) and S.Stop(id) then
+				draft.seen[id] = true
+			end
 		end
+		draft.name = IsText(raw.name) and raw.name or draft.name
+		draft.saveNew = raw.saveNew == true
 	end
 	-- A pick of Out of range dimming from an older build is Out of range opacity, on the other scale.
 	local picks = type(raw.values) == "table" and raw.values or {}
@@ -224,8 +277,9 @@ local function CleanDraft(raw)
 	if ns.MigrateSounds then
 		ns.MigrateSounds(values, false)
 	end
-	-- White names never beat a Name colour the profile the draft starts from has.
-	local base = draft.from and db.profiles[draft.from].options
+	-- White names never beat a Name colour the profile in use has.
+	local start = S.StartProfile()
+	local base = start and start.options
 	if type(raw.values) == "table" and raw.values["unitframes.nameColour"] == nil and values["unitframes.nameColour"] == "white" and type(base) == "table"
 		and base["unitframes.nameColour"] ~= nil and base["unitframes.nameColour"] ~= "game" then
 		values["unitframes.nameColour"] = nil
@@ -243,16 +297,12 @@ local function CleanDraft(raw)
 			draft.actions[#draft.actions + 1] = { pick = action.pick, id = action.id, text = IsText(action.text) and action.text or nil }
 		end
 	end
-	-- A draft made before the ready-made profiles started from the defaults, which Standard is.
-	if not draft.preset and not draft.from and (next(draft.values) ~= nil or #draft.actions > 0 or draft.at ~= nil) then
-		draft.preset = "standard"
-	end
 	return draft
 end
 
--- True when a draft has something worth keeping: a value, a queued action, a saved profile or a ready-made profile other than Standard to start from.
+-- True when a draft has something worth keeping: a value or a queued action.
 function S.Has(draft)
-	return draft ~= nil and (next(draft.values) ~= nil or #draft.actions > 0 or draft.from ~= nil or (draft.preset ~= nil and draft.preset ~= "standard"))
+	return draft ~= nil and (next(draft.values) ~= nil or #draft.actions > 0)
 end
 
 -- This character's saved draft, cleaned and put back, or nil.
@@ -306,62 +356,57 @@ function S.Drop()
 	S.draft = nil
 end
 
--- The views ------------------------------------------------------------------------------------------
-
--- The profile the draft starts from, or nil for the defaults.
-function S.StartProfile()
-	local db = ns.Account()
-	if S.done then
-		-- Finish made the profile: the drawing shows the profile in use.
-		return db and db.profiles and db.profiles[ns.Profile()] or nil
-	end
-	local preset = S.draft and S.draft.preset
-	if preset then
-		return S.Preset(preset)
-	end
-	local from = S.draft and S.draft.from
-	return from and db and db.profiles and db.profiles[from] or nil
-end
-
--- The ready-made profile shown selected on New profile: the one the draft starts from, else the one that suits this character; none while a saved
--- profile is picked. Nothing is written.
-function S.SelectedPreset()
+-- A draft made over another profile than the one in use now changes the one in use, and the values that profile has already go. Returns the line
+-- that says so while values remain, else nil.
+function S.Rebase()
 	local draft = S.draft
-	if not draft or draft.from then
+	local using = ns.Profile()
+	if draft.from == using then
 		return nil
 	end
-	if draft.preset then
-		return draft.preset
+	draft.from = using
+	S.Prune()
+	S.Sync()
+	if next(draft.values) ~= nil then
+		return ("Setup now changes |cffffffff%s|r, the profile in use."):format(using)
 	end
-	if not S.pick then
-		S.pick = S.Recommend()
-	end
-	return S.pick
+	return nil
 end
 
--- The name of the profile the draft starts from, for the buttons and Review: the ready-made profile's, else the saved profile's, else Defaults.
-function S.StartName()
-	local profile = S.PresetOf(S.SelectedPreset())
-	if profile then
-		return profile.label
-	end
-	return S.draft and S.draft.from or "Defaults"
+-- True when Finish makes a new profile: on Default, which stays as it is for the other characters, or with Save as a new profile ticked.
+function S.SavesNew()
+	return ns.Profile() == "Default" or (S.draft ~= nil and S.draft.saveNew == true)
 end
 
--- The ready-made profile shown becomes the draft's start, as the steps, Review and Finish need it. A saved profile or an earlier pick is kept.
-function S.Commit()
-	local draft = S.draft
-	if draft and not draft.from and not draft.preset and S.PresetOf(S.SelectedPreset()) then
-		draft.preset = S.SelectedPreset()
-		S.Prune()
-		S.dirty = true
-		S.Sync()
+-- How many characters of the account use the profile `name`.
+function S.Users(name)
+	local db = ns.Account()
+	local count = 0
+	for _, used in pairs(type(db) == "table" and type(db.profileOf) == "table" and db.profileOf or {}) do
+		if used == name then
+			count = count + 1
+		end
 	end
+	return count
+end
+
+-- The name of the profile Finish makes, or nil and the sentence why it cannot have it.
+function S.NameCheck()
+	local clean, why = ns.ProfileNameCheck(S.draft and S.draft.name or "")
+	return clean, why
+end
+
+-- The views ------------------------------------------------------------------------------------------
+
+-- The profile the draft changes: the profile in use. Finish saves into it, or into a copy of it.
+function S.StartProfile()
+	local db = ns.Account()
+	return type(db) == "table" and type(db.profiles) == "table" and db.profiles[ns.Profile()] or nil
 end
 
 S.noSpots = {}
 
--- What a drawing reads: the draft, else the start profile, else the row's default. Its spots are the start profile's positions.
+-- What a drawing reads: the draft, else the profile in use, else the row's default. Its spots are the positions of the profile in use.
 S.view = setmetatable({ spots = S.noSpots }, { __index = function(_, path)
 	local drafted = S.draft and S.draft.values[path]
 	if drafted ~= nil then
@@ -371,19 +416,11 @@ S.view = setmetatable({ spots = S.noSpots }, { __index = function(_, path)
 	return start and start.options[path]
 end })
 
--- The same without the draft: what the new profile starts with.
+-- The same without the draft: what the profile in use has now.
 S.startView = setmetatable({ spots = S.noSpots }, { __index = function(_, path)
 	local start = S.StartProfile()
 	return start and start.options[path]
 end })
-
-local function Reported(ok, ...)
-	if not ok then
-		geterrorhandler()((...))
-		return nil
-	end
-	return ...
-end
 
 -- Runs fn(...) with ns.Get reading `view`, and says an error it raised. Returns what fn returned.
 function S.Under(view, fn, ...)
@@ -392,7 +429,7 @@ function S.Under(view, fn, ...)
 	return Reported(ns.Viewing(view, fn, ...))
 end
 
--- The value of a setting in the draft: a draft value, else what the new profile starts with.
+-- The value of a setting in the draft: a draft value, else what the profile in use has.
 function S.Value(path)
 	return S.Under(S.view, ns.Get, path)
 end
@@ -401,8 +438,8 @@ function S.StartValue(path)
 	return S.Under(S.startView, ns.Get, path)
 end
 
--- Gives a setting a value in the draft. A value the new profile starts with is not kept, so Undo, Back and a change back leave nothing behind.
--- Nothing is written to a profile, a game setting or a list.
+-- Gives a setting a value in the draft. A value the profile in use has is not kept, so a card picked back, Back and a change back leave nothing
+-- behind. Nothing is written to a profile, a game setting or a list.
 function S.Set(path, value)
 	local draft = S.draft
 	if not draft then
@@ -418,10 +455,11 @@ function S.Set(path, value)
 		draft.values[path] = fitted
 	end
 	S.dirty = true
+	S.version = S.version + 1
 	S.Sync()
 end
 
--- A change of the profile to start from keeps every choice made, except those the new start already has.
+-- A draft over another profile in use keeps every choice made, except those that profile has already.
 function S.Prune()
 	local draft = S.draft
 	for path, value in pairs(draft.values) do
@@ -429,9 +467,10 @@ function S.Prune()
 			draft.values[path] = nil
 		end
 	end
+	S.version = S.version + 1
 end
 
--- The choices that differ from the start, in step order: { path, step, tier, value }.
+-- The choices that differ from the profile in use, in step order: { path, step, tier, value }.
 function S.Changes()
 	local list = {}
 	for path, value in pairs(S.draft and S.draft.values or {}) do
@@ -450,8 +489,8 @@ function S.Changes()
 end
 
 -- The rows that need a reload, by the reload field of their row in Config.lua: "off" for a switch that takes full effect after /reload when it is turned
--- off, "change" for a row that applies after /reload when its value changes. An entry { label, field } for each one that is on now and off in the new
--- profile ("off"), or that has another value there ("change").
+-- off, "change" for a row that applies after /reload when its value changes. An entry { label, field } for each one that is on now and off in the
+-- draft ("off"), or that has another value there ("change").
 function S.ReloadLines()
 	local lines = {}
 	for _, page in ipairs(ns.PAGES) do
@@ -475,10 +514,105 @@ function S.ReloadText(entry)
 	return ("Turning off |cffffffff%s|r takes full effect after /reload."):format(entry[1])
 end
 
+-- Lists, at Finish ------------------------------------------------------------------------------------
+
+-- Queues a pick for Finish: `pick` names the function of ns that a list row or a tick of the walk calls, `id` the line chosen and `text` what the
+-- player reads of it. The same pick and id are queued once. Nothing runs before Finish.
+function S.Queue(pick, id, text)
+	local draft = S.draft
+	if not draft or not IsText(pick) or not (IsText(id) or Number(id)) then
+		return
+	end
+	if not S.Queued(pick, id) then
+		draft.actions[#draft.actions + 1] = { pick = pick, id = id, text = IsText(text) and text or nil }
+		S.version = S.version + 1
+		S.Sync()
+	end
+	if IsText(text) then
+		kit.Say(("At Finish: %s."):format(text))
+	end
+end
+
+function S.Unqueue(pick, id)
+	local draft = S.draft
+	if not draft then
+		return
+	end
+	for index = #draft.actions, 1, -1 do
+		if draft.actions[index].pick == pick and draft.actions[index].id == id then
+			table.remove(draft.actions, index)
+		end
+	end
+	S.version = S.version + 1
+	S.Sync()
+end
+
+function S.Queued(pick, id)
+	for _, action in ipairs(S.draft and S.draft.actions or {}) do
+		if action.pick == pick and action.id == id then
+			return true
+		end
+	end
+	return false
+end
+
+-- What a pick of a list row reads as: "<row label>: <the line chosen>", or the label alone when its lines do not have the id.
+function S.ListText(def, id)
+	local call = ns[def.items]
+	if type(call) == "function" then
+		local ok, lines = pcall(call)
+		for _, line in ipairs(ok and type(lines) == "table" and lines or {}) do
+			if type(line) == "table" and line[1] == id and IsText(line[2]) then
+				return ("%s: %s"):format(def.label, line[2])
+			end
+		end
+	end
+	return def.label
+end
+
+-- The id a queued pick runs with at Finish. The lines of some lists are places in the list (Remove a tracker, Remove a proc), which move when a line
+-- before them goes, by a pick queued earlier or a change made since: the line with the text the player chose is looked for again, the queued id
+-- first. A text no line has keeps the queued id.
+function S.LineId(action)
+	local id, wanted = action.id, action.text
+	if not IsText(wanted) then
+		return id
+	end
+	local moved
+	for _, def in pairs(S.Defs()) do
+		local call = def.kind == "list" and def.pick == action.pick and IsText(def.label) and IsText(def.items) and ns[def.items] or nil
+		if type(call) == "function" then
+			local ok, lines = pcall(call)
+			for _, line in ipairs(ok and type(lines) == "table" and lines or {}) do
+				local at = type(line) == "table" and line[1] or nil
+				if (IsText(at) or Number(at)) and IsText(line[2]) and ("%s: %s"):format(def.label, line[2]) == wanted then
+					if at == id then
+						return id
+					end
+					moved = moved == nil and at or moved
+				end
+			end
+		end
+	end
+	if moved ~= nil then
+		return moved
+	end
+	return id
+end
+
 -- Rows ---------------------------------------------------------------------------------------------
 
--- A copy of a row of Config.lua that reads and writes the draft: it has no saved path, so the row builders never touch a profile.
-function S.Item(def)
+-- List rows setup leaves to the options pages: a pick in two steps (an icon or a tracker, then what it gets), whose first step only chooses and so
+-- cannot wait for Finish, and Show as import text, which only shows something.
+S.APART = {
+	["cooldowns.iconSound"] = true, ["cooldowns.iconShow"] = true, ["cooldowns.rowOf"] = true, ["pulse.iconSound"] = true, ["pulse.iconSpot"] = true,
+	["trackers.clickUse"] = true, ["movers.layoutText"] = true,
+}
+
+-- A copy of a row of Config.lua that reads and writes the draft: it has no saved path, so the row builders never touch a profile. A list row queues
+-- its pick for Finish (Panel.lua calls item.act in place of the pick), and a row the step only describes ("behaviour") that has no tip of its own
+-- takes the step's sentence as its tip.
+function S.Item(def, entry)
 	local path = def.path
 	local item = {}
 	for field, value in pairs(def) do
@@ -491,21 +625,28 @@ function S.Item(def)
 	item.write = function(value)
 		S.Set(path, value)
 	end
-	if IsText(def.tip) then
+	if IsText(def.tip) and def.tip ~= "" then
 		-- Inside setup the profiles are in front of the player already.
 		item.tip = def.tip:gsub(" Profiles are in the options window%.$", "")
+	elseif type(entry) == "table" and entry[3] == "behaviour" and IsText(entry[4]) then
+		item.tip = entry[4]
+	end
+	if def.kind == "list" and IsText(def.pick) then
+		item.act = function(id)
+			S.Queue(def.pick, id, S.ListText(def, id))
+		end
 	end
 	return item
 end
 
--- The rows of a step, built the first time the step is shown: { row, item, page, tier, path }.
+-- The rows of a step, built the first time its page is shown: { row, item, page, tier, path }.
 function S.BuildRows(number, scroller)
 	local defs = S.Defs()
 	local rows = {}
 	for _, entry in ipairs(STEPS[number].rows) do
 		local def = defs[entry[1]]
-		if def and ns.RowShown(def.path) then
-			local item = S.Item(def)
+		if def and ns.RowShown(def.path) and not S.APART[def.path] then
+			local item = S.Item(def, entry)
 			local page = S.pageOf[def]
 			local row = kit.BuildRow(scroller.child, page, item, 8)
 			if row then
@@ -523,9 +664,9 @@ function S.BuildRows(number, scroller)
 	return rows
 end
 
--- The rows of the step that show now: open (every setting they need is on), and main ones, or all of them with Every choice. Run under the view.
+-- The rows of the page that show now: open (every setting they need is on), and the main ones, or all of them with Show all. Run under the view.
 function S.Shown(view)
-	local all = ns.Get("setup.choices") == "all"
+	local all = S.showAll[view.step] == true
 	local shown, more = {}, 0
 	for _, entry in ipairs(view.rows) do
 		if kit.IsOpen(entry.page, entry.item) then
@@ -540,7 +681,7 @@ function S.Shown(view)
 	return shown, more
 end
 
--- Puts the rows that show in a column and hides the rest.
+-- Puts the rows that show in a column and hides the rest. Show all counts every open row of the page.
 function S.LayoutStep(view)
 	local shown, more = S.Shown(view)
 	local y = 8
@@ -556,10 +697,10 @@ function S.LayoutStep(view)
 			entry.row.frame:Hide()
 		end
 	end
-	local all = ns.Get("setup.choices") == "all"
+	local all = S.showAll[view.step] == true
 	view.more:SetShown(more > 0)
 	if more > 0 then
-		view.moreText:SetText(all and "Fewer choices" or ("More choices (%d)"):format(more))
+		view.moreText:SetText(all and "Show fewer" or ("Show all (%d)"):format(#shown + more))
 		view.more:ClearAllPoints()
 		view.more:SetPoint("TOPLEFT", view.scroller.child, "TOPLEFT", kit.PAD, -(y + 6))
 		y = y + 40
@@ -569,7 +710,7 @@ function S.LayoutStep(view)
 end
 
 function S.Signature(view, shown, more)
-	local parts = { ns.Get("setup.choices") == "all" and "all" or "main", tostring(more) }
+	local parts = { S.showAll[view.step] and "all" or "main", tostring(more) }
 	for _, entry in ipairs(shown) do
 		parts[#parts + 1] = entry.path
 	end
@@ -581,12 +722,13 @@ function S.StepView(number)
 	if view then
 		return view
 	end
-	local scroller = kit.Scroller(S.right, kit.RIGHT_W, BODY_H)
-	scroller.frame:SetPoint("TOPLEFT", S.right, "TOPLEFT", 0, -BODY_Y)
+	local scroller = kit.Scroller(S.right, kit.RIGHT_W, PAGE_H)
+	scroller.frame:SetPoint("TOPLEFT", S.right, "TOPLEFT", 0, -PAGE_Y)
 	view = { scroller = scroller, step = number }
 	view.rows = S.BuildRows(number, scroller)
-	local more, text = kit.Button(scroller.child, "More choices", 150, function()
-		ns.Set("setup.choices", ns.Get("setup.choices") == "all" and "main" or "all")
+	-- Show all and Show fewer are for this page, while the window is open.
+	local more, text = kit.Button(scroller.child, "Show all", 150, function()
+		S.showAll[number] = not S.showAll[number] or nil
 		kit.Refresh()
 	end)
 	view.more, view.moreText = more, text
@@ -596,23 +738,33 @@ function S.StepView(number)
 	return view
 end
 
--- The text under the step title: a switch that is off, and rows the game holds.
+-- The text under the page title: a module that is off ("Off. Turn on Unit frames for more choices."); else the switches that closed rows wait for,
+-- the first each row waits for and at most two ("Turn on Flat UI portraits for more choices."); and a line when the page has rows the game holds.
+-- Run under the view.
 function S.Subtitle(view)
 	local lines = {}
 	local defs = S.Defs()
-	local closed, off = false, nil
+	local off, waits, named = nil, {}, {}
 	for _, entry in ipairs(view.rows) do
 		if not kit.IsOpen(entry.page, entry.item) then
-			closed = true
 			for _, needed in ipairs(S.Gates(entry)) do
 				if not off and needed:find("%.enabled$") and ns.Get(needed) ~= true then
 					off = defs[needed]
 				end
 			end
+			-- Only a switch is turned on: a row that waits for a choice is not named.
+			local unmet = kit.Unmet(entry.page, entry.item)
+			local def = unmet and defs[unmet]
+			if def and def.kind == "bool" and IsText(def.label) and not named[unmet] and #waits < 2 then
+				named[unmet] = true
+				waits[#waits + 1] = ("|cffffffff%s|r"):format(def.label)
+			end
 		end
 	end
-	if closed and off then
+	if off then
 		lines[#lines + 1] = ("Off. Turn on |cffffffff%s|r for more choices."):format(off.label)
+	elseif #waits > 0 then
+		lines[#lines + 1] = ("Turn on %s for more choices."):format(table.concat(waits, " or "))
 	end
 	for _, entry in ipairs(view.rows) do
 		if entry.item.cvar then
@@ -644,151 +796,333 @@ function S.Gates(entry)
 end
 
 -- Screens ---------------------------------------------------------------------------------------------
+-- A screen is { kind = "stop", id }, { kind = "yours" } (Your screen) or { kind = "page", number, list, back }: a built step, the steps Next and
+-- Back go through, and the stop or Your screen Done goes back to.
 
--- The text of the counter in the title bar.
+-- The text of the counter in the title bar: "2 of 6" on a stop, Your screen, or the area of the page shown.
 function S.Counter()
-	if S.done then
-		return "Finished"
-	elseif S.cur == 0 then
-		return "Start"
-	elseif S.cur == S.REVIEW then
-		return "Review"
+	local screen = S.screen
+	if not screen then
+		return ""
+	elseif screen.kind == "stop" then
+		local at = S.StopIndex(screen.id)
+		return at and ("%d of %d"):format(at, #S.Stops()) or ""
+	elseif screen.kind == "yours" then
+		return "Your screen"
 	end
-	return ("%d of %d"):format(S.position[S.cur] or 0, S.total)
+	return STEPS[screen.number].area or ""
 end
 
--- The step to open after this one: the next built step that has a row to show, else Review. With a number, the step after that screen.
-function S.NextStep(after)
-	after = after or S.cur
-	for _, number in ipairs(S.built) do
-		if number > after then
-			local view = S.StepView(number)
-			local shown = S.Under(S.view, S.Shown, view)
-			if shown and #shown > 0 then
-				return number
-			end
-		end
+-- The page of a built step reached from Every setting or a search: every built step for Next and Back, and Done back to the stop or Your screen
+-- last shown.
+function S.PageOf(number)
+	return { kind = "page", number = number, list = S.built, back = S.walkAt or S.FirstScreen() }
+end
+
+-- The screen an id opens: "yours" is Your screen, a built step its page, a stop its stop. A step's id is read first, as a search hit means a step;
+-- no stop has the id of a step (the action bars stop is "actionbars", since "bars" is the step Bar texture and colours).
+function S.ScreenOf(id)
+	if id == "yours" then
+		return { kind = "yours" }
+	elseif not IsText(id) then
+		return nil
+	elseif S.numberOf[id] then
+		return S.PageOf(S.numberOf[id])
 	end
-	return S.REVIEW
+	return S.StopIndex(id) and { kind = "stop", id = id } or nil
 end
 
--- The first step of the next area.
-function S.SkipStep()
-	local area = S.cur >= 1 and STEPS[S.cur] and STEPS[S.cur].area
-	for _, number in ipairs(S.built) do
-		if number > S.cur and STEPS[number].area ~= area then
-			return number
-		end
+-- Where setup opens: the stop or Your screen the draft was last at, else the first stop.
+function S.Opening()
+	local at = S.draft and S.draft.stop
+	if at == "yours" then
+		return { kind = "yours" }
 	end
-	return S.REVIEW
+	return IsText(at) and S.StopIndex(at) and { kind = "stop", id = at } or S.FirstScreen()
 end
 
-function S.NameCheck()
-	local clean, why = ns.ProfileNameCheck(S.draft and S.draft.name or "")
-	return clean, why
-end
-
--- Opens a screen: 0 New profile, a step number, or S.REVIEW.
-function S.Go(number, quiet)
+-- Opens a screen. A stop or Your screen is where the draft opens next time; a page is not remembered.
+function S.Go(screen)
 	local draft = S.draft
-	if not draft then
+	if not draft or type(screen) ~= "table" then
+		return
+	elseif screen.kind == "page" and not (STEPS[screen.number] and STEPS[screen.number].built) then
+		return
+	elseif screen.kind == "stop" and not S.StopIndex(screen.id) then
 		return
 	end
-	if S.cur == 0 and number ~= 0 then
-		S.Commit()
+	if screen.kind ~= "page" then
+		S.walkAt = screen
+		draft.stop = screen.kind == "yours" and "yours" or screen.id
+		S.Sync()
 	end
-	if S.cur ~= number then
-		if not quiet then
-			S.hist[#S.hist + 1] = S.cur
-		end
-		if S.cur >= 1 and S.cur < S.REVIEW then
-			draft.seen[S.cur] = true
-		end
-	end
-	S.cur, S.done = number, false
+	S.screen = screen
 	ns.SetupDraw.Mark(nil)
-	draft.step = number
-	if number > 0 then
-		draft.at = number
-	end
-	S.Sync()
 	S.Show()
 end
 
-function S.Back()
-	local before = table.remove(S.hist)
-	if before then
-		if S.cur >= 1 and S.cur < S.REVIEW then
-			S.draft.seen[S.cur] = true
+-- The place of the page shown in the pages it goes through, or nil.
+function S.PageIndex(screen)
+	for index, number in ipairs(screen.list or {}) do
+		if number == screen.number then
+			return index
 		end
-		S.cur, S.done = before, false
-		S.draft.step = before
-		if before > 0 then
-			S.draft.at = before
+	end
+	return nil
+end
+
+-- Next: the next stop, and Your screen after the last; on a page the next page, and after the last the screen the pages came from.
+function S.Next()
+	local screen = S.screen
+	if not screen then
+		return
+	elseif screen.kind == "stop" then
+		S.Go(S.StopScreen((S.StopIndex(screen.id) or 0) + 1) or { kind = "yours" })
+	elseif screen.kind == "page" then
+		local at = S.PageIndex(screen)
+		local number = at and screen.list[at + 1]
+		if number then
+			S.Go({ kind = "page", number = number, list = screen.list, back = screen.back })
+		else
+			S.Go(screen.back or S.FirstScreen())
 		end
-		S.Sync()
-		S.Show()
 	end
 end
 
--- The list at the left: the areas and the steps in them, New profile before and Review after.
-function S.Entries()
-	local list = { { area = "Start" }, { number = 0, text = "New profile" } }
-	local last
-	for _, number in ipairs(S.built) do
-		local step = STEPS[number]
-		if step.area ~= last then
-			last = step.area
-			list[#list + 1] = { area = step.area }
+-- Back: the stop before, the last stop from Your screen; on a page the page before, and from the first the screen the pages came from.
+function S.Back()
+	local screen = S.screen
+	if not screen then
+		return
+	elseif screen.kind == "stop" then
+		local before = S.StopScreen((S.StopIndex(screen.id) or 1) - 1)
+		if before then
+			S.Go(before)
 		end
-		list[#list + 1] = { number = number, text = step.title }
+	elseif screen.kind == "yours" then
+		local last = S.StopScreen(#S.Stops())
+		if last then
+			S.Go(last)
+		end
+	else
+		local at = S.PageIndex(screen)
+		local number = at and at > 1 and screen.list[at - 1]
+		if number then
+			S.Go({ kind = "page", number = number, list = screen.list, back = screen.back })
+		else
+			S.Go(screen.back or S.FirstScreen())
+		end
 	end
-	list[#list + 1] = { area = "Finish" }
-	list[#list + 1] = { number = S.REVIEW, text = "Review" }
+end
+
+-- The button Enter presses: Finish on Your screen, else Next.
+function S.Primary()
+	if S.screen and S.screen.kind == "yours" then
+		S.Finish()
+	else
+		S.Next()
+	end
+end
+
+-- The button left of the primary one: Skip the rest on a stop (stops not visited stay as they are), Start over on Your screen, Done on a page.
+function S.Second()
+	local screen = S.screen
+	if not screen then
+		return
+	elseif screen.kind == "stop" then
+		S.Go({ kind = "yours" })
+	elseif screen.kind == "yours" then
+		S.StartOver()
+	else
+		S.Go(screen.back or S.FirstScreen())
+	end
+end
+
+-- More settings: the pages of the stop shown, from the first, with Done back to the stop.
+function S.More()
+	local screen = S.screen
+	local pages = screen and screen.kind == "stop" and S.Pages(S.Stop(screen.id)) or {}
+	if pages[1] then
+		S.Go({ kind = "page", number = pages[1], list = pages, back = screen })
+	end
+end
+
+-- True while something shows over setup that Enter and the arrow keys must not act under: a list, a question or the colour picker of the window,
+-- which puts them and the shade under them 40 levels and more above itself (Panel.lua, PanelColour.lua), or the welcome screen with the ready-made
+-- looks (SetupWelcome.lua). It is read when a key comes, so it is right however a box closed, by a click outside it too.
+function S.Covered()
+	local welcome = _G.FlatUIWelcome
+	if type(welcome) == "table" and type(welcome.IsShown) == "function" then
+		local ok, shown = pcall(welcome.IsShown, welcome)
+		if ok and not ns.IsSecret(shown) and shown == true then
+			return true
+		end
+	end
+	local window = kit.Window()
+	if not window then
+		return false
+	end
+	local ok, base = pcall(window.GetFrameLevel, window)
+	local children = { pcall(window.GetChildren, window) }
+	if not ok or not Number(base) or children[1] ~= true then
+		return false
+	end
+	for index = 2, #children do
+		local child = children[index]
+		local read, level = pcall(child.GetFrameLevel, child)
+		local seen, shown = pcall(child.IsShown, child)
+		if read and seen and Number(level) and level >= base + 40 and not ns.IsSecret(shown) and shown == true then
+			return true
+		end
+	end
+	return false
+end
+
+-- Start over: every choice goes, and the walk starts again at its first stop.
+function S.Reset()
+	S.Drop()
+	S.draft = S.Fresh()
+	S.Walk("Begin")
+	S.Go(S.FirstScreen())
+end
+
+-- Start over on Your screen asks first when there is something to lose.
+function S.StartOver()
+	if S.Has(S.draft) then
+		kit.Ask("Start over. Every choice made here goes.", S.Reset, nil, "Start over", "Keep choices")
+	else
+		S.Reset()
+	end
+end
+
+-- The list and the map ------------------------------------------------------------------------------
+
+-- The lines of the list: the stops, Your screen, Every setting (with the areas and the pages under it while it is open) and Ready-made looks.
+function S.Entries()
+	local list = {}
+	for index, stop in ipairs(S.Stops()) do
+		list[#list + 1] = { kind = "stop", key = "stop:" .. stop.id, id = stop.id, number = index, text = stop.title }
+	end
+	list[#list + 1] = { kind = "yours", key = "yours", text = "Your screen" }
+	list[#list + 1] = { kind = "every", text = "Every setting", gap = 8 }
+	if S.everyOpen then
+		local last
+		for _, number in ipairs(S.built) do
+			local step = STEPS[number]
+			if step.area ~= last then
+				last = step.area
+				list[#list + 1] = { kind = "area", text = step.area }
+			end
+			list[#list + 1] = { kind = "step", key = "step:" .. number, number = number, text = step.title }
+		end
+	end
+	if type(ns.OpenProfiles) == "function" then
+		list[#list + 1] = { kind = "ready", text = "Ready-made looks" }
+	end
 	return list
 end
 
+-- The key of a screen's own line.
+function S.KeyOf(screen)
+	if not screen then
+		return nil
+	elseif screen.kind == "stop" then
+		return "stop:" .. screen.id
+	elseif screen.kind == "yours" then
+		return "yours"
+	end
+	return "step:" .. screen.number
+end
+
+-- The line that is current: the screen's own, or for a page while Every setting is shut, the stop or Your screen it came from.
+function S.CurrentKey()
+	local screen = S.screen
+	if screen and screen.kind == "page" and not S.everyOpen then
+		screen = screen.back
+	end
+	return S.KeyOf(screen)
+end
+
+-- A line of the list, made the first time it is needed. A line shows any kind of entry; the parts its kind does not use are hidden.
 function S.ListLine(index)
 	local line = S.lines[index]
 	if line then
 		return line
 	end
 	local frame = kit.Frame(S.listScroller.child)
-	frame:SetSize(kit.LEFT - 1, 22)
+	frame:SetWidth(kit.LEFT - 1)
 	local fill = kit.Fill(frame, "BACKGROUND")
 	fill:SetAllPoints(frame)
 	local mark = kit.Fill(frame, "ARTWORK")
 	mark:SetWidth(2)
 	mark:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
 	mark:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+	-- A stop has its number in a square, filled once the stop has been seen.
+	local square = kit.Fill(frame, "BORDER")
+	square:SetSize(16, 16)
+	square:SetPoint("LEFT", frame, "LEFT", 12, 0)
+	local inside = kit.Fill(frame, "ARTWORK")
+	inside:SetSize(14, 14)
+	inside:SetPoint("CENTER", square, "CENTER", 0, 0)
+	-- A page has the small square the list of steps always had.
 	local box = kit.Fill(frame, "ARTWORK")
 	box:SetSize(8, 8)
 	box:SetPoint("LEFT", frame, "LEFT", 14, 0)
 	local inner = kit.Fill(frame, "OVERLAY")
 	inner:SetSize(6, 6)
 	inner:SetPoint("CENTER", box, "CENTER", 0, 0)
-	local text = kit.Label(frame, "GameFontHighlight", "LEFT", kit.LEFT - 50)
-	text:SetPoint("LEFT", frame, "LEFT", 30, 0)
-	line = { frame = frame, fill = fill, mark = mark, box = box, inner = inner, text = text }
+	-- Every setting has a chevron of four short bars: pointing down while it is open, right while it is shut.
+	local chevron = {}
+	for bar = 1, 4 do
+		chevron[bar] = kit.Fill(frame, "ARTWORK")
+	end
+	line = {
+		frame = frame,
+		digit = kit.Label(frame, "GameFontHighlightSmall", "CENTER", 16),
+		text = kit.Label(frame, "GameFontHighlight", "LEFT", kit.LEFT - 50),
+		head = kit.Tint(kit.Label(frame, "GameFontHighlightSmall", "LEFT", kit.LEFT - 50), "text-faint"),
+		summary = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", 160)),
+	}
+	line.digit:SetPoint("CENTER", square, "CENTER", 0, 0)
+	line.summary:SetPoint("TOPLEFT", frame, "TOPLEFT", 36, -20)
 	local function Paint()
+		local kind = line.kind
 		fill:SetShown(line.current == true or line.hover == true)
 		kit.Solid(fill, line.current and 0.1 or 0.06)
 		mark:SetShown(line.current == true)
 		mark:SetColorTexture(kit.Accent())
-		kit.Solid(box, "line-strong", line.area and 0 or 1)
-		kit.Solid(inner, line.seen and "text-faint" or "stage", line.area and 0 or 1)
+		square:SetShown(kind == "stop")
+		inside:SetShown(kind == "stop")
+		line.digit:SetShown(kind == "stop")
+		kit.Solid(square, "line-strong")
+		kit.Solid(inside, line.seen and "line-strong" or "stage")
+		line.digit:SetTextColor(kit.Shade(line.seen and "text" or "text-dim"))
+		box:SetShown(kind == "step")
+		inner:SetShown(kind == "step")
+		kit.Solid(box, "line-strong")
+		kit.Solid(inner, "stage")
+		for bar, texture in ipairs(chevron) do
+			texture:SetShown(kind == "every")
+			texture:ClearAllPoints()
+			if S.everyOpen then
+				texture:SetSize(10 - 2 * bar, 1.5)
+				texture:SetPoint("TOP", frame, "TOPRIGHT", -20, -(9 + (bar - 1) * 1.5))
+			else
+				texture:SetSize(1.5, 10 - 2 * bar)
+				texture:SetPoint("LEFT", frame, "TOPRIGHT", -24 + (bar - 1) * 1.5, -12)
+			end
+			texture:SetColorTexture(kit.Shade("text-dim"))
+		end
 		if line.current then
-			text:SetTextColor(kit.Accent())
-		elseif line.area or line.skipped then
-			text:SetTextColor(kit.Shade("text-faint"))
+			line.text:SetTextColor(kit.Accent())
 		else
-			text:SetTextColor(kit.Shade("text"))
+			line.text:SetTextColor(kit.Shade("text"))
 		end
 	end
 	line.Paint = Paint
 	kit.Painted(Paint)
 	frame:SetScript("OnEnter", function()
-		line.hover = line.number ~= nil
+		line.hover = line.kind ~= nil and line.kind ~= "area"
 		Paint()
 	end)
 	frame:SetScript("OnLeave", function()
@@ -796,599 +1130,249 @@ function S.ListLine(index)
 		Paint()
 	end)
 	kit.Clickable(frame, function()
-		if line.number ~= nil and line.number ~= S.cur then
-			if line.number > 0 and S.cur == 0 and not S.NameCheck() then
-				kit.Say(select(2, S.NameCheck()))
-				return
-			end
-			S.Go(line.number)
-		end
+		S.PickLine(line)
 	end)
 	S.lines[index] = line
 	return line
 end
 
+-- A click on a line of the list. The line of the screen shown does nothing.
+function S.PickLine(line)
+	local kind = line.kind
+	if kind == "every" then
+		S.everyOpen = not S.everyOpen
+		S.LayoutList()
+	elseif kind == "ready" then
+		if type(ns.OpenProfiles) == "function" then
+			Reported(pcall(ns.OpenProfiles))
+		end
+	elseif line.key == nil or line.key == S.KeyOf(S.screen) then
+		return
+	elseif kind == "stop" then
+		S.Go({ kind = "stop", id = line.id })
+	elseif kind == "yours" then
+		S.Go({ kind = "yours" })
+	elseif kind == "step" then
+		S.Go(S.PageOf(line.number))
+	end
+end
+
+-- Lays the list out, then keeps the current line in view: when it is not, the list scrolls so that it is three lines from the top.
 function S.LayoutList()
-	local y = 4
-	local entries = S.Entries()
-	for index, entry in ipairs(entries) do
-		local line = S.ListLine(index)
-		line.area, line.number = entry.area ~= nil, entry.number
-		line.current = not S.done and entry.number ~= nil and entry.number == S.cur
-		line.seen = entry.number ~= nil and S.draft ~= nil and S.draft.seen[entry.number] == true
-		line.skipped = entry.area ~= nil and S.skipped[entry.area] == true
-		line.text:ClearAllPoints()
-		line.text:SetPoint("LEFT", line.frame, "LEFT", entry.area and 12 or 30, 0)
-		line.text:SetFontObject(entry.area and "GameFontHighlightSmall" or "GameFontHighlight")
-		line.text:SetText(entry.area or entry.text)
-		line.frame:SetHeight(entry.area and 20 or 22)
-		line.frame:ClearAllPoints()
-		line.frame:SetPoint("TOPLEFT", S.listScroller.child, "TOPLEFT", 0, -y)
-		line.Paint()
-		line.frame:Show()
-		y = y + (entry.area and 20 or 22)
-	end
-	for index = #entries + 1, #S.lines do
-		S.lines[index].frame:Hide()
-	end
-	S.listScroller.SetContent(y + 8)
-end
-
--- The drawing of a screen: the ready-made profiles on New profile, the look of the profile being made on Review and after Finish.
-function S.DrawingOf(number)
-	if number >= 1 and number < S.REVIEW then
-		return STEPS[number].draw
-	end
-	return number == 0 and "mock-profiles" or "mock-profile"
-end
-
-function S.Redraw()
-	if not (S.draft or S.done) then
+	local scroller = S.listScroller
+	if not scroller then
 		return
 	end
-	local id = S.done and "mock-profile" or S.DrawingOf(S.cur)
-	local marks = ns.SetupDraw.cardMarks
-	if id == "mock-profiles" then
-		if not S.pick then
-			S.pick = S.Recommend()
+	S.LayoutMap()
+	local entries = S.Entries()
+	local current = S.CurrentKey()
+	local tops, at = {}, nil
+	local y = 4
+	for index, entry in ipairs(entries) do
+		y = y + (entry.gap or 0)
+		local line = S.ListLine(index)
+		local kind = entry.kind
+		line.kind, line.key, line.id, line.number = kind, entry.key, entry.id, entry.number
+		line.text:SetShown(kind ~= "area")
+		line.head:SetShown(kind == "area")
+		local label = kind == "area" and line.head or line.text
+		label:SetText(entry.text)
+		label:ClearAllPoints()
+		if kind == "stop" then
+			label:SetPoint("TOPLEFT", line.frame, "TOPLEFT", 36, -4)
+		else
+			label:SetPoint("LEFT", line.frame, "LEFT", kind == "step" and 30 or 12, 0)
 		end
-		marks.selected, marks.tag = S.SelectedPreset(), S.pick
+		line.summary:SetShown(kind == "stop")
+		line.digit:SetText(entry.number and kind == "stop" and tostring(entry.number) or "")
+		line.frame:SetHeight(LINE_H[kind])
+		line.frame:ClearAllPoints()
+		line.frame:SetPoint("TOPLEFT", scroller.child, "TOPLEFT", 0, -y)
+		line.frame:Show()
+		tops[index] = y
+		if entry.key ~= nil and entry.key == current then
+			at = index
+		end
+		y = y + LINE_H[kind]
 	end
-	ns.SetupDraw.Show(id)
-	S.Under(S.view, ns.SetupDraw.Paint)
-	S.marked = id == "mock-profiles" and (tostring(marks.selected) .. "," .. tostring(marks.tag)) or nil
+	for index = #entries + 1, #S.lines do
+		local line = S.lines[index]
+		line.frame:Hide()
+		line.kind, line.key, line.hover = nil, nil, false
+	end
+	scroller.SetContent(y + 8)
+	if at and (tops[at] < scroller.offset or tops[at] + LINE_H[entries[at].kind] > scroller.offset + scroller.height) then
+		scroller.Scroll(tops[math.max(1, at - 3)] - 4)
+	end
+	S.ReadList(true)
 end
 
--- Buttons ----------------------------------------------------------------------------------------------
-
--- The text of the Next button on New profile: Use Healer for a ready-made profile, Copy Mira for a saved one.
-function S.UseText()
-	local draft = S.draft
-	if draft and draft.from and not S.PresetOf(S.SelectedPreset()) then
-		return "Copy " .. S.Short(draft.from)
+-- Reads the list and the map again: the current line, the stops seen, the stops the draft changed and, after a change of the draft or of the
+-- profile in use, what each stop has picked. A line is painted again when one of these changed, or every line with `force` (after a layout).
+function S.ReadList(force)
+	local current = S.CurrentKey()
+	local seen = S.draft and S.draft.seen or {}
+	local stamp = S.version .. "|" .. tostring(ns.Profile())
+	local summed = force or S.summed ~= stamp
+	S.summed = stamp
+	for _, line in ipairs(S.lines) do
+		if line.kind then
+			local now, saw = line.key ~= nil and line.key == current, line.kind == "stop" and seen[line.id] == true
+			if force or now ~= line.current or saw ~= line.seen then
+				line.current, line.seen = now, saw
+				line.Paint()
+			end
+			if summed and line.kind == "stop" then
+				local summary = S.Walk("Summary", line.id)
+				line.summary:SetText(IsText(summary) and summary or "")
+			end
+		end
 	end
-	return "Use " .. S.Short(S.StartName())
+	S.ReadMap(force)
 end
 
+-- The screen map: the screen drawn small, with a box for each stop where that part of the screen is, numbered as the list is. The box of the stop
+-- shown is in the accent, a stop the draft changed has a dot, and a click on a box opens its stop.
+function S.BuildMap(left)
+	local map = kit.Frame(left)
+	map:SetSize(MAP_W, MAP_H)
+	map:SetPoint("TOPLEFT", left, "TOPLEFT", 12, -10)
+	local edge = kit.Fill(map, "BACKGROUND")
+	edge:SetAllPoints(map)
+	local floor = kit.Fill(map, "BORDER")
+	floor:SetPoint("TOPLEFT", map, "TOPLEFT", 1, -1)
+	floor:SetPoint("BOTTOMRIGHT", map, "BOTTOMRIGHT", -1, 1)
+	kit.Painted(function()
+		kit.Solid(edge, "line")
+		kit.Solid(floor, "stage")
+	end)
+	S.map = map
+end
+
+-- A box of the map, made the first time it is needed.
+function S.MapBox(index)
+	local box = S.boxes[index]
+	if box then
+		return box
+	end
+	local frame = kit.Frame(S.map)
+	local edge = kit.Fill(frame, "BORDER")
+	edge:SetAllPoints(frame)
+	local fill = kit.Fill(frame, "ARTWORK")
+	fill:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+	fill:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+	local dot = kit.Fill(frame, "OVERLAY")
+	dot:SetSize(4, 4)
+	dot:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+	box = { frame = frame, digit = kit.Label(frame, "GameFontHighlightSmall", "CENTER") }
+	box.digit:SetPoint("CENTER", frame, "CENTER", 0, 0)
+	function box.Paint()
+		kit.Solid(edge, "line")
+		kit.Solid(fill, box.current and "accent" or "raised")
+		box.digit:SetTextColor(kit.Shade(box.current and "on-accent" or "text"))
+		dot:SetShown(box.changed == true)
+		-- On the box in the accent the dot takes the colour of text on the accent, so that it still shows.
+		kit.Solid(dot, box.current and "on-accent" or "accent")
+	end
+	kit.Painted(box.Paint)
+	kit.Clickable(frame, function()
+		if box.id and S.KeyOf(S.screen) ~= "stop:" .. box.id then
+			S.Go({ kind = "stop", id = box.id })
+		end
+	end)
+	S.boxes[index] = box
+	return box
+end
+
+-- Places a box for each stop that has a spot: left, top, width and height as shares of the screen.
+function S.LayoutMap()
+	if not S.map then
+		return
+	end
+	local used = 0
+	for index, stop in ipairs(S.Stops()) do
+		local spot = stop.spot
+		if type(spot) == "table" and Number(spot[1]) and Number(spot[2]) and Number(spot[3]) and Number(spot[4]) then
+			used = used + 1
+			local box = S.MapBox(used)
+			box.id = stop.id
+			box.frame:ClearAllPoints()
+			box.frame:SetPoint("TOPLEFT", S.map, "TOPLEFT", spot[1] * MAP_W, -spot[2] * MAP_H)
+			box.frame:SetSize(math.max(4, spot[3] * MAP_W), math.max(4, spot[4] * MAP_H))
+			box.digit:SetText(tostring(index))
+			box.frame:Show()
+		end
+	end
+	for index = used + 1, #S.boxes do
+		S.boxes[index].id = nil
+		S.boxes[index].frame:Hide()
+	end
+end
+
+-- Reads the boxes of the map again: the stop shown (or the stop a page came from) and the stops the draft changed. A box is painted again when one
+-- of these changed, or every box with `force`.
+function S.ReadMap(force)
+	local screen = S.screen
+	if screen and screen.kind == "page" then
+		screen = screen.back
+	end
+	for _, box in ipairs(S.boxes) do
+		if box.id then
+			local now, changed = screen ~= nil and screen.kind == "stop" and screen.id == box.id, S.Walk("Changed", box.id) == true
+			if force or now ~= box.current or changed ~= box.changed then
+				box.current, box.changed = now, changed
+				box.Paint()
+			end
+		end
+	end
+end
+
+-- The bar and the page drawing ------------------------------------------------------------------------
+
+-- The bar: Back at the left; at the right the primary button and up to two more, relabelled for the screen shown. On a stop Next, Skip the rest
+-- (not on the last) and More settings (when the stop has pages); on Your screen Finish (dim in combat, or while the name is refused and the draft has
+-- something to save: with nothing chosen Finish only closes) and Start over; on a page Next and Done.
 function S.Buttons()
-	local number, done = S.cur, S.done
-	local review = number == S.REVIEW
-	local start = number == 0
-	S.back:SetShown(not done and number > 0)
-	S.skip:SetShown(not done)
-	S.skip:ClearAllPoints()
-	S.skip:SetPoint("RIGHT", review and S.next or S.keep, "LEFT", -8, 0)
-	S.skipText:SetText((start or review) and "Every step" or "Skip this area")
-	S.keep:SetShown(not done and not review)
-	S.next:SetShown(not done)
-	S.nextText:SetText(review and "Finish" or (start and S.UseText() or "Next"))
-	if start then
-		S.keepText:SetText("Review")
-	else
-		local name = S.StartName()
-		local plain = name == "Standard" or name == "Defaults"
-		S.keepText:SetText(plain and "Keep the defaults for the rest" or ("Keep the rest from %s"):format(name))
+	local screen = S.screen
+	if not screen or not S.next then
+		return
 	end
-	local blocked = ((start or review) and InCombatLockdown()) or (start and not S.NameCheck())
+	local back, primary, first, second
+	if screen.kind == "stop" then
+		local at = S.StopIndex(screen.id) or 1
+		back, primary = at > 1, "Next"
+		first = at < #S.Stops() and "Skip the rest" or nil
+		second = #S.Pages(S.Stop(screen.id)) > 0 and "More settings" or nil
+	elseif screen.kind == "yours" then
+		back, primary, first = #S.Stops() > 0, "Finish", "Start over"
+	else
+		back, primary, first = true, "Next", "Done"
+	end
+	S.back:SetShown(back)
+	S.nextText:SetText(primary)
+	S.mid1:SetShown(first ~= nil)
+	S.mid1Text:SetText(first or "")
+	S.mid2:SetShown(second ~= nil)
+	S.mid2Text:SetText(second or "")
+	S.mid2:ClearAllPoints()
+	S.mid2:SetPoint("RIGHT", first and S.mid1 or S.next, "LEFT", -8, 0)
+	local blocked = screen.kind == "yours" and (InCombatLockdown() or (S.SavesNew() and S.Has(S.draft) and not S.NameCheck()))
 	S.next:SetAlpha(blocked and 0.4 or 1)
 end
 
--- Checks the name on New profile; says why when it fails. True when the name is good or the screen is not New profile.
-function S.NameGood()
-	if S.cur == 0 and not S.NameCheck() then
-		kit.Say(select(2, S.NameCheck()))
-		return false
-	end
-	return true
-end
-
-function S.OnNext()
-	if S.cur == S.REVIEW then
-		S.Finish()
-	elseif S.cur == 0 then
-		if S.NameGood() then
-			-- In combat Finish says so and the tile is not written into the draft.
-			if not InCombatLockdown() then
-				S.Commit()
-			end
-			S.Finish()
-		end
-	else
-		S.Go(S.NextStep())
+-- Paints the drawing of the page shown, under the draft. SetupWalk.lua paints the cards of a stop and the pictures of Your screen.
+function S.Redraw()
+	local screen = S.screen
+	if S.draft and screen and screen.kind == "page" then
+		ns.SetupDraw.Show(STEPS[screen.number].draw)
+		S.Under(S.view, ns.SetupDraw.Paint)
 	end
 end
 
-function S.OnSkip()
-	if S.cur == 0 or S.cur == S.REVIEW then
-		if S.NameGood() then
-			S.Commit()
-			S.Go(S.NextStep(0))
-		end
-	elseif S.cur >= 1 then
-		S.skipped[STEPS[S.cur].area] = true
-		S.Go(S.SkipStep())
-	end
-end
-
-function S.OnKeep()
-	if S.NameGood() then
-		S.Go(S.REVIEW)
-	end
-end
-
--- The start screen -----------------------------------------------------------------------------------
-
-local function Profiles()
-	local lines = {}
-	local current = ns.Profile()
-	for _, name in ipairs(ns.Profiles()) do
-		lines[#lines + 1] = { name, name == current and (name .. " (in use)") or name }
-	end
-	return lines
-end
-
--- A saved profile picked in Start from: the ready-made profile is no longer the start, and a name the window filled goes back to the character's.
-function S.PickSaved(name)
-	local draft = S.draft
-	if draft and IsText(name) then
-		local filled = S.Filled(draft.name, draft.preset)
-		draft.from, draft.preset = name, nil
-		if filled then
-			draft.name = S.DefaultName()
-		end
-		S.Prune()
-		S.dirty = true
-		S.Sync()
-		kit.Refresh()
-	end
-end
-
--- A click on a tile of New profile: the ready-made profile is the start. Choices made keep, except those it already has. A name the window filled
--- becomes the tile's name; a name the player typed stays.
-function S.PickCard(id)
-	local draft, profile = S.draft, S.PresetOf(id)
-	if not draft or S.cur ~= 0 or not profile then
-		return
-	end
-	local filled = S.Filled(draft.name, draft.preset)
-	draft.preset, draft.from = id, nil
-	if filled then
-		draft.name = S.FreeName(profile.label)
-	end
-	S.Prune()
-	S.dirty = true
-	S.Sync()
-	kit.Refresh()
-end
-
-function S.BuildStart()
-	local scroller = kit.Scroller(S.right, kit.RIGHT_W, BODY_H)
-	scroller.frame:SetPoint("TOPLEFT", S.right, "TOPLEFT", 0, -BODY_Y)
-	scroller.frame:Hide()
-	local child = scroller.child
-	local view = { scroller = scroller, rows = {} }
-
-	view.unfinished = kit.Label(child, "GameFontHighlight", "LEFT", kit.ROW_W)
-	view.again = kit.Button(child, "Continue", 90, function()
-		S.Go(S.draft.at)
-	end)
-	view.reset = kit.Button(child, "Start over", 110, function()
-		S.Reset()
-	end)
-
-	view.name = kit.NewRow(child, 8, "Profile name")
-	local box = kit.Field(view.name.frame, kit.FIELD, 40)
-	box:SetPoint("LEFT", view.name.frame, "LEFT", kit.CONTROL, 0)
-	box:SetScript("OnEnterPressed", function(self)
-		self:ClearFocus()
-	end)
-	box:SetScript("OnTextChanged", function(self)
-		if not S.quiet and S.draft then
-			local typed = self:GetText()
-			S.draft.name = IsText(typed) and typed or ""
-			S.NameLine()
-			S.Buttons()
-		end
-	end)
-	view.name.Hover(box)
-	view.box = box
-	view.bad = kit.Label(view.name.frame, "GameFontHighlightSmall", "LEFT", 100, true)
-	view.bad:SetPoint("LEFT", view.name.frame, "LEFT", kit.CONTROL + kit.FIELD + 10, 0)
-	kit.Painted(function()
-		view.bad:SetTextColor(kit.Shade("danger"))
-	end)
-
-	view.from = kit.NewRow(child, 8, "Start from")
-	view.fromMenu = kit.Dropdown(view.from, kit.FIELD, {
-		lines = Profiles,
-		selected = function()
-			return S.draft and S.draft.from or nil
-		end,
-		pick = function(value)
-			S.PickSaved(value)
-		end,
-	})
-	view.fromMenu.frame:SetPoint("LEFT", view.from.frame, "LEFT", kit.CONTROL, 0)
-	view.line = kit.Label(child, "GameFontHighlight", "LEFT", kit.ROW_W)
-
-	local _, header = kit.Header(child, "Setup", 8)
-	view.header = header
-	local defs = S.Defs()
-	for _, path in ipairs({ "setup.newCharacter", "setup.welcomeLayout", "setup.welcomeWhen", "setup.welcomeSkip", "setup.welcomeSize", "setup.welcomeTick", "setup.choices", "setup.say" }) do
-		local def = defs[path]
-		local row = def and kit.BuildRow(child, S.pageOf[def], def, 8)
-		if row then
-			view.rows[#view.rows + 1] = row
-		end
-	end
-	S.start = view
-	return view
-end
-
-function S.NameLine()
-	local _, why = S.NameCheck()
-	S.start.bad:SetText(why or "")
-end
-
-function S.LayoutStart()
-	local view = S.start
-	local draft = S.draft
-	local y = 8
-	local progress = draft.at ~= nil
-	view.unfinished:SetShown(progress)
-	view.again:SetShown(progress)
-	view.reset:SetShown(progress)
-	if progress then
-		local where = draft.at == S.REVIEW and "at Review" or ("step %d of %d"):format(S.position[draft.at] or 0, S.total)
-		view.unfinished:SetText(("Unfinished setup: %s, %s."):format(draft.name, where))
-		view.unfinished:ClearAllPoints()
-		view.unfinished:SetPoint("TOPLEFT", view.scroller.child, "TOPLEFT", kit.PAD, -(y + 6))
-		view.again:ClearAllPoints()
-		view.again:SetPoint("TOPLEFT", view.scroller.child, "TOPLEFT", kit.PAD, -(y + 32))
-		view.reset:ClearAllPoints()
-		view.reset:SetPoint("TOPLEFT", view.scroller.child, "TOPLEFT", kit.PAD + 100, -(y + 32))
-		y = y + 66
-	end
-	local profile = S.PresetOf(S.SelectedPreset())
-	view.shown = profile ~= nil
-	view.line:SetShown(profile ~= nil)
-	if profile then
-		view.line:SetText(profile.line)
-		view.line:ClearAllPoints()
-		view.line:SetPoint("TOPLEFT", view.scroller.child, "TOPLEFT", kit.PAD, -(y + 6))
-		y = y + 28
-	end
-	view.name.Place(y)
-	y = y + kit.ROW
-	view.from.Place(y)
-	y = y + kit.ROW
-	view.header.Place(y + 6)
-	y = y + kit.SECTION + 6
-	for _, row in ipairs(view.rows) do
-		row.Place(y)
-		y = y + kit.ROW
-	end
-	view.scroller.SetContent(y + kit.PAD)
-	view.progress = progress
-end
-
-function S.UpdateStart()
-	local view = S.start
-	local draft = S.draft
-	if draft.from and not (ns.Account().profiles or {})[draft.from] then
-		draft.from = nil
-		S.Sync()
-	end
-	if (draft.at ~= nil) ~= view.progress or (S.PresetOf(S.SelectedPreset()) ~= nil) ~= view.shown then
-		S.LayoutStart()
-	end
-	local profile = S.PresetOf(S.SelectedPreset())
-	if profile and view.line:GetText() ~= profile.line then
-		view.line:SetText(profile.line)
-	end
-	if not view.box:HasFocus() then
-		local text = view.box:GetText()
-		if text ~= draft.name then
-			S.quiet = true
-			view.box:SetText(draft.name)
-			S.quiet = false
-		end
-	end
-	S.NameLine()
-	view.fromMenu.SetText(profile and profile.label or draft.from or "Defaults")
-	if S.marked ~= (tostring(S.SelectedPreset()) .. "," .. tostring(S.pick)) then
-		S.dirty = true
-	end
-	for _, row in ipairs(view.rows) do
-		row.Update()
-	end
-end
-
--- Discards every choice and starts again.
-function S.Reset()
-	S.Drop()
-	S.draft = S.Fresh()
-	S.pick = nil
-	S.hist, S.skipped = {}, {}
-	S.cur = 0
-	S.dirty = true
-	S.Show()
-end
-
--- Review ---------------------------------------------------------------------------------------------
-
-function S.ValueText(item, value)
-	if item.kind == "bool" then
-		return value and "On" or "Off"
-	elseif item.kind == "number" then
-		return ("%g%s"):format(value, item.unit or "")
-	elseif item.kind == "colour" then
-		return "#" .. value:sub(3):upper()
-	end
-	for _, choice in ipairs(ns.Choices(item)) do
-		if choice[1] == value then
-			return choice[2]
-		end
-	end
-	return tostring(value)
-end
-
-function S.BuildReview()
-	local scroller = kit.Scroller(S.right, kit.RIGHT_W, BODY_H)
-	scroller.frame:SetPoint("TOPLEFT", S.right, "TOPLEFT", 0, -BODY_Y)
-	scroller.frame:Hide()
-	S.reviewView = { scroller = scroller, heads = {}, items = {}, notes = {} }
-	return S.reviewView
-end
-
--- A group title, a change line (the label, with Undo) or a plain line of the review, made when it is first needed.
-function S.ReviewPart(kind, index)
-	local view = S.reviewView
-	local pool = view[kind]
-	local part = pool[index]
-	if part then
-		return part
-	end
-	local child = view.scroller.child
-	if kind == "heads" then
-		local text = kit.Dim(kit.Label(child, "GameFontHighlightSmall", "LEFT", kit.ROW_W))
-		part = { text = text }
-		function part.Place(top)
-			text:ClearAllPoints()
-			text:SetPoint("TOPLEFT", child, "TOPLEFT", kit.PAD, -top)
-		end
-		function part.Show(shown)
-			text:SetShown(shown)
-		end
-	elseif kind == "notes" then
-		local text = kit.Label(child, "GameFontHighlight", "LEFT", kit.ROW_W, true)
-		part = { text = text }
-		function part.Place(top)
-			text:ClearAllPoints()
-			text:SetPoint("TOPLEFT", child, "TOPLEFT", kit.PAD, -top)
-		end
-		function part.Show(shown)
-			text:SetShown(shown)
-		end
-	else
-		local frame = kit.Frame(child)
-		frame:SetSize(kit.ROW_W, 26)
-		local open = kit.Frame(frame)
-		open:SetSize(440, 26)
-		open:SetPoint("LEFT", frame, "LEFT", 0, 0)
-		local text = kit.Label(open, "GameFontHighlight", "LEFT", 330)
-		text:SetPoint("LEFT", open, "LEFT", 0, 0)
-		local swatch = kit.Fill(open, "ARTWORK")
-		swatch:SetSize(14, 14)
-		swatch:SetPoint("LEFT", open, "LEFT", 340, 0)
-		part = { frame = frame, text = text, swatch = swatch }
-		kit.Clickable(open, function()
-			if part.step then
-				S.Go(part.step)
-			end
-		end)
-		local undo = kit.Button(frame, "Undo", 70, function()
-			if part.path then
-				S.Undo(part.path, part.toDefault)
-			end
-		end)
-		undo:SetPoint("LEFT", frame, "LEFT", 450, 0)
-		function part.Place(top)
-			frame:ClearAllPoints()
-			frame:SetPoint("TOPLEFT", child, "TOPLEFT", kit.PAD, -top)
-		end
-		function part.Show(shown)
-			frame:SetShown(shown)
-		end
-	end
-	pool[index] = part
-	return part
-end
-
--- Undo on a change goes back to what the start has. Undo on a line of Set by writes the setting's default, which differs from the start, so the draft
--- keeps it and the line moves to the changes.
-function S.Undo(path, toDefault)
-	if S.draft then
-		if toDefault then
-			local def = S.Defs()[path]
-			if def then
-				S.Set(path, def.default)
-			end
-		else
-			S.draft.values[path] = nil
-			S.dirty = true
-			S.Sync()
-		end
-		S.LayoutReview()
-	end
-end
-
--- The values of the ready-made profile the draft starts from that the draft does not override, in step order: { path, step, tier, value }. Empty for
--- Standard and for a saved profile.
-function S.SetBy()
-	local list = {}
-	local draft, profile = S.draft, S.draft and S.draft.preset and S.PresetOf(S.draft.preset)
-	if not profile then
-		return list
-	end
-	for path, value in pairs(profile.values) do
-		if draft.values[path] == nil then
-			local place = S.where[path]
-			list[#list + 1] = { path = path, step = place and place.step or 0, index = place and place.index or 0, value = value }
-		end
-	end
-	table.sort(list, function(a, b)
-		if a.step ~= b.step then
-			return a.step < b.step
-		elseif a.index ~= b.index then
-			return a.index < b.index
-		end
-		return a.path < b.path
-	end)
-	return list
-end
-
--- How many lines Review lists: the values the start sets and the changes made over it.
-function S.ReviewCount()
-	return #S.SetBy() + #S.Changes()
-end
-
-function S.LayoutReview()
-	local view = S.reviewView
-	local y = 8
-	local heads, items, notes = 0, 0, 0
-	local function Head(text)
-		heads = heads + 1
-		local head = S.ReviewPart("heads", heads)
-		head.text:SetText(text)
-		head.Place(y + 6)
-		head.Show(true)
-		y = y + 28
-	end
-	-- One line: the label and the value, with Undo. A line of Set by has Undo write the default.
-	local function Line(change, def, toDefault)
-		items = items + 1
-		local line = S.ReviewPart("items", items)
-		line.path, line.step, line.toDefault = change.path, change.step, toDefault
-		line.text:SetText(("%s: %s"):format(def.label, S.ValueText(def, change.value)))
-		if def.kind == "colour" then
-			local r, g, b = tonumber(change.value:sub(3, 4), 16) / 255, tonumber(change.value:sub(5, 6), 16) / 255, tonumber(change.value:sub(7, 8), 16) / 255
-			line.swatch:SetColorTexture(r, g, b, 1)
-			line.swatch:Show()
-		else
-			line.swatch:Hide()
-		end
-		line.Place(y)
-		line.Show(true)
-		y = y + 28
-	end
-	local setBy = S.SetBy()
-	if #setBy > 0 then
-		Head("Set by " .. S.StartName())
-		for _, change in ipairs(setBy) do
-			local def = S.Defs()[change.path]
-			if def then
-				Line(change, def, true)
-			end
-		end
-	end
-	local last
-	for _, change in ipairs(S.Changes()) do
-		local def = S.Defs()[change.path]
-		if def then
-			local step = STEPS[change.step]
-			if step and step.title ~= last then
-				last = step.title
-				Head(step.title)
-			end
-			Line(change, def, false)
-		end
-	end
-	local reload = S.ReloadLines()
-	if #reload > 0 then
-		Head("Reload")
-		for _, entry in ipairs(reload) do
-			notes = notes + 1
-			local note = S.ReviewPart("notes", notes)
-			note.text:SetText(S.ReloadText(entry))
-			note.Place(y)
-			note.Show(true)
-			y = y + 20
-		end
-	end
-	for index = heads + 1, #view.heads do
-		view.heads[index].Show(false)
-	end
-	for index = items + 1, #view.items do
-		view.items[index].Show(false)
-	end
-	for index = notes + 1, #view.notes do
-		view.notes[index].Show(false)
-	end
-	view.scroller.SetContent(y + kit.PAD)
-	view.count = S.ReviewCount()
-	S.sub:SetText(S.ReviewSubtitle())
-end
-
--- The lines under the title of Review: the profile and where it starts, then the settings the start sets and the changes made over it.
-function S.ReviewSubtitle()
-	local changes, set = #S.Changes(), #S.SetBy()
-	local name = IsText(S.draft.name) and S.draft.name:match("^%s*(.-)%s*$") or ""
-	local start = S.StartName()
-	local parts = {}
-	if set > 0 then
-		parts[#parts + 1] = ("%d %s from %s"):format(set, set == 1 and "setting" or "settings", start)
-	end
-	if changes > 0 then
-		parts[#parts + 1] = changes == 1 and "1 change" or ("%d changes"):format(changes)
-	end
-	return ("|cffffffff%s|r, from |cffffffff%s|r.\n%s"):format(name ~= "" and name or "Profile", start,
-		#parts == 0 and "No changes." or (table.concat(parts, ", ") .. "."))
-end
-
--- Finish and the screen after it ----------------------------------------------------------------------
+-- Finish -----------------------------------------------------------------------------------------------
 
 local function Count(number, one, many)
 	return ("%d %s"):format(number, number == 1 and one or many)
-end
-
--- The settings the draft chooses, and the settings the new profile takes from its start (a ready-made or saved profile) that the draft leaves alone.
--- Only saved settings count from the start: the game and the functions hold the others.
-function S.Counts()
-	local draft = S.draft
-	local defs = S.Defs()
-	local chosen, fromStart = 0, 0
-	for _ in pairs(draft.values) do
-		chosen = chosen + 1
-	end
-	local start = S.StartProfile()
-	for path in pairs(start and start.options or {}) do
-		local def = defs[path]
-		if def and not ns.RowUnsaved(def) and draft.values[path] == nil then
-			fromStart = fromStart + 1
-		end
-	end
-	return chosen, fromStart
 end
 
 -- The counts of a result in one clause: "16 settings, 2 game settings, 1 kept by the game".
@@ -1403,34 +1387,8 @@ function S.Totals(result)
 	return table.concat(parts, ", ")
 end
 
--- The lines of the Finish screen: the counts, the game settings, each one the game kept, the problems of the queued actions, each reload need.
-function S.ReportLines(finished)
-	local result = finished.result
-	local texts = {}
-	if result.settings == 0 then
-		texts[1] = ("%s: no settings chosen."):format(result.name)
-	elseif result.settings == result.chosen then
-		texts[1] = ("%s: %s chosen here."):format(result.name, Count(result.chosen, "setting", "settings"))
-	else
-		texts[1] = ("%s: %s. %d chosen here, %d from %s."):format(result.name, Count(result.settings, "setting", "settings"), result.chosen, result.settings - result.chosen,
-			tostring(result.start))
-	end
-	if result.game > 0 then
-		texts[#texts + 1] = #result.kept > 0 and ("Game settings: %d set, %d kept by the game."):format(result.game, #result.kept) or ("Game settings: %d set."):format(result.game)
-	end
-	for _, text in ipairs(result.kept) do
-		texts[#texts + 1] = ("Kept by the game: %s."):format(text)
-	end
-	for _, text in ipairs(finished.problems) do
-		texts[#texts + 1] = text
-	end
-	for _, entry in ipairs(finished.reloadLines or {}) do
-		texts[#texts + 1] = S.ReloadText(entry)
-	end
-	return texts
-end
-
--- The line of /flatui status for the last setup of this character, while its profile exists. Core.lua adds it.
+-- The lines of /flatui status for the last setup of this character, while its profile exists. Core.lua adds them. A result of 0.5.11 has the same
+-- fields and reads the same.
 function ns.SetupStatus()
 	local character = ns.Character()
 	local result = type(character) == "table" and character.setupResult
@@ -1444,7 +1402,7 @@ function ns.SetupStatus()
 	if not found then
 		return {}
 	end
-	local lines = { ("Setup: %s%s. %s."):format(result.name, IsText(result.start) and (" from " .. result.start) or "", S.Totals(result)) }
+	local lines = { ("Setup: %s, %s."):format(result.name, S.Totals(result)) }
 	local defs = S.Defs()
 	for index, text in ipairs(result.kept) do
 		-- The setting is read again: a line whose setting now holds the pick is left out. A value that cannot be read keeps its line.
@@ -1458,48 +1416,54 @@ function ns.SetupStatus()
 	return lines
 end
 
--- Makes the profile. Out of combat only: the profile calls refuse in combat, and so does this.
+-- Saves the draft: into the profile in use in one call, or into a new profile of the character's own, a copy of the profile in use with the draft
+-- over it, while it is on Default or Save as a new profile is ticked. Then the rows the game holds are written and read back, the queued picks run,
+-- the flag and the result are kept, one line goes to chat, and the window closes so that the real screen shows the change, with the after card
+-- (SetupWelcome.lua) over it. Out of combat only: the profile calls refuse in combat, and so does this.
 function S.Finish()
 	local draft = S.draft
 	if not draft then
 		return
-	end
-	if InCombatLockdown() then
+	elseif InCombatLockdown() then
 		kit.Say(COMBAT_LINE)
 		return
-	end
-	local name, why = S.NameCheck()
-	if not name then
-		S.Go(0)
-		kit.Say(why)
-		S.start.box:SetFocus()
+	elseif not S.Has(draft) then
+		S.Flag()
+		if ns.Get("setup.say") == "line" then
+			print("Flat UI: nothing changed.")
+		end
+		S.Drop()
+		kit.Hide()
 		return
+	end
+	local new = S.SavesNew()
+	local name, why
+	if new then
+		name, why = S.NameCheck()
+		if not name then
+			kit.Say(why)
+			S.Walk("FocusName")
+			return
+		end
 	end
 	local reloadLines = S.ReloadLines()
-	local reload = #reloadLines > 0
-	local chosen, fromStart = S.Counts()
-	local profile = draft.preset and S.PresetOf(draft.preset)
-	-- The start is the ready-made profile or the saved profile the draft came from, whatever the name text says.
-	local start = profile and profile.label or draft.from
-	local picks = draft.values
-	if profile then
-		-- A ready-made profile is the start: its values with the draft's over them, in a table of their own.
-		picks = {}
-		for path, value in pairs(profile.values) do
-			picks[path] = value
-		end
-		for path, value in pairs(draft.values) do
-			picks[path] = value
-		end
+	local picks, settings = {}, 0
+	for path, value in pairs(draft.values) do
+		picks[path] = value
+		settings = settings + 1
 	end
-	local ok, message = ns.NewProfile(name, draft.from, picks, profile and profile.movers)
+	local ok, message
+	if new then
+		ok, message = ns.NewProfile(name, ns.Profile(), picks)
+	else
+		name = ns.Profile()
+		ok, message = ns.ChangeProfile(picks)
+	end
 	if not ok then
-		S.Go(0)
 		kit.Say(message)
-		S.start.box:SetFocus()
 		return
 	end
-	-- The rows the game or a function holds are written now that the new profile is in use.
+	-- The rows the game or a function holds are written now that the profile in use has the rest.
 	local defs = S.Defs()
 	local problems = {}
 	local game, kept, keptAt = 0, {}, {}
@@ -1525,7 +1489,10 @@ function S.Finish()
 	for _, action in ipairs(draft.actions) do
 		local call = ns[action.pick]
 		if type(call) == "function" then
-			local good, done, text = pcall(call, action.id)
+			-- With the id its line has now (S.LineId): a tracker removed before it moves the others up.
+			local good, done, text = pcall(function()
+				return call(S.LineId(action))
+			end)
 			if not good then
 				geterrorhandler()(done)
 			elseif done == false and IsText(text) and text ~= "" then
@@ -1533,164 +1500,41 @@ function S.Finish()
 			end
 		end
 	end
+	local result = { name = name, saved = not new, settings = settings, game = game, kept = kept, keptAt = keptAt }
 	local character = ns.Character()
 	if type(character) == "table" then
 		character.setupOffered = true
-	end
-	local result = { name = name, start = fromStart > 0 and start or nil, settings = chosen + fromStart, chosen = chosen, game = game, kept = kept, keptAt = keptAt }
-	if type(character) == "table" then
 		character.setupResult = result
 	end
 	if ns.Get("setup.say") == "line" then
-		print(("Flat UI: %s is in use. %s."):format(name, S.Totals(result)))
+		print((new and "Flat UI: %s is in use. %s." or "Flat UI: %s is saved. %s."):format(name, S.Totals(result)))
 	end
+	local finished = { name = name, new = new, users = S.Users(name), reloadLines = reloadLines, kept = kept, problems = problems }
 	S.Drop()
-	S.finished = { name = name, reload = reload, reloadLines = reloadLines, problems = problems, result = result }
-	S.done = true
-	S.draft = nil
-	S.Show()
-end
-
--- Gives a button of the Finish screen a tip line besides its own hover behaviour.
-function S.Tipped(button, tip)
-	local enter, leave = button:GetScript("OnEnter"), button:GetScript("OnLeave")
-	button:SetScript("OnEnter", function(...)
-		enter(...)
-		kit.Tip(tip)
-	end)
-	button:SetScript("OnLeave", function(...)
-		leave(...)
-		kit.Tip("")
-	end)
-end
-
-function S.BuildDone()
-	local view = { frame = kit.Frame(S.right) }
-	view.frame:SetSize(kit.RIGHT_W, BODY_H)
-	view.frame:SetPoint("TOPLEFT", S.right, "TOPLEFT", 0, -BODY_Y)
-	view.frame:Hide()
-	local Tipped = S.Tipped
-	local x = kit.PAD
-	local function Add(text, width, tip, onClick)
-		local button = kit.Button(view.frame, text, width, onClick)
-		button:SetPoint("TOPLEFT", view.frame, "TOPLEFT", x, -16)
-		Tipped(button, tip)
-		x = x + width + 8
-		return button
+	kit.Hide()
+	if type(ns.SetupAfter) == "function" then
+		Reported(pcall(ns.SetupAfter, finished))
 	end
-	view.movers = Add("Movers", 90, "Shows the handles for moving frames.", function()
-		local module = ns.modules and ns.modules.movers
-		local command = module and module.slash and module.slash.move
-		if type(command) == "function" then
-			local ok, err = pcall(command, "")
-			if not ok then
-				geterrorhandler()(err)
-			end
-		end
-	end)
-	view.options = Add("Options", 90, "Opens the Flat UI options.", function()
-		kit.Hide()
-		ns.OpenPanel()
-	end)
-	view.close = Add("Close", 90, "Closes setup.", function()
-		kit.Hide()
-	end)
-	-- The report scrolls under the buttons, a line for each text.
-	view.scroller = kit.Scroller(view.frame, kit.RIGHT_W, BODY_H - REPORT_Y)
-	view.scroller.frame:SetPoint("TOPLEFT", view.frame, "TOPLEFT", 0, -REPORT_Y)
-	view.lines = {}
-	S.doneView = view
-	return view
-end
-
--- The Reload button of Finish, made when a reload is needed: Finish runs out of combat, where the secure button can be made.
-function S.ReloadButton()
-	local view = S.doneView
-	if not view.reload then
-		view.reload = kit.Button(view.frame, "Reload", 90, ns.Reload)
-		S.Tipped(view.reload, "Reloads the interface.")
-		ns.SecureReload(view.reload)
-	end
-	return view.reload
-end
-
-function S.ShowDone()
-	local view = S.doneView or S.BuildDone()
-	local finished = S.finished
-	view.frame:Show()
-	local x = kit.PAD
-	if finished.reload then
-		local reload = S.ReloadButton()
-		reload:ClearAllPoints()
-		reload:SetPoint("TOPLEFT", view.frame, "TOPLEFT", x, -16)
-		reload:Show()
-		x = x + 98
-	elseif view.reload then
-		view.reload:Hide()
-	end
-	for _, button in ipairs({ view.movers, view.options, view.close }) do
-		button:ClearAllPoints()
-		button:SetPoint("TOPLEFT", view.frame, "TOPLEFT", x, -16)
-		x = x + 98
-	end
-	local texts = S.ReportLines(finished)
-	local y = 8
-	for index = 1, math.max(#texts, #view.lines) do
-		local text = texts[index]
-		local line = view.lines[index]
-		if not line and text then
-			line = kit.Label(view.scroller.child, "GameFontHighlight", "LEFT", kit.ROW_W, true)
-			view.lines[index] = line
-		end
-		if line then
-			line:SetText(text or "")
-			line:SetShown(text ~= nil)
-			if text then
-				line:ClearAllPoints()
-				line:SetPoint("TOPLEFT", view.scroller.child, "TOPLEFT", kit.PAD, -y)
-				local ok, height = pcall(line.GetStringHeight, line)
-				y = y + (ok and Number(height) and height > 0 and height or 14) + 8
-			end
-		end
-	end
-	view.scroller.SetContent(y + kit.PAD)
-	view.scroller.Scroll(0)
 end
 
 -- The window -----------------------------------------------------------------------------------------
 
--- Shows the screen S.cur is: the title, the rows or lines, the drawing, the buttons, the list.
+-- Shows the screen S.screen is: the title, the page's rows and drawing or the walk's stop or Your screen, the buttons and the list.
 function S.Show()
-	if not S.root or not S.draft and not S.done then
+	local screen = S.screen
+	if not S.root or not S.draft or not screen then
 		return
 	end
-	local view
+	kit.CloseList()
 	kit.Tip("")
 	for _, other in pairs(S.views) do
 		other.scroller.frame:Hide()
 	end
-	S.start.scroller.frame:Hide()
-	S.reviewView.scroller.frame:Hide()
-	S.doneView.frame:Hide()
-	if S.done then
-		S.title:SetText(S.finished.name)
-		S.sub:SetText(("|cffffffff%s|r is in use."):format(S.finished.name))
-		S.ShowDone()
-	elseif S.cur == 0 then
-		S.title:SetText("New profile")
-		S.sub:SetText("")
-		S.start.scroller.frame:Show()
-		S.LayoutStart()
-		S.start.scroller.Scroll(0)
-	elseif S.cur == S.REVIEW then
-		S.title:SetText("Review")
-		S.reviewView.scroller.frame:Show()
-		S.LayoutReview()
-		S.reviewView.scroller.Scroll(0)
-		S.sub:SetText(S.ReviewSubtitle())
-	else
-		view = S.StepView(S.cur)
-		S.title:SetText(STEPS[S.cur].title)
+	S.band:SetShown(screen.kind == "page")
+	if screen.kind == "page" then
+		S.Walk("Hide")
+		local view = S.StepView(screen.number)
+		S.title:SetText(STEPS[screen.number].title)
 		view.scroller.frame:Show()
 		S.Under(S.view, function()
 			for _, entry in ipairs(view.rows) do
@@ -1700,41 +1544,29 @@ function S.Show()
 			S.sub:SetText(S.Subtitle(view))
 		end)
 		view.scroller.Scroll(0)
+	else
+		-- The walk writes its own title and line; these stand while it is missing.
+		local stop = screen.kind == "stop" and S.Stop(screen.id)
+		S.title:SetText(stop and stop.title or "Your screen")
+		S.sub:SetText(stop and stop.line or "")
+		S.Walk("Show", screen)
 	end
 	S.dirty = true
 	S.LayoutList()
 	S.Buttons()
-	S.Redraw()
 	kit.SetCounter(S.Counter())
 	kit.Refresh()
 end
 
 -- Reads every control on screen again: the window calls it every half second and after every change.
 function S.Update()
-	if not S.root or not (S.draft or S.done) then
+	local screen = S.screen
+	if not S.root or not S.draft or not screen then
 		return
 	end
 	kit.SetCounter(S.Counter())
-	if S.done then
-		return
-	end
-	if S.cur == 0 then
-		S.UpdateStart()
-	elseif S.cur == S.REVIEW then
-		if S.reviewView.count ~= S.ReviewCount() then
-			S.LayoutReview()
-		end
-		S.sub:SetText(S.ReviewSubtitle())
-		-- The strip says why Finish does nothing, and stops saying it when the fight is over.
-		if InCombatLockdown() then
-			kit.Say(COMBAT_LINE)
-			S.combatSaid = true
-		elseif S.combatSaid then
-			S.combatSaid = false
-			kit.Tip("")
-		end
-	else
-		local view = S.StepView(S.cur)
+	if screen.kind == "page" then
+		local view = S.StepView(screen.number)
 		S.Under(S.view, function()
 			for _, entry in ipairs(view.rows) do
 				entry.row.Update()
@@ -1745,15 +1577,31 @@ function S.Update()
 				S.sub:SetText(S.Subtitle(view))
 			end
 		end)
+	else
+		S.Walk("Update")
 	end
+	-- While Your screen shows in a fight the strip says why Finish does nothing, and stops saying it when the fight is over.
+	if screen.kind == "yours" and InCombatLockdown() then
+		kit.Say(COMBAT_LINE)
+		S.combatSaid = true
+	elseif S.combatSaid then
+		S.combatSaid = false
+		kit.Tip("")
+	end
+	S.ReadList()
 	S.Buttons()
 end
 
--- Draws the drawing again on the frame after a change.
+-- On the frame after a change the drawings are painted again: the page's, or the walk's cards and pictures.
 function S.Frame()
-	if S.dirty then
-		S.dirty = false
+	if not S.dirty or not S.draft or not S.screen then
+		return
+	end
+	S.dirty = false
+	if S.screen.kind == "page" then
 		S.Redraw()
+	else
+		S.Walk("Paint")
 	end
 end
 
@@ -1776,8 +1624,9 @@ function S.Build(window)
 		kit.Solid(back, "sidebar")
 		kit.Solid(divider, "line")
 	end)
-	S.listScroller = kit.Scroller(left, kit.LEFT - 1, kit.HEIGHT - kit.TITLE - kit.STRIP - 8)
-	S.listScroller.frame:SetPoint("TOPLEFT", left, "TOPLEFT", 0, -4)
+	S.BuildMap(left)
+	S.listScroller = kit.Scroller(left, kit.LEFT - 1, kit.HEIGHT - kit.TITLE - kit.STRIP - LIST_Y - 8)
+	S.listScroller.frame:SetPoint("TOPLEFT", left, "TOPLEFT", 0, -LIST_Y)
 
 	local right = kit.Frame(root)
 	right:SetSize(kit.RIGHT_W, kit.HEIGHT - kit.TITLE - kit.STRIP)
@@ -1794,76 +1643,125 @@ function S.Build(window)
 	line:SetPoint("TOPRIGHT", right, "TOPRIGHT", 0, -(kit.HEADER - 1))
 	line:SetHeight(1)
 
-	local area = kit.Frame(right)
-	area:SetSize(kit.RIGHT_W, DRAW_H)
-	area:SetPoint("TOPLEFT", right, "TOPLEFT", 0, -kit.HEADER)
-	local floor = kit.Fill(area, "BACKGROUND")
-	floor:SetAllPoints(area)
-	local edge = kit.Fill(area, "BORDER")
-	edge:SetPoint("BOTTOMLEFT", area, "BOTTOMLEFT", 0, 0)
-	edge:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", 0, 0)
+	-- The drawing band of a page, under the title. The stops draw on cards of their own.
+	local band = kit.Frame(right)
+	band:SetSize(kit.RIGHT_W, DRAW_H)
+	band:SetPoint("TOPLEFT", right, "TOPLEFT", 0, -kit.HEADER)
+	local floor = kit.Fill(band, "BACKGROUND")
+	floor:SetAllPoints(band)
+	local edge = kit.Fill(band, "BORDER")
+	edge:SetPoint("BOTTOMLEFT", band, "BOTTOMLEFT", 0, 0)
+	edge:SetPoint("BOTTOMRIGHT", band, "BOTTOMRIGHT", 0, 0)
 	edge:SetHeight(1)
 	kit.Painted(function()
 		kit.Solid(line, 0.08)
 		kit.Solid(floor, 0.02)
 		kit.Solid(edge, 0.08)
 	end)
-	ns.SetupDraw.Build(area, S.view)
-	ns.SetupDraw.onCard = function(id)
-		S.PickCard(id)
-	end
+	ns.SetupDraw.Build(band, S.view)
+	band:Hide()
+	S.band = band
 
-	S.BuildStart()
-	S.BuildReview()
-	S.BuildDone()
+	-- A stop and Your screen, under the title (SetupWalk.lua).
+	S.Walk("Build", right)
 
-	-- Back at the left, Skip this area, Keep the defaults for the rest and Next at the right.
+	-- Back at the left; Next (or Finish) at the right, and the two buttons left of it.
 	local bar = kit.Frame(right)
 	bar:SetSize(kit.RIGHT_W, BAR_H)
 	bar:SetPoint("BOTTOMLEFT", right, "BOTTOMLEFT", 0, 0)
 	S.back = kit.Button(bar, "Back", 80, S.Back)
 	S.back:SetPoint("LEFT", bar, "LEFT", kit.PAD, 0)
-	S.next, S.nextText = kit.Button(bar, "Next", 160, S.OnNext)
+	S.next, S.nextText = kit.Button(bar, "Next", 120, S.Primary, true)
 	S.next:SetPoint("RIGHT", bar, "RIGHT", -kit.PAD, 0)
-	S.keep, S.keepText = kit.Button(bar, "Keep the defaults for the rest", 220, S.OnKeep)
-	S.keep:SetPoint("RIGHT", S.next, "LEFT", -8, 0)
-	S.skip, S.skipText = kit.Button(bar, "Skip this area", 120, S.OnSkip)
-	S.skip:SetPoint("RIGHT", S.keep, "LEFT", -8, 0)
+	S.mid1, S.mid1Text = kit.Button(bar, "Skip the rest", 130, S.Second)
+	S.mid1:SetPoint("RIGHT", S.next, "LEFT", -8, 0)
+	S.mid2, S.mid2Text = kit.Button(bar, "More settings", 130, S.More)
+	S.mid2:SetPoint("RIGHT", S.mid1, "LEFT", -8, 0)
+
+	S.BuildKeys(root)
 	return root
 end
 
--- The window has the mode: this character's draft is opened at its step, or a new one at New profile.
-function S.Enter()
-	S.draft = S.Load() or S.Fresh()
-	S.pick = nil
-	S.done, S.finished = false, nil
-	-- Back from the movers: the report is as it was left.
-	if S.held then
-		S.done, S.finished = S.held[1], S.held[2]
-		S.held = nil
-	end
-	S.hist, S.skipped = {}, {}
-	S.cur = S.draft.step or 0
-	S.combatSaid = false
-	S.Show()
+-- Enter presses the primary button and Left and Right pick the card before or after on a stop. The keys come through a frame of Flat UI's own
+-- that has the keyboard while setup shows and only out of combat (EnableKeyboard and SetPropagateKeyboardInput are protected); every key it does not
+-- use goes on to the game, Escape too, so Escape closes the window. A box with the cursor takes the keys first.
+function S.BuildKeys(root)
+	local keys = kit.Frame(root)
+	keys:SetAllPoints(root)
+	keys:Hide()
+	keys:SetScript("OnKeyDown", function(self, key)
+		local enter = key == "ENTER" or key == "NUMPADENTER"
+		local arrow = key == "LEFT" or key == "RIGHT"
+		local covered = (enter or arrow) and Reported(pcall(S.Covered)) == true
+		local handled = enter
+		if arrow and not covered and S.screen and S.screen.kind == "stop" then
+			handled = S.Walk("Key", key) == true
+		end
+		if not InCombatLockdown() then
+			Reported(pcall(self.SetPropagateKeyboardInput, self, not handled))
+		end
+		-- Enter is always taken, so that it never opens chat while setup has the keys; under a list, a question or the welcome screen it does nothing.
+		if enter and not covered then
+			Reported(pcall(S.Primary))
+		end
+	end)
+	-- A fight takes the keyboard from it at its start, the last moment that may, and gives it back after while setup still shows.
+	keys:RegisterEvent("PLAYER_REGEN_DISABLED")
+	keys:RegisterEvent("PLAYER_REGEN_ENABLED")
+	keys:SetScript("OnEvent", function(_, event)
+		if event == "PLAYER_REGEN_DISABLED" then
+			S.Keys(false)
+		elseif S.root:IsVisible() then
+			S.Keys(true)
+		end
+	end)
+	S.keys = keys
 end
 
--- The window was hidden, by Close or by the game (Escape, a loading screen). A draft with a choice or a queued action stays for Continue; one with
+-- Gives the keys frame the keyboard, or takes it away. In a fight it only hides: the keyboard is changed out of combat only.
+function S.Keys(on)
+	local keys = S.keys
+	if not keys then
+		return
+	end
+	if InCombatLockdown() then
+		keys:Hide()
+		return
+	end
+	local ok, err = pcall(keys.EnableKeyboard, keys, on)
+	if not ok then
+		geterrorhandler()(err)
+	end
+	keys:SetShown(on and ok)
+end
+
+-- The window has the mode: this character's draft opens where it was left, over the profile in use, or a new draft at the first stop.
+function S.Enter()
+	S.draft = S.Load() or S.Fresh()
+	local moved = S.Rebase()
+	S.Walk("Begin")
+	S.screen, S.walkAt, S.combatSaid = nil, nil, false
+	S.showAll = {}
+	S.Keys(true)
+	S.Go(S.Opening())
+	if moved then
+		kit.Say(moved)
+	end
+end
+
+-- The window was hidden: by Close, Escape, Finish or the game (a loading screen). A draft with a choice or a queued pick stays for next time; one with
 -- neither is dropped.
 function S.Hidden()
 	if S.draft then
 		S.Sync()
 	end
-	S.draft = nil
-	if ns.MoversMode and ns.MoversMode.Holding() then
-		S.held = { S.done, S.finished }
-	end
-	S.done, S.finished = false, nil
+	S.draft, S.screen = nil, nil
+	S.Keys(false)
 end
 
 -- Close: with something to keep it asks.
 function S.Close()
-	if S.done or not S.Has(S.draft) then
+	if not S.Has(S.draft) then
 		kit.Hide()
 		return
 	end
@@ -1880,15 +1778,16 @@ S.mode = {
 	Build = S.Build, Enter = S.Enter, Update = S.Update, Frame = S.Frame, Hidden = S.Hidden, Close = S.Close,
 }
 
--- Opens setup at this character's draft, or at New profile. With the id of a built step it opens at that step.
+-- Opens setup at this character's draft, where it was left, or at the first stop. With an id it opens there: a stop, "yours" for Your screen, or a
+-- built step, whose page goes through every built step and back to the stop or Your screen last shown, with Every setting open in the list.
 function ns.OpenSetup(id)
 	local shown = ns.OpenPanelMode(S.mode)
-	if id and S.draft then
-		for number, step in ipairs(STEPS) do
-			if step.id == id and step.built then
-				S.Go(number)
-			end
+	local screen = id ~= nil and S.draft and S.ScreenOf(id)
+	if screen then
+		if screen.kind == "page" then
+			S.everyOpen = true
 		end
+		S.Go(screen)
 	end
 	return shown
 end
@@ -1976,7 +1875,7 @@ function S.PresetOf(id)
 	return nil
 end
 
--- A ready-made profile in the shape of a saved one, which is what the draft starts from.
+-- A ready-made profile in the shape of a saved one: its values as the options and its positions as the movers.
 function S.Preset(id)
 	local profile = S.PresetOf(id)
 	return profile and { options = profile.values, movers = profile.movers or S.noSpots } or nil
@@ -2094,10 +1993,6 @@ function S.UseReady(id)
 	return ok, why
 end
 
--- The panel: a tile for each ready-made profile, each a picture of it, three to a row. A click on a tile puts that profile in use.
-S.OFFER_W, S.OFFER_H, S.TILE_W, S.TILE_H = 644, 518, 200, 118
-S.PICK_LINE = "Click a profile to use it."
-
 -- What Profile on a new character holds to share a profile that is in use: a ready-made profile is shared by its tile, any other by its name.
 function S.ShareMode(name)
 	for _, profile in ipairs(S.Presets()) do
@@ -2122,213 +2017,8 @@ function S.Short(name)
 	return name
 end
 
--- Reads the tile buttons' states again: the line, the tags, the pictures, and which buttons show. Run when the panel opens and when combat or the
--- screen changes.
-function S.UpdateOffer()
-	local frame = S.offer
-	if not frame then
-		return
-	end
-	S.offerLine:SetText(InCombatLockdown() and "In combat. Pick a profile after combat." or S.PICK_LINE)
-	local pick, using = S.Recommend(), ns.Profile()
-	local db = ns.Account()
-	for _, tile in ipairs(S.tiles) do
-		local found = S.FindProfile(tile.profile.label)
-		local saved = found and type(db) == "table" and type(db.profiles) == "table" and db.profiles[found]
-		tile.values = saved and saved.options or tile.profile.values
-		local tag = (found and found == using and "In use") or (tile.profile.id == pick and "Recommended") or nil
-		tile.tag:SetShown(tag ~= nil)
-		tile.tagText:SetText(tag or "")
-		tile.card.Paint()
-	end
-	S.mark:SetShown(S.share == true)
-	local mate = S.MostUsed()
-	S.same:SetShown(mate ~= nil)
-	S.same:ClearAllPoints()
-	S.open:ClearAllPoints()
-	S.offerKeep:ClearAllPoints()
-	S.sameName = mate
-	if mate then
-		S.sameText:SetText("Same as " .. S.Short(mate))
-		S.same:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 12)
-		S.open:SetPoint("LEFT", S.same, "RIGHT", 8, 0)
-	else
-		S.open:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 12)
-	end
-	S.offerKeep:SetPoint("LEFT", S.open, "RIGHT", 8, 0)
-end
-
--- A click on a tile: its profile is put in use and the panel closes; in combat the line says so and nothing changes.
-function S.PickTile(index)
-	local tile = S.tiles[index]
-	if not tile or not S.offer then
-		return false
-	end
-	local ok, why = S.UseReady(tile.profile.id)
-	if ok then
-		if S.share then
-			ns.Set("setup.newCharacter", "preset:" .. tile.profile.id)
-		end
-		S.offer:Hide()
-	else
-		S.offerLine:SetText(why == "combat" and "In combat. Pick a profile after combat." or tostring(why))
-	end
-	return ok
-end
-
-function S.BuildOffer()
-	local frame = CreateFrame("Frame", "FlatUISetupOffer", UIParent)
-	ns.Own[frame] = true
-	frame:SetSize(S.OFFER_W, S.OFFER_H)
-	frame:SetPoint("TOP", UIParent, "TOP", 0, -100)
-	frame:SetFrameStrata("HIGH")
-	-- Above the options window, which is in the same strata.
-	frame:SetFrameLevel(200)
-	frame:EnableMouse(true)
-	local outline = ns.Outline(frame, frame, true)
-	kit.Painted(function()
-		kit.Backing(outline, "window", 0.98)
-	end)
-	S.offer = frame
-	local title = kit.Label(frame, "GameFontNormal", "LEFT", 400)
-	title:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -10)
-	title:SetText("Flat UI setup")
-	S.offerLine = kit.Label(frame, "GameFontHighlight", "LEFT", 620)
-	S.offerLine:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -34)
-	S.offerLine:SetText(S.PICK_LINE)
-
-	S.tiles = {}
-	for index, profile in ipairs(S.Presets()) do
-		local entry = { profile = profile, values = profile.values }
-		local tile = kit.Frame(frame)
-		tile:SetSize(S.TILE_W, S.TILE_H)
-		tile:SetPoint("TOPLEFT", frame, "TOPLEFT", 12 + ((index - 1) % 3) * 210, -(58 + math.floor((index - 1) / 3) * 128))
-		local edge = ns.Outline(tile, tile, true)
-		kit.Painted(function()
-			kit.Backing(edge, "raised")
-		end)
-		entry.frame, entry.edge = tile, edge
-		entry.card = ns.SetupDraw.Card(tile, ns.SetupDraw.CardView(function()
-			return entry.values
-		end))
-		entry.card.frame:SetScale(0.595)
-		entry.card.frame:SetPoint("TOPLEFT", tile, "TOPLEFT", 0, 0)
-		local name = kit.Label(tile, "GameFontNormal", "LEFT", 184)
-		name:SetPoint("TOPLEFT", tile, "TOPLEFT", 8, -72)
-		name:SetText(profile.label)
-		local line = kit.Dim(kit.Label(tile, "GameFontHighlightSmall", "LEFT", 184, true))
-		line:SetPoint("TOPLEFT", tile, "TOPLEFT", 8, -90)
-		line:SetText(profile.line)
-		entry.name, entry.line = name, line
-		-- The tag sits on a frame of its own, above every frame of the picture.
-		local tag = kit.Frame(tile)
-		tag:SetFrameLevel(tile:GetFrameLevel() + 10)
-		tag:SetSize(88, 16)
-		tag:SetPoint("TOPRIGHT", tile, "TOPRIGHT", -4, -4)
-		local back = kit.Fill(tag, "BACKGROUND")
-		back:SetAllPoints(tag)
-		back:SetColorTexture(0, 0, 0, 0.75)
-		entry.tagText = kit.Label(tag, "GameFontHighlightSmall", "CENTER", 88)
-		entry.tagText:SetPoint("CENTER", tag, "CENTER", 0, 0)
-		tag:Hide()
-		entry.tag = tag
-		kit.Clickable(tile, function()
-			S.PickTile(index)
-		end)
-		tile:SetScript("OnEnter", function()
-			ns.SetOutlineColour(edge, kit.Accent())
-		end)
-		tile:SetScript("OnLeave", function()
-			ns.SetOutlineColour(edge, nil, nil, nil)
-		end)
-		S.tiles[index] = entry
-	end
-
-	S.same, S.sameText = kit.Button(frame, "Same as", 200, function()
-		local name = S.sameName
-		if not name then
-			return
-		end
-		if InCombatLockdown() then
-			S.offerLine:SetText("In combat. Pick a profile after combat.")
-			return
-		end
-		local ok, why = ns.UseProfile(name)
-		if ok then
-			S.Flag()
-			local used = S.FindProfile(name) or name
-			print(("Flat UI: using %s."):format(used))
-			if S.share then
-				ns.Set("setup.newCharacter", S.ShareMode(used))
-			end
-			frame:Hide()
-		else
-			S.offerLine:SetText(tostring(why))
-		end
-	end)
-	S.open = kit.Button(frame, "Open setup", 110, function()
-		S.Flag()
-		frame:Hide()
-		ns.OpenSetup()
-	end)
-	S.offerKeep = kit.Button(frame, "Keep Default", 110, function()
-		S.Flag()
-		frame:Hide()
-	end)
-	-- The check box: the profile picked next is the one every new character gets. Unticked each time the panel opens.
-	local box = kit.Frame(frame)
-	box:SetSize(18, 18)
-	box:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 50)
-	local boxOutline = ns.Outline(box, box, true)
-	S.mark = kit.Fill(box, "ARTWORK")
-	S.mark:SetPoint("TOPLEFT", box, "TOPLEFT", 4, -4)
-	S.mark:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -4, 4)
-	S.shareLabel = kit.Label(frame, "GameFontHighlight", "LEFT", 400)
-	S.shareLabel:SetPoint("LEFT", box, "RIGHT", 8, 0)
-	S.shareLabel:SetText("Same profile on new characters")
-	kit.Painted(function()
-		kit.Backing(boxOutline, "raised")
-		S.mark:SetColorTexture(kit.Accent())
-	end)
-	kit.Clickable(box, function()
-		S.share = not S.share
-		S.mark:SetShown(S.share == true)
-	end)
-	S.box = box
-	frame:SetScript("OnShow", function()
-		S.share = false
-		S.UpdateOffer()
-	end)
-	-- The events go to a frame of their own: the panel hides itself, and a hidden frame still hears them.
-	local listener = CreateFrame("Frame")
-	ns.Own[listener] = true
-	listener:RegisterEvent("PLAYER_REGEN_DISABLED")
-	listener:RegisterEvent("PLAYER_REGEN_ENABLED")
-	listener:RegisterEvent("UI_SCALE_CHANGED")
-	listener:RegisterEvent("DISPLAY_SIZE_CHANGED")
-	listener:SetScript("OnEvent", function(_, event)
-		if event == "PLAYER_REGEN_DISABLED" then
-			frame:Hide()
-		elseif frame:IsShown() then
-			S.UpdateOffer()
-		end
-	end)
-	if type(UISpecialFrames) == "table" then
-		table.insert(UISpecialFrames, "FlatUISetupOffer")
-	end
-	frame:Hide()
-	return frame
-end
-
--- Opens the panel, whether or not the character was offered: /flatui profiles and the Profiles page.
-function ns.OpenProfiles()
-	local frame = S.offer or S.BuildOffer()
-	frame:Show()
-	return frame:IsShown() == true
-end
-
--- True when this character has no profile of its own, has not been offered, and keeps no draft: a new character. With `asked` the panel is
--- offered only when Profile on a new character is Show profiles.
+-- True when this character has no profile of its own, has not been offered, and keeps no draft: a new character. With `asked` the welcome screen is
+-- offered only when Profile on a new character is Show the welcome screen.
 function S.Offerable(asked)
 	local db, key = ns.Account(), ns.CharacterKey()
 	local character = ns.Character()
@@ -2337,7 +2027,7 @@ function S.Offerable(asked)
 end
 
 -- At login, before the modules start: a new character takes the profile that Profile on a new character names, with no window. Default profile only
--- sets the flag. A profile put in use leaves its line for ns.SetupLogin. Show profiles does nothing here.
+-- sets the flag. A profile put in use leaves its line for ns.SetupLogin. Show the welcome screen does nothing here.
 function ns.SetupAuto()
 	S.line = nil
 	local mode = ns.Get("setup.newCharacter")

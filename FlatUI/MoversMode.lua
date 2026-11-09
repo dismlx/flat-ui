@@ -1161,7 +1161,7 @@ function MM.Opened(source)
 	-- The options window opened during a fight goes away again when the handles do.
 	if type(ns.PanelShown) == "function" and ns.PanelShown() then
 		S.panel = true
-		-- The setup report is a mode of the window: it comes back with it.
+		-- Setup is a mode of the window: it comes back with it, at its draft.
 		S.panelMode = type(ns.PanelMode) == "function" and ns.PanelMode() or nil
 		ns.PanelKit.Hide()
 	end

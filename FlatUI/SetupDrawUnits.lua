@@ -1,13 +1,21 @@
 local ADDON_NAME, ns = ...
 
--- The drawings of the unit frame steps of the setup (steps 13 to 22): mock-unit-frame, mock-unit-frames, mock-party-frames and mock-raid-cells. A drawing is
--- { build(stage), draw(stage), parts = { [path] = region } }. build makes the frames once on the stage, all of them in ns.Own so that no module restyles them.
--- draw reads settings only through ns.Get and lays out and paints the same frames, so under the draft view of the setup it draws the draft. Nothing here calls a
--- module or the draft layer. Every number shown is fixed (health 7,000 of 10,000, power 4,200 of 6,000), since the real ones are secret values
--- (AO/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:1526-1529). The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
+-- The drawings of the unit frame steps of the setup (steps 13 to 22): mock-unit-frame, mock-unit-frames, mock-party-frames and mock-raid-cells, and mock-player,
+-- the player's frame alone for the frame style cards. A drawing is { build(stage), draw(stage), parts = { [path] = region } }. build makes the frames once on the
+-- stage, all of them in ns.Own so that no module restyles them. draw reads settings only through ns.Get and lays out and paints the same frames, so under the draft
+-- view of the setup it draws the draft. Nothing here calls a module or the draft layer. Every number shown is fixed (health 7,000 of 10,000, mana 4,200 of 6,000),
+-- since the real ones are secret values (AO/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:1526-1529); the player's power is that of their class at rest,
+-- so a warrior's rage shows empty and a rogue's energy full. The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
 -- UnitFrameLooks.lua, UnitFramePortrait.lua, UnitFrameCells.lua, UnitText.lua, UnitParts.lua and UnitExtras.lua, which style the game's frames; the layout is this
--- file's own, since a module can style only the game's frames. A frame whose switch is off, and every frame while Restyle unit frames is off, is drawn as the game
--- draws it: a grey plate, a ring round the portrait and the game's bar file.
+-- file's own, since a module can style only the game's frames.
+-- With Frame style One frame (the default) every unit frame but the raid cells is one body with one background and one border, and the picture, the name row
+-- and the bars are cells inside it with no borders of their own, the gap (Border thickness and Space between parts) apart and in from its edge; an empty bar is
+-- a lighter strip of the background, and a party pet has no name row: its body wraps its picture and its bar alone. Separate parts gives each part its own
+-- border and background, as in 0.5.11. Portrait shape Round cuts faces and class icons to a circle, and Game portrait in One frame is the face drawn by
+-- Flat UI and cut round; a 3D head stays square. The game's own portrait (Game portrait
+-- in Separate parts, Flat UI portraits off, or a frame that is not restyled) is a disc of the game's size at the game's place beside the bars. A frame whose
+-- switch is off, and every frame while Restyle unit frames is off, is drawn as the game draws it: a grey plate, the game's portrait and the game's bar file.
+-- Each scene stands on a ground of muted earth, so that a see-through background looks as it does in the world.
 
 local KEY = "unitframes"
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
@@ -25,6 +33,26 @@ local SLICE = 4
 -- The grey of a dark health bar (UnitFrameLooks.lua:20) and the shadow behind a frame (UnitFrameLooks.lua:25).
 local DARK = 0.10
 local SHADOW = { file = MEDIA .. "Shadow.tga", out = 8, alpha = 0.55 }
+-- One frame and the pictures. GROUND: the earth colour round each scene, so that a see-through background shows the world behind it (a stand-in). LIFT: the
+-- opacity of the white, or black on a light plate, that marks the empty part of a bar on the plate (UnitFrameLooks.lua Trough). CAP: the most lightness a name
+-- row keeps, flat and fading, so that the name reads on it (stand-ins, UnitFrames.lua RowColour). INSET: the share of a round picture's side from its box's
+-- corner to the circle at 45 degrees, (1 - 1/sqrt 2) / 2, where the level and the PvP plate sit. CROP: the share of a face cut off at each edge (UnitFrames.lua:58).
+local GROUND = { 0.32, 0.27, 0.20 }
+local LIFT = 0.08
+local CAP = { flat = 0.45, gradient = 0.75 }
+local INSET = 0.1464
+local CROP = 0.08
+-- The game's own portrait beside its bars: its size, the units between it and the bars, and on the player, target and focus how far its top is above the top
+-- of the health bar. The player's is 60 at 24,-19 and its health bar starts at 87,-43 (Blizzard_UnitFrame/Mainline/PlayerFrame.xml:24-40,
+-- Camelot/PlayerFrame.lua:79-84). The target's is 58 at -26,-19 from the top right of a frame 232 by 100, and its health slot ends 147 from the left with its top
+-- 6 above the middle (Mainline/TargetFrame.xml:53, 61-73, Camelot/TargetFrame.lua:79-81). The pet's is 37 with its health bar 3 to the right (Mainline/PetFrame.xml:24-28,
+-- Camelot/PetFrame.lua:15), a party member's 37 with its health bar 1 to the right and a party pet's 18 (Mainline/PartyFrameTemplates.xml:13-16, 86-90, 138-140):
+-- the small frames keep 2. A small frame's portrait is centred on its bars.
+local GAME = { player = { size = 60, gap = 3, top = 24 }, target = { size = 58, gap = 1, top = 25 }, focus = { size = 58, gap = 1, top = 25 },
+	small = { size = 37, gap = 2 }, partypet = { size = 18, gap = 2 } }
+-- The player's power at rest, by class: the power and how full it is. A warrior's rage is empty and a rogue's energy full out of combat; any other class has
+-- mana at 70%.
+local REST = { WARRIOR = { "RAGE", 0 }, ROGUE = { "ENERGY", 1 } }
 -- The flags of each outline choice (UnitText.lua:14).
 local FLAGS = { none = "", thin = "OUTLINE", thick = "OUTLINE, THICK" }
 -- Samples: the colours of the classes, of a hostile and a friendly unit, and of the states of a picture border.
@@ -51,14 +79,15 @@ local ICON = 14
 -- The picture of the sample auras and the totem.
 local AURA_FILE = 135940
 
--- What each kind of frame has. group: its sizes. pic: it has a picture. on: its switch. sw: the switch of its picture. pick: the row of its picture. name,
--- level, by, ht, pt, power: the rows of its name, level, health colour, health text, power text and power bar. ranked: its unit can be an elite or a rare.
+-- What each kind of frame has. group: its sizes. pic: it has a picture. side: "right" for a picture on the right of the bars, as the game has it on the target
+-- and focus (UnitFrames.lua Describe), else it is on the left. on: its switch. sw: the switch of its picture. pick: the row of its picture. name, level, by, ht,
+-- pt, power: the rows of its name, level, health colour, health text, power text and power bar. ranked: its unit can be an elite or a rare.
 local KIND = {
 	player = { group = "large", pic = true, on = "player", sw = "portraitPlayer", pick = "playerPicture", name = "playerName", level = "playerLevel",
 		by = "playerHealthBy", ht = "player", pt = "player", power = "playerPowerBar" },
-	target = { group = "large", pic = true, on = "target", sw = "portraitTarget", pick = "targetPicture", name = "targetName", level = "targetLevel",
+	target = { group = "large", pic = true, side = "right", on = "target", sw = "portraitTarget", pick = "targetPicture", name = "targetName", level = "targetLevel",
 		by = "targetHealthBy", ht = "target", pt = "target", power = "targetPowerBar", ranked = true },
-	focus = { group = "large", pic = true, on = "focus", sw = "portraitFocus", pick = "focusPicture", name = "focusName", level = "focusLevel",
+	focus = { group = "large", pic = true, side = "right", on = "focus", sw = "portraitFocus", pick = "focusPicture", name = "focusName", level = "focusLevel",
 		by = "focusHealthBy", ht = "focus", pt = "focus", power = "focusPowerBar", ranked = true },
 	pet = { group = "small", pic = true, on = "pet", sw = "portraitPet", pick = "petPicture", name = "petName", by = "petHealthBy", ht = "pet", pt = "pet",
 		power = "petPowerBar" },
@@ -93,6 +122,16 @@ end
 
 local function Frame(parent)
 	return Own(CreateFrame("Frame", nil, parent))
+end
+
+-- A frame of a unit frame `levels` above its root, so that the parts draw in their order whatever order the client gives frames of one level: the body,
+-- then the picture and the bars, then the name row, then the icons and texts. Returns the frame.
+local function Above(frame, root, levels)
+	local ok, level = pcall(root.GetFrameLevel, root)
+	if ok and not ns.IsSecret(level) and type(level) == "number" then
+		pcall(frame.SetFrameLevel, frame, level + levels)
+	end
+	return frame
 end
 
 local function Tex(frame, layer, sub)
@@ -133,14 +172,19 @@ local function Solid(texture, r, g, b, a)
 	texture:SetColorTexture(Clamp(r), Clamp(g), Clamp(b), Clamp(a or 1))
 end
 
--- A vertical gradient of one colour, as strong as bottom at the bottom and as top at the top; one colour at their mean when the client refuses it.
-local function Gradient(texture, r, g, b, bottom, top)
+-- A vertical gradient of one colour, as strong as bottom at the bottom and as top at the top; one colour at their mean when the client refuses it. keep: the
+-- texture keeps its file, the rounded shape of a name row, and the gradient tints it, as UnitFrames.lua's Gradient does (a colour texture would square it).
+local function Gradient(texture, r, g, b, bottom, top, keep)
 	local done = type(CreateColor) == "function" and type(texture.SetGradient) == "function" and pcall(function()
 		texture:SetVertexColor(1, 1, 1, 1)
-		texture:SetColorTexture(1, 1, 1, 1)
+		if not keep then
+			texture:SetColorTexture(1, 1, 1, 1)
+		end
 		texture:SetGradient("VERTICAL", CreateColor(Clamp(r), Clamp(g), Clamp(b), Clamp(bottom)), CreateColor(Clamp(r), Clamp(g), Clamp(b), Clamp(top)))
 	end)
-	if not done then
+	if not done and keep then
+		texture:SetVertexColor(Clamp(r), Clamp(g), Clamp(b), Clamp((bottom + top) / 2))
+	elseif not done then
 		Solid(texture, r, g, b, (bottom + top) / 2)
 	end
 end
@@ -354,9 +398,30 @@ end
 
 -- Outlines --------------------------------------------------------------------------------------------------------------------------------
 
+-- The background of unit frames, red, green, blue and opacity: the Unit frames page's own with Own border and background on, else the Flat UI page's
+-- (UnitFrames.lua FRAME.back). It is the plate of One frame and the fill of an outline that has none of its own, and it colours the dark name row, the player's
+-- row base and the fade at the top of a picture.
+local function Plate()
+	if Get("lookOwn") == true then
+		local r, g, b = ns.Colour(KEY .. ".lookBack")
+		return r, g, b, (tonumber(Get("lookBackAlpha")) or 100) / 100
+	end
+	local r, g, b = ns.Colour("general.backdrop")
+	return r, g, b, (tonumber(ns.Get("general.backdropAlpha")) or 100) / 100
+end
+
+-- The empty part of a bar in One frame, on the plate (UnitFrameLooks.lua Trough): white at LIFT, so that an empty bar still reads as a bar, or black at LIFT on
+-- a light plate, one whose lightness (0.30 red + 0.59 green + 0.11 blue) is a half or more. { r, g, b, a } for EdgePaint.
+local function Trough()
+	local r, g, b = Plate()
+	local shade = (0.30 * r + 0.59 * g + 0.11 * b) >= 0.5 and 0 or 1
+	return { shade, shade, shade, LIFT }
+end
+
 -- The outline of a frame in the border and background the Unit frames page asks for: its own border and background with Own border and background on, else
--- the Flat UI page's. colour: the colour of a state (threat, resting, combat, kind), which keeps the edges with Borderless on. fill: the colour of what a dark
--- health bar hides. Every part is set from ns.Get, so the same call draws the draft.
+-- the Flat UI page's. colour: the colour of a state (threat, resting, combat, kind), which keeps the edges with Borderless on. fill: { r, g, b, a } of a fill of
+-- its own, the colour of what a dark health bar hides (opaque) or the trough of an empty bar. bars: Border off hides the edges, coloured or not. Every part is set
+-- from ns.Get, so the same call draws the draft.
 local function EdgePaint(outline, shown, back, colour, fill, bars)
 	if outline == nil then
 		return
@@ -374,13 +439,9 @@ local function EdgePaint(outline, shown, back, colour, fill, bars)
 	ns.SetOutlineColour(outline, r, g, b)
 	ns.SetOutlineEdges(outline, (colour ~= nil or ns.Get("general.borderless") ~= true) and not (bars and Get("barBorder") == false))
 	if fill then
-		ns.SetOutlineFill(outline, fill[1], fill[2], fill[3], 1)
-	elseif own then
-		local fr, fg, fb = ns.Colour(KEY .. ".lookBack")
-		ns.SetOutlineFill(outline, fr, fg, fb, Get("lookBackAlpha") / 100)
+		ns.SetOutlineFill(outline, fill[1], fill[2], fill[3], fill[4] or 1)
 	else
-		local fr, fg, fb = ns.Colour("general.backdrop")
-		ns.SetOutlineFill(outline, fr, fg, fb, ns.Get("general.backdropAlpha") / 100)
+		ns.SetOutlineFill(outline, Plate())
 	end
 	ns.SetOutlineThickness(outline, ns.Get("general.thickness"))
 end
@@ -480,13 +541,14 @@ local PARTY = { { "Mara", "PALADIN", "tank" }, { "Bex", "MAGE", "healer" }, { "C
 local PETS = { "Cat", "Boar", "Owl", "Wolf", "Bear" }
 
 -- The sample of one frame. player: a player, with a class colour; the others take the colour of their reaction. aura: kind, type, stealable, count, time.
+-- threat: the unit has threat. It is on the boss and not on the elite target, since in One frame threat would hide the target's Elite gold.
 local function Sample(id)
 	local name, level, class = Me()
 	if id == "player" then
 		return { kind = "player", cap = "Player", name = name, level = level, class = class, player = true, react = FRIENDLY, lcol = GOLD, state = COMBAT, leader = true,
 			flag = "PvP", timer = "3:05", own = true }
 	elseif id == "target" then
-		return { kind = "target", cap = "Target", name = "Defias Pillager", level = 18, react = HOSTILE, lcol = { 1, 0.5, 0.25 }, rank = "elite", threat = true, marker = 8,
+		return { kind = "target", cap = "Target", name = "Defias Pillager", level = 18, react = HOSTILE, lcol = { 1, 0.5, 0.25 }, rank = "elite", marker = 8,
 			auras = { { "buff", "none", true }, { "buff", "none" }, { "debuff", "magic" }, { "debuff", "poison" } } }
 	elseif id == "focus" then
 		return { kind = "focus", cap = "Focus", name = "Gruff Swiftbite", level = 18, react = HOSTILE, lcol = { 0.25, 0.75, 0.25 }, rank = "rare" }
@@ -496,7 +558,7 @@ local function Sample(id)
 	elseif id == "tot" then
 		return { kind = "tot", cap = "Target of target", name = "Defias Pillager Captain", level = 18, react = HOSTILE, auras = { { "debuff", "magic" } } }
 	elseif id == "boss" then
-		return { kind = "boss", cap = "Boss", name = "Hogger", level = "??", react = HOSTILE, lcol = { 1, 0.1, 0.1 }, marker = 1 }
+		return { kind = "boss", cap = "Boss", name = "Hogger", level = "??", react = HOSTILE, lcol = { 1, 0.1, 0.1 }, marker = 1, threat = true }
 	elseif id == "boss2" then
 		return { kind = "boss", name = "Kobold Digger", level = "??", react = HOSTILE, lcol = { 1, 0.1, 0.1 }, dead = true }
 	end
@@ -518,17 +580,24 @@ end
 
 local E = {}
 
--- Makes the frames of one unit frame on a parent. Nothing is shown or placed until E.draw.
+-- Makes the frames of one unit frame on a parent. Nothing is shown or placed until E.draw. The levels above the root are those of the game's frames
+-- (UnitFrames.lua FRAME.make): the body 1, the picture, the bars, the rim and the inner line 2, the name row 3, the icons and texts 4.
 function E.make(stage, id)
 	local sample = Sample(id)
 	local k = KIND[sample.kind]
-	local o = { id = id, k = k, s = sample, draw = E.draw }
+	-- cut: the textures the circle of a round picture cuts now (Cut).
+	local o = { id = id, k = k, s = sample, draw = E.draw, cut = {} }
 	local root = Frame(stage)
 	o.root = root
 	o.shadow = Tex(root, "BACKGROUND", -8)
 	o.plate = Tex(root, "BACKGROUND", -7)
+	-- The body of One frame: its outline's backdrop is the plate behind every part, and its edges, t outside it in whole pixels, the frame's one border.
+	-- (o.body is the grey shape of a unit's body on its picture.)
+	o.box = Above(Frame(root), root, 1)
+	o.boxOutline = ns.Outline(o.box, o.box)
+	ns.SetOutlineArea(o.boxOutline, KEY)
 	if k.pic then
-		local pic = Frame(root)
+		local pic = Above(Frame(root), root, 2)
 		o.pic = pic
 		o.glow = Tex(pic, "BACKGROUND", -6)
 		o.ring = Tex(pic, "BACKGROUND", -5)
@@ -539,18 +608,18 @@ function E.make(stage, id)
 		o.outline = ns.Outline(pic, pic, true)
 		ns.SetOutlineArea(o.outline, KEY)
 		if k.ranked then
-			o.rimFrame = Frame(root)
+			o.rimFrame = Above(Frame(root), root, 2)
 			o.rim = ns.Outline(o.rimFrame, o.rimFrame, true)
 			ns.SetOutlineArea(o.rim, KEY)
 			ns.SetOutlineThickness(o.rim, 2)
-			o.innerFrame = Frame(root)
+			o.innerFrame = Above(Frame(root), root, 2)
 			o.inner = ns.Outline(o.innerFrame, o.innerFrame, true)
 			ns.SetOutlineArea(o.inner, KEY)
 			ns.SetOutlineThickness(o.inner, 1)
 		end
 	end
 	for _, role in ipairs({ "health", "power" }) do
-		local bar = Frame(root)
+		local bar = Above(Frame(root), root, 2)
 		o[role] = bar
 		o[role .. "Back"] = Tex(bar, "BACKGROUND", -6)
 		o[role .. "Outline"] = ns.Outline(bar, bar)
@@ -562,7 +631,7 @@ function E.make(stage, id)
 	end
 	o.pred, o.shield, o.absorb = Tex(o.health, "ARTWORK", 1), Tex(o.health, "ARTWORK", 2), Tex(o.health, "ARTWORK", 3)
 	o.deadText = Text(o.healthTop, "GameFontHighlightSmall")
-	local row = Frame(root)
+	local row = Above(Frame(root), root, 3)
 	o.row = row
 	o.rBase, o.rGrad, o.rFill = Tex(row, "BACKGROUND", -8), Tex(row, "BACKGROUND", 0), Tex(row, "BACKGROUND", 0)
 	o.rMark, o.rLine = Tex(row, "ARTWORK", 0), Tex(row, "ARTWORK", 1)
@@ -572,7 +641,7 @@ function E.make(stage, id)
 	o.kword:SetJustifyH("RIGHT")
 	o.flag:SetJustifyH("RIGHT")
 	o.name:SetJustifyH("LEFT")
-	local top = Frame(root)
+	local top = Above(Frame(root), root, 4)
 	o.top = top
 	o.picLevel = Text(top)
 	o.picLevel:SetJustifyH("RIGHT")
@@ -592,8 +661,8 @@ function E.make(stage, id)
 			o.auras[index] = icon
 		end
 	end
-	-- The regions the rows of the steps mark (design.md 4.3, part marks).
-	o.parts = { root = root, pic = o.pic, health = o.health, power = o.power, row = row, name = o.name, level = o.level, healthText = o.healthText,
+	-- The regions the rows of the steps mark (design.md 4.3, part marks). body: the frame's box, placed in both styles and shown in One frame.
+	o.parts = { root = root, body = o.box, pic = o.pic, health = o.health, power = o.power, row = row, name = o.name, level = o.level, healthText = o.healthText,
 		powerText = o.powerText, pred = o.pred, shield = o.shield, absorb = o.absorb, kmark = o.kmark, kword = o.kword, kline = o.rLine, plate = o.plateIcon,
 		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, aura = o.auras[1] and o.auras[1].frame,
 		count = o.auras[1] and o.auras[1].count, time = o.auras[1] and o.auras[1].time, picLevel = o.picLevel, timer = o.pvpTimer, shadow = o.shadow }
@@ -658,52 +727,133 @@ local function Settings(root)
 		auraCrop = Get("auraCrop"), auraTypeColours = Get("auraTypeColours") == true, auraCountSize = Get("auraCountSize"),
 		auraNumbers = Get("auraNumbers") == true, lookShadow = Get("lookShadow") == true, radius = RADIUS[Get("corners")], fit = { tot = Get("totNameFit"), pet = Get("petNameFit"), party = Get("partyNameFit"), partypet = Get("partyNameFit"), boss = Get("bossNameFit") } }
 	g.t = ns.Pixels(root, ns.Get("general.thickness"))
+	-- Frame style: One frame unless it says Separate parts (no row yet counts as One frame). The gap of One frame is Border thickness and Space between parts
+	-- (2 px while the row is not there), between the parts and round them (UnitFrames.lua FRAME.gap).
+	g.joined = Get("frameStyle") ~= "parts"
+	g.space = ns.Pixels(root, tonumber(Get("powerSpace")) or 2)
+	g.gap = g.t + g.space
 	return g
 end
 
--- The geometry of a frame: what is on, and where each part goes, in units from the top left corner of its root.
+-- The geometry of a frame: what is on, and where each part goes, in units from the top left corner of its root (UnitFrames.lua Layout, SideOf, AnchorPicture
+-- and FRAME.place).
+-- One frame: the picture, the name row and the bars are cells the gap apart and the gap in from the body's edge, and the body keeps a border's width inside the
+-- root for its border, as every part does in Separate parts. The row is as wide as the bars, or with As tall as the bars runs on over the picture's column. The
+-- picture is a square as tall as the cells beside it, from the row's top (As tall as the frame), the name's (a small frame without a row) or the health bar's to
+-- the power bar's bottom; it is on the bars' left, or their right on the target and focus. None leaves no cell. The body wraps the name of a small frame or a
+-- boss frame without a row; the player, target and focus keep theirs above it. A party pet has neither a row nor a name in One frame (UnitFrames.lua
+-- ROW.none), so its body wraps its picture, as tall as its health bar, and the bar alone.
+-- Separate parts: each part's border is t outside it, the row sits on the health bar's top border band, the power bar is 2t under the health bar and, on
+-- every frame but the player's, Space between parts further, and the picture is 3t from the bars, its place kept, empty, with None.
+-- The game's own portrait is a disc of the game's size and gap beside the bars (GAME): the bars move right, and everything moves down, until it fits in the root.
 local function Layout(o, g)
 	local k, s = o.k, o.s
 	local size = SIZE[k.group]
 	local t = g.t
 	local L = { size = size, t = t, large = LARGE[s.kind] == true, boss = k.group == "boss" }
 	L.on = g.enabled and Get(k.on) == true
+	L.joined = L.on and g.joined
+	L.right = k.side == "right"
 	L.drawn, L.gameFace = false, false
 	if k.pic then
 		if not L.on or not g.square then
 			L.gameFace = true
 		else
 			L.style, L.none, L.game = PictureMode(k)
+			-- In One frame Game portrait is the face drawn by Flat UI and cut round (UnitFrames.lua ApplyPicture).
+			if L.game and L.joined then
+				L.style, L.game, L.gameRound = "picture", false, true
+			end
 			L.drawn, L.gameFace = not L.none and not L.game, L.game
 		end
 	end
-	L.rowOn = L.on and g.strip and g.square and ((not (k.group == "small" or k.group == "pet2")) or g.smallRow)
+	-- Round: faces and class icons with Portrait shape Round, whatever the unit, and Game portrait in One frame. A 3D head stays square.
+	L.round = L.drawn and L.style ~= "head" and (g.classShape == "round" or L.gameRound == true) or false
+	-- A party pet in One frame: no row, whatever Name row on small frames says, and no name, as the game hides a party pet's.
+	L.nameless = L.joined and s.kind == "partypet"
+	L.rowOn = L.on and g.strip and g.square and ((not (k.group == "small" or k.group == "pet2")) or g.smallRow) and not L.nameless
 	L.rowH = L.rowOn and (L.large and ROW.height or ROW.small) or 0
 	L.power = size.power > 0 and (not L.on or k.power == nil or Get(k.power) ~= false)
-	local y = t
+	L.tall = L.rowOn and g.portraitSize ~= "bars"
+	local bar = size.bar
+	-- start: where the cells start, the margin round them plus, in One frame, the band of the body's border. seam: from the row, or the name, to the health
+	-- bar. drop: from the health bar to the power bar. apart: from the picture to the bars. inside: the picture's top below the row's or the name's.
+	local start, seam, nameSeam, drop, apart, inside = t, t, 0, 2 * t, 3 * t, t
+	if L.joined then
+		start, seam, nameSeam, drop, apart, inside = t + g.gap, g.gap, g.gap, g.gap, g.gap, 0
+	elseif L.on and s.kind ~= "player" and g.space > 0 and not ((L.right or L.boss) and Get("powerWidth") == "game") then
+		-- Separate parts: Space between parts lowers the power bar by that much more on every frame but the player's, whose bar hangs by the two borders
+		-- alone; a power bar of the game's width on the target, focus or boss keeps the game's place (UnitFrames.lua FRAME.partsCut and PowerSpan).
+		drop = 2 * t + g.space
+	end
+	local y = start
 	if L.rowOn then
 		L.rowTop = y
-		y = y + L.rowH + t
-	else
+		y = y + L.rowH + seam
+	elseif L.joined and L.large then
+		-- The player, target and focus without a name row keep the game's name above the body, which starts at the bars (UnitFrames.lua FRAME.place).
+		L.nameTop = 0
+		y = NAMEH + start
+	elseif not L.nameless then
 		L.nameTop = y
-		y = y + NAMEH
+		y = y + NAMEH + nameSeam
 	end
 	L.healthTop = y
 	L.healthBottom = y + size.health
-	L.powerTop = L.healthBottom + 2 * t
+	L.powerTop = L.healthBottom + drop
 	L.bottom = L.power and (L.powerTop + size.power) or L.healthBottom
-	L.tall = L.rowOn and g.portraitSize ~= "bars"
 	L.picTop = L.healthTop
 	if L.tall then
-		L.picTop = L.rowTop + t
-	elseif not L.rowOn and not L.large and not L.boss then
-		L.picTop = L.nameTop + t
+		L.picTop = L.rowTop + inside
+	elseif not L.rowOn and not L.large and not L.boss and not L.nameless then
+		L.picTop = L.nameTop + inside
 	end
 	L.side = math.max(L.bottom - L.picTop, 4)
-	L.barsLeft = k.pic and (t + L.side + 3 * t) or t
-	L.width, L.height = L.barsLeft + size.bar + t, L.bottom + t
+	-- The picture's square: a drawn picture, and in Separate parts the empty place of None as well.
+	L.cell = (k.pic and not L.gameFace and (L.drawn or not L.joined)) and true or false
+	L.barsLeft, L.picLeft = start, start
+	if L.cell and L.right then
+		L.picLeft = start + bar + apart
+	elseif L.cell then
+		L.barsLeft = start + L.side + apart
+	end
+	if L.rowOn and L.joined and L.cell and not L.tall then
+		L.rowLeft, L.rowWidth = start, L.side + apart + bar
+	elseif L.rowOn and L.joined then
+		L.rowLeft, L.rowWidth = L.barsLeft, bar
+	elseif L.rowOn then
+		L.rowLeft, L.rowWidth = L.barsLeft - t, bar + 2 * t
+	end
+	L.width = (L.cell and L.side + apart or 0) + bar + 2 * start
+	L.height = L.bottom + start
+	if L.gameFace then
+		local game = GAME[s.kind] or GAME.small
+		L.side = game.size
+		L.picTop = game.top and (L.healthTop - game.top) or ((L.healthTop + L.bottom - game.size) / 2)
+		L.picLeft = L.right and (L.barsLeft + bar + game.gap) or (L.barsLeft - game.gap - game.size)
+		local dx, dy = math.max(0, -L.picLeft), math.max(0, -L.picTop)
+		for _, key in ipairs({ "barsLeft", "picLeft", "rowLeft" }) do
+			L[key] = L[key] and L[key] + dx
+		end
+		for _, key in ipairs({ "rowTop", "nameTop", "healthTop", "healthBottom", "powerTop", "bottom", "picTop" }) do
+			L[key] = L[key] and L[key] + dy
+		end
+		L.width = math.max(L.width + dx, L.picLeft + L.side)
+		L.height = math.max(L.height + dy, L.picTop + L.side)
+	end
+	-- The body: in One frame the cells' box with the gap round it, the game's portrait outside it; in Separate parts, where nothing is drawn on it, the frame.
+	if L.joined then
+		local left = math.min(L.barsLeft, L.rowLeft or L.barsLeft, L.cell and L.picLeft or L.barsLeft)
+		local right = math.max(L.barsLeft + bar, L.rowLeft and (L.rowLeft + L.rowWidth) or 0, L.cell and (L.picLeft + L.side) or 0)
+		local top = L.rowTop or (not L.large and L.nameTop) or L.healthTop
+		L.bodyLeft, L.bodyTop = left - g.gap, top - g.gap
+		L.bodyWidth, L.bodyHeight = right - left + 2 * g.gap, L.bottom - top + 2 * g.gap
+	else
+		L.bodyLeft, L.bodyTop, L.bodyWidth, L.bodyHeight = 0, 0, L.width, L.height
+	end
 	L.radius = L.on and g.radius or nil
-	-- Where the level shows: Level position, with On the portrait needing a drawn picture and a name row.
+	-- Where the level shows: Level position, with On the portrait needing a picture Flat UI draws and a name row; else it is at the end of the row, as the
+	-- game frames show it (UnitFrames.lua ROW.at).
 	L.levelOn = (L.large or L.boss) and (not L.on or Get(k.level) ~= false)
 	L.at = g.levelPosition
 	if L.at == "portrait" and not (L.drawn and L.rowOn) then
@@ -715,51 +865,108 @@ local function Layout(o, g)
 	return L
 end
 
--- The picture: the border by state, kind, class or reaction, the face, the fade and the rest glow (UnitFrames.lua:694-728, 1333-1380, UnitFramePortrait.lua).
+-- The one colour of the border round the body and round a round picture in One frame, the first that applies: threat or a party member's top debuff;
+-- resting, combat or an attacking pet; Elite, Rare or Boss; the class or reaction colour of Portrait border Class or reaction colour. Nil leaves the border
+-- colour, which Borderless hides. The states and the kinds need Flat UI portraits and a frame with a picture (UnitFrames.lua FRAME.colour); Portrait border
+-- needs Flat UI portraits only, so it reaches a boss frame too (UnitFramePortrait.lua Colour).
+local function FrameColour(o, g)
+	local s, k = o.s, o.k
+	local threat = g.threat and (s.threat and THREAT or s.debuff) or nil
+	if threat then
+		return threat
+	end
+	local square = g.square and k.pic
+	if square and g.status and s.state then
+		return s.state
+	end
+	local look = square and s.rank and Get("elite") == true and ns.KINDS[s.rank] or nil
+	if look then
+		return look.colour
+	end
+	if g.square and g.portraitBorder == "class" then
+		local r, gr, b = Mute(UnitColour(o))
+		return { r, gr, b }
+	end
+	return nil
+end
+
+-- Cuts the grey shapes of a unit and the game's black disc with the circle that cuts the face (ns.SetOutlineRound's artMask), or takes the circle off. The
+-- circle is there once the outline has been round; one that waits for the end of combat cuts nothing yet.
+local function Cut(o, on)
+	local round = o.outline and o.outline.round
+	local mask = round and round.artMask
+	if mask == nil then
+		return
+	end
+	on = on and o.outline.roundOn == true
+	for _, texture in ipairs({ o.head, o.body, o.ring }) do
+		if (o.cut[texture] or false) ~= on and pcall(texture[on and "AddMaskTexture" or "RemoveMaskTexture"], texture, mask) then
+			o.cut[texture] = on or nil
+		end
+	end
+end
+
+-- The picture: its border, the face, the fade and the rest glow (UnitFrames.lua ApplyPicture, Draw and Colour, UnitFramePortrait.lua).
+-- Separate parts: the border takes the colour of a state or a kind, else of the class or reaction, over the picture's own background, and a square Elite or
+-- Rare picture gets its 2 px rim and a Rare Elite its inner line.
+-- One frame: a square picture is a cell with no border and no background of its own; a round one keeps its ring in the one colour of the frame (E.draw), with
+-- Border and Portrait border None as for the body. There is no rim or inner line: the mark after the level tells a Rare Elite.
+-- The game's own portrait is a black disc with the face over it, both cut round, with no ring line: the game's ring art is faded.
 function E.picture(o, g, L)
 	local s, pic, t = o.s, o.pic, L.t
 	local shown = L.drawn or L.gameFace
 	pic:SetShown(shown)
-	Box(pic, o.root, t, L.picTop, L.side, L.side)
-	local look = L.drawn and s.rank and Get("elite") == true and ns.KINDS[s.rank] or nil
-	local colour = nil
-	if L.drawn and g.status and s.state then
-		colour = s.state
+	Box(pic, o.root, L.picLeft, L.picTop, L.side, L.side)
+	local look = nil
+	if L.joined then
+		local ring = L.drawn and L.round
+		EdgePaint(o.outline, ring, false, L.colour, nil, true)
+		ns.SetOutlineBare(o.outline, ring and L.bare)
+		Round(o.outline, nil, t)
+	else
+		look = L.drawn and s.rank and Get("elite") == true and ns.KINDS[s.rank] or nil
+		local colour = nil
+		if L.drawn and g.status and s.state then
+			colour = s.state
+		end
+		if look then
+			colour = look.colour
+		end
+		local coloured = colour ~= nil
+		if L.drawn and not coloured and g.portraitBorder == "class" then
+			local r, gr, b = Mute(UnitColour(o))
+			colour = { r, gr, b }
+		end
+		EdgePaint(o.outline, L.drawn, true, colour)
+		ns.SetOutlineBare(o.outline, L.drawn and g.portraitBorder == "none" and not coloured)
+		-- A round picture has its ring in place of the rounded corners.
+		Round(o.outline, L.drawn and not L.round and L.radius or nil, t)
 	end
-	if look then
-		colour = look.colour
-	end
-	local coloured = colour ~= nil
-	if L.drawn and not coloured and g.portraitBorder == "class" then
-		local r, gr, b = Mute(UnitColour(o))
-		colour = { r, gr, b }
-	end
-	EdgePaint(o.outline, L.drawn, true, colour)
-	ns.SetOutlineBare(o.outline, L.drawn and g.portraitBorder == "none" and not coloured)
-	-- A class icon can be round: the ring takes the place of the rounded corners.
-	local icon = L.drawn and L.style == "icon" and s.player
-	local ring = icon and g.classShape == "round"
-	Round(o.outline, L.drawn and not ring and L.radius or nil, t)
 	if o.rim then
-		o.rimFrame:SetShown(look ~= nil)
+		-- The rim and the inner line are square, so they go round a square picture only: a round one shows the kind's colour on its ring (UnitFrames.lua Colour).
+		local rim = not L.round and look or nil
+		o.rimFrame:SetShown(rim ~= nil)
 		Over(o.rimFrame, pic)
-		EdgePaint(o.rim, look ~= nil, false, look and look.colour or nil)
-		Round(o.rim, look ~= nil and L.radius or nil, t)
-		local inner = look ~= nil and look.inner ~= nil
+		EdgePaint(o.rim, rim ~= nil, false, rim and rim.colour or nil)
+		-- EdgePaint gives an outline the general thickness: the rim is 2 px and the inner line 1 px, as on the game's frames (UnitFrames.lua RIM_PX, INNER_PX).
+		ns.SetOutlineThickness(o.rim, 2)
+		Round(o.rim, rim ~= nil and L.radius or nil, t)
+		local inner = rim ~= nil and rim.inner ~= nil
 		o.innerFrame:SetShown(inner)
 		Over(o.innerFrame, pic, ns.Pixels(o.root, 1))
-		EdgePaint(o.inner, inner, false, inner and look.inner or nil)
+		EdgePaint(o.inner, inner, false, inner and rim.inner or nil)
+		ns.SetOutlineThickness(o.inner, 1)
 	end
-	-- The ring of the game's own portrait, and the face: the player's 2D portrait where the client draws it, a class icon on a player, else a plain silhouette.
+	-- The face fills the square: the player's portrait unmasked, as UnitFrames.lua Draw draws it, a class icon on a player, else a plain silhouette. Under the
+	-- game's own portrait is a black disc, as the game draws it.
 	o.ring:SetShown(L.gameFace)
 	o.face:SetShown(shown)
+	Over(o.face, pic)
 	if L.gameFace then
 		Over(o.ring, pic)
-		Solid(o.ring, 0.55, 0.45, 0.25, 1)
-		Over(o.face, pic, 2)
-	else
-		Over(o.face, pic)
+		Solid(o.ring, 0, 0, 0, 1)
 	end
+	local icon = L.drawn and L.style == "icon" and s.player
 	local atlas = icon and ns.ClassAtlas(s.class) or nil
 	local plain = false
 	o.face:SetTexCoord(0, 1, 0, 1)
@@ -769,16 +976,23 @@ function E.picture(o, g, L)
 	elseif icon then
 		local r, gr, b = ClassRgb(s.class)
 		Solid(o.face, r * 0.8, gr * 0.8, b * 0.8, 1)
-	elseif s.own and shown and type(SetPortraitTexture) == "function" and pcall(SetPortraitTexture, o.face, "player") then
+	elseif s.own and shown and type(SetPortraitTexture) == "function" and pcall(SetPortraitTexture, o.face, "player", true) then
 		o.face:SetVertexColor(1, 1, 1, 1)
-		-- A 3D head is drawn as the face cut tighter, tighter still for the framing Face and looser for Head and shoulders (stand-ins).
-		local crop = L.drawn and L.style == "head" and ({ face = 0.28, shoulders = 0.12 })[g.headFraming] or (L.drawn and L.style == "head" and 0.2) or 0.08
+		-- A drawn face loses CROP at each edge, as UnitFrames.lua Draw cuts it; a 3D head is drawn as the face cut tighter, tighter still for the framing Face
+		-- and looser for Head and shoulders (stand-ins). The game's own portrait is whole.
+		local crop = 0
+		if L.drawn then
+			crop = L.style == "head" and (({ face = 0.28, shoulders = 0.12 })[g.headFraming] or 0.2) or CROP
+		end
 		o.face:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
 	else
 		Solid(o.face, 0.29, 0.32, 0.38, 1)
 		plain = shown
 	end
-	ns.SetOutlineRound(o.outline, o.face, ring and true or false, o.fade)
+	-- The circle cuts a round picture, its fade, its grey shapes and the game's black disc.
+	local round = L.round or L.gameFace
+	ns.SetOutlineRound(o.outline, o.face, round, o.fade)
+	Cut(o, round)
 	o.head:SetShown(plain)
 	o.body:SetShown(plain)
 	if plain then
@@ -789,12 +1003,12 @@ function E.picture(o, g, L)
 		Solid(o.head, 0, 0, 0, 0.45)
 		Solid(o.body, 0, 0, 0, 0.45)
 	end
-	-- The top of the picture fades into the background beside a name row that fades upward (UnitFramePortrait.lua:62-82).
+	-- The top of the picture fades into the background, Own background too, beside a name row that fades upward (UnitFramePortrait.lua Fade).
 	local fade = L.drawn and L.tall and L.large and L.rowOn and g.portraitFade and g.stripColour == "gradient"
 	o.fade:SetShown(fade and true or false)
 	if fade then
 		Box(o.fade, pic, 0, 0, L.side, math.min(ROW.height, L.side))
-		local r, gr, b = ns.Colour("general.backdrop")
+		local r, gr, b = Plate()
 		Gradient(o.fade, r, gr, b, 0, g.stripFade / 100)
 	end
 	-- The rest animation of the game's art, around the picture of the player (UnitFrames.lua:2082).
@@ -832,10 +1046,19 @@ local function HealthColour(o, g)
 	return r, gr, b, nil
 end
 
--- The bars: borders, backgrounds, fills, the segments on the health bar and the words (UnitFrames.lua:1190-1290, UnitText.lua:313-495).
+-- The bars: borders, backgrounds, fills, the segments on the health bar and the words (UnitFrames.lua:1190-1290, UnitText.lua:313-495). In One frame a bar is a
+-- cell with no border: its own background is the trough on the plate, or the colour a dark health bar hides, and its corners stay square.
 function E.bars(o, g, L)
 	local k, s, t = o.k, o.s, L.t
 	local size = L.size
+	-- The player's power at rest (REST): its colour, how full it is, and numbers to match. Every other frame shows mana at 70%.
+	local token, share, powerNumbers = "MANA", FRACTION, POWER
+	local rest = s.kind == "player" and REST[s.class] or nil
+	if rest then
+		local full = math.floor(rest[2] * 100 + 0.5)
+		token, share, powerNumbers = rest[1], rest[2], { cur = full, max = 100, pct = full, miss = 100 - full }
+	end
+	local trough = L.joined and Trough() or nil
 	for _, role in ipairs({ "health", "power" }) do
 		local frame, fill = o[role], o[role .. "Fill"]
 		local live = role == "health" or L.power
@@ -854,7 +1077,7 @@ function E.bars(o, g, L)
 				end
 			end
 		else
-			r, gr, b = ns.PowerColour("MANA")
+			r, gr, b = ns.PowerColour(token)
 			if r == nil then
 				r, gr, b = 0, 0, 1
 			end
@@ -869,17 +1092,23 @@ function E.bars(o, g, L)
 			Over(o[role .. "Back"], frame)
 			Solid(o[role .. "Back"], 0, 0, 0, 0.6)
 		end
+		-- Threat colours the health bar's border in Separate parts; in One frame it colours the frame's border (E.draw).
 		local colour = nil
-		if role == "health" and L.on and g.threat then
+		if role == "health" and L.on and not L.joined and g.threat then
 			colour = s.threat and THREAT or s.debuff
 		end
-		EdgePaint(o[role .. "Outline"], live and L.on, g.backdrop, colour, lost, true)
-		Round(o[role .. "Outline"], live and L.on and L.radius or nil, t)
-		local width = size.bar * (s.dead and 0 or FRACTION)
+		local outline = o[role .. "Outline"]
+		EdgePaint(outline, live and L.on, g.backdrop, colour, lost or trough, true)
+		if L.joined then
+			ns.SetOutlineEdges(outline, false)
+		end
+		local radius = live and L.on and not L.joined and L.radius or nil
+		Round(outline, radius, t)
+		local width = size.bar * (s.dead and 0 or (role == "health" and FRACTION or share))
 		fill:SetShown(live and width > 0)
 		Stretch(fill, frame, 0, width, height)
 		Fill(fill, file, r, gr, b, 1)
-		CutFill(frame, fill, L.on and L.radius or nil)
+		CutFill(frame, fill, radius)
 	end
 	-- Heal prediction, absorb shield and heal absorb on the health bar (UnitExtras.lua:190-216).
 	local bar = size.bar
@@ -902,7 +1131,7 @@ function E.bars(o, g, L)
 	end
 	for _, role in ipairs({ "health", "power" }) do
 		local text, frame = o[role .. "Text"], o[role]
-		local numbers = role == "health" and HEALTH or POWER
+		local numbers = role == "health" and HEALTH or powerNumbers
 		local row = role == "health" and k.ht or k.pt
 		local mode = "game"
 		if L.on and row then
@@ -966,23 +1195,29 @@ function E.row(o, g, L)
 	local k, s, t, row = o.k, o.s, L.t, o.row
 	local size = L.size
 	local rowOn = L.rowOn
-	row:SetShown(true)
+	-- The row's corners: those of Corners in Separate parts; in One frame the row is a square cell on the plate.
+	local radius = not L.joined and L.radius or nil
+	-- A party pet in One frame shows neither a row nor a name (Layout), so the frame that holds them is hidden.
+	row:SetShown(not L.nameless)
 	local mode = "dark"
 	if rowOn then
-		local rr, rg, rb = UnitColour(o)
-		if not s.player and (s.kind == "target" or s.kind == "focus" or s.kind == "boss") then
-			rr, rg, rb = s.react[1], s.react[2], s.react[3]
-		end
-		rr, rg, rb = Mute(rr, rg, rb)
+		-- The colour (UnitFrames.lua RowColour): the class of a player, the owner's class for a pet, the reaction of any other unit, the target, focus and boss
+		-- too; muted, at Name background brightness, then, unless the row is dark, scaled down to a lightness of CAP so that the name reads on it.
+		local rr, rg, rb = Mute(UnitColour(o))
 		local bright = g.stripBrightness / 100
 		rr, rg, rb = rr * bright, rg * bright, rb * bright
 		mode = g.stripColour
-		Box(row, o.root, L.barsLeft - t, L.rowTop, size.bar + 2 * t, L.rowH)
-		local radius = L.radius
+		local cap, light = CAP[mode], 0.30 * rr + 0.59 * rg + 0.11 * rb
+		if cap and light > cap then
+			rr, rg, rb = rr * cap / light, rg * cap / light, rb * cap / light
+		end
+		Box(row, o.root, L.rowLeft, L.rowTop, L.rowWidth, L.rowH)
 		local top = ROW.strong * (100 - g.stripFade) / 100
-		local br, bg, bb = ns.Colour("general.backdrop")
-		local alpha = ns.Get("general.backdropAlpha") / 100
-		o.rBase:SetShown(s.kind == "player")
+		local br, bg, bb, alpha = Plate()
+		-- In Separate parts the player's row has an opaque base in the background colour, where the game's band behind the name may show through
+		-- (UnitFrames.lua PaintRow); One frame has none.
+		local base = s.kind == "player" and not L.joined
+		o.rBase:SetShown(base)
 		Over(o.rBase, row)
 		if radius then
 			Shaped(o.rBase, radius, br, bg, bb, 1)
@@ -990,14 +1225,15 @@ function E.row(o, g, L)
 			Solid(o.rBase, br, bg, bb, 1)
 		end
 		o.rGrad:SetShown(mode == "gradient")
-		o.rFill:SetShown(mode ~= "gradient")
+		-- A dark row is the background with a mark of the colour at its left end; in One frame it is the mark alone, on the plate.
+		o.rFill:SetShown(mode ~= "gradient" and not (L.joined and mode == "dark"))
 		Over(o.rGrad, row)
 		Over(o.rFill, row)
 		if mode == "gradient" then
 			if radius then
 				Shaped(o.rGrad, radius, 1, 1, 1, 1)
 			end
-			Gradient(o.rGrad, rr, rg, rb, ROW.strong, top)
+			Gradient(o.rGrad, rr, rg, rb, ROW.strong, top, radius ~= nil)
 		elseif mode == "flat" then
 			if radius then
 				Shaped(o.rFill, radius, rr, rg, rb, ROW.strong)
@@ -1020,7 +1256,9 @@ function E.row(o, g, L)
 			Solid(o.rMark, rr, rg, rb, 1)
 		end
 	else
-		Box(row, o.root, L.barsLeft, L.nameTop, size.bar, NAMEH)
+		if L.nameTop ~= nil then
+			Box(row, o.root, L.barsLeft, L.nameTop, size.bar, NAMEH)
+		end
 		for _, texture in ipairs({ o.rBase, o.rGrad, o.rFill, o.rMark }) do
 			texture:Hide()
 		end
@@ -1049,7 +1287,7 @@ function E.row(o, g, L)
 	-- Long names: a name wider than the row is set smaller, down to 75% (UnitExtras.lua, FitName).
 	if rowOn and L.on and g.fit[s.kind] == "shrink" then
 		local ok, need = pcall(o.name.GetUnboundedStringWidth or o.name.GetStringWidth, o.name)
-		local room = size.bar + 2 * t - 2 * ROW.pad
+		local room = L.rowWidth - 2 * ROW.pad
 		if ok and not ns.IsSecret(need) and type(need) == "number" and need > room then
 			spec.percent = spec.percent * math.max(0.75, room / need)
 			Style(o.name, spec)
@@ -1091,8 +1329,8 @@ function E.row(o, g, L)
 	o.rLine:SetShown(line and true or false)
 	if line then
 		o.rLine:ClearAllPoints()
-		o.rLine:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", L.radius or 0, 0)
-		o.rLine:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -(L.radius or 0), 0)
+		o.rLine:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", radius or 0, 0)
+		o.rLine:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -(radius or 0), 0)
 		o.rLine:SetHeight(t)
 		Solid(o.rLine, look.colour[1], look.colour[2], look.colour[3], 1)
 	end
@@ -1193,7 +1431,10 @@ function E.icons(o, g, L)
 	end
 	if o.pic then
 		local shown = L.drawn or L.gameFace
-		local px, py, side = L.t, L.picTop, L.side
+		local px, py, side = L.picLeft, L.picTop, L.side
+		-- On a round picture the level and the PvP plate move in by INSET of the side on both axes, onto the circle at 45 degrees (UnitFrameLevel.lua
+		-- Update, UnitFrames.lua PlacePlate).
+		local inset = L.round and INSET * side or 0
 		if L.drawn and L.levelOn and L.at == "portrait" and L.rowOn then
 			local text = tostring(s.level)
 			local look = s.rank and ns.KINDS[s.rank] or nil
@@ -1202,7 +1443,7 @@ function E.icons(o, g, L)
 			end
 			o.picLevel:SetText(text)
 			o.picLevel:ClearAllPoints()
-			o.picLevel:SetPoint("BOTTOMRIGHT", o.pic, "BOTTOMRIGHT", -2, 2)
+			o.picLevel:SetPoint("BOTTOMRIGHT", o.pic, "BOTTOMRIGHT", -2 - inset, 2 + inset)
 			Style(o.picLevel, { percent = 100, flags = "OUTLINE", r = L.lr, g = L.lg, b = L.lb })
 			o.picLevel:Show()
 		end
@@ -1220,9 +1461,11 @@ function E.icons(o, g, L)
 		end
 		if shown and (L.pvp == "icon" or L.pvp == "both" or L.pvp == "game") then
 			Art(o.plateIcon, "pvp")
+			-- The plate's centre is half a plate in from the corner, so that it sits inside the picture, and INSET more on a round one.
 			local corner = L.pvp == "game" and "bl" or g.pvpCorner
-			local cx = px + ((corner == "tr" or corner == "br") and side or 0) - ((corner == "tr" or corner == "br") and ICON / 2 or -ICON / 2)
-			local cy = py + ((corner == "bl" or corner == "br") and side or 0) - ((corner == "bl" or corner == "br") and ICON / 2 or -ICON / 2)
+			local right, low = corner == "tr" or corner == "br", corner == "bl" or corner == "br"
+			local cx = px + (right and (side - ICON / 2 - inset) or (ICON / 2 + inset))
+			local cy = py + (low and (side - ICON / 2 - inset) or (ICON / 2 + inset))
 			Mark(o.plateIcon, root, cx - ICON / 2, cy - ICON / 2)
 			local timer = s.own and g.pvpTimer and (L.pvp == "icon" or L.pvp == "game")
 			o.pvpTimer:SetShown(timer and true or false)
@@ -1313,13 +1556,33 @@ function E.draw(o, g)
 		Box(o.plate, o.root, 0, 0, L.width, L.height)
 		Solid(o.plate, 0.13, 0.12, 0.11, 1)
 	end
-	-- The shadow behind a styled frame, from the picture to the bars and from the name row to the power bar (UnitFrameLooks.lua:225-244).
+	-- One frame: the one colour of the frame's border (FrameColour), worked out first so that a round picture's ring takes it too, and Portrait border None,
+	-- which leaves the plain border off with Flat UI portraits on, a boss frame's too (UnitFramePortrait.lua Colour).
+	if L.joined then
+		L.colour = FrameColour(o, g)
+		L.bare = (g.square and g.portraitBorder == "none" and L.colour == nil) and true or false
+	end
+	-- The body: in One frame the plate behind every part, at Background, and the frame's one border, with Border, Borderless and the corners. In Separate
+	-- parts there is none: it is hidden, so that the options window finds the frame under the pointer, and placed for the mark of its rows.
+	Box(o.box, o.root, L.bodyLeft, L.bodyTop, L.bodyWidth, L.bodyHeight)
+	o.box:SetShown(L.joined)
+	EdgePaint(o.boxOutline, L.joined, g.backdrop, L.colour, nil, true)
+	ns.SetOutlineBare(o.boxOutline, L.bare)
+	Round(o.boxOutline, L.joined and L.radius or nil, L.t)
+	-- The shadow behind a styled frame (UnitFrameLooks.lua Place): round the body in One frame; else from the picture, while it is drawn, on its side, or the
+	-- bars, to the bars' other end, and from the name row to the power bar.
 	local shadow = L.on and g.lookShadow
 	o.shadow:SetShown(shadow and true or false)
 	if shadow then
+		local left, top, right, bottom = L.bodyLeft, L.bodyTop, L.bodyLeft + L.bodyWidth, L.bodyTop + L.bodyHeight
+		if not L.joined then
+			left = (L.drawn and not L.right) and L.picLeft or L.barsLeft
+			right = (L.drawn and L.right) and (L.picLeft + L.side) or (L.barsLeft + L.size.bar)
+			top, bottom = L.rowTop or L.healthTop, L.bottom
+		end
 		o.shadow:ClearAllPoints()
-		o.shadow:SetPoint("TOPLEFT", o.root, "TOPLEFT", L.t - SHADOW.out, -((L.rowTop or L.healthTop) - SHADOW.out))
-		o.shadow:SetPoint("BOTTOMRIGHT", o.root, "TOPLEFT", L.barsLeft + L.size.bar + SHADOW.out, -(L.bottom + SHADOW.out))
+		o.shadow:SetPoint("TOPLEFT", o.root, "TOPLEFT", left - SHADOW.out, -(top - SHADOW.out))
+		o.shadow:SetPoint("BOTTOMRIGHT", o.root, "TOPLEFT", right + SHADOW.out, -(bottom + SHADOW.out))
 		o.shadow:SetTexture(SHADOW.file)
 		Slice(o.shadow)
 		o.shadow:SetVertexColor(0, 0, 0, SHADOW.alpha)
@@ -1523,9 +1786,9 @@ local MARK = {
 	portraitStyle = { "player", "pic" }, portraitSize = { "player", "pic" }, portraitBorder = { "player", "pic" }, classShape = { "player", "pic" }, portraitFade = { "player", "pic" }, headFraming = { "player", "pic" },
 	portraitPlayer = { "player", "pic" }, portraitTarget = { "target", "pic" }, portraitFocus = { "focus", "pic" }, portraitPet = { "pet", "pic" },
 	portraitTot = { "tot", "pic" }, portraitParty = { "party1", "pic" }, portraitPartypet = { "partypet1", "pic" }, squarePortrait = { "player", "pic" },
-	corners = { "player", "health" }, elite = { "target", "pic" },
-	backdrop = { "player", "health" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
-	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "target", "health" },
+	frameStyle = { "player", "body" }, powerSpace = { "player", "body" }, barBorder = { "player", "body" }, corners = { "player", "body" }, elite = { "target", "pic" },
+	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
+	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	healPrediction = { "player", "pred" }, absorbShield = { "player", "shield" }, healAbsorb = { "player", "absorb" }, lookOwn = { "player", "health" },
 	lookBorder = { "player", "health" }, lookBack = { "player", "health" }, lookBackAlpha = { "player", "health" },
 	smallRow = { "pet", "row" }, levelPosition = { "target", "level" }, levelColour = { "player", "level" }, pvpWordColour = { "player", "level" }, levelSize = { "player", "level" },
@@ -1559,9 +1822,16 @@ local MARK = {
 }
 
 -- Builds a scene: the frames of a list of items on a root frame, with a caption under each. make: the function for an item that is not a unit frame.
+-- spec.ground = false leaves out the ground, for a stage that has a ground of its own.
 local function BuildScene(stage, spec)
 	local scene = { root = Frame(stage), items = {}, spec = spec, parts = {} }
 	scene.root:SetPoint("TOPLEFT", stage, "TOPLEFT", 0, 0)
+	-- The ground: GROUND under every frame, 6 units round the scene, so that a see-through background shows the world behind it as in the game.
+	scene.ground = Tex(scene.root, "BACKGROUND", -8)
+	scene.ground:SetPoint("TOPLEFT", scene.root, "TOPLEFT", -6, 6)
+	scene.ground:SetPoint("BOTTOMRIGHT", scene.root, "BOTTOMRIGHT", 6, -6)
+	Solid(scene.ground, GROUND[1], GROUND[2], GROUND[3], 1)
+	scene.ground:SetShown(spec.ground ~= false)
 	for _, id in ipairs(spec.ids) do
 		local item
 		if id == "totem" then
@@ -1738,3 +2008,7 @@ Register("mock-party-frames", { ids = { "party1", "party2", "party3", "party4", 
 	rows = { { { "party1", "partypet1" }, { "party2", "partypet2" }, "party3", "party4", "party5" } } })
 -- A block of raid cells and a boss frame, living and dead.
 Register("mock-raid-cells", { ids = { "raid", "boss", "boss2" }, raid = { 5, 2 }, rows = { { "raid", { "boss", "boss2" } } } })
+-- The player's frame alone, for the frame style cards of the setup (Config.lua ns.SETUP_FRAME_STYLES).
+Register("mock-player", { ids = { "player" }, rows = { { "player" } } })
+-- Flat UI setup's stop Your target and party: the target beside four party members, the fourth out of range.
+Register("mock-group-frames", { ids = { "target", "party1", "party2", "party3", "party4" }, rows = { { "target", { "party1", "party2", "party3", "party4" } } } })

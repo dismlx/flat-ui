@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- The steps of Flat UI setup, from FlatUI/Config.lua. Written by tools/dev/setup_steps.py; change that tool and write the file again.
+-- The steps of Flat UI setup, from FlatUI/Config.lua. Kept by hand, since tools/dev/setup_steps.py, which first wrote it, is not in the repository.
 -- A step has id, area, title, draw (the id of its drawing), built (true when the wizard shows it) and rows. A row is { saved path, tier, drawing
 -- id or "behaviour", sentence }, the tier c for a main choice, o for an optional one and r for a rare one; behaviour rows have the sentence.
 -- Every setting of Config.lua is in exactly one step.
@@ -308,7 +308,8 @@ ns.SETUP_STEPS = {
 		{ "unitframes.bossScale", "o", "mock-unit-frames" },
 		{ "unitframes.raidScale", "c", "mock-unit-frames" },
 	} },
-	{ id = "uf-portraits", area = "Unit frames", title = "Portraits and corners", draw = "mock-unit-frame", built = true, rows = {
+	{ id = "uf-portraits", area = "Unit frames", title = "Frame, portraits and corners", draw = "mock-unit-frame", built = true, rows = {
+		{ "unitframes.frameStyle", "c", "mock-unit-frame" },
 		{ "unitframes.portraitStyle", "c", "mock-unit-frame" },
 		{ "unitframes.headFraming", "o", "mock-unit-frame" },
 		{ "unitframes.portraitSize", "c", "mock-unit-frame" },
@@ -335,7 +336,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.powerTexture", "o", "mock-unit-frame" },
 		{ "unitframes.manaColour", "o", "behaviour", "Chooses whether a mana bar turns sky blue when the health bar is blue too." },
 		{ "unitframes.powerWidth", "o", "behaviour", "Chooses whether the power bar is as wide as the health bar or as wide as the game's bar." },
-		{ "unitframes.powerSpace", "o", "behaviour", "Sets the space between the health bar and the power bar." },
+		{ "unitframes.powerSpace", "o", "mock-unit-frame" },
 		{ "unitframes.hideEmptyPower", "o", "behaviour", "Chooses whether a power bar with nothing to show is hidden." },
 		{ "unitframes.healthByLeft", "c", "mock-unit-frame" },
 		{ "unitframes.status", "o", "mock-unit-frame" },

@@ -163,7 +163,8 @@ local MAX_NAME = 32
 local RESET_SETTINGS = { "unitframes.squarePortrait", "unitframes.badges", "unitframes.strip", "unitframes.elite", "unitframes.status", "unitframes.lossFlash" }
 -- A slider or a colour picker changes a general setting on every step. The work that follows waits for the last step.
 local SETTLE = 0.2
--- Modules that read a setting of another page, so a change of it refreshes them too.
+-- Modules that read a setting of another page, or a border or background row of their own page that only repaints the outlines (Changed), so a
+-- change of it refreshes them too.
 local READERS = {
 	["castbars.castColour"] = "hud", ["castbars.channelColour"] = "hud", ["castbars.craftColour"] = "hud",
 	["windows.accent"] = "chat",
@@ -176,6 +177,9 @@ local READERS = {
 	["defensives.own"] = "ownbuffs", ["defensives.enabled"] = "ownbuffs", ["defensives.place"] = "ownbuffs",
 	-- The health text of a nameplate follows Number style of the unit frames.
 	["unitframes.numberStyle"] = "nameplates",
+	-- The name row, the fade, the trough and the rounded lines of unit frames follow them.
+	["unitframes.lookOwn"] = "unitframes", ["unitframes.lookBorder"] = "unitframes", ["unitframes.lookBack"] = "unitframes",
+	["unitframes.lookBackAlpha"] = "unitframes",
 }
 
 local db
@@ -1514,6 +1518,23 @@ local function PaintNow(outline)
 	end
 end
 
+-- Red, green and blue of the edges of an outline, as PaintNow gives them: its own colour, else the border colour of its page while that page has a
+-- border and background of its own, else the general border colour. For a line a module draws in place of the edges, such as the rounded line of a
+-- unit frame, so that it takes the same colour.
+function ns.OutlineEdgeRGB(outline)
+	if outline == nil then
+		return ns.BorderRGB()
+	end
+	if outline.r ~= nil then
+		return outline.r, outline.g, outline.b
+	end
+	local area, prefix = AreaOf(outline)
+	if area then
+		return ns.Colour(area .. "." .. prefix .. "Border")
+	end
+	return ns.BorderRGB()
+end
+
 local function Paint(outline)
 	if outline.view then
 		local ok, err = ns.Viewing(outline.view, PaintNow, outline)
@@ -2797,6 +2818,32 @@ function ns.CopyProfile(from)
 	return true, ("Copied %s."):format(source)
 end
 
+-- The profile in use takes `picks`, a table of saved path to value, and is applied once. Each value is written as Normalise gives it; a value equal to
+-- the setting's default takes the path out, so the default applies; a path that is no setting, or that the game or a function holds, is left out. The
+-- positions stay. Returns true and a line, or false and why (in combat nothing changes). Flat UI setup's Finish calls it.
+function ns.ChangeProfile(picks)
+	local refusal = Refusal()
+	if refusal then
+		return false, refusal
+	end
+	local copy = CopyOf(profile)
+	for path, value in pairs(type(picks) == "table" and picks or {}) do
+		local def = defs[path]
+		if def and not Unsaved(def) then
+			local fitted = Normalise(def, value)
+			if fitted ~= nil then
+				if fitted == def.default then
+					copy.options[path] = nil
+				else
+					copy.options[path] = fitted
+				end
+			end
+		end
+	end
+	Replace(copy.options, profile.movers)
+	return true, ("Saved %s."):format(current)
+end
+
 -- A profile takes another name. The rules of Switch automatically and the profile of every character follow it.
 function ns.RenameProfile(from, to)
 	local refusal = Refusal()
@@ -3457,8 +3504,8 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui status - what is styled, and any error")
 		print("/flatui profile - the profile in use and the others")
 		print("/flatui profile Name - switch to a profile")
-		print("/flatui setup - set up a new profile step by step")
-		print("/flatui profiles - the ready-made profiles")
+		print("/flatui setup - walk round your screen in six short stops")
+		print("/flatui profiles - the ready-made looks; a click puts one in use")
 		print("/flatui welcome - the welcome screen")
 		print("/flatui scale 70 - custom UI scale in percent, 65 to 115")
 		print("/flatui scale off - the game's own UI scale")
