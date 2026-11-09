@@ -124,13 +124,45 @@ function W.Used()
 	end
 end
 
--- A click on a tile: its look is put in use (S.UseReady sets the flag and says it in chat), and the after view says which. In combat the line says so
--- and nothing changes.
+-- The rows that apply only after /reload (the reload field of Config.lua), each with the value it has now. A tile switches the profile at once, so
+-- the after view compares these with the values of the look put in use, as Finish compares the profile with the draft (S.ReloadLines).
+function W.ReloadBefore()
+	local before = {}
+	for _, page in ipairs(type(ns.PAGES) == "table" and ns.PAGES or {}) do
+		for _, item in ipairs(page) do
+			if item.path and item.reload and IsText(item.label) and not ns.RowUnsaved(item) then
+				before[item] = ns.Get(item.path)
+			end
+		end
+	end
+	return before
+end
+
+-- The reload lines after a switch, { label, field } as S.ReloadLines gives them: "off" for a switch turned off, "change" for a row whose value changed.
+function W.ReloadSince(before)
+	local lines = {}
+	for _, page in ipairs(type(ns.PAGES) == "table" and ns.PAGES or {}) do
+		for _, item in ipairs(page) do
+			local now = before[item]
+			if now ~= nil then
+				local later = ns.Get(item.path)
+				if item.reload == "off" and now == true and later == false or item.reload == "change" and now ~= later then
+					lines[#lines + 1] = { item.label, item.reload }
+				end
+			end
+		end
+	end
+	return lines
+end
+
+-- A click on a tile: its look is put in use (S.UseReady sets the flag and says it in chat), and the after view says which, with Reload when the look
+-- changes a row that applies only after /reload. In combat the line says so and nothing changes.
 function W.Pick(index)
 	local tile = W.tiles[index]
 	if not tile then
 		return
 	end
+	local before = W.ReloadBefore()
 	local ok, why = S.UseReady(tile.profile.id)
 	if not ok then
 		W.line:SetText(why == "combat" and COMBAT or tostring(why))
@@ -141,7 +173,7 @@ function W.Pick(index)
 	end
 	W.Done(true, true)
 	W.Used()
-	W.ShowAfter({ name = ns.Profile() or tile.profile.label, ready = true })
+	W.ShowAfter({ name = ns.Profile() or tile.profile.label, ready = true, reloadLines = W.ReloadSince(before) })
 end
 
 -- Same as: the profile most characters of the account use, put in use as it is.
@@ -403,15 +435,22 @@ function W.Build()
 	W.caption:SetText("Your frame as Flat UI draws it now.")
 	W.setup = kit.Button(frame, "Set up my screen", INNER, W.Setup, true)
 	W.ready = kit.Button(frame, "Ready-made looks", INNER, function()
-		W.view = "tiles"
+		W.view, W.fromStart = "tiles", true
 		W.Update()
 	end)
 	W.keep, W.keepText = kit.Button(frame, "Keep this look", INNER, W.Keep)
 	-- The tiles view: the tiles are made the first time it shows (W.BuildTiles).
 	W.same, W.sameText = kit.Button(frame, "Same as", SAME_W, W.Same)
-	W.back = kit.Button(frame, "Back", 100, function()
-		W.view, W.share = "start", false
-		W.Update()
+	-- Back returns to the start view when the tiles were opened from it; opened from anywhere else (Home, the Profiles page, setup's list,
+	-- /flatui profiles), there is nothing to go back to, so it reads Close and closes the screen.
+	W.back, W.backText = kit.Button(frame, "Back", 100, function()
+		W.share = false
+		if W.fromStart then
+			W.view = "start"
+			W.Update()
+		else
+			W.frame:Hide()
+		end
 	end)
 	W.shareBox, W.shareMark, W.shareLabel = Tick(frame, "Same profile on new characters", function()
 		W.share = not W.share
@@ -549,6 +588,9 @@ function W.LayoutTiles(y)
 	end
 	y = y + 28
 	W.At(W.back, y)
+	if W.backText then
+		W.backText:SetText(W.fromStart and "Back" or "Close")
+	end
 	W.back:Show()
 	y = y + kit.BUTTON
 	ShowFoot()
@@ -629,6 +671,8 @@ end
 function W.Open(view, finished)
 	local frame = W.frame or W.Build()
 	W.view = view
+	-- Tiles opened here come from outside the start view; the start view's own button sets this again.
+	W.fromStart = false
 	if view == "after" then
 		W.finished = finished
 	end
