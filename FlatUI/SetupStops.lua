@@ -28,7 +28,7 @@ ns.SETUP_STOPS = {
 					values = { [U .. "portraitStyle"] = "head" } },
 				{ id = "icon", label = "Class icon", line = "Your class's icon. Other units keep their face.",
 					values = { [U .. "portraitStyle"] = "icon" } },
-				{ id = "game", label = "Game portrait", line = "The game's round portrait.",
+				{ id = "game", label = "Game portrait", line = "The game's portrait, drawn in your frame.",
 					values = { [U .. "playerPicture"] = "game", [U .. "targetPicture"] = "game", [U .. "focusPicture"] = "game", [U .. "petPicture"] = "game",
 						[U .. "totPicture"] = "game" } },
 				{ id = "none", label = "None", line = "Just the name and the bars.",

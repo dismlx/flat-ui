@@ -1,6 +1,11 @@
 ## 0.5.13
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Unit frames**, **All frames: bars and pictures**, **Frame style**: **Separate parts** is the default again, so each frame's portrait, name row and bars have their own border, as in 0.5.11. A profile that never picked a frame style shows separate parts after the update, and one that picked **One frame** keeps it.
+- **Unit frames**: **Game portrait** is drawn by Flat UI in the frame's own picture, in both frame styles, as **Face** draws it, and takes **Portrait shape** like every other picture, square or round. The level **On the portrait**, the PvP flag, the Elite and Rare colours, the resting and combat colours and the portrait's fade now show on it. The game's own portrait, where the game puts it, shows only with **Flat UI portraits** off.
+- **Unit frames**: choosing a **Portrait style** sets every frame's **Picture** to **As Portrait style**, so the new style shows on every frame; a frame's own **Picture** can then pick another. Switching, importing, making or resetting a profile, and Flat UI setup, leave each frame's **Picture** as it is.
+- **Jon Default**: no longer sets **Portrait shape**, so its portraits and the party's class icons are square, as **Portrait shape** is by default.
+- **Flat UI setup**: **Your character** offers **Square portrait** (suggested), **Round portrait**, **Class icon** and **No portrait**, each in separate parts, and **One frame**.
 
 ## 0.5.12
 

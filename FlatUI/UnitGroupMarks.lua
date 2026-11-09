@@ -625,9 +625,10 @@ end
 
 -- Raid markers -------------------------------------------------------------------------------------------------------------------------------------
 
--- Where the marker of a frame sits: at the top of a raid frame, and on a party frame at the top of the picture Flat UI draws, or of the game's portrait
--- while that shows, as the game centres the marker of its target frame on the top of the portrait (Mainline/TargetFrame.xml:282-287), or at the top of
--- the health bar of a frame that shows neither. The game's classic party frames have no marker (Mainline/PartyFrameTemplates.xml:79-368).
+-- Where the marker of a frame sits: at the top of a raid frame, and on a party frame at the top of the picture Flat UI draws (a Game portrait too), or
+-- of the game's portrait while that shows, as the game centres the marker of its target frame on the top of the portrait (Mainline/TargetFrame.xml:
+-- 282-287), or at the top of the health bar of a frame that shows neither. The game's classic party frames have no marker (Mainline/
+-- PartyFrameTemplates.xml:79-368).
 local function MarkerSpot(rec)
 	if rec.kind ~= "party" then
 		return rec.frame, "TOP", -1
@@ -635,7 +636,7 @@ local function MarkerSpot(rec)
 	local pic, portrait = rec.pic, rec.parts.portrait
 	if pic ~= nil and pic.drawn then
 		return pic.frame, "CENTER", 0
-	elseif portrait ~= nil and not (pic ~= nil and pic.none and not pic.game) then
+	elseif portrait ~= nil and not (pic ~= nil and pic.none) then
 		return portrait, "CENTER", 0
 	end
 	local entry = rec.byRole.health

@@ -8,12 +8,12 @@ local ADDON_NAME, ns = ...
 -- so a warrior's rage shows empty and a rogue's energy full. The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
 -- UnitFrameLooks.lua, UnitFramePortrait.lua, UnitFrameCells.lua, UnitText.lua, UnitParts.lua and UnitExtras.lua, which style the game's frames; the layout is this
 -- file's own, since a module can style only the game's frames.
--- With Frame style One frame (the default) every unit frame but the raid cells is one body with one background and one border, and the picture, the name row
--- and the bars are cells inside it with no borders of their own, the gap (Border thickness and Space between parts) apart and in from its edge; an empty bar is
--- a lighter strip of the background, and a party pet has no name row: its body wraps its picture and its bar alone. Separate parts gives each part its own
--- border and background, as in 0.5.11. Portrait shape Round cuts faces and class icons to a circle, and Game portrait in One frame is the face drawn by
--- Flat UI and cut round; a 3D head stays square. The game's own portrait (Game portrait
--- in Separate parts, Flat UI portraits off, or a frame that is not restyled) is a disc of the game's size at the game's place beside the bars. A frame whose
+-- With Frame style Separate parts (the default, and what any value but One frame means) each part has its own border and background. With One frame every
+-- unit frame but the raid cells is one body with one background and one border, and the picture, the name row and the bars are cells inside it with no
+-- borders of their own, the gap (Border thickness and Space between parts) apart and in from its edge; an empty bar is a lighter strip of the background,
+-- and a party pet has no name row: its body wraps its picture and its bar alone. Portrait shape Round cuts faces, class icons and Game portrait to a
+-- circle; a 3D head stays square. Game portrait is the face drawn by Flat UI in the frame's picture, as Face draws it, in both Frame styles. The game's
+-- own portrait (Flat UI portraits off, or a frame that is not restyled) is a disc of the game's size at the game's place beside the bars. A frame whose
 -- switch is off, and every frame while Restyle unit frames is off, is drawn as the game draws it: a grey plate, the game's portrait and the game's bar file.
 -- Each scene stands on a ground of muted earth, so that a see-through background looks as it does in the world.
 
@@ -692,21 +692,22 @@ local function ByUnit(o, mode, health)
 	return ClassRgb(s.class)
 end
 
--- What the picture of a frame shows: its style, whether it shows nothing, and whether it shows the game's own portrait (UnitFrames.lua:159-173).
+-- What the picture of a frame shows: its style and whether it shows nothing (UnitFrames.lua, ns.UnitFrameExtra.pictureMode). Game portrait is the face,
+-- drawn as Face draws it.
 local function PictureMode(k)
 	local style = Get("portraitStyle")
 	local none = style == "none" or (k.sw ~= nil and Get(k.sw) == false)
 	local pick = k.pick and Get(k.pick) or "auto"
-	if pick == "square" or pick == "class" then
-		return pick == "class" and "icon" or "picture", false, false
+	if pick == "square" or pick == "game" then
+		return "picture", false
+	elseif pick == "class" then
+		return "icon", false
 	elseif pick == "head" then
-		return "head", false, false
+		return "head", false
 	elseif pick == "none" then
-		return style, true, false
-	elseif pick == "game" then
-		return style, false, true
+		return style, true
 	end
-	return style, none, false
+	return style, none
 end
 
 -- The settings every frame of a draw shares.
@@ -727,9 +728,9 @@ local function Settings(root)
 		auraCrop = Get("auraCrop"), auraTypeColours = Get("auraTypeColours") == true, auraCountSize = Get("auraCountSize"),
 		auraNumbers = Get("auraNumbers") == true, lookShadow = Get("lookShadow") == true, radius = RADIUS[Get("corners")], fit = { tot = Get("totNameFit"), pet = Get("petNameFit"), party = Get("partyNameFit"), partypet = Get("partyNameFit"), boss = Get("bossNameFit") } }
 	g.t = ns.Pixels(root, ns.Get("general.thickness"))
-	-- Frame style: One frame unless it says Separate parts (no row yet counts as One frame). The gap of One frame is Border thickness and Space between parts
-	-- (2 px while the row is not there), between the parts and round them (UnitFrames.lua FRAME.gap).
-	g.joined = Get("frameStyle") ~= "parts"
+	-- Frame style: One frame only while it says One frame; any other value, or none, is Separate parts (UnitFrames.lua FRAME.want). The gap of One frame is
+	-- Border thickness and Space between parts (2 px while the row is not there), between the parts and round them (UnitFrames.lua FRAME.gap).
+	g.joined = Get("frameStyle") == "one"
 	g.space = ns.Pixels(root, tonumber(Get("powerSpace")) or 2)
 	g.gap = g.t + g.space
 	return g
@@ -754,21 +755,19 @@ local function Layout(o, g)
 	L.on = g.enabled and Get(k.on) == true
 	L.joined = L.on and g.joined
 	L.right = k.side == "right"
+	-- The game's own disc (gameFace) shows only while Flat UI portraits is off or the frame is not styled; a Game portrait is drawn in the picture, as Face
+	-- is, in both Frame styles (UnitFrames.lua ApplyPicture).
 	L.drawn, L.gameFace = false, false
 	if k.pic then
 		if not L.on or not g.square then
 			L.gameFace = true
 		else
-			L.style, L.none, L.game = PictureMode(k)
-			-- In One frame Game portrait is the face drawn by Flat UI and cut round (UnitFrames.lua ApplyPicture).
-			if L.game and L.joined then
-				L.style, L.game, L.gameRound = "picture", false, true
-			end
-			L.drawn, L.gameFace = not L.none and not L.game, L.game
+			L.style, L.none = PictureMode(k)
+			L.drawn = not L.none
 		end
 	end
-	-- Round: faces and class icons with Portrait shape Round, whatever the unit, and Game portrait in One frame. A 3D head stays square.
-	L.round = L.drawn and L.style ~= "head" and (g.classShape == "round" or L.gameRound == true) or false
+	-- Round: every picture with Portrait shape Round, whatever the unit, a Game portrait too. A 3D head stays square.
+	L.round = L.drawn and L.style ~= "head" and g.classShape == "round" or false
 	-- A party pet in One frame: no row, whatever Name row on small frames says, and no name, as the game hides a party pet's.
 	L.nameless = L.joined and s.kind == "partypet"
 	L.rowOn = L.on and g.strip and g.square and ((not (k.group == "small" or k.group == "pet2")) or g.smallRow) and not L.nameless
