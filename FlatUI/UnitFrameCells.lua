@@ -94,7 +94,7 @@ local function Home(bar)
 	return nil
 end
 
--- The space between the two bars in units. In One frame (Frame style; no value counts as One frame) it is the frame's one gap:
+-- The space between the two bars in units. In One frame (Frame style One frame; any other value, or none, is Separate parts) it is the frame's one gap:
 -- Border thickness and Space between parts in screen pixels, as between every cell of the frame (UnitFrames.lua, FRAME.gap). In Separate parts it is
 -- the two edges of the borders (each ns.Pixels(bar, thickness) outside its bar), and at least 1 unit. The
 -- game's own layout has none: the 15 unit slot of the health bar ends where the power bar starts, and the health bar, 20 units tall from 3 above the
@@ -102,7 +102,7 @@ end
 -- this is that 1 unit.
 local function Gap(power)
 	local thickness = ns.Get("general.thickness")
-	if X.opt("frameStyle") ~= "parts" then
+	if X.opt("frameStyle") == "one" then
 		return ns.Pixels(power, thickness + (tonumber(X.opt("powerSpace")) or 0))
 	end
 	return math.max(1, ns.Pixels(power, 2 * thickness))

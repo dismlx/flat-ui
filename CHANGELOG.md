@@ -1,3 +1,13 @@
+## 0.5.13
+
+- For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Unit frames**, **All frames: bars and pictures**, **Frame style**: **Separate parts** is the default again, so the portrait and each bar of a frame have their own border and background, as in 0.5.11. A profile that never chose a frame style on that row shows separate parts after the update, and one that chose **One frame** there keeps it.
+- **Unit frames**: **Game portrait** is drawn by Flat UI in the frame's own picture, in both frame styles, as **Face** draws it, and takes **Portrait shape** like every other picture, square or round. The level **On the portrait**, the PvP flag, the Elite and Rare colours, the resting and combat colours and the portrait's fade now show on it. The game's own portrait, where the game puts it, shows only with **Flat UI portraits** off.
+- **Unit frames**: choosing a **Portrait style** sets every frame's **Picture** to **As Portrait style**, so the new style shows on every frame; a frame's own **Picture** can then pick another. Switching to, importing or making a profile keeps each frame's **Picture** as the profile has it.
+- **Jon Default**: no longer sets **Portrait shape**, so its portraits and the party's class icons are square, as **Portrait shape** is by default.
+- **Flat UI setup**: **Your character** offers **Square portrait** (suggested), **Round portrait**, **Class icon** and **No portrait**, each in separate parts, and **One frame**.
+- **Unit frames**, party frames: in **Separate parts** a party pet's name row lay over the first two debuff icons of its owner, so they could not be seen while the mouse there still showed their tooltip; the icons are now drawn over the row, and over the border of the pet's health bar, which crossed them too. **Tooltip**, **Every tooltip**: the tooltip of a buff or debuff icon on a party frame, under a party pet or in the box of buffs and debuffs that opens over a party frame stays beside its icon, as the game puts it, instead of going to the cursor, where it lay over the icons next to it and seemed to be theirs.
+
 ## 0.5.12
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.

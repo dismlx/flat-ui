@@ -237,7 +237,6 @@ ns.SETUP_PROFILES = {
 		["trackers.place"] = "own",
 		["trackers.show"] = "low",
 		["trackers.sound"] = true,
-		["unitframes.classShape"] = "round",
 		["unitframes.corners"] = "soft",
 		["unitframes.focusPicture"] = "game",
 		["unitframes.headFraming"] = "shoulders",

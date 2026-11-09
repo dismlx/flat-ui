@@ -11683,7 +11683,7 @@ end
 
 -- 1. The package.
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.12" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.13" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -69164,7 +69164,7 @@ function PT.runSetup()
 					threat = threat and path ~= "nameplates.threat" and path ~= "nameplates.threatRole" and path ~= "chat.combat"
 				end
 			end
-			check("setup profiles: every value passes the check of S.Presets, so nothing is dropped, and no error is reported", same and count == 239 and #W.errors == 0, tostring(count))
+			check("setup profiles: every value passes the check of S.Presets, so nothing is dropped, and no error is reported", same and count == 238 and #W.errors == 0, tostring(count))
 			check("setup profiles: no value equals its setting's default", defaults)
 			check("setup profiles: no profile sets Custom scale, Pixel-perfect scale, Pixels per unit, a setup row, a bar block row or a setting the game holds", banned)
 			check("setup profiles: no profile changes a setting the author picked, except the size of combat text in Large and every row in Jon Default", picked and list[6].values["combattext.size"] == 200)

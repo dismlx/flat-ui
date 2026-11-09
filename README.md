@@ -18,7 +18,7 @@ The **Trackers** can count who in your group lacks your class buff (2/5 on its i
 
 The **Group tools** page, off by default, adds a row of buttons for your group: the eight raid markers and a clear for your target, a ready check, a role poll and a pull countdown.
 
-Each unit frame is one frame: its portrait, name row and bars sit on one background inside one border, the same few pixels apart. The portrait can be your face, square or round, a 3D head, a class icon or none, and **Frame style** on the **All frames: bars and pictures** tab of **Unit frames** gives each part its own border again.
+Each unit frame shows its portrait beside its name row and bars, the portrait as tall as the frame, with the portrait and each bar in a thin border of its own. The portrait can be a face, square or round, a 3D head, a class icon or none, and **One frame**, under **Frame style** on the **All frames: bars and pictures** tab of **Unit frames**, puts the whole frame on one background inside one border, its parts the same few pixels apart.
 
 On party and raid frames, a debuff you can dispel colours the border of the health bar, also on your own, your target's and your focus's frames, with its type icon on party frames. Party and raid frames show raid markers, raid frames the leader and assistants; a tank can keep a plain border while holding aggro, role icons can be limited to the roles you choose, and your target's border can take a colour of your own. With **Squares for your heals over time** (off by default), each heal over time of yours on a member, such as Renew, Rejuvenation or Regrowth, shows as a small square of its own colour in a corner of the health bar.
 

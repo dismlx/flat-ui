@@ -2,19 +2,20 @@ local ADDON_NAME, ns = ...
 
 -- Player, target, focus, pet, target of target, party, party pet, boss and raid frames. The frame art of each is one atlas
 -- that cannot be thinned, so it is made transparent and the addon draws its own look over the game's bars, in one of two Frame styles.
--- One frame (the default) makes every frame but a raid frame one frame: a body of the addon's own,
+-- Separate parts (the default, and what any value but One frame means) gives the health bar, the power bar and the portrait each a thin border
+-- with a dark background, and hides the body. One frame makes every frame but a raid frame one frame: a body of the addon's own,
 -- a frame on the unit button one level under the frame the portrait is on, with one background (the plate) and one border round the portrait,
 -- the name row and the bars. These sit inside it as cells with no border and no background of their own, one gap apart and one gap in from
--- its edge, the gap being Border thickness and Space between parts together; the portrait is a square as tall as the cells beside it. Separate
--- parts is the look before 0.5.12: a thin border with a dark background around the health bar, the power bar and the portrait each, and the
--- body hidden. The unit buttons and their bars are protected: art, fills and colours change at any time, and the body, the borders and the
+-- its edge, the gap being Border thickness and Space between parts together; the portrait is a square as tall as the cells beside it.
+-- The unit buttons and their bars are protected: art, fills and colours change at any time, and the body, the borders and the
 -- cells are made and anchored out of combat, so a change of Frame style in a fight waits for its end. What the art said is kept as the colour of a
 -- border: resting and combat on the picture of the player, an attacking pet on the picture of the pet, the kind of a target or focus
 -- (elite, rare, rare elite or boss) on the picture of a target, threat on the health bar, and target as well on a raid frame. In One frame the
 -- first of these that applies is the one colour of the body's border and of a round portrait's ring. A portrait is drawn again as a picture of the
 -- addon's own beside the bars, and the portrait of the game is hidden: square, or a face or a class icon cut to a circle with Portrait shape
--- Round, whatever the unit; a 3D head stays square. In One frame Game portrait is the same face drawn by the addon and cut round, in its cell; in
--- Separate parts the game draws its own portrait in its own place. The picture is a frame
+-- Round, whatever the unit; a 3D head stays square. Game portrait is the same face drawn by the addon as Face draws it, in the frame's picture,
+-- in both Frame styles and in the shape Portrait shape gives it; the game's own portrait shows where the game puts it only on a frame that is not
+-- styled, with Flat UI portraits off, or while a picture cannot be drawn. The picture is a frame
 -- with one anchor on a region of the game and a size set from numbers, the rectangles of the game's bars when the client gives them and fixed
 -- numbers when it does not, and its texture has no mask at any corner setting but the circle. The player, target, focus and boss frames get a name row of the
 -- addon's own above the health bar (the pet, target of target, party and party pet frames get a lower one, but a party pet has none in One frame,
@@ -173,7 +174,7 @@ end
 
 -- Where the level shows: "end" of the name row, "before" the name, "portrait" or "hidden".
 -- A frame with no picture of the addon's own has nothing to put a level on, so "portrait" shows the level at the end there: a frame with no
--- picture at all, or one whose picture is None or the game's portrait.
+-- picture at all, or one whose picture is None. A Game portrait is a picture of the addon's own.
 function ROW.at(rec)
 	local at = Opt("levelPosition")
 	if at == "portrait" and rec ~= nil and (rec.pic == nil or rec.pic.none) then
@@ -187,23 +188,24 @@ ns.UnitFrameExtra.per = { picture = { player = true, target = true, focus = true
 	level = { player = true, target = true, focus = true, boss = true },
 	health = { player = true, target = true, focus = true, pet = true, tot = true, party = true, boss = true } }
 
--- The style of the picture of a frame, whether it has no picture, and whether it shows the game's portrait: the row of the frame over what Square
--- portraits and Portrait style say. Auto is what those two say. Square picture, 3D head and Class icon draw the picture even where its switch is off.
+-- The style of the picture of a frame and whether it has no picture: the frame's own Picture row over what Portrait style and the portrait switch
+-- of its kind say. Auto (As Portrait style) is what those two say. Face, Game portrait, 3D head and Class icon draw the picture even where its
+-- switch is off. Game portrait is the face, drawn as Face draws it in the frame's own picture, in either Frame style.
 function ns.UnitFrameExtra.pictureMode(rec)
 	local style = Opt("portraitStyle")
 	local switch = ns.UnitFrameExtra.switches[rec.kind]
 	local none = style == "none" or (switch ~= nil and Opt(switch) == false)
 	local pick = ns.UnitFrameExtra.per.picture[rec.kind] and Opt(rec.kind .. "Picture") or "auto"
-	if pick == "square" or pick == "class" then
-		return pick == "class" and "icon" or "picture", false, false
+	if pick == "square" or pick == "game" then
+		return "picture", false
+	elseif pick == "class" then
+		return "icon", false
 	elseif pick == "head" then
-		return "head", false, false
+		return "head", false
 	elseif pick == "none" then
-		return style, true, false
-	elseif pick == "game" then
-		return style, false, true
+		return style, true
 	end
-	return style, none, false
+	return style, none
 end
 
 -- Whether the level of a frame shows: its row, or True for a frame that has none.
@@ -815,9 +817,9 @@ end
 -- Draws the picture, and the portrait of the game is hidden while it shows: the game writes its alpha, and a hidden region keeps
 -- the place its marks are anchored to. A picture that is shown is drawn again only when asked: the game draws its portrait once
 -- for each new unit. A portrait the addon cannot draw stays as it is, and so does a portrait whose picture has no size.
--- The picture is round with Portrait shape Round, and a Game portrait in One frame is always round; a 3D head stays square, also when the face
--- takes its place. In One frame a square cell has no border and no background of its own, and a round one keeps only its ring, in the colour of
--- the body's border; in Separate parts the picture has its own border and background.
+-- The picture is round with Portrait shape Round, a Game portrait too, which is the face drawn here as Face draws it (pictureMode); a 3D head stays
+-- square, also when the face takes its place. In One frame a square cell has no border and no background of its own, and a round one keeps only its
+-- ring, in the colour of the body's border; in Separate parts the picture has its own border and background.
 local function ApplyPicture(rec, on, redraw)
 	local pic = rec.pic
 	if pic == nil then
@@ -825,29 +827,21 @@ local function ApplyPicture(rec, on, redraw)
 	end
 	local square = on and Opt("squarePortrait") and true or false
 	-- No picture at all: the style None, or the switch of this kind of frame is off. The game's portrait stays hidden and the space stays empty.
-	local style, none, game = ns.UnitFrameExtra.pictureMode(rec)
-	none, game = square and none, square and game
-	-- In One frame the game's portrait is the face drawn by the addon, cut round, in the frame's cell.
-	local gameRound = game and rec.joined == true
-	if gameRound then
-		style, game = "picture", false
-	end
-	pic.gameRound = gameRound or nil
+	local style, none = ns.UnitFrameExtra.pictureMode(rec)
+	none = square and none
 	if pic.style ~= style then
 		pic.style, redraw = style, true
 	end
 	local sized = pic.side ~= nil and not NoArea(pic.frame)
-	local drawn = square and not none and not game
+	local drawn = square and not none
 	local shown = drawn and sized and ((pic.drawn and not redraw) or Draw(rec) == true)
-	-- The game's portrait shown in place of the picture counts as no picture for what is drawn on the picture.
-	pic.none = (none or game) or nil
-	pic.game = game or nil
+	pic.none = none or nil
 	pic.noSize = drawn and not sized
 	pic.drawn = shown
 	Undrawn(rec, drawn and not shown)
 	ns.SetHidden(rec.parts.portrait, shown or none)
 	Mask.sync(rec, shown or none or false)
-	local round = shown and pic.style ~= "head" and (gameRound or Opt("classShape") == "round") or false
+	local round = shown and pic.style ~= "head" and Opt("classShape") == "round" or false
 	ns.SetOutlineRound(pic.outline, pic.texture, round, pic.fadeTex)
 	if round and not pic.outline.round and not ns.roundMissing and InCombatLockdown() and not pic.roundQueued then
 		-- The first round picture is made after combat, and the rounded line is drawn again then.
@@ -908,10 +902,10 @@ end
 
 -- The body ----------------------------------------------------------------------------------------------------
 
--- True while a frame is to be one frame: Frame style is not Separate parts (no value counts as One frame), the frame is not a raid frame, its body
--- was made and the frame is styled. rec.joined keeps the answer, and changes only out of combat (Apply and Layout).
+-- True while a frame is to be one frame: Frame style is One frame (any other value, or none, is Separate parts), the frame is not a raid frame, its
+-- body was made and the frame is styled. rec.joined keeps the answer, and changes only out of combat (Apply and Layout).
 function FRAME.want(rec)
-	return Opt("frameStyle") ~= "parts" and rec.kind ~= "raid" and rec.body ~= nil and Active(rec)
+	return Opt("frameStyle") == "one" and rec.kind ~= "raid" and rec.body ~= nil and Active(rec)
 end
 
 -- The one gap of a frame in its units: Border thickness and Space between parts, in screen pixels. Cells are this far apart and this far in from the
@@ -927,14 +921,14 @@ function FRAME.powerOn(rec)
 	return rec.byRole.power ~= nil and (row == nil or Opt(row) ~= false)
 end
 
--- True when the frame lays out a portrait cell: it has a picture, Flat UI portraits is on and its Picture is not None. A Game portrait is a cell in
--- One frame only, where the addon draws it; in Separate parts the game draws it in its own place.
+-- True when the frame lays out a portrait cell: it has a picture, Flat UI portraits is on and its Picture is not None. A Game portrait is a cell like
+-- any other picture, in both Frame styles, since the addon draws it.
 function FRAME.cell(rec)
 	if rec.pic == nil or Opt("squarePortrait") ~= true then
 		return false
 	end
-	local _, none, game = ns.UnitFrameExtra.pictureMode(rec)
-	return not none and (not game or FRAME.want(rec))
+	local _, none = ns.UnitFrameExtra.pictureMode(rec)
+	return not none
 end
 
 -- The red, green, blue and opacity of the plate: the Own background of the Unit frames page while Own border and background is on, else the
@@ -1025,10 +1019,18 @@ local function Picture(parts, made)
 	return pic
 end
 
--- The level of the name row: above the frames the game draws its content on, so that the row covers what the game draws in that row.
-local function RowLevel(parts)
+-- The level of the name row: above the frames the game draws its content on, so that the row covers what the game draws in that row. A party pet's
+-- row is at the level of the pet frame itself. The game hangs the pet frame 43 units under its owner's top, where it also hangs its owner's row of
+-- debuff icons (Mainline\PartyFrameTemplates.xml:366-376), so in Separate parts the pet's row lies over the top of the first two icons; their buttons
+-- are one level above the pet frame (children of the owner's AuraFrameContainer, Mainline\PartyMemberFrame.lua:369), so at the pet frame's level the
+-- icons are drawn over the row. The row takes no mouse: one level higher it hid the icons while the mouse over them still gave their tooltip.
+local function RowLevel(rec)
+	if rec.kind == "partypet" then
+		local ok, level = pcall(rec.frame.GetFrameLevel, rec.frame)
+		return ok and Number(level) and level or nil
+	end
 	local top
-	for _, frame in ipairs(parts.content or {}) do
+	for _, frame in ipairs(rec.parts.content or {}) do
 		local ok, level = pcall(frame.GetFrameLevel, frame)
 		if ok and Number(level) and (top == nil or level > top) then
 			top = level
@@ -1044,7 +1046,7 @@ end
 -- the kind. A unit with no kind leaves both empty, so the texts inside them move out to the edge without anything being anchored again. The level
 -- of the player is anchored to the row. Before the name, the level is at the left end, the mark hangs from it and the name from the mark.
 local function NameRow(rec)
-	local frame = Frame(rec.frame, RowLevel(rec.parts))
+	local frame = Frame(rec.frame, RowLevel(rec))
 	local row = { frame = frame, base = Layer(frame, "BACKGROUND", -8), grad = Layer(frame, "BACKGROUND", 0), fill = Layer(frame, "BACKGROUND", 0),
 		mark = Layer(frame, "ARTWORK", 0, true), line = Layer(frame, "ARTWORK", 1, true) }
 	row.mark:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
@@ -1477,6 +1479,15 @@ local function Make(rec, made)
 			local outline = ns.Outline(box, target)
 			if outline then
 				made[#made + 1] = outline
+				-- A party pet's health bar lies under its owner's debuff icons, whose buttons are one level above the pet frame and so at the bar's own
+				-- level (RowLevel). The holder of the bar's border is a child of the bar, a level above them, so its edges and rounded line, which lie
+				-- outside the bar, crossed the first two icons: it is put at the pet frame's level, under them.
+				if rec.kind == "partypet" and outline.holder ~= nil then
+					local okLevel, level = pcall(rec.frame.GetFrameLevel, rec.frame)
+					if okLevel and Number(level) then
+						pcall(outline.holder.SetFrameLevel, outline.holder, level)
+					end
+				end
 				local entry = { role = role, bar = bar, mask = parts[role .. "Mask"], outline = outline, cut = cut, target = target,
 					slot = role == "health" and parts.cutHealth and box or nil }
 				rec.bars[#rec.bars + 1] = entry
@@ -2301,8 +2312,8 @@ end
 
 -- How the PvP flag of a frame is shown: "icon" has the game's icon on a corner of the picture, "word" has a word in the name row and the
 -- game's icon and timer transparent, "both" has the icon on the picture and the word in the name row, "off" has them all
--- transparent, and "game" leaves them as the game draws them, which is so while the frame shows the portrait of the game. A word needs the name
--- row, and a frame without it shows the icon. Nil for a frame with no flag.
+-- transparent, and "game" leaves them as the game draws them, which is so while the frame shows no picture of the addon's own (a Game portrait is
+-- one). A word needs the name row, and a frame without it shows the icon. Nil for a frame with no flag.
 local function FlagMode(rec)
 	local parts = rec.parts
 	if parts.pvp == nil and parts.pvpIcon == nil then
@@ -3606,8 +3617,6 @@ function STATUS.picture(rec, name)
 	local text
 	if not (Active(rec) and Opt("squarePortrait") == true) then
 		text = "off"
-	elseif pic.game then
-		text = "off, the game's portrait shown"
 	elseif pic.none then
 		text = "off, no portrait"
 	elseif pic.noSize then
@@ -3822,6 +3831,34 @@ function Refresh()
 	end
 	for _, hook in ipairs(ns.UnitFrameExtra.after.refresh) do
 		Run(hook.part, hook.fn)
+	end
+end
+
+-- The row Portrait style changed (Config.lua names this function in the row's changed, so Core.lua's Changed calls it in place of the refresh of
+-- this module): every frame's own Picture goes back to As Portrait style, so the new style shows on every frame, and the module is refreshed here.
+-- The guard is where Changed runs. Core.lua calls a row's changed function only from ns.Set, only when the saved value really changed, and only once
+-- the modules have started (loggedIn): that is a change the player makes to the row, in the options window (the row's own reset and Reset page
+-- too), in the game's settings or with an undo on Home. A profile switched, imported, made or copied (ns.UseProfile, ns.ImportProfile,
+-- ns.NewProfile, ns.ChangeProfile, ns.CopyProfile), reset (ns.ResetProfile) or migrated (LoadSettings, before login) takes its values whole, without
+-- Changed, and Flat UI setup writes a draft (S.Set), not the profile, and saves it with ns.ChangeProfile or ns.NewProfile; so none of them reaches
+-- this, and a ready-made profile keeps its Pictures. The path is checked as well. Each Picture that is not As Portrait style already is written with
+-- ns.Set, which refreshes this module as any row of it does; the refresh at the end is for the style itself.
+function ns.PortraitStyleChanged(path)
+	if path ~= KEY .. ".portraitStyle" then
+		return
+	end
+	for _, kind in ipairs(KINDS) do
+		local row = KEY .. "." .. kind .. "Picture"
+		if ns.UnitFrameExtra.per.picture[kind] and ns.Get(row) ~= "auto" then
+			ns.Set(row, "auto")
+			-- The game's settings show the new value too, while Flat UI's rows are in them.
+			if type(ns.NotifyOption) == "function" then
+				ns.NotifyOption(row)
+			end
+		end
+	end
+	if ns.Enabled(KEY) then
+		ns.Try(KEY, Refresh)
 	end
 end
 

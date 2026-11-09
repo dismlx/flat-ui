@@ -58,8 +58,8 @@ local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the ma
 -- When a frame of When shown on the Fading page is at full opacity; at other times it fades (Fade.lua has the rules).
 local FADE_WHEN = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" },
 	{ "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } }
--- The tip of the Picture row of each unit frame: what Game portrait is in each Frame style (UnitFrames.lua draws it).
-local GAME_PORTRAIT = "Game portrait is drawn round in One frame. In Separate parts the game draws it in its own place."
+-- The tip of the Picture row of each unit frame: what Game portrait is, in either Frame style (UnitFrames.lua draws it).
+local GAME_PORTRAIT = "Game portrait draws the game's portrait in the frame, square or round as Portrait shape says. Flat UI portraits off keeps the game's own portrait where the game puts it."
 
 ns.PAGES = {
 	{
@@ -1365,7 +1365,9 @@ ns.PAGES = {
 		{ key = "bossScale", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Boss frame scale", live = true, get = "MoverScale", set = "SetMoverScale", frame = "BossTargetFrameContainer" },
 		{ key = "raidScale", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Raid frame scale", live = true, get = "MoverScale", set = "SetMoverScale", frame = "CompactRaidFrameContainer" },
 		{ section = "Portraits" },
-		{ key = "portraitStyle", kind = "choice", default = "picture", label = "Portrait style", tip = "Class icon shows on players. Other units keep their face.", needs = "squarePortrait",
+		-- UnitFrames.lua, ns.PortraitStyleChanged: a change the player makes here puts each frame's own Picture back at As Portrait style.
+		{ key = "portraitStyle", kind = "choice", default = "picture", label = "Portrait style",
+			tip = "Sets every frame's Picture to As Portrait style. A frame's own Picture can then pick another.", needs = "squarePortrait", changed = "PortraitStyleChanged",
 			choices = { { "picture", "Face" }, { "head", "3D head" }, { "icon", "Class icon" }, { "none", "None" } } },
 		{ key = "headFraming", kind = "choice", default = "head", label = "3D head framing",
 			choices = { { "face", "Face" }, { "head", "Head" }, { "shoulders", "Head and shoulders" } } },
@@ -1374,7 +1376,7 @@ ns.PAGES = {
 		{ key = "portraitBorder", kind = "choice", default = "thin", label = "Portrait border",
 			tip = "In One frame, the colour of the whole frame's border. Resting, combat and Elite colours still show with None.", needs = "squarePortrait",
 			choices = { { "thin", "Thin" }, { "class", "Class or reaction colour" }, { "none", "None" } } },
-		{ key = "classShape", kind = "choice", default = "square", label = "Portrait shape", tip = "Faces and class icons, on every frame. A 3D head stays square.", needs = "squarePortrait",
+		{ key = "classShape", kind = "choice", default = "square", label = "Portrait shape", tip = "Every picture but a 3D head, Game portrait too.", needs = "squarePortrait",
 			choices = { { "square", "Square" }, { "round", "Round" } } },
 		{ key = "portraitFade", kind = "bool", default = true, label = "Portrait fades with the name row", tip = "The top of the picture fades like the name row. Needs Name row colour set to Class or reaction colour, fading upward.", needs = "squarePortrait" },
 		{ key = "portraitPlayer", kind = "bool", default = true, label = "Player portrait", needs = "squarePortrait" },
@@ -1517,10 +1519,11 @@ ns.PAGES = {
 	},
 	{
 		key = "unitframesBars", label = "All frames: bars and pictures", parent = "unitframes", owner = "unitframes",
-		-- UnitFrames.lua: One frame draws a body of Flat UI's own behind each unit frame but the raid frames, with one background and one border
-		-- round the portrait, the name row and the bars; Separate parts gives each part its own.
+		-- UnitFrames.lua: Separate parts (the default) gives each part its own border and background; One frame draws a body of Flat UI's own behind
+		-- each unit frame but the raid frames, with one background and one border round the portrait, the name row and the bars. Any value but One
+		-- frame counts as Separate parts wherever the row is read.
 		{ section = "Frame" },
-		{ key = "frameStyle", kind = "choice", default = "one", label = "Frame style",
+		{ key = "frameStyle", kind = "choice", default = "parts", label = "Frame style",
 			tip = "One frame puts the portrait, the name row and the bars in one border and one background. Separate parts gives each its own.",
 			choices = { { "one", "One frame" }, { "parts", "Separate parts" } } },
 		{ key = "backdrop", kind = "bool", default = true, label = "Background", tip = "Behind the whole frame. In Separate parts, behind each bar." },
@@ -2305,17 +2308,20 @@ ns.PAGES = {
 	},
 }
 
--- The frame styles Flat UI setup offers for the unit frames, each { id, label, line, values }. values is a table of saved path to value; every style
--- sets the same paths, so its card shows what you get whatever you start from.
+-- The frame styles Flat UI setup offers for the unit frames, each { id, label, line, values }, Separate parts first: the walk offers the first as
+-- the suggestion (SetupWalk.lua). An id stays the same from one version to the next. values is a table of saved path to value; every style sets the
+-- same paths, so its card shows what you get whatever you start from, and each value is one its row takes.
 ns.SETUP_FRAME_STYLES = {
-	{ id = "one", label = "One frame", line = "Portrait, name and bars in one frame.", values = {
-		["unitframes.frameStyle"] = "one", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "square" } },
-	{ id = "round", label = "Round portrait", line = "One frame with a round portrait.", values = {
-		["unitframes.frameStyle"] = "one", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "round" } },
-	{ id = "bars", label = "No portrait", line = "One frame with just the name and the bars.", values = {
-		["unitframes.frameStyle"] = "one", ["unitframes.portraitStyle"] = "none", ["unitframes.classShape"] = "square" } },
-	{ id = "parts", label = "Separate parts", line = "Portrait, name and bars apart, each with its own border.", values = {
+	{ id = "square", label = "Square portrait", line = "Portrait, name and bars side by side.", values = {
 		["unitframes.frameStyle"] = "parts", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "square" } },
+	{ id = "round", label = "Round portrait", line = "The same with a round portrait.", values = {
+		["unitframes.frameStyle"] = "parts", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "round" } },
+	{ id = "class", label = "Class icon", line = "Your class icon for players, faces for the rest.", values = {
+		["unitframes.frameStyle"] = "parts", ["unitframes.portraitStyle"] = "icon", ["unitframes.classShape"] = "square" } },
+	{ id = "none", label = "No portrait", line = "Just the name and the bars.", values = {
+		["unitframes.frameStyle"] = "parts", ["unitframes.portraitStyle"] = "none", ["unitframes.classShape"] = "square" } },
+	{ id = "one", label = "One frame", line = "Portrait, name and bars on one dark background.", values = {
+		["unitframes.frameStyle"] = "one", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "square" } },
 }
 -- Every style also turns on Flat UI portraits and each frame's portrait, and puts each frame's Picture at As Portrait style.
 for _, style in ipairs(ns.SETUP_FRAME_STYLES) do
