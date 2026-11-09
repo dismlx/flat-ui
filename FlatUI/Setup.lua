@@ -782,8 +782,8 @@ function S.PageOf(number)
 	return { kind = "page", number = number, list = S.built, back = S.walkAt or S.FirstScreen() }
 end
 
--- The screen an id opens: "yours" is Your screen, a built step its page, a stop its stop. The id "bars" names both a step and a stop: it is the step,
--- as a search hit means it.
+-- The screen an id opens: "yours" is Your screen, a built step its page, a stop its stop. A step's id is read first, as a search hit means a step;
+-- no stop has the id of a step (the action bars stop is "actionbars", since "bars" is the step Bar texture and colours).
 function S.ScreenOf(id)
 	if id == "yours" then
 		return { kind = "yours" }
@@ -1293,8 +1293,8 @@ end
 -- The bar and the page drawing ------------------------------------------------------------------------
 
 -- The bar: Back at the left; at the right the primary button and up to two more, relabelled for the screen shown. On a stop Next, Skip the rest
--- (not on the last) and More settings (when the stop has pages); on Your screen Finish (dim in combat or while the name is refused) and Start over;
--- on a page Next and Done.
+-- (not on the last) and More settings (when the stop has pages); on Your screen Finish (dim in combat, or while the name is refused and the draft has
+-- something to save: with nothing chosen Finish only closes) and Start over; on a page Next and Done.
 function S.Buttons()
 	local screen = S.screen
 	if not screen or not S.next then
@@ -1319,7 +1319,7 @@ function S.Buttons()
 	S.mid2Text:SetText(second or "")
 	S.mid2:ClearAllPoints()
 	S.mid2:SetPoint("RIGHT", first and S.mid1 or S.next, "LEFT", -8, 0)
-	local blocked = screen.kind == "yours" and (InCombatLockdown() or (S.SavesNew() and not S.NameCheck()))
+	local blocked = screen.kind == "yours" and (InCombatLockdown() or (S.SavesNew() and S.Has(S.draft) and not S.NameCheck()))
 	S.next:SetAlpha(blocked and 0.4 or 1)
 end
 
