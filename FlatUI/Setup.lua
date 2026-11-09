@@ -570,7 +570,44 @@ function S.ListText(def, id)
 	return def.label
 end
 
+-- The id a queued pick runs with at Finish. The lines of some lists are places in the list (Remove a tracker, Remove a proc), which move when a line
+-- before them goes, by a pick queued earlier or a change made since: the line with the text the player chose is looked for again, the queued id
+-- first. A text no line has keeps the queued id.
+function S.LineId(action)
+	local id, wanted = action.id, action.text
+	if not IsText(wanted) then
+		return id
+	end
+	local moved
+	for _, def in pairs(S.Defs()) do
+		local call = def.kind == "list" and def.pick == action.pick and IsText(def.label) and IsText(def.items) and ns[def.items] or nil
+		if type(call) == "function" then
+			local ok, lines = pcall(call)
+			for _, line in ipairs(ok and type(lines) == "table" and lines or {}) do
+				local at = type(line) == "table" and line[1] or nil
+				if (IsText(at) or Number(at)) and IsText(line[2]) and ("%s: %s"):format(def.label, line[2]) == wanted then
+					if at == id then
+						return id
+					end
+					moved = moved == nil and at or moved
+				end
+			end
+		end
+	end
+	if moved ~= nil then
+		return moved
+	end
+	return id
+end
+
 -- Rows ---------------------------------------------------------------------------------------------
+
+-- List rows setup leaves to the options pages: a pick in two steps (an icon or a tracker, then what it gets), whose first step only chooses and so
+-- cannot wait for Finish, and Show as import text, which only shows something.
+S.APART = {
+	["cooldowns.iconSound"] = true, ["cooldowns.iconShow"] = true, ["cooldowns.rowOf"] = true, ["pulse.iconSound"] = true, ["pulse.iconSpot"] = true,
+	["trackers.clickUse"] = true, ["movers.layoutText"] = true,
+}
 
 -- A copy of a row of Config.lua that reads and writes the draft: it has no saved path, so the row builders never touch a profile. A list row queues
 -- its pick for Finish (Panel.lua calls item.act in place of the pick), and a row the step only describes ("behaviour") that has no tip of its own
@@ -608,7 +645,7 @@ function S.BuildRows(number, scroller)
 	local rows = {}
 	for _, entry in ipairs(STEPS[number].rows) do
 		local def = defs[entry[1]]
-		if def and ns.RowShown(def.path) then
+		if def and ns.RowShown(def.path) and not S.APART[def.path] then
 			local item = S.Item(def, entry)
 			local page = S.pageOf[def]
 			local row = kit.BuildRow(scroller.child, page, item, 8)
@@ -1452,7 +1489,10 @@ function S.Finish()
 	for _, action in ipairs(draft.actions) do
 		local call = ns[action.pick]
 		if type(call) == "function" then
-			local good, done, text = pcall(call, action.id)
+			-- With the id its line has now (S.LineId): a tracker removed before it moves the others up.
+			local good, done, text = pcall(function()
+				return call(S.LineId(action))
+			end)
 			if not good then
 				geterrorhandler()(done)
 			elseif done == false and IsText(text) and text ~= "" then

@@ -327,9 +327,16 @@ do
 	end
 
 	local drawing = { draw = Draw, parts = {} }
+	-- The marks of each stage: setup's chat cards and its Your screen draw the chat on stages of their own besides the page's, so a row of a page
+	-- marks the page's window, not the window of the stage built last.
+	local partsOf = setmetatable({}, { __mode = "k" })
+	function drawing.partsOf(stage)
+		return partsOf[stage]
+	end
 	drawing.build = function(stage)
 		local S = Build(stage)
-		local p = drawing.parts
+		local p = {}
+		partsOf[stage], drawing.parts = p, p
 		p.window, p.tabs, p.buttons, p.lines, p.input, p.typing = S.window, S.tabs[1].frame, S.buttons, S.lines[1], S.box.frame, S.typing.frame
 		p["chat.frames"], p["chat.opacity"], p["chat.frameBorder"] = S.window, S.window, S.window
 		p["chat.lookOwn"], p["chat.lookBorder"], p["chat.lookBack"], p["chat.lookBackAlpha"] = S.window, S.window, S.tabs[1].frame, S.tabs[1].frame
