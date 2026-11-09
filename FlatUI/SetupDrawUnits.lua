@@ -10,8 +10,9 @@ local ADDON_NAME, ns = ...
 -- file's own, since a module can style only the game's frames.
 -- With Frame style One frame (the default) every unit frame but the raid cells is one body with one background and one border, and the picture, the name row
 -- and the bars are cells inside it with no borders of their own, the gap (Border thickness and Space between parts) apart and in from its edge; an empty bar is
--- a lighter strip of the background. Separate parts gives each part its own border and background, as in 0.5.11. Portrait shape Round cuts faces and class
--- icons to a circle, and Game portrait in One frame is the face drawn by Flat UI and cut round; a 3D head stays square. The game's own portrait (Game portrait
+-- a lighter strip of the background, and a party pet has no name row: its body wraps its picture and its bar alone. Separate parts gives each part its own
+-- border and background, as in 0.5.11. Portrait shape Round cuts faces and class icons to a circle, and Game portrait in One frame is the face drawn by
+-- Flat UI and cut round; a 3D head stays square. The game's own portrait (Game portrait
 -- in Separate parts, Flat UI portraits off, or a frame that is not restyled) is a disc of the game's size at the game's place beside the bars. A frame whose
 -- switch is off, and every frame while Restyle unit frames is off, is drawn as the game draws it: a grey plate, the game's portrait and the game's bar file.
 -- Each scene stands on a ground of muted earth, so that a see-through background looks as it does in the world.
@@ -740,7 +741,8 @@ end
 -- root for its border, as every part does in Separate parts. The row is as wide as the bars, or with As tall as the bars runs on over the picture's column. The
 -- picture is a square as tall as the cells beside it, from the row's top (As tall as the frame), the name's (a small frame without a row) or the health bar's to
 -- the power bar's bottom; it is on the bars' left, or their right on the target and focus. None leaves no cell. The body wraps the name of a small frame or a
--- boss frame without a row; the player, target and focus keep theirs above it.
+-- boss frame without a row; the player, target and focus keep theirs above it. A party pet has neither a row nor a name in One frame (UnitFrames.lua
+-- ROW.none), so its body wraps its picture, as tall as its health bar, and the bar alone.
 -- Separate parts: each part's border is t outside it, the row sits on the health bar's top border band, the power bar is 2t under the health bar and, on
 -- every frame but the player's, Space between parts further, and the picture is 3t from the bars, its place kept, empty, with None.
 -- The game's own portrait is a disc of the game's size and gap beside the bars (GAME): the bars move right, and everything moves down, until it fits in the root.
@@ -767,7 +769,9 @@ local function Layout(o, g)
 	end
 	-- Round: faces and class icons with Portrait shape Round, whatever the unit, and Game portrait in One frame. A 3D head stays square.
 	L.round = L.drawn and L.style ~= "head" and (g.classShape == "round" or L.gameRound == true) or false
-	L.rowOn = L.on and g.strip and g.square and ((not (k.group == "small" or k.group == "pet2")) or g.smallRow)
+	-- A party pet in One frame: no row, whatever Name row on small frames says, and no name, as the game hides a party pet's.
+	L.nameless = L.joined and s.kind == "partypet"
+	L.rowOn = L.on and g.strip and g.square and ((not (k.group == "small" or k.group == "pet2")) or g.smallRow) and not L.nameless
 	L.rowH = L.rowOn and (L.large and ROW.height or ROW.small) or 0
 	L.power = size.power > 0 and (not L.on or k.power == nil or Get(k.power) ~= false)
 	L.tall = L.rowOn and g.portraitSize ~= "bars"
@@ -790,7 +794,7 @@ local function Layout(o, g)
 		-- The player, target and focus without a name row keep the game's name above the body, which starts at the bars (UnitFrames.lua FRAME.place).
 		L.nameTop = 0
 		y = NAMEH + start
-	else
+	elseif not L.nameless then
 		L.nameTop = y
 		y = y + NAMEH + nameSeam
 	end
@@ -801,7 +805,7 @@ local function Layout(o, g)
 	L.picTop = L.healthTop
 	if L.tall then
 		L.picTop = L.rowTop + inside
-	elseif not L.rowOn and not L.large and not L.boss then
+	elseif not L.rowOn and not L.large and not L.boss and not L.nameless then
 		L.picTop = L.nameTop + inside
 	end
 	L.side = math.max(L.bottom - L.picTop, 4)
@@ -1193,7 +1197,8 @@ function E.row(o, g, L)
 	local rowOn = L.rowOn
 	-- The row's corners: those of Corners in Separate parts; in One frame the row is a square cell on the plate.
 	local radius = not L.joined and L.radius or nil
-	row:SetShown(true)
+	-- A party pet in One frame shows neither a row nor a name (Layout), so the frame that holds them is hidden.
+	row:SetShown(not L.nameless)
 	local mode = "dark"
 	if rowOn then
 		-- The colour (UnitFrames.lua RowColour): the class of a player, the owner's class for a pet, the reaction of any other unit, the target, focus and boss
@@ -1251,7 +1256,9 @@ function E.row(o, g, L)
 			Solid(o.rMark, rr, rg, rb, 1)
 		end
 	else
-		Box(row, o.root, L.barsLeft, L.nameTop, size.bar, NAMEH)
+		if L.nameTop ~= nil then
+			Box(row, o.root, L.barsLeft, L.nameTop, size.bar, NAMEH)
+		end
 		for _, texture in ipairs({ o.rBase, o.rGrad, o.rFill, o.rMark }) do
 			texture:Hide()
 		end

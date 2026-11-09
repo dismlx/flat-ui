@@ -16,6 +16,9 @@ local _, ns = ...
 -- PetActionBar, MicroMenuContainer, BagsBar, PlayerFrame.PlayerFrameContainer and PlayerFrame.PlayerFrameContent (parentKeys of PlayerFrame with no global name: Blizzard_UnitFrame/Mainline/PlayerFrame.xml:23 and :68; the pet frame, totems and cast bar stay as they are),
 -- PetFrame, and under MinimapCluster the Tracking and IndicatorFrame frames, GameTimeFrame, TimeManagerClockButton and AddonCompartmentFrame
 -- (Blizzard_Minimap/Mainline/Minimap.xml:3, 25 and 46, GameTime.xml:3, Camelot/AddonCompartment.xml:3, Blizzard_TimeManager/Mainline/Blizzard_TimeManager.xml:178).
+-- The Player frame row also fades the frames of Flat UI's own that Unit frames puts on PlayerFrame itself, outside its container and its content: the
+-- body, the name row and the shadow (ns.UnitFrameExtra.pieces, UnitFrames.lua), so the plate and its border fade with the bars and the portrait. The
+-- picture, the level on it and the bars' borders of Unit frames are inside the container and the content, and fade once, with them.
 -- Other addons' minimap buttons join the Minimap buttons row: the shown, unprotected LibDBIcon10_ frames on the map that MapButtons.lua finds
 -- (ns.MapAddonButtons), whatever Addon buttons says, asked for again at each pass so that a button made later joins, and a button that leaves the
 -- list gets its alpha back at once. In the column or row beside the map they lie outside MinimapCluster, so the mouse over any of them counts as
@@ -70,15 +73,24 @@ local HIDDEN = 0.001
 
 -- row: the setting that switches it. frames: names in the game, a dotted name reaching down from a global. hover: the frame whose rectangle
 -- counts as under the mouse (the frames themselves when it is left out). rule: a row of When shown, whose setting is a rule (RULES) and not a switch.
--- targeted: frames the game shows only while there is a target, which With a target does not hold at full. more: the function of ns that gives the
--- frames of other addons the row fades too, asked at each pass, each also under the mouse. beside: frames by name that do not fade with the row
--- but count as under the mouse while they show.
+-- targeted: frames the game shows only while there is a target, which With a target does not hold at full. more: the function, or the name of the
+-- function of ns, that gives the frames of other addons or of Flat UI's own the row fades too, each { frame = frame }, asked at each pass, each also
+-- under the mouse. beside: frames by name that do not fade with the row but count as under the mouse while they show.
 -- The meter's session windows (DamageMeterSessionWindow1 to 3, DamageMeter.lua:285) and the breakdown of each, a parentKey with no global name
 -- (DamageMeterSessionWindow.lua:119-128, DamageMeterSessionWindow.xml:84 and 129).
 local METER_PARTS = {}
 for index = 1, 3 do
 	METER_PARTS[#METER_PARTS + 1] = "DamageMeterSessionWindow" .. index
 	METER_PARTS[#METER_PARTS + 1] = "DamageMeterSessionWindow" .. index .. ".MinimizeContainer.SourceWindow"
+end
+-- The frames of Flat UI's own that Unit frames puts on PlayerFrame itself, outside its container and its content, which the Player frame row fades with
+-- them: the body, the name row and the shadow (ns.UnitFrameExtra.pieces, UnitFrames.lua). None while that file gives none.
+local function PlayerPieces()
+	local extra = ns.UnitFrameExtra
+	if type(extra) == "table" and type(extra.pieces) == "function" then
+		return extra.pieces("player")
+	end
+	return nil
 end
 local ENTRIES = {
 	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" } },
@@ -93,7 +105,8 @@ local ENTRIES = {
 	{ bar = true, row = "pet", label = "Pet bar", frames = { "PetActionBar" } },
 	{ bar = true, row = "micro", label = "Micro menu", frames = { "MicroMenuContainer" } },
 	{ bar = true, row = "bags", label = "Bag bar", frames = { "BagsBar" } },
-	{ row = "playerFrame", label = "Player frame", frames = { "PlayerFrame.PlayerFrameContainer", "PlayerFrame.PlayerFrameContent" }, hover = "PlayerFrame" },
+	{ row = "playerFrame", label = "Player frame", frames = { "PlayerFrame.PlayerFrameContainer", "PlayerFrame.PlayerFrameContent" }, hover = "PlayerFrame",
+		more = PlayerPieces },
 	{ row = "petFrame", label = "Pet frame", frames = { "PetFrame" } },
 	{ row = "minimapButtons", label = "Minimap buttons", hover = "MinimapCluster", more = "MapAddonButtons",
 		frames = { "MinimapCluster.Tracking", "MinimapCluster.IndicatorFrame", "GameTimeFrame", "TimeManagerClockButton", "AddonCompartmentFrame" } },
@@ -307,7 +320,8 @@ local function ReleaseAll()
 	state.added = setmetatable({}, weak)
 end
 
--- The frames of other addons that a row faded get their alpha back: those the row no longer lists, or with keep left out all of them.
+-- The frames of other addons, or of Flat UI's own, that a row faded get their alpha back: those the row no longer lists, or with keep left out all of
+-- them.
 local function Forget(row, keep)
 	for frame, owner in pairs(state.added) do
 		if owner == row and not (keep and keep[frame]) then
@@ -317,10 +331,14 @@ local function Forget(row, keep)
 	end
 end
 
--- The frames of other addons that a row fades this pass (entry.more), each { frame, name }. A frame the row no longer lists gets its alpha back.
+-- The frames of other addons, or of Flat UI's own, that a row fades this pass (entry.more, a function or the name of one of ns), each { frame, name }. A
+-- frame the row no longer lists gets its alpha back.
 local function Added(entry)
 	local list, listed = {}, {}
-	local fn = ns[entry.more]
+	local fn = entry.more
+	if type(fn) ~= "function" then
+		fn = ns[fn]
+	end
 	if type(fn) == "function" then
 		local ok, found = pcall(fn)
 		if ok and type(found) == "table" then
@@ -470,7 +488,8 @@ local function Step(dt)
 						end
 					end
 				end
-				-- Another addon's button beside the map, or a window of the meter placed apart, counts as the row's own under the mouse.
+				-- Another addon's button beside the map, a frame of Flat UI's own on the player frame, or a window of the meter placed apart, counts as the
+				-- row's own under the mouse.
 				for _, held in ipairs(not full and added or {}) do
 					if Over(held[1]) then
 						full = true

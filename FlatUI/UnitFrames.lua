@@ -17,7 +17,8 @@ local ADDON_NAME, ns = ...
 -- Separate parts the game draws its own portrait in its own place. The picture is a frame
 -- with one anchor on a region of the game and a size set from numbers, the rectangles of the game's bars when the client gives them and fixed
 -- numbers when it does not, and its texture has no mask at any corner setting but the circle. The player, target, focus and boss frames get a name row of the
--- addon's own above the health bar (the pet, target of target, party and party pet frames get a lower one), with the name of the unit (the game's text when the client withholds it), the level copied from the
+-- addon's own above the health bar (the pet, target of target, party and party pet frames get a lower one, but a party pet has none in One frame,
+-- where its body wraps its picture and its bar alone, clear of its owner's), with the name of the unit (the game's text when the client withholds it), the level copied from the
 -- game's text and a colour that fades upward; the round level plate and the art behind the name are made transparent. What a target or focus
 -- is (an elite, a rare, a rare elite or a boss, read from its classification) is the colour of the border of its picture, and the name row can
 -- have a mark after the level, a word after the name and a line under it in that colour. The round PvP plate of the game is the one region this
@@ -114,8 +115,9 @@ local TOKENS = { player = "player", target = "target", focus = "focus", pet = "p
 -- PlayerFrame.lua:75-96). The target and the focus are STANDARD. The pet and the target of target have the name 1 unit under the top of the
 -- portrait, the health bar 11 units tall with its bottom 5 under the middle of the portrait or 4 under the middle of the frame, and the power bar
 -- 7 units tall 1 unit under it (Camelot\PetFrame.lua:4-22, Camelot\TargetFrame.lua:92-108, Mainline\PetFrame.xml:11-12, 24-28 and 133-134,
--- TargetFrame.xml:397-398, 408-411 and 479-480). The party frames are in PartyFrameTemplates.xml:9-51, 118-121 and 241-244.
-local SPAN = { player = 31, target = 26, focus = 26, pet = 30.5, tot = 30.5, party = 31, partypet = 22 }
+-- TargetFrame.xml:397-398, 408-411 and 479-480). The party frames are in PartyFrameTemplates.xml:9-51, 118-121 and 241-244. petBar: the party pet's
+-- health bar alone, 10 units tall at a scale of 0.5 (PartyFrameTemplates.xml:48-49), which its picture spans in One frame, where it has no name row.
+local SPAN = { player = 31, target = 26, focus = 26, pet = 30.5, tot = 30.5, party = 31, partypet = 22, petBar = 5 }
 -- The PvP flag. Since 1.60.1.70425 the icon is the round plate itself, with the faction drawn on it, and it is the region that moves; the client
 -- before had a plate under the icon, which moved with the icon on it. half: half the height of what moves in its own units, for a client that does
 -- not give its size. home: where the XML anchors the icon in its frame, the point of the icon, the point of the frame and the offsets
@@ -160,8 +162,12 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- The height of the name row of a frame: the large height on the player, target and focus frames, else the small one.
+-- The height of the name row of a frame: the large height on the player, target and focus frames, else the small one, and none on a frame whose
+-- style has no row (ROW.none).
 function ROW.of(rec)
+	if ROW.none(rec) then
+		return 0
+	end
 	return (LARGE[rec.kind] and ROW.height) or ROW.small
 end
 
@@ -1078,10 +1084,26 @@ local function HideRow(row)
 	end
 end
 
--- True while the frame has a name row: the page, the frame, Name row and Square portraits are on, and on a small frame other than a boss frame
--- Name row on small frames too.
+-- True for a frame whose style has no name row, whatever Name row and Name row on small frames say: a party pet in One frame. A 13-unit row over its
+-- 5-unit bar was out of proportion, and the game leaves about 14 units between its owner's power bar and its health bar (the member's power bar 7 tall
+-- and 31 under its top, the pet frame 43 under it and the pet's bar 9 further: Mainline\PartyFrameTemplates.xml:48-51, 242 and 364-366, Mainline\
+-- PartyMemberFrame.lua:166, Camelot\PartyMemberFrame.lua:17-23), which the row with the gaps of One frame round it overfills. So its body wraps its
+-- picture and its bar alone, and clears its owner's. The game hides the pet's own name (Mainline\PartyMemberFrame.lua:810), so it shows none. rec.joined
+-- decides, so this changes out of combat only, with the layout, and Separate parts gives the row back.
+function ROW.none(rec)
+	return rec.kind == "partypet" and rec.joined == true
+end
+
+-- True when the picture and the body of a frame without a name row start at the top of the game's name text: a small frame, but not one whose style
+-- has no row, which wraps its picture and its bars alone.
+function ROW.named(rec, rowOn)
+	return not rowOn and rec.parts.nameText ~= nil and not LARGE[rec.kind] and not ROW.none(rec)
+end
+
+-- True while the frame has a name row: the page, the frame, Name row and Square portraits are on, its style has a row (ROW.none), and on a small frame
+-- other than a boss frame Name row on small frames too.
 local function RowOn(rec)
-	if rec.row == nil or not Active(rec) or Opt("strip") ~= true or Opt("squarePortrait") ~= true then
+	if rec.row == nil or not Active(rec) or Opt("strip") ~= true or Opt("squarePortrait") ~= true or ROW.none(rec) then
 		return false
 	end
 	return LARGE[rec.kind] or rec.kind == "boss" or Opt("smallRow") == true
@@ -1118,7 +1140,8 @@ end
 -- g is the gap of One frame, and nil in Separate parts. In One frame the name row is a gap above the slot, so a picture as tall as the frame is a gap
 -- taller; the picture starts at the top of a name text, not a border below it; and with the frame's Power bar row off it ends at the bottom of the
 -- slot (STANDARD.slotBottom on a target). The player hangs the power bar the gap under the health bar (UnitFrameCells.lua), so without rectangles it
--- spans its health bar, 20 units tall, the gap and its power bar, 10 units tall (Camelot\PlayerFrame.lua:82, 94), or the health bar alone.
+-- spans its health bar, 20 units tall, the gap and its power bar, 10 units tall (Camelot\PlayerFrame.lua:82, 94), or the health bar alone. A party pet
+-- in One frame has neither a row nor a name (ROW.none), so its picture is as tall as its health bar, SPAN.petBar without rectangles.
 local function SideOf(rec, t, rowOn, tall, g)
 	local parts = rec.parts
 	local row = tall and ROW.of(rec) + (g or 0) or 0
@@ -1134,11 +1157,13 @@ local function SideOf(rec, t, rowOn, tall, g)
 		return parts.standard.top + row - bottom, true
 	end
 	local slot = parts.healthBox or parts.health
-	local named = not rowOn and parts.nameText ~= nil and not LARGE[rec.kind]
+	local named = ROW.named(rec, rowOn)
 	local span = Span(named and parts.nameText or slot, power and power.bar or slot, rec.pic.frame)
 	local fallback = SPAN[rec.kind]
 	if g ~= nil and rec.kind == "player" then
 		fallback = 20 + (power and g + 10 or 0)
+	elseif ROW.none(rec) then
+		fallback = SPAN.petBar
 	end
 	local side = (span or fallback) + row - (named and g == nil and t or 0)
 	if side <= 1 then
@@ -1151,7 +1176,7 @@ end
 -- name row, of the name text or of the health bar. Its border and the border of the bars are one border thickness apart. In One frame (g) the picture
 -- is a gap from the bars and its top is the top of the name row or of the name text. The game puts the name of a small frame a unit or more to the side
 -- of its health bar (Camelot\PetFrame.lua:6, 15; Mainline\PartyFrameTemplates.xml:42, 51, 121, 140), so in One frame a picture beside a name takes its
--- top from the name and its side from the slot, with two points.
+-- top from the name and its side from the slot, with two points. A party pet in One frame has no name (ROW.named), and its picture's top is its slot's.
 local function AnchorPicture(rec, t, rowOn, tall, g)
 	local parts, frame = rec.parts, rec.pic.frame
 	local apart = g or 3 * t
@@ -1163,7 +1188,7 @@ local function AnchorPicture(rec, t, rowOn, tall, g)
 		return
 	end
 	local slot = parts.healthBox or parts.health
-	local named = not rowOn and parts.nameText ~= nil and not LARGE[rec.kind]
+	local named = ROW.named(rec, rowOn)
 	if named and g ~= nil then
 		frame:SetPoint("TOP", parts.nameText, "TOP", 0, 0)
 		frame:SetPoint("RIGHT", slot, "LEFT", -g, 0)
@@ -1202,11 +1227,13 @@ end
 
 -- Anchors the body round the cells, a gap outside them on every side: its top from the name row (else the name text of a small frame, else the slot),
 -- its bottom from the power cell (else the slot), its near side from the outer edge of the portrait cell (else the slot) and its far side from the
--- slot. One point each way, LEFT, RIGHT, TOP and BOTTOM, as the shadow has (UnitFrameLooks.lua). Out of combat only, from Layout.
+-- slot. One point each way, LEFT, RIGHT, TOP and BOTTOM, as the shadow has (UnitFrameLooks.lua). Out of combat only, from Layout. A party pet in One frame
+-- has neither row nor name (ROW.none), so its body is its slot and its picture with the gap round them: its top is the gap over its health bar, which
+-- the game hangs about 14 units under its owner's power bar, whose body ends the gap under it.
 function FRAME.place(rec, g, rowOn)
 	local parts, body = rec.parts, rec.body.frame
 	local slot = parts.healthBox or parts.health
-	local named = not rowOn and parts.nameText ~= nil and not LARGE[rec.kind]
+	local named = ROW.named(rec, rowOn)
 	local top = rowOn and rec.row.frame or (named and parts.nameText) or slot
 	local bottom = FRAME.powerOn(rec) and rec.byRole.power.target or slot
 	local near = FRAME.cell(rec) and rec.pic.frame or slot
@@ -1220,7 +1247,8 @@ end
 
 -- Lays out what hangs from the bars: the name row above the health bar, the picture and the body. In Separate parts the row is as wide as the border
 -- of the bar and sits on its top border band; in One frame it is as wide as the slot and a gap above it, and with Portrait size As tall as the bars
--- its near end runs on over the portrait's column. The anchors are set again
+-- its near end runs on over the portrait's column. A party pet has no row in One frame (ROW.none): its row frame is placed with no height and shows
+-- nothing, and the key holds whether the row is on, so a change of Frame style lays it out again. The anchors are set again
 -- only when the border thickness, the name row, the room for the texts, the text size or what One frame lays out has changed; the size of the picture is worked out each time.
 -- At the end of the row, on a target or focus the word of the kind stands the room of the level inside the mark, and the PvP word and the name
 -- stand inside the word; on the player they stand that far from the edge. In the other positions no room is kept for the level at the right.
@@ -3839,6 +3867,24 @@ ns.UnitFrameExtra.frameOutlines = FRAME.outlines
 ns.UnitFrameExtra.bareOutline = function(outline, bare)
 	ns.SetOutlineBare(outline, bare)
 	Rim(outline)
+end
+
+-- The frames of the addon's own that sit on the unit button of a kind's frames itself, and not on a frame of the game inside it, each { frame = frame }:
+-- the body (FRAME.make), the name row (NameRow) and the shadow (UnitFrameLooks.lua), of every frame of the kind that is styled or was. Fading fades
+-- the player frame through its container and its content (Fade.lua), which do not hold these, so it fades them with those. Everything else the addon
+-- draws on the player frame is inside them, so it is not listed and fades once: the picture, the level on it and the 3D head are on the container (the
+-- frame the portrait is on), and the borders of the bars, the bar texts and the druid's mana bar on the content. Each frame is a child of the button,
+-- and what it holds (the body's outline and rounded line) fades with it.
+ns.UnitFrameExtra.pieces = function(kind)
+	local list = {}
+	for _, rec in pairs(records) do
+		if rec.kind == kind and rec.made then
+			for _, frame in ipairs(List(rec.body and rec.body.frame, rec.row and rec.row.frame, rec.shadowBox)) do
+				list[#list + 1] = { frame = frame }
+			end
+		end
+	end
+	return list
 end
 
 ns.Register(KEY, {

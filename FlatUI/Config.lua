@@ -1385,7 +1385,7 @@ ns.PAGES = {
 		{ key = "portraitParty", kind = "bool", default = true, label = "Party portraits", needs = "squarePortrait" },
 		{ key = "portraitPartypet", kind = "bool", default = true, label = "Party pet portraits", needs = "squarePortrait" },
 		{ section = "Name row" },
-		{ key = "smallRow", kind = "bool", default = true, label = "Name row on small frames", tip = "A row with the name above the bars on the pet, target of target, party and party pet frames.", needs = "strip" },
+		{ key = "smallRow", kind = "bool", default = true, label = "Name row on small frames", tip = "A row with the name above the bars on the pet, target of target, party and party pet frames. In One frame party pets have none.", needs = "strip" },
 		{ key = "nameRoom", kind = "choice", default = "fit", label = "Name room", tip = "The name gets the room the level and the PvP word leave. Fixed space keeps a set room for each.", needs = "strip",
 			choices = { { "fit", "Only what the texts need" }, { "fixed", "Fixed space" } } },
 		{ key = "pvpWordColour", kind = "choice", default = "name", label = "PvP word colour", tip = "The colour of the PvP word in the name row.", needs = "strip",
