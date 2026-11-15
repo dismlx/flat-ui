@@ -41,10 +41,11 @@ local ADDON_NAME, ns = ...
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.
 -- Its cast and global cooldown progress are Cooldown frames of its own fed the game's duration objects.
 -- Quest item sparkle, on the Flat UI page, writes the game's outlineModeShowLootEffectWhenDisabled (1), and Sparkle strength raises
--- graphicsParticleDensity, raidGraphicsParticleDensity, graphicsSpellDensity and raidGraphicsSpellDensity to its level and never lowers one,
+-- graphicsParticleDensity, raidGraphicsParticleDensity, graphicsSpellDensity and raidGraphicsSpellDensity to its level, never below the game's own,
 -- out of combat: at login, when a row or the profile changes, and a second after the game writes one of them or its graphics quality. The text
 -- each had before is kept in FlatUIDB (sparkleGame, sparkleParticleGame, sparkleRaidParticleGame, sparkleSpellGame, sparkleRaidSpellGame) and
--- written back when the rows no longer need it, while the variable still holds what Flat UI wrote. Glow on the nearest object is a frame of its
+-- the text Flat UI wrote in FlatUIDB.sparkleWrote; the kept text is written back when the rows no longer need it, while the variable still holds
+-- the text Flat UI wrote, and a value written since, also while Flat UI did not run, is the game's own. Glow on the nearest object is a frame of its
 -- own that takes no mouse, put on the game's nameplate of the object the Interact Key would use (its soft-interact game object), only while the
 -- game shows that plate, and parented, levelled and anchored there out of combat only; it writes no game setting.
 -- Nameplate threat follows CompactUnitFrame_UpdateAggroHighlight with hooksecurefunc and only reads threat, roles, stances, forms and auras; a

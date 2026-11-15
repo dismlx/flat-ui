@@ -1,11 +1,11 @@
 local ADDON_NAME, ns = ...
 
 -- Glow on the nearest object (general.sparkleGlow on the Flat UI page, under World; on, with Quest item sparkle): a strong golden sparkle of Flat
--- UI's own on the object the game's Interact Key would use, while that is a herb, a vein, a chest or a quest object. The game tracks that object
--- as the unit softinteract and, while it gives it a nameplate, puts the plate over the object; its own nameplate code finds that plate the same
--- way, by UnitIsUnit with softinteract (Blizzard_NamePlates/Blizzard_NamePlates.lua:187-219). The game gives a game object that plate only while
--- the player's Interact Key is on (Enable Interact Key in its Controls options, Controls.lua:72-86, or a gamepad) and its interact icons take in
--- objects (Interact Key Icons at Show All in Accessibility, Accessibility.lua:175-222, or a gamepad, Blizzard_Gamepad/Core.lua:28); without the
+-- UI's own on the object the game's Interact Key would use, while its cursor marks a herb, a vein, a quest object or loot. The game tracks that
+-- object as the unit softinteract and, while it gives it a nameplate, puts the plate over the object; its own nameplate code finds that plate the
+-- same way, by UnitIsUnit with softinteract (Blizzard_NamePlates/Blizzard_NamePlates.lua:187-219). The game gives a game object that plate only
+-- while the player's Interact Key is on (Enable Interact Key in its Controls options, Controls.lua:72-86, or a gamepad) and its interact icons take
+-- in objects (Interact Key Icons at Show All in Accessibility, Accessibility.lua:175-222, or a gamepad, Blizzard_Gamepad/Core.lua:28); without the
 -- icons a world object gets no nameplate, as ForeverLootSparkles and NodeSight Sparkles found in the client. Flat UI changes neither: they are the
 -- player's choices, the Interact Key's variable is secure (cvars.yaml of build 70790:3866), and a plate for every object would change what the
 -- player sees of the key. So this row writes no game setting, and the sparkle shows only where the game already shows such a plate.
@@ -13,10 +13,11 @@ local ADDON_NAME, ns = ...
 -- NAME_PLATE_UNIT_ADDED: NamePlateDocumentation.lua:11-25) by UnitIsGameObject and UnitIsUnit(unit, "softinteract") (UnitDocumentation.lua:
 -- 1993-2006), looked at again at NAME_PLATE_UNIT_ADDED, NAME_PLATE_UNIT_REMOVED, PLAYER_SOFT_INTERACT_CHANGED (UnitDocumentation.lua:3909-3919),
 -- PLAYER_ENTERING_WORLD and the end of a fight. What kind of object it is comes from its cursor: SetUnitCursorTexture puts it on a hidden texture
--- of Flat UI's own (UnitDocumentation.lua:595-612), whose file or atlas names Mine, GatherHerbs, LootAll, PickLock or a Quest cursor
--- (Interface\Cursor, the same with Unable in front while the player cannot use it yet), or C_QuestLog.UnitIsRelatedToActiveQuest says it
--- belongs to a quest of the player's (QuestLogDocumentation.lua:1287-1300). A chair, a door or a mailbox gets nothing. An answer the game
--- withholds counts as no.
+-- of Flat UI's own (UnitDocumentation.lua:595-612), whose file or atlas names Mine, GatherHerbs, a Quest cursor, LootAll, Pickup or PickLock
+-- (Interface\Cursor, the same with Unable in front while the player cannot use it yet; the names Forever's client has, as Lueur read them from it,
+-- and a file ID is looked up with and without .blp, as Lueur does), or C_QuestLog.UnitIsRelatedToActiveQuest says it belongs to a quest of the
+-- player's (QuestLogDocumentation.lua:1287-1300). A chair, a door or a mailbox gets nothing, and so does a chest the game gives a lever's cursor,
+-- as Lueur saw one get on Forever. An answer the game withholds counts as no.
 -- The sparkle is one frame of Flat UI's own that takes no mouse, parented to that plate at the plate's frame level, under the game's unit frame,
 -- and anchored under it (SetParent, SetFrameLevel, SetPoint on its own frame), so it follows the object, its distance and its fade, and hides with
 -- it. It is put on a plate and taken off one only out of combat, as Flat UI does with every frame on a plate that may be protected: in a fight it
@@ -43,8 +44,8 @@ local STARS = {
 	{ x = -10, y = -28, size = 34, time = 1.7, turn = -90 },
 	{ x = 26, y = -14, size = 24, time = 2.2, turn = 90 },
 }
--- The cursor files of the objects that get the sparkle (Interface\Cursor): ore, herbs, chests, locked chests and quest objects.
-local CURSORS = { "Mine", "GatherHerbs", "LootAll", "PickLock", "Quest", "QuestRepeatable", "QuestTurnIn" }
+-- The cursor files of the objects that get the sparkle (Interface\Cursor): ore, herbs, quest objects, loot, things to pick up and locked chests.
+local CURSORS = { "Mine", "GatherHerbs", "Quest", "QuestRepeatable", "QuestTurnIn", "QuestInteract", "LootAll", "Pickup", "PickLock" }
 local KINDS = {}
 for _, name in ipairs(CURSORS) do
 	KINDS[name:lower()] = true
@@ -95,9 +96,12 @@ local function Glows(texture)
 			cursorIDs = {}
 			for _, name in ipairs(CURSORS) do
 				for _, prefix in ipairs({ "", "Unable" }) do
-					local id = Ask(_G.GetFileIDFromPath, "Interface\\Cursor\\" .. prefix .. name)
-					if type(id) == "number" then
-						cursorIDs[id] = true
+					local path = "Interface\\Cursor\\" .. prefix .. name
+					for _, file in ipairs({ path, path .. ".blp" }) do
+						local id = Ask(_G.GetFileIDFromPath, file)
+						if ns.Finite(id) and id > 0 then
+							cursorIDs[id] = true
+						end
 					end
 				end
 			end
@@ -121,7 +125,7 @@ local function Glows(texture)
 	return false
 end
 
--- True for an object that gets the sparkle: one of a quest of the player's, or one whose cursor is that of ore, herbs, a chest or a quest.
+-- True for an object that gets the sparkle: one of a quest of the player's, or one whose cursor is that of ore, herbs, a quest or loot.
 local function Sparkles(unit)
 	local quests = _G.C_QuestLog
 	if type(quests) == "table" and Ask(quests.UnitIsRelatedToActiveQuest, unit) == true then
@@ -163,9 +167,12 @@ local function Find()
 	for _, plate in ipairs(shown) do
 		if not ns.Forbidden(plate) then
 			local unitFrame = plate.UnitFrame
-			local unit = not ns.Forbidden(unitFrame) and unitFrame.unit or nil
-			if unit and Match(unit) == plate then
-				return plate, unit
+			if not ns.Forbidden(unitFrame) then
+				-- Match tests the unit with ns.IsSecret before anything else.
+				local unit = unitFrame.unit
+				if Match(unit) == plate then
+					return plate, unit
+				end
 			end
 		end
 	end
@@ -331,6 +338,8 @@ local function OnEvent(_, event, unit)
 		end
 		if plate ~= anchor then
 			if InCombatLockdown() then
+				-- The object the sparkle is on is no longer the one the Interact Key would use.
+				Hide()
 				return
 			end
 			Attach(plate, unit)
@@ -453,5 +462,5 @@ function ns.SparkleGlowStatus()
 	if Setting("SoftTargetIconGameObject") == 0 then
 		return "Glow on the nearest object: on. It shows once Interact Key Icons is at Show All in the game's Accessibility options."
 	end
-	return "Glow on the nearest object: on. No herb, vein, chest or quest object near you has had a nameplate from the game yet."
+	return "Glow on the nearest object: on. No herb, vein or quest object near you has had a nameplate from the game yet."
 end

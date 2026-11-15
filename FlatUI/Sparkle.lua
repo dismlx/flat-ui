@@ -15,17 +15,22 @@ local _, ns = ...
 -- build 70790: 2283, 2293, 3100, 3378, 3388). Strong raises each to the level under the top (High, and Reduced), Strongest to the top (Ultra, and
 -- Everything), at most to the highest level the client offers for that variable, as the options grey out a level the computer cannot take
 -- (IsGraphicsSettingValueSupported gives the number of the reason, 0 for none: Graphics.lua:101-106). A variable is only ever raised: a value at
--- or above that level stays as it is. As the game has it writes none of them. That more particles bring back a sparkle a lower setting thins is
--- from players too; no variable of the client sizes or brightens the sparkle itself, and the outline variables show an outline in its place
--- rather than a stronger sparkle (ForeverLootSparkles' notes), so they are left alone.
+-- or above that level stays as it is. As the game has it writes none of them. Only the tooltip of Particle Density ("the number of particles used
+-- in effects caused by spells, fires, etc.") ties a variable to an effect like the sparkle: neither the client's source nor a player says how much
+-- a lower level thins the sparkle, so how much a higher one gives back wants a look in game. No variable in the client's list sizes or brightens
+-- the sparkle itself, and the outline variables show an outline in its place rather than a stronger sparkle (ForeverLootSparkles' notes), so they
+-- are left alone.
 -- Every write is made out of combat: at login, when a row or the profile changes, and a second after the game writes its graphics quality
 -- (graphicsQuality, raidGraphicsQuality) or one of these variables, as a graphics preset puts its own values back; a write the game does not keep
 -- is not tried again until the value asked or the game's value changes, and /flatui status says so. The text a variable had before
 -- Flat UI's write is kept for the account in FlatUIDB (sparkleGame, sparkleParticleGame, sparkleRaidParticleGame, sparkleSpellGame,
--- sparkleRaidSpellGame); a value the game or the player writes since is the game's own from then on. When the rows no longer need a variable
--- (Quest item sparkle off, or Sparkle strength at As the game has it), the kept text is written back while the variable still holds what Flat UI
--- wrote, and forgotten; a value changed by hand meanwhile stays. The client applies the loot variable at its next start, and an object already in
--- view keeps its look until it appears again. Every change of the rows also reaches Glow on the nearest object (SparkleGlow.lua).
+-- sparkleRaidSpellGame), and the text Flat UI wrote beside it (FlatUIDB.sparkleWrote, by variable): the value in place is Flat UI's only while it
+-- is that text, so a value the game or the player writes since is the game's own from then on, also one written while Flat UI did not run (at
+-- the character screen, with Flat UI off, or by another account on this computer, whose graphics settings are the computer's). 0.5.13 kept the
+-- loot variable's text alone, and wrote 1 there. When the rows no longer need a variable (Quest item sparkle off, or Sparkle strength at As the
+-- game has it), the kept text is written back while the variable still holds what Flat UI wrote, and forgotten; a value changed by hand meanwhile
+-- stays. The client applies the loot variable at its next start, and an object already in view keeps its look until it appears again. Every
+-- change of the rows also reaches Glow on the nearest object (SparkleGlow.lua).
 
 local LOOT = "outlineModeShowLootEffectWhenDisabled"
 -- The variables, in the order they are written. key: the field of FlatUIDB that keeps the game's own text. kind: what sets the level the rows ask.
@@ -53,8 +58,6 @@ local pending = false
 local settling = false
 -- How the last write of each variable ended while a row asked for it, by name: nil when nothing was asked, "ok" or "refused".
 local results = {}
--- The text Flat UI wrote in each variable, by name, so that a value the game or the player wrote since is told apart from it.
-local wrote = {}
 -- A write the game did not keep, by name: the value asked and the value the game kept. It is not asked again until one of them changes, so a
 -- variable the game holds at another value is not written again at each change it announces.
 local stuck = {}
@@ -86,6 +89,31 @@ end
 local function Number(text)
 	local number = type(text) == "string" and tonumber(text) or nil
 	return ns.Finite(number) and number or nil
+end
+
+-- The text Flat UI wrote in a variable and kept for the account (FlatUIDB.sparkleWrote, by name), or nil.
+local function Wrote(var, db)
+	local store = db and db.sparkleWrote
+	local text = type(store) == "table" and store[var.name] or nil
+	return type(text) == "string" and text or nil
+end
+
+-- Keeps the text Flat UI wrote in a variable, or forgets it with nil; the table goes once it is empty.
+local function KeepWrote(var, db, text)
+	if not db then
+		return
+	end
+	local store = type(db.sparkleWrote) == "table" and db.sparkleWrote or nil
+	if store == nil and text ~= nil then
+		store = {}
+		db.sparkleWrote = store
+	end
+	if store then
+		store[var.name] = text
+		if next(store) == nil then
+			db.sparkleWrote = nil
+		end
+	end
 end
 
 -- Writes the text and gives the text the variable holds after it, or nil when the client cannot be asked.
@@ -176,18 +204,18 @@ local function Settle(var, db)
 	if type(kept) ~= "string" or Number(kept) == nil then
 		kept = nil
 	end
-	-- A text kept in an earlier session: the value in place is the one Flat UI wrote then.
-	if kept ~= nil and wrote[var.name] == nil then
-		wrote[var.name] = now
-	end
-	local ours = kept ~= nil and Number(wrote[var.name]) == value
+	-- What Flat UI wrote; 0.5.13 kept the loot variable's text without it, and wrote 1.
+	local mine = Wrote(var, db) or (kept ~= nil and var.kind == "loot" and "1" or nil)
+	-- The value in place is Flat UI's while it is the text Flat UI wrote, and not the game's own text again.
+	local ours = kept ~= nil and Number(mine) == value and Number(kept) ~= value
 	if not ours then
-		-- The game or the player wrote the value in place, so it is the game's own, and a text kept before it is no longer.
+		-- The game or the player wrote the value in place, also while Flat UI did not run, so it is the game's own, and a text kept before it
+		-- is no longer.
 		kept = nil
-		wrote[var.name] = nil
 		if db then
 			db[var.key] = nil
 		end
+		KeepWrote(var, db, nil)
 	end
 	local own = ours and kept or now
 	local ownValue = Number(own)
@@ -212,11 +240,11 @@ local function Settle(var, db)
 	stuck[var.name] = afterValue ~= want and { want = want, value = afterValue } or nil
 	if raise then
 		if afterValue ~= nil and afterValue ~= value then
-			-- The write took, whole or in part: what is in place is Flat UI's, and the game's own text is kept.
+			-- The write took, whole or in part: what is in place is Flat UI's, and the game's own text is kept beside it.
 			if db then
 				db[var.key] = own
 			end
-			wrote[var.name] = after
+			KeepWrote(var, db, after)
 		end
 		results[var.name] = afterValue == target and "ok" or "refused"
 		return
@@ -226,7 +254,7 @@ local function Settle(var, db)
 		if db then
 			db[var.key] = nil
 		end
-		wrote[var.name] = nil
+		KeepWrote(var, db, nil)
 		if var.kind == "loot" then
 			restored = true
 		else
@@ -303,7 +331,9 @@ local function StrengthStatus()
 	local strength = Strength()
 	local line = "Sparkle strength: " .. STRENGTHS[strength or "game"] .. "."
 	if #refused > 0 then
-		line = line .. " The game kept its own " .. table.concat(refused, ", ") .. "."
+		local last = table.remove(refused)
+		local names = #refused > 0 and (table.concat(refused, ", ") .. " and " .. last) or last
+		line = line .. " The game kept its own " .. names .. "."
 	end
 	if strength == nil and graphicsBack then
 		line = line .. " Your own graphics values are back."
