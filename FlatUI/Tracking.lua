@@ -202,14 +202,23 @@ local function KickOf(class)
 end
 
 -- A kick that stopped the player's own cast, by a player: starts that player's interrupt timer, and those of the abilities that share
--- its category. A pet or a creature (a GUID that is not a player's) starts nothing. Enemy cooldowns shows the timer.
+-- its category. A pet or a creature (a GUID that is not a player's) starts nothing. Enemy cooldowns shows the timer, and starts it too
+-- on a plate of that player that keeps his timers by its frame (ns.EnemyKicked).
 function T.Interrupted(by)
 	if type(ns.ABILITIES) ~= "table" or not ns.Enabled("enemycd") or by:sub(1, 7) ~= "Player-" then
 		return
 	end
 	local class = ClassOf(by)
 	local a = class and KickOf(class)
-	if a and T.Use(by, class, a, T.Now(), nil) and type(ns.EnemyRender) == "function" then
+	if not a then
+		return
+	end
+	local at = T.Now()
+	local started = T.Use(by, class, a, at, nil)
+	if type(ns.EnemyKicked) == "function" then
+		started = ns.EnemyKicked(by, class, a, at) or started
+	end
+	if started and type(ns.EnemyRender) == "function" then
 		ns.EnemyRender()
 	end
 end
@@ -566,7 +575,8 @@ end
 function T.OnUnitEvent(rec, event, who, ...)
 	if event == "UNIT_SPELLCAST_SUCCEEDED" then
 		local _, spell = ...
-		if IsSecret(who) or IsSecret(spell) then
+		-- A frame that hears this unit alone knows the unit while the game withholds its token; one that hears every unit does not.
+		if IsSecret(spell) or (rec.all and IsSecret(who)) then
 			rec.counts.castHidden = rec.counts.castHidden + 1
 			return
 		end
@@ -677,7 +687,8 @@ function T.Control()
 end
 
 -- A restriction of the four that hide buffs (Combat, Encounter, Challenge mode, PvP match) starts or ends. While one is on and no
--- buff of the list is never hidden, the buff events are not listened for.
+-- buff of the list is never hidden, the buff events are not listened for. When the last ends, the buffs of every unit heard are read
+-- once: a buff that came while they were hidden and still runs starts its timer now, not at the next change of that unit's buffs.
 function T.OnRestriction(kind, state)
 	if not (Plain(kind, "number") and Plain(state, "number") and kind >= 0 and kind <= 3) then
 		return
@@ -692,6 +703,13 @@ function T.OnRestriction(kind, state)
 		T.paused = pause
 		for _, rec in pairs(T.units) do
 			T.Tune(rec)
+		end
+	end
+	if not restricted then
+		for _, rec in pairs(T.units) do
+			if rec.events and rec.events.UNIT_AURA then
+				T.Queue(rec)
+			end
 		end
 	end
 end

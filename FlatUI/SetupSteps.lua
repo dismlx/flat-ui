@@ -1077,6 +1077,7 @@ ns.SETUP_STEPS = {
 		{ "enemycd.add", "o", "behaviour", "Adds an ability to the enemy cooldowns." },
 		{ "enemycd.hide", "o", "behaviour", "Hides an ability from the enemy cooldowns." },
 		{ "enemycd.place", "c", "mock-enemy-cooldowns" },
+		{ "enemycd.platePlace", "o", "mock-enemy-cooldowns" },
 		{ "enemycd.show", "c", "behaviour", "Chooses whether enemy icons show only while on cooldown or always." },
 		{ "enemycd.seconds", "o", "mock-enemy-cooldowns" },
 		{ "enemycd.numbersFont", "o", "mock-enemy-cooldowns" },
