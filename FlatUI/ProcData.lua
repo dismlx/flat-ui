@@ -4,16 +4,18 @@ local _, ns = ...
 -- which are not in the repository, with the spell IDs of the DB2 tables of build 1.60.1. By class: each proc, its time in seconds, the IDs of
 -- its buffs, the IDs of the spells it is for (every rank, the lowest first), how it is known and the art beside the character.
 -- kind: proc, reactive (an ability the game makes usable: Overpower after a dodge, Execute on a target at low health), stack, or activated
--- (a buff of your own cooldown). watch: aura or usable. trigger: how the proc is known while the game hides its buff (ProcTriggers.lua):
--- usable is C_Spell.IsSpellUsable of the highest rank you know, asked also while the buff can be read; casttime and cast as there.
+-- (a buff of your own cooldown). watch: aura or usable; a row watched as usable with the trigger usable is known by that trigger alone, and so
+-- is a row with no buff (Procs.lua, Raw). trigger: how the proc is known while the game hides its buff (ProcTriggers.lua): usable is
+-- C_Spell.IsSpellUsable of the highest rank you know, asked also while the buff can be read; casttime and cast as there.
 -- auto: shown with Procs of your class without being added; when it is not given, the procs and reactive abilities are and the stacks and
 -- activated buffs are not. stay: casting the spell does not end the alert, which lasts while the spell is usable (Execute). glow false: a proc
 -- any spell uses, whose automatic alert lights no button. noArt: the button glows and no art shows, as the game has it.
 -- art: file, a FileDataID of the client's own overlay art (Interface\SpellActivationOverlay); location, Left, Right, Top, LeftRight (the
 -- right one mirrored) or LeftRightOutside; scale; alpha, 0 to 1; r, g and b, 0 to 1, white when not given; turn 1 to turn the art a quarter
 -- clockwise, for side art at the Top; pulse false for art that does not pulse; seconds, how long the art shows of an alert that lasts. The
--- places, sizes and colours follow the game's own overlay of later versions, as the SpellActivationOverlay addon shows it on this client.
--- A buff with no ID (Execute, Hammer of Wrath) is none: those are known by usable alone.
+-- art, places, sizes and colours follow the game's own overlay of later versions as SpellActivationOverlay by ennvina shows it on this client
+-- (its classes/*.lua, MIT licence, Copyright (c) 2022-2026 ennvina; README.md, Credits). A buff with no ID (Execute, Hammer of Wrath) is none:
+-- those are known by usable alone.
 -- Left out: DRUID Swiftmend (reactive, target aura)
 -- Left out: HUNTER Quick Shots (stat, aura)
 -- Left out: HUNTER Quick Strikes (stat, aura)
@@ -555,7 +557,7 @@ ns.ProcData = {
 			kind = "reactive",
 			lights = { 7384, 7887, 11584, 11585 },
 			name = "Overpower",
-			seconds = 6,
+			seconds = 5,
 			trigger = "usable",
 			watch = "usable",
 		},

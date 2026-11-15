@@ -153,6 +153,27 @@ local function RowOf(entry)
 	return nil
 end
 
+-- The names of the procs of the class turned off on this character, as a set (FlatUICharDB.procsOff), made when make is set.
+local function OffSet(make)
+	local saved = ns.Character()
+	if type(saved) ~= "table" then
+		return {}
+	end
+	if type(saved.procsOff) ~= "table" then
+		if not make then
+			return {}
+		end
+		saved.procsOff = {}
+	end
+	return saved.procsOff
+end
+
+-- True for a proc of your class that is turned off, or for all of them while Procs of your class is off. Until the next layout takes it away
+-- (after the fight, in one) it is read as down, so its icon, art and glow go at once.
+local function Off(entry)
+	return entry.auto == true and (ns.Get(KEY .. ".procAuto") == false or OffSet(false)[entry.name] == true)
+end
+
 -- A spell of the player's, or true when the game cannot say.
 local function Known(spellID)
 	local book = C_SpellBook
@@ -271,13 +292,19 @@ local function Stop(entry)
 	Call(ns.ProcGlowStop, entry)
 end
 
--- The proc is no longer a tracker that is on: removed, switched off, or the page off.
+-- The proc is no longer a tracker that is on: removed, switched off, or the page off. A trigger with a Forget(id) forgets it too, so a proc
+-- that comes back (Bring back a proc, Procs of your class on again) is not up from an answer of before.
 local function Gone(id)
 	local entry = P.up[id]
 	if entry then
 		Stop(entry)
 	end
 	P.since[id], P.signalled[id], P.glow[id], P.ended[id] = nil, nil, nil, nil
+	for _, def in pairs(P.triggers) do
+		if type(def.Forget) == "function" then
+			pcall(def.Forget, id)
+		end
+	end
 end
 
 -- Called when the state the proc shows changes: fine is up, missing is down. low is fine.
@@ -316,14 +343,33 @@ local function OverlayRead(entry)
 	return nil
 end
 
+-- True for a proc known by its trigger alone: an ability the class data watches by its use (watch usable: Overpower, Revenge, Execute) with the
+-- trigger usable, and a proc with no buff. The buff a row names may not be the one that comes and goes (Overpower's, 1289681, is named
+-- Bloodthrill like the talent), and a proc with no buff (Execute) has none to look for by name, where an aura of the same name (the one Execute
+-- leaves on you for a second after each cast) would be taken for it.
+local function ByUse(entry, row)
+	row = row or RowOf(entry)
+	return row ~= nil and ((row.watch == "usable" and entry.trigger == "usable") or #row.buffs == 0)
+end
+
 -- The reading of the buff, else the reading of the entry's trigger when the buff is hidden. A trigger that says Either (usable) is asked also
--- while the buff can be read and is missing: an ability the game makes usable without the buff (Overpower after a dodge, Execute) is up.
+-- while the buff can be read and is missing: an ability the game makes usable without the buff is up. A proc known by its trigger alone (ByUse)
+-- has the trigger's reading, and is down until its first answer.
 local function Raw(entry)
+	local trigger = P.triggers[entry.trigger]
+	if ByUse(entry) then
+		if trigger and type(trigger.Read) == "function" then
+			local ok, got = pcall(trigger.Read, entry)
+			if ok and type(got) == "table" and type(got.state) == "string" then
+				return got
+			end
+		end
+		return { state = "missing", hidden = false }
+	end
 	local reading = ns.AuraReading(entry)
 	if reading.state == "fine" or reading.state == "low" then
 		return reading
 	end
-	local trigger = P.triggers[entry.trigger]
 	if not (trigger and type(trigger.Read) == "function") or (reading.state ~= "unknown" and trigger.Either ~= true) then
 		return reading
 	end
@@ -336,6 +382,10 @@ end
 
 local function Read(entry)
 	local id, now = entry.id, Now()
+	if Off(entry) then
+		P.ended[id], P.since[id] = nil, nil
+		return { state = "missing", hidden = false }
+	end
 	local reading = Raw(entry)
 	if reading.state == "low" then
 		reading.state = "fine"
@@ -376,12 +426,17 @@ local function Wanted(entry, state, how)
 end
 
 -- The spell a proc is for is cast: the alert ends, and starts again with the next proc. One that stays (Execute) lasts while it is usable.
+-- A trigger with a Used(entry) hears it, so the next proc starts an alert even within the time of this one (usable: a second dodge).
 local function Cast(spellID)
 	for _, entry in ipairs(All()) do
 		if Lists(entry.lights, spellID) and (P.up[entry.id] or P.signalled[entry.id] or P.glow[entry.id]) then
 			local row = RowOf(entry)
 			if not (row and row.stay == true) then
 				P.ended[entry.id], P.signalled[entry.id], P.glow[entry.id] = true, nil, nil
+				local trigger = P.triggers[entry.trigger]
+				if trigger and type(trigger.Used) == "function" then
+					pcall(trigger.Used, entry)
+				end
 				ns.TrackerDirty()
 			end
 		end
@@ -638,21 +693,6 @@ local function Automatic(row)
 	return K.AUTO_KINDS[row.kind] == true
 end
 
--- The names of the procs of the class turned off on this character, as a set (FlatUICharDB.procsOff), made when make is set.
-local function OffSet(make)
-	local saved = ns.Character()
-	if type(saved) ~= "table" then
-		return {}
-	end
-	if type(saved.procsOff) ~= "table" then
-		if not make then
-			return {}
-		end
-		saved.procsOff = {}
-	end
-	return saved.procsOff
-end
-
 -- The IDs of a row's spells that the player knows, or nil when none is. Not saved, so not held to the 40 of an entry of the list: every spell
 -- that uses Clearcasting ends its alert.
 local function Ranks(lights)
@@ -693,7 +733,12 @@ local function Build()
 				entry.trigger = P.triggers[row.trigger] and row.trigger or "aura"
 				entry.kind2 = row.kind2 == "shorter" and "shorter" or nil
 				entry.time = Plain(row.seconds, "number") and row.seconds > 0 and row.seconds <= K.MAX_TIME and row.seconds or nil
-				entry.glow = row.glow == false and false or nil
+				-- An if, since an and/or that ends in false or nil always gives nil.
+				if row.glow == false then
+					entry.glow = false
+				else
+					entry.glow = nil
+				end
 				if Refused(entry) then
 					entry.trigger = "aura"
 				end
@@ -720,8 +765,9 @@ function ns.ProcAutoEntries(saved)
 	if A.stale then
 		Build()
 	end
-	-- Off in a fight: none from now on, though the list is built again only at the next layout, after it.
-	if #A.list == 0 or ns.Get(KEY .. ".procAuto") == false then
+	-- Procs of your class or one of them turned off in a fight: the list stays as it is until the layout after the fight builds it again, and
+	-- each one that is off reads as down from now on (Off), so nothing of it is left on screen.
+	if #A.list == 0 then
 		return {}
 	end
 	saved = type(saved) == "table" and saved or ns.TrackerEntries()
@@ -767,7 +813,7 @@ function ns.ProcPicked()
 		rows[#rows + 1] = { found[1], ns.TrackerLabel(found[2]) }
 	end
 	for _, entry in ipairs(ns.ProcAutoEntries()) do
-		local number = Line(entry.name)
+		local number = not Off(entry) and Line(entry.name)
 		if number then
 			rows[#rows + 1] = { K.AUTO_LINE + number, ("%s, of your class"):format(entry.name) }
 		end
@@ -784,9 +830,10 @@ function ns.ProcRemove(position)
 			return false, ("No proc numbered %s."):format(tostring(position))
 		end
 		OffSet(true)[row.name] = true
-		A.stale = true
-		-- An alert that is up ends now, even in a fight, where the layout that frees its icon waits for the end of it.
+		-- An alert that is up ends now, even in a fight, where it reads as down (Off) until the layout after the fight builds the list again
+		-- and frees its icon; out of a fight that layout is now.
 		Gone("auto:" .. row.name)
+		ns.TrackerDirty()
 		ns.TrackerLayout()
 		return true, ("%s is off for this character. Bring back a proc turns it on again."):format(row.name)
 	end
@@ -840,7 +887,9 @@ end
 -- Triggers ---------------------------------------------------------------------------------------------------------------------------
 
 -- Registers a way a proc is known to be up: def.Read(entry) gives a reading or nothing, def.Text the words after the proc's name where it is
--- listed, def.Lines(entry) the lines of the check and def.Valid(entry) true or false and a message, asked when a trigger is chosen.
+-- listed, def.Lines(entry) the lines of the check and def.Valid(entry) true or false and a message, asked when a trigger is chosen. def.Either
+-- true: Read is asked also while the buff can be read and is missing (Raw). def.Used(entry): the spell the proc is for was cast and ended the alert.
+-- def.Forget(id): the proc is no longer on (Gone).
 function ns.ProcTrigger(name, def)
 	if type(name) ~= "string" or name == "" or type(def) ~= "table" then
 		return false
@@ -917,7 +966,9 @@ local function Lines(entry)
 	end
 	local level = Level(entry)
 	lines[#lines + 1] = "Aura level: " .. level .. "."
-	if level ~= "never hidden" then
+	if ByUse(entry) then
+		lines[#lines + 1] = "Known by its trigger alone, in fights too."
+	elseif level ~= "never hidden" then
 		lines[#lines + 1] = "Sound in fights: none while the game hides the buff."
 	end
 	lines[#lines + 1] = "Up now: " .. UpNow(entry) .. "."

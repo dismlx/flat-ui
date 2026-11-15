@@ -3080,24 +3080,29 @@ local function HideHolders()
 	end
 end
 
+-- The page is off: every kind ends what it has up for a tracker (a proc's art and glow), at once, also in a fight, where the layout that frees
+-- the records waits for its end. A kind that ended what it had up for a tracker shows it again from the start when the page comes back.
+function K.EndKinds()
+	for id in pairs(records) do
+		Gone(id)
+	end
+	for _, list in ipairs({ Entries(), K.Auto() }) do
+		for _, entry in ipairs(list) do
+			local kind = KINDS[entry.kind]
+			if kind and type(kind.Gone) == "function" then
+				mem.kept[entry.id] = nil
+			end
+		end
+	end
+end
+
 -- Runs out of combat. The trackers are grouped by their place, and each group is one row hung from the holder of its place.
 local function Layout()
 	if not ns.Enabled(KEY) then
 		tracked = 0
 		ns.ClearNote(KEY, NO_POSITION)
 		HideHolders()
-		for id in pairs(records) do
-			Gone(id)
-		end
-		-- A kind that ended what it had up for a tracker shows it again from the start when the page comes back.
-		for _, list in ipairs({ Entries(), K.Auto() }) do
-			for _, entry in ipairs(list) do
-				local kind = KINDS[entry.kind]
-				if kind and type(kind.Gone) == "function" then
-					mem.kept[entry.id] = nil
-				end
-			end
-		end
+		K.EndKinds()
 		shown = {}
 		return
 	end
@@ -3884,6 +3889,7 @@ local function Refresh()
 	end
 	if not ns.Enabled(KEY) then
 		HideHolders()
+		K.EndKinds()
 		if ns.TrackerMarkSweep then
 			ns.TrackerMarkSweep()
 		end

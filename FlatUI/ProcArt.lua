@@ -150,7 +150,8 @@ local function ColourOf(entry, art)
 end
 
 -- The corners of the picture of a piece: mirrored across or down as the geometry says, and turned a quarter as the art says, with the eight
--- corners SetTexCoord takes (upper left, lower left, upper right, lower right, each x and y).
+-- corners SetTexCoord takes (upper left, lower left, upper right, lower right, each x and y), the turn SpellActivationOverlay by ennvina gives
+-- its locations "(CW)" and "(CCW)" (SpellActivationOverlay.lua, SpellActivationOverlay_ShowOverlay, MIT licence; README.md, Credits).
 local function Corners(texture, g, turn)
 	local left, right = g.flipH and 1 or 0, g.flipH and 0 or 1
 	local top, bottom = g.flipV and 1 or 0, g.flipV and 0 or 1
@@ -653,6 +654,14 @@ end
 function ns.ProcArtLine(entry)
 	if not On() then
 		return "Art: off"
+	end
+	-- A proc of the class data with no art (noArt, Hammer of Wrath) has the glow alone.
+	local given = type(ns.ProcArtData) == "function" and ns.ProcArtData
+	if given and type(entry) == "table" then
+		local ok, data = pcall(given, entry)
+		if ok and data == false then
+			return "Art: none, the glow on the button alone"
+		end
 	end
 	local seen = type(entry) == "table" and (last[entry.id or entry] or last[entry])
 	if not seen then

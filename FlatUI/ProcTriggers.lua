@@ -2,9 +2,10 @@ local _, ns = ...
 
 -- Proc triggers for a proc whose buff the game hides in a fight: your cast of the proc's spell (cast), a cast that has become instant or much
 -- shorter (casttime) and an ability that has become usable (usable). Each is registered with ns.ProcTrigger (Procs.lua) and is read only while the
--- buff cannot be read, except usable, which says Either and is read also while the buff can be read and is missing: Overpower made usable by a
--- dodge, Revenge by a block, dodge or parry and Execute by a target at low health have no buff an addon can read (the game marks theirs not to be
--- shown), and C_Spell.IsSpellUsable is plain in fights (SpellDocumentation.lua:980-995) while the target's health is not. The frame of this file
+-- buff cannot be read, except usable, which says Either and is read also while the buff can be read and is missing, and alone for an ability the
+-- class data watches by its use (Procs.lua, Raw): Overpower made usable by a dodge, Revenge by a block, dodge or parry and Execute by a target at
+-- low health have no buff an addon can read (the game marks theirs not to be shown), and C_Spell.IsSpellUsable is plain in fights
+-- (SpellDocumentation.lua:980-995) while the target's health is not. A cast of the spell ends its alert (Used). The frame of this file
 -- hears the player's casts (UNIT_SPELLCAST_SUCCEEDED, which is withheld for some spells), a ping of UNIT_AURA that is never read,
 -- SPELL_UPDATE_USABLE and ACTION_USABLE_CHANGED, the player's power, stance or form, the target and the target's health, and it is made when the
 -- first proc with one of these triggers is in the list (the procs of the list and those of your class, ns.ProcEntries). C_Spell GetSpellInfo
@@ -457,8 +458,14 @@ end
 
 -- The triggers -------------------------------------------------------------------------------------------------------------------------
 
+-- A proc that is no longer on (Procs.lua, Gone): its alert and the last answer about it go, so it starts afresh if it comes back. The cast time
+-- at rest is a measure of the spell and stays.
+local function Forget(id)
+	T.on[id], T.last[id], T.cast[id], T.ask[id] = nil, nil, nil, nil
+end
+
 ns.ProcTrigger("cast", {
-	Text = "your cast", Label = "your cast", Seen = Seen,
+	Text = "your cast", Label = "your cast", Seen = Seen, Forget = Forget,
 	Read = function(entry)
 		local state = T.cast[entry.id]
 		if state and state.expires and Now() >= state.expires then
@@ -479,7 +486,7 @@ ns.ProcTrigger("cast", {
 })
 
 ns.ProcTrigger("casttime", {
-	Text = "cast time", Label = "cast time", Seen = Seen,
+	Text = "cast time", Label = "cast time", Seen = Seen, Forget = Forget,
 	Read = function(entry)
 		if not T.rest[entry.id] then
 			return nil
@@ -512,7 +519,12 @@ ns.ProcTrigger("casttime", {
 })
 
 ns.ProcTrigger("usable", {
-	Text = "usable", Label = "usable", Seen = Seen, Either = true,
+	Text = "usable", Label = "usable", Seen = Seen, Either = true, Forget = Forget,
+	-- The spell was cast (Procs.lua, Cast): this alert is over, so the next time the spell becomes usable starts one, also while it is short of
+	-- power now (Overpower's combo point used) and within the time of this one.
+	Used = function(entry)
+		T.on[entry.id] = nil
+	end,
 	-- Up with the icon of the spell it is for, the rank asked about.
 	Read = function(entry)
 		if T.last[entry.id] == nil then
