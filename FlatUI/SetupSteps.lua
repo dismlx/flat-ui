@@ -922,8 +922,10 @@ ns.SETUP_STEPS = {
 		{ "trackers.kit", "r", "behaviour", "Chooses the sound a tracker plays when it drops, comes or stacks." },
 	} },
 	{ id = "tr-proc", area = "Trackers", title = "Proc alerts", draw = "mock-proc", built = true, rows = {
+		{ "trackers.procAuto", "o", "behaviour", "Shows every proc of your class whose spell you know without adding it." },
 		{ "trackers.addProc", "c", "behaviour", "Adds a proc to the alert list." },
-		{ "trackers.removeProc", "o", "behaviour", "Removes a proc from the alert list." },
+		{ "trackers.removeProc", "o", "behaviour", "Removes a proc from the alert list, or turns off a proc of your class." },
+		{ "trackers.restoreProc", "o", "behaviour", "Turns a proc of your class you turned off back on." },
 		{ "trackers.procColour", "r", "mock-proc" },
 		{ "trackers.procSound", "r", "behaviour", "Chooses the sound a proc alert plays, or none." },
 		{ "trackers.art", "c", "mock-proc" },

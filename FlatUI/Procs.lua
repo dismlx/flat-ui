@@ -7,6 +7,10 @@ local _, ns = ...
 -- (Blizzard_FrameXML.toc:109-110), so on this client no event is expected, and the check says how many came. The art and the glow of a
 -- proc are other files that provide ns.ProcArtShow, ns.ProcArtHide, ns.ProcGlowStart and ns.ProcGlowStop; each is called here only when it
 -- is there. Every value from the game is tested with ns.IsSecret before it is compared, indexed or kept.
+-- Procs of your class (on by default): every row of the class data that is automatic (ProcData.lua) and has a spell you know is a proc too,
+-- without being added. These are not saved: ns.ProcAutoEntries gives them to the trackers that are on (Trackers.lua), each with the id "auto:"
+-- and its name, one table kept for good so what the trackers know of it stays. One added by hand takes its place, with its own colour, time
+-- and sound, and Remove a proc turns one off for the character (FlatUICharDB.procsOff, by name) until Bring back a proc.
 
 local KEY = "trackers"
 local PART = "procs"
@@ -25,7 +29,12 @@ local K = {
 	COUNT = { SPELL_ACTIVATION_OVERLAY_SHOW = "show", SPELL_ACTIVATION_OVERLAY_HIDE = "hide", SPELL_ACTIVATION_OVERLAY_GLOW_SHOW = "glowShow",
 		SPELL_ACTIVATION_OVERLAY_GLOW_HIDE = "glowHide" },
 	USAGE = "Usage: /flatui tracker proc colour 1 ffd100, proc time 1 10 or proc trigger 1 aura.",
+	-- AUTO_KINDS: the kinds of the class data that are automatic when a row does not say. AUTO_LINE: the lines of Remove a proc for the automatic
+	-- procs start above it, clear of the numbers of the list of trackers.
+	AUTO_KINDS = { proc = true, reactive = true }, AUTO_LINE = 1000,
 }
+-- The automatic procs: the list built last, every entry ever built by its id, and whether the list is built again when next asked.
+local A = { list = {}, byId = {}, stale = true }
 -- What is known of each proc, by the id of its entry: the entry while its alert is up, the moment the alert started, the overlay signal and the
 -- glow signal, an alert ended by a cast or by its time until the buff is gone, and the last sound in words. seen counts the events heard.
 -- triggers are the ways a proc is known to be up, by name.
@@ -98,6 +107,21 @@ local function Procs()
 	return found
 end
 
+-- Every proc that is watched: the proc trackers in list order, then the automatic ones (ns.ProcAutoEntries, below).
+local function All()
+	local found, saved = {}, ns.TrackerEntries()
+	for _, entry in ipairs(saved) do
+		if entry.kind == "proc" then
+			found[#found + 1] = entry
+		end
+	end
+	for _, entry in ipairs(type(ns.ProcAutoEntries) == "function" and ns.ProcAutoEntries(saved) or {}) do
+		found[#found + 1] = entry
+	end
+	return found
+end
+ns.ProcEntries = All
+
 -- The class data ------------------------------------------------------------------------------------------------------------------
 
 local function ProcList()
@@ -109,11 +133,19 @@ local function ProcList()
 	return type(data) == "table" and data or {}
 end
 
--- The class data row of a proc tracker, by the IDs of its buff.
+-- The class data row of a proc tracker, by the IDs of its buff; a row with no buff (Execute) by its name, for an entry with no buff either.
 local function RowOf(entry)
-	for _, row in ipairs(ProcList()) do
+	local list = ProcList()
+	for _, row in ipairs(list) do
 		for _, id in ipairs(row.buffs) do
 			if Lists(entry.spells, id) then
+				return row
+			end
+		end
+	end
+	if type(entry.spells) == "table" and #entry.spells == 0 then
+		for _, row in ipairs(list) do
+			if #row.buffs == 0 and row.name == entry.name then
 				return row
 			end
 		end
@@ -166,17 +198,31 @@ local function KitOf(entry)
 	return K.KITS[ns.Get(KEY .. ".procSound")]
 end
 
--- The art of an alert: the payload of the game's overlay when it came, else the art of the class data, else nothing.
+-- The art of an alert: the payload of the game's overlay when it came, else the art of the class data with its place, size, opacity, colour,
+-- turn, pulse and time, else nothing (the plain arc). False for a proc of the class data that has no art, only the glow (noArt).
 local function ArtData(entry)
 	local signal = P.signalled[entry.id]
 	if signal then
 		return { file = signal.file, location = signal.location, scale = signal.scale or 1, r = signal.r, g = signal.g, b = signal.b }
 	end
 	local row = RowOf(entry)
-	if row and row.art then
-		return { file = row.art.file, location = row.art.location, scale = 1 }
+	if row and row.noArt == true then
+		return false
+	end
+	local art = row and row.art
+	if type(art) == "table" then
+		return { file = art.file, location = art.location, scale = art.scale or 1, alpha = art.alpha, r = art.r, g = art.g, b = art.b,
+			turn = art.turn, pulse = art.pulse, seconds = art.seconds }
 	end
 	return nil
+end
+
+-- Shows the art of a proc that is up, unless it has none.
+local function ShowArt(entry)
+	local art = ArtData(entry)
+	if art ~= false then
+		Call(ns.ProcArtShow, entry, art)
+	end
 end
 
 -- The art of the alert as ProcArt.lua draws it, for the pieces it makes on the game's own icon.
@@ -215,7 +261,7 @@ local function Start(entry)
 	local id = entry.id
 	P.up[id], P.since[id] = entry, Now()
 	Sound(entry, false)
-	Call(ns.ProcArtShow, entry, ArtData(entry))
+	ShowArt(entry)
 	Call(ns.ProcGlowStart, entry)
 end
 
@@ -270,17 +316,20 @@ local function OverlayRead(entry)
 	return nil
 end
 
--- The reading of the buff, else the reading of the entry's trigger when the buff is hidden.
+-- The reading of the buff, else the reading of the entry's trigger when the buff is hidden. A trigger that says Either (usable) is asked also
+-- while the buff can be read and is missing: an ability the game makes usable without the buff (Overpower after a dodge, Execute) is up.
 local function Raw(entry)
 	local reading = ns.AuraReading(entry)
-	if reading.state == "unknown" then
-		local trigger = P.triggers[entry.trigger]
-		if trigger and type(trigger.Read) == "function" then
-			local ok, got = pcall(trigger.Read, entry)
-			if ok and type(got) == "table" and type(got.state) == "string" then
-				reading = got
-			end
-		end
+	if reading.state == "fine" or reading.state == "low" then
+		return reading
+	end
+	local trigger = P.triggers[entry.trigger]
+	if not (trigger and type(trigger.Read) == "function") or (reading.state ~= "unknown" and trigger.Either ~= true) then
+		return reading
+	end
+	local ok, got = pcall(trigger.Read, entry)
+	if ok and type(got) == "table" and type(got.state) == "string" and (reading.state == "unknown" or got.state == "fine" or got.state == "low") then
+		return got
 	end
 	return reading
 end
@@ -326,13 +375,15 @@ local function Wanted(entry, state, how)
 	return 1
 end
 
--- The spell a proc is for is cast: the alert ends, and starts again with the next proc.
+-- The spell a proc is for is cast: the alert ends, and starts again with the next proc. One that stays (Execute) lasts while it is usable.
 local function Cast(spellID)
-	for _, found in ipairs(Procs()) do
-		local entry = found[2]
+	for _, entry in ipairs(All()) do
 		if Lists(entry.lights, spellID) and (P.up[entry.id] or P.signalled[entry.id] or P.glow[entry.id]) then
-			P.ended[entry.id], P.signalled[entry.id], P.glow[entry.id] = true, nil, nil
-			ns.TrackerDirty()
+			local row = RowOf(entry)
+			if not (row and row.stay == true) then
+				P.ended[entry.id], P.signalled[entry.id], P.glow[entry.id] = true, nil, nil
+				ns.TrackerDirty()
+			end
 		end
 	end
 end
@@ -358,8 +409,7 @@ local function Overlayed()
 	if type(call) ~= "function" then
 		return
 	end
-	for _, found in ipairs(Procs()) do
-		local entry = found[2]
+	for _, entry in ipairs(All()) do
 		for _, id in ipairs(entry.lights or {}) do
 			if Ask(call, id) == true then
 				P.glow[entry.id] = P.glow[entry.id] or Now()
@@ -378,8 +428,7 @@ local function Event(event, ...)
 	if IsSecret(spellID) then
 		return
 	end
-	for _, found in ipairs(Procs()) do
-		local entry = found[2]
+	for _, entry in ipairs(All()) do
 		local id = entry.id
 		if event == "SPELL_ACTIVATION_OVERLAY_SHOW" then
 			if Whole(spellID) and Lists(entry.spells, spellID) then
@@ -579,22 +628,213 @@ function ns.ProcAdd(number)
 	return ns.TrackerAddKind("proc", { row = row })
 end
 
--- The proc trackers by their number in the list of trackers.
+-- Procs of your class ----------------------------------------------------------------------------------------------------------------
+
+-- True when a row of the class data shows without being added: its own auto, else its kind.
+local function Automatic(row)
+	if row.auto ~= nil then
+		return row.auto == true
+	end
+	return K.AUTO_KINDS[row.kind] == true
+end
+
+-- The names of the procs of the class turned off on this character, as a set (FlatUICharDB.procsOff), made when make is set.
+local function OffSet(make)
+	local saved = ns.Character()
+	if type(saved) ~= "table" then
+		return {}
+	end
+	if type(saved.procsOff) ~= "table" then
+		if not make then
+			return {}
+		end
+		saved.procsOff = {}
+	end
+	return saved.procsOff
+end
+
+-- The IDs of a row's spells that the player knows, or nil when none is. Not saved, so not held to the 40 of an entry of the list: every spell
+-- that uses Clearcasting ends its alert.
+local function Ranks(lights)
+	local own = {}
+	for _, id in ipairs(lights) do
+		if Known(id) then
+			own[#own + 1] = id
+		end
+	end
+	return #own > 0 and own or nil
+end
+
+-- Builds the automatic procs again: each automatic row of the class with a spell the player knows that is not turned off, while Procs of your
+-- class is on. An entry keeps its table: its buffs follow the row (an ID the trackers found by name since stays), its lights the ranks known
+-- now, so a rank learned later is in them, and its trigger, time and glow the row. A trigger that does not fit (Valid) leaves the buff alone.
+local function Build()
+	A.stale = false
+	local list = {}
+	if ns.Get(KEY .. ".procAuto") ~= false then
+		local off = OffSet(false)
+		for _, row in ipairs(ProcList()) do
+			local lights = Automatic(row) and off[row.name] ~= true and type(row.lights) == "table" and Ranks(row.lights)
+			if lights then
+				local id = "auto:" .. row.name
+				local entry = A.byId[id]
+				if not entry then
+					entry = { id = id, kind = "proc", auto = true, name = row.name, names = { row.name }, spells = {}, lights = {}, show = "always" }
+					A.byId[id] = entry
+				end
+				for _, buff in ipairs(row.buffs) do
+					if not Lists(entry.spells, buff) and #entry.spells < K.MAX_SPELLS then
+						entry.spells[#entry.spells + 1] = buff
+					end
+				end
+				if not Same(entry.lights, lights) then
+					entry.lights = lights
+				end
+				entry.trigger = P.triggers[row.trigger] and row.trigger or "aura"
+				entry.kind2 = row.kind2 == "shorter" and "shorter" or nil
+				entry.time = Plain(row.seconds, "number") and row.seconds > 0 and row.seconds <= K.MAX_TIME and row.seconds or nil
+				entry.glow = row.glow == false and false or nil
+				if Refused(entry) then
+					entry.trigger = "aura"
+				end
+				Touch(entry)
+				list[#list + 1] = entry
+			end
+		end
+	end
+	A.list = list
+end
+
+-- The ids of the automatic procs built, as one text.
+local function Ids()
+	local ids = {}
+	for index, entry in ipairs(A.list) do
+		ids[index] = entry.id
+	end
+	return table.concat(ids, "|")
+end
+
+-- The automatic procs that no proc of the list tracks (by name or buff), in the order of the class data. saved: the list of trackers, when the
+-- caller has it. The list is built again first when something it depends on changed.
+function ns.ProcAutoEntries(saved)
+	if A.stale then
+		Build()
+	end
+	-- Off in a fight: none from now on, though the list is built again only at the next layout, after it.
+	if #A.list == 0 or ns.Get(KEY .. ".procAuto") == false then
+		return {}
+	end
+	saved = type(saved) == "table" and saved or ns.TrackerEntries()
+	local out = {}
+	for _, entry in ipairs(A.list) do
+		if not Tracked(saved, entry.name, entry.spells) then
+			out[#out + 1] = entry
+		end
+	end
+	return out
+end
+
+-- Builds the automatic procs again (Trackers.lua runs it at each layout, out of combat), and has the glow frames of their buttons made ahead.
+function ns.ProcAutoBuild()
+	Build()
+	Call(ns.ProcGlowPrepare, All())
+end
+
+-- At login and when the spells change: the overlay is asked, and the automatic procs are built again, with a new layout when they changed.
+local function World()
+	Overlayed()
+	local before = Ids()
+	Build()
+	if Ids() ~= before then
+		ns.TrackerLayout()
+	end
+end
+
+-- The place in the class data of the row with this name, and the row.
+local function Line(name)
+	for number, row in ipairs(ProcList()) do
+		if row.name == name then
+			return number, row
+		end
+	end
+	return nil
+end
+
+-- The proc trackers by their number in the list of trackers, then the automatic procs by their place in the class data above AUTO_LINE.
 function ns.ProcPicked()
 	local rows = {}
 	for _, found in ipairs(Procs()) do
 		rows[#rows + 1] = { found[1], ns.TrackerLabel(found[2]) }
 	end
+	for _, entry in ipairs(ns.ProcAutoEntries()) do
+		local number = Line(entry.name)
+		if number then
+			rows[#rows + 1] = { K.AUTO_LINE + number, ("%s, of your class"):format(entry.name) }
+		end
+	end
 	return rows
 end
 
+-- Removes a proc tracker, or turns an automatic proc off for this character. A proc of the class removed from the list is turned off too, so it
+-- does not come back on its own; Bring back a proc turns it on again.
 function ns.ProcRemove(position)
+	if Whole(position) and position > K.AUTO_LINE then
+		local row = ProcList()[position - K.AUTO_LINE]
+		if not row then
+			return false, ("No proc numbered %s."):format(tostring(position))
+		end
+		OffSet(true)[row.name] = true
+		A.stale = true
+		-- An alert that is up ends now, even in a fight, where the layout that frees its icon waits for the end of it.
+		Gone("auto:" .. row.name)
+		ns.TrackerLayout()
+		return true, ("%s is off for this character. Bring back a proc turns it on again."):format(row.name)
+	end
 	for _, found in ipairs(Procs()) do
 		if found[1] == position then
-			return ns.TrackerRemove(position)
+			local row = RowOf(found[2])
+			local kept = row and Automatic(row) and ns.Get(KEY .. ".procAuto") ~= false
+			if kept then
+				OffSet(true)[row.name] = true
+				A.stale = true
+			end
+			local done, message = ns.TrackerRemove(position)
+			if not done and kept then
+				OffSet(false)[row.name] = nil
+				A.stale = true
+			elseif kept then
+				message = ("%s It stays off for this character until Bring back a proc."):format(tostring(message))
+			end
+			return done, message
 		end
 	end
 	return false, ("No proc numbered %s."):format(tostring(position))
+end
+
+-- The procs of the class turned off on this character, by their place in the class data: the lines of Bring back a proc.
+function ns.ProcTurnedOff()
+	local rows, off = {}, OffSet(false)
+	for number, row in ipairs(ProcList()) do
+		if off[row.name] == true then
+			rows[#rows + 1] = { number, row.name }
+		end
+	end
+	return rows
+end
+
+function ns.ProcRestore(number)
+	local row = Whole(number) and ProcList()[number]
+	local off = OffSet(false)
+	if not (row and off[row.name] == true) then
+		return false, "That proc is not turned off."
+	end
+	off[row.name] = nil
+	A.stale = true
+	ns.TrackerLayout()
+	if ns.Get(KEY .. ".procAuto") == false then
+		return true, ("%s is on again once Procs of your class is on."):format(row.name)
+	end
+	return true, ("%s is on again."):format(row.name)
 end
 
 -- Triggers ---------------------------------------------------------------------------------------------------------------------------
@@ -672,6 +912,9 @@ local function Lines(entry)
 	local chosen = P.triggers[entry.trigger]
 	local label = chosen and Plain(chosen.Label, "string") and chosen.Label or entry.trigger or "aura"
 	local lines = { ("Trigger: %s."):format(label) }
+	if entry.auto == true then
+		lines[#lines + 1] = "Procs of your class: shown without being added. Remove a proc turns it off."
+	end
 	local level = Level(entry)
 	lines[#lines + 1] = "Aura level: " .. level .. "."
 	if level ~= "never hidden" then
@@ -716,7 +959,7 @@ local function Test(entry, on)
 		if P.before[entry.id] then
 			P.before[entry.id] = nil
 			P.up[entry.id] = entry
-			Call(ns.ProcArtShow, entry, ArtData(entry))
+			ShowArt(entry)
 			Call(ns.ProcGlowStart, entry)
 		end
 		return nil
@@ -726,7 +969,7 @@ local function Test(entry, on)
 	end
 	P.up[entry.id] = entry
 	local word = Sound(entry, true)
-	Call(ns.ProcArtShow, entry, ArtData(entry))
+	ShowArt(entry)
 	Call(ns.ProcGlowStart, entry)
 	return ("Sound: %s."):format(word or "none")
 end
@@ -805,7 +1048,13 @@ end)
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("proc", {
 		Read = Read, Clean = Clean, Add = Add, Lines = Lines, Hide = Hide, Wanted = Wanted, Changed = Changed, Gone = Gone, Cast = Cast, Event = Event,
-		Test = Test, Rim = ns.ProcColour, World = Overlayed, Label = function(entry) return entry.name end,
+		Test = Test, Rim = ns.ProcColour, World = World, Label = function(entry) return entry.name end,
+		-- A proc with no buff (Execute) has the icon of the spell it is for.
+		Icon = function(entry)
+			local light = type(entry.lights) == "table" and entry.lights[1]
+			local file = Whole(light) and Ask(C_Spell and C_Spell.GetSpellTexture, light)
+			return (Plain(file, "number") or Plain(file, "string")) and file or nil
+		end,
 		events = { "SPELL_ACTIVATION_OVERLAY_SHOW", "SPELL_ACTIVATION_OVERLAY_HIDE", "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW",
 			"SPELL_ACTIVATION_OVERLAY_GLOW_HIDE" },
 		own = {
