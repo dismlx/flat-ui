@@ -575,8 +575,7 @@ end
 function T.OnUnitEvent(rec, event, who, ...)
 	if event == "UNIT_SPELLCAST_SUCCEEDED" then
 		local _, spell = ...
-		-- A frame that hears this unit alone knows the unit while the game withholds its token; one that hears every unit does not.
-		if IsSecret(spell) or (rec.all and IsSecret(who)) then
+		if IsSecret(who) or IsSecret(spell) then
 			rec.counts.castHidden = rec.counts.castHidden + 1
 			return
 		end

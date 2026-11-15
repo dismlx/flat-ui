@@ -195,6 +195,19 @@ function E.AuraScale(frame)
 	return 1
 end
 
+-- True when the game draws the name inside the health bar (Modern and Block styles): the debuffs then hang over the bar, not the name
+-- (Blizzard_NamePlateUnitFrame.lua:864-869). Only read.
+function E.NameInside()
+	local options, constants = NamePlateSetupOptions, NamePlateConstants
+	if not (Plain(options, "table") and Plain(constants, "table")) then
+		return false
+	end
+	local ok, style, inside = pcall(function()
+		return options.unitNameAnchorStyle, constants.NAME_ANCHOR_STYLES.InsideHealthBar
+	end)
+	return ok and Plain(style, "number") and Plain(inside, "number") and style == inside
+end
+
 -- The space the game keeps between the name and the debuffs over it, its setting nameplateDebuffPadding
 -- (Blizzard_NamePlateUnitFrame.lua:864-869), else none.
 function E.Padding()
@@ -202,8 +215,8 @@ function E.Padding()
 	return ns.Finite(number) and math.max(number, 0) or 0
 end
 
--- How high over the name of an enemy player Flat UI's class icon reaches with Class icon position Above (Nameplates.lua PlaceIcon): its
--- gap, its size (the bar's height while it fits the bar) and its offset up. 0 when it is not there.
+-- How high over the name of an enemy player (over the bar, with the name inside it) Flat UI's class icon reaches with Class icon position
+-- Above (Nameplates.lua PlaceIcon): its gap, its size (the bar's height while it fits the bar) and its offset up. 0 when it is not there.
 function E.IconAbove(frame)
 	if not (ns.Enabled("nameplates") and ns.Get("nameplates.classEnemy") == true and ns.Get("nameplates.classPosition") == "above") then
 		return 0
@@ -250,9 +263,13 @@ function E.Spot(frame)
 			return "RIGHT", bar, "LEFT", -(RAID_MARK + CLASSIFICATION + BUFF_GAP + beside), 0, "left"
 		end
 	elseif place == "above" then
-		local name = E.Part(frame, "name")
-		if name then
-			return "BOTTOM", name, "TOP", 0, math.max(E.Padding() + AURA * scale, E.IconAbove(frame)) + SPACING, "center"
+		-- The debuffs and a class icon above hang from the name, or from the health bar when the name is inside it.
+		local base = E.Part(frame, "name")
+		if E.NameInside() then
+			base = E.Part(frame, "HealthBarsContainer", "healthBar") or E.Part(frame, "HealthBarsContainer") or base
+		end
+		if base then
+			return "BOTTOM", base, "TOP", 0, math.max(E.Padding() + AURA * scale, E.IconAbove(frame)) + SPACING, "center"
 		end
 	end
 	return "TOP", E.Target(frame), "BOTTOM", 0, -BELOW, "center"
@@ -384,30 +401,58 @@ function E.Fits(rec, a)
 	return a.lvl == nil or not rec.level or rec.level <= 0 or rec.level >= a.lvl
 end
 
--- True when the ability has a buff that gives the start of a use (not one of NO_START).
-function E.Buffed(a)
-	for _, id in ipairs(a.buffs) do
-		if not NO_START[id] then
+-- True for an ability whose kind, or second kind, is crowd control: the auras it lists are on its target, not on the player.
+function E.Crowd(a)
+	if a.kind == 4 then
+		return true
+	end
+	for _, also in ipairs(a.also or {}) do
+		if also == 4 then
 			return true
 		end
 	end
 	return false
 end
 
--- True when the game never hides a cast or a buff of the ability, from the secrecy levels it gives the spells.
-function E.Never(a)
-	local known = E.never[a.key]
-	if known == nil then
-		known = false
-		for _, id in ipairs(a.casts) do
-			known = known or ns.CastLevel(id) == 0
-		end
-		for _, id in ipairs(a.buffs) do
-			known = known or (not NO_START[id] and T.NeverHidden(id) == true)
-		end
-		E.never[a.key] = known
+-- True when the game says a spell is cast on hostile targets (SpellDocumentation.lua:900-913): an aura of it is on a target.
+function E.Harmful(id)
+	return T.Ask(type(C_Spell) == "table" and C_Spell.IsSpellHarmful or nil, id) == true
+end
+
+-- The secrecy level the game gives a spell as an aura (Enum.SecrecyLevel: 0 never hidden, 1 always hidden, 2 hidden in some states), or nil.
+function E.AuraLevel(id)
+	local level = T.Ask(type(C_Secrets) == "table" and C_Secrets.GetSpellAuraSecrecy or nil, id)
+	return Plain(level, "number") and level or nil
+end
+
+-- How a use of an ability can reach the addon, from its data and the secrecy levels the game gives its spells (Tracking.lua hears the
+-- casts and the buffs of the player of a plate, a bar's unit, and no pet). cast: a cast of the player himself (not flag p) that is not
+-- always hidden. buff: a buff of his own (not flag o, cast on others and seen only on a player with a plate, nor p) that gives the start
+-- of a use: not one of NO_START, not the aura a crowd control or harmful spell leaves on its target, and not always hidden. never: such a
+-- cast or buff the game never hides. Kept until the next refresh.
+function E.Ways(a)
+	local ways = E.never[a.key]
+	if ways then
+		return ways
 	end
-	return known
+	ways = { cast = false, buff = false, never = false }
+	if not a.flags:find("p", 1, true) then
+		for _, id in ipairs(a.casts) do
+			local level = ns.CastLevel(id)
+			ways.cast = ways.cast or level ~= 1
+			ways.never = ways.never or level == 0
+		end
+		if not a.flags:find("o", 1, true) and not E.Crowd(a) then
+			for _, id in ipairs(a.buffs) do
+				if not NO_START[id] and not E.Harmful(id) and E.AuraLevel(id) ~= 1 then
+					ways.buff = true
+					ways.never = ways.never or T.NeverHidden(id) == true
+				end
+			end
+		end
+	end
+	E.never[a.key] = ways
+	return ways
 end
 
 -- The cooldown of an ability in seconds: the one typed for it, else its own.
@@ -430,18 +475,19 @@ function E.Sight()
 	E.open = open
 end
 
--- True when a use of the ability would be seen at this moment: a cast or a buff the game never hides, a cast of the unit the game lets
--- through, or a buff that gives its start while buffs can be read. A kick shows only the uses that stopped the player's own cast, so it
--- is not enough. `state` keeps the answers of one pass.
+-- True when a use of the ability would be seen at this moment (E.Ways): a cast or a buff the game never hides, a cast of the unit the
+-- game lets through, or a buff that gives its start while buffs can be read. A kick shows only the uses that stopped the player's own
+-- cast, so it is not enough. `state` keeps the answers of one pass.
 function E.Seeable(a, rec, state)
-	if E.Never(a) then
+	local ways = E.Ways(a)
+	if ways.never then
 		return true
 	end
 	if state.casts == nil then
 		state.casts = ns.CanSeeCasts(rec.unit) == true
 		state.auras = ns.AurasReadable() == true
 	end
-	return state.casts or (state.auras and E.Buffed(a))
+	return (state.casts and ways.cast) or (state.auras and ways.buff)
 end
 
 -- True when an ability with no timer is ready, as far as the addon can tell: a use of it would be seen now, and one seen by its buff
@@ -451,7 +497,8 @@ function E.Visible(a, rec, state)
 	if not E.Seeable(a, rec, state) then
 		return false
 	end
-	return E.Never(a) or state.casts or T.Now() - E.sight >= E.Cooldown(a)
+	local ways = E.Ways(a)
+	return ways.never or (state.casts and ways.cast) or T.Now() - E.sight >= E.Cooldown(a)
 end
 
 -- Adds to a list the abilities of the player's class and race that are shown and fit him, and are not on it: ready when E.Visible says
@@ -1518,7 +1565,7 @@ function E.SlashHide(text)
 end
 
 -- /flatui enemy list: each ability shown with its cooldown and whether a use of it can be seen here: always, only when it stops your own
--- cast, or not.
+-- cast, only when its buff is on a player with a plate (one cast on others), or not.
 function E.SlashList()
 	local state = {}
 	local rec = { unit = "target" }
@@ -1533,6 +1580,8 @@ function E.SlashList()
 			how = "use can be seen here"
 		elseif E.Kick(a) then
 			how = "use seen here only when it stops your own cast"
+		elseif a.flags:find("o", 1, true) and #a.buffs > 0 and state.auras then
+			how = "use seen here only when its buff is on a player whose nameplate shows"
 		end
 		print(("%s: %d seconds, %s."):format(row[2], a.cd, how))
 	end
@@ -1806,18 +1855,19 @@ function E.Refresh()
 	end
 end
 
+-- A restriction that starts is enforced only once this event has been sent (RestrictedActionsConstantsDocumentation.lua: Activating), so
+-- whether buffs can be read is noted now and again on the next frame, for E.Visible, whether or not a row has icons to draw (E.Items notes
+-- it only for a row it draws).
 function E.OnRestriction()
 	E.Sight()
-	if not E.Live() then
-		-- With no icon to draw, whether buffs can be read is still noted, again on the next frame, for E.Visible.
-		Soon(function()
-			ns.Try(KEY, E.Sight)
-		end)
-		return
+	if E.Live() then
+		E.Render()
 	end
-	E.Render()
 	Soon(function()
-		ns.Try(KEY, E.Render)
+		ns.Try(KEY, E.Sight)
+		if E.Live() then
+			ns.Try(KEY, E.Render)
+		end
 	end)
 end
 

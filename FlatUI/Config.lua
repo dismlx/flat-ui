@@ -1183,7 +1183,7 @@ ns.PAGES = {
 		{ key = "place", kind = "choice", default = "both", label = "Place", tip = "The two bars have handles in /flatui move.",
 			choices = { { "both", "Both" }, { "plates", "On enemy nameplates" }, { "bars", "Bars for target and focus" } } },
 		{ key = "platePlace", kind = "choice", default = "right", label = "Place on nameplates", needs = "place", needsIn = { "both", "plates" },
-			tip = "Past the level box and the room the game keeps for its own icons, so the icons stay off the enemy's character.",
+			tip = "Beside the health bar or above the name, the icons leave room for the game's own icons and stay off the enemy's character. Below the health bar they cover his character.",
 			choices = { { "right", "Right of the health bar" }, { "left", "Left of the health bar" }, { "above", "Above the name" }, { "below", "Below the health bar" } } },
 		{ key = "show", kind = "choice", default = "cooling", label = "Show",
 			tip = "With Always, an icon is bright only while a use of its ability would be seen. The game hides enemy casts, and their buffs in a fight, so the others are dim with a question mark, and after a fight one seen by its buff stays so for its cooldown.",
