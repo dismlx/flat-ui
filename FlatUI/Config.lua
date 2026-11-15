@@ -98,6 +98,13 @@ ns.PAGES = {
 		{ section = "World" },
 		{ key = "questSparkle", kind = "bool", default = true, label = "Quest item sparkle", changed = "SparkleChanged",
 			tip = "Quest items in the world sparkle. Sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start." },
+		-- The game's graphics variables that thicken the sparkle, only ever raised (Sparkle.lua).
+		{ key = "sparkleStrength", kind = "choice", default = "strongest", label = "Sparkle strength", needs = "questSparkle", changed = "SparkleChanged",
+			choices = { { "game", "As the game has it" }, { "strong", "Strong" }, { "strongest", "Strongest" } },
+			tip = "Thickens the sparkle by raising the game's Particle Density, and its Spell Density where the game has one, raid settings too: Strong to High and Reduced, Strongest to Ultra and Everything. A higher value of yours stays. More particles can cost frame rate in busy fights. As the game has it, or Quest item sparkle off, puts your own values back." },
+		-- A sparkle of Flat UI's own on the game's nameplate of the object the Interact Key would use (SparkleGlow.lua).
+		{ key = "sparkleGlow", kind = "bool", default = true, label = "Glow on the nearest object", needs = "questSparkle", changed = "SparkleChanged",
+			tip = "A pulsing golden glow with twinkling stars on the herb, vein, chest or quest object your Interact Key would use. It shows only while the game gives that object a nameplate: tick Enable Interact Key in the game's Controls options and set Interact Key Icons to Show All in Accessibility. In a fight, a new object gets it once the fight ends." },
 		-- The game holds this one (CameraZoom.lua): it is ticked while the game's camera distance is at Flat UI's top, in every profile.
 		{ key = "cameraZoom", kind = "bool", default = false, label = "Maximum camera distance", live = true, get = "CameraZoomGet", set = "CameraZoomSet",
 			tip = "The camera zooms out to 2.6, past the 2.0 that the game's Max Camera Distance allows. A game setting, the same in every profile. Turned off, the distance you had is back." },

@@ -684,6 +684,8 @@ ns.SETUP_STEPS = {
 		{ "general.menuButton", "o", "behaviour", "Puts a Flat UI button in the game menu, under Options. It does not work in combat." },
 		{ "general.menuOpens", "o", "behaviour", "Chooses whether the game menu button opens Flat UI setup or the options window." },
 		{ "general.questSparkle", "o", "behaviour", "Makes quest items in the world sparkle, a game setting that the game's options do not show." },
+		{ "general.sparkleStrength", "o", "behaviour", "Raises the game's particle and spell density so that the sparkle on quest items and gathering nodes is thicker, at some cost to frame rate." },
+		{ "general.sparkleGlow", "o", "behaviour", "Draws a pulsing golden glow on the herb, vein, chest or quest object your Interact Key would use, while the game gives it a nameplate." },
 		{ "general.cameraZoom", "o", "behaviour", "Lets the camera zoom out farther than the game's own options allow, a game setting that applies to every profile." },
 		{ "general.cursorRing", "o", "behaviour", "Draws a ring around the mouse pointer, always or in combat only, so you find it at a glance." },
 		{ "general.cursorRingSize", "o", "behaviour", "Sets the size of the ring around the mouse pointer." },
