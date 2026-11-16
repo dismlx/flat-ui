@@ -1285,7 +1285,7 @@ ns.SETUP_STEPS = {
 		{ "errands.repFollow", "c", "behaviour", "Shows on Flat UI's experience bar the faction you last gained reputation with." },
 		{ "errands.talentReminder", "o", "behaviour", "Says in chat when you have talent points to spend." },
 		{ "errands.wayCommand", "o", "behaviour", "Adds /way, which puts a pin on your map at the coordinates you give." },
-		{ "errands.navigation", "o", "behaviour", "Turns on the game's in-game navigation, an arrow on screen with the distance to the quest or map pin you track." },
+		{ "errands.navigation", "o", "behaviour", "Turns on the game's in-game navigation, a marker with its distance over the quest or map pin you track." },
 	} },
 	{ id = "datapanels", area = "Data panels", title = "Data panels", draw = "mock-screen", built = false, rows = {
 		{ "datapanels.enabled", "c", "behaviour", "Shows panels of text with your bag space, gold, durability and more, placed with the movers." },

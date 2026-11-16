@@ -2095,7 +2095,7 @@ ns.PAGES = {
 			tip = "/way 45 61 puts a pin on your map there and the game points you to it. /way Elwynn Forest 45 61, /way #1429 45 61 and /way clear work too. When another addon has /way it keeps it, and /flatui way does the same." },
 		-- The game's own showInGameNavigation, written out of combat with its own value kept and put back (ErrandsNavigation.lua).
 		{ key = "navigation", kind = "bool", default = true, label = "In-game navigation", changed = "ErrandsNavigationChanged",
-			tip = "An arrow on screen with the distance to the quest or map pin you track, as the game's own option shows it in later expansions. Sets a game setting that Forever's options do not show. Turned off, the game's own value is back." },
+			tip = "A marker over the quest or map pin you track, with its distance, and an arrow at the edge of the screen while it is out of view, as the game's own option shows it in later expansions. Sets a game setting that Forever's options do not show. Turned off with /console showInGameNavigation 0, it stays off until you change this row. Turned off here, the game's own value is back." },
 	},
 	-- Consumables.lua: two macros of Flat UI's own in the account's macro list, written again out of combat when the bags or the level change.
 	-- Off by default; on, both macros are kept, with the choices of a player levelling on Forever.

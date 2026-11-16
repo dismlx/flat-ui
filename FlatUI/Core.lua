@@ -50,9 +50,11 @@ local ADDON_NAME, ns = ...
 -- game shows that plate, and parented, levelled and anchored there out of combat only; it writes no game setting.
 -- In-game navigation, on the Levelling tab of Errands, writes the game's showInGameNavigation (1) while the row and Errands are on, out of combat:
 -- at every login whatever the switch of Errands, when the row, the switch or the profile changes, and a second after the game or the player
--- writes it; a value already on is left as it is. The text it had before is kept in FlatUIDB.navigationGame and the text Flat UI wrote in
--- FlatUIDB.navigationWrote; the kept text is written back when the row, Errands or its part goes off or stops, while the variable still holds the
--- text Flat UI wrote, and a value written since, also while Flat UI did not run, is the game's own.
+-- writes it; a value already on is left as it is, and a 0 written another way after the variable was on while the row asked for it (/console,
+-- another addon or the game) is the player's own, kept in FlatUIDB.navigationOn and navigationOff, and given no 1 again until the row changes.
+-- The text it had before is kept in FlatUIDB.navigationGame and the text Flat UI wrote in FlatUIDB.navigationWrote; the kept text is written back
+-- when the row, Errands or its part goes off or stops, while the variable still holds the text Flat UI wrote, and a value written since, also
+-- while Flat UI did not run, is the game's own.
 -- Nameplate threat follows CompactUnitFrame_UpdateAggroHighlight with hooksecurefunc and only reads threat, roles, stances, forms and auras; a
 -- frame of its own hears UPDATE_SHAPESHIFT_FORM for a warrior or druid, and /flatui role sets Your role. With Fade enemies held for you, Nameplates
 -- writes the alpha of the game's nameplate unit frame (SetAlpha), read first and put back when the plate loses its fade, leaves, or the row, page
