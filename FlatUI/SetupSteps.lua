@@ -1030,7 +1030,7 @@ ns.SETUP_STEPS = {
 		{ "cooldowns.interruptGlow", "o", "behaviour", "Gives your class interrupt a gold border while your target or focus casts something you can interrupt." },
 		{ "cooldowns.readyGlow", "o", "behaviour", "Glows round a cooldown icon from the end of its cooldown until you use it again." },
 		{ "cooldowns.readyGlowColour", "r", "behaviour", "Sets the colour of the glow round a ready cooldown icon." },
-		{ "cooldowns.procGlow", "o", "behaviour", "Shows the game's proc glow on the cooldown icon of a spell while a proc alert for it is up." },
+		{ "cooldowns.procGlow", "o", "behaviour", "Shows a glow on the cooldown icon of a spell while a proc alert for it is up, in the Glow style of the Trackers page." },
 		{ "cooldowns.auraTime", "o", "behaviour", "Shows on the cooldown icon of a spell or trinket how long the buff it gave you has left." },
 		{ "cooldowns.auraColour", "r", "behaviour", "Sets the colour of the buff time on the cooldown icons." },
 		{ "cooldowns.numbersFont", "o", "mock-cooldown-row" },
