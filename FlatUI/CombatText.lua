@@ -109,16 +109,19 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- (the first hit can come before the threat update), is yours when you are alone, and in a party while no other member or member's pet is on its
 -- threat table (no raid is read): every damage hit and miss word on it shows, and the slots below only name it, with nothing counted as left
 -- out. On any other enemy, and for a heal on an enemy, the slots decide: each action of yours opens a slot and a hit fills one free slot. A
--- report waits for the next frame (Flush), so a cast, a swing and a hit that the game sends in one frame count in any order.
+-- report waits for the next frame (Flush), so a cast, a swing and a hit that the game sends in one frame count in any order, or until its plate
+-- goes, as the hit that kills an enemy comes just before.
 -- A successful cast of yours or your pet's is looked up by its name in ns.CombatSpells (CombatTextSpells.lua, the classic class abilities cast on
 -- an enemy, so every rank and language): a spell that hits (kind hit, both or area) opens a cast slot of its school for cast seconds, or travel
 -- seconds when its missile flies, and the slot of an area spell takes up to areaMax hits of its school, on your target and on the enemies around
 -- it; a damage-over-time spell (dot or both) is recorded on the plate of your target (your pet's for the pet) with its school, icon and time, for
 -- dotKeep seconds or until the list of your auras on that enemy reads none (not in the first travel seconds, while its aura may not be on yet); a
 -- channel takes only the hits of its school, on your target, and on every enemy for an area channel (area: Blizzard, Hurricane, Rain of Fire,
--- Volley, Hellfire); a spin (The Ravager's Bladestorm) takes one physical hit on each enemy at each of its ticks, spinSlack seconds either side; a
--- sweep (Sweeping Strikes) takes, for its duration and up to its charges, one physical hit on another enemy within swingTake seconds of a melee
--- strike of yours (Struck); and a spell that does no damage (none), such as a mark, a curse that only weakens, a shout or a totem, opens nothing.
+-- Volley, Hellfire); a spin (The Ravager's Bladestorm) takes one physical hit on each enemy at each of its ticks, spinSlack seconds either side, and
+-- a cast of the spell it casts at a tick (its trigger, 9633 Whirlwind) moves the ticks to it and opens no slot (SpinTick); a sweep (Sweeping
+-- Strikes) takes, for its duration and up to its charges, one physical hit on another enemy within swingTake seconds of a melee strike of yours
+-- (Struck), and a cast of its name while it lasts starts no other; and a spell that does no damage (none), such as a mark, a curse that only
+-- weakens, a shout or a totem, opens nothing.
 -- A spell not in the table opens an area slot of any school only when the game plainly says it is harmful (C_Spell.IsSpellHarmful,
 -- SpellDocumentation.lua:900-913), and a channel of one takes any hit on your target only then. A hit takes the oldest open cast slot whose school
 -- shares a bit with its own (bit.band): a slot of unknown school takes any hit, and a hit whose school is withheld takes only such a slot.
@@ -132,8 +135,8 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- swing slot is tried first. A non-critical hit then tries the cast slot first when its school fits an open cast slot and no recorded damage over
 -- time, the aura slot first when it is the other way round, and else an aura slot and then the cast slot, which stays for a spell hit that can be
 -- critical: a critical hit takes no aura slot, as damage over time cannot be critical in the classic game. extra: also the seconds after a swing slot
--- in which one more physical hit is an extra attack, alone with no pet out, when no cast slot is open, no aura of yours is on the enemy and no other
--- player hits it (Crowded, which only this slot asks). swingGap is the speed used when the game withholds it.
+-- in which one more physical hit is an extra attack, alone with no pet out, when no cast slot is open, no aura of yours is on the enemy, no other
+-- player hits it (Crowded, which only this slot asks) and no tick of a spin takes the hit. swingGap is the speed used when the game withholds it.
 -- nextSwing: the first rank of Maul, Heroic Strike, Cleave and Raptor Strike. A cast of one of them (by name, so every rank and language) opens its
 -- pair (OpenPair) and no cast slot: two physical reports on your target, its hit and the swing it replaced, which the game reports as a hit of 0
 -- that cannot be told from the hit and may come first, and for Cleave (targets 2 in ns.CombatSpells) one on another enemy in melee range of you
@@ -1414,7 +1417,8 @@ local function Fill(item, plate, unit, kind, value, extra, crit, r, g, b, class,
 	else
 		-- A withheld amount is written by the client with its sign and the name after it, and as nothing when it is zero, so a zero draws no
 		-- name or (Extra attack) either; the partial effect stays outside, so a full absorb or resist shows only the word after it. value2 is
-		-- written the same way beside it: of the two reports of a next melee ability one is the swing it replaced, a zero, which adds nothing.
+		-- written the same way beside it, with a space in front that the client writes only with its digits: of the two reports of a next melee
+		-- ability one is the swing it replaced, a zero, which adds nothing, and two that are not zero (another hit took a place) stay two numbers.
 		local done, withheld = false, nil
 		if ns.IsSecret(value) then
 			local after = name and (" " .. name) or nil
@@ -1426,7 +1430,7 @@ local function Fill(item, plate, unit, kind, value, extra, crit, r, g, b, class,
 				local other
 				if ns.IsSecret(value2) then
 					local joined
-					joined, other = ns.CombatWithheld(value2, sign, after)
+					joined, other = ns.CombatWithheld(value2, " " .. (sign or ""), after)
 					if not joined then
 						other = nil
 					end
@@ -2171,9 +2175,9 @@ function MINE.ExtraOpen(now, unit, key)
 		and not Crowded(key, now) and AuraListFree(unit)
 end
 
--- Until the game has reported a melee swing: takes the slot of a hand for a white hit, then the extra attack slot (ExtraOpen). Returns
--- "swing slot" or "extra slot" when it took one, and true when a hand was busy.
-local function TakeSwing(now, unit, key)
+-- Until the game has reported a melee swing: takes the slot of a hand for a white hit. Returns "swing slot" when it took one, and true when
+-- both hands were busy. The extra attack slot (ExtraOpen) is MineOne's, after a spin.
+local function TakeSwing(now)
 	local main, off = Speeds(UnitAttackSpeed, true)
 	if TakeWeapon(main, mine.hand.main, now) then
 		mine.hand.main, mine.swingAt, mine.extraUsed = now, now, false
@@ -2181,9 +2185,6 @@ local function TakeSwing(now, unit, key)
 	elseif off and TakeWeapon(off, mine.hand.off, now) then
 		mine.hand.off, mine.swingAt, mine.extraUsed = now, now, false
 		return "swing slot", false
-	elseif MINE.ExtraOpen(now, unit, key) then
-		mine.extraUsed = true
-		return "extra slot", false
 	end
 	return nil, true
 end
@@ -2253,10 +2254,10 @@ function MINE.TakeToken(at, ranged)
 	return nil
 end
 
--- Once the game has reported a melee swing: the slot of a swing of yours (TakeToken), then the extra attack slot (ExtraOpen). Returns
--- "swing slot", or "extra slot" for a swing right after another of the main hand (with Extra attacks on) and for the extra attack slot, and
--- true when no swing of yours fits.
-function MINE.TakeSwingHeard(now, unit, key)
+-- Once the game has reported a melee swing: the slot of a swing of yours (TakeToken). Returns "swing slot", or "extra slot" for a swing right
+-- after another of the main hand (with Extra attacks on), and true when no swing of yours fits. The extra attack slot (ExtraOpen) is MineOne's,
+-- after a spin.
+function MINE.TakeSwingHeard(now)
 	local token = MINE.TakeToken(now, false)
 	if token then
 		if token.extra and Opt("extra") == "plain" then
@@ -2265,10 +2266,6 @@ function MINE.TakeSwingHeard(now, unit, key)
 		end
 		mine.swingAt, mine.extraUsed = now, false
 		return "swing slot", false
-	end
-	if MINE.ExtraOpen(now, unit, key) then
-		mine.extraUsed = true
-		return "extra slot", false
 	end
 	return nil, true
 end
@@ -2343,12 +2340,31 @@ end
 
 -- Starts a spin of yours (kind spin in ns.CombatSpells, The Ravager's Bladestorm: an aura on you that hits every enemy around you each period
 -- seconds, ticks times) at its cast or the start of its channel. A second signal of the same spin within MINE.spinSlack seconds keeps it.
+-- trigger is the spell its aura casts at each tick, when the table names one.
 function MINE.StartSpin(now, entry, spellID, name)
 	local spin = mine.spin
 	if spin and spin.name == name and now - spin.start <= MINE.spinSlack then
 		return
 	end
-	mine.spin = { name = name, icon = Icon(spellID) or false, start = now, period = entry.period or MINE.tick, ticks = entry.ticks or 3, taken = {} }
+	mine.spin = { name = name, icon = Icon(spellID) or false, start = now, period = entry.period or MINE.tick, ticks = entry.ticks or 3, taken = {},
+		trigger = Plain(entry.trigger, "number") and entry.trigger or nil }
+end
+
+-- True for a cast of the spell a spin of yours casts at a tick (trigger, The Ravager's 9633 Whirlwind) within MINE.spinSlack seconds of one of
+-- its ticks: the ticks move to it, and its cast opens no area slot, which would let in hits of others for MINE.cast seconds, as the spin takes
+-- the hits of that tick. A cast far from every tick is no tick of it and opens its slot as before.
+function MINE.SpinTick(now, spellID)
+	local spin = mine.spin
+	if spin == nil or spin.trigger == nil or not Plain(spellID, "number") or spellID ~= spin.trigger then
+		return false
+	end
+	local t = now - spin.start
+	local k = math.floor(t / spin.period + 0.5)
+	if k < 1 or k > spin.ticks or math.abs(t - k * spin.period) > MINE.spinSlack then
+		return false
+	end
+	spin.start = now - k * spin.period
+	return true
 end
 
 -- Takes one physical hit on an enemy (key) at a tick of the spin: within MINE.spinSlack seconds of start + k x period, k from 1 to ticks, once
@@ -2397,23 +2413,28 @@ function MINE.Struck(at)
 end
 
 -- Starts a sweep of yours (kind sweep in ns.CombatSpells, Sweeping Strikes: a buff on you whose charges make your melee swings and strikes hit
--- another enemy nearby too) at its cast, for its duration and charges.
+-- another enemy nearby too) at its cast, for its duration and charges. A cast of the same name while one lasts, such as the strike of a charge
+-- if the game reports it, starts none: the buff cannot be cast again before it ends (its cooldown is longer).
 function MINE.StartSweep(now, entry, spellID, name)
+	local sweep = mine.sweep
+	if sweep and now <= sweep.close then
+		return
+	end
 	mine.sweep = { name = name, icon = Icon(spellID) or false, close = now + (entry.duration or MINE.dotKeep), left = entry.charges or 5 }
 end
 
 -- Takes a charge of the sweep for a physical hit on an enemy other than your target that comes with a melee strike of yours (Struck). Returns
--- the sweep, or nil.
+-- the sweep, or nil. A sweep with no charge left stays until it ends, so that no cast of its name starts it again.
 function MINE.TakeSweep(at)
 	local sweep = mine.sweep
 	if sweep == nil then
 		return nil
 	end
-	if at > sweep.close or sweep.left <= 0 then
+	if at > sweep.close then
 		mine.sweep = nil
 		return nil
 	end
-	if not MINE.Struck(at) then
+	if sweep.left <= 0 or not MINE.Struck(at) then
 		return nil
 	end
 	sweep.left = sweep.left - 1
@@ -2505,12 +2526,13 @@ end
 -- True when the hit takes a slot of yours (see MINE): one hit for each action. Then the slot taken, the icon of the action (nil for none, by Spell
 -- icons), the name of the spell matched and, for a next melee ability, its pair. On the target plate a channel of its school is tried first, then
 -- the pair of a next melee ability, then a swing slot for a physical hit (the game's reported swing, or a free hand before any was reported),
--- then a spin. A non-critical hit then tries the cast slot first when its school fits an open cast slot and no damage over time of yours recorded
--- on the enemy, and else an aura slot first, so that a cast slot stays for the spell hit it was made for, which can be critical. The cast slot is
--- the fallback for every hit, and each slot and the channel take only a hit of their school (SchoolFits). On another enemy an area channel, a
--- place of Cleave's pair, a spin, a sweep, an aura slot and the slot of an area spell are tried, the last two in the same order. A hit with no free slot
--- is left out, and a physical one marks its enemy as hit by others for MINE.crowd seconds; with own (an enemy only you fight, Engaged) it is
--- neither counted nor marked, as it shows anyway. at is the time of the report, which waits for the next frame (Flush).
+-- then a spin, then the extra attack slot (ExtraOpen). A non-critical hit then tries the cast slot first when its school fits an open cast slot
+-- and no damage over time of yours recorded on the enemy, and else an aura slot first, so that a cast slot stays for the spell hit it was made
+-- for, which can be critical. The cast slot is the fallback for every hit, and each slot and the channel take only a hit of their school
+-- (SchoolFits). On another enemy an area channel, a place of Cleave's pair, a spin, a sweep, an aura slot and the slot of an area spell are
+-- tried, the last two in the same order. A hit with no free slot is left out, and a physical one marks its enemy as hit by others for MINE.crowd
+-- seconds; with own (an enemy only you fight, Engaged) it is neither counted nor marked, as it shows anyway. at is the time of the report, which
+-- waits for the next frame (Flush).
 local function MineOne(plate, unit, school, flag, own, at)
 	local now = at or GetTime()
 	local why, taken, swingTried, auraTried, icon, spell, pair
@@ -2525,6 +2547,10 @@ local function MineOne(plate, unit, school, flag, own, at)
 		pair = MINE.TakePair(now, onTarget, unit)
 		if pair then
 			why, spell = "next swing", pair.name
+			-- Before the game has reported a melee swing, the swing the ability replaced is the main hand's, as a white hit's would be.
+			if onTarget and not mine.swingHeard then
+				mine.hand.main = now
+			end
 		end
 	end
 	if not why and onTarget then
@@ -2532,15 +2558,20 @@ local function MineOne(plate, unit, school, flag, own, at)
 		if physical and not shooting and (mine.swingHeard or mine.swing) then
 			swingTried = true
 			if mine.swingHeard then
-				why, taken = MINE.TakeSwingHeard(now, unit, key)
+				why, taken = MINE.TakeSwingHeard(now)
 			else
-				why, taken = TakeSwing(now, unit, key)
+				why, taken = TakeSwing(now)
 			end
 		end
+		-- A tick of a spin of yours, and only then the guess of an extra attack right after a swing slot, which a tick on your target would
+		-- otherwise take with (Extra attack) after it.
 		if not why and physical then
 			local spin = MINE.TakeSpin(now, key)
 			if spin then
 				why, spell, icon = "spin", spin.name, spin.icon or nil
+			elseif swingTried and MINE.ExtraOpen(now, unit, key) then
+				mine.extraUsed = true
+				why, taken = "extra slot", false
 			end
 		end
 		if not why and Plain(flag, "string") and flag ~= "CRITICAL" then
@@ -2734,6 +2765,8 @@ local function OnSignal(_, event, unit, second, spellID)
 				end
 			elseif name then
 				MINE.OpenPair(now, spellID, name)
+			elseif MINE.SpinTick(now, spellID) then
+				-- A tick of a spin of yours: the spin takes its hits, and no cast slot opens.
 			else
 				-- The spell by its name in ns.CombatSpells: one that hits opens a cast slot of its school, damage over time is recorded on the
 				-- enemy, a spin starts, and a channel (set at its start) or a spell that does no damage opens nothing. A spell not in the table
@@ -2826,8 +2859,11 @@ local function MineFrame()
 		mine.castSlots, mine.castTaken, mine.auraSlots, mine.dots = {}, -1, {}, setmetatable({}, { __mode = "k" })
 		mine.pair, mine.spin, mine.sweep, mine.swings = nil, nil, nil, {}
 	end
-	if not wanted and #mine.queue > 0 then
-		mine.queue = {}
+	if not wanted then
+		if #mine.queue > 0 then
+			mine.queue = {}
+		end
+		-- Also after an error in a frame that judged the reports, which leaves the frame that runs them on with none waiting.
 		if mine.flusher then
 			mine.flusher:SetScript("OnUpdate", nil)
 		end
@@ -2932,6 +2968,11 @@ end
 -- scroll area), why, icon, spell }. partner is the other report of the same next melee ability on the same enemy, judged in the same frame: both
 -- are withheld amounts, one of them the swing it replaced, a zero, and the two are written as one number.
 function MINE.Draw(e, partner)
+	-- A plain 0 that the pair of a next melee ability took is the swing it replaced, on a client that does not withhold the amount: it shows
+	-- nothing, not Miss.
+	if e.why == "next swing" and e.event == "WOUND" and e.word and not ns.IsSecret(e.amount) and MINE.Bare(e.flag) then
+		return
+	end
 	local kind, value, suffix, crit, r, g, b, sign, scale = Describe(e.event, e.flag, e.amount, e.school)
 	if not kind then
 		return
@@ -2966,14 +3007,16 @@ end
 
 -- Under Yours a report on an enemy waits for the next frame before it is judged (see MINE), so that a cast, a swing and a hit the game sends in
 -- one frame count in any order. The reports of one frame are judged in the order they came, then drawn, the two of a pair as one number.
--- A report whose plate went or took another unit meanwhile goes with it. At most MINE.queueMax wait: past that every one is judged at once.
+-- The reports for a plate that goes are judged at once, while the game still gives its plate (OnRemoved): the hit that kills an enemy comes
+-- just before its plate goes, and would else go with it. A report whose plate took another unit meanwhile goes. At most MINE.queueMax wait:
+-- past that every one is judged at once. unit, when given, is the token of the plate that goes.
 MINE.decided = {}
 
 function MINE.FlushTick()
 	ns.Try(KEY, MINE.Flush)
 end
 
-function MINE.Flush(all)
+function MINE.Flush(all, unit)
 	local decided = MINE.decided
 	for index = #decided, 1, -1 do
 		decided[index] = nil
@@ -2983,7 +3026,7 @@ function MINE.Flush(all)
 	local index = 1
 	while index <= #list do
 		local e = list[index]
-		if all or e.at < now then
+		if all or e.at < now or (unit ~= nil and e.unit == unit) then
 			table.remove(list, index)
 			if e.route == "target" or Plate(e.unit) == e.plate then
 				local counted, why, icon, spell, pair = Counts(e.plate, e.unit, e.school, e.flag, e.event, e.amount, e.at)
@@ -3150,10 +3193,14 @@ local function OnAdded(unit)
 	end
 end
 
--- A number whose plate goes stays where it was on screen. One whose place cannot be read goes with the plate.
+-- A number whose plate goes stays where it was on screen. One whose place cannot be read goes with the plate. The reports that wait for the
+-- plate are drawn first, as the game still gives the plate in this event (Blizzard_NamePlates.lua:177-181 reads it then).
 local function OnRemoved(unit)
 	plateOf.at = nil
 	if Plain(unit, "string") then
+		if #mine.queue > 0 then
+			MINE.Flush(false, unit)
+		end
 		mine.aura[unit], mine.auraSlots[unit] = nil, nil
 	end
 	if #live == 0 then

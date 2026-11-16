@@ -282,8 +282,9 @@ local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag,
 	else
 		-- A withheld amount is written by the client with what the format puts around it, its icon in front, and as nothing when it is zero
 		-- (CombatText.lua, ns.CombatWithheld), so a zero draws no icon, name or (Extra attack) either. value2, the other report of a next melee
-		-- ability, is written beside it the same way: one of the two is the swing it replaced, a zero. The format has one %s for the amount, and
-		-- %% for a percent sign in an ability name.
+		-- ability, is written beside it the same way with a space in front, which the client writes only with its digits: one of the two is the
+		-- swing it replaced, a zero, and two that are not zero stay two numbers. The format has one %s for the amount, and %% for a percent sign
+		-- in an ability name.
 		local done, withheld = false, nil
 		local spec = (format or "%s") .. (extra and (" " .. EXTRA_TEXT) or "")
 		local lead = hasIcon and INLINE:format(icon) or ""
@@ -297,7 +298,7 @@ local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag,
 				local other
 				if ns.IsSecret(value2) then
 					local joined
-					joined, other = ns.CombatWithheld(value2, before, after)
+					joined, other = ns.CombatWithheld(value2, " " .. (before or ""), after)
 					if not joined then
 						other = nil
 					end

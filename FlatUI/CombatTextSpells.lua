@@ -5,7 +5,8 @@ local _, ns = ...
 -- each at load, so every rank and every language matches by name.
 -- school: the school mask (1 physical, 2 holy, 4 fire, 8 nature, 16 frost, 32 shadow, 64 arcane). kind: "hit" makes one hit when the cast
 -- succeeds or lands, "dot" no hit when cast and ticks after, "both" a hit and then ticks, "channel" hits while it is channelled, "area" several
--- hits at once around you or a spot, "spin" an aura on you that hits every enemy around you each `period` seconds, `ticks` times, "sweep" a buff
+-- hits at once around you or a spot, "spin" an aura on you that hits every enemy around you each `period` seconds, `ticks` times, by casting the
+-- spell `trigger` (whose own cast, when the game reports it, then opens no slot of its name: the spin takes its hits), "sweep" a buff
 -- whose `charges` make your melee swings and strikes hit another enemy too for `duration` seconds, and "none" no damage at all, so its cast opens
 -- no slot (its school is not used). travel: the missile flies (its SpellMisc Speed is above 0), so the hit comes later. area: a channel that hits
 -- every enemy in its area, not only your target. Auto Shot, the shots of a bow, gun, crossbow or thrown weapon and the Shoot of a wand are left
@@ -205,7 +206,7 @@ ns.CombatSpells = {
 	[12323] = { school = 1, kind = "none" }, -- Piercing Howl
 	[12809] = { school = 1, kind = "none" }, -- Concussion Blow (no row; classic: a stun only)
 	-- Weapons
-	[9632] = { school = 1, kind = "spin", period = 3, ticks = 3 }, -- Bladestorm (The Ravager's chance on hit: 9 seconds, SpellMisc 3179; its aura on you casts 9633 Whirlwind on the enemies around you every 3000 ms, SpellEffect 4080-4082)
+	[9632] = { school = 1, kind = "spin", period = 3, ticks = 3, trigger = 9633 }, -- Bladestorm (The Ravager's chance on hit: 9 seconds, SpellMisc 3179; its aura on you casts 9633 Whirlwind on the enemies around you every 3000 ms, SpellEffect 4080-4082)
 	-- Paladin
 	[20271] = { school = 2, kind = "hit" }, -- Judgement (now Judgment; as the row Judgement 343122: no missile. Only a judged Seal of Righteousness or Command hits)
 	[879] = { school = 2, kind = "hit" }, -- Exorcism (no row)
