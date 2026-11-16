@@ -1,1 +1,3 @@
 *.zip
+tools/dev/out/
+tools/dev/sources/
