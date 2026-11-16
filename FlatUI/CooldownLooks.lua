@@ -12,9 +12,10 @@ local _, ns = ...
 -- Glow when ready: a pulsing border of Flat UI's own round an icon from the end of its cooldown until it is used, as EnhanceQoL's ready glow stays
 -- on until the cooldown runs again (CooldownPanels.lua:10679-10703, 26692-26760; its glow time is always 0, 28202-28203), in its gold
 -- (CooldownPanels_Helper.lua:272-276). Glow on procs: while a proc alert of Trackers is up (Procs.lua starts and stops it through ns.ProcGlowStart and
--- ns.ProcGlowStop, which call ns.CooldownProcs), the icons of the spells it is for, every rank by name, show the game's proc loop art on a frame of
--- Flat UI's own over the icon, as EnhanceQoL glows an icon while its spell's proc is up (CooldownPanels.lua:8752-8756, 32945-32991); Forever has no
--- spell activation overlay of the game's (Procs.lua:5-7), so Flat UI's own proc alerts say when. Buff time on icons: while the buff a spell or a
+-- ns.ProcGlowStop, which call ns.CooldownProcs), the icons of the spells it is for, every rank by name, glow in the look Glow style of the Trackers
+-- page gives the action button (ProcGlow.lua): Soft, a gold ring of Flat UI's own round the icon that breathes slowly, or As the game has it, the
+-- game's proc loop art on a frame of Flat UI's own over the icon, as EnhanceQoL glows an icon while its spell's proc is up (CooldownPanels.lua:8752-8756,
+-- 32945-32991); Forever has no spell activation overlay of the game's (Procs.lua:5-7), so Flat UI's own proc alerts say when. Buff time on icons: while the buff a spell or a
 -- trinket, gear or item gives is on you, a picture of the icon and a Cooldown of Flat UI's own over it show the time the buff has left with a
 -- reverse sweep in Buff time colour at 55%, as EnhanceQoL's spell aura overlay covers its icon (CooldownPanels_AuraContainers.lua:1743-1926;
 -- CooldownPanels.lua:10953-11075; CooldownPanels_Helper.lua:25, 340-341). It is read only while the game says the aura of that spell is not secret
@@ -36,7 +37,8 @@ local Opt, Ask, Field, Plain, Whole = R.Get, R.Ask, R.Field, R.Plain, R.Whole
 -- MAX_ROWS: the rows. SHOWS: the choices of When one icon shows by their line, and what each is called. BACK: the line back to the icons.
 -- GLOW_PART, AURA_PART: the parts of the module for /flatui status. PROC: the game's proc loop, a flipbook of 6 rows and 5 columns, 30 pictures in
 -- a second, on a frame 1.4 times the size of its button (Blizzard_ActionBar/Shared/ActionButtonSpellAlerts.xml:13 and 24,
--- ActionButtonSpellAlerts.lua:19-20). PULSE: the ready glow from full to 35% and back in half a second, 2 pixels wide. AURA_ALPHA: the opacity
+-- ActionButtonSpellAlerts.lua:19-20). PULSE: the ready glow from full to 35% and back in half a second, 2 pixels wide. SOFT: the soft proc glow
+-- from 25% to 60% and back, 1.2 seconds each way, as on the action button (ProcGlow.lua). AURA_ALPHA: the opacity
 -- of the buff time's sweep, EnhanceQoL's (CooldownPanels_Helper.lua:25). TRAVEL: a druid's travel, aquatic and flight form by GetShapeshiftFormID,
 -- which count as mounted (Fade.lua:108-109). procs: by the id of a proc alert that is up, the IDs and the names of its spells. rowFor, showFor: the
 -- icon whose row or show the list offers next. itemSpells: by item ID, its use spell and the spell's name, or false for an item without one.
@@ -46,7 +48,7 @@ local L = {
 	SAID = { cooling = "only on cooldown", ready = "only when ready", border = "border on cooldown" },
 	GLOW_PART = "glows", AURA_PART = "buff time",
 	PROC_ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook", PROC_SCALE = 1.4, PROC_ROWS = 6, PROC_COLUMNS = 5, PROC_FRAMES = 30, PROC_TIME = 1,
-	PULSE_TO = 0.35, PULSE_TIME = 0.5, GLOW_PX = 2, GOLD = { 1, 0.82, 0 },
+	PULSE_TO = 0.35, PULSE_TIME = 0.5, GLOW_PX = 2, GOLD = { 1, 0.82, 0 }, SOFT_LOW = 0.25, SOFT_HIGH = 0.6, SOFT_TIME = 1.2,
 	AURA_ALPHA = 0.55, UNKNOWN_ICON = 134400,
 	TRAVEL = { [3] = true, [4] = true, [27] = true },
 	procs = {}, rowFor = nil, showFor = nil, itemSpells = {}, pending = false, watching = false, playerOnly = false,
@@ -358,9 +360,9 @@ local function HasAtlas()
 	return L.atlas
 end
 
--- The proc glow: the game's proc loop on a frame of Flat UI's own 1.4 times the icon, played by a FlipBook animation of its own texture
--- (SimpleAnimFlipBookAPIDocumentation.lua; the game plays the same atlas so, ActionButtonSpellAlerts.xml:13 and 24). A client that has not the
--- atlas or the animation gets a gold ring that pulses in its place.
+-- The proc glow, in two looks made together. As the game has it: the game's proc loop on a frame of Flat UI's own 1.4 times the icon, played by a
+-- FlipBook animation of its own texture (SimpleAnimFlipBookAPIDocumentation.lua; the game plays the same atlas so, ActionButtonSpellAlerts.xml:13
+-- and 24). Soft: a gold ring round the icon that breathes slowly; a client that has not the atlas or the animation gets it for both.
 local function MakeProc(deco)
 	local frame = CreateFrame("Frame", nil, deco)
 	ns.Own[frame] = true
@@ -382,30 +384,29 @@ local function MakeProc(deco)
 				flip:SetFlipBookFrameHeight(0)
 				flip:SetDuration(L.PROC_TIME)
 				group:SetLooping("REPEAT")
-				proc.group = group
+				proc.game = group
 			end)
 			if not ok then
-				proc.group = nil
+				proc.game = nil
 			end
 		end
-		if not proc.group then
-			texture:Hide()
-		end
+		texture:Hide()
+		proc.texture = proc.game and texture or nil
 	end
-	if not proc.group then
-		local ring = CreateFrame("Frame", nil, frame)
-		ns.Own[ring] = true
-		ring:SetAllPoints(deco)
-		local outline = Ring(ring, L.GLOW_PX)
-		ns.SetOutlineColour(outline, L.GOLD[1], L.GOLD[2], L.GOLD[3])
-		local group = ring:CreateAnimationGroup()
-		local fade = group:CreateAnimation("Alpha")
-		fade:SetFromAlpha(1)
-		fade:SetToAlpha(L.PULSE_TO)
-		fade:SetDuration(L.PULSE_TIME)
-		group:SetLooping("BOUNCE")
-		proc.group = group
-	end
+	local ring = CreateFrame("Frame", nil, frame)
+	ns.Own[ring] = true
+	ring:SetAllPoints(deco)
+	ring:Hide()
+	local outline = Ring(ring, L.GLOW_PX)
+	ns.SetOutlineColour(outline, L.GOLD[1], L.GOLD[2], L.GOLD[3])
+	local group = ring:CreateAnimationGroup()
+	local fade = group:CreateAnimation("Alpha")
+	fade:SetFromAlpha(L.SOFT_LOW)
+	fade:SetToAlpha(L.SOFT_HIGH)
+	fade:SetDuration(L.SOFT_TIME)
+	fade:SetSmoothing("IN_OUT")
+	group:SetLooping("BOUNCE")
+	proc.ring, proc.soft = ring, group
 	return proc
 end
 
@@ -574,23 +575,44 @@ local function ProcUp(spellID)
 	return false
 end
 
+-- The look of a glow that is on: the game's loop with Glow style As the game has it, while the client has it, else the soft ring.
+local function ProcLook(proc)
+	return proc.game and ns.Get("trackers.glowStyle") == "game" and "game" or "soft"
+end
+
 local function Proc(record)
 	local proc = record.proc
 	if not proc then
 		return
 	end
 	local on = Opt("procGlow") == true and ns.Enabled(KEY) and record.spell ~= nil and ProcUp(record.spell)
-	if proc.on == on then
+	local look = on and ProcLook(proc) or false
+	if proc.look == look then
 		return
 	end
-	proc.on = on
-	if on then
-		proc.frame:Show()
-		proc.group:Play()
-	else
-		proc.group:Stop()
-		proc.frame:Hide()
+	proc.on, proc.look = on, look
+	if proc.game then
+		if look == "game" then
+			proc.texture:Show()
+			proc.game:Play()
+		else
+			proc.game:Stop()
+			proc.texture:Hide()
+		end
 	end
+	if look == "soft" then
+		proc.ring:Show()
+		-- Resumes where it was held, so a proc that comes again carries on.
+		proc.soft:Play()
+	else
+		if look == "game" then
+			proc.soft:Stop()
+		else
+			proc.soft:Pause()
+		end
+		proc.ring:Hide()
+	end
+	proc.frame:SetShown(look ~= false)
 end
 
 -- Takes every glow of an icon away, for a part that stopped on errors.
@@ -603,10 +625,14 @@ local function Off(record)
 		pcall(record.ready.frame.SetAlpha, record.ready.frame, 0)
 		record.ready.playing = nil
 	end
-	if record.proc then
-		pcall(record.proc.group.Stop, record.proc.group)
-		pcall(record.proc.frame.Hide, record.proc.frame)
-		record.proc.on = false
+	local proc = record.proc
+	if proc then
+		if proc.game then
+			pcall(proc.game.Stop, proc.game)
+		end
+		pcall(proc.soft.Stop, proc.soft)
+		pcall(proc.frame.Hide, proc.frame)
+		proc.on, proc.look = false, false
 	end
 end
 
@@ -660,6 +686,12 @@ function ns.CooldownProcs(entry, on)
 	else
 		L.procs[entry.id] = nil
 	end
+	ns.CooldownProcLook()
+end
+
+-- The icons on the screen take the proc alerts that are up and the look of Glow style, now, in a fight too: also when that row changes
+-- (ProcGlow.lua, ns.ProcGlowChanged).
+function ns.CooldownProcLook()
 	if not ns.Enabled(KEY) or ns.PartStopped(KEY, L.GLOW_PART) then
 		return
 	end
