@@ -1121,7 +1121,7 @@ ns.SETUP_STEPS = {
 		{ "combattext.classicTime", "o", "mock-combat-text" },
 		{ "combattext.classicStack", "o", "mock-combat-text" },
 		{ "combattext.classicCrit", "o", "mock-combat-text" },
-		{ "combattext.whose", "o", "behaviour", "Chooses whether numbers in front of nameplates and in the Outgoing scroll area show one hit for each of yours, every hit while you attack, or everyone's." },
+		{ "combattext.whose", "o", "behaviour", "Chooses whether numbers in front of nameplates and in the Outgoing scroll area show your hits or everyone's." },
 		{ "combattext.extra", "o", "behaviour", "Chooses whether an extra swing, such as Windfury, shows in white with (Extra attack) after the number." },
 		{ "combattext.group", "o", "behaviour", "Chooses whether the game's own numbers or Flat UI numbers show over enemies while you are in a group." },
 		{ "combattext.units", "o", "behaviour", "Chooses whether every enemy with a nameplate gets numbers or only the target." },

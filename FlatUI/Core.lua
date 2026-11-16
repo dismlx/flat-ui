@@ -362,8 +362,9 @@ local function Normalise(def, value)
 	return nil
 end
 
--- Choice ids that were renamed, by saved path: a saved value of the old id is the new one. The text outline rows had "outline" for Thin.
-local RENAMED = { ["trackers.grow"] = { middle = "center" }, ["partycd.show"] = { used = "cooling" } }
+-- Choice ids that were renamed, by saved path: a saved value of the old id is the new one. The text outline rows had "outline" for Thin, and
+-- Whose hits had Every hit while you attack, which Yours took in.
+local RENAMED = { ["trackers.grow"] = { middle = "center" }, ["partycd.show"] = { used = "cooling" }, ["combattext.whose"] = { mine = "one" } }
 for _, path in ipairs({ "fonts.outline", "chat.outline", "actionbars.textOutline" }) do
 	RENAMED[path] = { outline = "thin" }
 end
