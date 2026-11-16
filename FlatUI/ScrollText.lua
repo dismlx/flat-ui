@@ -6,6 +6,8 @@ local _, ns = ...
 -- animation in Vertex mode, so the pop is smooth, and a second font string that holds the partial effect, such as (Glancing), which
 -- appears when the pop ends. A record is made on first use and reused, and no table is made for a hit. The lengths, times and sizes below
 -- are choices of this file, not the game's: the design is research/reports/2026-10-20-scrolling-text/design.md, sections 2.1, 2.2 and 2.6.
+-- The icon of an amount is written in its text (a texture escape), so that a withheld zero, which the client writes as nothing, draws no icon,
+-- name or (Extra attack) either; a word has the icon beside it, a texture of the record's own.
 -- A secret amount or name goes to SetText and SetFormattedText only; nothing here compares, counts or measures it.
 
 local KEY = "combattext"
@@ -27,7 +29,12 @@ ns.CombatShape.scroll = SHAPE
 local TEXT_HEIGHT = 25
 -- The colours of a partial effect (CombatFeedback.lua:41-58 gives the sizes; the colours are a choice of this file).
 local PARTIAL = { GLANCING = { 0.7, 0.7, 0.7 }, CRUSHING = { 1, 0.4, 0.2 }, RESIST = { 0.79, 0.3, 0.85 }, BLOCK = { 0.6, 0.7, 1 },
-	BLOCK_REDUCED = { 0.6, 0.7, 1 }, ABSORB = { 1, 0.85, 0.4 }, EXTRA = { 1, 0.6, 0.15 } }
+	BLOCK_REDUCED = { 0.6, 0.7, 1 }, ABSORB = { 1, 0.85, 0.4 } }
+-- The words of an extra swing (the flag EXTRA), in orange (1, 0.6, 0.15), written after its number in the same text, so that a zero draws neither.
+local EXTRA_TEXT = "|cffff9926(Extra attack)|r"
+-- The icon of a spell in the text of a number: a texture escape as high as the text, its edge trimmed as the icon beside a word is (5 to 59
+-- of the 64 texels), and a space after it.
+local INLINE = "|T%d:0:0:0:0:64:64:5:59:5:59|t "
 -- The two areas: the name of the handle, the row of the style, the row of the size, the direction (1 up, -1 down), the side an arc and a
 -- horizontal number go to, the most numbers alive and, with no handle to take the place from, where the area starts as units from the
 -- middle of the screen.
@@ -266,24 +273,40 @@ local function Row(area, item, now)
 	return area.dir * pick * line
 end
 
-local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag, icon)
+local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag, icon, value2)
 	local text, word = item.text, item.word
+	local hasIcon = Plain(icon, "number")
+	local extra = kind ~= "word" and Plain(flag, "string") and flag == "EXTRA"
 	if kind == "word" then
 		text:SetText(value)
 	else
-		-- A withheld amount is written by the client with what the format puts around it, and as nothing when it is zero (CombatText.lua,
-		-- ns.CombatWithheld). The format has one %s for the amount, and %% for a percent sign in an ability name.
+		-- A withheld amount is written by the client with what the format puts around it, its icon in front, and as nothing when it is zero
+		-- (CombatText.lua, ns.CombatWithheld), so a zero draws no icon, name or (Extra attack) either. value2, the other report of a next melee
+		-- ability, is written beside it the same way with a space in front, which the client writes only with its digits: one of the two is the
+		-- swing it replaced, a zero, and two that are not zero stay two numbers. The format has one %s for the amount, and %% for a percent sign
+		-- in an ability name.
 		local done, withheld = false, nil
-		local spec = format or "%s"
+		local spec = (format or "%s") .. (extra and (" " .. EXTRA_TEXT) or "")
+		local lead = hasIcon and INLINE:format(icon) or ""
 		local at = ns.IsSecret(value) and ns.CombatWithheld and spec:find("%s", 1, true)
 		if at then
-			local before = (spec:sub(1, at - 1):gsub("%%%%", "%%"))
+			local before = lead .. (spec:sub(1, at - 1):gsub("%%%%", "%%"))
 			local after = (spec:sub(at + 2):gsub("%%%%", "%%"))
-			done, withheld = ns.CombatWithheld(value, before ~= "" and before or nil, after ~= "" and after or nil)
+			before, after = before ~= "" and before or nil, after ~= "" and after or nil
+			done, withheld = ns.CombatWithheld(value, before, after)
+			if done then
+				local other
+				if ns.IsSecret(value2) then
+					local joined
+					joined, other = ns.CombatWithheld(value2, " " .. (before or ""), after)
+					if not joined then
+						other = nil
+					end
+				end
+				text:SetFormattedText("%s%s", withheld, other or "")
+			end
 		end
-		if done then
-			text:SetFormattedText("%s", withheld)
-		else
+		if not done then
 			local shown = value
 			if type(BreakUpLargeNumbers) == "function" then
 				local ok, broken = pcall(BreakUpLargeNumbers, value)
@@ -291,13 +314,13 @@ local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag,
 					shown = broken
 				end
 			end
-			text:SetFormattedText(spec, shown)
+			text:SetFormattedText(lead .. spec, shown)
 		end
 	end
 	local height = TEXT_HEIGHT * Opt(area.size) / 100 * (scale or 1) * (crit and CRIT or 1)
 	text:SetTextHeight(height)
 	text:SetTextColor(r, g, b)
-	local suffix = kind ~= "word" and Plain(flag, "string") and ns.CombatSuffix(flag) or nil
+	local suffix = kind ~= "word" and not extra and Plain(flag, "string") and ns.CombatSuffix(flag) or nil
 	item.hasWord = suffix ~= nil
 	if suffix then
 		local colour = PARTIAL[flag] or PARTIAL.GLANCING
@@ -307,8 +330,9 @@ local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag,
 	end
 	word:Hide()
 	item.height = height
-	-- The icon is as high and as wide as the number, and the text moves right by half of it and the gap, so the pair is centred on the path.
-	item.hasIcon = Plain(icon, "number")
+	-- The icon of a word is as high and as wide as the word, and the text moves right by half of it and the gap, so the pair is centred on the
+	-- path. An amount has its icon in its text.
+	item.hasIcon = kind == "word" and hasIcon
 	if item.hasIcon then
 		item.icon:SetTexture(icon)
 		item.icon:SetSize(height, height)
@@ -319,7 +343,7 @@ local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag,
 	end
 end
 
-local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon)
+local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, value2)
 	if type(GetTime) ~= "function" then
 		return false
 	end
@@ -335,7 +359,7 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon)
 	end
 	local now = GetTime()
 	local style = Opt(area.style)
-	Fill(area, item, kind, value, format, crit, r, g, b, scale, flag, icon)
+	Fill(area, item, kind, value, format, crit, r, g, b, scale, flag, icon, value2)
 	item.style, item.dir, item.side = style, area.dir, area.side
 	item.arc = SHAPE.arcs[Opt("arcWidth")] or SHAPE.arc
 	item.length = SHAPE.length * ns.CombatWorldScale()
@@ -383,11 +407,12 @@ function ST.On(key)
 end
 
 -- Shows one number in an area. kind is "amount" or "word"; format is the format of an amount, with its sign; flag is the plain flag of
--- the hit, which gives the partial effect, and icon is the file of the spell icon left of the number, or nil. True when the number is on screen. A sample is not counted as shown. An error is counted and
--- does not go up.
-function ST.Show(key, kind, value, format, crit, r, g, b, scale, flag, sample, icon)
+-- the hit, which gives the partial effect (EXTRA for an extra swing), and icon is the file of the spell icon left of the number, or nil. value2
+-- is a second withheld amount written in the same text (the other report of a next melee ability). True when the number is on screen. A sample
+-- is not counted as shown. An error is counted and does not go up.
+function ST.Show(key, kind, value, format, crit, r, g, b, scale, flag, sample, icon, value2)
 	local area = AREAS[key]
-	local ok, shown = pcall(Add, area, kind, value, format, crit, r, g, b, scale, flag, icon)
+	local ok, shown = pcall(Add, area, kind, value, format, crit, r, g, b, scale, flag, icon, value2)
 	if ok then
 		if shown and sample then
 			area.shown = area.shown - 1

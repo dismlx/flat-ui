@@ -518,13 +518,26 @@ local function Buffs()
 	return buffs
 end
 
--- The trackers that are on, in list order.
+-- The procs of your class that show without being added (Procs.lua: Procs of your class), which are not saved and have no number in the list:
+-- the ones no proc of the list tracks. entries: the list, when the caller has it.
+function K.Auto(entries)
+	if type(ns.ProcAutoEntries) ~= "function" then
+		return {}
+	end
+	local ok, auto = pcall(ns.ProcAutoEntries, entries)
+	return ok and type(auto) == "table" and auto or {}
+end
+
+-- The trackers that are on, in list order, then the procs of your class that show without being added.
 local function OnEntries()
-	local on = {}
-	for _, entry in ipairs(Entries()) do
+	local on, entries = {}, Entries()
+	for _, entry in ipairs(entries) do
 		if entry.on ~= false then
 			on[#on + 1] = entry
 		end
+	end
+	for _, entry in ipairs(K.Auto(entries)) do
+		on[#on + 1] = entry
 	end
 	return on
 end
@@ -3067,24 +3080,35 @@ local function HideHolders()
 	end
 end
 
+-- The page is off: every kind ends what it has up for a tracker (a proc's art and glow), at once, also in a fight, where the layout that frees
+-- the records waits for its end. A kind that ended what it had up for a tracker shows it again from the start when the page comes back.
+function K.EndKinds()
+	for id in pairs(records) do
+		Gone(id)
+	end
+	for _, list in ipairs({ Entries(), K.Auto() }) do
+		for _, entry in ipairs(list) do
+			local kind = KINDS[entry.kind]
+			if kind and type(kind.Gone) == "function" then
+				mem.kept[entry.id] = nil
+			end
+		end
+	end
+end
+
 -- Runs out of combat. The trackers are grouped by their place, and each group is one row hung from the holder of its place.
 local function Layout()
 	if not ns.Enabled(KEY) then
 		tracked = 0
 		ns.ClearNote(KEY, NO_POSITION)
 		HideHolders()
-		for id in pairs(records) do
-			Gone(id)
-		end
-		-- A kind that ended what it had up for a tracker shows it again from the start when the page comes back.
-		for _, entry in ipairs(Entries()) do
-			local kind = KINDS[entry.kind]
-			if kind and type(kind.Gone) == "function" then
-				mem.kept[entry.id] = nil
-			end
-		end
+		K.EndKinds()
 		shown = {}
 		return
+	end
+	-- The procs of your class are built again first: a setting, the list or the spells known may have changed them.
+	if type(ns.ProcAutoBuild) == "function" then
+		ns.EachPart(KEY, "procs", ns.ProcAutoBuild)
 	end
 	local entries, wanted = OnEntries(), {}
 	tracked = #entries
@@ -3128,13 +3152,20 @@ local function Layout()
 		else
 			holder:Show()
 			-- Each tracker has a record and a shape, and so a width and a height: the total of the widths and the tallest height place the row.
-			local sized, total, tallest = {}, spacing * (#group - 1), 0
+			-- A proc of your class that shows without being added (entry.auto, Procs.lua) comes last, past the end of the row, and is not in its
+			-- width, so the row stays where it is without them; like every proc it is nothing on screen while it is down.
+			local sized, total, tallest, counted = {}, 0, 0, 0
 			for _, entry in ipairs(group) do
 				local record = Assign(entry, holder)
 				local width, height = ns.TrackerShapes.Size(entry, ns.TrackerShapes.Make(record, Value(entry, "shape")))
 				sized[#sized + 1] = { entry, record, width, height }
-				total, tallest = total + width, math.max(tallest, height)
+				record.auto = entry.auto == true or nil
+				if not record.auto then
+					total, counted = total + width, counted + 1
+				end
+				tallest = math.max(tallest, height)
 			end
+			total = total + spacing * math.max(0, counted - 1)
 			if Place(place, holder, total, tallest, grow) then
 				refused = true
 			end
@@ -3236,8 +3267,9 @@ function ns.TrackerRow()
 	if not holder then
 		return frames
 	end
+	-- The procs of your class past the end of the row are not in the row's box.
 	for _, record in ipairs(shown) do
-		if record.place == place then
+		if record.place == place and not record.auto then
 			frames[#frames + 1] = record.frame
 		end
 	end
@@ -3340,7 +3372,9 @@ local function EntryLines(index, entry)
 	local lines = {}
 	local reading = Read(entry)
 	local kind = KINDS[entry.kind]
-	lines[1] = ("%d. %s, %s%s"):format(index, Label(entry), kind and kind.what or "buff on you", entry.on == false and ", off" or "")
+	-- A proc of your class that shows without being added has no number: it is marked Class.
+	lines[1] = ("%s. %s, %s%s"):format(Plain(index, "number") and ("%d"):format(index) or "Class", Label(entry), kind and kind.what or "buff on you",
+		entry.on == false and ", off" or "")
 	lines[2] = "   Now: " .. NowText(reading, entry) .. "."
 	local how = (records[entry.id] and records[entry.id].how == "drawn") and "drawn" or How(entry, reading)
 	local shownAs = K.SHOWN_AS[how]
@@ -3479,6 +3513,16 @@ local function Check(number)
 	for index, entry in ipairs(entries) do
 		if number == nil or number == index then
 			for _, line in ipairs(EntryLines(index, entry)) do
+				print(line)
+			end
+		end
+	end
+	-- The procs of your class that show without being added, after the list, while the page is on.
+	local auto = ns.Enabled(KEY) and K.Auto(entries) or {}
+	if number == nil and #auto > 0 then
+		print(("Procs of your class: %d, shown without being added."):format(#auto))
+		for _, entry in ipairs(auto) do
+			for _, line in ipairs(EntryLines(nil, entry)) do
 				print(line)
 			end
 		end
@@ -3673,6 +3717,13 @@ local function Test(number)
 			group[#group + 1] = entry
 		end
 	end
+	-- The procs of your class are in the test of every tracker, with their art, glow and sound.
+	for _, entry in ipairs(number == nil and K.Auto() or {}) do
+		local kind = KINDS[entry.kind]
+		if records[entry.id] and kind ~= nil and type(kind.Test) == "function" then
+			kinds[#kinds + 1] = entry
+		end
+	end
 	if #entries == 0 and #kinds == 0 then
 		print(number and ("No tracker numbered %d."):format(number) or "No trackers.")
 		return
@@ -3838,6 +3889,7 @@ local function Refresh()
 	end
 	if not ns.Enabled(KEY) then
 		HideHolders()
+		K.EndKinds()
 		if ns.TrackerMarkSweep then
 			ns.TrackerMarkSweep()
 		end

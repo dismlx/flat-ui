@@ -5,10 +5,14 @@ local _, ns = ...
 -- each at load, so every rank and every language matches by name.
 -- school: the school mask (1 physical, 2 holy, 4 fire, 8 nature, 16 frost, 32 shadow, 64 arcane). kind: "hit" makes one hit when the cast
 -- succeeds or lands, "dot" no hit when cast and ticks after, "both" a hit and then ticks, "channel" hits while it is channelled, "area" several
--- hits at once around you or a spot, and "none" no damage at all, so its cast opens no slot (its school is not used). travel: the missile
--- flies (its SpellMisc Speed is above 0), so the hit comes later. Auto Shot, the shots of a bow, gun, crossbow or thrown weapon and the Shoot of
--- a wand are left out: the shot slot takes them (MINE.shots). Maul, Heroic Strike, Cleave and Raptor Strike are here too, but their cast opens
--- the next-swing slot (MINE.nextSwing) before this table is read.
+-- hits at once around you or a spot, "spin" an aura on you that hits every enemy around you each `period` seconds, `ticks` times, by casting the
+-- spell `trigger` (whose own cast, when the game reports it, then opens no slot of its name: the spin takes its hits), "sweep" a buff
+-- whose `charges` make your melee swings and strikes hit another enemy too for `duration` seconds, and "none" no damage at all, so its cast opens
+-- no slot (its school is not used). travel: the missile flies (its SpellMisc Speed is above 0), so the hit comes later. area: a channel that hits
+-- every enemy in its area, not only your target. Auto Shot, the shots of a bow, gun, crossbow or thrown weapon and the Shoot of a wand are left
+-- out: the shot slot takes them (MINE.shots). Maul, Heroic Strike, Cleave and Raptor Strike are here too, but their cast opens the pair of a next
+-- melee ability (MINE.OpenPair), which reads only targets here: the enemies it hits. Forever's own rows (wowsims/gamedata) give the length and the
+-- charges of Sweeping Strikes and Bladestorm.
 -- Checked against the game's tables. The name of each ID: the classic client's Spell table (WowClassicGrindBot, Json/dbc/spells.json: Id, Name,
 -- Level) and SpellName of the Retail dumps (ThingEngineering/wow-dumps, te_spellname.csv). School and missile: SpellMisc of those dumps
 -- (SchoolMask, Speed). Kind: SpellEffect of those dumps, with the spells its EffectTriggerSpell names: Effect 2, 9, 17, 31, 58, 62 or 121 is a
@@ -25,7 +29,7 @@ ns.CombatSpells = {
 	[1449] = { school = 64, kind = "area" }, -- Arcane Explosion
 	[122] = { school = 16, kind = "area" }, -- Frost Nova
 	[120] = { school = 16, kind = "area" }, -- Cone of Cold
-	[10] = { school = 16, kind = "channel" }, -- Blizzard (no row)
+	[10] = { school = 16, kind = "channel", area = true }, -- Blizzard (no row)
 	[2120] = { school = 4, kind = "area" }, -- Flamestrike (the burn on the spot after it ticks as an aura)
 	[11366] = { school = 4, kind = "both", travel = true }, -- Pyroblast (classic: a burn after the hit)
 	[2948] = { school = 4, kind = "hit" }, -- Scorch
@@ -48,8 +52,8 @@ ns.CombatSpells = {
 	[689] = { school = 32, kind = "channel" }, -- Drain Life (no row)
 	[1120] = { school = 32, kind = "channel" }, -- Drain Soul (no row)
 	[5138] = { school = 32, kind = "none" }, -- Drain Mana (no row; classic school; channelled, it drains mana and does no damage)
-	[1949] = { school = 4, kind = "channel" }, -- Hellfire
-	[5740] = { school = 4, kind = "channel" }, -- Rain of Fire (classic: channelled)
+	[1949] = { school = 4, kind = "channel", area = true }, -- Hellfire
+	[5740] = { school = 4, kind = "channel", area = true }, -- Rain of Fire (classic: channelled)
 	[5676] = { school = 4, kind = "hit" }, -- Searing Pain (no row)
 	[6353] = { school = 4, kind = "hit", travel = true }, -- Soul Fire
 	[17877] = { school = 32, kind = "hit" }, -- Shadowburn (classic school; Retail's row holds 36, fire and shadow)
@@ -94,7 +98,7 @@ ns.CombatSpells = {
 	[8921] = { school = 64, kind = "both" }, -- Moonfire (classic: a hit and ticks; Retail's row is a dummy)
 	[2912] = { school = 64, kind = "hit" }, -- Starfire (no row)
 	[5570] = { school = 8, kind = "dot" }, -- Insect Swarm (no row)
-	[16914] = { school = 8, kind = "channel" }, -- Hurricane (classic: channelled)
+	[16914] = { school = 8, kind = "channel", area = true }, -- Hurricane (classic: channelled)
 	[339] = { school = 8, kind = "dot" }, -- Entangling Roots
 	[770] = { school = 8, kind = "none" }, -- Faerie Fire (no row)
 	[16857] = { school = 8, kind = "none" }, -- Faerie Fire (Feral) (no row, none of the same name)
@@ -123,7 +127,7 @@ ns.CombatSpells = {
 	[5116] = { school = 1, kind = "none", travel = true }, -- Concussive Shot
 	[19434] = { school = 1, kind = "hit", travel = true }, -- Aimed Shot
 	[2643] = { school = 1, kind = "area", travel = true }, -- Multi-Shot
-	[1510] = { school = 64, kind = "channel" }, -- Volley (no row; classic school, arcane: most rows of the name are physical)
+	[1510] = { school = 64, kind = "channel", area = true }, -- Volley (no row; classic school, arcane: most rows of the name are physical)
 	[1130] = { school = 64, kind = "none" }, -- Hunter's Mark
 	[20736] = { school = 64, kind = "none", travel = true }, -- Distracting Shot
 	[2974] = { school = 1, kind = "hit" }, -- Wing Clip (no row)
@@ -175,7 +179,7 @@ ns.CombatSpells = {
 	[14183] = { school = 1, kind = "none" }, -- Premeditation (no row)
 	-- Warrior
 	[78] = { school = 1, kind = "hit" }, -- Heroic Strike (no row; a next swing)
-	[845] = { school = 1, kind = "area" }, -- Cleave (a next swing)
+	[845] = { school = 1, kind = "area", targets = 2 }, -- Cleave (a next swing; Forever's own rows of 845 and 7369 have ChainTargets 2)
 	[772] = { school = 1, kind = "dot" }, -- Rend (classic: ticks only; Retail's row is a hit)
 	[6343] = { school = 1, kind = "area" }, -- Thunder Clap
 	[1715] = { school = 1, kind = "hit" }, -- Hamstring
@@ -187,6 +191,7 @@ ns.CombatSpells = {
 	[5308] = { school = 1, kind = "hit" }, -- Execute
 	[1464] = { school = 1, kind = "hit" }, -- Slam
 	[1680] = { school = 1, kind = "area" }, -- Whirlwind
+	[12292] = { school = 1, kind = "sweep", duration = 20, charges = 5 }, -- Sweeping Strikes (Forever's row: 20 seconds, 5 charges, on your melee swings and strikes)
 	[7386] = { school = 1, kind = "none" }, -- Sunder Armor (no row)
 	[1160] = { school = 1, kind = "none" }, -- Demoralizing Shout
 	[5246] = { school = 1, kind = "none" }, -- Intimidating Shout
@@ -200,6 +205,8 @@ ns.CombatSpells = {
 	[72] = { school = 1, kind = "hit" }, -- Shield Bash (no row)
 	[12323] = { school = 1, kind = "none" }, -- Piercing Howl
 	[12809] = { school = 1, kind = "none" }, -- Concussion Blow (no row; classic: a stun only)
+	-- Weapons
+	[9632] = { school = 1, kind = "spin", period = 3, ticks = 3, trigger = 9633 }, -- Bladestorm (The Ravager's chance on hit: 9 seconds, SpellMisc 3179; its aura on you casts 9633 Whirlwind on the enemies around you every 3000 ms, SpellEffect 4080-4082)
 	-- Paladin
 	[20271] = { school = 2, kind = "hit" }, -- Judgement (now Judgment; as the row Judgement 343122: no missile. Only a judged Seal of Righteousness or Command hits)
 	[879] = { school = 2, kind = "hit" }, -- Exorcism (no row)

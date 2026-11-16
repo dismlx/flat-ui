@@ -5,9 +5,16 @@ local _, ns = ...
 -- rows too (ns.CooldownProcs, CooldownLooks.lua). The border is
 -- drawn by ns.SetButtonMark in ActionBars.lua. The glow is a frame of this addon next to the button (a child of the button's parent,
 -- anchored to the button), made out of combat and kept at alpha 0; in a fight only SetAlpha and SetScript run on it. A button the game glows itself is left alone. This file is not a module.
+-- As the game's alert does, the glow starts with the burst of its start flipbook (0.7 s, 150 units on a button of 45) and then loops (1 s, 1.4
+-- times the button). A button Flat UI does not restyle glows too: Flat UI's own buttons, or the game's action bars unless Flat UI leaves them
+-- alone; it gets the glow without the border. The glow frames of the buttons that hold the spells of the procs are made ahead, out of combat
+-- (ns.ProcGlowPrepare), so the first proc of a fight glows at once. A proc whose entry says glow false (a proc any spell uses) lights no button.
 
 local KEY = "trackers"
 local ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
+local START_ATLAS = "UI-HUD-ActionBar-Proc-Start-Flipbook"
+-- The start flipbook is 150 units on the game's button of 45, and plays once in 0.7 seconds.
+local START_SIZE, START_SECONDS = 150 / 45, 0.7
 local SCALE = 1.4
 local GOLD = { 1, 0.82, 0 }
 local REFUSED = "Proc glow: the game refused a call on an action button in a fight. The border is drawn without the glow."
@@ -57,21 +64,63 @@ local function SpellName(id)
 	return nil
 end
 
--- The restyled buttons that hold a spell the proc is for, as a set. Names are asked, so every rank is found.
+-- The game's action bars, for the buttons Flat UI does not restyle.
+local GAME_BARS = { "ActionButton", "MultiBarBottomLeftButton", "MultiBarBottomRightButton", "MultiBarLeftButton", "MultiBarRightButton",
+	"MultiBar5Button", "MultiBar6Button", "MultiBar7Button" }
+
+-- Adds to the set the buttons Flat UI does not restyle that hold one of the names (lower case): Flat UI's own while they are built, else the
+-- game's, unless Flat UI leaves the game's bars alone. What a button holds is only read (ns.ButtonAction, ActionBars.lua).
+local function Unstyled(names, set)
+	if type(ns.ButtonAction) ~= "function" or next(names) == nil then
+		return
+	end
+	local list = {}
+	if type(ns.OwnOn) == "function" and ns.OwnOn() == true then
+		local ok, buttons = pcall(ns.OwnButtons)
+		for _, button in ipairs(ok and type(buttons) == "table" and buttons or {}) do
+			list[#list + 1] = button
+		end
+	elseif not ns.HandsOff() then
+		for _, bar in ipairs(GAME_BARS) do
+			for index = 1, 12 do
+				local button = _G[bar .. index]
+				if Plain(button, "table") and not ns.Forbidden(button) then
+					list[#list + 1] = button
+				end
+			end
+		end
+	end
+	for _, button in ipairs(list) do
+		if not set[button] then
+			local ok, kind, _, name = pcall(ns.ButtonAction, button)
+			if ok and kind == "spell" and Plain(name, "string") and names[name:lower()] then
+				set[button] = true
+			end
+		end
+	end
+end
+
+-- The buttons that hold a spell the proc is for, as a set: the restyled ones, then the others. Names are asked, so every rank is found.
 local function Holders(entry)
 	local set, seen = {}, {}
-	if type(ns.ButtonsFor) ~= "function" or type(entry.lights) ~= "table" then
+	if entry.glow == false or type(entry.lights) ~= "table" then
 		return set
 	end
 	for index = 1, math.min(#entry.lights, 40) do
 		local id = entry.lights[index]
 		local name = Plain(id, "number") and SpellName(id)
-		if name and not seen[name] then
-			seen[name] = true
-			for _, button in ipairs(ns.ButtonsFor("spell", name:lower())) do
-				set[button] = true
+		if name and not seen[name:lower()] then
+			seen[name:lower()] = true
+			if type(ns.ButtonsFor) == "function" then
+				for _, button in ipairs(ns.ButtonsFor("spell", name:lower())) do
+					set[button] = true
+				end
 			end
 		end
+	end
+	-- While Restyle action bars is on, the others are looked for only when no restyled button holds the spell.
+	if not ns.Enabled("actionbars") or next(set) == nil then
+		Unstyled(seen, set)
 	end
 	return set
 end
@@ -93,14 +142,15 @@ local function ParentOf(button)
 	return UIParent
 end
 
--- Shows one cell of the flipbook: the cell's rectangle inside the atlas's own.
-local function Cell(made, index)
+-- Shows one cell of a flipbook: the cell's rectangle inside the atlas's own (box: left, right, top, bottom).
+local function Cell(texture, box, index)
 	local column, row = index % COLUMNS, math.floor(index / COLUMNS)
-	local width, height = (made.right - made.left) / COLUMNS, (made.bottom - made.top) / ROWS
-	made.texture:SetTexCoord(made.left + column * width, made.left + (column + 1) * width, made.top + row * height, made.top + (row + 1) * height)
+	local width, height = (box.right - box.left) / COLUMNS, (box.bottom - box.top) / ROWS
+	texture:SetTexCoord(box.left + column * width, box.left + (column + 1) * width, box.top + row * height, box.top + (row + 1) * height)
 end
 
--- The glow shows while its button does: the container stays shown over an empty slot, so the button is asked each frame.
+-- The glow shows while its button does: the container stays shown over an empty slot, so the button is asked each frame. The burst plays
+-- first, once, then the loop.
 local function Tick(made, seconds)
 	made.clock = made.clock + seconds
 	local ok, visible = pcall(made.button.IsVisible, made.button)
@@ -109,9 +159,46 @@ local function Tick(made, seconds)
 		made.alpha = wanted
 		made.frame:SetAlpha(wanted)
 	end
-	if wanted == 1 then
-		Cell(made, math.floor((made.clock % SECONDS) / SECONDS * FRAMES))
+	if wanted ~= 1 then
+		return
 	end
+	local start = made.start
+	if start and made.clock < START_SECONDS then
+		if made.bursting ~= true then
+			made.bursting = true
+			start:SetAlpha(1)
+			made.texture:SetAlpha(0)
+		end
+		Cell(start, made.startBox, math.min(FRAMES - 1, math.floor(made.clock / START_SECONDS * FRAMES)))
+		return
+	end
+	if made.bursting ~= false then
+		made.bursting = false
+		if start then
+			start:SetAlpha(0)
+		end
+		made.texture:SetAlpha(1)
+	end
+	local clock = made.clock - (start and START_SECONDS or 0)
+	Cell(made.texture, made, math.floor((clock % SECONDS) / SECONDS * FRAMES))
+end
+
+-- The rectangle of an atlas in its file, or nil when the game does not have it.
+local function AtlasBox(name)
+	if not (C_Texture and C_Texture.GetAtlasInfo) then
+		return nil
+	end
+	local asked, info = pcall(C_Texture.GetAtlasInfo, name)
+	if not (asked and Plain(info, "table")) then
+		return nil
+	end
+	local box = { left = 0, right = 1, top = 0, bottom = 1 }
+	for key, field in pairs({ left = "leftTexCoord", right = "rightTexCoord", top = "topTexCoord", bottom = "bottomTexCoord" }) do
+		if Plain(info[field], "number") then
+			box[key] = info[field]
+		end
+	end
+	return box
 end
 
 local function MakeGlow(button)
@@ -152,6 +239,19 @@ local function MakeGlow(button)
 			texture:Hide()
 		end
 	end
+	-- The burst of the start flipbook, larger than the button and centred on it; without it the loop starts at once.
+	local box = made.textured and AtlasBox(START_ATLAS)
+	if box then
+		local start = frame:CreateTexture(nil, "ARTWORK", nil, 1)
+		start:SetPoint("CENTER", frame, "CENTER", 0, 0)
+		start:SetSize(width * START_SIZE, height * START_SIZE)
+		if pcall(start.SetAtlas, start, START_ATLAS) then
+			start:SetAlpha(0)
+			made.start, made.startBox = start, box
+		else
+			start:Hide()
+		end
+	end
 	frame:SetAlpha(0)
 	frame:Show()
 	return made
@@ -163,10 +263,12 @@ local function Play(made)
 	end
 	made.playing = true
 	made.plays = made.plays + 1
-	made.clock, made.alpha = 0, 1
+	made.clock, made.alpha, made.bursting = 0, 1, nil
 	if not pcall(function()
 		made.frame:SetAlpha(1)
 		made.frame:SetScript("OnUpdate", made.step)
+		-- The first cell at once, so the loop's last cell never shows before the burst.
+		Tick(made, 0)
 	end) then
 		Refused()
 	end
@@ -358,12 +460,35 @@ local function Hook()
 	pcall(hooksecurefunc, manager, "HideAlert", Ask)
 end
 
+-- The procs whose buttons get their glow frames ahead, kept for when the buttons hold something else.
+local prepared = {}
+
+-- Out of combat, makes the glow frames of the buttons that hold the spells of the procs, so the first proc of a fight glows at once (a frame is
+-- made only out of combat). entries: the procs watched (ns.ProcEntries), or nil for the ones given last.
+function ns.ProcGlowPrepare(entries)
+	if type(entries) == "table" then
+		prepared = entries
+	end
+	if not Wanted() or InCombatLockdown() then
+		return
+	end
+	for _, entry in ipairs(prepared) do
+		if type(entry) == "table" and entry.glow ~= false then
+			for button in pairs(Holders(entry)) do
+				if glows[button] == nil then
+					Want(button)
+				end
+			end
+		end
+	end
+end
+
 function ns.ProcGlowStart(entry)
 	if type(entry) ~= "table" or entry.id == nil then
 		return
 	end
-	-- The icons of its spells on the cooldown rows glow too, with Glow on procs (CooldownLooks.lua).
-	if type(ns.CooldownProcs) == "function" then
+	-- The icons of its spells on the cooldown rows glow too, with Glow on procs (CooldownLooks.lua); not for a proc any spell uses.
+	if type(ns.CooldownProcs) == "function" and entry.glow ~= false then
 		pcall(ns.CooldownProcs, entry, true)
 	end
 	Hook()
@@ -420,8 +545,8 @@ function ns.ProcGlowLine(entry)
 	if ns.Get(KEY .. ".glow") ~= true then
 		return "Glow: off"
 	end
-	if not ns.Enabled("actionbars") then
-		return "Glow: Restyle action bars is off"
+	if entry.glow == false then
+		return "Glow: none, any spell uses this proc"
 	end
 	local rec = active[entry.id]
 	local set = rec and rec.set or Holders(entry)
@@ -437,7 +562,8 @@ function ns.ProcGlowLine(entry)
 		local light = Plain(entry.lights and entry.lights[1], "number") and SpellName(entry.lights[1])
 		return ("Glow: no button holds %s"):format(light or (Plain(entry.name, "string") and entry.name) or "this proc")
 	end
-	return ("Glow: %d %s, border %s, animation %s"):format(n, n == 1 and "button" or "buttons", border and "yes" or "no", animation and "yes" or "no")
+	return ("Glow: %d %s, border %s, animation %s%s"):format(n, n == 1 and "button" or "buttons", border and "yes" or "no", animation and "yes" or "no",
+		ns.Enabled("actionbars") and "" or " (no border while Restyle action bars is off)")
 end
 
 -- The buttons hold something else: the buttons of every proc that is up are found again.
@@ -450,10 +576,12 @@ if type(ns.OnButtonsChanged) == "function" then
 end
 
 -- Flat UI's buttons made after login, or the game's styled after them: the alert manager is followed once a game button is among them and a proc is up.
+-- The glow frames of the buttons that now hold a proc's spell are made ahead.
 if type(ns.OnButtonsChanged) == "function" then
 	ns.OnButtonsChanged(function()
 		if next(active) ~= nil then
 			Hook()
 		end
+		ns.ProcGlowPrepare()
 	end)
 end

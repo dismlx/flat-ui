@@ -10,6 +10,9 @@ local _, ns = ...
 -- A second way to draw, for a proc whose buff the game hides in a fight: ns.ProcArtParts makes the same pieces as textures that are children of
 -- the button of the game's own icon of the buff (TrackerSlots.lua), inside the function the game calls while it builds the slot. The game shows
 -- that button exactly while the buff is up, so these pieces show exactly then. While that icon is on show the pieces of the holder stay hidden.
+-- The art of the class data (ProcData.lua) is the client's own overlay art, drawn by FileDataID, white unless the row gives a colour or the proc
+-- has a colour of its own, at the row's scale and opacity; side art turned a quarter for the Top is drawn with the eight corners of SetTexCoord.
+-- A proc with no art of its own has the plain arc in the proc's colour.
 
 local KEY = "trackers"
 local IsSecret = ns.IsSecret
@@ -33,7 +36,7 @@ local K = {
 		LeftRightOutside = "Left and Right outside",
 	},
 	BY_NUMBER = { [0] = "Center", "Left", "Right", "Top", "Bottom", "TopLeft", "TopRight", "LeftOutside", "RightOutside", "LeftRight", "TopBottom", "LeftRightOutside" },
-	MAX_SCALE = 5,
+	MAX_SCALE = 5, MAX_SECONDS = 120,
 }
 
 -- GEOMETRY: by piece, its width and height in units, the point of the piece and the point of the holder it hangs on, the offset along x,
@@ -80,11 +83,16 @@ local function Locations(location)
 	return K.SIDES[location] or { location }
 end
 
--- What a proc is drawn with, from what Procs.lua gives: the file, the location, the scale and the colour. A proc with no file is the arc on
--- the left and the right. A location the game does not have is left and right.
+-- What a proc is drawn with, from what Procs.lua gives: the file, the location, the scale, the colour, the opacity of the art (alpha), its
+-- quarter turn (turn 1 clockwise, -1 the other way), whether it pulses and how many seconds it shows. A proc with no file is the arc on the left
+-- and the right. A location the game does not have is left and right.
 local function Normalise(data)
 	data = type(data) == "table" and data or {}
 	local file, location, scale = data.file, data.location, data.scale
+	local alpha, turn, seconds = data.alpha, data.turn, data.seconds
+	alpha = Plain(alpha, "number") and math.max(0, math.min(1, alpha)) or 1
+	turn = (turn == 1 or turn == -1) and turn or nil
+	seconds = Plain(seconds, "number") and seconds > 0 and math.min(seconds, K.MAX_SECONDS) or nil
 	if Plain(location, "number") then
 		location = K.BY_NUMBER[location]
 	end
@@ -107,21 +115,53 @@ local function Normalise(data)
 	if not (colour[1] and colour[2] and colour[3]) then
 		colour = nil
 	end
-	return { file = file, location = location, scale = scale, colour = colour, arc = arc }
+	if arc then
+		alpha, turn = 1, nil
+	end
+	return { file = file, location = location, scale = scale, colour = colour, arc = arc, alpha = alpha, turn = turn, pulse = data.pulse ~= false,
+		seconds = seconds }
 end
 
--- The colour of a proc's art: the entry's own when Procs.lua says one, else the one that came with the proc, else gold.
-local function ColourOf(entry, art)
+-- The proc's colour (ns.ProcColour, Procs.lua: its own, else the page's, else gold), or nil.
+local function ProcRgb(entry)
 	if type(ns.ProcColour) == "function" then
 		local ok, r, g, b = pcall(ns.ProcColour, entry)
 		if ok and Plain(r, "number") and Plain(g, "number") and Plain(b, "number") then
 			return r, g, b
 		end
 	end
+	return nil
+end
+
+-- The colour of a proc's art. A colour the proc has of its own (/flatui tracker proc colour) tints any art; the plain arc takes the proc's colour;
+-- the game's own art is white, as the game draws it, unless it came with a colour (Victory Rush is red).
+local function ColourOf(entry, art)
+	local own = type(entry) == "table" and entry.colour
+	if (Plain(own, "string") or art.arc) and ProcRgb(entry) then
+		return ProcRgb(entry)
+	end
 	if art.colour then
 		return art.colour[1], art.colour[2], art.colour[3]
 	end
-	return K.FALLBACK[1], K.FALLBACK[2], K.FALLBACK[3]
+	if art.arc then
+		return K.FALLBACK[1], K.FALLBACK[2], K.FALLBACK[3]
+	end
+	return 1, 1, 1
+end
+
+-- The corners of the picture of a piece: mirrored across or down as the geometry says, and turned a quarter as the art says, with the eight
+-- corners SetTexCoord takes (upper left, lower left, upper right, lower right, each x and y), the turn SpellActivationOverlay by ennvina gives
+-- its locations "(CW)" and "(CCW)" (SpellActivationOverlay.lua, SpellActivationOverlay_ShowOverlay, MIT licence; README.md, Credits).
+local function Corners(texture, g, turn)
+	local left, right = g.flipH and 1 or 0, g.flipH and 0 or 1
+	local top, bottom = g.flipV and 1 or 0, g.flipV and 0 or 1
+	if turn == 1 then
+		texture:SetTexCoord(left, bottom, right, bottom, left, top, right, top)
+	elseif turn == -1 then
+		texture:SetTexCoord(right, top, left, top, right, bottom, left, bottom)
+	else
+		texture:SetTexCoord(left, right, top, bottom)
+	end
 end
 
 -- The pieces ---------------------------------------------------------------------------------------------------------------------
@@ -154,7 +194,7 @@ local function MakePiece()
 	end)
 	piece.animIn:SetScript("OnFinished", function()
 		piece:SetAlpha(1)
-		if piece.live then
+		if piece.live and piece.pulses then
 			piece.pulse:Play()
 		end
 	end)
@@ -215,7 +255,8 @@ local function Place(piece, name, art, slot)
 	piece:ClearAllPoints()
 	piece:SetPoint(g.point, holder, g.rel, x, y)
 	piece:SetSize(w, h)
-	piece.tex:SetTexCoord(g.flipH and 1 or 0, g.flipH and 0 or 1, g.flipV and 1 or 0, g.flipV and 0 or 1)
+	Corners(piece.tex, g, art.turn)
+	piece.tex:SetAlpha(art.alpha)
 end
 
 -- True while the game's own icon of the proc is on show with the art made on its button, so the pieces of the holder are not drawn twice.
@@ -259,6 +300,11 @@ local function Layout(rec)
 			local ok = pcall(piece.tex.SetTexture, piece.tex, rec.art.file)
 			rec.drew = rec.drew and ok
 			piece.tex:SetVertexColor(r, g, b)
+			-- Art that does not pulse (Clearcasting's arcs) stays still once faded in.
+			piece.pulses = rec.art.pulse
+			if not piece.pulses and piece.pulse:IsPlaying() then
+				piece.pulse:Stop()
+			end
 			if piece.fresh then
 				piece.fresh = false
 				piece:Show()
@@ -380,6 +426,17 @@ function ns.ProcArtShow(entry, data)
 			end
 		end)
 	end
+	-- Art of an alert that lasts (Execute) shows only for its seconds; the glow of the button stays.
+	rec.token = (rec.token or 0) + 1
+	if art.seconds and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+		local token = rec.token
+		C_Timer.After(art.seconds, function()
+			local found = Find(entry)
+			if found == rec and rec.token == token then
+				ns.ProcArtHide(entry)
+			end
+		end)
+	end
 	return true
 end
 
@@ -476,7 +533,7 @@ end
 -- The place of a proc whose pieces are on the game's button: fixed by the order of the proc trackers, as the proc trackers before it take places,
 -- so two procs never stack and the place does not depend on which is up.
 local function FixedSlot(entry, art)
-	local list = type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}
+	local list = type(ns.ProcEntries) == "function" and ns.ProcEntries() or {}
 	local placed = {}
 	for _, other in ipairs(type(list) == "table" and list or {}) do
 		if type(other) == "table" then
@@ -488,8 +545,11 @@ local function FixedSlot(entry, art)
 				if give then
 					ok, data = pcall(give, other)
 				end
-				local theirs = Normalise(ok and data or nil)
-				placed[#placed + 1] = { art = theirs, slot = Lowest(theirs, placed) }
+				-- A proc with no art (only the glow) takes no place.
+				if not (ok and data == false) then
+					local theirs = Normalise(ok and data or nil)
+					placed[#placed + 1] = { art = theirs, slot = Lowest(theirs, placed) }
+				end
 			end
 		end
 	end
@@ -523,7 +583,22 @@ function ns.ProcArtParts(rec, button, entry)
 		error("no proc to draw", 0)
 	end
 	local given = type(ns.ProcArtData) == "function" and ns.ProcArtData
-	local art = Normalise(given and select(2, pcall(given, entry)) or nil)
+	local data
+	if given then
+		local ok, got = pcall(given, entry)
+		data = ok and got or nil
+	end
+	-- A proc with no art (only the glow) has no pieces on the button.
+	if data == false then
+		local none = { pieces = {} }
+		function none.Pending()
+			return false
+		end
+		function none.Apply() end
+		function none.Shown() end
+		return none
+	end
+	local art = Normalise(data)
 	local pieces = {}
 	for _, name in ipairs(Locations(art.location)) do
 		local ok, texture = pcall(button.CreateTexture, button, nil, "ARTWORK", nil, 0)
@@ -551,9 +626,9 @@ function ns.ProcArtParts(rec, button, entry)
 			texture:SetPoint(geometry.point, UIParent, "CENTER", (x + step[1] * K.LONG / 2) / ratio, (y + step[2] * K.LONG / 2 + height) / ratio)
 			texture:SetSize(w / ratio, h / ratio)
 			texture:SetTexture(art.file)
-			texture:SetTexCoord(geometry.flipH and 1 or 0, geometry.flipH and 0 or 1, geometry.flipV and 1 or 0, geometry.flipV and 0 or 1)
+			Corners(texture, geometry, art.turn)
 			texture:SetVertexColor(r, g, b)
-			texture:SetAlpha(alpha)
+			texture:SetAlpha(alpha * art.alpha)
 		end
 		handle.key = key
 	end
@@ -579,6 +654,14 @@ end
 function ns.ProcArtLine(entry)
 	if not On() then
 		return "Art: off"
+	end
+	-- A proc of the class data with no art (noArt, Hammer of Wrath) has the glow alone.
+	local given = type(ns.ProcArtData) == "function" and ns.ProcArtData
+	if given and type(entry) == "table" then
+		local ok, data = pcall(given, entry)
+		if ok and data == false then
+			return "Art: none, the glow on the button alone"
+		end
 	end
 	local seen = type(entry) == "table" and (last[entry.id or entry] or last[entry])
 	if not seen then

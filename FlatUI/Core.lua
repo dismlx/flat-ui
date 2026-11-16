@@ -40,6 +40,14 @@ local ADDON_NAME, ns = ...
 -- combat: 2.6 when ticked, its text before that kept in FlatUIDB.cameraGame, and that text again (or the client's default) when unticked while
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.
 -- Its cast and global cooldown progress are Cooldown frames of its own fed the game's duration objects.
+-- Quest item sparkle, on the Flat UI page, writes the game's outlineModeShowLootEffectWhenDisabled (1), and Sparkle strength raises
+-- graphicsParticleDensity, raidGraphicsParticleDensity, graphicsSpellDensity and raidGraphicsSpellDensity to its level, never below the game's own,
+-- out of combat: at login, when a row or the profile changes, and a second after the game writes one of them or its graphics quality. The text
+-- each had before is kept in FlatUIDB (sparkleGame, sparkleParticleGame, sparkleRaidParticleGame, sparkleSpellGame, sparkleRaidSpellGame) and
+-- the text Flat UI wrote in FlatUIDB.sparkleWrote; the kept text is written back when the rows no longer need it, while the variable still holds
+-- the text Flat UI wrote, and a value written since, also while Flat UI did not run, is the game's own. Glow on the nearest object is a frame of its
+-- own that takes no mouse, put on the game's nameplate of the object the Interact Key would use (its soft-interact game object), only while the
+-- game shows that plate, and parented, levelled and anchored there out of combat only; it writes no game setting.
 -- Nameplate threat follows CompactUnitFrame_UpdateAggroHighlight with hooksecurefunc and only reads threat, roles, stances, forms and auras; a
 -- frame of its own hears UPDATE_SHAPESHIFT_FORM for a warrior or druid, and /flatui role sets Your role. With Fade enemies held for you, Nameplates
 -- writes the alpha of the game's nameplate unit frame (SetAlpha), read first and put back when the plate loses its fade, leaves, or the row, page
@@ -354,8 +362,9 @@ local function Normalise(def, value)
 	return nil
 end
 
--- Choice ids that were renamed, by saved path: a saved value of the old id is the new one. The text outline rows had "outline" for Thin.
-local RENAMED = { ["trackers.grow"] = { middle = "center" }, ["partycd.show"] = { used = "cooling" } }
+-- Choice ids that were renamed, by saved path: a saved value of the old id is the new one. The text outline rows had "outline" for Thin, and
+-- Whose hits had Every hit while you attack, which Yours took in.
+local RENAMED = { ["trackers.grow"] = { middle = "center" }, ["partycd.show"] = { used = "cooling" }, ["combattext.whose"] = { mine = "one" } }
 for _, path in ipairs({ "fonts.outline", "chat.outline", "actionbars.textOutline" }) do
 	RENAMED[path] = { outline = "thin" }
 end
@@ -2317,6 +2326,10 @@ function ns.StatusLines()
 	if sparkle then
 		lines[#lines + 1] = sparkle
 	end
+	local glow = ns.SparkleGlowStatus and ns.SparkleGlowStatus()
+	if glow then
+		lines[#lines + 1] = glow
+	end
 	local camera = ns.CameraZoomStatus and ns.CameraZoomStatus()
 	if camera then
 		lines[#lines + 1] = camera
@@ -3344,7 +3357,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 				geterrorhandler()(err)
 			end
 		end
-		-- Quest item sparkle is written at every login (Sparkle.lua).
+		-- Quest item sparkle and Sparkle strength are written at every login, and Glow on the nearest object starts (Sparkle.lua).
 		if ns.SparkleChanged then
 			local ok, err = pcall(ns.SparkleChanged)
 			if not ok then
@@ -3366,7 +3379,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
 			end
 		end
 	elseif event == "CVAR_UPDATE" then
-		-- A graphics preset puts the quest item sparkle variable back (Sparkle.lua).
+		-- A graphics preset puts the quest item sparkle variable and the graphics variables of Sparkle strength back (Sparkle.lua).
 		if loggedIn and ns.SparkleCVar then
 			local ok, err = pcall(ns.SparkleCVar, ...)
 			if not ok then

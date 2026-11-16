@@ -10,8 +10,8 @@ local _, ns = ...
 -- A stage with a field `section` of "trackers" or "defensives" shows only that part of mock-tracker.
 -- Sweeps are Cooldown frames set to a start and a length, then paused (FrameAPICooldownDocumentation.lua:251), so a sample time stays put.
 -- The layout of each part is the one of its module: Trackers.lua 2920-2985 and TrackerShapes.lua for trackers, Cooldowns.lua 940-980 for the
--- row of cooldowns, PartyCooldowns.lua 541-600 for the rows beside the party frames, EnemyCooldowns.lua 430-455 and 570-600 for the rows
--- of enemy abilities, ProcArt.lua 52-127 and 190-215 for the proc art, ProcGlow.lua for the glow. The player portrait is SetPortraitTexture
+-- row of cooldowns, PartyCooldowns.lua 541-600 for the rows beside the party frames, EnemyCooldowns.lua E.Spot, E.Fit and E.PlaceBar for the
+-- rows of enemy abilities, ProcArt.lua 52-127 and 190-215 for the proc art, ProcGlow.lua for the glow. The player portrait is SetPortraitTexture
 -- (UnitDocumentation.lua:572) and the clip of the proc screen is SetClipsChildren (SimpleFrameAPIDocumentation.lua:1218).
 
 ns.SetupDrawings = ns.SetupDrawings or {}
@@ -1261,8 +1261,8 @@ U.Register("mock-party-cooldowns", { build = BuildParty, draw = DrawParty })
 
 -- mock-enemy-cooldowns -------------------------------------------------------------------------------------
 
--- One ability of each kind a switch of Enemy cooldowns shows, in the order of EnemyCooldowns.lua 52: kind, icon, seconds left and length. The
--- second, a second interrupt, is the one whose timer has just ended.
+-- One ability of each kind a switch of Enemy cooldowns shows, in the order of SWITCHES in EnemyCooldowns.lua: kind, icon, seconds left and
+-- length. The second, a second interrupt, is the one whose timer has just ended.
 local ENEMY = {
 	{ switch = "interrupts", kind = 1, icon = "Ability_Kick", left = 7, length = 24 },
 	{ switch = "interrupts", kind = 1, icon = "Spell_Frost_IceShock", ended = true },
@@ -1276,6 +1276,9 @@ local ENEMY = {
 local ENEMY_ARENA = { icon = "INV_Jewelry_TrinketPVP_01", left = 60, length = 120 }
 local ENEMY_SPACING, ENEMY_BELOW, ENEMY_BAR_UP, ENEMY_PLATE_MOST, ENEMY_BAR_MOST = 2, 1, 4, 4, 8
 local PLATE_W, PLATE_H, TARGET_W, TARGET_H = 110, 12, 150, 36
+-- The height of the name over the mock plate, and the space between the plate and a row beside it, which stands for the level box and the
+-- room the game keeps for its own icons there (EnemyCooldowns.lua E.Spot).
+local PLATE_NAME, ENEMY_SIDE = 18, 6
 
 local function BuildEnemy(stage)
 	local s = { root = Root(stage), parts = {} }
@@ -1315,6 +1318,7 @@ local function BuildEnemy(stage)
 	end
 	s.parts["enemycd.enabled"] = s.root
 	s.parts["enemycd.place"] = s.barRow.holder
+	s.parts["enemycd.platePlace"] = s.plateRow.holder
 	s.parts["enemycd.arenaBreak"] = s.barRow.holder
 	return s
 end
@@ -1328,7 +1332,7 @@ function U.EnemyItems(most)
 			items[#items + 1] = sample
 		end
 	end
-	-- Over the limit, ready icons go first (EnemyCooldowns.lua:198-208).
+	-- Over the limit, ready icons go first (EnemyCooldowns.lua E.Items).
 	if #items > most then
 		for index = #items, 1, -1 do
 			if items[index].ended then
@@ -1343,7 +1347,8 @@ function U.EnemyItems(most)
 	return cut
 end
 
-function U.PaintEnemy(row, items, size)
+-- Paints a row; its icons grow from the middle, or to the right or the left from its edge (ns.IconLayout).
+function U.PaintEnemy(row, items, size, direction)
 	local read = ns.Get
 	local shown = {}
 	for index, icon in ipairs(row.icons) do
@@ -1373,9 +1378,31 @@ function U.PaintEnemy(row, items, size)
 			icon.flashTex:Hide()
 		end
 	end
-	local width = ns.IconLayout(shown, row.holder, size, ENEMY_SPACING, "center")
+	local width = ns.IconLayout(shown, row.holder, size, ENEMY_SPACING, direction or "center")
 	row.holder:SetSize(math.max(width, 1), size)
 	return width
+end
+
+-- The mock plate and its row, by Place on nameplates (EnemyCooldowns.lua E.Spot): the width and height of the two, the left and top of the
+-- plate in them, and where the row hangs from the plate.
+function U.EnemyPlate(platePlace, size)
+	local rowW = ENEMY_PLATE_MOST * size + (ENEMY_PLATE_MOST - 1) * ENEMY_SPACING
+	if platePlace == "right" or platePlace == "left" then
+		-- The row is as high as an icon, its middle on the middle of the plate.
+		local top = math.max(PLATE_NAME, size / 2 - PLATE_H / 2)
+		local height = top + math.max(PLATE_H, PLATE_H / 2 + size / 2)
+		local width = PLATE_W + ENEMY_SIDE + rowW
+		if platePlace == "right" then
+			return width, height, 0, top, { "LEFT", "RIGHT", ENEMY_SIDE, 0, "right" }
+		end
+		return width, height, rowW + ENEMY_SIDE, top, { "RIGHT", "LEFT", -ENEMY_SIDE, 0, "left" }
+	end
+	local width = math.max(PLATE_W, rowW)
+	local left = (width - PLATE_W) / 2
+	if platePlace == "above" then
+		return width, size + PLATE_NAME + PLATE_H, left, size + PLATE_NAME, { "BOTTOM", "TOP", 0, PLATE_NAME, "center" }
+	end
+	return width, PLATE_NAME + PLATE_H + ENEMY_BELOW + size, left, PLATE_NAME, { "TOP", "BOTTOM", 0, -ENEMY_BELOW, "center" }
 end
 
 local function DrawEnemy(s)
@@ -1383,19 +1410,17 @@ local function DrawEnemy(s)
 	local on = read("enemycd.enabled") == true
 	local place, size = read("enemycd.place"), read("enemycd.size")
 	local plates, bars = on and place ~= "bars", on and place ~= "plates"
-	local plateRowWidth = ENEMY_PLATE_MOST * size + (ENEMY_PLATE_MOST - 1) * ENEMY_SPACING
 	local barRowWidth = (ENEMY_BAR_MOST + 1) * size + ENEMY_BAR_MOST * ENEMY_SPACING
-	local plateW = math.max(PLATE_W, plateRowWidth)
+	local plateW, plateH, plateLeft, plateTop, hang = U.EnemyPlate(read("enemycd.platePlace"), size)
 	U.Show(s.plate, plates)
 	U.Show(s.plateRow.holder, plates)
 	U.Show(s.target, bars)
 	U.Show(s.barRow.holder, bars)
-	local plateTop = PAD + 18
-	U.At(s.plate, "TOP", s.root, "TOPLEFT", PAD + plateW / 2, -plateTop)
+	U.At(s.plate, "TOPLEFT", s.root, "TOPLEFT", PAD + plateLeft, -(PAD + plateTop))
 	local plateItems, barItems = plates and U.EnemyItems(ENEMY_PLATE_MOST) or {}, bars and U.EnemyItems(ENEMY_BAR_MOST) or {}
-	U.PaintEnemy(s.plateRow, plateItems, size)
+	U.PaintEnemy(s.plateRow, plateItems, size, hang[5])
 	s.plateRow.holder:ClearAllPoints()
-	s.plateRow.holder:SetPoint("TOP", s.plate, "BOTTOM", 0, -ENEMY_BELOW)
+	s.plateRow.holder:SetPoint(hang[1], s.plate, hang[2], hang[3], hang[4])
 	local barLeft = PAD + (plates and plateW + 40 or 0)
 	local barTop = PAD + size + ENEMY_BAR_UP
 	U.At(s.target, "TOPLEFT", s.root, "TOPLEFT", barLeft, -barTop)
@@ -1406,7 +1431,7 @@ local function DrawEnemy(s)
 	s.barRow.holder:ClearAllPoints()
 	s.barRow.holder:SetPoint("TOPLEFT", s.target, "TOPLEFT", 0, size + ENEMY_BAR_UP)
 	local width = PAD * 2 + (plates and plateW or 0) + (plates and bars and 40 or 0) + (bars and math.max(TARGET_W, barRowWidth) or 0)
-	local height = PAD * 2 + math.max(plates and (18 + PLATE_H + ENEMY_BELOW + size) or 0, bars and (size + ENEMY_BAR_UP + TARGET_H) or 0)
+	local height = PAD * 2 + math.max(plates and plateH or 0, bars and (size + ENEMY_BAR_UP + TARGET_H) or 0)
 	U.Finish(s, on and width or 2 * PAD + 1, on and height or 2 * PAD + 1)
 end
 
