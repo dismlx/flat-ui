@@ -1,14 +1,19 @@
 local _, ns = ...
 
--- Glow on the action button: while a proc is up, the button that casts the spell it is for gets the proc's border colour and the game's own
--- glow animation (ActionButtonSpellAlerts.xml:3-33). Procs.lua calls ns.ProcGlowStart(entry) and ns.ProcGlowStop(entry), which tell the cooldown
--- rows too (ns.CooldownProcs, CooldownLooks.lua). The border is
--- drawn by ns.SetButtonMark in ActionBars.lua. The glow is a frame of this addon next to the button (a child of the button's parent,
--- anchored to the button), made out of combat and kept at alpha 0; in a fight only SetAlpha and SetScript run on it. A button the game glows itself is left alone. This file is not a module.
--- As the game's alert does, the glow starts with the burst of its start flipbook (0.7 s, 150 units on a button of 45) and then loops (1 s, 1.4
--- times the button). A button Flat UI does not restyle glows too: Flat UI's own buttons, or the game's action bars unless Flat UI leaves them
--- alone; it gets the glow without the border. The glow frames of the buttons that hold the spells of the procs are made ahead, out of combat
--- (ns.ProcGlowPrepare), so the first proc of a fight glows at once. A proc whose entry says glow false (a proc any spell uses) lights no button.
+-- Glow on the action button: while a proc is up, the button that casts the spell it is for gets the proc's border colour and a glow, in the look
+-- the row Glow style gives it. Procs.lua calls ns.ProcGlowStart(entry, again) and ns.ProcGlowStop(entry), which tell the cooldown rows too
+-- (ns.CooldownProcs, CooldownLooks.lua). The border is drawn by ns.SetButtonMark in ActionBars.lua. The glow is a frame of this addon next to the
+-- button (a child of the button's parent, anchored to the button), made out of combat and kept at alpha 0; in a fight only SetAlpha and SetScript
+-- on its frames, the texture calls that colour its ring and halo, and the Play, Pause and Stop of its animation are run on it. A button the game
+-- glows itself is left alone. This file is not a module.
+-- Soft (the default): no burst; a ring of Flat UI's own (ns.Outline) 2 pixels wide just outside the button and a halo of Media/Shadow.tga 4 pixels
+-- past it, in the proc's colour (gold when it has none), breathing from 25% to 60% and back, 1.2 s each way, so it hugs the button and leaves the
+-- buttons beside it clear. As the game has it: as the game's alert does, the glow starts with the burst of its start flipbook (0.7 s, 150 units on
+-- a button of 45) and then loops (1 s, 1.4 times the button, ActionButtonSpellAlerts.xml:3-33); without the game's atlas it is the soft one.
+-- A proc that came again soon after it ended (again, Procs.lua) carries on: no burst, and the soft look breathes on from where it stopped.
+-- A button Flat UI does not restyle glows too: Flat UI's own buttons, or the game's action bars unless Flat UI leaves them alone; it gets the
+-- glow without the border. The glow frames of the buttons that hold the spells of the procs are made ahead, out of combat (ns.ProcGlowPrepare), so
+-- the first proc of a fight glows at once. A proc whose entry says glow false (a proc any spell uses) lights no button.
 
 local KEY = "trackers"
 local ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
@@ -17,13 +22,18 @@ local START_ATLAS = "UI-HUD-ActionBar-Proc-Start-Flipbook"
 local START_SIZE, START_SECONDS = 150 / 45, 0.7
 local SCALE = 1.4
 local GOLD = { 1, 0.82, 0 }
+-- SOFT: the look Soft. RING: the ring's width and HALO how far the halo reaches past the button, in screen pixels; HALO_ALPHA: the halo's opacity.
+-- LOW, HIGH, SECONDS: the breathing, from LOW to HIGH and back, SECONDS each way. FILE: white, its alpha rising over the outer quarter (EDGE) of
+-- each side from clear to full, so a side and a corner of that quarter fade out away from the button.
+local SOFT = { RING = 2, HALO = 4, HALO_ALPHA = 0.8, LOW = 0.25, HIGH = 0.6, SECONDS = 1.2, EDGE = 0.25,
+	FILE = "Interface\\AddOns\\FlatUI\\Media\\Shadow.tga" }
 local REFUSED = "Proc glow: the game refused a call on an action button in a fight. The border is drawn without the glow."
 
 -- active[entry.id] = { entry = entry, order = n, set = { [button] = true } }
 local active, seq = {}, 0
 -- users[button][entry.id] = { r, g, b, order }: the procs that are up on a button
 local users = setmetatable({}, { __mode = "k" })
--- glows[button] = { frame, texture, step, playing } once made, or false when it could not be made
+-- glows[button] = { frame, texture, start, soft, step, playing, look } once made, or false when it could not be made
 local glows = setmetatable({}, { __mode = "k" })
 local pending = setmetatable({}, { __mode = "k" })
 -- gameAlert[button] = true while the game's own alert is up
@@ -41,6 +51,22 @@ end
 
 local function Wanted()
 	return ns.Enabled(KEY) and ns.Get(KEY .. ".glow") == true
+end
+
+-- The look the row Glow style asks for: "game" for As the game has it, else "soft".
+local function Style()
+	return ns.Get(KEY .. ".glowStyle") == "game" and "game" or "soft"
+end
+
+-- The look a glow frame shows: the one Glow style asks for, else the other one the frame has, else none.
+local function LookOf(made)
+	if Style() == "game" and made.textured then
+		return "game"
+	end
+	if made.soft then
+		return "soft"
+	end
+	return made.textured and "game" or nil
 end
 
 local function Colour(entry)
@@ -149,8 +175,8 @@ local function Cell(texture, box, index)
 	texture:SetTexCoord(box.left + column * width, box.left + (column + 1) * width, box.top + row * height, box.top + (row + 1) * height)
 end
 
--- The glow shows while its button does: the container stays shown over an empty slot, so the button is asked each frame. The burst plays
--- first, once, then the loop.
+-- The glow shows while its button does: the container stays shown over an empty slot, so the button is asked each frame. In the game's look
+-- the burst plays first, once, then the loop; the soft look breathes by its own animation.
 local function Tick(made, seconds)
 	made.clock = made.clock + seconds
 	local ok, visible = pcall(made.button.IsVisible, made.button)
@@ -159,7 +185,7 @@ local function Tick(made, seconds)
 		made.alpha = wanted
 		made.frame:SetAlpha(wanted)
 	end
-	if wanted ~= 1 then
+	if wanted ~= 1 or made.look ~= "game" then
 		return
 	end
 	local start = made.start
@@ -201,6 +227,83 @@ local function AtlasBox(name)
 	return box
 end
 
+-- The halo of the soft look: the outer quarter of the shadow file along each side of the frame and at each corner, reaching `spill` past it,
+-- full at the frame's edge and clear at its far side. Nothing covers the frame itself.
+local function Halo(frame, spill)
+	local e, pieces = SOFT.EDGE, {}
+	local function Piece(left, right, top, bottom)
+		local texture = frame:CreateTexture(nil, "ARTWORK", nil, 0)
+		ns.Own[texture] = true
+		texture:SetTexture(SOFT.FILE)
+		texture:SetTexCoord(left, right, top, bottom)
+		pieces[#pieces + 1] = texture
+		return texture
+	end
+	-- Top, bottom, left and right: two points along the side, then its depth, as a height or a width.
+	for _, side in ipairs({
+		{ "BOTTOMLEFT", "TOPLEFT", "BOTTOMRIGHT", "TOPRIGHT", e, 1 - e, 0, e, "SetHeight" },
+		{ "TOPLEFT", "BOTTOMLEFT", "TOPRIGHT", "BOTTOMRIGHT", e, 1 - e, 1 - e, 1, "SetHeight" },
+		{ "TOPRIGHT", "TOPLEFT", "BOTTOMRIGHT", "BOTTOMLEFT", 0, e, e, 1 - e, "SetWidth" },
+		{ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", 1 - e, 1, e, 1 - e, "SetWidth" },
+	}) do
+		local piece = Piece(side[5], side[6], side[7], side[8])
+		piece:SetPoint(side[1], frame, side[2], 0, 0)
+		piece:SetPoint(side[3], frame, side[4], 0, 0)
+		piece[side[9]](piece, spill)
+	end
+	-- The corners: top left, top right, bottom left, bottom right.
+	for _, corner in ipairs({
+		{ "BOTTOMRIGHT", "TOPLEFT", 0, e, 0, e }, { "BOTTOMLEFT", "TOPRIGHT", 1 - e, 1, 0, e },
+		{ "TOPRIGHT", "BOTTOMLEFT", 0, e, 1 - e, 1 }, { "TOPLEFT", "BOTTOMRIGHT", 1 - e, 1, 1 - e, 1 },
+	}) do
+		local piece = Piece(corner[3], corner[4], corner[5], corner[6])
+		piece:SetPoint(corner[1], frame, corner[2], 0, 0)
+		piece:SetSize(spill, spill)
+	end
+	return pieces
+end
+
+-- The colour of a soft look: colour calls on its textures, so it may change in a fight.
+function ns.ProcGlowTint(look, r, g, b)
+	if type(look) ~= "table" or (look.r == r and look.g == g and look.b == b) then
+		return
+	end
+	look.r, look.g, look.b = r, g, b
+	if look.ring then
+		ns.SetOutlineColour(look.ring, r, g, b)
+	end
+	for _, piece in ipairs(look.halo) do
+		piece:SetVertexColor(r, g, b, SOFT.HALO_ALPHA)
+	end
+end
+
+-- The soft look: a frame of the addon, a child of `parent` over all of `anchor` (the button), with the ring and the halo in gold, at alpha 0;
+-- look.pulse breathes it from SOFT.LOW to SOFT.HIGH and back. Out of combat only. The setup drawing shows it too (SetupDrawTrackers.lua, mock-proc).
+function ns.ProcGlowSoft(parent, anchor)
+	local frame = CreateFrame("Frame", nil, parent)
+	ns.Own[frame] = true
+	frame:SetAllPoints(anchor)
+	frame:SetAlpha(0)
+	local look = { frame = frame, high = SOFT.HIGH }
+	-- An outline of Flat UI's own, its edges only, as the rings of the cooldown icons (CooldownLooks.lua, Ring).
+	look.ring = ns.Outline(frame, frame)
+	if look.ring then
+		ns.SetOutline(look.ring, true, false)
+		ns.SetOutlineThickness(look.ring, SOFT.RING)
+	end
+	look.halo = Halo(frame, ns.Pixels(frame, SOFT.HALO))
+	local pulse = frame:CreateAnimationGroup()
+	local breathe = pulse:CreateAnimation("Alpha")
+	breathe:SetFromAlpha(SOFT.LOW)
+	breathe:SetToAlpha(SOFT.HIGH)
+	breathe:SetDuration(SOFT.SECONDS)
+	breathe:SetSmoothing("IN_OUT")
+	pulse:SetLooping("BOUNCE")
+	look.pulse = pulse
+	ns.ProcGlowTint(look, GOLD[1], GOLD[2], GOLD[3])
+	return look
+end
+
 local function MakeGlow(button)
 	local width, height = 36, 36
 	local ok, w, h = pcall(button.GetSize, button)
@@ -232,9 +335,7 @@ local function MakeGlow(button)
 		texture:SetAllPoints(frame)
 		if pcall(texture.SetAtlas, texture, ATLAS) then
 			made.texture, made.textured = texture, true
-			made.step = function(_, seconds)
-				Tick(made, seconds)
-			end
+			texture:SetAlpha(0)
 		else
 			texture:Hide()
 		end
@@ -252,19 +353,61 @@ local function MakeGlow(button)
 			start:Hide()
 		end
 	end
+	-- The soft look, over the button itself; a client that refuses it keeps the game's.
+	local fine, soft = pcall(ns.ProcGlowSoft, frame, button)
+	if fine and type(soft) == "table" then
+		made.soft = soft
+	end
+	made.step = function(_, seconds)
+		Tick(made, seconds)
+	end
 	frame:SetAlpha(0)
 	frame:Show()
 	return made
 end
 
-local function Play(made)
+-- Shows a look of a glow frame and hides the other: alpha and animation calls on frames of the addon only, so it may run in a fight. carry: the
+-- glow goes on where it was, so the soft look breathes on from where it stopped.
+local function SetLook(made, look, carry)
+	made.look, made.bursting = look, nil
+	local soft = made.soft
+	if look == "soft" then
+		if made.texture then
+			made.texture:SetAlpha(0)
+		end
+		if made.start then
+			made.start:SetAlpha(0)
+		end
+		soft.frame:SetAlpha(1)
+		if not carry then
+			soft.pulse:Stop()
+		end
+		soft.pulse:Play()
+	elseif soft then
+		soft.pulse:Stop()
+		soft.frame:SetAlpha(0)
+	end
+end
+
+-- carry: a proc that came again soon after it ended (Procs.lua): the game's look goes on with its loop, without the burst. A glow that is
+-- playing takes the look Glow style asks for now.
+local function Play(made, carry)
+	local look = LookOf(made)
 	if made.playing then
+		if look and look ~= made.look and not pcall(SetLook, made, look, true) then
+			Refused()
+		end
+		return
+	end
+	if not look then
 		return
 	end
 	made.playing = true
 	made.plays = made.plays + 1
-	made.clock, made.alpha, made.bursting = 0, 1, nil
+	made.alpha = 1
+	made.clock = carry and math.max(made.clock, START_SECONDS) or 0
 	if not pcall(function()
+		SetLook(made, look, carry)
 		made.frame:SetAlpha(1)
 		made.frame:SetScript("OnUpdate", made.step)
 		-- The first cell at once, so the loop's last cell never shows before the burst.
@@ -284,6 +427,10 @@ local function Halt(made)
 		made.frame:SetScript("OnUpdate", nil)
 		made.frame:SetAlpha(0)
 		made.alpha = 0
+		-- Held where it is, for a proc that comes again (Play, carry).
+		if made.soft then
+			made.soft.pulse:Pause()
+		end
 	end) then
 		Refused()
 	end
@@ -313,8 +460,9 @@ local function Want(button)
 	end)
 end
 
--- What a button shows now: the border of the proc that came up first, and the glow unless the game glows it.
-Refresh = function(button)
+-- What a button shows now: the border of the proc that came up first, and the glow unless the game glows it, in that proc's colour (gold for
+-- the glow of the game's proc on one of Flat UI's own buttons alone). carry: the proc came again soon after it ended (Play).
+Refresh = function(button, carry)
 	local list, first = users[button], nil
 	for _, mark in pairs(list or {}) do
 		if first == nil or mark[4] < first[4] then
@@ -339,9 +487,11 @@ Refresh = function(button)
 			Halt(made)
 		end
 	elseif made then
-		if made.step then
-			Play(made)
+		if made.soft then
+			local colour = first or GOLD
+			ns.ProcGlowTint(made.soft, colour[1], colour[2], colour[3])
 		end
+		Play(made, carry)
 	elseif made == nil then
 		Want(button)
 	end
@@ -361,7 +511,7 @@ end
 -- The buttons of a proc are the set: the ones that held it before and are not in it lose it.
 local Sync
 
-local function Apply(rec, set)
+local function Apply(rec, set, carry)
 	local id = rec.entry.id
 	for button in pairs(rec.set) do
 		if not set[button] then
@@ -377,7 +527,7 @@ local function Apply(rec, set)
 			users[button] = list
 		end
 		list[id] = { r, g, b, rec.order }
-		Refresh(button)
+		Refresh(button, carry)
 	end
 	rec.set = set
 end
@@ -483,7 +633,8 @@ function ns.ProcGlowPrepare(entries)
 	end
 end
 
-function ns.ProcGlowStart(entry)
+-- A proc came up. again: it came again soon after it ended (Procs.lua, Start), so its glow carries on without the burst.
+function ns.ProcGlowStart(entry, again)
 	if type(entry) ~= "table" or entry.id == nil then
 		return
 	end
@@ -503,7 +654,7 @@ function ns.ProcGlowStart(entry)
 	for button in pairs(set) do
 		Sync(button)
 	end
-	Apply(rec, set)
+	Apply(rec, set, again == true)
 end
 
 -- The glow of the game's proc on one of Flat UI's own buttons, given by the proc row of the Glows and animations page: on is true while the spell of the
@@ -533,10 +684,23 @@ function ns.ProcGlowStop(entry)
 	end
 end
 
--- The row Glow on the action button changed: the procs that are up take the border and the glow, or give them back.
-function ns.ProcGlowChanged()
+-- A row of the glow changed. Glow on the action button: the procs that are up take the border and the glow, or give them back. Glow style: every
+-- glow that is playing takes the new look at once, and so do the art's pulse (ProcArt.lua) and the glow on the cooldown icons (CooldownLooks.lua).
+function ns.ProcGlowChanged(path)
 	for _, rec in pairs(active) do
 		Apply(rec, Wanted() and Holders(rec.entry) or {})
+	end
+	for _, made in pairs(glows) do
+		if made and made.playing then
+			Play(made)
+		end
+	end
+	if path == KEY .. ".glowStyle" then
+		for _, name in ipairs({ "ProcArtChanged", "CooldownProcLook" }) do
+			if type(ns[name]) == "function" then
+				pcall(ns[name])
+			end
+		end
 	end
 end
 
@@ -556,13 +720,14 @@ function ns.ProcGlowLine(entry)
 		local list = users[button]
 		border = border or (list ~= nil and list[entry.id] ~= nil and drawn[button] == true)
 		local made = glows[button]
-		animation = animation or (made and made.textured) == true
+		animation = made and LookOf(made) or animation
 	end
 	if n == 0 then
 		local light = Plain(entry.lights and entry.lights[1], "number") and SpellName(entry.lights[1])
 		return ("Glow: no button holds %s"):format(light or (Plain(entry.name, "string") and entry.name) or "this proc")
 	end
-	return ("Glow: %d %s, border %s, animation %s%s"):format(n, n == 1 and "button" or "buttons", border and "yes" or "no", animation and "yes" or "no",
+	return ("Glow: %d %s, border %s, animation %s%s"):format(n, n == 1 and "button" or "buttons", border and "yes" or "no",
+		animation == "game" and "yes, as the game has it" or animation == "soft" and "yes, soft" or "no",
 		ns.Enabled("actionbars") and "" or " (no border while Restyle action bars is off)")
 end
 

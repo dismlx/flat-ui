@@ -933,6 +933,7 @@ ns.SETUP_STEPS = {
 		{ "trackers.artAlpha", "r", "mock-proc" },
 		{ "trackers.artY", "r", "mock-proc" },
 		{ "trackers.glow", "c", "mock-proc" },
+		{ "trackers.glowStyle", "o", "mock-proc" },
 	} },
 	{ id = "tr-def", area = "Trackers", title = "Defensives on you", draw = "mock-tracker", built = true, rows = {
 		{ "defensives.enabled", "c", "mock-tracker" },

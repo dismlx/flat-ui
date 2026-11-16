@@ -1,8 +1,10 @@
 local _, ns = ...
 
 -- Proc alerts: the kind of tracker called proc. A proc shows nothing until the buff of the proc is up, then its icon with the time left, a
--- sound once, and it ends when the buff ends, when the spell it is for is cast or when its time is up. Where the game hides the buff in a
--- fight, the game's own icon for the buff (TrackerSlots.lua) shows the proc. The game's overlay events and IsSpellOverlayed are a second
+-- sound once, and it ends when the buff ends, when the spell it is for is cast or when its time is up. A proc that starts again within 3 seconds
+-- of its end (a reactive ability after each dodge, Execute as rage refills) is the same alert going on: no sound, and its art and glow carry on
+-- without fading in or bursting again (Start). Where the game hides the buff in a fight, the game's own icon for the buff (TrackerSlots.lua)
+-- shows the proc. The game's overlay events and IsSpellOverlayed are a second
 -- way to know that a proc is up, for the trigger overlay: SpellActivationOverlay.lua loads only for the game types cata, mists and mainline
 -- (Blizzard_FrameXML.toc:109-110), so on this client no event is expected, and the check says how many came. The art and the glow of a
 -- proc are other files that provide ns.ProcArtShow, ns.ProcArtHide, ns.ProcGlowStart and ns.ProcGlowStop; each is called here only when it
@@ -20,9 +22,10 @@ local IsSecret = ns.IsSecret
 -- KITS: the sound choices of the page by their saved word, the sound kit each stands for. The first five are the kits of ns.SOUNDS in
 --   IconRow.lua; alarm is ALARM_CLOCK_WARNING_3 and whisper UI_RAID_BOSS_WHISPER_WARNING (SoundKitConstants.lua:95, 136).
 -- FALL: the kit the game's own overlay plays (SpellActivationOverlay.lua:134), tried when the game refuses a kit.
--- COUNT: the counter of each event of the game's overlay.
+-- COUNT: the counter of each event of the game's overlay. AGAIN: the seconds after the end of an alert within which the same proc starting again
+-- carries it on (Start).
 local K = {
-	MAX_SPELLS = 40, MAX_TIME = 120, SIZE = 48, MAX_ID = 2147483647,
+	MAX_SPELLS = 40, MAX_TIME = 120, SIZE = 48, MAX_ID = 2147483647, AGAIN = 3,
 	KITS = { spell = 23287, chimes = 316736, bell = 316773, warhorn = 316723, raid = 8959, alarm = 12889, whisper = 37666 },
 	FALL = 23287,
 	NO_SOUND = "Trackers: the game played no sound, so proc alerts are silent.",
@@ -36,9 +39,10 @@ local K = {
 -- The automatic procs: the list built last, every entry ever built by its id, and whether the list is built again when next asked.
 local A = { list = {}, byId = {}, stale = true }
 -- What is known of each proc, by the id of its entry: the entry while its alert is up, the moment the alert started, the overlay signal and the
--- glow signal, an alert ended by a cast or by its time until the buff is gone, and the last sound in words. seen counts the events heard.
--- triggers are the ways a proc is known to be up, by name.
-local P = { up = {}, since = {}, signalled = {}, glow = {}, ended = {}, played = {}, triggers = {}, seen = { show = 0, hide = 0, glowShow = 0, glowHide = 0 } }
+-- glow signal, an alert ended by a cast or by its time until the buff is gone, the last sound in words and the moment the alert last ended
+-- (stopped). seen counts the events heard. triggers are the ways a proc is known to be up, by name.
+local P = { up = {}, since = {}, signalled = {}, glow = {}, ended = {}, played = {}, stopped = {}, triggers = {},
+	seen = { show = 0, hide = 0, glowShow = 0, glowHide = 0 } }
 
 local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
@@ -238,11 +242,11 @@ local function ArtData(entry)
 	return nil
 end
 
--- Shows the art of a proc that is up, unless it has none.
-local function ShowArt(entry)
+-- Shows the art of a proc that is up, unless it has none. again: at once, with no fade-in (Start).
+local function ShowArt(entry, again)
 	local art = ArtData(entry)
 	if art ~= false then
-		Call(ns.ProcArtShow, entry, art)
+		Call(ns.ProcArtShow, entry, art, again)
 	end
 end
 
@@ -278,16 +282,24 @@ local function Sound(entry, always)
 	return word
 end
 
+-- An alert starts: the sound once, the art and the glow. A proc that starts again within K.AGAIN seconds of the end of its alert, or while it is
+-- up, is the same alert going on (Overpower after each dodge, Revenge, Execute as rage refills): no sound, the art is there at
+-- once with no fade-in, and the glow carries on without its burst.
 local function Start(entry)
-	local id = entry.id
-	P.up[id], P.since[id] = entry, Now()
-	Sound(entry, false)
-	ShowArt(entry)
-	Call(ns.ProcGlowStart, entry)
+	local id, now = entry.id, Now()
+	local ended = P.stopped[id]
+	local again = P.up[id] ~= nil or (ended ~= nil and now >= ended and now - ended <= K.AGAIN)
+	P.up[id], P.since[id] = entry, now
+	if not again then
+		Sound(entry, false)
+	end
+	ShowArt(entry, again)
+	Call(ns.ProcGlowStart, entry, again)
 end
 
 local function Stop(entry)
 	P.up[entry.id] = nil
+	P.stopped[entry.id] = Now()
 	Call(ns.ProcArtHide, entry)
 	Call(ns.ProcGlowStop, entry)
 end
@@ -299,7 +311,7 @@ local function Gone(id)
 	if entry then
 		Stop(entry)
 	end
-	P.since[id], P.signalled[id], P.glow[id], P.ended[id] = nil, nil, nil, nil
+	P.since[id], P.signalled[id], P.glow[id], P.ended[id], P.stopped[id] = nil, nil, nil, nil, nil
 	for _, def in pairs(P.triggers) do
 		if type(def.Forget) == "function" then
 			pcall(def.Forget, id)
@@ -1007,11 +1019,12 @@ local function Test(entry, on)
 	P.before = P.before or {}
 	if not on then
 		Stop(entry)
+		-- An alert that was up before the test carries on.
 		if P.before[entry.id] then
 			P.before[entry.id] = nil
 			P.up[entry.id] = entry
-			ShowArt(entry)
-			Call(ns.ProcGlowStart, entry)
+			ShowArt(entry, true)
+			Call(ns.ProcGlowStart, entry, true)
 		end
 		return nil
 	end

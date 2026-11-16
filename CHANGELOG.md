@@ -1,6 +1,9 @@
 ## 0.5.15
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Trackers**, **Proc alerts**, **Glow on the action button**, new row **Glow style** (**Soft**): the glow is now a faint ring in the proc's colour that hugs the button's edge and breathes slowly, reaching only a few pixels past it, so it no longer lies over the buttons beside it, and it starts with no burst. **As the game has it** brings back the game's burst and loop, and the game's own pulse and fade-in of the art. The same style draws the glow of the game's proc on Flat UI's own buttons (**Proc glow**, **Game glow**) and **Glow on procs** on the cooldown icons. The setup drawing shows it.
+- **Trackers**, **Proc alerts**, **Art beside the character**: the art is larger and fainter by default, **Art size** 150% (now up to 300%) and **Art opacity** 40%, with a slower, smaller pulse and a softer fade-in. A size or opacity you set yourself stays; 100% and 65% are the game's.
+- **Trackers**, **Proc alerts**: a proc that comes again within 3 seconds of its end, such as **Overpower** after each dodge, **Revenge** or **Execute** as your rage refills, no longer plays its sound again, and its art and glow carry on without fading in or bursting again.
 
 ## 0.5.14
 

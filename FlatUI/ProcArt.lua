@@ -3,10 +3,14 @@ local _, ns = ...
 -- The large art beside the character while a proc is up. The game's own overlay (SpellActivationOverlay.lua) is not built in Forever
 -- (Blizzard_FrameXML.toc:109-110), so the pieces are drawn here on frames of the addon, laid out as the game lays them out
 -- (SpellActivationOverlay.lua:75-127): a holder of 204.8 square at the middle of the screen, a piece 102.4 by 204.8 to the left of it, its
--- mirror to the right, 204.8 by 102.4 above and below, 102.4 square at the corners. A piece fades in over 0.2 s, pulses while the proc
--- is up and fades out over 0.1 s (SpellActivationOverlay.xml:3-24). Procs.lua calls ns.ProcArtShow when a proc comes up and
--- ns.ProcArtHide when it ends. Every call here is a frame, texture or animation call on a frame of the addon that is not protected, so
--- all of it is allowed in combat; the holder is made out of combat like every Flat UI frame.
+-- mirror to the right, 204.8 by 102.4 above and below, 102.4 square at the corners, all times Art size, which is 150% by default (the game's
+-- is 100%), and the holder at Art opacity, 40% by default (the game's is 65%), so the art is large and faint. With Glow style Soft (the
+-- default) a piece fades in over 0.4 s and pulses gently while the proc is up, 1.035 times and back over a second each way; with As the game
+-- has it it fades in over 0.2 s and pulses as the game's does, 1.08 times and back over half a second each way (SpellActivationOverlay.xml:3-24).
+-- Either way it fades out over 0.1 s. Each piece has both looks made with it and plays the one the row asks for. Procs.lua calls
+-- ns.ProcArtShow when a proc comes up, with again true when the same proc came again soon after it ended (then the art is there at once,
+-- with no fade-in), and ns.ProcArtHide when it ends. Every call here is a frame, texture or animation call on a frame of the addon that is not
+-- protected, so all of it is allowed in combat; the holder is made out of combat like every Flat UI frame.
 -- A second way to draw, for a proc whose buff the game hides in a fight: ns.ProcArtParts makes the same pieces as textures that are children of
 -- the button of the game's own icon of the buff (TrackerSlots.lua), inside the function the game calls while it builds the slot. The game shows
 -- that button exactly while the buff is up, so these pieces show exactly then. While that icon is on show the pieces of the holder stay hidden.
@@ -18,12 +22,15 @@ local KEY = "trackers"
 local IsSecret = ns.IsSecret
 
 -- LONG, SHORT: the long and short side of a piece, units. FADE_IN, FADE_OUT, PULSE_UP, PULSE_DOWN, PULSE_TIME: the game's animation.
--- MAX: procs drawn at once. POOL: pieces made with the holder. ARC: the plain arc of a proc with no art. FALLBACK: the colour when nothing
+-- SOFT_FADE_IN, SOFT_UP, SOFT_DOWN, SOFT_TIME: the softer one of Glow style Soft. SIZE, ALPHA: Art size and Art opacity when the row gives no
+-- number. MAX: procs drawn at once. POOL: pieces made with the holder. ARC: the plain arc of a proc with no art. FALLBACK: the colour when nothing
 -- gives one. SIDES: pieces of a location that stands for two. NAMES: what the check says. BY_NUMBER: Enum.ScreenLocationType by value
 -- (ScreenLocationConstantsDocumentation.lua:13-24).
 local K = {
 	LONG = 204.8, SHORT = 102.4,
 	FADE_IN = 0.2, FADE_OUT = 0.1, PULSE_UP = 1.08, PULSE_DOWN = 0.9259, PULSE_TIME = 0.5,
+	SOFT_FADE_IN = 0.4, SOFT_UP = 1.035, SOFT_DOWN = 1 / 1.035, SOFT_TIME = 1,
+	SIZE = 150, ALPHA = 40,
 	MAX = 3, POOL = 12,
 	ARC = "Interface\\AddOns\\FlatUI\\Media\\ProcArc.tga",
 	FALLBACK = { 1, 209 / 255, 0 },
@@ -72,6 +79,11 @@ end
 
 local function On()
 	return ns.Get(KEY .. ".art") == true
+end
+
+-- The look of the art's animation: "game" with Glow style As the game has it, else "soft".
+local function Look()
+	return ns.Get(KEY .. ".glowStyle") == "game" and "game" or "soft"
 end
 
 function ns.ProcArtOn()
@@ -169,12 +181,60 @@ end
 local function Release(piece)
 	piece.live = false
 	piece.byGame = false
-	piece.animIn:Stop()
+	for _, set in pairs(piece.looks) do
+		set.fadeIn:Stop()
+		set.pulse:Stop()
+	end
 	piece.animOut:Stop()
-	piece.pulse:Stop()
 	piece:Hide()
 	fading[piece] = nil
 	pool[#pool + 1] = piece
+end
+
+-- A pulse of a piece: up by `up`, then by `down` back to its size, `seconds` each, eased at both ends, again and again.
+local function Pulse(piece, up, down, seconds)
+	local group = piece:CreateAnimationGroup()
+	group:SetLooping("REPEAT")
+	for order, scale in ipairs({ up, down }) do
+		local step = group:CreateAnimation("Scale")
+		step:SetScaleFrom(1, 1)
+		step:SetScaleTo(scale, scale)
+		step:SetDuration(seconds)
+		step:SetSmoothing("IN_OUT")
+		step:SetOrder(order)
+	end
+	return group
+end
+
+-- A fade-in of a piece over `seconds`, then its pulse while the proc is up and the art pulses.
+local function FadeIn(piece, seconds, pulse)
+	local group = piece:CreateAnimationGroup()
+	local fadeIn = group:CreateAnimation("Alpha")
+	fadeIn:SetFromAlpha(0)
+	fadeIn:SetToAlpha(1)
+	fadeIn:SetDuration(seconds)
+	group:SetScript("OnPlay", function()
+		piece:SetAlpha(0)
+	end)
+	group:SetScript("OnFinished", function()
+		piece:SetAlpha(1)
+		if piece.live and piece.pulses then
+			pulse:Play()
+		end
+	end)
+	return group
+end
+
+-- Gives a piece the fade-in and the pulse of a look (piece.animIn, piece.pulse); those of the other look stop.
+local function UseLook(piece, look)
+	piece.look = look
+	for name, set in pairs(piece.looks) do
+		if name ~= look then
+			set.fadeIn:Stop()
+			set.pulse:Stop()
+		end
+	end
+	piece.animIn, piece.pulse = piece.looks[look].fadeIn, piece.looks[look].pulse
 end
 
 local function MakePiece()
@@ -184,20 +244,12 @@ local function MakePiece()
 	piece.tex = piece:CreateTexture(nil, "ARTWORK", nil, 0)
 	ns.Own[piece.tex] = true
 	piece.tex:SetAllPoints(piece)
-	piece.animIn = piece:CreateAnimationGroup()
-	local fadeIn = piece.animIn:CreateAnimation("Alpha")
-	fadeIn:SetFromAlpha(0)
-	fadeIn:SetToAlpha(1)
-	fadeIn:SetDuration(K.FADE_IN)
-	piece.animIn:SetScript("OnPlay", function()
-		piece:SetAlpha(0)
-	end)
-	piece.animIn:SetScript("OnFinished", function()
-		piece:SetAlpha(1)
-		if piece.live and piece.pulses then
-			piece.pulse:Play()
-		end
-	end)
+	piece.looks = {}
+	for look, steps in pairs({ game = { K.FADE_IN, K.PULSE_UP, K.PULSE_DOWN, K.PULSE_TIME },
+		soft = { K.SOFT_FADE_IN, K.SOFT_UP, K.SOFT_DOWN, K.SOFT_TIME } }) do
+		local pulse = Pulse(piece, steps[2], steps[3], steps[4])
+		piece.looks[look] = { pulse = pulse, fadeIn = FadeIn(piece, steps[1], pulse) }
+	end
 	piece.animOut = piece:CreateAnimationGroup()
 	local fadeOut = piece.animOut:CreateAnimation("Alpha")
 	fadeOut:SetFromAlpha(1)
@@ -206,16 +258,7 @@ local function MakePiece()
 	piece.animOut:SetScript("OnFinished", function()
 		Release(piece)
 	end)
-	piece.pulse = piece:CreateAnimationGroup()
-	piece.pulse:SetLooping("REPEAT")
-	for order, scale in ipairs({ K.PULSE_UP, K.PULSE_DOWN }) do
-		local step = piece.pulse:CreateAnimation("Scale")
-		step:SetScaleFrom(1, 1)
-		step:SetScaleTo(scale, scale)
-		step:SetDuration(K.PULSE_TIME)
-		step:SetSmoothing("IN_OUT")
-		step:SetOrder(order)
-	end
+	UseLook(piece, Look())
 	return piece
 end
 
@@ -235,7 +278,7 @@ end
 -- for the third. The offset of an outside piece is the game's, a short side, and is not scaled.
 local function Spot(name, art, slot)
 	local g = G[name]
-	local size = Setting("artSize", 100) / 100 * art.scale
+	local size = Setting("artSize", K.SIZE) / 100 * art.scale
 	local w, h = g.w * size, g.h * size
 	local x, y = g.x, 0
 	if slot == 2 then
@@ -266,8 +309,9 @@ local function GameIcon(entry)
 	return type(call) == "function" and call(entry) == true
 end
 
--- Draws a proc's pieces with what it has now, for a proc that came up and for a setting that changed.
-local function Layout(rec)
+-- Draws a proc's pieces with what it has now, for a proc that came up and for a setting that changed. again: the proc came again soon after it
+-- ended, so a new piece is there at once, with no fade-in. A piece that is up when Glow style changes takes the other look at once.
+local function Layout(rec, again)
 	local r, g, b = ColourOf(rec.entry, rec.art)
 	local game = GameIcon(rec.entry)
 	rec.drew = true
@@ -302,13 +346,31 @@ local function Layout(rec)
 			piece.tex:SetVertexColor(r, g, b)
 			-- Art that does not pulse (Clearcasting's arcs) stays still once faded in.
 			piece.pulses = rec.art.pulse
+			local look = Look()
+			if piece.look ~= look then
+				local moving = piece.animIn:IsPlaying() or piece.pulse:IsPlaying()
+				UseLook(piece, look)
+				if moving and not piece.fresh then
+					piece:SetAlpha(1)
+					if piece.pulses then
+						piece.pulse:Play()
+					end
+				end
+			end
 			if not piece.pulses and piece.pulse:IsPlaying() then
 				piece.pulse:Stop()
 			end
 			if piece.fresh then
 				piece.fresh = false
 				piece:Show()
-				piece.animIn:Play()
+				if again then
+					piece:SetAlpha(1)
+					if piece.pulses then
+						piece.pulse:Play()
+					end
+				else
+					piece.animIn:Play()
+				end
 			end
 			if game and not piece.byGame then
 				piece.byGame = true
@@ -325,7 +387,7 @@ end
 local function PlaceHolder()
 	holder:ClearAllPoints()
 	holder:SetPoint("CENTER", UIParent, "CENTER", 0, Setting("artY", 0))
-	holder:SetAlpha(Setting("artAlpha", 65) / 100)
+	holder:SetAlpha(Setting("artAlpha", K.ALPHA) / 100)
 end
 
 local function Build()
@@ -394,9 +456,10 @@ end
 
 -- The calls for Procs.lua ---------------------------------------------------------------------------------------------------------
 
--- A proc came up, or its art changed. data is what Procs.lua gives: file, location, scale, r, g, b, all optional. Nothing is drawn with the
--- art off, and nothing beyond three procs at once.
-function ns.ProcArtShow(entry, data)
+-- A proc came up, or its art changed. data is what Procs.lua gives: file, location, scale, r, g, b, all optional. again: the proc came again
+-- soon after it ended (Procs.lua, Start), so its art is there at once, with no fade-in. Nothing is drawn with the art off, and nothing beyond
+-- three procs at once.
+function ns.ProcArtShow(entry, data, again)
 	if type(entry) ~= "table" or not On() then
 		return false
 	end
@@ -415,7 +478,7 @@ function ns.ProcArtShow(entry, data)
 	end
 	last[rec.id or entry] = { file = art.file, location = art.location, arc = art.arc }
 	if holder then
-		Layout(rec)
+		Layout(rec, again == true)
 		last[rec.id or entry].drew = rec.drew
 	else
 		ns.OutOfCombat(function()
@@ -483,7 +546,8 @@ function ns.ProcArtReset()
 	end
 end
 
--- A row of Proc alerts changed: the art goes at once when it is off, else the holder and the pieces take the new size, height or opacity.
+-- A row of Proc alerts changed: the art goes at once when it is off, else the holder and the pieces take the new size, height or opacity, and
+-- the look of Glow style (ns.ProcGlowChanged calls this for that row).
 function ns.ProcArtChanged()
 	if holder then
 		if not On() then
@@ -570,7 +634,7 @@ end
 -- What the pieces on the button are drawn with, as one text: the row's state, size, opacity and height, the colour, the place and the file.
 local function Key(entry, art, slot)
 	local r, g, b = ColourOf(entry, art)
-	return table.concat({ On() and "on" or "off", Setting("artSize", 100), Setting("artAlpha", 65), Setting("artY", 0), r, g, b, slot,
+	return table.concat({ On() and "on" or "off", Setting("artSize", K.SIZE), Setting("artAlpha", K.ALPHA), Setting("artY", 0), r, g, b, slot,
 		tostring(art.file), art.location }, "|")
 end
 
@@ -617,7 +681,7 @@ function ns.ProcArtParts(rec, button, entry)
 		local key = Key(entry, art, slot)
 		local r, g, b = ColourOf(entry, art)
 		local ratio = Ratio(button)
-		local alpha = On() and Setting("artAlpha", 65) / 100 or 0
+		local alpha = On() and Setting("artAlpha", K.ALPHA) / 100 or 0
 		local height = Setting("artY", 0)
 		for name, texture in pairs(pieces) do
 			local geometry, w, h, x, y = Spot(name, art, slot)

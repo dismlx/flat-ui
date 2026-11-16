@@ -11,7 +11,8 @@ local _, ns = ...
 -- Sweeps are Cooldown frames set to a start and a length, then paused (FrameAPICooldownDocumentation.lua:251), so a sample time stays put.
 -- The layout of each part is the one of its module: Trackers.lua 2920-2985 and TrackerShapes.lua for trackers, Cooldowns.lua 940-980 for the
 -- row of cooldowns, PartyCooldowns.lua 541-600 for the rows beside the party frames, EnemyCooldowns.lua E.Spot, E.Fit and E.PlaceBar for the
--- rows of enemy abilities, ProcArt.lua 52-127 and 190-215 for the proc art, ProcGlow.lua for the glow. The player portrait is SetPortraitTexture
+-- rows of enemy abilities, ProcArt.lua (G, Spot and PlaceHolder) for the proc art, ProcGlow.lua for the glow, whose soft look it makes with
+-- ns.ProcGlowSoft and shows still at the top of its breath. The player portrait is SetPortraitTexture
 -- (UnitDocumentation.lua:572) and the clip of the proc screen is SetClipsChildren (SimpleFrameAPIDocumentation.lua:1218).
 
 ns.SetupDrawings = ns.SetupDrawings or {}
@@ -814,7 +815,8 @@ local function BuildProc(stage)
 	if type(SetPortraitTexture) == "function" then
 		pcall(SetPortraitTexture, s.portrait, "player")
 	end
-	-- The action button that glows: an icon with the outline of the addon, the border of the proc and the game's glow.
+	-- The action button that glows: an icon with the outline of the addon, the border of the proc and its glow, the soft look of ProcGlow.lua
+	-- or the game's loop (Glow style).
 	s.button = U.Frame(s.root)
 	s.button:SetSize(44, 44)
 	s.buttonIcon = U.Tex(s.button, "ARTWORK", 0)
@@ -836,6 +838,8 @@ local function BuildProc(stage)
 			s.glowRect = { info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord }
 		end
 	end
+	local made, soft = pcall(ns.ProcGlowSoft, s.button, s.button)
+	s.soft = made and type(soft) == "table" and soft or nil
 	s.buttonLabel = U.Str(s.root, "GameFontHighlightSmall", "CENTER")
 	s.buttonLabel:SetText("Action button")
 	s.parts["trackers.art"] = s.pieces[1]
@@ -844,6 +848,7 @@ local function BuildProc(stage)
 	s.parts["trackers.artY"] = s.holder
 	s.parts["trackers.procColour"] = s.pieces[1]
 	s.parts["trackers.glow"] = s.glow
+	s.parts["trackers.glowStyle"] = s.glow
 	return s
 end
 
@@ -867,9 +872,17 @@ local function DrawProc(s)
 	s.buttonLabel:SetWidth(120)
 	U.At(s.buttonLabel, "TOP", s.button, "BOTTOM", 0, -14)
 	U.Show(s.glow, glow)
+	-- Soft, or As the game has it on a client without the game's loop, as ProcGlow.lua's LookOf chooses.
+	local soft = s.soft ~= nil and (read("trackers.glowStyle") ~= "game" or not s.glowFile)
+	s.glowTex:SetShown(not soft)
+	if s.soft then
+		U.Show(s.soft.frame, glow and soft)
+		ns.ProcGlowTint(s.soft, r, g, b)
+		s.soft.frame:SetAlpha(s.soft.high)
+	end
 	if s.glowFile then
 		pcall(s.glowTex.SetAtlas, s.glowTex, PROC.atlas)
-		-- First cell of the 5 by 6 flipbook (ProcGlow.lua:97-99), inside the atlas rectangle.
+		-- First cell of the 5 by 6 flipbook (ProcGlow.lua, Cell), inside the atlas rectangle.
 		local rect = s.glowRect
 		if rect and type(rect[1]) == "number" and type(rect[2]) == "number" and type(rect[3]) == "number" and type(rect[4]) == "number" then
 			s.glowTex:SetTexCoord(rect[1], rect[1] + (rect[2] - rect[1]) * 0.2, rect[3], rect[3] + (rect[4] - rect[3]) / 6)

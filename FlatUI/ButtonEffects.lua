@@ -77,7 +77,8 @@ local function Plainly(button)
 end
 
 -- One of Flat UI's own buttons (OwnBars.lua) has no alert frame of the game's. OwnPaint.lua says when the spell of its slot starts or stops
--- glowing (ns.OnOwnProc), and the proc row decides what that shows: the game's glow drawn by ProcGlow.lua's frame, the coloured border, or nothing.
+-- glowing (ns.OnOwnProc), and the proc row decides what that shows: the game's glow drawn by ProcGlow.lua's frame, in the look Glow style of the
+-- Trackers page gives it (soft by default), the coloured border, or nothing.
 -- The rotation helper highlight, the cast fill animation and the interrupt flash are not drawn on these buttons.
 local procOn = setmetatable({}, WEAK)
 local listenedOwn = false
