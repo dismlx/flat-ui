@@ -1,0 +1,1892 @@
+local _, ns = ...
+
+-- Bags, the two windows: FlatUIBags, all the bags in one, and FlatUIBank. Each is a frame of Flat UI's own on UIParent in the MEDIUM strata among
+-- the game's windows, raised when clicked (SetToplevel, WL/uiobjects.yaml:4770) and kept on the screen (SetClampedToScreen), in the look of the
+-- Windows page: the Background colour at Window opacity with a thin border (ns.Outline), and its buttons in Button and slot colour with the
+-- Highlight colour, as Windows draws the game's windows and Clean up bags its button (Windows.lua:539-552, 815-855; BagSort.lua:433-446).
+-- The title bar holds, left to right:
+-- the character picker, the name of the character shown, in its class colour (RAID_CLASS_COLORS), with "as of" and the day of what is shown when
+-- it is not live (date and time, WL/apis.yaml:35306, 42024). A click opens a menu of Flat UI's own (BagsLayout.lua) with every character Bags
+-- keeps, by realm, this realm first; while a search is typed each line says how many items match there, worked out one character a frame once the
+-- menu opens, never while the player types, from names the client has loaded only;
+-- the search box (B.Search.Box, BagsSearch.lua); the view button, Sections or Bag by bag; the sort button, on live slots only: ns.BagSort.Run and
+-- ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the game is asked to sort (BagSort tells its
+-- watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving, six and a half seconds at most; the bank
+-- button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close button, a cross with no box, as Windows draws the game's.
+-- Dragging the title bar moves the window (StartMoving and StopMovingOrSizing, :4797, 4813, with SetDontSavePosition and SetUserPlaced, :4605,
+-- 4778, so the client keeps no place of its own). Where it is let go is saved as its spot in the movers: the box of its entry in Movers.lua, put
+-- with its corner at the window's, goes to ns.MoverKit.Commit (Movers.lua:1672-1710, 4529-4532), and the window hangs from that spot
+-- (ns.MoverSpot, Movers.lua:819-837), the bag window by its bottom right corner and the bank window by its top left, so each grows away from it,
+-- as the Threat list hangs from its spot (Threat.lua:396-413). /flatui move shows the same box.
+-- The content scrolls in a scroll frame of Flat UI's own (SetScrollChild, SetVerticalScroll, :8020, 8028) once the window would be taller than 85%
+-- of the screen, with a thin bar in the colours of Windows' scroll bars (Windows.lua:1191-1214), the wheel and the bar's thumb (GetCursorPosition,
+-- WL/apis.yaml:36266). It is as wide as the layout (BagsLayout.lua) and its padding of 8 on each side.
+-- The bag window's footer has the gold of the character shown (Errands.Money, Errands.lua:65-85), whose tooltip lists the characters of this realm
+-- and its connected realms, richest first, with their total, and one line for those of other realms; its free slots by kind of bag (B.Data.Free),
+-- and, at a merchant, Sell junk (N) (Errands.Button, Errands.lua:127-202): N is ns.ErrandsJunkCount, what the next pass of Errands would sell, and a
+-- click runs ns.ErrandsSellJunk, which sells as Errands sells and says why when it cannot. The bank window's footer has the free slots of the bank
+-- and, at the banker with a search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit, B.Bank.TakeOut,
+-- B.Bank.Busy); the row above it is BagsBank.lua's (B.Bank.Slots), sized as that file leaves it. A bank never seen says how to keep one.
+-- Escape closes either window: both are named in UISpecialFrames, as the options window is (Panel.lua:2700-2708), whose windows the game's
+-- CloseSpecialWindows hides (UIParentPanelManager.lua:21-27). The bag window's OnHide is the one place the bags tidy up, whatever hid it: it hides
+-- the game's bag windows Bags parked (B.HideGameBags), drops every hold (B.Hold), lets New items go (B.Categories.New.Close), forgets the places of
+-- the layout (B.Layout.Closed), clears the search when the bank window is not shown, and goes back to the logged-in character (B.SetViewing). The
+-- bank window's OnHide forgets its places, clears the search when the bag window is not shown and goes back to the logged-in character; ending
+-- the visit to the banker when it hides is BagsBank.lua's. Opening and closing play the game's own sounds of its bag windows (PlaySound with
+-- SOUNDKIT.IG_BACKPACK_OPEN and IG_BACKPACK_CLOSE, Mainline/ContainerFrame.lua:791, 819), once a frame.
+-- Warm (B.Window.Warm): after BagsItems.lua made some of the game's item buttons, the hidden bag window shows for one frame at alpha 0 with every
+-- live button shown (B.Buttons.ShowAll) and hides on the next frame (C_Timer.After), doing none of the work of an opening or a closing, so that no
+-- button is first shown in a fight; with the window open only the new buttons show that way, and the layout places them on the next frame.
+-- Tooltips are GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, Hide). Movers asks ns.BagsWindowShown and ns.BankWindowShown whether
+-- the windows have a handle (while Bags is on), and calls ns.BagsWindowMoved and ns.BankWindowMoved when their spots are set or put back.
+-- Every frame, texture and font string here is Flat UI's own. This file owns no event of the module.
+
+local B = ns.Bags
+local Window = B.Window
+local Layout = B.Layout
+local Data = B.Data
+local Categories = B.Categories
+local Search = B.Search
+local Buttons = B.Buttons
+local Bank = B.Bank
+local Errands = ns.Errands
+
+-- The windows by their global names, the corner each hangs from, and the boxes of their entries in Movers.lua with where they are with no spot
+-- saved (width, height, x, y from that corner of the screen).
+local NAMES = { bags = "FlatUIBags", bank = "FlatUIBank" }
+local CORNERS = { bags = "BOTTOMRIGHT", bank = "TOPLEFT" }
+local BOXES = { bags = { 360, 260, -60, 110 }, bank = { 420, 300, 25, -110 } }
+-- Units: the padding on each side, the title bar, the footer, the space between them and the content, a button of the title bar and the space
+-- between two, the close button, the least room of the picker and of the search box, and the row of BagsBank.lua before it sizes it.
+local PAD, BAR, FOOT, INNER = 8, 26, 22, 4
+local ICON, ICON_GAP, CLOSE = 18, 3, 18
+local PICKER_LEAST, PICKER_MOST, SEARCH_LEAST, SEARCH_HEIGHT = 64, 0.5, 70, 18
+local STRIP = 26
+-- The least height of the content, and of the room for a message; the share of the screen a window may take.
+local LEAST_VIEW, MESSAGE_VIEW, MOST = 40, 64, 0.85
+-- The scroll bar: its width, the least height of its thumb, and the rows one turn of the wheel scrolls.
+local TRACK_W, THUMB_LEAST, WHEEL_ROWS = 4, 16, 2
+-- The cell pitch and the button of BagsLayout.lua, for the rows the wheel scrolls.
+local PITCH, SLOT = 40, 37
+-- The buttons of the footer.
+local SELL_W, MOVE_W, FOOT_BUTTON = 108, 96, 18
+-- How often the footer is read again while a pass runs; how long the sort button looks busy at most, and the least time after the sort before a
+-- layout ends it; how many characters the gold tooltip names.
+local POLL, BUSY_MOST, BUSY_LEAST, MOST_GOLD = 0.5, 6.5, 0.35, 15
+-- The holds of Bags.lua that the bag window's closing drops.
+local HOLDS = { "bank", "trade", "command" }
+local KEYRING = -1
+-- The text-dim of the windows (Threat.lua), and colours for a free count that is low or nothing.
+local DIM = { 0.66, 0.68, 0.62 }
+local DIM_HEX, WHITE_HEX, LOW_HEX, NONE_HEX = "|cffa8ad9e", "|cffffffff", "|cffffd100", "|cffff5a3d"
+local LOW = 4
+-- The separators under the title bar and over the footer, white at this opacity.
+local SEPARATOR = 0.07
+-- The glyphs of the title bar's buttons, in units of an 18 unit button: rectangles { x, y, width, height } from its top left corner, and strokes
+-- { x1, y1, x2, y2 }. The sort glyph is Clean up bags' three bars (BagSort.lua:37-41).
+local GLYPHS = {
+	sections = { rects = { { 4, 4, 2, 2 }, { 8, 4, 6, 2 }, { 4, 8, 2, 2 }, { 8, 8, 6, 2 }, { 4, 12, 2, 2 }, { 8, 12, 6, 2 } } },
+	bags = { rects = { { 4, 4, 2, 2 }, { 8, 4, 2, 2 }, { 12, 4, 2, 2 }, { 4, 8, 2, 2 }, { 8, 8, 2, 2 }, { 12, 8, 2, 2 }, { 4, 12, 2, 2 },
+		{ 8, 12, 2, 2 }, { 12, 12, 2, 2 } } },
+	sort = { rects = { { 4, 4, 10, 2 }, { 4, 8, 7, 2 }, { 4, 12, 4, 2 } } },
+	bank = { rects = { { 4, 8, 10, 1 }, { 5, 10, 1.5, 3.5 }, { 8.25, 10, 1.5, 3.5 }, { 11.5, 10, 1.5, 3.5 }, { 3.5, 14, 11, 1.5 } },
+		strokes = { { 3.5, 7.5, 9, 3.5 }, { 9, 3.5, 14.5, 7.5 } } },
+}
+
+local IsSecret, Finite = ns.IsSecret, ns.Finite
+
+-- Per window ("bags", "bank"): which, frame, outline; bar and its controls (picker, search, icons, close); scroll, child (the scroll child) and
+-- content (the frame BagsLayout.lua lays out in, scaled); track and thumb of the scroll bar; foot and its labels and buttons; strip (the bank's
+-- row of BagsBank.lua); message. viewH, contentH, offset: the height shown, the height of the content and the scroll. placed: the spot it hangs
+-- from now; dropped: where it was let go when the movers could not keep it. mode: what the last layout showed. busy: when the sort began.
+-- warming: the warm-up shows it; wantShow: an opening asked for meanwhile. open: shown for real.
+local windows = {}
+-- The sounds played this frame, and whether BagSort tells this file of a sort.
+local played, watching = {}, false
+
+local function Own(object)
+	ns.Own[object] = true
+	return object
+end
+
+-- A function of another part, looked up when it is called and never kept at load.
+local function Fn(tbl, name)
+	local fn = type(tbl) == "table" and tbl[name] or nil
+	if type(fn) == "function" then
+		return fn
+	end
+	return nil
+end
+
+local function Call(tbl, name, ...)
+	local fn = Fn(tbl, name)
+	if fn then
+		return fn(...)
+	end
+	return nil
+end
+
+-- Runs fn as a part of the module (B.Part, Bags.lua), so a part that keeps failing stops alone.
+local function Run(part, fn, ...)
+	local run = Fn(B, "Part")
+	if run then
+		return run(part, fn, ...)
+	end
+	local ok, err = pcall(fn, ...)
+	if not ok then
+		geterrorhandler()(err)
+	end
+	return ok
+end
+
+local function Opt(key)
+	return Call(B, "Opt", key)
+end
+
+local function On()
+	return Call(B, "On") == true
+end
+
+local function Request(flag, which)
+	Call(B, "Request", flag, which)
+end
+
+local function Now()
+	local ok, now = pcall(GetTime)
+	return ok and Finite(now) and now or 0
+end
+
+local function After(seconds, fn)
+	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+		C_Timer.After(seconds, fn)
+	else
+		fn()
+	end
+end
+
+-- A word of the game's global strings, or the English one when the client has none.
+local function Word(name, fallback)
+	local text = _G[name]
+	if type(text) == "string" and not IsSecret(text) and text ~= "" then
+		return text
+	end
+	return fallback
+end
+
+local function Plain(text)
+	return (tostring(text):gsub("|", "||"))
+end
+
+local function Hex(r, g, b)
+	local function Byte(value)
+		return math.max(0, math.min(255, math.floor(value * 255 + 0.5)))
+	end
+	return ("|cff%02x%02x%02x"):format(Byte(r), Byte(g), Byte(b))
+end
+
+-- Red, green and blue of a colour row of the Windows page, the look Bags takes (B.Look).
+local function LookRGB(key, r, g, b)
+	local ok, cr, cg, cb = pcall(ns.Colour, "windows." .. key)
+	if ok and Finite(cr) and Finite(cg) and Finite(cb) then
+		return cr, cg, cb
+	end
+	return r, g, b
+end
+
+-- Window opacity of the Windows page, 0 to 1.
+local function Opacity()
+	local value = Call(B, "Look", "opacity")
+	if not Finite(value) then
+		value = ns.Get("windows.opacity")
+	end
+	return Finite(value) and math.max(0, math.min(1, value / 100)) or 0.8
+end
+
+local function TextWidth(text)
+	local ok, width = pcall(text.GetUnboundedStringWidth, text)
+	if not (ok and Finite(width)) then
+		ok, width = pcall(text.GetStringWidth, text)
+	end
+	return ok and Finite(width) and width or 0
+end
+
+local function Shown(w)
+	return w ~= nil and not w.warming and w.frame:IsShown() == true
+end
+
+-- An amount of copper as the game writes money.
+local function Money(copper)
+	if type(Errands) == "table" and type(Errands.Money) == "function" then
+		return Errands.Money(copper)
+	end
+	return ("%dg"):format(math.floor(copper / 10000))
+end
+
+-- Tooltips ---------------------------------------------------------------------------------------------------------------------------------------
+
+local function Tip(owner)
+	local tip = GameTooltip
+	if type(tip) ~= "table" or ns.Forbidden(tip) then
+		return nil
+	end
+	tip:SetOwner(owner, "ANCHOR_TOP")
+	return tip
+end
+
+local function Untip(owner)
+	local tip = GameTooltip
+	if type(tip) ~= "table" or ns.Forbidden(tip) then
+		return
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, owner)
+	if ok and owned == true then
+		tip:Hide()
+	end
+end
+
+-- A tooltip of a title and lines in the dim colour.
+local function Say(owner, title, ...)
+	local tip = Tip(owner)
+	if not tip then
+		return
+	end
+	tip:SetText(title, 1, 1, 1)
+	for index = 1, select("#", ...) do
+		local line = select(index, ...)
+		if line then
+			tip:AddLine(line, DIM[1], DIM[2], DIM[3], true)
+		end
+	end
+	tip:Show()
+end
+
+-- Characters -------------------------------------------------------------------------------------------------------------------------------------
+
+local function Characters()
+	local list = Call(Data, "Characters")
+	return type(list) == "table" and list or {}
+end
+
+local function CharacterOf(key)
+	if key == nil then
+		return nil
+	end
+	for _, c in ipairs(Characters()) do
+		if type(c) == "table" and c.key == key then
+			return c
+		end
+	end
+	return nil
+end
+
+local function NameOf(key, c)
+	if c and type(c.name) == "string" and not IsSecret(c.name) and c.name ~= "" then
+		return c.name
+	end
+	if type(key) == "string" and not IsSecret(key) then
+		return key:match("^(.-) %- ") or key
+	end
+	local ok, name = pcall(UnitName, "player")
+	if ok and type(name) == "string" and not IsSecret(name) and name ~= "" then
+		return name
+	end
+	return "?"
+end
+
+-- The realm a character is listed under: the realm of its key, as the game writes it, else the one kept with it.
+local function RealmOf(c)
+	if type(c.key) == "string" and not IsSecret(c.key) then
+		local realm = c.key:match(" %- (.+)$")
+		if realm and realm ~= "" then
+			return realm
+		end
+	end
+	if type(c.realm) == "string" and not IsSecret(c.realm) and c.realm ~= "" then
+		return c.realm
+	end
+	return "?"
+end
+
+local function ClassRGB(class)
+	if type(class) ~= "string" or IsSecret(class) then
+		return nil
+	end
+	local colours = RAID_CLASS_COLORS
+	local colour = type(colours) == "table" and not IsSecret(colours) and colours[class] or nil
+	if type(colour) ~= "table" or IsSecret(colour) then
+		return nil
+	end
+	local r, g, b = colour.r, colour.g, colour.b
+	if Finite(r) and Finite(g) and Finite(b) then
+		return r, g, b
+	end
+	return nil
+end
+
+local function ClassHex(class)
+	local r, g, b = ClassRGB(class)
+	return r and Hex(r, g, b) or WHITE_HEX
+end
+
+-- When something was seen, as a day: today, yesterday or so many days ago, by the calendar of this computer (date and time).
+local function AsOf(seen)
+	if not Finite(seen) or seen <= 0 then
+		return nil
+	end
+	local function Noon(t)
+		local ok, day = pcall(date, "*t", t)
+		if not ok or type(day) ~= "table" then
+			return nil
+		end
+		local okTime, noon = pcall(time, { year = day.year, month = day.month, day = day.day, hour = 12 })
+		return okTime and Finite(noon) and noon or nil
+	end
+	local okNow, now = pcall(time)
+	local today, then_ = okNow and Finite(now) and Noon(now) or nil, Noon(seen)
+	if not (today and then_) then
+		return nil
+	end
+	local days = math.floor((today - then_) / 86400 + 0.5)
+	if days <= 0 then
+		return "as of today"
+	elseif days == 1 then
+		return "as of yesterday"
+	end
+	return ("as of %d days ago"):format(days)
+end
+
+-- How many items match the search among a character's slots of a window: the stacks added up, or for stacks false the slots, without the keyring.
+-- Only names the client has loaded count; nothing is asked for (B.Search.Match gives nil for the others).
+local function Matches(which, key, stacks)
+	local match = Fn(Search, "Match")
+	if not match then
+		return 0
+	end
+	local count = 0
+	local list = Call(Data, "Containers", which, key)
+	for _, bag in ipairs(type(list) == "table" and list or {}) do
+		if Finite(bag) and bag ~= KEYRING then
+			local slots = Call(Data, "Size", key, bag)
+			for slot = 1, Finite(slots) and slots or 0 do
+				local record = Call(Data, "Item", key, bag, slot)
+				if type(record) == "table" and match(record) == true then
+					local n = stacks and record.count or 1
+					count = count + (Finite(n) and n > 0 and n or 1)
+				end
+			end
+		end
+	end
+	return math.floor(count)
+end
+
+-- Drawing ----------------------------------------------------------------------------------------------------------------------------------------
+
+local function Rule(owner)
+	local rule = Own(owner:CreateTexture(nil, "ARTWORK"))
+	return rule
+end
+
+local function Bit(button, x, y, width, height)
+	local bit = Own(button:CreateTexture(nil, "OVERLAY", nil, 2))
+	bit:SetPoint("TOPLEFT", button, "TOPLEFT", x, -y)
+	bit:SetSize(width, height)
+	return bit
+end
+
+local function Stroke(button, layer, x1, y1, x2, y2)
+	local line = Own(button:CreateLine(nil, layer or "OVERLAY", nil, 2))
+	line:SetThickness(1.5)
+	line:SetStartPoint("TOPLEFT", button, x1, -y1)
+	line:SetEndPoint("TOPLEFT", button, x2, -y2)
+	return line
+end
+
+-- The regions of one glyph.
+local function Glyph(button, spec)
+	local parts = {}
+	for _, r in ipairs(spec.rects or {}) do
+		parts[#parts + 1] = Bit(button, r[1], r[2], r[3], r[4])
+	end
+	for _, s in ipairs(spec.strokes or {}) do
+		parts[#parts + 1] = Stroke(button, "OVERLAY", s[1], s[2], s[3], s[4])
+	end
+	return parts
+end
+
+local function SetGlyph(parts, shown)
+	for _, part in ipairs(parts) do
+		part:SetShown(shown)
+	end
+end
+
+-- The colours of a button of the title bar: the box in Button and slot colour, the glyph and the light under the cursor in the Highlight colour,
+-- as Clean up bags' button has them (BagSort.lua:433-446).
+local function PaintIcon(icon, alpha)
+	local pr, pg, pb = LookRGB("panel", 0.12, 0.12, 0.12)
+	local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+	ns.SetOutlineFill(icon.outline, pr, pg, pb, 1)
+	ns.SetOutline(icon.outline, true, true)
+	icon.hover:SetColorTexture(ar, ag, ab, 0.25)
+	for _, parts in pairs(icon.glyphs) do
+		for _, part in ipairs(parts) do
+			part:SetColorTexture(ar, ag, ab, alpha or 0.9)
+		end
+	end
+end
+
+local function PaintWindow(w)
+	local r, g, b = ns.Colour("general.backdrop")
+	ns.SetOutlineFill(w.outline, r, g, b, Opacity())
+	ns.SetOutline(w.outline, true, true)
+	local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+	for _, icon in pairs(w.icons) do
+		PaintIcon(icon)
+	end
+	for _, line in ipairs(w.close.lines) do
+		line:SetColorTexture(1, 1, 1, 0.6)
+	end
+	for _, line in ipairs(w.close.hover) do
+		line:SetColorTexture(ar, ag, ab, 1)
+	end
+	w.pickerLight:SetColorTexture(1, 1, 1, 0.06)
+	for _, line in ipairs(w.chevron) do
+		line:SetColorTexture(1, 1, 1, 0.6)
+	end
+	for _, rule in ipairs(w.rules) do
+		rule:SetColorTexture(1, 1, 1, SEPARATOR)
+	end
+	w.trackBack:SetColorTexture(0, 0, 0, 0.3)
+	w.thumbBack:SetColorTexture(ar, ag, ab, w.thumbOver and 0.5 or 0.25)
+	w.message:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
+end
+
+-- The window -------------------------------------------------------------------------------------------------------------------------------------
+
+local Showing, Hiding, Footer, TitleLine, Resize, ArrangeBar, ArrangeFoot, SetOffset
+
+-- What the window shows now, to tell whether an opening asked for while it is open needs a new layout.
+local function Mode(which)
+	local key, _, live = Layout.Viewed(which)
+	return tostring(key) .. ":" .. tostring(live)
+end
+
+-- Escape closes the window: the game hides the windows named in this list (UIParentPanelManager.lua:21-27, 1104-1116).
+local function Special(name)
+	if type(UISpecialFrames) ~= "table" then
+		return
+	end
+	for _, listed in ipairs(UISpecialFrames) do
+		if listed == name then
+			return
+		end
+	end
+	table.insert(UISpecialFrames, name)
+end
+
+-- The game's own sounds of its bag windows, once a frame: at the banker the bank and the bags open together.
+local function Sound(name)
+	if type(PlaySound) ~= "function" or type(SOUNDKIT) ~= "table" or IsSecret(SOUNDKIT) then
+		return
+	end
+	local id = SOUNDKIT[name]
+	if not Finite(id) then
+		return
+	end
+	local now = Now()
+	if played[name] == now then
+		return
+	end
+	played[name] = now
+	pcall(PlaySound, id)
+end
+
+-- The sort button ----------------------------------------------------------------------------------------------------------------------------------
+
+local function PaintSort(w)
+	local icon = w.icons.sort
+	if icon then
+		PaintIcon(icon)
+	end
+end
+
+local function EndBusy(w)
+	if w.busy then
+		w.busy = nil
+		PaintSort(w)
+	end
+end
+
+-- BagSort asked the game to sort the bags or the bank: that window's sort button looks busy until the window is laid out again.
+local function Sorted(which)
+	local w = windows[which]
+	if not w then
+		return
+	end
+	local began = Now()
+	w.busy = began
+	After(BUSY_MOST, function()
+		if w.busy == began then
+			Run("window", EndBusy, w)
+		end
+	end)
+end
+
+-- Listens to BagSort's word that the game was asked to sort (ns.BagSort.Watch), once.
+local function Watching()
+	if watching then
+		return
+	end
+	local sort = ns.BagSort
+	local watch = type(sort) == "table" and sort.Watch or nil
+	if type(watch) == "function" then
+		watching = pcall(watch, function(which)
+			Run("window", Sorted, which)
+		end) == true
+	end
+end
+
+local function Pulse(w)
+	local icon = w.icons.sort
+	if not icon then
+		return
+	end
+	local alpha = 0.3 + 0.55 * math.abs(math.sin(Now() * 3))
+	local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+	for _, part in ipairs(icon.glyphs.sort) do
+		part:SetColorTexture(ar, ag, ab, alpha)
+	end
+end
+
+-- The title bar ------------------------------------------------------------------------------------------------------------------------------------
+
+local Clicks, Tips = {}, {}
+
+-- A button of the title bar with the glyphs it may show.
+local function Icon(w, kind, glyphs)
+	local button = Own(CreateFrame("Button", nil, w.bar))
+	button:SetSize(ICON, ICON)
+	button:RegisterForClicks("LeftButtonUp")
+	local icon = { kind = kind, button = button, glyphs = {} }
+	icon.outline = ns.Outline(button, button)
+	icon.hover = Own(button:CreateTexture(nil, "HIGHLIGHT"))
+	icon.hover:SetAllPoints(button)
+	for _, name in ipairs(glyphs) do
+		icon.glyphs[name] = Glyph(button, GLYPHS[name])
+	end
+	button:SetScript("OnClick", function()
+		Run("window", Clicks[kind], w)
+	end)
+	button:SetScript("OnEnter", function()
+		Run("window", Tips[kind], w, button)
+	end)
+	button:SetScript("OnLeave", function()
+		Untip(button)
+	end)
+	w.icons[kind] = icon
+	return icon
+end
+
+local function MakeClose(w)
+	local button = Own(CreateFrame("Button", nil, w.bar))
+	button:SetSize(CLOSE, CLOSE)
+	button:RegisterForClicks("LeftButtonUp")
+	local close = { button = button }
+	close.lines = { Stroke(button, "OVERLAY", 5, 5, 13, 13), Stroke(button, "OVERLAY", 5, 13, 13, 5) }
+	close.hover = { Stroke(button, "HIGHLIGHT", 5, 5, 13, 13), Stroke(button, "HIGHLIGHT", 5, 13, 13, 5) }
+	button:SetScript("OnClick", function()
+		w.frame:Hide()
+	end)
+	w.close = close
+end
+
+local function MakePicker(w)
+	local button = Own(CreateFrame("Button", nil, w.bar))
+	button:SetHeight(ICON)
+	button:RegisterForClicks("LeftButtonUp")
+	w.pickerLight = Own(button:CreateTexture(nil, "HIGHLIGHT"))
+	w.pickerLight:SetAllPoints(button)
+	local text = ns.OwnText(button, "OVERLAY", "GameFontHighlightSmall")
+	text:SetPoint("LEFT", button, "LEFT", 4, 0)
+	text:SetJustifyH("LEFT")
+	text:SetWordWrap(false)
+	w.picker, w.pickerText = button, text
+	-- A small chevron at its right: it opens a list.
+	w.chevron = {}
+	for index, s in ipairs({ { -11, 1.5, -8, -1.5 }, { -8, -1.5, -5, 1.5 } }) do
+		local line = Own(button:CreateLine(nil, "OVERLAY", nil, 2))
+		line:SetThickness(1.5)
+		line:SetStartPoint("RIGHT", button, s[1], s[2])
+		line:SetEndPoint("RIGHT", button, s[3], s[4])
+		w.chevron[index] = line
+	end
+	button:SetScript("OnClick", function()
+		Run("window", Clicks.picker, w)
+	end)
+	button:SetScript("OnEnter", function()
+		Run("window", Tips.picker, w, button)
+	end)
+	button:SetScript("OnLeave", function()
+		Untip(button)
+	end)
+end
+
+-- A drag of the title bar: the window follows the cursor, and where it is let go becomes its spot.
+local function DragStart(w)
+	Layout.CloseMenu(w.which)
+	w.frame:StartMoving()
+	w.moving = true
+end
+
+-- Left, bottom, width and height of a frame in the units of UIParent.
+local function RectOf(frame)
+	local ok, left, bottom, width, height = pcall(frame.GetRect, frame)
+	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
+	local okBase, base = pcall(UIParent.GetEffectiveScale, UIParent)
+	if not (ok and okScale and okBase and Finite(left) and Finite(bottom) and Finite(width) and Finite(height) and Finite(scale) and Finite(base))
+		or base <= 0 then
+		return nil
+	end
+	local k = scale / base
+	return left * k, bottom * k, width * k, height * k
+end
+
+-- The window was let go: the box of its entry in the movers, put with its corner at the window's, is saved as its spot (ns.MoverKit.Commit), and
+-- the window hangs from it (ns.BagsWindowMoved). Without the entry it stays where it was let go for this session.
+local function Dropped(w)
+	if not w.moving then
+		return
+	end
+	w.moving = false
+	local frame = w.frame
+	frame:StopMovingOrSizing()
+	pcall(frame.SetUserPlaced, frame, false)
+	w.placed = nil
+	local which = w.which
+	local left, bottom, width, height = RectOf(frame)
+	if not left then
+		Window.Place(which)
+		return
+	end
+	local name, box = NAMES[which], BOXES[which]
+	local kit = ns.MoverKit
+	local info = type(kit) == "table" and type(kit.BY_NAME) == "table" and kit.BY_NAME[name] or nil
+	local boxW = info and Finite(info.width) and info.width > 0 and info.width or box[1]
+	local boxH = info and Finite(info.height) and info.height > 0 and info.height or box[2]
+	local boxLeft, boxBottom
+	if CORNERS[which] == "BOTTOMRIGHT" then
+		boxLeft, boxBottom = left + width - boxW, bottom
+	else
+		boxLeft, boxBottom = left, bottom + height - boxH
+	end
+	local saved = false
+	if info and type(kit.Commit) == "function" then
+		saved = kit.Commit(name, info, boxLeft, boxBottom, boxW, boxH) == true
+	end
+	if saved then
+		w.dropped = nil
+	elseif CORNERS[which] == "BOTTOMRIGHT" then
+		w.dropped = { left + width, bottom }
+	else
+		w.dropped = { left, bottom + height }
+	end
+	w.placed = nil
+	Window.Place(which)
+end
+
+local function MakeBar(w)
+	local frame = w.frame
+	local bar = Own(CreateFrame("Frame", nil, frame))
+	bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+	bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+	bar:SetHeight(BAR)
+	bar:EnableMouse(true)
+	bar:RegisterForDrag("LeftButton")
+	bar:SetScript("OnDragStart", function()
+		Run("window", DragStart, w)
+	end)
+	bar:SetScript("OnDragStop", function()
+		Run("window", Dropped, w)
+	end)
+	-- A drag that ends off the bar still ends.
+	bar:SetScript("OnHide", function()
+		if w.moving then
+			Run("window", Dropped, w)
+		end
+	end)
+	w.bar = bar
+	MakeClose(w)
+	MakePicker(w)
+	Icon(w, "view", { "sections", "bags" })
+	Icon(w, "sort", { "sort" })
+	if w.which == "bags" then
+		Icon(w, "bank", { "bank" })
+	end
+	local box = Call(Search, "Box", bar)
+	if type(box) == "table" then
+		w.search = box
+		pcall(box.SetHeight, box, SEARCH_HEIGHT)
+	end
+	local rule = Rule(frame)
+	rule:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -BAR)
+	rule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -BAR)
+	w.rules[#w.rules + 1] = rule
+	w.barRule = rule
+end
+
+-- Lays the title bar out: the close button at the right, the buttons the window shows now left of it, the picker at the left as wide as its text
+-- allows, and the search box between them.
+function ArrangeBar(w)
+	local bar = w.bar
+	local ok, width = pcall(w.frame.GetWidth, w.frame)
+	width = ok and Finite(width) and width or BOXES[w.which][1]
+	w.close.button:ClearAllPoints()
+	w.close.button:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+	local x = -(4 + CLOSE + 4)
+	local _, _, live = Layout.Viewed(w.which)
+	local shown = { bank = w.which == "bags", sort = live == true, view = true }
+	for _, kind in ipairs({ "bank", "sort", "view" }) do
+		local icon = w.icons[kind]
+		if icon then
+			icon.button:SetShown(shown[kind] == true)
+			if shown[kind] then
+				icon.button:ClearAllPoints()
+				icon.button:SetPoint("RIGHT", bar, "RIGHT", x, 0)
+				x = x - ICON - ICON_GAP
+			end
+		end
+	end
+	local view = Opt("view") == "bags" and "bags" or "sections"
+	local icon = w.icons.view
+	SetGlyph(icon.glyphs.sections, view == "sections")
+	SetGlyph(icon.glyphs.bags, view == "bags")
+	-- What is left between the padding and the buttons, for the picker and the search box.
+	local right = width + x + ICON_GAP - 6
+	local room = right - PAD
+	local most = w.search and math.max(PICKER_LEAST, math.min(room * PICKER_MOST, room - SEARCH_LEAST - 6)) or room
+	local picker = math.max(PICKER_LEAST, math.min(w.pickerNeed or PICKER_LEAST, most))
+	w.picker:ClearAllPoints()
+	w.picker:SetPoint("LEFT", bar, "LEFT", PAD - 4, 0)
+	w.picker:SetWidth(picker)
+	w.pickerText:SetWidth(math.max(1, picker - 20))
+	if w.search then
+		w.search:ClearAllPoints()
+		w.search:SetPoint("LEFT", w.picker, "RIGHT", 6, 0)
+		w.search:SetPoint("RIGHT", bar, "RIGHT", x + ICON_GAP - 6, 0)
+	end
+end
+
+-- The name in the picker: the character shown in its class colour, then what is shown when it is not live, dim.
+function TitleLine(w)
+	local which = w.which
+	local key, _, live = Layout.Viewed(which)
+	local c = CharacterOf(key)
+	local text = ClassHex(c and c.class) .. Plain(NameOf(key, c)) .. "|r"
+	local parts = {}
+	if which == "bank" then
+		parts[#parts + 1] = Word("BANK", "Bank")
+	end
+	if not live and c then
+		local seen = c.seen
+		if which == "bank" then
+			seen = c.bankSeen
+		end
+		local asOf = AsOf(seen)
+		if asOf then
+			parts[#parts + 1] = asOf
+		end
+	end
+	if #parts > 0 then
+		text = text .. DIM_HEX .. "  ·  " .. table.concat(parts, "  ·  ") .. "|r"
+	end
+	w.pickerText:SetWidth(0)
+	w.pickerText:SetText(text)
+	w.pickerNeed = math.ceil(TextWidth(w.pickerText)) + 4 + 18
+	ArrangeBar(w)
+end
+
+-- The content and its scroll bar --------------------------------------------------------------------------------------------------------------------
+
+local function Range(w)
+	return math.max(0, (w.contentH or 0) - (w.viewH or 0))
+end
+
+local function ScrollBar(w)
+	local range = Range(w)
+	if range <= 0 then
+		w.track:Hide()
+		return
+	end
+	local trackH = w.viewH or 0
+	local thumbH = math.max(THUMB_LEAST, trackH * trackH / math.max(1, w.contentH))
+	local y = (trackH - thumbH) * ((w.offset or 0) / range)
+	w.thumb:ClearAllPoints()
+	w.thumb:SetPoint("TOPLEFT", w.track, "TOPLEFT", 0, -y)
+	w.thumb:SetPoint("TOPRIGHT", w.track, "TOPRIGHT", 0, -y)
+	w.thumb:SetHeight(thumbH)
+	w.track:Show()
+end
+
+function SetOffset(w, offset)
+	offset = math.max(0, math.min(Range(w), offset or 0))
+	w.offset = offset
+	w.scroll:SetVerticalScroll(offset)
+	ScrollBar(w)
+end
+
+-- The units of a row of the content in the window's own.
+local function RowHeight()
+	local size = Opt("slotSize")
+	if not Finite(size) or size <= 0 then
+		size = 36
+	end
+	return PITCH * size / SLOT
+end
+
+local function CursorY(w)
+	local ok, _, y = pcall(GetCursorPosition)
+	local okScale, scale = pcall(w.frame.GetEffectiveScale, w.frame)
+	if ok and okScale and Finite(y) and Finite(scale) and scale > 0 then
+		return y / scale
+	end
+	return nil
+end
+
+local function MakeView(w)
+	local frame = w.frame
+	local scroll = Own(CreateFrame("ScrollFrame", nil, frame))
+	scroll:EnableMouseWheel(true)
+	scroll:SetScript("OnMouseWheel", function(_, delta)
+		if Finite(delta) then
+			SetOffset(w, (w.offset or 0) - delta * WHEEL_ROWS * RowHeight())
+		end
+	end)
+	-- The scroll child is not scaled, so the scroll is in the window's units; the content inside it takes Slot size (BagsLayout.lua).
+	local child = Own(CreateFrame("Frame", nil, scroll))
+	child:SetSize(1, 1)
+	scroll:SetScrollChild(child)
+	local content = Own(CreateFrame("Frame", nil, child))
+	content:SetPoint("TOPLEFT", child, "TOPLEFT", 0, 0)
+	content:SetSize(1, 1)
+	w.scroll, w.child, w.content = scroll, child, content
+	-- BagsItems.lua and BagsLayout.lua find the content frame on the window.
+	frame.content = content
+	local track = Own(CreateFrame("Frame", nil, frame))
+	track:SetWidth(TRACK_W)
+	track:EnableMouse(true)
+	track:Hide()
+	w.trackBack = Own(track:CreateTexture(nil, "BACKGROUND"))
+	w.trackBack:SetAllPoints(track)
+	local thumb = Own(CreateFrame("Frame", nil, track))
+	thumb:EnableMouse(true)
+	w.thumbBack = Own(thumb:CreateTexture(nil, "ARTWORK"))
+	w.thumbBack:SetAllPoints(thumb)
+	w.track, w.thumb = track, thumb
+	-- A press on the track above or below the thumb scrolls a page that way.
+	track:SetScript("OnMouseDown", function()
+		local y = CursorY(w)
+		local ok, top = pcall(thumb.GetTop, thumb)
+		if y and ok and Finite(top) then
+			local page = (w.viewH or 0) * 0.9
+			SetOffset(w, (w.offset or 0) + (y > top and -page or page))
+		end
+	end)
+	thumb:SetScript("OnMouseDown", function(_, mouse)
+		if mouse == "LeftButton" then
+			w.drag = { y = CursorY(w), offset = w.offset or 0 }
+		end
+	end)
+	thumb:SetScript("OnMouseUp", function()
+		w.drag = nil
+	end)
+	thumb:SetScript("OnEnter", function()
+		w.thumbOver = true
+		local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+		w.thumbBack:SetColorTexture(ar, ag, ab, 0.5)
+	end)
+	thumb:SetScript("OnLeave", function()
+		w.thumbOver = false
+		local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+		w.thumbBack:SetColorTexture(ar, ag, ab, 0.25)
+	end)
+	w.message = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
+	w.message:SetJustifyH("CENTER")
+	w.message:SetPoint("TOP", frame, "TOP", 0, -(BAR + INNER + 14))
+	w.message:Hide()
+end
+
+-- The drag of the scroll bar's thumb, every frame while it is held.
+local function ThumbDrag(w)
+	local drag = w.drag
+	local y = CursorY(w)
+	if not (drag and drag.y and y) then
+		return
+	end
+	local range = Range(w)
+	local trackH = w.viewH or 0
+	local thumbH = math.max(THUMB_LEAST, trackH * trackH / math.max(1, w.contentH or 1))
+	local free = trackH - thumbH
+	if free > 0 then
+		SetOffset(w, drag.offset + (drag.y - y) * range / free)
+	end
+end
+
+-- The footer ---------------------------------------------------------------------------------------------------------------------------------------
+
+-- A text of the footer that has a tooltip: a frame of Flat UI's own as wide as its text.
+local function FootLabel(w, tip)
+	local holder = Own(CreateFrame("Frame", nil, w.foot))
+	holder:SetHeight(FOOT)
+	holder:EnableMouse(true)
+	local text = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
+	text:SetAllPoints(holder)
+	text:SetWordWrap(false)
+	holder:SetScript("OnEnter", function()
+		Run("window", tip, w, holder)
+	end)
+	holder:SetScript("OnLeave", function()
+		Untip(holder)
+	end)
+	return { frame = holder, text = text }
+end
+
+local function GoldTip(w, owner)
+	local tip = Tip(owner)
+	if not tip then
+		return
+	end
+	local near, total, other, others = {}, 0, 0, 0
+	for _, c in ipairs(Characters()) do
+		if type(c) == "table" and Finite(c.money) and c.money >= 0 then
+			if c.near == true or c.me == true then
+				near[#near + 1] = c
+				total = total + c.money
+			else
+				other, others = other + c.money, others + 1
+			end
+		end
+	end
+	table.sort(near, function(a, b)
+		if a.money ~= b.money then
+			return a.money > b.money
+		end
+		return tostring(a.key) < tostring(b.key)
+	end)
+	tip:SetText("Gold", 1, 1, 1)
+	for index, c in ipairs(near) do
+		if index > MOST_GOLD then
+			tip:AddLine(("and %d more"):format(#near - MOST_GOLD), DIM[1], DIM[2], DIM[3])
+			break
+		end
+		local r, g, b = ClassRGB(c.class)
+		tip:AddDoubleLine(Plain(NameOf(c.key, c)), Money(c.money), r or 1, g or 1, b or 1, 1, 1, 1)
+	end
+	if #near > 1 then
+		tip:AddDoubleLine("Total", Money(total), DIM[1], DIM[2], DIM[3], 1, 1, 1)
+	end
+	if others > 0 then
+		tip:AddDoubleLine(("Other realms (%d)"):format(others), Money(other), DIM[1], DIM[2], DIM[3], DIM[1], DIM[2], DIM[3])
+	end
+	if #near == 0 and others == 0 then
+		tip:AddLine("Flat UI keeps the gold of each character that logs in with Flat UI bags on.", DIM[1], DIM[2], DIM[3], true)
+	end
+	tip:Show()
+end
+
+-- The kinds of bag with room: { label, free, total }, the first being the bags of no special kind.
+local function Kinds(w)
+	local key = Layout.Viewed(w.which)
+	local list = Call(Data, "Free", key, w.which)
+	local out = {}
+	for _, kind in ipairs(type(list) == "table" and list or {}) do
+		if type(kind) == "table" and Finite(kind.free) and Finite(kind.total) and kind.total > 0 then
+			local label = kind.label
+			if type(label) ~= "string" or IsSecret(label) or label == "" then
+				label = type(kind.kind) == "table" and type(kind.kind.label) == "string" and kind.kind.label or "Bags"
+			end
+			out[#out + 1] = { label = label, free = math.max(0, math.floor(kind.free)), total = math.floor(kind.total) }
+		end
+	end
+	return out
+end
+
+local function FreeTip(w, owner)
+	local tip = Tip(owner)
+	if not tip then
+		return
+	end
+	tip:SetText("Free slots", 1, 1, 1)
+	for _, kind in ipairs(Kinds(w)) do
+		tip:AddDoubleLine(Plain(kind.label), ("%d of %d"):format(kind.free, kind.total), DIM[1], DIM[2], DIM[3], 1, 1, 1)
+	end
+	tip:Show()
+end
+
+-- The free slots as the footer writes them: the bags of no special kind, low in gold and none in red, then each special kind.
+local function FreeText(w)
+	local kinds = Kinds(w)
+	local main = kinds[1]
+	if not main then
+		return ""
+	end
+	local colour = main.free <= 0 and NONE_HEX or (main.free <= LOW and LOW_HEX) or WHITE_HEX
+	local text = ("%sFree|r %s%d|r%s/%d|r"):format(DIM_HEX, colour, main.free, DIM_HEX, main.total)
+	for index = 2, #kinds do
+		local kind = kinds[index]
+		text = text .. ("%s  ·  %s|r %d"):format(DIM_HEX, Plain(kind.label), kind.free)
+	end
+	return text
+end
+
+local function JunkCount()
+	local count = ns.ErrandsJunkCount
+	if type(count) ~= "function" then
+		return 0, 0
+	end
+	local ok, n, waits = pcall(count)
+	if not ok then
+		return 0, 0
+	end
+	return Finite(n) and math.max(0, math.floor(n)) or 0, Finite(waits) and math.max(0, math.floor(waits)) or 0
+end
+
+local function Selling()
+	local selling = ns.ErrandsSelling
+	if type(selling) ~= "function" then
+		return false
+	end
+	local ok, on = pcall(selling)
+	return ok and on == true
+end
+
+local function Plural(n, one, many)
+	return n == 1 and one or many
+end
+
+local function SellTip(w, owner)
+	local n, waits = w.sellCount or 0, w.sellWaits or 0
+	Say(owner, "Sell junk",
+		("Sells %d %s, as Errands sells: grey items with a price and the items of your sell list, one at a time."):format(n, Plural(n, "item", "items")),
+		waits > 0 and ("%d more of your sell list %s for the next click."):format(waits, Plural(waits, "waits", "wait")) or nil)
+end
+
+local function SellClick(w)
+	local sell = ns.ErrandsSellJunk
+	if type(sell) ~= "function" then
+		return
+	end
+	local ok, why = sell()
+	if ok == false and type(why) == "string" and why ~= "" and why ~= "busy" then
+		print(("Flat UI: Sold nothing: %s."):format(why))
+	end
+	Request("footer", "bags")
+end
+
+-- The pass of BagsBank.lua that runs now: "deposit", "takeout", true for one it does not name, or nil.
+local function Busy()
+	local busy = Call(Bank, "Busy")
+	if busy == "deposit" or busy == "takeout" then
+		return busy
+	end
+	return busy and true or nil
+end
+
+local function MoveTip(w, owner, kind)
+	local busy = Busy()
+	if busy == true or busy == kind then
+		Say(owner, kind == "deposit" and "Deposit" or "Take out", "A click stops it.")
+		return
+	end
+	local n = kind == "deposit" and (w.depositCount or 0) or (w.takeoutCount or 0)
+	local items = Plural(n, "item", "items")
+	if kind == "deposit" then
+		Say(owner, "Deposit", ("Puts the %d %s of your bags that match the search in the bank, one at a time."):format(n, items))
+	else
+		Say(owner, "Take out", ("Takes the %d %s of the bank that match the search out to your bags, one at a time."):format(n, items))
+	end
+end
+
+local function MoveClick(w, kind)
+	Call(Bank, kind == "deposit" and "Deposit" or "TakeOut")
+	Request("footer", "bank")
+end
+
+local function MakeFoot(w)
+	local frame = w.frame
+	local foot = Own(CreateFrame("Frame", nil, frame))
+	foot:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, 0)
+	foot:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, 0)
+	foot:SetHeight(FOOT)
+	w.foot = foot
+	local rule = Rule(frame)
+	rule:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, FOOT)
+	rule:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, FOOT)
+	w.rules[#w.rules + 1] = rule
+	w.footRule = rule
+	w.free = FootLabel(w, FreeTip)
+	w.free.text:SetJustifyH(w.which == "bags" and "RIGHT" or "LEFT")
+	if w.which == "bank" then
+		-- The row of BagsBank.lua: the bank bag slots and the Buy button, above the footer.
+		local strip = Own(CreateFrame("Frame", nil, frame))
+		strip:SetPoint("BOTTOMLEFT", foot, "TOPLEFT", 0, INNER)
+		strip:SetPoint("BOTTOMRIGHT", foot, "TOPRIGHT", 0, INNER)
+		strip:SetHeight(STRIP)
+		w.strip = strip
+	end
+	if type(Errands) ~= "table" or type(Errands.Button) ~= "function" then
+		return
+	end
+	if w.which == "bags" then
+		w.gold = FootLabel(w, GoldTip)
+		w.gold.text:SetJustifyH("LEFT")
+		local sell = Errands.Button(foot, "Sell junk", SELL_W, function()
+			Run("window", SellClick, w)
+		end, function(button)
+			Run("window", SellTip, w, button)
+		end)
+		sell:SetHeight(FOOT_BUTTON)
+		sell:Hide()
+		-- It hides itself once it is no longer wanted, whatever missed the merchant's closing.
+		sell.Keep(function()
+			return w.sellOn == true and B.atMerchant == true and Shown(w)
+		end)
+		w.sell = sell
+	else
+		for _, kind in ipairs({ "deposit", "takeout" }) do
+			local button = Errands.Button(foot, kind == "deposit" and "Deposit" or "Take out", MOVE_W, function()
+				Run("window", MoveClick, w, kind)
+			end, function(owner)
+				Run("window", MoveTip, w, owner, kind)
+			end)
+			button:SetHeight(FOOT_BUTTON)
+			button:Hide()
+			button.Keep(function()
+				return w.moveOn == true and Call(Bank, "Live") == true and Shown(w)
+			end)
+			w[kind] = button
+		end
+	end
+end
+
+-- The footer's texts and buttons, left to right: the bag window has its gold at the left, its free slots at the right and Sell junk at the far
+-- right; the bank window its free slots at the left and Deposit and Take out at the right.
+function ArrangeFoot(w)
+	local foot = w.foot
+	if w.which == "bags" then
+		local gold = w.gold
+		local right, gap = foot, 0
+		if w.sell and w.sell:IsShown() then
+			w.sell:ClearAllPoints()
+			w.sell:SetPoint("RIGHT", foot, "RIGHT", 0, 0)
+			right, gap = w.sell, -8
+		end
+		local left = foot
+		if gold then
+			gold.frame:ClearAllPoints()
+			gold.frame:SetPoint("LEFT", foot, "LEFT", 0, 0)
+			gold.frame:SetWidth(math.max(1, math.ceil(TextWidth(gold.text)) + 2))
+			left = gold.frame
+		end
+		w.free.frame:ClearAllPoints()
+		w.free.frame:SetPoint("LEFT", left, left == foot and "LEFT" or "RIGHT", left == foot and 0 or 12, 0)
+		w.free.frame:SetPoint("RIGHT", right, right == foot and "RIGHT" or "LEFT", gap, 0)
+	else
+		local right = foot
+		for _, kind in ipairs({ "takeout", "deposit" }) do
+			local button = w[kind]
+			if button and button:IsShown() then
+				button:ClearAllPoints()
+				button:SetPoint("RIGHT", right, right == foot and "RIGHT" or "LEFT", right == foot and 0 or -4, 0)
+				right = button
+			end
+		end
+		w.free.frame:ClearAllPoints()
+		w.free.frame:SetPoint("LEFT", foot, "LEFT", 0, 0)
+		w.free.frame:SetPoint("RIGHT", right, right == foot and "RIGHT" or "LEFT", right == foot and 0 or -8, 0)
+	end
+end
+
+-- Reads the footer again: gold, free slots, and the buttons the window wants now.
+function Footer(w)
+	local which = w.which
+	local key, mine, live = Layout.Viewed(which)
+	w.free.text:SetText(FreeText(w))
+	if which == "bags" then
+		if w.gold then
+			local money = Call(Data, "Money", key)
+			w.gold.text:SetText(Finite(money) and money >= 0 and Money(money) or "")
+		end
+		if w.sell then
+			local wanted = mine and live and B.atMerchant == true and Opt("sellButton") ~= false
+			local n, waits, selling = 0, 0, false
+			if wanted then
+				n, waits = JunkCount()
+				selling = Selling()
+			end
+			w.sellCount, w.sellWaits = n, waits
+			w.sellOn = wanted and (n > 0 or selling)
+			if w.sellOn then
+				w.sell.SetLabel(selling and "Selling..." or ("Sell junk (%d)"):format(n))
+				w.sell.SetUsable(not selling)
+				w.sell:Show()
+			else
+				w.sell:Hide()
+			end
+		end
+	elseif w.deposit then
+		-- A pass that runs keeps its button, to stop it, also once the search is cleared.
+		local on = live and Opt("bankButtons") ~= false
+		local busy = on and Busy() or nil
+		local wanted = on and Call(Search, "Active") == true
+		if wanted then
+			w.depositCount = Matches("bags", key, false)
+			w.takeoutCount = Matches("bank", key, false)
+		else
+			w.depositCount, w.takeoutCount = 0, 0
+		end
+		w.moveOn = on and (wanted or busy ~= nil)
+		for _, kind in ipairs({ "deposit", "takeout" }) do
+			local button = w[kind]
+			local count = kind == "deposit" and w.depositCount or w.takeoutCount
+			local running = busy == true or busy == kind
+			if on and (running or (wanted and count > 0)) then
+				if running then
+					button.SetLabel("Stop")
+				else
+					button.SetLabel(("%s (%d)"):format(kind == "deposit" and "Deposit" or "Take out", count))
+				end
+				button:Show()
+			else
+				button:Hide()
+			end
+		end
+	end
+	ArrangeFoot(w)
+end
+
+-- How high the bank's row of BagsBank.lua is, as that file left it: nothing while it is hidden.
+local function StripHeight(w)
+	local strip = w.strip
+	if not strip or not strip:IsShown() then
+		return 0
+	end
+	local ok, height = pcall(strip.GetHeight, strip)
+	if not ok or not Finite(height) or height < 1 then
+		return 0
+	end
+	return height
+end
+
+-- What the window says in place of slots: a bank that was never seen.
+local function Message(w)
+	if w.which ~= "bank" then
+		return nil
+	end
+	local key, mine, live = Layout.Viewed("bank")
+	if live then
+		return nil
+	end
+	local c = CharacterOf(key)
+	if c and Finite(c.bankSeen) then
+		return nil
+	end
+	if mine then
+		return "Visit a banker once with Flat UI bags on, and your bank shows here wherever you are."
+	end
+	return ("%s has not visited a banker with Flat UI bags on."):format(Plain(NameOf(key, c)))
+end
+
+-- Sizes the window to its layout: as wide as the content and its padding (at least as wide as the title bar needs), as high as the title bar, the
+-- content, the bank's row and the footer, at most 85% of the screen, the content scrolling past that.
+function Resize(w)
+	local which = w.which
+	local cw, ch = Layout.Size(which)
+	cw = Finite(cw) and math.max(0, cw) or 0
+	ch = Finite(ch) and math.max(0, ch) or 0
+	local least = 2 * PAD + PICKER_LEAST + (w.search and (SEARCH_LEAST + 12) or 6) + 3 * (ICON + ICON_GAP) + CLOSE + 8
+	local width = math.max(least, math.ceil(cw + 2 * PAD))
+	local strip = StripHeight(w)
+	local fixed = BAR + INNER + INNER + FOOT + (strip > 0 and (strip + INNER) or 0)
+	local okScreen, screen = pcall(UIParent.GetHeight, UIParent)
+	screen = okScreen and Finite(screen) and screen > 0 and screen or 768
+	local most = math.max(fixed + LEAST_VIEW, math.floor(screen * MOST))
+	local message = ch <= 0 and Message(w) or nil
+	local view
+	if ch <= 0 then
+		view = message and MESSAGE_VIEW or LEAST_VIEW
+	else
+		view = math.max(LEAST_VIEW, math.min(math.ceil(ch), most - fixed))
+	end
+	w.frame:SetSize(width, fixed + view)
+	local left = math.floor((width - cw) / 2 + 0.5)
+	w.scroll:ClearAllPoints()
+	w.scroll:SetPoint("TOPLEFT", w.frame, "TOPLEFT", left, -(BAR + INNER))
+	w.scroll:SetSize(math.max(1, cw), view)
+	w.child:SetSize(math.max(1, cw), math.max(1, ch))
+	w.viewH, w.contentH = view, ch
+	w.track:ClearAllPoints()
+	w.track:SetPoint("TOPRIGHT", w.frame, "TOPRIGHT", -2, -(BAR + INNER))
+	w.track:SetHeight(view)
+	for _, rule in ipairs(w.rules) do
+		rule:SetHeight(ns.Pixels(w.frame, 1))
+	end
+	if message then
+		w.message:SetWidth(math.max(1, width - 4 * PAD))
+		w.message:SetText(message)
+		w.message:Show()
+	else
+		w.message:Hide()
+	end
+	SetOffset(w, w.offset)
+	ArrangeBar(w)
+end
+
+-- The bank's row of BagsBank.lua is laid out again in the frame this file gives it.
+local function Slots(w)
+	if w.strip then
+		Call(Bank, "Slots", w.strip)
+	end
+end
+
+-- Each frame while the window shows: the drag of the scroll bar's thumb, the busy sort button, and every half second whether a pass that runs
+-- (Sell junk, Deposit, Take out) began or ended.
+local function Tick(w, elapsed)
+	if w.warming then
+		return
+	end
+	if w.drag then
+		Run("window", ThumbDrag, w)
+	end
+	if w.busy then
+		Run("window", Pulse, w)
+	end
+	w.wait = (w.wait or 0) - (Finite(elapsed) and elapsed or 0)
+	if w.wait > 0 then
+		return
+	end
+	w.wait = POLL
+	local sign
+	if w.which == "bags" then
+		sign = w.sellOn and tostring(Selling()) or ""
+	else
+		sign = w.moveOn and tostring(Busy()) or ""
+	end
+	if sign ~= (w.sign or "") then
+		w.sign = sign
+		Run("window", Footer, w)
+	end
+end
+
+-- Making a window --------------------------------------------------------------------------------------------------------------------------------
+
+local function Make(which)
+	local frame = Own(CreateFrame("Frame", NAMES[which], UIParent))
+	frame:SetFrameStrata("MEDIUM")
+	frame:SetToplevel(true)
+	frame:SetClampedToScreen(true)
+	frame:SetMovable(true)
+	frame:EnableMouse(true)
+	pcall(frame.SetDontSavePosition, frame, true)
+	frame:SetSize(BOXES[which][1], BOXES[which][2])
+	frame:Hide()
+	local w = { which = which, frame = frame, icons = {}, rules = {}, offset = 0 }
+	windows[which] = w
+	w.outline = ns.Outline(frame, frame)
+	MakeBar(w)
+	MakeView(w)
+	MakeFoot(w)
+	frame:SetScript("OnShow", function()
+		Run("window", Showing, w)
+	end)
+	frame:SetScript("OnHide", function()
+		Run("window", Hiding, w)
+	end)
+	frame:SetScript("OnUpdate", function(_, elapsed)
+		Tick(w, elapsed)
+	end)
+	Special(NAMES[which])
+	Watching()
+	PaintWindow(w)
+	TitleLine(w)
+	Resize(w)
+	Window.Place(which)
+	return w
+end
+
+-- The work of an opening, also when the warm-up's frame turns into one: the open sound, the look, a fresh layout, the title, the footer, the size.
+function Showing(w)
+	if w.warming then
+		return
+	end
+	w.open = true
+	Sound("IG_BACKPACK_OPEN")
+	Watching()
+	PaintWindow(w)
+	Slots(w)
+	Run("layout", Layout.Build, w.which)
+	w.mode = Mode(w.which)
+	w.offset = 0
+	TitleLine(w)
+	Footer(w)
+	Resize(w)
+	Window.Place(w.which)
+end
+
+-- The one place the bags tidy up when the bag window hides, whatever hid it (its close button, a key, Escape, the page going off); each step runs
+-- alone, so one that fails leaves the others done. The bank window forgets its places and goes back to the logged-in character.
+function Hiding(w)
+	if w.warming then
+		return
+	end
+	w.open, w.drag = false, nil
+	if w.moving then
+		w.moving = false
+		pcall(w.frame.StopMovingOrSizing, w.frame)
+	end
+	if w.search then
+		pcall(w.search.ClearFocus, w.search)
+	end
+	Layout.CloseMenu(w.which)
+	EndBusy(w)
+	if w.which == "bags" then
+		Run("window", Call, B, "HideGameBags")
+		for _, reason in ipairs(HOLDS) do
+			Run("window", Call, B, "Hold", reason, false)
+		end
+		Run("window", Call, Categories.New, "Close")
+		Run("layout", Layout.Closed, "bags")
+		if not Shown(windows.bank) then
+			Run("window", Call, Search, "SetText", "")
+		end
+		Run("window", Call, B, "SetViewing", "bags", nil)
+	else
+		Run("layout", Layout.Closed, "bank")
+		if not Shown(windows.bags) then
+			Run("window", Call, Search, "SetText", "")
+		end
+		Run("window", Call, B, "SetViewing", "bank", nil)
+	end
+	Sound("IG_BACKPACK_CLOSE")
+end
+
+-- The contract (B.Window) -------------------------------------------------------------------------------------------------------------------------
+
+-- The window, made the first time anything asks for it.
+function Window.Get(which)
+	if which ~= "bags" and which ~= "bank" then
+		return nil
+	end
+	local w = windows[which] or Make(which)
+	return w.frame
+end
+
+-- Puts the window at its spot in the movers: the bag window's bottom right corner, the bank window's top left.
+function Window.Place(which)
+	local w = windows[which]
+	if not w or w.moving then
+		return
+	end
+	local corner = CORNERS[which]
+	local x, y
+	if type(ns.MoverSpot) == "function" then
+		x, y = ns.MoverSpot(NAMES[which], corner)
+	end
+	if not (Finite(x) and Finite(y)) then
+		x, y = nil, nil
+		if w.dropped then
+			x, y = w.dropped[1], w.dropped[2]
+		end
+	end
+	local key = x and ("%.2f:%.2f"):format(x, y) or "start"
+	if w.placed == key then
+		return
+	end
+	w.placed = key
+	local frame = w.frame
+	frame:ClearAllPoints()
+	if x then
+		frame:SetPoint(corner, UIParent, "BOTTOMLEFT", x, y)
+	else
+		local box = BOXES[which]
+		frame:SetPoint(corner, UIParent, corner, box[3], box[4])
+	end
+end
+
+-- Shows the window, laid out afresh. An opening asked for while it is open lays it out again only when it would show something else now (the
+-- bank turning live at the banker), so nothing moves for an opening of the game's that finds the bags open.
+function Window.Show(which)
+	if not On() then
+		return
+	end
+	Window.Get(which)
+	local w = windows[which]
+	if not w then
+		return
+	end
+	if w.warming then
+		w.wantShow = true
+		return
+	end
+	if w.frame:IsShown() then
+		if w.mode ~= Mode(which) then
+			Request("layout", which)
+		end
+		return
+	end
+	Window.Place(which)
+	w.frame:Show()
+end
+
+function Window.Hide(which)
+	local w = windows[which]
+	if not w then
+		return
+	end
+	if w.warming then
+		w.wantShow = false
+		return
+	end
+	if w.frame:IsShown() then
+		w.frame:Hide()
+	end
+end
+
+-- What changed for an open window, once a frame (B.Request, Bags.lua): flags is { layout, items, search, footer, look = true }, changed the slots
+-- that changed, { [bag] = { [slot] = true } }. A hidden window does nothing: it is laid out afresh when it opens.
+local function Updating(w, flags, changed)
+	local which = w.which
+	if flags.look then
+		PaintWindow(w)
+	end
+	if flags.layout then
+		Slots(w)
+		Run("layout", Layout.Build, which)
+		w.mode = Mode(which)
+		if w.busy and Now() - w.busy >= BUSY_LEAST then
+			EndBusy(w)
+		end
+		TitleLine(w)
+	else
+		if flags.items then
+			-- While a sort still moves items the window keeps every place: what fills a slot that had no cell waits for the layout after it.
+			Run("layout", Layout.Update, which, changed, w.busy ~= nil)
+		end
+		if flags.search then
+			Run("layout", Layout.Dim, which)
+		end
+		if flags.look then
+			Run("layout", Layout.Render, which)
+		end
+	end
+	Footer(w)
+	Resize(w)
+	Window.Place(which)
+end
+
+function Window.Update(which, flags, changed)
+	local w = windows[which]
+	if not Shown(w) then
+		return
+	end
+	if type(flags) == "string" then
+		flags = { [flags] = true }
+	elseif type(flags) ~= "table" then
+		flags = { layout = true }
+	end
+	Run("window", Updating, w, flags, changed)
+end
+
+-- The look of the Windows page changed: both windows, their layouts and the buttons take it.
+function Window.Paint()
+	for which, w in pairs(windows) do
+		PaintWindow(w)
+		if Shown(w) then
+			Run("layout", Layout.Render, which)
+		end
+	end
+	Call(Buttons, "Paint")
+end
+
+local function WarmEnd(w)
+	w.warmQueued = false
+	if w.warming then
+		Call(Buttons, "ShowAll", false)
+		if w.wantShow and On() then
+			-- An opening came while the window warmed up: the shown window turns into it.
+			w.warming, w.wantShow = false, false
+			w.frame:SetAlpha(1)
+			w.frame:EnableMouse(true)
+			Showing(w)
+		else
+			w.frame:Hide()
+			w.warming, w.wantShow = false, false
+			w.frame:SetAlpha(1)
+			w.frame:EnableMouse(true)
+		end
+		return
+	end
+	local new = w.warmButtons
+	w.warmButtons = nil
+	if new then
+		for button in pairs(new) do
+			button:SetAlpha(1)
+			if not Layout.Placed(w.which, button) then
+				button:Hide()
+			end
+		end
+	end
+	if Shown(w) then
+		Run("layout", Layout.Render, w.which)
+	end
+end
+
+-- The live buttons of the bag window that its layout does not show.
+local function Unplaced(w)
+	local list = {}
+	local key = Layout.Viewed("bags")
+	local bags = Call(Data, "Containers", "bags", key)
+	for _, bag in ipairs(type(bags) == "table" and bags or {}) do
+		local slots = Call(Data, "Size", key, bag)
+		for slot = 1, Finite(slots) and slots or 0 do
+			local button = Call(Buttons, "Live", bag, slot)
+			if type(button) == "table" and not Layout.Placed("bags", button) then
+				list[#list + 1] = button
+			end
+		end
+	end
+	return list
+end
+
+local function Warming(w, buttons)
+	if w.warming then
+		-- A warm-up is under way: the buttons made since show with it.
+		Call(Buttons, "ShowAll", true)
+		return
+	end
+	if not w.frame:IsShown() then
+		w.warming, w.wantShow = true, false
+		w.frame:SetAlpha(0)
+		w.frame:EnableMouse(false)
+		Layout.Adopt("bags")
+		w.frame:Show()
+		Call(Buttons, "ShowAll", true)
+	else
+		w.warmButtons = w.warmButtons or {}
+		Layout.Adopt("bags")
+		for _, button in ipairs(type(buttons) == "table" and buttons or Unplaced(w)) do
+			if type(button) == "table" and not Layout.Placed("bags", button) then
+				button:SetAlpha(0)
+				button:Show()
+				w.warmButtons[button] = true
+			end
+		end
+	end
+	if not w.warmQueued then
+		w.warmQueued = true
+		After(0, function()
+			Run("window", WarmEnd, w)
+		end)
+	end
+end
+
+-- After BagsItems.lua made some of the game's item buttons: each shows once inside the bag window before any fight can need it. The game's source
+-- shows no need for it, so it is a precaution, for the potion a fight needs most. Only the bag window has such buttons.
+function Window.Warm(which, buttons)
+	if which ~= "bags" then
+		return
+	end
+	Window.Get("bags")
+	Run("window", Warming, windows.bags, buttons)
+end
+
+-- Movers ------------------------------------------------------------------------------------------------------------------------------------------
+
+-- The windows have a handle in the movers while Bags is on, open or not, as the other frames of Flat UI's own have one while their page is on.
+function ns.BagsWindowShown()
+	return On()
+end
+
+function ns.BankWindowShown()
+	return On()
+end
+
+-- The movers set or put back a spot: the window hangs from it now.
+function ns.BagsWindowMoved()
+	local w = windows.bags
+	if w then
+		w.placed, w.dropped = nil, nil
+		Run("window", Window.Place, "bags")
+	end
+end
+
+function ns.BankWindowMoved()
+	local w = windows.bank
+	if w then
+		w.placed, w.dropped = nil, nil
+		Run("window", Window.Place, "bank")
+	end
+end
+
+-- The buttons of the title bar ------------------------------------------------------------------------------------------------------------------
+
+-- The character picker: every character Bags keeps, by realm, this realm and the connected ones first; the one shown is ticked. While a search is
+-- typed, the menu's title names it and each line fills in how many items match there, one character a frame.
+function Clicks.picker(w)
+	local which = w.which
+	local viewed = Layout.Viewed(which)
+	local me = Call(B, "Me")
+	local groups, order, myRealm = {}, {}, nil
+	for _, c in ipairs(Characters()) do
+		if type(c) == "table" and type(c.key) == "string" and not IsSecret(c.key) then
+			local realm = RealmOf(c)
+			if c.me == true or c.key == me then
+				myRealm = realm
+			end
+			local group = groups[realm]
+			if not group then
+				group = { realm = realm, near = false, list = {} }
+				groups[realm] = group
+				order[#order + 1] = group
+			end
+			group.near = group.near or c.near == true or c.me == true
+			group.list[#group.list + 1] = c
+		end
+	end
+	table.sort(order, function(a, b)
+		if (a.realm == myRealm) ~= (b.realm == myRealm) then
+			return a.realm == myRealm
+		end
+		if a.near ~= b.near then
+			return a.near
+		end
+		return a.realm < b.realm
+	end)
+	local items, jobs = {}, {}
+	for _, group in ipairs(order) do
+		table.sort(group.list, function(a, b)
+			local am, bm = a.key == me, b.key == me
+			if am ~= bm then
+				return am
+			end
+			return NameOf(a.key, a) < NameOf(b.key, b)
+		end)
+		items[#items + 1] = { text = Plain(group.realm), header = true }
+		for _, c in ipairs(group.list) do
+			local level = Finite(c.level) and ("  " .. DIM_HEX .. math.floor(c.level) .. "|r") or ""
+			local key = c.key
+			items[#items + 1] = { text = ClassHex(c.class) .. Plain(NameOf(key, c)) .. "|r" .. level, tick = key == viewed, part = "window",
+				pick = function()
+					Call(B, "SetViewing", which, key ~= me and key or nil)
+					Request("layout", which)
+					TitleLine(w)
+				end }
+			jobs[#jobs + 1] = { index = #items, key = key }
+		end
+	end
+	if #jobs == 0 then
+		return
+	end
+	local searching = Call(Search, "Active") == true
+	local title = "Characters"
+	if searching then
+		local text = Call(Search, "Text")
+		text = type(text) == "string" and not IsSecret(text) and text or ""
+		if #text > 24 then
+			-- Cut before a whole character: a byte from 128 to 191 continues the one before it.
+			local cut = 24
+			while cut > 1 and text:byte(cut) >= 128 and text:byte(cut) < 192 do
+				cut = cut - 1
+			end
+			text = text:sub(1, cut - 1) .. "..."
+		end
+		title = ("Items matching %s"):format(Plain(text))
+	end
+	local menu = Layout.Menu(w.picker, title, items, which)
+	if not (menu and searching) then
+		return
+	end
+	for _, job in ipairs(jobs) do
+		Layout.MenuRight(job.index, "...")
+	end
+	local step = 1
+	menu.tick = function()
+		local job = jobs[step]
+		if not job then
+			menu.tick = nil
+			return
+		end
+		step = step + 1
+		local n = Matches(which, job.key, true)
+		Layout.MenuRight(job.index, n > 0 and (WHITE_HEX .. n .. "|r") or "0")
+	end
+end
+
+function Tips.picker(w, owner)
+	if Layout.MenuOn(owner) then
+		return
+	end
+	if w.which == "bank" then
+		Say(owner, "Characters", "Choose a character to see their bank, as it was last seen.")
+	else
+		Say(owner, "Characters", "Choose a character to see their bags, as they were last seen.")
+	end
+end
+
+function Clicks.view(w)
+	local view = Opt("view") == "bags" and "sections" or "bags"
+	ns.Set("bags.view", view)
+	Request("layout", nil)
+	ArrangeBar(w)
+end
+
+function Tips.view(w, owner)
+	if Opt("view") == "bags" then
+		Say(owner, "Bag by bag", "Each bag in turn, as the game shows them.", "Click for Sections.")
+	else
+		Say(owner, "Sections", "Items grouped by kind.", "Click for Bag by bag.")
+	end
+end
+
+-- The sort button: the game's clean up, through BagSort, with its sound. It takes no click while the last sort is still moving items.
+function Clicks.sort(w)
+	if w.busy then
+		return
+	end
+	local sort = ns.BagSort
+	local run = type(sort) == "table" and sort.Run or nil
+	if type(run) ~= "function" then
+		return
+	end
+	if run(w.which) then
+		local sound = sort.Sound
+		if type(sound) == "function" then
+			sound()
+		end
+		if not watching and w.which == "bags" then
+			Sorted("bags")
+		end
+	end
+end
+
+function Tips.sort(w, owner)
+	local title = w.which == "bank" and Word("BAG_CLEANUP_BANK", "Clean Up Bank") or Word("BAG_CLEANUP_BAGS", "Clean Up Bags")
+	if w.busy then
+		Say(owner, title, "Sorting: the window is laid out again once your items have stopped moving.")
+	else
+		Say(owner, title)
+	end
+end
+
+-- The bank button: the bank of the character the bag window shows, live at the banker and as last seen anywhere else (B.Bank.Toggle).
+function Clicks.bank(w)
+	local key, mine = Layout.Viewed("bags")
+	Call(Bank, "Toggle", (not mine) and key or nil)
+end
+
+function Tips.bank(w, owner)
+	local key, mine = Layout.Viewed("bags")
+	if mine then
+		Say(owner, Word("BANK", "Bank"), "Your bank: live at the banker, and as you last left it anywhere else.")
+	else
+		Say(owner, Word("BANK", "Bank"), ("The bank of %s, as it was last seen."):format(Plain(NameOf(key, CharacterOf(key)))))
+	end
+end
