@@ -326,14 +326,16 @@ local function Height(crit)
 end
 
 -- Size: 100% is the game's own 1.000000. No file gives a range, so the game may keep another value (the status says so).
--- While Flat UI draws the numbers over enemies (Switch is "0") the game's world text left is what Flat UI does not draw, such as
--- experience, so Size of experience and other gains sets it. Smaller than your text is the share the game gives words on the
--- portrait (CombatFeedback.lua:54).
+-- The variable sizes all of the game's world text: its numbers over enemies and the text it draws near you, such as experience.
+-- While Flat UI draws the numbers over enemies (Switch is "0") the world text left is what Flat UI does not draw, so Size of
+-- experience and other gains sets it. In a group with the game's own numbers (GroupHand) it sets it as well, so that text keeps its
+-- size as you join or leave a party or raid, and the game's numbers over enemies take that size there. Smaller than your text is the
+-- share the game gives words on the portrait (CombatFeedback.lua:54).
 local GAIN_SMALLER = 0.75
 local GAIN_WORDS = { own = "Same as your text", smaller = "Smaller than your text", game = "The game's own size", enemy = "Same as numbers over enemies" }
 local function Size()
 	local percent = Opt("size")
-	if Switch() == "0" then
+	if Switch() == "0" or GroupHand() then
 		local gain = Opt("gainSize")
 		if gain == "game" then
 			return GAME
@@ -3312,7 +3314,7 @@ local function Status()
 			end
 		end
 		if GroupHand() and Read(VARS[1].name) ~= "0" then
-			lines[#lines + 1] = "Numbers over enemies: in a group, the game's own numbers show."
+			lines[#lines + 1] = "Numbers over enemies: in a group, the game's own numbers show, at Size of experience and other gains, as the game has one size for both."
 		end
 	end
 	for _, line in ipairs(ns.ScrollText.Lines()) do
@@ -3374,7 +3376,7 @@ local function Report()
 		else
 			print(("%s: now %s, default %s, wanted %s"):format(var.name, current, GameDefault(var), Wanted(var) or "no change"))
 			if var.name == "WorldTextScale_v2" then
-				print(("Size of experience and other gains: %s%s."):format(GAIN_WORDS[Opt("gainSize")] or tostring(Opt("gainSize")), Switch() == "0" and "" or ", not in use"))
+				print(("Size of experience and other gains: %s%s."):format(GAIN_WORDS[Opt("gainSize")] or tostring(Opt("gainSize")), (Switch() == "0" or GroupHand()) and "" or ", not in use"))
 			end
 		end
 	end

@@ -1,6 +1,7 @@
 ## 0.5.16
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Combat text**: experience and the other text the game draws near you no longer grows when you join a party or raid. There, with **Numbers over enemies in a group** at **The game's own numbers** (the default), the game draws the numbers over enemies, and it sizes them and that text with one setting, which Flat UI set to **Size** (140%). It now keeps **Size of experience and other gains** in a group as well, so the text keeps the size it has while you are alone, and the game's numbers over enemies take that size there. **Same as numbers over enemies** gives both **Size** again, and **Flat UI numbers** keeps Flat UI's own numbers, at **Size**, in a group. `/flatui combat` says which size is in use.
 
 ## 0.5.15
 
