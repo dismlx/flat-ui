@@ -1,6 +1,7 @@
 ## 0.5.17
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Windows**, **Bags and items**, new row **Backpack key opens every bag** (on): B, or your key for Toggle Backpack, opens the reagent bag with your other bags, and closes them all again, as **Open All Bags** (Shift+B) does. WoW: Forever binds B to Toggle Backpack, which with **Combine bags** on shows the combined bag alone: the reagent bag has a window and a key of its own. Flat UI gives your Toggle Backpack keys the game's own Open All Bags as an override binding, outside combat, and writes none of your key bindings; a key you bind again is followed. With separate bags the key opens all of them, not only the backpack. Turned off, B toggles the backpack again. `/flatui status` names the key.
 - **Movers**, **Positions and sizes** at **Kept**: a bag window you moved near the edge of the screen no longer takes the bags the game hangs beside it off the screen. The game puts the reagent bag to the left of the combined bag, and with separate bags stacks the other bags above or beside the backpack, so a combined bag kept near the left edge, or a backpack kept near the top, put them out of sight. The moved bag window now stays far enough in for those bags to show whole while they are open, and goes back to your spot when they close.
 
 ## 0.5.16

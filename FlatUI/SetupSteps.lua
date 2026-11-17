@@ -785,6 +785,7 @@ ns.SETUP_STEPS = {
 		{ "windows.unusableTint", "c", "behaviour", "Tints the items you cannot use red." },
 		{ "windows.petFood", "o", "behaviour", "Marks the food your pet eats, for hunters." },
 		{ "windows.combinedBags", "c", "mock-bag-slots" },
+		{ "windows.bagKey", "o", "behaviour", "Makes B, your key for Toggle Backpack, open every bag, the reagent bag too." },
 		{ "windows.durability", "c", "behaviour", "Shows the durability of your gear on the Character window." },
 		{ "windows.sortButton", "c", "mock-bag-slots" },
 		{ "windows.sortBank", "o", "behaviour", "Adds the clean up bags button to the bank." },

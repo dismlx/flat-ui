@@ -68,6 +68,7 @@ TrackerGroup.lua
 TrackerClicks.lua
 Pulse.lua
 BagSort.lua
+BagKey.lua
 Windows.lua
 Items.lua
 ItemMarks.lua

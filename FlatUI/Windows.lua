@@ -2432,8 +2432,10 @@ local function Refresh()
 			Style(item[1], item[2], item[3].group)
 		end
 	end
-	-- The clean up button, the sort direction and the durability of the Character window follow their own settings, whatever the switches say.
+	-- The clean up button, the sort direction, the backpack key and the durability of the Character window follow their own settings, whatever the
+	-- switches say.
 	ns.BagSort.Apply()
+	ns.BagKey.Apply()
 	ns.CharacterDurability.Apply()
 	if ns.Enabled(KEY) and switched then
 		SweepAll()
@@ -2498,6 +2500,9 @@ ns.Register(KEY, {
 	Start = Refresh,
 	Refresh = Refresh,
 	Resized = Resized,
+	Status = function()
+		return ns.BagKey.Status()
+	end,
 	filters = {
 		ADDON_LOADED = function(name)
 			return not ns.IsSecret(name) and LOAD_ON_DEMAND[name] == true

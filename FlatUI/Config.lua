@@ -1356,6 +1356,9 @@ ns.PAGES = {
 		{ key = "unusableTint", kind = "bool", default = true, label = "Tint items you cannot use", tip = "Red over an item whose tooltip has a requirement in red: class, race, level, skill, reputation, armour or weapon type, or a recipe you already know." },
 		{ key = "petFood", kind = "bool", default = true, label = "Mark food your pet eats", tip = "For hunters: the Feed Pet icon at the bottom left of food your pet eats, while it is out." },
 		{ key = "combinedBags", kind = "bool", default = false, cvar = "combinedBags", label = "Combine bags" },
+		-- BagKey.lua: the keys of Toggle Backpack run the game's Open All Bags, so B opens the reagent bag too.
+		{ key = "bagKey", kind = "bool", default = true, label = "Backpack key opens every bag", changed = "BagKeyChanged",
+			tip = "B, or your key for Toggle Backpack, opens the reagent bag with your other bags and closes them all again, as Open All Bags (Shift+B) does. With separate bags it opens all of them, not only the backpack." },
 		{ section = "Character window" },
 		{ key = "durability", kind = "bool", default = true, label = "Show durability",
 			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below." },

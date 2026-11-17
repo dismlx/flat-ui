@@ -35,7 +35,10 @@ local ADDON_NAME, ns = ...
 -- own text for the player (enableFloatingCombatText), each remembered in FlatUIDB.cvars before its first write and put back when
 -- its page goes off. Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.
 -- Windows writes one game setting: the direction of the game's clean up (C_Container.SetSortBagsRightToLeft), only while Items gather is
--- From the other end, remembered in FlatUICharDB.sortDirection before the first write and put back as the variables above are.
+-- From the other end, remembered in FlatUICharDB.sortDirection before the first write and put back as the variables above are. While Backpack key
+-- opens every bag is on, it gives each key the player has for Toggle Backpack an override binding to Open All Bags (SetOverrideBinding, on a frame
+-- of its own, out of combat), so B opens the reagent bag too; ClearOverrideBindings takes them away when the row goes off, the player's bindings
+-- are never written, and the overrides end with the session.
 -- Maximum camera distance, on the Flat UI page, writes the game's cameraDistanceMaxZoomFactor only when the player ticks or unticks it, out of
 -- combat: 2.6 when ticked, its text before that kept in FlatUIDB.cameraGame, and that text again (or the client's default) when unticked while
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.
