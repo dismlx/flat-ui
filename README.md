@@ -40,7 +40,7 @@ The **Fading** page, off by default, fades bars and frames while nothing needs t
 
 The **Flat UI** page can let the camera zoom out farther than the game's own options allow, and draw a ring around the mouse pointer, always or in combat only, with your cast running round it and, if you like, the global cooldown. The unit frames can hide the hit numbers the game flashes over your portrait and your pet's.
 
-![Flat UI in play](media/flatui-in-play.jpg)
+![Flat UI in a fight: the player and target frames, the enemy's cast bar, combat numbers in front of the nameplate, proc art beside the character and the action bars](media/flatui-in-play.jpg)
 
 ## Install
 
