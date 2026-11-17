@@ -19,8 +19,8 @@ local _, ns = ...
 -- One line for each character, the most first: the name in the colour of its class (RAID_CLASS_COLORS, Blizzard_SharedXML/ClassColors.lua:1),
 -- without the realm when it is this character's, and where the items are. At most MOST characters have a line of their own and the rest share
 -- one; a total ends the lines when two or more characters carry the item.
--- What the other files of Bags use: Tips.Start, which adds the post call (also run after the Start of Bags through ns.AddStart), and Tips.Forget,
--- for after a character is forgotten. This file owns no event (design 2.8).
+-- What another file of Bags uses: Tips.Forget (BagsData's Forget, after a character is forgotten). Tips.Start, which adds the post call, runs only
+-- from this file's ns.AddStart line, after the Start of Bags. This file owns no event (design 2.8).
 
 local B = ns.Bags
 if type(B) ~= "table" or type(B.Tips) ~= "table" then
@@ -98,7 +98,7 @@ local function Whole(value)
 	return 0
 end
 
--- The realm of a key "Name - Realm" (ns.CharacterKey, Core.lua:2692-2695), or nil.
+-- The realm of a key "Name - Realm" (ns.CharacterKey, Core.lua:2704-2707), or nil.
 local function Realm(key)
 	if type(key) ~= "string" then
 		return nil
@@ -242,8 +242,8 @@ local function Filled(tooltip, data)
 	end
 end
 
--- Adds the post call, once for the session. Bags.lua may call it from its Start, and the line below runs it after that Start as well, so it is added
--- either way, and only once. True once it is added.
+-- Adds the post call, once for the session; true once it is added. Its one caller is the ns.AddStart line below, which runs it after the Start of
+-- Bags and BagsData's step there (Core.lua:2188-2199). An add the game refuses is not tried again (broken), and /flatui status says so.
 function Tips.Start()
 	if started then
 		return not broken

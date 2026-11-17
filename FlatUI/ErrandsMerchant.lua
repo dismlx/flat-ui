@@ -8,8 +8,9 @@ local _, ns = ...
 -- Selling walks the bags (C_Container.GetContainerNumSlots and GetContainerItemInfo, bags 0 to NUM_TOTAL_EQUIPPED_BAG_SLOTS) and sells one item
 -- every SPACING seconds with C_Container.UseContainerItem, which sells while a merchant is open and uses or equips the item otherwise. So before
 -- every sale the merchant window must still be shown (MerchantFrame, asked with the widget call IsShown) and no trade window open (TradeFrame:
--- the same call puts an item in the trade), the module and the row still on, the cursor empty, and the slot must still hold the same unlocked
--- item, whose count is read again there. An item of poor quality (grey) is sold unless it is on the keep list;
+-- the same call puts an item in the trade), the module and the row still on, the cursor empty, no spell waiting for its target (SpellIsTargeting,
+-- SpellCanTargetItem, SpellCanTargetItemID: the same call would give it the item, Mainline/ContainerFrame.lua:1508-1510), and the slot must still
+-- hold the same unlocked item, whose count is read again there. An item of poor quality (grey) is sold unless it is on the keep list;
 -- an item on the sell list is sold whatever its quality. A quest item and an item the game gives no value are never sold. The lists hold item
 -- IDs for the whole account (Errands.Lists) and are changed with /flatui sell and /flatui keep, or taken off with the two list rows of the page.
 -- The money is counted from the sell price the game gives (C_Item.GetItemInfo) and said once at the end, with no amount when a price was not known.
@@ -26,9 +27,9 @@ local _, ns = ...
 -- bottom left of the window and move as the merchant can repair or not (MerchantFrame.lua:987-1019, Mainline/MerchantFrame.xml:200-330), the
 -- buyback slot lies on its right half (MerchantFrame.xml:409-413), and the Merchant and Buyback tabs hang under its left edge
 -- (MerchantFrame.xml:583-614, 32 units high, SharedUIPanelTemplates.xml:932-933). Its click sells the next ones through the same checks; a click
--- the trade window or the cursor stops before its first sale says why and leaves the button. It is made out of combat only, never under the
--- gamepad interface, and hides itself whenever it is no longer wanted. Under the gamepad interface the cap still holds, and chat and /flatui
--- status say that the rest wait until a merchant is opened again.
+-- the trade window, the cursor or a spell waiting for its target stops before its first sale says why and leaves the button. It is made out of
+-- combat only, never under the gamepad interface, and hides itself whenever it is no longer wanted. Under the gamepad interface the cap still
+-- holds, and chat and /flatui status say that the rest wait until a merchant is opened again.
 --
 -- Repair uses RepairAllItems, with the guild's money first when Repair is Guild gold first and the guild lets you (CanGuildBankRepair and
 -- GetGuildBankWithdrawMoney, -1 for no limit). Two seconds later, an unpaid bill with the merchant still open is paid with your own gold. A bill
@@ -249,6 +250,12 @@ local function MerchantOpen()
 	return open and E.Shown(MerchantFrame)
 end
 
+-- A spell waits for its target, which the cursor does not say: C_Container.UseContainerItem would then give the item to the spell instead of selling
+-- it, as the game's own bag slot does (Mainline/ContainerFrame.lua:1508-1510). Only a plain true counts.
+local function Targeting()
+	return E.Ask(SpellIsTargeting) == true or E.Ask(SpellCanTargetItem) == true or E.Ask(SpellCanTargetItemID) == true
+end
+
 -- Errands' own selling: the module and Sell grey items are on.
 local function SellOn()
 	return ns.Enabled("errands") and E.Opt("sell") == true
@@ -365,6 +372,10 @@ local function SellNext(at)
 		Finish("the cursor held something")
 		return
 	end
+	if Targeting() then
+		Finish("a spell waited for its target")
+		return
+	end
 	local sale = run.queue[run.next]
 	if not sale then
 		Finish(nil)
@@ -438,6 +449,8 @@ local function SellMore()
 		why = "a trade window is open"
 	elseif E.Ask(GetCursorInfo) ~= nil or E.Ask(CursorHasItem) == true then
 		why = "the cursor holds something"
+	elseif Targeting() then
+		why = "a spell waits for its target"
 	end
 	if why then
 		print(("Flat UI: Sold nothing: %s."):format(why))
@@ -981,6 +994,8 @@ local function SellJunk()
 		return false, "a trade window is open"
 	elseif E.Ask(GetCursorInfo) ~= nil or E.Ask(CursorHasItem) == true then
 		return false, "the cursor holds something"
+	elseif Targeting() then
+		return false, "a spell waits for its target"
 	elseif type(C_Container) ~= "table" or type(C_Container.UseContainerItem) ~= "function" then
 		return false, "this client cannot sell from the bags"
 	end

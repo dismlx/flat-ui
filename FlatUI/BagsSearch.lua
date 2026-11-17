@@ -11,18 +11,22 @@ local _, ns = ...
 -- The grammar is Flat UI's own. Brackets bind first, then ! (not), then and (a space or &), then | (or). A term is a #keyword, a comparison
 -- (q or ilvl, then :, =, <, <=, > or >=, then a value; ilvl also takes a range such as 20-30), or a word: any other run of letters, or "quoted
 -- text". Text that does not parse, such as an open bracket while typing, is looked for whole as one word, so typing never fails, and a #word
--- that is no keyword is looked for as a word without its #. The text is compiled once for each change.
+-- that is no keyword is looked for as a word without its #. The text is compiled once for each change. The box keeps a typed bar as "||", the
+-- escape of the game's edit boxes (its login box reads it back the same way, Blizzard_GlueXML/Mainline/AccountLogin.lua:212-213), so the text is
+-- compiled with each "||" read as one bar, and a run of bars is one or; the text itself is kept as the box gives it.
 --
 -- A word is plain text, never a pattern (string.find with plain on), found without regard to case (string.lower, which folds A to Z only) in the
 -- item's name (the record's, else C_Item.GetItemNameByID), its type and subtype as C_Item.GetItemInfoInstant gives them in the client's language,
 -- the name of its equip slot (the game's global string the slot is named by, INVTYPE_HEAD and the like) and the label of its section, so potion,
--- cloth, mail, head and consumables all find something. The keywords are English: #junk (the junk test of BagsCategories.lua), #new, #quest,
--- #gear, #weapon, #armor or #armour (classes 2 and 4, 2, 4), #consumable and its subclasses #potion, #elixir, #flask, #scroll, #food and
--- #bandage (Enum.ItemClass and Enum.ItemConsumableSubclass, wowless, data/products/wowf/enums.yaml:4630-4651 and 4694-4711), #trade, #reagent,
--- #recipe, #ammo, #bag and #key (the rules of those sections), #boe (ItemMarks' answer, ns.ItemMarks.BoE, ItemMarks.lua:184-191), #bound,
--- #set, #usable and #unusable (ItemMarks' tooltip test, ns.ItemMarks.Unusable, :247-279), and the qualities #poor to #legendary. q takes 0 to 7,
--- the English names or the client's (ITEM_QUALITY0_DESC to ITEM_QUALITY7_DESC, Enum.ItemQuality, enums.yaml:5101-5111); ilvl compares the item
--- level of weapons and armour (ns.Items.LevelOf, Items.lua:425-438), and an item with no level never matches it.
+-- cloth, mail, head and consumables all find something. The keywords are English: #junk (the junk test of BagsCategories.lua), #new (New items
+-- of BagsCategories.lua, and while New items at the top is off, which keeps nothing as new, the game's own flag of a slot of my bags,
+-- C_NewItems.IsNewItem, NewItemsDocumentation.lua:15-28, as the glow of the slot shows it), #quest, #gear, #weapon, #armor or #armour (classes 2
+-- and 4, 2, 4), #consumable and its subclasses #potion, #elixir, #flask, #scroll, #food and #bandage (Enum.ItemClass and
+-- Enum.ItemConsumableSubclass, wowless, data/products/wowf/enums.yaml:4630-4651 and 4694-4711), #trade, #reagent, #recipe, #ammo, #bag and #key
+-- (the rules of those sections), #boe (ItemMarks' answer, ns.ItemMarks.BoE, ItemMarks.lua:184-191), #bound, #set, #usable and #unusable (ItemMarks'
+-- tooltip test, ns.ItemMarks.Unusable, :247-279), and the qualities #poor to #legendary. q takes 0 to 7, the English names or the client's
+-- (ITEM_QUALITY0_DESC to ITEM_QUALITY7_DESC, Enum.ItemQuality, enums.yaml:5101-5111); ilvl compares the item level of weapons and armour
+-- (ns.Items.LevelOf, Items.lua:425-438), and an item with no level never matches it.
 --
 -- A record whose name the client has not loaded yet matches nil, unknown, when only its name could decide: it is drawn dimmed until the name
 -- comes. The search never asks the server for an item: the name, the binding, the tooltip and the item level are read only once
@@ -59,10 +63,12 @@ local POTION, ELIXIR, FLASK, SCROLL, FOOD, BANDAGE = 1, 2, 3, 4, 5, 7
 -- Enum.ItemQuality (enums.yaml:5101-5111): the English names q takes, and the highest quality it takes.
 local QUALITIES = { poor = 0, common = 1, uncommon = 2, rare = 3, epic = 4, legendary = 5, artifact = 6, heirloom = 7 }
 local MOST_QUALITY = 7
+-- The containers of my bags (Enum.BagIndex, enums.yaml:544-572): the keyring, the backpack, the four bags and the reagent bag.
+local BAGS = { [-1] = true, [0] = true, [1] = true, [2] = true, [3] = true, [4] = true, [5] = true }
 
 local HELP = {
 	"Search",
-	"Words look in each item's name, kind and slot, and in the name of its section: potion, cloth, mail, head, junk.",
+	"Words look in each item's name, kind and slot, and in the name of its section: potion, cloth, mail, head, consumables.",
 	"A space or & is and, | is or, ! is not, brackets group, and \"quoted text\" is one word.",
 	"#junk  #new  #quest  #boe  #bound  #set  #usable  #unusable",
 	"#gear  #weapon  #armour  #consumable  #potion  #elixir  #flask  #food  #bandage  #scroll",
@@ -93,6 +99,10 @@ local function Whole(value)
 		return value
 	end
 	return nil
+end
+
+local function Opt(key)
+	return ns.Get(KEY .. "." .. key)
 end
 
 -- Runs fn as the search part of the module (ns.EachPart through B.Part), so a part that keeps failing stops alone.
@@ -226,6 +236,17 @@ local function OfQuality(quality)
 	end
 end
 
+-- The game's own new flag of a live slot of my bags (C_NewItems.IsNewItem), which the glow of the slot shows: only a plain true counts. Pointing at
+-- the slot takes the flag off (Mainline/ContainerFrame.lua:1735-1738), which the next search pass sees.
+local function GameNew(record)
+	local bag, slot = Whole(record.bag), Whole(record.slot)
+	if record.live ~= true or not bag or not slot or not BAGS[bag] or type(C_NewItems) ~= "table" or type(C_NewItems.IsNewItem) ~= "function" then
+		return false
+	end
+	local ok, isNew = pcall(C_NewItems.IsNewItem, bag, slot)
+	return ok and not ns.IsSecret(isNew) and isNew == true
+end
+
 local function BoE(record)
 	local marks = ns.ItemMarks
 	local answer = type(marks) == "table" and marks.BoE or nil
@@ -269,7 +290,11 @@ local KEYWORDS = {
 	junk = function(record)
 		return Categories.IsJunk(record) == true
 	end,
+	-- New items keeps nothing as new while New items at the top is off, so the game's flag answers then, as the glow does.
 	new = function(record)
+		if Opt("newItems") == false then
+			return GameNew(record)
+		end
 		return Categories.New.Is(record) == true
 	end,
 	quest = Section("quest"),
@@ -462,13 +487,18 @@ local OPERATORS = { ["("] = true, [")"] = true, ["|"] = true, ["&"] = true, ["!"
 -- A run of text: anything but space, the operators and the quote.
 local RUN = '^[^%s%(%)|&!"]+'
 
--- The tokens of a text: { kind = an operator } or { kind = "text", text, quoted }. Nil for a quote that is not closed.
+-- The tokens of a text: { kind = an operator } or { kind = "text", text, quoted }. Nil for a quote that is not closed. A run of bars is one or, so
+-- "||" typed for or means or.
 local function Tokens(source)
 	local tokens, at, length = {}, 1, #source
 	while at <= length do
 		local char = source:sub(at, at)
 		if char:find("^%s") then
 			at = at + 1
+		elseif char == "|" then
+			local _, last = source:find("^|+", at)
+			tokens[#tokens + 1] = { kind = "|" }
+			at = last + 1
 		elseif OPERATORS[char] then
 			tokens[#tokens + 1] = { kind = char }
 			at = at + 1
@@ -582,9 +612,10 @@ Either = function(state)
 	return #list == 1 and first or { op = "or", list = list }
 end
 
--- What a text looks for, or nil for a text with nothing in it. A text that does not parse is one word.
+-- What a text looks for, or nil for a text with nothing in it. A text that does not parse is one word. The box gives a typed bar as "||" (see the
+-- top of the file), read here as the one bar the player typed.
 local function Compile(source)
-	local trimmed = source:match("^%s*(.-)%s*$") or ""
+	local trimmed = (source:gsub("||", "|")):match("^%s*(.-)%s*$") or ""
 	if trimmed == "" then
 		return nil
 	end
@@ -672,6 +703,7 @@ Eval = function(node, record)
 	return Test(node, record)
 end
 
+-- The shared text as the boxes give it, with a typed bar kept as "||" (see the top of the file).
 function Search.Text()
 	return text
 end

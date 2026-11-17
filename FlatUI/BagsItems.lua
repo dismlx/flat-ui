@@ -25,7 +25,7 @@ local _, ns = ...
 -- sell, deposit at the banker, mail, trade, post at the auction house, split a stack, link, dress up and drag, and its OnEnter is the game's
 -- tooltip with the compare, which also takes the game's new flag off (ContainerFrame.lua:1735-1775). No script is set on these buttons.
 -- They are made out of combat only, STEP to a frame, by B.Buttons.Prepare (Bags.lua at Start, BagsData.lua at BAG_CONTAINER_UPDATE); a call made
--- in a fight waits for its end with a flag of its own, since ns.OutOfCombat keeps every call it is given (Core.lua:1884-1891). The layout may ask
+-- in a fight waits for its end with a flag of its own, since ns.OutOfCombat keeps every call it is given (Core.lua:1896-1903). The layout may ask
 -- for a missing one (B.Buttons.Live), which is then made at once, out of combat only. Bag addons of this client found slots made by addon code
 -- failing when they were first shown in a fight, so as a precaution each Prepare run that made buttons hands them to B.Window.Warm, which shows
 -- them once off the screen (design §2.5.1), and PLAYER_REGEN_DISABLED, which comes before the lockdown (Cooldowns.lua:1738-1739), makes every
@@ -41,26 +41,25 @@ local _, ns = ...
 -- button or a frame that holds one, and first in the OnHide of the bag window, its title bar and its footer buttons, whichever hears it first. The
 -- box is then the game's alone and stays, anchored to the hidden slot, until the player presses Okay or Cancel.
 --
--- Bank slots (FlatUIBankTab<tab>Slot<slot>, tabs 6 to 14), the bank's bag slots (FlatUIBankBag<n>, container -2, Camelot/BankFrame.lua:136-191,
--- 301-327) and the slots of other characters and of the bank away from the banker (FlatUIBagsCached<n>, pooled per owner) are ItemButtons of this
--- addon's own from the intrinsic alone (Blizzard_ItemButton/Shared/ItemButtonTemplate.xml:4-81), made when asked, also in a fight, since nothing
--- on them is protected. Their clicks and tooltips are this file's:
+-- Bank slots (FlatUIBankTab<tab>Slot<slot>, tabs 6 to 14) and the slots of other characters and of the bank away from the banker
+-- (FlatUIBagsCached<n>, pooled per owner) are ItemButtons of this addon's own from the intrinsic alone
+-- (Blizzard_ItemButton/Shared/ItemButtonTemplate.xml:4-81), made when asked, also in a fight, since nothing on them is protected. The bank's bag
+-- slots (container -2) are not among them: BagsBank.lua draws those, with their clicks and tooltips, in its row over the bank window's footer.
+-- The clicks and tooltips of these buttons are this file's:
 -- - A bank slot picks its item up with C_Container.PickupContainerItem on a left click, a drag and a drop, and takes it out with
---   C_Container.UseContainerItem and no bank type on a right click, as the game's bank buttons do (Mainline/BankFrameTemplates.lua:436-478). A
---   bank bag slot picks up with C_Container.PickupContainerItem(-2, n) on any click, drag or drop (Camelot/BankFrame.lua:378-395); one the
---   character has not bought, by C_Bank.FetchNumPurchasedBankTabs (BankDocumentation.lua:226-239), shows the game's lock (bankslot-icon-lock,
---   Camelot/BankFrame.xml:11) and takes no click. Both act only while the bank is live (B.Bank.Live) and never in a fight, when a line says so.
+--   C_Container.UseContainerItem and no bank type on a right click, as the game's bank buttons do (Mainline/BankFrameTemplates.lua:436-478), only
+--   while the bank is live (B.Bank.Live) and never in a fight, when a line says so.
 -- - A modified click links the item: out of a fight with HandleModifiedItemClick (Mainline/ItemButtonTemplate.lua:372-404), for chat links and
 --   the dressing room, and in a fight only the chat link, with ChatFrameUtil.InsertLink while IsModifiedClick("CHATLINK"), which is the call that
 --   function makes for it (:376-387). The dressing room writes the game's DressUpFrame and opens it as a panel (Mainline/DressUpFrames.lua:346-366),
 --   which a fight refuses to this addon (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:853-861, 886-888). The link of a live bank
 --   slot is read with C_Container.GetContainerItemLink, and a cached link is made whole with C_Item.GetItemInfo first. Any other click on a cached
 --   slot does nothing, so a cached slot never reaches the game's click.
--- - The tooltip is GameTooltip: SetOwner, then SetBagItem for a live bank slot or bank bag slot, or SetHyperlink and a line "Last seen ..." from
+-- - The tooltip is GameTooltip: SetOwner, then SetBagItem for a live bank slot, or SetHyperlink and a line "Last seen ..." from
 --   B.Data.Characters (the days counted from the local noon of one day to the other's with date and time, rounded, as the window's title counts
 --   them) for a cached one, then Show, out of a fight. The sell price stays: on this build it is plain text
 --   (Blizzard_GameTooltip/Mainline/GameTooltip.lua:325-333). In a fight it is the name (C_Item.GetItemNameByID while the record has none), the
---   count and that line in plain lines (SetText, AddLine), the rule Chat keeps for link tooltips (Core.lua:198-200), and so is the tooltip of an
+--   count and that line in plain lines (SetText, AddLine), the rule Chat keeps for link tooltips (Core.lua:208-210), and so is the tooltip of an
 --   item the game builds none for. When the mouse leaves, it is hidden while the button owns it (IsOwned, Hide).
 --
 -- The look is set once on each button, as Windows restyles the game's slots (Windows.lua:1123-1189): the NormalTexture at alpha 0, the rounded
@@ -83,9 +82,10 @@ local _, ns = ...
 -- ItemMarks' answers drawn as ItemMarks.lua:366-460 draws them (BoE, the red tint, the Feed Pet icon of C_Spell.GetSpellTexture): all three on
 -- this character's items, with Unusable asked by bag and slot for a live slot and by link for the bank away from the banker, and the BoE mark
 -- alone on another character's, since the other two describe the character playing. The junk coin shows B.Categories.IsJunk, Errands' own test
--- of the slot for a live slot of the bags. The search dims through the item button's SetMatchesSearch (Shared/ItemButtonTemplate.lua:49-56,
--- 96-116), and the level and marks fade to 0.4. A name the client has not loaded is asked for once through B.Data.Want (Core.lua:138-139). An
--- empty slot of a special bag takes a fill of its kind, and the free slot of a kind its count.
+-- of the slot for a live slot of the bags, on anything Sell junk would sell, an item of the sell list of any quality too; the BoE word sits in
+-- the same corner, so it is left out while the coin shows, since the item is to be sold. The search dims through the item button's
+-- SetMatchesSearch (Shared/ItemButtonTemplate.lua:49-56, 96-116), and the level and marks fade to 0.4. A name the client has not loaded is asked
+-- for once through B.Data.Want (Core.lua:148-149). An empty slot of a special bag takes a fill of its kind, and the free slot of a kind its count.
 --
 -- Events this file owns (design §2.8), each run as the part "items" while Bags is on, with the work in its order:
 -- ITEM_LOCK_CHANGED(bag, slot) (ContainerDocumentation.lua:718-728): B.Buttons.Lock(bag, slot), the lock of that one button read live; no pass.
@@ -110,19 +110,14 @@ local ItemMarks = ns.ItemMarks
 local TEMPLATE = "ContainerFrameItemButtonTemplate"
 local LIVE_NAME = "FlatUIBag%dSlot%d"
 local BANK_NAME = "FlatUIBankTab%dSlot%d"
-local BAG_SLOT_NAME = "FlatUIBankBag%d"
 local OFFLINE_NAME = "FlatUIBagsCached%d"
 -- Template buttons made in one frame of a Prepare run.
 local STEP = 40
--- The containers (Enum.BagIndex): the backpack, the four bags and the reagent bag, the keyring, the bank's bag slots (Characterbanktab) and the
--- bank's tabs (CharacterBankTab_1 to _9).
+-- The containers (Enum.BagIndex): the backpack, the four bags and the reagent bag, the keyring, and the bank's tabs (CharacterBankTab_1 to _9).
 local BAGS = { 0, 1, 2, 3, 4, 5 }
 local REAGENT_BAG = 5
 local KEYRING = -1
-local BANK_BAGS = -2
 local FIRST_TAB, LAST_TAB = 6, 14
--- Enum.BankType.Character, for a client whose Enum does not say.
-local CHARACTER_BANK = 0
 
 -- The look of Windows' slots (Windows.lua:56-60) and of its text: the hover and pressed tints, the edge of a broken item, the dim text colour
 -- (Threat.lua:46) and how far the level and marks fade while the search dims a slot.
@@ -146,9 +141,8 @@ local MIN_QUALITY = { all = 0, uncommon = 2, rare = 3, epic = 4 }
 local BIND_WORD, BIND_FONT, BIND_COLOUR = "BoE", "NumberFontNormalSmall", { 0.38, 0.82, 1 }
 local TINT = { 1, 0.18, 0.18 }
 local FEED_PET, FOOD_SIZE, FOOD_COLOUR = 6991, 14, { 0.45, 0.85, 0.3 }
--- The art of the template that the other buttons draw with textures of their own, and the lock of a bank bag slot not bought.
+-- The art of the template that the other buttons draw with textures of their own.
 local JUNK_ATLAS = "bags-junkcoin"
-local LOCK_ATLAS = "bankslot-icon-lock"
 local QUEST_BANG = { "TEXTURE_ITEM_QUEST_BANG", "Interface\\ContainerFrame\\UI-Icon-QuestBang" }
 local QUEST_BORDER = { "TEXTURE_ITEM_QUEST_BORDER", "Interface\\ContainerFrame\\UI-Icon-QuestBorder" }
 local QUEST_WIDTH, QUEST_HEIGHT = 37, 38
@@ -174,11 +168,6 @@ local SUBCLASS_FILLS = { [1] = "soul", [2] = "herb", [3] = "enchanting", [4] = "
 	[11] = "reagent" }
 -- Each row of the Bags page this file reads, at its default for a profile that has none yet (design §7.2).
 local DEFAULTS = { itemLevel = true, quality = "all", marks = true, junkCoin = true, newGlow = true }
--- The game's words for a bank bag slot (Camelot/BankFrame.lua:176, 181), in English when the client has none.
-local WORDS = {
-	bankBag = { "BANK_BAG", "Bank bag slot" },
-	purchase = { "BANK_BAG_PURCHASE", "Purchasable bag slot" },
-}
 local SAY = {
 	fight = "Bags: the bank's slots wait for the end of the fight.",
 	closed = "Bags: the bank is not open.",
@@ -193,15 +182,15 @@ local DAY = 86400
 local FADES = { "level", "bind", "tint", "food" }
 local NONE = {}
 
--- Per button: { kind = "live", "bank", "bagslot" or "offline", bag, slot (live, bank and bagslot), holder (live), owner (offline), icon, outline,
--- cooldown, record and opts of the last Draw, broken, fill (the kind's colour of an empty slot), unbought (bagslot), and the regions of this file
--- made on it when first needed, false when the game refused one: level, bind, tint, food, quest, junk, lock, freeText }.
+-- Per button: { kind = "live", "bank" or "offline", bag, slot (live and bank), holder (live), owner (offline), icon, outline, cooldown, record and
+-- opts of the last Draw, broken, fill (the kind's colour of an empty slot), and the regions of this file made on it when first needed, false when
+-- the game refused one: level, bind, tint, food, quest, junk, freeText }.
 local states = setmetatable({}, { __mode = "k" })
 -- Per bag: its holder, and its template buttons by slot. The number of slots each bag had at the last Prepare.
 local holders = {}
 local live = {}
 local sizes = {}
--- Per bank tab (and -2 for the bag slots): the buttons by slot.
+-- Per bank tab: the buttons by slot.
 local banks = {}
 -- Offline buttons: those free, those each owner holds, and how many were made.
 local pool = {}
@@ -321,12 +310,6 @@ local function Fighting()
 	return ok and (ns.IsSecret(fighting) or fighting == true)
 end
 
--- A word of the game's, or the English one when the client has none.
-local function Word(key)
-	local entry = WORDS[key]
-	return Text(_G[entry[1]]) or entry[2]
-end
-
 local function Say(text)
 	local now = 0
 	if type(GetTime) == "function" then
@@ -415,30 +398,6 @@ local function KeyringShows()
 	return ok and not ns.IsSecret(shows) and shows == true
 end
 
-local function BankType()
-	local enum = _G.Enum
-	local types = Usable(enum) and enum.BankType or nil
-	local value = Usable(types) and types.Character or nil
-	if ns.Finite(value) then
-		return value
-	end
-	return CHARACTER_BANK
-end
-
--- Whether bank bag slot n is bought: the first tab is the bank's own slots, and bag slot n holds tab n (Camelot/BankFrame.lua:154-183). An
--- answer the game withholds counts as bought, so the slot is not locked by mistake.
-local function Bought(n)
-	local api = C_Bank
-	if type(api) ~= "table" or ns.IsSecret(api) or type(api.FetchNumPurchasedBankTabs) ~= "function" then
-		return true
-	end
-	local ok, count = pcall(api.FetchNumPurchasedBankTabs, BankType())
-	if not ok or not ns.Finite(count) then
-		return true
-	end
-	return n <= count
-end
-
 -- The colour the game gives a quality in the bags, or nil (none for poor items, ColorConstants.lua:21-30).
 local function QualityColour(quality)
 	if not ns.Finite(quality) then
@@ -524,26 +483,6 @@ local function NameOf(record)
 		end
 	end
 	return "Item " .. tostring(math.floor(record.id))
-end
-
--- The bag in bank bag slot n, read live at the banker, for a bag slot drawn with no record: a record of this file in the shape of BagsData's.
-local function BagSlotRecord(state)
-	if not BankLive() then
-		return nil
-	end
-	local info = Info(BANK_BAGS, state.slot)
-	local id = info and Plain(info.itemID)
-	if not ns.Finite(id) then
-		return nil
-	end
-	local quality = Plain(info.quality)
-	local icon = Plain(info.iconFileID)
-	return {
-		key = Me(), bag = BANK_BAGS, slot = state.slot, live = true, id = id, count = 1,
-		quality = ns.Finite(quality) and quality or nil,
-		link = Text(info.hyperlink), icon = (ns.Finite(icon) or Text(icon)) and icon or nil, name = Text(info.itemName),
-		bound = Plain(info.isBound) == true, locked = Plain(info.isLocked) == true,
-	}
 end
 
 -- The fill of an empty slot of a bag of this kind, or nil for a normal bag. kind is BagsData's { id, label, family, class, subclass, key, name }:
@@ -888,17 +827,6 @@ local function QuestTexture(button)
 	return texture
 end
 
--- The game's lock over a bank bag slot not bought (Camelot/BankFrame.xml:11).
-local function LockTexture(button)
-	local texture = Made(button, "ARTWORK", 1)
-	if texture == nil then
-		return nil
-	end
-	pcall(texture.SetAtlas, texture, LOCK_ATLAS)
-	pcall(texture.SetAllPoints, texture, button)
-	return texture
-end
-
 local function FreeText(button)
 	local text = ns.OwnText(button, "OVERLAY", FREE_FONT)
 	if text == nil then
@@ -1036,12 +964,18 @@ local function Level(button, state, record, link)
 	end
 end
 
+-- Whether the junk coin shows on a record: what B.Categories.IsJunk says Sell junk would sell (design §4.4), while Junk coin is on.
+local function JunkShown(record)
+	return record ~= nil and Opt("junkCoin") ~= false and Ask(Categories.IsJunk, record) == true
+end
+
 -- Whose marks a record gets (design §2.5.3): the character playing gets all three, and Unusable reads its tooltip by bag and slot while the slot
 -- is live, by link otherwise (the bank away from the banker); another character only the BoE mark, which depends on the item and its bound flag.
-local function Marks(button, state, record, link)
+-- junk: the junk coin shows, in the corner of the BoE word, which is left out then: the item is to be sold.
+local function Marks(button, state, record, link, junk)
 	local bind, tint, food = false, false, false
-	if record ~= nil and state.kind ~= "bagslot" and Opt("marks") ~= false and Usable(ItemMarks) then
-		bind = Ask(ItemMarks.BoE, record.id, link, record.bound == true) == true
+	if record ~= nil and Opt("marks") ~= false and Usable(ItemMarks) then
+		bind = not junk and Ask(ItemMarks.BoE, record.id, link, record.bound == true) == true
 		if record.key == Me() then
 			if record.live == true then
 				tint = Ask(ItemMarks.Unusable, record.id, link, record.bag, record.slot) == true
@@ -1056,9 +990,8 @@ local function Marks(button, state, record, link)
 	Mark(button, state, "food", food, FoodTexture)
 end
 
--- The junk coin on what B.Categories.IsJunk says Sell junk would sell (design §4.4): the template's own JunkIcon on a live slot.
-local function Junk(button, state, record)
-	local show = record ~= nil and state.kind ~= "bagslot" and Opt("junkCoin") ~= false and Ask(Categories.IsJunk, record) == true
+-- The junk coin (JunkShown): the template's own JunkIcon on a live slot, a texture of this file's on the other buttons.
+local function Junk(button, state, show)
 	if state.kind == "live" then
 		local coin = Field(button, "JunkIcon")
 		if coin then
@@ -1085,7 +1018,7 @@ function Buttons.Dim(button, matched)
 	if state == nil then
 		return
 	end
-	local dim = state.record ~= nil and state.kind ~= "bagslot" and matched ~= true and Searching()
+	local dim = state.record ~= nil and matched ~= true and Searching()
 	pcall(button.SetMatchesSearch, button, not dim)
 	local alpha = dim and FADED or 1
 	for _, key in ipairs(FADES) do
@@ -1115,9 +1048,6 @@ function Buttons.Draw(button, record, opts)
 	if record ~= nil and (state.kind == "live" or state.kind == "bank") and not (record.bag == state.bag and record.slot == state.slot) then
 		record = RecordOf(Ask(Data.Item, Me(), state.bag, state.slot))
 	end
-	if record == nil and state.kind == "bagslot" then
-		record = BagSlotRecord(state)
-	end
 	state.record, state.opts = record, opts
 	local empty = record == nil and opts.hold ~= true
 	local link = record and Text(record.link) or nil
@@ -1140,20 +1070,18 @@ function Buttons.Draw(button, record, opts)
 		Cooldown(state)
 		pcall(button.UpdateQuestItem, button, record ~= nil and record.quest == true, record ~= nil and record.questStart == true or nil, false)
 		Glow(button, record)
-	elseif state.kind ~= "bagslot" then
+	else
 		OwnQuest(button, state, record)
 	end
 	state.broken = reading and Broken(state.bag, state.slot) or false
 	state.fill = empty and opts.kind ~= nil and KindFill(opts.kind, state.bag) or nil
 	PaintOne(state)
 	Level(button, state, record, link)
-	Marks(button, state, record, link)
-	Junk(button, state, record)
+	-- The junk answer once, for the coin and for the BoE word that gives way to it.
+	local junk = JunkShown(record)
+	Marks(button, state, record, link, junk)
+	Junk(button, state, junk)
 	FreeCount(button, state, empty and opts.free or nil)
-	if state.kind == "bagslot" then
-		state.unbought = not Bought(state.slot)
-		Mark(button, state, "lock", state.unbought, LockTexture)
-	end
 	if record ~= nil and record.name == nil then
 		Ask(Data.Want, record.id)
 	end
@@ -1247,9 +1175,6 @@ end
 local function PlainTip(tip, state)
 	local record = state.record
 	if record == nil then
-		if state.kind == "bagslot" then
-			return (pcall(tip.SetText, tip, Word(state.unbought and "purchase" or "bankBag")))
-		end
 		return false
 	end
 	local r, g, b = QualityColour(record.quality)
@@ -1273,23 +1198,16 @@ local function Entered(button)
 		return
 	end
 	local record = state.record
-	if record == nil and state.kind ~= "bagslot" then
+	if record == nil then
 		HideTip(button)
 		return
-	end
-	if state.kind == "bagslot" then
-		state.unbought = not Bought(state.slot)
 	end
 	if not pcall(tip.SetOwner, tip, button, "ANCHOR_RIGHT") then
 		return
 	end
 	local shown = false
 	if not Fighting() then
-		if state.kind == "bagslot" then
-			if not state.unbought and record ~= nil and BankLive() then
-				shown = Built(pcall(tip.SetBagItem, tip, BANK_BAGS, state.slot))
-			end
-		elseif state.kind == "bank" and record.live == true and BankLive() then
+		if state.kind == "bank" and record.live == true and BankLive() then
 			shown = Built(pcall(tip.SetBagItem, tip, state.bag, state.slot))
 		else
 			local link = Text(record.link)
@@ -1331,7 +1249,7 @@ end
 -- string that C_Item.GetItemInfo makes whole once the client has the item.
 local function WholeLink(state)
 	local link = nil
-	if (state.kind == "bank" or state.kind == "bagslot") and BankLive() then
+	if state.kind == "bank" and BankLive() then
 		local call = Container("GetContainerItemLink")
 		if call then
 			local ok, found = pcall(call, state.bag, state.slot)
@@ -1375,7 +1293,7 @@ local function Linked(state)
 	end
 end
 
--- A click, drag or drop on a bank slot or bank bag slot (design §2.4).
+-- A click, drag or drop on a bank slot (design §2.4).
 local function Use(state, mouse)
 	if Fighting() then
 		Say(SAY.fight)
@@ -1385,13 +1303,7 @@ local function Use(state, mouse)
 		Say(SAY.closed)
 		return
 	end
-	if state.kind == "bagslot" then
-		state.unbought = not Bought(state.slot)
-		local pickup = Container("PickupContainerItem")
-		if pickup and not state.unbought then
-			pcall(pickup, BANK_BAGS, state.slot)
-		end
-	elseif mouse == "RightButton" then
+	if mouse == "RightButton" then
 		local use = Container("UseContainerItem")
 		if use then
 			pcall(use, state.bag, state.slot)
@@ -1511,7 +1423,7 @@ local function Make(bag, slot, warm)
 	return button
 end
 
--- Makes a button of this file's own from the intrinsic: a bank slot, a bank bag slot or an offline slot. It starts hidden, as the template does.
+-- Makes a button of this file's own from the intrinsic: a bank slot or an offline slot. It starts hidden, as the template does.
 local function MakeOwn(name, parent, kind, bag, slot)
 	local ok, button = pcall(CreateFrame, "ItemButton", name, parent)
 	if not ok or not IsFrame(button) then
@@ -1563,9 +1475,9 @@ function Buttons.Live(bag, slot)
 	return button
 end
 
--- B.Buttons.Bank(tab, slot): the button of a slot of a bank tab (6 to 14) while the bank is live, or with tab -2 the button of bank bag slot n.
+-- B.Buttons.Bank(tab, slot): the button of a slot of a bank tab (6 to 14) while the bank is live. The bank's bag slots are BagsBank.lua's.
 function Buttons.Bank(tab, slot)
-	if not Whole(slot) or slot < 1 or not (tab == BANK_BAGS or IsTab(tab)) then
+	if not Whole(slot) or slot < 1 or not IsTab(tab) then
 		return nil
 	end
 	local list = banks[tab]
@@ -1578,9 +1490,7 @@ function Buttons.Bank(tab, slot)
 		Rehome(button, "bank", false)
 		return button
 	end
-	local bagSlot = tab == BANK_BAGS
-	local name = bagSlot and BAG_SLOT_NAME:format(slot) or BANK_NAME:format(tab, slot)
-	button = MakeOwn(name, Home("bank"), bagSlot and "bagslot" or "bank", tab, slot)
+	button = MakeOwn(BANK_NAME:format(tab, slot), Home("bank"), "bank", tab, slot)
 	list[slot] = button
 	return button
 end
@@ -1897,7 +1807,7 @@ function Buttons.Lock(bag, slot)
 	local list
 	if IsBag(bag) then
 		list = live[bag]
-	elseif IsTab(bag) or bag == BANK_BAGS then
+	elseif IsTab(bag) then
 		list = banks[bag]
 	end
 	local button = list and list[slot] or nil

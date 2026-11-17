@@ -3,14 +3,15 @@ local _, ns = ...
 -- Bags data: what the bag and bank windows of Bags show, and the record the account keeps of each character's bags, bank, worn items and gold, so
 -- that the bank and the other characters can be shown away from the banker and counted in item tooltips. Bags.lua is the module and makes ns.Bags
 -- with every sub-table; this file only adds the fields of ns.Bags.Data, and two functions of ns for the row Forget a character. It hears its events
--- on the module (ns.AddEvent, Core.lua:2081-2129), and each handler runs as the part cache of the module (B.Part, a fresh key per call as
--- Errands.Run does, Errands.lua:212-227), so a failure stops this part alone and the windows go on with what the game answers. It touches no frame,
--- the game's or its own: it reads the game, writes FlatUIDB.bags, and looks up the other parts of Bags and the functions of Core.lua when it calls
--- them, never at load.
+-- on the module (ns.AddEvent, Core.lua:2093-2141), and each handler runs as the part cache of the module (B.Part, a fresh key per call as
+-- Errands.Run does, Errands.lua:212-227), so a failure counts against this part alone. Nothing else tells the windows that the bags changed, so
+-- cache is one of the parts Bags cannot do without (Bags.lua): when it stops, both windows hide and the game's bags come back. The tooltip index
+-- alone (below) is built as the part tooltips, the part of BagsTooltip.lua that it serves. It touches no frame, the game's or its own: it reads the
+-- game, writes FlatUIDB.bags, and looks up the other parts of Bags and the functions of Core.lua when it calls them, never at load.
 --
 -- The record. FlatUIDB.bags is account data outside every profile, made only while the module is on, as FlatUIDB.datapanels is
 -- (DataPanels.lua:193-212). v is its layout, 1; a store of another layout starts its characters again and keeps placed, the hand placements of
--- BagsCategories.lua. chars holds each character by "Name - Realm" (ns.CharacterKey, Core.lua:2692-2695): realm (GetNormalizedRealmName,
+-- BagsCategories.lua. chars holds each character by "Name - Realm" (ns.CharacterKey, Core.lua:2704-2707): realm (GetNormalizedRealmName,
 -- PlayerScriptDocumentation.lua:651-658), class (UnitClassBase, UnitDocumentation.lua:930-946), faction (UnitFactionGroup, :1207-1222), level
 -- (UnitLevel, :2474-2487), money (GetMoney, PlayerScriptDocumentation.lua:642-649), seen and bankSeen (time() of the last write of the bags or the
 -- gold, and of the bank), bags (containers 0 to 5, and -1 while the game shows the keyring), bank (the bought tabs, 6 to 14), bagItems (the item ID
@@ -23,18 +24,19 @@ local _, ns = ...
 -- ns.IsSecret or ns.Finite first and a withheld one counts as none. A character that is not a table, a key that is not a string and a text that
 -- does not parse are skipped when read, never raised.
 --
--- When it is written, by the events this file owns, in this order (the module hears them only while it is on, Core.lua:3492-3500):
--- PLAYER_ENTERING_WORLD (SystemDocumentation.lua:136), the module's Start (ns.AddStart, Core.lua:2174-2187), and B.Data.Resume, which Bags.lua
--- calls when the page comes on again after Start (Core then runs Refresh and not Start, Core.lua:2266-2275, and the module heard nothing while the
+-- When it is written, by the events this file owns, in this order (the module hears them only while it is on, Core.lua:3504-3512):
+-- PLAYER_ENTERING_WORLD (SystemDocumentation.lua:136), the module's Start (ns.AddStart, Core.lua:2186-2199), and B.Data.Resume, which Bags.lua
+-- calls when the page comes on again after Start (Core then runs Refresh and not Start, Core.lua:2278-2287, and the module heard nothing while the
 -- page was off): the keyring test and the kinds of the bags are read again, and the realm, class, faction, level, gold, worn items and bag items
 -- written; a full scan of the bags, and of the bank's tabs while the bank is open, then waits for the next BAG_UPDATE_DELAYED, and runs FULL_WAIT
--- seconds later when none comes.
+-- seconds later when none comes. After B.Data.Resume that scan is followed by a read of the quest marks and the set of every slot (Remark, below):
+-- the scan reads them only for a slot whose item changed, and the events that tell of them went unheard while the page was off too.
 -- BAG_UPDATE (ContainerDocumentation.lua:661) only marks its container. BAG_UPDATE_DELAYED (:677, one after a batch of changes) scans the
 -- marked containers, and every bag when the last full scan is SWEEP seconds old, which also catches up a change no BAG_UPDATE marked (the bank is
 -- read in full at each open instead). A slot counts as changed when its item, link, count, lock or quality changed, and its text is written when
 -- its item, link, count, quality or binding changed. Bags is then told, in this order: B.Categories.New.Seen(changed) with the changed slots of the
--- bags, B.Request("items", "bags", changed) and the footer of the bags, and while the bank is open B.Request("items", "bank", changed) and the
--- footer of the bank, and B.Request("layout", "bank") when a bank bag slot changed what the tabs are.
+-- bags, B.Request("items", "bags", changed) and the footer of the bags, and while the bank is open (or in the grace after its close, below)
+-- B.Request("items", "bank", changed) and the footer of the bank, and B.Request("layout", "bank") when a bank bag slot changed what the tabs are.
 -- BAG_CONTAINER_UPDATE (:623, a bag put in or taken out) reads the keyring test, the kinds and the bag items again, flags a full scan, and calls
 -- B.Buttons.Prepare with the bags' containers and B.Request("layout", "bags"); while the bank is open it reads the bank's tabs again too and asks
 -- B.Request("layout", "bank"). BAG_NEW_ITEMS_UPDATED (:629; the game's bag windows draw again on it, Mainline/ContainerFrame.lua:611-612) comes
@@ -47,16 +49,21 @@ local _, ns = ...
 -- (EquipmentManagerDocumentation.lua:308) reads the set of each slot again; a change of either is written and asks B.Request("items").
 -- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (ItemDocumentation.lua:1815, 1857) fill in the records that waited for an item's name, and for
 -- an item B.Data.Want asked for call B.Request("items") and B.Request("search"). PLAYER_MONEY (CurrencyInfoDocumentation.lua:637) writes the gold,
--- and PLAYER_LOGOUT (SystemDocumentation.lua:159) the gold, the worn items and the bag items, which can change unheard while the page is off; both
--- ask B.Request("footer", "bags"). PLAYER_LEVEL_UP (UnitDocumentation.lua:3832) writes the level
--- from its own value, which UnitLevel may not count yet; PLAYER_EQUIPMENT_CHANGED (PaperDollInfoDocumentation.lua:386) writes the worn item of its
--- slot. The other parts are told only while Bags is in use (B.On: on, not stopped and not stood down for another bag addon or the gamepad
--- interface); the record is kept all the same.
+-- and PLAYER_LOGOUT (SystemDocumentation.lua:159), heard only while the page is on, writes the gold, the worn items and the bag items once more as
+-- a last refresh, which also catches a change whose event failed or that came while this part was stopped (what changed while the page was off was
+-- read again by B.Data.Resume when it came back on, and nothing is written while it stays off); both ask B.Request("footer", "bags").
+-- PLAYER_LEVEL_UP (UnitDocumentation.lua:3832) writes the level from its own value, which UnitLevel may not count yet; PLAYER_EQUIPMENT_CHANGED
+-- (PaperDollInfoDocumentation.lua:386) writes the worn item of its slot. The other parts are told only while Bags is in use (B.On: on, not
+-- stopped and not stood down for another bag addon or the gamepad interface); the record is kept all the same.
 --
 -- The bank is read only while it is open, as the game reads it only while its panel shows (Mainline/BankFrameTemplates.lua:622-630): BagsBank.lua
 -- calls B.Data.BankScan at the open, B.Data.BankTabs when the tabs or the bank's bag slots change (it reads them again, has every tab scanned at
 -- the next BAG_UPDATE_DELAYED, and says whether they changed, which needs a new layout of the bank window), and B.Data.BankClosed at the close,
--- which writes bankSeen. The bought tabs are C_Bank.FetchPurchasedBankTabIDs(Enum.BankType.Character) (BankDocumentation.lua:256-269): tab 6 is the
+-- which ends the live reading and dates the snapshot (bankSeen), except for a close the module did not hear (Bank.Settle, when the page comes up),
+-- whose snapshot keeps the date of its last write. A move sent just before a close may be answered after it, so for GRACE seconds after a close
+-- it heard the tabs a BAG_UPDATE marks are still read at BAG_UPDATE_DELAYED, slot by slot against what the visit read; a tab the client then gives
+-- no slots, or no item at all where the visit read some, is no answer and keeps its snapshot, since the client may drop the bank's items at the
+-- close. The bought tabs are C_Bank.FetchPurchasedBankTabIDs(Enum.BankType.Character) (BankDocumentation.lua:256-269): tab 6 is the
 -- bank's own slots and tab 5 + n the bag in bank bag slot n, the item at (Enum.BagIndex.Characterbanktab, n) (C_Container.GetContainerItemID,
 -- ContainerDocumentation.lua:175-190; Camelot/BankFrame.lua:136-191, 312-319). The items in a tab change with BAG_UPDATE of the tab
 -- (Mainline/BankFrameTemplates.lua:791-795) and are written as they change, so a visit that ends in a disconnect is kept. A tab the game gives no
@@ -88,16 +95,19 @@ local _, ns = ...
 -- and bag 5 is the reagent bag. B.Data.Characters lists every character kept, and this one with the game's answers. A character is near when its
 -- realm is this one's or one the client names as connected (C_AutoComplete.GetAutoCompleteRealms, AutoCompleteDocumentation.lua:26-33), or, kept
 -- with no realm, when its key ends in this character's realm. The tooltip index of B.Data.Counts holds the bags, bank and worn items of the near
--- characters other than this one by item ID. It is built the first time a tooltip asks, INDEX_STEP slots a frame (C_Timer.After), and kept for
--- the session, since the others do not change while this one plays; Forget, or connected realms the client names later, have it built again.
+-- characters other than this one by item ID. It is built the first time a tooltip asks, INDEX_STEP slots a frame (C_Timer.After), each step as the
+-- part tooltips (so an index that keeps failing stops the counts alone), and kept for the session, since the others do not change while this one
+-- plays; Forget, or connected realms the client names later, have it built again.
 --
 -- Forget a character (ns.BagsCharacterLines and ns.BagsCharacterForget, a list row as Forget a character's gold is, DataStreams.lua:239-257, its
 -- ids numbers as the game's options need, Options.lua:165-195) takes a character out of the record; this character is then not written again
--- until it logs in again. /flatui status (ns.AddStatus, Core.lua:2131-2153) says how many characters and items are kept and how old this
+-- until it logs in again. /flatui status (ns.AddStatus, Core.lua:2143-2165) says how many characters and items are kept and how old this
 -- character's bank is, and warns above MANY characters.
 
 local KEY = "bags"
 local PART = "cache"
+-- The part of Counts in tooltips (BagsTooltip.lua), which builds the tooltip index.
+local TIPS = "tooltips"
 local B = ns.Bags
 -- Bags.lua makes ns.Bags and its sub-tables before this file loads; without them there is nothing to fill.
 if type(B) ~= "table" or type(B.Data) ~= "table" then
@@ -123,6 +133,8 @@ local INDEX_STEP = 2000
 -- Seconds: quest marks are read at most this often; a flagged full scan runs this long after its flag when no BAG_UPDATE_DELAYED comes; every
 -- bag is scanned again when the last full scan is this old; the client is asked again for connected realms it did not name.
 local QUEST_EVERY, FULL_WAIT, SWEEP, REALMS_AGAIN = 1, 2, 60, 60
+-- Seconds the bank's tabs are still read after a close, for a move the server answers after it.
+local GRACE = 2
 local DAY = 86400
 -- /flatui status warns above this many characters kept.
 local MANY = 40
@@ -149,6 +161,9 @@ local full, bankFull, fullTimer, sweptAt = true, false, false, nil
 -- The bank is open, from B.Data.BankScan to B.Data.BankClosed, and liveTabs are its bought tabs; tabsSign is those tabs and the bags in them as
 -- last read ("6,7:4500,8:0"), to tell whether they changed.
 local bankLive, liveTabs, tabsSign = false, {}, nil
+-- The bank closed a moment ago (B.Data.BankClosed): { tabs = the visit's bought tabs } until GRACE seconds after the close, else nil. What the
+-- visit read of those tabs (last) and their marks (dirty) are kept meanwhile.
+local grace
 -- Whether the game shows the keyring (nil until asked), the kinds of my containers, and the live records of my slots: live[bag][slot].
 local keyring
 local kinds, live = {}, {}
@@ -163,8 +178,10 @@ local index, who, builtWithout, building
 local generation = 0
 -- My realm without spaces, the set of connected realms once the client names any, and when it was last asked.
 local myRealm, connected, realmsAt
--- Quest marks: when they were last read, and whether a read waits.
+-- Quest marks: when they were last read, and whether a read waits. remarkAll: B.Data.Resume ran, and the next full scan reads the quest marks and
+-- the set of every slot again.
 local questAt, questQueued = nil, false
+local remarkAll = false
 -- Forget a character took this one out: nothing of it is written again this session.
 local muted = false
 
@@ -352,6 +369,18 @@ local function Part(fn, ...)
 		return part(PART, fn, ...)
 	end
 	return ns.EachPart(KEY, PART, function(_, ...)
+		return fn(...)
+	end, {}, ...)
+end
+
+-- Runs fn as the part tooltips of the module, the part of Counts in tooltips that the tooltip index serves: an index that keeps failing stops the
+-- counts alone, and the windows, which cannot do without this file's part cache, go on.
+local function TipsPart(fn, ...)
+	local part = B.Part
+	if type(part) == "function" then
+		return part(TIPS, fn, ...)
+	end
+	return ns.EachPart(KEY, TIPS, function(_, ...)
 		return fn(...)
 	end, {}, ...)
 end
@@ -1113,6 +1142,44 @@ local function ScanBank(record, changed, all)
 	end
 end
 
+-- Whether a tab of the visit still answers after the bank closed: the client gives it the slots the visit read, and an item in one of them unless the
+-- visit read none there. The client may drop the bank's items at the close, so a tab with other slots, or with no item at all where the visit read
+-- some, is no answer, and its snapshot stays.
+local function Answers(tab)
+	local held = last[tab]
+	local size = Count(Ask(Client("C_Container", "GetContainerNumSlots"), tab))
+	if not held or not size or size == 0 or size ~= held.n then
+		return false
+	end
+	local had = false
+	for slot = 1, held.n do
+		if held[slot] then
+			had = true
+			break
+		end
+	end
+	if not had then
+		return true
+	end
+	for slot = 1, size do
+		if ReadSlot(tab, slot) then
+			return true
+		end
+	end
+	return false
+end
+
+-- The grace after a close: the tabs of the visit that a BAG_UPDATE marked since are read once more, slot by slot against what the visit read of them
+-- (last, kept until the grace ends), for a move the server answered after the close.
+local function GraceScan(record, changed)
+	local into = record and record.bank
+	for _, tab in ipairs(grace.tabs) do
+		if dirty[tab] and Answers(tab) then
+			Scan(tab, into, changed, true)
+		end
+	end
+end
+
 -- The player still deals with a banker. Only a plain no for each kind of banker, from a client that has the call, says the bank closed.
 local function AtBanker()
 	local ask = Client("C_PlayerInteractionManager", "IsInteractingWithNpcOfType")
@@ -1128,12 +1195,18 @@ local function AtBanker()
 	return false
 end
 
--- The bank is no longer read: what this visit read of it is forgotten, and its windows show the record.
-local function EndBank()
-	bankLive, bankFull, tabsSign = false, false, nil
+-- What a visit read of the bank's tabs is forgotten, and the grace after its close ends.
+local function DropTabs()
+	grace = nil
 	for tab = FIRST_TAB, LAST_TAB do
 		last[tab], live[tab], dirty[tab], kinds[tab] = nil, nil, nil, nil
 	end
+end
+
+-- The bank is no longer read: what this visit read of it is forgotten, and its windows show the record.
+local function EndBank()
+	bankLive, bankFull, tabsSign = false, false, nil
+	DropTabs()
 end
 
 -- Whether the bank is read live. A bank left open while the page was off, whose close the module never heard, ends here before anything of it
@@ -1243,7 +1316,8 @@ local function AddCount(target, id, key, where, count)
 	counts[where] = counts[where] + count
 end
 
--- Reads up to INDEX_STEP kept slots into the index being built, and the next ones on the next frame. job.failed stays true when a step raises.
+-- Reads up to INDEX_STEP kept slots into the index being built, and the next ones on the next frame, each step as the part tooltips (TipsPart).
+-- job.failed stays true when a step raises, or does not run because that part stopped.
 local function IndexStep(job)
 	if building ~= job or job.generation ~= generation then
 		return
@@ -1280,7 +1354,7 @@ local function IndexStep(job)
 			return
 		end
 		job.failed = true
-		Part(IndexStep, job)
+		TipsPart(IndexStep, job)
 		if job.failed and building == job then
 			building = nil
 		end
@@ -1313,7 +1387,7 @@ local function StartIndex()
 	job.without = connected == nil
 	building = job
 	job.failed = true
-	Part(IndexStep, job)
+	TipsPart(IndexStep, job)
 	if job.failed and building == job then
 		building = nil
 	end
@@ -1601,9 +1675,9 @@ function Data.Counts(id)
 	return rows
 end
 
--- The bank opened (BagsBank.lua, at BANKFRAME_OPENED): it is read live from now on and its tabs are read at once, also while this part is
--- stopped, since the windows ask for them. Every tab is written now and scanned again at the next BAG_UPDATE_DELAYED, in case the game had not
--- given them all yet.
+-- The bank opened (BagsBank.lua, at BANKFRAME_OPENED, as this part): it is read live from now on and its tabs are read at once, since the windows
+-- ask for them; what is left of a visit before, its grace included, is forgotten first. Every tab is written now and scanned again at the next
+-- BAG_UPDATE_DELAYED, in case the game had not given them all yet.
 function Data.BankScan()
 	EndBank()
 	bankLive = true
@@ -1621,12 +1695,30 @@ function Data.BankScan()
 	end)
 end
 
--- The bank closed (BagsBank.lua, once a visit): the snapshot is dated, and the bank is no longer read.
-function Data.BankClosed()
+-- The bank closed (BagsBank.lua, once a visit): it is no longer read live, so its windows show the record, and the snapshot is dated. A move sent
+-- just before the close may be answered after it, so for GRACE seconds the tabs a BAG_UPDATE marks are still read at BAG_UPDATE_DELAYED (Delayed,
+-- GraceScan) against what the visit read of them, which is forgotten when the grace ends (DropTabs). late: a close the module did not hear
+-- (Bank.Settle, when the page comes up): nothing of the bank is read again, and the snapshot keeps the date of its last write, which is no later
+-- than what it holds.
+function Data.BankClosed(late)
 	if not bankLive then
 		return
 	end
-	EndBank()
+	if late then
+		EndBank()
+		return
+	end
+	bankLive, bankFull, tabsSign = false, false, nil
+	for tab = FIRST_TAB, LAST_TAB do
+		live[tab], kinds[tab] = nil, nil
+	end
+	local token = { tabs = liveTabs }
+	grace = token
+	After(GRACE, function()
+		if grace == token then
+			DropTabs()
+		end
+	end)
 	Part(function()
 		local record = Mine(true)
 		if record then
@@ -1712,8 +1804,11 @@ end
 
 -- Events -----------------------------------------------------------------------------------------------------------------------------------------
 
--- BAG_UPDATE_DELAYED: scans the marked containers (all of them after a flag, or when the last full scan is SWEEP seconds old), writes the record,
--- and tells New items and the windows what changed.
+-- After B.Data.Resume: the quest marks and the set of every slot of mine read again (below, with Remark).
+local RemarkAll
+
+-- BAG_UPDATE_DELAYED: scans the marked containers (all of them after a flag, or when the last full scan is SWEEP seconds old), and in the grace
+-- after a close the marked tabs of the visit, writes the record, and tells New items and the windows what changed.
 local function Delayed()
 	local record = Mine(true)
 	local now = Clock()
@@ -1743,12 +1838,23 @@ local function Delayed()
 		if record and next(bank) ~= nil then
 			record.bankSeen = Now() or record.bankSeen
 		end
+	elseif grace then
+		-- The bank closed a moment ago: a move answered after the close is written to the tab it went in or came out of too.
+		GraceScan(record, bank)
+		if record and next(bank) ~= nil then
+			record.bankSeen = Now() or record.bankSeen
+		end
 	end
 	for container in pairs(dirty) do
 		dirty[container] = nil
 	end
 	if record and next(bags) ~= nil then
 		record.seen = Now() or record.seen
+	end
+	if remarkAll and all then
+		-- Once every slot is read after B.Data.Resume, also while Bags stands down (Remark asks the windows only while it is in use).
+		remarkAll = false
+		RemarkAll()
 	end
 	if not Active() then
 		return
@@ -1961,6 +2067,14 @@ local function SetsChanged()
 	Remark(SetMarks)
 end
 
+-- The full scan after B.Data.Resume read every slot: QUEST_ACCEPTED, UNIT_QUEST_LOG_CHANGED and EQUIPMENT_SETS_CHANGED went unheard while the page
+-- was off, and the scan reads quest marks and sets only for a slot whose item changed, so both are read again for every slot of mine.
+RemarkAll = function()
+	questAt = Clock()
+	Remark(QuestMarks)
+	Remark(SetMarks)
+end
+
 -- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT: the records that waited for this item take its name; an item a window asked for has the
 -- windows draw and match again.
 local function Loaded(id, success)
@@ -1996,7 +2110,9 @@ local function MoneyChanged()
 	end
 end
 
--- PLAYER_LOGOUT: who this character is and its gold, and its worn items and bag items, which can change unheard while the page is off.
+-- PLAYER_LOGOUT, heard only while the page is on: who this character is and its gold, and its worn items and bag items once more, a last refresh
+-- that also catches a change whose event failed, or one that came while this part was stopped. What changed while the page was off was read again
+-- by B.Data.Resume when it came back on, and nothing is written while it stays off.
 local function LoggingOut()
 	local record = Mine(true)
 	if record then
@@ -2174,9 +2290,13 @@ ns.AddStart(KEY, function()
 	Part(Started)
 end)
 
--- The page came on again after the module's Start (Bags.lua's Refresh, since Core runs Refresh and not Start then, Core.lua:2266-2275): the module
--- heard none of its events while the page was off, so the work of Start runs again, and its full scan catches up what changed meanwhile.
+-- The page came on again after the module's Start (Bags.lua's Refresh, since Core runs Refresh and not Start then, Core.lua:2278-2287): the module
+-- heard none of its events while the page was off, so the work of Start runs again and its full scan catches up the items that changed meanwhile;
+-- after that scan the quest marks and the set of every slot are read again too (remarkAll, Delayed and RemarkAll), which no slot-by-slot change
+-- shows. They are not read here, before the scan: a slot whose item changed would be written with the marks of its new item and the rest of the
+-- old one.
 function Data.Resume()
+	remarkAll = true
 	Part(Started)
 end
 

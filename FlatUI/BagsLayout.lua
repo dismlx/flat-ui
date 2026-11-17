@@ -8,12 +8,15 @@ local _, ns = ...
 -- Sections files every item with B.Categories.Of and sorts each section with B.Categories.Compare (BagsCategories.lua). A section lies under its
 -- title, as many cells wide as it has items, at least as wide as its title needs and at most as wide as the window. The title's width is measured
 -- once per layout with GetUnboundedStringWidth on Flat UI's own font string (WL/uiobjects.yaml:3738), and a title wider than the window is cut to
--- it with an ellipsis (SetWidth and SetWordWrap, :3857). Sections go left to right on a shelf while they fit, and one that does not fit starts the
--- next shelf, 12 units below. The player's own bag window always has a Junk title, a title with no cell while nothing is junk, so there is always
--- somewhere to drop an item for the sell list. The top shelf is as wide as the window, titled New items in the bag window while New items at the
--- top is on and everything on it is new, else Added, as in the bank window. Free slots is the last: one counted slot for each kind of bag (the
--- live button of the first free slot of that kind, so a drop on it puts the item there) or every free slot, as Free slots says. A title's text
--- keeps an on-screen size of at least 9 units, so a small Slot size never makes it unreadable.
+-- it with an ellipsis (SetWidth and SetWordWrap, :3857). Titles and that font string take the face and outline the game's small font
+-- (GameFontNormalSmall, GetFont) has when they are drawn, which Flat UI's Fonts page changes while the game runs, at their own size (SetFont).
+-- Sections go left to right on a shelf while they fit, and one that does not fit starts the next shelf, 12 units below. The player's own bag
+-- window always has a Junk title, a title with no cell while nothing is junk, so there is always somewhere to drop an item for the sell list. The
+-- top shelf is as wide as the window, titled New items in the bag window while New items at the top is on and everything on it is new, else
+-- Added, as in the bank window; New items is told of everything the shelf shows (B.Categories.New.Shown), so it leaves when the window closes.
+-- Free slots is the last: one counted slot for each kind of bag (the live button of the first free slot of that kind, so a drop on it puts the
+-- item there) or every free slot, as Free slots says. A title's text keeps an on-screen size of at least 9 units, so a small Slot size never makes
+-- it unreadable.
 -- While the window is open nothing moves but what arrives. A slot that keeps an item is drawn again where it is, whatever it holds now. A slot that
 -- empties keeps its cell as a blank slot (B.Buttons.Draw with hold), Free slots is drawn again below everything, and an item in a slot that had no
 -- cell goes to the end of the top shelf, which moves what is below it only when it needs a new row (the first time, a row and its title). While a
@@ -36,9 +39,10 @@ local _, ns = ...
 -- none. A change asks for the junk coin and the Sell junk count again, since Errands follows these flags.
 -- The title of a section takes a drop. An item on the cursor (GetCursorInfo, WL/apis.yaml:36258) let go or clicked on it goes to
 -- B.Categories.Drop, which keeps it in that section, puts it on Errands' sell list (on Junk), or takes a junk item off that list and a grey one
--- onto the keep list (on another section), and it goes back to its slot (ClearCursor, :34956). That happens out of combat only, with one line in
--- a fight, and never on the top shelf or Free slots, whose titles only give the item back. While the cursor holds an item the titles that take
--- one are lit, read every tenth of a second while the window shows. A click on the top shelf's title puts its items away and lays the window out
+-- onto the keep list (on another section), and asks for the layout when it took the drop; either way the item goes back to its slot
+-- (ClearCursor, :34956, which is not protected). That happens out of combat only: in a fight the item only goes back, with one line. The top
+-- shelf and Free slots take no drop, and their titles only give the item back. While the cursor holds an item the titles that take one are lit,
+-- read every tenth of a second while the window shows. A click on the top shelf's title puts its items away and lays the window out
 -- again: in the bag window, while New items at the top is on, B.ClearNew (Bags.lua) first takes the game's new flags off the items of the bags,
 -- as the window's close does, then B.Categories.New.Clear lets New items go.
 -- The buttons are BagsItems.lua's: the game's item buttons for the player's own bags, buttons of Flat UI's own for the live bank and for
@@ -120,7 +124,7 @@ end
 -- sections: the sections or bag blocks in order; strip: the top shelf; free: Free slots. cells: the cell of each slot that has one, by slot key.
 -- placed: the cell or free slot each button placed by the last pass shows, by button. where: where each button was put. titles: the title frames,
 -- used: how many the last pass used. ruler: the font string titles are measured on. holding: the cursor held an item at the last reading.
--- built: a layout stands.
+-- built: a layout stands; builds: how many times the window was laid out afresh (Layout.Builds).
 local state = {}
 
 local function Own(object)
@@ -235,7 +239,8 @@ end
 -- What a window shows ------------------------------------------------------------------------------------------------------------------------
 
 -- The character a window shows, whether it is the logged-in one, and whether its slots are live: the player's own bags always are, and the bank is
--- while it is open with Flat UI's bank window at the banker (BagsBank.lua).
+-- while Flat UI's bank window is the live bank of a visit (B.Bank.Live, BagsBank.lua, the one test of it). That is decided as the visit starts, so
+-- At the banker changed during a visit counts from the next one: a window that is live stays so until the visit ends.
 function Layout.Viewed(which)
 	local me = Call(B, "Me")
 	local key = Call(B, "Viewing", which)
@@ -245,7 +250,7 @@ function Layout.Viewed(which)
 	local mine = key == me
 	local live = mine
 	if which == "bank" then
-		live = mine and Call(Bank, "Live") == true and Opt("bank") ~= "game"
+		live = mine and Call(Bank, "Live") == true
 	end
 	return key, mine, live
 end
@@ -420,15 +425,37 @@ local function TextSize(scale)
 	return math.max(base, LEAST_TEXT / scale)
 end
 
+-- The face and outline of the game's small font as they are now, or nil while the client does not say.
+local function SmallFont()
+	local font = _G.GameFontNormalSmall
+	if type(font) ~= "table" or IsSecret(font) then
+		return nil
+	end
+	local ok, file, _, flags = pcall(font.GetFont, font)
+	if not ok or type(file) ~= "string" or IsSecret(file) or file == "" then
+		return nil
+	end
+	return file, (type(flags) == "string" and not IsSecret(flags)) and flags or ""
+end
+
+-- Gives a title's text, or the ruler, the face and outline the game's small font has now at size, once for each change of any of the three: a font
+-- string given a font of its own no longer follows its font object, so a change that Flat UI's Fonts page makes to GameFontNormalSmall reaches it
+-- only through this, at its next drawing. While the client does not say the small font's face, the font string keeps its own.
 local function SetSize(text, size)
-	if text.flatSize == size then
+	local file, flags = SmallFont()
+	if not file then
+		local ok, own, _, ownFlags = pcall(text.GetFont, text)
+		if not ok or type(own) ~= "string" or IsSecret(own) then
+			return
+		end
+		file, flags = own, (type(ownFlags) == "string" and not IsSecret(ownFlags)) and ownFlags or ""
+	end
+	local key = file .. "|" .. flags .. "|" .. size
+	if text.flatKey == key then
 		return
 	end
-	local ok, file, _, flags = pcall(text.GetFont, text)
-	if ok and type(file) == "string" and not IsSecret(file) then
-		if pcall(text.SetFont, text, file, size, type(flags) == "string" and flags or "") then
-			text.flatSize = size
-		end
+	if pcall(text.SetFont, text, file, size, flags) then
+		text.flatKey = key
 	end
 end
 
@@ -1040,6 +1067,13 @@ local function Render(st)
 	local strip = st.strip
 	if strip then
 		Recount(st, strip)
+		-- Everything the top shelf shows counts as shown in New items, so it leaves when the window closes (New.Close): also an item that filled a
+		-- cell the shelf had already, or whose new flag came after it arrived (B.Categories.New asks the item first).
+		for _, entry in ipairs(strip.entries) do
+			if entry.record then
+				ShownNew(entry.record)
+			end
+		end
 		strip.x, strip.w = 0, st.columns
 		strip.height = Height(st, #strip.entries, strip.w)
 		PlaceSection(st, strip, 0, 0)
@@ -1151,6 +1185,7 @@ function Layout.Build(which)
 	if not st.content then
 		return
 	end
+	st.builds = (st.builds or 0) + 1
 	if st.built then
 		-- The pooled buttons of the last layout go back first.
 		Call(Buttons, "Release", st.content)
@@ -1314,6 +1349,13 @@ function Layout.Adopt(which)
 	end
 end
 
+-- How many times a window was laid out afresh (Layout.Build), also from inside Layout.Update, so BagsWindow.lua can tell an update that laid it out
+-- afresh from one that drew it again where it stands.
+function Layout.Builds(which)
+	local st = state[which]
+	return st and st.builds or 0
+end
+
 -- True when the last layout of a window shows this button.
 function Layout.Placed(which, button)
 	local st = state[which]
@@ -1359,27 +1401,27 @@ end
 
 -- Drops and clicks on titles ----------------------------------------------------------------------------------------------------------------------
 
--- An item let go or clicked on a section's title: kept in that section, or put on Errands' sell or keep list by B.Categories.Drop, and given back to
--- its slot. Out of combat only; the top shelf and Free slots only give it back.
+-- An item let go or clicked on a section's title: kept in that section, or put on Errands' sell or keep list by B.Categories.Drop, which asks for the
+-- layout itself when it took the drop, so a drop it refused moves nothing; either way the item goes back to its slot. Out of combat only: in a
+-- fight the item only goes back, with one line. The top shelf and Free slots only give it back. The time of the drop is kept first, so the click
+-- that ends it on the same title is that drop (TitleClick), in a fight too.
 function Drop(title)
 	local st, sec = title.st, title.sec
 	local id = Holding()
 	if not (st and sec and id) or sec.block or not st.mine or st.view ~= "sections" then
 		return
 	end
-	if Fighting() then
+	title.dropped = GetTime()
+	local takes = Takes(st, sec)
+	if takes and Fighting() then
+		pcall(ClearCursor)
 		print(FIGHT_LINE)
 		return
 	end
-	title.dropped = GetTime()
-	local takes = Takes(st, sec)
 	if takes then
 		Call(Categories, "Drop", id, sec.key)
 	end
 	pcall(ClearCursor)
-	if takes then
-		Request("layout", nil)
-	end
 end
 
 function TitleClick(title, mouse)

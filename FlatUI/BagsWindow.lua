@@ -18,16 +18,20 @@ local _, ns = ...
 -- game's.
 -- Dragging the title bar or the character picker moves the window (StartMoving and StopMovingOrSizing, :4797, 4813, with SetDontSavePosition and
 -- SetUserPlaced, :4605, 4778, so the client keeps no place of its own); a drag that starts on the picker opens no menu. Where it is let go is saved
--- as its spot in the movers: the box of its entry in Movers.lua, put with its corner at the window's, goes to ns.MoverKit.Commit
--- (Movers.lua:1713-1753, 4573-4575), and the window hangs from that spot (ns.MoverSpot, Movers.lua:856-877), the bag window by its bottom right
--- corner and the bank window by its top left, so each grows away from it, as the Threat list hangs from its spot (Threat.lua:396-413). /flatui
--- move shows the same box. With no spot saved, the bag window starts above the bottom right corner of the screen and left of the right action
--- bars that stand there, as the game's bags open (ns.BagsWindowStart, which Movers.lua asks for the box too): MultiBarRight and MultiBarLeft are
--- read with widget calls only (IsVisible, GetLeft, GetRight, GetEffectiveScale), each answer through ns.IsSecret or ns.Finite.
+-- as its spot in the movers, also when the window closes during the drag: the box of its entry in Movers.lua, put with its corner at the window's,
+-- goes to ns.MoverKit.Commit (Movers.lua:1713-1753, 4573-4575), and the window hangs from that spot (ns.MoverSpot, Movers.lua:856-877), the bag
+-- window by its bottom right corner and the bank window by its top left, so each grows away from it, as the Threat list hangs from its spot
+-- (Threat.lua:396-413). /flatui move shows the same box. With no spot saved, the bag window starts above the bottom right corner of the screen and
+-- left of the right action bars that stand in their place there, as the game's bags open (ns.BagsWindowStart, which Movers.lua asks for the box
+-- too): MultiBarRight and MultiBarLeft are read with widget calls only (IsVisible, GetLeft, GetRight, GetEffectiveScale), and whether Edit Mode
+-- has each in its place from the field it keeps on the bar, systemInfo, and its isInDefaultPosition, read with rawget; each answer goes through
+-- ns.IsSecret or ns.Finite.
 -- The content scrolls in a scroll frame of Flat UI's own (SetScrollChild, SetVerticalScroll, :8020, 8028) once the window would be taller than 85%
 -- of the screen, with a thin bar in the colours of Windows' scroll bars (Windows.lua:1191-1214), the wheel and the bar's thumb (GetCursorPosition,
--- WL/apis.yaml:36266). It is as wide as the layout (BagsLayout.lua) and its padding of 8 on each side, and the bank window at least as wide as the
--- row of BagsBank.lua over its footer.
+-- WL/apis.yaml:36266). It is as wide as the layout (BagsLayout.lua) and its padding of 8 on each side, at least as wide as its title bar and its
+-- footer need, and the bank window at least as wide as the row of BagsBank.lua over its footer. While a window is open, an update that does not
+-- lay it out afresh never makes it shorter: the bag window hangs from its bottom right corner, so a shorter window would move everything above
+-- what shrank (Free slots losing a row as its slots fill). It takes its exact height again at its next fresh layout and at its opening.
 -- The bag window's footer has the gold of the character shown (Errands.Money, Errands.lua:65-85), whose tooltip lists the characters of this realm
 -- and its connected realms, richest first, each with its realm when that is not this character's, with their total, and one line for those of
 -- other realms; its free slots by kind of bag (B.Data.Free), and, at a merchant, Sell junk (N): N is ns.ErrandsJunkCount, what the next pass of
@@ -35,19 +39,29 @@ local _, ns = ...
 -- the free slots of the bank and, at the banker with a search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit,
 -- B.Bank.TakeOut, B.Bank.Busy, whose per-click fallback labels the button with what is left). These three buttons are this file's own, drawn as
 -- the title bar's are, and clicked as the game's buttons are, by the left button let go over them, as Errands.Button's are (Errands.lua:127-201).
+-- Each window keeps room in its least width for the buttons of its footer and the shortest text of its free slots, and the bag window for a gold
+-- of the usual length too, whatever shows now, so it never changes width as a button comes or goes or the gold changes; the free slots are
+-- written as fully as the room left allows, the special kinds of bag left out first, then the word Free (their tooltip names them all).
 -- The row above the bank window's footer, at the live bank only, is BagsBank.lua's (B.Bank.Slots), as high and as wide as that file says. A bank
 -- never seen says how to keep one.
 -- Escape closes either window: both are named in UISpecialFrames, as the options window is (Panel.lua:2700-2708), whose windows the game's
--- CloseSpecialWindows hides (UIParentPanelManager.lua:21-27). The bag window's OnHide is the one place the bags tidy up, whatever hid it: it hides
--- the game's bag windows Bags parked (B.HideGameBags), drops every hold (B.Hold), lets New items go (B.Categories.New.Close), forgets the places of
--- the layout (B.Layout.Closed), clears the search when the bank window is not shown, and goes back to the logged-in character (B.SetViewing). The
--- bank window's OnHide forgets its places, clears the search when the bag window is not shown and goes back to the logged-in character; ending
--- the visit to the banker when it hides is BagsBank.lua's. A window hidden only with its parent (UIParent hidden by a movie, MovieFrame.lua:59-63,
--- the report's screenshot mode or another addon; Alt+Z and full-screen panels close the windows first, Bindings_Camelot.xml:1310-1317) keeps its
--- own shown flag and is not closed, as Bags.lua and BagsBank.lua have it: its OnHide only ends a drag, the keyboard of the search box and a menu.
--- A window closed while the interface is hidden hears no OnHide, so B.Window.Hide runs the steps of its closing itself then, with no sound.
--- Opening and closing play the game's own sounds of its bag windows (PlaySound with SOUNDKIT.IG_BACKPACK_OPEN and IG_BACKPACK_CLOSE,
--- Mainline/ContainerFrame.lua:791, 819), once a frame.
+-- CloseSpecialWindows hides (UIParentPanelManager.lua:21-27). Whatever hid a window (its close button, a key, Escape, the page going off), its
+-- OnHide ends what is the window's own: a drag (where it was let go is kept), the keyboard of the search box, a menu and the busy sort button.
+-- The bags tidy up in one place, Tidy of Bags.lua, which follows the hiding of a frame of that file's own inside the bag window: the game's bag
+-- windows Bags parked hide (B.HideGameBags), every hold goes, New items lets go, the layout forgets its places, the search clears when the bank
+-- window is not shown, and the window goes back to the logged-in character. The bank window's OnHide forgets its places, clears the search when
+-- the bag window is not shown and goes back to the logged-in character; ending the visit to the banker when it hides is BagsBank.lua's. A window
+-- hidden only with its parent (UIParent hidden by a movie, MovieFrame.lua:59-63, the report's screenshot mode or another addon; Alt+Z and
+-- full-screen panels close the windows first, Bindings_Camelot.xml:1310-1317) keeps its own shown flag and is not closed, as Bags.lua and
+-- BagsBank.lua have it: its OnHide only ends a drag, the keyboard of the search box and a menu. A window closed while the interface is hidden
+-- hears no OnHide, so B.Window.Hide runs the steps of its closing itself then, with no sound, and for the bank window BagsBank's end of the visit
+-- (B.Bank.Hidden), which its hook on the OnHide would run. Escape closes the windows then too, with no code of Flat UI's running: a frame of this
+-- file's own on UIParent hears the interface come back (OnShow), and a window that was open and is hidden now closes the same way then, the bag
+-- window with the bags' own closing (B.HideBags, Bags.lua).
+-- An opening lays the window out afresh, which covers what was asked for it while it was closed, so it first has Bags.lua let that go
+-- (B.LaidOut, looked up when called), and the pass after the opening does not draw every slot a second time. Opening and closing play the game's
+-- own sounds of its bag windows (PlaySound with SOUNDKIT.IG_BACKPACK_OPEN and IG_BACKPACK_CLOSE, Mainline/ContainerFrame.lua:791, 819), once a
+-- frame.
 -- A slot of the bag window that owns the game's split box (StackSplitFrame) is left to the game: before this file hides the window or a slot, and
 -- first in the OnHide of the window, of its title bar and of a footer button the window's hiding hides, B.Buttons.Unsplit (BagsItems.lua) writes
 -- 0 in the slot's field hasStackSplit, so the template's OnHide (ContainerFrame.lua:1816-1822) does not hide the box in Flat UI's taint, whichever
@@ -57,7 +71,8 @@ local _, ns = ...
 -- the work of an opening or a closing, so that no button is first shown in a fight; with the window open only the new buttons show that way
 -- (B.Layout.Park), and the layout places them on the next frame. Nothing of it can be seen or reached by the mouse meanwhile, and none of it hides
 -- a button by its alpha: the template's SetAlpha is a Lua method of the game that fades the icon and the count only
--- (Shared/ItemButtonTemplate.lua:239-245).
+-- (Shared/ItemButtonTemplate.lua:239-245). Its end is queued whatever its steps did, and undoes its state as plain code with no part around it,
+-- so a step that fails or a part that stops meanwhile never leaves the window warming, which would keep every opening waiting for that end.
 -- Tooltips are GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, Hide). Movers asks ns.BagsWindowShown and ns.BankWindowShown whether
 -- the windows have a handle (while Bags is on) and ns.BagsWindowStart where the bag window starts, and calls ns.BagsWindowMoved and
 -- ns.BankWindowMoved when their spots are set or put back.
@@ -67,7 +82,6 @@ local B = ns.Bags
 local Window = B.Window
 local Layout = B.Layout
 local Data = B.Data
-local Categories = B.Categories
 local Search = B.Search
 local Buttons = B.Buttons
 local Bank = B.Bank
@@ -96,13 +110,13 @@ local LEAST_VIEW, MESSAGE_VIEW, MOST = 40, 64, 0.85
 local TRACK_W, THUMB_LEAST, WHEEL_ROWS = 4, 16, 2
 -- The cell pitch and the button of BagsLayout.lua, for the rows the wheel scrolls.
 local PITCH, SLOT = 40, 37
--- The buttons of the footer.
+-- The buttons of the footer; the room the footer keeps for the gold (a few thousand gold with its coins), and for the shortest text of the free
+-- slots ("12/80"), and the space between two of its texts.
 local SELL_W, MOVE_W, FOOT_BUTTON = 108, 96, 18
+local GOLD_ROOM, FREE_ROOM, FOOT_GAP = 96, 40, 12
 -- How often the footer is read again while a pass runs; how long the sort button looks busy at most, and the least time after the sort before a
 -- layout ends it; how many characters the gold tooltip names.
 local POLL, BUSY_MOST, BUSY_LEAST, MOST_GOLD = 0.5, 6.5, 0.35, 15
--- The holds of Bags.lua that the bag window's closing drops.
-local HOLDS = { "bank", "trade", "command" }
 local KEYRING = -1
 -- The text-dim of the windows (Threat.lua), and colours for a free count that is low or nothing.
 local DIM = { 0.66, 0.68, 0.62 }
@@ -132,13 +146,15 @@ end
 
 -- Per window ("bags", "bank"): which, frame, outline; bar and its controls (picker, search, icons, close); scroll, child (the scroll child) and
 -- content (the frame BagsLayout.lua lays out in, scaled); track and thumb of the scroll bar; foot and its labels and buttons, with plates, the
--- drawing of each button; strip (the bank's row of BagsBank.lua) and stripW, the width of that row; message. viewH, contentH, offset: the height
--- shown, the height of the content and the scroll. placed: the spot it hangs from now; dropped: where it was let go when the movers could not keep
--- it. mode: what the last layout showed. busy: when the sort began; pulsing: the sort button pulses. warming: the warm-up shows it; parked: it
--- stands off the screen for the warm-up; wantShow: an opening asked for meanwhile. open: shown for real.
+-- drawing of each button; freeTexts, the texts of the free slots, longest first; strip (the bank's row of BagsBank.lua) and stripW, the width of
+-- that row; message. viewH, contentH, offset: the height shown, the height of the content and the scroll. placed: the spot it hangs from now;
+-- dropped: where it was let go when the movers could not keep it. mode: what the last layout showed. busy: when the sort began; pulsing: the sort
+-- button pulses. warming: the warm-up shows it; parked: it stands off the screen for the warm-up; wantShow: an opening asked for meanwhile;
+-- warmQueued: the end of a warm-up is queued; warmButtons: the new buttons a warm-up showed in the open window. open: shown for real.
 local windows = {}
--- The sounds played this frame, and whether BagSort tells this file of a sort.
+-- The sounds played this frame, and whether BagSort tells this file of a sort. The frame on UIParent that hears the interface come back (Missed).
 local played, watching = {}, false
+local watcher = nil
 
 local function Own(object)
 	ns.Own[object] = true
@@ -533,7 +549,7 @@ end
 
 -- The window -------------------------------------------------------------------------------------------------------------------------------------
 
-local Showing, Hiding, Footer, TitleLine, Resize, ArrangeBar, ArrangeFoot, SetOffset
+local Showing, Hiding, Missed, Footer, TitleLine, Resize, ArrangeBar, ArrangeFoot, SetOffset
 
 -- What the window shows now, to tell whether an opening asked for while it is open needs a new layout.
 local function Mode(which)
@@ -1120,20 +1136,26 @@ local function FreeTip(w, owner)
 	tip:Show()
 end
 
--- The free slots as the footer writes them: the bags of no special kind, low in gold and none in red, then each special kind.
-local function FreeText(w)
+-- The free slots as the footer may write them, longest first, for ArrangeFoot to take the first that fits: the bags of no special kind, low in gold
+-- and none in red, then each special kind; the same without the special kinds; and the count alone, without the word Free.
+local function FreeTexts(w)
 	local kinds = Kinds(w)
 	local main = kinds[1]
 	if not main then
-		return ""
+		return { "" }
 	end
 	local colour = main.free <= 0 and NONE_HEX or (main.free <= LOW and LOW_HEX) or WHITE_HEX
-	local text = ("%sFree|r %s%d|r%s/%d|r"):format(DIM_HEX, colour, main.free, DIM_HEX, main.total)
+	local count = ("%s%d|r%s/%d|r"):format(colour, main.free, DIM_HEX, main.total)
+	local plain = DIM_HEX .. "Free|r " .. count
+	if #kinds < 2 then
+		return { plain, count }
+	end
+	local full = plain
 	for index = 2, #kinds do
 		local kind = kinds[index]
-		text = text .. ("%s  ·  %s|r %d"):format(DIM_HEX, Plain(kind.label), kind.free)
+		full = full .. ("%s  ·  %s|r %d"):format(DIM_HEX, Plain(kind.label), kind.free)
 	end
-	return text
+	return { full, plain, count }
 end
 
 local function JunkCount()
@@ -1324,10 +1346,29 @@ local function MakeFoot(w)
 	end
 end
 
+-- The width of the window, or its box's while the client does not say.
+local function WindowWidth(w)
+	local ok, width = pcall(w.frame.GetWidth, w.frame)
+	return ok and Finite(width) and width or BOXES[w.which][1]
+end
+
+-- Writes the first text of the free slots (FreeTexts, kept by Footer) whose width fits in room, else the shortest, which the label cuts.
+local function FitFree(w, room)
+	local texts = w.freeTexts or { "" }
+	for index, words in ipairs(texts) do
+		w.free.text:SetText(words)
+		if index == #texts or TextWidth(w.free.text) <= room then
+			return
+		end
+	end
+end
+
 -- The footer's texts and buttons, left to right: the bag window has its gold at the left, its free slots at the right and Sell junk at the far
--- right; the bank window its free slots at the left and Deposit and Take out at the right.
+-- right; the bank window its free slots at the left and Deposit and Take out at the right. The free slots are written to fit what the others
+-- leave (FitFree), also after Resize gives the window its width.
 function ArrangeFoot(w)
 	local foot = w.foot
+	local room = WindowWidth(w) - 2 * PAD
 	if w.which == "bags" then
 		local gold = w.gold
 		local right, gap = foot, 0
@@ -1335,16 +1376,19 @@ function ArrangeFoot(w)
 			w.sell:ClearAllPoints()
 			w.sell:SetPoint("RIGHT", foot, "RIGHT", 0, 0)
 			right, gap = w.sell, -8
+			room = room - SELL_W - 8
 		end
 		local left = foot
 		if gold then
+			local goldW = math.max(1, math.ceil(TextWidth(gold.text)) + 2)
 			gold.frame:ClearAllPoints()
 			gold.frame:SetPoint("LEFT", foot, "LEFT", 0, 0)
-			gold.frame:SetWidth(math.max(1, math.ceil(TextWidth(gold.text)) + 2))
+			gold.frame:SetWidth(goldW)
 			left = gold.frame
+			room = room - goldW - FOOT_GAP
 		end
 		w.free.frame:ClearAllPoints()
-		w.free.frame:SetPoint("LEFT", left, left == foot and "LEFT" or "RIGHT", left == foot and 0 or 12, 0)
+		w.free.frame:SetPoint("LEFT", left, left == foot and "LEFT" or "RIGHT", left == foot and 0 or FOOT_GAP, 0)
 		w.free.frame:SetPoint("RIGHT", right, right == foot and "RIGHT" or "LEFT", gap, 0)
 	else
 		local right = foot
@@ -1353,6 +1397,7 @@ function ArrangeFoot(w)
 			if button and button:IsShown() then
 				button:ClearAllPoints()
 				button:SetPoint("RIGHT", right, right == foot and "RIGHT" or "LEFT", right == foot and 0 or -4, 0)
+				room = room - MOVE_W - (right == foot and 8 or 4)
 				right = button
 			end
 		end
@@ -1360,13 +1405,23 @@ function ArrangeFoot(w)
 		w.free.frame:SetPoint("LEFT", foot, "LEFT", 0, 0)
 		w.free.frame:SetPoint("RIGHT", right, right == foot and "RIGHT" or "LEFT", right == foot and 0 or -8, 0)
 	end
+	FitFree(w, room)
+end
+
+-- The least width of the footer: room for the buttons the window may show and the gap before them (Sell junk, or Deposit and Take out), for the
+-- gold, and for the shortest text of the free slots, whether they show now or not, so the window never changes width as they come and go.
+local function FootLeast(w)
+	if w.which == "bags" then
+		return 2 * PAD + GOLD_ROOM + FOOT_GAP + FREE_ROOM + 8 + SELL_W
+	end
+	return 2 * PAD + FREE_ROOM + 8 + MOVE_W + 4 + MOVE_W
 end
 
 -- Reads the footer again: gold, free slots, and the buttons the window wants now.
 function Footer(w)
 	local which = w.which
 	local key, mine, live = Layout.Viewed(which)
-	w.free.text:SetText(FreeText(w))
+	w.freeTexts = FreeTexts(w)
 	if which == "bags" then
 		if w.gold then
 			local money = Call(Data, "Money", key)
@@ -1457,14 +1512,16 @@ local function Message(w)
 	return ("%s has not visited a banker with Flat UI bags on."):format(Plain(Named(key, c)))
 end
 
--- Sizes the window to its layout: as wide as the content and its padding (at least as wide as the title bar needs, and as the bank's row while it
--- shows), as high as the title bar, the content, the bank's row and the footer, at most 85% of the screen, the content scrolling past that.
-function Resize(w)
+-- Sizes the window to its layout: as wide as the content and its padding (at least as wide as the title bar and the footer need, and as the bank's
+-- row while it shows), as high as the title bar, the content, the bank's row and the footer, at most 85% of the screen, the content scrolling past
+-- that. keep: an update of the open window that did not lay it out afresh, which leaves it no shorter than it is (Updating).
+function Resize(w, keep)
 	local which = w.which
 	local cw, ch = Layout.Size(which)
 	cw = Finite(cw) and math.max(0, cw) or 0
 	ch = Finite(ch) and math.max(0, ch) or 0
 	local least = 2 * PAD + PICKER_LEAST + (w.search and (SEARCH_LEAST + 12) or 6) + 3 * (ICON + ICON_GAP) + CLOSE + 8
+	least = math.max(least, FootLeast(w))
 	local strip = StripHeight(w)
 	if strip > 0 then
 		least = math.max(least, math.ceil((w.stripW or 0) + 2 * PAD))
@@ -1480,6 +1537,10 @@ function Resize(w)
 		view = message and MESSAGE_VIEW or LEAST_VIEW
 	else
 		view = math.max(LEAST_VIEW, math.min(math.ceil(ch), most - fixed))
+	end
+	if keep and Finite(w.viewH) and w.viewH > view then
+		-- No shorter than it is, and never past the share of the screen it may take.
+		view = math.min(w.viewH, math.max(view, most - fixed))
 	end
 	w.frame:SetSize(width, fixed + view)
 	local left = math.floor((width - cw) / 2 + 0.5)
@@ -1503,6 +1564,7 @@ function Resize(w)
 	end
 	SetOffset(w, w.offset)
 	ArrangeBar(w)
+	ArrangeFoot(w)
 end
 
 -- The bank's row of BagsBank.lua is laid out again in the strip this file gives it, which takes the height B.Bank.Slots returns and hides when
@@ -1590,6 +1652,15 @@ local function Make(which)
 	frame:SetScript("OnUpdate", function(_, elapsed)
 		Tick(w, elapsed)
 	end)
+	if not watcher then
+		-- A frame of this file's own on UIParent that takes no mouse and shows nothing: its OnShow is the interface coming back (Missed).
+		watcher = Own(CreateFrame("Frame", nil, UIParent))
+		watcher:SetSize(1, 1)
+		watcher:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+		watcher:SetScript("OnShow", function()
+			Missed()
+		end)
+	end
 	Special(NAMES[which])
 	Watching()
 	PaintWindow(w)
@@ -1600,11 +1671,15 @@ local function Make(which)
 end
 
 -- The work of an opening, also when the warm-up's frame turns into one: the open sound, the look, a fresh layout, the title, the footer, the size.
+-- The fresh layout covers what the window was asked to draw while it was closed (items, layout, search, footer, its slots), so Bags.lua lets that
+-- go first (B.LaidOut, looked up now and skipped when missing) and the pass after the opening does not draw every slot a second time; what is
+-- asked from here on keeps its pass, and so does a change of look, since this paints neither the search boxes nor the buttons.
 function Showing(w)
 	if w.warming then
 		return
 	end
 	w.open = true
+	Run("window", Call, B, "LaidOut", w.which)
 	Sound("IG_BACKPACK_OPEN")
 	Watching()
 	PaintWindow(w)
@@ -1618,9 +1693,12 @@ function Showing(w)
 	Window.Place(w.which)
 end
 
--- The one place the bags tidy up when the bag window hides, whatever hid it (its close button, a key, Escape, the page going off); each step runs
--- alone, so one that fails leaves the others done. The bank window forgets its places and goes back to the logged-in character. quiet: the window
--- closed while the player could not see it (Window.Hide), which plays no sound.
+-- The window's own part of its hiding, whatever hid it (its close button, a key, Escape, the page going off): a drag ends, the search box lets go of
+-- the keyboard, a menu closes, the sort button stops looking busy, and the close sound plays. The bags tidy up in Tidy of Bags.lua, which follows
+-- the hiding of a frame of that file's own inside the bag window (and B.HideBags and Release, when the window closed unseen), so this does none of
+-- that. The bank window also forgets its places, clears the search when the bag window is not shown and goes back to the logged-in character; its
+-- visit to the banker ends in BagsBank.lua. Each step runs alone, so one that fails leaves the others done. quiet: the window closed while the player
+-- could not see it (Unseen), which plays no sound.
 function Hiding(w, quiet)
 	-- First, since the slots may hear the hiding after the window: a slot that owns the game's split box leaves it to the game.
 	Unsplit(w)
@@ -1643,26 +1721,16 @@ function Hiding(w, quiet)
 	end
 	w.open, w.drag = false, nil
 	if w.moving then
-		w.moving = false
-		pcall(w.frame.StopMovingOrSizing, w.frame)
+		-- A drag the closing cut short ends as one let go (Dropped): its place is kept and the window hangs from it again, whichever of the window
+		-- and its title bar hears the hiding first.
+		Run("window", Dropped, w)
 	end
 	if w.search then
 		pcall(w.search.ClearFocus, w.search)
 	end
 	Layout.CloseMenu(w.which)
 	EndBusy(w)
-	if w.which == "bags" then
-		Run("window", Call, B, "HideGameBags")
-		for _, reason in ipairs(HOLDS) do
-			Run("window", Call, B, "Hold", reason, false)
-		end
-		Run("window", Call, Categories.New, "Close")
-		Run("layout", Layout.Closed, "bags")
-		if not Shown(windows.bank) then
-			Run("window", Call, Search, "SetText", "")
-		end
-		Run("window", Call, B, "SetViewing", "bags", nil)
-	else
+	if w.which == "bank" then
 		Run("layout", Layout.Closed, "bank")
 		if not Shown(windows.bags) then
 			Run("window", Call, Search, "SetText", "")
@@ -1671,6 +1739,36 @@ function Hiding(w, quiet)
 	end
 	if not quiet then
 		Sound("IG_BACKPACK_CLOSE")
+	end
+end
+
+-- The closing of a window the player could not see (the interface hidden), which hears no OnHide: this file's own steps, quiet (Hiding), then for
+-- the bank window the end of the visit it was the live bank of (B.Bank.Hidden, BagsBank.lua, looked up now and skipped when missing), which
+-- BagsBank's hook on the window's OnHide would have run. That runs as plain code outside the parts, as the hook does, so a part that fails here
+-- cannot leave the game's bank open behind Bags' hidden frame.
+local function Unseen(w)
+	Run("window", Hiding, w, true)
+	if w.which == "bank" then
+		local hidden = Fn(Bank, "Hidden")
+		if hidden then
+			pcall(hidden)
+		end
+	end
+end
+
+-- The interface came back (the OnShow of the watcher frame, Make). Escape hides the windows of UISpecialFrames also while the interface is hidden
+-- (CloseSpecialWindows, UIParentPanelManager.lua:1106-1116), and a window hidden then heard no OnHide and ran no code of Flat UI's: a window that
+-- was open and is hidden now closes as an unseen one does (Unseen), and the bag window's closing in Bags.lua follows (B.HideBags, whose Tidy finds
+-- the bags still open). A window hidden only with its parent is still shown, and one closed while it was seen is no longer open, so neither is
+-- touched.
+function Missed()
+	for which, w in pairs(windows) do
+		if w.open and not w.warming and not w.frame:IsShown() then
+			Unseen(w)
+			if which == "bags" then
+				Run("window", Call, B, "HideBags")
+			end
+		end
 	end
 end
 
@@ -1687,7 +1785,8 @@ end
 
 -- Puts the window at its spot in the movers: the bag window's bottom right corner, the bank window's top left. With no spot saved that is where the
 -- entry starts, the bag window left of the right action bars (ns.BagsWindowStart). Not while it is dragged, nor while the warm-up keeps it off the
--- screen: the end of the warm-up places it.
+-- screen: the end of the warm-up forgets its place, and the next call here anchors it at its spot and clamps it to the screen again, which the
+-- warm-up turned off (Park), only once it stands there, so the clamp never pulls a window that stands off the screen onto its edge.
 function Window.Place(which)
 	local w = windows[which]
 	if not w or w.moving or w.parked then
@@ -1721,6 +1820,7 @@ function Window.Place(which)
 	local frame = w.frame
 	frame:ClearAllPoints()
 	frame:SetPoint(corner, UIParent, anchor, x, y)
+	frame:SetClampedToScreen(true)
 end
 
 -- Shows the window, laid out afresh. An opening asked for while it is open lays it out again only when it would show something else now (the
@@ -1749,7 +1849,7 @@ function Window.Show(which)
 end
 
 -- Hides the window, once a slot that owns the game's split box has left it to the game. A window the player cannot see (the interface hidden) hears
--- no OnHide when it hides, so the steps of its closing run here then, with no sound.
+-- no OnHide when it hides, so the steps of its closing run here then, with no sound, and for the bank window the end of its visit (Unseen).
 function Window.Hide(which)
 	local w = windows[which]
 	if not w then
@@ -1764,23 +1864,29 @@ function Window.Hide(which)
 		local visible = w.frame:IsVisible() == true
 		w.frame:Hide()
 		if not visible then
-			Run("window", Hiding, w, true)
+			Unseen(w)
 		end
 	end
 end
 
 -- What changed for an open window, once a frame (B.Request, Bags.lua): flags is { layout, items, search, footer, look = true }, changed the slots
--- that changed, { [bag] = { [slot] = true } }, or nil for every slot. A hidden window does nothing: it is laid out afresh when it opens.
+-- that changed, { [bag] = { [slot] = true } }, or nil for every slot. A hidden window does nothing: it is laid out afresh when it opens, and what
+-- was asked for it meanwhile goes then (Showing). Only a fresh layout, asked for or one BagsLayout.lua made itself (B.Layout.Builds counts them),
+-- makes the window shorter: the bag window hangs from its bottom right corner, so a shorter window after an update would move everything above
+-- what shrank, such as a row of Free slots filled by what arrives (Resize, keep). The bank's row (Slots) is measured again at every update, not
+-- only at a layout: it can grow without one, as when BagsBank.lua makes the Buy button at the end of a fight and asks for the footer.
 local function Updating(w, flags, changed)
 	local which = w.which
+	local builds = Call(Layout, "Builds", which)
 	if flags.look then
 		PaintWindow(w)
 		-- The search boxes, and the buttons this layout does not show, take the look of the Windows page too.
 		Run("search", Call, Search, "Paint")
 		Call(Buttons, "Paint")
 	end
+	-- The bank's row first, so its height and width go into the size below; the bag window has none.
+	Slots(w)
 	if flags.layout then
-		Slots(w)
 		Run("layout", Layout.Build, which)
 		w.mode = Mode(which)
 		if w.busy and Now() - w.busy >= BUSY_LEAST then
@@ -1800,7 +1906,7 @@ local function Updating(w, flags, changed)
 		end
 	end
 	Footer(w)
-	Resize(w)
+	Resize(w, not flags.layout and Call(Layout, "Builds", which) == builds)
 	Window.Place(which)
 end
 
@@ -1831,26 +1937,19 @@ function Window.Paint()
 end
 
 -- The warm-up's window stands off the left edge of the screen and is not clamped to it meanwhile, so nothing of it can be seen or reached by the
--- mouse; the end of the warm-up puts it back at its spot, clamped again.
-local function Park(w, on)
-	if on then
-		w.parked = true
-		w.frame:SetClampedToScreen(false)
-		w.frame:ClearAllPoints()
-		w.frame:SetPoint("TOPRIGHT", UIParent, "TOPLEFT", -PARK, 0)
-	elseif w.parked then
-		w.parked, w.placed = nil, nil
-		w.frame:SetClampedToScreen(true)
-		Window.Place(w.which)
-	end
+-- mouse. The end of the warm-up forgets that place, and Window.Place anchors the window at its spot again and clamps it again.
+local function Park(w)
+	w.parked = true
+	w.frame:SetClampedToScreen(false)
+	w.frame:ClearAllPoints()
+	w.frame:SetPoint("TOPRIGHT", UIParent, "TOPLEFT", -PARK, 0)
 end
 
-local function WarmEnd(w)
-	w.warmQueued = false
-	-- The new buttons the open window showed off the screen: each its layout does not show hides again. Their places were forgotten when they were
-	-- parked (B.Layout.Park), so the layout's next pass anchors each in its cell. Also when the window closed and warms up again meanwhile.
-	local new = w.warmButtons
-	w.warmButtons = nil
+-- The rest of the end of the warm-up, as the window part. The new buttons the open window showed off the screen: each its layout does not show
+-- hides again. Their places were forgotten when they were parked (B.Layout.Park), so the layout's next pass anchors each in its cell. Also when the
+-- window closed and warms up again meanwhile. After a warm-up of the hidden window the live buttons go back to the shown flags they had, the
+-- window back to its spot, clamped again (Window.Place), and an opening asked for meanwhile turns the shown window into it (Showing).
+local function WarmDone(w, warmed, opening, new)
 	if new then
 		for button in pairs(new) do
 			if not Layout.Placed(w.which, button) then
@@ -1859,24 +1958,41 @@ local function WarmEnd(w)
 			end
 		end
 	end
-	if w.warming then
+	if warmed then
 		Call(Buttons, "ShowAll", false)
-		-- Back at its spot first, for an opening as for the hiding.
-		Park(w, false)
-		if w.wantShow and On() then
-			-- An opening came while the window warmed up: the shown window turns into it.
-			w.warming, w.wantShow = false, false
+		Window.Place(w.which)
+		if opening then
 			Showing(w)
-		else
-			Unsplit(w)
-			w.frame:Hide()
-			w.warming, w.wantShow = false, false
 		end
-		return
-	end
-	if Shown(w) then
+	elseif Shown(w) then
 		Run("layout", Layout.Render, w.which)
 	end
+end
+
+-- The end of the warm-up, on the next frame, as plain code with no part around it: a part that stopped meanwhile (and Release then hid the window
+-- itself) or a step that failed must not leave the window warming, since every opening would wait for this end (Window.Show) while the game's
+-- bags stay hidden. Unless an opening came for a window the warm-up did show, the window hides first, while it is still marked as warming, so its
+-- OnHide does none of a closing's work; then the warm-up's state and its place go, so the next Window.Place anchors the window at its spot; the
+-- rest runs as the window part (WarmDone).
+local function WarmEnd(w)
+	w.warmQueued = false
+	local warmed = w.warming == true
+	local opening = false
+	if warmed and w.wantShow == true and w.frame:IsShown() then
+		local ok, on = pcall(On)
+		opening = ok and on == true
+	end
+	if warmed and not opening then
+		pcall(Unsplit, w)
+		pcall(w.frame.Hide, w.frame)
+	end
+	w.warming, w.wantShow = false, false
+	if w.parked then
+		w.parked, w.placed = nil, nil
+	end
+	local new = w.warmButtons
+	w.warmButtons = nil
+	Run("window", WarmDone, w, warmed, opening, new)
 end
 
 -- The live buttons of the bag window that its layout does not show.
@@ -1896,7 +2012,8 @@ local function Unplaced(w)
 	return list
 end
 
-local function Warming(w, buttons)
+-- The steps of a warm-up that show things.
+local function WarmStart(w, buttons)
 	if w.warming then
 		-- A warm-up is under way: the buttons made since show with it.
 		Call(Buttons, "ShowAll", true)
@@ -1904,7 +2021,7 @@ local function Warming(w, buttons)
 	end
 	if not w.frame:IsShown() then
 		w.warming, w.wantShow = true, false
-		Park(w, true)
+		Park(w)
 		Layout.Adopt("bags")
 		w.frame:Show()
 		Call(Buttons, "ShowAll", true)
@@ -1919,11 +2036,20 @@ local function Warming(w, buttons)
 			end
 		end
 	end
+end
+
+-- A warm-up: its steps run protected, and its end is queued after them whatever they did, so a step that fails still has the warm-up end on the
+-- next frame (WarmEnd); the failure is raised again once the end is queued, so it still counts toward stopping the window part.
+local function Warming(w, buttons)
+	local ok, err = pcall(WarmStart, w, buttons)
 	if not w.warmQueued then
 		w.warmQueued = true
 		After(0, function()
-			Run("window", WarmEnd, w)
+			WarmEnd(w)
 		end)
+	end
+	if not ok then
+		error(err, 0)
 	end
 end
 
@@ -1962,10 +2088,28 @@ local function BarEdges(name)
 	return left * k, right * k
 end
 
--- How far in from the right edge of the screen the right action bars reach, in UIParent's units, or 0. A bar that shows counts when its right edge
--- stands at the edge of the screen, or at the left edge of a bar that counts, give or take BAR_SLACK, as Edit Mode stacks them there
--- (Blizzard_EditMode/Shared/EditModeManager.lua:598-636); one the player moved anywhere else does not, as the game counts only bars in their
--- place (EditModeUtil.lua:39-63).
+-- Whether Edit Mode has a bar in its place: the table it keeps on the bar, systemInfo, and its isInDefaultPosition, which the game reads for the
+-- same purpose (IsInitialized and IsInDefaultPosition, Blizzard_EditMode/Shared/EditModeSystemTemplates.lua:428-430, 882-884), read here as fields
+-- with rawget, with no method of the bar's called, each through ns.IsSecret. Only a flag that is plainly false says no: a bar the player dragged or
+-- nudged in Edit Mode (EditModeManager.lua:316-375).
+local function InPlace(name)
+	local frame = _G[name]
+	if ns.Forbidden(frame) then
+		return false
+	end
+	local okInfo, info = pcall(rawget, frame, "systemInfo")
+	if not okInfo or IsSecret(info) or type(info) ~= "table" then
+		return true
+	end
+	local okFlag, flag = pcall(rawget, info, "isInDefaultPosition")
+	return not (okFlag and not IsSecret(flag) and flag == false)
+end
+
+-- How far in from the right edge of the screen the right action bars reach, in UIParent's units, or 0. A bar counts while it shows and Edit Mode has
+-- it in its place (InPlace), as the game counts only those (GetBarsLayoutSize, Blizzard_EditMode/Shared/EditModeUtil.lua:39-69), and while its
+-- right edge stands at the edge of the screen, or at the left edge of a bar that counts, give or take BAR_SLACK, as Edit Mode stacks them there
+-- (EditModeManager.lua:598-636). So a bar the player moved in Edit Mode does not count, also when it stands along the right edge, nor one something
+-- else moved away from that edge.
 local function RightBarsRoom()
 	local ok, screen = pcall(UIParent.GetRight, UIParent)
 	if not ok or not Finite(screen) then
@@ -1974,7 +2118,7 @@ local function RightBarsRoom()
 	local bars = {}
 	for _, name in ipairs(RIGHT_BARS) do
 		local left, right = BarEdges(name)
-		if left and right > left then
+		if left and right > left and InPlace(name) then
 			bars[#bars + 1] = { left = left, right = right }
 		end
 	end
@@ -1991,9 +2135,10 @@ local function RightBarsRoom()
 end
 
 -- Where the bag window starts while no spot is saved for it, from the x and y of its entry in Movers.lua, which asks (start = "BagsWindowStart") for
--- the window and its box alike: as the game's bags open, BAR_ROOM left of the right action bars that show (GetInitialContainerFrameOffsetX,
--- Mainline/ContainerFrame.lua:1320-1326, with EditModeUtil:GetRightActionBarWidth, Blizzard_EditMode/Shared/EditModeUtil.lua:65-69), and never
--- nearer the edge of the screen than the entry's x. The window follows a change of the bars when it is next placed (Window.Place).
+-- the window and its box alike: as the game's bags open, BAR_ROOM left of the right action bars that show in their place
+-- (GetInitialContainerFrameOffsetX, Mainline/ContainerFrame.lua:1320-1326, with EditModeUtil:GetRightActionBarWidth,
+-- Blizzard_EditMode/Shared/EditModeUtil.lua:65-69), and never nearer the edge of the screen than the entry's x. The window follows a change of the
+-- bars when it is next placed (Window.Place).
 function ns.BagsWindowStart(x, y)
 	if not Finite(x) then
 		return x, y
@@ -2095,6 +2240,8 @@ function Clicks.picker(w)
 	if searching then
 		local text = Call(Search, "Text")
 		text = type(text) == "string" and not IsSecret(text) and text or ""
+		-- The search keeps a typed bar as "||" (BagsSearch.lua): the bar the player typed is cut and then written once, as Plain writes any bar.
+		text = (text:gsub("||", "|"))
 		if #text > 24 then
 			-- Cut before a whole character: a byte from 128 to 191 continues the one before it.
 			local cut = 24
@@ -2181,16 +2328,24 @@ function Tips.sort(w, owner)
 	end
 end
 
--- The bank button: the bank of the character the bag window shows (B.Bank.Toggle), live at the banker while At the banker is Flat UI's bank
--- window, and as last seen anywhere else, and also at the banker with the game's bank window, which is the live one then.
+-- The bank button: the bank of the character the bag window shows (B.Bank.Toggle), live at the banker while Flat UI's bank window is the live
+-- bank of the visit (B.Bank.Live), and as last seen anywhere else, and also at the banker with the game's bank window, which is the live one then.
 function Clicks.bank(w)
 	local key, mine = Layout.Viewed("bags")
 	Call(Bank, "Toggle", (not mine) and key or nil)
 end
 
+-- Which bank window is the live one at the banker: during a visit the one it started with (B.Bank.Live, which a change of At the banker meanwhile
+-- does not change), else the one At the banker names.
 function Tips.bank(w, owner)
 	local key, mine = Layout.Viewed("bags")
-	if mine and Opt("bank") == "game" then
+	local game
+	if Call(Bank, "Visiting") == true then
+		game = Call(Bank, "Live") ~= true
+	else
+		game = Opt("bank") == "game"
+	end
+	if mine and game then
 		Say(owner, Word("BANK", "Bank"), "Your bank as you last left it. At the banker the game's bank window is the live one.")
 	elseif mine then
 		Say(owner, Word("BANK", "Bank"), "Your bank: live at the banker, and as you last left it anywhere else.")

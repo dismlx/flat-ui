@@ -187,8 +187,8 @@ local LIST = {
 		gate = "HealerManaShown", changed = "HealerManaMoved" },
 	-- The bag window of Bags (BagsWindow.lua), which shows while the bags are open: its bottom right corner is the bottom right corner of the box, and
 	-- it grows up and to the left from there as its slots change. It starts above the bottom right corner of the screen, where the game's bags open:
-	-- further left while the right action bars stand there, so it covers none of them (ns.BagsWindowStart). Dragging the window by its title sets
-	-- the spot too.
+	-- further left while the right action bars stand in their place there (as Edit Mode and the game count them), so it covers none of those
+	-- (ns.BagsWindowStart). Dragging the window by its title sets the spot too.
 	{ name = "FlatUIBags", label = "Flat UI bags", point = "BOTTOMRIGHT", kind = "hud", own = true, noScale = true, width = 360, height = 260, x = -60, y = 110,
 		gate = "BagsWindowShown", changed = "BagsWindowMoved", start = "BagsWindowStart" },
 	-- The bank window of Bags (BagsWindow.lua), which shows at the banker or when asked: its top left corner is the top left corner of the box, and it

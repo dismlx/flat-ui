@@ -27,26 +27,27 @@ local _, ns = ...
 -- at the top off, nothing is kept as new.
 --
 -- Junk is Errands' own test, so the Junk section, the junk coin and Sell junk agree on what is junk. A live slot of the bags is junk when Errands
--- would sell it (ns.ErrandsJunk: the sale test of ErrandsMerchant.lua:177-202, with the bags the game's menu leaves out of junk selling,
--- :166-175), asked whatever its lock (its third argument): an item the game holds for a moment, in the trade window, on a mail not sent yet or on
+-- would sell it (ns.ErrandsJunk: the sale test of ErrandsMerchant.lua:178-203, with the bags the game's menu leaves out of junk selling,
+-- :167-176), asked whatever its lock (its third argument): an item the game holds for a moment, in the trade window, on a mail not sent yet or on
 -- the cursor, keeps its coin and its place in Junk, while Sell junk counts and sells only the unlocked ones. The keyring never is: Errands walks
--- bags 0 to NUM_TOTAL_EQUIPPED_BAG_SLOTS only (:112-119). The bank and every item of another character, which nothing can sell from where they
--- are, take the list part of that test (ns.ErrandsJunkRule, :188-191): on the sell list, or grey and not on the keep list, and never an item with
+-- bags 0 to NUM_TOTAL_EQUIPPED_BAG_SLOTS only (:113-120). The bank and every item of another character, which nothing can sell from where they
+-- are, take the list part of that test (ns.ErrandsJunkRule, :189-192): on the sell list, or grey and not on the keep list, and never an item with
 -- no value or a quest item. Junk is tried right after New items, so a new junk item stays in New items with its coin until the bags close, and
 -- nothing Sell junk sells is filed anywhere else.
 --
 -- Placement by hand: an item dropped on the title of a section stays in that section, by item ID, for the whole account, in FlatUIDB.bags.placed
 -- (at most MOST_PLACED items). A drop reads the cursor (GetCursorInfo, and C_Cursor.GetCursorItem for the slot the item came from,
 -- CursorDocumentation.lua:11-19, read from the fields of its ItemLocation, Blizzard_ObjectAPI/Mainline/ItemLocation.lua:35-44) and gives the
--- item back to its slot with ClearCursor. Dropped on Junk, the item goes on Errands' sell list; an item the two lists make junk
--- (ns.ErrandsJunkRule) dropped on another section comes off the sell list, and a grey one goes on the keep list (ns.ErrandsJunkMark), as
--- /flatui sell and /flatui keep put them there and take them off (ErrandsMerchant.lua:811-835): a placement of Flat UI's own in or out of Junk
--- would make the section and the selling disagree. An item the game gives no value, or no sell price (C_Item.GetItemInfo,
--- ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands never sells them. Dropped on the section it reaches by itself,
--- an item loses its placement. An item whose slot the game does not say is judged by its ID alone, with its quality from
--- C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight (InCombatLockdown and UnitAffectingCombat,
--- through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands does, by C_Item.GetItemNameByID and its ID.
--- The row Items placed by hand lists the placements and takes one off.
+-- item back to its slot with ClearCursor. Dropped on Junk, the item goes on Errands' sell list; an item of Junk dropped on another section comes
+-- off the sell list, and a grey one goes on the keep list (ns.ErrandsJunkMark), as /flatui sell and /flatui keep put them there and take them off
+-- (ErrandsMerchant.lua:824-848): a placement of Flat UI's own in or out of Junk would make the section and the selling disagree. Whether a dropped
+-- item is of Junk is the test of its slot for a slot of the bags (Categories.IsJunk), so a grey item of a bag left out of junk selling, which is
+-- not in Junk, goes on no list; for the bank, and an item whose slot the game does not say, it is the two lists (ns.ErrandsJunkRule). An item the
+-- game gives no value, or no sell price (C_Item.GetItemInfo, ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands
+-- never sells them. Dropped on the section it reaches by itself, an item loses its placement. An item whose slot the game does not say is judged by
+-- its ID alone, with its quality from C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight
+-- (InCombatLockdown and UnitAffectingCombat, through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands
+-- does, by C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off.
 --
 -- Inside a section, equipment sorts by the place of its slot in the Character window (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-873),
 -- then by item level (ns.Items.LevelOf, Items.lua:425-438), quality and name; everything else by class, subclass, quality, name and count. An item
@@ -670,17 +671,30 @@ local function DropOnJunk(id, record, link)
 	return true
 end
 
--- A drop on another section: a junk item leaves the lists first, then the item is kept there, or loses its placement when that is the
+-- Whether a dropped item is an item of Junk, which a drop on another section takes off the lists: for a slot of the bags (not the keyring) the
+-- slot's own test (Categories.IsJunk, whatever its lock, so the item held on the cursor is judged as it lies), which leaves a grey item of a bag the
+-- game's menu leaves out of junk selling outside Junk; for the bank, or an item whose slot the game does not say, the two lists (ns.ErrandsJunkRule).
+local function DroppedJunk(id, record)
+	local bag = Whole(record.bag)
+	if record.live == true and bag ~= nil and bag ~= KEYRING and BAGS[bag] then
+		return Categories.IsJunk(record) == true
+	end
+	local rule = ns.ErrandsJunkRule
+	if type(rule) ~= "function" then
+		return false
+	end
+	local quality = ns.Finite(record.quality) and record.quality or nil
+	return rule(id, quality, Unsellable(record, Text(record.link)), Quest(record)) == true
+end
+
+-- A drop on another section: an item of Junk leaves the lists first, then the item is kept there, or loses its placement when that is the
 -- section it reaches by itself. True when either changed what the window shows.
 local function DropOn(key, id, record)
-	local rule, mark = ns.ErrandsJunkRule, ns.ErrandsJunkMark
+	local mark = ns.ErrandsJunkMark
 	local unlisted = false
-	if type(rule) == "function" and type(mark) == "function" then
-		local quality = ns.Finite(record.quality) and record.quality or nil
-		if rule(id, quality, Unsellable(record, Text(record.link)), Quest(record)) == true then
-			mark(id, false)
-			unlisted = true
-		end
+	if type(mark) == "function" and DroppedJunk(id, record) then
+		mark(id, false)
+		unlisted = true
 	end
 	local done, why = Categories.Place(id, key ~= Rules(record) and key or nil)
 	if not done and why == "full" then

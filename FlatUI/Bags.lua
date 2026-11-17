@@ -1,16 +1,17 @@
 local _, ns = ...
 
--- Bags (off by default) puts every bag in one window of Flat UI's own, with sections and a search, and the bank in a second window that is
--- live at the banker and shows the last snapshot anywhere else; the game's bag and bank windows stay hidden while it is on. This file is the
--- module, and the other Bags files are its parts. It makes ns.Bags and every table the parts fill, for the files that load after it in this
--- order: BagsData.lua (Data, the account cache), BagsCategories.lua (Categories and Categories.New), BagsSearch.lua (Search), BagsItems.lua
--- (Buttons), BagsLayout.lua (Layout), BagsWindow.lua (Window), BagsBank.lua (Bank) and BagsTooltip.lua (Tips). A part adds fields to its own
--- table only, adds the events it owns with ns.AddEvent while the files load (Core.lua:2081-2129; so the module is registered here, first), and
--- looks up the functions of the other parts when it calls them, never at load. This file holds what they share (Opt, Look, On, Part, Request,
--- Me, Viewing), decides when the bag window opens and closes, keeps the game's windows hidden, stands down, and runs the redraw pass and the
--- sort hold. Every part runs its work through Bags.Part (ns.EachPart, Core.lua:1988-2023, with a fresh key per call as Errands.Run does,
--- Errands.lua:215-227), so a part that keeps failing stops alone; when follow, window, layout or items stops, both windows hide and the game's
--- windows go back, so the player always has bags.
+-- Bags (off by default) puts every bag in one window of Flat UI's own, with sections and a search, and the bank in a second window, live at the
+-- banker for a visit that starts while At the banker is Flat UI's bank window and the last snapshot otherwise; the game's bag windows stay hidden
+-- while it is on, and its bank window too for such a visit. This file is the module, and the other Bags files are its parts. It makes ns.Bags and
+-- every table the parts fill, for the files that load after it in this order: BagsData.lua (Data, the account cache), BagsCategories.lua
+-- (Categories and Categories.New), BagsSearch.lua (Search), BagsItems.lua (Buttons), BagsLayout.lua (Layout), BagsWindow.lua (Window),
+-- BagsBank.lua (Bank) and BagsTooltip.lua (Tips). A part adds fields to its own table only, adds the events it owns with ns.AddEvent while the
+-- files load (Core.lua:2093-2141; so the module is registered here, first), and looks up the functions of the other parts when it calls them,
+-- never at load. This file holds what they share (Opt, Look, On, Part, Request, Me, Viewing), decides when the bag window opens and closes, keeps
+-- the game's windows hidden, stands down, and runs the redraw pass and the sort hold. Every part runs its work through Bags.Part (ns.EachPart,
+-- Core.lua:2000-2035, with a fresh key per call as Errands.Run does, Errands.lua:215-227), so a part that keeps failing stops alone; when follow,
+-- cache, window, layout or items stops, both windows hide and the game's windows go back, so the player always has bags (cache is BagsData's, the
+-- only part that tells the windows the bags changed).
 --
 -- The game keeps deciding when bags are open, and the bag window follows it. Every way the game opens or closes bags goes through ten
 -- functions: the key bindings (Bindings_Camelot.xml:1172-1192), the bag bar (Shared/MainMenuBarBagButtons.lua:69-87, 171-175), the merchant
@@ -18,7 +19,7 @@ local _, ns = ...
 -- (Mainline/AlertFrameSystems.lua:575, 623, 716) and Escape (UIParentPanelManager.lua:1175-1183) call ToggleBackpack, ToggleBag,
 -- ToggleAllBags, OpenAllBags, OpenAllBagsMatchingContext, OpenBag, OpenBackpack, CloseAllBags, CloseBag or CloseBackpack
 -- (Mainline/ContainerFrame.lua:189-199, 237-251, 2173-2217, 2153-2171, 2255-2280, 313-323, 378-391, 2282-2306, 360-366, 341-347). Each is
--- followed with hooksecurefunc (ns.FollowGlobal, Core.lua:1396-1404) once, at Start; a hook cannot be taken back, so each asks first whether
+-- followed with hooksecurefunc (ns.FollowGlobal, Core.lua:1408-1416) once, at Start; a hook cannot be taken back, so each asks first whether
 -- the page is on, and Bags stays off when one of them cannot be followed. None of the game's bag code is called here, not even a reader:
 -- IsBagOpen, IsAnyBagOpen and CloseBag reach ContainerFrameUtil_EnumerateContainerFrames, which fills the game's list of bag windows the first
 -- time it is asked (:349-376, 2219-2238, 2335-2373, 2416-2422) and is left empty after login with individual bags (:2443-2449, 2502-2513). A
@@ -57,12 +58,16 @@ local _, ns = ...
 -- C_ActionBar.ShouldShowKeyring says it shows), as the game's own close does (UpdateNewItemList, Mainline/ContainerFrame.lua:349-358, 393-397,
 -- 806), which a hidden window never runs; every hold goes; New items lets go (Categories.New.Close); the layout forgets its places
 -- (Layout.Closed); the search clears unless the bank window is open; and the window goes back to this character. The sound is BagsWindow's. A
--- window hidden with its parent (the interface hidden) keeps its own shown flag and is not closed, and the warm-up of BagsItems shows and hides
--- the window without opening it, so nothing follows then either. The step that takes the new flags off is also Bags.ClearNew, for the other two
+-- window closed while the player could not see it hears no hiding, so Bags.HideBags and Release take the same steps after it (Tidy), and
+-- BagsWindow asks Bags.HideBags when the interface shows again after Escape closed the window meanwhile. A window hidden with its parent (the
+-- interface hidden) keeps its own shown flag and is not closed, and the warm-up of new item buttons (BagsWindow) shows and hides the window
+-- without opening it, so nothing follows then either. The step that takes the new flags off is also Bags.ClearNew, for the other two
 -- ways New items is put away while New items at the top is on: a sort of the bags (Bags.Sorted, below) and a click on the title of the top shelf
 -- in the bag window (BagsLayout.lua), since a flag left on one of its items would bring it back at the next change of its slot. This file hides a
 -- window through Window.Hide, which first has a slot of the bag window that owns the game's split box leave it to the game (B.Buttons.Unsplit)
--- and closes a window the player cannot see itself; one still shown after it (the window part stopped) is hidden here, after the same Unsplit.
+-- and closes a window the player cannot see itself; one still shown after it (the window part stopped) is hidden here, after the same Unsplit,
+-- and a bank window hidden here while the player could not see it heard no OnHide, so the visit it was the live bank of ends here
+-- (B.Bank.Hidden of BagsBank.lua).
 --
 -- The game's windows are kept from drawing by moving each under a hidden frame of this file's own (SetParent, a widget call, after GetParent is
 -- read and kept), out of combat (ns.OutOfCombat with a flag of its own, as BagSort.lua:597-619) and only while the game has it closed: moving a
@@ -86,7 +91,8 @@ local _, ns = ...
 -- Bags.Request gathers what the windows must draw again (items, layout, search, footer or look, and the slots BagsData found changed at
 -- BAG_UPDATE_DELAYED, merged), per window; an ask for items that names no slots means every slot, whatever else the frame asked. One pass on
 -- the next frame calls Window.Update for each open window; a closed window keeps what it was asked and drops the slots, since it lays out
--- afresh when it opens. The sort hold: the game's clean up only asks the server, and the items then move over many BAG_UPDATE_DELAYED
+-- afresh when it opens, and its opening lets that go (Bags.LaidOut, from BagsWindow's Showing), all but a change of look, which the fresh layout
+-- does not paint. The sort hold: the game's clean up only asks the server, and the items then move over many BAG_UPDATE_DELAYED
 -- (BagSort.lua:294-325), so after BagSort says it asked (Bags.Sorted) the window keeps every place: its slots are drawn where they are, nothing
 -- moves to the arrivals (Bags.Sorting tells BagsWindow), and the fresh layout waits for 0.4 seconds with no change after one came, 1.5 seconds
 -- when none comes, or 6 seconds at most; another character chosen meanwhile is laid out at once. A sort of the bags puts New items away, and
@@ -94,7 +100,7 @@ local _, ns = ...
 --
 -- The events this file owns, each heard only here, in this order: BAG_CLOSED (the swap wait above; ContainerDocumentation.lua:613);
 -- PLAYER_REGEN_ENABLED (with Errands off, ns.ErrandsSellJunk goes on with a Sell junk pass that a fight paused, which Errands does itself while
--- it is on; work queued with ns.OutOfCombat runs from Core.lua:3480-3488; UnitDocumentation.lua:3893); MERCHANT_SHOW and MERCHANT_CLOSED
+-- it is on; work queued with ns.OutOfCombat runs from Core.lua:3492-3500; UnitDocumentation.lua:3893); MERCHANT_SHOW and MERCHANT_CLOSED
 -- (Bags.atMerchant, ns.ErrandsMerchantClosed at the close, then the footer of the bag window; MerchantFrameDocumentation.lua:112, 96);
 -- TRADE_SHOW and TRADE_CLOSED (the trade hold; TradeInfoDocumentation.lua:143, 78); ADDON_LOADED and INPUT_DEVICE_INTERFACE_TRANSITION
 -- (standing down; AddOnsDocumentation.lua:391, InputDocumentation.lua:343). Every other event of the page belongs to its part: BagsData hears
@@ -141,9 +147,10 @@ local NAMES = { bags = "FlatUIBags", bank = "FlatUIBank" }
 -- What Request takes, and the reasons that hold the bag window open.
 local FLAGS = { items = true, layout = true, search = true, footer = true, look = true }
 local HOLDS = { bank = true, trade = true, command = true }
--- The parts without which the window cannot stand in for the game's bags: when one stops, the game's windows go back.
-local CRITICAL = { follow = true, window = true, layout = true, items = true }
-local CRITICAL_ORDER = { "follow", "window", "layout", "items" }
+-- The parts without which the window cannot stand in for the game's bags: when one stops, the game's windows go back. cache (BagsData.lua) is
+-- the only part that hears the bags change and asks the windows to draw again, so without it they would show what the bags held before.
+local CRITICAL = { follow = true, cache = true, window = true, layout = true, items = true }
+local CRITICAL_ORDER = { "follow", "cache", "window", "layout", "items" }
 -- Seconds: how long a closing waits after BAG_CLOSED, and the sort hold (quiet after a change, no change at all, at most).
 local SWAP_WAIT = 0.5
 local SORT_QUIET, SORT_NONE, SORT_CAP = 0.4, 1.5, 6
@@ -314,7 +321,7 @@ function B.Look(key)
 	return ns.Get("windows." .. key)
 end
 
--- "Name - Realm" of this character, or nil while the client does not say (Core.lua:2692-2695).
+-- "Name - Realm" of this character, or nil while the client does not say (Core.lua:2704-2707).
 function B.Me()
 	return ns.CharacterKey()
 end
@@ -712,6 +719,19 @@ function B.Request(flag, which, changed)
 	Queue()
 end
 
+-- A window opened (BagsWindow's Showing, before its fresh layout): what was asked for it while it was closed is drawn by that layout, so it goes
+-- here, and the pass after the opening does not draw every slot again. A change of look stays, since the opening paints neither the search boxes
+-- nor the buttons the layout does not show; what is asked from here on keeps its pass. Nothing is queued.
+function B.LaidOut(which)
+	local want = wants[which]
+	if want == nil then
+		return
+	end
+	local flags = want.flags
+	flags.items, flags.layout, flags.search, flags.footer = nil, nil, nil, nil
+	want.changed, want.all = nil, nil
+end
+
 -- The character each window shows: nil is this one.
 function B.Viewing(which)
 	return viewing[which]
@@ -799,7 +819,9 @@ end
 -- OnHide then. When that did not hide it (the window part stopped, or the warm-up of BagsWindow shows the window for that frame), it is hidden
 -- here, and the bag window's slots first leave the split box to the game here too, outside the parts, so a stopped items part does not stop
 -- that: a hiding made by Flat UI's code would otherwise run the template's OnHide, which hides the box in Flat UI's taint
--- (ContainerFrame.lua:1816-1822; Mainline/StackSplitFrame.lua:284-299).
+-- (ContainerFrame.lua:1816-1822; Mainline/StackSplitFrame.lua:284-299). A bank window hidden here ends the visit it was the live bank of
+-- (B.Bank.Hidden, BagsBank.lua), also outside the parts: one the player saw heard its OnHide, which ended the visit already, and one the player
+-- could not see heard none.
 local function HideWindow(which, frame)
 	Call("window", B.Window, "Hide", which)
 	if Shown(frame) then
@@ -808,6 +830,10 @@ local function HideWindow(which, frame)
 			pcall(unsplit)
 		end
 		pcall(frame.Hide, frame)
+		local ended = which == "bank" and not Shown(frame) and B.Bank.Hidden or nil
+		if type(ended) == "function" then
+			pcall(ended)
+		end
 	end
 end
 
@@ -1232,11 +1258,12 @@ local function Start()
 	end
 end
 
--- Applies the rows: the page off, the module stopped (Core.lua:1920-1933) or standing down puts everything back; else the windows are laid out
+-- Applies the rows: the page off, the module stopped (Core.lua:1932-1945) or standing down puts everything back; else the windows are laid out
 -- again, for a change of Width in slots, Slot size, Show items, the look of the Windows page or a general setting. A page turned on again after
--- Start, also by a profile or after a stop, runs this and not Start (Core.lua:2266-2275, 2707-2721), and the module heard no event while it was
+-- Start, also by a profile or after a stop, runs this and not Start (Core.lua:2278-2287, 2719-2733), and the module heard no event while it was
 -- off: BagsData then does the work of its Start again (Data.Resume: the keyring test, the kinds of the bags, the bags in the bag slots, the worn
--- items and who the character is, then a full scan), also while Bags stands down, since the record is kept then too.
+-- items and who the character is, then a full scan, and after it the quest marks and the set of every slot), also while Bags stands down, since
+-- the record is kept then too.
 local function Refresh()
 	if not started then
 		return
