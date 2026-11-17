@@ -36,7 +36,8 @@ local _, ns = ...
 -- read in full at each open instead). A slot counts as changed when its item, link, count, lock or quality changed, and its text is written when
 -- its item, link, count, quality or binding changed. Bags is then told, in this order: B.Categories.New.Seen(changed) with the changed slots of the
 -- bags, B.Request("items", "bags", changed) and the footer of the bags, and while the bank is open (or in the grace after its close, below)
--- B.Request("items", "bank", changed) and the footer of the bank, and B.Request("layout", "bank") when a bank bag slot changed what the tabs are.
+-- B.Request("items", "bank", changed) and the footer of the bank, and B.Request("layout", "bank") when a bank bag slot changed what the tabs are
+-- or, while the bank is open, a tab's size changed (a tab just bought, whose slots the client may give only after the layout that read it).
 -- BAG_CONTAINER_UPDATE (:623, a bag put in or taken out) reads the keyring test, the kinds and the bag items again, flags a full scan, and calls
 -- B.Buttons.Prepare with the bags' containers and B.Request("layout", "bags"); while the bank is open it reads the bank's tabs again too and asks
 -- B.Request("layout", "bank"). BAG_NEW_ITEMS_UPDATED (:629; the game's bag windows draw again on it, Mainline/ContainerFrame.lua:611-612) comes
@@ -982,11 +983,13 @@ end
 
 -- Reads one container of mine slot by slot. A slot whose item, link, count, lock or quality changed goes into changed[bag]; the text of a slot whose
 -- item, link, count, quality or binding changed is written into into[bag] (my bags or bank in the record), and every text when the container is
--- read for the first time this session or its table is new. guard: a size of 0 is no answer, and the container is left as it was.
+-- read for the first time this session or its table is new. guard: a size of 0 is no answer, and the container is left as it was. True when the
+-- size read differs from the last one this session read of the container (none read yet counts as 0 slots), so a tab whose slots the client
+-- gives only after a layout read it as none is laid out again (Delayed).
 local function Scan(bag, into, changed, guard)
 	local size = Count(Ask(Client("C_Container", "GetContainerNumSlots"), bag))
 	if not size or size > MAX_SLOTS or (size == 0 and guard) then
-		return
+		return false
 	end
 	local held = last[bag]
 	local fresh = held == nil
@@ -994,6 +997,7 @@ local function Scan(bag, into, changed, guard)
 		held = { n = 0 }
 		last[bag] = held
 	end
+	local was = held.n
 	local slots
 	if into then
 		slots = into[bag]
@@ -1055,6 +1059,7 @@ local function Scan(bag, into, changed, guard)
 		family = Count(family)
 		slots.f = family ~= nil and family ~= 0 and family or nil
 	end
+	return size ~= was
 end
 
 -- Forgets what this session read of a container, and its kept table.
@@ -1132,14 +1137,19 @@ local function WriteBank(record)
 	record.bankItems = items
 end
 
--- The bank's tabs, the marked ones or all. The first tab, or a tab whose bag slot holds a bag, with no slots has not been answered yet.
+-- The bank's tabs, the marked ones or all. The first tab, or a tab whose bag slot holds a bag, with no slots has not been answered yet. True when
+-- the size of a tab changed (Scan): a tab just bought, or one whose slots the client gave only after the bank window was laid out.
 local function ScanBank(record, changed, all)
 	local into = record and record.bank
+	local resized = false
 	for _, tab in ipairs(liveTabs) do
 		if all or dirty[tab] then
-			Scan(tab, into, changed, tab == FIRST_TAB or LiveBagItem(tab) ~= nil)
+			if Scan(tab, into, changed, tab == FIRST_TAB or LiveBagItem(tab) ~= nil) then
+				resized = true
+			end
 		end
 	end
+	return resized
 end
 
 -- Whether a tab of the visit still answers after the bank closed: the client gives it the slots the visit read, and an item in one of them unless the
@@ -1808,7 +1818,8 @@ end
 local RemarkAll
 
 -- BAG_UPDATE_DELAYED: scans the marked containers (all of them after a flag, or when the last full scan is SWEEP seconds old), and in the grace
--- after a close the marked tabs of the visit, writes the record, and tells New items and the windows what changed.
+-- after a close the marked tabs of the visit, writes the record, and tells New items and the windows what changed; while the bank is open, a
+-- change of the tabs or of a tab's size lays the bank window out afresh.
 local function Delayed()
 	local record = Mine(true)
 	local now = Clock()
@@ -1834,7 +1845,11 @@ local function Delayed()
 		end
 		local tabs = bankFull
 		bankFull = false
-		ScanBank(record, bank, tabs)
+		-- A tab whose size changed needs a new layout as well: the layout read each tab's size once, and the client may give the slots of a tab
+		-- (one just bought with the Buy button of BagsBank.lua) only after that.
+		if ScanBank(record, bank, tabs) then
+			tabsMoved = true
+		end
 		if record and next(bank) ~= nil then
 			record.bankSeen = Now() or record.bankSeen
 		end

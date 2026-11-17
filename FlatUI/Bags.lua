@@ -45,8 +45,9 @@ local _, ns = ...
 -- waits, looks again, and closes the window only when no game bag is open then.
 --
 -- A hold keeps the window open while the game has no bag open. bank: at the banker, with Flat UI's bank window and Open the bags at the
--- banker (the hidden BankFrame never runs the OnShow that opens the game's bags, Mainline/BankFrameTemplates.lua:97-102). trade: between
--- TRADE_SHOW and TRADE_CLOSED with Open the bags for a trade (the game opens bags for a trade only under the gamepad interface,
+-- banker (the hidden BankFrame never runs the OnShow that opens the game's bags, Mainline/BankFrameTemplates.lua:97-102), until BagsBank ends
+-- the visit itself (it drops the hold then, as BankFrame's OnHide closes the bags it opened, :104-109) or the visit ends (Bags.BankClosed).
+-- trade: between TRADE_SHOW and TRADE_CLOSED with Open the bags for a trade (the game opens bags for a trade only under the gamepad interface,
 -- Mainline/TradeFrame.lua:29-32, 243-245). command: /flatui bags. A toggle while the window is open closes it, and every close drops them all.
 --
 -- Escape closes both windows: when the page comes up their names, FlatUIBags and FlatUIBank, go once into UISpecialFrames, which the game
@@ -59,8 +60,10 @@ local _, ns = ...
 -- 806), which a hidden window never runs; every hold goes; New items lets go (Categories.New.Close); the layout forgets its places
 -- (Layout.Closed); the search clears unless the bank window is open; and the window goes back to this character. The sound is BagsWindow's. A
 -- window closed while the player could not see it hears no hiding, so Bags.HideBags and Release take the same steps after it (Tidy), and
--- BagsWindow asks Bags.HideBags when the interface shows again after Escape closed the window meanwhile. A window hidden with its parent (the
--- interface hidden) keeps its own shown flag and is not closed, and the warm-up of new item buttons (BagsWindow) shows and hides the window
+-- BagsWindow asks Bags.HideBags when the interface shows again and finds the window closed meanwhile with no hiding heard (its Missed). A window
+-- hidden with its parent (the interface hidden) keeps its own shown flag and is not closed then: the game closes every window as the interface
+-- comes back (UIParent's OnShow runs CloseAllWindows, Blizzard_UIParent/UIParent.lua:5-7, Blizzard_Game/Shared/Game.lua:91-93), and Escape
+-- while the interface is hidden only brings it back (Game.lua:29-37). The warm-up of new item buttons (BagsWindow) shows and hides the window
 -- without opening it, so nothing follows then either. The step that takes the new flags off is also Bags.ClearNew, for the other two
 -- ways New items is put away while New items at the top is on: a sort of the bags (Bags.Sorted, below) and a click on the title of the top shelf
 -- in the bag window (BagsLayout.lua), since a flag left on one of its items would bring it back at the next change of its slot. This file hides a
@@ -78,7 +81,10 @@ local _, ns = ...
 -- interface comes, or (BankFrame alone) the game's bank window is chosen: at once, also in a fight, since none of them is protected
 -- (Mainline/ContainerFrame.xml:229, 298-304, 313; Mainline/BankFrameTemplates.xml:667), when the game has it closed, and else once the game
 -- closes it, which is seen through the ten functions and, for BankFrame, through HideUIPanel (PlayerInteractionFrameManager.lua:139-163),
--- also followed with hooksecurefunc, and BagsBank's end of the bank (Bags.BankClosed).
+-- also followed with hooksecurefunc, and BagsBank's end of the bank (Bags.BankClosed). BagsBank hides a BankFrame still shown under the hidden
+-- frame (Hide, which runs no script there) just before it ends the bank itself: the game hides BankFrame inside that call
+-- (PLAYER_INTERACTION_MANAGER_FRAME_HIDE is a synchronous event, PlayerInteractionManagerDocumentation.lua:103-104) with a HideUIPanel run under
+-- Flat UI's code, which the game refuses in a fight; hidden first, the frame stops that HideUIPanel at its shown check.
 -- ContainerFrame_SetFullScreenFrame and ContainerFrame_ClearFullScreenFrame give the bag windows another parent themselves
 -- (Mainline/ContainerFrame.lua:138-161), so after either one they are moved under the hidden frame again. ns.BagsParked tells Movers and
 -- Windows which of the game's windows nobody sees.
@@ -865,7 +871,8 @@ function B.Hold(reason, on)
 	return true
 end
 
--- The steps of a close, once for each opening. A window hidden with its parent keeps its own shown flag and is not closed.
+-- The steps of a close, once for each opening. A window hidden with its parent keeps its own shown flag and is not closed then; the game closes it
+-- when the interface comes back.
 function Tidy()
 	if not bagsOpen or Shown(windows.bags) then
 		return
@@ -1096,8 +1103,9 @@ function B.BankOpened()
 	end
 end
 
--- BagsBank ended the live bank: the bank hold goes, and the bag window closes when no game bag is open and nothing else holds it. BankFrame
--- goes back, or under the hidden frame, once the game has hidden it.
+-- BagsBank ended the live bank: the bank hold goes (BagsBank drops it already when it ends the visit itself), and the bag window
+-- closes when no game bag is open and nothing else holds it. BankFrame goes back, or under the hidden frame, once it is hidden: by the game, or
+-- by BagsBank just before it ended the bank.
 function B.BankClosed()
 	if B.On() or next(parked) ~= nil then
 		SoonSync()

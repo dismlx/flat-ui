@@ -25,7 +25,8 @@ local _, ns = ...
 --   B.Request("layout", "bank"): the live window turns into the records.
 -- - PLAYERBANKSLOTS_CHANGED, and BANK_TABS_CHANGED of the character bank (BankDocumentation.lua:382 and 414), during a visit: B.Data.BankTabs; the
 --   row of bank bag slots and the Buy button; B.Request("layout", "bank") when the bought tabs or the bags in them changed, since the items in the
---   tabs reach the window slot by slot and nothing moves while it is open.
+--   tabs reach the window slot by slot and nothing moves while it is open. A tab whose slots the client gives only after that layout, as it may
+--   for a tab just bought, has BagsData.lua lay the window out again at BAG_UPDATE_DELAYED.
 -- These events reach the module only while it is on, so when the page comes up again Bank.Settle ends a visit that ended meanwhile, one whose
 -- BankFrame is no longer shown (the game shows it, hidden by Bags or not, for as long as a visit lasts), with B.Data.BankClosed told that the close
 -- was not heard, so the snapshot keeps the date of its last write; and it starts one that began meanwhile, whose BankFrame shows while the client
@@ -37,16 +38,24 @@ local _, ns = ...
 -- - when that window hides: its close button, the bank key, or Escape, which hides the windows of UISpecialFrames through a securecall
 --   (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:1106-1116 and 1168). Its OnHide is followed with HookScript, on a frame of Flat
 --   UI's own; a window hidden with its parent, as when a movie or another addon hides the interface, keeps its shown flag (IsShown) and ends
---   nothing. A window hidden while the player could not see it hears no OnHide, so BagsWindow's Window.Hide and Bags.lua, which hid it, call
---   Bank.Hidden, which ends the visit the same way; so does BagsWindow when the interface shows again after Escape hid the window meanwhile, which
---   no code of Flat UI's heard (its Missed).
--- - when the game hides BankFrame with HideUIPanel, which is followed with ns.FollowGlobal the first time a visit starts live: Escape
---   (UIParentPanelManager.lua:1130-1132 and 1175-1177), walking away (PlayerInteractionFrameManager.lua:139-163), or another panel taking its place.
---   Only the first argument is read, compared with rawequal, and only a BankFrame whose shown flag is false after the call counts: the game refuses a
---   hide asked by an addon in a fight (UIParentPanelManager.lua:853-861 and 905-922).
--- The visit stops being live at once, but a move of Deposit or Take out sent less than WAIT seconds before is given the time to be answered: the call
--- waits until WAIT seconds after that move (C_Timer.After), so the answer comes while BagsData.lua still reads the bank's tabs. The game then sends
--- BANKFRAME_CLOSED, and the visit ends as above.
+--   nothing then. A window hidden while the player could not see it hears no OnHide, so BagsWindow's Window.Hide and Bags.lua, which hid it, call
+--   Bank.Hidden, which ends the visit the same way, and so does BagsWindow's Missed when the interface shows again and finds the window closed
+--   meanwhile with no OnHide heard. The game closes every window when the interface comes back (UIParent's OnShow runs CloseAllWindows,
+--   Blizzard_UIParent/UIParent.lua:5-7 and Blizzard_Game/Shared/Game.lua:91-93), and at death, at a loss of control and on entering the world
+--   also while it stays hidden; Escape while the interface is hidden only brings it back (Game.lua:29-37).
+-- - when the game hides BankFrame with HideUIPanel, which is followed with ns.FollowGlobal the first time a visit starts live: Escape and the
+--   game's other closes of every window (UIParentPanelManager.lua:1130-1132 and 1175-1177), walking away (PlayerInteractionFrameManager.lua:139-163),
+--   or another panel taking its place. Only the first argument is read, compared with rawequal, and only a BankFrame whose shown flag is false
+--   after the call counts: the game refuses a hide asked by an addon in a fight (UIParentPanelManager.lua:853-861 and 905-922).
+-- The visit stops being live at once, and the bank hold of Bags.lua goes with it (B.Hold), as the game's OnHide closes the bags its bank window
+-- opened (CloseAllBags(self)). The call comes at once, unless a move of Deposit or Take out sent less than WAIT seconds before has no answer yet:
+-- its slot still holds that item locked, a lock of the server's, since a pass moves only unlocked items with the cursor empty and a locked item
+-- cannot be picked up. Then the slots are looked at again once a frame (C_Timer.After), WAIT seconds after the move at most, and the call comes on
+-- the frame after the answer, so BagsData.lua reads it while it still reads the bank's tabs; the game's bank stays open meanwhile, and a
+-- right-click in a bag window would still deposit. Just before the call the game's BankFrame, still shown under Bags' hidden frame, is hidden
+-- (Hide, which runs no script there): the call ends the interaction, whose hide the game handles inside the call (a synchronous event,
+-- PlayerInteractionManagerDocumentation.lua:103-104) with HideUIPanel(BankFrame) under Flat UI's code, which the game refuses in a fight; hidden
+-- first, the frame stops it at its shown check (UIParentPanelManager.lua:916-918). The game then sends BANKFRAME_CLOSED, and the visit ends as above.
 --
 -- The row of bank bag slots (Bank.Slots, in a frame of Bags' own that the bank window gives it). Tab 1 is the bank's own slots; tabs 2 to 9 are the
 -- bags put in the bank bag slots, the item at Enum.BagIndex.Characterbanktab (-2), slot n (Blizzard_UIPanels_Game/Camelot/BankFrame.lua:136-191 and
@@ -101,8 +110,9 @@ local _, ns = ...
 -- the strip of the bank window, which takes the height Slots returns and hides when it is 0).
 --
 -- Every game call runs inside pcall (each piece of work runs in B.Part, which is one), every game answer goes through ns.IsSecret or ns.Finite before
--- it is compared, counted, joined or used as a key, and nothing of the game's frames is written: BankFrame is only read (IsShown) and compared, and
--- the buy question is taken down by the game's own StaticPopup_Hide (through Errands.HideAlone).
+-- it is compared, counted, joined or used as a key, and no field of the game's frames is written nor any of their Lua methods called: BankFrame is
+-- read (IsShown), compared, and hidden with the widget call Hide only while it is still shown under Bags' hidden frame, just before the call that
+-- ends the bank (CloseBank), and the buy question is taken down by the game's own StaticPopup_Hide (through Errands.HideAlone).
 
 local B = ns.Bags
 if type(B) ~= "table" or type(B.Bank) ~= "table" then
@@ -124,8 +134,8 @@ local FIRST_BAG, MOST_BAGS = 2, 9
 local BAGS = { 0, 1, 2, 3, 4, 5 }
 -- More slots than a container ever has; a larger answer is no answer.
 local MOST_SLOTS = 200
--- Seconds between two moves; seconds after a move before its slot is looked at again, and how many looks a slot the game holds locked gets; seconds
--- between two looks at the end of a fight.
+-- Seconds between two moves; seconds after a move before its slot is looked at again (and the longest the end of a visit waits for its answer),
+-- and how many looks a slot the game holds locked gets; seconds between two looks at the end of a fight.
 local SPACING = 0.15
 local WAIT, LOOKS = 1, 3
 local POLL = 1
@@ -167,9 +177,11 @@ local BINDING = "CLICK " .. BUTTON .. ":LeftButton"
 _G["BINDING_NAME_" .. BINDING] = "Flat UI bank"
 
 -- open: a visit to a banker is under way; flat: Flat UI's bank window is its live bank; closing: Flat UI asked to end it (C_Bank.CloseBankFrame,
--- maybe after a wait). closeWait: the token of the close that waits; movedAt: when (GetTime) Deposit or Take out last moved an item.
+-- maybe after a wait). closeWait: the token of the close that waits; sent: the moves of Deposit and Take out of the last WAIT seconds, oldest
+-- first, { bag, slot, id, link, at } with at from GetTime, whose answers that close waits for.
 local open, flat, closing = false, false, false
-local closeWait, movedAt
+local closeWait
+local sent = {}
 -- The pass of Deposit or Take out, or nil: { kind, queue, next, moved, checks, paused, draining, left }. queue and next serve a pass of timers,
 -- left a pass of clicks; checks counts the moves whose slot has not been looked at again yet.
 local pass
@@ -360,7 +372,49 @@ function Bank.Visiting()
 	return open == true
 end
 
--- C_Bank.CloseBankFrame for the close that waits, while it is still the one that waits and the visit it was asked for goes on.
+-- Keeps a move of Deposit or Take out that the game took, for the close that waits (EndVisit), and forgets the moves sent WAIT seconds or more
+-- before it. Without the client's clock nothing is kept, and the close never waits.
+local function Sent(move)
+	local now = Clock()
+	local kept = {}
+	if now then
+		for _, entry in ipairs(sent) do
+			if now - entry.at < WAIT then
+				kept[#kept + 1] = entry
+			end
+		end
+		kept[#kept + 1] = { bag = move.bag, slot = move.slot, id = move.id, link = move.link, at = now }
+	end
+	sent = kept
+end
+
+-- True while a move sent less than WAIT seconds ago has no answer yet: its slot still holds that item, locked. That lock is the server's: a pass
+-- moves only an unlocked item with the cursor empty, and a locked item cannot be picked up. A move that failed unlocks its slot, and an item the
+-- player picks up after that looks locked again, so the wait never runs past WAIT seconds after the move.
+local function Unanswered()
+	local now = Clock()
+	if not now then
+		return false
+	end
+	for _, entry in ipairs(sent) do
+		if now - entry.at < WAIT then
+			local held = Held(entry.bag, entry.slot)
+			if held and held.locked and held.id == entry.id and held.link == entry.link then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- C_Bank.CloseBankFrame for the close that waits, while it is still the one that waits and the visit it was asked for goes on. The game's
+-- BankFrame, still shown under Bags' hidden frame, is hidden first (Hide, which runs no script there). The call ends the bank's interaction, and
+-- the game hides BankFrame for that inside the call (PLAYER_INTERACTION_MANAGER_FRAME_HIDE is a synchronous event,
+-- PlayerInteractionManagerDocumentation.lua:103-104), with HideUIPanel (PlayerInteractionFrameManager.lua:139-163) run under Flat UI's code,
+-- which the game refuses in a fight (UIParentPanelManager.lua:853-861 and 905-922): the frame would stay shown, holding its place among the
+-- game's panels. Hidden first, it stops that HideUIPanel at its shown check (:916-918), before the test of a fight, and the game frees the place
+-- itself at its next ShowUIPanel or Escape (:156-183 and 191-195, 1130-1132). A BankFrame that is not under the hidden frame is never hidden
+-- here: its OnHide would run in Flat UI's taint.
 local function CloseBank(token)
 	if closeWait ~= token or not open or not closing then
 		return
@@ -368,13 +422,40 @@ local function CloseBank(token)
 	closeWait = nil
 	local api = C_Bank
 	if Usable(api) and type(api.CloseBankFrame) == "function" then
+		local bank = _G.BankFrame
+		if Parked() and E.Shown(bank) then
+			pcall(bank.Hide, bank)
+		end
 		pcall(api.CloseBankFrame)
 	end
 end
 
+-- The close that waits looks at the slots of the moves just sent once a frame (C_Timer.After), and asks for the close on the frame after the last
+-- answer came, so the BAG_UPDATE_DELAYED that carried it has been read while BagsData.lua still reads the bank's tabs. Plain code, checked
+-- against its token as CloseBank is.
+local function Await(token)
+	if closeWait ~= token or not open or not closing then
+		return
+	end
+	if Unanswered() and After(0, function()
+		Await(token)
+	end) then
+		return
+	end
+	if not After(0, function()
+		CloseBank(token)
+	end) then
+		CloseBank(token)
+	end
+end
+
 -- Asks the game to end the visit, once, as BankFrame's OnHide would. Plain code with no part around it, so a part that stopped cannot leave the
--- game's bank open behind a hidden frame. The visit stops being live at once (closing); the call itself waits until WAIT seconds after the last
--- move of Deposit or Take out, so a move sent just before is answered while BagsData.lua still reads the bank's tabs.
+-- game's bank open behind a hidden frame. The visit stops being live at once (closing), and the bank hold of Bags.lua goes (B.Hold, outside the parts
+-- too), as the game's OnHide closes the bags its bank window opened (CloseAllBags(self), BankFrameTemplates.lua:104-109): the bag window closes then
+-- when nothing else keeps it open. The call comes at once, unless a move of Deposit or Take out sent less than WAIT seconds before has no answer yet
+-- (Unanswered); then it waits for that answer (Await), so the move is read while BagsData.lua still reads the bank's tabs. While it waits the game's
+-- bank is still open, and a right-click in a bag window still deposits, so it waits no longer than the answer takes. A move answered after the close
+-- is left to the grace of BagsData.lua.
 local function EndVisit()
 	if not open or not flat or closing then
 		return
@@ -382,17 +463,19 @@ local function EndVisit()
 	closing = true
 	local token = {}
 	closeWait = token
-	local now = Clock()
-	local left = (movedAt and now) and (movedAt + WAIT - now) or 0
-	if left > 0 and After(math.min(left, WAIT), function()
-		CloseBank(token)
+	local hold = B.Hold
+	if type(hold) == "function" then
+		pcall(hold, "bank", false)
+	end
+	if Unanswered() and After(0, function()
+		Await(token)
 	end) then
 		return
 	end
 	CloseBank(token)
 end
 
--- The bank window hid. A window hidden with its parent keeps its shown flag and ends nothing.
+-- The bank window hid. A window hidden with its parent keeps its shown flag and ends nothing then: the game closes it when the interface comes back.
 local function WindowHidden(window)
 	if open and flat and not closing and not E.Shown(window) then
 		EndVisit()
@@ -400,8 +483,8 @@ local function WindowHidden(window)
 end
 
 -- The bank window hid while the player could not see it (the interface hidden), so it heard no OnHide: BagsWindow's Window.Hide, and Bags.lua when
--- it hides the window itself, call this then, and BagsWindow's Missed when the interface shows again after Escape hid the window meanwhile. It ends
--- the visit as WindowHidden does, without asking the window's shown flag, and as plain code with no part around it.
+-- it hides the window itself, call this then, and BagsWindow's Missed when the interface shows again and finds the window closed meanwhile with no
+-- OnHide heard. It ends the visit as WindowHidden does, without asking the window's shown flag, and as plain code with no part around it.
 function Bank.Hidden()
 	if open and flat and not closing then
 		EndVisit()
@@ -861,7 +944,7 @@ local function Move(run, move)
 	if not Use(run.kind, move) then
 		return false
 	end
-	movedAt = Clock()
+	Sent(move)
 	run.moved = run.moved + 1
 	run.checks = run.checks + 1
 	local count = held.count
@@ -1145,6 +1228,7 @@ Closed = function(late)
 	end
 	local wasFlat = flat
 	open, flat, closing, closeWait = false, false, false, nil
+	sent = {}
 	if pass then
 		Run(Finish, not PER_CLICK and "the bank closed" or nil)
 		pass = nil
@@ -1160,8 +1244,9 @@ end
 
 -- The tabs or the bank's bag slots changed. The bank window is laid out afresh only when the bought tabs or the bags in them changed
 -- (B.Data.BankTabs says so): the items of the tabs come slot by slot at the next BAG_UPDATE_DELAYED (BagsData.lua), and nothing moves while the
--- window is open. When BagsData could not say (BankTabs missing or failing), the window is laid out afresh as well; a stopped part of BagsData
--- stands Bags down, and the window with it.
+-- window is open; a tab whose size the client gives only after this layout read it has BagsData lay the window out again then. When BagsData
+-- could not say (BankTabs missing or failing), the window is laid out afresh as well; a stopped part of BagsData stands Bags down, and the window
+-- with it.
 local function Changed()
 	if not open then
 		return

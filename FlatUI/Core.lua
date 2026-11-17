@@ -95,29 +95,29 @@ local ADDON_NAME, ns = ...
 -- faction the game watches, and reads the list of factions without expanding it: Flat UI's own reputation bar shows the faction gained.
 -- Bags (off by default) draws a bag window and a bank window of its own on UIParent and keeps the game's bag windows (ContainerFrame1 to
 -- ContainerFrame7 and ContainerFrameCombinedBags), and with Flat UI's bank BankFrame, from showing by moving each under a hidden frame of its own
--- (SetParent), out of combat and only while the game has it closed. Each goes back to the parent it was read from (GetParent) when the page goes
--- off, the module or one of its parts follow, cache, window, layout or items stops, Bags stands down for another bag addon or the gamepad
--- interface, or, for BankFrame, the game's bank window is chosen: at once, also in a fight, when the game has it closed, and once the game closes
--- it otherwise. Of those windows it reads the shown flag (IsShown), and when its own bag window hides, and when it gives the windows back, it
--- hides the bag windows it moved that the game still has open (Hide, which runs no script under the hidden frame); it writes no field on them and
--- calls none of their methods. It follows ToggleBackpack, ToggleBag, ToggleAllBags, OpenAllBags, OpenAllBagsMatchingContext, OpenBag,
--- OpenBackpack, CloseAllBags, CloseBag, CloseBackpack, HideUIPanel, ContainerFrame_SetFullScreenFrame and ContainerFrame_ClearFullScreenFrame
--- with hooksecurefunc, and calls none of the game's bag functions: they build the game's list of bag windows the first time they are asked
--- (Mainline/ContainerFrame.lua:2335-2373), and a list built by Flat UI's code would be read by Escape. It asks C_GameRules.IsGameRuleActive
--- whether the game shuts the bags and C_ActionBar.ShouldShowKeyring whether it shows a keyring, and after ToggleBag it reads the game's
--- showKeyring and combinedBags settings (C_CVar.GetCVarBool) and the size of the bag named (C_Container.GetContainerNumSlots), so a toggle the
--- game lets pass leaves its window alone. It takes the game's new flag off the items of the bags (C_NewItems.RemoveNewItem), as the game's own
--- close does, when its bag window hides, when it gives the windows back and has hidden one of them, and, while New items at the top is on, when
--- it has the game sort the bags and at a click on the title of the top shelf of its bag window. With BankFrame hidden this way it ends the bank
--- with C_Bank.CloseBankFrame, which the game's OnHide would otherwise do, when its bank window closes or the game hides BankFrame. A bank window
--- hidden while the interface is hidden runs no OnHide, so the call comes when Flat UI hides it, or when the interface shows again after Escape
--- hid it; and a call asked less than a second after a move of Deposit or Take out waits until a second after it (C_Timer.After), so the answer to
--- the move is read first. While it reads the bank, and when the page comes up while BankFrame shows, it asks whether the player still deals with
--- a banker (C_PlayerInteractionManager.IsInteractingWithNpcOfType). It reads where the right action bars stand (IsVisible, GetLeft, GetRight and
--- GetEffectiveScale of MultiBarRight and MultiBarLeft) and whether Edit Mode has each in its place (the table Edit Mode keeps on the bar,
--- systemInfo, and its isInDefaultPosition, read with rawget; no method of the bar is called), so that its bag window starts left of those in
--- their place, as the game's bags open. Its windows play the sounds of the game's bag windows as they open and close (PlaySound,
--- SOUNDKIT.IG_BACKPACK_OPEN and IG_BACKPACK_CLOSE).
+-- (SetParent), out of combat and only while the game has it closed. Each goes back to the parent it was read from (GetParent) when the page goes off,
+-- the module or one of its parts follow, cache, window, layout or items stops, Bags stands down for another bag addon or the gamepad interface, or,
+-- for BankFrame, the game's bank window is chosen: at once, also in a fight, when the game has it closed, and once the game closes it otherwise. Of
+-- those windows it reads the shown flag (IsShown), and when its own bag window hides, and when it gives the windows back, it hides the bag windows it
+-- moved that the game still has open (Hide, which runs no script under the hidden frame); it writes no field on them and calls none of their methods.
+-- It follows ToggleBackpack, ToggleBag, ToggleAllBags, OpenAllBags, OpenAllBagsMatchingContext, OpenBag, OpenBackpack, CloseAllBags, CloseBag,
+-- CloseBackpack, HideUIPanel, ContainerFrame_SetFullScreenFrame and ContainerFrame_ClearFullScreenFrame with hooksecurefunc, and calls none of the
+-- game's bag functions: they build the game's list of bag windows the first time they are asked (Mainline/ContainerFrame.lua:2335-2373), and a list
+-- built by Flat UI's code would be read by Escape. It asks C_GameRules.IsGameRuleActive whether the game shuts the bags and
+-- C_ActionBar.ShouldShowKeyring whether it shows a keyring, and after ToggleBag it reads the game's showKeyring and combinedBags settings
+-- (C_CVar.GetCVarBool) and the size of the bag named (C_Container.GetContainerNumSlots), so a toggle the game lets pass leaves its window alone. It
+-- takes the game's new flag off the items of the bags (C_NewItems.RemoveNewItem), as the game's own close does, when its bag window hides, when it
+-- gives the windows back and has hidden one of them, and, while New items at the top is on, when it has the game sort the bags and at a click on the
+-- title of the top shelf of its bag window. With BankFrame hidden this way it ends the bank with C_Bank.CloseBankFrame, which the game's OnHide would
+-- otherwise do, when its bank window closes or the game hides BankFrame, first hiding BankFrame if shown there (Hide): the game hides it in the call
+-- (a synchronous event) with a HideUIPanel refused to Flat UI's code in a fight. A bank window hidden while the interface is hidden runs no OnHide,
+-- so the call comes when Flat UI hides it, or when the interface shows again after the game closed it; and the call waits while a move of Deposit or
+-- Take out of the last second has no answer (its slot locked; C_Timer.After), so the answer is read first. While it reads the bank, and when the page
+-- comes up while BankFrame shows, it asks whether the player still deals with a banker (C_PlayerInteractionManager.IsInteractingWithNpcOfType). It
+-- reads where the right action bars stand (IsVisible, GetLeft, GetRight and GetEffectiveScale of MultiBarRight and MultiBarLeft) and whether Edit
+-- Mode has each in its place (the table Edit Mode keeps on the bar, systemInfo, and its isInDefaultPosition, read with rawget; no method of the bar
+-- is called), so that its bag window starts left of those in their place, as the game's bags open. Its windows play the sounds of the game's bag
+-- windows as they open and close (PlaySound, SOUNDKIT.IG_BACKPACK_OPEN and IG_BACKPACK_CLOSE).
 -- Its bag slots are ItemButtons of its own from ContainerFrameItemButtonTemplate, made out of combat or as a fight starts
 -- (PLAYER_REGEN_DISABLED), each with its bag as the ID of a frame of its own (SetID) and its slot as its own ID for the whole session, and shown
 -- once inside its own window after they are made, for one frame, with the window (or, in an open window, the new buttons alone) standing off the

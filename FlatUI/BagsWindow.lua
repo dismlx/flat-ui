@@ -52,12 +52,16 @@ local _, ns = ...
 -- window is not shown, and the window goes back to the logged-in character. The bank window's OnHide forgets its places, clears the search when
 -- the bag window is not shown and goes back to the logged-in character; ending the visit to the banker when it hides is BagsBank.lua's. A window
 -- hidden only with its parent (UIParent hidden by a movie, MovieFrame.lua:59-63, the report's screenshot mode or another addon; Alt+Z and
--- full-screen panels close the windows first, Bindings_Camelot.xml:1310-1317) keeps its own shown flag and is not closed, as Bags.lua and
--- BagsBank.lua have it: its OnHide only ends a drag, the keyboard of the search box and a menu. A window closed while the interface is hidden
--- hears no OnHide, so B.Window.Hide runs the steps of its closing itself then, with no sound, and for the bank window BagsBank's end of the visit
--- (B.Bank.Hidden), which its hook on the OnHide would run. Escape closes the windows then too, with no code of Flat UI's running: a frame of this
--- file's own on UIParent hears the interface come back (OnShow), and a window that was open and is hidden now closes the same way then, the bag
--- window with the bags' own closing (B.HideBags, Bags.lua).
+-- full-screen panels close the windows first, Bindings_Camelot.xml:1310-1317) keeps its own shown flag and is not closed meanwhile, as Bags.lua
+-- and BagsBank.lua have it: its OnHide only ends a drag, the keyboard of the search box and a menu. As the interface comes back the game closes
+-- every window (UIParent's OnShow runs CloseAllWindows, Blizzard_UIParent/UIParent.lua:5-7 and Blizzard_Game/Shared/Game.lua:91-93), which
+-- hides both through CloseSpecialWindows and, during a visit with Flat UI's bank window, BankFrame through HideUIPanel, which ends the visit
+-- (BagsBank.lua); Escape while the interface is hidden only brings it back (Game.lua:29-37). A window closed while the interface is hidden hears
+-- no OnHide, so B.Window.Hide runs the steps of its closing itself then, with no sound, and for the bank window BagsBank's end of the visit
+-- (B.Bank.Hidden), which its hook on the OnHide would run. The game closes the windows then too, with no code of Flat UI's running (its
+-- CloseAllWindows at death, at a loss of control and on entering the world), and a window it hides as the interface comes back may hear no
+-- OnHide, by the order the engine tells the frames in: a frame of this file's own on UIParent hears the interface come back (OnShow), and a
+-- window that was open and is hidden now closes the same way then, the bag window with the bags' own closing (B.HideBags, Bags.lua).
 -- An opening lays the window out afresh, which covers what was asked for it while it was closed, so it first has Bags.lua let that go
 -- (B.LaidOut, looked up when called), and the pass after the opening does not draw every slot a second time. Opening and closing play the game's
 -- own sounds of its bag windows (PlaySound with SOUNDKIT.IG_BACKPACK_OPEN and IG_BACKPACK_CLOSE, Mainline/ContainerFrame.lua:791, 819), once a
@@ -1707,8 +1711,9 @@ function Hiding(w, quiet)
 	end
 	if w.frame:IsShown() then
 		-- Hidden only with its parent (the interface hidden by a movie, the report's screenshot mode or another addon): the window keeps its own
-		-- shown flag and is not closed, as Tidy of Bags.lua and BagsBank.lua have it, so nothing is tidied, no hold goes and no sound plays. Only what
-		-- cannot outlive the hiding ends: a drag (where it was let go is kept, as the bar's OnHide keeps it), the search's keyboard and a menu.
+		-- shown flag and is not closed yet, as Tidy of Bags.lua and BagsBank.lua have it, so nothing is tidied, no hold goes and no sound plays; the
+		-- game closes it when the interface comes back. Only what cannot outlive the hiding ends: a drag (where it was let go is kept, as the bar's
+		-- OnHide keeps it), the search's keyboard and a menu.
 		w.drag = nil
 		if w.moving then
 			Dropped(w)
@@ -1756,11 +1761,15 @@ local function Unseen(w)
 	end
 end
 
--- The interface came back (the OnShow of the watcher frame, Make). Escape hides the windows of UISpecialFrames also while the interface is hidden
--- (CloseSpecialWindows, UIParentPanelManager.lua:1106-1116), and a window hidden then heard no OnHide and ran no code of Flat UI's: a window that
--- was open and is hidden now closes as an unseen one does (Unseen), and the bag window's closing in Bags.lua follows (B.HideBags, whose Tidy finds
--- the bags still open). A window hidden only with its parent is still shown, and one closed while it was seen is no longer open, so neither is
--- touched.
+-- The interface came back (the OnShow of the watcher frame, Make). A window the game closed while the interface was hidden heard no OnHide and ran no
+-- code of Flat UI's: the game's CloseAllWindows hides the windows of UISpecialFrames (CloseSpecialWindows, UIParentPanelManager.lua:1106-1116 and
+-- 1168) also then, at death, at a loss of control and on entering the world (Blizzard_Game/Camelot/EventImplementation.lua:17-20,
+-- Shared/EventImplementation.lua:168-174 and 306-307). It closes every window as the interface comes back too (UIParent's OnShow runs it,
+-- Blizzard_UIParent/UIParent.lua:5-7 and Blizzard_Game/Shared/Game.lua:91-93), and whether a window it hides then hears its OnHide depends on the
+-- order in which the engine tells the frames. A window that was open and is hidden now closes as an unseen one does (Unseen; where the game's
+-- CloseAllWindows hid it, its HideUIPanel of BankFrame has ended a visit with Flat UI's bank window already), and the bag window's closing in
+-- Bags.lua follows (B.HideBags, whose Tidy finds the bags still open). A window hidden only with its parent is still shown, and one whose OnHide was
+-- heard is no longer open, so neither is touched. Escape while the interface is hidden only brings it back (Game.lua:29-37).
 function Missed()
 	for which, w in pairs(windows) do
 		if w.open and not w.warming and not w.frame:IsShown() then
