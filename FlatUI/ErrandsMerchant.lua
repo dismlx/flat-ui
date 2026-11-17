@@ -43,6 +43,8 @@ local _, ns = ...
 -- slot (ns.ErrandsJunk, Sale below), and the count on its button is the queue Scan makes for a new pass (ns.ErrandsJunkCount); an item no pass can
 -- sell from where it lies, in the bank or in another character's bags, has the part of the test that reads the two lists (ns.ErrandsJunkRule).
 -- An item dropped on a section title of Bags goes on or off the two lists as /flatui sell and /flatui keep put it there (ns.ErrandsJunkMark).
+-- Every change of the lists (those two commands, their list rows and a drop) is told to the functions given to ns.ErrandsListsWatch, so the junk
+-- coin and the Sell junk count of Bags follow it at once.
 -- The selling and repair follow EnhanceQoL's vendor and auto repair, adapted with the permission of its author. The sale of the sell list in
 -- twelves, the bags left out of junk selling and the places of guild gold follow EnhanceQoL by Philipp Barth (R41Z0R), adapted with his
 -- permission (EnhanceQoLVendor/EnhanceQoLVendor.lua:77-95, 1403-1418, 1789-1823; EnhanceQoL/EnhanceQoL.lua:3976-3996).
@@ -781,6 +783,31 @@ local function Unlisted(which, id)
 	return ("Flat UI: %s is no longer %s."):format(Named(id), which == "sell" and "always sold" or "kept")
 end
 
+-- The functions told when the sell or keep list changes (ns.ErrandsListsWatch): the junk coin and the Sell junk count of Bags read these lists, so
+-- its windows draw them again. Each is called inside pcall, so none can stop the change.
+local listWatchers = {}
+
+local function ListsChanged()
+	for _, fn in ipairs(listWatchers) do
+		pcall(fn)
+	end
+end
+
+-- Adds a function to them, called with no values after /flatui sell, /flatui keep, a pick of the two list rows or a drop on a section of Bags
+-- changed a list. A function given twice is called once. True once it is in the list.
+function ns.ErrandsListsWatch(fn)
+	if type(fn) ~= "function" then
+		return false
+	end
+	for _, known in ipairs(listWatchers) do
+		if known == fn then
+			return true
+		end
+	end
+	listWatchers[#listWatchers + 1] = fn
+	return true
+end
+
 local function Toggle(which, rest)
 	local lists = E.Lists()
 	if not lists then
@@ -804,6 +831,7 @@ local function Toggle(which, rest)
 		list[id], other[id] = true, nil
 		print(("Flat UI: %s is %s."):format(Named(id), which == "sell" and "always sold at merchants" or "never sold"))
 	end
+	ListsChanged()
 end
 
 E.slash.sell = function(rest)
@@ -836,6 +864,7 @@ local function ListPick(which, id)
 		return false
 	end
 	lists[which][id] = nil
+	ListsChanged()
 	return true, Unlisted(which, id)
 end
 
@@ -1024,16 +1053,23 @@ function ns.ErrandsJunkMark(id, junk, noValue)
 		end
 		lists.sell[id], lists.keep[id] = true, nil
 		print(("Flat UI: %s is always sold at merchants."):format(Named(id)))
+		ListsChanged()
 		return true
 	end
+	local changed = false
 	if lists.sell[id] == true then
 		lists.sell[id] = nil
 		print(Unlisted("sell", id))
+		changed = true
 	end
 	local quality = type(C_Item) == "table" and E.Ask(C_Item.GetItemQualityByID, id) or nil
 	if ns.Finite(quality) and quality == POOR and lists.keep[id] ~= true then
 		lists.keep[id] = true
 		print(("Flat UI: %s is never sold."):format(Named(id)))
+		changed = true
+	end
+	if changed then
+		ListsChanged()
 	end
 	return true
 end

@@ -19,7 +19,10 @@ local _, ns = ...
 -- - BANKFRAME_CLOSED and the interaction's hide: the live state off, and a pass of Deposit or Take out ends; B.Data.BankClosed; B.BankClosed, which
 --   drops the bank hold and closes the bag window when nothing else holds it; B.Request("layout", "bank"): the live window turns into the records.
 -- - PLAYERBANKSLOTS_CHANGED, and BANK_TABS_CHANGED of the character bank (BankDocumentation.lua:382 and 414), during a visit: B.Data.BankTabs; the
---   row of bank bag slots and the Buy button; B.Request("layout", "bank").
+--   row of bank bag slots and the Buy button; B.Request("layout", "bank") when the bought tabs or the bags in them changed, since the items in the
+--   tabs reach the window slot by slot and nothing moves while it is open.
+-- These events reach the module only while it is on, so when the page comes up again Bank.Settle ends a visit that ended meanwhile: one whose
+-- BankFrame is no longer shown (the game shows it, hidden by Bags or not, for as long as a visit lasts).
 --
 -- Ending a visit. The game ends the bank in BankFrame's OnHide (BankFrameTemplates.lua:104-109), which a frame under a hidden parent never runs. So
 -- Flat UI calls C_Bank.CloseBankFrame (BankDocumentation.lua:121; apis.yaml:3353) once a visit, while its bank window is the live one:
@@ -74,8 +77,10 @@ local _, ns = ...
 -- key press toggles the bank window once. The name of the binding is the global BINDING_NAME_CLICK FlatUIBankButton:LeftButton, as Mount key names
 -- its own (MountKey.lua:86).
 --
--- What the other files of Bags use: Bank.Live (Flat UI's bank window is the live bank now), Bank.Toggle (the slash word bank and the key), Bank.Deposit,
--- Bank.TakeOut and Bank.Busy (the buttons of the bank window), Bank.Slots (the row in the bank window).
+-- What the other files of Bags use: Bank.Live (Flat UI's bank window is the live bank now), Bank.Visiting (a visit to a banker is under way, in
+-- either bank window: nothing becomes new then), Bank.Settle (Bags.lua, when the page comes up), Bank.Toggle (the slash word bank and the key),
+-- Bank.Deposit, Bank.TakeOut and Bank.Busy (the buttons of the bank window), Bank.Slots (the row in the strip of the bank window, which takes the
+-- height Slots returns and hides when it is 0).
 --
 -- Every game call runs inside pcall (each piece of work runs in B.Part, which is one), every game answer goes through ns.IsSecret or ns.Finite before
 -- it is compared, counted, joined or used as a key, and nothing of the game's frames is written: BankFrame is only read (IsShown) and compared.
@@ -311,6 +316,12 @@ end
 -- True while Flat UI's bank window is the live bank: at a banker, with BankFrame kept hidden, the visit not ending and Bags on.
 function Bank.Live()
 	return open and flat and not closing and On()
+end
+
+-- True while a visit to a banker is under way, with Flat UI's bank window or the game's, until the game says it ended: what comes out of the
+-- bank then is not loot (New items, BagsCategories.lua).
+function Bank.Visiting()
+	return open == true
 end
 
 -- Asks the game to end the visit, once, as BankFrame's OnHide would. Plain code with no part around it, so a part that stopped cannot leave the
@@ -927,7 +938,7 @@ local function Start(kind)
 end
 
 -- Deposit and Take out start a pass, or stop the one running (true, or false and why). Busy gives the kind of the pass under way ("deposit" or
--- "takeout") and how many matching items it has left, or nil.
+-- "takeout"), how many matching items it has left, and true when each click moves the next one (PER_CLICK; else a click stops it), or nil.
 function Bank.Deposit()
 	local ok, why = false, nil
 	Run(function()
@@ -947,12 +958,12 @@ end
 function Bank.Busy()
 	local run = pass
 	if not run or run.draining then
-		return nil, 0
+		return nil, 0, PER_CLICK
 	end
 	if PER_CLICK then
-		return run.kind, run.left or 0
+		return run.kind, run.left or 0, true
 	end
-	return run.kind, math.max(0, #run.queue - run.next + 1)
+	return run.kind, math.max(0, #run.queue - run.next + 1), false
 end
 
 -- The bank window and its key ----------------------------------------------------------------------------------------------------------------
@@ -1063,13 +1074,34 @@ Closed = function()
 	Refresh()
 end
 
+-- The tabs or the bank's bag slots changed. The bank window is laid out afresh only when the bought tabs or the bags in them changed
+-- (B.Data.BankTabs says so): the items of the tabs come slot by slot at the next BAG_UPDATE_DELAYED (BagsData.lua), and nothing moves while the
+-- window is open. When BagsData could not say (its part stopped), the window is laid out afresh as well.
 local function Changed()
 	if not open then
 		return
 	end
-	Call("cache", B.Data, "BankTabs")
+	local read, ran, moved = Usable(B.Data) and B.Data.BankTabs or nil, false, false
+	local run = B.Part
+	if type(read) == "function" and type(run) == "function" then
+		run("cache", function()
+			ran = true
+			moved = read() == true
+		end)
+	end
 	Refresh()
-	Call("window", B, "Request", "layout", "bank")
+	if moved or not ran then
+		Call("window", B, "Request", "layout", "bank")
+	end
+end
+
+-- The page comes up again (Bags.lua): a visit whose close the module did not hear while the page was off ends now. During a visit BankFrame has
+-- its shown flag set, hidden by Bags or not (BankFrame_Open shows it and asks the game to end the visit when it does not show,
+-- Mainline/BankFrameTemplates.lua:111-124), and the game hides it when the visit ends (PlayerInteractionFrameManager.lua:139-163).
+function Bank.Settle()
+	if open and not E.Shown(_G.BankFrame) then
+		Closed()
+	end
 end
 
 ns.AddEvent(KEY, "BANKFRAME_OPENED", function()

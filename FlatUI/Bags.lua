@@ -76,11 +76,12 @@ local _, ns = ...
 -- not be followed, or a file the window needs did not load. /flatui status and one line in chat say so.
 --
 -- Bags.Request gathers what the windows must draw again (items, layout, search, footer or look, and the slots BagsData found changed at
--- BAG_UPDATE_DELAYED, merged), per window. One pass on the next frame calls Window.Update for each open window; a closed window keeps what it
--- was asked and drops the slots, since it lays out afresh when it opens. The sort hold: the game's clean up only asks the server, and the
--- items then move over many BAG_UPDATE_DELAYED (BagSort.lua:294-325), so after BagSort says it asked (Bags.Sorted) the window keeps every
--- place: its slots are drawn where they are, nothing moves to the arrivals, and the fresh layout waits for 0.4 seconds with no change after
--- one came, 1.5 seconds when none comes, or 6 seconds at most.
+-- BAG_UPDATE_DELAYED, merged), per window; an ask for items that names no slots means every slot, whatever else the frame asked. One pass on
+-- the next frame calls Window.Update for each open window; a closed window keeps what it was asked and drops the slots, since it lays out
+-- afresh when it opens. The sort hold: the game's clean up only asks the server, and the items then move over many BAG_UPDATE_DELAYED
+-- (BagSort.lua:294-325), so after BagSort says it asked (Bags.Sorted) the window keeps every place: its slots are drawn where they are, nothing
+-- moves to the arrivals (Bags.Sorting tells BagsWindow), and the fresh layout waits for 0.4 seconds with no change after one came, 1.5 seconds
+-- when none comes, or 6 seconds at most; another character chosen meanwhile is laid out at once.
 --
 -- The events this file owns, each heard only here, in this order: BAG_CLOSED (the swap wait above; ContainerDocumentation.lua:613);
 -- PLAYER_REGEN_ENABLED (with Errands off, ns.ErrandsSellJunk goes on with a Sell junk pass that a fight paused, which Errands does itself while
@@ -89,14 +90,16 @@ local _, ns = ...
 -- TRADE_SHOW and TRADE_CLOSED (the trade hold; TradeInfoDocumentation.lua:143, 78); ADDON_LOADED and INPUT_DEVICE_INTERFACE_TRANSITION
 -- (standing down; AddOnsDocumentation.lua:391, InputDocumentation.lua:343). Every other event of the page belongs to its part: BagsData hears
 -- the bags, the money and the item data, BagsItems the locks, cooldowns and the start of a fight, BagsBank the bank. ItemMarks adds its own
--- handlers to the module (ItemMarks.Hear), and its watcher and BagSort's call Bags.Request and Bags.Sorted.
+-- handlers to the module (ItemMarks.Hear), and its watcher and BagSort's call Bags.Request and Bags.Sorted, as Errands' does when its sell or
+-- keep list changes (ns.ErrandsListsWatch). The module hears no event while the page is off, so when it comes up again whether a merchant is
+-- open is read anew, and a visit to a banker that ended meanwhile is ended (Bank.Settle of BagsBank.lua).
 --
 -- /flatui bags opens or closes the bag window with the command hold, and /flatui bags Name shows the bags of a character Flat UI keeps;
 -- /flatui bank and /flatui bank Name ask BagsBank for the bank window. They run whatever the switch of the page, and say so while it is off.
 --
--- Besides the calls above it reads GetTime, InCombatLockdown and, when the page comes up, whether MerchantFrame is shown (IsShown); it makes
--- frames of its own with CreateFrame (the hidden frame, and in each window a frame that only hears the window's OnShow and OnHide); and for
--- /flatui status it reads time and date and writes counts with BreakUpLargeNumbers.
+-- Besides the calls above it reads GetTime, InCombatLockdown and, when the page comes up, whether MerchantFrame is shown (IsShown); and it makes
+-- frames of its own with CreateFrame (the hidden frame, and in each window a frame that only hears the window's OnShow and OnHide). Its lines
+-- of /flatui status are the windows it hides and why it stands down; BagsData and BagsBank add theirs (ns.AddStatus).
 
 local KEY = "bags"
 -- The game's eight bag windows, every window its list of bag windows can hold (Mainline/ContainerFrame.lua:2346-2360), and its bank window.
@@ -132,8 +135,7 @@ local CRITICAL_ORDER = { "follow", "window", "layout", "items" }
 -- Seconds: how long a closing waits after BAG_CLOSED, and the sort hold (quiet after a change, no change at all, at most).
 local SWAP_WAIT = 0.5
 local SORT_QUIET, SORT_NONE, SORT_CAP = 0.4, 1.5, 6
--- Above this many characters /flatui status says how to forget one. No container has more slots than MOST_SLOTS.
-local MANY_CHARACTERS = 40
+-- No container has more slots than this.
 local MOST_SLOTS = 200
 -- The last bag and the keyring, for a client whose constants do not say (Blizzard_FrameXMLBase/Constants.lua:165-170).
 local LAST_BAG, KEYRING = 5, -1
@@ -169,7 +171,10 @@ local HELP = {
 	"/flatui bank Name - the bank of another of your characters",
 }
 
-local IsSecret = ns.IsSecret
+-- ns.IsSecret of Core.lua, looked up when called.
+local function IsSecret(value)
+	return ns.IsSecret(value)
+end
 
 -- The table every Bags file shares. The parts add fields to their own tables and never replace one.
 local B = {
@@ -200,7 +205,8 @@ local bagsOpen = false
 local holds = {}
 -- The calls of the game heard since the last settle; the time of the last BAG_CLOSED; the token of a closing that waits.
 local burst, swapAt, swapToken
--- What each window must draw again; a pass waits for the next frame; the sort hold of each window.
+-- What each window must draw again: { flags, changed (the slots to look at), all (every slot) }; a pass waits for the next frame; the sort hold
+-- of each window.
 local wants = { bags = { flags = {} }, bank = { flags = {} } }
 local passQueued = false
 local sorting = {}
@@ -281,19 +287,6 @@ local function Trim(text)
 		return ""
 	end
 	return text:match("^%s*(.-)%s*$") or ""
-end
-
--- A count with the game's thousands separator, or commas when the client has none.
-local function Thousands(n)
-	n = math.floor(n)
-	if type(BreakUpLargeNumbers) == "function" then
-		local ok, text = pcall(BreakUpLargeNumbers, n)
-		if ok and type(text) == "string" and not IsSecret(text) then
-			return text
-		end
-	end
-	local text = tostring(n):reverse():gsub("(%d%d%d)", "%1,"):reverse()
-	return (text:gsub("^,", ""))
 end
 
 -- The shared helpers ---------------------------------------------------------------------------------------------------------------------------
@@ -645,9 +638,10 @@ local function Pass()
 		if next(want.flags) ~= nil then
 			if Open(which) then
 				wants[which] = { flags = {} }
-				Call("window", B.Window, "Update", which, want.flags, want.changed)
+				-- No slots named (nil) is every slot.
+				Call("window", B.Window, "Update", which, want.flags, (not want.all) and want.changed or nil)
 			else
-				want.changed = nil
+				want.changed, want.all = nil, nil
 			end
 		end
 	end
@@ -666,8 +660,10 @@ function Queue()
 end
 
 -- flag: "items", "layout", "search", "footer" or "look"; which: "bags", "bank" or nil for both; changed: { [bag] = { [slot] = true } } from
--- BagsData at BAG_UPDATE_DELAYED, for that window. During a sort hold the window keeps every place: a layout waits for the end of the hold,
--- and the changed slots are drawn where they are, not moved to the arrivals; each call with changed is the time of the last bag change.
+-- BagsData at BAG_UPDATE_DELAYED, for that window. An ask for items with no changed means every slot (marks or names that went old, a junk list
+-- or a bag's flag that changed), and wins over the slots asked for in the same frame. During a sort hold the window keeps every place: a layout
+-- waits for the end of the hold, and the changed slots are drawn where they are, not moved to the arrivals; each call with changed is the time
+-- of the last bag change.
 function B.Request(flag, which, changed)
 	if not FLAGS[flag] or (which ~= nil and wants[which] == nil) or not B.On() then
 		return
@@ -680,7 +676,9 @@ function B.Request(flag, which, changed)
 			end
 			if not (hold and flag == "layout") then
 				want.flags[flag] = true
-				if not hold and type(changed) == "table" then
+				if flag == "items" and type(changed) ~= "table" then
+					want.all, want.changed = true, nil
+				elseif not hold and not want.all and type(changed) == "table" then
 					want.changed = want.changed or {}
 					Merge(want.changed, changed)
 				end
@@ -706,7 +704,13 @@ function B.SetViewing(which, key)
 		return
 	end
 	viewing[which] = key
-	B.Request("layout", which)
+	if sorting[which] and B.On() and Open(which, true) then
+		-- Another character keeps none of the places a sort hold keeps: the open window's layout does not wait for the end of the hold.
+		wants[which].flags.layout = true
+		Queue()
+	else
+		B.Request("layout", which)
+	end
 	B.Request("footer", which)
 end
 
@@ -974,6 +978,12 @@ function B.Sorted(which)
 	HoldEnd(which, hold)
 end
 
+-- True while the sort hold of a window lasts: BagsWindow keeps its sort button busy and lets nothing arrive at the top shelf until then, also
+-- when the window closed and opened again during the hold.
+function B.Sorting(which)
+	return sorting[which] ~= nil
+end
+
 -- The bank -----------------------------------------------------------------------------------------------------------------------------------
 
 -- BagsBank made the bank live: BankFrame is kept hidden with Flat UI's bank window, and the bags open with it while the row says so.
@@ -1084,8 +1094,12 @@ end
 local function Up(fresh)
 	up = true
 	if fresh then
-		-- MERCHANT_SHOW reached no handler while the page was off.
+		-- MERCHANT_SHOW reached no handler while the page was off, and neither did the bank's close: a visit that ended meanwhile ends now. As
+		-- BagsBank's own handlers do, that runs outside the bank part, whose steps each run as their own part.
 		B.atMerchant = Shown(Game("MerchantFrame"))
+		if type(B.Bank.Settle) == "function" then
+			Safely(B.Bank.Settle)
+		end
 		Safely(Special)
 	end
 	Safely(Sync)
@@ -1229,33 +1243,6 @@ end
 
 -- /flatui status ------------------------------------------------------------------------------------------------------------------------------
 
--- "today", "yesterday" or "N days ago" for a time() of the past, by the calendar of this computer, or nil.
-local function Ago(seen)
-	if not ns.Finite(seen) or type(time) ~= "function" or type(date) ~= "function" then
-		return nil
-	end
-	local okNow, now = pcall(time)
-	if not okNow or not ns.Finite(now) then
-		return nil
-	end
-	local okDay, day = pcall(date, "*t", now)
-	if not okDay or type(day) ~= "table" then
-		return nil
-	end
-	local okMidnight, midnight = pcall(time, { year = day.year, month = day.month, day = day.day, hour = 0, min = 0, sec = 0 })
-	if not okMidnight or not ns.Finite(midnight) then
-		return nil
-	end
-	if seen >= midnight then
-		return "today"
-	end
-	local days = math.floor((midnight - seen) / 86400) + 1
-	if days <= 1 then
-		return "yesterday"
-	end
-	return ("%d days ago"):format(days)
-end
-
 -- The characters BagsData keeps, each with a key, or an empty list.
 local function Characters()
 	local fn = B.Data.Characters
@@ -1275,69 +1262,8 @@ local function Characters()
 	return out
 end
 
--- How many slots of a character hold an item, in its bags and its bank, by BagsData.
-local function Stored(key)
-	local Data = B.Data
-	if type(Data.Containers) ~= "function" or type(Data.Size) ~= "function" or type(Data.Item) ~= "function" then
-		return nil
-	end
-	local total = 0
-	for _, which in ipairs(WINDOWS) do
-		local ok, bags = pcall(Data.Containers, which, key)
-		if ok and type(bags) == "table" then
-			for _, bag in ipairs(bags) do
-				local okSize, slots = pcall(Data.Size, key, bag)
-				if okSize and ns.Finite(slots) and slots > 0 then
-					for slot = 1, math.min(math.floor(slots), MOST_SLOTS) do
-						local okItem, record = pcall(Data.Item, key, bag, slot)
-						if okItem and type(record) == "table" then
-							total = total + 1
-						end
-					end
-				end
-			end
-		end
-	end
-	return total
-end
-
--- "Bags: 7 characters kept, 1,834 items; your bank as of 2 days ago." and the warning above MANY_CHARACTERS.
-local function DataLines(lines)
-	local list = Characters()
-	if #list == 0 then
-		return
-	end
-	local me, items, counted = B.Me(), 0, true
-	local mine
-	for _, entry in ipairs(list) do
-		if entry.me == true or entry.key == me then
-			mine = entry
-		end
-		local n = Stored(entry.key)
-		if n == nil then
-			counted = false
-		else
-			items = items + n
-		end
-	end
-	local bank
-	local live = type(B.Bank.Live) == "function" and Ask(B.Bank.Live)
-	if live == true then
-		bank = "your bank is open"
-	else
-		local ago = mine and Ago(mine.bankSeen)
-		bank = ago and ("your bank as of " .. ago) or "your bank is kept once you visit a banker"
-	end
-	local chars = #list == 1 and "1 character kept" or ("%s characters kept"):format(Thousands(#list))
-	if counted then
-		chars = ("%s, %s %s"):format(chars, Thousands(items), items == 1 and "item" or "items")
-	end
-	lines[#lines + 1] = ("Bags: %s; %s."):format(chars, bank)
-	if #list > MANY_CHARACTERS then
-		lines[#lines + 1] = ("Bags: more than %d characters are kept. Forget a character takes one out."):format(MANY_CHARACTERS)
-	end
-end
-
+-- The lines of the page's own state. BagsData adds what it keeps ("Bags: 7 characters kept, 1,834 items; your bank as of 2 days ago." and the
+-- warning above 40 characters) and BagsBank a Deposit or Take out that waits for the end of a fight, each with ns.AddStatus.
 local function Status()
 	local lines = {}
 	if ns.Enabled(KEY) and down ~= nil then
@@ -1377,16 +1303,8 @@ local function Status()
 	if bank and Wanted(BANK_FRAME) and parked[bank] == nil and Shown(bank) then
 		lines[#lines + 1] = "Bags: the game's bank window waits to be closed."
 	end
-	DataLines(lines)
-	if InCombat() then
-		local busy = type(B.Bank.Busy) == "function" and Ask(B.Bank.Busy)
-		if busy then
-			local name = type(busy) == "string" and busy ~= "" and busy or "Deposit or Take out"
-			lines[#lines + 1] = ("Bags: %s waits for the end of the fight."):format(name)
-		end
-		if B.atMerchant and not ErrandsOn() and type(ns.ErrandsSelling) == "function" and Ask(ns.ErrandsSelling) == true then
-			lines[#lines + 1] = "Bags: Sell junk waits for the end of the fight."
-		end
+	if InCombat() and B.atMerchant and not ErrandsOn() and type(ns.ErrandsSelling) == "function" and Ask(ns.ErrandsSelling) == true then
+		lines[#lines + 1] = "Bags: Sell junk waits for the end of the fight."
 	end
 	return lines
 end
@@ -1573,7 +1491,8 @@ Hear("ADDON_LOADED", Reconsider, function(name)
 end)
 Hear("INPUT_DEVICE_INTERFACE_TRANSITION", Reconsider)
 
--- ItemMarks' handlers clear its answers while the page is on, whatever the switch of Windows; its watcher and BagSort's tell the windows.
+-- ItemMarks' handlers clear its answers while the page is on, whatever the switch of Windows; its watcher and BagSort's tell the windows, and so
+-- does Errands' when its sell or keep list changes (/flatui sell, /flatui keep, its list rows), since the junk coin and Sell junk read them.
 local marks, sorter = ns.ItemMarks, ns.BagSort
 if type(marks) == "table" and type(marks.Hear) == "function" then
 	Safely(marks.Hear, KEY)
@@ -1586,5 +1505,11 @@ end
 if type(sorter) == "table" and type(sorter.Watch) == "function" then
 	Safely(sorter.Watch, function(which)
 		B.Sorted(which)
+	end)
+end
+if type(ns.ErrandsListsWatch) == "function" then
+	Safely(ns.ErrandsListsWatch, function()
+		B.Request("items")
+		B.Request("footer", "bags")
 	end)
 end

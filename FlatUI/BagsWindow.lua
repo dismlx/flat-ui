@@ -11,8 +11,10 @@ local _, ns = ...
 -- menu opens, never while the player types, from names the client has loaded only;
 -- the search box (B.Search.Box, BagsSearch.lua); the view button, Sections or Bag by bag; the sort button, on live slots only: ns.BagSort.Run and
 -- ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the game is asked to sort (BagSort tells its
--- watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving, six and a half seconds at most; the bank
--- button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close button, a cross with no box, as Windows draws the game's.
+-- watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving, six and a half seconds at most, and for as
+-- long as the sort hold of Bags.lua lasts (B.Sorting), also when the window closed and opened again meanwhile; nothing arrives at the top shelf
+-- then either; the bank button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close button, a cross with no box, as Windows draws the
+-- game's.
 -- Dragging the title bar moves the window (StartMoving and StopMovingOrSizing, :4797, 4813, with SetDontSavePosition and SetUserPlaced, :4605,
 -- 4778, so the client keeps no place of its own). Where it is let go is saved as its spot in the movers: the box of its entry in Movers.lua, put
 -- with its corner at the window's, goes to ns.MoverKit.Commit (Movers.lua:1672-1710, 4529-4532), and the window hangs from that spot
@@ -26,7 +28,8 @@ local _, ns = ...
 -- and, at a merchant, Sell junk (N) (Errands.Button, Errands.lua:127-202): N is ns.ErrandsJunkCount, what the next pass of Errands would sell, and a
 -- click runs ns.ErrandsSellJunk, which sells as Errands sells and says why when it cannot. The bank window's footer has the free slots of the bank
 -- and, at the banker with a search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit, B.Bank.TakeOut,
--- B.Bank.Busy); the row above it is BagsBank.lua's (B.Bank.Slots), sized as that file leaves it. A bank never seen says how to keep one.
+-- B.Bank.Busy, whose per-click fallback labels the button with what is left); the row above it, at the live bank only, is BagsBank.lua's
+-- (B.Bank.Slots), as high as that file says. A bank never seen says how to keep one.
 -- Escape closes either window: both are named in UISpecialFrames, as the options window is (Panel.lua:2700-2708), whose windows the game's
 -- CloseSpecialWindows hides (UIParentPanelManager.lua:21-27). The bag window's OnHide is the one place the bags tidy up, whatever hid it: it hides
 -- the game's bag windows Bags parked (B.HideGameBags), drops every hold (B.Hold), lets New items go (B.Categories.New.Close), forgets the places of
@@ -93,13 +96,20 @@ local GLYPHS = {
 		strokes = { { 3.5, 7.5, 9, 3.5 }, { 9, 3.5, 14.5, 7.5 } } },
 }
 
-local IsSecret, Finite = ns.IsSecret, ns.Finite
+-- ns.IsSecret and ns.Finite of Core.lua, looked up when called.
+local function IsSecret(value)
+	return ns.IsSecret(value)
+end
+
+local function Finite(value)
+	return ns.Finite(value)
+end
 
 -- Per window ("bags", "bank"): which, frame, outline; bar and its controls (picker, search, icons, close); scroll, child (the scroll child) and
 -- content (the frame BagsLayout.lua lays out in, scaled); track and thumb of the scroll bar; foot and its labels and buttons; strip (the bank's
 -- row of BagsBank.lua); message. viewH, contentH, offset: the height shown, the height of the content and the scroll. placed: the spot it hangs
--- from now; dropped: where it was let go when the movers could not keep it. mode: what the last layout showed. busy: when the sort began.
--- warming: the warm-up shows it; wantShow: an opening asked for meanwhile. open: shown for real.
+-- from now; dropped: where it was let go when the movers could not keep it. mode: what the last layout showed. busy: when the sort began;
+-- pulsing: the sort button pulses. warming: the warm-up shows it; wantShow: an opening asked for meanwhile. open: shown for real.
 local windows = {}
 -- The sounds played this frame, and whether BagSort tells this file of a sort.
 local played, watching = {}, false
@@ -356,7 +366,8 @@ local function AsOf(seen)
 end
 
 -- How many items match the search among a character's slots of a window: the stacks added up, or for stacks false the slots, without the keyring.
--- Only names the client has loaded count; nothing is asked for (B.Search.Match gives nil for the others).
+-- Only names the client has loaded count; nothing is asked for (B.Search.Match gives nil for the others). A match that fails counts as none, so a
+-- fault of the search never stops the window.
 local function Matches(which, key, stacks)
 	local match = Fn(Search, "Match")
 	if not match then
@@ -369,9 +380,12 @@ local function Matches(which, key, stacks)
 			local slots = Call(Data, "Size", key, bag)
 			for slot = 1, Finite(slots) and slots or 0 do
 				local record = Call(Data, "Item", key, bag, slot)
-				if type(record) == "table" and match(record) == true then
-					local n = stacks and record.count or 1
-					count = count + (Finite(n) and n > 0 and n or 1)
+				if type(record) == "table" then
+					local ok, matched = pcall(match, record)
+					if ok and matched == true then
+						local n = stacks and record.count or 1
+						count = count + (Finite(n) and n > 0 and n or 1)
+					end
 				end
 			end
 		end
@@ -514,6 +528,13 @@ local function EndBusy(w)
 		w.busy = nil
 		PaintSort(w)
 	end
+end
+
+-- True while a sort still moves the window's items: from BagSort's word until the window is laid out again (busy), and while Bags.lua holds
+-- the window's places (B.Sorting), which a closing and opening during the hold does not end. Nothing arrives at the top shelf meanwhile, and the
+-- sort button looks busy and takes no click.
+local function Sorting(w)
+	return w.busy ~= nil or Call(B, "Sorting", w.which) == true
 end
 
 -- BagSort asked the game to sort the bags or the bank: that window's sort button looks busy until the window is laid out again.
@@ -1081,19 +1102,26 @@ local function SellClick(w)
 	Request("footer", "bags")
 end
 
--- The pass of BagsBank.lua that runs now: "deposit", "takeout", true for one it does not name, or nil.
+-- The pass of BagsBank.lua that runs now: "deposit", "takeout", true for one it does not name, or nil; then how many matching items it has left,
+-- and true when each click moves the next one (the fallback of design 6) rather than stopping the pass.
 local function Busy()
-	local busy = Call(Bank, "Busy")
+	local busy, left, perClick = Call(Bank, "Busy")
+	left = Finite(left) and math.max(0, math.floor(left)) or 0
 	if busy == "deposit" or busy == "takeout" then
-		return busy
+		return busy, left, perClick == true
 	end
-	return busy and true or nil
+	return busy and true or nil, left, perClick == true
 end
 
 local function MoveTip(w, owner, kind)
-	local busy = Busy()
+	local busy, left, perClick = Busy()
 	if busy == true or busy == kind then
-		Say(owner, kind == "deposit" and "Deposit" or "Take out", "A click stops it.")
+		if perClick then
+			Say(owner, kind == "deposit" and "Deposit" or "Take out", ("Each click moves the next item: %d %s left."):format(left,
+				Plural(left, "is", "are")))
+		else
+			Say(owner, kind == "deposit" and "Deposit" or "Take out", "A click stops it.")
+		end
 		return
 	end
 	local n = kind == "deposit" and (w.depositCount or 0) or (w.takeoutCount or 0)
@@ -1125,11 +1153,12 @@ local function MakeFoot(w)
 	w.free = FootLabel(w, FreeTip)
 	w.free.text:SetJustifyH(w.which == "bags" and "RIGHT" or "LEFT")
 	if w.which == "bank" then
-		-- The row of BagsBank.lua: the bank bag slots and the Buy button, above the footer.
+		-- The row of BagsBank.lua: the bank bag slots and the Buy button, above the footer. Hidden until the row gives its height (Slots).
 		local strip = Own(CreateFrame("Frame", nil, frame))
 		strip:SetPoint("BOTTOMLEFT", foot, "TOPLEFT", 0, INNER)
 		strip:SetPoint("BOTTOMRIGHT", foot, "TOPRIGHT", 0, INNER)
 		strip:SetHeight(STRIP)
+		strip:Hide()
 		w.strip = strip
 	end
 	if type(Errands) ~= "table" or type(Errands.Button) ~= "function" then
@@ -1233,9 +1262,12 @@ function Footer(w)
 			end
 		end
 	elseif w.deposit then
-		-- A pass that runs keeps its button, to stop it, also once the search is cleared.
+		-- A pass that runs keeps its button, to stop it, also once the search is cleared; in the per-click fallback its label counts down instead.
 		local on = live and Opt("bankButtons") ~= false
-		local busy = on and Busy() or nil
+		local busy, left, perClick = nil, 0, false
+		if on then
+			busy, left, perClick = Busy()
+		end
 		local wanted = on and Call(Search, "Active") == true
 		if wanted then
 			w.depositCount = Matches("bags", key, false)
@@ -1249,7 +1281,9 @@ function Footer(w)
 			local count = kind == "deposit" and w.depositCount or w.takeoutCount
 			local running = busy == true or busy == kind
 			if on and (running or (wanted and count > 0)) then
-				if running then
+				if running and perClick then
+					button.SetLabel(("%s (%d)"):format(kind == "deposit" and "Deposit" or "Take out", left))
+				elseif running then
 					button.SetLabel("Stop")
 				else
 					button.SetLabel(("%s (%d)"):format(kind == "deposit" and "Deposit" or "Take out", count))
@@ -1340,10 +1374,25 @@ function Resize(w)
 	ArrangeBar(w)
 end
 
--- The bank's row of BagsBank.lua is laid out again in the frame this file gives it.
+-- The bank's row of BagsBank.lua is laid out again in the strip this file gives it, which takes the height B.Bank.Slots returns and hides when
+-- that is 0 (away from the live bank). The row belongs to the live bank, so it is not asked for while the window shows a snapshot or another
+-- character.
 local function Slots(w)
-	if w.strip then
-		Call(Bank, "Slots", w.strip)
+	local strip = w.strip
+	if not strip then
+		return
+	end
+	local height = 0
+	local _, _, live = Layout.Viewed(w.which)
+	if live then
+		local _, h = Call(Bank, "Slots", strip)
+		height = Finite(h) and h > 0 and h or 0
+	end
+	if height > 0 then
+		strip:SetHeight(height)
+		strip:Show()
+	else
+		strip:Hide()
 	end
 end
 
@@ -1356,8 +1405,12 @@ local function Tick(w, elapsed)
 	if w.drag then
 		Run("window", ThumbDrag, w)
 	end
-	if w.busy then
+	if Sorting(w) then
+		w.pulsing = true
 		Run("window", Pulse, w)
+	elseif w.pulsing then
+		w.pulsing = nil
+		Run("window", PaintSort, w)
 	end
 	w.wait = (w.wait or 0) - (Finite(elapsed) and elapsed or 0)
 	if w.wait > 0 then
@@ -1551,11 +1604,14 @@ function Window.Hide(which)
 end
 
 -- What changed for an open window, once a frame (B.Request, Bags.lua): flags is { layout, items, search, footer, look = true }, changed the slots
--- that changed, { [bag] = { [slot] = true } }. A hidden window does nothing: it is laid out afresh when it opens.
+-- that changed, { [bag] = { [slot] = true } }, or nil for every slot. A hidden window does nothing: it is laid out afresh when it opens.
 local function Updating(w, flags, changed)
 	local which = w.which
 	if flags.look then
 		PaintWindow(w)
+		-- The search boxes, and the buttons this layout does not show, take the look of the Windows page too.
+		Run("search", Call, Search, "Paint")
+		Call(Buttons, "Paint")
 	end
 	if flags.layout then
 		Slots(w)
@@ -1568,7 +1624,7 @@ local function Updating(w, flags, changed)
 	else
 		if flags.items then
 			-- While a sort still moves items the window keeps every place: what fills a slot that had no cell waits for the layout after it.
-			Run("layout", Layout.Update, which, changed, w.busy ~= nil)
+			Run("layout", Layout.Update, which, changed, Sorting(w))
 		end
 		if flags.search then
 			Run("layout", Layout.Dim, which)
@@ -1595,7 +1651,8 @@ function Window.Update(which, flags, changed)
 	Run("window", Updating, w, flags, changed)
 end
 
--- The look of the Windows page changed: both windows, their layouts and the buttons take it.
+-- The look of the Windows page changed: both windows, their layouts, the search boxes and the buttons take it. (B.Request("look") does the same for
+-- the windows that show.)
 function Window.Paint()
 	for which, w in pairs(windows) do
 		PaintWindow(w)
@@ -1603,6 +1660,7 @@ function Window.Paint()
 			Run("layout", Layout.Render, which)
 		end
 	end
+	Run("search", Call, Search, "Paint")
 	Call(Buttons, "Paint")
 end
 
@@ -1689,9 +1747,10 @@ local function Warming(w, buttons)
 end
 
 -- After BagsItems.lua made some of the game's item buttons: each shows once inside the bag window before any fight can need it. The game's source
--- shows no need for it, so it is a precaution, for the potion a fight needs most. Only the bag window has such buttons.
+-- shows no need for it, so it is a precaution, for the potion a fight needs most. Only the bag window has such buttons, and nothing shows while
+-- Bags is off, stopped or stood down (BagsItems keeps the buttons for the next warm-up then).
 function Window.Warm(which, buttons)
-	if which ~= "bags" then
+	if which ~= "bags" or not On() then
 		return
 	end
 	Window.Get("bags")
@@ -1848,7 +1907,7 @@ end
 
 -- The sort button: the game's clean up, through BagSort, with its sound. It takes no click while the last sort is still moving items.
 function Clicks.sort(w)
-	if w.busy then
+	if Sorting(w) then
 		return
 	end
 	local sort = ns.BagSort
@@ -1869,7 +1928,7 @@ end
 
 function Tips.sort(w, owner)
 	local title = w.which == "bank" and Word("BAG_CLEANUP_BANK", "Clean Up Bank") or Word("BAG_CLEANUP_BAGS", "Clean Up Bags")
-	if w.busy then
+	if Sorting(w) then
 		Say(owner, title, "Sorting: the window is laid out again once your items have stopped moving.")
 	else
 		Say(owner, title)

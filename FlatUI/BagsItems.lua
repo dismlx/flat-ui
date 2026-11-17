@@ -535,8 +535,9 @@ local function BagSlotRecord(state)
 	}
 end
 
--- The fill of an empty slot of a bag of this kind, or nil for a normal bag. kind is BagsData's { id, label, family, class, subclass }; the
--- keyring and the reagent bag are known by their container too.
+-- The fill of an empty slot of a bag of this kind, or nil for a normal bag. kind is BagsData's { id, label, family, class, subclass, key, name }:
+-- id is the bag's item ID, and key names the kind ("keyring", "reagent", "bag" and one for each kind of special bag), so the keyring and the
+-- reagent bag are known by it on a button of another character, which has no container; a live button knows them by its container too.
 local function KindFill(kind, bag)
 	if bag == KEYRING then
 		return KIND_FILLS.keyring
@@ -546,11 +547,9 @@ local function KindFill(kind, bag)
 	if not Usable(kind) then
 		return nil
 	end
-	local id = Plain(kind.id)
-	if id == KEYRING then
-		return KIND_FILLS.keyring
-	elseif Text(id) and KIND_FILLS[id] then
-		return KIND_FILLS[id]
+	local key = Plain(kind.key)
+	if key == "keyring" or key == "reagent" then
+		return KIND_FILLS[key]
 	end
 	local class, subclass = Plain(kind.class), Plain(kind.subclass)
 	if class == QUIVER then
@@ -1740,9 +1739,10 @@ local function Missing(list)
 	return missing
 end
 
--- Hands the buttons made since the last warm-up to B.Window.Warm, once their holders are in the window.
+-- Hands the buttons made since the last warm-up to B.Window.Warm, once their holders are in the window. While Bags is off, stopped or stood down
+-- nothing shows, and they wait for the next Prepare or the top-up at the start of a fight.
 local function Finish()
-	if #unwarmed == 0 then
+	if #unwarmed == 0 or not On() then
 		return
 	end
 	local list = unwarmed

@@ -17,9 +17,10 @@ local _, ns = ...
 --
 -- New items: an item is new when the game's own flag is set (C_NewItems.IsNewItem, NewItemsDocumentation.lua:15-28) at the scan in which its
 -- slot changed. It is then kept by its GUID (the record's guid, which BagsData reads with C_Item.GetItemGUID) for the session, so pointing at it,
--- which takes the game's flag off (Blizzard_UIPanels_Game/Mainline/ContainerFrame.lua:1735-1738), leaves it in New items. While the bank is open
--- nothing becomes new: what comes out of the bank is not loot. When the bag window closes, every item New items showed during that opening
--- leaves; a click on its title and a clean up take every one out at once. With New items at the top off, nothing is kept as new.
+-- which takes the game's flag off (Blizzard_UIPanels_Game/Mainline/ContainerFrame.lua:1735-1738), leaves it in New items. While the bank is open,
+-- in Flat UI's bank window or the game's (B.Bank.Visiting), nothing becomes new: what comes out of the bank is not loot. When the bag window closes,
+-- every item New items showed during that opening leaves; a click on its title and a clean up take every one out at once. With New items at the
+-- top off, nothing is kept as new.
 --
 -- Junk is Errands' own test, so the Junk section, the junk coin and Sell junk always agree. A live slot of the bags is junk when Errands would
 -- sell it (ns.ErrandsJunk: the sale test of ErrandsMerchant.lua:165-190, with the bags the game's menu leaves out of junk selling, :154-163).
@@ -388,9 +389,11 @@ local function Kept()
 	return Opt("newItems") ~= false
 end
 
-local function BankLive()
-	local live = B.Bank.Live
-	return type(live) == "function" and live() == true
+-- A visit to a banker is under way (B.Bank.Visiting, BagsBank.lua), with Flat UI's bank window or the game's: what comes out of the bank then is not
+-- loot.
+local function AtBanker()
+	local visiting = B.Bank.Visiting
+	return type(visiting) == "function" and visiting() == true
 end
 
 -- A live slot of this character's bags: the only items that can be new.
@@ -400,7 +403,7 @@ end
 
 -- changed: { [bag] = { [slot] = true } }, the slots BagsData found changed at BAG_UPDATE_DELAYED, before it asks for the redraw.
 function New.Seen(changed)
-	if type(changed) ~= "table" or not Kept() or BankLive() then
+	if type(changed) ~= "table" or not Kept() or AtBanker() then
 		return
 	end
 	local read = B.Data.Item

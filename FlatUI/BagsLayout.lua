@@ -91,7 +91,14 @@ local FILTERS = {
 local DISABLE_AUTO_SORT, EXCLUDE_JUNK_SELL = 1, 64
 local FIGHT_LINE = "Flat UI: Bags: an item is put in a section out of combat only."
 
-local IsSecret, Finite = ns.IsSecret, ns.Finite
+-- ns.IsSecret and ns.Finite of Core.lua, looked up when called.
+local function IsSecret(value)
+	return ns.IsSecret(value)
+end
+
+local function Finite(value)
+	return ns.Finite(value)
+end
 
 -- Per window ("bags", "bank"): what the last layout put where.
 -- which, content: the window and its content frame. key, mine, live: the character shown, whether it is the logged-in one, and whether its slots
@@ -269,7 +276,7 @@ local function Containers(which, key)
 	return out
 end
 
--- The slots of a container and its kind ({ id, label, family, class, subclass }); 0 and nil when they are not known.
+-- The slots of a container and its kind ({ id, label, family, class, subclass, key, name }, BagsData.lua); 0 and nil when they are not known.
 local function Size(key, bag)
 	local slots, kind = Call(Data, "Size", key, bag)
 	if not Finite(slots) or slots < 0 then
@@ -291,10 +298,11 @@ local function KindField(kind, field)
 	return value
 end
 
--- A kind's name for matching two kinds: its id, else its label.
+-- A kind's name for matching two kinds: BagsData's key, which groups the free slots of B.Data.Free ("bag" for every normal bag, the backpack and
+-- the bank's own slots included, "reagent", "keyring", and one for each kind of special bag); else its id, else its label.
 local function KindId(kind)
 	if type(kind) == "table" then
-		return KindField(kind, "id") or KindField(kind, "label")
+		return KindField(kind, "key") or KindField(kind, "id") or KindField(kind, "label")
 	end
 	return kind
 end
@@ -1050,7 +1058,8 @@ local function Watch(st)
 end
 
 -- The search: each button shown is lit when its item matches, and dimmed when it does not or is not loaded yet (B.Search.Match gives nil then). An
--- empty slot is dimmed while a search is typed.
+-- empty slot is never dimmed (B.Buttons.Dim), so free slots stay readable. A match that fails counts as unknown, so a fault of the search dims
+-- and never stops the layout, as B.Buttons.Draw has it.
 function Layout.Dim(which)
 	local st = state[which]
 	if not (st and st.built) then
@@ -1064,11 +1073,12 @@ function Layout.Dim(which)
 	local match = Fn(Search, "Match")
 	for button, entry in pairs(st.placed) do
 		local matched = true
-		if active then
-			if not entry.record then
-				matched = false
-			elseif match then
-				matched = match(entry.record)
+		if active and entry.record and match then
+			local ok, answer = pcall(match, entry.record)
+			if ok then
+				matched = answer
+			else
+				matched = nil
 			end
 		end
 		dim(button, matched)

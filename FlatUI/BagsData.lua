@@ -31,10 +31,11 @@ local _, ns = ...
 -- read in full at each open instead). A slot counts as changed when its item, link, count, lock or quality changed, and its text is written when
 -- its item, link, count, quality or binding changed. Bags is then told, in this order: B.Categories.New.Seen(changed) with the changed slots of the
 -- bags, B.Request("items", "bags", changed) and the footer of the bags, and while the bank is open B.Request("items", "bank", changed) and the
--- footer of the bank.
+-- footer of the bank, and B.Request("layout", "bank") when a bank bag slot changed what the tabs are.
 -- BAG_CONTAINER_UPDATE (:623, a bag put in or taken out) reads the keyring test, the kinds and the bag items again, flags a full scan, and calls
--- B.Buttons.Prepare with the bags' containers and B.Request("layout", "bags"). QUEST_ACCEPTED (QuestLogDocumentation.lua:1312) and
--- UNIT_QUEST_LOG_CHANGED for the player (UnitDocumentation.lua:4565), on which the game draws its quest marks again
+-- B.Buttons.Prepare with the bags' containers and B.Request("layout", "bags"); while the bank is open it reads the bank's tabs again too and asks
+-- B.Request("layout", "bank"). QUEST_ACCEPTED (QuestLogDocumentation.lua:1312) and UNIT_QUEST_LOG_CHANGED for the player
+-- (UnitDocumentation.lua:4565), on which the game draws its quest marks again
 -- (Mainline/ContainerFrame.lua:613-619), read the quest info of my slots again, at most once a second; EQUIPMENT_SETS_CHANGED
 -- (EquipmentManagerDocumentation.lua:308) reads the set of each slot again; a change of either is written and asks B.Request("items").
 -- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (ItemDocumentation.lua:1815, 1857) fill in the records that waited for an item's name, and for
@@ -45,8 +46,9 @@ local _, ns = ...
 -- interface); the record is kept all the same.
 --
 -- The bank is read only while it is open, as the game reads it only while its panel shows (Mainline/BankFrameTemplates.lua:622-630): BagsBank.lua
--- calls B.Data.BankScan at the open, B.Data.BankTabs when the tabs or the bank's bag slots change, and B.Data.BankClosed at the close, which
--- writes bankSeen. The bought tabs are C_Bank.FetchPurchasedBankTabIDs(Enum.BankType.Character) (BankDocumentation.lua:256-269): tab 6 is the
+-- calls B.Data.BankScan at the open, B.Data.BankTabs when the tabs or the bank's bag slots change (it reads them again, has every tab scanned at
+-- the next BAG_UPDATE_DELAYED, and says whether they changed, which needs a new layout of the bank window), and B.Data.BankClosed at the close,
+-- which writes bankSeen. The bought tabs are C_Bank.FetchPurchasedBankTabIDs(Enum.BankType.Character) (BankDocumentation.lua:256-269): tab 6 is the
 -- bank's own slots and tab 5 + n the bag in bank bag slot n, the item at (Enum.BagIndex.Characterbanktab, n) (C_Container.GetContainerItemID,
 -- ContainerDocumentation.lua:175-190; Camelot/BankFrame.lua:136-191, 312-319). The items in a tab change with BAG_UPDATE of the tab
 -- (Mainline/BankFrameTemplates.lua:791-795) and are written as they change, so a visit that ends in a disconnect is kept. A tab the game gives no
@@ -132,8 +134,9 @@ local dirty = {}
 -- A full scan of the bags or of the bank's tabs waits for the next BAG_UPDATE_DELAYED; fullTimer while the fallback wait runs; sweptAt is when
 -- (GetTime) the last full scan of the bags ran. The first scan of a session is a full one.
 local full, bankFull, fullTimer, sweptAt = true, false, false, nil
--- The bank is open, from B.Data.BankScan to B.Data.BankClosed, and liveTabs are its bought tabs.
-local bankLive, liveTabs = false, {}
+-- The bank is open, from B.Data.BankScan to B.Data.BankClosed, and liveTabs are its bought tabs; tabsSign is those tabs and the bags in them as
+-- last read ("6,7:4500,8:0"), to tell whether they changed.
+local bankLive, liveTabs, tabsSign = false, {}, nil
 -- Whether the game shows the keyring (nil until asked), the kinds of my containers, and the live records of my slots: live[bag][slot].
 local keyring
 local kinds, live = {}, {}
@@ -1024,14 +1027,15 @@ local function ScanBags(record, changed, all)
 	end
 end
 
--- The bought tabs of the bank, read while it is open. True when the client answered with a list.
+-- The bought tabs of the bank, read while it is open. True when the client answered with a list, and then true again when the tabs or the bags in
+-- the bank's bag slots differ from the last read.
 local function ReadTabs()
 	for tab = FIRST_TAB, LAST_TAB do
 		kinds[tab] = nil
 	end
 	local ids = Ask(Client("C_Bank", "FetchPurchasedBankTabIDs"), EnumValue("BankType", "Character", CHARACTER_BANK))
 	if type(ids) ~= "table" then
-		return false
+		return false, false
 	end
 	local list, seen = {}, {}
 	for _, value in ipairs(ids) do
@@ -1043,7 +1047,14 @@ local function ReadTabs()
 	end
 	table.sort(list)
 	liveTabs = list
-	return true
+	local parts = {}
+	for index, tab in ipairs(list) do
+		parts[index] = tab > FIRST_TAB and ("%d:%d"):format(tab, LiveBagItem(tab) or 0) or ("%d"):format(tab)
+	end
+	local sign = table.concat(parts, ",")
+	local moved = sign ~= tabsSign
+	tabsSign = sign
+	return true, moved
 end
 
 -- The bags in the bank's bag slots, and no kept tab the bank no longer has.
@@ -1093,7 +1104,7 @@ end
 
 -- The bank is no longer read: what this visit read of it is forgotten, and its windows show the record.
 local function EndBank()
-	bankLive, bankFull = false, false
+	bankLive, bankFull, tabsSign = false, false, nil
 	for tab = FIRST_TAB, LAST_TAB do
 		last[tab], live[tab], dirty[tab], kinds[tab] = nil, nil, nil, nil
 	end
@@ -1598,22 +1609,26 @@ function Data.BankClosed()
 	end)
 end
 
--- The bank's tabs or its bag slots changed (BagsBank.lua, at PLAYERBANKSLOTS_CHANGED and BANK_TABS_CHANGED): read again, with every tab.
+-- The bank's tabs or its bag slots changed (BagsBank.lua, at PLAYERBANKSLOTS_CHANGED and BANK_TABS_CHANGED): the bought tabs and the bags in the
+-- bank's bag slots are read again, and every tab is scanned at the next BAG_UPDATE_DELAYED, which tells the bank window the slots that changed and
+-- marks the time of a change for a sort hold; a scan here would take those changes in unseen. True when the bought tabs or the bags in them
+-- changed, so the bank window needs a new layout.
 function Data.BankTabs()
 	if not BankOpen() then
-		return
+		return false
 	end
-	local answered = ReadTabs()
-	Part(function()
-		local record = Mine(true)
-		if record and answered then
-			WriteBank(record)
-		end
-		ScanBank(record, nil, true)
-		if record then
-			record.bankSeen = Now() or record.bankSeen
-		end
-	end)
+	local answered, moved = ReadTabs()
+	bankFull = true
+	if answered then
+		Part(function()
+			local record = Mine(true)
+			if record then
+				WriteBank(record)
+				record.bankSeen = Now() or record.bankSeen
+			end
+		end)
+	end
+	return moved == true
 end
 
 -- Takes a character out of the record. This character is then not written again until its next login; a window that showed the character
@@ -1682,13 +1697,18 @@ local function Delayed()
 		sweptAt = now
 	end
 	local bags, bank = {}, {}
+	local tabsMoved = false
 	ScanBags(record, bags, all)
 	-- The bank is read in full at each open, so the sweep leaves it alone.
 	if BankOpen() then
 		if dirty[BANK_BAGS] then
-			if ReadTabs() and record then
+			-- A bag went in or out of a bank bag slot: when the tabs or the bags in them changed since the last read, the bank window needs a new
+			-- layout, also when the client named the bag only after PLAYERBANKSLOTS_CHANGED.
+			local answered, moved = ReadTabs()
+			if answered and record then
 				WriteBank(record)
 			end
+			tabsMoved = moved == true
 			bankFull = true
 		end
 		local tabs = bankFull
@@ -1715,6 +1735,9 @@ local function Delayed()
 	if next(bank) ~= nil then
 		Part(Request, "items", "bank", bank)
 		Part(Request, "footer", "bank")
+	end
+	if tabsMoved then
+		Part(Request, "layout", "bank")
 	end
 end
 
@@ -1933,23 +1956,31 @@ end
 
 -- The row Forget a character, and /flatui status -------------------------------------------------------------------------------------------------
 
--- Today, yesterday or how many days ago a time() was.
+-- The local noon of the day a time() falls on, by the calendar of this computer (date and time), or nil.
+local function Noon(stamp)
+	local parts = Ask(Client(nil, "date"), "*t", stamp)
+	if type(parts) ~= "table" then
+		return nil
+	end
+	return Count(Ask(Client(nil, "time"), { year = parts.year, month = parts.month, day = parts.day, hour = 12 }))
+end
+
+-- Today, yesterday or how many days ago a time() was, in days of the calendar counted from noon to noon, so a change of the clock between them
+-- counts no day; the bag and bank windows (BagsWindow.lua) and the tooltips of their slots (BagsItems.lua) count the same way.
 local function Age(stamp)
 	local now = Now()
 	if not stamp or not now then
 		return nil
 	end
-	local date = Client(nil, "date")
-	local day, today = Text(Ask(date, "%Y-%m-%d", stamp)), Text(Ask(date, "%Y-%m-%d", now))
-	if stamp >= now or (day and day == today) then
+	local today, day = Noon(now), Noon(stamp)
+	if not (today and day) then
+		return nil
+	end
+	local days = math.floor((today - day) / DAY + 0.5)
+	if days <= 0 then
 		return "today"
-	end
-	if day and day == Text(Ask(date, "%Y-%m-%d", now - DAY)) then
+	elseif days == 1 then
 		return "yesterday"
-	end
-	local days = math.floor((now - stamp) / DAY + 0.5)
-	if days < 2 then
-		days = 2
 	end
 	return ("%d days ago"):format(days)
 end
