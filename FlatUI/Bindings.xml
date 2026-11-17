@@ -2,4 +2,8 @@
 	<!-- MountKey.lua: the key of the Mount key page. It clicks the secure button Flat UI makes once the page is on and a key is bound. -->
 	<Binding name="CLICK FlatUIMountButton:LeftButton" category="Flat UI">
 	</Binding>
+	<!-- BagsBank.lua: the key of Flat UI bank. It clicks a plain button of Flat UI's own that opens or closes the bank window of the Bags page:
+	     live at the banker, else your bank as you last left it. BagsBank.lua names it in the game's Key Bindings. -->
+	<Binding name="CLICK FlatUIBankButton:LeftButton" category="Flat UI">
+	</Binding>
 </Bindings>

@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Bag marks: three marks of this addon's own on the item slots of the bags and the bank, each its own row in the Bags section of Bags and items,
+-- Bag marks: three marks of this addon's own on the item slots of the bags and the bank, each its own row in the Bags section of Item slots,
 -- all on by default. Not a module: Items.lua dresses a bag or bank slot and calls ItemMarks.Dress for it, in a part of its own (PART).
 -- Mark bind on equip items: BoE at the top left of an item that binds when equipped and is not bound yet. The binding is the 14th answer of
 -- C_Item.GetItemInfo (ItemDocumentation.lua:626-650; Enum.ItemBind.OnEquip is 2, ItemConstantsDocumentation.lua:249-266), kept per item ID as it
@@ -35,6 +35,11 @@ local _, ns = ...
 -- and bank slots are dressed again on the next frame (Items.Redraw); a hidden one is dressed when its bag or the bank opens. Every answer the game
 -- may withhold marks nothing and is not kept. Nothing of the game's is written: a mark is a text or a texture of this addon's own made on the slot,
 -- out of a fight while the slot is protected. On a client without one of the calls its mark is never made, and /flatui status says so.
+-- Bags (Bags*.lua) draws the same three marks on slots of its own with these answers (ItemMarks.BoE, Unusable and Eats), whatever the switch of
+-- Windows and its rows. An item in no bag slot the game can read now, such as one of the bank away from the banker, has the tooltip of its link
+-- read (C_TooltipInfo.GetHyperlink, TooltipInfoDocumentation.lua:337-354) in place of the slot's. ItemMarks.Hear has Bags hear the events after
+-- which an answer goes old while it is on, and each function given to ItemMarks.Watch is called when an answer goes old or an item that was
+-- waited for arrives, so Bags draws its slots again.
 -- These follow the bind status, unusable item and Hunter pet food overlays of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
 
 local KEY = "windows"
@@ -70,6 +75,9 @@ local foodIcon
 local redrawQueued = false
 -- The number of lines of the skills window at the last look, or nil before the first.
 local skillLines
+-- The functions ItemMarks.Watch was given, and the modules that hear the events after which an answer goes old: Windows, and those ItemMarks.Hear
+-- names.
+local watchers, heard = {}, {}
 
 local ItemMarks = { PART = PART }
 ns.ItemMarks = ItemMarks
@@ -245,7 +253,8 @@ local function Nested(lines)
 end
 
 -- True when the item in this slot cannot be used, false when it can, nil when the game has not said yet. A tooltip of another item than the slot
--- had a moment ago is not kept.
+-- had a moment ago is not kept. With no bag and slot, the tooltip of the link is read (C_TooltipInfo.GetHyperlink): Bags asks so for an item in
+-- no bag slot the game can read now (ItemMarks.Unusable).
 local function Unusable(id, link, bag, slot)
 	local known = blocked[id]
 	if known ~= nil then
@@ -254,11 +263,17 @@ local function Unusable(id, link, bag, slot)
 	if Binding(id, link) == nil then
 		return nil
 	end
-	local call = Call("C_TooltipInfo", "GetBagItem")
-	if call == nil then
+	local placed = ns.Finite(bag) and ns.Finite(slot)
+	local call = Call("C_TooltipInfo", placed and "GetBagItem" or "GetHyperlink")
+	if call == nil or not (placed or (not ns.IsSecret(link) and type(link) == "string")) then
 		return nil
 	end
-	local ok, data = pcall(call, bag, slot)
+	local ok, data
+	if placed then
+		ok, data = pcall(call, bag, slot)
+	else
+		ok, data = pcall(call, link)
+	end
 	if not ok or not Usable(data) then
 		return nil
 	end
@@ -541,9 +556,19 @@ end
 
 -- Answers that went old ----------------------------------------------------------------------
 
--- Dresses the shown bag and bank slots again on the next frame, once for a run of changes.
-local function Redraw()
-	if redrawQueued then
+-- Tells each function ItemMarks.Watch was given that an answer went old or an item arrived, whatever the switch of Windows. Each is called inside
+-- pcall, so none can stop the marks.
+local function Tell()
+	for _, fn in ipairs(watchers) do
+		pcall(fn)
+	end
+end
+
+-- Tells the watchers, and while windowsWants (the windows module wants the marks that changed) dresses the shown bag and bank slots of the game's
+-- windows again on the next frame, once for a run of changes.
+local function Redraw(windowsWants)
+	Tell()
+	if not windowsWants or redrawQueued then
 		return
 	end
 	redrawQueued = true
@@ -562,66 +587,132 @@ local function Forget(which)
 			dropped = true
 		end
 	end
-	if dropped and Wanted("tint") then
-		Redraw()
+	if dropped then
+		Redraw(Wanted("tint"))
 	end
 end
 
-local function ForgetUnusable()
-	ns.EachPart(KEY, PART, Forget, "unusable")
+-- Adds the events after which an answer goes old to a module, heard while that module is on: Windows' own here, and another module's through
+-- ItemMarks.Hear. Each change is made in that module's part PART, so an error stops that part alone. The answers are shared, so a module that hears
+-- an event after another finds them dropped already. False for a module that is not registered or hears them already.
+local function Listen(key)
+	if heard[key] or type(ns.modules[key]) ~= "table" then
+		return false
+	end
+	heard[key] = true
+	local function ForgetUnusable()
+		ns.EachPart(key, PART, Forget, "unusable")
+	end
+	local function ForgetAll()
+		ns.EachPart(key, PART, Forget, "all")
+	end
+	ns.AddEvent(key, "UNIT_PET", function()
+		pet.diet = nil
+		Redraw(Wanted("food"))
+	end, function(unit)
+		return not ns.IsSecret(unit) and unit == "player"
+	end)
+	ns.AddEvent(key, "PLAYER_ENTERING_WORLD", function()
+		pet.diet = nil
+	end)
+	-- A pet that gains a level may take food it left before.
+	ns.AddEvent(key, "UNIT_LEVEL", function()
+		pet.diet = nil
+		Redraw(Wanted("food"))
+	end, function(unit)
+		return not ns.IsSecret(unit) and unit == "pet"
+	end)
+	ns.AddEvent(key, "PLAYER_LEVEL_UP", function()
+		if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+			C_Timer.After(LEVEL_WAIT, ForgetUnusable)
+		else
+			ForgetUnusable()
+		end
+	end)
+	-- A skill that rose, or a profession abandoned (see the top of this file).
+	ns.AddEvent(key, "SKILL_LINES_CHANGED", function()
+		if FewerSkills() then
+			ForgetAll()
+		else
+			ForgetUnusable()
+		end
+	end)
+	ns.AddEvent(key, "UPDATE_FACTION", ForgetUnusable)
+	for _, event in ipairs({ "LEARNED_SPELL_IN_SKILL_LINE", "NEW_RECIPE_LEARNED", "PLAYER_PVP_RANK_CHANGED" }) do
+		ns.AddEvent(key, event, ForgetAll)
+	end
+	ns.AddEvent(key, "GET_ITEM_INFO_RECEIVED", function(id, success)
+		waiting[id] = nil
+		if not ns.IsSecret(success) and success == true then
+			Redraw(ItemMarks.Wanted())
+		end
+	end, function(id)
+		return ns.Finite(id) and waiting[id] == true
+	end)
+	return true
 end
 
-local function ForgetAll()
-	ns.EachPart(KEY, PART, Forget, "all")
+Listen(KEY)
+
+-- Answers for Bags ------------------------------------------------------------------------------
+
+-- A link the game can read for an item: the one given when it is a hyperlink or an item string, else the item string of its ID.
+local function LinkOf(id, link)
+	if not ns.IsSecret(link) and type(link) == "string" and (link:find("|H", 1, true) or link:find("^item:")) then
+		return link
+	end
+	return "item:" .. id
 end
 
-ns.AddEvent(KEY, "UNIT_PET", function()
-	pet.diet = nil
-	if Wanted("food") then
-		Redraw()
+-- True for an item that binds when equipped and is not bound: bound is false for an item its slot or its record says is not bound, true for one
+-- that is, nil when nothing says. False while the game has not loaded the item; the watchers are told when it has.
+function ItemMarks.BoE(id, link, bound)
+	if not ns.Finite(id) then
+		return false
 	end
-end, function(unit)
-	return not ns.IsSecret(unit) and unit == "player"
-end)
-ns.AddEvent(KEY, "PLAYER_ENTERING_WORLD", function()
-	pet.diet = nil
-end)
--- A pet that gains a level may take food it left before.
-ns.AddEvent(KEY, "UNIT_LEVEL", function()
-	pet.diet = nil
-	if Wanted("food") then
-		Redraw()
-	end
-end, function(unit)
-	return not ns.IsSecret(unit) and unit == "pet"
-end)
-ns.AddEvent(KEY, "PLAYER_LEVEL_UP", function()
-	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
-		C_Timer.After(LEVEL_WAIT, ForgetUnusable)
-	else
-		ForgetUnusable()
-	end
-end)
--- A skill that rose, or a profession abandoned (see the top of this file).
-ns.AddEvent(KEY, "SKILL_LINES_CHANGED", function()
-	if FewerSkills() then
-		ForgetAll()
-	else
-		ForgetUnusable()
-	end
-end)
-ns.AddEvent(KEY, "UPDATE_FACTION", ForgetUnusable)
-for _, event in ipairs({ "LEARNED_SPELL_IN_SKILL_LINE", "NEW_RECIPE_LEARNED", "PLAYER_PVP_RANK_CHANGED" }) do
-	ns.AddEvent(KEY, event, ForgetAll)
+	return Unbound(id, LinkOf(id, link), { isBound = bound })
 end
-ns.AddEvent(KEY, "GET_ITEM_INFO_RECEIVED", function(id, success)
-	waiting[id] = nil
-	if not ns.IsSecret(success) and success == true and ItemMarks.Wanted() then
-		Redraw()
+
+-- True when the character cannot use the item, false when it can, nil while the game has not said: the tooltip of the bag and slot, or with no
+-- bag and slot that of the link. The answer is kept per item ID, as for Windows.
+function ItemMarks.Unusable(id, link, bag, slot)
+	if not ns.Finite(id) then
+		return nil
 	end
-end, function(id)
-	return ns.Finite(id) and waiting[id] == true
-end)
+	return Unusable(id, LinkOf(id, link), bag, slot)
+end
+
+-- True when the pet that is out eats the item.
+function ItemMarks.Eats(id)
+	if not ns.Finite(id) then
+		return false
+	end
+	return Eats(id)
+end
+
+-- Adds a function called with no values each time an answer goes old or an item that was waited for arrives, whatever the switch of Windows: Bags
+-- draws its slots again then. A function given twice is called once. True once it is in the list.
+function ItemMarks.Watch(fn)
+	if type(fn) ~= "function" then
+		return false
+	end
+	for _, known in ipairs(watchers) do
+		if known == fn then
+			return true
+		end
+	end
+	watchers[#watchers + 1] = fn
+	return true
+end
+
+-- Has another module hear the events after which an answer goes old, while it is on and whatever the switch of Windows (Listen). Call it while the
+-- files load, after that module is registered: Bags.lua calls it with "bags". False for a module that is not registered or hears them already.
+function ItemMarks.Hear(key)
+	if type(key) ~= "string" then
+		return false
+	end
+	return Listen(key)
+end
 
 -- /flatui status: how many slots on screen show each mark, the diet of the pet, and the marks the client cannot make. A stopped part has its note.
 -- A slot keeps its marks while it is hidden: in a closed bag or bank, in the frames of the other bag layout (combined or one frame per bag), and

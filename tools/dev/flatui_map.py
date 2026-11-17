@@ -1451,7 +1451,8 @@ AREAS = [
     ("trackers", "Trackers and cooldowns", """Trackers TrackerSound TrackerSlots IconRow Tracking Defensives PartyCooldowns
         PartySync EnemyCooldowns Threat HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
         TrackerShare TrackerGroup TrackerClicks Pulse Items"""),
-    ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Windows ItemMarks CharacterDurability Hud MapButtons
+    ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
+        BagsLayout BagsWindow BagsBank BagsTooltip Windows ItemMarks CharacterDurability Hud MapButtons
         AuraTime XpStats XpBar QuestCount MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable Chat ChatText
         ChatTips ChatLinks ItemCompare ChatHistory Movers MoversMode MoversSnap Tooltip"""),
     ("errands", "Errands, panels and world", """Sparkle SparkleGlow CameraZoom CursorRing MountKey Errands ErrandsMerchant

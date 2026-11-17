@@ -1863,9 +1863,20 @@ end
 -- open bag (:1270-1273), so a bag is looked at a frame after either, after BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED, and when it is shown.
 Watch.bags = setmetatable({}, { __mode = "k" })
 
+-- A bag window that Bags keeps under a hidden frame of its own (ns.BagsParked, Bags.lua) is seen by nobody, so it is not looked at; once Bags
+-- puts it back, its next OnShow looks at it again. The answer is looked up when asked, since Bags.lua loads after this file.
+function Watch.Parked(root)
+	local call = ns.BagsParked
+	if type(call) ~= "function" then
+		return false
+	end
+	local ok, parked = pcall(call, root)
+	return ok and parked == true
+end
+
 function Watch.BagChanged(root)
 	local group = Watch.bags[root]
-	if group then
+	if group and not Watch.Parked(root) then
 		Soon("window details", StyleNew, root, group)
 		Soon("item details", ns.Items.Bag, root)
 		Soon(KINDS.window.label, Again, root, "window")

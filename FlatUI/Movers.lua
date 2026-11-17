@@ -183,6 +183,15 @@ local LIST = {
 	-- the room of three bars at the default size, under the Threat list, and it grows down and to the right from there.
 	{ name = "FlatUIHealerMana", label = "Healer mana", point = "CENTER", kind = "hud", own = true, noScale = true, width = 158, height = 76, x = 420, y = -130,
 		gate = "HealerManaShown", changed = "HealerManaMoved" },
+	-- The bag window of Bags (BagsWindow.lua), which shows while the bags are open: its bottom right corner is the bottom right corner of the box, and
+	-- it grows up and to the left from there as its slots change. It starts above the bottom right corner of the screen, where the game's bags open.
+	-- Dragging the window by its title sets the spot too.
+	{ name = "FlatUIBags", label = "Flat UI bags", point = "BOTTOMRIGHT", kind = "hud", own = true, noScale = true, width = 360, height = 260, x = -60, y = 110,
+		gate = "BagsWindowShown", changed = "BagsWindowMoved" },
+	-- The bank window of Bags (BagsWindow.lua), which shows at the banker or when asked: its top left corner is the top left corner of the box, and it
+	-- grows down and to the right from there. It starts where the game's bank opens, at the left of the screen.
+	{ name = "FlatUIBank", label = "Flat UI bank", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 420, height = 300, x = 25, y = -110,
+		gate = "BankWindowShown", changed = "BankWindowMoved" },
 	-- The pet target frame (UnitPetTarget.lua), which the game shows while the pet has a target: its top left corner is the top left corner of the box,
 	-- which has the room of the frame at the default width, right of the pet frame where the game's default layout puts it. A secure frame: it
 	-- takes a spot out of combat.
@@ -573,6 +582,18 @@ local function IsShown(frame)
 		return nil
 	end
 	return shown == true
+end
+
+-- True for a bag or bank window of the game that Bags keeps under a hidden frame of its own (ns.BagsParked, Bags.lua): the game may hold it
+-- shown, but nobody sees it, so it counts as not shown and gets no handle and no grips. Before Bags.lua has run, and for any frame Bags does
+-- not hold, false. The answer is looked up when asked, since Bags.lua loads after this file.
+local function Parked(frame)
+	local call = ns.BagsParked
+	if type(call) ~= "function" then
+		return false
+	end
+	local ok, parked = pcall(call, frame)
+	return ok and parked == true
 end
 
 -- A frame that is protected, or that will not say, cannot be placed in combat.
@@ -1491,7 +1512,8 @@ local function HandleRect(name, info)
 	if not frame or ns.Forbidden(frame) then
 		return nil
 	end
-	if info.kind == "window" and IsShown(frame) ~= true then
+	-- A window Bags keeps hidden counts as closed (Parked).
+	if info.kind == "window" and (IsShown(frame) ~= true or Parked(frame)) then
 		return nil
 	end
 	-- Edit Mode has boxes of its own while it is open, and a module that places the frame itself needs none.
@@ -3353,7 +3375,8 @@ function win.Grip(name)
 	if not frame or ns.Forbidden(frame) then
 		return
 	end
-	if IsShown(frame) ~= true then
+	-- A window Bags keeps hidden counts as closed (Parked).
+	if IsShown(frame) ~= true or Parked(frame) then
 		win.why[name] = nil
 		return
 	end

@@ -130,6 +130,15 @@ ErrandsRanks.lua
 ErrandsLevelling.lua
 ErrandsNavigation.lua
 ErrandsBulkBuy.lua
+Bags.lua
+BagsData.lua
+BagsCategories.lua
+BagsSearch.lua
+BagsItems.lua
+BagsLayout.lua
+BagsWindow.lua
+BagsBank.lua
+BagsTooltip.lua
 ConsumableData.lua
 Consumables.lua
 DataPanels.lua
