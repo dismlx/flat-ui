@@ -1,6 +1,7 @@
 ## 0.5.17
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Movers**, **Positions and sizes** at **Kept**: a bag window you moved near the edge of the screen no longer takes the bags the game hangs beside it off the screen. The game puts the reagent bag to the left of the combined bag, and with separate bags stacks the other bags above or beside the backpack, so a combined bag kept near the left edge, or a backpack kept near the top, put them out of sight. The moved bag window now stays far enough in for those bags to show whole while they are open, and goes back to your spot when they close.
 
 ## 0.5.16
 

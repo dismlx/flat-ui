@@ -6,7 +6,8 @@ local _, ns = ...
 -- manager has placed a window, and by a check twice a second that runs on a frame of the addon's
 -- own. A saved spot is never changed by the size of the screen: UIParent has another size under the
 -- game's own scale and under a custom one, so a spot is cut to the screen only where it is used or dropped,
--- and a part of the frame stays on the screen.
+-- and a part of the frame stays on the screen. A bag window is also held in far enough for the bags the game
+-- hangs from it to be seen whole (win.Carry).
 -- An open window also has two frames of the addon's own, children of the window: a title bar two levels above
 -- the window, and a grip in the bottom right corner. A press on the title bar, or on an empty part of the window
 -- (the game reports every press, and a window is found from the frame under the cursor), places the window the
@@ -352,6 +353,13 @@ local win = { grips = {}, corners = {}, art = {}, clocks = {}, levels = {}, why 
 -- frame that sizes the marked windows.
 win.marked, win.wrote, win.markers, win.fixQueued, win.writing = {}, {}, {}, {}, 0
 win.scaleHooked, win.showHooked, win.guards = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+-- The bag windows of the list, which the game lays out together (UpdateContainerFrameAnchors, ContainerFrame.lua:1380-1410).
+win.bags = {}
+for _, info in ipairs(LIST) do
+	if info.grip == BAG_GRIP then
+		win.bags[#win.bags + 1] = info.name
+	end
+end
 -- The system frames a module holds at spots of its own (ns.MoverHold). owners: the spots each module gave, by module. by: the spot of each held
 -- frame, by name, with the first module in order winning. state: placed, waiting or refused, by name.
 local hold = { owners = {}, by = {}, state = {}, order = { "barblock", "blocks" } }
@@ -702,6 +710,61 @@ local function Size(frame)
 	return nil
 end
 
+-- The bags the game hangs from a bag window go wherever the window goes: the game puts every bag after the first on the bag before it, on the
+-- first bag of its column or, after the combined bag, on that bag's left edge, by one point (UpdateContainerFrameAnchors,
+-- ContainerFrame.lua:1390-1405). A window cut to the screen by its own size alone took them past the edge: a combined bag put at the left edge
+-- left the reagent bag, the last bag Open All Bags opens (:2141-2148), off the screen on its left, and a moved backpack the bags above or beside
+-- it. So the offsets of a bag window, already cut by its own size, are cut again to keep whole on the screen the shown bags it carries that have
+-- no spot of their own, found outwards from it by the first point of each. Only the window is placed, and its saved spot stays as it is. Bags
+-- that could not all be seen leave the window's own cut, which stays the last word.
+function win.Carry(frame, point, x, y)
+	local bag = false
+	for _, name in ipairs(win.bags) do
+		bag = bag or rawequal(GameFrame(name), frame)
+	end
+	local sw, sh = ScreenSize()
+	local left, bottom, width, height = Rect(frame)
+	local f = FRACTION[point]
+	if not (bag and sw and left and f) then
+		return x, y
+	end
+	local saved = Saved() or {}
+	local carried, box, grew = { [frame] = true }, nil, true
+	while grew do
+		grew = false
+		for _, name in ipairs(win.bags) do
+			local other = GameFrame(name)
+			if other and not carried[other] and not ns.Forbidden(other) and type(saved[name]) ~= "table" and hold.by[name] == nil
+				and IsShown(other) == true then
+				local ok, _, relativeTo = pcall(other.GetPoint, other, 1)
+				if ok and not ns.IsSecret(relativeTo) and type(relativeTo) == "table" and carried[relativeTo] then
+					carried[other], grew = true, true
+					local l, b, w, h = Rect(other)
+					if l then
+						box = box or { l, b, l + w, b + h }
+						box[1], box[2] = math.min(box[1], l), math.min(box[2], b)
+						box[3], box[4] = math.max(box[3], l + w), math.max(box[4], b + h)
+					end
+				end
+			end
+		end
+	end
+	if not box then
+		return x, y
+	end
+	-- At offsets x, y from the same point of UIParent the window's bottom left corner lies (sw - width) * f[1] + x across and
+	-- (sh - height) * f[2] + y up (RectAt), and the bags it carries keep their distance from that corner.
+	local baseX, baseY = (sw - width) * f[1], (sh - height) * f[2]
+	local fromLeft, toRight, fromBottom, toTop = box[1] - left, box[3] - left, box[2] - bottom, box[4] - bottom
+	if toRight - fromLeft <= sw then
+		x = math.max(-fromLeft - baseX, math.min(sw - toRight - baseX, x))
+	end
+	if toTop - fromBottom <= sh then
+		y = math.max(-fromBottom - baseY, math.min(sh - toTop - baseY, y))
+	end
+	return OnScreen(point, x, y, width, height, frame)
+end
+
 -- Makes a saved entry valid, or returns nil when it cannot be. The numbers of the spot are kept.
 local function Clean(entry)
 	if type(entry) ~= "table" or FRACTION[entry.point] == nil or not Number(entry.x) or not Number(entry.y) then
@@ -861,7 +924,7 @@ local function InPlace(frame, entry)
 	-- A held bar is where its module put it, not cut to the screen.
 	if not entry.held then
 		local width, height = Size(frame)
-		wantedX, wantedY = OnScreen(entry.point, entry.x, entry.y, width, height, frame)
+		wantedX, wantedY = win.Carry(frame, entry.point, OnScreen(entry.point, entry.x, entry.y, width, height, frame))
 	end
 	return math.abs(x - wantedX / k) <= TOLERANCE and math.abs(y - wantedY / k) <= TOLERANCE
 end
@@ -892,7 +955,7 @@ local function Move(name, frame, entry)
 		local x, y = entry.x, entry.y
 		if not entry.held then
 			local width, height = Size(frame)
-			x, y = OnScreen(entry.point, entry.x, entry.y, width, height, frame)
+			x, y = win.Carry(frame, entry.point, OnScreen(entry.point, entry.x, entry.y, width, height, frame))
 		end
 		clear(frame)
 		setPoint(frame, entry.point, UIParent, entry.point, x / k, y / k)
