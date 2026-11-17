@@ -219,6 +219,11 @@ function ns.CastBarSizes()
 		end
 	end
 	Hook()
+	-- The hit table hangs under the player bar while Edit Mode locks it to the player frame, clear of the spell name that Below the bar hangs under
+	-- it (HitTable.lua, TextBelow): it is placed again, out of combat, once the rows of the size and the text change.
+	if type(ns.HitTableMoved) == "function" then
+		pcall(ns.HitTableMoved)
+	end
 end
 
 -- The cast bar and the swing timers take the width of the personal resource display. Only the player bar is set, and only when its width is not the

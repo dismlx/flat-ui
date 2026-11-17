@@ -13,21 +13,28 @@ local ADDON_NAME, ns = ...
 -- The frame is a frame of its own on UIParent, in the LOW strata of the player frame (Mainline/PlayerFrame.xml:13), with no mouse and no name, in a
 -- flat background with a thin border of the hud page's look (ns.Outline, made inside ns.EachPart). With no spot saved in the movers it hangs from a
 -- rail, a second frame of its own with two points: its top left corner on the left edge Flat UI draws for the player frame (the body of One frame,
--- else Flat UI's picture, else the game's portrait, PlayerFrame.xml:23-30, else the health bar) and its bottom right corner on the frame the game
--- hangs the pet frame and the totems in, PlayerBottomManagedFrameContainer (PlayerFrame.xml:477-484, Shared/PlayerFrameTemplates.xml:4-31), or on the
--- player's cast bar while Edit Mode locks it to the player frame (Shared/PlayerFrame.lua:18-48). The table's top left corner is the rail's bottom left
--- one, a gap lower. So its left edge is the portrait's in either Frame style, and the game lowers it as a pet frame, totems or the locked cast bar come,
--- in a fight too, with no call from Flat UI. The gap also clears the lowest line Flat UI draws on the player frame (the borders of its power bar,
--- health bar and picture, the body of One frame, the druid's mana bar of UnitDruidMana.lua) while the container is at its smallest, so it holds with
--- a pet or without one. Points are set out of combat only, as Flat UI hangs every frame of its own from the player frame (Core.lua); a change asked
--- for in a fight waits once for its end (ns.OutOfCombat). /flatui move places it (FlatUIHitTable in Movers.lua, with the table as its box), and a
--- spot saved there wins.
+-- else Flat UI's picture while it draws one, else the game's portrait, PlayerFrame.xml:23-30, else the health bar, else the player frame) and its
+-- bottom right corner on the frame the game hangs the pet frame and the totems in, PlayerBottomManagedFrameContainer (PlayerFrame.xml:477-484,
+-- Shared/PlayerFrameTemplates.xml:4-31), or on the player's cast bar while Edit Mode locks it to the player frame (Shared/PlayerFrame.lua:18-48), else
+-- on the player frame. The table's top left corner is the rail's bottom left one, a gap lower. So its left edge is the portrait's in either Frame
+-- style, and the game lowers it as a pet frame, totems or the locked cast bar come, in a fight too, with no call from Flat UI. The gap also clears,
+-- while the container is at its smallest so it holds with a pet or without one, the lowest line Flat UI draws on the player frame (the borders of its
+-- power bar, health bar and picture, the body of One frame, the druid's mana bar of UnitDruidMana.lua) and the icons of a Cooldown icons row hung
+-- under the player frame (Cooldowns.lua); and the auras a pet frame hangs under the container, and the spell name Flat UI's cast bar size hangs under
+-- the locked bar. While the target frame or the focus frame stands beside the player frame, as Edit Mode's Classic layout puts the target frame 14
+-- units right of it (Blizzard_EditMode/Mainline/EditModePresetLayouts.lua:1049-1075), the table ends before it, its text made smaller: their auras
+-- and cast bar hang under them and are drawn over the table (frameLevel 500, Mainline/TargetFrame.xml:52; Mainline/TargetFrame.lua:534-558, 830-851).
+-- It ends before the edge of the screen the same way. Points are set out of combat only, as Flat UI hangs every frame of its own from the player frame
+-- (Core.lua); a change asked for in a fight waits once for its end (ns.OutOfCombat). /flatui move places it (FlatUIHitTable in Movers.lua, with the
+-- table as its box), and a spot saved there wins.
 --
 -- What it hears: a frame of its own registers the events that change the numbers only while the table is wanted, the unit events for the player
 -- and the target alone (RegisterUnitEvent), as the character sheet registers its own (Camelot/PaperDollFrame.lua:314-351). An event only marks the
 -- table, and one OnUpdate on the next frame works it out once for a burst, as the sheet batches its events (Camelot/PaperDollFrame.lua:392-395). The
--- cast bar's lock is followed with hooksecurefunc (ns.FollowGlobal, as CastBarSize.lua follows it), and a refresh of the unit frames places the table
--- again (ns.UnitFrameExtra.after.refresh). Nothing of the game's is written: its frames are read and anchored to, never changed.
+-- threat events and the target's own target count only when the facing they decide changes, as they come many times a second in a fight. The
+-- cast bar's lock is followed with hooksecurefunc (ns.FollowGlobal, as CastBarSize.lua follows it), and a refresh of the unit frames, a layout of the
+-- Cooldown icons rows (Cooldowns.lua) and a change of the cast bars' sizes (CastBarSize.lua) place the table again (ns.UnitFrameExtra.after.refresh,
+-- ns.HitTableMoved). Nothing of the game's is written: its frames are read and anchored to, never changed.
 
 local KEY, PART = "hud", "hit table"
 local MOVER = "FlatUIHitTable"
@@ -41,6 +48,24 @@ local BASE, PAD_X, PAD_Y, COLUMN_GAP, NAME_GAP, TITLE_GAP = 11, 6, 4, 6, 8, 12
 local GAP = 4
 -- The height of the container the game hangs the pet frame in while it holds nothing (minimumHeight, Shared/PlayerFrameTemplates.xml:16).
 local SMALLEST = 1
+-- How far a pet's buffs and debuffs reach under the container while the pet frame is the last frame in it, in the pet frame's units: the row starts
+-- 42 under the top of a pet frame 49 tall (Mainline/PetFrame.xml:12, 170-176), its icons 15 tall (PartyAuraFrameTemplate,
+-- Shared/PartyFrameTemplates.xml:5-6), so 8 under its bottom; and the container ends 1 above that bottom, from the pet frame's bottomPadding of -3
+-- (PetFrame.xml:16) and the spacing of 2 before the container's empty last row (Shared/PlayerFrameTemplates.xml:14, 19-26;
+-- Blizzard_SharedXML/LayoutFrame.lua:277-300).
+local PET_AURAS = 42 + 15 - 49 + 1
+-- The classes whose own pet the pet frame shows; for another class the room is kept only while the pet frame shows (Mind Control).
+local PET_CLASSES = { HUNTER = true, WARLOCK = true }
+-- The Cooldown icons rows that can hang under the player frame (Cooldowns.lua): the movers' function that gives a row's icons, its Position row, and
+-- its name among the spots of the movers (CD.MOVERS, R.Opt).
+local COOLDOWN_ROWS = { { "CooldownRow", "cooldowns.place", "FlatUICooldowns" }, { "CooldownRow2", "cooldowns.row2Place", "FlatUICooldowns2" },
+	{ "CooldownRow3", "cooldowns.row3Place", "FlatUICooldowns3" }, { "CooldownRow4", "cooldowns.row4Place", "FlatUICooldowns4" } }
+-- The game's frames the table ends before while one stands beside the player frame, and their names for /flatui status (Mainline/TargetFrame.xml:549,
+-- 572).
+local BESIDE = { { "TargetFrame", "target frame" }, { "FocusFrame", "focus frame" } }
+-- The smallest Text size (Config.lua), under which a table made to fit gets no smaller, and the steps of the share of Text size it is made, so the
+-- sizes it measures at stay few. Widths are kept for this many sizes at most.
+local SMALLEST_TEXT, FIT_STEP, MEASURED = 0.5, 0.05, 8
 -- Points of weapon skill a level, for the status line of a skill the game did not give (HitTableCalc.lua counts the same).
 local PER_LEVEL = 5
 -- The colours of the windows' text and states (PanelLook.lua:27-31), as Threat list and Data panels have them.
@@ -56,10 +81,13 @@ local FLOORED = { miss = true, dodge = true, parry = true }
 -- The word of a kind of enemy in the title (ns.UnitKind).
 local KIND_WORDS = { boss = "boss", elite = "elite", rare = "rare", rareelite = "rare elite" }
 -- The events: the player's alone, the target's alone, and the others (UNIT_LEVEL is heard for both units). Each is in events.yaml of the client and
--- in the sheet's list or the target frame's.
+-- in the sheet's list or the target frame's, but the threat events, which the game's unit frames hear for their own unit (Mainline/UnitFrame.lua:1002,
+-- Shared/CompactUnitFrame.lua:131-143): the player's threat situation and the target's threat list.
 local PLAYER_EVENTS = { "UNIT_STATS", "UNIT_ATTACK", "UNIT_DAMAGE", "UNIT_ATTACK_SPEED", "UNIT_RANGEDDAMAGE", "UNIT_AURA", "UNIT_INVENTORY_CHANGED",
-	"UNIT_DISPLAYPOWER" }
-local TARGET_EVENTS = { "UNIT_CLASSIFICATION_CHANGED", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_TARGET", "UNIT_HEALTH" }
+	"UNIT_DISPLAYPOWER", "UNIT_THREAT_SITUATION_UPDATE" }
+local TARGET_EVENTS = { "UNIT_CLASSIFICATION_CHANGED", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_TARGET", "UNIT_HEALTH", "UNIT_THREAT_LIST_UPDATE" }
+-- The events that change only whether the target attacks the player (HitTableCalc.lua, C.Front): they count only when the facing changes.
+local FACING_EVENTS = { UNIT_THREAT_SITUATION_UPDATE = true, UNIT_THREAT_LIST_UPDATE = true, UNIT_TARGET = true }
 local EVENTS = { "COMBAT_RATING_UPDATE", "PLAYER_DAMAGE_DONE_MODS", "SPELL_POWER_CHANGED", "PLAYER_EQUIPMENT_CHANGED", "WEAPON_ENCHANT_CHANGED",
 	"SKILL_LINES_CHANGED", "CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED", "PLAYER_LEVEL_UP", "UPDATE_SHAPESHIFT_FORM",
 	"PLAYER_TARGET_CHANGED", "ADDON_RESTRICTION_STATE_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD",
@@ -88,19 +116,25 @@ local LINE_NO_RANGED = "Hit table: no ranged line, since you wear no bow, gun, c
 local LINE_RANGED_UNKNOWN = "Hit table: no ranged line, since the game did not say what your ranged slot holds."
 local LINE_EMPTY = "Hit table: hidden, with no line to show."
 local LINE_NO_LEVEL = "Hit table: hidden, since the game does not give your level."
+local LINE_FACING = "Hit table: the game did not say whether your target attacks you, so the table counts you behind it."
+local LINE_OFF_CRIT = "Hit table: the game gives one crit chance, your main hand's, so crit talents for one kind of weapon may make your off hand's crit differ."
+local LINE_FIT = "Hit table: the text is %d%% of Text size, so the table ends before the %s. /flatui move places it elsewhere."
 
 local IsSecret, Finite = ns.IsSecret, ns.Finite
 
 -- frame: the table; rail: the frame it hangs from under the player frame; outline: its background and border; title and note: the first line, the
 -- enemy and the weapon skill; heads: the headings; rows: the lines, each { label, cells }; probe: a text never drawn that measures widths. A text
 -- is { fs, text, colour, font }: the font string and what was last written to it. fontKey, file, size: the font in use; widths: widths measured
--- with it, by text. ear: the frame that hears the events, hearing: it does, units: the units each unit event counts for, alone: the unit events
--- the client registered for those units alone, dirty: the table waits for the next frame. fighting: between PLAYER_REGEN_DISABLED and
--- PLAYER_REGEN_ENABLED. dead: the target was dead at the last look. read: the last numbers (HitTableCalc.lua). laid: the key of the layout.
--- placed, edge, anchor: where the table was put; where: what /flatui status says of it; later: a place waits for the end of the fight. hooked: the
--- cast bar's lock is followed. sansRefused: the game refused Flat UI Sans.
-local S = { heads = {}, rows = {}, widths = {}, units = {}, alone = {}, hearing = false, fighting = false, dirty = false, later = false }
-local Update, Later, Off
+-- with it, by text; measures: those tables by font, and measured: how many. ear: the frame that hears the events, hearing: it does, units: the units
+-- each unit event counts for, alone: the unit events the client registered for those units alone, dirty: the table waits for the next frame.
+-- fighting: between PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED. dead: the target was dead at the last look. read: the last numbers
+-- (HitTableCalc.lua). laid: the key of the layout. placed, edge, anchor: where the table was put; where: what /flatui status says of it; later: a
+-- place waits for the end of the fight. room: the width the table may take under the player frame, in its own units, nil for no bound; roomBy:
+-- what ends it; fit: the share of Text size the text was made to end there, nil while it has its size. hooked: the cast bar's lock is followed.
+-- sansRefused: the game refused Flat UI Sans.
+local S = { heads = {}, rows = {}, widths = {}, measures = {}, measured = 0, units = {}, alone = {}, hearing = false, fighting = false, dirty = false,
+	later = false }
+local Update, Later, Off, Dirty
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -216,8 +250,18 @@ local function Record()
 	return X.known(_G.PlayerFrame), X
 end
 
--- The region whose left edge the table starts at: the body of One frame (UnitFrames.lua, FRAME.place), else Flat UI's picture while it shows, else
--- the game's portrait while it shows, else the health bar, else the player frame. Each has its own border outside it, as the table has.
+-- The frame of Flat UI's picture on the player frame while Flat UI styles the frame and draws the picture (UnitFrames.lua, ApplyPicture sets
+-- pic.drawn), else nil. That frame stays shown either way, as only its texture and outline are hidden, so its own flag says nothing.
+local function Picture(rec, X)
+	local pic = type(rec.pic) == "table" and rec.pic or nil
+	if pic and pic.drawn == true and type(X.active) == "function" and X.active(rec) == true and Laid(pic.frame) then
+		return pic.frame
+	end
+	return nil
+end
+
+-- The region whose left edge the table starts at: the body of One frame (UnitFrames.lua, FRAME.place), else Flat UI's picture while it draws one,
+-- else the game's portrait while it shows, else the health bar, else the player frame. Each has its own border outside it, as the table has.
 local function LeftEdge()
 	local frame = _G.PlayerFrame
 	local rec, X = Record()
@@ -228,8 +272,8 @@ local function LeftEdge()
 				return body
 			end
 		end
-		local picture = type(rec.pic) == "table" and rec.pic.frame or nil
-		if Shown(picture) and Laid(picture) then
+		local picture = Picture(rec, X)
+		if picture then
 			return picture
 		end
 	end
@@ -269,14 +313,18 @@ local function Anchor()
 	return nil
 end
 
--- The lowest line Flat UI draws on the player frame, in units of scale 1, border is the width of one border there: under the body of One frame,
--- else under the power bar, the health bar and the picture while Flat UI styles the frame, and under the druid's mana bar, whose holder keeps its
--- place in every form (UnitDruidMana.lua). Nil while Flat UI draws nothing there.
+-- True when the named Cooldown icons row has a spot of its own in the movers, which then holds it wherever the player put it (Cooldowns.lua, Place).
+local function OwnSpot(name)
+	return type(ns.MoverSaved) == "function" and ns.MoverSaved(name) == true
+end
+
+-- The lowest line Flat UI draws on or under the player frame, in units of scale 1, border is the width of one border there: under the body of One
+-- frame, else under the power bar, the health bar and the picture while Flat UI styles the frame and draws them, under the druid's mana bar, whose
+-- holder keeps its place in every form (UnitDruidMana.lua), and under the icons of each Cooldown icons row whose Position is under the player
+-- frame and that has no spot of its own: its holder is 4 units under the frame's bottom and its icons hang from the holder's middle (Cooldowns.lua,
+-- Place and R.LayoutRow), given by the movers' row functions (ns.CooldownRow, ns.CooldownRow2 to 4: nothing while the page or the row is off).
+-- Nil while Flat UI draws nothing there.
 local function Lowest(border)
-	local rec, X = Record()
-	if not rec then
-		return nil
-	end
 	local low
 	local function Take(region)
 		local bottom = Edge(region, "GetBottom")
@@ -284,36 +332,82 @@ local function Lowest(border)
 			low = math.min(low or bottom - border, bottom - border)
 		end
 	end
-	if type(X.active) == "function" and X.active(rec) == true then
-		if type(X.joined) == "function" and X.joined(rec) == true and type(X.body) == "function" then
-			Take(X.body(rec))
-		else
-			local roles = type(rec.byRole) == "table" and rec.byRole or {}
-			Take(type(roles.power) == "table" and roles.power.target or nil)
-			Take(type(roles.health) == "table" and roles.health.target or nil)
-			local picture = type(rec.pic) == "table" and rec.pic.frame or nil
-			if Shown(picture) then
-				Take(picture)
+	local rec, X = Record()
+	if rec then
+		if type(X.active) == "function" and X.active(rec) == true then
+			if type(X.joined) == "function" and X.joined(rec) == true and type(X.body) == "function" then
+				Take(X.body(rec))
+			else
+				local roles = type(rec.byRole) == "table" and rec.byRole or {}
+				Take(type(roles.power) == "table" and roles.power.target or nil)
+				Take(type(roles.health) == "table" and roles.health.target or nil)
+				Take(Picture(rec, X))
 			end
 		end
+		local mana = rec.druidMana
+		if type(mana) == "table" and mana.holder ~= nil and ns.Enabled("unitframes") and ns.Get("unitframes.druidMana") == true then
+			Take(mana.holder)
+		end
 	end
-	local mana = rec.druidMana
-	if type(mana) == "table" and mana.holder ~= nil and ns.Enabled("unitframes") and ns.Get("unitframes.druidMana") == true then
-		Take(mana.holder)
+	for _, row in ipairs(COOLDOWN_ROWS) do
+		local icons = ns[row[1]]
+		if type(icons) == "function" and ns.Get(row[2]) == "player" and not OwnSpot(row[3]) then
+			local ok, list = pcall(icons)
+			if ok and type(list) == "table" then
+				for _, icon in ipairs(list) do
+					Take(icon)
+				end
+			end
+		end
 	end
 	return low
 end
 
--- How far under the anchor's bottom the table's top is, in its own units: GAP and its own border, and as much more as Flat UI's player frame reaches
--- under the anchor while the container is at its smallest. The game lowers the container's bottom as a pet frame comes, and the locked cast bar with
--- it while the container shows (Shared/PlayerFrame.lua:24-27), so the anchor's bottom at the smallest is its bottom now raised by what the container
--- holds; the table then clears Flat UI's frame with a pet or without one.
+-- How far a pet's auras reach under the container, in units of scale 1, for a class whose own pet the pet frame shows, or while the pet frame shows;
+-- 0 otherwise.
+local function PetAuras()
+	local pet = _G.PetFrame
+	if ns.Forbidden(pet) then
+		return 0
+	end
+	local ok, _, class = pcall(UnitClass, "player")
+	if not (ok and not IsSecret(class) and type(class) == "string" and PET_CLASSES[class]) and not Shown(pet) then
+		return 0
+	end
+	return PET_AURAS * Scale(pet)
+end
+
+-- How far the spell name hangs under the locked cast bar, in units of scale 1: with Custom player cast bar size on and Player cast bar text Below the
+-- bar, Flat UI puts its top 1 unit above the bar's bottom on every cast (CastBarSize.lua, Size and PlaceText), as tall as its font, read out of
+-- combat (the game's own size when the font cannot be read); 0 otherwise.
+local function TextBelow(bar)
+	if not (ns.Enabled("castbars") and not ns.PartStopped("castbars", "size") and ns.Get("castbars.playerSize") == true
+		and ns.Get("castbars.playerText") == "below") then
+		return 0
+	end
+	local text, height = Path(bar, "Text"), nil
+	if text ~= nil then
+		local ok, _, size = pcall(function()
+			return text:GetFont()
+		end)
+		height = ok and Finite(size) and size > 0 and size or nil
+	end
+	return math.max(0, (height or BASE) - 1) * Scale(bar)
+end
+
+-- How far under the anchor's bottom the table's top is, in its own units: GAP and its own border, and the most of three: how far Flat UI's lines and
+-- the Cooldown icons rows under the player frame reach under the anchor while the container is at its smallest; how far a pet's auras reach under the
+-- container; how far the spell name hangs under the locked cast bar. The game lowers the container's bottom as a pet frame comes, and the locked
+-- cast bar with it while the container shows (Shared/PlayerFrame.lua:24-27), so the anchor's bottom at the smallest is its bottom now raised by
+-- what the container holds; the table then clears all of them with a pet or without one. The cast bar's top already sits 13 units under the
+-- container's bottom (12 under the player frame less the container's height, Shared/PlayerFrame.lua:24-26; the container's top 25 above,
+-- PlayerFrame.xml:482), past the reach of a pet's auras.
 local function Offset(anchor, kind)
 	local frame = S.frame
 	local scale = Scale(frame)
 	local pixel = ns.Pixels(frame, 1) * scale
 	local thickness = tonumber(ns.Get("general.thickness")) or 1
-	local offset = GAP * scale + (Opt("hitTableBack") ~= false and thickness * pixel or 0)
+	local below = 0
 	local bottom, low = Edge(anchor, "GetBottom"), Lowest(thickness * pixel)
 	if bottom and low then
 		local box = _G.PlayerBottomManagedFrameContainer
@@ -325,14 +419,66 @@ local function Offset(anchor, kind)
 				bottom = bottom + (height - SMALLEST) * boxScale
 			end
 		end
-		offset = offset + math.max(0, bottom - low)
+		below = math.max(0, bottom - low)
 	end
-	return offset / scale
+	if kind == "container" then
+		below = math.max(below, PetAuras())
+	elseif kind == "cast bar" then
+		below = math.max(below, TextBelow(anchor))
+	end
+	return (GAP * scale + (Opt("hitTableBack") ~= false and thickness * pixel or 0) + below) / scale
+end
+
+-- Keeps the width the table may take, in its own units, and what ends it; a change lays the table out again on the next frame. Nil for no bound.
+local function SetRoom(room, by)
+	if room ~= S.room or by ~= S.roomBy then
+		S.room, S.roomBy = room, by
+		Dirty()
+	end
+end
+
+-- The table's height at Text size, in its own units, for the lines it shows now (Layout): the height it is measured with beside the player frame.
+local function NaturalHeight()
+	local size = BASE * (tonumber(Opt("hitTableSize")) or 100) / 100
+	local lines = type(S.read) == "table" and #S.read.lines or 0
+	return 2 * PAD_Y + math.ceil(size + 3) * (2 + math.max(1, lines))
+end
+
+-- The width the table may take under the player frame, out of combat with its points: from its left edge to a GAP short of the left edge of the
+-- target frame or the focus frame that stands beside it (right of that edge, not above the player frame and not under the table), else of the edge of
+-- the screen. Edit Mode's Modern layout puts the target frame 600 units right of the player frame (EditModePresetLayouts.lua:249-275), so there the
+-- table keeps its size; its Classic layout puts it 14 units right of the player frame (:1049-1075), whose 232 units (PlayerFrame.xml:14) leave a
+-- table at Text size too little room.
+local function Room(edge, anchor, offset)
+	local scale = Scale(S.frame)
+	local left = Edge(edge, "GetLeft")
+	if not left then
+		SetRoom(nil, nil)
+		return
+	end
+	local limit, by = Edge(UIParent, "GetRight"), "edge of the screen"
+	local top, bottom = Edge(_G.PlayerFrame, "GetTop"), Edge(anchor, "GetBottom")
+	local lowest = bottom and bottom - (offset + NaturalHeight()) * scale or nil
+	for _, entry in ipairs(BESIDE) do
+		local other = _G[entry[1]]
+		if not ns.Forbidden(other) then
+			local otherLeft, otherTop, otherBottom = Edge(other, "GetLeft"), Edge(other, "GetTop"), Edge(other, "GetBottom")
+			if otherLeft and otherTop and otherBottom and otherLeft > left + GAP * scale and (top == nil or otherBottom < top)
+				and (lowest == nil or otherTop > lowest) and (limit == nil or otherLeft < limit) then
+				limit, by = otherLeft, entry[2]
+			end
+		end
+	end
+	if limit then
+		SetRoom(math.floor(math.max(0, limit - left - GAP * scale) / scale), by)
+	else
+		SetRoom(nil, nil)
+	end
 end
 
 -- Places the table, out of combat: at the spot saved in the movers, by the point it was saved by (as Data panels reads it, DataPanels.lua), else
--- under the player frame from the rail, else under the middle of the screen when the player frame cannot be used. A place already taken is not set
--- again.
+-- under the player frame from the rail, where its width is bounded (Room), else under the middle of the screen when the player frame cannot be used.
+-- A place already taken is not set again.
 local function Place()
 	local frame = S.frame
 	if not frame then
@@ -357,12 +503,14 @@ local function Place()
 			S.placed, S.edge, S.anchor = key, nil, nil
 		end
 		S.where = "spot"
+		SetRoom(nil, nil)
 		return
 	end
 	local anchor, kind = Anchor()
 	local edge = anchor and LeftEdge() or nil
 	if anchor and edge then
 		local offset = Offset(anchor, kind)
+		Room(edge, anchor, offset)
 		local key = ("%s:%.2f"):format(kind, offset)
 		if S.placed == key and S.edge == edge and S.anchor == anchor then
 			S.where = kind
@@ -387,6 +535,7 @@ local function Place()
 		S.placed, S.edge, S.anchor = "screen", nil, nil
 	end
 	S.where = "screen"
+	SetRoom(nil, nil)
 end
 
 -- A place asked for in a fight waits once for its end.
@@ -425,14 +574,31 @@ local function GameFile()
 	return GAME_FONT
 end
 
--- The font of Font and Text size. A change forgets the widths measured with the old one.
-local function Font()
+-- The font of Font and Text size, its size times fit while the table is made to end within its room (1 or nil otherwise), never under the smallest
+-- Text size. A table made to fit measures at two sizes, so the widths measured are kept by font, for MEASURED fonts at most; a refusal of Flat UI
+-- Sans is forgotten only when the face changes.
+local function Font(fit)
 	local size = BASE * (tonumber(Opt("hitTableSize")) or 100) / 100
+	if fit and fit < 1 then
+		size = math.max(BASE * SMALLEST_TEXT, size * fit)
+	end
 	local file = Opt("hitTableFont") == "sans" and Covers() and SANS or nil
 	local key = ("%s:%.2f"):format(file or "game", size)
-	if S.fontKey ~= key then
-		S.fontKey, S.file, S.size, S.widths, S.sansRefused = key, file, size, {}, false
+	if S.fontKey == key then
+		return
 	end
+	local widths = S.measures[key]
+	if not widths then
+		if S.measured >= MEASURED then
+			S.measures, S.measured = {}, 0
+		end
+		widths = {}
+		S.measures[key], S.measured = widths, S.measured + 1
+	end
+	if S.file ~= file then
+		S.sansRefused = false
+	end
+	S.fontKey, S.file, S.size, S.widths = key, file, size, widths
 end
 
 -- Gives a text the font in use once. A face the game refuses (an answer of false, or an error) leaves the game's font, and /flatui status says so
@@ -515,12 +681,15 @@ end
 
 -- The table ----------------------------------------------------------------------------------------------------------------------------------------
 
--- The columns that apply to a line shown, in the order of the roll.
-local function Columns(lines)
+-- The columns that apply to a line shown, in the order of the roll. widest adds those a line of a weapon gains from the front, Parry for a line that
+-- can be dodged and Block for any (HitTableCalc.lua, Parry, Block and Ranged), so a table made to fit keeps its size as the facing changes.
+local function Columns(lines, widest)
 	local list = {}
 	for _, column in ipairs(COLUMNS) do
+		local key = column[1]
 		for _, line in ipairs(lines) do
-			if line.parts[column[1]] ~= false then
+			local parts = line.parts
+			if parts[key] ~= false or (widest and line.skill and (key == "block" or (key == "parry" and parts.dodge ~= false))) then
 				list[#list + 1] = column
 				break
 			end
@@ -580,44 +749,81 @@ local function Value(line, key)
 	return ("%.1f"):format(value), colour
 end
 
--- Lays out the title, the headings and the lines, and sizes the table to them: the names of the lines on the left, then each column as wide as its
--- heading or the widest number, its text at its right edge. Laid out again only when the font, the columns, the lines or the width change.
-local function Layout(columns, lines, title, note)
-	local rowHeight = math.ceil(S.size + 3)
+-- A gap of the layout, in whole units, times k, the share of Text size the text is made to fit (1 at its size).
+local function Units(units, k)
+	return math.max(1, math.floor(units * k + 0.5))
+end
+
+-- The sizes of the table for these columns, lines, title and note in the font in use, its gaps times k: the height of a line, the gaps inside the
+-- edge, the width of the names, the width and right edge of each column, the width of the note and the room it takes beside the title, the width
+-- of the names and the columns (content), and the whole width, which the title may widen.
+local function Geometry(columns, lines, title, note, k)
+	local g = { rowHeight = math.ceil(S.size + 3), padX = Units(PAD_X, k), padY = Units(PAD_Y, k), widths = {}, rights = {}, ids = {} }
 	local nameWidth = 0
 	for _, line in ipairs(lines) do
 		nameWidth = math.max(nameWidth, Measure(line.label))
 	end
-	nameWidth = math.ceil(nameWidth)
-	local number = Measure(WIDEST)
-	local widths, rights, ids = {}, {}, {}
-	local x = PAD_X + nameWidth + NAME_GAP
+	g.nameWidth = math.ceil(nameWidth)
+	local number, gap = Measure(WIDEST), Units(COLUMN_GAP, k)
+	local x = g.padX + g.nameWidth + Units(NAME_GAP, k)
 	for index, column in ipairs(columns) do
-		widths[index] = math.ceil(math.max(number, Measure(column[2])))
-		x = x + widths[index]
-		rights[index] = x
-		x = x + COLUMN_GAP
-		ids[index] = column[1]
+		g.widths[index] = math.ceil(math.max(number, Measure(column[2])))
+		x = x + g.widths[index]
+		g.rights[index] = x
+		x = x + gap
+		g.ids[index] = column[1]
 	end
-	local noteWidth = note ~= "" and math.ceil(Measure(note)) + 2 or 0
-	local besideNote = noteWidth > 0 and noteWidth + TITLE_GAP or 0
-	local content = (#columns > 0 and rights[#columns] or PAD_X + nameWidth) + PAD_X
-	local width = math.max(content, PAD_X + math.ceil(Measure(title)) + besideNote + PAD_X)
+	g.noteWidth = note ~= "" and math.ceil(Measure(note)) + 2 or 0
+	g.besideNote = g.noteWidth > 0 and g.noteWidth + Units(TITLE_GAP, k) or 0
+	g.content = (#columns > 0 and g.rights[#columns] or g.padX + g.nameWidth) + g.padX
+	g.width = math.max(g.content, g.padX + math.ceil(Measure(title)) + g.besideNote + g.padX)
+	return g
+end
+
+-- The share of Text size the text is made so the table ends within its room (S.room), in steps of FIT_STEP down to the smallest Text size; 1 while
+-- it fits or has no bound. It is worked out from the widest columns the lines can come to show (Columns), so the size holds as the facing changes in
+-- a fight, and from the names and columns alone: the title gives way instead, cut short.
+local function Fit(lines)
+	local room = S.room
+	if not room then
+		return 1
+	end
+	local widest = Columns(lines, Opt("hitTableFacing") == "auto")
+	Font(1)
+	local natural = Geometry(widest, lines, "", "", 1).content
+	if natural <= room then
+		return 1
+	end
+	local fit = math.max(FIT_STEP, math.floor(room / natural / FIT_STEP) * FIT_STEP)
+	while fit > FIT_STEP do
+		Font(fit)
+		if S.size <= BASE * SMALLEST_TEXT or Geometry(widest, lines, "", "", fit).content <= room then
+			break
+		end
+		fit = fit - FIT_STEP
+	end
+	return fit
+end
+
+-- Lays out the title, the headings and the lines as Geometry worked them out, and sizes the table to them: the names of the lines on the left, then
+-- each column as wide as its heading or the widest number, its text at its right edge. Laid out again only when the font, the columns, the lines,
+-- the gaps or the width change.
+local function Layout(g, lines)
 	local names = {}
 	for index, line in ipairs(lines) do
 		names[index] = line.label
 	end
-	local key = table.concat({ S.fontKey, table.concat(ids, ","), table.concat(names, ","), width, noteWidth }, ":")
+	local width, rowHeight, padX, padY = g.width, g.rowHeight, g.padX, g.padY
+	local key = table.concat({ S.fontKey, table.concat(g.ids, ","), table.concat(names, ","), width, g.noteWidth, padX, padY }, ":")
 	if S.laid == key then
 		return
 	end
-	local frame = S.frame
-	At(S.note, "TOPRIGHT", width - PAD_X, -PAD_Y, math.max(1, noteWidth), rowHeight)
-	At(S.title, "TOPLEFT", PAD_X, -PAD_Y, math.max(1, width - 2 * PAD_X - besideNote), rowHeight)
-	local top = -(PAD_Y + rowHeight)
+	At(S.note, "TOPRIGHT", width - padX, -padY, math.max(1, g.noteWidth), rowHeight)
+	At(S.title, "TOPLEFT", padX, -padY, math.max(1, width - 2 * padX - g.besideNote), rowHeight)
+	local top = -(padY + rowHeight)
 	for index, head in ipairs(S.heads) do
-		if index <= #columns then
-			At(head, "TOPRIGHT", rights[index], top, widths[index], rowHeight)
+		if index <= #g.ids then
+			At(head, "TOPRIGHT", g.rights[index], top, g.widths[index], rowHeight)
 		else
 			head.fs:Hide()
 		end
@@ -625,10 +831,10 @@ local function Layout(columns, lines, title, note)
 	for index = 1, math.max(#lines, #S.rows) do
 		if index <= #lines then
 			local row, y = Row(index), top - rowHeight * index
-			At(row.label, "TOPLEFT", PAD_X, y, nameWidth + 2, rowHeight)
+			At(row.label, "TOPLEFT", padX, y, g.nameWidth + 2, rowHeight)
 			for column, cell in ipairs(row.cells) do
-				if column <= #columns then
-					At(cell, "TOPRIGHT", rights[column], y, widths[column], rowHeight)
+				if column <= #g.ids then
+					At(cell, "TOPRIGHT", g.rights[column], y, g.widths[column], rowHeight)
 				else
 					cell.fs:Hide()
 				end
@@ -641,7 +847,7 @@ local function Layout(columns, lines, title, note)
 			end
 		end
 	end
-	frame:SetSize(width, 2 * PAD_Y + rowHeight * (2 + #lines))
+	S.frame:SetSize(width, 2 * padY + rowHeight * (2 + #lines))
 	S.laid = key
 end
 
@@ -691,10 +897,19 @@ Update = function(force)
 	local read = calc.Read({ lines = Opt("hitTableLines"), special = Opt("hitTableSpecial") ~= false, against = Opt("hitTableAgainst"),
 		facing = Opt("hitTableFacing"), rules = Opt("hitTableRules") })
 	S.read = read
-	Font()
 	local lines = read.lines
 	local columns, title, note = Columns(lines), Title(read), Note(read)
-	Layout(columns, lines, title, note)
+	-- Within its room the table keeps its top left corner on the rail and ends before the frame beside the player frame: the text is made smaller,
+	-- which a font string takes in a fight too, and the title is cut short rather than widen it.
+	local fit = Fit(lines)
+	Font(fit)
+	local wanted = BASE * (tonumber(Opt("hitTableSize")) or 100) / 100
+	S.fit = S.size < wanted - 0.005 and S.size / wanted or nil
+	local g = Geometry(columns, lines, title, note, fit)
+	if S.room and g.width > S.room then
+		g.width = math.max(g.content, S.room)
+	end
+	Layout(g, lines)
 	Fill(columns, lines, title, note)
 	S.frame:SetAlpha(allowed and #lines > 0 and 1 or 0)
 end
@@ -709,7 +924,7 @@ local function Tick(ear)
 end
 
 -- Marks the table to be worked out again on the next frame.
-local function Dirty()
+Dirty = function()
 	if S.dirty then
 		return
 	end
@@ -740,6 +955,20 @@ local function OnEvent(event, unit)
 		Place()
 	end
 	Dirty()
+end
+
+-- True when the facing the table counts may have changed (HitTableCalc.lua, C.Front, against the target of the last numbers): the threat events and
+-- the target's own target come many times a second in a fight and count only then. Nothing to compare counts as a change; with no level read there
+-- is no line to change.
+local function FacingChanged()
+	local read, calc = S.read, ns.HitTableCalc
+	if type(read) ~= "table" or type(calc) ~= "table" or type(calc.Front) ~= "function" then
+		return true
+	elseif read.target == nil then
+		return false
+	end
+	local ok, front, unsure = pcall(calc.Front, Opt("hitTableFacing"), read.target)
+	return not ok or front ~= read.front or (unsure == true) ~= (read.facingUnsure == true)
 end
 
 -- Registers a unit event for its units alone where the client can, else for every unit (OnEvent keeps its own), as UnitDruidMana.lua hears the
@@ -776,6 +1005,9 @@ local function Hear(on)
 			-- The target's health comes many times a second in a fight and counts only when the target dies or comes back, so the rest stops
 			-- here.
 			if event == "UNIT_HEALTH" and (Ask(UnitIsDeadOrGhost, "target") == true) == S.dead then
+				return
+			end
+			if FACING_EVENTS[event] and not FacingChanged() then
 				return
 			end
 			Safe(OnEvent, event, ...)
@@ -919,6 +1151,9 @@ ns.AddStatus(KEY, function()
 	elseif S.where and LINE_WHERE[S.where] then
 		lines[#lines + 1] = LINE_WHERE[S.where]
 	end
+	if S.fit and S.room and S.roomBy then
+		lines[#lines + 1] = LINE_FIT:format(math.floor(S.fit * 100 + 0.5), S.roomBy)
+	end
 	if S.sansRefused then
 		lines[#lines + 1] = LINE_SANS
 	end
@@ -959,6 +1194,12 @@ ns.AddStatus(KEY, function()
 	end
 	if target and target.player then
 		lines[#lines + 1] = LINE_PLAYER
+	end
+	if read.facingUnsure then
+		lines[#lines + 1] = LINE_FACING
+	end
+	if read.offCritFromMain then
+		lines[#lines + 1] = LINE_OFF_CRIT
 	end
 	if read.noRanged then
 		lines[#lines + 1] = LINE_NO_RANGED

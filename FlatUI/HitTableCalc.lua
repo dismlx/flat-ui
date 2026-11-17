@@ -13,7 +13,9 @@ local _, ns = ...
 -- (PlayerScriptDocumentation.lua): a withheld value is never compared, added or kept, and every part that needs it is unknown (nil), which the
 -- table shows as ?. A call that raises counts the same; a client without a modifier has none of it. The target's level, kind and whether it can be
 -- attacked carry no secret tag (UnitDocumentation.lua). A level the game shows as ?? (UnitEffectiveLevel 0 or less, Mainline/TargetFrame.lua:297-315)
--- counts as three levels above the player.
+-- counts as three levels above the player. The game does not say where the player stands: the first choice of Where you stand reads whether the
+-- target attacks the player from the player's threat situation on it (C.Front). The client has one melee crit chance, the main hand's: apis.yaml lists
+-- GetCritChance, GetRangedCritChance, GetSpellCritChance and GetPetCritChance and nothing for the off hand.
 --
 -- The rules are those of Classic's attack table, which Forever keeps (Forever hunter wiki, Ranged-Attack-Table.md:11-23), as tests of Classic found
 -- them (magey's Classic warrior wiki, Attack-table.md, with the posts of Blizzard it quotes at :22-33). D is five times the target's level and d is D
@@ -56,6 +58,9 @@ local KITS = {
 }
 -- How much crit past the cap counts as over it.
 local OVER = 0.05
+-- The lowest threat situation of a unit the enemy attacks: 2 tanking insecurely and 3 securely, as PlateThreat.lua:142-144 and CombatText.lua:2485
+-- read UnitThreatSituation (UnitDocumentation.lua:3279-3294).
+local TANKING = 2
 -- Why a value is missing, the worst kept: withheld before refused before a client without the call.
 local RANK = { withheld = 3, refused = 2, missing = 1 }
 
@@ -195,15 +200,19 @@ local function Skill(line)
 	return nil
 end
 
--- The weapon skill of a melee hand. When the game gives none, the most for the player's level stands in, and the hand is named for /flatui status.
+-- The weapon skill of a melee hand, and its skill line (nil while the game does not say what the hand holds). When the game gives no skill, the most
+-- for the player's level stands in, and the hand is named for /flatui status.
 local function HandSkill(read, slot, name)
 	local line, unknown = Line(read, slot)
-	local skill = not unknown and Skill(line) or nil
+	if unknown then
+		line = nil
+	end
+	local skill = line and Skill(line) or nil
 	if skill then
-		return skill
+		return skill, line
 	end
 	read.assumed[#read.assumed + 1] = name
-	return read.level * PER_LEVEL
+	return read.level * PER_LEVEL, line
 end
 
 -- The enemy the table is worked out against: level, unknown (shown ??), kind ("boss", "elite"... from ns.UnitKind), player, none (no enemy targeted:
@@ -232,15 +241,32 @@ function C.Target(against, level)
 	return target
 end
 
--- True while the table counts parries and blocks: In front, or the first choice while the target's own target is the player. UnitIsUnit may be
--- withheld (SecretWhenUnitComparisonRestricted, UnitDocumentation.lua:2410-2426), and then the player counts as behind.
-function C.Front(facing, enemy)
+-- True while the table counts parries and blocks: In front, or the first choice while the target attacks the player. That is the player's threat
+-- situation on the target, UnitThreatSituation("player", "target"), TANKING or more: a query of the player against the target is generally not
+-- secret (SecretWhenUnitThreatStateRestricted, SecretPredicatesDocumentation.lua:160-163), in dungeons and raids too. The target's own target
+-- (UnitIsUnit("targettarget", "player")) is asked only when that gives no number, as for a player, who has no threat table: on an addon-restricted
+-- map every comparison of a compound unit token is withheld (SecretWhenUnitComparisonRestricted, SecretPredicatesDocumentation.lua:120-123;
+-- UnitDocumentation.lua:2410-2426), as Forever withholds the enemy's target (PlateThreat.lua:12). A plain answer of no place on the threat table of an
+-- enemy that is no player says it does not attack the player. With no answer at all the player counts as behind, and the second value is true, for
+-- /flatui status. target: C.Target's answer.
+function C.Front(facing, target)
 	if facing == "front" then
-		return true
-	elseif facing ~= "auto" or not enemy then
-		return false
+		return true, false
+	elseif facing ~= "auto" or type(target) ~= "table" or not target.enemy then
+		return false, false
 	end
-	return Ask(UnitIsUnit, "targettarget", "player") == true
+	local status, why = Call(UnitThreatSituation, "player", "target")
+	if not why and Finite(status) then
+		return status >= TANKING, false
+	end
+	local same = Ask(UnitIsUnit, "targettarget", "player")
+	if type(same) == "boolean" then
+		return same, false
+	end
+	if not why and status == nil and Ask(UnitIsPlayer, "target") == false then
+		return false, false
+	end
+	return false, true
 end
 
 -- The kinds of attack the row Attacks asks for: melee, ranged and spell, each true or nil.
@@ -356,15 +382,16 @@ local function Glance(ctx, skill)
 end
 
 -- The crit of a weapon against the enemy. The sheet's chance holds 0.04 a point of skill past the most for the player's level, which counts against
--- players only, so it comes off first. Against a mob the skill, counted up to that most, changes crit 0.2 a point under the mob's defense and 0.04
--- over it, and an enemy three levels above also takes up to AURA_CRIT of the crit that comes from auras: the sheet's crit less what agility gives
--- (Attack-table.md:155-182). Against a player 0.04 a point either way.
-local function WeaponCrit(ctx, skill, crit, agility)
+-- players only, so it comes off first: of sheetSkill, the skill the sheet's chance was worked out with (the main hand's for GetCritChance, which is
+-- the off hand's crit too, and the ranged weapon's for GetRangedCritChance). Against a mob the skill of the hand, counted up to that most, changes
+-- crit 0.2 a point under the mob's defense and 0.04 over it, and an enemy three levels above also takes up to AURA_CRIT of the crit that comes from
+-- auras: the sheet's crit less what agility gives (Attack-table.md:155-182). Against a player 0.04 a point either way.
+local function WeaponCrit(ctx, skill, crit, agility, sheetSkill)
 	if crit == nil then
 		return nil
 	end
 	local most = ctx.L * PER_LEVEL
-	local sheet = crit - math.max(0, skill - most) * 0.04
+	local sheet = crit - math.max(0, (sheetSkill or skill) - most) * 0.04
 	if ctx.player then
 		return Clamp(sheet + (skill - ctx.D) * 0.04)
 	end
@@ -377,12 +404,12 @@ local function WeaponCrit(ctx, skill, crit, agility)
 end
 
 -- A swing: one roll. The cap is what the outcomes before crit leave; crit above it is pushed off the table, and over says so once more than half
--- of the tenth the table shows is lost, so a rounding of the game's numbers does not count.
-local function Swing(ctx, id, label, skill, hit, expertise, crit, agility, extra)
+-- of the tenth the table shows is lost, so a rounding of the game's numbers does not count. sheetSkill: the main hand's skill (WeaponCrit).
+local function Swing(ctx, id, label, skill, hit, expertise, crit, agility, extra, sheetSkill)
 	local parts = { miss = Miss(ctx, skill, hit, extra), dodge = Dodge(ctx, skill, expertise), parry = Parry(ctx, skill, expertise),
 		glance = Glance(ctx, skill), block = Block(ctx, skill) }
 	local cap = Roll(parts, { "miss", "dodge", "parry", "glance", "block" })
-	local chance = WeaponCrit(ctx, skill, crit, agility)
+	local chance = WeaponCrit(ctx, skill, crit, agility, sheetSkill)
 	local line = { id = id, label = label, skill = skill, parts = parts, floor = 0, over = false }
 	parts.cap = cap
 	if cap ~= nil and chance ~= nil then
@@ -430,10 +457,11 @@ local function Spell(ctx, hit, crit)
 end
 
 -- The table for the rows of the hit table: spec = { lines (Attacks), special, against, facing, rules }. The answer holds level, target (C.Target),
--- enemy, front, lines ({ id, label, skill, parts, floor, over }, in the order shown), gaps (what the game withheld or refused, by name), assumed (the
--- hands whose skill stood in), noRanged (Ranged asked for with no ranged weapon worn) and rangedUnknown (the game did not say what the ranged slot
--- holds). A part of a line is a number, false where it does not apply, and nil where the game did not give what it needs. No line at all while the
--- player's level cannot be read.
+-- enemy, front, facingUnsure (the game did not say whether the target attacks the player), lines ({ id, label, skill, parts, floor, over }, in the
+-- order shown), gaps (what the game withheld or refused, by name), assumed (the hands whose skill stood in), offCritFromMain (the two hands hold
+-- weapons of two skill lines, while the off hand's crit is the main hand's), noRanged (Ranged asked for with no ranged weapon worn) and
+-- rangedUnknown (the game did not say what the ranged slot holds). A part of a line is a number, false where it does not apply, and nil where the
+-- game did not give what it needs. No line at all while the player's level cannot be read.
 function C.Read(spec)
 	local read = { gaps = {}, assumed = {}, lines = {} }
 	local level = Ask(UnitLevel, "player")
@@ -451,7 +479,7 @@ function C.Read(spec)
 	read.feral = class == "DRUID" and Finite(form) and form ~= 0
 	local target = C.Target(spec.against, level)
 	read.target, read.enemy = target, target.enemy
-	read.front = C.Front(spec.facing, target.enemy)
+	read.front, read.facingUnsure = C.Front(spec.facing, target)
 	local ctx = { L = level, T = target.level, D = target.level * PER_LEVEL, player = target.player == true, front = read.front,
 		classic = spec.rules ~= "game" }
 	local kinds = C.Kinds(spec.lines, class, power)
@@ -459,17 +487,20 @@ function C.Read(spec)
 	if kinds.melee then
 		local expertise, offExpertise = Expertise(read)
 		local crit = Crit(read, GetCritChance)
-		local skill = HandSkill(read, SLOTS.main, "main hand")
+		local skill, mainLine = HandSkill(read, SLOTS.main, "main hand")
 		local hit = Hit(read, "melee", GetHitModifier)
 		-- The game's own test of dual wielding (PlayerScriptDocumentation.lua:1297-1304, no secret tag; Camelot/PaperDollFrameStats.lua:469).
 		if not read.feral and Ask(IsDualWielding) == true then
-			local offSkill = HandSkill(read, SLOTS.off, "off hand")
+			local offSkill, offLine = HandSkill(read, SLOTS.off, "off hand")
 			-- Forever has hit for the off hand alone (Dual Wield Specialization, Furious Precision), read as the sheet reads it (:525).
 			local offHit = Hit(read, "melee", type(GetOffhandHitModifier) == "function" and GetOffhandHitModifier or GetHitModifier)
-			read.lines[#read.lines + 1] = Swing(ctx, "main", "Main", skill, hit, expertise, crit, agility, DUAL_WIELD)
-			read.lines[#read.lines + 1] = Swing(ctx, "off", "Off", offSkill, offHit, offExpertise, crit, agility, DUAL_WIELD)
+			-- The off hand's crit is the main hand's: a crit talent for one kind of weapon (Axe, Polearm, Dagger and Fist Weapon Specialization) counts
+			-- in it only for the main hand's kind, so with two kinds of weapon the Off line's crit may be off by that talent, which /flatui status says.
+			read.offCritFromMain = crit ~= nil and mainLine ~= nil and offLine ~= nil and mainLine ~= offLine
+			read.lines[#read.lines + 1] = Swing(ctx, "main", "Main", skill, hit, expertise, crit, agility, DUAL_WIELD, skill)
+			read.lines[#read.lines + 1] = Swing(ctx, "off", "Off", offSkill, offHit, offExpertise, crit, agility, DUAL_WIELD, skill)
 		else
-			read.lines[#read.lines + 1] = Swing(ctx, "swing", "Swing", skill, hit, expertise, crit, agility, 0)
+			read.lines[#read.lines + 1] = Swing(ctx, "swing", "Swing", skill, hit, expertise, crit, agility, 0, skill)
 		end
 		if spec.special then
 			read.lines[#read.lines + 1] = Special(ctx, skill, hit, expertise, crit, agility)
