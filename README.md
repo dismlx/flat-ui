@@ -40,7 +40,7 @@ The **Fading** page, off by default, fades bars and frames while nothing needs t
 
 The **Flat UI** page can let the camera zoom out farther than the game's own options allow, and draw a ring around the mouse pointer, always or in combat only, with your cast running round it and, if you like, the global cooldown. The unit frames can hide the hit numbers the game flashes over your portrait and your pet's.
 
-![Flat UI in play](media/flatui-in-play.jpg)
+![Flat UI in a fight: the player and target frames, the enemy's cast bar, combat numbers in front of the nameplate, proc art beside the character and the action bars](media/flatui-in-play.jpg)
 
 ## Install
 
@@ -86,6 +86,16 @@ lua5.4 FlatUI_test.lua FlatUI
 ```
 
 The last line must say `N passed, 0 failed`.
+
+## Code map
+
+`tools/dev/flatui_map.py` builds the code map of Flat UI as one page: each file with its functions, its settings, its calls to other files, and the game's frames, functions, events and CVars it uses. It needs Python 3, Lua 5.4 and git.
+
+```
+python3 tools/dev/flatui_map.py --fetch
+```
+
+`--fetch` clones Forever's interface source and the client lists of [wowless](https://github.com/wowless/wowless), which name the game's functions, into `tools/dev/sources`, or brings them up to date. The page is `tools/dev/out/flat-ui-map.html`, with its data beside it.
 
 ## Credits
 
