@@ -2,8 +2,9 @@ local _, ns = ...
 
 -- Bags: the sections of the category view and the rules that file each item in one, the record of new items, the junk test, and the
 -- placement of items by hand with drops on Junk. Bags.lua makes ns.Bags with B.Categories and B.Categories.New; this file only adds their
--- fields. It makes no frame and owns no event: BagsData.lua hears BAG_UPDATE_DELAYED and hands New.Seen the slots that changed before it asks
--- for a redraw, and the window's layout (BagsLayout.lua) asks Of, Compare and Label when it lays a window out.
+-- fields. It makes no frame and owns no event: BagsData.lua hears BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED and hands New.Seen the slots that
+-- changed, or whose new flag is set, before it asks for a redraw, and the window's layout (BagsLayout.lua) asks Of, Compare and Label when it lays
+-- a window out.
 --
 -- An item lands in the first section whose rule it meets: New items, then Junk, then the section the player placed it in by hand, then
 -- Equipment sets, Quest items, Equipment, Consumables, Trade goods, Reagents, Recipes, Ammunition, Bags and quivers, Keys and Other. Free slots
@@ -16,25 +17,31 @@ local _, ns = ...
 -- not the order their rules are tried in: New items first, Junk and Free slots last.
 --
 -- New items: an item is new when the game's own flag is set (C_NewItems.IsNewItem, NewItemsDocumentation.lua:15-28) at the scan in which its
--- slot changed. It is then kept by its GUID (the record's guid, which BagsData reads with C_Item.GetItemGUID) for the session, so pointing at it,
--- which takes the game's flag off (Blizzard_UIPanels_Game/Mainline/ContainerFrame.lua:1735-1738), leaves it in New items. While the bank is open,
--- in Flat UI's bank window or the game's (B.Bank.Visiting), nothing becomes new: what comes out of the bank is not loot. When the bag window closes,
--- every item New items showed during that opening leaves; a click on its title and a clean up take every one out at once. With New items at the
--- top off, nothing is kept as new.
+-- slot changed, or when BagsData hears that the game set new flags (BAG_NEW_ITEMS_UPDATED), which it may do after that scan. It is then kept by
+-- its GUID (the record's guid, which BagsData reads with C_Item.GetItemGUID) for the session, so pointing at it, which takes the game's flag off
+-- (Blizzard_UIPanels_Game/Mainline/ContainerFrame.lua:1735-1738), leaves it in New items. While the bank is open, in Flat UI's bank window or the
+-- game's (B.Bank.Visiting), nothing becomes new: what comes out of the bank is not loot, and it keeps the game's flag after the visit, so an item
+-- flagged then is noted and stays out of New items until the flags come off. When the bag window closes, every item New items showed during that
+-- opening leaves; a click on its title and a clean up take every one out at once. The close takes the game's flags off, and so does putting New
+-- items away by its title or by a clean up (Bags.ClearNew, Bags.lua), so the next change of a slot does not bring its item back. With New items
+-- at the top off, nothing is kept as new.
 --
--- Junk is Errands' own test, so the Junk section, the junk coin and Sell junk always agree. A live slot of the bags is junk when Errands would
--- sell it (ns.ErrandsJunk: the sale test of ErrandsMerchant.lua:165-190, with the bags the game's menu leaves out of junk selling, :154-163).
--- The keyring never is: Errands walks bags 0 to NUM_TOTAL_EQUIPPED_BAG_SLOTS only (:100-107). The bank and every item of another character,
--- which nothing can sell from where they are, take the list part of that test (ns.ErrandsJunkRule, :176-183): on the sell list, or grey and not
--- on the keep list, and never an item with no value or a quest item. Junk is tried right after New items, so a new junk item stays in New items
--- with its coin until the bags close, and nothing Sell junk sells is filed anywhere else.
+-- Junk is Errands' own test, so the Junk section, the junk coin and Sell junk agree on what is junk. A live slot of the bags is junk when Errands
+-- would sell it (ns.ErrandsJunk: the sale test of ErrandsMerchant.lua:177-202, with the bags the game's menu leaves out of junk selling,
+-- :166-175), asked whatever its lock (its third argument): an item the game holds for a moment, in the trade window, on a mail not sent yet or on
+-- the cursor, keeps its coin and its place in Junk, while Sell junk counts and sells only the unlocked ones. The keyring never is: Errands walks
+-- bags 0 to NUM_TOTAL_EQUIPPED_BAG_SLOTS only (:112-119). The bank and every item of another character, which nothing can sell from where they
+-- are, take the list part of that test (ns.ErrandsJunkRule, :188-191): on the sell list, or grey and not on the keep list, and never an item with
+-- no value or a quest item. Junk is tried right after New items, so a new junk item stays in New items with its coin until the bags close, and
+-- nothing Sell junk sells is filed anywhere else.
 --
 -- Placement by hand: an item dropped on the title of a section stays in that section, by item ID, for the whole account, in FlatUIDB.bags.placed
 -- (at most MOST_PLACED items). A drop reads the cursor (GetCursorInfo, and C_Cursor.GetCursorItem for the slot the item came from,
 -- CursorDocumentation.lua:11-19, read from the fields of its ItemLocation, Blizzard_ObjectAPI/Mainline/ItemLocation.lua:35-44) and gives the
--- item back to its slot with ClearCursor. Dropped on Junk, the item goes on Errands' sell list, and a junk item dropped on another section goes
--- on its keep list (ns.ErrandsJunkMark), as /flatui sell and /flatui keep put them there (ErrandsMerchant.lua:758-781): a placement of Flat UI's
--- own in or out of Junk would make the section and the selling disagree. An item the game gives no value, or no sell price (C_Item.GetItemInfo,
+-- item back to its slot with ClearCursor. Dropped on Junk, the item goes on Errands' sell list; an item the two lists make junk
+-- (ns.ErrandsJunkRule) dropped on another section comes off the sell list, and a grey one goes on the keep list (ns.ErrandsJunkMark), as
+-- /flatui sell and /flatui keep put them there and take them off (ErrandsMerchant.lua:811-835): a placement of Flat UI's own in or out of Junk
+-- would make the section and the selling disagree. An item the game gives no value, or no sell price (C_Item.GetItemInfo,
 -- ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands never sells them. Dropped on the section it reaches by itself,
 -- an item loses its placement. An item whose slot the game does not say is judged by its ID alone, with its quality from
 -- C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight (InCombatLockdown and UnitAffectingCombat,
@@ -342,7 +349,8 @@ end
 
 -- Junk -----------------------------------------------------------------------------------------------------------------------------------
 
--- Whether Sell junk would sell the item, by Errands' own test (see the top of the file).
+-- Whether Sell junk would sell the item, by Errands' own test (see the top of the file). A live slot is asked whatever its lock (the third
+-- argument of ns.ErrandsJunk), so an item the game holds for a moment keeps its coin and its section.
 function Categories.IsJunk(record)
 	if type(record) ~= "table" then
 		return false
@@ -355,7 +363,7 @@ function Categories.IsJunk(record)
 		local slotTest = ns.ErrandsJunk
 		if type(slotTest) == "function" then
 			local slot = Whole(record.slot)
-			return slot ~= nil and slotTest(bag, slot) == true
+			return slot ~= nil and slotTest(bag, slot, true) == true
 		end
 	end
 	local rule = ns.ErrandsJunkRule
@@ -368,9 +376,11 @@ end
 
 -- New items ------------------------------------------------------------------------------------------------------------------------------
 
--- By the key of an item (its GUID, else its bag, slot and ID): true while it is new. And the items New items showed since the bag window last
--- opened, which leave it when the window closes.
-local fresh, shown = {}, {}
+-- By the key of an item (its GUID, else its bag, slot and ID): true while it is new. The items New items showed since the bag window last
+-- opened, which leave it when the window closes. And the items whose game flag was set during a visit to a banker: what came out of the bank
+-- keeps that flag after the visit, until the bag window closes, or a sort or a click on the title of New items takes the flags off while New items
+-- at the top is on (Bags.lua), and it never becomes new on the flag alone meanwhile.
+local fresh, shown, banked = {}, {}, {}
 
 local function NewKey(record)
 	local guid = Text(record.guid)
@@ -401,15 +411,18 @@ local function InBags(record)
 	return type(record) == "table" and record.live == true and BAGS[Whole(record.bag)] == true
 end
 
--- changed: { [bag] = { [slot] = true } }, the slots BagsData found changed at BAG_UPDATE_DELAYED, before it asks for the redraw.
+-- changed: { [bag] = { [slot] = true } }: the slots BagsData found changed at BAG_UPDATE_DELAYED, before it asks for the redraw, or the slots whose
+-- game flag is set at BAG_NEW_ITEMS_UPDATED (BagsData.lua). A flagged item becomes new, unless the flag was set during a visit to a banker: it is
+-- noted as banked then, and stays out.
 function New.Seen(changed)
-	if type(changed) ~= "table" or not Kept() or AtBanker() then
+	if type(changed) ~= "table" or not Kept() then
 		return
 	end
 	local read = B.Data.Item
 	if type(read) ~= "function" or type(C_NewItems) ~= "table" or type(C_NewItems.IsNewItem) ~= "function" then
 		return
 	end
+	local bank = AtBanker()
 	local me = ns.CharacterKey()
 	for bag, slots in pairs(changed) do
 		if BAGS[Whole(bag)] and type(slots) == "table" then
@@ -419,7 +432,9 @@ function New.Seen(changed)
 					if ok and not ns.IsSecret(isNew) and isNew == true then
 						local record = read(me, bag, slot)
 						local key = InBags(record) and NewKey(record) or nil
-						if key then
+						if key and bank then
+							banked[key] = true
+						elseif key and not banked[key] then
 							fresh[key] = true
 						end
 					end
@@ -446,7 +461,7 @@ function New.Shown(record)
 	return true
 end
 
--- The bag window closed: what New items showed leaves it.
+-- The bag window closed: what New items showed leaves it. The close took the game's flags off (Bags.HideGameBags), so nothing is banked now.
 function New.Close()
 	if Kept() then
 		for key in pairs(shown) do
@@ -456,12 +471,18 @@ function New.Close()
 		Empty(fresh)
 	end
 	Empty(shown)
+	Empty(banked)
 end
 
--- Every item leaves New items now: a click on its title, or a clean up. The caller asks for the layout.
+-- Every item leaves New items now: a click on its title, or a clean up. While New items at the top is on, Bags.ClearNew takes the game's flags off
+-- before each, so nothing stays banked either; with the row off nothing is kept as new, the flags stay until the bags close, and so does what was
+-- banked. The caller asks for the layout.
 function New.Clear()
 	Empty(fresh)
 	Empty(shown)
+	if Kept() then
+		Empty(banked)
+	end
 end
 
 -- Placement by hand ----------------------------------------------------------------------------------------------------------------------

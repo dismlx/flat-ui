@@ -10,7 +10,7 @@ The **Data panels** page, off by default, adds a top and a bottom panel with bag
 
 The **Threat list** page, off by default, lists your group by threat on the enemy you fight, highest first, in class colours; at 100% a member has aggro. The **Healer mana** page, off by default, shows your healers' mana in dungeons and raids.
 
-The **Bags** page, off by default, puts all your bags in one Flat UI window, in sections (new items, equipment sets, equipment, consumables, quest items, trade goods, reagents, recipes, ammunition, bags and quivers, keys, other, junk and free slots) or bag by bag, with a search that dims what does not match, your gold and your free slots. Nothing moves while the window is open: what you loot gathers at the top. Drop an item on a section's title to keep it there, or on Junk to sell it at merchants from then on. A Flat UI bank window works at the banker, with Deposit and Take out for what you searched, and shows your bank anywhere else as you last left it. Pick another of your characters in a window's title to see their bags and bank, and an item's tooltip names who else on your realms carries it. A Sell junk button at merchants sells what Errands would sell, also with Errands off. The game's bag windows stay hidden while it is on.
+The **Bags** page, off by default, puts all your bags in one Flat UI window, in sections (new items, equipment sets, equipment, consumables, quest items, trade goods, reagents, recipes, ammunition, bags and quivers, keys, other, junk and free slots) or bag by bag, with a search that dims what does not match, your gold and your free slots. Nothing moves while the window is open: what you loot gathers at the top under New items, and anything else that comes into your bags meanwhile under Added. Drop an item on a section's title to keep it there, or on Junk, which is always there to drop on, to sell it at merchants from then on. A Flat UI bank window works at the banker, with Deposit and Take out for what you searched, and shows your bank anywhere else as you last left it. Pick another of your characters in a window's title to see their bags and bank, and an item's tooltip names who else on your realms carries it. A Sell junk button at merchants sells what Errands would sell, also with Errands off. The game's bag windows stay hidden while it is on.
 
 The **Drink and health macros** page, off by default, keeps two macros up to date with your bags and level: one drinks your best drink, conjured water first when it is as good, and the other takes a healthstone, then a healing potion, and eats out of combat.
 
@@ -80,7 +80,7 @@ The **Flat UI** page can let the camera zoom out farther than the game's own opt
 - `/flatui role` says whether nameplate threat reads you as a tank and why; `tank`, `damage`, `auto` or `toggle` sets it.
 - `/flatui tracker add group` tracks your class buff on your group; `/flatui tracker use 2 <item>` sets what weapon tracker 2 applies; `/flatui tracker set 1 health 40` shows pet tracker 1's health in red under 40%.
 - `/flatui bags` opens or closes the Flat UI bag window; `/flatui bags <name>` shows another of your characters' bags.
-- `/flatui bank` opens your bank anywhere, as you last left it; `/flatui bank <name>` shows another character's bank.
+- `/flatui bank` opens or closes your bank window: live at the banker with Flat UI's bank window, else as you last left it; `/flatui bank <name>` shows another character's bank.
 - `/flatui help` lists the commands.
 
 ![Movers](media/flatui-movers.jpg)

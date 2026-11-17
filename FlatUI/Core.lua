@@ -96,36 +96,49 @@ local ADDON_NAME, ns = ...
 -- Bags (off by default) draws a bag window and a bank window of its own on UIParent and keeps the game's bag windows (ContainerFrame1 to
 -- ContainerFrame7 and ContainerFrameCombinedBags), and with Flat UI's bank BankFrame, from showing by moving each under a hidden frame of its
 -- own (SetParent), out of combat and only while the game has it closed. Each goes back to the parent it was read from (GetParent) when the
--- page goes off, the module or one of its parts stops, or the game's bank window is chosen: at once, also in a fight, when the game has it
--- closed, and once the game closes it otherwise. Of those windows it reads the shown flag (IsShown), and when its own bag window hides it
--- hides the ones it moved that the game still has open (Hide, which runs no script under the hidden frame); it writes no field on them and
--- calls none of their methods. It follows ToggleBackpack, ToggleBag, ToggleAllBags, OpenAllBags, OpenAllBagsMatchingContext, OpenBag,
--- OpenBackpack, CloseAllBags, CloseBag, CloseBackpack, HideUIPanel, ContainerFrame_SetFullScreenFrame and ContainerFrame_ClearFullScreenFrame
--- with hooksecurefunc, and calls none of the game's bag functions: they build the game's list of bag windows the first time they are asked
--- (Mainline/ContainerFrame.lua:2335-2373), and a list built by Flat UI's code would be read by Escape. It asks C_GameRules.IsGameRuleActive
--- whether the game shuts the bags and C_ActionBar.ShouldShowKeyring whether it shows a keyring, and when its bag window hides it takes the
--- game's new flag off the items of the bags (C_NewItems.RemoveNewItem), as the game's own close does. With BankFrame hidden this way it ends
--- the bank with C_Bank.CloseBankFrame when its bank window closes or the game hides BankFrame, which the game's OnHide would otherwise do.
+-- page goes off, the module or one of its parts follow, window, layout or items stops, Bags stands down for another bag addon or the gamepad
+-- interface, or, for BankFrame, the game's bank window is chosen: at once, also in a fight, when the game has it closed, and once the game
+-- closes it otherwise. Of those windows it reads the shown flag (IsShown), and when its own bag window hides, and when it gives the windows
+-- back, it hides the bag windows it moved that the game still has open (Hide, which runs no script under the hidden frame); it writes no field
+-- on them and calls none of their methods. It follows ToggleBackpack, ToggleBag, ToggleAllBags, OpenAllBags, OpenAllBagsMatchingContext,
+-- OpenBag, OpenBackpack, CloseAllBags, CloseBag, CloseBackpack, HideUIPanel, ContainerFrame_SetFullScreenFrame and
+-- ContainerFrame_ClearFullScreenFrame with hooksecurefunc, and calls none of the game's bag functions: they build the game's list of bag
+-- windows the first time they are asked (Mainline/ContainerFrame.lua:2335-2373), and a list built by Flat UI's code would be read by Escape.
+-- It asks C_GameRules.IsGameRuleActive whether the game shuts the bags and C_ActionBar.ShouldShowKeyring whether it shows a keyring, and after
+-- ToggleBag it reads the game's showKeyring and combinedBags settings (C_CVar.GetCVarBool) and the size of the bag named
+-- (C_Container.GetContainerNumSlots), so a toggle the game lets pass leaves its window alone. It takes the game's new flag off the items of the
+-- bags (C_NewItems.RemoveNewItem), as the game's own close does, when its bag window hides, when it gives the windows back and has hidden one
+-- of them, and, while New items at the top is on, when it has the game sort the bags and at a click on the title of the top shelf of its bag
+-- window. With BankFrame hidden this way it ends the bank with C_Bank.CloseBankFrame when its bank window closes or the game hides BankFrame,
+-- which the game's OnHide would otherwise do; when the page comes up while BankFrame shows, it asks whether the player deals with a banker
+-- (C_PlayerInteractionManager.IsInteractingWithNpcOfType). It reads where the right action bars stand (IsVisible, GetLeft, GetRight and
+-- GetEffectiveScale of MultiBarRight and MultiBarLeft), so that its bag window starts left of them, as the game's bags open.
 -- Its bag slots are ItemButtons of its own from ContainerFrameItemButtonTemplate, made out of combat or as a fight starts
 -- (PLAYER_REGEN_DISABLED), each with its bag as the ID of a frame of its own (SetID) and its slot as its own ID for the whole session, and
--- shown once at alpha 0 inside its own window after they are made. It never calls SetBagID or Initialize on them; of the template it calls
--- only SetHasItem, SetReadable, SetMatchesSearch, UpdateQuestItem and UpdateNewItem, and it draws counts and cooldowns on its own slots with
--- the game's SetItemButtonCount and CooldownFrame_Set. Its bank slots and bank bag slots are buttons of its own that pick up
--- (C_Container.PickupContainerItem) and take out (C_Container.UseContainerItem with no bank type) on a click, out of combat; a modified click
--- on them or on a slot of another character links the item (HandleModifiedItemClick, and in a fight ChatFrameUtil.InsertLink only, never the
--- dressing room). Deposit and Take out move the items that match its search with C_Container.UseContainerItem (Enum.BankType.Character to
--- deposit) one at a time while the bank is open, out of combat. Its Buy button is a frame of its own from the game's
--- BankPanelPurchaseButtonScriptTemplate given the attribute overrideBankType out of combat; the game's own popup buys. The menu of a bag's
--- label sets the flags of the game's own bag menu (C_Container.SetBagSlotFlag, SetBackpackAutosortDisabled, SetBackpackSellJunkDisabled).
--- Its sort buttons clean up the bags, or the bank at the banker, through Clean up bags (C_Container.SortBags and SortBank, BagSort.lua).
--- A dropped item goes back with ClearCursor; one dropped on Junk goes on Errands' sell list, and a junk item dropped on another section on
--- its keep list (FlatUIDB.errands), as /flatui sell and /flatui keep do. It writes the tooltips of its buttons, its gold and its slots that
+-- shown once inside its own window after they are made, for one frame, with the window (or, in an open window, the new buttons alone)
+-- standing off the left edge of the screen. It never calls SetBagID or Initialize on them; of the template it calls only SetHasItem,
+-- SetReadable, SetMatchesSearch, UpdateQuestItem and UpdateNewItem, and it draws counts and cooldowns on its own slots with the game's
+-- SetItemButtonCount and CooldownFrame_Set. The one field it writes on them itself is hasStackSplit: before its code hides one of them that owns the
+-- game's split box (StackSplitFrame), or a frame that holds one, and first in the OnHide of the bag window and of its title bar and footer
+-- buttons, it writes 0 there, as the game does when the box closes (Mainline/StackSplitFrame.lua:5, 293), so the template's OnHide
+-- (Mainline/ContainerFrame.lua:1816-1822) leaves the box to the game, and it stays until the player presses Okay or Cancel. Its bank slots and
+-- bank bag slots are buttons of its own that pick up (C_Container.PickupContainerItem) and take out (C_Container.UseContainerItem with no
+-- bank type) on a click, out of combat; a modified click on them or on a slot of another character links the item (HandleModifiedItemClick,
+-- and in a fight ChatFrameUtil.InsertLink only, never the dressing room). Deposit and Take out move the items that match its search with
+-- C_Container.UseContainerItem (Enum.BankType.Character to deposit) one at a time while the bank is open, out of combat. Its Buy button is a
+-- frame of its own from the game's BankPanelPurchaseButtonScriptTemplate given the attribute overrideBankType out of combat; the game's own
+-- popup buys. The menu of a bag's label sets the flags of the game's own bag menu (C_Container.SetBagSlotFlag, SetBackpackAutosortDisabled,
+-- SetBackpackSellJunkDisabled). Its sort buttons clean up the bags, or the bank at the banker, through Clean up bags (C_Container.SortBags
+-- and SortBank, BagSort.lua), and its Sell junk button sells through Errands (above). A dropped item goes back with ClearCursor; one dropped
+-- on Junk goes on Errands' sell list, and one the lists call junk dropped on another section comes off the sell list, and onto the keep list
+-- when it is grey (FlatUIDB.errands), as /flatui sell and /flatui keep do. It writes the tooltips of its buttons, its gold and its slots that
 -- hold no live item in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, Hide), those of the slots from the item (SetHyperlink,
--- SetBagItem) never in a fight, and inside the game's build of an item tooltip it adds lines naming the player's other characters on this
--- realm and its connected realms that carry the item (AddLine, AddDoubleLine). The game is asked once to load each item its windows show
--- that the client has not loaded yet (C_Item.RequestLoadItemDataByID). It adds FlatUIBags and FlatUIBank to UISpecialFrames, and names the
--- key binding of its bank button (BINDING_NAME_CLICK FlatUIBankButton:LeftButton). What it keeps of each character (items, gold, level,
--- class, faction, realm and the time) and the sections items were placed in by hand are in FlatUIDB.bags, and none of it leaves the client.
+-- SetBagItem) never in a fight, and inside the game's build of an item tooltip, through one post call of its own
+-- (TooltipDataProcessor.AddTooltipPostCall), it adds lines naming the player's other characters on this realm and its connected realms that
+-- carry the item (AddDoubleLine). The game is asked once to load each item its windows show that the client has not loaded yet
+-- (C_Item.RequestLoadItemDataByID). It adds FlatUIBags and FlatUIBank to UISpecialFrames, and names the key binding of its bank button
+-- (BINDING_NAME_CLICK FlatUIBankButton:LeftButton). What it keeps of each character (items, gold, level, class, faction, realm and the time)
+-- and the sections items were placed in by hand are in FlatUIDB.bags, and none of it leaves the client.
 -- Data panels (off by default) draws two panels of its own on UIParent and writes the lines of their tooltips in GameTooltip (SetOwner,
 -- SetText, AddLine, AddDoubleLine, Show, Hide). It asks the server for the guild roster (C_GuildInfo.GuildRoster) while a slot shows the guild,
 -- and the game for the memory of addons (UpdateAddOnMemoryUsage) when its frame rate tooltip opens out of combat. When another addon brought

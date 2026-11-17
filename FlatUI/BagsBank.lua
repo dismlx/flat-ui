@@ -21,8 +21,10 @@ local _, ns = ...
 -- - PLAYERBANKSLOTS_CHANGED, and BANK_TABS_CHANGED of the character bank (BankDocumentation.lua:382 and 414), during a visit: B.Data.BankTabs; the
 --   row of bank bag slots and the Buy button; B.Request("layout", "bank") when the bought tabs or the bags in them changed, since the items in the
 --   tabs reach the window slot by slot and nothing moves while it is open.
--- These events reach the module only while it is on, so when the page comes up again Bank.Settle ends a visit that ended meanwhile: one whose
--- BankFrame is no longer shown (the game shows it, hidden by Bags or not, for as long as a visit lasts).
+-- These events reach the module only while it is on, so when the page comes up again Bank.Settle ends a visit that ended meanwhile, one whose
+-- BankFrame is no longer shown (the game shows it, hidden by Bags or not, for as long as a visit lasts), and starts one that began meanwhile, whose
+-- BankFrame shows while the client does not say the player deals with no banker (C_PlayerInteractionManager.IsInteractingWithNpcOfType with
+-- Banker, CharacterBanker and AccountBanker). Bags does not hide a BankFrame that shows, so the game's bank window is the live bank of that visit.
 --
 -- Ending a visit. The game ends the bank in BankFrame's OnHide (BankFrameTemplates.lua:104-109), which a frame under a hidden parent never runs. So
 -- Flat UI calls C_Bank.CloseBankFrame (BankDocumentation.lua:121; apis.yaml:3353) once a visit, while its bank window is the live one:
@@ -60,7 +62,7 @@ local _, ns = ...
 -- type, as the game's bank buttons do (BankFrameTemplates.lua:445-456; ContainerDocumentation.lua:584). A pass reads each slot of those containers
 -- (C_Container.GetContainerNumSlots and GetContainerItemInfo, ContainerDocumentation.lua:192, 313 and 766) and takes the unlocked items whose record
 -- (B.Data.Item) the search matches (B.Search.Match). The first move is made inside the click, the next ones SPACING seconds apart on the game's timer
--- (C_Timer.After), the spacing of Errands' selling (ErrandsMerchant.lua:46-47). Before each move: the bank still live; no fight (Errands.Fighting,
+-- (C_Timer.After), the spacing of Errands' selling (ErrandsMerchant.lua:55-56). Before each move: the bank still live; no fight (Errands.Fighting,
 -- Errands.lua:321-323: InCombatLockdown or UnitAffectingCombat), else the pass waits and looks again each second; the cursor empty (GetCursorInfo,
 -- CursorHasItem); none of MerchantFrame, TradeFrame, MailFrame, AuctionHouseFrame or GuildBankFrame shown (Errands.Shown, Errands.lua:265-271, the
 -- widget call IsShown), since the same call would sell, trade, mail or post; and the slot still holding the same unlocked item. A slot still
@@ -78,7 +80,8 @@ local _, ns = ...
 -- its own (MountKey.lua:86).
 --
 -- What the other files of Bags use: Bank.Live (Flat UI's bank window is the live bank now), Bank.Visiting (a visit to a banker is under way, in
--- either bank window: nothing becomes new then), Bank.Settle (Bags.lua, when the page comes up), Bank.Toggle (the slash word bank and the key),
+-- either bank window: nothing becomes new then), Bank.Settle (Bags.lua, when the page comes up, once the bag slots are made, since a visit it starts
+-- may open the bag window), Bank.Toggle (the slash word bank and the key),
 -- Bank.Deposit, Bank.TakeOut and Bank.Busy (the buttons of the bank window), Bank.Slots (the row in the strip of the bank window, which takes the
 -- height Slots returns and hides when it is 0).
 --
@@ -1095,12 +1098,36 @@ local function Changed()
 	end
 end
 
--- The page comes up again (Bags.lua): a visit whose close the module did not hear while the page was off ends now. During a visit BankFrame has
--- its shown flag set, hidden by Bags or not (BankFrame_Open shows it and asks the game to end the visit when it does not show,
--- Mainline/BankFrameTemplates.lua:111-124), and the game hides it when the visit ends (PlayerInteractionFrameManager.lua:139-163).
+-- The player still deals with a banker: false only when the client plainly says no for each of the three kinds
+-- (C_PlayerInteractionManager.IsInteractingWithNpcOfType, PlayerInteractionManagerDocumentation.lua:49-62, as BagsData.lua asks it), true on a
+-- client without the call.
+local function AtBanker()
+	local api = C_PlayerInteractionManager
+	local ask = Usable(api) and api.IsInteractingWithNpcOfType or nil
+	if type(ask) ~= "function" then
+		return true
+	end
+	for name, number in pairs(BANKERS) do
+		local ok, yes = pcall(ask, EnumValue("PlayerInteractionType", name, number))
+		if not ok or ns.IsSecret(yes) or yes ~= false then
+			return true
+		end
+	end
+	return false
+end
+
+-- The page comes up again (Bags.lua): the module heard none of the bank's events while the page was off. During a visit BankFrame has its shown
+-- flag set, hidden by Bags or not (BankFrame_Open shows it and asks the game to end the visit when it does not show,
+-- Mainline/BankFrameTemplates.lua:111-124), and the game hides it when the visit ends (PlayerInteractionFrameManager.lua:139-163). So a visit
+-- whose close the module did not hear ends now, and one that began meanwhile starts now, while BankFrame shows and the player still deals with a
+-- banker: Bags does not hide a BankFrame that shows (Parked is false), so the game's bank window stays that visit's live bank, B.Data.BankScan
+-- reads the bank, nothing that comes out of it becomes new (Bank.Visiting), and BANKFRAME_CLOSED ends the visit as usual.
 function Bank.Settle()
-	if open and not E.Shown(_G.BankFrame) then
+	local shown = E.Shown(_G.BankFrame)
+	if open and not shown then
 		Closed()
+	elseif not open and shown and AtBanker() then
+		Opened()
 	end
 end
 

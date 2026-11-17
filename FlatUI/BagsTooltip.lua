@@ -98,7 +98,7 @@ local function Whole(value)
 	return 0
 end
 
--- The realm of a key "Name - Realm" (ns.CharacterKey, Core.lua:2402-2413), or nil.
+-- The realm of a key "Name - Realm" (ns.CharacterKey, Core.lua:2692-2695), or nil.
 local function Realm(key)
 	if type(key) ~= "string" then
 		return nil

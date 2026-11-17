@@ -3,14 +3,17 @@ local _, ns = ...
 -- Bags, the layout of a bag window: where every slot the window shows goes, in that window's content frame (BagsWindow.lua). The content frame
 -- is scaled by Slot size over the 37 units of the game's item button (ContainerFrameItemButtonTemplate, Mainline/ContainerFrame.xml:77-78), so
 -- everything here is in the units of that button: a cell is 40 of them, a button and a space of 3. Frames of Flat UI's own take that scale too,
--- and the game's art on its item buttons stays in proportion. Two views, as Show items says.
+-- and the game's art on its item buttons stays in proportion. A window is as many cells wide as Width in slots (or Bank width in slots) says, and
+-- no wider than 95% of the screen (UIParent's width) with its padding. Two views, as Show items says.
 -- Sections files every item with B.Categories.Of and sorts each section with B.Categories.Compare (BagsCategories.lua). A section lies under its
 -- title, as many cells wide as it has items, at least as wide as its title needs and at most as wide as the window. The title's width is measured
 -- once per layout with GetUnboundedStringWidth on Flat UI's own font string (WL/uiobjects.yaml:3738), and a title wider than the window is cut to
 -- it with an ellipsis (SetWidth and SetWordWrap, :3857). Sections go left to right on a shelf while they fit, and one that does not fit starts the
--- next shelf, 12 units below. New items is a full-width shelf at the top and Free slots the last: one counted slot for each kind of bag (the live
--- button of the first free slot of that kind, so a drop on it puts the item there) or every free slot, as Free slots says. A title's text keeps an
--- on-screen size of at least 9 units, so a small Slot size never makes it unreadable.
+-- next shelf, 12 units below. The player's own bag window always has a Junk title, a title with no cell while nothing is junk, so there is always
+-- somewhere to drop an item for the sell list. The top shelf is as wide as the window, titled New items in the bag window while New items at the
+-- top is on and everything on it is new, else Added, as in the bank window. Free slots is the last: one counted slot for each kind of bag (the
+-- live button of the first free slot of that kind, so a drop on it puts the item there) or every free slot, as Free slots says. A title's text
+-- keeps an on-screen size of at least 9 units, so a small Slot size never makes it unreadable.
 -- While the window is open nothing moves but what arrives. A slot that keeps an item is drawn again where it is, whatever it holds now. A slot that
 -- empties keeps its cell as a blank slot (B.Buttons.Draw with hold), Free slots is drawn again below everything, and an item in a slot that had no
 -- cell goes to the end of the top shelf, which moves what is below it only when it needs a new row (the first time, a row and its title). While a
@@ -32,17 +35,23 @@ local _, ns = ...
 -- SELL_ALL_JUNK_ITEMS_EXCLUDE_FLAG and the six BAG_FILTER labels, ContainerFrame.lua:46-53, 648, 667, 686, 708), in English when the client has
 -- none. A change asks for the junk coin and the Sell junk count again, since Errands follows these flags.
 -- The title of a section takes a drop. An item on the cursor (GetCursorInfo, WL/apis.yaml:36258) let go or clicked on it goes to
--- B.Categories.Drop, which keeps it in that section or puts it on Errands' sell or keep list, and goes back to its slot (ClearCursor, :34956). That
--- happens out of combat only, with one line in a fight, and never on New items or Free slots, whose titles only give the item back. While the
--- cursor holds an item the titles that take one are lit, read every tenth of a second while the window shows. A click on the top shelf's title
--- puts its items away (B.Categories.New.Clear in the bag window) and lays the window out again.
+-- B.Categories.Drop, which keeps it in that section, puts it on Errands' sell list (on Junk), or takes a junk item off that list and a grey one
+-- onto the keep list (on another section), and it goes back to its slot (ClearCursor, :34956). That happens out of combat only, with one line in
+-- a fight, and never on the top shelf or Free slots, whose titles only give the item back. While the cursor holds an item the titles that take
+-- one are lit, read every tenth of a second while the window shows. A click on the top shelf's title puts its items away and lays the window out
+-- again: in the bag window, while New items at the top is on, B.ClearNew (Bags.lua) first takes the game's new flags off the items of the bags,
+-- as the window's close does, then B.Categories.New.Clear lets New items go.
 -- The buttons are BagsItems.lua's: the game's item buttons for the player's own bags, buttons of Flat UI's own for the live bank and for
 -- everything else. They are drawn with B.Buttons.Draw, dimmed with B.Buttons.Dim and placed here (ClearAllPoints, SetPoint, Show, Hide). A holder
 -- of a bag's buttons (the frame whose ID is the bag, ContainerFrame.lua:1845-1851), or a button of Flat UI's own, that is not under the window's
--- content frame is put under it (SetParent, on frames of Flat UI's own only), so it takes the content's scale and scrolls with it.
+-- content frame is put under it (SetParent, on frames of Flat UI's own only), so it takes the content's scale and scrolls with it. Before a live
+-- button hides here, B.Buttons.Unsplit leaves the game's split box it may own to the game (BagsItems.lua), so the template's OnHide does not hide
+-- the box in Flat UI's taint. Layout.Park puts a button the warm-up of BagsWindow.lua shows in an open window off the left of the screen for that
+-- frame, and the next pass that shows it anchors it in its cell again.
 -- The menus are frames of Flat UI's own on UIParent in the DIALOG strata, as the menu of Data panels is (DataPanels.lua:1306-1474): a press
--- anywhere else closes one (GLOBAL_MOUSE_DOWN, WL/events.yaml:5249, heard on a frame of its own only while a menu is open). Tooltips are
--- GameTooltip (SetOwner, SetText, AddLine, Show, Hide). This file owns no event of the module.
+-- anywhere else closes one (GLOBAL_MOUSE_DOWN, WL/events.yaml:5249, heard on a frame of its own only while a menu is open). A menu's lines go on in
+-- further columns past 90% of the screen's height. Tooltips are GameTooltip (SetOwner, SetText, AddLine, Show, Hide). This file owns no event of
+-- the module.
 
 local B = ns.Bags
 local Layout = B.Layout
@@ -59,6 +68,10 @@ local SLOT, PITCH, SPACE = 37, 40, 3
 local GAP, TITLE, TITLE_ROOM = 12, 16, 6
 -- The smallest on-screen size of a title's text, and the size of the font the titles start from when the client does not say.
 local LEAST_TEXT, BASE_TEXT = 9, 10
+-- The padding of BagsWindow.lua on each side of the content, in the window's units, and the share of the screen's width a window may take.
+local WINDOW_PAD, SCREEN_SHARE = 8, 0.95
+-- How far off the left edge of the screen the warm-up of BagsWindow.lua puts a button it shows in an open window (Layout.Park).
+local PARK = 200
 -- The defaults of the rows this file reads, for a value the options do not give.
 local DEFAULTS = { view = "sections", columns = 12, bankColumns = 16, slotSize = 36, freeSlots = "kinds", bank = "flat", gear = "one",
 	newItems = true }
@@ -237,20 +250,29 @@ function Layout.Viewed(which)
 	return key, mine, live
 end
 
-local function Columns(which)
-	local value = which == "bank" and Opt("bankColumns") or Opt("columns")
-	if not Finite(value) then
-		value = which == "bank" and DEFAULTS.bankColumns or DEFAULTS.columns
-	end
-	return math.max(1, math.floor(value + 0.5))
-end
-
 local function Scale()
 	local size = Opt("slotSize")
 	if not Finite(size) or size <= 0 then
 		size = DEFAULTS.slotSize
 	end
 	return size / SLOT
+end
+
+-- The cells of a row: Width in slots (or Bank width in slots), but no more than fit in SCREEN_SHARE of the screen's width with the window's padding,
+-- since a window wider than the screen would put its close button and its last cells out of reach. A change of the screen or of the UI scale lays
+-- the windows out afresh (Bags.lua).
+local function Columns(which)
+	local value = which == "bank" and Opt("bankColumns") or Opt("columns")
+	if not Finite(value) then
+		value = which == "bank" and DEFAULTS.bankColumns or DEFAULTS.columns
+	end
+	local columns = math.max(1, math.floor(value + 0.5))
+	local ok, screen = pcall(UIParent.GetWidth, UIParent)
+	if ok and Finite(screen) and screen > 0 then
+		local fit = math.floor(((screen * SCREEN_SHARE - 2 * WINDOW_PAD) / Scale() + SPACE) / PITCH)
+		columns = math.min(columns, math.max(1, fit))
+	end
+	return columns
 end
 
 local function View()
@@ -457,6 +479,8 @@ local function TitleTip(title)
 		else
 			line = ("Drop the item here to keep it in %s."):format(sec.label)
 		end
+	elseif sec.key == JUNK and #sec.entries == 0 and Takes(st, sec) then
+		head, line = sec.label, "Nothing to sell. Drop an item here to sell it at merchants from now on."
 	elseif sec.strip and not st.holding then
 		head, line = sec.label, "Click to put these items away now."
 	else
@@ -645,10 +669,13 @@ local function Place(st, button, x, y)
 	if not button:IsShown() then
 		button:Show()
 	end
-	local ok, alpha = pcall(button.GetAlpha, button)
-	if ok and Finite(alpha) and alpha < 1 then
-		button:SetAlpha(1)
-	end
+end
+
+-- Hides a button the layout shows no longer. A live button that owns the game's split box leaves it to the game first (B.Buttons.Unsplit,
+-- BagsItems.lua), so the template's OnHide does not hide the box in this addon's taint.
+local function Hide(button)
+	Call(Buttons, "Unsplit", button)
+	button:Hide()
 end
 
 local function Draw(st, entry, button)
@@ -690,9 +717,12 @@ local function PlaceTitle(st, title, sec, x, y, width)
 	frame:Show()
 end
 
--- The height of a section of n cells, w wide, under its title.
+-- The height of a section of n cells, w wide, under its title; a section of no cell (the empty Junk of the bag window) is its title alone.
 local function Height(st, n, w)
-	return st.titleH + math.max(1, math.ceil(n / w)) * PITCH - SPACE
+	if n <= 0 then
+		return st.titleH
+	end
+	return st.titleH + math.ceil(n / w) * PITCH - SPACE
 end
 
 -- Places one section: its title at x, y and its cells in rows of w below it.
@@ -841,6 +871,22 @@ local function NewStrip(st)
 	return { key = NEW, label = st.which == "bank" and ADDED or Label(NEW), entries = {}, strip = true }
 end
 
+-- The title of the top shelf: New items in the bag window while New items at the top is on and every item on the shelf is new
+-- (B.Categories.New.Is), else Added, as the bank window's always is. What fills a slot that had no cell while the window is open goes there, new or
+-- not: an item taken out of the bank, gear taken off, an item put in a free slot, and with the row off everything.
+local function StripLabel(st, sec)
+	local new = st.which == "bags" and Opt("newItems") ~= false
+	if new then
+		for _, entry in ipairs(sec.entries) do
+			if entry.record and Call(Categories.New, "Is", entry.record) ~= true then
+				new = false
+				break
+			end
+		end
+	end
+	return new and Label(NEW) or ADDED
+end
+
 local function BuildSections(st)
 	local orders = Orders()
 	local byKey, list = {}, {}
@@ -865,6 +911,13 @@ local function BuildSections(st)
 				sec.entries[#sec.entries + 1] = entry
 			end
 		end
+	end
+	-- The player's own bag window always has a Junk title, with no cell while nothing is junk, so an item can be dropped on it to go on Errands'
+	-- sell list also right after the junk was sold. It comes in the order of B.Categories.LIST, just before Free slots.
+	if st.which == "bags" and st.mine and not byKey[JUNK] then
+		local junk = { key = JUNK, label = Label(JUNK), entries = {} }
+		byKey[JUNK] = junk
+		list[#list + 1] = junk
 	end
 	table.sort(list, function(a, b)
 		local oa, ob = orders[a.key] or LATE, orders[b.key] or LATE
@@ -924,8 +977,8 @@ local function BagName(st, bag, kind)
 	return name
 end
 
--- Counts what a section holds, for its title: the free slots of a bag, the items of a section.
-local function Recount(sec)
+-- Counts what a section holds, for its title: the free slots of a bag, the items of a section; and names the top shelf by what is on it now.
+local function Recount(st, sec)
 	if sec.block then
 		local free = 0
 		for _, entry in ipairs(sec.entries) do
@@ -942,6 +995,13 @@ local function Recount(sec)
 			end
 		end
 		sec.count = count
+		if sec.strip then
+			local label = StripLabel(st, sec)
+			if label ~= sec.label then
+				sec.label = label
+				sec.titleWidth = Measure(st, TitleText(sec))
+			end
+		end
 	end
 end
 
@@ -961,7 +1021,7 @@ local function BuildBlocks(st)
 					ShownNew(record)
 				end
 			end
-			Recount(block)
+			Recount(st, block)
 			block.titleWidth = Measure(st, TitleText(block))
 			blocks[#blocks + 1] = block
 		end
@@ -979,14 +1039,14 @@ local function Render(st)
 	local top, bottom = 0, 0
 	local strip = st.strip
 	if strip then
-		Recount(strip)
+		Recount(st, strip)
 		strip.x, strip.w = 0, st.columns
 		strip.height = Height(st, #strip.entries, strip.w)
 		PlaceSection(st, strip, 0, 0)
 		top, bottom = -(strip.height + GAP), -strip.height
 	end
 	for _, sec in ipairs(st.sections) do
-		Recount(sec)
+		Recount(st, sec)
 		PlaceSection(st, sec, sec.x, top + sec.y)
 		bottom = math.min(bottom, top + sec.y - sec.height)
 	end
@@ -1002,7 +1062,7 @@ local function Render(st)
 	st.height = -bottom
 	for button in pairs(was) do
 		if not st.placed[button] then
-			button:Hide()
+			Hide(button)
 		end
 	end
 	for index = st.used + 1, #st.titles do
@@ -1024,7 +1084,7 @@ local function HideUnplaced(st)
 		for slot = 1, slots do
 			local button = Call(Buttons, get, bag, slot)
 			if type(button) == "table" and not st.placed[button] and button:IsShown() then
-				button:Hide()
+				Hide(button)
 			end
 		end
 	end
@@ -1236,7 +1296,7 @@ function Layout.Render(which)
 end
 
 -- Puts the holders of the player's own live buttons under the bag window's content frame, whoever the window shows, so the warm-up of
--- BagsWindow.lua shows them inside the window at no opacity and nowhere else.
+-- BagsWindow.lua shows them inside the window, which it puts off the screen meanwhile, and nowhere else.
 function Layout.Adopt(which)
 	local st = State(which)
 	if not st.content or which ~= "bags" then
@@ -1260,6 +1320,17 @@ function Layout.Placed(which, button)
 	return st ~= nil and st.built == true and st.placed[button] ~= nil
 end
 
+-- Where the warm-up of BagsWindow.lua puts a button it shows in an open window for one frame: off the left edge of the screen, out of sight and
+-- out of reach of the mouse (not by its alpha: the template's SetAlpha fades its icon and count only). Every layout forgets where it put the
+-- button, so the next pass that shows it anchors it in its cell again.
+function Layout.Park(button)
+	for _, st in pairs(state) do
+		st.where[button] = nil
+	end
+	button:ClearAllPoints()
+	button:SetPoint("TOPRIGHT", UIParent, "TOPLEFT", -PARK, 0)
+end
+
 -- The window closed: the next opening lays it out afresh, and the pooled buttons go back.
 function Layout.Closed(which)
 	Layout.CloseMenu(which)
@@ -1269,7 +1340,7 @@ function Layout.Closed(which)
 	end
 	st.built = false
 	for button in pairs(st.placed) do
-		button:Hide()
+		Hide(button)
 	end
 	st.placed, st.cells, st.where, st.sections, st.strip, st.free = {}, {}, {}, {}, nil, nil
 	if st.content then
@@ -1334,6 +1405,12 @@ function TitleClick(title, mouse)
 		end
 	elseif sec.strip then
 		if st.which == "bags" then
+			-- While New items at the top is on, the game's new flags come off the items of the bags first, as the window's close takes them
+			-- (B.ClearNew, Bags.lua), so a slot that changes later does not bring its item back as new. With the row off nothing is kept as new,
+			-- and the flags stay until the bags close, as a sort leaves them.
+			if Opt("newItems") ~= false then
+				Call(B, "ClearNew")
+			end
 			Call(Categories.New, "Clear")
 		end
 		Request("layout", st.which)
@@ -1342,11 +1419,15 @@ end
 
 -- Menus -------------------------------------------------------------------------------------------------------------------------------------------
 
--- A menu of Flat UI's own, in the way of Data panels' menu: a title and a column of lines, each { text, right = text at the right edge, tick = true
--- or false for a line with a box (nil for none), header = true for a dim line that does nothing, pick = function run on a click, part = the part it
--- runs as }. A click on a line closes the menu and runs its pick. A press anywhere else, a second click on what opened it, and its window closing
--- close it. Its tick, when set, runs every frame while it shows: the character picker counts with it.
+-- A menu of Flat UI's own, in the way of Data panels' menu: a title and lines, each { text, right = text at the right edge, tick = true or false for
+-- a line with a box (nil for none), header = true for a dim line that does nothing, pick = function run on a click, part = the part it runs as }.
+-- The lines go down a column and on in the next column to the right once a column would be taller than MENU_MOST of the screen, a header never last
+-- in a column, so every line stays on the screen however many characters Bags keeps. A click on a line closes the menu and runs its pick. A press
+-- anywhere else, a second click on what opened it and its window closing close it; so does the interface hiding, for good, since nothing could
+-- close a menu that came back with it. Its tick, when set, runs every frame while it shows: the character picker counts with it.
 local MENU_X, MENU_Y, MENU_LINE, MENU_BOX, MENU_GAP = 8, 5, 16, 10, 14
+-- The share of the screen's height a column of lines may take, and the fewest lines a column holds.
+local MENU_MOST, MENU_LEAST = 0.9, 4
 local menu
 
 local function Over(frame)
@@ -1354,18 +1435,56 @@ local function Over(frame)
 	return ok and not IsSecret(over) and over == true
 end
 
+-- The menu closed: nothing listens for a press any more, and it belongs to no frame.
+local function Gone()
+	pcall(menu.listener.UnregisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
+	menu.anchor, menu.owner, menu.tick = nil, nil, nil
+end
+
+-- Makes each column as wide as its widest line (a title wider than all of them widens the last one), and puts every line at its column and row.
 local function Fit()
-	local width = menu.title:IsShown() and TextWidth(menu.title) or 0
+	local columns = menu.columns or 1
+	local widths = {}
+	for column = 1, columns do
+		widths[column] = 0
+	end
 	for index = 1, menu.count do
 		local line = menu.lines[index]
-		local w = TextWidth(line.text) + (line.item.tick ~= nil and (MENU_BOX + 6) or 0)
+		local need = TextWidth(line.text) + (line.item.tick ~= nil and (MENU_BOX + 6) or 0)
 		local right = TextWidth(line.right)
 		if right > 0 then
-			w = w + MENU_GAP + right
+			need = need + MENU_GAP + right
 		end
-		width = math.max(width, w)
+		local column = line.column or 1
+		widths[column] = math.max(widths[column] or 0, need)
 	end
-	menu.frame:SetWidth(math.ceil(width) + 2 * MENU_X)
+	local total = 0
+	for column = 1, columns do
+		widths[column] = math.ceil(widths[column]) + 2 * MENU_X
+		total = total + widths[column]
+	end
+	local title = menu.title:IsShown() and (math.ceil(TextWidth(menu.title)) + 2 * MENU_X) or 0
+	if title > total then
+		widths[columns] = widths[columns] + title - total
+		total = title
+	end
+	local lefts, x = {}, 0
+	for column = 1, columns do
+		lefts[column] = x
+		x = x + widths[column]
+	end
+	for index = 1, menu.count do
+		local line = menu.lines[index]
+		local column = line.column or 1
+		local left, width = lefts[column], widths[column]
+		if line.left ~= left or line.width ~= width then
+			line.left, line.width = left, width
+			line.frame:ClearAllPoints()
+			line.frame:SetPoint("TOPLEFT", menu.frame, "TOPLEFT", left, -(line.y or 0))
+			line.frame:SetSize(width, MENU_LINE)
+		end
+	end
+	menu.frame:SetWidth(total)
 end
 
 local function MenuPaint()
@@ -1459,9 +1578,12 @@ local function MenuFrame()
 			Run("window", menu.tick, elapsed)
 		end
 	end)
+	-- Hidden with its parent (the interface hidden), the menu keeps its own shown flag: it is hidden for good, which runs no second OnHide.
 	frame:SetScript("OnHide", function()
-		pcall(menu.listener.UnregisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
-		menu.anchor, menu.owner, menu.tick = nil, nil, nil
+		if menu.frame:IsShown() then
+			menu.frame:Hide()
+		end
+		Gone()
 	end)
 	return menu
 end
@@ -1471,10 +1593,12 @@ function Layout.MenuOn(anchor)
 	return menu ~= nil and menu.anchor ~= nil and menu.anchor == anchor
 end
 
--- Closes the menu, or only one opened from that window ("bags", "bank").
+-- Closes the menu, or only one opened from that window ("bags", "bank"). It is closed here too, since a menu hidden already (with its parent)
+-- hears no second OnHide.
 function Layout.CloseMenu(owner)
 	if menu and menu.anchor and (owner == nil or menu.owner == owner) then
 		menu.frame:Hide()
+		Gone()
 	end
 end
 
@@ -1490,16 +1614,21 @@ function Layout.Menu(anchor, title, items, owner)
 	end
 	MenuFrame()
 	Layout.CloseMenu()
-	local y = MENU_Y
+	local top = MENU_Y
 	if title then
 		menu.title:SetText(title)
 		menu.title:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
 		menu.title:Show()
-		y = y + MENU_LINE + 2
+		top = top + MENU_LINE + 2
 	else
 		menu.title:SetText("")
 		menu.title:Hide()
 	end
+	-- As many lines in a column as MENU_MOST of the screen holds; a header that would be the last line of a column starts the next one.
+	local okScreen, screen = pcall(UIParent.GetHeight, UIParent)
+	screen = okScreen and Finite(screen) and screen > 0 and screen or 768
+	local most = math.max(MENU_LEAST, math.floor((screen * MENU_MOST - top - MENU_Y) / MENU_LINE))
+	local column, row, rows = 1, 0, 0
 	for index, item in ipairs(items) do
 		local line = MenuLine(index)
 		line.item = item
@@ -1523,19 +1652,21 @@ function Layout.Menu(anchor, title, items, owner)
 			line.text:SetTextColor(1, 1, 1, 1)
 		end
 		line.light:Hide()
-		line.frame:ClearAllPoints()
-		line.frame:SetPoint("TOPLEFT", menu.frame, "TOPLEFT", 0, -y)
-		line.frame:SetPoint("TOPRIGHT", menu.frame, "TOPRIGHT", 0, -y)
-		line.frame:SetHeight(MENU_LINE)
+		if row > 0 and (row >= most or (item.header and row >= most - 1)) then
+			column, row = column + 1, 0
+		end
+		-- Fit anchors the line at its column's left edge, as wide as the column.
+		line.column, line.y, line.left, line.width = column, top + row * MENU_LINE, nil, nil
 		line.frame:Show()
-		y = y + MENU_LINE
+		row = row + 1
+		rows = math.max(rows, row)
 	end
-	menu.count = #items
+	menu.count, menu.columns = #items, column
 	for index = #items + 1, #menu.lines do
 		menu.lines[index].item = nil
 		menu.lines[index].frame:Hide()
 	end
-	menu.frame:SetHeight(y + MENU_Y)
+	menu.frame:SetHeight(top + rows * MENU_LINE + MENU_Y)
 	Fit()
 	MenuPaint()
 	menu.frame:ClearAllPoints()
@@ -1547,7 +1678,7 @@ function Layout.Menu(anchor, title, items, owner)
 	return menu
 end
 
--- Writes the text at the right edge of line number index of the open menu, and widens the menu for it.
+-- Writes the text at the right edge of line number index of the open menu, and widens its column for it.
 function Layout.MenuRight(index, text)
 	local line = menu and menu.anchor and menu.lines[index]
 	if line and line.item then

@@ -99,7 +99,9 @@ local FRACTION = {
 -- and it places itself from its spot (ns.MoverSpot). row names the function of ns that gives the
 -- frames the handle covers and the frame they hang from, and changed the one that is called when the
 -- spot is set or put back. gate names the function of ns that says whether the spot has an effect: an own
--- frame with a gate has a handle only while it returns true. Windows have the names Windows.lua gives them.
+-- frame with a gate has a handle only while it returns true. start names the function of ns that is given the
+-- x and y of an own frame's entry and gives where it starts while no spot is saved, for its handle and for
+-- ns.MoverSpot, when that depends on the screen. Windows have the names Windows.lua gives them.
 -- noScale marks a frame whose scale does not reach what it holds. noBox marks a window with no handle: its
 -- title bar moves it, and a handle would cover its buttons. grip sets where the title bar of a window
 -- starts and how many levels above the window it lies, for a window with its own controls in the title. A
@@ -184,10 +186,11 @@ local LIST = {
 	{ name = "FlatUIHealerMana", label = "Healer mana", point = "CENTER", kind = "hud", own = true, noScale = true, width = 158, height = 76, x = 420, y = -130,
 		gate = "HealerManaShown", changed = "HealerManaMoved" },
 	-- The bag window of Bags (BagsWindow.lua), which shows while the bags are open: its bottom right corner is the bottom right corner of the box, and
-	-- it grows up and to the left from there as its slots change. It starts above the bottom right corner of the screen, where the game's bags open.
-	-- Dragging the window by its title sets the spot too.
+	-- it grows up and to the left from there as its slots change. It starts above the bottom right corner of the screen, where the game's bags open:
+	-- further left while the right action bars stand there, so it covers none of them (ns.BagsWindowStart). Dragging the window by its title sets
+	-- the spot too.
 	{ name = "FlatUIBags", label = "Flat UI bags", point = "BOTTOMRIGHT", kind = "hud", own = true, noScale = true, width = 360, height = 260, x = -60, y = 110,
-		gate = "BagsWindowShown", changed = "BagsWindowMoved" },
+		gate = "BagsWindowShown", changed = "BagsWindowMoved", start = "BagsWindowStart" },
 	-- The bank window of Bags (BagsWindow.lua), which shows at the banker or when asked: its top left corner is the top left corner of the box, and it
 	-- grows down and to the right from there. It starts where the game's bank opens, at the left of the screen.
 	{ name = "FlatUIBank", label = "Flat UI bank", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 420, height = 300, x = 25, y = -110,
@@ -835,6 +838,21 @@ local function IsWindow(name)
 	return type(UIPanelWindows) == "table" and UIPanelWindows[name] ~= nil
 end
 
+-- Where an own frame starts while no spot is saved for it: the point, x and y of its entry, or the x and y that the function of ns its entry
+-- names in start gives from them (the bag window of Bags, left of the right action bars). A start that fails or gives no plain numbers is the
+-- entry's own.
+local function StartsAt(info)
+	local x, y = info.x, info.y
+	local start = info.start and ns[info.start]
+	if x and type(start) == "function" then
+		local ok, sx, sy = pcall(start, x, y)
+		if ok and Number(sx) and Number(sy) then
+			x, y = sx, sy
+		end
+	end
+	return info.point, x, y
+end
+
 -- Where the named point of the handle of an own frame is, in the units of UIParent from the bottom left.
 -- Nothing for a frame that has no spot and starts nowhere in particular.
 function ns.MoverSpot(name, point)
@@ -849,7 +867,8 @@ function ns.MoverSpot(name, point)
 		local x, y = OnScreen(entry.point, entry.x, entry.y, info.width, info.height)
 		left, bottom, width, height = RectAt(entry.point, x, y, info.width, info.height)
 	elseif info.x then
-		left, bottom, width, height = RectAt(info.point, info.x, info.y, info.width, info.height)
+		local from, x, y = StartsAt(info)
+		left, bottom, width, height = RectAt(from, x, y, info.width, info.height)
 	end
 	if not left then
 		return nil
@@ -1502,9 +1521,11 @@ local function HandleRect(name, info)
 		if info.gate and not (type(gate) == "function" and gate()) then
 			return nil
 		end
-		local point, x, y = info.point, info.x, info.y
+		local point, x, y
 		if entry then
 			point, x, y = entry.point, OnScreen(entry.point, entry.x, entry.y, info.width, info.height)
+		else
+			point, x, y = StartsAt(info)
 		end
 		return RectAt(point, x, y, info.width, info.height)
 	end

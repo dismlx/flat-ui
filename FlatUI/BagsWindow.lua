@@ -5,43 +5,62 @@ local _, ns = ...
 -- Windows page: the Background colour at Window opacity with a thin border (ns.Outline), and its buttons in Button and slot colour with the
 -- Highlight colour, as Windows draws the game's windows and Clean up bags its button (Windows.lua:539-552, 815-855; BagSort.lua:433-446).
 -- The title bar holds, left to right:
--- the character picker, the name of the character shown, in its class colour (RAID_CLASS_COLORS), with "as of" and the day of what is shown when
--- it is not live (date and time, WL/apis.yaml:35306, 42024). A click opens a menu of Flat UI's own (BagsLayout.lua) with every character Bags
--- keeps, by realm, this realm first; while a search is typed each line says how many items match there, worked out one character a frame once the
--- menu opens, never while the player types, from names the client has loaded only;
+-- the character picker, the name of the character shown, in its class colour (RAID_CLASS_COLORS) and with its realm when that is not this
+-- character's, with "as of" and the day of what is shown when it is not live (date and time, WL/apis.yaml:35306, 42024). A click opens a menu of
+-- Flat UI's own (BagsLayout.lua) with every character Bags keeps, by realm, this realm first; while a search is typed each line says how many items
+-- match there, the keyring's included, worked out one character a frame once the menu opens, never while the player types, from names the client
+-- has loaded only;
 -- the search box (B.Search.Box, BagsSearch.lua); the view button, Sections or Bag by bag; the sort button, on live slots only: ns.BagSort.Run and
 -- ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the game is asked to sort (BagSort tells its
 -- watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving, six and a half seconds at most, and for as
 -- long as the sort hold of Bags.lua lasts (B.Sorting), also when the window closed and opened again meanwhile; nothing arrives at the top shelf
 -- then either; the bank button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close button, a cross with no box, as Windows draws the
 -- game's.
--- Dragging the title bar moves the window (StartMoving and StopMovingOrSizing, :4797, 4813, with SetDontSavePosition and SetUserPlaced, :4605,
--- 4778, so the client keeps no place of its own). Where it is let go is saved as its spot in the movers: the box of its entry in Movers.lua, put
--- with its corner at the window's, goes to ns.MoverKit.Commit (Movers.lua:1672-1710, 4529-4532), and the window hangs from that spot
--- (ns.MoverSpot, Movers.lua:819-837), the bag window by its bottom right corner and the bank window by its top left, so each grows away from it,
--- as the Threat list hangs from its spot (Threat.lua:396-413). /flatui move shows the same box.
+-- Dragging the title bar or the character picker moves the window (StartMoving and StopMovingOrSizing, :4797, 4813, with SetDontSavePosition and
+-- SetUserPlaced, :4605, 4778, so the client keeps no place of its own); a drag that starts on the picker opens no menu. Where it is let go is saved
+-- as its spot in the movers: the box of its entry in Movers.lua, put with its corner at the window's, goes to ns.MoverKit.Commit
+-- (Movers.lua:1713-1753, 4573-4575), and the window hangs from that spot (ns.MoverSpot, Movers.lua:856-877), the bag window by its bottom right
+-- corner and the bank window by its top left, so each grows away from it, as the Threat list hangs from its spot (Threat.lua:396-413). /flatui
+-- move shows the same box. With no spot saved, the bag window starts above the bottom right corner of the screen and left of the right action
+-- bars that stand there, as the game's bags open (ns.BagsWindowStart, which Movers.lua asks for the box too): MultiBarRight and MultiBarLeft are
+-- read with widget calls only (IsVisible, GetLeft, GetRight, GetEffectiveScale), each answer through ns.IsSecret or ns.Finite.
 -- The content scrolls in a scroll frame of Flat UI's own (SetScrollChild, SetVerticalScroll, :8020, 8028) once the window would be taller than 85%
 -- of the screen, with a thin bar in the colours of Windows' scroll bars (Windows.lua:1191-1214), the wheel and the bar's thumb (GetCursorPosition,
--- WL/apis.yaml:36266). It is as wide as the layout (BagsLayout.lua) and its padding of 8 on each side.
+-- WL/apis.yaml:36266). It is as wide as the layout (BagsLayout.lua) and its padding of 8 on each side, and the bank window at least as wide as the
+-- row of BagsBank.lua over its footer.
 -- The bag window's footer has the gold of the character shown (Errands.Money, Errands.lua:65-85), whose tooltip lists the characters of this realm
--- and its connected realms, richest first, with their total, and one line for those of other realms; its free slots by kind of bag (B.Data.Free),
--- and, at a merchant, Sell junk (N) (Errands.Button, Errands.lua:127-202): N is ns.ErrandsJunkCount, what the next pass of Errands would sell, and a
--- click runs ns.ErrandsSellJunk, which sells as Errands sells and says why when it cannot. The bank window's footer has the free slots of the bank
--- and, at the banker with a search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit, B.Bank.TakeOut,
--- B.Bank.Busy, whose per-click fallback labels the button with what is left); the row above it, at the live bank only, is BagsBank.lua's
--- (B.Bank.Slots), as high as that file says. A bank never seen says how to keep one.
+-- and its connected realms, richest first, each with its realm when that is not this character's, with their total, and one line for those of
+-- other realms; its free slots by kind of bag (B.Data.Free), and, at a merchant, Sell junk (N): N is ns.ErrandsJunkCount, what the next pass of
+-- Errands would sell, and a click runs ns.ErrandsSellJunk, which sells as Errands sells and says why when it cannot. The bank window's footer has
+-- the free slots of the bank and, at the banker with a search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit,
+-- B.Bank.TakeOut, B.Bank.Busy, whose per-click fallback labels the button with what is left). These three buttons are this file's own, drawn as
+-- the title bar's are, and clicked as the game's buttons are, by the left button let go over them, as Errands.Button's are (Errands.lua:127-201).
+-- The row above the bank window's footer, at the live bank only, is BagsBank.lua's (B.Bank.Slots), as high and as wide as that file says. A bank
+-- never seen says how to keep one.
 -- Escape closes either window: both are named in UISpecialFrames, as the options window is (Panel.lua:2700-2708), whose windows the game's
 -- CloseSpecialWindows hides (UIParentPanelManager.lua:21-27). The bag window's OnHide is the one place the bags tidy up, whatever hid it: it hides
 -- the game's bag windows Bags parked (B.HideGameBags), drops every hold (B.Hold), lets New items go (B.Categories.New.Close), forgets the places of
 -- the layout (B.Layout.Closed), clears the search when the bank window is not shown, and goes back to the logged-in character (B.SetViewing). The
 -- bank window's OnHide forgets its places, clears the search when the bag window is not shown and goes back to the logged-in character; ending
--- the visit to the banker when it hides is BagsBank.lua's. Opening and closing play the game's own sounds of its bag windows (PlaySound with
--- SOUNDKIT.IG_BACKPACK_OPEN and IG_BACKPACK_CLOSE, Mainline/ContainerFrame.lua:791, 819), once a frame.
--- Warm (B.Window.Warm): after BagsItems.lua made some of the game's item buttons, the hidden bag window shows for one frame at alpha 0 with every
--- live button shown (B.Buttons.ShowAll) and hides on the next frame (C_Timer.After), doing none of the work of an opening or a closing, so that no
--- button is first shown in a fight; with the window open only the new buttons show that way, and the layout places them on the next frame.
+-- the visit to the banker when it hides is BagsBank.lua's. A window hidden only with its parent (UIParent hidden by a movie, MovieFrame.lua:59-63,
+-- the report's screenshot mode or another addon; Alt+Z and full-screen panels close the windows first, Bindings_Camelot.xml:1310-1317) keeps its
+-- own shown flag and is not closed, as Bags.lua and BagsBank.lua have it: its OnHide only ends a drag, the keyboard of the search box and a menu.
+-- A window closed while the interface is hidden hears no OnHide, so B.Window.Hide runs the steps of its closing itself then, with no sound.
+-- Opening and closing play the game's own sounds of its bag windows (PlaySound with SOUNDKIT.IG_BACKPACK_OPEN and IG_BACKPACK_CLOSE,
+-- Mainline/ContainerFrame.lua:791, 819), once a frame.
+-- A slot of the bag window that owns the game's split box (StackSplitFrame) is left to the game: before this file hides the window or a slot, and
+-- first in the OnHide of the window, of its title bar and of a footer button the window's hiding hides, B.Buttons.Unsplit (BagsItems.lua) writes
+-- 0 in the slot's field hasStackSplit, so the template's OnHide (ContainerFrame.lua:1816-1822) does not hide the box in Flat UI's taint, whichever
+-- of those frames the game tells first. The box then stays, anchored to the hidden slot, until the player presses Okay or Cancel.
+-- Warm (B.Window.Warm): after BagsItems.lua made some of the game's item buttons, the hidden bag window shows for one frame off the left edge of the
+-- screen (not clamped to it meanwhile) with every live button shown (B.Buttons.ShowAll) and hides on the next frame (C_Timer.After), doing none of
+-- the work of an opening or a closing, so that no button is first shown in a fight; with the window open only the new buttons show that way
+-- (B.Layout.Park), and the layout places them on the next frame. Nothing of it can be seen or reached by the mouse meanwhile, and none of it hides
+-- a button by its alpha: the template's SetAlpha is a Lua method of the game that fades the icon and the count only
+-- (Shared/ItemButtonTemplate.lua:239-245).
 -- Tooltips are GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, Hide). Movers asks ns.BagsWindowShown and ns.BankWindowShown whether
--- the windows have a handle (while Bags is on), and calls ns.BagsWindowMoved and ns.BankWindowMoved when their spots are set or put back.
+-- the windows have a handle (while Bags is on) and ns.BagsWindowStart where the bag window starts, and calls ns.BagsWindowMoved and
+-- ns.BankWindowMoved when their spots are set or put back.
 -- Every frame, texture and font string here is Flat UI's own. This file owns no event of the module.
 
 local B = ns.Bags
@@ -55,16 +74,22 @@ local Bank = B.Bank
 local Errands = ns.Errands
 
 -- The windows by their global names, the corner each hangs from, and the boxes of their entries in Movers.lua with where they are with no spot
--- saved (width, height, x, y from that corner of the screen).
+-- saved (width, height, x, y from that corner of the screen; the bag window's x moves left of the right action bars, ns.BagsWindowStart).
 local NAMES = { bags = "FlatUIBags", bank = "FlatUIBank" }
 local CORNERS = { bags = "BOTTOMRIGHT", bank = "TOPLEFT" }
 local BOXES = { bags = { 360, 260, -60, 110 }, bank = { 420, 300, 25, -110 } }
+-- The game's right action bars, which Edit Mode stacks at the right edge of the screen 5 units apart, how far one may stand from that edge or from
+-- the bar right of it and still count as stacked there, and the room the game's bags leave beside them (Mainline/ContainerFrame.lua:1320-1326).
+local RIGHT_BARS = { "MultiBarRight", "MultiBarLeft" }
+local BAR_SLACK, BAR_ROOM = 12, 10
 -- Units: the padding on each side, the title bar, the footer, the space between them and the content, a button of the title bar and the space
 -- between two, the close button, the least room of the picker and of the search box, and the row of BagsBank.lua before it sizes it.
 local PAD, BAR, FOOT, INNER = 8, 26, 22, 4
 local ICON, ICON_GAP, CLOSE = 18, 3, 18
 local PICKER_LEAST, PICKER_MOST, SEARCH_LEAST, SEARCH_HEIGHT = 64, 0.5, 70, 18
 local STRIP = 26
+-- How far off the left edge of the screen the window stands while the warm-up shows it.
+local PARK = 200
 -- The least height of the content, and of the room for a message; the share of the screen a window may take.
 local LEAST_VIEW, MESSAGE_VIEW, MOST = 40, 64, 0.85
 -- The scroll bar: its width, the least height of its thumb, and the rows one turn of the wheel scrolls.
@@ -106,10 +131,11 @@ local function Finite(value)
 end
 
 -- Per window ("bags", "bank"): which, frame, outline; bar and its controls (picker, search, icons, close); scroll, child (the scroll child) and
--- content (the frame BagsLayout.lua lays out in, scaled); track and thumb of the scroll bar; foot and its labels and buttons; strip (the bank's
--- row of BagsBank.lua); message. viewH, contentH, offset: the height shown, the height of the content and the scroll. placed: the spot it hangs
--- from now; dropped: where it was let go when the movers could not keep it. mode: what the last layout showed. busy: when the sort began;
--- pulsing: the sort button pulses. warming: the warm-up shows it; wantShow: an opening asked for meanwhile. open: shown for real.
+-- content (the frame BagsLayout.lua lays out in, scaled); track and thumb of the scroll bar; foot and its labels and buttons, with plates, the
+-- drawing of each button; strip (the bank's row of BagsBank.lua) and stripW, the width of that row; message. viewH, contentH, offset: the height
+-- shown, the height of the content and the scroll. placed: the spot it hangs from now; dropped: where it was let go when the movers could not keep
+-- it. mode: what the last layout showed. busy: when the sort began; pulsing: the sort button pulses. warming: the warm-up shows it; parked: it
+-- stands off the screen for the warm-up; wantShow: an opening asked for meanwhile. open: shown for real.
 local windows = {}
 -- The sounds played this frame, and whether BagSort tells this file of a sort.
 local played, watching = {}, false
@@ -317,6 +343,22 @@ local function RealmOf(c)
 	return "?"
 end
 
+-- How a character is named on its own (the window's title, the gold list, a message): its name, and its realm after it when that is not this
+-- character's, as BagsTooltip.lua's counts and the gold of DataStreams.lua name one, since characters of connected realms may share a name.
+local function Named(key, c)
+	local name = NameOf(key, c)
+	local me = Call(B, "Me")
+	local mine = type(me) == "string" and not IsSecret(me) and me:match(" %- (.+)$") or nil
+	local realm = type(c) == "table" and RealmOf(c) or nil
+	if (realm == nil or realm == "?") and type(key) == "string" and not IsSecret(key) then
+		realm = key:match(" %- (.+)$")
+	end
+	if mine and realm and realm ~= "?" and realm ~= mine then
+		return name .. " - " .. realm
+	end
+	return name
+end
+
 local function ClassRGB(class)
 	if type(class) ~= "string" or IsSecret(class) then
 		return nil
@@ -365,9 +407,10 @@ local function AsOf(seen)
 	return ("as of %d days ago"):format(days)
 end
 
--- How many items match the search among a character's slots of a window: the stacks added up, or for stacks false the slots, without the keyring.
--- Only names the client has loaded count; nothing is asked for (B.Search.Match gives nil for the others). A match that fails counts as none, so a
--- fault of the search never stops the window.
+-- How many items match the search among a character's slots of a window: for the character picker the stacks added up, the keyring's included,
+-- since the window shows and lights it; for stacks false (Deposit and Take out) the slots without the keyring, which their passes never take from
+-- (BagsBank.lua). Only names the client has loaded count; nothing is asked for (B.Search.Match gives nil for the others). A match that fails
+-- counts as none, so a fault of the search never stops the window.
 local function Matches(which, key, stacks)
 	local match = Fn(Search, "Match")
 	if not match then
@@ -376,7 +419,7 @@ local function Matches(which, key, stacks)
 	local count = 0
 	local list = Call(Data, "Containers", which, key)
 	for _, bag in ipairs(type(list) == "table" and list or {}) do
-		if Finite(bag) and bag ~= KEYRING then
+		if Finite(bag) and (stacks or bag ~= KEYRING) then
 			local slots = Call(Data, "Size", key, bag)
 			for slot = 1, Finite(slots) and slots or 0 do
 				local record = Call(Data, "Item", key, bag, slot)
@@ -448,6 +491,17 @@ local function PaintIcon(icon, alpha)
 	end
 end
 
+-- The colours of a button of the footer, as PaintIcon gives the title bar's: the box in Button and slot colour and the light under the cursor in the
+-- Highlight colour, none while the button takes no click, which also dims its label as Errands.Button does (Errands.lua:138-146).
+local function PaintPlate(plate)
+	local pr, pg, pb = LookRGB("panel", 0.12, 0.12, 0.12)
+	local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+	ns.SetOutlineFill(plate.outline, pr, pg, pb, 1)
+	ns.SetOutline(plate.outline, true, true)
+	plate.hover:SetColorTexture(ar, ag, ab, plate.usable and 0.25 or 0)
+	plate.label:SetAlpha(plate.usable and 1 or 0.45)
+end
+
 local function PaintWindow(w)
 	local r, g, b = ns.Colour("general.backdrop")
 	ns.SetOutlineFill(w.outline, r, g, b, Opacity())
@@ -472,6 +526,9 @@ local function PaintWindow(w)
 	w.trackBack:SetColorTexture(0, 0, 0, 0.3)
 	w.thumbBack:SetColorTexture(ar, ag, ab, w.thumbOver and 0.5 or 0.25)
 	w.message:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
+	for _, plate in ipairs(w.plates) do
+		PaintPlate(plate)
+	end
 end
 
 -- The window -------------------------------------------------------------------------------------------------------------------------------------
@@ -512,6 +569,15 @@ local function Sound(name)
 	end
 	played[name] = now
 	pcall(PlaySound, id)
+end
+
+-- Before this file hides the bag window, a slot of it or a frame that holds one, and first in the OnHide of the frames the window's hiding hides: a
+-- live slot that owns the game's split box leaves it to the game (B.Buttons.Unsplit, BagsItems.lua), so the template's OnHide does not hide the
+-- box in Flat UI's taint. With a button, that one; else every live slot. The bank window has none.
+local function Unsplit(w, button)
+	if w.which == "bags" then
+		Call(Buttons, "Unsplit", button)
+	end
 end
 
 -- The sort button ----------------------------------------------------------------------------------------------------------------------------------
@@ -615,40 +681,9 @@ local function MakeClose(w)
 	close.lines = { Stroke(button, "OVERLAY", 5, 5, 13, 13), Stroke(button, "OVERLAY", 5, 13, 13, 5) }
 	close.hover = { Stroke(button, "HIGHLIGHT", 5, 5, 13, 13), Stroke(button, "HIGHLIGHT", 5, 13, 13, 5) }
 	button:SetScript("OnClick", function()
-		w.frame:Hide()
+		Window.Hide(w.which)
 	end)
 	w.close = close
-end
-
-local function MakePicker(w)
-	local button = Own(CreateFrame("Button", nil, w.bar))
-	button:SetHeight(ICON)
-	button:RegisterForClicks("LeftButtonUp")
-	w.pickerLight = Own(button:CreateTexture(nil, "HIGHLIGHT"))
-	w.pickerLight:SetAllPoints(button)
-	local text = ns.OwnText(button, "OVERLAY", "GameFontHighlightSmall")
-	text:SetPoint("LEFT", button, "LEFT", 4, 0)
-	text:SetJustifyH("LEFT")
-	text:SetWordWrap(false)
-	w.picker, w.pickerText = button, text
-	-- A small chevron at its right: it opens a list.
-	w.chevron = {}
-	for index, s in ipairs({ { -11, 1.5, -8, -1.5 }, { -8, -1.5, -5, 1.5 } }) do
-		local line = Own(button:CreateLine(nil, "OVERLAY", nil, 2))
-		line:SetThickness(1.5)
-		line:SetStartPoint("RIGHT", button, s[1], s[2])
-		line:SetEndPoint("RIGHT", button, s[3], s[4])
-		w.chevron[index] = line
-	end
-	button:SetScript("OnClick", function()
-		Run("window", Clicks.picker, w)
-	end)
-	button:SetScript("OnEnter", function()
-		Run("window", Tips.picker, w, button)
-	end)
-	button:SetScript("OnLeave", function()
-		Untip(button)
-	end)
 end
 
 -- A drag of the title bar: the window follows the cursor, and where it is let go becomes its spot.
@@ -714,6 +749,46 @@ local function Dropped(w)
 	Window.Place(which)
 end
 
+local function MakePicker(w)
+	local button = Own(CreateFrame("Button", nil, w.bar))
+	button:SetHeight(ICON)
+	button:RegisterForClicks("LeftButtonUp")
+	w.pickerLight = Own(button:CreateTexture(nil, "HIGHLIGHT"))
+	w.pickerLight:SetAllPoints(button)
+	local text = ns.OwnText(button, "OVERLAY", "GameFontHighlightSmall")
+	text:SetPoint("LEFT", button, "LEFT", 4, 0)
+	text:SetJustifyH("LEFT")
+	text:SetWordWrap(false)
+	w.picker, w.pickerText = button, text
+	-- A small chevron at its right: it opens a list.
+	w.chevron = {}
+	for index, s in ipairs({ { -11, 1.5, -8, -1.5 }, { -8, -1.5, -5, 1.5 } }) do
+		local line = Own(button:CreateLine(nil, "OVERLAY", nil, 2))
+		line:SetThickness(1.5)
+		line:SetStartPoint("RIGHT", button, s[1], s[2])
+		line:SetEndPoint("RIGHT", button, s[3], s[4])
+		w.chevron[index] = line
+	end
+	button:SetScript("OnClick", function()
+		Run("window", Clicks.picker, w)
+	end)
+	button:SetScript("OnEnter", function()
+		Run("window", Tips.picker, w, button)
+	end)
+	button:SetScript("OnLeave", function()
+		Untip(button)
+	end)
+	-- The picker covers much of the title bar, so a drag that starts on it moves the window as the bar's does; a drag gives no click, so it opens
+	-- no menu.
+	button:RegisterForDrag("LeftButton")
+	button:SetScript("OnDragStart", function()
+		Run("window", DragStart, w)
+	end)
+	button:SetScript("OnDragStop", function()
+		Run("window", Dropped, w)
+	end)
+end
+
 local function MakeBar(w)
 	local frame = w.frame
 	local bar = Own(CreateFrame("Frame", nil, frame))
@@ -728,8 +803,10 @@ local function MakeBar(w)
 	bar:SetScript("OnDragStop", function()
 		Run("window", Dropped, w)
 	end)
-	-- A drag that ends off the bar still ends.
+	-- A drag that ends off the bar still ends. The bar may hear the window's hiding before the window does, so it leaves the game's split box to
+	-- the game first (Unsplit).
 	bar:SetScript("OnHide", function()
+		Unsplit(w)
 		if w.moving then
 			Run("window", Dropped, w)
 		end
@@ -796,12 +873,13 @@ function ArrangeBar(w)
 	end
 end
 
--- The name in the picker: the character shown in its class colour, then what is shown when it is not live, dim.
+-- The name in the picker: the character shown in its class colour, with its realm when that is not this character's, then what is shown when it is
+-- not live, dim.
 function TitleLine(w)
 	local which = w.which
 	local key, _, live = Layout.Viewed(which)
 	local c = CharacterOf(key)
-	local text = ClassHex(c and c.class) .. Plain(NameOf(key, c)) .. "|r"
+	local text = ClassHex(c and c.class) .. Plain(Named(key, c)) .. "|r"
 	local parts = {}
 	if which == "bank" then
 		parts[#parts + 1] = Word("BANK", "Bank")
@@ -999,7 +1077,7 @@ local function GoldTip(w, owner)
 			break
 		end
 		local r, g, b = ClassRGB(c.class)
-		tip:AddDoubleLine(Plain(NameOf(c.key, c)), Money(c.money), r or 1, g or 1, b or 1, 1, 1, 1)
+		tip:AddDoubleLine(Plain(Named(c.key, c)), Money(c.money), r or 1, g or 1, b or 1, 1, 1, 1)
 	end
 	if #near > 1 then
 		tip:AddDoubleLine("Total", Money(total), DIM[1], DIM[2], DIM[3], 1, 1, 1)
@@ -1138,6 +1216,61 @@ local function MoveClick(w, kind)
 	Request("footer", "bank")
 end
 
+-- A button of the footer (Sell junk, Deposit, Take out): a plate of this file's own, drawn as the title bar's buttons are (PaintPlate), with a label.
+-- It is clicked as a button of the game's is, by the left button let go over it, and takes no click while SetUsable says no; SetLabel writes its
+-- label, and it hides itself once the question given to Keep, asked every frame while it shows, says it is no longer wanted, whatever missed the
+-- end of a merchant or a pass, as Errands.Button's do (Errands.lua:127-201).
+local function FootButton(w, text, width, onClick, onEnter)
+	local button = Own(CreateFrame("Button", nil, w.foot))
+	button:SetSize(width, FOOT_BUTTON)
+	button:RegisterForClicks("LeftButtonUp")
+	local plate = { button = button, usable = true }
+	plate.outline = ns.Outline(button, button)
+	plate.hover = Own(button:CreateTexture(nil, "HIGHLIGHT"))
+	plate.hover:SetAllPoints(button)
+	plate.label = ns.OwnText(button, "OVERLAY", "GameFontHighlightSmall")
+	plate.label:SetPoint("CENTER", button, "CENTER", 0, 0)
+	plate.label:SetWordWrap(false)
+	plate.label:SetText(text)
+	button:SetScript("OnClick", function()
+		if plate.usable then
+			onClick(button)
+		end
+	end)
+	button:SetScript("OnEnter", function()
+		onEnter(button)
+	end)
+	button:SetScript("OnLeave", function()
+		Untip(button)
+	end)
+	-- Hidden under the cursor, it takes its tooltip with it. Hidden by the window's hiding, it may hear that before the window does, so the game's
+	-- split box is left to the game first (Unsplit).
+	button:SetScript("OnHide", function()
+		if not w.frame:IsVisible() then
+			Unsplit(w)
+		end
+		Untip(button)
+	end)
+	function button.Keep(wanted)
+		button:SetScript("OnUpdate", function()
+			local ok, keep = pcall(wanted)
+			if not ok or not keep then
+				button:Hide()
+			end
+		end)
+	end
+	function button.SetUsable(on)
+		plate.usable = on == true
+		PaintPlate(plate)
+	end
+	function button.SetLabel(words)
+		plate.label:SetText(words)
+	end
+	w.plates[#w.plates + 1] = plate
+	PaintPlate(plate)
+	return button
+end
+
 local function MakeFoot(w)
 	local frame = w.frame
 	local foot = Own(CreateFrame("Frame", nil, frame))
@@ -1161,18 +1294,14 @@ local function MakeFoot(w)
 		strip:Hide()
 		w.strip = strip
 	end
-	if type(Errands) ~= "table" or type(Errands.Button) ~= "function" then
-		return
-	end
 	if w.which == "bags" then
 		w.gold = FootLabel(w, GoldTip)
 		w.gold.text:SetJustifyH("LEFT")
-		local sell = Errands.Button(foot, "Sell junk", SELL_W, function()
+		local sell = FootButton(w, "Sell junk", SELL_W, function()
 			Run("window", SellClick, w)
 		end, function(button)
 			Run("window", SellTip, w, button)
 		end)
-		sell:SetHeight(FOOT_BUTTON)
 		sell:Hide()
 		-- It hides itself once it is no longer wanted, whatever missed the merchant's closing.
 		sell.Keep(function()
@@ -1181,12 +1310,11 @@ local function MakeFoot(w)
 		w.sell = sell
 	else
 		for _, kind in ipairs({ "deposit", "takeout" }) do
-			local button = Errands.Button(foot, kind == "deposit" and "Deposit" or "Take out", MOVE_W, function()
+			local button = FootButton(w, kind == "deposit" and "Deposit" or "Take out", MOVE_W, function()
 				Run("window", MoveClick, w, kind)
 			end, function(owner)
 				Run("window", MoveTip, w, owner, kind)
 			end)
-			button:SetHeight(FOOT_BUTTON)
 			button:Hide()
 			button.Keep(function()
 				return w.moveOn == true and Call(Bank, "Live") == true and Shown(w)
@@ -1326,19 +1454,22 @@ local function Message(w)
 	if mine then
 		return "Visit a banker once with Flat UI bags on, and your bank shows here wherever you are."
 	end
-	return ("%s has not visited a banker with Flat UI bags on."):format(Plain(NameOf(key, c)))
+	return ("%s has not visited a banker with Flat UI bags on."):format(Plain(Named(key, c)))
 end
 
--- Sizes the window to its layout: as wide as the content and its padding (at least as wide as the title bar needs), as high as the title bar, the
--- content, the bank's row and the footer, at most 85% of the screen, the content scrolling past that.
+-- Sizes the window to its layout: as wide as the content and its padding (at least as wide as the title bar needs, and as the bank's row while it
+-- shows), as high as the title bar, the content, the bank's row and the footer, at most 85% of the screen, the content scrolling past that.
 function Resize(w)
 	local which = w.which
 	local cw, ch = Layout.Size(which)
 	cw = Finite(cw) and math.max(0, cw) or 0
 	ch = Finite(ch) and math.max(0, ch) or 0
 	local least = 2 * PAD + PICKER_LEAST + (w.search and (SEARCH_LEAST + 12) or 6) + 3 * (ICON + ICON_GAP) + CLOSE + 8
-	local width = math.max(least, math.ceil(cw + 2 * PAD))
 	local strip = StripHeight(w)
+	if strip > 0 then
+		least = math.max(least, math.ceil((w.stripW or 0) + 2 * PAD))
+	end
+	local width = math.max(least, math.ceil(cw + 2 * PAD))
 	local fixed = BAR + INNER + INNER + FOOT + (strip > 0 and (strip + INNER) or 0)
 	local okScreen, screen = pcall(UIParent.GetHeight, UIParent)
 	screen = okScreen and Finite(screen) and screen > 0 and screen or 768
@@ -1375,23 +1506,26 @@ function Resize(w)
 end
 
 -- The bank's row of BagsBank.lua is laid out again in the strip this file gives it, which takes the height B.Bank.Slots returns and hides when
--- that is 0 (away from the live bank). The row belongs to the live bank, so it is not asked for while the window shows a snapshot or another
--- character.
+-- that is 0 (away from the live bank); the width it returns is kept (stripW), so the window is never narrower than the row. The row belongs to
+-- the live bank, so it is not asked for while the window shows a snapshot or another character.
 local function Slots(w)
 	local strip = w.strip
 	if not strip then
 		return
 	end
-	local height = 0
+	local width, height = 0, 0
 	local _, _, live = Layout.Viewed(w.which)
 	if live then
-		local _, h = Call(Bank, "Slots", strip)
+		local wide, h = Call(Bank, "Slots", strip)
 		height = Finite(h) and h > 0 and h or 0
+		width = Finite(wide) and wide > 0 and wide or 0
 	end
 	if height > 0 then
+		w.stripW = width
 		strip:SetHeight(height)
 		strip:Show()
 	else
+		w.stripW = 0
 		strip:Hide()
 	end
 end
@@ -1441,7 +1575,7 @@ local function Make(which)
 	pcall(frame.SetDontSavePosition, frame, true)
 	frame:SetSize(BOXES[which][1], BOXES[which][2])
 	frame:Hide()
-	local w = { which = which, frame = frame, icons = {}, rules = {}, offset = 0 }
+	local w = { which = which, frame = frame, icons = {}, rules = {}, plates = {}, offset = 0 }
 	windows[which] = w
 	w.outline = ns.Outline(frame, frame)
 	MakeBar(w)
@@ -1485,9 +1619,26 @@ function Showing(w)
 end
 
 -- The one place the bags tidy up when the bag window hides, whatever hid it (its close button, a key, Escape, the page going off); each step runs
--- alone, so one that fails leaves the others done. The bank window forgets its places and goes back to the logged-in character.
-function Hiding(w)
+-- alone, so one that fails leaves the others done. The bank window forgets its places and goes back to the logged-in character. quiet: the window
+-- closed while the player could not see it (Window.Hide), which plays no sound.
+function Hiding(w, quiet)
+	-- First, since the slots may hear the hiding after the window: a slot that owns the game's split box leaves it to the game.
+	Unsplit(w)
 	if w.warming then
+		return
+	end
+	if w.frame:IsShown() then
+		-- Hidden only with its parent (the interface hidden by a movie, the report's screenshot mode or another addon): the window keeps its own
+		-- shown flag and is not closed, as Tidy of Bags.lua and BagsBank.lua have it, so nothing is tidied, no hold goes and no sound plays. Only what
+		-- cannot outlive the hiding ends: a drag (where it was let go is kept, as the bar's OnHide keeps it), the search's keyboard and a menu.
+		w.drag = nil
+		if w.moving then
+			Dropped(w)
+		end
+		if w.search then
+			pcall(w.search.ClearFocus, w.search)
+		end
+		Layout.CloseMenu(w.which)
 		return
 	end
 	w.open, w.drag = false, nil
@@ -1518,7 +1669,9 @@ function Hiding(w)
 		end
 		Run("window", Call, B, "SetViewing", "bank", nil)
 	end
-	Sound("IG_BACKPACK_CLOSE")
+	if not quiet then
+		Sound("IG_BACKPACK_CLOSE")
+	end
 end
 
 -- The contract (B.Window) -------------------------------------------------------------------------------------------------------------------------
@@ -1532,14 +1685,17 @@ function Window.Get(which)
 	return w.frame
 end
 
--- Puts the window at its spot in the movers: the bag window's bottom right corner, the bank window's top left.
+-- Puts the window at its spot in the movers: the bag window's bottom right corner, the bank window's top left. With no spot saved that is where the
+-- entry starts, the bag window left of the right action bars (ns.BagsWindowStart). Not while it is dragged, nor while the warm-up keeps it off the
+-- screen: the end of the warm-up places it.
 function Window.Place(which)
 	local w = windows[which]
-	if not w or w.moving then
+	if not w or w.moving or w.parked then
 		return
 	end
 	local corner = CORNERS[which]
 	local x, y
+	local anchor = "BOTTOMLEFT"
 	if type(ns.MoverSpot) == "function" then
 		x, y = ns.MoverSpot(NAMES[which], corner)
 	end
@@ -1549,19 +1705,22 @@ function Window.Place(which)
 			x, y = w.dropped[1], w.dropped[2]
 		end
 	end
-	local key = x and ("%.2f:%.2f"):format(x, y) or "start"
+	if not (Finite(x) and Finite(y)) then
+		-- No spot from the movers: the box's own start, from that corner of the screen.
+		local box = BOXES[which]
+		x, y, anchor = box[3], box[4], corner
+		if which == "bags" then
+			x, y = ns.BagsWindowStart(x, y)
+		end
+	end
+	local key = ("%s:%.2f:%.2f"):format(anchor, x, y)
 	if w.placed == key then
 		return
 	end
 	w.placed = key
 	local frame = w.frame
 	frame:ClearAllPoints()
-	if x then
-		frame:SetPoint(corner, UIParent, "BOTTOMLEFT", x, y)
-	else
-		local box = BOXES[which]
-		frame:SetPoint(corner, UIParent, corner, box[3], box[4])
-	end
+	frame:SetPoint(corner, UIParent, anchor, x, y)
 end
 
 -- Shows the window, laid out afresh. An opening asked for while it is open lays it out again only when it would show something else now (the
@@ -1589,6 +1748,8 @@ function Window.Show(which)
 	w.frame:Show()
 end
 
+-- Hides the window, once a slot that owns the game's split box has left it to the game. A window the player cannot see (the interface hidden) hears
+-- no OnHide when it hides, so the steps of its closing run here then, with no sound.
 function Window.Hide(which)
 	local w = windows[which]
 	if not w then
@@ -1599,7 +1760,12 @@ function Window.Hide(which)
 		return
 	end
 	if w.frame:IsShown() then
+		Unsplit(w)
+		local visible = w.frame:IsVisible() == true
 		w.frame:Hide()
+		if not visible then
+			Run("window", Hiding, w, true)
+		end
 	end
 end
 
@@ -1664,33 +1830,49 @@ function Window.Paint()
 	Call(Buttons, "Paint")
 end
 
+-- The warm-up's window stands off the left edge of the screen and is not clamped to it meanwhile, so nothing of it can be seen or reached by the
+-- mouse; the end of the warm-up puts it back at its spot, clamped again.
+local function Park(w, on)
+	if on then
+		w.parked = true
+		w.frame:SetClampedToScreen(false)
+		w.frame:ClearAllPoints()
+		w.frame:SetPoint("TOPRIGHT", UIParent, "TOPLEFT", -PARK, 0)
+	elseif w.parked then
+		w.parked, w.placed = nil, nil
+		w.frame:SetClampedToScreen(true)
+		Window.Place(w.which)
+	end
+end
+
 local function WarmEnd(w)
 	w.warmQueued = false
-	if w.warming then
-		Call(Buttons, "ShowAll", false)
-		if w.wantShow and On() then
-			-- An opening came while the window warmed up: the shown window turns into it.
-			w.warming, w.wantShow = false, false
-			w.frame:SetAlpha(1)
-			w.frame:EnableMouse(true)
-			Showing(w)
-		else
-			w.frame:Hide()
-			w.warming, w.wantShow = false, false
-			w.frame:SetAlpha(1)
-			w.frame:EnableMouse(true)
-		end
-		return
-	end
+	-- The new buttons the open window showed off the screen: each its layout does not show hides again. Their places were forgotten when they were
+	-- parked (B.Layout.Park), so the layout's next pass anchors each in its cell. Also when the window closed and warms up again meanwhile.
 	local new = w.warmButtons
 	w.warmButtons = nil
 	if new then
 		for button in pairs(new) do
-			button:SetAlpha(1)
 			if not Layout.Placed(w.which, button) then
+				Unsplit(w, button)
 				button:Hide()
 			end
 		end
+	end
+	if w.warming then
+		Call(Buttons, "ShowAll", false)
+		-- Back at its spot first, for an opening as for the hiding.
+		Park(w, false)
+		if w.wantShow and On() then
+			-- An opening came while the window warmed up: the shown window turns into it.
+			w.warming, w.wantShow = false, false
+			Showing(w)
+		else
+			Unsplit(w)
+			w.frame:Hide()
+			w.warming, w.wantShow = false, false
+		end
+		return
 	end
 	if Shown(w) then
 		Run("layout", Layout.Render, w.which)
@@ -1722,8 +1904,7 @@ local function Warming(w, buttons)
 	end
 	if not w.frame:IsShown() then
 		w.warming, w.wantShow = true, false
-		w.frame:SetAlpha(0)
-		w.frame:EnableMouse(false)
+		Park(w, true)
 		Layout.Adopt("bags")
 		w.frame:Show()
 		Call(Buttons, "ShowAll", true)
@@ -1732,7 +1913,7 @@ local function Warming(w, buttons)
 		Layout.Adopt("bags")
 		for _, button in ipairs(type(buttons) == "table" and buttons or Unplaced(w)) do
 			if type(button) == "table" and not Layout.Placed("bags", button) then
-				button:SetAlpha(0)
+				Layout.Park(button)
 				button:Show()
 				w.warmButtons[button] = true
 			end
@@ -1758,6 +1939,71 @@ function Window.Warm(which, buttons)
 end
 
 -- Movers ------------------------------------------------------------------------------------------------------------------------------------------
+
+-- The left and right edges of a game frame while it shows, in UIParent's units, read with widget calls only (IsVisible, GetLeft, GetRight,
+-- GetEffectiveScale), each answer through ns.IsSecret or ns.Finite; nil for a frame that is missing, forbidden or hidden, or does not say.
+local function BarEdges(name)
+	local frame = _G[name]
+	if ns.Forbidden(frame) then
+		return nil
+	end
+	local okShown, shown = pcall(frame.IsVisible, frame)
+	if not okShown or IsSecret(shown) or shown ~= true then
+		return nil
+	end
+	local okLeft, left = pcall(frame.GetLeft, frame)
+	local okRight, right = pcall(frame.GetRight, frame)
+	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
+	local okBase, base = pcall(UIParent.GetEffectiveScale, UIParent)
+	if not (okLeft and okRight and okScale and okBase and Finite(left) and Finite(right) and Finite(scale) and Finite(base)) or base <= 0 then
+		return nil
+	end
+	local k = scale / base
+	return left * k, right * k
+end
+
+-- How far in from the right edge of the screen the right action bars reach, in UIParent's units, or 0. A bar that shows counts when its right edge
+-- stands at the edge of the screen, or at the left edge of a bar that counts, give or take BAR_SLACK, as Edit Mode stacks them there
+-- (Blizzard_EditMode/Shared/EditModeManager.lua:598-636); one the player moved anywhere else does not, as the game counts only bars in their
+-- place (EditModeUtil.lua:39-63).
+local function RightBarsRoom()
+	local ok, screen = pcall(UIParent.GetRight, UIParent)
+	if not ok or not Finite(screen) then
+		return 0
+	end
+	local bars = {}
+	for _, name in ipairs(RIGHT_BARS) do
+		local left, right = BarEdges(name)
+		if left and right > left then
+			bars[#bars + 1] = { left = left, right = right }
+		end
+	end
+	table.sort(bars, function(a, b)
+		return a.right > b.right
+	end)
+	local edge = screen
+	for _, bar in ipairs(bars) do
+		if math.abs(bar.right - edge) <= BAR_SLACK then
+			edge = math.min(edge, bar.left)
+		end
+	end
+	return math.max(0, screen - edge)
+end
+
+-- Where the bag window starts while no spot is saved for it, from the x and y of its entry in Movers.lua, which asks (start = "BagsWindowStart") for
+-- the window and its box alike: as the game's bags open, BAR_ROOM left of the right action bars that show (GetInitialContainerFrameOffsetX,
+-- Mainline/ContainerFrame.lua:1320-1326, with EditModeUtil:GetRightActionBarWidth, Blizzard_EditMode/Shared/EditModeUtil.lua:65-69), and never
+-- nearer the edge of the screen than the entry's x. The window follows a change of the bars when it is next placed (Window.Place).
+function ns.BagsWindowStart(x, y)
+	if not Finite(x) then
+		return x, y
+	end
+	local room = RightBarsRoom()
+	if room > 0 then
+		x = math.min(x, -(room + BAR_ROOM))
+	end
+	return x, y
+end
 
 -- The windows have a handle in the movers while Bags is on, open or not, as the other frames of Flat UI's own have one while their page is on.
 function ns.BagsWindowShown()
@@ -1935,7 +2181,8 @@ function Tips.sort(w, owner)
 	end
 end
 
--- The bank button: the bank of the character the bag window shows, live at the banker and as last seen anywhere else (B.Bank.Toggle).
+-- The bank button: the bank of the character the bag window shows (B.Bank.Toggle), live at the banker while At the banker is Flat UI's bank
+-- window, and as last seen anywhere else, and also at the banker with the game's bank window, which is the live one then.
 function Clicks.bank(w)
 	local key, mine = Layout.Viewed("bags")
 	Call(Bank, "Toggle", (not mine) and key or nil)
@@ -1943,9 +2190,11 @@ end
 
 function Tips.bank(w, owner)
 	local key, mine = Layout.Viewed("bags")
-	if mine then
+	if mine and Opt("bank") == "game" then
+		Say(owner, Word("BANK", "Bank"), "Your bank as you last left it. At the banker the game's bank window is the live one.")
+	elseif mine then
 		Say(owner, Word("BANK", "Bank"), "Your bank: live at the banker, and as you last left it anywhere else.")
 	else
-		Say(owner, Word("BANK", "Bank"), ("The bank of %s, as it was last seen."):format(Plain(NameOf(key, CharacterOf(key)))))
+		Say(owner, Word("BANK", "Bank"), ("The bank of %s, as it was last seen."):format(Plain(Named(key, CharacterOf(key)))))
 	end
 end

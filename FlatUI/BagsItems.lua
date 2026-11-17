@@ -4,11 +4,12 @@ local _, ns = ...
 -- of BagsData.lua on them, dims them for the search, follows their locks and cooldowns, and holds the click and tooltip code of the buttons that
 -- are Flat UI's own. Bags.lua makes ns.Bags and every sub-table of it; this file only adds the fields of B.Buttons, and looks each function of
 -- another file up when it calls it. It writes no field on a frame of the game's and calls none of the game's bag functions: the helpers of the
--- game it calls (SetItemButtonCount, CooldownFrame_Set) and the template's methods write fields of this addon's own buttons only. Besides the
--- calls named below it makes widget calls on frames and regions of its own only (CreateFrame, CreateTexture, SetParent, GetParent, SetID,
--- SetPoint, SetAllPoints, ClearAllPoints, GetFrameLevel, SetFrameLevel, Show, Hide, SetShown, IsShown, IsVisible, SetScript, RegisterForClicks,
--- RegisterForDrag, and the texture, text and animation calls of its look), and asks InCombatLockdown, GetTime and C_Timer.After. A hidden frame
--- of its own on UIParent holds the holders until the bag window exists.
+-- game it calls (SetItemButtonCount, CooldownFrame_Set) and the template's methods write fields of this addon's own buttons only, and so does
+-- B.Buttons.Unsplit, the one field it writes itself (hasStackSplit, below). Besides the calls named below it makes widget calls on frames and
+-- regions of its own only (CreateFrame, CreateTexture, SetParent, GetParent, SetID, SetPoint, SetAllPoints, ClearAllPoints, GetFrameLevel,
+-- SetFrameLevel, Show, Hide, SetShown, IsShown, IsVisible, SetScript, RegisterForClicks, RegisterForDrag, and the texture, text and animation
+-- calls of its look), and asks InCombatLockdown, GetTime and C_Timer.After. A hidden frame of its own on UIParent holds the holders until the bag
+-- window exists.
 --
 -- Live bag slots are the game's own template, ContainerFrameItemButtonTemplate (Blizzard_UIPanels_Game/Mainline/ContainerFrame.xml:77-169), made
 -- with CreateFrame("ItemButton", "FlatUIBag<bag + 10>Slot<slot>", holder, template), as the game makes item buttons elsewhere
@@ -24,12 +25,21 @@ local _, ns = ...
 -- sell, deposit at the banker, mail, trade, post at the auction house, split a stack, link, dress up and drag, and its OnEnter is the game's
 -- tooltip with the compare, which also takes the game's new flag off (ContainerFrame.lua:1735-1775). No script is set on these buttons.
 -- They are made out of combat only, STEP to a frame, by B.Buttons.Prepare (Bags.lua at Start, BagsData.lua at BAG_CONTAINER_UPDATE); a call made
--- in a fight waits for its end with a flag of its own, since ns.OutOfCombat keeps every call it is given (Core.lua:1837-1843). The layout may ask
+-- in a fight waits for its end with a flag of its own, since ns.OutOfCombat keeps every call it is given (Core.lua:1884-1891). The layout may ask
 -- for a missing one (B.Buttons.Live), which is then made at once, out of combat only. Bag addons of this client found slots made by addon code
 -- failing when they were first shown in a fight, so as a precaution each Prepare run that made buttons hands them to B.Window.Warm, which shows
--- them once at alpha 0 (design §2.5.1), and PLAYER_REGEN_DISABLED, which comes before the lockdown (Cooldowns.lua:1738-1739), makes every missing
--- button at once and warms those the same way. B.Buttons.ShowAll(true) shows every live button for the warm-up, and ShowAll(false) puts each back
--- as it was. The game's source shows no mechanism that needs it (the first OnShow only registers a callback, Shared/ItemButtonTemplate.lua:22-29).
+-- them once off the screen (design §2.5.1), and PLAYER_REGEN_DISABLED, which comes before the lockdown (Cooldowns.lua:1738-1739), makes every
+-- missing button at once and warms those the same way. B.Buttons.ShowAll(true) shows every live button for the warm-up, and ShowAll(false) puts
+-- each back as it was. The game's source shows no mechanism that needs it (the first OnShow only registers a callback,
+-- Shared/ItemButtonTemplate.lua:22-29). The template's SetAlpha is a Lua method of the game that fades the icon, its borders, the stock and the
+-- count only (Shared/ItemButtonTemplate.lua:239-245), so nothing here or in the warm-up hides a button by its alpha.
+-- A shift-click on a live slot opens the game's split box (StackSplitFrame) through the template's own click, which writes 1 in the button's field
+-- hasStackSplit (ContainerFrame.lua:1805-1813; Mainline/StackSplitFrame.lua:3-16); the template's OnHide hides the box while that field is 1
+-- (ContainerFrame.lua:1816-1822), and the box's OnHide runs the up of every key it took through RunBinding (StackSplitFrame.lua:284-299), which is
+-- protected for movement. A hiding made by this addon's code would run all of that in Flat UI's taint, so B.Buttons.Unsplit writes 0 there, as
+-- the game does when the box closes or moves to another slot (:5, 293), before this file, BagsLayout.lua, BagsWindow.lua or Bags.lua hides a live
+-- button or a frame that holds one, and first in the OnHide of the bag window, its title bar and its footer buttons, whichever hears it first. The
+-- box is then the game's alone and stays, anchored to the hidden slot, until the player presses Okay or Cancel.
 --
 -- Bank slots (FlatUIBankTab<tab>Slot<slot>, tabs 6 to 14), the bank's bag slots (FlatUIBankBag<n>, container -2, Camelot/BankFrame.lua:136-191,
 -- 301-327) and the slots of other characters and of the bank away from the banker (FlatUIBagsCached<n>, pooled per owner) are ItemButtons of this
@@ -47,10 +57,11 @@ local _, ns = ...
 --   slot is read with C_Container.GetContainerItemLink, and a cached link is made whole with C_Item.GetItemInfo first. Any other click on a cached
 --   slot does nothing, so a cached slot never reaches the game's click.
 -- - The tooltip is GameTooltip: SetOwner, then SetBagItem for a live bank slot or bank bag slot, or SetHyperlink and a line "Last seen ..." from
---   B.Data.Characters (the days counted with date and time) for a cached one, then Show, out of a fight. The sell price stays: on this build it is
---   plain text (Blizzard_GameTooltip/Mainline/GameTooltip.lua:325-333). In a fight it is the name (C_Item.GetItemNameByID while the record has
---   none), the count and that line in plain lines (SetText, AddLine), the rule Chat keeps for link tooltips (Core.lua:149-153), and so is the
---   tooltip of an item the game builds none for. When the mouse leaves, it is hidden while the button owns it (IsOwned, Hide).
+--   B.Data.Characters (the days counted from the local noon of one day to the other's with date and time, rounded, as the window's title counts
+--   them) for a cached one, then Show, out of a fight. The sell price stays: on this build it is plain text
+--   (Blizzard_GameTooltip/Mainline/GameTooltip.lua:325-333). In a fight it is the name (C_Item.GetItemNameByID while the record has none), the
+--   count and that line in plain lines (SetText, AddLine), the rule Chat keeps for link tooltips (Core.lua:198-200), and so is the tooltip of an
+--   item the game builds none for. When the mouse leaves, it is hidden while the button owns it (IsOwned, Hide).
 --
 -- The look is set once on each button, as Windows restyles the game's slots (Windows.lua:1123-1189): the NormalTexture at alpha 0, the rounded
 -- Mask taken off the icon and off the pushed texture (RemoveMaskTexture; it is put on in Shared/ItemButtonTemplate.lua:16-20), the highlight and
@@ -73,7 +84,7 @@ local _, ns = ...
 -- this character's items, with Unusable asked by bag and slot for a live slot and by link for the bank away from the banker, and the BoE mark
 -- alone on another character's, since the other two describe the character playing. The junk coin shows B.Categories.IsJunk, Errands' own test
 -- of the slot for a live slot of the bags. The search dims through the item button's SetMatchesSearch (Shared/ItemButtonTemplate.lua:49-56,
--- 96-116), and the level and marks fade to 0.4. A name the client has not loaded is asked for once through B.Data.Want (Core.lua:139-140). An
+-- 96-116), and the level and marks fade to 0.4. A name the client has not loaded is asked for once through B.Data.Want (Core.lua:138-139). An
 -- empty slot of a special bag takes a fill of its kind, and the free slot of a kind its count.
 --
 -- Events this file owns (design §2.8), each run as the part "items" while Bags is on, with the work in its order:
@@ -1179,8 +1190,10 @@ local function Built(ok, answer)
 	return ok and not ns.IsSecret(answer) and answer == true
 end
 
--- How old a time of BagsData's records is, in days of the calendar: today, yesterday, or so many days ago.
-local function DayOf(stamp)
+-- How old a time of BagsData's records is, in days of the calendar: today, yesterday, or so many days ago. The days are counted from the local
+-- noon of one day to the other's and rounded, as the window's title (BagsWindow.lua, AsOf) and BagsData's age count them, so a change of summer
+-- time between the two counts no day.
+local function NoonOf(stamp)
 	local ok, parts = pcall(date, "*t", stamp)
 	if not ok or not Usable(parts) then
 		return nil
@@ -1189,7 +1202,7 @@ local function DayOf(stamp)
 	if not okNoon or not ns.Finite(noon) then
 		return nil
 	end
-	return math.floor(noon / DAY)
+	return noon
 end
 
 local function SeenPhrase(stamp)
@@ -1200,11 +1213,11 @@ local function SeenPhrase(stamp)
 	if not okNow or not ns.Finite(now) then
 		return nil
 	end
-	local today, seen = DayOf(now), DayOf(stamp)
+	local today, seen = NoonOf(now), NoonOf(stamp)
 	if today == nil or seen == nil then
 		return nil
 	end
-	local days = today - seen
+	local days = math.floor((today - seen) / DAY + 0.5)
 	if days <= 0 then
 		return SEEN.today
 	elseif days == 1 then
@@ -1644,8 +1657,34 @@ function Buttons.Release(owner)
 	end
 end
 
--- B.Buttons.ShowAll(on): with true, every live button the bags have now is shown, for the warm-up of B.Window.Warm, which shows the window at alpha
--- 0 for one frame (design §2.5.1); with false, each goes back to the shown flag it had.
+-- The game's split box is left to the game (see the top of the file): a live button that owns it (hasStackSplit 1, written by the game) gets the 0
+-- the game writes when the box closes, so the template's OnHide does not hide the box when this addon hides the button.
+local function Unsplit(button)
+	local ok, value = pcall(rawget, button, "hasStackSplit")
+	if ok and not ns.IsSecret(value) and value == 1 then
+		button.hasStackSplit = 0
+	end
+end
+
+-- B.Buttons.Unsplit(button): called before Flat UI's code hides a live button or a frame that holds one (the bag window, its content, a holder).
+-- With a button, that one, when it is a live one; with none, every live button.
+function Buttons.Unsplit(button)
+	if button ~= nil then
+		local state = states[button]
+		if state ~= nil and state.kind == "live" then
+			Unsplit(button)
+		end
+		return
+	end
+	for _, list in pairs(live) do
+		for _, made in pairs(list) do
+			Unsplit(made)
+		end
+	end
+end
+
+-- B.Buttons.ShowAll(on): with true, every live button the bags have now is shown, for the warm-up of B.Window.Warm, which shows the window off the
+-- screen for one frame (design §2.5.1); with false, each goes back to the shown flag it had.
 function Buttons.ShowAll(on)
 	if not on then
 		local was = warming
@@ -1655,6 +1694,7 @@ function Buttons.ShowAll(on)
 		end
 		for button, shown in pairs(was) do
 			if not shown then
+				Unsplit(button)
 				pcall(button.Hide, button)
 			end
 		end
@@ -1692,6 +1732,11 @@ local function Wanted(containers)
 	keyringShown = KeyringShows()
 	local keyring = holders[KEYRING]
 	if keyring then
+		if not keyringShown then
+			for _, button in pairs(live[KEYRING] or NONE) do
+				Unsplit(button)
+			end
+		end
 		pcall(keyring.SetShown, keyring, keyringShown)
 	end
 	local list, taken = {}, {}
@@ -1718,6 +1763,7 @@ local function Wanted(containers)
 		sizes[bag] = size
 		for slot, button in pairs(live[bag] or NONE) do
 			if slot > size then
+				Unsplit(button)
 				pcall(button.Hide, button)
 			end
 		end

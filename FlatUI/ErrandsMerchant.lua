@@ -175,14 +175,14 @@ local function JunkExcluded(bag)
 end
 
 -- What a slot holds, as a sale, or nil when it is not to be sold. excluded: the bag is left out of junk selling, so a grey item stays unless it
--- is on the sell list. A sale marked listed is an item of the sell list that is not grey.
-local function Sale(bag, slot, lists, excluded)
+-- is on the sell list; anyLock: a locked item counts too (ns.ErrandsJunk for Bags). A sale marked listed is an item of the sell list that is not grey.
+local function Sale(bag, slot, lists, excluded, anyLock)
 	local info = E.Ask(C_Container.GetContainerItemInfo, bag, slot)
 	if type(info) ~= "table" then
 		return nil
 	end
 	local id, link, count = Field(info, "itemID"), Field(info, "hyperlink"), Field(info, "stackCount")
-	if type(id) ~= "number" or type(link) ~= "string" or Field(info, "isLocked") ~= false or Field(info, "hasNoValue") ~= false then
+	if type(id) ~= "number" or type(link) ~= "string" or (not anyLock and Field(info, "isLocked") ~= false) or Field(info, "hasNoValue") ~= false then
 		return nil
 	end
 	local listed = lists.sell[id] == true
@@ -927,8 +927,10 @@ end
 -- The Sell junk button and the Junk section of Bags ---------------------------------------------------------------------------------------
 
 -- Errands' own test of a slot of the bags (Sale above), for the junk coin and the Junk section of Bags: true when a pass would sell what the slot
--- holds now. False for a bag no pass sells from (the keyring, the bank), for a locked item or one with no price, and before the saved variables load.
-function ns.ErrandsJunk(bag, slot)
+-- holds now. False for a bag no pass sells from (the keyring, the bank), for one with no price, and before the saved variables load. A locked item
+-- is false too, unless anyLock is true: Bags asks so, since the game holds an item locked only for a moment (in the trade window, on a mail not
+-- sent yet, on the cursor), and its coin and section stay meanwhile. A pass and the count of Sell junk (Scan) still leave a locked item.
+function ns.ErrandsJunk(bag, slot, anyLock)
 	if not (ns.Finite(bag) and ns.Finite(slot)) or bag < 0 or bag > Bags() or type(C_Container) ~= "table" then
 		return false
 	end
@@ -936,7 +938,7 @@ function ns.ErrandsJunk(bag, slot)
 	if not lists then
 		return false
 	end
-	return Sale(bag, slot, lists, JunkExcluded(bag)) ~= nil
+	return Sale(bag, slot, lists, JunkExcluded(bag), anyLock == true) ~= nil
 end
 
 -- The part of that test that reads the two lists (Sale above), for an item no pass can sell from where it lies: in the bank, or in the bags of

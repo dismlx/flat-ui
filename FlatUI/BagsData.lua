@@ -3,14 +3,14 @@ local _, ns = ...
 -- Bags data: what the bag and bank windows of Bags show, and the record the account keeps of each character's bags, bank, worn items and gold, so
 -- that the bank and the other characters can be shown away from the banker and counted in item tooltips. Bags.lua is the module and makes ns.Bags
 -- with every sub-table; this file only adds the fields of ns.Bags.Data, and two functions of ns for the row Forget a character. It hears its events
--- on the module (ns.AddEvent, Core.lua:2033-2081), and each handler runs as the part cache of the module (B.Part, a fresh key per call as
+-- on the module (ns.AddEvent, Core.lua:2081-2129), and each handler runs as the part cache of the module (B.Part, a fresh key per call as
 -- Errands.Run does, Errands.lua:212-227), so a failure stops this part alone and the windows go on with what the game answers. It touches no frame,
 -- the game's or its own: it reads the game, writes FlatUIDB.bags, and looks up the other parts of Bags and the functions of Core.lua when it calls
 -- them, never at load.
 --
 -- The record. FlatUIDB.bags is account data outside every profile, made only while the module is on, as FlatUIDB.datapanels is
 -- (DataPanels.lua:193-212). v is its layout, 1; a store of another layout starts its characters again and keeps placed, the hand placements of
--- BagsCategories.lua. chars holds each character by "Name - Realm" (ns.CharacterKey, Core.lua:2633-2636): realm (GetNormalizedRealmName,
+-- BagsCategories.lua. chars holds each character by "Name - Realm" (ns.CharacterKey, Core.lua:2692-2695): realm (GetNormalizedRealmName,
 -- PlayerScriptDocumentation.lua:651-658), class (UnitClassBase, UnitDocumentation.lua:930-946), faction (UnitFactionGroup, :1207-1222), level
 -- (UnitLevel, :2474-2487), money (GetMoney, PlayerScriptDocumentation.lua:642-649), seen and bankSeen (time() of the last write of the bags or the
 -- gold, and of the bank), bags (containers 0 to 5, and -1 while the game shows the keyring), bank (the bought tabs, 6 to 14), bagItems (the item ID
@@ -23,24 +23,32 @@ local _, ns = ...
 -- ns.IsSecret or ns.Finite first and a withheld one counts as none. A character that is not a table, a key that is not a string and a text that
 -- does not parse are skipped when read, never raised.
 --
--- When it is written, by the events this file owns, in this order (the module hears them only while it is on, Core.lua:3433-3441):
--- PLAYER_ENTERING_WORLD (SystemDocumentation.lua:136), and the module's Start (ns.AddStart, Core.lua:2126-2139): the realm, class, faction, level,
--- gold, worn items and bag items; a full scan of the bags then waits for the next BAG_UPDATE_DELAYED, and runs FULL_WAIT seconds later when none
--- comes. BAG_UPDATE (ContainerDocumentation.lua:661) only marks its container. BAG_UPDATE_DELAYED (:677, one after a batch of changes) scans the
--- marked containers, and every bag when the last full scan is SWEEP seconds old, which catches up what changed while the page was off (the bank is
+-- When it is written, by the events this file owns, in this order (the module hears them only while it is on, Core.lua:3492-3500):
+-- PLAYER_ENTERING_WORLD (SystemDocumentation.lua:136), the module's Start (ns.AddStart, Core.lua:2174-2187), and B.Data.Resume, which Bags.lua
+-- calls when the page comes on again after Start (Core then runs Refresh and not Start, Core.lua:2266-2275, and the module heard nothing while the
+-- page was off): the keyring test and the kinds of the bags are read again, and the realm, class, faction, level, gold, worn items and bag items
+-- written; a full scan of the bags, and of the bank's tabs while the bank is open, then waits for the next BAG_UPDATE_DELAYED, and runs FULL_WAIT
+-- seconds later when none comes.
+-- BAG_UPDATE (ContainerDocumentation.lua:661) only marks its container. BAG_UPDATE_DELAYED (:677, one after a batch of changes) scans the
+-- marked containers, and every bag when the last full scan is SWEEP seconds old, which also catches up a change no BAG_UPDATE marked (the bank is
 -- read in full at each open instead). A slot counts as changed when its item, link, count, lock or quality changed, and its text is written when
 -- its item, link, count, quality or binding changed. Bags is then told, in this order: B.Categories.New.Seen(changed) with the changed slots of the
 -- bags, B.Request("items", "bags", changed) and the footer of the bags, and while the bank is open B.Request("items", "bank", changed) and the
 -- footer of the bank, and B.Request("layout", "bank") when a bank bag slot changed what the tabs are.
 -- BAG_CONTAINER_UPDATE (:623, a bag put in or taken out) reads the keyring test, the kinds and the bag items again, flags a full scan, and calls
 -- B.Buttons.Prepare with the bags' containers and B.Request("layout", "bags"); while the bank is open it reads the bank's tabs again too and asks
--- B.Request("layout", "bank"). QUEST_ACCEPTED (QuestLogDocumentation.lua:1312) and UNIT_QUEST_LOG_CHANGED for the player
+-- B.Request("layout", "bank"). BAG_NEW_ITEMS_UPDATED (:629; the game's bag windows draw again on it, Mainline/ContainerFrame.lua:611-612) comes
+-- when new flags were set or taken off, and the game may set an item's flag after the BAG_UPDATE_DELAYED that brought it: on the next frame, once
+-- for a run of them, the slots of my bags whose flag is set (C_NewItems.IsNewItem, NewItemsDocumentation.lua:15-28) go to
+-- B.Categories.New.Seen and B.Request("items", "bags", ...), except during a sort hold of the bags (B.Sorting of Bags.lua), whose moves bring
+-- nothing new. QUEST_ACCEPTED (QuestLogDocumentation.lua:1312) and UNIT_QUEST_LOG_CHANGED for the player
 -- (UnitDocumentation.lua:4565), on which the game draws its quest marks again
 -- (Mainline/ContainerFrame.lua:613-619), read the quest info of my slots again, at most once a second; EQUIPMENT_SETS_CHANGED
 -- (EquipmentManagerDocumentation.lua:308) reads the set of each slot again; a change of either is written and asks B.Request("items").
 -- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (ItemDocumentation.lua:1815, 1857) fill in the records that waited for an item's name, and for
--- an item B.Data.Want asked for call B.Request("items") and B.Request("search"). PLAYER_MONEY (CurrencyInfoDocumentation.lua:637) and PLAYER_LOGOUT
--- (SystemDocumentation.lua:159) write the gold and ask B.Request("footer", "bags"); PLAYER_LEVEL_UP (UnitDocumentation.lua:3832) writes the level
+-- an item B.Data.Want asked for call B.Request("items") and B.Request("search"). PLAYER_MONEY (CurrencyInfoDocumentation.lua:637) writes the gold,
+-- and PLAYER_LOGOUT (SystemDocumentation.lua:159) the gold, the worn items and the bag items, which can change unheard while the page is off; both
+-- ask B.Request("footer", "bags"). PLAYER_LEVEL_UP (UnitDocumentation.lua:3832) writes the level
 -- from its own value, which UnitLevel may not count yet; PLAYER_EQUIPMENT_CHANGED (PaperDollInfoDocumentation.lua:386) writes the worn item of its
 -- slot. The other parts are told only while Bags is in use (B.On: on, not stopped and not stood down for another bag addon or the gamepad
 -- interface); the record is kept all the same.
@@ -66,9 +74,13 @@ local _, ns = ...
 -- only while C_ActionBar.ShouldShowKeyring() (ActionBarFrameDocumentation.lua:987-995), the game's own test (Mainline/ContainerFrame.lua:10-12).
 --
 -- What it answers. B.Data.Item gives the record of a slot: live for this character's bags, and for its bank while the bank is open, else decoded
--- from the record, with the icon from C_Item.GetItemIconByID (ItemDocumentation.lua:611-624), the name from GetItemNameByID (:846-859), the
--- quality from GetItemQualityByID (:906-919) when the text has none, and the link "item:" and the item fields or the ID. A live record is kept per
--- slot while its item, link, count, quality and binding stay, its lock read anew at each call; a decoded one while something holds it.
+-- from the record, with the icon from C_Item.GetItemIconByID (ItemDocumentation.lua:611-624), the quality from GetItemQualityByID (:906-919) when
+-- the text has none, and the link "item:" and the item fields or the ID. A record's name is the text of a link where there is one, which holds the
+-- random suffix of an item ("of the Monkey") that its own name leaves out, so a search and the order of a section treat a live item and a kept one
+-- alike: for a live slot its hyperlink, else its itemName, else GetItemNameByID (:846-859); for a kept text with item fields the whole link the
+-- client makes of them (the second answer of C_Item.GetItemInfo, :626-657), asked only once C_Item.IsItemDataCachedByID (:1520-1533) says the
+-- client has the item, else GetItemNameByID. A live record is kept per slot while its item, link, count, quality and binding stay, its lock read
+-- anew at each call; a decoded one while something holds it.
 -- B.Data.Info is C_Item.GetItemInfoInstant (:659-679), kept per item ID. B.Data.Want asks C_Item.RequestLoadItemDataByID (:1710-1718) once a
 -- session for an item a window shows with no name; the record decoder, the picker's counts and the tooltip index never ask. The kind of a bag is
 -- its item's class and subclass from the instant info, named by C_Item.GetItemSubClassInfo (:1020-1036); the backpack, the keyring and the bank's
@@ -81,7 +93,7 @@ local _, ns = ...
 --
 -- Forget a character (ns.BagsCharacterLines and ns.BagsCharacterForget, a list row as Forget a character's gold is, DataStreams.lua:239-257, its
 -- ids numbers as the game's options need, Options.lua:165-195) takes a character out of the record; this character is then not written again
--- until it logs in again. /flatui status (ns.AddStatus, Core.lua:2083-2105) says how many characters and items are kept and how old this
+-- until it logs in again. /flatui status (ns.AddStatus, Core.lua:2131-2153) says how many characters and items are kept and how old this
 -- character's bank is, and warns above MANY characters.
 
 local KEY = "bags"
@@ -425,12 +437,14 @@ local function SubclassName(class, subclass)
 	return Text(Ask(Client("C_Item", "GetItemSubClassInfo"), class, subclass))
 end
 
--- The name in the text of a link, "[Name]".
+-- The name in the text of a link, "[Name]", which holds the random suffix of the item ("of the Monkey"), without the markup of an atlas the game
+-- may put in it (|A...|a, Blizzard_SharedXMLBase/TextureUtil.lua:289-311).
 local function LinkName(link)
-	if not link then
+	local name = link and link:match("|h%[(.-)%]|h")
+	if not name then
 		return nil
 	end
-	return Text(link:match("|h%[(.-)%]|h"))
+	return Text((name:gsub("%s*|A.-|a", "")))
 end
 
 -- The texts of slots ---------------------------------------------------------------------------------------------------------------------------
@@ -805,10 +819,21 @@ local function Wait(rec)
 	list[rec] = true
 end
 
+-- The name of a kept item as a live slot of it is named: the text of the whole link the client makes of the kept item fields (the second answer
+-- of C_Item.GetItemInfo), which holds a random suffix that GetItemNameByID leaves out. It is asked only once C_Item.IsItemDataCachedByID says the
+-- client has the item, so no decoded record asks for a load. Nil for a record that keeps no item fields.
+local function KeptName(rec)
+	if rec.link == "item:" .. rec.id or Ask(Client("C_Item", "IsItemDataCachedByID"), rec.id) ~= true then
+		return nil
+	end
+	local _, link = Ask2(Client("C_Item", "GetItemInfo"), rec.link)
+	return LinkName(Text(link))
+end
+
 -- Fills what the client has loaded since a decoded record was made.
 local function Fill(rec)
 	if rec.name == nil then
-		rec.name = ItemName(rec.id)
+		rec.name = KeptName(rec) or ItemName(rec.id)
 	end
 	if rec.quality == nil then
 		rec.quality = QualityOf(rec.id)
@@ -832,6 +857,7 @@ local function TakeInfo(rec)
 end
 
 -- The record of a slot of mine as the game has it now. It is kept while its item, link, count, quality and binding stay; its lock is read anew.
+-- Its name is the text of its link before the slot's own itemName, so a random suffix is named as a kept record of the item names it (KeptName).
 local function LiveRecord(key, bag, slot)
 	local id, link, count, quality, locked, bound, noValue, icon, name, readable = ReadSlot(bag, slot)
 	local byBag = live[bag]
@@ -846,12 +872,12 @@ local function LiveRecord(key, bag, slot)
 		rec.locked = locked
 		-- A name the client loaded since (B.Data.Want, then B.Request("items")).
 		if rec.name == nil then
-			rec.name = name or LinkName(link) or ItemName(id)
+			rec.name = LinkName(link) or name or ItemName(id)
 		end
 		return rec
 	end
 	rec = { key = key, bag = bag, slot = slot, live = true, id = id, count = count, quality = quality, link = link, icon = icon,
-		name = name or LinkName(link) or ItemName(id), bound = bound, noValue = noValue, locked = locked, readable = readable }
+		name = LinkName(link) or name or ItemName(id), bound = bound, noValue = noValue, locked = locked, readable = readable }
 	TakeInfo(rec)
 	local held = last[bag]
 	local state = held and held[slot]
@@ -1756,7 +1782,8 @@ local function FlagFull()
 	end)
 end
 
--- The module's Start and PLAYER_ENTERING_WORLD: who this character is, its gold, worn items and bags, then a full scan.
+-- The module's Start, PLAYER_ENTERING_WORLD and B.Data.Resume: who this character is, its gold, worn items and bags, then a full scan of the bags,
+-- and of the bank's tabs while the bank is open.
 local function Started()
 	keyring = ShowsKeyring()
 	for bag in pairs(kinds) do
@@ -1767,6 +1794,9 @@ local function Started()
 		Identity(record)
 		WriteWorn(record)
 		WriteBagItems(record)
+	end
+	if bankLive then
+		bankFull = true
 	end
 	FlagFull()
 end
@@ -1804,6 +1834,51 @@ local function ContainerUpdate()
 	if bank then
 		Part(Request, "layout", "bank")
 	end
+end
+
+-- BAG_NEW_ITEMS_UPDATED waits for the next frame, once for a run of them.
+local newQueued = false
+
+-- The game set or took off new flags, and it may set one after the BAG_UPDATE_DELAYED that brought the item: every slot of my bags whose flag is
+-- set (C_NewItems.IsNewItem) goes to New items (B.Categories.New.Seen, which leaves out what came out of the bank) and is drawn again. Nothing
+-- during a sort hold of the bags (B.Sorting), whose moves bring nothing new.
+local function NewFlags()
+	local sorting = B.Sorting
+	if not Active() or (type(sorting) == "function" and sorting("bags") == true) then
+		return
+	end
+	local isNew, sizeOf = Client("C_NewItems", "IsNewItem"), Client("C_Container", "GetContainerNumSlots")
+	if not (isNew and sizeOf) then
+		return
+	end
+	local flagged = {}
+	for _, bag in ipairs(Data.Containers("bags")) do
+		local size = Count(Ask(sizeOf, bag))
+		if size and size <= MAX_SLOTS then
+			for slot = 1, size do
+				if Ask(isNew, bag, slot) == true then
+					Mark(flagged, bag, slot)
+				end
+			end
+		end
+	end
+	if next(flagged) ~= nil then
+		Part(NewSeen, flagged)
+		Part(Request, "items", "bags", flagged)
+	end
+end
+
+local function NewItemsUpdated()
+	if newQueued then
+		return
+	end
+	newQueued = true
+	After(0, function()
+		newQueued = false
+		if Running() then
+			Part(NewFlags)
+		end
+	end)
 end
 
 -- Reads one mark of every slot of mine again (my bags, and my tabs while the bank is open), writes the slots whose mark changed, and has the
@@ -1921,10 +1996,13 @@ local function MoneyChanged()
 	end
 end
 
+-- PLAYER_LOGOUT: who this character is and its gold, and its worn items and bag items, which can change unheard while the page is off.
 local function LoggingOut()
 	local record = Mine(true)
 	if record then
 		Identity(record)
+		WriteWorn(record)
+		WriteBagItems(record)
 	end
 	if Active() then
 		Part(Request, "footer", "bags")
@@ -2078,6 +2156,7 @@ Listen("PLAYER_ENTERING_WORLD", Started)
 Listen("BAG_UPDATE", BagUpdate)
 Listen("BAG_UPDATE_DELAYED", Delayed)
 Listen("BAG_CONTAINER_UPDATE", ContainerUpdate)
+Listen("BAG_NEW_ITEMS_UPDATED", NewItemsUpdated)
 Listen("QUEST_ACCEPTED", QuestSoon)
 Listen("UNIT_QUEST_LOG_CHANGED", QuestSoon, function(unit)
 	return not IsSecret(unit) and unit == "player"
@@ -2090,10 +2169,16 @@ Listen("PLAYER_LOGOUT", LoggingOut)
 Listen("PLAYER_LEVEL_UP", LevelUp)
 Listen("PLAYER_EQUIPMENT_CHANGED", EquipmentChanged)
 
--- The module's Start, at login or when the page is turned on: the same work as a loading screen.
+-- The module's Start, at login or when the page is first turned on: the same work as a loading screen.
 ns.AddStart(KEY, function()
 	Part(Started)
 end)
+
+-- The page came on again after the module's Start (Bags.lua's Refresh, since Core runs Refresh and not Start then, Core.lua:2266-2275): the module
+-- heard none of its events while the page was off, so the work of Start runs again, and its full scan catches up what changed meanwhile.
+function Data.Resume()
+	Part(Started)
+end
 
 ns.AddStatus(KEY, function()
 	if not Running() or Stopped() then
