@@ -727,6 +727,19 @@ ns.SETUP_STEPS = {
 		{ "hud.meterClearBoss", "r", "behaviour", "Also clears the damage meter as each raid boss fight starts, without asking." },
 		{ "hud.zoneBars", "o", "mock-xp-micro" },
 	} },
+	-- The hit table hangs under the player frame, so its step shows the player's frame (mock-player, SetupDrawUnits.lua); every row describes itself.
+	{ id = "hud-hittable", area = "Minimap and buffs", title = "Hit table", draw = "mock-player", built = true, rows = {
+		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target." },
+		{ "hud.hitTableLines", "o", "behaviour", "Chooses whether the hit table shows melee, ranged or spells, or picks them by your class and form." },
+		{ "hud.hitTableSpecial", "o", "behaviour", "Adds a line for your special attacks, which do not glance and miss less while you dual wield." },
+		{ "hud.hitTableAgainst", "o", "behaviour", "Chooses whether the hit table is against your target or always against a boss three levels above you." },
+		{ "hud.hitTableFacing", "o", "behaviour", "Chooses whether the hit table counts parries and blocks, which come only from the front." },
+		{ "hud.hitTableRules", "r", "behaviour", "Chooses the hit cap against a boss: 9% as tests of Classic found it, or 8% as the game's tooltip says." },
+		{ "hud.hitTableShow", "o", "behaviour", "Chooses whether the hit table shows with an enemy targeted, in combat, or always." },
+		{ "hud.hitTableFont", "r", "behaviour", "Chooses Flat UI Sans or the game font for the hit table." },
+		{ "hud.hitTableSize", "o", "behaviour", "Sets the size of the text of the hit table." },
+		{ "hud.hitTableBack", "r", "behaviour", "Draws a flat background with a thin border behind the hit table." },
+	} },
 	{ id = "win-which", area = "Windows", title = "Which windows", draw = "mock-window-set", built = true, rows = {
 		{ "windows.enabled", "c", "mock-window-set" },
 		{ "windows.character", "c", "mock-window-set" },

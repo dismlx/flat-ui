@@ -96,6 +96,8 @@ MapText.lua
 ErrorFilter.lua
 ScreenText.lua
 MeterClear.lua
+HitTableCalc.lua
+HitTable.lua
 Fade.lua
 Chat.lua
 ChatText.lua

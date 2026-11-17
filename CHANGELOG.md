@@ -1,6 +1,7 @@
 ## 0.5.18
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Minimap and buffs**, new tab **Hit table**, new row **Hit table under the player frame** (off): a small table under your player frame, below the pet frame and the totems the game hangs there, with your chances against your target to miss, be dodged, parried or blocked, glance, crit and hit, worked out again as your gear, buffs, weapon skill, form and target change. It has a line for your swings (one for each hand while you dual wield, which miss 19% more), your **Special attacks**, your ranged attacks and your spells, picked by your class and form under **Attacks**, and the crit cap of your swings, yellow once your crit is past it, since a swing's crit past the cap is lost. A target whose level shows as ?? counts as three levels above you, **Against** can count a boss three levels above you always, **Where you stand** counts parries and blocks, which come only from the front (by default while your target attacks you), and **Hit cap against a boss** chooses between the 9% tests of Classic found and the 8% of the game's tooltip. **Show** (**With an enemy targeted**, **In combat** or **Always**), **Font**, **Text size** and **Background and border** do the rest; `/flatui move` places it, and `/flatui status` says where it hangs and what the game withheld, which the table shows as ?.
 
 ## 0.5.17
 

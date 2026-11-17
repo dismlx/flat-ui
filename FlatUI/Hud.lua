@@ -3,7 +3,7 @@ local ADDON_NAME, ns = ...
 -- The minimap with the plate of its zone name and the tracking button beside it and the text around it (MapText.lua), the bag bar, the buff and debuff icons, the experience and reputation bars and the micro menu, and the objective
 -- tracker and its quest count (QuestCount.lua), the loot window and rolls, alerts, breath and countdown timers, the queue panel, the damage meter and the zone event bars,
 -- and the kinds of the game's red error messages that are hidden (ErrorFilter.lua). The damage meter can be cleared as the player enters a dungeon or raid
--- (MeterClear.lua).
+-- (MeterClear.lua). The hit table under the player frame is HitTable.lua, with its numbers from HitTableCalc.lua.
 -- A frame the game may protect has nothing made on it in combat: ns.MaybeProtected asks the client each time.
 -- Each part has its own switch and puts the game's look back when it is off. The game's frame art is made
 -- transparent and left in place, and thin borders and flat fills take its place. The map keeps the shape of the
@@ -2164,6 +2164,10 @@ function Refresh()
 	-- The damage meter cleared as the player enters a dungeon or raid: a clear that waits and the popup that asks follow the rows (MeterClear.lua).
 	if ns.MeterClearRefresh ~= nil then
 		ns.MeterClearRefresh()
+	end
+	-- The hit table under the player frame: shown, heard and placed as its rows say, or hidden (HitTable.lua).
+	if ns.HitTableRefresh ~= nil then
+		ns.HitTableRefresh()
 	end
 	RefreshTimers()
 	RefreshOther()

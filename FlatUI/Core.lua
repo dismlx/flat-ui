@@ -98,6 +98,10 @@ local ADDON_NAME, ns = ...
 -- LibDataBroker, it listens to that library and calls the functions of the feeds a slot shows (OnEnter, OnLeave, OnTooltipShow, OnClick).
 -- Its Equipment set slot opens a menu of its own whose lines call C_EquipmentSet.UseEquipmentSet, never in a fight.
 -- Threat list (off by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
+-- Hit table (off by default, Minimap and buffs) is a frame of its own on UIParent that takes no mouse, hung out of combat by SetPoint from a second
+-- frame of its own whose corners are set on the player frame's portrait (or Flat UI's picture or body) and on PlayerBottomManagedFrameContainer, or
+-- on PlayerCastingBarFrame while Edit Mode locks the cast bar to the player frame; it follows PlayerFrame_AttachCastBar and PlayerFrame_DetachCastBar
+-- with hooksecurefunc, only reads the player's stats, weapon skills and weapons and the target's level and kind, and changes nothing.
 -- Healer mana (off by default) is a window of its own on UIParent; it only reads mana (UnitPowerPercent) and changes nothing. The dispel border, the
 -- debuff type icon and the raid marker of the party and raid frames, the leader and assistant icons of the raid frames and the dispel border of the
 -- player, target and focus frames, and the heal over time squares of the party and raid frames, are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a

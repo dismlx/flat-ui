@@ -188,6 +188,10 @@ local LIST = {
 	-- takes a spot out of combat.
 	{ name = "FlatUIPetTarget", label = "Pet target", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 120, height = 20, x = -246, y = 238,
 		gate = "PetTargetShown", changed = "PetTargetMoved" },
+	-- The hit table (HitTable.lua): its box is the table's own frame, and its spot is its top left corner, which stays where it is as lines come and
+	-- go. With no spot saved it hangs under the player frame, under the pet frame and the totems the game hangs there.
+	{ name = "FlatUIHitTable", label = "Hit table", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "HitTableRow",
+		changed = "HitTableMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
