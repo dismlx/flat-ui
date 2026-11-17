@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.16
+## Version: 0.5.17
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -68,6 +68,7 @@ TrackerGroup.lua
 TrackerClicks.lua
 Pulse.lua
 BagSort.lua
+BagKey.lua
 Windows.lua
 Items.lua
 ItemMarks.lua
