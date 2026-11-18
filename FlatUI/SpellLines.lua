@@ -8,6 +8,10 @@ local _, ns = ...
 -- state and stats, and listens to the game while a part wants it (M.Want); this file finds the spell, keeps its lines and adds them. It registers
 -- no event, adds to the chat module and has no switch of its own, as ChatTips.lua. SpellModel.lua, SpellData.lua and ns.ActionSpell of
 -- Cooldowns.lua are looked up when asked, never as the files load, since each may load after this one or fail.
+-- What it touches of the game, in the order it does: the frames GameTooltip and ItemRefTooltip, IsForbidden (through ns.Forbidden), the
+-- tooltip's field IsEmbedded, Enum.TooltipDataType and the data's type, IsShiftKeyDown, IsControlKeyDown and IsAltKeyDown, the data's id and
+-- lines, the tooltip's field processingInfo, GetActionInfo and GetMacroSpell (through ns.ActionSpell), the tooltip's NumLines, UnitLevel, the
+-- tooltip's AddDoubleLine and AddLine, geterrorhandler, and for /flatui status C_Secrets.ShouldUnitStatsBeSecret and GetTime. No event.
 -- Chat.lua calls ns.SpellTipLines from its post call of the game's tooltip data (TooltipDataProcessor.AddTooltipPostCall, AllTypes) right after
 -- ChatTips.lua's lines and before its own ID and count lines, so Spell ID stays the last line, and ns.SpellLinesSync at the end of each refresh.
 -- The game runs the post calls after its own lines and before it shows the tooltip (Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:
@@ -26,7 +30,7 @@ local _, ns = ...
 -- The spell ID (design 1.1). A spell's data has it in its id (Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua:25-32): the rank on the button, in
 -- the book or in the link. A macro's and a pet action's data name it in their first line, by tooltipID while tooltipType is 1 (0 is an item), the
 -- fields retail addons read for it, not yet seen on WoW: Forever (design 6.4). A macro whose first line names none is read from its action slot:
--- the game builds an action's tooltip through GetAction with the slot (TooltipDataHandler.lua:497-503, 586) and keeps the getterName and the
+-- the game builds an action's tooltip through GetAction with the slot (TooltipDataHandler.lua:499-502, 586) and keeps the getterName and the
 -- getterArgs of the build, packed in order (SafePack, Blizzard_SharedXMLBase/TableUtil.lua:414-418), in processingInfo on the tooltip while it
 -- builds (TooltipDataHandler.lua:281), a field read only; ns.ActionSpell (Cooldowns.lua) reads the slot as Add the spells of a bar reads one
 -- (GetActionInfo, and GetMacroSpell for a macro). A pet action whose first line names no spell gets nothing. A talent's tooltip appends a build
@@ -51,9 +55,9 @@ local _, ns = ...
 -- and dim lines (0.66, 0.68, 0.62, HitTable.lua's DIM) wrapped at the tooltip's width by AddLine's fifth argument (Blizzard_SharedXML/
 -- SharedTooltipTemplates.lua:166-172), so a long note does not widen the tooltip.
 -- /flatui status (design 4.12), while the module is on and a row wants lines: the build of the data and its number of spells (every class's
--- constructor of SpellData.lua run once, for this line alone), when the stats were read (GetTime) or that the game withholds them in this fight
--- (C_Secrets.ShouldUnitStatsBeSecret, Blizzard_APIDocumentationGenerated/SecretPredicateAPIDocumentation.lua:388-396), what SpellModel's check of
--- the game's texts found, and the low rank rule while its row is on.
+-- constructor of SpellData.lua run once, for this line alone), that the game withholds the stats in this fight (C_Secrets.ShouldUnitStatsBeSecret,
+-- Blizzard_APIDocumentationGenerated/SecretPredicateAPIDocumentation.lua:388-396) or when they were read (GetTime), what SpellModel's check of the
+-- game's texts found, and the low rank rule while its row is on.
 
 local KEY, PART = "chat", "spell lines"
 local IsSecret = ns.IsSecret
