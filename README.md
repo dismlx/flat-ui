@@ -149,7 +149,7 @@ The item finder's index of armor and weapons comes from the client tables of bui
 
 The threat feedback of the nameplates follows what [Threat Plates](https://www.curseforge.com/wow/addons/tidy-plates-threat-plates) by Suicidal Katt and Blacksalsify does: its threat colours and role detection, its warning glow, border colour and threat transparency, its threat value and its target of the enemy. Threat Plates is under the GNU GPL, so none of its code is in Flat UI; Flat UI does the same things in code of its own.
 
-**Questie's tracker** styles the tracker of [Questie](https://github.com/Questie/Questie), the quest helper by Aero, Logon, Muehe, TheCrux (BreakBB), Drejjmit, Dyaxler, Cheeq, TechnoHunter, Yttrium and its other authors. Questie is under the GNU GPL 3: it was read only to learn the names of its tracker's frames and when it draws them again, and none of its code is in Flat UI.
+**Questie's tracker** styles the tracker of [Questie](https://github.com/Questie/Questie), the quest helper by Aero, Logon, Muehe, TheCrux (BreakBB), Drejjmit, Dyaxler, Cheeq, TechnoHunter, Yttrium and its other authors. Questie's team offers it under the GNU GPL 3 (its LICENSE.md): it was read only to learn the names of its tracker's frames and when it draws them again, and none of its code is in Flat UI.
 
 The Bags page follows the way the bag addons Baganator, Bagnon, BetterBags and AdiBags work: one window with sections and a search, the bank and your other characters away from the banker, and quick handling of junk, the bank and clean up. It is code of Flat UI's own, and none of theirs is in it.
 

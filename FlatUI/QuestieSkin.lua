@@ -9,9 +9,10 @@ local _, ns = ...
 -- draws no bars: a timed quest's time is a line of text (Modules/Tracker/TrackerQuestTimers.lua:134-135), so Tracker bars and Tracker bar
 -- texture have nothing to style here. It is part "questie tracker" of the module, which stops alone after a few failures.
 --
--- Questie is under the GNU GPL 3. It was read for its frame names, its structure and its redraws only, and none of its code is here. The
--- facts, from Questie 12.10.0, whose Questie_Forever.toc loads the same tracker files as its other flavours (Questie_Forever.toc:254-289);
--- on Forever it takes Era's content paths (Modules/Expansions.lua:21-24), so its tracker shows no achievements, scenarios or timer ticks:
+-- Questie's team offers it under the GNU GPL 3 (its LICENSE.md). It was read for its frame names, its structure and its redraws only, and
+-- none of its code is here. The facts, from Questie 12.10.0, whose Questie_Forever.toc loads the same tracker files as its other flavours
+-- (Questie_Forever.toc:254-289); on Forever it takes Era's content paths (Modules/Expansions.lua:21-24), so its tracker shows no
+-- achievements, scenarios or timer ticks:
 -- - QuestieTracker.Initialize makes the frames once, only while Questie's tracker is on (Modules/Tracker/QuestieTracker.lua:225-266).
 --   Questie_BaseFrame is a frame on UIParent with the game's BackdropTemplate, whose backdrop Questie only colours, with SetBackdropColor and
 --   SetBackdropBorderColor (TrackerBaseFrame.lua:33-59, 170-193; TrackerFadeTicker.lua:33-37), and keeps clear by default
@@ -33,8 +34,9 @@ local _, ns = ...
 --   from ImportModule, which makes an empty one for a name it does not know (QuestieLoader.lua:165-177), so only QuestieTracker, which every
 --   Questie with a tracker has, is asked that way.
 --
--- How: QuestieTracker.Update is followed with ns.FollowTable and each line's SetMode with ns.Follow, never replaced. After every redraw the
--- frames Questie made are looked at again by their names, so a line or button that is new or handed out again is styled as it is used.
+-- How: QuestieTracker.Update and UpdateFormatting are followed with ns.FollowTable and each line's SetMode with ns.Follow, never replaced.
+-- After every redraw the frames Questie made are looked at again by their names, so a line or button that is new or handed out again is styled
+-- as it is used. A line Questie gives another kind has its remembered font and height dropped, and the font Questie just set written back.
 -- Flat UI's own outlines (ns.Outline) go on Questie's frames: a backdrop texture under their own art and four edges on a frame of Flat UI's
 -- own, round the frame or round an anchor frame of Flat UI's own on a heading. Of Questie's own it writes only what it puts back: the alpha of
 -- the nine pieces of its backdrop (ns.SetFaded), the font of its heading and of each line's label (SetFont, SetShadowOffset, through
@@ -236,6 +238,21 @@ local function PlaceHeading(anchor, header)
 	anchor:SetWidth(1)
 end
 
+-- Drops what was remembered of a label's font and height, for a line Questie has just given another kind: its SetMode has set the font and
+-- height of the new kind (TrackerLine.lua:203-219), and what was set here for the old kind can be near enough to pass for them (a zone heading
+-- at 85% of 12 is 10.2, a quest line 10), which would keep the old kind's size as Questie's. ns.TextStyle with nothing asked puts back the font
+-- it remembered and forgets what it set, and Questie's new font is then written back as Questie set it.
+local function Forget(rec)
+	rec.hGame, rec.hSet = nil, nil
+	local label = rec.label
+	local ok, file, size, flags = pcall(label.GetFont, label)
+	if not ok or ns.IsSecret(file) or ns.IsSecret(size) or ns.IsSecret(flags) or type(file) ~= "string" or not ns.Finite(size) or size <= 0 then
+		return
+	end
+	ns.TextStyle(label, {})
+	label:SetFont(file, size, type(flags) == "string" and flags or "")
+end
+
 local LineHook
 
 -- One line: the band while it is a zone heading, Flat UI's font, and the height of a zone heading's label.
@@ -258,7 +275,16 @@ local function Line(line)
 			S.noMode = true
 		end
 	end
-	local zone = on and Read(line, "mode") == "zone"
+	-- rec.mode is the kind the label was last styled for. Questie clears a line's kind at each redraw (TrackerLinePool.lua:88, 241) and only
+	-- its SetMode sets one, so a kind other than rec.mode means Questie set that kind's font since.
+	local mode = Read(line, "mode")
+	if type(mode) == "string" then
+		if rec.mode ~= nil and rec.mode ~= mode then
+			Forget(rec)
+		end
+		rec.mode = mode
+	end
+	local zone = on and mode == "zone"
 	Band(rec, line, zone and Opt("trackerHeaders") == true, PlaceZone)
 	Text(rec.label, on and Spec(zone) or {})
 	Height(rec, zone and (Opt("trackerHeaderSize") or 100) or 100)
@@ -457,6 +483,17 @@ local function AfterUpdate()
 	end
 end
 
+-- Questie's options also call UpdateFormatting alone, which sets the heading's font again (QuestieTracker.lua:980-1017;
+-- QuestieOptionsTracker.lua:776).
+local function AfterFormatting()
+	local base = Named("Questie_BaseFrame")
+	if base ~= nil and not ns.IsStopped(KEY) and (Wanted() or Styled()) then
+		Run(Heading, base)
+	end
+end
+
+-- Followed whatever the row says, while the module runs: Questie hands the function in QuestieTracker.Update to its heading's click when it
+-- makes its tracker (QuestieTracker.lua:249; TrackerHeaderFrame.lua:171-173), so a hook put on later would miss the redraws of that click.
 local function Follow()
 	if S.followed then
 		return
@@ -466,6 +503,9 @@ local function Follow()
 		return
 	end
 	S.followed = ns.FollowTable(tracker, "Update", AfterUpdate) == true
+	if S.followed and type(Read(tracker, "UpdateFormatting")) == "function" then
+		ns.FollowTable(tracker, "UpdateFormatting", AfterFormatting)
+	end
 end
 
 -- The lines of /flatui status for a Questie whose tracker is not one this file knows.
@@ -490,9 +530,7 @@ function ns.QuestieSkinRefresh()
 		return
 	end
 	local wanted = Wanted()
-	if wanted then
-		pcall(Follow)
-	end
+	pcall(Follow)
 	if wanted or Styled() then
 		Pass(true)
 	end
@@ -505,9 +543,11 @@ ns.AddEvent(KEY, "ADDON_LOADED", ns.QuestieSkinRefresh, function(name)
 	return not ns.IsSecret(name) and name == "Questie"
 end)
 ns.AddEvent(KEY, "PLAYER_ENTERING_WORLD", function()
-	if Loaded() and Wanted() then
+	if Loaded() then
 		pcall(Follow)
-		Queue()
+		if Wanted() then
+			Queue()
+		end
 	end
 end)
 -- The game says a fight starts before it locks the interface, so the state is given.
