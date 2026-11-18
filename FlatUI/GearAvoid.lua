@@ -12,7 +12,7 @@ local _, ns = ...
 -- snapshot, never a mix of two reads; a missing call or a nil answer is none, as HitTableCalc.lua's Call tells them apart (HitTableCalc.lua:70-81).
 -- In a fight the snapshot is the one from before it, as the spell lines say. The reads, as the character sheet makes them: the level (UnitLevel); the
 -- defense skill, base plus modifier and at least 0 (UnitDefenseSkill, UnitDocumentation.lua:1069-1084, the sheet's GetEffectiveDefenseSkill,
--- Camelot/PaperDollFrameStats.lua:51-54; UnitDefense on a client that has that name instead); the chances to dodge, parry and block against an
+-- Camelot/PaperDollFrameStats.lua:52-55; UnitDefense on a client that has that name instead); the chances to dodge, parry and block against an
 -- attacker of the player's level (GetDodgeChance, GetParryChance and GetBlockChance, PlayerScriptDocumentation.lua:414, 747, 275, as the sheet reads
 -- them, Camelot/PaperDollFrame.lua:787-845); the effective armor, UnitArmor's second answer (UnitDocumentation.lua:645, as
 -- Camelot/PaperDollFrameStats.lua:486-488 reads it); the block value (GetShieldBlock, PlayerScriptDocumentation.lua:1040), none without a shield
@@ -40,18 +40,20 @@ local _, ns = ...
 -- (C_Item.GetItemStats, ItemDocumentation.lua:1004-1018, with the full link) less those of the items it replaces, each key turned into what it
 -- changes by the data (SpellData.lua's D.STATS: avoid with its rating index, armor, and Strength and Agility): defense, dodge, parry and block rating
 -- into defense points and percent with the client's own conversion, GetCombatRatingBonusForCombatRatingValue (PlayerScriptDocumentation.lua:335-349,
--- no secret mark) with CR_DEFENSE_SKILL 2, CR_DODGE 3, CR_PARRY 4 and CR_BLOCK 5 (Camelot/PaperDollFrame.lua:5-8); a point of defense also adds
--- 0.04% to dodge, parry and block (STAT_PER_DEFENSE, Camelot/PaperDollFrameStats.lua:348, 364, and the same string); agility adds dodge by the point
--- read above and 2 armor a point (ARMOR_PER_AGILITY, :6); the item's armor (RESISTANCE0_NAME, which holds its bonus armor too) adds armor. The block
--- value with the item is GearModel.lua's (G.With, for the spell rows that count it): the shield's own block, a block value stat and a point a 20
--- Strength (BLOCK_VALUE_PER_STRENGTH, :2, 313); its state says whether a shield is worn with the item. A shield put on where none is worn turns block
--- on at Classic's 5% plus 0.04% a point of defense over the cap plus its block rating (~); one taken off turns it off, and the block value with it.
--- Where the client gives no conversion, that stat is named as not counted. Armor takes off what C_PaperDollInfo.GetArmorEffectiveness(armor,
--- attacker level) gives, the client's own formula (PaperDollInfoDocumentation.lua:56-70, which marks no secret answer; the sheet's
--- PaperDollFrame_GetArmorReduction, Camelot/PaperDollFrame.lua:2392-2393), asked at compare time with the snapshot's plain armor; with no answer, an
--- item that changes armor names it as not counted. A worn item (the Character window) is the table with it against the table with its slot empty
--- (G.Without), so the change is what it gives. A total that rests on an estimate is marked ~, its change is not: the change of a row the roll does not
--- cut is the client's own sum.
+-- no secret mark) with CR_DEFENSE_SKILL 2, CR_DODGE 3, CR_PARRY 4 and CR_BLOCK 5 (Camelot/PaperDollFrame.lua:5-8); a point of defense also adds 0.04%
+-- to dodge, parry and block (STAT_PER_DEFENSE, Camelot/PaperDollFrameStats.lua:348, 364, and the same string); agility adds dodge by the point read
+-- above and 2 armor a point (ARMOR_PER_AGILITY, :6); the item's armor (RESISTANCE0_NAME, which holds its bonus armor too) adds armor, 2.8 and 4.6
+-- times as much in Bear Form and Dire Bear Form, whose spells raise the armor of items by 180% and 360% (K.FORM_ARMOR), as the armor read in the form
+-- holds it. The block value with the item is GearModel.lua's (G.With, for the spell rows that count it): the shield's own block, a block value stat
+-- and a point a 20 Strength (BLOCK_VALUE_PER_STRENGTH, :2, 313); its state says whether a shield is worn with the item, and its form whether the
+-- armor of items counts more. A shield put on where none is worn turns block on at Classic's 5% plus 0.04% a point of defense over the cap plus its
+-- block rating (~); one taken off turns it off, and the block value with it. Where the client gives no conversion, that stat is named as not counted.
+-- Stats the game refused or withheld for the item or one it replaces are never read as none: the item is not worked out, nor kept, until the game
+-- gives them. Armor takes off what C_PaperDollInfo.GetArmorEffectiveness(armor, attacker level) gives, the client's own formula
+-- (PaperDollInfoDocumentation.lua:56-70, which marks no secret answer; the sheet's PaperDollFrame_GetArmorReduction,
+-- Camelot/PaperDollFrame.lua:2392-2393), asked at compare time with the snapshot's plain armor; with no answer, an item that changes armor names it
+-- as not counted. A worn item (the Character window) is the table with it against the table with its slot empty (G.Without), so the change is what it
+-- gives. A total that rests on an estimate is marked ~, its change is not: the change of a row the roll does not cut is the client's own sum.
 --
 -- A.Compare(link or slot, opts) gives { header, attacker, boss, now, candidates = { { label, slots, empty, offEmpty, game, notCounted, rows = { {
 -- key, label, now, with, nowEstimate, withEstimate, estimate, better } } } }, notCounted, why, quiet, old }, kept by the link (or the slot and the
@@ -76,6 +78,11 @@ local K = {
 	MISS = 5, CRIT = 5, PER_SKILL = 0.04, PER_LEVEL = 5, CRUSH_FROM = 15, CRUSH_PER = 2, CRUSH_LESS = 15, ARMOR_PER_AGILITY = 2, BASE_BLOCK = 5,
 	-- Against: a boss three levels above the player, at its first choice from this level on (GearModel.lua, K.MAX_LEVEL).
 	BOSS = 3, MAX_LEVEL = 60,
+	-- What a point of an item's armor counts in Bear Form and Dire Bear Form (GetShapeshiftFormID 5 and 8, as GearModel.lua's K.FORMS has them):
+	-- their spells raise the armor contribution from items by 180% and 360% (5487 and 9634, "Armor contribution from items by $1178s1%" and
+	-- "$9635s1%", tools/dev/spelltips/client_spells.json:229, 445, which the game's tooltips of 1.60.1 show as 180% and 360%). UnitArmor's armor of
+	-- the snapshot has it already, so an item's armor counts with it too.
+	FORM_ARMOR = { [5] = 2.8, [8] = 4.6 },
 	-- The results kept; the changes under which a row counts as none, half the last digit each shows (a hundredth of a percent for the table, a
 	-- tenth for armor's share, a whole point of block value), so a change that shows as none is none.
 	CACHE = 64, STILL = 0.005, STILL_ARMOR = 0.05, STILL_VALUE = 0.5,
@@ -122,6 +129,7 @@ local T = {
 	NO_ITEM = "No item to compare.",
 	NO_STATS = "The game has not given your stats yet.",
 	NO_DEFENSE = "The game gave no defense skill, so there is no attack table to work out.",
+	WITHHELD = "The game withheld the stats of an item, so its avoidance is not worked out.",
 	COMBAT = "Gear lines show out of combat.",
 	EMPTY = "That slot is empty.",
 	HEAD = "An enemy's swing",
@@ -217,10 +225,12 @@ end
 -- One answer of a call for the snapshot: a number, nil for none (a missing call or no number), or false when the game withheld it.
 local function First(fn, at, ...)
 	local answers, why = Call(fn, ...)
-	if not answers then
-		return why == "missing" and nil or false
+	if answers then
+		return Num(answers[at])
+	elseif why == "missing" then
+		return nil
 	end
-	return Num(answers[at])
+	return false
 end
 
 -- The first answer of another part's function, or nil when it is missing or raises.
@@ -446,11 +456,18 @@ local function Rating(rating, amount)
 	return got and got > 0 and sign * got or nil
 end
 
--- The stats of an item by the game's keys (C_Item.GetItemStats), each a plain number; empty for none.
+-- The stats of an item by the game's keys (C_Item.GetItemStats), each a plain number: empty for none (no item, no such call, no stats), nil when the
+-- game refused or withheld them, which says nothing of the item's stats.
 local function ItemStats(link)
 	local out = {}
-	local answers = link and Call(Api("C_Item", "GetItemStats"), link)
-	local got = answers and Table(answers[1])
+	if not link then
+		return out
+	end
+	local answers, why = Call(Api("C_Item", "GetItemStats"), link)
+	if not answers then
+		return why == "missing" and out or nil
+	end
+	local got = Table(answers[1])
 	if got then
 		for key, value in pairs(got) do
 			if Text(key) and Finite(value) then
@@ -461,11 +478,15 @@ local function ItemStats(link)
 	return out
 end
 
--- The item's stats less those of the items worn in the slots (link nil: the slots emptied).
+-- The item's stats less those of the items worn in the slots (link nil: the slots emptied), or nil when the game withheld the stats of one of them.
 local function Delta(link, slots, state)
 	local delta = ItemStats(link)
 	for _, slot in ipairs(slots) do
-		for key, value in pairs(ItemStats(LinkAt(state, slot))) do
+		local worn = ItemStats(LinkAt(state, slot))
+		if not (delta and worn) then
+			return nil
+		end
+		for key, value in pairs(worn) do
 			delta[key] = (delta[key] or 0) - value
 		end
 	end
@@ -478,20 +499,23 @@ local function Apply(s, delta, state2, stats2, notes)
 	local D = ns.SpellData
 	local defs = Table(D and D.STATS) or {}
 	local ratings, agility, armor = {}, 0, 0
+	local share = K.FORM_ARMOR[Num(Field(state2, "form")) or 0] or 1
 	for key, amount in pairs(delta) do
 		local def = Table(defs[key])
 		local kind = def and def[1]
 		if amount ~= 0 and kind == "avoid" and Num(def[2]) then
 			ratings[def[2]] = (ratings[def[2]] or 0) + amount
 		elseif amount ~= 0 and kind == "armor" then
-			armor = armor + amount
+			armor = armor + amount * share
 		elseif amount ~= 0 and kind == "stat" and def[2] == 2 then
 			agility = agility + amount
 		end
 	end
+	-- The ratings in the order of their index, so the notes read the same each time.
 	local pct = {}
-	for rating, amount in pairs(ratings) do
-		if amount ~= 0 then
+	for rating = K.DEFENSE, K.BLOCK do
+		local amount = ratings[rating]
+		if amount and amount ~= 0 then
 			pct[rating] = Rating(rating, amount)
 			if not pct[rating] then
 				AddOnce(notes, T.NO_CONVERSION:format(K.RATING_NAMES[rating] or "A"))
@@ -572,13 +596,15 @@ local function Instead(result, link, opts, state, stats, s, now)
 	end
 	for _, c in ipairs(list) do
 		local state2, stats2, info = G.With(state, stats, link, c, lines)
-		if not state2 then
+		local delta = state2 and Delta(link, c.slots, state)
+		if not delta then
 			result.candidates = {}
-			result.why, result.quiet = Text(Field(info, "why")), Field(info, "quiet") == true
+			result.why = state2 and T.WITHHELD or Text(Field(info, "why"))
+			result.quiet = not state2 and Field(info, "quiet") == true
 			return false
 		end
 		local notes = {}
-		local with = Changed(s, Delta(link, c.slots, state), state2, stats2, notes, result.attacker)
+		local with = Changed(s, delta, state2, stats2, notes, result.attacker)
 		result.candidates[#result.candidates + 1] = { label = c.label, slots = c.slots, empty = c.empty, offEmpty = c.offEmpty, game = c.game,
 			notCounted = notes, rows = Rows(now, with) }
 		for _, text in ipairs(notes) do
@@ -597,12 +623,13 @@ local function Gives(result, slot, state, stats, s, now)
 		return true
 	end
 	local state2, stats2, info = G.Without(state, stats, slot)
-	if not state2 then
-		result.why, result.quiet = Text(Field(info, "why")), true
+	local delta = state2 and Delta(nil, { slot }, state)
+	if not delta then
+		result.why, result.quiet = state2 and T.WITHHELD or Text(Field(info, "why")), true
 		return false
 	end
 	local notes = {}
-	local without = Changed(s, Delta(nil, { slot }, state), state2, stats2, notes, result.attacker)
+	local without = Changed(s, delta, state2, stats2, notes, result.attacker)
 	result.candidates[1] = { label = K.SLOTS[slot], slots = { slot }, empty = false, game = true, notCounted = notes, rows = Rows(without, now) }
 	for _, text in ipairs(notes) do
 		AddOnce(result.notCounted, text)
@@ -838,7 +865,8 @@ end
 
 -- The lines of the item tooltip block (GearLines.lua), for the candidate whose slots the spell rows show, else the first: the header, the lines that
 -- change and the dim lines of what is not counted, as entries GearLines.lua adds ({ text, colour, wrap }), and the words of the spell rows' "no
--- change" line while avoidance shows. Nil while avoidance does not show or has nothing to say.
+-- change" line while avoidance shows. A stat not counted is named also when nothing else changes, so "no change to your avoidance" is said only
+-- when all of the item was counted. Nil while avoidance does not show or has nothing to say.
 function A.TipLines(subject, slots, opts)
 	if not A.Wanted() then
 		return nil
@@ -854,12 +882,12 @@ function A.TipLines(subject, slots, opts)
 	if not (chosen and result.attacker) then
 		return nil
 	end
-	local lines = Lines(chosen.rows, result.attacker)
-	if #lines == 0 then
+	local lines, notes = Lines(chosen.rows, result.attacker), chosen.notCounted or {}
+	if #lines == 0 and #notes == 0 then
 		return {}, T.NO_CHANGE_ALL
 	end
 	table.insert(lines, 1, { text = result.header, colour = K.GREY, wrap = true })
-	for _, text in ipairs(chosen.notCounted or {}) do
+	for _, text in ipairs(notes) do
 		lines[#lines + 1] = { text = T.NOT_COUNTED .. text, colour = K.DIM, wrap = true }
 	end
 	return lines, T.NO_CHANGE
@@ -867,16 +895,19 @@ end
 
 -- The window -------------------------------------------------------------------------------------------------------------------------------------
 
--- A row of the window: its texts and tones by column (name, now, with, change1, change2).
-local function WindowRow(rows, withs)
+-- A row of the window: its texts and tones by column (name, now, with, change1, change2), from the row of each slot compared (rows), with and the
+-- changes only while an item is compared. Each slot's own row gives its change, so a with of none (a block value with the shield taken off) has
+-- one too.
+local function WindowRow(rows, compared)
 	local first = rows[1]
 	local texts, tones = { name = first.label, now = Total(first, true) }, {}
-	if withs then
+	if compared then
 		texts.with = Total(first)
-		for index, with in ipairs(withs) do
-			local delta, tone = Change(rows[index], with)
+		for index, row in ipairs(rows) do
+			local delta, tone = Change(row, row.with)
 			local column = "change" .. index
-			texts[column] = delta and Value(first, delta, true) or "-"
+			-- A change under the last digit shown is none, never "-0.00%".
+			texts[column] = delta and Value(row, tone == "none" and 0 or delta, true) or "-"
 			tones[column] = tone
 		end
 	end
@@ -907,16 +938,16 @@ function A.Window(link)
 	end
 	if #view.cands > 0 then
 		view.layout = #view.cands == 2 and "two" or "one"
-		for index, row in ipairs(view.cands[1].rows) do
-			local rows, withs = {}, {}
+		for index in ipairs(view.cands[1].rows) do
+			local rows = {}
 			for which, c in ipairs(view.cands) do
-				rows[which], withs[which] = c.rows[index], c.rows[index].with
+				rows[which] = c.rows[index]
 			end
-			view.rows[#view.rows + 1] = WindowRow(rows, withs)
+			view.rows[#view.rows + 1] = WindowRow(rows, true)
 		end
 	elseif now then
 		for _, row in ipairs(now.rows) do
-			view.rows[#view.rows + 1] = WindowRow({ row }, nil)
+			view.rows[#view.rows + 1] = WindowRow({ row }, false)
 		end
 	else
 		view.why = view.why or why
