@@ -4,13 +4,25 @@ local _, ns = ...
 -- of the Gear comparison window (FlatUIGear, GearWindow.lua): its top left corner 4 px right of the window's top right corner, or, while the screen
 -- has no room for it there and has room on the other side, its top right corner 4 px left of the window's top left corner (the window's and the
 -- screen's edges, GetLeft, GetRight and GetWidth of the window and UIParent, WL/uiobjects.yaml), and kept on the screen (SetClampedToScreen), so a
--- window sized to the screen or one low on it leaves the finder in sight. It is made as a child
--- of that window, a frame of Flat UI's own, so it hides with it, takes its strata and is raised with it; when the window hides, the finder hides as
--- well, so the next opening of the window starts without it until Find (the button on the window's title bar, ns.GearSearchToggle) or the list row
--- Item finder (chat.gearFind: ns.GearFindLines and ns.GearFindPick) opens it again. Opening the finder opens the window first
--- (ns.GearWindowShow, looked up when called); a window that waits for the end of a fight (GearWindow.lua makes its frame out of combat only) has the
--- finder wait for it too (ns.OutOfCombat). Every frame here is a plain frame of Flat UI's own with nothing protected, so it is made, sized, filled
--- and shown in a fight too.
+-- window sized to the screen or one low on it leaves the finder in sight. It is made on UIParent and hangs from the window by its anchor, so it
+-- moves with it, takes its strata (GetFrameStrata, SetFrameStrata) and is raised when clicked (SetToplevel); it shows only while the window does:
+-- when the window hides it closes the finder (GearWindow.lua's Hiding, ns.GearSearchToggle), and the finder closes at its next look once the window
+-- is not shown, so the next opening of the window starts without it until Find (the button on the window's title bar, ns.GearSearchToggle) or the
+-- list row Item finder (chat.gearFind: ns.GearFindLines and ns.GearFindPick) opens it again.
+-- Moved and minimized (the owner: "when i use the movers function the search panel needs to be able to be minimized and moved"): the finder has an
+-- entry of its own in the movers (Movers.lua: FlatUIGearSearch, Item finder). Until the player moves it, it hangs at the window's edge as above and
+-- its box is there (ns.GearSearchDocked, ns.GearSearchStart). A drag of its title bar out of a fight (SetMovable, StartMoving, StopMovingOrSizing and
+-- SetUserPlaced, WL/uiobjects.yaml:4797, 4813, 4778, as the window's title bar drags the window; SetDontSavePosition, :4605) saves where it is let go
+-- as its spot (ns.MoverKit.Commit), as a drag of its box in /flatui move does; from then on this character's finder hangs from that spot
+-- (ns.MoverSpot), not at the window's edge, until Dock (a button on its title bar while it has a spot) or a right-click on the title docks it again;
+-- a reset of its box in the movers docks it too (ns.GearSearchMoved). Minimize, left of the cross, folds it to its title bar, with the search box on
+-- the bar while it leaves the box room enough there, and back; Enter in the box opens it again with the results. Both are kept for the character in
+-- FlatUICharDB.gearFinder (ns.Character): free (it hangs from its spot), min (minimized), and w and h, the size of its box in the movers, which takes
+-- the title bar's height while it is minimized. While the movers are open (ns.MoverKit.IsOpen) the finder is in the MEDIUM strata, under their
+-- boxes (HIGH), so it covers none of them, and Minimize is above them, so the finder can be minimized out of their way.
+-- Opening the finder opens the window first (ns.GearWindowShow, looked up when called); a window that waits for the end of a fight (GearWindow.lua
+-- makes its frame out of combat only) has the finder wait for it too (ns.OutOfCombat). Every frame here is a plain frame of Flat UI's own with
+-- nothing protected, so it is made, sized, filled, shown and placed in a fight too; only a drag of its title bar waits for the end of one.
 -- What it finds (ns.GearSearchFind): the generated item index (ItemIndex.lua, ns.ItemIndex: one string of records for each inventory type, parsed
 -- the first time a search needs that type, then kept for the session with an index by item ID), the player's bags and bank, and the other
 -- characters' bags and bank, as Bags keeps them (ns.Bags.Data: B.Data.Characters, Containers, Size and Item, BagsData.lua:1432-1547), looked up
@@ -53,19 +65,22 @@ local _, ns = ...
 -- (ClearFocus). A fight is InCombatLockdown's answer (:39650), a withheld one counting as a fight; time is GetTime's (:39050).
 -- The look is the window's, the Windows page's: the Background colour at Window opacity with a thin border (ns.Outline), boxes and buttons in Button
 -- and slot colour, the light under the cursor and what is chosen in the Highlight colour. It registers no event but GLOBAL_MOUSE_DOWN while a menu is
--- open, and looks on the OnUpdate of its own frame while it shows: whether the part may run, the window's height (the finder is as tall as the
--- window, at least MIN_HEIGHT), typing that settled, items that loaded and Best for me's next items. Everything runs as the part "item finder" of
--- the chat module (ns.EachPart, Core.lua:2197-2228), each run with a count of its own, so three faults stop the finder alone with a line for
--- /flatui status; the first fault of each kind also goes to the game's error handler. It writes no saved variable: the search is kept for the
--- session.
+-- open, and looks on the OnUpdate of its own frame while it shows: whether the part may run and the window shows, the window's height (the finder is
+-- as tall as the window, at least MIN_HEIGHT), its strata and place, typing that settled, items that loaded and Best for me's next items.
+-- Everything runs as the part "item finder" of the chat module (ns.EachPart, Core.lua:2197-2228), each run with a count of its own, so three faults
+-- stop the finder alone with a line for /flatui status; the first fault of each kind also goes to the game's error handler. It writes no saved
+-- variable but FlatUICharDB.gearFinder (above) and its spot in the movers: the search is kept for the session.
 
 local KEY, PART = "chat", "item finder"
 -- The finder's name, and the window it docks to (GearWindow.lua's NAME).
 local NAME, PARENT = "FlatUIGearSearch", "FlatUIGear"
 -- Units: width, the least height, padding, the title bar and its cross, the gap between two controls and to the window, a field, a row of results and
--- its icon, a check box, a line of a menu, the results a page, the room of the level boxes and of a filter button, and the two right columns.
+-- its icon, a check box, a line of a menu, the results a page, the room of the level boxes and of a filter button, and the two right columns; the
+-- least width of the search box on the title bar of a minimized finder, the width of Dock, and the frame level that puts Minimize above the boxes
+-- of the movers (their levels go up to 501, Movers.lua:56, 1973-1979).
 local L = { WIDTH = 344, MIN_HEIGHT = 540, PAD = 8, BAR = 26, CLOSE = 18, GAP = 6, DOCK = 4, FIELD = 20, ROW = 30, ICON = 24, CHECK = 12,
-	MENU_LINE = 16, PER_PAGE = 50, LEVEL_BOX = 34, ARROW = 20, BEST = 84, RIGHT = 54, CHANGE = 60, FOOT = 26, LINE = 12 }
+	MENU_LINE = 16, PER_PAGE = 50, LEVEL_BOX = 34, ARROW = 20, BEST = 84, RIGHT = 54, CHANGE = 60, FOOT = 26, LINE = 12, MIN_BOX = 90, DOCK_W = 44,
+	LIFT = 600 }
 L.INNER = L.WIDTH - 2 * L.PAD
 L.HALF = (L.INNER - L.GAP) / 2
 -- Seconds: between two looks, typing that settles before a search, between two searches while an item loads (and how many), how long Best for me
@@ -180,6 +195,12 @@ local T = {
 	OFF = "Item finder: turn on Restyle chat and tooltips on the Chat and tooltips page first.",
 	MODULE_STOPPED = "Item finder: Chat and tooltips stopped after an error. /flatui status says why.",
 	STOPPED = "Item finder: it stopped after an error. /flatui status says why.",
+	BAR_TIP = "Drag the title to move the finder on its own, out of a fight: it then keeps its spot for this character. Right-click the title to dock it at the window's edge again. /flatui move places it too.",
+	MINIMIZE = "Minimize",
+	RESTORE = "Restore",
+	FOLD_TIP = "Folds the finder to its title bar, with the search box where it fits, and back; kept for this character. Enter in the search box opens it again with the results.",
+	DOCK = "Dock",
+	DOCK_TIP = "Hangs the finder at the window's edge again, where it moves with the window. A right-click on the title does the same.",
 	REPORT = "Flat UI, Item finder, %s: %s",
 }
 
@@ -195,13 +216,18 @@ local IsSecret = ns.IsSecret
 -- level; levelRow and usableRow: the rows of the tab as last read. parsed and byId: the index's records by type and by item ID; types: the types it
 -- has; icons, subNames, colours: answers kept. requested: items the client was asked to load. best: Best for me's { on, scores, version, started }.
 -- runs, faults, elapsed, pending: the part's runs, what went to the error handler, the time since the last look, an opening that waits for a fight.
--- side: the side of the window the finder hangs on (Dock).
+-- parent: the window; body: the frame of everything under the title bar; close, fold (Minimize, its strokes in foldLines) and dock (Dock), the
+-- buttons of the title bar; boxY: where the search box sits under the title bar. placed: where the finder hangs now (Place: "right" or "left" of the
+-- window, else its spot); min: minimized; moving: its title bar is dragged; dropped: where a drag left it this session when the movers kept no spot;
+-- strata and lifted: the strata it took and whether Minimize is above the boxes of the movers.
 local S = { runs = 0, faults = {}, elapsed = 0, page = 1, offset = 0, results = {}, rows = {}, made = {}, choices = {}, checks = {}, fields = {}, owners = {},
 	parsed = {}, byId = {}, icons = {}, subNames = {}, colours = {}, requested = {}, tries = 0,
 	query = { text = "", quality = 1, usable = true, sources = { all = true, bags = true, alts = true } },
 	best = { on = false, scores = {} } }
 
 local Search, Paint, PaintList, Close
+-- The placing and minimizing functions, in a table of their own to keep the file under the client's count of locals.
+local D = {}
 
 local function Own(object)
 	ns.Own[object] = true
@@ -1898,11 +1924,32 @@ end
 
 -- The frame ---------------------------------------------------------------------------------------------------------------------------------------
 
+-- The title bar: the title, Dock, Minimize and the cross. A drag of it moves the finder out of a fight (D.DragStart), a right-click docks it (D.Dock).
 local function MakeBar(frame)
 	local bar = Own(CreateFrame("Frame", nil, frame))
 	bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
 	bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
 	bar:SetHeight(L.BAR)
+	bar:EnableMouse(true)
+	bar:RegisterForDrag("LeftButton")
+	bar:SetScript("OnDragStart", function()
+		Run(D.DragStart)
+	end)
+	bar:SetScript("OnDragStop", function()
+		Run(D.DragStop)
+	end)
+	bar:SetScript("OnMouseUp", function(_, mouse)
+		if mouse == "RightButton" then
+			Run(D.Dock)
+		end
+	end)
+	-- A drag that the finder's hiding cut short ends where it was let go.
+	bar:SetScript("OnHide", function()
+		if S.moving then
+			pcall(D.DragStop)
+		end
+	end)
+	Tipped(bar, T.TITLE, T.BAR_TIP)
 	S.bar = bar
 	S.title = Label(bar, TITLE_FONT)
 	S.title:SetPoint("LEFT", bar, "LEFT", L.PAD, 0)
@@ -1918,6 +1965,7 @@ local function MakeBar(frame)
 	close:SetScript("OnClick", function()
 		Close()
 	end)
+	S.close = close
 	S.barRule = Texture(frame, "ARTWORK")
 	S.barRule:SetHeight(1)
 	S.barRule:SetPoint("TOPLEFT", frame, "TOPLEFT", L.PAD, -L.BAR)
@@ -1930,6 +1978,7 @@ local function MakeSearch(frame, y)
 	S.box = box
 	S.hint = Label(box)
 	S.hint:SetPoint("LEFT", box, "LEFT", 6, 0)
+	S.hint:SetPoint("RIGHT", box, "RIGHT", -6, 0)
 	S.hint:SetText(T.SEARCH)
 	local function Hint()
 		S.hint:SetShown(BoxText(box) == "" and not box:HasFocus())
@@ -1945,6 +1994,9 @@ local function MakeSearch(frame, y)
 	box:SetScript("OnEnterPressed", function(self)
 		self:ClearFocus()
 		S.typedAt = nil
+		if S.min then
+			Run(D.Collapse, false)
+		end
 		Run(Search, true)
 	end)
 end
@@ -2146,41 +2198,19 @@ local function MakeList(frame, y)
 	pcall(S.foot.SetJustifyV, S.foot, "BOTTOM")
 end
 
--- The side of the window the finder hangs on (header): its right while the screen has room for the finder there, else its left while that side has
--- room, else its right, where the clamp to the screen keeps it in sight over the window's edge. The window is on UIParent at its scale, so their
--- edges are in the same units.
-local function Dock()
-	local parent = S.parent
-	local okLeft, left = pcall(parent.GetLeft, parent)
-	local okRight, right = pcall(parent.GetRight, parent)
-	local okScreen, screen = pcall(UIParent.GetWidth, UIParent)
-	local side = "right"
-	if okLeft and okRight and okScreen and Finite(left) and Finite(right) and Finite(screen) and right + L.DOCK + L.WIDTH > screen
-		and left - L.DOCK - L.WIDTH >= 0 then
-		side = "left"
-	end
-	if side ~= S.side then
-		S.side = side
-		S.frame:ClearAllPoints()
-		if side == "left" then
-			S.frame:SetPoint("TOPRIGHT", parent, "TOPLEFT", -L.DOCK, 0)
-		else
-			S.frame:SetPoint("TOPLEFT", parent, "TOPRIGHT", L.DOCK, 0)
-		end
-	end
-end
-
--- The finder's height: the window's, at least MIN_HEIGHT; and its side of the window (Dock).
+-- The finder's height: the window's, at least MIN_HEIGHT, or its title bar's while it is minimized; its strata, and where it hangs (D.Place).
 local function Fit()
 	local parent = S.parent
 	local ok, height = pcall(parent.GetHeight, parent)
 	local want = math.max(L.MIN_HEIGHT, ok and Finite(height) and math.floor(height + 0.5) or 0)
 	if want ~= S.height then
 		S.height = want
-		S.frame:SetHeight(want)
+		S.frame:SetHeight(S.min and L.BAR or want)
 		LayoutRows()
+		D.Keep()
 	end
-	Dock()
+	D.Strata()
+	D.Place()
 end
 
 -- The looks while the finder shows: whether it may run, its height, typing that settled, items of the bags that loaded and Best for me.
@@ -2200,13 +2230,17 @@ end
 local function Showing()
 	TakeRows()
 	S.elapsed = 0
+	S.placed, S.strata, S.lifted = nil, nil, nil
 	Fit()
 	Search(true)
 end
 
--- Whatever hid the finder: the menu closes, its tooltips go, and when the window hid it the finder stays closed until it is opened again. Plain
--- code, so it also runs once the part has stopped.
+-- Whatever hid the finder: a drag of its title bar ends where it was let go, the menu closes, its tooltips go, and when the window hid it the finder
+-- stays closed until it is opened again. Plain code, so it also runs once the part has stopped.
 local function Hiding()
+	if S.moving then
+		pcall(D.DragStop)
+	end
 	CloseMenu()
 	for _, owner in ipairs(S.owners) do
 		Untip(owner)
@@ -2218,41 +2252,51 @@ local function Hiding()
 	end
 end
 
--- The frame and everything in it, once, on the window.
+-- The frame and everything in it, once, on UIParent beside the window (parent), minimized as the character left it. Everything under the title bar
+-- is on the body, which minimizing hides; the search box is on the finder, so it can go on the title bar.
 local function Make(parent)
-	local frame = Own(CreateFrame("Frame", NAME, parent))
+	local frame = Own(CreateFrame("Frame", NAME, UIParent))
 	S.parent = parent
 	S.lights, S.strokes, S.hoverStrokes = {}, {}, {}
 	frame:SetSize(L.WIDTH, L.MIN_HEIGHT)
-	frame:SetPoint("TOPLEFT", parent, "TOPRIGHT", L.DOCK, 0)
-	S.side = "right"
 	frame:SetClampedToScreen(true)
+	frame:SetToplevel(true)
+	frame:SetMovable(true)
+	pcall(frame.SetDontSavePosition, frame, true)
 	frame:EnableMouse(true)
 	frame:Hide()
 	S.frame = frame
 	S.outline = ns.SetOutlineArea(ns.Outline(frame, frame), "windows")
 	MakeBar(frame)
+	local body = Own(CreateFrame("Frame", nil, frame))
+	body:SetAllPoints(frame)
+	S.body = body
 	local y = -(L.BAR + L.GAP + 2)
+	S.boxY = y
 	MakeSearch(frame, y)
+	S.box:SetFrameLevel(S.bar:GetFrameLevel() + 2)
 	y = y - L.FIELD - L.GAP
-	MakeFilters(frame, y)
+	MakeFilters(body, y)
 	y = y - 4 * (L.FIELD + L.GAP)
-	MakeStatus(frame, y)
+	MakeStatus(body, y)
 	y = y - L.FIELD - 2 * L.GAP - 1
-	MakeList(frame, y)
+	MakeList(body, y)
+	D.MakeButtons(S.bar)
 	frame:SetScript("OnShow", function()
 		Run(Showing)
 	end)
 	frame:SetScript("OnHide", function()
 		Hiding()
 	end)
+	-- It closes once the module or the part is off, and when the window is not shown (it closes the finder as it hides, GearWindow.lua's Hiding).
 	frame:SetScript("OnUpdate", function(_, elapsed)
 		S.elapsed = S.elapsed + (Finite(elapsed) and elapsed or 0)
 		if S.elapsed < LOOK then
 			return
 		end
 		S.elapsed = 0
-		if Allowed() then
+		local ok, shown = pcall(parent.IsShown, parent)
+		if Allowed() and ok and shown == true then
 			Run(Look)
 		else
 			Close()
@@ -2261,6 +2305,9 @@ local function Make(parent)
 	S.height = nil
 	TakeRows()
 	PaintLook()
+	local kept = D.Record()
+	D.Collapse(kept ~= nil and kept.min == true)
+	D.Place()
 end
 
 -- The window the finder docks to: FlatUIGear, a frame of Flat UI's own, or nil before GearWindow.lua made it.
@@ -2275,6 +2322,325 @@ end
 local function WindowShown(frame)
 	local ok, shown = pcall(frame.IsShown, frame)
 	return ok and shown == true
+end
+
+-- Placing and minimizing ---------------------------------------------------------------------------------------------------------------------------
+
+-- What is kept for the character (FlatUICharDB.gearFinder, ns.Character): w and h, the size of the finder's box in the movers (BoxSize of
+-- Movers.lua), min (minimized) and free (it hangs from its spot in the movers, not at the window's edge). Made when make is true; else nil without.
+function D.Record(make)
+	local char = type(ns.Character) == "function" and ns.Character() or nil
+	if type(char) ~= "table" or IsSecret(char) then
+		return nil
+	end
+	local kept = char.gearFinder
+	if type(kept) ~= "table" then
+		if not make then
+			return nil
+		end
+		kept = {}
+		char.gearFinder = kept
+	end
+	return kept
+end
+
+-- The handle of the finder in the movers drawn again, so its box has the finder's place and size.
+function D.Handle()
+	local kit = ns.MoverKit
+	local show = type(kit) == "table" and kit.ShowHandle or nil
+	if type(show) == "function" then
+		pcall(show, NAME)
+	end
+end
+
+-- The size of the box kept for the character: the title bar's height while minimized, else the finder's.
+function D.Keep()
+	local kept = D.Record(true)
+	local height = S.min and L.BAR or (S.height or L.MIN_HEIGHT)
+	if kept and (kept.w ~= L.WIDTH or kept.h ~= height) then
+		kept.w, kept.h = L.WIDTH, height
+		D.Handle()
+	end
+end
+
+-- True while the finder hangs from a spot of its own: one the player gave it this session that the movers did not keep, or its spot in the movers
+-- once this character moved it (ns.MoverSaved, looked up when called).
+function D.Free()
+	if S.dropped then
+		return true
+	end
+	local kept = D.Record()
+	return kept ~= nil and kept.free == true and Ask(ns, "MoverSaved", NAME) == true
+end
+
+-- The width and height of UIParent, or nil.
+function D.Screen()
+	local okW, width = pcall(UIParent.GetWidth, UIParent)
+	local okH, height = pcall(UIParent.GetHeight, UIParent)
+	if okW and okH and Finite(width) and Finite(height) and width > 0 and height > 0 then
+		return width, height
+	end
+	return nil
+end
+
+-- Left, bottom, width and height of a frame in the units of UIParent (GetRect and GetEffectiveScale), or nil.
+function D.Rect(frame)
+	local ok, left, bottom, width, height = pcall(frame.GetRect, frame)
+	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
+	local okBase, base = pcall(UIParent.GetEffectiveScale, UIParent)
+	if not (ok and okScale and okBase and Finite(left) and Finite(bottom) and Finite(width) and Finite(height) and Finite(scale) and Finite(base))
+		or base <= 0 then
+		return nil
+	end
+	local k = scale / base
+	return left * k, bottom * k, width * k, height * k
+end
+
+-- The side of the window the finder hangs on while docked (header): its right while the screen has room for the finder there, else its left while
+-- that side has room, else its right, where the clamp to the screen keeps it in sight over the window's edge.
+function D.Side(left, right, screen)
+	if Finite(left) and Finite(right) and Finite(screen) and right + L.DOCK + L.WIDTH > screen and left - L.DOCK - L.WIDTH >= 0 then
+		return "left"
+	end
+	return "right"
+end
+
+-- Where the top left corner of a docked finder is, in the units of UIParent from its bottom left: beside the window while it shows, else beside
+-- the window's spot in the movers (ns.MoverSpot and the BoxSize of its entry), on the screen. Nil when neither says.
+function D.Hang()
+	local left, bottom, width, height
+	local window = Window()
+	if window and WindowShown(window) then
+		left, bottom, width, height = D.Rect(window)
+	end
+	if not left then
+		local kit = ns.MoverKit
+		local info = type(kit) == "table" and type(kit.BY_NAME) == "table" and kit.BY_NAME[PARENT] or nil
+		if not (info and type(kit.BoxSize) == "function" and type(ns.MoverSpot) == "function") then
+			return nil
+		end
+		local ok, x, y = pcall(ns.MoverSpot, PARENT, "TOPLEFT")
+		local okSize, w, h = pcall(kit.BoxSize, info)
+		if not (ok and okSize and Finite(x) and Finite(y) and Finite(w) and Finite(h)) then
+			return nil
+		end
+		left, bottom, width, height = x, y - h, w, h
+	end
+	local screen = D.Screen()
+	local x = left + width + L.DOCK
+	if D.Side(left, left + width, screen) == "left" then
+		x = left - L.DOCK - L.WIDTH
+	end
+	if screen then
+		x = math.max(0, math.min(x, screen - L.WIDTH))
+	end
+	return x, bottom + height
+end
+
+-- Hangs the finder from its own spot while it has one (D.Free), else at the window's edge, where it moves with the window. Not while it is dragged.
+function D.Place()
+	local frame, window = S.frame, S.parent
+	if not frame or S.moving then
+		return
+	end
+	local x, y
+	if D.Free() then
+		if S.dropped then
+			x, y = S.dropped[1], S.dropped[2]
+		elseif type(ns.MoverSpot) == "function" then
+			local ok, sx, sy = pcall(ns.MoverSpot, NAME, "TOPLEFT")
+			if ok and Finite(sx) and Finite(sy) then
+				x, y = sx, sy
+			end
+		end
+	end
+	local key
+	if x then
+		key = ("%.2f:%.2f"):format(x, y)
+	else
+		local okLeft, left = pcall(window.GetLeft, window)
+		local okRight, right = pcall(window.GetRight, window)
+		key = D.Side(okLeft and left, okRight and right, (D.Screen()))
+	end
+	if key == S.placed then
+		return
+	end
+	S.placed = key
+	frame:ClearAllPoints()
+	if x then
+		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+	elseif key == "left" then
+		frame:SetPoint("TOPRIGHT", window, "TOPLEFT", -L.DOCK, 0)
+	else
+		frame:SetPoint("TOPLEFT", window, "TOPRIGHT", L.DOCK, 0)
+	end
+	D.Bar()
+end
+
+-- The finder takes the window's strata, MEDIUM or DIALOG (GearWindow.lua's Raise), and MEDIUM while the movers are open (ns.MoverKit.IsOpen), under
+-- their boxes (HIGH, Movers.lua:1984), so it covers none of them; Minimize then sits above them, so the finder can be minimized out of their way.
+-- The menu keeps its own strata.
+function D.Strata()
+	local kit = ns.MoverKit
+	local open = type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
+	local strata = "MEDIUM"
+	if not open then
+		local window = S.parent
+		local ok, answer = pcall(window.GetFrameStrata, window)
+		if ok and not IsSecret(answer) and type(answer) == "string" then
+			strata = answer
+		end
+	end
+	if strata ~= S.strata then
+		S.strata, S.lifted = strata, nil
+		S.frame:SetFrameStrata(strata)
+		if S.menu then
+			S.menu.frame:SetFrameStrata("FULLSCREEN_DIALOG")
+		end
+	end
+	if open ~= S.lifted then
+		S.lifted = open
+		S.fold:SetFrameStrata(open and "HIGH" or strata)
+		S.fold:SetFrameLevel(open and L.LIFT or S.bar:GetFrameLevel() + 1)
+	end
+end
+
+-- The title bar as the finder is: Dock while it hangs from a spot of its own, Minimize's mark (a bar, or a square while minimized), and the search
+-- box under the title bar, or on it while minimized where it leaves its least width between the title and the buttons, else hidden.
+function D.Bar()
+	if not S.fold then
+		return
+	end
+	local free = D.Free()
+	S.dock:SetShown(free)
+	for _, line in ipairs(S.foldLines.full) do
+		line:SetShown(not S.min)
+	end
+	for _, line in ipairs(S.foldLines.min) do
+		line:SetShown(S.min == true)
+	end
+	local box = S.box
+	box:ClearAllPoints()
+	if not S.min then
+		box:SetPoint("TOPLEFT", S.frame, "TOPLEFT", L.PAD, S.boxY)
+		box:SetWidth(L.INNER)
+		box:Show()
+		return
+	end
+	local ok, words = pcall(S.title.GetStringWidth, S.title)
+	local used = L.PAD + (ok and Finite(words) and words or 80) + L.GAP
+	local buttons = 4 + 2 * L.CLOSE + 2 + (free and L.GAP + L.DOCK_W or 0) + L.GAP
+	if L.WIDTH - used - buttons >= L.MIN_BOX then
+		box:SetPoint("LEFT", S.title, "RIGHT", L.GAP, 0)
+		box:SetPoint("RIGHT", free and S.dock or S.fold, "LEFT", -L.GAP, 0)
+		box:Show()
+	else
+		box:Hide()
+	end
+end
+
+-- Minimizes the finder to its title bar, or opens it again; kept for the character, and its box in the movers takes that size.
+function D.Collapse(on)
+	S.min = on == true
+	local kept = D.Record(true)
+	if kept then
+		kept.min = S.min or nil
+	end
+	if not S.frame then
+		return
+	end
+	CloseMenu()
+	S.body:SetShown(not S.min)
+	S.barRule:SetShown(not S.min)
+	S.frame:SetHeight(S.min and L.BAR or (S.height or L.MIN_HEIGHT))
+	D.Bar()
+	D.Keep()
+end
+
+-- Docks the finder at the window's edge again, for this character; the spot in the movers stays for a later move.
+function D.Dock()
+	local kept = D.Record()
+	if kept then
+		kept.free = nil
+	end
+	S.dropped, S.placed = nil, nil
+	D.Place()
+	D.Handle()
+end
+
+-- A drag of the title bar, out of a fight (StartMoving, WL/uiobjects.yaml:4797), as the window's title bar drags the window.
+function D.DragStart()
+	if S.moving or not S.frame or Fighting() then
+		return
+	end
+	CloseMenu()
+	Untip(S.bar)
+	S.frame:StartMoving()
+	S.moving = true
+end
+
+-- The finder was let go (StopMovingOrSizing, :4813, with SetUserPlaced, :4778, so the client keeps no place of its own): a box of its size, its top
+-- left corner at the finder's, is saved as its spot (ns.MoverKit.Commit), which it hangs from for this character from now on (ns.GearSearchMoved).
+-- Without the entry it stays where it was let go for this session.
+function D.DragStop()
+	if not S.moving then
+		return
+	end
+	S.moving = false
+	local frame = S.frame
+	frame:StopMovingOrSizing()
+	pcall(frame.SetUserPlaced, frame, false)
+	S.placed = nil
+	local left, bottom, width, height = D.Rect(frame)
+	if not left then
+		D.Place()
+		return
+	end
+	local kept = D.Record(true)
+	if kept then
+		kept.free = true
+	end
+	local kit = ns.MoverKit
+	local info = type(kit) == "table" and type(kit.BY_NAME) == "table" and kit.BY_NAME[NAME] or nil
+	local saved = false
+	if info and type(kit.Commit) == "function" then
+		saved = kit.Commit(NAME, info, left, bottom, width, height) == true
+	end
+	S.dropped = not saved and { left, bottom + height } or nil
+	S.placed = nil
+	D.Place()
+	D.Handle()
+end
+
+-- Dock, Minimize and their place on the title bar, left of the cross; Minimize's marks are a bar and a square, drawn as the cross is.
+function D.MakeButtons(bar)
+	local fold = Own(CreateFrame("Button", nil, bar))
+	fold:SetSize(L.CLOSE, L.CLOSE)
+	fold:SetPoint("RIGHT", S.close, "LEFT", -2, 0)
+	fold:RegisterForClicks("LeftButtonUp")
+	S.fold = fold
+	S.foldLines = { full = {}, min = {} }
+	local marks = { full = { { 5, -12, 13, -12 } }, min = { { 5, -5, 13, -5 }, { 13, -5, 13, -13 }, { 13, -13, 5, -13 }, { 5, -13, 5, -5 } } }
+	for state, lines in pairs(marks) do
+		for _, at in ipairs(lines) do
+			local line = Stroke(fold, "OVERLAY", "TOPLEFT", at[1], at[2], at[3], at[4])
+			local hover = Stroke(fold, "HIGHLIGHT", "TOPLEFT", at[1], at[2], at[3], at[4])
+			S.strokes[#S.strokes + 1] = line
+			S.hoverStrokes[#S.hoverStrokes + 1] = hover
+			table.insert(S.foldLines[state], line)
+			table.insert(S.foldLines[state], hover)
+		end
+	end
+	fold:SetScript("OnClick", function()
+		Run(D.Collapse, not S.min)
+	end)
+	Tipped(fold, function()
+		return S.min and T.RESTORE or T.MINIMIZE
+	end, T.FOLD_TIP)
+	local dock = MakeTextButton(bar, T.DOCK, L.DOCK_W, T.DOCK_TIP, D.Dock)
+	dock:SetPoint("RIGHT", fold, "LEFT", -L.GAP, 0)
+	dock:Hide()
+	S.dock = dock
 end
 
 -- Opens the finder, the window first. When the window waits for the end of a fight, the finder waits for it too.
@@ -2356,7 +2722,41 @@ function ns.GearSearchShown()
 	return ok and shown == true
 end
 
--- The list row Item finder (chat.gearFind): one line, which opens the window and the finder.
+-- The movers (Movers.lua's entry FlatUIGearSearch). The finder has a handle while the window may show (gate: as ns.GearWindowShown, looked up when
+-- called).
+function ns.GearSearchMayShow()
+	return Allowed() and Ask(ns, "GearWindowShown") == true
+end
+
+-- True while the finder hangs at the window's edge (docked), where its box then is, whatever spot the movers keep.
+function ns.GearSearchDocked()
+	return not D.Free()
+end
+
+-- Where the box of a docked finder starts (start): the offsets of its top left corner from the screen's, beside the window; else the entry's x and y.
+function ns.GearSearchStart(x, y)
+	local left, top = D.Hang()
+	local _, height = D.Screen()
+	if not (left and height) then
+		return x, y
+	end
+	return left, top - height
+end
+
+-- The movers set or put back the finder's spot (changed): it hangs from it now, for this character, or, with the spot forgotten (a reset of its
+-- box), at the window's edge again.
+function ns.GearSearchMoved()
+	local kept = D.Record(true)
+	if kept then
+		kept.free = Ask(ns, "MoverSaved", NAME) == true or nil
+	end
+	S.dropped, S.placed = nil, nil
+	if S.frame then
+		Run(D.Place)
+	end
+end
+
+-- The list row Item finder (chat.gearFind): one line, which opens the window and the finder, and a minimized finder again.
 function ns.GearFindLines()
 	return { { 1, T.OPEN_LINE } }
 end
@@ -2373,6 +2773,9 @@ function ns.GearFindPick(id)
 		local show = Fn(ns, "GearWindowShow")
 		if parent and show then
 			pcall(show)
+		end
+		if S.min then
+			Run(D.Collapse, false)
 		end
 		return true, nil
 	end

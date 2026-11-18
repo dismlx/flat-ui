@@ -250,9 +250,12 @@ local ADDON_NAME, ns = ...
 -- movers' box of it follows; its text size is set on its own font strings (SetFont) in the face of the game's GameFontHighlightSmall and
 -- GameFontHighlight (GetFont, read only); and it has a second item box, Against, that an item dropped on it or chosen in the finder fills. The
 -- weight of each spell is kept with the spells in FlatUICharDB.gearSpells and set by a click on its Weight cell (IsShiftKeyDown for back to 1).
--- Its Find button and the Item finder row show the item finder, FlatUIGearSearch, a frame of its own made on the window (a frame of Flat UI's own)
--- and hung at its right edge, or at its left edge while the screen has no room on the right (GetLeft and GetRight of the window, GetWidth of
--- UIParent), kept on the screen (SetClampedToScreen), so it hides with it; its search and level boxes are EditBoxes of its own. The finder
+-- Its Find button and the Item finder row show the item finder, FlatUIGearSearch, a frame of its own on UIParent that shows only with the window
+-- (FlatUIGear) and is hung at its right edge, or at its left edge while the screen has no room on the right (GetLeft and GetRight of the window,
+-- GetWidth of UIParent), kept on the screen (SetClampedToScreen) and in the window's strata (GetFrameStrata, SetFrameStrata); its search and level
+-- boxes are EditBoxes of its own. The movers place it too (its own entry): a drag of its title bar (StartMoving, StopMovingOrSizing, SetUserPlaced)
+-- or of its box gives it a spot of its own for the character, and Dock hangs it at the window again; Minimize folds it to its title bar, kept in
+-- FlatUICharDB.gearFinder with whether it is docked. The finder
 -- searches Flat UI's own item index (ItemIndex.lua, made from the game's client data by tools/dev/make_itemindex.py) and the bags, bank and other
 -- characters Bags records; for an item the index lacks and for Best for me it asks the game to load the item (C_Item.RequestLoadItemDataByID) and
 -- reads it (C_Item.GetItemInfo,
