@@ -105,7 +105,7 @@ ns.SETUP_STOPS = {
 	{
 		id = "chat", title = "Chat", line = "Bottom left. Pick how much the chat window stands out.",
 		draw = "mock-chat", spot = { 0.02, 0.66, 0.26, 0.28 },
-		more = { "chat-window", "chat-text", "tips" },
+		more = { "chat-window", "chat-text", "tips", "tips-spells" },
 		parts = {
 			{ id = "panel", label = "Chat window", kind = "cards", owns = { "chat.enabled", "chat.frames", "chat.opacity", "chat.frameBorder" }, cards = {
 				{ id = "dark", label = "Dark panel", line = "See-through dark, with a thin border.", suggest = { "else" }, values = {} },
