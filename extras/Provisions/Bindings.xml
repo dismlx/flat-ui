@@ -1,0 +1,16 @@
+<Bindings>
+	<Binding name="CLICK ProvisionsHealButton:LeftButton" header="PROVISIONS" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK ProvisionsManaButton:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK ProvisionsStoneButton:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK ProvisionsFoodButton:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK ProvisionsDrinkButton:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK ProvisionsBandageButton:LeftButton" category="ADDONS">
+	</Binding>
+	<Binding name="CLICK ProvisionsBuffFoodButton:LeftButton" category="ADDONS">
+	</Binding>
+</Bindings>

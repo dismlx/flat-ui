@@ -124,6 +124,9 @@ def main(argv):
         if first(flags) & AURA_INTERRUPT_STANDING:
             seated.add(spell)
     spell_category = dict(con.execute("SELECT SpellID, Category FROM SpellCategories WHERE DifficultyID = 0"))
+    cast_time = dict(con.execute(
+        "SELECT m.SpellID, t.Base FROM SpellMisc m JOIN SpellCastTimes t ON t.ID = m.CastingTimeIndex "
+        "WHERE m.DifficultyID = 0"))
     spell_category_cd = dict(con.execute(
         "SELECT SpellID, CategoryRecoveryTime FROM SpellCooldowns WHERE DifficultyID = 0"))
     zone_spells = set(r[0] for r in con.execute(
@@ -197,7 +200,9 @@ def main(argv):
             item_cat = (use[7] or 0) & 0xFFFF
             cat = item_cat or spell_category.get(spell, 0)
             cd = use[8] if (use[8] or 0) > 0 else spell_category_cd.get(spell, 0)
-            if cat and cd and cd > 0 and not category:
+            # The shared cooldown, kept only for an instant item: its use starts the category's cooldown before
+            # the next line of the same macro press runs (Core.lua, Body).
+            if cat and cd and cd > 0 and not category and cast_time.get(spell, 0) == 0:
                 category, cooldown = cat, cd
             for sp, e in chain(spell):
                 if sp in zone_spells:
@@ -250,7 +255,7 @@ def main(argv):
             if buff:
                 rec["buff"] = dict((k, int(round(v))) for k, v in buff[0].items())
                 rec["buffSpell"] = buff[1]
-                buff_spells[buff[1]] = (sorted(buff[0]), spell_name.get(buff[1], ""))
+                buff_spells[buff[1]] = (list(buff[0]), spell_name.get(buff[1], ""))
         elif bandage:
             rec["bandage"] = int(round(bandage))
             rec["skill"] = skill
@@ -303,7 +308,8 @@ def write(items, buff_spells, skills, meta, counts):
     out.append("-- Source: the GrunzForever export of the WoW: Forever client (MIT), %s build %s (%s)."
                % (meta.get("Product", "?"), meta.get("Version", "?"), meta.get("BuildName", "?")))
     out.append("-- Tables read: Item, ItemSparse, ItemXItemEffect, ItemEffect, SpellEffect, SpellMisc, SpellDuration,")
-    out.append("-- SpellInterrupts, SpellCategories, SpellCooldowns, SpellCastingRequirements, SpellName, SkillLine.")
+    out.append("-- SpellInterrupts, SpellCategories, SpellCooldowns, SpellCastTimes, SpellCastingRequirements, SpellName,")
+    out.append("-- SkillLine.")
     out.append("-- Counts: " + ", ".join("%s %d" % (k, counts[k]) for k in
                                          ("heal", "mana", "stone", "food", "drink", "both", "bandage", "buff")) + ".")
     out.append("--")
@@ -311,13 +317,13 @@ def write(items, buff_spells, skills, meta, counts):
     out.append("-- on one item = food and drink. bandage = healing over the channel, firstAid = the First Aid rank it")
     out.append("-- needs (skill = the skill line). buff = the stats of its buff and their amounts (buffSpell = the aura).")
     out.append("-- level = the level it needs; conjured = the item's conjured flag; zone = usable only in some areas")
-    out.append("-- (checked with C_Item.IsUsableItem); cd = its shared cooldown category, when it has a cooldown.")
+    out.append("-- (checked with C_Item.IsUsableItem); cd = its shared cooldown category, when it has one and is instant.")
     out.append("")
     out.append("local _, ns = ...")
     out.append("")
     out.append("ns.FIRST_AID_SKILLS = { " + ", ".join(str(s) for s in skills) + " }")
     out.append("")
-    out.append("-- The buffs of buff food, by the spell of the aura: the stats it raises.")
+    out.append("-- The buffs of buff food, by the spell of the aura: the stats it raises, in the order of its effects.")
     out.append("ns.BUFF_SPELLS = {")
     for spell in sorted(buff_spells):
         stats, name = buff_spells[spell]
