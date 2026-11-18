@@ -40,6 +40,10 @@ CLASS_FAMILY = {'MAGE': 3, 'WARRIOR': 4, 'WARLOCK': 5, 'PRIEST': 6, 'DRUID': 7, 
 SCHOOL_INDEX = {1: 1, 2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7}
 ROLL = {1: 'spell', 2: 'special', 3: 'ranged'}
 CMP_KINDS = ('spell', 'dot', 'channel', 'heal', 'hot', 'strike', 'apstrike', 'finisher', 'auto', 'shot', 'wand', 'seal', 'proc', 'threat')
+# The kinds of an item stat key (D.STATS): those GearModel.lua's spell model counts, none and note, and avoid (a rating index: 2 defense, 3 dodge,
+# 4 parry, 5 block, Camelot/PaperDollFrame.lua:5-8) and armor, which only GearAvoid.lua counts; GearModel.lua passes over a kind it does not know.
+STAT_KINDS = ('stat', 'school', 'rating', 'skill', 'vs', 'note', 'none', 'ap', 'rap', 'sp', 'spd', 'heal', 'wdmg', 'bv', 'dps', 'avoid', 'armor')
+AVOID_RATINGS = (2, 3, 4, 5)
 
 # The fields the shapes may hold: those of design 3.2, and of its stub (3.2a), which uses a part of them, and an entry's seal (a judgement's,
 # whose rank SpellModel.lua's M.Highest gives the judgement), which the join of the parts added. Every field written must be one of these;
@@ -1204,7 +1208,7 @@ def write_lua(entries, rules, crit, gear, cur, threat, probes, defaults, rockbit
         out.append('\t' + lua(c) + ',')
     out.append('}')
     out.append('-- Every item stat key of the client; t: its "Equip:" sentence, for the keys that have one. none: known, not in the model;')
-    out.append('-- note: not in the model, and named when an item has it.')
+    out.append('-- note: not in the model, and named when an item has it; avoid (with its rating index) and armor: counted by GearAvoid.lua only.')
     out.append('D.STATS = {')
     for s in sorted(gear['stats'], key=lambda s: s['key']):
         out.append('\t%s = %s,' % (s['key'], lua(stat_value(s))))
@@ -1246,6 +1250,8 @@ def stat_value(s):
         v[3] = s['stat']
     elif kind == 'note':
         v[2] = s['what']
+    elif kind == 'avoid':
+        v[2] = s['rating']
     if s.get('t'):
         v['t'] = s['t']
     return v
@@ -1292,6 +1298,14 @@ def check_whole(entries, rules, crit, w, client, coef, threat, gear):
         if x.get('talent'):
             if not x.get('r') or x.get('node') is None or x.get('def') not in capdefs:
                 P.fail('talent %s: curve %s, node %s, definition %s' % (x['talent'], x.get('r'), x.get('node'), x.get('def')))
+    stat_keys = [s['key'] for s in gear['stats']]
+    if len(stat_keys) != len(set(stat_keys)):
+        P.fail('an item stat key twice')
+    for s in gear['stats']:
+        if s['kind'] not in STAT_KINDS:
+            P.fail('item stat %s: kind %r' % (s['key'], s['kind']))
+        if (s['kind'] == 'avoid') != (s.get('rating') is not None) or (s['kind'] == 'avoid' and s['rating'] not in AVOID_RATINGS):
+            P.fail('item stat %s: rating %r' % (s['key'], s.get('rating')))
     written = {e.cmp for e in entries.values() if e.cmp}
     for k in CMP_KINDS:
         if k not in written:
