@@ -558,7 +558,8 @@ local function Header(boss, attacker, gives)
 	return (gives and T.GIVES or T.HEADER):format(boss and T.BOSS or T.LEVEL, attacker)
 end
 
--- An item to wear: each slot G.Candidates gives, the table with the item there. False when nothing should be kept (the item not loaded).
+-- An item to wear: each slot G.Candidates gives, the table with the item there. False when nothing should be kept: no slot to compare with, which
+-- may be an item the client has not loaded yet, or an item G.With could not read, so the next ask works it out again.
 local function Instead(result, link, opts, state, stats, s, now)
 	local G = Gear()
 	local data = Table(opts.data)
@@ -566,7 +567,7 @@ local function Instead(result, link, opts, state, stats, s, now)
 	local list, why, quiet = G.Candidates(link, Text(Field(data, "guid")) or Text(opts.guid), lines)
 	if not Table(list) then
 		result.why, result.quiet = Text(why), quiet == true
-		return true
+		return false
 	end
 	for _, c in ipairs(list) do
 		local state2, stats2, info = G.With(state, stats, link, c, lines)
