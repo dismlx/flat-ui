@@ -110,7 +110,9 @@ local PLACE_EVENTS = { PLAYER_ENTERING_WORLD = true, UI_SCALE_CHANGED = true, DI
 -- (:186, 343-345), and the set in use on ACTIVE_COMBAT_CONFIG_CHANGED and the list of sets on TRAIT_CONFIG_LIST_UPDATED
 -- (ClassTalents/Blizzard_ClassTalentsFrame.lua:41, 46, 335-336, 340-342), so a set the client gives only after the interface loaded is read too; the
 -- Cooldown Manager follows a change of set the same way (Blizzard_CooldownViewer/CooldownViewerSettingsDataProvider.lua:26-29). Then a level; a
--- stance or form; a new world. The player's UNIT_AURA is heard too, for Righteous Fury and the game's tank aura (PlateThreat.lua).
+-- stance or form; a new world. The player's UNIT_AURA is heard too, for Righteous Fury and the game's tank aura (PlateThreat.lua). A pick that waits
+-- unapplied in the talent window brings TRAIT_TREE_CURRENCY_INFO_UPDATED too, and does not count: only the talents applied do (MostPoints,
+-- Core.lua).
 local ROLE_EVENTS = { "PLAYER_ROLES_ASSIGNED", "GROUP_ROSTER_UPDATE", "CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED",
 	"TRAIT_TREE_CURRENCY_INFO_UPDATED", "ACTIVE_COMBAT_CONFIG_CHANGED", "TRAIT_CONFIG_LIST_UPDATED", "ACTIVE_TALENT_GROUP_CHANGED",
 	"PLAYER_LEVEL_UP", "UPDATE_SHAPESHIFT_FORM", "PLAYER_ENTERING_WORLD" }

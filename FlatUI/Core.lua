@@ -165,7 +165,8 @@ local ADDON_NAME, ns = ...
 -- skills and weapons; the target's level and kind, whether it exists, can be attacked, is dead or is a player, and whether it attacks the player:
 -- the player's threat situation on it (UnitThreatSituation), else whether its target is the player (UnitIsUnit); and, while its row is For tanks
 -- and damage dealers, the player's role (ns.PlayerRole: the group role, a tank stance, form or aura, the points spent in each talent tree of the set
--- of talents in use, the class), read again after each event the hud module hears that can change it.
+-- of talents in use, as last read while no pick waited unapplied on it in the talent window, the class), read again after each event the hud module
+-- hears that can change it.
 -- Healer mana (off by default) is a window of its own on UIParent; it only reads mana (UnitPowerPercent) and changes nothing. The dispel border, the
 -- debuff type icon and the raid marker of the party and raid frames, the leader and assistant icons of the raid frames and the dispel border of the
 -- player, target and focus frames, and the heal over time squares of the party and raid frames, are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a
@@ -444,6 +445,10 @@ local function Api(space, name)
 	return type(fn) == "function" and fn or nil
 end
 
+-- The answer of MostPoints for each set of talents, by its config ID, from the last read that found one while no pick waited unapplied on the set:
+-- { place, name }, or {} when no tree had a point then.
+local unstaged = {}
+
 -- The talent tree of the class with the most points spent in it: its place in the game's order of the trees and its name, or nil when no tree has a
 -- point or the client does not say. On Forever a class has one specialization (the talent window keys its art by one specialization per class,
 -- Blizzard_PlayerSpells/Camelot/ClassTalents/Blizzard_ClassTalentUtil.lua:13-40), and the three trees of old are the node groups of its one tree of
@@ -455,9 +460,16 @@ end
 -- (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:1310-1324), and the set in use is the one the window shows as it opens
 -- (ClassTalents/Blizzard_ClassTalentsFrame.lua:147-150, 883-902): C_ClassTalents.GetActiveConfigID (ClassTalentsDocumentation.lua:73-80), else, as
 -- Forever's window falls back, the set of the active group of dual spec (C_SpecializationInfo.GetCombatConfigIDForSpecGroup of GetActiveSpecGroup,
--- SpecializationInfoDocumentation.lua:41-55, 90-103; Camelot:111-121). Each call is in apis.yaml of the client, and every answer passes
--- ns.IsSecret or ns.Finite before it is compared or used as a key. With another number of groups than the class has trees the order would tell
--- nothing, so that gives nil too.
+-- SpecializationInfoDocumentation.lua:41-55, 90-103; Camelot:111-121). Only the talents applied count. The window stages the player's picks on that
+-- same set until they are applied or undone (its Apply and Undo: Camelot/ClassTalents/Blizzard_ClassTalentsFrame.xml:441, 517; ClassTalents:90-92)
+-- and keeps them when it hides (its OnHide calls no RollbackConfig: Blizzard_SharedTalentFrame.lua:300-308, ClassTalents:295-309, Camelot:50-55),
+-- and its headers count them by all it shows: it draws them again with each pick (TRAIT_TREE_CURRENCY_INFO_UPDATED,
+-- Blizzard_SharedTalentFrame.lua:338-342; ClassTalents:765-774) and after Undo (ClassTalents:1190-1195), it counts its own points with the picks
+-- (excludeStagedChangesForCurrencies false, Blizzard_SharedTalentFrame.xml:43, .lua:1359), and C_Traits.GetGroupCurrencyInfo has no flag to leave
+-- them out, as GetTreeCurrencyInfo has (:537-552). So while the client says a pick waits on the set (C_Traits.ConfigHasStagedChanges, :107-120, as
+-- the window asks, ClassTalents:1256-1262), the answer is the last one found for that set while none waited (unstaged), or nil before one was found,
+-- which leaves the role to the class. Each call is in apis.yaml of the client, and every answer passes ns.IsSecret or ns.Finite before it is
+-- compared or used as a key. With another number of groups than the class has trees the order would tell nothing, so that gives nil too.
 local function MostPoints(count)
 	local config = Ask(Api("C_ClassTalents", "GetActiveConfigID"))
 	if not Finite(config) then
@@ -465,6 +477,14 @@ local function MostPoints(count)
 		config = Finite(group) and Ask(Api("C_SpecializationInfo", "GetCombatConfigIDForSpecGroup"), group) or nil
 	end
 	if not Finite(config) then
+		return nil
+	end
+	-- A pick waits unapplied: the answer found before it.
+	if Ask(Api("C_Traits", "ConfigHasStagedChanges"), config) == true then
+		local found = unstaged[config]
+		if found then
+			return found[1], found[2]
+		end
 		return nil
 	end
 	local tree = Field(Field(Ask(Api("C_Traits", "GetConfigInfo"), config), "treeIDs"), 1)
@@ -501,16 +521,18 @@ local function MostPoints(count)
 			best, most = place, points
 		end
 	end
-	return best, best and names[best] or nil
+	local name = best and names[best] or nil
+	unstaged[config] = { best, name }
+	return best, name
 end
 
 -- The player's role, "tank", "healer" or "damage", the sentence that says why as Flat UI setup suggests from it, and what it was read from, as a
 -- short phrase for /flatui status (the hit table's line; as nameplate threat names its own reason, PlateThreat.lua), from the first that answers:
 -- the role the group gave, a tank stance, form or aura as nameplate threat reads it (ns.PlateThreat.Role, PlateThreat.lua, looked up when asked; its
--- reason "your group role" is passed over, as the role the group gives now is read here first), the talent tree with the most points (MostPoints,
--- above), the class, where a priest heals. The sentence and the phrase are nil when the client gives none of them. Flat UI setup suggests from it
--- (SetupWalk.lua, Walk.Role) and the hit table shows by it (HitTable.lua), so the two always agree. It only reads, and a withheld answer counts as
--- none.
+-- reason "your group role" is passed over, as the role the group gives now is read here first), the talent tree with the most points of the talents
+-- applied (MostPoints, above), the class, where a priest heals. The sentence and the phrase are nil when the client gives none of them. Flat UI
+-- setup suggests from it (SetupWalk.lua, Walk.Role) and the hit table shows by it (HitTable.lua), so the two always agree. It only reads, and a
+-- withheld answer counts as none.
 function ns.PlayerRole()
 	local given = Ask(UnitGroupRolesAssigned, "player")
 	if IsText(given) and ROLE_GIVEN[given] then
