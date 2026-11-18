@@ -229,6 +229,10 @@ local ADDON_NAME, ns = ...
 -- and the others, only while the game gives stats plain), reads once a session the description of one spell (C_Spell.GetSpellDescription) to see
 -- whether the game's texts count spell power, and reads the fields processingInfo, supportsItemComparison and suppressAutomaticCompareItem the game
 -- keeps on a tooltip it builds (TooltipDataHandler.lua:281, TooltipDataRules.lua:168-176). The spells chosen are kept in FlatUICharDB.gearSpells.
+-- With Avoidance (for tanks by default) the item lines and the window also show an enemy's swing against the player now and with the item: in the
+-- same plain moment as the other stats it reads the defense skill (UnitDefenseSkill), the chances to dodge, parry and block (GetDodgeChance,
+-- GetParryChance, GetBlockChance), armor (UnitArmor), block value (GetShieldBlock), the dodge agility gives (GetDodgeChanceFromAttribute) and whether a
+-- shield is worn (C_PaperDollInfo.OffhandHasShield), and asks what armor takes off against the enemy's level (C_PaperDollInfo.GetArmorEffectiveness).
 -- Its Gear comparison window (/flatui gear) is a frame of its own on UIParent, named FlatUIGear in UISpecialFrames so Escape closes it, placed by
 -- the movers; it takes an item dropped on it (GetCursorInfo, then ClearCursor) and a spell dropped on it (GetCursorInfo, and GetMacroSpell for a
 -- macro: the cursor keeps the spell), and writes GameTooltip for its rows (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and Hide while
