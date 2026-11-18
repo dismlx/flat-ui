@@ -100,8 +100,9 @@ local CAPS = { classic = "9% melee, 16% spells", game = "8% melee, 17% spells" }
 -- The slots by their number (INVSLOT_AMMO to INVSLOT_TABARD), as the comparison names them (design 2.3, 2.4).
 local SLOTS = { [0] = "Ammo", "Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Finger 1", "Finger 2",
 	"Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged", "Tabard" }
--- The comparison kinds whose cast is a swing or a shot (design 2.3): Attack, Auto Shot and Shoot with a wand, as the name of a line says it at A cast.
-local SWINGS = { auto = "a swing", shot = "a shot", wand = "a shot" }
+-- What a cast is for the comparison kinds whose cast is no spell cast (design 2.3; GearModel.lua's G.Figure): a swing of Attack, a shot of Auto
+-- Shot and of Shoot with a wand, a hit of a seal and one proc of a proc, as the name of a line says it at A cast.
+local CASTS = { auto = "a swing", shot = "a shot", wand = "a shot", seal = "a hit", proc = "a proc" }
 -- The forms whose swing a weapon ability counts its attack power at (GetShapeshiftFormID: Cat Form 1, Bear Form 5, Dire Bear Form 8, as D.RULES has
 -- them), the slot of each hand of a weapon part (design 3.2), and the normalized and form speeds when the data gives none (D.MODEL, SpellData.lua).
 local FORMS = { [1] = "cat", [5] = "bear", [8] = "bear" }
@@ -797,9 +798,9 @@ local function Pick(e, figure)
 	return nil
 end
 
--- What a line counts when it is not what the switch says (design 2.3): a swing or a shot for A cast, threat for a line that does no damage, a second
--- for threat that rides on the swings (row.perSecond), and none at A second for a strike that takes the place of the next swing (G.Figure gives it
--- no figure there). Nil when the switch says it.
+-- What a line counts when it is not what the switch says (design 2.3): a swing, shot, hit or proc for A cast, threat for a line that does no damage,
+-- a second for threat that rides on the swings (row.perSecond), and none at A second for a strike that takes the place of the next swing (G.Figure
+-- gives it no figure there). Nil when the switch says it.
 local function Counts(mode, row)
 	local entry = EntryOf(row.line)
 	local cmp, figure = entry and entry.cmp or nil, row.figure
@@ -810,8 +811,8 @@ local function Counts(mode, row)
 			return mode == "threat" and "a second" or "threat a second"
 		end
 		return mode ~= "threat" and "threat" or nil
-	elseif figure == "cast" and SWINGS[cmp] then
-		return SWINGS[cmp]
+	elseif figure == "cast" and CASTS[cmp] then
+		return CASTS[cmp]
 	end
 	return nil
 end

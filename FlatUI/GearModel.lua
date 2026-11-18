@@ -2706,10 +2706,10 @@ local function Remember(key, result)
 	cache[key] = result
 end
 
--- The comparison of an item to wear (a link) or of a worn item (its slot number) for the chosen lines (the design's 2.3, 2.4): { header, candidates =
--- { { label, slots, mean, rows = { { line, now, with, figure, estimate, basis, perSecond, why } } } }, notCounted, vs, random, notYet, noChange, why },
--- and best (the candidate the tooltip shows), quiet (why is no line to show), sizes (the fixed rating sizes stood in) and old (a result from before
--- the fight); the header of this file says what each holds. lines: the chosen lines (ns.GearChosen() when nil). opts: { listVersion, mode, data (the
+-- The comparison of an item to wear (a link) or of a worn item (its slot number) for the chosen lines (the design's 2.3, 2.4): { header,
+-- candidates = { { label, slots, mean, rows = { { line, now, with, figure, estimate, basis, perSecond, why } } } }, notCounted, vs, random, notYet,
+-- noChange, why }, and best (the candidate the tooltip shows), quiet (why is no line to show), sizes (the fixed rating sizes stood in) and old (a
+-- result from before the fight); the header of this file says what each holds. lines: the chosen lines (ns.GearChosen() when nil). opts: { listVersion, mode, data (the
 -- post call's data, for its lines and guid), guid, most, role, against, facing, rules, lowRank, inputs (the hit table's, else those of the last
 -- read) }. Kept by link (or slot and the link worn there), M.Version(), opts.listVersion and opts.mode, with the rows' choices; in a fight and with
 -- stats from before it, the last result for the item, else why.
