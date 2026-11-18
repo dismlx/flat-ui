@@ -24,20 +24,22 @@ local _, ns = ...
 -- (minimized), and w and h, the size of its box in the movers, which takes the title bar's height while it is minimized. While the movers are
 -- open (ns.MoverKit.IsOpen) the finder is in the MEDIUM strata, under their boxes (HIGH), so it covers none of them, and Minimize is above them,
 -- so the finder can be minimized out of their way.
--- Strata and levels (0.5.23, the owner: "the search function cant be clicked into in the default flatui user interface"): the finder lies one
--- strata above the window's (GetFrameStrata, SetFrameStrata, WL/uiobjects.yaml:4217, 4653: HIGH over MEDIUM, FULLSCREEN over DIALOG), as the
--- Compare gear button lies over the Character window (GearButton.lua), at a level of its own (L.LEVEL, SetFrameLevel, :4646), under that button's
--- (20) so the button stays on its title bar where the two meet, and it is not toplevel; in the window's strata only while the movers are open
--- (above) and while the options window (HIGH, Panel.lua:2654) shows over a window in MEDIUM, so it stays under that with its window. Its search
--- box and level fields lie L.ABOVE levels over it and Minimize two, set again at each look whenever one is not there (D.Levels): the game sets the
--- levels of a frame's children again when the frame's level changes (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:817). Before, the
+-- Strata and levels (0.5.23, the owner: "the search function cant be clicked into in the default flatui user interface"): the finder lies one strata
+-- above the window's (GetFrameStrata, SetFrameStrata, WL/uiobjects.yaml:4217, 4653: HIGH over MEDIUM, FULLSCREEN over DIALOG), as the Compare gear
+-- button lies over the Character window (GearButton.lua), at a level of its own (L.LEVEL, SetFrameLevel, :4646), under that button's (20) so the
+-- button stays on its title bar where the two meet, and it is not toplevel; in the window's strata only while the movers are open (above) and while
+-- the options window (HIGH, Panel.lua:2654) shows over a window in MEDIUM, so it stays under that with its window. A finder kept on the screen over
+-- the window, with no room on either side, covers that part of it. Its search box and level fields lie L.ABOVE levels over it, above the rest of the
+-- finder and the Compare gear button, so the search box of a minimized finder docked on the Character window, on that window's title bar where the
+-- button is, takes the click where the two meet; Minimize two. They are set again at each look whenever one is not there (D.Levels): the game sets
+-- the levels of a frame's children again when the frame's level changes (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:817). Before, the
 -- finder was toplevel in the window's strata with its search box set once two levels over the title bar. The game raises a toplevel window above
 -- every frame of its strata when it is clicked, and the panel manager raises its left panel each time it lays the panels out
--- (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:615-647); the finder, made later and raised only by a click on itself, opened
--- under such a window. By default it docks on one: with UIParent 1365 wide (the game's UI scale 1 on a 16:9 screen) the window, at 680 and 460
--- wide, leaves no room on its right (1488), so the finder hangs on its left, on the Character window (16 to 647), whose paper doll, stats pane,
--- title bar (510) and the movers' title strip (Movers.lua:3385-3394) then lay over the search box and took its clicks, each raising the Character
--- window again.
+-- (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:615-647); the finder, made later and raised only by a click on itself, opened under
+-- such a window. By default it docks on one: with UIParent 1365 wide (the game's UI scale 1 on a 16:9 screen) the window, at 680 and 460 wide, leaves
+-- no room on its right (1488), so the finder hangs on its left, on the Character window (16 to 647), whose paper doll and stats pane, and on a
+-- minimized finder its title bar (510) and the movers' title strip (Movers.lua:3385-3394), then lay over the search box and took its clicks, each
+-- raising the Character window again.
 -- Opening the finder opens the window first (ns.GearWindowShow, looked up when called); a window that waits for the end of a fight (GearWindow.lua
 -- makes its frame out of combat only) has the finder wait for it too (ns.OutOfCombat). Every frame here is a plain frame of Flat UI's own with
 -- nothing protected, so it is made, sized, filled, shown and placed in a fight too; only a drag of its title bar waits for the end of one.
@@ -96,10 +98,11 @@ local NAME, PARENT = "FlatUIGearSearch", "FlatUIGear"
 -- its icon, a check box, a line of a menu, the results a page, the room of the level boxes and of a filter button, and the two right columns; the
 -- least width of the search box on the title bar of a minimized finder, the width of Dock, and the frame level that puts Minimize above the boxes
 -- of the movers (their levels go up to 501, Movers.lua:56, 1973-1979); the finder's own level, whose frames reach it + 4, under the Compare gear
--- button's (GearButton.lua's LEVEL, 20), and how many levels over it its boxes lie: over the title bar and the body (+ 1) and their buttons (+ 2).
+-- button's (GearButton.lua's LEVEL, 20), and how many levels over it its boxes lie: over the rest of the finder (up to + 4) and over that button
+-- and its outline (20 and 21), where the search box of a minimized finder meets it.
 local L = { WIDTH = 344, MIN_HEIGHT = 540, PAD = 8, BAR = 26, CLOSE = 18, GAP = 6, DOCK = 4, FIELD = 20, ROW = 30, ICON = 24, CHECK = 12,
 	MENU_LINE = 16, PER_PAGE = 50, LEVEL_BOX = 34, ARROW = 20, BEST = 84, RIGHT = 54, CHANGE = 60, FOOT = 26, LINE = 12, MIN_BOX = 90, DOCK_W = 44,
-	LIFT = 600, LEVEL = 10, ABOVE = 3 }
+	LIFT = 600, LEVEL = 10, ABOVE = 12 }
 L.INNER = L.WIDTH - 2 * L.PAD
 L.HALF = (L.INNER - L.GAP) / 2
 -- Seconds: between two looks, typing that settles before a search, between two searches while an item loads (and how many), how long Best for me
@@ -2544,9 +2547,10 @@ function D.Level(frame, level)
 end
 
 -- The levels of the finder's own frames from its level as it is now, at each look: the search box and the level fields L.ABOVE over it, over the
--- title bar and the body (+ 1) and their buttons (+ 2), so the box takes its click on the title bar of a minimized finder too; Minimize one over the
--- title bar, or L.LIFT while it is above the boxes of the movers. The game sets the levels of a frame's children again when the frame's level
--- changes, so a level set once does not last (header).
+-- title bar and the body (+ 1), their buttons (+ 2), the rows (+ 3) and the Compare gear button (20 and its outline 21, in the same strata), so
+-- the box takes its click on the title bar of a minimized finder too, also where it meets that button; Minimize one over the title bar, or L.LIFT
+-- while it is above the boxes of the movers. The game sets the levels of a frame's children again when the frame's level changes, so a level set
+-- once does not last (header).
 function D.Levels()
 	local ok, level = pcall(S.frame.GetFrameLevel, S.frame)
 	if not (ok and Finite(level)) then
