@@ -1,6 +1,7 @@
 ## 0.5.24
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Combat text**, **Whose hits** at **Yours**: more of your hits show with the right spell, among them ticks every 2 seconds, critical ticks, your pet's hits, **Retaliation** and a strike cast while a damage over time ticks. When a swing and a strike land together, a weapon strike such as **Mortal Strike** takes the larger hit and a fixed one such as **Hamstring** the smaller, and where the game withholds the amounts, as this build does, both show with no spell name or icon rather than a wrong one.
 
 ## 0.5.23
 
