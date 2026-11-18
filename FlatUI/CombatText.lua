@@ -111,13 +111,13 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 --    while the player is in a fight (RestrictedActionsConstantsDocumentation.lua:26), and spellID and totalAmount are not NeverSecret (220-221).
 --    Addon code cannot compare or subtract a withheld value, so in a fight it cannot see which spell's total grew, and the meter cannot tell
 --    the spell of a single hit there. On this client the game withholds stats, cooldowns and debuff types in a fight as well.
---  * Details! does no more on this client. Its Details_Camelot.toc (Interface 16001) loads its parsers without the combat log, and
---    core/parser_nocleu1.lua reads only that meter: in a fight it hands the meter's withheld names, totals and amounts per second straight to its
---    bars and text and leaves out the sorting and shares of withheld values ("secrets cannot be compared or sorted"), and once the fight is over,
---    when the values are plain, it copies each source's spells and totals into its own segments. It never ties a hit to a spell: its numbers
---    are right because they are the game's own totals for each spell.
--- So Flat UI keeps UNIT_COMBAT for each number, its kind, its school and the enemy it hit, which the meter cannot give, and judges whose hit it
--- is and which spell made it from the signals below, as no source on this client names them.
+--  * Details! on this client (Details_Camelot.toc, Interface 16001) reads that meter and not the combat log (core/parser_nocleu1.lua): in a
+--    fight it passes the meter's withheld totals to its bars as they are, and after the fight it copies each spell's total into its own
+--    segments. It never sees a single hit, so it never has to say which spell made one: its numbers are the game's own totals for each spell.
+-- What Flat UI does: it takes each number, its kind, its school and the enemy it hit from UNIT_COMBAT, which the meter cannot give, and judges
+-- whose hit it is and which spell made it from your own casts, swings and auras (the signals below), as nothing on this client names them.
+-- Where that cannot tell, as for a swing and a strike that land together while the game withholds their amounts, the hit shows with no spell
+-- name or icon rather than a wrong one (MINE.Rival).
 -- A hit counts as yours from signals about you that are plain: a cast of yours or your pet's (UNIT_SPELLCAST_*, plain for the player and their
 -- pet, SecretPredicatesDocumentation.lua:115-118), each swing and shot of yours (PLAYER_SWING with its length and its hand, SwingTimerDocumentation.lua:43-52),
 -- your auto-attack and auto-repeat (PLAYER_ENTER_COMBAT, START_AUTOREPEAT_SPELL, as the game's attack button follows them, ActionButton.lua:1018-1031),
@@ -133,7 +133,8 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- no other member or member's pet is on its threat table (no raid is read): every damage hit and miss word on it shows, your pet's too, and the
 -- slots below only name it, with nothing counted as left out. On any other enemy, and for a heal on an enemy, the slots decide: each action of yours
 -- opens a slot and a hit fills one free slot. A report waits `hold` seconds (Flush), so a cast, a swing and a hit that the game sends in one frame or
--- a few frames apart count in any order, or until its plate goes, as the hit that kills an enemy comes just before.
+-- a few frames apart count in any order, or until its plate goes, as the hit that kills an enemy comes just before. A physical report waits with
+-- the first physical report on its enemy that came at most `hold` seconds before it, and they are judged together (Wait).
 -- A successful cast of yours or your pet's is looked up by its name in ns.CombatSpells (CombatTextSpells.lua, the classic class abilities cast on
 -- an enemy, so every rank and language): a spell that hits (kind hit, both or area) opens a cast slot of its school for cast seconds, or travel
 -- seconds when its missile flies, and the slot of an area spell takes up to areaMax hits of its school, on your target and on the enemies around
@@ -152,12 +153,13 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- with its own (bit.band): a slot of unknown school takes any hit, and a hit whose school is withheld takes only such a slot. Of those, a fresh
 -- slot goes first, the slot of a spell that does not fly whose hit comes from `late` seconds before its cast to `fresh` seconds after it, so two
 -- spells of one school cast close together (Fire Blast while a Fireball flies) each take their own hit; then the oldest.
--- A swing and a physical strike close together (a swing in the global cooldown of Hamstring) are not paired with their hits by order alone, which
--- gave the swing's hit the strike's name and icon and the strike's hit the swing's: the physical reports on your target that wait are paired as a
--- whole with the reported swings and the open strikes they fit (MINE.Assign), by the time of each swing (PLAYER_SWING, the swing timer's own),
--- the time of each cast, the order the game sent the signals and the hits in (`order`), and that a glancing hit is a swing's. The amount is
--- withheld from build 70755, so the expected damage of a strike (flat in ns.CombatSpells) counts only where the game gives it plainly. When
--- another pairing fits as well (within `tie`), the hit shows as yours with no spell name and no icon, in the colour of its school.
+-- A swing of yours and a physical strike of yours on one enemy within `hold` seconds of each other (a swing in the global cooldown of Hamstring)
+-- each fit the other's slot, and the game names neither hit and sends them in either order, so taking them in order gave the swing's hit the
+-- strike's name and icon and the strike's hit the swing's. One rule decides them (MINE.Rival): a strike with a weapon part (damage "weapon" in
+-- ns.CombatSpells, such as Mortal Strike or Sinister Strike) takes the larger amount and the swing the smaller, and a strike of a fixed damage
+-- (damage "flat": Hamstring, Wing Clip, Pummel, Shield Bash, Kick, Gouge and their like) the smaller and the swing the larger. When the amounts
+-- are not all plain numbers (from build 70755 the game withholds every amount, and a withheld amount cannot be compared), when two of them are
+-- the same, or when the strike is neither, the hits show as yours with no spell name and no icon, in the colour of their school.
 -- A swing of yours the game reports (PLAYER_SWING) opens a slot for one physical hit on your target, from `late` seconds before it (the hit may
 -- come first) to swingTake seconds after it, and a shot one for cast seconds, as its arrow flies; a main-hand swing within `extra` seconds of the one
 -- before is an extra attack. Until the game has reported a melee swing, each hand has a slot that frees swingShare of its speed after it was used
@@ -189,8 +191,7 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- length of most classic damage over time) and the other numbers here are chosen by eye, not the game's: cast is the seconds after a cast that its
 -- slot is open, fresh the seconds after a cast that its hit is its own, tail the seconds after a channel ends, aura the seconds an answer about the
 -- auras of an enemy is kept, offAfter the hit reports in combat with no signal heard that switch the estimate off, engaged the seconds a hit in a
--- slot of yours ties an enemy to you, hold the seconds a report waits, queueMax the most reports that wait at once, and order, amountMiss, tie,
--- rivals and rivalSlots the weights and limits of the pairing (MINE.Assign).
+-- slot of yours ties an enemy to you, hold the seconds a report waits, and queueMax the most reports that wait at once.
 -- It is still a guess where the slots decide. The game names no spell and no source for a hit, so the match goes by school, kind and time: two
 -- spells of yours of one school cast at once, or a hit of another player of the school of a slot of yours, cannot be told apart, and the damage
 -- over time of a weapon poison or a proc is not cast, so it is never recorded and borrows the name of a recorded one of its school. Engaged cannot
@@ -202,7 +203,8 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- the signals is registered. queue: the reports waiting.
 -- castSlots holds each open cast slot in the order made: { at = when it closes, from = when it was cast, travel = true for a spell that flies,
 -- pet = true for a spell of your pet's, school (nil for any), icon (false for none), area = true for an area spell, left = hits it takes yet,
--- name }. dots holds the damage over time recorded on each plate (or token) as { school, icon, name, at }.
+-- name, damage (the strike's in ns.CombatSpells, none for your pet's) }. dots holds the damage over time recorded on each plate (or token) as
+-- { school, icon, name, at }.
 -- swings holds each swing and shot the game reported in the last travel seconds as { at, hand (main, off or ranged), extra, left }, due the time
 -- the next swing of each hand is due and lastMain the last main-hand swing; swingHeard and rangedHeard are true once a melee swing and a shot
 -- were reported, and swingCount counts the reports. pair is the open pair { name, icon (false for none), spell, opened, bound (the time of its
@@ -211,11 +213,9 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- the times of the hits that struck you while it lasts; strikeAt is when you last cast a physical strike, petAt when the pet's swing slot was last
 -- taken, and hitBy holds when a slot last took a hit on each plate (or token). chanIcon, chanName and chanSchool are those of the channel, chanTakes
 -- is true when it does damage and chanArea when it hits every enemy; healIcon is the icon of a helpful cast of yours until healUntil, swingIcon and
--- shotIcon those of a swing and a shot. seq numbers the signals and the reports in the order they came; a swing, a cast slot and a report keep
--- theirs, and a swing or a cast slot that the pairing could not tell from another is marked unsure.
+-- shotIcon those of a swing and a shot.
 local MINE = { cast = 1.5, travel = 3.0, areaMax = 10, dotKeep = 30, shots = { [75] = true, [2480] = true, [7918] = true, [2764] = true, [7919] = true, [5019] = true }, tail = 0.5, aura = 0.5, offAfter = 10, swingGap = 1.0, tick = 3.0, swingShare = 0.8, auraMax = 4, extra = 0.4, nextSwing = { 6807, 78, 845, 2973 },
 	late = 0.1, swingTake = 0.3, pairTail = 0.4, nextMax = 5, spinSlack = 0.6, engaged = 10, queueMax = 200, fresh = 0.3, auraTick = 2.0, hold = 0.1,
-	order = 1e-5, amountMiss = 1, tie = 1e-6, rivals = 4, rivalSlots = 6,
 	words = { MISS = true, DODGE = true, PARRY = true, BLOCK = true, EVADE = true, DEFLECT = true, REFLECT = true, INTERRUPT = true },
 	partyTokens = { "party1", "partypet1", "party2", "partypet2", "party3", "partypet3", "party4", "partypet4" },
 	unitEvents = { "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" },
@@ -224,7 +224,7 @@ local mine = { castUntil = -1, castAt = 0, on = false, deaf = false, chan = fals
 	unheard = 0, off = false, last = nil, castSlots = {}, castTaken = -1, hand = { main = -math.huge, off = -math.huge }, shotAt = -math.huge, shotEnd = -math.huge, auraSlots = {}, swingAt = -math.huge, extraUsed = false,
 	dots = setmetatable({}, { __mode = "k" }), chanTakes = false, chanArea = false, healUntil = -1, trace = false, crowd = setmetatable({}, { __mode = "k" }),
 	swings = {}, swingHeard = false, rangedHeard = false, swingCount = 0, lastMain = -math.huge, due = {}, hitBy = setmetatable({}, { __mode = "k" }), queue = {},
-	strikeAt = -math.huge, counter = nil, struckAt = {}, petAt = -math.huge, seq = 0 }
+	strikeAt = -math.huge, counter = nil, struckAt = {}, petAt = -math.huge }
 -- How long a target counts as hit by others after a physical hit on it was left out: its extra attack slot stays closed meanwhile. In the open
 -- world players who are not in your group hit the same enemy, and a swing of theirs right after yours looks like an extra attack.
 MINE.crowd = 10
@@ -2074,12 +2074,6 @@ function MINE.CastOpen(now)
 	return false
 end
 
--- The next number in the order the signals and the hit reports came in, which tells apart those of one frame (GetTime is the same for them).
-function MINE.Seq()
-	mine.seq = mine.seq + 1
-	return mine.seq
-end
-
 -- The open cast slot a hit of this school can take (SchoolFits) and its place in the list, or nil; nothing is taken. away is true for a hit on
 -- another enemy than your target: it fits the slot of an area spell, and the slot of a spell of your pet's when onPet says the hit is on the
 -- enemy your pet attacks (pettarget). A hit on your target fits every slot of yours, and a slot of your pet's only with onPet. Of the slots that
@@ -2102,17 +2096,20 @@ end
 
 -- Opens a cast slot for a spell of yours or your pet's (pet true) that hits: for MINE.cast seconds, or MINE.travel when its missile flies, of the
 -- spell's school, taken by one hit or, for an area spell, by up to MINE.areaMax hits. entry is nil for a harmful spell not in the table: an area
--- slot of any school, as such a spell (a bomb, a trinket, a spell of Forever's own) may hit every enemy around. from is the time of the cast.
+-- slot of any school, as such a spell (a bomb, a trinket, a spell of Forever's own) may hit every enemy around. from is the time of the cast, and
+-- damage the strike's ("weapon" or "flat", MINE.Rival), none for a spell of your pet's: the pet's Claw shares the druid's name and entry.
 function MINE.OpenCast(now, entry, spellID, name, pet)
 	local list = mine.castSlots
 	local area = entry == nil or entry.kind == "area"
 	local travel = entry ~= nil and entry.travel == true
 	list[#list + 1] = { at = now + (travel and MINE.travel or MINE.cast), from = now, travel = travel, pet = pet == true, school = entry and entry.school or nil,
-		icon = Icon(spellID) or false, area = area, left = area and MINE.areaMax or 1, name = name, seq = MINE.Seq(), flat = entry ~= nil and entry.flat == true }
+		icon = Icon(spellID) or false, area = area, left = area and MINE.areaMax or 1, name = name,
+		damage = (entry ~= nil and pet ~= true) and entry.damage or nil }
 end
 
 -- Takes the open cast slot of yours a hit of this school can take (CastFor, with away and onPet as there). Returns true when it did, the icon of
--- the cast (nil for none) and the name of the spell. The slot of an area spell stays open until it has taken its hits.
+-- the cast (nil for none), the name of the spell and the strike's damage (OpenCast). The slot of an area spell stays open until it has taken its
+-- hits.
 local function TakeCast(now, school, away, onPet)
 	MINE.DropCasts(now)
 	local slot, index = MINE.CastFor(now, school, away, onPet)
@@ -2124,25 +2121,7 @@ local function TakeCast(now, school, away, onPet)
 	if slot.left <= 0 then
 		table.remove(mine.castSlots, index)
 	end
-	return true, slot.icon or nil, slot.name, slot.unsure == true
-end
-
--- Takes one hit of this cast slot, when it is still open and in the list. Returns true when it did.
-function MINE.TakeSlot(slot, now)
-	for index, open in ipairs(mine.castSlots) do
-		if open == slot then
-			if slot.at < now or slot.left <= 0 then
-				return false
-			end
-			mine.castTaken = math.max(mine.castTaken, slot.at)
-			slot.left = slot.left - 1
-			if slot.left <= 0 then
-				table.remove(mine.castSlots, index)
-			end
-			return true
-		end
-	end
-	return false
+	return true, slot.icon or nil, slot.name, slot.damage
 end
 
 -- Records a damage-over-time spell of yours on the enemy you target, or the pet's target for the pet, under the key MineOne judges its hits
@@ -2368,7 +2347,7 @@ function MINE.OnSwing(now, duration, swingType)
 			table.remove(list, index)
 		end
 	end
-	list[#list + 1] = { at = now, hand = hand, extra = extra, left = 1, seq = MINE.Seq() }
+	list[#list + 1] = { at = now, hand = hand, extra = extra, left = 1 }
 	return true
 end
 
@@ -2384,25 +2363,18 @@ function MINE.TakeToken(at, ranged)
 	return nil
 end
 
--- Takes a reported swing of yours for a hit at `now`: "extra slot" for a swing right after another of the main hand (with Extra attacks on),
--- else "swing slot".
-function MINE.UseSwing(token, now)
-	token.left = 0
-	if token.extra and Opt("extra") == "plain" then
-		mine.extraUsed = true
-		return "extra slot"
-	end
-	mine.swingAt, mine.extraUsed = now, false
-	return "swing slot"
-end
-
 -- Once the game has reported a melee swing: the slot of a swing of yours (TakeToken). Returns "swing slot", or "extra slot" for a swing right
 -- after another of the main hand (with Extra attacks on), and true when no swing of yours fits. The extra attack slot (ExtraOpen) is MineOne's,
 -- after a spin.
 function MINE.TakeSwingHeard(now)
 	local token = MINE.TakeToken(now, false)
 	if token then
-		return MINE.UseSwing(token, now), false, token.unsure == true
+		if token.extra and Opt("extra") == "plain" then
+			mine.extraUsed = true
+			return "extra slot", false
+		end
+		mine.swingAt, mine.extraUsed = now, false
+		return "swing slot", false
 	end
 	return nil, true
 end
@@ -2729,21 +2701,21 @@ function MINE.Engaged(unit, key, at)
 end
 
 -- True when the hit takes a slot of yours (see MINE): one hit for each action. Then the slot taken, the icon of the action (nil for none, by Spell
--- icons), the name of the spell matched and, for a next melee ability, its pair. On the target plate a channel of its school is tried first, then
--- the pair of a next melee ability, then a swing slot for a physical hit (the game's reported swing, or a free hand before any was reported),
--- then a spin, a counter (Retaliation) and the extra attack slot (ExtraOpen). A non-critical hit then tries the cast slot first when its school
--- fits a fresh cast slot (CastFor) or an open one and no damage over time of yours recorded on the enemy, and else an aura slot first, so that the
--- slot of a spell that flies stays for its hit, which can be critical. A critical hit tries the cast slot, then the shot, then an aura slot, as a
--- tick can be critical on this client. A word a tick cannot be (MINE.words: a miss, dodge, parry, full block, evade, deflect, reflect) takes no
--- aura slot. Each slot and the channel take only a hit of their school (SchoolFits). On another enemy an area channel, a place of Cleave's pair,
--- a spin, a sweep, a counter, an aura slot and the slot of an area spell are tried, the last two in the same order. A physical hit on the enemy
--- your pet attacks also takes the pet's swing slot (TakePetSwing), and the slot of a spell of your pet's fits a hit there (onPet). A hit with no
--- free slot is left out, and a physical one marks its enemy as hit by others for MINE.crowd seconds; with own (an enemy only you and your pet
--- fight, Engaged) it is neither counted nor marked, as it shows anyway. at is the time of the report, which waits MINE.hold seconds (Flush), and
--- event its kind.
-local function MineOne(plate, unit, school, flag, own, at, event, hint)
+-- icons), the name of the spell matched, for a next melee ability its pair, and for a cast slot the strike's damage (MINE.Rival). On the target plate
+-- a channel of its school is tried first, then the pair of a next melee ability, then a swing slot for a physical hit (the game's reported swing, or
+-- a free hand before any was reported), then a spin, a counter (Retaliation) and the extra attack slot (ExtraOpen). A non-critical hit then tries the
+-- cast slot first when its school fits a fresh cast slot (CastFor) or an open one and no damage over time of yours recorded on the enemy, and else an
+-- aura slot first, so that the slot of a spell that flies stays for its hit, which can be critical. A critical hit tries the cast slot, then the
+-- shot, then an aura slot, as a tick can be critical on this client. A word a tick cannot be (MINE.words: a miss, dodge, parry, full block, evade,
+-- deflect, reflect) takes no aura slot. Each slot and the channel take only a hit of their school (SchoolFits). On another enemy an area channel, a
+-- place of Cleave's pair, a spin, a sweep, a counter, an aura slot and the slot of an area spell are tried, the last two in the same order. A
+-- physical hit on the enemy your pet attacks also takes the pet's swing slot (TakePetSwing), and the slot of a spell of your pet's fits a hit there
+-- (onPet). A hit with no free slot is left out, and a physical one marks its enemy as hit by others for MINE.crowd seconds; with own (an enemy only
+-- you and your pet fight, Engaged) it is neither counted nor marked, as it shows anyway. at is the time of the report, which waits MINE.hold seconds
+-- (Flush), and event its kind.
+local function MineOne(plate, unit, school, flag, own, at, event)
 	local now = at or GetTime()
-	local why, taken, swingTried, auraTried, icon, spell, pair, unsure
+	local why, taken, swingTried, auraTried, icon, spell, pair, damage
 	local key = plate or unit
 	local onTarget = plate == Plate("target")
 	local onPet = plate ~= nil and plate == Plate("pettarget")
@@ -2764,22 +2736,12 @@ local function MineOne(plate, unit, school, flag, own, at, event, hint)
 			end
 		end
 	end
-	-- The swing or the strike that the pairing of the reports that wait gave this hit (MINE.Assign).
-	if not why and onTarget and physical and hint then
-		local slot = hint.slot
-		if hint.kind == "swing" and slot.left > 0 then
-			swingTried, why = true, MINE.UseSwing(slot, now)
-		elseif hint.kind == "cast" and MINE.TakeSlot(slot, now) then
-			why, icon, spell = "cast slot", slot.icon or nil, slot.name
-		end
-		unsure = why ~= nil and (hint.unsure or slot.unsure == true)
-	end
 	if not why and onTarget then
 		local shooting = mine.shoot or now <= mine.shotEnd
 		if physical and not shooting and (mine.swingHeard or mine.swing) then
 			swingTried = true
 			if mine.swingHeard then
-				why, taken, unsure = MINE.TakeSwingHeard(now)
+				why, taken = MINE.TakeSwingHeard(now)
 			else
 				why, taken = TakeSwing(now)
 			end
@@ -2817,14 +2779,14 @@ local function MineOne(plate, unit, school, flag, own, at, event, hint)
 				end
 			end
 		end
-		local cast, castIcon, castName, castUnsure
+		local cast, castIcon, castName, castDamage
 		if not why then
-			cast, castIcon, castName, castUnsure = TakeCast(now, school, false, onPet)
+			cast, castIcon, castName, castDamage = TakeCast(now, school, false, onPet)
 		end
 		if why then
 			-- A slot was taken above.
 		elseif cast then
-			why, icon, spell, unsure = "cast slot", castIcon, castName, castUnsure
+			why, icon, spell, damage = "cast slot", castIcon, castName, castDamage
 		else
 			taken = taken or now <= mine.castTaken
 			if shooting then
@@ -2866,9 +2828,9 @@ local function MineOne(plate, unit, school, flag, own, at, event, hint)
 		local slot, _, fresh = MINE.CastFor(now, school, true, onPet)
 		areaFirst = slot ~= nil and (fresh or crit or MINE.DotFor(MINE.DotsOn(key, unit, now), school) == 0)
 		if areaFirst then
-			local cast, castIcon, castName = TakeCast(now, school, true, onPet)
+			local cast, castIcon, castName, castDamage = TakeCast(now, school, true, onPet)
 			if cast then
-				why, icon, spell = "cast slot", castIcon, castName
+				why, icon, spell, damage = "cast slot", castIcon, castName, castDamage
 			end
 		end
 	end
@@ -2885,19 +2847,14 @@ local function MineOne(plate, unit, school, flag, own, at, event, hint)
 		end
 	end
 	if not why and not onTarget and not areaFirst then
-		local cast, castIcon, castName = TakeCast(now, school, true, onPet)
+		local cast, castIcon, castName, castDamage = TakeCast(now, school, true, onPet)
 		if cast then
-			why, icon, spell = "cast slot", castIcon, castName
+			why, icon, spell, damage = "cast slot", castIcon, castName, castDamage
 		end
 	end
 	if why then
 		if key ~= nil then
 			mine.hitBy[key] = now
-		end
-		if unsure then
-			-- Yours, but which swing or strike is not sure: no name, no icon and the colour of its school.
-			mine.kept, mine.last = mine.kept + 1, MINE.Decision("yours", "swing or strike, not sure which", school)
-			return true, "unsure", nil, nil, nil
 		end
 		mine.kept, mine.last = mine.kept + 1, MINE.Decision("yours", why, school, spell)
 		local mode = Opt("icons")
@@ -2912,7 +2869,7 @@ local function MineOne(plate, unit, school, flag, own, at, event, hint)
 			mine.shotIcon = mine.shotIcon or Icon(75)
 			icon = mode == "all" and mine.shotIcon or nil
 		end
-		return true, why, mode ~= "off" and icon or nil, spell, pair
+		return true, why, mode ~= "off" and icon or nil, spell, pair, damage
 	end
 	if own then
 		return false
@@ -3115,9 +3072,9 @@ end
 -- attack, "next swing" for Maul and the like), the icon of the action, the name of the spell matched and the pair of a next melee ability. A
 -- plate that Target only leaves out is not judged, so it is not counted as shown. Under Yours an enemy only you and your pet fight (Engaged)
 -- takes every damage hit and miss word, and a slot only names it. event is the kind of the report (MineOne reads it, and the trace), amount is
--- for /flatui combat trace, and at is the time of the report.
-local function Counts(plate, unit, school, flag, event, amount, at, hint)
-	local keep, why, icon, spell, pair, decision
+-- for /flatui combat trace, and at is the time of the report. Last comes the strike's damage of a cast slot (MINE.Rival).
+local function Counts(plate, unit, school, flag, event, amount, at)
+	local keep, why, icon, spell, pair, damage, decision
 	if Opt("whose") ~= "all" then
 		-- Reports in combat with no signal of yours heard since login or the last change of zone: the estimate has nothing to go on.
 		if mine.heard == 0 and InCombatLockdown() then
@@ -3131,7 +3088,7 @@ local function Counts(plate, unit, school, flag, event, amount, at, hint)
 			local now = at or GetTime()
 			-- A heal on an enemy is the enemy's own or another's: the slots decide it.
 			local own = event ~= "HEAL" and MINE.Engaged(unit, plate or unit, now)
-			keep, why, icon, spell, pair = MineOne(plate, unit, school, flag, own, now, event, hint)
+			keep, why, icon, spell, pair, damage = MineOne(plate, unit, school, flag, own, now, event)
 			if own and not keep then
 				keep = true
 				mine.kept, mine.last = mine.kept + 1, MINE.Decision("yours", "an enemy only you fight", school)
@@ -3150,7 +3107,7 @@ local function Counts(plate, unit, school, flag, event, amount, at, hint)
 	if not keep then
 		return false
 	end
-	return true, why, icon, spell, pair
+	return true, why, icon, spell, pair, damage
 end
 
 -- The colour of a hit of yours and the name to show after it, by the slot it took. Without Colour by school of magic every hit of a spell or
@@ -3248,8 +3205,9 @@ end
 -- Reports wait ---------------------------------------------------------------------------------------------------------------------
 
 -- Under Yours a report on an enemy waits MINE.hold seconds before it is judged (see MINE), so that a cast, a swing and a hit the game sends in
--- one frame, or a few frames apart, count in any order. The reports judged together are judged in the order they came, then drawn, the two of
--- a pair as one number.
+-- one frame, or a few frames apart, count in any order, and a physical one waits with the others on its enemy (Wait). The reports judged
+-- together are judged in the order they came, a swing and a strike among them are put right (MINE.Rival), and then they are drawn, the two of a
+-- pair as one number.
 -- The reports for a plate that goes are judged at once, while the game still gives its plate (OnRemoved): the hit that kills an enemy comes
 -- just before its plate goes, and would else go with it. A report whose plate took another unit meanwhile goes. At most MINE.queueMax wait:
 -- past that every one is judged at once. unit, when given, is the token of the plate that goes.
@@ -3266,15 +3224,8 @@ function MINE.Flush(all, unit)
 	end
 	local list = mine.queue
 	local now = GetTime()
-	local due = {}
 	for _, e in ipairs(list) do
-		e.due = all or now - e.at >= MINE.hold or (unit ~= nil and e.unit == unit)
-		if e.due then
-			due[#due + 1] = e
-		end
-	end
-	if #due > 0 then
-		MINE.Assign(due, list, now)
+		e.due = all or now - (e.with and e.with.last or e.at) >= MINE.hold or (unit ~= nil and e.unit == unit)
 	end
 	local index = 1
 	while index <= #list do
@@ -3282,9 +3233,9 @@ function MINE.Flush(all, unit)
 		if e.due then
 			table.remove(list, index)
 			if e.route == "target" or Plate(e.unit) == e.plate then
-				local counted, why, icon, spell, pair = Counts(e.plate, e.unit, e.school, e.flag, e.event, e.amount, e.at, e.hint)
+				local counted, why, icon, spell, pair, damage = Counts(e.plate, e.unit, e.school, e.flag, e.event, e.amount, e.at)
 				if counted then
-					e.why, e.icon, e.spell, e.pair, e.drawn = why, icon, spell, pair, false
+					e.why, e.icon, e.spell, e.pair, e.damage, e.drawn = why, icon, spell, pair, damage, false
 					decided[#decided + 1] = e
 				end
 			end
@@ -3292,6 +3243,7 @@ function MINE.Flush(all, unit)
 			index = index + 1
 		end
 	end
+	MINE.Rival(decided)
 	for at, e in ipairs(decided) do
 		if not e.drawn then
 			e.drawn = true
@@ -3316,136 +3268,68 @@ function MINE.Flush(all, unit)
 	end
 end
 
--- A swing and a physical strike of yours close together (a swing and Hamstring in one global cooldown) make two physical hits on your target,
--- and either hit could be either: the first is not the strike's because it came first. So the physical reports on your target that wait are
--- paired as a whole with the swings the game reported (PLAYER_SWING, the swing timer's own time of each swing) and the open slots of physical
--- strikes of yours that do not fly, each report with one it fits in time (a swing from MINE.late seconds before it to MINE.swingTake after, a
--- strike from MINE.late before its cast to MINE.fresh after). The best pairing pairs the most reports, then has the least sum of the seconds
--- (GetTime) between each report and its swing or cast, then of the steps between them in the order they came (MINE.order each: the game sends a
--- swing with its hit and a cast with its hit, so within one frame the nearer one is its own). A glancing hit is a swing's only: a special attack
--- never glances. When the game gives the amounts plainly (no build from 70755 does: every amount is withheld, so this is tested with ns.IsSecret
--- and is no signal there), a hit of a strike of flat damage (flat in ns.CombatSpells: Hamstring, Wing Clip, Kick, Pummel, Shield Bash, Gouge)
--- larger than a swing's hit costs MINE.amountMiss. When another pairing fits as well (within MINE.tie) and gives a report a strike in place of a
--- swing, another strike, or none, that report and every slot it could take are unsure: the hit shows as yours with no spell name, no icon and the colour of its school,
--- not a wrong name. due are the reports judged now and list all that wait; a report a next melee ability's pair takes is left to it. At most
--- MINE.rivals reports and MINE.rivalSlots slots are weighed. Each due report paired gets e.hint = { kind = "swing" or "cast", slot, unsure }.
-function MINE.Assign(due, list, now)
-	local target = Plate("target")
-	local reports, slots = {}, {}
-	for _, e in ipairs(list) do
-		if #reports >= MINE.rivals then
-			break
-		end
-		local onTarget = e.route == "target" or (target ~= nil and e.plate == target)
-		if onTarget and Plain(e.school, "number") and e.school == 1 and not (mine.pair and mine.pair.left > 0 and MINE.PairOpen(mine.pair, e.at)) then
-			reports[#reports + 1] = e
-		end
-	end
-	if #reports == 0 then
-		return
-	end
-	local swings, casts = 0, 0
-	for _, token in ipairs(mine.swings) do
-		if token.hand ~= "ranged" and token.left > 0 and #slots < MINE.rivalSlots then
-			slots[#slots + 1] = { kind = "swing", slot = token, at = token.at, seq = token.seq or 0, from = token.at - MINE.late, to = token.at + MINE.swingTake }
-			swings = swings + 1
-		end
-	end
-	for _, slot in ipairs(mine.castSlots) do
-		if not slot.travel and not slot.pet and Plain(slot.school, "number") and slot.school == 1 and slot.left > 0 and slot.at >= now - MINE.hold
-			and #slots < MINE.rivalSlots then
-			slots[#slots + 1] = { kind = "cast", slot = slot, at = slot.from, seq = slot.seq or 0, from = slot.from - MINE.late, to = slot.from + MINE.fresh }
-			casts = casts + 1
-		end
-	end
-	if swings == 0 or casts == 0 then
-		return
-	end
-	local function Fits(e, c)
-		if e.at < c.from or e.at > c.to then
-			return false
-		end
-		return c.kind == "swing" or not (Plain(e.flag, "string") and e.flag == "GLANCING")
-	end
-	local n, pick, used, best, ties = #reports, {}, {}, nil, {}
-	local function Amounts()
-		local miss = 0
-		for i = 1, n do
-			local j, e = pick[i], reports[i]
-			if j and slots[j].kind == "cast" and slots[j].slot.flat and not e.word and Plain(e.amount, "number") then
-				for k = 1, n do
-					local other, f = pick[k], reports[k]
-					if other and slots[other].kind == "swing" and not f.word and Plain(f.amount, "number") and e.amount > f.amount then
-						miss = miss + MINE.amountMiss
+-- The rule of a swing and a strike (see MINE): for each physical report judged together that took a cast slot, the reports on its enemy within
+-- MINE.hold seconds of it that took a swing of yours. A strike with a weapon part (damage "weapon") takes the largest amount of them and one of
+-- a fixed damage (damage "flat") the smallest: when that is a swing's report, the two swap the slot, the name and the icon. When the amounts are
+-- not all plain numbers (a withheld amount cannot be compared), when the largest or the smallest is there twice, or when the strike has no
+-- damage of the two, each of them shows with no spell name and no icon, in the colour of its school, rather than a wrong one.
+function MINE.Rival(decided)
+	for _, strike in ipairs(decided) do
+		if strike.why == "cast slot" and not strike.ruled and Plain(strike.school, "number") and strike.school == 1 then
+			local group = { strike }
+			for _, e in ipairs(decided) do
+				if (e.why == "swing slot" or e.why == "extra slot") and not e.ruled and e.route == strike.route and e.plate == strike.plate
+					and math.abs(e.at - strike.at) <= MINE.hold then
+					group[#group + 1] = e
+				end
+			end
+			if #group > 1 then
+				local damage, plain, pick, twice = strike.damage, true, nil, false
+				for _, e in ipairs(group) do
+					e.ruled = true
+					plain = plain and not e.word and Plain(e.amount, "number")
+				end
+				if plain and (damage == "weapon" or damage == "flat") then
+					for _, e in ipairs(group) do
+						if pick == nil or (damage == "weapon" and e.amount > pick.amount) or (damage == "flat" and e.amount < pick.amount) then
+							pick, twice = e, false
+						elseif e.amount == pick.amount then
+							twice = true
+						end
 					end
 				end
-			end
-		end
-		return miss
-	end
-	local function Walk(i, count, cost)
-		if i > n then
-			cost = cost + Amounts()
-			if best == nil or count > best.count or (count == best.count and cost < best.cost - MINE.tie) then
-				best, ties = { count = count, cost = cost }, {}
-			elseif count ~= best.count or cost > best.cost + MINE.tie or #ties >= 16 then
-				return
-			end
-			local copy = {}
-			for k = 1, n do
-				copy[k] = pick[k]
-			end
-			ties[#ties + 1] = copy
-			return
-		end
-		local e = reports[i]
-		for j, c in ipairs(slots) do
-			if not used[j] and Fits(e, c) then
-				used[j], pick[i] = true, j
-				Walk(i + 1, count + 1, cost + math.abs(e.at - c.at) + MINE.order * math.abs((e.seq or 0) - c.seq))
-				used[j] = false
-			end
-		end
-		pick[i] = false
-		Walk(i + 1, count, cost)
-	end
-	Walk(1, 0, 0)
-	if best == nil or best.count == 0 then
-		return
-	end
-	local isDue = {}
-	for _, e in ipairs(due) do
-		isDue[e] = true
-	end
-	local first = ties[1]
-	for i, e in ipairs(reports) do
-		local j = first[i]
-		if j and isDue[e] then
-			local unsure = false
-			for _, other in ipairs(ties) do
-				local k = other[i]
-				if not k or slots[k].kind ~= slots[j].kind or (slots[k].kind == "cast" and slots[k].slot.name ~= slots[j].slot.name) then
-					unsure = true
-				end
-			end
-			if unsure then
-				for _, other in ipairs(ties) do
-					if other[i] then
-						slots[other[i]].slot.unsure = true
+				if pick and not twice then
+					strike.why, pick.why = pick.why, strike.why
+					strike.icon, pick.icon = pick.icon, strike.icon
+					strike.spell, pick.spell = pick.spell, strike.spell
+				else
+					for _, e in ipairs(group) do
+						e.why, e.icon, e.spell = "unnamed", nil, nil
 					end
+					mine.last = MINE.Decision("yours", "a swing or a strike, not sure which", strike.school)
 				end
 			end
-			e.hint = { kind = slots[j].kind, slot = slots[j].slot, unsure = unsure }
 		end
 	end
 end
 
--- A report waits MINE.hold seconds. The frame that judges them runs only while one waits.
+-- A report waits MINE.hold seconds. The frame that judges them runs only while one waits. A physical report waits with the first physical report
+-- on its enemy that waits and came at most MINE.hold seconds before it (with, whose last is the last that joined it), and they are judged
+-- together once the last has waited MINE.hold seconds, so that a swing and a strike that land together are judged together (MINE.Rival).
 function MINE.Wait(e)
 	if #mine.queue >= MINE.queueMax then
 		MINE.Flush(true)
 	end
 	local list = mine.queue
+	if Plain(e.school, "number") and e.school == 1 then
+		e.with, e.last = e, e.at
+		for _, other in ipairs(list) do
+			if other.with == other and other.route == e.route and other.plate == e.plate and e.at - other.at <= MINE.hold then
+				e.with, other.last = other, e.at
+				break
+			end
+		end
+	end
 	list[#list + 1] = e
 	if not mine.flusher then
 		mine.flusher = CreateFrame("Frame")
@@ -3457,7 +3341,6 @@ end
 
 -- A report judged under Whose hits: it waits under Yours and is judged and drawn at once under Everyone's.
 function MINE.Judge(e)
-	e.seq = MINE.Seq()
 	if Opt("whose") ~= "all" then
 		MINE.Wait(e)
 		return

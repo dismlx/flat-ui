@@ -1,14 +1,7 @@
 ## 0.5.24
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
-- **Combat text**, **Whose hits** at **Yours**: fewer of your hits go missing or take the wrong spell. The game still names no spell and no source for a hit, and this client gives addons no list of your own hits: its combat log is closed to addons, and its damage meter, which Details! reads here, gives only the totals of each spell, withheld in a fight, so neither can say which spell a single hit was. Flat UI still works that out from your casts, swings and auras, now with these fixes:
-  - A swing and a strike close together, such as a swing in the global cooldown of **Hamstring**, no longer swap names: the swing's hit showed as **Hamstring** with its icon and Hamstring's small hit as the swing. The game names neither hit, and the first is not the strike's because it came first, so Flat UI now pairs the hits with the swing and the cast together, by when the game reported each swing and each cast and the order it sent them, and a glancing hit is always the swing's (the amount of a hit is withheld on this build, so it cannot help). When the two still fit either way, the hit shows with no spell name or icon, in the colour of its school, rather than with the wrong one.
-  - A direct hit cast at the same moment as a damage over time of its school ticks, such as **Mortal Strike** while **Rend** is on, no longer shows with the icon and name of the damage over time, and two spells of one school cast close together (**Fire Blast** while a **Fireball** flies) each keep their own hit.
-  - A damage over time that ticks every 2 seconds no longer loses every other tick in a group or on an enemy someone else fights, and a critical tick, which WoW: Forever allows, shows there too. A miss, dodge or parry of someone else no longer takes the place of one of your ticks.
-  - With a pet out, every hit on an enemy only you and your pet fight now shows, as it already did with no pet; in a group your pet's swings show, one for each of its attacks, and its spells show on the enemy it attacks instead of being left out when that is not your target.
-  - **Heroic Strike**, **Cleave**, **Maul** and **Raptor Strike** pressed before the swing no longer take an off-hand swing or another hit that lands first: they wait for their own swing.
-  - **Retaliation** shows its counterattacks in a group as well, one for each melee hit that strikes you.
-  - A hit now waits a tenth of a second rather than one frame for the cast or swing it belongs to, so one the game sends a few frames apart still counts.
+- **Combat text**, **Whose hits** at **Yours**: more of your hits show with the right spell, among them ticks every 2 seconds, critical ticks, your pet's hits, **Retaliation** and a strike cast while a damage over time ticks. When a swing and a strike land together, a weapon strike such as **Mortal Strike** takes the larger hit and a fixed one such as **Hamstring** the smaller, and where the game withholds the amounts, as this build does, both show with no spell name or icon rather than a wrong one.
 
 ## 0.5.23
 
