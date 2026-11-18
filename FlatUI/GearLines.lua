@@ -1824,14 +1824,14 @@ local function Taken(subject, slots, opts)
 	return nil
 end
 
--- One figure of the Overall line: its word and its change as a share in green when better and red when worse (white for none), ~ before an
--- estimate; lower is better for damage taken.
+-- One figure of the Overall line, as the window writes it: its word in the label's light grey and its change as a share in green when better and
+-- red when worse (white for none), ~ before an estimate; lower is better for damage taken.
 local function OverallFigure(word, pct, estimate, lowerBetter, style)
 	local colour = style.value
 	if math.abs(pct) >= T.STILL_PCT then
 		colour = ((pct > 0) ~= (lowerBetter == true)) and style.good or style.bad
 	end
-	return Paint(word .. " " .. (estimate and "~" or "") .. Signed(pct), colour), math.abs(pct) >= T.STILL_PCT
+	return Paint(word, style.label) .. " " .. Paint((estimate and "~" or "") .. Signed(pct), colour), math.abs(pct) >= T.STILL_PCT
 end
 
 -- The Overall line of the block (0.5.20, Overall totals at Weighted, chat.gearTotals): a figure the chosen spells have, each the weighted mean of
@@ -1861,7 +1861,7 @@ local function Overall(candidate, lines, opts, taken, style)
 	if not moved then
 		return nil
 	end
-	return { left = T.OVERALL, right = table.concat(parts, T.SEPARATOR), leftColour = style.label, colour = style.value }
+	return { left = T.OVERALL, right = table.concat(parts, Paint(T.SEPARATOR, style.dim)), leftColour = style.label, colour = style.value }
 end
 
 -- The block of an item, from the cache or G.Compare. In a fight with nothing worked out now, the last block of the item, else one dim line;

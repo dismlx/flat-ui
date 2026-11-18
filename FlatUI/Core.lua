@@ -240,8 +240,8 @@ local ADDON_NAME, ns = ...
 -- the movers. It takes an item dropped on it (GetCursorInfo) and gives one lifted from a bag, the bank or a worn slot back there with ClearCursor,
 -- while C_Cursor.GetCursorItem names that slot and C_Item.IsLocked says the item is still locked in it; any other item, such as one dragged off an
 -- action bar, stays on the cursor, and so does a spell dropped on it (GetCursorInfo, and GetMacroSpell for a macro). It writes GameTooltip for its
--- rows, its switch and its item (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and Hide while IsOwned says one of its frames owns it),
--- never in a fight.
+-- rows, its switch, its item, Against, Find, the weights, the grip and the Overall lines (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and
+-- Hide while IsOwned says one of its frames owns it), never in a fight.
 -- With Total of a cast, a spell's tooltip also has its total with the player's stats and a dim line of what a cast does on average, a second and
 -- a point of mana; the second is the spell's cast time (C_Spell.GetSpellInfo, castTime) and the mana the game's cost of the spell
 -- (C_Spell.GetSpellPowerCost, mana only). The spell and item lines take their gold header and their green and red from the game's

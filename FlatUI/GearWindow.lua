@@ -70,7 +70,7 @@ local _, ns = ...
 -- that says it; a second line names the best and the worst line of them (each total's best and worst). Pointed at, it says how each is worked
 -- out. Its Weight column sets how much a line counts (ns.GearSetWeight, GearLines.lua: 0 to 5 in steps of 0.5): a left click adds 0.5, a right
 -- click takes 0.5 off, and a Shift-click (IsShiftKeyDown, WL/apis.yaml:40162) gives 1. The colours are those of the lines' style (M.Fmt.Style of
--- SpellModel.lua: header, label, good, bad), else the window's own.
+-- SpellModel.lua: label, good, bad), else the window's own, as the item tooltips' Overall line has them.
 -- Against (0.5.20): a second, smaller item box under the item, empty for what the player wears. An item dropped on it, or Compare against in the item
 -- finder (ns.GearWindowAgainst), is what the item is compared with instead: G.Compare and A.Compare take it as opts.base, and the place line says
 -- "instead of" it when the comparison echoes it (result.base), else a note says it was not used. One that does not go in the item's slots (their
@@ -184,8 +184,8 @@ local FONT, TITLE_FONT = "GameFontHighlightSmall", "GameFontHighlight"
 -- (CombatText.lua:889-894), as the item tooltips colour a change (design 2.3).
 local DIM, FAINT, PLAIN = { 0.66, 0.68, 0.62 }, { 0.48, 0.50, 0.45 }, { 1, 1, 1 }
 local TONES = { gain = { 0.1, 1, 0.1 }, loss = { 1, 0.1, 0.1 }, none = { 0.8, 0.8, 0.8 } }
--- The header gold (the client's NORMAL_FONT_COLOR) and the label grey of the lines' style, while SpellModel.lua's M.Fmt.Style is not there.
-local HEADER, LABEL = { 1, 0.82, 0 }, { 0.82, 0.82, 0.82 }
+-- The label grey of the lines' style, while SpellModel.lua's M.Fmt.Style is not there.
+local LABEL = { 0.82, 0.82, 0.82 }
 -- The words of the window. Flat UI's lines are English, as its other extra lines (design 6.22).
 local T = {
 	TITLE = "Gear comparison",
@@ -1448,7 +1448,7 @@ function O.Overall(view, lines)
 		end
 		if #parts > 0 then
 			local head = where and T.OVERALL_SLOT:format(where) or T.OVERALL
-			texts[#texts + 1] = HexOf(Styled("header", HEADER)) .. head .. "|r  " .. table.concat(parts, sep)
+			texts[#texts + 1] = HexOf(Styled("label", LABEL)) .. head .. "|r  " .. table.concat(parts, sep)
 			O.Extremes(acc, figures, where)
 		end
 	end

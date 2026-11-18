@@ -1216,14 +1216,20 @@ function A.Window(link, base)
 	end
 	if #view.cands > 0 then
 		view.layout = #view.cands == 2 and "two" or "one"
+		-- A row of each slot by its key, so damage taken one slot has and the other lacks shows for neither rather than beside another row.
 		local lists = {}
 		for which, c in ipairs(view.cands) do
 			lists[which] = WindowRows(c)
 		end
-		for index in ipairs(lists[1]) do
-			local rows = {}
-			for which, list in ipairs(lists) do
-				rows[which] = list[index]
+		for _, first in ipairs(lists[1]) do
+			local rows = { first }
+			for which = 2, #lists do
+				for _, other in ipairs(lists[which]) do
+					if other.key == first.key then
+						rows[which] = other
+						break
+					end
+				end
 			end
 			if #rows == #lists then
 				view.rows[#view.rows + 1] = WindowRow(rows, true)
