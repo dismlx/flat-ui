@@ -16126,9 +16126,16 @@ do
 				and near(beside[2].points[1][5], beside[1].points[1][5], 1e-9) and near(beside[3].points[1][5], beside[1].points[1][5], 1e-9), starts .. " " .. C.spot(beside[2]))
 			local Cap = world("scroll")
 			Cap.now = 0
-			local sixteen = {}
-			for index = 1, 17 do
-				sixteen[index] = C.hit(Cap, "target", "WOUND", "", index)
+			local burst = {}
+			for index = 1, 33 do
+				burst[index] = C.hit(Cap, "target", "WOUND", "", index)
+			end
+			C.draw(Cap, 1.19)
+			local early = 0
+			for _, font in ipairs(numbers(Cap)) do
+				if font.shown and font.alpha > 0 then
+					early = early + 1
+				end
 			end
 			C.draw(Cap, 1.21)
 			local seen = 0
@@ -16137,10 +16144,10 @@ do
 					seen = seen + 1
 				end
 			end
-			check("scrolling: Outgoing: seventeen numbers in one frame: four start at once, one in each lane, each four after them wait 0.3 seconds more for a lane, and the seventeenth takes the record of the first, which goes: sixteen records of two font strings, every number kept, and all of them seen by 1.21 seconds",
-				sixteen[17] == sixteen[1] and #Cap.addonFonts == 32 and sixteen[1].text == "17" and sixteen[2].text == "2" and sixteen[16].text == "16" and seen == 16
-				and has(Cap.status(), "Outgoing scroll area: 17 shown.\nNumbers in the Outgoing scroll area that waited for a free lane: 13.\nNumbers taken off the Outgoing scroll area early, to make room when 16 were on screen: 1."),
-				#Cap.addonFonts .. " " .. tostring(sixteen[1].text) .. " " .. seen .. " " .. Cap.status())
+			check("scrolling: Outgoing: thirty-three numbers in one frame: four start at once, one in each lane, each four after them wait 0.3 seconds more for a lane, none more than 1.2 seconds, so fifteen are seen at 1.19 seconds and all at 1.21, and the thirty-third takes the record of the first, which goes: thirty-two records of two font strings",
+				burst[33] == burst[1] and #Cap.addonFonts == 64 and burst[1].text == "33" and burst[2].text == "2" and burst[32].text == "32" and early == 15 and seen == 32
+				and has(Cap.status(), "Outgoing scroll area: 33 shown.\nNumbers in the Outgoing scroll area that waited for a free lane: 29.\nNumbers taken off the Outgoing scroll area early, to make room when 32 were on screen: 1."),
+				#Cap.addonFonts .. " " .. tostring(burst[1].text) .. " " .. early .. " " .. seen .. " " .. Cap.status())
 			-- Where your hits show.
 			local B = world("both")
 			B.now = 0
@@ -16333,7 +16340,7 @@ do
 			local W = C.world()
 			local frames, strings = #W.addonFrames, 0
 			local players = {}
-			for index = 1, 13 do
+			for index = 1, 33 do
 				players[index] = C.hit(W, "player", "HEAL", "", index, 1)
 			end
 			local owns = 0
@@ -16342,8 +16349,8 @@ do
 					owns = owns + 1
 				end
 			end
-			check("scrolling: Incoming: thirteen numbers for the player in one frame: four start at once in the four lanes, the rest wait for a lane, and the thirteenth takes the record of the oldest, which goes: twelve records of two font strings",
-				owns == 24 and players[13] == players[1] and players[1].text == "+13" and players[2].text == "+2", owns .. " " .. tostring(players[1].text))
+			check("scrolling: Incoming: thirty-three numbers for the player in one frame: four start at once in the four lanes, the rest wait for a lane, and the thirty-third takes the record of the oldest, which goes: thirty-two records of two font strings",
+				owns == 64 and players[33] == players[1] and players[1].text == "+33" and players[2].text == "+2", owns .. " " .. tostring(players[1].text))
 			for index = 1, 41 do
 				C.hit(W, "nameplate1", "WOUND", "", index)
 			end
@@ -16356,8 +16363,8 @@ do
 					shown = shown + 1
 				end
 			end
-			check("scrolling: forty-one numbers over enemies leave every number for the player in place, and thirteen for the player leave every number over enemies", enemies == 40 and shown == 52 and players[2].shown
-				and players[1].text == "+13", enemies .. " " .. shown)
+			check("scrolling: forty-one numbers over enemies leave every number for the player in place, and thirty-three for the player leave every number over enemies", enemies == 40 and shown == 72 and players[2].shown
+				and players[1].text == "+33", enemies .. " " .. shown)
 			for index = 1, 13 do
 				C.hit(W, "player", "HEAL", "", index, 1)
 			end
@@ -16367,9 +16374,9 @@ do
 					shown = shown + 1
 				end
 			end
-			check("scrolling: and the other way round", shown == 52 and #W.addonFonts == 64, shown .. " " .. #W.addonFonts)
+			check("scrolling: and the other way round", shown == 72 and #W.addonFonts == 104, shown .. " " .. #W.addonFonts)
 			check("scrolling: with both kinds alive each has a frame with a script, and the two hosts are the only frames made besides the two scripts", C.running(W) == 2 and #W.addonFrames == frames + 2, C.running(W) .. " " .. (#W.addonFrames - frames))
-			-- The last number for the player waits for a lane until 1.43 seconds on, and lives 2.2.
+			-- The last number for the player waits for a lane 1.2 seconds at most, and lives 2.2.
 			C.draw(W, W.now + 4)
 			check("ctlook: and the script is cleared when the last number of either kind has gone", C.running(W) == 0 and C.shownCount(W) == 0)
 			check("ctlook: both kinds: no violations, errors or messages", C.quiet(W), C.trouble(W))

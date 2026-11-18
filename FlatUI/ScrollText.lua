@@ -12,10 +12,11 @@ local _, ns = ...
 -- path moved sideways by about the width of a number, first away from the character and then to the other side, four lanes at most
 -- (SHAPE.lanes), and starts at once, so a burst shows side by side. Only when every lane is busy near the start does it wait, see-through
 -- and still at its start, for the lane that frees first, and start there: SHAPE.wait seconds at most after it came or after the number
--- ahead of it in that lane started (ns.ScrollLane). No number starts lower or higher than its spot (up to 0.5.23 a number in a burst
--- started a line further back and kept that place all the way), and none is left out while the area has a record free. A Horizontal or
--- Static number takes a free row, and when every row is busy the oldest number in a row goes and the new one takes its row. When every
--- record of an area is alive, the oldest number goes.
+-- ahead of it in that lane started, and never more than SHAPE.most seconds after it came, so a flood of hits that goes on is never further
+-- behind (ns.ScrollLane). No number starts lower or higher than its spot (up to 0.5.23 a number in a burst started a line further back
+-- and kept that place all the way), and none is left out while the area has a record free. A Horizontal or Static number takes a free
+-- row, and when every row is busy the oldest number in a row goes and the new one takes its row. When every record of an area is alive,
+-- the oldest number goes.
 -- The icon of an amount is written in its text (a texture escape), so that a withheld zero, which the client writes as nothing, draws no icon,
 -- name or (Extra attack) either; a word has the icon beside it, a texture of the record's own.
 -- A secret amount or name goes to SetText and SetFormattedText only; nothing here compares, counts or measures it.
@@ -27,10 +28,11 @@ local KEY = "combattext"
 -- of the life the fade in takes, the height of a line as a share of the height of a number, the rows a Horizontal or Static area has,
 -- the heights of a number a Horizontal number must travel before another may start in its row, the width of a lane in heights of a number
 -- at the Size of its area (about the width of a number), the lanes a Straight or Arc number takes in turn, in lane widths to the side the
--- numbers of its area go (away from the character): its path, one lane out, one lane in and two lanes out, and the seconds such a number
--- may wait for a lane when every lane is busy.
+-- numbers of its area go (away from the character): its path, one lane out, one lane in and two lanes out, the seconds such a number
+-- may wait for a lane when every lane is busy, after it came or after the number ahead of it in that lane started, and the most seconds
+-- it waits in all.
 local SHAPE = { length = 240, arc = 0.2, arcs = { narrow = 0.2, wide = 0.35 }, reach = 0.6, life = { fast = 1.6, normal = 2.2, slow = 3.0 }, still = 1.5, hold = 0.75, stillHold = 0.7,
-	fadeIn = 0.03, line = 1.04, rows = 5, clear = 2.5, lane = 3, lanes = { 0, 1, -1, 2 }, wait = 0.3 }
+	fadeIn = 0.03, line = 1.04, rows = 5, clear = 2.5, lane = 3, lanes = { 0, 1, -1, 2 }, wait = 0.3, most = 1.2 }
 -- The styles whose numbers follow a path from the start, in lanes side by side.
 local PATH = { straight = true, arc = true }
 -- The pop: the scale at its peak, and the seconds up and down. A critical hit is this much larger than a hit. A partial effect is drawn at
@@ -51,11 +53,11 @@ local EXTRA_TEXT = "|cffff9926(Extra attack)|r"
 -- of the 64 texels), and a space after it.
 local INLINE = "|T%d:0:0:0:0:64:64:5:59:5:59|t "
 -- The two areas: the name of the handle, the row of the style, the row of the size, the direction (1 up, -1 down), the side an arc and a
--- horizontal number go to, the most numbers alive (those that wait for a lane too) and, with no handle to take the place from, where the
--- area starts as units from the middle of the screen.
+-- horizontal number go to, the most numbers alive, those that wait for a lane too (room for a burst of 20 and the numbers still on screen
+-- before it), and, with no handle to take the place from, where the area starts as units from the middle of the screen.
 local AREAS = {
-	out = { label = "Outgoing", mover = "FlatUICombatOut", style = "outStyle", size = "size", dir = 1, side = 1, max = 16, dx = 170, dy = -30 },
-	inc = { label = "Incoming", mover = "FlatUICombatSelf", style = "inStyle", size = "ownSize", dir = -1, side = -1, max = 12, dx = -170, dy = -30 },
+	out = { label = "Outgoing", mover = "FlatUICombatOut", style = "outStyle", size = "size", dir = 1, side = 1, max = 32, dx = 170, dy = -30 },
+	inc = { label = "Incoming", mover = "FlatUICombatSelf", style = "inStyle", size = "ownSize", dir = -1, side = -1, max = 32, dx = -170, dy = -30 },
 }
 local ORDER = { AREAS.out, AREAS.inc }
 for key, area in pairs(AREAS) do
@@ -278,11 +280,14 @@ end
 -- SHAPE.lanes), or nothing, each with its start, height, life, length and serial (its place in the order the numbers came). A lane is busy
 -- while its newest number is less than a line on from the start (the mean of the two heights, times SHAPE.line); the two move along the
 -- direction at the same steady speed, so the line between them stays. The number takes the first lane that is not busy, in the order of
--- SHAPE.lanes, and starts now. When every lane is busy it takes the lane that frees first, on a tie the lane of the oldest of those numbers,
--- and starts when that lane frees, but SHAPE.wait seconds at most after now or after the number there starts, whichever is later: a number
--- waits only briefly, and no two start together in one lane. The setup drawing of combat text takes its lanes from here too.
+-- SHAPE.lanes, and starts now. When every lane is busy it takes the lane that frees first, on a tie the lane whose newest number started
+-- first and then the lane of the oldest of those numbers, and starts when that lane frees, but SHAPE.wait seconds at most after now or
+-- after the number there starts, whichever is later, so that no two start together in one lane, and SHAPE.most seconds at most after now.
+-- A burst of up to 20 numbers in one frame starts four at a time, each four a line or SHAPE.wait (the sooner) after the four before; in a
+-- flood of hits that goes on a wait does not grow past SHAPE.most, and a number held to it covers some of the number ahead of it in its
+-- lane, or all of it in a burst of more than 20. The setup drawing of combat text takes its lanes from here too.
 function ns.ScrollLane(newest, height, now)
-	local pick, at, age
+	local pick, at, first, age
 	for lane = 1, #SHAPE.lanes do
 		local last = newest[lane]
 		if not last then
@@ -292,9 +297,9 @@ function ns.ScrollLane(newest, height, now)
 		if free <= now then
 			return lane, now
 		end
-		free = math.min(free, math.max(now, last.start) + SHAPE.wait)
-		if not pick or free < at or (free == at and last.serial < age) then
-			pick, at, age = lane, free, last.serial
+		free = math.min(free, math.max(now, last.start) + SHAPE.wait, now + SHAPE.most)
+		if not pick or free < at or (free == at and (last.start < first or (last.start == first and last.serial < age))) then
+			pick, at, first, age = lane, free, last.start, last.serial
 		end
 	end
 	return pick, at
