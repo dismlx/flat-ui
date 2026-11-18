@@ -17,8 +17,9 @@ local _, ns = ...
 -- the ranged slot holds none (GetInventoryItemID, C.LineOf: a paladin's libram is no ranged weapon, HitTableCalc.lua:509-523). With no read since
 -- this file registered, a read is asked for (M.Mark, M.Stats), and with still none C.Inputs reads them here, only while the game gives stats plain
 -- (C_Secrets.ShouldUnitStatsBeSecret, SecretPredicateAPIDocumentation.lua:388-396). Against, Where you stand and Hit cap against a boss come from
--- the rows of the Spells and gear tab (chat.gearAgainst, chat.gearFacing, chat.gearRules, and the hit table's hud.hitTableRules), and the target of
--- the table is the one those rows name, worked out again each time (C.Target), so a row changed since the read counts at once.
+-- the rows of the Spells and gear tab (chat.gearAgainst, chat.gearFacing, chat.gearRules, and the hit table's hud.hitTableRules) and the player's level
+-- (S.state, else UnitLevel), and the target of the table is the one those rows name, worked out again each time (C.Target), so a row changed since
+-- the read counts at once.
 -- An item: its kind (C_Item.GetItemInfoInstant, ItemDocumentation.lua:659-679), its name and quality (C_Item.GetItemInfo, :626-657, which gives
 -- nothing until the client has the item, so the game is asked to load it, C_Item.RequestLoadItemDataByID, :1710-1718, as BagsData.lua:1649 does,
 -- and the next build has the lines), its quality's colour for the header (C_Item.GetItemQualityColor, :921-936), its stats by the game's keys
@@ -660,10 +661,13 @@ local function ItemOf(link, given, slot)
 			return nil, K.WHY.weapon, false
 		end
 	end
-	if loc == K.SHIELD then
+	-- A shield's block and ammunition's damage that its lines do not give stay those worn now, and the note says so (Notes).
+	if loc == K.SHIELD and not slot then
 		item.block = LineNumber(item.lines, "SHIELD_BLOCK_TEMPLATE")
-	elseif loc == "INVTYPE_AMMO" then
+		item.unread = item.block == nil and "the shield's block (Flat UI could not read it)" or nil
+	elseif loc == "INVTYPE_AMMO" and not slot then
 		item.ammo = LineNumber(item.lines, "AMMO_DAMAGE_TEMPLATE")
+		item.unread = item.ammo == nil and "the ammunition's damage (Flat UI could not read it)" or nil
 	end
 	return item
 end
@@ -711,6 +715,9 @@ local function Notes(item, info)
 	local D = Data()
 	if not (D and item) then
 		return
+	end
+	if item.unread then
+		AddOnce(info.notCounted, item.unread)
 	end
 	local names = Explaining(item.stats, D)
 	local equip, use, proc = Word("ITEM_SPELL_TRIGGER_ONEQUIP"), Word("ITEM_SPELL_TRIGGER_ONUSE"), Word("ITEM_SPELL_TRIGGER_ONPROC")
@@ -1143,7 +1150,7 @@ local function Wear(state, state2, item, slots)
 	end
 	state2.links[slot] = item.link
 	if slot == K.AMMO then
-		state2.ammo = item.ammo or 0
+		state2.ammo = item.ammo or state.ammo
 		return
 	end
 	if item.weapon then
@@ -1158,7 +1165,7 @@ local function Wear(state, state2, item, slots)
 		end
 	elseif slot == K.OFF then
 		state2.shield = item.loc == K.SHIELD
-		state2.shieldBlock = state2.shield and item.block or nil
+		state2.shieldBlock = state2.shield and (item.block or state.shieldBlock) or nil
 		state2.dual = item.weapon ~= nil
 	end
 end
@@ -2309,9 +2316,10 @@ local function RankOf(entry, line)
 end
 
 -- The expected values of a line (the design's 2.5): { cast, second, threat, threatSecond, basis, why } and estimate, for line { entry, rank, id },
--- with opts { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table inputs (G.Inputs() when none). stats may
--- be a copy G.With or G.Without made: its change (swap) goes into the hit table. why: "not compared" (no cmp), "pet" (a pet's spell: an item does not
--- change the pet), "no data", "no stats", "no rank", "no inputs" or "withheld" (the table lacks a part it needs).
+-- with opts { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table inputs (when none, G.Inputs(), or a read
+-- asked for while there is none yet). stats may be a copy G.With or G.Without made: its change (swap) goes into the hit table. why: "not compared" (no
+-- cmp), "pet" (a pet's spell: an item does not change the pet), "no data", "no stats", "no rank", "no inputs" or "withheld" (the table lacks a part it
+-- needs).
 function G.Expect(line, state, stats, opts)
 	local result = {}
 	line = Table(line)
@@ -2339,14 +2347,14 @@ function G.Expect(line, state, stats, opts)
 		result.why = "no rank"
 		return result
 	end
-	local inputs = Table(opts.inputs) or G.Inputs()
+	local M = Model()
+	local inputs = Table(opts.inputs) or G.Inputs() or (M and InputsNow(M))
 	if not inputs then
 		result.why = "no inputs"
 		return result
 	end
 	local spec = Spec(opts, state)
 	local swap = Table(stats.swap)
-	local M = Model()
 	local version = tostring(M and Ask(M.Version))
 	local physical = entry.school == 1
 	local damage
