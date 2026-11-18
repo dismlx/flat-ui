@@ -1501,9 +1501,9 @@ local function Refresh()
 	if type(ns.ChatHistorySync) == "function" then
 		ns.ChatHistorySync()
 	end
-	-- The spell lines, the gear lines and the Gear comparison window follow the rows just applied, also as the module goes off: the window hides
-	-- then, and takes the look of the Windows page after a change of it (READERS, Core.lua). Each runs through ns.Each, so an error in one of them
-	-- cannot stop this refresh, which runs under ns.Try, nor the module with it.
+	-- The spell lines, the gear lines, the Gear comparison window and its Compare gear button on the Character window follow the rows just applied,
+	-- also as the module goes off: the window and the button hide then, and take the look of the Windows page after a change of it (READERS,
+	-- Core.lua). Each runs through ns.Each, so an error in one of them cannot stop this refresh, which runs under ns.Try, nor the module with it.
 	if type(ns.SpellLinesSync) == "function" then
 		ns.Each(KEY, ns.SpellLinesSync)
 	end
@@ -1512,6 +1512,9 @@ local function Refresh()
 	end
 	if type(ns.GearWindowSync) == "function" then
 		ns.Each(KEY, ns.GearWindowSync)
+	end
+	if type(ns.GearButtonChanged) == "function" then
+		ns.Each(KEY, ns.GearButtonChanged)
 	end
 end
 

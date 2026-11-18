@@ -907,7 +907,7 @@ ns.SETUP_STEPS = {
 		{ "chat.gearBar", "o", "behaviour", "Adds the spells of one action bar, with their ranks, to those the gear comparison counts." },
 		{ "chat.gearReset", "r", "behaviour", "Goes back to your class's main spells for your role." },
 		{ "chat.gearOpen", "o", "behaviour", "Opens the Gear comparison window, with every spell you chose, now and with an item you drop on it." },
-		{ "chat.gearCharButton", "c", "behaviour", "Puts a button at the top right of the Character window that opens and closes the Gear comparison window." },
+		{ "chat.gearCharButton", "c", "behaviour", "Puts a Compare gear button on the title bar of the Character window that opens and closes the Gear comparison window." },
 		{ "chat.gearWinFont", "r", "behaviour", "Sets the size of the text in the Gear comparison window." },
 		{ "chat.gearWinReset", "r", "behaviour", "Puts the Gear comparison window back at its first size and place." },
 		{ "chat.gearFind", "o", "behaviour", "Opens the Gear comparison window with the item finder, to find armor and weapons by name, slot, type, level and quality." },
