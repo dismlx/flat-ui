@@ -1455,7 +1455,7 @@ AREAS = [
         BagsLayout BagsWindow BagsBank BagsTooltip Windows ItemMarks CharacterDurability Hud MapButtons
         AuraTime XpStats XpBar QuestCount MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable Chat ChatText
         ChatTips ChatLinks ItemCompare ChatHistory SpellData SpellModel GearModel GearAvoid SpellLines GearLines GearWindow
-        Movers MoversMode MoversSnap Tooltip"""),
+        ItemIndex GearSearch GearButton Movers MoversMode MoversSnap Tooltip"""),
     ("errands", "Errands, panels and world", """Sparkle SparkleGlow CameraZoom CursorRing MountKey Errands ErrandsMerchant
         ErrandsLoot ErrandsTrainer ErrandsPopups ErrandsSocial ErrandsQuests ErrandsRanks ErrandsLevelling
         ErrandsNavigation ErrandsBulkBuy ConsumableData Consumables DataPanels DataStreams"""),

@@ -205,11 +205,11 @@ local LIST = {
 	{ name = "FlatUIHitTable", label = "Hit table", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "HitTableRow",
 		changed = "HitTableMoved" },
 	-- The Gear comparison window (GearWindow.lua), which shows while /flatui gear or its row has it open: its top left corner is the top left corner
-	-- of the box, and it grows down from there as lines come. It starts right of the Character window, which is 631 wide at the left panel's spot,
-	-- 16 from the left, with the game's 32 between panels (Camelot/CharacterFrameConstants.lua:4; UIPanelLayoutFrame.lua:3-4, 8); GearWindow.lua's
-	-- BOX starts at the same corner.
+	-- of the box. It starts right of the Character window, which is 631 wide at the left panel's spot, 16 from the left, with the game's 32 between
+	-- panels (Camelot/CharacterFrameConstants.lua:4; UIPanelLayoutFrame.lua:3-4, 8); GearWindow.lua's BOX starts at the same corner. The player sizes
+	-- it with its grip, and its box has the size it keeps for the character (sized: FlatUICharDB.gearWindow, BoxSize), at least 380 by 220.
 	{ name = "FlatUIGear", label = "Gear comparison", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 420, height = 220,
-		x = 680, y = -120, gate = "GearWindowShown", changed = "GearWindowMoved" },
+		sized = "gearWindow", minWidth = 380, minHeight = 220, x = 680, y = -120, gate = "GearWindowShown", changed = "GearWindowMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
@@ -735,6 +735,27 @@ local function OnScreen(point, x, y, width, height, frame)
 	return math.max(minX, math.min(maxX, x)), math.max(minY, math.min(maxY, y))
 end
 
+-- The width and height of the box of an own frame. One the player sizes (sized: the key of FlatUICharDB, ns.Character, where its size is kept, as
+-- { w, h } or { w = w, h = h }, in the units of UIParent, which the frame on UIParent has) has that size, cut to its least size and to the screen,
+-- the least size winning on a screen smaller than it; with no size kept, or one that is no pair of numbers, its entry's.
+local function BoxSize(info)
+	local width, height = info.width, info.height
+	local character = info.sized and ns.Character and ns.Character()
+	local kept = type(character) == "table" and character[info.sized] or nil
+	if type(kept) ~= "table" or ns.IsSecret(kept) then
+		return width, height
+	end
+	local w, h = kept.w or kept[1], kept.h or kept[2]
+	if not (Number(w) and Number(h) and w > 0 and h > 0) then
+		return width, height
+	end
+	local sw, sh = ScreenSize()
+	if sw then
+		w, h = math.min(w, sw), math.min(h, sh)
+	end
+	return math.max(info.minWidth or 0, w), math.max(info.minHeight or 0, h)
+end
+
 -- Width and height of a frame in the units of UIParent, or nothing when the client will not say.
 local function Size(frame)
 	if frame then
@@ -869,12 +890,13 @@ function ns.MoverSpot(name, point)
 	local saved = Saved()
 	local entry = saved and Clean(saved[name])
 	local left, bottom, width, height
+	local boxWidth, boxHeight = BoxSize(info)
 	if entry then
-		local x, y = OnScreen(entry.point, entry.x, entry.y, info.width, info.height)
-		left, bottom, width, height = RectAt(entry.point, x, y, info.width, info.height)
+		local x, y = OnScreen(entry.point, entry.x, entry.y, boxWidth, boxHeight)
+		left, bottom, width, height = RectAt(entry.point, x, y, boxWidth, boxHeight)
 	elseif info.x then
 		local from, x, y = StartsAt(info)
-		left, bottom, width, height = RectAt(from, x, y, info.width, info.height)
+		left, bottom, width, height = RectAt(from, x, y, boxWidth, boxHeight)
 	end
 	if not left then
 		return nil
@@ -1528,12 +1550,13 @@ local function HandleRect(name, info)
 			return nil
 		end
 		local point, x, y
+		local width, height = BoxSize(info)
 		if entry then
-			point, x, y = entry.point, OnScreen(entry.point, entry.x, entry.y, info.width, info.height)
+			point, x, y = entry.point, OnScreen(entry.point, entry.x, entry.y, width, height)
 		else
 			point, x, y = StartsAt(info)
 		end
-		return RectAt(point, x, y, info.width, info.height)
+		return RectAt(point, x, y, width, height)
 	end
 	local frame = GameFrame(name)
 	if not frame or ns.Forbidden(frame) then
@@ -4578,6 +4601,7 @@ end
 -- What MoversMode.lua draws its toolbar, lists and inspector from. It holds no state of its own.
 ns.MoverKit = {
 	LIST = LIST, BY_NAME = BY_NAME, handles = handles, looks = handleLooks, Saved = Saved, Describe = Describe, Rect = Rect, ScreenSize = ScreenSize,
+	BoxSize = BoxSize,
 	Commit = Commit, ShowHandle = function(name) ShowHandle(name) end, Cursor = function() return win.Cursor() end,
 	IsOpen = function() return open == true end, Close = function() Close() end,
 	Centre = function(name) return centre.Do(name) end,
