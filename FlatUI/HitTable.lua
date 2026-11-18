@@ -10,8 +10,11 @@ local ADDON_NAME, ns = ...
 --
 -- The table: a title with the enemy as counted and where the player stands, the weapon skill at its right, a heading, and a line for each attack
 -- (Swing, or Main and Off while dual wielding; Special; Ranged; Spell) with a column for each part of the roll that applies to a line shown: Miss,
--- Dodge, Parry, Glance, Block, Crit, Hit, and Cap, the crit cap of a swing. A crit above the cap turns the crit and the cap yellow; a miss, dodge or
--- parry down to its floor turns green. A part that does not apply is -, one the game withheld or refused is ?, and /flatui status says which.
+-- Dodge, Parry, Glance, Block, Crit, Hit, and Cap, the crit cap of a swing; then Resist, the Spell line's alone, no part of the roll: the share of
+-- a spell's damage resisted on average, below 0 the damage a creature takes more from the player's Spell Piercing (HitTableCalc.lua, Resist), with
+-- the piercing of every school the game gives (GetSpellPenetration), the piercing of one school (Fire Piercing...) only in the gear comparison. A
+-- crit above the cap turns the crit and the cap yellow; a miss, dodge or parry down to its floor, and a resist below 0, turn green. A part that
+-- does not apply is -, one the game withheld or refused is ?, and /flatui status says which, and what Resist counts.
 --
 -- The frame is a frame of its own on UIParent, in the LOW strata of the player frame (Mainline/PlayerFrame.xml:13), with no mouse and no name, in a
 -- flat background with a thin border of the hud page's look (ns.Outline, made inside ns.EachPart). With no spot saved in the movers it hangs from a
@@ -82,9 +85,9 @@ local PER_LEVEL = 5
 -- The colours of the windows' text and states (PanelLook.lua:27-31), as Threat list and Data panels have them.
 local DIM, FAINT, PLAIN = { 0.66, 0.68, 0.62 }, { 0.48, 0.50, 0.45 }, { 1, 1, 1 }
 local OK, WARN = { 0.49, 0.80, 0.56 }, { 0.90, 0.72, 0.36 }
--- The columns, in the order of the roll.
+-- The columns, in the order of the roll, and Resist, a spell's damage resisted after it.
 local COLUMNS = { { "miss", "Miss" }, { "dodge", "Dodge" }, { "parry", "Parry" }, { "glance", "Glance" }, { "block", "Block" }, { "crit", "Crit" },
-	{ "hit", "Hit" }, { "cap", "Cap" } }
+	{ "hit", "Hit" }, { "cap", "Cap" }, { "resist", "Resist" } }
 -- The widest number a cell shows, which sets the width of a column.
 local WIDEST = "100.0"
 -- The parts whose floor is good news: no miss (1 for spells under Classic rules), no dodge, no parry.
@@ -146,6 +149,8 @@ local LINE_EMPTY = "Hit table: hidden, with no line to show."
 local LINE_NO_LEVEL = "Hit table: hidden, since the game does not give your level."
 local LINE_FACING = "Hit table: the game did not say whether your target attacks you, so the table counts you behind it."
 local LINE_OFF_CRIT = "Hit table: the game gives one crit chance, your main hand's, so crit talents for one kind of weapon may make your off hand's crit differ."
+local LINE_RESIST = "Hit table: Resist is the share of a spell's damage resisted on average, with your Spell Piercing %d. The enemy's own resistances are not known and count as none, so below 0 it is the damage a creature takes more from your piercing (Spell Vulnerability); against a player piercing does nothing below 0. Above 0, a spell with an effect beyond its damage, as a slow, is resisted whole that often. Piercing of one school, as Fire Piercing, counts in the gear comparison only."
+local LINE_RESIST_LEVEL = "Hit table: Resist counts %s%% for the levels the enemy is above you, Classic's rule and an estimate on WoW: Forever; piercing does not lower it."
 local LINE_FIT = "Hit table: the text is %d%% of Text size, so the table ends before the %s. /flatui move places it elsewhere."
 -- At For tanks and damage dealers: on or off, the role, and what it was read from (the third answer of ns.PlayerRole, a phrase such as "your group
 -- role" or "most points in Holy"), as nameplate threat names its own (PlateThreat.lua); setup's sentence, a suggestion, is not said here.
@@ -802,7 +807,7 @@ local function Note(read)
 	return #skills > 0 and ("Skill " .. table.concat(skills, " / ")) or ""
 end
 
--- The text and colour of a cell.
+-- The text and colour of a cell: a resist below 0, the damage taken more, green, and one that rounds to 0 without its sign.
 local function Value(line, key)
 	local value = line.parts[key]
 	if value == false then
@@ -815,6 +820,11 @@ local function Value(line, key)
 		colour = WARN
 	elseif FLOORED[key] and value < (key == "miss" and line.floor or 0) + 0.05 then
 		colour = OK
+	elseif key == "resist" and value <= -0.05 then
+		colour = OK
+	end
+	if math.abs(value) < 0.05 then
+		value = 0
 	end
 	return ("%.1f"):format(value), colour
 end
@@ -1310,7 +1320,7 @@ ns.AddStatus(KEY, function()
 	end
 	for _, why in ipairs({ "withheld", "refused", "missing" }) do
 		local names = {}
-		for _, what in ipairs({ "hit", "crit", "expertise" }) do
+		for _, what in ipairs({ "hit", "crit", "expertise", "spell piercing" }) do
 			if read.gaps[what] == why then
 				names[#names + 1] = what
 			end
@@ -1321,6 +1331,18 @@ ns.AddStatus(KEY, function()
 	end
 	for _, hand in ipairs(read.assumed) do
 		lines[#lines + 1] = LINE_ASSUMED:format(hand, read.level * PER_LEVEL)
+	end
+	-- What Resist counts, while the Spell line shows it.
+	for _, line in ipairs(read.lines) do
+		if line.id == "spell" and line.pen ~= nil then
+			lines[#lines + 1] = LINE_RESIST:format(math.floor(line.pen + 0.5))
+			local calc = ns.HitTableCalc
+			local level = line.levelResist and type(calc) == "table" and type(calc.Resist) == "function"
+				and calc.Resist(read.level, read.target.level, false, 0) or nil
+			if level then
+				lines[#lines + 1] = LINE_RESIST_LEVEL:format((("%.1f"):format(level):gsub("%.0$", "")))
+			end
+		end
 	end
 	local target = read.target
 	if target and target.unknown then

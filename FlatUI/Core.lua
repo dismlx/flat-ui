@@ -184,9 +184,10 @@ local ADDON_NAME, ns = ...
 -- Edit Mode locks the cast bar to the player frame (its field attachedToPlayerFrame, read only), else on PlayerFrame; it follows
 -- PlayerFrame_AttachCastBar and PlayerFrame_DetachCastBar with hooksecurefunc.
 -- Of the game's it only reads, and changes nothing: the place and size of those frames, of PetFrame, TargetFrame, FocusFrame, UIParent and Flat UI's own frames
--- under the player frame, and the font of the player cast bar's text; the player's level, class, form, power type, combat state, stats, weapon
--- skills and weapons; the target's level and kind, whether it exists, can be attacked, is dead or is a player, and whether it attacks the player:
--- the player's threat situation on it (UnitThreatSituation), else whether its target is the player (UnitIsUnit); and, while its row is For tanks
+-- under the player frame, and the font of the player cast bar's text; the player's level, class, form, power type, combat state, stats (Spell
+-- Piercing among them, GetSpellPenetration; never the enemy's resistances), weapon skills and weapons; the target's level and kind, whether it
+-- exists, can be attacked, is dead or is a player, and whether it attacks the player: the player's threat situation on it (UnitThreatSituation),
+-- else whether its target is the player (UnitIsUnit); and, while its row is For tanks
 -- and damage dealers, the player's role (ns.PlayerRole: the group role, a tank stance, form or aura, the points spent in each talent tree of the set
 -- of talents in use, as last read while no pick waited unapplied on it in the talent window, the class), read again after each event the hud module
 -- hears that can change it. Its lines on an enemy's tooltip (HitTableTip.lua, On enemy tooltips, by the role too by default) are added to

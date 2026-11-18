@@ -59,11 +59,16 @@ local _, ns = ...
 -- SecretWhenUnitStatsRestricted, PlayerScriptDocumentation.lua:221-235, 388-400, 908-920, 1096-1108, so none is asked here), spell power to every
 -- school and healing, attack power to melee and ranged attack power (an inference: the modern engine's stat feeds both), ratings to percent, weapon
 -- skill to its skill line, "+N Weapon Damage" to each weapon hit of the Physical school, block value to the shield's block with a point for each 20
--- Strength (BLOCK_VALUE_PER_STRENGTH, Camelot/PaperDollFrameStats.lua:2, 313); a creature type's bonus and spell penetration are only named. A spell
+-- Strength (BLOCK_VALUE_PER_STRENGTH, Camelot/PaperDollFrameStats.lua:2, 313), Spell Piercing (D.STATS kind pen, 0.5.26) to the piercing the hit
+-- table reads (GetSpellPenetration) and so to the Spell line's resist (HitTableCalc.lua's Resist); a creature type's bonus is only named. A spell
 -- is E = H x (B + c x f x SP) x (1 + C x (m - 1)) on the line of the attack table its data gives it (roll), H and C that line's chances to land and
 -- to crit, m 1.5 on the Spell line and 2.0 on the others (STAT_CRIT_BONUS, GlobalStrings enUS.lua:22332) raised by a crit damage talent, 1 + (m - 1)
--- x (1 + t); a periodic part the same over its ticks, which crit on Forever. A swing is (weapon mean + attack power / 14 x its own speed + flat) x
--- pct (ATTACK_POWER_MAGIC_NUMBER, Camelot/PaperDollFrameStats.lua:11; flat and pct UnitDamage's, backed out as the sheet backs them out,
+-- x (1 + t); a periodic part the same over its ticks, which crit on Forever. A damage spell of a school of magic on the Spell line also takes
+-- x (1 - R / 100), R the line's resist: the share resisted on average, below 0 the damage a creature takes more from piercing; the piercing of one
+-- school (Fire Piercing..., kind pen with its school), which GetSpellPenetration does not count, is the sum of the worn items' (SchoolPiercing) and
+-- counts for spells of that school alone (C.Resist), and a resist that counts the levels a creature is above the player is an estimate. A swing is
+-- (weapon mean + attack power / 14 x its own speed + flat) x pct (ATTACK_POWER_MAGIC_NUMBER, Camelot/PaperDollFrameStats.lua:11; flat and pct
+-- UnitDamage's, backed out as the sheet backs them out,
 -- Camelot/PaperDollFrame.lua:913-914), on the Swing line with glancing blows; a strike adds its bonus, takes the weapon multiple and the normalized
 -- speed where its data says so (and its dagger multiple, dg, with a dagger in the main hand), and rolls the Special line; one that cannot be dodged,
 -- parried or blocked (nd) only misses, one that cannot miss (nm) never does, and one that needs a dagger in the main hand or a shield (needs) deals
@@ -73,9 +78,10 @@ local _, ns = ...
 -- no figure. Haste: a new weapon swings at its own speed x (hasted now / own now) x (1 + h) / (1 + h'), h and h' the haste of the rating worn now and
 -- with the item. Every compared hand counts its weapon's line at full skill, the most for the level plus the line's modifier from race and gear, now
 -- and with the item alike (Adjust, 0.5.25: the comparison is between items, not between the player's training states), and a note names a compared
--- line the player has yet to raise (SkillNotes). The absolute numbers are before armor, resistances, and talents and buffs the stats do not show; the
--- percent cancels them. A figure is an estimate when a value it is built from is (design 3.5): a damage or healing figure by its parts, the model
--- and its line of the attack table; a threat figure by the threat's own values and multipliers too, and by the damage it multiplies.
+-- line the player has yet to raise (SkillNotes). The absolute numbers are before armor, the enemy's own resistances (not known: counted as 0), and
+-- talents and buffs the stats do not show; the percent cancels them. A figure is an estimate when a value it is built from is (design 3.5): a
+-- damage or healing figure by its parts, the model and its line of the attack table; a threat figure by the threat's own values and multipliers
+-- too, and by the damage it multiplies.
 --
 -- G.Compare's answer, as GearLines.lua and GearWindow.lua read it (design 4.3). Its candidates come in the order the game names them, then by slot,
 -- each { slots, label, empty, game, offEmpty, mean, header, notCounted, vs, skills, noChange, rows }: slots the INVSLOT numbers the item would take,
@@ -1282,15 +1288,15 @@ local function CopyState(state)
 	return copy
 end
 
--- A copy of S.stats with its own tables, and swap: what the hit table's inputs take from the change (hit, crit and expertise in percent, skill by line),
--- the factor of the cast time (castScale), the off hand's factor of now and the slots the change touches (changed).
+-- A copy of S.stats with its own tables, and swap: what the hit table's inputs take from the change (hit, crit and expertise in percent, skill by line,
+-- Spell Piercing in points, pen), the factor of the cast time (castScale), the off hand's factor of now and the slots the change touches (changed).
 local function CopyStats(stats)
 	local copy = Copy(stats)
 	for _, key in ipairs(K.STATS_TABLES) do
 		copy[key] = Copy(stats[key])
 	end
-	copy.swap = { hit = { melee = 0, ranged = 0, spell = 0 }, crit = { melee = 0, ranged = 0, spell = 0 }, expertise = 0, skill = {}, castScale = 1,
-		changed = {} }
+	copy.swap = { hit = { melee = 0, ranged = 0, spell = 0 }, crit = { melee = 0, ranged = 0, spell = 0 }, expertise = 0, skill = {}, pen = 0,
+		castScale = 1, changed = {} }
 	return copy
 end
 
@@ -1337,9 +1343,11 @@ local function Wear(state, state2, item, slots)
 	end
 end
 
--- The change per kind of D.STATS, summed over the keys, with the creature type bonuses and the notes it leaves for info.
+-- The change per kind of D.STATS, summed over the keys, with the creature type bonuses and the notes it leaves for info. Spell Piercing (pen) of
+-- every school is summed; that of one school is left to the spells of that school, from the items worn (SchoolPiercing).
 local function Sums(delta, info, D)
-	local sums = { stat = {}, school = {}, rating = {}, size = {}, skill = {}, ap = 0, rap = 0, sp = 0, spd = 0, heal = 0, wdmg = 0, bv = 0 }
+	local sums = { stat = {}, school = {}, rating = {}, size = {}, skill = {}, ap = 0, rap = 0, sp = 0, spd = 0, heal = 0, wdmg = 0, bv = 0,
+		pen = 0 }
 	local defs = Table(D.STATS) or {}
 	local keys = {}
 	for key in pairs(delta) do
@@ -1365,6 +1373,8 @@ local function Sums(delta, info, D)
 				AddOnce(info.vs, ("Against %s: %s %s"):format(def[2], Signed(amount), def[3] == "ap" and "attack power" or "spell damage"))
 			elseif kind == "note" and Text(def[2]) then
 				AddOnce(info.notCounted, ("%s %s"):format(def[2], Signed(amount)))
+			elseif kind == "pen" then
+				sums.pen = sums.pen + (def[2] == nil and amount or 0)
 			elseif sums[kind] ~= nil and type(sums[kind]) == "number" then
 				sums[kind] = sums[kind] + amount
 			end
@@ -1493,7 +1503,7 @@ local function Block(state, stats, state2, stats2, sums, offChanges)
 end
 
 -- Copies of the state and stats with the item in the slots (nil: the slots emptied), and its stat change applied; info gets the notes of the
--- change (stats with no rate, creature type bonuses, spell penetration).
+-- change (stats with no rate, creature type bonuses).
 local function Swap(state, stats, item, slots, info)
 	local D = Data()
 	local state2, stats2 = CopyState(state), CopyStats(stats)
@@ -1512,6 +1522,7 @@ local function Swap(state, stats, item, slots, info)
 	end
 	Wear(state, state2, item, slots)
 	local sums = Sums(delta, info, D)
+	stats2.swap.pen = sums.pen
 	Primary(stats, stats2, sums, info)
 	Powers(stats2, sums)
 	Ratings(stats2, sums)
@@ -1739,13 +1750,13 @@ local function LineSkill(C, line, most, full)
 	return Num((Ask(C.Skill, line))) or most
 end
 
--- The inputs with the target and the facing of the rows, and with an item's change (stats.swap): hit, crit and expertise added. For the comparison
--- (spec.full) every hand counts its weapon's line at full skill (Full), now and with the item alike, so neither side gains from a line the player has
--- yet to raise; a spell tooltip's rates line, the hit table HUD and the enemy tooltip's table count the player's skill as it is (C.Skill, C.Read).
--- For a hand the change touches (swap.changed) the line of its weapon where the line changes (LineSkill) and the dual wield of the change; the
--- item's weapon skill added to the line it names. A hand the change does
--- not touch keeps its line as read, whatever S.state holds for it. sheetSkill stays as read: the sheet's crit was read with it (HitTableCalc.lua's
--- WeaponCrit). melee.moved: the main hand's skill is not that of the line read (EXPECT.auto's estimate).
+-- The inputs with the target and the facing of the rows, and with an item's change (stats.swap): hit, crit, expertise and Spell Piercing added. For
+-- the comparison (spec.full) every hand counts its weapon's line at full skill (Full), now and with the item alike, so neither side gains from a line
+-- the player has yet to raise; a spell tooltip's rates line, the hit table HUD and the enemy tooltip's table count the player's skill as it is
+-- (C.Skill, C.Read). For a hand the change touches (swap.changed) the line of its weapon where the line changes (LineSkill) and the dual wield of the
+-- change; the item's weapon skill added to the line it names. A hand the change does not touch keeps its line as read, whatever S.state holds for it.
+-- sheetSkill stays as read: the sheet's crit was read with it (HitTableCalc.lua's WeaponCrit). melee.moved: the main hand's skill is not that of the
+-- line read (EXPECT.auto's estimate).
 local function Adjust(state, stats, inputs, spec, C)
 	local copy = Copy(inputs)
 	local level = Num(inputs.level) or K.MAX_LEVEL
@@ -1829,6 +1840,7 @@ local function Adjust(state, stats, inputs, spec, C)
 		copy.spell = s
 		s.hit = Num(s.hit) and s.hit + swap.hit.spell or nil
 		s.crit = Num(s.crit) and s.crit + swap.crit.spell or nil
+		s.pen = Num(s.pen) and s.pen + (Num(swap.pen) or 0) or nil
 	end
 	return copy
 end
@@ -2012,6 +2024,61 @@ local function OnSwing(ctx, line, m)
 	return landed + (m - 1) * crit - glance * (1 - g), landed
 end
 
+-- The piercing of one school (D.STATS kind pen with the school: Fire Piercing...) the items of a state give, summed over its links (with the item in
+-- its slots for the state with it), kept for each table of links: GetSpellPenetration gives the piercing of every school alone.
+local schoolPiercing = setmetatable({}, { __mode = "k" })
+
+local function SchoolPiercing(ctx, school)
+	local links = Table(ctx.state.links)
+	if not links then
+		return 0
+	end
+	local kept = schoolPiercing[links]
+	if not kept then
+		kept = {}
+		local defs = Table(Field(ctx.D, "STATS")) or {}
+		for _, link in pairs(links) do
+			for key, amount in pairs(ItemStats(Text(link))) do
+				local def = Table(defs[key])
+				local at = def and def[1] == "pen" and Num(def[2])
+				if at and Num(amount) then
+					kept[at] = (kept[at] or 0) + amount
+				end
+			end
+		end
+		schoolPiercing[links] = kept
+	end
+	return kept[school] or 0
+end
+
+-- The share of a damage spell's amount the enemy does not resist: 1 - the Spell line's resist / 100, the resist worked out again (C.Resist) with the
+-- piercing the items worn give its school (of several, sch, the most: the lowest resistance counts); a resist that counts the levels a creature is
+-- above the player is an estimate. 1 for the Physical school, nil while the resist is not known.
+local function Unresisted(ctx, line)
+	local parts = line and Table(line.parts)
+	local resist = parts and parts.resist
+	if ctx.physical or resist == false then
+		return 1
+	elseif not Num(resist) then
+		return nil
+	end
+	local most
+	for _, school in ipairs(Table(ctx.entry.sch) or { ctx.entry.school }) do
+		if Num(school) and school >= 2 then
+			local pen = SchoolPiercing(ctx, school)
+			most = most and math.max(most, pen) or pen
+		end
+	end
+	local C, target = Calc(), Table(ctx.read.target)
+	if most and most ~= 0 and C and target and Num(line.pen) then
+		resist = Num(Ask(C.Resist, Num(ctx.read.level), Num(target.level), target.player == true, line.pen + most)) or resist
+	end
+	if line.levelResist == true then
+		ctx.estimate = true
+	end
+	return 1 - resist / 100
+end
+
 -- A cast on the Spell line: the chance to hit times the crits; and the share that lands.
 local function OnSpell(line, m)
 	local parts = line and Table(line.parts)
@@ -2058,7 +2125,8 @@ end
 
 -- The share of a cast's amount the entry deals on its line, with crits, and the share that lands: heals do not miss and crit as spells; a Physical
 -- spell on the Spell line takes the sheet's spell crit and 1.5, an estimate (no source says which crit it rolls); a Ranged line with no ranged weapon
--- is an estimate too. Such a line is an estimate of the line itself (lineEstimate), which a flat threat's landed share takes as well.
+-- is an estimate too. Such a line is an estimate of the line itself (lineEstimate), which a flat threat's landed share takes as well. A damage spell
+-- on the Spell line takes the share not resisted too (Unresisted).
 local function LineFactor(ctx)
 	local entry = ctx.entry
 	if K.HEALS[entry.cmp] then
@@ -2074,7 +2142,11 @@ local function LineFactor(ctx)
 		if ctx.physical then
 			ctx.estimate, ctx.lineEstimate = true, true
 		end
-		return OnSpell(FindLine(ctx.read, "spell"), CritMultiplier(ctx, "spell"))
+		local line = FindLine(ctx.read, "spell")
+		local factor, land = OnSpell(line, CritMultiplier(ctx, "spell"))
+		-- A spell that does no damage (EXPECT.threat) takes only the share that lands.
+		local kept = factor and (ctx.entry.cmp == "threat" and 1 or Unresisted(ctx, line))
+		return kept and factor * kept or nil, land
 	elseif roll == "ranged" then
 		if ctx.read.noRanged then
 			ctx.estimate, ctx.lineEstimate = true, true

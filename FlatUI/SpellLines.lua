@@ -3,10 +3,10 @@ local _, ns = ...
 -- Spell lines (part "spell lines" of Chat and tooltips, on its Spells and gear tab; design 1 and 4): inside the game's build of a spell tooltip,
 -- lines with the share of spell damage, spell healing or attack power the spell adds and what that is with the player's stats (Spell power and
 -- attack power lines, With your stats, Less for low ranks), the total of one cast with the player's stats, base and bonus together (Total,
--- chat.spellTotal; 0.5.20) and its rates (chat.spellRates: the expected value with crits and misses, a second of cast time, a point of mana), its
--- threat on WoW: Forever with each multiplier in force (Threat lines), the lines a stance, form, aura or talent tooltip needs that its own text
--- leaves out, and, while a number shown is from before the fight now on, one dim line that says so, last. SpellModel.lua makes the texts
--- (M.PowerLines, M.TotalLines, M.ThreatLines, M.RuleLines, each a block with its title) from the data of SpellData.lua and the player's
+-- chat.spellTotal; 0.5.20) and its rates (chat.spellRates: the expected value with crits, misses and a spell's resists, a second of cast time, a
+-- point of mana), its threat on WoW: Forever with each multiplier in force (Threat lines), the lines a stance, form, aura or talent tooltip needs
+-- that its own text leaves out, and, while a number shown is from before the fight now on, one dim line that says so, last. SpellModel.lua makes
+-- the texts (M.PowerLines, M.TotalLines, M.ThreatLines, M.RuleLines, each a block with its title) from the data of SpellData.lua and the player's
 -- state and stats, and listens to the game while a part wants it (M.Want); this file finds the spell, keeps its lines and adds them. It registers
 -- no event, adds to the chat module and has no switch of its own, as ChatTips.lua. SpellModel.lua, SpellData.lua and ns.ActionSpell of
 -- Cooldowns.lua are looked up when asked, never as the files load, since each may load after this one or fail.

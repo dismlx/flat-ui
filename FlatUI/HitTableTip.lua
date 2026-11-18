@@ -1,19 +1,21 @@
 local _, ns = ...
 
--- Hit table lines (part "hit table lines" of Chat and tooltips; 0.5.20): under the tooltip of an enemy the player can attack, the player's hit
--- table against it, a line for each attack the hit table under the player frame shows (HitTable.lua), as "Swing  M8 D6.5 G40 C12.1 H33.4" (0.5.21:
--- a letter for each part, M miss, D dodge, P parry, G glance, B block, C crit, H hit, and one decimal unless it is 0). Its row is On enemy tooltips (hud.hitTableTip, on the Hit table tab of Minimap and buffs): For tanks and damage
--- dealers (the default) adds the lines while the player's role (ns.PlayerRole, Core.lua) is no healer, Always whatever the role, Off never. The
--- lines follow that row alone, not Hit table under the player frame, so a player may hide the table and keep the lines; and they come only while
--- the chat module is on, since its post call adds them. They count what the Hit table tab says: Attacks (hud.hitTableLines, the kinds of
--- C.Kinds by the class and the player's power type now, UnitPowerType, which carries no secret tag, so a druid who takes Bear or Cat Form in a
--- fight gets the melee lines), Special attacks (hud.hitTableSpecial) and Hit cap against a boss (hud.hitTableRules); parry and block only from the
--- front: by Where you stand (hud.hitTableFacing), at its first choice while the enemy attacks the player (C.Front) and always for a tank, who stands
--- in front. The enemy counts at its level (C.Target: UnitEffectiveLevel, else UnitLevel); a level the game shows as ?? at three levels above the
--- player, and a boss (ns.UnitKind) of the player's level or above at three levels above the player at least, as the hit table counts a boss
--- (HitTableCalc.lua, ABOVE), while a boss below the player (a dungeon's, for a player far above it) keeps its level. It registers no event, makes
--- no frame and has no switch of its own, as SpellLines.lua, and follows one call only, for the size of its lines (below); HitTableCalc.lua and
--- SpellModel.lua are looked up when asked, never as the files load.
+-- Hit table lines (part "hit table lines" of Chat and tooltips; 0.5.20): under the tooltip of an enemy the player can attack, the player's hit table
+-- against it, a line for each attack the hit table under the player frame shows (HitTable.lua), as "Swing  M8 D6.5 G40 C12.1 H33.4" (0.5.21: a letter
+-- for each part, M miss, D dodge, P parry, G glance, B block, C crit, H hit, and one decimal unless it is 0; 0.5.26: R on the Spells line, the share
+-- of a spell's damage resisted on average, signed, as R-2.5 for damage taken more from Spell Piercing, HitTableCalc.lua's Resist). Its row is On
+-- enemy tooltips (hud.hitTableTip, on the Hit table tab of Minimap and buffs): For tanks and damage dealers (the default) adds the lines while the
+-- player's role (ns.PlayerRole, Core.lua) is no healer, Always whatever the role, Off never. The lines follow that row alone, not Hit table under the
+-- player frame, so a player may hide the table and keep the lines; and they come only while the chat module is on, since its post call adds them.
+-- They count what the Hit table tab says: Attacks (hud.hitTableLines, the kinds of C.Kinds by the class and the player's power type now,
+-- UnitPowerType, which carries no secret tag, so a druid who takes Bear or Cat Form in a fight gets the melee lines), Special attacks
+-- (hud.hitTableSpecial) and Hit cap against a boss (hud.hitTableRules); parry and block only from the front: by Where you stand (hud.hitTableFacing),
+-- at its first choice while the enemy attacks the player (C.Front) and always for a tank, who stands in front. The enemy counts at its level
+-- (C.Target: UnitEffectiveLevel, else UnitLevel); a level the game shows as ?? at three levels above the player, and a boss (ns.UnitKind) of the
+-- player's level or above at three levels above the player at least, as the hit table counts a boss (HitTableCalc.lua, ABOVE), while a boss below the
+-- player (a dungeon's, for a player far above it) keeps its level. It registers no event, makes no frame and has no switch of its own, as
+-- SpellLines.lua, and follows one call only, for the size of its lines (below); HitTableCalc.lua and SpellModel.lua are looked up when asked, never
+-- as the files load.
 --
 -- The tests, cheapest first: the row and the chat module; the tooltip GameTooltip (rawequal), one addons may touch (ns.Forbidden) and not one
 -- inside another tooltip (its field IsEmbedded, read only); then the look at the stats and the role (Look, below), at a build of any kind; the
@@ -43,8 +45,10 @@ local _, ns = ...
 -- follows; each line its label light grey on the left and its parts white on the right (AddDoubleLine), or light grey while they are from before
 -- the fight; a part that does not apply left out, one the game did not give ?; and the notes dim, wrapped at the tooltip's width (AddLine's fifth
 -- argument): the stats from before the fight, and an estimate (a level of ?? or a boss counted three above the player, a player's dodge, parry and
--- block counted from 5%, a weapon skill the game did not give counted as the most for the level, for a hand or a ranged weapon of a line shown). In
--- Compact (chat.tipDetail) the notes are joined into one dim line, in Full each is its own.
+-- block counted from 5%, a weapon skill the game did not give counted as the most for the level, for a hand or a ranged weapon of a line shown);
+-- and, while R is not 0, what it counts: the player's Spell Piercing against resistances not known, counted as 0, the share for the levels a
+-- creature is above the player (an estimate, which piercing does not lower), and that a spell with an effect beyond its damage is resisted whole
+-- that often. In Compact (chat.tipDetail) the notes are joined into one dim line, in Full each is its own.
 --
 -- The size (0.5.26): Text size on enemy tooltips (hud.hitTableTipSize, 70 to 200%, its ids the percent in text) sizes these lines alone, in a
 -- share of the size the game gave each, with the face and flags it had (GetFont, SetFont): the left text of each line and the right text of a
@@ -81,8 +85,10 @@ local HT = {
 	-- The levels a boss and a ?? count above the player, as the hit table counts them (HitTableCalc.lua, ABOVE).
 	ABOVE = 3,
 	-- The parts of a line in the order of the roll, each a letter with its figure (the owner: "make more concise parry = p, block = b, etc"):
-	-- M miss, D dodge, P parry, G glance, B block, C crit, H hit; the row's tip says what each letter is. The crit cap is the hit table's alone.
-	PARTS = { { "miss", "M" }, { "dodge", "D" }, { "parry", "P" }, { "glance", "G" }, { "block", "B" }, { "crit", "C" }, { "hit", "H" } },
+	-- M miss, D dodge, P parry, G glance, B block, C crit, H hit, then R, the Spells line's resist; the row's tip says what each letter is. The crit
+	-- cap is the hit table's alone.
+	PARTS = { { "miss", "M" }, { "dodge", "D" }, { "parry", "P" }, { "glance", "G" }, { "block", "B" }, { "crit", "C" }, { "hit", "H" },
+		{ "resist", "R" } },
 	-- Between two parts: a space.
 	SEPARATOR = " ",
 	-- The label of each line of C.Table, by its id: short, as the line is.
@@ -96,6 +102,10 @@ local HT = {
 	BOSS = "A boss counted as level %d",
 	PLAYER = "A player's dodge, parry and block counted from 5%",
 	ASSUMED = "Weapon skill counted as the most for your level",
+	-- What R counts, one note: the piercing, then the share for the levels above (an estimate), then a spell resisted whole.
+	PIERCE = "R counts your Spell Piercing %d against resistances not known, counted as 0",
+	LEVEL_RESIST = ", and ~%s for its levels above you, which piercing does not lower",
+	WHOLE = "; a spell that also slows or roots is resisted whole that often",
 	JOIN = "; ",
 }
 
@@ -306,8 +316,11 @@ end
 -- The right text of a line: each part that applies, in the order of the roll, with one decimal, ? where the game did not give it. Nil when no part
 -- is known.
 
--- A part's figure: one decimal, without a trailing .0 (8.0 reads 8).
+-- A part's figure: one decimal, without a trailing .0 (8.0 reads 8), and a figure that rounds to 0 without its sign.
 local function Short(value)
+	if math.abs(value) < 0.05 then
+		value = 0
+	end
 	local text = ("%.1f"):format(value)
 	text = text:gsub("%.0$", "")
 	return text
@@ -325,7 +338,32 @@ local function Parts(line)
 	return known and table.concat(parts, HT.SEPARATOR) or nil
 end
 
--- The notes of a table: the stats from before the fight, then each estimate.
+-- What R counts, in one note, while the Spells line shows one that is not 0: the piercing, the share for the levels above (C.Resist with none) and,
+-- for a share resisted, a spell resisted whole.
+local function ResistNote(notes, read, target)
+	local spell
+	for _, line in ipairs(type(read.lines) == "table" and read.lines or {}) do
+		if line.id == "spell" then
+			spell = line
+		end
+	end
+	local resist = spell and type(spell.parts) == "table" and spell.parts.resist
+	if not Finite(resist) or math.abs(resist) < 0.05 or not Finite(spell.pen) then
+		return
+	end
+	local note = HT.PIERCE:format(math.floor(spell.pen + 0.5))
+	local C = ns.HitTableCalc
+	local level = spell.levelResist and type(C) == "table" and type(C.Resist) == "function" and C.Resist(read.level, target.level, false, 0) or nil
+	if Finite(level) and level >= 0.05 then
+		note = note .. HT.LEVEL_RESIST:format(Short(level) .. "%")
+	end
+	if resist >= 0.05 then
+		note = note .. HT.WHOLE
+	end
+	notes[#notes + 1] = note
+end
+
+-- The notes of a table: the stats from before the fight, then each estimate, then what R counts.
 local function Notes(read, target, old)
 	local notes = {}
 	if old then
@@ -342,6 +380,7 @@ local function Notes(read, target, old)
 	if type(read.assumed) == "table" and #read.assumed > 0 then
 		notes[#notes + 1] = HT.ASSUMED
 	end
+	ResistNote(notes, read, target)
 	return notes
 end
 
