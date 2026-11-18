@@ -729,7 +729,7 @@ ns.SETUP_STEPS = {
 	} },
 	-- The hit table hangs under the player frame, so its step shows the player's frame (mock-player, SetupDrawUnits.lua); every row describes itself.
 	{ id = "hud-hittable", area = "Minimap and buffs", title = "Hit table", draw = "mock-player", built = true, rows = {
-		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target." },
+		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target, while you are a tank or a damage dealer, or always." },
 		{ "hud.hitTableLines", "o", "behaviour", "Chooses whether the hit table shows melee, ranged or spells, or picks them by your class and form." },
 		{ "hud.hitTableSpecial", "o", "behaviour", "Adds a line for your special attacks, which do not glance and miss less while you dual wield." },
 		{ "hud.hitTableAgainst", "o", "behaviour", "Chooses whether the hit table is against your target or always against a boss three levels above you." },

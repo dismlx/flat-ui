@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Bags (off by default) puts every bag in one window of Flat UI's own, with sections and a search, and the bank in a second window, live at the
+-- Bags (on by default) puts every bag in one window of Flat UI's own, with sections and a search, and the bank in a second window, live at the
 -- banker for a visit that starts while At the banker is Flat UI's bank window and the last snapshot otherwise; the game's bag windows stay hidden
 -- while it is on, and its bank window too for such a visit. This file is the module, and the other Bags files are its parts. It makes ns.Bags and
 -- every table the parts fill, for the files that load after it in this order: BagsData.lua (Data, the account cache), BagsCategories.lua

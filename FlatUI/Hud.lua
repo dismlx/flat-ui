@@ -2165,7 +2165,8 @@ function Refresh()
 	if ns.MeterClearRefresh ~= nil then
 		ns.MeterClearRefresh()
 	end
-	-- The hit table under the player frame: shown, heard and placed as its rows say, or hidden (HitTable.lua).
+	-- The hit table under the player frame: shown, heard and placed as its rows and, at For tanks and damage dealers, the player's role say, or
+	-- hidden (HitTable.lua, which also hears the events that can change the role through this module).
 	if ns.HitTableRefresh ~= nil then
 		ns.HitTableRefresh()
 	end

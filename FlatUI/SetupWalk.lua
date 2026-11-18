@@ -263,50 +263,18 @@ end
 
 -- Facts about the character -------------------------------------------------------------------------------------------------------------------
 
--- The role of each talent tree of a class, in the game's order of its trees.
-Walk.TREES = {
-	WARRIOR = { "damage", "damage", "tank" }, PALADIN = { "healer", "tank", "damage" }, PRIEST = { "healer", "healer", "damage" },
-	SHAMAN = { "damage", "damage", "healer" }, DRUID = { "damage", "damage", "healer" }, HUNTER = { "damage", "damage", "damage" },
-	ROGUE = { "damage", "damage", "damage" }, MAGE = { "damage", "damage", "damage" }, WARLOCK = { "damage", "damage", "damage" },
-}
-Walk.GIVEN = { TANK = "tank", HEALER = "healer", DAMAGER = "damage" }
-
--- The role setup suggests for ("tank", "healer" or "damage") and the sentence that says why, from the first that answers: the role the group gave,
--- a tank stance, form or aura as nameplate threat reads it (PlateThreat.lua), the talent tree with the most points, the class.
+-- The role setup suggests for ("tank", "healer" or "damage") and the sentence that says why: the player's role as Flat UI reads it (Core.lua,
+-- ns.PlayerRole: the role the group gave, a tank stance, form or aura as nameplate threat reads it, the talent tree with the most points, the
+-- class), which the hit table at For tanks and damage dealers shows by as well, so the two always agree.
 function Walk.Role()
-	local given = S.Ask(UnitGroupRolesAssigned, "player")
-	if IsText(given) and Walk.GIVEN[given] then
-		return Walk.GIVEN[given], "Suggested from your group role."
+	local role, why = nil, nil
+	if type(ns.PlayerRole) == "function" then
+		role, why = ns.PlayerRole()
 	end
-	local threat = ns.PlateThreat
-	if type(threat) == "table" and type(threat.Role) == "function" then
-		local ok, kind, reason = pcall(threat.Role)
-		if ok and IsText(kind) and kind == "tank" and IsText(reason) and reason ~= "your group role" then
-			return "tank", reason == "your choice" and "Suggested from your role." or ("Suggested from %s."):format(reason)
-		end
+	if role ~= "tank" and role ~= "healer" then
+		role = "damage"
 	end
-	local class = S.Ask(UnitClassBase, "player")
-	class = IsText(class) and class or nil
-	local trees = class and Walk.TREES[class]
-	local info = type(C_SpecializationInfo) == "table" and C_SpecializationInfo.GetSpecializationInfo or nil
-	local count = S.Ask(GetNumSpecializations)
-	if trees and type(info) == "function" and ns.Finite(count) then
-		local best, most, name = nil, 0, nil
-		for index = 1, math.min(math.floor(count), #trees) do
-			-- After pcall's own answer: the tree's id, name, description, icon, role, main stat, and the points spent in it.
-			local ok, _, tree, _, _, _, _, points = pcall(info, index)
-			if ok and ns.Finite(points) and points > most and IsText(tree) then
-				best, most, name = index, points, tree
-			end
-		end
-		if best then
-			return trees[best], ("Suggested from your talents: most points in %s."):format(name)
-		end
-	end
-	if class then
-		return class == "PRIEST" and "healer" or "damage", ("Suggested for a %s."):format(class:lower())
-	end
-	return "damage", nil
+	return role, IsText(why) and why or nil
 end
 
 -- What the walk knows of the character, read once each time the window opens (Walk.Begin): role and why, and the role itself as a fact (tank,

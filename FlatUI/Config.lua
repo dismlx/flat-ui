@@ -1367,11 +1367,12 @@ ns.PAGES = {
 			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below." },
 	},
 	-- Bags.lua and the Bags*.lua files: a bag window and a bank window of Flat UI's own in place of the game's, with sections, a search and the bags
-	-- and bank of your other characters. Off by default; on, the windows look as the Windows page sets (Window opacity, Button and slot colour,
-	-- Highlight colour, Icon crop), and no row has a function of its own: the module applies them all when one changes.
+	-- and bank of your other characters. On by default for every character since 0.5.19 (a profile of an older build with every other module off
+	-- keeps it off: Core.lua, KeepBagsOff); the windows look as the Windows page sets (Window opacity, Button and slot colour, Highlight colour, Icon
+	-- crop), and no row has a function of its own: the module applies them all when one changes.
 	{
 		key = "bags", label = "Bags",
-		{ key = "enabled", kind = "bool", default = false, label = "Flat UI bags",
+		{ key = "enabled", kind = "bool", default = true, label = "Flat UI bags",
 			tip = "One window for all your bags, with sections, a search and your gold, and one for your bank, which also shows it away from the banker. The name in either window's title picks another of your characters, to see their bags or bank. The game's bag windows stay hidden while it is on, and its bank window too while At the banker is Flat UI's. It stays off while another bag addon is loaded, and under the gamepad interface. /flatui bags and /flatui bank open them." },
 		{ section = "Window" },
 		{ key = "view", kind = "choice", default = "sections", label = "Show items",
@@ -1935,36 +1936,40 @@ ns.PAGES = {
 		{ key = "zoneBars", kind = "bool", default = true, label = "Zone event bars", tip = "Thin border on score and progress bars." },
 	},
 	-- HitTable.lua and HitTableCalc.lua: a table of Flat UI's own under the player frame with the player's chances against the target, worked out again
-	-- as stats, gear, weapon skill, buffs, form and the target change. Off by default, as the other readouts of Flat UI's own.
+	-- as stats, gear, weapon skill, buffs, form and the target change. By default it shows for a tank or a damage dealer and not for a healer, by the
+	-- role Flat UI setup reads (ns.PlayerRole, Core.lua); Always and Off hold whatever the role, and the other rows apply at either of the first two.
+	-- It was a tick in 0.5.18: a saved tick reads as Always or Off (Core.lua, ns.MigrateText).
 	{
 		key = "hudHitTable", label = "Hit table", parent = "hud", owner = "hud",
-		{ key = "hitTable", kind = "bool", default = false, label = "Hit table under the player frame",
-			tip = "Your chances against your target to miss, be dodged, parried or blocked, glance, crit and hit, worked out again as your gear, buffs, weapon skill and target change. /flatui move places it." },
+		{ key = "hitTable", kind = "choice", default = "role", label = "Hit table under the player frame",
+			choices = { { "role", "For tanks and damage dealers" }, { "on", "Always" }, { "off", "Off" } },
+			tip = "Your chances against your target to miss, be dodged, parried or blocked, glance, crit and hit, worked out again as your gear, buffs, weapon skill and target change. For tanks and damage dealers hides it while you count as a healer: by your group role, else a tank stance, form or aura, else the talent tree you put most points in, else your class, as Flat UI setup reads it. /flatui status says which you count as. /flatui move places it." },
 		{ section = "What it shows" },
-		{ key = "hitTableLines", kind = "choice", default = "auto", label = "Attacks", needs = "hitTable",
+		{ key = "hitTableLines", kind = "choice", default = "auto", label = "Attacks", needs = "hitTable", needsIn = { "role", "on" },
 			choices = { { "auto", "By your class and form" }, { "melee", "Melee" }, { "ranged", "Ranged" }, { "spell", "Spells" }, { "all", "Melee, ranged and spells" } },
 			tip = "By your class and form: melee for a warrior or rogue, ranged for a hunter, melee and spells for a paladin or shaman, melee for a druid in Bear or Cat Form and spells out of them, spells for the others. Ranged needs a bow, gun, crossbow, thrown weapon or wand." },
-		{ key = "hitTableSpecial", kind = "bool", default = true, label = "Special attacks", needs = "hitTable",
+		{ key = "hitTableSpecial", kind = "bool", default = true, label = "Special attacks", needs = "hitTable", needsIn = { "role", "on" },
 			tip = "A line for your abilities under your swings: they do not glance or take the dual wield miss. Their crit, as on ranged attacks and spells, is the chance on an attack that lands." },
-		{ key = "hitTableAgainst", kind = "choice", default = "target", label = "Against", needs = "hitTable",
+		{ key = "hitTableAgainst", kind = "choice", default = "target", label = "Against", needs = "hitTable", needsIn = { "role", "on" },
 			choices = { { "target", "Your target" }, { "boss", "A boss three levels above you" } },
 			tip = "With no enemy targeted, an enemy of your level. A target whose level shows as ?? counts as three levels above you." },
-		{ key = "hitTableFacing", kind = "choice", default = "auto", label = "Where you stand", needs = "hitTable",
+		{ key = "hitTableFacing", kind = "choice", default = "auto", label = "Where you stand", needs = "hitTable", needsIn = { "role", "on" },
 			choices = { { "auto", "Behind, in front while it attacks you" }, { "behind", "Behind" }, { "front", "In front" } },
 			tip = "From the front an enemy can also parry and block. The game does not tell where you stand: the first choice counts you in front while you hold your target's threat, as a tank does." },
-		{ key = "hitTableRules", kind = "choice", default = "classic", label = "Hit cap against a boss", needs = "hitTable",
+		{ key = "hitTableRules", kind = "choice", default = "classic", label = "Hit cap against a boss", needs = "hitTable", needsIn = { "role", "on" },
 			choices = { { "classic", "9% melee, 16% spells (Classic tests)" }, { "game", "8% melee, 17% spells (the game's tooltip)" } },
 			tip = "Tests of Classic found the first 1% of your hit lost against a boss and 1% of spells always missing. The hit tooltip of the character sheet leaves both out. Which holds on WoW: Forever is not known yet." },
 		{ section = "When it shows" },
-		{ key = "hitTableShow", kind = "choice", default = "target", label = "Show", needs = "hitTable",
+		{ key = "hitTableShow", kind = "choice", default = "target", label = "Show", needs = "hitTable", needsIn = { "role", "on" },
 			choices = { { "target", "With an enemy targeted" }, { "combat", "In combat" }, { "always", "Always" } } },
 		{ section = "Look" },
-		{ key = "hitTableFont", kind = "choice", default = "sans", label = "Font", needs = "hitTable", choices = { { "sans", "Flat UI Sans" }, { "game", "Game font" } },
+		{ key = "hitTableFont", kind = "choice", default = "sans", label = "Font", needs = "hitTable", needsIn = { "role", "on" },
+			choices = { { "sans", "Flat UI Sans" }, { "game", "Game font" } },
 			tip = "Flat UI Sans is IBM Plex Sans. A language it has no letters for keeps the game font." },
 		{ key = "hitTableSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Text size",
 			tip = "100% is 11 px. While the target frame stands right beside your player frame, the text gets smaller so the table ends before it.",
-			needs = "hitTable" },
-		{ key = "hitTableBack", kind = "bool", default = true, label = "Background and border", needs = "hitTable",
+			needs = "hitTable", needsIn = { "role", "on" } },
+		{ key = "hitTableBack", kind = "bool", default = true, label = "Background and border", needs = "hitTable", needsIn = { "role", "on" },
 			tip = "A flat background with a thin border, in the colours of the Flat UI page, or of Own border and background on Minimap and buffs." },
 	},
 	{

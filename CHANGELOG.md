@@ -1,6 +1,8 @@
 ## 0.5.19
 
 - For WoW: Forever 1.60.1 build 70790. The interface number stays 16001.
+- **Bags**: **Flat UI bags** is now on by default, for every character, so after the update your bags open in Flat UI's window unless you turned the row off before. A profile with every other Flat UI module off, such as **Game look** of the welcome screen, keeps it off. It still stays off while another bag addon is loaded, and under the gamepad interface, and turned off it gives you the game's bag windows back.
+- **Minimap and buffs**, **Hit table**: **Hit table under the player frame** is now a choice, **For tanks and damage dealers** (the default), **Always** or **Off**. **For tanks and damage dealers** shows the table while you count as a tank or a damage dealer and hides it while you count as a healer, reading your role as Flat UI setup does: your group role, else a tank stance, form or aura as nameplate threat reads it (**Defensive Stance**, **Bear Form**, **Righteous Fury**, or **Your role** at **Tank** on the **Threat** tab of **Nameplates**), else the talent tree you put most points in, else your class (a priest heals). It follows a group role given or changed, talents spent or reset, a switch to your other talents with dual spec, a level gained and a change of form or aura. A profile where you ticked the row in 0.5.18 now has **Always**, one where you unticked it again has **Off**, and one where you never changed it has the new default, so the table now shows on your tanks and damage dealers; the other rows of the tab apply at **For tanks and damage dealers** and **Always**. `/flatui status` says which role you count as and why.
 
 ## 0.5.18
 

@@ -21,9 +21,10 @@ local _, ns = ...
 -- That call is followed (hooksecurefunc, through ns.FollowGlobal) from the first plate shown with threat on, and every plate is read again when the
 -- role changes, the group changes, a fight starts and the rows change; at the end of a fight every plate loses its level, as Threat Plates has it
 -- (Modules/Threat.lua:247-253). The other parts hear a change of a plate's level (PT.OnChange), and every update (PT.OnUpdate).
--- The role is worked out on events and not for each plate: the role the group gave, the raid's Main Tank, the game's tank aura, then a warrior's
--- Defensive Stance, a druid's bear form and a paladin's Righteous Fury, as Threat Plates' Classic path has them. Nothing of the game is changed: every
--- call only reads, and a frame of the file's own hears UPDATE_SHAPESHIFT_FORM for a warrior or a druid while the role is automatic.
+-- The role is worked out on events and not for each plate, and while threat is off at each ask of PT.Role, which Flat UI setup and the hit table
+-- make (ns.PlayerRole, Core.lua): the role the group gave, the raid's Main Tank, the game's tank aura, then a warrior's Defensive Stance, a druid's
+-- bear form and a paladin's Righteous Fury, as Threat Plates' Classic path has them. Nothing of the game is changed: every call only reads, and a
+-- frame of the file's own hears UPDATE_SHAPESHIFT_FORM for a warrior or a druid while the role is automatic.
 
 local KEY = "nameplates"
 local EXTRA = ns.PlateExtra
@@ -543,9 +544,16 @@ function PT.Colour(state)
 	return ns.Colour(KEY .. "." .. row)
 end
 
--- "tank" or "damage", and why, as a short phrase.
+-- "tank" or "damage", and why, as a short phrase. While threat is off no event works the role out (every handler here looks only while it is on),
+-- so each call works it out then, Righteous Fury read first while the role is automatic: Flat UI setup and the hit table ask through ns.PlayerRole
+-- (Core.lua), and a role kept from an earlier look would be out of date. Nothing is read again for a plate: no plate shows threat then.
 function PT.Role()
-	if role.reason == nil then
+	if not PT.Active() then
+		if Opt("threatRole") == "auto" then
+			ReadFury()
+		end
+		WorkOut()
+	elseif role.reason == nil then
 		WorkOut()
 	end
 	return role.tank and "tank" or "damage", role.reason

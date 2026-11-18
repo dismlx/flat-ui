@@ -1,9 +1,12 @@
 local ADDON_NAME, ns = ...
 
--- Hit table (hud.hitTable, on the Hit table tab of Minimap and buffs, off by default): a small table of Flat UI's own under the player frame with the
--- player's chances against the target, worked out again as stats, gear, weapon skill, buffs, form and the target change; HitTableCalc.lua has the
--- numbers and their sources. Part "hit table" of the hud module, which stops alone after a few faults: Hud.lua calls ns.HitTableRefresh in every
--- refresh of the page, and everything else here runs inside ns.EachPart.
+-- Hit table (hud.hitTable, on the Hit table tab of Minimap and buffs): a small table of Flat UI's own under the player frame with the player's
+-- chances against the target, worked out again as stats, gear, weapon skill, buffs, form and the target change; HitTableCalc.lua has the numbers and
+-- their sources. Its row is For tanks and damage dealers by default, which shows the table while the player's role (ns.PlayerRole, Core.lua, the role
+-- Flat UI setup suggests from) is tank or damage and hides it for a healer; Always and Off hold whatever the role. The row was a tick in 0.5.18:
+-- Core.lua moves a saved one to Always or Off once (ns.MigrateText), and one that slips past reads the same here. Part "hit table" of the hud
+-- module, which stops alone after a few faults: Hud.lua calls ns.HitTableRefresh in every refresh of the page, and everything else here runs inside
+-- ns.EachPart.
 --
 -- The table: a title with the enemy as counted and where the player stands, the weapon skill at its right, a heading, and a line for each attack
 -- (Swing, or Main and Off while dual wielding; Special; Ranged; Spell) with a column for each part of the roll that applies to a line shown: Miss,
@@ -34,7 +37,11 @@ local ADDON_NAME, ns = ...
 -- threat events and the target's own target count only when the facing they decide changes, as they come many times a second in a fight. The
 -- cast bar's lock is followed with hooksecurefunc (ns.FollowGlobal, as CastBarSize.lua follows it), and a refresh of the unit frames, a layout of the
 -- Cooldown icons rows (Cooldowns.lua) and a change of the cast bars' sizes (CastBarSize.lua) place the table again (ns.UnitFrameExtra.after.refresh,
--- ns.HitTableMoved). Nothing of the game's is written: its frames are read and anchored to, never changed.
+-- ns.HitTableMoved). At For tanks and damage dealers the role is worked out in every refresh and again after an event that can change it
+-- (ROLE_EVENTS: a role the group gives, talents spent, reset or switched to the other set of dual spec, a level, a form, a new world, the player's
+-- auras), which the hud module hears for it (ns.AddEvent) also while the table is hidden for a healer; such an event too only marks the table, and
+-- the next frame works the role out before the numbers, showing or hiding the table when its answer changed. Nothing of the game's is written: its
+-- frames are read and anchored to, never changed.
 
 local KEY, PART = "hud", "hit table"
 local MOVER = "FlatUIHitTable"
@@ -94,6 +101,16 @@ local EVENTS = { "COMBAT_RATING_UPDATE", "PLAYER_DAMAGE_DONE_MODS", "SPELL_POWER
 	"UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED", "EDIT_MODE_LAYOUTS_UPDATED" }
 -- The events after which the table is placed again: a new world, the screen, the scale or Edit Mode's layout changed.
 local PLACE_EVENTS = { PLAYER_ENTERING_WORLD = true, UI_SCALE_CHANGED = true, DISPLAY_SIZE_CHANGED = true, EDIT_MODE_LAYOUTS_UPDATED = true }
+-- The events after which the role is worked out again at For tanks and damage dealers (ns.PlayerRole), heard through the hud module while that is
+-- the row's choice, also while the table is hidden. Each is in events.yaml of the client: a role the group gives or takes back, as the game's player
+-- frame hears it (Mainline/PlayerFrame.lua:63, 71, 197); talents spent or reset, and the switch to the other set of dual spec, which Forever's talent
+-- window has (Blizzard_PlayerSpells/Camelot/ClassTalents/Blizzard_ClassTalentsFrame.lua:111-125, 144-145, 367-371), as the sheet hears them
+-- (Camelot/PaperDollFrame.lua:315, 335, 340) and the talent window (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:186); a level; a stance or
+-- form; a new world. The player's UNIT_AURA is heard too, for Righteous Fury and the game's tank aura (PlateThreat.lua).
+local ROLE_EVENTS = { "PLAYER_ROLES_ASSIGNED", "GROUP_ROSTER_UPDATE", "CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED",
+	"ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_LEVEL_UP", "UPDATE_SHAPESHIFT_FORM", "PLAYER_ENTERING_WORLD" }
+-- The roles as /flatui status names them.
+local ROLE_WORDS = { tank = "a tank", healer = "a healer", damage = "a damage dealer" }
 -- The lines of /flatui status.
 local LINE_WHERE = {
 	container = "Hit table: under the player frame.",
@@ -119,6 +136,8 @@ local LINE_NO_LEVEL = "Hit table: hidden, since the game does not give your leve
 local LINE_FACING = "Hit table: the game did not say whether your target attacks you, so the table counts you behind it."
 local LINE_OFF_CRIT = "Hit table: the game gives one crit chance, your main hand's, so crit talents for one kind of weapon may make your off hand's crit differ."
 local LINE_FIT = "Hit table: the text is %d%% of Text size, so the table ends before the %s. /flatui move places it elsewhere."
+-- At For tanks and damage dealers: on or off, the role, and the sentence of ns.PlayerRole that says why, as Flat UI setup shows it.
+local LINE_ROLE = "Hit table: %s, since you count as %s."
 
 local IsSecret, Finite = ns.IsSecret, ns.Finite
 
@@ -131,10 +150,11 @@ local IsSecret, Finite = ns.IsSecret, ns.Finite
 -- (HitTableCalc.lua). laid: the key of the layout. placed, edge, anchor: where the table was put; where: what /flatui status says of it; later: a
 -- place waits for the end of the fight. room: the width the table may take under the player frame, in its own units, nil for no bound; roomBy:
 -- what ends it; fit: the share of Text size the text was made to end there, nil while it has its size. hooked: the cast bar's lock is followed.
--- sansRefused: the game refused Flat UI Sans.
+-- sansRefused: the game refused Flat UI Sans. role and why: the player's role at the last look ("tank", "healer" or "damage", nil before the
+-- first) and the sentence of ns.PlayerRole that says why; recheck: an event that can change the role came, so the next frame looks again.
 local S = { heads = {}, rows = {}, widths = {}, measures = {}, measured = 0, units = {}, alone = {}, hearing = false, fighting = false, dirty = false,
-	later = false }
-local Update, Later, Off, Dirty
+	later = false, recheck = false }
+local Update, Later, Off, Dirty, Apply
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -152,9 +172,44 @@ local function Ask(fn, ...)
 	return nil
 end
 
--- True while the table is wanted: the page on, the row on, the part not stopped.
+-- The choice of Hit table under the player frame: "role" (For tanks and damage dealers), "on" (Always) or "off". A tick of 0.5.18 that slips past
+-- the migration (Core.lua, ns.MigrateText) reads as on or off.
+local function Choice()
+	local value = Opt("hitTable")
+	if value == true or value == "on" then
+		return "on"
+	elseif value == false or value == "off" then
+		return "off"
+	end
+	return "role"
+end
+
+-- Looks at the player's role again: the role and the sentence that says why (ns.PlayerRole, Core.lua, which only reads and drops a withheld answer).
+local function WorkOutRole()
+	local role, why
+	if type(ns.PlayerRole) == "function" then
+		role, why = ns.PlayerRole()
+	end
+	S.role = (role == "tank" or role == "healer") and role or "damage"
+	S.why = type(why) == "string" and why or nil
+end
+
+-- True while the row lets the table show: Always, or For tanks and damage dealers while the player is no healer (the role of the last look, else
+-- one now).
+local function Shows()
+	local choice = Choice()
+	if choice == "role" then
+		if S.role == nil then
+			WorkOutRole()
+		end
+		return S.role ~= "healer"
+	end
+	return choice == "on"
+end
+
+-- True while the table is wanted: the page on, the row letting it show, the part not stopped.
 local function Wanted()
-	return ns.Enabled(KEY) and Opt("hitTable") == true and not ns.PartStopped(KEY, PART)
+	return ns.Enabled(KEY) and Shows() and not ns.PartStopped(KEY, PART)
 end
 
 -- Runs fn as this part: a fault is counted by ns.EachPart, and three stop the part alone (each call is a new table, so each fault counts); the
@@ -916,14 +971,36 @@ end
 
 -- Events ---------------------------------------------------------------------------------------------------------------------------------------------
 
+-- After an event that can change the role (ROLE_EVENTS): the role is looked at again, and the table shows or hides when the row's answer for it
+-- changed (Apply); else the numbers are worked out again, as after any other event.
+local function Recheck()
+	local was = Wanted()
+	WorkOutRole()
+	if Wanted() ~= was then
+		Apply()
+	else
+		Update()
+	end
+end
+
+-- The work of the frame after a burst: the role first when an event that can change it came, then the numbers.
+local function Work()
+	if S.recheck then
+		S.recheck = false
+		Recheck()
+	else
+		Update()
+	end
+end
+
 -- The OnUpdate of the ear: once, on the frame after the events of a burst.
 local function Tick(ear)
 	ear:SetScript("OnUpdate", nil)
 	S.dirty = false
-	Safe(Update)
+	Safe(Work)
 end
 
--- Marks the table to be worked out again on the next frame.
+-- Marks the table, and with S.recheck the role, to be worked out again on the next frame.
 Dirty = function()
 	if S.dirty then
 		return
@@ -932,7 +1009,7 @@ Dirty = function()
 	local ear = S.ear
 	if not (ear and pcall(ear.SetScript, ear, "OnUpdate", Tick)) then
 		S.dirty = false
-		Update()
+		Work()
 	end
 end
 
@@ -989,31 +1066,35 @@ local function HearUnit(ear, event, ...)
 	end
 end
 
--- The frame that hears the events, and only while the table is wanted.
-local function Hear(on)
-	if S.hearing == on then
-		return
+-- The frame that hears the events while the table is wanted, and whose OnUpdate works out a burst (Tick), also for the role while the table is
+-- hidden and the frame hears nothing: made the first time either is needed.
+local function Ear()
+	if S.ear then
+		return S.ear
 	end
-	local ear = S.ear
-	if not ear then
-		if not on then
+	local ear = CreateFrame("Frame")
+	ns.Own[ear] = true
+	ear:SetScript("OnEvent", function(_, event, ...)
+		-- The target's health comes many times a second in a fight and counts only when the target dies or comes back, so the rest stops
+		-- here.
+		if event == "UNIT_HEALTH" and (Ask(UnitIsDeadOrGhost, "target") == true) == S.dead then
 			return
 		end
-		ear = CreateFrame("Frame")
-		ns.Own[ear] = true
-		ear:SetScript("OnEvent", function(_, event, ...)
-			-- The target's health comes many times a second in a fight and counts only when the target dies or comes back, so the rest stops
-			-- here.
-			if event == "UNIT_HEALTH" and (Ask(UnitIsDeadOrGhost, "target") == true) == S.dead then
-				return
-			end
-			if FACING_EVENTS[event] and not FacingChanged() then
-				return
-			end
-			Safe(OnEvent, event, ...)
-		end)
-		S.ear = ear
+		if FACING_EVENTS[event] and not FacingChanged() then
+			return
+		end
+		Safe(OnEvent, event, ...)
+	end)
+	S.ear = ear
+	return ear
+end
+
+-- The ear hears the events, and only while the table is wanted.
+local function Hear(on)
+	if S.hearing == on or not (on or S.ear) then
+		return
 	end
+	local ear = Ear()
 	pcall(ear.UnregisterAllEvents, ear)
 	pcall(ear.SetScript, ear, "OnUpdate", nil)
 	S.hearing, S.dirty = false, false
@@ -1085,7 +1166,13 @@ local function Hook()
 	ns.FollowGlobal("PlayerFrame_DetachCastBar", Moved)
 end
 
-local function Apply()
+-- Shows the table as its rows say, or hides it. At For tanks and damage dealers the role is looked at again first, so a refresh also catches a role
+-- that changed with no event, and an event that waits for the next frame has nothing more to look at.
+Apply = function()
+	if Choice() == "role" then
+		WorkOutRole()
+	end
+	S.recheck = false
 	if not Wanted() then
 		Off()
 		return
@@ -1124,6 +1211,32 @@ function ns.HitTableMoved()
 	Moved()
 end
 
+-- An event that can change the role: marked, and looked at on the next frame with the numbers, once for a burst (Tick on the ear, made now if the
+-- table has not been wanted yet).
+local function RoleEvent()
+	S.recheck = true
+	Ear()
+	Dirty()
+end
+
+-- True while the row follows the role and the part runs: the role events count then, also while the table is hidden for a healer.
+local function ByRole()
+	return Choice() == "role" and not ns.PartStopped(KEY, PART)
+end
+
+local function RoleHeard()
+	Safe(RoleEvent)
+end
+
+-- The role events come through the hud module (ns.AddEvent, Core.lua), which hears them only while its page is on; UNIT_AURA counts by a plain
+-- "player" token alone, a withheld token passed over as the module's own aura pass does (Hud.lua, ForPlayer).
+for _, event in ipairs(ROLE_EVENTS) do
+	ns.AddEvent(KEY, event, RoleHeard, ByRole)
+end
+ns.AddEvent(KEY, "UNIT_AURA", RoleHeard, function(unit)
+	return not IsSecret(unit) and unit == "player" and ByRole()
+end)
+
 -- A refresh of the unit frames can change what the player frame draws under the bars: the table is placed again after it (the steps after a refresh
 -- are run inside the unit frames' own part guard; Moved runs its work in this part's).
 local X = ns.UnitFrameExtra
@@ -1143,6 +1256,12 @@ end
 
 ns.AddStatus(KEY, function()
 	local lines = {}
+	-- At For tanks and damage dealers, the role the table follows and why, also while it is hidden for a healer.
+	if ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and Choice() == "role" then
+		local shown = Shows()
+		local line = LINE_ROLE:format(shown and "on" or "off", ROLE_WORDS[S.role] or ROLE_WORDS.damage)
+		lines[#lines + 1] = S.why and (line .. " " .. S.why) or line
+	end
 	if not Wanted() then
 		return lines
 	end
