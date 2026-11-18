@@ -1,7 +1,8 @@
 {
- "about": "Constants of the gear model (design 2.5), the crit damage talents (their curves and class masks come from the client rows) and every item stat key of the client with the sentence its Equip: line uses (design 3.2 STATS).",
+ "about": "Constants of the gear model (design 2.5), the crit damage talents (their curves and class masks come from the client rows) and every item stat key of the client with the sentence its Equip: line uses (design 3.2 STATS). Each model value and crit talent carries its basis (c client data, m measured on Forever, e estimate) and its citation (cite); the stat keys and their sentences carry the citation of stats_cite.",
  "crit": [
   {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
    ],
@@ -11,6 +12,7 @@
    "talent": 11207
   },
   {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
    ],
@@ -20,6 +22,7 @@
    "talent": 11232
   },
   {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
    ],
@@ -29,6 +32,7 @@
    "talent": 17959
   },
   {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
    ],
@@ -38,6 +42,7 @@
    "talent": 16089
   },
   {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
    ],
@@ -47,6 +52,7 @@
    "talent": 16909
   },
   {
+   "basis": "c",
    "aura": 15473,
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
@@ -56,6 +62,7 @@
    "spell": 15473
   },
   {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
    ],
@@ -65,6 +72,7 @@
    "talent": 19485
   },
   {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
    ],
@@ -74,6 +82,7 @@
    "talent": 16493
   },
   {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
    ],
@@ -85,13 +94,16 @@
  ],
  "model": {
   "apPerDps": {
+   "basis": "c",
    "cite": [
+    "client code: ATTACK_POWER_MAGIC_NUMBER 14 (Camelot/PaperDollFrameStats.lua:11)",
     "Forever hunter wiki (github.com/classic-hunter/forever-hunter) Attack-Formulas",
     "wowsims/forever sim/core/attack.go"
    ],
    "value": 14
   },
   "crit": {
+   "basis": "c",
    "cite": [
     "client text: STAT_CRIT_BONUS (GlobalStrings)",
     "wowsims/forever sim/core/spell.go"
@@ -104,6 +116,7 @@
    }
   },
   "form": {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70888 (GrunzForever export): SpellShapeshiftForm CombatRoundTime 1000 and 2500",
     "wowsims/forever sim/druid/forms.go"
@@ -114,12 +127,14 @@
    }
   },
   "gcd": {
+   "basis": "c",
    "cite": [
     "client rows of build 1.60.1.70938 (wowsims/forever capture): the global cooldown of 1500 ms"
    ],
    "value": 1.5
   },
   "glance": {
+   "basis": "e",
    "cite": [
     "wowsims/forever sim/core/target.go"
    ],
@@ -134,6 +149,7 @@
    }
   },
   "healThreat": {
+   "basis": "m",
    "cite": [
     "wowsims/forever docs/evidence/EV-0045",
     "wowsims/forever docs/evidence/EV-0057"
@@ -141,6 +157,7 @@
    "value": 0.5
   },
   "norm": {
+   "basis": "e",
    "cite": [
     "wowsims/forever sim/core/attack.go",
     "client rows of build 1.60.1.70938 (wowsims/forever capture): normalized weapon damage (121)"
@@ -153,12 +170,14 @@
    }
   },
   "offHand": {
+   "basis": "e",
    "cite": [
     "Forever hunter wiki (github.com/classic-hunter/forever-hunter) Attack-Formulas, off-hand swing"
    ],
    "value": 0.5
   },
   "ratings": {
+   "basis": "e",
    "cite": [
     "Efficient Games (efficient.games) stat scan, CC BY 4.0",
     "wowsims/forever sim/core/base_stats_auto_gen.go"
@@ -733,5 +752,9 @@
    "key": "ITEM_MOD_DAMAGE_PER_SECOND_SHORT",
    "kind": "dps"
   }
+ ],
+ "stats_cite": [
+  "client GlobalStrings of build 1.60.1.70938: the ITEM_MOD_* keys and their TOOLTIP_ITEM_STAT_* sentences",
+  "Efficient Games (efficient.games) stat scan, CC BY 4.0: the keys items carry"
  ]
 }

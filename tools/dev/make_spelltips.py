@@ -13,15 +13,17 @@ row holds (server rules and measured shares). Where a slice's value differs from
 known_differences names it with a reason.
 
 It prints the counts and the file's size, the spells left out of the comparison, the parts the text scan marked as counted by the game's
-text, the probes per class, and every value of the slices that differs from its row with whether known_differences explains it.
---check writes nothing and exits 1 on a failed check; without it the file is written only when every check passes, and then luac5.4 -p
-and tools/dev/lua51_check.py run on it when they are there. The checks: every rank ID once and every key once; every default resolves and
-is a key, a list of keys or { needs, keys, else } (the one form GearLines.lua reads); each judgement's seal is an entry of its class with
-as many ranks; a threat list has one value per rank; coefficients between 0 and 5; every basis c, m or e; every talent of the rules and
-crit talents has a curve as long as its ranks, a node and a definition the capture's TraitNodes holds; every value a row holds equals the
-slice's or is in known_differences; every field written is one the shapes of design 3.2 and its stub (3.2a) use, or an entry's seal, and
-every field and comparison kind of the stub is written; every class with spell power has a probe; a description whose variables come from
-build 70888 reads the same in 70938, else it says so. Python 3, standard library only; deterministic, so a diff shows real changes.
+text, the probes per class, and every value of the slices that differs from its row with whether known_differences explains it. --check
+writes nothing and exits 1 on a failed check; without it the file is written only when every check passes, and then luac5.4 -p and
+tools/dev/lua51_check.py run on it when they are there. The checks: every rank ID once and every key once; every default resolves and is a
+key, a list of keys or { needs, keys, else } (the one form GearLines.lua reads); each judgement's seal is an entry of its class with as many
+ranks; a threat list has one value per rank; coefficients between 0 and 5; every basis c, m or e; every talent of the rules and crit talents
+has a curve as long as its ranks, a node and a definition the capture's TraitNodes holds; every value a row holds equals the slice's or is
+in known_differences; every field written is one the shapes of design 3.2 and its stub (3.2a) use, or an entry's seal or a field of the
+first fix round (FIELDS), and every field and comparison kind of the stub is written; every class with spell power has a probe; a
+description whose variables come from build 70888 reads the same in 70938, else it says so; a channel with ticks has a duration; every
+estimate of curation.json names a part the slices mark e; every model value and crit talent of gear.json has a basis and a citation, and its
+stat keys a citation. Python 3, standard library only; deterministic, so a diff shows real changes.
 """
 import json
 import os
@@ -41,13 +43,13 @@ SCHOOL_INDEX = {1: 1, 2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7}
 ROLL = {1: 'spell', 2: 'special', 3: 'ranged'}
 CMP_KINDS = ('spell', 'dot', 'channel', 'heal', 'hot', 'strike', 'apstrike', 'finisher', 'auto', 'shot', 'wand', 'seal', 'proc', 'threat')
 
-# The fields the shapes may hold: those of design 3.2, and of its stub (3.2a), which uses a part of them, and an entry's seal (a judgement's,
-# whose rank SpellModel.lua's M.Highest gives the judgement), which the join of the parts added. Every field written must be one of these;
-# the second set is reported, so a field the other parts may not read yet is seen. An entry's rule of 3.2 is not written: a rule names the
-# spells of its tooltip itself (tip).
+# The fields the shapes may hold: those of design 3.2, and of its stub (3.2a), which uses a part of them, an entry's seal (a judgement's,
+# whose rank SpellModel.lua's M.Highest gives the judgement), which the join of the parts added, and those the first fix round added: an
+# entry's nd, nm and needs, a part's free and dg. Every field written must be one of these; the second set is reported, so a field the
+# other parts may not read yet is seen. An entry's rule of 3.2 is not written: a rule names the spells of its tooltip itself (tip).
 FIELDS = {
-    'entry': {'key', 'pet', 'school', 'sch', 'cmp', 'roll', 'nb', 'nx', 'seal', 'parts', 'ranks', 'threat'},
-    'part': {1, 2, 'n', 'p', 'per', 'max', 'j', 'cp', 'spd', 'h', 'sch', 'g', 'fs', 'o', 'two', 'note', 'b'},
+    'entry': {'key', 'pet', 'school', 'sch', 'cmp', 'roll', 'nb', 'nd', 'nm', 'nx', 'needs', 'seal', 'parts', 'ranks', 'threat'},
+    'part': {1, 2, 'n', 'p', 'per', 'max', 'j', 'cp', 'spd', 'h', 'sch', 'g', 'fs', 'o', 'two', 'note', 'free', 'dg', 'b'},
     'rank': {1, 2, 'c', 'n', 'w', 'ct', 'du', 'bm', 'bl', 'lv', 'mx', 'cpb', 'sv'},
     'threat': {'k', 'v', 'b', 'ap', 'apb', 'pl', 'mx', 'split', 'forms', 'note'},
     'rule': {'id', 'class', 'form', 'm', 'b', 'name', 'tip', 'note', 'say', 'lowers', 'talent', 'node', 'def', 'r', 'shield', 'aura',
@@ -68,6 +70,11 @@ TOKENS = {'apm': 'ap', 'ap': 'ap', 'AP': 'ap', 'RAP': 'rap', 'rap': 'rap', 'bh':
           'SPFI': 'sp', 'SPN': 'sp', 'SPS': 'sp', 'SPA': 'sp', 'SPI': 'spirit'}
 TOKEN = re.compile(r'\$(apm|ap|AP|RAP|rap|bh|SPFR|SPFI|SPH|SPN|SPS|SPA|SPI|SP)(?![A-Za-z0-9])')
 AURA_TYPES = {6, 27, 35, 65, 119, 128, 129, 143, 174}
+# Attribute word 0's No Active Defense (an attack that cannot be dodged, parried or blocked: SPELL_ATTR0_NO_ACTIVE_DEFENSE, as
+# wowsims/forever's spelldata reads it), and the item a spell needs worn by class and subclass mask: a dagger (weapon 2, subclass 15) and a
+# shield (armor 4, subclass 6).
+NO_ACTIVE_DEFENSE = 0x200000
+NEEDS = {(2, 1 << 15): 'dagger', (4, 1 << 6): 'shield'}
 
 
 class Problems:
@@ -172,7 +179,11 @@ class Entry:
         self.cmp = None
         self.roll = None
         self.nb = False
+        self.nd = False
+        self.nm = False
         self.nx = False
+        self.needs = None
+        self.duration = None
         self.seal = None
         self.parts = []
         self.ranks = []
@@ -410,20 +421,53 @@ def apply_curation(entries, cur):
     for key, n in cur['notes'].items():
         e = need(entries, key, 'notes')
         part = e.parts[n['part']]
-        for f in ('note', 'per', 'max'):
+        for f in ('note', 'per', 'max', 'free'):
             if f in n:
                 part[f] = n[f]
     for key, s in cur['schools'].items():
         e = need(entries, key, 'schools')
         if 'sch' in s:
+            # The client does not say which school's spell damage counts: the lower is taken, an estimate (design 3.5).
             e.sch = s['sch']
             for part in e.parts:
                 if part['stat'] == 'sp':
                     part['sch'] = s['sch']
+                    part['b'] = 'e'
         if 'school' in s:
             e.school_override = s['school']
     for key in cur['nb']['keys']:
         need(entries, key, 'nb').nb = True
+    for key in cur['nm']['keys']:
+        need(entries, key, 'nm').nm = True
+    for key, x in cur['estimates'].items():
+        e = need(entries, key, 'estimates')
+        if x['part'] >= len(e.parts) or e.parts[x['part']]['b'] != 'e':
+            P.fail('curation estimates names %s part %d, which the slices do not mark e' % (key, x['part'] + 1))
+
+
+def apply_rows(entries, client, cur):
+    """The curation that reads a client row: a part's weapon multiple with a dagger (dagger: the effect the text names, on every rank alike)
+    and a rank's duration from the row its text names (durations)."""
+    for key, x in cur['dagger'].items():
+        e = need(entries, key, 'dagger')
+        found = set()
+        for r in e.ranks:
+            effect = [y for y in r['row']['effects'] if y['i'] == x['effect']]
+            if not effect:
+                P.fail('dagger: %s rank %d has no effect %d' % (key, r['id'], x['effect']))
+                continue
+            found.add(rnd(effect[0]['bp'] / 100.0, 4))
+        if len(found) == 1 and x['part'] < len(e.parts) and e.parts[x['part']]['stat'] == 'wpn':
+            e.parts[x['part']]['dg'] = found.pop()
+        elif found:
+            P.fail('dagger: %s part %d is no weapon part with one dagger multiple (%s)' % (key, x['part'] + 1, sorted(found)))
+    for key, x in cur['durations'].items():
+        e = need(entries, key, 'durations')
+        row = client.row(x['row'])
+        if row is None or not row['dur'] or row['dur'] <= 0:
+            P.fail('durations: %s: row %s holds no duration' % (key, x['row']))
+            continue
+        e.duration = row['dur']
 
 
 def apply_judgements(entries, cur):
@@ -478,8 +522,11 @@ def decide(entries, order, cur):
                 P.fail('%s: school mask %s in the row, %s in the slice' % (e.key, mask, ce['school']))
             e.roll = ROLL.get(row['def'])
         top = e.ranks[-1]['row'] if e.ranks else None
+        # The cast's row rolls the table (Pounce's, whose bleed rides on it), else the row of the damage (a judgement's).
+        e.nd = any(x is not None and bool(x['attr0'] & NO_ACTIVE_DEFENSE) for x in (top, row))
         if top is not None and top['attr0'] & 0x4:
             e.nx = True
+        e.needs = needs_of(e)
         e.cmp = compare_kind(e, ce, kinds, none)
         if e.cmp is None and e.key not in none and e.parts:
             left.append(e.key)
@@ -491,6 +538,18 @@ def decide(entries, order, cur):
     if 'attack' in entries:
         entries['attack'].roll = 'swing'
     return left
+
+
+def needs_of(e):
+    """The item an entry's ranks need worn (NEEDS: a dagger, a shield), the same on every rank, or None."""
+    found = set()
+    for r in e.ranks:
+        equip = r['row'].get('equip')
+        found.add(NEEDS.get(tuple(equip)) if equip else None)
+    if len(found) > 1:
+        P.fail('%s: its ranks need different items: %s' % (e.key, sorted(str(x) for x in found)))
+        return None
+    return found.pop() if found else None
 
 
 def compare_kind(e, ce, kinds, none):
@@ -549,6 +608,8 @@ def make_threat_entries(entries, client, threat):
             if top is not None:
                 e.school = SCHOOL_INDEX.get(top['school'])
                 e.roll = ROLL.get(top['def'])
+                e.nd = bool(top['attr0'] & NO_ACTIVE_DEFENSE)
+            e.needs = needs_of(e)
             entries[key] = e
             made.append(key)
     return made
@@ -628,9 +689,12 @@ def build_threat(entries, client, threat, cur):
     for key in heal:
         if key not in entries:
             P.fail('heal_threat names %r, which no entry has' % key)
-    for key in leave:
-        if key in entries:
-            entries[key].threat = None
+    # Threat not known on Forever: the spells curation leaves out, and a spell that only absorbs (Ice Barrier, Frost Ward), whose absorb is
+    # neither damage nor healing. k unknown: no threat line and no threat figure, unlike none (no threat) or no threat entry (the damage's).
+    for key, e in entries.items():
+        absorbs = bool(e.parts) and all(p['slice']['find'] == 'absorb' for p in e.parts)
+        if key in leave or (absorbs and e.threat is None):
+            e.threat = {'k': 'unknown'}
 
 
 # Rules and crit talents -----------------------------------------------------------------------------------------------------------
@@ -962,7 +1026,7 @@ def part_fields(part, info_top):
         v = part.get(k, s.get(k))
         if v is not None:
             f[k] = v if k != 'j' else rnd(info_top['effect']['amp'], 4) if info_top['effect'] else v
-    for k in ('sch', 'g', 'fs', 'o', 'two', 'note'):
+    for k in ('sch', 'g', 'fs', 'o', 'two', 'note', 'free', 'dg'):
         if part.get(k) is not None:
             f[k] = part[k]
     if s.get('per') == 'cp' and s.get('cp'):
@@ -1056,8 +1120,12 @@ def rank_fields(e, r, parts_top, caster):
     # The duration of a periodic, channelled, seal or proc rank, and of one whose threat lasts: a taunt's, a forced attack's and Fade's
     # (SpellModel.lua words "3 sec", "forces attacks 6 sec" and "for 10 sec" from it, design 1.2).
     lasting = e.threat is not None and e.threat.get('k') in ('taunt', 'force', 'more', 'temp')
+    if e.duration:
+        dur = e.duration
     if (periodic or channel(row) or e.cmp in ('seal', 'proc') or lasting) and dur and dur > 0:
         f['du'] = dur
+    if f.get('ct') == -1 and periodic and 'du' not in f:
+        P.fail('%s rank %d: a channel with ticks and no duration (curation durations)' % (e.key, r['id']))
     for name, vals in (('bm', bm), ('bl', bl), ('lv', lv), ('mx', mx)):
         if any(v is not None for v in vals):
             f[name] = vals
@@ -1083,8 +1151,14 @@ def entry_lua(w, e):
         head['roll'] = e.roll
     if e.nb:
         head['nb'] = True
+    if e.nd:
+        head['nd'] = True
+    if e.nm:
+        head['nm'] = True
     if e.nx:
         head['nx'] = True
+    if e.needs:
+        head['needs'] = e.needs
     if e.seal:
         head['seal'] = e.seal
     parts_top = []
@@ -1132,20 +1206,23 @@ HEADER = '''local _, ns = ...
 -- Basis of a value (b): c client data (a row, a curve or the game's text), m measured on Forever, e estimate (shown with ~ before it).
 -- An entry (one spell, every rank): key (English name, lower case; " (pet)" for a pet's spell), pet, school (Lua school index 1-7) or
 --   sch (several, of which the lower counts), cmp (the comparison kind, nil when the comparison cannot work it out), roll (the attack
---   table line of the row's DefenseType: spell, special, ranged, or swing for Attack), nb (cannot be blocked), nx (replaces the next
---   swing), seal (a judgement: the key of its seal, whose highest rank known gives the judgement's of the same place), parts, ranks,
---   threat.
+--   table line of the row's DefenseType: spell, special, ranged, or swing for Attack), nb (cannot be blocked), nd (cannot be dodged,
+--   parried or blocked: the row's No Active Defense, attribute word 0 bit 0x200000), nm (cannot miss, its text says), nx (replaces the next
+--   swing), needs (dagger: a dagger in the main hand, shield: a shield, the row's equipped item), seal (a judgement: the key of its seal,
+--   whose highest rank known gives the judgement's of the same place), parts, ranks, threat.
 -- A part: [1] the stat (sp, heal, ap, rap, wpn: weapon damage with the coefficient its multiple, bv: block value), [2] the coefficient of
 --   the top rank (a periodic part's total over its ticks), n ticks and p seconds a tick, per (target, first with max targets, jump with j
 --   the share kept each jump, hit, block, stack, proc, missile, cp with cp the shares at 1 to 5 combo points, self), spd (actual, norm,
 --   nranged, cat, bear) and h (main, off, both, ranged) for a weapon part, sch, g (the game's text counts this stat at this share
 --   already), fs = { form, share } (the share the text counts in that form), o (the text counts the stat otherwise) with two (the share
---   with a two-hander), note, b.
+--   with a two-hander), note, free (the share of the part on a target that is not stunned), dg (a weapon part's multiple with a dagger in
+--   the main hand), b.
 -- A rank: [1] the spell ID, [2] its level (learned), then by part where the rank differs: c coefficient, n ticks, w weapon multiple;
 --   ct cast ms (0 instant, -1 channel), du duration ms, bm the base mean at lv and bl its gain a level (a periodic part's total over its
 --   ticks; a weapon part's flat bonus), lv the level the gain counts from and mx the level it stops (0 none), both from the row that
 --   carries the part (lv is the rank's level when absent), cpb points a combo point, sv the seal value.
--- A threat: k (mult, bonus, flat, more, drop, temp, taunt, force, none, heal, wipe, resist, caster, rage), v (one number or one a rank),
+-- A threat: k (mult, bonus, flat, more, drop, temp, taunt, force, none, heal, wipe, resist, caster, rage, or unknown: not known on Forever,
+--   so no threat line and no threat figure), v (one number or one a rank),
 --   b (one letter or one a rank), ap and apb (the share of attack power added and its basis), pl the gain a level (one or one a rank)
 --   with mx the level it stops a rank, split, forms, note.
 '''
@@ -1287,6 +1364,14 @@ def check_whole(entries, rules, crit, w, client, coef, threat, gear):
                     P.fail('%s rank %d part %d: coefficient %s' % (key, r['id'], i + 1, c))
                 if c is not None and part['stat'] == 'wpn' and not 0 < c <= 5:
                     P.fail('%s rank %d part %d: weapon multiple %s' % (key, r['id'], i + 1, c))
+    for name, x in sorted(gear['model'].items()):
+        if x.get('basis') not in ('c', 'm', 'e') or not x.get('cite'):
+            P.fail('gear.json model %s: basis %r and cite %r' % (name, x.get('basis'), x.get('cite')))
+    for x in gear['crit']:
+        if x.get('basis') not in ('c', 'm', 'e') or not x.get('cite'):
+            P.fail('gear.json crit %s: basis %r and cite %r' % (x.get('name'), x.get('basis'), x.get('cite')))
+    if not gear.get('stats_cite'):
+        P.fail('gear.json: the stat keys have no citation (stats_cite)')
     capdefs = {t['def'] for t in client.talents.values()}
     for x in rules + crit:
         if x.get('talent'):
@@ -1314,6 +1399,7 @@ def main():
     entries, order = build_entries(client, coef, cur)
     marked = scan_texts(order, client)
     apply_curation(entries, cur)
+    apply_rows(entries, client, cur)
     apply_judgements(entries, cur)
     made = make_threat_entries(entries, client, threat)
     left = decide(entries, order, cur)
@@ -1344,6 +1430,10 @@ def main():
     print('rows with a gain a level whose base level and spell level differ: %s' % (', '.join(level_rows(entries)) or 'none'))
     nx = sorted(e.key for e in entries.values() if e.nx)
     print('next swing (attribute word 0 bit 0x4): %s' % ', '.join(nx))
+    nd = sorted(e.key for e in entries.values() if e.nd)
+    print('no active defense (attribute word 0 bit 0x200000): %s' % ', '.join(nd))
+    print('needs worn: %s' % ', '.join('%s (%s)' % (e.key, e.needs) for e in sorted(entries.values(), key=lambda e: e.key) if e.needs))
+    print('threat not known: %s' % ', '.join(sorted(k for k, e in entries.items() if e.threat and e.threat.get('k') == 'unknown')))
     for (key, i), x in sorted(P.explained.items()):
         print('differs, explained by known_differences: %s part %d, %d ranks: %s %s in the row, %s shipped (%s)' % (
             key, i + 1, x['ranks'], x['what'], '/'.join(str(v) for v in sorted(x['row'])),

@@ -25,7 +25,8 @@ local _, ns = ...
 --   DECIMAL_SEPERATOR, DAMAGE_TEMPLATE, DAMAGE_TEMPLATE_WITH_SCHOOL, SINGLE_DAMAGE_TEMPLATE, SINGLE_DAMAGE_TEMPLATE_WITH_SCHOOL,
 --   PLUS_DAMAGE_TEMPLATE, PLUS_DAMAGE_TEMPLATE_WITH_SCHOOL, SHIELD_BLOCK_TEMPLATE, AMMO_DAMAGE_TEMPLATE and SPEED: KD GlobalStrings/enUS.lua:13363,
 --   5741, 5687-5688, 19328-19329, 16592-16593, 19208, 873, 20628), so they read right in every language; the second school's damage adds to the
---   weapon's. Its class, subclass and inventory type are C_Item.GetItemInfoInstant's (ItemDocumentation.lua:659-679) and its skill line the hit
+--   weapon's. Its class, subclass and inventory type are C_Item.GetItemInfoInstant's (ItemDocumentation.lua:659-679; the ammunition's subclass, arrow
+--   or bullet, is kept as ammoKind, for GearModel.lua to tell whether the ranged weapon fires it) and its skill line the hit
 --   table's (ns.HitTableCalc.LineOf, HitTableCalc.lua). The lines of an item the client has not loaded (C_Item.IsItemDataCachedByID) are asked
 --   for (C_Item.RequestLoadItemDataByID) and read again after GET_ITEM_INFO_RECEIVED. Item calls are never secret (research_gear_items.md §1.7).
 -- - Righteous Fury 25780, the one aura of the rules on Forever, read here (design 4.3), not from nameplate threat, whose list is Threat Plates'
@@ -60,7 +61,8 @@ local _, ns = ...
 -- GetRangedAttackPowerForStat, GetCritChanceFromStat and GetSpellCritChanceFromStat at the total and ten points above it (design 2.5). So
 -- S.stats.per[stat] = { ap, rap, crit, spellCrit } holds attack power and ranged attack power a point, and crit and spell crit in percent a
 -- point: the crit calls give fractions, which the sheet shows times 100 (Camelot/PaperDollFrameStats.lua:277, 318), and they are kept times 100,
--- the unit of S.stats.crit; GearModel.lua reads them as that. PLAYER_REGEN_DISABLED makes S.stats old until the next plain read. Right after
+-- the unit of S.stats.crit; GearModel.lua reads them as that. PLAYER_REGEN_DISABLED makes S.stats old until the next plain read, and so does a
+-- withheld read in a fight, so stats read plain at the start of a fight turn old once the game withholds them. Right after
 -- each plain read the functions of M.AfterRead run in the same frame (GearModel.lua reads the hit table's inputs).
 --
 -- The text check (design 4.3, 6.1), once a session, out of combat with the stats plain (InCombatLockdown), on an English client (GetLocale,
@@ -124,8 +126,8 @@ local K = {
 	-- the other side, and the least spell power part that tells the two apart.
 	ENGLISH = { enUS = true, enGB = true }, NEAR = 1, FAR = 5, ENOUGH = 10,
 	-- What a share counts for a weapon ability that the data leaves out, the model's own values (SpellData.lua, D.MODEL; design 3.2).
-	MODEL = { apPerDps = 14, healThreat = 0.5, norm = { one = 2.4, dagger = 1.7, two = 3.3, ranged = 2.8 }, form = { cat = 1.0, bear = 2.5 },
-		downrank = { grace = 17, step = 0.05 } },
+	MODEL = { apPerDps = 14, healThreat = 0.5, offHand = 0.5, norm = { one = 2.4, dagger = 1.7, two = 3.3, ranged = 2.8 },
+		form = { cat = 1.0, bear = 2.5 }, downrank = { grace = 17, step = 0.05 } },
 	SCHOOL_NAMES = { "Physical", "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" },
 	-- The order of the bases, the worst last: client data, measured, estimate (design 3.5).
 	BASIS = { c = 1, m = 2, e = 3 },
@@ -144,7 +146,7 @@ local K = {
 	-- The parts of the player marked for the next read (M.Mark), the fields of the gear part, and the fields of S.stats a comparison of two reads
 	-- leaves out.
 	ALL = { "state", "stats", "talents", "gear", "spells", "role" },
-	GEAR = { "links", "enchants", "temp", "weapons", "shield", "shieldBlock", "ammo", "twoHand", "dual", "rockbiter" },
+	GEAR = { "links", "enchants", "temp", "weapons", "shield", "shieldBlock", "ammo", "ammoKind", "twoHand", "dual", "rockbiter" },
 	SKIP = { time = true, old = true },
 	-- The rows of the Spells and gear tab (design 4.9), the hit table's hit cap row its Hit cap against a boss can follow, and Your role of
 	-- nameplate threat, which ns.PlayerRole reads: a change of any of them changes M.Version, and of the last the role too.
@@ -751,7 +753,7 @@ local function Worn(slot, link)
 	local data = Ask(Api("C_TooltipInfo", "GetInventoryItem"), "player", slot)
 	local info = LinesOf(Field(data, "lines"))
 	local id, loc, class, subclass = Instant(link)
-	info.link, info.id = link, id
+	info.link, info.id, info.class, info.subclass = link, id, class, subclass
 	if id and Ask(Api("C_Item", "IsItemDataCachedByID"), id) == false then
 		info.waiting = id
 		Ask(Api("C_Item", "RequestLoadItemDataByID"), id)
@@ -1035,6 +1037,7 @@ local function ReadGear()
 	local now = { links = links, enchants = enchants, temp = temp, weapons = weapons, shield = shield,
 		shieldBlock = shield and links[K.OFF] and Worn(K.OFF, links[K.OFF]).block or nil,
 		ammo = links[K.AMMO] and Worn(K.AMMO, links[K.AMMO]).ammo or nil,
+		ammoKind = links[K.AMMO] and Worn(K.AMMO, links[K.AMMO]).subclass or nil,
 		twoHand = weapons[K.MAIN] ~= nil and weapons[K.MAIN].twoHand == true, dual = dual, rockbiter = rockbiter }
 	for slot in pairs(S.parsed) do
 		if not links[slot] then
@@ -1355,13 +1358,19 @@ local function ReadMarked()
 	end
 end
 
--- Reads S.stats while the game gives them plain; withheld, they stay marked for the next ask. Right after a plain read the functions of
--- M.AfterRead run, in the same frame (GearModel.lua reads the hit table's inputs there), each under pcall so another file's error stops nothing
--- here, and the text check runs while it waits.
+-- Reads S.stats while the game gives them plain; withheld, they stay marked for the next ask, and in a fight (InCombatLockdown) the kept ones
+-- are old, whatever order the start of the fight and a plain read in it came in. Right after a plain read the functions of M.AfterRead run, in the
+-- same frame (GearModel.lua reads the hit table's inputs there), each under pcall so another file's error stops nothing here, and the text check
+-- runs while it waits.
 local function ReadStatsNow()
 	local stats = ReadStats()
 	if not stats then
 		S.marks.stats = true
+		local kept = S.stats
+		if kept and not kept.old and Ask(InCombatLockdown) == true then
+			kept.old = true
+			Bump()
+		end
 		return
 	end
 	local old = S.stats
@@ -1802,6 +1811,39 @@ local function WeaponSpeed(part, state)
 	return weapon and Finite(weapon.speed) and weapon.speed or nil
 end
 
+-- The factor of an off-hand hit, as the gear comparison counts it (GearModel.lua's G.OffFactor: D.MODEL.offHand, or while dual wielding the one
+-- UnitDamage gives), so an off-hand part's line and the comparison agree.
+local function OffHand(state, stats)
+	local G = ns.GearModel
+	local factor = type(G) == "table" and Ask(G.OffFactor, state, stats) or nil
+	if Finite(factor) and factor > 0 then
+		return factor
+	end
+	return ModelOf("offHand")
+end
+
+-- The words of the ticks, the targets and the hits a part's share is for (design 1.2), after its share.
+local function PerWords(part, ticks)
+	local per, words = part.per, ""
+	if per == "missile" and ticks then
+		words = ", " .. ticks .. " missiles"
+	elseif ticks then
+		words = ", " .. ticks .. " ticks"
+	end
+	if per == "target" then
+		words = words .. ", each target"
+	elseif per == "first" then
+		words = words .. ", the first " .. (Finite(part.max) and part.max or "few") .. " enemies"
+	elseif per == "jump" and Finite(part.j) then
+		words = words .. ", " .. Pct(1 - part.j) .. " less each jump"
+	elseif per == "hit" or per == "block" or per == "stack" or per == "proc" then
+		words = words .. " a " .. per
+	elseif per == "self" then
+		words = words .. " to you"
+	end
+	return words
+end
+
 -- The dim line of a part the game's text counts otherwise (design 1.3): its first half for a two-hander, whose share the text counts as the
 -- measured one, and the note with a one-hander.
 local function Otherwise(part, state)
@@ -1818,7 +1860,8 @@ end
 
 -- The left text of a power part (its share in words), and what its right text needs: the share its amount counts (at 5 combo points for a
 -- finisher), the stat that is a share of (nil without stats), the factor of a low rank, whether the amount is an estimate, and its ticks. A part
--- that gets nothing gives its left text alone.
+-- that gets nothing gives its left text alone, with the ticks and targets it is for. A weapon part counts its dagger multiple (dg) with a dagger in
+-- the main hand, and an off-hand one the off-hand factor the comparison counts (OffHand).
 local function PartTexts(entry, row, at, part, state, stats, lowRank)
 	local stat, coef = part[1], PartValue(row.c, at) or part[2]
 	local per, ticks = part.per, PartValue(row.n, at) or part.n
@@ -1829,9 +1872,9 @@ local function PartTexts(entry, row, at, part, state, stats, lowRank)
 	if not Finite(coef) then
 		return nil
 	elseif coef == 0 or (stat == "wpn" and entry.cmp == "wand") then
-		-- A spell that gets nothing (design 1.2: Shoot with a wand, Mana Burn, Fireball's burn).
+		-- A spell that gets nothing (design 1.2: Shoot with a wand, Mana Burn, Fireball's burn, Consecration's flat tick on each target).
 		local left = (spell or entry.cmp == "wand") and "No spell power" or "No attack power"
-		return ticks and (left .. ", " .. ticks .. " ticks") or left
+		return left .. PerWords(part, ticks)
 	end
 	local share, power, head = coef, nil, nil
 	if part.o and state.twoHand == true and Finite(part.two) then
@@ -1855,6 +1898,13 @@ local function PartTexts(entry, row, at, part, state, stats, lowRank)
 		head, power = Dec(share) .. " x block value", stats and stats.block
 	elseif stat == "wpn" then
 		local multiple, speed = PartValue(row.w, at) or coef, WeaponSpeed(part, state)
+		local main = type(state.weapons) == "table" and state.weapons[K.MAIN] or nil
+		if Finite(part.dg) and type(main) == "table" and main.dagger == true then
+			multiple = part.dg
+		end
+		if part.h == "off" then
+			multiple = multiple * OffHand(state, stats)
+		end
 		local ranged = part.h == "ranged"
 		head, share = Pct(multiple) .. " weapon damage", nil
 		if Finite(speed) then
@@ -1866,22 +1916,7 @@ local function PartTexts(entry, row, at, part, state, stats, lowRank)
 		return nil
 	end
 	-- The ticks, the targets and the hits the share is for (design 1.2).
-	if per == "missile" and ticks then
-		head = head .. ", " .. ticks .. " missiles"
-	elseif ticks then
-		head = head .. ", " .. ticks .. " ticks"
-	end
-	if per == "target" then
-		head = head .. ", each target"
-	elseif per == "first" then
-		head = head .. ", the first " .. (Finite(part.max) and part.max or "few") .. " enemies"
-	elseif per == "jump" and Finite(part.j) then
-		head = head .. ", " .. Pct(1 - part.j) .. " less each jump"
-	elseif per == "hit" or per == "block" or per == "stack" or per == "proc" then
-		head = head .. " a " .. per
-	elseif per == "self" then
-		head = head .. " to you"
-	end
+	head = head .. PerWords(part, ticks)
 	if part.g and type(part.fs) == "table" and Finite(part.fs[2]) then
 		local form = FormName(part.fs[1], true)
 		if form then
@@ -2513,7 +2548,8 @@ function M.ThreatLines(entry, rank, state, stats, opts)
 	local data = ns.SpellData
 	local paladin = type(data) == "table" and type(data.HEAL_THREAT) == "table" and Finite(data.HEAL_THREAT[entry.key])
 	local kind = t and t.k or (paladin and Heals(entry) and "heal") or (Damages(entry) and "mult") or (Heals(entry) and "heal") or nil
-	if not kind then
+	-- A threat the data marks unknown (not known on Forever: Power Word: Shield, Execute, Whirlwind, the absorbs) gets no line.
+	if not kind or kind == "unknown" then
 		return out
 	end
 	local G, factors, Gb = Factors(entry, state, opts.role or state.role)

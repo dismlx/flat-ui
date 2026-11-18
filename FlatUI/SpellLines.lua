@@ -23,10 +23,12 @@ local _, ns = ...
 -- (ns.Forbidden, which asks IsForbidden) and not one inside another tooltip (its field IsEmbedded, GameTooltip.xml:88-91, read only). The data: a
 -- spell, a pet action or a macro (Enum.TooltipDataType Spell 1, PetAction 11 and Macro 25, Blizzard_APIDocumentationGenerated/
 -- TooltipInfoSharedDocumentation.lua:97, 107, 121), never a buff or a debuff (UnitAura 7). The key: Show spell lines at Always, or its key held
--- (IsShiftKeyDown, IsControlKeyDown, IsAltKeyDown). A bar button's tooltip is built again five times a second (GameTooltip.lua:451-463;
--- Blizzard_ActionBar/Shared/ActionButton.lua:1125-1129), so there the lines come as the key goes down, and elsewhere at the next build, as Show
--- IDs works (ChatTips.lua:28-31). The spell: one of the data for the player's class, its pet or every class (M.Find), or, while Threat lines is
--- on, any other spell, which may be the tooltip of a rule (M.RuleLines answers nothing for the rest).
+-- (IsShiftKeyDown, IsControlKeyDown, IsAltKeyDown); ItemRefTooltip at every choice, since the game builds it only for a plain click on a link, a
+-- modified one going to HandleModifiedItemClick (SetItemRef, Blizzard_UIPanels_Game/Mainline/ItemRef.lua:17-26), and builds it again only when its
+-- data changes (its OnUpdate, :351-355), so no key is ever down while its lines are built. A bar button's tooltip is built again five times a second
+-- (GameTooltip.lua:451-463; Blizzard_ActionBar/Shared/ActionButton.lua:1125-1129), so there the lines come as the key goes down, and elsewhere at the
+-- next build, as Show IDs works (ChatTips.lua:28-31). The spell: one of the data for the player's class, its pet or every class (M.Find), or, while
+-- Threat lines is on, any other spell, which may be the tooltip of a rule (M.RuleLines answers nothing for the rest).
 -- The spell ID (design 1.1). A spell's data has it in its id (Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua:25-32): the rank on the button, in
 -- the book or in the link. A macro's and a pet action's data name it in their first line, by tooltipID while tooltipType is 1 (0 is an item), the
 -- fields retail addons read for it, not yet seen on WoW: Forever (design 6.4). A macro whose first line names none is read from its action slot:
@@ -36,7 +38,8 @@ local _, ns = ...
 -- (GetActionInfo, and GetMacroSpell for a macro). A pet action whose first line names no spell gets nothing. A talent's tooltip appends a build
 -- through GetTraitEntry with the entry and the rank, one for the rank the player has and one for the next (Blizzard_SharedTalentUI/
 -- Blizzard_TalentDisplay.lua:365, 371; TooltipDataHandler.lua:434-438): each has data of its own and gets its own lines, for the rank in its
--- getterArgs. The talent's title is plain text and gets nothing.
+-- getterArgs, but the next rank's block leaves out a dim line the block before it of the same entry added to that tooltip (a rule's note, which no
+-- rank changes), so it shows once. The talent's title is plain text and gets nothing.
 --
 -- The work, keyed (design 4.4): ns.EachPart counts a failure once for each first argument it is given (Core.lua:2168-2199) and stops a part at
 -- the third (MAX_PART_FAILURES, Core.lua:240). The tests run keyed by the data of the build, which is new for each build, the lines keyed by the
@@ -97,7 +100,8 @@ local SL = {
 	STEP = 0.05,
 }
 
--- Per tooltip: { data, lines } of the build that has the spell lines.
+-- Per tooltip: { data, lines, trait, rank, notes } of the build that has the spell lines: its data, the tooltip's lines after them, the entry and
+-- rank of a talent's block, and the dim lines it added, by their text.
 local added = setmetatable({}, { __mode = "k" })
 -- The lines by spell ID, then by talent rank (NO_RANK for none): { pet = the pet's level they were made for, lines = the lines as Put adds them };
 -- order holds the spell IDs, the one kept longest first.
@@ -245,16 +249,17 @@ local function SlotSpell(tooltip)
 	return Whole(id) and id or nil
 end
 
--- The rank of a talent's block: the second of the getterArgs of a build through GetTraitEntry (the entry, then the rank), or nil for any other
+-- The rank and the entry of a talent's block: the getterArgs of a build through GetTraitEntry (the entry, then the rank), or nil for any other
 -- build. A talent the player has no point in yet shows rank 0.
 local function TalentRank(tooltip)
 	local info = Field(tooltip, "processingInfo")
 	if Field(info, "getterName") ~= SL.TRAIT then
 		return nil
 	end
-	local rank = Field(Field(info, "getterArgs"), 2)
+	local args = Field(info, "getterArgs")
+	local rank, trait = Field(args, 2), Field(args, 1)
 	if ns.Finite(rank) and rank >= 0 and rank == math.floor(rank) then
-		return rank
+		return rank, Whole(trait) and trait or nil
 	end
 	return nil
 end
@@ -273,12 +278,13 @@ local function Find(data, tooltip)
 	if not (spell or macro or kind == kinds.PetAction) then
 		return
 	end
-	if not KeyHeld(Opt("spellWhen")) then
+	-- A clicked link's tooltip is never built with a key down (header): its lines show at every choice.
+	if not rawequal(tooltip, ItemRefTooltip) and not KeyHeld(Opt("spellWhen")) then
 		return
 	end
-	local id, rank
+	local id, rank, trait
 	if spell then
-		id, rank = Field(data, "id"), TalentRank(tooltip)
+		id, rank, trait = Field(data, "id"), TalentRank(tooltip)
 	else
 		id = LineSpell(data)
 		if id == nil and macro then
@@ -297,7 +303,7 @@ local function Find(data, tooltip)
 			return
 		end
 	end
-	pick.id, pick.entry, pick.index, pick.rank = id, entry, index, rank
+	pick.id, pick.entry, pick.index, pick.rank, pick.trait = id, entry, index, rank, trait
 end
 
 -- The lines --------------------------------------------------------------------------------------------------------------------------------
@@ -466,8 +472,10 @@ local function Put(tooltip, line)
 end
 
 -- The lines of one spell on the tooltip, once for each build, keyed by the spell ID. The same data with at least the lines added then still there
--- is the same build, so a second post call of it adds none, and a refused line ends the adding for that build.
-local function Work(id, tooltip, data, entry, index, rank)
+-- is the same build, so a second post call of it adds none, and a refused line ends the adding for that build. A talent's block of a higher rank
+-- right after a block of the same entry, whose lines are still there, is the next rank's of the same tooltip (header): a dim line that block
+-- added is not added again.
+local function Work(id, tooltip, data, entry, index, rank, trait)
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	if not ok or not ns.Finite(shown) then
 		return
@@ -484,17 +492,28 @@ local function Work(id, tooltip, data, entry, index, rank)
 	if #lines == 0 then
 		return
 	end
+	local before = nil
+	if record and trait and record.trait == trait and rank and record.rank and rank > record.rank and shown >= record.lines then
+		before = record.notes
+	end
+	local notes = {}
 	for _, line in ipairs(lines) do
-		if not Put(tooltip, line) then
-			break
+		local dim = line.colour == SL.DIM and line.right == nil
+		if not (dim and before and before[line.left]) then
+			if not Put(tooltip, line) then
+				break
+			end
+			shown = shown + 1
+			if dim then
+				notes[line.left] = true
+			end
 		end
-		shown = shown + 1
 	end
-	if record then
-		record.data, record.lines = data, shown
-	else
-		added[tooltip] = { data = data, lines = shown }
+	if not record then
+		record = {}
+		added[tooltip] = record
 	end
+	record.data, record.lines, record.trait, record.rank, record.notes = data, shown, trait, rank, notes
 end
 
 -- Sends the first error of this part once to the game's error handler, as Bags' parts send theirs (Bags.lua:360-367).
@@ -550,13 +569,13 @@ function ns.SpellTipLines(tooltip, data)
 	if IsSecret(tooltip) or IsSecret(data) or type(data) ~= "table" then
 		return
 	end
-	pick.id, pick.entry, pick.index, pick.rank = nil, nil, nil, nil
+	pick.id, pick.entry, pick.index, pick.rank, pick.trait = nil, nil, nil, nil, nil
 	local ok, err = ns.EachPart(KEY, PART, Find, data, tooltip)
 	Report(ok, err)
-	local id, entry, index, rank = pick.id, pick.entry, pick.index, pick.rank
-	pick.id, pick.entry, pick.index, pick.rank = nil, nil, nil, nil
+	local id, entry, index, rank, trait = pick.id, pick.entry, pick.index, pick.rank, pick.trait
+	pick.id, pick.entry, pick.index, pick.rank, pick.trait = nil, nil, nil, nil, nil
 	if ok and id then
-		Report(ns.EachPart(KEY, PART, Work, id, tooltip, data, entry, index, rank))
+		Report(ns.EachPart(KEY, PART, Work, id, tooltip, data, entry, index, rank, trait))
 	end
 end
 

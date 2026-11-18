@@ -16,25 +16,32 @@ local _, ns = ...
 -- ShoppingTooltip1 and 2, which show the worn items, get nothing. The kind of the data: data.type, Enum.TooltipDataType.Item
 -- (TooltipInfoSharedDocumentation.lua:96). The key of Show gear lines: Always, or Shift, Ctrl or Alt held (IsShiftKeyDown, IsControlKeyDown,
 -- IsAltKeyDown), or With the game's comparison by the game's own test: on GameTooltip its supportsItemComparison (GameTooltip.xml:251) and either
--- the compareItem of the info the game is building (its processingInfo, TooltipDataHandler.lua:222, 281) or TooltipUtil.ShouldDoItemComparison;
--- on ItemRefTooltip, which compares from its OnUpdate by that test alone (Blizzard_UIPanels_Game/Mainline/ItemRef.lua:351-366), the test alone. The
--- test is alwaysCompareItems (C_CVar.GetCVarBool) while the tooltip's suppressAutomaticCompareItem is not true, or the modified click COMPAREITEMS
--- held (IsModifiedClick; Shift by default, Blizzard_FrameXML/Bindings_Camelot.xml:1546) (Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua:3-6;
--- TooltipDataRules.lua:168-176); with Compare items only while holding Shift on, which writes alwaysCompareItems 0 (ItemCompare.lua:3-14), that is
--- while Shift is held. A worn item shows its lines at this choice while Shift is held. Then the item: worn when the game gives its data.guid a place
+-- the compareItem of the info the game is building (its processingInfo, TooltipDataHandler.lua:222, 281) or TooltipUtil.ShouldDoItemComparison.
+-- The test is alwaysCompareItems (C_CVar.GetCVarBool) while the tooltip's suppressAutomaticCompareItem is not true, or the modified click
+-- COMPAREITEMS held (IsModifiedClick; Shift by default, Blizzard_FrameXML/Bindings_Camelot.xml:1546) (Blizzard_SharedXMLGame/Tooltip/
+-- TooltipUtil.lua:3-6; TooltipDataRules.lua:168-176); with Compare items only while holding Shift on, which writes alwaysCompareItems 0
+-- (ItemCompare.lua:3-14), that is while Shift is held. A worn item shows its lines at this choice while Shift is held. ItemRefTooltip shows them at
+-- every choice: the game builds it only for a plain click on a link, a modified one going to HandleModifiedItemClick (SetItemRef,
+-- Blizzard_UIPanels_Game/Mainline/ItemRef.lua:17-26), and builds it again only when its data changes, comparing from its OnUpdate with no new build
+-- (:351-366), so no key and no comparison is ever down while its lines are built. Then the item: worn when the game gives its data.guid a place
 -- in an equipment slot (C_Item.GetItemLocation and the field equipmentSlotIndex, ItemDocumentation.lua:786-799, read as ChatTips.lua:134-157
 -- reads it); its link is data.hyperlink, else C_Item.GetItemLinkByGUID(data.guid) (:771-784), as the game finds the item a tooltip shows
 -- (TooltipUtil.lua:8-22), else the link of data.id from C_Item.GetItemInfo (:626-657), which carries no random suffix; the game is asked once for an
 -- item the client has not loaded (C_Item.RequestLoadItemDataByID, :1710-1718, as BagsData.lua:1649 asks), and the next build has the lines. Its
 -- kind is the itemEquipLoc of C_Item.GetItemInfoInstant (:659-680): an item with none gets nothing, nor a relic, bag, quiver, tabard or shirt,
--- whose worth is not in the model (design 2.4). Then the lines of the build itself, read fresh each time with the tests of ItemMarks.lua:213-224: an
--- EquipSlot line (Enum.TooltipDataLineType, TooltipInfoSharedDocumentation.lua:55) whose isValidItemType or isValidInvSlot is false, or that is red
--- where the game gives neither field, or a red UsageRequirement line (:77) that says Classes: or Races: (ITEM_CLASSES_ALLOWED and
--- ITEM_RACES_ALLOWED, GlobalStrings/enUS.lua:12687 and 13011), is an item the player can never wear: no lines. Any other red requirement (a level,
--- a skill, a reputation) is one the player cannot wear yet: the lines show, and end with "Not wearable yet:" and the game's own red line (design
--- 2.2), so a level 58 player sees what a level 60 reward will do. A red is the game's RED_FONT_COLOR or near it (ItemMarks.lua:53-54). ItemMarks'
--- own answer (ns.ItemMarks.Unusable) is not used: it is kept by item ID and goes old only through events of the windows module and Bags
--- (ItemMarks.lua:9-19). C_Item.IsItemDataCachedByID (ItemDocumentation.lua:1520-1533) says whether the client has the item. Every field of the
+-- whose worth is not in the model (design 2.4); its classID and subclassID (the same call) name its armour or weapon type. Then the lines of the
+-- build itself, read fresh each time with the tests of ItemMarks.lua:213-224: an EquipSlot line (Enum.TooltipDataLineType,
+-- TooltipInfoSharedDocumentation.lua:55) whose isValidInvSlot is false, or whose isValidItemType is false for a type the player's class never
+-- learns, or that is red where the game gives neither field, or a red UsageRequirement line (:77) that says Classes: or Races:
+-- (ITEM_CLASSES_ALLOWED and ITEM_RACES_ALLOWED, GlobalStrings/enUS.lua:12687 and 13011), is an item the player can never wear: no lines. The game
+-- also gives isValidItemType false, the type in red, for a type the class learns in time and has not learned (T.LEARNS: mail for a hunter or a
+-- shaman and plate for a warrior or a paladin at level 40, a weapon skill of the weapon masters), which with any other red requirement (a level, a
+-- skill, a reputation) is one the player cannot wear yet: the lines show, and end with "Not wearable yet:" and the game's own red requirement line,
+-- else the type's red text (design 2.2), so a level 58 player sees what a level 60 reward will do and a level 38 hunter what a mail chest will. A red
+-- is the game's RED_FONT_COLOR or near it (ItemMarks.lua:53-54). ItemMarks' own answer (ns.ItemMarks.Unusable) is not used: it is kept by item ID
+-- and goes old only through events of the windows module and Bags (ItemMarks.lua:9-19). The Gear comparison window, which has no build of the game's
+-- to read, asks the same test of the lines C_TooltipInfo.GetHyperlink gives for its item (ns.GearWearable, TooltipInfoDocumentation.lua:337-354, as
+-- GearModel.lua reads them). C_Item.IsItemDataCachedByID (ItemDocumentation.lua:1520-1533) says whether the client has the item. Every field of the
 -- data and of the tooltip is read under pcall and through ns.IsSecret, and every call under pcall.
 --
 -- The block: G.Compare(link, lines, opts), or G.Compare(slot, lines, opts) for a worn item (what it gives: now against that slot empty), with the
@@ -83,14 +90,15 @@ local _, ns = ...
 -- Cooldowns' Add a spell walks it (ns.SpellBookList, Cooldowns.lua:2287-2336), only the spells Flat UI can work out (an entry with cmp) at the
 -- highest rank known, with Attack, Auto Shot and Shoot added when the player has them; Remove a spell lists the lines, "(not known)" after one the
 -- character lost; Add the spells of a bar takes each entry once with the rank on the bar (ns.BarSpells, as Cooldowns' import reads a bar,
--- Cooldowns.lua:2587-2654); Back to your class's spells drops the list; Gear comparison window calls ns.GearWindowToggle of GearWindow.lua when it is
--- there, as Reset windows is a list row (Movers.lua:4556-4570). Each pick answers (done, message), as ns.CooldownAdd does (Cooldowns.lua:2354-2370),
--- and never raises: an error goes once to geterrorhandler(). /flatui gear (ns.AddSlash, Core.lua:2333-2348; design 4.11) opens the window
--- (ns.GearWindowToggle, ns.GearWindowShow) and changes the list, and prints with print(). /flatui status (ns.AddStatus, Core.lua:2309-2329; design
--- 4.12) says, while Your spells in item tooltips is on and this part runs or the window is open (ns.GearWindowOpen, GearWindow.lua), which spells
--- are compared, against what, and, once seen, that the slot table stood in for the game's choice or Flat UI's rating sizes for the game's
--- conversion: of GetCombatRatingBonusForCombatRatingValue, C_TooltipComparison.GetItemComparisonInfo and GetActionInfo (Add the spells of a bar) it
--- only looks whether the client has them, and a candidate of G.Compare whose game is false, or its sizes, the fixed sizes having stood in.
+-- Cooldowns.lua:2587-2654); Back to your class's spells drops the list; Gear comparison window calls ns.GearWindowShow of GearWindow.lua when it is
+-- there, which opens the window or raises an open one, as Reset windows is a list row (Movers.lua:4556-4570). Each pick answers (done, message), as
+-- ns.CooldownAdd does (Cooldowns.lua:2354-2370), and never raises: an error goes once to geterrorhandler(). /flatui gear (ns.AddSlash,
+-- Core.lua:2333-2348; design 4.11) opens the window (ns.GearWindowToggle, ns.GearWindowShow) and changes the list, and prints with print(). /flatui
+-- status (ns.AddStatus, Core.lua:2309-2329; design 4.12) says, while Your spells in item tooltips is on and this part runs or the window is open
+-- (ns.GearWindowOpen, GearWindow.lua), which spells are compared, against what, and, once seen, that the slot table stood in for the game's choice or
+-- Flat UI's rating sizes for the game's conversion: of GetCombatRatingBonusForCombatRatingValue, C_TooltipComparison.GetItemComparisonInfo and
+-- GetActionInfo (Add the spells of a bar) it only looks whether the client has them, and a candidate of G.Compare whose game is false, or its sizes,
+-- the fixed sizes having stood in.
 -- UnitClassBase, UnitLevel, GetShapeshiftFormID and ns.PlayerRole are asked only
 -- when SpellModel's state lacks the class, level, form or role, and GetTime keeps one reading of the list for one frame.
 -- This file registers no event: SpellModel.lua listens for the player's state and stats on a frame of its own while an owner wants them
@@ -120,6 +128,27 @@ local T = {
 	-- that cannot be worn.
 	NO_LINES = { INVTYPE_RELIC = true, INVTYPE_BAG = true, INVTYPE_QUIVER = true, INVTYPE_TABARD = true, INVTYPE_BODY = true, INVTYPE_NON_EQUIP = true,
 		INVTYPE_NON_EQUIP_IGNORE = true },
+	-- The armour and weapon types each class can wear once it has learned them, as the class trainers and weapon masters of the game of old teach
+	-- them (mail at 40 for a hunter and a shaman, plate at 40 for a warrior and a paladin), by the item's classID (Enum.ItemClass: Weapon 2, Armor 4)
+	-- and subclassID (Enum.ItemWeaponSubclass: Axe1H 0, Axe2H 1, Bows 2, Guns 3, Mace1H 4, Mace2H 5, Polearm 6, Sword1H 7, Sword2H 8, Staff 10,
+	-- Unarmed 13, Dagger 15, Thrown 16, Crossbow 18, Wand 19; Enum.ItemArmorSubclass: Cloth 1, Leather 2, Mail 3, Plate 4, Shield 6). A type in red
+	-- that is here is one the player has not learned yet; any other, one the class never learns (Wearable).
+	LEARNS = {
+		WARRIOR = { [2] = { [0] = true, [1] = true, [2] = true, [3] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true, [10] = true,
+			[13] = true, [15] = true, [16] = true, [18] = true }, [4] = { [1] = true, [2] = true, [3] = true, [4] = true, [6] = true } },
+		PALADIN = { [2] = { [0] = true, [1] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true },
+			[4] = { [1] = true, [2] = true, [3] = true, [4] = true, [6] = true } },
+		HUNTER = { [2] = { [0] = true, [1] = true, [2] = true, [3] = true, [6] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true,
+			[16] = true, [18] = true }, [4] = { [1] = true, [2] = true, [3] = true } },
+		ROGUE = { [2] = { [2] = true, [3] = true, [4] = true, [7] = true, [13] = true, [15] = true, [16] = true, [18] = true },
+			[4] = { [1] = true, [2] = true } },
+		SHAMAN = { [2] = { [0] = true, [1] = true, [4] = true, [5] = true, [10] = true, [13] = true, [15] = true },
+			[4] = { [1] = true, [2] = true, [3] = true, [6] = true } },
+		DRUID = { [2] = { [4] = true, [5] = true, [10] = true, [13] = true, [15] = true }, [4] = { [1] = true, [2] = true } },
+		PRIEST = { [2] = { [4] = true, [10] = true, [15] = true, [19] = true }, [4] = { [1] = true } },
+		MAGE = { [2] = { [7] = true, [10] = true, [15] = true, [19] = true }, [4] = { [1] = true } },
+		WARLOCK = { [2] = { [7] = true, [10] = true, [15] = true, [19] = true }, [4] = { [1] = true } },
+	},
 	-- The worn slots by number (INVSLOT_AMMO 0 to INVSLOT_TABARD 19, Blizzard_FrameXMLBase/Constants.lua:135-154), in the words of G.Compare's labels
 	-- (GearModel.lua, K.LABEL) and the window's, for a header whose slot G.Compare gave no label.
 	SLOT_NAMES = { [0] = "Ammo", "Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Finger 1", "Finger 2",
@@ -144,6 +173,8 @@ local T = {
 	OUT_OF_COMBAT = "Gear lines show out of combat.",
 	RANDOM = "Random stats not known",
 	NOT_YET = "Not wearable yet: ",
+	-- What a type the player has yet to learn needs, when its line gives no text of the type.
+	LEARN = "an armor or weapon skill you have yet to learn",
 	NOT_COUNTED = "Not counted: ",
 	MORE = "and %d more: /flatui gear",
 	SLOT_NOTE = "Gear comparison: the game did not say which item an item replaces, so Flat UI went by its slot.",
@@ -995,13 +1026,14 @@ local function Reset(id)
 	return true, ("Gear comparison: back to %s: %s."):format(Who(info), Names(lines))
 end
 
--- Gear comparison window: GearWindow.lua's toggle, when that file is there (design 6.21: without it the row does nothing).
+-- Gear comparison window: GearWindow.lua's opening, when that file is there (design 6.21: without it the row does nothing). It opens the window, or
+-- raises it above the options window and works it out afresh when it is open already, and never closes it, as the line says.
 local function Open(id)
-	local toggle = ns.GearWindowToggle
-	if id ~= 1 or type(toggle) ~= "function" then
+	local show = ns.GearWindowShow
+	if id ~= 1 or type(show) ~= "function" then
 		return false, nil
 	end
-	local said = toggle()
+	local said = show()
 	return true, Plain(said, "string") and said or nil
 end
 
@@ -1113,8 +1145,8 @@ local function KeyHeld(choice)
 	return Ask(down) == true
 end
 
--- True while the game compares the item of this tooltip with the worn ones, by its own test (TooltipDataRules.lua:168-176, TooltipUtil.lua:3-6,
--- ItemRef.lua:351-366). A withheld field counts as no.
+-- True while the game compares the item of this tooltip with the worn ones, by its own test (TooltipDataRules.lua:168-176, TooltipUtil.lua:3-6).
+-- Find asks it of GameTooltip alone (header). A withheld field counts as no.
 local function Comparing(tooltip)
 	if rawequal(tooltip, _G.GameTooltip) then
 		if Field(tooltip, "supportsItemComparison") ~= true then
@@ -1180,11 +1212,11 @@ local function EquipLoc(link)
 	if not instant then
 		return nil
 	end
-	local ok, _, _, _, loc = pcall(instant, link)
+	local ok, _, _, _, loc, _, itemClass, subclass = pcall(instant, link)
 	if not ok or not Plain(loc, "string") or loc == "" or T.NO_LINES[loc] then
 		return nil
 	end
-	return loc
+	return loc, Finite(itemClass) and itemClass or nil, Finite(subclass) and subclass or nil
 end
 
 -- False when the client has not loaded the item yet; the game is asked for it then.
@@ -1229,9 +1261,31 @@ local function PatternOf(name, fallback)
 	return pattern
 end
 
+-- True when the player's class learns the item's armour or weapon type in time (T.LEARNS), by the classID and subclassID of the item.
+local function Learns(itemClass, subclass)
+	if not (Finite(itemClass) and Finite(subclass)) then
+		return false
+	end
+	local M = ns.SpellModel
+	local class = Class(StateOf(type(M) == "table" and M or nil))
+	local types = class and T.LEARNS[class]
+	local kinds = types and types[itemClass]
+	return type(kinds) == "table" and kinds[subclass] == true
+end
+
+-- The red text of a type the player has yet to learn: the EquipSlot line's type ("Mail"), else T.LEARN.
+local function TypeText(line)
+	local text = Field(line, "rightText")
+	if Plain(text, "string") and text ~= "" then
+		return text
+	end
+	return T.LEARN
+end
+
 -- Reads the lines of the build: true when the player can never wear the item (its type, class or race), else false and the text of the first
--- other requirement in red, which the player can meet in time (design 2.2, 6.20).
-local function Wearable(data)
+-- other requirement in red, else of a type the class learns in time and the player has not learned, which the player can meet in time (design
+-- 2.2, 6.20). itemClass and subclass are the item's classID and subclassID, or nil.
+local function Wearable(data, itemClass, subclass)
 	local lines = Field(data, "lines")
 	if not Plain(lines, "table") then
 		return false, nil
@@ -1240,17 +1294,27 @@ local function Wearable(data)
 	local slotLine = EnumValue("TooltipDataLineType", "EquipSlot", T.EQUIP_SLOT)
 	local classes = PatternOf("ITEM_CLASSES_ALLOWED", "Classes: %s")
 	local races = PatternOf("ITEM_RACES_ALLOWED", "Races: %s")
-	local later
+	local later, learn
 	for _, line in ipairs(lines) do
 		local kind = Plain(line, "table") and Field(line, "type") or nil
 		if Finite(kind) and kind == slotLine then
 			local itemType, typeWithheld = Field(line, "isValidItemType")
 			local invSlot, slotWithheld = Field(line, "isValidInvSlot")
-			if itemType == false or invSlot == false then
+			-- Neither field given: a red slot is a slot the player has not, a red type alone a type not learned.
+			if itemType == nil and invSlot == nil and not typeWithheld and not slotWithheld then
+				if Red(Field(line, "leftColor")) then
+					invSlot = false
+				elseif Red(Field(line, "rightColor")) then
+					itemType = false
+				end
+			end
+			if invSlot == false then
 				return true, nil
-			elseif itemType == nil and invSlot == nil and not typeWithheld and not slotWithheld
-				and (Red(Field(line, "leftColor")) or Red(Field(line, "rightColor"))) then
-				return true, nil
+			elseif itemType == false then
+				if not Learns(itemClass, subclass) then
+					return true, nil
+				end
+				learn = learn or TypeText(line)
 			end
 		elseif Finite(kind) and kind == usage and Red(Field(line, "leftColor")) then
 			local text = Field(line, "leftText")
@@ -1262,7 +1326,19 @@ local function Wearable(data)
 			end
 		end
 	end
-	return false, later
+	return false, later or learn
+end
+
+-- The test of Wearable for an item the Gear comparison window shows (GearWindow.lua), which has no build of the game's to read: the lines
+-- C_TooltipInfo.GetHyperlink gives for its link (header). True when the player can never wear it, else false and what it needs first, or nil; false
+-- and nil for a link the client gives no lines for yet.
+function ns.GearWearable(link)
+	if not Plain(link, "string") or link == "" then
+		return false, nil
+	end
+	local _, itemClass, subclass = EquipLoc(link)
+	local data = Ask(Call(_G.C_TooltipInfo, "GetHyperlink"), link)
+	return Wearable(data, itemClass, subclass)
 end
 
 -- The block --------------------------------------------------------------------------------------------------------------------------------
@@ -1669,7 +1745,10 @@ local function Find(data, tooltip)
 	end
 	local when = Opt("gearWhen")
 	local game, shift = false, false
-	if when == "compare" then
+	if rawequal(tooltip, _G.ItemRefTooltip) then
+		-- Built for a plain click on a link alone and never again for a key (header): its lines show at every choice.
+		game, shift = true, true
+	elseif when == "compare" then
 		game = Comparing(tooltip)
 		shift = KeyHeld("shift")
 		if not (game or shift) then
@@ -1688,10 +1767,14 @@ local function Find(data, tooltip)
 		return
 	end
 	local link = ItemLink(data, id, guid)
-	if not link or not EquipLoc(link) then
+	local loc, itemClass, subclass
+	if link then
+		loc, itemClass, subclass = EquipLoc(link)
+	end
+	if not loc then
 		return
 	end
-	local never, later = Wearable(data)
+	local never, later = Wearable(data, itemClass, subclass)
 	if never or (id and not Loaded(id)) then
 		return
 	end

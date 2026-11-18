@@ -16,20 +16,23 @@ local _, ns = ...
 -- Basis of a value (b): c client data (a row, a curve or the game's text), m measured on Forever, e estimate (shown with ~ before it).
 -- An entry (one spell, every rank): key (English name, lower case; " (pet)" for a pet's spell), pet, school (Lua school index 1-7) or
 --   sch (several, of which the lower counts), cmp (the comparison kind, nil when the comparison cannot work it out), roll (the attack
---   table line of the row's DefenseType: spell, special, ranged, or swing for Attack), nb (cannot be blocked), nx (replaces the next
---   swing), seal (a judgement: the key of its seal, whose highest rank known gives the judgement's of the same place), parts, ranks,
---   threat.
+--   table line of the row's DefenseType: spell, special, ranged, or swing for Attack), nb (cannot be blocked), nd (cannot be dodged,
+--   parried or blocked: the row's No Active Defense, attribute word 0 bit 0x200000), nm (cannot miss, its text says), nx (replaces the next
+--   swing), needs (dagger: a dagger in the main hand, shield: a shield, the row's equipped item), seal (a judgement: the key of its seal,
+--   whose highest rank known gives the judgement's of the same place), parts, ranks, threat.
 -- A part: [1] the stat (sp, heal, ap, rap, wpn: weapon damage with the coefficient its multiple, bv: block value), [2] the coefficient of
 --   the top rank (a periodic part's total over its ticks), n ticks and p seconds a tick, per (target, first with max targets, jump with j
 --   the share kept each jump, hit, block, stack, proc, missile, cp with cp the shares at 1 to 5 combo points, self), spd (actual, norm,
 --   nranged, cat, bear) and h (main, off, both, ranged) for a weapon part, sch, g (the game's text counts this stat at this share
 --   already), fs = { form, share } (the share the text counts in that form), o (the text counts the stat otherwise) with two (the share
---   with a two-hander), note, b.
+--   with a two-hander), note, free (the share of the part on a target that is not stunned), dg (a weapon part's multiple with a dagger in
+--   the main hand), b.
 -- A rank: [1] the spell ID, [2] its level (learned), then by part where the rank differs: c coefficient, n ticks, w weapon multiple;
 --   ct cast ms (0 instant, -1 channel), du duration ms, bm the base mean at lv and bl its gain a level (a periodic part's total over its
 --   ticks; a weapon part's flat bonus), lv the level the gain counts from and mx the level it stops (0 none), both from the row that
 --   carries the part (lv is the rank's level when absent), cpb points a combo point, sv the seal value.
--- A threat: k (mult, bonus, flat, more, drop, temp, taunt, force, none, heal, wipe, resist, caster, rage), v (one number or one a rank),
+-- A threat: k (mult, bonus, flat, more, drop, temp, taunt, force, none, heal, wipe, resist, caster, rage, or unknown: not known on Forever,
+--   so no threat line and no threat figure), v (one number or one a rank),
 --   b (one letter or one a rank), ap and apb (the share of attack power added and its basis), pl the gain a level (one or one a rank)
 --   with mx the level it stops a rank, split, forms, note.
 
@@ -135,7 +138,8 @@ D.CLASS.WARRIOR = function()
 				{ 20660, 40, bm = { 325 } },
 				{ 20661, 48, bm = { 450 } },
 				{ 20662, 56, bm = { 600 } },
-			} },
+			},
+			threat = { k = "unknown" } },
 		{ key = "hamstring", school = 1, cmp = "apstrike", roll = "special",
 			parts = { { "ap", 0, b = "c" } },
 			ranks = {
@@ -183,7 +187,7 @@ D.CLASS.WARRIOR = function()
 				{ 21552, 54, bm = { 135 } },
 				{ 21553, 60, bm = { 160 } },
 			} },
-		{ key = "overpower", school = 1, cmp = "strike", roll = "special",
+		{ key = "overpower", school = 1, cmp = "strike", roll = "special", nd = true,
 			parts = { { "wpn", 1, spd = "norm", h = "main", b = "c" } },
 			ranks = {
 				{ 7384, 12, bm = { 5 } },
@@ -220,7 +224,7 @@ D.CLASS.WARRIOR = function()
 				{ 25288, 60, bm = { 153 } },
 			},
 			threat = { k = "mult", v = 2.25, b = "eemmee" } },
-		{ key = "shield bash", school = 1, cmp = "apstrike", roll = "special",
+		{ key = "shield bash", school = 1, cmp = "apstrike", roll = "special", needs = "shield",
 			parts = { { "ap", 0, b = "c" } },
 			ranks = {
 				{ 72, 12, bm = { 6 } },
@@ -228,7 +232,7 @@ D.CLASS.WARRIOR = function()
 				{ 1672, 52, bm = { 45 } },
 			},
 			threat = { k = "mult", v = 1.5, b = "mee" } },
-		{ key = "shield slam", school = 1, cmp = "apstrike", roll = "special",
+		{ key = "shield slam", school = 1, cmp = "apstrike", roll = "special", needs = "shield",
 			parts = { { "bv", 2, b = "m" } },
 			ranks = {
 				{ 23922, 40, bm = { 430 } },
@@ -280,7 +284,8 @@ D.CLASS.WARRIOR = function()
 			ranks = { { 402927, 20, bm = { 1 } } } },
 		{ key = "whirlwind", school = 1, cmp = "strike", roll = "special",
 			parts = { { "wpn", 1, per = "target", spd = "norm", h = "main", b = "c" }, { "wpn", 1, per = "target", spd = "norm", h = "off", note = "off hand at half, as the simulator models it", b = "e" } },
-			ranks = { { 1680, 36 } } },
+			ranks = { { 1680, 36 } },
+			threat = { k = "unknown" } },
 	}
 end
 
@@ -338,7 +343,7 @@ D.CLASS.PALADIN = function()
 				{ 25292, 60, ct = 2500, bm = { 1580 }, bl = { 5.8 }, mx = { 65 } },
 			},
 			threat = { k = "heal", v = 0.25, b = "m", split = true } },
-		{ key = "holy shield", school = 2, cmp = "proc", roll = "spell",
+		{ key = "holy shield", school = 2, cmp = "proc", roll = "spell", needs = "shield",
 			parts = { { "sp", 0.08, per = "block", b = "c" } },
 			ranks = {
 				{ 20925, 30, du = 10000, bm = { 75 } },
@@ -375,8 +380,8 @@ D.CLASS.PALADIN = function()
 				{ 2812, 50, ct = 2000, bm = { 395 }, bl = { 1.6 }, mx = { 54 } },
 				{ 10318, 60, ct = 2000, bm = { 533 }, bl = { 1.9 }, mx = { 64 } },
 			} },
-		{ key = "judgement of command", school = 2, cmp = "spell", roll = "special", seal = "seal of command",
-			parts = { { "sp", 0.429, note = "half unless the target is stunned", b = "c" } },
+		{ key = "judgement of command", school = 2, cmp = "spell", roll = "special", nd = true, seal = "seal of command",
+			parts = { { "sp", 0.429, note = "half unless the target is stunned", free = 0.5, b = "c" } },
 			ranks = {
 				{ 20467, 20, ct = 0, bm = { 97 }, bl = { 5.6 }, mx = { 28 } },
 				{ 20963, 30, ct = 0, bm = { 153 }, bl = { 6.1 }, mx = { 38 } },
@@ -385,7 +390,7 @@ D.CLASS.PALADIN = function()
 				{ 20966, 60, ct = 0, bm = { 356 }, bl = { 6.1 }, mx = { 68 } },
 			},
 			threat = { k = "mult", v = 1, b = "e" } },
-		{ key = "judgement of fury", school = 2, cmp = "spell", roll = "ranged", nb = true, seal = "seal of fury",
+		{ key = "judgement of fury", school = 2, cmp = "spell", roll = "ranged", nb = true, nd = true, seal = "seal of fury",
 			parts = { { "sp", 0.429, b = "c" } },
 			ranks = {
 				{ 1311650, 10, ct = 0, bm = { 23 }, bl = { 1.71 }, mx = { 16 } },
@@ -396,7 +401,7 @@ D.CLASS.PALADIN = function()
 				{ 20413, 50, ct = 0, bm = { 123 }, bl = { 3.69 }, mx = { 56 } },
 				{ 20414, 58, ct = 0, bm = { 153 }, bl = { 3.69 }, mx = { 64 } },
 			} },
-		{ key = "judgement of light", school = 2, seal = "seal of light",
+		{ key = "judgement of light", school = 2, nd = true, seal = "seal of light",
 			parts = { { "heal", 0, per = "proc", b = "c" } },
 			ranks = {
 				{ 20185, 30, bm = { 25 } },
@@ -405,7 +410,7 @@ D.CLASS.PALADIN = function()
 				{ 20346, 60, bm = { 61 } },
 			},
 			threat = { k = "heal", v = 0.5, b = "m", split = true } },
-		{ key = "judgement of righteousness", school = 2, cmp = "spell", roll = "ranged", nb = true, seal = "seal of righteousness",
+		{ key = "judgement of righteousness", school = 2, cmp = "spell", roll = "ranged", nb = true, nd = true, seal = "seal of righteousness",
 			parts = { { "sp", 0.429, b = "c" } },
 			ranks = {
 				{ 20187, 1, ct = 0, bm = { 15 }, bl = { 1.8 }, mx = { 7 } },
@@ -445,7 +450,7 @@ D.CLASS.PALADIN = function()
 				{ 20920, 60, du = 30000 },
 			},
 			threat = { k = "mult", v = 1, b = "e" } },
-		{ key = "seal of fury", school = 2, roll = "special",
+		{ key = "seal of fury", school = 2, roll = "special", nd = true,
 			parts = { { "sp", 0.1, per = "hit", b = "c" } },
 			ranks = {
 				{ 1311649, 10, bm = { 6 } },
@@ -508,7 +513,7 @@ D.CLASS.HUNTER = function()
 		{ key = "auto shot", school = 1, cmp = "shot", roll = "ranged",
 			parts = { { "wpn", 1, spd = "actual", h = "ranged", b = "c" } },
 			ranks = { { 75, 1 } } },
-		{ key = "counterattack", school = 1, cmp = "strike", roll = "special",
+		{ key = "counterattack", school = 1, cmp = "strike", roll = "special", nd = true,
 			parts = { { "wpn", 0.5, spd = "norm", h = "main", b = "c" } },
 			ranks = {
 				{ 19306, 30, bm = { 26 } },
@@ -658,7 +663,7 @@ end
 
 D.CLASS.ROGUE = function()
 	return {
-		{ key = "ambush", school = 1, cmp = "strike", roll = "special",
+		{ key = "ambush", school = 1, cmp = "strike", roll = "special", nd = true, needs = "dagger",
 			parts = { { "wpn", 2.5, spd = "norm", h = "main", b = "c" } },
 			ranks = {
 				{ 8676, 18, bm = { 28 } },
@@ -668,7 +673,7 @@ D.CLASS.ROGUE = function()
 				{ 11268, 50, bm = { 92 } },
 				{ 11269, 58, bm = { 116 } },
 			} },
-		{ key = "backstab", school = 1, cmp = "strike", roll = "special",
+		{ key = "backstab", school = 1, cmp = "strike", roll = "special", needs = "dagger",
 			parts = { { "wpn", 1.5, spd = "norm", h = "main", b = "c" } },
 			ranks = {
 				{ 53, 4, bm = { 10 } },
@@ -690,7 +695,7 @@ D.CLASS.ROGUE = function()
 				{ 11354, 54, du = 12000, bm = { 72 } },
 				{ 25349, 60, du = 12000, bm = { 92 } },
 			} },
-		{ key = "death mark", school = 1, roll = "special",
+		{ key = "death mark", school = 1, roll = "special", nd = true,
 			parts = { { "ap", 0.04, per = "cp", g = true, b = "c" } },
 			ranks = {
 				{ 1316709, 40 },
@@ -721,7 +726,7 @@ D.CLASS.ROGUE = function()
 				{ 25302, 60 },
 			},
 			threat = { k = "drop", v = { -750, -1200, -1950, -3000, -4000 }, pl = -5, mx = { 26, 38, 50, 62, 70 }, b = "e", note = "client data, Blizzard said doubled" } },
-		{ key = "garrote", school = 1, cmp = "dot", roll = "special",
+		{ key = "garrote", school = 1, cmp = "dot", roll = "special", nd = true,
 			parts = { { "ap", 0.18, n = 6, p = 3, b = "e" } },
 			ranks = {
 				{ 703, 14, ct = 0, du = 18000, bm = { 144 } },
@@ -732,7 +737,7 @@ D.CLASS.ROGUE = function()
 				{ 11290, 54, ct = 0, du = 18000, bm = { 552 } },
 			} },
 		{ key = "ghostly strike", school = 1, cmp = "strike", roll = "special",
-			parts = { { "wpn", 1.25, spd = "norm", h = "main", note = "180% with a dagger", b = "c" } },
+			parts = { { "wpn", 1.25, spd = "norm", h = "main", dg = 1.8, b = "c" } },
 			ranks = { { 14278, 60 } } },
 		{ key = "gouge", school = 1, cmp = "apstrike", roll = "special",
 			parts = { { "ap", 0, b = "c" } },
@@ -744,7 +749,7 @@ D.CLASS.ROGUE = function()
 				{ 11286, 60, bm = { 75 } },
 			} },
 		{ key = "hemorrhage", school = 1, cmp = "strike", roll = "special",
-			parts = { { "wpn", 1, spd = "norm", h = "main", b = "c" } },
+			parts = { { "wpn", 1, spd = "norm", h = "main", dg = 1.45, b = "c" } },
 			ranks = { { 16511, 30 } } },
 		{ key = "instant poison", school = 4, roll = "spell",
 			parts = { { "ap", 0.01, per = "proc", b = "e" } },
@@ -764,7 +769,7 @@ D.CLASS.ROGUE = function()
 				{ 1768, 42, bm = { 45 } },
 				{ 1769, 58, bm = { 80 } },
 			} },
-		{ key = "mutilate", school = 1, cmp = "strike", roll = "special",
+		{ key = "mutilate", school = 1, cmp = "strike", roll = "special", needs = "dagger",
 			parts = { { "wpn", 0.9, spd = "norm", h = "main", b = "c" }, { "wpn", 0.9, spd = "norm", h = "off", note = "whether the off hand is halved is not known", b = "e" } },
 			ranks = {
 				{ 399956, 40, bm = { 44, 44 } },
@@ -784,7 +789,7 @@ D.CLASS.ROGUE = function()
 				{ 11274, 52, bm = { 22 }, cpb = 4.14 },
 				{ 11275, 60, bm = { 35 }, cpb = 4.73 },
 			} },
-		{ key = "shank", school = 1, cmp = "strike", roll = "special",
+		{ key = "shank", school = 1, cmp = "strike", roll = "special", nm = true,
 			parts = { { "wpn", 0.5, spd = "actual", h = "off", b = "c" } },
 			ranks = {
 				{ 1329283, 24 },
@@ -929,7 +934,7 @@ D.CLASS.PRIEST = function()
 				{ 15267, 54, ct = 3500, du = 10000, bm = { 173, 65 }, bl = { 1.9 }, mx = { 60 } },
 				{ 15261, 60, ct = 3500, du = 10000, bm = { 208, 75 }, bl = { 2 }, mx = { 66 } },
 			} },
-		{ key = "holy nova", school = 2, cmp = "spell", roll = "spell",
+		{ key = "holy nova", school = 2, cmp = "heal", roll = "spell",
 			parts = { { "sp", 0.107, per = "target", b = "c" }, { "heal", 0.107, per = "target", b = "c" } },
 			ranks = {
 				{ 15237, 20, ct = 0, bm = { 27, 51 }, bl = { 0.2, 0.4 }, mx = { 26, 26 } },
@@ -988,16 +993,17 @@ D.CLASS.PRIEST = function()
 				{ 17314, 52, ct = -1, du = 3000, bm = { 294 } },
 				{ 18807, 60, ct = -1, du = 3000, bm = { 390 } },
 			} },
-		{ key = "penance", school = 2, cmp = "channel", roll = "spell",
+		{ key = "penance", school = 2, cmp = "hot", roll = "spell",
 			parts = { { "sp", 0.57, n = 3, p = 1, b = "c" }, { "heal", 0.57, n = 3, p = 1, b = "c" } },
 			ranks = {
-				{ 402174, 30, ct = -1, bm = { 126, 378 }, bl = { 0.87, 2.61 }, mx = { 39, 39 } },
-				{ 1240720, 40, ct = -1, bm = { 150, 600 }, bl = { 0.99, 2.94 }, mx = { 49, 49 } },
-				{ 1240721, 50, ct = -1, bm = { 204, 804 }, bl = { 1.29, 3.81 }, mx = { 59, 59 } },
-				{ 1316995, 60, ct = -1, bm = { 276, 1275 } },
-			} },
+				{ 402174, 30, ct = -1, du = 2000, bm = { 126, 378 }, bl = { 0.87, 2.61 }, mx = { 39, 39 } },
+				{ 1240720, 40, ct = -1, du = 2000, bm = { 150, 600 }, bl = { 0.99, 2.94 }, mx = { 49, 49 } },
+				{ 1240721, 50, ct = -1, du = 2000, bm = { 204, 804 }, bl = { 1.29, 3.81 }, mx = { 59, 59 } },
+				{ 1316995, 60, ct = -1, du = 2000, bm = { 276, 1275 } },
+			},
+			threat = { k = "heal", v = 0.5, b = "m", split = true } },
 		{ key = "power word: shield", school = 2, roll = "spell",
-			parts = { { "heal", 0.1, b = "c" } },
+			parts = { { "heal", 0.1, b = "e" } },
 			ranks = {
 				{ 17, 6, bm = { 44 }, bl = { 0.8 }, mx = { 11 } },
 				{ 592, 12, bm = { 86 }, bl = { 1.2 }, mx = { 17 } },
@@ -1009,7 +1015,8 @@ D.CLASS.PRIEST = function()
 				{ 10899, 48, bm = { 591 }, bl = { 3.4 }, mx = { 53 } },
 				{ 10900, 54, bm = { 749 }, bl = { 3.9 }, mx = { 59 } },
 				{ 10901, 60, bm = { 928 }, bl = { 4.3 }, mx = { 65 } },
-			} },
+			},
+			threat = { k = "unknown" } },
 		{ key = "prayer of healing", school = 2, cmp = "heal", roll = "spell",
 			parts = { { "heal", 0.286, per = "target", b = "c" } },
 			ranks = {
@@ -1394,7 +1401,8 @@ D.CLASS.MAGE = function()
 				{ 8458, 40, bm = { 463 } },
 				{ 10223, 50, bm = { 668 } },
 				{ 10225, 60, bm = { 913 } },
-			} },
+			},
+			threat = { k = "unknown" } },
 		{ key = "fireball", school = 3, cmp = "spell", roll = "spell",
 			parts = { { "sp", 1, b = "c" }, { "sp", 0, n = 4, p = 2, b = "c" } },
 			ranks = {
@@ -1437,7 +1445,8 @@ D.CLASS.MAGE = function()
 				{ 8462, 42, bm = { 463 } },
 				{ 10177, 52, bm = { 668 } },
 				{ 28609, 60, bm = { 913 } },
-			} },
+			},
+			threat = { k = "unknown" } },
 		{ key = "frostbolt", school = 5, cmp = "spell", roll = "spell",
 			parts = { { "sp", 0.814, b = "c" } },
 			ranks = {
@@ -1454,7 +1463,7 @@ D.CLASS.MAGE = function()
 				{ 25304, 60, ct = 3000, bm = { 475 }, bl = { 3.2 }, mx = { 64 } },
 			} },
 		{ key = "frostfire bolt", sch = { 3, 5 }, cmp = "spell", roll = "spell",
-			parts = { { "sp", 0.814, sch = { 3, 5 }, b = "c" }, { "sp", 0, n = 3, p = 3, sch = { 3, 5 }, b = "c" } },
+			parts = { { "sp", 0.814, sch = { 3, 5 }, b = "e" }, { "sp", 0, n = 3, p = 3, sch = { 3, 5 }, b = "e" } },
 			ranks = {
 				{ 401502, 40, ct = 3000, du = 9000, bm = { 100, 27 }, bl = { 1.3 }, mx = { 48 } },
 				{ 1237312, 50, ct = 3000, du = 9000, bm = { 182, 39 }, bl = { 1.7 }, mx = { 58 } },
@@ -1467,7 +1476,8 @@ D.CLASS.MAGE = function()
 				{ 13031, 46, bm = { 542 }, bl = { 3.2 }, mx = { 52 } },
 				{ 13032, 52, bm = { 671 }, bl = { 3.6 }, mx = { 58 } },
 				{ 13033, 58, bm = { 811 }, bl = { 4 }, mx = { 64 } },
-			} },
+			},
+			threat = { k = "unknown" } },
 		{ key = "ice lance", school = 5, cmp = "spell", roll = "spell",
 			parts = { { "sp", 0.1, b = "e" } },
 			ranks = {
@@ -1487,7 +1497,8 @@ D.CLASS.MAGE = function()
 				{ 10191, 44, bm = { 390 } },
 				{ 10192, 52, bm = { 480 } },
 				{ 10193, 60, bm = { 570 } },
-			} },
+			},
+			threat = { k = "unknown" } },
 		{ key = "pyroblast", school = 3, cmp = "spell", roll = "spell",
 			parts = { { "sp", 1, b = "c" }, { "sp", 0.6, n = 4, p = 3, b = "c" } },
 			ranks = {
@@ -1669,7 +1680,8 @@ D.CLASS.WARLOCK = function()
 				{ 11739, 42, bm = { 470 } },
 				{ 11740, 52, bm = { 675 } },
 				{ 28610, 60, bm = { 920 } },
-			} },
+			},
+			threat = { k = "unknown" } },
 		{ key = "shadowburn", school = 6, cmp = "spell", roll = "spell",
 			parts = { { "sp", 0.429, b = "c" } },
 			ranks = {
@@ -1881,7 +1893,7 @@ D.CLASS.DRUID = function()
 				{ 16813, 48, c = { 0.48 }, n = { 8 }, ct = 0, du = 24000, bm = { 168 } },
 				{ 17329, 58, ct = 0, du = 27000, bm = { 234 } },
 			} },
-		{ key = "pounce", school = 1, cmp = "dot", roll = "special",
+		{ key = "pounce", school = 1, cmp = "dot", roll = "special", nd = true,
 			parts = { { "ap", 0.15, n = 6, p = 3, b = "m" } },
 			ranks = {
 				{ 9005, 36, ct = 0, du = 18000, bm = { 114 } },
@@ -1904,7 +1916,7 @@ D.CLASS.DRUID = function()
 				{ 1824, 44, du = 9000, bm = { 56, 96 } },
 				{ 9904, 54, du = 9000, bm = { 76, 126 } },
 			} },
-		{ key = "ravage", school = 1, cmp = "strike", roll = "special",
+		{ key = "ravage", school = 1, cmp = "strike", roll = "special", nd = true,
 			parts = { { "wpn", 4.35, spd = "cat", h = "main", b = "c" } },
 			ranks = {
 				{ 6785, 32, bm = { 42 } },
@@ -2180,7 +2192,7 @@ D.DEFAULTS = {
 	HUNTER = { damage = { "auto shot", "aimed shot", "multi-shot", "arcane shot", "serpent sting" } },
 	MAGE = { damage = { "frostbolt", "fireball", "arcane missiles" } },
 	PALADIN = { damage = { "attack", { "seal of command", "judgement of command", needs = "seal of command", ["else"] = { "seal of righteousness", "judgement of righteousness" } }, "holy strike" }, healer = { "holy light", "flash of light", "holy shock" }, tank = { "attack", "holy shield", "consecration" } },
-	PRIEST = { damage = { "mind blast", "shadow word: pain", "mind flay" }, healer = { { "greater heal", "heal" }, "flash heal", "renew" } },
+	PRIEST = { damage = { "mind blast", "shadow word: pain", "mind flay" }, healer = { { "greater heal", "heal", "lesser heal" }, "flash heal", "renew" } },
 	ROGUE = { damage = { "attack", "sinister strike", "backstab", "mutilate", "eviscerate" } },
 	SHAMAN = { damage = { "lightning bolt", "chain lightning", "earth shock", { "attack", "stormstrike", needs = "stormstrike" } }, healer = { "healing wave", "lesser healing wave", "chain heal" } },
 	WARLOCK = { damage = { "shadow bolt", "corruption", "immolate" } },
@@ -2190,7 +2202,7 @@ D.DEFAULTS = {
 -- count spell power; the highest rank of each spell first.
 D.PROBES = {
 	DRUID = { 25297, 9889, 9888, 9758, 8903, 6778, 5189, 5188, 5187, 5186, 5185, 9835, 9834, 9833, 8929, 8928, 8927, 8926, 8925, 8924, 8921, 9858, 9857, 9856, 9750, 8941, 8940, 8939, 8938, 8936, 25298, 9876, 9875, 8951, 8950, 8949, 2912, 9912, 8905, 6780, 5180, 5179, 5178, 5177, 5176 },
-	MAGE = { 1239700, 1239699, 1239697, 1239696, 400574, 10202, 10201, 8439, 8438, 8437, 1449, 1326082, 1326081, 1326080, 1326079, 13021, 13020, 13019, 13018, 11113, 10199, 10197, 8413, 8412, 2138, 2137, 2136, 25306, 10151, 10150, 10149, 10148, 8402, 8401, 8400, 3140, 145, 143, 133, 10216, 10215, 8423, 8422, 2121, 2120, 1237313, 1237312, 401502, 18809, 12526, 12525, 12524, 12523, 12522, 12505, 11366, 10207, 10206, 10205, 8446, 8445, 8444, 2948 },
+	MAGE = { 1239700, 1239699, 1239697, 1239696, 400574, 10202, 10201, 8439, 8438, 8437, 1449, 1326082, 1326081, 1326080, 1326079, 13021, 13020, 13019, 13018, 11113, 10199, 10197, 8413, 8412, 2138, 2137, 2136, 25306, 10151, 10150, 10149, 10148, 8402, 8401, 8400, 3140, 145, 143, 133, 10216, 10215, 8423, 8422, 2121, 2120, 18809, 12526, 12525, 12524, 12523, 12522, 12505, 11366, 10207, 10206, 10205, 8446, 8445, 8444, 2948 },
 	PALADIN = { 10314, 10313, 10312, 5615, 5614, 879, 19943, 19942, 19941, 19940, 19939, 19750, 24239, 24274, 24275, 25292, 10329, 10328, 3472, 1042, 1026, 647, 639, 635, 10318, 2812 },
 	PRIEST = { 1277335, 1277334, 1277333, 1277332, 1277331, 19243, 19242, 19241, 19240, 19238, 19236, 13908, 10917, 10916, 10915, 9474, 9473, 9472, 2061, 25314, 10965, 10964, 10963, 2060, 6064, 6063, 2055, 2054, 15261, 15267, 15266, 15265, 15264, 15263, 15262, 14914, 27801, 27800, 27799, 15431, 15430, 15237, 2053, 2052, 2050, 10947, 10946, 10945, 8106, 8105, 8104, 8103, 8102, 8092, 25316, 10961, 10960, 996, 596, 1309636, 1309635, 1309633, 1309595, 10934, 10933, 6060, 1004, 984, 598, 591, 585 },
 	SHAMAN = { 10623, 10622, 1064, 10605, 2860, 930, 421, 10414, 10413, 10412, 8046, 8045, 8044, 8042, 29228, 10448, 10447, 8053, 8052, 8050, 10473, 10472, 8058, 8056, 25357, 10396, 10395, 8005, 959, 939, 913, 547, 332, 331, 10468, 10467, 10466, 8010, 8008, 8004, 15208, 15207, 10392, 10391, 6041, 943, 915, 548, 529, 403 },

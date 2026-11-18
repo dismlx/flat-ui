@@ -6307,9 +6307,10 @@
    "name": "Power Word: Shield",
    "parts": [
     {
-     "basis": "c",
+     "basis": "e",
      "cite": [
-      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+      "client rows of build 1.60.1.70938 (wowsims/forever capture): the absorb's coefficient",
+      "curation.json estimates: which stat counts is not known (healing, the vanilla rule)"
      ],
      "coef": 0.1,
      "find": "absorb",
@@ -7445,7 +7446,7 @@
     {
      "basis": "e",
      "cite": [
-      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+      "wowsims/forever simulator: its Rupture table, the 1.12 rule, unverified on Forever (curation.json estimates)"
      ],
      "coef": 0.04,
      "cp": [

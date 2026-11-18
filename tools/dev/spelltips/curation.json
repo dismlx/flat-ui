@@ -134,11 +134,23 @@
     "drain mana",
     "lay on hands",
     "bloom",
-    "dark pact"
+    "dark pact",
+    "rockbiter weapon",
+    "windfury totem",
+    "flametongue totem",
+    "seal of the crusader",
+    "judgement of the crusader",
+    "swiftmend",
+    "deep wounds",
+    "kidney shot"
    ],
-   "why": "No line: Dark Pact is Classic only, and Drain Mana, Lay on Hands and Bloom's Spirit heal take no spell power and have no threat known on Forever. Drain Mana, Lay on Hands, Bloom and Dark Pact are not in the slices at all; the keys stand here so a later slice cannot bring them back unnoticed.",
+   "why": "No line: Dark Pact is Classic only, and Drain Mana, Lay on Hands and Bloom's Spirit heal take no spell power and have no threat known on Forever. Rockbiter Weapon, Windfury Totem and Seal of the Crusader give attack power, which the character sheet already counts (Rockbiter Weapon's enchants stay in rockbiter for Spirit Weapons' threat); Flametongue Totem's hits (16368) and Judgement of the Crusader's Holy damage taken have no coefficient of their own; Swiftmend heals for the HoT it reads, with no share of its own; Deep Wounds takes no attack power on Forever (measured) and Kidney Shot deals no damage. None of them is in the slices; the keys stand here so a later slice cannot bring them back unnoticed.",
    "source": [
-    "client rows of build 1.60.1.70938"
+    "client rows of build 1.60.1.70938",
+    "wowsims/forever docs/evidence/EV-0013 (Flametongue Totem's hit 16368 has no coefficient)",
+    "wowsims/forever docs/evidence/EV-0062 (Seal of the Crusader)",
+    "wowsims/forever docs/evidence/EV-0139 (Deep Wounds takes no attack power)",
+    "wowsims/forever docs/evidence/EV-0143 (Judgement of the Crusader)"
    ]
   },
   "threat": {
@@ -191,9 +203,11 @@
   "judgement of command": {
    "part": 0,
    "note": "half unless the target is stunned",
-   "why": "Its seal's text deals half the judgement's damage unless the target is stunned or incapacitated ($/2;20966s1).",
+   "free": 0.5,
+   "why": "Its seal's text deals half the judgement's damage unless the target is stunned or incapacitated ($/2;20966s1). The comparison works against a boss or an enemy of your level, neither of them stunned, so it counts half (free) of the whole part, an estimate: the simulator halves only the base, the research the spell damage share too.",
    "source": [
-    "client text of 20920"
+    "client text of 20920",
+    "wowsims/forever sim/paladin/seal_of_command.go"
    ]
   },
   "consecration": {
@@ -223,14 +237,6 @@
     "client text of 1293695 and variables 1016"
    ]
   },
-  "ghostly strike": {
-   "part": 0,
-   "note": "180% with a dagger",
-   "why": "Its row holds a second weapon percent of 180 for daggers (effect 3); the part gives the one for other weapons.",
-   "source": [
-    "client row 14278 effects 0 and 3"
-   ]
-  },
   "whirlwind": {
    "part": 1,
    "note": "off hand at half, as the simulator models it",
@@ -246,6 +252,51 @@
    "why": "No reading covers the off-hand strike of Mutilate.",
    "source": [
     "wowsims/forever simulator"
+   ]
+  }
+ },
+ "dagger": {
+  "ghostly strike": {
+   "part": 0,
+   "effect": 3,
+   "why": "Its text deals $s1% weapon damage, $m4% if a dagger is in the main hand: effect 3 holds the dagger's percent (180).",
+   "source": [
+    "client row 14278 effects 0 and 3, and its text"
+   ]
+  },
+  "hemorrhage": {
+   "part": 0,
+   "effect": 4,
+   "why": "Its text deals $m4% weapon damage, $m5% if a dagger is equipped: effect 4 holds the dagger's percent (145).",
+   "source": [
+    "client row 16511 effects 3 and 4, and its text"
+   ]
+  }
+ },
+ "durations": {
+  "penance": {
+   "row": 402261,
+   "why": "The rank rows hold no duration and their bolts are not periodic; every rank's text names the channel's helper row ($402261t2, $402261d), which lasts 2000 ms with a bolt a second, so 3 bolts land in 2 seconds.",
+   "source": [
+    "client rows 402174, 1240720, 1240721, 1316995 (their texts) and 402261 (DurationMs 2000)"
+   ]
+  }
+ },
+ "estimates": {
+  "power word: shield": {
+   "part": 0,
+   "why": "Its absorb row stores 0.1 but no row or text says whether healing or spell damage counts; healing is the vanilla rule, an estimate (design 3.5).",
+   "source": [
+    "client rows 17 to 10901",
+    "research_coef_casters.md (Power Word: Shield)"
+   ]
+  },
+  "rupture": {
+   "part": 0,
+   "why": "No row holds Rupture's attack power shares: its rows give points a combo point and no attack power coefficient. The shares are the 1.12 table the simulator keeps, unverified on Forever (design 3.6).",
+   "source": [
+    "wowsims/forever simulator (its Rupture table, the 1.12 rule)",
+    "client rows 1943 to 11275 (no attack power coefficient)"
    ]
   }
  },
@@ -411,6 +462,15 @@
    "client rows 20286 and 20414 (DefenseType 3)"
   ]
  },
+ "nm": {
+  "keys": [
+   "shank"
+  ],
+  "why": "Its text says it cannot miss.",
+  "source": [
+   "client text of 1329549"
+  ]
+ },
  "compare": {
   "kinds": {
    "seal of righteousness": "seal",
@@ -418,7 +478,9 @@
    "holy shield": "proc",
    "sunder armor": "threat",
    "faerie fire": "threat",
-   "holy shock": "heal"
+   "holy shock": "heal",
+   "penance": "hot",
+   "holy nova": "heal"
   },
   "none": [
    "rupture",
@@ -452,7 +514,7 @@
    "contingency plan",
    "prayer of mending"
   ],
-  "why": "kinds: Holy Shock heals or harms by its target and counts as the heal it is in a healer's lines; Seal of Righteousness and Seal of Command are worked out from the swings (design 2.5), Holy Shield a proc on each block, Sunder Armor and Faerie Fire count their threat. none: procs, totems, traps, poisons and imbues whose rate the model does not know, the finishers whose base grows with combo points in ways the rows do not give (Rupture's duration, Death Mark's stored damage), and spells whose amount is not the spell's own (Mana Burn and Feedback burn mana, Health Funnel heals the pet, Lightwell Renew is cast by the Lightwell, Execute converts rage, Inferno summons, Contingency Plan and Prayer of Mending wait for damage). They keep their tooltip lines.",
+  "why": "kinds: Holy Shock, Penance and Holy Nova heal or harm by their target and count as the heal they are in a healer's lines (Penance a channelled heal, so its second is one of the channel); Seal of Righteousness and Seal of Command are worked out from the swings (design 2.5), Holy Shield a proc on each block, Sunder Armor and Faerie Fire count their threat. none: procs, totems, traps, poisons and imbues whose rate the model does not know, the finishers whose base grows with combo points in ways the rows do not give (Rupture's duration, Death Mark's stored damage), and spells whose amount is not the spell's own (Mana Burn and Feedback burn mana, Health Funnel heals the pet, Lightwell Renew is cast by the Lightwell, Execute converts rage, Inferno summons, Contingency Plan and Prayer of Mending wait for damage). They keep their tooltip lines.",
   "source": [
    "design 2.5"
   ]
@@ -515,7 +577,8 @@
    "healer": [
     [
      "greater heal",
-     "heal"
+     "heal",
+     "lesser heal"
     ],
     "flash heal",
     "renew"
@@ -589,7 +652,7 @@
     "chain heal"
    ]
   },
-  "why": "The default lines of design 2.1 by class and by the role ns.PlayerRole gives (damage, tank, healer), and a druid's cat set (cat) for Cat Form; a bear form takes the tank set. Every line counts only if known. A line is a key; a list of keys is the first of them known (Greater Heal, else Heal); an object { needs, keys, else } is each of its keys while needs is known, else each of else (the seal and judgement of Command with Seal of Command known, else those of Righteousness; a shaman's Attack and Stormstrike with Stormstrike known). make_spelltips.py writes the object as { key, key ..., needs = key, [\"else\"] = { key ... } }, which GearLines.lua reads.",
+  "why": "The default lines of design 2.1 by class and by the role ns.PlayerRole gives (damage, tank, healer), and a druid's cat set (cat) for Cat Form; a bear form takes the tank set. Every line counts only if known. A line is a key; a list of keys is the first of them known (Greater Heal, else Heal, else Lesser Heal, so a priest has a heal from level 1); an object { needs, keys, else } is each of its keys while needs is known, else each of else (the seal and judgement of Command with Seal of Command known, else those of Righteousness; a shaman's Attack and Stormstrike with Stormstrike known). make_spelltips.py writes the object as { key, key ..., needs = key, [\"else\"] = { key ... } }, which GearLines.lua reads.",
   "source": [
    "design 2.1"
   ]

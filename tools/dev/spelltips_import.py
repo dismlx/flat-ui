@@ -4,22 +4,27 @@
 Usage: python3 tools/dev/spelltips_import.py CAPTURE SQLITE
 
 CAPTURE is wowsims/forever's capture of the Forever client's spell rows (assets/db_inputs/spell_store_inputs.json, plain or
-gzipped): build 1.60.1.70938 with hotfix push 114122, every class (its Builds and Hotfixes keys). SQLITE is GrunzForever's export of
-every client table (wow_wowf_1.60.1.70888.sqlite: build 1.60.1.70888 with the hotfixes of its date). Every row comes from the capture;
-the export gives only what the capture lacks: the rows of the few spells it holds no row of (Attack and the generic shots), the
-description variables (SpellXDescriptionVariables, SpellDescriptionVariables), the description of 70888 of each spell that has
-variables (so make_spelltips.py can see the text is the same in 70938) and the trait nodes of the talents (TraitNodeEntry,
-TraitNodeXTraitNodeEntry, TraitNode).
+gzipped): build 1.60.1.70938 with hotfix push 114122, every class (its Builds and Hotfixes keys; the hotfix push of the spell rows is
+the largest of the class groups, as the items group has its own). SQLITE is GrunzForever's export of every client table
+(wow_wowf_1.60.1.70888.sqlite: build 1.60.1.70888 with the hotfixes of its date); its build is the Version of its _ExtractionMetadata
+table, else the 1.60.1.NNNNN of its file name, and the import stops when it finds neither. Every row comes from the capture; the export
+gives only what the capture lacks: the rows of the few spells it holds no row of (Attack and the generic shots), the description
+variables (SpellXDescriptionVariables, SpellDescriptionVariables), the description of 70888 of each spell that has variables (so
+make_spelltips.py can see the text is the same in 70938) and the trait nodes of the talents (TraitNodeEntry, TraitNodeXTraitNodeEntry,
+TraitNode).
 
 The spells read are those the other inputs name (coef.json, threat.json, gear.json, curation.json beside client_spells.json): every
 rank, every carrier row, the spells of the rules and their tooltips, the crit talents, the equip spells of the threat items and enchants,
-Rockbiter Weapon's imbues, and one level down every spell their effects trigger. Each spell gets one uniform record; each talent its
-definition, node, tree, rank count and curve per effect (CAP TraitNodes and TraitPoints). The IDs taken from the export are printed.
-Python 3, standard library only; the output is sorted, so a new capture shows as a plain diff.
+Rockbiter Weapon's imbues, the rows curation.json's durations read a duration from, and one level down every spell their effects
+trigger. Each spell gets one uniform record, with the item a caster must wear for it (equip: the item class and subclass mask of CAP
+Equipped or SpellEquippedItems, null for none); each talent its definition, node, tree, rank count and curve per effect (CAP TraitNodes
+and TraitPoints). The IDs taken from the export are printed. Python 3, standard library only; the output is sorted, so a new capture
+shows as a plain diff.
 """
 import gzip
 import json
 import os
+import re
 import sqlite3
 import sys
 
@@ -82,6 +87,7 @@ def wanted():
         for it in cur['threat_items'][group]:
             ids.add(it['spell'])
     ids.update(cur['rockbiter']['spells'])
+    ids.update(d['row'] for k, d in cur['durations'].items() if k not in ('why', 'source'))
     return ids, talents
 
 
@@ -101,6 +107,13 @@ def cap_effect(e):
             'misc': e['Misc'], 'misc2': e['Misc2'], 'family': flags.get('Family', 0), 'mask': list(flags.get('Mask') or [0, 0, 0, 0])}
 
 
+def equip_of(item_class, subclass):
+    """The item a caster must wear for a spell: [class, subclass mask], or None for none (a class below 0 or no row)."""
+    if item_class is None or item_class < 0:
+        return None
+    return [item_class, subclass or 0]
+
+
 def cap_spell(cap, sid, build):
     k = str(sid)
     misc = cap['Misc'].get(k)
@@ -112,10 +125,12 @@ def cap_spell(cap, sid, build):
     cls = cap['ClassOptions'].get(k) or {}
     misc = misc or {}
     attr = misc.get('Attr') or [0, 0]
+    equip = cap['Equipped'].get(k) or {}
     return {'build': build, 'name': cap['Names'].get(k), 'rank': cap['Subtexts'].get(k), 'desc': cap['Descriptions'].get(k) or '',
             'level': lv.get('SpellLevel'), 'base': lv.get('BaseLevel'), 'max': lv.get('MaxLevel'),
             'cast': misc.get('CastTimeMs'), 'dur': misc.get('DurationMs'), 'school': misc.get('School'),
             'def': cat.get('DefenseType'), 'attr0': attr[0], 'attr1': attr[1] if len(attr) > 1 else 0,
+            'equip': equip_of(equip.get('Class'), equip.get('Subclass')),
             'family': cls.get('Family', 0), 'mask': list(cls.get('Mask') or [0, 0, 0, 0]),
             'effects': sorted((cap_effect(e) for e in effects or []), key=lambda e: e['i'])}
 
@@ -149,6 +164,7 @@ def db_spell(db, sid, build):
     lv = one(db, 'SELECT SpellLevel, BaseLevel, MaxLevel FROM SpellLevels WHERE SpellID = ? AND DifficultyID = 0', sid)
     cat = one(db, 'SELECT DefenseType FROM SpellCategories WHERE SpellID = ? AND DifficultyID = 0', sid)
     cls = one(db, 'SELECT SpellClassSet, SpellClassMask FROM SpellClassOptions WHERE SpellID = ?', sid)
+    equip = one(db, 'SELECT EquippedItemClass, EquippedItemSubclass FROM SpellEquippedItems WHERE SpellID = ?', sid)
     attr = jlist(misc[0], 2) if misc else [0, 0]
     cast = dur = None
     if misc:
@@ -165,8 +181,8 @@ def db_spell(db, sid, build):
     return {'build': build, 'name': name[0] if name else None, 'rank': text[0] or None, 'desc': text[1] or '',
             'level': lv[0] if lv else None, 'base': lv[1] if lv else None, 'max': lv[2] if lv else None,
             'cast': cast, 'dur': dur, 'school': misc[3] if misc else None, 'def': cat[0] if cat else None,
-            'attr0': attr[0], 'attr1': attr[1], 'family': cls[0] if cls else 0, 'mask': jlist(cls[1], 4) if cls else [0, 0, 0, 0],
-            'effects': out}
+            'attr0': attr[0], 'attr1': attr[1], 'equip': equip_of(*equip) if equip else None,
+            'family': cls[0] if cls else 0, 'mask': jlist(cls[1], 4) if cls else [0, 0, 0, 0], 'effects': out}
 
 
 def db_variables(db, sid):
@@ -188,6 +204,20 @@ def db_node(db, definition, tree):
     return live[0] if live else None
 
 
+def db_build(db, path):
+    """The build of the export: the Version of its _ExtractionMetadata table, else the 1.60.1.NNNNN of its file name."""
+    try:
+        row = one(db, "SELECT Value FROM _ExtractionMetadata WHERE Key = 'Version'")
+    except sqlite3.Error:
+        row = None
+    if row and row[0] and re.match(r'^\d+\.\d+\.\d+\.\d+$', row[0]):
+        return row[0]
+    m = re.search(r'(\d+\.\d+\.\d+\.\d+)', os.path.basename(path))
+    if m:
+        return m.group(1)
+    raise SystemExit('the build of the export %s is in neither its _ExtractionMetadata nor its file name' % path)
+
+
 # The whole ------------------------------------------------------------------------------------------------------------------------
 
 def main():
@@ -196,11 +226,12 @@ def main():
     cap = read_capture(sys.argv[1])
     db = sqlite3.connect('file:%s?mode=ro' % sys.argv[2], uri=True)
     builds = sorted(set(cap['Builds'].values()))
-    hotfixes = sorted(set(cap['Hotfixes'].values()))
     if len(builds) != 1:
         raise SystemExit('the capture holds several builds: %s' % builds)
     build = builds[0]
-    fallback = '1.60.1.70888'
+    # The spell rows' hotfix push: the largest of the class groups; the items group has a push of its own.
+    hotfix = max(cap['Hotfixes'][k] for k in cap['Hotfixes'] if k != 'items')
+    fallback = db_build(db, sys.argv[2])
     ids, talents = wanted()
     spells, fallen, missing = {}, [], []
     todo, seen = sorted(ids), set()
@@ -248,8 +279,9 @@ def main():
                     'the capture lacks (build says which), the description variables (vars), the 70888 description of a spell with '
                     'variables (desc70888) and the trait nodes. Effects: i index, type, aura, bp base points (the mean), var variance, '
                     'ppl points a level, ppr points a combo point, period ms, sp and ap the bonus coefficients, trigger, chain targets '
-                    'and amp amplitude, misc, misc2, and the class family and mask the effect modifies.' % (build, hotfixes[-1], fallback),
-           'build': build, 'hotfix': max(cap['Hotfixes'][k] for k in cap['Hotfixes'] if k != 'items'), 'fallback': fallback,
+                    'and amp amplitude, misc, misc2, and the class family and mask the effect modifies. equip: the item class and '
+                    'subclass mask a caster must wear (null for none).' % (build, hotfix, fallback),
+           'build': build, 'hotfix': hotfix, 'fallback': fallback,
            'spells': {str(k): spells[k] for k in sorted(spells)}, 'talents': {str(k): trait[k] for k in sorted(trait)}}
     with open(OUT, 'w', encoding='utf-8') as handle:
         handle.write('{\n')

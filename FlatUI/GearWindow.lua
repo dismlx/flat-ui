@@ -3,8 +3,8 @@ local _, ns = ...
 -- The Gear comparison window (design 2.7): the part "gear window" of Chat and tooltips, a small window of Flat UI's own, FlatUIGear, with the whole
 -- profile of the spells chosen for the gear comparison (ns.GearChosen, GearLines.lua), each now and with an item, as a cast, a second or threat. It is
 -- the place to drop items and spells on, and it works with Your spells in item tooltips off: it is a tool of its own, and the list rows of the Spells
--- and gear tab serve both. /flatui gear and the tab's Gear comparison window row open and close it (ns.GearWindowToggle), /flatui gear <item> shows
--- that item in it (ns.GearWindowShow), and Escape closes it; the item and the switch are kept for the session.
+-- and gear tab serve both. /flatui gear opens and closes it (ns.GearWindowToggle); the tab's Gear comparison window row opens it, or raises it when it
+-- is open, and /flatui gear <item> shows that item in it (ns.GearWindowShow); Escape closes it; the item and the switch are kept for the session.
 -- A fight is InCombatLockdown's answer (WL/apis.yaml:39650), a withheld one counting as a fight; the time of a spell dropped is GetTime's (:39050).
 -- Everything runs as the part "gear window" of the chat module (ns.EachPart, Core.lua:2168-2199), each run with a count of its own as its first
 -- argument, so three faults stop the window alone with a line for /flatui status (design 4.4); the first fault also goes to the game's error handler
@@ -34,7 +34,10 @@ local _, ns = ...
 -- GearLines.lua's, else the game's (C_Spell.GetSpellName, :26753); the role is S.state's, else ns.PlayerRole's, and the level S.state's, else
 -- UnitLevel's (:43168).
 -- Working it out: with an item G.Compare (the slots it would take, each line now and with it), with none G.Expect of each line in the figure G.Figure
--- gives it for the switch (design 4.3), with the rows of the tab and G.Inputs. It is worked out again out of combat only, when SpellModel's version
+-- gives it for the switch (design 4.3), with the rows of the tab and G.Inputs. An item is first put to the test of the item tooltips
+-- (ns.GearWearable, GearLines.lua, on the lines C_TooltipInfo.GetHyperlink gives for it): one the player can never wear (its type, class or race) is
+-- not compared, and the place line says so over the lines as with no item; for one the player cannot wear yet, "Not wearable yet:" says what it
+-- needs, G.Compare's notYet else the test's (a type the player has yet to learn). It is worked out again out of combat only, when SpellModel's version
 -- (M.Version: the state, the stats, talents, gear, role and the rows of the tab), the version of the list (ns.GearListVersion), the switch or the item
 -- changed, looked at every half second while it shows; in a fight it keeps its numbers and its foot says the stats are from before the fight. A drop,
 -- the switch and a line taken off are worked out at once, also in a fight, where GearModel gives what it worked out before it (design 4.7).
@@ -47,10 +50,13 @@ local _, ns = ...
 -- GetCursorInfo's fourth answer, the second being its slot (Blizzard_SharedTalentUI/Blizzard_SharedTalentSelectionTemplates.lua:137;
 -- Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.lua:1953-1955), and a macro's is the spell it casts (GetMacroSpell, WL/apis.yaml:37417), as
 -- Cooldowns reads a macro's (Cooldowns.lua:2571-2579). The cursor keeps the spell: one dragged off an action bar has left its slot already, and
--- ClearCursor would take it off the bar. An item dropped or clicked on the window is compared, and ClearCursor (:34956, not protected) puts it back
--- where it came from, also in a fight, as Bags' sections give a dropped item back (BagsLayout.lua:1408-1425). A right click takes a line off the list
--- (ns.GearRemove). While the cursor holds an item or a spell, the part of the window that takes it is lit, looked at ten times a second, as Bags
--- lights the titles that take an item (BagsLayout.lua:40-45).
+-- ClearCursor would take it off the bar. An item dropped or clicked on the window is compared. One lifted from a bag, the bank or a worn slot, where
+-- it stays locked while it rides the cursor (C_Cursor.GetCursorItem, :10071, a bag slot or a worn slot by its ItemLocationMixin, and C_Item.IsLocked,
+-- :17097), goes back there with ClearCursor (:34956, not protected), also in a fight, as Bags' sections give a dropped item back
+-- (BagsLayout.lua:1408-1425); any other, such as one dragged off an action bar (PickupAction takes it off the bar, Blizzard_ActionBar/Shared/
+-- ActionButton.lua:1429-1437), stays on the cursor, as a spell does. The click that ends a drag on the window brings the same thing again, which
+-- counts as that drop. A right click takes a line off the list (ns.GearRemove). While the cursor holds an item or a spell, the part of the window
+-- that takes it is lit, looked at ten times a second, as Bags lights the titles that take an item (BagsLayout.lua:40-45).
 -- The frame: CreateFrame on UIParent, named FlatUIGear, made the first time it opens and only out of combat (an opening asked for in a fight before
 -- that waits for its end, ns.OutOfCombat), in the MEDIUM strata among the game's windows, or DIALOG when it shows while the options window does
 -- (HIGH, Panel.lua:2654; ns.PanelShown), so the window its row there opens shows above it, as the Edit Mode layout text does (LayoutText.lua:38);
@@ -108,8 +114,8 @@ local CASTS = { auto = "a swing", shot = "a shot", wand = "a shot", seal = "a hi
 local FORMS = { [1] = "cat", [5] = "bear", [8] = "bear" }
 local HANDS = { main = 16, off = 17, both = 16, ranged = 18 }
 local NORM, SWING = { one = 2.4, dagger = 1.7, two = 3.3, ranged = 2.8 }, { cat = 1.0, bear = 2.5 }
--- Seconds between two looks at what the window was worked out from, and at the cursor; how soon the same spell again counts as the same drop (the
--- click that ends a drag on the window).
+-- Seconds between two looks at what the window was worked out from, and at the cursor; how soon the same item or spell again counts as the same drop
+-- (the click that ends a drag on the window).
 local TICK, LOOK, DROP_AGAIN = 0.5, 0.1, 0.3
 -- The dim lines the window holds under its table (the item's notes) and in its foot, the most lines it shows at once, and the separators' opacity.
 local NOTES, FOOT, MOST_ROWS = 10, 7, 16
@@ -130,6 +136,7 @@ local T = {
 	NO_ADD = "Gear comparison: the list of spells is not running, so the spell was not added.",
 	LOADING = "The game has not loaded this item yet.",
 	NOT_COMPARED = "This item is not compared with what you wear.",
+	NEVER = "You cannot wear this item.",
 	NOT_YET = "Not wearable yet.",
 	NOT_YET_LINE = "Not wearable yet: ",
 	NOT_COUNTED_LINE = "Not counted: ",
@@ -190,7 +197,7 @@ local IsSecret = ns.IsSecret
 -- asked for in a fight before the frame was made waits for the fight's end. moving, placed, dropped: a drag of the title bar, the spot the window
 -- was put at, and where it was let go while the movers could not keep it. runs: the count of the part's runs. faults: what went to the error handler
 -- already. requested: the items the client was asked to load. elapsed, looked: the time since the last look at the view and at the cursor.
--- spell, spellAt: the last spell dropped, and when.
+-- held, heldAt: the last item or spell dropped, and when.
 local W = { mode = "cast", chosen = false, offset = 0, runs = 0, faults = {}, requested = {}, elapsed = 0, looked = 0, words = {}, rows = {},
 	notes = {}, foot = {}, rules = {}, owners = {} }
 
@@ -950,13 +957,14 @@ local function Note(notes, text, prefix)
 end
 
 -- The dim lines of an item compared (design 2.6): not wearable yet, no change, each line not counted, the bonuses against a kind of creature, random
--- stats, and why it was not compared when the place line does not say it already.
-local function Notes(view, result)
+-- stats, and why it was not compared when the place line does not say it already. later is what the test of the item tooltips found the item needs
+-- (Wearing), which says it when G.Compare's notYet does not, as for a type the player has yet to learn.
+local function Notes(view, result, later)
 	local notes = view.notes
 	if result.notYet == true then
 		Note(notes, T.NOT_YET)
 	else
-		Note(notes, result.notYet, T.NOT_YET_LINE)
+		Note(notes, Text(result.notYet) or later, T.NOT_YET_LINE)
 	end
 	if result.noChange == true then
 		Note(notes, T.NO_CHANGE)
@@ -978,7 +986,23 @@ local function Notes(view, result)
 	end
 end
 
--- What the window shows now, the view Paint draws: the lines, now and with the item, in the figure of the switch, with the item's notes.
+-- Whether the player can wear the item: the test of the item tooltips (ns.GearWearable, GearLines.lua) on the lines of its link. True when the
+-- player can never wear it (its type, class or race), else false and what it needs first, or nil; false when that file is not there or fails.
+local function Wearing(link)
+	local wearable = Fn(ns, "GearWearable")
+	if not wearable then
+		return false, nil
+	end
+	local ok, never, later = pcall(wearable, link)
+	if not ok then
+		Report("GearWearable", never)
+		return false, nil
+	end
+	return not IsSecret(never) and never == true, Text(later)
+end
+
+-- What the window shows now, the view Paint draws: the lines, now and with the item, in the figure of the switch, with the item's notes. An item the
+-- player can never wear is not compared: the place line says so, and the lines show as with no item.
 local function Compute()
 	local view = { mode = W.mode, layout = "none", rows = {}, notes = {}, cands = {} }
 	local model, gear = ns.SpellModel, ns.GearModel
@@ -997,8 +1021,11 @@ local function Compute()
 	view.old = type(stats) == "table" and stats.old == true
 	if W.link then
 		view.item = ItemLook(W.link)
-		local result = Ask(gear, "Compare", W.link, lines, Options(view.mode))
-		if type(result) == "table" then
+		local never, later = Wearing(W.link)
+		local result = not never and Ask(gear, "Compare", W.link, lines, Options(view.mode)) or nil
+		if never then
+			view.place = T.NEVER
+		elseif type(result) == "table" then
 			-- With no slot to compare with, why goes where the slots would be named; the header is the item tooltip's and names a unit.
 			if not Compared(view, result, lines, state) then
 				view.place = Text(result.why)
@@ -1006,7 +1033,7 @@ local function Compute()
 					Note(view.notes, view.item.loaded and T.NOT_COMPARED or T.LOADING)
 				end
 			end
-			Notes(view, result)
+			Notes(view, result, later)
 		else
 			Note(view.notes, view.item.loaded and T.NOT_COMPARED or T.LOADING)
 		end
@@ -1432,24 +1459,60 @@ local function Add(spell)
 	end
 end
 
--- Takes what the cursor holds. An item is compared and goes back where it came from; a spell goes on the list and stays on the cursor (header). The
--- click that ends a drag on the window brings the same spell again, which counts as that drop. True when it took something.
+-- True when the item on the cursor was lifted from a bag, the bank or a worn slot, so ClearCursor puts it back there (header): the place
+-- C_Cursor.GetCursorItem gives is a bag slot or a worn slot, and the item there is locked, as it is while it rides the cursor. An item with no such
+-- place, such as one dragged off an action bar, is not, and neither is one whose place the client does not say.
+local function Lifted()
+	local get = Fn(_G.C_Cursor, "GetCursorItem")
+	local locked = Fn(C_Item, "IsLocked")
+	if not (get and locked) then
+		return false
+	end
+	local ok, place = pcall(get)
+	if not ok or IsSecret(place) or type(place) ~= "table" then
+		return false
+	end
+	local slotted = false
+	for _, name in ipairs({ "IsBagAndSlot", "IsEquipmentSlot" }) do
+		local is = Fn(place, name)
+		local okIs, answer = false, nil
+		if is then
+			okIs, answer = pcall(is, place)
+		end
+		if okIs and not IsSecret(answer) and answer == true then
+			slotted = true
+		end
+	end
+	if not slotted then
+		return false
+	end
+	local okLocked, held = pcall(locked, place)
+	return okLocked and not IsSecret(held) and held == true
+end
+
+-- Takes what the cursor holds. An item is compared and, lifted from a bag, the bank or a worn slot, goes back there; any other item and a spell stay
+-- on the cursor, and a spell goes on the list (header). The click that ends a drag on the window brings the same thing again, which counts as that
+-- drop. True when it took something.
 function Drop()
 	local kind, value = Held()
-	if kind == "item" then
-		pcall(ClearCursor)
-		W.link, W.offset = value, 0
-		Refresh()
-		return true
-	elseif kind == "spell" then
-		local now = Now()
-		if W.spell ~= value or now - (W.spellAt or 0) >= DROP_AGAIN then
-			W.spell, W.spellAt = value, now
-			Add(value)
-		end
+	if not kind then
+		return false
+	end
+	local now = Now()
+	if W.held == value and now - (W.heldAt or 0) < DROP_AGAIN then
 		return true
 	end
-	return false
+	W.held, W.heldAt = value, now
+	if kind == "item" then
+		if Lifted() then
+			pcall(ClearCursor)
+		end
+		W.link, W.offset = value, 0
+		Refresh()
+	else
+		Add(value)
+	end
+	return true
 end
 
 -- Takes a line off the list (ns.GearRemove, by the spell of the line), which says what it did.
@@ -2030,8 +2093,8 @@ end
 
 -- The contract (design 4.3) ----------------------------------------------------------------------------------------------------------------------
 
--- Opens or closes the window (/flatui gear, the tab's Gear comparison window row). True when it opened, closed or waits for the end of the fight;
--- false, with a line that says why, when Chat and tooltips or this part is off.
+-- Opens or closes the window (/flatui gear). True when it opened, closed or waits for the end of the fight; false, with a line that says why, when
+-- Chat and tooltips or this part is off.
 function ns.GearWindowToggle()
 	if W.opening then
 		W.opening = false
@@ -2048,7 +2111,8 @@ function ns.GearWindowToggle()
 	return Run(Open)
 end
 
--- Opens the window with an item (/flatui gear <item>): a link, an item string or an item ID; with none it opens with the item it had.
+-- Opens the window with an item (/flatui gear <item>): a link, an item string or an item ID; with none (the tab's Gear comparison window row) it opens
+-- with the item it had. An open window is raised (Raise) and worked out afresh, never closed.
 function ns.GearWindowShow(link)
 	if not Allowed() then
 		print(Refusal())

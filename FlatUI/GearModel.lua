@@ -9,17 +9,17 @@ local _, ns = ...
 -- SpellData.lua's (ns.SpellData), the chosen spells GearLines.lua's (ns.GearChosen, ns.GearListVersion) and the role Core.lua's (ns.PlayerRole), each
 -- looked up when asked, never while the files load.
 --
--- What it asks the game, in this order. Each call is under pcall and each answer passes ns.IsSecret or ns.Finite before it is compared, added,
--- joined or used as a key; a call that raises or a secret answer is withheld, and is told apart from none, as HitTableCalc.lua's Call does
--- (HitTableCalc.lua:70-81). In a fight (InCombatLockdown) nothing is worked out and the last answer for an item stays. The hit table's inputs are
--- read by C.Inputs right after each plain read of the stats, inside it (M.AfterRead), with every kind of attack, so a paladin's judgement gets a
--- Ranged line although the hit table gives a paladin melee and spells (HitTableCalc.lua:55-58), and with the ranged line of no ranged weapon while
--- the ranged slot holds none (GetInventoryItemID, C.LineOf: a paladin's libram is no ranged weapon, HitTableCalc.lua:509-523). With no read since
--- this file registered, a read is asked for (M.Mark, M.Stats), and with still none C.Inputs reads them here, only while the game gives stats plain
--- (C_Secrets.ShouldUnitStatsBeSecret, SecretPredicateAPIDocumentation.lua:388-396). Against, Where you stand and Hit cap against a boss come from
--- the rows of the Spells and gear tab (chat.gearAgainst, chat.gearFacing, chat.gearRules, and the hit table's hud.hitTableRules) and the player's level
--- (S.state, else UnitLevel), and the target of the table is the one those rows name, worked out again each time (C.Target), so a row changed since
--- the read counts at once.
+-- What it asks the game, in this order. Each call is under pcall and each answer passes ns.IsSecret or ns.Finite before it is compared, added, joined
+-- or used as a key; a call that raises or a secret answer is withheld, and is told apart from none, as HitTableCalc.lua's Call does
+-- (HitTableCalc.lua:70-81). In a fight (InCombatLockdown) nothing is worked out and the last answer for an item stays (for the last K.CACHE items).
+-- The hit table's inputs are read by C.Inputs right after each plain read of the stats, inside it (M.AfterRead), with every kind of attack, so a
+-- paladin's judgement gets a Ranged line although the hit table gives a paladin melee and spells (HitTableCalc.lua:55-58), and with the ranged line
+-- of no ranged weapon while the ranged slot holds none (GetInventoryItemID, C.LineOf: a paladin's libram is no ranged weapon,
+-- HitTableCalc.lua:509-523). With no read since this file registered, a read is asked for (M.Mark, M.Stats), and with still none C.Inputs reads them
+-- here, only while the game gives stats plain (C_Secrets.ShouldUnitStatsBeSecret, SecretPredicateAPIDocumentation.lua:388-396). Against, Where you
+-- stand and Hit cap against a boss come from the rows of the Spells and gear tab (chat.gearAgainst, chat.gearFacing, chat.gearRules, and the hit
+-- table's hud.hitTableRules) and the player's level (S.state, else UnitLevel), and the target of the table is the one those rows name, worked out
+-- again each time (C.Target), so a row changed since the read counts at once.
 -- An item: its kind (C_Item.GetItemInfoInstant, ItemDocumentation.lua:659-679), its name and quality (C_Item.GetItemInfo, :626-657, which gives
 -- nothing until the client has the item, so the game is asked to load it, C_Item.RequestLoadItemDataByID, :1710-1718, as BagsData.lua:1649 does,
 -- and the next build has the lines), its quality's colour for the header (C_Item.GetItemQualityColor, :921-936), its stats by the game's keys
@@ -31,11 +31,19 @@ local _, ns = ...
 -- out of combat), each worn item's slot from its GUID (C_Item.GetItemLocation, ItemDocumentation.lua:786-799, its equipmentSlotIndex as
 -- ChatTips.lua:134-157 reads it, else C_Item.GetItemLinkByGUID, :771-784, held against the worn links); then the slots its inventory type can take,
 -- and the uniqueness of rings, trinkets and a dual wielder's one-handers (C_Item.GetItemUniquenessByID, :1055-1072, and the item's Unique and
--- Unique-Equipped lines). Ammunition is compared only while the game uses it (C_PaperDollInfo.AmmoNeeded, PaperDollInfoDocumentation.lua:11-18).
+-- Unique-Equipped lines). Ammunition is compared only while the game uses it (C_PaperDollInfo.AmmoNeeded, PaperDollInfoDocumentation.lua:11-18,
+-- the game-wide flag) and the player does (UnitUsesAmmo("player"), UnitDocumentation.lua:3359-3372, as Camelot/PaperDollFrame.lua:1517 shows the
+-- slot; a nil answer hides nothing), and only ammunition the worn ranged weapon fires: arrows from a bow or crossbow, bullets from a gun (the
+-- subclasses of C_Item.GetItemInfoInstant, TrackerKinds.lua's rule). The ammunition's damage counts with the ranged weapon it fits, in every shot;
+-- a compared ranged weapon the worn ammunition does not fit counts it as a stand-in for ammunition of its kind, an estimate, and a thrown weapon or
+-- a wand counts none.
 -- A rating becomes percent with the client's own conversion (GetCombatRatingBonusForCombatRatingValue, PlayerScriptDocumentation.lua:335-349, which
 -- has no secret mark), else with the fixed sizes of D.MODEL.ratings. A spell's cast time is the castTime of C_Spell.GetSpellInfo
 -- (SpellDocumentation.lua:416-430, 1183-1195), as ProcTriggers.lua:119 reads it. A crit damage talent that is an aura (Shadowform in D.CRIT) is read
--- with C_UnitAuras.GetPlayerAuraBySpellID (UnitAuraDocumentation.lua:397-412), out of combat. The item lines are read with the client's own strings
+-- with C_UnitAuras.GetPlayerAuraBySpellID (UnitAuraDocumentation.lua:397-412), which answers nothing for an aura the game withholds
+-- (RequiresNonSecretAura, SecretPredicatesDocumentation.lua:28-31): no aura found is off only while C_Secrets.ShouldSpellAuraBeSecret
+-- (SecretPredicateAPIDocumentation.lua:139-153) answers a plain false, or the client has no such call out of combat; else the last plain answer
+-- stands, and with none the aura is unknown, an estimate. The item lines are read with the client's own strings
 -- (GlobalStrings enUS.lua, the English below standing in only for a client without them): the weapon's damage in its six forms, DAMAGE_TEMPLATE
 -- "%s - %s Damage" (:5687), DAMAGE_TEMPLATE_WITH_SCHOOL (:5688), SINGLE_DAMAGE_TEMPLATE "%s Damage" (:19328), SINGLE_DAMAGE_TEMPLATE_WITH_SCHOOL
 -- (:19329), and a second school's PLUS_DAMAGE_TEMPLATE "+ %s - %s Damage" (:16592) and PLUS_DAMAGE_TEMPLATE_WITH_SCHOOL "+%s - %s %s Damage" (:16593),
@@ -47,22 +55,25 @@ local _, ns = ...
 -- TOOLTIP_ITEM_STAT_* string D.STATS names (:22999-23158).
 --
 -- The model (the design's 2.5). A stat change is new minus old per key of C_Item.GetItemStats, each key turned into what it changes by D.STATS:
--- Strength, Agility and Intellect by the rates SpellModel.lua read with the stats while the game gave them plain (per[stat]: the conversion calls
--- are SecretWhenUnitStatsRestricted, PlayerScriptDocumentation.lua:221-235, 388-400, 908-920, 1096-1108, so none is asked here), spell power to
--- every school and healing, attack power to melee and ranged attack power (an inference: the modern engine's stat feeds both), ratings to percent,
--- weapon skill to its skill line, "+N Weapon Damage" to each weapon hit of the Physical school, block value to the shield's block with a point for
--- each 20 Strength (BLOCK_VALUE_PER_STRENGTH, Camelot/PaperDollFrameStats.lua:2, 313); a creature type's bonus and spell penetration are only named.
--- A spell is E = H x (B + c x f x SP) x (1 + C x (m - 1)) on the line of the attack table its data gives it (roll), H and C that line's chances to
--- land and to crit, m 1.5 on the Spell line and 2.0 on the others (STAT_CRIT_BONUS, GlobalStrings enUS.lua:22332) raised by a crit damage talent,
--- 1 + (m - 1) x (1 + t); a periodic part the same over its ticks, which crit on Forever. A swing is (weapon mean + attack power / 14 x its own speed +
--- flat) x pct (ATTACK_POWER_MAGIC_NUMBER, Camelot/PaperDollFrameStats.lua:11; flat and pct UnitDamage's, backed out as the sheet backs them out,
--- Camelot/PaperDollFrame.lua:913-914), on the Swing line with glancing blows; a strike adds its bonus, takes the weapon multiple and the
--- normalized speed where its data says so, and rolls the Special line. Threat is damage x T x G + the landed share x (F + A x attack power) x G,
--- G the multipliers SpellModel.lua finds in force (M.Multiplier). Haste: a new weapon swings at its own speed x (hasted now / own now) x (1 + h) /
--- (1 + h'), h and h' the haste of the rating worn now and with the item. The absolute numbers are before armor, resistances, and talents and buffs
--- the stats do not show; the percent cancels them. A figure is an estimate when a value it is built from is (design 3.5): a damage or healing
--- figure by its parts, the model and its line of the attack table; a threat figure by the threat's own values and multipliers too, and by the
--- damage it multiplies.
+-- Strength, Agility and Intellect by the rates SpellModel.lua read with the stats while the game gave them plain (per[stat]: the conversion calls are
+-- SecretWhenUnitStatsRestricted, PlayerScriptDocumentation.lua:221-235, 388-400, 908-920, 1096-1108, so none is asked here), spell power to every
+-- school and healing, attack power to melee and ranged attack power (an inference: the modern engine's stat feeds both), ratings to percent, weapon
+-- skill to its skill line, "+N Weapon Damage" to each weapon hit of the Physical school, block value to the shield's block with a point for each 20
+-- Strength (BLOCK_VALUE_PER_STRENGTH, Camelot/PaperDollFrameStats.lua:2, 313); a creature type's bonus and spell penetration are only named. A spell
+-- is E = H x (B + c x f x SP) x (1 + C x (m - 1)) on the line of the attack table its data gives it (roll), H and C that line's chances to land and
+-- to crit, m 1.5 on the Spell line and 2.0 on the others (STAT_CRIT_BONUS, GlobalStrings enUS.lua:22332) raised by a crit damage talent, 1 + (m - 1)
+-- x (1 + t); a periodic part the same over its ticks, which crit on Forever. A swing is (weapon mean + attack power / 14 x its own speed + flat) x
+-- pct (ATTACK_POWER_MAGIC_NUMBER, Camelot/PaperDollFrameStats.lua:11; flat and pct UnitDamage's, backed out as the sheet backs them out,
+-- Camelot/PaperDollFrame.lua:913-914), on the Swing line with glancing blows; a strike adds its bonus, takes the weapon multiple and the normalized
+-- speed where its data says so (and its dagger multiple, dg, with a dagger in the main hand), and rolls the Special line; one that cannot be dodged,
+-- parried or blocked (nd) only misses, one that cannot miss (nm) never does, and one that needs a dagger in the main hand or a shield (needs) deals
+-- nothing without it, as a strike whose hand holds no weapon. A druid's strike of a form (spd cat or bear) takes that form's paw in any form. A part
+-- with free counts that share of itself, against an enemy that is not stunned (Judgement of Command's half), an estimate. Threat is damage x T x G +
+-- the landed share x (F + A x attack power) x G, G the multipliers SpellModel.lua finds in force (M.Multiplier); a threat the data marks unknown has
+-- no figure. Haste: a new weapon swings at its own speed x (hasted now / own now) x (1 + h) / (1 + h'), h and h' the haste of the rating worn now and
+-- with the item. The absolute numbers are before armor, resistances, and talents and buffs the stats do not show; the percent cancels them. A figure
+-- is an estimate when a value it is built from is (design 3.5): a damage or healing figure by its parts, the model and its line of the attack table;
+-- a threat figure by the threat's own values and multipliers too, and by the damage it multiplies.
 --
 -- G.Compare's answer, as GearLines.lua and GearWindow.lua read it (design 4.3). Its candidates come in the order the game names them, then by slot,
 -- each { slots, label, empty, game, offEmpty, mean, header, notCounted, vs, noChange, rows }: slots the INVSLOT numbers the item would take, label
@@ -102,6 +113,10 @@ local K = {
 	TWO_HAND = "INVTYPE_2HWEAPON", SHIELD = "INVTYPE_SHIELD",
 	-- Enum.ItemClass.Weapon and Enum.ItemWeaponSubclass.Dagger (ItemConstantsDocumentation.lua), for a client without Enum.
 	WEAPON = 2, DAGGER = 15,
+	-- The ammunition each ranged weapon fires, by Enum.ItemWeaponSubclass (Bows 2 and Crossbow 18 arrows, Guns 3 bullets,
+	-- ItemConstantsDocumentation.lua:627-643) and the Projectile subclasses the game documents no enum of (Arrow 2, Bullet 3, as TrackerKinds.lua's
+	-- I.ARROWS and I.BULLETS); a thrown weapon and a wand fire none.
+	FIRES = { [2] = 2, [18] = 2, [3] = 3 },
 	-- The ranged skill lines (bows, guns, thrown weapons, crossbows, wands) and the line of an empty hand, as HitTableCalc.lua:36-41 has them.
 	RANGED_LINES = { [45] = true, [46] = true, [176] = true, [226] = true, [228] = true }, UNARMED = 162,
 	-- GetShapeshiftFormID of Cat Form, Bear Form and Dire Bear Form, the forms of D.RULES' cat and bear rules: their swing is the form's, and the paw
@@ -158,6 +173,7 @@ local K = {
 		none = "Not compared: it gives your spells nothing the comparison counts.", loading = "The game has not loaded this item yet.",
 		twoHand = "Needs a one-hand weapon; not compared.", dual = "An off-hand weapon needs you to dual wield; not compared.",
 		ammo = "The game does not use ammunition for you; not compared.", unique = "You wear as many of its kind as the game allows; not compared.",
+		fires = "You wear no ranged weapon that fires this ammunition; not compared.",
 		weapon = "Flat UI could not read this weapon's damage and speed.", combat = "Gear lines show out of combat.",
 		stats = "The game has not given your stats yet.", empty = "That slot is empty.",
 		notCompared = "Flat UI cannot work this spell out.", pet = "An item does not change your pet's spells.",
@@ -798,6 +814,23 @@ local function TwoHandWorn(state)
 	return state.twoHand == true or (weapon ~= nil and weapon.twoHand == true)
 end
 
+-- The ammunition damage a second the ranged weapon of a state fires: the worn ammunition's (S.state.ammo, its kind ammoKind) where it fits, none for a
+-- thrown weapon, a wand or no ranged weapon; for a compared bow, crossbow or gun it does not fit (ammoStandIn, Wear) the worn ammunition's damage
+-- stands in for ammunition of its kind, and the second answer says it is an estimate. A kind not read counts as fitting.
+local function AmmoFor(state)
+	local ammo, weapon = Num(state.ammo), Worn(state, K.RANGED)
+	if not (ammo and ammo > 0 and weapon) then
+		return 0, false
+	end
+	local sub, kind = Num(weapon.subclass), Num(state.ammoKind)
+	if sub == nil or kind == nil or K.FIRES[sub] == kind then
+		return ammo, false
+	elseif K.FIRES[sub] and state.ammoStandIn then
+		return ammo, true
+	end
+	return 0, false
+end
+
 -- The worn slot of a link, or nil.
 local function SlotOfLink(state, link)
 	for slot = K.AMMO, K.LAST do
@@ -863,9 +896,19 @@ local function GameSlots(state, link, guid)
 	return named, order
 end
 
+-- Whether ammunition of a subclass fits the worn ranged weapon (K.FIRES); true while either subclass is unknown.
+local function Fits(state, ammoKind)
+	local weapon = Worn(state, K.RANGED)
+	local kind, sub = Num(ammoKind), weapon and Num(weapon.subclass)
+	if weapon and not sub then
+		return true
+	end
+	return kind == nil or (sub ~= nil and K.FIRES[sub] == kind)
+end
+
 -- The groups of slots an item's inventory type can take, by the slot table (the design's 2.4), with the case of a one-hander over a worn two-hander
--- (offEmpty); or nil, why and whether nothing should show.
-local function Groups(state, loc)
+-- (offEmpty); or nil, why and whether nothing should show. sub: the item's subclass, for ammunition the worn ranged weapon must fire.
+local function Groups(state, loc, sub)
 	local kind = K.EQUIP[loc]
 	if type(kind) == "number" then
 		return { { kind } }
@@ -889,8 +932,10 @@ local function Groups(state, loc)
 		end
 		return { { K.OFF } }
 	elseif kind == "ammo" then
-		if Call(Api("C_PaperDollInfo", "AmmoNeeded")) ~= true then
+		if Call(Api("C_PaperDollInfo", "AmmoNeeded")) ~= true or Call(_G.UnitUsesAmmo, "player") == false then
 			return nil, K.WHY.ammo, true
+		elseif not Fits(state, sub) then
+			return nil, K.WHY.fires, false
 		end
 		return { { K.AMMO } }
 	end
@@ -976,14 +1021,15 @@ local function Label(slots)
 end
 
 -- The candidates of an item: { slots, label, empty, game, offEmpty } in the order the game names them, then the others in slot order. game is true
--- for a group the game's comparison named (an empty slot counts as named once the game answered at all, since it names worn items only).
-local function Candidates(state, link, id, loc, lines, guid)
+-- for a group the game's comparison named (an empty slot counts as named once the game answered at all, since it names worn items only). sub: the
+-- item's subclass (Groups).
+local function Candidates(state, link, id, loc, lines, guid, sub)
 	if not loc or loc == "" then
 		return nil, K.WHY.worn, true
 	elseif K.NONE[loc] then
 		return nil, K.WHY.none, true
 	end
-	local groups, second, quiet = Groups(state, loc)
+	local groups, second, quiet = Groups(state, loc, sub)
 	if not groups then
 		return nil, second, quiet
 	end
@@ -1029,13 +1075,13 @@ function G.Candidates(link, guid, lines)
 	end
 	local M = Model()
 	local state = Table(M and Ask(M.State)) or {}
-	local id, loc = Instant(link)
+	local id, loc, _, sub = Instant(link)
 	-- Only an item of two possible slots needs its lines, for its Unique lines.
 	local tipLines
 	if loc and (K.PAIR[loc] or loc == "INVTYPE_WEAPON") then
 		tipLines = TipLines(lines, link, nil)
 	end
-	return Candidates(state, link, id, loc, tipLines, Text(guid))
+	return Candidates(state, link, id, loc, tipLines, Text(guid), sub)
 end
 
 -- The change ------------------------------------------------------------------------------------------------------------------------------------
@@ -1142,7 +1188,8 @@ local function CopyStats(stats)
 end
 
 -- The links, permanent enchants, weapons, shield and ammunition with the item in its slots (nil for the slots emptied: G.Without), so a threat
--- enchant (D.RULES' enchant and slot) or item follows what is worn in the copy, as M.Multiplier reads it.
+-- enchant (D.RULES' enchant and slot) or item follows what is worn in the copy, as M.Multiplier reads it. Ammunition brings its damage and kind; a
+-- ranged weapon marks the worn ammunition a stand-in where it does not fit (AmmoFor).
 local function Wear(state, state2, item, slots)
 	for _, slot in ipairs(slots) do
 		state2.links[slot], state2.weapons[slot], state2.enchants[slot] = nil, nil, nil
@@ -1154,17 +1201,20 @@ local function Wear(state, state2, item, slots)
 		elseif slot == K.OFF then
 			state2.shield, state2.shieldBlock, state2.dual = false, nil, false
 		elseif slot == K.AMMO then
-			state2.ammo = nil
+			state2.ammo, state2.ammoKind = nil, nil
 		end
 		return
 	end
 	state2.links[slot], state2.enchants[slot] = item.link, EnchantOf(item.link)
 	if slot == K.AMMO then
-		state2.ammo = item.ammo or state.ammo
+		state2.ammo, state2.ammoKind = item.ammo or state.ammo, item.subclass
 		return
 	end
 	if item.weapon then
 		state2.weapons[slot] = item.weapon
+	end
+	if slot == K.RANGED then
+		state2.ammoStandIn = true
 	end
 	if slot == K.MAIN then
 		state2.twoHand = item.weapon ~= nil and item.weapon.twoHand == true
@@ -1402,6 +1452,11 @@ function G.Without(state, stats, slot)
 	end
 	local state2, stats2 = Swap(state, stats, nil, slots, info)
 	return state2, stats2, info
+end
+
+-- The factor of an off-hand hit the comparison counts (OffFactor), for SpellModel.lua's lines of an off-hand part.
+function G.OffFactor(state, stats)
+	return OffFactor(Table(state) or {}, Table(stats) or {})
 end
 
 -- The hit table's inputs ----------------------------------------------------------------------------------------------------------------------
@@ -1668,13 +1723,28 @@ local function Letter(b, rank)
 	return b
 end
 
--- Whether an aura is on the player now; nil when the game withholds it.
+-- The last plain answer of each aura AuraUp read, by spell ID.
+local auraKept = {}
+
+-- Whether an aura is on the player now. GetPlayerAuraBySpellID answers nothing for an aura the game withholds, so no aura found is off only while
+-- C_Secrets.ShouldSpellAuraBeSecret answers a plain false (or the client has no such call and the player is out of combat); else, and for a call
+-- that raises or a secret answer, the last plain answer stands, nil (unknown) when there is none. A client with no aura call has none on.
 local function AuraUp(spellID)
 	local aura, why = Call(Api("C_UnitAuras", "GetPlayerAuraBySpellID"), spellID)
-	if why == "withheld" or why == "refused" then
-		return nil
+	if why == "missing" then
+		return false
+	elseif why then
+		return auraKept[spellID]
+	elseif aura ~= nil then
+		auraKept[spellID] = true
+		return true
 	end
-	return aura ~= nil
+	local secret, asked = Call(Api("C_Secrets", "ShouldSpellAuraBeSecret"), spellID)
+	if secret == false or (asked == "missing" and not InCombat()) then
+		auraKept[spellID] = false
+		return false
+	end
+	return auraKept[spellID]
 end
 
 -- The crit damage talents of the data by spell key (D.CRIT), made once.
@@ -1770,8 +1840,9 @@ local function OnSpell(line, m)
 end
 
 -- A cast on the Special or Ranged line: an attack that lands unblocked can crit, a blocked one counts whole and cannot crit; one that cannot be blocked
--- (nb: the judgements) counts its block share as hits. And the share that lands.
-local function OnWeapon(line, m, nb)
+-- (nb: the ranged judgements) counts its block share as hits, one that cannot be dodged, parried or blocked (nd: the row's No Active Defense) only
+-- misses, and one that cannot miss (nm) counts its miss share as hits. And the share that lands. entry: the data's entry, or nil.
+local function OnWeapon(line, m, entry)
 	local parts = line and Table(line.parts)
 	if not parts then
 		return nil
@@ -1780,8 +1851,24 @@ local function OnWeapon(line, m, nb)
 	if not (hit and block and crit) then
 		return nil
 	end
-	if nb then
-		return (hit + block) * (1 + crit * (m - 1)), hit + block
+	local nb, nd, nm = entry and entry.nb, entry and entry.nd, entry and entry.nm
+	if nd then
+		local miss = Share(parts.miss)
+		if not miss then
+			return nil
+		end
+		hit, block = 1 - miss, 0
+	elseif nb then
+		hit, block = hit + block, 0
+	end
+	if nm and not nd then
+		local miss = Share(parts.miss)
+		if not miss then
+			return nil
+		end
+		hit = hit + miss
+	elseif nm then
+		hit = 1
 	end
 	return hit * (1 + crit * (m - 1)) + block, hit + block
 end
@@ -1809,9 +1896,9 @@ local function LineFactor(ctx)
 		if ctx.read.noRanged then
 			ctx.estimate, ctx.lineEstimate = true, true
 		end
-		return OnWeapon(FindLine(ctx.read, "ranged"), CritMultiplier(ctx, "ranged"), entry.nb)
+		return OnWeapon(FindLine(ctx.read, "ranged"), CritMultiplier(ctx, "ranged"), entry)
 	end
-	return OnWeapon(FindLine(ctx.read, "special"), CritMultiplier(ctx, "special"), entry.nb)
+	return OnWeapon(FindLine(ctx.read, "special"), CritMultiplier(ctx, "special"), entry)
 end
 
 -- The base of a part at the player's level: its mean at lv and its gain a level up to mx (the data's 3.2), or the value given in its place (a seal's).
@@ -1876,8 +1963,9 @@ local function SpellPower(ctx, part)
 end
 
 -- A part that is no weapon damage: its base plus its coefficient times its stat (spell power with the low rank factor, attack power, ranged attack
--- power, block value), a finisher's at 5 combo points; damage to the caster (per "self") counts none.
-local function PartAmount(ctx, part, index)
+-- power, block value), a finisher's at 5 combo points; damage to the caster (per "self") counts none. A part with free counts that share of itself
+-- against an enemy that is not stunned, an estimate.
+local function Amount(ctx, part, index)
 	local stat = part[1]
 	if part.per == "self" or stat == "wpn" then
 		return 0
@@ -1903,12 +1991,24 @@ local function PartAmount(ctx, part, index)
 	return base
 end
 
--- A hand's weapon damage before attack power and its own speed: in Cat or Bear Form the paw, the weapon's damage a second times the form's swing (at
--- least 1); an empty main hand 0 at 2.0 sec, an estimate; nil for an empty off hand or ranged slot.
-local function HandMean(ctx, slot)
+local function PartAmount(ctx, part, index)
+	local amount = Amount(ctx, part, index)
+	local free = Num(part.free)
+	if free and amount ~= 0 then
+		ctx.estimate = true
+		return amount * free
+	end
+	return amount
+end
+
+-- A hand's weapon damage before attack power and its own speed: in Cat or Bear Form, or for a strike of that form (form, a part's spd cat or bear)
+-- in any form, the paw, the weapon's damage a second times the form's swing (at least 1); an empty main hand 0 at 2.0 sec, an estimate; nil for an
+-- empty off hand or ranged slot.
+local function HandMean(ctx, slot, form)
 	local mean, speed = WeaponMean(ctx.state, slot)
-	if slot == K.MAIN and ctx.form then
-		local swing = Num(Field(ctx.model.form, ctx.form)) or 1
+	form = form or ctx.form
+	if slot == K.MAIN and form then
+		local swing = Num(Field(ctx.model.form, form)) or 1
 		local paw = mean and speed and mean / speed * swing or K.PAW_LEAST
 		return math.max(K.PAW_LEAST, paw), swing
 	end
@@ -1945,16 +2045,24 @@ local function StrikeSpeed(ctx, part, slot, own)
 end
 
 -- One hand's part of a strike: (weapon mean + attack power / 14 x the strike's speed + flat + bonus) x the weapon multiple x pct, flat and pct
--- UnitDamage's (UnitRangedDamage's for the ranged slot), and the Physical school's only (a Holy strike takes neither); the off hand's weapon part
--- times its factor. nil for a hand with no weapon.
+-- UnitDamage's (UnitRangedDamage's for the ranged slot), and the Physical school's only (a Holy strike takes neither); the ranged weapon's mean with
+-- its ammunition's damage a second x its own speed (AmmoFor), as every shot has it; the off hand's weapon part times its factor; the multiple with a
+-- dagger in the main hand where the data gives one (dg). A strike of a form (spd cat or bear) takes that form's paw out of it too. nil for a hand
+-- with no weapon.
 local function HandStrike(ctx, part, index, slot)
-	local mean, own = HandMean(ctx, slot)
+	local form = (part.spd == "cat" or part.spd == "bear") and slot == K.MAIN and part.spd or nil
+	local mean, own = HandMean(ctx, slot, form)
 	if not own then
 		return nil
 	end
 	local power, damage
 	if slot == K.RANGED then
 		power, damage = Num(ctx.stats.rap) or 0, Table(ctx.stats.rdmg) or {}
+		local ammo, standIn = AmmoFor(ctx.state)
+		mean = mean + ammo * own
+		if standIn then
+			ctx.estimate = true
+		end
 	else
 		power, damage = Num(ctx.stats.ap) or 0, Table(ctx.stats.dmg) or {}
 	end
@@ -1965,6 +2073,10 @@ local function HandStrike(ctx, part, index, slot)
 		weapon = weapon * ctx.offFactor
 	end
 	local multiple = Num(Pick(ctx.rank.w, index)) or Num(part[2]) or 1
+	local main = Worn(ctx.state, K.MAIN)
+	if Num(part.dg) and main and main.dagger == true then
+		multiple = part.dg
+	end
 	return (weapon + flat + Base(ctx, index)) * multiple * pct
 end
 
@@ -2043,11 +2155,23 @@ local function MainWeapon(entry)
 	return false
 end
 
+-- Whether the state wears what the entry needs (the data's needs): a dagger in the main hand, or a shield; true when it needs nothing.
+local function Wears(ctx)
+	local needs = ctx.entry.needs
+	if needs == "dagger" then
+		local main = Worn(ctx.state, K.MAIN)
+		return main ~= nil and main.dagger == true
+	elseif needs == "shield" then
+		return ctx.state.shield == true
+	end
+	return true
+end
+
 -- Spells, heals, their periodic and channelled kinds, weapon and attack power strikes and finishers: the sum of the parts on the entry's line, a cast
--- and a second of casting (of the effect for a DoT, HoT or channel); a next-swing strike a cast only. A strike that needs a weapon its hand lacks deals
--- nothing.
+-- and a second of casting (of the effect for a DoT, HoT or channel); a next-swing strike a cast only. A strike that needs a weapon its hand lacks, and
+-- a spell that needs a dagger or a shield not worn (Wears), deal nothing.
 local function Damage(ctx)
-	local entry, amount, missing = ctx.entry, 0, false
+	local entry, amount, missing = ctx.entry, 0, not Wears(ctx)
 	local spare = MainWeapon(entry)
 	for index, part in ipairs(Table(entry.parts) or {}) do
 		if not Suits(entry, part) then
@@ -2128,8 +2252,8 @@ function EXPECT.auto(ctx)
 	end
 end
 
--- Auto Shot: (weapon mean + ammunition damage a second x speed + ranged attack power / 14 x speed + flat) x pct on the Ranged line; nothing with no
--- ranged weapon.
+-- Auto Shot: (weapon mean + ammunition damage a second x speed + ranged attack power / 14 x speed + flat) x pct on the Ranged line, the ammunition
+-- the weapon fires (AmmoFor); nothing with no ranged weapon.
 function EXPECT.shot(ctx)
 	ctx.perSecond = true
 	local mean, own = HandMean(ctx, K.RANGED)
@@ -2138,9 +2262,12 @@ function EXPECT.shot(ctx)
 		return
 	end
 	local damage = Table(ctx.stats.rdmg) or {}
-	local ammo = Num(ctx.state.ammo) or 0
+	local ammo, standIn = AmmoFor(ctx.state)
+	if standIn then
+		ctx.estimate = true
+	end
 	local shot = (mean + ammo * own + (Num(ctx.stats.rap) or 0) / ctx.perDps * own + (Num(damage.flat) or 0)) * (Num(damage.pct) or 1)
-	local factor = OnWeapon(FindLine(ctx.read, "ranged"), CritMultiplier(ctx, "ranged"), ctx.entry.nb)
+	local factor = OnWeapon(FindLine(ctx.read, "ranged"), CritMultiplier(ctx, "ranged"), ctx.entry)
 	if not factor then
 		ctx.why = K.WHY.withheld
 		return
@@ -2283,7 +2410,8 @@ local function InForms(form, forms)
 end
 
 -- T (of the damage or healing), F (flat, landed casts) and whether no multiplier applies, by the threat's kind (the data's 3.2); nil for a kind with no
--- amount (taunt, force, wipe, resist, rage). Heals make 0.5 a point, 0.25 for the paladin's (D.HEAL_THREAT).
+-- amount (taunt, force, wipe, resist, rage) and for a threat not known on Forever (unknown). Heals make 0.5 a point, 0.25 for the paladin's
+-- (D.HEAL_THREAT).
 local function ThreatParts(ctx, spec)
 	local kind, rank = spec and spec.k, ctx.rankIndex
 	if spec then
@@ -2618,7 +2746,7 @@ local function Instead(result, link, opts, chosen, state, stats, work)
 	end
 	Notes(item, result)
 	local list
-	list, why, quiet = Candidates(state, link, item.id, item.loc, item.lines, Text(Field(data, "guid")) or Text(opts.guid))
+	list, why, quiet = Candidates(state, link, item.id, item.loc, item.lines, Text(Field(data, "guid")) or Text(opts.guid), item.subclass)
 	if not list then
 		result.why, result.quiet = why, quiet
 		return true
@@ -2687,23 +2815,25 @@ local function Auras(D)
 	for _, talent in ipairs(Table(D.CRIT) or {}) do
 		local aura = Num(talent.aura)
 		if aura then
-			parts[#parts + 1] = aura .. (AuraUp(aura) and "+" or "-")
+			local up = AuraUp(aura)
+			parts[#parts + 1] = aura .. (up == true and "+" or up == false and "-" or "?")
 		end
 	end
 	return table.concat(parts, ",")
 end
 
-local cache, kept, last = {}, {}, {}
+-- The results by key (cache) and the last result of each item and mode for a fight (last), each with its keys in the order kept.
+local cache, kept, last, lastKept = {}, {}, {}, {}
 
--- Keeps a result, K.CACHE at most, the oldest forgotten first.
-local function Remember(key, result)
-	if cache[key] == nil then
-		kept[#kept + 1] = key
-		if #kept > K.CACHE then
-			cache[table.remove(kept, 1)] = nil
+-- Keeps a value in a store, K.CACHE at most, the oldest forgotten first.
+local function Store(store, order, key, value)
+	if store[key] == nil then
+		order[#order + 1] = key
+		if #order > K.CACHE then
+			store[table.remove(order, 1)] = nil
 		end
 	end
-	cache[key] = result
+	store[key] = value
 end
 
 -- The comparison of an item to wear (a link) or of a worn item (its slot number) for the chosen lines (the design's 2.3, 2.4): { header,
@@ -2712,7 +2842,7 @@ end
 -- result from before the fight); the header of this file says what each holds. lines: the chosen lines (ns.GearChosen() when nil). opts: { listVersion, mode, data (the
 -- post call's data, for its lines and guid), guid, most, role, against, facing, rules, lowRank, inputs (the hit table's, else those of the last
 -- read) }. Kept by link (or slot and the link worn there), M.Version(), opts.listVersion and opts.mode, with the rows' choices; in a fight and with
--- stats from before it, the last result for the item, else why.
+-- stats from before it, the last result for the item while it is among the last K.CACHE kept, else why.
 function G.Compare(itemOrSlot, lines, opts)
 	opts = Table(opts) or {}
 	local mode = K.MODES[opts.mode] and opts.mode or "tooltip"
@@ -2771,8 +2901,8 @@ function G.Compare(itemOrSlot, lines, opts)
 	end
 	result.sizes = held.sizes
 	if keep then
-		Remember(key, result)
-		last[again] = result
+		Store(cache, kept, key, result)
+		Store(last, lastKept, again, result)
 	end
 	return result
 end
