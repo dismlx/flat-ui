@@ -213,13 +213,12 @@ local LIST = {
 		sized = "gearWindow", minWidth = 380, minHeight = 220, x = 680, y = -120, gate = "GearWindowShown", changed = "GearWindowMoved" },
 	-- The item finder (GearSearch.lua) of that window: its top left corner is the top left corner of the box, which has the finder's size as kept for
 	-- the character (sized: FlatUICharDB.gearFinder, BoxSize): its title bar alone while it is minimized, else as tall as the window, at least 540
-	-- (else 344 by 540, GearSearch.lua's L). While it hangs at the window's edge, as it does until the player moves it (docked: ns.GearSearchDocked,
-	-- for each character), its box is where it hangs, right of the window or left of it while the screen has no room on the right (start:
-	-- ns.GearSearchStart), whatever spot is saved; once moved it hangs from its spot until the player docks it again, and a reset of the spot docks it.
-	-- It has a handle while the window may show (ns.GearSearchMayShow).
+	-- (else 344 by 540, GearSearch.lua's L). Its spot is the character's (ownSpot: FlatUICharDB.gearFinder), so its box is always where it starts
+	-- (start: ns.GearSearchStart), whatever spot the profile keeps: at the character's spot once the player moved it, else where it hangs, right of
+	-- the window or left of it while the screen has no room on the right. A drop of its box saves a spot as for any frame, which the character takes
+	-- (changed), and a reset of it docks the finder at the window again. It has a handle while the window may show (ns.GearSearchMayShow).
 	{ name = "FlatUIGearSearch", label = "Item finder", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 344, height = 540,
-		sized = "gearFinder", x = 1144, y = -120, gate = "GearSearchMayShow", changed = "GearSearchMoved", start = "GearSearchStart",
-		docked = "GearSearchDocked" },
+		sized = "gearFinder", x = 1144, y = -120, gate = "GearSearchMayShow", changed = "GearSearchMoved", start = "GearSearchStart", ownSpot = true },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
@@ -1561,9 +1560,8 @@ local function HandleRect(name, info)
 		end
 		local point, x, y
 		local width, height = BoxSize(info)
-		-- An own frame that hangs from another frame now (docked: a function of ns that says so) has its box where it starts, its spot kept.
-		local docked = info.docked and ns[info.docked]
-		if entry and not (type(docked) == "function" and docked()) then
+		-- An own frame that keeps its spot itself (ownSpot) has its box where it starts, the profile's spot kept.
+		if entry and not info.ownSpot then
 			point, x, y = entry.point, OnScreen(entry.point, entry.x, entry.y, width, height)
 		else
 			point, x, y = StartsAt(info)

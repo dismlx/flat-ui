@@ -255,7 +255,7 @@ local ADDON_NAME, ns = ...
 -- GetWidth of UIParent), kept on the screen (SetClampedToScreen) and in the window's strata (GetFrameStrata, SetFrameStrata); its search and level
 -- boxes are EditBoxes of its own. The movers place it too (its own entry): a drag of its title bar (StartMoving, StopMovingOrSizing, SetUserPlaced)
 -- or of its box gives it a spot of its own for the character, and Dock hangs it at the window again; Minimize folds it to its title bar, kept in
--- FlatUICharDB.gearFinder with whether it is docked. The finder
+-- FlatUICharDB.gearFinder with that spot and whether it is docked. The finder
 -- searches Flat UI's own item index (ItemIndex.lua, made from the game's client data by tools/dev/make_itemindex.py) and the bags, bank and other
 -- characters Bags records; for an item the index lacks and for Best for me it asks the game to load the item (C_Item.RequestLoadItemDataByID) and
 -- reads it (C_Item.GetItemInfo,
