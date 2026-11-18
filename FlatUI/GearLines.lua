@@ -49,35 +49,43 @@ local _, ns = ...
 -- The block: G.Compare(link, lines, opts), or G.Compare(slot, lines, opts) for a worn item (what it gives: now against that slot empty), with the
 -- lines of ns.GearChosen the player knows now and opts.mode "tooltip" and opts.listVersion ns.GearListVersion() (design 4.3); a row's change is with
 -- - now, what the item gives, and its label, slots, empty, offEmpty and perSecond are read as GearModel.lua's header says. Of the slots it gives
--- (rings, trinkets, a dual wielder's one-hand weapon) the tooltip shows the one with the larger mean of the shown lines' percent changes, the first
--- the game names on a tie (design 2.4). Written with AddLine and AddDoubleLine, the only writes on a Blizzard frame here: a grey header that wraps
--- (AddLine's fifth argument), naming what the item replaces, the worn item's name in its quality colour (its link's own colour), and the unit of the
--- plain numbers ("Instead of Band of X (Finger 1), a cast:"); a line per spell, its name white and the change green for a gain, red for a loss and
--- grey for none, the colours Flat UI's combat numbers give gains and losses (CombatText.lua:889-894), with ~ before an estimate; at most Spells in
--- an item tooltip of them and a dim "and 2 more: /flatui gear" past that, never "and 1 more"; one dim line in place of them when none changes by
--- 0.05% or more; and the dim lines of what is not counted (design 2.3, 2.6), in the dim of the hit table (HitTable.lua:79) and the grey of Flat UI's
--- extra lines (Chat.lua:801). Each block is kept by the item's link (by its slot and link for a worn one), M.Version() and ns.GearListVersion(), at
--- most 64 and the oldest first out (design 4.6), and all are dropped at each refresh of the module, where a row may have changed. A block is added
--- once for each build of a tooltip, as Chat.lua adds its own lines (Chat.lua:795-806): the game fetches new data for each build and may run the
--- post calls more than once for one, so the same data with the lines of the first call still there is the same build (NumLines). Each AddLine and
--- AddDoubleLine is under pcall, and one the game refuses stops the adding for that build. In a fight, where the game withholds the stats
--- (design 4.7), a block worked out before it shows, else one dim line (InCombatLockdown, and SpellModel's old stats). A reason G.Compare gives
--- shows as one grey line ("Needs a one-hand weapon; not compared."), but one it marks quiet (ammunition the game does not use for the player, an
+-- (rings, trinkets, a dual wielder's one-hand weapon) the tooltip shows the one with the larger mean of the shown lines' percent changes, each
+-- weighted by its line's weight, the first the game names on a tie (design 2.4). Written with AddLine and AddDoubleLine, the only writes on a
+-- Blizzard frame here, in the one style of SpellModel.lua's M.Fmt.Style (0.5.20): a gold header (the game's NORMAL_FONT_COLOR) that wraps (AddLine's
+-- fifth argument), naming what the item replaces, the worn item's name in its quality colour (its link's own colour), and the unit of the plain
+-- numbers ("Instead of Band of X (Finger 1), a cast:"); while Overall totals is Weighted (chat.gearTotals), the Overall line: a figure the chosen
+-- spells have, each the weighted mean of its rows' percent changes (GearModel.lua's G.Totals, with the lines and their weights), and Damage taken
+-- while avoidance shows (GearAvoid.lua's taken of the candidate for the same slots, which A.Compare's candidates carry, else A.Totals), each green
+-- when better and red when worse, "Overall Damage +2.4% · Threat +1.1% · Damage taken -2.1%", none when no figure changes; a line per spell
+-- (AddDoubleLine), its name light grey (0.82) and the change green for a gain, red for a loss (GREEN_FONT_COLOR, RED_FONT_COLOR) and white for none,
+-- with ~ before an estimate; at most Spells in an item tooltip of them; then the block's notes, dim (HitTable.lua:79) and wrapped: "and 2 more:
+-- /flatui gear" past the rows shown, never "and 1 more", or the note in place of them when none changes by 0.05% or more, "Not wearable yet:" with
+-- the game's requirement, and what is not counted (design 2.3, 2.6), in Compact (chat.tipDetail) joined into one line with "; " between them and in
+-- Full each its own. Each block is kept by the item's link (by its slot and link for a worn one), M.Version(), ns.GearListVersion(), A.Stamp and
+-- Overall totals, at most 64 and the oldest first out (design 4.6), and all are dropped at each refresh of the module, where a row may have changed.
+-- A block is added once for each build of a tooltip, as Chat.lua adds its own lines (Chat.lua:795-806): the game fetches new data for each build and
+-- may run the post calls more than once for one, so the same data with the lines of the first call still there is the same build (NumLines). Each
+-- AddLine and AddDoubleLine is under pcall, and one the game refuses stops the adding for that build. In a fight, where the game withholds the stats
+-- (design 4.7), a block worked out before it shows, else one dim line (InCombatLockdown, and SpellModel's old stats). A reason G.Compare gives shows
+-- as one light grey line ("Needs a one-hand weapon; not compared."), but one it marks quiet (ammunition the game does not use for the player, an
 -- off-hand weapon for one who does not dual wield) shows nothing. The numbers are rounded as design 2.3 says by SpellModel's M.Fmt, as the window
--- rounds them: a change a cast whole from 100 up and to a tenth below, a second to a tenth and " dps" (Change), the percent to a tenth with its
--- sign, (0%) under 0.05 (Percent), and none while the figure now is 0.
--- While avoidance shows (Avoidance, chat.gearAvoid; GearAvoid.lua's A.Wanted), the block goes on after the spell rows with GearAvoid.lua's lines for
--- the slot they show (A.TipLines: a header, the rows of an enemy's swing, armor and block value that change, and what it does not count), and the
--- line in place of spell rows that do not change says what it counts; the block's key holds A.Stamp, which changes with what those lines are built
--- from. GearAvoid.lua is asked under pcall, so a fault there goes to the error handler once and the spell rows show without it.
+-- rounds them: a change a cast whole from 100 up and to a tenth below, a second to a tenth and " dps" (Change), the percent to a tenth with its sign,
+-- (0%) under 0.05 (Percent), and none while the figure now is 0.
+-- While avoidance shows (Avoidance, chat.gearAvoid; GearAvoid.lua's A.Wanted), the block goes on after the spell block with GearAvoid.lua's lines
+-- for the slot they show (A.TipLines: its own block in the same style; { text, colour, wrap } a line alone and { left, right, leftColour, colour }
+-- a figure), and the note in place of spell rows that do not change says what it counts; the block's key holds A.Stamp, which changes with what
+-- those lines are built from. GearAvoid.lua is asked under pcall, so a fault there goes to the error handler once and the spell rows show without
+-- it.
 -- The post call runs in two steps, each inside ns.EachPart (Core.lua:2193-2224), which counts a failure once for each first argument and stops a
 -- part at the third (Core.lua:260, 2203, 2210-2219): the tests and the link keyed by the data of the build, which is new for each build, and the
 -- work keyed by the item's link, so three items that fail stop the gear lines with their note for /flatui status, and a test that fails on every
 -- build stops them after three builds (design 4.4). The first error also goes once to geterrorhandler(), as Bags' parts report theirs
 -- (Bags.lua:356-373).
 --
--- The list: FlatUICharDB.gearSpells (ns.Character, Core.lua:2650-2652), as { { key = "frostbolt" }, { key = "heal", id = 6064 } }: the key of an
--- entry of ns.SpellData (SpellData.lua) and, only for a kept rank, its spell ID; nil until the player first changes it, and nil again after Back
+-- The list: FlatUICharDB.gearSpells (ns.Character, Core.lua:2650-2652), as { { key = "frostbolt" }, { key = "heal", id = 6064, weight = 2 } }: the
+-- key of an entry of ns.SpellData (SpellData.lua), only for a kept rank its spell ID, and only where it is not 1 its weight in the Overall line (0
+-- to 5 in steps of 0.5, 0 leaving the line out of the totals; ns.GearSetWeight, which the window calls, and /flatui gear weight; a line of the
+-- defaults weighted gets its saved entry, the defaults becoming the list); nil until the player first changes it, and nil again after Back
 -- to your class's spells (design 4.3). At most 20 lines; a change is saved at once, also in a fight, as Cooldowns' are (Cooldowns.lua:2353). A
 -- line with no ID follows the highest rank the player knows (SpellModel's M.Highest, by the ranks of its entry, as Cooldowns and Pulse count the
 -- ranks of a spell as one, Cooldowns.lua:2301-2302, Pulse.lua:11-13); a kept rank is known when ns.SpellKnown (Cooldowns.lua:314-325) says so, or
@@ -88,23 +96,23 @@ local _, ns = ...
 -- conditions in the one form tools/dev/make_spelltips.py writes: a key; a list of keys, the first of them known (Greater Heal, else Heal, else
 -- Lesser Heal); or { key, key ..., needs = key, ["else"] = { key ... } }, each of its keys while needs is known, else each of else (the seal and
 -- judgement of Command with Seal of Command known, else those of Righteousness). ns.GearListVersion() changes
--- with each change of what the list gives: the lines, their ranks, whether they are known, and
+-- with each change of what the list gives: the lines, their ranks, whether they are known, their weights, and
 -- the defaults it follows (the role, the form). The names are the game's (C_Spell.GetSpellName), with the rank of a kept line
 -- (C_Spell.GetSpellSubtext, as Cooldowns.lua:2271-2284 tells ranks apart), and a name typed after /flatui gear add is found in the data, else by
 -- C_Spell.GetSpellInfo (as Cooldowns.lua:362-375 resolves one).
 -- The rows (Config.lua, the Spells and gear tab; the panel prints a pick's message, Panel.lua:762-791): Add a spell lists the spell book walked as
 -- Cooldowns' Add a spell walks it (ns.SpellBookList, Cooldowns.lua:2287-2336), only the spells Flat UI can work out (an entry with cmp) at the
--- highest rank known, with Attack, Auto Shot and Shoot added when the player has them; Remove a spell lists the lines, "(not known)" after one the
--- character lost; Add the spells of a bar takes each entry once with the rank on the bar (ns.BarSpells, as Cooldowns' import reads a bar,
--- Cooldowns.lua:2587-2654); Back to your class's spells drops the list; Gear comparison window calls ns.GearWindowShow of GearWindow.lua when it is
--- there, which opens the window or raises an open one, as Reset windows is a list row (Movers.lua:4556-4570). Each pick answers (done, message), as
--- ns.CooldownAdd does (Cooldowns.lua:2354-2370), and never raises: an error goes once to geterrorhandler(). /flatui gear (ns.AddSlash,
--- Core.lua:2358-2373; design 4.11) opens the window (ns.GearWindowToggle, ns.GearWindowShow) and changes the list, and prints with print(). /flatui
--- status (ns.AddStatus, Core.lua:2334-2354; design 4.12) says, while Your spells in item tooltips is on and this part runs or the window is open
--- (ns.GearWindowOpen, GearWindow.lua), which spells are compared, against what, and, once seen, that the slot table stood in for the game's choice or
--- Flat UI's rating sizes for the game's conversion: of GetCombatRatingBonusForCombatRatingValue, C_TooltipComparison.GetItemComparisonInfo and
--- GetActionInfo (Add the spells of a bar) it only looks whether the client has them, and a candidate of G.Compare whose game is false, or its sizes,
--- the fixed sizes having stood in.
+-- highest rank known, with Attack, Auto Shot and Shoot added when the player has them; Remove a spell lists the lines, "(weight 2)" after one whose
+-- weight is not 1 and "(not known)" after one the character lost; Add the spells of a bar takes each entry once with the rank on the bar
+-- (ns.BarSpells, as Cooldowns' import reads a bar, Cooldowns.lua:2587-2654); Back to your class's spells drops the list; Gear comparison window calls
+-- ns.GearWindowShow of GearWindow.lua when it is there, which opens the window or raises an open one, as Reset windows is a list row
+-- (Movers.lua:4556-4570). Each pick answers (done, message), as ns.CooldownAdd does (Cooldowns.lua:2354-2370), and never raises: an error goes once
+-- to geterrorhandler(). /flatui gear (ns.AddSlash, Core.lua:2358-2373; design 4.11) opens the window (ns.GearWindowToggle, ns.GearWindowShow) and
+-- changes the list and its weights, and prints with print(). /flatui status (ns.AddStatus, Core.lua:2334-2354; design 4.12) says, while Your spells
+-- in item tooltips is on and this part runs or the window is open (ns.GearWindowOpen, GearWindow.lua), which spells are compared, against what, and,
+-- once seen, that the slot table stood in for the game's choice or Flat UI's rating sizes for the game's conversion: of
+-- GetCombatRatingBonusForCombatRatingValue, C_TooltipComparison.GetItemComparisonInfo and GetActionInfo (Add the spells of a bar) it only looks
+-- whether the client has them, and a candidate of G.Compare whose game is false, or its sizes, the fixed sizes having stood in.
 -- UnitClassBase, UnitLevel, GetShapeshiftFormID and ns.PlayerRole are asked only
 -- when SpellModel's state lacks the class, level, form or role, and GetTime keeps one reading of the list for one frame.
 -- This file registers no event: SpellModel.lua listens for the player's state and stats on a frame of its own while an owner wants them
@@ -119,9 +127,6 @@ local IsSecret, Finite = ns.IsSecret, ns.Finite
 local T = {
 	-- The owner this file names when it asks SpellModel.lua for its events (M.Want, design 4.3).
 	OWNER = "gear lines",
-	-- The grey of Flat UI's extra lines (Chat.lua:801), the dim of the hit table (HitTable.lua:79), white, and the gain and loss of Flat UI's combat
-	-- numbers (CombatText.lua:889-894).
-	GREY = { 0.8, 0.8, 0.8 }, DIM = { 0.66, 0.68, 0.62 }, WHITE = { 1, 1, 1 }, GAIN = { 0.1, 1, 0.1 }, LOSS = { 1, 0.1, 0.1 },
 	-- The most lines a list holds; the most blocks kept (design 4.6); the action bars of Add the spells of a bar (Cooldowns.lua:127); Spells in an
 	-- item tooltip when the row does not say (design 4.9); the level a boss is three levels above at Against's first choice (design 2.5).
 	MAX_LINES = 20, CACHE = 64, BARS = 8, MOST = 5, MAX_LEVEL = 60,
@@ -177,6 +182,18 @@ local T = {
 	CAPS = { classic = "9% melee and 16% spells", game = "8% melee and 17% spells" },
 	-- The fixed rating sizes for 1% when the data does not give them (design 2.5, SpellData.lua's D.MODEL.ratings).
 	RATINGS = { hit = 10, crit = 14, haste = 10, expertise = 10 },
+	-- A line's weight in the Overall line (ns.GearSetWeight): 0 (left out) to 5, in steps of 0.5, 1 when none is saved.
+	WEIGHT_MIN = 0, WEIGHT_MAX = 5, WEIGHT_STEP = 0.5, WEIGHT = 1,
+	-- The figures of the Overall line in their order (GearModel.lua's G.Totals), the word each shows as, and the least share a figure must change
+	-- by to show other than 0% (as M.Fmt.Percent rounds).
+	FIGURES = { { "damage", "Damage" }, { "healing", "Healing" }, { "threat", "Threat" } }, TAKEN = "Damage taken", OVERALL = "Overall",
+	SEPARATOR = "  \194\183  ", STILL_PCT = 0.0005,
+	-- The colours of the style while SpellModel.lua's (M.Fmt.Style) cannot be read: the gold header (the game's NORMAL_FONT_COLOR), a figure's
+	-- light grey label and white value, a change better or worse (GREEN_FONT_COLOR, RED_FONT_COLOR) and a dim note.
+	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, good = { 0.1, 1, 0.1 }, bad = { 1, 0.1, 0.1 },
+		dim = { 0.66, 0.68, 0.62 } },
+	-- The notes of a block in Compact are joined into one dim line with this between them (chat.tipDetail).
+	JOIN = "; ",
 	NO_CHANGE = "No change to your chosen spells; stamina, armor, avoidance and mana are not counted.",
 	OUT_OF_COMBAT = "Gear lines show out of combat.",
 	RANDOM = "Random stats not known",
@@ -195,9 +212,11 @@ local T = {
 	NO_WINDOW = "Gear comparison: the window is not in this build of Flat UI.",
 	RESET_LINE = "Your class's main spells for your role",
 	OPEN_LINE = "Open the Gear comparison window",
+	WEIGHT_HELP = "/flatui gear weight <spell> <0 to 5> - how much a spell counts in the Overall line, in steps of 0.5",
 	HELP = {
 		"/flatui gear - the Gear comparison window; /flatui gear <item> compares a shift-clicked item there",
 		"/flatui gear add <spell>, remove <spell>, bar 1, reset, list - the spells it compares",
+		"/flatui gear weight <spell> <0 to 5> - how much a spell counts in the Overall line",
 	},
 }
 
@@ -474,9 +493,23 @@ local function KnownRank(M, entry, id)
 	return top ~= nil and top == id
 end
 
--- A line as ns.GearChosen gives it (design 4.3), with its key.
-local function Line(entry, index, id, kept, known)
-	return { entry = entry, rank = index, id = id, name = NameOf(entry, id), kept = kept == true, known = known == true, key = entry.key }
+-- A weight as saved: a number from WEIGHT_MIN to WEIGHT_MAX, else nil.
+local function WeightOf(value)
+	if Finite(value) and value >= T.WEIGHT_MIN and value <= T.WEIGHT_MAX then
+		return value
+	end
+	return nil
+end
+
+-- A weight in words: 2, 1.5.
+local function WeightText(weight)
+	return (("%.1f"):format(weight):gsub("%.0$", ""))
+end
+
+-- A line as ns.GearChosen gives it (design 4.3), with its key and its weight in the Overall line (0.5.20: the saved one, else 1).
+local function Line(entry, index, id, kept, known, weight)
+	return { entry = entry, rank = index, id = id, name = NameOf(entry, id), kept = kept == true, known = known == true, key = entry.key,
+		weight = WeightOf(weight) or T.WEIGHT }
 end
 
 -- An entry the comparison can work out: one of the data with a comparison kind (cmp, design 3.2) and ranks, not of the player's pet.
@@ -579,8 +612,9 @@ end
 
 -- The saved list --------------------------------------------------------------------------------------------------------------------------
 
--- The saved lines of this character, or nil while the defaults are followed. A line is { key, id }: the key a text, the id nil or a spell ID; none
--- twice, at most MAX_LINES. A list that is not so is written back cleaned, as Cooldowns' List does (Cooldowns.lua:264-288).
+-- The saved lines of this character, or nil while the defaults are followed. A line is { key, id, weight }: the key a text, the id nil or a spell
+-- ID, the weight nil (1) or 0 to 5; none twice, at most MAX_LINES. A list that is not so is written back cleaned, as Cooldowns' List does
+-- (Cooldowns.lua:264-288): a weight out of range is dropped.
 local function Saved()
 	local char = ns.Character()
 	if type(char) ~= "table" then
@@ -601,6 +635,9 @@ local function Saved()
 			local mark = key .. "#" .. tostring(id)
 			if not twice[mark] then
 				twice[mark] = true
+				if line.weight ~= nil and not WeightOf(line.weight) then
+					line = { key = key, id = id }
+				end
 				clean[#clean + 1] = line
 			end
 		end
@@ -623,7 +660,7 @@ local function SavedLine(M, item)
 		if not Comparable(entry) or not Finite(index) then
 			return nil
 		end
-		return Line(entry, index, item.id, true, KnownRank(M, entry, item.id))
+		return Line(entry, index, item.id, true, KnownRank(M, entry, item.id), item.weight)
 	end
 	local entry = M.ByKey(item.key)
 	if not Comparable(entry) then
@@ -631,11 +668,11 @@ local function SavedLine(M, item)
 	end
 	local index, id = Highest(M, entry)
 	if index and id then
-		return Line(entry, index, id, false, true)
+		return Line(entry, index, id, false, true, item.weight)
 	end
 	local top = #entry.ranks
 	local topId = RankId(entry, top)
-	return topId and Line(entry, top, topId, false, false) or nil
+	return topId and Line(entry, top, topId, false, false, item.weight) or nil
 end
 
 -- What the list gives now: its lines, and { defaults, set, role, class, noSet }. One reading serves every ask of one frame (GetTime is the time of
@@ -669,7 +706,8 @@ local function Resolve()
 	end
 	local parts = { info.defaults and ("d" .. tostring(info.set)) or "c" }
 	for _, line in ipairs(lines) do
-		parts[#parts + 1] = ("%s;%s;%s%s"):format(line.key, tostring(line.id), line.kept and "k" or "f", line.known and "y" or "n")
+		parts[#parts + 1] = ("%s;%s;%s%s;%s"):format(line.key, tostring(line.id), line.kept and "k" or "f", line.known and "y" or "n",
+			tostring(line.weight))
 	end
 	local signature = table.concat(parts, ",")
 	if signature ~= list.signature then
@@ -680,8 +718,8 @@ local function Resolve()
 	return lines, info
 end
 
--- The lines of the list (design 4.3): { { entry, rank, id, name, kept, known, key } ... }, the spells the comparison works out, in list order, and
--- what the list is (as Resolve). Never raises.
+-- The lines of the list (design 4.3): { { entry, rank, id, name, kept, known, key, weight } ... }, the spells the comparison works out, in list
+-- order, and what the list is (as Resolve). Never raises.
 function ns.GearChosen()
 	local ok, lines, info = pcall(Resolve)
 	if not ok then
@@ -695,7 +733,7 @@ function ns.GearChosen()
 	return copy, info
 end
 
--- A number that changes with each change of what the list gives, the defaults it follows included (design 4.3).
+-- A number that changes with each change of what the list gives, the defaults it follows and the weights included (design 4.3).
 function ns.GearListVersion()
 	local ok, err = pcall(Resolve)
 	if not ok then
@@ -734,7 +772,8 @@ local function Editable()
 	return made
 end
 
--- What a line is called in the lists: its name, the rank of a kept one, and "(not known)" after a spell the character does not know now.
+-- What a line is called in the lists: its name, the rank of a kept one, its weight in the Overall line where it is not 1, and "(not known)"
+-- after a spell the character does not know now.
 local function Label(line)
 	local text = line.name or "?"
 	if line.kept then
@@ -742,6 +781,9 @@ local function Label(line)
 		if rank then
 			text = text .. " (" .. rank .. ")"
 		end
+	end
+	if Finite(line.weight) and line.weight ~= T.WEIGHT then
+		text = text .. " (weight " .. WeightText(line.weight) .. ")"
 	end
 	if not line.known then
 		text = text .. " (not known)"
@@ -916,6 +958,33 @@ local function Which(M, lines, id)
 	return nil
 end
 
+-- The place of the saved line a spell ID names, and its name: a kept line of that rank, else the line that follows the ranks of its spell; or
+-- minus the place of a line the data does not have.
+local function SavedAt(M, saved, id)
+	if id < 0 then
+		local item = saved[-id]
+		if type(item) == "table" and item.id == nil then
+			return -id, Title(item.key)
+		end
+		return nil
+	end
+	local name = SpellName(id) or ("Spell " .. id)
+	for index, item in ipairs(saved) do
+		if item.id == id then
+			return index, name
+		end
+	end
+	local entry = M and M.Find(id) or nil
+	if type(entry) == "table" then
+		for index, item in ipairs(saved) do
+			if item.id == nil and item.key == entry.key then
+				return index, name
+			end
+		end
+	end
+	return nil, name
+end
+
 -- Takes a line off: by the spell ID of its row (Remove a spell, the window), or minus its place for one the data does not have.
 local function RemoveLine(id)
 	if not Finite(id) or id ~= math.floor(id) or id == 0 then
@@ -943,36 +1012,51 @@ local function RemoveLine(id)
 		Changed()
 		return true, ("Gear comparison: removed %s."):format(lines[at].name)
 	end
-	local at, name
-	if id < 0 then
-		local item = saved[-id]
-		if type(item) == "table" and item.id == nil then
-			at, name = -id, Title(item.key)
-		end
-	else
-		for index, item in ipairs(saved) do
-			if item.id == id then
-				at = index
-				break
-			end
-		end
-		local entry = not at and M and M.Find(id) or nil
-		if type(entry) == "table" then
-			for index, item in ipairs(saved) do
-				if item.id == nil and item.key == entry.key then
-					at = index
-					break
-				end
-			end
-		end
-		name = SpellName(id) or ("Spell " .. id)
-	end
+	local at, name = SavedAt(M, saved, id)
 	if not at then
 		return false, ("Gear comparison: %s is not chosen."):format(name or tostring(id))
 	end
 	table.remove(saved, at)
 	Changed()
 	return true, ("Gear comparison: removed %s."):format(name)
+end
+
+-- Sets the weight of a line in the Overall line (0.5.20, ns.GearSetWeight): by the spell ID of its row, or minus its place for one the data does
+-- not have, as RemoveLine finds it; 0 to 5 in steps of 0.5 (a number between is rounded to the nearest step), 1 by default, 0 leaving the line out
+-- of the totals. A line of the defaults gets its saved entry: the defaults become the list, each line following its rank, as a first change does.
+local function SetWeight(id, weight)
+	if not Finite(id) or id ~= math.floor(id) or id == 0 then
+		return false, ('Gear comparison: no spell found for "%s".'):format(tostring(id))
+	elseif not Finite(weight) or weight < T.WEIGHT_MIN or weight > T.WEIGHT_MAX then
+		return false, T.WEIGHT_HELP
+	end
+	weight = math.floor(weight / T.WEIGHT_STEP + 0.5) * T.WEIGHT_STEP
+	local M = Model()
+	local saved, at, name = Saved(), nil, nil
+	if saved == nil then
+		local lines = Resolve()
+		at = id > 0 and Which(M, lines, id) or nil
+		name = at and lines[at].name or SpellName(id)
+	else
+		at, name = SavedAt(M, saved, id)
+	end
+	if not at then
+		return false, ("Gear comparison: %s is not chosen."):format(name or tostring(id))
+	end
+	local now = saved and WeightOf(saved[at].weight) or T.WEIGHT
+	if now == weight then
+		return false, ("Gear comparison: %s weighs %s already."):format(name, WeightText(weight))
+	end
+	local edit = Editable()
+	if not edit or type(edit[at]) ~= "table" then
+		return false, T.NOT_LOADED
+	end
+	edit[at].weight = weight ~= T.WEIGHT and weight or nil
+	Changed()
+	if weight == 0 then
+		return true, ("Gear comparison: %s is left out of the Overall line (weight 0)."):format(name)
+	end
+	return true, ("Gear comparison: %s weighs %s in the Overall line."):format(name, WeightText(weight))
 end
 
 -- Add the spells of a bar: each entry Flat UI can work out on that bar, once, with the rank on the bar (design 2.1). The slots that hold anything
@@ -1103,6 +1187,11 @@ end
 
 function ns.GearRemove(id)
 	return Answer(pcall(RemoveLine, id))
+end
+
+-- The weight of a line in the Overall line (0.5.20): id as ns.GearRemove takes it, weight 0 to 5 in steps of 0.5; answers (done, message).
+function ns.GearSetWeight(id, weight)
+	return Answer(pcall(SetWeight, id, weight))
 end
 
 function ns.GearBarLines()
@@ -1418,13 +1507,18 @@ local function Share(row)
 	return (row.with - row.now) / math.abs(row.now) * 100
 end
 
--- The mean of the shown rows' percent changes, by which the tooltip picks the slot to show (design 2.4).
+-- A line's weight in the Overall line, 1 when it has none.
+local function Weight(line)
+	return WeightOf(type(line) == "table" and line.weight or nil) or T.WEIGHT
+end
+
+-- The mean of the shown rows' percent changes, each weighted by its line's weight (0.5.20), by which the tooltip picks the slot to show (design 2.4).
 local function Mean(rows, shown)
 	local sum, count = 0, 0
 	for index = 1, shown do
-		local share = Share(rows[index])
-		if share then
-			sum, count = sum + share, count + 1
+		local share, weight = Share(rows[index]), Weight(rows[index].line)
+		if share and weight > 0 then
+			sum, count = sum + share * weight, count + weight
 		end
 	end
 	return count > 0 and sum / count or 0
@@ -1454,12 +1548,36 @@ local function KindOf(line)
 	return type(entry) == "table" and entry.cmp or nil
 end
 
--- The rounding of design 2.3, SpellModel.lua's (M.Fmt), which the window writes its numbers with too, or nil.
+-- A function of SpellModel.lua's rounding and style (M.Fmt, design 2.3 and 0.5.20), which the window writes its numbers with too, or nil.
 local function Fmt(name)
 	local M = ns.SpellModel
 	local fmt = type(M) == "table" and type(M.Fmt) == "table" and M.Fmt or nil
 	local fn = fmt and fmt[name]
 	return type(fn) == "function" and fn or nil
+end
+
+-- The colours of the style: SpellModel.lua's M.Fmt.Style, else this file's (T.STYLE), each { r, g, b }.
+local function Colours()
+	local M = ns.SpellModel
+	local fmt = type(M) == "table" and type(M.Fmt) == "table" and M.Fmt or nil
+	local style = fmt and type(fmt.Style) == "table" and fmt.Style or nil
+	if not style then
+		return T.STYLE
+	end
+	for name in pairs(T.STYLE) do
+		if type(style[name]) ~= "table" then
+			return T.STYLE
+		end
+	end
+	return style
+end
+
+-- Text in a colour of the style inside a line of another colour.
+local function Paint(text, colour)
+	local function Byte(value)
+		return math.floor(math.max(0, math.min(1, Finite(value) and value or 1)) * 255 + 0.5)
+	end
+	return ("|cff%02x%02x%02x"):format(Byte(colour[1]), Byte(colour[2]), Byte(colour[3])) .. text .. "|r"
 end
 
 -- A change as the tooltip writes it (design 2.3, M.Fmt.Change): whole from 100 up and to a tenth below for a cast, to a tenth for a second, "0"
@@ -1472,14 +1590,19 @@ local function Amount(change, perSecond)
 	return ("%+.1f"):format(change)
 end
 
+-- A change as a share (a fraction) with its sign, one decimal (M.Fmt.Percent): +1.8%, 0% under 0.05%.
+local function Signed(fraction)
+	local fn = Fmt("Percent")
+	return fn and fn(fraction) or ("%+.1f%%"):format(fraction * 100)
+end
+
 -- "(+1.8%)", "(0%)" under 0.05 (M.Fmt.Percent), or nil while the figure now is 0.
 local function Percent(row)
 	local share = Share(row)
 	if not share then
 		return nil
 	end
-	local fn = Fmt("Percent")
-	return "(" .. (fn and fn(share / 100) or ("%+.1f%%"):format(share)) .. ")"
+	return "(" .. Signed(share / 100) .. ")"
 end
 
 -- The name of a row's spell, with the rank after a kept one below the highest the player knows.
@@ -1495,9 +1618,10 @@ local function LeftName(M, line)
 	return name
 end
 
--- One line of the block for a row: the name white, the change in the colour of its direction, ~ before an estimate. A figure that is a second
--- (row.perSecond: dps, or the threat of what rides on the swings) has one decimal and says so.
-local function RowLine(M, row, role)
+-- One line of the block for a row, in the style: the name light grey, the change green for a gain and red for a loss (white for none), ~ before an
+-- estimate, the percent after it. A figure that is a second (row.perSecond: dps, or the threat of what rides on the swings) has one decimal and
+-- says so.
+local function RowLine(M, row, role, style)
 	local figure = FigureOf(row, role)
 	local kind = KindOf(row.line)
 	local perSecond = row.perSecond == true
@@ -1512,8 +1636,8 @@ local function RowLine(M, row, role)
 	end
 	local percent = Percent(row)
 	local right = (row.estimate == true and "~" or "") .. Amount(change, perSecond) .. unit .. (percent and (" " .. percent) or "")
-	local colour = math.abs(change) < 0.05 and T.GREY or (change > 0 and T.GAIN or T.LOSS)
-	return { left = LeftName(M, row.line), right = right, colour = colour }
+	local colour = math.abs(change) < 0.05 and style.value or (change > 0 and style.good or style.bad)
+	return { left = LeftName(M, row.line), right = right, leftColour = style.label, colour = colour }
 end
 
 -- The name of a worn item in its quality colour, from its link: the colour the link starts with, else the plain name.
@@ -1576,8 +1700,8 @@ local function Header(M, candidate, slot, unit)
 	return ("Instead of %s (%s)"):format(table.concat(names, " and "), where) .. ending
 end
 
--- The dim lines of what is not counted (design 2.6): G.Compare's notCounted, each said "Not counted:" unless it says so already, its creature-type
--- bonuses (vs) and a random suffix not rolled yet.
+-- The notes of what is not counted (design 2.3, 2.6), as texts: G.Compare's notCounted, each said "Not counted:" unless it says so already, its
+-- creature-type bonuses (vs) and a random suffix not rolled yet.
 local function Tail(result)
 	local tail = {}
 	for _, text in ipairs(type(result.notCounted) == "table" and result.notCounted or {}) do
@@ -1585,23 +1709,25 @@ local function Tail(result)
 			if not text:lower():find("not counted", 1, true) then
 				text = T.NOT_COUNTED .. text
 			end
-			tail[#tail + 1] = { text = text, colour = T.DIM, wrap = true }
+			tail[#tail + 1] = text
 		end
 	end
 	for _, text in ipairs(type(result.vs) == "table" and result.vs or {}) do
 		if type(text) == "string" and text ~= "" then
-			tail[#tail + 1] = { text = text, colour = T.DIM, wrap = true }
+			tail[#tail + 1] = text
 		end
 	end
 	local random = result.random
 	if random == true or (type(random) == "string" and random ~= "") then
-		tail[#tail + 1] = { text = random == true and T.RANDOM or random, colour = T.DIM, wrap = true }
+		tail[#tail + 1] = random == true and T.RANDOM or random
 	end
 	return tail
 end
 
--- The block for a comparison G.Compare worked out: { head, tail }, the "Not wearable yet" line going between them at each build. Nil when it gave
--- no slot with a line to show.
+-- The block for a comparison G.Compare worked out (0.5.20, the style): { head, notes, tail, avoid, slots, still, candidate }: head the gold
+-- header and the rows, notes the block's own dim notes (the rows past those shown, or no change), tail the notes of what is not counted, the
+-- "Not wearable yet" note going between them at each build, and avoid GearAvoid.lua's lines (BlockFor). Nil when it gave no slot with a line to
+-- show.
 local function Build(M, result, slot, info)
 	local candidates = type(result) == "table" and result.candidates or nil
 	if type(candidates) ~= "table" then
@@ -1637,22 +1763,109 @@ local function Build(M, result, slot, info)
 			break
 		end
 	end
-	local head = { { text = Header(M, best, slot, unit), colour = T.GREY, wrap = true } }
+	local style = Colours()
+	local head = { { text = Header(M, best, slot, unit), colour = style.header, wrap = true } }
+	local notes = {}
 	if still then
-		head[#head + 1] = { text = T.NO_CHANGE, colour = T.DIM, wrap = true }
+		notes[1] = T.NO_CHANGE
 	else
 		for index = 1, bestShown do
-			head[#head + 1] = RowLine(M, bestRows[index], info.role)
+			head[#head + 1] = RowLine(M, bestRows[index], info.role, style)
 		end
 		if #bestRows > bestShown then
-			head[#head + 1] = { text = T.MORE:format(#bestRows - bestShown), colour = T.DIM, wrap = true }
+			notes[1] = T.MORE:format(#bestRows - bestShown)
 		end
 	end
-	return { head = head, tail = Tail(result), slots = best.slots, still = still }
+	return { head = head, notes = notes, tail = Tail(result), avoid = {}, slots = best.slots, still = still, candidate = best }
+end
+
+local function SameSlots(a, b)
+	if type(a) ~= "table" or type(b) ~= "table" or #a ~= #b then
+		return false
+	end
+	for index, slot in ipairs(a) do
+		if b[index] ~= slot then
+			return false
+		end
+	end
+	return true
+end
+
+-- What the item does to an enemy's swing (0.5.20, Damage taken), while avoidance shows: GearAvoid.lua's taken { now, with, pct, estimate } of the
+-- candidate of A.Compare for the slots the spell rows show (else its first), which A.Compare's candidates carry, else A.Totals of it; nil while
+-- avoidance does not show or has no figure.
+local function Taken(subject, slots, opts)
+	if Avoid("Wanted") ~= true then
+		return nil
+	end
+	local result = Avoid("Compare", subject, opts)
+	local candidates = type(result) == "table" and result.candidates or nil
+	if type(candidates) ~= "table" then
+		return nil
+	end
+	local chosen = candidates[1]
+	for _, candidate in ipairs(candidates) do
+		if type(candidate) == "table" and SameSlots(candidate.slots, slots) then
+			chosen = candidate
+			break
+		end
+	end
+	if type(chosen) ~= "table" then
+		return nil
+	end
+	local taken = chosen.taken
+	if type(taken) ~= "table" then
+		local totals = Avoid("Totals", chosen)
+		taken = type(totals) == "table" and totals.taken or nil
+	end
+	if type(taken) == "table" and Finite(taken.pct) then
+		return taken
+	end
+	return nil
+end
+
+-- One figure of the Overall line: its word and its change as a share in green when better and red when worse (white for none), ~ before an
+-- estimate; lower is better for damage taken.
+local function OverallFigure(word, pct, estimate, lowerBetter, style)
+	local colour = style.value
+	if math.abs(pct) >= T.STILL_PCT then
+		colour = ((pct > 0) ~= (lowerBetter == true)) and style.good or style.bad
+	end
+	return Paint(word .. " " .. (estimate and "~" or "") .. Signed(pct), colour), math.abs(pct) >= T.STILL_PCT
+end
+
+-- The Overall line of the block (0.5.20, Overall totals at Weighted, chat.gearTotals): a figure the chosen spells have, each the weighted mean of
+-- its rows' percent changes (GearModel.lua's G.Totals of the candidate shown, with the lines and their weights), and Damage taken while avoidance
+-- shows (Taken): "Overall  Damage +2.4%  ·  Threat +1.1%  ·  Damage taken -2.1%". Nil when there is no figure, or none changes.
+local function Overall(candidate, lines, opts, taken, style)
+	local G = Gear()
+	local parts, moved = {}, false
+	if type(G.Totals) == "function" then
+		local ok, totals = pcall(G.Totals, candidate, lines, opts)
+		if not ok then
+			Report(totals, "totals")
+		elseif type(totals) == "table" then
+			for _, figure in ipairs(T.FIGURES) do
+				local total = totals[figure[1]]
+				if type(total) == "table" and Finite(total.pct) and not (Finite(total.n) and total.n <= 0) then
+					local text, moves = OverallFigure(figure[2], total.pct, total.estimate == true, false, style)
+					parts[#parts + 1], moved = text, moved or moves
+				end
+			end
+		end
+	end
+	if taken then
+		local text, moves = OverallFigure(T.TAKEN, taken.pct, taken.estimate == true, true, style)
+		parts[#parts + 1], moved = text, moved or moves
+	end
+	if not moved then
+		return nil
+	end
+	return { left = T.OVERALL, right = table.concat(parts, T.SEPARATOR), leftColour = style.label, colour = style.value }
 end
 
 -- The block of an item, from the cache or G.Compare. In a fight with nothing worked out now, the last block of the item, else one dim line;
--- out of one, G.Compare's reason as one grey line (as "Needs a one-hand weapon; not compared.") unless it is quiet, else nothing.
+-- out of one, G.Compare's reason as one line (as "Needs a one-hand weapon; not compared.") unless it is quiet, else nothing.
 local function BlockFor(key, data, link, slot, guid)
 	local M, G = Model(), Gear()
 	if not (M and G) then
@@ -1670,7 +1883,8 @@ local function BlockFor(key, data, link, slot, guid)
 	if #known == 0 then
 		return nil
 	end
-	local cacheKey = key .. "|" .. tostring(Version(M)) .. "|" .. list.version .. "|" .. tostring(Avoid("Stamp"))
+	local totals = Opt("gearTotals") ~= "off"
+	local cacheKey = table.concat({ key, tostring(Version(M)), list.version, tostring(Avoid("Stamp")), tostring(totals) }, "|")
 	local kept = blocks.byKey[cacheKey]
 	if kept then
 		return kept
@@ -1680,24 +1894,34 @@ local function BlockFor(key, data, link, slot, guid)
 	local result = G.Compare(slot or link, known, opts)
 	Seen(result)
 	local block = Build(M, result, slot, info)
+	local style = Colours()
 	if block then
-		-- The avoidance block after the spell rows, for the slots they show, while it shows (GearAvoid.lua, A.TipLines); with it, the line in place
-		-- of spell rows that do not change says what it counts.
+		-- The avoidance block after the spell block, for the slots its rows show, while it shows (GearAvoid.lua, A.TipLines); with it, the note in
+		-- place of spell rows that do not change says what it counts.
 		local more, words = Avoid("TipLines", slot or link, block.slots, opts)
 		if type(more) == "table" then
 			if block.still and type(words) == "string" then
-				block.head[2] = { text = words, colour = T.DIM, wrap = true }
+				block.notes[1] = words
 			end
 			for _, entry in ipairs(more) do
-				block.head[#block.head + 1] = entry
+				if type(entry) == "table" then
+					block.avoid[#block.avoid + 1] = entry
+				end
 			end
 		end
+		if totals then
+			local overall = Overall(block.candidate, known, opts, Taken(slot or link, block.slots, opts), style)
+			if overall then
+				table.insert(block.head, 2, overall)
+			end
+		end
+		block.candidate = nil
 		Store(blocks.byKey, blocks.order, cacheKey, block)
 		Store(blocks.last, blocks.lastOrder, key, block)
 		return block
 	end
 	if Fighting(stats) then
-		return blocks.last[key] or { head = { { text = T.OUT_OF_COMBAT, colour = T.DIM, wrap = true } }, tail = {} }
+		return blocks.last[key] or { head = {}, notes = { T.OUT_OF_COMBAT }, tail = {}, avoid = {} }
 	end
 	-- A reason marked quiet is one no line should show (design 2.4: ammunition the game does not use for the player, an off-hand weapon for one who
 	-- does not dual wield, an item not loaded).
@@ -1706,22 +1930,29 @@ local function BlockFor(key, data, link, slot, guid)
 	end
 	local reason = result.why
 	if type(reason) == "string" and reason ~= "" then
-		return { head = { { text = reason, colour = T.GREY, wrap = true } }, tail = {} }
+		return { head = { { text = reason, colour = style.label, wrap = true } }, notes = {}, tail = {}, avoid = {} }
 	end
 	return nil
 end
 
--- Adds one line of a block; false when the game refused it.
-local function Put(tooltip, entry)
-	local colour = entry.colour or T.GREY
-	if entry.right then
-		return (pcall(tooltip.AddDoubleLine, tooltip, entry.left, entry.right, T.WHITE[1], T.WHITE[2], T.WHITE[3], colour[1], colour[2], colour[3]))
+-- Adds one line of a block in the style; false when the game refused it. A figure ({ left, right }) has its label light grey and its value in
+-- its colour (white by default); a line alone ({ text }) its own colour, light grey by default, a note's dim; GearAvoid.lua's lines are read the
+-- same way, with leftColour or rightColour where they give one.
+local function Put(tooltip, entry, style)
+	if entry.right ~= nil then
+		local left = type(entry.leftColour) == "table" and entry.leftColour or style.label
+		local right = (type(entry.rightColour) == "table" and entry.rightColour) or (type(entry.colour) == "table" and entry.colour) or style.value
+		return (pcall(tooltip.AddDoubleLine, tooltip, tostring(entry.left or ""), tostring(entry.right), left[1], left[2], left[3], right[1], right[2],
+			right[3]))
 	end
-	return (pcall(tooltip.AddLine, tooltip, entry.text, colour[1], colour[2], colour[3], entry.wrap == true))
+	local colour = (type(entry.colour) == "table" and entry.colour) or (entry.dim == true and style.dim) or style.label
+	return (pcall(tooltip.AddLine, tooltip, tostring(entry.text or entry.left or ""), colour[1], colour[2], colour[3], entry.wrap ~= false))
 end
 
 -- Adds the block once for each build of the tooltip: the same data with the lines of the first call still there is the same build
--- (Chat.lua:795-806). A line the game refuses stops the adding for this build.
+-- (Chat.lua:795-806). The head, then the block's notes (its own, "Not wearable yet:" with the game's requirement, and what is not counted): in
+-- Compact (chat.tipDetail) joined into one dim line, in Full each its own; then GearAvoid.lua's lines. A line the game refuses stops the adding
+-- for this build.
 local function Add(tooltip, data, block, later)
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	if not ok or not Finite(shown) then
@@ -1731,10 +1962,11 @@ local function Add(tooltip, data, block, later)
 	if record and rawequal(record.data, data) and shown >= record.lines then
 		return
 	end
+	local style = Colours()
 	local count, going = 0, true
 	local function One(entry)
 		if going then
-			going = Put(tooltip, entry)
+			going = Put(tooltip, entry, style)
 			if going then
 				count = count + 1
 			end
@@ -1743,10 +1975,27 @@ local function Add(tooltip, data, block, later)
 	for _, entry in ipairs(block.head) do
 		One(entry)
 	end
-	if later then
-		One({ text = T.NOT_YET .. later, colour = T.DIM, wrap = true })
+	local notes = {}
+	for _, text in ipairs(block.notes or {}) do
+		notes[#notes + 1] = text
 	end
-	for _, entry in ipairs(block.tail) do
+	if later then
+		notes[#notes + 1] = T.NOT_YET .. later
+	end
+	for _, text in ipairs(block.tail or {}) do
+		notes[#notes + 1] = text
+	end
+	if Opt("tipDetail") == "full" then
+		for _, text in ipairs(notes) do
+			One({ text = text, colour = style.dim, wrap = true })
+		end
+	elseif #notes > 0 then
+		for index, text in ipairs(notes) do
+			notes[index] = (text:gsub("%.$", ""))
+		end
+		One({ text = table.concat(notes, T.JOIN), colour = style.dim, wrap = true })
+	end
+	for _, entry in ipairs(block.avoid or {}) do
 		One(entry)
 	end
 	added[tooltip] = { data = data, lines = shown + count }
@@ -1892,7 +2141,39 @@ local function RemoveNamed(text)
 	return RemoveLine(id)
 end
 
--- /flatui gear list: the lines with their ranks, and whether they are the defaults.
+-- /flatui gear weight <name> <0 to 5>: the weight of the line of the spell of that name in the Overall line, the one that follows its rank first,
+-- as RemoveNamed finds it.
+local function WeightNamed(text)
+	local typed, value = text:match("^(.-)%s+([%d%.]+)$")
+	value = tonumber(value or "")
+	if not typed or typed == "" or not value then
+		return false, T.WEIGHT_HELP
+	end
+	local M = Model()
+	local entry = M and M.ByKey(typed:lower()) or nil
+	if type(entry) == "table" then
+		local first
+		for _, row in ipairs(Entries()) do
+			local line = row[3]
+			if line and line.key == entry.key then
+				if not line.kept then
+					return SetWeight(row[1], value)
+				end
+				first = first or row[1]
+			end
+		end
+		if first then
+			return SetWeight(first, value)
+		end
+	end
+	local id = SpellFrom(typed)
+	if not id then
+		return false, ('Gear comparison: no spell found for "%s".'):format(typed)
+	end
+	return SetWeight(id, value)
+end
+
+-- /flatui gear list: the lines with their ranks and weights, and whether they are the defaults.
 local function PrintList()
 	local _, info = Resolve()
 	local rows = Entries()
@@ -1911,8 +2192,9 @@ local function PrintList()
 		local line = row[3]
 		if line then
 			local rank = RankText(line.id)
-			print(("%d. %s%s (%d)%s%s"):format(index, line.name, rank and (", " .. rank) or "", line.id, line.kept and ", rank kept" or "",
-				line.known and "" or ", not known"))
+			local weight = Finite(line.weight) and line.weight ~= T.WEIGHT and (", weight " .. WeightText(line.weight)) or ""
+			print(("%d. %s%s (%d)%s%s%s"):format(index, line.name, rank and (", " .. rank) or "", line.id, line.kept and ", rank kept" or "",
+				weight, line.known and "" or ", not known"))
 		else
 			print(("%d. %s"):format(index, row[2]))
 		end
@@ -1960,6 +2242,8 @@ local function Slash(rest)
 		Say(pcall(AddNamed, text))
 	elseif word == "remove" and text ~= "" then
 		Say(pcall(RemoveNamed, text))
+	elseif word == "weight" then
+		Say(pcall(WeightNamed, text))
 	elseif word == "bar" then
 		Say(pcall(BarAdd, tonumber(text:match("^(%d+)$") or "")))
 	elseif word == "reset" then
