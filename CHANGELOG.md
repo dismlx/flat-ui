@@ -1,6 +1,7 @@
 ## 0.5.21
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Gear comparison** window: the **item finder** now moves in `/flatui move`. Drag its box, or its title bar, and it stays where you let it go, a place your profile keeps as it keeps every moved frame; **Dock**, a right-click on its title or a right-click on its box hangs it on the window again, and **Undo** and **Reset all** know both. Its box shows only while the finder is open, so a closed finder is no longer in the way.
 - **Hit table**, **On enemy tooltips**: the lines are shorter, a letter for each part and short labels, as in "Swing  M8 D6.5 P14 B5 G40 C12.1 H33.4" (M miss, D dodge, P parry, G glance, B block, C crit, H hit, in percent; a figure loses its .0).
 
 ## 0.5.20
