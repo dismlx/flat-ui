@@ -47,8 +47,10 @@ local _, ns = ...
 -- on at Classic's 5% plus 0.04% a point of defense over the cap plus its block rating (~); one taken off turns it off, and the block value with it.
 -- Where the client gives no conversion, that stat is named as not counted. Armor takes off what C_PaperDollInfo.GetArmorEffectiveness(armor,
 -- attacker level) gives, the client's own formula (PaperDollInfoDocumentation.lua:56-70, which marks no secret answer; the sheet's
--- PaperDollFrame_GetArmorReduction, Camelot/PaperDollFrame.lua:2392-2393), asked at compare time with the snapshot's plain armor. A worn item (the
--- Character window) is the table with it against the table with its slot empty (G.Without), so the change is what it gives.
+-- PaperDollFrame_GetArmorReduction, Camelot/PaperDollFrame.lua:2392-2393), asked at compare time with the snapshot's plain armor; with no answer, an
+-- item that changes armor names it as not counted. A worn item (the Character window) is the table with it against the table with its slot empty
+-- (G.Without), so the change is what it gives. A total that rests on an estimate is marked ~, its change is not: the change of a row the roll does not
+-- cut is the client's own sum.
 --
 -- A.Compare(link or slot, opts) gives { header, attacker, boss, now, candidates = { { label, slots, empty, offEmpty, game, notCounted, rows = { { key,
 -- label, now, with, estimate, better } } } }, notCounted, why, quiet, old }, kept by the link (or the slot and the link worn there), M.Version(), the
@@ -93,6 +95,8 @@ local K = {
 	-- The gear lines' colours (GearLines.lua): the grey of a header and white, and the gain and loss of Flat UI's combat numbers
 	-- (CombatText.lua:889-894).
 	GREY = { 0.8, 0.8, 0.8 }, WHITE = { 1, 1, 1 }, GAIN = { 0.1, 1, 0.1 }, LOSS = { 1, 0.1, 0.1 },
+	-- The dim of the lines of what is not counted, the hit table's (HitTable.lua:79), as GearLines.lua has it.
+	DIM = { 0.66, 0.68, 0.62 },
 }
 
 -- The words, English as all of Flat UI's lines are.
@@ -551,6 +555,16 @@ local function Rows(now, with)
 	return rows
 end
 
+-- The table of a slot with a stat change (Apply, then Work); armor is named as not counted where it changes and the client gave no reduction.
+local function Changed(s, delta, state2, stats2, notes, attacker)
+	local w = Apply(s, delta, state2, stats2, notes)
+	local t = Work(w, attacker)
+	if not t.armor and w.armor ~= s.armor then
+		AddOnce(notes, T.NO_ARMOR)
+	end
+	return t
+end
+
 local function Header(boss, attacker, gives)
 	return (gives and T.GIVES or T.HEADER):format(boss and T.BOSS or T.LEVEL, attacker)
 end
@@ -573,7 +587,7 @@ local function Instead(result, link, opts, state, stats, s, now)
 			return false
 		end
 		local notes = {}
-		local with = Work(Apply(s, Delta(link, c.slots, state), state2, stats2, notes), result.attacker)
+		local with = Changed(s, Delta(link, c.slots, state), state2, stats2, notes, result.attacker)
 		result.candidates[#result.candidates + 1] = { label = c.label, slots = c.slots, empty = c.empty, offEmpty = c.offEmpty, game = c.game,
 			notCounted = notes, rows = Rows(now, with) }
 		for _, text in ipairs(notes) do
@@ -597,9 +611,11 @@ local function Gives(result, slot, state, stats, s, now)
 		return false
 	end
 	local notes = {}
-	local without = Work(Apply(s, Delta(nil, { slot }, state), state2, stats2, notes), result.attacker)
+	local without = Changed(s, Delta(nil, { slot }, state), state2, stats2, notes, result.attacker)
 	result.candidates[1] = { label = K.SLOTS[slot], slots = { slot }, empty = false, game = true, notCounted = notes, rows = Rows(without, now) }
-	result.notCounted = notes
+	for _, text in ipairs(notes) do
+		AddOnce(result.notCounted, text)
+	end
 	result.header = Header(result.boss, result.attacker, true)
 	return true
 end
@@ -659,9 +675,6 @@ function A.Compare(itemOrSlot, opts)
 	result.attacker, result.boss = attacker, boss
 	local now = Work(s, attacker)
 	result.now = now
-	if not now.armor then
-		AddOnce(result.notCounted, T.NO_ARMOR)
-	end
 	local keep
 	if slot then
 		keep = Gives(result, slot, state, stats, s, now)
@@ -750,9 +763,14 @@ local function Change(row, with)
 	return delta, ((delta > 0) == (row.better == true)) and "gain" or "loss"
 end
 
--- A part of a tooltip line in the colour of its direction, with ~ before an estimate's number.
+-- A part of a tooltip line in the colour of its direction.
 local function Coloured(text, tone)
 	return (tone == "gain" and GAIN or LOSS) .. text .. "|r"
+end
+
+-- A row's value with the item, ~ first when the row is an estimate (header): the change itself is the client's own sum, its total is not.
+local function Total(row)
+	return (row.estimate and "~" or "") .. Value(row, row.with)
 end
 
 local function Byes(rows)
@@ -771,8 +789,7 @@ local function Lines(rows, attacker)
 		local row = by[key]
 		local delta, tone = Change(row, row.with)
 		if tone ~= "none" then
-			local mark = row.estimate and "~" or ""
-			parts[#parts + 1] = Coloured(("%s %s%s (%s)"):format(row.label, mark, Value(row, delta, true), Value(row, row.with)), tone)
+			parts[#parts + 1] = Coloured(("%s %s (%s)"):format(row.label, Value(row, delta, true), Total(row)), tone)
 		end
 	end
 	if #parts > 0 then
@@ -781,20 +798,18 @@ local function Lines(rows, attacker)
 	local crit = by.crit
 	local delta, tone = Change(crit, crit.with)
 	if tone ~= "none" then
-		local mark, immuneAt = crit.estimate and "~" or "", math.floor(attacker * K.PER_LEVEL + K.CRIT / K.PER_SKILL + 0.5)
-		local text
+		local immuneAt, text = math.floor(attacker * K.PER_LEVEL + K.CRIT / K.PER_SKILL + 0.5), nil
 		if (Num(crit.with) or 0) <= 0 then
-			text = T.CRIT_IMMUNE:format(mark .. Value(crit, delta, true), immuneAt)
+			text = T.CRIT_IMMUNE:format(Value(crit, delta, true), immuneAt)
 		else
-			text = T.CRIT:format(mark .. Value(crit, delta, true), Value(crit, crit.with), immuneAt)
+			text = T.CRIT:format(Value(crit, delta, true), Total(crit), immuneAt)
 		end
 		lines[#lines + 1] = { text = Coloured(text, tone), colour = K.WHITE, wrap = true }
 	end
 	local crush = by.crush
 	delta, tone = Change(crush, crush.with)
 	if tone ~= "none" then
-		local text = T.CRUSH:format((crush.estimate and "~" or "") .. Value(crush, delta, true), Value(crush, crush.with))
-		lines[#lines + 1] = { text = Coloured(text, tone), colour = K.WHITE, wrap = true }
+		lines[#lines + 1] = { text = Coloured(T.CRUSH:format(Value(crush, delta, true), Total(crush)), tone), colour = K.WHITE, wrap = true }
 	end
 	parts = {}
 	local armor = by.armor
@@ -826,21 +841,19 @@ local function SameSlots(a, b)
 	return true
 end
 
--- The lines of the item tooltip block (GearLines.lua), for the candidate whose slots the spell rows show, else the first: the header and the lines
--- that change, as entries GearLines.lua adds ({ text, colour, wrap }), and the words of the spell rows' "no change" line while avoidance shows. Nil
--- while avoidance does not show or has nothing to say.
+-- The lines of the item tooltip block (GearLines.lua), for the candidate whose slots the spell rows show, else the first: the header, the lines that
+-- change and the dim lines of what is not counted, as entries GearLines.lua adds ({ text, colour, wrap }), and the words of the spell rows' "no
+-- change" line while avoidance shows. Nil while avoidance does not show or has nothing to say.
 function A.TipLines(subject, slots, opts)
 	if not A.Wanted() then
 		return nil
 	end
 	local result = A.Compare(subject, opts)
-	local chosen
+	local chosen = result.candidates[1]
 	for _, c in ipairs(result.candidates) do
-		if chosen == nil or SameSlots(c.slots, slots) then
-			chosen = (chosen == nil or SameSlots(c.slots, slots)) and c or chosen
-			if SameSlots(c.slots, slots) then
-				break
-			end
+		if SameSlots(c.slots, slots) then
+			chosen = c
+			break
 		end
 	end
 	if not (chosen and result.attacker) then
@@ -851,6 +864,9 @@ function A.TipLines(subject, slots, opts)
 		return {}, T.NO_CHANGE_ALL
 	end
 	table.insert(lines, 1, { text = result.header, colour = K.GREY, wrap = true })
+	for _, text in ipairs(chosen.notCounted or {}) do
+		lines[#lines + 1] = { text = T.NOT_COUNTED .. text, colour = K.DIM, wrap = true }
+	end
 	return lines, T.NO_CHANGE
 end
 
