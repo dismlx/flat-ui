@@ -91,7 +91,7 @@ local _, ns = ...
 -- The frame: CreateFrame on UIParent, named FlatUIGear, made the first time it opens and only out of combat (an opening asked for in a fight before
 -- that waits for its end, ns.OutOfCombat), in the MEDIUM strata among the game's windows, or DIALOG when it shows while the options window does
 -- (HIGH, Panel.lua:2654; ns.PanelShown), so the window its row there opens shows above it, as the Edit Mode layout text does (LayoutText.lua:38);
--- raised when clicked (SetToplevel, WL/uiobjects.yaml:4770),
+-- raised when clicked (SetToplevel, WL/uiobjects.yaml:4770) and when it opens or is asked for again (Raise, :4473),
 -- kept on the screen (SetClampedToScreen) and placed by Flat UI alone (SetMovable, SetDontSavePosition, :4605). The mouse wheel scrolls its lines when
 -- there are more than it holds (EnableMouseWheel, :7184). Its name goes once into UISpecialFrames, whose windows the game's CloseSpecialWindows hides
 -- on Escape (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:21-27, 1104-1116). It adds a line to /flatui status while it is open with
@@ -3102,7 +3102,11 @@ local function Special()
 end
 
 -- The strata of the window: MEDIUM among the game's windows (design 2.7), or DIALOG while the options window shows (HIGH, Panel.lua:2654), so a
--- window its Gear comparison window row opens shows above it, as the Edit Mode layout text does (LayoutText.lua:38).
+-- window its Gear comparison window row opens shows above it, as the Edit Mode layout text does (LayoutText.lua:38); and the window at the front of
+-- that strata (Raise, WL/uiobjects.yaml:4473), above the game's windows there, which the game raises at a click and the panel manager each time it
+-- lays them out (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:615-751). Made later and raised only by a click on itself, it opened
+-- under any of them that lay where it opens, such as a second panel beside the Character window, and their frames took the clicks and drops meant
+-- for its item box, Against and weights (0.5.23). The item finder lies a strata above it (GearSearch.lua's D.Strata).
 local function Raise()
 	local over = false
 	if type(ns.PanelShown) == "function" then
@@ -3110,6 +3114,7 @@ local function Raise()
 		over = ok and shown == true
 	end
 	W.frame:SetFrameStrata(over and "DIALOG" or "MEDIUM")
+	pcall(W.frame.Raise, W.frame)
 end
 
 -- The window's part of its showing: SpellModel listens, the switch starts on Threat for a tank (on Avoidance while it shows) and on A cast for the

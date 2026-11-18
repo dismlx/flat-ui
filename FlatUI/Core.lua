@@ -295,7 +295,7 @@ local ADDON_NAME, ns = ...
 -- open.
 -- Its Compare gear button (GearButton.lua) is a frame of its own, FlatUIGearButton, on UIParent, anchored to the title bar of CharacterFrame or, at
 -- a spot the movers keep measured from the window's top left corner, to that corner (SetPoint with the window as the frame it hangs from), and never
--- parented to it; of the window it reads only whether it shows, where it is and its scale (which the button takes), its strata and level, whether
+-- parented to it; of the window it reads only whether it shows, where it is and its scale (which the button takes), its strata (the button is one above it, so the window, which the game raises when clicked, never covers it), whether
 -- the game protects it and the width of its title text (the fields TitleContainer and TitleText, read). It follows ShowUIPanel and HideUIPanel
 -- with hooksecurefunc (ns.FollowGlobal), and a frame of its own looks four times a second, while the row and the module are on, whether the window
 -- shows. With an item on the cursor it gives one lifted from a slot back with ClearCursor, as the window does, and its tooltip is GameTooltip,

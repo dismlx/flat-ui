@@ -5,7 +5,7 @@ local _, ns = ...
 -- has no room for it there and has room on the other side, its top right corner 4 px left of the window's top left corner (the window's and the
 -- screen's edges, GetLeft, GetRight and GetWidth of the window and UIParent, WL/uiobjects.yaml), and kept on the screen (SetClampedToScreen), so a
 -- window sized to the screen or one low on it leaves the finder in sight. It is made on UIParent and hangs from the window by its anchor, so it
--- moves with it, takes its strata (GetFrameStrata, SetFrameStrata) and is raised when clicked (SetToplevel); it shows only while the window does:
+-- moves with it, and lies one strata above the window's (Strata and levels, below); it shows only while the window does:
 -- when the window hides it closes the finder (GearWindow.lua's Hiding, ns.GearSearchToggle), and the finder closes at its next look once the window
 -- is not shown, so the next opening of the window starts without it until Find (the button on the window's title bar, ns.GearSearchToggle) or the
 -- list row Item finder (chat.gearFind: ns.GearFindLines and ns.GearFindPick) opens it again.
@@ -24,6 +24,22 @@ local _, ns = ...
 -- (minimized), and w and h, the size of its box in the movers, which takes the title bar's height while it is minimized. While the movers are
 -- open (ns.MoverKit.IsOpen) the finder is in the MEDIUM strata, under their boxes (HIGH), so it covers none of them, and Minimize is above them,
 -- so the finder can be minimized out of their way.
+-- Strata and levels (0.5.23, the owner: "the search function cant be clicked into in the default flatui user interface"): the finder lies one strata
+-- above the window's (GetFrameStrata, SetFrameStrata, WL/uiobjects.yaml:4217, 4653: HIGH over MEDIUM, FULLSCREEN over DIALOG), as the Compare gear
+-- button lies over the Character window (GearButton.lua), at a level of its own (L.LEVEL, SetFrameLevel, :4646), under that button's (20) so the
+-- button stays on its title bar where the two meet, and it is not toplevel; in the window's strata only while the movers are open (above) and while
+-- the options window (HIGH, Panel.lua:2654) shows over a window in MEDIUM, so it stays under that with its window. A finder kept on the screen over
+-- the window, with no room on either side, covers that part of it. Its search box and level fields lie L.ABOVE levels over it, above the rest of the
+-- finder and the Compare gear button, so the search box of a minimized finder docked on the Character window, on that window's title bar where the
+-- button is, takes the click where the two meet; Minimize two. They are set again at each look whenever one is not there (D.Levels): the game sets
+-- the levels of a frame's children again when the frame's level changes (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:817). Before, the
+-- finder was toplevel in the window's strata with its search box set once two levels over the title bar. The game raises a toplevel window above
+-- every frame of its strata when it is clicked, and the panel manager raises its left panel each time it lays the panels out
+-- (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:615-647); the finder, made later and raised only by a click on itself, opened under
+-- such a window. By default it docks on one: with UIParent 1365 wide (the game's UI scale 1 on a 16:9 screen) the window, at 680 and 460 wide, leaves
+-- no room on its right (1488), so the finder hangs on its left, on the Character window (16 to 647), whose paper doll and stats pane, and on a
+-- minimized finder its title bar (510) and the movers' title strip (Movers.lua:3385-3394), then lay over the search box and took its clicks, each
+-- raising the Character window again.
 -- Opening the finder opens the window first (ns.GearWindowShow, looked up when called); a window that waits for the end of a fight (GearWindow.lua
 -- makes its frame out of combat only) has the finder wait for it too (ns.OutOfCombat). Every frame here is a plain frame of Flat UI's own with
 -- nothing protected, so it is made, sized, filled, shown and placed in a fight too; only a drag of its title bar waits for the end of one.
@@ -81,10 +97,12 @@ local NAME, PARENT = "FlatUIGearSearch", "FlatUIGear"
 -- Units: width, the least height, padding, the title bar and its cross, the gap between two controls and to the window, a field, a row of results and
 -- its icon, a check box, a line of a menu, the results a page, the room of the level boxes and of a filter button, and the two right columns; the
 -- least width of the search box on the title bar of a minimized finder, the width of Dock, and the frame level that puts Minimize above the boxes
--- of the movers (their levels go up to 501, Movers.lua:56, 1973-1979).
+-- of the movers (their levels go up to 501, Movers.lua:56, 1973-1979); the finder's own level, whose frames reach it + 4, under the Compare gear
+-- button's (GearButton.lua's LEVEL, 20), and how many levels over it its boxes lie: over the rest of the finder (up to + 4) and over that button
+-- and its outline (20 and 21), where the search box of a minimized finder meets it.
 local L = { WIDTH = 344, MIN_HEIGHT = 540, PAD = 8, BAR = 26, CLOSE = 18, GAP = 6, DOCK = 4, FIELD = 20, ROW = 30, ICON = 24, CHECK = 12,
 	MENU_LINE = 16, PER_PAGE = 50, LEVEL_BOX = 34, ARROW = 20, BEST = 84, RIGHT = 54, CHANGE = 60, FOOT = 26, LINE = 12, MIN_BOX = 90, DOCK_W = 44,
-	LIFT = 600 }
+	LIFT = 600, LEVEL = 10, ABOVE = 12 }
 L.INNER = L.WIDTH - 2 * L.PAD
 L.HALF = (L.INNER - L.GAP) / 2
 -- Seconds: between two looks, typing that settles before a search, between two searches while an item loads (and how many), how long Best for me
@@ -221,9 +239,9 @@ local IsSecret = ns.IsSecret
 -- has; icons, subNames, colours: answers kept. requested: items the client was asked to load. best: Best for me's { on, scores, version, started }.
 -- runs, faults, elapsed, pending: the part's runs, what went to the error handler, the time since the last look, an opening that waits for a fight.
 -- parent: the window; body: the frame of everything under the title bar; close, fold (Minimize, its strokes in foldLines) and dock (Dock), the
--- buttons of the title bar; boxY: where the search box sits under the title bar. placed: where the finder hangs now (Place: "right" or "left" of the
--- window, else its spot); min: minimized; moving: its title bar is dragged; strata and lifted: the strata it took and whether Minimize is above the
--- boxes of the movers.
+-- buttons of the title bar; boxY: where the search box sits under the title bar; boxes: the search box and the level boxes (D.Levels). placed:
+-- where the finder hangs now (Place: "right" or "left" of the window, else its spot); min: minimized; moving: its title bar is dragged; strata and
+-- lifted: the strata it took and whether Minimize is above the boxes of the movers.
 local S = { runs = 0, faults = {}, elapsed = 0, page = 1, offset = 0, results = {}, rows = {}, made = {}, choices = {}, checks = {}, fields = {}, owners = {},
 	parsed = {}, byId = {}, icons = {}, subNames = {}, colours = {}, requested = {}, tries = 0,
 	query = { text = "", quality = 1, usable = true, sources = { all = true, bags = true, alts = true } },
@@ -2259,14 +2277,14 @@ local function Hiding()
 end
 
 -- The frame and everything in it, once, on UIParent beside the window (parent), minimized as the character left it. Everything under the title bar
--- is on the body, which minimizing hides; the search box is on the finder, so it can go on the title bar.
+-- is on the body, which minimizing hides; the search box is on the finder, so it can go on the title bar. Not toplevel, and the levels of its boxes
+-- follow its own at each look (D.Strata, D.Levels).
 local function Make(parent)
 	local frame = Own(CreateFrame("Frame", NAME, UIParent))
 	S.parent = parent
 	S.lights, S.strokes, S.hoverStrokes = {}, {}, {}
 	frame:SetSize(L.WIDTH, L.MIN_HEIGHT)
 	frame:SetClampedToScreen(true)
-	frame:SetToplevel(true)
 	frame:SetMovable(true)
 	pcall(frame.SetDontSavePosition, frame, true)
 	frame:EnableMouse(true)
@@ -2280,9 +2298,9 @@ local function Make(parent)
 	local y = -(L.BAR + L.GAP + 2)
 	S.boxY = y
 	MakeSearch(frame, y)
-	S.box:SetFrameLevel(S.bar:GetFrameLevel() + 2)
 	y = y - L.FIELD - L.GAP
 	MakeFilters(body, y)
+	S.boxes = { S.box, S.from, S.to }
 	y = y - 4 * (L.FIELD + L.GAP)
 	MakeStatus(body, y)
 	y = y - L.FIELD - 2 * L.GAP - 1
@@ -2484,9 +2502,14 @@ function D.Place()
 	D.Bar()
 end
 
--- The finder takes the window's strata, MEDIUM or DIALOG (GearWindow.lua's Raise), and MEDIUM while the movers are open (ns.MoverKit.IsOpen), under
--- their boxes (HIGH, Movers.lua:1984), so it covers none of them; Minimize then sits above them, so the finder can be minimized out of their way.
--- The menu keeps its own strata.
+-- The strata above each strata a window can have, never above FULLSCREEN, so the finder's menus (FULLSCREEN_DIALOG) stay above it.
+D.OVER = { BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = "DIALOG", DIALOG = "FULLSCREEN" }
+
+-- The finder lies one strata above the window's (header, Strata and levels): HIGH over MEDIUM and FULLSCREEN over DIALOG (GearWindow.lua's Raise),
+-- at its own level (L.LEVEL), so no window of the window's strata, which the game raises at a click, lies over it. In the window's strata while
+-- the options window (HIGH, ns.PanelShown) shows over a window in MEDIUM, under it as its window is; MEDIUM while the movers are open
+-- (ns.MoverKit.IsOpen), under their boxes (HIGH, Movers.lua:1984), so it covers none of them; Minimize then sits above them, so the finder can be
+-- minimized out of their way. The menu keeps its own strata. Then the levels of its boxes (D.Levels).
 function D.Strata()
 	local kit = ns.MoverKit
 	local open = type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
@@ -2494,13 +2517,16 @@ function D.Strata()
 	if not open then
 		local window = S.parent
 		local ok, answer = pcall(window.GetFrameStrata, window)
-		if ok and not IsSecret(answer) and type(answer) == "string" then
-			strata = answer
+		local own = ok and not IsSecret(answer) and type(answer) == "string" and answer or "MEDIUM"
+		strata = D.OVER[own] or "FULLSCREEN"
+		if own == "MEDIUM" and Ask(ns, "PanelShown") == true then
+			strata = own
 		end
 	end
 	if strata ~= S.strata then
 		S.strata, S.lifted = strata, nil
 		S.frame:SetFrameStrata(strata)
+		S.frame:SetFrameLevel(L.LEVEL)
 		if S.menu then
 			S.menu.frame:SetFrameStrata("FULLSCREEN_DIALOG")
 		end
@@ -2508,8 +2534,32 @@ function D.Strata()
 	if open ~= S.lifted then
 		S.lifted = open
 		S.fold:SetFrameStrata(open and "HIGH" or strata)
-		S.fold:SetFrameLevel(open and L.LIFT or S.bar:GetFrameLevel() + 1)
 	end
+	D.Levels()
+end
+
+-- A frame of the finder at a level, set only when it is not there.
+function D.Level(frame, level)
+	local ok, now = pcall(frame.GetFrameLevel, frame)
+	if not (ok and now == level) then
+		frame:SetFrameLevel(level)
+	end
+end
+
+-- The levels of the finder's own frames from its level as it is now, at each look: the search box and the level fields L.ABOVE over it, over the
+-- title bar and the body (+ 1), their buttons (+ 2), the rows (+ 3) and the Compare gear button (20 and its outline 21, in the same strata), so
+-- the box takes its click on the title bar of a minimized finder too, also where it meets that button; Minimize one over the title bar, or L.LIFT
+-- while it is above the boxes of the movers. The game sets the levels of a frame's children again when the frame's level changes, so a level set
+-- once does not last (header).
+function D.Levels()
+	local ok, level = pcall(S.frame.GetFrameLevel, S.frame)
+	if not (ok and Finite(level)) then
+		return
+	end
+	for _, box in ipairs(S.boxes) do
+		D.Level(box, level + L.ABOVE)
+	end
+	D.Level(S.fold, S.lifted and L.LIFT or level + 2)
 end
 
 -- The title bar as the finder is: Dock while it hangs from a spot of its own, Minimize's mark (a bar, or a square while minimized), and the search

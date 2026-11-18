@@ -1,3 +1,9 @@
+## 0.5.23
+
+- For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Gear comparison**: the **Compare gear** button on the Character window could not be clicked. The game raises the Character window above everything in its layer each time it is clicked, which put the button under the window's background and gave its clicks to the window's title bar. The button is now one layer above the window, so it stays on top and clickable.
+- **Gear comparison**: the **item finder**'s search box could not be clicked. Where the screen has no room for the finder right of the **Gear comparison** window, as at the game's own UI scale on a 16:9 screen, the finder opens on the window's left, over the Character window. The game puts the Character window in front of everything in its layer each time you click it and each time one of its windows opens or closes, so the Character window lay over the search box and took its clicks. The finder now lies one layer above the window, where the Character window and the game's other windows no longer cover it, and its search box and level boxes stay above the rest of the finder and above the **Compare gear** button, also on the title bar of a minimized finder, where the search box meets that button on the Character window's title bar. The **Gear comparison** window now comes to the front when it opens or is asked for again, so a game window it opened under no longer takes the clicks and drops meant for its item, **Against** and weights.
+
 ## 0.5.22
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
