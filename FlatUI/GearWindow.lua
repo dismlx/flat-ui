@@ -5,52 +5,57 @@ local _, ns = ...
 -- the place to drop items and spells on, and it works with Your spells in item tooltips off: it is a tool of its own, and the list rows of the Spells
 -- and gear tab serve both. /flatui gear and the tab's Gear comparison window row open and close it (ns.GearWindowToggle), /flatui gear <item> shows
 -- that item in it (ns.GearWindowShow), and Escape closes it; the item and the switch are kept for the session.
+-- A fight is InCombatLockdown's answer (WL/apis.yaml:39650), a withheld one counting as a fight; the time of a spell dropped is GetTime's (:39050).
 -- Everything runs as the part "gear window" of the chat module (ns.EachPart, Core.lua:2168-2199), each run with a count of its own as its first
 -- argument, so three faults stop the window alone with a line for /flatui status (design 4.4); the first fault also goes to the game's error handler
 -- (geterrorhandler), as Bags' parts report theirs (Bags.lua:356-374), and a part that stopped closes the window. The files it reads, SpellModel.lua,
 -- GearModel.lua and GearLines.lua, are looked up when called, since any of them may load after this one or fail; a fault of one of their functions
--- goes to the error handler once, and the window goes on with what the other lines give.
--- A fight is InCombatLockdown's answer, a withheld one counting as a fight. In a fight nothing is made, no tooltip is written and the numbers stay as
--- they were worked out: the window works them out again out of combat only, when SpellModel's version (M.Version: the state, the stats, talents, gear,
--- role and the rows of the tab), the version of the list (ns.GearListVersion), the switch or the item changed. It looks every half second while it
--- shows, after M.State and M.Stats, which read what an event marked (design 4.5); M.Want("gear window") has SpellModel listen to the game's events
--- while the window shows and lets go when it hides. In a fight the foot says the stats are from before it. A drop, the switch and a line taken off are
--- worked out at once, also in a fight, where GearModel gives what it worked out before the fight (design 4.7).
--- The numbers are GearModel's, so the window and the item tooltips agree: with an item G.Compare (the slots it would take, each line now and with it,
--- design 4.3), with none G.Expect of each line in the figure G.Figure gives it for the switch. They are written as design 2.3 rounds them: a cast whole
--- from 100 up and with one decimal below, a second with one decimal, the change in green for a gain, red for a loss and grey for none with its percent,
--- and ~ first for an estimate.
+-- goes to the error handler once, and the window goes on with what the other lines give. M.Want("gear window") has SpellModel listen to the game's
+-- events while the window shows and lets go when it hides; M.State and M.Stats first read what an event marked (design 4.3, 4.5).
 -- The look is the Windows page's, as Bags' windows have it (BagsWindow.lua:499-552): the Background colour at Window opacity with a thin border in the
 -- general border colour (ns.Outline, whose page is the Windows page, so the chat page's own border does not reach it, Core.lua:296), the icon's box in
 -- Button and slot colour, the chosen word of the switch and the light under the cursor in the Highlight colour, the icon cut by Icon crop
--- (SetTexCoord), and the text of the windows (PanelLook.lua:27-28). ns.GearWindowSync, at the end of each refresh of Chat.lua, closes the window while
--- the module or the part is off and paints it again after a change of those rows, which refresh the chat module (Core.lua, READERS).
--- Tooltips are GameTooltip, never in a fight, as Bags' item tooltips wait (Core.lua:146): SetOwner, then the spell of a line (SetSpellByID,
--- Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:560) or the item (SetHyperlink, :590), each a secure accessor of the game's tooltip data
--- (:488-519) that answers true when it built one, AddLine for this window's lines, Show, and Hide only while a frame of the window owns it (IsOwned).
+-- (SetTexCoord), and the text of the windows (PanelLook.lua:27-28) in font strings of Flat UI's own (ns.OwnText), measured as they wrap
+-- (GetUnboundedStringWidth, GetStringHeight, WL/uiobjects.yaml:3738, 3711) so the window is as tall as what it shows. ns.GearWindowSync, at the end of
+-- each refresh of Chat.lua, closes the window while the module or the part is off and paints it again after a change of those rows, which refresh the
+-- chat module (Core.lua, READERS).
+-- Tooltips are GameTooltip, never in a fight, as Bags' item tooltips wait (Core.lua:146): SetOwner, AddLine for this window's lines, Show, and Hide only
+-- while a frame of the window owns it (IsOwned); a line's own spell (SetSpellByID, Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:560) and the
+-- item (SetHyperlink, :590) come from secure accessors of the game's tooltip data (:488-519), which answer true when they built one.
+-- The numbers are GearModel's, so the window and the item tooltips agree, written as design 2.3 rounds them: a cast whole from 100 up and with one
+-- decimal below, a second with one decimal, the change in green for a gain, red for a loss and grey for none, with its percent, and ~ first for an
+-- estimate.
 -- The item: its name in its quality colour from the link, which needs nothing loaded, else from C_Item.GetItemInfo (WL/apis.yaml:16525) and the
 -- game's colour of its quality (ColorManager.GetColorDataForItemQuality, Blizzard_Colors/Mainline/ColorManager.lua:52-60, which has every quality,
 -- else C_Item.GetItemQualityColor, WL/apis.yaml:16726); its icon from C_Item.GetItemInfoInstant (:16569), which never waits. An item the client has
 -- not loaded is asked for once (C_Item.RequestLoadItemDataByID, :17160), as Bags asks (BagsData.lua:1649), and the next look finds it. What it would
--- take the place of is named from the worn items SpellModel read (S.state.links), else GetInventoryItemLink (:36977). The name of a spell is
--- GearLines.lua's, else the game's (C_Spell.GetSpellName, :26753); the level is S.state's, else UnitLevel's (:43168).
--- Drops: what the cursor holds is GetCursorInfo's (:36258). An item dropped or clicked on the window is compared, and ClearCursor (:34956, not
--- protected) puts it back where it came from, also in a fight, as Bags' sections give a dropped item back (BagsLayout.lua:1408-1425). A spell is
--- added to the list (ns.GearAdd, which says what it did): its ID is GetCursorInfo's fourth answer, the second being its slot
--- (Blizzard_SharedTalentUI/Blizzard_SharedTalentSelectionTemplates.lua:137; Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.lua:1953-1955), and a
--- macro's is the spell it casts (GetMacroSpell, WL/apis.yaml:37417), as Cooldowns reads a macro's (Cooldowns.lua:2571-2579). The cursor keeps the
--- spell: one dragged off an action bar has left its slot already, and ClearCursor would take it off the bar. While the cursor holds either, the part of
--- the window that takes it is lit, looked at ten times a second, as Bags lights the titles that take an item (BagsLayout.lua:40-45).
+-- take the place of is named from the worn items SpellModel read (S.state.links), else GetInventoryItemLink (:36977). The name of a line is
+-- GearLines.lua's, else the game's (C_Spell.GetSpellName, :26753); the role is S.state's, else ns.PlayerRole's, and the level S.state's, else
+-- UnitLevel's (:43168).
+-- Working it out: with an item G.Compare (the slots it would take, each line now and with it), with none G.Expect of each line in the figure G.Figure
+-- gives it for the switch (design 4.3), with the rows of the tab and G.Inputs. It is worked out again out of combat only, when SpellModel's version
+-- (M.Version: the state, the stats, talents, gear, role and the rows of the tab), the version of the list (ns.GearListVersion), the switch or the item
+-- changed, looked at every half second while it shows; in a fight it keeps its numbers and its foot says the stats are from before the fight. A drop,
+-- the switch and a line taken off are worked out at once, also in a fight, where GearModel gives what it worked out before it (design 4.7).
+-- Placing: the window hangs by its top left corner from its spot in the movers (ns.MoverSpot, Movers.lua:856-877), growing down as lines come.
+-- Dragging its title bar moves it (StartMoving and StopMovingOrSizing, WL/uiobjects.yaml:4797, 4813, with SetUserPlaced, :4778, so the client keeps no
+-- place of its own), and where it is let go is saved as its spot: the box of its entry in Movers.lua, its top left corner at the window's (GetRect and
+-- GetEffectiveScale), goes to ns.MoverKit.Commit (Movers.lua:1713-1753). Movers asks ns.GearWindowShown whether it has a handle and calls
+-- ns.GearWindowMoved when its spot is set or put back.
+-- Drops: what the cursor holds is GetCursorInfo's (WL/apis.yaml:36258). A spell is added to the list (ns.GearAdd, which says what it did): its ID is
+-- GetCursorInfo's fourth answer, the second being its slot (Blizzard_SharedTalentUI/Blizzard_SharedTalentSelectionTemplates.lua:137;
+-- Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.lua:1953-1955), and a macro's is the spell it casts (GetMacroSpell, WL/apis.yaml:37417), as
+-- Cooldowns reads a macro's (Cooldowns.lua:2571-2579). The cursor keeps the spell: one dragged off an action bar has left its slot already, and
+-- ClearCursor would take it off the bar. An item dropped or clicked on the window is compared, and ClearCursor (:34956, not protected) puts it back
+-- where it came from, also in a fight, as Bags' sections give a dropped item back (BagsLayout.lua:1408-1425). A right click takes a line off the list
+-- (ns.GearRemove). While the cursor holds an item or a spell, the part of the window that takes it is lit, looked at ten times a second, as Bags
+-- lights the titles that take an item (BagsLayout.lua:40-45).
 -- The frame: CreateFrame on UIParent, named FlatUIGear, made the first time it opens and only out of combat (an opening asked for in a fight before
--- that waits for its end, ns.OutOfCombat), in the MEDIUM strata among the game's windows, raised when clicked (SetToplevel, WL/uiobjects.yaml:4770)
--- and kept on the screen (SetClampedToScreen). Its name goes once into UISpecialFrames, whose windows the game's CloseSpecialWindows hides on Escape
--- (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:21-27, 1104-1116). Dragging its title bar moves it (SetMovable, StartMoving and
--- StopMovingOrSizing, WL/uiobjects.yaml:4797, 4813, with SetDontSavePosition and SetUserPlaced, :4605, 4778, so the client keeps no place of its own),
--- and where it is let go is saved as its spot in the movers: the box of its entry in Movers.lua, its top left corner at the window's (GetRect and
--- GetEffectiveScale), goes to ns.MoverKit.Commit (Movers.lua:1713-1753), and the window hangs from that spot by its top left corner (ns.MoverSpot,
--- Movers.lua:856-877), growing down as lines come. Movers asks ns.GearWindowShown whether it has a handle and calls ns.GearWindowMoved when its spot
--- is set or put back. The mouse wheel scrolls the lines when there are more than the window holds (EnableMouseWheel, WL/uiobjects.yaml:7184), and the
--- text of each part is measured (GetUnboundedStringWidth, GetStringHeight, :3738, 3711) so the window is as tall as what it shows.
+-- that waits for its end, ns.OutOfCombat), in the MEDIUM strata among the game's windows, raised when clicked (SetToplevel, WL/uiobjects.yaml:4770),
+-- kept on the screen (SetClampedToScreen) and placed by Flat UI alone (SetMovable, SetDontSavePosition, :4605). The mouse wheel scrolls its lines when
+-- there are more than it holds (EnableMouseWheel, :7184). Its name goes once into UISpecialFrames, whose windows the game's CloseSpecialWindows hides
+-- on Escape (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:21-27, 1104-1116). It adds a line to /flatui status while it is open with
+-- an item (ns.AddStatus, design 4.12).
 -- It registers no event: it looks on the OnUpdate of its own frame while it shows. Every frame, texture and font string here is Flat UI's own.
 
 local KEY, PART = "chat", "gear window"
@@ -142,6 +147,7 @@ local T = {
 	MORE = "And %d more.",
 	RANK = "%s Rank %d",
 	NOT_KNOWN = "not known",
+	SWING_NONE = "takes a swing's place",
 	SPEED_FORM = "%s at %s's %.1f sec swing.",
 	SPEED_NORM = "%s as a %.1f sec %s.",
 	SPEED_OWN = "%s at your weapon's own speed, %.2f sec.",
@@ -491,7 +497,8 @@ local function AddDim(tip, lines)
 	end
 end
 
--- A tooltip of a title and dim lines, never in a fight.
+-- A tooltip of a title and dim lines, never in a fight. SetOwner leaves it empty, as the game's own tooltips start with AddLine after it
+-- (Blizzard_MacroUI/Blizzard_MacroUI.lua:242-243).
 local function Say(owner, title, lines)
 	if Fighting() then
 		return
@@ -627,10 +634,11 @@ local function ItemLook(link)
 	local look = { id = ItemID(link) }
 	local info = Fn(C_Item, "GetItemInfo")
 	if info then
-		local ok, loaded, _, quality = pcall(info, link)
-		if ok and Text(loaded) then
+		-- The first answer is nil while the client has not loaded the item.
+		local ok, itemName, _, quality = pcall(info, link)
+		if ok and Text(itemName) then
 			look.loaded = true
-			name = name or loaded
+			name = name or itemName
 			colour = colour or QualityHex(quality)
 		end
 	end
@@ -810,10 +818,13 @@ local function Pick(e, figure, entry)
 end
 
 -- What a line counts when it is not what the switch says (design 2.3): a swing or a shot for A cast, threat for a line that does no damage, a second
--- for the threat of the auto attack. Nil when the switch says it.
+-- for the threat of the auto attack, and none at A second for a strike that takes the place of the next swing (G.Figure gives it no figure there).
+-- Nil when the switch says it.
 local function Counts(mode, figure, entry)
 	local cmp = entry and entry.cmp or nil
-	if figure == "threat" then
+	if not figure then
+		return entry and entry.nx and mode == "second" and T.SWING_NONE or nil
+	elseif figure == "threat" then
 		if SWINGS[cmp] then
 			return mode == "threat" and "a second" or "threat a second"
 		end
@@ -1023,13 +1034,17 @@ local function Key()
 		look and look.loaded and "loaded" or "" }, "\n")
 end
 
--- Works the view out again and draws it. SpellModel reads what an event marked first, so the key is that of what the view is worked out from.
-function Refresh()
+-- Works the view out again and draws it. SpellModel reads what an event marked first, so the key is that of what the view is worked out from; a
+-- key taken just now (Tick) is given.
+function Refresh(key)
 	if not W.frame then
 		return
 	end
-	Touch()
-	W.drawn = Key()
+	if not key then
+		Touch()
+		key = Key()
+	end
+	W.drawn = key
 	W.fight = Fighting()
 	W.dirty = false
 	W.view = Compute()
@@ -1069,6 +1084,14 @@ local function Hang(region, y, height)
 	if height then
 		region:SetHeight(height)
 	end
+end
+
+-- A text of the window from y down, given the width inside the padding itself, so it wraps there and the height read after SetText is the height it
+-- wraps to, as the options window's tooltip beside a row sizes its texts (PanelTrust.lua:113-126).
+local function HangText(text, y)
+	text:ClearAllPoints()
+	text:SetPoint("TOPLEFT", W.frame, "TOPLEFT", L.PAD, -y)
+	text:SetWidth(L.INNER)
 end
 
 -- A separator across the window at y.
@@ -1120,7 +1143,7 @@ local function PaintHeads(view, y)
 		if column then
 			local text = column.head
 			if column.slot then
-				text = text:gsub("%%s", Where(view.cands[column.slot]))
+				text = text:format(Where(view.cands[column.slot]))
 			end
 			SetCell(head, W.headRow, column)
 			head:SetText(text)
@@ -1205,7 +1228,7 @@ local function PaintRows(view, y)
 		end
 	end
 	if view.message then
-		Hang(W.message, y)
+		HangText(W.message, y)
 		W.message:SetText(view.message)
 		W.message:Show()
 		y = y + Height(W.message) + L.LINE_GAP
@@ -1225,7 +1248,7 @@ local function PaintLines(pool, texts, y)
 			text = T.MORE:format(count - #pool + 1)
 		end
 		if text then
-			Hang(label, y)
+			HangText(label, y)
 			label:SetText(text)
 			label:Show()
 			y = y + Height(label) + L.LINE_GAP
@@ -1288,7 +1311,8 @@ function Paint(view)
 	else
 		PaintLines(W.notes, {}, y)
 	end
-	PaintRule(W.footRule, y + L.GAP - L.LINE_GAP)
+	-- The foot under a separator, as far from it as the separator is from what is above it.
+	PaintRule(W.footRule, y + L.GAP)
 	y = PaintLines(W.foot, FootLines(view), y + 2 * L.GAP)
 	frame:SetHeight(math.ceil(y - L.LINE_GAP + L.PAD))
 end
@@ -1470,8 +1494,9 @@ local function Tick()
 		return
 	end
 	Touch()
-	if W.dirty or W.fight or Key() ~= W.drawn then
-		Refresh()
+	local key = Key()
+	if W.dirty or W.fight or key ~= W.drawn then
+		Refresh(key)
 	end
 end
 
@@ -1921,6 +1946,8 @@ local function Make()
 	frame:SetScript("OnHide", function()
 		Hiding()
 	end)
+	-- The looks of the window while it shows. It closes once the module or the part is off, also when no refresh of the module said so
+	-- (ns.GearWindowSync), and when the module stopped, whose parts run nothing more: that test is plain code.
 	frame:SetScript("OnUpdate", function(_, elapsed)
 		local step = Finite(elapsed) and elapsed or 0
 		W.elapsed, W.looked = W.elapsed + step, W.looked + step
@@ -1930,7 +1957,11 @@ local function Make()
 		end
 		if W.elapsed >= TICK then
 			W.elapsed = 0
-			Run(Tick)
+			if Allowed() then
+				Run(Tick)
+			else
+				Close()
+			end
 		end
 	end)
 	Special()
