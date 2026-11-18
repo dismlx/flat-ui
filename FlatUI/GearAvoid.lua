@@ -437,12 +437,13 @@ local function Work(s, attacker)
 	return t
 end
 
--- The percent a rating gives the player, with its sign (GetCombatRatingBonusForCombatRatingValue; for defense, points), or nil with no conversion.
+-- The percent a rating gives the player, with its sign (GetCombatRatingBonusForCombatRatingValue; for defense, points), or nil with no conversion:
+-- no call, no number, or none for a rating the item has, which is a client that does not convert that rating, not a stat worth nothing.
 local function Rating(rating, amount)
 	local sign, value = amount < 0 and -1 or 1, math.abs(amount)
 	local answers = Call(Global("GetCombatRatingBonusForCombatRatingValue"), rating, value)
 	local got = answers and Num(answers[1])
-	return got and sign * got or nil
+	return got and got > 0 and sign * got or nil
 end
 
 -- The stats of an item by the game's keys (C_Item.GetItemStats), each a plain number; empty for none.
