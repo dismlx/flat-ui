@@ -2351,10 +2351,11 @@ local function Threat(ctx)
 	if A ~= 0 then
 		ThreatBasis(ctx, spec.apb)
 	end
-	ThreatFlags(ctx, T, F ~= 0 or A ~= 0)
 	-- Feint and Fade change the player's own threat: they land whole.
 	local kind = spec and spec.k
-	local land = (kind == "drop" or kind == "temp") and 1 or ctx.land
+	local whole = kind == "drop" or kind == "temp"
+	local land = whole and 1 or ctx.land
+	ThreatFlags(ctx, T, (F ~= 0 or A ~= 0) and not whole)
 	local flat = 0
 	if F ~= 0 or A ~= 0 then
 		if not land then

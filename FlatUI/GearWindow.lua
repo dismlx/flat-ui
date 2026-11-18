@@ -91,7 +91,7 @@ local MODES = { { "cast", "A cast" }, { "second", "A second" }, { "threat", "Thr
 local WORD_TIPS = {
 	cast = "What one cast does: its expected damage or healing, or its threat for a line that does no damage. Your auto attack, Auto Shot and wand count one swing or shot.",
 	second = "What a second does: a cast over its cast time (at least the global cooldown), a spell over time over its duration, your swings and shots over their speed. A strike that takes the place of your next swing has none.",
-	threat = "The threat of one cast, and of a second of your auto attack, with your stance, form, Righteous Fury and talents.",
+	threat = "The threat of one cast, and of a second of what rides on your swings and shots (your auto attack, Auto Shot, wand and seals), with your stance, form, Righteous Fury and talents.",
 }
 -- Against at its first choice is a boss three levels above at the top level, else an enemy of the player's level (design 2.5, 4.9). The hit caps of
 -- Hit cap against a boss and of the hit table's row of the same name (Config.lua, hud.hitTableRules).
