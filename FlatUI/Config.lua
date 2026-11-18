@@ -1367,9 +1367,9 @@ ns.PAGES = {
 			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below." },
 	},
 	-- Bags.lua and the Bags*.lua files: a bag window and a bank window of Flat UI's own in place of the game's, with sections, a search and the bags
-	-- and bank of your other characters. On by default for every character since 0.5.19 (a profile of an older build with every other module off
-	-- keeps it off: Core.lua, KeepBagsOff); the windows look as the Windows page sets (Window opacity, Button and slot colour, Highlight colour, Icon
-	-- crop), and no row has a function of its own: the module applies them all when one changes.
+	-- and bank of your other characters. On by default for every character since 0.5.19 (a profile saved before then with every module that is on
+	-- by default off keeps it off: Core.lua, KeepBagsOff); the windows look as the Windows page sets (Window opacity, Button and slot colour,
+	-- Highlight colour, Icon crop), and no row has a function of its own: the module applies them all when one changes.
 	{
 		key = "bags", label = "Bags",
 		{ key = "enabled", kind = "bool", default = true, label = "Flat UI bags",
@@ -1943,7 +1943,7 @@ ns.PAGES = {
 		key = "hudHitTable", label = "Hit table", parent = "hud", owner = "hud",
 		{ key = "hitTable", kind = "choice", default = "role", label = "Hit table under the player frame",
 			choices = { { "role", "For tanks and damage dealers" }, { "on", "Always" }, { "off", "Off" } },
-			tip = "Your chances against your target to miss, be dodged, parried or blocked, glance, crit and hit, worked out again as your gear, buffs, weapon skill and target change. For tanks and damage dealers hides it while you count as a healer: by your group role, else a tank stance, form or aura, else the talent tree you put most points in, else your class, as Flat UI setup reads it. /flatui status says which you count as. /flatui move places it." },
+			tip = "Your chances against your target to miss, be dodged, parried or blocked, glance, crit and hit, worked out again as your gear, buffs, weapon skill and target change. For tanks and damage dealers hides it while you count as a healer: by your group role, else a tank stance, form or aura, else the talent tree you put most points in, else your class (a priest heals), as Flat UI setup reads it. /flatui status says which you count as, and why. /flatui move places it." },
 		{ section = "What it shows" },
 		{ key = "hitTableLines", kind = "choice", default = "auto", label = "Attacks", needs = "hitTable", needsIn = { "role", "on" },
 			choices = { { "auto", "By your class and form" }, { "melee", "Melee" }, { "ranged", "Ranged" }, { "spell", "Spells" }, { "all", "Melee, ranged and spells" } },

@@ -92,7 +92,9 @@ local _, ns = ...
 -- Bags stays off, hiding nothing and showing nothing, while another bag addon is loaded (C_AddOns.IsAddOnLoaded at Start and at ADDON_LOADED,
 -- as Movers stands down for other movers, Movers.lua:87) and under the gamepad interface (InputUtil.IsGamepadUIEnabled, as BagSort.lua:516-524,
 -- again at INPUT_DEVICE_INTERFACE_TRANSITION), where the game's bags and their gamepad cursor stay; also when one of the ten functions could
--- not be followed, or a file the window needs did not load. /flatui status and one line in chat say so.
+-- not be followed, or a file the window needs did not load. /flatui status says so, and one line in chat a session: for those two faults to
+-- everyone, and for another bag addon or the gamepad interface only to a player who chose Flat UI bags (the row saved in the profile), since the
+-- page is on by default and steps aside for them on purpose.
 --
 -- Bags.Request gathers what the windows must draw again (items, layout, search, footer or look, and the slots BagsData found changed at
 -- BAG_UPDATE_DELAYED, merged), per window; an ask for items that names no slots means every slot, whatever else the frame asked. One pass on
@@ -177,13 +179,16 @@ local SAY = {
 	several = "More than one character is called %s: %s. Type the realm too.",
 	noBank = "the Flat UI bank window is not there.",
 }
--- Why Bags stays off: in chat once a session, and in /flatui status.
+-- Why Bags stays off: in /flatui status, and in chat once a session (Judge, which says another bag addon and the gamepad interface only to a player
+-- who chose Flat UI bags).
 local DOWN_CHAT = {
 	follow = "Flat UI: Bags stays off: the game's bag functions could not be followed, so the game's bags are used.",
 	missing = "Flat UI: Bags stays off: a file of its window did not load, so the game's bags are used.",
 	gamepad = "Flat UI: Bags stays off under the gamepad interface, where the game's bags are used.",
 	addon = "Flat UI: Bags stays off while %s is loaded.",
 }
+-- The reasons Bags steps aside for on purpose, said in chat only to a player who chose Flat UI bags (Judge).
+local ON_PURPOSE = { addon = true, gamepad = true }
 local DOWN_STATUS = {
 	follow = "Bags: the game's bag functions could not be followed, so the game's bags are used.",
 	missing = "Bags: a file of its window did not load, so the game's bags are used.",
@@ -1162,11 +1167,14 @@ local function Reason()
 	return nil
 end
 
--- Reads the reason again and says a new one in chat, once a session. True when it changed.
+-- Reads the reason again and says a new one in chat, once a session. A fault (the game's bag functions not followed, a file not loaded) is said to
+-- everyone, as Core.lua says a module that stops; Bags steps aside for another bag addon and the gamepad interface on purpose (ON_PURPOSE), and
+-- since it is on by default (0.5.19) that is said only to a player who chose Flat UI bags, the row saved in the profile (ns.IsSet), and to one who
+-- chooses it later in the session. /flatui status says every reason. True when it changed.
 local function Judge()
 	local was, wasAddon = down, downAddon
 	down, downAddon = Reason()
-	if down ~= nil and ns.Enabled(KEY) then
+	if down ~= nil and ns.Enabled(KEY) and (not ON_PURPOSE[down] or ns.IsSet(KEY .. ".enabled")) then
 		local key = down == "addon" and ("addon:" .. tostring(downAddon)) or down
 		if not said[key] then
 			said[key] = true

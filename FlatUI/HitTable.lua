@@ -38,10 +38,10 @@ local ADDON_NAME, ns = ...
 -- cast bar's lock is followed with hooksecurefunc (ns.FollowGlobal, as CastBarSize.lua follows it), and a refresh of the unit frames, a layout of the
 -- Cooldown icons rows (Cooldowns.lua) and a change of the cast bars' sizes (CastBarSize.lua) place the table again (ns.UnitFrameExtra.after.refresh,
 -- ns.HitTableMoved). At For tanks and damage dealers the role is worked out in every refresh and again after an event that can change it
--- (ROLE_EVENTS: a role the group gives, talents spent, reset or switched to the other set of dual spec, a level, a form, a new world, the player's
--- auras), which the hud module hears for it (ns.AddEvent) also while the table is hidden for a healer; such an event too only marks the table, and
--- the next frame works the role out before the numbers, showing or hiding the table when its answer changed. Nothing of the game's is written: its
--- frames are read and anchored to, never changed.
+-- (ROLE_EVENTS: a role the group gives, talents spent, reset or switched to the other set of dual spec, a new list of the sets of talents, a level,
+-- a form, a new world, the player's auras), which the hud module hears for it (ns.AddEvent) also while the table is hidden for a healer; such an
+-- event too only marks the table, and the next frame works the role out before the numbers, showing or hiding the table when its answer changed.
+-- Nothing of the game's is written: its frames are read and anchored to, never changed.
 
 local KEY, PART = "hud", "hit table"
 local MOVER = "FlatUIHitTable"
@@ -105,10 +105,15 @@ local PLACE_EVENTS = { PLAYER_ENTERING_WORLD = true, UI_SCALE_CHANGED = true, DI
 -- the row's choice, also while the table is hidden. Each is in events.yaml of the client: a role the group gives or takes back, as the game's player
 -- frame hears it (Mainline/PlayerFrame.lua:63, 71, 197); talents spent or reset, and the switch to the other set of dual spec, which Forever's talent
 -- window has (Blizzard_PlayerSpells/Camelot/ClassTalents/Blizzard_ClassTalentsFrame.lua:111-125, 144-145, 367-371), as the sheet hears them
--- (Camelot/PaperDollFrame.lua:315, 335, 340) and the talent window (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:186); a level; a stance or
--- form; a new world. The player's UNIT_AURA is heard too, for Righteous Fury and the game's tank aura (PlateThreat.lua).
+-- (Camelot/PaperDollFrame.lua:315, 335, 340) and the talent window: it reads the points spent in each tree again on TRAIT_TREE_CURRENCY_INFO_UPDATED
+-- (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:116, 338-342) and the set of talents once a change is applied on TRAIT_CONFIG_UPDATED
+-- (:186, 343-345), and the set in use on ACTIVE_COMBAT_CONFIG_CHANGED and the list of sets on TRAIT_CONFIG_LIST_UPDATED
+-- (ClassTalents/Blizzard_ClassTalentsFrame.lua:41, 46, 335-336, 340-342), so a set the client gives only after the interface loaded is read too; the
+-- Cooldown Manager follows a change of set the same way (Blizzard_CooldownViewer/CooldownViewerSettingsDataProvider.lua:26-29). Then a level; a
+-- stance or form; a new world. The player's UNIT_AURA is heard too, for Righteous Fury and the game's tank aura (PlateThreat.lua).
 local ROLE_EVENTS = { "PLAYER_ROLES_ASSIGNED", "GROUP_ROSTER_UPDATE", "CHARACTER_POINTS_CHANGED", "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED",
-	"ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_LEVEL_UP", "UPDATE_SHAPESHIFT_FORM", "PLAYER_ENTERING_WORLD" }
+	"TRAIT_TREE_CURRENCY_INFO_UPDATED", "ACTIVE_COMBAT_CONFIG_CHANGED", "TRAIT_CONFIG_LIST_UPDATED", "ACTIVE_TALENT_GROUP_CHANGED",
+	"PLAYER_LEVEL_UP", "UPDATE_SHAPESHIFT_FORM", "PLAYER_ENTERING_WORLD" }
 -- The roles as /flatui status names them.
 local ROLE_WORDS = { tank = "a tank", healer = "a healer", damage = "a damage dealer" }
 -- The lines of /flatui status.
@@ -136,8 +141,10 @@ local LINE_NO_LEVEL = "Hit table: hidden, since the game does not give your leve
 local LINE_FACING = "Hit table: the game did not say whether your target attacks you, so the table counts you behind it."
 local LINE_OFF_CRIT = "Hit table: the game gives one crit chance, your main hand's, so crit talents for one kind of weapon may make your off hand's crit differ."
 local LINE_FIT = "Hit table: the text is %d%% of Text size, so the table ends before the %s. /flatui move places it elsewhere."
--- At For tanks and damage dealers: on or off, the role, and the sentence of ns.PlayerRole that says why, as Flat UI setup shows it.
+-- At For tanks and damage dealers: on or off, the role, and what it was read from (the third answer of ns.PlayerRole, a phrase such as "your group
+-- role" or "most points in Holy"), as nameplate threat names its own (PlateThreat.lua); setup's sentence, a suggestion, is not said here.
 local LINE_ROLE = "Hit table: %s, since you count as %s."
+local LINE_ROLE_BY = "Hit table: %s, since you count as %s (%s)."
 
 local IsSecret, Finite = ns.IsSecret, ns.Finite
 
@@ -150,8 +157,8 @@ local IsSecret, Finite = ns.IsSecret, ns.Finite
 -- (HitTableCalc.lua). laid: the key of the layout. placed, edge, anchor: where the table was put; where: what /flatui status says of it; later: a
 -- place waits for the end of the fight. room: the width the table may take under the player frame, in its own units, nil for no bound; roomBy:
 -- what ends it; fit: the share of Text size the text was made to end there, nil while it has its size. hooked: the cast bar's lock is followed.
--- sansRefused: the game refused Flat UI Sans. role and why: the player's role at the last look ("tank", "healer" or "damage", nil before the
--- first) and the sentence of ns.PlayerRole that says why; recheck: an event that can change the role came, so the next frame looks again.
+-- sansRefused: the game refused Flat UI Sans. role and by: the player's role at the last look ("tank", "healer" or "damage", nil before the
+-- first) and what ns.PlayerRole read it from; recheck: an event that can change the role came, so the next frame looks again.
 local S = { heads = {}, rows = {}, widths = {}, measures = {}, measured = 0, units = {}, alone = {}, hearing = false, fighting = false, dirty = false,
 	later = false, recheck = false }
 local Update, Later, Off, Dirty, Apply
@@ -184,14 +191,16 @@ local function Choice()
 	return "role"
 end
 
--- Looks at the player's role again: the role and the sentence that says why (ns.PlayerRole, Core.lua, which only reads and drops a withheld answer).
+-- Looks at the player's role again: the role and what it was read from, its first and third answers (ns.PlayerRole, Core.lua, which only reads and
+-- drops a withheld answer; the second is setup's sentence).
 local function WorkOutRole()
-	local role, why
+	local role, by
 	if type(ns.PlayerRole) == "function" then
-		role, why = ns.PlayerRole()
+		local _
+		role, _, by = ns.PlayerRole()
 	end
 	S.role = (role == "tank" or role == "healer") and role or "damage"
-	S.why = type(why) == "string" and why or nil
+	S.by = type(by) == "string" and by or nil
 end
 
 -- True while the row lets the table show: Always, or For tanks and damage dealers while the player is no healer (the role of the last look, else
@@ -1256,11 +1265,11 @@ end
 
 ns.AddStatus(KEY, function()
 	local lines = {}
-	-- At For tanks and damage dealers, the role the table follows and why, also while it is hidden for a healer.
+	-- At For tanks and damage dealers, the role the table follows and what it was read from, also while it is hidden for a healer.
 	if ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and Choice() == "role" then
-		local shown = Shows()
-		local line = LINE_ROLE:format(shown and "on" or "off", ROLE_WORDS[S.role] or ROLE_WORDS.damage)
-		lines[#lines + 1] = S.why and (line .. " " .. S.why) or line
+		local state = Shows() and "on" or "off"
+		local word = ROLE_WORDS[S.role] or ROLE_WORDS.damage
+		lines[#lines + 1] = S.by and LINE_ROLE_BY:format(state, word, S.by) or LINE_ROLE:format(state, word)
 	end
 	if not Wanted() then
 		return lines

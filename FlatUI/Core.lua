@@ -164,7 +164,8 @@ local ADDON_NAME, ns = ...
 -- under the player frame, and the font of the player cast bar's text; the player's level, class, form, power type, combat state, stats, weapon
 -- skills and weapons; the target's level and kind, whether it exists, can be attacked, is dead or is a player, and whether it attacks the player:
 -- the player's threat situation on it (UnitThreatSituation), else whether its target is the player (UnitIsUnit); and, while its row is For tanks
--- and damage dealers, the player's role (ns.PlayerRole), read again after each event the hud module hears that can change it.
+-- and damage dealers, the player's role (ns.PlayerRole: the group role, a tank stance, form or aura, the points spent in each talent tree of the set
+-- of talents in use, the class), read again after each event the hud module hears that can change it.
 -- Healer mana (off by default) is a window of its own on UIParent; it only reads mana (UnitPowerPercent) and changes nothing. The dispel border, the
 -- debuff type icon and the raid marker of the party and raid frames, the leader and assistant icons of the raid frames and the dispel border of the
 -- player, target and focus frames, and the heal over time squares of the party and raid frames, are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a
@@ -406,7 +407,7 @@ end
 
 -- The player's role ------------------------------------------------------------------------
 
--- The role of each talent tree of a class, in the game's order of its trees.
+-- The role of each talent tree of a class, in the game's order of its trees: the order Forever's talent window draws them in, left to right.
 local ROLE_TREES = {
 	WARRIOR = { "damage", "damage", "tank" }, PALADIN = { "healer", "tank", "damage" }, PRIEST = { "healer", "healer", "damage" },
 	SHAMAN = { "damage", "damage", "healer" }, DRUID = { "damage", "damage", "healer" }, HUNTER = { "damage", "damage", "damage" },
@@ -420,47 +421,125 @@ local function IsText(value)
 	return not IsSecret(value) and type(value) == "string"
 end
 
--- The player's role, "tank", "healer" or "damage", and the sentence that says why, from the first that answers: the role the group gave, a tank
--- stance, form or aura as nameplate threat reads it (ns.PlateThreat.Role, PlateThreat.lua, looked up when asked; its reason "your group role" is
--- passed over, as the role the group gives now is read here first), the talent tree with the most points (C_SpecializationInfo.GetSpecializationInfo,
--- SpecializationInfoDocumentation.lua:254-282, asked with no set of talents, as the game's character sheet asks for the set in use after its
--- talent events and a switch of dual spec: Camelot/PaperDollFrame.lua:480-499, 2457), the class. The sentence is nil when the client gives none of
--- them. Flat UI setup suggests from it (SetupWalk.lua, Walk.Role) and the hit table shows by it (HitTable.lua), so the two always agree. It only
--- reads, and a withheld answer counts as none.
+-- t[key], for pcall.
+local function Index(t, key)
+	return t[key]
+end
+
+-- A field of a table the client gave, or nil when the table or the field is withheld, or reading it raises.
+local function Field(t, key)
+	if IsSecret(t) or type(t) ~= "table" then
+		return nil
+	end
+	local ok, value = pcall(Index, t, key)
+	if ok and not IsSecret(value) then
+		return value
+	end
+	return nil
+end
+
+-- A function of one of the client's tables (C_Traits and the others), or nil when the client has none.
+local function Api(space, name)
+	local fn = Field(_G[space], name)
+	return type(fn) == "function" and fn or nil
+end
+
+-- The talent tree of the class with the most points spent in it: its place in the game's order of the trees and its name, or nil when no tree has a
+-- point or the client does not say. On Forever a class has one specialization (the talent window keys its art by one specialization per class,
+-- Blizzard_PlayerSpells/Camelot/ClassTalents/Blizzard_ClassTalentUtil.lua:13-40), and the three trees of old are the node groups of its one tree of
+-- C_Traits, which the talent window reads for the headers over its trees (Camelot/ClassTalents/Blizzard_ClassTalentsFrame.lua:82-109, 331-344): the
+-- groups of the tree in the order the client gives them, drawn left to right (C_Traits.GetGroupDisplayInfoByTreeID,
+-- SharedTraitsDocumentation.lua:297-310, with groupID and displayName, :1080-1091), and the points spent in each, the spent of the first currency of
+-- its entry (C_Traits.GetGroupCurrencyInfo, :281-295, each entry naming its group by traitNodeGroupID, :972-979, :1188-1198). The tree is the first
+-- of the treeIDs of the set of talents in use (C_Traits.GetConfigInfo, :201-215, :1013-1023), as the window takes it
+-- (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:1310-1324), and the set in use is the one the window shows as it opens
+-- (ClassTalents/Blizzard_ClassTalentsFrame.lua:147-150, 883-902): C_ClassTalents.GetActiveConfigID (ClassTalentsDocumentation.lua:73-80), else, as
+-- Forever's window falls back, the set of the active group of dual spec (C_SpecializationInfo.GetCombatConfigIDForSpecGroup of GetActiveSpecGroup,
+-- SpecializationInfoDocumentation.lua:41-55, 90-103; Camelot:111-121). Each call is in apis.yaml of the client, and every answer passes
+-- ns.IsSecret or ns.Finite before it is compared or used as a key. With another number of groups than the class has trees the order would tell
+-- nothing, so that gives nil too.
+local function MostPoints(count)
+	local config = Ask(Api("C_ClassTalents", "GetActiveConfigID"))
+	if not Finite(config) then
+		local group = Ask(Api("C_SpecializationInfo", "GetActiveSpecGroup"))
+		config = Finite(group) and Ask(Api("C_SpecializationInfo", "GetCombatConfigIDForSpecGroup"), group) or nil
+	end
+	if not Finite(config) then
+		return nil
+	end
+	local tree = Field(Field(Ask(Api("C_Traits", "GetConfigInfo"), config), "treeIDs"), 1)
+	if not Finite(tree) then
+		return nil
+	end
+	local shown = Ask(Api("C_Traits", "GetGroupDisplayInfoByTreeID"), tree)
+	if Field(shown, count + 1) ~= nil then
+		return nil
+	end
+	local ids, names = {}, {}
+	for place = 1, count do
+		local info = Field(shown, place)
+		local id, name = Field(info, "groupID"), Field(info, "displayName")
+		if not (Finite(id) and IsText(name)) then
+			return nil
+		end
+		ids[place], names[place] = id, name
+	end
+	local spent = {}
+	local entries = Ask(Api("C_Traits", "GetGroupCurrencyInfo"), config, ids)
+	for place = 1, count do
+		local entry = Field(entries, place)
+		local id = Field(entry, "traitNodeGroupID")
+		local points = Field(Field(Field(entry, "currencyInfos"), 1), "spent")
+		if Finite(id) and Finite(points) then
+			spent[id] = points
+		end
+	end
+	local best, most = nil, 0
+	for place = 1, count do
+		local points = spent[ids[place]]
+		if points and points > most then
+			best, most = place, points
+		end
+	end
+	return best, best and names[best] or nil
+end
+
+-- The player's role, "tank", "healer" or "damage", the sentence that says why as Flat UI setup suggests from it, and what it was read from, as a
+-- short phrase for /flatui status (the hit table's line; as nameplate threat names its own reason, PlateThreat.lua), from the first that answers:
+-- the role the group gave, a tank stance, form or aura as nameplate threat reads it (ns.PlateThreat.Role, PlateThreat.lua, looked up when asked; its
+-- reason "your group role" is passed over, as the role the group gives now is read here first), the talent tree with the most points (MostPoints,
+-- above), the class, where a priest heals. The sentence and the phrase are nil when the client gives none of them. Flat UI setup suggests from it
+-- (SetupWalk.lua, Walk.Role) and the hit table shows by it (HitTable.lua), so the two always agree. It only reads, and a withheld answer counts as
+-- none.
 function ns.PlayerRole()
 	local given = Ask(UnitGroupRolesAssigned, "player")
 	if IsText(given) and ROLE_GIVEN[given] then
-		return ROLE_GIVEN[given], "Suggested from your group role."
+		return ROLE_GIVEN[given], "Suggested from your group role.", "your group role"
 	end
 	local threat = ns.PlateThreat
 	if type(threat) == "table" and type(threat.Role) == "function" then
 		local ok, kind, reason = pcall(threat.Role)
 		if ok and IsText(kind) and kind == "tank" and IsText(reason) and reason ~= "your group role" then
-			return "tank", reason == "your choice" and "Suggested from your role." or ("Suggested from %s."):format(reason)
+			if reason == "your choice" then
+				return "tank", "Suggested from your role.", "Your role of nameplate threat"
+			end
+			return "tank", ("Suggested from %s."):format(reason), reason
 		end
 	end
 	local class = Ask(UnitClassBase, "player")
 	class = IsText(class) and class or nil
 	local trees = class and ROLE_TREES[class]
-	local info = type(C_SpecializationInfo) == "table" and C_SpecializationInfo.GetSpecializationInfo or nil
-	local count = Ask(GetNumSpecializations)
-	if trees and type(info) == "function" and Finite(count) then
-		local best, most, name = nil, 0, nil
-		for index = 1, math.min(math.floor(count), #trees) do
-			-- After pcall's own answer: the tree's id, name, description, icon, role, main stat, and the points spent in it.
-			local ok, _, tree, _, _, _, _, points = pcall(info, index)
-			if ok and Finite(points) and points > most and IsText(tree) then
-				best, most, name = index, points, tree
-			end
-		end
+	if trees then
+		local best, name = MostPoints(#trees)
 		if best then
-			return trees[best], ("Suggested from your talents: most points in %s."):format(name)
+			return trees[best], ("Suggested from your talents: most points in %s."):format(name), ("most points in %s"):format(name)
 		end
 	end
 	if class then
-		return class == "PRIEST" and "healer" or "damage", ("Suggested for a %s."):format(class:lower())
+		local word = class:lower()
+		return class == "PRIEST" and "healer" or "damage", ("Suggested for a %s."):format(word), ("your class, %s"):format(word)
 	end
-	return "damage", nil
+	return "damage", nil, nil
 end
 
 -- Options ---------------------------------------------------------------------------------
@@ -2566,10 +2645,11 @@ function ns.MigrateText(old, options)
 	end
 end
 
--- Bags was off by default until 0.5.18, so a profile of then with every module that is on by default saved off, as Game look of Flat UI setup is
--- made (SetupWelcome.lua, W.GameLook), and nothing saved for Bags, had every module off. It keeps Bags off now that Bags is on by default: run once
--- for the profiles saved before (LoadSettings, while FlatUIDB.bagsMigrated is not set, as soundsMigrated marks the move of the sound rows). A Game
--- look made since saves Bags off itself.
+-- Bags came in 0.5.18, off by default, and is on by default from 0.5.19. A profile saved before 0.5.19 with every module that is on by default
+-- saved off, as Game look of the welcome screen makes one (SetupWelcome.lua, W.GameLook), and nothing saved for Bags keeps Bags off: it left the
+-- look to the game, and the modules that are off by default (Errands, Data panels and the others), which it may have turned on, are not read
+-- here. Run once, for the profiles saved before (LoadSettings, while FlatUIDB.bagsMigrated is not set, as soundsMigrated marks the move of the
+-- sound rows). A Game look made since saves Bags off itself.
 local function KeepBagsOff(options)
 	if options["bags.enabled"] ~= nil then
 		return
@@ -2687,7 +2767,7 @@ local function LoadSettings()
 			saved.movers = type(saved.movers) == "table" and saved.movers or {}
 			ns.MigrateText(saved.options, saved.options)
 			NormaliseValues(saved.options)
-			-- A profile of 0.5.18 or older with every module off keeps Bags off (KeepBagsOff), once.
+			-- A profile saved before 0.5.19 with every module that is on by default off keeps Bags off (KeepBagsOff), once.
 			if not db.bagsMigrated then
 				KeepBagsOff(saved.options)
 			end
