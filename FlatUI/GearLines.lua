@@ -198,7 +198,7 @@ local T = {
 		dim = { 0.66, 0.68, 0.62 } },
 	-- The notes of a block in Compact are joined into one dim line with this between them (chat.tipDetail).
 	JOIN = "; ",
-	NO_CHANGE = "No change to your chosen spells; stamina, armor, avoidance and mana are not counted.",
+	NO_CHANGE = "No change to your chosen spells; armor, avoidance and mana are not counted.",
 	OUT_OF_COMBAT = "Gear lines show out of combat.",
 	RANDOM = "Random stats not known",
 	NOT_YET = "Not wearable yet: ",
@@ -1701,27 +1701,46 @@ local function Header(M, candidate, slot, unit)
 	return ("Instead of %s (%s)"):format(table.concat(names, " and "), where) .. ending
 end
 
--- The notes of what is not counted (design 2.3, 2.6), as texts: G.Compare's skills (a compared weapon line the player has yet to raise), its
--- notCounted, each said "Not counted:" unless it says so already, its creature-type bonuses (vs) and a random suffix not rolled yet.
-local function Tail(result)
-	local tail = {}
-	for _, text in ipairs(type(result.skills) == "table" and result.skills or {}) do
-		if type(text) == "string" and text ~= "" then
-			tail[#tail + 1] = text
-		end
+-- The texts of a list of the result (G.Compare's skills, notCounted or vs: the item's and every slot's) that are not only another slot's than the one
+-- shown (0.5.25, the review: a block's notes are those of its own slot, as its rows are).
+local function Mine(result, shown, field)
+	local list = type(result[field]) == "table" and result[field] or {}
+	local own, others = {}, {}
+	for _, text in ipairs(type(shown) == "table" and type(shown[field]) == "table" and shown[field] or {}) do
+		own[text] = true
 	end
-	for _, text in ipairs(type(result.notCounted) == "table" and result.notCounted or {}) do
-		if type(text) == "string" and text ~= "" then
-			if not text:lower():find("not counted", 1, true) then
-				text = T.NOT_COUNTED .. text
+	for _, candidate in ipairs(type(result.candidates) == "table" and result.candidates or {}) do
+		if candidate ~= shown and type(candidate) == "table" and type(candidate[field]) == "table" then
+			for _, text in ipairs(candidate[field]) do
+				others[text] = not own[text] or nil
 			end
-			tail[#tail + 1] = text
 		end
 	end
-	for _, text in ipairs(type(result.vs) == "table" and result.vs or {}) do
-		if type(text) == "string" and text ~= "" then
-			tail[#tail + 1] = text
+	local out = {}
+	for _, text in ipairs(list) do
+		if type(text) == "string" and text ~= "" and not others[text] then
+			out[#out + 1] = text
 		end
+	end
+	return out
+end
+
+-- The notes of what is not counted (design 2.3, 2.6), as texts: G.Compare's skills (a compared weapon line the player has yet to raise), its
+-- notCounted, each said "Not counted:" unless it says so already, its creature-type bonuses (vs) and a random suffix not rolled yet; those of the
+-- slot shown and the item's own (Mine).
+local function Tail(result, shown)
+	local tail = {}
+	for _, text in ipairs(Mine(result, shown, "skills")) do
+		tail[#tail + 1] = text
+	end
+	for _, text in ipairs(Mine(result, shown, "notCounted")) do
+		if not text:lower():find("not counted", 1, true) then
+			text = T.NOT_COUNTED .. text
+		end
+		tail[#tail + 1] = text
+	end
+	for _, text in ipairs(Mine(result, shown, "vs")) do
+		tail[#tail + 1] = text
 	end
 	local random = result.random
 	if random == true or (type(random) == "string" and random ~= "") then
@@ -1782,7 +1801,7 @@ local function Build(M, result, slot, info)
 			notes[1] = T.MORE:format(#bestRows - bestShown)
 		end
 	end
-	return { head = head, notes = notes, tail = Tail(result), avoid = {}, slots = best.slots, still = still, candidate = best }
+	return { head = head, notes = notes, tail = Tail(result, best), avoid = {}, slots = best.slots, still = still, candidate = best }
 end
 
 local function SameSlots(a, b)
@@ -1841,8 +1860,9 @@ local function OverallFigure(word, pct, estimate, lowerBetter, style)
 end
 
 -- The Overall line of the block (0.5.20, Overall totals at Weighted, chat.gearTotals): a figure the chosen spells have, each what its rows do in a
--- minute with the item against now (GearModel.lua's G.Totals of the candidate shown, with the lines and their weights), and Damage taken while
--- avoidance shows (Taken): "Overall  Damage +2.4%  ·  Threat +1.1%  ·  Damage taken -2.1%". Nil when there is no figure, or none changes.
+-- minute with the item against now (GearModel.lua's G.Totals of the candidate shown, with the lines and their weights), threat only for a tank (any
+-- other role's lines give threat only for those that do no damage, so it would be Sunder Armor's alone, as the window's, 0.5.25), and Damage taken
+-- while avoidance shows (Taken): "Overall  Damage +2.4%  ·  Threat +1.1%  ·  Damage taken -2.1%". Nil when there is no figure, or none changes.
 local function Overall(candidate, lines, opts, taken, style)
 	local G = Gear()
 	local parts, moved = {}, false
@@ -1852,7 +1872,7 @@ local function Overall(candidate, lines, opts, taken, style)
 			Report(totals, "totals")
 		elseif type(totals) == "table" then
 			for _, figure in ipairs(T.FIGURES) do
-				local total = totals[figure[1]]
+				local total = (figure[1] ~= "threat" or opts.role == "tank") and totals[figure[1]] or nil
 				if type(total) == "table" and Finite(total.pct) and not (Finite(total.n) and total.n <= 0) then
 					local text, moves = OverallFigure(figure[2], total.pct, total.estimate == true, false, style)
 					parts[#parts + 1], moved = text, moved or moves

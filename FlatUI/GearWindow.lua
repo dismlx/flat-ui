@@ -65,12 +65,13 @@ local _, ns = ...
 -- Overall (0.5.20, chat.gearTotals at Weighted; "totals for threat/avoidance/etc need to be made more easily understood for the total impact of an
 -- item over another"; 0.5.25: "this cannot be correct"): under the item, a line for each slot of the comparison with what the item does overall: what
 -- the lines do in a minute with the item against now (GearModel's G.Totals: what rides on the swings or shots for the whole minute, each other line
--- its share of the minute's global cooldowns by its weight), for damage and healing from the comparison at A cast and for threat from the comparison
--- at Threat (for a tank, or while the switch says Threat), whatever the switch shows; and, while avoidance shows, GearAvoid's damage taken (A.Totals:
--- what an enemy's swing does after the attack table, armor and block value, as a share of a plain hit), whose change is better when it is less. A
--- figure is green when it is better for the player, red when worse, and grey under 0.05%, with its sign and ~ before an estimate that moves it, so
--- colour is never all that says it; a second line names the best line that gains and the worst that loses among the rows on show, in percent as their
--- Change says. Pointed at, it says how each is worked out. Its Weight column sets how much a line counts (ns.GearSetWeight, GearLines.lua: 0 to 5 in
+-- an even share of the minute's global cooldowns among the lines of its kind, a next-swing strike its gain over the swing it takes the place of, each
+-- times its weight), for damage and healing from the comparison at A cast whatever the switch shows and for threat from the comparison at Threat,
+-- only for a tank or while the switch says Threat; and, while avoidance shows, GearAvoid's damage taken (A.Totals: what an enemy's swing does after
+-- the attack table, armor and block value, as a share of a plain hit), whose change is better when it is less. A figure is green when it is better
+-- for the player, red when worse, and grey under 0.05%, with its sign and ~ before an estimate that moves it, so colour is never all that says it; a
+-- second line names the best line that gains and the worst that loses among the rows on show (weight 0 too; none under Avoidance), in percent as
+-- their Change says. Pointed at, it says how each is worked out. Its Weight column sets how much a line counts (ns.GearSetWeight, GearLines.lua: 0 to 5 in
 -- steps of 0.5): a left click adds 0.5, a right click takes 0.5 off, and a Shift-click (IsShiftKeyDown, WL/apis.yaml:40162) gives 1. The colours are
 -- those of the lines' style (M.Fmt.Style of SpellModel.lua: label, good, bad), else the window's own, as the item tooltips' Overall line has them.
 -- Against (0.5.20): a second, smaller item box under the item, empty for what the player wears. An item dropped on it, or Compare against in the item
@@ -204,7 +205,7 @@ local T = {
 	NOT_YET_LINE = "Not wearable yet: ",
 	NOT_YET_LEVEL = " (the numbers are for you now, at level %d)",
 	NOT_COUNTED_LINE = "Not counted: ",
-	NO_CHANGE = "No change to your chosen spells; stamina, armor, avoidance and mana are not counted.",
+	NO_CHANGE = "No change to your chosen spells; armor, avoidance and mana are not counted.",
 	RANDOM = "Random stats not known.",
 	IN_PLACE = "instead of %s (%s)",
 	IN_PLACE_OFF = "instead of %s, off hand empty",
@@ -239,6 +240,7 @@ local T = {
 	MEASURED = "Measured in the game.",
 	ESTIMATED = "~ An estimate.",
 	NEXT_SWING = "It takes the place of your next swing, so it has no second of its own.",
+	ROW_SKILL = "Now and With count your weapon at the full skill of its line for your level; the spell's own lines above count your skill as it is.",
 	UNKNOWN = "You do not know this spell now.",
 	REMOVE = "Right-click to take it off the comparison.",
 	CLEAR = "Right-click to take the item out of the window.",
@@ -265,13 +267,13 @@ local T = {
 	BEST = "Best",
 	WORST = "Worst",
 	OVERALL_LINES = {
-		"Damage, Healing and Threat: what your lines do in a minute with the item against now. Your auto attack, Auto Shot, wand and seals count the whole minute; every other line gets a share of the minute's 40 global cooldowns by its weight (the Weight column; 0 leaves it out, and 2 counts Attack's minute twice). Damage and healing are those of A cast, threat those of Threat, whatever the switch says.",
-		"Best and Worst: the lines on show with the largest gain and loss in percent, as their Change says.",
+		"Damage, Healing and Threat: what your lines do in a minute with the item against now. Your auto attack, Auto Shot, wand and seals count the whole minute; the other lines of each kind share the minute's 40 global cooldowns evenly, and Heroic Strike, Cleave, Maul and Raptor Strike count what they add over the swing they take the place of, once a swing at most. Then each line counts times its weight (the Weight column; 0 leaves it out, 2 counts it twice). Damage and healing are those of A cast whatever the switch says; threat is that of Threat, for a tank or while the switch says Threat.",
+		"Best and Worst: the lines on show with the largest gain and loss in percent, as their Change says, weight 0 too; none under Avoidance.",
 		"Damage taken: what an enemy's swing does to you after misses, dodges, parries, blocks, crits, crushing blows and armor, as a share of a plain hit, so less is better. Block value counts against an enemy hit of %s before armor (Enemy hit for block value, an estimate).",
 		"Green is better for you and red worse; ~ marks an estimate.",
 	},
 	WEIGHT_TIP = "Weight %s",
-	WEIGHT_LINES = { "How much this line counts in the Overall line: its share of the minute's casts, or for your swings and shots how many minutes; 0 leaves it out, 5 counts it five times.",
+	WEIGHT_LINES = { "How much this line counts in the Overall line against the others: its minute, of swings and shots or of its even share of the casts, times this; 0 leaves it out, 5 counts it five times.",
 		"Left-click: +0.5. Right-click: -0.5. Shift-click: back to 1." },
 	NO_WEIGHT = "Gear comparison: the list of spells is not running, so the weight was not changed.",
 	GRIP = "Size",
@@ -1437,9 +1439,10 @@ function O.Extreme(word, held)
 end
 
 -- The Overall lines of an item (design item 3, chat.gearTotals): for each slot of the comparison its damage, healing and threat (G.Totals: what
--- the lines do in a minute with the item against now; damage and healing those of A cast, threat those of Threat (for a tank, or while the switch
--- says Threat), whatever the switch shows, 0.5.25) and, while avoidance shows, damage taken (A.Totals); then the best and the worst line of the rows on
--- show (the comparison of the switch; A cast's under Avoidance). Nil when there is nothing to say, the row is Off, or the item is not compared.
+-- the lines do in a minute with the item against now; damage and healing those of A cast whatever the switch shows, threat that of Threat, only for
+-- a tank or while the switch says Threat, since A cast's threat is only that of the lines that do no damage, 0.5.25) and, while avoidance shows,
+-- damage taken (A.Totals); then the best and the worst line of the rows on show (the comparison of the switch; none under Avoidance, whose rows are
+-- not spells). Nil when there is nothing to say, the row is Off, or the item is not compared.
 function O.Overall(view, lines)
 	if not W.link or view.never or Opt("gearTotals") == "off" then
 		return nil
@@ -1451,7 +1454,9 @@ function O.Overall(view, lines)
 		if view.role == "tank" or W.mode == "threat" then
 			threat = (view.mode == "threat" and view.result) or Ask(gear, "Compare", W.link, lines, Options("threat"))
 		end
-		shown = (view.mode == "threat" and threat) or (view.mode == "second" and view.result) or main
+		if view.mode ~= "avoid" then
+			shown = (view.mode == "threat" and threat) or (view.mode == "second" and view.result) or main
+		end
 	end
 	if Avoiding() then
 		avoid = Ask(ns.GearAvoid, "Compare", W.link, { base = W.used })
@@ -1465,7 +1470,7 @@ function O.Overall(view, lines)
 		local where = #cands > 1 and Where(c) or nil
 		local totals = O.Totals(main, c, lines, "cast") or {}
 		local threatTotals = threat and O.Totals(threat, c, lines, "threat") or {}
-		local figures = { damage = totals.damage, healing = totals.healing, threat = threatTotals.threat or totals.threat,
+		local figures = { damage = totals.damage, healing = totals.healing, threat = threatTotals.threat,
 			taken = avoid and O.Taken(avoid, c) or nil }
 		local onShow = (shown == main and totals) or (shown == threat and threatTotals) or (shown and O.Totals(shown, c, lines, view.mode)) or {}
 		local parts = {}
@@ -2535,7 +2540,8 @@ local function Measured(entry, line, figure)
 end
 
 -- The window's lines under a line's spell tooltip: the speed its attack power counts at, whether its numbers were measured or are an estimate and
--- why, a strike that takes the place of the next swing, a spell not known now, and how to take it off.
+-- why, a strike that takes the place of the next swing, that a weapon's line counts at full skill (as Options asks, while the spell tooltip's own
+-- Expected line counts the player's skill), a spell not known now, and how to take it off.
 local function RowLines(row)
 	local lines, line = {}, row.line
 	local entry = EntryOf(line)
@@ -2564,6 +2570,9 @@ local function RowLines(row)
 	end
 	if entry and entry.nx and W.mode == "second" then
 		lines[#lines + 1] = T.NEXT_SWING
+	end
+	if entry and entry.roll and entry.roll ~= "spell" then
+		lines[#lines + 1] = T.ROW_SKILL
 	end
 	if line.known == false then
 		lines[#lines + 1] = T.UNKNOWN
