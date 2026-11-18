@@ -31,6 +31,17 @@ local ADDON_NAME, ns = ...
 -- still that name, and the name alone again when the row goes off.
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
+-- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
+-- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
+-- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at
+-- every roll), and the Need, Greed, Transmog and Pass buttons in a row (ClearAllPoints, SetPoint, SetSize), with outlines of its own round the
+-- frame, the icon and the timer. The cards of the gamepad interface go through the same call and take the look, but keep the game's places for
+-- their timer and buttons. Once the box Loot rolls has a spot in /flatui move (an own entry, FlatUILootRolls, with Movers on), an anchor frame
+-- of Flat UI's own on UIParent lies over that box, and after each GroupLootContainer_Update (ns.FollowGlobal) every roll frame the game's container
+-- holds (its rollFrames, read) is hung from it with ClearAllPoints and SetPoint, slot by slot with the game's 100 between them, up or down as Rolls
+-- stack says; also in a fight, since none of them is protected and nothing protected hangs from them. While no spot is saved the game's layout is
+-- left alone, and a reset of the box puts each moved frame back at the point the container's layout gives it. The container itself is never
+-- touched, and keeps its room in the game's bottom stack.
 -- With Questie's tracker on and the Questie addon loaded (QuestieSkin.lua), it lays Flat UI's own outlines on Questie's tracker (Questie_BaseFrame,
 -- Questie_HeaderFrame, the lines linePool1 and on, the item buttons Questie_ItemButton1 and on), each a backdrop texture on Questie's frame and edges
 -- on a frame of Flat UI's own, round the frame or round an anchor frame of Flat UI's own on a heading. It follows QuestieTracker.Update with

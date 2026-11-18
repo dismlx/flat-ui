@@ -188,6 +188,11 @@ local LIST = {
 	-- the room of three bars at the default size, under the Threat list, and it grows down and to the right from there.
 	{ name = "FlatUIHealerMana", label = "Healer mana", point = "CENTER", kind = "hud", own = true, noScale = true, width = 158, height = 76, x = 420, y = -130,
 		gate = "HealerManaShown", changed = "HealerManaMoved" },
+	-- The game's loot rolls (Hud.lua): the room of four roll frames, 277 by 67, with the game's 100 from one to the next (GroupLootFrame.xml:292,
+	-- GroupLootFrame.lua:15, 125). It starts where the game stacks them, in its bottom stack above the action bars (ns.LootRollsStart). While no spot is
+	-- saved the game lays the rolls out; once one is, Hud.lua hangs them from the box, up from its bottom or down from its top.
+	{ name = "FlatUILootRolls", label = "Loot rolls", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 277, height = 367, x = 0, y = 150,
+		gate = "LootRollsShown", changed = "LootRollsMoved", start = "LootRollsStart" },
 	-- The bag window of Bags (BagsWindow.lua), which shows while the bags are open: its bottom right corner is the bottom right corner of the box, and
 	-- it grows up and to the left from there as its slots change. It starts above the bottom right corner of the screen, where the game's bags open:
 	-- further left while the right action bars stand in their place there (as Edit Mode and the game count them), so it covers none of those
@@ -360,7 +365,8 @@ for _, name in ipairs({
 }) do
 	REFUSE[name] = true
 end
-local REFUSE_PATTERNS = { "^ContainerFrame%d+$", "^ChatFrame%d+$", "^StaticPopup%d+$", "^Boss%dTargetFrameSpellBar$" }
+-- The roll frames are laid out by GroupLootContainer and hang from the box Loot rolls once it is moved (Hud.lua).
+local REFUSE_PATTERNS = { "^ContainerFrame%d+$", "^ChatFrame%d+$", "^StaticPopup%d+$", "^Boss%dTargetFrameSpellBar$", "^GroupLootFrame%d+$" }
 
 local EVERY_FRAME = "Every frame can be moved here. A grey box moves with the frame it hangs from. A hidden frame the game has not placed yet has no box."
 -- What a box of a bar the game lays out says while its Edit Mode layout cannot hold the spot: the layout passes run when a fight starts and ends.

@@ -87,6 +87,22 @@ local ROLL_FILE = "Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar"
 local PANEL_FILL = { "BottomLeft", "BottomRight", "BottomEdge", "TopSection" }
 local SLOT_ART = { "NormalTexture", "PushedTexture", "IconBorder" }
 local ROLL_FRAMES, METER_WINDOWS = 4, 3
+-- The roll frames (Blizzard_UIPanels_Game/Mainline/GroupLootFrame.xml:291-549). game and flat: the buttons where the game puts them, given back when
+-- the row goes off, and where Flat UI puts them, a row of Need, Greed (or Transmog in its place) and Pass at the right, level with the icon, each
+-- { key in the button container, point, the frame it hangs from (a key, "frame" or "container"), its point, x, y }, in an order that never
+-- hangs a button from one that hangs from it. button: the side of a button, the game's and Flat UI's. timer: the game's size and spot of the timer
+-- from the bottom left corner (xml:370-374), and Flat UI's inset from both bottom corners. mover: the box of the rolls in /flatui move (Movers.lua),
+-- part: the part that hangs the rolls there, step: the game's room for each roll (GroupLootFrame.lua:15), moved: per roll frame hung from the box.
+local ROLL = {
+	game = { { "NeedButton", "TOPLEFT", "container", "TOPLEFT", 14, -7 }, { "PassButton", "LEFT", "NeedButton", "RIGHT", 6, 2 },
+		{ "GreedButton", "TOP", "NeedButton", "BOTTOM", 0, 5 }, { "TransmogButton", "CENTER", "GreedButton", "CENTER", 0, 0 } },
+	flat = { { "PassButton", "RIGHT", "frame", "RIGHT", -8, 5 }, { "GreedButton", "RIGHT", "PassButton", "LEFT", -2, 0 },
+		{ "TransmogButton", "CENTER", "GreedButton", "CENTER", 0, 0 }, { "NeedButton", "RIGHT", "GreedButton", "LEFT", -2, 0 } },
+	button = 32, flatButton = 26,
+	timer = { width = 190, height = 8, x = 3, y = 2, inset = 8, lift = 6 },
+	mover = "FlatUILootRolls", part = "loot roll spot", step = 100,
+	moved = setmetatable({}, { __mode = "k" }),
+}
 local ALERT_SYSTEMS = { "LootAlertSystem", "MoneyWonAlertSystem", "HonorAwardedAlertSystem" }
 -- The backgrounds of those alerts and the ring round the icon of money and honour. The game shows and hides them and never sets their alpha.
 local ALERT_ART = { "Background", "PvPBackground", "RatedPvPBackground", "BGAtlas", "IconBorder" }
@@ -1741,14 +1757,73 @@ local function ApplyLootRow(row)
 	ns.SetOutlineColour(rec.slot, r, g, b)
 end
 
--- The game sets the colour of the frame, its name and the ring round the icon for the quality of the item every time a roll starts.
+-- True for the game's four roll frames (GroupLootFrame1 to 4, MKBGroupLootFrameTemplate). The cards of the gamepad interface pass through
+-- GroupLootFrame_SetupItemDisplay too (GroupLootFrame.lua:1184) but lay their buttons out otherwise (GroupLootFrame.xml:553-597), so they
+-- keep the game's places for their buttons and timer and take the rest of the look.
+function ROLL.Ours(frame)
+	for index = 1, ROLL_FRAMES do
+		if rawequal(_G["GroupLootFrame" .. index], frame) then
+			return true
+		end
+	end
+	return false
+end
+
+-- The timer of a roll: across the foot of the frame, one level above it so that the flat background does not cover it, or back where the game
+-- has it, one level under the frame as the game sets it at every roll (GroupLootFrame.lua:362). A gamepad card keeps its timer's place.
+function ROLL.Timer(frame, timer, on, rec)
+	if not (on or rec.timerMoved) then
+		return
+	end
+	rec.timerMoved = on or nil
+	if ROLL.Ours(frame) then
+		local spot = ROLL.timer
+		timer:ClearAllPoints()
+		if on then
+			timer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", spot.inset, spot.lift)
+			timer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -spot.inset, spot.lift)
+			timer:SetHeight(spot.height)
+		else
+			timer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", spot.x, spot.y)
+			timer:SetSize(spot.width, spot.height)
+		end
+	end
+	local level = Level(frame)
+	if level then
+		timer:SetFrameLevel(math.max(0, level + (on and 1 or -1)))
+	end
+end
+
+-- The Need, Greed, Transmog and Pass buttons: a row at the right, or back where the game has them. The game never places them itself. Not on
+-- a gamepad card, whose buttons stand elsewhere.
+function ROLL.Buttons(frame, on, rec)
+	local holder = Child(frame, "LootButtonContainer")
+	if not holder or not ROLL.Ours(frame) or not (on or rec.buttonsMoved) then
+		return
+	end
+	rec.buttonsMoved = on or nil
+	local side = on and ROLL.flatButton or ROLL.button
+	for _, spot in ipairs(on and ROLL.flat or ROLL.game) do
+		local button = Child(holder, spot[1])
+		local relative = spot[3] == "frame" and frame or spot[3] == "container" and holder or Child(holder, spot[3])
+		if button and relative then
+			button:ClearAllPoints()
+			button:SetPoint(spot[2], relative, spot[4], spot[5], spot[6])
+			button:SetSize(side, side)
+		end
+	end
+end
+
+-- A roll in Flat UI's look: a flat background and a thin border round the frame in place of the game's toast, the icon cropped with a thin border
+-- in the colour of the item's quality, which the game gives the frame's border, the name in that colour as the game writes it, a flat timer with a
+-- thin border, and the buttons in a row. The game sets the icon, the colours and the timer's level every time a roll starts.
 local function ApplyRoll(frame)
 	local icon, timer = Child(frame, "IconFrame"), Child(frame, "Timer")
 	if not icon then
 		return
 	end
 	local on = Wanted("loot rolls")
-	local rec = Plate("loot rolls", ApplyRoll, frame, frame, on, false)
+	local rec = Plate("loot rolls", ApplyRoll, frame, frame, on, true)
 	if not rec then
 		return
 	end
@@ -1756,17 +1831,28 @@ local function ApplyRoll(frame)
 		rec.icon = ns.Outline(icon, icon)
 	end
 	ns.SetOutline(rec.icon, on, on)
-	Art(rec, frame, { "Border" }, on)
+	Art(rec, frame, { "Background", "Border" }, on)
 	Art(rec, icon, { "Border" }, on)
 	local r, g, b
 	if on then
 		r, g, b = Tint(frame.Border)
 	end
-	ns.SetOutlineColour(rec.outline, r, g, b)
 	ns.SetOutlineColour(rec.icon, r, g, b)
-	if timer then
-		FillOf(timer, on, ROLL_FILE, 1, 1, 1, true)
+	local art = icon.Icon
+	if art ~= nil and not ns.IsSecret(art) and (on or rec.cropped) then
+		rec.cropped = on or nil
+		local crop = on and Crop() or 0
+		art:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
 	end
+	if timer then
+		if on and not rec.timer and not Later(timer) then
+			rec.timer = ns.Outline(timer, timer)
+		end
+		ns.SetOutline(rec.timer, on, false)
+		FillOf(timer, on, ROLL_FILE, 1, 1, 1, true)
+		ROLL.Timer(frame, timer, on, rec)
+	end
+	ROLL.Buttons(frame, on, rec)
 end
 
 local RowHook, RollHook = Hook("loot window", ApplyLootRow, true), Hook("loot rolls", ApplyRoll, true)
@@ -1780,6 +1866,87 @@ local function LootRows(window)
 	end
 	local ok, rows = pcall(function() return { target:GetChildren() } end)
 	return ok and rows or {}
+end
+
+-- True while the rolls hang from the box Loot rolls of /flatui move: this page and Movers are on, the profile has a spot saved for the box, and the
+-- gamepad interface is off (it lists the rolls in a window of its own, and the game's container places none: GroupLootFrame.lua:114-117).
+function ROLL.Moved()
+	if not (ns.Enabled(KEY) and not ns.PartStopped(KEY, ROLL.part) and ns.Enabled("movers") and type(ns.MoverSaved) == "function"
+		and ns.MoverSaved(ROLL.mover)) then
+		return false
+	end
+	local input = _G.InputUtil
+	if input ~= nil and not ns.IsSecret(input) and type(input) == "table" and type(input.IsGamepadUIEnabled) == "function" then
+		local ok, pad = pcall(input.IsGamepadUIEnabled)
+		return ok and not ns.IsSecret(pad) and pad ~= true
+	end
+	return true
+end
+
+-- The anchor of the rolls: a frame of Flat UI's own on UIParent over the box Loot rolls, at the spot saved for it.
+function ROLL.Anchor()
+	local left, bottom = ns.MoverSpot(ROLL.mover, "BOTTOMLEFT")
+	local right, top = ns.MoverSpot(ROLL.mover, "TOPRIGHT")
+	if not (left and right) then
+		return nil
+	end
+	local anchor = ROLL.anchor
+	if not anchor then
+		anchor = CreateFrame("Frame", nil, UIParent)
+		ns.Own[anchor] = true
+		ROLL.anchor = anchor
+	end
+	anchor:ClearAllPoints()
+	anchor:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom)
+	anchor:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", right, top)
+	return anchor
+end
+
+-- Hangs every roll frame the game's container holds (its rollFrames, by slot) from the anchor, slot by slot with the game's room for each, up from
+-- the bottom of the box or down from its top as Rolls stack says. With no spot, a frame hung here goes back to the point the container's own
+-- layout gives it (GroupLootFrame.lua:124-125). Widget calls on frames that are not protected, so also in a fight.
+function ROLL.Place()
+	local container = Frame("GroupLootContainer")
+	local list = container and container.rollFrames
+	if list == nil or ns.IsSecret(list) or type(list) ~= "table" then
+		return
+	end
+	local step = container.reservedSize
+	if ns.IsSecret(step) or type(step) ~= "number" or step <= 0 then
+		step = ROLL.step
+	end
+	local anchor = ROLL.Moved() and ROLL.Anchor() or nil
+	local down = ns.Get(KEY .. ".lootRollsGrow") == "down"
+	for index, frame in pairs(list) do
+		if type(index) == "number" and not ns.Forbidden(frame) and (anchor or ROLL.moved[frame]) then
+			frame:ClearAllPoints()
+			if not anchor then
+				ROLL.moved[frame] = nil
+				frame:SetPoint("CENTER", container, "BOTTOM", 0, step * (index - 0.5))
+			elseif down then
+				ROLL.moved[frame] = true
+				frame:SetPoint("TOP", anchor, "TOP", 0, -step * (index - 1))
+			else
+				ROLL.moved[frame] = true
+				frame:SetPoint("BOTTOM", anchor, "BOTTOM", 0, step * (index - 1))
+			end
+		end
+	end
+end
+
+-- After each layout of the game's container: the rolls go under the anchor again.
+function ROLL.Layout()
+	if not ns.IsStopped(KEY) and (ROLL.Moved() or next(ROLL.moved) ~= nil) then
+		Run(ROLL.part, ROLL.Place)
+	end
+end
+
+-- The game's container is followed from the first time a spot is saved for the box, and the rolls are hung there or given back now.
+function ROLL.Spot()
+	if ROLL.Moved() then
+		ns.FollowGlobal("GroupLootContainer_Update", ROLL.Layout)
+	end
+	Run(ROLL.part, ROLL.Place)
 end
 
 local function RefreshLoot()
@@ -1801,6 +1968,50 @@ local function RefreshLoot()
 	if Wanted("loot rolls") then
 		FollowGlobal("GroupLootFrame_SetupItemDisplay", RollHook)
 	end
+	ROLL.Spot()
+end
+
+-- The box Loot rolls in /flatui move has a handle while this page is on.
+function ns.LootRollsShown()
+	return ns.Enabled(KEY)
+end
+
+-- The movers set or put back the spot of the box: the rolls shown now go there, or back to the game's layout.
+function ns.LootRollsMoved()
+	if not ns.IsStopped(KEY) then
+		ROLL.Spot()
+	end
+end
+
+-- Where the box starts while no spot is saved: where the game stacks its rolls, the bottom of the first half a frame under the middle of the first
+-- slot of the game's container (GroupLootFrame.lua:125), and that container in the game's bottom stack above the action bars
+-- (UIParentPanelManager.lua:807-815). Read from the container while it shows, else from the bottom of the stack; the entry's own x and y while
+-- neither can be read.
+function ns.LootRollsStart(x, y)
+	local game = Frame("GroupLootContainer")
+	local ok, shown = false, false
+	if game then
+		ok, shown = pcall(game.IsShown, game)
+	end
+	local frame = (ok and not ns.IsSecret(shown) and shown == true) and game or Frame("BottomManagedFrameContainer")
+	if not frame or not UIParent then
+		return x, y
+	end
+	local okBottom, bottom = pcall(frame.GetBottom, frame)
+	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
+	local okParent, parentScale = pcall(UIParent.GetEffectiveScale, UIParent)
+	if not (okBottom and okScale and okParent and ns.Finite(bottom) and ns.Finite(scale) and ns.Finite(parentScale) and parentScale > 0) then
+		return x, y
+	end
+	local first = Frame("GroupLootFrame1")
+	local okHeight, height = false, nil
+	if first then
+		okHeight, height = pcall(first.GetHeight, first)
+	end
+	if not (okHeight and ns.Finite(height)) then
+		height = 67
+	end
+	return x, bottom * scale / parentScale + ROLL.step / 2 - height / 2
 end
 
 -- Alerts ------------------------------------------------------------------------------------------------

@@ -707,6 +707,7 @@ ns.SETUP_STEPS = {
 		{ "hud.trackerQuestie", "o", "behaviour", "Gives the Questie addon's quest tracker the look of the objective tracker, when Questie is loaded." },
 		{ "hud.lootWindow", "c", "mock-loot" },
 		{ "hud.lootRolls", "c", "mock-loot" },
+		{ "hud.lootRollsGrow", "r", "behaviour", "Chooses whether loot rolls stack up or down from the spot you move them to with /flatui move." },
 		{ "hud.lootQualityText", "o", "mock-loot" },
 		{ "hud.alerts", "c", "mock-loot" },
 		{ "hud.errors", "o", "behaviour", "Hides the red error messages of the kinds you choose in the middle of the screen, with their sound and voice." },

@@ -773,17 +773,25 @@ function Loot.build(stage)
 		card.words = NewText(card.frame, "GameFontNormalSmall", "BOTTOMLEFT", 36, 4, quality[4], "LEFT")
 		s.cards[index] = card
 	end
-	s.roll = NewPlate(root, 230, 44)
-	At(s.roll.frame, root, 190, 8)
-	s.rollIcon = NewSlot(s.roll.frame, 7, 7, 30, ICONS[2])
-	local rollName = NewText(s.roll.frame, "GameFontHighlightSmall", "TOPLEFT", 44, -6, "Sturdy Shield", "LEFT")
+	-- A roll as Hud.lua draws it: the timer across the foot and Need, Greed and Pass in a row at the right while the row is on, else where the game
+	-- has them, the timer under the name and the buttons in two rows.
+	s.roll = NewPlate(root, 230, 50)
+	At(s.roll.frame, root, 190, 6)
+	s.rollIcon = NewSlot(s.roll.frame, 7, 6, 28, ICONS[2])
+	local rollName = NewText(s.roll.frame, "GameFontHighlightSmall", "TOPLEFT", 42, -8, "Sturdy Shield", "LEFT")
 	rollName:SetTextColor(0, 0.44, 0.87, 1)
 	s.timer = Owned(CreateFrame("StatusBar", nil, s.roll.frame))
-	s.timer:SetSize(170, 8)
-	s.timer:SetPoint("BOTTOMLEFT", s.roll.frame, "BOTTOMLEFT", 44, 7)
 	s.timer:SetMinMaxValues(0, 100)
 	s.timer:SetStatusBarTexture(BAR_FILE)
 	s.timer:SetValue(65)
+	NewTexture(s.timer, "BACKGROUND", 0, 0, 0, 0, 1):SetAllPoints(s.timer)
+	s.timerEdge = { outline = ns.SetOutlineArea(ns.Outline(s.timer, s.timer), "hud") }
+	s.rollButtons = {}
+	for index, kind in ipairs({ "need", "greed", "pass" }) do
+		local button = NewTexture(s.roll.frame, "ARTWORK", 1)
+		button:SetAtlas("lootroll-toast-icon-" .. kind .. "-up")
+		s.rollButtons[index] = button
+	end
 	s.alert = NewPlate(root, 230, 44)
 	At(s.alert.frame, root, 190, 70)
 	s.alertIcon = NewTexture(s.alert.frame, "ARTWORK", 0, 1, 1, 1, 1)
@@ -816,13 +824,36 @@ function Loot.draw(stage)
 	end
 	on = On("lootRolls")
 	local blue = { 0, 0.44, 0.87 }
-	Style(s.roll, on, false, not on, on and blue or nil)
+	Style(s.roll, on, true, not on)
 	Style(s.rollIcon, on, true, not on, on and blue or nil)
-	local file
+	crop = on and Crop() or 0
+	s.rollIcon.icon:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
+	Style(s.timerEdge, on, false, false)
+	local roll, timer, need, greed, pass = s.roll.frame, s.timer, s.rollButtons[1], s.rollButtons[2], s.rollButtons[3]
+	timer:ClearAllPoints()
+	for _, button in ipairs(s.rollButtons) do
+		button:ClearAllPoints()
+	end
+	local file, side
 	if on then
-		file = nil
+		timer:SetPoint("BOTTOMLEFT", roll, "BOTTOMLEFT", 7, 5)
+		timer:SetPoint("BOTTOMRIGHT", roll, "BOTTOMRIGHT", -7, 5)
+		timer:SetHeight(6)
+		side = 18
+		pass:SetPoint("RIGHT", roll, "RIGHT", -6, 5)
+		greed:SetPoint("RIGHT", pass, "LEFT", -2, 0)
+		need:SetPoint("RIGHT", greed, "LEFT", -2, 0)
 	else
+		timer:SetPoint("BOTTOMLEFT", roll, "BOTTOMLEFT", 3, 2)
+		timer:SetSize(150, 6)
+		side = 20
+		need:SetPoint("TOPRIGHT", roll, "TOPRIGHT", -34, -4)
+		pass:SetPoint("LEFT", need, "RIGHT", 4, 1)
+		greed:SetPoint("TOP", need, "BOTTOM", 0, 3)
 		file = ns.BarFile("skills")
+	end
+	for _, button in ipairs(s.rollButtons) do
+		button:SetSize(side, side)
 	end
 	Fill(s.timer, 1, 0.82, 0, file)
 	on = On("alerts")
