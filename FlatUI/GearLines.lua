@@ -66,6 +66,10 @@ local _, ns = ...
 -- off-hand weapon for one who does not dual wield) shows nothing. The numbers are rounded as design 2.3 says by SpellModel's M.Fmt, as the window
 -- rounds them: a change a cast whole from 100 up and to a tenth below, a second to a tenth and " dps" (Change), the percent to a tenth with its
 -- sign, (0%) under 0.05 (Percent), and none while the figure now is 0.
+-- While avoidance shows (Avoidance, chat.gearAvoid; GearAvoid.lua's A.Wanted), the block goes on after the spell rows with GearAvoid.lua's lines for
+-- the slot they show (A.TipLines: a header, the rows of an enemy's swing, armor and block value that change, and what it does not count), and the
+-- line in place of spell rows that do not change says what it counts; the block's key holds A.Stamp, which changes with what those lines are built
+-- from. GearAvoid.lua is asked under pcall, so a fault there goes to the error handler once and the spell rows show without it.
 -- The post call runs in two steps, each inside ns.EachPart (Core.lua:2193-2224), which counts a failure once for each first argument and stops a
 -- part at the third (Core.lua:260, 2203, 2210-2219): the tests and the link keyed by the data of the build, which is new for each build, and the
 -- work keyed by the item's link, so three items that fail stop the gear lines with their note for /flatui status, and a test that fails on every
@@ -298,6 +302,22 @@ local function Gear()
 		return G
 	end
 	return nil
+end
+
+-- A function of GearAvoid.lua (ns.GearAvoid), looked up when called and run under pcall: its fault goes to the error handler once and never stops
+-- the gear lines, which show without the avoidance block.
+local function Avoid(name, ...)
+	local A = ns.GearAvoid
+	local fn = type(A) == "table" and A[name] or nil
+	if type(fn) ~= "function" then
+		return nil
+	end
+	local ok, first, second = pcall(fn, ...)
+	if not ok then
+		Report(first, "avoidance")
+		return nil
+	end
+	return first, second
 end
 
 -- Asks SpellModel.lua for its events while the gear lines want them. A refusal goes to the error handler, never to the caller.
@@ -1628,7 +1648,7 @@ local function Build(M, result, slot, info)
 			head[#head + 1] = { text = T.MORE:format(#bestRows - bestShown), colour = T.DIM, wrap = true }
 		end
 	end
-	return { head = head, tail = Tail(result) }
+	return { head = head, tail = Tail(result), slots = best.slots, still = still }
 end
 
 -- The block of an item, from the cache or G.Compare. In a fight with nothing worked out now, the last block of the item, else one dim line;
@@ -1650,7 +1670,7 @@ local function BlockFor(key, data, link, slot, guid)
 	if #known == 0 then
 		return nil
 	end
-	local cacheKey = key .. "|" .. tostring(Version(M)) .. "|" .. list.version
+	local cacheKey = key .. "|" .. tostring(Version(M)) .. "|" .. list.version .. "|" .. tostring(Avoid("Stamp"))
 	local kept = blocks.byKey[cacheKey]
 	if kept then
 		return kept
@@ -1661,6 +1681,17 @@ local function BlockFor(key, data, link, slot, guid)
 	Seen(result)
 	local block = Build(M, result, slot, info)
 	if block then
+		-- The avoidance block after the spell rows, for the slots they show, while it shows (GearAvoid.lua, A.TipLines); with it, the line in place
+		-- of spell rows that do not change says what it counts.
+		local more, words = Avoid("TipLines", slot or link, block.slots, opts)
+		if type(more) == "table" then
+			if block.still and type(words) == "string" then
+				block.head[2] = { text = words, colour = T.DIM, wrap = true }
+			end
+			for _, entry in ipairs(more) do
+				block.head[#block.head + 1] = entry
+			end
+		end
 		Store(blocks.byKey, blocks.order, cacheKey, block)
 		Store(blocks.last, blocks.lastOrder, key, block)
 		return block

@@ -343,22 +343,26 @@
   },
   {
    "key": "ITEM_MOD_DODGE_RATING_SHORT",
-   "kind": "none",
+   "kind": "avoid",
+   "rating": 3,
    "t": "TOOLTIP_ITEM_STAT_DODGE_PCT_INCREASE"
   },
   {
    "key": "ITEM_MOD_PARRY_RATING_SHORT",
-   "kind": "none",
+   "kind": "avoid",
+   "rating": 4,
    "t": "TOOLTIP_ITEM_STAT_PARRY_PCT_INCREASE"
   },
   {
    "key": "ITEM_MOD_BLOCK_RATING_SHORT",
-   "kind": "none",
+   "kind": "avoid",
+   "rating": 5,
    "t": "TOOLTIP_ITEM_STAT_BLOCK_CHANCE_INCREASE"
   },
   {
    "key": "ITEM_MOD_DEFENSE_SKILL_RATING_SHORT",
-   "kind": "none",
+   "kind": "avoid",
+   "rating": 2,
    "t": "TOOLTIP_ITEM_STAT_DEFENSE_INCREASE"
   },
   {
@@ -473,7 +477,7 @@
   },
   {
    "key": "RESISTANCE0_NAME",
-   "kind": "none",
+   "kind": "armor",
    "t": "TOOLTIP_ITEM_STAT_ARMOR_INCREASE"
   },
   {

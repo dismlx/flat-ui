@@ -108,6 +108,7 @@ ChatHistory.lua
 SpellData.lua
 SpellModel.lua
 GearModel.lua
+GearAvoid.lua
 SpellLines.lua
 GearLines.lua
 GearWindow.lua

@@ -5,6 +5,9 @@ local _, ns = ...
 -- the place to drop items and spells on, and it works with Your spells in item tooltips off: it is a tool of its own, and the list rows of the Spells
 -- and gear tab serve both. /flatui gear opens and closes it (ns.GearWindowToggle); the tab's Gear comparison window row opens it, or raises it when it
 -- is open, and /flatui gear <item> shows that item in it (ns.GearWindowShow); Escape closes it; the item and the switch are kept for the session.
+-- While avoidance shows (Avoidance of the Spells and gear tab, GearAvoid.lua's A.Wanted) the switch has a fourth word, Avoidance: the attack table
+-- of an enemy's swing, armor and block value now and with the item, in the rows and words GearAvoid.lua writes (A.Window), which this file draws in
+-- the same columns; a tank's window starts on it, and its lines have no spell, so they have no tooltip and a right click takes nothing off.
 -- A fight is InCombatLockdown's answer (WL/apis.yaml:39650), a withheld one counting as a fight; the time of a drop is GetTime's (:39050).
 -- Everything runs as the part "gear window" of the chat module (ns.EachPart, Core.lua:2193-2224), each run with a count of its own as its first
 -- argument, so three faults stop the window alone with a line for /flatui status (design 4.4); the first fault also goes to the game's error handler
@@ -92,12 +95,14 @@ local COLUMNS = {
 	two = { { "name", "Spell", 150, "LEFT" }, { "now", "Now", 70, "RIGHT" }, { "change", "Change %s", 92, "RIGHT", 1 },
 		{ "change", "Change %s", 92, "RIGHT", 2 } },
 }
--- The three figures of the switch in the title bar (design 2.3), left to right, and what each says when pointed at.
-local MODES = { { "cast", "A cast" }, { "second", "A second" }, { "threat", "Threat" } }
+-- The three figures of the switch in the title bar (design 2.3), left to right, and what each says when pointed at; and Avoidance, the attack table of
+-- an enemy's swing (GearAvoid.lua), which shows while avoidance shows (A.Wanted).
+local MODES = { { "cast", "A cast" }, { "second", "A second" }, { "threat", "Threat" }, { "avoid", "Avoidance" } }
 local WORD_TIPS = {
 	cast = "What one cast does: its expected damage or healing, or its threat for a line that does no damage. Your auto attack, Auto Shot and wand count one swing or shot.",
 	second = "What a second does: a cast over its cast time (at least the global cooldown), a spell over time over its duration, your swings and shots over their speed. A strike that takes the place of your next swing has none.",
 	threat = "The threat of one cast, and of a second of what rides on your swings and shots (your auto attack, Auto Shot, wand and seals), with your stance, form, Righteous Fury and talents.",
+	avoid = "How often an enemy's swing misses you, is dodged, parried or blocked, crits or crushes, and what your armor and block value take off: now, and with the item in each slot it can take. Avoidance on the Spells and gear tab chooses when it shows.",
 }
 -- Against at its first choice is a boss three levels above at the top level, else an enemy of the player's level (design 2.5, 4.9). The hit caps of
 -- Hit cap against a boss and of the hit table's row of the same name (Config.lua, hud.hitTableRules).
@@ -427,6 +432,34 @@ local function PaintWords()
 			Colour(word.text, PLAIN)
 		else
 			Colour(word.text, DIM)
+		end
+	end
+end
+
+-- True while the Avoidance view shows (GearAvoid.lua, A.Wanted: Avoidance of the Spells and gear tab).
+local function Avoiding()
+	return Ask(ns.GearAvoid, "Wanted") == true
+end
+
+-- The words of the switch from the right, after the close cross, each with the separator on its left: Avoidance, the last, only while it shows.
+local function PlaceWords()
+	local x, bar = -(4 + L.CLOSE + L.WORD_GAP), W.bar
+	for index = #W.words, 1, -1 do
+		local word = W.words[index]
+		local shown = word.mode ~= "avoid" or Avoiding()
+		word.button:SetShown(shown)
+		if word.sep then
+			word.sep:SetShown(shown)
+		end
+		if shown then
+			word.button:ClearAllPoints()
+			word.button:SetPoint("RIGHT", bar, "RIGHT", x, 0)
+			x = x - word.width
+			if word.sep then
+				word.sep:ClearAllPoints()
+				word.sep:SetPoint("CENTER", bar, "RIGHT", x - L.WORD_GAP / 2, 0)
+				x = x - L.WORD_GAP
+			end
 		end
 	end
 end
@@ -1003,9 +1036,51 @@ local function Wearing(link)
 	return not IsSecret(never) and never == true, Text(later)
 end
 
+-- The Avoidance view (GearAvoid.lua's A.Window): the attack table of an enemy's swing now, or with the item in each slot it can take (the first two),
+-- its rows' texts and tones as that file writes them, its notes and its foot; what the item would take the place of as for the spells. Nil while
+-- avoidance does not show.
+local function AvoidView()
+	if not Avoiding() then
+		return nil
+	end
+	-- An item the player can never wear is not compared here either, as in the spell view: the table shows as now.
+	local never = W.link ~= nil and (Wearing(W.link)) == true
+	local got = Ask(ns.GearAvoid, "Window", not never and W.link or nil)
+	if type(got) ~= "table" or type(got.rows) ~= "table" or not COLUMNS[got.layout] then
+		return nil
+	end
+	local state, stats = Touch()
+	local view = { mode = "avoid", layout = got.layout, rows = got.rows, notes = got.notes or {}, cands = got.cands or {}, heads = got.heads,
+		foot = got.foot, noStats = type(stats) ~= "table", old = type(stats) == "table" and stats.old == true }
+	if W.link then
+		view.item = ItemLook(W.link)
+		if never then
+			view.place = T.NEVER
+		elseif #view.cands > 0 then
+			view.place = PlaceLine(view.cands, state)
+		else
+			view.place = Text(got.why)
+			if not view.place then
+				Note(view.notes, view.item.loaded and T.NOT_COMPARED or T.LOADING)
+			end
+		end
+	elseif #view.rows == 0 then
+		view.message = Text(got.why) or T.NO_STATS
+	end
+	return view
+end
+
 -- What the window shows now, the view Paint draws: the lines, now and with the item, in the figure of the switch, with the item's notes. An item the
--- player can never wear is not compared: the place line says so, and the lines show as with no item.
+-- player can never wear is not compared: the place line says so, and the lines show as with no item. Avoidance that no longer shows gives the switch
+-- back its first figure for the role.
 local function Compute()
+	if W.mode == "avoid" then
+		local avoid = AvoidView()
+		if avoid then
+			return avoid
+		end
+		W.mode = Role((Touch())) == "tank" and "threat" or "cast"
+	end
 	local view = { mode = W.mode, layout = "none", rows = {}, notes = {}, cands = {} }
 	local model, gear = ns.SpellModel, ns.GearModel
 	if not (Fn(model, "State") and Fn(gear, "Expect") and Fn(gear, "Figure")) then
@@ -1053,7 +1128,7 @@ end
 local function Key()
 	local look = W.link and ItemLook(W.link) or nil
 	return table.concat({ tostring(Ask(ns.SpellModel, "Version")), tostring(Ask(ns, "GearListVersion")), W.mode, W.link or "",
-		look and look.loaded and "loaded" or "" }, "\n")
+		look and look.loaded and "loaded" or "", tostring(Ask(ns.GearAvoid, "Stamp")) }, "\n")
 end
 
 -- Works the view out again and draws it. SpellModel reads what an event marked first, so the key is that of what the view is worked out from; a
@@ -1163,7 +1238,7 @@ local function PaintHeads(view, y)
 	for index, head in ipairs(W.heads) do
 		local column = shown and columns[index] or nil
 		if column then
-			local text = column.head
+			local text = type(view.heads) == "table" and Text(view.heads[column.key]) or column.head
 			if column.slot then
 				text = text:format(Where(view.cands[column.slot]))
 			end
@@ -1203,8 +1278,31 @@ local function RowName(row, mode)
 	return name
 end
 
+-- A line of the Avoidance view: its texts and tones by column as GearAvoid.lua wrote them, a change by the slot of its column.
+local function PaintTexts(slot, row, columns, y)
+	for index, cell in ipairs(slot.cells) do
+		local column = columns[index]
+		if column then
+			local key = column.slot and ("change" .. column.slot) or column.key
+			local text = Text(row.texts[key]) or "-"
+			SetCell(cell, slot.button, column)
+			cell:SetText(text)
+			Colour(cell, text == "-" and FAINT or (column.slot and (TONES[row.tones[key]] or TONES.none)) or PLAIN)
+			cell:Show()
+		else
+			cell:Hide()
+		end
+	end
+	slot.row = row
+	Hang(slot.button, y, L.ROW)
+	slot.button:Show()
+end
+
 -- One line of the table: its cells in the columns of the layout, coloured as the item tooltips colour them (design 2.3).
 local function PaintRow(slot, row, view, columns, y)
+	if type(row.texts) == "table" then
+		return PaintTexts(slot, row, columns, y)
+	end
 	local second = row.perSecond == true
 	for index, cell in ipairs(slot.cells) do
 		local column = columns[index]
@@ -1301,7 +1399,10 @@ end
 
 -- The foot (design 2.7): against what, what the numbers leave out, the mark of an estimate, the stats of before the fight, and the scroll.
 local function FootLines(view)
-	local texts = { Against(view), T.BEFORE, T.NOT_COUNTED, T.ESTIMATE }
+	local texts = {}
+	for _, text in ipairs(type(view.foot) == "table" and view.foot or { Against(view), T.BEFORE, T.NOT_COUNTED, T.ESTIMATE }) do
+		texts[#texts + 1] = text
+	end
 	if view.noStats then
 		texts[#texts + 1] = T.NO_STATS
 	elseif view.old or Fighting() then
@@ -1314,13 +1415,14 @@ local function FootLines(view)
 	return texts
 end
 
--- Draws a view: from the top down, the item, the table, the item's notes and the foot, and the window as tall as they are.
+-- Draws a view: from the top down, the words of the switch, the item, the table, the item's notes and the foot, and the window as tall as they are.
 function Paint(view)
 	local frame = W.frame
 	if not frame or type(view) ~= "table" then
 		return
 	end
 	PaintLook()
+	PlaceWords()
 	PaintRule(W.barRule, L.BAR)
 	local y = PaintItem(view, L.BAR + L.GAP)
 	local top = y
@@ -1680,7 +1782,7 @@ end
 -- The spell's own tooltip with the window's lines under it, out of combat. A spell the game builds no tooltip for gets its name.
 local function RowTip(slot)
 	local row = slot.row
-	if not row or Fighting() then
+	if not row or row.texts or Fighting() then
 		return
 	end
 	local tip, button = Tooltip(), slot.button
@@ -1736,7 +1838,7 @@ local function RowClick(slot, mouse)
 	if mouse == "LeftButton" and Drop() then
 		return
 	end
-	if mouse == "RightButton" and slot.row then
+	if mouse == "RightButton" and slot.row and not slot.row.texts then
 		Untip(slot.button)
 		Remove(slot.row)
 	end
@@ -1782,7 +1884,7 @@ local function MakeSwitch(bar)
 		local width = math.ceil(TextWidth(text, mode[2])) + L.WORD_ROOM
 		button:SetWidth(width)
 		button:SetPoint("RIGHT", bar, "RIGHT", x, 0)
-		local word = { mode = mode[1], label = mode[2], button = button, text = text }
+		local word = { mode = mode[1], label = mode[2], button = button, text = text, width = width }
 		button:SetScript("OnClick", function()
 			Run(Choose, word)
 		end)
@@ -1805,6 +1907,7 @@ local function MakeSwitch(bar)
 			sep:SetSize(1, 10)
 			sep:SetPoint("CENTER", bar, "RIGHT", x - L.WORD_GAP / 2, 0)
 			W.seps[#W.seps + 1] = sep
+			word.sep = sep
 			x = x - L.WORD_GAP
 		end
 	end
@@ -1973,13 +2076,13 @@ local function Raise()
 	W.frame:SetFrameStrata(over and "DIALOG" or "MEDIUM")
 end
 
--- The window's part of its showing: SpellModel listens, the switch starts on Threat for a tank and on A cast for the others until the player picks
--- one (design 2.7), the strata suits the options window, and the window is placed and worked out afresh.
+-- The window's part of its showing: SpellModel listens, the switch starts on Threat for a tank (on Avoidance while it shows) and on A cast for the
+-- others until the player picks one (design 2.7), the strata suits the options window, and the window is placed and worked out afresh.
 local function Showing()
 	Want(true)
 	Raise()
 	if not W.chosen then
-		W.mode = Role((Touch())) == "tank" and "threat" or "cast"
+		W.mode = Role((Touch())) == "tank" and (Avoiding() and "avoid" or "threat") or "cast"
 	end
 	W.elapsed, W.looked = 0, 0
 	Place()

@@ -2134,6 +2134,10 @@ ns.PAGES = {
 		{ key = "gearRules", kind = "choice", default = "hittable", label = "Hit cap against a boss",
 			choices = { { "hittable", "As on the Hit table tab" }, { "classic", "9% melee, 16% spells (Classic tests)" }, { "game", "8% melee, 17% spells (the game's tooltip)" } },
 			tip = "As on the Hit table tab follows Hit cap against a boss of the Minimap and buffs page, also while the hit table is off. Which holds on WoW: Forever is not known yet." },
+		-- GearAvoid.lua: avoidance in item tooltips, the window's Avoidance view and /flatui status, while the role reads tank at its first choice.
+		{ key = "gearAvoid", kind = "choice", default = "role", label = "Avoidance",
+			choices = { { "role", "For tanks" }, { "on", "Always" }, { "off", "Off" } },
+			tip = "In item tooltips and the window's Avoidance view: how an item changes the chance that an enemy's swing misses you, is dodged, parried or blocked, crits or crushes, and what your armor and block value take off, against the enemy of Against. For tanks: while your role reads tank, as for the hit table. The rules of misses, crits and crushing blows are the game's; the rest are Classic's, marked ~." },
 		{ key = "gearAdd", kind = "list", default = 0, label = "Add a spell", none = "Choose a spell", items = "GearCandidates", pick = "GearAdd",
 			tip = "Your spells Flat UI can work out, and your auto attack, Auto Shot or wand. For one not listed, type /flatui gear add and its name; a shift-clicked spell keeps its rank. Until you add or remove one, your class's main spells for your role are used. The list serves item tooltips and the window." },
 		{ key = "gearRemove", kind = "list", default = 0, label = "Remove a spell", none = "Choose a spell", items = "GearPicked", pick = "GearRemove" },

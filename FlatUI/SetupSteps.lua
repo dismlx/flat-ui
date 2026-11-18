@@ -894,6 +894,7 @@ ns.SETUP_STEPS = {
 		{ "chat.gearAgainst", "o", "behaviour", "Chooses the enemy the gear comparison counts against: a boss at level 60 and an enemy of your level before, or one of them always." },
 		{ "chat.gearFacing", "r", "behaviour", "Chooses whether the gear comparison counts you in front of the enemy, where it parries and blocks, or behind it." },
 		{ "chat.gearRules", "r", "behaviour", "Chooses the hit cap the gear comparison counts against a boss: the hit table's, 9% as Classic tests found, or 8% as the game's tooltip says." },
+		{ "chat.gearAvoid", "o", "behaviour", "Adds to an item's tooltip and the Gear comparison window how the item changes an enemy's misses, dodges, parries, blocks, crits and crushing blows against you, for tanks, always or never." },
 		{ "chat.gearAdd", "c", "behaviour", "Adds a spell to those the gear comparison counts." },
 		{ "chat.gearRemove", "o", "behaviour", "Removes a spell from those the gear comparison counts." },
 		{ "chat.gearBar", "o", "behaviour", "Adds the spells of one action bar, with their ranks, to those the gear comparison counts." },
