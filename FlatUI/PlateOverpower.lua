@@ -9,10 +9,10 @@ local _, ns = ...
 -- only inside SPELL_UPDATE_COOLDOWN (:30), so only that event turns Overpower to not ready, and a look every LOOK seconds while the icon shows turns
 -- it ready again, since no event comes when a cooldown runs out. While Overpower cannot be used now (the wrong stance, too little rage, its
 -- cooldown) the icon is grey, dim and still. It goes when you cast Overpower (UNIT_SPELLCAST_SUCCEEDED for the player with one of its ranks,
--- UnitDocumentation.lua:4845; for a cast whose spell the game withholds, the start of Overpower's own cooldown, a cooldown that was ready and is
--- not, read in SPELL_UPDATE_COOLDOWN), when its window ends, when the enemy dies (UnitIsDead, UnitDocumentation.lua:1916-1929) and when its plate
--- goes (NAME_PLATE_UNIT_REMOVED, NamePlateManagerDocumentation.lua:139; the leave hook of Nameplates.lua). One enemy shows it at a time, as a dodge
--- gives the warrior one Overpower: a later dodge of yours moves it.
+-- UnitDocumentation.lua:4845; for a cast whose spell the game withholds, the start of Overpower's own cooldown, a cooldown that was ready and now
+-- runs with isOnGCD a plain false, read in SPELL_UPDATE_COOLDOWN), when its window ends, when the enemy dies (UnitIsDead,
+-- UnitDocumentation.lua:1916-1929) and when its plate goes (NAME_PLATE_UNIT_REMOVED, NamePlateManagerDocumentation.lua:139; the leave hook of
+-- Nameplates.lua). One enemy shows it at a time, as a dodge gives the warrior one Overpower: a later dodge of yours moves it.
 -- The window is the time of Overpower's row in ProcData.lua (5 seconds, the time of its hidden buff 1289681 in the DB2 tables of build 1.60.1, which
 -- that file was written from), and 5 seconds when the row is missing: the game's UI source and API documentation name no time for it. A dodge
 -- renews it, as a new dodge renews Overpower's.
@@ -28,7 +28,8 @@ local _, ns = ...
 --      ACTION_USABLE_CHANGED, ActionBarFrameDocumentation.lua:1049, read as ProcTriggers.lua reads Overpower: not usable before, usable now).
 --      With several enemies dodging within that time the turn goes to your target's dodge first, else to the latest one, and one turn names one dodge.
 -- A dodge of an attack of someone else on your target while you are in melee with it also counts (the game does not say whose it was), and a dodge
--- in a stance where Overpower cannot be used is known by the first rule alone, since Overpower does not turn usable there.
+-- in a stance where Overpower cannot be used, or with too little rage for it, is known by the first rule alone, since Overpower does not turn
+-- usable then.
 -- Combat: the icon is a frame of Flat UI's own, a child of the plate's unit frame so it moves, fades and hides with the plate, made, sized and
 -- anchored only out of combat on a plate the game may protect (ns.MaybeProtected, Movers.lua), as the threat ring is (PlateThreatLook.lua): its
 -- frame is made on each enemy plate as the plate shows while the row is on, so the first dodge of a fight has it. In a fight only its alpha, its
@@ -168,6 +169,8 @@ local function UsableState()
 end
 
 -- True while Overpower's cooldown is off or is the global cooldown alone, false while it runs or is held, nil when the game gives no plain answer.
+-- The second answer is true only while its own cooldown plainly runs: active, and isOnGCD a plain false (isOnGCD may be nil,
+-- SpellSharedDocumentation.lua:30, and a global cooldown read as nil is no cast of Overpower).
 local function Fresh()
 	local rank = KnownRank()
 	local info = rank and Ask(Spell("GetSpellCooldown"), rank)
@@ -181,7 +184,7 @@ local function Fresh()
 	if enabled == false then
 		return false
 	end
-	return active ~= true or gcd == true
+	return active ~= true or gcd == true, active == true and gcd == false
 end
 
 -- The icon's frame ------------------------------------------------------------------------------------------------------------------------------
@@ -424,6 +427,10 @@ local function Light(unitFrame, unit, at)
 	end
 	-- A turn of Overpower to usable just before is this dodge's.
 	S.turned = -math.huge
+	-- A cooldown that ran out while no icon showed was not looked at: it is ready again before the icon is drawn.
+	if S.ready ~= true and Fresh() == true then
+		S.ready = true
+	end
 	lit = { unitFrame = unitFrame, unit = unit, at = at, expires = at + Window() }
 	Ticking(true)
 	Draw()
@@ -539,11 +546,13 @@ local function OnUsable()
 	Draw()
 end
 
--- Inside the event isOnGCD is believed: Overpower's own cooldown starting while the icon shows is a cast of it the game did not name.
+-- Inside the event isOnGCD is believed: Overpower's own cooldown starting while the icon shows (isOnGCD a plain false) is a cast of it the game
+-- did not name.
 local function OnCooldown()
-	local before, fresh = S.ready, Fresh()
+	local before = S.ready
+	local fresh, own = Fresh()
 	S.ready = fresh
-	if lit and before == true and fresh == false then
+	if lit and before == true and own == true then
 		Unlight()
 		return
 	end
