@@ -101,7 +101,10 @@ local FRACTION = {
 -- spot is set or put back. gate names the function of ns that says whether the spot has an effect: an own
 -- frame with a gate has a handle only while it returns true. start names the function of ns that is given the
 -- x and y of an own frame's entry and gives where it starts while no spot is saved, for its handle and for
--- ns.MoverSpot, when that depends on the screen. Windows have the names Windows.lua gives them.
+-- ns.MoverSpot, when that depends on the screen. from names the frame (a global name) whose top left corner an own frame's spot is
+-- measured from instead of UIParent's, for an entry whose point is TOPLEFT: its x and y, what start gives and the spot saved are offsets
+-- from that corner, so the frame and its handle go with that frame, and a spot is not centred (Origin). Windows have the names Windows.lua
+-- gives them.
 -- noScale marks a frame whose scale does not reach what it holds. noBox marks a window with no handle: its
 -- title bar moves it, and a handle would cover its buttons. grip sets where the title bar of a window
 -- starts and how many levels above the window it lies, for a window with its own controls in the title. A
@@ -219,6 +222,13 @@ local LIST = {
 	-- while the finder shows (ns.GearSearchShown), so a closed finder is never in the way.
 	{ name = "FlatUIGearSearch", label = "Item finder", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 344, height = 540,
 		sized = "gearFinder", x = 1144, y = -120, gate = "GearSearchShown", changed = "GearSearchMoved", start = "GearSearchStart" },
+	-- The Compare gear button (GearButton.lua) on the Character window, with a handle while that window shows and the button is wanted (gate:
+	-- ns.GearButtonShown). Its spot is measured from the Character window's top left corner (from), so the button goes with the window: its top
+	-- left corner is the top left corner of the box, which has the button's room with its words. With no spot saved its box is where the button
+	-- hangs by default, on the title bar right-aligned left of the close cross (start: ns.GearButtonStart, from the window's width as it is
+	-- now; the x here is the window's full 631); a spot saved or put back is told to the button (changed: ns.GearButtonMoved).
+	{ name = "FlatUIGearButton", label = "Compare gear button", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 112, height = 20,
+		x = 485, y = -1, from = "CharacterFrame", gate = "GearButtonShown", changed = "GearButtonMoved", start = "GearButtonStart" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
@@ -874,6 +884,24 @@ local function IsWindow(name)
 	return type(UIPanelWindows) == "table" and UIPanelWindows[name] ~= nil
 end
 
+-- Where the spot of an own frame is measured from, as offsets from the top left corner of UIParent in the units of UIParent: 0, 0 for an entry
+-- with no from (its spot is UIParent's own), else the top left corner of the frame from names, or nothing while that frame has no place.
+local function Origin(info)
+	if not info.from then
+		return 0, 0
+	end
+	local frame = GameFrame(info.from)
+	local _, sh = ScreenSize()
+	local left, bottom, _, height
+	if frame and sh and not ns.Forbidden(frame) then
+		left, bottom, _, height = Rect(frame)
+	end
+	if not left then
+		return nil
+	end
+	return left, bottom + height - sh
+end
+
 -- Where an own frame starts while no spot is saved for it: the point, x and y of its entry, or the x and y that the function of ns its entry
 -- names in start gives from them (the bag window of Bags, left of the right action bars). A start that fails or gives no plain numbers is the
 -- entry's own.
@@ -900,12 +928,16 @@ function ns.MoverSpot(name, point)
 	local entry = saved and Clean(saved[name])
 	local left, bottom, width, height
 	local boxWidth, boxHeight = BoxSize(info)
+	local ox, oy = Origin(info)
+	if not ox then
+		return nil
+	end
 	if entry then
-		local x, y = OnScreen(entry.point, entry.x, entry.y, boxWidth, boxHeight)
+		local x, y = OnScreen(entry.point, entry.x + ox, entry.y + oy, boxWidth, boxHeight)
 		left, bottom, width, height = RectAt(entry.point, x, y, boxWidth, boxHeight)
 	elseif info.x then
 		local from, x, y = StartsAt(info)
-		left, bottom, width, height = RectAt(from, x, y, boxWidth, boxHeight)
+		left, bottom, width, height = RectAt(from, x + ox, y + oy, boxWidth, boxHeight)
 	end
 	if not left then
 		return nil
@@ -1560,10 +1592,17 @@ local function HandleRect(name, info)
 		end
 		local point, x, y
 		local width, height = BoxSize(info)
+		local ox, oy = Origin(info)
+		if not ox then
+			return nil
+		end
 		if entry then
-			point, x, y = entry.point, OnScreen(entry.point, entry.x, entry.y, width, height)
+			point, x, y = entry.point, OnScreen(entry.point, entry.x + ox, entry.y + oy, width, height)
 		else
 			point, x, y = StartsAt(info)
+			if x then
+				x, y = x + ox, y + oy
+			end
 		end
 		return RectAt(point, x, y, width, height)
 	end
@@ -1750,10 +1789,15 @@ end
 
 -- Saves the spot a handle was dropped on, and moves the game frame there. A centred frame is on the middle of the screen whatever `left`
 -- says: it is saved by the point in the middle column on the row of its point, with no offset across, so it stays there at any UI scale.
+-- A spot measured from another frame (from) is saved as offsets from that frame's top left corner, where the handle was dropped, centred or not.
 local function Commit(name, info, left, bottom, width, height, centred)
 	local saved = Saved()
-	if not saved then
+	local ox, oy = Origin(info)
+	if not (saved and ox) then
 		return
+	end
+	if info.from then
+		centred = nil
 	end
 	local frame = GameFrame(name)
 	if frame and Offstage(name, info, frame) then
@@ -1783,6 +1827,7 @@ local function Commit(name, info, left, bottom, width, height, centred)
 		local frameWidth, frameHeight = Size(frame)
 		x, y = OnScreen(point, x, y, frameWidth or width, frameHeight or height, frame)
 	end
+	x, y = x - ox, y - oy
 	saved[name] = Clean({ point = point, x = x, y = y, scale = previous and previous.scale, kind = info.kind or "hud",
 		label = not BY_NAME[name] and info.label or nil })
 	ns.Each(KEY, ApplyEntry, name)
@@ -1867,14 +1912,20 @@ local function Wheel(name, delta)
 			entry.scale = math.max(WIN.min / 100, math.min(WIN.max / 100, entry.scale))
 		end
 	else
-		-- A nudge starts from the frame as it is on the screen now, and moves it along one axis.
+		-- A nudge starts from the frame as it is on the screen now, and moves it along one axis; a spot measured from another frame (from)
+		-- stays measured from it.
 		local step = ns.Pixels(UIParent, 1)
 		local width, height = Size(handles[name])
-		local x, y = OnScreen(entry.point, entry.x, entry.y, width, height)
+		local ox, oy = Origin(info)
+		if not ox then
+			ShowHandle(name)
+			return
+		end
+		local x, y = OnScreen(entry.point, entry.x + ox, entry.y + oy, width, height)
 		if KeyDown(IsShiftKeyDown) then
-			entry.x = OnScreen(entry.point, x + (delta > 0 and step or -step), y, width, height)
+			entry.x = OnScreen(entry.point, x + (delta > 0 and step or -step), y, width, height) - ox
 		else
-			entry.y = select(2, OnScreen(entry.point, x, y + (delta > 0 and step or -step), width, height))
+			entry.y = select(2, OnScreen(entry.point, x, y + (delta > 0 and step or -step), width, height)) - oy
 		end
 	end
 	Clean(entry)

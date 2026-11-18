@@ -2173,9 +2173,9 @@ ns.PAGES = {
 		{ section = "Gear comparison window" },
 		{ key = "gearOpen", kind = "list", default = 0, label = "Gear comparison window", none = "Choose", items = "GearOpenLines", pick = "GearOpenPick",
 			tip = "Every spell you chose, now and with an item you drop on it. /flatui gear opens it too. Drag its bottom right corner to size it, and set each spell's weight for the Overall line there." },
-		-- GearButton.lua: a button of Flat UI's own at the top right of the Character window.
+		-- GearButton.lua: the Compare gear button of Flat UI's own on the title bar of the Character window.
 		{ key = "gearCharButton", kind = "bool", default = true, label = "Button on the Character window", changed = "GearButtonChanged",
-			tip = "A small button at the top right of the Character window opens and closes the Gear comparison window. With an item on the cursor, or one dropped on it, the window compares that item. Right-click opens the item finder." },
+			tip = "A Compare gear button on the title bar of the Character window, left of the close button, opens and closes the Gear comparison window; its words light up while the window is open. With an item on the cursor, or one dropped on it, the window compares that item. Right-click opens the item finder. Move it with /flatui move (Compare gear button): it keeps its place on the Character window." },
 		{ key = "gearWinFont", kind = "number", default = 12, min = 10, max = 16, step = 1, label = "Window text size",
 			tip = "The size of the text in the Gear comparison window." },
 		{ key = "gearWinReset", kind = "list", default = 0, label = "Reset the window", none = "Choose", items = "GearWindowResetLines", pick = "GearWindowResetPick",
