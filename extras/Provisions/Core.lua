@@ -84,7 +84,7 @@ for _, s in ipairs(STATS) do
 end
 ns.STATS, ns.STAT = STATS, STAT
 
--- Auto: the stats each class wants first, in order; then Stamina, then the strongest of any.
+-- Auto: the stats each class wants, first ones weighing a little more (see Choose); then the strongest of any.
 local AUTO = {
 	WARRIOR = { "sta", "str", "ap", "agi", "crit", "armor" },
 	PALADIN = { "sta", "str", "int", "healing", "spi", "mp5" },
@@ -284,7 +284,9 @@ local function Sorter(kind, stat)
 		end
 		local va, vb
 		if kind == "buff" then
-			if stat then
+			if type(stat) == "function" then
+				va, vb = stat(ra), stat(rb)
+			elseif stat then
 				va, vb = ra.buff[stat] or 0, rb.buff[stat] or 0
 			else
 				va, vb = BuffWorth(ra), BuffWorth(rb)
@@ -320,13 +322,39 @@ local function Choose(kind, level, firstAid)
 	local items
 	if kind == "buff" then
 		local choice = Opt("buffChoice") or "auto"
-		local order
+		local order, score
 		if choice == "auto" then
-			order = {}
-			for _, key in ipairs(AUTO[playerClass or ""] or {}) do
-				table.insert(order, key)
+			-- Auto weighs every stat of the class's list at once, by its worth a point, the first two counting a
+			-- little more, so +20 Strength beats a +1 Stamina snack for a warrior while Stamina still wins a tie.
+			-- Stamina counts for every class (it is added last when the list lacks it).
+			local weights = {}
+			for i, key in ipairs(AUTO[playerClass or ""] or {}) do
+				weights[key] = (STAT[key] and STAT[key].worth or 0) * (i == 1 and 1.5 or i == 2 and 1.25 or 1)
 			end
-			table.insert(order, "sta")
+			if not weights.sta then
+				weights.sta = STAT.sta.worth
+			end
+			score = function(rec)
+				local total = 0
+				for key, amount in pairs(rec.buff or {}) do
+					total = total + (weights[key] or 0) * amount
+				end
+				return total
+			end
+			items = Carried(LIST.buff, level, firstAid, function(rec)
+				return score(rec) > 0
+			end)
+			if #items > 0 then
+				table.sort(items, Sorter("buff", score))
+				-- The stat to name: the one that gives the chosen item most of its score.
+				local best, top = ITEMS[items[1]], -1
+				for key, amount in pairs(best.buff or {}) do
+					local part = (weights[key] or 0) * amount
+					if part > top or (part == top and key < (state.stat or "~")) then
+						state.stat, top = key, part
+					end
+				end
+			end
 		elseif choice ~= "any" then
 			order = { choice }
 		end
@@ -348,7 +376,9 @@ local function Choose(kind, level, firstAid)
 					.. " food in your bags: using the strongest of any."
 			end
 		end
-		table.sort(items, Sorter("buff", state.stat))
+		if not score or not state.stat then
+			table.sort(items, Sorter("buff", state.stat))
+		end
 	else
 		items = Carried(LIST[kind] or {}, level, firstAid)
 		if #items == 0 and FALLBACK[kind] and Opt("buffFallback") then

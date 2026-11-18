@@ -60,14 +60,16 @@ Buff food is worth more for its buff than for its health, so:
 - The Food and Drink buttons never eat buff food. An option (off by default) lets them eat it when your bags hold
   no plain food or drink, so you are never stuck without something to eat.
 - The Buff Food button eats the best buff food of the buff you chose, per character:
-  - **Auto** (default): the stats your class wants first. Warrior: Stamina, Strength, Attack power, Agility,
+  - **Auto** (default): the buff food that gives most of the stats your class wants, weighed together by the rough
+    worth per point below, the first two stats of the class counting a little more (so +20 Strength beats a +1 Stamina
+    snack for a warrior). Stamina counts for every class. The stats, first ones first: Warrior: Stamina, Strength, Attack power, Agility,
     Critical strike, Armor. Paladin: Stamina, Strength, Intellect, Healing power, Spirit, Mana regeneration. Hunter:
     Agility, Attack power, Ranged attack power, Critical strike, Intellect. Rogue: Agility, Attack power,
     Critical strike, Strength. Priest: Intellect, Spirit, Mana regeneration, Healing power, Spell damage. Shaman:
     Intellect, Mana regeneration, Spirit, Healing power, Spell damage, Agility. Mage: Intellect, Spirit, Mana
     regeneration, Spell damage, Spell critical strike. Warlock: Intellect, Spirit, Mana regeneration, Spell
-    damage, Stamina. Druid: Intellect, Spirit, Mana regeneration, Healing power, Stamina, Agility. Then Stamina,
-    then the strongest of any.
+    damage, Stamina. Druid: Intellect, Spirit, Mana regeneration, Healing power, Stamina, Agility. With none of
+    them in your bags, the strongest of any.
   - **A stat or effect** of your choice (only those some food gives are offered).
   - **Any**: the strongest buff. Buffs of different stats are weighed by a rough worth per point (one point of a
     primary stat = 1, attack power 0.5, spell damage 0.86, healing 0.45, 1% critical strike 14, mana or health
