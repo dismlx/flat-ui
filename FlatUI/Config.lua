@@ -417,6 +417,9 @@ ns.PAGES = {
 		{ key = "raidMarkerX", kind = "number", default = 0, min = -40, max = 40, step = 1, label = "Raid marker horizontal offset" },
 		{ key = "raidMarkerY", kind = "number", default = 0, min = -40, max = 40, step = 1, label = "Raid marker vertical offset" },
 		{ key = "offscreenIcon", kind = "bool", default = true, label = "Arrow for nameplates behind you" },
+		{ section = "Overpower" },
+		{ key = "overpower", kind = "bool", default = true, label = "Overpower on enemy nameplates", tip = "Warriors only: when an enemy dodges you, Overpower's icon shows over its nameplate for 5 seconds and glows while you can use it." },
+		{ key = "overpowerSize", kind = "number", default = 26, min = 16, max = 48, step = 1, label = "Overpower icon size", needs = "overpower" },
 	},
 	{
 		key = "nameplatesAuras", label = "Auras", parent = "nameplates", owner = "nameplates",

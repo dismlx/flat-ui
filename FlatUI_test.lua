@@ -10104,6 +10104,9 @@ local PAGES = {
 		S("nameplates.raidMarkerX", "number", 0, "Raid marker horizontal offset", nil, { min = -40, max = 40, step = 1, unit = "" }),
 		S("nameplates.raidMarkerY", "number", 0, "Raid marker vertical offset", nil, { min = -40, max = 40, step = 1, unit = "" }),
 		S("nameplates.offscreenIcon", "bool", true, "Arrow for nameplates behind you"),
+		"Overpower",
+		S("nameplates.overpower", "bool", true, "Overpower on enemy nameplates", "Warriors only: when an enemy dodges you, Overpower's icon shows over its nameplate for 5 seconds and glows while you can use it."),
+		S("nameplates.overpowerSize", "number", 26, "Overpower icon size", nil, { min = 16, max = 48, step = 1, unit = "", needs = "nameplates.overpower" }),
 	} },
 	{ key = "nameplatesAuras", label = "Auras", parent = "nameplates", owner = "nameplates", rows = {
 		S("nameplates.auras", "bool", true, "Aura icon border", "Square buff and debuff icons with a thin border."),
