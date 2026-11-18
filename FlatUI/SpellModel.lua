@@ -1795,7 +1795,9 @@ local function Otherwise(part, state)
 	return K.OTHERWISE .. (cut > 0 and " and " or "; ") .. rest .. "."
 end
 
--- The left and right text of a power part, and what its amount needs: the share, the stat it is of, whether it is an estimate.
+-- The left text of a power part (its share in words), and what its right text needs: the share its amount counts (at 5 combo points for a
+-- finisher), the stat that is a share of (nil without stats), the factor of a low rank, whether the amount is an estimate, and its ticks. A part
+-- that gets nothing gives its left text alone.
 local function PartTexts(entry, row, at, part, state, stats, lowRank)
 	local stat, coef = part[1], PartValue(row.c, at) or part[2]
 	local per, ticks = part.per, PartValue(row.n, at) or part.n
