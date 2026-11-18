@@ -72,10 +72,10 @@ local _, ns = ...
 -- rounds them: a change a cast whole from 100 up and to a tenth below, a second to a tenth and " dps" (Change), the percent to a tenth with its sign,
 -- (0%) under 0.05 (Percent), and none while the figure now is 0.
 -- While avoidance shows (Avoidance, chat.gearAvoid; GearAvoid.lua's A.Wanted), the block goes on after the spell block with GearAvoid.lua's lines
--- for the slot they show (A.TipLines: its own block in the same style; { text, colour, wrap } a line alone and { left, right, leftColour, colour }
--- a figure), and the note in place of spell rows that do not change says what it counts; the block's key holds A.Stamp, which changes with what
--- those lines are built from. GearAvoid.lua is asked under pcall, so a fault there goes to the error handler once and the spell rows show without
--- it.
+-- for the slot they show (A.TipLines: its own block in the same style; { text, colour, wrap } a line alone and { key, left, right, leftColour,
+-- colour } a figure), Damage taken among them only while the Overall line does not say it, so it shows once, and the note in place of spell rows
+-- that do not change says what it counts; the block's key holds A.Stamp, which changes with what those lines are built from. GearAvoid.lua is
+-- asked under pcall, so a fault there goes to the error handler once and the spell rows show without it.
 -- The post call runs in two steps, each inside ns.EachPart (Core.lua:2193-2224), which counts a failure once for each first argument and stops a
 -- part at the third (Core.lua:260, 2203, 2210-2219): the tests and the link keyed by the data of the build, which is new for each build, and the
 -- work keyed by the item's link, so three items that fail stop the gear lines with their note for /flatui status, and a test that fails on every
@@ -1896,23 +1896,37 @@ local function BlockFor(key, data, link, slot, guid)
 	local block = Build(M, result, slot, info)
 	local style = Colours()
 	if block then
+		local overall, taken = nil, nil
+		if totals then
+			taken = Taken(slot or link, block.slots, opts)
+			overall = Overall(block.candidate, known, opts, taken, style)
+			if overall then
+				table.insert(block.head, 2, overall)
+			end
+		end
 		-- The avoidance block after the spell block, for the slots its rows show, while it shows (GearAvoid.lua, A.TipLines); with it, the note in
-		-- place of spell rows that do not change says what it counts.
+		-- place of spell rows that do not change says what it counts. Damage taken shows once: in the Overall line while that line has it, else
+		-- in the avoidance block; the block's header stays only where more than one line still follows it.
 		local more, words = Avoid("TipLines", slot or link, block.slots, opts)
 		if type(more) == "table" then
 			if block.still and type(words) == "string" then
 				block.notes[1] = words
 			end
+			local header, rest = nil, {}
 			for _, entry in ipairs(more) do
-				if type(entry) == "table" then
-					block.avoid[#block.avoid + 1] = entry
+				if type(entry) == "table" and not (overall and taken and entry.key == "taken") then
+					if entry.header == true then
+						header = entry
+					else
+						rest[#rest + 1] = entry
+					end
 				end
 			end
-		end
-		if totals then
-			local overall = Overall(block.candidate, known, opts, Taken(slot or link, block.slots, opts), style)
-			if overall then
-				table.insert(block.head, 2, overall)
+			if header and #rest > 1 then
+				block.avoid[1] = header
+			end
+			for _, entry in ipairs(rest) do
+				block.avoid[#block.avoid + 1] = entry
 			end
 		end
 		block.candidate = nil

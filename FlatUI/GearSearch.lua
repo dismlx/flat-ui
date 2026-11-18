@@ -1,7 +1,10 @@
 local _, ns = ...
 
 -- The item finder (spec 0.5.20, item 6): the part "item finder" of Chat and tooltips, a panel of Flat UI's own, FlatUIGearSearch, docked to the right
--- of the Gear comparison window (FlatUIGear, GearWindow.lua): its top left corner 4 px right of the window's top right corner. It is made as a child
+-- of the Gear comparison window (FlatUIGear, GearWindow.lua): its top left corner 4 px right of the window's top right corner, or, while the screen
+-- has no room for it there and has room on the other side, its top right corner 4 px left of the window's top left corner (the window's and the
+-- screen's edges, GetLeft, GetRight and GetWidth of the window and UIParent, WL/uiobjects.yaml), and kept on the screen (SetClampedToScreen), so a
+-- window sized to the screen or one low on it leaves the finder in sight. It is made as a child
 -- of that window, a frame of Flat UI's own, so it hides with it, takes its strata and is raised with it; when the window hides, the finder hides as
 -- well, so the next opening of the window starts without it until Find (the button on the window's title bar, ns.GearSearchToggle) or the list row
 -- Item finder (chat.gearFind: ns.GearFindLines and ns.GearFindPick) opens it again. Opening the finder opens the window first
@@ -192,6 +195,7 @@ local IsSecret = ns.IsSecret
 -- level; levelRow and usableRow: the rows of the tab as last read. parsed and byId: the index's records by type and by item ID; types: the types it
 -- has; icons, subNames, colours: answers kept. requested: items the client was asked to load. best: Best for me's { on, scores, version, started }.
 -- runs, faults, elapsed, pending: the part's runs, what went to the error handler, the time since the last look, an opening that waits for a fight.
+-- side: the side of the window the finder hangs on (Dock).
 local S = { runs = 0, faults = {}, elapsed = 0, page = 1, offset = 0, results = {}, rows = {}, made = {}, choices = {}, checks = {}, fields = {}, owners = {},
 	parsed = {}, byId = {}, icons = {}, subNames = {}, colours = {}, requested = {}, tries = 0,
 	query = { text = "", quality = 1, usable = true, sources = { all = true, bags = true, alts = true } },
@@ -2142,7 +2146,31 @@ local function MakeList(frame, y)
 	pcall(S.foot.SetJustifyV, S.foot, "BOTTOM")
 end
 
--- The finder's height: the window's, at least MIN_HEIGHT.
+-- The side of the window the finder hangs on (header): its right while the screen has room for the finder there, else its left while that side has
+-- room, else its right, where the clamp to the screen keeps it in sight over the window's edge. The window is on UIParent at its scale, so their
+-- edges are in the same units.
+local function Dock()
+	local parent = S.parent
+	local okLeft, left = pcall(parent.GetLeft, parent)
+	local okRight, right = pcall(parent.GetRight, parent)
+	local okScreen, screen = pcall(UIParent.GetWidth, UIParent)
+	local side = "right"
+	if okLeft and okRight and okScreen and Finite(left) and Finite(right) and Finite(screen) and right + L.DOCK + L.WIDTH > screen
+		and left - L.DOCK - L.WIDTH >= 0 then
+		side = "left"
+	end
+	if side ~= S.side then
+		S.side = side
+		S.frame:ClearAllPoints()
+		if side == "left" then
+			S.frame:SetPoint("TOPRIGHT", parent, "TOPLEFT", -L.DOCK, 0)
+		else
+			S.frame:SetPoint("TOPLEFT", parent, "TOPRIGHT", L.DOCK, 0)
+		end
+	end
+end
+
+-- The finder's height: the window's, at least MIN_HEIGHT; and its side of the window (Dock).
 local function Fit()
 	local parent = S.parent
 	local ok, height = pcall(parent.GetHeight, parent)
@@ -2152,6 +2180,7 @@ local function Fit()
 		S.frame:SetHeight(want)
 		LayoutRows()
 	end
+	Dock()
 end
 
 -- The looks while the finder shows: whether it may run, its height, typing that settled, items of the bags that loaded and Best for me.
@@ -2196,6 +2225,8 @@ local function Make(parent)
 	S.lights, S.strokes, S.hoverStrokes = {}, {}, {}
 	frame:SetSize(L.WIDTH, L.MIN_HEIGHT)
 	frame:SetPoint("TOPLEFT", parent, "TOPRIGHT", L.DOCK, 0)
+	S.side = "right"
+	frame:SetClampedToScreen(true)
 	frame:EnableMouse(true)
 	frame:Hide()
 	S.frame = frame

@@ -243,13 +243,19 @@ local ADDON_NAME, ns = ...
 -- rows, its switch and its item (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and Hide while IsOwned says one of its frames owns it),
 -- never in a fight.
 -- With Total of a cast, a spell's tooltip also has its total with the player's stats and a dim line of what a cast does on average, a second and
--- a point of mana; the mana is the game's cost of the spell (C_Spell.GetSpellPowerCost, mana only). The window has a grip of its own at its bottom
--- right corner (SetResizable, SetResizeBounds, StartSizing and StopMovingOrSizing on its own frame), its size kept in FlatUICharDB.gearWindow, which
--- the movers' box of it follows, and a second item box, Against, that an item dropped on it or chosen in the finder fills; the weight of each spell
--- is kept with the spells in FlatUICharDB.gearSpells. Its Find button and the Item finder row show the item finder, FlatUIGearSearch, a frame of its
--- own made on the window (a frame of Flat UI's own) and hung at its right edge, so it hides with it. The finder searches Flat UI's own item index
--- (ItemIndex.lua, made from the game's client data by tools/dev/make_itemindex.py) and the bags, bank and other characters Bags records; for an
--- item the index lacks and for Best for me it asks the game to load the item (C_Item.RequestLoadItemDataByID) and reads it (C_Item.GetItemInfo,
+-- a point of mana; the second is the spell's cast time (C_Spell.GetSpellInfo, castTime) and the mana the game's cost of the spell
+-- (C_Spell.GetSpellPowerCost, mana only). The spell and item lines take their gold header and their green and red from the game's
+-- NORMAL_FONT_COLOR, GREEN_FONT_COLOR and RED_FONT_COLOR, read once as SpellModel.lua loads. The window has a grip of its own at its bottom right
+-- corner (SetResizable, SetResizeBounds, StartSizing and StopMovingOrSizing on its own frame), its size kept in FlatUICharDB.gearWindow, which the
+-- movers' box of it follows; its text size is set on its own font strings (SetFont) in the face of the game's GameFontHighlightSmall and
+-- GameFontHighlight (GetFont, read only); and it has a second item box, Against, that an item dropped on it or chosen in the finder fills. The
+-- weight of each spell is kept with the spells in FlatUICharDB.gearSpells and set by a click on its Weight cell (IsShiftKeyDown for back to 1).
+-- Its Find button and the Item finder row show the item finder, FlatUIGearSearch, a frame of its own made on the window (a frame of Flat UI's own)
+-- and hung at its right edge, or at its left edge while the screen has no room on the right (GetLeft and GetRight of the window, GetWidth of
+-- UIParent), kept on the screen (SetClampedToScreen), so it hides with it; its search and level boxes are EditBoxes of its own. The finder
+-- searches Flat UI's own item index (ItemIndex.lua, made from the game's client data by tools/dev/make_itemindex.py) and the bags, bank and other
+-- characters Bags records; for an item the index lacks and for Best for me it asks the game to load the item (C_Item.RequestLoadItemDataByID) and
+-- reads it (C_Item.GetItemInfo,
 -- C_Item.GetItemInfoInstant, C_Item.GetItemInventoryTypeByID), names the weapon types by C_Item.GetItemSubClassInfo and the qualities' colours by
 -- C_Item.GetItemQualityColor, and reads the player's class and level (UnitClassBase, UnitLevel). A Shift-click on a result links the item in chat
 -- (IsModifiedClick, ChatFrameUtil.InsertLink) and a Ctrl-click tries it on in the game's dressing room (DressUpItemLink), as a click on an item in

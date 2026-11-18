@@ -2910,9 +2910,10 @@ local function ManaCost(id)
 	return nil
 end
 
--- The rates line (0.5.20, chat.spellRates): the expected value with crits and misses (GearModel.lua's G.Expect, looked up when asked, its cast),
--- then a second of cast time (the global cooldown for an instant), or for what rides on the swings or shots its own figure a second, and a point of
--- mana, each of the expected value, else of the total; ~ before an estimate. Nil with nothing to say.
+-- The rates line (0.5.20, chat.spellRates): the expected value with crits and misses (GearModel.lua's G.Expect, looked up when asked, its cast;
+-- with crits alone for a heal, which never misses), then a second of cast time (the global cooldown for an instant), or for what rides on the
+-- swings or shots its own figure a second, and a point of mana, each of the expected value, else of the total; ~ before an estimate. Nil with
+-- nothing to say.
 local function Rates(entry, at, row, state, stats, total, lowRank)
 	local G = ns.GearModel
 	local result = nil
@@ -2925,7 +2926,7 @@ local function Rates(entry, at, row, state, stats, total, lowRank)
 	local words, figure, guess = {}, nil, ""
 	if result then
 		figure, guess = result.cast, result.estimate == true and "~" or ""
-		words[1] = "Expected " .. guess .. Num(figure) .. " with crits and misses"
+		words[1] = "Expected " .. guess .. Num(figure) .. (K.HEALS[TotalKind(entry)] and " with crits" or " with crits and misses")
 	elseif total then
 		figure, guess = total.value, total.estimate and "~" or ""
 	end

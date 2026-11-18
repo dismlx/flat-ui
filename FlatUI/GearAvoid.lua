@@ -1032,14 +1032,15 @@ local function TakenRow(taken)
 end
 
 -- A figure of the tooltip as GearLines.lua adds it with AddDoubleLine: its label left in the style's label colour, its value right in white, the
--- change first in the colour of its direction, its sign saying the same, and the total after it.
+-- change first in the colour of its direction, its sign saying the same, and the total after it; key is its row's, so GearLines.lua can leave out
+-- Damage taken where its Overall line says it already.
 local function Double(style, row, delta, tone, total)
 	local change = Value(row, delta, true)
 	if row.key == "taken" and row.estimate then
 		change = "~" .. change
 	end
 	local right = Hex(tone == "gain" and style.good or style.bad) .. change .. "|r  " .. Hex(style.value) .. "(" .. total .. ")|r"
-	return { left = row.label, right = right, colour = style.value, leftColour = style.label, text = row.label .. "  " .. right }
+	return { key = row.key, left = row.label, right = right, colour = style.value, leftColour = style.label, text = row.label .. "  " .. right }
 end
 
 -- The figures of a candidate that change, in the order of damage taken, the roll, armor and block value, and the notes of the figures whose
@@ -1091,9 +1092,10 @@ end
 -- figure that changes (damage taken, missed, dodged, parried, blocked, critical, crushing, armor reduction, block value: the label left, the change
 -- in green or red and the total in white right, ~ before an estimate); and the notes, dim and wrapped: in Compact (chat.tipDetail) one line of them
 -- joined with "; ", in Full one line each. Entries as GearLines.lua adds them: { text, colour, wrap } (header = true on the header, note = true on
--- a note) and { left, right, colour, leftColour, text } for a figure (colour the right's, text both together for a caller that adds one line). The
--- second answer is the words of the spell rows' "no change" line while avoidance shows. A stat not counted is named also when nothing else changes,
--- so "no change to your avoidance" is said only when all of the item was counted. Nil while avoidance does not show or has nothing to say.
+-- a note) and { key, left, right, colour, leftColour, text } for a figure (key its row's, colour the right's, text both together for a caller that
+-- adds one line). The second answer is the words of the spell rows' "no change" line while avoidance shows. A stat not counted is named also when
+-- nothing else changes, so "no change to your avoidance" is said only when all of the item was counted. Nil while avoidance does not show or has
+-- nothing to say.
 function A.TipLines(subject, slots, opts)
 	if not A.Wanted() then
 		return nil
