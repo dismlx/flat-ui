@@ -22,6 +22,11 @@ local _, ns = ...
 -- less the weapon skill. A swing is one roll: miss, dodge, parry, glancing blow, block, crit and hit each take their chance in that order from what is
 -- left, so the crit cap is what the outcomes before crit leave (:184-347). A special attack, a ranged attack and a spell roll crit again on an attack
 -- that lands (Ranged-Attack-Table.md:291-310), so their crit is a chance of its own and their hit is everything that lands.
+--
+-- C.Inputs reads the game and C.Table works the table out from what it read, reading nothing, so the gear comparison (GearModel.lua) works it out
+-- again with the weapon skill, hit, crit and expertise an item would give, keeping the skill the sheet's crit was read with; it can ask C.Inputs for
+-- the kinds its spells roll and for a ranged line with no ranged weapon worn (a paladin's judgements). C.Read is the two in a row. C.LineOf and
+-- C.Skill give it the skill line of an item and the skill of a line, and C.Target counts against an enemy of the player's level when it asks.
 
 local C = {}
 ns.HitTableCalc = C
@@ -153,18 +158,11 @@ local function Expertise(read)
 	return Finite(main) and main or 0, Finite(off) and off or 0, Finite(ranged) and ranged or 0
 end
 
--- The skill line of what a slot holds, as the character sheet finds it (Camelot/PaperDollFrameStats.lua:681-698): Feral Combat for a druid in a form,
--- Unarmed for an empty hand, nil for anything that is not a weapon (and for an empty ranged slot). The second value is true while the game does not say.
-local function Line(read, slot)
-	if read.feral then
-		return FERAL
-	end
-	local item, why = Call(GetInventoryItemID, "player", slot)
-	if why then
-		return nil, true
-	elseif item == nil then
-		return slot ~= SLOTS.ranged and UNARMED or nil
-	elseif not Finite(item) then
+-- The skill line of an item, an item ID or a link, as the character sheet finds a weapon's (Camelot/PaperDollFrameStats.lua:22-38): the line of
+-- its weapon subclass, nil for an item that is no weapon. The second value is true while the game does not say. The gear comparison asks it of the
+-- item it compares (C.LineOf).
+local function LineOf(item)
+	if not (Finite(item) or (not IsSecret(item) and type(item) == "string")) then
 		return nil, true
 	end
 	local api = C_Item
@@ -179,6 +177,24 @@ local function Line(read, slot)
 		return nil
 	end
 	return SKILL_OF[subclassID]
+end
+C.LineOf = LineOf
+
+-- The skill line of what a slot holds, as the character sheet finds it (Camelot/PaperDollFrameStats.lua:681-698): Feral Combat for a druid in a form,
+-- Unarmed for an empty hand, nil for anything that is not a weapon (and for an empty ranged slot). The second value is true while the game does not say.
+local function Line(read, slot)
+	if read.feral then
+		return FERAL
+	end
+	local item, why = Call(GetInventoryItemID, "player", slot)
+	if why then
+		return nil, true
+	elseif item == nil then
+		return slot ~= SLOTS.ranged and UNARMED or nil
+	elseif not Finite(item) then
+		return nil, true
+	end
+	return LineOf(item)
 end
 
 -- The skill of a line, rank plus modifier, or nil when the player has no such line or the game says nothing.
@@ -199,6 +215,7 @@ local function Skill(line)
 	end
 	return nil
 end
+C.Skill = Skill
 
 -- The weapon skill of a melee hand, and its skill line (nil while the game does not say what the hand holds). When the game gives no skill, the most
 -- for the player's level stands in, and the hand is named for /flatui status.
@@ -216,13 +233,17 @@ local function HandSkill(read, slot, name)
 end
 
 -- The enemy the table is worked out against: level, unknown (shown ??), kind ("boss", "elite"... from ns.UnitKind), player, none (no enemy targeted:
--- one of the player's level), boss (Against a boss), and enemy: the target can be attacked and is alive.
+-- one of the player's level), boss (Against a boss), and enemy: the target can be attacked and is alive. against is "boss", "level" (an enemy of the
+-- player's level whatever is targeted, for the gear comparison's Against) or anything else for the target.
 function C.Target(against, level)
 	local target = { level = level }
 	target.enemy = Ask(UnitExists, "target") == true and Ask(UnitCanAttack, "player", "target") == true
 		and Ask(UnitIsDeadOrGhost, "target") ~= true
 	if against == "boss" then
 		target.level, target.kind, target.boss = level + ABOVE, "boss", true
+	elseif against == "level" then
+		-- A mob of the player's own level, of no kind and no player, whatever the target is.
+		target.level = level
 	elseif target.enemy then
 		local seen = Ask(UnitEffectiveLevel, "target")
 		if not Finite(seen) then
@@ -422,20 +443,22 @@ local function Swing(ctx, id, label, skill, hit, expertise, crit, agility, extra
 	return line
 end
 
--- A special attack: no glancing and no dual wield penalty, and crit rolled again on an attack that lands.
-local function Special(ctx, skill, hit, expertise, crit, agility)
+-- A special attack: no glancing and no dual wield penalty, and crit rolled again on an attack that lands. sheetSkill: the main hand's skill
+-- (WeaponCrit), which the hit table reads as skill.
+local function Special(ctx, skill, hit, expertise, crit, agility, sheetSkill)
 	local parts = { miss = Miss(ctx, skill, hit, 0), dodge = Dodge(ctx, skill, expertise), parry = Parry(ctx, skill, expertise), glance = false,
 		block = Block(ctx, skill), cap = false }
 	parts.hit = Roll(parts, { "miss", "dodge", "parry", "block" })
-	parts.crit = WeaponCrit(ctx, skill, crit, agility)
+	parts.crit = WeaponCrit(ctx, skill, crit, agility, sheetSkill)
 	return { id = "special", label = "Special", skill = skill, parts = parts, floor = 0, over = false }
 end
 
 -- A ranged attack: it cannot be dodged, parried or glance, and only blocked from the front (Ranged-Attack-Table.md:5, 254-287); crit rolled again.
-local function Ranged(ctx, skill, hit, crit, agility)
+-- sheetSkill: the ranged weapon's skill (WeaponCrit), which the hit table reads as skill.
+local function Ranged(ctx, skill, hit, crit, agility, sheetSkill)
 	local parts = { miss = Miss(ctx, skill, hit, 0), dodge = false, parry = false, glance = false, block = Block(ctx, skill), cap = false }
 	parts.hit = Roll(parts, { "miss", "block" })
-	parts.crit = WeaponCrit(ctx, skill, crit, agility)
+	parts.crit = WeaponCrit(ctx, skill, crit, agility, sheetSkill)
 	return { id = "ranged", label = "Ranged", skill = skill, parts = parts, floor = 0, over = false }
 end
 
@@ -456,73 +479,147 @@ local function Spell(ctx, hit, crit)
 	return { id = "spell", label = "Spell", parts = parts, floor = floor, over = false }
 end
 
--- The table for the rows of the hit table: spec = { lines (Attacks), special, against, facing, rules }. The answer holds level, target (C.Target),
--- enemy, front, facingUnsure (the game did not say whether the target attacks the player), lines ({ id, label, skill, parts, floor, over }, in the
--- order shown), gaps (what the game withheld or refused, by name), assumed (the hands whose skill stood in), offCritFromMain (the two hands hold
--- weapons of two skill lines, while the off hand's crit is the main hand's), noRanged (Ranged asked for with no ranged weapon worn) and
--- rangedUnknown (the game did not say what the ranged slot holds). A part of a line is a number, false where it does not apply, and nil where the
--- game did not give what it needs. No line at all while the player's level cannot be read.
-function C.Read(spec)
-	local read = { gaps = {}, assumed = {}, lines = {} }
+-- The reads and the table ---------------------------------------------------------------------------------------------------------------------------
+
+-- Reads the game for the table: everything C.Table needs, nothing worked out. These are the reads the hit table always made, in the same order.
+-- spec = { lines (Attacks), against, facing, kinds, rangedWithout }. spec.kinds, when given, is the set of kinds to read ({ melee = true, ranged =
+-- true, spell = true }) in place of C.Kinds(spec.lines, class, power); spec.rangedWithout reads the ranged kind with no ranged weapon worn: skill
+-- level x 5, the ranged hit and the ranged crit (a judgement's line: the client's rows of the damaging judgements roll on the ranged table,
+-- DefenseType 3 of SpellCategories, and which weapon skill counts without a ranged weapon no source says). The answer: { gaps, assumed, level,
+-- class, power, feral, target, front, facingUnsure, kinds, agility,
+-- melee = { expertise, offExpertise, crit, skill, sheetSkill, line, hit, dual, offSkill, offLine, offHit } (nil without melee),
+-- ranged = { line, unknown, skill, sheetSkill, hit, crit, noWeapon } (nil without ranged), spell = { hit, crit } (nil without spells) }, with gaps
+-- and assumed alone while the player's level cannot be read. sheetSkill is the skill the sheet's crit was read with (WeaponCrit): a caller that
+-- changes skill leaves it as it is. The off hand's three are there while the player dual wields (dual); a ranged skill, hit and crit while a ranged
+-- weapon is worn or, with noWeapon, while spec.rangedWithout asks for them.
+function C.Inputs(spec)
+	spec = type(spec) == "table" and spec or {}
+	local inputs = { gaps = {}, assumed = {} }
 	local level = Ask(UnitLevel, "player")
 	if not Finite(level) or level < 1 then
-		return read
+		return inputs
 	end
 	level = math.floor(level)
-	read.level = level
+	inputs.level = level
 	local okClass, _, class = pcall(UnitClass, "player")
 	if not okClass or IsSecret(class) then
 		class = nil
 	end
 	local power = Ask(UnitPowerType, "player")
 	local form = Ask(GetShapeshiftForm)
-	read.feral = class == "DRUID" and Finite(form) and form ~= 0
+	inputs.class, inputs.power = class, power
+	inputs.feral = class == "DRUID" and Finite(form) and form ~= 0
 	local target = C.Target(spec.against, level)
-	read.target, read.enemy = target, target.enemy
-	read.front, read.facingUnsure = C.Front(spec.facing, target)
-	local ctx = { L = level, T = target.level, D = target.level * PER_LEVEL, player = target.player == true, front = read.front,
-		classic = spec.rules ~= "game" }
-	local kinds = C.Kinds(spec.lines, class, power)
-	local agility = (kinds.melee or kinds.ranged) and AgilityCrit() or nil
+	inputs.target = target
+	inputs.front, inputs.facingUnsure = C.Front(spec.facing, target)
+	local kinds = type(spec.kinds) == "table" and spec.kinds or C.Kinds(spec.lines, class, power)
+	inputs.kinds = kinds
+	inputs.agility = (kinds.melee or kinds.ranged) and AgilityCrit() or nil
 	if kinds.melee then
-		local expertise, offExpertise = Expertise(read)
-		local crit = Crit(read, GetCritChance)
-		local skill, mainLine = HandSkill(read, SLOTS.main, "main hand")
-		local hit = Hit(read, "melee", GetHitModifier)
+		local melee = {}
+		inputs.melee = melee
+		melee.expertise, melee.offExpertise = Expertise(inputs)
+		melee.crit = Crit(inputs, GetCritChance)
+		melee.skill, melee.line = HandSkill(inputs, SLOTS.main, "main hand")
+		melee.sheetSkill = melee.skill
+		melee.hit = Hit(inputs, "melee", GetHitModifier)
 		-- The game's own test of dual wielding (PlayerScriptDocumentation.lua:1297-1304, no secret tag; Camelot/PaperDollFrameStats.lua:469).
-		if not read.feral and Ask(IsDualWielding) == true then
-			local offSkill, offLine = HandSkill(read, SLOTS.off, "off hand")
+		if not inputs.feral and Ask(IsDualWielding) == true then
+			melee.dual = true
+			melee.offSkill, melee.offLine = HandSkill(inputs, SLOTS.off, "off hand")
 			-- Forever has hit for the off hand alone (Dual Wield Specialization, Furious Precision), read as the sheet reads it (:525).
-			local offHit = Hit(read, "melee", type(GetOffhandHitModifier) == "function" and GetOffhandHitModifier or GetHitModifier)
-			-- The off hand's crit is the main hand's: a crit talent for one kind of weapon (Axe, Polearm, Dagger and Fist Weapon Specialization) counts
-			-- in it only for the main hand's kind, so with two kinds of weapon the Off line's crit may be off by that talent, which /flatui status says.
-			read.offCritFromMain = crit ~= nil and mainLine ~= nil and offLine ~= nil and mainLine ~= offLine
-			read.lines[#read.lines + 1] = Swing(ctx, "main", "Main", skill, hit, expertise, crit, agility, DUAL_WIELD, skill)
-			read.lines[#read.lines + 1] = Swing(ctx, "off", "Off", offSkill, offHit, offExpertise, crit, agility, DUAL_WIELD, skill)
-		else
-			read.lines[#read.lines + 1] = Swing(ctx, "swing", "Swing", skill, hit, expertise, crit, agility, 0, skill)
-		end
-		if spec.special then
-			read.lines[#read.lines + 1] = Special(ctx, skill, hit, expertise, crit, agility)
+			melee.offHit = Hit(inputs, "melee", type(GetOffhandHitModifier) == "function" and GetOffhandHitModifier or GetHitModifier)
 		end
 	end
 	if kinds.ranged then
-		local line, unknown = Line(read, SLOTS.ranged)
-		if not read.feral and RANGED[line] then
-			local skill = Skill(line)
-			if not skill then
-				read.assumed[#read.assumed + 1] = "ranged weapon"
+		local ranged = {}
+		inputs.ranged = ranged
+		ranged.line, ranged.unknown = Line(inputs, SLOTS.ranged)
+		local worn = not inputs.feral and RANGED[ranged.line]
+		if worn or spec.rangedWithout then
+			local skill = worn and Skill(ranged.line) or nil
+			if not worn then
+				ranged.noWeapon, skill = true, level * PER_LEVEL
+			elseif not skill then
+				inputs.assumed[#inputs.assumed + 1] = "ranged weapon"
 				skill = level * PER_LEVEL
 			end
-			read.lines[#read.lines + 1] = Ranged(ctx, skill, Hit(read, "ranged", GetRangedHitModifier), Crit(read, GetRangedCritChance), agility)
-		elseif unknown then
-			read.rangedUnknown = true
-		else
-			read.noRanged = true
+			ranged.skill, ranged.sheetSkill = skill, skill
+			ranged.hit = Hit(inputs, "ranged", GetRangedHitModifier)
+			ranged.crit = Crit(inputs, GetRangedCritChance)
 		end
 	end
 	if kinds.spell then
-		read.lines[#read.lines + 1] = Spell(ctx, Hit(read, "spell", GetSpellHitModifier), Crit(read, GetSpellCritChance))
+		local hit = Hit(inputs, "spell", GetSpellHitModifier)
+		inputs.spell = { hit = hit, crit = Crit(inputs, GetSpellCritChance) }
+	end
+	return inputs
+end
+
+-- Works the table out from inputs (C.Inputs' answer, or a copy a caller changed), reading nothing, for spec = { special, rules }. The answer holds
+-- level, target (C.Target), enemy, front, facingUnsure (the game did not say whether the target attacks the player), lines ({ id, label, skill, parts,
+-- floor, over }, in the order shown), gaps (what the game withheld or refused, by name), assumed (the hands whose skill stood in), offCritFromMain (the
+-- two hands hold weapons of two skill lines, while the off hand's crit is the main hand's), noRanged (Ranged asked for with no ranged weapon worn) and
+-- rangedUnknown (the game did not say what the ranged slot holds); a ranged line asked for with no ranged weapon (noWeapon) is there all the same. A
+-- part of a line is a number, false where it does not apply, and nil where the game did not give what it needs. No line at all while the player's
+-- level cannot be read. gaps and assumed are copies, so inputs stay as they were for the next table.
+function C.Table(spec, inputs)
+	spec = type(spec) == "table" and spec or {}
+	local read = { gaps = {}, assumed = {}, lines = {} }
+	if type(inputs) ~= "table" then
+		return read
+	end
+	for what, why in pairs(type(inputs.gaps) == "table" and inputs.gaps or {}) do
+		read.gaps[what] = why
+	end
+	for index, hand in ipairs(type(inputs.assumed) == "table" and inputs.assumed or {}) do
+		read.assumed[index] = hand
+	end
+	local level, target = inputs.level, inputs.target
+	if not Finite(level) or type(target) ~= "table" then
+		return read
+	end
+	read.level, read.feral = level, inputs.feral
+	read.target, read.enemy = target, target.enemy
+	read.front, read.facingUnsure = inputs.front, inputs.facingUnsure
+	local ctx = { L = level, T = target.level, D = target.level * PER_LEVEL, player = target.player == true, front = read.front,
+		classic = spec.rules ~= "game" }
+	local agility, melee, ranged, spell = inputs.agility, inputs.melee, inputs.ranged, inputs.spell
+	if type(melee) == "table" then
+		local skill, sheetSkill = melee.skill, melee.sheetSkill
+		if melee.dual then
+			-- The off hand's crit is the main hand's: a crit talent for one kind of weapon (Axe, Polearm, Dagger and Fist Weapon Specialization) counts
+			-- in it only for the main hand's kind, so with two kinds of weapon the Off line's crit may be off by that talent, which /flatui status says.
+			read.offCritFromMain = melee.crit ~= nil and melee.line ~= nil and melee.offLine ~= nil and melee.line ~= melee.offLine
+			read.lines[#read.lines + 1] = Swing(ctx, "main", "Main", skill, melee.hit, melee.expertise, melee.crit, agility, DUAL_WIELD, sheetSkill)
+			read.lines[#read.lines + 1] = Swing(ctx, "off", "Off", melee.offSkill, melee.offHit, melee.offExpertise, melee.crit, agility, DUAL_WIELD,
+				sheetSkill)
+		else
+			read.lines[#read.lines + 1] = Swing(ctx, "swing", "Swing", skill, melee.hit, melee.expertise, melee.crit, agility, 0, sheetSkill)
+		end
+		if spec.special then
+			read.lines[#read.lines + 1] = Special(ctx, skill, melee.hit, melee.expertise, melee.crit, agility, sheetSkill)
+		end
+	end
+	if type(ranged) == "table" then
+		if ranged.skill == nil or ranged.noWeapon then
+			if ranged.unknown then
+				read.rangedUnknown = true
+			else
+				read.noRanged = true
+			end
+		end
+		if ranged.skill ~= nil then
+			read.lines[#read.lines + 1] = Ranged(ctx, ranged.skill, ranged.hit, ranged.crit, agility, ranged.sheetSkill)
+		end
+	end
+	if type(spell) == "table" then
+		read.lines[#read.lines + 1] = Spell(ctx, spell.hit, spell.crit)
 	end
 	return read
+end
+
+-- The table for the rows of the hit table, spec = { lines (Attacks), special, against, facing, rules }: the reads of C.Inputs, worked out by C.Table.
+function C.Read(spec)
+	return C.Table(spec, C.Inputs(spec))
 end

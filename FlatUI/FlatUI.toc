@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.18
+## Version: 0.5.19
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -105,6 +105,13 @@ ChatTips.lua
 ChatLinks.lua
 ItemCompare.lua
 ChatHistory.lua
+SpellData.lua
+SpellModel.lua
+GearModel.lua
+GearAvoid.lua
+SpellLines.lua
+GearLines.lua
+GearWindow.lua
 HealthColour.lua
 CastTime.lua
 CastRank.lua

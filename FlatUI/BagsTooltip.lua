@@ -2,7 +2,7 @@ local _, ns = ...
 
 -- Bags: counts in tooltips (design 1.3 and 3.5; the row Counts in tooltips). An item's tooltip names the player's other characters on this realm and
 -- its connected realms who carry it, in their bags, their bank or their worn gear, as Flat UI last saw them. The line for this character stays the
--- job of Chat and tooltips' Item count in bags and bank (Chat.lua:765-799); items on other realms cannot reach this character and are left out.
+-- job of Chat and tooltips' Item count in bags and bank (Chat.lua:773-807); items on other realms cannot reach this character and are left out.
 --
 -- The lines are added inside the game's build of an item tooltip, by one post call for the item kind of tooltip data that Tips.Start adds once with
 -- TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, ...) (Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:181-201;
@@ -14,7 +14,7 @@ local _, ns = ...
 -- The counts come from Flat UI's own records (B.Data.Counts of BagsData.lua: the bags, bank and worn items of each character as Flat UI last saw
 -- them, for the characters of this realm and its connected realms), never from the game, so the lines are the same in a fight. The tooltip only
 -- gets lines (AddDoubleLine) and is asked how many it has (NumLines), both widget calls. The lines are added once for each build of a tooltip, as
--- Chat and tooltips adds its own (Chat.lua:787-798): the game fetches new data for each build and may run the post calls more than once for one,
+-- Chat and tooltips adds its own (Chat.lua:795-806): the game fetches new data for each build and may run the post calls more than once for one,
 -- so the same data with the lines of the first call still there is the same build.
 -- One line for each character, the most first: the name in the colour of its class (RAID_CLASS_COLORS, Blizzard_SharedXML/ClassColors.lua:1),
 -- without the realm when it is this character's, and where the items are. At most MOST characters have a line of their own and the rest share
@@ -34,7 +34,7 @@ local PART = "tooltips"
 local ITEM = 0
 -- Characters with a line of their own; the rest share one line.
 local MOST = 8
--- The colour of the counts, as Chat and tooltips writes its own extra lines (Chat.lua:793), and of a name whose class is not known.
+-- The colour of the counts, as Chat and tooltips writes its own extra lines (Chat.lua:801), and of a name whose class is not known.
 local DIM = { 0.8, 0.8, 0.8 }
 local PLAIN = { 1, 1, 1 }
 

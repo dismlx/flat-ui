@@ -1,0 +1,764 @@
+{
+ "about": "Constants of the gear model (design 2.5), the crit damage talents (their curves and class masks come from the client rows) and every item stat key of the client with the sentence its Equip: line uses (design 3.2 STATS). Each model value and crit talent carries its basis (c client data, m measured on Forever, e estimate) and its citation (cite); the stat keys and their sentences carry the citation of stats_cite.",
+ "crit": [
+  {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
+   ],
+   "effect": 0,
+   "name": "Ice Shards",
+   "spell": 11207,
+   "talent": 11207
+  },
+  {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
+   ],
+   "effect": 1,
+   "name": "Arcane Mind",
+   "spell": 11232,
+   "talent": 11232
+  },
+  {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
+   ],
+   "effect": 0,
+   "name": "Ruin",
+   "spell": 17959,
+   "talent": 17959
+  },
+  {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
+   ],
+   "effect": 0,
+   "name": "Elemental Fury",
+   "spell": 16089,
+   "talent": 16089
+  },
+  {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
+   ],
+   "effect": 0,
+   "name": "Vengeance",
+   "spell": 16909,
+   "talent": 16909
+  },
+  {
+   "basis": "c",
+   "aura": 15473,
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
+   ],
+   "effect": 4,
+   "name": "Shadowform",
+   "spell": 15473
+  },
+  {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
+   ],
+   "effect": 0,
+   "name": "Mortal Shots",
+   "spell": 19485,
+   "talent": 19485
+  },
+  {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
+   ],
+   "effect": 0,
+   "name": "Impale",
+   "spell": 16493,
+   "talent": 16493
+  },
+  {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): a crit damage modifier (108, misc 15) of its class mask, its trait curve"
+   ],
+   "effect": 0,
+   "name": "Lethality",
+   "spell": 14128,
+   "talent": 14128
+  }
+ ],
+ "model": {
+  "apPerDps": {
+   "basis": "c",
+   "cite": [
+    "client code: ATTACK_POWER_MAGIC_NUMBER 14 (Camelot/PaperDollFrameStats.lua:11)",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter) Attack-Formulas",
+    "wowsims/forever sim/core/attack.go"
+   ],
+   "value": 14
+  },
+  "crit": {
+   "basis": "c",
+   "cite": [
+    "client text: STAT_CRIT_BONUS (GlobalStrings)",
+    "wowsims/forever sim/core/spell.go"
+   ],
+   "value": {
+    "ranged": 2.0,
+    "special": 2.0,
+    "spell": 1.5,
+    "swing": 2.0
+   }
+  },
+  "form": {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70888 (GrunzForever export): SpellShapeshiftForm CombatRoundTime 1000 and 2500",
+    "wowsims/forever sim/druid/forms.go"
+   ],
+   "value": {
+    "bear": 2.5,
+    "cat": 1.0
+   }
+  },
+  "gcd": {
+   "basis": "c",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the global cooldown of 1500 ms"
+   ],
+   "value": 1.5
+  },
+  "glance": {
+   "basis": "e",
+   "cite": [
+    "wowsims/forever sim/core/target.go"
+   ],
+   "value": {
+    "highA": 1.2,
+    "highB": 0.03,
+    "highMax": 0.99,
+    "highMin": 0.2,
+    "lowA": 1.3,
+    "lowB": 0.05,
+    "lowMax": 0.91
+   }
+  },
+  "healThreat": {
+   "basis": "m",
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0045",
+    "wowsims/forever docs/evidence/EV-0057"
+   ],
+   "value": 0.5
+  },
+  "norm": {
+   "basis": "e",
+   "cite": [
+    "wowsims/forever sim/core/attack.go",
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): normalized weapon damage (121)"
+   ],
+   "value": {
+    "dagger": 1.7,
+    "one": 2.4,
+    "ranged": 2.8,
+    "two": 3.3
+   }
+  },
+  "offHand": {
+   "basis": "e",
+   "cite": [
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter) Attack-Formulas, off-hand swing"
+   ],
+   "value": 0.5
+  },
+  "ratings": {
+   "basis": "e",
+   "cite": [
+    "Efficient Games (efficient.games) stat scan, CC BY 4.0",
+    "wowsims/forever sim/core/base_stats_auto_gen.go"
+   ],
+   "value": {
+    "crit": 14,
+    "expertise": 10,
+    "haste": 10,
+    "hit": 10
+   }
+  }
+ },
+ "pairs": [
+  {
+   "keys": [
+    "ITEM_MOD_SPELL_HEALING_DONE_SHORT",
+    "ITEM_MOD_SPELL_DAMAGE_DONE_SHORT"
+   ],
+   "t": "TOOLTIP_ITEM_STAT_SPELL_HEALING_INCREASE_DAMAGE_INCREASE"
+  }
+ ],
+ "stats": [
+  {
+   "index": 1,
+   "key": "ITEM_MOD_STRENGTH_SHORT",
+   "kind": "stat"
+  },
+  {
+   "index": 2,
+   "key": "ITEM_MOD_AGILITY_SHORT",
+   "kind": "stat"
+  },
+  {
+   "index": 3,
+   "key": "ITEM_MOD_STAMINA_SHORT",
+   "kind": "stat"
+  },
+  {
+   "index": 4,
+   "key": "ITEM_MOD_INTELLECT_SHORT",
+   "kind": "stat"
+  },
+  {
+   "index": 5,
+   "key": "ITEM_MOD_SPIRIT_SHORT",
+   "kind": "stat"
+  },
+  {
+   "key": "ITEM_MOD_HEALTH_SHORT",
+   "kind": "none"
+  },
+  {
+   "key": "ITEM_MOD_MANA_SHORT",
+   "kind": "none"
+  },
+  {
+   "key": "ITEM_MOD_ATTACK_POWER_SHORT",
+   "kind": "ap",
+   "t": "TOOLTIP_ITEM_STAT_ATTACK_POWER_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_RANGED_ATTACK_POWER_SHORT",
+   "kind": "rap",
+   "t": "TOOLTIP_ITEM_STAT_RANGED_ATTACK_POWER_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_POWER_SHORT",
+   "kind": "sp",
+   "t": "TOOLTIP_ITEM_STAT_SPELL_POWER_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_DAMAGE_DONE_SHORT",
+   "kind": "spd",
+   "t": "TOOLTIP_ITEM_STAT_SPELL_DAMAGE_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_HEALING_DONE_SHORT",
+   "kind": "heal",
+   "t": "TOOLTIP_ITEM_STAT_SPELL_HEALING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_PHYSICAL_DAMAGE_DONE_SHORT",
+   "kind": "wdmg",
+   "t": "TOOLTIP_ITEM_STAT_WEAPON_DAMAGE_INCREASE"
+  },
+  {
+   "index": 2,
+   "key": "ITEM_MOD_HOLY_DAMAGE_DONE_SHORT",
+   "kind": "school",
+   "t": "TOOLTIP_ITEM_STAT_HOLY_DAMAGE_INCREASE"
+  },
+  {
+   "index": 3,
+   "key": "ITEM_MOD_FIRE_DAMAGE_DONE_SHORT",
+   "kind": "school",
+   "t": "TOOLTIP_ITEM_STAT_FIRE_DAMAGE_INCREASE"
+  },
+  {
+   "index": 4,
+   "key": "ITEM_MOD_NATURE_DAMAGE_DONE_SHORT",
+   "kind": "school",
+   "t": "TOOLTIP_ITEM_STAT_NATURE_DAMAGE_INCREASE"
+  },
+  {
+   "index": 5,
+   "key": "ITEM_MOD_FROST_DAMAGE_DONE_SHORT",
+   "kind": "school",
+   "t": "TOOLTIP_ITEM_STAT_FROST_DAMAGE_INCREASE"
+  },
+  {
+   "index": 6,
+   "key": "ITEM_MOD_SHADOW_DAMAGE_DONE_SHORT",
+   "kind": "school",
+   "t": "TOOLTIP_ITEM_STAT_SHADOW_DAMAGE_INCREASE"
+  },
+  {
+   "index": 7,
+   "key": "ITEM_MOD_ARCANE_DAMAGE_DONE_SHORT",
+   "kind": "school",
+   "t": "TOOLTIP_ITEM_STAT_ARCANE_DAMAGE_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_HIT_RATING_SHORT",
+   "kind": "rating",
+   "ratings": [
+    6,
+    7,
+    8
+   ],
+   "size": 10,
+   "t": "TOOLTIP_ITEM_STAT_HIT_PERCENT_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_CRIT_RATING_SHORT",
+   "kind": "rating",
+   "ratings": [
+    9,
+    10,
+    11
+   ],
+   "size": 14,
+   "t": "TOOLTIP_ITEM_STAT_CRIT_PERCENT_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_HASTE_RATING_SHORT",
+   "kind": "rating",
+   "ratings": [
+    18,
+    19,
+    20
+   ],
+   "size": 10,
+   "t": "TOOLTIP_ITEM_STAT_HASTE_PCT_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_EXPERTISE_RATING_SHORT",
+   "kind": "rating",
+   "ratings": [
+    24
+   ],
+   "size": 10,
+   "t": "TOOLTIP_ITEM_STAT_EXPERTISE_PCT_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_DODGE_RATING_SHORT",
+   "kind": "avoid",
+   "rating": 3,
+   "t": "TOOLTIP_ITEM_STAT_DODGE_PCT_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_PARRY_RATING_SHORT",
+   "kind": "avoid",
+   "rating": 4,
+   "t": "TOOLTIP_ITEM_STAT_PARRY_PCT_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_BLOCK_RATING_SHORT",
+   "kind": "avoid",
+   "rating": 5,
+   "t": "TOOLTIP_ITEM_STAT_BLOCK_CHANCE_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_DEFENSE_SKILL_RATING_SHORT",
+   "kind": "avoid",
+   "rating": 2,
+   "t": "TOOLTIP_ITEM_STAT_DEFENSE_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_BLOCK_VALUE_SHORT",
+   "kind": "bv",
+   "t": "TOOLTIP_ITEM_STAT_BLOCK_VALUE_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_MANA_REGENERATION_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_MANA_REGEN_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_HEALTH_REGEN_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_HEALTH_REGEN_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_PENETRATION_SHORT",
+   "kind": "note",
+   "t": "TOOLTIP_ITEM_STAT_SPELL_PENETRATION_INCREASE",
+   "what": "spell penetration"
+  },
+  {
+   "key": "ITEM_MOD_FIRE_PENETRATION_SHORT",
+   "kind": "note",
+   "t": "TOOLTIP_ITEM_STAT_FIRE_PENETRATION_INCREASE",
+   "what": "fire penetration"
+  },
+  {
+   "key": "ITEM_MOD_NATURE_PENETRATION_SHORT",
+   "kind": "note",
+   "t": "TOOLTIP_ITEM_STAT_NATURE_PENETRATION_INCREASE",
+   "what": "nature penetration"
+  },
+  {
+   "key": "ITEM_MOD_FROST_PENETRATION_SHORT",
+   "kind": "note",
+   "t": "TOOLTIP_ITEM_STAT_FROST_PENETRATION_INCREASE",
+   "what": "frost penetration"
+  },
+  {
+   "key": "ITEM_MOD_SHADOW_PENETRATION_SHORT",
+   "kind": "note",
+   "t": "TOOLTIP_ITEM_STAT_SHADOW_PENETRATION_INCREASE",
+   "what": "shadow penetration"
+  },
+  {
+   "key": "ITEM_MOD_ARCANE_PENETRATION_SHORT",
+   "kind": "note",
+   "t": "TOOLTIP_ITEM_STAT_ARCANE_PENETRATION_INCREASE",
+   "what": "arcane penetration"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_RESISTANCE_ALL_SCHOOLS_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SPELL_RESISTANCE_ALL_SCHOOLS_INCREASE"
+  },
+  {
+   "key": "RESISTANCE1_NAME",
+   "kind": "none"
+  },
+  {
+   "key": "ITEM_MOD_HOLY_RESISTANCE_SHORT",
+   "kind": "none",
+   "same": "RESISTANCE1_NAME"
+  },
+  {
+   "key": "RESISTANCE2_NAME",
+   "kind": "none"
+  },
+  {
+   "key": "ITEM_MOD_FIRE_RESISTANCE_SHORT",
+   "kind": "none",
+   "same": "RESISTANCE2_NAME"
+  },
+  {
+   "key": "RESISTANCE3_NAME",
+   "kind": "none"
+  },
+  {
+   "key": "ITEM_MOD_NATURE_RESISTANCE_SHORT",
+   "kind": "none",
+   "same": "RESISTANCE3_NAME"
+  },
+  {
+   "key": "RESISTANCE4_NAME",
+   "kind": "none"
+  },
+  {
+   "key": "ITEM_MOD_FROST_RESISTANCE_SHORT",
+   "kind": "none",
+   "same": "RESISTANCE4_NAME"
+  },
+  {
+   "key": "RESISTANCE5_NAME",
+   "kind": "none"
+  },
+  {
+   "key": "ITEM_MOD_SHADOW_RESISTANCE_SHORT",
+   "kind": "none",
+   "same": "RESISTANCE5_NAME"
+  },
+  {
+   "key": "RESISTANCE6_NAME",
+   "kind": "none"
+  },
+  {
+   "key": "ITEM_MOD_ARCANE_RESISTANCE_SHORT",
+   "kind": "none",
+   "same": "RESISTANCE6_NAME"
+  },
+  {
+   "key": "RESISTANCE0_NAME",
+   "kind": "armor",
+   "t": "TOOLTIP_ITEM_STAT_ARMOR_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_ATTACK_POWER_VS_HUMANOID_SHORT",
+   "kind": "vs",
+   "stat": "ap",
+   "t": "TOOLTIP_ITEM_STAT_AP_VS_HUMANOID_INCREASE",
+   "type": "Humanoid"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_DAMAGE_VS_HUMANOID_SHORT",
+   "kind": "vs",
+   "stat": "sp",
+   "t": "TOOLTIP_ITEM_STAT_SD_VS_HUMANOID_INCREASE",
+   "type": "Humanoid"
+  },
+  {
+   "key": "ITEM_MOD_ATTACK_POWER_VS_ELEMENTAL_SHORT",
+   "kind": "vs",
+   "stat": "ap",
+   "t": "TOOLTIP_ITEM_STAT_AP_VS_ELEMENTAL_INCREASE",
+   "type": "Elemental"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_DAMAGE_VS_ELEMENTAL_SHORT",
+   "kind": "vs",
+   "stat": "sp",
+   "t": "TOOLTIP_ITEM_STAT_SD_VS_ELEMENTAL_INCREASE",
+   "type": "Elemental"
+  },
+  {
+   "key": "ITEM_MOD_ATTACK_POWER_VS_DEMON_SHORT",
+   "kind": "vs",
+   "stat": "ap",
+   "t": "TOOLTIP_ITEM_STAT_AP_VS_DEMON_INCREASE",
+   "type": "Demon"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_DAMAGE_VS_DEMON_SHORT",
+   "kind": "vs",
+   "stat": "sp",
+   "t": "TOOLTIP_ITEM_STAT_SD_VS_DEMON_INCREASE",
+   "type": "Demon"
+  },
+  {
+   "key": "ITEM_MOD_ATTACK_POWER_VS_UNDEAD_SHORT",
+   "kind": "vs",
+   "stat": "ap",
+   "t": "TOOLTIP_ITEM_STAT_AP_VS_UNDEAD_INCREASE",
+   "type": "Undead"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_DAMAGE_VS_UNDEAD_SHORT",
+   "kind": "vs",
+   "stat": "sp",
+   "t": "TOOLTIP_ITEM_STAT_SD_VS_UNDEAD_INCREASE",
+   "type": "Undead"
+  },
+  {
+   "key": "ITEM_MOD_ATTACK_POWER_VS_DRAGONKIN_SHORT",
+   "kind": "vs",
+   "stat": "ap",
+   "t": "TOOLTIP_ITEM_STAT_AP_VS_DRAGONKIN_INCREASE",
+   "type": "Dragonkin"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_DAMAGE_VS_DRAGONKIN_SHORT",
+   "kind": "vs",
+   "stat": "sp",
+   "t": "TOOLTIP_ITEM_STAT_SD_VS_DRAGONKIN_INCREASE",
+   "type": "Dragonkin"
+  },
+  {
+   "key": "ITEM_MOD_ATTACK_POWER_VS_GIANT_SHORT",
+   "kind": "vs",
+   "stat": "ap",
+   "t": "TOOLTIP_ITEM_STAT_AP_VS_GIANT_INCREASE",
+   "type": "Giant"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_DAMAGE_VS_GIANT_SHORT",
+   "kind": "vs",
+   "stat": "sp",
+   "t": "TOOLTIP_ITEM_STAT_SD_VS_GIANT_INCREASE",
+   "type": "Giant"
+  },
+  {
+   "key": "ITEM_MOD_ATTACK_POWER_VS_BEAST_SHORT",
+   "kind": "vs",
+   "stat": "ap",
+   "t": "TOOLTIP_ITEM_STAT_AP_VS_BEAST_INCREASE",
+   "type": "Beast"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_DAMAGE_VS_BEAST_SHORT",
+   "kind": "vs",
+   "stat": "sp",
+   "t": "TOOLTIP_ITEM_STAT_SD_VS_BEAST_INCREASE",
+   "type": "Beast"
+  },
+  {
+   "key": "ITEM_MOD_ATTACK_POWER_VS_MECHANICAL_SHORT",
+   "kind": "vs",
+   "stat": "ap",
+   "t": "TOOLTIP_ITEM_STAT_AP_VS_MECHANICAL_INCREASE",
+   "type": "Mechanical"
+  },
+  {
+   "key": "ITEM_MOD_SPELL_DAMAGE_VS_MECHANICAL_SHORT",
+   "kind": "vs",
+   "stat": "sp",
+   "t": "TOOLTIP_ITEM_STAT_SD_VS_MECHANICAL_INCREASE",
+   "type": "Mechanical"
+  },
+  {
+   "key": "ITEM_MOD_TWOHANDED_AXES_SHORT",
+   "kind": "skill",
+   "line": 172,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_TWO-HANDED_AXES_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_TWOHANDED_MACES_SHORT",
+   "kind": "skill",
+   "line": 160,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_TWO-HANDED_MACES_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_TWOHANDED_SWORDS_SHORT",
+   "kind": "skill",
+   "line": 55,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_TWO-HANDED_SWORDS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_AXES_SHORT",
+   "kind": "skill",
+   "line": 44,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_AXES_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_BOWS_SHORT",
+   "kind": "skill",
+   "line": 45,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_BOWS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_CROSSBOWS_SHORT",
+   "kind": "skill",
+   "line": 226,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_CROSSBOWS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_DAGGERS_SHORT",
+   "kind": "skill",
+   "line": 173,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_DAGGERS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_DUAL_WIELD_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_DUAL_WIELDING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_FIST_WEAPONS_SHORT",
+   "kind": "skill",
+   "line": 162,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_FIST_WEAPONS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_GUNS_SHORT",
+   "kind": "skill",
+   "line": 46,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_GUNS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_MACES_SHORT",
+   "kind": "skill",
+   "line": 54,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_MACES_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_POLEARMS_SHORT",
+   "kind": "skill",
+   "line": 229,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_POLEARMS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_STAVES_SHORT",
+   "kind": "skill",
+   "line": 136,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_STAVES_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_SWORDS_SHORT",
+   "kind": "skill",
+   "line": 43,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_SWORDS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_THROWN_SHORT",
+   "kind": "skill",
+   "line": 176,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_THROWN_WEAPONS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_WANDS_SHORT",
+   "kind": "skill",
+   "line": 228,
+   "t": "TOOLTIP_ITEM_STAT_SKILL_WANDS_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_ALCHEMY_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_ALCHEMY_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_BLACKSMITHING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_BLACKSMITHING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_ENCHANTING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_ENCHANTING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_ENGINEERING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_ENGINEERING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_JEWELCRAFTING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_JEWELCRAFTING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_LEATHERWORKING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_LEATHERWORKING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_HERBALISM_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_HERBALISM_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_MINING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_MINING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_SKINNING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_SKINNING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_COOKING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_COOKING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_FIRST_AID_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_FIRST_AID_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_FISHING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_FISHING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_TAILORING_SHORT",
+   "kind": "none",
+   "t": "TOOLTIP_ITEM_STAT_SKILL_TAILORING_INCREASE"
+  },
+  {
+   "key": "ITEM_MOD_DAMAGE_PER_SECOND_SHORT",
+   "kind": "dps"
+  }
+ ],
+ "stats_cite": [
+  "client GlobalStrings of build 1.60.1.70938: the ITEM_MOD_* keys and their TOOLTIP_ITEM_STAT_* sentences",
+  "Efficient Games (efficient.games) stat scan, CC BY 4.0: the keys items carry"
+ ]
+}

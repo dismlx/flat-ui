@@ -729,7 +729,7 @@ ns.SETUP_STEPS = {
 	} },
 	-- The hit table hangs under the player frame, so its step shows the player's frame (mock-player, SetupDrawUnits.lua); every row describes itself.
 	{ id = "hud-hittable", area = "Minimap and buffs", title = "Hit table", draw = "mock-player", built = true, rows = {
-		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target." },
+		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target, while you are a tank or a damage dealer, or always." },
 		{ "hud.hitTableLines", "o", "behaviour", "Chooses whether the hit table shows melee, ranged or spells, or picks them by your class and form." },
 		{ "hud.hitTableSpecial", "o", "behaviour", "Adds a line for your special attacks, which do not glance and miss less while you dual wield." },
 		{ "hud.hitTableAgainst", "o", "behaviour", "Chooses whether the hit table is against your target or always against a boss three levels above you." },
@@ -880,6 +880,26 @@ ns.SETUP_STEPS = {
 		{ "chat.icons", "o", "behaviour", "Puts the icon of an item, spell, buff or debuff before its name in its tooltip." },
 		{ "chat.targetLine", "c", "behaviour", "Adds a line naming what a unit targets to its tooltip." },
 		{ "chat.compareShift", "c", "behaviour", "Shows the items you wear beside an item's tooltip only while Shift is held." },
+	} },
+	-- The spell and gear lines go into tooltips of spells and items the drawing does not show, so every row describes itself.
+	{ id = "tips-spells", area = "Chat and tooltips", title = "Spell and gear lines", draw = "mock-tooltip", built = true, rows = {
+		{ "chat.spellPower", "c", "behaviour", "Adds to a spell's tooltip the share of your spell damage, healing or attack power it adds." },
+		{ "chat.spellStats", "o", "behaviour", "Adds how much that share is with your stats now, and the threat your attack power adds." },
+		{ "chat.spellLowRank", "r", "behaviour", "Counts less spell power for ranks far below your level, by an estimate from players' tests on WoW: Forever." },
+		{ "chat.spellThreat", "c", "behaviour", "Adds a spell's threat where it is special or your stance, form, aura, talents or gear change it, or to every spell whose threat is known." },
+		{ "chat.spellWhen", "o", "behaviour", "Chooses whether the spell lines show always or only while Shift, Ctrl or Alt is held." },
+		{ "chat.gear", "c", "behaviour", "Adds to an item's tooltip how wearing it changes the damage, healing or threat of the spells you chose." },
+		{ "chat.gearWhen", "o", "behaviour", "Chooses whether the gear lines show with the game's item comparison, always, or while a key is held." },
+		{ "chat.gearMost", "r", "behaviour", "Sets how many of your chosen spells an item's tooltip lists." },
+		{ "chat.gearAgainst", "o", "behaviour", "Chooses the enemy the gear comparison counts against: a boss at level 60 and an enemy of your level before, or one of them always." },
+		{ "chat.gearFacing", "r", "behaviour", "Chooses whether the gear comparison counts you in front of the enemy, where it parries and blocks, or behind it." },
+		{ "chat.gearRules", "r", "behaviour", "Chooses the hit cap the gear comparison counts against a boss: the hit table's, 9% as Classic tests found, or 8% as the game's tooltip says." },
+		{ "chat.gearAvoid", "o", "behaviour", "Adds to an item's tooltip and the Gear comparison window how the item changes an enemy's misses, dodges, parries, blocks, crits and crushing blows against you, for tanks, always or never." },
+		{ "chat.gearAdd", "c", "behaviour", "Adds a spell to those the gear comparison counts." },
+		{ "chat.gearRemove", "o", "behaviour", "Removes a spell from those the gear comparison counts." },
+		{ "chat.gearBar", "o", "behaviour", "Adds the spells of one action bar, with their ranks, to those the gear comparison counts." },
+		{ "chat.gearReset", "r", "behaviour", "Goes back to your class's main spells for your role." },
+		{ "chat.gearOpen", "o", "behaviour", "Opens the Gear comparison window, with every spell you chose, now and with an item you drop on it." },
 	} },
 	{ id = "tr-list", area = "Trackers", title = "What trackers watch and when they show", draw = "mock-tracker", built = true, rows = {
 		{ "trackers.enabled", "c", "mock-tracker" },

@@ -93,7 +93,7 @@ local ADDON_NAME, ns = ...
 -- It adds the slash command /way beside /flatui (SLASH_FLATUIWAY1 and SlashCmdList.FLATUIWAY) when no other addon has one, and sets a map
 -- pin and its tracking (C_Map.SetUserWaypoint, C_SuperTrack.SetSuperTrackedUserWaypoint) only when the player types it. It never changes the
 -- faction the game watches, and reads the list of factions without expanding it: Flat UI's own reputation bar shows the faction gained.
--- Bags (off by default) draws a bag window and a bank window of its own on UIParent and keeps the game's bag windows (ContainerFrame1 to
+-- Bags (on by default) draws a bag window and a bank window of its own on UIParent and keeps the game's bag windows (ContainerFrame1 to
 -- ContainerFrame7 and ContainerFrameCombinedBags), and with Flat UI's bank BankFrame, from showing by moving each under a hidden frame of its own
 -- (SetParent), out of combat and only while the game has it closed. Each goes back to the parent it was read from (GetParent) when the page goes off,
 -- the module or one of its parts follow, cache, window, layout or items stops, Bags stands down for another bag addon or the gamepad interface, or,
@@ -155,14 +155,18 @@ local ADDON_NAME, ns = ...
 -- LibDataBroker, it listens to that library and calls the functions of the feeds a slot shows (OnEnter, OnLeave, OnTooltipShow, OnClick).
 -- Its Equipment set slot opens a menu of its own whose lines call C_EquipmentSet.UseEquipmentSet, never in a fight.
 -- Threat list (off by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
--- Hit table (off by default, Minimap and buffs) is a frame of its own on UIParent that takes no mouse, hung out of combat by SetPoint from a second
--- frame of its own whose corners are set on the player frame's portrait (or Flat UI's picture or body, else the health bar, else PlayerFrame) and on
--- PlayerBottomManagedFrameContainer, or on PlayerCastingBarFrame while Edit Mode locks the cast bar to the player frame (its field
--- attachedToPlayerFrame, read only), else on PlayerFrame; it follows PlayerFrame_AttachCastBar and PlayerFrame_DetachCastBar with hooksecurefunc.
+-- Hit table (Minimap and buffs; on by default for a tank or a damage dealer and off for a healer, by ns.PlayerRole below) is a frame of its own on
+-- UIParent that takes no mouse, hung out of combat by SetPoint from a second frame of its own whose corners are set on the player frame's portrait
+-- (or Flat UI's picture or body, else the health bar, else PlayerFrame) and on PlayerBottomManagedFrameContainer, or on PlayerCastingBarFrame while
+-- Edit Mode locks the cast bar to the player frame (its field attachedToPlayerFrame, read only), else on PlayerFrame; it follows
+-- PlayerFrame_AttachCastBar and PlayerFrame_DetachCastBar with hooksecurefunc.
 -- It only reads, and changes nothing: the place and size of those frames, of PetFrame, TargetFrame, FocusFrame, UIParent and Flat UI's own frames
 -- under the player frame, and the font of the player cast bar's text; the player's level, class, form, power type, combat state, stats, weapon
 -- skills and weapons; the target's level and kind, whether it exists, can be attacked, is dead or is a player, and whether it attacks the player:
--- the player's threat situation on it (UnitThreatSituation), else whether its target is the player (UnitIsUnit).
+-- the player's threat situation on it (UnitThreatSituation), else whether its target is the player (UnitIsUnit); and, while its row is For tanks
+-- and damage dealers, the player's role (ns.PlayerRole: the group role, a tank stance, form or aura, the points spent in each talent tree of the set
+-- of talents in use, as last read while no pick waited unapplied on it in the talent window, the class), read again after each event the hud module
+-- hears that can change it.
 -- Healer mana (off by default) is a window of its own on UIParent; it only reads mana (UnitPowerPercent) and changes nothing. The dispel border, the
 -- debuff type icon and the raid marker of the party and raid frames, the leader and assistant icons of the raid frames and the dispel border of the
 -- player, target and focus frames, and the heal over time squares of the party and raid frames, are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a
@@ -214,6 +218,30 @@ local ADDON_NAME, ns = ...
 -- line still holds the text it wrote. With Compare items only while holding Shift
 -- (on by default) it writes the game's alwaysCompareItems, out of combat: 0, its text before that kept in FlatUIDB.compareGame, and that text
 -- again when the row, its page or the module goes off while the variable is still 0.
+-- Inside the game's build of a spell tooltip, through the same post call, Chat and tooltips adds lines with the share of spell damage, spell
+-- healing or attack power the spell adds, what that is with the player's stats, and its threat (AddLine, AddDoubleLine), and inside the build of
+-- an item tooltip lines with what wearing the item changes for the spells the player chose (AddLine, AddDoubleLine), each once for each build and
+-- only on GameTooltip and ItemRefTooltip.
+-- For them it reads the player's stats, talents (C_Traits), form, Righteous Fury and Shadowform (C_UnitAuras, and for one not found
+-- C_Secrets.ShouldSpellAuraBeSecret), the temporary enchant of each weapon, whether the player uses ammunition (C_PaperDollInfo.AmmoNeeded,
+-- UnitUsesAmmo) and the action slot of a macro, the item's stats (C_Item.GetItemStats) and the lines of the item and of the items the player wears
+-- (the data of the build, else C_TooltipInfo.GetHyperlink, and C_TooltipInfo.GetInventoryItem), asks the game to load an item it has not loaded
+-- yet (C_Item.RequestLoadItemDataByID), asks which worn items the game would compare an item with (C_TooltipComparison.GetItemComparisonInfo;
+-- never the protected CompareItem), converts ratings and stats with the game's own calls (GetCombatRatingBonusForCombatRatingValue,
+-- GetAttackPowerForStat and the others, only while the game gives stats plain), reads once a session the description of one spell
+-- (C_Spell.GetSpellDescription) to see whether the game's texts count spell power, and reads the fields processingInfo, supportsItemComparison
+-- and suppressAutomaticCompareItem the game keeps on a tooltip it builds (TooltipDataHandler.lua:281, TooltipDataRules.lua:168-176). The spells
+-- chosen are kept in FlatUICharDB.gearSpells.
+-- With Avoidance (for tanks by default) the item lines and the window also show an enemy's swing against the player now and with the item: in the
+-- same plain moment as the other stats it reads the defense skill (UnitDefenseSkill), the chances to dodge, parry and block (GetDodgeChance,
+-- GetParryChance, GetBlockChance), armor (UnitArmor), block value (GetShieldBlock), the dodge agility gives (GetDodgeChanceFromAttribute) and whether a
+-- shield is worn (C_PaperDollInfo.OffhandHasShield), and asks what armor takes off against the enemy's level (C_PaperDollInfo.GetArmorEffectiveness).
+-- Its Gear comparison window (/flatui gear) is a frame of its own on UIParent, named FlatUIGear in UISpecialFrames so Escape closes it, placed by
+-- the movers. It takes an item dropped on it (GetCursorInfo) and gives one lifted from a bag, the bank or a worn slot back there with ClearCursor,
+-- while C_Cursor.GetCursorItem names that slot and C_Item.IsLocked says the item is still locked in it; any other item, such as one dragged off an
+-- action bar, stays on the cursor, and so does a spell dropped on it (GetCursorInfo, and GetMacroSpell for a macro). It writes GameTooltip for its
+-- rows, its switch and its item (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and Hide while IsOwned says one of its frames owns it),
+-- never in a fight.
 -- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
 -- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
 -- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
@@ -250,8 +278,10 @@ local SETTLE = 0.2
 -- change of it refreshes them too: one module key, or a list of them.
 local READERS = {
 	["castbars.castColour"] = "hud", ["castbars.channelColour"] = "hud", ["castbars.craftColour"] = "hud",
-	-- The windows of Bags take the look of the Windows page: Window opacity, Button and slot colour, Highlight colour and Icon crop.
-	["windows.accent"] = { "chat", "bags" }, ["windows.panel"] = "bags", ["windows.opacity"] = "bags", ["windows.crop"] = "bags",
+	-- The windows of Bags and the Gear comparison window of Chat and tooltips (GearWindow.lua) take the look of the Windows page: Window opacity,
+	-- Button and slot colour, Highlight colour and Icon crop. The chat input box takes the Highlight colour as well (Border while typing).
+	["windows.accent"] = { "chat", "bags" }, ["windows.panel"] = { "chat", "bags" }, ["windows.opacity"] = { "chat", "bags" },
+	["windows.crop"] = { "chat", "bags" },
 	-- The count on Sell junk (N) of Bags follows Sell at most 12 at a time of Errands (ns.ErrandsJunkCount).
 	["errands.sellTwelve"] = "bags",
 	-- A bar the bar block holds with its own Background panel has no panel from the Action bars page.
@@ -263,6 +293,11 @@ local READERS = {
 	["defensives.own"] = "ownbuffs", ["defensives.enabled"] = "ownbuffs", ["defensives.place"] = "ownbuffs",
 	-- The health text of a nameplate follows Number style of the unit frames.
 	["unitframes.numberStyle"] = "nameplates",
+	-- The hit table at For tanks and damage dealers follows the player's role, which Your role of nameplate threat can make a tank (ns.PlayerRole),
+	-- and so do the spells the gear comparison of Chat and tooltips counts by default and where it counts the player standing (GearLines.lua).
+	["nameplates.threatRole"] = { "hud", "chat" },
+	-- The gear comparison counts the hit cap of the hit table at Hit cap against a boss: As on the Hit table tab (Config.lua, chat.gearRules).
+	["hud.hitTableRules"] = "chat",
 	-- The name row, the fade, the trough and the rounded lines of unit frames follow them.
 	["unitframes.lookOwn"] = "unitframes", ["unitframes.lookBorder"] = "unitframes", ["unitframes.lookBack"] = "unitframes",
 	["unitframes.lookBackAlpha"] = "unitframes",
@@ -371,10 +406,10 @@ ns.KINDS = {
 	boss = { word = "Boss", colour = RED },
 }
 
--- The answer of a unit function, or nil when the client lacks it, raises, or withholds the answer.
-local function Ask(fn, unit)
+-- The first answer of a call of the client, or nil when the client lacks it, the call raises, or the answer is withheld.
+local function Ask(fn, ...)
 	if type(fn) == "function" then
-		local ok, answer = pcall(fn, unit)
+		local ok, answer = pcall(fn, ...)
 		if ok and not IsSecret(answer) then
 			return answer
 		end
@@ -398,6 +433,164 @@ function ns.UnitKind(unit)
 		return class
 	end
 	return nil
+end
+
+-- The player's role ------------------------------------------------------------------------
+
+-- The role of each talent tree of a class, in the game's order of its trees: the order Forever's talent window draws them in, left to right.
+local ROLE_TREES = {
+	WARRIOR = { "damage", "damage", "tank" }, PALADIN = { "healer", "tank", "damage" }, PRIEST = { "healer", "healer", "damage" },
+	SHAMAN = { "damage", "damage", "healer" }, DRUID = { "damage", "damage", "healer" }, HUNTER = { "damage", "damage", "damage" },
+	ROGUE = { "damage", "damage", "damage" }, MAGE = { "damage", "damage", "damage" }, WARLOCK = { "damage", "damage", "damage" },
+}
+-- The roles a group gives, by the word of UnitGroupRolesAssigned (UnitDocumentation.lua:1318-1332), which is NONE for none.
+local ROLE_GIVEN = { TANK = "tank", HEALER = "healer", DAMAGER = "damage" }
+
+-- True for a string the client did not withhold.
+local function IsText(value)
+	return not IsSecret(value) and type(value) == "string"
+end
+
+-- t[key], for pcall.
+local function Index(t, key)
+	return t[key]
+end
+
+-- A field of a table the client gave, or nil when the table or the field is withheld, or reading it raises.
+local function Field(t, key)
+	if IsSecret(t) or type(t) ~= "table" then
+		return nil
+	end
+	local ok, value = pcall(Index, t, key)
+	if ok and not IsSecret(value) then
+		return value
+	end
+	return nil
+end
+
+-- A function of one of the client's tables (C_Traits and the others), or nil when the client has none.
+local function Api(space, name)
+	local fn = Field(_G[space], name)
+	return type(fn) == "function" and fn or nil
+end
+
+-- The answer of MostPoints for each set of talents, by its config ID, from the last read that found one while no pick waited unapplied on the set:
+-- { place, name }, or {} when no tree had a point then.
+local unstaged = {}
+
+-- The talent tree of the class with the most points spent in it: its place in the game's order of the trees and its name, or nil when no tree has a
+-- point or the client does not say. On Forever a class has one specialization (the talent window keys its art by one specialization per class,
+-- Blizzard_PlayerSpells/Camelot/ClassTalents/Blizzard_ClassTalentUtil.lua:13-40), and the three trees of old are the node groups of its one tree of
+-- C_Traits, which the talent window reads for the headers over its trees (Camelot/ClassTalents/Blizzard_ClassTalentsFrame.lua:82-109, 331-344): the
+-- groups of the tree in the order the client gives them, drawn left to right (C_Traits.GetGroupDisplayInfoByTreeID,
+-- SharedTraitsDocumentation.lua:297-310, with groupID and displayName, :1080-1091), and the points spent in each, the spent of the first currency of
+-- its entry (C_Traits.GetGroupCurrencyInfo, :281-295, each entry naming its group by traitNodeGroupID, :972-979, :1188-1198). The tree is the first
+-- of the treeIDs of the set of talents in use (C_Traits.GetConfigInfo, :201-215, :1013-1023), as the window takes it
+-- (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:1310-1324), and the set in use is the one the window shows as it opens
+-- (ClassTalents/Blizzard_ClassTalentsFrame.lua:147-150, 883-902): C_ClassTalents.GetActiveConfigID (ClassTalentsDocumentation.lua:73-80), else, as
+-- Forever's window falls back, the set of the active group of dual spec (C_SpecializationInfo.GetCombatConfigIDForSpecGroup of GetActiveSpecGroup,
+-- SpecializationInfoDocumentation.lua:41-55, 90-103; Camelot:111-121). Only the talents applied count. The window stages the player's picks on that
+-- same set until they are applied or undone (its Apply and Undo: Camelot/ClassTalents/Blizzard_ClassTalentsFrame.xml:441, 517; ClassTalents:90-92)
+-- and keeps them when it hides (its OnHide calls no RollbackConfig: Blizzard_SharedTalentFrame.lua:300-308, ClassTalents:295-309, Camelot:50-55),
+-- and its headers count them by all it shows: it draws them again with each pick (TRAIT_TREE_CURRENCY_INFO_UPDATED,
+-- Blizzard_SharedTalentFrame.lua:338-342; ClassTalents:765-774) and after Undo (ClassTalents:1190-1195), it counts its own points with the picks
+-- (excludeStagedChangesForCurrencies false, Blizzard_SharedTalentFrame.xml:43, .lua:1359), and C_Traits.GetGroupCurrencyInfo has no flag to leave
+-- them out, as GetTreeCurrencyInfo has (:537-552). So while the client says a pick waits on the set (C_Traits.ConfigHasStagedChanges, :107-120, as
+-- the window asks, ClassTalents:1256-1262), the answer is the last one found for that set while none waited (unstaged), or nil before one was found,
+-- which leaves the role to the class. Each call is in apis.yaml of the client, and every answer passes ns.IsSecret or ns.Finite before it is
+-- compared or used as a key. With another number of groups than the class has trees the order would tell nothing, so that gives nil too.
+local function MostPoints(count)
+	local config = Ask(Api("C_ClassTalents", "GetActiveConfigID"))
+	if not Finite(config) then
+		local group = Ask(Api("C_SpecializationInfo", "GetActiveSpecGroup"))
+		config = Finite(group) and Ask(Api("C_SpecializationInfo", "GetCombatConfigIDForSpecGroup"), group) or nil
+	end
+	if not Finite(config) then
+		return nil
+	end
+	-- A pick waits unapplied: the answer found before it.
+	if Ask(Api("C_Traits", "ConfigHasStagedChanges"), config) == true then
+		local found = unstaged[config]
+		if found then
+			return found[1], found[2]
+		end
+		return nil
+	end
+	local tree = Field(Field(Ask(Api("C_Traits", "GetConfigInfo"), config), "treeIDs"), 1)
+	if not Finite(tree) then
+		return nil
+	end
+	local shown = Ask(Api("C_Traits", "GetGroupDisplayInfoByTreeID"), tree)
+	if Field(shown, count + 1) ~= nil then
+		return nil
+	end
+	local ids, names = {}, {}
+	for place = 1, count do
+		local info = Field(shown, place)
+		local id, name = Field(info, "groupID"), Field(info, "displayName")
+		if not (Finite(id) and IsText(name)) then
+			return nil
+		end
+		ids[place], names[place] = id, name
+	end
+	local spent = {}
+	local entries = Ask(Api("C_Traits", "GetGroupCurrencyInfo"), config, ids)
+	for place = 1, count do
+		local entry = Field(entries, place)
+		local id = Field(entry, "traitNodeGroupID")
+		local points = Field(Field(Field(entry, "currencyInfos"), 1), "spent")
+		if Finite(id) and Finite(points) then
+			spent[id] = points
+		end
+	end
+	local best, most = nil, 0
+	for place = 1, count do
+		local points = spent[ids[place]]
+		if points and points > most then
+			best, most = place, points
+		end
+	end
+	local name = best and names[best] or nil
+	unstaged[config] = { best, name }
+	return best, name
+end
+
+-- The player's role, "tank", "healer" or "damage", the sentence that says why as Flat UI setup suggests from it, and what it was read from, as a
+-- short phrase for /flatui status (the hit table's line; as nameplate threat names its own reason, PlateThreat.lua), from the first that answers:
+-- the role the group gave, a tank stance, form or aura as nameplate threat reads it (ns.PlateThreat.Role, PlateThreat.lua, looked up when asked; its
+-- reason "your group role" is passed over, as the role the group gives now is read here first), the talent tree with the most points of the talents
+-- applied (MostPoints, above), the class, where a priest heals. The sentence and the phrase are nil when the client gives none of them. Flat UI
+-- setup suggests from it (SetupWalk.lua, Walk.Role) and the hit table shows by it (HitTable.lua), so the two always agree. It only reads, and a
+-- withheld answer counts as none.
+function ns.PlayerRole()
+	local given = Ask(UnitGroupRolesAssigned, "player")
+	if IsText(given) and ROLE_GIVEN[given] then
+		return ROLE_GIVEN[given], "Suggested from your group role.", "your group role"
+	end
+	local threat = ns.PlateThreat
+	if type(threat) == "table" and type(threat.Role) == "function" then
+		local ok, kind, reason = pcall(threat.Role)
+		if ok and IsText(kind) and kind == "tank" and IsText(reason) and reason ~= "your group role" then
+			if reason == "your choice" then
+				return "tank", "Suggested from your role.", "Your role of nameplate threat"
+			end
+			return "tank", ("Suggested from %s."):format(reason), reason
+		end
+	end
+	local class = Ask(UnitClassBase, "player")
+	class = IsText(class) and class or nil
+	local trees = class and ROLE_TREES[class]
+	if trees then
+		local best, name = MostPoints(#trees)
+		if best then
+			return trees[best], ("Suggested from your talents: most points in %s."):format(name), ("most points in %s"):format(name)
+		end
+	end
+	if class then
+		local word = class:lower()
+		return class == "PRIEST" and "healer" or "damage", ("Suggested for a %s."):format(word), ("your class, %s"):format(word)
+	end
+	return "damage", nil, nil
 end
 
 -- Options ---------------------------------------------------------------------------------
@@ -2483,9 +2676,11 @@ local function ReadCharacter()
 	return name .. " - " .. realm
 end
 
--- Rows of an older build read as the rows that replaced them: the three nameplate outline rows were ticks (on is As the game has it, off is None), and White
--- names is Name colour White on the unit frames unless a Name colour is chosen. `old` holds the values the older rows were saved with, as booleans; `options`
--- takes the new ones (the same table for a saved profile).
+-- Rows of an older build read as the rows that replaced them: the three nameplate outline rows were ticks (on is As the game has it, off is None), Hit
+-- table under the player frame was a tick in 0.5.18 (on is Always, off is Off), and White names is Name colour White on the unit frames unless a Name
+-- colour is chosen. `old` holds the values the older rows were saved with, as booleans; `options` takes the new ones (the same table for a saved profile).
+-- It runs for each saved profile as the settings load, for a profile text as it is read, and for a draft of Flat UI setup as it is read (Setup.lua);
+-- a value it gave is a choice from then on, so each tick moves once.
 local OLD_PLATE_OUTLINES = { "nameplates.nameOutline", "nameplates.healthTextOutline", "nameplates.castTextOutline" }
 function ns.MigrateText(old, options)
 	for _, path in ipairs(OLD_PLATE_OUTLINES) do
@@ -2493,8 +2688,34 @@ function ns.MigrateText(old, options)
 			options[path] = old[path] and "game" or "none"
 		end
 	end
+	if type(old["hud.hitTable"]) == "boolean" then
+		options["hud.hitTable"] = old["hud.hitTable"] and "on" or "off"
+	end
 	if old["unitframes.lookWhiteNames"] == true and (options["unitframes.nameColour"] == nil or options["unitframes.nameColour"] == "game") then
 		options["unitframes.nameColour"] = "white"
+	end
+end
+
+-- Bags came in 0.5.18, off by default, and is on by default from 0.5.19. A profile saved before 0.5.19 with every module that is on by default
+-- saved off, as Game look of the welcome screen makes one (SetupWelcome.lua, W.GameLook), and nothing saved for Bags keeps Bags off: it left the
+-- look to the game, and the modules that are off by default (Errands, Data panels and the others), which it may have turned on, are not read
+-- here. Run once, for the profiles saved before (LoadSettings, while FlatUIDB.bagsMigrated is not set, as soundsMigrated marks the move of the
+-- sound rows). A Game look made since saves Bags off itself.
+local function KeepBagsOff(options)
+	if options["bags.enabled"] ~= nil then
+		return
+	end
+	local any = false
+	for path, def in pairs(defs) do
+		if def.key == "enabled" and def.kind == "bool" and def.default == true and path ~= "bags.enabled" then
+			if options[path] ~= false then
+				return
+			end
+			any = true
+		end
+	end
+	if any then
+		options["bags.enabled"] = false
 	end
 end
 
@@ -2597,6 +2818,10 @@ local function LoadSettings()
 			saved.movers = type(saved.movers) == "table" and saved.movers or {}
 			ns.MigrateText(saved.options, saved.options)
 			NormaliseValues(saved.options)
+			-- A profile saved before 0.5.19 with every module that is on by default off keeps Bags off (KeepBagsOff), once.
+			if not db.bagsMigrated then
+				KeepBagsOff(saved.options)
+			end
 			NormaliseSpots(saved.movers)
 		end
 	end
@@ -2607,6 +2832,7 @@ local function LoadSettings()
 		end
 	end
 	db.soundsMigrated = true
+	db.bagsMigrated = true
 	if db.profiles[DEFAULT] == nil then
 		db.profiles[DEFAULT] = { options = {}, movers = {} }
 	end
