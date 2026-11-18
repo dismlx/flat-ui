@@ -29,8 +29,8 @@ local _, ns = ...
 -- protected too, so while the game protects the Character window in a fight the button is made, anchored, levelled, shown and hidden only after
 -- it (ns.OutOfCombat), and meanwhile only its alpha changes (SetAlpha); with the window not protected, as Camelot's CharacterFrame is not
 -- (CharacterFrame.xml:403, Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.xml:566), it also changes in a fight. The colours are painted
--- each time the Character window opens and as the Gear comparison window opens or closes. Everything runs through ns.EachPart, so three faults stop the button alone with a line for
--- /flatui status, and the button hides then. Every frame and texture here is Flat UI's own.
+-- each time the Character window opens and as the Gear comparison window opens or closes. Everything runs through ns.EachPart, so three faults
+-- stop the button alone with a line for /flatui status, and the button hides then. Every frame and texture here is Flat UI's own.
 
 local KEY, PART, ROW = "chat", "gear button", "chat.gearCharButton"
 local NAME = "FlatUIGearButton"
@@ -477,8 +477,9 @@ function Start()
 end
 
 -- ShowUIPanel ran: when it opens the Character window, the driver looks, and the first look paints the button in the Windows page's colours of now.
+-- With the row off and no button made, nothing starts: the row's change starts the driver.
 local function Panel(frame)
-	if frame ~= nil and not IsSecret(frame) and rawequal(frame, _G.CharacterFrame) then
+	if frame ~= nil and not IsSecret(frame) and rawequal(frame, _G.CharacterFrame) and (B.button ~= nil or ns.Get(ROW) == true) then
 		Start()
 	end
 end

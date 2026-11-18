@@ -242,6 +242,21 @@ local ADDON_NAME, ns = ...
 -- action bar, stays on the cursor, and so does a spell dropped on it (GetCursorInfo, and GetMacroSpell for a macro). It writes GameTooltip for its
 -- rows, its switch and its item (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and Hide while IsOwned says one of its frames owns it),
 -- never in a fight.
+-- With Total of a cast, a spell's tooltip also has its total with the player's stats and a dim line of what a cast does on average, a second and
+-- a point of mana; the mana is the game's cost of the spell (C_Spell.GetSpellPowerCost, mana only). The window has a grip of its own at its bottom
+-- right corner (SetResizable, SetResizeBounds, StartSizing and StopMovingOrSizing on its own frame), its size kept in FlatUICharDB.gearWindow, which
+-- the movers' box of it follows, and a second item box, Against, that an item dropped on it or chosen in the finder fills; the weight of each spell
+-- is kept with the spells in FlatUICharDB.gearSpells. Its Find button and the Item finder row show the item finder, FlatUIGearSearch, a frame of its
+-- own on UIParent hung at the window's right edge, which hides with it. The finder searches Flat UI's own item index (ItemIndex.lua, made from the
+-- game's client data by tools/dev/make_itemindex.py) and the bags, bank and other characters Bags records; for Best for me it asks the game to
+-- load the items of the page it shows (C_Item.RequestLoadItemDataByID) and reads them (C_Item.GetItemInfo, C_Item.GetItemInfoInstant). A Shift-click
+-- on a result links the item in chat and a Ctrl-click tries it on in the game's dressing room (DressUpItemLink), as a click on an item in the
+-- game's windows does.
+-- Its Gear comparison button (GearButton.lua) is a frame of its own, FlatUIGearButton, on UIParent, anchored to the top right of CharacterFrame
+-- (SetPoint with the window as the frame it hangs from) and never parented to it; of the window it reads only whether it shows, its strata and level
+-- and whether the game protects it. It follows ShowUIPanel with hooksecurefunc (ns.FollowGlobal) to see the window open, and a frame of its own looks
+-- ten times a second, while the window shows, whether it still does. With an item on the cursor it gives one lifted from a slot back with
+-- ClearCursor, as the window does, and its tooltip is GameTooltip, never in a fight.
 -- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
 -- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
 -- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
@@ -279,7 +294,10 @@ local SETTLE = 0.2
 local READERS = {
 	["castbars.castColour"] = "hud", ["castbars.channelColour"] = "hud", ["castbars.craftColour"] = "hud",
 	-- The windows of Bags and the Gear comparison window of Chat and tooltips (GearWindow.lua) take the look of the Windows page: Window opacity,
-	-- Button and slot colour, Highlight colour and Icon crop. The chat input box takes the Highlight colour as well (Border while typing).
+	-- Button and slot colour, Highlight colour and Icon crop. The chat input box takes the Highlight colour as well (Border while typing). The Gear
+	-- comparison button on the Character window (GearButton.lua) takes it each time that window opens. The rows of the Spells and gear tab are read
+	-- by Chat and tooltips alone, whose refresh they bring, and Button on the Character window by its own call (Config.lua, changed), so none of
+	-- them is here.
 	["windows.accent"] = { "chat", "bags" }, ["windows.panel"] = { "chat", "bags" }, ["windows.opacity"] = { "chat", "bags" },
 	["windows.crop"] = { "chat", "bags" },
 	-- The count on Sell junk (N) of Bags follows Sell at most 12 at a time of Errands (ns.ErrandsJunkCount).
