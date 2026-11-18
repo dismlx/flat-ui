@@ -60,7 +60,19 @@ local _, ns = ...
 -- normalized speed where its data says so, and rolls the Special line. Threat is damage x T x G + the landed share x (F + A x attack power) x G,
 -- G the multipliers SpellModel.lua finds in force (M.Multiplier). Haste: a new weapon swings at its own speed x (hasted now / own now) x (1 + h) /
 -- (1 + h'), h and h' the haste of the rating worn now and with the item. The absolute numbers are before armor, resistances, and talents and buffs
--- the stats do not show; the percent cancels them.
+-- the stats do not show; the percent cancels them. A figure is an estimate when a value it is built from is (design 3.5): a damage or healing
+-- figure by its parts, the model and its line of the attack table; a threat figure by the threat's own values and multipliers too, and by the
+-- damage it multiplies.
+--
+-- G.Compare's answer, as GearLines.lua and GearWindow.lua read it (design 4.3). Its candidates come in the order the game names them, then by slot,
+-- each { slots, label, empty, game, offEmpty, mean, header, notCounted, vs, noChange, rows }: slots the INVSLOT numbers the item would take, label
+-- their words ("Finger 1", "both hands"), empty and game as G.Candidates gives them, offEmpty a one-hander over a worn two-hander, whose off hand
+-- is left empty. A row is { line, figure, now, with, estimate, basis, perSecond, why }: with is the player with the item in that slot and now the
+-- player without it, which for an item to wear is with what the slot holds now and for a worn item (G.Compare(slot), the Character window) with
+-- that slot empty, so with - now is what the item gives in both; perSecond says the figure is a second (dps, a second, or the threat of what rides
+-- on the swings). why, each notCounted and vs, notYet and random are the player's words (random may be true), and quiet marks a why no line
+-- should show. Every option a caller passes is read: listVersion, mode, data, guid, most, role, against, facing, rules, lowRank and inputs; any
+-- other is ignored. S.stats.per[stat].crit and .spellCrit are percent a point, as SpellModel.lua keeps them.
 
 local G = {}
 ns.GearModel = G
@@ -108,15 +120,12 @@ local K = {
 	-- The primary stats, and those whose change needs the client's rates: Strength (attack power, block value), Agility (attack power, ranged attack
 	-- power, crit), Intellect (spell crit). Stamina and Spirit change none of the lines.
 	STAT_NAMES = { "Strength", "Agility", "Stamina", "Intellect", "Spirit" }, RATED = { [1] = true, [2] = true, [4] = true },
-	-- A gain of crit a point of a stat that is below this is a fraction, as the conversion calls answer (the sheet multiplies it by 100,
-	-- Camelot/PaperDollFrameStats.lua:318): as a fraction no class gets 0.004 a point even at level 1, and in percent none gets under 0.016 at level
-	-- 60 (the players' sheets Efficient Games read, CC BY 4.0, and the client's tables at 60 as wowsims/forever generates them).
-	FRACTION = 0.01,
 	-- Seal of Righteousness' hit: its value / 100 x the weapon's speed x 1.2 with a two-hander, 0.85 with a one-hander from 2.0 sec up and 0.2 less a
 	-- second under it (wowsims/forever, MIT: docs/evidence/EV-0059). Seal of Command procs 7 times a minute on white hits that land
-	-- (sim/paladin/seal_of_command.go:81); no other proc's rate is known, so another gets no figure a second.
+	-- (sim/paladin/seal_of_command.go:81); no other proc's rate is known (Holy Shield's comes with blocks), so another is a cast of one proc.
 	SEAL = { two = 1.2, one = 0.85, at = 2.0, step = 0.2 }, PPM = { ["seal of command"] = 7 },
-	-- The comparison kinds whose figure rides on the swings or shots (damage and threat a second), the heals, and those whose second is one of the effect.
+	-- The comparison kinds whose figure rides on the swings or shots (damage and threat a second): a proc only with its rate (PPM). The heals, and
+	-- those whose second is one of the effect.
 	PER_SECOND = { auto = true, shot = true, wand = true, seal = true, proc = true },
 	HEALS = { heal = true, hot = true }, LASTING = { dot = true, hot = true, channel = true },
 	-- The hit table read with every kind of attack (C.Inputs' spec.kinds), so a line added later never waits for the next read.
@@ -143,7 +152,7 @@ local K = {
 	},
 	-- The tables of S.stats a copy changes.
 	STATS_TABLES = { "sp", "crit", "haste", "rating", "stat", "dmg", "rdmg", "speed" },
-	-- Why there are no lines, in words GearLines.lua and GearWindow.lua can show.
+	-- Why there are no lines, or a line has no figure (G.Expect), in words GearLines.lua and GearWindow.lua can show.
 	WHY = {
 		data = "The gear comparison has no spell data.", item = "No item to compare.", worn = "This item is not worn.",
 		none = "Not compared: it gives your spells nothing the comparison counts.", loading = "The game has not loaded this item yet.",
@@ -151,6 +160,9 @@ local K = {
 		ammo = "The game does not use ammunition for you; not compared.", unique = "You wear as many of its kind as the game allows; not compared.",
 		weapon = "Flat UI could not read this weapon's damage and speed.", combat = "Gear lines show out of combat.",
 		stats = "The game has not given your stats yet.", empty = "That slot is empty.",
+		notCompared = "Flat UI cannot work this spell out.", pet = "An item does not change your pet's spells.",
+		rank = "Flat UI's data has no rank of this spell.", inputs = "Flat UI has not read your hit table yet.",
+		withheld = "The game withheld part of your hit table.",
 	},
 }
 
@@ -468,6 +480,15 @@ end
 local function LinkID(link)
 	local id = link and link:match("item:(%d+)")
 	return Num(id and tonumber(id))
+end
+
+-- The permanent enchant of a link, its second field (item:id:enchant:...), as SpellModel.lua reads a worn one's, or nil.
+local function EnchantOf(link)
+	local id = link and tonumber(link:match("item:%-?%d+:(%d+)") or "")
+	if Num(id) and id > 0 then
+		return id
+	end
+	return nil
 end
 
 local function Into(source, out)
@@ -1056,18 +1077,6 @@ local function HasteScale(stats, rating, amount, size)
 	return 1
 end
 
--- A gain of crit a point of a stat in percent (K.FRACTION).
-local function CritPerPoint(value)
-	value = Num(value)
-	if not value then
-		return nil
-	end
-	if math.abs(value) < K.FRACTION then
-		return value * 100
-	end
-	return value
-end
-
 local function FormOf(state)
 	return K.FORMS[Num(state.form) or 0]
 end
@@ -1132,10 +1141,11 @@ local function CopyStats(stats)
 	return copy
 end
 
--- The weapons, shield and ammunition with the item in its slots (nil for the slots emptied: G.Without).
+-- The links, permanent enchants, weapons, shield and ammunition with the item in its slots (nil for the slots emptied: G.Without), so a threat
+-- enchant (D.RULES' enchant and slot) or item follows what is worn in the copy, as M.Multiplier reads it.
 local function Wear(state, state2, item, slots)
 	for _, slot in ipairs(slots) do
-		state2.links[slot], state2.weapons[slot] = nil, nil
+		state2.links[slot], state2.weapons[slot], state2.enchants[slot] = nil, nil, nil
 	end
 	local slot = slots[1]
 	if not item then
@@ -1148,7 +1158,7 @@ local function Wear(state, state2, item, slots)
 		end
 		return
 	end
-	state2.links[slot] = item.link
+	state2.links[slot], state2.enchants[slot] = item.link, EnchantOf(item.link)
 	if slot == K.AMMO then
 		state2.ammo = item.ammo or state.ammo
 		return
@@ -1206,7 +1216,8 @@ local function Sums(delta, info, D)
 	return sums
 end
 
--- Strength, Agility and Intellect by the client's rates read with the stats (per[stat]); with none, the stat is named as not counted.
+-- Strength, Agility and Intellect by the client's rates read with the stats (per[stat]: attack power a point, and crit in percent a point, the unit
+-- of S.stats.crit, as SpellModel.lua keeps them); with none, the stat is named as not counted.
 local function Primary(stats, stats2, sums, info)
 	local swap = stats2.swap
 	for stat = 1, 5 do
@@ -1216,7 +1227,7 @@ local function Primary(stats, stats2, sums, info)
 			if K.RATED[stat] then
 				local per = Table(Field(stats.per, stat))
 				local ap, rap = per and Num(per.ap), per and Num(per.rap)
-				local crit, spellCrit = per and CritPerPoint(per.crit), per and CritPerPoint(per.spellCrit)
+				local crit, spellCrit = per and Num(per.crit), per and Num(per.spellCrit)
 				if not (ap or rap or crit or spellCrit) then
 					AddOnce(info.notCounted, ("%s (your stats were not read yet)"):format(K.STAT_NAMES[stat]))
 				else
@@ -1621,12 +1632,32 @@ local function Share(value)
 	return number and number / 100 or nil
 end
 
+-- The basis of a value a damage or healing figure is built from (a part's, design 3.5): an estimate marks it, a measured value makes it "m".
 local function Basis(ctx, letter)
 	if letter == "e" then
 		ctx.estimate = true
 	elseif letter == "m" and ctx.basis == "c" then
 		ctx.basis = "m"
 	end
+end
+
+-- The same for a value of the threat alone (its letter by rank, its attack power share, the multipliers): the threat figure's basis.
+local function ThreatBasis(ctx, letter)
+	if letter == "e" then
+		ctx.threatEstimate = true
+	elseif letter == "m" and ctx.threatBasis == "c" then
+		ctx.threatBasis = "m"
+	end
+end
+
+-- The worse of two bases, c, then m, then e (design 3.5).
+local function Worse(a, b)
+	if a == "e" or b == "e" then
+		return "e"
+	elseif a == "m" or b == "m" then
+		return "m"
+	end
+	return "c"
 end
 
 -- A letter of a basis given by rank ("mmmmmeeee"), or the one letter.
@@ -1757,7 +1788,7 @@ end
 
 -- The share of a cast's amount the entry deals on its line, with crits, and the share that lands: heals do not miss and crit as spells; a Physical
 -- spell on the Spell line takes the sheet's spell crit and 1.5, an estimate (no source says which crit it rolls); a Ranged line with no ranged weapon
--- is an estimate too.
+-- is an estimate too. Such a line is an estimate of the line itself (lineEstimate), which a flat threat's landed share takes as well.
 local function LineFactor(ctx)
 	local entry = ctx.entry
 	if K.HEALS[entry.cmp] then
@@ -1771,12 +1802,12 @@ local function LineFactor(ctx)
 	local roll = entry.roll
 	if roll == "spell" then
 		if ctx.physical then
-			ctx.estimate = true
+			ctx.estimate, ctx.lineEstimate = true, true
 		end
 		return OnSpell(FindLine(ctx.read, "spell"), CritMultiplier(ctx, "spell"))
 	elseif roll == "ranged" then
 		if ctx.read.noRanged then
-			ctx.estimate = true
+			ctx.estimate, ctx.lineEstimate = true, true
 		end
 		return OnWeapon(FindLine(ctx.read, "ranged"), CritMultiplier(ctx, "ranged"), entry.nb)
 	end
@@ -1937,16 +1968,21 @@ local function HandStrike(ctx, part, index, slot)
 	return (weapon + flat + Base(ctx, index)) * multiple * pct
 end
 
--- A weapon part of its hand (h): main, off, ranged, or both hands while dual wielding.
+-- A weapon part of its hand (h): main, off, ranged, or both hands while dual wielding; nil for a hand with no weapon. Its basis counts only when
+-- it deals something.
 local function WeaponPart(ctx, part, index)
-	Basis(ctx, part.b)
-	local hand = part.h or "main"
+	local hand, value = part.h or "main", nil
 	if hand == "both" then
 		local main = HandStrike(ctx, part, index, K.MAIN)
 		local off = main and ctx.state.dual == true and HandStrike(ctx, part, index, K.OFF) or nil
-		return main and main + (off or 0) or nil
+		value = main and main + (off or 0) or nil
+	else
+		value = HandStrike(ctx, part, index, hand == "off" and K.OFF or hand == "ranged" and K.RANGED or K.MAIN)
 	end
-	return HandStrike(ctx, part, index, hand == "off" and K.OFF or hand == "ranged" and K.RANGED or K.MAIN)
+	if value ~= nil then
+		Basis(ctx, part.b)
+	end
+	return value
 end
 
 -- The cast's seconds for "a second of casting": C_Spell.GetSpellInfo's castTime, else the rank's, scaled by the item's spell haste, the global cooldown
@@ -1986,18 +2022,42 @@ end
 
 local EXPECT = {}
 
+-- Whether a part counts for the entry's kind: a heal or HoT counts its healing parts, any other kind its other parts, so a spell that heals an ally
+-- or hurts an enemy (Holy Shock, Penance, Holy Nova) counts what its kind is (design 2.3: a heal's figure is its healing, 2.5: SP is spell healing
+-- for a heal); the spell lines show both shares.
+local function Suits(entry, part)
+	if K.HEALS[entry.cmp] then
+		return part[1] == "heal"
+	end
+	return part[1] ~= "heal"
+end
+
+-- True when an entry has a weapon part of a hand other than the off hand. Then its off hand's part adds nothing while no off-hand weapon is worn
+-- (Whirlwind, Mutilate), and only a strike of the off hand alone (Shank) needs one.
+local function MainWeapon(entry)
+	for _, part in ipairs(Table(entry.parts) or {}) do
+		if part[1] == "wpn" and part.h ~= "off" then
+			return true
+		end
+	end
+	return false
+end
+
 -- Spells, heals, their periodic and channelled kinds, weapon and attack power strikes and finishers: the sum of the parts on the entry's line, a cast
 -- and a second of casting (of the effect for a DoT, HoT or channel); a next-swing strike a cast only. A strike that needs a weapon its hand lacks deals
 -- nothing.
 local function Damage(ctx)
 	local entry, amount, missing = ctx.entry, 0, false
+	local spare = MainWeapon(entry)
 	for index, part in ipairs(Table(entry.parts) or {}) do
-		if part[1] == "wpn" then
+		if not Suits(entry, part) then
+			-- Left out: the other half of a spell that heals or hurts.
+		elseif part[1] == "wpn" then
 			local value = WeaponPart(ctx, part, index)
-			if value == nil then
-				missing = true
-			else
+			if value ~= nil then
 				amount = amount + value
+			elseif not (part.h == "off" and spare) then
+				missing = true
 			end
 		else
 			amount = amount + PartAmount(ctx, part, index) * ctx.pct
@@ -2007,7 +2067,7 @@ local function Damage(ctx)
 	if missing then
 		factor, land = 0, land or 0
 	elseif not factor then
-		ctx.why = "withheld"
+		ctx.why = K.WHY.withheld
 		return
 	end
 	ctx.cast, ctx.land = amount * factor, land
@@ -2049,7 +2109,7 @@ function EXPECT.auto(ctx)
 	local factor = OnSwing(ctx, main, m)
 	local swing = SwingMean(ctx, K.MAIN)
 	if not (factor and swing) then
-		ctx.why = "withheld"
+		ctx.why = K.WHY.withheld
 		return
 	end
 	local hit = swing * factor
@@ -2082,7 +2142,7 @@ function EXPECT.shot(ctx)
 	local shot = (mean + ammo * own + (Num(ctx.stats.rap) or 0) / ctx.perDps * own + (Num(damage.flat) or 0)) * (Num(damage.pct) or 1)
 	local factor = OnWeapon(FindLine(ctx.read, "ranged"), CritMultiplier(ctx, "ranged"), ctx.entry.nb)
 	if not factor then
-		ctx.why = "withheld"
+		ctx.why = K.WHY.withheld
 		return
 	end
 	ctx.cast = shot * factor
@@ -2099,7 +2159,7 @@ function EXPECT.wand(ctx)
 	end
 	local factor = OnSpell(FindLine(ctx.read, "spell"), CritMultiplier(ctx, "spell"))
 	if not factor then
-		ctx.why = "withheld"
+		ctx.why = K.WHY.withheld
 		return
 	end
 	ctx.cast = mean * (Num(Field(ctx.stats.rdmg, "pct")) or 1) * factor
@@ -2135,22 +2195,33 @@ function EXPECT.seal(ctx)
 	local crit = special and Share(Field(special.parts, "crit"))
 	local landed = Landed(ctx)
 	if not (crit and landed) then
-		ctx.why = "withheld"
+		ctx.why = K.WHY.withheld
 		return
 	end
 	ctx.cast = hit * (1 + crit * (CritMultiplier(ctx, "special") - 1))
 	ctx.second = ctx.cast * landed / Speed(ctx, "main", K.MAIN)
 end
 
--- A proc (Seal of Command): its parts (0.7 of the weapon hit and 0.203 of Holy spell damage, a Holy strike with no UnitDamage percent or flat bonus)
--- on its line; a second at its procs a minute on the landed white swings, the chance a swing at the weapon's own speed (wowsims/forever
--- sim/paladin/seal_of_command.go:62-81). An estimate: the rate is the simulator's.
+-- True for an entry whose figures ride on the swings or shots: Attack, Auto Shot, Shoot, the seals, and a proc with a known rate (K.PPM).
+local function OnSwings(entry)
+	return K.PER_SECOND[entry.cmp] == true and (entry.cmp ~= "proc" or K.PPM[entry.key] ~= nil)
+end
+
+-- A proc: its parts on its line, a cast being one proc (Seal of Command: 0.7 of the weapon hit and 0.203 of Holy spell damage, a Holy strike with no
+-- UnitDamage percent or flat bonus; Holy Shield: its spell power part on a block). With a rate (K.PPM) it rides on the landed white swings: a second
+-- at its procs a minute, the chance a swing at the weapon's own speed (wowsims/forever sim/paladin/seal_of_command.go:62-81), and its threat a
+-- second, an estimate since the rate is the simulator's. With none (Holy Shield, whose procs come with blocks) it has no second, and its threat is
+-- that of one proc.
 function EXPECT.proc(ctx)
 	Damage(ctx)
-	ctx.perSecond, ctx.estimate, ctx.second, ctx.time = true, true, nil, nil
+	ctx.second, ctx.time = nil, nil
+	if not OnSwings(ctx.entry) then
+		return
+	end
+	ctx.perSecond, ctx.estimate = true, true
 	local rate, landed = K.PPM[ctx.entry.key], Landed(ctx)
 	local _, own = HandMean(ctx, K.MAIN)
-	if ctx.cast and rate and landed and own then
+	if ctx.cast and landed and own then
 		ctx.second = ctx.cast * rate / 60 * landed * own / Speed(ctx, "main", K.MAIN)
 	end
 end
@@ -2167,7 +2238,7 @@ end
 
 -- Threat ---------------------------------------------------------------------------------------------------------------------------------------
 
--- The multipliers in force for the entry (M.Multiplier): G, an estimate when their basis is; 1 without the model.
+-- The multipliers in force for the entry (M.Multiplier): G, with their basis the threat's; 1 without the model.
 local function Multiplier(ctx)
 	local M = Model()
 	if not (M and type(M.Multiplier) == "function") then
@@ -2177,9 +2248,7 @@ local function Multiplier(ctx)
 	if not ok or not Finite(value) then
 		return 1
 	end
-	if basis == "e" then
-		ctx.estimate = true
-	end
+	ThreatBasis(ctx, basis)
 	return value
 end
 
@@ -2218,7 +2287,7 @@ end
 local function ThreatParts(ctx, spec)
 	local kind, rank = spec and spec.k, ctx.rankIndex
 	if spec then
-		Basis(ctx, Letter(spec.b, rank))
+		ThreatBasis(ctx, Letter(spec.b, rank))
 	end
 	if K.HEALS[ctx.entry.cmp] and (kind == nil or kind == "heal") then
 		local paladin = Num(Field(ctx.D.HEAL_THREAT, ctx.entry.key))
@@ -2232,7 +2301,7 @@ local function ThreatParts(ctx, spec)
 	elseif kind == "flat" then
 		return 0, ThreatFlat(ctx, spec)
 	elseif kind == "more" then
-		ctx.estimate = true
+		ctx.threatEstimate = true
 		return Num(Pick(spec.v, rank)) or 1, 0
 	elseif kind == "drop" then
 		return 0, -math.abs(ThreatFlat(ctx, spec))
@@ -2249,6 +2318,18 @@ local function ThreatParts(ctx, spec)
 	return nil
 end
 
+-- The threat figure's basis from what it is built from (design 3.5): its own values (ThreatBasis), the damage or healing it multiplies when T is not
+-- 0, and the line's landed share for a flat amount.
+local function ThreatFlags(ctx, T, flat)
+	if T ~= 0 then
+		ctx.threatEstimate = ctx.threatEstimate or ctx.estimate
+		ThreatBasis(ctx, ctx.basis)
+	end
+	if flat and ctx.lineEstimate then
+		ctx.threatEstimate = true
+	end
+end
+
 -- threat = damage x T x G + the landed share x (F + A x attack power) x G (the design's 2.5); a swing's or shot's a second (damage a second x T x G);
 -- Fade's temporary amount alone, with no G. threatSecond: a second of casting or of the effect.
 local function Threat(ctx)
@@ -2263,19 +2344,21 @@ local function Threat(ctx)
 			ctx.threat = ctx.second * T * G
 			ctx.threatSecond = ctx.threat
 		end
+		ThreatFlags(ctx, T, false)
 		return
 	end
 	local A = spec and Num(spec.ap) or 0
 	if A ~= 0 then
-		Basis(ctx, spec.apb)
+		ThreatBasis(ctx, spec.apb)
 	end
+	ThreatFlags(ctx, T, F ~= 0 or A ~= 0)
 	-- Feint and Fade change the player's own threat: they land whole.
 	local kind = spec and spec.k
 	local land = (kind == "drop" or kind == "temp") and 1 or ctx.land
 	local flat = 0
 	if F ~= 0 or A ~= 0 then
 		if not land then
-			ctx.why = ctx.why or "withheld"
+			ctx.why = ctx.why or K.WHY.withheld
 			return
 		end
 		flat = land * (F + A * (Num(ctx.stats.ap) or 0))
@@ -2315,42 +2398,43 @@ local function RankOf(entry, line)
 	return nil
 end
 
--- The expected values of a line (the design's 2.5): { cast, second, threat, threatSecond, basis, why } and estimate, for line { entry, rank, id },
--- with opts { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table inputs (when none, G.Inputs(), or a read
--- asked for while there is none yet). stats may be a copy G.With or G.Without made: its change (swap) goes into the hit table. why: "not compared" (no
--- cmp), "pet" (a pet's spell: an item does not change the pet), "no data", "no stats", "no rank", "no inputs" or "withheld" (the table lacks a part it
--- needs).
+-- The expected values of a line (the design's 2.5): { cast, second, threat, threatSecond, basis, why }, for line { entry, rank, id }, with opts
+-- { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table inputs (when none, G.Inputs(), or a read asked
+-- for while there is none yet). stats may be a copy G.With or G.Without made: its change (swap) goes into the hit table. basis and estimate are those
+-- of cast and second, threatBasis and threatEstimate those of threat and threatSecond (design 3.5); perSecond says the figures ride on the swings or
+-- shots, so threat is a second too. why is the player's words (K.WHY): a spell it cannot work out, a pet's spell, no data, no stats, no rank, no hit
+-- table, or a part of the table the game withheld.
 function G.Expect(line, state, stats, opts)
 	local result = {}
 	line = Table(line)
 	local entry = line and Table(line.entry)
 	local fn = entry and EXPECT[entry.cmp]
 	if not fn then
-		result.why = "not compared"
+		result.why = K.WHY.notCompared
 		return result
 	elseif entry.pet then
-		result.why = "pet"
+		result.why = K.WHY.pet
 		return result
 	end
 	local D, C = Data(), Calc()
 	stats = Table(stats)
 	if not (D and C) then
-		result.why = "no data"
+		result.why = K.WHY.data
 		return result
 	elseif not stats then
-		result.why = "no stats"
+		result.why = K.WHY.stats
 		return result
 	end
 	state, opts = Table(state) or {}, Table(opts) or {}
 	local rankIndex, rank = RankOf(entry, line)
 	if not rank then
-		result.why = "no rank"
+		result.why = K.WHY.rank
 		return result
 	end
 	local M = Model()
 	local inputs = Table(opts.inputs) or G.Inputs() or (M and InputsNow(M))
 	if not inputs then
-		result.why = "no inputs"
+		result.why = K.WHY.inputs
 		return result
 	end
 	local spec = Spec(opts, state)
@@ -2365,9 +2449,10 @@ function G.Expect(line, state, stats, opts)
 	end
 	local ctx = { D = D, model = D.MODEL, entry = entry, rank = rank, rankIndex = rankIndex, id = Num(line.id) or Num(rank[1]),
 		level = Num(inputs.level) or Num(state.level) or K.MAX_LEVEL, state = state, stats = stats, swap = swap, inputs = inputs,
-		read = TableFor(state, stats, inputs, spec, C, version), lowRank = spec.lowRank, basis = "c", estimate = false, form = FormOf(state),
-		physical = physical, pct = physical and (Num(damage.pct) or 1) or 1, castScale = swap and Num(swap.castScale) or 1,
-		offFactor = swap and Num(swap.offFactor) or OffFactor(state, stats), perDps = Num(D.MODEL.apPerDps) or 14 }
+		read = TableFor(state, stats, inputs, spec, C, version), lowRank = spec.lowRank, basis = "c", estimate = false, threatBasis = "c",
+		threatEstimate = false, lineEstimate = false, form = FormOf(state), physical = physical, pct = physical and (Num(damage.pct) or 1) or 1,
+		castScale = swap and Num(swap.castScale) or 1, offFactor = swap and Num(swap.offFactor) or OffFactor(state, stats),
+		perDps = Num(D.MODEL.apPerDps) or 14 }
 	fn(ctx)
 	if not ctx.why then
 		Threat(ctx)
@@ -2375,14 +2460,17 @@ function G.Expect(line, state, stats, opts)
 	result.cast, result.second, result.threat, result.threatSecond = Num(ctx.cast), Num(ctx.second), Num(ctx.threat), Num(ctx.threatSecond)
 	result.basis = ctx.estimate and "e" or ctx.basis
 	result.estimate = ctx.estimate == true
+	result.threatBasis = ctx.threatEstimate and "e" or ctx.threatBasis
+	result.threatEstimate = ctx.threatEstimate == true
+	result.perSecond = ctx.perSecond == true
 	result.why = ctx.why
 	return result
 end
 
 -- Which figure a line shows (the design's 2.3): "cast", "second", "threat", "dps" or nil, mode "tooltip" or the window's switch ("cast", "second",
 -- "threat"). A tank's line and a line with no damage give "threat" in the tooltip, a line with no damage in every mode; the lines on the swings or
--- shots (Attack, Auto Shot, Shoot and the seals) "dps" in the tooltip and "cast" (a swing, shot, hit or proc) or "second" in the window; a next-swing
--- strike nil in "second".
+-- shots (Attack, Auto Shot, Shoot, the seals and a proc with its rate) "dps" in the tooltip and "cast" (a swing, shot, hit or proc) or "second" in
+-- the window; a next-swing strike nil in "second".
 function G.Figure(line, role, mode)
 	local entry = Table(Field(line, "entry"))
 	local cmp = entry and entry.cmp
@@ -2399,7 +2487,7 @@ function G.Figure(line, role, mode)
 		return "cast"
 	elseif role == "tank" then
 		return "threat"
-	elseif K.PER_SECOND[cmp] then
+	elseif OnSwings(entry) then
 		return "dps"
 	end
 	return "cast"
@@ -2440,8 +2528,9 @@ local function Now(line, state, stats, opts, stamp)
 	return value
 end
 
--- The rows of a candidate: { line, now, with, figure, estimate, why } for each chosen line. reverse: what a worn item gives, now being the slot empty
--- and with as worn, so with - now reads the same way as for an item to wear.
+-- The rows of a candidate: { line, now, with, figure, estimate, basis, perSecond, why } for each chosen line, with the basis of its figure (the
+-- threat's for threat) and whether its figure is a second. reverse: what a worn item gives, now being the slot empty and with as worn, so with - now
+-- reads the same way as for an item to wear.
 local function Rows(chosen, state, stats, state2, stats2, opts, stamp, mode, role, reverse)
 	local rows = {}
 	for _, line in ipairs(chosen) do
@@ -2453,7 +2542,14 @@ local function Rows(chosen, state, stats, state2, stats2, opts, stamp, mode, rol
 				worn, other = other, worn
 			end
 			row.now, row.with = FigureOf(worn, figure), FigureOf(other, figure)
-			row.estimate = worn.estimate == true or other.estimate == true
+			if figure == "threat" then
+				row.estimate = worn.threatEstimate == true or other.threatEstimate == true
+				row.basis = Worse(worn.threatBasis, other.threatBasis)
+			else
+				row.estimate = worn.estimate == true or other.estimate == true
+				row.basis = Worse(worn.basis, other.basis)
+			end
+			row.perSecond = figure == "dps" or figure == "second" or (figure == "threat" and (worn.perSecond == true or other.perSecond == true))
 			row.why = worn.why or other.why
 		end
 		rows[#rows + 1] = row
@@ -2610,11 +2706,12 @@ local function Remember(key, result)
 end
 
 -- The comparison of an item to wear (a link) or of a worn item (its slot number) for the chosen lines (the design's 2.3, 2.4): { header, candidates =
--- { { label, slots, mean, rows = { { line, now, with, figure, estimate } } } }, notCounted, vs, random, notYet, noChange, why }, and best (the
--- candidate the tooltip shows), quiet (why is no line to show), sizes (the fixed rating sizes stood in) and old (a result from before the fight).
--- lines: the chosen lines (ns.GearChosen() when nil). opts: { listVersion, mode, data (the post call's data, for its lines and guid), guid, most,
--- role, against, facing, rules, lowRank }. Kept by link (or slot), M.Version(), opts.listVersion and opts.mode, with the rows' choices; in a fight
--- and with stats from before it, the last result for the item, else why.
+-- { { label, slots, mean, rows = { { line, now, with, figure, estimate, basis, perSecond, why } } } }, notCounted, vs, random, notYet, noChange, why },
+-- and best (the candidate the tooltip shows), quiet (why is no line to show), sizes (the fixed rating sizes stood in) and old (a result from before
+-- the fight); the header of this file says what each holds. lines: the chosen lines (ns.GearChosen() when nil). opts: { listVersion, mode, data (the
+-- post call's data, for its lines and guid), guid, most, role, against, facing, rules, lowRank, inputs (the hit table's, else those of the last
+-- read) }. Kept by link (or slot and the link worn there), M.Version(), opts.listVersion and opts.mode, with the rows' choices; in a fight and with
+-- stats from before it, the last result for the item, else why.
 function G.Compare(itemOrSlot, lines, opts)
 	opts = Table(opts) or {}
 	local mode = K.MODES[opts.mode] and opts.mode or "tooltip"
@@ -2631,7 +2728,9 @@ function G.Compare(itemOrSlot, lines, opts)
 		result.why, result.quiet = K.WHY.item, true
 		return result
 	end
-	local subject = slot and ("slot " .. slot) or link
+	local state = Table(Ask(M.State)) or {}
+	-- A worn item is kept by its slot and the link worn there, so a fight never shows what another item in that slot gave.
+	local subject = slot and ("slot " .. slot .. " " .. (LinkAt(state, slot) or "")) or link
 	local stats = Table(Ask(M.Stats))
 	local again = subject .. "|" .. mode
 	if InCombat() or (stats and stats.old == true) then
@@ -2646,7 +2745,6 @@ function G.Compare(itemOrSlot, lines, opts)
 		result.why = K.WHY.stats
 		return result
 	end
-	local state = Table(Ask(M.State)) or {}
 	local spec = Spec(opts, state)
 	local role = Text(opts.role) or Role(state)
 	local listVersion = Num(opts.listVersion) or Num(type(ns.GearListVersion) == "function" and Ask(ns.GearListVersion)) or 0
@@ -2654,7 +2752,7 @@ function G.Compare(itemOrSlot, lines, opts)
 	if cache[key] then
 		return cache[key]
 	end
-	local inputs = InputsNow(M)
+	local inputs = Table(opts.inputs) or InputsNow(M)
 	if not inputs then
 		result.why = K.WHY.stats
 		return result
