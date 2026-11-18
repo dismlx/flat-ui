@@ -1,0 +1,687 @@
+{
+ "about": "The hand-kept decisions of the spell data (design 3.1): what the client rows and the measured values leave to judgement. Each entry has its reason (why) and its source. tools/dev/make_spelltips.py applies them over coef.json, threat.json, gear.json and client_spells.json, and refuses an entry that names a key, a spell or a part it does not know.",
+ "downrank": {
+  "grace": 17,
+  "step": 0.05,
+  "basis": "e",
+  "why": "Blizzard's client text says spell ranks far below the caster's level benefit less from spell damage and healing (STAT_SPELLPOWER_TOOLTIP, STAT_SPELLHEALING_TOOLTIP) but gives no formula. ForeverChanges measured heals on beta build 1.60.1.70338 up to level 30: a rank keeps its full bonus for 17 levels after it is learned and loses 5% a level from the 18th. Ozgar's calculator uses 16 levels; a summary of Blizzard's notes of November 2 says the penalty was removed at launch. Its size is not known, so the factor is an estimate with a row to turn it off.",
+  "source": [
+   "client text STAT_SPELLPOWER_TOOLTIP and STAT_SPELLHEALING_TOOLTIP (GlobalStrings, build 1.60.1.70938)",
+   "ForeverChanges (foreverchanges.pro/downranking)",
+   "Blizzard, WoW: Forever development notes of 2026-10-01 and 2026-11-02 (read through search summaries)"
+  ]
+ },
+ "threat_basis": {
+  "overpower": {
+   "b": "m",
+   "why": "Measured on Forever at 0.75 of its damage.",
+   "source": [
+    "wowsims/forever docs/evidence/EV-0043"
+   ]
+  },
+  "bloodthirst": {
+   "b": "e",
+   "why": "Plain damage threat, as the Forever simulator assumes; not measured.",
+   "source": [
+    "wowsims/forever sim/warrior/bloodthirst.go"
+   ]
+  },
+  "cleave": {
+   "b": "e",
+   "ranks": [
+    11608
+   ],
+   "why": "Rank 3 lies between the measured ranks 2 and 4 and was not read itself.",
+   "source": [
+    "wowsims/forever docs/evidence/EV-0042",
+    "wowsims/forever docs/evidence/EV-0050"
+   ]
+  },
+  "consecration": {
+   "b": "e",
+   "why": "Plain damage threat assumed; no reading on Forever.",
+   "source": [
+    "wowsims/forever sim/paladin/consecration.go"
+   ]
+  },
+  "holy strike": {
+   "b": "e",
+   "why": "Plain damage threat assumed (Iron Creed raises it); no reading on Forever.",
+   "source": [
+    "wowsims/forever sim/paladin/holy_strike.go"
+   ]
+  },
+  "seal of righteousness": {
+   "b": "e",
+   "why": "Plain damage threat assumed for the seal's hits; no reading on Forever.",
+   "source": [
+    "wowsims/forever sim/paladin/seal_of_righteousness.go"
+   ]
+  },
+  "judgement of righteousness": {
+   "b": "e",
+   "why": "Plain damage threat assumed; no reading on Forever.",
+   "source": [
+    "wowsims/forever simulator"
+   ]
+  },
+  "seal of command": {
+   "b": "e",
+   "why": "Plain damage threat assumed for the procs; no reading on Forever.",
+   "source": [
+    "wowsims/forever sim/paladin/seal_of_command.go"
+   ]
+  },
+  "judgement of command": {
+   "b": "e",
+   "why": "Plain damage threat assumed; no reading on Forever.",
+   "source": [
+    "wowsims/forever simulator"
+   ]
+  },
+  "searing pain": {
+   "b": "e",
+   "why": "The client text says it causes a high amount of threat; the size is Classic's x2, which no Forever test confirms.",
+   "source": [
+    "client text of Searing Pain",
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ]
+  },
+  "earth shock": {
+   "b": "e",
+   "why": "The client text says it causes a high amount of threat; the size is Classic's x2, which no Forever test confirms.",
+   "source": [
+    "client text of Earth Shock",
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ]
+  },
+  "mind blast": {
+   "b": "e",
+   "why": "The client text says it causes a high amount of threat; the size is Classic's x2, which no Forever test confirms.",
+   "source": [
+    "client text of Mind Blast",
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ]
+  },
+  "counterspell": {
+   "b": "e",
+   "why": "The client text says it generates a high amount of threat; 300 is Classic's value, not measured on Forever.",
+   "source": [
+    "client text of Counterspell",
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ]
+  },
+  "feint": {
+   "b": "e",
+   "why": "The client rows give 5 times Classic's values (-4000 at rank 5) while Blizzard's notes say the reduction was doubled; the client value is shown, marked as an estimate, until a reading settles it.",
+   "source": [
+    "client rows of build 1.60.1.70938",
+    "Blizzard, WoW: Forever development notes (read through search summaries)"
+   ]
+  },
+  "fade": {
+   "b": "e",
+   "why": "The client rows give 5 times Classic's values (-4100 at rank 6) while Blizzard's notes say the reduction was doubled; the client value is shown, marked as an estimate, until a reading settles it.",
+   "source": [
+    "client rows of build 1.60.1.70938",
+    "Blizzard, WoW: Forever development notes (read through search summaries)"
+   ]
+  }
+ },
+ "leave_out": {
+  "spells": {
+   "keys": [
+    "drain mana",
+    "lay on hands",
+    "bloom",
+    "dark pact"
+   ],
+   "why": "No line: Dark Pact is Classic only, and Drain Mana, Lay on Hands and Bloom's Spirit heal take no spell power and have no threat known on Forever. Drain Mana, Lay on Hands, Bloom and Dark Pact are not in the slices at all; the keys stand here so a later slice cannot bring them back unnoticed.",
+   "source": [
+    "client rows of build 1.60.1.70938"
+   ]
+  },
+  "threat": {
+   "keys": [
+    "power word: shield",
+    "execute",
+    "whirlwind"
+   ],
+   "why": "Their threat on Forever is not known (no reading, no rule in the client data), so they get no threat line: Power Word: Shield's absorb, Execute, Whirlwind. The blessings, Battle Shout, Disarm and Holy Shield's cast threat are not in the threat slice for the same reason.",
+   "source": [
+    "wowsims/forever docs/evidence (no reading)",
+    "client rows of build 1.60.1.70938 (no THREAT effect)"
+   ]
+  }
+ },
+ "texts": {
+  "seal of righteousness": {
+   "part": 0,
+   "o": true,
+   "two": 0.12,
+   "why": "Its text counts Holy spell damage through variables 1023 ($1h = 0.0765 x $SPH, $2h = 0.12 x $SPH) and shows a range from a fast one-hander to a slow two-hander, not the player's own hit, while 10% was measured with one-handers at every speed from 1.8 to 3.8 and 12% with two-handers. So the line gives the measured share and the amount alone.",
+   "source": [
+    "client text of 20293 and variables 1023",
+    "wowsims/forever docs/evidence/EV-0059",
+    "wowsims/forever docs/evidence/EV-0060"
+   ]
+  },
+  "revenge": {
+   "part": 0,
+   "fs": [
+    18,
+    0.225
+   ],
+   "why": "Its text counts attack power through variables 1024: $APR = 0.225 in Defensive Stance (aura 71), else 0.25. The 0.25 was measured on rank 4 (0.2518), and Defensive Stance's 10% less damage (7376 effect 1) makes the 0.225.",
+   "source": [
+    "client text of 25288 and variables 1024",
+    "wowsims/forever docs/evidence/EV-0048"
+   ]
+  }
+ },
+ "notes": {
+  "seal of righteousness": {
+   "part": 0,
+   "note": "The game's text shows a range for any weapon and counts 7.65% for one-handers.",
+   "why": "The dim line under the share, as design 1.3 gives it.",
+   "source": [
+    "client text of 20293 and variables 1023"
+   ]
+  },
+  "judgement of command": {
+   "part": 0,
+   "note": "half unless the target is stunned",
+   "why": "Its seal's text deals half the judgement's damage unless the target is stunned or incapacitated ($/2;20966s1).",
+   "source": [
+    "client text of 20920"
+   ]
+  },
+  "consecration": {
+   "part": 1,
+   "per": "first",
+   "max": 4,
+   "why": "Only the first 4 enemies who enter the area take the part with spell power (the text's $s3 = 4); every other enemy takes the flat tick of part 1, which has none.",
+   "source": [
+    "client text of 20924",
+    "wowsims/forever docs/evidence/EV-0015",
+    "wowsims/forever docs/evidence/EV-0143"
+   ]
+  },
+  "hellfire": {
+   "part": 1,
+   "per": "self",
+   "why": "The second part burns the caster, not enemies: it is damage to the warlock and never counted as damage dealt.",
+   "source": [
+    "client rows 1949, 11683, 11684 effect 1 (periodic damage on the caster)"
+   ]
+  },
+  "demonic brand": {
+   "part": 0,
+   "note": "the larger of your Shadow and Fire spell damage, on the pet's next attacks",
+   "why": "Variables 1016 take the larger of $SPS and $SPFI, and the damage comes with the pet's attacks.",
+   "source": [
+    "client text of 1293695 and variables 1016"
+   ]
+  },
+  "ghostly strike": {
+   "part": 0,
+   "note": "180% with a dagger",
+   "why": "Its row holds a second weapon percent of 180 for daggers (effect 3); the part gives the one for other weapons.",
+   "source": [
+    "client row 14278 effects 0 and 3"
+   ]
+  },
+  "whirlwind": {
+   "part": 1,
+   "note": "off hand at half, as the simulator models it",
+   "why": "The text says both weapons; the off-hand half is the simulator's, not measured.",
+   "source": [
+    "client text of 1680",
+    "wowsims/forever sim/warrior/whirlwind.go"
+   ]
+  },
+  "mutilate": {
+   "part": 1,
+   "note": "whether the off hand is halved is not known",
+   "why": "No reading covers the off-hand strike of Mutilate.",
+   "source": [
+    "wowsims/forever simulator"
+   ]
+  }
+ },
+ "schools": {
+  "frostfire bolt": {
+   "sch": [
+    3,
+    5
+   ],
+   "why": "Its school is Fire and Frost (mask 20); the client does not say which spell damage counts, so the lower of the two is taken, an estimate.",
+   "source": [
+    "client row 1237313 (school mask 20)"
+   ]
+  },
+  "windfury weapon": {
+   "school": 1,
+   "why": "Its two extra attacks are swings of the main-hand weapon, Physical, while the imbue spell's own school is Nature.",
+   "source": [
+    "client rows 16361 and 16362",
+    "wowsims/forever simulator"
+   ]
+  },
+  "demonic brand": {
+   "school": 6,
+   "why": "The talent's row has the Physical school; the share is of spell damage, the larger of Shadow and Fire (variables 1016), and Shadow is its tree's school. Its text counts it, so only the share shows.",
+   "source": [
+    "client text of 1293695 and variables 1016"
+   ]
+  }
+ },
+ "levels": {
+  "keys": {
+   "ghostly strike": 60,
+   "riposte": 60,
+   "demonic brand": 60,
+   "attack": 1
+  },
+  "why": "These spells have no level row in either client input. Attack is every character's from level 1. The talents are at the top level: the downranking estimate is about casting a low rank of a spell, and a talent's one rank is never a low rank, so the top level keeps the estimate's factor at 1. No part of these spells has a gain a level that the level would start.",
+  "source": [
+   "client rows of build 1.60.1.70938 and 1.60.1.70888 (no SpellLevels row for 6603, 14278, 14251, 1293695)"
+  ]
+ },
+ "rolls": {
+  "seal of righteousness": {
+   "roll": "special",
+   "why": "The seal's hit on each swing is a melee special that cannot miss and can crit; the rank row itself is a self buff of the magic line.",
+   "source": [
+    "wowsims/forever docs/evidence/EV-0059",
+    "wowsims/forever sim/paladin/seal_of_righteousness.go"
+   ]
+  }
+ },
+ "tips": {
+  "defensive": {
+   "tip": 71,
+   "note": "Defiance counts only with a shield",
+   "why": "Defensive Stance's text gives the total with Defiance ($?a12792[...]) but not that Defiance needs a shield, which Defiance's own text says.",
+   "source": [
+    "client text of 71 and of 12792"
+   ]
+  },
+  "battle": {
+   "tip": 2457,
+   "why": "Battle Stance's text says nothing of threat, so its tooltip shows the multiplier.",
+   "source": [
+    "client text of 2457"
+   ]
+  },
+  "berserker": {
+   "tip": 2458,
+   "why": "Berserker Stance's text says nothing of threat, so its tooltip shows the multiplier.",
+   "source": [
+    "client text of 2458"
+   ]
+  },
+  "bear": {
+   "tip": [
+    5487,
+    9634
+   ],
+   "why": "The bear forms' texts say nothing of threat, so their tooltips show the multiplier.",
+   "source": [
+    "client text of 5487 and 9634"
+   ]
+  },
+  "cat": {
+   "tip": 768,
+   "why": "Cat Form's text says nothing of threat, so its tooltip shows the multiplier.",
+   "source": [
+    "client text of 768"
+   ]
+  },
+  "fury": {
+   "tip": 25780,
+   "note": "Holy ~x2.53: the two multiply",
+   "why": "Its text gives 33% for all threat and 90% more for Holy; threat auras multiply, so Holy is about x2.53, not measured.",
+   "source": [
+    "client text of 25780",
+    "client rows 25780 effects 0 and 4"
+   ]
+  },
+  "silentresolve": {
+   "tip": 14523,
+   "note": "Holy and Shadow spells only",
+   "why": "Its text says the threat of your spells; on Forever its aura counts Holy and Shadow only (school mask 34).",
+   "source": [
+    "client text of 14523",
+    "client row 14523 effect 0 (mask 34)"
+   ]
+  }
+ },
+ "threat_items": {
+  "items": [
+   {
+    "id": "omokk",
+    "item": 13959,
+    "spell": 1298501,
+    "name": "Omokk's Girth Restrainer"
+   },
+   {
+    "id": "cleverhat",
+    "item": 18308,
+    "spell": 1298505,
+    "name": "Clever Hat"
+   },
+   {
+    "id": "treads",
+    "item": 273842,
+    "spell": 1292683,
+    "name": "Treacherous Treads"
+   }
+  ],
+  "enchants": [
+   {
+    "id": "glovesthreat",
+    "enchant": 2613,
+    "slot": 10,
+    "spell": 25063,
+    "name": "Enchant Gloves - Threat"
+   },
+   {
+    "id": "cloaksubtlety",
+    "enchant": 2621,
+    "slot": 15,
+    "spell": 25070,
+    "name": "Enchant Cloak - Subtlety"
+   }
+  ],
+  "why": "The worn items whose Equip effect changes all threat on Forever (a MOD_THREAT aura of school mask 127 on their equip spell), and the two threat enchants of gloves and cloak. The multiplier comes from the equip spell's row. Items the client holds with no item record, and items whose threat comes from a use effect or a proc, are not worn effects and are left out.",
+  "source": [
+   "client rows of the equip spells (build 1.60.1.70938)",
+   "client items and enchants of build 1.60.1.70888 (GrunzForever export: ItemSparse, ItemEffect, SpellItemEnchantment)"
+  ]
+ },
+ "nb": {
+  "keys": [
+   "judgement of righteousness",
+   "judgement of fury"
+  ],
+  "why": "Since the hotfix of 2026-11-11 the judgements are ranged attacks that cannot be blocked, but Judgement of Command, a melee attack again since 2026-11-16.",
+  "source": [
+   "Blizzard, WoW: Forever hotfixes of 2026-11-11 and 2026-11-16 (read through search summaries)",
+   "client rows 20286 and 20414 (DefenseType 3)"
+  ]
+ },
+ "compare": {
+  "kinds": {
+   "seal of righteousness": "seal",
+   "seal of command": "proc",
+   "holy shield": "proc",
+   "sunder armor": "threat",
+   "faerie fire": "threat",
+   "holy shock": "heal"
+  },
+  "none": [
+   "rupture",
+   "death mark",
+   "deadly poison",
+   "instant poison",
+   "explosive trap",
+   "immolation trap",
+   "lightning shield",
+   "searing totem",
+   "magma totem",
+   "healing stream totem",
+   "flametongue weapon",
+   "frostbrand weapon",
+   "windfury weapon",
+   "retribution aura",
+   "thorns",
+   "shadowguard",
+   "touch of weakness",
+   "feedback",
+   "mana burn",
+   "health funnel",
+   "lightwell renew",
+   "seal of fury",
+   "seal of light",
+   "judgement of light",
+   "demonic brand",
+   "lacerate",
+   "execute",
+   "inferno",
+   "contingency plan",
+   "prayer of mending"
+  ],
+  "why": "kinds: Holy Shock heals or harms by its target and counts as the heal it is in a healer's lines; Seal of Righteousness and Seal of Command are worked out from the swings (design 2.5), Holy Shield a proc on each block, Sunder Armor and Faerie Fire count their threat. none: procs, totems, traps, poisons and imbues whose rate the model does not know, the finishers whose base grows with combo points in ways the rows do not give (Rupture's duration, Death Mark's stored damage), and spells whose amount is not the spell's own (Mana Burn and Feedback burn mana, Health Funnel heals the pet, Lightwell Renew is cast by the Lightwell, Execute converts rage, Inferno summons, Contingency Plan and Prayer of Mending wait for damage). They keep their tooltip lines.",
+  "source": [
+   "design 2.5"
+  ]
+ },
+ "defaults": {
+  "WARRIOR": {
+   "damage": [
+    "attack",
+    "heroic strike",
+    "mortal strike",
+    "bloodthirst",
+    "whirlwind"
+   ],
+   "tank": [
+    "attack",
+    "heroic strike",
+    "sunder armor",
+    "revenge",
+    "shield slam"
+   ]
+  },
+  "ROGUE": {
+   "damage": [
+    "attack",
+    "sinister strike",
+    "backstab",
+    "mutilate",
+    "eviscerate"
+   ]
+  },
+  "HUNTER": {
+   "damage": [
+    "auto shot",
+    "aimed shot",
+    "multi-shot",
+    "arcane shot",
+    "serpent sting"
+   ]
+  },
+  "MAGE": {
+   "damage": [
+    "frostbolt",
+    "fireball",
+    "arcane missiles"
+   ]
+  },
+  "WARLOCK": {
+   "damage": [
+    "shadow bolt",
+    "corruption",
+    "immolate"
+   ]
+  },
+  "PRIEST": {
+   "damage": [
+    "mind blast",
+    "shadow word: pain",
+    "mind flay"
+   ],
+   "healer": [
+    "greater heal",
+    "heal",
+    "flash heal",
+    "renew"
+   ]
+  },
+  "DRUID": {
+   "damage": [
+    "starfire",
+    "wrath",
+    "moonfire"
+   ],
+   "cat": [
+    "attack",
+    "shred",
+    "claw"
+   ],
+   "tank": [
+    "attack",
+    "maul",
+    "swipe"
+   ],
+   "healer": [
+    "healing touch",
+    "rejuvenation",
+    "regrowth"
+   ]
+  },
+  "PALADIN": {
+   "damage": [
+    "attack",
+    "seal of command",
+    "judgement of command",
+    "seal of righteousness",
+    "judgement of righteousness",
+    "holy strike"
+   ],
+   "tank": [
+    "attack",
+    "holy shield",
+    "consecration"
+   ],
+   "healer": [
+    "holy light",
+    "flash of light",
+    "holy shock"
+   ]
+  },
+  "SHAMAN": {
+   "damage": [
+    "lightning bolt",
+    "chain lightning",
+    "earth shock",
+    "attack",
+    "stormstrike"
+   ],
+   "healer": [
+    "healing wave",
+    "lesser healing wave",
+    "chain heal"
+   ]
+  },
+  "why": "The default lines of design 2.1 by class and by the role ns.PlayerRole gives (damage, tank, healer), and a druid's cat set (cat) for Cat Form; a bear form takes the tank set. Every line counts only if known, so where 2.1 picks one of two (Greater Heal else Heal, Seal of Command else Seal of Righteousness, Attack only with Stormstrike) both stand in the list.",
+  "source": [
+   "design 2.1"
+  ]
+ },
+ "known_differences": {
+  "retribution aura": {
+   "part": 0,
+   "c": 0.06,
+   "why": "A server rule: the rows store 0, and Retribution Aura deals 6% of the paladin's spell damage a hit on Forever, as Blizzard's tuning of 2026-10-08 says and readings show.",
+   "source": [
+    "Blizzard, WoW: Forever beta tuning of 2026-10-08 (read through search summaries)"
+   ]
+  },
+  "thorns": {
+   "part": 0,
+   "c": 0.06,
+   "why": "A server rule: the rows store 0, and Thorns deals 6% of the druid's spell damage a hit on Forever, as Blizzard's tuning of 2026-10-08 says.",
+   "source": [
+    "Blizzard, WoW: Forever beta tuning of 2026-10-08 (read through search summaries)"
+   ]
+  },
+  "seal of righteousness": {
+   "part": 0,
+   "c": 0.1,
+   "why": "A server rule: 10% of Holy spell damage a hit with a one-hander (12% with a two-hander), measured at every weapon speed; rank 8's row stores 0 and counts as rank 7.",
+   "source": [
+    "wowsims/forever docs/evidence/EV-0060"
+   ]
+  },
+  "seal of command": {
+   "part": 1,
+   "c": 0.203,
+   "why": "The proc row stores 0.29 on its weapon-percent effect, and the 70% applies to it: 0.29 x 0.70 = 0.203 of Holy spell damage a proc, measured as 20.4%.",
+   "source": [
+    "client row 20424 effect 0",
+    "wowsims/forever docs/evidence/EV-0061"
+   ]
+  },
+  "holy strike": {
+   "part": 1,
+   "c": [
+    0.1072,
+    0.1244,
+    0.1373,
+    0.1544,
+    0.1673,
+    0.1845,
+    0.1973,
+    0.2145
+   ],
+   "why": "The row stores 0.429 on the normalized weapon effect, and the rank's weapon percent applies to it (0.429 x 25% to 50%), as the simulator models it; not measured.",
+   "source": [
+    "client rows 679 to 10333 effects 0 and 1",
+    "wowsims/forever sim/paladin/holy_strike.go"
+   ]
+  },
+  "ice lance": {
+   "part": 0,
+   "c": 0.1,
+   "why": "The rows store 0 (the server adds it); 0.10 is a community fit of beta combat logs (rank 1 about 0.095, rank 2 about 0.113), an estimate.",
+   "source": [
+    "gunba wow-forever-sim docs/uncertainties.md MAG-001"
+   ]
+  },
+  "ice barrier": {
+   "part": 0,
+   "c": 0.1,
+   "why": "The absorb effect stores 0; the client's own text adds 10% of Frost spell damage ($SPFR*0.1). Whether the server adds it is not tested.",
+   "source": [
+    "client text of Ice Barrier (hotfix push 112753)"
+   ]
+  },
+  "frost ward": {
+   "part": 0,
+   "c": 0.1,
+   "why": "The absorb effect stores 0; the client's own text adds 10% of Frost spell damage ($SPFR*0.1). Whether the server adds it is not tested.",
+   "source": [
+    "client text of Frost Ward (hotfix push 113024)"
+   ]
+  }
+ },
+ "rockbiter": {
+  "spells": [
+   8017,
+   8018,
+   8019,
+   10399,
+   16314,
+   16315,
+   16316
+  ],
+  "why": "Spirit Weapons raises threat with Rockbiter Weapon on the main hand (x1.302 in all). The imbue is a temporary enchant of the weapon, so SpellModel reads the main hand's enchant and holds it against the enchants of these seven ranks, each the misc value of the rank's enchant effect (360).",
+  "source": [
+   "client rows of the seven ranks of Rockbiter Weapon (effect 360)",
+   "client row 16268 effects 0 and 1"
+  ]
+ },
+ "seal_values": {
+  "seal of righteousness": {
+   "from": "judgement of righteousness",
+   "effect": "dummy",
+   "why": "The per-hit base of Seal of Righteousness is value / 100 x weapon speed x hand factor, with value the dummy effect of the judgement of the same rank; the seal's own dummy aura holds the same number.",
+   "source": [
+    "wowsims/forever docs/evidence/EV-0059",
+    "client rows 20187 to 20286 effect 2"
+   ]
+  }
+ }
+}

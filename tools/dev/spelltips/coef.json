@@ -1,0 +1,10907 @@
+{
+ "about": "WoW: Forever spell power, healing, attack power and weapon shares of every spell entry, sliced once from the spell research (design 3.1): the Forever values only, each part with its basis (c client data, m measured on Forever, e estimate) and citation. A part names the client effect that carries it (find, nth, carrier, ticks); make_spelltips.py reads every value a row holds from client_spells.json and checks it against the value here. coef is the top rank's share (for a periodic part the total over its ticks, for a weapon part the weapon multiple, for a combo point part the share a point); ranks[].c gives a rank's share where it differs, ranks[].rows the carrier row of a part where the rank does not hold it.",
+ "spells": [
+  {
+   "cite": [
+    "client rows of build 1.60.1.70888 (GrunzForever export)",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "ALL",
+   "key": "attack",
+   "kind": "physical",
+   "name": "Attack",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70888 (GrunzForever export): 6603, weapon damage"
+     ],
+     "coef": 1.0,
+     "find": "none",
+     "h": "both",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6603,
+     "level": 1
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ALL",
+   "key": "shoot",
+   "kind": "physical",
+   "name": "Shoot",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture): 5019, a weapon damage effect with no spell power"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "ranged",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 5019,
+     "level": 1
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70888 (GrunzForever export)"
+   ],
+   "class": "ALL",
+   "key": "shoot bow",
+   "kind": "physical",
+   "name": "Shoot Bow",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70888 (GrunzForever export)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "ranged",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2480,
+     "level": 1
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70888 (GrunzForever export)"
+   ],
+   "class": "ALL",
+   "key": "shoot crossbow",
+   "kind": "physical",
+   "name": "Shoot Crossbow",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70888 (GrunzForever export)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "ranged",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 7919,
+     "level": 1
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70888 (GrunzForever export)"
+   ],
+   "class": "ALL",
+   "key": "shoot gun",
+   "kind": "physical",
+   "name": "Shoot Gun",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70888 (GrunzForever export)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "ranged",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 7918,
+     "level": 1
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70888 (GrunzForever export)"
+   ],
+   "class": "ALL",
+   "key": "throw",
+   "kind": "physical",
+   "name": "Throw",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70888 (GrunzForever export)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "ranged",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2764,
+     "level": 1
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "claw",
+   "kind": "physical",
+   "name": "Claw",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.4,
+     "find": "weapon",
+     "h": "main",
+     "spd": "cat",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1082,
+     "level": 20
+    },
+    {
+     "id": 3029,
+     "level": 28
+    },
+    {
+     "id": 5201,
+     "level": 38
+    },
+    {
+     "id": 9849,
+     "level": 48
+    },
+    {
+     "id": 9850,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0141",
+    "wowsims/forever docs/evidence/EV-0142"
+   ],
+   "class": "DRUID",
+   "key": "entangling roots",
+   "kind": "damage",
+   "name": "Entangling Roots",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.54,
+     "find": "pdamage",
+     "n": 9,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      5
+     ],
+     "c": [
+      0.24
+     ],
+     "def": 1,
+     "id": 339,
+     "level": 8,
+     "n": [
+      4
+     ]
+    },
+    {
+     "bp": [
+      9
+     ],
+     "c": [
+      0.3
+     ],
+     "def": 1,
+     "id": 1062,
+     "level": 18,
+     "n": [
+      5
+     ]
+    },
+    {
+     "bp": [
+      12
+     ],
+     "c": [
+      0.36
+     ],
+     "def": 1,
+     "id": 5195,
+     "level": 28,
+     "n": [
+      6
+     ]
+    },
+    {
+     "bp": [
+      16
+     ],
+     "c": [
+      0.42
+     ],
+     "def": 1,
+     "id": 5196,
+     "level": 38,
+     "n": [
+      7
+     ]
+    },
+    {
+     "bp": [
+      21
+     ],
+     "c": [
+      0.48
+     ],
+     "def": 1,
+     "id": 9852,
+     "level": 48,
+     "n": [
+      8
+     ]
+    },
+    {
+     "bp": [
+      26
+     ],
+     "def": 1,
+     "id": 9853,
+     "level": 58
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0032",
+    "wowsims/forever docs/evidence/EV-0034",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)"
+   ],
+   "class": "DRUID",
+   "key": "ferocious bite",
+   "kind": "physical",
+   "name": "Ferocious Bite",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0032",
+      "wowsims/forever docs/evidence/EV-0034",
+      "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)"
+     ],
+     "coef": 0.037,
+     "find": "damage",
+     "per": "cp",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1328618,
+     "level": 24
+    },
+    {
+     "id": 22568,
+     "level": 32
+    },
+    {
+     "id": 22827,
+     "level": 40
+    },
+    {
+     "id": 22828,
+     "level": 48
+    },
+    {
+     "id": 22829,
+     "level": 56
+    },
+    {
+     "id": 31018,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "healing touch",
+   "kind": "heal",
+   "name": "Healing Touch",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      44
+     ],
+     "c": [
+      0.429
+     ],
+     "def": 1,
+     "id": 5185,
+     "level": 1,
+     "ppl": [
+      0.8
+     ]
+    },
+    {
+     "bp": [
+      100
+     ],
+     "c": [
+      0.571
+     ],
+     "def": 1,
+     "id": 5186,
+     "level": 8,
+     "ppl": [
+      1.3
+     ]
+    },
+    {
+     "bp": [
+      201
+     ],
+     "c": [
+      0.714
+     ],
+     "def": 1,
+     "id": 5187,
+     "level": 14,
+     "ppl": [
+      1.9
+     ]
+    },
+    {
+     "bp": [
+      362
+     ],
+     "c": [
+      0.857
+     ],
+     "def": 1,
+     "id": 5188,
+     "level": 20,
+     "ppl": [
+      2.7
+     ]
+    },
+    {
+     "bp": [
+      546
+     ],
+     "def": 1,
+     "id": 5189,
+     "level": 26,
+     "ppl": [
+      3.5
+     ]
+    },
+    {
+     "bp": [
+      707
+     ],
+     "def": 1,
+     "id": 6778,
+     "level": 32,
+     "ppl": [
+      4
+     ]
+    },
+    {
+     "bp": [
+      898
+     ],
+     "def": 1,
+     "id": 8903,
+     "level": 38,
+     "ppl": [
+      4.5
+     ]
+    },
+    {
+     "bp": [
+      1173
+     ],
+     "def": 1,
+     "id": 9758,
+     "level": 44,
+     "ppl": [
+      5.2
+     ]
+    },
+    {
+     "bp": [
+      1516
+     ],
+     "def": 1,
+     "id": 9888,
+     "level": 50,
+     "ppl": [
+      5.9
+     ]
+    },
+    {
+     "bp": [
+      1920
+     ],
+     "def": 1,
+     "id": 9889,
+     "level": 56,
+     "ppl": [
+      6.6
+     ]
+    },
+    {
+     "bp": [
+      2332
+     ],
+     "def": 1,
+     "id": 25297,
+     "level": 60,
+     "ppl": [
+      7.3
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0141",
+    "wowsims/forever docs/evidence/EV-0142"
+   ],
+   "class": "DRUID",
+   "key": "hurricane",
+   "kind": "damage",
+   "name": "Hurricane",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.3,
+     "find": "damage",
+     "n": 10,
+     "per": "target",
+     "stat": "sp",
+     "ticks": "rank"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      68
+     ],
+     "def": 1,
+     "id": 16914,
+     "level": 40,
+     "ppl": [
+      0.2
+     ],
+     "rows": {
+      "0": 1278965
+     }
+    },
+    {
+     "bp": [
+      98
+     ],
+     "def": 1,
+     "id": 17401,
+     "level": 50,
+     "ppl": [
+      0.2
+     ],
+     "rows": {
+      "0": 1278968
+     }
+    },
+    {
+     "bp": [
+      132
+     ],
+     "def": 1,
+     "id": 17402,
+     "level": 60,
+     "ppl": [
+      0.3
+     ],
+     "rows": {
+      "0": 1278759
+     }
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0141",
+    "wowsims/forever docs/evidence/EV-0142"
+   ],
+   "class": "DRUID",
+   "key": "insect swarm",
+   "kind": "damage",
+   "name": "Insect Swarm",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.948,
+     "find": "pdamage",
+     "n": 6,
+     "p": 2.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      8
+     ],
+     "def": 1,
+     "id": 5570,
+     "level": 20
+    },
+    {
+     "bp": [
+      15
+     ],
+     "def": 1,
+     "id": 24974,
+     "level": 30
+    },
+    {
+     "bp": [
+      20
+     ],
+     "def": 1,
+     "id": 24975,
+     "level": 40
+    },
+    {
+     "bp": [
+      25
+     ],
+     "def": 1,
+     "id": 24976,
+     "level": 50
+    },
+    {
+     "bp": [
+      31
+     ],
+     "def": 1,
+     "id": 24977,
+     "level": 60
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "lacerate",
+   "kind": "physical",
+   "name": "Lacerate",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.1,
+     "find": "none",
+     "h": "main",
+     "per": "stack",
+     "spd": "bear",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1328617,
+     "level": 25
+    },
+    {
+     "id": 1328616,
+     "level": 34
+    },
+    {
+     "id": 414644,
+     "level": 42
+    },
+    {
+     "id": 1235826,
+     "level": 50
+    },
+    {
+     "id": 1235827,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "maul",
+   "kind": "physical",
+   "name": "Maul",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "bear",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6807,
+     "level": 10
+    },
+    {
+     "id": 6808,
+     "level": 18
+    },
+    {
+     "id": 6809,
+     "level": 26
+    },
+    {
+     "id": 8972,
+     "level": 34
+    },
+    {
+     "id": 9745,
+     "level": 42
+    },
+    {
+     "id": 9880,
+     "level": 50
+    },
+    {
+     "id": 9881,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0141"
+   ],
+   "class": "DRUID",
+   "key": "moonfire",
+   "kind": "damage",
+   "name": "Moonfire",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.15,
+     "find": "damage",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.52,
+     "find": "pdamage",
+     "n": 4,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      8,
+      4
+     ],
+     "c": [
+      null,
+      0.39
+     ],
+     "def": 1,
+     "id": 8921,
+     "level": 4,
+     "n": [
+      null,
+      3
+     ],
+     "ppl": [
+      0.5,
+      null
+     ]
+    },
+    {
+     "bp": [
+      13,
+      6
+     ],
+     "def": 1,
+     "id": 8924,
+     "level": 10,
+     "ppl": [
+      0.8,
+      null
+     ]
+    },
+    {
+     "bp": [
+      22,
+      9
+     ],
+     "def": 1,
+     "id": 8925,
+     "level": 16,
+     "ppl": [
+      1,
+      null
+     ]
+    },
+    {
+     "bp": [
+      32,
+      13
+     ],
+     "def": 1,
+     "id": 8926,
+     "level": 22,
+     "ppl": [
+      1.5,
+      null
+     ]
+    },
+    {
+     "bp": [
+      47,
+      19
+     ],
+     "def": 1,
+     "id": 8927,
+     "level": 28,
+     "ppl": [
+      1.5,
+      null
+     ]
+    },
+    {
+     "bp": [
+      59,
+      23
+     ],
+     "def": 1,
+     "id": 8928,
+     "level": 34,
+     "ppl": [
+      1.6,
+      null
+     ]
+    },
+    {
+     "bp": [
+      73,
+      31
+     ],
+     "def": 1,
+     "id": 8929,
+     "level": 40,
+     "ppl": [
+      1.7,
+      null
+     ]
+    },
+    {
+     "bp": [
+      91,
+      39
+     ],
+     "def": 1,
+     "id": 9833,
+     "level": 46,
+     "ppl": [
+      2.7,
+      null
+     ]
+    },
+    {
+     "bp": [
+      111,
+      49
+     ],
+     "def": 1,
+     "id": 9834,
+     "level": 52,
+     "ppl": [
+      2.1,
+      null
+     ]
+    },
+    {
+     "bp": [
+      135,
+      60
+     ],
+     "def": 1,
+     "id": 9835,
+     "level": 58,
+     "ppl": [
+      2.3,
+      null
+     ]
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "nature's grasp",
+   "kind": "damage",
+   "name": "Nature's Grasp",
+   "parts": [
+    {
+     "basis": "c",
+     "carrier": "trigger",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.54,
+     "find": "pdamage",
+     "n": 9,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      5
+     ],
+     "c": [
+      0.24
+     ],
+     "def": 1,
+     "id": 16689,
+     "level": 10,
+     "n": [
+      4
+     ]
+    },
+    {
+     "bp": [
+      9
+     ],
+     "c": [
+      0.3
+     ],
+     "def": 1,
+     "id": 16810,
+     "level": 18,
+     "n": [
+      5
+     ]
+    },
+    {
+     "bp": [
+      12
+     ],
+     "c": [
+      0.36
+     ],
+     "def": 1,
+     "id": 16811,
+     "level": 28,
+     "n": [
+      6
+     ]
+    },
+    {
+     "bp": [
+      16
+     ],
+     "c": [
+      0.42
+     ],
+     "def": 1,
+     "id": 16812,
+     "level": 38,
+     "n": [
+      7
+     ]
+    },
+    {
+     "bp": [
+      21
+     ],
+     "c": [
+      0.48
+     ],
+     "def": 1,
+     "id": 16813,
+     "level": 48,
+     "n": [
+      8
+     ]
+    },
+    {
+     "bp": [
+      26
+     ],
+     "def": 1,
+     "id": 17329,
+     "level": 58
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0033"
+   ],
+   "class": "DRUID",
+   "key": "pounce",
+   "kind": "physical",
+   "name": "Pounce",
+   "parts": [
+    {
+     "basis": "m",
+     "carrier": "trigger",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0033"
+     ],
+     "coef": 0.15,
+     "find": "pdamage",
+     "n": 6,
+     "stat": "ap",
+     "tick": 0.025,
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 9005,
+     "level": 36
+    },
+    {
+     "id": 9823,
+     "level": 46
+    },
+    {
+     "id": 9827,
+     "level": 56
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "primal bite",
+   "kind": "physical",
+   "name": "Primal Bite",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "bear",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 407995,
+     "level": 40
+    },
+    {
+     "id": 1238069,
+     "level": 50
+    },
+    {
+     "id": 1238070,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0031",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)"
+   ],
+   "class": "DRUID",
+   "key": "rake",
+   "kind": "physical",
+   "name": "Rake",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0031",
+      "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)"
+     ],
+     "coef": 0.065,
+     "find": "damage",
+     "stat": "ap"
+    },
+    {
+     "basis": "m",
+     "cite": [
+      "wowsims/forever docs/evidence/EV-0031",
+      "wowsims/forever docs/evidence/EV-0033",
+      "wowsims/forever docs/evidence/EV-0034",
+      "wowsims/forever docs/evidence/EV-0036"
+     ],
+     "coef": 0.195,
+     "find": "pdamage",
+     "n": 3,
+     "stat": "ap",
+     "tick": 0.065,
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1822,
+     "level": 24
+    },
+    {
+     "id": 1823,
+     "level": 34
+    },
+    {
+     "id": 1824,
+     "level": 44
+    },
+    {
+     "id": 9904,
+     "level": 54
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "ravage",
+   "kind": "physical",
+   "name": "Ravage",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 4.35,
+     "find": "weapon",
+     "h": "main",
+     "spd": "cat",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6785,
+     "level": 32
+    },
+    {
+     "id": 6787,
+     "level": 42
+    },
+    {
+     "id": 9866,
+     "level": 50
+    },
+    {
+     "id": 9867,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "regrowth",
+   "kind": "heal",
+   "name": "Regrowth",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.286,
+     "find": "heal",
+     "stat": "heal"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.497,
+     "find": "pheal",
+     "n": 7,
+     "p": 3.0,
+     "stat": "heal",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      87,
+      13
+     ],
+     "def": 1,
+     "id": 8936,
+     "level": 12,
+     "ppl": [
+      1.8,
+      null
+     ]
+    },
+    {
+     "bp": [
+      164,
+      22
+     ],
+     "def": 1,
+     "id": 8938,
+     "level": 18,
+     "ppl": [
+      2.5,
+      null
+     ]
+    },
+    {
+     "bp": [
+      235,
+      32
+     ],
+     "def": 1,
+     "id": 8939,
+     "level": 24,
+     "ppl": [
+      3.1,
+      null
+     ]
+    },
+    {
+     "bp": [
+      311,
+      42
+     ],
+     "def": 1,
+     "id": 8940,
+     "level": 30,
+     "ppl": [
+      3.6,
+      null
+     ]
+    },
+    {
+     "bp": [
+      394,
+      52
+     ],
+     "def": 1,
+     "id": 8941,
+     "level": 36,
+     "ppl": [
+      4.1,
+      null
+     ]
+    },
+    {
+     "bp": [
+      504,
+      68
+     ],
+     "def": 1,
+     "id": 9750,
+     "level": 42,
+     "ppl": [
+      4.7,
+      null
+     ]
+    },
+    {
+     "bp": [
+      645,
+      88
+     ],
+     "def": 1,
+     "id": 9856,
+     "level": 48,
+     "ppl": [
+      5.3,
+      null
+     ]
+    },
+    {
+     "bp": [
+      817,
+      113
+     ],
+     "def": 1,
+     "id": 9857,
+     "level": 54,
+     "ppl": [
+      6,
+      null
+     ]
+    },
+    {
+     "bp": [
+      1021,
+      142
+     ],
+     "def": 1,
+     "id": 9858,
+     "level": 60,
+     "ppl": [
+      6.8,
+      null
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "rejuvenation",
+   "kind": "heal",
+   "name": "Rejuvenation",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.8,
+     "find": "pheal",
+     "n": 4,
+     "p": 3.0,
+     "stat": "heal",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      8
+     ],
+     "def": 1,
+     "id": 774,
+     "level": 4
+    },
+    {
+     "bp": [
+      12
+     ],
+     "def": 1,
+     "id": 1058,
+     "level": 10
+    },
+    {
+     "bp": [
+      23
+     ],
+     "def": 1,
+     "id": 1430,
+     "level": 16
+    },
+    {
+     "bp": [
+      32
+     ],
+     "def": 1,
+     "id": 2090,
+     "level": 22
+    },
+    {
+     "bp": [
+      42
+     ],
+     "def": 1,
+     "id": 2091,
+     "level": 28
+    },
+    {
+     "bp": [
+      51
+     ],
+     "def": 1,
+     "id": 3627,
+     "level": 34
+    },
+    {
+     "bp": [
+      71
+     ],
+     "def": 1,
+     "id": 8910,
+     "level": 40
+    },
+    {
+     "bp": [
+      94
+     ],
+     "def": 1,
+     "id": 9839,
+     "level": 46
+    },
+    {
+     "bp": [
+      124
+     ],
+     "def": 1,
+     "id": 9840,
+     "level": 52
+    },
+    {
+     "bp": [
+      161
+     ],
+     "def": 1,
+     "id": 9841,
+     "level": 58
+    },
+    {
+     "bp": [
+      194
+     ],
+     "def": 1,
+     "id": 25299,
+     "level": 60
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0031"
+   ],
+   "class": "DRUID",
+   "key": "rip",
+   "kind": "physical",
+   "name": "Rip",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0031"
+     ],
+     "coef": 0.0684,
+     "cp": [
+      0.0684,
+      0.1368,
+      0.2052,
+      0.2736,
+      0.2736
+     ],
+     "find": "pdamage",
+     "per": "cp",
+     "stat": "ap",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1079,
+     "level": 20
+    },
+    {
+     "id": 9492,
+     "level": 28
+    },
+    {
+     "id": 9493,
+     "level": 36
+    },
+    {
+     "id": 9752,
+     "level": 44
+    },
+    {
+     "id": 9894,
+     "level": 52
+    },
+    {
+     "id": 9896,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "shred",
+   "kind": "physical",
+   "name": "Shred",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 2.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "cat",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 5221,
+     "level": 22
+    },
+    {
+     "id": 6800,
+     "level": 30
+    },
+    {
+     "id": 8992,
+     "level": 38
+    },
+    {
+     "id": 9829,
+     "level": 46
+    },
+    {
+     "id": 9830,
+     "level": 54
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "starfire",
+   "kind": "damage",
+   "name": "Starfire",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      113
+     ],
+     "def": 1,
+     "id": 2912,
+     "level": 20,
+     "ppl": [
+      1.8
+     ]
+    },
+    {
+     "bp": [
+      154
+     ],
+     "def": 1,
+     "id": 8949,
+     "level": 26,
+     "ppl": [
+      2.1
+     ]
+    },
+    {
+     "bp": [
+      201
+     ],
+     "def": 1,
+     "id": 8950,
+     "level": 34,
+     "ppl": [
+      2.2
+     ]
+    },
+    {
+     "bp": [
+      277
+     ],
+     "def": 1,
+     "id": 8951,
+     "level": 42,
+     "ppl": [
+      2.5
+     ]
+    },
+    {
+     "bp": [
+      372
+     ],
+     "def": 1,
+     "id": 9875,
+     "level": 50,
+     "ppl": [
+      3
+     ]
+    },
+    {
+     "bp": [
+      471
+     ],
+     "def": 1,
+     "id": 9876,
+     "level": 58,
+     "ppl": [
+      3.2
+     ]
+    },
+    {
+     "bp": [
+      533
+     ],
+     "def": 1,
+     "id": 25298,
+     "level": 60,
+     "ppl": [
+      3.4
+     ]
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0031"
+   ],
+   "class": "DRUID",
+   "key": "swipe",
+   "kind": "physical",
+   "name": "Swipe",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0031"
+     ],
+     "coef": 0.03,
+     "find": "damage",
+     "per": "target",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 779,
+     "level": 16
+    },
+    {
+     "id": 780,
+     "level": 24
+    },
+    {
+     "id": 769,
+     "level": 34
+    },
+    {
+     "id": 9754,
+     "level": 44
+    },
+    {
+     "id": 9908,
+     "level": 54
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)",
+    "wowsims/forever docs/evidence/EV-0141",
+    "wowsims/forever docs/evidence/EV-0067"
+   ],
+   "class": "DRUID",
+   "key": "thorns",
+   "kind": "damage",
+   "name": "Thorns",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries): Retribution Aura and Thorns deal 6% of spell damage (beta tuning, 2026-10-08)"
+     ],
+     "coef": 0.06,
+     "find": "shield",
+     "per": "hit",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      3
+     ],
+     "def": 1,
+     "id": 467,
+     "level": 6
+    },
+    {
+     "bp": [
+      6
+     ],
+     "def": 1,
+     "id": 782,
+     "level": 14
+    },
+    {
+     "bp": [
+      9
+     ],
+     "def": 1,
+     "id": 1075,
+     "level": 24
+    },
+    {
+     "bp": [
+      12
+     ],
+     "def": 1,
+     "id": 8914,
+     "level": 34
+    },
+    {
+     "bp": [
+      15
+     ],
+     "def": 1,
+     "id": 9756,
+     "level": 44
+    },
+    {
+     "bp": [
+      18
+     ],
+     "def": 1,
+     "id": 9910,
+     "level": 54
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "tranquility",
+   "kind": "heal",
+   "name": "Tranquility",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.335,
+     "find": "pheal",
+     "n": 5,
+     "p": 2.0,
+     "per": "target",
+     "stat": "heal",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      87
+     ],
+     "def": 1,
+     "id": 740,
+     "level": 30,
+     "ppl": [
+      0.6
+     ]
+    },
+    {
+     "bp": [
+      129
+     ],
+     "def": 1,
+     "id": 8918,
+     "level": 40,
+     "ppl": [
+      0.7
+     ]
+    },
+    {
+     "bp": [
+      196
+     ],
+     "def": 1,
+     "id": 9862,
+     "level": 50,
+     "ppl": [
+      0.9
+     ]
+    },
+    {
+     "bp": [
+      285
+     ],
+     "def": 1,
+     "id": 9863,
+     "level": 60,
+     "ppl": [
+      1
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "key": "wild growth",
+   "kind": "heal",
+   "name": "Wild Growth",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.462,
+     "find": "pheal",
+     "n": 7,
+     "p": 1.0,
+     "per": "target",
+     "stat": "heal",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      40
+     ],
+     "def": 1,
+     "id": 408120,
+     "level": 40,
+     "ppl": [
+      1
+     ]
+    },
+    {
+     "bp": [
+      60
+     ],
+     "def": 1,
+     "id": 1238214,
+     "level": 50,
+     "ppl": [
+      1.3
+     ]
+    },
+    {
+     "bp": [
+      97
+     ],
+     "def": 1,
+     "id": 1238215,
+     "level": 60,
+     "ppl": [
+      1.6
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0141"
+   ],
+   "class": "DRUID",
+   "key": "wrath",
+   "kind": "damage",
+   "name": "Wrath",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.571,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      15
+     ],
+     "c": [
+      0.429
+     ],
+     "def": 1,
+     "id": 5176,
+     "level": 1,
+     "ppl": [
+      0.2
+     ]
+    },
+    {
+     "bp": [
+      21
+     ],
+     "c": [
+      0.486
+     ],
+     "def": 1,
+     "id": 5177,
+     "level": 6,
+     "ppl": [
+      0.3
+     ]
+    },
+    {
+     "bp": [
+      30
+     ],
+     "def": 1,
+     "id": 5178,
+     "level": 14,
+     "ppl": [
+      0.5
+     ]
+    },
+    {
+     "bp": [
+      37
+     ],
+     "def": 1,
+     "id": 5179,
+     "level": 22,
+     "ppl": [
+      0.6
+     ]
+    },
+    {
+     "bp": [
+      45
+     ],
+     "def": 1,
+     "id": 5180,
+     "level": 30,
+     "ppl": [
+      0.7
+     ]
+    },
+    {
+     "bp": [
+      54
+     ],
+     "def": 1,
+     "id": 6780,
+     "level": 38,
+     "ppl": [
+      0.9
+     ]
+    },
+    {
+     "bp": [
+      68
+     ],
+     "def": 1,
+     "id": 8905,
+     "level": 46,
+     "ppl": [
+      0.9
+     ]
+    },
+    {
+     "bp": [
+      91
+     ],
+     "def": 1,
+     "id": 9912,
+     "level": 54,
+     "ppl": [
+      1
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "key": "aimed shot",
+   "kind": "physical",
+   "name": "Aimed Shot",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0068"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "ranged",
+     "spd": "nranged",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 19434,
+     "level": 20
+    },
+    {
+     "id": 20900,
+     "level": 28
+    },
+    {
+     "id": 20901,
+     "level": 36
+    },
+    {
+     "id": 20902,
+     "level": 44
+    },
+    {
+     "id": 20903,
+     "level": 52
+    },
+    {
+     "id": 20904,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0068",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "HUNTER",
+   "key": "arcane shot",
+   "kind": "damage",
+   "name": "Arcane Shot",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0068",
+      "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)",
+      "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+     ],
+     "coef": 0.15,
+     "find": "damage",
+     "stat": "rap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 3044,
+     "level": 6
+    },
+    {
+     "id": 14281,
+     "level": 12
+    },
+    {
+     "id": 14282,
+     "level": 20
+    },
+    {
+     "id": 14283,
+     "level": 28
+    },
+    {
+     "id": 14284,
+     "level": 36
+    },
+    {
+     "id": 14285,
+     "level": 44
+    },
+    {
+     "id": 14286,
+     "level": 52
+    },
+    {
+     "id": 14287,
+     "level": 60
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "HUNTER",
+   "key": "auto shot",
+   "kind": "physical",
+   "name": "Auto Shot",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "ranged",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 75,
+     "level": 1
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "key": "counterattack",
+   "kind": "physical",
+   "name": "Counterattack",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.5,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 19306,
+     "level": 30
+    },
+    {
+     "id": 1242634,
+     "level": 30
+    },
+    {
+     "id": 20909,
+     "level": 42
+    },
+    {
+     "id": 20910,
+     "level": 54
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0068",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "HUNTER",
+   "key": "explosive trap",
+   "kind": "damage",
+   "name": "Explosive Trap",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "wowsims/forever docs/evidence/EV-0068"
+     ],
+     "coef": 0.1,
+     "find": "damage",
+     "per": "target",
+     "stat": "rap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 13812,
+     "level": 34
+    },
+    {
+     "id": 14314,
+     "level": 44
+    },
+    {
+     "id": 14315,
+     "level": 54
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "HUNTER",
+   "key": "immolation trap",
+   "kind": "damage",
+   "name": "Immolation Trap",
+   "parts": [
+    {
+     "basis": "e",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+     ],
+     "coef": 0.1,
+     "find": "pdamage",
+     "n": 5,
+     "stat": "rap",
+     "tick": 0.02,
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 13797,
+     "level": 16
+    },
+    {
+     "id": 14298,
+     "level": 26
+    },
+    {
+     "id": 14299,
+     "level": 36
+    },
+    {
+     "id": 14300,
+     "level": 46
+    },
+    {
+     "id": 14301,
+     "level": 56
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "HUNTER",
+   "key": "mongoose bite",
+   "kind": "physical",
+   "name": "Mongoose Bite",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1495,
+     "level": 16
+    },
+    {
+     "id": 14269,
+     "level": 30
+    },
+    {
+     "id": 14270,
+     "level": 44
+    },
+    {
+     "id": 14271,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "key": "multi-shot",
+   "kind": "physical",
+   "name": "Multi-Shot",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0068"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "ranged",
+     "per": "target",
+     "spd": "nranged",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2643,
+     "level": 18
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "key": "raptor strike",
+   "kind": "physical",
+   "name": "Raptor Strike",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2973,
+     "level": 1
+    },
+    {
+     "id": 14260,
+     "level": 8
+    },
+    {
+     "id": 14261,
+     "level": 16
+    },
+    {
+     "id": 14262,
+     "level": 24
+    },
+    {
+     "id": 14263,
+     "level": 32
+    },
+    {
+     "id": 14264,
+     "level": 40
+    },
+    {
+     "id": 14265,
+     "level": 48
+    },
+    {
+     "id": 14266,
+     "level": 56
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "key": "scatter shot",
+   "kind": "physical",
+   "name": "Scatter Shot",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.5,
+     "find": "weapon",
+     "h": "ranged",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 19503,
+     "level": 30
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0068",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "HUNTER",
+   "key": "serpent sting",
+   "kind": "damage",
+   "name": "Serpent Sting",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0068",
+      "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)",
+      "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+     ],
+     "coef": 0.25,
+     "find": "pdamage",
+     "n": 5,
+     "stat": "rap",
+     "tick": 0.05,
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1978,
+     "level": 4
+    },
+    {
+     "id": 13549,
+     "level": 10
+    },
+    {
+     "id": 13550,
+     "level": 18
+    },
+    {
+     "id": 13551,
+     "level": 26
+    },
+    {
+     "id": 13552,
+     "level": 34
+    },
+    {
+     "id": 13553,
+     "level": 42
+    },
+    {
+     "id": 13554,
+     "level": 50
+    },
+    {
+     "id": 13555,
+     "level": 58
+    },
+    {
+     "id": 25295,
+     "level": 60
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "HUNTER",
+   "key": "sniper shot",
+   "kind": "physical",
+   "name": "Sniper Shot",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "ranged",
+     "spd": "nranged",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1310687,
+     "level": 40
+    },
+    {
+     "id": 1310785,
+     "level": 48
+    },
+    {
+     "id": 1310786,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "key": "strider kick",
+   "kind": "physical",
+   "name": "Strider Kick",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1317257,
+     "level": 30
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "key": "summon hawk",
+   "kind": "physical",
+   "name": "Summon Hawk",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "client text: ${$s1+($rap*($s4/100))}"
+     ],
+     "coef": 0.05,
+     "find": "damage",
+     "stat": "rap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1293241,
+     "level": 25
+    },
+    {
+     "id": 1293525,
+     "level": 36
+    },
+    {
+     "id": 1293526,
+     "level": 48
+    },
+    {
+     "id": 1293527,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "key": "volley",
+   "kind": "damage",
+   "name": "Volley",
+   "parts": [
+    {
+     "basis": "e",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+     ],
+     "coef": 0.18,
+     "find": "damage",
+     "per": "target",
+     "stat": "rap",
+     "ticks": "rank"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1510,
+     "level": 40,
+     "rows": {
+      "0": 1279721
+     }
+    },
+    {
+     "id": 14294,
+     "level": 50,
+     "rows": {
+      "0": 1279719
+     }
+    },
+    {
+     "id": 14295,
+     "level": 58,
+     "rows": {
+      "0": 1279715
+     }
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "key": "wing clip",
+   "kind": "physical",
+   "name": "Wing Clip",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2974,
+     "level": 12
+    },
+    {
+     "id": 14267,
+     "level": 38
+    },
+    {
+     "id": 14268,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "arcane blast",
+   "kind": "damage",
+   "name": "Arcane Blast",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 400574,
+     "level": 20
+    },
+    {
+     "id": 1239696,
+     "level": 30
+    },
+    {
+     "id": 1239697,
+     "level": 40
+    },
+    {
+     "id": 1239699,
+     "level": 50
+    },
+    {
+     "id": 1239700,
+     "level": 60
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "arcane explosion",
+   "kind": "damage",
+   "name": "Arcane Explosion",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.143,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1449,
+     "level": 14
+    },
+    {
+     "id": 8437,
+     "level": 22
+    },
+    {
+     "id": 8438,
+     "level": 30
+    },
+    {
+     "id": 8439,
+     "level": 38
+    },
+    {
+     "id": 10201,
+     "level": 46
+    },
+    {
+     "id": 10202,
+     "level": 54
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "arcane missiles",
+   "kind": "damage",
+   "name": "Arcane Missiles",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.43,
+     "find": "damage",
+     "n": 5,
+     "p": 1.0,
+     "per": "missile",
+     "stat": "sp",
+     "ticks": "rank"
+    }
+   ],
+   "ranks": [
+    {
+     "c": [
+      0.858
+     ],
+     "id": 5143,
+     "level": 8,
+     "n": [
+      3
+     ],
+     "rows": {
+      "0": 7268
+     }
+    },
+    {
+     "c": [
+      1.144
+     ],
+     "id": 5144,
+     "level": 16,
+     "n": [
+      4
+     ],
+     "rows": {
+      "0": 7269
+     }
+    },
+    {
+     "id": 5145,
+     "level": 24,
+     "rows": {
+      "0": 7270
+     }
+    },
+    {
+     "id": 8416,
+     "level": 32,
+     "rows": {
+      "0": 8419
+     }
+    },
+    {
+     "id": 8417,
+     "level": 40,
+     "rows": {
+      "0": 8418
+     }
+    },
+    {
+     "id": 10211,
+     "level": 48,
+     "rows": {
+      "0": 10273
+     }
+    },
+    {
+     "id": 10212,
+     "level": 56,
+     "rows": {
+      "0": 10274
+     }
+    },
+    {
+     "id": 25345,
+     "level": 56,
+     "rows": {
+      "0": 25346
+     }
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "arcane wrath",
+   "kind": "damage",
+   "name": "Arcane Wrath",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1326079,
+     "level": 25
+    },
+    {
+     "id": 1326080,
+     "level": 36
+    },
+    {
+     "id": 1326081,
+     "level": 48
+    },
+    {
+     "id": 1326082,
+     "level": 60
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "blast wave",
+   "kind": "damage",
+   "name": "Blast Wave",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.129,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 11113,
+     "level": 30
+    },
+    {
+     "id": 13018,
+     "level": 36
+    },
+    {
+     "id": 13019,
+     "level": 44
+    },
+    {
+     "id": 13020,
+     "level": 52
+    },
+    {
+     "id": 13021,
+     "level": 60
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)"
+   ],
+   "class": "MAGE",
+   "key": "blizzard",
+   "kind": "damage",
+   "name": "Blizzard",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.336,
+     "find": "damage",
+     "n": 8,
+     "p": 1.0,
+     "per": "target",
+     "stat": "sp",
+     "ticks": "rank"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 10,
+     "level": 20,
+     "rows": {
+      "0": 1279976
+     }
+    },
+    {
+     "id": 6141,
+     "level": 28,
+     "rows": {
+      "0": 1279977
+     }
+    },
+    {
+     "id": 8427,
+     "level": 36,
+     "rows": {
+      "0": 1279978
+     }
+    },
+    {
+     "id": 10185,
+     "level": 44,
+     "rows": {
+      "0": 1279979
+     }
+    },
+    {
+     "id": 10186,
+     "level": 52,
+     "rows": {
+      "0": 1279980
+     }
+    },
+    {
+     "id": 10187,
+     "level": 60,
+     "rows": {
+      "0": 1279949
+     }
+    }
+   ],
+   "school": 16
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "cone of cold",
+   "kind": "damage",
+   "name": "Cone of Cold",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.129,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 120,
+     "level": 26
+    },
+    {
+     "id": 8492,
+     "level": 34
+    },
+    {
+     "id": 10159,
+     "level": 42
+    },
+    {
+     "id": 10160,
+     "level": 50
+    },
+    {
+     "id": 10161,
+     "level": 58
+    }
+   ],
+   "school": 16
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "fire blast",
+   "kind": "damage",
+   "name": "Fire Blast",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2136,
+     "level": 6
+    },
+    {
+     "id": 2137,
+     "level": 14
+    },
+    {
+     "id": 2138,
+     "level": 22
+    },
+    {
+     "id": 8412,
+     "level": 30
+    },
+    {
+     "id": 8413,
+     "level": 38
+    },
+    {
+     "id": 10197,
+     "level": 46
+    },
+    {
+     "id": 10199,
+     "level": 54
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "fire ward",
+   "kind": "absorb",
+   "name": "Fire Ward",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "absorb",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 543,
+     "level": 20
+    },
+    {
+     "id": 8457,
+     "level": 30
+    },
+    {
+     "id": 8458,
+     "level": 40
+    },
+    {
+     "id": 10223,
+     "level": 50
+    },
+    {
+     "id": 10225,
+     "level": 60
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "fireball",
+   "kind": "damage",
+   "name": "Fireball",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "damage",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "pdamage",
+     "n": 4,
+     "p": 2.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "c": [
+      0.429,
+      null
+     ],
+     "id": 133,
+     "level": 1,
+     "n": [
+      null,
+      2
+     ]
+    },
+    {
+     "c": [
+      0.571,
+      null
+     ],
+     "id": 143,
+     "level": 6,
+     "n": [
+      null,
+      3
+     ]
+    },
+    {
+     "c": [
+      0.714,
+      null
+     ],
+     "id": 145,
+     "level": 12,
+     "n": [
+      null,
+      3
+     ]
+    },
+    {
+     "c": [
+      0.857,
+      null
+     ],
+     "id": 3140,
+     "level": 18
+    },
+    {
+     "id": 8400,
+     "level": 24
+    },
+    {
+     "id": 8401,
+     "level": 30
+    },
+    {
+     "id": 8402,
+     "level": 36
+    },
+    {
+     "id": 10148,
+     "level": 42
+    },
+    {
+     "id": 10149,
+     "level": 48
+    },
+    {
+     "id": 10150,
+     "level": 54
+    },
+    {
+     "id": 10151,
+     "level": 60
+    },
+    {
+     "id": 25306,
+     "level": 60
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "flamestrike",
+   "kind": "damage",
+   "name": "Flamestrike",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.157,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.128,
+     "find": "damage",
+     "n": 4,
+     "p": 2.0,
+     "per": "target",
+     "stat": "sp",
+     "ticks": "rank"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2120,
+     "level": 16,
+     "rows": {
+      "1": 1279983
+     }
+    },
+    {
+     "id": 2121,
+     "level": 24,
+     "rows": {
+      "1": 1279985
+     }
+    },
+    {
+     "id": 8422,
+     "level": 32,
+     "rows": {
+      "1": 1279987
+     }
+    },
+    {
+     "id": 8423,
+     "level": 40,
+     "rows": {
+      "1": 1279988
+     }
+    },
+    {
+     "id": 10215,
+     "level": 48,
+     "rows": {
+      "1": 1279989
+     }
+    },
+    {
+     "id": 10216,
+     "level": 56,
+     "rows": {
+      "1": 1279990
+     }
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "frost nova",
+   "kind": "damage",
+   "name": "Frost Nova",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.029,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 122,
+     "level": 10
+    },
+    {
+     "id": 865,
+     "level": 26
+    },
+    {
+     "id": 6131,
+     "level": 40
+    },
+    {
+     "id": 10230,
+     "level": 54
+    }
+   ],
+   "school": 16
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "frost ward",
+   "kind": "absorb",
+   "name": "Frost Ward",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client text: ${$s1+($SPFR*0.1)*...}, hotfix push 113024"
+     ],
+     "coef": 0.1,
+     "find": "absorb",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6143,
+     "level": 22
+    },
+    {
+     "id": 8461,
+     "level": 32
+    },
+    {
+     "id": 8462,
+     "level": 42
+    },
+    {
+     "id": 10177,
+     "level": 52
+    },
+    {
+     "id": 28609,
+     "level": 60
+    }
+   ],
+   "school": 16
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "frostbolt",
+   "kind": "damage",
+   "name": "Frostbolt",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.814,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "c": [
+      0.407
+     ],
+     "id": 116,
+     "level": 4
+    },
+    {
+     "c": [
+      0.489
+     ],
+     "id": 205,
+     "level": 8
+    },
+    {
+     "c": [
+      0.597
+     ],
+     "id": 837,
+     "level": 14
+    },
+    {
+     "c": [
+      0.706
+     ],
+     "id": 7322,
+     "level": 20
+    },
+    {
+     "id": 8406,
+     "level": 26
+    },
+    {
+     "id": 8407,
+     "level": 32
+    },
+    {
+     "id": 8408,
+     "level": 38
+    },
+    {
+     "id": 10179,
+     "level": 44
+    },
+    {
+     "id": 10180,
+     "level": 50
+    },
+    {
+     "id": 10181,
+     "level": 56
+    },
+    {
+     "id": 25304,
+     "level": 60
+    }
+   ],
+   "school": 16
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "frostfire bolt",
+   "kind": "damage",
+   "name": "Frostfire Bolt",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.814,
+     "find": "damage",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "pdamage",
+     "n": 3,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 401502,
+     "level": 40
+    },
+    {
+     "id": 1237312,
+     "level": 50
+    },
+    {
+     "id": 1237313,
+     "level": 60
+    }
+   ],
+   "school": 20
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "ice barrier",
+   "kind": "absorb",
+   "name": "Ice Barrier",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client text: ${$s1+($SPFR*0.1)*...}, hotfix push 112753"
+     ],
+     "coef": 0.1,
+     "find": "absorb",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 11426,
+     "level": 40
+    },
+    {
+     "id": 13031,
+     "level": 46
+    },
+    {
+     "id": 13032,
+     "level": 52
+    },
+    {
+     "id": 13033,
+     "level": 58
+    }
+   ],
+   "school": 16
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "gunba wow-forever-sim docs/uncertainties.md"
+   ],
+   "class": "MAGE",
+   "key": "ice lance",
+   "kind": "damage",
+   "name": "Ice Lance",
+   "parts": [
+    {
+     "basis": "e",
+     "cite": [
+      "gunba wow-forever-sim docs/uncertainties.md MAG-001 (a fit of beta combat logs)"
+     ],
+     "coef": 0.1,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1312002,
+     "level": 20
+    },
+    {
+     "id": 400640,
+     "level": 28
+    },
+    {
+     "id": 1240044,
+     "level": 34
+    },
+    {
+     "id": 1240045,
+     "level": 42
+    },
+    {
+     "id": 1240046,
+     "level": 48
+    },
+    {
+     "id": 1240047,
+     "level": 56
+    }
+   ],
+   "school": 16
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "mana shield",
+   "kind": "absorb",
+   "name": "Mana Shield",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "absorb",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1463,
+     "level": 20
+    },
+    {
+     "id": 8494,
+     "level": 28
+    },
+    {
+     "id": 8495,
+     "level": 36
+    },
+    {
+     "id": 10191,
+     "level": 44
+    },
+    {
+     "id": 10192,
+     "level": 52
+    },
+    {
+     "id": 10193,
+     "level": 60
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "pyroblast",
+   "kind": "damage",
+   "name": "Pyroblast",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "damage",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.6,
+     "find": "pdamage",
+     "n": 4,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 11366,
+     "level": 20
+    },
+    {
+     "id": 12505,
+     "level": 24
+    },
+    {
+     "id": 12522,
+     "level": 30
+    },
+    {
+     "id": 12523,
+     "level": 36
+    },
+    {
+     "id": 12524,
+     "level": 42
+    },
+    {
+     "id": 12525,
+     "level": 48
+    },
+    {
+     "id": 12526,
+     "level": 54
+    },
+    {
+     "id": 18809,
+     "level": 60
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "MAGE",
+   "key": "scorch",
+   "kind": "damage",
+   "name": "Scorch",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2948,
+     "level": 22
+    },
+    {
+     "id": 8444,
+     "level": 28
+    },
+    {
+     "id": 8445,
+     "level": 34
+    },
+    {
+     "id": 8446,
+     "level": 40
+    },
+    {
+     "id": 10205,
+     "level": 46
+    },
+    {
+     "id": 10206,
+     "level": 52
+    },
+    {
+     "id": 10207,
+     "level": 58
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0015",
+    "wowsims/forever docs/evidence/EV-0143"
+   ],
+   "class": "PALADIN",
+   "key": "consecration",
+   "kind": "damage",
+   "name": "Consecration",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0,
+     "find": "damage",
+     "n": 8,
+     "per": "target",
+     "stat": "sp",
+     "ticks": "rank"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.336,
+     "find": "damage",
+     "n": 8,
+     "nth": 1,
+     "per": "target",
+     "stat": "sp",
+     "ticks": "rank"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      2,
+      4
+     ],
+     "def": 1,
+     "id": 26573,
+     "level": 20,
+     "rows": {
+      "0": 1280345,
+      "1": 1280345
+     }
+    },
+    {
+     "bp": [
+      3,
+      7
+     ],
+     "def": 1,
+     "id": 20116,
+     "level": 30,
+     "rows": {
+      "0": 1280346,
+      "1": 1280346
+     }
+    },
+    {
+     "bp": [
+      6,
+      11
+     ],
+     "def": 1,
+     "id": 20922,
+     "level": 40,
+     "rows": {
+      "0": 1280347,
+      "1": 1280347
+     }
+    },
+    {
+     "bp": [
+      8,
+      20
+     ],
+     "def": 1,
+     "id": 20923,
+     "level": 50,
+     "rows": {
+      "0": 1280348,
+      "1": 1280348
+     }
+    },
+    {
+     "bp": [
+      12,
+      27
+     ],
+     "def": 1,
+     "id": 20924,
+     "level": 60,
+     "rows": {
+      "0": 1280349,
+      "1": 1280349
+     }
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PALADIN",
+   "key": "exorcism",
+   "kind": "damage",
+   "name": "Exorcism",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      79
+     ],
+     "def": 1,
+     "id": 879,
+     "level": 20,
+     "ppl": [
+      1.2
+     ]
+    },
+    {
+     "bp": [
+      141
+     ],
+     "def": 1,
+     "id": 5614,
+     "level": 28,
+     "ppl": [
+      1.6
+     ]
+    },
+    {
+     "bp": [
+      202
+     ],
+     "def": 1,
+     "id": 5615,
+     "level": 36,
+     "ppl": [
+      2
+     ]
+    },
+    {
+     "bp": [
+      291
+     ],
+     "def": 1,
+     "id": 10312,
+     "level": 44,
+     "ppl": [
+      2.4
+     ]
+    },
+    {
+     "bp": [
+      384
+     ],
+     "def": 1,
+     "id": 10313,
+     "level": 52,
+     "ppl": [
+      2.8
+     ]
+    },
+    {
+     "bp": [
+      502
+     ],
+     "def": 1,
+     "id": 10314,
+     "level": 60,
+     "ppl": [
+      3.2
+     ]
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0057"
+   ],
+   "class": "PALADIN",
+   "key": "flash of light",
+   "kind": "heal",
+   "name": "Flash of Light",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      46
+     ],
+     "def": 1,
+     "id": 19750,
+     "level": 20,
+     "ppl": [
+      1
+     ]
+    },
+    {
+     "bp": [
+      66
+     ],
+     "def": 1,
+     "id": 19939,
+     "level": 26,
+     "ppl": [
+      1.3
+     ]
+    },
+    {
+     "bp": [
+      101
+     ],
+     "def": 1,
+     "id": 19940,
+     "level": 34,
+     "ppl": [
+      1.6
+     ]
+    },
+    {
+     "bp": [
+      151
+     ],
+     "def": 1,
+     "id": 19941,
+     "level": 42,
+     "ppl": [
+      1.9
+     ]
+    },
+    {
+     "bp": [
+      223
+     ],
+     "def": 1,
+     "id": 19942,
+     "level": 50,
+     "ppl": [
+      2.2
+     ]
+    },
+    {
+     "bp": [
+      303
+     ],
+     "def": 1,
+     "id": 19943,
+     "level": 58,
+     "ppl": [
+      2.6
+     ]
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PALADIN",
+   "key": "hammer of wrath",
+   "kind": "damage",
+   "name": "Hammer of Wrath",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      288
+     ],
+     "def": 3,
+     "id": 24275,
+     "level": 44,
+     "ppl": [
+      2.4
+     ]
+    },
+    {
+     "bp": [
+      388
+     ],
+     "def": 3,
+     "id": 24274,
+     "level": 52,
+     "ppl": [
+      2.7
+     ]
+    },
+    {
+     "bp": [
+      498
+     ],
+     "def": 3,
+     "id": 24239,
+     "level": 60,
+     "ppl": [
+      3.1
+     ]
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever sim/paladin/oath_of_light.go",
+    "wowsims/forever docs/evidence/EV-0057"
+   ],
+   "class": "PALADIN",
+   "key": "holy light",
+   "kind": "heal",
+   "name": "Holy Light",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.714,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      43
+     ],
+     "def": 1,
+     "id": 635,
+     "level": 1,
+     "ppl": [
+      0.8
+     ]
+    },
+    {
+     "bp": [
+      83
+     ],
+     "def": 1,
+     "id": 639,
+     "level": 6,
+     "ppl": [
+      1.1
+     ]
+    },
+    {
+     "bp": [
+      155
+     ],
+     "def": 1,
+     "id": 647,
+     "level": 14,
+     "ppl": [
+      1.7
+     ]
+    },
+    {
+     "bp": [
+      287
+     ],
+     "def": 1,
+     "id": 1026,
+     "level": 22,
+     "ppl": [
+      2.4
+     ]
+    },
+    {
+     "bp": [
+      452
+     ],
+     "def": 1,
+     "id": 1042,
+     "level": 30,
+     "ppl": [
+      3.1
+     ]
+    },
+    {
+     "bp": [
+      646
+     ],
+     "def": 1,
+     "id": 3472,
+     "level": 38,
+     "ppl": [
+      3.8
+     ]
+    },
+    {
+     "bp": [
+      899
+     ],
+     "def": 1,
+     "id": 10328,
+     "level": 46,
+     "ppl": [
+      4.6
+     ]
+    },
+    {
+     "bp": [
+      1217
+     ],
+     "def": 1,
+     "id": 10329,
+     "level": 54,
+     "ppl": [
+      5.2
+     ]
+    },
+    {
+     "bp": [
+      1580
+     ],
+     "def": 1,
+     "id": 25292,
+     "level": 60,
+     "ppl": [
+      5.8
+     ]
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0141"
+   ],
+   "class": "PALADIN",
+   "key": "holy shield",
+   "kind": "damage",
+   "name": "Holy Shield",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.08,
+     "find": "shield",
+     "per": "block",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      75
+     ],
+     "def": 1,
+     "id": 20925,
+     "level": 30
+    },
+    {
+     "bp": [
+      110
+     ],
+     "def": 1,
+     "id": 20927,
+     "level": 40
+    },
+    {
+     "bp": [
+      153
+     ],
+     "def": 1,
+     "id": 20928,
+     "level": 50
+    },
+    {
+     "bp": [
+      221
+     ],
+     "def": 1,
+     "id": 1239570,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0058"
+   ],
+   "class": "PALADIN",
+   "key": "holy shock",
+   "kind": "damage",
+   "name": "Holy Shock",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      134,
+      114
+     ],
+     "def": 0,
+     "id": 1311606,
+     "level": 30,
+     "rows": {
+      "0": 1311604,
+      "1": 1311605
+     }
+    },
+    {
+     "bp": [
+      182,
+      156
+     ],
+     "def": 0,
+     "id": 20473,
+     "level": 40,
+     "rows": {
+      "0": 25912,
+      "1": 25914
+     }
+    },
+    {
+     "bp": [
+      258,
+      230
+     ],
+     "def": 0,
+     "id": 20929,
+     "level": 48,
+     "rows": {
+      "0": 25911,
+      "1": 25913
+     }
+    },
+    {
+     "bp": [
+      348,
+      320
+     ],
+     "def": 0,
+     "id": 20930,
+     "level": 56,
+     "rows": {
+      "0": 25902,
+      "1": 25903
+     }
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0101",
+    "wowsims/forever docs/evidence/EV-0018",
+    "wowsims/forever docs/evidence/EV-0117"
+   ],
+   "class": "PALADIN",
+   "key": "holy strike",
+   "kind": "physical",
+   "name": "Holy Strike",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.5,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    },
+    {
+     "basis": "e",
+     "cite": [
+      "wowsims/forever sim/paladin/holy_strike.go"
+     ],
+     "coef": 0.2145,
+     "find": "weapon",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "c": [
+      0.25,
+      0.1072
+     ],
+     "id": 679,
+     "level": 6
+    },
+    {
+     "c": [
+      0.29,
+      0.1244
+     ],
+     "id": 678,
+     "level": 12
+    },
+    {
+     "c": [
+      0.32,
+      0.1373
+     ],
+     "id": 1866,
+     "level": 20
+    },
+    {
+     "c": [
+      0.36,
+      0.1544
+     ],
+     "id": 680,
+     "level": 28
+    },
+    {
+     "c": [
+      0.39,
+      0.1673
+     ],
+     "id": 2495,
+     "level": 36
+    },
+    {
+     "c": [
+      0.43,
+      0.1845
+     ],
+     "id": 5569,
+     "level": 44
+    },
+    {
+     "c": [
+      0.46,
+      0.1973
+     ],
+     "id": 10332,
+     "level": 52
+    },
+    {
+     "id": 10333,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PALADIN",
+   "key": "holy wrath",
+   "kind": "damage",
+   "name": "Holy Wrath",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.19,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      395
+     ],
+     "def": 1,
+     "id": 2812,
+     "level": 50,
+     "ppl": [
+      1.6
+     ]
+    },
+    {
+     "bp": [
+      533
+     ],
+     "def": 1,
+     "id": 10318,
+     "level": 60,
+     "ppl": [
+      1.9
+     ]
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PALADIN",
+   "key": "judgement of command",
+   "kind": "damage",
+   "name": "Judgement of Command",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      97
+     ],
+     "def": 2,
+     "id": 20467,
+     "level": 20,
+     "ppl": [
+      5.6
+     ]
+    },
+    {
+     "bp": [
+      153
+     ],
+     "def": 2,
+     "id": 20963,
+     "level": 30,
+     "ppl": [
+      6.1
+     ]
+    },
+    {
+     "bp": [
+      214
+     ],
+     "def": 2,
+     "id": 20964,
+     "level": 40,
+     "ppl": [
+      5.6
+     ]
+    },
+    {
+     "bp": [
+      274
+     ],
+     "def": 2,
+     "id": 20965,
+     "level": 50,
+     "ppl": [
+      6.1
+     ]
+    },
+    {
+     "bp": [
+      356
+     ],
+     "def": 2,
+     "id": 20966,
+     "level": 60,
+     "ppl": [
+      6.1
+     ]
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0143"
+   ],
+   "class": "PALADIN",
+   "key": "judgement of fury",
+   "kind": "damage",
+   "name": "Judgement of Fury",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      23
+     ],
+     "def": 3,
+     "id": 1311650,
+     "level": 10,
+     "ppl": [
+      1.71
+     ]
+    },
+    {
+     "bp": [
+      36.9
+     ],
+     "def": 3,
+     "id": 1311655,
+     "level": 18,
+     "ppl": [
+      2.16
+     ]
+    },
+    {
+     "bp": [
+      54
+     ],
+     "def": 3,
+     "id": 20183,
+     "level": 25,
+     "ppl": [
+      2.52
+     ]
+    },
+    {
+     "bp": [
+      74
+     ],
+     "def": 3,
+     "id": 20411,
+     "level": 34,
+     "ppl": [
+      2.79
+     ]
+    },
+    {
+     "bp": [
+      96
+     ],
+     "def": 3,
+     "id": 20412,
+     "level": 42,
+     "ppl": [
+      3.42
+     ]
+    },
+    {
+     "bp": [
+      123
+     ],
+     "def": 3,
+     "id": 20413,
+     "level": 50,
+     "ppl": [
+      3.69
+     ]
+    },
+    {
+     "bp": [
+      153
+     ],
+     "def": 3,
+     "id": 20414,
+     "level": 58,
+     "ppl": [
+      3.69
+     ]
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0117",
+    "wowsims/forever docs/evidence/EV-0017"
+   ],
+   "class": "PALADIN",
+   "key": "judgement of light",
+   "kind": "heal",
+   "name": "Judgement of Light",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0,
+     "find": "heal",
+     "per": "proc",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      25
+     ],
+     "def": 3,
+     "id": 20185,
+     "level": 30,
+     "rows": {
+      "0": 20267
+     }
+    },
+    {
+     "bp": [
+      34
+     ],
+     "def": 3,
+     "id": 20344,
+     "level": 40,
+     "rows": {
+      "0": 20341
+     }
+    },
+    {
+     "bp": [
+      49
+     ],
+     "def": 3,
+     "id": 20345,
+     "level": 50,
+     "rows": {
+      "0": 20342
+     }
+    },
+    {
+     "bp": [
+      61
+     ],
+     "def": 3,
+     "id": 20346,
+     "level": 60,
+     "rows": {
+      "0": 20343
+     }
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)",
+    "wowsims/forever docs/evidence/EV-0059"
+   ],
+   "class": "PALADIN",
+   "key": "judgement of righteousness",
+   "kind": "damage",
+   "name": "Judgement of Righteousness",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      15
+     ],
+     "def": 3,
+     "id": 20187,
+     "level": 1,
+     "ppl": [
+      1.8
+     ]
+    },
+    {
+     "bp": [
+      26
+     ],
+     "def": 3,
+     "id": 20280,
+     "level": 10,
+     "ppl": [
+      1.9
+     ]
+    },
+    {
+     "bp": [
+      41
+     ],
+     "def": 3,
+     "id": 20281,
+     "level": 18,
+     "ppl": [
+      2.4
+     ]
+    },
+    {
+     "bp": [
+      60
+     ],
+     "def": 3,
+     "id": 20282,
+     "level": 26,
+     "ppl": [
+      2.8
+     ]
+    },
+    {
+     "bp": [
+      82
+     ],
+     "def": 3,
+     "id": 20283,
+     "level": 34,
+     "ppl": [
+      3.1
+     ]
+    },
+    {
+     "bp": [
+      107
+     ],
+     "def": 3,
+     "id": 20284,
+     "level": 42,
+     "ppl": [
+      3.8
+     ]
+    },
+    {
+     "bp": [
+      137
+     ],
+     "def": 3,
+     "id": 20285,
+     "level": 50,
+     "ppl": [
+      4.1
+     ]
+    },
+    {
+     "bp": [
+      170
+     ],
+     "def": 3,
+     "id": 20286,
+     "level": 58,
+     "ppl": [
+      4.1
+     ]
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PALADIN",
+   "key": "light's vigil",
+   "kind": "heal",
+   "name": "Light's Vigil",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.143,
+     "find": "heal",
+     "per": "target",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      324
+     ],
+     "def": 1,
+     "id": 1310911,
+     "level": 40,
+     "ppl": [
+      1.2
+     ],
+     "rows": {
+      "0": 1310912
+     }
+    },
+    {
+     "bp": [
+      487
+     ],
+     "def": 1,
+     "id": 1311590,
+     "level": 50,
+     "ppl": [
+      1.5
+     ],
+     "rows": {
+      "0": 1311591
+     }
+    },
+    {
+     "bp": [
+      704
+     ],
+     "def": 1,
+     "id": 1311595,
+     "level": 60,
+     "ppl": [
+      1.8
+     ],
+     "rows": {
+      "0": 1311596
+     }
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)",
+    "wowsims/forever docs/evidence/EV-0141"
+   ],
+   "class": "PALADIN",
+   "key": "retribution aura",
+   "kind": "damage",
+   "name": "Retribution Aura",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries): Retribution Aura and Thorns deal 6% of spell damage (beta tuning, 2026-10-08)"
+     ],
+     "coef": 0.06,
+     "find": "shield",
+     "per": "hit",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      5
+     ],
+     "def": 1,
+     "id": 7294,
+     "level": 16
+    },
+    {
+     "bp": [
+      8
+     ],
+     "def": 1,
+     "id": 10298,
+     "level": 26
+    },
+    {
+     "bp": [
+      12
+     ],
+     "def": 1,
+     "id": 10299,
+     "level": 36
+    },
+    {
+     "bp": [
+      16
+     ],
+     "def": 1,
+     "id": 10300,
+     "level": 46
+    },
+    {
+     "bp": [
+      20
+     ],
+     "def": 1,
+     "id": 10301,
+     "level": 56
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0061",
+    "wowsims/forever sim/paladin/seal_of_command.go"
+   ],
+   "class": "PALADIN",
+   "key": "seal of command",
+   "kind": "physical",
+   "name": "Seal of Command",
+   "parts": [
+    {
+     "basis": "c",
+     "carrier": "trigger",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.7,
+     "find": "weapon",
+     "h": "main",
+     "per": "proc",
+     "spd": "actual",
+     "stat": "wpn"
+    },
+    {
+     "basis": "m",
+     "carrier": "trigger",
+     "cite": [
+      "wowsims/forever docs/evidence/EV-0061"
+     ],
+     "coef": 0.203,
+     "find": "weapon",
+     "per": "proc",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 20375,
+     "level": 20
+    },
+    {
+     "id": 20915,
+     "level": 30
+    },
+    {
+     "id": 20918,
+     "level": 40
+    },
+    {
+     "id": 20919,
+     "level": 50
+    },
+    {
+     "id": 20920,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0143"
+   ],
+   "class": "PALADIN",
+   "key": "seal of fury",
+   "kind": "damage",
+   "name": "Seal of Fury",
+   "parts": [
+    {
+     "basis": "c",
+     "carrier": "trigger",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.1,
+     "find": "damage",
+     "per": "hit",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      6
+     ],
+     "def": 1,
+     "id": 1311649,
+     "level": 10
+    },
+    {
+     "bp": [
+      9
+     ],
+     "def": 1,
+     "id": 1311656,
+     "level": 18
+    },
+    {
+     "bp": [
+      14
+     ],
+     "def": 1,
+     "id": 20163,
+     "level": 26
+    },
+    {
+     "bp": [
+      19
+     ],
+     "def": 1,
+     "id": 20419,
+     "level": 34
+    },
+    {
+     "bp": [
+      25
+     ],
+     "def": 1,
+     "id": 20421,
+     "level": 42
+    },
+    {
+     "bp": [
+      32
+     ],
+     "def": 1,
+     "id": 20422,
+     "level": 50
+    },
+    {
+     "bp": [
+      35
+     ],
+     "def": 1,
+     "id": 20423,
+     "level": 58
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0017",
+    "wowsims/forever docs/evidence/EV-0018",
+    "wowsims/forever docs/evidence/EV-0057"
+   ],
+   "class": "PALADIN",
+   "key": "seal of light",
+   "kind": "heal",
+   "name": "Seal of Light",
+   "parts": [
+    {
+     "basis": "c",
+     "carrier": "trigger",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0,
+     "find": "heal",
+     "per": "proc",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      39
+     ],
+     "def": 1,
+     "id": 20165,
+     "level": 30
+    },
+    {
+     "bp": [
+      53
+     ],
+     "def": 1,
+     "id": 20347,
+     "level": 40
+    },
+    {
+     "bp": [
+      76
+     ],
+     "def": 1,
+     "id": 20348,
+     "level": 50
+    },
+    {
+     "bp": [
+      94
+     ],
+     "def": 1,
+     "id": 20349,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0059",
+    "wowsims/forever docs/evidence/EV-0060"
+   ],
+   "class": "PALADIN",
+   "key": "seal of righteousness",
+   "kind": "damage",
+   "name": "Seal of Righteousness",
+   "parts": [
+    {
+     "base": "sv",
+     "basis": "m",
+     "cite": [
+      "wowsims/forever docs/evidence/EV-0059",
+      "wowsims/forever docs/evidence/EV-0060"
+     ],
+     "coef": 0.1,
+     "find": "dummy",
+     "per": "hit",
+     "stat": "sp",
+     "two": 0.12
+    }
+   ],
+   "ranks": [
+    {
+     "def": 1,
+     "id": 21084,
+     "level": 1
+    },
+    {
+     "def": 1,
+     "id": 20287,
+     "level": 10
+    },
+    {
+     "def": 1,
+     "id": 20288,
+     "level": 18
+    },
+    {
+     "def": 1,
+     "id": 20289,
+     "level": 26
+    },
+    {
+     "def": 1,
+     "id": 20290,
+     "level": 34
+    },
+    {
+     "def": 1,
+     "id": 20291,
+     "level": 42
+    },
+    {
+     "def": 1,
+     "id": 20292,
+     "level": 50
+    },
+    {
+     "def": 1,
+     "id": 20293,
+     "level": 58
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "chastise",
+   "kind": "damage",
+   "name": "Chastise",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.143,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1277331,
+     "level": 20
+    },
+    {
+     "id": 1277332,
+     "level": 30
+    },
+    {
+     "id": 1277333,
+     "level": 40
+    },
+    {
+     "id": 1277334,
+     "level": 50
+    },
+    {
+     "id": 1277335,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "contingency plan",
+   "kind": "absorb",
+   "name": "Contingency Plan",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "absorb",
+     "stat": "heal"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "pheal",
+     "n": 5,
+     "p": 3.0,
+     "stat": "heal",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1277462,
+     "level": 20,
+     "rows": {
+      "0": 1277463,
+      "1": 1277456
+     }
+    },
+    {
+     "id": 1277634,
+     "level": 30,
+     "rows": {
+      "0": 1277464,
+      "1": 1277457
+     }
+    },
+    {
+     "id": 1277638,
+     "level": 40,
+     "rows": {
+      "0": 1277465,
+      "1": 1277458
+     }
+    },
+    {
+     "id": 1277639,
+     "level": 50,
+     "rows": {
+      "0": 1277467,
+      "1": 1277459
+     }
+    },
+    {
+     "id": 1277640,
+     "level": 60,
+     "rows": {
+      "0": 1277466,
+      "1": 1277460
+     }
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "desperate prayer",
+   "kind": "heal",
+   "name": "Desperate Prayer",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 13908,
+     "level": 10
+    },
+    {
+     "id": 19236,
+     "level": 18
+    },
+    {
+     "id": 19238,
+     "level": 26
+    },
+    {
+     "id": 19240,
+     "level": 34
+    },
+    {
+     "id": 19241,
+     "level": 42
+    },
+    {
+     "id": 19242,
+     "level": 50
+    },
+    {
+     "id": 19243,
+     "level": 58
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "devouring plague",
+   "kind": "damage",
+   "name": "Devouring Plague",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.8,
+     "find": "pdamage",
+     "n": 8,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2944,
+     "level": 20
+    },
+    {
+     "id": 19276,
+     "level": 28
+    },
+    {
+     "id": 19277,
+     "level": 36
+    },
+    {
+     "id": 19278,
+     "level": 44
+    },
+    {
+     "id": 19279,
+     "level": 52
+    },
+    {
+     "id": 19280,
+     "level": 60
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "divine grace",
+   "kind": "heal",
+   "name": "Divine Grace",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1277370,
+     "level": 10
+    },
+    {
+     "id": 1277371,
+     "level": 18
+    },
+    {
+     "id": 1277372,
+     "level": 26
+    },
+    {
+     "id": 1277374,
+     "level": 34
+    },
+    {
+     "id": 1277376,
+     "level": 42
+    },
+    {
+     "id": 1277377,
+     "level": 50
+    },
+    {
+     "id": 1277378,
+     "level": 58
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "feedback",
+   "kind": "damage",
+   "name": "Feedback",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "burn",
+     "per": "hit",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 13896,
+     "level": 20,
+     "rows": {
+      "0": 6347
+     }
+    },
+    {
+     "id": 19271,
+     "level": 30,
+     "rows": {
+      "0": 19267
+     }
+    },
+    {
+     "id": 19273,
+     "level": 40,
+     "rows": {
+      "0": 19268
+     }
+    },
+    {
+     "id": 19274,
+     "level": 50,
+     "rows": {
+      "0": 19269
+     }
+    },
+    {
+     "id": 19275,
+     "level": 60,
+     "rows": {
+      "0": 19270
+     }
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "flash heal",
+   "kind": "heal",
+   "name": "Flash Heal",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2061,
+     "level": 20
+    },
+    {
+     "id": 9472,
+     "level": 26
+    },
+    {
+     "id": 9473,
+     "level": 32
+    },
+    {
+     "id": 9474,
+     "level": 38
+    },
+    {
+     "id": 10915,
+     "level": 44
+    },
+    {
+     "id": 10916,
+     "level": 50
+    },
+    {
+     "id": 10917,
+     "level": 56
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "greater heal",
+   "kind": "heal",
+   "name": "Greater Heal",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.857,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2060,
+     "level": 40
+    },
+    {
+     "id": 10963,
+     "level": 46
+    },
+    {
+     "id": 10964,
+     "level": 52
+    },
+    {
+     "id": 10965,
+     "level": 58
+    },
+    {
+     "id": 25314,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "heal",
+   "kind": "heal",
+   "name": "Heal",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.857,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2054,
+     "level": 16
+    },
+    {
+     "id": 2055,
+     "level": 22
+    },
+    {
+     "id": 6063,
+     "level": 28
+    },
+    {
+     "id": 6064,
+     "level": 34
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "holy fire",
+   "kind": "damage",
+   "name": "Holy Fire",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.75,
+     "find": "damage",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.25,
+     "find": "pdamage",
+     "n": 5,
+     "p": 2.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 14914,
+     "level": 20
+    },
+    {
+     "id": 15262,
+     "level": 24
+    },
+    {
+     "id": 15263,
+     "level": 30
+    },
+    {
+     "id": 15264,
+     "level": 36
+    },
+    {
+     "id": 15265,
+     "level": 42
+    },
+    {
+     "id": 15266,
+     "level": 48
+    },
+    {
+     "id": 15267,
+     "level": 54
+    },
+    {
+     "id": 15261,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "holy nova",
+   "kind": "damage",
+   "name": "Holy Nova",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.107,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.107,
+     "find": "heal",
+     "per": "target",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 15237,
+     "level": 20,
+     "rows": {
+      "1": 23455
+     }
+    },
+    {
+     "id": 15430,
+     "level": 28,
+     "rows": {
+      "1": 23458
+     }
+    },
+    {
+     "id": 15431,
+     "level": 36,
+     "rows": {
+      "1": 23459
+     }
+    },
+    {
+     "id": 27799,
+     "level": 44,
+     "rows": {
+      "1": 27803
+     }
+    },
+    {
+     "id": 27800,
+     "level": 52,
+     "rows": {
+      "1": 27804
+     }
+    },
+    {
+     "id": 27801,
+     "level": 60,
+     "rows": {
+      "1": 27805
+     }
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "lesser heal",
+   "kind": "heal",
+   "name": "Lesser Heal",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.714,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "c": [
+      0.429
+     ],
+     "id": 2050,
+     "level": 1
+    },
+    {
+     "c": [
+      0.571
+     ],
+     "id": 2052,
+     "level": 4
+    },
+    {
+     "id": 2053,
+     "level": 10
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "lightwell renew",
+   "kind": "heal",
+   "name": "Lightwell Renew",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "pheal",
+     "n": 5,
+     "p": 2.0,
+     "stat": "heal",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 7001,
+     "level": 40
+    },
+    {
+     "id": 27873,
+     "level": 50
+    },
+    {
+     "id": 27874,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "mana burn",
+   "kind": "damage",
+   "name": "Mana Burn",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "burn",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 8129,
+     "level": 24
+    },
+    {
+     "id": 8131,
+     "level": 32
+    },
+    {
+     "id": 10874,
+     "level": 40
+    },
+    {
+     "id": 10875,
+     "level": 48
+    },
+    {
+     "id": 10876,
+     "level": 56
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "mind blast",
+   "kind": "damage",
+   "name": "Mind Blast",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 8092,
+     "level": 10
+    },
+    {
+     "id": 8102,
+     "level": 16
+    },
+    {
+     "id": 8103,
+     "level": 22
+    },
+    {
+     "id": 8104,
+     "level": 28
+    },
+    {
+     "id": 8105,
+     "level": 34
+    },
+    {
+     "id": 8106,
+     "level": 40
+    },
+    {
+     "id": 10945,
+     "level": 46
+    },
+    {
+     "id": 10946,
+     "level": 52
+    },
+    {
+     "id": 10947,
+     "level": 58
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "mind flay",
+   "kind": "damage",
+   "name": "Mind Flay",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.501,
+     "find": "pdamage",
+     "n": 3,
+     "p": 1.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 15407,
+     "level": 20
+    },
+    {
+     "id": 17311,
+     "level": 28
+    },
+    {
+     "id": 17312,
+     "level": 36
+    },
+    {
+     "id": 17313,
+     "level": 44
+    },
+    {
+     "id": 17314,
+     "level": 52
+    },
+    {
+     "id": 18807,
+     "level": 60
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "penance",
+   "kind": "damage",
+   "name": "Penance",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.57,
+     "find": "damage",
+     "n": 3,
+     "p": 1.0,
+     "stat": "sp",
+     "ticks": 3
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.57,
+     "find": "heal",
+     "n": 3,
+     "p": 1.0,
+     "stat": "heal",
+     "ticks": 3
+    }
+   ],
+   "ranks": [
+    {
+     "id": 402174,
+     "level": 30,
+     "rows": {
+      "0": 402284,
+      "1": 402289
+     }
+    },
+    {
+     "id": 1240720,
+     "level": 40,
+     "rows": {
+      "0": 1240727,
+      "1": 1240723
+     }
+    },
+    {
+     "id": 1240721,
+     "level": 50,
+     "rows": {
+      "0": 1240730,
+      "1": 1240724
+     }
+    },
+    {
+     "id": 1316995,
+     "level": 60,
+     "rows": {
+      "0": 1316993,
+      "1": 1316991
+     }
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "power word: shield",
+   "kind": "absorb",
+   "name": "Power Word: Shield",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.1,
+     "find": "absorb",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 17,
+     "level": 6
+    },
+    {
+     "id": 592,
+     "level": 12
+    },
+    {
+     "id": 600,
+     "level": 18
+    },
+    {
+     "id": 3747,
+     "level": 24
+    },
+    {
+     "id": 6065,
+     "level": 30
+    },
+    {
+     "id": 6066,
+     "level": 36
+    },
+    {
+     "id": 10898,
+     "level": 42
+    },
+    {
+     "id": 10899,
+     "level": 48
+    },
+    {
+     "id": 10900,
+     "level": 54
+    },
+    {
+     "id": 10901,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "prayer of healing",
+   "kind": "heal",
+   "name": "Prayer of Healing",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.286,
+     "find": "heal",
+     "per": "target",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 596,
+     "level": 30
+    },
+    {
+     "id": 996,
+     "level": 40
+    },
+    {
+     "id": 10960,
+     "level": 50
+    },
+    {
+     "id": 10961,
+     "level": 60
+    },
+    {
+     "id": 25316,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "prayer of mending",
+   "kind": "heal",
+   "name": "Prayer of Mending",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "client text: ${($m1+($bh*$bc))*$<mult>}"
+     ],
+     "coef": 0.429,
+     "find": "dummy",
+     "per": "proc",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 401859,
+     "level": 40
+    },
+    {
+     "id": 1240826,
+     "level": 50
+    },
+    {
+     "id": 1240827,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "renew",
+   "kind": "heal",
+   "name": "Renew",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "pheal",
+     "n": 5,
+     "p": 3.0,
+     "stat": "heal",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 139,
+     "level": 8
+    },
+    {
+     "id": 6074,
+     "level": 14
+    },
+    {
+     "id": 6075,
+     "level": 20
+    },
+    {
+     "id": 6076,
+     "level": 26
+    },
+    {
+     "id": 6077,
+     "level": 32
+    },
+    {
+     "id": 6078,
+     "level": 38
+    },
+    {
+     "id": 10927,
+     "level": 44
+    },
+    {
+     "id": 10928,
+     "level": 50
+    },
+    {
+     "id": 10929,
+     "level": 56
+    },
+    {
+     "id": 25315,
+     "level": 60
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "shadow word: death",
+   "kind": "damage",
+   "name": "Shadow Word: Death",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1309595,
+     "level": 32
+    },
+    {
+     "id": 1309633,
+     "level": 40
+    },
+    {
+     "id": 1309635,
+     "level": 48
+    },
+    {
+     "id": 1309636,
+     "level": 56
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "shadow word: pain",
+   "kind": "damage",
+   "name": "Shadow Word: Pain",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.2,
+     "find": "pdamage",
+     "n": 6,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 589,
+     "level": 4
+    },
+    {
+     "id": 594,
+     "level": 10
+    },
+    {
+     "id": 970,
+     "level": 18
+    },
+    {
+     "id": 992,
+     "level": 26
+    },
+    {
+     "id": 2767,
+     "level": 34
+    },
+    {
+     "id": 10892,
+     "level": 42
+    },
+    {
+     "id": 10893,
+     "level": 50
+    },
+    {
+     "id": 10894,
+     "level": 58
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "shadowguard",
+   "kind": "damage",
+   "name": "Shadowguard",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.267,
+     "find": "damage",
+     "per": "hit",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 18137,
+     "level": 20,
+     "rows": {
+      "0": 28377
+     }
+    },
+    {
+     "id": 19308,
+     "level": 28,
+     "rows": {
+      "0": 28378
+     }
+    },
+    {
+     "id": 19309,
+     "level": 36,
+     "rows": {
+      "0": 28379
+     }
+    },
+    {
+     "id": 19310,
+     "level": 44,
+     "rows": {
+      "0": 28380
+     }
+    },
+    {
+     "id": 19311,
+     "level": 52,
+     "rows": {
+      "0": 28381
+     }
+    },
+    {
+     "id": 19312,
+     "level": 60,
+     "rows": {
+      "0": 28382
+     }
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "smite",
+   "kind": "damage",
+   "name": "Smite",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.714,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "c": [
+      0.429
+     ],
+     "id": 585,
+     "level": 1
+    },
+    {
+     "c": [
+      0.571
+     ],
+     "id": 591,
+     "level": 6
+    },
+    {
+     "id": 598,
+     "level": 14
+    },
+    {
+     "id": 984,
+     "level": 22
+    },
+    {
+     "id": 1004,
+     "level": 30
+    },
+    {
+     "id": 6060,
+     "level": 38
+    },
+    {
+     "id": 10933,
+     "level": 46
+    },
+    {
+     "id": 10934,
+     "level": 54
+    }
+   ],
+   "school": 2
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "starshards",
+   "kind": "damage",
+   "name": "Starshards",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.002,
+     "find": "pdamage",
+     "n": 6,
+     "p": 1.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 10797,
+     "level": 10
+    },
+    {
+     "id": 19296,
+     "level": 18
+    },
+    {
+     "id": 19299,
+     "level": 26
+    },
+    {
+     "id": 19302,
+     "level": 34
+    },
+    {
+     "id": 19303,
+     "level": 42
+    },
+    {
+     "id": 19304,
+     "level": 50
+    },
+    {
+     "id": 19305,
+     "level": 58
+    }
+   ],
+   "school": 64
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "PRIEST",
+   "key": "touch of weakness",
+   "kind": "damage",
+   "name": "Touch of Weakness",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.107,
+     "find": "damage",
+     "per": "hit",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2652,
+     "level": 10,
+     "rows": {
+      "0": 2943
+     }
+    },
+    {
+     "id": 19261,
+     "level": 20,
+     "rows": {
+      "0": 19249
+     }
+    },
+    {
+     "id": 19262,
+     "level": 30,
+     "rows": {
+      "0": 19251
+     }
+    },
+    {
+     "id": 19264,
+     "level": 40,
+     "rows": {
+      "0": 19252
+     }
+    },
+    {
+     "id": 19265,
+     "level": 50,
+     "rows": {
+      "0": 19253
+     }
+    },
+    {
+     "id": 19266,
+     "level": 60,
+     "rows": {
+      "0": 19254
+     }
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "ambush",
+   "kind": "physical",
+   "name": "Ambush",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 2.5,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 8676,
+     "level": 18
+    },
+    {
+     "id": 8724,
+     "level": 26
+    },
+    {
+     "id": 8725,
+     "level": 34
+    },
+    {
+     "id": 11267,
+     "level": 42
+    },
+    {
+     "id": 11268,
+     "level": 50
+    },
+    {
+     "id": 11269,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "backstab",
+   "kind": "physical",
+   "name": "Backstab",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.5,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 53,
+     "level": 4
+    },
+    {
+     "id": 2589,
+     "level": 12
+    },
+    {
+     "id": 2590,
+     "level": 20
+    },
+    {
+     "id": 2591,
+     "level": 28
+    },
+    {
+     "id": 8721,
+     "level": 36
+    },
+    {
+     "id": 11279,
+     "level": 44
+    },
+    {
+     "id": 11280,
+     "level": 52
+    },
+    {
+     "id": 11281,
+     "level": 60
+    },
+    {
+     "id": 25300,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0086"
+   ],
+   "class": "ROGUE",
+   "key": "deadly poison",
+   "kind": "damage",
+   "name": "Deadly Poison",
+   "parts": [
+    {
+     "basis": "e",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0086"
+     ],
+     "coef": 0.009,
+     "find": "pdamage",
+     "n": 4,
+     "per": "stack",
+     "stat": "ap",
+     "tick": 0.00225,
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2818,
+     "level": 30
+    },
+    {
+     "id": 2819,
+     "level": 38
+    },
+    {
+     "id": 11353,
+     "level": 46
+    },
+    {
+     "id": 11354,
+     "level": 54
+    },
+    {
+     "id": 25349,
+     "level": 60
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "death mark",
+   "kind": "physical",
+   "name": "Death Mark",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client text: variables 1021, $<maxAP>*$apm"
+     ],
+     "coef": 0.04,
+     "find": "none",
+     "per": "cp",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1316709,
+     "level": 40
+    },
+    {
+     "id": 1325756,
+     "level": 48
+    },
+    {
+     "id": 1325757,
+     "level": 56
+    },
+    {
+     "id": 1325758,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0086"
+   ],
+   "class": "ROGUE",
+   "key": "eviscerate",
+   "kind": "physical",
+   "name": "Eviscerate",
+   "parts": [
+    {
+     "basis": "e",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0086"
+     ],
+     "coef": 0.04,
+     "find": "damage",
+     "per": "cp",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 2098,
+     "level": 1
+    },
+    {
+     "id": 6760,
+     "level": 8
+    },
+    {
+     "id": 6761,
+     "level": 16
+    },
+    {
+     "id": 6762,
+     "level": 24
+    },
+    {
+     "id": 8623,
+     "level": 32
+    },
+    {
+     "id": 8624,
+     "level": 40
+    },
+    {
+     "id": 11299,
+     "level": 48
+    },
+    {
+     "id": 11300,
+     "level": 56
+    },
+    {
+     "id": 31016,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0086"
+   ],
+   "class": "ROGUE",
+   "key": "garrote",
+   "kind": "physical",
+   "name": "Garrote",
+   "parts": [
+    {
+     "basis": "e",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0086"
+     ],
+     "coef": 0.18,
+     "find": "pdamage",
+     "n": 6,
+     "stat": "ap",
+     "tick": 0.03,
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 703,
+     "level": 14
+    },
+    {
+     "id": 8631,
+     "level": 22
+    },
+    {
+     "id": 8632,
+     "level": 30
+    },
+    {
+     "id": 8633,
+     "level": 38
+    },
+    {
+     "id": 11289,
+     "level": 46
+    },
+    {
+     "id": 11290,
+     "level": 54
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "ghostly strike",
+   "kind": "physical",
+   "name": "Ghostly Strike",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.25,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 14278,
+     "level": null
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "gouge",
+   "kind": "physical",
+   "name": "Gouge",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1776,
+     "level": 6
+    },
+    {
+     "id": 1777,
+     "level": 18
+    },
+    {
+     "id": 8629,
+     "level": 32
+    },
+    {
+     "id": 11285,
+     "level": 46
+    },
+    {
+     "id": 11286,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "hemorrhage",
+   "kind": "physical",
+   "name": "Hemorrhage",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 16511,
+     "level": 30
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0086"
+   ],
+   "class": "ROGUE",
+   "key": "instant poison",
+   "kind": "damage",
+   "name": "Instant Poison",
+   "parts": [
+    {
+     "basis": "e",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0086"
+     ],
+     "coef": 0.01,
+     "find": "damage",
+     "per": "proc",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 8680,
+     "level": 20
+    },
+    {
+     "id": 8685,
+     "level": 28
+    },
+    {
+     "id": 8689,
+     "level": 36
+    },
+    {
+     "id": 11335,
+     "level": 44
+    },
+    {
+     "id": 11336,
+     "level": 52
+    },
+    {
+     "id": 11337,
+     "level": 60
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "kick",
+   "kind": "physical",
+   "name": "Kick",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1766,
+     "level": 12
+    },
+    {
+     "id": 1767,
+     "level": 26
+    },
+    {
+     "id": 1768,
+     "level": 42
+    },
+    {
+     "id": 1769,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "mutilate",
+   "kind": "physical",
+   "name": "Mutilate",
+   "parts": [
+    {
+     "basis": "c",
+     "carrier": "trigger",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.9,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    },
+    {
+     "basis": "e",
+     "carrier": "trigger2",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.9,
+     "find": "weapon",
+     "h": "off",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 399956,
+     "level": 40
+    },
+    {
+     "id": 1241582,
+     "level": 50
+    },
+    {
+     "id": 1241584,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "riposte",
+   "kind": "physical",
+   "name": "Riposte",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.5,
+     "find": "weapon",
+     "h": "main",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 14251,
+     "level": null
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "rupture",
+   "kind": "physical",
+   "name": "Rupture",
+   "parts": [
+    {
+     "basis": "e",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.04,
+     "cp": [
+      0.04,
+      0.1,
+      0.18,
+      0.21,
+      0.24
+     ],
+     "find": "pdamage",
+     "per": "cp",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1943,
+     "level": 20
+    },
+    {
+     "id": 8639,
+     "level": 28
+    },
+    {
+     "id": 8640,
+     "level": 36
+    },
+    {
+     "id": 11273,
+     "level": 44
+    },
+    {
+     "id": 11274,
+     "level": 52
+    },
+    {
+     "id": 11275,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "shank",
+   "kind": "physical",
+   "name": "Shank",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.5,
+     "find": "weapon",
+     "h": "off",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1329283,
+     "level": 24
+    },
+    {
+     "id": 1329549,
+     "level": 44
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "ROGUE",
+   "key": "sinister strike",
+   "kind": "physical",
+   "name": "Sinister Strike",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1752,
+     "level": 1
+    },
+    {
+     "id": 1757,
+     "level": 6
+    },
+    {
+     "id": 1758,
+     "level": 14
+    },
+    {
+     "id": 1759,
+     "level": 22
+    },
+    {
+     "id": 1760,
+     "level": 30
+    },
+    {
+     "id": 8621,
+     "level": 38
+    },
+    {
+     "id": 11293,
+     "level": 46
+    },
+    {
+     "id": 11294,
+     "level": 54
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "chain heal",
+   "kind": "heal",
+   "name": "Chain Heal",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.714,
+     "find": "heal",
+     "j": 0.5,
+     "per": "jump",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      251
+     ],
+     "def": 1,
+     "id": 1064,
+     "level": 40,
+     "ppl": [
+      2.5
+     ]
+    },
+    {
+     "bp": [
+      335
+     ],
+     "def": 1,
+     "id": 10622,
+     "level": 46,
+     "ppl": [
+      2.8
+     ]
+    },
+    {
+     "bp": [
+      490
+     ],
+     "def": 1,
+     "id": 10623,
+     "level": 54,
+     "ppl": [
+      3.3
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "chain lightning",
+   "kind": "damage",
+   "name": "Chain Lightning",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.714,
+     "find": "damage",
+     "j": 0.7,
+     "per": "jump",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      215
+     ],
+     "def": 1,
+     "id": 421,
+     "level": 32,
+     "ppl": [
+      1.4
+     ]
+    },
+    {
+     "bp": [
+      348
+     ],
+     "def": 1,
+     "id": 930,
+     "level": 40,
+     "ppl": [
+      2.2
+     ]
+    },
+    {
+     "bp": [
+      428
+     ],
+     "def": 1,
+     "id": 2860,
+     "level": 48,
+     "ppl": [
+      2.7
+     ]
+    },
+    {
+     "bp": [
+      510
+     ],
+     "def": 1,
+     "id": 10605,
+     "level": 56,
+     "ppl": [
+      3.3
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0142"
+   ],
+   "class": "SHAMAN",
+   "key": "earth shock",
+   "kind": "damage",
+   "name": "Earth Shock",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.386,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      20
+     ],
+     "def": 1,
+     "id": 8042,
+     "level": 4,
+     "ppl": [
+      0.5
+     ]
+    },
+    {
+     "bp": [
+      36
+     ],
+     "def": 1,
+     "id": 8044,
+     "level": 8,
+     "ppl": [
+      0.7
+     ]
+    },
+    {
+     "bp": [
+      67
+     ],
+     "def": 1,
+     "id": 8045,
+     "level": 14,
+     "ppl": [
+      0.9
+     ]
+    },
+    {
+     "bp": [
+      130
+     ],
+     "def": 1,
+     "id": 8046,
+     "level": 24,
+     "ppl": [
+      1.1
+     ]
+    },
+    {
+     "bp": [
+      242
+     ],
+     "def": 1,
+     "id": 10412,
+     "level": 36,
+     "ppl": [
+      1.3
+     ]
+    },
+    {
+     "bp": [
+      383
+     ],
+     "def": 1,
+     "id": 10413,
+     "level": 48,
+     "ppl": [
+      1.6
+     ]
+    },
+    {
+     "bp": [
+      531
+     ],
+     "def": 1,
+     "id": 10414,
+     "level": 60,
+     "ppl": [
+      3.4
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0014"
+   ],
+   "class": "SHAMAN",
+   "key": "fire nova",
+   "kind": "damage",
+   "name": "Fire Nova",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.143,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      33
+     ],
+     "def": 1,
+     "id": 408341,
+     "level": 12,
+     "ppl": [
+      0.4
+     ],
+     "rows": {
+      "0": 408423
+     }
+    },
+    {
+     "bp": [
+      55
+     ],
+     "def": 1,
+     "id": 408342,
+     "level": 22,
+     "ppl": [
+      0.6
+     ],
+     "rows": {
+      "0": 408424
+     }
+    },
+    {
+     "bp": [
+      130
+     ],
+     "def": 1,
+     "id": 408343,
+     "level": 32,
+     "ppl": [
+      0.9
+     ],
+     "rows": {
+      "0": 408426
+     }
+    },
+    {
+     "bp": [
+      179
+     ],
+     "def": 1,
+     "id": 408344,
+     "level": 42,
+     "ppl": [
+      1.1
+     ],
+     "rows": {
+      "0": 408427
+     }
+    },
+    {
+     "bp": [
+      239
+     ],
+     "def": 1,
+     "id": 408345,
+     "level": 52,
+     "ppl": [
+      1.3
+     ],
+     "rows": {
+      "0": 408428
+     }
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "flame shock",
+   "kind": "damage",
+   "name": "Flame Shock",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.214,
+     "find": "damage",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.4,
+     "find": "pdamage",
+     "n": 4,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      25,
+      7
+     ],
+     "def": 1,
+     "id": 8050,
+     "level": 10,
+     "ppl": [
+      0.8,
+      null
+     ]
+    },
+    {
+     "bp": [
+      51,
+      12
+     ],
+     "def": 1,
+     "id": 8052,
+     "level": 18,
+     "ppl": [
+      1,
+      null
+     ]
+    },
+    {
+     "bp": [
+      95,
+      24
+     ],
+     "def": 1,
+     "id": 8053,
+     "level": 28,
+     "ppl": [
+      1.2,
+      null
+     ]
+    },
+    {
+     "bp": [
+      164,
+      42
+     ],
+     "def": 1,
+     "id": 10447,
+     "level": 40,
+     "ppl": [
+      1.4,
+      null
+     ]
+    },
+    {
+     "bp": [
+      245,
+      64
+     ],
+     "def": 1,
+     "id": 10448,
+     "level": 52,
+     "ppl": [
+      1.7,
+      null
+     ]
+    },
+    {
+     "bp": [
+      292,
+      80
+     ],
+     "def": 1,
+     "id": 29228,
+     "level": 60,
+     "ppl": [
+      3.8,
+      null
+     ]
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "flametongue weapon",
+   "kind": "damage",
+   "name": "Flametongue Weapon",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.1,
+     "find": "damage",
+     "per": "hit",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "def": 1,
+     "id": 8024,
+     "level": 10,
+     "rows": {
+      "0": 29469
+     }
+    },
+    {
+     "def": 1,
+     "id": 8027,
+     "level": 18,
+     "rows": {
+      "0": 29470
+     }
+    },
+    {
+     "def": 1,
+     "id": 8030,
+     "level": 26,
+     "rows": {
+      "0": 10444
+     }
+    },
+    {
+     "def": 1,
+     "id": 16339,
+     "level": 36,
+     "rows": {
+      "0": 10444
+     }
+    },
+    {
+     "def": 1,
+     "id": 16341,
+     "level": 46,
+     "rows": {
+      "0": 10444
+     }
+    },
+    {
+     "def": 1,
+     "id": 16342,
+     "level": 56,
+     "rows": {
+      "0": 10444
+     }
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "frost shock",
+   "kind": "damage",
+   "name": "Frost Shock",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.386,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      98
+     ],
+     "def": 1,
+     "id": 8056,
+     "level": 20,
+     "ppl": [
+      0.9
+     ]
+    },
+    {
+     "bp": [
+      222
+     ],
+     "def": 1,
+     "id": 8058,
+     "level": 34,
+     "ppl": [
+      1.3
+     ]
+    },
+    {
+     "bp": [
+      355
+     ],
+     "def": 1,
+     "id": 10472,
+     "level": 46,
+     "ppl": [
+      1.5
+     ]
+    },
+    {
+     "bp": [
+      506
+     ],
+     "def": 1,
+     "id": 10473,
+     "level": 58,
+     "ppl": [
+      1.8
+     ]
+    }
+   ],
+   "school": 16
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "frostbrand weapon",
+   "kind": "damage",
+   "name": "Frostbrand Weapon",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.1,
+     "find": "damage",
+     "per": "proc",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      32
+     ],
+     "def": 1,
+     "id": 8033,
+     "level": 20,
+     "ppl": [
+      2.1
+     ],
+     "rows": {
+      "0": 8034
+     }
+    },
+    {
+     "bp": [
+      48
+     ],
+     "def": 1,
+     "id": 8038,
+     "level": 28,
+     "ppl": [
+      3
+     ],
+     "rows": {
+      "0": 8037
+     }
+    },
+    {
+     "bp": [
+      77
+     ],
+     "def": 1,
+     "id": 10456,
+     "level": 38,
+     "ppl": [
+      5
+     ],
+     "rows": {
+      "0": 10458
+     }
+    },
+    {
+     "bp": [
+      127
+     ],
+     "def": 1,
+     "id": 16355,
+     "level": 48,
+     "ppl": [
+      4
+     ],
+     "rows": {
+      "0": 16352
+     }
+    },
+    {
+     "bp": [
+      158
+     ],
+     "def": 1,
+     "id": 16356,
+     "level": 58,
+     "ppl": [
+      5.6
+     ],
+     "rows": {
+      "0": 16353
+     }
+    }
+   ],
+   "school": 16
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "healing stream totem",
+   "kind": "heal",
+   "name": "Healing Stream Totem",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.022,
+     "find": "pheal",
+     "per": "target",
+     "stat": "heal",
+     "ticks": 1
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      5
+     ],
+     "def": 1,
+     "id": 5394,
+     "level": 20,
+     "rows": {
+      "0": 5672
+     }
+    },
+    {
+     "bp": [
+      6
+     ],
+     "def": 1,
+     "id": 6375,
+     "level": 30,
+     "rows": {
+      "0": 6371
+     }
+    },
+    {
+     "bp": [
+      7
+     ],
+     "def": 1,
+     "id": 6377,
+     "level": 40,
+     "rows": {
+      "0": 6372
+     }
+    },
+    {
+     "bp": [
+      9
+     ],
+     "def": 1,
+     "id": 10462,
+     "level": 50,
+     "rows": {
+      "0": 10460
+     }
+    },
+    {
+     "bp": [
+      11
+     ],
+     "def": 1,
+     "id": 10463,
+     "level": 60,
+     "rows": {
+      "0": 10461
+     }
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "healing wave",
+   "kind": "heal",
+   "name": "Healing Wave",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.857,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      39
+     ],
+     "c": [
+      0.429
+     ],
+     "def": 1,
+     "id": 331,
+     "level": 1,
+     "ppl": [
+      0.7
+     ]
+    },
+    {
+     "bp": [
+      71
+     ],
+     "c": [
+      0.571
+     ],
+     "def": 1,
+     "id": 332,
+     "level": 6,
+     "ppl": [
+      1
+     ]
+    },
+    {
+     "bp": [
+      131
+     ],
+     "c": [
+      0.714
+     ],
+     "def": 1,
+     "id": 547,
+     "level": 12,
+     "ppl": [
+      1.5
+     ]
+    },
+    {
+     "bp": [
+      256
+     ],
+     "def": 1,
+     "id": 913,
+     "level": 18,
+     "ppl": [
+      2.3
+     ]
+    },
+    {
+     "bp": [
+      342
+     ],
+     "def": 1,
+     "id": 939,
+     "level": 24,
+     "ppl": [
+      2.7
+     ]
+    },
+    {
+     "bp": [
+      484
+     ],
+     "def": 1,
+     "id": 959,
+     "level": 32,
+     "ppl": [
+      3.3
+     ]
+    },
+    {
+     "bp": [
+      685
+     ],
+     "def": 1,
+     "id": 8005,
+     "level": 40,
+     "ppl": [
+      3.9
+     ]
+    },
+    {
+     "bp": [
+      972
+     ],
+     "def": 1,
+     "id": 10395,
+     "level": 48,
+     "ppl": [
+      4.7
+     ]
+    },
+    {
+     "bp": [
+      1344
+     ],
+     "def": 1,
+     "id": 10396,
+     "level": 56,
+     "ppl": [
+      5.5
+     ]
+    },
+    {
+     "bp": [
+      1615
+     ],
+     "def": 1,
+     "id": 25357,
+     "level": 60,
+     "ppl": [
+      5.5
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "lesser healing wave",
+   "kind": "heal",
+   "name": "Lesser Healing Wave",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "heal",
+     "stat": "heal"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      153
+     ],
+     "def": 1,
+     "id": 8004,
+     "level": 20,
+     "ppl": [
+      1.7
+     ]
+    },
+    {
+     "bp": [
+      224
+     ],
+     "def": 1,
+     "id": 8008,
+     "level": 28,
+     "ppl": [
+      2.1
+     ]
+    },
+    {
+     "bp": [
+      304
+     ],
+     "def": 1,
+     "id": 8010,
+     "level": 36,
+     "ppl": [
+      2.5
+     ]
+    },
+    {
+     "bp": [
+      426
+     ],
+     "def": 1,
+     "id": 10466,
+     "level": 44,
+     "ppl": [
+      3
+     ]
+    },
+    {
+     "bp": [
+      608
+     ],
+     "def": 1,
+     "id": 10467,
+     "level": 52,
+     "ppl": [
+      3.6
+     ]
+    },
+    {
+     "bp": [
+      820
+     ],
+     "def": 1,
+     "id": 10468,
+     "level": 60,
+     "ppl": [
+      4.2
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0137"
+   ],
+   "class": "SHAMAN",
+   "key": "lightning bolt",
+   "kind": "damage",
+   "name": "Lightning Bolt",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.714,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      16
+     ],
+     "c": [
+      0.429
+     ],
+     "def": 1,
+     "id": 403,
+     "level": 1,
+     "ppl": [
+      0.1
+     ]
+    },
+    {
+     "bp": [
+      30
+     ],
+     "c": [
+      0.571
+     ],
+     "def": 1,
+     "id": 529,
+     "level": 8,
+     "ppl": [
+      0.1
+     ]
+    },
+    {
+     "bp": [
+      52
+     ],
+     "def": 1,
+     "id": 548,
+     "level": 14,
+     "ppl": [
+      0.3
+     ]
+    },
+    {
+     "bp": [
+      73
+     ],
+     "def": 1,
+     "id": 915,
+     "level": 20,
+     "ppl": [
+      0.5
+     ]
+    },
+    {
+     "bp": [
+      109
+     ],
+     "def": 1,
+     "id": 943,
+     "level": 26,
+     "ppl": [
+      0.7
+     ]
+    },
+    {
+     "bp": [
+      148
+     ],
+     "def": 1,
+     "id": 6041,
+     "level": 32,
+     "ppl": [
+      1
+     ]
+    },
+    {
+     "bp": [
+      194
+     ],
+     "def": 1,
+     "id": 10391,
+     "level": 38,
+     "ppl": [
+      1
+     ]
+    },
+    {
+     "bp": [
+      240
+     ],
+     "def": 1,
+     "id": 10392,
+     "level": 44,
+     "ppl": [
+      1.5
+     ]
+    },
+    {
+     "bp": [
+      295
+     ],
+     "def": 1,
+     "id": 15207,
+     "level": 50,
+     "ppl": [
+      1.6
+     ]
+    },
+    {
+     "bp": [
+      353
+     ],
+     "def": 1,
+     "id": 15208,
+     "level": 56,
+     "ppl": [
+      2.1
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0141"
+   ],
+   "class": "SHAMAN",
+   "key": "lightning shield",
+   "kind": "damage",
+   "name": "Lightning Shield",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.267,
+     "find": "damage",
+     "per": "hit",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      13
+     ],
+     "def": 1,
+     "id": 324,
+     "level": 8,
+     "rows": {
+      "0": 26364
+     }
+    },
+    {
+     "bp": [
+      24
+     ],
+     "def": 1,
+     "id": 325,
+     "level": 16,
+     "rows": {
+      "0": 26365
+     }
+    },
+    {
+     "bp": [
+      40
+     ],
+     "def": 1,
+     "id": 905,
+     "level": 24,
+     "rows": {
+      "0": 26366
+     }
+    },
+    {
+     "bp": [
+      64
+     ],
+     "def": 1,
+     "id": 945,
+     "level": 32,
+     "rows": {
+      "0": 26367
+     }
+    },
+    {
+     "bp": [
+      96
+     ],
+     "def": 1,
+     "id": 8134,
+     "level": 40,
+     "rows": {
+      "0": 26369
+     }
+    },
+    {
+     "bp": [
+      134
+     ],
+     "def": 1,
+     "id": 10431,
+     "level": 48,
+     "rows": {
+      "0": 26370
+     }
+    },
+    {
+     "bp": [
+      178
+     ],
+     "def": 1,
+     "id": 10432,
+     "level": 56,
+     "rows": {
+      "0": 26363
+     }
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "magma totem",
+   "kind": "damage",
+   "name": "Magma Totem",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.033,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      20
+     ],
+     "def": 1,
+     "id": 8190,
+     "level": 26,
+     "rows": {
+      "0": 8187
+     }
+    },
+    {
+     "bp": [
+      35
+     ],
+     "def": 1,
+     "id": 10585,
+     "level": 36,
+     "rows": {
+      "0": 10579
+     }
+    },
+    {
+     "bp": [
+      52
+     ],
+     "def": 1,
+     "id": 10586,
+     "level": 46,
+     "rows": {
+      "0": 10580
+     }
+    },
+    {
+     "bp": [
+      73
+     ],
+     "def": 1,
+     "id": 10587,
+     "level": 56,
+     "rows": {
+      "0": 10581
+     }
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "riptide",
+   "kind": "heal",
+   "name": "Riptide",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.214,
+     "find": "dummy",
+     "stat": "heal"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.5,
+     "find": "pheal",
+     "n": 5,
+     "p": 3.0,
+     "stat": "heal",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      0,
+      89
+     ],
+     "def": 1,
+     "id": 408521,
+     "level": 40,
+     "ppl": [
+      3.7,
+      null
+     ]
+    },
+    {
+     "bp": [
+      0,
+      115
+     ],
+     "def": 1,
+     "id": 1239242,
+     "level": 50,
+     "ppl": [
+      4.2,
+      null
+     ]
+    },
+    {
+     "bp": [
+      0,
+      161
+     ],
+     "def": 1,
+     "id": 1239243,
+     "level": 60,
+     "ppl": [
+      4.9,
+      3.7
+     ]
+    }
+   ],
+   "school": 8
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "searing totem",
+   "kind": "damage",
+   "name": "Searing Totem",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.017,
+     "find": "damage",
+     "per": "hit",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "bp": [
+      10
+     ],
+     "def": 0,
+     "id": 3599,
+     "level": 10,
+     "rows": {
+      "0": 3606
+     }
+    },
+    {
+     "bp": [
+      15
+     ],
+     "def": 0,
+     "id": 6363,
+     "level": 20,
+     "rows": {
+      "0": 6350
+     }
+    },
+    {
+     "bp": [
+      22
+     ],
+     "def": 0,
+     "id": 6364,
+     "level": 30,
+     "rows": {
+      "0": 6351
+     }
+    },
+    {
+     "bp": [
+      30
+     ],
+     "def": 0,
+     "id": 6365,
+     "level": 40,
+     "rows": {
+      "0": 6352
+     }
+    },
+    {
+     "bp": [
+      39
+     ],
+     "def": 0,
+     "id": 10437,
+     "level": 50,
+     "rows": {
+      "0": 10435
+     }
+    },
+    {
+     "bp": [
+      47
+     ],
+     "def": 0,
+     "id": 10438,
+     "level": 60,
+     "rows": {
+      "0": 10436
+     }
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "SHAMAN",
+   "key": "stormstrike",
+   "kind": "physical",
+   "name": "Stormstrike",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture): 17364 effect 2, a weapon percent of 100 (build 70888 had 150)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 17364,
+     "level": 40
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0012",
+    "wowsims/forever docs/evidence/EV-0128"
+   ],
+   "class": "SHAMAN",
+   "key": "windfury weapon",
+   "kind": "physical",
+   "name": "Windfury Weapon",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 2.0,
+     "find": "none",
+     "h": "main",
+     "per": "proc",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 8232,
+     "level": 30
+    },
+    {
+     "id": 8235,
+     "level": 40
+    },
+    {
+     "id": 10486,
+     "level": 50
+    },
+    {
+     "id": 16362,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "bane of agony",
+   "kind": "damage",
+   "name": "Bane of Agony",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.596,
+     "find": "pdamage",
+     "n": 12,
+     "p": 2.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 980,
+     "level": 8
+    },
+    {
+     "id": 1014,
+     "level": 18
+    },
+    {
+     "id": 6217,
+     "level": 28
+    },
+    {
+     "id": 11711,
+     "level": 38
+    },
+    {
+     "id": 11712,
+     "level": 48
+    },
+    {
+     "id": 11713,
+     "level": 58
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "bane of doom",
+   "kind": "damage",
+   "name": "Bane of Doom",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 4.0,
+     "find": "pdamage",
+     "n": 1,
+     "p": 60.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 603,
+     "level": 60
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "conflagrate",
+   "kind": "damage",
+   "name": "Conflagrate",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1293817,
+     "level": 25
+    },
+    {
+     "id": 1293818,
+     "level": 32
+    },
+    {
+     "id": 17962,
+     "level": 40
+    },
+    {
+     "id": 18930,
+     "level": 48
+    },
+    {
+     "id": 18931,
+     "level": 54
+    },
+    {
+     "id": 18932,
+     "level": 60
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "corruption",
+   "kind": "damage",
+   "name": "Corruption",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.2,
+     "find": "pdamage",
+     "n": 6,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "c": [
+      0.8
+     ],
+     "id": 172,
+     "level": 4,
+     "n": [
+      4
+     ]
+    },
+    {
+     "c": [
+      1.0
+     ],
+     "id": 6222,
+     "level": 14,
+     "n": [
+      5
+     ]
+    },
+    {
+     "id": 6223,
+     "level": 24
+    },
+    {
+     "id": 7648,
+     "level": 34
+    },
+    {
+     "id": 11671,
+     "level": 44
+    },
+    {
+     "id": 11672,
+     "level": 54
+    },
+    {
+     "id": 25311,
+     "level": 60
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "death coil",
+   "kind": "damage",
+   "name": "Death Coil",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.214,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6789,
+     "level": 42
+    },
+    {
+     "id": 17925,
+     "level": 50
+    },
+    {
+     "id": 17926,
+     "level": 58
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "gunba wow-forever-sim docs/uncertainties.md"
+   ],
+   "class": "WARLOCK",
+   "key": "demonic brand",
+   "kind": "damage",
+   "name": "Demonic Brand",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client text: variables 1016, 0.078 x the larger of Shadow and Fire spell damage"
+     ],
+     "coef": 0.078,
+     "find": "none",
+     "per": "proc",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1293695,
+     "level": null
+    }
+   ],
+   "school": null
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "drain life",
+   "kind": "damage",
+   "name": "Drain Life",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.5,
+     "find": "pdamage",
+     "n": 5,
+     "p": 1.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 689,
+     "level": 14
+    },
+    {
+     "id": 699,
+     "level": 22
+    },
+    {
+     "id": 709,
+     "level": 30
+    },
+    {
+     "id": 7651,
+     "level": 38
+    },
+    {
+     "id": 11699,
+     "level": 46
+    },
+    {
+     "id": 11700,
+     "level": 54
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "drain soul",
+   "kind": "damage",
+   "name": "Drain Soul",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.5,
+     "find": "pdamage",
+     "n": 5,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1120,
+     "level": 10
+    },
+    {
+     "id": 8288,
+     "level": 24
+    },
+    {
+     "id": 8289,
+     "level": 38
+    },
+    {
+     "id": 11675,
+     "level": 52
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "health funnel",
+   "kind": "heal",
+   "name": "Health Funnel",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "pheal",
+     "n": 10,
+     "p": 1.0,
+     "stat": "heal",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 755,
+     "level": 12
+    },
+    {
+     "id": 3698,
+     "level": 20
+    },
+    {
+     "id": 3699,
+     "level": 28
+    },
+    {
+     "id": 3700,
+     "level": 36
+    },
+    {
+     "id": 11693,
+     "level": 44
+    },
+    {
+     "id": 11694,
+     "level": 52
+    },
+    {
+     "id": 11695,
+     "level": 60
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "hellfire",
+   "kind": "damage",
+   "name": "Hellfire",
+   "parts": [
+    {
+     "basis": "c",
+     "carrier": "trigger",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.33,
+     "find": "damage",
+     "n": 15,
+     "p": 1.0,
+     "per": "target",
+     "stat": "sp",
+     "ticks": "rank"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.33,
+     "find": "pdamage",
+     "n": 15,
+     "p": 1.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1949,
+     "level": 30
+    },
+    {
+     "id": 11683,
+     "level": 42
+    },
+    {
+     "id": 11684,
+     "level": 54
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "immolate",
+   "kind": "damage",
+   "name": "Immolate",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.2,
+     "find": "damage",
+     "stat": "sp"
+    },
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.65,
+     "find": "pdamage",
+     "n": 5,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 348,
+     "level": 1
+    },
+    {
+     "id": 707,
+     "level": 10
+    },
+    {
+     "id": 1094,
+     "level": 20
+    },
+    {
+     "id": 2941,
+     "level": 30
+    },
+    {
+     "id": 11665,
+     "level": 40
+    },
+    {
+     "id": 11667,
+     "level": 50
+    },
+    {
+     "id": 11668,
+     "level": 60
+    },
+    {
+     "id": 25309,
+     "level": 60
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "gunba wow-forever-sim docs/uncertainties.md"
+   ],
+   "class": "WARLOCK",
+   "key": "incinerate",
+   "kind": "damage",
+   "name": "Incinerate",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.714,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 412758,
+     "level": 40
+    },
+    {
+     "id": 1293812,
+     "level": 50
+    },
+    {
+     "id": 1293813,
+     "level": 60
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "inferno",
+   "kind": "damage",
+   "name": "Inferno",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "damage",
+     "per": "target",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1122,
+     "level": 50,
+     "rows": {
+      "0": 22699
+     }
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "life tap",
+   "kind": "utility",
+   "name": "Life Tap",
+   "parts": [],
+   "ranks": [
+    {
+     "id": 1454,
+     "level": 6
+    },
+    {
+     "id": 1455,
+     "level": 16
+    },
+    {
+     "id": 1456,
+     "level": 26
+    },
+    {
+     "id": 11687,
+     "level": 36
+    },
+    {
+     "id": 11688,
+     "level": 46
+    },
+    {
+     "id": 11689,
+     "level": 56
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "rain of fire",
+   "kind": "damage",
+   "name": "Rain of Fire",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.332,
+     "find": "damage",
+     "n": 4,
+     "p": 2.0,
+     "per": "target",
+     "stat": "sp",
+     "ticks": "rank"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 5740,
+     "level": 20,
+     "rows": {
+      "0": 1282380
+     }
+    },
+    {
+     "id": 6219,
+     "level": 34,
+     "rows": {
+      "0": 1282383
+     }
+    },
+    {
+     "id": 11677,
+     "level": 46,
+     "rows": {
+      "0": 1282384
+     }
+    },
+    {
+     "id": 11678,
+     "level": 58,
+     "rows": {
+      "0": 1282385
+     }
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "searing pain",
+   "kind": "damage",
+   "name": "Searing Pain",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 5676,
+     "level": 18
+    },
+    {
+     "id": 17919,
+     "level": 26
+    },
+    {
+     "id": 17920,
+     "level": 34
+    },
+    {
+     "id": 17921,
+     "level": 42
+    },
+    {
+     "id": 17922,
+     "level": 50
+    },
+    {
+     "id": 17923,
+     "level": 58
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "shadow bolt",
+   "kind": "damage",
+   "name": "Shadow Bolt",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.857,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "c": [
+      0.486
+     ],
+     "id": 686,
+     "level": 1
+    },
+    {
+     "c": [
+      0.629
+     ],
+     "id": 695,
+     "level": 6
+    },
+    {
+     "c": [
+      0.8
+     ],
+     "id": 705,
+     "level": 12
+    },
+    {
+     "id": 1088,
+     "level": 20
+    },
+    {
+     "id": 1106,
+     "level": 28
+    },
+    {
+     "id": 7641,
+     "level": 36
+    },
+    {
+     "id": 11659,
+     "level": 44
+    },
+    {
+     "id": 11660,
+     "level": 52
+    },
+    {
+     "id": 11661,
+     "level": 60
+    },
+    {
+     "id": 25307,
+     "level": 60
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "shadow ward",
+   "kind": "absorb",
+   "name": "Shadow Ward",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "absorb",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6229,
+     "level": 32
+    },
+    {
+     "id": 11739,
+     "level": 42
+    },
+    {
+     "id": 11740,
+     "level": 52
+    },
+    {
+     "id": 28610,
+     "level": 60
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "shadowburn",
+   "kind": "damage",
+   "name": "Shadowburn",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.429,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 17877,
+     "level": 20
+    },
+    {
+     "id": 18867,
+     "level": 24
+    },
+    {
+     "id": 18868,
+     "level": 32
+    },
+    {
+     "id": 18869,
+     "level": 40
+    },
+    {
+     "id": 18870,
+     "level": 48
+    },
+    {
+     "id": 18871,
+     "level": 56
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "siphon life",
+   "kind": "damage",
+   "name": "Siphon Life",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.5,
+     "find": "pdamage",
+     "n": 10,
+     "p": 3.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 18265,
+     "level": 30
+    },
+    {
+     "id": 18879,
+     "level": 38
+    },
+    {
+     "id": 18880,
+     "level": 48
+    },
+    {
+     "id": 18881,
+     "level": 58
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "soul fire",
+   "kind": "damage",
+   "name": "Soul Fire",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "damage",
+     "stat": "sp"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6353,
+     "level": 48
+    },
+    {
+     "id": 17924,
+     "level": 56
+    }
+   ],
+   "school": 4
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "key": "wrack",
+   "kind": "damage",
+   "name": "Wrack",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.2012,
+     "find": "pdamage",
+     "n": 6,
+     "p": 1.0,
+     "stat": "sp",
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1316697,
+     "level": 40
+    }
+   ],
+   "school": 32
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "bloodthirst",
+   "kind": "physical",
+   "name": "Bloodthirst",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "client text: $s2% of your Attack Power plus $s1"
+     ],
+     "coef": 0.45,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 23881,
+     "level": 40
+    },
+    {
+     "id": 23892,
+     "level": 48
+    },
+    {
+     "id": 23893,
+     "level": 54
+    },
+    {
+     "id": 23894,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "cleave",
+   "kind": "physical",
+   "name": "Cleave",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "per": "target",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 845,
+     "level": 20
+    },
+    {
+     "id": 7369,
+     "level": 30
+    },
+    {
+     "id": 11608,
+     "level": 40
+    },
+    {
+     "id": 11609,
+     "level": 50
+    },
+    {
+     "id": 20569,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "execute",
+   "kind": "physical",
+   "name": "Execute",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "dummy",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 5308,
+     "level": 24
+    },
+    {
+     "id": 20658,
+     "level": 32
+    },
+    {
+     "id": 20660,
+     "level": 40
+    },
+    {
+     "id": 20661,
+     "level": 48
+    },
+    {
+     "id": 20662,
+     "level": 56
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "hamstring",
+   "kind": "physical",
+   "name": "Hamstring",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1715,
+     "level": 8
+    },
+    {
+     "id": 7372,
+     "level": 32
+    },
+    {
+     "id": 7373,
+     "level": 54
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries)"
+   ],
+   "class": "WARRIOR",
+   "key": "heroic strike",
+   "kind": "physical",
+   "name": "Heroic Strike",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 78,
+     "level": 1
+    },
+    {
+     "id": 284,
+     "level": 8
+    },
+    {
+     "id": 285,
+     "level": 16
+    },
+    {
+     "id": 1608,
+     "level": 24
+    },
+    {
+     "id": 11564,
+     "level": 32
+    },
+    {
+     "id": 11565,
+     "level": 40
+    },
+    {
+     "id": 11566,
+     "level": 48
+    },
+    {
+     "id": 11567,
+     "level": 56
+    },
+    {
+     "id": 25286,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "intercept",
+   "kind": "physical",
+   "name": "Intercept",
+   "parts": [
+    {
+     "basis": "c",
+     "carrier": "trigger",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 20252,
+     "level": 30
+    },
+    {
+     "id": 20616,
+     "level": 42
+    },
+    {
+     "id": 20617,
+     "level": 52
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "mocking blow",
+   "kind": "physical",
+   "name": "Mocking Blow",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 694,
+     "level": 16
+    },
+    {
+     "id": 7400,
+     "level": 26
+    },
+    {
+     "id": 7402,
+     "level": 36
+    },
+    {
+     "id": 20559,
+     "level": 46
+    },
+    {
+     "id": 20560,
+     "level": 56
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "mortal strike",
+   "kind": "physical",
+   "name": "Mortal Strike",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 12294,
+     "level": 40
+    },
+    {
+     "id": 21551,
+     "level": 48
+    },
+    {
+     "id": 21552,
+     "level": 54
+    },
+    {
+     "id": 21553,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "overpower",
+   "kind": "physical",
+   "name": "Overpower",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 7384,
+     "level": 12
+    },
+    {
+     "id": 7887,
+     "level": 28
+    },
+    {
+     "id": 11584,
+     "level": 44
+    },
+    {
+     "id": 11585,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "pummel",
+   "kind": "physical",
+   "name": "Pummel",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6552,
+     "level": 38
+    },
+    {
+     "id": 6554,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0019",
+    "wowsims/forever docs/evidence/EV-0048"
+   ],
+   "class": "WARRIOR",
+   "key": "rend",
+   "kind": "physical",
+   "name": "Rend",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0019",
+      "wowsims/forever docs/evidence/EV-0048"
+     ],
+     "coef": 0.14,
+     "find": "pdamage",
+     "n": 7,
+     "stat": "ap",
+     "tick": 0.02,
+     "ticks": "row"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 772,
+     "level": 4,
+     "n": [
+      3
+     ]
+    },
+    {
+     "id": 6546,
+     "level": 10,
+     "n": [
+      4
+     ]
+    },
+    {
+     "id": 6547,
+     "level": 20,
+     "n": [
+      5
+     ]
+    },
+    {
+     "id": 6548,
+     "level": 30,
+     "n": [
+      6
+     ]
+    },
+    {
+     "id": 11572,
+     "level": 40
+    },
+    {
+     "id": 11573,
+     "level": 50
+    },
+    {
+     "id": 11574,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0048"
+   ],
+   "class": "WARRIOR",
+   "key": "revenge",
+   "kind": "physical",
+   "name": "Revenge",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "wowsims/forever docs/evidence/EV-0048",
+      "client text: variables 1024, $APR"
+     ],
+     "coef": 0.25,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6572,
+     "level": 14
+    },
+    {
+     "id": 6574,
+     "level": 24
+    },
+    {
+     "id": 7379,
+     "level": 34
+    },
+    {
+     "id": 11600,
+     "level": 44
+    },
+    {
+     "id": 11601,
+     "level": 54
+    },
+    {
+     "id": 25288,
+     "level": 60
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "shield bash",
+   "kind": "physical",
+   "name": "Shield Bash",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.0,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 72,
+     "level": 12
+    },
+    {
+     "id": 1671,
+     "level": 32
+    },
+    {
+     "id": 1672,
+     "level": 52
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0004"
+   ],
+   "class": "WARRIOR",
+   "key": "shield slam",
+   "kind": "physical",
+   "name": "Shield Slam",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "wowsims/forever docs/evidence/EV-0004"
+     ],
+     "coef": 2.0,
+     "find": "damage",
+     "stat": "bv"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 23922,
+     "level": 40
+    },
+    {
+     "id": 23923,
+     "level": 48
+    },
+    {
+     "id": 23924,
+     "level": 54
+    },
+    {
+     "id": 23925,
+     "level": 60
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "slam",
+   "kind": "physical",
+   "name": "Slam",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "spd": "actual",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1240193,
+     "level": 20
+    },
+    {
+     "id": 1464,
+     "level": 30
+    },
+    {
+     "id": 8820,
+     "level": 38
+    },
+    {
+     "id": 11604,
+     "level": 46
+    },
+    {
+     "id": 11605,
+     "level": 54
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "spearing strike",
+   "kind": "physical",
+   "name": "Spearing Strike",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 0.75,
+     "find": "weapon",
+     "h": "main",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1310222,
+     "level": 1
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0019",
+    "wowsims/forever docs/evidence/EV-0048"
+   ],
+   "class": "WARRIOR",
+   "key": "thunder clap",
+   "kind": "physical",
+   "name": "Thunder Clap",
+   "parts": [
+    {
+     "basis": "m",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "wowsims/forever docs/evidence/EV-0019",
+      "wowsims/forever docs/evidence/EV-0048"
+     ],
+     "coef": 0.07,
+     "find": "damage",
+     "per": "target",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 6343,
+     "level": 6
+    },
+    {
+     "id": 8198,
+     "level": 18
+    },
+    {
+     "id": 8204,
+     "level": 28
+    },
+    {
+     "id": 8205,
+     "level": 38
+    },
+    {
+     "id": 11580,
+     "level": 48
+    },
+    {
+     "id": 11581,
+     "level": 58
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "key": "victory rush",
+   "kind": "physical",
+   "name": "Victory Rush",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+      "client text: ${1+$apm*$m3/100}"
+     ],
+     "coef": 0.15,
+     "find": "damage",
+     "stat": "ap"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 402927,
+     "level": 20
+    }
+   ],
+   "school": 1
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever sim/warrior/whirlwind.go"
+   ],
+   "class": "WARRIOR",
+   "key": "whirlwind",
+   "kind": "physical",
+   "name": "Whirlwind",
+   "parts": [
+    {
+     "basis": "c",
+     "cite": [
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "main",
+     "per": "target",
+     "spd": "norm",
+     "stat": "wpn"
+    },
+    {
+     "basis": "e",
+     "cite": [
+      "client text: weapon damage from both melee weapons",
+      "wowsims/forever sim/warrior/whirlwind.go"
+     ],
+     "coef": 1.0,
+     "find": "weapon",
+     "h": "off",
+     "per": "target",
+     "spd": "norm",
+     "stat": "wpn"
+    }
+   ],
+   "ranks": [
+    {
+     "id": 1680,
+     "level": 36
+    }
+   ],
+   "school": 1
+  }
+ ]
+}
