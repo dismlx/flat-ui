@@ -1,8 +1,8 @@
 local _, ns = ...
 
 -- Hit table lines (part "hit table lines" of Chat and tooltips; 0.5.20): under the tooltip of an enemy the player can attack, the player's hit
--- table against it, a line for each attack the hit table under the player frame shows (HitTable.lua), as "Your swing  Miss 8.0 · Dodge 6.5 · Glance
--- 40.0 · Crit 12.1 · Hit 33.4". Its row is On enemy tooltips (hud.hitTableTip, on the Hit table tab of Minimap and buffs): For tanks and damage
+-- table against it, a line for each attack the hit table under the player frame shows (HitTable.lua), as "Swing  M8 D6.5 G40 C12.1 H33.4" (0.5.21:
+-- a letter for each part, M miss, D dodge, P parry, G glance, B block, C crit, H hit, and one decimal unless it is 0). Its row is On enemy tooltips (hud.hitTableTip, on the Hit table tab of Minimap and buffs): For tanks and damage
 -- dealers (the default) adds the lines while the player's role (ns.PlayerRole, Core.lua) is no healer, Always whatever the role, Off never. The
 -- lines follow that row alone, not Hit table under the player frame, so a player may hide the table and keep the lines; and they come only while
 -- the chat module is on, since its post call adds them. They count what the Hit table tab says: Attacks (hud.hitTableLines, the kinds of
@@ -68,14 +68,13 @@ local HT = {
 	AGAIN = 2,
 	-- The levels a boss and a ?? count above the player, as the hit table counts them (HitTableCalc.lua, ABOVE).
 	ABOVE = 3,
-	-- The parts of a line in the order of the roll, and their words; the crit cap is the hit table's alone.
-	PARTS = { { "miss", "Miss" }, { "dodge", "Dodge" }, { "parry", "Parry" }, { "glance", "Glance" }, { "block", "Block" }, { "crit", "Crit" },
-		{ "hit", "Hit" } },
-	-- Between two parts: a middle dot, as the Overall line of the gear lines has (GearLines.lua, T.SEPARATOR).
-	SEPARATOR = " \194\183 ",
-	-- The label of each line of C.Table, by its id.
-	LABELS = { swing = "Your swing", main = "Your main hand", off = "Your off hand", special = "Your special attacks",
-		ranged = "Your ranged attacks", spell = "Your spells" },
+	-- The parts of a line in the order of the roll, each a letter with its figure (the owner: "make more concise parry = p, block = b, etc"):
+	-- M miss, D dodge, P parry, G glance, B block, C crit, H hit; the row's tip says what each letter is. The crit cap is the hit table's alone.
+	PARTS = { { "miss", "M" }, { "dodge", "D" }, { "parry", "P" }, { "glance", "G" }, { "block", "B" }, { "crit", "C" }, { "hit", "H" } },
+	-- Between two parts: a space.
+	SEPARATOR = " ",
+	-- The label of each line of C.Table, by its id: short, as the line is.
+	LABELS = { swing = "Swing", main = "Main hand", off = "Off hand", special = "Special", ranged = "Ranged", spell = "Spells" },
 	HEADER = "Hit table",
 	-- The colours of the style while SpellModel.lua's (M.Fmt.Style) cannot be read, as SpellLines.lua keeps them.
 	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, dim = { 0.66, 0.68, 0.62 } },
@@ -291,13 +290,21 @@ end
 
 -- The right text of a line: each part that applies, in the order of the roll, with one decimal, ? where the game did not give it. Nil when no part
 -- is known.
+
+-- A part's figure: one decimal, without a trailing .0 (8.0 reads 8).
+local function Short(value)
+	local text = ("%.1f"):format(value)
+	text = text:gsub("%.0$", "")
+	return text
+end
+
 local function Parts(line)
 	local parts, known = {}, false
 	for _, part in ipairs(HT.PARTS) do
 		local value = line.parts[part[1]]
 		if value ~= false then
 			known = known or Finite(value)
-			parts[#parts + 1] = part[2] .. " " .. (Finite(value) and ("%.1f"):format(value) or "?")
+			parts[#parts + 1] = part[2] .. (Finite(value) and Short(value) or "?")
 		end
 	end
 	return known and table.concat(parts, HT.SEPARATOR) or nil

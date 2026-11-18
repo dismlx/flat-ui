@@ -1,6 +1,7 @@
 ## 0.5.21
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Hit table**, **On enemy tooltips**: the lines are shorter, a letter for each part and short labels, as in "Swing  M8 D6.5 P14 B5 G40 C12.1 H33.4" (M miss, D dodge, P parry, G glance, B block, C crit, H hit, in percent; a figure loses its .0).
 
 ## 0.5.20
 
