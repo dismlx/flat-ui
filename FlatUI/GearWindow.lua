@@ -22,9 +22,10 @@ local _, ns = ...
 -- Tooltips are GameTooltip, never in a fight, as Bags' item tooltips wait (Core.lua:146): SetOwner, AddLine for this window's lines, Show, and Hide only
 -- while a frame of the window owns it (IsOwned); a line's own spell (SetSpellByID, Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:560) and the
 -- item (SetHyperlink, :590) come from secure accessors of the game's tooltip data (:488-519), which answer true when they built one.
--- The numbers are GearModel's, so the window and the item tooltips agree, written as design 2.3 rounds them: a cast whole from 100 up and with one
--- decimal below, a second with one decimal, the change in green for a gain, red for a loss and grey for none, with its percent, and ~ first for an
--- estimate.
+-- The numbers are GearModel's, so the window and the item tooltips agree, written as design 2.3 rounds them with SpellModel's M.Fmt, as the item
+-- tooltips write them (Figure, Change, Percent): a cast whole from 100 up and with one decimal below, a second (row.perSecond: dps, a second, or the
+-- threat of what rides on the swings) with one decimal, the change in green for a gain, red for a loss and grey for none, with its percent, and ~
+-- first for an estimate (the threat's own for a threat figure).
 -- The item: its name in its quality colour from the link, which needs nothing loaded, else from C_Item.GetItemInfo (WL/apis.yaml:16525) and the
 -- game's colour of its quality (ColorManager.GetColorDataForItemQuality, Blizzard_Colors/Mainline/ColorManager.lua:52-60, which has every quality,
 -- else C_Item.GetItemQualityColor, WL/apis.yaml:16726); its icon from C_Item.GetItemInfoInstant (:16569), which never waits. An item the client has
@@ -51,19 +52,23 @@ local _, ns = ...
 -- (ns.GearRemove). While the cursor holds an item or a spell, the part of the window that takes it is lit, looked at ten times a second, as Bags
 -- lights the titles that take an item (BagsLayout.lua:40-45).
 -- The frame: CreateFrame on UIParent, named FlatUIGear, made the first time it opens and only out of combat (an opening asked for in a fight before
--- that waits for its end, ns.OutOfCombat), in the MEDIUM strata among the game's windows, raised when clicked (SetToplevel, WL/uiobjects.yaml:4770),
+-- that waits for its end, ns.OutOfCombat), in the MEDIUM strata among the game's windows, or DIALOG when it shows while the options window does
+-- (HIGH, Panel.lua:2654; ns.PanelShown), so the window its row there opens shows above it, as the Edit Mode layout text does (LayoutText.lua:38);
+-- raised when clicked (SetToplevel, WL/uiobjects.yaml:4770),
 -- kept on the screen (SetClampedToScreen) and placed by Flat UI alone (SetMovable, SetDontSavePosition, :4605). The mouse wheel scrolls its lines when
 -- there are more than it holds (EnableMouseWheel, :7184). Its name goes once into UISpecialFrames, whose windows the game's CloseSpecialWindows hides
 -- on Escape (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:21-27, 1104-1116). It adds a line to /flatui status while it is open with
--- an item (ns.AddStatus, design 4.12).
+-- an item (ns.AddStatus, design 4.12), and tells GearLines.lua whether it is open (ns.GearWindowOpen), whose status lines show then too.
 -- It registers no event: it looks on the OnUpdate of its own frame while it shows. Every frame, texture and font string here is Flat UI's own.
 
 local KEY, PART = "chat", "gear window"
 -- The owner M.Want knows the window by, and the window's name, which the movers and UISpecialFrames know it by.
 local OWNER, NAME = "gear window", "FlatUIGear"
 -- The box of the window's entry in Movers.lua, and where it starts while no spot is saved: its top left corner this far from the top left corner of
--- the screen, right of the Character window (design 5.1).
-local BOX = { width = 420, height = 220, x = 380, y = -120 }
+-- the screen, right of the Character window (design 5.1). That window is 631 wide on this client (CHARACTER_FRAME_WIDTH, its stats pane open, as
+-- characterFrameCollapsed 0 has it: Blizzard_UIPanels_Game/Camelot/CharacterFrameConstants.lua:4, 7) at the left panel's spot, 16 from the left
+-- and 116 down (Blizzard_UIParentPanelManager/Shared/UIPanelLayoutFrame.lua:3-4), and the game leaves 32 between panels (:8): 16 + 631 + 32.
+local BOX = { width = 420, height = 220, x = 680, y = -120 }
 -- Units: the width of the window and its padding on each side; the title bar, its close cross, a word of the switch, the room around the text of one
 -- and between two; the icon of the item and the space after it; the column heads and a line of the table (design 2.7: a row 18 high a line); the
 -- space between two parts, between two dim lines and before a cell's neighbour; and a line of small text when the client does not say.
@@ -95,7 +100,7 @@ local CAPS = { classic = "9% melee, 16% spells", game = "8% melee, 17% spells" }
 -- The slots by their number (INVSLOT_AMMO to INVSLOT_TABARD), as the comparison names them (design 2.3, 2.4).
 local SLOTS = { [0] = "Ammo", "Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Finger 1", "Finger 2",
 	"Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged", "Tabard" }
--- The comparison kinds whose cast is a swing or a shot (design 2.3): Attack, Auto Shot and Shoot with a wand.
+-- The comparison kinds whose cast is a swing or a shot (design 2.3): Attack, Auto Shot and Shoot with a wand, as the name of a line says it at A cast.
 local SWINGS = { auto = "a swing", shot = "a shot", wand = "a shot" }
 -- The forms whose swing a weapon ability counts its attack power at (GetShapeshiftFormID: Cat Form 1, Bear Form 5, Dire Bear Form 8, as D.RULES has
 -- them), the slot of each hand of a weapon part (design 3.2), and the normalized and form speeds when the data gives none (D.MODEL, SpellData.lua).
@@ -130,6 +135,7 @@ local T = {
 	NO_CHANGE = "No change to your chosen spells; stamina, armor, avoidance and mana are not counted.",
 	RANDOM = "Random stats not known.",
 	IN_PLACE = "in place of %s (%s)",
+	IN_PLACE_OFF = "in place of %s, off hand empty",
 	IN_EMPTY = "in your empty %s slot",
 	EMPTY_HANDS = "in your empty hands",
 	BOTH = "both hands",
@@ -514,61 +520,39 @@ end
 
 -- Numbers ----------------------------------------------------------------------------------------------------------------------------------------
 
--- A whole number with its thousands set apart by commas, as Flat UI's English lines write them.
-local function Group(whole)
-	local digits = ("%d"):format(whole)
-	return (digits:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", ""))
+-- The rounding of design 2.3, SpellModel.lua's (M.Fmt), which the item tooltips write their numbers with too, or nil.
+local function Fmt(name)
+	local fmt = type(ns.SpellModel) == "table" and ns.SpellModel.Fmt or nil
+	return Fn(fmt, name)
 end
 
--- An amount, no sign, as the comparison writes it (design 2.3): a second with one decimal; any other figure whole from 100 up and with one decimal
--- below, a trailing .0 dropped.
-local function Amount(size, second)
-	if second then
-		local whole, tenth = ("%.1f"):format(size):match("^(%d+)%.(%d)$")
-		if whole then
-			return Group(tonumber(whole)) .. "." .. tenth
-		end
-		return ("%.1f"):format(size)
-	end
-	if size >= 100 then
-		return Group(math.floor(size + 0.5))
-	end
-	return (("%.1f"):format(size):gsub("%.0$", ""))
-end
-
--- A figure now or with the item: - when the line has none in this figure, ~ first for an estimate.
+-- A figure now or with the item (M.Fmt.Figure: a second with one decimal, any other whole from 100 up and with one decimal below): - when the line
+-- has none in this figure, ~ first for an estimate.
 local function Value(value, second, estimate)
 	if not Finite(value) then
 		return "-"
 	end
-	local text = Amount(math.abs(value), second)
-	if value < 0 and text ~= "0" then
-		text = "-" .. text
-	end
-	return (estimate and "~" or "") .. text
+	local figure = Fmt("Figure")
+	return (estimate and "~" or "") .. (figure and figure(value, second) or ("%.1f"):format(value))
 end
 
--- The change from now to with, signed, with the percent of the figure now (one decimal and its sign, (0%) under 0.05%, none when the figure now is
--- 0), and its tone: gain, loss or none (design 2.3). An estimate starts with ~ and keeps the tone of its direction.
+-- The change from now to with, signed (M.Fmt.Change), with the percent of the figure now (M.Fmt.Percent: one decimal and its sign, (0%) under
+-- 0.05%, none when the figure now is 0), and its tone: gain, loss or none (design 2.3). An estimate starts with ~ and keeps the tone of its
+-- direction.
 local function Change(now, with, second, estimate)
 	if not (Finite(now) and Finite(with)) then
 		return "-", "none"
 	end
 	local delta = with - now
-	local text, tone = "0", "none"
+	local change, percent = Fmt("Change"), Fmt("Percent")
+	local text = change and change(delta, second) or ("%+.1f"):format(delta)
+	local tone = "none"
 	if math.abs(delta) >= 0.05 then
-		local amount = Amount(math.abs(delta), second)
-		if amount ~= "0" then
-			text, tone = (delta > 0 and "+" or "-") .. amount, delta > 0 and "gain" or "loss"
-		end
+		tone = delta > 0 and "gain" or "loss"
 	end
 	if now ~= 0 then
-		local share = delta / math.abs(now) * 100
-		if math.abs(share) < 0.05 then
-			text = text .. " (0%)"
-		else
-			text = text .. (" (%s%.1f%%)"):format(share > 0 and "+" or "-", math.abs(share))
-		end
+		local share = delta / math.abs(now)
+		text = text .. " (" .. (percent and percent(share) or ("%+.1f%%"):format(share * 100)) .. ")"
 	end
 	return (estimate and "~" or "") .. text, tone
 end
@@ -696,7 +680,8 @@ local function Where(candidate)
 	return (Finite(first) and SLOTS[first]) or (type(candidate) == "table" and Text(candidate.label)) or T.SLOT
 end
 
--- What the item would take the place of, one phrase for each slot of the comparison (design 2.4): the worn items with the slot, or the empty slot.
+-- What the item would take the place of, one phrase for each slot of the comparison (design 2.4): the worn items with the slot, a two-hander whose
+-- off hand a one-hander leaves empty (offEmpty), or the empty slot, as GearModel.lua's header of a candidate words it.
 local function PlaceLine(cands, state)
 	local phrases = {}
 	for _, c in ipairs(cands) do
@@ -709,7 +694,9 @@ local function PlaceLine(cands, state)
 				end
 			end
 		end
-		if #names > 0 then
+		if #names > 0 and c.offEmpty == true then
+			phrases[#phrases + 1] = T.IN_PLACE_OFF:format(table.concat(names, " and "))
+		elseif #names > 0 then
 			phrases[#phrases + 1] = T.IN_PLACE:format(table.concat(names, " and "), where)
 		elseif where == T.BOTH then
 			phrases[#phrases + 1] = T.EMPTY_HANDS
@@ -794,34 +781,32 @@ local function NameOf(line)
 	return name or "?"
 end
 
--- The number of G.Expect's answer a figure shows (design 2.3): threat a cast, or a second for the auto attack, Auto Shot and the wand.
-local function Pick(e, figure, entry)
+-- The number of G.Expect's answer a figure shows (design 2.3): a cast, a second, or threat, which GearModel gives a second for what rides on the
+-- swings or shots (perSecond: Attack, Auto Shot, Shoot, the seals) and a cast for the rest.
+local function Pick(e, figure)
 	if type(e) ~= "table" or not figure then
 		return nil
 	end
-	local cmp = entry and entry.cmp or nil
 	if figure == "cast" then
 		return e.cast
 	elseif figure == "second" or figure == "dps" then
 		return e.second
 	elseif figure == "threat" then
-		if SWINGS[cmp] then
-			return e.threatSecond
-		end
 		return e.threat
 	end
 	return nil
 end
 
 -- What a line counts when it is not what the switch says (design 2.3): a swing or a shot for A cast, threat for a line that does no damage, a second
--- for the threat of the auto attack, and none at A second for a strike that takes the place of the next swing (G.Figure gives it no figure there).
--- Nil when the switch says it.
-local function Counts(mode, figure, entry)
-	local cmp = entry and entry.cmp or nil
+-- for threat that rides on the swings (row.perSecond), and none at A second for a strike that takes the place of the next swing (G.Figure gives it
+-- no figure there). Nil when the switch says it.
+local function Counts(mode, row)
+	local entry = EntryOf(row.line)
+	local cmp, figure = entry and entry.cmp or nil, row.figure
 	if not figure then
 		return entry and entry.nx and mode == "second" and T.SWING_NONE or nil
 	elseif figure == "threat" then
-		if SWINGS[cmp] then
+		if row.perSecond then
 			return mode == "threat" and "a second" or "threat a second"
 		end
 		return mode ~= "threat" and "threat" or nil
@@ -871,7 +856,7 @@ end
 -- Working it out ---------------------------------------------------------------------------------------------------------------------------------
 
 -- With no item, or one that cannot be compared: what each line does now, from G.Expect with the player's state and stats, in the figure G.Figure
--- gives it for the switch.
+-- gives it for the switch, with that figure's basis and whether it is a second.
 local function Profile(view, lines, state, stats)
 	local model = ns.GearModel
 	local opts = Options(view.mode)
@@ -881,9 +866,12 @@ local function Profile(view, lines, state, stats)
 			if row.figure then
 				local e = Ask(model, "Expect", line, state, stats, opts)
 				if type(e) == "table" then
-					row.now = Pick(e, row.figure, EntryOf(line))
-					row.basis, row.why = Text(e.basis), Text(e.why)
+					-- A threat figure takes the threat's basis, and is a second for what rides on the swings (GearModel.lua's header).
+					local threat = row.figure == "threat"
+					row.now = Pick(e, row.figure)
+					row.basis, row.why = Text(threat and e.threatBasis or e.basis), Text(e.why)
 					row.estimate = row.basis == "e"
+					row.perSecond = row.figure == "second" or row.figure == "dps" or (threat and e.perSecond == true)
 				end
 			end
 			view.rows[#view.rows + 1] = row
@@ -912,8 +900,8 @@ local function RowOf(rows, line, index)
 	return nil
 end
 
--- The rows of an item compared (G.Compare's candidates, the first two): each line now, with the item in each slot, its figure and whether it is an
--- estimate. False when the item has no slot to compare with.
+-- The rows of an item compared (G.Compare's candidates, the first two): each line now, with the item in each slot, its figure, whether it is an
+-- estimate or a second, its basis and why it has none. False when the item has no slot to compare with.
 local function Compared(view, result, lines, state)
 	local cands = {}
 	for _, c in ipairs(type(result.candidates) == "table" and result.candidates or {}) do
@@ -937,6 +925,9 @@ local function Compared(view, result, lines, state)
 					end
 					row.figure = row.figure or Text(found.figure)
 					row.estimate = row.estimate or found.estimate == true
+					row.perSecond = row.perSecond or found.perSecond == true
+					row.basis = row.basis or Text(found.basis)
+					row.why = row.why or Text(found.why)
 					row.with[which] = found.with
 				end
 			end
@@ -1172,7 +1163,7 @@ local function RowName(row, mode)
 			name = T.RANK:format(name, rank)
 		end
 	end
-	local counts = Counts(mode, row.figure, entry)
+	local counts = Counts(mode, row)
 	if counts then
 		name = name .. "  " .. DIM_HEX .. counts .. "|r"
 	end
@@ -1184,7 +1175,7 @@ end
 
 -- One line of the table: its cells in the columns of the layout, coloured as the item tooltips colour them (design 2.3).
 local function PaintRow(slot, row, view, columns, y)
-	local second = row.figure == "second" or row.figure == "dps"
+	local second = row.perSecond == true
 	for index, cell in ipairs(slot.cells) do
 		local column = columns[index]
 		if column then
@@ -1596,7 +1587,7 @@ local function RowLines(row)
 	if basis == nil then
 		local e = Ask(ns.GearModel, "Expect", line, state, stats, Options(W.mode))
 		if type(e) == "table" then
-			basis, why = Text(e.basis), Text(e.why)
+			basis, why = Text(row.figure == "threat" and e.threatBasis or e.basis), Text(e.why)
 		end
 	end
 	if basis == "m" or (basis == nil and entry and Measured(entry, line, row.figure)) then
@@ -1903,10 +1894,22 @@ local function Special()
 	table.insert(list, NAME)
 end
 
+-- The strata of the window: MEDIUM among the game's windows (design 2.7), or DIALOG while the options window shows (HIGH, Panel.lua:2654), so a
+-- window its Gear comparison window row opens shows above it, as the Edit Mode layout text does (LayoutText.lua:38).
+local function Raise()
+	local over = false
+	if type(ns.PanelShown) == "function" then
+		local ok, shown = pcall(ns.PanelShown)
+		over = ok and shown == true
+	end
+	W.frame:SetFrameStrata(over and "DIALOG" or "MEDIUM")
+end
+
 -- The window's part of its showing: SpellModel listens, the switch starts on Threat for a tank and on A cast for the others until the player picks
--- one (design 2.7), and the window is placed and worked out afresh.
+-- one (design 2.7), the strata suits the options window, and the window is placed and worked out afresh.
 local function Showing()
 	Want(true)
+	Raise()
 	if not W.chosen then
 		W.mode = Role((Touch())) == "tank" and "threat" or "cast"
 	end
@@ -2007,6 +2010,7 @@ local function Open(link)
 		Make()
 	end
 	if W.frame:IsShown() then
+		Raise()
 		Refresh()
 	else
 		Place()
@@ -2055,6 +2059,16 @@ end
 -- The window has a handle in the movers while it may show, open or not, as Bags' windows have one while Bags is on (BagsWindow.lua:2162-2169).
 function ns.GearWindowShown()
 	return Allowed()
+end
+
+-- True while the window is open: GearLines.lua's /flatui status lines show then too, whatever Your spells in item tooltips says.
+function ns.GearWindowOpen()
+	local frame = W.frame
+	if not frame then
+		return false
+	end
+	local ok, shown = pcall(frame.IsShown, frame)
+	return ok and shown == true
 end
 
 -- The movers set or put back the window's spot: it hangs from it now.

@@ -54,10 +54,11 @@ local _, ns = ...
 -- The look (design 1.2): the share grey (0.8, the grey of Chat.lua's extra lines), the number white, or grey while it is from before the fight,
 -- and dim lines (0.66, 0.68, 0.62, HitTable.lua's DIM) wrapped at the tooltip's width by AddLine's fifth argument (Blizzard_SharedXML/
 -- SharedTooltipTemplates.lua:166-172), so a long note does not widen the tooltip.
--- /flatui status (design 4.12), while the module is on and a row wants lines: the build of the data and its number of spells (every class's
--- constructor of SpellData.lua run once, for this line alone), that the game withholds the stats in this fight (C_Secrets.ShouldUnitStatsBeSecret,
+-- /flatui status (design 4.12), while the module is on and a row wants lines: the build of the data and its number of spells (D.SPELLS, which the
+-- generator counts, so no other class's constructor runs), that the game withholds the stats in this fight (C_Secrets.ShouldUnitStatsBeSecret,
 -- Blizzard_APIDocumentationGenerated/SecretPredicateAPIDocumentation.lua:388-396) or when they were read (GetTime), what SpellModel's check of the
--- game's texts found, and the low rank rule while its row is on.
+-- game's texts found, the low rank rule while its row is on, and, once SpellModel had to look through the talent tree (S.state.treeWalked, design
+-- 6.25), that it did.
 
 local KEY, PART = "chat", "spell lines"
 local IsSecret = ns.IsSecret
@@ -106,7 +107,7 @@ local made = {}
 -- What Find found, for Work: ns.EachPart gives back no answer of the function it runs.
 local pick = {}
 -- wanting: what SpellModel was told last (M.Want); reported: the first error of the part went to the game's handler; syncs: the number of the
--- last sync; counted: the data's number of spells, once; kinds: the values of Enum.TooltipDataType, once.
+-- last sync; kinds: the values of Enum.TooltipDataType, once.
 local run = { wanting = false, reported = false, syncs = 0 }
 
 -- Rows -----------------------------------------------------------------------------------------------------------------------------------------
@@ -225,7 +226,7 @@ local function LineSpell(data)
 end
 
 -- The spell of the macro on the action slot this build is of, or nil when the build is not of an action slot or the slot holds no spell.
--- ns.ActionSpell answers as Cooldowns.lua's Bar.SlotAction, "spell" and its ID (design 4.3); an answer of the spell ID alone is read too.
+-- ns.ActionSpell (Cooldowns.lua, design 4.3) answers the spell's ID, or nil.
 local function SlotSpell(tooltip)
 	local info = Field(tooltip, "processingInfo")
 	if Field(info, "getterName") ~= SL.ACTION then
@@ -237,14 +238,11 @@ local function SlotSpell(tooltip)
 		return nil
 	end
 	-- A fault of the slot's read leaves a macro without lines and does not count against this part.
-	local ok, kind, id = pcall(read, slot)
-	if not ok or IsSecret(kind) or IsSecret(id) then
+	local ok, id = pcall(read, slot)
+	if not ok or IsSecret(id) then
 		return nil
 	end
-	if kind == "spell" then
-		return Whole(id) and id or nil
-	end
-	return Whole(kind) and kind or nil
+	return Whole(id) and id or nil
 end
 
 -- The rank of a talent's block: the second of the getterArgs of a build through GetTraitEntry (the entry, then the rank), or nil for any other
@@ -617,34 +615,16 @@ local function Withheld()
 	return not ok or IsSecret(secret) or secret ~= false
 end
 
--- The number of spells of the data, of every class: each class's constructor and ALL's run once, for this line alone, and the count is kept.
-local function Count(D)
-	if run.counted == nil then
-		local total = 0
-		local classes = D.CLASS
-		if type(classes) == "table" then
-			for _, make in pairs(classes) do
-				if type(make) == "function" then
-					local ok, list = pcall(make)
-					if ok and type(list) == "table" then
-						total = total + #list
-					end
-				end
-			end
-		end
-		run.counted = total
-	end
-	return run.counted
-end
-
--- The status line of the data: its client build, its hotfix push and its number of spells.
+-- The status line of the data: its client build, its hotfix push and its number of spells (D.SPELLS, every class's, as the generator counts them;
+-- a data file without it says no number).
 local function DataLine()
 	local D = ns.SpellData
 	if type(D) ~= "table" or type(D.BUILD) ~= "string" then
 		return nil
 	end
 	local push = D.HOTFIX ~= nil and (" (hotfix push %s)"):format(tostring(D.HOTFIX)) or ""
-	return ("Spell lines: WoW: Forever's values, client build %s%s, %d spells; ~ marks an estimate."):format(D.BUILD, push, Count(D))
+	local count = ns.Finite(D.SPELLS) and (", %d spells"):format(D.SPELLS) or ""
+	return ("Spell lines: WoW: Forever's values, client build %s%s%s; ~ marks an estimate."):format(D.BUILD, push, count)
 end
 
 -- The status line of the stats, while With your stats is on: when they were read, that the game withholds them in this fight, or that it has not
@@ -733,6 +713,14 @@ ns.AddStatus(KEY, function()
 	end
 	if power and Opt("spellLowRank") == true then
 		Push(lines, LowRankLine())
+	end
+	-- Once seen: a talent's node did not answer with the data's definition, so SpellModel looked through the whole tree (design 4.12, 6.25).
+	local read, state = false, nil
+	if M and type(M.State) == "function" then
+		read, state = pcall(M.State)
+	end
+	if read and type(state) == "table" and state.treeWalked == true then
+		Push(lines, "Spell lines: your talent tree differs from the data's, so Flat UI looked through all of it.")
 	end
 	return lines
 end)

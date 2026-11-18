@@ -205,9 +205,11 @@ local LIST = {
 	{ name = "FlatUIHitTable", label = "Hit table", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "HitTableRow",
 		changed = "HitTableMoved" },
 	-- The Gear comparison window (GearWindow.lua), which shows while /flatui gear or its row has it open: its top left corner is the top left corner
-	-- of the box, and it grows down from there as lines come. It starts right of the Character window.
+	-- of the box, and it grows down from there as lines come. It starts right of the Character window, which is 631 wide at the left panel's spot,
+	-- 16 from the left, with the game's 32 between panels (Camelot/CharacterFrameConstants.lua:4; UIPanelLayoutFrame.lua:3-4, 8); GearWindow.lua's
+	-- BOX starts at the same corner.
 	{ name = "FlatUIGear", label = "Gear comparison", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 420, height = 220,
-		x = 380, y = -120, gate = "GearWindowShown", changed = "GearWindowMoved" },
+		x = 680, y = -120, gate = "GearWindowShown", changed = "GearWindowMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",

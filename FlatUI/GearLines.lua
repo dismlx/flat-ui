@@ -38,7 +38,8 @@ local _, ns = ...
 -- data and of the tooltip is read under pcall and through ns.IsSecret, and every call under pcall.
 --
 -- The block: G.Compare(link, lines, opts), or G.Compare(slot, lines, opts) for a worn item (what it gives: now against that slot empty), with the
--- lines of ns.GearChosen the player knows now and opts.mode "tooltip" and opts.listVersion ns.GearListVersion() (design 4.3). Of the slots it gives
+-- lines of ns.GearChosen the player knows now and opts.mode "tooltip" and opts.listVersion ns.GearListVersion() (design 4.3); a row's change is with
+-- - now, what the item gives, and its label, slots, empty, offEmpty and perSecond are read as GearModel.lua's header says. Of the slots it gives
 -- (rings, trinkets, a dual wielder's one-hand weapon) the tooltip shows the one with the larger mean of the shown lines' percent changes, the first
 -- the game names on a tie (design 2.4). Written with AddLine and AddDoubleLine, the only writes on a Blizzard frame here: a grey header that wraps
 -- (AddLine's fifth argument), naming what the item replaces, the worn item's name in its quality colour (its link's own colour), and the unit of the
@@ -51,10 +52,11 @@ local _, ns = ...
 -- once for each build of a tooltip, as Chat.lua adds its own lines (Chat.lua:787-798): the game fetches new data for each build and may run the
 -- post calls more than once for one, so the same data with the lines of the first call still there is the same build (NumLines). Each AddLine and
 -- AddDoubleLine is under pcall, and one the game refuses stops the adding for that build. In a fight, where the game withholds the stats
--- (design 4.7), a block worked out before it shows, else one dim line (InCombatLockdown, and SpellModel's old stats). The numbers are rounded
--- here (design 2.3): a change a cast whole from 100 up and to a tenth below, a second to a tenth and " dps", thousands broken by the game's
--- BreakUpLargeNumbers under pcall (as CombatText.lua:1445-1446), the percent to a tenth with its sign, (0%) under 0.05 and none while the figure now
--- is 0.
+-- (design 4.7), a block worked out before it shows, else one dim line (InCombatLockdown, and SpellModel's old stats). A reason G.Compare gives
+-- shows as one grey line ("Needs a one-hand weapon; not compared."), but one it marks quiet (ammunition the game does not use for the player, an
+-- off-hand weapon for one who does not dual wield) shows nothing. The numbers are rounded as design 2.3 says by SpellModel's M.Fmt, as the window
+-- rounds them: a change a cast whole from 100 up and to a tenth below, a second to a tenth and " dps" (Change), the percent to a tenth with its
+-- sign, (0%) under 0.05 (Percent), and none while the figure now is 0.
 -- The post call runs in two steps, each inside ns.EachPart (Core.lua:2168-2199), which counts a failure once for each first argument and stops a
 -- part at the third (Core.lua:240, 2178, 2185-2194): the tests and the link keyed by the data of the build, which is new for each build, and the
 -- work keyed by the item's link, so three items that fail stop the gear lines with their note for /flatui status, and a test that fails on every
@@ -65,13 +67,15 @@ local _, ns = ...
 -- entry of ns.SpellData (SpellData.lua) and, only for a kept rank, its spell ID; nil until the player first changes it, and nil again after Back
 -- to your class's spells (design 4.3). At most 20 lines; a change is saved at once, also in a fight, as Cooldowns' are (Cooldowns.lua:2353). A
 -- line with no ID follows the highest rank the player knows (SpellModel's M.Highest, by the ranks of its entry, as Cooldowns and Pulse count the
--- ranks of a spell as one, Cooldowns.lua:2301-2302, Pulse.lua:11-13); a kept rank is known when ns.SpellKnown (Cooldowns.lua:314-325) says so.
--- Attack is known to every character whatever the spell book says, and a judgement, which no spell book holds, is known through its seal, at the
--- seal's rank. While the list is nil the defaults of the data are used (D.DEFAULTS by class and role, design 2.1): the role SpellModel read
--- (ns.PlayerRole's first answer, Core.lua:536-565), and a druid's form (GetShapeshiftFormID: Cat Form 1, the bear forms 5 and 8, PlateThreat.lua:54-56)
--- picks its cat or bear set whatever the role. Every entry of them is "if known"; T.WHEN holds the conditions of 2.1 a plain list of keys cannot
--- say (Heal only without Greater Heal, the seal and judgement of Command with Seal of Command known, else those of Righteousness, a shaman's Attack
--- with Stormstrike known). ns.GearListVersion() changes with each change of what the list gives: the lines, their ranks, whether they are known, and
+-- ranks of a spell as one, Cooldowns.lua:2301-2302, Pulse.lua:11-13); a kept rank is known when ns.SpellKnown (Cooldowns.lua:314-325) says so, or
+-- when it is the rank M.Highest gives. Attack is known to every character whatever the spell book says, and a judgement, which no spell book holds,
+-- takes the rank M.Highest gives it through its seal. While the list is nil the defaults of the data are used (D.DEFAULTS by class and role,
+-- design 2.1): the role SpellModel read (ns.PlayerRole's first answer, Core.lua:536-565), and a druid's form (GetShapeshiftFormID: Cat Form 1, the
+-- bear forms 5 and 8, PlateThreat.lua:54-56) picks its cat or bear set whatever the role. Every entry of them is "if known", and a set holds 2.1's
+-- conditions in the one form tools/dev/make_spelltips.py writes: a key; a list of keys, the first of them known (Greater Heal, else Heal); or
+-- { key, key ..., needs = key, ["else"] = { key ... } }, each of its keys while needs is known, else each of else (the seal and judgement of Command
+-- with Seal of Command known, else those of Righteousness; a shaman's Attack and Stormstrike with Stormstrike known). ns.GearListVersion() changes
+-- with each change of what the list gives: the lines, their ranks, whether they are known, and
 -- the defaults it follows (the role, the form). The names are the game's (C_Spell.GetSpellName), with the rank of a kept line
 -- (C_Spell.GetSpellSubtext, as Cooldowns.lua:2271-2284 tells ranks apart), and a name typed after /flatui gear add is found in the data, else by
 -- C_Spell.GetSpellInfo (as Cooldowns.lua:362-375 resolves one).
@@ -83,9 +87,11 @@ local _, ns = ...
 -- there, as Reset windows is a list row (Movers.lua:4556-4570). Each pick answers (done, message), as ns.CooldownAdd does (Cooldowns.lua:2354-2370),
 -- and never raises: an error goes once to geterrorhandler(). /flatui gear (ns.AddSlash, Core.lua:2333-2348; design 4.11) opens the window
 -- (ns.GearWindowToggle, ns.GearWindowShow) and changes the list, and prints with print(). /flatui status (ns.AddStatus, Core.lua:2309-2329; design
--- 4.12) says which spells are compared, against what, and, once seen, that the slot table stood in for the game's choice or Flat UI's rating sizes
--- for the game's conversion: of GetCombatRatingBonusForCombatRatingValue and C_TooltipComparison.GetItemComparisonInfo it only looks whether the
--- client has them, and a candidate of G.Compare whose game is false. UnitClassBase, UnitLevel, GetShapeshiftFormID and ns.PlayerRole are asked only
+-- 4.12) says, while Your spells in item tooltips is on and this part runs or the window is open (ns.GearWindowOpen, GearWindow.lua), which spells
+-- are compared, against what, and, once seen, that the slot table stood in for the game's choice or Flat UI's rating sizes for the game's
+-- conversion: of GetCombatRatingBonusForCombatRatingValue, C_TooltipComparison.GetItemComparisonInfo and GetActionInfo (Add the spells of a bar) it
+-- only looks whether the client has them, and a candidate of G.Compare whose game is false, or its sizes, the fixed sizes having stood in.
+-- UnitClassBase, UnitLevel, GetShapeshiftFormID and ns.PlayerRole are asked only
 -- when SpellModel's state lacks the class, level, form or role, and GetTime keeps one reading of the list for one frame.
 -- This file registers no event: SpellModel.lua listens for the player's state and stats on a frame of its own while an owner wants them
 -- (M.Want("gear lines", on) from ns.GearLinesSync, design 4.5), and a block the client had not loaded is never kept, so the next build has it.
@@ -114,9 +120,9 @@ local T = {
 	-- that cannot be worn.
 	NO_LINES = { INVTYPE_RELIC = true, INVTYPE_BAG = true, INVTYPE_QUIVER = true, INVTYPE_TABARD = true, INVTYPE_BODY = true, INVTYPE_NON_EQUIP = true,
 		INVTYPE_NON_EQUIP_IGNORE = true },
-	-- The worn slots by number (INVSLOT_AMMO 0 to INVSLOT_TABARD 19, Blizzard_FrameXMLBase/Constants.lua:135-154), named as Cooldowns names them
-	-- (Cooldowns.lua:119-121), for a header whose slot G.Compare gave no label.
-	SLOT_NAMES = { [0] = "Ammo", "Head", "Neck", "Shoulders", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrists", "Hands", "Finger 1", "Finger 2",
+	-- The worn slots by number (INVSLOT_AMMO 0 to INVSLOT_TABARD 19, Blizzard_FrameXMLBase/Constants.lua:135-154), in the words of G.Compare's labels
+	-- (GearModel.lua, K.LABEL) and the window's, for a header whose slot G.Compare gave no label.
+	SLOT_NAMES = { [0] = "Ammo", "Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Finger 1", "Finger 2",
 		"Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged", "Tabard" },
 	-- Attack (the auto attack of both hands), Auto Shot and Shoot with a wand, which Add a spell lists when the player has them (design 2.1).
 	GENERIC = { 6603, 75, 5019 },
@@ -128,21 +134,8 @@ local T = {
 	-- What a set of the defaults is for, as /flatui status and the list say it.
 	SETS = { damage = "a damage dealer", tank = "a tank", healer = "a healer", cat = "Cat Form", bear = "a bear form" },
 	ROLES = { damage = true, tank = true, healer = true },
-	-- The conditions of design 2.1 that a plain list of keys cannot hold, by class and set: a key of the defaults shows only while another is known
-	-- (needs) or only while it is not (unless). The data may hold them too (Items, below); these make a plain list read as 2.1 says.
-	WHEN = {
-		PRIEST = { healer = { ["heal"] = { unless = "greater heal" } } },
-		PALADIN = { damage = {
-			["judgement of command"] = { needs = "seal of command" },
-			["seal of righteousness"] = { unless = "seal of command" },
-			["judgement of righteousness"] = { unless = "seal of command" },
-		} },
-		SHAMAN = { damage = { ["attack"] = { needs = "stormstrike" } } },
-	},
-	-- A judgement is no spell of the spell book: the game casts it from the seal that is up. It counts as known through its seal, at the seal's rank.
-	THROUGH = { ["judgement of command"] = "seal of command", ["judgement of righteousness"] = "seal of righteousness" },
-	-- The comparison kinds (design 3.2) that count a second in the tooltip, and those that heal.
-	SWING = { auto = true, shot = true, wand = true }, HEALS = { heal = true, hot = true },
+	-- The comparison kinds (design 3.2) that heal: their second is healing a second.
+	HEALS = { heal = true, hot = true },
 	-- The hit cap against a boss of each choice (chat.gearRules, hud.hitTableRules; Config.lua:1959-1961).
 	CAPS = { classic = "9% melee and 16% spells", game = "8% melee and 17% spells" },
 	-- The fixed rating sizes for 1% when the data does not give them (design 2.5, SpellData.lua's D.MODEL.ratings).
@@ -398,8 +391,8 @@ local function Known(id)
 	return known(id) == true
 end
 
--- The rank index and spell ID of the highest rank of an entry the player knows, or nil: SpellModel's answer, else Attack's one rank, else for a
--- judgement the rank of its seal.
+-- The rank index and spell ID of the highest rank of an entry the player knows, or nil: SpellModel's answer (M.Highest, which gives a judgement the
+-- rank of its seal), else Attack's one rank, which every character knows.
 local function Highest(M, entry)
 	if type(entry) ~= "table" or type(entry.ranks) ~= "table" then
 		return nil
@@ -414,30 +407,16 @@ local function Highest(M, entry)
 			return at, rank
 		end
 	end
-	local through = T.THROUGH[entry.key]
-	local seal = through and M.ByKey(through) or nil
-	if type(seal) == "table" and #entry.ranks > 0 then
-		local sealIndex = M.Highest(seal)
-		if Finite(sealIndex) and sealIndex >= 1 then
-			local at = math.min(math.floor(sealIndex), #entry.ranks)
-			return at, RankId(entry, at)
-		end
-	end
 	return nil
 end
 
--- Whether the player knows the rank of a kept line: the spell itself, or for a judgement the rank of its seal.
-local function KnownRank(M, entry, index, id)
+-- Whether the player knows the rank of a kept line: the spell itself, or the rank M.Highest gives (a judgement's, through its seal).
+local function KnownRank(M, entry, id)
 	if Known(id) then
 		return true
 	end
-	local through = T.THROUGH[entry.key]
-	local seal = through and M.ByKey(through) or nil
-	if type(seal) == "table" and type(seal.ranks) == "table" and #seal.ranks > 0 then
-		local rank = RankId(seal, math.min(index, #seal.ranks))
-		return rank ~= nil and Known(rank)
-	end
-	return false
+	local _, top = Highest(M, entry)
+	return top ~= nil and top == id
 end
 
 -- A line as ns.GearChosen gives it (design 4.3), with its key.
@@ -481,80 +460,36 @@ local function SetOf(class, role, form)
 	return nil, role
 end
 
--- True when test holds for a key, or for every key of a list of them.
-local function Holds(test, value)
-	if type(value) == "string" then
-		return test(value)
-	elseif type(value) == "table" and value[1] ~= nil then
-		for _, key in ipairs(value) do
-			if type(key) ~= "string" or not test(key) then
-				return false
-			end
-		end
-		return true
-	end
-	return false
-end
-
--- Adds to out the keys an item of a set gives, and says how many. An item is a key; a list of keys, of which the first wanted counts ("Greater
--- Heal, else Heal"), or every key wanted where whole is true (a group inside a list of choices); a table with a condition (when, needs, with or known:
--- a key that must be known; unless or without: one that must not), which gives its key and its items when the condition holds and its else when
--- not; or a list of such tables and groups, of which the first that gives any counts. wanted says whether a key may be added; known whether a key
--- is known, for the conditions.
-local function Items(item, wanted, known, out, depth, whole)
-	if depth > 6 then
-		return 0
-	end
+-- Adds to out the keys one item of a set of D.DEFAULTS gives, in the one form tools/dev/make_spelltips.py writes (design 2.1): a key, while known; a
+-- list of keys, the first of them known ("Greater Heal, else Heal"); or { key, key ..., needs = key, ["else"] = { key ... } }, each of its keys
+-- known while needs is known, else each known key of its else. known says whether the player knows a key's spell.
+local function Items(item, known, out)
 	if type(item) == "string" then
-		if wanted(item) then
+		if known(item) then
 			out[#out + 1] = item
-			return 1
 		end
-		return 0
+		return
 	elseif type(item) ~= "table" then
-		return 0
+		return
 	end
-	local needs = item.when or item.needs or item.with or item.known
-	local unless = item.unless or item.without
-	if needs ~= nil or unless ~= nil then
-		if (needs ~= nil and not Holds(known, needs)) or (unless ~= nil and Holds(known, unless)) then
-			return Items(item["else"], wanted, known, out, depth + 1, true)
+	if item.needs ~= nil then
+		local group = item
+		if not known(item.needs) then
+			group = item["else"]
 		end
-		local count = Items(item.key, wanted, known, out, depth + 1, true)
-		for _, sub in ipairs(item) do
-			count = count + Items(sub, wanted, known, out, depth + 1, true)
-		end
-		return count
-	end
-	if type(item.key) == "string" then
-		return Items(item.key, wanted, known, out, depth + 1, true)
-	end
-	local keys = true
-	for _, sub in ipairs(item) do
-		if type(sub) ~= "string" then
-			keys = false
-			break
-		end
-	end
-	if keys and not whole then
-		for _, sub in ipairs(item) do
-			if wanted(sub) then
-				out[#out + 1] = sub
-				return 1
+		for _, key in ipairs(type(group) == "table" and group or {}) do
+			if type(key) == "string" and known(key) then
+				out[#out + 1] = key
 			end
 		end
-		return 0
+		return
 	end
-	local count = 0
-	for _, sub in ipairs(item) do
-		local got = Items(sub, wanted, known, out, depth + 1, true)
-		if keys then
-			count = count + got
-		elseif got > 0 then
-			return got
+	for _, key in ipairs(item) do
+		if type(key) == "string" and known(key) then
+			out[#out + 1] = key
+			return
 		end
 	end
-	return count
 end
 
 -- The lines of the defaults for the player's class, role and form, and the set they are: every entry known now, each once, in the set's order.
@@ -565,24 +500,13 @@ local function DefaultLines(M, state)
 	if not set then
 		return {}, name, true
 	end
-	local rules = class and T.WHEN[class] and T.WHEN[class][name] or nil
 	local function KnownKey(key)
 		local entry = type(key) == "string" and M.ByKey(key) or nil
 		return Comparable(entry) and Highest(M, entry) ~= nil
 	end
-	local function Wanted(key)
-		if not KnownKey(key) then
-			return false
-		end
-		local rule = rules and rules[key]
-		if rule and ((rule.needs and not KnownKey(rule.needs)) or (rule.unless and KnownKey(rule.unless))) then
-			return false
-		end
-		return true
-	end
 	local keys = {}
 	for _, item in ipairs(set) do
-		Items(item, Wanted, KnownKey, keys, 0, false)
+		Items(item, KnownKey, keys)
 	end
 	local lines, taken = {}, {}
 	for _, key in ipairs(keys) do
@@ -644,7 +568,7 @@ local function SavedLine(M, item)
 		if not Comparable(entry) or not Finite(index) then
 			return nil
 		end
-		return Line(entry, index, item.id, true, KnownRank(M, entry, index, item.id))
+		return Line(entry, index, item.id, true, KnownRank(M, entry, item.id))
 	end
 	local entry = M.ByKey(item.key)
 	if not Comparable(entry) then
@@ -1006,6 +930,11 @@ local function BarAdd(bar)
 	if not M then
 		return false, T.NO_MODEL
 	end
+	-- ns.BarSpells answers an empty bar both for a bar with nothing on it and for a client without GetActionInfo, so the call is looked for first,
+	-- as Cooldowns' import does (Cooldowns.lua, ns.CooldownImport).
+	if type(GetActionInfo) ~= "function" then
+		return false, T.NO_BAR
+	end
 	local read = ns.BarSpells
 	local ids, others
 	if type(read) == "function" then
@@ -1352,7 +1281,7 @@ end
 -- Notes what a comparison shows of the game's calls, for /flatui status: the slot table stood in for the game's choice, the fixed sizes for its
 -- rating conversion.
 local function Seen(result)
-	if not seen.ratings and type(_G.GetCombatRatingBonusForCombatRatingValue) ~= "function" then
+	if not seen.ratings and (type(_G.GetCombatRatingBonusForCombatRatingValue) ~= "function" or (type(result) == "table" and result.sizes == true)) then
 		seen.ratings = true
 	end
 	if seen.slots then
@@ -1425,43 +1354,32 @@ local function KindOf(line)
 	return type(entry) == "table" and entry.cmp or nil
 end
 
--- A whole number with the game's thousands separator (BreakUpLargeNumbers), else as it is.
-local function Thousands(value)
-	local broken = Ask(_G.BreakUpLargeNumbers, value)
-	if Plain(broken, "string") and broken ~= "" then
-		return broken
-	end
-	return tostring(value)
+-- The rounding of design 2.3, SpellModel.lua's (M.Fmt), which the window writes its numbers with too, or nil.
+local function Fmt(name)
+	local M = ns.SpellModel
+	local fmt = type(M) == "table" and type(M.Fmt) == "table" and M.Fmt or nil
+	local fn = fmt and fmt[name]
+	return type(fn) == "function" and fn or nil
 end
 
--- A change as the tooltip writes it (design 2.3): whole from 100 up and to a tenth below for a cast, a trailing .0 dropped; to a tenth for a second;
--- "0" under 0.05.
+-- A change as the tooltip writes it (design 2.3, M.Fmt.Change): whole from 100 up and to a tenth below for a cast, to a tenth for a second, "0"
+-- under 0.05.
 local function Amount(change, perSecond)
-	local size = math.abs(change)
-	if size < 0.05 then
-		return "0"
+	local fn = Fmt("Change")
+	if fn then
+		return fn(change, perSecond)
 	end
-	local sign = change > 0 and "+" or "-"
-	if perSecond then
-		return sign .. ("%.1f"):format(size)
-	elseif size >= 100 then
-		return sign .. Thousands(math.floor(size + 0.5))
-	end
-	local text = ("%.1f"):format(size):gsub("%.0$", "")
-	return sign .. text
+	return ("%+.1f"):format(change)
 end
 
--- "(+1.8%)", "(0%)" under 0.05, or nil while the figure now is 0.
+-- "(+1.8%)", "(0%)" under 0.05 (M.Fmt.Percent), or nil while the figure now is 0.
 local function Percent(row)
 	local share = Share(row)
 	if not share then
 		return nil
 	end
-	local text = ("%+.1f"):format(share)
-	if math.abs(share) < 0.05 or text == "+0.0" or text == "-0.0" then
-		return "(0%)"
-	end
-	return "(" .. text .. "%)"
+	local fn = Fmt("Percent")
+	return "(" .. (fn and fn(share / 100) or ("%+.1f%%"):format(share)) .. ")"
 end
 
 -- The name of a row's spell, with the rank after a kept one below the highest the player knows.
@@ -1477,12 +1395,12 @@ local function LeftName(M, line)
 	return name
 end
 
--- One line of the block for a row: the name white, the change in the colour of its direction, ~ before an estimate.
+-- One line of the block for a row: the name white, the change in the colour of its direction, ~ before an estimate. A figure that is a second
+-- (row.perSecond: dps, or the threat of what rides on the swings) has one decimal and says so.
 local function RowLine(M, row, role)
 	local figure = FigureOf(row, role)
 	local kind = KindOf(row.line)
-	local swing = kind ~= nil and T.SWING[kind] == true
-	local perSecond = figure == "dps" or figure == "second" or (figure == "threat" and swing)
+	local perSecond = row.perSecond == true
 	local change = row.with - row.now
 	local unit = ""
 	if figure == "dps" or (figure == "second" and not T.HEALS[kind]) then
@@ -1490,7 +1408,7 @@ local function RowLine(M, row, role)
 	elseif figure == "second" then
 		unit = " healing a second"
 	elseif figure == "threat" then
-		unit = swing and " threat a second" or " threat"
+		unit = perSecond and " threat a second" or " threat"
 	end
 	local percent = Percent(row)
 	local right = (row.estimate == true and "~" or "") .. Amount(change, perSecond) .. unit .. (percent and (" " .. percent) or "")
@@ -1525,17 +1443,16 @@ local function SlotWords(slots)
 	return table.concat(names, " and ")
 end
 
--- The header of the block (design 2.3, 2.4): what the item replaces and the unit of the plain numbers. A label of G.Compare that holds an item
--- (a colour or a link) is used as it is; else the slot's label with the worn items' names from SpellModel's state (links).
+-- The header of the block (design 2.3, 2.4): what the item replaces and the unit of the plain numbers, as GearModel.lua's header of a candidate
+-- words it: the slot's words (G.Compare's label) with the worn items' names from SpellModel's state (links), "Instead of X (Finger 1)", "Instead
+-- of X, off hand empty" for a one-hander over a worn two-hander (offEmpty), "In your empty Finger 2 slot", "In your empty hands", and for a worn
+-- item "What it gives your spells".
 local function Header(M, candidate, slot, unit)
 	local ending = unit and (", " .. unit .. ":") or ":"
 	if slot then
 		return "What it gives your spells" .. ending
 	end
 	local label = candidate.label
-	if type(label) == "string" and (label:find("|c", 1, true) or label:find("|H", 1, true)) then
-		return "Instead of " .. label .. ending
-	end
 	local slots = type(candidate.slots) == "table" and candidate.slots or {}
 	local where = type(label) == "string" and label ~= "" and label or SlotWords(slots)
 	local links = StateOf(M).links
@@ -1550,9 +1467,11 @@ local function Header(M, candidate, slot, unit)
 	end
 	if #names == 0 then
 		if #slots > 1 then
-			return ("With %s empty"):format(where) .. ending
+			return "In your empty hands" .. ending
 		end
 		return ("In your empty %s slot"):format(where) .. ending
+	elseif candidate.offEmpty == true then
+		return ("Instead of %s, off hand empty"):format(table.concat(names, " and ")) .. ending
 	end
 	return ("Instead of %s (%s)"):format(table.concat(names, " and "), where) .. ending
 end
@@ -1613,10 +1532,7 @@ local function Build(M, result, slot, info)
 	end
 	local unit
 	for index = 1, still and 0 or bestShown do
-		local row = bestRows[index]
-		local figure = FigureOf(row, info.role)
-		local kind = KindOf(row.line)
-		if figure == "cast" or (figure == "threat" and not (kind and T.SWING[kind])) then
+		if bestRows[index].perSecond ~= true then
 			unit = "a cast"
 			break
 		end
@@ -1636,7 +1552,7 @@ local function Build(M, result, slot, info)
 end
 
 -- The block of an item, from the cache or G.Compare. In a fight with nothing worked out now, the last block of the item, else one dim line;
--- out of one, G.Compare's reason as one grey line (as "Needs a one-hand weapon; not compared."), else nothing.
+-- out of one, G.Compare's reason as one grey line (as "Needs a one-hand weapon; not compared.") unless it is quiet, else nothing.
 local function BlockFor(key, data, link, slot, guid)
 	local M, G = Model(), Gear()
 	if not (M and G) then
@@ -1659,9 +1575,9 @@ local function BlockFor(key, data, link, slot, guid)
 	if kept then
 		return kept
 	end
-	local opts = { mode = "tooltip", listVersion = list.version, role = info.role, guid = guid, data = data, itemLines = Field(data, "lines"),
-		worn = slot, against = Opt("gearAgainst"), facing = Opt("gearFacing"), rules = Opt("gearRules"), lowRank = Opt("spellLowRank") == true }
-	local result, why = G.Compare(slot or link, known, opts)
+	local opts = { mode = "tooltip", listVersion = list.version, role = info.role, guid = guid, data = data, against = Opt("gearAgainst"),
+		facing = Opt("gearFacing"), rules = Opt("gearRules"), lowRank = Opt("spellLowRank") ~= false }
+	local result = G.Compare(slot or link, known, opts)
 	Seen(result)
 	local block = Build(M, result, slot, info)
 	if block then
@@ -1672,7 +1588,12 @@ local function BlockFor(key, data, link, slot, guid)
 	if Fighting(stats) then
 		return blocks.last[key] or { head = { { text = T.OUT_OF_COMBAT, colour = T.DIM, wrap = true } }, tail = {} }
 	end
-	local reason = type(result) == "table" and result.why or why
+	-- A reason marked quiet is one no line should show (design 2.4: ammunition the game does not use for the player, an off-hand weapon for one who
+	-- does not dual wield, an item not loaded).
+	if type(result) ~= "table" or result.quiet == true then
+		return nil
+	end
+	local reason = result.why
 	if type(reason) == "string" and reason ~= "" then
 		return { head = { { text = reason, colour = T.GREY, wrap = true } }, tail = {} }
 	end
@@ -1996,18 +1917,19 @@ local function RatingNote()
 	return T.RATING_NOTE:format(Size("hit"), Size("crit"), Size("haste"), Size("expertise"))
 end
 
--- The lines of /flatui status while the module is on and Your spells in item tooltips is on or the window is open (design 4.12).
+-- The lines of /flatui status while the module is on and Your spells in item tooltips is on with this part running, or the window is open
+-- (ns.GearWindowOpen; ns.GearWindowShown is the movers' gate, true while the window may show) (design 4.12).
 ns.AddStatus(KEY, function()
 	if not ns.Enabled(KEY) or ns.IsStopped(KEY) then
 		return {}
 	end
-	local shown = ns.GearWindowShown
+	local open = ns.GearWindowOpen
 	local window = false
-	if type(shown) == "function" then
-		local ok, open = pcall(shown)
-		window = ok and open == true
+	if type(open) == "function" then
+		local ok, shown = pcall(open)
+		window = ok and shown == true
 	end
-	if Opt("gear") ~= true and not window then
+	if not window and (Opt("gear") ~= true or ns.PartStopped(KEY, PART)) then
 		return {}
 	end
 	local lines = { ListStatus(), AgainstStatus() }
