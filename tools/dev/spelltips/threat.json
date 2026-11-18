@@ -1,0 +1,2308 @@
+{
+ "about": "WoW: Forever threat of the spells with a rule of their own, and the multipliers of stances, forms, auras, talents and items (design 3.2), sliced once from the threat research. v: the value per rank (find threat: the rank's THREAT effect holds it, with its gain a level and its cap), b: the basis per rank. A rule names the client effect that holds its multiplier, or the talent whose trait curve gives its ranks.",
+ "heal_threat": {
+  "cite": [
+   "wowsims/forever docs/evidence/EV-0057",
+   "wowsims/forever docs/evidence/EV-0058"
+  ],
+  "value": {
+   "flash of light": 0.25,
+   "holy light": 0.25,
+   "holy shock": 0.25
+  }
+ },
+ "rules": [
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): 7376 effect 2, +80 (hotfix push 113326)",
+    "wowsims/forever docs/evidence/EV-0043"
+   ],
+   "class": "WARRIOR",
+   "effect": 2,
+   "form": 18,
+   "id": "defensive",
+   "name": "Defensive Stance",
+   "spell": 7376,
+   "tip": 71
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): 21156 effect 0, -20",
+    "wowsims/forever docs/evidence/EV-0042",
+    "wowsims/forever docs/evidence/EV-0043"
+   ],
+   "class": "WARRIOR",
+   "effect": 0,
+   "form": 17,
+   "id": "battle",
+   "name": "Battle Stance",
+   "spell": 21156,
+   "tip": 2457
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): 7381 effect 2, -20"
+   ],
+   "class": "WARRIOR",
+   "effect": 2,
+   "form": 19,
+   "id": "berserker",
+   "name": "Berserker Stance",
+   "spell": 7381,
+   "tip": 2458
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of Defiance (7, 13, 20), only in Defensive Stance with a shield (its text)"
+   ],
+   "class": "WARRIOR",
+   "effect": 0,
+   "form": 18,
+   "id": "defiance",
+   "name": "Defiance",
+   "shield": true,
+   "talent": 12792
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): 21178 effect 0, +115 (hotfix push 113326)",
+    "wowsims/forever docs/evidence/EV-0037"
+   ],
+   "class": "DRUID",
+   "effect": 0,
+   "form": [
+    5,
+    8
+   ],
+   "id": "bear",
+   "name": "Bear Form",
+   "spell": 21178,
+   "tip": [
+    5487,
+    9634
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): 3025 effect 1, -29"
+   ],
+   "class": "DRUID",
+   "effect": 1,
+   "form": 1,
+   "id": "cat",
+   "name": "Cat Form",
+   "spell": 3025,
+   "tip": 768
+  },
+  {
+   "aura": 25780,
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): 25780 effect 4, +33 all (hotfix push 113139), and effect 0, +90 Holy",
+    "the two multiply as every threat aura does; not measured"
+   ],
+   "class": "PALADIN",
+   "effect": 4,
+   "holyB": "e",
+   "holyEffect": 0,
+   "id": "fury",
+   "name": "Righteous Fury",
+   "spell": 25780,
+   "tip": 25780
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 20111 effect 1 (-7, -14, -20), with a two-handed weapon (its text)"
+   ],
+   "class": "PALADIN",
+   "effect": 1,
+   "id": "paladin2h",
+   "name": "Two-Handed Weapon Specialization",
+   "talent": 20111,
+   "twoHand": true
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 1311034 effect 0 (+10, +20, +30), a threat modifier of its class mask"
+   ],
+   "class": "PALADIN",
+   "effect": 0,
+   "id": "ironcreed",
+   "name": "Iron Creed",
+   "talent": 1311034
+  },
+  {
+   "always": true,
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): Rogue Passive (DND) 21184 effect 0, -29"
+   ],
+   "class": "ROGUE",
+   "effect": 0,
+   "id": "rogue",
+   "name": "rogue",
+   "spell": 21184
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 11210 effect 0 (-15, -30), a threat modifier of its class mask"
+   ],
+   "class": "MAGE",
+   "effect": 0,
+   "id": "arcanesub",
+   "name": "Arcane Subtlety",
+   "talent": 11210
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 11083 effect 1 (-10, -20, -30), Fire threat"
+   ],
+   "class": "MAGE",
+   "effect": 1,
+   "id": "burningsoul",
+   "name": "Burning Soul",
+   "talent": 11083
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 11160 effect 1 (-10, -20, -30), Frost threat"
+   ],
+   "class": "MAGE",
+   "effect": 1,
+   "id": "frostch",
+   "name": "Frost Channeling",
+   "talent": 11160
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 14523 effect 0 (-10, -20, -30), Holy and Shadow threat (mask 34)"
+   ],
+   "class": "PRIEST",
+   "effect": 0,
+   "id": "silentresolve",
+   "name": "Silent Resolve",
+   "talent": 14523,
+   "tip": 14523
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 18174 effect 2 (-4 to -20), all threat"
+   ],
+   "class": "WARLOCK",
+   "effect": 2,
+   "id": "suppression",
+   "name": "Suppression",
+   "talent": 18174
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 1293695 effect 0 (-17, -33, -50), a threat modifier of its class mask"
+   ],
+   "class": "WARLOCK",
+   "effect": 0,
+   "id": "demonicbrand",
+   "name": "Demonic Brand",
+   "talent": 1293695
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 18703 effect 2 (-50, -100), a threat modifier of its class mask"
+   ],
+   "class": "WARLOCK",
+   "effect": 2,
+   "id": "healthfunnel",
+   "name": "Improved Health Funnel",
+   "talent": 18703
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 29187 effect 0 (-5, -10, -15), the magic schools (mask 126)"
+   ],
+   "class": "SHAMAN",
+   "effect": 0,
+   "id": "naturalgrace",
+   "name": "Natural Grace",
+   "talent": 29187
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): 16268 effect 0, -30 all threat, and effect 1, +86 to the threat aura of Rockbiter Weapon (Passive)"
+   ],
+   "class": "SHAMAN",
+   "effect": 0,
+   "id": "spiritweapons",
+   "name": "Spirit Weapons",
+   "rockbiterEffect": 1,
+   "talent": 16268
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 17118 effect 0 (-10, -20, -30), Nature and Arcane threat (mask 72)"
+   ],
+   "class": "DRUID",
+   "effect": 0,
+   "id": "subtlety",
+   "name": "Subtlety",
+   "talent": 17118
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the trait curve of 17123 effect 0 (-50, -100), a threat modifier of its class mask"
+   ],
+   "class": "DRUID",
+   "effect": 0,
+   "id": "imptranq",
+   "name": "Improved Tranquility",
+   "talent": 17123
+  }
+ ],
+ "spells": [
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): MOD_TAUNT only"
+   ],
+   "class": "DRUID",
+   "k": "force",
+   "key": "challenging roar",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 5209,
+     "level": 28
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "find": "threat",
+   "k": "drop",
+   "key": "cower",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 8998,
+     "level": 28,
+     "v": -480
+    },
+    {
+     "b": "c",
+     "id": 9000,
+     "level": 40,
+     "v": -780
+    },
+    {
+     "b": "c",
+     "id": 9892,
+     "level": 52,
+     "v": -1200
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "DRUID",
+   "find": "threat",
+   "k": "flat",
+   "key": "demoralizing roar",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 99,
+     "level": 10,
+     "v": 8
+    },
+    {
+     "b": "c",
+     "id": 1735,
+     "level": 20,
+     "v": 16
+    },
+    {
+     "b": "c",
+     "id": 9490,
+     "level": 32,
+     "v": 26
+    },
+    {
+     "b": "c",
+     "id": 9747,
+     "level": 42,
+     "v": 34
+    },
+    {
+     "b": "c",
+     "id": 9898,
+     "level": 52,
+     "v": 42
+    }
+   ]
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0037"
+   ],
+   "class": "DRUID",
+   "k": "rage",
+   "key": "enrage",
+   "note": "5 a point of rage over time, times the form",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 5229,
+     "level": 12
+    }
+   ],
+   "split": true,
+   "v": 5
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0034",
+    "wowsims/forever docs/evidence/EV-0037",
+    "wowsims/forever sim/druid/faerie_fire.go"
+   ],
+   "class": "DRUID",
+   "forms": [
+    5,
+    8
+   ],
+   "k": "caster",
+   "key": "faerie fire",
+   "note": "2 x your level in a bear form, none in other forms",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 770,
+     "level": 18
+    },
+    {
+     "b": "m",
+     "id": 778,
+     "level": 30
+    },
+    {
+     "b": "m",
+     "id": 9749,
+     "level": 42
+    },
+    {
+     "b": "m",
+     "id": 9907,
+     "level": 54
+    }
+   ],
+   "v": 2
+  },
+  {
+   "cite": [
+    "wowsims/forever sim/druid/frenzied_regeneration.go (the heal rule, assumed)"
+   ],
+   "class": "DRUID",
+   "k": "heal",
+   "key": "frenzied regeneration",
+   "ranks": [
+    {
+     "b": "e",
+     "id": 22842,
+     "level": 36
+    }
+   ],
+   "split": true,
+   "v": 0.5
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): ATTACK_ME and MOD_TAUNT"
+   ],
+   "class": "DRUID",
+   "k": "taunt",
+   "key": "growl",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 6795,
+     "level": 10
+    }
+   ]
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0034",
+    "wowsims/forever docs/evidence/EV-0037"
+   ],
+   "class": "DRUID",
+   "k": "mult",
+   "key": "lacerate",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 1328617,
+     "level": 25
+    },
+    {
+     "b": "m",
+     "id": 1328616,
+     "level": 34
+    },
+    {
+     "b": "m",
+     "id": 414644,
+     "level": 42
+    },
+    {
+     "b": "m",
+     "id": 1235826,
+     "level": 50
+    },
+    {
+     "b": "m",
+     "id": 1235827,
+     "level": 58
+    }
+   ],
+   "v": 3.33
+  },
+  {
+   "cite": [
+    "wowsims/forever sim/druid/maul.go (assumed, not measured)"
+   ],
+   "class": "DRUID",
+   "k": "mult",
+   "key": "maul",
+   "ranks": [
+    {
+     "b": "e",
+     "id": 6807,
+     "level": 10
+    },
+    {
+     "b": "e",
+     "id": 6808,
+     "level": 18
+    },
+    {
+     "b": "e",
+     "id": 6809,
+     "level": 26
+    },
+    {
+     "b": "e",
+     "id": 8972,
+     "level": 34
+    },
+    {
+     "b": "e",
+     "id": 9745,
+     "level": 42
+    },
+    {
+     "b": "e",
+     "id": 9880,
+     "level": 50
+    },
+    {
+     "b": "e",
+     "id": 9881,
+     "level": 58
+    }
+   ],
+   "v": 1.75
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0034"
+   ],
+   "class": "DRUID",
+   "k": "mult",
+   "key": "primal bite",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 407995,
+     "level": 40
+    },
+    {
+     "b": "m",
+     "id": 1238069,
+     "level": 50
+    },
+    {
+     "b": "e",
+     "id": 1238070,
+     "level": 60
+    }
+   ],
+   "v": 3.0
+  },
+  {
+   "cite": [
+    "wowsims/forever sim/druid/swipe.go (assumed, not measured)",
+    "wowsims/forever docs/evidence/EV-0037"
+   ],
+   "class": "DRUID",
+   "k": "mult",
+   "key": "swipe",
+   "ranks": [
+    {
+     "b": "e",
+     "id": 779,
+     "level": 16
+    },
+    {
+     "b": "e",
+     "id": 780,
+     "level": 24
+    },
+    {
+     "b": "e",
+     "id": 769,
+     "level": 34
+    },
+    {
+     "b": "e",
+     "id": 9754,
+     "level": 44
+    },
+    {
+     "b": "e",
+     "id": 9908,
+     "level": 54
+    }
+   ],
+   "v": 1.75
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "find": "threat",
+   "k": "drop",
+   "key": "cower (pet)",
+   "pet": true,
+   "ranks": [
+    {
+     "b": "c",
+     "id": 1742,
+     "level": 5,
+     "mx": 15,
+     "pl": -1.5,
+     "v": -30.0
+    },
+    {
+     "b": "c",
+     "id": 1753,
+     "level": 15,
+     "mx": 25,
+     "pl": -1.5,
+     "v": -55.0
+    },
+    {
+     "b": "c",
+     "id": 1754,
+     "level": 25,
+     "mx": 35,
+     "pl": -2.0,
+     "v": -85.0
+    },
+    {
+     "b": "c",
+     "id": 1755,
+     "level": 35,
+     "mx": 45,
+     "pl": -3.0,
+     "v": -125.0
+    },
+    {
+     "b": "c",
+     "id": 1756,
+     "level": 45,
+     "mx": 55,
+     "pl": -3.0,
+     "v": -175.0
+    },
+    {
+     "b": "c",
+     "id": 16697,
+     "level": 55,
+     "mx": 65,
+     "pl": -3.0,
+     "v": -225.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "HUNTER",
+   "find": "threat",
+   "k": "drop",
+   "key": "disengage",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 781,
+     "level": 20,
+     "mx": 30,
+     "pl": -3.0,
+     "v": -280.0
+    },
+    {
+     "b": "c",
+     "id": 14272,
+     "level": 34,
+     "mx": 44,
+     "pl": -3.0,
+     "v": -560.0
+    },
+    {
+     "b": "c",
+     "id": 14273,
+     "level": 48,
+     "mx": 58,
+     "pl": -3.0,
+     "v": -810.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "find": "threat",
+   "k": "flat",
+   "key": "distracting shot",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 20736,
+     "level": 12,
+     "mx": 19,
+     "pl": 1.5,
+     "v": 110.0
+    },
+    {
+     "b": "c",
+     "id": 14274,
+     "level": 20,
+     "mx": 29,
+     "pl": 2.0,
+     "v": 160.0
+    },
+    {
+     "b": "c",
+     "id": 15629,
+     "level": 30,
+     "mx": 39,
+     "pl": 2.5,
+     "v": 250.0
+    },
+    {
+     "b": "c",
+     "id": 15630,
+     "level": 40,
+     "mx": 49,
+     "pl": 3.0,
+     "v": 350.0
+    },
+    {
+     "b": "c",
+     "id": 15631,
+     "level": 50,
+     "mx": 59,
+     "pl": 3.5,
+     "v": 465.0
+    },
+    {
+     "b": "c",
+     "id": 15632,
+     "level": 60,
+     "mx": 69,
+     "pl": 4.0,
+     "v": 600.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): FEIGN_DEATH and the no-threat attribute",
+    "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+   ],
+   "class": "HUNTER",
+   "k": "resist",
+   "key": "feign death",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 5384,
+     "level": 30
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "find": "threat",
+   "k": "flat",
+   "key": "growl (pet)",
+   "pet": true,
+   "ranks": [
+    {
+     "b": "c",
+     "id": 2649,
+     "level": 1,
+     "mx": 10,
+     "pl": 2.0,
+     "v": 50.0
+    },
+    {
+     "b": "c",
+     "id": 14916,
+     "level": 10,
+     "mx": 20,
+     "pl": 3.0,
+     "v": 65.0
+    },
+    {
+     "b": "c",
+     "id": 14917,
+     "level": 20,
+     "mx": 30,
+     "pl": 4.0,
+     "v": 110.0
+    },
+    {
+     "b": "c",
+     "id": 14918,
+     "level": 30,
+     "mx": 40,
+     "pl": 4.0,
+     "v": 170.0
+    },
+    {
+     "b": "c",
+     "id": 14919,
+     "level": 40,
+     "mx": 50,
+     "pl": 4.0,
+     "v": 240.0
+    },
+    {
+     "b": "c",
+     "id": 14920,
+     "level": 50,
+     "mx": 60,
+     "pl": 4.0,
+     "v": 320.0
+    },
+    {
+     "b": "c",
+     "id": 14921,
+     "level": 60,
+     "mx": 70,
+     "pl": 5.0,
+     "v": 415.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "HUNTER",
+   "find": "threat",
+   "k": "flat",
+   "key": "intimidation (pet)",
+   "pet": true,
+   "ranks": [
+    {
+     "b": "c",
+     "id": 24394,
+     "level": 40,
+     "mx": 0,
+     "pl": 21.0,
+     "v": 580.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ],
+   "class": "MAGE",
+   "k": "flat",
+   "key": "counterspell",
+   "ranks": [
+    {
+     "id": 2139,
+     "level": 24,
+     "v": 300
+    }
+   ]
+  },
+  {
+   "cite": [
+    "wowsims/forever simulator (plain damage threat assumed, not measured)"
+   ],
+   "class": "PALADIN",
+   "k": "mult",
+   "key": "consecration",
+   "ranks": [
+    {
+     "id": 26573,
+     "level": 20
+    },
+    {
+     "id": 20116,
+     "level": 30
+    },
+    {
+     "id": 20922,
+     "level": 40
+    },
+    {
+     "id": 20923,
+     "level": 50
+    },
+    {
+     "id": 20924,
+     "level": 60
+    }
+   ],
+   "v": 1.0
+  },
+  {
+   "cite": [
+    "client text: damage caused by Holy Shield causes 20% additional threat"
+   ],
+   "class": "PALADIN",
+   "k": "mult",
+   "key": "holy shield",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 20925,
+     "level": 30
+    },
+    {
+     "b": "c",
+     "id": 20927,
+     "level": 40
+    },
+    {
+     "b": "c",
+     "id": 20928,
+     "level": 50
+    },
+    {
+     "b": "c",
+     "id": 1239570,
+     "level": 60
+    }
+   ],
+   "v": 1.2
+  },
+  {
+   "cite": [
+    "wowsims/forever simulator (plain damage threat assumed, not measured)"
+   ],
+   "class": "PALADIN",
+   "k": "mult",
+   "key": "holy strike",
+   "ranks": [
+    {
+     "id": 679,
+     "level": 6
+    },
+    {
+     "id": 678,
+     "level": 12
+    },
+    {
+     "id": 1866,
+     "level": 20
+    },
+    {
+     "id": 680,
+     "level": 28
+    },
+    {
+     "id": 2495,
+     "level": 36
+    },
+    {
+     "id": 5569,
+     "level": 44
+    },
+    {
+     "id": 10332,
+     "level": 52
+    },
+    {
+     "id": 10333,
+     "level": 60
+    }
+   ],
+   "v": 1.0
+  },
+  {
+   "cite": [
+    "wowsims/forever simulator (plain damage threat assumed, not measured)"
+   ],
+   "class": "PALADIN",
+   "k": "mult",
+   "key": "judgement of command",
+   "ranks": [
+    {
+     "id": 20425,
+     "level": 20
+    },
+    {
+     "id": 20962,
+     "level": 30
+    },
+    {
+     "id": 20961,
+     "level": 40
+    },
+    {
+     "id": 20967,
+     "level": 50
+    },
+    {
+     "id": 20968,
+     "level": 60
+    }
+   ],
+   "v": 1.0
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0057"
+   ],
+   "class": "PALADIN",
+   "k": "heal",
+   "key": "judgement of light",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 20185,
+     "level": 30
+    },
+    {
+     "b": "m",
+     "id": 20344,
+     "level": 40
+    },
+    {
+     "b": "m",
+     "id": 20345,
+     "level": 50
+    },
+    {
+     "b": "m",
+     "id": 20346,
+     "level": 60
+    }
+   ],
+   "split": true,
+   "v": 0.5
+  },
+  {
+   "cite": [
+    "wowsims/forever simulator (plain damage threat assumed, not measured)"
+   ],
+   "class": "PALADIN",
+   "k": "mult",
+   "key": "judgement of righteousness",
+   "ranks": [
+    {
+     "id": 20187,
+     "level": 1
+    },
+    {
+     "id": 20280,
+     "level": 10
+    },
+    {
+     "id": 20281,
+     "level": 18
+    },
+    {
+     "id": 20282,
+     "level": 26
+    },
+    {
+     "id": 20283,
+     "level": 34
+    },
+    {
+     "id": 20284,
+     "level": 42
+    },
+    {
+     "id": 20285,
+     "level": 50
+    },
+    {
+     "id": 20286,
+     "level": 58
+    }
+   ],
+   "v": 1.0
+  },
+  {
+   "cite": [
+    "wowsims/forever simulator (plain damage threat assumed, not measured)"
+   ],
+   "class": "PALADIN",
+   "k": "mult",
+   "key": "seal of command",
+   "ranks": [
+    {
+     "id": 20375,
+     "level": 20
+    },
+    {
+     "id": 20915,
+     "level": 30
+    },
+    {
+     "id": 20918,
+     "level": 40
+    },
+    {
+     "id": 20919,
+     "level": 50
+    },
+    {
+     "id": 20920,
+     "level": 60
+    }
+   ],
+   "v": 1.0
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0057"
+   ],
+   "class": "PALADIN",
+   "k": "heal",
+   "key": "seal of light",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 20165,
+     "level": 30
+    },
+    {
+     "b": "m",
+     "id": 20347,
+     "level": 40
+    },
+    {
+     "b": "m",
+     "id": 20348,
+     "level": 50
+    },
+    {
+     "b": "m",
+     "id": 20349,
+     "level": 60
+    }
+   ],
+   "split": true,
+   "v": 0.5
+  },
+  {
+   "cite": [
+    "wowsims/forever simulator (plain damage threat assumed, not measured)"
+   ],
+   "class": "PALADIN",
+   "k": "mult",
+   "key": "seal of righteousness",
+   "ranks": [
+    {
+     "id": 21084,
+     "level": 1
+    },
+    {
+     "id": 20287,
+     "level": 10
+    },
+    {
+     "id": 20288,
+     "level": 18
+    },
+    {
+     "id": 20289,
+     "level": 26
+    },
+    {
+     "id": 20290,
+     "level": 34
+    },
+    {
+     "id": 20291,
+     "level": 42
+    },
+    {
+     "id": 20292,
+     "level": 50
+    },
+    {
+     "id": 20293,
+     "level": 58
+    }
+   ],
+   "v": 1.0
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries): Fade doubled"
+   ],
+   "class": "PRIEST",
+   "find": "threat",
+   "k": "temp",
+   "key": "fade",
+   "note": "client data, Blizzard said doubled; no talent or stance changes it; given back after 10 sec",
+   "ranks": [
+    {
+     "id": 586,
+     "level": 8,
+     "mx": 18,
+     "pl": -3.0,
+     "v": -275.0
+    },
+    {
+     "id": 9578,
+     "level": 20,
+     "mx": 30,
+     "pl": -3.0,
+     "v": -775.0
+    },
+    {
+     "id": 9579,
+     "level": 30,
+     "mx": 40,
+     "pl": -3.0,
+     "v": -1425.0
+    },
+    {
+     "id": 9592,
+     "level": 40,
+     "mx": 50,
+     "pl": -3.0,
+     "v": -2200.0
+    },
+    {
+     "id": 10941,
+     "level": 50,
+     "mx": 60,
+     "pl": -3.0,
+     "v": -3100.0
+    },
+    {
+     "id": 10942,
+     "level": 60,
+     "mx": 70,
+     "pl": -3.0,
+     "v": -4100.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client text: these effects cause no threat"
+   ],
+   "class": "PRIEST",
+   "k": "none",
+   "key": "holy nova",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 15237,
+     "level": 20
+    },
+    {
+     "b": "c",
+     "id": 15430,
+     "level": 28
+    },
+    {
+     "b": "c",
+     "id": 15431,
+     "level": 36
+    },
+    {
+     "b": "c",
+     "id": 27799,
+     "level": 44
+    },
+    {
+     "b": "c",
+     "id": 27800,
+     "level": 52
+    },
+    {
+     "b": "c",
+     "id": 27801,
+     "level": 60
+    }
+   ]
+  },
+  {
+   "cite": [
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ],
+   "class": "PRIEST",
+   "k": "mult",
+   "key": "mind blast",
+   "ranks": [
+    {
+     "id": 8092,
+     "level": 10
+    },
+    {
+     "id": 8102,
+     "level": 16
+    },
+    {
+     "id": 8103,
+     "level": 22
+    },
+    {
+     "id": 8104,
+     "level": 28
+    },
+    {
+     "id": 8105,
+     "level": 34
+    },
+    {
+     "id": 8106,
+     "level": 40
+    },
+    {
+     "id": 10945,
+     "level": 46
+    },
+    {
+     "id": 10946,
+     "level": 52
+    },
+    {
+     "id": 10947,
+     "level": 58
+    }
+   ],
+   "v": 2.0
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "Blizzard, WoW: Forever development notes and hotfix posts (read through search summaries): Feint doubled"
+   ],
+   "class": "ROGUE",
+   "find": "threat",
+   "k": "drop",
+   "key": "feint",
+   "note": "client data, Blizzard said doubled",
+   "ranks": [
+    {
+     "id": 1966,
+     "level": 16,
+     "mx": 26,
+     "pl": -5.0,
+     "v": -750.0
+    },
+    {
+     "id": 6768,
+     "level": 28,
+     "mx": 38,
+     "pl": -5.0,
+     "v": -1200.0
+    },
+    {
+     "id": 8637,
+     "level": 40,
+     "mx": 50,
+     "pl": -5.0,
+     "v": -1950.0
+    },
+    {
+     "id": 11303,
+     "level": 52,
+     "mx": 62,
+     "pl": -5.0,
+     "v": -3000.0
+    },
+    {
+     "id": 25302,
+     "level": 60,
+     "mx": 70,
+     "pl": -5.0,
+     "v": -4000.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): SANCTUARY (79)"
+   ],
+   "class": "ROGUE",
+   "k": "wipe",
+   "key": "vanish",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 1856,
+     "level": 22
+    },
+    {
+     "b": "c",
+     "id": 1857,
+     "level": 42
+    }
+   ]
+  },
+  {
+   "cite": [
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ],
+   "class": "SHAMAN",
+   "k": "mult",
+   "key": "earth shock",
+   "ranks": [
+    {
+     "id": 8042,
+     "level": 4
+    },
+    {
+     "id": 8044,
+     "level": 8
+    },
+    {
+     "id": 8045,
+     "level": 14
+    },
+    {
+     "id": 8046,
+     "level": 24
+    },
+    {
+     "id": 10412,
+     "level": 36
+    },
+    {
+     "id": 10413,
+     "level": 48
+    },
+    {
+     "id": 10414,
+     "level": 60
+    }
+   ],
+   "v": 2.0
+  },
+  {
+   "cite": [
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ],
+   "class": "SHAMAN",
+   "k": "none",
+   "key": "healing stream totem",
+   "ranks": [
+    {
+     "b": "e",
+     "id": 5394,
+     "level": 20,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 6375,
+     "level": 30,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 6377,
+     "level": 40,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 10462,
+     "level": 50,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 10463,
+     "level": 60,
+     "mx": 0,
+     "v": 0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ],
+   "class": "SHAMAN",
+   "k": "none",
+   "key": "totems of mana",
+   "ranks": [
+    {
+     "b": "e",
+     "id": 5675,
+     "level": 26,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 10495,
+     "level": 36,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 10496,
+     "level": 46,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 10497,
+     "level": 56,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 16190,
+     "level": 1,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 17354,
+     "level": 38,
+     "mx": 0,
+     "v": 0
+    },
+    {
+     "b": "e",
+     "id": 17359,
+     "level": 48,
+     "mx": 0,
+     "v": 0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): the no-threat attribute"
+   ],
+   "class": "WARLOCK",
+   "k": "none",
+   "key": "life tap",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 1454,
+     "level": 6
+    },
+    {
+     "b": "c",
+     "id": 1455,
+     "level": 16
+    },
+    {
+     "b": "c",
+     "id": 1456,
+     "level": 26
+    },
+    {
+     "b": "c",
+     "id": 11687,
+     "level": 36
+    },
+    {
+     "b": "c",
+     "id": 11688,
+     "level": 46
+    },
+    {
+     "b": "c",
+     "id": 11689,
+     "level": 56
+    }
+   ]
+  },
+  {
+   "cite": [
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ],
+   "class": "WARLOCK",
+   "k": "mult",
+   "key": "searing pain",
+   "ranks": [
+    {
+     "id": 5676,
+     "level": 18
+    },
+    {
+     "id": 17919,
+     "level": 26
+    },
+    {
+     "id": 17920,
+     "level": 34
+    },
+    {
+     "id": 17921,
+     "level": 42
+    },
+    {
+     "id": 17922,
+     "level": 50
+    },
+    {
+     "id": 17923,
+     "level": 58
+    }
+   ],
+   "v": 2.0
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "find": "threat",
+   "k": "drop",
+   "key": "soothing kiss (pet)",
+   "pet": true,
+   "ranks": [
+    {
+     "b": "c",
+     "id": 6360,
+     "level": 22,
+     "mx": 32,
+     "pl": -1.0,
+     "v": -45.0
+    },
+    {
+     "b": "c",
+     "id": 7813,
+     "level": 34,
+     "mx": 44,
+     "pl": -1.0,
+     "v": -75.0
+    },
+    {
+     "b": "c",
+     "id": 11784,
+     "level": 46,
+     "mx": 0,
+     "pl": -1.0,
+     "v": -127.0
+    },
+    {
+     "b": "c",
+     "id": 11785,
+     "level": 58,
+     "mx": 68,
+     "pl": -1.0,
+     "v": -165.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "find": "threat",
+   "k": "flat",
+   "key": "suffering (pet)",
+   "pet": true,
+   "ranks": [
+    {
+     "b": "c",
+     "id": 17735,
+     "level": 24,
+     "mx": 34,
+     "pl": 0.0,
+     "v": 150.0
+    },
+    {
+     "b": "c",
+     "id": 17750,
+     "level": 36,
+     "mx": 46,
+     "pl": 0.0,
+     "v": 300.0
+    },
+    {
+     "b": "c",
+     "id": 17751,
+     "level": 48,
+     "mx": 58,
+     "pl": 0.0,
+     "v": 450.0
+    },
+    {
+     "b": "c",
+     "id": 17752,
+     "level": 60,
+     "mx": 70,
+     "pl": 0.0,
+     "v": 600.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARLOCK",
+   "find": "threat",
+   "k": "flat",
+   "key": "torment (pet)",
+   "pet": true,
+   "ranks": [
+    {
+     "b": "c",
+     "id": 3716,
+     "level": 10,
+     "mx": 15,
+     "pl": 3.0,
+     "v": 70.0
+    },
+    {
+     "b": "c",
+     "id": 7809,
+     "level": 20,
+     "mx": 25,
+     "pl": 3.0,
+     "v": 115.0
+    },
+    {
+     "b": "c",
+     "id": 7810,
+     "level": 30,
+     "mx": 35,
+     "pl": 3.0,
+     "v": 190.0
+    },
+    {
+     "b": "c",
+     "id": 7811,
+     "level": 40,
+     "mx": 45,
+     "pl": 3.0,
+     "v": 320.0
+    },
+    {
+     "b": "c",
+     "id": 11774,
+     "level": 50,
+     "mx": 55,
+     "pl": 3.0,
+     "v": 450.0
+    },
+    {
+     "b": "c",
+     "id": 11775,
+     "level": 60,
+     "mx": 65,
+     "pl": 3.0,
+     "v": 600.0
+    }
+   ]
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0044"
+   ],
+   "class": "WARRIOR",
+   "k": "rage",
+   "key": "bloodrage",
+   "note": "5 a point of rage; the rage at once is not changed by the stance, the rage over time is",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 2687,
+     "level": 10
+    }
+   ],
+   "split": true,
+   "v": 5
+  },
+  {
+   "cite": [
+    "wowsims/forever simulator sim/warrior/bloodthirst.go (assumed)"
+   ],
+   "class": "WARRIOR",
+   "k": "mult",
+   "key": "bloodthirst",
+   "ranks": [
+    {
+     "id": 23881,
+     "level": 40
+    },
+    {
+     "id": 23892,
+     "level": 48
+    },
+    {
+     "id": 23893,
+     "level": 54
+    },
+    {
+     "id": 23894,
+     "level": 60
+    }
+   ],
+   "v": 1.0
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): MOD_TAUNT only"
+   ],
+   "class": "WARRIOR",
+   "k": "force",
+   "key": "challenging shout",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 1161,
+     "level": 26
+    }
+   ]
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0045",
+    "wowsims/forever docs/evidence/EV-0042",
+    "wowsims/forever docs/evidence/EV-0050"
+   ],
+   "class": "WARRIOR",
+   "k": "bonus",
+   "key": "cleave",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 845,
+     "level": 20,
+     "v": 30
+    },
+    {
+     "b": "m",
+     "id": 7369,
+     "level": 30,
+     "v": 46
+    },
+    {
+     "id": 11608,
+     "level": 40,
+     "v": 62
+    },
+    {
+     "b": "m",
+     "id": 11609,
+     "level": 50,
+     "v": 80
+    },
+    {
+     "b": "e",
+     "id": 20569,
+     "level": 60,
+     "v": 96
+    }
+   ],
+   "split": true
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0048"
+   ],
+   "class": "WARRIOR",
+   "k": "none",
+   "key": "concussion blow",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 12809,
+     "level": 30
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+   ],
+   "class": "WARRIOR",
+   "find": "threat",
+   "k": "flat",
+   "key": "demoralizing shout",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 1160,
+     "level": 14,
+     "v": 11
+    },
+    {
+     "b": "c",
+     "id": 6190,
+     "level": 24,
+     "v": 19
+    },
+    {
+     "b": "c",
+     "id": 11554,
+     "level": 34,
+     "v": 27
+    },
+    {
+     "b": "c",
+     "id": 11555,
+     "level": 44,
+     "v": 35
+    },
+    {
+     "b": "c",
+     "id": 11556,
+     "level": 54,
+     "v": 43
+    }
+   ]
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0044"
+   ],
+   "class": "WARRIOR",
+   "k": "mult",
+   "key": "hamstring",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 1715,
+     "level": 8
+    },
+    {
+     "b": "e",
+     "id": 7372,
+     "level": 32
+    },
+    {
+     "b": "e",
+     "id": 7373,
+     "level": 54
+    }
+   ],
+   "v": 1.25
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0043",
+    "wowsims/forever docs/evidence/EV-0004",
+    "wowsims/forever docs/evidence/EV-0048",
+    "wowsims/forever simulator (ranks 6 to 9: 2.5 x the spell level)"
+   ],
+   "class": "WARRIOR",
+   "k": "bonus",
+   "key": "heroic strike",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 78,
+     "level": 1,
+     "v": 17
+    },
+    {
+     "b": "m",
+     "id": 284,
+     "level": 8,
+     "v": 28
+    },
+    {
+     "b": "m",
+     "id": 285,
+     "level": 16,
+     "v": 40
+    },
+    {
+     "b": "m",
+     "id": 1608,
+     "level": 24,
+     "v": 60
+    },
+    {
+     "b": "m",
+     "id": 11564,
+     "level": 32,
+     "v": 80
+    },
+    {
+     "b": "e",
+     "id": 11565,
+     "level": 40,
+     "v": 100
+    },
+    {
+     "b": "e",
+     "id": 11566,
+     "level": 48,
+     "v": 120
+    },
+    {
+     "b": "e",
+     "id": 11567,
+     "level": 56,
+     "v": 140
+    },
+    {
+     "b": "e",
+     "id": 25286,
+     "level": 60,
+     "v": 150
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): damage and a forced attack (MOD_TAUNT), no THREAT effect",
+    "wowsims/forever sim/warrior/mocking_blow.go"
+   ],
+   "class": "WARRIOR",
+   "k": "more",
+   "key": "mocking blow",
+   "note": "forces attacks 6 sec; how much more threat is not known",
+   "ranks": [
+    {
+     "b": "e",
+     "id": 694,
+     "level": 16
+    },
+    {
+     "b": "e",
+     "id": 7400,
+     "level": 26
+    },
+    {
+     "b": "e",
+     "id": 7402,
+     "level": 36
+    },
+    {
+     "b": "e",
+     "id": 20559,
+     "level": 46
+    },
+    {
+     "b": "e",
+     "id": 20560,
+     "level": 56
+    }
+   ],
+   "v": 1
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0043"
+   ],
+   "class": "WARRIOR",
+   "k": "mult",
+   "key": "overpower",
+   "ranks": [
+    {
+     "id": 7384,
+     "level": 12
+    },
+    {
+     "id": 7887,
+     "level": 28
+    },
+    {
+     "id": 11584,
+     "level": 44
+    },
+    {
+     "id": 11585,
+     "level": 60
+    }
+   ],
+   "v": 0.75
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0048",
+    "wowsims/forever simulator sim/warrior/revenge.go (ranks 1, 2, 5, 6)"
+   ],
+   "class": "WARRIOR",
+   "k": "mult",
+   "key": "revenge",
+   "ranks": [
+    {
+     "b": "e",
+     "id": 6572,
+     "level": 14
+    },
+    {
+     "b": "e",
+     "id": 6574,
+     "level": 24
+    },
+    {
+     "b": "m",
+     "id": 7379,
+     "level": 34
+    },
+    {
+     "b": "m",
+     "id": 11600,
+     "level": 44
+    },
+    {
+     "b": "e",
+     "id": 11601,
+     "level": 54
+    },
+    {
+     "b": "e",
+     "id": 25288,
+     "level": 60
+    }
+   ],
+   "v": 2.25
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0044",
+    "wowsims/forever sim/warrior/shield_bash.go"
+   ],
+   "class": "WARRIOR",
+   "k": "mult",
+   "key": "shield bash",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 72,
+     "level": 12
+    },
+    {
+     "b": "e",
+     "id": 1671,
+     "level": 32
+    },
+    {
+     "b": "e",
+     "id": 1672,
+     "level": 52
+    }
+   ],
+   "v": 1.5
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0004",
+    "wowsims/forever docs/evidence/EV-0050",
+    "wowsims/forever simulator (rank 4 extrapolated)"
+   ],
+   "class": "WARRIOR",
+   "k": "bonus",
+   "key": "shield slam",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 23922,
+     "level": 40,
+     "v": 178
+    },
+    {
+     "b": "m",
+     "id": 23923,
+     "level": 48,
+     "v": 203
+    },
+    {
+     "b": "m",
+     "id": 23924,
+     "level": 54,
+     "v": 229
+    },
+    {
+     "b": "e",
+     "id": 23925,
+     "level": 60,
+     "v": 255
+    }
+   ]
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0004",
+    "wowsims/forever simulator (ranks 2 to 5: 1.5 x the spell level)"
+   ],
+   "class": "WARRIOR",
+   "k": "bonus",
+   "key": "slam",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 1240193,
+     "level": 20,
+     "v": 30
+    },
+    {
+     "b": "e",
+     "id": 1464,
+     "level": 30,
+     "v": 45
+    },
+    {
+     "b": "e",
+     "id": 8820,
+     "level": 38,
+     "v": 57
+    },
+    {
+     "b": "e",
+     "id": 11604,
+     "level": 46,
+     "v": 69
+    },
+    {
+     "b": "e",
+     "id": 11605,
+     "level": 54,
+     "v": 81
+    }
+   ]
+  },
+  {
+   "ap": 0.05,
+   "apb": "m",
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture)",
+    "wowsims/forever docs/evidence/EV-0042",
+    "wowsims/forever docs/evidence/EV-0048"
+   ],
+   "class": "WARRIOR",
+   "find": "threat",
+   "k": "flat",
+   "key": "sunder armor",
+   "ranks": [
+    {
+     "b": "m",
+     "id": 7386,
+     "level": 10,
+     "v": 34
+    },
+    {
+     "b": "c",
+     "id": 7405,
+     "level": 22,
+     "v": 75
+    },
+    {
+     "b": "m",
+     "id": 8380,
+     "level": 34,
+     "v": 117
+    },
+    {
+     "b": "c",
+     "id": 11596,
+     "level": 46,
+     "v": 158
+    },
+    {
+     "b": "c",
+     "id": 11597,
+     "level": 58,
+     "v": 206
+    }
+   ]
+  },
+  {
+   "cite": [
+    "client rows of build 1.60.1.70938 (wowsims/forever capture): ATTACK_ME (114) and MOD_TAUNT"
+   ],
+   "class": "WARRIOR",
+   "k": "taunt",
+   "key": "taunt",
+   "ranks": [
+    {
+     "b": "c",
+     "id": 355,
+     "level": 10
+    }
+   ]
+  },
+  {
+   "cite": [
+    "wowsims/forever docs/evidence/EV-0048"
+   ],
+   "class": "WARRIOR",
+   "k": "mult",
+   "key": "thunder clap",
+   "ranks": [
+    {
+     "b": "e",
+     "id": 6343,
+     "level": 6
+    },
+    {
+     "b": "e",
+     "id": 8198,
+     "level": 18
+    },
+    {
+     "b": "e",
+     "id": 8204,
+     "level": 28
+    },
+    {
+     "b": "m",
+     "id": 8205,
+     "level": 38
+    },
+    {
+     "b": "e",
+     "id": 11580,
+     "level": 48
+    },
+    {
+     "b": "e",
+     "id": 11581,
+     "level": 58
+    }
+   ],
+   "v": 1.0
+  }
+ ]
+}
