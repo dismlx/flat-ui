@@ -27,6 +27,8 @@ local _, ns = ...
 -- again with the weapon skill, hit, crit and expertise an item would give, keeping the skill the sheet's crit was read with; it can ask C.Inputs for
 -- the kinds its spells roll and for a ranged line with no ranged weapon worn (a paladin's judgements). C.Read is the two in a row. C.LineOf and
 -- C.Skill give it the skill line of an item and the skill of a line, and C.Target counts against an enemy of the player's level when it asks.
+-- The enemy is the target unless spec.unit names another unit (C.Target, C.Front): HitTableTip.lua works the table out against the unit of an enemy's
+-- tooltip, from inputs it kept, with C.Target and C.Table.
 
 local C = {}
 ns.HitTableCalc = C
@@ -233,29 +235,33 @@ local function HandSkill(read, slot, name)
 end
 
 -- The enemy the table is worked out against: level, unknown (shown ??), kind ("boss", "elite"... from ns.UnitKind), player, none (no enemy targeted:
--- one of the player's level), boss (Against a boss), and enemy: the target can be attacked and is alive. against is "boss", "level" (an enemy of the
--- player's level whatever is targeted, for the gear comparison's Against) or anything else for the target.
-function C.Target(against, level)
-	local target = { level = level }
-	target.enemy = Ask(UnitExists, "target") == true and Ask(UnitCanAttack, "player", "target") == true
-		and Ask(UnitIsDeadOrGhost, "target") ~= true
+-- one of the player's level), boss (Against a boss), unit (the unit read), and enemy: the unit can be attacked and is alive. against is "boss",
+-- "level" (an enemy of the player's level whatever is targeted, for the gear comparison's Against) or anything else for the unit. unit is a unit
+-- token, "target" when it is nil or not a plain string, so the hit table, which names none, reads the target as it always did.
+function C.Target(against, level, unit)
+	if IsSecret(unit) or type(unit) ~= "string" or unit == "" then
+		unit = "target"
+	end
+	local target = { level = level, unit = unit }
+	target.enemy = Ask(UnitExists, unit) == true and Ask(UnitCanAttack, "player", unit) == true
+		and Ask(UnitIsDeadOrGhost, unit) ~= true
 	if against == "boss" then
 		target.level, target.kind, target.boss = level + ABOVE, "boss", true
 	elseif against == "level" then
 		-- A mob of the player's own level, of no kind and no player, whatever the target is.
 		target.level = level
 	elseif target.enemy then
-		local seen = Ask(UnitEffectiveLevel, "target")
+		local seen = Ask(UnitEffectiveLevel, unit)
 		if not Finite(seen) then
-			seen = Ask(UnitLevel, "target")
+			seen = Ask(UnitLevel, unit)
 		end
 		if Finite(seen) and seen > 0 then
 			target.level = math.floor(seen)
 		else
 			target.level, target.unknown = level + ABOVE, true
 		end
-		target.kind = ns.UnitKind("target")
-		target.player = Ask(UnitIsPlayer, "target") == true
+		target.kind = ns.UnitKind(unit)
+		target.player = Ask(UnitIsPlayer, unit) == true
 	else
 		target.none = true
 	end
@@ -269,22 +275,26 @@ end
 -- map every comparison of a compound unit token is withheld (SecretWhenUnitComparisonRestricted, SecretPredicatesDocumentation.lua:120-123;
 -- UnitDocumentation.lua:2410-2426), as Forever withholds the enemy's target (PlateThreat.lua:12). A plain answer of no place on the threat table of an
 -- enemy that is no player says it does not attack the player. With no answer at all the player counts as behind, and the second value is true, for
--- /flatui status. target: C.Target's answer.
+-- /flatui status. target: C.Target's answer, whose unit (the target unless spec.unit named another) is the one asked of here.
 function C.Front(facing, target)
 	if facing == "front" then
 		return true, false
 	elseif facing ~= "auto" or type(target) ~= "table" or not target.enemy then
 		return false, false
 	end
-	local status, why = Call(UnitThreatSituation, "player", "target")
+	local unit = target.unit
+	if IsSecret(unit) or type(unit) ~= "string" or unit == "" then
+		unit = "target"
+	end
+	local status, why = Call(UnitThreatSituation, "player", unit)
 	if not why and Finite(status) then
 		return status >= TANKING, false
 	end
-	local same = Ask(UnitIsUnit, "targettarget", "player")
+	local same = Ask(UnitIsUnit, unit .. "target", "player")
 	if type(same) == "boolean" then
 		return same, false
 	end
-	if not why and status == nil and Ask(UnitIsPlayer, "target") == false then
+	if not why and status == nil and Ask(UnitIsPlayer, unit) == false then
 		return false, false
 	end
 	return false, true
@@ -482,7 +492,8 @@ end
 -- The reads and the table ---------------------------------------------------------------------------------------------------------------------------
 
 -- Reads the game for the table: everything C.Table needs, nothing worked out. These are the reads the hit table always made, in the same order.
--- spec = { lines (Attacks), against, facing, kinds, rangedWithout }. spec.kinds, when given, is the set of kinds to read ({ melee = true, ranged =
+-- spec = { lines (Attacks), against, facing, kinds, rangedWithout, unit }. spec.unit is the unit the table is against (C.Target), the target when
+-- nil. spec.kinds, when given, is the set of kinds to read ({ melee = true, ranged =
 -- true, spell = true }) in place of C.Kinds(spec.lines, class, power); spec.rangedWithout reads the ranged kind with no ranged weapon worn: skill
 -- level x 5, the ranged hit and the ranged crit (a judgement's line: the client's rows of the damaging judgements roll on the ranged table,
 -- DefenseType 3 of SpellCategories, and which weapon skill counts without a ranged weapon no source says). The answer: { gaps, assumed, level,
@@ -509,7 +520,7 @@ function C.Inputs(spec)
 	local form = Ask(GetShapeshiftForm)
 	inputs.class, inputs.power = class, power
 	inputs.feral = class == "DRUID" and Finite(form) and form ~= 0
-	local target = C.Target(spec.against, level)
+	local target = C.Target(spec.against, level, spec.unit)
 	inputs.target = target
 	inputs.front, inputs.facingUnsure = C.Front(spec.facing, target)
 	local kinds = type(spec.kinds) == "table" and spec.kinds or C.Kinds(spec.lines, class, power)

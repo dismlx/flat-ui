@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.19
+## Version: 0.5.20
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -92,12 +92,14 @@ AuraTime.lua
 XpStats.lua
 XpBar.lua
 QuestCount.lua
+QuestieSkin.lua
 MapText.lua
 ErrorFilter.lua
 ScreenText.lua
 MeterClear.lua
 HitTableCalc.lua
 HitTable.lua
+HitTableTip.lua
 Fade.lua
 Chat.lua
 ChatText.lua
@@ -112,6 +114,9 @@ GearAvoid.lua
 SpellLines.lua
 GearLines.lua
 GearWindow.lua
+ItemIndex.lua
+GearSearch.lua
+GearButton.lua
 HealthColour.lua
 CastTime.lua
 CastRank.lua

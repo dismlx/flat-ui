@@ -86,11 +86,16 @@ local _, ns = ...
 -- TRAIT_TREE_CURRENCY_INFO_UPDATED, PLAYER_LEVEL_UP, UPDATE_SHAPESHIFT_FORM, PLAYER_ENTERING_WORLD, SPELLS_CHANGED, SPELL_TEXT_UPDATE,
 -- ADDON_RESTRICTION_STATE_CHANGED, PLAYER_REGEN_DISABLED, PLAYER_REGEN_ENABLED and GET_ITEM_INFO_RECEIVED (each in events.yaml of the client).
 --
--- The lines (design 1.2-1.4) are texts and colours' names only: the share of a power part in words with what it adds with the player's stats,
--- the threat block with its multipliers (the rules of design 2.5, G), and the lines of a stance, form, aura or talent tooltip. Amounts are worded
--- with the rounding of design 1.2, and the gear comparison's with that of design 2.3 (M.Fmt, which GearLines.lua and GearWindow.lua use too),
--- thousands broken by the game's BreakUpLargeNumbers under pcall (as CombatText.lua:1445-1446), and a spell's name in a dim line is the game's
--- (C_Spell.GetSpellName).
+-- The lines (design 1.2-1.4) are texts and colours' names only, in blocks each with its title (Spell power, Total, Threat), which SpellLines.lua
+-- shows as the block's header where more than one line follows: the share of a power part in words with what it adds with the player's stats,
+-- the total of one cast (0.5.20: what it does now with the player's stats, base and bonus together) and its rates (the expected value with crits
+-- and misses from GearModel.lua's G.Expect, looked up when asked; a second of cast time, from the castTime of C_Spell.GetSpellInfo,
+-- SpellDocumentation.lua:416-430, else the rank's, the global cooldown at least; and a point of mana, from C_Spell.GetSpellPowerCost,
+-- :535-549), the threat block with its multipliers (the rules of design 2.5, G), and the lines of a stance, form, aura or talent tooltip. Amounts
+-- are worded with the rounding of design 1.2, and the gear comparison's with that of design 2.3 (M.Fmt, which GearLines.lua, GearAvoid.lua and
+-- GearWindow.lua use too, with its one style of every line: M.Fmt.Style, whose header, good and bad colours are the game's NORMAL_FONT_COLOR,
+-- GREEN_FONT_COLOR and RED_FONT_COLOR, read once as this file loads, Blizzard_SharedXMLBase/Color.lua:82-86), thousands broken by the game's
+-- BreakUpLargeNumbers under pcall (as CombatText.lua:1445-1446), and a spell's name in a dim line is the game's (C_Spell.GetSpellName).
 
 local KEY, PART = "chat", "your stats"
 local IsSecret, Finite = ns.IsSecret, ns.Finite
@@ -126,7 +131,7 @@ local K = {
 	-- the other side, and the least spell power part that tells the two apart.
 	ENGLISH = { enUS = true, enGB = true }, NEAR = 1, FAR = 5, ENOUGH = 10,
 	-- What a share counts for a weapon ability that the data leaves out, the model's own values (SpellData.lua, D.MODEL; design 3.2).
-	MODEL = { apPerDps = 14, healThreat = 0.5, offHand = 0.5, norm = { one = 2.4, dagger = 1.7, two = 3.3, ranged = 2.8 },
+	MODEL = { apPerDps = 14, healThreat = 0.5, offHand = 0.5, gcd = 1.5, norm = { one = 2.4, dagger = 1.7, two = 3.3, ranged = 2.8 },
 		form = { cat = 1.0, bear = 2.5 }, downrank = { grace = 17, step = 0.05 } },
 	SCHOOL_NAMES = { "Physical", "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" },
 	-- The order of the bases, the worst last: client data, measured, estimate (design 3.5).
@@ -150,9 +155,27 @@ local K = {
 	SKIP = { time = true, old = true },
 	-- The rows of the Spells and gear tab (design 4.9), the hit table's hit cap row its Hit cap against a boss can follow, and Your role of
 	-- nameplate threat, which ns.PlayerRole reads: a change of any of them changes M.Version, and of the last the role too.
-	ROWS = { "chat.spellPower", "chat.spellStats", "chat.spellLowRank", "chat.spellThreat", "chat.spellWhen", "chat.gear", "chat.gearWhen",
-		"chat.gearMost", "chat.gearAgainst", "chat.gearFacing", "chat.gearRules", "hud.hitTableRules", "nameplates.threatRole" },
+	ROWS = { "chat.spellPower", "chat.spellStats", "chat.spellLowRank", "chat.spellThreat", "chat.spellWhen", "chat.spellTotal", "chat.spellRates",
+		"chat.tipDetail", "chat.gear", "chat.gearWhen", "chat.gearMost", "chat.gearAgainst", "chat.gearFacing", "chat.gearRules", "chat.gearTotals",
+		"chat.gearSwing", "hud.hitTableRules", "nameplates.threatRole" },
 	ROLE_ROW = "nameplates.threatRole",
+	-- The spell totals (Total, chat.spellTotal; its rates, chat.spellRates). The kinds of the data a total is worked out for: the rest (a seal, a
+	-- proc, a threat alone) have only the rates line, from GearModel.lua's G.Expect. The kinds that last (their total is over their duration and a
+	-- tick) and that heal (their total counts their healing parts, as GearModel.lua's Suits). The ammunition each ranged weapon fires by its
+	-- subclass (bow 2 and crossbow 18 arrows, gun 3 bullets), as GearModel.lua's K.FIRES; the paw's least damage and an empty hand's speed, as its
+	-- K.PAW_LEAST and K.UNARMED_SPEED. Enum.PowerType.Mana (PowerTypeConstantsDocumentation.lua:25), the one power a figure a point of is given for.
+	TOTAL_KINDS = { spell = true, dot = true, channel = true, heal = true, hot = true, strike = true, apstrike = true, finisher = true, auto = true,
+		shot = true, wand = true },
+	LASTING = { dot = true, hot = true }, HEALS = { heal = true, hot = true }, FIRES = { [2] = 2, [18] = 2, [3] = 3 },
+	PAW_LEAST = 1, UNARMED_SPEED = 2.0, MANA = 0, MAX_COSTS = 8,
+	-- The unit of a total by the part's per (design 1.2), and of the strikes and swings by kind.
+	PER_UNIT = { hit = "a hit", block = "a block", stack = "a stack", proc = "a proc" },
+	KIND_UNIT = { strike = "a hit", apstrike = "a hit", finisher = "a hit at 5 points", auto = "a swing", shot = "a shot", wand = "a shot" },
+	-- The colours of the style (design of 0.5.20: one style for every line): the game's NORMAL_FONT_COLOR, GREEN_FONT_COLOR and RED_FONT_COLOR from
+	-- its colour table (Blizzard_SharedXMLBase/Color.lua:82-86, which makes each a global of r, g and b), else their usual values; the light grey
+	-- of a label, the white of a value and the dim of a note (the hit table's DIM, HitTable.lua:79).
+	STYLE = { header = { "NORMAL_FONT_COLOR", 1, 0.82, 0 }, good = { "GREEN_FONT_COLOR", 0.1, 1, 0.1 }, bad = { "RED_FONT_COLOR", 1, 0.1, 0.1 } },
+	LABEL = { 0.82, 0.82, 0.82 }, VALUE = { 1, 1, 1 }, DIM = { 0.66, 0.68, 0.62 },
 	-- The player's own unit events (RegisterUnitEvent), then the others (design 4.5; each in events.yaml of the client).
 	PLAYER_EVENTS = { "UNIT_STATS", "UNIT_ATTACK_POWER", "UNIT_RANGED_ATTACK_POWER", "UNIT_DAMAGE", "UNIT_ATTACK_SPEED", "UNIT_RANGEDDAMAGE",
 		"UNIT_SPELL_HASTE", "UNIT_AURA", "UNIT_INVENTORY_CHANGED" },
@@ -1583,14 +1606,15 @@ local function Dec(x)
 	return Trim(("%.2f"):format(x))
 end
 
--- An amount: whole from 10 up with its thousands broken, one decimal below with a trailing .0 dropped, its minus kept.
+-- An amount: whole from 100 up with its thousands broken, one decimal below with a trailing .0 dropped, its minus kept (the style's numbers, as
+-- Figure writes them).
 local function Num(x)
 	if not Finite(x) then
 		return ""
 	end
 	local size = math.abs(x)
 	local text
-	if size >= 10 then
+	if size >= 100 then
 		text = Big(math.floor(size + 0.5))
 	else
 		text = Trim(("%.1f"):format(size))
@@ -1651,6 +1675,61 @@ local function Change(x, second)
 		return "0"
 	end
 	return (x > 0 and "+" or "-") .. Figure(math.abs(x), second)
+end
+
+-- A share with two decimals, x * 100 with no trailing zeros dropped, so a table's column lines up: 5.20%; with signed, its sign too (a change):
+-- +0.52%, -1.04%, and 0.00% under 0.005%.
+local function Pct2(x, signed)
+	if not Finite(x) then
+		return ""
+	end
+	local value = x * 100
+	if math.abs(value) < 0.005 then
+		return "0.00%"
+	end
+	local text = ("%.2f"):format(math.abs(value)) .. "%"
+	if value < 0 then
+		return "-" .. text
+	end
+	return (signed and "+" or "") .. text
+end
+
+-- The style (one for every line Flat UI adds to a tooltip and for the window): the colours as { r, g, b }, the game's own read once here.
+local function StyleColour(spec)
+	local colour = _G[spec[1]]
+	local r, g, b = Field(colour, "r"), Field(colour, "g"), Field(colour, "b")
+	if Finite(r) and Finite(g) and Finite(b) then
+		return { r, g, b }
+	end
+	return { spec[2], spec[3], spec[4] }
+end
+
+local Style = { header = StyleColour(K.STYLE.header), label = K.LABEL, value = K.VALUE, good = StyleColour(K.STYLE.good),
+	bad = StyleColour(K.STYLE.bad), dim = K.DIM }
+
+-- The escape that starts text in a colour of the style: |cffrrggbb.
+local function Hex(colour)
+	local function Byte(value)
+		return math.floor(math.max(0, math.min(1, Finite(value) and value or 1)) * 255 + 0.5)
+	end
+	return ("|cff%02x%02x%02x"):format(Byte(colour[1]), Byte(colour[2]), Byte(colour[3]))
+end
+
+-- Text in a colour of the style, inside a line of another colour.
+local function Paint(text, colour)
+	return Hex(colour) .. text .. "|r"
+end
+
+-- The colour of a change: good when it is better, bad when worse, the value's colour when it is none (under still, 0 by default); higherBetter
+-- false for a change that is better when it falls (damage taken).
+local function Tone(change, higherBetter, still)
+	if not Finite(change) or math.abs(change) <= (Finite(still) and still or 0) then
+		return Style.value
+	end
+	if (change > 0) == (higherBetter ~= false) then
+		return Style.good
+	end
+	return Style.bad
 end
 
 -- Milliseconds as seconds: 6 sec.
@@ -2497,14 +2576,31 @@ local function IdleOffHand(entry, part, state)
 	return false
 end
 
+-- The title of a block of power lines, which shows as its header where it has more than one line (0.5.20): Spell power for parts of spell damage
+-- and healing alone, Attack power for parts of attack power, weapon damage and block value alone, else Power.
+local function PowerTitle(entry)
+	local spell, attack = false, false
+	for _, part in ipairs(entry.parts) do
+		if type(part) == "table" then
+			if part[1] == "sp" or part[1] == "heal" then
+				spell = true
+			else
+				attack = true
+			end
+		end
+	end
+	return (spell and not attack and "Spell power") or (attack and not spell and "Attack power") or "Power"
+end
+
 -- The power lines of a rank (design 1.2): { { left, right, tone, dim, wrap } ... }, a line a part (but the off hand's of a strike while the player
--- does not dual wield); opts { stats = With your stats, lowRank = Less for low ranks }, both on unless false. tone is "plain", or "old" while the
--- stats are from before a fight now on; an estimate is the ~ in the text.
+-- does not dual wield), and its title (out.title, PowerTitle); opts { stats = With your stats, lowRank = Less for low ranks }, both on unless
+-- false. tone is "plain", or "old" while the stats are from before a fight now on; an estimate is the ~ in the text.
 function M.PowerLines(entry, rank, state, stats, opts)
 	local out = {}
 	if type(entry) ~= "table" or type(entry.parts) ~= "table" or type(entry.ranks) ~= "table" then
 		return out
 	end
+	out.title = PowerTitle(entry)
 	local row, at = RankRow(entry, rank)
 	if not row then
 		return out
@@ -2523,12 +2619,378 @@ function M.PowerLines(entry, rank, state, stats, opts)
 	return out
 end
 
--- The threat block of a rank (design 1.2, 1.4), or {}: a line "Threat" with the value and a dim line naming the spell's own rule and each
--- multiplier in force. opts { mode = "special", "all" or "off", petLevel, role }. Where threat is special or changed the block shows for a rule
--- of the spell's own, a heal whose half a point something changes, or a multiplier the player can change that is not background; background
--- ones are named when something else brings the block.
+-- The spell totals -----------------------------------------------------------------------------------------------------------------------------
+
+-- The base of a part at the player's level: the rank's mean at lv and its gain a level up to mx (design 3.2), as GearModel.lua's Base counts it.
+local function PartBase(row, at, level)
+	local base = PartValue(row.bm, at) or 0
+	local gain = PartValue(row.bl, at)
+	if gain and gain ~= 0 then
+		base = base + gain * Levels(row, at, level)
+	end
+	return base
+end
+
+-- The form a weapon part swings in: its strike's own (spd cat or bear), else the player's (Cat Form, a bear form), else none.
+local function SwingForm(part, state)
+	if part.spd == "cat" or part.spd == "bear" then
+		return part.spd
+	elseif state.form == K.CAT then
+		return "cat"
+	elseif state.form ~= nil and K.BEARS[state.form] then
+		return "bear"
+	end
+	return nil
+end
+
+-- A hand's weapon damage before attack power and the speed it swings at, as GearModel.lua's HandMean counts them: the mean of the weapon's damage
+-- lines (a second school's with it); in a form the main hand is the paw, the weapon's damage a second times the form's swing, at least
+-- K.PAW_LEAST; an empty main hand 0 at K.UNARMED_SPEED, an estimate (the third answer). Nil for an empty off hand or ranged slot.
+local function HandMean(state, slot, form)
+	local weapon = type(state.weapons) == "table" and state.weapons[slot] or nil
+	local mean, speed
+	if type(weapon) == "table" and Finite(weapon.min) and Finite(weapon.max) and Positive(weapon.speed) then
+		mean, speed = (weapon.min + weapon.max) / 2, weapon.speed
+		if Finite(weapon.plusMin) and Finite(weapon.plusMax) then
+			mean = mean + (weapon.plusMin + weapon.plusMax) / 2
+		end
+	end
+	if slot == K.MAIN and form then
+		local swing = ModelOf("form", form)
+		return math.max(K.PAW_LEAST, mean and mean / speed * swing or K.PAW_LEAST), swing, false
+	elseif mean then
+		return mean, speed, false
+	elseif slot == K.MAIN then
+		return 0, K.UNARMED_SPEED, true
+	end
+	return nil
+end
+
+-- The speed a strike counts attack power at, as GearModel.lua's StrikeSpeed: in a form the hand's own swing; normalized by the weapon's kind (norm),
+-- the ranged one (nranged); else the weapon's own speed.
+local function StrikeSpeed(part, state, slot, own)
+	if SwingForm(part, state) then
+		return own
+	end
+	local weapon = type(state.weapons) == "table" and state.weapons[slot] or nil
+	if part.spd == "norm" then
+		if type(weapon) == "table" and weapon.twoHand then
+			return ModelOf("norm", "two")
+		elseif type(weapon) == "table" and weapon.dagger then
+			return ModelOf("norm", "dagger")
+		end
+		return ModelOf("norm", "one")
+	elseif part.spd == "nranged" then
+		return ModelOf("norm", "ranged")
+	end
+	return own
+end
+
+-- One hand's part of a weapon strike as (base, bonus, estimate): (weapon mean + attack power / 14 x the strike's speed + flat + the part's own base)
+-- x the weapon multiple x pct, as GearModel.lua's HandStrike counts it, the attack power share the bonus and the rest the base. flat and pct are
+-- UnitDamage's (UnitRangedDamage's for the ranged slot), and the Physical school's only; the ranged weapon's mean takes its ammunition's damage a
+-- second x its speed where it fires it (K.FIRES); the off hand's weapon and attack power share take the off-hand factor (OffHand); the multiple is
+-- the dagger one with a dagger in the main hand where the data gives one (dg). Nil for a hand with no weapon.
+local function HandTotal(entry, row, at, part, state, stats, slot)
+	local mean, own, empty = HandMean(state, slot, slot == K.MAIN and SwingForm(part, state) or nil)
+	if not mean then
+		return nil
+	end
+	local ranged = slot == K.RANGED
+	local damage = ranged and stats.rdmg or stats.dmg
+	damage = type(damage) == "table" and damage or {}
+	if ranged then
+		local sub = state.weapons[slot].subclass
+		if Positive(state.ammo) and (sub == nil or state.ammoKind == nil or K.FIRES[sub] == state.ammoKind) then
+			mean = mean + state.ammo * own
+		end
+	end
+	local physical = entry.school == 1
+	local flat = physical and Finite(damage.flat) and damage.flat or 0
+	local pct = physical and Finite(damage.pct) and damage.pct or 1
+	local power = ranged and stats.rap or stats.ap
+	local bonus = (Finite(power) and power or 0) / ModelOf("apPerDps") * StrikeSpeed(part, state, slot, own)
+	local off = slot == K.OFF and OffHand(state, stats) or 1
+	local multiple = PartValue(row.w, at) or (Finite(part[2]) and part[2]) or 1
+	local main = type(state.weapons) == "table" and state.weapons[K.MAIN] or nil
+	if Finite(part.dg) and type(main) == "table" and main.dagger == true then
+		multiple = part.dg
+	end
+	local scale = multiple * pct
+	return (mean * off + flat + PartBase(row, at, state.level)) * scale, bonus * off * scale, empty
+end
+
+-- A weapon part of its hand (h: main, off, ranged, or both hands, the off hand only while dual wielding), or nil for a hand with no weapon.
+local function WeaponTotal(entry, row, at, part, state, stats)
+	local hand = part.h or "main"
+	if hand ~= "both" then
+		return HandTotal(entry, row, at, part, state, stats, (hand == "off" and K.OFF) or (hand == "ranged" and K.RANGED) or K.MAIN)
+	end
+	local base, bonus, estimate = HandTotal(entry, row, at, part, state, stats, K.MAIN)
+	if base and state.dual == true then
+		local offBase, offBonus = HandTotal(entry, row, at, part, state, stats, K.OFF)
+		if offBase then
+			base, bonus = base + offBase, bonus + offBonus
+		end
+	end
+	return base, bonus, estimate
+end
+
+-- A part that is no weapon damage as (base, bonus, estimate): its base, and its share of its stat (spell power with the low rank factor while the
+-- row is on, as its power line counts it, attack power, ranged attack power, block value), a finisher's at 5 combo points, as GearModel.lua's
+-- Amount counts it; a part with free counts that share of itself (against an enemy that is not stunned), an estimate.
+local function PartTotal(entry, row, at, part, state, stats, lowRank)
+	local stat = part[1]
+	local share = PartValue(row.c, at) or (Finite(part[2]) and part[2]) or 0
+	local base = PartBase(row, at, state.level)
+	if part.per == "cp" then
+		base = base + (Finite(row.cpb) and row.cpb or 0) * 5
+		local list = type(part.cp) == "table" and part.cp or nil
+		share = list and Finite(list[5]) and list[5] or share * 5
+	end
+	local power = nil
+	if stat == "sp" then
+		power = SchoolPower(entry, part, stats)
+	elseif stat == "heal" then
+		power = stats.heal
+	elseif stat == "ap" or stat == "rap" then
+		power = stats[stat]
+	elseif stat == "bv" then
+		power = stats.block
+	end
+	local factor = 1
+	if (stat == "sp" or stat == "heal") and lowRank and not part.g then
+		factor = LowFactor(row, state.level)
+	end
+	local bonus = (Finite(power) and power or 0) * share * factor
+	local estimate = part.b == "e" or factor < 1
+	if Finite(part.free) then
+		base, bonus, estimate = base * part.free, bonus * part.free, true
+	end
+	local damage = entry.roll == "ranged" and stats.rdmg or stats.dmg
+	local pct = entry.school == 1 and type(damage) == "table" and Finite(damage.pct) and damage.pct or 1
+	return base * pct, bonus * pct, estimate
+end
+
+-- The kind a total is worked out as: the entry's comparison kind, else a heal for one with only healing parts, else a spell (a shield's charge).
+local function TotalKind(entry)
+	if entry.cmp ~= nil then
+		return entry.cmp
+	end
+	for _, part in ipairs(entry.parts) do
+		if type(part) == "table" and part[1] ~= "heal" then
+			return "spell"
+		end
+	end
+	return "heal"
+end
+
+-- Whether the player wears what the entry needs (the data's needs): a dagger in the main hand, or a shield; true when it needs nothing.
+local function Equipped(entry, state)
+	if entry.needs == "dagger" then
+		local main = type(state.weapons) == "table" and state.weapons[K.MAIN] or nil
+		return type(main) == "table" and main.dagger == true
+	elseif entry.needs == "shield" then
+		return state.shield == true
+	end
+	return true
+end
+
+-- The unit of a total: a strike's hit, a swing or a shot by kind; a channel; for parts that all tick, the duration and a tick; for parts that are
+-- all a hit, block, stack or proc, that; else a cast; each target for a part on each target.
+local function TotalUnit(kind, t, row, state)
+	local unit
+	if kind == "auto" and state.dual == true then
+		unit = "both hands, a swing each"
+	elseif K.KIND_UNIT[kind] then
+		unit = K.KIND_UNIT[kind]
+	elseif kind == "channel" then
+		unit = "a channel"
+	elseif t.allOver and t.ticks then
+		local ms = Finite(row.du) and row.du > 0 and row.du or (Finite(t.period) and t.ticks * t.period * 1000) or nil
+		unit = (ms and ("over " .. Sec(ms)) or "over its time") .. ", " .. Num((t.base + t.bonus) / t.ticks) .. " a tick"
+	elseif t.per and K.PER_UNIT[t.per] then
+		unit = K.PER_UNIT[t.per]
+	else
+		unit = "a cast"
+	end
+	if t.each then
+		unit = unit .. ", each target"
+	end
+	return unit
+end
+
+-- What one cast does now with the player's stats (0.5.20, Total): { value, base, bonus, unit, estimate }, the sum of the parts its kind counts
+-- (a heal's healing parts, any other kind's other parts, as GearModel.lua's Suits; never a part on the caster, nor the off hand of a strike while
+-- the player does not dual wield), the base what the spell and the weapon give and the bonus what the player's stats add. Nil for a kind it is
+-- not worked out for (a seal, a proc, a threat alone), a strike whose weapon the player lacks, or a spell that needs a dagger or shield not worn.
+local function Total(entry, row, at, state, stats, lowRank)
+	local kind = TotalKind(entry)
+	if not K.TOTAL_KINDS[kind] or not Equipped(entry, state) then
+		return nil
+	end
+	local heal = K.HEALS[kind] == true
+	local t = { base = 0, bonus = 0, estimate = false, allOver = true, ticks = nil, period = nil, per = nil, each = false, any = false }
+	for index, part in ipairs(entry.parts) do
+		if type(part) == "table" and (part[1] == "heal") == heal and part.per ~= "self" and not IdleOffHand(entry, part, state) then
+			local base, bonus, estimate
+			if kind == "wand" then
+				local mean = HandMean(state, K.RANGED)
+				local damage = type(stats.rdmg) == "table" and stats.rdmg or {}
+				base, bonus, estimate = mean and mean * (Finite(damage.pct) and damage.pct or 1), 0, true
+			elseif part[1] == "wpn" then
+				base, bonus, estimate = WeaponTotal(entry, row, at, part, state, stats)
+			else
+				base, bonus, estimate = PartTotal(entry, row, at, part, state, stats, lowRank)
+			end
+			if base == nil then
+				return nil
+			end
+			t.base, t.bonus, t.any = t.base + base, t.bonus + bonus, true
+			t.estimate = t.estimate or estimate == true
+			local ticks = PartValue(row.n, at) or part.n
+			if Finite(ticks) and ticks >= 2 then
+				t.ticks, t.period = ticks, Finite(part.p) and part.p or t.period
+			else
+				t.allOver = false
+			end
+			if t.per == nil then
+				t.per = part.per or false
+			elseif t.per ~= part.per then
+				t.per = false
+			end
+			t.each = t.each or part.per == "target" or part.per == "first"
+		end
+	end
+	if not t.any then
+		return nil
+	end
+	return { value = t.base + t.bonus, base = t.base, bonus = t.bonus, unit = TotalUnit(kind, t, row, state), estimate = t.estimate }
+end
+
+-- The seconds of one cast for "a second of casting": a channel's duration, else C_Spell.GetSpellInfo's castTime of the rank (SpellDocumentation.lua:
+-- 416-430, as GearModel.lua's CastSeconds reads it), else the rank's; at least the global cooldown, and true as the second answer when the global
+-- cooldown is what counts (an instant).
+local function CastSeconds(entry, row)
+	local gcd = ModelOf("gcd")
+	local seconds = nil
+	if entry.cmp == "channel" or row.ct == -1 then
+		seconds = Finite(row.du) and row.du > 0 and row.du / 1000 or nil
+	end
+	if not seconds then
+		local ms = Field(Ask(Api("C_Spell", "GetSpellInfo"), row[1]), "castTime")
+		if not Finite(ms) then
+			ms = row.ct
+		end
+		seconds = Finite(ms) and ms > 0 and ms / 1000 or 0
+	end
+	if seconds < gcd then
+		return gcd, true
+	end
+	return seconds, false
+end
+
+-- The mana one cast of a rank costs (C_Spell.GetSpellPowerCost, SpellDocumentation.lua:535-549: a list of SpellPowerCostInfo,
+-- SpellSharedDocumentation.lua:46-59, its type Enum.PowerType), or nil: none for rage, energy or a spell that costs nothing.
+local function ManaCost(id)
+	local costs = Ask(Api("C_Spell", "GetSpellPowerCost"), id)
+	if not Plain(costs, "table") then
+		return nil
+	end
+	for index = 1, K.MAX_COSTS do
+		local cost = Field(costs, index)
+		if cost == nil then
+			break
+		end
+		local kind, amount = Field(cost, "type"), Field(cost, "cost")
+		if kind == K.MANA and Finite(amount) and amount > 0 then
+			return amount
+		end
+	end
+	return nil
+end
+
+-- The rates line (0.5.20, chat.spellRates): the expected value with crits and misses (GearModel.lua's G.Expect, looked up when asked, its cast;
+-- with crits alone for a heal, which never misses), then a second of cast time (the global cooldown for an instant), or for what rides on the
+-- swings or shots its own figure a second, and a point of mana, each of the expected value, else of the total; ~ before an estimate. Nil with
+-- nothing to say.
+local function Rates(entry, at, row, state, stats, total, lowRank)
+	local G = ns.GearModel
+	local result = nil
+	if type(G) == "table" and type(G.Expect) == "function" then
+		local ok, value = pcall(G.Expect, { entry = entry, rank = at, id = row[1] }, state, stats, { lowRank = lowRank })
+		if ok and type(value) == "table" and value.why == nil and Finite(value.cast) then
+			result = value
+		end
+	end
+	local words, figure, guess = {}, nil, ""
+	if result then
+		figure, guess = result.cast, result.estimate == true and "~" or ""
+		words[1] = "Expected " .. guess .. Num(figure) .. (K.HEALS[TotalKind(entry)] and " with crits" or " with crits and misses")
+	elseif total then
+		figure, guess = total.value, total.estimate and "~" or ""
+	end
+	if not figure or figure <= 0 then
+		return nil
+	end
+	if result and result.perSecond then
+		if Finite(result.second) then
+			words[#words + 1] = guess .. Num(result.second) .. " a second"
+		end
+	elseif not entry.nx then
+		local seconds, instant = CastSeconds(entry, row)
+		words[#words + 1] = guess .. Num(figure / seconds) .. (instant and " a second of the global cooldown" or " a second of casting")
+		local mana = ManaCost(row[1])
+		if mana then
+			words[#words + 1] = guess .. Num(figure / mana) .. " a point of mana"
+		end
+	end
+	if #words == 0 then
+		return nil
+	end
+	words[1] = words[1]:sub(1, 1):upper() .. words[1]:sub(2)
+	return table.concat(words, "; ")
+end
+
+-- The total block of a rank (0.5.20), titled "Total" (out.title): a line "Total" with what one cast does now with the player's stats, base and
+-- bonus together ("973 a cast  (556 + 417)", Total; while chat.spellTotal is on), and one dim line of its rates (Rates; while chat.spellRates is
+-- on). opts { total, rates, lowRank }, each on unless false. Nothing without stats (With your stats off) or for a pet's spell, whose power is the
+-- pet's own. tone is "old" while the stats are from before a fight now on.
+function M.TotalLines(entry, rank, state, stats, opts)
+	local out = { title = "Total" }
+	if type(entry) ~= "table" or entry.pet or type(entry.parts) ~= "table" or type(entry.ranks) ~= "table" or type(stats) ~= "table" then
+		return out
+	end
+	local row, at = RankRow(entry, rank)
+	if not row then
+		return out
+	end
+	state = type(state) == "table" and state or S.state
+	opts = type(opts) == "table" and opts or {}
+	local lowRank = opts.lowRank ~= false
+	local total = Total(entry, row, at, state, stats, lowRank)
+	if total and opts.total ~= false then
+		local right = (total.estimate and "~" or "") .. Num(total.value) .. " " .. total.unit
+		if total.base >= 1 and total.bonus >= 1 then
+			right = right .. "  (" .. Num(total.base) .. " + " .. Num(total.bonus) .. ")"
+		end
+		out[#out + 1] = Line("Total", right, stats.old and "old" or "plain")
+	end
+	if opts.rates ~= false then
+		local text = Rates(entry, at, row, state, stats, total, lowRank)
+		if text then
+			out[#out + 1] = Dim(text)
+		end
+	end
+	return out
+end
+
+-- The threat block of a rank (design 1.2, 1.4; titled "Threat"), or none: a line "Threat" with the value and a dim line naming the spell's own
+-- rule and each multiplier in force. opts { mode = "special", "all" or "off", petLevel, role }. Where threat is special or changed the block shows
+-- for a rule of the spell's own, a heal whose half a point something changes, or a multiplier the player can change that is not background;
+-- background ones are named when something else brings the block.
 function M.ThreatLines(entry, rank, state, stats, opts)
-	local out = {}
+	local out = { title = "Threat" }
 	if type(entry) ~= "table" or type(entry.ranks) ~= "table" then
 		return out
 	end
@@ -2588,11 +3050,12 @@ function M.ThreatLines(entry, rank, state, stats, opts)
 	return out
 end
 
--- The lines of a stance, form, aura or talent tooltip (design 1.3), from the rule's say and note, or {}: say gives its multiplier, as the tip
--- spell's own text says nothing of threat; the note is a dim line, but that of a stance whose talent needs a shield, which shows only while the
--- talent is learned and no shield is worn (Defiance counts only with a shield: x1.8 now). rank is the talent rank of the tooltip's block.
+-- The lines of a stance, form, aura or talent tooltip (design 1.3; titled "Threat"), from the rule's say and note, or none: say gives its
+-- multiplier, as the tip spell's own text says nothing of threat; the note is a dim line, but that of a stance whose talent needs a shield, which
+-- shows only while the talent is learned and no shield is worn (Defiance counts only with a shield: x1.8 now). rank is the talent rank of the
+-- tooltip's block.
 function M.RuleLines(spellID, state, rank)
-	local out = {}
+	local out = { title = "Threat" }
 	local L = Whole(spellID) and Lookups() or nil
 	local rule = L and (L.tips[spellID] or L.talents[spellID]) or nil
 	if not rule then
@@ -2625,5 +3088,10 @@ function M.RuleLines(spellID, state, rank)
 end
 
 -- The rounding of design 1.2, for every file that words a number of the model, and of design 2.3 for the gear comparison: Percent (a change as a
--- share, "+1.8%"), Figure (a figure now or with an item) and Change (its change, signed), which the item tooltips and the window both use.
-M.Fmt = { Pct = Pct, Mult = Mult, Num = Num, Signed = Signed, Percent = Percent, Figure = Figure, Change = Change }
+-- share, "+1.8%"), Figure (a figure now or with an item) and Change (its change, signed), which the item tooltips and the window both use; Pct2 (a
+-- share with two decimals, signed on request, for the avoidance table). And the one style of every line Flat UI adds to a tooltip and of the
+-- window: Style { header, label, value, good, bad, dim } as { r, g, b } (a block's gold header, a figure's light grey label and white value, a
+-- change better or worse, a dim note), Hex and Paint (a colour inside a line), Tone (the colour of a change by its direction). Numbers: thousands
+-- broken, whole from 100 up, one decimal below; percents one decimal (the avoidance table two); signs on changes only.
+M.Fmt = { Pct = Pct, Mult = Mult, Num = Num, Signed = Signed, Percent = Percent, Figure = Figure, Change = Change, Pct2 = Pct2, Style = Style,
+	Hex = Hex, Paint = Paint, Tone = Tone }

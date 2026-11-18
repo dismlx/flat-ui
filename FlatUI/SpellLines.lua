@@ -2,9 +2,11 @@ local _, ns = ...
 
 -- Spell lines (part "spell lines" of Chat and tooltips, on its Spells and gear tab; design 1 and 4): inside the game's build of a spell tooltip,
 -- lines with the share of spell damage, spell healing or attack power the spell adds and what that is with the player's stats (Spell power and
--- attack power lines, With your stats, Less for low ranks), its threat on WoW: Forever with each multiplier in force (Threat lines), the lines a
--- stance, form, aura or talent tooltip needs that its own text leaves out, and, while a number shown is from before the fight now on, one dim line
--- that says so, last. SpellModel.lua makes the texts (M.PowerLines, M.ThreatLines, M.RuleLines) from the data of SpellData.lua and the player's
+-- attack power lines, With your stats, Less for low ranks), the total of one cast with the player's stats, base and bonus together (Total,
+-- chat.spellTotal; 0.5.20) and its rates (chat.spellRates: the expected value with crits and misses, a second of cast time, a point of mana), its
+-- threat on WoW: Forever with each multiplier in force (Threat lines), the lines a stance, form, aura or talent tooltip needs that its own text
+-- leaves out, and, while a number shown is from before the fight now on, one dim line that says so, last. SpellModel.lua makes the texts
+-- (M.PowerLines, M.TotalLines, M.ThreatLines, M.RuleLines, each a block with its title) from the data of SpellData.lua and the player's
 -- state and stats, and listens to the game while a part wants it (M.Want); this file finds the spell, keeps its lines and adds them. It registers
 -- no event, adds to the chat module and has no switch of its own, as ChatTips.lua. SpellModel.lua, SpellData.lua and ns.ActionSpell of
 -- Cooldowns.lua are looked up when asked, never as the files load, since each may load after this one or fail.
@@ -55,9 +57,12 @@ local _, ns = ...
 -- Once for each build (Chat.lua:795-806): the game makes new data for each build and may run the post calls more than once for one, so the same
 -- data with at least the lines added then still there is the same build. The only writes are widget calls on the tooltip, each under pcall:
 -- NumLines, AddDoubleLine for a share and its number, AddLine for a line alone; one the game refuses ends the adding for that build.
--- The look (design 1.2): the share grey (0.8, the grey of Chat.lua's extra lines), the number white, or grey while it is from before the fight,
--- and dim lines (0.66, 0.68, 0.62, HitTable.lua's DIM) wrapped at the tooltip's width by AddLine's fifth argument (Blizzard_SharedXML/
--- SharedTooltipTemplates.lua:166-172), so a long note does not widen the tooltip.
+-- The look (0.5.20: one style for every line, SpellModel.lua's M.Fmt.Style): each block SpellModel gives (the power lines, the total, the threat
+-- block, a rule's lines) opens with its title as one gold header (the game's NORMAL_FONT_COLOR) only where more than one line that is no note
+-- follows; a figure's label light grey (0.82) and its value white, or light grey while it is from before the fight; and the notes dim (0.66,
+-- 0.68, 0.62, HitTable.lua's DIM), wrapped at the tooltip's width by AddLine's fifth argument (Blizzard_SharedXML/SharedTooltipTemplates.lua:
+-- 166-172), so a long note does not widen the tooltip: in Compact (chat.tipDetail) a block's notes are joined into one dim line at its end with
+-- "; " between them, in Full each shows where it comes.
 -- /flatui status (design 4.12), while the module is on and a row wants lines: the build of the data and its number of spells (D.SPELLS, which the
 -- generator counts, so no other class's constructor runs), that the game withholds the stats in this fight (C_Secrets.ShouldUnitStatsBeSecret,
 -- Blizzard_APIDocumentationGenerated/SecretPredicateAPIDocumentation.lua:388-396) or when they were read (GetTime), what SpellModel's check of the
@@ -72,8 +77,9 @@ local SL = {
 	-- The rows of the Spells and gear tab this file reads (Config.lua, saved as chat.<key>), and their defaults of design 4.9 for a profile that has
 	-- none of them yet.
 	PATH = { spellPower = "chat.spellPower", spellStats = "chat.spellStats", spellLowRank = "chat.spellLowRank", spellThreat = "chat.spellThreat",
-		spellWhen = "chat.spellWhen" },
-	DEFAULT = { spellPower = true, spellStats = true, spellLowRank = true, spellThreat = "special", spellWhen = "always" },
+		spellWhen = "chat.spellWhen", spellTotal = "chat.spellTotal", spellRates = "chat.spellRates", tipDetail = "chat.tipDetail" },
+	DEFAULT = { spellPower = true, spellStats = true, spellLowRank = true, spellThreat = "special", spellWhen = "always", spellTotal = true,
+		spellRates = true, tipDetail = "compact" },
 	-- The kinds of tooltip data a spell line goes on, for a client whose Enum.TooltipDataType does not say (TooltipInfoSharedDocumentation.lua:97,
 	-- 107, 121).
 	TYPES = { Spell = 1, PetAction = 11, Macro = 25 },
@@ -82,10 +88,11 @@ local SL = {
 	-- The getters of a build of an action slot and of a talent's block (TooltipDataHandler.lua:586, 598).
 	ACTION = "GetAction",
 	TRAIT = "GetTraitEntry",
-	-- The colours of design 1.2: the share, the number, and the dim lines.
-	GREY = { 0.8, 0.8, 0.8 },
-	WHITE = { 1, 1, 1 },
-	DIM = { 0.66, 0.68, 0.62 },
+	-- The colours of the style while SpellModel.lua's (M.Fmt.Style) cannot be read: a block's gold header (the game's NORMAL_FONT_COLOR), a
+	-- figure's light grey label and white value, and a dim note.
+	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, dim = { 0.66, 0.68, 0.62 } },
+	-- The notes of a block in Compact are joined into one dim line with this between them (chat.tipDetail).
+	JOIN = "; ",
 	-- The dim line that ends the spell lines while a number shown is from before the fight now on.
 	OLD = "Your stats from before this fight.",
 	-- Spells whose lines are kept at most (design 4.6).
@@ -135,9 +142,10 @@ local function Mode()
 	return "special"
 end
 
--- True while the module is on and a row wants lines: the power lines, or the threat lines with the lines of stances, forms, auras and talents.
+-- True while the module is on and a row wants lines: the power lines, the total or its rates, or the threat lines with the lines of stances,
+-- forms, auras and talents.
 local function Wanted()
-	return ns.Enabled(KEY) and (Opt("spellPower") == true or Mode() ~= "off")
+	return ns.Enabled(KEY) and (Opt("spellPower") == true or Opt("spellTotal") == true or Opt("spellRates") == true or Mode() ~= "off")
 end
 
 -- SpellModel (SpellModel.lua), looked up when asked; nil while it is not there.
@@ -147,6 +155,17 @@ local function Model()
 		return M
 	end
 	return nil
+end
+
+-- The colours of the style: SpellModel.lua's M.Fmt.Style, else this file's.
+local function Colours()
+	local M = Model()
+	local fmt = M and type(M.Fmt) == "table" and M.Fmt or nil
+	local style = fmt and type(fmt.Style) == "table" and fmt.Style or nil
+	if style and type(style.header) == "table" and type(style.label) == "table" and type(style.value) == "table" and type(style.dim) == "table" then
+		return style
+	end
+	return SL.STYLE
 end
 
 -- Reading the game's tables ---------------------------------------------------------------------------------------------------------------------
@@ -346,21 +365,11 @@ local function Role(state)
 	return nil
 end
 
--- Puts the lines of a list SpellModel gave after those of raw.
-local function Gather(raw, list)
-	if type(list) ~= "table" then
-		return
-	end
-	for _, line in ipairs(list) do
-		raw[#raw + 1] = line
-	end
-end
-
--- A line of SpellModel's as Put adds it, { left, right, colour, rightColour, wrap }, and true when its number is from before the fight. Nil for a
--- line with no text, and for the sentence that the stats are old, which Shape adds once, last. A share takes the grey of Chat.lua's extra lines
--- and its number white, or grey while the number is old; a dim line takes the dim colour and wraps unless it says not to; a share with no number is
--- a line alone, wrapped when it asks.
-local function Line(line)
+-- A line of SpellModel's as Put adds it, { left, right, colour, rightColour, wrap, note }, and true when its number is from before the fight. Nil
+-- for a line with no text, and for the sentence that the stats are old, which Shape adds once, last. In the style (M.Fmt.Style): a figure's label
+-- light grey and its value white, or light grey while the value is old; a dim line is a note, in the dim colour, and wraps unless it says not
+-- to; a share with no number is a line alone, wrapped when it asks.
+local function Line(line, style)
 	if type(line) ~= "table" then
 		return nil, false
 	end
@@ -376,55 +385,104 @@ local function Line(line)
 		return nil, true
 	end
 	if dim then
-		return { left = left, right = right, colour = SL.DIM, rightColour = SL.DIM, wrap = right == nil and wrap ~= false }, false
+		return { left = left, right = right, colour = style.dim, rightColour = style.dim, wrap = right == nil and wrap ~= false, note = true }, false
 	end
 	local old = right ~= nil and not IsSecret(tone) and tone == "old"
-	return { left = left, right = right, colour = SL.GREY, rightColour = old and SL.GREY or SL.WHITE, wrap = right == nil and wrap == true }, old
+	return { left = left, right = right, colour = style.label, rightColour = old and style.label or style.value, wrap = right == nil and wrap == true },
+		old
 end
 
--- The lines as they are added: SpellModel's in their order, and, while a number shown is from before the fight, the dim line that says so once at
--- the end of them, in place of a mark on every line (design 1.2).
-local function Shape(raw, withStats)
-	local lines, aged = {}, false
+-- A note's text for a joined line: its own words, with its right text after them, and no full stop at the end.
+local function NoteText(line)
+	local text = line.right and (line.left .. " " .. line.right) or line.left
+	return (text:gsub("%.$", ""))
+end
+
+-- The lines of one block as they are added (0.5.20, the style): the block's title (its list's title) as one gold header where more than one line
+-- that is no note follows; its lines in their order; and its notes, in Full each where it comes, in Compact joined into one dim line at its end
+-- (chat.tipDetail). aged says a number shown is from before the fight.
+local function Block(lines, raw, style, full)
+	local shaped, notes, figures, aged = {}, {}, 0, false
 	for _, line in ipairs(raw) do
-		local shaped, old = Line(line)
-		if shaped then
-			lines[#lines + 1] = shaped
-		end
+		local one, old = Line(line, style)
 		aged = aged or old
+		if one and one.note and not full then
+			notes[#notes + 1] = NoteText(one)
+		elseif one then
+			shaped[#shaped + 1] = one
+			figures = figures + (one.note and 0 or 1)
+		end
+	end
+	if #notes > 0 then
+		shaped[#shaped + 1] = { left = table.concat(notes, SL.JOIN), colour = style.dim, rightColour = style.dim, wrap = true, note = true }
+	end
+	local title = raw.title
+	if figures > 1 and not IsSecret(title) and type(title) == "string" and title ~= "" then
+		lines[#lines + 1] = { left = title, colour = style.header, rightColour = style.header, wrap = false }
+	end
+	for _, line in ipairs(shaped) do
+		lines[#lines + 1] = line
+	end
+	return aged
+end
+
+-- The lines as they are added: SpellModel's blocks in their order, each shaped by Block, and, while a number shown is from before the fight, the
+-- dim line that says so once at the end of them, in place of a mark on every line (design 1.2).
+local function Shape(blocks, withStats, full)
+	local lines, aged, style = {}, false, Colours()
+	for _, raw in ipairs(blocks) do
+		if type(raw) == "table" and Block(lines, raw, style, full) then
+			aged = true
+		end
 	end
 	if aged and withStats then
-		lines[#lines + 1] = { left = SL.OLD, colour = SL.DIM, rightColour = SL.DIM, wrap = true }
+		lines[#lines + 1] = { left = SL.OLD, colour = style.dim, rightColour = style.dim, wrap = true, note = true }
 	end
 	return lines
 end
 
 -- Empties the cache when what its lines were made for changed: SpellModel's version, whether the stats are old, the text check's answer (which
--- turns "+417" into "of which 417"), or a row. made then holds what the next lines are made for, which Build reads.
-local function Fresh(version, old, check, power, withStats, lowRank, mode)
-	if made.version ~= version or made.old ~= old or made.check ~= check or made.power ~= power or made.withStats ~= withStats
-		or made.lowRank ~= lowRank or made.mode ~= mode then
+-- turns "+417" into "of which 417"), or a row (now: the same fields). made then holds what the next lines are made for, which Build reads.
+local function Fresh(now)
+	local same = true
+	for key, value in pairs(now) do
+		same = same and made[key] == value
+	end
+	for key in pairs(made) do
+		same = same and now[key] ~= nil
+	end
+	if not same then
 		cache, order = {}, {}
-		made.version, made.old, made.check, made.power, made.withStats, made.lowRank, made.mode = version, old, check, power, withStats, lowRank, mode
+		made = now
 	end
 end
 
--- Works out the lines of a spell from SpellModel, for the rows made holds: the power lines, the threat block, then the lines of a rule whose
--- tooltip this is. With your stats off, no right text that needs a stat shows (design 1.4), so the threat block gets no stats either.
+-- The list SpellModel gave as one block, or nil.
+local function Gather(list)
+	return type(list) == "table" and list or nil
+end
+
+-- Works out the lines of a spell from SpellModel, for the rows made holds, block by block: the power lines, the total and its rates (which need
+-- the stats), the threat block, then the lines of a rule whose tooltip this is. With your stats off, no right text that needs a stat shows (design
+-- 1.4), so the threat block gets no stats either and the total does not show.
 local function Build(M, id, entry, index, rank, state, stats, petLevel)
-	local raw = {}
+	local blocks = {}
 	if entry then
 		if made.power and type(M.PowerLines) == "function" then
-			Gather(raw, M.PowerLines(entry, index, state, stats, { stats = made.withStats, lowRank = made.lowRank }))
+			blocks[#blocks + 1] = Gather(M.PowerLines(entry, index, state, stats, { stats = made.withStats, lowRank = made.lowRank }))
+		end
+		if (made.total or made.rates) and made.withStats and type(M.TotalLines) == "function" then
+			blocks[#blocks + 1] = Gather(M.TotalLines(entry, index, state, stats, { total = made.total, rates = made.rates, lowRank = made.lowRank }))
 		end
 		if made.mode ~= "off" and type(M.ThreatLines) == "function" then
-			Gather(raw, M.ThreatLines(entry, index, state, made.withStats and stats or nil, { mode = made.mode, petLevel = petLevel, role = Role(state) }))
+			blocks[#blocks + 1] = Gather(M.ThreatLines(entry, index, state, made.withStats and stats or nil,
+				{ mode = made.mode, petLevel = petLevel, role = Role(state) }))
 		end
 	end
 	if made.mode ~= "off" and type(M.RuleLines) == "function" then
-		Gather(raw, M.RuleLines(id, state, rank))
+		blocks[#blocks + 1] = Gather(M.RuleLines(id, state, rank))
 	end
-	return Shape(raw, made.withStats)
+	return Shape(blocks, made.withStats, made.full)
 end
 
 -- Keeps the lines of a spell, forgetting the spell kept longest when MOST are kept.
@@ -449,7 +507,9 @@ local function LinesOf(M, id, entry, index, rank)
 	local version = type(M.Version) == "function" and M.Version() or nil
 	local check = type(M.TextCheck) == "function" and M.TextCheck() or nil
 	local withStats = Opt("spellStats") == true
-	Fresh(version, withStats and Old(stats), check, Opt("spellPower") == true, withStats, Opt("spellLowRank") == true, Mode())
+	Fresh({ version = version or false, old = withStats and Old(stats), check = check or false, power = Opt("spellPower") == true,
+		withStats = withStats, lowRank = Opt("spellLowRank") == true, mode = Mode(), total = Opt("spellTotal") == true,
+		rates = Opt("spellRates") == true, full = Opt("tipDetail") == "full" })
 	local petLevel = Pet(entry) and PetLevel() or nil
 	local slot = cache[id]
 	local kept = slot and slot[rank or SL.NO_RANK]
@@ -499,7 +559,7 @@ local function Work(id, tooltip, data, entry, index, rank, trait)
 	end
 	local notes = {}
 	for _, line in ipairs(lines) do
-		local dim = line.colour == SL.DIM and line.right == nil
+		local dim = line.note == true and line.right == nil
 		if not (dim and before and before[line.left]) then
 			if not Put(tooltip, line) then
 				break

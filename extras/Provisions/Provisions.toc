@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: Provisions
+## Notes: One button for each kind of consumable (healing potion, mana potion, healthstone, food, drink, bandage, buff food), always on the best item in your bags. /prov
+## Version: 1.0.0
+## SavedVariables: ProvisionsDB
+## SavedVariablesPerCharacter: ProvisionsCharDB
+
+Data.lua
+Core.lua
+Panel.lua

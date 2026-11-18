@@ -31,6 +31,14 @@ local ADDON_NAME, ns = ...
 -- still that name, and the name alone again when the row goes off.
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
+-- With Questie's tracker on and the Questie addon loaded (QuestieSkin.lua), it lays Flat UI's own outlines on Questie's tracker (Questie_BaseFrame,
+-- Questie_HeaderFrame, the lines linePool1 and on, the item buttons Questie_ItemButton1 and on), each a backdrop texture on Questie's frame and edges
+-- on a frame of Flat UI's own, round the frame or round an anchor frame of Flat UI's own on a heading. It follows QuestieTracker.Update with
+-- ns.FollowTable and each line's SetMode with ns.Follow, and writes only what it puts back: the alpha of the pieces of Questie's backdrop
+-- (SetAlpha), the font of Questie's heading and of each line's label (SetFont and SetShadowOffset, through ns.TextStyle), the height of a zone
+-- heading's label (SetHeight), the texture coordinates of the item icons (SetTexCoord) and, in a fight with Opacity in combat, the alpha of
+-- Questie_BaseFrame (SetAlpha). After a change of that look it asks Questie to lay its lines out again (QuestieTracker:Update), out of combat;
+-- it never writes Questie's saved settings.
 -- Combat text is the one module that writes console variables: nine of the game's combat number variables and the switch of its
 -- own text for the player (enableFloatingCombatText), each remembered in FlatUIDB.cvars before its first write and put back when
 -- its page goes off. Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.
@@ -166,7 +174,13 @@ local ADDON_NAME, ns = ...
 -- the player's threat situation on it (UnitThreatSituation), else whether its target is the player (UnitIsUnit); and, while its row is For tanks
 -- and damage dealers, the player's role (ns.PlayerRole: the group role, a tank stance, form or aura, the points spent in each talent tree of the set
 -- of talents in use, as last read while no pick waited unapplied on it in the talent window, the class), read again after each event the hud module
--- hears that can change it.
+-- hears that can change it. Its lines on an enemy's tooltip (HitTableTip.lua, On enemy tooltips, by the role too by default) are added to
+-- GameTooltip (AddDoubleLine, AddLine) from the chat module's post call while that module is on, for a unit the player can attack that is not
+-- dead: they read the tooltip's unit (GetUnit under pcall, else UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level
+-- and kind (C.Target with the unit), whether it attacks the player (C.Front), the player's form and power type (GetShapeshiftForm, UnitPowerType),
+-- the combat state (InCombatLockdown, UnitAffectingCombat, C_Secrets.ShouldUnitStatsBeSecret) and the stats the table reads (ns.HitTableCalc,
+-- C.Inputs), those out of a fight only, at most every two seconds as GameTooltip is built whatever it shows, and worked out by C.Table; in a fight
+-- they count the last plain read, from before it, and say so.
 -- Healer mana (off by default) is a window of its own on UIParent; it only reads mana (UnitPowerPercent) and changes nothing. The dispel border, the
 -- debuff type icon and the raid marker of the party and raid frames, the leader and assistant icons of the raid frames and the dispel border of the
 -- player, target and focus frames, and the heal over time squares of the party and raid frames, are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a
@@ -240,8 +254,35 @@ local ADDON_NAME, ns = ...
 -- the movers. It takes an item dropped on it (GetCursorInfo) and gives one lifted from a bag, the bank or a worn slot back there with ClearCursor,
 -- while C_Cursor.GetCursorItem names that slot and C_Item.IsLocked says the item is still locked in it; any other item, such as one dragged off an
 -- action bar, stays on the cursor, and so does a spell dropped on it (GetCursorInfo, and GetMacroSpell for a macro). It writes GameTooltip for its
--- rows, its switch and its item (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and Hide while IsOwned says one of its frames owns it),
--- never in a fight.
+-- rows, its switch, its item, Against, Find, the weights, the grip and the Overall lines (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and
+-- Hide while IsOwned says one of its frames owns it), never in a fight.
+-- With Total of a cast, a spell's tooltip also has its total with the player's stats and a dim line of what a cast does on average, a second and
+-- a point of mana; the second is the spell's cast time (C_Spell.GetSpellInfo, castTime) and the mana the game's cost of the spell
+-- (C_Spell.GetSpellPowerCost, mana only). The spell and item lines take their gold header and their green and red from the game's
+-- NORMAL_FONT_COLOR, GREEN_FONT_COLOR and RED_FONT_COLOR, read once as SpellModel.lua loads. The window has a grip of its own at its bottom right
+-- corner (SetResizable, SetResizeBounds, StartSizing and StopMovingOrSizing on its own frame), its size kept in FlatUICharDB.gearWindow, which the
+-- movers' box of it follows; its text size is set on its own font strings (SetFont) in the face of the game's GameFontHighlightSmall and
+-- GameFontHighlight (GetFont, read only); and it has a second item box, Against, that an item dropped on it or chosen in the finder fills. The
+-- weight of each spell is kept with the spells in FlatUICharDB.gearSpells and set by a click on its Weight cell (IsShiftKeyDown for back to 1).
+-- Its Find button and the Item finder row show the item finder, FlatUIGearSearch, a frame of its own on UIParent that shows only with the window
+-- (FlatUIGear) and is hung at its right edge, or at its left edge while the screen has no room on the right (GetLeft and GetRight of the window,
+-- GetWidth of UIParent), kept on the screen (SetClampedToScreen) and in the window's strata (GetFrameStrata, SetFrameStrata); its search and level
+-- boxes are EditBoxes of its own. The movers place it too (its own entry): a drag of its title bar (StartMoving, StopMovingOrSizing, SetUserPlaced)
+-- or of its box gives it a spot of its own for the character, and Dock hangs it at the window again; Minimize folds it to its title bar, kept in
+-- FlatUICharDB.gearFinder with that spot and whether it is docked. The finder
+-- searches Flat UI's own item index (ItemIndex.lua, made from the game's client data by tools/dev/make_itemindex.py) and the bags, bank and other
+-- characters Bags records; for an item the index lacks and for Best for me it asks the game to load the item (C_Item.RequestLoadItemDataByID) and
+-- reads it (C_Item.GetItemInfo,
+-- C_Item.GetItemInfoInstant, C_Item.GetItemInventoryTypeByID), names the weapon types by C_Item.GetItemSubClassInfo and the qualities' colours by
+-- C_Item.GetItemQualityColor, and reads the player's class and level (UnitClassBase, UnitLevel). A Shift-click on a result links the item in chat
+-- (IsModifiedClick, ChatFrameUtil.InsertLink) and a Ctrl-click tries it on in the game's dressing room (DressUpItemLink), as a click on an item in
+-- the game's windows does. Its filter menus close at a press anywhere else, heard as GLOBAL_MOUSE_DOWN on a frame of their own only while one is
+-- open.
+-- Its Gear comparison button (GearButton.lua) is a frame of its own, FlatUIGearButton, on UIParent, anchored to the top right of CharacterFrame
+-- (SetPoint with the window as the frame it hangs from) and never parented to it; of the window it reads only whether it shows, its strata and level
+-- and whether the game protects it. It follows ShowUIPanel with hooksecurefunc (ns.FollowGlobal) to see the window open, and a frame of its own looks
+-- ten times a second, while the window shows, whether it still does. With an item on the cursor it gives one lifted from a slot back with
+-- ClearCursor, as the window does, and its tooltip is GameTooltip, never in a fight.
 -- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
 -- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
 -- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
@@ -279,7 +320,10 @@ local SETTLE = 0.2
 local READERS = {
 	["castbars.castColour"] = "hud", ["castbars.channelColour"] = "hud", ["castbars.craftColour"] = "hud",
 	-- The windows of Bags and the Gear comparison window of Chat and tooltips (GearWindow.lua) take the look of the Windows page: Window opacity,
-	-- Button and slot colour, Highlight colour and Icon crop. The chat input box takes the Highlight colour as well (Border while typing).
+	-- Button and slot colour, Highlight colour and Icon crop. The chat input box takes the Highlight colour as well (Border while typing). The Gear
+	-- comparison button on the Character window (GearButton.lua) takes it each time that window opens. The rows of the Spells and gear tab are read
+	-- by Chat and tooltips alone, whose refresh they bring, and Button on the Character window by its own call (Config.lua, changed), so none of
+	-- them is here.
 	["windows.accent"] = { "chat", "bags" }, ["windows.panel"] = { "chat", "bags" }, ["windows.opacity"] = { "chat", "bags" },
 	["windows.crop"] = { "chat", "bags" },
 	-- The count on Sell junk (N) of Bags follows Sell at most 12 at a time of Errands (ns.ErrandsJunkCount).

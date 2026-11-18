@@ -1888,6 +1888,9 @@ ns.PAGES = {
 		{ key = "trackerPanel", kind = "bool", default = false, label = "Tracker background" },
 		{ key = "trackerHeaderSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Heading size" },
 		{ key = "trackerCombat", kind = "number", default = 100, min = 0, max = 100, step = 5, unit = "%", label = "Opacity in combat" },
+		-- QuestieSkin.lua: the same rows, and Flat UI's fonts, on the Questie addon's tracker.
+		{ key = "trackerQuestie", kind = "bool", default = true, label = "Questie's tracker",
+			tip = "Gives the quest tracker of the Questie addon the look of the rows above: background, headings, Heading size on its zone headings, item buttons and Opacity in combat, and the fonts of the Fonts page while that page is on. Needs Questie: without it this row does nothing. Off gives Questie its own look back." },
 		{ section = "Loot" },
 		{ key = "lootWindow", kind = "bool", default = true, label = "Loot window", tip = "Flat window with thin borders on the window, the cards and the item slots." },
 		{ key = "lootRolls", kind = "bool", default = true, label = "Loot rolls", tip = "Thin border and flat timer bar on each roll." },
@@ -1937,26 +1940,30 @@ ns.PAGES = {
 	},
 	-- HitTable.lua and HitTableCalc.lua: a table of Flat UI's own under the player frame with the player's chances against the target, worked out again
 	-- as stats, gear, weapon skill, buffs, form and the target change. By default it shows for a tank or a damage dealer and not for a healer, by the
-	-- role Flat UI setup reads (ns.PlayerRole, Core.lua); Always and Off hold whatever the role, and the other rows apply at either of the first two.
-	-- It was a tick in 0.5.18: a saved tick reads as Always or Off (Core.lua, ns.MigrateText).
+	-- role Flat UI setup reads (ns.PlayerRole, Core.lua); Always and Off hold whatever the role. Attacks, Special attacks, Where you stand and Hit cap
+	-- against a boss serve On enemy tooltips (HitTableTip.lua) too and need nothing; the other rows apply at either of the first two. It was a tick in
+	-- 0.5.18: a saved tick reads as Always or Off (Core.lua, ns.MigrateText).
 	{
 		key = "hudHitTable", label = "Hit table", parent = "hud", owner = "hud",
 		{ key = "hitTable", kind = "choice", default = "role", label = "Hit table under the player frame",
 			choices = { { "role", "For tanks and damage dealers" }, { "on", "Always" }, { "off", "Off" } },
 			tip = "Your chances against your target to miss, be dodged, parried or blocked, glance, crit and hit, worked out again as your gear, buffs, weapon skill and target change. For tanks and damage dealers hides it while you count as a healer: by your group role, else a tank stance, form or aura, else the talent tree you put most points in, else your class (a priest heals), as Flat UI setup reads it. /flatui status says which you count as, and why. /flatui move places it." },
+		{ key = "hitTableTip", kind = "choice", default = "role", label = "On enemy tooltips",
+			choices = { { "role", "For tanks and damage dealers" }, { "on", "Always" }, { "off", "Off" } },
+			tip = "Adds your hit table to the tooltip of an enemy you can attack: a line for each attack, against that enemy's level (a level shown as ??, or a boss of your level or above, counts as three levels above you). It counts Attacks, Special attacks, Where you stand (a tank counts in front) and Hit cap against a boss below, whatever Hit table under the player frame is set to. The game hides your stats in a fight, so there the numbers are from before it, and a line says so. For tanks and damage dealers leaves the lines out while you count as a healer. Needs Chat and tooltips on." },
 		{ section = "What it shows" },
-		{ key = "hitTableLines", kind = "choice", default = "auto", label = "Attacks", needs = "hitTable", needsIn = { "role", "on" },
+		{ key = "hitTableLines", kind = "choice", default = "auto", label = "Attacks",
 			choices = { { "auto", "By your class and form" }, { "melee", "Melee" }, { "ranged", "Ranged" }, { "spell", "Spells" }, { "all", "Melee, ranged and spells" } },
 			tip = "By your class and form: melee for a warrior or rogue, ranged for a hunter, melee and spells for a paladin or shaman, melee for a druid in Bear or Cat Form and spells out of them, spells for the others. Ranged needs a bow, gun, crossbow, thrown weapon or wand." },
-		{ key = "hitTableSpecial", kind = "bool", default = true, label = "Special attacks", needs = "hitTable", needsIn = { "role", "on" },
+		{ key = "hitTableSpecial", kind = "bool", default = true, label = "Special attacks",
 			tip = "A line for your abilities under your swings: they do not glance or take the dual wield miss. Their crit, as on ranged attacks and spells, is the chance on an attack that lands." },
 		{ key = "hitTableAgainst", kind = "choice", default = "target", label = "Against", needs = "hitTable", needsIn = { "role", "on" },
 			choices = { { "target", "Your target" }, { "boss", "A boss three levels above you" } },
 			tip = "With no enemy targeted, an enemy of your level. A target whose level shows as ?? counts as three levels above you." },
-		{ key = "hitTableFacing", kind = "choice", default = "auto", label = "Where you stand", needs = "hitTable", needsIn = { "role", "on" },
+		{ key = "hitTableFacing", kind = "choice", default = "auto", label = "Where you stand",
 			choices = { { "auto", "Behind, in front while it attacks you" }, { "behind", "Behind" }, { "front", "In front" } },
 			tip = "From the front an enemy can also parry and block. The game does not tell where you stand: the first choice counts you in front while you hold your target's threat, as a tank does." },
-		{ key = "hitTableRules", kind = "choice", default = "classic", label = "Hit cap against a boss", needs = "hitTable", needsIn = { "role", "on" },
+		{ key = "hitTableRules", kind = "choice", default = "classic", label = "Hit cap against a boss",
 			choices = { { "classic", "9% melee, 16% spells (Classic tests)" }, { "game", "8% melee, 17% spells (the game's tooltip)" } },
 			tip = "Tests of Classic found the first 1% of your hit lost against a boss and 1% of spells always missing. The hit tooltip of the character sheet leaves both out. Which holds on WoW: Forever is not known yet." },
 		{ section = "When it shows" },
@@ -2107,6 +2114,12 @@ ns.PAGES = {
 			tip = "What share of your spell damage, spell healing or attack power a spell or ability adds: a cast, a tick or a target, and for weapon abilities their weapon damage and the share of attack power the weapon's speed gives. WoW: Forever's own values, from the game's spell data and tooltips and, where they do not say, from tests in the game (many by wowsims/forever), Blizzard's notes and a few rules of the wowsims/forever simulator. ~ marks an estimate." },
 		{ key = "spellStats", kind = "bool", default = true, label = "With your stats",
 			tip = "How much that share is with your stats now, and the threat your attack power adds. The game withholds your stats in fights: then the numbers are those from before the fight, and a line says so." },
+		-- SpellLines.lua: a total line under the power lines, and a dim line of rates under it (SpellModel.lua works them out, G.Expect gives the
+		-- expected cast with crits and misses).
+		{ key = "spellTotal", kind = "bool", default = true, label = "Total of a cast", needs = "spellPower",
+			tip = "What one cast does now with your stats, base and bonus together, as in Total 973 a cast (556 + 417). A spell over time says its total over its duration and a tick, a channel its whole channel, a heal its healing, and a weapon strike one hit with the weapon you wear." },
+		{ key = "spellRates", kind = "bool", default = true, label = "Average and rates", needs = "spellTotal",
+			tip = "A dim line under the total: what a cast does on average with crits and misses against the enemy Against names under Gear comparison, and that for a second of cast time (the global cooldown for an instant) and for a point of mana. Not for rage or energy." },
 		-- It needs no other row: the gear comparison counts it too, in item tooltips and the window (GearModel.lua), as Against and the rows after it
 		-- serve the window (design 2.5: the low rank factor while its row is on).
 		{ key = "spellLowRank", kind = "bool", default = true, label = "Less for low ranks (estimate)",
@@ -2117,6 +2130,10 @@ ns.PAGES = {
 		{ key = "spellWhen", kind = "choice", default = "always", label = "Show spell lines",
 			choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } },
 			tip = "With a key, the lines come as it goes down over action bars, and in the spell book and over a link once you point at it again. A spell link you click in chat shows them at every choice: the game opens its tooltip only for a plain click and never builds it again as a key goes down." },
+		-- SpellLines.lua, GearLines.lua and GearAvoid.lua: how many dim notes a block of lines keeps (M.Fmt).
+		{ key = "tipDetail", kind = "choice", default = "compact", label = "Notes under the lines",
+			choices = { { "compact", "Compact" }, { "full", "Full" } },
+			tip = "For spell and item tooltips alike. Compact keeps at most one dim line of notes under each block, its notes joined; Full shows every note, such as what a multiplier comes from or why a figure is an estimate." },
 		{ section = "Gear comparison" },
 		{ key = "gear", kind = "bool", default = true, label = "Your spells in item tooltips",
 			tip = "An item you could wear says how it changes the damage, healing or threat of the spells you chose, against what you wear in its slot, before armor, resistances and the talents and buffs your stats do not show, such as talents that turn one stat into another or add crit to one school. On the Character window an item says what it gives. The Gear comparison window shows all of them." },
@@ -2125,6 +2142,10 @@ ns.PAGES = {
 				{ "alt", "While holding Alt" } },
 			tip = "With the game's comparison: while the items you wear show beside the tooltip, which is while you hold Shift with Compare items only while holding Shift on the Tooltips tab. On the Character window, while you hold Shift. An item link you click in chat shows them at every choice: the game opens its tooltip only for a plain click and never builds it again as a key goes down." },
 		{ key = "gearMost", kind = "number", default = 5, min = 1, max = 8, step = 1, unit = " spells", label = "Spells in an item tooltip", needs = "gear" },
+		-- GearLines.lua and GearWindow.lua: the Overall line, from G.Totals and A.Totals (GearModel.lua, GearAvoid.lua).
+		{ key = "gearTotals", kind = "choice", default = "weighted", label = "Overall change",
+			choices = { { "weighted", "Weighted" }, { "off", "Off" } },
+			tip = "One line at the top of an item's lines and of the Gear comparison window with what the item does overall: the change in damage, healing and threat of the spells you chose, each spell counted by its weight (1 unless you set another in the window, from 0 to 5), and Damage taken where avoidance shows. Green is better, red worse, and the best and the worst spell are named in the window." },
 		{ key = "gearAgainst", kind = "choice", default = "auto", label = "Against",
 			choices = { { "auto", "A boss at level 60, else an enemy of your level" }, { "level", "An enemy of your level" }, { "boss", "A boss three levels above you" } },
 			tip = "Misses, dodges, parries, glancing blows and crits counted as the hit table counts them against this enemy, in item tooltips and the window." },
@@ -2138,6 +2159,10 @@ ns.PAGES = {
 		{ key = "gearAvoid", kind = "choice", default = "role", label = "Avoidance",
 			choices = { { "role", "For tanks" }, { "on", "Always" }, { "off", "Off" } },
 			tip = "In item tooltips and the window's Avoidance view: how an item changes the chance that an enemy's swing misses you, is dodged, parried or blocked, crits or crushes, and what your armor and block value take off, against the enemy of Against. For tanks: while your role reads tank, as for the hit table. The rules of misses, crits and crushing blows are the game's; the rest are Classic's, marked ~." },
+		-- GearAvoid.lua (A.Totals): the hit block value is measured against in Damage taken.
+		{ key = "gearSwing", kind = "number", default = 1500, min = 200, max = 6000, step = 100, unit = "", label = "Enemy hit for block value",
+			needs = "gearAvoid", needsIn = { "role", "on" },
+			tip = "Damage taken counts an enemy's swing after misses, dodges, parries, blocks, crits and crushing blows and after your armor. A blocked swing loses your block value, at most the whole hit: this is the size of that hit before armor. Set it near what the enemies you tank hit for. It is an estimate." },
 		{ key = "gearAdd", kind = "list", default = 0, label = "Add a spell", none = "Choose a spell", items = "GearCandidates", pick = "GearAdd",
 			tip = "Your spells Flat UI can work out, and your auto attack, Auto Shot or wand. For one not listed, type /flatui gear add and its name; a shift-clicked spell keeps its rank. Until you add or remove one, your class's main spells for your role are used. The list serves item tooltips and the window." },
 		{ key = "gearRemove", kind = "list", default = 0, label = "Remove a spell", none = "Choose a spell", items = "GearPicked", pick = "GearRemove" },
@@ -2145,8 +2170,25 @@ ns.PAGES = {
 			tip = "Each spell on that bar Flat UI can work out, with the rank on the bar, which counts for a low rank you keep there. Action bar 1 is the one the main bar shows now." },
 		{ key = "gearReset", kind = "list", default = 0, label = "Back to your class's spells", none = "Choose", items = "GearResetLines", pick = "GearResetPick",
 			tip = "Your class's main spells for your role, which follow your role and form until you add or remove one." },
+		{ section = "Gear comparison window" },
 		{ key = "gearOpen", kind = "list", default = 0, label = "Gear comparison window", none = "Choose", items = "GearOpenLines", pick = "GearOpenPick",
-			tip = "Every spell you chose, now and with an item you drop on it. /flatui gear opens it too." },
+			tip = "Every spell you chose, now and with an item you drop on it. /flatui gear opens it too. Drag its bottom right corner to size it, and set each spell's weight for the Overall line there." },
+		-- GearButton.lua: a button of Flat UI's own at the top right of the Character window.
+		{ key = "gearCharButton", kind = "bool", default = true, label = "Button on the Character window", changed = "GearButtonChanged",
+			tip = "A small button at the top right of the Character window opens and closes the Gear comparison window. With an item on the cursor, or one dropped on it, the window compares that item. Right-click opens the item finder." },
+		{ key = "gearWinFont", kind = "number", default = 12, min = 10, max = 16, step = 1, label = "Window text size",
+			tip = "The size of the text in the Gear comparison window." },
+		{ key = "gearWinReset", kind = "list", default = 0, label = "Reset the window", none = "Choose", items = "GearWindowResetLines", pick = "GearWindowResetPick",
+			tip = "Puts the Gear comparison window back at its first size and place." },
+		{ section = "Item finder" },
+		-- GearSearch.lua: the finder docked to the right of the window, over Flat UI's item index (ItemIndex.lua) and the record of Bags.
+		{ key = "gearFind", kind = "list", default = 0, label = "Item finder", none = "Choose", items = "GearFindLines", pick = "GearFindPick",
+			tip = "Opens the Gear comparison window with the item finder beside it: find items by name, slot, armor or weapon type, level and quality, among the armor and weapons of the game, in your bags and bank, or on your other characters. Click one to compare it, right-click to compare against it, Shift-click to link it, Ctrl-click to try it on. The Find button of the window opens it too." },
+		{ key = "gearFindLevel", kind = "choice", default = "near", label = "Levels the finder starts with",
+			choices = { { "near", "Near your level" }, { "any", "Any level" } },
+			tip = "Near your level starts the finder on items you need at most your level + 5 to wear. You can change the levels in the finder." },
+		{ key = "gearFindUsable", kind = "bool", default = true, label = "Only what you can wear",
+			tip = "The finder starts with only the armor and weapon types your class can learn, and items for your class. You can change it in the finder." },
 	},
 	-- Errands.lua and the Errands*.lua files: chores done when the game asks for them. Off by default; on, each row has the choice of a player
 	-- levelling on Forever.
