@@ -962,23 +962,23 @@
    "key": "judgement of command",
    "ranks": [
     {
-     "id": 20425,
+     "id": 20467,
      "level": 20
     },
     {
-     "id": 20962,
+     "id": 20963,
      "level": 30
     },
     {
-     "id": 20961,
+     "id": 20964,
      "level": 40
     },
     {
-     "id": 20967,
+     "id": 20965,
      "level": 50
     },
     {
-     "id": 20968,
+     "id": 20966,
      "level": 60
     }
    ],
@@ -1465,7 +1465,7 @@
    ],
    "class": "SHAMAN",
    "k": "none",
-   "key": "totems of mana",
+   "key": "mana spring totem",
    "ranks": [
     {
      "b": "e",
@@ -1494,7 +1494,17 @@
      "level": 56,
      "mx": 0,
      "v": 0
-    },
+    }
+   ]
+  },
+  {
+   "cite": [
+    "Warcraft Tavern, Classic threat guide (assumed on Forever)"
+   ],
+   "class": "SHAMAN",
+   "k": "none",
+   "key": "mana tide totem",
+   "ranks": [
     {
      "b": "e",
      "id": 16190,
