@@ -29,7 +29,7 @@ local _, ns = ...
 --   table's (ns.HitTableCalc.LineOf, HitTableCalc.lua). The lines of an item the client has not loaded (C_Item.IsItemDataCachedByID) are asked
 --   for (C_Item.RequestLoadItemDataByID) and read again after GET_ITEM_INFO_RECEIVED. Item calls are never secret (research_gear_items.md §1.7).
 -- - Righteous Fury 25780, the one aura of the rules on Forever, read here (design 4.3), not from nameplate threat, whose list is Threat Plates'
---   (PlateThreat.lua:50-53): C_UnitAuras.GetPlayerAuraBySpellID (UnitAuraDocumentation.lua:397-412) answers nothing for an aura the game
+--   (PlateThreat.lua:52-53): C_UnitAuras.GetPlayerAuraBySpellID (UnitAuraDocumentation.lua:397-412) answers nothing for an aura the game
 --   withholds, so a plain aura sets the flag and none found clears it only out of combat (InCombatLockdown), the rule PlateThreat.lua:219-243
 --   follows.
 -- - The level (UnitLevel, UnitDocumentation.lua:2474-2487), the class, and the form: GetShapeshiftFormID has no documentation, so its answer must
@@ -44,13 +44,13 @@ local _, ns = ...
 --   C_Traits.GetConfigInfo(config).treeIDs[1] (:201-215, :1013-1023), C_Traits.GetTreeNodes (:586-600), each node's entries and
 --   C_Traits.GetDefinitionInfo (:248-262, :1034-1046) for their spell; S.state.treeWalked then says so. While C_Traits.ConfigHasStagedChanges
 --   (:107-120) says a pick waits unapplied in the talent window, the ranks found before stay, as MostPoints keeps them (Core.lua:482-489).
--- - The gear's links and the rest: every slot, ammunition 0 to tabard 19 (GetInventoryItemLink, as Items.lua:324-327), the permanent enchant of
---   each link, the temporary enchant of each weapon (C_PaperDollInfo.GetTemporaryEnchantmentInfo, PaperDollInfoDocumentation.lua:226-241, read as
---   ChatTips.lua:134-157 reads it) and so Rockbiter Weapon (its enchants are D.ROCKBITER, design 6.17), whether the off hand holds a shield
+-- - The gear's links and the rest: every slot, ammunition 0 to tabard 19 (GetInventoryItemLink, as Items.lua:322-329 reads it), the permanent
+--   enchant of each link, the temporary enchant of each weapon (C_PaperDollInfo.GetTemporaryEnchantmentInfo, PaperDollInfoDocumentation.lua:226-241,
+--   read as ChatTips.lua:134-157 reads it) and so Rockbiter Weapon (its enchants are D.ROCKBITER, design 6.17), whether the off hand holds a shield
 --   (C_PaperDollInfo.OffhandHasShield, :267-273) and whether the player dual wields (IsDualWielding, PlayerScriptDocumentation.lua:1297-1304).
 --
 -- S.stats is read only while C_Secrets.ShouldUnitStatsBeSecret() is false (SecretPredicateAPIDocumentation.lua:388-396), since every stat call is
--- SecretWhenUnitStatsRestricted (design 4.7), with the time of the read (GetTime). As HitTableCalc.lua counts them (:66-81), a call that raises or
+-- SecretWhenUnitStatsRestricted (design 4.7), with the time of the read (GetTime). As HitTableCalc.lua counts them (:69-81), a call that raises or
 -- an answer the game withholds is withheld and keeps the whole old S.stats, never a mix of two reads; a missing call or a nil answer is none (an
 -- off hand, a ranged weapon or a shield the player does not have). The calls, as the sheet reads them (research_tooltips.md §3.1, PlayerScript-
 -- and UnitDocumentation.lua): GetSpellBonusDamage for schools 2 to 7 (its nil is 0), GetSpellBonusHealing, UnitAttackPower and
@@ -95,7 +95,7 @@ local K = {
 	-- Every equipment slot, ammunition (0) to tabard (19), and the three weapons: main hand, off hand and ranged (INVSLOT_AMMO to INVSLOT_TABARD,
 	-- Blizzard_FrameXMLBase/Constants.lua:135-155). The game keeps temporary enchants on the first two (PaperDollInfoDocumentation.lua:226-241).
 	FIRST_SLOT = 0, LAST_SLOT = 19, AMMO = 0, MAIN = 16, OFF = 17, RANGED = 18, WEAPON_SLOTS = { 16, 17, 18 }, TEMP_SLOTS = { 16, 17 },
-	-- Enum.ItemClass.Weapon and Enum.ItemWeaponSubclass.Dagger (ItemConstantsDocumentation.lua:269-297, 640), and the inventory type of a two-hand
+	-- Enum.ItemClass.Weapon and Enum.ItemWeaponSubclass.Dagger (ItemConstantsDocumentation.lua:269-298, 640), and the inventory type of a two-hand
 	-- weapon (research_gear_items.md §3.1).
 	WEAPON = 2, DAGGER = 15, TWO_HAND = "INVTYPE_2HWEAPON",
 	-- The spell schools GetSpellBonusDamage counts, holy to arcane, as the sheet reads them (Camelot/PaperDollFrame.lua:1072-1107), and Holy.
@@ -255,7 +255,7 @@ local function Plainly(ok, ...)
 end
 
 -- The answers of a stat call: true and the answers; true and none for a client without the call; false when the call raises or the game
--- withholds an answer. As HitTableCalc.lua's Call counts them (HitTableCalc.lua:66-81), a raise or a secret is withheld, and a missing call or a
+-- withholds an answer. As HitTableCalc.lua's Call counts them (HitTableCalc.lua:69-81), a raise or a secret is withheld, and a missing call or a
 -- nil answer is none (design 4.3).
 local function Read(fn, ...)
 	if type(fn) ~= "function" then
@@ -900,9 +900,10 @@ local function NodeRank(config, node, def)
 end
 
 -- The walk of the tree of a set of talents, once a session, for the talents whose node did not answer with their definition: each node's
--- entries to their definition and its spell. Gives { node, def, rank } by the talent's spell.
+-- entries to their definition and its spell. Gives { node, def, rank } by the talent's spell, and how many nodes answered: none means the
+-- client has not loaded the tree yet, so the walk is not spent.
 local function Walk(config, wanted)
-	local found = {}
+	local found, answered = {}, 0
 	local tree = Field(Field(Ask(Api("C_Traits", "GetConfigInfo"), config), "treeIDs"), 1)
 	local nodes = Finite(tree) and Ask(Api("C_Traits", "GetTreeNodes"), tree) or nil
 	local getNode, getEntry, getDef = Api("C_Traits", "GetNodeInfo"), Api("C_Traits", "GetEntryInfo"), Api("C_Traits", "GetDefinitionInfo")
@@ -912,6 +913,9 @@ local function Walk(config, wanted)
 			break
 		end
 		local info = Finite(node) and Ask(getNode, config, node) or nil
+		if Field(info, "ID") == node then
+			answered = answered + 1
+		end
 		local entries = Field(info, "entryIDs")
 		local active, rank = Field(Field(info, "activeEntry"), "entryID"), Field(info, "activeRank")
 		for slot = 1, K.MAX_ENTRIES do
@@ -927,7 +931,7 @@ local function Walk(config, wanted)
 			end
 		end
 	end
-	return found
+	return found, answered
 end
 
 -- The ranks of the talents of D.RULES and D.CRIT, by talent spell (design 4.3). True when one changed.
@@ -957,10 +961,13 @@ local function ReadTalents()
 			end
 		end
 		if next(missing) ~= nil and not S.walked then
-			S.walked, st.treeWalked = true, true
-			S.nodes = Walk(config, missing)
-			for spell, hit in pairs(S.nodes) do
-				talents[spell] = hit.rank
+			local found, answered = Walk(config, missing)
+			-- No node answering means the client has not loaded the tree yet: the walk waits for the next talent event.
+			if answered > 0 then
+				S.walked, S.nodes, st.treeWalked = true, found, true
+				for spell, hit in pairs(found) do
+					talents[spell] = hit.rank
+				end
 			end
 		end
 		S.unstaged[config] = talents
@@ -1296,8 +1303,12 @@ local function TextCheck()
 			part, at = ProbePart(entry)
 		end
 		if part and Knows(id) and LowFactor(row, level) >= 1 then
-			local coef = PartValue(row.c, at) or part[2]
-			local power = part[1] == "heal" and stats.heal or SchoolPower(entry, part, stats)
+			local coef, power = PartValue(row.c, at) or part[2], nil
+			if part[1] == "heal" then
+				power = stats.heal
+			else
+				power = SchoolPower(entry, part, stats)
+			end
 			local base = PartValue(row.bm, at)
 			if Finite(coef) and Finite(power) and base and coef * power >= K.ENOUGH then
 				local text = Ask(Api("C_Spell", "GetSpellDescription"), id)
@@ -1386,6 +1397,18 @@ local function ReadStatsNow()
 	TextCheck()
 end
 
+-- The marked parts of S.state, then the stats while marked: before the stats, so the functions of M.AfterRead see the state of the same moment.
+local function ReadAll()
+	local marks = S.marks
+	if marks.state or marks.talents or marks.gear or marks.role then
+		ReadMarked()
+	end
+	if marks.stats then
+		marks.stats = false
+		ReadStatsNow()
+	end
+end
+
 -- Runs fn while a read runs, so a function that asks again in it gets what is there; an error comes back after the flag is down.
 local function Inside(fn)
 	if S.reading then
@@ -1447,8 +1470,7 @@ local function OnEvent(_, event, ...)
 		Inside(ReadMarked)
 	elseif event == "ADDON_RESTRICTION_STATE_CHANGED" then
 		if S.marks.stats then
-			S.marks.stats = false
-			Inside(ReadStatsNow)
+			Inside(ReadAll)
 		end
 	elseif event == "SPELL_TEXT_UPDATE" then
 		local id = ...
@@ -1466,7 +1488,7 @@ local function OnEvent(_, event, ...)
 	end
 end
 
--- Registers a unit event for the player alone where the client can, else for every unit, as HitTable.lua hears its own (HitTable.lua:1063-1078).
+-- Registers a unit event for the player alone where the client can, else for every unit, as HitTable.lua hears its own (HitTable.lua:1062-1078).
 local function HearUnit(frame, event)
 	S.units[event] = true
 	local ok, done = false, nil
@@ -1674,25 +1696,30 @@ local function SpellName(entry, row)
 	return TitleCase(entry.key)
 end
 
--- The name of a form: its rule's, or for a rule of two forms the name of the spell of its tooltip in the same place (Bear Form, Dire Bear Form).
+-- The name of a rule of a stance or form for the form the player is in: its own, or for a rule of two forms the name of the spell of its tooltip
+-- in the same place (Bear Form, Dire Bear Form). In a list of multipliers a stance is its first word (design 1.2: Defensive x1.8).
+local function FormRuleName(rule, form, full)
+	local name = type(rule.name) == "string" and rule.name or (type(rule.id) == "string" and rule.id) or "?"
+	if type(rule.form) == "table" and type(rule.tip) == "table" then
+		for index, value in ipairs(rule.form) do
+			local spell = value == form and Ask(Api("C_Spell", "GetSpellName"), rule.tip[index]) or nil
+			if Plain(spell, "string") and spell ~= "" then
+				name = spell
+			end
+		end
+	end
+	if not full then
+		name = name:gsub(" Stance$", "")
+	end
+	return name
+end
+
+-- The name of a form, from the class's rule of that stance or form, or nil.
 local function FormName(form, full)
 	local L = Lookups()
 	for _, rule in ipairs(L and L.rules or {}) do
 		if rule.form ~= nil and rule.talent == nil and InSet(rule.form, form) and type(rule.name) == "string" then
-			local name = rule.name
-			if type(rule.form) == "table" and type(rule.tip) == "table" then
-				for index, value in ipairs(rule.form) do
-					local spell = value == form and Ask(Api("C_Spell", "GetSpellName"), rule.tip[index]) or nil
-					if Plain(spell, "string") and spell ~= "" then
-						name = spell
-					end
-				end
-			end
-			-- In a list of multipliers a stance is its first word (design 1.2: Defensive x1.8).
-			if not full then
-				name = name:gsub(" Stance$", "")
-			end
-			return name
+			return FormRuleName(rule, form, full)
 		end
 	end
 	return nil
@@ -2032,7 +2059,7 @@ local function RuleName(rule, state)
 			name = ("%s %d/%d"):format(name, rank, most)
 		end
 	elseif rule.form ~= nil then
-		name = FormName(state.form, false) or name
+		name = FormRuleName(rule, state.form, false)
 	end
 	return name
 end
@@ -2431,8 +2458,12 @@ function M.ThreatLines(entry, rank, state, stats, opts)
 	if opts.stats == false or type(stats) ~= "table" or entry.pet then
 		stats = nil
 	end
+	-- With no threat of its own a spell makes damage threat, or healing threat when it only heals; a paladin's heal of D.HEAL_THREAT, which can
+	-- also deal damage (Holy Shock), shows its heal rule, the one that is special.
 	local t = type(entry.threat) == "table" and entry.threat or nil
-	local kind = t and t.k or (Damages(entry) and "mult") or (Heals(entry) and "heal") or nil
+	local data = ns.SpellData
+	local paladin = type(data) == "table" and type(data.HEAL_THREAT) == "table" and Finite(data.HEAL_THREAT[entry.key])
+	local kind = t and t.k or (paladin and Heals(entry) and "heal") or (Damages(entry) and "mult") or (Heals(entry) and "heal") or nil
 	if not kind then
 		return out
 	end
