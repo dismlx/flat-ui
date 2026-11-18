@@ -202,6 +202,8 @@ ns.SETUP_STEPS = {
 		{ "nameplates.raidMarkerX", "r", "mock-nameplate-marks" },
 		{ "nameplates.raidMarkerY", "r", "mock-nameplate-marks" },
 		{ "nameplates.offscreenIcon", "o", "behaviour", "Shows an arrow at the screen edge for nameplates behind you." },
+		{ "nameplates.overpower", "o", "behaviour", "For a warrior, shows Overpower over an enemy that dodged you, glowing while you can use it." },
+		{ "nameplates.overpowerSize", "r", "behaviour", "Sets the size of the Overpower icon over an enemy's nameplate." },
 	} },
 	{ id = "np-game", area = "Nameplates", title = "Nameplate size, distance and clicks", draw = "mock-nameplate-stack", built = true, rows = {
 		{ "nameplates.showCastBars", "o", "mock-nameplate-stack" },

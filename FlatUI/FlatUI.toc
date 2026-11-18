@@ -26,6 +26,7 @@ PlateThreatLook.lua
 PlateText.lua
 PlateClick.lua
 PlateThreatText.lua
+PlateOverpower.lua
 CombatBurst.lua
 CombatTextSpells.lua
 CombatText.lua

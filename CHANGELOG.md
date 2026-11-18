@@ -1,6 +1,7 @@
 ## 0.5.22
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Nameplates**, **Target and marks**, new row **Overpower on enemy nameplates** (on, warriors only): when an enemy dodges you, Overpower's icon shows above its name, centred, with Flat UI's thin border, at **Overpower icon size** (26). It glows with the calm proc glow of the action buttons while you can use Overpower now, and is grey, dim and still while you cannot: the wrong stance, too little rage, or its cooldown (the global cooldown does not count). It goes when you cast Overpower, when its 5 second window ends, or when the enemy dies or its nameplate goes, and a later dodge of yours moves it. The game does not say whose attack was dodged and the combat log is closed to addons, so a dodge counts as yours when that enemy is your target and you are in melee with it, or when Overpower turns usable within half a second of it (your target first, else the latest dodge). The icon is made on each enemy nameplate out of combat, so a nameplate first seen in a fight gets its icon when the fight ends; `/flatui status` counts those.
 
 ## 0.5.21
 
