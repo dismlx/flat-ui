@@ -112,6 +112,9 @@ GearAvoid.lua
 SpellLines.lua
 GearLines.lua
 GearWindow.lua
+ItemIndex.lua
+GearSearch.lua
+GearButton.lua
 HealthColour.lua
 CastTime.lua
 CastRank.lua
