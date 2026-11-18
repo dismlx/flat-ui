@@ -27,8 +27,9 @@ local _, ns = ...
 -- item (SetHyperlink, :590) come from secure accessors of the game's tooltip data (:488-519), which answer true when they built one.
 -- The numbers are GearModel's, so the window and the item tooltips agree, written as design 2.3 rounds them with SpellModel's M.Fmt, as the item
 -- tooltips write them (Figure, Change, Percent): a cast whole from 100 up and with one decimal below, a second (row.perSecond: dps, a second, or the
--- threat of what rides on the swings) with one decimal, the change in green for a gain, red for a loss and grey for none, with its percent, and ~
--- first for an estimate (the threat's own for a threat figure).
+-- threat of what rides on the swings, which A cast counts a second too since 0.5.25) with one decimal, the change in green for a gain, red for a
+-- loss and grey for none, with its percent, and ~ first for an estimate (the threat's own for a threat figure): Now and With each by its own side,
+-- the change by either.
 -- The item: its name in its quality colour from the link, which needs nothing loaded, else from C_Item.GetItemInfo (WL/apis.yaml:16525) and the
 -- game's colour of its quality (ColorManager.GetColorDataForItemQuality, Blizzard_Colors/Mainline/ColorManager.lua:52-60, which has every quality,
 -- else C_Item.GetItemQualityColor, WL/apis.yaml:16726); its icon from C_Item.GetItemInfoInstant (:16569), which never waits. An item the client has
@@ -62,15 +63,16 @@ local _, ns = ...
 -- line, joined with "; ", and so is the foot; at Full each is a line. While they leave fewer than three lines of the table room, the foot goes, then
 -- the notes.
 -- Overall (0.5.20, chat.gearTotals at Weighted; "totals for threat/avoidance/etc need to be made more easily understood for the total impact of an
--- item over another"): under the item, a line for each slot of the comparison with what the item does overall: GearModel's weighted means of the
--- lines' percent changes (G.Totals) for damage and healing, from the comparison at A cast, or A second while the switch says it, and for threat,
--- from the comparison at Threat for a tank or while the switch says Threat; and, while avoidance shows, GearAvoid's damage taken (A.Totals: what an
--- enemy's swing does after the attack table, armor and block value, as a share of a plain hit), whose change is better when it is less. A figure is
--- green when it is better for the player, red when worse, and grey under 0.05%, with its sign and ~ before an estimate, so colour is never all
--- that says it; a second line names the best and the worst line of them (each total's best and worst). Pointed at, it says how each is worked
--- out. Its Weight column sets how much a line counts (ns.GearSetWeight, GearLines.lua: 0 to 5 in steps of 0.5): a left click adds 0.5, a right
--- click takes 0.5 off, and a Shift-click (IsShiftKeyDown, WL/apis.yaml:40162) gives 1. The colours are those of the lines' style (M.Fmt.Style of
--- SpellModel.lua: label, good, bad), else the window's own, as the item tooltips' Overall line has them.
+-- item over another"; 0.5.25: "this cannot be correct"): under the item, a line for each slot of the comparison with what the item does overall: what
+-- the lines do in a minute with the item against now (GearModel's G.Totals: what rides on the swings or shots for the whole minute, each other line
+-- its share of the minute's global cooldowns by its weight), for damage and healing from the comparison at A cast and for threat from the comparison
+-- at Threat (for a tank, or while the switch says Threat), whatever the switch shows; and, while avoidance shows, GearAvoid's damage taken (A.Totals:
+-- what an enemy's swing does after the attack table, armor and block value, as a share of a plain hit), whose change is better when it is less. A
+-- figure is green when it is better for the player, red when worse, and grey under 0.05%, with its sign and ~ before an estimate that moves it, so
+-- colour is never all that says it; a second line names the best line that gains and the worst that loses among the rows on show, in percent as their
+-- Change says. Pointed at, it says how each is worked out. Its Weight column sets how much a line counts (ns.GearSetWeight, GearLines.lua: 0 to 5 in
+-- steps of 0.5): a left click adds 0.5, a right click takes 0.5 off, and a Shift-click (IsShiftKeyDown, WL/apis.yaml:40162) gives 1. The colours are
+-- those of the lines' style (M.Fmt.Style of SpellModel.lua: label, good, bad), else the window's own, as the item tooltips' Overall line has them.
 -- Against (0.5.20): a second, smaller item box under the item, empty for what the player wears. An item dropped on it, or Compare against in the item
 -- finder (ns.GearWindowAgainst), is what the item is compared with instead: G.Compare and A.Compare take it as opts.base, and the place line says
 -- "instead of" it when the comparison echoes it (result.base), else a note says it was not used. One that does not go in the item's slots (their
@@ -151,7 +153,7 @@ local GROUPS = {
 -- an enemy's swing (GearAvoid.lua), which shows while avoidance shows (A.Wanted).
 local MODES = { { "cast", "A cast" }, { "second", "A second" }, { "threat", "Threat" }, { "avoid", "Avoidance" } }
 local WORD_TIPS = {
-	cast = "What one cast does: its expected damage or healing, or its threat for a line that does no damage. Your auto attack, Auto Shot and wand count one swing or shot.",
+	cast = "What one cast does: its expected damage or healing, or its threat for a line that does no damage. Your auto attack, Auto Shot, wand and seals count a second of your swings or shots, so a slower weapon is not set against a faster one swing for swing.",
 	second = "What a second does: a cast over its cast time (at least the global cooldown), a spell over time over its duration, your swings and shots over their speed. A strike that takes the place of your next swing has none.",
 	threat = "The threat of one cast, and of a second of what rides on your swings and shots (your auto attack, Auto Shot, wand and seals), with your stance, form, Righteous Fury and talents.",
 	avoid = "How often an enemy's swing misses you, is dodged, parried or blocked, crits or crushes, and what your armor and block value take off: now, and with the item in each slot it can take. Avoidance on the Spells and gear tab chooses when it shows.",
@@ -163,9 +165,10 @@ local CAPS = { classic = "9% melee, 16% spells", game = "8% melee, 17% spells" }
 -- The slots by their number (INVSLOT_AMMO to INVSLOT_TABARD), as the comparison names them (design 2.3, 2.4).
 local SLOTS = { [0] = "Ammo", "Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Finger 1", "Finger 2",
 	"Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged", "Tabard" }
--- What a cast is for the comparison kinds whose cast is no spell cast (design 2.3; GearModel.lua's G.Figure): a swing of Attack, a shot of Auto
--- Shot and of Shoot with a wand, a hit of a seal and one proc of a proc, as the name of a line says it at A cast.
-local CASTS = { auto = "a swing", shot = "a shot", wand = "a shot", seal = "a hit", proc = "a proc" }
+-- What a cast is for the comparison kinds whose cast is no spell cast (design 2.3; GearModel.lua's G.Figure): one proc of a proc with no rate, as the
+-- name of a line says it at A cast. What rides on the swings or shots (Attack, Auto Shot, Shoot, the seals, a proc with its rate) counts a second
+-- there since 0.5.25, and says "a second" (Counts).
+local CASTS = { proc = "a proc" }
 -- The forms whose swing a weapon ability counts its attack power at (GetShapeshiftFormID: Cat Form 1, Bear Form 5, Dire Bear Form 8, as D.RULES has
 -- them), the slot of each hand of a weapon part (design 3.2), and the normalized and form speeds when the data gives none (D.MODEL, SpellData.lua).
 local FORMS = { [1] = "cat", [5] = "bear", [8] = "bear" }
@@ -199,6 +202,7 @@ local T = {
 	NEVER = "You cannot wear this item.",
 	NOT_YET = "Not wearable yet.",
 	NOT_YET_LINE = "Not wearable yet: ",
+	NOT_YET_LEVEL = " (the numbers are for you now, at level %d)",
 	NOT_COUNTED_LINE = "Not counted: ",
 	NO_CHANGE = "No change to your chosen spells; stamina, armor, avoidance and mana are not counted.",
 	RANDOM = "Random stats not known.",
@@ -208,12 +212,14 @@ local T = {
 	EMPTY_HANDS = "in your empty hands",
 	BOTH = "both hands",
 	SLOT = "its slot",
-	AGAINST_BOSS = "Against a boss three levels above you, %s; hit cap: %s.",
-	AGAINST_LEVEL = "Against an enemy of your level, %s.",
+	AGAINST_BOSS = "Enemy: a boss three levels above you, %s, hit cap %s.",
+	AGAINST_LEVEL = "Enemy: one of your level, %s.",
 	FRONT = "from the front",
 	BEHIND = "from behind",
-	BEFORE = "Before armor, resistances, and talents and buffs your stats do not show: talents that turn one stat into another or add crit to one school too.",
-	NOT_COUNTED = "Not counted: procs, use effects, set bonuses; enchants as the game's item stats count them.",
+	BEFORE = "Before the enemy's armor and resistances, and without talents and buffs your stats do not show, such as one that turns a stat into another or adds crit to one school.",
+	NOT_COUNTED = "Not counted: procs, use effects and set bonuses.",
+	ENCHANTS = "Enchants count as the game's item stats give them.",
+	SKILLS = "Each weapon counts at the full skill of its line for your level, now and with the item.",
 	ESTIMATE = "~ marks an estimate.",
 	OLD = "Your stats from before the fight.",
 	NO_STATS = "The game has not given your stats yet, so the numbers wait for them.",
@@ -259,12 +265,13 @@ local T = {
 	BEST = "Best",
 	WORST = "Worst",
 	OVERALL_LINES = {
-		"Damage, Healing and Threat: the mean of the percent changes of your lines with the item, each line counted as often as its weight (the Weight column; 0 leaves it out). Damage and healing are at A cast, or A second while the switch says it; threat at Threat.",
+		"Damage, Healing and Threat: what your lines do in a minute with the item against now. Your auto attack, Auto Shot, wand and seals count the whole minute; every other line gets a share of the minute's 40 global cooldowns by its weight (the Weight column; 0 leaves it out, and 2 counts Attack's minute twice). Damage and healing are those of A cast, threat those of Threat, whatever the switch says.",
+		"Best and Worst: the lines on show with the largest gain and loss in percent, as their Change says.",
 		"Damage taken: what an enemy's swing does to you after misses, dodges, parries, blocks, crits, crushing blows and armor, as a share of a plain hit, so less is better. Block value counts against an enemy hit of %s before armor (Enemy hit for block value, an estimate).",
 		"Green is better for you and red worse; ~ marks an estimate.",
 	},
 	WEIGHT_TIP = "Weight %s",
-	WEIGHT_LINES = { "How much this line counts in the Overall line: 0 leaves it out, 5 counts it five times.",
+	WEIGHT_LINES = { "How much this line counts in the Overall line: its share of the minute's casts, or for your swings and shots how many minutes; 0 leaves it out, 5 counts it five times.",
 		"Left-click: +0.5. Right-click: -0.5. Shift-click: back to 1." },
 	NO_WEIGHT = "Gear comparison: the list of spells is not running, so the weight was not changed.",
 	GRIP = "Size",
@@ -1087,7 +1094,8 @@ local function Pick(e, figure)
 	return nil
 end
 
--- What a line counts when it is not what the switch says (design 2.3): a swing, shot, hit or proc for A cast, threat for a line that does no damage,
+-- What a line counts when it is not what the switch says (design 2.3): a second for what rides on the swings or shots and a proc for one with no
+-- rate at A cast, threat for a line that does no damage,
 -- a second for threat that rides on the swings (row.perSecond), and none at A second for a strike that takes the place of the next swing (G.Figure
 -- gives it no figure there). Nil when the switch says it.
 local function Counts(mode, row)
@@ -1102,6 +1110,8 @@ local function Counts(mode, row)
 		return mode ~= "threat" and "threat" or nil
 	elseif figure == "cast" and CASTS[cmp] then
 		return CASTS[cmp]
+	elseif row.perSecond and mode ~= "second" then
+		return "a second"
 	end
 	return nil
 end
@@ -1135,11 +1145,12 @@ local function Level(state)
 end
 
 -- What the comparison counts with: the switch, the version of the list, the rows of the tab (design 4.9), the hit table inputs GearModel read at
--- the last plain read of the stats (G.Inputs) and the item of Against while it goes in the item's slots (base).
+-- the last plain read of the stats (G.Inputs), the item of Against while it goes in the item's slots (base), and every weapon at the full skill of
+-- its line (full), as G.Compare counts it, so the lines with no item show what Now shows with one.
 local function Options(mode)
 	return {
 		mode = mode, listVersion = Ask(ns, "GearListVersion"), against = Opt("gearAgainst"), facing = Opt("gearFacing"), rules = Opt("gearRules"),
-		lowRank = Opt("spellLowRank") ~= false, inputs = Ask(ns.GearModel, "Inputs"), base = W.used,
+		lowRank = Opt("spellLowRank") ~= false, inputs = Ask(ns.GearModel, "Inputs"), base = W.used, full = true,
 	}
 end
 
@@ -1163,6 +1174,7 @@ local function Profile(view, lines, state, stats)
 					row.basis = Text(threat and e.threatBasis or e.basis)
 					row.why = Text(e.why) or (threat and Text(e.threatWhy)) or nil
 					row.estimate = row.basis == "e"
+					row.nowEstimate = row.estimate
 					row.perSecond = row.figure == "second" or row.figure == "dps" or (threat and e.perSecond == true)
 				end
 			end
@@ -1217,6 +1229,11 @@ local function Compared(view, result, lines, state)
 					end
 					row.figure = row.figure or Text(found.figure)
 					row.estimate = row.estimate or found.estimate == true
+					-- Each side marks its own estimate (GearModel.lua's rows), the change either.
+					row.nowEstimate = row.nowEstimate or found.nowEstimate == true
+					if which == 1 then
+						row.withEstimate = found.withEstimate == true
+					end
 					row.perSecond = row.perSecond or found.perSecond == true
 					row.basis = row.basis or Text(found.basis)
 					row.why = row.why or Text(found.why)
@@ -1240,7 +1257,8 @@ local function Note(notes, text, prefix)
 	end
 end
 
--- The dim lines of an item compared (design 2.6): not wearable yet, no change, each line not counted, the bonuses against a kind of creature, random
+-- The dim lines of an item compared (design 2.6): not wearable yet (with the level the numbers are for), each compared weapon line the player has yet
+-- to raise (G.Compare's skills), no change, each line not counted, the bonuses against a kind of creature, random
 -- stats, and why it was not compared when the place line does not say it already. later is what the test of the item tooltips found the item needs
 -- (Wearing), which says it when G.Compare's notYet does not, as for a type the player has yet to learn.
 local function Notes(view, result, later)
@@ -1248,7 +1266,11 @@ local function Notes(view, result, later)
 	if result.notYet == true then
 		Note(notes, T.NOT_YET)
 	else
-		Note(notes, Text(result.notYet) or later, T.NOT_YET_LINE)
+		local yet = Text(result.notYet) or later
+		Note(notes, yet and Finite(view.level) and (yet .. T.NOT_YET_LEVEL:format(view.level)) or yet, T.NOT_YET_LINE)
+	end
+	for _, text in ipairs(type(result.skills) == "table" and result.skills or {}) do
+		Note(notes, text)
 	end
 	if result.noChange == true then
 		Note(notes, T.NO_CHANGE)
@@ -1331,6 +1353,8 @@ end
 
 -- The Overall lines' functions, in a table of their own to keep the file under the client's count of locals.
 local O = {}
+-- A share under which a figure is no change: 0.05%, as M.Fmt.Percent rounds it to 0%.
+O.STILL = 0.0005
 
 -- The first two candidates of a comparison, as the window shows them.
 function O.Firsts(result)
@@ -1380,22 +1404,26 @@ function O.Taken(result, c)
 	return nil
 end
 
--- A figure of the Overall line: its word in the label grey, then its change as a signed percent, ~ first for an estimate, in green when it is
--- better for the player and red when worse, grey under 0.05%.
+-- A figure of the Overall line: its word in the label grey, then its change as a signed percent, ~ first for an estimate that moves (none on a grey
+-- 0%), in green when it is better for the player and red when worse, grey under 0.05%.
 function O.FigureText(word, pct, estimate, better)
-	return HexOf(Styled("label", LABEL)) .. word .. "|r " .. HexOf(ToneColour(ShareTone(pct, better))) .. (estimate and "~" or "") .. Share(pct) .. "|r"
+	local guess = estimate and math.abs(pct) >= O.STILL and "~" or ""
+	return HexOf(Styled("label", LABEL)) .. word .. "|r " .. HexOf(ToneColour(ShareTone(pct, better))) .. guess .. Share(pct) .. "|r"
 end
 
--- Keeps the best and the worst line of a total's figures (each figure's best and worst, G.Totals), with the slot when there are two.
+-- Keeps the best and the worst line of the totals of the rows on show (each figure's best and worst, G.Totals), with the slot when there are two:
+-- the best only when it gains and the worst only when it loses, 0.05% or more.
 function O.Extremes(acc, figures, where)
 	for _, key in ipairs({ "damage", "healing", "threat" }) do
 		local figure = figures[key]
 		if type(figure) == "table" then
 			local best, worst = figure.best, figure.worst
-			if type(best) == "table" and Text(best.name) and Finite(best.pct) and (not acc.best or best.pct > acc.best.pct) then
+			if type(best) == "table" and Text(best.name) and Finite(best.pct) and best.pct >= O.STILL
+				and (not acc.best or best.pct > acc.best.pct) then
 				acc.best = { name = best.name, pct = best.pct, where = where }
 			end
-			if type(worst) == "table" and Text(worst.name) and Finite(worst.pct) and (not acc.worst or worst.pct < acc.worst.pct) then
+			if type(worst) == "table" and Text(worst.name) and Finite(worst.pct) and worst.pct <= -O.STILL
+				and (not acc.worst or worst.pct < acc.worst.pct) then
 				acc.worst = { name = worst.name, pct = worst.pct, where = where }
 			end
 		end
@@ -1408,22 +1436,22 @@ function O.Extreme(word, held)
 	return HexOf(Styled("label", LABEL)) .. word .. "|r " .. name .. " " .. HexOf(ToneColour(ShareTone(held.pct, 1))) .. Share(held.pct) .. "|r"
 end
 
--- The Overall lines of an item (design item 3, chat.gearTotals): for each slot of the comparison its damage, healing and threat (G.Totals: the
--- weighted means of the lines' percent changes; damage and healing at A cast, or A second while the switch says it, threat at Threat for a tank or
--- while the switch says Threat) and, while avoidance shows, damage taken (A.Totals); then the best and the worst line. Nil when there is nothing
--- to say, the row is Off, or the item is not compared.
+-- The Overall lines of an item (design item 3, chat.gearTotals): for each slot of the comparison its damage, healing and threat (G.Totals: what
+-- the lines do in a minute with the item against now; damage and healing those of A cast, threat those of Threat (for a tank, or while the switch
+-- says Threat), whatever the switch shows, 0.5.25) and, while avoidance shows, damage taken (A.Totals); then the best and the worst line of the rows on
+-- show (the comparison of the switch; A cast's under Avoidance). Nil when there is nothing to say, the row is Off, or the item is not compared.
 function O.Overall(view, lines)
 	if not W.link or view.never or Opt("gearTotals") == "off" then
 		return nil
 	end
 	local gear = ns.GearModel
-	local damage = W.mode == "second" and "second" or "cast"
-	local main, threat, avoid
+	local main, threat, avoid, shown
 	if Fn(gear, "Totals") and lines then
-		main = (view.mode == damage and view.result) or Ask(gear, "Compare", W.link, lines, Options(damage))
+		main = (view.mode == "cast" and view.result) or Ask(gear, "Compare", W.link, lines, Options("cast"))
 		if view.role == "tank" or W.mode == "threat" then
 			threat = (view.mode == "threat" and view.result) or Ask(gear, "Compare", W.link, lines, Options("threat"))
 		end
+		shown = (view.mode == "threat" and threat) or (view.mode == "second" and view.result) or main
 	end
 	if Avoiding() then
 		avoid = Ask(ns.GearAvoid, "Compare", W.link, { base = W.used })
@@ -1435,10 +1463,11 @@ function O.Overall(view, lines)
 	local texts, acc, sep = {}, {}, "  " .. FAINT_HEX .. "\194\183|r  "
 	for _, c in ipairs(cands) do
 		local where = #cands > 1 and Where(c) or nil
-		local totals = O.Totals(main, c, lines, damage) or {}
+		local totals = O.Totals(main, c, lines, "cast") or {}
 		local threatTotals = threat and O.Totals(threat, c, lines, "threat") or {}
 		local figures = { damage = totals.damage, healing = totals.healing, threat = threatTotals.threat or totals.threat,
 			taken = avoid and O.Taken(avoid, c) or nil }
+		local onShow = (shown == main and totals) or (shown == threat and threatTotals) or (shown and O.Totals(shown, c, lines, view.mode)) or {}
 		local parts = {}
 		for _, figure in ipairs(FIGURES) do
 			local held = figures[figure[1]]
@@ -1449,16 +1478,18 @@ function O.Overall(view, lines)
 		if #parts > 0 then
 			local head = where and T.OVERALL_SLOT:format(where) or T.OVERALL
 			texts[#texts + 1] = HexOf(Styled("label", LABEL)) .. head .. "|r  " .. table.concat(parts, sep)
-			O.Extremes(acc, figures, where)
+			O.Extremes(acc, onShow, where)
 		end
 	end
+	local extremes = {}
 	if acc.best then
-		local line = O.Extreme(T.BEST, acc.best)
-		local worst = acc.worst
-		if worst and not (worst.name == acc.best.name and worst.where == acc.best.where) then
-			line = line .. sep .. O.Extreme(T.WORST, worst)
-		end
-		texts[#texts + 1] = line
+		extremes[#extremes + 1] = O.Extreme(T.BEST, acc.best)
+	end
+	if acc.worst then
+		extremes[#extremes + 1] = O.Extreme(T.WORST, acc.worst)
+	end
+	if #extremes > 0 then
+		texts[#texts + 1] = table.concat(extremes, sep)
 	end
 	return #texts > 0 and texts or nil
 end
@@ -1743,10 +1774,10 @@ local function CellText(view, row, column)
 	if key == "name" then
 		return RowName(row, view.mode), row.line.known == false and FAINT or PLAIN
 	elseif key == "now" then
-		return Value(row.now, second, row.estimate), Finite(row.now) and PLAIN or FAINT
+		return Value(row.now, second, row.nowEstimate == true), Finite(row.now) and PLAIN or FAINT
 	elseif key == "with" then
 		local with = row.with and row.with[1]
-		return Value(with, second, row.estimate), Finite(with) and PLAIN or FAINT
+		return Value(with, second, row.withEstimate == true), Finite(with) and PLAIN or FAINT
 	elseif key == "weight" then
 		local weight = WeightOf(row.line)
 		return WeightText(weight), weight == 0 and FAINT or (weight == WEIGHT.FIRST and DIM) or PLAIN
@@ -1933,10 +1964,11 @@ local function Against(view)
 	return T.AGAINST_BOSS:format(where, CAPS[rules] or CAPS.classic)
 end
 
--- The foot (design 2.7): against what, what the numbers leave out, the mark of an estimate and the stats of before the fight.
+-- The foot (design 2.7): the enemy, what the numbers leave out, the full weapon skill they count, the enchants, the mark of an estimate and the
+-- stats of before the fight.
 local function FootLines(view)
 	local texts = {}
-	for _, text in ipairs(type(view.foot) == "table" and view.foot or { Against(view), T.BEFORE, T.NOT_COUNTED, T.ESTIMATE }) do
+	for _, text in ipairs(type(view.foot) == "table" and view.foot or { Against(view), T.BEFORE, T.SKILLS, T.NOT_COUNTED, T.ENCHANTS, T.ESTIMATE }) do
 		texts[#texts + 1] = text
 	end
 	if view.noStats then
@@ -1958,9 +1990,15 @@ function B.Joined(texts, full)
 	end
 	local parts = {}
 	for _, text in ipairs(texts) do
-		parts[#parts + 1] = (text:gsub("[%.%s]+$", ""))
+		-- A text cut with "..." keeps its dots (0.5.25: a cut note left "300 Armor,;"); one full stop goes.
+		text = text:gsub("%s+$", "")
+		if text:sub(-3) ~= "..." then
+			text = text:gsub("%.$", "")
+		end
+		parts[#parts + 1] = text
 	end
-	return { table.concat(parts, "; ") .. "." }
+	local joined = table.concat(parts, "; ")
+	return { joined:sub(-3) == "..." and joined or (joined .. ".") }
 end
 
 -- Puts texts on the dim lines of a pool, each wrapping at the width inside the padding, the last saying how many more there are when they do not
@@ -2614,16 +2652,16 @@ function U.WeightTip(slot)
 	Say(slot.weight.button, T.WEIGHT_TIP:format(WeightText(WeightOf(row.line))), T.WEIGHT_LINES)
 end
 
--- Overall's tooltip: how each figure is worked out, damage taken while avoidance shows, with the enemy hit block value counts against (Enemy hit
--- for block value, chat.gearSwing).
+-- Overall's tooltip: how each figure is worked out, and Best and Worst, damage taken while avoidance shows, with the enemy hit block value counts
+-- against (Enemy hit for block value, chat.gearSwing).
 function U.OverallTip()
-	local lines = { T.OVERALL_LINES[1] }
+	local lines = { T.OVERALL_LINES[1], T.OVERALL_LINES[2] }
 	if Avoiding() then
 		local swing, figure = Opt("gearSwing"), Fmt("Figure")
 		swing = Finite(swing) and swing or 1500
-		lines[#lines + 1] = T.OVERALL_LINES[2]:format(figure and figure(swing) or tostring(math.floor(swing)))
+		lines[#lines + 1] = T.OVERALL_LINES[3]:format(figure and figure(swing) or tostring(math.floor(swing)))
 	end
-	lines[#lines + 1] = T.OVERALL_LINES[3]
+	lines[#lines + 1] = T.OVERALL_LINES[4]
 	Say(W.overallBox, T.OVERALL, lines)
 end
 

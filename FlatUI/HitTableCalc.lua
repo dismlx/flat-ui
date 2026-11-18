@@ -25,8 +25,10 @@ local _, ns = ...
 --
 -- C.Inputs reads the game and C.Table works the table out from what it read, reading nothing, so the gear comparison (GearModel.lua) works it out
 -- again with the weapon skill, hit, crit and expertise an item would give, keeping the skill the sheet's crit was read with; it can ask C.Inputs for
--- the kinds its spells roll and for a ranged line with no ranged weapon worn (a paladin's judgements). C.Read is the two in a row. C.LineOf and
--- C.Skill give it the skill line of an item and the skill of a line, and C.Target counts against an enemy of the player's level when it asks.
+-- the kinds its spells roll and for a ranged line with no ranged weapon worn (a paladin's judgements). C.Read is the two in a row. C.LineOf,
+-- C.Skill and C.SkillLine give it the skill line of an item, the skill of a line and its rank, modifier and name (the comparison counts every
+-- compared hand at the most for the level plus the modifier, while the hit table here counts the player's skill as it is), and C.Target counts
+-- against an enemy of the player's level when it asks.
 -- The enemy is the target unless spec.unit names another unit (C.Target, C.Front): HitTableTip.lua works the table out against the unit of an enemy's
 -- tooltip, from inputs it kept, with C.Target and C.Table.
 
@@ -199,23 +201,34 @@ local function Line(read, slot)
 	return LineOf(item)
 end
 
--- The skill of a line, rank plus modifier, or nil when the player has no such line or the game says nothing.
-local function Skill(line)
+-- What the game says of a line: { rank, modifier (race and gear, 0 when none), name (nil when the game gives none) }, or nil when the player has
+-- no such line or the game says nothing (GetSkillLineInfoByID is Nilable, SkillInfoDocumentation.lua:74-87, 111-129).
+local function SkillLine(line)
 	local api = C_SkillInfo
 	if line == nil or type(api) ~= "table" or type(api.GetSkillLineInfoByID) ~= "function" then
 		return nil
 	end
-	local ok, rank, modifier = pcall(function()
+	local ok, rank, modifier, name = pcall(function()
 		local info = api.GetSkillLineInfoByID(line)
 		if IsSecret(info) or type(info) ~= "table" then
-			return nil, nil
+			return nil, nil, nil
 		end
-		return info.rank, info.modifier
+		return info.rank, info.modifier, info.name
 	end)
-	if ok and Finite(rank) then
-		return rank + (Finite(modifier) and modifier or 0)
+	if not (ok and Finite(rank)) then
+		return nil
 	end
-	return nil
+	if IsSecret(name) or type(name) ~= "string" or name == "" then
+		name = nil
+	end
+	return { rank = rank, modifier = Finite(modifier) and modifier or 0, name = name }
+end
+C.SkillLine = SkillLine
+
+-- The skill of a line, rank plus modifier, or nil when the player has no such line or the game says nothing.
+local function Skill(line)
+	local got = SkillLine(line)
+	return got and got.rank + got.modifier or nil
 end
 C.Skill = Skill
 

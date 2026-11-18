@@ -2152,7 +2152,7 @@ ns.PAGES = {
 		-- GearLines.lua and GearWindow.lua: the Overall line, from G.Totals and A.Totals (GearModel.lua, GearAvoid.lua).
 		{ key = "gearTotals", kind = "choice", default = "weighted", label = "Overall change",
 			choices = { { "weighted", "Weighted" }, { "off", "Off" } },
-			tip = "One line at the top of an item's lines and of the Gear comparison window with what the item does overall: the change in damage, healing and threat of the spells you chose, each spell counted by its weight (1 unless you set another in the window, from 0 to 5), and Damage taken where avoidance shows. Green is better, red worse, and the best and the worst spell are named in the window." },
+			tip = "One line at the top of an item's lines and of the Gear comparison window with what the item does overall: the change in what the spells you chose do in a minute, in damage, healing and threat, your swings and shots for the whole minute and each other spell for its share of the global cooldowns by its weight (1 unless you set another in the window, from 0 to 5), and Damage taken where avoidance shows. Green is better, red worse, and the best and the worst spell are named in the window." },
 		{ key = "gearAgainst", kind = "choice", default = "auto", label = "Against",
 			choices = { { "auto", "A boss at level 60, else an enemy of your level" }, { "level", "An enemy of your level" }, { "boss", "A boss three levels above you" } },
 			tip = "Misses, dodges, parries, glancing blows and crits counted as the hit table counts them against this enemy, in item tooltips and the window." },
