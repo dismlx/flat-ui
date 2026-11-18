@@ -31,6 +31,14 @@ local ADDON_NAME, ns = ...
 -- still that name, and the name alone again when the row goes off.
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
+-- With Questie's tracker on and the Questie addon loaded (QuestieSkin.lua), it lays Flat UI's own outlines on Questie's tracker (Questie_BaseFrame,
+-- Questie_HeaderFrame, the lines linePool1 and on, the item buttons Questie_ItemButton1 and on), each a backdrop texture on Questie's frame and edges
+-- on a frame of Flat UI's own, round the frame or round an anchor frame of Flat UI's own on a heading. It follows QuestieTracker.Update with
+-- ns.FollowTable and each line's SetMode with ns.Follow, and writes only what it puts back: the alpha of the pieces of Questie's backdrop
+-- (SetAlpha), the font of Questie's heading and of each line's label (SetFont and SetShadowOffset, through ns.TextStyle), the height of a zone
+-- heading's label (SetHeight), the texture coordinates of the item icons (SetTexCoord) and, in a fight with Opacity in combat, the alpha of
+-- Questie_BaseFrame (SetAlpha). After a change of that look it asks Questie to lay its lines out again (QuestieTracker:Update), out of combat;
+-- it never writes Questie's saved settings.
 -- Combat text is the one module that writes console variables: nine of the game's combat number variables and the switch of its
 -- own text for the player (enableFloatingCombatText), each remembered in FlatUIDB.cvars before its first write and put back when
 -- its page goes off. Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.

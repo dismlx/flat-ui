@@ -1675,6 +1675,10 @@ local function RefreshTracker()
 	if ns.QuestCountRefresh ~= nil then
 		ns.QuestCountRefresh()
 	end
+	-- Questie's tracker takes the same rows (QuestieSkin.lua).
+	if ns.QuestieSkinRefresh ~= nil then
+		ns.QuestieSkinRefresh()
+	end
 end
 
 -- Loot window and loot rolls ----------------------------------------------------------------------------
