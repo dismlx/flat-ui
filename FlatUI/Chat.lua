@@ -4,13 +4,16 @@ local _, ns = ...
 -- hidden; art whose alpha the game leaves alone is made transparent. The flat boxes are textures of the addon's own. What the game sets again
 -- is followed with hooksecurefunc on a global function of the game, with HookScript on GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an ID and a count add and what ChatTips.lua writes, and nothing is created on one in combat. The size of a tooltip, the height of its
--- health bar and the place of the input box are changed out of combat only. The fade of GameTooltip is seen as a fall of its alpha in a frame of the
+-- from the lines the kind of a unit, an ID and a count add, what ChatTips.lua writes and the spell and gear lines of SpellLines.lua and GearLines.lua,
+-- and nothing is created on one in combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of
+-- combat only. The fade of GameTooltip is seen as a fall of its alpha in a frame of the
 -- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
 -- ChatLinks.lua (called at the end of each refresh) also fills GameTooltip from a chat link under the mouse: SetOwner on a frame of its own,
 -- SetHyperlink and Hide, never in a fight. ItemCompare.lua (called at the start of each refresh) writes the game's alwaysCompareItems.
 -- ChatHistory.lua (called at the end of each refresh) keeps recent chat lines for this character and prints them after a reload.
+-- SpellLines.lua and GearLines.lua (called from the post call after ChatTips.lua) add the spell and gear lines, from SpellModel.lua and GearModel.lua
+-- and the data of SpellData.lua, and GearWindow.lua is the Gear comparison window; the three are synced at the end of each refresh.
 -- Tooltips hidden by their kind, by hostility and place, and by the party and raid frames that own them follow the tooltip and the group frames of
 -- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLTooltip/EnhanceQoLTooltip.lua:226-233, 973-977, 1420-1440, 1590-1594,
 -- 1633-1636; EnhanceQoLUnitFrames/UF_GroupFrames.lua:6507-6536). They are hidden as the rows of Tooltips in combat are, with Hide on the tooltip
@@ -1167,6 +1170,14 @@ local function FollowData()
 		if not ns.IsStopped(KEY) then
 			-- ChatTips.lua: the target line, the class line and the icons, before the kind word so that it stays the last line.
 			ns.Each(KEY, ns.ChatTipLines, tooltip, data)
+			-- SpellLines.lua and GearLines.lua: the spell and the gear lines, after the game's own and before the ID and count lines (Extras), so that
+			-- the ID line stays after them. Each runs its work inside ns.EachPart, so a fault there stops that part alone.
+			if type(ns.SpellTipLines) == "function" then
+				ns.Each(KEY, ns.SpellTipLines, tooltip, data)
+			end
+			if type(ns.GearTipLines) == "function" then
+				ns.Each(KEY, ns.GearTipLines, tooltip, data)
+			end
 			ns.Each(KEY, Filled, tooltip, data)
 			ns.Each(KEY, Extras, tooltip, data)
 			ns.Each(KEY, Combat, tooltip, data)
@@ -1479,6 +1490,17 @@ local function Refresh()
 	end
 	if type(ns.ChatHistorySync) == "function" then
 		ns.ChatHistorySync()
+	end
+	-- The spell lines, the gear lines and the Gear comparison window follow the rows just applied, also as the module goes off: the window hides
+	-- then, and takes the look of the Windows page after a change of it (READERS, Core.lua).
+	if type(ns.SpellLinesSync) == "function" then
+		ns.SpellLinesSync()
+	end
+	if type(ns.GearLinesSync) == "function" then
+		ns.GearLinesSync()
+	end
+	if type(ns.GearWindowSync) == "function" then
+		ns.GearWindowSync()
 	end
 end
 
