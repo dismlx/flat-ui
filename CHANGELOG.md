@@ -1,3 +1,8 @@
+## 0.5.23
+
+- For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Gear comparison**: the **Compare gear** button on the Character window could not be clicked. The game raises the Character window above everything in its layer each time it is clicked, which put the button under the window's background and gave its clicks to the window's title bar. The button is now one layer above the window, so it stays on top and clickable.
+
 ## 0.5.22
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.

@@ -4,7 +4,7 @@ local _, ns = ...
 -- (chat.gearCharButton, Spells and gear tab). It is a button of Flat UI's own, FlatUIGearButton, made on UIParent (CreateFrame,
 -- WL/apis.yaml:35213): Flat UI's gear icon left of the words Compare gear, 20 high, in the Windows page look. It is never parented to the
 -- Character window and writes nothing on it: of CharacterFrame it reads whether it shows (IsShown, WL/uiobjects.yaml:7680), where it is (GetRect
--- and GetEffectiveScale, :7307, :7223), its strata and level (GetFrameStrata, GetFrameLevel, :4217, :4209), whether the game protects it
+-- and GetEffectiveScale, :7307, :7223), its strata (GetFrameStrata, :4217), whether the game protects it
 -- (IsProtected, :7487), and the width of its title text (the fields TitleContainer and TitleText, read with rawget; GetStringWidth, :3716).
 -- Where it hangs. By default from the window's top right (SetPoint with CharacterFrame as the frame it hangs from, :7586): on the title bar,
 -- right-aligned 6 clear of the close cross. The window is a PortraitFrameBaseTemplate (Blizzard_UIPanels_Game/Camelot/CharacterFrame.xml:403):
@@ -42,9 +42,11 @@ local _, ns = ...
 -- The look is the Windows page's, as the Gear comparison window has it: the Button and slot colour behind Flat UI's own icon (the TOC's
 -- IconTexture, INV_Misc_Gear_01) cut by Icon crop (SetTexCoord) and the words in GameFontHighlight, a thin border in the general border colour
 -- (ns.Outline, whose page is the Windows page), and the Highlight colour under the cursor. The words are light grey, white under the cursor, and
--- light up in the Highlight colour while the Gear comparison window is open. The button takes the window's strata and a level 520 above the
--- window's, above its title bar, close cross and pane toggle (510: SharedUIPanelTemplates.xml:134, 600; CharacterFrame.xml:553), looked at each
--- time.
+-- light up in the Highlight colour while the Gear comparison window is open. The button is one strata above the window's (MEDIUM: HIGH), looked
+-- at each time, so it is above the window, its title bar, close cross and pane toggle (510: SharedUIPanelTemplates.xml:134, 600;
+-- CharacterFrame.xml:553) and the movers' title strip whatever their levels: the window is toplevel, and the game raises a toplevel frame it is
+-- clicked in above every frame of its strata, this button too were it in that strata, which left the button under the window's background and its
+-- clicks to the title strip (0.5.22, the owner: "unable to click compare gear button").
 -- A fight is InCombatLockdown's answer (WL/apis.yaml:39650), a withheld one counting as a fight. Camelot's CharacterFrame is not protected (it and
 -- its template mark nothing protected, CharacterFrame.xml:403), so the button changes in a fight too. A frame anchored to a protected frame is
 -- protected too, so while the game protects the window in a fight the button is made, anchored, sized, levelled, shown and hidden only after it
@@ -63,8 +65,9 @@ local HEIGHT, WIDE, ICON_SIDE, GAP, ROOM, WORDS_WIDTH = 20, 112, 14, 5, 6, 76
 local X, Y = -34, -1
 -- The least room between the title text and the button before the words fold away.
 local CLEAR = 6
--- Levels above the Character window's own, above its title bar, close cross and pane toggle (510), and the highest level a frame may have.
-local ABOVE, TOP_LEVEL = 520, 9000
+-- The stratas from the lowest, the one above the window's is the button's (never TOOLTIP); and the button's level in it.
+local STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG" }
+local LEVEL = 20
 -- How often the driver looks.
 local EVERY = 0.25
 local FONT = "GameFontHighlight"
@@ -545,15 +548,23 @@ local function Place(frame)
 	return true
 end
 
--- The window's strata, and a level above its own buttons; the game raises a window it is told to (toplevel), so this is looked at each time.
+-- The strata above the window's, at a level of its own: whatever level the game raises the window (toplevel) to, the button stays above it.
+-- The window's strata is looked at each time.
 local function Level(frame)
 	if Blocked(B.button) then
 		return
 	end
 	local okStrata, strata = pcall(frame.GetFrameStrata, frame)
-	local okLevel, level = pcall(frame.GetFrameLevel, frame)
+	local level
 	strata = okStrata and not IsSecret(strata) and type(strata) == "string" and strata or "MEDIUM"
-	level = math.min(TOP_LEVEL, (okLevel and Finite(level) and level or 1) + ABOVE)
+	local above = STRATA[#STRATA]
+	for i, name in ipairs(STRATA) do
+		if name == strata then
+			above = STRATA[math.min(i + 1, #STRATA)]
+			break
+		end
+	end
+	strata, level = above, LEVEL
 	if B.strata ~= strata then
 		B.button:SetFrameStrata(strata)
 		B.strata = strata
