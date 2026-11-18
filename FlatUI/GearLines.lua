@@ -49,28 +49,30 @@ local _, ns = ...
 -- The block: G.Compare(link, lines, opts), or G.Compare(slot, lines, opts) for a worn item (what it gives: now against that slot empty), with the
 -- lines of ns.GearChosen the player knows now and opts.mode "tooltip" and opts.listVersion ns.GearListVersion() (design 4.3); a row's change is with
 -- - now, what the item gives, and its label, slots, empty, offEmpty and perSecond are read as GearModel.lua's header says. Of the slots it gives
--- (rings, trinkets, a dual wielder's one-hand weapon) the tooltip shows the one with the larger mean of the shown lines' percent changes, each
--- weighted by its line's weight, the first the game names on a tie (design 2.4). Written with AddLine and AddDoubleLine, the only writes on a
--- Blizzard frame here, in the one style of SpellModel.lua's M.Fmt.Style (0.5.20): a gold header (the game's NORMAL_FONT_COLOR) that wraps (AddLine's
--- fifth argument), naming what the item replaces, the worn item's name in its quality colour (its link's own colour), and the unit of the plain
--- numbers ("Instead of Band of X (Finger 1), a cast:"); while Overall totals is Weighted (chat.gearTotals), the Overall line: a figure the chosen
--- spells have, each the weighted mean of its rows' percent changes (GearModel.lua's G.Totals, with the lines and their weights), and Damage taken
--- while avoidance shows (GearAvoid.lua's taken of the candidate for the same slots, which A.Compare's candidates carry, else A.Totals), each green
--- when better and red when worse, "Overall Damage +2.4% · Threat +1.1% · Damage taken -2.1%", none when no figure changes; a line per spell
--- (AddDoubleLine), its name light grey (0.82) and the change green for a gain, red for a loss (GREEN_FONT_COLOR, RED_FONT_COLOR) and white for none,
--- with ~ before an estimate; at most Spells in an item tooltip of them; then the block's notes, dim (HitTable.lua:79) and wrapped: "and 2 more:
--- /flatui gear" past the rows shown, never "and 1 more", or the note in place of them when none changes by 0.05% or more, "Not wearable yet:" with
--- the game's requirement, and what is not counted (design 2.3, 2.6), in Compact (chat.tipDetail) joined into one line with "; " between them and in
--- Full each its own. Each block is kept by the item's link (by its slot and link for a worn one), M.Version(), ns.GearListVersion(), A.Stamp and
--- Overall totals, at most 64 and the oldest first out (design 4.6), and all are dropped at each refresh of the module, where a row may have changed.
--- A block is added once for each build of a tooltip, as Chat.lua adds its own lines (Chat.lua:795-806): the game fetches new data for each build and
--- may run the post calls more than once for one, so the same data with the lines of the first call still there is the same build (NumLines). Each
--- AddLine and AddDoubleLine is under pcall, and one the game refuses stops the adding for that build. In a fight, where the game withholds the stats
--- (design 4.7), a block worked out before it shows, else one dim line (InCombatLockdown, and SpellModel's old stats). A reason G.Compare gives shows
--- as one light grey line ("Needs a one-hand weapon; not compared."), but one it marks quiet (ammunition the game does not use for the player, an
--- off-hand weapon for one who does not dual wield) shows nothing. The numbers are rounded as design 2.3 says by SpellModel's M.Fmt, as the window
--- rounds them: a change a cast whole from 100 up and to a tenth below, a second to a tenth and " dps" (Change), the percent to a tenth with its sign,
--- (0%) under 0.05 (Percent), and none while the figure now is 0.
+-- (rings, trinkets, a dual wielder's one-hand weapon) the tooltip shows the one whose shown lines do more in a minute for the figure of the role
+-- (GearModel.lua's G.Totals, as G.Compare picks its best slot; 0.5.25), the first the game names on a tie (design 2.4). Written with AddLine and
+-- AddDoubleLine, the only writes on a Blizzard frame here, in the one style of SpellModel.lua's M.Fmt.Style (0.5.20): a gold header (the game's
+-- NORMAL_FONT_COLOR) that wraps (AddLine's fifth argument), naming what the item replaces, the worn item's name in its quality colour (its link's own
+-- colour), and the unit of the plain numbers ("Instead of Band of X (Finger 1), a cast:"); while Overall totals is Weighted (chat.gearTotals), the
+-- Overall line: a figure the chosen spells have, each what its rows do in a minute with the item against now (GearModel.lua's G.Totals, with the
+-- lines and their weights), and Damage taken while avoidance shows (GearAvoid.lua's taken of the candidate for the same slots, which A.Compare's
+-- candidates carry, else A.Totals), each green when better and red when worse, "Overall Damage +2.4% · Threat +1.1% · Damage taken -2.1%", none when
+-- no figure changes; a line per spell (AddDoubleLine), its name light grey (0.82) and the change green for a gain, red for a loss (GREEN_FONT_COLOR,
+-- RED_FONT_COLOR) and white for none, with ~ before an estimate; at most Spells in an item tooltip of them; then the block's notes, dim
+-- (HitTable.lua:79) and wrapped: "and 2 more: /flatui gear" past the rows shown, never "and 1 more", or the note in place of them when none changes
+-- by 0.05% or more, "Not wearable yet:" with the game's requirement and the level the numbers are for, each compared weapon line the player has yet
+-- to raise (G.Compare's skills: the numbers count every weapon at the full skill of its line), and what is not counted (design 2.3, 2.6), in Compact
+-- (chat.tipDetail) joined into one line with "; " between them, a note cut with "..." keeping its dots, and in Full each its own. Each block is kept
+-- by the item's link (by its slot and link for a worn one), M.Version(), ns.GearListVersion(), A.Stamp and Overall totals, at most 64 and the oldest
+-- first out (design 4.6), and all are dropped at each refresh of the module, where a row may have changed. A block is added once for each build of a
+-- tooltip, as Chat.lua adds its own lines (Chat.lua:795-806): the game fetches new data for each build and may run the post calls more than once for
+-- one, so the same data with the lines of the first call still there is the same build (NumLines). Each AddLine and AddDoubleLine is under pcall, and
+-- one the game refuses stops the adding for that build. In a fight, where the game withholds the stats (design 4.7), a block worked out before it
+-- shows, else one dim line (InCombatLockdown, and SpellModel's old stats). A reason G.Compare gives shows as one light grey line ("Needs a one-hand
+-- weapon; not compared."), but one it marks quiet (ammunition the game does not use for the player, an off-hand weapon for one who does not dual
+-- wield) shows nothing. The numbers are rounded as design 2.3 says by SpellModel's M.Fmt, as the window rounds them: a change a cast whole from 100
+-- up and to a tenth below, a second to a tenth and " a second" (Change; what rides on the swings or shots, as the window's A cast counts it), the
+-- percent to a tenth with its sign, (0%) under 0.05 (Percent), and none while the figure now is 0.
 -- While avoidance shows (Avoidance, chat.gearAvoid; GearAvoid.lua's A.Wanted), the block goes on after the spell block with GearAvoid.lua's lines
 -- for the slot they show (A.TipLines: its own block in the same style; { text, colour, wrap } a line alone and { key, left, right, leftColour,
 -- colour } a figure), Damage taken among them only while the Overall line does not say it, so it shows once, and the note in place of spell rows
@@ -188,16 +190,19 @@ local T = {
 	-- by to show other than 0% (as M.Fmt.Percent rounds).
 	FIGURES = { { "damage", "Damage" }, { "healing", "Healing" }, { "threat", "Threat" } }, TAKEN = "Damage taken", OVERALL = "Overall",
 	SEPARATOR = "  \194\183  ", STILL_PCT = 0.0005,
+	-- The figure each role ranks the slots of an item by (Rank), as GearModel.lua's G.Compare does.
+	ROLE_KIND = { healer = "healing", tank = "threat" },
 	-- The colours of the style while SpellModel.lua's (M.Fmt.Style) cannot be read: the gold header (the game's NORMAL_FONT_COLOR), a figure's
 	-- light grey label and white value, a change better or worse (GREEN_FONT_COLOR, RED_FONT_COLOR) and a dim note.
 	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, good = { 0.1, 1, 0.1 }, bad = { 1, 0.1, 0.1 },
 		dim = { 0.66, 0.68, 0.62 } },
 	-- The notes of a block in Compact are joined into one dim line with this between them (chat.tipDetail).
 	JOIN = "; ",
-	NO_CHANGE = "No change to your chosen spells; stamina, armor, avoidance and mana are not counted.",
+	NO_CHANGE = "No change to your chosen spells; armor, avoidance and mana are not counted.",
 	OUT_OF_COMBAT = "Gear lines show out of combat.",
 	RANDOM = "Random stats not known",
 	NOT_YET = "Not wearable yet: ",
+	NOT_YET_LEVEL = " (the numbers are for you now, at level %d)",
 	-- What a type the player has yet to learn needs, when its line gives no text of the type.
 	LEARN = "an armor or weapon skill you have yet to learn",
 	NOT_COUNTED = "Not counted: ",
@@ -1507,21 +1512,17 @@ local function Share(row)
 	return (row.with - row.now) / math.abs(row.now) * 100
 end
 
--- A line's weight in the Overall line, 1 when it has none.
-local function Weight(line)
-	return WeightOf(type(line) == "table" and line.weight or nil) or T.WEIGHT
-end
-
--- The mean of the shown rows' percent changes, each weighted by its line's weight (0.5.20), by which the tooltip picks the slot to show (design 2.4).
-local function Mean(rows, shown)
-	local sum, count = 0, 0
-	for index = 1, shown do
-		local share, weight = Share(rows[index]), Weight(rows[index].line)
-		if share and weight > 0 then
-			sum, count = sum + share * weight, count + weight
-		end
+-- What a candidate's shown rows do over a minute for the figure of the role (GearModel.lua's G.Totals: healing for a healer, threat for a tank,
+-- damage for the others, else the first there is), as a fraction, by which the tooltip picks the slot to show (design 2.4; 0.5.25, no longer a
+-- mean of the rows' percents); 0 when there is none.
+local function Rank(candidate, role, shown)
+	local G = Gear()
+	local ok, totals = pcall(G and G.Totals, candidate, nil, { limit = shown })
+	if not ok or type(totals) ~= "table" then
+		return 0
 	end
-	return count > 0 and sum / count or 0
+	local total = totals[T.ROLE_KIND[role] or "damage"] or totals.damage or totals.healing or totals.threat
+	return type(total) == "table" and Finite(total.pct) and total.pct or 0
 end
 
 -- True when a row changes by 0.05% or more (by 0.05 when its figure now is 0).
@@ -1619,8 +1620,8 @@ local function LeftName(M, line)
 end
 
 -- One line of the block for a row, in the style: the name light grey, the change green for a gain and red for a loss (white for none), ~ before an
--- estimate, the percent after it. A figure that is a second (row.perSecond: dps, or the threat of what rides on the swings) has one decimal and
--- says so.
+-- estimate, the percent after it. A figure that is a second (row.perSecond: what rides on the swings or shots, or its threat) has one decimal and
+-- says so: " a second", " healing a second" or " threat a second" (0.5.25: one unit for Attack, as the window has it).
 local function RowLine(M, row, role, style)
 	local figure = FigureOf(row, role)
 	local kind = KindOf(row.line)
@@ -1628,7 +1629,7 @@ local function RowLine(M, row, role, style)
 	local change = row.with - row.now
 	local unit = ""
 	if figure == "dps" or (figure == "second" and not T.HEALS[kind]) then
-		unit = " dps"
+		unit = " a second"
 	elseif figure == "second" then
 		unit = " healing a second"
 	elseif figure == "threat" then
@@ -1700,22 +1701,46 @@ local function Header(M, candidate, slot, unit)
 	return ("Instead of %s (%s)"):format(table.concat(names, " and "), where) .. ending
 end
 
--- The notes of what is not counted (design 2.3, 2.6), as texts: G.Compare's notCounted, each said "Not counted:" unless it says so already, its
--- creature-type bonuses (vs) and a random suffix not rolled yet.
-local function Tail(result)
-	local tail = {}
-	for _, text in ipairs(type(result.notCounted) == "table" and result.notCounted or {}) do
-		if type(text) == "string" and text ~= "" then
-			if not text:lower():find("not counted", 1, true) then
-				text = T.NOT_COUNTED .. text
+-- The texts of a list of the result (G.Compare's skills, notCounted or vs: the item's and every slot's) that are not only another slot's than the one
+-- shown (0.5.25, the review: a block's notes are those of its own slot, as its rows are).
+local function Mine(result, shown, field)
+	local list = type(result[field]) == "table" and result[field] or {}
+	local own, others = {}, {}
+	for _, text in ipairs(type(shown) == "table" and type(shown[field]) == "table" and shown[field] or {}) do
+		own[text] = true
+	end
+	for _, candidate in ipairs(type(result.candidates) == "table" and result.candidates or {}) do
+		if candidate ~= shown and type(candidate) == "table" and type(candidate[field]) == "table" then
+			for _, text in ipairs(candidate[field]) do
+				others[text] = not own[text] or nil
 			end
-			tail[#tail + 1] = text
 		end
 	end
-	for _, text in ipairs(type(result.vs) == "table" and result.vs or {}) do
-		if type(text) == "string" and text ~= "" then
-			tail[#tail + 1] = text
+	local out = {}
+	for _, text in ipairs(list) do
+		if type(text) == "string" and text ~= "" and not others[text] then
+			out[#out + 1] = text
 		end
+	end
+	return out
+end
+
+-- The notes of what is not counted (design 2.3, 2.6), as texts: G.Compare's skills (a compared weapon line the player has yet to raise), its
+-- notCounted, each said "Not counted:" unless it says so already, its creature-type bonuses (vs) and a random suffix not rolled yet; those of the
+-- slot shown and the item's own (Mine).
+local function Tail(result, shown)
+	local tail = {}
+	for _, text in ipairs(Mine(result, shown, "skills")) do
+		tail[#tail + 1] = text
+	end
+	for _, text in ipairs(Mine(result, shown, "notCounted")) do
+		if not text:lower():find("not counted", 1, true) then
+			text = T.NOT_COUNTED .. text
+		end
+		tail[#tail + 1] = text
+	end
+	for _, text in ipairs(Mine(result, shown, "vs")) do
+		tail[#tail + 1] = text
 	end
 	local random = result.random
 	if random == true or (type(random) == "string" and random ~= "") then
@@ -1740,7 +1765,7 @@ local function Build(M, result, slot, info)
 		if type(candidate) == "table" then
 			local rows = RowsOf(candidate)
 			local shown = #rows <= most + 1 and #rows or most
-			local mean = Mean(rows, shown)
+			local mean = Rank(candidate, info.role, shown)
 			if #rows > 0 and (best == nil or mean > bestMean + 1e-9) then
 				best, bestRows, bestShown, bestMean = candidate, rows, shown, mean
 			end
@@ -1776,7 +1801,7 @@ local function Build(M, result, slot, info)
 			notes[1] = T.MORE:format(#bestRows - bestShown)
 		end
 	end
-	return { head = head, notes = notes, tail = Tail(result), avoid = {}, slots = best.slots, still = still, candidate = best }
+	return { head = head, notes = notes, tail = Tail(result, best), avoid = {}, slots = best.slots, still = still, candidate = best }
 end
 
 local function SameSlots(a, b)
@@ -1825,18 +1850,19 @@ local function Taken(subject, slots, opts)
 end
 
 -- One figure of the Overall line, as the window writes it: its word in the label's light grey and its change as a share in green when better and
--- red when worse (white for none), ~ before an estimate; lower is better for damage taken.
+-- red when worse (white for none), ~ before an estimate that moves it (none on a 0%); lower is better for damage taken.
 local function OverallFigure(word, pct, estimate, lowerBetter, style)
-	local colour = style.value
-	if math.abs(pct) >= T.STILL_PCT then
+	local colour, moves = style.value, math.abs(pct) >= T.STILL_PCT
+	if moves then
 		colour = ((pct > 0) ~= (lowerBetter == true)) and style.good or style.bad
 	end
-	return Paint(word, style.label) .. " " .. Paint((estimate and "~" or "") .. Signed(pct), colour), math.abs(pct) >= T.STILL_PCT
+	return Paint(word, style.label) .. " " .. Paint((estimate and moves and "~" or "") .. Signed(pct), colour), moves
 end
 
--- The Overall line of the block (0.5.20, Overall totals at Weighted, chat.gearTotals): a figure the chosen spells have, each the weighted mean of
--- its rows' percent changes (GearModel.lua's G.Totals of the candidate shown, with the lines and their weights), and Damage taken while avoidance
--- shows (Taken): "Overall  Damage +2.4%  ·  Threat +1.1%  ·  Damage taken -2.1%". Nil when there is no figure, or none changes.
+-- The Overall line of the block (0.5.20, Overall totals at Weighted, chat.gearTotals): a figure the chosen spells have, each what its rows do in a
+-- minute with the item against now (GearModel.lua's G.Totals of the candidate shown, with the lines and their weights), threat only for a tank (any
+-- other role's lines give threat only for those that do no damage, so it would be Sunder Armor's alone, as the window's, 0.5.25), and Damage taken
+-- while avoidance shows (Taken): "Overall  Damage +2.4%  ·  Threat +1.1%  ·  Damage taken -2.1%". Nil when there is no figure, or none changes.
 local function Overall(candidate, lines, opts, taken, style)
 	local G = Gear()
 	local parts, moved = {}, false
@@ -1846,7 +1872,7 @@ local function Overall(candidate, lines, opts, taken, style)
 			Report(totals, "totals")
 		elseif type(totals) == "table" then
 			for _, figure in ipairs(T.FIGURES) do
-				local total = totals[figure[1]]
+				local total = (figure[1] ~= "threat" or opts.role == "tank") and totals[figure[1]] or nil
 				if type(total) == "table" and Finite(total.pct) and not (Finite(total.n) and total.n <= 0) then
 					local text, moves = OverallFigure(figure[2], total.pct, total.estimate == true, false, style)
 					parts[#parts + 1], moved = text, moved or moves
@@ -1994,7 +2020,8 @@ local function Add(tooltip, data, block, later)
 		notes[#notes + 1] = text
 	end
 	if later then
-		notes[#notes + 1] = T.NOT_YET .. later
+		local level = Ask(UnitLevel, "player")
+		notes[#notes + 1] = T.NOT_YET .. later .. (Finite(level) and T.NOT_YET_LEVEL:format(level) or "")
 	end
 	for _, text in ipairs(block.tail or {}) do
 		notes[#notes + 1] = text
@@ -2005,7 +2032,8 @@ local function Add(tooltip, data, block, later)
 		end
 	elseif #notes > 0 then
 		for index, text in ipairs(notes) do
-			notes[index] = (text:gsub("%.$", ""))
+			-- A note cut with "..." keeps its dots (0.5.25); one full stop goes.
+			notes[index] = text:sub(-3) == "..." and text or (text:gsub("%.$", ""))
 		end
 		One({ text = table.concat(notes, T.JOIN), colour = style.dim, wrap = true })
 	end

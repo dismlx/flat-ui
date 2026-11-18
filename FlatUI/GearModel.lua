@@ -1,13 +1,13 @@
 local _, ns = ...
 
--- The model of the gear comparison, part of Chat and tooltips with no switch of its own (as SpellModel.lua and ChatTips.lua are): which worn items
--- an item would replace, what wearing it changes in the player's stats, and the expected damage, healing and threat of each chosen spell or auto
--- attack now and with it, worked out per cast and per second, deterministic, with no roll and no simulation. GearLines.lua writes its answers in item
+-- The model of the gear comparison, part of Chat and tooltips with no switch of its own (as SpellModel.lua and ChatTips.lua are): which worn items an
+-- item would replace, what wearing it changes in the player's stats, and the expected damage, healing and threat of each chosen spell or auto attack
+-- now and with it, worked out per cast and per second, deterministic, with no roll and no simulation. GearLines.lua writes its answers in item
 -- tooltips and GearWindow.lua in the Gear comparison window. Nothing is drawn, written on a frame or hooked here; no frame is made and no event is
 -- heard. The player's state and stats are SpellModel.lua's (ns.SpellModel: M.State, M.Stats, M.Version, M.Mark, M.AfterRead, M.Highest,
--- M.Multiplier), the attack table is the hit table's (ns.HitTableCalc: C.Inputs, C.Table, C.Target, C.LineOf, C.Skill), the spells' values are
--- SpellData.lua's (ns.SpellData), the chosen spells GearLines.lua's (ns.GearChosen, ns.GearListVersion) and the role Core.lua's (ns.PlayerRole), each
--- looked up when asked, never while the files load.
+-- M.Multiplier), the attack table is the hit table's (ns.HitTableCalc: C.Inputs, C.Table, C.Target, C.LineOf, C.Skill, C.SkillLine), the spells'
+-- values are SpellData.lua's (ns.SpellData), the chosen spells GearLines.lua's (ns.GearChosen, ns.GearListVersion) and the role Core.lua's
+-- (ns.PlayerRole), each looked up when asked, never while the files load.
 --
 -- What it asks the game, in this order. Each call is under pcall and each answer passes ns.IsSecret or ns.Finite before it is compared, added, joined
 -- or used as a key; a call that raises or a secret answer is withheld, and is told apart from none, as HitTableCalc.lua's Call does
@@ -71,25 +71,32 @@ local _, ns = ...
 -- with free counts that share of itself, against an enemy that is not stunned (Judgement of Command's half), an estimate. Threat is damage x T x G +
 -- the landed share x (F + A x attack power) x G, G the multipliers SpellModel.lua finds in force (M.Multiplier); a threat the data marks unknown has
 -- no figure. Haste: a new weapon swings at its own speed x (hasted now / own now) x (1 + h) / (1 + h'), h and h' the haste of the rating worn now and
--- with the item. The absolute numbers are before armor, resistances, and talents and buffs the stats do not show; the percent cancels them. A figure
--- is an estimate when a value it is built from is (design 3.5): a damage or healing figure by its parts, the model and its line of the attack table;
--- a threat figure by the threat's own values and multipliers too, and by the damage it multiplies.
+-- with the item. Every compared hand counts its weapon's line at full skill, the most for the level plus the line's modifier from race and gear, now
+-- and with the item alike (Adjust, 0.5.25: the comparison is between items, not between the player's training states), and a note names a compared
+-- line the player has yet to raise (SkillNotes). The absolute numbers are before armor, resistances, and talents and buffs the stats do not show; the
+-- percent cancels them. A figure is an estimate when a value it is built from is (design 3.5): a damage or healing figure by its parts, the model
+-- and its line of the attack table; a threat figure by the threat's own values and multipliers too, and by the damage it multiplies.
 --
 -- G.Compare's answer, as GearLines.lua and GearWindow.lua read it (design 4.3). Its candidates come in the order the game names them, then by slot,
--- each { slots, label, empty, game, offEmpty, mean, header, notCounted, vs, noChange, rows }: slots the INVSLOT numbers the item would take, label
--- their words ("Finger 1", "both hands"), empty and game as G.Candidates gives them, offEmpty a one-hander over a worn two-hander, whose off hand
--- is left empty. A row is { line, figure, now, with, estimate, basis, perSecond, why }: with is the player with the item in that slot and now the
--- player without it, which for an item to wear is with what the slot holds now and for a worn item (G.Compare(slot), the Character window) with
--- that slot empty, so with - now is what the item gives in both; perSecond says the figure is a second (dps, a second, or the threat of what rides
--- on the swings). why (a row's: why it has no figure, for threat also a threat not known on Forever), each notCounted and vs, notYet and random are
--- the player's words (random may be true), and quiet marks a why no line should show. Every option a caller passes is read: listVersion, mode, data,
--- guid, most, role, against, facing, rules, lowRank, inputs and base; any other is ignored.
--- Against (opts.base, an item link: the window's second item box): each candidate's slot then holds that item instead of what is worn (a two-slot
--- candidate: its main hand; a two-hander there takes both hands), so now is the player with it and with - now is the item instead of it; each
--- slot's change is against what is worn there, so an off hand the item compared against leaves stays worn. A candidate where it does not go is left
--- out (G.BaseSlots), the result echoes base, each candidate carries base and baseSlots, and the header names it ("Instead of <base>"). G.Totals
--- gives what an item does overall: the weighted mean of its rows' changes by damage, healing and threat, with their best and worst lines. S.stats.per[stat].crit and .spellCrit are percent a point, as
--- SpellModel.lua keeps them.
+-- each { slots, label, empty, game, offEmpty, mean, header, notCounted, vs, skills, noChange, rows }: slots the INVSLOT numbers the item would take,
+-- label their words ("Finger 1", "both hands"), empty and game as G.Candidates gives them, offEmpty a one-hander over a worn two-hander, whose off
+-- hand is left empty. A row is { line, figure, now, with, estimate, nowEstimate, withEstimate, basis, perSecond, why }: with is the player with the
+-- item in that slot and now the player without it, which for an item to wear is with what the slot holds now and for a worn item (G.Compare(slot),
+-- the Character window) with that slot empty, so with - now is what the item gives in both; perSecond says the figure is a second (dps, a second, or
+-- the threat of what rides on the swings); estimate marks the change, nowEstimate and withEstimate each side; a next-swing strike's row also carries
+-- the swing it takes the place of (nowSwing, withSwing, nowSwings, withSwings: Rows). mean is the change of the role's figure
+-- over a minute as G.Totals counts it, which picks the best slot. skills holds the notes of compared weapon lines under the most for the level; a
+-- candidate's notCounted, vs and skills are its own slot's, the result's the item's and every candidate's, the best's first. why
+-- (a row's: why it has no figure, for threat also a threat not known on Forever), each notCounted, vs and skills, notYet and random are the player's
+-- words (random may be true), and quiet marks a why no line should show. Every option a caller passes is read: listVersion, mode, data, guid, most,
+-- role, against, facing, rules, lowRank, inputs and base; any other is ignored. G.Compare counts every hand at full skill; G.Expect does with
+-- opts.full (the window passes it, a spell tooltip's rates line does not). Against (opts.base, an item link: the window's second item box): each
+-- candidate's slot then holds that item instead of what is worn (a two-slot candidate: its main hand; a two-hander there takes both hands), so now is
+-- the player with it and with - now is the item instead of it; each slot's change is against what is worn there, so an off hand the item compared
+-- against leaves stays worn. A candidate where it does not go is left out (G.BaseSlots), the result echoes base, each candidate carries base and
+-- baseSlots, and the header names it ("Instead of <base>"). G.Totals gives what an item does overall: what its rows do in a minute by damage, healing
+-- and threat, with and without it, and the best and worst line of each. S.stats.per[stat].crit and .spellCrit are percent a point, as SpellModel.lua
+-- keeps them.
 
 local G = {}
 ns.GearModel = G
@@ -141,6 +148,9 @@ local K = {
 	-- The primary stats, and those whose change needs the client's rates: Strength (attack power, block value), Agility (attack power, ranged attack
 	-- power, crit), Intellect (spell crit). Stamina and Spirit change none of the lines.
 	STAT_NAMES = { "Strength", "Agility", "Stamina", "Intellect", "Spirit" }, RATED = { [1] = true, [2] = true, [4] = true },
+	-- Stamina and Spirit as a note says what they give instead (Notes), and the words of an item's trigger lines in a note (Trigger).
+	UNCOUNTED = { [3] = "your health", [5] = "your regeneration" },
+	TRIGGERS = { use = "use effect", proc = "chance on hit", equip = "equip effect" },
 	-- Seal of Righteousness' hit: its value / 100 x the weapon's speed x 1.2 with a two-hander, 0.85 with a one-hander from 2.0 sec up and 0.2 less a
 	-- second under it (wowsims/forever, MIT: docs/evidence/EV-0059). Seal of Command procs 7 times a minute on white hits that land
 	-- (sim/paladin/seal_of_command.go:81); no other proc's rate is known (Holy Shield's comes with blocks), so another is a cast of one proc.
@@ -192,6 +202,11 @@ local K = {
 	-- The figure a row of G.Totals counts in, by its figure (G.Figure) and the kind of its line, and the weights a line may have (GearLines.lua's
 	-- ns.GearSetWeight: 0 to 5, 1 when it has none).
 	TOTAL_KINDS = { "damage", "healing", "threat" }, WEIGHT_MOST = 5, WEIGHT = 1,
+	-- The minute G.Totals counts, the global cooldown when the data has none (D.MODEL.gcd), the share of a total's change from estimates under which
+	-- the total is no estimate (0.5.25), and the figure each role ranks the slots of an item by (G.Compare's best, the item tooltips' block).
+	MINUTE = 60, GCD = 1.5, GUESSED = 0.1, ROLE_KIND = { healer = "healing", tank = "threat" },
+	-- The note of a compared weapon line the player has yet to raise (SkillNotes): its name, the player's skill and the most for the level.
+	SKILL_NOTE = "%s %d/%d: until you raise it you miss more", SKILL_ANY = "Weapon skill",
 }
 
 -- Reading the game ---------------------------------------------------------------------------------------------------------------------------------
@@ -440,7 +455,9 @@ local function Starts(text, word)
 	return word ~= nil and word ~= "" and text:sub(1, #word) == word
 end
 
--- A line cut to K.SHORT characters, never inside a character of several bytes (a byte from 0x80 to 0xBF goes on with the one before).
+-- A line cut to K.SHORT characters with "...", never inside a character of several bytes (a byte from 0x80 to 0xBF goes on with the one before),
+-- and at the end of a word when one ends in the second half of what is kept, with no comma, colon or dash left before the dots (0.5.25: the owner saw
+-- "300 Armor,;").
 local function Short(text)
 	if #text <= K.SHORT then
 		return text
@@ -453,7 +470,13 @@ local function Short(text)
 		end
 		cut = cut - 1
 	end
-	return text:sub(1, cut) .. "..."
+	local head = text:sub(1, cut)
+	local space = head:match("^.*()%s")
+	if space and space > cut / 2 then
+		head = head:sub(1, space - 1)
+	end
+	head = head:gsub("[%s,;:%-]+$", "")
+	return head .. "..."
 end
 
 -- Items ---------------------------------------------------------------------------------------------------------------------------------------
@@ -757,15 +780,28 @@ local function Explained(text, names)
 	return false
 end
 
+-- A trigger line of an item in the player's words, named after the item so no colon follows "Not counted:" (0.5.25): "Quel'Serrar's chance on hit
+-- (Grants the wielder 13 Defense...)", the rest of the line after the client's word cut to K.SHORT characters (Short).
+local function Trigger(item, text, word, phrase)
+	local rest = Starts(text, word) and (text:sub(#word + 1):gsub("^%s+", "")) or text
+	local name = Text(item.name)
+	if not name then
+		return Short(text)
+	end
+	return ("%s's %s (%s)"):format(name, phrase, Short(rest))
+end
+
 -- What an item's own lines say the model leaves out (the design's 2.6): each "Use:", "Chance on hit:" and set line, and each "Equip:" line no stat
--- of the item explains, cut to K.SHORT characters; whether its random stats are not rolled yet; and the text of its first red requirement that is no
--- class or race (a level, a skill, a reputation: "not wearable yet").
-local function Notes(item, info)
+-- of the item explains, cut to K.SHORT characters at a word, a trigger line named after the item (Trigger); its Stamina and Spirit, which change
+-- none of the lines (K.UNCOUNTED); whether its random stats are not rolled yet; and the text of its first red requirement that is no class or race
+-- (a level, a skill, a reputation: "not wearable yet"). replaced: the item is one a candidate takes the place of (what now holds), so only its
+-- trigger lines are noted, which now leaves out as with leaves out the item's.
+local function Notes(item, info, replaced)
 	local D = Data()
 	if not (D and item) then
 		return
 	end
-	if item.unread then
+	if item.unread and not replaced then
 		AddOnce(info.notCounted, item.unread)
 	end
 	local names = Explaining(item.stats, D)
@@ -775,17 +811,38 @@ local function Notes(item, info)
 		local text = line.left
 		if text then
 			if text == random then
-				info.random = true
-			elseif line.kind == K.ON_USE or line.kind == K.ON_PROC or Starts(text, use) or Starts(text, proc) or SetLine(text) then
-				AddOnce(info.notCounted, Short(text))
-			elseif line.kind == K.ON_EQUIP or Starts(text, equip) then
-				if not Explained(text, names) then
+				info.random = info.random or not replaced
+			elseif SetLine(text) then
+				if not replaced then
 					AddOnce(info.notCounted, Short(text))
 				end
-			elseif line.red and line.kind == K.USAGE and info.notYet == nil and not Match("ITEM_CLASSES_ALLOWED", text)
+			elseif line.kind == K.ON_USE or Starts(text, use) then
+				AddOnce(info.notCounted, Trigger(item, text, use, K.TRIGGERS.use))
+			elseif line.kind == K.ON_PROC or Starts(text, proc) then
+				AddOnce(info.notCounted, Trigger(item, text, proc, K.TRIGGERS.proc))
+			elseif line.kind == K.ON_EQUIP or Starts(text, equip) then
+				if not Explained(text, names) then
+					AddOnce(info.notCounted, Trigger(item, text, equip, K.TRIGGERS.equip))
+				end
+			elseif not replaced and line.red and line.kind == K.USAGE and info.notYet == nil and not Match("ITEM_CLASSES_ALLOWED", text)
 				and not Match("ITEM_RACES_ALLOWED", text) then
 				info.notYet = text
 			end
+		end
+	end
+	if replaced then
+		return
+	end
+	local defs, keys = Table(D.STATS) or {}, {}
+	for key in pairs(Table(item.stats) or {}) do
+		keys[#keys + 1] = key
+	end
+	table.sort(keys)
+	for _, key in ipairs(keys) do
+		local def, amount = Table(defs[key]), Num(item.stats[key])
+		local stat = def and def[1] == "stat" and Num(def[2])
+		if stat and K.UNCOUNTED[stat] and amount and amount ~= 0 then
+			AddOnce(info.notCounted, ("%s %s (%s)"):format(Signed(amount), K.STAT_NAMES[stat], K.UNCOUNTED[stat]))
 		end
 	end
 end
@@ -1464,7 +1521,7 @@ local function Swap(state, stats, item, slots, info)
 end
 
 local function NewInfo()
-	return { notCounted = {}, vs = {} }
+	return { notCounted = {}, vs = {}, skills = {} }
 end
 
 -- Against (opts.base): the item compared against, read as an item to wear, or nil, why in the player's words and whether the game is loading it.
@@ -1480,18 +1537,15 @@ end
 
 -- The state and stats with the item compared against in its slots of a candidate (BaseSlots), and those slots: the "now" of the comparison, so with
 -- - now is the item instead of it; nil where it does not go. Each slot's change is against what is worn there, as an item's is, so with and now
--- differ by the item against the one compared against. info gets what its own lines leave out, named after it; the notes of its stat change are
--- left out, since that change is against what is worn, not against the item compared.
+-- differ by the item against the one compared against. info gets what its trigger lines leave out, named after it (Notes as for an item replaced, so
+-- the notes read the same with Against as without it, 0.5.25); the notes of its stat change are left out, since that change is against what is
+-- worn, not against the item compared.
 local function BaseSwap(state, stats, baseItem, slots, info)
 	local baseSlots = BaseSlots(baseItem.loc, slots)
 	if not baseSlots then
 		return nil
 	end
-	local own = NewInfo()
-	Notes(baseItem, own)
-	for _, text in ipairs(own.notCounted) do
-		AddOnce(info.notCounted, ("%s: %s"):format(baseItem.name, text))
-	end
+	Notes(baseItem, info, true)
 	local stateB, statsB = Swap(state, stats, baseItem, baseSlots, NewInfo())
 	return stateB, statsB, baseSlots
 end
@@ -1594,8 +1648,11 @@ local function Spec(opts, state)
 	if lowRank == nil then
 		lowRank = ns.Get("chat.spellLowRank") ~= false
 	end
-	return { against = against, facing = facing, rules = rules, lowRank = lowRank == true,
-		key = against .. "|" .. facing .. "|" .. rules .. "|" .. tostring(lowRank == true) }
+	-- full: every hand at the full skill of its line (Adjust), as the comparison counts it; without it, the player's skill as it is (a spell
+	-- tooltip's rates line).
+	local full = opts.full == true
+	return { against = against, facing = facing, rules = rules, lowRank = lowRank == true, full = full,
+		key = against .. "|" .. facing .. "|" .. rules .. "|" .. tostring(lowRank == true) .. "|" .. tostring(full) }
 end
 
 -- True while the ranged slot holds a ranged weapon (its skill line one of K.RANGED_LINES), as C.Inputs finds one.
@@ -1666,25 +1723,56 @@ end
 
 -- The table with an item ---------------------------------------------------------------------------------------------------------------------
 
--- The inputs with the target and the facing of the rows, and with an item's change (stats.swap): hit, crit and expertise added; for a hand the
--- change touches (swap.changed), the skill of its weapon's line where the line changes (C.Skill, else the most for the level) and the dual wield of
--- the change; the item's weapon skill added to the line it names. A hand the change does not touch keeps what was read, whatever S.state holds for
--- it. sheetSkill stays as read: the sheet's crit was read with it (HitTableCalc.lua:389-404).
+-- A weapon line at full skill (0.5.25, the owner: the comparison is between items, not between the player's training states): the most for the
+-- level plus the line's modifier from race and gear (C.SkillLine; none when the game says nothing of the line).
+local function Full(C, line, most)
+	local got = Table(Ask(C.SkillLine, line))
+	return most + (got and Num(got.modifier) or 0)
+end
+
+-- The skill a hand counts for a line it changes to: at full skill (Full) for the comparison (spec.full), else the player's (C.Skill), the most for
+-- the level when the game says nothing.
+local function LineSkill(C, line, most, full)
+	if full then
+		return Full(C, line, most)
+	end
+	return Num((Ask(C.Skill, line))) or most
+end
+
+-- The inputs with the target and the facing of the rows, and with an item's change (stats.swap): hit, crit and expertise added. For the comparison
+-- (spec.full) every hand counts its weapon's line at full skill (Full), now and with the item alike, so neither side gains from a line the player has
+-- yet to raise; a spell tooltip's rates line, the hit table HUD and the enemy tooltip's table count the player's skill as it is (C.Skill, C.Read).
+-- For a hand the change touches (swap.changed) the line of its weapon where the line changes (LineSkill) and the dual wield of the change; the
+-- item's weapon skill added to the line it names. A hand the change does
+-- not touch keeps its line as read, whatever S.state holds for it. sheetSkill stays as read: the sheet's crit was read with it (HitTableCalc.lua's
+-- WeaponCrit). melee.moved: the main hand's skill is not that of the line read (EXPECT.auto's estimate).
 local function Adjust(state, stats, inputs, spec, C)
 	local copy = Copy(inputs)
 	local level = Num(inputs.level) or K.MAX_LEVEL
 	local target = Table(Ask(C.Target, spec.against, level))
 	copy.target = target or inputs.target
 	copy.front, copy.facingUnsure = spec.facing == "front", false
+	local most, full = level * 5, spec.full == true
+	local melee, ranged = Table(inputs.melee), Table(inputs.ranged)
+	if melee then
+		local m = Copy(melee)
+		copy.melee = m
+		m.skill = (full and Num(m.skill) and m.line) and Full(C, m.line, most) or m.skill
+		m.offSkill = (full and Num(m.offSkill) and m.offLine) and Full(C, m.offLine, most) or m.offSkill
+	end
+	if ranged then
+		local r = Copy(ranged)
+		copy.ranged = r
+		r.skill = (full and Num(r.skill) and r.line and not r.noWeapon) and Full(C, r.line, most) or r.skill
+	end
 	local swap = Table(stats.swap)
 	if not swap then
 		return copy
 	end
-	local most, changed = level * 5, Table(swap.changed) or {}
-	local melee = Table(inputs.melee)
+	local changed = Table(swap.changed) or {}
 	if melee then
-		local m = Copy(melee)
-		copy.melee = m
+		local m = copy.melee
+		local before = m.skill
 		m.hit = Num(m.hit) and m.hit + swap.hit.melee or nil
 		m.crit = Num(m.crit) and m.crit + swap.crit.melee or nil
 		m.expertise = Num(m.expertise) and m.expertise + swap.expertise or nil
@@ -1692,13 +1780,14 @@ local function Adjust(state, stats, inputs, spec, C)
 			local weapon = Worn(state, K.MAIN)
 			local line = weapon and Num(weapon.line) or (weapon == nil and K.UNARMED or nil)
 			if line and line ~= melee.line then
-				m.line, m.skill = line, Num((Ask(C.Skill, line))) or most
+				m.line, m.skill = line, LineSkill(C, line, most, full)
 			end
 		end
 		if not inputs.feral and (changed[K.MAIN] or changed[K.OFF]) then
 			m.dual = state.dual == true
 		end
 		m.skill = Num(m.skill) and m.skill + (swap.skill[m.line] or 0) or nil
+		m.moved = m.skill ~= before
 		if m.dual then
 			if not melee.dual then
 				-- The off hand's own hit and expertise were not read while one hand swung: the main hand's stand in.
@@ -1707,7 +1796,7 @@ local function Adjust(state, stats, inputs, spec, C)
 			local offWeapon = changed[K.OFF] and Worn(state, K.OFF) or nil
 			local offLine = offWeapon and Num(offWeapon.line)
 			if offLine and (offLine ~= melee.offLine or not melee.dual) then
-				m.offLine, m.offSkill = offLine, Num((Ask(C.Skill, offLine))) or most
+				m.offLine, m.offSkill = offLine, LineSkill(C, offLine, most, full)
 			end
 			m.offSkill = Num(m.offSkill) and m.offSkill + (swap.skill[m.offLine] or 0) or nil
 			m.offHit = Num(m.offHit) and m.offHit + swap.hit.melee or nil
@@ -1716,10 +1805,8 @@ local function Adjust(state, stats, inputs, spec, C)
 			m.offSkill, m.offLine, m.offHit, m.offExpertise = nil, nil, nil, nil
 		end
 	end
-	local ranged = Table(inputs.ranged)
 	if ranged then
-		local r = Copy(ranged)
-		copy.ranged = r
+		local r = copy.ranged
 		r.hit = Num(r.hit) and r.hit + swap.hit.ranged or nil
 		r.crit = Num(r.crit) and r.crit + swap.crit.ranged or nil
 		if not inputs.feral and changed[K.RANGED] then
@@ -1728,7 +1815,7 @@ local function Adjust(state, stats, inputs, spec, C)
 			if line and K.RANGED_LINES[line] then
 				if line ~= ranged.line or ranged.noWeapon then
 					r.line, r.noWeapon, r.unknown = line, nil, nil
-					r.skill = Num((Ask(C.Skill, line))) or most
+					r.skill = LineSkill(C, line, most, full)
 				end
 			elseif weapon == nil and ranged.skill ~= nil then
 				r.line, r.noWeapon, r.unknown, r.skill = nil, true, nil, most
@@ -1758,6 +1845,7 @@ local function TableFor(state, stats, inputs, spec, C, version)
 	end
 	local adjusted = Adjust(state, stats, inputs, spec, C)
 	local read = Table(Ask(C.Table, { special = true, rules = spec.rules }, adjusted)) or { lines = {}, gaps = {}, assumed = {} }
+	read.mainMoved = Field(adjusted.melee, "moved") == true
 	tables[stats] = { key = key, inputs = inputs, state = state, read = read }
 	return read
 end
@@ -2301,7 +2389,7 @@ local function Damage(ctx)
 end
 
 EXPECT.spell, EXPECT.dot, EXPECT.channel, EXPECT.heal, EXPECT.hot = Damage, Damage, Damage, Damage, Damage
-EXPECT.strike, EXPECT.apstrike, EXPECT.finisher = Damage, Damage, Damage
+EXPECT.apstrike, EXPECT.finisher = Damage, Damage
 
 -- One swing of a hand before the table: (weapon mean + attack power / 14 x its own speed + flat) x pct, the off hand's weapon part times its factor.
 local function SwingMean(ctx, slot)
@@ -2317,9 +2405,9 @@ local function SwingMean(ctx, slot)
 	return (weapon + (Num(damage.flat) or 0)) * (Num(damage.pct) or 1)
 end
 
--- Attack: one swing of each hand (a cast) and both hands' damage a second, on the Swing line or the Main and Off lines. Its change is an estimate when
--- the item changes the weapon skill of the main hand: it moves mostly through glancing blows, whose formula Forever has not confirmed against a boss
--- (HitTableCalc.lua:376).
+-- Attack: one swing of each hand (a cast) and both hands' damage a second, on the Swing line or the Main and Off lines (G.Figure shows the second).
+-- Its change is an estimate when the item changes the weapon skill of the main hand (read.mainMoved, Adjust): it moves mostly through glancing
+-- blows, whose formula Forever has not confirmed against a boss (HitTableCalc.lua's Glance).
 function EXPECT.auto(ctx)
 	ctx.perSecond = true
 	local main = FindLine(ctx.read, "main")
@@ -2342,9 +2430,23 @@ function EXPECT.auto(ctx)
 		end
 	end
 	ctx.cast, ctx.second = cast, second
-	local read = Table(ctx.inputs.melee)
-	if ctx.swap and read and Num(main.skill) and main.skill ~= read.skill then
+	if ctx.swap and ctx.read.mainMoved == true then
 		ctx.estimate = true
+	end
+end
+
+-- A weapon strike (Damage); one on the next swing (Heroic Strike, Cleave, Maul, Raptor Strike) also gives the main hand's swing it takes the place of,
+-- after the table (swing, its crits at the plain multiplier), and that hand's swings a second (swings), so Overall counts the strike's gain over
+-- that swing at most once a swing (Minute; 0.5.25, the review: not the strike on top of every swing).
+function EXPECT.strike(ctx)
+	Damage(ctx)
+	if not (ctx.entry.nx and ctx.cast) then
+		return
+	end
+	local m = Num(Field(ctx.model.crit, "swing")) or 2
+	local factor, swing = OnSwing(ctx, FindLine(ctx.read, "main") or FindLine(ctx.read, "swing"), m), SwingMean(ctx, K.MAIN)
+	if factor and swing then
+		ctx.swing, ctx.swings = swing * factor, 1 / Speed(ctx, "main", K.MAIN)
 	end
 end
 
@@ -2596,6 +2698,10 @@ local function Threat(ctx)
 	if ctx.time and ctx.time > 0 and not ctx.entry.nx then
 		ctx.threatSecond = ctx.threat / ctx.time
 	end
+	-- The swing a next-swing strike takes the place of: its damage's threat (Attack's T is 1), by the same multipliers.
+	if ctx.swing then
+		ctx.swingThreat = ctx.swing * G
+	end
 end
 
 -- The rank index and rank of a line: its rank, else its spell ID's, else the highest the player knows (M.Highest), else the last.
@@ -2627,12 +2733,14 @@ local function RankOf(entry, line)
 	return nil
 end
 
--- The expected values of a line (the design's 2.5): { cast, second, threat, threatSecond, basis, why, threatWhy }, for line { entry, rank, id }, with
--- opts { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table inputs (when none, G.Inputs(), or a read
--- asked for while there is none yet). stats may be a copy G.With or G.Without made: its change (swap) goes into the hit table. basis and estimate are
--- those of cast and second, threatBasis and threatEstimate those of threat and threatSecond (design 3.5); perSecond says the figures ride on the swings
--- or shots, so threat is a second too. why is the player's words (K.WHY): a spell it cannot work out, a pet's spell, no data, no stats, no rank, no
--- hit table, or a part of the table the game withheld; threatWhy why threat alone has no figure (a threat not known on Forever: Whirlwind's).
+-- The expected values of a line (the design's 2.5): { cast, second, threat, threatSecond, basis, why, threatWhy, swing, swingThreat, swings }, for
+-- line { entry, rank, id }, with opts { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table inputs
+-- (when none, G.Inputs(), or a read asked for while there is none yet). swing, swingThreat and swings are a next-swing strike's (EXPECT.strike): the
+-- swing it takes the place of, that swing's threat and the main hand's swings a second. stats may be a copy G.With or G.Without made: its change
+-- (swap) goes into the hit table. basis and estimate are those of cast and second, threatBasis and threatEstimate those of threat and threatSecond
+-- (design 3.5); perSecond says the figures ride on the swings or shots, so threat is a second too. why is the player's words (K.WHY): a spell it
+-- cannot work out, a pet's spell, no data, no stats, no rank, no hit table, or a part of the table the game withheld; threatWhy why threat alone has
+-- no figure (a threat not known on Forever: Whirlwind's).
 function G.Expect(line, state, stats, opts)
 	local result = {}
 	line = Table(line)
@@ -2692,14 +2800,16 @@ function G.Expect(line, state, stats, opts)
 	result.threatBasis = ctx.threatEstimate and "e" or ctx.threatBasis
 	result.threatEstimate = ctx.threatEstimate == true
 	result.perSecond = ctx.perSecond == true
+	result.swing, result.swingThreat, result.swings = Num(ctx.swing), Num(ctx.swingThreat), Num(ctx.swings)
 	result.why, result.threatWhy = ctx.why, ctx.threatWhy
 	return result
 end
 
 -- Which figure a line shows (the design's 2.3): "cast", "second", "threat", "dps" or nil, mode "tooltip" or the window's switch ("cast", "second",
 -- "threat"). A tank's line and a line with no damage give "threat" in the tooltip, a line with no damage in every mode; the lines on the swings or
--- shots (Attack, Auto Shot, Shoot, the seals and a proc with its rate) "dps" in the tooltip and "cast" (a swing, shot, hit or proc) or "second" in
--- the window; a next-swing strike nil in "second".
+-- shots (Attack, Auto Shot, Shoot, the seals and a proc with its rate) "dps" in the tooltip and "second" in the window at A cast too (0.5.25: one
+-- unit for them everywhere, so a slower weapon's swing is never set against a faster one's), and their threat is a second; a next-swing strike nil in
+-- "second".
 function G.Figure(line, role, mode)
 	local entry = Table(Field(line, "entry"))
 	local cmp = entry and entry.cmp
@@ -2713,7 +2823,7 @@ function G.Figure(line, role, mode)
 		end
 		return "second"
 	elseif mode == "cast" then
-		return "cast"
+		return OnSwings(entry) and "second" or "cast"
 	elseif role == "tank" then
 		return "threat"
 	elseif OnSwings(entry) then
@@ -2757,8 +2867,10 @@ local function Now(line, state, stats, opts, stamp)
 	return value
 end
 
--- The rows of a candidate: { line, now, with, figure, estimate, basis, perSecond, why } for each chosen line, with the basis of its figure (the
--- threat's for threat), whether its figure is a second and why it has none (for threat also threatWhy). reverse: what a worn item gives, now being
+-- The rows of a candidate: { line, now, with, figure, estimate, nowEstimate, withEstimate, basis, perSecond, why } for each chosen line, with the
+-- basis of its figure (the threat's for threat), whether each side is an estimate and the change is (either side), whether its figure is a second
+-- and why it has none (for threat also threatWhy); a next-swing strike's also nowSwing, withSwing, nowSwings and withSwings, the swing it takes the
+-- place of in its figure and the main hand's swings a second, each side's (G.Expect's swing, swingThreat, swings). reverse: what a worn item gives, now being
 -- the slot empty (or the item compared against there) and with as worn, so with - now reads the same way as for an item to wear. fresh: state and
 -- stats are a copy (the item compared against worn), whose figures are worked out here and not kept as those of now.
 local function Rows(chosen, state, stats, state2, stats2, work, reverse, fresh)
@@ -2775,13 +2887,18 @@ local function Rows(chosen, state, stats, state2, stats2, work, reverse, fresh)
 			end
 			row.now, row.with = FigureOf(worn, figure), FigureOf(other, figure)
 			if figure == "threat" then
-				row.estimate = worn.threatEstimate == true or other.threatEstimate == true
+				row.nowEstimate, row.withEstimate = worn.threatEstimate == true, other.threatEstimate == true
 				row.basis = Worse(worn.threatBasis, other.threatBasis)
 			else
-				row.estimate = worn.estimate == true or other.estimate == true
+				row.nowEstimate, row.withEstimate = worn.estimate == true, other.estimate == true
 				row.basis = Worse(worn.basis, other.basis)
 			end
+			row.estimate = row.nowEstimate or row.withEstimate
 			row.perSecond = figure == "dps" or figure == "second" or (figure == "threat" and (worn.perSecond == true or other.perSecond == true))
+			if (figure == "cast" or figure == "threat") and worn.swings and other.swings then
+				local field = figure == "threat" and "swingThreat" or "swing"
+				row.nowSwing, row.withSwing, row.nowSwings, row.withSwings = worn[field], other[field], worn.swings, other.swings
+			end
 			row.why = worn.why or other.why or (figure == "threat" and (worn.threatWhy or other.threatWhy)) or nil
 		end
 		rows[#rows + 1] = row
@@ -2789,26 +2906,38 @@ local function Rows(chosen, state, stats, state2, stats2, work, reverse, fresh)
 	return rows
 end
 
--- The mean of the rows' changes in percent, of the first limit rows with a figure (the tooltip's shown lines), and whether none changes by
--- K.NONE_UNDER percent or more.
-local function Mean(rows, limit)
-	local sum, count, shown, any, moved = 0, 0, 0, false, false
+-- The rows counted over a minute (G.Totals), defined with the totals below.
+local Minute
+
+-- The change of a candidate in percent, as G.Totals counts it (Minute) for the figure of the role (healing for a healer, threat for a tank where
+-- the mode counts threat, damage for the others and a tank at A cast and A second, else the first there is), which ranks the slots of an item
+-- (0.5.25: no longer the plain mean of the rows' percents); and whether none changes by K.NONE_UNDER percent or more. limit: the rows the tooltip
+-- shows, all of them when there is at most one more (GearLines.lua's Build, so its block and this pick the same slot).
+local function Mean(rows, limit, role, mode)
+	local any, moved, n = false, false, 0
 	for _, row in ipairs(rows) do
-		if row.figure then
-			shown = shown + 1
-			if Finite(row.now) and Finite(row.with) then
-				any = true
-				local change = Change(row)
-				if (change and math.abs(change) >= K.NONE_UNDER) or (row.now == 0 and row.with ~= 0) then
-					moved = true
-				end
-				if change and (not limit or shown <= limit) then
-					sum, count = sum + change, count + 1
-				end
+		if row.figure and Finite(row.now) and Finite(row.with) then
+			any, n = true, n + 1
+			local change = Change(row)
+			if (change and math.abs(change) >= K.NONE_UNDER) or (row.now == 0 and row.with ~= 0) then
+				moved = true
 			end
 		end
 	end
-	return count > 0 and sum / count or nil, any and not moved
+	local sums = Minute(rows, {}, limit and n > limit + 1 and limit or nil)
+	local kind = K.ROLE_KIND[role]
+	if kind == "threat" and mode ~= "threat" and mode ~= "tooltip" then
+		kind = nil
+	end
+	local mean
+	for _, each in ipairs({ kind or "damage", "damage", "healing", "threat" }) do
+		local sum = sums[each]
+		if sum and sum.now ~= 0 then
+			mean = (sum.with - sum.now) / math.abs(sum.now) * 100
+			break
+		end
+	end
+	return mean, any and not moved
 end
 
 -- The header of a candidate: "Instead of <worn item> (<slot>), a cast:", its empty slot, or a one-hander over a two-hander's empty off hand. state is
@@ -2839,10 +2968,45 @@ local function Merge(into, from)
 	end
 end
 
--- An item to wear: each candidate with its rows, the mean of its changes, its header and notes; the best (the larger mean, a tie to the slot the
--- game names first) gives the result's header, notes and noChange. With Against (work.base), each candidate's now is the item compared against in
--- its slots (BaseSwap), and a candidate where it does not go is left out. False when the item or the one compared against is not loaded, so nothing
--- is kept.
+-- The note of each weapon line of a candidate's slots the player has yet to raise to the most for the level (0.5.25), now and with the item:
+-- "Swords 230/275: until you raise it you miss more", in info.skills. The numbers count each line at full skill (Adjust); the name is the game's
+-- (C.SkillLine), else K.SKILL_ANY. Nothing for a druid in a form, whose swings take Feral Combat.
+local function SkillNotes(info, states, slots, inputs)
+	local C = Calc()
+	inputs = Table(inputs) or {}
+	if not C or inputs.feral then
+		return
+	end
+	local most = (Num(inputs.level) or K.MAX_LEVEL) * 5
+	for _, state in ipairs(states) do
+		for _, slot in ipairs(slots) do
+			local weapon = (slot == K.MAIN or slot == K.OFF or slot == K.RANGED) and Worn(state, slot) or nil
+			local line = weapon and Num(weapon.line)
+			local got = line and Table(Ask(C.SkillLine, line))
+			local rank = got and Num(got.rank)
+			if rank and rank < most then
+				AddOnce(info.skills, K.SKILL_NOTE:format(Text(got.name) or K.SKILL_ANY, math.floor(rank), math.floor(most)))
+			end
+		end
+	end
+end
+
+-- What the items a candidate takes the place of leave out (Notes, replaced), named after them, while no item of Against holds the slots.
+local function Replaced(state, slots, info)
+	for _, slot in ipairs(slots) do
+		local link = LinkAt(state, slot)
+		local worn = link and ItemOf(link, nil, slot)
+		if worn then
+			Notes(worn, info, true)
+		end
+	end
+end
+
+-- An item to wear: each candidate with its rows, the change of its role's figure over a minute (Mean), its header and notes; the best (the larger
+-- mean, a tie to the slot the game names first) gives the result's header and noChange, and the result's notes are the item's and every
+-- candidate's, the best's first. With Against (work.base), each candidate's now is the
+-- item compared against in its slots (BaseSwap), and a candidate where it does not go is left out. False when the item or the one compared against is
+-- not loaded, so nothing is kept.
 local function Instead(result, link, opts, chosen, state, stats, work)
 	local data = Table(opts.data)
 	local item, why, quiet = ItemOf(link, data and Field(data, "lines"))
@@ -2874,10 +3038,15 @@ local function Instead(result, link, opts, chosen, state, stats, work)
 		end
 		if nowState then
 			local state2, stats2 = Swap(state, stats, item, candidate.slots, info)
+			if not baseItem then
+				Replaced(state, candidate.slots, info)
+			end
+			SkillNotes(info, { nowState, state2 }, candidate.slots, work.opts.inputs)
 			candidate.base, candidate.baseSlots = work.base, baseSlots
 			candidate.rows = Rows(chosen, nowState, nowStats, state2, stats2, work, false, baseItem ~= nil)
-			candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit)
+			candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit, work.role, work.mode)
 			candidate.header, candidate.notCounted, candidate.vs = Header(candidate, nowState, work.unit), info.notCounted, info.vs
+			candidate.skills = info.skills
 			local index = #result.candidates + 1
 			if best == nil or (candidate.mean ~= nil and (bestMean == nil or candidate.mean > bestMean)) then
 				best, bestMean = index, candidate.mean
@@ -2891,8 +3060,14 @@ local function Instead(result, link, opts, chosen, state, stats, work)
 	end
 	local chosenOne = result.candidates[best]
 	result.best, result.header, result.noChange = best, chosenOne.header, chosenOne.noChange
-	Merge(result.notCounted, chosenOne.notCounted)
-	Merge(result.vs, chosenOne.vs)
+	-- The notes of every slot, the best's first (0.5.25, the review): the window shows two slots, and the item tooltips take only their slot's
+	-- (GearLines.lua's Tail).
+	for at = 0, #result.candidates do
+		local candidate = at == 0 and chosenOne or result.candidates[at]
+		Merge(result.notCounted, candidate.notCounted)
+		Merge(result.vs, candidate.vs)
+		Merge(result.skills, candidate.skills)
+	end
 	return true
 end
 
@@ -2928,9 +3103,10 @@ local function WhatItGives(result, slot, chosen, state, stats, work)
 	else
 		state2, stats2 = Swap(state, stats, nil, slots, result)
 	end
-	local candidate = { slots = slots, label = Label(slots), empty = false, game = true, offEmpty = false, base = work.base }
+	SkillNotes(result, { state, state2 }, slots, work.opts.inputs)
+	local candidate = { slots = slots, label = Label(slots), empty = false, game = true, offEmpty = false, base = work.base, skills = result.skills }
 	candidate.rows = Rows(chosen, state, stats, state2, stats2, work, true, false)
-	candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit)
+	candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit, work.role, work.mode)
 	if baseName then
 		candidate.header = ("What it gives your spells instead of %s, %s:"):format(baseName, work.unit)
 	else
@@ -2993,7 +3169,7 @@ end
 function G.Compare(itemOrSlot, lines, opts)
 	opts = Table(opts) or {}
 	local mode = K.MODES[opts.mode] and opts.mode or "tooltip"
-	local result = { candidates = {}, notCounted = {}, vs = {} }
+	local result = { candidates = {}, notCounted = {}, vs = {}, skills = {} }
 	local M, D, C = Model(), Data(), Calc()
 	if not (M and D and C) then
 		result.why, result.quiet = K.WHY.data, true
@@ -3040,7 +3216,7 @@ function G.Compare(itemOrSlot, lines, opts)
 	end
 	local most = Num(opts.most) or Num(ns.Get("chat.gearMost")) or 5
 	local work = { mode = mode, role = role, unit = K.UNITS[mode], limit = mode == "tooltip" and most or nil, base = base,
-		opts = { against = spec.against, facing = spec.facing, rules = spec.rules, lowRank = spec.lowRank, inputs = inputs },
+		opts = { against = spec.against, facing = spec.facing, rules = spec.rules, lowRank = spec.lowRank, inputs = inputs, full = true },
 		stamp = table.concat({ tostring(Ask(M.Version)), spec.key, tostring(inputs), tostring(stats), tostring(state) }, "|") }
 	local chosen = Chosen(lines)
 	local keep
@@ -3116,13 +3292,86 @@ local function LineName(line)
 	return Text(Field(line, "name")) or (entry and Text(entry.key)) or "?"
 end
 
--- What an item does overall (item 3 of the 0.5.20 brief): { damage = Tot, healing = Tot, threat = Tot }, a figure left out where no row counts in it,
--- Tot = { pct, n, estimate, best = { name, pct }, worst = { name, pct } }. pct is the weighted mean of the rows' changes as a fraction (0.024 is
--- +2.4%), each row's change (with - now) / |now| as G.Compare's mean takes it, weighted by its line's weight (lines: the chosen lines whose weights
--- count, ns.GearChosen()'s records; else the row's own line's; 1 when none; 0 leaves the line out); a row with no figure, or none now, is skipped.
--- n is the rows counted, estimate whether one of them is an estimate, best and worst the counted rows of the largest and the smallest change (the
--- first on a tie). candidate: one of G.Compare's candidates, or its result (its best candidate). opts.limit: only the first limit rows with a figure
--- count, as the tooltip shows them (G.Compare's mean); none, all.
+-- A cast row's minute (Minute): its value each use; a next-swing strike's (its swing known, Rows) its gain over the main hand's swing it takes the
+-- place of, at most once a swing (0.5.25, the review: the minute's swings count whole already, so the strike is not counted on top of one).
+local function Uses(value, swing, swings, uses)
+	if Finite(swing) and Finite(swings) and swings > 0 then
+		return (value - swing) * math.min(uses, K.MINUTE * swings)
+	end
+	return value * uses
+end
+
+-- The rows counted over a minute (0.5.25, the owner: Overall is the item's total effect, not a mean that sets a swing's percent beside a strike's
+-- as if they were equal). A row that is a second (row.perSecond: what rides on the swings or shots, and threat of it) counts K.MINUTE of its
+-- seconds; each other row an even share of the minute's global cooldowns (K.MINUTE / D.MODEL.gcd casts) among the rows of its figure that are not a
+-- second (so a heal line or Sunder Armor's threat does not thin the damage lines' casts), a next-swing strike its gain over the swing it takes the
+-- place of (Uses). A row's weight (lines' weights, else its own line's, K.WEIGHT when none; 0 leaves it out) then multiplies what it counts, so the
+-- weights are relative: 2 counts that row twice, and the same weight on every row changes nothing. By kind (TotalKind): { now, with, moved,
+-- guessed, n, best, worst }: now and with what the rows do in the minute, moved the size of their changes summed, guessed that of the rows that are
+-- estimates, n the rows counted, best and worst the rows of the largest and the smallest change in percent, { name, pct } (the first on a tie),
+-- among every row on show, one of weight 0 too. Only rows with a figure and now and with known count. limit: only the first limit of them (the
+-- tooltip's shown lines).
+function Minute(rows, weights, limit)
+	local gcd = Num(Field(Field(Data(), "MODEL"), "gcd")) or K.GCD
+	local counted, casts, shown, sums = {}, {}, 0, {}
+	for _, row in ipairs(rows) do
+		if Table(row) and row.figure and Finite(row.now) and Finite(row.with) then
+			shown = shown + 1
+			if not limit or shown <= limit then
+				local line = Table(row.line)
+				local exact, key = LineKey(line)
+				local weight = (line and weights[line]) or (exact and weights[exact]) or (key and weights[key]) or WeightOf(Field(line, "weight"))
+					or K.WEIGHT
+				local kind = TotalKind(row)
+				local sum = sums[kind] or { now = 0, with = 0, moved = 0, guessed = 0, n = 0 }
+				sums[kind] = sum
+				local change = Change(row)
+				if change then
+					local pct = change / 100
+					if not sum.best or pct > sum.best.pct then
+						sum.best = { name = LineName(line), pct = pct }
+					end
+					if not sum.worst or pct < sum.worst.pct then
+						sum.worst = { name = LineName(line), pct = pct }
+					end
+				end
+				if weight > 0 then
+					counted[#counted + 1] = { row = row, weight = weight, kind = kind }
+					if row.perSecond ~= true then
+						casts[kind] = (casts[kind] or 0) + 1
+					end
+				end
+			end
+		end
+	end
+	for _, one in ipairs(counted) do
+		local row, weight = one.row, one.weight
+		local now, with
+		if row.perSecond == true then
+			now, with = row.now * K.MINUTE * weight, row.with * K.MINUTE * weight
+		else
+			local uses = K.MINUTE / gcd / casts[one.kind]
+			now = Uses(row.now, row.nowSwing, row.nowSwings, uses) * weight
+			with = Uses(row.with, row.withSwing, row.withSwings, uses) * weight
+		end
+		local sum = sums[one.kind]
+		local moved = math.abs(with - now)
+		sum.now, sum.with, sum.moved, sum.n = sum.now + now, sum.with + with, sum.moved + moved, sum.n + 1
+		if row.estimate == true then
+			sum.guessed = sum.guessed + moved
+		end
+	end
+	return sums
+end
+
+-- What an item does overall (item 3 of the 0.5.20 brief, a minute since 0.5.25): { damage = Tot, healing = Tot, threat = Tot }, a figure left out
+-- where no row counts in it or the rows do nothing now, Tot = { pct, now, with, n, estimate, best = { name, pct }, worst = { name, pct } }. now and
+-- with are what the rows do in a minute (Minute: a second's row for the whole minute, each other row an even share of the global cooldowns, a
+-- next-swing strike its gain over the swing it takes the place of, each times its weight; lines: the chosen lines whose weights count,
+-- ns.GearChosen()'s records), pct the change of with against now as a fraction (0.024 is +2.4%). n is the rows counted; estimate says the rows that
+-- are estimates make K.GUESSED or more of the minute's change; best and worst the rows on show of the largest and the smallest change in percent,
+-- weight 0 too. candidate: one of G.Compare's candidates, or its result (its best candidate). opts.limit: only the
+-- first limit rows with a figure count, as the tooltip shows them; none, all.
 function G.Totals(candidate, lines, opts)
 	local out = {}
 	candidate, opts = Table(candidate), Table(opts) or {}
@@ -3133,36 +3382,12 @@ function G.Totals(candidate, lines, opts)
 	if not rows then
 		return out
 	end
-	local weights, limit = Weights(lines), Num(opts.limit)
-	local sums, shown = {}, 0
-	for _, row in ipairs(rows) do
-		if Table(row) and row.figure then
-			shown = shown + 1
-			local change = Change(row)
-			local line = Table(row.line)
-			local exact, key = LineKey(line)
-			local weight = (line and weights[line]) or (exact and weights[exact]) or (key and weights[key]) or WeightOf(Field(line, "weight"))
-				or K.WEIGHT
-			if change and weight > 0 and (not limit or shown <= limit) then
-				local kind, pct = TotalKind(row), change / 100
-				local sum = sums[kind] or { total = 0, weight = 0, n = 0, estimate = false }
-				sums[kind] = sum
-				sum.total, sum.weight, sum.n = sum.total + pct * weight, sum.weight + weight, sum.n + 1
-				sum.estimate = sum.estimate or row.estimate == true
-				local name = LineName(line)
-				if not sum.best or pct > sum.best.pct then
-					sum.best = { name = name, pct = pct }
-				end
-				if not sum.worst or pct < sum.worst.pct then
-					sum.worst = { name = name, pct = pct }
-				end
-			end
-		end
-	end
+	local sums = Minute(rows, Weights(lines), Num(opts.limit))
 	for _, kind in ipairs(K.TOTAL_KINDS) do
 		local sum = sums[kind]
-		if sum and sum.weight > 0 then
-			out[kind] = { pct = sum.total / sum.weight, n = sum.n, estimate = sum.estimate, best = sum.best, worst = sum.worst }
+		if sum and sum.now ~= 0 then
+			out[kind] = { pct = (sum.with - sum.now) / math.abs(sum.now), now = sum.now, with = sum.with, n = sum.n,
+				estimate = sum.guessed > 0 and sum.guessed >= K.GUESSED * sum.moved, best = sum.best, worst = sum.worst }
 		end
 	end
 	return out
