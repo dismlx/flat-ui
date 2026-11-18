@@ -105,6 +105,12 @@ ChatTips.lua
 ChatLinks.lua
 ItemCompare.lua
 ChatHistory.lua
+SpellData.lua
+SpellModel.lua
+GearModel.lua
+SpellLines.lua
+GearLines.lua
+GearWindow.lua
 HealthColour.lua
 CastTime.lua
 CastRank.lua

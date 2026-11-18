@@ -1454,7 +1454,8 @@ AREAS = [
     ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
         BagsLayout BagsWindow BagsBank BagsTooltip Windows ItemMarks CharacterDurability Hud MapButtons
         AuraTime XpStats XpBar QuestCount MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable Chat ChatText
-        ChatTips ChatLinks ItemCompare ChatHistory Movers MoversMode MoversSnap Tooltip"""),
+        ChatTips ChatLinks ItemCompare ChatHistory SpellData SpellModel GearModel SpellLines GearLines GearWindow
+        Movers MoversMode MoversSnap Tooltip"""),
     ("errands", "Errands, panels and world", """Sparkle SparkleGlow CameraZoom CursorRing MountKey Errands ErrandsMerchant
         ErrandsLoot ErrandsTrainer ErrandsPopups ErrandsSocial ErrandsQuests ErrandsRanks ErrandsLevelling
         ErrandsNavigation ErrandsBulkBuy ConsumableData Consumables DataPanels DataStreams"""),
