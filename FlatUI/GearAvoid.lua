@@ -55,12 +55,29 @@ local _, ns = ...
 -- as not counted. A worn item (the Character window) is the table with it against the table with its slot empty (G.Without), so the change is what it
 -- gives. A total that rests on an estimate is marked ~, its change is not: the change of a row the roll does not cut is the client's own sum.
 --
--- A.Compare(link or slot, opts) gives { header, attacker, boss, now, candidates = { { label, slots, empty, offEmpty, game, notCounted, rows = { {
--- key, label, now, with, nowEstimate, withEstimate, estimate, better } } } }, notCounted, why, quiet, old }, kept by the link (or the slot and the
--- link worn there), M.Version(), the snapshot's version and the attacker's level, 64 at most and the oldest first out; in a fight, the last result
--- for the item, marked old. opts: data (the post call's, for its lines and guid) and guid. A.Now() gives the table now, A.Wanted() whether avoidance
--- shows (Avoidance, chat.gearAvoid, at Always, or at For tanks, its first choice, while ns.PlayerRole's first answer is tank), A.TipLines and
--- A.Window the lines of GearLines.lua and the view of GearWindow.lua, and A.Stamp a text that changes with what they are built from.
+-- Against (opts.base, an item link: the window's second item box, GearWindow.lua): each candidate's slot holds that item instead of what is worn,
+-- where it goes (GearModel.lua's G.BaseSlots: the candidate's first slot, both hands for a two-hander), so the table with it is the candidate's now
+-- and the change is the item instead of it; G.With puts it there as it puts the item. A worn item with Against: the table with that item in its
+-- slot against the table now. The header then names it, from its link's own colour and name, else the game's name (C_Item.GetItemInfo,
+-- ItemDocumentation.lua:626-657).
+--
+-- Damage taken (item 3 of the 0.5.20 brief), so one number says what the rows mean together: the expected damage of one enemy swing after the
+-- table (missed, dodged and parried 0; blocked 1 - min(1, block value / the enemy's hit); critical 2; crushing 1.5; a normal hit 1), times what
+-- armor leaves, as a share of a plain hit; with an item, its change is with / now - 1, negative being better. The enemy's hit before armor that block
+-- value is measured against is the row Enemy hit for block value (chat.gearSwing, 1,500), an estimate, so a figure with a block is marked ~; so is
+-- one where the game gave no armor reduction (armor then counts none). Crit 2 and crushing 1.5 are the brief's; the game's data does not show them.
+--
+-- A.Compare(link or slot, opts) gives { header, attacker, boss, now, base, candidates = { { label, slots, empty, offEmpty, game, notCounted, base,
+-- baseSlots, taken, avoided, rows = { { key, label, now, with, nowEstimate, withEstimate, estimate, better } } } }, notCounted, why, quiet, old },
+-- kept by the link (or the slot and the link worn there), base, M.Version(), the snapshot's version, the attacker's level and the enemy's hit, 64 at
+-- most and the oldest first out; in a fight, the last result for the item and base, marked old. opts: data (the post call's, for its lines and guid),
+-- guid and base. A.Totals(candidate) gives { taken = { now, with, pct, estimate }, avoided = { now, with } } (a candidate's taken and avoided are
+-- these), A.Now() the table now, A.Wanted() whether avoidance shows (Avoidance, chat.gearAvoid, at Always, or at For tanks, its first choice, while
+-- ns.PlayerRole's first answer is tank), A.TipLines and A.Window(link, base) the lines of GearLines.lua and the view of GearWindow.lua, and A.Stamp a
+-- text that changes with what they are built from. The lines follow the one style of the spell and gear lines (SpellModel.lua's M.Fmt.Style, looked
+-- up when they are built): a gold header only where more than one line follows, a double line a figure (the label light grey, the change green or
+-- red with its sign, the total white, ~ before an estimate), and the notes dim, joined in one line at Compact (chat.tipDetail) and one a line at
+-- Full; the table to two decimals, armor's share and damage taken to one, block value whole with commas.
 
 local A = {}
 ns.GearAvoid = A
@@ -100,25 +117,34 @@ local K = {
 	-- The slots by number (INVSLOT_AMMO to INVSLOT_TABARD), as GearModel.lua's K.LABEL names them.
 	SLOTS = { [0] = "Ammo", "Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Finger 1", "Finger 2",
 		"Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged", "Tabard" },
-	-- The gear lines' colours (GearLines.lua): the grey of a header and white, and the gain and loss of Flat UI's combat numbers
-	-- (CombatText.lua:889-894).
-	GREY = { 0.8, 0.8, 0.8 }, WHITE = { 1, 1, 1 }, GAIN = { 0.1, 1, 0.1 }, LOSS = { 1, 0.1, 0.1 },
-	-- The dim of the lines of what is not counted, the hit table's (HitTable.lua:79), as GearLines.lua has it.
-	DIM = { 0.66, 0.68, 0.62 },
+	-- The one style of the spell and gear lines is SpellModel.lua's (M.Fmt.Style); these stand in for a colour it does not have: the gold of a header
+	-- (the client's NORMAL_FONT_COLOR, as ChatConfigFrame.lua:2048 reads it), the light grey of a label, the white of a value, the green and red of
+	-- a change for the better and the worse (GREEN_FONT_COLOR, RED_FONT_COLOR), and the dim of a note, the hit table's (HitTable.lua:79).
+	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, good = { 0.1, 1, 0.1 }, bad = { 1, 0.1, 0.1 },
+		dim = { 0.66, 0.68, 0.62 } },
+	-- Damage taken (A.Totals): one swing of the table after armor and block value as a share of a plain hit, a crit doing 2 hits and a crushing blow
+	-- 1.5 (the 0.5.20 brief); block value measured against an enemy's hit before armor of chat.gearSwing (Enemy hit for block value: 200 to 6,000,
+	-- 1,500 when it has none), an estimate. Its change shows to one decimal, so one under half of that is none.
+	CRIT_TAKEN = 2, CRUSH_TAKEN = 1.5, SWING = 1500, SWING_LEAST = 200, SWING_MOST = 6000, STILL_TAKEN = 0.05,
+	TAKEN_ROWS = { "missed", "dodged", "parried", "blocked", "crit", "crush", "hit" },
 }
 
 -- The words, English as all of Flat UI's lines are.
 local T = {
-	HEADER = "Avoidance against %s (level %d):",
-	GIVES = "What it gives your avoidance against %s (level %d):",
+	HEADER = "Avoidance against %s (level %d)",
+	GIVES = "What it gives your avoidance against %s (level %d)",
+	HEADER_BASE = "Avoidance against %s (level %d), instead of %s",
+	GIVES_BASE = "What it gives your avoidance against %s (level %d) instead of %s",
 	BOSS = "a boss",
 	LEVEL = "an enemy of your level",
-	CRIT = "Critical hits %s (%s; immune at %d defense)",
-	CRIT_IMMUNE = "Critical hits %s (immune from %d defense)",
-	CRUSH = "Crushing blows %s (%s; gone at 100%% avoided or blocked)",
-	ARMOR_LESS = "Armor: %s less damage (%s)",
-	ARMOR_MORE = "Armor: %s more damage (%s)",
-	VALUE = "Block value %s (%s)",
+	TAKEN = "Damage taken",
+	OF_A_HIT = "%s of a hit",
+	CRIT_AT = "Immune to critical hits at %s defense",
+	CRIT_NOW = "Immune to critical hits (from %s defense)",
+	CRUSH_STOP = "Crushing blows stop at 100% missed, dodged, parried or blocked",
+	TAKEN_NOTE = "Damage taken: one swing after the table and armor as a share of a plain hit, block value against a %s hit (an estimate)",
+	THAT_ITEM = "that item",
+	BASE_SLOT = "It does not go in the same slot as %s.",
 	NONE = "none",
 	NO_CHANGE = "No change to your chosen spells; stamina and mana are not counted.",
 	NO_CHANGE_ALL = "No change to your chosen spells or your avoidance; stamina and mana are not counted.",
@@ -139,7 +165,10 @@ local T = {
 	FOOT_LEFT = "Not counted: talents and buffs your stats do not show, spells, and ranged attacks.",
 	FOOT_ESTIMATE = "~ marks an estimate: Classic's rules where the game's data does not show them.",
 	NOT_COUNTED = "Not counted: ",
-	STATUS = "Avoidance against %s: missed %s, dodged %s, parried %s, blocked %s, crit %s, crushing %s.",
+	NOT_COUNTED_TIP = "Not counted in avoidance: ",
+	FOOT_TAKEN = "Damage taken: one swing's expected damage after the table, armor and block value as a share of a plain hit (a crit 2, a crushing "
+		.. "blow 1.5), block value against an enemy's hit of %s before armor (Enemy hit for block value, an estimate); its change is relative.",
+	STATUS = "Avoidance against %s: missed %s, dodged %s, parried %s, blocked %s, crit %s, crushing %s; damage taken %s of a hit.",
 	STATUS_OLD = " From before the fight.",
 	STATUS_NONE = "Avoidance: your stats were not read yet.",
 	STATUS_NO_DEFENSE = "Avoidance: the game gave no defense skill, so there is no attack table to work out.",
@@ -255,7 +284,8 @@ end
 
 local function Gear()
 	local G = ns.GearModel
-	if type(G) == "table" and type(G.Candidates) == "function" and type(G.With) == "function" and type(G.Without) == "function" then
+	if type(G) == "table" and type(G.Candidates) == "function" and type(G.With) == "function" and type(G.Without) == "function"
+		and type(G.BaseSlots) == "function" then
 		return G
 	end
 	return nil
@@ -395,6 +425,29 @@ local function Attacker(level)
 		return level + K.BOSS, true
 	end
 	return level, false
+end
+
+-- The size of an enemy's hit before armor that block value is measured against (chat.gearSwing, Enemy hit for block value), between its bounds.
+local function Swing()
+	local value = Num(ns.Get("chat.gearSwing"))
+	if value and value >= K.SWING_LEAST then
+		return math.min(value, K.SWING_MOST)
+	end
+	return K.SWING
+end
+
+-- The name of the item compared against (Against, opts.base) in its quality's colour, from its link's own colour and name, else the game's name of
+-- it (C_Item.GetItemInfo), else words.
+local function BaseName(link)
+	local colour, name = link:match("^|c(%x%x%x%x%x%x%x%x)"), link:match("|h%[(.-)%]|h")
+	if not name then
+		local answers = Call(Api("C_Item", "GetItemInfo"), link)
+		name = answers and Text(answers[1])
+	end
+	if not name then
+		return T.THAT_ITEM
+	end
+	return colour and ("|c" .. colour .. name .. "|r") or name
 end
 
 -- The table -------------------------------------------------------------------------------------------------------------------------------------
@@ -569,6 +622,84 @@ local function Rows(now, with)
 	return rows
 end
 
+local function ByKey(rows)
+	local out = {}
+	for _, row in ipairs(rows) do
+		out[row.key] = row
+	end
+	return out
+end
+
+-- One swing's expected damage as a share of a plain hit from one side of the rows ("now" or "with"), and whether it rests on an estimate: a row of the
+-- roll that is one, a block (the size of an enemy's hit is chat.gearSwing's), or no armor reduction from the game. Nil when a row of the roll has no
+-- figure there.
+local function Taken(by, side, swing)
+	local at, estimate = {}, false
+	for _, key in ipairs(K.TAKEN_ROWS) do
+		local row = by[key]
+		at[key] = row and Num(row[side])
+		if not at[key] then
+			return nil
+		end
+		estimate = estimate or row[side .. "Estimate"] == true
+	end
+	local share = 0
+	if at.blocked > 0 then
+		local value = Num(by.blockValue and by.blockValue[side])
+		share = value and math.min(1, math.max(0, value) / swing) or 0
+		estimate = true
+	end
+	local armor = Num(by.armor and by.armor[side])
+	estimate = estimate or armor == nil
+	local hits = at.blocked * (1 - share) + at.crit * K.CRIT_TAKEN + at.crush * K.CRUSH_TAKEN + at.hit
+	return hits / 100 * (1 - (armor or 0) / 100), estimate
+end
+
+-- What the rows of a candidate (A.Compare's) or of the table now (A.Now's) come to (item 3 of the 0.5.20 brief): { taken = { now, with, pct,
+-- estimate, nowEstimate, withEstimate }, avoided = { now, with } }. taken is the expected damage of one enemy swing after the table (missed,
+-- dodged and parried 0, blocked 1 - min(1, block value / chat.gearSwing), critical 2, crushing 1.5, a normal hit 1) times what armor leaves, as a
+-- share of a plain hit (0.62 is 62%), and pct with / now - 1 as a fraction (negative is better); avoided is the share missed, dodged, parried or
+-- blocked, in percent as the rows are. with and pct are nil with no item; an empty table when there are no rows.
+function A.Totals(candidate)
+	local out = {}
+	local rows = Table(Field(candidate, "rows"))
+	if not rows then
+		return out
+	end
+	local by, swing = ByKey(rows), Swing()
+	local now, nowEstimate = Taken(by, "now", swing)
+	local with, withEstimate = Taken(by, "with", swing)
+	if now then
+		out.taken = { now = now, with = with, nowEstimate = nowEstimate, withEstimate = withEstimate == true,
+			estimate = nowEstimate or withEstimate == true }
+		if with and now > 0 then
+			out.taken.pct = with / now - 1
+		end
+	end
+	local avoided = {}
+	for _, side in ipairs({ "now", "with" }) do
+		local sum = 0
+		for _, key in ipairs(K.AVOIDED) do
+			local value = by[key] and Num(by[key][side])
+			if not value then
+				sum = nil
+				break
+			end
+			sum = sum + value
+		end
+		avoided[side] = sum
+	end
+	out.avoided = avoided
+	return out
+end
+
+-- A candidate with what its rows come to (A.Totals), as A.Compare's candidates carry it.
+local function Carry(candidate)
+	local totals = A.Totals(candidate)
+	candidate.taken, candidate.avoided = totals.taken, totals.avoided
+	return candidate
+end
+
 -- The table of a slot with a stat change (Apply, then Work); armor is named as not counted where it changes and the client gave no reduction.
 local function Changed(s, delta, state2, stats2, notes, attacker)
 	local w = Apply(s, delta, state2, stats2, notes)
@@ -579,62 +710,107 @@ local function Changed(s, delta, state2, stats2, notes, attacker)
 	return t
 end
 
-local function Header(boss, attacker, gives)
-	return (gives and T.GIVES or T.HEADER):format(boss and T.BOSS or T.LEVEL, attacker)
+-- The header of the block: against whom, and with Against the item compared against.
+local function Header(boss, attacker, gives, base)
+	local who = boss and T.BOSS or T.LEVEL
+	if base then
+		return (gives and T.GIVES_BASE or T.HEADER_BASE):format(who, attacker, BaseName(base))
+	end
+	return (gives and T.GIVES or T.HEADER):format(who, attacker)
 end
 
--- An item to wear: each slot G.Candidates gives, the table with the item there. False when nothing should be kept: no slot to compare with, which
--- may be an item the client has not loaded yet, or an item G.With could not read, so the next ask works it out again.
+-- The table with the item compared against (Against) in a candidate's slots, the now of that candidate: G.With put it there (its fourth and fifth
+-- answers) and info.baseSlots says which slots it took; nil when the game withheld the stats of it or of what it replaces.
+local function BaseTable(s, base, state, stateB, statsB, info, notes, attacker)
+	local baseSlots = Table(Field(info, "baseSlots"))
+	local delta = stateB and baseSlots and Delta(base, baseSlots, state)
+	if not delta then
+		return nil
+	end
+	return Changed(s, delta, stateB, statsB, notes, attacker)
+end
+
+-- An item to wear: each slot G.Candidates gives, the table with the item there, against the table now or with Against (base) against the table with
+-- that item in the candidate's slots (a candidate where it does not go is left out, G.BaseSlots). False when nothing should be kept: no slot to
+-- compare with, which may be an item the client has not loaded yet, or an item G.With could not read, so the next ask works it out again.
 local function Instead(result, link, opts, state, stats, s, now)
 	local G = Gear()
 	local data = Table(opts.data)
 	local lines = Table(Field(data, "lines"))
+	local base = Text(opts.base)
 	local list, why, quiet = G.Candidates(link, Text(Field(data, "guid")) or Text(opts.guid), lines)
 	if not Table(list) then
 		result.why, result.quiet = Text(why), quiet == true
 		return false
 	end
 	for _, c in ipairs(list) do
-		local state2, stats2, info = G.With(state, stats, link, c, lines)
-		local delta = state2 and Delta(link, c.slots, state)
-		if not delta then
-			result.candidates = {}
-			result.why = state2 and T.WITHHELD or Text(Field(info, "why"))
-			result.quiet = not state2 and Field(info, "quiet") == true
-			return false
-		end
-		local notes = {}
-		local with = Changed(s, delta, state2, stats2, notes, result.attacker)
-		result.candidates[#result.candidates + 1] = { label = c.label, slots = c.slots, empty = c.empty, offEmpty = c.offEmpty, game = c.game,
-			notCounted = notes, rows = Rows(now, with) }
-		for _, text in ipairs(notes) do
-			AddOnce(result.notCounted, text)
+		if not base or Table(Ask(G.BaseSlots, base, c)) then
+			local state2, stats2, info, stateB, statsB = G.With(state, stats, link, c, lines, base and { base = base } or nil)
+			local delta = state2 and Delta(link, c.slots, state)
+			local notes = {}
+			local before = now
+			if delta and base then
+				before = BaseTable(s, base, state, stateB, statsB, info, notes, result.attacker)
+			end
+			if not (delta and before) then
+				result.candidates = {}
+				result.why = state2 and T.WITHHELD or Text(Field(info, "why"))
+				result.quiet = not state2 and Field(info, "quiet") == true
+				return false
+			end
+			local with = Changed(s, delta, state2, stats2, notes, result.attacker)
+			result.candidates[#result.candidates + 1] = Carry({ label = c.label, slots = c.slots, empty = c.empty, offEmpty = c.offEmpty,
+				game = c.game, notCounted = notes, rows = Rows(before, with), base = base, baseSlots = base and Field(info, "baseSlots") or nil })
+			for _, text in ipairs(notes) do
+				AddOnce(result.notCounted, text)
+			end
 		end
 	end
-	result.header = Header(result.boss, result.attacker, false)
+	if base and #result.candidates == 0 then
+		result.why, result.quiet = T.BASE_SLOT:format(BaseName(base)), false
+		return true
+	end
+	result.header = Header(result.boss, result.attacker, false, base)
 	return true
 end
 
--- A worn item: the table with its slot empty against the table now, so the change is what it gives.
-local function Gives(result, slot, state, stats, s, now)
+-- A worn item: the table with its slot empty against the table now, so the change is what it gives; with Against (base), the table with that item
+-- in its slot (G.With with it as the item, in the slots G.BaseSlots gives: a two-hander takes both hands) against the table now.
+local function Gives(result, slot, state, stats, s, now, base)
 	local G = Gear()
 	if not LinkAt(state, slot) then
 		result.why, result.quiet = T.EMPTY, true
 		return true
 	end
-	local state2, stats2, info = G.Without(state, stats, slot)
-	local delta = state2 and Delta(nil, { slot }, state)
-	if not delta then
-		result.why, result.quiet = state2 and T.WITHHELD or Text(Field(info, "why")), true
-		return false
+	local notes, before = {}, nil
+	if base then
+		local baseSlots = Table(Ask(G.BaseSlots, base, { slots = { slot } }))
+		if not baseSlots then
+			result.why, result.quiet = T.BASE_SLOT:format(BaseName(base)), false
+			return true
+		end
+		local stateB, statsB, info = G.With(state, stats, base, { slots = baseSlots }, nil)
+		local delta = stateB and Delta(base, baseSlots, state)
+		if not delta then
+			result.why, result.quiet = stateB and T.WITHHELD or Text(Field(info, "why")), false
+			return false
+		end
+		before = Changed(s, delta, stateB, statsB, notes, result.attacker)
+	else
+		local state2, stats2, info = G.Without(state, stats, slot)
+		local delta = state2 and Delta(nil, { slot }, state)
+		if not delta then
+			result.why, result.quiet = state2 and T.WITHHELD or Text(Field(info, "why")), true
+			return false
+		end
+		before = Changed(s, delta, state2, stats2, notes, result.attacker)
 	end
-	local notes = {}
-	local without = Changed(s, delta, state2, stats2, notes, result.attacker)
-	result.candidates[1] = { label = K.SLOTS[slot], slots = { slot }, empty = false, game = true, notCounted = notes, rows = Rows(without, now) }
+	result.candidates[1] = Carry({ label = K.SLOTS[slot], slots = { slot }, empty = false, game = true, notCounted = notes,
+		rows = Rows(before, now), base = base })
 	for _, text in ipairs(notes) do
 		AddOnce(result.notCounted, text)
 	end
-	result.header = Header(result.boss, result.attacker, true)
+	result.header = Header(result.boss, result.attacker, true, base)
 	return true
 end
 
@@ -665,9 +841,12 @@ function A.Compare(itemOrSlot, opts)
 		return result
 	end
 	local state = Table(Ask(M.State)) or {}
-	-- A worn item is kept by its slot and the link worn there, so a fight never shows what another item in that slot gave.
-	local subject = slot and ("slot " .. slot .. " " .. (LinkAt(state, slot) or "")) or link
+	-- A worn item is kept by its slot and the link worn there, so a fight never shows what another item in that slot gave; with Against, by the item
+	-- compared against too.
+	local base = Text(opts.base)
+	local subject = (slot and ("slot " .. slot .. " " .. (LinkAt(state, slot) or "")) or link) .. "|" .. (base or "")
 	local stats = Table(Ask(M.Stats))
+	result.base = base
 	local s = Snapshot()
 	if InCombat() or (stats and stats.old == true) then
 		local before = held.last[subject]
@@ -686,7 +865,7 @@ function A.Compare(itemOrSlot, opts)
 		return result
 	end
 	local attacker, boss = Attacker(s.level)
-	local key = table.concat({ subject, tostring(Ask(M.Version)), held.version, attacker }, "|")
+	local key = table.concat({ subject, tostring(Ask(M.Version)), held.version, attacker, Swing() }, "|")
 	if held.cache[key] then
 		return held.cache[key]
 	end
@@ -695,7 +874,7 @@ function A.Compare(itemOrSlot, opts)
 	result.now = now
 	local keep
 	if slot then
-		keep = Gives(result, slot, state, stats, s, now)
+		keep = Gives(result, slot, state, stats, s, now, base)
 	else
 		keep = Instead(result, link, opts, state, stats, s, now)
 	end
@@ -706,7 +885,8 @@ function A.Compare(itemOrSlot, opts)
 	return result
 end
 
--- The table now against the enemy Against names: { attacker, boss, table, rows (as A.Compare's, with nil), old }, or nil and why.
+-- The table now against the enemy Against names: { attacker, boss, table, rows (as A.Compare's, with nil), taken, avoided (A.Totals'), old }, or nil
+-- and why.
 function A.Now()
 	local s = Snapshot()
 	if not s then
@@ -715,10 +895,10 @@ function A.Now()
 		return nil, T.NO_DEFENSE
 	end
 	local attacker, boss = Attacker(s.level)
-	local key = held.version .. "|" .. attacker
+	local key = held.version .. "|" .. attacker .. "|" .. Swing()
 	if not (held.now and held.nowKey == key) then
 		local now = Work(s, attacker)
-		held.now, held.nowKey = { attacker = attacker, boss = boss, table = now, rows = Rows(now, nil) }, key
+		held.now, held.nowKey = Carry({ attacker = attacker, boss = boss, table = now, rows = Rows(now, nil) }), key
 	end
 	local M = Model()
 	local stats = M and Table(Ask(M.Stats))
@@ -738,56 +918,100 @@ function A.Wanted()
 	return ok and Text(role) == "tank"
 end
 
--- A text that changes with what the lines and the view are built from: the snapshot, whether avoidance shows and Against.
+-- A text that changes with what the lines and the view are built from: the snapshot, whether avoidance shows, Against, the enemy's hit for block
+-- value and how much the tooltips say (chat.tipDetail).
 function A.Stamp()
-	return table.concat({ held.version, A.Wanted() and "on" or "off", tostring(ns.Get("chat.gearAgainst")) }, "|")
+	return table.concat({ held.version, A.Wanted() and "on" or "off", tostring(ns.Get("chat.gearAgainst")), Swing(),
+		tostring(ns.Get("chat.tipDetail")) }, "|")
 end
 
 -- Text -------------------------------------------------------------------------------------------------------------------------------------------
+
+-- A colour of the style as { r, g, b }, from a list or the fields r, g and b (a colour of the client's), or nil.
+local function Colour(value)
+	local t = Table(value)
+	if not t then
+		return nil
+	end
+	local r, g, b = Num(Field(t, 1)) or Num(Field(t, "r")), Num(Field(t, 2)) or Num(Field(t, "g")), Num(Field(t, 3)) or Num(Field(t, "b"))
+	if r and g and b then
+		return { r, g, b }
+	end
+	return nil
+end
+
+-- The colours of the lines: SpellModel.lua's one style of the spell and gear lines (M.Fmt.Style), looked up when the lines are built; K.STYLE stands
+-- in for a colour it does not have.
+local function Style()
+	local M = Model()
+	local style = Table(Field(Table(Field(M, "Fmt")), "Style"))
+	local out = {}
+	for name, fallback in pairs(K.STYLE) do
+		out[name] = Colour(Field(style, name)) or fallback
+	end
+	return out
+end
 
 local function Hex(colour)
 	return ("|cff%02x%02x%02x"):format(math.floor(colour[1] * 255 + 0.5), math.floor(colour[2] * 255 + 0.5), math.floor(colour[3] * 255 + 0.5))
 end
 
-local GAIN, LOSS = Hex(K.GAIN), Hex(K.LOSS)
+-- A whole number with its thousands broken by commas, its minus kept.
+local function Whole(value)
+	local digits = ("%d"):format(math.floor(math.abs(value) + 0.5))
+	local broken = digits:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+	broken = broken:gsub("^,", "")
+	if value < 0 and broken ~= "0" then
+		return "-" .. broken
+	end
+	return broken
+end
 
--- A row's value: two decimals for the table, one for armor's share, whole for block value; "-" for none, "none" for a block value with no shield.
+-- A row's value in the style of the lines: two decimals for the table, one for armor's share and damage taken, whole with commas for block value;
+-- a sign on a change only; "-" for none, "none" for a block value with no shield.
 local function Value(row, value, signed)
 	if not Finite(value) then
 		return row.key == "blockValue" and T.NONE or "-"
 	elseif row.key == "blockValue" then
-		return (signed and "%+d" or "%d"):format(math.floor(value + 0.5))
-	elseif row.key == "armor" then
+		local text = Whole(value)
+		if signed and math.floor(value + 0.5) > 0 then
+			text = "+" .. text
+		end
+		return text
+	elseif row.key == "armor" or row.key == "taken" then
 		return (signed and "%+.1f%%" or "%.1f%%"):format(value)
 	end
 	return (signed and "%+.2f%%" or "%.2f%%"):format(value)
 end
 
 local function Still(row)
-	return row.key == "armor" and K.STILL_ARMOR or row.key == "blockValue" and K.STILL_VALUE or K.STILL
+	return row.key == "armor" and K.STILL_ARMOR or row.key == "blockValue" and K.STILL_VALUE or row.key == "taken" and K.STILL_TAKEN or K.STILL
 end
 
--- The change of a row (a block value or armor share none is 0), and its tone: "gain" when better for the player, "loss" when worse, else "none".
+-- The change of a row (a block value or armor share none is 0; damage taken's relative, in percent of now), and its tone: "gain" when better for
+-- the player, "loss" when worse, else "none".
 local function Change(row, with)
 	local now = Num(row.now)
 	with = Num(with)
-	if now == nil and with == nil then
+	local delta
+	if row.key == "taken" then
+		if not (now and with and now > 0) then
+			return nil, "none"
+		end
+		delta = (with / now - 1) * 100
+	elseif now == nil and with == nil then
 		return nil, "none"
+	else
+		delta = (with or 0) - (now or 0)
 	end
-	local delta = (with or 0) - (now or 0)
 	if math.abs(delta) < Still(row) then
 		return delta, "none"
 	end
 	return delta, ((delta > 0) == (row.better == true)) and "gain" or "loss"
 end
 
--- A part of a tooltip line in the colour of its direction.
-local function Coloured(text, tone)
-	return (tone == "gain" and GAIN or LOSS) .. text .. "|r"
-end
-
--- A row's value now or with the item, ~ first when it rests on an estimate (header); a change is never marked, since the change of a row the roll does
--- not cut is the client's own sum.
+-- A row's value now or with the item, ~ first when it rests on an estimate (header); a change of the table is not marked, since the change of a row
+-- the roll does not cut is the client's own sum, but damage taken's is, since an estimate is in both of its sides.
 local function Total(row, now)
 	if now then
 		return (row.nowEstimate and "~" or "") .. Value(row, row.now)
@@ -795,60 +1019,59 @@ local function Total(row, now)
 	return (row.withEstimate and "~" or "") .. Value(row, row.with)
 end
 
-local function ByKey(rows)
-	local out = {}
-	for _, row in ipairs(rows) do
-		out[row.key] = row
+-- Damage taken (A.Totals) as a row of the lines and the window: in percent of a plain hit, lower being better.
+local function TakenRow(taken)
+	if not Table(taken) then
+		return nil
 	end
-	return out
+	local function Share(value)
+		return Num(value) and value * 100 or nil
+	end
+	return { key = "taken", label = T.TAKEN, better = false, now = Share(taken.now), with = Share(taken.with), nowEstimate = taken.nowEstimate == true,
+		withEstimate = taken.withEstimate == true, estimate = taken.estimate == true }
 end
 
--- The lines of a candidate that change (design of this file: the avoided rows on one line, crit, crushing, armor and block value).
-local function Lines(rows, attacker)
-	local by, lines = ByKey(rows), {}
-	local parts = {}
-	for _, key in ipairs(K.AVOIDED) do
-		local row = by[key]
-		local delta, tone = Change(row, row.with)
+-- A figure of the tooltip as GearLines.lua adds it with AddDoubleLine: its label left in the style's label colour, its value right in white, the
+-- change first in the colour of its direction, its sign saying the same, and the total after it.
+local function Double(style, row, delta, tone, total)
+	local change = Value(row, delta, true)
+	if row.key == "taken" and row.estimate then
+		change = "~" .. change
+	end
+	local right = Hex(tone == "gain" and style.good or style.bad) .. change .. "|r  " .. Hex(style.value) .. "(" .. total .. ")|r"
+	return { left = row.label, right = right, colour = style.value, leftColour = style.label, text = row.label .. "  " .. right }
+end
+
+-- The figures of a candidate that change, in the order of damage taken, the roll, armor and block value, and the notes of the figures whose
+-- meaning wants one (damage taken, critical immunity, crushing blows).
+local function Figures(rows, attacker, taken, style)
+	local by, figures, notes = ByKey(rows), {}, {}
+	local takenRow = TakenRow(taken)
+	if takenRow then
+		local delta, tone = Change(takenRow, takenRow.with)
 		if tone ~= "none" then
-			parts[#parts + 1] = Coloured(("%s %s (%s)"):format(row.label, Value(row, delta, true), Total(row)), tone)
+			local total = T.OF_A_HIT:format(Total(takenRow))
+			figures[#figures + 1] = Double(style, takenRow, delta, tone, total)
+			notes[#notes + 1] = T.TAKEN_NOTE:format(Whole(Swing()))
 		end
 	end
-	if #parts > 0 then
-		lines[#lines + 1] = { text = table.concat(parts, "   "), colour = K.WHITE, wrap = true }
-	end
-	local crit = by.crit
-	local delta, tone = Change(crit, crit.with)
-	if tone ~= "none" then
-		local immuneAt, text = math.floor(attacker * K.PER_LEVEL + K.CRIT / K.PER_SKILL + 0.5), nil
-		if (Num(crit.with) or 0) <= 0 then
-			text = T.CRIT_IMMUNE:format(Value(crit, delta, true), immuneAt)
-		else
-			text = T.CRIT:format(Value(crit, delta, true), Total(crit), immuneAt)
+	for _, def in ipairs(K.ROWS) do
+		local row = by[def[1]]
+		local delta, tone
+		if row and row.key ~= "hit" then
+			delta, tone = Change(row, row.with)
 		end
-		lines[#lines + 1] = { text = Coloured(text, tone), colour = K.WHITE, wrap = true }
+		if tone == "gain" or tone == "loss" then
+			figures[#figures + 1] = Double(style, row, delta, tone, Total(row))
+			if row.key == "crit" then
+				local immuneAt = Whole(attacker * K.PER_LEVEL + K.CRIT / K.PER_SKILL)
+				notes[#notes + 1] = ((Num(row.with) or 0) <= 0 and T.CRIT_NOW or T.CRIT_AT):format(immuneAt)
+			elseif row.key == "crush" then
+				notes[#notes + 1] = T.CRUSH_STOP
+			end
+		end
 	end
-	local crush = by.crush
-	delta, tone = Change(crush, crush.with)
-	if tone ~= "none" then
-		lines[#lines + 1] = { text = Coloured(T.CRUSH:format(Value(crush, delta, true), Total(crush)), tone), colour = K.WHITE, wrap = true }
-	end
-	parts = {}
-	local armor = by.armor
-	delta, tone = Change(armor, armor.with)
-	if tone ~= "none" then
-		local size = ("%.1f%%"):format(math.abs(delta))
-		parts[#parts + 1] = Coloured((delta > 0 and T.ARMOR_LESS or T.ARMOR_MORE):format(size, Value(armor, armor.with)), tone)
-	end
-	local value = by.blockValue
-	delta, tone = Change(value, value.with)
-	if tone ~= "none" then
-		parts[#parts + 1] = Coloured(T.VALUE:format(Value(value, delta, true), Value(value, value.with)), tone)
-	end
-	if #parts > 0 then
-		lines[#lines + 1] = { text = table.concat(parts, "   "), colour = K.WHITE, wrap = true }
-	end
-	return lines
+	return figures, notes
 end
 
 local function SameSlots(a, b)
@@ -863,10 +1086,14 @@ local function SameSlots(a, b)
 	return true
 end
 
--- The lines of the item tooltip block (GearLines.lua), for the candidate whose slots the spell rows show, else the first: the header, the lines that
--- change and the dim lines of what is not counted, as entries GearLines.lua adds ({ text, colour, wrap }), and the words of the spell rows' "no
--- change" line while avoidance shows. A stat not counted is named also when nothing else changes, so "no change to your avoidance" is said only
--- when all of the item was counted. Nil while avoidance does not show or has nothing to say.
+-- The lines of the item tooltip block (GearLines.lua), for the candidate whose slots the spell rows show, else the first, in the one style of the
+-- spell and gear lines (the 0.5.20 brief, item 2): a gold header (against whom) only where more than one line follows; a double line for each
+-- figure that changes (damage taken, missed, dodged, parried, blocked, critical, crushing, armor reduction, block value: the label left, the change
+-- in green or red and the total in white right, ~ before an estimate); and the notes, dim and wrapped: in Compact (chat.tipDetail) one line of them
+-- joined with "; ", in Full one line each. Entries as GearLines.lua adds them: { text, colour, wrap } (header = true on the header, note = true on
+-- a note) and { left, right, colour, leftColour, text } for a figure (colour the right's, text both together for a caller that adds one line). The
+-- second answer is the words of the spell rows' "no change" line while avoidance shows. A stat not counted is named also when nothing else changes,
+-- so "no change to your avoidance" is said only when all of the item was counted. Nil while avoidance does not show or has nothing to say.
 function A.TipLines(subject, slots, opts)
 	if not A.Wanted() then
 		return nil
@@ -882,13 +1109,45 @@ function A.TipLines(subject, slots, opts)
 	if not (chosen and result.attacker) then
 		return nil
 	end
-	local lines, notes = Lines(chosen.rows, result.attacker), chosen.notCounted or {}
-	if #lines == 0 and #notes == 0 then
+	local style, notCounted = Style(), chosen.notCounted or {}
+	local figures, hints = Figures(chosen.rows, result.attacker, chosen.taken, style)
+	if #figures == 0 and #notCounted == 0 then
 		return {}, T.NO_CHANGE_ALL
 	end
-	table.insert(lines, 1, { text = result.header, colour = K.GREY, wrap = true })
+	-- What is not counted first, since it says what the figures leave out, then the figures' notes.
+	local notes = {}
+	if ns.Get("chat.tipDetail") == "full" then
+		for _, text in ipairs(notCounted) do
+			notes[#notes + 1] = T.NOT_COUNTED_TIP .. text
+		end
+		for _, text in ipairs(hints) do
+			notes[#notes + 1] = text
+		end
+	else
+		local joined = {}
+		if #notCounted > 0 then
+			joined[1] = T.NOT_COUNTED_TIP .. table.concat(notCounted, ", ")
+		end
+		for _, text in ipairs(hints) do
+			joined[#joined + 1] = text
+		end
+		if #joined > 0 then
+			notes[1] = table.concat(joined, "; ")
+		end
+	end
+	local noteLines = {}
 	for _, text in ipairs(notes) do
-		lines[#lines + 1] = { text = T.NOT_COUNTED .. text, colour = K.DIM, wrap = true }
+		noteLines[#noteLines + 1] = { text = text, colour = style.dim, wrap = true, note = true }
+	end
+	local lines = {}
+	if #figures + #noteLines > 1 then
+		lines[1] = { text = result.header, colour = style.header, wrap = true, header = true }
+	end
+	for _, entry in ipairs(figures) do
+		lines[#lines + 1] = entry
+	end
+	for _, entry in ipairs(noteLines) do
+		lines[#lines + 1] = entry
 	end
 	return lines, T.NO_CHANGE
 end
@@ -907,21 +1166,38 @@ local function WindowRow(rows, compared)
 			local delta, tone = Change(row, row.with)
 			local column = "change" .. index
 			-- A change under the last digit shown is none, never "-0.00%".
-			texts[column] = delta and Value(row, tone == "none" and 0 or delta, true) or "-"
-			tones[column] = tone
+			local text = delta and Value(row, tone == "none" and 0 or delta, true) or "-"
+			if delta and row.key == "taken" and row.estimate then
+				text = "~" .. text
+			end
+			texts[column], tones[column] = text, tone
 		end
 	end
 	return { texts = texts, tones = tones }
 end
 
--- The Avoidance view of the Gear comparison window (GearWindow.lua): { layout, cands, rows = { { texts, tones } }, heads, foot, notes, why }, with an
--- item the table in each slot it can take (the first two), else the table now.
-function A.Window(link)
-	local view = { layout = "none", cands = {}, rows = {}, notes = {}, heads = { name = T.HEAD }, foot = {} }
+-- A candidate's rows for the window: damage taken first (A.Totals), then the table, armor and block value.
+local function WindowRows(c)
+	local rows, taken = {}, TakenRow(c.taken)
+	if taken then
+		rows[1] = taken
+	end
+	for _, row in ipairs(c.rows) do
+		rows[#rows + 1] = row
+	end
+	return rows
+end
+
+-- The Avoidance view of the Gear comparison window (GearWindow.lua): { layout, cands, rows = { { texts, tones } }, heads, foot, notes, why, base },
+-- with an item the table in each slot it can take (the first two), else the table now; damage taken is the first row. base (Against, an item
+-- link): the item set against it in those slots (A.Compare's opts.base), else what is worn.
+function A.Window(link, base)
+	base = Text(base)
+	local view = { layout = "none", cands = {}, rows = {}, notes = {}, heads = { name = T.HEAD }, foot = {}, base = base }
 	local now, why = A.Now()
 	local attacker, boss = now and now.attacker, now and now.boss
 	if link then
-		local result = A.Compare(link, {})
+		local result = A.Compare(link, { base = base })
 		for _, c in ipairs(result.candidates) do
 			if #view.cands < 2 then
 				view.cands[#view.cands + 1] = c
@@ -938,15 +1214,21 @@ function A.Window(link)
 	end
 	if #view.cands > 0 then
 		view.layout = #view.cands == 2 and "two" or "one"
-		for index in ipairs(view.cands[1].rows) do
+		local lists = {}
+		for which, c in ipairs(view.cands) do
+			lists[which] = WindowRows(c)
+		end
+		for index in ipairs(lists[1]) do
 			local rows = {}
-			for which, c in ipairs(view.cands) do
-				rows[which] = c.rows[index]
+			for which, list in ipairs(lists) do
+				rows[which] = list[index]
 			end
-			view.rows[#view.rows + 1] = WindowRow(rows, true)
+			if #rows == #lists then
+				view.rows[#view.rows + 1] = WindowRow(rows, true)
+			end
 		end
 	elseif now then
-		for _, row in ipairs(now.rows) do
+		for _, row in ipairs(WindowRows(now)) do
 			view.rows[#view.rows + 1] = WindowRow({ row }, false)
 		end
 	else
@@ -956,6 +1238,7 @@ function A.Window(link)
 		view.foot[1] = T.FOOT_AGAINST:format(boss and T.FOOT_BOSS or T.LEVEL, attacker)
 	end
 	view.foot[#view.foot + 1] = T.FOOT_SHEET
+	view.foot[#view.foot + 1] = T.FOOT_TAKEN:format(Whole(Swing()))
 	view.foot[#view.foot + 1] = T.FOOT_LEFT
 	view.foot[#view.foot + 1] = T.FOOT_ESTIMATE
 	return view
@@ -977,9 +1260,13 @@ local function Status()
 	if not now then
 		return { why == T.NO_DEFENSE and T.STATUS_NO_DEFENSE or T.STATUS_NONE }
 	end
-	local t = now.table
+	local t, taken = now.table, now.taken
+	local share = taken and Num(taken.now) and Short(taken.now * 100) or "-"
+	if taken and taken.estimate then
+		share = "~" .. share
+	end
 	local line = T.STATUS:format(now.boss and T.BOSS or T.LEVEL, Short(t.missed), Short(t.dodged), Short(t.parried), Short(t.blocked), Short(t.crit),
-		Short(t.crush))
+		Short(t.crush), share)
 	if now.old then
 		line = line .. T.STATUS_OLD
 	end
