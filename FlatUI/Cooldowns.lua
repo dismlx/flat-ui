@@ -26,6 +26,9 @@ local _, ns = ...
 -- Cooldown Panels by Philipp Barth (R41Z0R), adapted with his permission (CooldownPanels.lua:2553-2722, 26865-26940, 26942-27267, 28581-28593):
 -- a frame of Flat UI's own hangs from the game's PlayerFrame or TargetFrame by SetPoint on Flat UI's frame, out of combat, as Your buffs hangs
 -- from the player frame (OwnBuffs.lua). CooldownLooks.lua has the rules, the lists of one icon, the glows and the buff time.
+-- ns.SpellKnown, ns.SpellBookList, ns.BarSpells and ns.ActionSpell also give the gear comparison and the spell lines of Chat and tooltips their
+-- list, their bar import and the spell of a macro's slot (GearLines.lua, SpellLines.lua): the same reads of the spell book and the action slots as
+-- Add a spell and Add the spells of a bar make, whatever the switch of this page, and nothing is written.
 
 local KEY = "cooldowns"
 local PART = "cooldown manager icons"
@@ -322,6 +325,12 @@ local function Known(spellID)
 		end
 	end
 	return true
+end
+
+-- Known for the gear comparison and the spell lines, which follow the highest rank the player knows (SpellModel.lua, M.Highest) and mark a chosen
+-- spell the character lost (GearLines.lua): false for anything that is no spell ID, and true, as here, while the game cannot say.
+function ns.SpellKnown(id)
+	return Whole(id) and Known(id)
 end
 
 local function HasCooldown(spellID)
@@ -2283,27 +2292,19 @@ local function Distinguish(rows)
 	end
 end
 
--- The known, active, highest rank spells that have a cooldown and are not picked yet, by name.
-function ns.CooldownCandidates()
+-- The known, active, highest rank spells of the player's spell book, by name: { { id, label } ... }, each ID once, sorted by name and then ID, and
+-- lines of the same name told apart by the rank or other text the game shows (Distinguish). The walk leaves out the skill lines the book hides and
+-- those of another specialization, passives, spells of another specialization and the lower ranks the book marks (IsSpellBookItemLowRank); keep,
+-- when given, is asked keep(id, label) of each spell left and lists those it says yes to. Add a spell lists so (below), and the gear comparison
+-- (GearLines.lua) with a filter of its own. Nothing when the game lacks a call the walk needs (SpellBook).
+function ns.SpellBookList(keep)
 	local rows = {}
 	local book = SpellBook()
 	if not book then
-		-- The list is empty, so the status says why. With the page off the list cannot be opened.
-		if ns.Enabled(KEY) then
-			ns.Note(KEY, NO_BOOK)
-		end
 		return rows
 	end
 	local bank, spellType = Enum.SpellBookSpellBank.Player, Enum.SpellBookItemType.Spell
-	local listed, named = {}, {}
-	for _, id in ipairs(List()) do
-		listed[id] = true
-		-- A rank trained since has another ID and the same name. A spell not known has no icon on
-		-- the row, so its name keeps nothing out.
-		if Known(id) then
-			named[Name(id)] = true
-		end
-	end
+	local listed = {}
 	local lines = Ask(book.GetNumSpellBookSkillLines)
 	for line = 1, Plain(lines, "number") and lines or 0 do
 		local skill = Ask(book.GetSpellBookSkillLineInfo, line)
@@ -2313,9 +2314,9 @@ function ns.CooldownCandidates()
 				local item = Ask(book.GetSpellBookItemInfo, slot, bank)
 				if type(item) == "table" and item.itemType == spellType and item.isPassive ~= true and item.isOffSpec ~= true then
 					local id = item.spellID or item.actionID
-					if Whole(id) and not listed[id] and Ask(book.IsSpellBookItemLowRank, slot, bank) ~= true and HasCooldown(id) then
+					if Whole(id) and not listed[id] and Ask(book.IsSpellBookItemLowRank, slot, bank) ~= true then
 						local label = Plain(item.name, "string") and item.name ~= "" and item.name or Name(id)
-						if not named[label] then
+						if type(keep) ~= "function" or keep(id, label) then
 							listed[id] = true
 							rows[#rows + 1] = { id, label }
 						end
@@ -2333,6 +2334,29 @@ function ns.CooldownCandidates()
 	end)
 	Distinguish(rows)
 	return rows
+end
+
+-- The known, active, highest rank spells that have a cooldown and are not picked yet, by name.
+function ns.CooldownCandidates()
+	if not SpellBook() then
+		-- The list is empty, so the status says why. With the page off the list cannot be opened.
+		if ns.Enabled(KEY) then
+			ns.Note(KEY, NO_BOOK)
+		end
+		return {}
+	end
+	local listed, named = {}, {}
+	for _, id in ipairs(List()) do
+		listed[id] = true
+		-- A rank trained since has another ID and the same name. A spell not known has no icon on
+		-- the row, so its name keeps nothing out.
+		if Known(id) then
+			named[Name(id)] = true
+		end
+	end
+	return ns.SpellBookList(function(id, label)
+		return not listed[id] and not named[label] and HasCooldown(id)
+	end)
 end
 
 -- The picked spells in row order, so opening the list also shows what is picked.
@@ -2578,6 +2602,44 @@ function Bar.SlotAction(slot)
 		end
 	end
 	return kind, id
+end
+
+-- The spell an action slot holds, or the spell the macro in it shows or casts (Bar.SlotAction): a spell ID, or nil for a slot that holds no spell
+-- and while the game withholds it. The spell lines read a macro's spell so when its tooltip data names none (SpellLines.lua).
+function ns.ActionSpell(slot)
+	if not Whole(slot) then
+		return nil
+	end
+	local kind, id = Bar.SlotAction(slot)
+	if kind == "spell" and Whole(id) then
+		return id
+	end
+	return nil
+end
+
+-- The spells on one action bar, each once in slot order, and how many slots held something else (an item, a macro with no spell): bar 1 is the page
+-- the main bar shows (Bar.MainPage), bars 2 to 8 their own pages (CD.IMPORT_FIRST), and a macro gives the spell it shows or casts (Bar.SlotAction),
+-- each with the rank on the bar. The slots are read as Add the spells of a bar reads them (below), for the gear comparison's Add the spells of a bar
+-- (GearLines.lua). No spell and nothing else for a bar that is not 1 to 8 and for a client without GetActionInfo.
+function ns.BarSpells(bar)
+	local spells, others = {}, 0
+	if not (Whole(bar) and bar <= #CD.IMPORT_FIRST) or type(GetActionInfo) ~= "function" then
+		return spells, others
+	end
+	local first = bar == 1 and (Bar.MainPage() - 1) * 12 + 1 or CD.IMPORT_FIRST[bar]
+	local seen = {}
+	for slot = first, first + 11 do
+		local kind, id = Bar.SlotAction(slot)
+		if kind == "spell" and Whole(id) then
+			if not seen[id] then
+				seen[id] = true
+				spells[#spells + 1] = id
+			end
+		elseif kind ~= nil then
+			others = others + 1
+		end
+	end
+	return spells, others
 end
 
 -- Adds each spell with a cooldown on one action bar that the row does not have yet, by ns.CooldownAdd, so the 40-spell cap and the layout queue hold;
