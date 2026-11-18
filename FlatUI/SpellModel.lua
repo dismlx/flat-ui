@@ -89,13 +89,13 @@ local _, ns = ...
 -- The lines (design 1.2-1.4) are texts and colours' names only, in blocks each with its title (Spell power, Total, Threat), which SpellLines.lua
 -- shows as the block's header where more than one line follows: the share of a power part in words with what it adds with the player's stats,
 -- the total of one cast (0.5.20: what it does now with the player's stats, base and bonus together) and its rates (the expected value with crits,
--- misses and a spell's resists from GearModel.lua's G.Expect, looked up when asked; a second of cast time, from the castTime of C_Spell.GetSpellInfo,
--- SpellDocumentation.lua:416-430, else the rank's, the global cooldown at least; and a point of mana, from C_Spell.GetSpellPowerCost,
--- :535-549), the threat block with its multipliers (the rules of design 2.5, G), and the lines of a stance, form, aura or talent tooltip. Amounts
--- are worded with the rounding of design 1.2, and the gear comparison's with that of design 2.3 (M.Fmt, which GearLines.lua, GearAvoid.lua and
--- GearWindow.lua use too, with its one style of every line: M.Fmt.Style, whose header, good and bad colours are the game's NORMAL_FONT_COLOR,
--- GREEN_FONT_COLOR and RED_FONT_COLOR, read once as this file loads, Blizzard_SharedXMLBase/Color.lua:82-86), thousands broken by the game's
--- BreakUpLargeNumbers under pcall (as CombatText.lua:1445-1446), and a spell's name in a dim line is the game's (C_Spell.GetSpellName).
+-- misses and a spell's Spell Piercing from GearModel.lua's G.Expect, looked up when asked; a second of cast time, from the castTime of
+-- C_Spell.GetSpellInfo, SpellDocumentation.lua:416-430, else the rank's, the global cooldown at least; and a point of mana, from
+-- C_Spell.GetSpellPowerCost, :535-549), the threat block with its multipliers (the rules of design 2.5, G), and the lines of a stance, form, aura or
+-- talent tooltip. Amounts are worded with the rounding of design 1.2, and the gear comparison's with that of design 2.3 (M.Fmt, which GearLines.lua,
+-- GearAvoid.lua and GearWindow.lua use too, with its one style of every line: M.Fmt.Style, whose header, good and bad colours are the game's
+-- NORMAL_FONT_COLOR, GREEN_FONT_COLOR and RED_FONT_COLOR, read once as this file loads, Blizzard_SharedXMLBase/Color.lua:82-86), thousands broken by
+-- the game's BreakUpLargeNumbers under pcall (as CombatText.lua:1445-1446), and a spell's name in a dim line is the game's (C_Spell.GetSpellName).
 
 local KEY, PART = "chat", "your stats"
 local IsSecret, Finite = ns.IsSecret, ns.Finite
@@ -2910,10 +2910,10 @@ local function ManaCost(id)
 	return nil
 end
 
--- The rates line (0.5.20, chat.spellRates): the expected value with crits and misses (GearModel.lua's G.Expect, looked up when asked, its cast;
--- with crits alone for a heal, which never misses; 0.5.26: and resists for a damage spell of a school of magic on the Spell line), then a second of cast time (the global cooldown for an instant), or for what rides on the
--- swings or shots its own figure a second, and a point of mana, each of the expected value, else of the total; ~ before an estimate. Nil with
--- nothing to say.
+-- The rates line (0.5.20, chat.spellRates): the expected value with crits and misses (GearModel.lua's G.Expect, looked up when asked, its cast; with
+-- crits alone for a heal, which never misses; 0.5.26: and Spell Piercing for a damage spell of a school of magic on the Spell line, the damage it
+-- adds), then a second of cast time (the global cooldown for an instant), or for what rides on the swings or shots its own figure a second, and a
+-- point of mana, each of the expected value, else of the total; ~ before an estimate. Nil with nothing to say.
 local function Rates(entry, at, row, state, stats, total, lowRank)
 	local G = ns.GearModel
 	local result = nil
@@ -2930,7 +2930,7 @@ local function Rates(entry, at, row, state, stats, total, lowRank)
 		if K.HEALS[TotalKind(entry)] then
 			with = " with crits"
 		elseif entry.roll == "spell" and entry.school ~= 1 and entry.cmp ~= "threat" then
-			with = " with crits, misses and resists"
+			with = " with crits, misses and Spell Piercing"
 		end
 		words[1] = "Expected " .. guess .. Num(figure) .. with
 	elseif total then

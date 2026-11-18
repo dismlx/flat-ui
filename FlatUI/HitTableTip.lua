@@ -47,8 +47,8 @@ local _, ns = ...
 -- argument): the stats from before the fight, and an estimate (a level of ?? or a boss counted three above the player, a player's dodge, parry and
 -- block counted from 5%, a weapon skill the game did not give counted as the most for the level, for a hand or a ranged weapon of a line shown);
 -- and, while R is not 0, what it counts: the player's Spell Piercing against resistances not known, counted as 0, the share for the levels a
--- creature is above the player (an estimate, which piercing does not lower), and that a spell with an effect beyond its damage is resisted whole
--- that often. In Compact (chat.tipDetail) the notes are joined into one dim line, in Full each is its own.
+-- creature is above the player (an estimate, which piercing does not lower), which a spell with an effect beyond its damage does not take: it pays
+-- for the levels with its higher miss. In Compact (chat.tipDetail) the notes are joined into one dim line, in Full each is its own.
 --
 -- The size (0.5.26): Text size on enemy tooltips (hud.hitTableTipSize, 70 to 200%, its ids the percent in text) sizes these lines alone, in a
 -- share of the size the game gave each, with the face and flags it had (GetFont, SetFont): the left text of each line and the right text of a
@@ -102,10 +102,9 @@ local HT = {
 	BOSS = "A boss counted as level %d",
 	PLAYER = "A player's dodge, parry and block counted from 5%",
 	ASSUMED = "Weapon skill counted as the most for your level",
-	-- What R counts, one note: the piercing, then the share for the levels above (an estimate), then a spell resisted whole.
+	-- What R counts, one note: the piercing, then the share for the levels above (an estimate), which a spell that also slows or roots does not take.
 	PIERCE = "R counts your Spell Piercing %d against resistances not known, counted as 0",
-	LEVEL_RESIST = ", and ~%s for its levels above you, which piercing does not lower",
-	WHOLE = "; a spell that also slows or roots is resisted whole that often",
+	LEVEL_RESIST = ", and ~%s for its levels above you, which piercing does not lower; a spell that also slows or roots pays for them with its higher miss instead",
 	JOIN = "; ",
 }
 
@@ -338,8 +337,8 @@ local function Parts(line)
 	return known and table.concat(parts, HT.SEPARATOR) or nil
 end
 
--- What R counts, in one note, while the Spells line shows one that is not 0: the piercing, the share for the levels above (C.Resist with none) and,
--- for a share resisted, a spell resisted whole.
+-- What R counts, in one note, while the Spells line shows one that is not 0: the piercing and the share for the levels above (C.Resist with none),
+-- which a spell that also slows or roots does not take.
 local function ResistNote(notes, read, target)
 	local spell
 	for _, line in ipairs(type(read.lines) == "table" and read.lines or {}) do
@@ -356,9 +355,6 @@ local function ResistNote(notes, read, target)
 	local level = spell.levelResist and type(C) == "table" and type(C.Resist) == "function" and C.Resist(read.level, target.level, false, 0) or nil
 	if Finite(level) and level >= 0.05 then
 		note = note .. HT.LEVEL_RESIST:format(Short(level) .. "%")
-	end
-	if resist >= 0.05 then
-		note = note .. HT.WHOLE
 	end
 	notes[#notes + 1] = note
 end

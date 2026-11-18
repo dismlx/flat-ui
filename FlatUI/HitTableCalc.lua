@@ -32,8 +32,8 @@ local _, ns = ...
 -- the kinds its spells roll and for a ranged line with no ranged weapon worn (a paladin's judgements). C.Read is the two in a row. C.LineOf,
 -- C.Skill and C.SkillLine give it the skill line of an item, the skill of a line and its rank, modifier and name (the comparison counts every
 -- compared hand at the most for the level plus the modifier, while the hit table here counts the player's skill as it is), and C.Target counts
--- against an enemy of the player's level when it asks. C.Resist gives it the Spell line's resist with more Spell Piercing, for a spell of a school an
--- item pierces on its own (Fire Piercing...), which GetSpellPenetration does not count.
+-- against an enemy of the player's level when it asks. C.Resist gives it a resist with other Spell Piercing and levels: at the player's level, with
+-- the piercing of a school an item pierces on its own (Fire Piercing...), which GetSpellPenetration does not count.
 -- The enemy is the target unless spec.unit names another unit (C.Target, C.Front): HitTableTip.lua works the table out against the unit of an enemy's
 -- tooltip, from inputs it kept, with C.Target and C.Table.
 
@@ -512,8 +512,10 @@ end
 -- The share of a spell's damage the enemy resists on average, in percent, with Spell Piercing pen: above 0 resisted, below 0 the damage a creature
 -- takes more. The enemy's own resistances are not known and count as 0, so piercing takes them below 0: against a creature each point adds half
 -- of what a point resists (Forever's Spell Vulnerability), against a player nothing. A creature above the player resists RESIST_LEVEL a level more,
--- which piercing does not lower; RESIST_CAP holds what is resisted. The share is the same for a spell with an effect beyond its damage (a slow, a
--- root), which Classic resists whole rather than in part. Nil when pen is not known. L the player's level, T the enemy's, player: it is a player.
+-- which piercing does not lower; RESIST_CAP holds what is resisted. That is the share of a spell that does damage alone: a spell with an effect
+-- beyond its damage (a slow, a root), which Classic resists whole or not at all, pays for the levels with its higher miss instead, and is resisted
+-- whole only by the enemy's own resistance, counted as 0, so it takes the damage piercing adds alone (T = L). Nil when pen is not known. L the
+-- player's level, T the enemy's, player: it is a player.
 local function Resist(L, T, player, pen)
 	if not (Finite(pen) and Finite(L) and L >= 1 and Finite(T)) then
 		return nil

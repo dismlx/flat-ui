@@ -10,11 +10,11 @@ local ADDON_NAME, ns = ...
 --
 -- The table: a title with the enemy as counted and where the player stands, the weapon skill at its right, a heading, and a line for each attack
 -- (Swing, or Main and Off while dual wielding; Special; Ranged; Spell) with a column for each part of the roll that applies to a line shown: Miss,
--- Dodge, Parry, Glance, Block, Crit, Hit, and Cap, the crit cap of a swing; then Resist, the Spell line's alone, no part of the roll: the share of
--- a spell's damage resisted on average, below 0 the damage a creature takes more from the player's Spell Piercing (HitTableCalc.lua, Resist), with
--- the piercing of every school the game gives (GetSpellPenetration), the piercing of one school (Fire Piercing...) only in the gear comparison. A
--- crit above the cap turns the crit and the cap yellow; a miss, dodge or parry down to its floor, and a resist below 0, turn green. A part that
--- does not apply is -, one the game withheld or refused is ?, and /flatui status says which, and what Resist counts.
+-- Dodge, Parry, Glance, Block, Crit, Hit, and Cap, the crit cap of a swing; then Resist, the Spell line's alone, no part of the roll: the share of a
+-- spell's damage resisted on average, below 0 the damage a creature takes more from the player's Spell Piercing (HitTableCalc.lua, Resist), with the
+-- piercing of every school the game gives (GetSpellPenetration), the piercing of one school (Fire Piercing...) only in the gear comparison and a
+-- spell tooltip's Expected line. A crit above the cap turns the crit and the cap yellow; a miss, dodge or parry down to its floor, and a resist below
+-- 0, turn green. A part that does not apply is -, one the game withheld or refused is ?, and /flatui status says which, and what Resist counts.
 --
 -- The frame is a frame of its own on UIParent, in the LOW strata of the player frame (Mainline/PlayerFrame.xml:13), with no mouse and no name, in a
 -- flat background with a thin border of the hud page's look (ns.Outline, made inside ns.EachPart). With no spot saved in the movers it hangs from a
@@ -149,8 +149,8 @@ local LINE_EMPTY = "Hit table: hidden, with no line to show."
 local LINE_NO_LEVEL = "Hit table: hidden, since the game does not give your level."
 local LINE_FACING = "Hit table: the game did not say whether your target attacks you, so the table counts you behind it."
 local LINE_OFF_CRIT = "Hit table: the game gives one crit chance, your main hand's, so crit talents for one kind of weapon may make your off hand's crit differ."
-local LINE_RESIST = "Hit table: Resist is the share of a spell's damage resisted on average, with your Spell Piercing %d. The enemy's own resistances are not known and count as none, so below 0 it is the damage a creature takes more from your piercing (Spell Vulnerability); against a player piercing does nothing below 0. Above 0, a spell with an effect beyond its damage, as a slow, is resisted whole that often. Piercing of one school, as Fire Piercing, counts in the gear comparison only."
-local LINE_RESIST_LEVEL = "Hit table: Resist counts %s%% for the levels the enemy is above you, Classic's rule and an estimate on WoW: Forever; piercing does not lower it."
+local LINE_RESIST = "Hit table: Resist is the share of a spell's damage resisted on average, with your Spell Piercing %d. The enemy's own resistances are not known and count as none, so below 0 it is the damage a creature takes more from your piercing (Spell Vulnerability); against a player piercing does nothing below 0. Piercing of one school, as Fire Piercing, counts only in the gear comparison and the Expected line of a spell's tooltip, not here."
+local LINE_RESIST_LEVEL = "Hit table: Resist counts %s%% for the levels the enemy is above you, Classic's rule and an estimate on WoW: Forever; piercing does not lower it. A spell with an effect beyond its damage, as a slow, takes no such share but pays for the levels with its higher miss, and the gear comparison leaves the share out."
 local LINE_FIT = "Hit table: the text is %d%% of Text size, so the table ends before the %s. /flatui move places it elsewhere."
 -- At For tanks and damage dealers: on or off, the role, and what it was read from (the third answer of ns.PlayerRole, a phrase such as "your group
 -- role" or "most points in Holy"), as nameplate threat names its own (PlateThreat.lua); setup's sentence, a suggestion, is not said here.

@@ -64,9 +64,11 @@ local _, ns = ...
 -- is E = H x (B + c x f x SP) x (1 + C x (m - 1)) on the line of the attack table its data gives it (roll), H and C that line's chances to land and
 -- to crit, m 1.5 on the Spell line and 2.0 on the others (STAT_CRIT_BONUS, GlobalStrings enUS.lua:22332) raised by a crit damage talent, 1 + (m - 1)
 -- x (1 + t); a periodic part the same over its ticks, which crit on Forever. A damage spell of a school of magic on the Spell line also takes
--- x (1 - R / 100), R the line's resist: the share resisted on average, below 0 the damage a creature takes more from piercing; the piercing of one
--- school (Fire Piercing..., kind pen with its school), which GetSpellPenetration does not count, is the sum of the worn items' (SchoolPiercing) and
--- counts for spells of that school alone (C.Resist), and a resist that counts the levels a creature is above the player is an estimate. A swing is
+-- x (1 - R / 100), R the resist of HitTableCalc.lua's Resist at the player's level (Unresisted): below 0 the damage a creature takes more from
+-- piercing, with no share for the levels a creature is above the player (a spell that also slows or roots pays for those with its higher miss, not
+-- a resist, and SpellData does not say which spells do); the piercing of one school (Fire Piercing..., kind pen with its school), which
+-- GetSpellPenetration does not count, is the sum of the worn items' (SchoolPiercing) and counts for spells of that school alone, and an item's
+-- piercing that no row compared takes is named as not counted (PierceNotes). A swing is
 -- (weapon mean + attack power / 14 x its own speed + flat) x pct (ATTACK_POWER_MAGIC_NUMBER, Camelot/PaperDollFrameStats.lua:11; flat and pct
 -- UnitDamage's, backed out as the sheet backs them out,
 -- Camelot/PaperDollFrame.lua:913-914), on the Swing line with glancing blows; a strike adds its bonus, takes the weapon multiple and the normalized
@@ -78,10 +80,10 @@ local _, ns = ...
 -- no figure. Haste: a new weapon swings at its own speed x (hasted now / own now) x (1 + h) / (1 + h'), h and h' the haste of the rating worn now and
 -- with the item. Every compared hand counts its weapon's line at full skill, the most for the level plus the line's modifier from race and gear, now
 -- and with the item alike (Adjust, 0.5.25: the comparison is between items, not between the player's training states), and a note names a compared
--- line the player has yet to raise (SkillNotes). The absolute numbers are before armor, the enemy's own resistances (not known: counted as 0), and
--- talents and buffs the stats do not show; the percent cancels them. A figure is an estimate when a value it is built from is (design 3.5): a
--- damage or healing figure by its parts, the model and its line of the attack table; a threat figure by the threat's own values and multipliers
--- too, and by the damage it multiplies.
+-- line the player has yet to raise (SkillNotes). The absolute numbers are before armor, resistances (the enemy's own, not known, and the share for
+-- its levels; a spell counts the damage piercing adds alone), and talents and buffs the stats do not show; the percent cancels them. A figure is an
+-- estimate when a value it is built from is (design 3.5): a damage or healing figure by its parts, the model and its line of the attack table; a
+-- threat figure by the threat's own values and multipliers too, and by the damage it multiplies.
 --
 -- G.Compare's answer, as GearLines.lua and GearWindow.lua read it (design 4.3). Its candidates come in the order the game names them, then by slot,
 -- each { slots, label, empty, game, offEmpty, mean, header, notCounted, vs, skills, noChange, rows }: slots the INVSLOT numbers the item would take,
@@ -156,6 +158,11 @@ local K = {
 	STAT_NAMES = { "Strength", "Agility", "Stamina", "Intellect", "Spirit" }, RATED = { [1] = true, [2] = true, [4] = true },
 	-- Stamina and Spirit as a note says what they give instead (Notes), and the words of an item's trigger lines in a note (Trigger).
 	UNCOUNTED = { [3] = "your health", [5] = "your regeneration" },
+	-- Spell Piercing (D.STATS kind pen) by its school's index, 0 for every school, as Forever names it (ITEM_MOD_<SCHOOL>_PENETRATION_SHORT), with
+	-- the spells it counts for: the note of an item's piercing that no row compared takes (PierceNotes).
+	PIERCE = { [0] = { "Spell Piercing", "magic" }, [3] = { "Fire Piercing", "Fire" }, [4] = { "Nature Piercing", "Nature" },
+		[5] = { "Frost Piercing", "Frost" }, [6] = { "Shadow Piercing", "Shadow" }, [7] = { "Arcane Piercing", "Arcane" } },
+	PIERCE_NOTE = "%s %s (only a %s damage spell rolled on the Spell line takes it, and none is compared)",
 	TRIGGERS = { use = "use effect", proc = "chance on hit", equip = "equip effect" },
 	-- Seal of Righteousness' hit: its value / 100 x the weapon's speed x 1.2 with a two-hander, 0.85 with a one-hander from 2.0 sec up and 0.2 less a
 	-- second under it (wowsims/forever, MIT: docs/evidence/EV-0059). Seal of Command procs 7 times a minute on white hits that land
@@ -1344,7 +1351,8 @@ local function Wear(state, state2, item, slots)
 end
 
 -- The change per kind of D.STATS, summed over the keys, with the creature type bonuses and the notes it leaves for info. Spell Piercing (pen) of
--- every school is summed; that of one school is left to the spells of that school, from the items worn (SchoolPiercing).
+-- every school is summed; that of one school is left to the spells of that school, from the items worn (SchoolPiercing); each goes to info.pierce,
+-- { school's index or 0, amount }, for PierceNotes.
 local function Sums(delta, info, D)
 	local sums = { stat = {}, school = {}, rating = {}, size = {}, skill = {}, ap = 0, rap = 0, sp = 0, spd = 0, heal = 0, wdmg = 0, bv = 0,
 		pen = 0 }
@@ -1375,6 +1383,8 @@ local function Sums(delta, info, D)
 				AddOnce(info.notCounted, ("%s %s"):format(def[2], Signed(amount)))
 			elseif kind == "pen" then
 				sums.pen = sums.pen + (def[2] == nil and amount or 0)
+				info.pierce = info.pierce or {}
+				info.pierce[#info.pierce + 1] = { Num(def[2]) or 0, amount }
 			elseif sums[kind] ~= nil and type(sums[kind]) == "number" then
 				sums[kind] = sums[kind] + amount
 			end
@@ -2025,7 +2035,8 @@ local function OnSwing(ctx, line, m)
 end
 
 -- The piercing of one school (D.STATS kind pen with the school: Fire Piercing...) the items of a state give, summed over its links (with the item in
--- its slots for the state with it), kept for each table of links: GetSpellPenetration gives the piercing of every school alone.
+-- its slots for the state with it), kept for each table of links once the game has given the stats of every link (ItemStats keeps them), so a sum
+-- made before an item loaded is made again: GetSpellPenetration gives the piercing of every school alone.
 local schoolPiercing = setmetatable({}, { __mode = "k" })
 
 local function SchoolPiercing(ctx, school)
@@ -2036,9 +2047,14 @@ local function SchoolPiercing(ctx, school)
 	local kept = schoolPiercing[links]
 	if not kept then
 		kept = {}
-		local defs = Table(Field(ctx.D, "STATS")) or {}
+		local defs, whole = Table(Field(ctx.D, "STATS")) or {}, true
 		for _, link in pairs(links) do
-			for key, amount in pairs(ItemStats(Text(link))) do
+			local text = Text(link)
+			local stats = ItemStats(text)
+			if text and statsOf[text] ~= stats then
+				whole = false
+			end
+			for key, amount in pairs(stats) do
 				local def = Table(defs[key])
 				local at = def and def[1] == "pen" and Num(def[2])
 				if at and Num(amount) then
@@ -2046,37 +2062,39 @@ local function SchoolPiercing(ctx, school)
 				end
 			end
 		end
-		schoolPiercing[links] = kept
+		if whole then
+			schoolPiercing[links] = kept
+		end
 	end
 	return kept[school] or 0
 end
 
--- The share of a damage spell's amount the enemy does not resist: 1 - the Spell line's resist / 100, the resist worked out again (C.Resist) with the
--- piercing the items worn give its school (of several, sch, the most: the lowest resistance counts); a resist that counts the levels a creature is
--- above the player is an estimate. 1 for the Physical school, nil while the resist is not known.
+-- The share of a damage spell's amount the enemy does not resist: 1 - the resist / 100, worked out again (C.Resist) at the player's level, so with
+-- no share for the levels a creature is above the player (a spell that also slows or roots pays for them with its higher miss, not a resist, and
+-- SpellData does not say which spells do), with the Spell line's piercing plus that the items worn give the spell's school (of several, sch, the
+-- most: the lowest resistance counts): the damage piercing adds against a creature (Spell Vulnerability). 1 for the Physical school, nil while the
+-- piercing is not known. ctx.pierced: the schools of a spell whose figure counts piercing (PierceNotes).
 local function Unresisted(ctx, line)
 	local parts = line and Table(line.parts)
 	local resist = parts and parts.resist
 	if ctx.physical or resist == false then
 		return 1
-	elseif not Num(resist) then
+	end
+	local schools = Table(ctx.entry.sch) or { ctx.entry.school }
+	ctx.pierced = schools
+	local C, target, level = Calc(), Table(ctx.read.target), Num(ctx.read.level)
+	if not (Num(resist) and Num(line.pen) and C and level) then
 		return nil
 	end
 	local most
-	for _, school in ipairs(Table(ctx.entry.sch) or { ctx.entry.school }) do
+	for _, school in ipairs(schools) do
 		if Num(school) and school >= 2 then
 			local pen = SchoolPiercing(ctx, school)
 			most = most and math.max(most, pen) or pen
 		end
 	end
-	local C, target = Calc(), Table(ctx.read.target)
-	if most and most ~= 0 and C and target and Num(line.pen) then
-		resist = Num(Ask(C.Resist, Num(ctx.read.level), Num(target.level), target.player == true, line.pen + most)) or resist
-	end
-	if line.levelResist == true then
-		ctx.estimate = true
-	end
-	return 1 - resist / 100
+	resist = Num(Ask(C.Resist, level, level, target ~= nil and target.player == true, line.pen + (most or 0)))
+	return resist and 1 - resist / 100 or nil
 end
 
 -- A cast on the Spell line: the chance to hit times the crits; and the share that lands.
@@ -2126,7 +2144,7 @@ end
 -- The share of a cast's amount the entry deals on its line, with crits, and the share that lands: heals do not miss and crit as spells; a Physical
 -- spell on the Spell line takes the sheet's spell crit and 1.5, an estimate (no source says which crit it rolls); a Ranged line with no ranged weapon
 -- is an estimate too. Such a line is an estimate of the line itself (lineEstimate), which a flat threat's landed share takes as well. A damage spell
--- on the Spell line takes the share not resisted too (Unresisted).
+-- on the Spell line takes the share not resisted too (Unresisted: the damage Spell Piercing adds).
 local function LineFactor(ctx)
 	local entry = ctx.entry
 	if K.HEALS[entry.cmp] then
@@ -2805,14 +2823,15 @@ local function RankOf(entry, line)
 	return nil
 end
 
--- The expected values of a line (the design's 2.5): { cast, second, threat, threatSecond, basis, why, threatWhy, swing, swingThreat, swings }, for
--- line { entry, rank, id }, with opts { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table inputs
--- (when none, G.Inputs(), or a read asked for while there is none yet). swing, swingThreat and swings are a next-swing strike's (EXPECT.strike): the
--- swing it takes the place of, that swing's threat and the main hand's swings a second. stats may be a copy G.With or G.Without made: its change
--- (swap) goes into the hit table. basis and estimate are those of cast and second, threatBasis and threatEstimate those of threat and threatSecond
--- (design 3.5); perSecond says the figures ride on the swings or shots, so threat is a second too. why is the player's words (K.WHY): a spell it
--- cannot work out, a pet's spell, no data, no stats, no rank, no hit table, or a part of the table the game withheld; threatWhy why threat alone has
--- no figure (a threat not known on Forever: Whirlwind's).
+-- The expected values of a line (the design's 2.5): { cast, second, threat, threatSecond, basis, why, threatWhy, swing, swingThreat, swings, pierced
+-- }, for line { entry, rank, id }, with opts { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table
+-- inputs (when none, G.Inputs(), or a read asked for while there is none yet). swing, swingThreat and swings are a next-swing strike's
+-- (EXPECT.strike): the swing it takes the place of, that swing's threat and the main hand's swings a second. stats may be a copy G.With or G.Without
+-- made: its change (swap) goes into the hit table. basis and estimate are those of cast and second, threatBasis and threatEstimate those of threat
+-- and threatSecond (design 3.5); perSecond says the figures ride on the swings or shots, so threat is a second too. why is the player's words
+-- (K.WHY): a spell it cannot work out, a pet's spell, no data, no stats, no rank, no hit table, or a part of the table the game withheld; threatWhy
+-- why threat alone has no figure (a threat not known on Forever: Whirlwind's). pierced: the schools of a damage spell whose figure counts Spell
+-- Piercing (Unresisted).
 function G.Expect(line, state, stats, opts)
 	local result = {}
 	line = Table(line)
@@ -2874,6 +2893,7 @@ function G.Expect(line, state, stats, opts)
 	result.perSecond = ctx.perSecond == true
 	result.swing, result.swingThreat, result.swings = Num(ctx.swing), Num(ctx.swingThreat), Num(ctx.swings)
 	result.why, result.threatWhy = ctx.why, ctx.threatWhy
+	result.pierced = ctx.pierced
 	return result
 end
 
@@ -2939,12 +2959,13 @@ local function Now(line, state, stats, opts, stamp)
 	return value
 end
 
--- The rows of a candidate: { line, now, with, figure, estimate, nowEstimate, withEstimate, basis, perSecond, why } for each chosen line, with the
--- basis of its figure (the threat's for threat), whether each side is an estimate and the change is (either side), whether its figure is a second
--- and why it has none (for threat also threatWhy); a next-swing strike's also nowSwing, withSwing, nowSwings and withSwings, the swing it takes the
--- place of in its figure and the main hand's swings a second, each side's (G.Expect's swing, swingThreat, swings). reverse: what a worn item gives, now being
--- the slot empty (or the item compared against there) and with as worn, so with - now reads the same way as for an item to wear. fresh: state and
--- stats are a copy (the item compared against worn), whose figures are worked out here and not kept as those of now.
+-- The rows of a candidate: { line, now, with, figure, estimate, nowEstimate, withEstimate, basis, perSecond, why, pierced } for each chosen line,
+-- with the basis of its figure (the threat's for threat), whether each side is an estimate and the change is (either side), whether its figure is a
+-- second, why it has none (for threat also threatWhy) and the schools whose Spell Piercing it counts (G.Expect's pierced); a next-swing strike's also
+-- nowSwing, withSwing, nowSwings and withSwings, the swing it takes the place of in its figure and the main hand's swings a second, each side's
+-- (G.Expect's swing, swingThreat, swings). reverse: what a worn item gives, now being the slot empty (or the item compared against there) and with as
+-- worn, so with - now reads the same way as for an item to wear. fresh: state and stats are a copy (the item compared against worn), whose figures
+-- are worked out here and not kept as those of now.
 local function Rows(chosen, state, stats, state2, stats2, work, reverse, fresh)
 	local rows = {}
 	local opts = work.opts
@@ -2972,10 +2993,34 @@ local function Rows(chosen, state, stats, state2, stats2, work, reverse, fresh)
 				row.nowSwing, row.withSwing, row.nowSwings, row.withSwings = worn[field], other[field], worn.swings, other.swings
 			end
 			row.why = worn.why or other.why or (figure == "threat" and (worn.threatWhy or other.threatWhy)) or nil
+			row.pierced = Table(other.pierced) or Table(worn.pierced)
 		end
 		rows[#rows + 1] = row
 	end
 	return rows
+end
+
+-- An item's Spell Piercing (info.pierce, Sums) that no row counts (a row's pierced) named as not counted, then info.pierce dropped: piercing counts
+-- only for a damage spell of a school of magic on the Spell line (Unresisted), that of one school for spells of that school.
+local function PierceNotes(info, rows)
+	for _, pierce in ipairs(Table(info.pierce) or {}) do
+		local school, taken = pierce[1], false
+		for _, row in ipairs(rows) do
+			local pierced = Table(row.pierced)
+			if pierced and school == 0 then
+				taken = true
+			elseif pierced then
+				for _, at in ipairs(pierced) do
+					taken = taken or at == school
+				end
+			end
+		end
+		if not taken then
+			local name = K.PIERCE[school] or K.PIERCE[0]
+			AddOnce(info.notCounted, K.PIERCE_NOTE:format(name[1], Signed(pierce[2]), name[2]))
+		end
+	end
+	info.pierce = nil
 end
 
 -- The rows counted over a minute (G.Totals), defined with the totals below.
@@ -3116,6 +3161,7 @@ local function Instead(result, link, opts, chosen, state, stats, work)
 			SkillNotes(info, { nowState, state2 }, candidate.slots, work.opts.inputs)
 			candidate.base, candidate.baseSlots = work.base, baseSlots
 			candidate.rows = Rows(chosen, nowState, nowStats, state2, stats2, work, false, baseItem ~= nil)
+			PierceNotes(info, candidate.rows)
 			candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit, work.role, work.mode)
 			candidate.header, candidate.notCounted, candidate.vs = Header(candidate, nowState, work.unit), info.notCounted, info.vs
 			candidate.skills = info.skills
@@ -3178,6 +3224,7 @@ local function WhatItGives(result, slot, chosen, state, stats, work)
 	SkillNotes(result, { state, state2 }, slots, work.opts.inputs)
 	local candidate = { slots = slots, label = Label(slots), empty = false, game = true, offEmpty = false, base = work.base, skills = result.skills }
 	candidate.rows = Rows(chosen, state, stats, state2, stats2, work, true, false)
+	PierceNotes(result, candidate.rows)
 	candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit, work.role, work.mode)
 	if baseName then
 		candidate.header = ("What it gives your spells instead of %s, %s:"):format(baseName, work.unit)
