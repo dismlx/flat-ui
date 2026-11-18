@@ -7,12 +7,16 @@ local _, ns = ...
 -- succeeds or lands, "dot" no hit when cast and ticks after, "both" a hit and then ticks, "channel" hits while it is channelled, "area" several
 -- hits at once around you or a spot, "spin" an aura on you that hits every enemy around you each `period` seconds, `ticks` times, by casting the
 -- spell `trigger` (whose own cast, when the game reports it, then opens no slot of its name: the spin takes its hits), "sweep" a buff
--- whose `charges` make your melee swings and strikes hit another enemy too for `duration` seconds, and "none" no damage at all, so its cast opens
--- no slot (its school is not used). travel: the missile flies (its SpellMisc Speed is above 0), so the hit comes later. area: a channel that hits
--- every enemy in its area, not only your target. Auto Shot, the shots of a bow, gun, crossbow or thrown weapon and the Shoot of a wand are left
--- out: the shot slot takes them (MINE.shots). Maul, Heroic Strike, Cleave and Raptor Strike are here too, but their cast opens the pair of a next
--- melee ability (MINE.OpenPair), which reads only targets here: the enemies it hits. Forever's own rows (wowsims/gamedata) give the length and the
--- charges of Sweeping Strikes and Bladestorm.
+-- whose `charges` make your melee swings and strikes hit another enemy too for `duration` seconds, "counter" a buff whose `charges` strike back
+-- at each enemy that hits you in melee for `duration` seconds (a cast of its name while it lasts, such as the counterattack, opens no slot), and
+-- "none" no damage at all, so its cast opens no slot (its school is not used). travel: the missile flies (its SpellMisc Speed is above 0), so
+-- the hit comes later. area: a channel that hits every enemy in its area, not only your target. Auto Shot, the shots of a bow, gun, crossbow
+-- or thrown weapon and the Shoot of a wand are left out: the shot slot takes them (MINE.shots). Maul, Heroic Strike, Cleave and Raptor Strike
+-- are here too, but their cast opens the pair of a next melee ability (MINE.OpenPair), which reads only targets here: the enemies it hits.
+-- Forever's own rows (wowsims/gamedata) give the length and the charges of Sweeping Strikes and Bladestorm, and Forever's row of Retaliation
+-- (Wowhead's Forever database, spell 20230) its length and charges. flat: a physical strike of a small flat damage and no weapon damage
+-- (Hamstring, Wing Clip, Kick, Pummel, Shield Bash, Gouge), whose hit is smaller than a swing's; CombatText.lua weighs it only when the game
+-- gives the amounts plainly (MINE.Assign).
 -- Checked against the game's tables. The name of each ID: the classic client's Spell table (WowClassicGrindBot, Json/dbc/spells.json: Id, Name,
 -- Level) and SpellName of the Retail dumps (ThingEngineering/wow-dumps, te_spellname.csv). School and missile: SpellMisc of those dumps
 -- (SchoolMask, Speed). Kind: SpellEffect of those dumps, with the spells its EffectTriggerSpell names: Effect 2, 9, 17, 31, 58, 62 or 121 is a
@@ -130,7 +134,7 @@ ns.CombatSpells = {
 	[1510] = { school = 64, kind = "channel", area = true }, -- Volley (no row; classic school, arcane: most rows of the name are physical)
 	[1130] = { school = 64, kind = "none" }, -- Hunter's Mark
 	[20736] = { school = 64, kind = "none", travel = true }, -- Distracting Shot
-	[2974] = { school = 1, kind = "hit" }, -- Wing Clip (no row)
+	[2974] = { school = 1, kind = "hit", flat = true }, -- Wing Clip (no row)
 	[2973] = { school = 1, kind = "hit" }, -- Raptor Strike (no row; a next swing)
 	[1495] = { school = 1, kind = "hit" }, -- Mongoose Bite (no row)
 	[19306] = { school = 1, kind = "hit" }, -- Counterattack (no row)
@@ -160,14 +164,14 @@ ns.CombatSpells = {
 	[1752] = { school = 1, kind = "hit" }, -- Sinister Strike
 	[53] = { school = 1, kind = "hit" }, -- Backstab
 	[2098] = { school = 1, kind = "hit" }, -- Eviscerate (now Dispatch)
-	[1776] = { school = 1, kind = "hit" }, -- Gouge (classic: it hits)
+	[1776] = { school = 1, kind = "hit", flat = true }, -- Gouge (classic: it hits)
 	[703] = { school = 1, kind = "dot" }, -- Garrote
 	[1943] = { school = 1, kind = "dot" }, -- Rupture
 	[8676] = { school = 1, kind = "hit" }, -- Ambush
 	[16511] = { school = 1, kind = "hit" }, -- Hemorrhage
 	[14278] = { school = 1, kind = "hit" }, -- Ghostly Strike (no row; classic school: two of the three rows of the name are shadow)
 	[14251] = { school = 1, kind = "hit" }, -- Riposte (no row)
-	[1766] = { school = 1, kind = "hit" }, -- Kick (classic: it hits)
+	[1766] = { school = 1, kind = "hit", flat = true }, -- Kick (classic: it hits)
 	[6770] = { school = 1, kind = "none" }, -- Sap
 	[1833] = { school = 1, kind = "none" }, -- Cheap Shot
 	[408] = { school = 1, kind = "none" }, -- Kidney Shot
@@ -182,7 +186,7 @@ ns.CombatSpells = {
 	[845] = { school = 1, kind = "area", targets = 2 }, -- Cleave (a next swing; Forever's own rows of 845 and 7369 have ChainTargets 2)
 	[772] = { school = 1, kind = "dot" }, -- Rend (classic: ticks only; Retail's row is a hit)
 	[6343] = { school = 1, kind = "area" }, -- Thunder Clap
-	[1715] = { school = 1, kind = "hit" }, -- Hamstring
+	[1715] = { school = 1, kind = "hit", flat = true }, -- Hamstring
 	[7384] = { school = 1, kind = "hit" }, -- Overpower
 	[12294] = { school = 1, kind = "hit" }, -- Mortal Strike
 	[23881] = { school = 1, kind = "hit" }, -- Bloodthirst
@@ -192,6 +196,7 @@ ns.CombatSpells = {
 	[1464] = { school = 1, kind = "hit" }, -- Slam
 	[1680] = { school = 1, kind = "area" }, -- Whirlwind
 	[12292] = { school = 1, kind = "sweep", duration = 20, charges = 5 }, -- Sweeping Strikes (Forever's row: 20 seconds, 5 charges, on your melee swings and strikes)
+	[20230] = { school = 1, kind = "counter", duration = 15, charges = 30 }, -- Retaliation (Forever's row: 15 seconds, 30 charges, on melee swings and abilities taken; each counterattack is 20240 Retaliation, weapon damage)
 	[7386] = { school = 1, kind = "none" }, -- Sunder Armor (no row)
 	[1160] = { school = 1, kind = "none" }, -- Demoralizing Shout
 	[5246] = { school = 1, kind = "none" }, -- Intimidating Shout
@@ -201,8 +206,8 @@ ns.CombatSpells = {
 	[676] = { school = 1, kind = "none" }, -- Disarm (no row)
 	[100] = { school = 1, kind = "none" }, -- Charge
 	[20252] = { school = 1, kind = "hit" }, -- Intercept (no row)
-	[6552] = { school = 1, kind = "hit" }, -- Pummel (classic: it hits)
-	[72] = { school = 1, kind = "hit" }, -- Shield Bash (no row)
+	[6552] = { school = 1, kind = "hit", flat = true }, -- Pummel (classic: it hits)
+	[72] = { school = 1, kind = "hit", flat = true }, -- Shield Bash (no row)
 	[12323] = { school = 1, kind = "none" }, -- Piercing Howl
 	[12809] = { school = 1, kind = "none" }, -- Concussion Blow (no row; classic: a stun only)
 	-- Weapons
