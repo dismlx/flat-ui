@@ -13,7 +13,9 @@ local _, ns = ...
 -- SetHyperlink and Hide, never in a fight. ItemCompare.lua (called at the start of each refresh) writes the game's alwaysCompareItems.
 -- ChatHistory.lua (called at the end of each refresh) keeps recent chat lines for this character and prints them after a reload.
 -- SpellLines.lua and GearLines.lua (called from the post call after ChatTips.lua) add the spell and gear lines, from SpellModel.lua and GearModel.lua
--- and the data of SpellData.lua, and GearWindow.lua is the Gear comparison window; the three are synced at the end of each refresh.
+-- and the data of SpellData.lua, and GearWindow.lua is the Gear comparison window; the three are synced at the end of each refresh, each through
+-- ns.Each. GearWindow.lua also fills GameTooltip for its rows, its switch and its item: SetOwner on a frame of its own, SetSpellByID, SetHyperlink,
+-- AddLine, Show, and Hide only while one of its frames owns it, never in a fight.
 -- Tooltips hidden by their kind, by hostility and place, and by the party and raid frames that own them follow the tooltip and the group frames of
 -- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLTooltip/EnhanceQoLTooltip.lua:226-233, 973-977, 1420-1440, 1590-1594,
 -- 1633-1636; EnhanceQoLUnitFrames/UF_GroupFrames.lua:6507-6536). They are hidden as the rows of Tooltips in combat are, with Hide on the tooltip
@@ -1492,15 +1494,16 @@ local function Refresh()
 		ns.ChatHistorySync()
 	end
 	-- The spell lines, the gear lines and the Gear comparison window follow the rows just applied, also as the module goes off: the window hides
-	-- then, and takes the look of the Windows page after a change of it (READERS, Core.lua).
+	-- then, and takes the look of the Windows page after a change of it (READERS, Core.lua). Each runs through ns.Each, so an error in one of them
+	-- cannot stop this refresh, which runs under ns.Try, nor the module with it.
 	if type(ns.SpellLinesSync) == "function" then
-		ns.SpellLinesSync()
+		ns.Each(KEY, ns.SpellLinesSync)
 	end
 	if type(ns.GearLinesSync) == "function" then
-		ns.GearLinesSync()
+		ns.Each(KEY, ns.GearLinesSync)
 	end
 	if type(ns.GearWindowSync) == "function" then
-		ns.GearWindowSync()
+		ns.Each(KEY, ns.GearWindowSync)
 	end
 end
 

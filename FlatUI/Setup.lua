@@ -603,10 +603,11 @@ end
 -- Rows ---------------------------------------------------------------------------------------------
 
 -- List rows setup leaves to the options pages: a pick in two steps (an icon or a tracker, then what it gets), whose first step only chooses and so
--- cannot wait for Finish, and Show as import text, which only shows something.
+-- cannot wait for Finish, and Show as import text and Gear comparison window, which only show something (queued for Finish, the window would open
+-- after setup closes, not when the player asks).
 S.APART = {
 	["cooldowns.iconSound"] = true, ["cooldowns.iconShow"] = true, ["cooldowns.rowOf"] = true, ["pulse.iconSound"] = true, ["pulse.iconSpot"] = true,
-	["trackers.clickUse"] = true, ["movers.layoutText"] = true,
+	["trackers.clickUse"] = true, ["movers.layoutText"] = true, ["chat.gearOpen"] = true,
 }
 
 -- A copy of a row of Config.lua that reads and writes the draft: it has no saved path, so the row builders never touch a profile. A list row queues

@@ -2107,7 +2107,9 @@ ns.PAGES = {
 			tip = "What share of your spell damage, spell healing or attack power a spell or ability adds: a cast, a tick or a target, and for weapon abilities their weapon damage and the share of attack power the weapon's speed gives. WoW: Forever's own values, from the game's spell data and tooltips and from tests in the game, many by wowsims/forever. ~ marks an estimate." },
 		{ key = "spellStats", kind = "bool", default = true, label = "With your stats",
 			tip = "How much that share is with your stats now, and the threat your attack power adds. The game withholds your stats in fights: then the numbers are those from before the fight, and a line says so." },
-		{ key = "spellLowRank", kind = "bool", default = true, label = "Less for low ranks (estimate)", needs = "spellPower",
+		-- It needs no other row: the gear comparison counts it too, in item tooltips and the window (GearModel.lua), as Against and the rows after it
+		-- serve the window (design 2.5: the low rank factor while its row is on).
+		{ key = "spellLowRank", kind = "bool", default = true, label = "Less for low ranks (estimate)",
 			tip = "On WoW: Forever a rank far below your level gets less of your spell damage and healing. Blizzard gave no formula, so Flat UI uses an estimate from players' tests on heals up to level 30: in full for 17 levels after the rank is learned, then 5% less a level. Marked ~." },
 		{ key = "spellThreat", kind = "choice", default = "special", label = "Threat lines",
 			choices = { { "special", "Where threat is special or changed" }, { "all", "On every spell" }, { "off", "Off" } },
