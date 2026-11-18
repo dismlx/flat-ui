@@ -86,7 +86,7 @@ The **Flat UI** page can let the camera zoom out farther than the game's own opt
 - `/flatui pulse sound <spell or item> bell` gives one its own pulse sound; `none` silences it, and `page` gives it the page's sound again.
 - `/flatui pulse spot <spell or item> 2` sends one to pulse spot 2; `1` puts it back.
 - `/flatui role` says whether nameplate threat reads you as a tank and why; `tank`, `damage`, `auto` or `toggle` sets it.
-- `/flatui gear` opens or closes the Gear comparison window; `/flatui gear <item>` compares a shift-clicked item there. The window's **Find** button opens the item finder. `/flatui gear add <spell>` (an ID, a name or a shift-clicked spell, which keeps its rank), `remove <spell>`, `bar 1` and `reset` change the spells it compares, and `list` prints them.
+- `/flatui gear` opens or closes the Gear comparison window; `/flatui gear <item>` compares a shift-clicked item there. The window's **Find** button opens the item finder. `/flatui gear add <spell>` (an ID, a name or a shift-clicked spell, which keeps its rank), `remove <spell>`, `bar 1` and `reset` change the spells it compares, `weight <spell> <0 to 5>` sets how much a spell counts in the **Overall** line, and `list` prints them.
 - `/flatui tracker add group` tracks your class buff on your group; `/flatui tracker use 2 <item>` sets what weapon tracker 2 applies; `/flatui tracker set 1 health 40` shows pet tracker 1's health in red under 40%.
 - `/flatui bags` opens or closes the Flat UI bag window; `/flatui bags <name>` shows another of your characters' bags.
 - `/flatui bank` opens or closes your bank window: live at the banker with Flat UI's bank window, else as you last left it; `/flatui bank <name>` shows another character's bank.

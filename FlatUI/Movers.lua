@@ -207,8 +207,9 @@ local LIST = {
 	-- The Gear comparison window (GearWindow.lua), which shows while /flatui gear or its row has it open: its top left corner is the top left corner
 	-- of the box. It starts right of the Character window, which is 631 wide at the left panel's spot, 16 from the left, with the game's 32 between
 	-- panels (Camelot/CharacterFrameConstants.lua:4; UIPanelLayoutFrame.lua:3-4, 8); GearWindow.lua's BOX starts at the same corner. The player sizes
-	-- it with its grip, and its box has the size it keeps for the character (sized: FlatUICharDB.gearWindow, BoxSize), at least 380 by 220.
-	{ name = "FlatUIGear", label = "Gear comparison", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 420, height = 220,
+	-- it with its grip, and its box has the size it keeps for the character (sized: FlatUICharDB.gearWindow, BoxSize), at least 380 by 220, else the
+	-- window's first size, 460 by 420 (GearWindow.lua's SIZE).
+	{ name = "FlatUIGear", label = "Gear comparison", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 460, height = 420,
 		sized = "gearWindow", minWidth = 380, minHeight = 220, x = 680, y = -120, gate = "GearWindowShown", changed = "GearWindowMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.

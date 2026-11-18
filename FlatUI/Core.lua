@@ -247,11 +247,14 @@ local ADDON_NAME, ns = ...
 -- right corner (SetResizable, SetResizeBounds, StartSizing and StopMovingOrSizing on its own frame), its size kept in FlatUICharDB.gearWindow, which
 -- the movers' box of it follows, and a second item box, Against, that an item dropped on it or chosen in the finder fills; the weight of each spell
 -- is kept with the spells in FlatUICharDB.gearSpells. Its Find button and the Item finder row show the item finder, FlatUIGearSearch, a frame of its
--- own on UIParent hung at the window's right edge, which hides with it. The finder searches Flat UI's own item index (ItemIndex.lua, made from the
--- game's client data by tools/dev/make_itemindex.py) and the bags, bank and other characters Bags records; for Best for me it asks the game to
--- load the items of the page it shows (C_Item.RequestLoadItemDataByID) and reads them (C_Item.GetItemInfo, C_Item.GetItemInfoInstant). A Shift-click
--- on a result links the item in chat and a Ctrl-click tries it on in the game's dressing room (DressUpItemLink), as a click on an item in the
--- game's windows does.
+-- own made on the window (a frame of Flat UI's own) and hung at its right edge, so it hides with it. The finder searches Flat UI's own item index
+-- (ItemIndex.lua, made from the game's client data by tools/dev/make_itemindex.py) and the bags, bank and other characters Bags records; for an
+-- item the index lacks and for Best for me it asks the game to load the item (C_Item.RequestLoadItemDataByID) and reads it (C_Item.GetItemInfo,
+-- C_Item.GetItemInfoInstant, C_Item.GetItemInventoryTypeByID), names the weapon types by C_Item.GetItemSubClassInfo and the qualities' colours by
+-- C_Item.GetItemQualityColor, and reads the player's class and level (UnitClassBase, UnitLevel). A Shift-click on a result links the item in chat
+-- (IsModifiedClick, ChatFrameUtil.InsertLink) and a Ctrl-click tries it on in the game's dressing room (DressUpItemLink), as a click on an item in
+-- the game's windows does. Its filter menus close at a press anywhere else, heard as GLOBAL_MOUSE_DOWN on a frame of their own only while one is
+-- open.
 -- Its Gear comparison button (GearButton.lua) is a frame of its own, FlatUIGearButton, on UIParent, anchored to the top right of CharacterFrame
 -- (SetPoint with the window as the frame it hangs from) and never parented to it; of the window it reads only whether it shows, its strata and level
 -- and whether the game protects it. It follows ShowUIPanel with hooksecurefunc (ns.FollowGlobal) to see the window open, and a frame of its own looks

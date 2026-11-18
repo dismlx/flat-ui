@@ -105,7 +105,7 @@ local OWNER, NAME = "gear window", "FlatUIGear"
 -- the screen, right of the Character window (design 5.1). That window is 631 wide on this client (CHARACTER_FRAME_WIDTH, its stats pane open, as
 -- characterFrameCollapsed 0 has it: Blizzard_UIPanels_Game/Camelot/CharacterFrameConstants.lua:4, 7) at the left panel's spot, 16 from the left
 -- and 116 down (Blizzard_UIParentPanelManager/Shared/UIPanelLayoutFrame.lua:3-4), and the game leaves 32 between panels (:8): 16 + 631 + 32.
-local BOX = { width = 420, height = 220, x = 680, y = -120 }
+local BOX = { width = 460, height = 420, x = 680, y = -120 }
 -- The window's size: at least 380 x 220 (owner, 0.5.20), at most the screen, and 460 x 420 until the player sizes it, room for the item, Against,
 -- the Overall lines and about ten lines of the table at the first text size.
 local SIZE = { MIN_W = 380, MIN_H = 220, W = 460, H = 420 }
@@ -1298,7 +1298,7 @@ local function AvoidView()
 	end
 	-- An item the player can never wear is not compared here either, as in the spell view: the table shows as now.
 	local never = W.link ~= nil and (Wearing(W.link)) == true
-	local got = Ask(ns.GearAvoid, "Window", not never and W.link or nil, { base = W.used })
+	local got = Ask(ns.GearAvoid, "Window", not never and W.link or nil, W.used)
 	if type(got) ~= "table" or type(got.rows) ~= "table" or not COLUMNS[got.layout] then
 		return nil
 	end
