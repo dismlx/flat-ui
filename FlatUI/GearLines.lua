@@ -1574,8 +1574,9 @@ local function Tail(result)
 			tail[#tail + 1] = { text = text, colour = T.DIM, wrap = true }
 		end
 	end
-	if result.random == true then
-		tail[#tail + 1] = { text = T.RANDOM, colour = T.DIM, wrap = true }
+	local random = result.random
+	if random == true or (type(random) == "string" and random ~= "") then
+		tail[#tail + 1] = { text = random == true and T.RANDOM or random, colour = T.DIM, wrap = true }
 	end
 	return tail
 end
