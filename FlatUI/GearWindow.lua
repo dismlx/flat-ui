@@ -500,7 +500,6 @@ function PaintLook()
 			Colour(text, DIM)
 		end
 	end
-	PlaceWords()
 	PaintWords()
 end
 
@@ -1383,13 +1382,14 @@ local function FootLines(view)
 	return texts
 end
 
--- Draws a view: from the top down, the item, the table, the item's notes and the foot, and the window as tall as they are.
+-- Draws a view: from the top down, the words of the switch, the item, the table, the item's notes and the foot, and the window as tall as they are.
 function Paint(view)
 	local frame = W.frame
 	if not frame or type(view) ~= "table" then
 		return
 	end
 	PaintLook()
+	PlaceWords()
 	PaintRule(W.barRule, L.BAR)
 	local y = PaintItem(view, L.BAR + L.GAP)
 	local top = y

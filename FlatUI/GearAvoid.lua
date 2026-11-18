@@ -7,18 +7,19 @@ local _, ns = ...
 -- no event is heard; it adds one line to /flatui status (ns.AddStatus, Core.lua).
 --
 -- The snapshot. Every character stat call is SecretWhenUnitStatsRestricted, so the defensive stats are read in the plain moment of SpellModel.lua's
--- read (M.AfterRead: right after each plain read of its stats, in the same frame), each call under pcall, never at compare time. A withheld answer
--- (a call that raises, or a secret value) keeps the whole last snapshot, never a mix of two reads; a missing call or a nil answer is none, as
--- HitTableCalc.lua's Call tells them apart (HitTableCalc.lua:70-81). In a fight the snapshot is the one from before it, as the spell lines say. The
--- reads, as the character sheet makes them: the level (UnitLevel); the defense skill, base plus modifier and at least 0 (UnitDefenseSkill,
--- UnitDocumentation.lua:1069-1084, the sheet's GetEffectiveDefenseSkill, Camelot/PaperDollFrameStats.lua:51-54; UnitDefense on a client that has
--- that name instead); the chances to dodge, parry and block against an attacker of the player's level (GetDodgeChance, GetParryChance and
--- GetBlockChance, PlayerScriptDocumentation.lua:414, 747, 275, as the sheet reads them, Camelot/PaperDollFrame.lua:787-845); the effective armor,
--- UnitArmor's second answer (UnitDocumentation.lua:645, as Camelot/PaperDollFrameStats.lua:486-488 reads it); the block value (GetShieldBlock,
--- PlayerScriptDocumentation.lua:1040), none without a shield (C_PaperDollInfo.OffhandHasShield, PaperDollInfoDocumentation.lua:267-273); strength
--- and agility, UnitStat's effective value that SpellModel read in the same moment (its stats.stat); and the dodge a point of agility gives:
--- GetDodgeChanceFromAttribute (PlayerScriptDocumentation.lua:424-432) answers the dodge all of the effective agility adds, a fraction the sheet shows
--- times 100 (Camelot/PaperDollFrameStats.lua:316), so a point gives that times 100 over the agility.
+-- read (M.AfterRead: right after each plain read of its stats, in the same frame; it reads only while C_Secrets.ShouldUnitStatsBeSecret() is false,
+-- SpellModel.lua:52), each call under pcall, never at compare time. A withheld answer (a call that raises, or a secret value) keeps the whole last
+-- snapshot, never a mix of two reads; a missing call or a nil answer is none, as HitTableCalc.lua's Call tells them apart (HitTableCalc.lua:70-81).
+-- In a fight the snapshot is the one from before it, as the spell lines say. The reads, as the character sheet makes them: the level (UnitLevel); the
+-- defense skill, base plus modifier and at least 0 (UnitDefenseSkill, UnitDocumentation.lua:1069-1084, the sheet's GetEffectiveDefenseSkill,
+-- Camelot/PaperDollFrameStats.lua:51-54; UnitDefense on a client that has that name instead); the chances to dodge, parry and block against an
+-- attacker of the player's level (GetDodgeChance, GetParryChance and GetBlockChance, PlayerScriptDocumentation.lua:414, 747, 275, as the sheet reads
+-- them, Camelot/PaperDollFrame.lua:787-845); the effective armor, UnitArmor's second answer (UnitDocumentation.lua:645, as
+-- Camelot/PaperDollFrameStats.lua:486-488 reads it); the block value (GetShieldBlock, PlayerScriptDocumentation.lua:1040), none without a shield
+-- (C_PaperDollInfo.OffhandHasShield, PaperDollInfoDocumentation.lua:267-273); strength and agility, UnitStat's effective value that SpellModel read
+-- in the same moment (its stats.stat); and the dodge a point of agility gives: GetDodgeChanceFromAttribute (PlayerScriptDocumentation.lua:424-432)
+-- answers the dodge all of the effective agility adds, a fraction the sheet shows times 100 (Camelot/PaperDollFrameStats.lua:316), so a point gives
+-- that times 100 over the agility.
 --
 -- The table: one roll of an enemy's melee swing, in this order, each row cut to what is left of 100%: missed, dodged, parried, blocked, critical,
 -- crushing, and a normal hit for the rest. The attacker's weapon skill is 5 a level (SKILL_RANKS_PER_SKILL_LEVEL, Camelot/PaperDollFrameStats.lua:10,
@@ -52,12 +53,12 @@ local _, ns = ...
 -- (G.Without), so the change is what it gives. A total that rests on an estimate is marked ~, its change is not: the change of a row the roll does not
 -- cut is the client's own sum.
 --
--- A.Compare(link or slot, opts) gives { header, attacker, boss, now, candidates = { { label, slots, empty, offEmpty, game, notCounted, rows = { { key,
--- label, now, with, estimate, better } } } }, notCounted, why, quiet, old }, kept by the link (or the slot and the link worn there), M.Version(), the
--- snapshot's version and the attacker's level, 64 at most and the oldest first out; in a fight, the last result for the item, marked old. opts: data
--- (the post call's, for its lines and guid) and guid. A.Now() gives the table now, A.Wanted() whether avoidance shows (Avoidance, chat.gearAvoid, at
--- Always, or at For tanks, its first choice, while ns.PlayerRole's first answer is tank), A.TipLines and A.Window the lines of GearLines.lua and the
--- view of GearWindow.lua, and A.Stamp a text that changes with what they are built from.
+-- A.Compare(link or slot, opts) gives { header, attacker, boss, now, candidates = { { label, slots, empty, offEmpty, game, notCounted, rows = { {
+-- key, label, now, with, nowEstimate, withEstimate, estimate, better } } } }, notCounted, why, quiet, old }, kept by the link (or the slot and the
+-- link worn there), M.Version(), the snapshot's version and the attacker's level, 64 at most and the oldest first out; in a fight, the last result
+-- for the item, marked old. opts: data (the post call's, for its lines and guid) and guid. A.Now() gives the table now, A.Wanted() whether avoidance
+-- shows (Avoidance, chat.gearAvoid, at Always, or at For tanks, its first choice, while ns.PlayerRole's first answer is tank), A.TipLines and
+-- A.Window the lines of GearLines.lua and the view of GearWindow.lua, and A.Stamp a text that changes with what they are built from.
 
 local A = {}
 ns.GearAvoid = A
@@ -75,9 +76,9 @@ local K = {
 	MISS = 5, CRIT = 5, PER_SKILL = 0.04, PER_LEVEL = 5, CRUSH_FROM = 15, CRUSH_PER = 2, CRUSH_LESS = 15, ARMOR_PER_AGILITY = 2, BASE_BLOCK = 5,
 	-- Against: a boss three levels above the player, at its first choice from this level on (GearModel.lua, K.MAX_LEVEL).
 	BOSS = 3, MAX_LEVEL = 60,
-	-- The main hand, for a slot's label; the results kept; the changes under which a row counts as none (a hundredth of a percent of the table, a
-	-- tenth of armor's, half a point of block value, which shows whole).
-	MAIN = 16, CACHE = 64, STILL = 0.005, STILL_ARMOR = 0.05, STILL_VALUE = 0.5,
+	-- The results kept; the changes under which a row counts as none, half the last digit each shows (a hundredth of a percent for the table, a
+	-- tenth for armor's share, a whole point of block value), so a change that shows as none is none.
+	CACHE = 64, STILL = 0.005, STILL_ARMOR = 0.05, STILL_VALUE = 0.5,
 	-- The rows, in the order of the roll, then armor and block value: key, the window's words, and whether more is better for the player.
 	ROWS = {
 		{ "missed", "Missed", true }, { "dodged", "Dodged", true }, { "parried", "Parried", true }, { "blocked", "Blocked", true },
@@ -133,6 +134,7 @@ local T = {
 	STATUS = "Avoidance against %s: missed %s, dodged %s, parried %s, blocked %s, crit %s, crushing %s.",
 	STATUS_OLD = " From before the fight.",
 	STATUS_NONE = "Avoidance: your stats were not read yet.",
+	STATUS_NO_DEFENSE = "Avoidance: the game gave no defense skill, so there is no attack table to work out.",
 }
 
 -- Reading the game ---------------------------------------------------------------------------------------------------------------------------------
@@ -258,15 +260,6 @@ local function InCombat()
 	return answers[1] == true
 end
 
--- True while the game gives the stats plain: C_Secrets.ShouldUnitStatsBeSecret is false, or the client has no such call.
-local function StatsPlain()
-	local answers, why = Call(Api("C_Secrets", "ShouldUnitStatsBeSecret"))
-	if why == "missing" then
-		return true
-	end
-	return answers ~= nil and answers[1] == false
-end
-
 local function Copy(t)
 	local out = {}
 	for key, value in pairs(t) do
@@ -370,20 +363,14 @@ local function Register()
 	return held.registered
 end
 
--- The snapshot of the last plain read; with none, a read asked of SpellModel (M.Mark, M.Stats); with still none, one made here while the game gives
--- the stats plain and out of combat.
+-- The snapshot of the last plain read. With none yet (this file registered after SpellModel's last read), SpellModel is asked to read the stats again
+-- (M.Mark, M.Stats), which runs AfterRead in that plain moment; the defensive stats are never read at another moment than SpellModel's.
 local function Snapshot()
 	Register()
-	if held.snap then
-		return held.snap
-	end
-	local M = Model()
+	local M = not held.snap and Model() or nil
 	if M then
 		Ask(M.Mark, "stats")
-		local stats = Table(Ask(M.Stats))
-		if not held.snap and stats and not InCombat() and StatsPlain() then
-			AfterRead(stats)
-		end
+		Ask(M.Stats)
 	end
 	return held.snap
 end
@@ -544,13 +531,15 @@ local function Apply(s, delta, state2, stats2, notes)
 	return w
 end
 
--- The rows of a candidate: each now and with (with nil: the table now alone), whether it is an estimate, and whether more is better.
+-- The rows of a candidate: each now and with (with nil: the table now alone), whether each of the two is an estimate and whether either is, and
+-- whether more is better.
 local function Rows(now, with)
 	local rows = {}
 	for _, def in ipairs(K.ROWS) do
 		local key = def[1]
-		rows[#rows + 1] = { key = key, label = def[2], better = def[3], now = now[key], with = with and with[key],
-			estimate = now.estimate[key] == true or (with ~= nil and with.estimate[key] == true) }
+		local nowEstimate, withEstimate = now.estimate[key] == true, with ~= nil and with.estimate[key] == true
+		rows[#rows + 1] = { key = key, label = def[2], better = def[3], now = now[key], with = with and with[key], nowEstimate = nowEstimate,
+			withEstimate = withEstimate, estimate = nowEstimate or withEstimate }
 	end
 	return rows
 end
@@ -688,7 +677,7 @@ function A.Compare(itemOrSlot, opts)
 	return result
 end
 
--- The table now against the enemy Against names: { attacker, boss, table, rows = { { key, label, now, estimate, better } }, old }, or nil and why.
+-- The table now against the enemy Against names: { attacker, boss, table, rows (as A.Compare's, with nil), old }, or nil and why.
 function A.Now()
 	local s = Snapshot()
 	if not s then
@@ -768,12 +757,16 @@ local function Coloured(text, tone)
 	return (tone == "gain" and GAIN or LOSS) .. text .. "|r"
 end
 
--- A row's value with the item, ~ first when the row is an estimate (header): the change itself is the client's own sum, its total is not.
-local function Total(row)
-	return (row.estimate and "~" or "") .. Value(row, row.with)
+-- A row's value now or with the item, ~ first when it rests on an estimate (header); a change is never marked, since the change of a row the roll does
+-- not cut is the client's own sum.
+local function Total(row, now)
+	if now then
+		return (row.nowEstimate and "~" or "") .. Value(row, row.now)
+	end
+	return (row.withEstimate and "~" or "") .. Value(row, row.with)
 end
 
-local function Byes(rows)
+local function ByKey(rows)
 	local out = {}
 	for _, row in ipairs(rows) do
 		out[row.key] = row
@@ -783,7 +776,7 @@ end
 
 -- The lines of a candidate that change (design of this file: the avoided rows on one line, crit, crushing, armor and block value).
 local function Lines(rows, attacker)
-	local by, lines = Byes(rows), {}
+	local by, lines = ByKey(rows), {}
 	local parts = {}
 	for _, key in ipairs(K.AVOIDED) do
 		local row = by[key]
@@ -875,19 +868,14 @@ end
 -- A row of the window: its texts and tones by column (name, now, with, change1, change2).
 local function WindowRow(rows, withs)
 	local first = rows[1]
-	local texts = { name = first.label, now = (first.estimate and "~" or "") .. Value(first, first.now) }
-	local tones = {}
+	local texts, tones = { name = first.label, now = Total(first, true) }, {}
 	if withs then
-		texts.with = Value(first, withs[1])
+		texts.with = Total(first)
 		for index, with in ipairs(withs) do
-			local estimate = rows[index].estimate
 			local delta, tone = Change(rows[index], with)
 			local column = "change" .. index
-			texts[column] = delta and ((estimate and "~" or "") .. Value(first, delta, true)) or "-"
+			texts[column] = delta and Value(first, delta, true) or "-"
 			tones[column] = tone
-		end
-		if first.estimate then
-			texts.with = "~" .. texts.with
 		end
 	end
 	return { texts = texts, tones = tones }
@@ -952,9 +940,9 @@ local function Status()
 	if not (ns.Enabled(K.KEY) and not ns.IsStopped(K.KEY) and A.Wanted()) then
 		return {}
 	end
-	local now = A.Now()
+	local now, why = A.Now()
 	if not now then
-		return { T.STATUS_NONE }
+		return { why == T.NO_DEFENSE and T.STATUS_NO_DEFENSE or T.STATUS_NONE }
 	end
 	local t = now.table
 	local line = T.STATUS:format(now.boss and T.BOSS or T.LEVEL, Short(t.missed), Short(t.dodged), Short(t.parried), Short(t.blocked), Short(t.crit),
