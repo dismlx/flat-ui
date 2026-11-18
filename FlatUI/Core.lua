@@ -31,6 +31,17 @@ local ADDON_NAME, ns = ...
 -- still that name, and the name alone again when the row goes off.
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
+-- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
+-- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
+-- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at
+-- every roll), and the Need, Greed, Transmog and Pass buttons in a row (ClearAllPoints, SetPoint, SetSize), with outlines of its own round the
+-- frame, the icon and the timer. The cards of the gamepad interface go through the same call and take the look, but keep the game's places for
+-- their timer and buttons. Once the box Loot rolls has a spot in /flatui move (an own entry, FlatUILootRolls, with Movers on), an anchor frame
+-- of Flat UI's own on UIParent lies over that box, and after each GroupLootContainer_Update (ns.FollowGlobal) every roll frame the game's container
+-- holds (its rollFrames, read) is hung from it with ClearAllPoints and SetPoint, slot by slot with the game's 100 between them, up or down as Rolls
+-- stack says; also in a fight, since none of them is protected and nothing protected hangs from them. While no spot is saved the game's layout is
+-- left alone, and a reset of the box puts each moved frame back at the point the container's layout gives it. The container itself is never
+-- touched, and keeps its room in the game's bottom stack.
 -- With Questie's tracker on and the Questie addon loaded (QuestieSkin.lua), it lays Flat UI's own outlines on Questie's tracker (Questie_BaseFrame,
 -- Questie_HeaderFrame, the lines linePool1 and on, the item buttons Questie_ItemButton1 and on), each a backdrop texture on Questie's frame and edges
 -- on a frame of Flat UI's own, round the frame or round an anchor frame of Flat UI's own on a heading. It follows QuestieTracker.Update with
@@ -77,6 +88,10 @@ local ADDON_NAME, ns = ...
 -- same way.
 -- With Health text in the name's colour, the game's health text takes that colour with SetTextColor, as Health text colour does, kept and put back
 -- the same way.
+-- Overpower on enemy nameplates (PlateOverpower.lua, a warrior's) puts Overpower's icon on a frame of its own, a child of the plate's unit frame,
+-- above the name of the enemy that dodged the player, made, sized and anchored out of combat on a plate that may be protected; in a fight only its
+-- alpha, texture, grey and glow change. A frame of its own hears UNIT_COMBAT, SPELL_UPDATE_USABLE, ACTION_USABLE_CHANGED, SPELL_UPDATE_COOLDOWN, the
+-- player's casts and auto attack and NAME_PLATE_UNIT_REMOVED while the row is on, and SPELLS_CHANGED for a warrior, and only reads.
 -- Errands (off by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- also for the Sell junk button of the bags, whatever the switch of Errands, repairs with RepairAllItems, buys with BuyMerchantItem, sells the
 -- cursor item with SellCursorItem, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click
@@ -278,11 +293,13 @@ local ADDON_NAME, ns = ...
 -- (IsModifiedClick, ChatFrameUtil.InsertLink) and a Ctrl-click tries it on in the game's dressing room (DressUpItemLink), as a click on an item in
 -- the game's windows does. Its filter menus close at a press anywhere else, heard as GLOBAL_MOUSE_DOWN on a frame of their own only while one is
 -- open.
--- Its Gear comparison button (GearButton.lua) is a frame of its own, FlatUIGearButton, on UIParent, anchored to the top right of CharacterFrame
--- (SetPoint with the window as the frame it hangs from) and never parented to it; of the window it reads only whether it shows, its strata and level
--- and whether the game protects it. It follows ShowUIPanel with hooksecurefunc (ns.FollowGlobal) to see the window open, and a frame of its own looks
--- ten times a second, while the window shows, whether it still does. With an item on the cursor it gives one lifted from a slot back with
--- ClearCursor, as the window does, and its tooltip is GameTooltip, never in a fight.
+-- Its Compare gear button (GearButton.lua) is a frame of its own, FlatUIGearButton, on UIParent, anchored to the title bar of CharacterFrame or, at
+-- a spot the movers keep measured from the window's top left corner, to that corner (SetPoint with the window as the frame it hangs from), and never
+-- parented to it; of the window it reads only whether it shows, where it is and its scale (which the button takes), its strata and level, whether
+-- the game protects it and the width of its title text (the fields TitleContainer and TitleText, read). It follows ShowUIPanel and HideUIPanel
+-- with hooksecurefunc (ns.FollowGlobal), and a frame of its own looks four times a second, while the row and the module are on, whether the window
+-- shows. With an item on the cursor it gives one lifted from a slot back with ClearCursor, as the window does, and its tooltip is GameTooltip,
+-- never in a fight.
 -- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
 -- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
 -- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
@@ -320,10 +337,10 @@ local SETTLE = 0.2
 local READERS = {
 	["castbars.castColour"] = "hud", ["castbars.channelColour"] = "hud", ["castbars.craftColour"] = "hud",
 	-- The windows of Bags and the Gear comparison window of Chat and tooltips (GearWindow.lua) take the look of the Windows page: Window opacity,
-	-- Button and slot colour, Highlight colour and Icon crop. The chat input box takes the Highlight colour as well (Border while typing). The Gear
-	-- comparison button on the Character window (GearButton.lua) takes it each time that window opens. The rows of the Spells and gear tab are read
-	-- by Chat and tooltips alone, whose refresh they bring, and Button on the Character window by its own call (Config.lua, changed), so none of
-	-- them is here.
+	-- Button and slot colour, Highlight colour and Icon crop. The chat input box takes the Highlight colour as well (Border while typing). The
+	-- Compare gear button on the Character window (GearButton.lua) takes it each time its driver starts, as that window opens and as Chat and
+	-- tooltips refresh. The rows of the Spells and gear tab are read by Chat and tooltips alone, whose refresh they bring, and Button on the
+	-- Character window by its own call (Config.lua, changed), so none of them is here.
 	["windows.accent"] = { "chat", "bags" }, ["windows.panel"] = { "chat", "bags" }, ["windows.opacity"] = { "chat", "bags" },
 	["windows.crop"] = { "chat", "bags" },
 	-- The count on Sell junk (N) of Bags follows Sell at most 12 at a time of Errands (ns.ErrandsJunkCount).

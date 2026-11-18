@@ -417,6 +417,9 @@ ns.PAGES = {
 		{ key = "raidMarkerX", kind = "number", default = 0, min = -40, max = 40, step = 1, label = "Raid marker horizontal offset" },
 		{ key = "raidMarkerY", kind = "number", default = 0, min = -40, max = 40, step = 1, label = "Raid marker vertical offset" },
 		{ key = "offscreenIcon", kind = "bool", default = true, label = "Arrow for nameplates behind you" },
+		{ section = "Overpower" },
+		{ key = "overpower", kind = "bool", default = true, label = "Overpower on enemy nameplates", tip = "Warriors only: when an enemy dodges you, Overpower's icon shows over its nameplate for 5 seconds and glows while you can use it." },
+		{ key = "overpowerSize", kind = "number", default = 26, min = 16, max = 48, step = 1, label = "Overpower icon size", needs = "overpower" },
 	},
 	{
 		key = "nameplatesAuras", label = "Auras", parent = "nameplates", owner = "nameplates",
@@ -1893,7 +1896,11 @@ ns.PAGES = {
 			tip = "Gives the quest tracker of the Questie addon the look of the rows above: background, headings, Heading size on its zone headings, item buttons and Opacity in combat, and the fonts of the Fonts page while that page is on. Needs Questie: without it this row does nothing. Off gives Questie its own look back." },
 		{ section = "Loot" },
 		{ key = "lootWindow", kind = "bool", default = true, label = "Loot window", tip = "Flat window with thin borders on the window, the cards and the item slots." },
-		{ key = "lootRolls", kind = "bool", default = true, label = "Loot rolls", tip = "Thin border and flat timer bar on each roll." },
+		{ key = "lootRolls", kind = "bool", default = true, label = "Loot rolls",
+			tip = "Flat background and thin border on each roll, the icon cropped with a border in the item's quality colour, a flat timer bar, and Need, Greed and Pass in a row. Off gives the rolls the game's look back. /flatui move moves the rolls, on or off." },
+		-- Hud.lua: the rolls hang from the box Loot rolls in /flatui move once it has a spot; the game lays them out until then.
+		{ key = "lootRollsGrow", kind = "choice", default = "up", label = "Rolls stack", choices = { { "up", "Up" }, { "down", "Down" } },
+			tip = "Which way more rolls stack from the spot you gave Loot rolls in /flatui move: Up, as the game stacks them, or Down. Until you move them the game places the rolls." },
 		{ key = "lootQualityText", kind = "bool", default = true, label = "Quality word on loot", needs = "lootWindow" },
 		{ section = "Alerts" },
 		{ key = "alerts", kind = "bool", default = true, label = "Loot, money and honour alerts", tip = "Flat background with a thin border." },
@@ -2173,9 +2180,9 @@ ns.PAGES = {
 		{ section = "Gear comparison window" },
 		{ key = "gearOpen", kind = "list", default = 0, label = "Gear comparison window", none = "Choose", items = "GearOpenLines", pick = "GearOpenPick",
 			tip = "Every spell you chose, now and with an item you drop on it. /flatui gear opens it too. Drag its bottom right corner to size it, and set each spell's weight for the Overall line there." },
-		-- GearButton.lua: a button of Flat UI's own at the top right of the Character window.
+		-- GearButton.lua: the Compare gear button of Flat UI's own on the title bar of the Character window.
 		{ key = "gearCharButton", kind = "bool", default = true, label = "Button on the Character window", changed = "GearButtonChanged",
-			tip = "A small button at the top right of the Character window opens and closes the Gear comparison window. With an item on the cursor, or one dropped on it, the window compares that item. Right-click opens the item finder." },
+			tip = "A Compare gear button on the title bar of the Character window, left of the close button, opens and closes the Gear comparison window; its words light up while the window is open. With an item on the cursor, or one dropped on it, the window compares that item. Right-click opens the item finder. Move it with /flatui move (Compare gear button): it keeps its place on the Character window." },
 		{ key = "gearWinFont", kind = "number", default = 12, min = 10, max = 16, step = 1, label = "Window text size",
 			tip = "The size of the text in the Gear comparison window." },
 		{ key = "gearWinReset", kind = "list", default = 0, label = "Reset the window", none = "Choose", items = "GearWindowResetLines", pick = "GearWindowResetPick",

@@ -1444,7 +1444,7 @@ AREAS = [
         UnitFrameHead UnitText UnitParts UnitExtras UnitGroupMarks UnitDruidMana UnitPetTarget UnitHots HealthColour
         PetFrameSize"""),
     ("nameplates", "Nameplates, combat text and cast bars", """Nameplates PlateThreat PlateColours PlateThreatLook PlateText
-        PlateClick PlateThreatText CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastRank
+        PlateClick PlateThreatText PlateOverpower CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastRank
         Interrupt CastBarSize"""),
     ("actionbars", "Action bars", """ActionBars OwnBars OwnPaint ButtonText Cooldowns CooldownLooks ButtonStates CooldownData
         ProcData Procs ProcArt ProcGlow ButtonEffects ProcTriggers BarBlock BarBlockButtons Blocks"""),
