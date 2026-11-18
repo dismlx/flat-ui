@@ -1937,26 +1937,30 @@ ns.PAGES = {
 	},
 	-- HitTable.lua and HitTableCalc.lua: a table of Flat UI's own under the player frame with the player's chances against the target, worked out again
 	-- as stats, gear, weapon skill, buffs, form and the target change. By default it shows for a tank or a damage dealer and not for a healer, by the
-	-- role Flat UI setup reads (ns.PlayerRole, Core.lua); Always and Off hold whatever the role, and the other rows apply at either of the first two.
-	-- It was a tick in 0.5.18: a saved tick reads as Always or Off (Core.lua, ns.MigrateText).
+	-- role Flat UI setup reads (ns.PlayerRole, Core.lua); Always and Off hold whatever the role. Attacks, Special attacks, Where you stand and Hit cap
+	-- against a boss serve On enemy tooltips (HitTableTip.lua) too and need nothing; the other rows apply at either of the first two. It was a tick in
+	-- 0.5.18: a saved tick reads as Always or Off (Core.lua, ns.MigrateText).
 	{
 		key = "hudHitTable", label = "Hit table", parent = "hud", owner = "hud",
 		{ key = "hitTable", kind = "choice", default = "role", label = "Hit table under the player frame",
 			choices = { { "role", "For tanks and damage dealers" }, { "on", "Always" }, { "off", "Off" } },
 			tip = "Your chances against your target to miss, be dodged, parried or blocked, glance, crit and hit, worked out again as your gear, buffs, weapon skill and target change. For tanks and damage dealers hides it while you count as a healer: by your group role, else a tank stance, form or aura, else the talent tree you put most points in, else your class (a priest heals), as Flat UI setup reads it. /flatui status says which you count as, and why. /flatui move places it." },
+		{ key = "hitTableTip", kind = "choice", default = "role", label = "On enemy tooltips",
+			choices = { { "role", "For tanks and damage dealers" }, { "on", "Always" }, { "off", "Off" } },
+			tip = "Adds your hit table to the tooltip of an enemy you can attack: a line for each attack, against that enemy's level (a level shown as ??, or a boss of your level or above, counts as three levels above you). It counts Attacks, Special attacks, Where you stand (a tank counts in front) and Hit cap against a boss below, whatever Hit table under the player frame is set to. The game hides your stats in a fight, so there the numbers are from before it, and a line says so. For tanks and damage dealers leaves the lines out while you count as a healer. Needs Chat and tooltips on." },
 		{ section = "What it shows" },
-		{ key = "hitTableLines", kind = "choice", default = "auto", label = "Attacks", needs = "hitTable", needsIn = { "role", "on" },
+		{ key = "hitTableLines", kind = "choice", default = "auto", label = "Attacks",
 			choices = { { "auto", "By your class and form" }, { "melee", "Melee" }, { "ranged", "Ranged" }, { "spell", "Spells" }, { "all", "Melee, ranged and spells" } },
 			tip = "By your class and form: melee for a warrior or rogue, ranged for a hunter, melee and spells for a paladin or shaman, melee for a druid in Bear or Cat Form and spells out of them, spells for the others. Ranged needs a bow, gun, crossbow, thrown weapon or wand." },
-		{ key = "hitTableSpecial", kind = "bool", default = true, label = "Special attacks", needs = "hitTable", needsIn = { "role", "on" },
+		{ key = "hitTableSpecial", kind = "bool", default = true, label = "Special attacks",
 			tip = "A line for your abilities under your swings: they do not glance or take the dual wield miss. Their crit, as on ranged attacks and spells, is the chance on an attack that lands." },
 		{ key = "hitTableAgainst", kind = "choice", default = "target", label = "Against", needs = "hitTable", needsIn = { "role", "on" },
 			choices = { { "target", "Your target" }, { "boss", "A boss three levels above you" } },
 			tip = "With no enemy targeted, an enemy of your level. A target whose level shows as ?? counts as three levels above you." },
-		{ key = "hitTableFacing", kind = "choice", default = "auto", label = "Where you stand", needs = "hitTable", needsIn = { "role", "on" },
+		{ key = "hitTableFacing", kind = "choice", default = "auto", label = "Where you stand",
 			choices = { { "auto", "Behind, in front while it attacks you" }, { "behind", "Behind" }, { "front", "In front" } },
 			tip = "From the front an enemy can also parry and block. The game does not tell where you stand: the first choice counts you in front while you hold your target's threat, as a tank does." },
-		{ key = "hitTableRules", kind = "choice", default = "classic", label = "Hit cap against a boss", needs = "hitTable", needsIn = { "role", "on" },
+		{ key = "hitTableRules", kind = "choice", default = "classic", label = "Hit cap against a boss",
 			choices = { { "classic", "9% melee, 16% spells (Classic tests)" }, { "game", "8% melee, 17% spells (the game's tooltip)" } },
 			tip = "Tests of Classic found the first 1% of your hit lost against a boss and 1% of spells always missing. The hit tooltip of the character sheet leaves both out. Which holds on WoW: Forever is not known yet." },
 		{ section = "When it shows" },
