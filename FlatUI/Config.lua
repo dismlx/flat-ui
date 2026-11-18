@@ -1893,7 +1893,11 @@ ns.PAGES = {
 			tip = "Gives the quest tracker of the Questie addon the look of the rows above: background, headings, Heading size on its zone headings, item buttons and Opacity in combat, and the fonts of the Fonts page while that page is on. Needs Questie: without it this row does nothing. Off gives Questie its own look back." },
 		{ section = "Loot" },
 		{ key = "lootWindow", kind = "bool", default = true, label = "Loot window", tip = "Flat window with thin borders on the window, the cards and the item slots." },
-		{ key = "lootRolls", kind = "bool", default = true, label = "Loot rolls", tip = "Thin border and flat timer bar on each roll." },
+		{ key = "lootRolls", kind = "bool", default = true, label = "Loot rolls",
+			tip = "Flat background and thin border on each roll, the icon cropped with a border in the item's quality colour, a flat timer bar, and Need, Greed and Pass in a row. Off gives the rolls the game's look back. /flatui move moves the rolls, on or off." },
+		-- Hud.lua: the rolls hang from the box Loot rolls in /flatui move once it has a spot; the game lays them out until then.
+		{ key = "lootRollsGrow", kind = "choice", default = "up", label = "Rolls stack", choices = { { "up", "Up" }, { "down", "Down" } },
+			tip = "Which way more rolls stack from the spot you gave Loot rolls in /flatui move: Up, as the game stacks them, or Down. Until you move them the game places the rolls." },
 		{ key = "lootQualityText", kind = "bool", default = true, label = "Quality word on loot", needs = "lootWindow" },
 		{ section = "Alerts" },
 		{ key = "alerts", kind = "bool", default = true, label = "Loot, money and honour alerts", tip = "Flat background with a thin border." },

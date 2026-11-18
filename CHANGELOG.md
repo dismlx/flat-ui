@@ -1,6 +1,7 @@
 ## 0.5.22
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Minimap and buffs**, **Tracker, loot and alerts**, **Loot rolls** (on): a roll now has Flat UI's look all through: a flat background and thin border in place of the game's toast, the item's icon cropped (**Icon crop**) with a thin border in its quality colour, the name in that colour, a flat timer bar in your **Bar texture** with a thin border, across the foot of the roll, and **Need**, **Greed** (or **Transmog**) and **Pass** in a row at the right. Off gives the rolls the game's look back. The rolls also move: drag the new **Loot rolls** box in `/flatui move`, sized for four rolls and starting where the game stacks them. Until you move it the game places the rolls as before; once you have, they stack from there with the game's spacing, also in a fight, and new row **Rolls stack** (**Up**, as the game stacks them, or **Down**) says which way. A right-click on the box gives them back to the game.
 
 ## 0.5.21
 
