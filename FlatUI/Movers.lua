@@ -224,7 +224,8 @@ local LIST = {
 		sized = "gearFinder", x = 1144, y = -120, gate = "GearSearchShown", changed = "GearSearchMoved", start = "GearSearchStart" },
 	-- The Compare gear button (GearButton.lua) on the Character window, with a handle while that window shows and the button is wanted (gate:
 	-- ns.GearButtonShown). Its spot is measured from the Character window's top left corner (from), so the button goes with the window: its top
-	-- left corner is the top left corner of the box, which has the button's room with its words. With no spot saved its box is where the button
+	-- left corner is the top left corner of the box, which has the button's room with its words on the window at 100 (the button takes the
+	-- window's scale, GearButton.lua). With no spot saved its box is where the button
 	-- hangs by default, on the title bar right-aligned left of the close cross (start: ns.GearButtonStart, from the window's width as it is
 	-- now; the x here is the window's full 631); a spot saved or put back is told to the button (changed: ns.GearButtonMoved).
 	{ name = "FlatUIGearButton", label = "Compare gear button", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 112, height = 20,

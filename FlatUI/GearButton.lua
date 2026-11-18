@@ -15,6 +15,9 @@ local _, ns = ...
 -- the title bar: the button, 1 under the window's top and 20 high, ends 5 above it. The window is 631 wide with the stats pane and 398 without
 -- (Camelot/CharacterFrameConstants.lua:4, 7); where the title text (the player's name with a PvP rank, CharacterFrame.lua:376-382) would come
 -- within 6 of the button, as a long name in the narrow window can, the words fold away and the button is its icon alone, right-aligned the same.
+-- The movers size windows from 60 to 150 (Movers.lua, WIN), so the button takes the window's scale against UIParent's (SetScale, :7702, on its
+-- own frame): its offsets, height and room are in the window's units, and it stays on the title bar and clear of the close cross, the title text
+-- and the pane toggle at any size of the window.
 -- The movers place it too: the entry Compare gear button (Movers.lua) has a handle while the window shows and the button is wanted
 -- (ns.GearButtonShown); its spot is measured from the window's top left corner (from), so a saved spot hangs the button from the window's top
 -- left at that spot and it goes with the window. With no spot saved the handle's box is where the button hangs by default (ns.GearButtonStart),
@@ -77,11 +80,11 @@ local TIPS = {
 }
 local DIM, PLAIN, WORD = { 0.66, 0.68, 0.62 }, { 1, 1, 1 }, { 0.9, 0.9, 0.88 }
 
--- The button and its parts, made once; the frame it hangs from and how (point, x, y, folded); the strata and level it has; whether the Gear
--- comparison window was open at the last paint; whether the cursor is over it; the driver and its clock; whether the window shows and whether the
--- button is wanted at the last look; whether a change waits for the end of a fight.
+-- The button and its parts, made once; the frame it hangs from and how (point, x, y, folded, scale); the strata and level it has; whether the
+-- Gear comparison window was open at the last paint; whether the cursor is over it; the driver and its clock; whether the window shows and
+-- whether the button is wanted at the last look; whether a change waits for the end of a fight.
 local B = { button = nil, icon = nil, words = nil, hover = nil, outline = nil, anchored = nil, point = nil, x = nil, y = nil, folded = nil,
-	strata = nil, level = nil, open = nil, over = false, driver = nil, clock = 0, shown = false, wanted = false, waiting = false }
+	scale = nil, strata = nil, level = nil, open = nil, over = false, driver = nil, clock = 0, shown = false, wanted = false, waiting = false }
 
 local Start
 
@@ -372,18 +375,23 @@ local function Finder()
 	end
 end
 
+-- After a click or a drop the driver looks on the next frame, so the words light up or go out as the window opens or closes.
 local function Click(mouse)
-	if Compare() then
-		return
+	if not Compare() then
+		if mouse == "RightButton" then
+			Finder()
+		elseif Fn(ns, "GearWindowToggle") then
+			Call("GearWindowToggle")
+		else
+			Call("GearWindowShow")
+		end
 	end
-	if mouse == "RightButton" then
-		Finder()
-	elseif Fn(ns, "GearWindowToggle") then
-		Call("GearWindowToggle")
-	else
-		Call("GearWindowShow")
-	end
-	B.open = nil
+	Start()
+end
+
+local function Drop()
+	Compare()
+	Start()
 end
 
 -- Making and placing ---------------------------------------------------------------------------------------------------------------------------
@@ -418,7 +426,7 @@ local function Make()
 		Run(Click, mouse)
 	end)
 	button:SetScript("OnReceiveDrag", function()
-		Run(Compare)
+		Run(Drop)
 	end)
 	button:SetScript("OnEnter", function()
 		B.over = true
@@ -491,32 +499,44 @@ local function Saved(left, top)
 	return x - left, y - top
 end
 
--- Where the button hangs from the window: the point of both, the offsets and whether the words fold away; nil while the window has no place.
+-- The window's scale against UIParent's, to a thousandth, which the button takes (header), or nil.
+local function Scale(frame)
+	local k = Ratio(frame)
+	return k and math.floor(k * 1000 + 0.5) / 1000 or nil
+end
+
+-- Where the button hangs from the window: the point of both, the offsets in the window's units, whether the words fold away and the scale the
+-- button takes; nil while the window has no place.
 local function Spot(frame)
 	local left, bottom, width, height = Rect(frame)
-	if not left then
+	local k = Scale(frame)
+	if not (left and k and k > 0) then
 		return nil
 	end
 	local x, y = Saved(left, bottom + height)
 	if x then
-		return "TOPLEFT", x, y, false
+		return "TOPLEFT", x / k, y / k, false, k
 	end
 	local title = TitleRight(frame)
-	return "TOPRIGHT", X, Y, title ~= nil and title + CLEAR > left + width + X - WideWidth()
+	return "TOPRIGHT", X, Y, title ~= nil and title + CLEAR * k > left + width + (X - WideWidth()) * k, k
 end
 
 -- Hangs the button from the window as Spot says, when that changed: false while the game would refuse it or the window has no place.
 local function Place(frame)
-	local point, x, y, folded = Spot(frame)
+	local point, x, y, folded, k = Spot(frame)
 	if not point then
 		return false
 	end
 	x, y = math.floor(x * 100 + 0.5) / 100, math.floor(y * 100 + 0.5) / 100
-	if rawequal(B.anchored, frame) and B.point == point and B.x == x and B.y == y and B.folded == folded then
+	if rawequal(B.anchored, frame) and B.point == point and B.x == x and B.y == y and B.folded == folded and B.scale == k then
 		return true
 	end
 	if Blocked(frame) or Blocked(B.button) then
 		return false
+	end
+	if B.scale ~= k then
+		B.button:SetScale(k)
+		B.scale = k
 	end
 	Layout(folded)
 	B.button:ClearAllPoints()
@@ -667,17 +687,19 @@ function ns.GearButtonShown()
 end
 
 -- Where the button starts while the movers keep no spot of it (start): the offsets of its top left corner, with its words, from the window's top
--- left corner, right-aligned left of the close cross on the window as wide as it is now; else the entry's x and y.
+-- left corner in the units of UIParent, right-aligned left of the close cross on the window as wide and as large as it is now; else the entry's
+-- x and y.
 function ns.GearButtonStart(x, y)
 	local frame = Character()
 	if not frame then
 		return x, y
 	end
 	local _, _, width = Rect(frame)
-	if not width then
+	local k = Scale(frame)
+	if not (width and k) then
 		return x, y
 	end
-	return width + X - WideWidth(), Y
+	return width + (X - WideWidth()) * k, Y * k
 end
 
 -- The movers saved or forgot the button's spot (changed): it hangs from the spot now, or on the title bar again.
