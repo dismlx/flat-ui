@@ -8,8 +8,9 @@ local _, ns = ...
 -- Selling walks the bags (C_Container.GetContainerNumSlots and GetContainerItemInfo, bags 0 to NUM_TOTAL_EQUIPPED_BAG_SLOTS) and sells one item
 -- every SPACING seconds with C_Container.UseContainerItem, which sells while a merchant is open and uses or equips the item otherwise. So before
 -- every sale the merchant window must still be shown (MerchantFrame, asked with the widget call IsShown) and no trade window open (TradeFrame:
--- the same call puts an item in the trade), the module and the row still on, the cursor empty, and the slot must still hold the same unlocked
--- item, whose count is read again there. An item of poor quality (grey) is sold unless it is on the keep list;
+-- the same call puts an item in the trade), the module and the row still on, the cursor empty, no spell waiting for its target (SpellIsTargeting,
+-- SpellCanTargetItem, SpellCanTargetItemID: the same call would give it the item, Mainline/ContainerFrame.lua:1508-1510), and the slot must still
+-- hold the same unlocked item, whose count is read again there. An item of poor quality (grey) is sold unless it is on the keep list;
 -- an item on the sell list is sold whatever its quality. A quest item and an item the game gives no value are never sold. The lists hold item
 -- IDs for the whole account (Errands.Lists) and are changed with /flatui sell and /flatui keep, or taken off with the two list rows of the page.
 -- The money is counted from the sell price the game gives (C_Item.GetItemInfo) and said once at the end, with no amount when a price was not known.
@@ -26,9 +27,9 @@ local _, ns = ...
 -- bottom left of the window and move as the merchant can repair or not (MerchantFrame.lua:987-1019, Mainline/MerchantFrame.xml:200-330), the
 -- buyback slot lies on its right half (MerchantFrame.xml:409-413), and the Merchant and Buyback tabs hang under its left edge
 -- (MerchantFrame.xml:583-614, 32 units high, SharedUIPanelTemplates.xml:932-933). Its click sells the next ones through the same checks; a click
--- the trade window or the cursor stops before its first sale says why and leaves the button. It is made out of combat only, never under the
--- gamepad interface, and hides itself whenever it is no longer wanted. Under the gamepad interface the cap still holds, and chat and /flatui
--- status say that the rest wait until a merchant is opened again.
+-- the trade window, the cursor or a spell waiting for its target stops before its first sale says why and leaves the button. It is made out of
+-- combat only, never under the gamepad interface, and hides itself whenever it is no longer wanted. Under the gamepad interface the cap still
+-- holds, and chat and /flatui status say that the rest wait until a merchant is opened again.
 --
 -- Repair uses RepairAllItems, with the guild's money first when Repair is Guild gold first and the guild lets you (CanGuildBankRepair and
 -- GetGuildBankWithdrawMoney, -1 for no limit). Two seconds later, an unpaid bill with the merchant still open is paid with your own gold. A bill
@@ -36,6 +37,15 @@ local _, ns = ...
 -- is GetRepairAllCost before the repair. Guild gold where keeps the guild's money for some places: inside an instance (IsInInstance,
 -- InstanceDocumentation.lua:170-177) a raid, a dungeon (party) or a battleground (pvp or arena); outside one, a raid group (IsInRaid) or a
 -- group (IsInGroup); anywhere else, a withheld answer included, the open world. Elsewhere the bill is paid with your own gold.
+-- The Sell junk button of Bags (BagsWindow.lua) sells through the same pass, with all its checks, whatever the switch of Errands and of Sell grey
+-- items: ns.ErrandsSellJunk starts a pass (or goes on with one a fight paused), the pass then counts as wanted until it ends (manual), and since
+-- this module hears no event while it is off, Bags ends the visit at its own MERCHANT_CLOSED with ns.ErrandsMerchantClosed, which does what
+-- MERCHANT_CLOSED does here; when both run, either order does the same. The junk coin and the Junk section of Bags are this file's own test of a
+-- slot (ns.ErrandsJunk, Sale below), and the count on its button is the queue Scan makes for a new pass (ns.ErrandsJunkCount); an item no pass can
+-- sell from where it lies, in the bank or in another character's bags, has the part of the test that reads the two lists (ns.ErrandsJunkRule).
+-- An item dropped on a section title of Bags goes on or off the two lists as /flatui sell and /flatui keep put it there (ns.ErrandsJunkMark).
+-- Every change of the lists (those two commands, their list rows and a drop) is told to the functions given to ns.ErrandsListsWatch, so the junk
+-- coin and the Sell junk count of Bags follow it at once.
 -- The selling and repair follow EnhanceQoL's vendor and auto repair, adapted with the permission of its author. The sale of the sell list in
 -- twelves, the bags left out of junk selling and the places of guild gold follow EnhanceQoL by Philipp Barth (R41Z0R), adapted with his
 -- permission (EnhanceQoLVendor/EnhanceQoLVendor.lua:77-95, 1403-1418, 1789-1823; EnhanceQoL/EnhanceQoL.lua:3976-3996).
@@ -73,6 +83,9 @@ local visit = 0
 -- The selling of the visit: { queue = sales in order, next = index, sold, value, unknown = a price was not known, listed = items of the sell
 -- list that are not grey sold in this pass }, or nil.
 local run
+-- The pass was asked for by the Sell junk button of Bags (ns.ErrandsSellJunk): it sells whatever the switch of Errands and of Sell grey items until
+-- it ends (Finish). Set only while there is a pass.
+local manual = false
 -- The selling waits for a fight to end, or the whole visit does.
 local paused, waiting = false, false
 -- A repair that could not be paid is tried again after the selling; then it waits for the money. The guild bank refused at this visit. A
@@ -163,14 +176,14 @@ local function JunkExcluded(bag)
 end
 
 -- What a slot holds, as a sale, or nil when it is not to be sold. excluded: the bag is left out of junk selling, so a grey item stays unless it
--- is on the sell list. A sale marked listed is an item of the sell list that is not grey.
-local function Sale(bag, slot, lists, excluded)
+-- is on the sell list; anyLock: a locked item counts too (ns.ErrandsJunk for Bags). A sale marked listed is an item of the sell list that is not grey.
+local function Sale(bag, slot, lists, excluded, anyLock)
 	local info = E.Ask(C_Container.GetContainerItemInfo, bag, slot)
 	if type(info) ~= "table" then
 		return nil
 	end
 	local id, link, count = Field(info, "itemID"), Field(info, "hyperlink"), Field(info, "stackCount")
-	if type(id) ~= "number" or type(link) ~= "string" or Field(info, "isLocked") ~= false or Field(info, "hasNoValue") ~= false then
+	if type(id) ~= "number" or type(link) ~= "string" or (not anyLock and Field(info, "isLocked") ~= false) or Field(info, "hasNoValue") ~= false then
 		return nil
 	end
 	local listed = lists.sell[id] == true
@@ -237,8 +250,20 @@ local function MerchantOpen()
 	return open and E.Shown(MerchantFrame)
 end
 
-local function Wanted()
+-- A spell waits for its target, which the cursor does not say: C_Container.UseContainerItem would then give the item to the spell instead of selling
+-- it, as the game's own bag slot does (Mainline/ContainerFrame.lua:1508-1510). Only a plain true counts.
+local function Targeting()
+	return E.Ask(SpellIsTargeting) == true or E.Ask(SpellCanTargetItem) == true or E.Ask(SpellCanTargetItemID) == true
+end
+
+-- Errands' own selling: the module and Sell grey items are on.
+local function SellOn()
 	return ns.Enabled("errands") and E.Opt("sell") == true
+end
+
+-- Errands' own selling, or a pass of the Sell junk button of Bags.
+local function Wanted()
+	return manual or SellOn()
 end
 
 -- The names of the bags the game leaves out of junk selling, for /flatui status: the backpack, and the others by the name the game gives them.
@@ -276,10 +301,14 @@ local function Wait(n)
 end
 
 -- What the items of the sell list that wait are waiting for: Sell next 12, or under the gamepad interface, where Flat UI puts no button on the
--- merchant window, the next visit. Nil when none wait, or when selling or its cap is off, as for the button itself.
+-- merchant window, the next visit. Nil when none wait, or when selling or its cap is off, as for the button itself. After a pass of the Sell junk
+-- button of Bags with Errands' own selling off, Sell next never shows, and that button sells the next ones.
 local function WaitsFor()
 	if more <= 0 or not Wanted() or not Capped() then
 		return nil
+	end
+	if manual and not SellOn() then
+		return "for Sell junk"
 	end
 	return E.Gamepad() and "until you next open a merchant" or "for Sell next"
 end
@@ -305,6 +334,8 @@ local function Finish(why)
 	elseif waits then
 		E.Say(("%d %s of your sell list %s %s."):format(more, Items(more), Wait(more), waits))
 	end
+	-- A pass of the Sell junk button of Bags ends here, after its line: Sell next follows Errands' own selling again.
+	manual = false
 	ShowNext()
 	if retryRepair and MerchantOpen() then
 		retryRepair = false
@@ -339,6 +370,10 @@ local function SellNext(at)
 	end
 	if E.Ask(GetCursorInfo) ~= nil or E.Ask(CursorHasItem) == true then
 		Finish("the cursor held something")
+		return
+	end
+	if Targeting() then
+		Finish("a spell waited for its target")
 		return
 	end
 	local sale = run.queue[run.next]
@@ -414,6 +449,8 @@ local function SellMore()
 		why = "a trade window is open"
 	elseif E.Ask(GetCursorInfo) ~= nil or E.Ask(CursorHasItem) == true then
 		why = "the cursor holds something"
+	elseif Targeting() then
+		why = "a spell waits for its target"
 	end
 	if why then
 		print(("Flat UI: Sold nothing: %s."):format(why))
@@ -628,7 +665,7 @@ E.Listen(part, "MERCHANT_SHOW", function()
 	end
 	visit = visit + 1
 	open, notes, run, paused, retryRepair, moneyWait, guildRefused, pending, repairAfterFight = true, {}, nil, false, false, false, false, nil, false
-	more = 0
+	more, manual = 0, false
 	if nextButton then
 		nextButton:Hide()
 	end
@@ -644,17 +681,21 @@ E.Listen(part, "MERCHANT_SHOW", function()
 	Visit(visit, keep)
 end)
 
-E.Listen(part, "MERCHANT_CLOSED", function()
+-- The merchant closed: the selling ends with its line, and what was queued for the visit does nothing. Errands hears MERCHANT_CLOSED while it is
+-- on, and Bags calls this at its own (ns.ErrandsMerchantClosed) for a pass of its Sell junk button; when both run, the second finds nothing left.
+local function Closed()
 	if run then
 		Finish("the merchant closed")
 	end
 	open, waiting, paused, retryRepair, moneyWait, pending, repairAfterFight = false, false, false, false, false, nil, false
-	more = 0
+	more, manual = 0, false
 	if nextButton then
 		nextButton:Hide()
 	end
 	visit = visit + 1
-end)
+end
+
+E.Listen(part, "MERCHANT_CLOSED", Closed)
 
 -- A trade window that opens stops the selling: the same call would put the item in the trade.
 E.Listen(part, "TRADE_SHOW", function()
@@ -755,6 +796,31 @@ local function Unlisted(which, id)
 	return ("Flat UI: %s is no longer %s."):format(Named(id), which == "sell" and "always sold" or "kept")
 end
 
+-- The functions told when the sell or keep list changes (ns.ErrandsListsWatch): the junk coin and the Sell junk count of Bags read these lists, so
+-- its windows draw them again. Each is called inside pcall, so none can stop the change.
+local listWatchers = {}
+
+local function ListsChanged()
+	for _, fn in ipairs(listWatchers) do
+		pcall(fn)
+	end
+end
+
+-- Adds a function to them, called with no values after /flatui sell, /flatui keep, a pick of the two list rows or a drop on a section of Bags
+-- changed a list. A function given twice is called once. True once it is in the list.
+function ns.ErrandsListsWatch(fn)
+	if type(fn) ~= "function" then
+		return false
+	end
+	for _, known in ipairs(listWatchers) do
+		if known == fn then
+			return true
+		end
+	end
+	listWatchers[#listWatchers + 1] = fn
+	return true
+end
+
 local function Toggle(which, rest)
 	local lists = E.Lists()
 	if not lists then
@@ -778,6 +844,7 @@ local function Toggle(which, rest)
 		list[id], other[id] = true, nil
 		print(("Flat UI: %s is %s."):format(Named(id), which == "sell" and "always sold at merchants" or "never sold"))
 	end
+	ListsChanged()
 end
 
 E.slash.sell = function(rest)
@@ -810,6 +877,7 @@ local function ListPick(which, id)
 		return false
 	end
 	lists[which][id] = nil
+	ListsChanged()
 	return true, Unlisted(which, id)
 end
 
@@ -867,4 +935,158 @@ function part.Status()
 		end
 	end
 	return lines
+end
+
+-- The Sell junk button and the Junk section of Bags ---------------------------------------------------------------------------------------
+
+-- Errands' own test of a slot of the bags (Sale above), for the junk coin and the Junk section of Bags: true when a pass would sell what the slot
+-- holds now. False for a bag no pass sells from (the keyring, the bank), for one with no price, and before the saved variables load. A locked item
+-- is false too, unless anyLock is true: Bags asks so, since the game holds an item locked only for a moment (in the trade window, on a mail not
+-- sent yet, on the cursor), and its coin and section stay meanwhile. A pass and the count of Sell junk (Scan) still leave a locked item.
+function ns.ErrandsJunk(bag, slot, anyLock)
+	if not (ns.Finite(bag) and ns.Finite(slot)) or bag < 0 or bag > Bags() or type(C_Container) ~= "table" then
+		return false
+	end
+	local lists = E.Lists()
+	if not lists then
+		return false
+	end
+	return Sale(bag, slot, lists, JunkExcluded(bag), anyLock == true) ~= nil
+end
+
+-- The part of that test that reads the two lists (Sale above), for an item no pass can sell from where it lies: in the bank, or in the bags of
+-- another character. True for an item of the sell list, or a grey one (quality 0) not on the keep list; never for an item with no vendor value or a
+-- quest item, and a value the game withholds counts as either.
+function ns.ErrandsJunkRule(id, quality, noValue, quest)
+	if not ns.Finite(id) or ns.IsSecret(noValue) or ns.IsSecret(quest) or noValue == true or quest == true then
+		return false
+	end
+	local lists = E.Lists()
+	if not lists then
+		return false
+	end
+	if lists.sell[id] == true then
+		return true
+	end
+	return ns.Finite(quality) and quality == POOR and lists.keep[id] ~= true
+end
+
+-- What the next click of the Sell junk button sells: the length of the queue Scan makes for a new pass, and how many items of the sell list wait
+-- for the click after it with Sell at most 12 at a time on (Sell). 0 and 0 on a client that cannot sell.
+function ns.ErrandsJunkCount()
+	if type(C_Container) ~= "table" or type(C_Container.UseContainerItem) ~= "function" then
+		return 0, 0
+	end
+	local queue, waits = Scan(Capped() and Buyback() or nil, 0)
+	return #queue, waits
+end
+
+-- A click of the Sell junk button. Before anything is sold it makes the checks of a click of Sell next 12 (SellMore), so a click they refuse says
+-- why and leaves the pass as it was.
+local function SellJunk()
+	if not E.Shown(MerchantFrame) then
+		return false, "no merchant is open"
+	elseif E.Fighting() then
+		return false, "you are in a fight"
+	elseif run and not paused then
+		return false, "busy"
+	elseif E.Shown(TradeFrame) then
+		return false, "a trade window is open"
+	elseif E.Ask(GetCursorInfo) ~= nil or E.Ask(CursorHasItem) == true then
+		return false, "the cursor holds something"
+	elseif Targeting() then
+		return false, "a spell waits for its target"
+	elseif type(C_Container) ~= "table" or type(C_Container.UseContainerItem) ~= "function" then
+		return false, "this client cannot sell from the bags"
+	end
+	manual = true
+	if run then
+		-- A pass a fight paused goes on with what the bags hold now, as Errands' own PLAYER_REGEN_ENABLED has it go on.
+		Sell()
+		return true
+	end
+	if not open then
+		-- Errands' own MERCHANT_SHOW did not run for this merchant: Errands is off, or was switched on after the merchant opened. When it did run,
+		-- the visit stays as it is, so the repair checks queued for it still hold.
+		visit = visit + 1
+		open = true
+	end
+	more = 0
+	if nextButton then
+		nextButton:Hide()
+	end
+	Sell()
+	if run == nil then
+		return false, "there is nothing to sell"
+	end
+	return true
+end
+
+-- The Sell junk button of Bags: a pass of Errands' own selling with all its checks, whatever the switch of Errands and of Sell grey items, or the
+-- pass a fight paused going on. True when it sells, or false and why not: "busy" while a pass is selling, else a few words a line can end with
+-- ("Sold nothing: ..."). With Errands off, Bags calls it again at PLAYER_REGEN_ENABLED while ns.ErrandsSelling() says a pass waits, as Errands'
+-- own handler goes on with one.
+function ns.ErrandsSellJunk()
+	local stopped = "selling stopped after an error (/flatui status)"
+	if ns.IsStopped("errands") or ns.PartStopped("errands", part.label) then
+		return false, stopped
+	end
+	local done, why = false, nil
+	if not E.Run(part, function()
+		done, why = SellJunk()
+	end) then
+		return false, stopped
+	end
+	return done, why
+end
+
+-- Bags at its own MERCHANT_CLOSED: what MERCHANT_CLOSED does here (Closed), which this module does not hear while it is off. When both run, the
+-- second finds nothing left to end.
+function ns.ErrandsMerchantClosed()
+	E.Run(part, Closed)
+end
+
+-- True while a pass sells, or waits for a fight to end.
+function ns.ErrandsSelling()
+	return run ~= nil
+end
+
+-- A drop on a section title of Bags. On Junk (junk true) the item goes on the sell list and off the keep list, as /flatui sell puts it there;
+-- dropped on another section it comes off the sell list, and a grey one (C_Item.GetItemQualityByID) goes on the keep list, as /flatui keep puts it
+-- there. Each change says the line of those commands. True once the lists hold what the drop asked; false before the saved variables load, and
+-- for an item no merchant buys (noValue, or a sell price of 0 from C_Item.GetItemInfo), which no pass would sell and Bags refuses with a line of
+-- its own.
+function ns.ErrandsJunkMark(id, junk, noValue)
+	if not ns.Finite(id) or id <= 0 or id ~= math.floor(id) then
+		return false
+	end
+	local lists = E.Lists()
+	if not lists then
+		return false
+	end
+	if junk == true then
+		if ns.IsSecret(noValue) or noValue == true or Price("item:" .. id) == 0 then
+			return false
+		end
+		lists.sell[id], lists.keep[id] = true, nil
+		print(("Flat UI: %s is always sold at merchants."):format(Named(id)))
+		ListsChanged()
+		return true
+	end
+	local changed = false
+	if lists.sell[id] == true then
+		lists.sell[id] = nil
+		print(Unlisted("sell", id))
+		changed = true
+	end
+	local quality = type(C_Item) == "table" and E.Ask(C_Item.GetItemQualityByID, id) or nil
+	if ns.Finite(quality) and quality == POOR and lists.keep[id] ~= true then
+		lists.keep[id] = true
+		print(("Flat UI: %s is never sold."):format(Named(id)))
+		changed = true
+	end
+	if changed then
+		ListsChanged()
+	end
+	return true
 end

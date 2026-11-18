@@ -945,3 +945,7 @@ ns.AddEvent(KEY, "INSPECT_READY", OnInspectReady)
 ns.AddEvent(KEY, "ADDON_LOADED", OnAddonLoaded, function(name)
 	return not ns.IsSecret(name) and name == INSPECT_ADDON
 end)
+
+-- The item level of a weapon or a piece of armour from its link, or nil for any other item and while the game has not said: Bags draws it on
+-- slots of its own and searches by it (BagsItems.lua, BagsSearch.lua), whatever the switch of Windows and its rows.
+Items.LevelOf = LevelOf

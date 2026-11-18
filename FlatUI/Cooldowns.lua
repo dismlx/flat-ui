@@ -2091,6 +2091,7 @@ local function Layout()
 		R.Notes({})
 		RangeWatch()
 		R.Call("AfterLayout")
+		R.TellHitTable()
 		return
 	end
 	Holder():Show()
@@ -2130,6 +2131,15 @@ local function Layout()
 	Binds()
 	RangeWatch()
 	R.Call("AfterLayout")
+	R.TellHitTable()
+end
+
+-- The hit table hangs under the rows that hang under the player frame (HitTable.lua, Lowest), so it is placed again after each layout, out of combat
+-- as a layout is, as Your buffs tells the rows that hang from it (OwnBuffs.lua, B.Tell).
+function R.TellHitTable()
+	if type(ns.HitTableMoved) == "function" then
+		pcall(ns.HitTableMoved)
+	end
 end
 
 -- The lines of the Positions that cannot be used, set or taken back after a layout: a line stays while any row with icons wants that frame.

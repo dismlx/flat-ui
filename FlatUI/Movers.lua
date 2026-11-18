@@ -99,7 +99,9 @@ local FRACTION = {
 -- and it places itself from its spot (ns.MoverSpot). row names the function of ns that gives the
 -- frames the handle covers and the frame they hang from, and changed the one that is called when the
 -- spot is set or put back. gate names the function of ns that says whether the spot has an effect: an own
--- frame with a gate has a handle only while it returns true. Windows have the names Windows.lua gives them.
+-- frame with a gate has a handle only while it returns true. start names the function of ns that is given the
+-- x and y of an own frame's entry and gives where it starts while no spot is saved, for its handle and for
+-- ns.MoverSpot, when that depends on the screen. Windows have the names Windows.lua gives them.
 -- noScale marks a frame whose scale does not reach what it holds. noBox marks a window with no handle: its
 -- title bar moves it, and a handle would cover its buttons. grip sets where the title bar of a window
 -- starts and how many levels above the window it lies, for a window with its own controls in the title. A
@@ -183,11 +185,25 @@ local LIST = {
 	-- the room of three bars at the default size, under the Threat list, and it grows down and to the right from there.
 	{ name = "FlatUIHealerMana", label = "Healer mana", point = "CENTER", kind = "hud", own = true, noScale = true, width = 158, height = 76, x = 420, y = -130,
 		gate = "HealerManaShown", changed = "HealerManaMoved" },
+	-- The bag window of Bags (BagsWindow.lua), which shows while the bags are open: its bottom right corner is the bottom right corner of the box, and
+	-- it grows up and to the left from there as its slots change. It starts above the bottom right corner of the screen, where the game's bags open:
+	-- further left while the right action bars stand in their place there (as Edit Mode and the game count them), so it covers none of those
+	-- (ns.BagsWindowStart). Dragging the window by its title sets the spot too.
+	{ name = "FlatUIBags", label = "Flat UI bags", point = "BOTTOMRIGHT", kind = "hud", own = true, noScale = true, width = 360, height = 260, x = -60, y = 110,
+		gate = "BagsWindowShown", changed = "BagsWindowMoved", start = "BagsWindowStart" },
+	-- The bank window of Bags (BagsWindow.lua), which shows at the banker or when asked: its top left corner is the top left corner of the box, and it
+	-- grows down and to the right from there. It starts where the game's bank opens, at the left of the screen.
+	{ name = "FlatUIBank", label = "Flat UI bank", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 420, height = 300, x = 25, y = -110,
+		gate = "BankWindowShown", changed = "BankWindowMoved" },
 	-- The pet target frame (UnitPetTarget.lua), which the game shows while the pet has a target: its top left corner is the top left corner of the box,
 	-- which has the room of the frame at the default width, right of the pet frame where the game's default layout puts it. A secure frame: it
 	-- takes a spot out of combat.
 	{ name = "FlatUIPetTarget", label = "Pet target", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 120, height = 20, x = -246, y = 238,
 		gate = "PetTargetShown", changed = "PetTargetMoved" },
+	-- The hit table (HitTable.lua): its box is the table's own frame, and its spot is its top left corner, which stays where it is as lines come and
+	-- go. With no spot saved it hangs under the player frame, under the pet frame and the totems the game hangs there.
+	{ name = "FlatUIHitTable", label = "Hit table", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "HitTableRow",
+		changed = "HitTableMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
@@ -571,6 +587,18 @@ local function IsShown(frame)
 	return shown == true
 end
 
+-- True for a bag or bank window of the game that Bags keeps under a hidden frame of its own (ns.BagsParked, Bags.lua): the game may hold it
+-- shown, but nobody sees it, so it counts as not shown and gets no handle and no grips. Before Bags.lua has run, and for any frame Bags does
+-- not hold, false. The answer is looked up when asked, since Bags.lua loads after this file.
+local function Parked(frame)
+	local call = ns.BagsParked
+	if type(call) ~= "function" then
+		return false
+	end
+	local ok, parked = pcall(call, frame)
+	return ok and parked == true
+end
+
 -- A frame that is protected, or that will not say, cannot be placed in combat.
 function ns.MaybeProtected(frame)
 	local ok, protected = pcall(frame.IsProtected, frame)
@@ -810,6 +838,21 @@ local function IsWindow(name)
 	return type(UIPanelWindows) == "table" and UIPanelWindows[name] ~= nil
 end
 
+-- Where an own frame starts while no spot is saved for it: the point, x and y of its entry, or the x and y that the function of ns its entry
+-- names in start gives from them (the bag window of Bags, left of the right action bars). A start that fails or gives no plain numbers is the
+-- entry's own.
+local function StartsAt(info)
+	local x, y = info.x, info.y
+	local start = info.start and ns[info.start]
+	if x and type(start) == "function" then
+		local ok, sx, sy = pcall(start, x, y)
+		if ok and Number(sx) and Number(sy) then
+			x, y = sx, sy
+		end
+	end
+	return info.point, x, y
+end
+
 -- Where the named point of the handle of an own frame is, in the units of UIParent from the bottom left.
 -- Nothing for a frame that has no spot and starts nowhere in particular.
 function ns.MoverSpot(name, point)
@@ -824,7 +867,8 @@ function ns.MoverSpot(name, point)
 		local x, y = OnScreen(entry.point, entry.x, entry.y, info.width, info.height)
 		left, bottom, width, height = RectAt(entry.point, x, y, info.width, info.height)
 	elseif info.x then
-		left, bottom, width, height = RectAt(info.point, info.x, info.y, info.width, info.height)
+		local from, x, y = StartsAt(info)
+		left, bottom, width, height = RectAt(from, x, y, info.width, info.height)
 	end
 	if not left then
 		return nil
@@ -1477,9 +1521,11 @@ local function HandleRect(name, info)
 		if info.gate and not (type(gate) == "function" and gate()) then
 			return nil
 		end
-		local point, x, y = info.point, info.x, info.y
+		local point, x, y
 		if entry then
 			point, x, y = entry.point, OnScreen(entry.point, entry.x, entry.y, info.width, info.height)
+		else
+			point, x, y = StartsAt(info)
 		end
 		return RectAt(point, x, y, info.width, info.height)
 	end
@@ -1487,7 +1533,8 @@ local function HandleRect(name, info)
 	if not frame or ns.Forbidden(frame) then
 		return nil
 	end
-	if info.kind == "window" and IsShown(frame) ~= true then
+	-- A window Bags keeps hidden counts as closed (Parked).
+	if info.kind == "window" and (IsShown(frame) ~= true or Parked(frame)) then
 		return nil
 	end
 	-- Edit Mode has boxes of its own while it is open, and a module that places the frame itself needs none.
@@ -3349,7 +3396,8 @@ function win.Grip(name)
 	if not frame or ns.Forbidden(frame) then
 		return
 	end
-	if IsShown(frame) ~= true then
+	-- A window Bags keeps hidden counts as closed (Parked).
+	if IsShown(frame) ~= true or Parked(frame) then
 		win.why[name] = nil
 		return
 	end

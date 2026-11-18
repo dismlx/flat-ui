@@ -10,6 +10,8 @@ The **Data panels** page, off by default, adds a top and a bottom panel with bag
 
 The **Threat list** page, off by default, lists your group by threat on the enemy you fight, highest first, in class colours; at 100% a member has aggro. The **Healer mana** page, off by default, shows your healers' mana in dungeons and raids.
 
+The **Bags** page, off by default, puts all your bags in one Flat UI window, in sections (new items, equipment sets, equipment, consumables, quest items, trade goods, reagents, recipes, ammunition, bags and quivers, keys, other, junk and free slots) or bag by bag, with a search that dims what does not match, your gold and your free slots. Nothing moves while the window is open: what you loot gathers at the top under New items, and anything else that comes into your bags meanwhile under Added. Drop an item on a section's title to keep it there, or on Junk, which is always there to drop on, to sell it at merchants from then on. A Flat UI bank window works at the banker, with Deposit and Take out for what you searched, and shows your bank anywhere else as you last left it. Pick another of your characters in a window's title to see their bags and bank, and an item's tooltip names who else on your realms carries it. A Sell junk button at merchants sells what Errands would sell, also with Errands off. The game's bag windows stay hidden while it is on.
+
 The **Drink and health macros** page, off by default, keeps two macros up to date with your bags and level: one drinks your best drink, conjured water first when it is as good, and the other takes a healthstone, then a healing potion, and eats out of combat.
 
 The **Mount key** page, off by default, gives you one key in the game's Key Bindings that mounts a random mount you can ride, favourites first; a druid takes Aquatic or Travel Form and a shaman Ghost Wolf where a mount cannot go, and pressed again it dismounts or leaves the form. With **Slow Fall or Levitate while falling** on, a mage or priest who presses it while falling, out of a fight and not mounted, casts that spell on themselves instead.
@@ -34,11 +36,13 @@ Enemy cast bars on your target, focus and nameplates show whether your class int
 
 In the chat windows, a web address becomes a link that opens a box to copy it, and an item, spell or achievement link shows its tooltip while the mouse is over it. The **Tooltips** tab names what a unit targets, colours a player's class line and puts icons before item and spell names; with IDs on it shows the ID of the poison, oil or stone on your weapon, and **Show IDs** can wait for Shift, Ctrl or Alt. The items you wear show beside an item's tooltip only while you hold Shift. With **Show recent chat after a reload** the chat of the last hour comes back in your main window after a reload. Tooltips can hide by kind (spells, items, and your buffs and debuffs and those on party and raid frames), unit tooltips by enemy or friend and only in dungeons and raids, and the unit tooltips of party and raid frames; **Icon ID** adds the icon's number.
 
-B opens your reagent bag with the rest of your bags, and closes them all again: WoW: Forever binds B to Toggle Backpack, which with **Combine bags** leaves the reagent bag shut, so Flat UI gives that key the game's own Open All Bags while **Backpack key opens every bag** is on (**Bags and items**).
+B opens your reagent bag with the rest of your bags, and closes them all again: WoW: Forever binds B to Toggle Backpack, which with **Combine bags** leaves the reagent bag shut, so Flat UI gives that key the game's own Open All Bags while **Backpack key opens every bag** is on (**Item slots**).
 
 The **Fading** page, off by default, fades bars and frames while nothing needs them, and can show the target and focus frames, your buffs, the objective tracker and the game's damage meter only in combat, in a group, in or outside an instance or when not mounted. Its **Minimap buttons** row fades other addons' minimap buttons with the game's.
 
 **Hide error messages**, off by default on the **Tracker, loot and alerts** tab, hides the kinds of red error messages you choose in the middle of the screen, with their sound and voice: not enough mana, rage or energy, out of range, facing the wrong way, not ready yet, no or an invalid target, and not while moving. **Hide the zone name**, **Hide the subzone name** and **Hide the talking head**, off by default on the same tab, take away the big zone name and the talking head with its voice. **Clear the damage meter**, off by default on the same tab, clears the game's damage meter as you enter a dungeon or raid, or asks first.
+
+**Hit table under the player frame**, off by default on the **Hit table** tab of **Minimap and buffs**, shows under your player frame your chances against your target to miss, be dodged, parried or blocked, glance, crit and hit, worked out again as your gear, buffs, weapon skill, form and target change: a line for your swings (each hand while you dual wield), your special attacks, your ranged attacks and your spells, picked by your class and form, with the crit cap of your swings, yellow once your crit is past it; a target whose level shows as ?? counts as three levels above you.
 
 The **Flat UI** page can let the camera zoom out farther than the game's own options allow, and draw a ring around the mouse pointer, always or in combat only, with your cast running round it and, if you like, the global cooldown. The unit frames can hide the hit numbers the game flashes over your portrait and your pet's.
 
@@ -75,6 +79,8 @@ The **Flat UI** page can let the camera zoom out farther than the game's own opt
 - `/flatui pulse spot <spell or item> 2` sends one to pulse spot 2; `1` puts it back.
 - `/flatui role` says whether nameplate threat reads you as a tank and why; `tank`, `damage`, `auto` or `toggle` sets it.
 - `/flatui tracker add group` tracks your class buff on your group; `/flatui tracker use 2 <item>` sets what weapon tracker 2 applies; `/flatui tracker set 1 health 40` shows pet tracker 1's health in red under 40%.
+- `/flatui bags` opens or closes the Flat UI bag window; `/flatui bags <name>` shows another of your characters' bags.
+- `/flatui bank` opens or closes your bank window: live at the banker with Flat UI's bank window, else as you last left it; `/flatui bank <name>` shows another character's bank.
 - `/flatui help` lists the commands.
 
 ![Movers](media/flatui-movers.jpg)
@@ -106,6 +112,8 @@ The Errands page, the levelling and reputation stats of the experience bar, the 
 The art of the proc alerts follows what [SpellActivationOverlay](https://github.com/ennvina/spellactivationoverlay) by ennvina shows on WoW: Forever. Each proc has the same piece of the game's own spell alert art in the same place and colour, larger and fainter by default, and art from the side is turned a quarter across the top the same way. SpellActivationOverlay is under the MIT licence, Copyright (c) 2022-2026 ennvina. None of its files are in Flat UI, which draws the game's own art.
 
 The threat feedback of the nameplates follows what [Threat Plates](https://www.curseforge.com/wow/addons/tidy-plates-threat-plates) by Suicidal Katt and Blacksalsify does: its threat colours and role detection, its warning glow, border colour and threat transparency, its threat value and its target of the enemy. Threat Plates is under the GNU GPL, so none of its code is in Flat UI; Flat UI does the same things in code of its own.
+
+The Bags page follows the way the bag addons Baganator, Bagnon, BetterBags and AdiBags work: one window with sections and a search, the bank and your other characters away from the banker, and quick handling of junk, the bank and clean up. It is code of Flat UI's own, and none of theirs is in it.
 
 ## Licence
 

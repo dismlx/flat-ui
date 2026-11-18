@@ -19,6 +19,9 @@ local _, ns = ...
 -- the player's own value, remembered in the saved data of the character before the first write, and puts it back when the choice goes,
 -- the page goes off, or the player logs out.
 -- This is not a module: the windows module calls ns.BagSort.Apply whenever it applies its settings.
+-- Bags (BagsWindow.lua) sorts from the buttons of its own windows with ns.BagSort.Run and ns.BagSort.Sound, the same path as the button here,
+-- and is told right after the game is asked to sort, by a function given to ns.BagSort.Watch: the items then move over many BAG_UPDATE_DELAYED,
+-- and its window keeps its places until they stop.
 
 local KEY = "windows"
 local PART = "clean up bags"
@@ -215,6 +218,30 @@ local function Say(text)
 	return false
 end
 
+-- The functions told right after the game is asked to sort (ns.BagSort.Watch), each with "bags" or "bank". Each is called inside pcall, so none
+-- can stop a sort or this part.
+local sortWatchers = {}
+
+local function Sorted(which)
+	for _, fn in ipairs(sortWatchers) do
+		pcall(fn, which)
+	end
+end
+
+-- Adds a function to them. A function given twice is called once. True once it is in the list.
+local function AddWatcher(fn)
+	if type(fn) ~= "function" then
+		return false
+	end
+	for _, known in ipairs(sortWatchers) do
+		if known == fn then
+			return true
+		end
+	end
+	sortWatchers[#sortWatchers + 1] = fn
+	return true
+end
+
 local function Holding()
 	if type(CursorHasItem) ~= "function" then
 		return false
@@ -317,9 +344,11 @@ local function Run(which)
 	if which == "bank" then
 		if not Ask(kind, account) then
 			C_Container.SortBank(kind)
+			Sorted("bank")
 		end
 	else
 		C_Container.SortBags()
+		Sorted("bags")
 	end
 	return true
 end
@@ -375,6 +404,7 @@ function Register()
 						return
 					end
 					C_Container.SortBank(kind)
+					Sorted("bank")
 				end)
 			end,
 		}
@@ -668,7 +698,9 @@ local function Command(rest)
 	end
 end
 
-ns.BagSort = { Apply = Apply, Logout = Logout, Command = Command, help = HELP }
+-- Run(which) sorts "bags" or "bank" and says why not, returning whether the game was asked (or its question is up); Sound plays the clean up
+-- sound; Watch(fn) adds a function told right after each sort is asked (Sorted).
+ns.BagSort = { Apply = Apply, Logout = Logout, Command = Command, help = HELP, Run = Run, Sound = Sound, Watch = AddWatcher }
 
 -- A page that is off is never started, so a record left by a session in which it was on is put back at login.
 local watcher = CreateFrame("Frame")
