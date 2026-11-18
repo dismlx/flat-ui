@@ -679,7 +679,7 @@ end
 
 local function Has(list, value)
 	for _, held in ipairs(list) do
-		if held == value then
+		if Finite(held) and held == value then
 			return true
 		end
 	end
@@ -692,7 +692,8 @@ local function Where(candidate)
 	if Has(slots, 16) and Has(slots, 17) then
 		return T.BOTH
 	end
-	return SLOTS[slots[1]] or (type(candidate) == "table" and Text(candidate.label)) or T.SLOT
+	local first = slots[1]
+	return (Finite(first) and SLOTS[first]) or (type(candidate) == "table" and Text(candidate.label)) or T.SLOT
 end
 
 -- What the item would take the place of, one phrase for each slot of the comparison (design 2.4): the worn items with the slot, or the empty slot.
@@ -725,19 +726,14 @@ end
 
 -- Lines ------------------------------------------------------------------------------------------------------------------------------------------
 
--- The spells chosen for the comparison (ns.GearChosen, GearLines.lua: { entry, rank, id, name, kept, known } each), or nil while that file gives none.
+-- The spells chosen for the comparison (ns.GearChosen, GearLines.lua: { entry, rank, id, name, kept, known } each), the list as that file gives it,
+-- since G.Compare takes it so; nil while it gives none.
 local function Chosen()
 	local list = Ask(ns, "GearChosen")
 	if type(list) ~= "table" or IsSecret(list) then
 		return nil
 	end
-	local lines = {}
-	for _, line in ipairs(list) do
-		if type(line) == "table" then
-			lines[#lines + 1] = line
-		end
-	end
-	return lines
+	return list
 end
 
 -- The entry of a line in the data (SpellData.lua), or nil.
@@ -880,16 +876,18 @@ local function Profile(view, lines, state, stats)
 	local model = ns.GearModel
 	local opts = Options(view.mode)
 	for _, line in ipairs(lines) do
-		local row = { line = line, figure = Text(Ask(model, "Figure", line, view.role, view.mode)) }
-		if row.figure then
-			local e = Ask(model, "Expect", line, state, stats, opts)
-			if type(e) == "table" then
-				row.now = Pick(e, row.figure, EntryOf(line))
-				row.basis, row.why = Text(e.basis), Text(e.why)
-				row.estimate = row.basis == "e"
+		if type(line) == "table" then
+			local row = { line = line, figure = Text(Ask(model, "Figure", line, view.role, view.mode)) }
+			if row.figure then
+				local e = Ask(model, "Expect", line, state, stats, opts)
+				if type(e) == "table" then
+					row.now = Pick(e, row.figure, EntryOf(line))
+					row.basis, row.why = Text(e.basis), Text(e.why)
+					row.estimate = row.basis == "e"
+				end
 			end
+			view.rows[#view.rows + 1] = row
 		end
-		view.rows[#view.rows + 1] = row
 	end
 end
 
@@ -929,19 +927,21 @@ local function Compared(view, result, lines, state)
 	end
 	view.layout = #cands == 2 and "two" or "one"
 	for index, line in ipairs(lines) do
-		local row = { line = line, with = {} }
-		for which, c in ipairs(cands) do
-			local found = RowOf(c.rows, line, index)
-			if found then
-				if row.now == nil then
-					row.now = found.now
+		if type(line) == "table" then
+			local row = { line = line, with = {} }
+			for which, c in ipairs(cands) do
+				local found = RowOf(c.rows, line, index)
+				if found then
+					if row.now == nil then
+						row.now = found.now
+					end
+					row.figure = row.figure or Text(found.figure)
+					row.estimate = row.estimate or found.estimate == true
+					row.with[which] = found.with
 				end
-				row.figure = row.figure or Text(found.figure)
-				row.estimate = row.estimate or found.estimate == true
-				row.with[which] = found.with
 			end
+			view.rows[#view.rows + 1] = row
 		end
-		view.rows[#view.rows + 1] = row
 	end
 	view.place = PlaceLine(cands, state)
 	return true
@@ -1007,8 +1007,9 @@ local function Compute()
 		view.item = ItemLook(W.link)
 		local result = Ask(gear, "Compare", W.link, lines, Options(view.mode))
 		if type(result) == "table" then
+			-- With no slot to compare with, why goes where the slots would be named; the header is the item tooltip's and names a unit.
 			if not Compared(view, result, lines, state) then
-				view.place = Text(result.why) or Text(result.header)
+				view.place = Text(result.why)
 				if not view.place then
 					Note(view.notes, view.item.loaded and T.NOT_COMPARED or T.LOADING)
 				end
@@ -1021,7 +1022,7 @@ local function Compute()
 	if view.layout == "none" then
 		Profile(view, lines, state, stats)
 	end
-	if #lines == 0 then
+	if #view.rows == 0 then
 		view.message = T.EMPTY
 	end
 	return view
@@ -1560,8 +1561,19 @@ local function Speed(entry, state)
 	return T.SPEED_ANY:format(power)
 end
 
--- True when a share of the entry was measured in the game (basis m, design 3.5).
-local function Measured(entry)
+-- True when what a line shows was measured in the game (basis m, design 3.2, 3.5): for threat the letter of its rank in the threat's basis, which is
+-- one letter or one a rank, or the basis of its attack power share; else a share of the entry.
+local function Measured(entry, line, figure)
+	local threat = entry.threat
+	local b = type(threat) == "table" and Text(threat.b) or nil
+	if figure == "threat" and b then
+		local letter = b
+		if #b > 1 then
+			local at = RankOf(line) or #b
+			letter = b:sub(at, at)
+		end
+		return letter == "m" or threat.apb == "m"
+	end
 	for _, part in ipairs(type(entry.parts) == "table" and entry.parts or {}) do
 		if type(part) == "table" and part.b == "m" then
 			return true
@@ -1587,7 +1599,7 @@ local function RowLines(row)
 			basis, why = Text(e.basis), Text(e.why)
 		end
 	end
-	if basis == "m" or (basis == nil and entry and Measured(entry)) then
+	if basis == "m" or (basis == nil and entry and Measured(entry, line, row.figure)) then
 		lines[#lines + 1] = T.MEASURED
 	end
 	if row.estimate or basis == "e" then
