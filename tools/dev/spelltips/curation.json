@@ -182,8 +182,8 @@
  "notes": {
   "seal of righteousness": {
    "part": 0,
-   "note": "The game's text shows a range for any weapon and counts 7.65% for one-handers.",
-   "why": "The dim line under the share, as design 1.3 gives it.",
+   "note": "the game's text counts 7.65% for one-handers",
+   "why": "The second half of the dim line under the share of design 1.3. SpellModel.lua words that line itself: \"The game's text shows a range for any weapon\", then \"and\" and this note with a one-hander, the first half alone with a two-hander.",
    "source": [
     "client text of 20293 and variables 1023"
    ]
@@ -513,8 +513,10 @@
     "mind flay"
    ],
    "healer": [
-    "greater heal",
-    "heal",
+    [
+     "greater heal",
+     "heal"
+    ],
     "flash heal",
     "renew"
    ]
@@ -544,10 +546,17 @@
   "PALADIN": {
    "damage": [
     "attack",
-    "seal of command",
-    "judgement of command",
-    "seal of righteousness",
-    "judgement of righteousness",
+    {
+     "needs": "seal of command",
+     "keys": [
+      "seal of command",
+      "judgement of command"
+     ],
+     "else": [
+      "seal of righteousness",
+      "judgement of righteousness"
+     ]
+    },
     "holy strike"
    ],
    "tank": [
@@ -566,8 +575,13 @@
     "lightning bolt",
     "chain lightning",
     "earth shock",
-    "attack",
-    "stormstrike"
+    {
+     "needs": "stormstrike",
+     "keys": [
+      "attack",
+      "stormstrike"
+     ]
+    }
    ],
    "healer": [
     "healing wave",
@@ -575,7 +589,7 @@
     "chain heal"
    ]
   },
-  "why": "The default lines of design 2.1 by class and by the role ns.PlayerRole gives (damage, tank, healer), and a druid's cat set (cat) for Cat Form; a bear form takes the tank set. Every line counts only if known, so where 2.1 picks one of two (Greater Heal else Heal, Seal of Command else Seal of Righteousness, Attack only with Stormstrike) both stand in the list.",
+  "why": "The default lines of design 2.1 by class and by the role ns.PlayerRole gives (damage, tank, healer), and a druid's cat set (cat) for Cat Form; a bear form takes the tank set. Every line counts only if known. A line is a key; a list of keys is the first of them known (Greater Heal, else Heal); an object { needs, keys, else } is each of its keys while needs is known, else each of else (the seal and judgement of Command with Seal of Command known, else those of Righteousness; a shaman's Attack and Stormstrike with Stormstrike known). make_spelltips.py writes the object as { key, key ..., needs = key, [\"else\"] = { key ... } }, which GearLines.lua reads.",
   "source": [
    "design 2.1"
   ]
@@ -681,6 +695,37 @@
    "source": [
     "wowsims/forever docs/evidence/EV-0059",
     "client rows 20187 to 20286 effect 2"
+   ]
+  }
+ },
+ "judgements": {
+  "about": "A judgement's damage rank is a row of its own that no spell book holds: the game casts it from the seal that is up, at the seal's rank. Each judgement names its seal (the entry field seal), and SpellModel.lua's M.Highest gives the judgement the rank of the same place as the highest rank of its seal the player knows. Each pair has as many ranks.",
+  "judgement of command": {
+   "seal": "seal of command",
+   "why": "Seal of Command's judgement deals the damage of 20467 to 20966, one rank a seal rank.",
+   "source": [
+    "client rows 20375 to 20920 (the seal) and 20467 to 20966 (its judgement)"
+   ]
+  },
+  "judgement of fury": {
+   "seal": "seal of fury",
+   "why": "Seal of Fury's judgement, one rank a seal rank.",
+   "source": [
+    "client rows of Seal of Fury and Judgement of Fury, build 1.60.1.70938"
+   ]
+  },
+  "judgement of light": {
+   "seal": "seal of light",
+   "why": "Seal of Light's judgement, one rank a seal rank.",
+   "source": [
+    "client rows 20165 to 20349 (the seal) and 20185 to 20346 (its judgement)"
+   ]
+  },
+  "judgement of righteousness": {
+   "seal": "seal of righteousness",
+   "why": "Seal of Righteousness' judgement, one rank a seal rank (seal_values reads the seal's value from it).",
+   "source": [
+    "client rows 21084 to 20293 (the seal) and 20187 to 20286 (its judgement)"
    ]
   }
  }

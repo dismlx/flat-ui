@@ -347,7 +347,7 @@
    "class": "DRUID",
    "k": "rage",
    "key": "enrage",
-   "note": "5 a point of rage over time, times the form",
+   "note": "the rage over time takes the form's multiplier",
    "ranks": [
     {
      "b": "m",
@@ -371,7 +371,6 @@
    ],
    "k": "caster",
    "key": "faerie fire",
-   "note": "2 x your level in a bear form, none in other forms",
    "ranks": [
     {
      "b": "m",
@@ -1174,7 +1173,7 @@
    "find": "threat",
    "k": "temp",
    "key": "fade",
-   "note": "client data, Blizzard said doubled; no talent or stance changes it; given back after 10 sec",
+   "note": "client data, Blizzard said doubled",
    "ranks": [
     {
      "id": 586,
@@ -1758,7 +1757,7 @@
    "class": "WARRIOR",
    "k": "rage",
    "key": "bloodrage",
-   "note": "5 a point of rage; the rage at once is not changed by the stance, the rage over time is",
+   "note": "the rage at once is not changed by the stance, the rage over time is",
    "ranks": [
     {
      "b": "m",
@@ -2010,7 +2009,6 @@
    "class": "WARRIOR",
    "k": "more",
    "key": "mocking blow",
-   "note": "forces attacks 6 sec; how much more threat is not known",
    "ranks": [
     {
      "b": "e",

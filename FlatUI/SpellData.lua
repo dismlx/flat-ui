@@ -17,7 +17,8 @@ local _, ns = ...
 -- An entry (one spell, every rank): key (English name, lower case; " (pet)" for a pet's spell), pet, school (Lua school index 1-7) or
 --   sch (several, of which the lower counts), cmp (the comparison kind, nil when the comparison cannot work it out), roll (the attack
 --   table line of the row's DefenseType: spell, special, ranged, or swing for Attack), nb (cannot be blocked), nx (replaces the next
---   swing), parts, ranks, threat.
+--   swing), seal (a judgement: the key of its seal, whose highest rank known gives the judgement's of the same place), parts, ranks,
+--   threat.
 -- A part: [1] the stat (sp, heal, ap, rap, wpn: weapon damage with the coefficient its multiple, bv: block value), [2] the coefficient of
 --   the top rank (a periodic part's total over its ticks), n ticks and p seconds a tick, per (target, first with max targets, jump with j
 --   the share kept each jump, hit, block, stack, proc, missile, cp with cp the shares at 1 to 5 combo points, self), spd (actual, norm,
@@ -36,6 +37,8 @@ local D = {}
 ns.SpellData = D
 
 D.BUILD, D.HOTFIX, D.FALLBACK = "1.60.1.70938", 114122, "1.60.1.70888"
+-- The number of spells of every class and ALL, for /flatui status, so no other class's constructor runs to count them.
+D.SPELLS = 215
 
 -- Constants of the gear model: crit multiplier by attack table line (STAT_CRIT_BONUS), attack power a point of DPS, the
 -- global cooldown, the off hand, heal threat a point, the normalized speeds and the forms' swings, glancing blows, the
@@ -86,7 +89,7 @@ D.CLASS.WARRIOR = function()
 		{ key = "bloodrage", school = 1,
 			parts = {},
 			ranks = { { 2687, 10 } },
-			threat = { k = "rage", v = 5, b = "m", note = "5 a point of rage; the rage at once is not changed by the stance, the rage over time is", split = true } },
+			threat = { k = "rage", v = 5, b = "m", note = "the rage at once is not changed by the stance, the rage over time is", split = true } },
 		{ key = "bloodthirst", school = 1, cmp = "apstrike", roll = "special",
 			parts = { { "ap", 0.45, b = "c" } },
 			ranks = {
@@ -98,7 +101,7 @@ D.CLASS.WARRIOR = function()
 			threat = { k = "mult", v = 1, b = "e" } },
 		{ key = "challenging shout", school = 1, roll = "spell",
 			parts = {},
-			ranks = { { 1161, 26 } },
+			ranks = { { 1161, 26, du = 6000 } },
 			threat = { k = "force", b = "c" } },
 		{ key = "cleave", school = 1, cmp = "strike", roll = "special", nx = true,
 			parts = { { "wpn", 1, per = "target", spd = "actual", h = "main", b = "c" } },
@@ -165,13 +168,13 @@ D.CLASS.WARRIOR = function()
 		{ key = "mocking blow", school = 1, cmp = "apstrike", roll = "special",
 			parts = { { "ap", 0, b = "c" } },
 			ranks = {
-				{ 694, 16, bm = { 22 } },
-				{ 7400, 26, bm = { 31 } },
-				{ 7402, 36, bm = { 46 } },
-				{ 20559, 46, bm = { 71 } },
-				{ 20560, 56, bm = { 93 } },
+				{ 694, 16, du = 6000, bm = { 22 } },
+				{ 7400, 26, du = 6000, bm = { 31 } },
+				{ 7402, 36, du = 6000, bm = { 46 } },
+				{ 20559, 46, du = 6000, bm = { 71 } },
+				{ 20560, 56, du = 6000, bm = { 93 } },
 			},
-			threat = { k = "more", v = 1, b = "e", note = "forces attacks 6 sec; how much more threat is not known" } },
+			threat = { k = "more", v = 1, b = "e" } },
 		{ key = "mortal strike", school = 1, cmp = "strike", roll = "special",
 			parts = { { "wpn", 1, spd = "norm", h = "main", b = "c" } },
 			ranks = {
@@ -259,7 +262,7 @@ D.CLASS.WARRIOR = function()
 			threat = { k = "flat", v = { 34, 75, 117, 158, 206 }, b = "mcmcc", ap = 0.05, apb = "m" } },
 		{ key = "taunt", school = 1, roll = "spell",
 			parts = {},
-			ranks = { { 355, 10 } },
+			ranks = { { 355, 10, du = 3000 } },
 			threat = { k = "taunt", b = "c" } },
 		{ key = "thunder clap", school = 1, cmp = "apstrike", roll = "spell",
 			parts = { { "ap", 0.07, per = "target", b = "m" } },
@@ -372,7 +375,7 @@ D.CLASS.PALADIN = function()
 				{ 2812, 50, ct = 2000, bm = { 395 }, bl = { 1.6 }, mx = { 54 } },
 				{ 10318, 60, ct = 2000, bm = { 533 }, bl = { 1.9 }, mx = { 64 } },
 			} },
-		{ key = "judgement of command", school = 2, cmp = "spell", roll = "special",
+		{ key = "judgement of command", school = 2, cmp = "spell", roll = "special", seal = "seal of command",
 			parts = { { "sp", 0.429, note = "half unless the target is stunned", b = "c" } },
 			ranks = {
 				{ 20467, 20, ct = 0, bm = { 97 }, bl = { 5.6 }, mx = { 28 } },
@@ -382,7 +385,7 @@ D.CLASS.PALADIN = function()
 				{ 20966, 60, ct = 0, bm = { 356 }, bl = { 6.1 }, mx = { 68 } },
 			},
 			threat = { k = "mult", v = 1, b = "e" } },
-		{ key = "judgement of fury", school = 2, cmp = "spell", roll = "ranged", nb = true,
+		{ key = "judgement of fury", school = 2, cmp = "spell", roll = "ranged", nb = true, seal = "seal of fury",
 			parts = { { "sp", 0.429, b = "c" } },
 			ranks = {
 				{ 1311650, 10, ct = 0, bm = { 23 }, bl = { 1.71 }, mx = { 16 } },
@@ -393,7 +396,7 @@ D.CLASS.PALADIN = function()
 				{ 20413, 50, ct = 0, bm = { 123 }, bl = { 3.69 }, mx = { 56 } },
 				{ 20414, 58, ct = 0, bm = { 153 }, bl = { 3.69 }, mx = { 64 } },
 			} },
-		{ key = "judgement of light", school = 2,
+		{ key = "judgement of light", school = 2, seal = "seal of light",
 			parts = { { "heal", 0, per = "proc", b = "c" } },
 			ranks = {
 				{ 20185, 30, bm = { 25 } },
@@ -402,7 +405,7 @@ D.CLASS.PALADIN = function()
 				{ 20346, 60, bm = { 61 } },
 			},
 			threat = { k = "heal", v = 0.5, b = "m", split = true } },
-		{ key = "judgement of righteousness", school = 2, cmp = "spell", roll = "ranged", nb = true,
+		{ key = "judgement of righteousness", school = 2, cmp = "spell", roll = "ranged", nb = true, seal = "seal of righteousness",
 			parts = { { "sp", 0.429, b = "c" } },
 			ranks = {
 				{ 20187, 1, ct = 0, bm = { 15 }, bl = { 1.8 }, mx = { 7 } },
@@ -463,7 +466,7 @@ D.CLASS.PALADIN = function()
 			},
 			threat = { k = "heal", v = 0.5, b = "m", split = true } },
 		{ key = "seal of righteousness", school = 2, cmp = "seal", roll = "special",
-			parts = { { "sp", 0.1, per = "hit", o = true, two = 0.12, note = "The game's text shows a range for any weapon and counts 7.65% for one-handers.", b = "m" } },
+			parts = { { "sp", 0.1, per = "hit", o = true, two = 0.12, note = "the game's text counts 7.65% for one-handers", b = "m" } },
 			ranks = {
 				{ 21084, 1, du = 30000, bl = { 18 }, mx = { 7 }, sv = 108 },
 				{ 20287, 10, du = 30000, bl = { 17 }, mx = { 16 }, sv = 216 },
@@ -866,14 +869,14 @@ D.CLASS.PRIEST = function()
 		{ key = "fade", school = 6, roll = "spell",
 			parts = {},
 			ranks = {
-				{ 586, 8 },
-				{ 9578, 20 },
-				{ 9579, 30 },
-				{ 9592, 40 },
-				{ 10941, 50 },
-				{ 10942, 60 },
+				{ 586, 8, du = 10000 },
+				{ 9578, 20, du = 10000 },
+				{ 9579, 30, du = 10000 },
+				{ 9592, 40, du = 10000 },
+				{ 10941, 50, du = 10000 },
+				{ 10942, 60, du = 10000 },
 			},
-			threat = { k = "temp", v = { -275, -775, -1425, -2200, -3100, -4100 }, pl = -3, mx = { 18, 30, 40, 50, 60, 70 }, b = "e", note = "client data, Blizzard said doubled; no talent or stance changes it; given back after 10 sec" } },
+			threat = { k = "temp", v = { -275, -775, -1425, -2200, -3100, -4100 }, pl = -3, mx = { 18, 30, 40, 50, 60, 70 }, b = "e", note = "client data, Blizzard said doubled" } },
 		{ key = "feedback", school = 6, roll = "spell",
 			parts = { { "sp", 0, per = "hit", b = "c" } },
 			ranks = {
@@ -1270,9 +1273,9 @@ D.CLASS.SHAMAN = function()
 		{ key = "riptide", school = 4, cmp = "heal", roll = "spell",
 			parts = { { "heal", 0.214, b = "c" }, { "heal", 0.5, n = 5, p = 3, b = "c" } },
 			ranks = {
-				{ 408521, 40, ct = 0, du = 15000, bm = { nil, 445 }, bl = { 3.7 }, mx = { 48 } },
-				{ 1239242, 50, ct = 0, du = 15000, bm = { nil, 575 }, bl = { 4.2 }, mx = { 58 } },
-				{ 1239243, 60, ct = 0, du = 15000, bm = { nil, 805 }, bl = { 4.9, 18.5 }, mx = { 68, 68 } },
+				{ 408521, 40, ct = 0, du = 15000, bm = { nil, 445 } },
+				{ 1239242, 50, ct = 0, du = 15000, bm = { nil, 575 } },
+				{ 1239243, 60, ct = 0, du = 15000, bm = { nil, 805 }, bl = { nil, 18.5 }, mx = { nil, 68 } },
 			},
 			threat = { k = "heal", v = 0.5, b = "m", split = true } },
 		{ key = "searing totem", school = 3, roll = "spell",
@@ -1730,7 +1733,7 @@ D.CLASS.DRUID = function()
 	return {
 		{ key = "challenging roar", school = 1, roll = "spell",
 			parts = {},
-			ranks = { { 5209, 28 } },
+			ranks = { { 5209, 28, du = 6000 } },
 			threat = { k = "force", b = "c" } },
 		{ key = "claw", school = 1, cmp = "strike", roll = "special",
 			parts = { { "wpn", 1.4, spd = "cat", h = "main", b = "c" } },
@@ -1762,7 +1765,7 @@ D.CLASS.DRUID = function()
 		{ key = "enrage", school = 1,
 			parts = {},
 			ranks = { { 5229, 12 } },
-			threat = { k = "rage", v = 5, b = "m", note = "5 a point of rage over time, times the form", split = true } },
+			threat = { k = "rage", v = 5, b = "m", note = "the rage over time takes the form's multiplier", split = true } },
 		{ key = "entangling roots", school = 4, cmp = "dot", roll = "spell",
 			parts = { { "sp", 0.54, n = 9, p = 3, b = "c" } },
 			ranks = {
@@ -1781,7 +1784,7 @@ D.CLASS.DRUID = function()
 				{ 9749, 42 },
 				{ 9907, 54 },
 			},
-			threat = { k = "caster", v = 2, b = "m", forms = { 5, 8 }, note = "2 x your level in a bear form, none in other forms" } },
+			threat = { k = "caster", v = 2, b = "m", forms = { 5, 8 } } },
 		{ key = "ferocious bite", school = 1, cmp = "finisher", roll = "special",
 			parts = { { "ap", 0.037, per = "cp", b = "m" } },
 			ranks = {
@@ -1798,7 +1801,7 @@ D.CLASS.DRUID = function()
 			threat = { k = "heal", v = 0.5, b = "e", split = true } },
 		{ key = "growl", school = 1, roll = "spell",
 			parts = {},
-			ranks = { { 6795, 10 } },
+			ranks = { { 6795, 10, du = 3000 } },
 			threat = { k = "taunt", b = "c" } },
 		{ key = "healing touch", school = 4, cmp = "heal", roll = "spell",
 			parts = { { "heal", 1, b = "c" } },
@@ -1989,14 +1992,15 @@ D.CLASS.DRUID = function()
 				{ 9756, 44, bm = { 15 } },
 				{ 9910, 54, bm = { 18 } },
 			} },
-		{ key = "tranquility", school = 4, cmp = "channel", roll = "spell",
+		{ key = "tranquility", school = 4, cmp = "hot", roll = "spell",
 			parts = { { "heal", 0.335, n = 5, p = 2, per = "target", b = "c" } },
 			ranks = {
 				{ 740, 30, ct = -1, du = 10000, bm = { 435 }, bl = { 3 }, mx = { 36 } },
 				{ 8918, 40, ct = -1, du = 10000, bm = { 645 }, bl = { 3.5 }, mx = { 46 } },
 				{ 9862, 50, ct = -1, du = 10000, bm = { 980 }, bl = { 4.5 }, mx = { 56 } },
 				{ 9863, 60, ct = -1, du = 10000, bm = { 1425 }, bl = { 5 }, mx = { 66 } },
-			} },
+			},
+			threat = { k = "heal", v = 0.5, b = "m", split = true } },
 		{ key = "wild growth", school = 4, cmp = "hot", roll = "spell",
 			parts = { { "heal", 0.462, n = 7, p = 1, per = "target", b = "c" } },
 			ranks = {
@@ -2168,15 +2172,17 @@ D.STATS = {
 }
 -- Two stats in one sentence: the line explains both.
 D.STAT_PAIRS = { { "ITEM_MOD_SPELL_HEALING_DONE_SHORT", "ITEM_MOD_SPELL_DAMAGE_DONE_SHORT", t = "TOOLTIP_ITEM_STAT_SPELL_HEALING_INCREASE_DAMAGE_INCREASE" } }
--- The default lines by class and role (ns.PlayerRole: damage, tank, healer; cat: a druid in Cat Form), each if known.
+-- The default lines by class and role (ns.PlayerRole: damage, tank, healer; cat: a druid in Cat Form), each if known: a key;
+-- a list of keys, the first of them known; { key, key ..., needs = key, ["else"] = { key ... } }, each of its keys while needs
+-- is known, else each of else (design 2.1; GearLines.lua reads them).
 D.DEFAULTS = {
 	DRUID = { cat = { "attack", "shred", "claw" }, damage = { "starfire", "wrath", "moonfire" }, healer = { "healing touch", "rejuvenation", "regrowth" }, tank = { "attack", "maul", "swipe" } },
 	HUNTER = { damage = { "auto shot", "aimed shot", "multi-shot", "arcane shot", "serpent sting" } },
 	MAGE = { damage = { "frostbolt", "fireball", "arcane missiles" } },
-	PALADIN = { damage = { "attack", "seal of command", "judgement of command", "seal of righteousness", "judgement of righteousness", "holy strike" }, healer = { "holy light", "flash of light", "holy shock" }, tank = { "attack", "holy shield", "consecration" } },
-	PRIEST = { damage = { "mind blast", "shadow word: pain", "mind flay" }, healer = { "greater heal", "heal", "flash heal", "renew" } },
+	PALADIN = { damage = { "attack", { "seal of command", "judgement of command", needs = "seal of command", ["else"] = { "seal of righteousness", "judgement of righteousness" } }, "holy strike" }, healer = { "holy light", "flash of light", "holy shock" }, tank = { "attack", "holy shield", "consecration" } },
+	PRIEST = { damage = { "mind blast", "shadow word: pain", "mind flay" }, healer = { { "greater heal", "heal" }, "flash heal", "renew" } },
 	ROGUE = { damage = { "attack", "sinister strike", "backstab", "mutilate", "eviscerate" } },
-	SHAMAN = { damage = { "lightning bolt", "chain lightning", "earth shock", "attack", "stormstrike" }, healer = { "healing wave", "lesser healing wave", "chain heal" } },
+	SHAMAN = { damage = { "lightning bolt", "chain lightning", "earth shock", { "attack", "stormstrike", needs = "stormstrike" } }, healer = { "healing wave", "lesser healing wave", "chain heal" } },
 	WARLOCK = { damage = { "shadow bolt", "corruption", "immolate" } },
 	WARRIOR = { damage = { "attack", "heroic strike", "mortal strike", "bloodthirst", "whirlwind" }, tank = { "attack", "heroic strike", "sunder armor", "revenge", "shield slam" } },
 }

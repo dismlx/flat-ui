@@ -15,12 +15,13 @@ known_differences names it with a reason.
 It prints the counts and the file's size, the spells left out of the comparison, the parts the text scan marked as counted by the game's
 text, the probes per class, and every value of the slices that differs from its row with whether known_differences explains it.
 --check writes nothing and exits 1 on a failed check; without it the file is written only when every check passes, and then luac5.4 -p
-and tools/dev/lua51_check.py run on it when they are there. The checks: every rank ID once and every key once; every default resolves;
-a threat list has one value per rank; coefficients between 0 and 5; every basis c, m or e; every talent of the rules and crit talents
-has a curve as long as its ranks, a node and a definition the capture's TraitNodes holds; every value a row holds equals the slice's or
-is in known_differences; every field written is one the shapes of design 3.2 and its stub (3.2a) use, and every field and comparison
-kind of the stub is written; every class with spell power has a probe; a description whose variables come from build 70888 reads the same in
-70938, else it says so. Python 3, standard library only; deterministic, so a diff shows real changes.
+and tools/dev/lua51_check.py run on it when they are there. The checks: every rank ID once and every key once; every default resolves and
+is a key, a list of keys or { needs, keys, else } (the one form GearLines.lua reads); each judgement's seal is an entry of its class with
+as many ranks; a threat list has one value per rank; coefficients between 0 and 5; every basis c, m or e; every talent of the rules and
+crit talents has a curve as long as its ranks, a node and a definition the capture's TraitNodes holds; every value a row holds equals the
+slice's or is in known_differences; every field written is one the shapes of design 3.2 and its stub (3.2a) use, or an entry's seal, and
+every field and comparison kind of the stub is written; every class with spell power has a probe; a description whose variables come from
+build 70888 reads the same in 70938, else it says so. Python 3, standard library only; deterministic, so a diff shows real changes.
 """
 import json
 import os
@@ -40,10 +41,12 @@ SCHOOL_INDEX = {1: 1, 2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7}
 ROLL = {1: 'spell', 2: 'special', 3: 'ranged'}
 CMP_KINDS = ('spell', 'dot', 'channel', 'heal', 'hot', 'strike', 'apstrike', 'finisher', 'auto', 'shot', 'wand', 'seal', 'proc', 'threat')
 
-# The fields the shapes may hold: those of design 3.2, and of its stub (3.2a), which uses a part of them. Every field written must be
-# one of these; the second set is reported, so a field the other parts may not read yet is seen.
+# The fields the shapes may hold: those of design 3.2, and of its stub (3.2a), which uses a part of them, and an entry's seal (a judgement's,
+# whose rank SpellModel.lua's M.Highest gives the judgement), which the join of the parts added. Every field written must be one of these;
+# the second set is reported, so a field the other parts may not read yet is seen. An entry's rule of 3.2 is not written: a rule names the
+# spells of its tooltip itself (tip).
 FIELDS = {
-    'entry': {'key', 'pet', 'school', 'sch', 'cmp', 'roll', 'nb', 'nx', 'parts', 'ranks', 'threat'},
+    'entry': {'key', 'pet', 'school', 'sch', 'cmp', 'roll', 'nb', 'nx', 'seal', 'parts', 'ranks', 'threat'},
     'part': {1, 2, 'n', 'p', 'per', 'max', 'j', 'cp', 'spd', 'h', 'sch', 'g', 'fs', 'o', 'two', 'note', 'b'},
     'rank': {1, 2, 'c', 'n', 'w', 'ct', 'du', 'bm', 'bl', 'lv', 'mx', 'cpb', 'sv'},
     'threat': {'k', 'v', 'b', 'ap', 'apb', 'pl', 'mx', 'split', 'forms', 'note'},
@@ -170,6 +173,7 @@ class Entry:
         self.roll = None
         self.nb = False
         self.nx = False
+        self.seal = None
         self.parts = []
         self.ranks = []
         self.threat = None
@@ -422,6 +426,21 @@ def apply_curation(entries, cur):
         need(entries, key, 'nb').nb = True
 
 
+def apply_judgements(entries, cur):
+    """Each judgement names its seal (curation judgements): the two of a class, with as many ranks, so the judgement's rank of a place is the
+    seal's rank of that place."""
+    for key, j in cur['judgements'].items():
+        if key == 'about':
+            continue
+        judgement, seal = need(entries, key, 'judgements'), need(entries, j['seal'], 'judgements')
+        if judgement.cls != seal.cls:
+            P.fail('judgements: %s is %s, its seal %s %s' % (key, judgement.cls, j['seal'], seal.cls))
+        elif len(judgement.ranks) != len(seal.ranks):
+            P.fail('judgements: %s has %d ranks, its seal %s %d' % (key, len(judgement.ranks), j['seal'], len(seal.ranks)))
+        else:
+            judgement.seal = j['seal']
+
+
 def need(entries, key, where):
     if key not in entries:
         P.fail('curation %s names %r, which no entry has' % (where, key))
@@ -496,10 +515,12 @@ def compare_kind(e, ce, kinds, none):
         return 'strike'
     if any(p['slice'].get('per') == 'cp' for p in e.parts):
         return 'finisher'
+    # A spell that only heals is a heal or a HoT, a channelled one too (Tranquility): it cannot miss and makes heal threat, and a HoT's
+    # figures are a channel's (the total, and a second of the effect, design 2.3).
+    if stats <= {'heal'}:
+        return 'hot' if periodic or channel(top) else 'heal'
     if channel(top):
         return 'channel'
-    if stats <= {'heal'}:
-        return 'hot' if periodic else 'heal'
     if stats <= {'sp'} or stats == {'sp', 'heal'}:
         return 'dot' if periodic else 'spell'
     return 'dot' if periodic else 'apstrike'
@@ -810,17 +831,50 @@ def build_probes(entries):
 
 
 def build_defaults(entries, cur):
+    """The default lines of design 2.1, in the one form GearLines.lua reads: a line is a key; a list of keys is the first of them known
+    (Greater Heal, else Heal); { needs, keys, else } is each of its keys while needs is known, else each of else, written as the Lua table
+    { key, key ..., needs = key, ["else"] = { key ... } }. Every key must be an entry of the class or of every class."""
     out = {}
+
+    def resolve(cls, role, key):
+        e = entries.get(key) if isinstance(key, str) else None
+        if e is None or e.cls not in (cls, 'ALL'):
+            P.fail('default %s %s: %r does not resolve' % (cls, role, key))
+
+    def keys_of(cls, role, value, what):
+        if not isinstance(value, list) or not value:
+            P.fail('default %s %s: %s is no list of keys' % (cls, role, what))
+            return []
+        for key in value:
+            resolve(cls, role, key)
+        return list(value)
+
     for cls, roles in cur['defaults'].items():
         if cls in ('why', 'source'):
             continue
         out[cls] = {}
-        for role, keys in roles.items():
-            for key in keys:
-                e = entries.get(key)
-                if e is None or e.cls not in (cls, 'ALL'):
-                    P.fail('default %s %s: %r does not resolve' % (cls, role, key))
-            out[cls][role] = keys
+        for role, items in roles.items():
+            lines = []
+            for item in items:
+                if isinstance(item, str):
+                    resolve(cls, role, item)
+                    lines.append(item)
+                elif isinstance(item, list):
+                    lines.append(keys_of(cls, role, item, 'a choice'))
+                elif isinstance(item, dict):
+                    extra = set(item) - {'needs', 'keys', 'else'}
+                    if extra or not isinstance(item.get('needs'), str):
+                        P.fail('default %s %s: %r is not { needs, keys, else }' % (cls, role, item))
+                        continue
+                    resolve(cls, role, item['needs'])
+                    group = {i + 1: key for i, key in enumerate(keys_of(cls, role, item.get('keys'), 'keys'))}
+                    group['needs'] = item['needs']
+                    if 'else' in item:
+                        group['else'] = keys_of(cls, role, item['else'], 'else')
+                    lines.append(group)
+                else:
+                    P.fail('default %s %s: %r is no line' % (cls, role, item))
+            out[cls][role] = lines
     return out
 
 
@@ -872,10 +926,15 @@ def lua(v):
     raise TypeError(v)
 
 
+# Lua's reserved words, which a table constructor can only take as ["word"] = ...
+LUA_WORDS = {'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'if', 'in', 'local', 'nil', 'not', 'or', 'repeat',
+             'return', 'then', 'true', 'until', 'while'}
+
+
 def field(k, v):
     if isinstance(k, int):
         return lua(v)
-    if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', k):
+    if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', k) and k not in LUA_WORDS:
         return '%s = %s' % (k, lua(v))
     return '[%s] = %s' % (lua(k), lua(v))
 
@@ -966,7 +1025,9 @@ def rank_fields(e, r, parts_top, caster):
                 mean = gain = None
             else:
                 mean = eff['bp'] * k
-                gain = eff['ppl'] * k
+                # A gain a level counts from a base mean: with none (a dummy of base 0 the server works out, Riptide's direct heal) there
+                # is no base to gain, so bl, lv and mx stay off that part, as bm does.
+                gain = eff['ppl'] * k if mean else None
                 if part['slice'].get('per') == 'cp' and eff['ppr']:
                     cpb = rnd(eff['ppr'] * k, 2)
         bm.append(rnd(mean, 2) if mean else None)
@@ -992,7 +1053,10 @@ def rank_fields(e, r, parts_top, caster):
                 and info['prow'] is not row and info['prow']['dur'] and info['prow']['dur'] > 0:
             dur = info['prow']['dur']
             break
-    if (periodic or channel(row) or e.cmp in ('seal', 'proc')) and dur and dur > 0:
+    # The duration of a periodic, channelled, seal or proc rank, and of one whose threat lasts: a taunt's, a forced attack's and Fade's
+    # (SpellModel.lua words "3 sec", "forces attacks 6 sec" and "for 10 sec" from it, design 1.2).
+    lasting = e.threat is not None and e.threat.get('k') in ('taunt', 'force', 'more', 'temp')
+    if (periodic or channel(row) or e.cmp in ('seal', 'proc') or lasting) and dur and dur > 0:
         f['du'] = dur
     for name, vals in (('bm', bm), ('bl', bl), ('lv', lv), ('mx', mx)):
         if any(v is not None for v in vals):
@@ -1021,6 +1085,8 @@ def entry_lua(w, e):
         head['nb'] = True
     if e.nx:
         head['nx'] = True
+    if e.seal:
+        head['seal'] = e.seal
     parts_top = []
     for i, part in enumerate(e.parts):
         info = e.ranks[-1]['parts'][i]
@@ -1067,7 +1133,8 @@ HEADER = '''local _, ns = ...
 -- An entry (one spell, every rank): key (English name, lower case; " (pet)" for a pet's spell), pet, school (Lua school index 1-7) or
 --   sch (several, of which the lower counts), cmp (the comparison kind, nil when the comparison cannot work it out), roll (the attack
 --   table line of the row's DefenseType: spell, special, ranged, or swing for Attack), nb (cannot be blocked), nx (replaces the next
---   swing), parts, ranks, threat.
+--   swing), seal (a judgement: the key of its seal, whose highest rank known gives the judgement's of the same place), parts, ranks,
+--   threat.
 -- A part: [1] the stat (sp, heal, ap, rap, wpn: weapon damage with the coefficient its multiple, bv: block value), [2] the coefficient of
 --   the top rank (a periodic part's total over its ticks), n ticks and p seconds a tick, per (target, first with max targets, jump with j
 --   the share kept each jump, hit, block, stack, proc, missile, cp with cp the shares at 1 to 5 combo points, self), spd (actual, norm,
@@ -1094,6 +1161,8 @@ def write_lua(entries, rules, crit, gear, cur, threat, probes, defaults, rockbit
     out.append('')
     out.append('D.BUILD, D.HOTFIX, D.FALLBACK = %s, %s, %s' % (lua(client.data['build']), lua(client.data['hotfix']),
                                                            lua(client.data['fallback'])))
+    out.append('-- The number of spells of every class and ALL, for /flatui status, so no other class\'s constructor runs to count them.')
+    out.append('D.SPELLS = %d' % len(entries))
     out.append('')
     out.append('-- Constants of the gear model: crit multiplier by attack table line (STAT_CRIT_BONUS), attack power a point of DPS, the')
     out.append('-- global cooldown, the off hand, heal threat a point, the normalized speeds and the forms\' swings, glancing blows, the')
@@ -1143,7 +1212,9 @@ def write_lua(entries, rules, crit, gear, cur, threat, probes, defaults, rockbit
     out.append('-- Two stats in one sentence: the line explains both.')
     pairs = [dict([(i + 1, k) for i, k in enumerate(p['keys'])] + [('t', p['t'])]) for p in gear['pairs']]
     out.append('D.STAT_PAIRS = ' + lua(pairs))
-    out.append('-- The default lines by class and role (ns.PlayerRole: damage, tank, healer; cat: a druid in Cat Form), each if known.')
+    out.append('-- The default lines by class and role (ns.PlayerRole: damage, tank, healer; cat: a druid in Cat Form), each if known: a key;')
+    out.append('-- a list of keys, the first of them known; { key, key ..., needs = key, ["else"] = { key ... } }, each of its keys while needs')
+    out.append('-- is known, else each of else (design 2.1; GearLines.lua reads them).')
     out.append('D.DEFAULTS = {')
     for cls in sorted(defaults):
         out.append('\t%s = %s,' % (cls, lua({role: defaults[cls][role] for role in sorted(defaults[cls])})))
@@ -1243,6 +1314,7 @@ def main():
     entries, order = build_entries(client, coef, cur)
     marked = scan_texts(order, client)
     apply_curation(entries, cur)
+    apply_judgements(entries, cur)
     made = make_threat_entries(entries, client, threat)
     left = decide(entries, order, cur)
     build_threat(entries, client, threat, cur)
