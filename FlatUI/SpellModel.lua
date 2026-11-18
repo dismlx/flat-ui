@@ -57,9 +57,11 @@ local _, ns = ...
 -- UnitRangedAttackPower (base and both buffs), GetShieldBlock, GetCritChance, GetRangedCritChance, GetSpellCritChance, GetMeleeHaste,
 -- GetRangedHaste (with the quiver's), UnitSpellHaste, GetCombatRating of the three haste ratings, UnitStat's effective five, UnitAttackSpeed,
 -- UnitDamage and UnitRangedDamage; then, for strength, agility and intellect, the gain a point of GetAttackPowerForStat,
--- GetRangedAttackPowerForStat, GetCritChanceFromStat and GetSpellCritChanceFromStat at the total and ten points above it (design 2.5), whose
--- crits are fractions the sheet shows times 100 (Camelot/PaperDollFrameStats.lua:277, 318). PLAYER_REGEN_DISABLED makes S.stats old until the
--- next plain read. Right after each plain read the functions of M.AfterRead run in the same frame (GearModel.lua reads the hit table's inputs).
+-- GetRangedAttackPowerForStat, GetCritChanceFromStat and GetSpellCritChanceFromStat at the total and ten points above it (design 2.5). So
+-- S.stats.per[stat] = { ap, rap, crit, spellCrit } holds attack power and ranged attack power a point, and crit and spell crit in percent a
+-- point: the crit calls give fractions, which the sheet shows times 100 (Camelot/PaperDollFrameStats.lua:277, 318), and they are kept times 100,
+-- the unit of S.stats.crit; GearModel.lua reads them as that. PLAYER_REGEN_DISABLED makes S.stats old until the next plain read. Right after
+-- each plain read the functions of M.AfterRead run in the same frame (GearModel.lua reads the hit table's inputs).
 --
 -- The text check (design 4.3, 6.1), once a session, out of combat with the stats plain (InCombatLockdown), on an English client (GetLocale,
 -- LocaleDocumentation.lua:49-56), with a probe rank of D.PROBES known whose spell power part is at least 10: the first "N to M" of
@@ -73,8 +75,9 @@ local _, ns = ...
 -- UPDATE_SHAPESHIFT_FORM reads the state at once, as a stance taken in a fight changes the multipliers; ADDON_RESTRICTION_STATE_CHANGED reads
 -- marked stats at once, as it comes before a restriction becomes active, while IsAddOnRestrictionActive is false, the last moment stats are plain
 -- (research_tooltips.md §2.2); PLAYER_REGEN_DISABLED makes the stats old; SPELL_TEXT_UPDATE runs the text check again while its probe's text was
--- empty; GET_ITEM_INFO_RECEIVED marks the gear for a worn item that waited and changes M.Version, so gear lines of an item not loaded are worked
--- out again. The events: the player's UNIT_STATS, UNIT_ATTACK_POWER, UNIT_RANGED_ATTACK_POWER, UNIT_DAMAGE, UNIT_ATTACK_SPEED, UNIT_RANGEDDAMAGE,
+-- empty; GET_ITEM_INFO_RECEIVED marks the gear for a worn item that waited, whose lines are read again (M.Version changes only if they then say
+-- something else: no reader keeps an answer for an item the client had not loaded, so nothing else waits for the event). The events: the
+-- player's UNIT_STATS, UNIT_ATTACK_POWER, UNIT_RANGED_ATTACK_POWER, UNIT_DAMAGE, UNIT_ATTACK_SPEED, UNIT_RANGEDDAMAGE,
 -- UNIT_SPELL_HASTE, UNIT_AURA and UNIT_INVENTORY_CHANGED; COMBAT_RATING_UPDATE, SPELL_POWER_CHANGED, PLAYER_DAMAGE_DONE_MODS,
 -- SKILL_LINES_CHANGED, PLAYER_EQUIPMENT_CHANGED, WEAPON_ENCHANT_CHANGED, TRAIT_CONFIG_UPDATED, PLAYER_TALENT_UPDATE, CHARACTER_POINTS_CHANGED,
 -- ACTIVE_COMBAT_CONFIG_CHANGED, TRAIT_CONFIG_LIST_UPDATED, ACTIVE_TALENT_GROUP_CHANGED, PLAYER_ROLES_ASSIGNED, GROUP_ROSTER_UPDATE,
@@ -83,8 +86,9 @@ local _, ns = ...
 --
 -- The lines (design 1.2-1.4) are texts and colours' names only: the share of a power part in words with what it adds with the player's stats,
 -- the threat block with its multipliers (the rules of design 2.5, G), and the lines of a stance, form, aura or talent tooltip. Amounts are worded
--- with the rounding of design 1.2 (M.Fmt), thousands broken by the game's BreakUpLargeNumbers under pcall (as CombatText.lua:1445-1446), and a
--- spell's name in a dim line is the game's (C_Spell.GetSpellName).
+-- with the rounding of design 1.2, and the gear comparison's with that of design 2.3 (M.Fmt, which GearLines.lua and GearWindow.lua use too),
+-- thousands broken by the game's BreakUpLargeNumbers under pcall (as CombatText.lua:1445-1446), and a spell's name in a dim line is the game's
+-- (C_Spell.GetSpellName).
 
 local KEY, PART = "chat", "your stats"
 local IsSecret, Finite = ns.IsSecret, ns.Finite
@@ -132,7 +136,8 @@ local K = {
 	-- The first half of the dim line of a part the game's text counts otherwise (design 1.3: Seal of Righteousness).
 	OTHERWISE = "The game's text shows a range for any weapon",
 	-- The comparison kinds that deal damage (SpellData.lua, cmp), and the threat kinds the multipliers in force change (design 2.5: Fade's
-	-- temporary amount and power gains take none, research_threat_rest.md §1).
+	-- temporary amount takes none; a power gain is threat a point of rage, which no multiplier of the spell changes, and its note in the data
+	-- says which rage a stance or form changes, research_threat_rest.md §1, research_threat_tanks.md §2).
 	DAMAGE_KINDS = { spell = true, dot = true, channel = true, strike = true, apstrike = true, finisher = true, auto = true, shot = true, wand = true,
 		seal = true, proc = true },
 	TAKES_G = { mult = true, bonus = true, flat = true, more = true, drop = true, heal = true, caster = true },
@@ -176,7 +181,7 @@ local M = {}
 ns.SpellModel = M
 
 -- state and stats: S.state and S.stats of design 4.3. marks: the parts of the player to read before the next answer (M.Mark). version: what
--- M.Version gives; rows: the rows of K.ROWS at its last ask; arrived: the game loaded an item since then. owners: who wants the events
+-- M.Version gives; rows: the rows of K.ROWS at its last ask. owners: who wants the events
 -- (M.Want); hearing: the frame hears them; frame: that frame; units and alone: the unit events it hears and those the client registered for
 -- the player alone, as HitTable.lua keeps them. count: the number of the last read, the key of ns.EachPart; reported: its first error went to
 -- the error handler. reading: a read runs, so an M.AfterRead function that asks again gets what is there. fresh: when everything was last
@@ -187,7 +192,7 @@ ns.SpellModel = M
 local S = {
 	state = {}, stats = nil,
 	marks = { state = true, stats = true, talents = true, gear = true, spells = true, role = true },
-	version = 1, rows = {}, arrived = false, owners = {}, hearing = false, frame = nil, units = {}, alone = {},
+	version = 1, rows = {}, owners = {}, hearing = false, frame = nil, units = {}, alone = {},
 	count = 0, reported = false, reading = false, fresh = nil, after = {}, failed = {}, highest = {}, before = nil, parsed = {},
 	check = { done = false, result = nil, name = nil, rank = nil, waiting = nil },
 	unstaged = {}, nodes = nil, walked = false, lookups = nil, patterns = nil,
@@ -482,9 +487,6 @@ end
 -- A rule of the class into the lookups: by the spells of its tooltip, by its talent, and the aura it reads.
 local function AddRule(L, rule)
 	L.rules[#L.rules + 1] = rule
-	if type(rule.id) == "string" then
-		L.ruleById[rule.id] = rule
-	end
 	for _, tip in ipairs(type(rule.tip) == "table" and rule.tip or { rule.tip }) do
 		if Whole(tip) and L.tips[tip] == nil then
 			L.tips[tip] = rule
@@ -520,7 +522,7 @@ local function Lookups()
 	if type(data) ~= "table" or type(data.CLASS) ~= "table" or not Plain(class, "string") then
 		return nil
 	end
-	local L = { class = class, byId = {}, byKey = {}, own = {}, tips = {}, talents = {}, rules = {}, ruleById = {}, auras = {}, talentList = {},
+	local L = { class = class, byId = {}, byKey = {}, own = {}, tips = {}, talents = {}, rules = {}, auras = {}, talentList = {},
 		seen = {} }
 	for _, name in ipairs({ class, "ALL" }) do
 		local make = data.CLASS[name]
@@ -533,21 +535,10 @@ local function Lookups()
 			end
 		end
 	end
+	-- A rule names the spells of its tooltip itself (tip); the data writes no entry field rule (make_spelltips.py, FIELDS).
 	for _, rule in ipairs(type(data.RULES) == "table" and data.RULES or {}) do
 		if type(rule) == "table" and (rule.class == nil or rule.class == "ALL" or rule.class == class) then
 			AddRule(L, rule)
-		end
-	end
-	-- An entry that is the tooltip of a rule (its field rule, design 3.2) gives that rule its ranks.
-	for _, entry in pairs(L.byKey) do
-		local rule = type(entry.rule) == "string" and L.ruleById[entry.rule] or nil
-		if rule then
-			for _, rank in ipairs(entry.ranks) do
-				local id = type(rank) == "table" and rank[1] or nil
-				if Whole(id) and L.tips[id] == nil then
-					L.tips[id] = rule
-				end
-			end
 		end
 	end
 	for _, crit in ipairs(type(data.CRIT) == "table" and data.CRIT or {}) do
@@ -1479,7 +1470,6 @@ local function OnEvent(_, event, ...)
 		end
 	elseif event == "GET_ITEM_INFO_RECEIVED" then
 		local id = ...
-		S.arrived = true
 		for _, info in pairs(S.parsed) do
 			if Finite(id) and info.waiting == id then
 				S.marks.gear = true
@@ -1621,6 +1611,37 @@ local function Percent(x)
 		return "0%"
 	end
 	return (value > 0 and "+" or "-") .. ("%.1f"):format(math.abs(value)) .. "%"
+end
+
+-- A figure of the gear comparison, now or with an item (design 2.3), for GearLines.lua and GearWindow.lua alike: a second with one decimal; any
+-- other figure whole from 100 up with its thousands broken, one decimal below with a trailing .0 dropped; its minus kept.
+local function Figure(x, second)
+	if not Finite(x) then
+		return ""
+	end
+	local size, text = math.abs(x), nil
+	if second then
+		local tenths = math.floor(size * 10 + 0.5)
+		text = Big(math.floor(tenths / 10)) .. "." .. (tenths % 10)
+	elseif size >= 100 then
+		text = Big(math.floor(size + 0.5))
+	else
+		text = Trim(("%.1f"):format(size))
+	end
+	if x < 0 and text ~= "0" and text ~= "0.0" then
+		text = "-" .. text
+	end
+	return text
+end
+
+-- A change of the gear comparison (design 2.3): a figure with its sign, "0" under 0.05: +16.7, -52, +1.3 (a second).
+local function Change(x, second)
+	if not Finite(x) then
+		return ""
+	elseif math.abs(x) < 0.05 then
+		return "0"
+	end
+	return (x > 0 and "+" or "-") .. Figure(math.abs(x), second)
 end
 
 -- Milliseconds as seconds: 6 sec.
@@ -2234,10 +2255,10 @@ local function Threat(kind, t, entry, row, index, state, stats, opts, G, factors
 			r.right = Dec(v) .. " x " .. who .. (G ~= 1 and (" " .. Mult(G)) or "")
 		end
 	elseif kind == "rage" then
-		-- Rage gained: split and changed by no multiplier (research_threat_rest.md §1).
+		-- Rage gained: v is threat a point of rage, split, and no multiplier of the spell changes it; the data's note says which rage a stance
+		-- or form changes (research_threat_tanks.md §2: the rage at once is unscaled, the rage over time takes the stance's or form's).
 		r.own = true
-		r.right = (basis == "e" and "~" or "") .. Num(Toward(raw))
-		r.after[1] = "from the rage it gives, which no stance or talent changes"
+		r.right = (basis == "e" and "~" or "") .. Num(raw) .. " a point of rage"
 	else
 		return nil
 	end
@@ -2300,8 +2321,10 @@ function M.ByKey(key)
 	return L and L.byKey[key] or nil
 end
 
--- The place and the spell ID of the highest rank of an entry the player knows, or nil. Kept until the next SPELLS_CHANGED; a rank learned or
--- lost since changes M.Version.
+-- The place and the spell ID of the highest rank of an entry the player knows, or nil. A judgement's damage ranks are rows no spell book holds:
+-- the game casts the judgement of the seal that is up, at the seal's rank, so a judgement (its field seal, SpellData.lua) takes the rank of the
+-- same place as the highest rank of its seal the player knows, for the spell lines, the gear lines and the window alike. Kept until the next
+-- SPELLS_CHANGED; a rank learned or lost since changes M.Version.
 function M.Highest(entry)
 	if type(entry) ~= "table" or type(entry.ranks) ~= "table" then
 		return nil
@@ -2315,12 +2338,24 @@ function M.Highest(entry)
 		return kept[1] or nil, kept[2]
 	end
 	local index, id
-	for place = #entry.ranks, 1, -1 do
-		local rank = entry.ranks[place]
+	local L = type(entry.seal) == "string" and Lookups() or nil
+	local seal = L and L.byKey[entry.seal] or nil
+	if type(seal) == "table" and seal ~= entry then
+		local place = M.Highest(seal)
+		place = Whole(place) and place >= 1 and math.min(place, #entry.ranks) or nil
+		local rank = place and entry.ranks[place] or nil
 		local spell = type(rank) == "table" and rank[1] or nil
-		if Whole(spell) and Knows(spell) then
+		if Whole(spell) then
 			index, id = place, spell
-			break
+		end
+	else
+		for place = #entry.ranks, 1, -1 do
+			local rank = entry.ranks[place]
+			local spell = type(rank) == "table" and rank[1] or nil
+			if Whole(spell) and Knows(spell) then
+				index, id = place, spell
+				break
+			end
 		end
 	end
 	S.highest[entry] = { index or false, id }
@@ -2343,8 +2378,8 @@ function M.Stats()
 	return S.stats
 end
 
--- A number that changes only when a value read differs from the last read, the text check answers, a rank is learned or lost, the game loads an
--- item (so the gear lines of an item it had not loaded are worked out again: design 4.5), or a row of the tab changes: the key of every cache.
+-- A number that changes only when a value read differs from the last read (a worn item the game loaded since included), the text check answers,
+-- a rank is learned or lost, or a row of the tab changes: the key of every cache (design 4.6).
 function M.Version()
 	local changed = false
 	for index, path in ipairs(K.ROWS) do
@@ -2358,9 +2393,6 @@ function M.Version()
 				S.marks.role = true
 			end
 		end
-	end
-	if S.arrived then
-		S.arrived, changed = false, true
 	end
 	if changed then
 		Bump()
@@ -2416,8 +2448,23 @@ function M.Multiplier(entry, state)
 	return Factors(entry, state, state.role)
 end
 
--- The power lines of a rank (design 1.2): { { left, right, tone, dim, wrap } ... }; opts { stats = With your stats, lowRank = Less for low
--- ranks }, both on unless false. tone is "plain", or "old" while the stats are from before a fight now on; an estimate is the ~ in the text.
+-- True for the off hand's weapon part of a strike that has another weapon part (Whirlwind, Mutilate) while the player does not dual wield: the off
+-- hand adds nothing then, as GearModel.lua counts it, so it gets no line.
+local function IdleOffHand(entry, part, state)
+	if part[1] ~= "wpn" or part.h ~= "off" or state.dual == true then
+		return false
+	end
+	for _, other in ipairs(entry.parts) do
+		if type(other) == "table" and other[1] == "wpn" and other.h ~= "off" then
+			return true
+		end
+	end
+	return false
+end
+
+-- The power lines of a rank (design 1.2): { { left, right, tone, dim, wrap } ... }, a line a part (but the off hand's of a strike while the player
+-- does not dual wield); opts { stats = With your stats, lowRank = Less for low ranks }, both on unless false. tone is "plain", or "old" while the
+-- stats are from before a fight now on; an estimate is the ~ in the text.
 function M.PowerLines(entry, rank, state, stats, opts)
 	local out = {}
 	if type(entry) ~= "table" or type(entry.parts) ~= "table" or type(entry.ranks) ~= "table" then
@@ -2434,7 +2481,7 @@ function M.PowerLines(entry, rank, state, stats, opts)
 		stats = nil
 	end
 	for index, part in ipairs(entry.parts) do
-		if type(part) == "table" then
+		if type(part) == "table" and not IdleOffHand(entry, part, state) then
 			PartLines(out, entry, row, index, part, state, stats, opts.lowRank ~= false)
 		end
 	end
@@ -2541,5 +2588,6 @@ function M.RuleLines(spellID, state, rank)
 	return out
 end
 
--- The rounding of design 1.2, for every file that words a number of the model.
-M.Fmt = { Pct = Pct, Mult = Mult, Num = Num, Signed = Signed, Percent = Percent }
+-- The rounding of design 1.2, for every file that words a number of the model, and of design 2.3 for the gear comparison: Percent (a change as a
+-- share, "+1.8%"), Figure (a figure now or with an item) and Change (its change, signed), which the item tooltips and the window both use.
+M.Fmt = { Pct = Pct, Mult = Mult, Num = Num, Signed = Signed, Percent = Percent, Figure = Figure, Change = Change }
