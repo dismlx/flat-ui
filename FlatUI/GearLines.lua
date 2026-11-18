@@ -1817,6 +1817,15 @@ local function SpellFrom(text)
 	return nil
 end
 
+-- /flatui gear add <spell>.
+local function AddNamed(text)
+	local id, keep = SpellFrom(text)
+	if not id then
+		return false, ('Gear comparison: no spell found for "%s".'):format(text)
+	end
+	return AddLine(id, keep)
+end
+
 -- /flatui gear remove <name>: the line of the spell of that name, the one that follows its rank first.
 local function RemoveNamed(text)
 	local M = Model()
@@ -1870,7 +1879,7 @@ local function PrintList()
 	end
 end
 
--- Prints the message of a change of the list.
+-- Prints the message of a change of the list, or of the window.
 local function Say(ok, done, message)
 	if not ok then
 		Report(done, "list")
@@ -1878,6 +1887,12 @@ local function Say(ok, done, message)
 	elseif type(message) == "string" then
 		print(message)
 	end
+end
+
+-- Calls a function of GearWindow.lua (ns.GearWindowShow, ns.GearWindowToggle) and answers as a pick does, with what it said.
+local function Window(fn, ...)
+	local said = fn(...)
+	return true, Plain(said, "string") and said or nil
 end
 
 local function Slash(rest)
@@ -1892,10 +1907,7 @@ local function Slash(rest)
 			return
 		end
 		local link = typed:match("(|c[^|]*|Hitem:.-|h.-|h|r)") or typed:match("(|Hitem:.-|h.-|h)") or typed:match("^([Ii]tem:[%d:%-]+)") or typed
-		local said = show(link)
-		if Plain(said, "string") then
-			print(said)
-		end
+		Say(pcall(Window, show, link))
 	elseif typed == "" then
 		local toggle = ns.GearWindowToggle
 		if type(toggle) ~= "function" then
@@ -1903,17 +1915,9 @@ local function Slash(rest)
 			Say(pcall(PrintList))
 			return
 		end
-		local said = toggle()
-		if Plain(said, "string") then
-			print(said)
-		end
+		Say(pcall(Window, toggle))
 	elseif word == "add" and text ~= "" then
-		local id, keep = SpellFrom(text)
-		if not id then
-			print(('Gear comparison: no spell found for "%s".'):format(text))
-			return
-		end
-		Say(pcall(AddLine, id, keep))
+		Say(pcall(AddNamed, text))
 	elseif word == "remove" and text ~= "" then
 		Say(pcall(RemoveNamed, text))
 	elseif word == "bar" then
