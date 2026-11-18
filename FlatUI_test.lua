@@ -15874,13 +15874,19 @@ do
 				lives[#lives + 1] = tostring(before) .. tostring(font.shown)
 			end
 			check("scrolling: Speed: Fast lives 1.6 seconds and Slow 3", table.concat(lives, ",") == "truefalse,truefalse", table.concat(lives, ","))
-			-- Rows.
+			-- Lanes and rows.
 			local R = style("straight")
+			R.now = 0
 			local lined = {}
 			for index = 1, 3 do
 				lined[index] = C.hit(R, "player", "HEAL", "", index, 1)
 			end
-			check("scrolling: Incoming: Straight numbers that come together start 26 units apart, one line, each behind the one before", spots(lined) == "790,510 790,536 790,562", spots(lined))
+			local beside = spots(lined) .. " " .. lined[2].groups[1].plays .. " " .. lined[3].groups[1].plays
+			C.draw(R, 0.5)
+			check("scrolling: Incoming: Straight numbers that come together start at once, with their pops, side by side a lane (three heights, 75 units) apart: the first on the path, the second to the left, away from the character, the third to the right; at 0.5 seconds they are level, whole and still in their lanes",
+				beside == "790,510 715,510 865,510 1 1" and near(lined[1].points[1][5], 510 - 240 * 0.5 / 2.2, 1e-9) and near(lined[2].points[1][5], lined[1].points[1][5], 1e-9)
+				and near(lined[3].points[1][5], lined[1].points[1][5], 1e-9) and near(lined[2].points[1][4], 715) and near(lined[3].points[1][4], 865) and near(lined[3].alpha, 1, 1e-9),
+				beside .. " " .. spots(lined))
 			local Q = style("straight")
 			Q.now = 0
 			C.hit(Q, "player", "HEAL", "", 1, 1)
@@ -15892,14 +15898,22 @@ do
 			C.hit(L, "player", "HEAL", "", 1, 1)
 			C.draw(L, 10.1)
 			local close = C.hit(L, "player", "HEAL", "", 2, 1)
-			check("scrolling: Incoming: a number that arrives 0.1 seconds after the one before starts the rest of a line behind it", near(close.points[1][5], 510 + (26 - 240 * 0.1 / 2.2), 1e-9), C.spot(close))
+			local beside = C.spot(close) .. " " .. close.groups[1].plays
+			C.draw(L, 10.1 + 0.95)
+			check("scrolling: Incoming: a number that arrives 0.1 seconds after the one before, which is not a line on yet, starts at once with its pop in the lane to the left and goes the same way there: 103.64 units down 0.95 seconds later",
+				beside == "CENTER BOTTOMLEFT 715 510 1" and close.groups[1].plays == 1 and near(close.points[1][5], 510 - 240 * 0.95 / 2.2, 1e-9) and near(close.points[1][4], 715),
+				beside .. " | " .. C.spot(close))
 			local Hz = style("horizontal")
 			local rows = {}
-			for index = 1, 7 do
+			for index = 1, 5 do
 				rows[index] = C.hit(Hz, "player", "HEAL", "", index, 1)
 			end
-			check("scrolling: Incoming: Horizontal numbers that come together take a row each, 26 units under the one before, five rows, and then the first row again",
-				spots(rows) == "790,510 790,484 790,458 790,432 790,406 790,510 790,510", spots(rows))
+			local five = spots(rows)
+			rows[6] = C.hit(Hz, "player", "HEAL", "", 6, 1)
+			rows[7] = C.hit(Hz, "player", "HEAL", "", 7, 1)
+			check("scrolling: Incoming: Horizontal numbers that come together take a row each, 26 units under the one before, five rows; the sixth takes the first row and the first number goes, the seventh the second row and the second goes, in the record the first had",
+				five == "790,510 790,484 790,458 790,432 790,406" and C.spot(rows[6]) == "CENTER BOTTOMLEFT 790 510" and C.spot(rows[7]) == "CENTER BOTTOMLEFT 790 484" and rows[7] == rows[1]
+				and rows[6].shown and rows[7].shown and not rows[2].shown and rows[3].shown, five .. " " .. C.spot(rows[6]) .. " " .. C.spot(rows[7]))
 			local Hz2 = style("horizontal")
 			Hz2.now = 0
 			C.hit(Hz2, "player", "HEAL", "", 1, 1)
@@ -15927,9 +15941,15 @@ do
 			end
 			check("scrolling: Incoming: Static numbers that come together take a row each too", spots(still5) == "790,510 790,484 790,458", spots(still5))
 			local Sz = style("straight", { ["combattext.ownSize"] = 160 })
+			Sz.now = 0
 			local big = C.hit(Sz, "player", "HEAL", "", 1, 1)
-			local bigger = C.hit(Sz, "player", "HEAL", "", 2, 1)
-			check("scrolling: Incoming: the line grows with Size of your text: 160% is 40 high and the lines are 41.6 apart", big.textHeight == 40 and near(bigger.points[1][5], 510 + 41.6, 1e-9), C.spot(bigger))
+			local bigger = C.spot(C.hit(Sz, "player", "HEAL", "", 2, 1))
+			C.draw(Sz, 0.38)
+			local third = C.spot(C.hit(Sz, "player", "HEAL", "", 3, 1))
+			C.draw(Sz, 0.39)
+			local fourth = C.spot(C.hit(Sz, "player", "HEAL", "", 4, 1))
+			check("scrolling: Incoming: the lane and the line grow with Size of your text: at 160% a number is 40 high and a lane 120 units wide, and the path is busy until the first is a line, 41.6 units, on (0.381 seconds): a number at 0.38 seconds takes the lane to the right, one at 0.39 the path",
+				big.textHeight == 40 and bigger == "CENTER BOTTOMLEFT 670 510" and third == "CENTER BOTTOMLEFT 910 510" and fourth == "CENTER BOTTOMLEFT 790 510", bigger .. " " .. third .. " " .. fourth)
 			-- Words, partial effects and the pop.
 			local function wordOf(world, font)
 				for index, other in ipairs(world.addonFonts) do
@@ -15954,7 +15974,7 @@ do
 			for _, flag in ipairs({ "CRUSHING", "BLOCK_REDUCED", "ABSORB", "RESIST", "CRITICAL" }) do
 				local font = C.hit(P, "player", "WOUND", flag, 20, 1)
 				local word = wordOf(P, font)
-				C.draw(P, P.now + 0.2)
+				C.draw(P, P.now + 0.5)
 				colours[#colours + 1] = flag .. "=" .. (word.shown and (word.text .. " " .. C.colour(word)) or "none")
 			end
 			check("scrolling: Partial effects: Crushing is orange red, Block blue grey, Absorb gold and Resist purple, and a critical hit has no word",
@@ -16092,18 +16112,42 @@ do
 			check("scrolling: Outgoing: Static numbers take a row each, 36.4 units apart, going up from the handle", C.spot(rows[1]) == "CENTER BOTTOMLEFT 1130 510" and near(rows[2].points[1][5], 546.4, 1e-9) and near(rows[3].points[1][5], 582.8, 1e-9),
 				C.spot(rows[1]) .. " " .. C.spot(rows[2]) .. " " .. C.spot(rows[3]))
 			local Rw = world("scroll")
-			local behind = {}
+			Rw.now = 0
+			local beside = {}
 			for index = 1, 3 do
-				behind[index] = C.hit(Rw, "target", "WOUND", "", index)
+				beside[index] = C.hit(Rw, "target", "WOUND", "", index)
 			end
-			check("scrolling: Outgoing: Straight numbers that come together start one line, 35 units of text and 36.4 of line, behind each other", near(behind[2].points[1][5] - behind[1].points[1][5], -36.4, 1e-9)
-				and near(behind[3].points[1][5] - behind[2].points[1][5], -36.4, 1e-9), C.spot(behind[2]))
+			local starts = C.spot(beside[1]) .. " " .. C.spot(beside[2]) .. " " .. C.spot(beside[3])
+			C.draw(Rw, 1)
+			local bow = 84 * math.sin(math.pi / 2.2)
+			check("scrolling: Outgoing: Arc numbers that come together start at once side by side, a lane (three heights of 35, 105 units) apart: the first on the path, the second to the right, away from the character, the third to the left; each follows the arc from its own start",
+				starts == "CENTER BOTTOMLEFT 1130 510 CENTER BOTTOMLEFT 1235 510 CENTER BOTTOMLEFT 1025 510" and near(beside[1].points[1][4], 1130 + bow, 1e-9)
+				and near(beside[2].points[1][4], 1235 + bow, 1e-9) and near(beside[3].points[1][4], 1025 + bow, 1e-9) and near(beside[1].points[1][5], 510 + 240 / 2.2, 1e-9)
+				and near(beside[2].points[1][5], beside[1].points[1][5], 1e-9) and near(beside[3].points[1][5], beside[1].points[1][5], 1e-9), starts .. " " .. C.spot(beside[2]))
 			local Cap = world("scroll")
-			local sixteen = {}
-			for index = 1, 17 do
-				sixteen[index] = C.hit(Cap, "target", "WOUND", "", index)
+			Cap.now = 0
+			local burst = {}
+			for index = 1, 33 do
+				burst[index] = C.hit(Cap, "target", "WOUND", "", index)
 			end
-			check("scrolling: Outgoing: the seventeenth number in one frame takes the font string of the first, and sixteen records of two font strings are all there are", sixteen[17] == sixteen[1] and #Cap.addonFonts == 32 and sixteen[1].text == "17", #Cap.addonFonts .. " " .. tostring(sixteen[1].text))
+			C.draw(Cap, 1.19)
+			local early = 0
+			for _, font in ipairs(numbers(Cap)) do
+				if font.shown and font.alpha > 0 then
+					early = early + 1
+				end
+			end
+			C.draw(Cap, 1.21)
+			local seen = 0
+			for _, font in ipairs(numbers(Cap)) do
+				if font.shown and font.alpha > 0 then
+					seen = seen + 1
+				end
+			end
+			check("scrolling: Outgoing: thirty-three numbers in one frame: four start at once, one in each lane, each four after them wait 0.3 seconds more for a lane, none more than 1.2 seconds, so fifteen are seen at 1.19 seconds and all at 1.21, and the thirty-third takes the record of the first, which goes: thirty-two records of two font strings",
+				burst[33] == burst[1] and #Cap.addonFonts == 64 and burst[1].text == "33" and burst[2].text == "2" and burst[32].text == "32" and early == 15 and seen == 32
+				and has(Cap.status(), "Outgoing scroll area: 33 shown.\nNumbers in the Outgoing scroll area that waited for a free lane: 29.\nNumbers taken off the Outgoing scroll area early, to make room when 32 were on screen: 1."),
+				#Cap.addonFonts .. " " .. tostring(burst[1].text) .. " " .. early .. " " .. seen .. " " .. Cap.status())
 			-- Where your hits show.
 			local B = world("both")
 			B.now = 0
@@ -16296,7 +16340,7 @@ do
 			local W = C.world()
 			local frames, strings = #W.addonFrames, 0
 			local players = {}
-			for index = 1, 13 do
+			for index = 1, 33 do
 				players[index] = C.hit(W, "player", "HEAL", "", index, 1)
 			end
 			local owns = 0
@@ -16305,7 +16349,8 @@ do
 					owns = owns + 1
 				end
 			end
-			check("scrolling: Incoming: thirteen numbers for the player in one frame make twelve records of two font strings, and the newest took the place of the oldest", owns == 24 and players[13] == players[1] and players[1].text == "+13" and players[2].text == "+2", owns .. " " .. tostring(players[1].text))
+			check("scrolling: Incoming: thirty-three numbers for the player in one frame: four start at once in the four lanes, the rest wait for a lane, and the thirty-third takes the record of the oldest, which goes: thirty-two records of two font strings",
+				owns == 64 and players[33] == players[1] and players[1].text == "+33" and players[2].text == "+2", owns .. " " .. tostring(players[1].text))
 			for index = 1, 41 do
 				C.hit(W, "nameplate1", "WOUND", "", index)
 			end
@@ -16318,8 +16363,8 @@ do
 					shown = shown + 1
 				end
 			end
-			check("scrolling: forty-one numbers over enemies leave every number for the player in place, and thirteen for the player leave every number over enemies", enemies == 40 and shown == 52 and players[2].shown
-				and players[1].text == "+13", enemies .. " " .. shown)
+			check("scrolling: forty-one numbers over enemies leave every number for the player in place, and thirty-three for the player leave every number over enemies", enemies == 40 and shown == 72 and players[2].shown
+				and players[1].text == "+33", enemies .. " " .. shown)
 			for index = 1, 13 do
 				C.hit(W, "player", "HEAL", "", index, 1)
 			end
@@ -16329,9 +16374,10 @@ do
 					shown = shown + 1
 				end
 			end
-			check("scrolling: and the other way round", shown == 52 and #W.addonFonts == 64, shown .. " " .. #W.addonFonts)
+			check("scrolling: and the other way round", shown == 72 and #W.addonFonts == 104, shown .. " " .. #W.addonFonts)
 			check("scrolling: with both kinds alive each has a frame with a script, and the two hosts are the only frames made besides the two scripts", C.running(W) == 2 and #W.addonFrames == frames + 2, C.running(W) .. " " .. (#W.addonFrames - frames))
-			C.draw(W, W.now + 3)
+			-- The last number for the player waits for a lane 1.2 seconds at most, and lives 2.2.
+			C.draw(W, W.now + 4)
 			check("ctlook: and the script is cleared when the last number of either kind has gone", C.running(W) == 0 and C.shownCount(W) == 0)
 			check("ctlook: both kinds: no violations, errors or messages", C.quiet(W), C.trouble(W))
 		end
@@ -104590,7 +104636,8 @@ do
 				end
 			end
 		end
-		check("sdchat: combat: the dodge and the gain for you move to the left by Incoming style, 0.35 and 0.1 seconds in, in the arc of Arc width Wide", near(sideways, 440 - 42 * math.sin(math.pi * 0.35 / 2.2), 1e-9) and near(fs("+20").points[1][4], 440 - 42 * math.sin(math.pi * 0.1 / 2.2), 1e-9), tostring(sideways))
+		check("sdchat: combat: the dodge and the gain for you move to the left by Incoming style, 0.35 and 0.1 seconds in, in the arc of Arc width Wide; the dodge comes while the path and the lane to the left are busy and starts in the lane to the right, 75 units (three heights) over",
+			near(sideways, 440 + 75 - 42 * math.sin(math.pi * 0.35 / 2.2), 1e-9) and near(fs("+20").points[1][4], 440 - 42 * math.sin(math.pi * 0.1 / 2.2), 1e-9), tostring(sideways))
 		ns.Set("combattext.arcWidth", "narrow")
 		drawing.draw(stage)
 		local narrow
@@ -104601,7 +104648,7 @@ do
 				end
 			end
 		end
-		check("msbt arc: the setup drawing uses the chosen arc width", near(narrow, 440 - 24 * math.sin(math.pi * 0.35 / 2.2), 1e-9), tostring(narrow))
+		check("msbt arc: the setup drawing uses the chosen arc width", near(narrow, 440 + 75 - 24 * math.sin(math.pi * 0.35 / 2.2), 1e-9), tostring(narrow))
 		ns.Set("combattext.arcWidth", "wide")
 		ns.Set("combattext.friendWords", true)
 		ns.Set("combattext.friend", "both")

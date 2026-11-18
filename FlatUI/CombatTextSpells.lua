@@ -7,12 +7,19 @@ local _, ns = ...
 -- succeeds or lands, "dot" no hit when cast and ticks after, "both" a hit and then ticks, "channel" hits while it is channelled, "area" several
 -- hits at once around you or a spot, "spin" an aura on you that hits every enemy around you each `period` seconds, `ticks` times, by casting the
 -- spell `trigger` (whose own cast, when the game reports it, then opens no slot of its name: the spin takes its hits), "sweep" a buff
--- whose `charges` make your melee swings and strikes hit another enemy too for `duration` seconds, and "none" no damage at all, so its cast opens
--- no slot (its school is not used). travel: the missile flies (its SpellMisc Speed is above 0), so the hit comes later. area: a channel that hits
--- every enemy in its area, not only your target. Auto Shot, the shots of a bow, gun, crossbow or thrown weapon and the Shoot of a wand are left
--- out: the shot slot takes them (MINE.shots). Maul, Heroic Strike, Cleave and Raptor Strike are here too, but their cast opens the pair of a next
--- melee ability (MINE.OpenPair), which reads only targets here: the enemies it hits. Forever's own rows (wowsims/gamedata) give the length and the
--- charges of Sweeping Strikes and Bladestorm.
+-- whose `charges` make your melee swings and strikes hit another enemy too for `duration` seconds, "counter" a buff whose `charges` strike back
+-- at each enemy that hits you in melee for `duration` seconds (a cast of its name while it lasts, such as the counterattack, opens no slot), and
+-- "none" no damage at all, so its cast opens no slot (its school is not used). travel: the missile flies (its SpellMisc Speed is above 0), so
+-- the hit comes later. area: a channel that hits every enemy in its area, not only your target. Auto Shot, the shots of a bow, gun, crossbow
+-- or thrown weapon and the Shoot of a wand are left out: the shot slot takes them (MINE.shots). Maul, Heroic Strike, Cleave and Raptor Strike
+-- are here too, but their cast opens the pair of a next melee ability (MINE.OpenPair), which reads only targets here: the enemies it hits.
+-- Forever's own rows (wowsims/gamedata) give the length and the charges of Sweeping Strikes and Bladestorm, and Forever's row of Retaliation
+-- (Wowhead's Forever database, spell 20230) its length and charges. damage: what a physical strike in melee deals by its Forever row
+-- (tools/dev/spelltips/client_spells.json, build 1.60.1.70938), for the rule of a swing and a strike (MINE.Rival in CombatText.lua): "weapon"
+-- for a row with a weapon part (Effect 17, 31, 58 or 121), whose hit is larger than a swing's, and "flat" for one whose only damage is a fixed
+-- number (Effect 2 with base points, and no share of combo points, attack power, block value or rage in its effects or its text), whose hit is
+-- smaller. A strike with neither (Eviscerate, Ferocious Bite, Bloodthirst, Execute, Revenge, Shield Slam, Intercept, a pet's) is left to that
+-- rule's fallback.
 -- Checked against the game's tables. The name of each ID: the classic client's Spell table (WowClassicGrindBot, Json/dbc/spells.json: Id, Name,
 -- Level) and SpellName of the Retail dumps (ThingEngineering/wow-dumps, te_spellname.csv). School and missile: SpellMisc of those dumps
 -- (SchoolMask, Speed). Kind: SpellEffect of those dumps, with the spells its EffectTriggerSpell names: Effect 2, 9, 17, 31, 58, 62 or 121 is a
@@ -104,16 +111,16 @@ ns.CombatSpells = {
 	[16857] = { school = 8, kind = "none" }, -- Faerie Fire (Feral) (no row, none of the same name)
 	[2637] = { school = 8, kind = "none" }, -- Hibernate
 	[2908] = { school = 8, kind = "none" }, -- Soothe Animal (now Soothe)
-	[1082] = { school = 1, kind = "hit" }, -- Claw (no row)
-	[1822] = { school = 1, kind = "both" }, -- Rake
+	[1082] = { school = 1, kind = "hit", damage = "weapon" }, -- Claw (no row)
+	[1822] = { school = 1, kind = "both", damage = "flat" }, -- Rake
 	[1079] = { school = 1, kind = "dot" }, -- Rip
 	[22568] = { school = 1, kind = "hit" }, -- Ferocious Bite
-	[5221] = { school = 1, kind = "hit" }, -- Shred
-	[6785] = { school = 1, kind = "hit" }, -- Ravage (no row)
+	[5221] = { school = 1, kind = "hit", damage = "weapon" }, -- Shred
+	[6785] = { school = 1, kind = "hit", damage = "weapon" }, -- Ravage (no row)
 	[9005] = { school = 1, kind = "dot" }, -- Pounce (no row; classic: a stun, then Pounce Bleed ticks)
 	[5211] = { school = 1, kind = "none" }, -- Bash (now Mighty Bash; classic: a stun only)
-	[779] = { school = 1, kind = "area" }, -- Swipe (no row)
-	[6807] = { school = 1, kind = "hit" }, -- Maul (a next swing)
+	[779] = { school = 1, kind = "area", damage = "flat" }, -- Swipe (no row)
+	[6807] = { school = 1, kind = "hit", damage = "weapon" }, -- Maul (a next swing)
 	[99] = { school = 1, kind = "none" }, -- Demoralizing Roar (now Incapacitating Roar)
 	[6795] = { school = 1, kind = "none" }, -- Growl
 	[5209] = { school = 1, kind = "none" }, -- Challenging Roar (no row, none of the same name)
@@ -130,10 +137,10 @@ ns.CombatSpells = {
 	[1510] = { school = 64, kind = "channel", area = true }, -- Volley (no row; classic school, arcane: most rows of the name are physical)
 	[1130] = { school = 64, kind = "none" }, -- Hunter's Mark
 	[20736] = { school = 64, kind = "none", travel = true }, -- Distracting Shot
-	[2974] = { school = 1, kind = "hit" }, -- Wing Clip (no row)
-	[2973] = { school = 1, kind = "hit" }, -- Raptor Strike (no row; a next swing)
-	[1495] = { school = 1, kind = "hit" }, -- Mongoose Bite (no row)
-	[19306] = { school = 1, kind = "hit" }, -- Counterattack (no row)
+	[2974] = { school = 1, kind = "hit", damage = "flat" }, -- Wing Clip (no row)
+	[2973] = { school = 1, kind = "hit", damage = "weapon" }, -- Raptor Strike (no row; a next swing)
+	[1495] = { school = 1, kind = "hit", damage = "weapon" }, -- Mongoose Bite (no row)
+	[19306] = { school = 1, kind = "hit", damage = "weapon" }, -- Counterattack (no row)
 	[19386] = { school = 8, kind = "none", travel = true }, -- Wyvern Sting (the sleep; its ticks come after it, from another spell)
 	[19503] = { school = 1, kind = "hit", travel = true }, -- Scatter Shot (no row; Retail's Scatter Shot 213691 has Speed 60)
 	[19801] = { school = 8, kind = "none", travel = true }, -- Tranquilizing Shot
@@ -148,7 +155,7 @@ ns.CombatSpells = {
 	[1515] = { school = 8, kind = "none" }, -- Tame Beast (channelled)
 	-- Hunter's pets
 	[17253] = { school = 1, kind = "hit" }, -- Bite
-	[16827] = { school = 1, kind = "hit" }, -- Claw (the druid's has the same name and entry)
+	[16827] = { school = 1, kind = "hit", damage = "weapon" }, -- Claw (the druid's has the same name and entry; a slot of your pet's takes no damage)
 	[2649] = { school = 1, kind = "none" }, -- Growl
 	[24423] = { school = 1, kind = "hit" }, -- Screech (now Bloody Screech)
 	[7371] = { school = 1, kind = "none" }, -- Charge (boar; no row)
@@ -157,17 +164,17 @@ ns.CombatSpells = {
 	[26090] = { school = 8, kind = "area" }, -- Thunderstomp (no row)
 	[1742] = { school = 1, kind = "none" }, -- Cower (no row)
 	-- Rogue
-	[1752] = { school = 1, kind = "hit" }, -- Sinister Strike
-	[53] = { school = 1, kind = "hit" }, -- Backstab
+	[1752] = { school = 1, kind = "hit", damage = "weapon" }, -- Sinister Strike
+	[53] = { school = 1, kind = "hit", damage = "weapon" }, -- Backstab
 	[2098] = { school = 1, kind = "hit" }, -- Eviscerate (now Dispatch)
-	[1776] = { school = 1, kind = "hit" }, -- Gouge (classic: it hits)
+	[1776] = { school = 1, kind = "hit", damage = "flat" }, -- Gouge (classic: it hits)
 	[703] = { school = 1, kind = "dot" }, -- Garrote
 	[1943] = { school = 1, kind = "dot" }, -- Rupture
-	[8676] = { school = 1, kind = "hit" }, -- Ambush
-	[16511] = { school = 1, kind = "hit" }, -- Hemorrhage
-	[14278] = { school = 1, kind = "hit" }, -- Ghostly Strike (no row; classic school: two of the three rows of the name are shadow)
-	[14251] = { school = 1, kind = "hit" }, -- Riposte (no row)
-	[1766] = { school = 1, kind = "hit" }, -- Kick (classic: it hits)
+	[8676] = { school = 1, kind = "hit", damage = "weapon" }, -- Ambush
+	[16511] = { school = 1, kind = "hit", damage = "weapon" }, -- Hemorrhage
+	[14278] = { school = 1, kind = "hit", damage = "weapon" }, -- Ghostly Strike (no row; classic school: two of the three rows of the name are shadow)
+	[14251] = { school = 1, kind = "hit", damage = "weapon" }, -- Riposte (no row)
+	[1766] = { school = 1, kind = "hit", damage = "flat" }, -- Kick (classic: it hits)
 	[6770] = { school = 1, kind = "none" }, -- Sap
 	[1833] = { school = 1, kind = "none" }, -- Cheap Shot
 	[408] = { school = 1, kind = "none" }, -- Kidney Shot
@@ -178,31 +185,32 @@ ns.CombatSpells = {
 	[921] = { school = 1, kind = "none" }, -- Pick Pocket
 	[14183] = { school = 1, kind = "none" }, -- Premeditation (no row)
 	-- Warrior
-	[78] = { school = 1, kind = "hit" }, -- Heroic Strike (no row; a next swing)
-	[845] = { school = 1, kind = "area", targets = 2 }, -- Cleave (a next swing; Forever's own rows of 845 and 7369 have ChainTargets 2)
+	[78] = { school = 1, kind = "hit", damage = "weapon" }, -- Heroic Strike (no row; a next swing)
+	[845] = { school = 1, kind = "area", targets = 2, damage = "weapon" }, -- Cleave (a next swing; Forever's own rows of 845 and 7369 have ChainTargets 2)
 	[772] = { school = 1, kind = "dot" }, -- Rend (classic: ticks only; Retail's row is a hit)
-	[6343] = { school = 1, kind = "area" }, -- Thunder Clap
-	[1715] = { school = 1, kind = "hit" }, -- Hamstring
-	[7384] = { school = 1, kind = "hit" }, -- Overpower
-	[12294] = { school = 1, kind = "hit" }, -- Mortal Strike
+	[6343] = { school = 1, kind = "area", damage = "flat" }, -- Thunder Clap
+	[1715] = { school = 1, kind = "hit", damage = "flat" }, -- Hamstring
+	[7384] = { school = 1, kind = "hit", damage = "weapon" }, -- Overpower
+	[12294] = { school = 1, kind = "hit", damage = "weapon" }, -- Mortal Strike
 	[23881] = { school = 1, kind = "hit" }, -- Bloodthirst
 	[23922] = { school = 1, kind = "hit" }, -- Shield Slam
 	[6572] = { school = 1, kind = "hit" }, -- Revenge (classic: one enemy; Retail's hits a cone)
 	[5308] = { school = 1, kind = "hit" }, -- Execute
-	[1464] = { school = 1, kind = "hit" }, -- Slam
-	[1680] = { school = 1, kind = "area" }, -- Whirlwind
+	[1464] = { school = 1, kind = "hit", damage = "weapon" }, -- Slam
+	[1680] = { school = 1, kind = "area", damage = "weapon" }, -- Whirlwind
 	[12292] = { school = 1, kind = "sweep", duration = 20, charges = 5 }, -- Sweeping Strikes (Forever's row: 20 seconds, 5 charges, on your melee swings and strikes)
+	[20230] = { school = 1, kind = "counter", duration = 15, charges = 30 }, -- Retaliation (Forever's row: 15 seconds, 30 charges, on melee swings and abilities taken; each counterattack is 20240 Retaliation, weapon damage)
 	[7386] = { school = 1, kind = "none" }, -- Sunder Armor (no row)
 	[1160] = { school = 1, kind = "none" }, -- Demoralizing Shout
 	[5246] = { school = 1, kind = "none" }, -- Intimidating Shout
 	[1161] = { school = 1, kind = "none" }, -- Challenging Shout
 	[355] = { school = 1, kind = "none" }, -- Taunt
-	[694] = { school = 1, kind = "hit" }, -- Mocking Blow (no row)
+	[694] = { school = 1, kind = "hit", damage = "flat" }, -- Mocking Blow (no row)
 	[676] = { school = 1, kind = "none" }, -- Disarm (no row)
 	[100] = { school = 1, kind = "none" }, -- Charge
 	[20252] = { school = 1, kind = "hit" }, -- Intercept (no row)
-	[6552] = { school = 1, kind = "hit" }, -- Pummel (classic: it hits)
-	[72] = { school = 1, kind = "hit" }, -- Shield Bash (no row)
+	[6552] = { school = 1, kind = "hit", damage = "flat" }, -- Pummel (classic: it hits)
+	[72] = { school = 1, kind = "hit", damage = "flat" }, -- Shield Bash (no row)
 	[12323] = { school = 1, kind = "none" }, -- Piercing Howl
 	[12809] = { school = 1, kind = "none" }, -- Concussion Blow (no row; classic: a stun only)
 	-- Weapons
@@ -224,7 +232,7 @@ ns.CombatSpells = {
 	[8050] = { school = 4, kind = "both" }, -- Flame Shock (no row)
 	[8056] = { school = 16, kind = "hit" }, -- Frost Shock (no row)
 	[370] = { school = 8, kind = "none" }, -- Purge
-	[17364] = { school = 1, kind = "hit" }, -- Stormstrike
+	[17364] = { school = 1, kind = "hit", damage = "weapon" }, -- Stormstrike
 	[3599] = { school = 4, kind = "none" }, -- Searing Totem (a totem's cast places it; its own hits come later)
 	[8190] = { school = 4, kind = "none" }, -- Magma Totem
 	[1535] = { school = 4, kind = "none" }, -- Fire Nova Totem (no row)
