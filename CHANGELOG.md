@@ -1,6 +1,7 @@
 ## 0.5.24
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Combat text**, scroll areas: in a fight the numbers of **Arc** (and **Straight**) now always start at the handle of their area, on both sides, and follow the same path. Until now a number that came before the one in front of it had moved a line started a line further back, lower in **Outgoing** and higher in **Incoming**, and kept that place all the way. In a burst each number started further back than the one before, so the numbers sank down the screen. Now a number waits at the start, see-through, until the one before is a line on, and then pops and starts. A number waits a second and a half at most. When a burst queues longer than that, the oldest number still waiting is left out, and `/flatui status` counts those. **Horizontal** and **Static**: when every row is busy, the oldest number goes and the new one takes its row, where before the two lay on top of each other. Each number is centred again after its font is set, so its pop grows from its middle. The setup drawing of combat text shows the same queue.
 
 ## 0.5.23
 

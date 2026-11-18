@@ -6,6 +6,13 @@ local _, ns = ...
 -- animation in Vertex mode, so the pop is smooth, and a second font string that holds the partial effect, such as (Glancing), which
 -- appears when the pop ends. A record is made on first use and reused, and no table is made for a hit. The lengths, times and sizes below
 -- are choices of this file, not the game's: the design is research/reports/2026-10-20-scrolling-text/design.md, sections 2.1, 2.2 and 2.6.
+-- Every number of an area starts at the same spot and follows the same path, whatever came before it, and nothing moves a number once
+-- it is on its way: each frame its place is worked out again from its own start time and spot (GetTime, so the frame rate does not
+-- matter). A Straight or Arc number takes its turn when the number before it is a line on from the start, and waits for that turn at its
+-- start, see-through and still, so that a burst queues behind the start instead of starting lower (as the area did up to 0.5.23, and kept
+-- that lower start all the way up). A number waits SHAPE.wait seconds at most: when the queue is longer, the oldest number that waits
+-- goes. A Horizontal or Static number takes a free row, and when every row is busy the oldest number in a row goes and the new one takes
+-- its row. When every record of an area is alive, the oldest number goes.
 -- The icon of an amount is written in its text (a texture escape), so that a withheld zero, which the client writes as nothing, draws no icon,
 -- name or (Extra attack) either; a word has the icon beside it, a texture of the record's own.
 -- A secret amount or name goes to SetText and SetFormattedText only; nothing here compares, counts or measures it.
@@ -14,10 +21,13 @@ local KEY = "combattext"
 
 -- Length of an area on a screen 768 units high, the share of it an arc and a horizontal number move sideways, the seconds a number lives at
 -- each Speed, the seconds a Static number lives, the share of the life at which the fade begins (a Static number fades earlier), the share
--- of the life the fade in takes, the height of a line as a share of the height of a number, the rows a Horizontal or Static area has, and
--- the heights of a number a Horizontal number must travel before another may start in its row.
+-- of the life the fade in takes, the height of a line as a share of the height of a number, the rows a Horizontal or Static area has,
+-- the heights of a number a Horizontal number must travel before another may start in its row, and the seconds a Straight or Arc number
+-- may wait for its turn.
 local SHAPE = { length = 240, arc = 0.2, arcs = { narrow = 0.2, wide = 0.35 }, reach = 0.6, life = { fast = 1.6, normal = 2.2, slow = 3.0 }, still = 1.5, hold = 0.75, stillHold = 0.7,
-	fadeIn = 0.03, line = 1.04, rows = 5, clear = 2.5 }
+	fadeIn = 0.03, line = 1.04, rows = 5, clear = 2.5, wait = 1.5 }
+-- The styles whose numbers follow one path from the start, one behind the other.
+local PATH = { straight = true, arc = true }
 -- The pop: the scale at its peak, and the seconds up and down. A critical hit is this much larger than a hit. A partial effect is drawn at
 -- this share of the number, this many units to the right of it.
 local POP = { peak = 1.15, up = 0.05, down = 0.10 }
@@ -36,18 +46,20 @@ local EXTRA_TEXT = "|cffff9926(Extra attack)|r"
 -- of the 64 texels), and a space after it.
 local INLINE = "|T%d:0:0:0:0:64:64:5:59:5:59|t "
 -- The two areas: the name of the handle, the row of the style, the row of the size, the direction (1 up, -1 down), the side an arc and a
--- horizontal number go to, the most numbers alive and, with no handle to take the place from, where the area starts as units from the
--- middle of the screen.
+-- horizontal number go to, the most numbers alive (those that wait for their turn too) and, with no handle to take the place from, where
+-- the area starts as units from the middle of the screen.
 local AREAS = {
 	out = { label = "Outgoing", mover = "FlatUICombatOut", style = "outStyle", size = "size", dir = 1, side = 1, max = 16, dx = 170, dy = -30 },
 	inc = { label = "Incoming", mover = "FlatUICombatSelf", style = "inStyle", size = "ownSize", dir = -1, side = -1, max = 12, dx = -170, dy = -30 },
 }
 local ORDER = { AREAS.out, AREAS.inc }
 for key, area in pairs(AREAS) do
-	area.key, area.items, area.live, area.rows, area.shown, area.failed = key, {}, {}, {}, 0, 0
+	area.key, area.items, area.live, area.rows, area.shown, area.failed, area.left = key, {}, {}, {}, 0, 0, 0
 end
 
 local host, ticker
+-- The count of numbers given to the areas, which orders them by age.
+local serial = 0
 -- Numbers on screen in all areas, and numbers that had no place to start from.
 local active, unplaced = 0, 0
 
@@ -132,22 +144,31 @@ local function Make(area)
 	icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 	icon:SetPoint("RIGHT", text, "LEFT", -GAP, 0)
 	icon:Hide()
-	local item = { text = text, word = word, icon = icon, shift = 0, area = area, on = false }
+	local item = { text = text, word = word, icon = icon, shift = 0, ry = 0, start = 0, serial = 0, area = area, on = false, cue = false }
 	MakePop(item)
 	return item
 end
 
--- Puts the look of the settings on both font strings of a number.
+-- Puts the look of the settings on both font strings of a number. A font object brings a justification of its own, so the number is
+-- centred again after it: the pop in Vertex mode grows from the middle of a centred number (UISharedDocumentation.lua:14), and its
+-- middle is the point on the path.
 local function Style(item, look)
 	local object = look.object or look.name
 	pcall(item.text.SetFontObject, item.text, object)
 	pcall(item.word.SetFontObject, item.word, object)
+	pcall(item.text.SetJustifyH, item.text, "CENTER")
+	pcall(item.text.SetJustifyV, item.text, "MIDDLE")
+	pcall(item.word.SetJustifyH, item.word, "LEFT")
 	item.look = look.key
 end
 
 local function Release(area, index)
 	local item = table.remove(area.live, index)
-	item.on = false
+	item.on, item.cue = false, false
+	if item.row ~= nil and area.rows[item.row] == item then
+		area.rows[item.row] = nil
+	end
+	item.row = nil
 	item.text:Hide()
 	item.word:Hide()
 	item.icon:Hide()
@@ -177,15 +198,16 @@ local function Take(area)
 	return oldest
 end
 
--- Where a number is now: the start, the path of its style and its row.
+-- Where a number is now: the start, the path of its style and its row. A number that waits for its turn is at its start, see-through.
 local function Place(item, now)
 	local t = now - item.start
-	local u = t / item.life
+	local waiting = t < 0
+	local u = waiting and 0 or t / item.life
 	local dx, dy = ns.ScrollPath(item.style, u, item.length, item.dir, item.side, item.arc)
 	local text = item.text
 	text:ClearAllPoints()
 	text:SetPoint("CENTER", UIParent, "BOTTOMLEFT", item.x0 + dx + item.shift, item.y0 + dy + item.ry)
-	local alpha = ns.ScrollAlpha(u, item.hold)
+	local alpha = waiting and 0 or ns.ScrollAlpha(u, item.hold)
 	text:SetAlpha(alpha)
 	if item.hasIcon then
 		item.icon:SetAlpha(alpha)
@@ -198,15 +220,23 @@ local function Place(item, now)
 	end
 end
 
+-- The pop of a number as its turn begins, unless How a number appears is Plainly.
+local function Begin(item)
+	item.cue = false
+	if item.group and Opt("pop") == "pop" then
+		pcall(item.group.Play, item.group)
+	end
+end
+
 local function Step()
 	local now = GetTime()
 	for _, area in ipairs(ORDER) do
 		for index = #area.live, 1, -1 do
 			local item = area.live[index]
-			if now - item.start >= item.life then
+			if now - item.start >= item.life or not pcall(Place, item, now) then
 				Release(area, index)
-			elseif not pcall(Place, item, now) then
-				Release(area, index)
+			elseif item.cue and now >= item.start then
+				Begin(item)
 			end
 		end
 	end
@@ -231,6 +261,51 @@ local function Spot(area)
 	return nil
 end
 
+-- The time a Straight or Arc number of this height may start after the numbers before index in the area: when the last of them on such a
+-- path is a line on from the start (the mean of the two heights, times SHAPE.line), or now when there is none or it is that far already.
+-- Both move along the direction at the same steady speed, so the line between them stays.
+local function TurnAfter(area, before, height, now)
+	for index = before - 1, 1, -1 do
+		local last = area.live[index]
+		if PATH[last.style] then
+			local line = (last.height + height) / 2 * SHAPE.line
+			return math.max(now, last.start + line * last.life / last.length)
+		end
+	end
+	return now
+end
+
+-- The oldest number of the area that waits for its turn goes, and the numbers that wait after it take their turns again: none of them is
+-- on screen yet, so nothing moves. False when no number waits.
+local function DropWaiting(area, now)
+	for index, item in ipairs(area.live) do
+		if PATH[item.style] and item.start > now then
+			if not item.sample then
+				area.shown, area.left = area.shown - 1, area.left + 1
+			end
+			Release(area, index)
+			for later = index, #area.live do
+				local other = area.live[later]
+				if PATH[other.style] and other.start > now then
+					other.start = TurnAfter(area, later, other.height, now)
+				end
+			end
+			return true
+		end
+	end
+	return false
+end
+
+-- When a new Straight or Arc number of this height starts: its turn after the last number of the area, and when that is more than
+-- SHAPE.wait seconds away, the oldest numbers that wait go until it is not, or none waits.
+local function Turn(area, height, now)
+	local start = TurnAfter(area, #area.live + 1, height, now)
+	while start - now > SHAPE.wait and DropWaiting(area, now) do
+		start = TurnAfter(area, #area.live + 1, height, now)
+	end
+	return start
+end
+
 -- True when the number in a row has gone far enough for another to start there: a Horizontal number after SHAPE.clear heights, a Static
 -- number when it begins to fade.
 local function Clear(occupant, height, now)
@@ -244,19 +319,9 @@ local function Clear(occupant, height, now)
 	return u >= occupant.hold
 end
 
--- How far from its start a number begins, along the direction of its area. Straight and arc numbers start one line behind the last number
--- when that one has not moved a line yet. Horizontal and static numbers take the first row whose number has gone, else the row of the
--- oldest, one line further on for each row.
+-- How far from its start a Horizontal or Static number begins, along the direction of its area: the first row whose number has gone far
+-- enough, else the row of the oldest number, which goes, so that two numbers never lie on each other; one line further on for each row.
 local function Row(area, item, now)
-	local line = item.height * SHAPE.line
-	if item.style == "straight" or item.style == "arc" then
-		local last = area.live[#area.live]
-		if not last then
-			return 0
-		end
-		local ahead = last.length * (now - last.start) / last.life + area.dir * last.ry
-		return ahead < line and area.dir * (ahead - line) or 0
-	end
 	local pick, oldest
 	for row = 0, SHAPE.rows - 1 do
 		local occupant = area.rows[row]
@@ -264,16 +329,31 @@ local function Row(area, item, now)
 			pick = row
 			break
 		end
-		if not oldest or occupant.start < area.rows[oldest].start then
+		if not oldest or occupant.serial < area.rows[oldest].serial then
 			oldest = row
 		end
 	end
-	pick = pick or oldest
+	if not pick then
+		pick = oldest
+		for index, other in ipairs(area.live) do
+			if other == area.rows[pick] then
+				Release(area, index)
+				break
+			end
+		end
+	end
 	area.rows[pick] = item
-	return area.dir * pick * line
+	item.row = pick
+	return area.dir * pick * item.height * SHAPE.line
 end
 
-local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag, icon, value2)
+-- The height of a number in an area: the game's height at the Size of the area, times scale (a smaller partial effect) and a quarter
+-- more for a critical hit.
+local function Height(area, crit, scale)
+	return TEXT_HEIGHT * Opt(area.size) / 100 * (scale or 1) * (crit and CRIT or 1)
+end
+
+local function Fill(item, height, kind, value, format, r, g, b, flag, icon, value2)
 	local text, word = item.text, item.word
 	local hasIcon = Plain(icon, "number")
 	local extra = kind ~= "word" and Plain(flag, "string") and flag == "EXTRA"
@@ -317,7 +397,6 @@ local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag,
 			text:SetFormattedText(lead .. spec, shown)
 		end
 	end
-	local height = TEXT_HEIGHT * Opt(area.size) / 100 * (scale or 1) * (crit and CRIT or 1)
 	text:SetTextHeight(height)
 	text:SetTextColor(r, g, b)
 	local suffix = kind ~= "word" and not extra and Plain(flag, "string") and ns.CombatSuffix(flag) or nil
@@ -343,7 +422,7 @@ local function Fill(area, item, kind, value, format, crit, r, g, b, scale, flag,
 	end
 end
 
-local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, value2)
+local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, value2, sample)
 	if type(GetTime) ~= "function" then
 		return false
 	end
@@ -352,21 +431,26 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, 
 		unplaced = unplaced + 1
 		return false
 	end
+	local now = GetTime()
+	local style = Opt(area.style)
+	local height = Height(area, crit, scale)
+	-- The turn comes before the record, so that a number that waits and goes for this one gives it its record.
+	local start = PATH[style] and Turn(area, height, now) or now
 	local item = Take(area)
 	local look = ns.CombatLook()
 	if item.look ~= look.key then
 		Style(item, look)
 	end
-	local now = GetTime()
-	local style = Opt(area.style)
-	Fill(area, item, kind, value, format, crit, r, g, b, scale, flag, icon, value2)
+	Fill(item, height, kind, value, format, r, g, b, flag, icon, value2)
+	serial = serial + 1
+	item.serial, item.sample = serial, sample and true or false
 	item.style, item.dir, item.side = style, area.dir, area.side
 	item.arc = SHAPE.arcs[Opt("arcWidth")] or SHAPE.arc
 	item.length = SHAPE.length * ns.CombatWorldScale()
 	item.life = style == "static" and SHAPE.still or SHAPE.life[Opt("speed")] or SHAPE.life.normal
 	item.hold = style == "static" and SHAPE.stillHold or SHAPE.hold
-	item.start, item.x0, item.y0 = now, x, y
-	item.ry = Row(area, item, now)
+	item.start, item.x0, item.y0 = start, x, y
+	item.ry = PATH[style] and 0 or Row(area, item, now)
 	Place(item, now)
 	item.text:Show()
 	if item.hasIcon then
@@ -374,16 +458,21 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, 
 	end
 	if item.group then
 		pcall(item.group.Stop, item.group)
-		if Opt("pop") == "pop" then
-			pcall(item.group.Play, item.group)
-		end
 	end
 	item.on = true
 	area.live[#area.live + 1] = item
-	area.shown = area.shown + 1
+	if not sample then
+		area.shown = area.shown + 1
+	end
 	active = active + 1
 	if active == 1 then
 		ticker:SetScript("OnUpdate", Tick)
+	end
+	-- The pop plays as the number starts: now, or when its turn comes (Step).
+	if start <= now then
+		Begin(item)
+	else
+		item.cue = true
 	end
 	return true
 end
@@ -408,15 +497,12 @@ end
 
 -- Shows one number in an area. kind is "amount" or "word"; format is the format of an amount, with its sign; flag is the plain flag of
 -- the hit, which gives the partial effect (EXTRA for an extra swing), and icon is the file of the spell icon left of the number, or nil. value2
--- is a second withheld amount written in the same text (the other report of a next melee ability). True when the number is on screen. A sample
--- is not counted as shown. An error is counted and does not go up.
+-- is a second withheld amount written in the same text (the other report of a next melee ability). True when the number is on screen, or
+-- waits there for its turn. A sample is not counted as shown. An error is counted and does not go up.
 function ST.Show(key, kind, value, format, crit, r, g, b, scale, flag, sample, icon, value2)
 	local area = AREAS[key]
-	local ok, shown = pcall(Add, area, kind, value, format, crit, r, g, b, scale, flag, icon, value2)
+	local ok, shown = pcall(Add, area, kind, value, format, crit, r, g, b, scale, flag, icon, value2, sample)
 	if ok then
-		if shown and sample then
-			area.shown = area.shown - 1
-		end
 		return shown
 	end
 	area.failed, area.first = area.failed + 1, area.first or tostring(shown)
@@ -434,18 +520,22 @@ function ST.Clear(key)
 	end
 end
 
--- The numbers of one area on screen.
+-- The numbers of one area on screen, those that wait for their turn too.
 function ST.Live(key)
 	return #AREAS[key].live
 end
 
--- The lines /flatui combat has about the areas: the count of the Outgoing area and the numbers that failed in either.
+-- The lines /flatui combat has about the areas: the count of the Outgoing area, the numbers either left out of a queue longer than
+-- SHAPE.wait seconds and the numbers that failed in either.
 function ST.Lines()
 	local lines = {}
 	for _, area in ipairs(ORDER) do
 		if ST.On(area.key) then
 			if area.key == "out" then
 				lines[#lines + 1] = ("%s scroll area: %d shown."):format(area.label, area.shown)
+			end
+			if area.left > 0 then
+				lines[#lines + 1] = ("Numbers left out of the %s scroll area, the oldest of a queue of more than %g seconds: %d."):format(area.label, SHAPE.wait, area.left)
 			end
 			if area.failed > 0 then
 				lines[#lines + 1] = ("Numbers in the %s scroll area that raised an error: %d. The first: %s"):format(area.label, area.failed, area.first)

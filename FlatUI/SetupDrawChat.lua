@@ -801,27 +801,34 @@ do
 				end
 			end
 		end
-		-- Over the character: the numbers of the Incoming scroll area, each one line behind the one before when that has not moved a line, or
-		-- in a row of its own for Horizontal and Static, and moved by Incoming style.
+		-- Over the character: the numbers of the Incoming scroll area, moved by Incoming style. Straight and Arc numbers come as a burst does in
+		-- the game (ScrollText.lua): each starts at the handle when the one before is a line on, so they lie a line apart on one path and
+		-- none starts lower. Horizontal and Static numbers come a quarter of a second apart, each in a row of its own.
 		local level, style, scroll = ns.Get("combattext.own"), ns.Get("combattext.inStyle"), SHAPE.scroll
 		local ownSize = ns.Get("combattext.ownSize") / 100
 		local life = style == "static" and scroll.still or scroll.life[ns.Get("combattext.speed")] or scroll.life.normal
 		local hold = style == "static" and scroll.stillHold or scroll.hold
-		local snapshot = 0.25 * (#OWN - 1) + 0.1
-		local lastStart, lastRy
+		local base = SHAPE.text * ownSize
+		local path = style == "straight" or style == "arc"
+		local starts, at, before = {}, 0, nil
+		for i, sample in ipairs(OWN) do
+			local height = base * (sample.crit and scroll.crit or 1)
+			if not path then
+				at = 0.25 * (i - 1)
+			elseif level == "more" or sample.level == "take" then
+				at = before and (at + (before + height) / 2 * scroll.line * life / OWN_LENGTH) or 0
+				before = height
+			end
+			starts[i] = at
+		end
+		local snapshot = at + 0.1
 		for i, sample in ipairs(OWN) do
 			local fs = S.own[i]
 			local shown = level == "more" or (level == "take" and sample.level == "take")
 			fs:SetShown(shown)
-			local base = SHAPE.text * ownSize
 			local line = base * (sample.crit and scroll.crit or 1) * scroll.line
-			local start = 0.25 * (i - 1)
-			local ry = -(i - 1) * line
-			if style == "straight" or style == "arc" then
-				local ahead = lastStart and (OWN_LENGTH * (start - lastStart) / life - lastRy) or line
-				ry = ahead < line and (line - ahead) or 0
-			end
-			lastStart, lastRy = start, ry
+			local start = starts[i]
+			local ry = path and 0 or -(i - 1) * line
 			if shown then
 				local age = snapshot - start
 				local u = age / life
