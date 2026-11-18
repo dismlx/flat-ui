@@ -83,7 +83,12 @@ local _, ns = ...
 -- that slot empty, so with - now is what the item gives in both; perSecond says the figure is a second (dps, a second, or the threat of what rides
 -- on the swings). why (a row's: why it has no figure, for threat also a threat not known on Forever), each notCounted and vs, notYet and random are
 -- the player's words (random may be true), and quiet marks a why no line should show. Every option a caller passes is read: listVersion, mode, data,
--- guid, most, role, against, facing, rules, lowRank and inputs; any other is ignored. S.stats.per[stat].crit and .spellCrit are percent a point, as
+-- guid, most, role, against, facing, rules, lowRank, inputs and base; any other is ignored.
+-- Against (opts.base, an item link: the window's second item box): each candidate's slot then holds that item instead of what is worn (a two-slot
+-- candidate: its main hand; a two-hander there takes both hands), so now is the player with it and with - now is the item instead of it; each
+-- slot's change is against what is worn there, so an off hand the item compared against leaves stays worn. A candidate where it does not go is left
+-- out (G.BaseSlots), the result echoes base, each candidate carries base and baseSlots, and the header names it ("Instead of <base>"). G.Totals
+-- gives what an item does overall: the weighted mean of its rows' changes by damage, healing and threat, with their best and worst lines. S.stats.per[stat].crit and .spellCrit are percent a point, as
 -- SpellModel.lua keeps them.
 
 local G = {}
@@ -180,7 +185,13 @@ local K = {
 		notCompared = "Flat UI cannot work this spell out.", pet = "An item does not change your pet's spells.",
 		rank = "Flat UI's data has no rank of this spell.", inputs = "Flat UI has not read your hit table yet.",
 		withheld = "The game withheld part of your hit table.", threat = "Its threat on Forever is not known.",
+		baseLoading = "The game has not loaded the item to compare against yet.",
+		baseUnread = "Flat UI could not read the item to compare against.",
+		baseSlot = "It does not go in the same slot as %s; not compared.",
 	},
+	-- The figure a row of G.Totals counts in, by its figure (G.Figure) and the kind of its line, and the weights a line may have (GearLines.lua's
+	-- ns.GearSetWeight: 0 to 5, 1 when it has none).
+	TOTAL_KINDS = { "damage", "healing", "threat" }, WEIGHT_MOST = 5, WEIGHT = 1,
 }
 
 -- Reading the game ---------------------------------------------------------------------------------------------------------------------------------
@@ -1085,6 +1096,44 @@ function G.Candidates(link, guid, lines)
 	return Candidates(state, link, id, loc, tipLines, Text(guid), sub)
 end
 
+-- Against (opts.base, the window's second item box, GearWindow.lua): the slots the item compared against takes in a candidate, so each candidate
+-- slot holds it instead of what is worn: the candidate's first slot (a two-slot candidate's main hand), both hands for a two-hander there, or nil
+-- where it does not go (a ring in a ring slot, a one-hander in either hand, a two-hander in the main hand only, an off-hand item in the off hand).
+local function BaseSlots(loc, slots)
+	local first = type(slots) == "table" and Num(slots[1]) or nil
+	local equip = loc and K.EQUIP[loc]
+	if not (first and equip) then
+		return nil
+	end
+	local fits
+	if equip == "two" then
+		if first == K.MAIN then
+			return { K.MAIN, K.OFF }
+		end
+		return nil
+	elseif type(equip) == "number" then
+		fits = equip == first
+	elseif equip == "pair" then
+		fits = K.PAIR[loc][1] == first or K.PAIR[loc][2] == first
+	elseif equip == "one" then
+		fits = first == K.MAIN or first == K.OFF
+	elseif equip == "ammo" then
+		fits = first == K.AMMO
+	else
+		fits = first == K.OFF
+	end
+	if fits then
+		return { first }
+	end
+	return nil
+end
+
+-- The slots an item compared against (a link) takes in a candidate of G.Candidates, or nil where it does not go (BaseSlots).
+function G.BaseSlots(base, candidate)
+	local _, loc = Instant(Text(base))
+	return BaseSlots(loc, Table(Field(candidate, "slots")))
+end
+
 -- The change ------------------------------------------------------------------------------------------------------------------------------------
 
 local held = { registered = false, inputs = nil, sizes = false }
@@ -1418,9 +1467,40 @@ local function NewInfo()
 	return { notCounted = {}, vs = {} }
 end
 
+-- Against (opts.base): the item compared against, read as an item to wear, or nil, why in the player's words and whether the game is loading it.
+local function BaseItem(base)
+	local item, why = ItemOf(base, nil, nil)
+	if item then
+		return item
+	elseif why == K.WHY.loading then
+		return nil, K.WHY.baseLoading, true
+	end
+	return nil, K.WHY.baseUnread, false
+end
+
+-- The state and stats with the item compared against in its slots of a candidate (BaseSlots), and those slots: the "now" of the comparison, so with
+-- - now is the item instead of it; nil where it does not go. Each slot's change is against what is worn there, as an item's is, so with and now
+-- differ by the item against the one compared against. info gets what its own lines leave out, named after it; the notes of its stat change are
+-- left out, since that change is against what is worn, not against the item compared.
+local function BaseSwap(state, stats, baseItem, slots, info)
+	local baseSlots = BaseSlots(baseItem.loc, slots)
+	if not baseSlots then
+		return nil
+	end
+	local own = NewInfo()
+	Notes(baseItem, own)
+	for _, text in ipairs(own.notCounted) do
+		AddOnce(info.notCounted, ("%s: %s"):format(baseItem.name, text))
+	end
+	local stateB, statsB = Swap(state, stats, baseItem, baseSlots, NewInfo())
+	return stateB, statsB, baseSlots
+end
+
 -- Copies of the state and stats with an item in a candidate's slots (the design's 2.5): state2, stats2 and info { notCounted, vs, random, notYet, why }.
--- lines: the item's tooltip lines, the post call's data.lines, else the game's for the link.
-function G.With(state, stats, link, candidate, lines)
+-- lines: the item's tooltip lines, the post call's data.lines, else the game's for the link. opts.base (Against, an item link): also the state and
+-- stats with that item in the candidate's slots instead of what is worn (BaseSwap), the now to set state2 and stats2 against, as two more answers,
+-- and info.base and info.baseSlots; with a base that is not loaded, cannot be read or does not go there, nil and info.why.
+function G.With(state, stats, link, candidate, lines, opts)
 	local info = NewInfo()
 	state, stats = Table(state) or {}, Table(stats)
 	local slots = Table(Field(candidate, "slots"))
@@ -1429,9 +1509,23 @@ function G.With(state, stats, link, candidate, lines)
 		info.why, info.quiet = why or (not stats and K.WHY.stats) or K.WHY.item, quiet
 		return nil, nil, info
 	end
+	local base, stateB, statsB = Text(Field(opts, "base")), nil, nil
+	if base then
+		local baseItem, baseWhy = BaseItem(base)
+		local baseSlots
+		if baseItem then
+			stateB, statsB, baseSlots = BaseSwap(state, stats, baseItem, slots, info)
+			baseWhy = not stateB and K.WHY.baseSlot:format(Coloured(base) or baseItem.name) or nil
+		end
+		if not stateB then
+			info.why, info.quiet = baseWhy, false
+			return nil, nil, info
+		end
+		info.base, info.baseSlots = base, baseSlots
+	end
 	Notes(item, info)
 	local state2, stats2 = Swap(state, stats, item, slots, info)
-	return state2, stats2, info
+	return state2, stats2, info, stateB, statsB
 end
 
 -- Copies of the state and stats with the item in a slot taken off (a two-hander leaves both hands), and info with what its own lines leave out.
@@ -2665,14 +2759,17 @@ end
 
 -- The rows of a candidate: { line, now, with, figure, estimate, basis, perSecond, why } for each chosen line, with the basis of its figure (the
 -- threat's for threat), whether its figure is a second and why it has none (for threat also threatWhy). reverse: what a worn item gives, now being
--- the slot empty and with as worn, so with - now reads the same way as for an item to wear.
-local function Rows(chosen, state, stats, state2, stats2, opts, stamp, mode, role, reverse)
+-- the slot empty (or the item compared against there) and with as worn, so with - now reads the same way as for an item to wear. fresh: state and
+-- stats are a copy (the item compared against worn), whose figures are worked out here and not kept as those of now.
+local function Rows(chosen, state, stats, state2, stats2, work, reverse, fresh)
 	local rows = {}
+	local opts = work.opts
 	for _, line in ipairs(chosen) do
-		local figure = G.Figure(line, role, mode)
+		local figure = G.Figure(line, work.role, work.mode)
 		local row = { line = line, figure = figure }
 		if figure then
-			local worn, other = Now(line, state, stats, opts, stamp), G.Expect(line, state2, stats2, opts)
+			local worn = fresh and G.Expect(line, state, stats, opts) or Now(line, state, stats, opts, work.stamp)
+			local other = G.Expect(line, state2, stats2, opts)
 			if reverse then
 				worn, other = other, worn
 			end
@@ -2714,7 +2811,8 @@ local function Mean(rows, limit)
 	return count > 0 and sum / count or nil, any and not moved
 end
 
--- The header of a candidate: "Instead of <worn item> (<slot>), a cast:", its empty slot, or a one-hander over a two-hander's empty off hand.
+-- The header of a candidate: "Instead of <worn item> (<slot>), a cast:", its empty slot, or a one-hander over a two-hander's empty off hand. state is
+-- the now of the comparison, so with Against it names the item compared against (BaseSwap put it in the slot).
 local function Header(candidate, state, unit)
 	local names = {}
 	for _, slot in ipairs(candidate.slots) do
@@ -2742,13 +2840,23 @@ local function Merge(into, from)
 end
 
 -- An item to wear: each candidate with its rows, the mean of its changes, its header and notes; the best (the larger mean, a tie to the slot the
--- game names first) gives the result's header, notes and noChange. False when the item is not loaded, so nothing is kept.
+-- game names first) gives the result's header, notes and noChange. With Against (work.base), each candidate's now is the item compared against in
+-- its slots (BaseSwap), and a candidate where it does not go is left out. False when the item or the one compared against is not loaded, so nothing
+-- is kept.
 local function Instead(result, link, opts, chosen, state, stats, work)
 	local data = Table(opts.data)
 	local item, why, quiet = ItemOf(link, data and Field(data, "lines"))
 	if not item then
 		result.why, result.quiet = why, quiet
 		return why ~= K.WHY.loading
+	end
+	local baseItem, loading
+	if work.base then
+		baseItem, why, loading = BaseItem(work.base)
+		if not baseItem then
+			result.why, result.quiet = why, false
+			return not loading
+		end
 	end
 	Notes(item, result)
 	local list
@@ -2758,25 +2866,38 @@ local function Instead(result, link, opts, chosen, state, stats, work)
 		return true
 	end
 	local best, bestMean = nil, nil
-	for index, candidate in ipairs(list) do
+	for _, candidate in ipairs(list) do
 		local info = NewInfo()
-		local state2, stats2 = Swap(state, stats, item, candidate.slots, info)
-		candidate.rows = Rows(chosen, state, stats, state2, stats2, work.opts, work.stamp, work.mode, work.role, false)
-		candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit)
-		candidate.header, candidate.notCounted, candidate.vs = Header(candidate, state, work.unit), info.notCounted, info.vs
-		if best == nil or (candidate.mean ~= nil and (bestMean == nil or candidate.mean > bestMean)) then
-			best, bestMean = index, candidate.mean
+		local nowState, nowStats, baseSlots = state, stats, nil
+		if baseItem then
+			nowState, nowStats, baseSlots = BaseSwap(state, stats, baseItem, candidate.slots, info)
 		end
-		result.candidates[index] = candidate
+		if nowState then
+			local state2, stats2 = Swap(state, stats, item, candidate.slots, info)
+			candidate.base, candidate.baseSlots = work.base, baseSlots
+			candidate.rows = Rows(chosen, nowState, nowStats, state2, stats2, work, false, baseItem ~= nil)
+			candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit)
+			candidate.header, candidate.notCounted, candidate.vs = Header(candidate, nowState, work.unit), info.notCounted, info.vs
+			local index = #result.candidates + 1
+			if best == nil or (candidate.mean ~= nil and (bestMean == nil or candidate.mean > bestMean)) then
+				best, bestMean = index, candidate.mean
+			end
+			result.candidates[index] = candidate
+		end
 	end
-	local chosenOne = list[best]
+	if not best then
+		result.why, result.quiet = K.WHY.baseSlot:format(Coloured(work.base) or baseItem.name), false
+		return true
+	end
+	local chosenOne = result.candidates[best]
 	result.best, result.header, result.noChange = best, chosenOne.header, chosenOne.noChange
 	Merge(result.notCounted, chosenOne.notCounted)
 	Merge(result.vs, chosenOne.vs)
 	return true
 end
 
--- A worn item: what it gives the chosen lines, against its slot empty.
+-- A worn item: what it gives the chosen lines, against its slot empty, or with Against (work.base) against the item compared against in its slot
+-- (BaseSwap). False while the one compared against is not loaded.
 local function WhatItGives(result, slot, chosen, state, stats, work)
 	local link = LinkAt(state, slot)
 	if not link then
@@ -2791,11 +2912,30 @@ local function WhatItGives(result, slot, chosen, state, stats, work)
 	if worn then
 		Notes(worn, result)
 	end
-	local state2, stats2 = Swap(state, stats, nil, slots, result)
-	local candidate = { slots = slots, label = Label(slots), empty = false, game = true, offEmpty = false }
-	candidate.rows = Rows(chosen, state, stats, state2, stats2, work.opts, work.stamp, work.mode, work.role, true)
+	local state2, stats2, baseName
+	if work.base then
+		local baseItem, why, loading = BaseItem(work.base)
+		if not baseItem then
+			result.why, result.quiet = why, false
+			return not loading
+		end
+		baseName = Coloured(work.base) or baseItem.name
+		state2, stats2 = BaseSwap(state, stats, baseItem, slots, result)
+		if not state2 then
+			result.why, result.quiet = K.WHY.baseSlot:format(baseName), false
+			return true
+		end
+	else
+		state2, stats2 = Swap(state, stats, nil, slots, result)
+	end
+	local candidate = { slots = slots, label = Label(slots), empty = false, game = true, offEmpty = false, base = work.base }
+	candidate.rows = Rows(chosen, state, stats, state2, stats2, work, true, false)
 	candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit)
-	candidate.header = ("What it gives your spells, %s:"):format(work.unit)
+	if baseName then
+		candidate.header = ("What it gives your spells instead of %s, %s:"):format(baseName, work.unit)
+	else
+		candidate.header = ("What it gives your spells, %s:"):format(work.unit)
+	end
 	result.candidates[1], result.best, result.header, result.noChange = candidate, 1, candidate.header, candidate.noChange
 	return true
 end
@@ -2844,11 +2984,12 @@ end
 
 -- The comparison of an item to wear (a link) or of a worn item (its slot number) for the chosen lines (the design's 2.3, 2.4): { header,
 -- candidates = { { label, slots, mean, rows = { { line, now, with, figure, estimate, basis, perSecond, why } } } }, notCounted, vs, random, notYet,
--- noChange, why }, and best (the candidate the tooltip shows), quiet (why is no line to show), sizes (the fixed rating sizes stood in) and old (a
--- result from before the fight); the header of this file says what each holds. lines: the chosen lines (ns.GearChosen() when nil). opts: { listVersion, mode, data (the
--- post call's data, for its lines and guid), guid, most, role, against, facing, rules, lowRank, inputs (the hit table's, else those of the last
--- read) }. Kept by link (or slot and the link worn there), M.Version(), opts.listVersion and opts.mode, with the rows' choices; in a fight and with
--- stats from before it, the last result for the item while it is among the last K.CACHE kept, else why.
+-- noChange, why }, and best (the candidate the tooltip shows), quiet (why is no line to show), sizes (the fixed rating sizes stood in), old (a
+-- result from before the fight) and base (Against's item, echoed); the header of this file says what each holds. lines: the chosen lines
+-- (ns.GearChosen() when nil). opts: { listVersion, mode, data (the post call's data, for its lines and guid), guid, most, role, against, facing,
+-- rules, lowRank, inputs (the hit table's, else those of the last read), base (Against: an item link) }. Kept by link (or slot and the link worn
+-- there) and base, M.Version(), opts.listVersion and opts.mode, with the rows' choices; in a fight and with stats from before it, the last result
+-- for the item and base while it is among the last K.CACHE kept, else why.
 function G.Compare(itemOrSlot, lines, opts)
 	opts = Table(opts) or {}
 	local mode = K.MODES[opts.mode] and opts.mode or "tooltip"
@@ -2866,10 +3007,13 @@ function G.Compare(itemOrSlot, lines, opts)
 		return result
 	end
 	local state = Table(Ask(M.State)) or {}
-	-- A worn item is kept by its slot and the link worn there, so a fight never shows what another item in that slot gave.
-	local subject = slot and ("slot " .. slot .. " " .. (LinkAt(state, slot) or "")) or link
+	-- A worn item is kept by its slot and the link worn there, so a fight never shows what another item in that slot gave; with Against, by the item
+	-- compared against too.
+	local base = Text(opts.base)
+	local subject = (slot and ("slot " .. slot .. " " .. (LinkAt(state, slot) or "")) or link) .. "|" .. (base or "")
 	local stats = Table(Ask(M.Stats))
 	local again = subject .. "|" .. mode
+	result.base = base
 	if InCombat() or (stats and stats.old == true) then
 		if last[again] then
 			local before = Copy(last[again])
@@ -2895,7 +3039,7 @@ function G.Compare(itemOrSlot, lines, opts)
 		return result
 	end
 	local most = Num(opts.most) or Num(ns.Get("chat.gearMost")) or 5
-	local work = { mode = mode, role = role, unit = K.UNITS[mode], limit = mode == "tooltip" and most or nil,
+	local work = { mode = mode, role = role, unit = K.UNITS[mode], limit = mode == "tooltip" and most or nil, base = base,
 		opts = { against = spec.against, facing = spec.facing, rules = spec.rules, lowRank = spec.lowRank, inputs = inputs },
 		stamp = table.concat({ tostring(Ask(M.Version)), spec.key, tostring(inputs), tostring(stats), tostring(state) }, "|") }
 	local chosen = Chosen(lines)
@@ -2911,6 +3055,117 @@ function G.Compare(itemOrSlot, lines, opts)
 		Store(last, lastKept, again, result)
 	end
 	return result
+end
+
+-- Totals ------------------------------------------------------------------------------------------------------------------------------------
+
+-- The weight of a line (GearLines.lua's ns.GearSetWeight: 0 to 5), or nil for none given.
+local function WeightOf(value)
+	value = Num(value)
+	if value then
+		return math.max(0, math.min(K.WEIGHT_MOST, value))
+	end
+	return nil
+end
+
+-- A line's key in the lists: its spell's key and its rank (or spell ID), so a line kept at a rank and the same spell followed apart stay apart.
+local function LineKey(line)
+	local entry = Table(Field(line, "entry"))
+	local key = Text(Field(line, "key")) or (entry and Text(entry.key))
+	if not key then
+		return nil
+	end
+	return key .. "#" .. tostring(Num(Field(line, "rank")) or Num(Field(line, "id")) or ""), key
+end
+
+-- The weights of the lines given (ns.GearChosen()'s records, whose weight GearLines.lua keeps), by the record itself and by its key with and without
+-- its rank, so the rows of a comparison made before a weight changed take the weight of now.
+local function Weights(lines)
+	local by = {}
+	for _, line in ipairs(Table(lines) or {}) do
+		local weight = Table(line) and WeightOf(line.weight)
+		if weight then
+			by[line] = weight
+			local exact, key = LineKey(line)
+			if exact then
+				by[exact] = weight
+				if by[key] == nil then
+					by[key] = weight
+				end
+			end
+		end
+	end
+	return by
+end
+
+-- The figure a row counts in (G.Figure's): a threat figure in threat, the cast and second of a heal or HoT in healing, the rest in damage.
+local function TotalKind(row)
+	if row.figure == "threat" then
+		return "threat"
+	end
+	local entry = Table(Field(row.line, "entry"))
+	if entry and K.HEALS[entry.cmp] then
+		return "healing"
+	end
+	return "damage"
+end
+
+-- A line's name in the totals' best and worst: GearLines.lua's name of it, else its spell's key.
+local function LineName(line)
+	local entry = Table(Field(line, "entry"))
+	return Text(Field(line, "name")) or (entry and Text(entry.key)) or "?"
+end
+
+-- What an item does overall (item 3 of the 0.5.20 brief): { damage = Tot, healing = Tot, threat = Tot }, a figure left out where no row counts in it,
+-- Tot = { pct, n, estimate, best = { name, pct }, worst = { name, pct } }. pct is the weighted mean of the rows' changes as a fraction (0.024 is
+-- +2.4%), each row's change (with - now) / |now| as G.Compare's mean takes it, weighted by its line's weight (lines: the chosen lines whose weights
+-- count, ns.GearChosen()'s records; else the row's own line's; 1 when none; 0 leaves the line out); a row with no figure, or none now, is skipped.
+-- n is the rows counted, estimate whether one of them is an estimate, best and worst the counted rows of the largest and the smallest change (the
+-- first on a tie). candidate: one of G.Compare's candidates, or its result (its best candidate). opts.limit: only the first limit rows with a figure
+-- count, as the tooltip shows them (G.Compare's mean); none, all.
+function G.Totals(candidate, lines, opts)
+	local out = {}
+	candidate, opts = Table(candidate), Table(opts) or {}
+	if candidate and Table(candidate.candidates) then
+		candidate = Table(candidate.candidates[Num(candidate.best) or 1])
+	end
+	local rows = candidate and Table(candidate.rows)
+	if not rows then
+		return out
+	end
+	local weights, limit = Weights(lines), Num(opts.limit)
+	local sums, shown = {}, 0
+	for _, row in ipairs(rows) do
+		if Table(row) and row.figure then
+			shown = shown + 1
+			local change = Change(row)
+			local line = Table(row.line)
+			local exact, key = LineKey(line)
+			local weight = (line and weights[line]) or (exact and weights[exact]) or (key and weights[key]) or WeightOf(Field(line, "weight"))
+				or K.WEIGHT
+			if change and weight > 0 and (not limit or shown <= limit) then
+				local kind, pct = TotalKind(row), change / 100
+				local sum = sums[kind] or { total = 0, weight = 0, n = 0, estimate = false }
+				sums[kind] = sum
+				sum.total, sum.weight, sum.n = sum.total + pct * weight, sum.weight + weight, sum.n + 1
+				sum.estimate = sum.estimate or row.estimate == true
+				local name = LineName(line)
+				if not sum.best or pct > sum.best.pct then
+					sum.best = { name = name, pct = pct }
+				end
+				if not sum.worst or pct < sum.worst.pct then
+					sum.worst = { name = name, pct = pct }
+				end
+			end
+		end
+	end
+	for _, kind in ipairs(K.TOTAL_KINDS) do
+		local sum = sums[kind]
+		if sum and sum.weight > 0 then
+			out[kind] = { pct = sum.total / sum.weight, n = sum.n, estimate = sum.estimate, best = sum.best, worst = sum.worst }
+		end
+	end
+	return out
 end
 
 -- The hit table's inputs follow each read of the stats from the start of Chat and tooltips on, so the first tooltip has them.
