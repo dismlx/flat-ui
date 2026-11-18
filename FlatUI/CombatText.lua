@@ -134,7 +134,8 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- slots below only name it, with nothing counted as left out. On any other enemy, and for a heal on an enemy, the slots decide: each action of yours
 -- opens a slot and a hit fills one free slot. A report waits `hold` seconds (Flush), so a cast, a swing and a hit that the game sends in one frame or
 -- a few frames apart count in any order, or until its plate goes, as the hit that kills an enemy comes just before. A physical report waits with
--- the first physical report on its enemy that came at most `hold` seconds before it, and they are judged together (Wait).
+-- the physical reports on its enemy that came at most `hold` seconds before it, for up to `gather` seconds after the first, and they are judged
+-- together (Wait).
 -- A successful cast of yours or your pet's is looked up by its name in ns.CombatSpells (CombatTextSpells.lua, the classic class abilities cast on
 -- an enemy, so every rank and language): a spell that hits (kind hit, both or area) opens a cast slot of its school for cast seconds, or travel
 -- seconds when its missile flies, and the slot of an area spell takes up to areaMax hits of its school, on your target and on the enemies around
@@ -152,14 +153,16 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- SpellDocumentation.lua:900-913), and a channel of one takes any hit on your target only then. A hit takes a cast slot whose school shares a bit
 -- with its own (bit.band): a slot of unknown school takes any hit, and a hit whose school is withheld takes only such a slot. Of those, a fresh
 -- slot goes first, the slot of a spell that does not fly whose hit comes from `late` seconds before its cast to `fresh` seconds after it, so two
--- spells of one school cast close together (Fire Blast while a Fireball flies) each take their own hit; then the oldest.
+-- spells of one school cast close together (Fire Blast while a Fireball flies) each take their own hit; then the oldest. A hit more than `late`
+-- seconds before a cast takes no slot of it.
 -- A swing of yours and a physical strike of yours on one enemy within `hold` seconds of each other (a swing in the global cooldown of Hamstring)
 -- each fit the other's slot, and the game names neither hit and sends them in either order, so taking them in order gave the swing's hit the
 -- strike's name and icon and the strike's hit the swing's. One rule decides them (MINE.Rival): a strike with a weapon part (damage "weapon" in
--- ns.CombatSpells, such as Mortal Strike or Sinister Strike) takes the larger amount and the swing the smaller, and a strike of a fixed damage
--- (damage "flat": Hamstring, Wing Clip, Pummel, Shield Bash, Kick, Gouge and their like) the smaller and the swing the larger. When the amounts
--- are not all plain numbers (from build 70755 the game withholds every amount, and a withheld amount cannot be compared), when two of them are
--- the same, or when the strike is neither, the hits show as yours with no spell name and no icon, in the colour of their school.
+-- ns.CombatSpells, such as Mortal Strike or Sinister Strike, and the pair of a next melee ability, such as Heroic Strike) takes the larger
+-- amount and the swing the smaller, and a strike of a fixed damage (damage "flat": Hamstring, Wing Clip, Pummel, Shield Bash, Kick, Gouge and
+-- their like) the smaller and the swing the larger. When the amounts are not all plain numbers (from build 70755 the game withholds every
+-- amount, and a withheld amount cannot be compared), when two of them are the same, when the strike is neither, when two strikes land with the
+-- swing, or when the swing is your pet's, the hits show as yours with no spell name and no icon, in the colour of their school.
 -- A swing of yours the game reports (PLAYER_SWING) opens a slot for one physical hit on your target, from `late` seconds before it (the hit may
 -- come first) to swingTake seconds after it, and a shot one for cast seconds, as its arrow flies; a main-hand swing within `extra` seconds of the one
 -- before is an extra attack. Until the game has reported a melee swing, each hand has a slot that frees swingShare of its speed after it was used
@@ -191,7 +194,8 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- length of most classic damage over time) and the other numbers here are chosen by eye, not the game's: cast is the seconds after a cast that its
 -- slot is open, fresh the seconds after a cast that its hit is its own, tail the seconds after a channel ends, aura the seconds an answer about the
 -- auras of an enemy is kept, offAfter the hit reports in combat with no signal heard that switch the estimate off, engaged the seconds a hit in a
--- slot of yours ties an enemy to you, hold the seconds a report waits, and queueMax the most reports that wait at once.
+-- slot of yours ties an enemy to you, hold the seconds a report waits, gather the most seconds after the first physical report on an enemy
+-- that others join it, and queueMax the most reports that wait at once.
 -- It is still a guess where the slots decide. The game names no spell and no source for a hit, so the match goes by school, kind and time: two
 -- spells of yours of one school cast at once, or a hit of another player of the school of a slot of yours, cannot be told apart, and the damage
 -- over time of a weapon poison or a proc is not cast, so it is never recorded and borrows the name of a recorded one of its school. Engaged cannot
@@ -216,7 +220,7 @@ local SCHOOLS = { [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.
 -- shotIcon those of a swing and a shot.
 local MINE = { cast = 1.5, travel = 3.0, areaMax = 10, dotKeep = 30, shots = { [75] = true, [2480] = true, [7918] = true, [2764] = true, [7919] = true, [5019] = true }, tail = 0.5, aura = 0.5, offAfter = 10, swingGap = 1.0, tick = 3.0, swingShare = 0.8, auraMax = 4, extra = 0.4, nextSwing = { 6807, 78, 845, 2973 },
 	late = 0.1, swingTake = 0.3, pairTail = 0.4, nextMax = 5, spinSlack = 0.6, engaged = 10, queueMax = 200, fresh = 0.3, auraTick = 2.0, hold = 0.1,
-	words = { MISS = true, DODGE = true, PARRY = true, BLOCK = true, EVADE = true, DEFLECT = true, REFLECT = true, INTERRUPT = true },
+	gather = 0.2, words = { MISS = true, DODGE = true, PARRY = true, BLOCK = true, EVADE = true, DEFLECT = true, REFLECT = true, INTERRUPT = true },
 	partyTokens = { "party1", "partypet1", "party2", "partypet2", "party3", "partypet3", "party4", "partypet4" },
 	unitEvents = { "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" },
 	plainEvents = { "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT", "START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL", "PLAYER_ENTERING_WORLD", "PLAYER_SWING" } }
@@ -2076,14 +2080,17 @@ end
 
 -- The open cast slot a hit of this school can take (SchoolFits) and its place in the list, or nil; nothing is taken. away is true for a hit on
 -- another enemy than your target: it fits the slot of an area spell, and the slot of a spell of your pet's when onPet says the hit is on the
--- enemy your pet attacks (pettarget). A hit on your target fits every slot of yours, and a slot of your pet's only with onPet. Of the slots that
--- fit, a fresh one goes first: the slot of a spell that does not fly, whose hit comes from MINE.late seconds before its cast to MINE.fresh after
--- it, so that two spells of one school cast close together each take their own hit. Then the oldest. The third value is true for a fresh slot.
+-- enemy your pet attacks (pettarget). A hit on your target fits every slot of yours, and a slot of your pet's only with onPet. A hit more than
+-- MINE.late seconds before a cast fits no slot of it: the report waits (MINE.hold), so a cast made after it is already heard then. Of the slots
+-- that fit, a fresh one goes first: the slot of a spell that does not fly, whose hit comes from MINE.late seconds before its cast to MINE.fresh
+-- after it, so that two spells of one school cast close together each take their own hit. Then the oldest. The third value is true for a fresh
+-- slot.
 function MINE.CastFor(now, school, away, onPet)
 	local found, at
 	for index, slot in ipairs(mine.castSlots) do
-		if slot.at >= now and MINE.SchoolFits(slot.school, school) and (slot.area or (slot.pet and onPet) or (not slot.pet and not away)) then
-			if not slot.travel and now >= slot.from - MINE.late and now <= slot.from + MINE.fresh then
+		if slot.at >= now and now >= slot.from - MINE.late and MINE.SchoolFits(slot.school, school)
+			and (slot.area or (slot.pet and onPet) or (not slot.pet and not away)) then
+			if not slot.travel and now <= slot.from + MINE.fresh then
 				return slot, index, true
 			end
 			if not found then
@@ -3268,28 +3275,47 @@ function MINE.Flush(all, unit)
 	end
 end
 
--- The rule of a swing and a strike (see MINE): for each physical report judged together that took a cast slot, the reports on its enemy within
--- MINE.hold seconds of it that took a swing of yours. A strike with a weapon part (damage "weapon") takes the largest amount of them and one of
--- a fixed damage (damage "flat") the smallest: when that is a swing's report, the two swap the slot, the name and the icon. When the amounts are
--- not all plain numbers (a withheld amount cannot be compared), when the largest or the smallest is there twice, or when the strike has no
--- damage of the two, each of them shows with no spell name and no icon, in the colour of its school, rather than a wrong one.
+-- True for a strike of the rule of a swing and a strike (see MINE), and its damage: a physical report that took a cast slot (the damage of
+-- its spell, OpenCast), or a report of the pair of a next melee ability that is no word (Heroic Strike, Cleave, Maul and Raptor Strike all
+-- have a weapon part: "weapon").
+function MINE.Strike(e)
+	if e.why == "next swing" then
+		return not e.word, "weapon"
+	end
+	return e.why == "cast slot" and Plain(e.school, "number") and e.school == 1, e.damage
+end
+
+-- The rule of a swing and a strike (see MINE): for each strike judged together (MINE.Strike), the strikes and the reports that took a swing of
+-- yours or your pet's on its enemy within MINE.hold seconds of it. With one swing or more among them, one strike, no swing of your pet's and
+-- every amount a plain number, a strike with a weapon part (damage "weapon") takes the largest amount and one of a fixed damage (damage
+-- "flat") the smallest: when that is a swing's report, the two swap the slot, the name, the icon and the pair. Else, as when an amount is
+-- withheld (it cannot be compared), the largest or the smallest is there twice, the strike has no damage of the two, two strikes land
+-- together or a swing is your pet's (its size says nothing), each of them shows with no spell name and no icon, in the colour of its school,
+-- rather than a wrong one.
 function MINE.Rival(decided)
 	for _, strike in ipairs(decided) do
-		if strike.why == "cast slot" and not strike.ruled and Plain(strike.school, "number") and strike.school == 1 then
-			local group = { strike }
+		local struck, damage = MINE.Strike(strike)
+		if struck and not strike.ruled then
+			local group, strikes, swings, pet = {}, 0, 0, false
 			for _, e in ipairs(decided) do
-				if (e.why == "swing slot" or e.why == "extra slot") and not e.ruled and e.route == strike.route and e.plate == strike.plate
-					and math.abs(e.at - strike.at) <= MINE.hold then
-					group[#group + 1] = e
+				if not e.ruled and e.route == strike.route and e.plate == strike.plate and math.abs(e.at - strike.at) <= MINE.hold then
+					if MINE.Strike(e) then
+						group[#group + 1] = e
+						strikes = strikes + 1
+					elseif e.why == "swing slot" or e.why == "extra slot" or e.why == "pet swing" then
+						group[#group + 1] = e
+						swings = swings + 1
+						pet = pet or e.why == "pet swing"
+					end
 				end
 			end
-			if #group > 1 then
-				local damage, plain, pick, twice = strike.damage, true, nil, false
+			if swings > 0 then
+				local plain, pick, twice = strikes == 1 and not pet and (damage == "weapon" or damage == "flat"), nil, false
 				for _, e in ipairs(group) do
 					e.ruled = true
 					plain = plain and not e.word and Plain(e.amount, "number")
 				end
-				if plain and (damage == "weapon" or damage == "flat") then
+				if plain then
 					for _, e in ipairs(group) do
 						if pick == nil or (damage == "weapon" and e.amount > pick.amount) or (damage == "flat" and e.amount < pick.amount) then
 							pick, twice = e, false
@@ -3302,6 +3328,7 @@ function MINE.Rival(decided)
 					strike.why, pick.why = pick.why, strike.why
 					strike.icon, pick.icon = pick.icon, strike.icon
 					strike.spell, pick.spell = pick.spell, strike.spell
+					strike.pair, pick.pair = pick.pair, strike.pair
 				else
 					for _, e in ipairs(group) do
 						e.why, e.icon, e.spell = "unnamed", nil, nil
@@ -3313,9 +3340,10 @@ function MINE.Rival(decided)
 	end
 end
 
--- A report waits MINE.hold seconds. The frame that judges them runs only while one waits. A physical report waits with the first physical report
--- on its enemy that waits and came at most MINE.hold seconds before it (with, whose last is the last that joined it), and they are judged
--- together once the last has waited MINE.hold seconds, so that a swing and a strike that land together are judged together (MINE.Rival).
+-- A report waits MINE.hold seconds. The frame that judges them runs only while one waits. A physical report joins the group of a physical
+-- report on its enemy that waits and came at most MINE.hold seconds before it, while the first of that group (with, whose last is the last that
+-- joined) came at most MINE.gather seconds before it, and a group is judged together once its last has waited MINE.hold seconds: a swing and a
+-- strike within MINE.hold seconds of each other are judged together (MINE.Rival), also when another hit on the enemy came just before them.
 function MINE.Wait(e)
 	if #mine.queue >= MINE.queueMax then
 		MINE.Flush(true)
@@ -3324,8 +3352,9 @@ function MINE.Wait(e)
 	if Plain(e.school, "number") and e.school == 1 then
 		e.with, e.last = e, e.at
 		for _, other in ipairs(list) do
-			if other.with == other and other.route == e.route and other.plate == e.plate and e.at - other.at <= MINE.hold then
-				e.with, other.last = other, e.at
+			local first = other.with
+			if first ~= nil and other.route == e.route and other.plate == e.plate and e.at - other.at <= MINE.hold and e.at - first.at <= MINE.gather then
+				e.with, first.last = first, e.at
 				break
 			end
 		end
