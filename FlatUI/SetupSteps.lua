@@ -886,7 +886,7 @@ ns.SETUP_STEPS = {
 		{ "chat.spellPower", "c", "behaviour", "Adds to a spell's tooltip the share of your spell damage, healing or attack power it adds." },
 		{ "chat.spellStats", "o", "behaviour", "Adds how much that share is with your stats now, and the threat your attack power adds." },
 		{ "chat.spellLowRank", "r", "behaviour", "Counts less spell power for ranks far below your level, by an estimate from players' tests on WoW: Forever." },
-		{ "chat.spellThreat", "c", "behaviour", "Adds a spell's threat where it is special or your stance, form, aura, talents or gear change it, or to every spell." },
+		{ "chat.spellThreat", "c", "behaviour", "Adds a spell's threat where it is special or your stance, form, aura, talents or gear change it, or to every spell whose threat is known." },
 		{ "chat.spellWhen", "o", "behaviour", "Chooses whether the spell lines show always or only while Shift, Ctrl or Alt is held." },
 		{ "chat.gear", "c", "behaviour", "Adds to an item's tooltip how wearing it changes the damage, healing or threat of the spells you chose." },
 		{ "chat.gearWhen", "o", "behaviour", "Chooses whether the gear lines show with the game's item comparison, always, or while a key is held." },

@@ -12,10 +12,13 @@ local _, ns = ...
 -- ChatLinks.lua (called at the end of each refresh) also fills GameTooltip from a chat link under the mouse: SetOwner on a frame of its own,
 -- SetHyperlink and Hide, never in a fight. ItemCompare.lua (called at the start of each refresh) writes the game's alwaysCompareItems.
 -- ChatHistory.lua (called at the end of each refresh) keeps recent chat lines for this character and prints them after a reload.
--- SpellLines.lua and GearLines.lua (called from the post call after ChatTips.lua) add the spell and gear lines, from SpellModel.lua and GearModel.lua
--- and the data of SpellData.lua, and GearWindow.lua is the Gear comparison window; the three are synced at the end of each refresh, each through
--- ns.Each. GearWindow.lua also fills GameTooltip for its rows, its switch and its item: SetOwner on a frame of its own, SetSpellByID, SetHyperlink,
--- AddLine, Show, and Hide only while one of its frames owns it, never in a fight.
+-- SpellLines.lua and GearLines.lua (called from the post call after ChatTips.lua) add the spell and gear lines to GameTooltip and ItemRefTooltip
+-- (AddLine, AddDoubleLine), from SpellModel.lua and GearModel.lua and the data of SpellData.lua, and GearWindow.lua is the Gear comparison window;
+-- the three are synced at the end of each refresh, each through ns.Each. GearWindow.lua also fills GameTooltip for its rows, its switch and its
+-- item: SetOwner on a frame of its own, SetSpellByID, SetHyperlink, AddLine, Show, and Hide only while one of its frames owns it, never in a fight.
+-- It puts its name in UISpecialFrames, so Escape closes it, and gives an item dropped on it back to the bag, bank or worn slot it was lifted from
+-- (ClearCursor); any other item, and a spell, stays on the cursor. SpellModel.lua, GearModel.lua, GearLines.lua and GearWindow.lua ask the game to
+-- load an item the client has not loaded yet (C_Item.RequestLoadItemDataByID).
 -- Tooltips hidden by their kind, by hostility and place, and by the party and raid frames that own them follow the tooltip and the group frames of
 -- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLTooltip/EnhanceQoLTooltip.lua:226-233, 973-977, 1420-1440, 1590-1594,
 -- 1633-1636; EnhanceQoLUnitFrames/UF_GroupFrames.lua:6507-6536). They are hidden as the rows of Tooltips in combat are, with Hide on the tooltip

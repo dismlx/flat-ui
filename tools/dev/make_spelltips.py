@@ -896,7 +896,7 @@ def build_probes(entries):
 
 def build_defaults(entries, cur):
     """The default lines of design 2.1, in the one form GearLines.lua reads: a line is a key; a list of keys is the first of them known
-    (Greater Heal, else Heal); { needs, keys, else } is each of its keys while needs is known, else each of else, written as the Lua table
+    (Greater Heal, else Heal, else Lesser Heal); { needs, keys, else } is each of its keys while needs is known, else each of else, written as the Lua table
     { key, key ..., needs = key, ["else"] = { key ... } }. Every key must be an entry of the class or of every class."""
     out = {}
 
@@ -1197,11 +1197,13 @@ HEADER = '''local _, ns = ...
 -- (github.com/wowsims/forever, MIT licence, Copyright (c) 2022 wowsims team) captured the game's spell rows; the rows of Attack and the
 -- generic shots, the description variables and the talent nodes are from the client tables of build %(fallback)s exported by
 -- GrunzForever (github.com/10igma/GrunzForever, a tool under the MIT licence). Where the server does what the rows do not say, the
--- values come from the in-game measurements of wowsims/forever (docs/evidence), Blizzard's development notes and hotfix posts, the
--- downranking estimate of ForeverChanges (foreverchanges.pro), the Forever hunter wiki (classic-hunter/forever-hunter), gunba's notes on
--- Ice Lance (wow-forever-sim, docs/uncertainties.md) and, for a few spells unmeasured on Forever, Warcraft Tavern's Classic threat guide.
--- The stat keys and rating sizes were checked against data from Efficient Games (https://efficient.games), licensed under CC BY 4.0.
--- No addon's code or data table is used; the values are facts of the game's client and of measurements.
+-- values come from the in-game measurements of wowsims/forever (docs/evidence) and, where nothing was measured, the rules of its
+-- simulator (sim/), Blizzard's development notes and hotfix posts, the downranking estimate of ForeverChanges (foreverchanges.pro), the
+-- Forever hunter wiki (classic-hunter/forever-hunter), gunba's notes on Ice Lance (wow-forever-sim, docs/uncertainties.md) and, for a
+-- few spells unmeasured on Forever, Warcraft Tavern's Classic threat guide and Classic's rule for Power Word: Shield as Icy Veins and
+-- Wowhead Classic give it. The stat keys and rating sizes were checked against data from Efficient Games (https://efficient.games),
+-- licensed under CC BY 4.0. No addon's code or data table is used; the values are facts of the game's client, of measurements and of
+-- the game's rules as these sources state them.
 --
 -- Basis of a value (b): c client data (a row, a curve or the game's text), m measured on Forever, e estimate (shown with ~ before it).
 -- An entry (one spell, every rank): key (English name, lower case; " (pet)" for a pet's spell), pet, school (Lua school index 1-7) or

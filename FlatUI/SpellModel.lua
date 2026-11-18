@@ -6,7 +6,7 @@ local _, ns = ...
 -- events that change them, checks once a session whether the game's spell texts count spell power, and words the power, threat and rule lines
 -- as texts SpellLines.lua adds. It adds to the chat module and has no switch of its own, as ChatTips.lua has none (ChatTips.lua:7); its readers ask
 -- only while their rows and the module are on. Its reads and its events run as part "your stats" of the chat module, inside
--- ns.EachPart("chat", "your stats", fn, n) keyed by the number n of the read (design 4.4; Core.lua:2163-2199), so three that fail stop the part
+-- ns.EachPart("chat", "your stats", fn, n) keyed by the number n of the read (design 4.4; Core.lua:2188-2224), so three that fail stop the part
 -- alone with a line for /flatui status, and its first error goes once to the game's error handler (geterrorhandler), as Bags' parts report theirs
 -- (BagsLayout.lua:152-163).
 --
@@ -35,16 +35,16 @@ local _, ns = ...
 --   follows.
 -- - The level (UnitLevel, UnitDocumentation.lua:2474-2487), the class, and the form: GetShapeshiftFormID has no documentation, so its answer must
 --   be a plain number, as PlateThreat.lua:198-208 reads it; none is 0.
--- - The role: the first answer of ns.PlayerRole (Core.lua:529-565), which only reads.
+-- - The role: the first answer of ns.PlayerRole (Core.lua:554-590), which only reads.
 -- - The ranks of the talents of D.RULES and D.CRIT (design 3.4, 4.3). The set in use is C_ClassTalents.GetActiveConfigID
 --   (ClassTalentsDocumentation.lua:73-80), else the set of the active group of dual spec (C_SpecializationInfo.GetActiveSpecGroup and
---   GetCombatConfigIDForSpecGroup, SpecializationInfoDocumentation.lua:41-55, 90-103), as MostPoints finds it (Core.lua:473-527). Each talent
+--   GetCombatConfigIDForSpecGroup, SpecializationInfoDocumentation.lua:41-55, 90-103), as MostPoints finds it (Core.lua:498-552). Each talent
 --   carries its trait node and definition: the node's C_Traits.GetNodeInfo (SharedTraitsDocumentation.lua:370-385, TraitNodeInfo :1093-1127) must
 --   hold an entry whose C_Traits.GetEntryInfo (:264-279, :1048-1060) has that definition, and the rank is the node's activeRank while that entry is
 --   its active one. A node that does not answer so (the tree changed since the data, design 6.25) makes this file walk the tree once a session:
 --   C_Traits.GetConfigInfo(config).treeIDs[1] (:201-215, :1013-1023), C_Traits.GetTreeNodes (:586-600), each node's entries and
 --   C_Traits.GetDefinitionInfo (:248-262, :1034-1046) for their spell; S.state.treeWalked then says so. While C_Traits.ConfigHasStagedChanges
---   (:107-120) says a pick waits unapplied in the talent window, the ranks found before stay, as MostPoints keeps them (Core.lua:482-489).
+--   (:107-120) says a pick waits unapplied in the talent window, the ranks found before stay, as MostPoints keeps them (Core.lua:507-514).
 -- - The gear's links and the rest: every slot, ammunition 0 to tabard 19 (GetInventoryItemLink, as Items.lua:322-329 reads it), the permanent
 --   enchant of each link, the temporary enchant of each weapon (C_PaperDollInfo.GetTemporaryEnchantmentInfo, PaperDollInfoDocumentation.lua:226-241,
 --   read as ChatTips.lua:134-157 reads it) and so Rockbiter Weapon (its enchants are D.ROCKBITER, design 6.17), whether the off hand holds a shield
@@ -411,7 +411,7 @@ local function Stopped()
 end
 
 -- Runs a read or an event of this file as part "your stats" of the chat module (design 4.4), keyed by the number of the read, so three reads
--- that fail stop the part alone, with its note for /flatui status (Core.lua:2163-2199). fn gets that number first.
+-- that fail stop the part alone, with its note for /flatui status (Core.lua:2188-2224). fn gets that number first.
 local function Run(fn, ...)
 	S.count = S.count + 1
 	if Registered() then
@@ -852,7 +852,7 @@ local function ReadRole()
 	return false
 end
 
--- The set of talents in use, as MostPoints finds it (Core.lua:473-527), or nil.
+-- The set of talents in use, as MostPoints finds it (Core.lua:498-552), or nil.
 local function ConfigID()
 	local config = Ask(Api("C_ClassTalents", "GetActiveConfigID"))
 	if not Finite(config) then
@@ -935,7 +935,7 @@ local function ReadTalents()
 	end
 	local talents, config = {}, ConfigID()
 	if config and Ask(Api("C_Traits", "ConfigHasStagedChanges"), config) == true then
-		-- A pick waits unapplied in the talent window: the ranks found before stay, as MostPoints keeps them (Core.lua:482-489).
+		-- A pick waits unapplied in the talent window: the ranks found before stay, as MostPoints keeps them (Core.lua:507-514).
 		local found = S.unstaged[config]
 		if not found then
 			S.marks.talents = true

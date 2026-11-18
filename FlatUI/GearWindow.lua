@@ -5,15 +5,15 @@ local _, ns = ...
 -- the place to drop items and spells on, and it works with Your spells in item tooltips off: it is a tool of its own, and the list rows of the Spells
 -- and gear tab serve both. /flatui gear opens and closes it (ns.GearWindowToggle); the tab's Gear comparison window row opens it, or raises it when it
 -- is open, and /flatui gear <item> shows that item in it (ns.GearWindowShow); Escape closes it; the item and the switch are kept for the session.
--- A fight is InCombatLockdown's answer (WL/apis.yaml:39650), a withheld one counting as a fight; the time of a spell dropped is GetTime's (:39050).
--- Everything runs as the part "gear window" of the chat module (ns.EachPart, Core.lua:2168-2199), each run with a count of its own as its first
+-- A fight is InCombatLockdown's answer (WL/apis.yaml:39650), a withheld one counting as a fight; the time of a drop is GetTime's (:39050).
+-- Everything runs as the part "gear window" of the chat module (ns.EachPart, Core.lua:2193-2224), each run with a count of its own as its first
 -- argument, so three faults stop the window alone with a line for /flatui status (design 4.4); the first fault also goes to the game's error handler
 -- (geterrorhandler), as Bags' parts report theirs (Bags.lua:356-374), and a part that stopped closes the window. The files it reads, SpellModel.lua,
 -- GearModel.lua and GearLines.lua, are looked up when called, since any of them may load after this one or fail; a fault of one of their functions
 -- goes to the error handler once, and the window goes on with what the other lines give. M.Want("gear window") has SpellModel listen to the game's
 -- events while the window shows and lets go when it hides; M.State and M.Stats first read what an event marked (design 4.3, 4.5).
 -- The look is the Windows page's, as Bags' windows have it (BagsWindow.lua:499-552): the Background colour at Window opacity with a thin border in the
--- general border colour (ns.Outline, whose page is the Windows page, so the chat page's own border does not reach it, Core.lua:296), the icon's box in
+-- general border colour (ns.Outline, whose page is the Windows page, so the chat page's own border does not reach it, Core.lua:321), the icon's box in
 -- Button and slot colour, the chosen word of the switch and the light under the cursor in the Highlight colour, the icon cut by Icon crop
 -- (SetTexCoord), and the text of the windows (PanelLook.lua:27-28) in font strings of Flat UI's own (ns.OwnText), measured as they wrap
 -- (GetUnboundedStringWidth, GetStringHeight, WL/uiobjects.yaml:3738, 3711) so the window is as tall as what it shows. ns.GearWindowSync, at the end of
@@ -122,7 +122,7 @@ local NOTES, FOOT, MOST_ROWS = 10, 7, 16
 local SEPARATOR = 0.07
 local FONT, TITLE_FONT = "GameFontHighlightSmall", "GameFontHighlight"
 -- The text of the windows (PanelLook.lua:27-28: text-dim and text-faint of graphite, as the Threat list and the hit table have them) and white; the
--- grey of Flat UI's extra tooltip lines (Chat.lua:793) for no change, and the green and red Flat UI's combat numbers give a gain and a loss
+-- grey of Flat UI's extra tooltip lines (Chat.lua:801) for no change, and the green and red Flat UI's combat numbers give a gain and a loss
 -- (CombatText.lua:889-894), as the item tooltips colour a change (design 2.3).
 local DIM, FAINT, PLAIN = { 0.66, 0.68, 0.62 }, { 0.48, 0.50, 0.45 }, { 1, 1, 1 }
 local TONES = { gain = { 0.1, 1, 0.1 }, loss = { 1, 0.1, 0.1 }, none = { 0.8, 0.8, 0.8 } }
@@ -270,7 +270,7 @@ local function Step(_, fn, ...)
 end
 
 -- Runs fn as the part of the chat module (design 4.4): each run is counted by a number of its own, given first, since ns.EachPart counts a fault once
--- for each first argument and stops the part at the third (Core.lua:2178, 2185-2194). A part that stopped closes the window.
+-- for each first argument and stops the part at the third (Core.lua:2203, 2210-2219). A part that stopped closes the window.
 local function Run(fn, ...)
 	W.runs = W.runs + 1
 	local ok, err = ns.EachPart(KEY, PART, Step, W.runs, fn, ...)
@@ -864,7 +864,7 @@ end
 -- Working it out ---------------------------------------------------------------------------------------------------------------------------------
 
 -- With no item, or one that cannot be compared: what each line does now, from G.Expect with the player's state and stats, in the figure G.Figure
--- gives it for the switch, with that figure's basis and whether it is a second.
+-- gives it for the switch, with that figure's basis, whether it is a second and why it has none.
 local function Profile(view, lines, state, stats)
 	local model = ns.GearModel
 	local opts = Options(view.mode)
@@ -874,10 +874,12 @@ local function Profile(view, lines, state, stats)
 			if row.figure then
 				local e = Ask(model, "Expect", line, state, stats, opts)
 				if type(e) == "table" then
-					-- A threat figure takes the threat's basis, and is a second for what rides on the swings (GearModel.lua's header).
+					-- A threat figure takes the threat's basis, and is a second for what rides on the swings (GearModel.lua's header); with no
+					-- figure it takes threatWhy, which says the threat is not known on Forever (Whirlwind's), as G.Compare's rows do.
 					local threat = row.figure == "threat"
 					row.now = Pick(e, row.figure)
-					row.basis, row.why = Text(threat and e.threatBasis or e.basis), Text(e.why)
+					row.basis = Text(threat and e.threatBasis or e.basis)
+					row.why = Text(e.why) or (threat and Text(e.threatWhy)) or nil
 					row.estimate = row.basis == "e"
 					row.perSecond = row.figure == "second" or row.figure == "dps" or (threat and e.perSecond == true)
 				end
@@ -1651,7 +1653,9 @@ local function RowLines(row)
 	if basis == nil then
 		local e = Ask(ns.GearModel, "Expect", line, state, stats, Options(W.mode))
 		if type(e) == "table" then
-			basis, why = Text(row.figure == "threat" and e.threatBasis or e.basis), Text(e.why)
+			local threat = row.figure == "threat"
+			basis = Text(threat and e.threatBasis or e.basis)
+			why = Text(e.why) or (threat and Text(e.threatWhy)) or nil
 		end
 	end
 	if basis == "m" or (basis == nil and entry and Measured(entry, line, row.figure)) then

@@ -25,10 +25,11 @@ local _, ns = ...
 -- TooltipInfoSharedDocumentation.lua:97, 107, 121), never a buff or a debuff (UnitAura 7). The key: Show spell lines at Always, or its key held
 -- (IsShiftKeyDown, IsControlKeyDown, IsAltKeyDown); ItemRefTooltip at every choice, since the game builds it only for a plain click on a link, a
 -- modified one going to HandleModifiedItemClick (SetItemRef, Blizzard_UIPanels_Game/Mainline/ItemRef.lua:17-26), and builds it again only when its
--- data changes (its OnUpdate, :351-355), so no key is ever down while its lines are built. A bar button's tooltip is built again five times a second
--- (GameTooltip.lua:451-463; Blizzard_ActionBar/Shared/ActionButton.lua:1125-1129), so there the lines come as the key goes down, and elsewhere at the
--- next build, as Show IDs works (ChatTips.lua:28-31). The spell: one of the data for the player's class, its pet or every class (M.Find), or, while
--- Threat lines is on, any other spell, which may be the tooltip of a rule (M.RuleLines answers nothing for the rest).
+-- data changes (its OnUpdate, :351-355), never as a key goes down, so lines that waited for a key would never come there. A bar button's tooltip is
+-- built again five times a second (GameTooltip.lua:451-463; Blizzard_ActionBar/Shared/ActionButton.lua:1125-1129), so there the lines come as the
+-- key goes down, and elsewhere at the next build, as Show IDs works (ChatTips.lua:28-31). The spell: one of the data for the player's class, its pet
+-- or every class (M.Find), or, while Threat lines is on, any other spell, which may be the tooltip of a rule (M.RuleLines answers nothing for the
+-- rest).
 -- The spell ID (design 1.1). A spell's data has it in its id (Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua:25-32): the rank on the button, in
 -- the book or in the link. A macro's and a pet action's data name it in their first line, by tooltipID while tooltipType is 1 (0 is an item), the
 -- fields retail addons read for it, not yet seen on WoW: Forever (design 6.4). A macro whose first line names none is read from its action slot:
@@ -41,8 +42,8 @@ local _, ns = ...
 -- getterArgs, but the next rank's block leaves out a dim line the block before it of the same entry added to that tooltip (a rule's note, which no
 -- rank changes), so it shows once. The talent's title is plain text and gets nothing.
 --
--- The work, keyed (design 4.4): ns.EachPart counts a failure once for each first argument it is given (Core.lua:2168-2199) and stops a part at
--- the third (MAX_PART_FAILURES, Core.lua:240). The tests run keyed by the data of the build, which is new for each build, the lines keyed by the
+-- The work, keyed (design 4.4): ns.EachPart counts a failure once for each first argument it is given (Core.lua:2193-2224) and stops a part at
+-- the third (MAX_PART_FAILURES, Core.lua:260). The tests run keyed by the data of the build, which is new for each build, the lines keyed by the
 -- spell ID, and a sync by its number, so a test that fails on three builds, three spells that fail or three syncs that fail stop this part alone,
 -- with a line for /flatui status; the first error also goes once to the game's error handler (geterrorhandler), as Bags' parts send theirs
 -- (Bags.lua:356-372). A part that stops wants nothing more of SpellModel.
@@ -51,7 +52,7 @@ local _, ns = ...
 -- spells, the oldest forgotten first. Each build asks SpellModel for the state and the stats first (M.State, M.Stats), which read the game only
 -- after an event marked them, so what changed shows at the next build. A pet's entry is kept for the pet's level (UnitLevel of "pet",
 -- Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:2474-2487), which its threat may gain by.
--- Once for each build (Chat.lua:787-798): the game makes new data for each build and may run the post calls more than once for one, so the same
+-- Once for each build (Chat.lua:795-806): the game makes new data for each build and may run the post calls more than once for one, so the same
 -- data with at least the lines added then still there is the same build. The only writes are widget calls on the tooltip, each under pcall:
 -- NumLines, AddDoubleLine for a share and its number, AddLine for a line alone; one the game refuses ends the adding for that build.
 -- The look (design 1.2): the share grey (0.8, the grey of Chat.lua's extra lines), the number white, or grey while it is from before the fight,

@@ -144,7 +144,7 @@
     "deep wounds",
     "kidney shot"
    ],
-   "why": "No line: Dark Pact is Classic only, and Drain Mana, Lay on Hands and Bloom's Spirit heal take no spell power and have no threat known on Forever. Rockbiter Weapon, Windfury Totem and Seal of the Crusader give attack power, which the character sheet already counts (Rockbiter Weapon's enchants stay in rockbiter for Spirit Weapons' threat); Flametongue Totem's hits (16368) and Judgement of the Crusader's Holy damage taken have no coefficient of their own; Swiftmend heals for the HoT it reads, with no share of its own; Deep Wounds takes no attack power on Forever (measured) and Kidney Shot deals no damage. None of them is in the slices; the keys stand here so a later slice cannot bring them back unnoticed.",
+   "why": "No line: Dark Pact is Classic only, and Drain Mana, Lay on Hands and Bloom's Spirit heal take no spell power and have no threat known on Forever. Rockbiter Weapon and Seal of the Crusader give attack power, which the character sheet already counts (Rockbiter Weapon's enchants stay in rockbiter for Spirit Weapons' threat), and Windfury Totem a chance of an extra attack with bonus attack power, a proc with no share of its own; Flametongue Totem's hits (16368) and Judgement of the Crusader's Holy damage taken have no coefficient of their own; Swiftmend heals for the HoT it reads, with no share of its own; Deep Wounds takes no attack power on Forever (measured) and Kidney Shot deals no damage. None of them is in the slices; the keys stand here so a later slice cannot bring them back unnoticed.",
    "source": [
     "client rows of build 1.60.1.70938",
     "wowsims/forever docs/evidence/EV-0013 (Flametongue Totem's hit 16368 has no coefficient)",
@@ -239,8 +239,8 @@
   },
   "whirlwind": {
    "part": 1,
-   "note": "off hand at half, as the simulator models it",
-   "why": "The text says both weapons; the off-hand half is the simulator's, not measured.",
+   "note": "off hand with the off-hand penalty, as the simulator models it",
+   "why": "The text says both weapons; the off-hand strike taking the off-hand penalty (half the damage, which Dual Wield Specialization eases) is the simulator's, not measured. The line counts the off-hand factor the comparison counts, so the note says penalty, not half.",
    "source": [
     "client text of 1680",
     "wowsims/forever sim/warrior/whirlwind.go"
@@ -248,8 +248,8 @@
   },
   "mutilate": {
    "part": 1,
-   "note": "whether the off hand is halved is not known",
-   "why": "No reading covers the off-hand strike of Mutilate.",
+   "note": "whether the off-hand penalty applies is not known",
+   "why": "No reading covers the off-hand strike of Mutilate. The line counts the off-hand factor the comparison counts.",
    "source": [
     "wowsims/forever simulator"
    ]
@@ -288,7 +288,7 @@
    "why": "Its absorb row stores 0.1 but no row or text says whether healing or spell damage counts; healing is the vanilla rule, an estimate (design 3.5).",
    "source": [
     "client rows 17 to 10901",
-    "research_coef_casters.md (Power Word: Shield)"
+    "Classic's rule since patch 1.10, 10% of bonus healing, as Icy Veins and Wowhead Classic give it"
    ]
   },
   "rupture": {
@@ -638,13 +638,8 @@
     "lightning bolt",
     "chain lightning",
     "earth shock",
-    {
-     "needs": "stormstrike",
-     "keys": [
-      "attack",
-      "stormstrike"
-     ]
-    }
+    "attack",
+    "stormstrike"
    ],
    "healer": [
     "healing wave",
@@ -652,7 +647,7 @@
     "chain heal"
    ]
   },
-  "why": "The default lines of design 2.1 by class and by the role ns.PlayerRole gives (damage, tank, healer), and a druid's cat set (cat) for Cat Form; a bear form takes the tank set. Every line counts only if known. A line is a key; a list of keys is the first of them known (Greater Heal, else Heal, else Lesser Heal, so a priest has a heal from level 1); an object { needs, keys, else } is each of its keys while needs is known, else each of else (the seal and judgement of Command with Seal of Command known, else those of Righteousness; a shaman's Attack and Stormstrike with Stormstrike known). make_spelltips.py writes the object as { key, key ..., needs = key, [\"else\"] = { key ... } }, which GearLines.lua reads.",
+  "why": "The default lines of design 2.1 by class and by the role ns.PlayerRole gives (damage, tank, healer), and a druid's cat set (cat) for Cat Form; a bear form takes the tank set. Every line counts only if known. A line is a key; a list of keys is the first of them known (Greater Heal, else Heal, else Lesser Heal, so a priest has a heal from level 1); an object { needs, keys, else } is each of its keys while needs is known, else each of else (the seal and judgement of Command with Seal of Command known, else those of Righteousness). A shaman's damage set has Attack at every level and Stormstrike once known, so an Enhancement shaman below level 40, before Stormstrike, still compares a strength weapon; ns.PlayerRole counts both damage trees as damage. make_spelltips.py writes the object as { key, key ..., needs = key, [\"else\"] = { key ... } }, which GearLines.lua reads.",
   "source": [
    "design 2.1"
   ]

@@ -6,7 +6,7 @@ local _, ns = ...
 -- that change it, /flatui gear and its lines of /flatui status. The numbers are GearModel.lua's (ns.GearModel: G.Compare and G.Figure), worked out
 -- from the state and stats SpellModel.lua reads (ns.SpellModel); this file reads no stat and works out no number. It adds to the chat module and
 -- has no switch of its own, as ChatTips.lua (ChatTips.lua:7): Chat.lua's post call of the game's tooltip data (TooltipDataProcessor.AddTooltipPostCall
--- for every kind, Chat.lua:1161-1184) calls ns.GearTipLines after ns.SpellTipLines and before its own ID and count lines, and the end of Chat.lua's
+-- for every kind, Chat.lua:1169-1200) calls ns.GearTipLines after ns.SpellTipLines and before its own ID and count lines, and the end of Chat.lua's
 -- Refresh calls ns.GearLinesSync. The game runs the post calls once it has added its own lines and before it shows the tooltip
 -- (Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:281-300), so the tooltip takes the size of the new lines.
 --
@@ -22,8 +22,9 @@ local _, ns = ...
 -- TooltipUtil.lua:3-6; TooltipDataRules.lua:168-176); with Compare items only while holding Shift on, which writes alwaysCompareItems 0
 -- (ItemCompare.lua:3-14), that is while Shift is held. A worn item shows its lines at this choice while Shift is held. ItemRefTooltip shows them at
 -- every choice: the game builds it only for a plain click on a link, a modified one going to HandleModifiedItemClick (SetItemRef,
--- Blizzard_UIPanels_Game/Mainline/ItemRef.lua:17-26), and builds it again only when its data changes, comparing from its OnUpdate with no new build
--- (:351-366), so no key and no comparison is ever down while its lines are built. Then the item: worn when the game gives its data.guid a place
+-- Blizzard_UIPanels_Game/Mainline/ItemRef.lua:17-26), and builds it again only when its data changes (TOOLTIP_DATA_UPDATE, GameTooltip.lua:964-976),
+-- never as a key goes down: its OnUpdate shows the worn items beside it with no new build (ItemRef.lua:351-366), so lines that waited for a key or
+-- for the comparison would never come there. Then the item: worn when the game gives its data.guid a place
 -- in an equipment slot (C_Item.GetItemLocation and the field equipmentSlotIndex, ItemDocumentation.lua:786-799, read as ChatTips.lua:134-157
 -- reads it); its link is data.hyperlink, else C_Item.GetItemLinkByGUID(data.guid) (:771-784), as the game finds the item a tooltip shows
 -- (TooltipUtil.lua:8-22), else the link of data.id from C_Item.GetItemInfo (:626-657), which carries no random suffix; the game is asked once for an
@@ -34,10 +35,11 @@ local _, ns = ...
 -- TooltipInfoSharedDocumentation.lua:55) whose isValidInvSlot is false, or whose isValidItemType is false for a type the player's class never
 -- learns, or that is red where the game gives neither field, or a red UsageRequirement line (:77) that says Classes: or Races:
 -- (ITEM_CLASSES_ALLOWED and ITEM_RACES_ALLOWED, GlobalStrings/enUS.lua:12687 and 13011), is an item the player can never wear: no lines. The game
--- also gives isValidItemType false, the type in red, for a type the class learns in time and has not learned (T.LEARNS: mail for a hunter or a
--- shaman and plate for a warrior or a paladin at level 40, a weapon skill of the weapon masters), which with any other red requirement (a level, a
--- skill, a reputation) is one the player cannot wear yet: the lines show, and end with "Not wearable yet:" and the game's own red requirement line,
--- else the type's red text (design 2.2), so a level 58 player sees what a level 60 reward will do and a level 38 hunter what a mail chest will. A red
+-- also gives isValidItemType false, the type in red, for a type the class learns in time and has not learned (T.LEARNS, the client's own table of
+-- them: mail for a hunter or a shaman and plate for a warrior or a paladin from level 40, polearms from 20, the weapon masters' other skills, a
+-- shaman's two-hand axes and maces through a talent). That, and any other red requirement (a level, a skill, a reputation), is one the player
+-- cannot wear yet: the lines show, and end with "Not wearable yet:" and the game's own red requirement line, else the type's red text (design
+-- 2.2), so a level 58 player sees what a level 60 reward will do and a level 38 hunter what a mail chest will. A red
 -- is the game's RED_FONT_COLOR or near it (ItemMarks.lua:53-54). ItemMarks' own answer (ns.ItemMarks.Unusable) is not used: it is kept by item ID
 -- and goes old only through events of the windows module and Bags (ItemMarks.lua:9-19). The Gear comparison window, which has no build of the game's
 -- to read, asks the same test of the lines C_TooltipInfo.GetHyperlink gives for its item (ns.GearWearable, TooltipInfoDocumentation.lua:337-354, as
@@ -54,9 +56,9 @@ local _, ns = ...
 -- grey for none, the colours Flat UI's combat numbers give gains and losses (CombatText.lua:889-894), with ~ before an estimate; at most Spells in
 -- an item tooltip of them and a dim "and 2 more: /flatui gear" past that, never "and 1 more"; one dim line in place of them when none changes by
 -- 0.05% or more; and the dim lines of what is not counted (design 2.3, 2.6), in the dim of the hit table (HitTable.lua:79) and the grey of Flat UI's
--- extra lines (Chat.lua:793). Each block is kept by the item's link (by its slot and link for a worn one), M.Version() and ns.GearListVersion(), at
+-- extra lines (Chat.lua:801). Each block is kept by the item's link (by its slot and link for a worn one), M.Version() and ns.GearListVersion(), at
 -- most 64 and the oldest first out (design 4.6), and all are dropped at each refresh of the module, where a row may have changed. A block is added
--- once for each build of a tooltip, as Chat.lua adds its own lines (Chat.lua:787-798): the game fetches new data for each build and may run the
+-- once for each build of a tooltip, as Chat.lua adds its own lines (Chat.lua:795-806): the game fetches new data for each build and may run the
 -- post calls more than once for one, so the same data with the lines of the first call still there is the same build (NumLines). Each AddLine and
 -- AddDoubleLine is under pcall, and one the game refuses stops the adding for that build. In a fight, where the game withholds the stats
 -- (design 4.7), a block worked out before it shows, else one dim line (InCombatLockdown, and SpellModel's old stats). A reason G.Compare gives
@@ -64,24 +66,24 @@ local _, ns = ...
 -- off-hand weapon for one who does not dual wield) shows nothing. The numbers are rounded as design 2.3 says by SpellModel's M.Fmt, as the window
 -- rounds them: a change a cast whole from 100 up and to a tenth below, a second to a tenth and " dps" (Change), the percent to a tenth with its
 -- sign, (0%) under 0.05 (Percent), and none while the figure now is 0.
--- The post call runs in two steps, each inside ns.EachPart (Core.lua:2168-2199), which counts a failure once for each first argument and stops a
--- part at the third (Core.lua:240, 2178, 2185-2194): the tests and the link keyed by the data of the build, which is new for each build, and the
+-- The post call runs in two steps, each inside ns.EachPart (Core.lua:2193-2224), which counts a failure once for each first argument and stops a
+-- part at the third (Core.lua:260, 2203, 2210-2219): the tests and the link keyed by the data of the build, which is new for each build, and the
 -- work keyed by the item's link, so three items that fail stop the gear lines with their note for /flatui status, and a test that fails on every
 -- build stops them after three builds (design 4.4). The first error also goes once to geterrorhandler(), as Bags' parts report theirs
 -- (Bags.lua:356-373).
 --
--- The list: FlatUICharDB.gearSpells (ns.Character, Core.lua:2625-2627), as { { key = "frostbolt" }, { key = "heal", id = 6064 } }: the key of an
+-- The list: FlatUICharDB.gearSpells (ns.Character, Core.lua:2650-2652), as { { key = "frostbolt" }, { key = "heal", id = 6064 } }: the key of an
 -- entry of ns.SpellData (SpellData.lua) and, only for a kept rank, its spell ID; nil until the player first changes it, and nil again after Back
 -- to your class's spells (design 4.3). At most 20 lines; a change is saved at once, also in a fight, as Cooldowns' are (Cooldowns.lua:2353). A
 -- line with no ID follows the highest rank the player knows (SpellModel's M.Highest, by the ranks of its entry, as Cooldowns and Pulse count the
 -- ranks of a spell as one, Cooldowns.lua:2301-2302, Pulse.lua:11-13); a kept rank is known when ns.SpellKnown (Cooldowns.lua:314-325) says so, or
 -- when it is the rank M.Highest gives. Attack is known to every character whatever the spell book says, and a judgement, which no spell book holds,
 -- takes the rank M.Highest gives it through its seal. While the list is nil the defaults of the data are used (D.DEFAULTS by class and role,
--- design 2.1): the role SpellModel read (ns.PlayerRole's first answer, Core.lua:536-565), and a druid's form (GetShapeshiftFormID: Cat Form 1, the
+-- design 2.1): the role SpellModel read (ns.PlayerRole's first answer, Core.lua:561-590), and a druid's form (GetShapeshiftFormID: Cat Form 1, the
 -- bear forms 5 and 8, PlateThreat.lua:54-56) picks its cat or bear set whatever the role. Every entry of them is "if known", and a set holds 2.1's
--- conditions in the one form tools/dev/make_spelltips.py writes: a key; a list of keys, the first of them known (Greater Heal, else Heal); or
--- { key, key ..., needs = key, ["else"] = { key ... } }, each of its keys while needs is known, else each of else (the seal and judgement of Command
--- with Seal of Command known, else those of Righteousness; a shaman's Attack and Stormstrike with Stormstrike known). ns.GearListVersion() changes
+-- conditions in the one form tools/dev/make_spelltips.py writes: a key; a list of keys, the first of them known (Greater Heal, else Heal, else
+-- Lesser Heal); or { key, key ..., needs = key, ["else"] = { key ... } }, each of its keys while needs is known, else each of else (the seal and
+-- judgement of Command with Seal of Command known, else those of Righteousness). ns.GearListVersion() changes
 -- with each change of what the list gives: the lines, their ranks, whether they are known, and
 -- the defaults it follows (the role, the form). The names are the game's (C_Spell.GetSpellName), with the rank of a kept line
 -- (C_Spell.GetSpellSubtext, as Cooldowns.lua:2271-2284 tells ranks apart), and a name typed after /flatui gear add is found in the data, else by
@@ -93,8 +95,8 @@ local _, ns = ...
 -- Cooldowns.lua:2587-2654); Back to your class's spells drops the list; Gear comparison window calls ns.GearWindowShow of GearWindow.lua when it is
 -- there, which opens the window or raises an open one, as Reset windows is a list row (Movers.lua:4556-4570). Each pick answers (done, message), as
 -- ns.CooldownAdd does (Cooldowns.lua:2354-2370), and never raises: an error goes once to geterrorhandler(). /flatui gear (ns.AddSlash,
--- Core.lua:2333-2348; design 4.11) opens the window (ns.GearWindowToggle, ns.GearWindowShow) and changes the list, and prints with print(). /flatui
--- status (ns.AddStatus, Core.lua:2309-2329; design 4.12) says, while Your spells in item tooltips is on and this part runs or the window is open
+-- Core.lua:2358-2373; design 4.11) opens the window (ns.GearWindowToggle, ns.GearWindowShow) and changes the list, and prints with print(). /flatui
+-- status (ns.AddStatus, Core.lua:2334-2354; design 4.12) says, while Your spells in item tooltips is on and this part runs or the window is open
 -- (ns.GearWindowOpen, GearWindow.lua), which spells are compared, against what, and, once seen, that the slot table stood in for the game's choice or
 -- Flat UI's rating sizes for the game's conversion: of GetCombatRatingBonusForCombatRatingValue, C_TooltipComparison.GetItemComparisonInfo and
 -- GetActionInfo (Add the spells of a bar) it only looks whether the client has them, and a candidate of G.Compare whose game is false, or its sizes,
@@ -113,7 +115,7 @@ local IsSecret, Finite = ns.IsSecret, ns.Finite
 local T = {
 	-- The owner this file names when it asks SpellModel.lua for its events (M.Want, design 4.3).
 	OWNER = "gear lines",
-	-- The grey of Flat UI's extra lines (Chat.lua:793), the dim of the hit table (HitTable.lua:79), white, and the gain and loss of Flat UI's combat
+	-- The grey of Flat UI's extra lines (Chat.lua:801), the dim of the hit table (HitTable.lua:79), white, and the gain and loss of Flat UI's combat
 	-- numbers (CombatText.lua:889-894).
 	GREY = { 0.8, 0.8, 0.8 }, DIM = { 0.66, 0.68, 0.62 }, WHITE = { 1, 1, 1 }, GAIN = { 0.1, 1, 0.1 }, LOSS = { 1, 0.1, 0.1 },
 	-- The most lines a list holds; the most blocks kept (design 4.6); the action bars of Add the spells of a bar (Cooldowns.lua:127); Spells in an
@@ -128,11 +130,13 @@ local T = {
 	-- that cannot be worn.
 	NO_LINES = { INVTYPE_RELIC = true, INVTYPE_BAG = true, INVTYPE_QUIVER = true, INVTYPE_TABARD = true, INVTYPE_BODY = true, INVTYPE_NON_EQUIP = true,
 		INVTYPE_NON_EQUIP_IGNORE = true },
-	-- The armour and weapon types each class can wear once it has learned them, as the class trainers and weapon masters of the game of old teach
-	-- them (mail at 40 for a hunter and a shaman, plate at 40 for a warrior and a paladin), by the item's classID (Enum.ItemClass: Weapon 2, Armor 4)
-	-- and subclassID (Enum.ItemWeaponSubclass: Axe1H 0, Axe2H 1, Bows 2, Guns 3, Mace1H 4, Mace2H 5, Polearm 6, Sword1H 7, Sword2H 8, Staff 10,
-	-- Unarmed 13, Dagger 15, Thrown 16, Crossbow 18, Wand 19; Enum.ItemArmorSubclass: Cloth 1, Leather 2, Mail 3, Plate 4, Shield 6). A type in red
-	-- that is here is one the player has not learned yet; any other, one the class never learns (Wearable).
+	-- The armour and weapon types each class can wear once it has learned them, as the client's SkillRaceClassInfo and SkillLineAbility give them
+	-- for each class (build 1.60.1.70888, as GrunzForever exports them; both tables agree): mail from level 40 for a hunter and a shaman, plate from
+	-- 40 for a warrior and a paladin, polearms from 20, a shaman's two-hand axes and maces through a talent (not trainable), the rest from the
+	-- weapon masters. By the item's classID (Enum.ItemClass: Weapon 2, Armor 4) and subclassID (Enum.ItemWeaponSubclass: Axe1H 0, Axe2H 1, Bows 2,
+	-- Guns 3, Mace1H 4, Mace2H 5, Polearm 6, Sword1H 7, Sword2H 8, Staff 10, Unarmed 13, Dagger 15, Thrown 16, Crossbow 18, Wand 19;
+	-- Enum.ItemArmorSubclass: Cloth 1, Leather 2, Mail 3, Plate 4, Shield 6). A type in red that is here is one the player has not learned yet; any
+	-- other, one the class never learns (Wearable).
 	LEARNS = {
 		WARRIOR = { [2] = { [0] = true, [1] = true, [2] = true, [3] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true, [10] = true,
 			[13] = true, [15] = true, [16] = true, [18] = true }, [4] = { [1] = true, [2] = true, [3] = true, [4] = true, [6] = true } },
@@ -140,11 +144,11 @@ local T = {
 			[4] = { [1] = true, [2] = true, [3] = true, [4] = true, [6] = true } },
 		HUNTER = { [2] = { [0] = true, [1] = true, [2] = true, [3] = true, [6] = true, [7] = true, [8] = true, [10] = true, [13] = true, [15] = true,
 			[16] = true, [18] = true }, [4] = { [1] = true, [2] = true, [3] = true } },
-		ROGUE = { [2] = { [2] = true, [3] = true, [4] = true, [7] = true, [13] = true, [15] = true, [16] = true, [18] = true },
+		ROGUE = { [2] = { [0] = true, [2] = true, [3] = true, [4] = true, [7] = true, [13] = true, [15] = true, [16] = true, [18] = true },
 			[4] = { [1] = true, [2] = true } },
 		SHAMAN = { [2] = { [0] = true, [1] = true, [4] = true, [5] = true, [10] = true, [13] = true, [15] = true },
 			[4] = { [1] = true, [2] = true, [3] = true, [6] = true } },
-		DRUID = { [2] = { [4] = true, [5] = true, [10] = true, [13] = true, [15] = true }, [4] = { [1] = true, [2] = true } },
+		DRUID = { [2] = { [4] = true, [5] = true, [6] = true, [10] = true, [13] = true, [15] = true }, [4] = { [1] = true, [2] = true } },
 		PRIEST = { [2] = { [4] = true, [10] = true, [15] = true, [19] = true }, [4] = { [1] = true } },
 		MAGE = { [2] = { [7] = true, [10] = true, [15] = true, [19] = true }, [4] = { [1] = true } },
 		WARLOCK = { [2] = { [7] = true, [10] = true, [15] = true, [19] = true }, [4] = { [1] = true } },
@@ -348,7 +352,7 @@ local function Form(state)
 	return Finite(form) and form or 0
 end
 
--- "tank", "healer" or "damage": the role SpellModel read, else ns.PlayerRole's first answer (Core.lua:536-565).
+-- "tank", "healer" or "damage": the role SpellModel read, else ns.PlayerRole's first answer (Core.lua:561-590).
 local function Role(state)
 	local role = state.role
 	if Plain(role, "string") and T.ROLES[role] then
@@ -492,8 +496,8 @@ local function SetOf(class, role, form)
 end
 
 -- Adds to out the keys one item of a set of D.DEFAULTS gives, in the one form tools/dev/make_spelltips.py writes (design 2.1): a key, while known; a
--- list of keys, the first of them known ("Greater Heal, else Heal"); or { key, key ..., needs = key, ["else"] = { key ... } }, each of its keys
--- known while needs is known, else each known key of its else. known says whether the player knows a key's spell.
+-- list of keys, the first of them known ("Greater Heal, else Heal, else Lesser Heal"); or { key, key ..., needs = key, ["else"] = { key ... } },
+-- each of its keys known while needs is known, else each known key of its else. known says whether the player knows a key's spell.
 local function Items(item, known, out)
 	if type(item) == "string" then
 		if known(item) then
@@ -1686,7 +1690,7 @@ local function Put(tooltip, entry)
 end
 
 -- Adds the block once for each build of the tooltip: the same data with the lines of the first call still there is the same build
--- (Chat.lua:787-798). A line the game refuses stops the adding for this build.
+-- (Chat.lua:795-806). A line the game refuses stops the adding for this build.
 local function Add(tooltip, data, block, later)
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	if not ok or not Finite(shown) then

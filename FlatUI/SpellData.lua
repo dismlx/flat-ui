@@ -7,11 +7,13 @@ local _, ns = ...
 -- (github.com/wowsims/forever, MIT licence, Copyright (c) 2022 wowsims team) captured the game's spell rows; the rows of Attack and the
 -- generic shots, the description variables and the talent nodes are from the client tables of build 1.60.1.70888 exported by
 -- GrunzForever (github.com/10igma/GrunzForever, a tool under the MIT licence). Where the server does what the rows do not say, the
--- values come from the in-game measurements of wowsims/forever (docs/evidence), Blizzard's development notes and hotfix posts, the
--- downranking estimate of ForeverChanges (foreverchanges.pro), the Forever hunter wiki (classic-hunter/forever-hunter), gunba's notes on
--- Ice Lance (wow-forever-sim, docs/uncertainties.md) and, for a few spells unmeasured on Forever, Warcraft Tavern's Classic threat guide.
--- The stat keys and rating sizes were checked against data from Efficient Games (https://efficient.games), licensed under CC BY 4.0.
--- No addon's code or data table is used; the values are facts of the game's client and of measurements.
+-- values come from the in-game measurements of wowsims/forever (docs/evidence) and, where nothing was measured, the rules of its
+-- simulator (sim/), Blizzard's development notes and hotfix posts, the downranking estimate of ForeverChanges (foreverchanges.pro), the
+-- Forever hunter wiki (classic-hunter/forever-hunter), gunba's notes on Ice Lance (wow-forever-sim, docs/uncertainties.md) and, for a
+-- few spells unmeasured on Forever, Warcraft Tavern's Classic threat guide and Classic's rule for Power Word: Shield as Icy Veins and
+-- Wowhead Classic give it. The stat keys and rating sizes were checked against data from Efficient Games (https://efficient.games),
+-- licensed under CC BY 4.0. No addon's code or data table is used; the values are facts of the game's client, of measurements and of
+-- the game's rules as these sources state them.
 --
 -- Basis of a value (b): c client data (a row, a curve or the game's text), m measured on Forever, e estimate (shown with ~ before it).
 -- An entry (one spell, every rank): key (English name, lower case; " (pet)" for a pet's spell), pet, school (Lua school index 1-7) or
@@ -283,7 +285,7 @@ D.CLASS.WARRIOR = function()
 			parts = { { "ap", 0.15, g = true, b = "c" } },
 			ranks = { { 402927, 20, bm = { 1 } } } },
 		{ key = "whirlwind", school = 1, cmp = "strike", roll = "special",
-			parts = { { "wpn", 1, per = "target", spd = "norm", h = "main", b = "c" }, { "wpn", 1, per = "target", spd = "norm", h = "off", note = "off hand at half, as the simulator models it", b = "e" } },
+			parts = { { "wpn", 1, per = "target", spd = "norm", h = "main", b = "c" }, { "wpn", 1, per = "target", spd = "norm", h = "off", note = "off hand with the off-hand penalty, as the simulator models it", b = "e" } },
 			ranks = { { 1680, 36 } },
 			threat = { k = "unknown" } },
 	}
@@ -770,7 +772,7 @@ D.CLASS.ROGUE = function()
 				{ 1769, 58, bm = { 80 } },
 			} },
 		{ key = "mutilate", school = 1, cmp = "strike", roll = "special", needs = "dagger",
-			parts = { { "wpn", 0.9, spd = "norm", h = "main", b = "c" }, { "wpn", 0.9, spd = "norm", h = "off", note = "whether the off hand is halved is not known", b = "e" } },
+			parts = { { "wpn", 0.9, spd = "norm", h = "main", b = "c" }, { "wpn", 0.9, spd = "norm", h = "off", note = "whether the off-hand penalty applies is not known", b = "e" } },
 			ranks = {
 				{ 399956, 40, bm = { 44, 44 } },
 				{ 1241582, 50, bm = { 63, 63 } },
@@ -2194,7 +2196,7 @@ D.DEFAULTS = {
 	PALADIN = { damage = { "attack", { "seal of command", "judgement of command", needs = "seal of command", ["else"] = { "seal of righteousness", "judgement of righteousness" } }, "holy strike" }, healer = { "holy light", "flash of light", "holy shock" }, tank = { "attack", "holy shield", "consecration" } },
 	PRIEST = { damage = { "mind blast", "shadow word: pain", "mind flay" }, healer = { { "greater heal", "heal", "lesser heal" }, "flash heal", "renew" } },
 	ROGUE = { damage = { "attack", "sinister strike", "backstab", "mutilate", "eviscerate" } },
-	SHAMAN = { damage = { "lightning bolt", "chain lightning", "earth shock", { "attack", "stormstrike", needs = "stormstrike" } }, healer = { "healing wave", "lesser healing wave", "chain heal" } },
+	SHAMAN = { damage = { "lightning bolt", "chain lightning", "earth shock", "attack", "stormstrike" }, healer = { "healing wave", "lesser healing wave", "chain heal" } },
 	WARLOCK = { damage = { "shadow bolt", "corruption", "immolate" } },
 	WARRIOR = { damage = { "attack", "heroic strike", "mortal strike", "bloodthirst", "whirlwind" }, tank = { "attack", "heroic strike", "sunder armor", "revenge", "shield slam" } },
 }

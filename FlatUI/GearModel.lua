@@ -81,9 +81,10 @@ local _, ns = ...
 -- is left empty. A row is { line, figure, now, with, estimate, basis, perSecond, why }: with is the player with the item in that slot and now the
 -- player without it, which for an item to wear is with what the slot holds now and for a worn item (G.Compare(slot), the Character window) with
 -- that slot empty, so with - now is what the item gives in both; perSecond says the figure is a second (dps, a second, or the threat of what rides
--- on the swings). why, each notCounted and vs, notYet and random are the player's words (random may be true), and quiet marks a why no line
--- should show. Every option a caller passes is read: listVersion, mode, data, guid, most, role, against, facing, rules, lowRank and inputs; any
--- other is ignored. S.stats.per[stat].crit and .spellCrit are percent a point, as SpellModel.lua keeps them.
+-- on the swings). why (a row's: why it has no figure, for threat also a threat not known on Forever), each notCounted and vs, notYet and random are
+-- the player's words (random may be true), and quiet marks a why no line should show. Every option a caller passes is read: listVersion, mode, data,
+-- guid, most, role, against, facing, rules, lowRank and inputs; any other is ignored. S.stats.per[stat].crit and .spellCrit are percent a point, as
+-- SpellModel.lua keeps them.
 
 local G = {}
 ns.GearModel = G
@@ -178,7 +179,7 @@ local K = {
 		stats = "The game has not given your stats yet.", empty = "That slot is empty.",
 		notCompared = "Flat UI cannot work this spell out.", pet = "An item does not change your pet's spells.",
 		rank = "Flat UI's data has no rank of this spell.", inputs = "Flat UI has not read your hit table yet.",
-		withheld = "The game withheld part of your hit table.",
+		withheld = "The game withheld part of your hit table.", threat = "Its threat on Forever is not known.",
 	},
 }
 
@@ -2169,7 +2170,8 @@ end
 
 -- Spells, heals, their periodic and channelled kinds, weapon and attack power strikes and finishers: the sum of the parts on the entry's line, a cast
 -- and a second of casting (of the effect for a DoT, HoT or channel); a next-swing strike a cast only. A strike that needs a weapon its hand lacks, and
--- a spell that needs a dagger or a shield not worn (Wears), deal nothing.
+-- a spell that needs a dagger or a shield not worn (Wears), cannot be made: it deals nothing and lands nothing, so no flat threat rides on it either
+-- (Shield Slam's).
 local function Damage(ctx)
 	local entry, amount, missing = ctx.entry, 0, not Wears(ctx)
 	local spare = MainWeapon(entry)
@@ -2189,7 +2191,7 @@ local function Damage(ctx)
 	end
 	local factor, land = LineFactor(ctx)
 	if missing then
-		factor, land = 0, land or 0
+		factor, land = 0, 0
 	elseif not factor then
 		ctx.why = K.WHY.withheld
 		return
@@ -2459,11 +2461,15 @@ local function ThreatFlags(ctx, T, flat)
 end
 
 -- threat = damage x T x G + the landed share x (F + A x attack power) x G (the design's 2.5); a swing's or shot's a second (damage a second x T x G);
--- Fade's temporary amount alone, with no G. threatSecond: a second of casting or of the effect.
+-- Fade's temporary amount alone, with no G. threatSecond: a second of casting or of the effect. A threat not known on Forever has no figure, and
+-- threatWhy says so.
 local function Threat(ctx)
 	local spec = Table(ctx.entry.threat)
 	local T, F, alone = ThreatParts(ctx, spec)
 	if T == nil then
+		if spec and spec.k == "unknown" then
+			ctx.threatWhy = K.WHY.threat
+		end
 		return
 	end
 	local G = alone and 1 or Multiplier(ctx)
@@ -2527,12 +2533,12 @@ local function RankOf(entry, line)
 	return nil
 end
 
--- The expected values of a line (the design's 2.5): { cast, second, threat, threatSecond, basis, why }, for line { entry, rank, id }, with opts
--- { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table inputs (when none, G.Inputs(), or a read asked
--- for while there is none yet). stats may be a copy G.With or G.Without made: its change (swap) goes into the hit table. basis and estimate are those
--- of cast and second, threatBasis and threatEstimate those of threat and threatSecond (design 3.5); perSecond says the figures ride on the swings or
--- shots, so threat is a second too. why is the player's words (K.WHY): a spell it cannot work out, a pet's spell, no data, no stats, no rank, no hit
--- table, or a part of the table the game withheld.
+-- The expected values of a line (the design's 2.5): { cast, second, threat, threatSecond, basis, why, threatWhy }, for line { entry, rank, id }, with
+-- opts { against, facing, rules, lowRank, inputs }: the rows' choices or the tab's rows, and the hit table inputs (when none, G.Inputs(), or a read
+-- asked for while there is none yet). stats may be a copy G.With or G.Without made: its change (swap) goes into the hit table. basis and estimate are
+-- those of cast and second, threatBasis and threatEstimate those of threat and threatSecond (design 3.5); perSecond says the figures ride on the swings
+-- or shots, so threat is a second too. why is the player's words (K.WHY): a spell it cannot work out, a pet's spell, no data, no stats, no rank, no
+-- hit table, or a part of the table the game withheld; threatWhy why threat alone has no figure (a threat not known on Forever: Whirlwind's).
 function G.Expect(line, state, stats, opts)
 	local result = {}
 	line = Table(line)
@@ -2592,7 +2598,7 @@ function G.Expect(line, state, stats, opts)
 	result.threatBasis = ctx.threatEstimate and "e" or ctx.threatBasis
 	result.threatEstimate = ctx.threatEstimate == true
 	result.perSecond = ctx.perSecond == true
-	result.why = ctx.why
+	result.why, result.threatWhy = ctx.why, ctx.threatWhy
 	return result
 end
 
@@ -2658,8 +2664,8 @@ local function Now(line, state, stats, opts, stamp)
 end
 
 -- The rows of a candidate: { line, now, with, figure, estimate, basis, perSecond, why } for each chosen line, with the basis of its figure (the
--- threat's for threat) and whether its figure is a second. reverse: what a worn item gives, now being the slot empty and with as worn, so with - now
--- reads the same way as for an item to wear.
+-- threat's for threat), whether its figure is a second and why it has none (for threat also threatWhy). reverse: what a worn item gives, now being
+-- the slot empty and with as worn, so with - now reads the same way as for an item to wear.
 local function Rows(chosen, state, stats, state2, stats2, opts, stamp, mode, role, reverse)
 	local rows = {}
 	for _, line in ipairs(chosen) do
@@ -2679,7 +2685,7 @@ local function Rows(chosen, state, stats, state2, stats2, opts, stamp, mode, rol
 				row.basis = Worse(worn.basis, other.basis)
 			end
 			row.perSecond = figure == "dps" or figure == "second" or (figure == "threat" and (worn.perSecond == true or other.perSecond == true))
-			row.why = worn.why or other.why
+			row.why = worn.why or other.why or (figure == "threat" and (worn.threatWhy or other.threatWhy)) or nil
 		end
 		rows[#rows + 1] = row
 	end

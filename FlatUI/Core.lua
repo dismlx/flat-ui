@@ -220,19 +220,24 @@ local ADDON_NAME, ns = ...
 -- again when the row, its page or the module goes off while the variable is still 0.
 -- Inside the game's build of a spell tooltip, through the same post call, Chat and tooltips adds lines with the share of spell damage, spell
 -- healing or attack power the spell adds, what that is with the player's stats, and its threat (AddLine, AddDoubleLine), and inside the build of
--- an item tooltip lines with what wearing the item changes for the spells the player chose (AddLine, AddDoubleLine), each once for each build.
--- For them it reads the player's stats, talents (C_Traits), form, Righteous Fury, the temporary enchant of each weapon and the action slot of a
--- macro, the item's stats (C_Item.GetItemStats) and the lines of the item and of the items the player wears (the data of the build, else
--- C_TooltipInfo.GetHyperlink, and C_TooltipInfo.GetInventoryItem), asks the game once to load an item it has not loaded yet
--- (C_Item.RequestLoadItemDataByID), asks which worn items the game would compare an item with (C_TooltipComparison.GetItemComparisonInfo; never
--- the protected CompareItem), converts ratings and stats with the game's own calls (GetCombatRatingBonusForCombatRatingValue, GetAttackPowerForStat
--- and the others, only while the game gives stats plain), reads once a session the description of one spell (C_Spell.GetSpellDescription) to see
--- whether the game's texts count spell power, and reads the fields processingInfo, supportsItemComparison and suppressAutomaticCompareItem the game
--- keeps on a tooltip it builds (TooltipDataHandler.lua:281, TooltipDataRules.lua:168-176). The spells chosen are kept in FlatUICharDB.gearSpells.
+-- an item tooltip lines with what wearing the item changes for the spells the player chose (AddLine, AddDoubleLine), each once for each build and
+-- only on GameTooltip and ItemRefTooltip.
+-- For them it reads the player's stats, talents (C_Traits), form, Righteous Fury and Shadowform (C_UnitAuras, and for one not found
+-- C_Secrets.ShouldSpellAuraBeSecret), the temporary enchant of each weapon, whether the player uses ammunition (C_PaperDollInfo.AmmoNeeded,
+-- UnitUsesAmmo) and the action slot of a macro, the item's stats (C_Item.GetItemStats) and the lines of the item and of the items the player wears
+-- (the data of the build, else C_TooltipInfo.GetHyperlink, and C_TooltipInfo.GetInventoryItem), asks the game to load an item it has not loaded
+-- yet (C_Item.RequestLoadItemDataByID), asks which worn items the game would compare an item with (C_TooltipComparison.GetItemComparisonInfo;
+-- never the protected CompareItem), converts ratings and stats with the game's own calls (GetCombatRatingBonusForCombatRatingValue,
+-- GetAttackPowerForStat and the others, only while the game gives stats plain), reads once a session the description of one spell
+-- (C_Spell.GetSpellDescription) to see whether the game's texts count spell power, and reads the fields processingInfo, supportsItemComparison
+-- and suppressAutomaticCompareItem the game keeps on a tooltip it builds (TooltipDataHandler.lua:281, TooltipDataRules.lua:168-176). The spells
+-- chosen are kept in FlatUICharDB.gearSpells.
 -- Its Gear comparison window (/flatui gear) is a frame of its own on UIParent, named FlatUIGear in UISpecialFrames so Escape closes it, placed by
--- the movers; it takes an item dropped on it (GetCursorInfo, then ClearCursor) and a spell dropped on it (GetCursorInfo, and GetMacroSpell for a
--- macro: the cursor keeps the spell), and writes GameTooltip for its rows (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and Hide while
--- IsOwned says one of its frames owns it), never in a fight.
+-- the movers. It takes an item dropped on it (GetCursorInfo) and gives one lifted from a bag, the bank or a worn slot back there with ClearCursor,
+-- while C_Cursor.GetCursorItem names that slot and C_Item.IsLocked says the item is still locked in it; any other item, such as one dragged off an
+-- action bar, stays on the cursor, and so does a spell dropped on it (GetCursorInfo, and GetMacroSpell for a macro). It writes GameTooltip for its
+-- rows, its switch and its item (SetOwner, SetSpellByID, SetHyperlink, AddLine, Show, and Hide while IsOwned says one of its frames owns it),
+-- never in a fight.
 -- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
 -- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
 -- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
