@@ -179,12 +179,10 @@ local ADDON_NAME, ns = ...
 -- Its Equipment set slot opens a menu of its own whose lines call C_EquipmentSet.UseEquipmentSet, never in a fight.
 -- Threat list (off by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
 -- Hit table (Minimap and buffs; on by default for a tank or a damage dealer and off for a healer, by ns.PlayerRole below) is a frame of its own on
--- UIParent that takes right clicks alone (no mouse motion, and its other buttons passed through to the world with SetPassThroughButtons, once, out
--- of combat; SetMouseClickEnabled only while it shows), a right-click opening the game's context menu (MenuUtil.CreateContextMenu) of its Text
--- size, whose pick writes that row (ns.Set). It is hung out of combat by SetPoint from a second frame of its own whose corners are set on the
--- player frame's portrait (or Flat UI's picture or body, else the health bar, else PlayerFrame) and on PlayerBottomManagedFrameContainer, or on
--- PlayerCastingBarFrame while Edit Mode locks the cast bar to the player frame (its field attachedToPlayerFrame, read only), else on PlayerFrame;
--- it follows PlayerFrame_AttachCastBar and PlayerFrame_DetachCastBar with hooksecurefunc.
+-- UIParent that takes no mouse, hung out of combat by SetPoint from a second frame of its own whose corners are set on the player frame's portrait
+-- (or Flat UI's picture or body, else the health bar, else PlayerFrame) and on PlayerBottomManagedFrameContainer, or on PlayerCastingBarFrame while
+-- Edit Mode locks the cast bar to the player frame (its field attachedToPlayerFrame, read only), else on PlayerFrame; it follows
+-- PlayerFrame_AttachCastBar and PlayerFrame_DetachCastBar with hooksecurefunc.
 -- Of the game's it only reads, and changes nothing: the place and size of those frames, of PetFrame, TargetFrame, FocusFrame, UIParent and Flat UI's own frames
 -- under the player frame, and the font of the player cast bar's text; the player's level, class, form, power type, combat state, stats, weapon
 -- skills and weapons; the target's level and kind, whether it exists, can be attacked, is dead or is a player, and whether it attacks the player:

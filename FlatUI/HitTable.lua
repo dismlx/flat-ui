@@ -13,35 +13,27 @@ local ADDON_NAME, ns = ...
 -- Dodge, Parry, Glance, Block, Crit, Hit, and Cap, the crit cap of a swing. A crit above the cap turns the crit and the cap yellow; a miss, dodge or
 -- parry down to its floor turns green. A part that does not apply is -, one the game withheld or refused is ?, and /flatui status says which.
 --
--- The frame is a frame of its own on UIParent, in the LOW strata of the player frame (Mainline/PlayerFrame.xml:13), with no name, that takes right
--- clicks alone (its menu, below), in a flat background with a thin border of the hud page's look (ns.Outline, made inside ns.EachPart). With no spot
--- saved in the movers it hangs from a rail, a second frame of its own with two points: its top left corner on the left edge Flat UI draws for the
--- player frame (the body of One frame, else Flat UI's picture while it draws one, else the game's portrait, PlayerFrame.xml:23-30, else the health
--- bar, else the player frame) and its bottom right corner on the frame the game hangs the pet frame and the totems in,
--- PlayerBottomManagedFrameContainer (PlayerFrame.xml:477-484, Shared/PlayerFrameTemplates.xml:4-31), or on the player's cast bar while Edit Mode
--- locks it to the player frame (Shared/PlayerFrame.lua:18-48), else on the player frame. The table's top left corner is the rail's bottom left one, a
--- gap lower. So its left edge is the portrait's in either Frame style, and the game lowers it as a pet frame, totems or the locked cast bar come, in
--- a fight too, with no call from Flat UI. The gap also clears, while the container is at its smallest so it holds with a pet or without one, the
--- lowest line Flat UI draws on the player frame (the borders of its power bar, health bar and picture, the body of One frame, the druid's mana bar of
--- UnitDruidMana.lua) and the icons of a Cooldown icons row hung under the player frame (Cooldowns.lua); and the auras a pet frame hangs under the
--- container, and the spell name Flat UI's cast bar size hangs under the locked bar. While the target frame or the focus frame stands beside the
--- player frame, as Edit Mode's Classic layout puts the target frame 14 units right of it
--- (Blizzard_EditMode/Mainline/EditModePresetLayouts.lua:1049-1075), the table ends before it, its text made smaller: their auras and cast bar hang
--- under them and are drawn over the table (frameLevel 500, Mainline/TargetFrame.xml:52; Mainline/TargetFrame.lua:534-558, 830-851). It ends before
--- the edge of the screen the same way. Points are set out of combat only, as Flat UI hangs every frame of its own from the player frame (Core.lua); a
--- change asked for in a fight waits once for its end (ns.OutOfCombat). /flatui move places it (FlatUIHitTable in Movers.lua, with the table as its
--- box), and a spot saved there wins.
+-- The frame is a frame of its own on UIParent, in the LOW strata of the player frame (Mainline/PlayerFrame.xml:13), with no mouse and no name, in a
+-- flat background with a thin border of the hud page's look (ns.Outline, made inside ns.EachPart). With no spot saved in the movers it hangs from a
+-- rail, a second frame of its own with two points: its top left corner on the left edge Flat UI draws for the player frame (the body of One frame,
+-- else Flat UI's picture while it draws one, else the game's portrait, PlayerFrame.xml:23-30, else the health bar, else the player frame) and its
+-- bottom right corner on the frame the game hangs the pet frame and the totems in, PlayerBottomManagedFrameContainer (PlayerFrame.xml:477-484,
+-- Shared/PlayerFrameTemplates.xml:4-31), or on the player's cast bar while Edit Mode locks it to the player frame (Shared/PlayerFrame.lua:18-48), else
+-- on the player frame. The table's top left corner is the rail's bottom left one, a gap lower. So its left edge is the portrait's in either Frame
+-- style, and the game lowers it as a pet frame, totems or the locked cast bar come, in a fight too, with no call from Flat UI. The gap also clears,
+-- while the container is at its smallest so it holds with a pet or without one, the lowest line Flat UI draws on the player frame (the borders of its
+-- power bar, health bar and picture, the body of One frame, the druid's mana bar of UnitDruidMana.lua) and the icons of a Cooldown icons row hung
+-- under the player frame (Cooldowns.lua); and the auras a pet frame hangs under the container, and the spell name Flat UI's cast bar size hangs under
+-- the locked bar. While the target frame or the focus frame stands beside the player frame, as Edit Mode's Classic layout puts the target frame 14
+-- units right of it (Blizzard_EditMode/Mainline/EditModePresetLayouts.lua:1049-1075), the table ends before it, its text made smaller: their auras
+-- and cast bar hang under them and are drawn over the table (frameLevel 500, Mainline/TargetFrame.xml:52; Mainline/TargetFrame.lua:534-558, 830-851).
+-- It ends before the edge of the screen the same way. Points are set out of combat only, as Flat UI hangs every frame of its own from the player frame
+-- (Core.lua); a change asked for in a fight waits once for its end (ns.OutOfCombat). /flatui move places it (FlatUIHitTable in Movers.lua, with the
+-- table as its box), and a spot saved there wins.
 --
 -- Its text size is Text size (hud.hitTableSize: 70 to 200%, its ids the percent in text; a number saved while it was a slider, until 0.5.26, reads
--- as the nearest, Core.lua, Renamed), and a menu of its own too: a right-click on the table opens the game's context menu
--- (MenuUtil.CreateContextMenu, Blizzard_Menu/MenuUtil.lua:151-167, as Forever's character sheet opens one, Camelot/PaperDollFrame.lua:2618) with
--- Text size's choices, the one in use ticked, and a pick saves the row (ns.Set), which refreshes the hud module and so the table at once, and has an
--- open options window read its rows again (ns.RefreshPanel). The table takes right clicks only. It takes no mouse motion, so the world under it keeps
--- its mouseover, and its other buttons pass through to the world (SetPassThroughButtons, as the map's pins pass theirs,
--- Blizzard_MapCanvas/MapCanvas_DataProviderBase.lua:290-300), so a left click or drag there turns the camera as before; the game refuses that call
--- in a fight, so it is made once out of combat (ns.OutOfCombat) and the table takes no click before. It takes clicks only while it shows
--- (SetMouseClickEnabled, which a frame of the addon's own that is not protected takes in a fight too), so an empty spot never catches a right-click;
--- /flatui move puts its box over it.
+-- as the nearest, Core.lua, Renamed), set in the options window or Flat UI setup; the table takes no mouse, so clicks and drags on it reach the
+-- world under it.
 --
 -- What it hears: a frame of its own registers the events that change the numbers only while the table is wanted, the unit events for the player
 -- and the target alone (RegisterUnitEvent), as the character sheet registers its own (Camelot/PaperDollFrame.lua:314-351). An event only marks the
@@ -155,9 +147,6 @@ local LINE_NO_LEVEL = "Hit table: hidden, since the game does not give your leve
 local LINE_FACING = "Hit table: the game did not say whether your target attacks you, so the table counts you behind it."
 local LINE_OFF_CRIT = "Hit table: the game gives one crit chance, your main hand's, so crit talents for one kind of weapon may make your off hand's crit differ."
 local LINE_FIT = "Hit table: the text is %d%% of Text size, so the table ends before the %s. /flatui move places it elsewhere."
--- The title of the menu of a right-click on the table, and the mouse buttons that pass through it to the world: all but the right one.
-local MENU_TITLE = "Hit table text size"
-local PASS = { "LeftButton", "MiddleButton", "Button4", "Button5" }
 -- At For tanks and damage dealers: on or off, the role, and what it was read from (the third answer of ns.PlayerRole, a phrase such as "your group
 -- role" or "most points in Holy"), as nameplate threat names its own (PlateThreat.lua); setup's sentence, a suggestion, is not said here.
 local LINE_ROLE = "Hit table: %s, since you count as %s."
@@ -172,11 +161,10 @@ local IsSecret, Finite = ns.IsSecret, ns.Finite
 -- each unit event counts for, alone: the unit events the client registered for those units alone, dirty: the table waits for the next frame.
 -- fighting: between PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED. dead: the target was dead at the last look. read: the last numbers
 -- (HitTableCalc.lua). laid: the key of the layout. placed, edge, anchor: where the table was put; where: what /flatui status says of it; later: a
--- place waits for the end of the fight. room: the width the table may take under the player frame, in its own units, nil for no bound; roomBy: what
--- ends it; fit: the share of Text size the text was made to end there, nil while it has its size. hooked: the cast bar's lock is followed.
--- sansRefused: the game refused Flat UI Sans. passes: the buttons but the right one pass through the table (false while that waits for the end of a
--- fight or the game refused it); clicks: the table takes clicks now. role and by: the player's role at the last look ("tank", "healer" or "damage",
--- nil before the first) and what ns.PlayerRole read it from; recheck: an event that can change the role came, so the next frame looks again.
+-- place waits for the end of the fight. room: the width the table may take under the player frame, in its own units, nil for no bound; roomBy:
+-- what ends it; fit: the share of Text size the text was made to end there, nil while it has its size. hooked: the cast bar's lock is followed.
+-- sansRefused: the game refused Flat UI Sans. role and by: the player's role at the last look ("tank", "healer" or "damage", nil before the
+-- first) and what ns.PlayerRole read it from; recheck: an event that can change the role came, so the next frame looks again.
 local S = { heads = {}, rows = {}, widths = {}, measures = {}, measured = 0, units = {}, alone = {}, hearing = false, fighting = false, dirty = false,
 	later = false, recheck = false }
 local Update, Later, Off, Dirty, Apply
@@ -949,78 +937,6 @@ local function Fill(columns, lines, title, note)
 	end
 end
 
--- Menu ------------------------------------------------------------------------------------------------------------------------------------------------
-
--- The table takes clicks only while it shows, and only once its other buttons pass through it (Mouse): on a frame of the addon's own that is not
--- protected, so in a fight too.
-local function Clicks(on)
-	on = on == true and S.passes == true
-	if S.clicks ~= on and pcall(S.frame.SetMouseClickEnabled, S.frame, on) then
-		S.clicks = on
-	end
-end
-
--- Shows the table, its opacity 1, or hides it while it stays laid out, its opacity 0 (Update), and it takes clicks while it shows.
-local function Showing(on)
-	S.frame:SetAlpha(on and 1 or 0)
-	Clicks(on)
-end
-
--- A size picked in the menu: saved as Text size (ns.Set, which refreshes the hud module and so the table at once), and an open options window reads
--- its rows again.
-local function Pick(id)
-	ns.Set(KEY .. ".hitTableSize", id)
-	if type(ns.RefreshPanel) == "function" then
-		ns.RefreshPanel()
-	end
-end
-
--- The game's context menu at the cursor, owned by the table, with Text size's choices (Config.lua), the one in use ticked; nothing on a client
--- without it.
-local function Menu()
-	local util = type(MenuUtil) == "table" and not IsSecret(MenuUtil) and MenuUtil or nil
-	local def = ns.Def(KEY .. ".hitTableSize")
-	if not (util and type(util.CreateContextMenu) == "function" and def) then
-		return
-	end
-	util.CreateContextMenu(S.frame, function(_, root)
-		root:CreateTitle(MENU_TITLE)
-		for _, choice in ipairs(ns.Choices(def)) do
-			local id = choice[1]
-			root:CreateRadio(choice[2], function()
-				return tostring(Opt("hitTableSize")) == id
-			end, function()
-				Safe(Pick, id)
-			end)
-		end
-	end)
-end
-
--- A right-click on the table opens the menu.
-local function MouseUp(_, button)
-	if button == "RightButton" then
-		Safe(Menu)
-	end
-end
-
--- Once, out of combat: every button but the right one passes through the table to the world, it takes no mouse motion, and a right-click opens the
--- menu; then it takes clicks while it shows. A client that refuses either call leaves the table without the mouse, and the row alone sets the size.
-local function Mouse()
-	if S.passes ~= nil then
-		return
-	end
-	S.passes = false
-	ns.OutOfCombat(function()
-		local frame = S.frame
-		if not (pcall(frame.SetPassThroughButtons, frame, unpack(PASS)) and pcall(frame.SetMouseMotionEnabled, frame, false)) then
-			return
-		end
-		frame:SetScript("OnMouseUp", MouseUp)
-		S.passes = true
-		Clicks(Shown(frame) and frame:GetAlpha() > 0)
-	end)
-end
-
 -- True while Show lets the table show: always, in combat, or with an enemy targeted, one that can be attacked and is alive (as the Threat list
 -- tells an enemy, Threat.lua, T.Enemy, without leaving out players, since a duel's foe can be attacked).
 local function Allowed()
@@ -1045,7 +961,7 @@ Update = function(force)
 	S.dead = Ask(UnitIsDeadOrGhost, "target") == true
 	local allowed = Allowed()
 	if not allowed and S.laid and not force then
-		Showing(false)
+		S.frame:SetAlpha(0)
 		return
 	end
 	local read = calc.Read({ lines = Opt("hitTableLines"), special = Opt("hitTableSpecial") ~= false, against = Opt("hitTableAgainst"),
@@ -1065,7 +981,7 @@ Update = function(force)
 	end
 	Layout(g, lines)
 	Fill(columns, lines, title, note)
-	Showing(allowed and #lines > 0)
+	S.frame:SetAlpha(allowed and #lines > 0 and 1 or 0)
 end
 
 -- Events ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -1244,8 +1160,7 @@ local function Build()
 	for index = 1, #COLUMNS do
 		heads[index] = Text(frame, "RIGHT")
 	end
-	S.frame, S.rail, S.outline, S.title, S.note, S.probe, S.heads, S.clicks = frame, rail, outline, title, note, probe, heads, false
-	Mouse()
+	S.frame, S.rail, S.outline, S.title, S.note, S.probe, S.heads = frame, rail, outline, title, note, probe, heads
 end
 
 -- The cast bar's lock changed, the unit frames were refreshed, or the movers set or put back the spot: the table is placed again, out of combat.

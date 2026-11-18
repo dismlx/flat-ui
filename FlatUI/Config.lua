@@ -55,9 +55,8 @@ local KEPT = "Not applied while Leave the game's action bars alone is on."
 local KEPT_XP = "On the game's bar, not applied while Leave the game's action bars alone is on."
 -- Where a line of text around the minimap goes (MapText.lua).
 local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the map" } }
--- The text sizes of the hit table, under the player frame and on enemy tooltips (HitTable.lua, HitTableTip.lua), and of the menu a right-click on
--- the table opens (HitTable.lua, Menu). Ids are the percent in text; a number saved before 0.5.26, when Text size was a slider of 50 to 200%, reads
--- as the nearest of them (Core.lua, Renamed).
+-- The text sizes of the hit table, under the player frame and on enemy tooltips (HitTable.lua, HitTableTip.lua). Ids are the percent in text; a
+-- number saved before 0.5.26, when Text size was a slider of 50 to 200%, reads as the nearest of them (Core.lua, Renamed).
 local HIT_TABLE_SIZES = { { "70", "70%" }, { "80", "80%" }, { "90", "90%" }, { "100", "100%" }, { "110", "110%" }, { "125", "125%" },
 	{ "150", "150%" }, { "175", "175%" }, { "200", "200%" } }
 -- When a frame of When shown on the Fading page is at full opacity; at other times it fades (Fade.lua has the rules).
@@ -1987,7 +1986,7 @@ ns.PAGES = {
 			choices = { { "sans", "Flat UI Sans" }, { "game", "Game font" } },
 			tip = "Flat UI Sans is IBM Plex Sans. A language it has no letters for keeps the game font." },
 		{ key = "hitTableSize", kind = "choice", default = "100", label = "Text size", choices = HIT_TABLE_SIZES,
-			tip = "100% is 11 px. A right-click on the table opens the same sizes. While the target frame stands right beside your player frame, the text gets smaller so the table ends before it.",
+			tip = "100% is 11 px. While the target frame stands right beside your player frame, the text gets smaller so the table ends before it.",
 			needs = "hitTable", needsIn = { "role", "on" } },
 		{ key = "hitTableBack", kind = "bool", default = true, label = "Background and border", needs = "hitTable", needsIn = { "role", "on" },
 			tip = "A flat background with a thin border, in the colours of the Flat UI page, or of Own border and background on Minimap and buffs." },

@@ -1,7 +1,7 @@
 ## 0.5.26
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
-- **Hit table**, **Text size** is now a dropdown of sizes, 70%, 80%, 90%, 100%, 110%, 125%, 150%, 175% and 200%, in place of the slider; a size you saved with the slider reads as the nearest of them (a tie as the larger). A right-click on the hit table under the player frame opens a menu of the same sizes, ticked at the one in use: a pick resizes the table at once, is kept with your profile and shows on the row. Left clicks and drags on the table still reach the world under it, as does the mouse passing over it; the table takes the right-click only while it shows, and its box in `/flatui move` is as before. New row **Text size on enemy tooltips** (100%, the same sizes, shown while **On enemy tooltips** is on) sizes the hit table's lines on an enemy's tooltip alone: the tooltip's other lines, and every tooltip after it, keep the game's size.
+- **Hit table**, **Text size** is now a dropdown of sizes, 70%, 80%, 90%, 100%, 110%, 125%, 150%, 175% and 200%, in place of the slider; a size you saved with the slider reads as the nearest of them (a tie as the larger). A pick resizes the table at once and is kept with your profile. New row **Text size on enemy tooltips** (100%, the same sizes, shown while **On enemy tooltips** is on) sizes the hit table's lines on an enemy's tooltip alone: the tooltip's other lines, and every tooltip after it, keep the game's size.
 
 ## 0.5.25
 
