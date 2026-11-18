@@ -92,6 +92,7 @@ AuraTime.lua
 XpStats.lua
 XpBar.lua
 QuestCount.lua
+QuestieSkin.lua
 MapText.lua
 ErrorFilter.lua
 ScreenText.lua

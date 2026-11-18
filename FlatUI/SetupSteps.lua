@@ -704,6 +704,7 @@ ns.SETUP_STEPS = {
 		{ "hud.trackerPanel", "c", "mock-objective" },
 		{ "hud.trackerHeaderSize", "o", "mock-objective" },
 		{ "hud.trackerCombat", "r", "mock-objective" },
+		{ "hud.trackerQuestie", "o", "behaviour", "Gives the Questie addon's quest tracker the look of the objective tracker, when Questie is loaded." },
 		{ "hud.lootWindow", "c", "mock-loot" },
 		{ "hud.lootRolls", "c", "mock-loot" },
 		{ "hud.lootQualityText", "o", "mock-loot" },

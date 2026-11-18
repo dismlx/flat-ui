@@ -1888,6 +1888,9 @@ ns.PAGES = {
 		{ key = "trackerPanel", kind = "bool", default = false, label = "Tracker background" },
 		{ key = "trackerHeaderSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Heading size" },
 		{ key = "trackerCombat", kind = "number", default = 100, min = 0, max = 100, step = 5, unit = "%", label = "Opacity in combat" },
+		-- QuestieSkin.lua: the same rows, and Flat UI's fonts, on the Questie addon's tracker.
+		{ key = "trackerQuestie", kind = "bool", default = true, label = "Questie's tracker",
+			tip = "Gives the quest tracker of the Questie addon the look of the rows above: background, headings, Heading size on its zone headings, item buttons and Opacity in combat, and the fonts of the Fonts page while that page is on. Needs Questie: without it this row does nothing. Off gives Questie its own look back." },
 		{ section = "Loot" },
 		{ key = "lootWindow", kind = "bool", default = true, label = "Loot window", tip = "Flat window with thin borders on the window, the cards and the item slots." },
 		{ key = "lootRolls", kind = "bool", default = true, label = "Loot rolls", tip = "Thin border and flat timer bar on each roll." },

@@ -1453,7 +1453,7 @@ AREAS = [
         TrackerShare TrackerGroup TrackerClicks Pulse Items"""),
     ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
         BagsLayout BagsWindow BagsBank BagsTooltip Windows ItemMarks CharacterDurability Hud MapButtons
-        AuraTime XpStats XpBar QuestCount MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat
+        AuraTime XpStats XpBar QuestCount QuestieSkin MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat
         ChatText ChatTips ChatLinks ItemCompare ChatHistory SpellData SpellModel GearModel GearAvoid SpellLines GearLines GearWindow
         ItemIndex GearSearch GearButton Movers MoversMode MoversSnap Tooltip"""),
     ("errands", "Errands, panels and world", """Sparkle SparkleGlow CameraZoom CursorRing MountKey Errands ErrandsMerchant
