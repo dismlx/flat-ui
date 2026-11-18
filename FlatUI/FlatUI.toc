@@ -98,6 +98,7 @@ ScreenText.lua
 MeterClear.lua
 HitTableCalc.lua
 HitTable.lua
+HitTableTip.lua
 Fade.lua
 Chat.lua
 ChatText.lua

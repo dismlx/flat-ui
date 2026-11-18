@@ -166,7 +166,12 @@ local ADDON_NAME, ns = ...
 -- the player's threat situation on it (UnitThreatSituation), else whether its target is the player (UnitIsUnit); and, while its row is For tanks
 -- and damage dealers, the player's role (ns.PlayerRole: the group role, a tank stance, form or aura, the points spent in each talent tree of the set
 -- of talents in use, as last read while no pick waited unapplied on it in the talent window, the class), read again after each event the hud module
--- hears that can change it.
+-- hears that can change it. Its lines on an enemy's tooltip (HitTableTip.lua, On enemy tooltips, by the role too by default) are added to
+-- GameTooltip (AddDoubleLine, AddLine) from the chat module's post call while that module is on, for a unit the player can attack that is not
+-- dead: they read the tooltip's unit (GetUnit under pcall, else UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level
+-- and kind, whether it attacks the player, the combat state (InCombatLockdown, UnitAffectingCombat, C_Secrets.ShouldUnitStatsBeSecret) and the
+-- stats the table reads (ns.HitTableCalc, C.Inputs with spec.unit, C.Target, C.Front, C.Table), those out of a fight only; in one they count the
+-- last plain read, from before it, and say so.
 -- Healer mana (off by default) is a window of its own on UIParent; it only reads mana (UnitPowerPercent) and changes nothing. The dispel border, the
 -- debuff type icon and the raid marker of the party and raid frames, the leader and assistant icons of the raid frames and the dispel border of the
 -- player, target and focus frames, and the heal over time squares of the party and raid frames, are textures of Flat UI's own over the game's frames, and the outline of your target on the party frames is a
