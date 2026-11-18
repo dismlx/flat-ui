@@ -234,7 +234,7 @@ end
 
 -- The enemy the table is worked out against: level, unknown (shown ??), kind ("boss", "elite"... from ns.UnitKind), player, none (no enemy targeted:
 -- one of the player's level), boss (Against a boss), and enemy: the target can be attacked and is alive. against is "boss", "level" (an enemy of the
--- player's level whatever is targeted, as the gear comparison's Against counts below level 60) or anything else for the target.
+-- player's level whatever is targeted, for the gear comparison's Against) or anything else for the target.
 function C.Target(against, level)
 	local target = { level = level }
 	target.enemy = Ask(UnitExists, "target") == true and Ask(UnitCanAttack, "player", "target") == true
@@ -484,8 +484,9 @@ end
 -- Reads the game for the table: everything C.Table needs, nothing worked out. These are the reads the hit table always made, in the same order.
 -- spec = { lines (Attacks), against, facing, kinds, rangedWithout }. spec.kinds, when given, is the set of kinds to read ({ melee = true, ranged =
 -- true, spell = true }) in place of C.Kinds(spec.lines, class, power); spec.rangedWithout reads the ranged kind with no ranged weapon worn: skill
--- level x 5, the ranged hit and the ranged crit (a judgement's line: the judgements roll the ranged hit and crit, and which weapon skill counts
--- without a ranged weapon no source says). The answer: { gaps, assumed, level, class, power, feral, target, front, facingUnsure, kinds, agility,
+-- level x 5, the ranged hit and the ranged crit (a judgement's line: the client's rows of the damaging judgements roll on the ranged table,
+-- DefenseType 3 of SpellCategories, and which weapon skill counts without a ranged weapon no source says). The answer: { gaps, assumed, level,
+-- class, power, feral, target, front, facingUnsure, kinds, agility,
 -- melee = { expertise, offExpertise, crit, skill, sheetSkill, line, hit, dual, offSkill, offLine, offHit } (nil without melee),
 -- ranged = { line, unknown, skill, sheetSkill, hit, crit, noWeapon } (nil without ranged), spell = { hit, crit } (nil without spells) }, with gaps
 -- and assumed alone while the player's level cannot be read. sheetSkill is the skill the sheet's crit was read with (WeaponCrit): a caller that
