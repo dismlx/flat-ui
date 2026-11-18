@@ -251,7 +251,10 @@ local function CanUse(id, rec, level, firstAid)
 			return false
 		end
 		local ok, usable = pcall(C_Item.IsUsableItem, id)
-		return ok and usable and not Secret(usable) and true or false
+		if not ok or Secret(usable) then
+			return false
+		end
+		return usable and true or false
 	end
 	return true
 end
@@ -266,9 +269,11 @@ end
 
 -- The order of items of a kind: conjured first (option), then the most restored (for buff food: the most of the
 -- chosen stat, or the strongest buff), then the lowest item ID, so that two items alike always come in one order
--- whatever the counts in the bags.
+-- whatever the counts in the bags. Conjured first leaves the healing potions out: their conjured ones (the
+-- Perishable potions, Lily Root) share the two-minute potion cooldown, so a weak one first would spend that cooldown
+-- on a small heal in a fight. Mana gems keep it: they have a cooldown of their own, apart from the potions'.
 local function Sorter(kind, stat)
-	local conjuredFirst = Opt("conjuredFirst")
+	local conjuredFirst = Opt("conjuredFirst") and kind ~= "heal"
 	return function(a, b)
 		local ra, rb = ITEMS[a], ITEMS[b]
 		if conjuredFirst then
@@ -383,7 +388,9 @@ end
 -- The lines of one press run in order, each a /use (SlashCommands.lua, SLASH_COMMAND.USE, then SecureCmdUseItem,
 -- ChatFrameUtil.lua:1228), and each item's spell is instant (the generator keeps cd only for an item whose spell has
 -- a cast time of 0, SpellMisc and SpellCastTimes): the best one's use starts the category's cooldown, so the next
--- line's item is "not ready yet" (LE_GAME_ERR_ITEM_COOLDOWN, UIErrorsFrame.lua:72) and nothing more is used. When
+-- line's item is "not ready yet" (LE_GAME_ERR_ITEM_COOLDOWN, UIErrorsFrame.lua:72) and nothing more is used. Should
+-- the client send the next line's use before it has heard of that cooldown, the server holds the category's cooldown
+-- and refuses it there with the same error, so one press uses at most one item of the category. When
 -- the best is gone from the bags its line does nothing and the next one fires: that is the point, a press in a
 -- fight still works after the best runs out and before the macro can be rewritten. Bandages, food and drink get
 -- the best item only (bandages share no cooldown; food and drink cannot be used in a fight).
@@ -574,7 +581,7 @@ local function WriteMacro(kind, body)
 	end
 end
 
-local function RemoveMacro(kind)
+local function RemoveMacro(kind, offBody)
 	local name = INFO[kind].macro
 	local index, current = FindMacro(name)
 	if not index then
@@ -585,6 +592,10 @@ local function RemoveMacro(kind)
 		return
 	end
 	if OnBar(index, name) then
+		-- Kept for now, but it no longer uses an item: a press clicks the kind's button, which says it is off.
+		if offBody and (current or ""):gsub("%s+$", "") ~= offBody then
+			Call(EditMacro, index, nil, nil, offBody)
+		end
 		waitingDelete = true
 		SayOnce("bar:" .. kind, "\"" .. name .. "\" is turned off but is on an action bar (or the cursor), so it stays "
 			.. "for now. Take it off the bar and Provisions deletes it.")
@@ -739,7 +750,7 @@ Run = function()
 		if on then
 			WriteMacro(kind, body)
 		else
-			RemoveMacro(kind)
+			RemoveMacro(kind, Body(kind, {}))
 		end
 	end
 	if events then

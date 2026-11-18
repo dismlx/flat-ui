@@ -1,16 +1,20 @@
 <Bindings>
-	<Binding name="CLICK ProvisionsHealButton:LeftButton" header="PROVISIONS" category="ADDONS">
+	<!-- One key per kind, each clicking that kind's secure button (Core.lua). The category is a section of its own in
+	     the game's Key Bindings, titled Provisions: the game names a section by the global its category names, else by
+	     the category itself (Blizzard_SettingsDefinitions_Frame/Keybindings.lua, GetBindingCategoryName), and shows a
+	     header only as a gap, so "ADDONS" would leave these keys unnamed among other addons' keys. -->
+	<Binding name="CLICK ProvisionsHealButton:LeftButton" header="PROVISIONS" category="Provisions">
 	</Binding>
-	<Binding name="CLICK ProvisionsManaButton:LeftButton" category="ADDONS">
+	<Binding name="CLICK ProvisionsManaButton:LeftButton" category="Provisions">
 	</Binding>
-	<Binding name="CLICK ProvisionsStoneButton:LeftButton" category="ADDONS">
+	<Binding name="CLICK ProvisionsStoneButton:LeftButton" category="Provisions">
 	</Binding>
-	<Binding name="CLICK ProvisionsFoodButton:LeftButton" category="ADDONS">
+	<Binding name="CLICK ProvisionsFoodButton:LeftButton" category="Provisions">
 	</Binding>
-	<Binding name="CLICK ProvisionsDrinkButton:LeftButton" category="ADDONS">
+	<Binding name="CLICK ProvisionsDrinkButton:LeftButton" category="Provisions">
 	</Binding>
-	<Binding name="CLICK ProvisionsBandageButton:LeftButton" category="ADDONS">
+	<Binding name="CLICK ProvisionsBandageButton:LeftButton" category="Provisions">
 	</Binding>
-	<Binding name="CLICK ProvisionsBuffFoodButton:LeftButton" category="ADDONS">
+	<Binding name="CLICK ProvisionsBuffFoodButton:LeftButton" category="Provisions">
 	</Binding>
 </Bindings>

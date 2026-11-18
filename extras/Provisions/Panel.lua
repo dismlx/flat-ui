@@ -54,13 +54,17 @@ local function Check(parent, label, onClick)
 	return c
 end
 
+-- An item's name; one the game has not loaded yet is asked for once (GET_ITEM_INFO_RECEIVED then refreshes the
+-- panel), so a load that fails cannot start a loop of asks and refreshes.
+local asked = {}
 local function ItemName(id)
 	if C_Item and C_Item.GetItemNameByID then
 		local ok, name = pcall(C_Item.GetItemNameByID, id)
 		if ok and type(name) == "string" and name ~= "" then
 			return name
 		end
-		if C_Item.RequestLoadItemDataByID then
+		if C_Item.RequestLoadItemDataByID and not asked[id] then
+			asked[id] = true
 			pcall(C_Item.RequestLoadItemDataByID, id)
 		end
 	end
@@ -357,7 +361,7 @@ function ns.MakePanel()
 		Changed()
 	end)
 	optionWidgets.bandageSelf:SetPoint("TOPLEFT", buff, "BOTTOMLEFT", -2, -6)
-	optionWidgets.conjured = Check(panel, "Conjured items first (they are free and vanish)", function(on)
+	optionWidgets.conjured = Check(panel, "Conjured food, water and mana gems first (free; they vanish)", function(on)
 		ns.cdb.conjuredFirst = on
 		Changed()
 	end)
@@ -371,7 +375,7 @@ function ns.MakePanel()
 	local foot = Text(panel, "GameFontDisableSmall")
 	foot:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 14, 12)
 	foot:SetWidth(WIDTH - 28)
-	foot:SetText("Drag an icon to an action bar, or bind keys in Key Bindings > AddOns > Provisions. "
+	foot:SetText("Drag an icon to an action bar, or bind keys in Key Bindings > Provisions. "
 		.. "Nothing changes in a fight: the game forbids it.")
 
 	-- The entry in the game's Settings, AddOns list: a page of its own with a button that opens the panel.
@@ -385,7 +389,7 @@ function ns.MakePanel()
 		body:SetWidth(560)
 		body:SetText("One button for each kind of consumable: healing potion, mana potion, healthstone, food, drink, "
 			.. "bandage and buff food. Each is a macro of your character (Prov Heal and so on) and a key binding "
-			.. "(Key Bindings > AddOns > Provisions), always on the best item in your bags. Type /prov to open the panel.")
+			.. "(Key Bindings > Provisions), always on the best item in your bags. Type /prov to open the panel.")
 		local open = Make("Button", page, "UIPanelButtonTemplate")
 		open:SetSize(160, 26)
 		open:SetPoint("TOPLEFT", body, "BOTTOMLEFT", 0, -14)
@@ -426,7 +430,7 @@ SlashCmdList.PROVISIONS = function()
 	Toggle()
 end
 
--- Key Bindings > AddOns > Provisions (Bindings.xml).
+-- Key Bindings > Provisions (Bindings.xml).
 BINDING_HEADER_PROVISIONS = "Provisions"
 for _, kind in ipairs(KINDS) do
 	_G["BINDING_NAME_CLICK " .. INFO[kind].button .. ":LeftButton"] = INFO[kind].label

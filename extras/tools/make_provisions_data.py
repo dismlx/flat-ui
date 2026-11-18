@@ -2,7 +2,9 @@
 """Write extras/Provisions/Data.lua from the GrunzForever export of the WoW: Forever client.
 
 The export (MIT) is a SQLite file of the client's own DB2 tables with their hotfixes applied. Every consumable is
-classified from those tables, never by its name (a name is read only to drop the client's test items):
+classified from those tables, never by its name (a name is read only to drop the client's test items). The items
+read are those with an on-use effect of the consumable or miscellaneous class, and conjured items of any class (Mana
+Agate is of class 4 in the client); trade goods (raw fish, kept for cooking) and quest items are left out:
 
   heal     an on-use item whose spell heals the player at once (Effect HEAL on the caster); amount = the mean heal
            (the spell's base points: the variance is spread evenly on both sides of it)
@@ -32,8 +34,11 @@ DEFAULT_DB = ("/tmp/claude-0/-workspace-flat-ui/1819971d-cb59-55bd-aea4-74e460d4
               "dl_grunz_sqlite/wow_wowf_1.60.1.70888.sqlite")
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Provisions", "Data.lua")
 
-# Item.ClassID of consumables; ItemEffect.TriggerType of an on-use effect.
+# Item.ClassID of consumables and of miscellaneous items (holiday food and drink); ItemEffect.TriggerType of an
+# on-use effect. An item of another class counts only when it is conjured: Mana Agate (5514) is of class 4 (armor,
+# miscellaneous) in the client, while trade goods (raw fish, kept for cooking) and quest items are left out.
 CLASS_CONSUMABLE = 0
+CLASS_MISCELLANEOUS = 15
 TRIGGER_ON_USE = 0
 # ItemSparse.Flags[0] bits.
 ITEM_FLAG_CONJURED = 0x2
@@ -171,11 +176,11 @@ def main(argv):
 
     rows = con.execute(
         "SELECT i.ID, s.Display_lang, s.RequiredLevel, s.RequiredSkill, s.RequiredSkillRank, s.Flags, "
-        "e.SpellID, e.SpellCategoryID, e.CategoryCoolDownMSec "
+        "e.SpellID, e.SpellCategoryID, e.CategoryCoolDownMSec, i.ClassID "
         "FROM Item i JOIN ItemSparse s ON s.ID = i.ID JOIN ItemXItemEffect x ON x.ItemID = i.ID "
         "JOIN ItemEffect e ON e.ID = x.ItemEffectID "
-        "WHERE i.ClassID = ? AND e.TriggerType = ? ORDER BY i.ID, e.LegacySlotIndex, e.ID",
-        (CLASS_CONSUMABLE, TRIGGER_ON_USE)).fetchall()
+        "WHERE e.TriggerType = ? ORDER BY i.ID, e.LegacySlotIndex, e.ID",
+        (TRIGGER_ON_USE,)).fetchall()
 
     by_item = collections.OrderedDict()
     for row in rows:
@@ -188,6 +193,8 @@ def main(argv):
         name, level, skill, rank, flags = uses[0][1] or "", uses[0][2] or 0, uses[0][3] or 0, uses[0][4] or 0, \
             flags0(uses[0][5])
         if flags & ITEM_FLAG_DEPRECATED:
+            continue
+        if uses[0][9] not in (CLASS_CONSUMABLE, CLASS_MISCELLANEOUS) and not flags & ITEM_FLAG_CONJURED:
             continue
         heal = mana = food = drink = bandage = 0
         buff = None

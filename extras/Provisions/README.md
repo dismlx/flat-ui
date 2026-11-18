@@ -14,9 +14,10 @@ Unzip `Provisions-1.0.0.zip` into the `Interface/AddOns` folder of your WoW: For
 - Type `/prov` (or `/provisions`), or open Settings > AddOns > Provisions.
 - Drag an icon from the panel to an action bar (or click it to pick it up). Each icon is a macro of your
   character: Prov Heal, Prov Mana, Prov Stone, Prov Food, Prov Drink, Prov Bandage, Prov Buff Food.
-- Or bind keys without using a bar slot: Key Bindings > AddOns > Provisions.
+- Or bind keys without using a bar slot: Key Bindings (Esc > Options > Keybindings), section Provisions.
 - Tick or untick a row to turn that kind on or off. Mana potion and Drink start off for warriors and rogues.
-  A kind that is off has no macro (Provisions deletes its own macro, but only once it is off your bars).
+  A kind that is off has no macro (Provisions deletes its own macro, but only once it is off your bars; until
+  then a press only says that the kind is off).
 - With nothing of a kind in your bags the button shows a question mark, and a press says
   "No healing potion in your bags." (or food, and so on) in chat.
 
@@ -38,8 +39,10 @@ it now: your level, your First Aid rank for bandages, and for battleground ratio
 
 How the best is chosen, in order:
 
-1. Conjured first (option, on by default): conjured water, food, healthstones and mana gems are free and vanish,
-   so they go before bought ones.
+1. Conjured first (option, on by default): conjured water, food and mana gems are free and vanish, so they go
+   before bought ones. Not for healing potions: a conjured one (a Perishable potion, Lily Root) shares the
+   two-minute potion cooldown, so a weak one first would spend that cooldown on a small heal in a fight; healing
+   potions are always strongest first. Mana gems have a cooldown of their own, apart from the potions'.
 2. Then the one that restores the most.
 3. Then the lowest item ID. Ties are settled by the item, not by how many you carry, so the button never flips
    between two equal items as your stacks go up and down.

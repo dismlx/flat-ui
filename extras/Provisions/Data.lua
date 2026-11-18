@@ -4,7 +4,7 @@
 -- Tables read: Item, ItemSparse, ItemXItemEffect, ItemEffect, SpellEffect, SpellMisc, SpellDuration,
 -- SpellInterrupts, SpellCategories, SpellCooldowns, SpellCastTimes, SpellCastingRequirements, SpellName,
 -- SkillLine.
--- Counts: heal 34, mana 25, stone 15, food 136, drink 47, both 20, bandage 28, buff 127.
+-- Counts: heal 34, mana 26, stone 15, food 137, drink 48, both 20, bandage 28, buff 127.
 --
 -- Each item: heal/mana/stone = amount restored at once; food/drink = health/mana over the meal; both kinds
 -- on one item = food and drink. bandage = healing over the channel, firstAid = the First Aid rank it
@@ -151,6 +151,7 @@ ns.ITEMS = {
 	[5511] = { stone = 300, level = 12, conjured = true, cd = 1153 }, -- Lesser Healthstone
 	[5512] = { stone = 120, level = 1, conjured = true, cd = 1153 }, -- Minor Healthstone
 	[5513] = { mana = 600, level = 38, conjured = true, cd = 1153 }, -- Mana Jade
+	[5514] = { mana = 400, level = 23, conjured = true, cd = 1153 }, -- Mana Agate
 	[5525] = { food = 61, level = 1 }, -- Boiled Clams
 	[5526] = { food = 244, level = 5 }, -- Clam Chowder
 	[5527] = { food = 552, buff = { spi = 6, sta = 6 }, buffSpell = 19708, level = 15 }, -- Goblin Deviled Clams
@@ -253,6 +254,7 @@ ns.ITEMS = {
 	[17351] = { mana = 1120, level = 45, cd = 4 }, -- Major Mana Draught
 	[17352] = { mana = 640, level = 35, cd = 4 }, -- Superior Mana Draught
 	[17404] = { drink = 437, level = 5 }, -- Blended Bean Brew
+	[17405] = { drink = 1345, level = 25 }, -- Green Garden Tea
 	[17406] = { food = 244, level = 5 }, -- Holiday Cheesewheel
 	[17407] = { food = 875, level = 25 }, -- Graccu's Homemade Meat Pie
 	[17408] = { food = 1392, level = 35 }, -- Spicy Beefstick
@@ -411,6 +413,7 @@ ns.ITEMS = {
 	[274935] = { heal = 800, mana = 800, level = 35, cd = 4 }, -- Tessa's Tonic
 	[274971] = { food = 875, buff = { spell = 14 }, buffSpell = 1249520, level = 25 }, -- Briny Seafood Stew
 	[274976] = { food = 875, buff = { str = 10 }, buffSpell = 1248422, level = 25 }, -- Plain Ol' Paletusk
+	[275893] = { food = 244, level = 1 }, -- Searing Gourd
 	[278117] = { food = 244, level = 5 }, -- Hard Boiled Eggs
 	[278118] = { food = 875, level = 25 }, -- Rich Broth
 	[278119] = { food = 61, level = 1 }, -- Bread with Butter
