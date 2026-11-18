@@ -35,7 +35,8 @@ local ADDON_NAME, ns = ...
 -- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
 -- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at
 -- every roll), and the Need, Greed, Transmog and Pass buttons in a row (ClearAllPoints, SetPoint, SetSize), with outlines of its own round the
--- frame, the icon and the timer. Once the box Loot rolls has a spot in /flatui move (an own entry, FlatUILootRolls, with Movers on), an anchor frame
+-- frame, the icon and the timer. The cards of the gamepad interface go through the same call and take the look, but keep the game's places for
+-- their timer and buttons. Once the box Loot rolls has a spot in /flatui move (an own entry, FlatUILootRolls, with Movers on), an anchor frame
 -- of Flat UI's own on UIParent lies over that box, and after each GroupLootContainer_Update (ns.FollowGlobal) every roll frame the game's container
 -- holds (its rollFrames, read) is hung from it with ClearAllPoints and SetPoint, slot by slot with the game's 100 between them, up or down as Rolls
 -- stack says; also in a fight, since none of them is protected and nothing protected hangs from them. While no spot is saved the game's layout is

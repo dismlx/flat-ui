@@ -1757,22 +1757,36 @@ local function ApplyLootRow(row)
 	ns.SetOutlineColour(rec.slot, r, g, b)
 end
 
+-- True for the game's four roll frames (GroupLootFrame1 to 4, MKBGroupLootFrameTemplate). The cards of the gamepad interface pass through
+-- GroupLootFrame_SetupItemDisplay too (GroupLootFrame.lua:1184) but lay their buttons out otherwise (GroupLootFrame.xml:553-597), so they
+-- keep the game's places for their buttons and timer and take the rest of the look.
+function ROLL.Ours(frame)
+	for index = 1, ROLL_FRAMES do
+		if rawequal(_G["GroupLootFrame" .. index], frame) then
+			return true
+		end
+	end
+	return false
+end
+
 -- The timer of a roll: across the foot of the frame, one level above it so that the flat background does not cover it, or back where the game
--- has it, one level under the frame as the game sets it at every roll (GroupLootFrame.lua:362).
+-- has it, one level under the frame as the game sets it at every roll (GroupLootFrame.lua:362). A gamepad card keeps its timer's place.
 function ROLL.Timer(frame, timer, on, rec)
 	if not (on or rec.timerMoved) then
 		return
 	end
 	rec.timerMoved = on or nil
-	local spot = ROLL.timer
-	timer:ClearAllPoints()
-	if on then
-		timer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", spot.inset, spot.lift)
-		timer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -spot.inset, spot.lift)
-		timer:SetHeight(spot.height)
-	else
-		timer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", spot.x, spot.y)
-		timer:SetSize(spot.width, spot.height)
+	if ROLL.Ours(frame) then
+		local spot = ROLL.timer
+		timer:ClearAllPoints()
+		if on then
+			timer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", spot.inset, spot.lift)
+			timer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -spot.inset, spot.lift)
+			timer:SetHeight(spot.height)
+		else
+			timer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", spot.x, spot.y)
+			timer:SetSize(spot.width, spot.height)
+		end
 	end
 	local level = Level(frame)
 	if level then
@@ -1780,10 +1794,11 @@ function ROLL.Timer(frame, timer, on, rec)
 	end
 end
 
--- The Need, Greed, Transmog and Pass buttons: a row at the right, or back where the game has them. The game never places them itself.
+-- The Need, Greed, Transmog and Pass buttons: a row at the right, or back where the game has them. The game never places them itself. Not on
+-- a gamepad card, whose buttons stand elsewhere.
 function ROLL.Buttons(frame, on, rec)
 	local holder = Child(frame, "LootButtonContainer")
-	if not holder or not (on or rec.buttonsMoved) then
+	if not holder or not ROLL.Ours(frame) or not (on or rec.buttonsMoved) then
 		return
 	end
 	rec.buttonsMoved = on or nil
