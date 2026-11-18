@@ -18,12 +18,11 @@ text, the probes per class, and every value of the slices that differs from its 
 and tools/dev/lua51_check.py run on it when they are there. The checks: every rank ID once and every key once; every default resolves;
 a threat list has one value per rank; coefficients between 0 and 5; every basis c, m or e; every talent of the rules and crit talents
 has a curve as long as its ranks, a node and a definition the capture's TraitNodes holds; every value a row holds equals the slice's or
-is in known_differences; every field written is one the shapes of design 3.2 and its stub (3.2a) use, and every comparison kind of the
-stub is written; every class with spell power has a probe; a description whose variables come from build 70888 reads the same in
+is in known_differences; every field written is one the shapes of design 3.2 and its stub (3.2a) use, and every field and comparison
+kind of the stub is written; every class with spell power has a probe; a description whose variables come from build 70888 reads the same in
 70938, else it says so. Python 3, standard library only; deterministic, so a diff shows real changes.
 """
 import json
-import math
 import os
 import re
 import shutil
@@ -165,6 +164,7 @@ class Entry:
         self.cls = cls
         self.pet = False
         self.school = None
+        self.school_override = None
         self.sch = None
         self.cmp = None
         self.roll = None
@@ -173,12 +173,10 @@ class Entry:
         self.parts = []
         self.ranks = []
         self.threat = None
-        self.rows = []
-        self.text_g = set()
         self.base_ok = True
 
 
-def resolve(client, coef_entry, rank, part, index):
+def resolve(client, rank, part, index):
     """The row and effect that carry a part on a rank, and the ticks of a periodic part."""
     rid = rank['id']
     rank_row = client.row(rid)
@@ -264,13 +262,11 @@ def build_entries(client, coef, cur):
             out = {'id': rank['id'], 'level': level or 1, 'row': row, 'parts': [], 'index': len(e.ranks)}
             used = set()
             for i, sp in enumerate(ce['parts']):
-                row_id, effect, n, why = resolve(client, ce, rank, sp, i)
+                row_id, effect, n, why = resolve(client, rank, sp, i)
                 info = {'row_id': row_id, 'effect': effect, 'n': n}
                 if why:
                     P.fail('%s: rank %d part %d: %s' % (key, rank['id'], i + 1, why))
                     e.base_ok = False
-                if row_id and row_id not in e.rows:
-                    e.rows.append(row_id)
                 info['p'] = period_of(client, rank, sp, effect) if n is not None else None
                 prow = client.row(row_id) if row_id else None
                 info['prow'] = prow
@@ -453,13 +449,13 @@ def decide(entries, order, cur):
         row = entry_rows(e)
         if row is not None:
             mask = row['school']
-            if getattr(e, 'school_override', None):
+            if e.school_override:
                 e.school = e.school_override
             elif mask in SCHOOL_INDEX:
                 e.school = SCHOOL_INDEX[mask]
             elif e.sch is None:
                 P.fail('%s: school mask %s and no schools in curation' % (e.key, mask))
-            if ce.get('school') is not None and mask != ce['school'] and not getattr(e, 'school_override', None):
+            if ce.get('school') is not None and mask != ce['school'] and not e.school_override:
                 P.fail('%s: school mask %s in the row, %s in the slice' % (e.key, mask, ce['school']))
             e.roll = ROLL.get(row['def'])
         top = e.ranks[-1]['row'] if e.ranks else None
