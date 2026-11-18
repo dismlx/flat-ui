@@ -364,7 +364,7 @@ local function ModelOf(group, field)
 		if not Finite(value) then
 			value = K.MODEL[group][field]
 		end
-	elseif value == nil then
+	elseif not Finite(value) then
 		value = K.MODEL[group]
 	end
 	return value
