@@ -6,16 +6,19 @@ local _, ns = ...
 -- dealers (the default) adds the lines while the player's role (ns.PlayerRole, Core.lua) is no healer, Always whatever the role, Off never. The
 -- lines follow that row alone, not Hit table under the player frame, so a player may hide the table and keep the lines; and they come only while
 -- the chat module is on, since its post call adds them. They count what the Hit table tab says: Attacks (hud.hitTableLines, the kinds of
--- C.Kinds by the class and form the inputs were read with), Special attacks (hud.hitTableSpecial) and Hit cap against a boss (hud.hitTableRules);
--- parry and block only from the front: by Where you stand (hud.hitTableFacing), at its first choice while the enemy attacks the player (C.Front)
--- and always for a tank, who stands in front. The enemy counts at its level (C.Target: UnitEffectiveLevel, else UnitLevel); a level the game shows
--- as ?? and a boss (ns.UnitKind) at three levels above the player at least, as the hit table counts a boss (HitTableCalc.lua, ABOVE). It registers
--- no event, makes no frame, hooks nothing and has no switch of its own, as SpellLines.lua; HitTableCalc.lua and SpellModel.lua are looked up when
--- asked, never as the files load.
+-- C.Kinds by the class and the player's power type now, UnitPowerType, which carries no secret tag, so a druid who takes Bear or Cat Form in a
+-- fight gets the melee lines), Special attacks (hud.hitTableSpecial) and Hit cap against a boss (hud.hitTableRules); parry and block only from the
+-- front: by Where you stand (hud.hitTableFacing), at its first choice while the enemy attacks the player (C.Front) and always for a tank, who stands
+-- in front. The enemy counts at its level (C.Target: UnitEffectiveLevel, else UnitLevel); a level the game shows as ?? at three levels above the
+-- player, and a boss (ns.UnitKind) of the player's level or above at three levels above the player at least, as the hit table counts a boss
+-- (HitTableCalc.lua, ABOVE), while a boss below the player (a dungeon's, for a player far above it) keeps its level. It registers no event, makes
+-- no frame, hooks nothing and has no switch of its own, as SpellLines.lua; HitTableCalc.lua and SpellModel.lua are looked up when asked, never as
+-- the files load.
 --
 -- The tests, cheapest first: the row and the chat module; the tooltip GameTooltip (rawequal), one addons may touch (ns.Forbidden) and not one
--- inside another tooltip (its field IsEmbedded, read only); the data of a unit (Enum.TooltipDataType.Unit 2, TooltipInfoSharedDocumentation.lua:
--- 98); the same build not already given its lines (as SpellLines.lua tells a build: the same data with at least the lines added then still
+-- inside another tooltip (its field IsEmbedded, read only); then the look at the stats and the role (Look, below), at a build of any kind; the
+-- data of a unit (Enum.TooltipDataType.Unit 2, TooltipInfoSharedDocumentation.lua:98), the role no healer at For tanks and damage dealers and
+-- inputs kept; the same build not already given its lines (as SpellLines.lua tells a build: the same data with at least the lines added then still
 -- there); the unit token from the tooltip, GetUnit under pcall (its second answer, Blizzard_GameTooltip/Mainline/GameTooltip.lua:1035-1037,
 -- which reads the data's guid with UnitTokenFromGUID, Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua:34-42), else UnitTokenFromGUID of the
 -- data's guid, else "mouseover" while its UnitGUID is that guid; a unit the player can attack (UnitCanAttack) that is not dead
@@ -23,23 +26,25 @@ local _, ns = ...
 -- UnitDocumentation.lua:3296-3310) says nothing; so does every value that is not plain (ns.IsSecret, ns.Finite).
 --
 -- The stats. Every stat call is SecretWhenUnitStatsRestricted: the game withholds them in fights. So the inputs of the table (C.Inputs, every kind
--- read, against the unit shown) are read only out of combat (InCombatLockdown, UnitAffectingCombat) while the game gives the stats plain
--- (C_Secrets.ShouldUnitStatsBeSecret, SecretPredicateAPIDocumentation.lua:388-396), as the gear comparison reads them (GearModel.lua, StatsPlain),
--- and an answer the game withheld any of (a gap "withheld") is not kept. The last plain answer is kept, so in a fight the table is worked out from
--- it with the unit's own level and facing (C.Target, C.Front and C.Table, which read no stat), and one dim line says the stats are from before the
--- fight, as SpellLines.lua says it. With none kept, nothing is said.
+-- read, against no unit: an enemy of the player's level, which the unit shown replaces) are read only out of combat (InCombatLockdown,
+-- UnitAffectingCombat) while the game gives the stats plain (C_Secrets.ShouldUnitStatsBeSecret, SecretPredicateAPIDocumentation.lua:388-396), as
+-- the gear comparison reads them (GearModel.lua, StatsPlain), and an answer the game withheld any of (a gap "withheld") is not kept. They are read
+-- at a build of GameTooltip of any kind, not only an enemy's, so the answer kept is that of the last tooltip out of a fight: the gear and buffs the
+-- player pulled with. So in a fight the table is worked out from it with the unit's own level and facing (C.Target, C.Front and C.Table, which read
+-- no stat), and one dim line says the stats are from before the fight, as SpellLines.lua says it. With none kept, nothing is said.
 --
 -- The cache: a build of a unit's tooltip comes often (TOOLTIP_DATA_UPDATE, GameTooltip.lua:970-973), so a read of the inputs and a look at the
--- role serve every build for AGAIN seconds, whatever unit is shown, until a fight ends, and each read kept counts a version; the enemy (C.Target)
--- is kept by the unit's guid and that version, and the lines by those, the facing, whether the stats are from before the fight and the rows they
--- follow. A build of the same enemy then costs the tests, the facing (C.Front) and the adding, and C.Table only when one of those changed.
+-- role serve every build for AGAIN seconds, whatever the tooltip shows, until a fight ends or, out of one, the form or stance changes
+-- (GetShapeshiftForm), and each read kept counts a version; the enemy (C.Target) is kept by the unit's guid and that version, and the lines by
+-- those, the facing, the power type, whether the stats are from before the fight and the rows they follow. A build of the same enemy then costs
+-- the tests, the facing (C.Front) and the adding, and C.Table only when one of those changed.
 --
 -- The look (0.5.20, the style of every tooltip line, SpellModel.lua's M.Fmt.Style): a gold header "Hit table" only when more than one line
 -- follows; each line its label light grey on the left and its parts white on the right (AddDoubleLine), or light grey while they are from before
 -- the fight; a part that does not apply left out, one the game did not give ?; and the notes dim, wrapped at the tooltip's width (AddLine's fifth
 -- argument): the stats from before the fight, and an estimate (a level of ?? or a boss counted three above the player, a player's dodge, parry and
--- block counted from 5%, a weapon skill the game did not give counted as the most for the level). In Compact (chat.tipDetail) the notes are joined
--- into one dim line, in Full each is its own.
+-- block counted from 5%, a weapon skill the game did not give counted as the most for the level, for a hand or a ranged weapon of a line shown). In
+-- Compact (chat.tipDetail) the notes are joined into one dim line, in Full each is its own.
 --
 -- The work runs inside ns.EachPart keyed by the data of the build, new for each build, so three builds that fail stop this part alone with a line
 -- for /flatui status, and the first error goes once to the game's error handler (geterrorhandler), as SpellLines.lua sends its own. The only
@@ -86,8 +91,8 @@ local HT = {
 -- Per tooltip: { data, lines } of the build that has the lines: its data and the tooltip's lines after them.
 local added = setmetatable({}, { __mode = "k" })
 -- held: inputs (the last plain answer of C.Inputs), version (counts the answers kept), at (GetTime of the last look: a read tried and the role),
--- fought (that look was in a fight), role (the player's role at that look: "tank", "healer" or "damage") and stale (the last read tried was
--- withheld).
+-- fought (that look was in a fight), role (the player's role at that look: "tank", "healer" or "damage"), form (GetShapeshiftForm at that look)
+-- and stale (the last read tried was withheld).
 local held = { version = 0, role = "damage", stale = false, fought = false }
 -- made: targetKey and target (C.Target's answer for a guid and a version), key and lines (the lines as they are added, and what they were made for).
 local made = {}
@@ -227,16 +232,19 @@ local function Plain(inputs)
 	return true
 end
 
--- A look, at most once in AGAIN seconds and at once as a fight ends: the role, and, out of a fight while the lines are wanted, the inputs read again
--- against the unit shown; a plain answer is kept and counted. Answers whether the inputs held are from before the fight.
-local function Look(C, unit)
+-- A look, at most once in AGAIN seconds, at once as a fight ends and, out of one, at once after a change of form or stance: the role, and, out of
+-- a fight while the lines are wanted, the inputs read again against no unit (an enemy of the player's level, which LinesFor replaces with the
+-- unit shown); a plain answer is kept and counted. Answers whether the inputs held are from before the fight.
+local function Look(C)
 	local fighting = Fighting()
 	local now = Ask(GetTime)
 	now = Finite(now) and now or 0
-	if held.at == nil or now - held.at >= HT.AGAIN or now < held.at or (held.fought and not fighting) then
-		held.at, held.fought, held.role = now, fighting, Role()
+	local form = Ask(GetShapeshiftForm)
+	if held.at == nil or now - held.at >= HT.AGAIN or now < held.at or (held.fought and not fighting)
+		or (not fighting and form ~= held.form) then
+		held.at, held.fought, held.role, held.form = now, fighting, Role(), form
 		if not fighting and not (Choice() == "role" and held.role == "healer") then
-			local inputs = C.Inputs({ kinds = HT.KINDS, unit = unit, facing = ns.Get(HT.FACING) })
+			local inputs = C.Inputs({ kinds = HT.KINDS, against = "level" })
 			held.stale = not Plain(inputs)
 			if not held.stale then
 				held.inputs, held.version = inputs, held.version + 1
@@ -248,15 +256,16 @@ end
 
 -- The table -------------------------------------------------------------------------------------------------------------------------------------
 
--- The enemy at its level (C.Target against the unit), a boss three levels above the player at least; kept by the guid and the version of the
--- inputs. Nil when C.Target does not count it an enemy or gives no level.
+-- The enemy at its level (C.Target against the unit), a boss of the player's level or above three levels above the player at least (a boss below
+-- the player, a dungeon's for a player far above it, keeps its level); kept by the guid and the version of the inputs. Nil, and nothing kept, when
+-- C.Target does not count it an enemy or gives no level.
 local function Against(C, inputs, unit, guid)
 	local key = guid .. "|" .. held.version
 	if made.targetKey ~= key then
 		local target = C.Target(nil, inputs.level, unit)
 		if type(target) ~= "table" or not target.enemy or not Finite(target.level) then
-			target = nil
-		elseif target.kind == "boss" and target.level < inputs.level + HT.ABOVE then
+			return nil
+		elseif target.kind == "boss" and target.level >= inputs.level and target.level < inputs.level + HT.ABOVE then
 			target.level, target.raised = inputs.level + HT.ABOVE, true
 		end
 		made.targetKey, made.target = key, target
@@ -345,7 +354,7 @@ local function Shape(read, target, old)
 end
 
 -- The lines against the enemy, from the inputs held with the enemy and the facing of now (C.Table, which reads nothing); kept while the guid, the
--- version, the facing, the age of the stats and the rows are the same.
+-- version, the facing, the power type, the age of the stats and the rows are the same.
 local function LinesFor(C, unit, guid, old)
 	local inputs = held.inputs
 	local target = Against(C, inputs, unit, guid)
@@ -353,23 +362,37 @@ local function LinesFor(C, unit, guid, old)
 		return nil
 	end
 	local front = Front(C, target)
-	local key = table.concat({ guid, held.version, tostring(front), tostring(old), tostring(ns.Get(HT.LINES)), tostring(ns.Get(HT.SPECIAL)),
-		tostring(ns.Get(HT.RULES)), tostring(ns.Get(HT.DETAIL)) }, "|")
+	-- The power type now, which By your class and form picks a druid's kinds by: a form taken in a fight counts, the stats kept being every kind's.
+	local power = Ask(UnitPowerType, "player")
+	if not Finite(power) then
+		power = inputs.power
+	end
+	local key = table.concat({ guid, held.version, tostring(front), tostring(old), tostring(power), tostring(ns.Get(HT.LINES)),
+		tostring(ns.Get(HT.SPECIAL)), tostring(ns.Get(HT.RULES)), tostring(ns.Get(HT.DETAIL)) }, "|")
 	if made.key == key then
 		return made.lines
 	end
-	-- A copy of the inputs with the enemy, the facing and the kinds Attacks asks for by the class and form they were read with.
+	-- A copy of the inputs with the enemy, the facing and the kinds Attacks asks for by the class and the power type now.
 	local copy = {}
 	for field, value in pairs(inputs) do
 		copy[field] = value
 	end
 	copy.target, copy.front, copy.facingUnsure = target, front, false
-	local kinds = C.Kinds(ns.Get(HT.LINES), inputs.class, inputs.power)
+	local kinds = C.Kinds(ns.Get(HT.LINES), inputs.class, power)
 	if type(kinds) == "table" then
 		copy.melee = kinds.melee and inputs.melee or nil
 		copy.ranged = kinds.ranged and inputs.ranged or nil
 		copy.spell = kinds.spell and inputs.spell or nil
 	end
+	-- The hands whose skill stood in (HitTableCalc.lua, HandSkill: "main hand", "off hand", "ranged weapon") of the kinds shown only, so a note of a
+	-- weapon skill never hangs under a spell line alone.
+	local assumed = {}
+	for _, hand in ipairs(type(inputs.assumed) == "table" and inputs.assumed or {}) do
+		if (hand == "ranged weapon" and copy.ranged) or (hand ~= "ranged weapon" and copy.melee) then
+			assumed[#assumed + 1] = hand
+		end
+	end
+	copy.assumed = assumed
 	local read = C.Table({ special = ns.Get(HT.SPECIAL) ~= false, rules = ns.Get(HT.RULES) }, copy)
 	made.key, made.lines = key, type(read) == "table" and Shape(read, target, old) or {}
 	return made.lines
@@ -387,18 +410,23 @@ local function Put(tooltip, line)
 end
 
 -- The tests and the lines of one build (header), once for each build: the same data with at least the lines added then still there is the same
--- build, so a second post call of it adds none, and a refused line ends the adding for that build.
+-- build, so a second post call of it adds none, and a refused line ends the adding for that build. Every build of GameTooltip looks first, so the
+-- inputs kept are those of the last tooltip shown out of a fight, whatever it showed.
 local function Work(data, tooltip)
 	if not rawequal(tooltip, GameTooltip) or ns.Forbidden(tooltip) then
 		return
 	end
 	local readable, embedded = pcall(Index, tooltip, "IsEmbedded")
-	if not readable or IsSecret(embedded) or embedded == true or Field(data, "type") ~= UnitType() then
+	if not readable or IsSecret(embedded) or embedded == true then
 		return
 	end
 	local C = ns.HitTableCalc
 	if type(C) ~= "table" or type(C.Inputs) ~= "function" or type(C.Table) ~= "function" or type(C.Target) ~= "function"
 		or type(C.Front) ~= "function" or type(C.Kinds) ~= "function" then
+		return
+	end
+	local old = Look(C)
+	if Field(data, "type") ~= UnitType() or (Choice() == "role" and held.role == "healer") or not held.inputs then
 		return
 	end
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
@@ -411,10 +439,6 @@ local function Work(data, tooltip)
 	end
 	local unit, guid = UnitOf(tooltip, data)
 	if not unit or not Enemy(unit) then
-		return
-	end
-	local old = Look(C, unit)
-	if (Choice() == "role" and held.role == "healer") or not held.inputs then
 		return
 	end
 	local lines = LinesFor(C, unit, guid, old)
