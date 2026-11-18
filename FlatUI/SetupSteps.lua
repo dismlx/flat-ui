@@ -742,8 +742,9 @@ ns.SETUP_STEPS = {
 		{ "hud.hitTableRules", "r", "behaviour", "Chooses the hit cap against a boss: 9% as tests of Classic found it, or 8% as the game's tooltip says." },
 		{ "hud.hitTableShow", "o", "behaviour", "Chooses whether the hit table shows with an enemy targeted, in combat, or always." },
 		{ "hud.hitTableFont", "r", "behaviour", "Chooses Flat UI Sans or the game font for the hit table." },
-		{ "hud.hitTableSize", "o", "behaviour", "Sets the size of the text of the hit table." },
+		{ "hud.hitTableSize", "o", "behaviour", "Sets the size of the text of the hit table, from 70% to 200%. A right-click on the table offers the same sizes." },
 		{ "hud.hitTableBack", "r", "behaviour", "Draws a flat background with a thin border behind the hit table." },
+		{ "hud.hitTableTipSize", "o", "behaviour", "Sets the size of the hit table's lines on enemy tooltips, from 70% to 200%; the tooltip's other lines keep theirs." },
 	} },
 	{ id = "win-which", area = "Windows", title = "Which windows", draw = "mock-window-set", built = true, rows = {
 		{ "windows.enabled", "c", "mock-window-set" },

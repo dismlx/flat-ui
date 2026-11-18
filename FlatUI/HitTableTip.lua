@@ -12,8 +12,8 @@ local _, ns = ...
 -- in front. The enemy counts at its level (C.Target: UnitEffectiveLevel, else UnitLevel); a level the game shows as ?? at three levels above the
 -- player, and a boss (ns.UnitKind) of the player's level or above at three levels above the player at least, as the hit table counts a boss
 -- (HitTableCalc.lua, ABOVE), while a boss below the player (a dungeon's, for a player far above it) keeps its level. It registers no event, makes
--- no frame, hooks nothing and has no switch of its own, as SpellLines.lua; HitTableCalc.lua and SpellModel.lua are looked up when asked, never as
--- the files load.
+-- no frame and has no switch of its own, as SpellLines.lua, and follows one call only, for the size of its lines (below); HitTableCalc.lua and
+-- SpellModel.lua are looked up when asked, never as the files load.
 --
 -- The tests, cheapest first: the row and the chat module; the tooltip GameTooltip (rawequal), one addons may touch (ns.Forbidden) and not one
 -- inside another tooltip (its field IsEmbedded, read only); then the look at the stats and the role (Look, below), at a build of any kind; the
@@ -46,11 +46,21 @@ local _, ns = ...
 -- block counted from 5%, a weapon skill the game did not give counted as the most for the level, for a hand or a ranged weapon of a line shown). In
 -- Compact (chat.tipDetail) the notes are joined into one dim line, in Full each is its own.
 --
--- The work runs inside ns.EachPart keyed by the data of the build, new for each build, so three builds that fail stop this part alone with a line
--- for /flatui status, and the first error goes once to the game's error handler (geterrorhandler), as SpellLines.lua sends its own. The only
--- writes are widget calls on GameTooltip, each under pcall: NumLines, AddDoubleLine and AddLine; one the game refuses ends the adding for that
--- build. Chat.lua calls ns.HitTableTipLines from its post call of the game's tooltip data (TooltipDataProcessor.AddTooltipPostCall), after the
--- spell and gear lines and before its own ID line.
+-- The size (0.5.26): Text size on enemy tooltips (hud.hitTableTipSize, 70 to 200%, its ids the percent in text) sizes these lines alone, in a
+-- share of the size the game gave each, with the face and flags it had (GetFont, SetFont): the left text of each line and the right text of a
+-- pair, GameTooltipTextLeftN and GameTooltipTextRightN, the tooltip's own font strings, which every tooltip after it reuses. So each goes back as
+-- the game had it when GameTooltip is next cleared, as the game clears it before it shows anything new: in the font object it had (GetFontObject;
+-- the game gives the first two lines theirs with SetFontObject, SharedTooltipTemplates.lua:1-18), and at the font read before where it had none
+-- or that object does not give it its own size. The OnTooltipCleared of its template calls GameTooltip_ClearMoney by name (Mainline/GameTooltip.xml:4, 31-34, 249;
+-- Blizzard_MoneyFrame/Shared/MoneyFrame.lua:660), which this file follows (ns.FollowGlobal) from the first size other than 100% on; a client
+-- without that function keeps the lines at the game's size. A font string still sized as new lines come is put back before they are added.
+--
+-- The work runs inside ns.EachPart keyed by the data of the build, new for each build, so three builds that fail stop this part alone with a line for
+-- /flatui status, and the first error goes once to the game's error handler (geterrorhandler), as SpellLines.lua sends its own. The only writes are
+-- widget calls on GameTooltip, each under pcall: NumLines, AddDoubleLine and AddLine, one the game refuses ending the adding for that build; and on
+-- the font strings of the lines added, SetFont, put back with SetFontObject (and SetFont) at the next clear (The size, above). Chat.lua calls
+-- ns.HitTableTipLines from its post call of the game's tooltip data (TooltipDataProcessor.AddTooltipPostCall), after the spell and gear lines and
+-- before its own ID line.
 
 local KEY, PART = "chat", "hit table lines"
 local IsSecret, Finite = ns.IsSecret, ns.Finite
@@ -60,6 +70,8 @@ local HT = {
 	-- The row of this file and the rows of the Hit table tab the lines follow (Config.lua), and Notes under the lines of Chat and tooltips.
 	ROW = "hud.hitTableTip", LINES = "hud.hitTableLines", SPECIAL = "hud.hitTableSpecial", FACING = "hud.hitTableFacing", RULES = "hud.hitTableRules",
 	DETAIL = "chat.tipDetail",
+	-- Text size on enemy tooltips (Config.lua), and the names of the font strings of a line of GameTooltip: the side and the number of the line.
+	SIZE = "hud.hitTableTipSize", FONT_STRING = "GameTooltipText%s%d",
 	-- Enum.TooltipDataType.Unit, for a client whose Enum does not say (TooltipInfoSharedDocumentation.lua:98).
 	UNIT = 2,
 	-- The kinds C.Inputs reads: every one, so a change of Attacks or of form later finds the kind it needs among the inputs kept.
@@ -97,6 +109,9 @@ local held = { version = 0, role = "damage", stale = false, fought = false }
 local made = {}
 -- reported: the first error of the part went to the game's handler.
 local run = { reported = false }
+-- sized: the font strings of GameTooltip this file sized, each { fs, object, file, size, flags }: the font object and the font it had. follow: nil
+-- until the first size other than 100%, then whether the clear of GameTooltip is followed.
+local sizing = { sized = {} }
 
 -- Reading -----------------------------------------------------------------------------------------------------------------------------------
 
@@ -405,6 +420,72 @@ local function LinesFor(C, unit, guid, old)
 	return made.lines
 end
 
+-- Sizing -----------------------------------------------------------------------------------------------------------------------------------------
+
+-- The size of a font string or a font object, or nil.
+local function SizeOf(font)
+	local ok, _, size = pcall(font.GetFont, font)
+	return ok and Finite(size) and size or nil
+end
+
+-- Puts back every font string sized: in its font object, or, where it had none or that does not give it the object's size, at the font read before.
+local function Unsize()
+	local sized = sizing.sized
+	for index = #sized, 1, -1 do
+		local entry = sized[index]
+		sized[index] = nil
+		local fs, object = entry.fs, entry.object
+		local back = object ~= nil and pcall(fs.SetFontObject, fs, object)
+		if back then
+			local want, have = SizeOf(object), SizeOf(fs)
+			back = want ~= nil and have ~= nil and math.abs(want - have) < 0.5
+		end
+		if not back then
+			pcall(fs.SetFont, fs, entry.file, entry.size, entry.flags)
+		end
+	end
+end
+
+-- After each clear of a tooltip whose OnTooltipCleared calls GameTooltip_ClearMoney: GameTooltip's sized lines go back.
+local function Cleared(tooltip)
+	if #sizing.sized > 0 and rawequal(tooltip, GameTooltip) then
+		Unsize()
+	end
+end
+
+-- Text size on enemy tooltips in percent: 100 for none.
+local function Percent()
+	local value = tonumber(ns.Get(HT.SIZE))
+	return Finite(value) and value > 0 and value or 100
+end
+
+-- Sizes the font strings of line number `index` of GameTooltip, its right one too for a pair, to percent of the size the game gave them, once the
+-- clear of GameTooltip is followed, and keeps what each had.
+local function Size(index, pair, percent)
+	if sizing.follow == nil then
+		sizing.follow = ns.FollowGlobal("GameTooltip_ClearMoney", Cleared) == true
+	end
+	if not sizing.follow then
+		return
+	end
+	for side = 1, pair and 2 or 1 do
+		local fs = _G[HT.FONT_STRING:format(side == 1 and "Left" or "Right", index)]
+		local ok, file, size, flags = false, nil, nil, nil
+		if not ns.Forbidden(fs) then
+			ok, file, size, flags = pcall(fs.GetFont, fs)
+		end
+		if ok and Text(file) and Finite(size) and size > 0 and not IsSecret(flags) then
+			local found, object = pcall(fs.GetFontObject, fs)
+			object = found and not IsSecret(object) and type(object) == "table" and object or nil
+			flags = type(flags) == "string" and flags or ""
+			if pcall(fs.SetFont, fs, file, size * percent / 100, flags) then
+				local sized = sizing.sized
+				sized[#sized + 1] = { fs = fs, object = object, file = file, size = size, flags = flags }
+			end
+		end
+	end
+end
+
 -- Adding -----------------------------------------------------------------------------------------------------------------------------------------
 
 -- Adds one line to the tooltip: a label and its parts side by side, or a line alone, wrapped when it asks. True when the game took it.
@@ -452,11 +533,18 @@ local function Work(data, tooltip)
 	if not lines or #lines == 0 then
 		return
 	end
+	if #sizing.sized > 0 then
+		Unsize()
+	end
+	local percent = Percent()
 	for _, line in ipairs(lines) do
 		if not Put(tooltip, line) then
 			break
 		end
 		shown = shown + 1
+		if percent ~= 100 then
+			Size(shown, line.right ~= nil, percent)
+		end
 	end
 	added[tooltip] = { data = data, lines = shown }
 end

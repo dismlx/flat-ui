@@ -55,6 +55,11 @@ local KEPT = "Not applied while Leave the game's action bars alone is on."
 local KEPT_XP = "On the game's bar, not applied while Leave the game's action bars alone is on."
 -- Where a line of text around the minimap goes (MapText.lua).
 local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the map" } }
+-- The text sizes of the hit table, under the player frame and on enemy tooltips (HitTable.lua, HitTableTip.lua), and of the menu a right-click on
+-- the table opens (HitTable.lua, Menu). Ids are the percent in text; a number saved before 0.5.26, when Text size was a slider of 50 to 200%, reads
+-- as the nearest of them (Core.lua, Renamed).
+local HIT_TABLE_SIZES = { { "70", "70%" }, { "80", "80%" }, { "90", "90%" }, { "100", "100%" }, { "110", "110%" }, { "125", "125%" },
+	{ "150", "150%" }, { "175", "175%" }, { "200", "200%" } }
 -- When a frame of When shown on the Fading page is at full opacity; at other times it fades (Fade.lua has the rules).
 local FADE_WHEN = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" },
 	{ "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } }
@@ -1948,8 +1953,9 @@ ns.PAGES = {
 	-- HitTable.lua and HitTableCalc.lua: a table of Flat UI's own under the player frame with the player's chances against the target, worked out again
 	-- as stats, gear, weapon skill, buffs, form and the target change. By default it shows for a tank or a damage dealer and not for a healer, by the
 	-- role Flat UI setup reads (ns.PlayerRole, Core.lua); Always and Off hold whatever the role. Attacks, Special attacks, Where you stand and Hit cap
-	-- against a boss serve On enemy tooltips (HitTableTip.lua) too and need nothing; the other rows apply at either of the first two. It was a tick in
-	-- 0.5.18: a saved tick reads as Always or Off (Core.lua, ns.MigrateText).
+	-- against a boss serve On enemy tooltips (HitTableTip.lua) too and need nothing; Text size on enemy tooltips needs On enemy tooltips, and the
+	-- other rows apply at either of the first two choices of Hit table under the player frame. It was a tick in 0.5.18: a saved tick reads as Always
+	-- or Off (Core.lua, ns.MigrateText). Text size was a slider until 0.5.26: a saved number reads as the nearest size (Core.lua, Renamed).
 	{
 		key = "hudHitTable", label = "Hit table", parent = "hud", owner = "hud",
 		{ key = "hitTable", kind = "choice", default = "role", label = "Hit table under the player frame",
@@ -1980,11 +1986,14 @@ ns.PAGES = {
 		{ key = "hitTableFont", kind = "choice", default = "sans", label = "Font", needs = "hitTable", needsIn = { "role", "on" },
 			choices = { { "sans", "Flat UI Sans" }, { "game", "Game font" } },
 			tip = "Flat UI Sans is IBM Plex Sans. A language it has no letters for keeps the game font." },
-		{ key = "hitTableSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Text size",
-			tip = "100% is 11 px. While the target frame stands right beside your player frame, the text gets smaller so the table ends before it.",
+		{ key = "hitTableSize", kind = "choice", default = "100", label = "Text size", choices = HIT_TABLE_SIZES,
+			tip = "100% is 11 px. A right-click on the table opens the same sizes. While the target frame stands right beside your player frame, the text gets smaller so the table ends before it.",
 			needs = "hitTable", needsIn = { "role", "on" } },
 		{ key = "hitTableBack", kind = "bool", default = true, label = "Background and border", needs = "hitTable", needsIn = { "role", "on" },
 			tip = "A flat background with a thin border, in the colours of the Flat UI page, or of Own border and background on Minimap and buffs." },
+		{ key = "hitTableTipSize", kind = "choice", default = "100", label = "Text size on enemy tooltips", choices = HIT_TABLE_SIZES,
+			tip = "The hit table's lines on an enemy's tooltip, in a share of the size of the tooltip's text. The other lines, and every tooltip after it, keep the game's size.",
+			needs = "hitTableTip", needsIn = { "role", "on" } },
 	},
 	{
 		key = "chat", label = "Chat and tooltips",

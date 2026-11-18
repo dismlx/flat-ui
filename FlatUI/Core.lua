@@ -179,11 +179,13 @@ local ADDON_NAME, ns = ...
 -- Its Equipment set slot opens a menu of its own whose lines call C_EquipmentSet.UseEquipmentSet, never in a fight.
 -- Threat list (off by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
 -- Hit table (Minimap and buffs; on by default for a tank or a damage dealer and off for a healer, by ns.PlayerRole below) is a frame of its own on
--- UIParent that takes no mouse, hung out of combat by SetPoint from a second frame of its own whose corners are set on the player frame's portrait
--- (or Flat UI's picture or body, else the health bar, else PlayerFrame) and on PlayerBottomManagedFrameContainer, or on PlayerCastingBarFrame while
--- Edit Mode locks the cast bar to the player frame (its field attachedToPlayerFrame, read only), else on PlayerFrame; it follows
--- PlayerFrame_AttachCastBar and PlayerFrame_DetachCastBar with hooksecurefunc.
--- It only reads, and changes nothing: the place and size of those frames, of PetFrame, TargetFrame, FocusFrame, UIParent and Flat UI's own frames
+-- UIParent that takes right clicks alone (no mouse motion, and its other buttons passed through to the world with SetPassThroughButtons, once, out
+-- of combat; SetMouseClickEnabled only while it shows), a right-click opening the game's context menu (MenuUtil.CreateContextMenu) of its Text
+-- size, whose pick writes that row (ns.Set). It is hung out of combat by SetPoint from a second frame of its own whose corners are set on the
+-- player frame's portrait (or Flat UI's picture or body, else the health bar, else PlayerFrame) and on PlayerBottomManagedFrameContainer, or on
+-- PlayerCastingBarFrame while Edit Mode locks the cast bar to the player frame (its field attachedToPlayerFrame, read only), else on PlayerFrame;
+-- it follows PlayerFrame_AttachCastBar and PlayerFrame_DetachCastBar with hooksecurefunc.
+-- Of the game's it only reads, and changes nothing: the place and size of those frames, of PetFrame, TargetFrame, FocusFrame, UIParent and Flat UI's own frames
 -- under the player frame, and the font of the player cast bar's text; the player's level, class, form, power type, combat state, stats, weapon
 -- skills and weapons; the target's level and kind, whether it exists, can be attacked, is dead or is a player, and whether it attacks the player:
 -- the player's threat situation on it (UnitThreatSituation), else whether its target is the player (UnitIsUnit); and, while its row is For tanks
@@ -191,8 +193,11 @@ local ADDON_NAME, ns = ...
 -- of talents in use, as last read while no pick waited unapplied on it in the talent window, the class), read again after each event the hud module
 -- hears that can change it. Its lines on an enemy's tooltip (HitTableTip.lua, On enemy tooltips, by the role too by default) are added to
 -- GameTooltip (AddDoubleLine, AddLine) from the chat module's post call while that module is on, for a unit the player can attack that is not
--- dead: they read the tooltip's unit (GetUnit under pcall, else UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level
--- and kind (C.Target with the unit), whether it attacks the player (C.Front), the player's form and power type (GetShapeshiftForm, UnitPowerType),
+-- dead, and with Text size on enemy tooltips other than 100% sized (SetFont on their font strings, GameTooltipTextLeftN and GameTooltipTextRightN),
+-- each put back in the font object and font it had at the next clear of GameTooltip (GameTooltip_ClearMoney, which its OnTooltipCleared calls,
+-- followed with ns.FollowGlobal), so every later tooltip has the game's sizes. They read the tooltip's unit (GetUnit under pcall, else
+-- UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level and kind (C.Target with the unit), whether it attacks the player
+-- (C.Front), the player's form and power type (GetShapeshiftForm, UnitPowerType),
 -- the combat state (InCombatLockdown, UnitAffectingCombat, C_Secrets.ShouldUnitStatsBeSecret) and the stats the table reads (ns.HitTableCalc,
 -- C.Inputs), those out of a fight only, at most every two seconds as GameTooltip is built whatever it shows, and worked out by C.Table; in a fight
 -- they count the last plain read, from before it, and say so.
@@ -700,9 +705,26 @@ local RENAMED = { ["trackers.grow"] = { middle = "center" }, ["partycd.show"] = 
 for _, path in ipairs({ "fonts.outline", "chat.outline", "actionbars.textOutline" }) do
 	RENAMED[path] = { outline = "thin" }
 end
+-- Text size of the hit table was a slider of 50 to 200% until 0.5.26 and is a choice of sizes, ids in text, since: a saved number, or the text of
+-- one, that is no choice reads as the nearest choice, a tie as the larger.
+RENAMED["hud.hitTableSize"] = "nearest"
 
 local function Renamed(path, value)
 	local map = RENAMED[path]
+	if map == "nearest" then
+		local number, def = tonumber(value), defs[path]
+		if number == nil or def == nil or Normalise(def, value) ~= nil then
+			return value
+		end
+		local best, gap = value, nil
+		for _, choice in ipairs(ns.Choices(def)) do
+			local id = tonumber(choice[1])
+			if id and (gap == nil or math.abs(id - number) <= gap) then
+				best, gap = choice[1], math.abs(id - number)
+			end
+		end
+		return best
+	end
 	return map and type(value) == "string" and map[value] or value
 end
 
