@@ -334,7 +334,7 @@
    "name": "Ferocious Bite",
    "parts": [
     {
-     "basis": "e",
+     "basis": "m",
      "cite": [
       "client rows of build 1.60.1.70938 (wowsims/forever capture)",
       "wowsims/forever docs/evidence/EV-0032",
@@ -1148,9 +1148,12 @@
      "stat": "ap"
     },
     {
-     "basis": "c",
+     "basis": "m",
      "cite": [
-      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
+      "wowsims/forever docs/evidence/EV-0031",
+      "wowsims/forever docs/evidence/EV-0033",
+      "wowsims/forever docs/evidence/EV-0034",
+      "wowsims/forever docs/evidence/EV-0036"
      ],
      "coef": 0.195,
      "find": "pdamage",
@@ -1498,7 +1501,7 @@
    "name": "Rip",
    "parts": [
     {
-     "basis": "e",
+     "basis": "m",
      "cite": [
       "client rows of build 1.60.1.70938 (wowsims/forever capture)",
       "wowsims/forever docs/evidence/EV-0031"
@@ -2253,11 +2256,9 @@
    "name": "Explosive Trap",
    "parts": [
     {
-     "basis": "e",
+     "basis": "m",
      "cite": [
-      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
-      "wowsims/forever docs/evidence/EV-0068",
-      "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+      "wowsims/forever docs/evidence/EV-0068"
      ],
      "coef": 0.1,
      "find": "damage",
@@ -2568,10 +2569,9 @@
    "name": "Sniper Shot",
    "parts": [
     {
-     "basis": "e",
+     "basis": "c",
      "cite": [
-      "client rows of build 1.60.1.70938 (wowsims/forever capture)",
-      "Forever hunter wiki (github.com/classic-hunter/forever-hunter)"
+      "client rows of build 1.60.1.70938 (wowsims/forever capture)"
      ],
      "coef": 1.0,
      "find": "weapon",
@@ -6972,7 +6972,7 @@
    "name": "Deadly Poison",
    "parts": [
     {
-     "basis": "m",
+     "basis": "e",
      "cite": [
       "client rows of build 1.60.1.70938 (wowsims/forever capture)",
       "wowsims/forever docs/evidence/EV-0086"
@@ -7276,7 +7276,7 @@
    "name": "Instant Poison",
    "parts": [
     {
-     "basis": "m",
+     "basis": "e",
      "cite": [
       "client rows of build 1.60.1.70938 (wowsims/forever capture)",
       "wowsims/forever docs/evidence/EV-0086"
@@ -7457,8 +7457,7 @@
      ],
      "find": "pdamage",
      "per": "cp",
-     "stat": "ap",
-     "ticks": "row"
+     "stat": "ap"
     }
    ],
    "ranks": [
@@ -10792,7 +10791,7 @@
    "name": "Thunder Clap",
    "parts": [
     {
-     "basis": "e",
+     "basis": "m",
      "cite": [
       "client rows of build 1.60.1.70938 (wowsims/forever capture)",
       "wowsims/forever docs/evidence/EV-0019",

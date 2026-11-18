@@ -899,7 +899,7 @@ class Writer:
 def part_fields(part, info_top):
     f = {1: part['stat'], 2: rnd(info_top['c'], 4) if info_top['c'] is not None else 0}
     s = part['slice']
-    if info_top.get('n') is not None:
+    if info_top.get('n') is not None and info_top['n'] > 1:
         f['n'] = info_top['n']
         if info_top.get('p'):
             f['p'] = rnd(info_top['p'], 3)
@@ -953,7 +953,8 @@ def rank_fields(e, r, parts_top, caster):
         else:
             c.append(rnd(val, 4) if val is not None and not near(val, top[2]) else None)
             w.append(None)
-        n.append(info['n'] if info['n'] is not None and info['n'] != top.get('n') else None)
+        ticks = info['n'] if info['n'] is not None and info['n'] > 1 else None
+        n.append(ticks if ticks != top.get('n') else None)
         eff, prow = info['effect'], info['prow']
         if info['n'] is not None:
             periodic = True
@@ -980,12 +981,23 @@ def rank_fields(e, r, parts_top, caster):
     for name, vals in (('c', c), ('n', n), ('w', w)):
         if any(v is not None for v in vals):
             f[name] = vals
+    # The cast of a rank: -1 a channel; the caster kinds always (0 instant); others only a real cast (Slam, Aimed Shot). An auto
+    # attack's or a shot's pace is its weapon's speed, and a ranged ability's negative cast (-1000000, "the ranged weapon's") is none.
+    cast = row['cast'] if row['cast'] and row['cast'] > 0 else 0
     if channel(row):
         f['ct'] = -1
-    elif caster or row['cast']:
-        f['ct'] = max(0, row['cast'] or 0)
-    if (periodic or channel(row) or e.cmp in ('seal', 'proc')) and row['dur'] and row['dur'] > 0:
-        f['du'] = row['dur']
+    elif e.cmp in ('auto', 'shot', 'wand'):
+        pass
+    elif caster or cast:
+        f['ct'] = cast
+    dur = row['dur']
+    for info in r['parts']:
+        if info['n'] is not None and info['prow'] is not None and info['effect'] is not None and info['effect']['period'] \
+                and info['prow'] is not row and info['prow']['dur'] and info['prow']['dur'] > 0:
+            dur = info['prow']['dur']
+            break
+    if (periodic or channel(row) or e.cmp in ('seal', 'proc')) and dur and dur > 0:
+        f['du'] = dur
     for name, vals in (('bm', bm), ('bl', bl), ('lv', lv), ('mx', mx)):
         if any(v is not None for v in vals):
             f[name] = vals
@@ -1174,6 +1186,18 @@ def stat_value(s):
 
 # The checks that need the whole --------------------------------------------------------------------------------------------------
 
+def level_rows(entries):
+    out = set()
+    for key, e in entries.items():
+        for r in e.ranks:
+            for info in r['parts']:
+                row, eff = info['prow'], info['effect']
+                if row is not None and eff is not None and eff['ppl'] and row['base'] is not None and row['level'] is not None \
+                        and row['base'] != row['level']:
+                    out.add('%s %d (base %s, spell %s)' % (key, info['row_id'], row['base'], row['level']))
+    return sorted(out)
+
+
 def check_whole(entries, rules, crit, w, client, coef, threat, gear):
     ids = {}
     for key, e in entries.items():
@@ -1209,6 +1233,9 @@ def check_whole(entries, rules, crit, w, client, coef, threat, gear):
         extra = sorted(str(k) for k in w.used[kind] - STUB_FIELDS[kind])
         if extra:
             P.note('fields of design 3.2 the stub (3.2a) does not use, in %s: %s' % (kind, ', '.join(extra)))
+        unwritten = sorted(str(k) for k in STUB_FIELDS[kind] - w.used[kind])
+        if unwritten:
+            P.fail('fields the stub uses that no %s holds: %s' % (kind, ', '.join(unwritten)))
 
 
 # Main ------------------------------------------------------------------------------------------------------------------------------
@@ -1246,6 +1273,7 @@ def main():
     print('parts the text scan marked as counted by the game\'s text (g): %s' % ', '.join(marked))
     for cls in sorted(probes):
         print('probes %s: %s' % (cls, ', '.join(str(x) for x in probes[cls])))
+    print('rows with a gain a level whose base level and spell level differ: %s' % (', '.join(level_rows(entries)) or 'none'))
     nx = sorted(e.key for e in entries.values() if e.nx)
     print('next swing (attribute word 0 bit 0x4): %s' % ', '.join(nx))
     for (key, i), x in sorted(P.explained.items()):
