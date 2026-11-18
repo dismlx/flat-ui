@@ -690,7 +690,7 @@ local function Resolve()
 	end
 	local parts = { info.defaults and ("d" .. tostring(info.set)) or "c" }
 	for _, line in ipairs(lines) do
-		parts[#parts + 1] = ("%s;%d;%s%s"):format(line.key, line.id, line.kept and "k" or "f", line.known and "y" or "n")
+		parts[#parts + 1] = ("%s;%s;%s%s"):format(line.key, tostring(line.id), line.kept and "k" or "f", line.known and "y" or "n")
 	end
 	local signature = table.concat(parts, ",")
 	if signature ~= list.signature then
@@ -828,15 +828,19 @@ local function Candidates()
 	if not M then
 		return {}
 	end
-	local followed = {}
+	-- The spells with a line that follows their ranks, and the ranks a known line stands for now (a kept rank that is the highest).
+	local followed, standing = {}, {}
 	for _, line in ipairs((Resolve())) do
 		if not line.kept then
 			followed[line.key] = true
 		end
+		if line.known then
+			standing[line.id] = true
+		end
 	end
 	local rows, taken = {}, {}
 	local function Keep(id)
-		if not Whole(id) then
+		if not Whole(id) or standing[id] then
 			return false
 		end
 		local entry = M.Find(id)
@@ -1948,12 +1952,10 @@ local function ListStatus()
 		end
 		return "Gear comparison: no spells chosen; /flatui gear add <spell> adds one."
 	end
-	local text
-	if #known > 0 then
-		text = ("Gear comparison: %s (%s)"):format(table.concat(known, ", "), Who(info))
-	else
-		text = ("Gear comparison: none of %s"):format(Who(info))
+	if #known == 0 then
+		return ("Gear comparison: none of %s is known now: %s."):format(Who(info), table.concat(unknown, ", "))
 	end
+	local text = ("Gear comparison: %s (%s)"):format(table.concat(known, ", "), Who(info))
 	if #unknown > 0 then
 		text = text .. "; not known now: " .. table.concat(unknown, ", ")
 	end
