@@ -267,9 +267,9 @@ local ADDON_NAME, ns = ...
 -- Its Find button and the Item finder row show the item finder, FlatUIGearSearch, a frame of its own on UIParent that shows only with the window
 -- (FlatUIGear) and is hung at its right edge, or at its left edge while the screen has no room on the right (GetLeft and GetRight of the window,
 -- GetWidth of UIParent), kept on the screen (SetClampedToScreen) and in the window's strata (GetFrameStrata, SetFrameStrata); its search and level
--- boxes are EditBoxes of its own. The movers place it too (its own entry): a drag of its title bar (StartMoving, StopMovingOrSizing, SetUserPlaced)
--- or of its box gives it a spot of its own for the character, and Dock hangs it at the window again; Minimize folds it to its title bar, kept in
--- FlatUICharDB.gearFinder with that spot and whether it is docked. The finder
+-- boxes are EditBoxes of its own. The movers place it too (its own entry, with a box only while it shows): a drag of its title bar (StartMoving,
+-- StopMovingOrSizing, SetUserPlaced) or of its box saves its spot in the movers as for any frame, and Dock forgets that spot, so it hangs at the
+-- window again; Minimize folds it to its title bar, kept in FlatUICharDB.gearFinder. The finder
 -- searches Flat UI's own item index (ItemIndex.lua, made from the game's client data by tools/dev/make_itemindex.py) and the bags, bank and other
 -- characters Bags records; for an item the index lacks and for Best for me it asks the game to load the item (C_Item.RequestLoadItemDataByID) and
 -- reads it (C_Item.GetItemInfo,
