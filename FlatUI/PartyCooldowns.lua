@@ -39,6 +39,9 @@ local HELP = {
 
 local IsSecret = ns.IsSecret
 local T = ns.Tracking
+local TM = ns.TestMode
+-- The sample party of test mode (TestMode.lua) for a player in no group, by name and class: a paladin, a priest, a warlock and a rogue.
+local SAMPLE_PARTY = { { "Mara", "PALADIN" }, { "Eli", "PRIEST" }, { "Ivo", "WARLOCK" }, { "Fay", "ROGUE" } }
 local P = { assigned = {}, pool = {}, known = {}, level = {}, never = {}, tex = {}, last = {}, frames = {}, raidUnits = {} }
 
 local function Own(object)
@@ -498,8 +501,12 @@ function P.Render()
 	end
 end
 
--- The sweep of an icon ended: the row is drawn again, and the player's own timer ends with the game's sweep.
+-- The sweep of an icon ended: the row is drawn again, and the player's own timer ends with the game's sweep. A sample's sweep (a test) ends no
+-- timer.
 function P.Done(row, icon)
+	if row.testing then
+		return
+	end
 	if row.own and icon.key then
 		T.Drop(row.owner, icon.key)
 	end
@@ -837,7 +844,14 @@ end
 function P.Sync()
 	P.queued = false
 	local state, members = P.Look()
+	if state == "none" and P.Holding() then
+		state = "sample"
+	end
 	P.state = state
+	if state == "sample" then
+		P.SyncSample()
+		return
+	end
 	if not LIVE[state] then
 		P.ReleaseAll()
 		T.DeafenAll(KEY)
@@ -859,6 +873,7 @@ function P.Sync()
 	end
 	P.Listen(members)
 	P.Render()
+	P.HoldRows()
 	P.Arm()
 end
 
@@ -1401,9 +1416,10 @@ end
 
 -- The raid group stack -------------------------------------------------------------------------------------------------------------
 
--- True while the stack has a handle in the movers: in a raid group, with the module on and In a raid group on Own position.
+-- True while the stack has a handle in the movers: in a raid group, with the module on and In a raid group on Own position; and while it holds
+-- the sample rows of test mode.
 function ns.PartyRaidShown()
-	return ns.Enabled(KEY) and Opt("raid") == "own" and T.Ask(IsInRaid) == true
+	return ns.Enabled(KEY) and ((Opt("raid") == "own" and T.Ask(IsInRaid) == true) or (P.state == "sample" and TM.IsOn()))
 end
 
 -- The movers set or put back the spot.
@@ -1412,6 +1428,138 @@ function ns.PartyRaidMoved()
 		ns.OutOfCombat(function()
 			P.PlaceStack(P.stack)
 		end)
+	end
+end
+
+-- Test mode (TestMode.lua) -------------------------------------------------------------------------------------------------------------------
+-- While it is on, out of combat, with the page on: in a party or a raid group each row the module shows holds samples in place of its timers, and
+-- with no group the raid group stack holds sample rows, the player's own (with Your own row on) and, unless the bar's Group is Solo, one for each
+-- member of the sample party, each with its name. A row holds up to three icons: with Show on Always the first ready and bright, and the others
+-- used, dark, with a sweep that the ticker of test mode starts again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop), with no flash or sound
+-- as the rows have none, in the pictures of the row's own abilities (by class, P.Candidates) or of the samples. Each Sync draws them again with
+-- the page's look and size, so a change shows at once; Off, a fight and the page going off give the rows their own icons back or take the sample
+-- rows away.
+P.HELD = {}
+
+function P.Holding()
+	return TM.IsOn() and ns.Enabled(KEY) and not InCombatLockdown()
+end
+
+-- The samples of one row, with its look now.
+function P.Hold(row)
+	row.testing = P.HELD
+	local abilities = P.Candidates(row)
+	local count = math.min(3, #row.icons)
+	for slot, icon in ipairs(row.icons) do
+		row.drawn[slot] = nil
+		local a = abilities[slot]
+		if slot <= count then
+			-- The kind of the row's ability colours the border, else the sample's (kind true, IconRow.lua).
+			local look = { kind = a and a.kind or nil, numbers = Opt("seconds") == true, font = Opt("numbersFont"), border = Opt("iconBorder") }
+			local texture = a and P.Texture(a) or ns.IconSamplePicture(slot)
+			local used = slot > 1 or Opt("show") ~= "always"
+			if not used then
+				icon.held = nil
+				pcall(icon.cooldown.Clear, icon.cooldown)
+				ns.IconSet(icon, texture, nil, nil, look)
+			else
+				look.kind, look.flash, look.sound = look.kind or true, false, false
+				ns.IconSampleHeld(icon, slot, KEY, look, texture)
+			end
+			local level = used and DARK or 1
+			icon.texture:SetDesaturated(used)
+			icon.texture:SetVertexColor(level, level, level)
+		else
+			icon.held = nil
+			ns.IconClear(icon)
+		end
+	end
+end
+
+-- A row gives its samples up: it is drawn again from its timers at the next Render.
+function P.Unhold(row)
+	row.testing = nil
+	for slot, icon in ipairs(row.icons) do
+		row.drawn[slot] = nil
+		icon.held = nil
+	end
+end
+
+-- The rows of a party or a raid group: samples while test mode holds them, else their own icons again. The 8-second test keeps its rows.
+function P.HoldRows()
+	if P.testing then
+		return
+	end
+	local holding = P.Holding()
+	for _, row in pairs(P.assigned) do
+		if holding then
+			P.Hold(row)
+		elseif row.testing == P.HELD then
+			P.Unhold(row)
+			P.RenderRow(row)
+		end
+	end
+end
+
+-- The sample rows of a player in no group, in the raid group stack.
+function P.SyncSample()
+	local stack = P.Stack()
+	P.PlaceStack(stack)
+	local size, count = Opt("size"), Opt("count")
+	P.frames, P.raidUnits = {}, {}
+	local list = {}
+	if Opt("ownRow") then
+		list[1] = { owner = "test:player", class = Text(UnitClassBase, "player"), name = Text(UnitName, "player") }
+	end
+	if TM.Group() ~= "solo" then
+		for index, member in ipairs(SAMPLE_PARTY) do
+			list[#list + 1] = { owner = "test:" .. index, class = member[2], name = member[1] }
+		end
+	end
+	local wanted, position = {}, 0
+	for _, member in ipairs(list) do
+		local row = P.Take(member.owner)
+		if row then
+			position = position + 1
+			wanted[member.owner] = true
+			row.unit, row.class, row.own, row.level, row.race, row.raceFile = nil, member.class, nil, nil, nil, nil
+			P.Fit(row, size, count, "right")
+			P.Stacked(row, stack, position, size)
+			P.Label(row, stack, member.name)
+			P.Hold(row)
+			row.holder:Show()
+		end
+	end
+	for owner, row in pairs(P.assigned) do
+		if not wanted[owner] then
+			P.Release(row)
+		end
+	end
+	T.DeafenAll(KEY)
+	stack:Show()
+end
+
+-- Off and the start of a fight: the samples go at once, before the Sync that follows (P.Refresh waits for the end of a fight).
+function P.TestStop()
+	for _, row in pairs(P.assigned) do
+		if row.testing == P.HELD then
+			if P.state == "sample" then
+				P.Release(row)
+			else
+				P.Unhold(row)
+			end
+		end
+	end
+	if P.state == "sample" and P.stack then
+		P.stack:Hide()
+	end
+end
+
+function P.TestTick(now)
+	for _, row in pairs(P.assigned) do
+		if row.testing == P.HELD then
+			ns.IconSampleLoop(row.icons, now)
+		end
 	end
 end
 
@@ -1515,6 +1663,14 @@ ns.Register(KEY, {
 	Status = P.Status,
 	slash = { party = P.Slash },
 	help = HELP,
+})
+
+TM.Register(KEY, {
+	module = KEY,
+	label = "Party cooldowns",
+	refresh = true,
+	Stop = P.TestStop,
+	Tick = P.TestTick,
 })
 
 ns.PartyCooldownsModule = P

@@ -31,7 +31,7 @@ local LINE_FRAME = "Defensives on you: the game's External Defensives frame is a
 local HELP = {
 	"/flatui check - what the game shows and hides where you stand",
 	"/flatui check last - the lines of the last check",
-	"/flatui test - three sample icons for Defensives on you",
+	"/flatui test icons - three sample icons for Defensives on you, for 8 seconds",
 	"/flatui defensives add 10060 - the spell ID of a buff, or a shift-clicked spell",
 	"/flatui defensives remove 17 - a spell ID or a name",
 	"/flatui defensives list",
@@ -39,6 +39,7 @@ local HELP = {
 
 local IsSecret = ns.IsSecret
 local T = ns.Tracking
+local TM = ns.TestMode
 local D = { list = {}, pending = {}, active = {}, refused = {}, icons = {} }
 
 local function Opt(key)
@@ -857,6 +858,7 @@ end
 function D.Sync()
 	local on = D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off"
 	if not on then
+		D.Held()
 		if D.holder and not D.testing then
 			D.holder:Hide()
 		end
@@ -878,6 +880,7 @@ function D.Sync()
 	elseif D.path == "reading" then
 		D.StartReading()
 	end
+	D.Held()
 end
 
 function D.Refresh()
@@ -1025,6 +1028,36 @@ function D.Test()
 	end
 end
 
+-- Test mode (TestMode.lua): while it is on, out of combat, with the page on and Place not Off, the holder shows three sample icons of its own, apart
+-- from those of /flatui test icons. Each Sync lays them out again with Icon size and Spacing, so a change of the row shows at once, and the ticker
+-- of test mode starts their sweeps again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop). Off, a fight and the page or the row going off take
+-- them away; the holder then hides as Sync says.
+function D.Held()
+	local list = D.held or {}
+	D.held = list
+	if not (TM.IsOn() and D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off" and not InCombatLockdown()) then
+		D.Drop()
+		return
+	end
+	local holder = D.Holder()
+	for index = 1, 3 do
+		list[index] = list[index] or ns.IconNew(holder)
+		if not list[index] then
+			return
+		end
+	end
+	for index, icon in ipairs(list) do
+		ns.IconSampleHeld(icon, index, KEY)
+	end
+	ns.IconLayout(list, holder, Opt("size"), Opt("spacing"), "right")
+end
+
+function D.Drop()
+	for _, icon in ipairs(D.held or {}) do
+		ns.IconSampleDrop(icon)
+	end
+end
+
 function D.Status()
 	local lines = {}
 	if not ns.Enabled(KEY) then
@@ -1071,8 +1104,14 @@ ns.Register(KEY, {
 			D.Refresh()
 		end,
 	},
+	-- /flatui test, test on and test off are test mode's (Core.lua takes them first); test icons is the 8-second test of the icon rows.
 	slash = { check = D.Check, defensives = D.Slash, test = function(rest)
-		D.Test(rest)
+		if not (rest or ""):lower():match("^%s*icons%s*$") then
+			print("/flatui test - samples of your hidden frames on screen until you turn it off")
+			print("/flatui test icons - three sample icons for 8 seconds on Defensives on you, Your buffs, Party and Enemy cooldowns")
+			return
+		end
+		D.Test()
 		if ns.OwnBuffsTest then
 			ns.OwnBuffsTest()
 		end
@@ -1085,6 +1124,17 @@ ns.Register(KEY, {
 	end },
 	help = HELP,
 	Status = D.Status,
+})
+
+-- The samples of test mode go at once at Off and at the start of a fight; the Refresh after it waits for the end of a fight (D.Refresh).
+TM.Register(KEY, {
+	module = KEY,
+	label = "Defensives on you",
+	refresh = true,
+	Stop = D.Drop,
+	Tick = function(now)
+		ns.IconSampleLoop(D.held, now)
+	end,
 })
 
 ns.DefensivesModule = D

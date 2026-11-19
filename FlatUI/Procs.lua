@@ -1019,8 +1019,12 @@ local function Test(entry, on)
 	P.before = P.before or {}
 	if not on then
 		Stop(entry)
-		-- An alert that was up before the test carries on.
-		if P.before[entry.id] then
+		-- The one test mode holds up carries on (what was up before it is kept for its end), and so does an alert that was up before the test.
+		if P.held == entry and ns.TestMode.IsOn() then
+			P.up[entry.id] = entry
+			ShowArt(entry, true)
+			Call(ns.ProcGlowStart, entry, true)
+		elseif P.before[entry.id] then
 			P.before[entry.id] = nil
 			P.up[entry.id] = entry
 			ShowArt(entry, true)
@@ -1036,6 +1040,80 @@ local function Test(entry, on)
 	ShowArt(entry)
 	Call(ns.ProcGlowStart, entry)
 	return ("Sound: %s."):format(word or "none")
+end
+
+-- Test mode (TestMode.lua) ------------------------------------------------------------------------------------------------------------
+-- While it is on, out of combat, with the page on, the first proc of the class (Procs of your class, else the first proc of the list that is on) is
+-- held up as the test holds one: its icon fine in the row (Trackers.lua asks ns.ProcHeld), its art and its glow, and its sound once each time test
+-- mode is turned on (TM.Sound; not again after a fight), when the proc has one. After each change of a row of the page or of the profile the proc
+-- is picked again (a change of the list or of Procs of your class may take it away) and its art drawn again, since Art off takes every art away
+-- (ns.ProcArtChanged); the glow keeps itself up through ns.ProcGlowChanged. Off and a fight let it go as the test does, and an alert that was up
+-- before carries on.
+P.TEST_SOUND = "procs"
+
+local function Pick()
+	if InCombatLockdown() or not ns.Enabled(KEY) or not ns.TestMode.IsOn() then
+		return nil
+	end
+	for _, list in ipairs({ ns.ProcAutoEntries(), All() }) do
+		for _, entry in ipairs(list) do
+			if entry.on ~= false and not Off(entry) then
+				return entry
+			end
+		end
+	end
+	return nil
+end
+
+local function Hold(entry)
+	P.before = P.before or {}
+	if P.before[entry.id] == nil then
+		P.before[entry.id] = P.up[entry.id] ~= nil
+	end
+	P.held = entry
+	P.up[entry.id] = entry
+	if ns.TestMode.Sound(P.TEST_SOUND) then
+		Sound(entry, true)
+	end
+	ShowArt(entry)
+	Call(ns.ProcGlowStart, entry)
+end
+
+local function Release()
+	local entry = P.held
+	if entry then
+		P.held = nil
+		Test(entry, false)
+	end
+end
+
+-- True for the proc test mode holds up.
+function ns.ProcHeld(entry)
+	return entry ~= nil and P.held == entry
+end
+
+local function HeldStart()
+	local entry = Pick()
+	if entry then
+		Hold(entry)
+	end
+end
+
+-- A row of this page or a new profile ("*"); a row of another page changes nothing here.
+local function HeldChanged(path)
+	if path ~= "*" and not (type(path) == "string" and path:find("^" .. KEY .. "%.")) then
+		return
+	end
+	local entry = Pick()
+	if entry ~= P.held then
+		Release()
+		if entry then
+			Hold(entry)
+		end
+	elseif entry then
+		ShowArt(entry, true)
+	end
+	ns.TrackerDirty()
 end
 
 -- Commands ---------------------------------------------------------------------------------------------------------------------------
@@ -1103,6 +1181,15 @@ local function Word(text)
 	end
 	return K.USAGE
 end
+
+-- The proc of test mode: the trackers' own entry (Trackers.lua) draws its icon; this one holds its alert.
+ns.TestMode.Register("procs", {
+	module = KEY,
+	label = "Proc alerts",
+	Start = HeldStart,
+	Stop = Release,
+	Changed = HeldChanged,
+})
 
 ns.TrackerWord("proc", function(text)
 	local ok, line = pcall(Word, text)
