@@ -890,7 +890,7 @@ function B.EndTest(token)
 	B.Pass()
 end
 
--- Three sample icons, run by /flatui test with the samples of the other rows.
+-- Three sample icons, run by /flatui test icons with the samples of the other rows.
 function ns.OwnBuffsTest()
 	if not B.Capable() then
 		return

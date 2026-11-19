@@ -99,9 +99,37 @@ The **Flat UI** page can let the camera zoom out farther than the game's own opt
 - `/flatui tracker add group` tracks your class buff on your group; `/flatui tracker use 2 <item>` sets what weapon tracker 2 applies; `/flatui tracker set 1 health 40` shows pet tracker 1's health in red under 40%.
 - `/flatui bags` opens or closes the Flat UI bag window; `/flatui bags <name>` shows another of your characters' bags.
 - `/flatui bank` opens or closes your bank window: live at the banker with Flat UI's bank window, else as you last left it; `/flatui bank <name>` shows another character's bank.
+- `/flatui test` turns test mode on or off (`/flatui test on` and `/flatui test off` also work); see **Test mode** below.
+- `/flatui test icons` shows three sample icons for 8 seconds on Defensives on you, Your buffs, Party cooldowns and Enemy cooldowns.
 - `/flatui help` lists the commands.
 
 ![Movers](media/flatui-movers.jpg)
+
+## Test mode
+
+Test mode shows your frames on screen with sample content while you change options, so a setting can be seen as you change it, the frames that are hidden until a fight, a target or a group included. Turn it on with the **Test mode** switch on the title bar of the options window, left of Close; **Samples** on the toolbar of `/flatui move`; `/flatui test`; or a key (Key Bindings > Flat UI > **Flat UI test mode**). It does not turn on in a fight or while Setup has the options window.
+
+A bar at the top of the screen (under the `/flatui move` toolbar while that shows) has **Group** (**Solo**, **Party**, **Raid 10**, **Raid 20** or **Raid 40**; Party at first, kept until a reload), **Moving** (on; off holds every sample still so a look can be judged), **Bags**, **Bank**, **Gear** and **Finder**, which open Flat UI's own windows with their real content, and **End**. A dim line under it names any frame that has no place yet ("open Edit Mode once"): a frame the game has never placed gets no sample at a corner.
+
+What shows, each at its saved place, scale and size, drawn with your current settings:
+
+- **Party frames** (Group Party, while you are in no group): Mara, a paladin tank and leader with a marker and aggro; Eli, a priest healer with a debuff you can dispel, your heals over time and out of range, whose health drifts; Ivo, a warlock with a Voidwalker; and Fay, a dead rogue. With Edit Mode's Raid-Style Party Frames they are cells, you first.
+- **Raid frames** (Raid 10, 20 or 40, while you are in no raid): that many members in groups, at the cell size and group layout of the Edit Mode layout in use, with every class and role, dead, offline and out of range members, debuffs you can dispel, markers on the tanks, a leader and two assistants, buffs and heals over time, as the game's raid frame options say. Three members' health drifts.
+- **Target**, **target of target** (with the game's Target of Target on), **focus**, **focus target**, **pet** and **boss** frames 1 to 5 while there is none, and a shaman's **totems**, whose time counts down.
+- **Cast bars**: yours fills, channels and is interrupted in turn; the target's, focus's, pet's and first boss's run while their sample frame shows. **Swing timers**, **debuffs** and **buffs** while you have none, two **loot rolls** at the Loot rolls box, and a **sample nameplate** in the middle of the screen with its cast and threat colours.
+- Flat UI's own frames: **combat text** and **combat alerts**, the **cooldown pulse**, **cooldown icons** (every row on, with sweeps that loop; an empty row gets three samples, one icon stays ready, and your interrupt is ringed in gold), **Defensives on you** and **Your buffs**, **party cooldowns** (on your real rows, or with no group sample rows for you and the party above), **enemy cooldowns** on the target and focus bars, **trackers** stepping fine, low and missing whatever their Show rule, your class's first **proc alert** with its art and glow, the **threat list**, **healer mana**, the **hit table** (against a boss with no target), the sample text of empty **data panel** slots, **group tools** and the **cursor ring**.
+
+Every change shows at once; a frame moved or scaled in `/flatui move` or Edit Mode takes its sample with it within a quarter of a second. A sample steps aside as soon as the real frame shows: a real target, cast, group or aura. Esc > Edit Mode still shows the game's own previews, and the samples give way to them. A frame ticked on the **Hidden frames** page gets no sample.
+
+It ends when you press the switch, **Samples**, `/flatui test`, the key or **End** again; when you close the options window it was turned on from (not while `/flatui move` holds that window); when `/flatui move` closes for good after turning it on (unless the options window is open, which then keeps it); when Setup takes the options window; and at a reload. A fight pauses it, and it comes back after the fight while what turned it on is still open. It saves nothing: no setting, game setting, key binding, target or focus, and no number counts in a statistic.
+
+What does not show, and why:
+
+- **The game's own unit frames are never shown or given a unit**, and **Edit Mode is never opened by Flat UI**: the game protects them, and doing either from an addon taints them and can block targeting. The samples are Flat UI's own frames drawn where the game's are, so a sample can differ slightly from the real frame.
+- **Real nameplates are not forced on screen** (that would change game settings), so threat colours show on the sample plate, not on your target's plate.
+- **The game's windows** (Character, Spellbook, talents and the rest) are not opened: an addon opening them can taint the game's window manager. Open them yourself and the **Windows** page restyles them as you change it.
+- **No drawing exists** for mirror timers, the loot window, the queue panel, alerts, zone text, the talking head, the extra action button, arena and vehicle frames, and Errands' overlays need the NPC's window open. Chat and tooltips get no sample: a printed line would skip the chat filters, and a tooltip shows on any mouse-over anyway.
+- **Party cooldown rows hang in the raid stack**, not beside the party samples, and the **pet's target** frame (a secure button of Flat UI's) shows no sample.
 
 ## Test
 

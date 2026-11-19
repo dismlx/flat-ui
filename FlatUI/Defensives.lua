@@ -1107,7 +1107,7 @@ ns.Register(KEY, {
 	-- /flatui test, test on and test off are test mode's (Core.lua takes them first); test icons is the 8-second test of the icon rows.
 	slash = { check = D.Check, defensives = D.Slash, test = function(rest)
 		if not (rest or ""):lower():match("^%s*icons%s*$") then
-			print("/flatui test - samples of your hidden frames on screen until you turn it off")
+			print("/flatui test - samples of your hidden frames on screen until you turn it off; test on and test off also work")
 			print("/flatui test icons - three sample icons for 8 seconds on Defensives on you, Your buffs, Party and Enemy cooldowns")
 			return
 		end

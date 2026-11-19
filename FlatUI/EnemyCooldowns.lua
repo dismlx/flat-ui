@@ -2027,7 +2027,7 @@ function E.Sample(row, rec, token, now)
 	row.holder:Show()
 end
 
--- /flatui test: three sample icons on the plate of every enemy player on screen and on the target and focus bars, for a few seconds.
+-- /flatui test icons: three sample icons on the plate of every enemy player on screen and on the target and focus bars, for a few seconds.
 function ns.EnemyTest()
 	if not ns.Enabled(KEY) or InCombatLockdown() then
 		return

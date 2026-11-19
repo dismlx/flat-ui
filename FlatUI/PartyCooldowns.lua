@@ -1565,7 +1565,7 @@ end
 
 -- The test and the status -----------------------------------------------------------------------------------------------------------------
 
--- /flatui test: three sample icons on every row, for a few seconds.
+-- /flatui test icons: three sample icons on every row, for a few seconds.
 function ns.PartyTest()
 	if not ns.Enabled(KEY) or InCombatLockdown() or not LIVE[P.state] then
 		if ns.Enabled(KEY) then

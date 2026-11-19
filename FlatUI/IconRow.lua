@@ -84,7 +84,7 @@ local COLOURS = {
 	{ 1, 0.84, 0.3 },
 }
 
--- The icons and times of the three samples that /flatui test shows.
+-- The icons and times of the three samples that /flatui test icons and test mode show.
 local SAMPLES = { { 135940, 3 }, { 135964, 3 }, { 136089, 3 } }
 
 -- The red, green and blue of a kind (1 to 9), or nothing for any other value.

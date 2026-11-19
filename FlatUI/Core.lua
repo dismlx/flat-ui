@@ -338,11 +338,19 @@ local ADDON_NAME, ns = ...
 -- goes off, and once Hide the zone name has been on it follows SetZoneText with hooksecurefunc, to hide the zone's name in the smaller line; with
 -- Hide the talking head it takes TALKINGHEAD_REQUESTED from TalkingHeadFrame (UnregisterEvent) and gives it back, as above.
 -- Test mode (TestMode.lua) is a state of the session, never saved. While it is on, out of combat, the modules that register with it draw samples on
--- their own frames, and frames of Flat UI's own on UIParent that take no mouse (stand-ins) lie at the places of game frames that are hidden now,
--- painted with Flat UI's look by the setup drawings. Of such a game frame a stand-in reads only the place and size (ns.MoverRect), the effective
--- scale, strata, level and shown flag. Test mode writes no variable, binding, target, attribute or field, calls no other method of a game frame,
--- adds no hook and never opens Edit Mode or a game window; a fight pauses it inside PLAYER_REGEN_DISABLED. Its key binding is a click on a plain
--- button of its own (BINDING_NAME_CLICK FlatUITestButton:LeftButton).
+-- their own frames, and frames of Flat UI's own on UIParent that take no mouse (stand-ins, TestUnits.lua and TestHud.lua) lie at the places of the
+-- game's party, raid, target, target of target, focus, focus target, pet, boss and totem frames, cast bars, swing timers and buff and debuff frames
+-- while those are hidden, with two loot rolls at the Loot rolls box and a sample nameplate in the middle of the screen, painted with Flat UI's look
+-- by the setup drawings. Of such a game frame a stand-in reads only the place and size (ns.MoverRect), the effective scale, strata, level and shown
+-- flag. TestUnits.lua also reads the layout in use (C_EditMode.GetLayouts, and for a preset EditModePresetLayoutManager.presetLayoutInfo with
+-- rawget), the raid frame variables raidFramesDisplayClassColor, raidFramesDisplayPowerBars, raidFramesDisplayOnlyHealerPowerBars,
+-- raidFramesHealthText, raidFramesDisplayDebuffs and raidFramesDispelIndicatorType and the variables showPartyPets and showTargetOfTarget
+-- (C_CVar.GetCVarBool, GetCVar), whether a target, focus, pet, boss, group or raid exists (UnitExists, IsInGroup, IsInRaid), the shown flags of
+-- PartyFrame.MemberFrame1 (rawget), CompactPartyFrame and Boss1TargetFrame and the effective scale of Boss1TargetFrame; TestHud.lua reads the
+-- slots of the player's auras (C_UnitAuras.GetAuraSlots) out of combat only and the shown flags of GroupLootFrame1 to 4. Test mode writes no
+-- variable, binding, target, attribute or field, calls no other method of a game frame, adds no hook and never opens Edit Mode or a game window;
+-- a fight pauses it inside PLAYER_REGEN_DISABLED. Its key binding is a click on a plain button of its own (BINDING_NAME_CLICK
+-- FlatUITestButton:LeftButton).
 
 local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
@@ -4006,7 +4014,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui welcome - the welcome screen")
 		print("/flatui scale 70 - custom UI scale in percent, 65 to 115")
 		print("/flatui scale off - the game's own UI scale")
-		print("/flatui test - samples of your hidden frames on screen until you turn it off")
+		print("/flatui test - samples of your hidden frames on screen until you turn it off; test on and test off also work")
 		print("/flatui taint - the action button click path, checked for values an add-on changed")
 		print("/flatui cvar - each game setting row: value, default, secure flag")
 		print("/flatui cvar check - whether each of those can be changed, out of combat")
