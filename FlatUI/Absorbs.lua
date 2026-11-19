@@ -18,9 +18,10 @@ local _, ns = ...
 -- Defensives on you does: one group of buttons for each school, so each button knows its colour, with the icon, the time and a bar the game
 -- fills by the time left; the game gives no amount of a single shield then, so only the total bar has one. The container's alpha says which
 -- of the two shows, a change allowed at any time; the parts of its buttons are made inside the function the game calls while it builds a
--- button, and a later change to them waits until the game says buffs are open. A shield that goes before its time while buffs are read
--- broke: a sound plays, if chosen, and the bars flash. The target's total can have a bar of its own. Every frame is Flat UI's own, and
--- nothing of the game is changed or hooked. The helpers are in one table, A.
+-- button, and a later change to them waits until the game says buffs are open. A shield that goes before its time while buffs are read,
+-- and is still listed, broke: a sound plays, if chosen, and the bars flash. The target's total can have a bar of its own. Out of a fight the
+-- totals follow the game's events; in one, a step a few times a second. Every frame is Flat UI's own, and nothing of the game is changed or
+-- hooked. The helpers are in one table, A.
 
 local KEY = "absorbs"
 local MOVER, MOVER_TARGET = "FlatUIAbsorbs", "FlatUIAbsorbsTarget"
@@ -31,8 +32,8 @@ local CROP = 0.08
 -- The most bars of single shields. A read is made at most this often; the time texts step, the total step, a test and a flash last so long.
 local MOST = 6
 local REREAD, STEP, TOTAL_STEP, TEST_TIME, FLASH = 0.2, 0.1, 0.25, 8, 0.4
--- A shield gone this long or more before its end broke; one gone later ran out.
-local EARLY = 0.3
+-- A shield gone this long or more before its end broke; one gone later ran out. One read this soon after it was put on is read whole.
+local EARLY, FRESH = 0.3, 1
 -- School masks: every school, and physical (Mana Shield).
 local ALL = 127
 -- One group of the game's container for each mask, in this order, and the most buttons of each.
@@ -46,6 +47,8 @@ local SCHOOL_RGB = { [1] = { 0.7, 0.7, 0.7 }, [2] = { 1, 0.9, 0.5 }, [4] = { 1, 
 local TIME_ALPHA = 0.6
 local FLASH_RGB = { 1, 0.15, 0.1, 0.55 }
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
+-- The events of the totals, which the player's and the target's bars hear; out of a fight they and the reads of the buffs move the totals.
+local TOTAL_EVENTS = { UNIT_ABSORB_AMOUNT_CHANGED = true, UNIT_MAXHEALTH = true }
 -- The shields: the row of the page that lists them, the school mask, the length in seconds of the player's own cast (self: cast on the player
 -- only, so a cast in a fight counts toward the size), a family (a new cast replaces the shield of its family) and the spell IDs of the aura,
 -- rank 1 first (CooldownData.lua; Contingency Plan's shield auras from client_spells.json, whose rank 4 and 5 IDs are crossed).
@@ -466,12 +469,20 @@ function A.PaintRow(row, w, h)
 	for _, name in ipairs({ "name", "amount", "time" }) do
 		row[name]:SetTextHeight(text)
 	end
-	-- The amount is on the left, or in the middle while the name is on the left.
+	-- The amount is on the left; while the name shows, it is on the right, left of the time, and the name ends before it.
 	row.amount:ClearAllPoints()
+	row.name:ClearAllPoints()
+	row.name:SetPoint("LEFT", row.bar, "LEFT", 3, 0)
 	if Opt("name") == true and not row.presence then
-		row.amount:SetPoint("CENTER", row.bar, "CENTER", 0, 0)
+		if Opt("time") == true then
+			row.amount:SetPoint("RIGHT", row.time, "LEFT", -3, 0)
+		else
+			row.amount:SetPoint("RIGHT", row.bar, "RIGHT", -3, 0)
+		end
+		row.name:SetPoint("RIGHT", row.amount, "LEFT", -3, 0)
 	else
 		row.amount:SetPoint("LEFT", row.bar, "LEFT", 3, 0)
+		row.name:SetPoint("RIGHT", row.time, "LEFT", -3, 0)
 	end
 end
 
@@ -516,8 +527,8 @@ end
 function A.Layout()
 	local w, h = Number("barWidth", 180), Number("barHeight", 16)
 	local parts = { w, h, Number("spacing", 2), Opt("grow"), Opt("show"), Opt("name"), A.File(), ns.Get("general.thickness"), ns.Get("general.border"),
-		ns.Get("general.borderMode"), ns.Borderless(), ns.Get("general.backdrop"), ns.Get("general.backdropAlpha"), #A.rows, A.target ~= nil }
-	for index = 1, 15 do
+		ns.Get("general.borderMode"), ns.Borderless(), ns.Get("general.backdrop"), ns.Get("general.backdropAlpha"), #A.rows, A.target ~= nil, Opt("time") }
+	for index = 1, 16 do
 		parts[index] = tostring(parts[index])
 	end
 	local key = table.concat(parts, ":")
@@ -544,20 +555,23 @@ function A.Layout()
 	end
 	if A.target then
 		A.PaintRow(A.target, w, h)
+		A.target.frame:GetParent():SetSize(w, h)
 		A.target.frame:SetPoint("TOPLEFT", A.target.frame:GetParent(), "TOPLEFT", 0, 0)
 	end
 end
 
--- Hangs the bars from the corner of the box of the movers they grow from.
+-- Hangs the bars, which are as wide as the holder, from the middle of the top of the box of the movers, or of its bottom while they grow up: so
+-- they stay centred on the box at any Bar width.
 function A.Place()
 	local holder = A.Holder()
-	local point = Opt("grow") == "up" and "BOTTOMLEFT" or "TOPLEFT"
+	local up = Opt("grow") == "up"
+	local point = up and "BOTTOM" or "TOP"
 	local x, y = ns.MoverSpot(MOVER, point)
 	holder:ClearAllPoints()
 	if x then
 		holder:SetPoint(point, UIParent, "BOTTOMLEFT", x, y)
 	else
-		holder:SetPoint("TOP", UIParent, "CENTER", 0, -180)
+		holder:SetPoint(point, UIParent, "CENTER", 0, up and -231 or -179)
 	end
 end
 
@@ -779,13 +793,14 @@ function A.PlaceTarget()
 	if not A.target then
 		return
 	end
+	-- The target's bar, as big as its holder, is centred on its box at any Bar width and height.
 	local holder = A.target.frame:GetParent()
-	local x, y = ns.MoverSpot(MOVER_TARGET, "TOPLEFT")
+	local x, y = ns.MoverSpot(MOVER_TARGET, "CENTER")
 	holder:ClearAllPoints()
 	if x then
-		holder:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+		holder:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
 	else
-		holder:SetPoint("BOTTOM", UIParent, "CENTER", 0, 140)
+		holder:SetPoint("CENTER", UIParent, "CENTER", 0, 140)
 	end
 end
 
@@ -834,29 +849,50 @@ for index, mask in ipairs(GROUPS) do
 	ORDER[mask] = index
 end
 
+-- True when a shield was put on just now, so what is read of it is the whole of it.
+local function Fresh(item, now)
+	return item.expires > 0 and item.length > 0 and now - (item.expires - item.length) < FRESH
+end
+
+-- The size of a shield first read: the largest plain amount, or the estimate of the player's own cast while buffs were hidden, or, unless it
+-- was put on just now, the estimate of the player's own spell, whichever is larger. So a shield cast in a fight, or first seen after a reload,
+-- is not sized at what it has left.
+function A.FirstSize(item, size, now)
+	local info = SHIELDS[item.id]
+	local cast = info and A.casts[info.family]
+	local guess = cast and cast.expires > now and cast.size or nil
+	if not guess and item.mine and (not ns.Finite(size) or not Fresh(item, now)) then
+		guess = A.Estimate(item.id)
+	end
+	if ns.Finite(guess) and (not ns.Finite(size) or guess > size) then
+		return guess
+	end
+	return size
+end
+
 -- The sizes of what was read, the shields that broke since the last read, and what is known now.
 function A.Track(found)
-	local now, was, seen, families = Now(), A.known, {}, {}
+	local now, was, seen, families, set = Now(), A.known, {}, {}, A.Effective()
 	for _, item in ipairs(found) do
 		local old = was[item.instance]
 		local size = old and old.size or nil
 		if ns.Finite(item.amount) and (not ns.Finite(size) or item.amount > size) then
 			size = item.amount
 		end
-		if not ns.Finite(size) and item.mine then
-			size = A.Estimate(item.id)
+		if not old then
+			size = A.FirstSize(item, size, now)
 		end
 		item.size = size
 		local info = SHIELDS[item.id]
-		seen[item.instance] = { size = size, expires = item.expires, mask = item.mask, family = info and info.family }
+		seen[item.instance] = { id = item.id, size = size, expires = item.expires, mask = item.mask, family = info and info.family }
 		if info then
 			families[info.family] = true
 		end
 	end
-	-- A shield that a new one of its family replaced did not break.
+	-- A shield that a new one of its family replaced did not break, nor one no longer listed.
 	if A.wasRead and Ask(UnitIsDeadOrGhost, "player") ~= true then
 		for instance, old in pairs(was) do
-			if not seen[instance] and not (old.family and families[old.family]) and (old.expires <= 0 or now < old.expires - EARLY) then
+			if not seen[instance] and set[old.id] and not (old.family and families[old.family]) and (old.expires <= 0 or now < old.expires - EARLY) then
 				A.Broke()
 				break
 			end
@@ -905,7 +941,8 @@ function A.Queue()
 	end
 end
 
--- The step of the bars: the time texts, and a few times a second the totals and whether the game shows buffs now.
+-- The step of the bars: the time texts, and a few times a second the totals and whether the game shows buffs now. Out of a fight, while the
+-- game shows buffs and no cast in a fight still counts, the events say every change of the totals, and the step leaves them.
 function A.OnUpdate(elapsed)
 	if not Plain(elapsed, "number") then
 		return
@@ -925,9 +962,11 @@ function A.OnUpdate(elapsed)
 	end
 	if A.accTotal >= TOTAL_STEP then
 		A.accTotal = 0
-		A.Totals()
-		if not A.sample and T.Open() ~= A.wasOpen then
-			A.Queue()
+		if InCombatLockdown() or not A.wasOpen or next(A.casts) ~= nil then
+			A.Totals()
+			if not A.sample and T.Open() ~= A.wasOpen then
+				A.Queue()
+			end
 		end
 	end
 end
@@ -1068,6 +1107,15 @@ function A.BindText(parts, kind)
 	parts[kind .. "On"] = want
 end
 
+-- The name of a button ends left of its time, or of its edge, so a long one is cut short as on Flat UI's bars.
+function A.NameEnd(parts, text)
+	if parts.time then
+		text:SetPoint("RIGHT", parts.time, "LEFT", -3, 0)
+	else
+		text:SetPoint("RIGHT", parts.button, "RIGHT", -3, 0)
+	end
+end
+
 -- Makes the parts of one button. Run by the game inside AddAuraGroup while the button is still open; nothing here may raise, and a part the
 -- game refuses is left out and named in the status.
 function A.Init(button, mask)
@@ -1118,6 +1166,7 @@ function A.Init(button, mask)
 			text:SetWordWrap(false)
 			text:SetJustifyH("LEFT")
 			text:SetPoint("LEFT", button, "LEFT", Number("barHeight", 16) + 3, 0)
+			A.NameEnd(parts, text)
 			parts.name = text
 			parts.nameOn = false
 			text:Hide()
@@ -1162,14 +1211,16 @@ function A.Flush()
 		end
 		if parts.name then
 			pcall(parts.name.SetPoint, parts.name, "LEFT", parts.button, "LEFT", Number("barHeight", 16) + 3, 0)
+			pcall(A.NameEnd, parts, parts.name)
 		end
 	end
 end
 
--- The layout of each group: one column of bars of the size of Flat UI's, in the order of GROUPS.
+-- The layout of each group: one column of bars of the size of Flat UI's, in the order of GROUPS. The spacing after a group's last bar already
+-- parts it from the next group (AnchorUtil.lua:684-727), so groups add none, and the bars are as far apart as Flat UI's.
 local function GroupLayout(index)
 	local gap = Number("spacing", 2)
-	return { elementSpacing = gap, groupSpacing = gap, elementWidth = Number("barWidth", 180), elementHeight = Number("barHeight", 16), layoutIndex = index }
+	return { elementSpacing = gap, groupSpacing = 0, elementWidth = Number("barWidth", 180), elementHeight = Number("barHeight", 16), layoutIndex = index }
 end
 
 -- The column grows down from the top left corner, or up from the bottom left corner (AnchorUtil.lua:465-477).
@@ -1267,9 +1318,16 @@ function A.Listen(on)
 		local frame = Own(CreateFrame("Frame"))
 		-- The payload of the auras and of the total is not read: the game may withhold it. A cast's spell ID is read only where it is plain.
 		frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
-			-- Where the game would not give the event for the player alone, the others are left out by a plain unit.
-			if A.loose[event] and event ~= "UNIT_ABSORB_AMOUNT_CHANGED" and not (Plain(unit, "string") and unit == "player") then
-				return
+			-- Where the game would not give the event for the player (and the target) alone, the others are left out by a plain unit.
+			if A.loose[event] then
+				local plain = Plain(unit, "string")
+				if TOTAL_EVENTS[event] then
+					if plain and unit ~= "player" and unit ~= "target" then
+						return
+					end
+				elseif not (plain and unit == "player") then
+					return
+				end
 			end
 			if event == "UNIT_AURA" then
 				A.Queue()
@@ -1287,10 +1345,10 @@ function A.Listen(on)
 		return
 	end
 	A.loose = {}
-	for _, event in ipairs({ "UNIT_AURA", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_ABSORB_AMOUNT_CHANGED" }) do
+	for _, event in ipairs({ "UNIT_AURA", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" }) do
 		local ok = false
 		if frame.RegisterUnitEvent ~= nil then
-			if event == "UNIT_ABSORB_AMOUNT_CHANGED" and Opt("target") == true then
+			if TOTAL_EVENTS[event] and Opt("target") == true then
 				ok = pcall(frame.RegisterUnitEvent, frame, event, "player", "target")
 			else
 				ok = pcall(frame.RegisterUnitEvent, frame, event, "player")
@@ -1303,8 +1361,10 @@ function A.Listen(on)
 	end
 end
 
+-- Switched off, Flat UI forgets what it read, so a shield that ends meanwhile is not taken for broken when it is on again.
 function A.Off()
 	A.sample = nil
+	A.known, A.casts, A.wasRead = {}, {}, false
 	A.Listen(false)
 	if A.holder then
 		A.holder:Hide()
@@ -1511,7 +1571,9 @@ ns.Register(KEY, {
 	Resized = A.Refresh,
 	Status = A.Status,
 	events = {
+		-- After a loading screen the first read is not compared with the last, so a shield the game had not yet listed again did not break.
 		PLAYER_ENTERING_WORLD = function()
+			A.wasRead = false
 			A.Refresh()
 		end,
 		PLAYER_REGEN_DISABLED = Soon,

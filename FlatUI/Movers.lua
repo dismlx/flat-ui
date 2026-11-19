@@ -168,9 +168,9 @@ local LIST = {
 	-- Where the row of Defensives on you hangs from with Place set to Own position: four icons and the room for the caster's name.
 	{ name = "FlatUIDefensives", label = "Defensives on you", point = "CENTER", kind = "hud", own = true, noScale = true, width = 137, height = 48, x = 0, y = 180,
 		gate = "DefensivesOwnShown", changed = "DefensivesMoved" },
-	-- The bars of Absorb shields (Absorbs.lua): they grow down from the top left corner of the box, or up from its bottom left corner, which has
-	-- the room of three bars at the default size. It starts under Your buffs. The target's total bar hangs from the top left corner of its own box,
-	-- above the character.
+	-- The bars of Absorb shields (Absorbs.lua): they grow down from the middle of the top of the box, or up from the middle of its bottom, so they
+	-- stay centred on it at any width; it has the room of three bars at the default size. It starts under Your buffs. The target's total bar is
+	-- centred on its own box, above the character.
 	{ name = "FlatUIAbsorbs", label = "Absorb shields", point = "CENTER", kind = "hud", own = true, noScale = true, width = 180, height = 52, x = 0, y = -205,
 		gate = "AbsorbsShown", changed = "AbsorbsMoved" },
 	{ name = "FlatUIAbsorbsTarget", label = "Absorb shields: target", point = "CENTER", kind = "hud", own = true, noScale = true, width = 180, height = 16, x = 0, y = 140,
