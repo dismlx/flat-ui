@@ -1255,6 +1255,7 @@ ns.SETUP_STEPS = {
 		{ "fade.pet", "c", "mock-fade" },
 		{ "fade.micro", "c", "mock-fade" },
 		{ "fade.bags", "c", "mock-fade" },
+		{ "fade.bagWindows", "o", "behaviour", "Fades your open bag and bank windows while you are not using them." },
 		{ "fade.playerFrame", "c", "mock-fade" },
 		{ "fade.petFrame", "o", "mock-fade" },
 		{ "fade.minimapButtons", "o", "mock-fade" },
