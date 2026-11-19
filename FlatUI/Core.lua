@@ -249,6 +249,13 @@ local ADDON_NAME, ns = ...
 -- raidtarget action, /readycheck and /countdown. A plain button asks for a role poll, and it writes tooltips in GameTooltip.
 -- Cooldown pulse (off by default) is up to three frames of its own on UIParent that take no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
+-- Absorb shields draws bars of its own on frames of its own on UIParent (placed by the movers, FlatUIAbsorbs and FlatUIAbsorbsTarget) and makes
+-- one aura container of the game's own (CustomAuraContainerTemplate) out of combat, as Defensives on you does, whose groups, filters, layout and
+-- alpha it changes at any time and the parts of whose buttons only while the game shows buffs. It reads the player's buffs (C_UnitAuras.
+-- GetUnitAuras: the spell, its end and its amount, points[1]) only while the game shows them, and spell power and healing (GetSpellBonusDamage,
+-- GetSpellBonusHealing) only while plain; it hands UnitGetTotalAbsorbs and UnitHealthMax of the player and the target unread to SetMinMaxValues
+-- and SetValue of its own status bars and, through C_StringUtil.TruncateWhenZero, to SetText, and plays a sound kit (PlaySound) when a shield
+-- breaks while buffs are read. It changes nothing of the game's.
 -- Cooldown icons, with Tooltips on icons, let their own icons hear the mouse and take no click (SetMouseMotionEnabled, SetMouseClickEnabled:
 -- protected functions, called on its own icons only while InCombatLockdown() is false), and write GameTooltip (GameTooltip_SetDefaultAnchor or
 -- SetOwner, SetSpellByID, SetItemByID, SetInventoryItem, Show, and Hide while an icon owns it). The game is asked once to load each item of Add an
@@ -338,7 +345,7 @@ local ADDON_NAME, ns = ...
 -- goes off, and once Hide the zone name has been on it follows SetZoneText with hooksecurefunc, to hide the zone's name in the smaller line; with
 -- Hide the talking head it takes TALKINGHEAD_REQUESTED from TalkingHeadFrame (UnregisterEvent) and gives it back, as above.
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade", "hide" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.
