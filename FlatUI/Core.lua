@@ -21,7 +21,9 @@ local ADDON_NAME, ns = ...
 -- its row or the module goes off. With Hit numbers on player and pet
 -- portraits off, Unit frames does the same for the frame that holds the player's hit number (HitIndicator), and hides the pet's (PetHitIndicator,
 -- SetShown) each time CombatFeedback_OnCombatEvent has shown it; the game shows the next one again once the row is on.
--- Fade's frames include the game's DamageMeter and other addons' minimap buttons (LibDBIcon10_), whose alpha it reads first and puts back the same way.
+-- Fade's frames include the game's DamageMeter, other addons' minimap buttons (LibDBIcon10_) and, while they show, the bag windows, the game's
+-- (ContainerFrameCombinedBags, ContainerFrame1 to ContainerFrame7, BankFrame) and those of Bags, whose alpha it reads first and puts back the same way; its
+-- Bag bar row writes the alpha of BagsBar alone, also while Leave the game's action bars alone is on, never of a bag button.
 -- Movers and Tooltip are the exceptions that move Blizzard frames, with ClearAllPoints, SetPoint
 -- and SetScale only, and SetAnchorType and Hide on GameTooltip: Movers places the frames the player moves,
 -- Tooltip places GameTooltip and hides it when the game fades it out while it follows the cursor. The cast
@@ -987,7 +989,8 @@ function ns.Enabled(key)
 end
 
 -- True while Leave the game's action bars alone is on (the default). Flat UI then makes no call that places, groups, fades or restyles the game's
--- stance, pet or status bars, and none that places, sizes, fades or writes a field on the micro menu or bag bar (their pictures and buttons get the Flat UI look), and registers no setting of its own in the game's settings registry. The game's eight action bars
+-- stance, pet or status bars, and none that places, sizes, fades or writes a field on the micro menu, or that places, sizes or writes a field on the
+-- bag bar (their pictures and buttons get the Flat UI look, and Fading's Bag bar row writes the alpha of the bag bar, Fade.lua), and registers no setting of its own in the game's settings registry. The game's eight action bars
 -- (bars 1 to 8) are covered by Action buttons (actionbars.own): with Flat UI's buttons they are parked by alpha and mouse only, with the game's
 -- buttons Flat UI leaves them alone. A click on an action button reads the bar, the button and the settings registry, and a call of this addon that
 -- touched one of them leaves the click refused (UseAction, ADDON_ACTION_FORBIDDEN).
