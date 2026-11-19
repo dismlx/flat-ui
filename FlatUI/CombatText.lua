@@ -18,6 +18,8 @@ local _, ns = ...
 -- yours and each hit that strikes you under Retaliation lets one hit in; on both, the slot a hit takes names it. A report waits MINE.hold
 -- seconds, so a cast, a swing and a hit sent together count in any order. It cannot know whose hit it is when a player outside your group hits
 -- an enemy you hold, nor, in a group, a proc that casts nothing.
+-- While test mode is on (TestMode.lua), a sample number shows in each place that shows them every 1.5 seconds (ns.CombatTextTestStep); like the
+-- samples of /flatui combat test they are no hit reports and count in no number of /flatui status.
 
 local KEY = "combattext"
 -- 40 is the game's own height above the enemy, and every 5 points are 0.00375 of WorldTextScreenY_v2: 60 gives 0.015, the value Retail ships (CVars_live.lua:1652).
@@ -3854,6 +3856,29 @@ local function Test()
 	Run(FRIEND_SAMPLES, FriendSample(anchor, onFrame))
 end
 
+-- Test mode (TestMode.lua): one sample number in each place that shows them, every 1.5 seconds while it is on and its bar's Moving is on, in turn a
+-- hit, a critical hit, a heal (a glancing blow in the Outgoing area and over the target), a dodge and an absorb, each in the look the rows give
+-- it now. Over the target's plate only while numbers show there and an enemy target has a plate. Like the samples of /flatui combat test they are
+-- no hit reports: the counters they raise are put back, and the scroll areas count none of them (ScrollText.lua).
+function ns.CombatTextTestStep(now)
+	if not ns.Enabled(KEY) or not ns.Finite(now) then
+		return
+	end
+	local absorb = { "WOUND", "ABSORB", 0, 1 }
+	local own = { OWN_SAMPLES[1], OWN_SAMPLES[2], OWN_SAMPLES[3], OWN_SAMPLES[4], absorb }
+	local out = { SAMPLES[1], SAMPLES[3], SAMPLES[2], SAMPLES[4], absorb }
+	local index = math.floor(now / 1.5) % #own + 1
+	if Opt("own") ~= "off" then
+		ns.Try(KEY, OwnSample, own[index])
+	end
+	if ns.ScrollText.On("out") then
+		ns.Try(KEY, OutSample, out[index])
+	end
+	if Opt("where") ~= "scroll" and Opt("source") == "front" and Plate("target") then
+		ns.Try(KEY, Sample, out[index])
+	end
+end
+
 -- Puts the game's values back: the page goes off, which writes back what was remembered, and every variable that still differs
 -- from the client's default is written to it.
 local function Reset()
@@ -3951,6 +3976,19 @@ ns.Register(KEY, {
 	help = HELP,
 	Status = Status,
 })
+
+-- Test mode: the sample numbers on its shared step; Off and a pause take those of the scroll areas off the screen.
+if ns.TestMode then
+	ns.TestMode.Register("combattext", {
+		module = KEY,
+		label = "Combat text",
+		every = 1.5,
+		Tick = ns.CombatTextTestStep,
+		Stop = function()
+			ns.ScrollText.ClearSamples()
+		end,
+	})
+end
 
 -- A module whose page is off is never started, so a record left by a character whose page was on is put back here.
 local frame = CreateFrame("Frame")

@@ -25,6 +25,8 @@ local ADDON_NAME, ns = ...
 -- It follows the cursor ring of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Modules/Mouse/Mouse.lua:1882-1925,
 -- 2185-2258): the ring and its combat rule, and its cast and global cooldown swipes (Mouse.lua:845-937, 958-1060 and 1164-1230), fed duration objects
 -- in place of the start and end times, which the game may withhold. The centre dot, the right-click rule and the dots that run round the ring are left out.
+-- While test mode is on (TestMode.lua, out of combat only) In combat only reads as shown, and TestHud.lua gives the swipes a sample cast and global
+-- cooldown every 3 seconds (ns.CursorRingSample), timed by the ring's own plain numbers (SetCooldown with GetTime).
 
 local TEXTURE = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Ring.tga"
 local MODES = { always = true, combat = true }
@@ -78,12 +80,18 @@ local function InFight()
 	return InCombatLockdown() == true
 end
 
+-- True while test mode is on (TestMode.lua), which is out of combat only: In combat only reads as shown then.
+local function Testing()
+	local test = ns.TestMode
+	return test ~= nil and test.IsOn() == true
+end
+
 local function Wanted()
 	local mode = Mode()
 	if broken or mode == nil then
 		return false
 	end
-	return mode == "always" or fighting
+	return mode == "always" or fighting or Testing()
 end
 
 -- Puts the centre of the ring on the cursor.
@@ -471,6 +479,28 @@ function ns.CursorRingChanged()
 	local ok, err = pcall(Apply)
 	if not ok then
 		Stop(err)
+	end
+end
+
+-- Test mode: a sample cast of 2.5 seconds on the cast's swipe and a global cooldown of 1.5 on the other, each while its row is on and the ring shows,
+-- with no cast of the player's under way. Plain numbers of the ring's own (SetCooldown with GetTime), not the game's; the next cast event of the
+-- player's gives the swipe back to the game's duration. TestHud.lua calls it every 3 seconds while test mode is on, and ns.CursorRingChanged when
+-- test mode turns on, pauses, resumes or ends.
+function ns.CursorRingSample()
+	if broken or stopped or not (ring and ring:IsShown() and Testing()) or Running(false) then
+		return
+	end
+	local now = GetTime()
+	for kind, on in pairs({ cast = CastOn(), gcd = GcdOn() }) do
+		local cooldown = on and swipes[kind]
+		if cooldown and type(cooldown.SetCooldown) == "function" then
+			if kind == "cast" and type(cooldown.SetReverse) == "function" then
+				pcall(cooldown.SetReverse, cooldown, true)
+			end
+			if pcall(cooldown.SetCooldown, cooldown, now, kind == "cast" and 2.5 or 1.5) then
+				pcall(cooldown.Show, cooldown)
+			end
+		end
 	end
 end
 

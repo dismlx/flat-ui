@@ -14,7 +14,7 @@ local _, ns = ...
 -- The window is a child of UIParent in the LOW strata in the look of the Threat list (Threat.lua): a flat background and a thin border in the
 -- colours of the Flat UI page, its bars in the bar texture of that page; it takes no mouse and hides with the interface. /flatui move places it
 -- (FlatUIHealerMana in Movers.lua: the window's top left corner is the top left corner of the box). /flatui healers shows sample bars for a few
--- seconds. Nothing of the game is changed.
+-- seconds; while test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh. Nothing of the game is changed.
 -- This follows the Healer Mana indicator of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/
 -- GroupTools.lua:485-713): the healers of the group by their role, their mana share through UnitPowerPercent and the curve to 100, and the
 -- dungeon or raid rule. Its lines of text, fonts, alignment and name width are bars in the look of the Threat list here, and while nobody in the
@@ -328,6 +328,12 @@ function H.Fill(row, unit, sample)
 	end
 end
 
+-- True while the sample bars show: /flatui healers holds them for a few seconds (H.sample), and test mode (TestMode.lua) while it is on.
+function H.Sampling()
+	local mode = ns.TestMode
+	return H.sample ~= nil or (mode ~= nil and mode.IsOn() == true)
+end
+
 -- Puts the window at the spot of its handle: its top left corner at the top left corner of the box.
 function H.Place()
 	local x, y
@@ -350,7 +356,7 @@ end
 
 -- Shows a bar for each healer, as many as Number of bars allows (the samples for /flatui healers), or hides the window when there are none.
 function H.Draw()
-	local samples = H.sample and SAMPLE or nil
+	local samples = H.Sampling() and SAMPLE or nil
 	local list = samples or H.healers
 	local n = math.min(#list, Number("rows", 5), MOST_ROWS)
 	if n < 1 then
@@ -383,12 +389,13 @@ end
 function H.Update()
 	H.pending = nil
 	local on = ns.Enabled(KEY) and type(UnitPowerPercent) == "function"
-	if on and not H.sample and H.Allowed() then
+	local sampling = H.Sampling()
+	if on and not sampling and H.Allowed() then
 		H.healers = H.Read()
 	else
 		H.healers = {}
 	end
-	if on or H.sample then
+	if on or sampling then
 		H.Draw()
 	elseif H.frame then
 		H.frame:Hide()
@@ -412,7 +419,7 @@ end
 -- A step of half a second while the list of a group shows: the shares are drawn again, and nothing is read but them. A client without NewTicker
 -- gets a timer that sets the next one while the token is the step's, as the Threat list has it.
 local function Step()
-	if H.frame and #H.healers > 0 and not H.sample then
+	if H.frame and #H.healers > 0 and not H.Sampling() then
 		local n = math.min(#H.healers, Number("rows", 5), MOST_ROWS)
 		for index = 1, math.min(n, #H.rows) do
 			H.Fill(H.rows[index], H.healers[index])
@@ -523,3 +530,9 @@ ns.Register(KEY, {
 	slash = { healers = H.Slash },
 	help = HELP,
 })
+
+-- Test mode: the sample bars while it is on (H.Sampling), drawn with the rows at each refresh of the page; Off refreshes the page, which draws the
+-- healers of the group again or hides the window.
+if ns.TestMode then
+	ns.TestMode.Register("healermana", { module = KEY, label = "Healer mana", refresh = true })
+end
