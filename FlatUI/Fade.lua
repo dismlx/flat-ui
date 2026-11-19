@@ -62,7 +62,9 @@ local _, ns = ...
 -- written while it still shows, and to forget them. A frame held so is passed by each step with no write (Gone), and does not count as under the
 -- mouse. When Hidden frames gives it back with its own alpha, as it came, this module takes it up from that alpha, as a frame it had never
 -- written: nothing is put back over it. The bag bar hidden while its row here is on is so: the row fades nothing while it is hidden, and fades
--- the bar again once it is back. The bag windows are not on the Hidden frames page.
+-- the bar again once it is back. The micro menu hidden is held otherwise: Hidden frames holds MicroMenu, the container's child, so this row
+-- goes on writing the alpha of the container, empty while the menu is held, and the menu comes back under it at the container's alpha. The bag
+-- windows are not on the Hidden frames page.
 --
 -- When shown: the target and focus frames, the buffs, the objective tracker and the damage meter each have a rule. Always (the default) leaves the
 -- frame alone. Only in combat, Only in a group, Only in an instance, Only outside an instance and Only when not mounted give it full opacity while that

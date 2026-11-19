@@ -52,8 +52,9 @@ local ADDON_NAME, ns = ...
 -- put back where the move changed them. It writes nothing else on the frame, and four times a second, out of combat, it puts a ticked frame the game
 -- gave another parent under its own again. The Alerts row also puts each toast AlertFrame:AddAlertFrame shows (ns.Follow) under that frame by the
 -- snippet, out of combat, as the toasts are only anchored to AlertFrame. A change in a fight waits for its end. While Leave the game's action bars
--- alone is on it hides none of the game's bars but the bag bar (BagsBar) and the micro menu (MicroMenuContainer), which it hides either way.
--- Movers moves neither while that row is on, the micro menu since the game hangs its main bar from it.
+-- alone is on it hides none of the game's bars but the bag bar (BagsBar) and the micro menu, which it hides either way. For the micro menu it
+-- holds MicroMenu, not MicroMenuContainer, which stays shown at its size: the game hangs its main bar from the container and measures its bottom
+-- bar stack by it while it is visible. Movers moves neither while that row is on, the micro menu since the game hangs its main bar from it.
 -- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
 -- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
 -- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at
@@ -1032,9 +1033,9 @@ function ns.Enabled(key)
 end
 
 -- True while Leave the game's action bars alone is on (the default). Flat UI then makes no call that places, groups, fades or restyles the game's
--- stance, pet or status bars, and none that places, sizes, fades or writes a field on the micro menu, or that places, sizes or writes a field on the
--- bag bar (their pictures and buttons get the Flat UI look, Fading's Bag bar row writes the alpha of the bag bar, Fade.lua, and Hidden frames' Bag
--- bar row puts it under a hidden frame in a secure snippet, Hide.lua), and registers no setting of its own in the game's settings registry. The game's eight action bars
+-- stance, pet or status bars, and none that places, sizes or writes a field on the micro menu or the bag bar (their pictures and buttons get the
+-- Flat UI look; Fading's Micro menu and Bag bar rows write the alpha of MicroMenuContainer and of BagsBar, Fade.lua, and Hidden frames' Micro
+-- menu and Bag bar rows put MicroMenu and BagsBar under a hidden frame in a secure snippet, Hide.lua), and registers no setting of its own in the game's settings registry. The game's eight action bars
 -- (bars 1 to 8) are covered by Action buttons (actionbars.own): with Flat UI's buttons they are parked by alpha and mouse only, with the game's
 -- buttons Flat UI leaves them alone. A click on an action button reads the bar, the button and the settings registry, and a call of this addon that
 -- touched one of them leaves the click refused (UseAction, ADDON_ACTION_FORBIDDEN).

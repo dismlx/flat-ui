@@ -31,14 +31,18 @@ local _, ns = ...
 -- same way. A managed frame that hides leaves its container's layout (ManagedFrameSystem.lua:21-23, 93-115), so the frames beside it close up, and it
 -- goes back in as it shows. While Leave the game's action bars alone is on (Flat UI page), the rows of the action bars, the stance, pet, possess
 -- and totem bars, the leave vehicle button and the game's status bars hide nothing, as for the other modules. The bag bar row hides BagsBar
--- either way, and the micro menu row MicroMenuContainer, as Fading's rows fade them either way (Fade.lua): the snippet writes only the parent,
--- which places, sizes and lays out nothing (the points stay, and the holder's corners and scale are UIParent's), and the bag buttons' clicks run
--- none of the game's secure code. The main bar hangs from the micro menu on Forever (Camelot/EditModePresetLayoutConstants.lua:5-8) and keeps
--- its place, as a frame anchored to a hidden frame does; the micro buttons (children of MicroMenu, its child) and the help ticket button (a
--- child of CharacterMicroButton, HelpFrame.xml:143) go with it, and the keys that open the windows (C, P, L and the rest) are bindings that
--- need no button. Where the game lends MicroMenu to a vehicle's bar (OverrideActionBar.lua:141) it shows there until the game gives it back to
--- the container (MicroMenuContainer.lua:234-245), which hides it again. Movers still offers no box for either while that row is on; the list's
--- Hidden group shows them again.
+-- either way, and the micro menu row MicroMenu, as Fading's rows fade them either way (Fade.lua): the snippet writes only the parent, which
+-- places, sizes and lays out nothing (the points stay, and the holder's corners and scale are UIParent's), and the bag buttons' clicks run none
+-- of the game's secure code. The micro menu row holds MicroMenu, not its container: on Forever the main bar hangs from MicroMenuContainer
+-- (Camelot/EditModePresetLayoutConstants.lua:5-8), and the game measures its bottom bar stack by it while it is visible (Camelot/EditModeUtil.lua:
+-- 26-29, Shared/EditModeUtil.lua:39-63), so with it hidden and Action bar 2 not shown the frames above the bars (the cast bar, the swing timers,
+-- the extra action button) would drop onto the main bar (UIParentPanelManager.lua:807-812). The container stays shown, empty, at the size it
+-- had, since its Layout keeps its size while MicroMenu is not its child (MicroMenuContainer.lua:44-49), and the row waits until the game has laid
+-- it out (bigger than the 1 by 1 it is made with), so the main bar and that stack keep their places. The micro buttons (children of MicroMenu)
+-- and the help ticket button (a child of CharacterMicroButton, HelpFrame.xml:143) go with it, and the keys that open the windows (C, P, L and the
+-- rest) are bindings that need no button. Where the game lends MicroMenu to a vehicle's bar (OverrideActionBar.lua:141), or gives it back to the
+-- container as the main bar shows (ResetMicroMenuPosition, MainActionBar.lua:14-17), it shows until the next look takes it again, after the
+-- fight in a fight. Movers still offers no box for either while that row is on; the list's Hidden group shows them again.
 -- The Alerts row: the toasts are not under AlertFrame. The game makes them under UIParent and gives each its fullscreen frame as it shows it
 -- (Blizzard_FrameXML/Mainline/AlertFrames.lua:92, 461-467), and only anchors them to AlertFrame. So each toast AlertFrame:AddAlertFrame shows
 -- (ns.Follow) also goes under the holder by the snippet, out of combat, and its OnHide, run securely, lets it go at once (AlertFrames.lua:111-116,
@@ -62,7 +66,8 @@ local EVERY = 0.25
 local WAITS = "Flat UI: hidden frames change when the fight ends."
 
 -- key: the row. frames: names in the game, a dotted name reaching down from a global. bar: a row that hides nothing while Leave the game's
--- action bars alone is on. toasts: the row also hides the toasts AlertFrame shows (above).
+-- action bars alone is on. toasts: the row also hides the toasts AlertFrame shows (above). box: the frame of the row's box in /flatui move where
+-- the row holds a frame inside it, which the row waits for until the game has laid it out (the micro menu's container, above).
 local ENTRIES = {
 	-- Action bars
 	{ key = "main", bar = true, frames = { "MainActionBar" } },
@@ -79,7 +84,7 @@ local ENTRIES = {
 	{ key = "totem", bar = true, frames = { "MultiCastActionBarFrame" } },
 	{ key = "vehicleLeave", bar = true, frames = { "MainMenuBarVehicleLeaveButton" } },
 	-- Not bar rows: hidden also while Leave the game's action bars alone is on (above).
-	{ key = "micro", frames = { "MicroMenuContainer" } },
+	{ key = "micro", frames = { "MicroMenu" }, box = "MicroMenuContainer" },
 	{ key = "bagBar", frames = { "BagsBar" } },
 	{ key = "xpBar", bar = true, frames = { "MainStatusTrackingBarContainer" } },
 	{ key = "statusBar", bar = true, frames = { "SecondaryStatusTrackingBarContainer" } },
@@ -137,6 +142,9 @@ local ENTRIES = {
 -- The row of each name of a frame /flatui move has a box for, a name without a dot: the first row that has it.
 local BY_NAME = {}
 for _, entry in ipairs(ENTRIES) do
+	if entry.box and BY_NAME[entry.box] == nil then
+		BY_NAME[entry.box] = entry
+	end
 	for _, name in ipairs(entry.frames) do
 		if not name:find(".", 1, true) and BY_NAME[name] == nil then
 			BY_NAME[name] = entry
@@ -435,6 +443,19 @@ local function Wanted(entry)
 	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and Opt(entry.key) == true and not (entry.bar and ns.HandsOff())
 end
 
+-- True for a row with no box frame to wait for, or once the game has laid that frame out: bigger than the 1 by 1 MicroMenuContainer is made with
+-- (Mainline/MicroMenuContainer.xml), so it keeps a real size while MicroMenu is held (header above).
+local function LaidOut(entry)
+	local box = entry.box and Resolve(entry.box)
+	if not entry.box then
+		return true
+	elseif not box then
+		return false
+	end
+	local width, height = Read("GetWidth", box), Read("GetHeight", box)
+	return ns.Finite(width) and ns.Finite(height) and width > 1 and height > 1
+end
+
 -- Hides what is ticked and gives back what is not. True while a row hides something, or a change waits.
 local function Apply()
 	local any = false
@@ -444,7 +465,7 @@ local function Apply()
 		any = any or on
 		for _, name in ipairs(entry.frames) do
 			local frame = Resolve(name)
-			if frame and on then
+			if frame and on and (state.held[frame] or LaidOut(entry)) then
 				wanted[frame] = true
 				ns.EachPart(KEY, PART, Hold, frame, entry.key)
 			end
@@ -659,7 +680,7 @@ function H.List()
 	local list = {}
 	for _, entry in ipairs(ENTRIES) do
 		if H.Hidden(entry.key) then
-			local name = entry.frames[1]
+			local name = entry.box or entry.frames[1]
 			list[#list + 1] = { key = entry.key, label = H.Label(entry.key), name = BY_NAME[name] == entry and name or nil }
 		end
 	end
