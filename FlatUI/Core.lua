@@ -33,7 +33,14 @@ local ADDON_NAME, ns = ...
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
 -- still that name, and the name alone again when the row goes off.
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
--- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
+-- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
+-- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from
+-- the minimap with ClearAllPoints and SetPoint, out of combat if the game protects it, no further out than the game's place, with a frame of its
+-- own in the cluster at the button's place so the cluster keeps its size; the mail icon (MinimapCluster.IndicatorFrame) and the addon list button
+-- (AddonCompartmentFrame) that the game hangs between the button and the map it hangs on the button's other side, inside the button's old place,
+-- the same way, where they do not fit between. It gives each back the points it read (GetPoint) when the row goes off, while the game's ring
+-- shows, while Edit Mode is open, and until Edit Mode has applied its layout (the manager's layoutInfo, read with rawget; EventRegistry's
+-- EditMode.Enter and EditMode.Exit).
 -- Hidden frames (Hide.lua; on, with nothing ticked, by default) puts each frame of the game the player ticks, of the HUD frames /flatui move moves
 -- and the parts of the minimap, under a hidden frame of its own (a SecureHandlerBaseTemplate frame with its corners on UIParent's), out of combat
 -- only: in a snippet of that frame (Execute; SetParent of the frame's handle), so the frame's OnHide runs in the game's secure code. A protected
