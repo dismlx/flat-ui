@@ -55,6 +55,7 @@ Threat.lua
 HealerMana.lua
 GroupTools.lua
 OwnBuffs.lua
+Absorbs.lua
 TrackerShapes.lua
 TrackerKinds.lua
 TrackerMarks.lua
