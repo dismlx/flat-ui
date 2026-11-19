@@ -17,11 +17,13 @@ local _, ns = ...
 --
 -- A stand-in reads of the game frame it stands in for only its place and size (ns.MoverRect), its effective scale against UIParent's, its strata,
 -- its level and its shown flag (ns.MoverShown), each through ns.IsSecret or ns.Finite; it writes nothing on it, calls no other method of it and adds
--- no hook. It shows while test mode is on and not paused, its module is on (ns.ModuleOn), its gate passes, the game frame is not shown (or its own
--- real rule says the real one is not), the Hidden frames page does not hide that frame (ns.HideFrames), and the frame has a place: not one the
--- movers count as Offstage (Movers.lua:1577-1583), which the bar names instead. A poll every 0.25 s (Movers.lua's HANDLES_EVERY) shows, hides and
--- places them again; a change of a setting paints the shown ones again once, on the next frame. Build, Paint, gate, real and Animate run under
--- pcall, and the first error of a stand-in goes to the error handler once and turns that stand-in off for the session, nothing else.
+-- no hook; Hide.lua's H.Holds reads its parents. It shows while test mode is on and not paused, its module is on (ns.ModuleOn), its gate passes,
+-- the game frame is not shown (or its own real rule says the real one is not), the Hidden frames page does not hide that frame or a frame it
+-- hangs from (ns.HideFrames: its row ticked, or H.Holds, as the pet frame and the totems hang from the player frame), and the frame has a place:
+-- not one the movers count as Offstage (Movers.lua:1577-1583), which the bar names instead. A poll every 0.25 s (Movers.lua's HANDLES_EVERY)
+-- shows, hides and places them again; a change of a setting paints the shown ones again once, on the next frame. Build, Paint, gate, real and
+-- Animate run under pcall, and the first error of a stand-in goes to the error handler once and turns that stand-in off for the session, nothing
+-- else.
 --
 -- The contract the other files code against (spec section 5.1):
 --   TM.IsOn()            true while on and not paused: the one read every part uses in Refresh, Update or a show rule.
@@ -39,6 +41,8 @@ local _, ns = ...
 --   TM.Sound(id)         true only the first time it is asked for this id since the last On: the gate of every sample sound.
 --   TM.Shown(id)         true while the stand-in with that id shows.
 --   TM.Changed(path)     Core.lua calls it after every ns.Set and after a change of profile ("*").
+--   TM.Repaint()         while on: the shown stand-ins are painted again on the next frame (a game variable they are drawn from changed).
+--   TM.Watch(fn)         at load: fn(TM.IsOn()) runs after every On, Off, pause and resume, so a file can run something only while test mode is on.
 --   TM.Status()          the line of /flatui status while on, paused included; nil while off.
 --   TM.Register(id, spec)  at load, after the module's ns.Register. spec: module (a module key, required), label, refresh (true: On, Off, pause,
 --                        resume and the group run ns.RefreshModule), Start, Stop, Changed(path), Tick(now) with every (seconds, default 1; one shared
@@ -64,6 +68,8 @@ events:RegisterEvent("PLAYER_REGEN_ENABLED")
 local S = { on = false, source = nil, paused = false, epoch = 0, group = "party", moving = true }
 -- The entries and the stand-ins, in the order they were given, and by id. heard: the sounds asked for since the last On.
 local entries, entryById, standins, standinById, heard = {}, {}, {}, {}, {}
+-- What TM.Watch was given, told after every On, Off, pause and resume.
+local watchers = {}
 -- The bar and what it shows.
 local ui = { notes = {} }
 local clock = { poll = 0, bar = 0 }
@@ -232,14 +238,20 @@ local function Offstage(si, frame, left, bottom, height)
 	return ns.Finite(top) and math.abs(left) < 0.5 and math.abs(bottom + height - top) < 0.5
 end
 
--- True while the Hidden frames page hides the game frame (Hide.lua).
-local function HiddenByPage(si)
+-- True while the Hidden frames page hides the game frame (Hide.lua): its own row is ticked, or it hangs from a frame that is held hidden (H.Holds),
+-- as the pet frame, the totems and a cast bar locked to it hang from the player frame.
+local function HiddenByPage(si, frame)
 	local hide = ns.HideFrames
-	if type(hide) ~= "table" or type(hide.Key) ~= "function" or type(hide.Hidden) ~= "function" then
+	if type(hide) ~= "table" then
 		return false
 	end
-	local key = hide.Key(si.game)
-	return key ~= nil and hide.Hidden(key) == true
+	if type(hide.Key) == "function" and type(hide.Hidden) == "function" then
+		local key = hide.Key(si.game)
+		if key ~= nil and hide.Hidden(key) == true then
+			return true
+		end
+	end
+	return type(hide.Holds) == "function" and hide.Holds(frame) == true
 end
 
 local function HideStandIn(si)
@@ -276,7 +288,7 @@ local function Want(si)
 		return false
 	end
 	local frame = GameFrame(si)
-	if not frame or HiddenByPage(si) then
+	if not frame or HiddenByPage(si, frame) then
 		return false
 	end
 	if si.gate and not Rule(si, si.gate) then
@@ -450,15 +462,52 @@ local function PaintBar()
 	ui.knob:SetPoint("LEFT", ui.toggle, "LEFT", S.moving and 18 or 2, 0)
 end
 
--- Under the toolbar of /flatui move while it shows, else at the top of the screen.
-local function PlaceBar()
+-- Where the bar goes: under the toolbar of /flatui move while it shows, else at the top of the screen; but while the options window shows and that
+-- would cover its title bar (the search field, the Test mode switch and the drag area), just above the window when there is room, else just
+-- under it (the bar is clamped to the screen). Returns "top" and the offset, or "above" or "below" and the window.
+local function BarSpot()
 	local kit = ns.MoverKit
 	local movers = type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
 	local y = movers and TOP - 46 or TOP
-	if ui.y ~= y then
-		ui.y = y
-		ui.bar:ClearAllPoints()
-		ui.bar:SetPoint("TOP", UIParent, "TOP", 0, y)
+	local panel = ns.PanelKit
+	local window = type(ns.PanelShown) == "function" and ns.PanelShown() and type(panel) == "table" and panel.Window() or nil
+	if not window then
+		return "top", y
+	end
+	local _, bottom, _, height = panel.Rect(window)
+	local screen, tall = Read(UIParent, "GetHeight"), Read(ui.bar, "GetHeight")
+	if not (ns.Finite(bottom) and ns.Finite(height) and ns.Finite(screen) and ns.Finite(tall)) or height <= 0 then
+		return "top", y
+	end
+	local top = bottom + height
+	local title = top - height * panel.TITLE / panel.HEIGHT
+	local barTop = screen + y
+	if barTop - tall >= top or barTop <= title then
+		return "top", y
+	end
+	if top + tall - TOP <= screen then
+		return "above", window
+	end
+	return "below", window
+end
+
+-- Places the bar at BarSpot, unless it was dragged this session: it then stays where it was dropped.
+local function PlaceBar()
+	if ui.dragged then
+		return
+	end
+	local spot, at = BarSpot()
+	if ui.spot == spot and ui.at == at then
+		return
+	end
+	ui.spot, ui.at = spot, at
+	ui.bar:ClearAllPoints()
+	if spot == "above" then
+		ui.bar:SetPoint("BOTTOM", at, "TOP", 0, -TOP)
+	elseif spot == "below" then
+		ui.bar:SetPoint("TOP", at, "BOTTOM", 0, TOP)
+	else
+		ui.bar:SetPoint("TOP", UIParent, "TOP", 0, at)
 	end
 end
 
@@ -493,6 +542,17 @@ local function BuildBar()
 	bar:SetFrameStrata("DIALOG")
 	bar:SetSize(BAR_W, BAR_H + 22)
 	bar:EnableMouse(true)
+	-- Dragged by any part that is not a control, for the session (it is no named frame, so the game keeps no spot of it).
+	bar:SetMovable(true)
+	bar:SetClampedToScreen(true)
+	bar:RegisterForDrag("LeftButton")
+	bar:SetScript("OnDragStart", function(self)
+		self:StartMoving()
+	end)
+	bar:SetScript("OnDragStop", function(self)
+		self:StopMovingOrSizing()
+		ui.dragged = true
+	end)
 	local outline = ns.Outline(bar, bar, true)
 	kit.Painted(function()
 		look.Backing(outline, "card", 1, "line-strong")
@@ -571,6 +631,10 @@ local function Controls()
 	local mode = ns.MoversMode
 	if type(mode) == "table" and type(mode.TestChanged) == "function" then
 		Safe(mode.TestChanged)
+	end
+	local on = TM.IsOn()
+	for _, fn in ipairs(watchers) do
+		Safe(fn, on)
 	end
 end
 
@@ -790,6 +854,20 @@ function TM.Changed(path)
 	end
 	Refresh(started)
 	S.dirty = true
+end
+
+function TM.Repaint()
+	if TM.IsOn() then
+		S.dirty = true
+	end
+end
+
+function TM.Watch(fn)
+	if type(fn) ~= "function" then
+		return false
+	end
+	watchers[#watchers + 1] = fn
+	return true
 end
 
 function TM.Status()

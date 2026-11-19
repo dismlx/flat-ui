@@ -11,24 +11,28 @@ local _, ns = ...
 -- of 14 units above them and 2 in from PartyFrame's left (Shared/CompactRaidGroup.xml:52-56, PartyFrame.lua:124-143), down a column or, with Display
 -- Horizontal Groups, along a row. Raid (Raid 10, 20 or 40, while the player is in no raid): the first 10, 20 or 40 of the roster below at the top left of
 -- CompactRaidFrameContainer, at the cell size and in the group layout of the Edit Mode layout in use: separate groups, a column each with its title
--- (14 units) or a row each, side by side with no gap and 8 units wider (2 taller) with Display Border (Shared/CompactRaidGroup.lua:95-160), or all the
--- members in one flow of Row Size per line (Blizzard_EditMode/Shared/EditModeManager.lua:477-503, Blizzard_FrameXMLBase/FlowContainer.lua:125-185).
+-- (14 units), side by side with no gap and 8 units wider and 2 taller with Display Border, or a row each, one under the other, 4 units wider and
+-- no taller with it (Shared/CompactRaidGroup.lua:95-160), or all the members in one flow of Row Size per line (Blizzard_EditMode/Shared/
+-- EditModeManager.lua:477-503, Blizzard_FrameXMLBase/FlowContainer.lua:125-185).
 -- A group starts a line of its own (FlowContainer.lua:161-166).
 --
 -- What it reads: the layout in use, from C_EditMode.GetLayouts and, for a preset, the game's own table of presets (EditModePresetLayoutManager.
 -- presetLayoutInfo, read with rawget; no method is called), its unit frame systems Party and Raid: Frame Width and Frame Height (stored as the
 -- difference from 72 and 36, Shared/EditModeSettingDisplayInfo.lua:16-22, 276-299), Raid Group Display Type, Row Size, Display Border, Opacity,
--- Raid-Style Party Frames and Display Horizontal Groups; anything missing or not finite takes the Modern preset's (Mainline/EditModePresetLayouts.lua:
--- 292-340). The raid frame options, read with C_CVar.GetCVarBool and GetCVar and never written: raidFramesDisplayClassColor,
--- raidFramesDisplayPowerBars, raidFramesDisplayOnlyHealerPowerBars, raidFramesHealthText, raidFramesDisplayDebuffs and
+-- Raid-Style Party Frames and Display Horizontal Groups, and of Boss its Cast Bar on Side; anything missing or not finite takes the Modern preset's
+-- (Mainline/EditModePresetLayouts.lua:292-356). The raid frame options, read with C_CVar.GetCVarBool and GetCVar and never written:
+-- raidFramesDisplayClassColor, raidFramesDisplayPowerBars, raidFramesDisplayOnlyHealerPowerBars, raidFramesHealthText, raidFramesDisplayDebuffs and
 -- raidFramesDispelIndicatorType (defaults: Mainline/CompactUnitFrameOptions.lua:2-40), showPartyPets and showTargetOfTarget. Whether a target,
 -- focus, pet, boss, group or raid exists (UnitExists, IsInGroup, IsInRaid), the player's class (ns.DrawUnits.Me), whether Edit Mode is open
 -- (ns.EditModeOpen) and the shown flag of the game's first party member frame (PartyFrame.MemberFrame1, read with rawget), of CompactPartyFrame and
--- of Boss1TargetFrame, and the effective scale of Boss1TargetFrame against its container's. It writes nothing on any of them.
+-- of Boss1TargetFrame, and the effective scale of Boss1TargetFrame against its container's. It writes nothing on any of them. While test mode is on
+-- it hears CVAR_UPDATE (TM.Watch), so a change of the raid frame options or showPartyPets in the game's own options paints the samples again
+-- (TM.Repaint).
 --
 -- Shown by (TestMode.lua runs the rules; each also needs the game frame hidden, its own `real` rule saying so, unless named):
 --   party     PartyFrame: the bar's Party and no group; real while Edit Mode is open or a party member frame or CompactPartyFrame shows.
---   raid      CompactRaidFrameContainer: the bar's Raid 10, 20 or 40 and no raid; real while Edit Mode is open or in a raid.
+--   raid      CompactRaidFrameContainer: the bar's Raid 10, 20 or 40 and no raid; real while Edit Mode is open, in a raid, or while the party
+--             stand-in's real frames show (a real party is where the raid frames would be, Mainline/EditModePresetLayouts.lua:292-340).
 --   target    TargetFrame: no target. tot: TargetFrameToT, while the target's stand-in shows and showTargetOfTarget is on.
 --   focus     FocusFrame: no focus. focustot: FocusFrameToT, while the focus's stand-in shows and showTargetOfTarget is on.
 --   pet       PetFrame: no pet, any class. boss: BossTargetFrameContainer, from its top right: no boss1; real while Edit Mode is open or
@@ -184,11 +188,11 @@ end
 
 -- The settings of the Modern preset (Mainline/EditModePresetLayouts.lua:292-340, Party and Raid), by setting number, and the setting numbers
 -- (EditModeManagerConstantsDocumentation.lua:783-812) for a client whose Enum will not say.
-local SETTING = { UseRaidStylePartyFrames = 4, UseHorizontalGroups = 6, FrameWidth = 10, FrameHeight = 11, DisplayBorder = 12, RaidGroupDisplayType = 13,
-	RowSize = 15, Opacity = 20 }
-local PRESET = { [4] = 0, [6] = 0, [10] = 26, [11] = 8, [12] = 0, [13] = 0, [15] = 5, [20] = 100 }
--- The system numbers: UnitFrame 3, its Party 4 and Raid 5 (EditModeManagerConstantsDocumentation.lua:741, 826-827).
-local SYSTEM = { UnitFrame = 3, Party = 4, Raid = 5 }
+local SETTING = { UseRaidStylePartyFrames = 4, UseHorizontalGroups = 6, CastBarOnSide = 7, FrameWidth = 10, FrameHeight = 11, DisplayBorder = 12,
+	RaidGroupDisplayType = 13, RowSize = 15, Opacity = 20 }
+local PRESET = { [4] = 0, [6] = 0, [7] = 1, [10] = 26, [11] = 8, [12] = 0, [13] = 0, [15] = 5, [20] = 100 }
+-- The system numbers: UnitFrame 3, its Party 4, Raid 5 and Boss 6 (EditModeManagerConstantsDocumentation.lua:741, 826-828).
+local SYSTEM = { UnitFrame = 3, Party = 4, Raid = 5, Boss = 6 }
 -- The smallest cell (Shared/CompactUnitFrame.lua:11-12), the height of a group's title (Shared/CompactRaidGroup.xml:52-56), and how long a read of
 -- the layout is kept.
 local CELL_W, CELL_H, TITLE, KEEP = 72, 36, 14, 1
@@ -251,12 +255,12 @@ local function Setting(settings, name)
 	return PRESET[SETTING[name]]
 end
 
--- The party and raid layouts: cell width and height, the display type, row size, border, opacity, raid style and horizontal groups. Read again
--- after KEEP seconds, and at once after Edit Mode was open.
+-- The party and raid layouts: cell width and height, the display type, row size, border, opacity, raid style and horizontal groups; and whether
+-- the boss frames have their cast bars on the side. Read again after KEEP seconds, and at once after Edit Mode was open.
 local function Layouts()
 	local now = GetTime()
 	if layouts.at and now - layouts.at < KEEP then
-		return layouts.party, layouts.raid
+		return layouts.party, layouts.raid, layouts.side
 	end
 	layouts.at = now
 	local out = {}
@@ -269,7 +273,8 @@ local function Layouts()
 			raidStyle = Setting(settings, "UseRaidStylePartyFrames") == 1, horizontal = Setting(settings, "UseHorizontalGroups") == 1 }
 	end
 	layouts.party, layouts.raid = out.party, out.raid
-	return out.party, out.raid
+	layouts.side = Setting(ReadSystem(EnumValue("EditModeUnitFrameSystemIndices", "Boss", SYSTEM.Boss)), "CastBarOnSide") == 1
+	return out.party, out.raid, layouts.side
 end
 
 -- The raid frame options (Mainline/CompactUnitFrameOptions.lua:2-40 for their defaults).
@@ -472,7 +477,7 @@ local function Spot(layout, index)
 	local w, h = layout.width, layout.height
 	local group, slot = math.floor((index - 1) / 5) + 1, (index - 1) % 5
 	if layout.display == 1 then
-		local x, y = slot * w, (group - 1) * (TITLE + h + (layout.border and 2 or 0)) + TITLE
+		local x, y = slot * w, (group - 1) * (TITLE + h) + TITLE
 		return x, y, 0, y - TITLE
 	elseif layout.display == 2 or layout.display == 3 then
 		local line, at = math.floor((index - 1) / layout.rowSize), (index - 1) % layout.rowSize
@@ -575,8 +580,10 @@ local function PetSample()
 end
 
 -- Boss frames: five in a column down from the container's top right, each 232 by 100 at its own scale (Boss1TargetFrame's against the container's:
--- 0.75 small, 1 large, Mainline/TargetFrame.lua:12-13, 1116-1128), 10 apart with the 20 the game takes back under each (TargetFrame.xml:607-617,
--- TargetFrame.lua:1081-1109).
+-- 0.75 small, 1 large, Mainline/TargetFrame.lua:12-13, 1116-1128), as the container lays them out (TargetFrame.xml:607-617, TargetFrame.lua:
+-- 1081-1104, Blizzard_SharedXML/LayoutFrame.lua:276-361): 10 apart plus the bottom padding of each, in container units (small: -20 with the cast
+-- bar on the side, else 0; large: -50 on the side, else -20), with each right edge 70 less its right padding (30 small, 15 large) right of the
+-- container's.
 local boss = { frames = {} }
 
 local function BuildBoss(holder)
@@ -602,7 +609,11 @@ local function PaintBoss(holder)
 	local D = ns.DrawUnits
 	local g = D.Settings(holder)
 	local scale = BossScale()
-	local pitch = (100 - 20) * scale + 10
+	local small = scale < 0.875
+	local _, _, side = Layouts()
+	local pad = small and (side and -20 or 0) or (side and -50 or -20)
+	local right = 70 - (small and 30 or 15)
+	local pitch = 100 * scale + pad + 10
 	local height = 1
 	for index, o in ipairs(boss.frames) do
 		local spec = BOSSES[index]
@@ -619,7 +630,7 @@ local function PaintBoss(holder)
 		D.PaintUnit(o, s, g)
 		local x, y = D.Offset(o)
 		o.root:ClearAllPoints()
-		o.root:SetPoint("TOPLEFT", holder, "TOPRIGHT", x - 232, -(y + (index - 1) * pitch / scale))
+		o.root:SetPoint("TOPLEFT", holder, "TOPRIGHT", x - 232 + right / scale, -(y + (index - 1) * pitch / scale))
 		height = (index - 1) * pitch + 100 * scale
 	end
 	return 232 * scale, height
@@ -638,6 +649,8 @@ local function PaintTotem(holder)
 	local D = ns.DrawUnits
 	totem.s = totem.s or {}
 	totem.s.time = TotemTime(GetTime())
+	totem.o.root:ClearAllPoints()
+	totem.o.root:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
 	return D.PaintUnit(totem.o, totem.s, D.Settings(holder))
 end
 
@@ -660,15 +673,20 @@ local function Group(which)
 	end
 end
 
+-- True while the game's party frames show: its first party member frame or CompactPartyFrame.
+local function PartyShows()
+	local frame = rawget(_G, "PartyFrame")
+	local first = type(frame) == "table" and not ns.Forbidden(frame) and rawget(frame, "MemberFrame1") or nil
+	return Shown(first) or Shown(rawget(_G, "CompactPartyFrame"))
+end
+
 TM.StandIn({ id = "party", module = KEY, game = "PartyFrame", label = "Party frames", gate = Group("party"),
 	real = function()
 		if EditMode() then
 			layouts.at = nil
 			return true
 		end
-		local frame = rawget(_G, "PartyFrame")
-		local first = type(frame) == "table" and not ns.Forbidden(frame) and rawget(frame, "MemberFrame1") or nil
-		return Shown(first) or Shown(rawget(_G, "CompactPartyFrame"))
+		return PartyShows()
 	end,
 	Build = BuildParty, Paint = PaintParty, Animate = AnimateParty })
 
@@ -678,7 +696,7 @@ TM.StandIn({ id = "raid", module = KEY, game = "CompactRaidFrameContainer", labe
 			layouts.at = nil
 			return true
 		end
-		return Asks(IsInRaid)
+		return Asks(IsInRaid) or PartyShows()
 	end,
 	Build = BuildRaid, Paint = PaintRaid, Animate = AnimateRaid })
 
@@ -715,3 +733,24 @@ TM.StandIn({ id = "totem", module = KEY, game = "TotemFrame", label = "Totem bar
 		return class == "SHAMAN"
 	end,
 	Build = function(holder) totem.o = ns.DrawUnits.Unit(holder, "totem") end, Paint = PaintTotem, Animate = AnimateTotem })
+
+-- The game variables the party and raid samples are drawn from (Options, PaintMembers): a change of one, in the game's own options, paints the
+-- shown stand-ins again. Heard only while test mode is on.
+local CVARS = { raidframesdisplayclasscolor = true, raidframesdisplaypowerbars = true, raidframesdisplayonlyhealerpowerbars = true,
+	raidframeshealthtext = true, raidframesdisplaydebuffs = true, raidframesdispelindicatortype = true, showpartypets = true }
+local cvars = CreateFrame("Frame")
+ns.Own[cvars] = true
+cvars:SetScript("OnEvent", function(_, _, name)
+	if not ns.IsSecret(name) and type(name) == "string" and CVARS[name:lower()] then
+		TM.Repaint()
+	end
+end)
+if type(TM.Watch) == "function" then
+	TM.Watch(function(on)
+		if on then
+			cvars:RegisterEvent("CVAR_UPDATE")
+		else
+			cvars:UnregisterEvent("CVAR_UPDATE")
+		end
+	end)
+end

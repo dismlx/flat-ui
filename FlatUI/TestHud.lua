@@ -12,22 +12,27 @@ local _, ns = ...
 --   cast the player's interrupt is ready for (Interrupt ready colour while Interrupt readiness on enemy casts is on), then one that cannot be
 --   interrupted, a little later than the player's. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
 --   styles no boss bar, and hangs on the unit frames' module, whose boss stand-in it follows.
---   Swing timers: at SwingTimerMainHandFrame for every class, SwingTimerOffHandFrame for a warrior and a rogue, SwingTimerRangedFrame for a hunter,
---   while the game's timer is hidden: a swing of 2.6 seconds that loops.
+--   Swing timers: at SwingTimerMainHandFrame for every class, SwingTimerOffHandFrame for a warrior and a rogue with an off-hand weapon,
+--   SwingTimerRangedFrame for a hunter with a ranged weapon (UnitAttackSpeed, as the game's HasOffHandWeapon and HasRangedWeapon), while the game's
+--   timer is hidden and would show in play: Enable Swing Timer (the variable showSwingTimer) on and the frame's Edit Mode Visibility not Hidden
+--   (its visibility field, read with rawget; Blizzard_SwingTimer.lua:241-263): a swing of 2.6 seconds that loops.
 --   Debuffs and buffs: three icons each, from the top right corner of DebuffFrame while the player has no harmful aura and of BuffFrame while the
---   player has no helpful aura at all (C_UnitAuras.GetAuraSlots, read out of combat only, when its answer is plain), a magic, a curse and a poison
---   debuff in the colours of their types, and times that count down and loop in the time format of Minimap and buffs (AuraTime.lua).
+--   player has no helpful aura at all (C_UnitAuras.GetAuraSlots, read out of combat only, when its answer is plain), only while the game shows that
+--   frame (its Edit Mode Visibility, Blizzard_BuffFrame/BuffFrame.lua:380-411) and not while Edit Mode is open, where it shows its example auras: a
+--   magic, a curse and a poison debuff in the colours of their types, and times that count down and loop in the time format of Minimap and buffs
+--   (AuraTime.lua).
 --   Loot rolls: two rolls at the box Loot rolls of /flatui move, where the game's rolls show (ns.MoverSpot: the saved spot, else where the game
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
 --   shows; their timers drain over 10 seconds and loop. They stand in for UIParent, so their place is the box's.
 --   The sample nameplate: an enemy plate with its cast bar and auras at the middle of the screen, 160 units up, with a dim Sample nameplate under it,
 --   as plates have no place of their own. Its cast fills, and its health bar takes the threat colours in turn every 3 seconds (You want, Changing
 --   hands, You do not want) while Threat on nameplates and Colour health bars by threat are on.
--- The cursor ring is no module, so it cannot register with test mode (TM.Register runs an entry only while its module is on): a frame of this file
--- looks four times a second whether TM.Epoch moved, which it does at every On, Off, pause and resume, and then has the ring apply its rows again
--- (ns.CursorRingChanged, which reads TM.IsOn: In combat only reads as shown while it is on); while test mode is on and Moving it gives the ring a
--- sample cast and global cooldown every 3 seconds (ns.CursorRingSample).
--- Nothing of the game is written or called: the stand-ins read only what TestMode.lua reads, and the auras' slots.
+-- The cursor ring is no module, so it cannot register with test mode (TM.Register runs an entry only while its module is on): at every On, Off,
+-- pause and resume (TM.Watch) the ring applies its rows again (ns.CursorRingChanged, which reads TM.IsOn: In combat only reads as shown while it
+-- is on), and while test mode is on and Moving a frame of this file gives the ring a sample cast and global cooldown every 3 seconds
+-- (ns.CursorRingSample); that frame runs nothing while test mode is off.
+-- Nothing of the game is written or called: the stand-ins read only what TestMode.lua reads, the auras' slots, the swing timers' variable, weapon
+-- speeds and visibility field, and whether Edit Mode is open (ns.EditModeOpen).
 
 local TM = ns.TestMode
 if type(TM) ~= "table" then
@@ -121,6 +126,10 @@ local function Now()
 	return ok and ns.Finite(now) and now or 0
 end
 
+local function EditMode()
+	return type(ns.EditModeOpen) == "function" and ns.EditModeOpen() == true
+end
+
 -- Cast bars -----------------------------------------------------------------------------------------------------------------------------------
 
 local function CastName(spec, state)
@@ -163,6 +172,35 @@ end
 
 -- Swing timers ----------------------------------------------------------------------------------------------------------------------------------
 
+-- Whether the game would show a swing timer of this hand in play: Enable Swing Timer on, its Edit Mode Visibility (Always 0, In combat 1, Hidden 2,
+-- EditModeManagerConstantsDocumentation.lua:718-727) not Hidden, and a weapon of the hand (the attack speeds of UnitAttackSpeed, as
+-- Blizzard_SwingTimer.lua:172-190). What the game will not say plainly lets the stand-in show.
+local function SwingPlays(spec)
+	local api = C_CVar
+	if type(api) == "table" and type(api.GetCVarBool) == "function" then
+		local ok, on = pcall(api.GetCVarBool, "showSwingTimer")
+		if ok and not ns.IsSecret(on) and on == false then
+			return false
+		end
+	end
+	local frame = rawget(_G, spec.game)
+	local visibility = type(frame) == "table" and not ns.Forbidden(frame) and rawget(frame, "visibility") or nil
+	local enum = type(Enum) == "table" and not ns.IsSecret(Enum) and Enum.EditModeSwingTimerVisibility
+	local hidden = type(enum) == "table" and ns.Finite(enum.Hidden) and enum.Hidden or 2
+	if not ns.IsSecret(visibility) and visibility == hidden then
+		return false
+	end
+	if spec.hand == "main" or type(UnitAttackSpeed) ~= "function" then
+		return true
+	end
+	local ok, _, off, ranged = pcall(UnitAttackSpeed, "player")
+	local speed = spec.hand == "off" and off or ranged
+	if not ok or ns.IsSecret(speed) then
+		return true
+	end
+	return ns.Finite(speed) and speed > 0
+end
+
 local function SwingStandIn(spec)
 	local function Shows(holder, now)
 		local run = ((now + spec.offset) / SWING_PERIOD) % 1
@@ -174,10 +212,15 @@ local function SwingStandIn(spec)
 		game = spec.game,
 		label = spec.label,
 		fit = true,
-		gate = spec.classes and function()
-			local class = Class()
-			return class ~= nil and spec.classes[class] == true
-		end or nil,
+		gate = function()
+			if spec.classes then
+				local class = Class()
+				if class == nil or spec.classes[class] ~= true then
+					return false
+				end
+			end
+			return SwingPlays(spec)
+		end,
 		Build = function(holder)
 			holder.row = ns.DrawCasts.Swing(holder, spec.hand, SWING_PERIOD)
 			holder.row.timer:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
@@ -244,8 +287,13 @@ local function AuraStandIn(id, game, label, list, filter)
 		game = game,
 		label = label,
 		corner = "TOPRIGHT",
+		-- Only into a frame the game shows (its Edit Mode Visibility), and not over Edit Mode's example auras.
+		gate = function()
+			local frame = rawget(_G, game)
+			return type(frame) == "table" and not ns.Forbidden(frame) and ns.MoverShown(frame) == true
+		end,
 		real = function()
-			return HasAura(filter)
+			return EditMode() or HasAura(filter)
 		end,
 		Build = function(holder)
 			local DH = ns.DrawHud
@@ -406,29 +454,28 @@ AuraStandIn("buffs", "BuffFrame", "Buffs", BUFFS, "HELPFUL")
 
 -- The cursor ring ---------------------------------------------------------------------------------------------------------------------------------
 
-local RING_LOOK, RING_EVERY = 0.25, 3
-local ring = { epoch = TM.Epoch(), wait = 0, next = 0 }
+local RING_EVERY = 3
+local ring = { next = 0 }
 local watcher = CreateFrame("Frame")
 ns.Own[watcher] = true
-watcher:SetScript("OnUpdate", function(_, elapsed)
-	ring.wait = ring.wait + (elapsed or 0)
-	if ring.wait < RING_LOOK then
+
+local function RingSample(_, elapsed)
+	if not (TM.IsOn() and TM.Moving()) or type(ns.CursorRingSample) ~= "function" then
 		return
 	end
-	local step = ring.wait
-	ring.wait = 0
-	local epoch = TM.Epoch()
-	if epoch ~= ring.epoch then
-		ring.epoch, ring.next = epoch, 0
+	ring.next = ring.next - (elapsed or 0)
+	if ring.next <= 0 then
+		ring.next = RING_EVERY
+		pcall(ns.CursorRingSample)
+	end
+end
+
+if type(TM.Watch) == "function" then
+	TM.Watch(function(on)
+		ring.next = 0
 		if type(ns.CursorRingChanged) == "function" then
 			pcall(ns.CursorRingChanged)
 		end
-	end
-	if TM.IsOn() and TM.Moving() and type(ns.CursorRingSample) == "function" then
-		ring.next = ring.next - step
-		if ring.next <= 0 then
-			ring.next = RING_EVERY
-			pcall(ns.CursorRingSample)
-		end
-	end
-end)
+		watcher:SetScript("OnUpdate", on and RingSample or nil)
+	end)
+end
