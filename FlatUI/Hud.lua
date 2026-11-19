@@ -7,8 +7,9 @@ local ADDON_NAME, ns = ...
 -- A frame the game may protect has nothing made on it in combat: ns.MaybeProtected asks the client each time.
 -- Each part has its own switch and puts the game's look back when it is off. The game's frame art is made
 -- transparent and left in place, and thin borders and flat fills take its place. The map keeps the shape of the
--- mask the game gives it: its border is a disc cut by the same mask, laid below the map. With Close the gap under the zone name on, the plate of
--- the zone name and the buttons that hang from it hang from the map, as close as Gap under the zone name says (headerGap, below).
+-- mask the game gives it: its border is a disc cut by the same mask, laid below the map. With Close the gap under the zone name on and the ring
+-- hidden, the plate of the zone name and the buttons beside it hang from the map, as close as Gap under the zone name says and no further out
+-- than the game's place, and the mail icon and the addon list button move out of the room it closes (headerGap, below).
 -- Inside some cities the game shows a map of the city in the minimap, and the setting Minimap in cities says what is done then.
 
 local KEY = "hud"
@@ -813,23 +814,28 @@ end
 -- the plate plus half of what the box has over the map at Edit Mode's size, about 21 at 100%, room that the ring fills. Hide minimap ring and
 -- header and the square shape, which has no ring, leave that room empty, round or square alike. With Edit Mode's Header underneath the plate is 8
 -- over the bottom of the cluster and the box 30 (Camelot/Minimap.lua:68-80), the plate about 13 under the map. With Close the gap under the zone
--- name on, the plate hangs from the map instead (ClearAllPoints and SetPoint, on a plate the game does not protect or out of combat), Gap under
--- the zone name pixels from the map's border, or from the top line of text that MapText.lua puts above the map (ns.MapTextAbove), which keeps its
--- place. Its left and right stay the game's. The tracking button, the clock, the calendar, the mail icon and the addon list button hang from the
--- plate or the calendar (Mainline/Minimap.xml:31, Camelot/GameTimeFrameTemplate.xml:10, Camelot/MinimapIndicatorFrameTemplate.xml:9,
--- Camelot/AddonCompartment.xml:10-12, Blizzard_TimeManager/Camelot/Blizzard_TimeManagerOverrides.lua:6) and come with it. The map, its box and
--- the cluster stay where the game, Edit Mode and /flatui move put them: the cluster takes the size of its children (ResizeLayoutFrame,
--- Blizzard_SharedXML/LayoutFrame.lua:488-528), so a frame of Flat UI's own, a child of the cluster the size of the plate, holds the plate's
--- place at the points the game gave the plate. The game gives the plate its points again only in SetHeaderUnderneath, from Edit Mode as it
--- applies a layout or a change of Header underneath or Size, and lays the cluster out at once (Camelot/Minimap.lua:68-92,
--- Blizzard_EditMode/Shared/EditModeSystemTemplates.lua:1794-1809, Shared/EditModeManager.lua:1010-1035), so the plate keeps the game's place until
--- Edit Mode has applied the layout of the login (its layoutInfo, read with rawget) and while Edit Mode is open (EventRegistry's EditMode.Enter and
--- EditMode.Exit), and is hung from the map again on the next frame after them. A frame of Flat UI's own hung from the plate sees it move
--- (OnSizeChanged): on the next frame the plate's points are read again and it hangs from the map again. Off, the plate gets back the points the
--- game gave it, and the frame that held its place hides.
+-- name on, and while the ring does not show, the plate hangs from the map instead (ClearAllPoints and SetPoint, on a plate the game does not
+-- protect or out of combat), Gap under the zone name pixels from the map's border, or from the top line of text that MapText.lua puts above the
+-- map (ns.MapTextAbove), and never further out than the game's place: lines that do not fit then go below the map, as MapText.lua does with the
+-- game's place. Its left and right stay the game's. The tracking button, the clock and the calendar hang beside the plate and come with it
+-- (Mainline/Minimap.xml:31, Camelot/GameTimeFrameTemplate.xml:10, Blizzard_TimeManager/Camelot/Blizzard_TimeManagerOverrides.lua:6). The mail
+-- icon and the addon list button hang on the map's side of the plate and of the calendar (headerGap.Sides), in the room the plate closes: each
+-- goes on the side of the plate where it overlaps less, the far side inside the plate's old place, and gets the game's points back otherwise.
+-- The map, its box and the cluster stay where the game, Edit Mode and /flatui move put them: the cluster takes the size of its children
+-- (ResizeLayoutFrame, Blizzard_SharedXML/LayoutFrame.lua:488-528), so a frame of Flat UI's own, a child of the cluster the size of the plate,
+-- holds the plate's place at the points the game gave the plate, and nothing that moves here leaves the cluster's box. The game gives the plate,
+-- the mail icon and the addon list button their points again only in SetHeaderUnderneath, from Edit Mode as it applies a layout or a change of
+-- Header underneath or Size, and lays the cluster out at once (Camelot/Minimap.lua:68-92, Blizzard_EditMode/Shared/EditModeSystemTemplates.lua:
+-- 1794-1809, Shared/EditModeManager.lua:1010-1035), so the plate keeps the game's place until Edit Mode has applied the layout of the login (its
+-- layoutInfo, read with rawget) and while Edit Mode is open (EventRegistry's EditMode.Enter and EditMode.Exit), and is hung from the map again on
+-- the next frame after them. A frame of Flat UI's own hung from the plate sees it move (OnSizeChanged): on the next frame the points are read
+-- again and it hangs from the map again. Off, or while the ring shows, the plate, the mail icon and the addon list button get back the points
+-- the game gave them, and the frame that held the plate's place hides.
 -- game: the points the game gave the plate, while it hangs from the map; set: the point set here; holder: the frame that holds its place;
--- probe: the frame hung from it; moved: true when the last pass moved it; listening, Look: EventRegistry is followed, and what it calls.
-local headerGap = {}
+-- probe: the frame hung from it; sides[frame]: the game's points and the point set here of the mail icon and the addon list button; bare: the
+-- ring does not show (ApplyMinimap); moved: true when the last pass moved the plate; listening, Look: EventRegistry is followed, and what it
+-- calls.
+local headerGap = { sides = {} }
 
 -- The points of a frame, each { point, relative frame, relative point, x, y }, or nil when one of them cannot be read.
 function headerGap.Points(frame)
@@ -849,11 +855,20 @@ function headerGap.Points(frame)
 	return points
 end
 
--- True while the plate hangs from the map at the point set here.
-function headerGap.Ours(plate, map)
-	local set, points = headerGap.set, headerGap.Points(plate)
-	local p = set and points and #points == 1 and points[1]
-	return p and p[1] == set[1] and p[2] == map and p[3] == set[3] and math.abs(p[4] - set[4]) < 0.01 and math.abs(p[5] - set[5]) < 0.01 or false
+-- True while a frame has the one point set here, { point, relative frame, relative point, x, y }.
+function headerGap.At(frame, set)
+	local points = set and headerGap.Points(frame)
+	local p = points and #points == 1 and points[1]
+	return p and p[1] == set[1] and p[2] == set[2] and p[3] == set[3] and math.abs(p[4] - set[4]) < 0.01 and math.abs(p[5] - set[5]) < 0.01
+		or false
+end
+
+-- Lays a frame on points, each { point, relative frame, relative point, x, y }.
+function headerGap.Hang(frame, points)
+	frame:ClearAllPoints()
+	for _, p in ipairs(points) do
+		frame:SetPoint(p[1], p[2], p[3], p[4], p[5])
+	end
 end
 
 -- The centre of a frame on the screen and its effective scale, or nil when the client does not say.
@@ -866,19 +881,41 @@ function headerGap.Centre(frame)
 	return x * scale, y * scale, scale
 end
 
--- Gives the plate back the points the game gave it, and hides the frame that held its place.
-function headerGap.Release(plate, map)
+-- The top and the bottom of a frame on the screen, or nil when the client does not say.
+function headerGap.Edges(frame)
+	local okTop, top = pcall(frame.GetTop, frame)
+	local okBottom, bottom = pcall(frame.GetBottom, frame)
+	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
+	if not okTop or not okBottom or not okScale or not ns.Finite(top) or not ns.Finite(bottom) or not ns.Finite(scale) or scale <= 0 then
+		return nil
+	end
+	return top * scale, bottom * scale
+end
+
+-- Gives a frame of the plate's side back the points the game gave it, while it has the point set here.
+function headerGap.Back(frame, rec)
+	if rec.set and headerGap.At(frame, rec.set) then
+		headerGap.Hang(frame, rec.game)
+	end
+	rec.set = nil
+end
+
+-- Gives the plate, the mail icon and the addon list button back the points the game gave them, and hides the frame that held the plate's place.
+function headerGap.Release(plate)
+	for frame, rec in pairs(headerGap.sides) do
+		if not Later(frame) then
+			headerGap.Back(frame, rec)
+			headerGap.sides[frame] = nil
+		end
+	end
 	if not headerGap.game then
 		return
 	end
-	if headerGap.Ours(plate, map) then
+	if headerGap.At(plate, headerGap.set) then
 		if Later(plate) then
 			return
 		end
-		plate:ClearAllPoints()
-		for _, p in ipairs(headerGap.game) do
-			plate:SetPoint(p[1], p[2], p[3], p[4], p[5])
-		end
+		headerGap.Hang(plate, headerGap.game)
 		headerGap.moved = true
 	end
 	headerGap.game, headerGap.set = nil, nil
@@ -901,15 +938,58 @@ function headerGap.Take(cluster, plate)
 		headerGap.holder = holder
 		ns.Count(KEY)
 	end
-	holder:ClearAllPoints()
-	for _, p in ipairs(points) do
-		holder:SetPoint(p[1], p[2], p[3], p[4], p[5])
-	end
+	headerGap.Hang(holder, points)
 	holder:SetScale(scale)
 	holder:SetSize(width, height)
 	holder:Show()
 	headerGap.game, headerGap.set = points, nil
 	return true
+end
+
+-- The frames the game hangs on the map's side of the plate, each with the frame it hangs from, the side of that frame it is level with, and how
+-- far the game lays it over that frame: the mail icon (IndicatorFrame, 32 by 24) from the plate, and the addon list button
+-- (AddonCompartmentFrame, 23 by 22) from the calendar, which is as high as the plate and level with it (Camelot/MinimapIndicatorFrameTemplate.xml:
+-- 4-9, Camelot/AddonCompartment.xml:9-12, Camelot/GameTimeFrameTemplate.xml:8-10, Camelot/Minimap.lua:68-89).
+function headerGap.Sides(cluster, plate)
+	return { { frame = Child(cluster, "IndicatorFrame"), from = plate, x = "LEFT", over = 0 },
+		{ frame = Frame("AddonCompartmentFrame"), from = Frame("GameTimeFrame"), x = "", over = 1 } }
+end
+
+-- Hangs a frame of the plate's side where it overlaps less: in the game's place, between the plate and the map, while it fits in the room there
+-- (near) or that room is the larger, else on the other side of the plate, inside the plate's old place (far), over the plate or the calendar by
+-- what that room lacks. above: the plate is over the map. near and far are in the units of the plate.
+function headerGap.Side(side, plate, above, near, far)
+	local frame, from = side.frame, side.from
+	if not frame or not from or Later(frame) then
+		return
+	end
+	local rec = headerGap.sides[frame]
+	if not (rec and headerGap.At(frame, rec.set)) then
+		local points = headerGap.Points(frame)
+		if not points then
+			return
+		end
+		rec = { game = points }
+		headerGap.sides[frame] = rec
+	end
+	local okHeight, height = pcall(frame.GetHeight, frame)
+	local okOwn, own = pcall(frame.GetEffectiveScale, frame)
+	local okScale, scale = pcall(plate.GetEffectiveScale, plate)
+	if not okHeight or not okOwn or not okScale or not ns.Finite(height) or not ns.Finite(own) or not ns.Finite(scale) or own <= 0 or scale <= 0 then
+		return
+	end
+	local reach = (height - side.over) * own / scale
+	if far < 1 or near >= reach or near > far then
+		headerGap.Back(frame, rec)
+		return
+	end
+	local over = math.max(side.over, height - far * scale / own)
+	local set = above and { "BOTTOM" .. side.x, from, "TOP" .. side.x, 0, -over } or { "TOP" .. side.x, from, "BOTTOM" .. side.x, 0, over }
+	if headerGap.At(frame, rec.set) and rec.set[1] == set[1] and math.abs(rec.set[5] - set[5]) < 0.01 then
+		return
+	end
+	headerGap.Hang(frame, { set })
+	rec.set = set
 end
 
 -- True once Edit Mode has applied the layout of the login, and on a client without Edit Mode.
@@ -938,9 +1018,11 @@ function headerGap.Listen()
 	headerGap.Look = Look
 end
 
--- Hangs the plate of the zone name from the map while Close the gap under the zone name is on, and gives it back its points while it is off.
-function headerGap.Apply(cluster, border)
+-- Hangs the plate of the zone name from the map while Close the gap under the zone name is on and the ring does not show (bare), and gives it
+-- back its points otherwise.
+function headerGap.Apply(cluster, border, bare)
 	headerGap.moved = false
+	headerGap.bare = bare
 	local plate, map = cluster and Child(cluster, "ZoneTextButton"), Frame("Minimap")
 	-- A client before 1.60.1.70425 has no button for the plate (see HEADER_PIECES), and its plate stays.
 	if not plate or not map or not Picture(plate, "StateTexture") then
@@ -950,14 +1032,14 @@ function headerGap.Apply(cluster, border)
 	if wanted then
 		headerGap.Listen()
 	end
-	if not wanted or not headerGap.Ready() or (ns.EditModeOpen and ns.EditModeOpen()) then
-		headerGap.Release(plate, map)
+	if not wanted or not bare or not headerGap.Ready() or (ns.EditModeOpen and ns.EditModeOpen()) then
+		headerGap.Release(plate)
 		return
 	end
 	if Later(plate) or Later(cluster) then
 		return
 	end
-	if not (headerGap.game and headerGap.Ours(plate, map)) and not headerGap.Take(cluster, plate) then
+	if not (headerGap.game and headerGap.At(plate, headerGap.set)) and not headerGap.Take(cluster, plate) then
 		return
 	end
 	if not headerGap.probe then
@@ -975,32 +1057,39 @@ function headerGap.Apply(cluster, border)
 	end
 	local hx, hy = headerGap.Centre(headerGap.holder)
 	local mx, my, mapScale = headerGap.Centre(map)
+	local holderTop, holderBottom = headerGap.Edges(headerGap.holder)
+	local mapTop, mapBottom = headerGap.Edges(map)
 	local okScale, scale = pcall(plate.GetEffectiveScale, plate)
-	if not hx or not mx or not okScale or not ns.Finite(scale) or scale <= 0 then
+	if not hx or not mx or not holderTop or not mapTop or not okScale or not ns.Finite(scale) or scale <= 0 then
 		return
 	end
 	local above = hy >= my
+	-- The room between the plate's old place and the map's edge: the plate goes no further out than its old place, so the cluster keeps its box.
+	local band = (above and holderBottom - mapTop or mapBottom - holderTop) / scale
 	local px = Val("minimap", "zoneGap")
 	px = ns.Finite(px) and math.max(px, 0) or 0
 	local edge = border and not ns.Borderless() and ns.Get("general.thickness") or 0
-	local dy = ns.Pixels(plate, edge + px)
+	local base = ns.Pixels(plate, edge)
 	local room = above and ns.MapTextAbove and ns.MapTextAbove()
 	if ns.Finite(room) and room > 0 then
-		dy = math.max(dy, room * mapScale / scale + ns.Pixels(plate, px))
+		base = math.max(base, room * mapScale / scale)
 	end
+	local dy = math.min(base + ns.Pixels(plate, px), band)
 	local dx = (hx - mx) / scale
-	local point, relativePoint = "BOTTOM", "TOP"
+	local point, relativePoint, y = "BOTTOM", "TOP", dy
 	if not above then
-		point, relativePoint, dy = "TOP", "BOTTOM", -dy
+		point, relativePoint, y = "TOP", "BOTTOM", -dy
 	end
 	local set = headerGap.set
-	if set and set[1] == point and math.abs(set[4] - dx) < 0.01 and math.abs(set[5] - dy) < 0.01 and headerGap.Ours(plate, map) then
-		return
+	if not (set and set[1] == point and math.abs(set[4] - dx) < 0.01 and math.abs(set[5] - y) < 0.01 and headerGap.At(plate, set)) then
+		set = { point, map, relativePoint, dx, y }
+		headerGap.Hang(plate, { set })
+		headerGap.set = set
+		headerGap.moved = true
 	end
-	plate:ClearAllPoints()
-	plate:SetPoint(point, map, relativePoint, dx, dy)
-	headerGap.set = { point, map, relativePoint, dx, dy }
-	headerGap.moved = true
+	for _, side in ipairs(headerGap.Sides(cluster, plate)) do
+		headerGap.Side(side, plate, above, dy - base, band - dy)
+	end
 end
 
 -- A pass on the next frame after the plate moved or the lines above the map changed; the lines are laid out again when the plate moved.
@@ -1009,7 +1098,7 @@ function headerGap.Again()
 	if not cluster or not ns.Enabled(KEY) then
 		return
 	end
-	Run("minimap", headerGap.Apply, cluster, On("minimap", "minimapBorder"))
+	Run("minimap", headerGap.Apply, cluster, On("minimap", "minimapBorder"), headerGap.bare)
 	if headerGap.moved and ns.MapTextRefresh then
 		ns.MapTextRefresh()
 	end
@@ -1076,7 +1165,8 @@ local function ApplyMinimap()
 	MapOutline(border and square)
 	-- The city map has a round mask of its own, which the square mask of the minimap does not reach: no round cover is drawn over a square map.
 	CityCover(choice == "cover" and up and not square, border)
-	headerGap.Apply(cluster, border)
+	-- The plate of the zone name keeps the game's place while the ring shows, which fills the room over the map.
+	headerGap.Apply(cluster, border, ring)
 	local night = Val("minimap", "dayNight") == false
 	if diel and Moves("daynight", night) then
 		ns.SetFaded(diel, night)
@@ -1098,6 +1188,10 @@ end
 local function CityChanged()
 	if ns.Enabled(KEY) then
 		Run("minimap", ApplyMinimap)
+		-- The ring that comes back with the city map puts the plate of the zone name back in the game's place: the lines above the map follow.
+		if headerGap.moved and ns.MapTextRefresh then
+			ns.MapTextRefresh()
+		end
 	end
 end
 

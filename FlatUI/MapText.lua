@@ -462,8 +462,8 @@ end
 
 -- Puts the lines that show one after another, out from the map on each side, when which lines show, where, or the plate of the zone name has
 -- changed. Over the map, where the game puts the plate, the screen ends above it: the lines above that do not fit between the map and the plate
--- go below (Hud.lua makes room for them while it hangs the plate from the map). Under the map (Header Underneath), a line below that would
--- reach the plate goes on under it.
+-- go below (Hud.lua makes room for them, as far as the game's place, while it hangs the plate from the map). Under the map (Header Underneath),
+-- a line below that would reach the plate goes on under it.
 local function Layout()
 	local places, sig = {}, { S.game and "game" or "" }
 	local side, near, far = Plate()

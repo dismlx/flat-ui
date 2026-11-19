@@ -1773,9 +1773,9 @@ ns.PAGES = {
 		{ key = "zoneSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Zone name size" },
 		-- Hud.lua hangs the zone name from the map (headerGap).
 		{ key = "zoneGapOwn", kind = "bool", default = false, label = "Close the gap under the zone name",
-			tip = "Brings the zone name, with the clock, calendar and tracking button beside it, to the map, which stays where it is. Off, the zone name keeps the game's place, which leaves room for the game's ring. With Edit Mode's Header underneath it comes up to the map. While Edit Mode is open it keeps the game's place." },
+			tip = "Brings the zone name, with the clock, calendar and tracking button beside it, to the map, which stays where it is. The mail icon and the addon list button, which the game puts between the zone name and the map, go to the other side of the zone name where they do not fit there. Off, the zone name keeps the game's place, which leaves room for the game's ring. With Edit Mode's Header underneath it comes up to the map. While the game's ring shows, and while Edit Mode is open, it keeps the game's place." },
 		{ key = "zoneGap", kind = "number", default = 0, min = 0, max = 40, step = 1, unit = " px", label = "Gap under the zone name", needs = "zoneGapOwn",
-			tip = "0 lays the zone name on the map's border. Text you put above the map keeps its room under the zone name." },
+			tip = "0 lays the zone name on the map's border. It goes no further from the map than the game's place. Text you put above the map keeps its room under the zone name while it fits there, and goes below the map otherwise." },
 		{ section = "Buttons" },
 		{ key = "btnTracking", kind = "bool", default = true, label = "Tracking button" },
 		{ key = "btnMail", kind = "bool", default = true, label = "Mail icon" },

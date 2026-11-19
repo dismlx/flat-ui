@@ -32,9 +32,12 @@ local ADDON_NAME, ns = ...
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
 -- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from
--- the minimap with ClearAllPoints and SetPoint, out of combat if the game protects it, with a frame of its own in the cluster at the button's
--- place so the cluster keeps its size; it gives the button back the points it read (GetPoint) when the row goes off, while Edit Mode is open, and
--- until Edit Mode has applied its layout (the manager's layoutInfo, read with rawget; EventRegistry's EditMode.Enter and EditMode.Exit).
+-- the minimap with ClearAllPoints and SetPoint, out of combat if the game protects it, no further out than the game's place, with a frame of its
+-- own in the cluster at the button's place so the cluster keeps its size; the mail icon (MinimapCluster.IndicatorFrame) and the addon list button
+-- (AddonCompartmentFrame) that the game hangs between the button and the map it hangs on the button's other side, inside the button's old place,
+-- the same way, where they do not fit between. It gives each back the points it read (GetPoint) when the row goes off, while the game's ring
+-- shows, while Edit Mode is open, and until Edit Mode has applied its layout (the manager's layoutInfo, read with rawget; EventRegistry's
+-- EditMode.Enter and EditMode.Exit).
 -- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
 -- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
 -- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at
