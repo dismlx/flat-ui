@@ -33,6 +33,13 @@ local ADDON_NAME, ns = ...
 -- still that name, and the name alone again when the row goes off.
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
+-- Hidden frames (Hide.lua; on, with nothing ticked, by default) puts each frame of the game the player ticks, of those /flatui move moves and the
+-- parts of the minimap, under a hidden frame of its own (a SecureHandlerBaseTemplate frame with its corners on UIParent's), out of combat only: in a
+-- snippet of that frame (Execute; SetParent of the frame's handle), so the frame's OnHide runs in the game's secure code, and back under the parent
+-- it had with the engine's own SetParent (the methods of GetFrameMetatable) while the snippet holds it hidden (Hide and Show of the handle, shown
+-- again only if its own shown flag was), with its frame strata and level put back where the move changed them. It writes nothing else on the frame,
+-- and four times a second, out of combat, it puts a ticked frame the game gave another parent under its own again. A change in a fight waits for
+-- its end. While Leave the game's action bars alone is on it hides none of the game's bars.
 -- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
 -- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
 -- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at
@@ -319,7 +326,7 @@ local ADDON_NAME, ns = ...
 -- goes off, and once Hide the zone name has been on it follows SetZoneText with hooksecurefunc, to hide the zone's name in the smaller line; with
 -- Hide the talking head it takes TALKINGHEAD_REQUESTED from TalkingHeadFrame (UnregisterEvent) and gives it back, as above.
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.
