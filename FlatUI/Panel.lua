@@ -2851,6 +2851,19 @@ function ns.OpenPanelMode(mode)
 	return ui.window:IsShown() == true
 end
 
+-- Opens the window at a page by its key (/flatui hide), and leaves it open when it is open already. False when the window or the page is not there.
+function ns.OpenPanelPage(key)
+	if not (ui.window and ui.window:IsShown()) then
+		ns.OpenPanel()
+	end
+	local entry = ui.model and ui.model.byKey[key]
+	if not (ui.window and ui.window:IsShown() and entry) then
+		return false
+	end
+	Go(entry)
+	return true
+end
+
 -- Opens the window at the Share section of Profiles, and leaves it open when it is open already.
 function ns.OpenPanelShare()
 	if not (ui.window and ui.window:IsShown()) then

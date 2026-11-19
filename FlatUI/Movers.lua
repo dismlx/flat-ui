@@ -34,6 +34,8 @@ local _, ns = ...
 -- to the tooltip, which hangs from it at a fixed spot).
 -- A module can hold system frames at spots of its own with ns.MoverHold: they are placed like a frame with a saved spot, have no box and keep the
 -- saved spots they may also have.
+-- Shift and a right-click on a box hides its frame, or shows it again, when the Hidden frames page has a row for it (Hide.lua, ns.HideFrames), and
+-- the box of a hidden frame says so.
 
 local KEY = "movers"
 local TOOLTIP = "FlatUITooltip"
@@ -72,7 +74,7 @@ local WIN = { height = 22, right = 28, level = 2, start = 4, corner = 18, min = 
 	controls = { "Button", "EditBox", "Slider", "Model", "ModelScene", "ColorSelect", "SimpleHTML", "MessageFrame", "ScrollingMessageFrame", "MovieFrame", "Minimap" },
 	loose = { Model = true, ModelScene = true },
 	scripts = { "OnMouseDown", "OnMouseUp", "OnDragStart" } }
-local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back."
+local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back, Shift and right-click hides it."
 -- A bag has a menu button on its portrait, and another over its title that opens the same menu. The title bar of a bag starts to the right
 -- of the portrait, like the title bar of every window two levels above it, so the title drags the bag and the portrait still opens the menu.
 local BAG_GRIP = { left = 44, level = 2 }
@@ -2085,7 +2087,15 @@ local function MakeHandle(name)
 		ns.Try(KEY, ns.MoversMode.Press, name, button)
 	end)
 	handle:SetScript("OnMouseUp", function(_, mouseButton)
-		if mouseButton == "RightButton" then
+		-- Shift and a right-click hides the frame of the box, or shows it again, as its tick on the Hidden frames page does (Hide.lua).
+		local hide = mouseButton == "RightButton" and type(IsShiftKeyDown) == "function" and IsShiftKeyDown() and ns.HideFrames
+			and ns.HideFrames.Key(name)
+		if hide then
+			ns.Try(KEY, ns.HideFrames.Toggle, hide)
+			ns.Try(KEY, ShowHandle, name)
+			ns.Try(KEY, ns.MoversMode.Layout)
+			ns.Try(KEY, ns.MoversMode.Refresh, true)
+		elseif mouseButton == "RightButton" then
 			ns.Try(KEY, ResetFrame, name)
 		elseif mouseButton == "LeftButton" then
 			ns.Try(KEY, centre.Click, name)
@@ -2146,6 +2156,11 @@ function ShowHandle(name)
 		if frame and not ns.Forbidden(frame) and KindOf(name, frame) == "layout" and ns.LayoutSpots.Mode() ~= "layout" then
 			text = ("%s (%s)"):format(text, BACK_IN_FIGHT)
 		end
+	end
+	-- A frame the Hidden frames page hides (Hide.lua) says so on its box.
+	local hidden = ns.HideFrames and ns.HideFrames.Key(name)
+	if hidden and ns.HideFrames.Hidden(hidden) then
+		text = ("%s (hidden)"):format(text)
 	end
 	if look.text ~= text then
 		look.text = text
@@ -4198,7 +4213,7 @@ local function BuildBar()
 	title:SetText("Movers")
 	local hint = Label(bar, "GameFontHighlightSmall", 416)
 	hint:SetPoint("TOPLEFT", bar, "TOPLEFT", 12, -30)
-	hint:SetText("Drag to move. Scroll or Shift and scroll to nudge. Ctrl and scroll to scale. Right-click to reset.")
+	hint:SetText("Drag to move. Scroll or Shift and scroll to nudge. Ctrl and scroll to scale. Right-click to reset, Shift and right-click to hide.")
 	local edit = Label(bar, "GameFontDisableSmall", 416)
 	edit:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -8)
 	edit:SetText(EVERY_FRAME)

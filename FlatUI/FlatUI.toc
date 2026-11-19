@@ -127,6 +127,7 @@ LayoutText.lua
 Movers.lua
 MoversMode.lua
 MoversSnap.lua
+Hide.lua
 BarBlock.lua
 BarBlockButtons.lua
 Blocks.lua

@@ -4,7 +4,8 @@ local _, ns = ...
 -- the frames at the left and an inspector with the X and Y of the chosen frame at the right. The handles themselves are Movers.lua's; this file
 -- gives them their look and keeps what was done in a session (the spots at the start, the steps for Undo, the handles hidden by the eye). The
 -- options window is hidden while the session lasts and comes back with it. Movers.lua hands over through the calls it makes on ns.MoversMode and
--- is read through ns.MoverKit. Every colour and size is a token of PanelLook.lua.
+-- is read through ns.MoverKit. Every colour and size is a token of PanelLook.lua. The frames the Hidden frames page hides (Hide.lua, ns.HideFrames)
+-- are listed first, under Hidden, where the eye shows one again, and the inspector's Hide frame hides the chosen frame or shows it again.
 
 local MM = {}
 ns.MoversMode = MM
@@ -14,9 +15,10 @@ local GRID = 32
 local GRID_ALPHA, CENTRE_ALPHA = { dim = 0.12, bright = 0.25 }, 0.4
 local BAR_W, BAR_H = 560, 40
 local LIST_W, LIST_H, ROW_H, LIST_TOP = 240, 400, 24, 66
-local SIDE_W, SIDE_H = 224, 196
+local SIDE_W, SIDE_H = 224, 226
 local STEPS_KEPT, SHIFT_STEP = 100, 10
-local GROUPS = { "Unit frames", "Action bars", "Flat UI", "Windows", "Other" }
+-- Hidden holds the frames the Hidden frames page hides (Hide.lua), whatever group they have otherwise.
+local GROUPS = { "Hidden", "Unit frames", "Action bars", "Flat UI", "Windows", "Other" }
 local UNITS = { PlayerFrame = true, TargetFrame = true, FocusFrame = true, PetFrame = true, PartyFrame = true, CompactRaidFrameContainer = true,
 	BossTargetFrameContainer = true }
 local BARS = { MainActionBar = true, MultiBarBottomLeft = true, MultiBarBottomRight = true, MultiBarRight = true, MultiBarLeft = true, MultiBar5 = true,
@@ -596,6 +598,17 @@ local function BuildInspector()
 		end
 	end)
 	reset:SetPoint("TOPLEFT", body, "TOPLEFT", 116, -152)
+	-- Hides the chosen frame, or shows it again: its tick on the Hidden frames page (Hide.lua). There for a frame that page has.
+	ui.hide, ui.hideLabel = Button(body, "Hide frame", 200, function()
+		local key = S.selected and ns.HideFrames and ns.HideFrames.Key(S.selected)
+		if key then
+			ns.HideFrames.Toggle(key)
+			Kit().ShowHandle(S.selected)
+			MM.Layout()
+			MM.Refresh(true)
+		end
+	end)
+	ui.hide:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -186)
 end
 
 -- The numbers of the chosen frame, the chip over its handle and the buttons that depend on it. force writes a field that has the cursor too.
@@ -648,6 +661,11 @@ function MM.Refresh(force)
 	else
 		ui.chip:Hide()
 	end
+	local hide = info and ns.HideFrames and ns.HideFrames.Key(name)
+	ui.hide:SetShown(hide ~= nil)
+	if hide then
+		ui.hideLabel:SetText(ns.HideFrames.Hidden(hide) and "Show frame" or "Hide frame")
+	end
 	ui.undoLabel:SetAlpha(#S.undo > 0 and 1 or 0.4)
 	MM.Spacing()
 end
@@ -691,11 +709,23 @@ local function Entries()
 	for _, group in ipairs(GROUPS) do
 		groups[group] = {}
 	end
+	-- A hidden frame is in Hidden, with the row (hide) whose untick shows it again; one with no box (a part of the minimap) has no name.
+	local H, listed = ns.HideFrames, {}
 	for _, name in ipairs(names) do
 		local info = kit.Describe(name)
 		if info and (filter == "" or info.label:lower():find(filter, 1, true)) then
-			local list = groups[GroupOf(info)]
-			list[#list + 1] = { name = name, label = info.label }
+			local key = H and H.Key(name)
+			local hidden = key ~= nil and H.Hidden(key)
+			local list = groups[hidden and "Hidden" or GroupOf(info)]
+			list[#list + 1] = { name = name, label = info.label, hide = hidden and key or nil }
+			if hidden then
+				listed[key] = true
+			end
+		end
+	end
+	for _, row in ipairs(H and H.List() or {}) do
+		if not listed[row.key] and (filter == "" or row.label:lower():find(filter, 1, true)) then
+			groups.Hidden[#groups.Hidden + 1] = { label = row.label, hide = row.key }
 		end
 	end
 	local entries = {}
@@ -748,7 +778,16 @@ local function BuildRow(index)
 	end)
 	row.eye:SetScript("OnMouseUp", function(_, mouseButton)
 		local name = row.entry and row.entry.name
-		if mouseButton == "LeftButton" and name then
+		local hide = row.entry and row.entry.hide
+		-- The eye of a hidden frame shows it again (Hide.lua); any other eye hides the handle for the session.
+		if mouseButton == "LeftButton" and hide then
+			Try(ns.HideFrames.Set, hide, false)
+			if name then
+				Try(Kit().ShowHandle, name)
+			end
+			MM.Layout()
+			MM.Refresh(true)
+		elseif mouseButton == "LeftButton" and name then
 			S.hidden[name] = not S.hidden[name] or nil
 			Try(Kit().ShowHandle, name)
 			MM.Layout()
@@ -787,7 +826,7 @@ function MM.Layout()
 				row.back:SetColorTexture(0, 0, 0, 0)
 				row.label:SetTextColor(L.Colour("text-faint"))
 			else
-				local chosen = S.selected == entry.name
+				local chosen = entry.name ~= nil and S.selected == entry.name
 				local fill = chosen and "raised" or row.over and "hover" or nil
 				if fill then
 					L.Solid(row.back, fill)
@@ -796,9 +835,9 @@ function MM.Layout()
 				end
 				row.label:SetTextColor(L.Colour(chosen and "text" or "text-dim"))
 				row.icon:SetVertexColor(L.Colour("text-dim"))
-				row.icon:SetAlpha(S.hidden[entry.name] and 0.35 or 1)
+				row.icon:SetAlpha((entry.hide or (entry.name and S.hidden[entry.name])) and 0.35 or 1)
 			end
-			row.eye:SetShown(entry.name ~= nil)
+			row.eye:SetShown(entry.name ~= nil or entry.hide ~= nil)
 		end
 	end
 	ui.empty:SetShown(#ui.entries == 0)
