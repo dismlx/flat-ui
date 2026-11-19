@@ -5,6 +5,7 @@ local _, ns = ...
 -- settings of the page with ns.Get (the draft while the setup window views one) and puts every part in the look they ask for. The numbers are fixed samples.
 -- A part the page leaves to the game is drawn in a plain grey look, the same as the game's art would be without its pictures.
 -- The game's own art is not drawn: the minimap is one frame of the game and its terrain is a plain fill (Hud.lua keeps the map's own mask and ring).
+-- ns.DrawHud gives test mode's stand-ins (TestHud.lua) the painters of an aura icon (DH.Aura, DH.PaintAura) and of a loot roll (DH.Roll, DH.PaintRoll).
 
 local GAME = 0.55
 local BAR_FILE = "Interface\\TargetingFrame\\UI-StatusBar"
@@ -324,9 +325,12 @@ local BUFF_SIZE, BUFF_GAP, BUFF_ROW = 36, 10, 70
 local BUFF_TIMES = { "12 s", "1 m", "12 m", "1 h", "30 s", "4 m" }
 local DEBUFF_TIMES = { "12 s", "30 s", "2 m", "6 s", "9 s" }
 
-local function NewAura(s, x, y, icon, time, count, game)
-	local holder = NewFrame(s.root, BUFF_SIZE, BUFF_SIZE)
-	At(holder, s.root, x, y)
+-- An aura icon on `parent` at x, y from its top left, size units across (the drawing's 36 when nil), with its time under it and its count, and the
+-- grey border the game gives it.
+local function NewAura(parent, x, y, icon, time, count, game, size)
+	size = size or BUFF_SIZE
+	local holder = NewFrame(parent, size, size)
+	At(holder, parent, x, y)
 	local cell = { holder = holder, game = game }
 	cell.rim = NewTexture(holder, "BACKGROUND", -6, game[1], game[2], game[3], 1)
 	cell.rim:SetPoint("TOPLEFT", holder, "TOPLEFT", -2, 2)
@@ -335,7 +339,7 @@ local function NewAura(s, x, y, icon, time, count, game)
 	cell.icon.frame:SetAllPoints(holder)
 	ns.IconSet(cell.icon, icon, nil, nil, { numbers = false })
 	cell.plate = { outline = cell.icon.outline, rim = cell.rim, inner = cell.rim }
-	cell.time = NewText(holder, "NumberFontNormalSmall", "TOP", 0, -BUFF_SIZE - 2, time)
+	cell.time = NewText(holder, "NumberFontNormalSmall", "TOP", 0, -size - 2, time)
 	cell.count = NewText(holder, "NumberFontNormal", "BOTTOMRIGHT", -1, 1, count, "RIGHT")
 	return cell
 end
@@ -348,11 +352,11 @@ function BuffRow.build(stage)
 	local parts = BuffRow.parts
 	s.buffs, s.debuffs = {}, {}
 	for index = 1, 6 do
-		s.buffs[index] = NewAura(s, (index - 1) * (BUFF_SIZE + BUFF_GAP), 0, ICONS[index], BUFF_TIMES[index], index == 2 and "3" or "",
+		s.buffs[index] = NewAura(s.root, (index - 1) * (BUFF_SIZE + BUFF_GAP), 0, ICONS[index], BUFF_TIMES[index], index == 2 and "3" or "",
 			{ 0.5, 0.5, 0.5 })
 	end
 	for index = 1, 5 do
-		s.debuffs[index] = NewAura(s, (index - 1) * (BUFF_SIZE + BUFF_GAP), BUFF_ROW, ICONS[7 - index], DEBUFF_TIMES[index], index == 4 and "3" or "",
+		s.debuffs[index] = NewAura(s.root, (index - 1) * (BUFF_SIZE + BUFF_GAP), BUFF_ROW, ICONS[7 - index], DEBUFF_TIMES[index], index == 4 and "3" or "",
 			GAME_DEBUFF[index])
 	end
 	s.label = NewGameLabel(s.root)
@@ -364,25 +368,29 @@ function BuffRow.build(stage)
 	return s.root
 end
 
-function BuffRow.draw(stage)
-	local s = Ready(BuffRow, stage)
+-- Paints a buff (kind nil) or a debuff of a type, 1 to 4 for magic, curse, disease and poison (DEBUFF_ROWS), else another, from the rows.
+local function PaintAura(cell, kind)
 	local on = On("auras")
 	local crop = on and Crop() or 0
-	local duration, count = Val("durationSize") or 100, Val("countSize") or 100
-	local types = ns.Get("hud.auraTypes") == true
-	for index, cell in ipairs(s.buffs) do
-		cell.icon.texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
-		Style(cell.plate, on, false, false)
-		ns.TextStyle(cell.time, { percent = duration })
-		ns.TextStyle(cell.count, { percent = count })
-	end
-	for index, cell in ipairs(s.debuffs) do
-		cell.icon.texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
-		local row = (types and index < 5) and DEBUFF_ROWS[index] or DEBUFF_ROWS[5]
+	cell.icon.texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
+	if kind then
+		local row = (ns.Get("hud.auraTypes") == true and DEBUFF_ROWS[kind] and kind < 5) and DEBUFF_ROWS[kind] or DEBUFF_ROWS[5]
 		local r, g, b = ns.Colour("hud." .. row)
 		Style(cell.plate, on, false, not on, { r, g, b })
-		ns.TextStyle(cell.time, { percent = duration })
-		ns.TextStyle(cell.count, { percent = count })
+	else
+		Style(cell.plate, on, false, false)
+	end
+	ns.TextStyle(cell.time, { percent = Val("durationSize") or 100 })
+	ns.TextStyle(cell.count, { percent = Val("countSize") or 100 })
+end
+
+function BuffRow.draw(stage)
+	local s = Ready(BuffRow, stage)
+	for _, cell in ipairs(s.buffs) do
+		PaintAura(cell, nil)
+	end
+	for index, cell in ipairs(s.debuffs) do
+		PaintAura(cell, index)
 	end
 	s.label:SetShown(not Enabled())
 end
@@ -753,6 +761,68 @@ local function NewSlot(parent, x, y, size, icon)
 	return plate
 end
 
+-- A roll as Hud.lua draws it, w units wide on `parent`, its parts on r: the plate (r.roll), the item (r.rollIcon) and its name in the colour of its
+-- quality, the timer (r.timer, filled to 65 of 100) and the Need, Greed and Pass buttons (r.rollButtons). The caller anchors r.roll.frame.
+local function NewRoll(r, parent, icon, name, quality, w)
+	r.roll = NewPlate(parent, w, 50)
+	r.rollIcon = NewSlot(r.roll.frame, 7, 6, 28, icon)
+	local rollName = NewText(r.roll.frame, "GameFontHighlightSmall", "TOPLEFT", 42, -8, name, "LEFT")
+	rollName:SetTextColor(quality[1], quality[2], quality[3], 1)
+	r.quality = quality
+	r.timer = Owned(CreateFrame("StatusBar", nil, r.roll.frame))
+	r.timer:SetMinMaxValues(0, 100)
+	r.timer:SetStatusBarTexture(BAR_FILE)
+	r.timer:SetValue(65)
+	NewTexture(r.timer, "BACKGROUND", 0, 0, 0, 0, 1):SetAllPoints(r.timer)
+	r.timerEdge = { outline = ns.SetOutlineArea(ns.Outline(r.timer, r.timer), "hud") }
+	r.rollButtons = {}
+	for index, kind in ipairs({ "need", "greed", "pass" }) do
+		local button = NewTexture(r.roll.frame, "ARTWORK", 1)
+		button:SetAtlas("lootroll-toast-icon-" .. kind .. "-up")
+		r.rollButtons[index] = button
+	end
+	return r
+end
+
+-- Paints a roll from the rows: the timer across the foot and Need, Greed and Pass in a row at the right while Loot rolls is on, else where the game
+-- has them, the timer under the name and the buttons in two rows.
+local function PaintRoll(r)
+	local on = On("lootRolls")
+	local colour = { r.quality[1], r.quality[2], r.quality[3] }
+	Style(r.roll, on, true, not on)
+	Style(r.rollIcon, on, true, not on, on and colour or nil)
+	local crop = on and Crop() or 0
+	r.rollIcon.icon:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
+	Style(r.timerEdge, on, false, false)
+	local roll, timer, need, greed, pass = r.roll.frame, r.timer, r.rollButtons[1], r.rollButtons[2], r.rollButtons[3]
+	timer:ClearAllPoints()
+	for _, button in ipairs(r.rollButtons) do
+		button:ClearAllPoints()
+	end
+	local file, side
+	if on then
+		timer:SetPoint("BOTTOMLEFT", roll, "BOTTOMLEFT", 7, 5)
+		timer:SetPoint("BOTTOMRIGHT", roll, "BOTTOMRIGHT", -7, 5)
+		timer:SetHeight(6)
+		side = 18
+		pass:SetPoint("RIGHT", roll, "RIGHT", -6, 5)
+		greed:SetPoint("RIGHT", pass, "LEFT", -2, 0)
+		need:SetPoint("RIGHT", greed, "LEFT", -2, 0)
+	else
+		timer:SetPoint("BOTTOMLEFT", roll, "BOTTOMLEFT", 3, 2)
+		timer:SetSize(150, 6)
+		side = 20
+		need:SetPoint("TOPRIGHT", roll, "TOPRIGHT", -34, -4)
+		pass:SetPoint("LEFT", need, "RIGHT", 4, 1)
+		greed:SetPoint("TOP", need, "BOTTOM", 0, 3)
+		file = ns.BarFile("skills")
+	end
+	for _, button in ipairs(r.rollButtons) do
+		button:SetSize(side, side)
+	end
+	Fill(r.timer, 1, 0.82, 0, file)
+end
+
 function Loot.build(stage)
 	local s = Start(Loot, stage, 440, 150)
 	if not s then
@@ -773,25 +843,8 @@ function Loot.build(stage)
 		card.words = NewText(card.frame, "GameFontNormalSmall", "BOTTOMLEFT", 36, 4, quality[4], "LEFT")
 		s.cards[index] = card
 	end
-	-- A roll as Hud.lua draws it: the timer across the foot and Need, Greed and Pass in a row at the right while the row is on, else where the game
-	-- has them, the timer under the name and the buttons in two rows.
-	s.roll = NewPlate(root, 230, 50)
+	NewRoll(s, root, ICONS[2], "Sturdy Shield", QUALITY[2], 230)
 	At(s.roll.frame, root, 190, 6)
-	s.rollIcon = NewSlot(s.roll.frame, 7, 6, 28, ICONS[2])
-	local rollName = NewText(s.roll.frame, "GameFontHighlightSmall", "TOPLEFT", 42, -8, "Sturdy Shield", "LEFT")
-	rollName:SetTextColor(0, 0.44, 0.87, 1)
-	s.timer = Owned(CreateFrame("StatusBar", nil, s.roll.frame))
-	s.timer:SetMinMaxValues(0, 100)
-	s.timer:SetStatusBarTexture(BAR_FILE)
-	s.timer:SetValue(65)
-	NewTexture(s.timer, "BACKGROUND", 0, 0, 0, 0, 1):SetAllPoints(s.timer)
-	s.timerEdge = { outline = ns.SetOutlineArea(ns.Outline(s.timer, s.timer), "hud") }
-	s.rollButtons = {}
-	for index, kind in ipairs({ "need", "greed", "pass" }) do
-		local button = NewTexture(s.roll.frame, "ARTWORK", 1)
-		button:SetAtlas("lootroll-toast-icon-" .. kind .. "-up")
-		s.rollButtons[index] = button
-	end
 	s.alert = NewPlate(root, 230, 44)
 	At(s.alert.frame, root, 190, 70)
 	s.alertIcon = NewTexture(s.alert.frame, "ARTWORK", 0, 1, 1, 1, 1)
@@ -822,40 +875,7 @@ function Loot.draw(stage)
 		card.slot.icon:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
 		card.words:SetShown(not hide)
 	end
-	on = On("lootRolls")
-	local blue = { 0, 0.44, 0.87 }
-	Style(s.roll, on, true, not on)
-	Style(s.rollIcon, on, true, not on, on and blue or nil)
-	crop = on and Crop() or 0
-	s.rollIcon.icon:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
-	Style(s.timerEdge, on, false, false)
-	local roll, timer, need, greed, pass = s.roll.frame, s.timer, s.rollButtons[1], s.rollButtons[2], s.rollButtons[3]
-	timer:ClearAllPoints()
-	for _, button in ipairs(s.rollButtons) do
-		button:ClearAllPoints()
-	end
-	local file, side
-	if on then
-		timer:SetPoint("BOTTOMLEFT", roll, "BOTTOMLEFT", 7, 5)
-		timer:SetPoint("BOTTOMRIGHT", roll, "BOTTOMRIGHT", -7, 5)
-		timer:SetHeight(6)
-		side = 18
-		pass:SetPoint("RIGHT", roll, "RIGHT", -6, 5)
-		greed:SetPoint("RIGHT", pass, "LEFT", -2, 0)
-		need:SetPoint("RIGHT", greed, "LEFT", -2, 0)
-	else
-		timer:SetPoint("BOTTOMLEFT", roll, "BOTTOMLEFT", 3, 2)
-		timer:SetSize(150, 6)
-		side = 20
-		need:SetPoint("TOPRIGHT", roll, "TOPRIGHT", -34, -4)
-		pass:SetPoint("LEFT", need, "RIGHT", 4, 1)
-		greed:SetPoint("TOP", need, "BOTTOM", 0, 3)
-		file = ns.BarFile("skills")
-	end
-	for _, button in ipairs(s.rollButtons) do
-		button:SetSize(side, side)
-	end
-	Fill(s.timer, 1, 0.82, 0, file)
+	PaintRoll(s)
 	on = On("alerts")
 	Style(s.alert, on, true, not on)
 	s.label:SetShown(not Enabled())
@@ -867,3 +887,30 @@ ns.SetupDrawings["mock-buff-row"] = BuffRow
 ns.SetupDrawings["mock-xp-micro"] = XpMicro
 ns.SetupDrawings["mock-objective"] = Objective
 ns.SetupDrawings["mock-loot"] = Loot
+
+-- The painters of the drawings, for test mode's stand-ins (TestHud.lua): aura icons and loot rolls on frames of the caller's, painted from the rows
+-- as mock-buff-row and mock-loot paint theirs.
+local DH = { ICONS = ICONS, QUALITY = QUALITY }
+ns.DrawHud = DH
+
+-- An aura icon on `parent` at x, y from its top left, size units across, with the texture `icon`. game: the colour of its border in the game's look.
+function DH.Aura(parent, x, y, size, icon, game)
+	return NewAura(parent, x, y, icon, "", "", game or { 0.5, 0.5, 0.5 }, size)
+end
+
+-- The game's border of a debuff of a type, 1 to 5 as DEBUFF_ROWS.
+function DH.DebuffColour(kind)
+	return GAME_DEBUFF[kind] or GAME_DEBUFF[5]
+end
+
+-- Paints an aura: a buff for kind nil, else a debuff of the type kind (1 magic, 2 curse, 3 disease, 4 poison, 5 another).
+function DH.PaintAura(cell, kind)
+	PaintAura(cell, kind)
+end
+
+-- A roll w units wide on `parent`, of the item `icon` named `name` in the colour of a QUALITY.
+function DH.Roll(parent, icon, name, quality, w)
+	return NewRoll({}, parent, icon, name, quality, w or 230)
+end
+
+DH.PaintRoll = PaintRoll

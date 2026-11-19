@@ -15,7 +15,8 @@ local _, ns = ...
 -- (SPELL_UPDATE_COOLDOWN gives the item of a cast, SpellBookDocumentation.lua:924-936, and the game's own cooldown manager reads it so,
 -- CooldownViewer.lua:2182-2186), until that cooldown is over; and, when the page goes on and after a loading screen, the items in the bags
 -- whose cooldown runs, one for each cooldown they share. A cooldown read out of combat that is shorter than Shortest cooldown does not pulse,
--- nor the global cooldown, nor what is left out.
+-- nor the global cooldown, nor what is left out. While test mode is on (TestMode.lua) a test pulse shows at each spot in use every 3 seconds, with
+-- the sound the first time only.
 --
 -- The end of a cooldown is found without reading what the game withholds in a fight. The flags of a spell's cooldown are never withheld
 -- (isEnabled, isActive and isOnGCD, SpellSharedDocumentation.lua:19-31), and isOnGCD is believed only inside SPELL_UPDATE_COOLDOWN, the one
@@ -1480,17 +1481,38 @@ function P.Resolve(text)
 	return nil
 end
 
-function P.Test()
+-- One test pulse at each spot in use, with the icon of the first spell watched by name; quiet: no sound, else the sound with the first alone.
+function P.Test(quiet)
 	local first
 	for name, entry in pairs(P.spells) do
 		if not first or name < first.name then
 			first = entry
 		end
 	end
-	-- One at each spot in use, the sound with the first alone.
 	local icon = first and P.Icon(first) or UNKNOWN_ICON
 	for index = 1, P.InUse() do
-		P.Queue({ kind = "test", key = "test", name = "a test", icon = icon, spot = index, quiet = index > 1 })
+		P.Queue({ kind = "test", key = "test", name = "a test", icon = icon, spot = index, quiet = quiet == true or index > 1 })
+	end
+end
+
+-- Test mode (TestMode.lua): the test pulses every 3 seconds while it is on and its bar's Moving is on, each at the size, spot, opacity and time the
+-- rows give now, with the sound the first time only (TM.Sound). Off and a pause take the test pulses that wait or show away, and leave the others.
+function P.TestStep()
+	local mode = ns.TestMode
+	P.Test(not (mode ~= nil and mode.Sound("pulse")))
+end
+
+function P.TestEnd()
+	for _, spot in pairs(P.spots) do
+		for index = #spot.queue, 1, -1 do
+			if spot.queue[index].kind == "test" then
+				table.remove(spot.queue, index)
+			end
+		end
+		if spot.current and spot.current.kind == "test" then
+			spot.token = spot.token + 1
+			P.Next(spot)
+		end
 	end
 end
 
@@ -1536,7 +1558,7 @@ function P.Slash(rest)
 		if not ns.Enabled(KEY) then
 			print("Cooldown pulse is off. Its page is under Cooldowns.")
 		elseif word == "test" then
-			ns.Try(KEY, P.Test)
+			ns.Try(KEY, P.Test, false)
 		else
 			ns.Try(KEY, P.List)
 		end
@@ -1619,3 +1641,7 @@ ns.Register(KEY, {
 	help = HELP,
 	Status = P.Status,
 })
+
+if ns.TestMode then
+	ns.TestMode.Register("pulse", { module = KEY, label = "Cooldown pulse", every = 3, Start = P.TestStep, Tick = P.TestStep, Stop = P.TestEnd })
+end

@@ -1,0 +1,434 @@
+local _, ns = ...
+
+-- Test mode's stand-ins for the bars, auras, rolls and the sample plate (spec section 1.3, Part C), and the cursor ring's samples. Each stand-in is
+-- a frame of Flat UI's own that TestMode.lua makes, places and shows (TM.StandIn): at the place, scale, strata and level of a game frame that is
+-- hidden now, while test mode is on, its module is on and the real frame does not show. It is painted from the rows by the painters the setup
+-- drawings share (ns.DrawCasts of SetupDrawCasts.lua, ns.DrawHud of SetupDrawHud.lua, ns.SetupDrawPlates of SetupDrawPlates.lua), and its moving
+-- parts change in Animate, while it shows and the bar's Moving is on: fills, text and alpha only. The numbers are fixed samples.
+--   Cast bars: the player's at PlayerCastingBarFrame, wherever Edit Mode or Lock to player frame put it, while the player casts nothing: a cast that
+--   fills over 2.5 seconds and holds half a second, a channel that drains, then an interrupted cast that flashes, in the colours of the Flat UI page.
+--   The target's, the focus's and the pet's at TargetFrameSpellBar, FocusFrameSpellBar and PetCastingBarFrame, and the first boss's at
+--   Boss1TargetFrameSpellBar, each only while the stand-in of its unit shows (TM.Shown of "target", "focus", "pet" and "boss", TestUnits.lua): an enemy
+--   cast the player's interrupt is ready for (Interrupt ready colour while Interrupt readiness on enemy casts is on), then one that cannot be
+--   interrupted, a little later than the player's. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
+--   styles no boss bar, and hangs on the unit frames' module, whose boss stand-in it follows.
+--   Swing timers: at SwingTimerMainHandFrame for every class, SwingTimerOffHandFrame for a warrior and a rogue, SwingTimerRangedFrame for a hunter,
+--   while the game's timer is hidden: a swing of 2.6 seconds that loops.
+--   Debuffs and buffs: three icons each, from the top right corner of DebuffFrame while the player has no harmful aura and of BuffFrame while the
+--   player has no helpful aura at all (C_UnitAuras.GetAuraSlots, read out of combat only, when its answer is plain), a magic, a curse and a poison
+--   debuff in the colours of their types, and times that count down and loop in the time format of Minimap and buffs (AuraTime.lua).
+--   Loot rolls: two rolls at the box Loot rolls of /flatui move, where the game's rolls show (ns.MoverSpot: the saved spot, else where the game
+--   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
+--   shows; their timers drain over 10 seconds and loop. They stand in for UIParent, so their place is the box's.
+--   The sample nameplate: an enemy plate with its cast bar and auras at the middle of the screen, 160 units up, with a dim Sample nameplate under it,
+--   as plates have no place of their own. Its cast fills, and its health bar takes the threat colours in turn every 3 seconds (You want, Changing
+--   hands, You do not want) while Threat on nameplates and Colour health bars by threat are on.
+-- The cursor ring is no module, so it cannot register with test mode (TM.Register runs an entry only while its module is on): a frame of this file
+-- looks four times a second whether TM.Epoch moved, which it does at every On, Off, pause and resume, and then has the ring apply its rows again
+-- (ns.CursorRingChanged, which reads TM.IsOn: In combat only reads as shown while it is on); while test mode is on and Moving it gives the ring a
+-- sample cast and global cooldown every 3 seconds (ns.CursorRingSample).
+-- Nothing of the game is written or called: the stand-ins read only what TestMode.lua reads, and the auras' slots.
+
+local TM = ns.TestMode
+if type(TM) ~= "table" then
+	return
+end
+
+-- The cast bars: their stand-in, game frame, module, place on the Cast bars page (opt), the stand-in of their unit, how much later their round
+-- starts, and their spell names by state.
+local CASTS = {
+	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0,
+		names = { channel = "Drain Life" } },
+	{ id = "castTarget", game = "TargetFrameSpellBar", module = "castbars", opt = "target", label = "Target cast bar", unit = "target", offset = 0.8,
+		small = true, kick = true, names = { cast = "Fireball", shield = "Polymorph" } },
+	{ id = "castFocus", game = "FocusFrameSpellBar", module = "castbars", opt = "focus", label = "Focus cast bar", unit = "focus", offset = 1.6,
+		small = true, kick = true, names = { cast = "Frostbolt", shield = "Fear" } },
+	{ id = "castPet", game = "PetCastingBarFrame", module = "castbars", opt = "pet", label = "Pet cast bar", unit = "pet", offset = 2.4,
+		round = "pet", names = { cast = "Firebolt" } },
+	{ id = "castBoss", game = "Boss1TargetFrameSpellBar", module = "unitframes", opt = "boss", label = "Boss cast bar", unit = "boss", offset = 1.2,
+		small = true, kick = true, names = { cast = "Shadow Bolt Volley", shield = "Enrage" } },
+}
+-- A round of each kind of bar: the state, the seconds it runs and the seconds it holds at its end. The pet's casts are the player's own, so they
+-- are neither shielded nor interrupted.
+local ROUNDS = {
+	player = { { "cast", 2.5, 0.5 }, { "channel", 2.5, 0.5 }, { "interrupted", 1, 0 } },
+	enemy = { { "cast", 2.5, 0.5 }, { "shield", 2.5, 0.5 } },
+	pet = { { "cast", 2, 0.5 } },
+}
+-- The swing timers: the stand-in, the game's frame, the hand, the classes that see it (every class when nil) and how much later it starts.
+local SWINGS = {
+	{ id = "swingMain", game = "SwingTimerMainHandFrame", hand = "main", label = "Main hand swing timer", offset = 0 },
+	{ id = "swingOff", game = "SwingTimerOffHandFrame", hand = "off", label = "Off hand swing timer", offset = 0.9, classes = { WARRIOR = true, ROGUE = true } },
+	{ id = "swingRanged", game = "SwingTimerRangedFrame", hand = "ranged", label = "Ranged swing timer", offset = 0.4, classes = { HUNTER = true } },
+}
+local SWING_PERIOD = 2.6
+-- The auras: the game's aura button is 30 across with its time under it (Blizzard_BuffFrame/BuffFrameTemplates.xml:4-16); the gap between two.
+local AURA_SIZE, AURA_GAP, AURA_TALL = 30, 5, 42
+local DEBUFFS = {
+	{ icon = "Interface\\Icons\\Spell_Frost_FrostNova", kind = 1, seconds = 18 },
+	{ icon = "Interface\\Icons\\Spell_Shadow_CurseOfSargeras", kind = 2, seconds = 45 },
+	{ icon = "Interface\\Icons\\Spell_Nature_CorrosiveBreath", kind = 4, seconds = 130 },
+}
+local BUFFS = { { kind = nil, seconds = 25 }, { kind = nil, seconds = 290 }, { kind = nil, seconds = 1700 } }
+-- The game's colour of an aura's time (GameFontNormalSmall), which Duration colour White replaces.
+local AURA_GOLD = { 1, 0.82, 0 }
+-- The rolls: the box of /flatui move, the game's room for each roll (GroupLootFrame.lua:15, Hud.lua's ROLL.step), its width (GroupLootFrame.xml:292),
+-- the seconds its timer runs, and the items, those of mock-loot.
+local ROLL_BOX, ROLL_STEP, ROLL_W, ROLL_TIME = "FlatUILootRolls", 100, 277, 10
+local ROLL_ITEMS = { { icon = 2, name = "Sturdy Shield", quality = 2 }, { icon = 3, name = "Royal Crown", quality = 3 } }
+-- The sample plate: how far above the middle of the screen, its cast's round, the seconds of each threat colour and the colours in turn.
+local PLATE_UP, PLATE_ROUND, PLATE_CAST, THREAT_EVERY = 160, 3, 2.5, 3
+local THREAT = { "threatGood", "threatTransition", "threatBad" }
+local DIM = { 0.66, 0.68, 0.62 }
+
+local function Class()
+	if type(UnitClass) ~= "function" then
+		return nil
+	end
+	local ok, _, class = pcall(UnitClass, "player")
+	if ok and not ns.IsSecret(class) and type(class) == "string" then
+		return class
+	end
+	return nil
+end
+
+-- Where a bar is in its round at `now`: its state, the share of the bar filled, the seconds left and the seconds into the state.
+local function Phase(round, offset, now)
+	local total = 0
+	for _, step in ipairs(round) do
+		total = total + step[2] + step[3]
+	end
+	local t = (now + offset) % total
+	for _, step in ipairs(round) do
+		local length = step[2] + step[3]
+		if t < length then
+			local run = math.min(1, t / step[2])
+			local state = step[1]
+			if state == "channel" then
+				return state, 1 - run, step[2] * (1 - run), t
+			elseif state == "interrupted" then
+				return state, 1, 0, t
+			end
+			return state, run, step[2] * (1 - run), t
+		end
+		t = t - length
+	end
+	return round[1][1], 0, round[1][2], 0
+end
+
+local function Now()
+	local ok, now = pcall(GetTime)
+	return ok and ns.Finite(now) and now or 0
+end
+
+-- Cast bars -----------------------------------------------------------------------------------------------------------------------------------
+
+local function CastName(spec, state)
+	if state == "interrupted" then
+		return type(_G.INTERRUPTED) == "string" and _G.INTERRUPTED or "Interrupted"
+	end
+	return spec.names[state]
+end
+
+local function CastStandIn(spec)
+	local round = ROUNDS[spec.round or (spec.opt == "player" and "player" or "enemy")]
+	local function Shows(holder, state, part, left, into)
+		ns.DrawCasts.CastProgress(holder.row, state, part, left, holder.row.state ~= state and CastName(spec, state) or nil)
+		holder.row.bar:SetAlpha(state == "interrupted" and (0.45 + 0.55 * math.abs(math.cos(into * 6))) or 1)
+	end
+	TM.StandIn({
+		id = spec.id,
+		module = spec.module,
+		game = spec.game,
+		label = spec.label,
+		fit = true,
+		gate = spec.unit and function()
+			return TM.Shown(spec.unit)
+		end or nil,
+		Build = function(holder)
+			holder.row = ns.DrawCasts.Cast(holder, { opt = spec.opt, small = spec.small, shield = true, time = spec.small and "" or nil,
+				name = spec.opt == "player" and "Shadow Bolt" or spec.names.cast, rank = spec.opt == "player" and "Rank 3" or nil })
+			holder.row.bar:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+		end,
+		Paint = function(holder, w, h)
+			local state, part, left, into = Phase(round, spec.offset, Now())
+			ns.DrawCasts.PaintCast(holder.row, spec.opt, state, part, w, h, CastName(spec, state), spec.kick)
+			Shows(holder, state, part, left, into)
+		end,
+		Animate = function(holder, _, now)
+			Shows(holder, Phase(round, spec.offset, now))
+		end,
+	})
+end
+
+-- Swing timers ----------------------------------------------------------------------------------------------------------------------------------
+
+local function SwingStandIn(spec)
+	local function Shows(holder, now)
+		local run = ((now + spec.offset) / SWING_PERIOD) % 1
+		ns.DrawCasts.SwingProgress(holder.row, run, SWING_PERIOD * (1 - run))
+	end
+	TM.StandIn({
+		id = spec.id,
+		module = "swing",
+		game = spec.game,
+		label = spec.label,
+		fit = true,
+		gate = spec.classes and function()
+			local class = Class()
+			return class ~= nil and spec.classes[class] == true
+		end or nil,
+		Build = function(holder)
+			holder.row = ns.DrawCasts.Swing(holder, spec.hand, SWING_PERIOD)
+			holder.row.timer:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+		end,
+		Paint = function(holder, w)
+			ns.DrawCasts.PaintSwing(holder.row, w)
+			Shows(holder, Now())
+		end,
+		Animate = function(holder, _, now)
+			Shows(holder, now)
+		end,
+	})
+end
+
+-- Debuffs and buffs -----------------------------------------------------------------------------------------------------------------------------
+
+-- True while the player has an aura of the filter, and while the game will not say plainly (in a fight, which pauses test mode anyway), so that no
+-- stand-in covers a real aura.
+local function HasAura(filter)
+	local api = C_UnitAuras
+	if type(api) ~= "table" or ns.IsSecret(api) or type(api.GetAuraSlots) ~= "function" or InCombatLockdown() then
+		return true
+	end
+	local ok, _, first = pcall(api.GetAuraSlots, "player", filter, 1)
+	if not ok or ns.IsSecret(first) then
+		return true
+	end
+	return first ~= nil
+end
+
+-- The time of an aura as the game writes it (SecondsToTimeAbbrev), without the space between number and unit at Duration format Tight, where the
+-- locale's form has none (AuraTime.lua, Tight).
+local function AuraTime(seconds)
+	local fn = _G.SecondsToTimeAbbrev
+	if type(fn) ~= "function" then
+		return ("%d"):format(seconds)
+	end
+	local ok, form, number = pcall(fn, seconds)
+	if not ok or type(form) ~= "string" then
+		return ("%d"):format(seconds)
+	end
+	local cooldown = _G.COOLDOWN_DURATION_MIN
+	if ns.Get("hud.enabled") == true and ns.Get("hud.durationFormat") == "tight" and type(cooldown) == "string" and not cooldown:find("%%d%s") then
+		form = form:gsub("(%%d)%s+", "%1")
+	end
+	local done, text = pcall(string.format, form, number)
+	return done and text or ""
+end
+
+local function AuraStandIn(id, game, label, list, filter)
+	local function Times(holder, now)
+		for index, aura in ipairs(list) do
+			local left = math.ceil(aura.seconds - (now % aura.seconds))
+			local cell = holder.cells[index]
+			if cell.left ~= left then
+				cell.left = left
+				cell.time:SetText(AuraTime(left))
+			end
+		end
+	end
+	TM.StandIn({
+		id = id,
+		module = "hud",
+		game = game,
+		label = label,
+		corner = "TOPRIGHT",
+		real = function()
+			return HasAura(filter)
+		end,
+		Build = function(holder)
+			local DH = ns.DrawHud
+			holder.cells = {}
+			local width = #list * AURA_SIZE + (#list - 1) * AURA_GAP
+			for index, aura in ipairs(list) do
+				-- From the right, as the game lays its auras out.
+				local x = width - index * AURA_SIZE - (index - 1) * AURA_GAP
+				holder.cells[index] = DH.Aura(holder, x, 0, AURA_SIZE, aura.icon or DH.ICONS[index], aura.kind and DH.DebuffColour(aura.kind) or nil)
+			end
+		end,
+		Paint = function(holder)
+			local white = ns.Get("hud.enabled") == true and ns.Get("hud.durationColour") == "white"
+			for index, aura in ipairs(list) do
+				local cell = holder.cells[index]
+				ns.DrawHud.PaintAura(cell, aura.kind)
+				if white then
+					cell.time:SetTextColor(1, 1, 1)
+				else
+					cell.time:SetTextColor(AURA_GOLD[1], AURA_GOLD[2], AURA_GOLD[3])
+				end
+				cell.left = nil
+			end
+			Times(holder, Now())
+			return #list * AURA_SIZE + (#list - 1) * AURA_GAP, AURA_TALL
+		end,
+		Animate = function(holder, _, now)
+			Times(holder, now)
+		end,
+	})
+end
+
+-- Loot rolls ------------------------------------------------------------------------------------------------------------------------------------
+
+local function RollShown()
+	for index = 1, 4 do
+		local frame = _G["GroupLootFrame" .. index]
+		if type(frame) == "table" and type(ns.MoverShown) == "function" and ns.MoverShown(frame) == true then
+			return true
+		end
+	end
+	return false
+end
+
+local function RollTimers(holder, now)
+	for index, roll in ipairs(holder.rolls) do
+		local run = ((now + (index - 1) * 3) % ROLL_TIME) / ROLL_TIME
+		roll.timer:SetValue(100 * (1 - run))
+	end
+end
+
+TM.StandIn({
+	id = "loot",
+	module = "hud",
+	game = "UIParent",
+	label = "Loot rolls",
+	corner = "BOTTOMLEFT",
+	real = RollShown,
+	Build = function(holder)
+		local DH = ns.DrawHud
+		holder.rolls = {}
+		for index, item in ipairs(ROLL_ITEMS) do
+			holder.rolls[index] = DH.Roll(holder, DH.ICONS[item.icon], item.name, DH.QUALITY[item.quality], ROLL_W)
+		end
+	end,
+	Paint = function(holder)
+		-- Down from the top of the box only once a spot is saved: until then the game stacks its rolls up (Hud.lua, ROLL.Place).
+		local down = ns.Get("hud.lootRollsGrow") == "down" and type(ns.MoverSaved) == "function" and ns.MoverSaved(ROLL_BOX) == true
+		local x, y
+		if type(ns.MoverSpot) == "function" then
+			x, y = ns.MoverSpot(ROLL_BOX, down and "TOP" or "BOTTOM")
+		end
+		for index, roll in ipairs(holder.rolls) do
+			local frame = roll.roll.frame
+			frame:ClearAllPoints()
+			if ns.Finite(x) and ns.Finite(y) then
+				if down then
+					frame:SetPoint("TOP", holder, "BOTTOMLEFT", x, y - ROLL_STEP * (index - 1))
+				else
+					frame:SetPoint("BOTTOM", holder, "BOTTOMLEFT", x, y + ROLL_STEP * (index - 1))
+				end
+				ns.DrawHud.PaintRoll(roll)
+				frame:Show()
+			else
+				frame:Hide()
+			end
+		end
+		RollTimers(holder, Now())
+		return 1, 1
+	end,
+	Animate = function(holder, _, now)
+		RollTimers(holder, now)
+	end,
+})
+
+-- The sample nameplate --------------------------------------------------------------------------------------------------------------------------
+
+local function PlateMoves(holder, now)
+	local P, p, spec = ns.SetupDrawPlates, holder.plate, holder.spec
+	local t = now % PLATE_ROUND
+	local run = math.min(1, t / PLATE_CAST)
+	P.CastProgress(p, run, PLATE_CAST * (1 - run))
+	local threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
+	if spec.threat ~= threat then
+		spec.threat = threat
+		P.Health(p, spec)
+	end
+end
+
+TM.StandIn({
+	id = "plate",
+	module = "nameplates",
+	game = "UIParent",
+	label = "Sample nameplate",
+	corner = "CENTER",
+	real = function()
+		return false
+	end,
+	Build = function(holder)
+		local P = ns.SetupDrawPlates
+		holder.state = { stage = holder, plates = {}, parts = {}, outlines = {} }
+		holder.plate = P.NewPlate(holder.state, holder)
+		holder.caption = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
+		if holder.caption then
+			holder.caption:SetText("Sample nameplate")
+			holder.caption:SetTextColor(DIM[1], DIM[2], DIM[3])
+		end
+		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, cast = { name = "Shadow Bolt", share = 0, left = PLATE_CAST } }
+	end,
+	Paint = function(holder)
+		local P, p, spec = ns.SetupDrawPlates, holder.plate, holder.spec
+		local now = Now()
+		local run = math.min(1, (now % PLATE_ROUND) / PLATE_CAST)
+		spec.cast.share, spec.cast.left = run, PLATE_CAST * (1 - run)
+		spec.threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
+		local box = P.Plate(p, spec, P.Sets())
+		p.f:ClearAllPoints()
+		p.f:SetPoint("BOTTOM", holder, "CENTER", 0, PLATE_UP)
+		if holder.caption then
+			holder.caption:ClearAllPoints()
+			holder.caption:SetPoint("TOP", p.f, "BOTTOM", 0, (box and ns.Finite(box.b) and box.b or 0) - 4)
+		end
+		return 1, 1
+	end,
+	Animate = function(holder, _, now)
+		PlateMoves(holder, now)
+	end,
+})
+
+for _, spec in ipairs(CASTS) do
+	CastStandIn(spec)
+end
+for _, spec in ipairs(SWINGS) do
+	SwingStandIn(spec)
+end
+AuraStandIn("debuffs", "DebuffFrame", "Debuffs", DEBUFFS, "HARMFUL")
+AuraStandIn("buffs", "BuffFrame", "Buffs", BUFFS, "HELPFUL")
+
+-- The cursor ring ---------------------------------------------------------------------------------------------------------------------------------
+
+local RING_LOOK, RING_EVERY = 0.25, 3
+local ring = { epoch = TM.Epoch(), wait = 0, next = 0 }
+local watcher = CreateFrame("Frame")
+ns.Own[watcher] = true
+watcher:SetScript("OnUpdate", function(_, elapsed)
+	ring.wait = ring.wait + (elapsed or 0)
+	if ring.wait < RING_LOOK then
+		return
+	end
+	local step = ring.wait
+	ring.wait = 0
+	local epoch = TM.Epoch()
+	if epoch ~= ring.epoch then
+		ring.epoch, ring.next = epoch, 0
+		if type(ns.CursorRingChanged) == "function" then
+			pcall(ns.CursorRingChanged)
+		end
+	end
+	if TM.IsOn() and TM.Moving() and type(ns.CursorRingSample) == "function" then
+		ring.next = ring.next - step
+		if ring.next <= 0 then
+			ring.next = RING_EVERY
+			pcall(ns.CursorRingSample)
+		end
+	end
+end)
