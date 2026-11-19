@@ -62,6 +62,8 @@ local HIT_TABLE_SIZES = { { "70", "70%" }, { "80", "80%" }, { "90", "90%" }, { "
 -- When a frame of When shown on the Fading page is at full opacity; at other times it fades (Fade.lua has the rules).
 local FADE_WHEN = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" },
 	{ "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } }
+-- The faded opacity of the micro menu and of the bag bar on the Fading page (Fade.lua): the page's Faded opacity, or a percent of their own.
+local FADE_TO = { { "page", "As Faded opacity" }, { "0", "0%, gone until the mouse is over it" }, { "10", "10%" }, { "25", "25%" }, { "50", "50%" } }
 -- The tip of the Picture row of each unit frame: what Game portrait is, in either Frame style (UnitFrames.lua draws it).
 local GAME_PORTRAIT = "Game portrait draws the game's portrait in the frame, square or round as Portrait shape says. Flat UI portraits off keeps the game's own portrait where the game puts it."
 
@@ -82,7 +84,7 @@ ns.PAGES = {
 			choices = ns.BAR_CHOICES },
 		{ section = "Game action bars" },
 		{ key = "handsOff", kind = "bool", default = true, label = "Leave the game's action bars alone", changed = "HandsOffChanged", reload = "change",
-			tip = "Flat UI does not move, group or fade the game's micro menu, stance and pet bars, or the game's experience bar while Experience bar is The game's, and does not move the bag bar (Fading's Bag bar row still fades it, and Hidden frames' Bag bar row still hides it). The game's Options page has one button that opens Flat UI. Applies after a reload." },
+			tip = "Flat UI does not move, group or fade the game's stance and pet bars, or the game's experience bar while Experience bar is The game's, and does not move the micro menu or the bag bar (Fading's Micro menu and Bag bar rows still fade them, and Hidden frames' Micro menu and Bag bar rows still hide them). The game's Options page has one button that opens Flat UI. Applies after a reload." },
 		{ section = "Game menu" },
 		{ key = "menuButton", kind = "bool", default = true, label = "Flat UI button in the game menu",
 			tip = "A Flat UI button under Options. It does not work in combat." },
@@ -2493,7 +2495,7 @@ ns.PAGES = {
 		{ key = "possess", kind = "bool", default = false, label = "Possess bar", tip = "The bar of a creature you control. Its keys still work. " .. KEPT },
 		{ key = "totem", kind = "bool", default = false, label = "Totem bar", tip = "Its keys still work. " .. KEPT },
 		{ key = "vehicleLeave", kind = "bool", default = false, label = "Leave vehicle button", tip = "The button that gets you out of a vehicle. " .. KEPT },
-		{ key = "micro", kind = "bool", default = false, label = "Micro menu", tip = "Takes away the buttons for your character, spellbook, talents, quests, group finder and game menu. Their keys and Escape still open them. " .. KEPT },
+		{ key = "micro", kind = "bool", default = false, label = "Micro menu", tip = "Takes away the buttons for your character, spellbook, talents, quests, group finder and game menu, with the help ticket button. Their keys, such as C, P and L, and Escape still open the windows. Also while Leave the game's action bars alone is on." },
 		{ key = "bagBar", kind = "bool", default = false, label = "Bag bar", tip = "Takes away the backpack, bag, reagent bag and keyring buttons. B and the bag keys still open the bags. Also while Leave the game's action bars alone is on." },
 		{ key = "xpBar", kind = "bool", default = false, label = "Game's experience bar", tip = "The game's experience or reputation bar, not Flat UI's own. " .. KEPT },
 		{ key = "statusBar", kind = "bool", default = false, label = "Game's second status bar", tip = "The game's second bar, for a reputation you watch. " .. KEPT },
@@ -2640,9 +2642,10 @@ ns.PAGES = {
 		{ key = "bar8", kind = "bool", default = false, label = "Action bar 8", tip = KEPT },
 		{ key = "stance", kind = "bool", default = false, label = "Stance bar", tip = KEPT },
 		{ key = "pet", kind = "bool", default = false, label = "Pet bar", tip = KEPT },
-		{ key = "micro", kind = "bool", default = false, label = "Micro menu", tip = KEPT },
+		{ key = "micro", kind = "bool", default = false, label = "Micro menu",
+			tip = "The micro menu's buttons fade together, the help ticket button too, and the mouse over any of them shows them all. Also while Leave the game's action bars alone is on. Micro menu faded opacity takes it down to 0%." },
 		{ key = "bags", kind = "bool", default = false, label = "Bag bar",
-			tip = "The backpack, the bag slots, the reagent bag and the keyring fade together, and the mouse over any of them shows them all. Also while Leave the game's action bars alone is on." },
+			tip = "The backpack, the bag slots, the reagent bag and the keyring fade together, and the mouse over any of them shows them all. Also while Leave the game's action bars alone is on. Bag bar faded opacity takes it down to 0%." },
 		{ key = "bagWindows", kind = "bool", default = false, label = "Bag windows",
 			tip = "Your open bag and bank windows, Flat UI's or the game's, the keyring's and the reagent bag's too. A window shows in full as it opens, under the mouse, while an item is on the cursor, a stack is being split or you type in its search box." },
 		{ key = "playerFrame", kind = "bool", default = false, label = "Player frame" },
@@ -2662,6 +2665,10 @@ ns.PAGES = {
 			tip = "At other times it fades like the frames above. The game's own Visibility in Edit Mode still applies.", choices = FADE_WHEN },
 		{ section = "Fade" },
 		{ key = "alpha", kind = "number", default = 25, min = 0, max = 90, step = 5, unit = "%", label = "Faded opacity", tip = "Faded buttons still work." },
+		{ key = "microAlpha", kind = "choice", default = "page", label = "Micro menu faded opacity", needs = "micro", choices = FADE_TO,
+			tip = "How far the micro menu fades, the other rows keeping Faded opacity. At 0% it is gone until the mouse is over it, and its buttons still take clicks where they are." },
+		{ key = "bagsAlpha", kind = "choice", default = "page", label = "Bag bar faded opacity", needs = "bags", choices = FADE_TO,
+			tip = "How far the bag bar fades, the other rows keeping Faded opacity. At 0% it is gone until the mouse is over one of its buttons, and they still take clicks where they are." },
 		{ key = "delay", kind = "number", default = 500, min = 0, max = 3000, step = 100, unit = " ms", label = "Wait before fading" },
 		{ key = "time", kind = "number", default = 300, min = 100, max = 2000, step = 100, unit = " ms", label = "Fade time" },
 		{ section = "Stay visible" },

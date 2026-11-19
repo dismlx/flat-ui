@@ -1,6 +1,8 @@
 ## 0.5.27
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Fading**, **Micro menu**: the row did nothing while **Leave the game's action bars alone** was on, as it is by default. It now fades the micro menu whatever that row says: its buttons and the help ticket button fade together, and the mouse over any of them, the help ticket button above the menu included, shows them all. New rows **Micro menu faded opacity** and **Bag bar faded opacity** (**As Faded opacity**, or 0%, 10%, 25% or 50%) fade the micro menu or the bag bar further than the page's **Faded opacity**, the other rows keeping theirs. At 0% it is gone until the mouse comes over it, and its buttons still take clicks where they are. Where the game lends the micro menu to a vehicle's bar it shows there as the game has it.
+- **Hidden frames**, **Micro menu**: the row hid nothing while **Leave the game's action bars alone** was on. It now hides the micro menu whatever that row says, the way **Bag bar** hides the bag bar: its buttons and the help ticket button go with it, and C, P, L and the other keys and Escape still open their windows. The main bar, which the game hangs from the micro menu, keeps its place. `/flatui move` still does not move or size the micro menu while that row is on: the game hangs its main bar from it and measures its bottom bars by it, so placing it would place the main bar, which that row keeps Flat UI away from.
 
 ## 0.5.26
 

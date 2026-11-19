@@ -426,6 +426,10 @@ local hold = { owners = {}, by = {}, state = {}, order = { "barblock", "blocks" 
 -- laid out in them; a call of this addon that placed, scaled or laid one out, or that ran inside the game's pass over them, left the click refused
 -- (UseAction, ADDON_ACTION_FORBIDDEN, SecureTemplates.lua:357). While Leave the game's action bars alone is on, nothing here places, holds, puts back,
 -- queues a layout spot for or offers a handle for one of them, and the game's bottom bar pass is not watched. Their saved spots stay in the profile and are not used.
+-- The micro menu stays among them although Fading fades it and Hidden frames hides it while that row is on (an alpha, and a parent with UIParent's
+-- corners, move nothing): Edit Mode hangs the main bar from it (Mainline/EditModePresetLayouts.lua:32-38 with Camelot's MAIN_ACTION_BAR_RELATIVE_TO)
+-- and measures the bottom stack by it (Camelot/EditModeUtil.lua:26-29, Shared/EditModeUtil.lua:71-75, UIParentPanelManager.lua:809), so a
+-- point or a scale of this addon's on it places the main bar and the stack, the calls this list keeps away from.
 hold.off = { MainActionBar = true, MultiBarBottomLeft = true, MultiBarBottomRight = true, MultiBarRight = true, MultiBarLeft = true, MultiBar5 = true,
 	MultiBar6 = true, MultiBar7 = true, StanceBar = true, PetActionBar = true, PossessActionBar = true, MultiCastActionBarFrame = true,
 	MainStatusTrackingBarContainer = true, SecondaryStatusTrackingBarContainer = true,

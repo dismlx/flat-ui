@@ -30,10 +30,15 @@ local _, ns = ...
 -- as the one to give back, and puts the frame under the holder again; one that the client had not made yet when the module started is found the
 -- same way. A managed frame that hides leaves its container's layout (ManagedFrameSystem.lua:21-23, 93-115), so the frames beside it close up, and it
 -- goes back in as it shows. While Leave the game's action bars alone is on (Flat UI page), the rows of the action bars, the stance, pet, possess
--- and totem bars, the leave vehicle button, the micro menu and the game's status bars hide nothing, as for the other modules. The bag bar row
--- hides BagsBar either way, as Fading's Bag bar row fades it either way (Fade.lua): the snippet writes only its parent, which places, sizes and
--- lays out nothing (its points stay, and the holder's corners and scale are UIParent's), and the bag buttons' clicks run none of the game's
--- secure code. Movers still offers no box for it while that row is on; the list's Hidden group shows it again.
+-- and totem bars, the leave vehicle button and the game's status bars hide nothing, as for the other modules. The bag bar row hides BagsBar
+-- either way, and the micro menu row MicroMenuContainer, as Fading's rows fade them either way (Fade.lua): the snippet writes only the parent,
+-- which places, sizes and lays out nothing (the points stay, and the holder's corners and scale are UIParent's), and the bag buttons' clicks run
+-- none of the game's secure code. The main bar hangs from the micro menu on Forever (Camelot/EditModePresetLayoutConstants.lua:5-8) and keeps
+-- its place, as a frame anchored to a hidden frame does; the micro buttons (children of MicroMenu, its child) and the help ticket button (a
+-- child of CharacterMicroButton, HelpFrame.xml:143) go with it, and the keys that open the windows (C, P, L and the rest) are bindings that
+-- need no button. Where the game lends MicroMenu to a vehicle's bar (OverrideActionBar.lua:141) it shows there until the game gives it back to
+-- the container (MicroMenuContainer.lua:234-245), which hides it again. Movers still offers no box for either while that row is on; the list's
+-- Hidden group shows them again.
 -- The Alerts row: the toasts are not under AlertFrame. The game makes them under UIParent and gives each its fullscreen frame as it shows it
 -- (Blizzard_FrameXML/Mainline/AlertFrames.lua:92, 461-467), and only anchors them to AlertFrame. So each toast AlertFrame:AddAlertFrame shows
 -- (ns.Follow) also goes under the holder by the snippet, out of combat, and its OnHide, run securely, lets it go at once (AlertFrames.lua:111-116,
@@ -73,8 +78,8 @@ local ENTRIES = {
 	{ key = "possess", bar = true, frames = { "PossessActionBar" } },
 	{ key = "totem", bar = true, frames = { "MultiCastActionBarFrame" } },
 	{ key = "vehicleLeave", bar = true, frames = { "MainMenuBarVehicleLeaveButton" } },
-	{ key = "micro", bar = true, frames = { "MicroMenuContainer" } },
-	-- Not a bar row: hidden also while Leave the game's action bars alone is on (above).
+	-- Not bar rows: hidden also while Leave the game's action bars alone is on (above).
+	{ key = "micro", frames = { "MicroMenuContainer" } },
 	{ key = "bagBar", frames = { "BagsBar" } },
 	{ key = "xpBar", bar = true, frames = { "MainStatusTrackingBarContainer" } },
 	{ key = "statusBar", bar = true, frames = { "SecondaryStatusTrackingBarContainer" } },

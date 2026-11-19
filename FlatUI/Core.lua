@@ -23,7 +23,8 @@ local ADDON_NAME, ns = ...
 -- SetShown) each time CombatFeedback_OnCombatEvent has shown it; the game shows the next one again once the row is on.
 -- Fade's frames include the game's DamageMeter, other addons' minimap buttons (LibDBIcon10_) and, while they show, the bag windows, the game's
 -- (ContainerFrameCombinedBags, ContainerFrame1 to ContainerFrame7, BankFrame) and those of Bags, whose alpha it reads first and puts back the same way; its
--- Bag bar row writes the alpha of BagsBar alone, also while Leave the game's action bars alone is on, never of a bag button. Fade writes no alpha
+-- Bag bar row writes the alpha of BagsBar alone, never of a bag button, and its Micro menu row the alpha of MicroMenuContainer alone, never of
+-- MicroMenu or a micro button, both also while Leave the game's action bars alone is on, each down to its own faded opacity. Fade writes no alpha
 -- on a frame Hidden frames holds (below) or one under it, and gives such a frame its own alpha back just before it goes under (ns.FadeLetGo).
 -- Movers and Tooltip are the exceptions that move Blizzard frames, with ClearAllPoints, SetPoint
 -- and SetScale only, and SetAnchorType and Hide on GameTooltip: Movers places the frames the player moves,
@@ -51,7 +52,8 @@ local ADDON_NAME, ns = ...
 -- put back where the move changed them. It writes nothing else on the frame, and four times a second, out of combat, it puts a ticked frame the game
 -- gave another parent under its own again. The Alerts row also puts each toast AlertFrame:AddAlertFrame shows (ns.Follow) under that frame by the
 -- snippet, out of combat, as the toasts are only anchored to AlertFrame. A change in a fight waits for its end. While Leave the game's action bars
--- alone is on it hides none of the game's bars but the bag bar (BagsBar), which it hides either way.
+-- alone is on it hides none of the game's bars but the bag bar (BagsBar) and the micro menu (MicroMenuContainer), which it hides either way.
+-- Movers moves neither while that row is on, the micro menu since the game hangs its main bar from it.
 -- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
 -- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
 -- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at

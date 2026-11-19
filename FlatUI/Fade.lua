@@ -36,6 +36,18 @@ local _, ns = ...
 -- default: the row was one of the action bar rows, which do nothing while it is on. It no longer is: its alpha places, scales and lays out
 -- nothing, and the bag buttons' clicks run none of the game's secure code (ToggleBag, PutItemInBag), so the row fades the bar either way. A bag
 -- button another addon takes into a bar of its own no longer hangs from BagsBar and is left to that addon.
+-- The micro menu the same way: its buttons (CharacterMicroButton to MainMenuMicroButton, Camelot/MicroMenuContainerOverrides.lua:1-20) are
+-- children of MicroMenu (MicroMenuContainer.lua:101-109), a child of MicroMenuContainer (Camelot/MainMenuBarMicroMenu.xml:3), and the help
+-- ticket button is a child of CharacterMicroButton, 25 above or under an end of the menu, outside its rectangle (HelpFrame.xml:143,
+-- MicroMenuContainer.lua:148-168). So the alpha of MicroMenuContainer fades all of them together and no button is written; the mouse over any
+-- of them that shows counts as over the menu. The game sets the alpha of neither frame. The main bar hangs from the container on Forever
+-- (Camelot/EditModePresetLayoutConstants.lua:5-8), but an alpha reaches only the frame and its children, never a frame anchored to it, and
+-- places, scales and lays out nothing, so the row fades the menu also while Leave the game's action bars alone is on. Where the game lends
+-- the menu to a vehicle's bar or a full screen frame (OverrideActionBar.lua:141, Mainline/MainMenuBarMicroButtons.lua:185-195) it is no
+-- longer under the container and shows there, at its own alpha, until the game gives it back. The queue eye is not the menu's on Forever: it
+-- hangs from the minimap (Blizzard_QueueStatusFrame/Camelot/QueueStatusFrameOverrides.lua:13-35) and does not fade with it.
+-- Faded opacity of the micro menu and of the bag bar: each row has its own (Micro menu faded opacity, Bag bar faded opacity), the page's
+-- Faded opacity by default, or a percent of its own down to 0%, where the frame is gone until the mouse comes over it and still takes clicks.
 -- The bag windows: Flat UI's bag and bank windows (FlatUIBags and FlatUIBank, BagsWindow.lua) and the game's, the combined window
 -- (ContainerFrameCombinedBags), ContainerFrame1 to ContainerFrame7, the reagent bag's and the keyring's among them, and the bank (BankFrame)
 -- (Blizzard_UIPanels_Game/Mainline/ContainerFrame.xml:298-313, ContainerFrame.lua:1-12, Camelot/BankFrame.xml:59), whose alpha the game never
@@ -104,7 +116,7 @@ local HIDDEN = 0.001
 -- function of ns, that gives the frames of other addons or of Flat UI's own the row fades too, each { frame = frame }, asked at each pass, each also
 -- under the mouse. beside: frames by name that count as under the mouse while they show, whether or not the row fades them. opens: the row is at
 -- full the pass a frame joins its more. busy: the function that gives true while the frames of its more (the list of { frame, name } of this
--- pass) are in use.
+-- pass) are in use. alpha: the setting of the row's own faded opacity, a percent as text or "page" for the page's Faded opacity.
 -- The meter's session windows (DamageMeterSessionWindow1 to 3, DamageMeter.lua:285) and the breakdown of each, a parentKey with no global name
 -- (DamageMeterSessionWindow.lua:119-128, DamageMeterSessionWindow.xml:84 and 129).
 local METER_PARTS = {}
@@ -121,6 +133,10 @@ local function PlayerPieces()
 	end
 	return nil
 end
+-- The micro buttons and the help ticket button, which fade with MicroMenuContainer and each count as under the mouse while it shows.
+local MICRO_BUTTONS = { "CharacterMicroButton", "ProfessionMicroButton", "SpellbookMicroButton", "TalentMicroButton", "LegacyMicroButton",
+	"QuestLogMicroButton", "HousingMicroButton", "GuildMicroButton", "LFDMicroButton", "CollectionsMicroButton", "EJMicroButton", "HelpMicroButton",
+	"StoreMicroButton", "MainMenuMicroButton", "HelpOpenWebTicketButton" }
 -- The bag buttons, which fade with BagsBar and each count as under the mouse while it shows.
 local BAG_BUTTONS = { "MainMenuBarBackpackButton", "BagBarExpandToggle", "CharacterBag0Slot", "CharacterBag1Slot", "CharacterBag2Slot",
 	"CharacterBag3Slot", "CharacterReagentBag0Slot", "KeyRingButton" }
@@ -142,8 +158,8 @@ local ENTRIES = {
 	{ bar = true, row = "bar8", label = "Action bar 8", frames = { "MultiBar7" } },
 	{ bar = true, row = "stance", label = "Stance bar", frames = { "StanceBar" } },
 	{ bar = true, row = "pet", label = "Pet bar", frames = { "PetActionBar" } },
-	{ bar = true, row = "micro", label = "Micro menu", frames = { "MicroMenuContainer" } },
-	{ row = "bags", label = "Bag bar", frames = { "BagsBar" }, beside = BAG_BUTTONS },
+	{ row = "micro", label = "Micro menu", frames = { "MicroMenuContainer" }, beside = MICRO_BUTTONS, alpha = "microAlpha" },
+	{ row = "bags", label = "Bag bar", frames = { "BagsBar" }, beside = BAG_BUTTONS, alpha = "bagsAlpha" },
 	WINDOWS_ROW,
 	{ row = "playerFrame", label = "Player frame", frames = { "PlayerFrame.PlayerFrameContainer", "PlayerFrame.PlayerFrameContent" }, hover = "PlayerFrame",
 		more = PlayerPieces },
@@ -161,7 +177,7 @@ local ENTRIES = {
 -- The forms of a druid that count as mounted, by GetShapeshiftFormID: travel, aquatic and flight form (Blizzard_FrameXMLBase/Constants.lua:329-333).
 local TRAVEL_FORMS = { [3] = true, [4] = true, [27] = true }
 
--- bar: a game action bar, or the micro menu, a frame its layout hangs from. While Leave the game's action bars alone is on the row does nothing, and a bar this module faded is given its alpha back.
+-- bar: a game action bar. While Leave the game's action bars alone is on the row does nothing, and a bar this module faded is given its alpha back.
 -- orig: the alpha a frame had before the first write. sent: the last alpha written. value: where the ease is. idle: seconds a row has had nothing to keep it
 -- at full. found: the frames reached by name. clock: seconds since the last step. added: per frame of another addon a row fades (more), that row.
 local weak = { __mode = "k" }
@@ -574,6 +590,15 @@ local function Ease(frame, target, step, name)
 	end
 end
 
+-- The faded opacity of a row, from 0 to 1: its own (entry.alpha) where it has one set to a percent, else the page's (floor).
+local function RowFloor(entry, floor)
+	local own = entry.alpha and tonumber(Opt(entry.alpha))
+	if ns.Finite(own) then
+		return math.min(math.max(own, 0), 100) / 100
+	end
+	return floor
+end
+
 local function Step(dt)
 	if ns.PartStopped(KEY, PART) then
 		ReleaseAll()
@@ -649,7 +674,7 @@ local function Step(dt)
 			end
 			local idle = full and 0 or (state.idle[entry.row] or 0) + dt
 			state.idle[entry.row] = idle
-			local target = full and 1 or (idle >= delay and floor or nil)
+			local target = full and 1 or (idle >= delay and RowFloor(entry, floor) or nil)
 			for _, held in ipairs(frames) do
 				Ease(held[1], target, step, held[2])
 			end

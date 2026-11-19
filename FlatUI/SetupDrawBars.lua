@@ -1088,6 +1088,8 @@ function FADE.build(stage)
 		inst.parts["fade." .. entry[1]] = tile.body
 	end
 	inst.parts["fade.enabled"], inst.parts["fade.alpha"] = inst.box, inst.samples[2].holder
+	-- The faded opacity of the micro menu and of the bag bar shows on their tiles.
+	inst.parts["fade.microAlpha"], inst.parts["fade.bagsAlpha"] = inst.parts["fade.micro"], inst.parts["fade.bags"]
 	Publish(FADE, inst)
 	return inst
 end
@@ -1109,7 +1111,10 @@ function FADE.draw(stage)
 	Standin(inst, standin)
 	inst.samples[2].label:SetText(enabled and ("Faded opacity " .. ns.Get("fade.alpha") .. "%") or "Faded opacity")
 	for _, tile in ipairs(inst.tiles) do
-		tile.body:SetAlpha((enabled and ns.Get("fade." .. tile.key) == true) and alpha or 1)
+		-- The micro menu and the bag bar may have a faded opacity of their own (Micro menu faded opacity, Bag bar faded opacity): a percent, or
+		-- "page" for Faded opacity.
+		local own = (tile.key == "micro" or tile.key == "bags") and tonumber(ns.Get("fade." .. tile.key .. "Alpha")) or nil
+		tile.body:SetAlpha((enabled and ns.Get("fade." .. tile.key) == true) and (ns.Finite(own) and own / 100 or alpha) or 1)
 		if type(ns.RepaintOutline) == "function" then
 			ns.RepaintOutline(tile.outline)
 		end
