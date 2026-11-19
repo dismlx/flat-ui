@@ -337,6 +337,12 @@ local ADDON_NAME, ns = ...
 -- With Hide the zone name or Hide the subzone name it sets the alpha of the game's zone text strings (SetAlpha), read first and put back when the row
 -- goes off, and once Hide the zone name has been on it follows SetZoneText with hooksecurefunc, to hide the zone's name in the smaller line; with
 -- Hide the talking head it takes TALKINGHEAD_REQUESTED from TalkingHeadFrame (UnregisterEvent) and gives it back, as above.
+-- Test mode (TestMode.lua) is a state of the session, never saved. While it is on, out of combat, the modules that register with it draw samples on
+-- their own frames, and frames of Flat UI's own on UIParent that take no mouse (stand-ins) lie at the places of game frames that are hidden now,
+-- painted with Flat UI's look by the setup drawings. Of such a game frame a stand-in reads only the place and size (ns.MoverRect), the effective
+-- scale, strata, level and shown flag. Test mode writes no variable, binding, target, attribute or field, calls no other method of a game frame,
+-- adds no hook and never opens Edit Mode or a game window; a fight pauses it inside PLAYER_REGEN_DISABLED. Its key binding is a click on a plain
+-- button of its own (BINDING_NAME_CLICK FlatUITestButton:LeftButton).
 
 local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
@@ -2496,6 +2502,31 @@ function ns.AddStart(key, fn)
 	return true
 end
 
+-- True while a module runs: started, not stopped by an error, and its page on. Test mode (TestMode.lua) runs a module's samples only then.
+function ns.ModuleOn(key)
+	local state = type(key) == "string" and status[key] or nil
+	return state ~= nil and state.started == true and not state.error and ns.Enabled(key)
+end
+
+-- Runs a module's Refresh while it runs (ns.ModuleOn), through ns.Try. False when it did not run or failed.
+function ns.RefreshModule(key)
+	if ns.ModuleOn(key) and modules[key].Refresh then
+		return ns.Try(key, modules[key].Refresh)
+	end
+	return false
+end
+
+-- Test mode hears every change after the module's own (TestMode.lua): its samples and stand-ins are drawn again from it.
+local function TestChanged(path)
+	local test = ns.TestMode
+	if type(test) == "table" and type(test.Changed) == "function" then
+		local ok, err = pcall(test.Changed, path)
+		if not ok then
+			geterrorhandler()(err)
+		end
+	end
+end
+
 local function StartModule(key)
 	local module, state = modules[key], status[key]
 	if state.started or not ns.Enabled(key) then
@@ -2622,6 +2653,8 @@ function ns.Set(path, value, quiet)
 		if def.changed or not ns.RowLive(def) then
 			Changed(path)
 		end
+		-- Also for a row that acts at once, such as partyScale and raidScale, which refresh no module.
+		TestChanged(path)
 		return
 	end
 	-- A value equal to the default is still saved: it is the player's choice from then on.
@@ -2629,6 +2662,7 @@ function ns.Set(path, value, quiet)
 	values[path] = value
 	if changed then
 		Changed(path)
+		TestChanged(path)
 	end
 end
 
@@ -2677,6 +2711,10 @@ function ns.StatusLines()
 				lines[#lines + 1] = extra
 			end
 		end
+	end
+	local test = ns.TestMode and ns.TestMode.Status()
+	if test then
+		lines[#lines + 1] = test
 	end
 	-- The faces are tried the first time a row asks for them.
 	if fontsOffered ~= nil then
@@ -3082,6 +3120,8 @@ local function Apply(wasSpots)
 			geterrorhandler()(err)
 		end
 	end
+	-- Every setting may have changed: test mode draws its samples and stand-ins again.
+	TestChanged("*")
 end
 
 -- Makes another profile the one in use.
@@ -3850,6 +3890,16 @@ SlashCmdList["FLATUI"] = function(msg)
 	end
 	local typed = (msg or ""):match("^%s*(.-)%s*$")
 	local text = typed:lower()
+	-- Test mode's words come before the modules' (Defensives has the word test, for test icons): test toggles, test on and test off.
+	local test = text:gsub("%s+", " ")
+	if (test == "test" or test == "test on" or test == "test off") and ns.TestMode then
+		local call = test == "test" and ns.TestMode.Toggle or test == "test on" and ns.TestMode.On or ns.TestMode.Off
+		local ok, err = pcall(call, test == "test off" and "toggle" or "slash")
+		if not ok then
+			geterrorhandler()(err)
+		end
+		return
+	end
 	-- A module's own commands: the first word picks the command, the rest goes to it as typed.
 	local verb, rest = typed:match("^(%S+)%s*(.-)$")
 	if verb then
@@ -3956,6 +4006,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui welcome - the welcome screen")
 		print("/flatui scale 70 - custom UI scale in percent, 65 to 115")
 		print("/flatui scale off - the game's own UI scale")
+		print("/flatui test - samples of your hidden frames on screen until you turn it off")
 		print("/flatui taint - the action button click path, checked for values an add-on changed")
 		print("/flatui cvar - each game setting row: value, default, secure flag")
 		print("/flatui cvar check - whether each of those can be changed, out of combat")

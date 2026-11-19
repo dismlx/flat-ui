@@ -12,6 +12,7 @@
 
 Config.lua
 Core.lua
+TestMode.lua
 TaintScan.lua
 Scale.lua
 Sparkle.lua
