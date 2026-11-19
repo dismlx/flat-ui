@@ -1314,7 +1314,7 @@ ns.SETUP_STEPS = {
 		{ "hide.totem", "o", "behaviour", "Hides the totem bar. Not while Leave the game's action bars alone is on." },
 		{ "hide.vehicleLeave", "o", "behaviour", "Hides the leave vehicle button. Not while Leave the game's action bars alone is on." },
 		{ "hide.micro", "o", "behaviour", "Hides the micro menu. Not while Leave the game's action bars alone is on." },
-		{ "hide.bagBar", "o", "behaviour", "Hides the bag bar. Not while Leave the game's action bars alone is on." },
+		{ "hide.bagBar", "o", "behaviour", "Hides the bag bar, also while Leave the game's action bars alone is on." },
 		{ "hide.xpBar", "o", "behaviour", "Hides the game's experience bar. Not while Leave the game's action bars alone is on." },
 		{ "hide.statusBar", "o", "behaviour", "Hides the game's second status bar. Not while Leave the game's action bars alone is on." },
 		{ "hide.playerFrame", "o", "behaviour", "Hides the player frame." },

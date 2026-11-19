@@ -23,7 +23,8 @@ local ADDON_NAME, ns = ...
 -- SetShown) each time CombatFeedback_OnCombatEvent has shown it; the game shows the next one again once the row is on.
 -- Fade's frames include the game's DamageMeter, other addons' minimap buttons (LibDBIcon10_) and, while they show, the bag windows, the game's
 -- (ContainerFrameCombinedBags, ContainerFrame1 to ContainerFrame7, BankFrame) and those of Bags, whose alpha it reads first and puts back the same way; its
--- Bag bar row writes the alpha of BagsBar alone, also while Leave the game's action bars alone is on, never of a bag button.
+-- Bag bar row writes the alpha of BagsBar alone, also while Leave the game's action bars alone is on, never of a bag button. Fade writes no alpha
+-- on a frame Hidden frames holds (below) or one under it, and gives such a frame its own alpha back just before it goes under (ns.FadeLetGo).
 -- Movers and Tooltip are the exceptions that move Blizzard frames, with ClearAllPoints, SetPoint
 -- and SetScale only, and SetAnchorType and Hide on GameTooltip: Movers places the frames the player moves,
 -- Tooltip places GameTooltip and hides it when the game fades it out while it follows the cursor. The cast
@@ -39,7 +40,7 @@ local ADDON_NAME, ns = ...
 -- it had with the engine's own SetParent (the methods of GetFrameMetatable) while the snippet holds it hidden (Hide and Show of the handle, shown
 -- again only if its own shown flag was), with its frame strata and level put back where the move changed them. It writes nothing else on the frame,
 -- and four times a second, out of combat, it puts a ticked frame the game gave another parent under its own again. A change in a fight waits for
--- its end. While Leave the game's action bars alone is on it hides none of the game's bars.
+-- its end. While Leave the game's action bars alone is on it hides none of the game's bars but the bag bar (BagsBar), which it hides either way.
 -- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
 -- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
 -- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at
@@ -997,7 +998,8 @@ end
 
 -- True while Leave the game's action bars alone is on (the default). Flat UI then makes no call that places, groups, fades or restyles the game's
 -- stance, pet or status bars, and none that places, sizes, fades or writes a field on the micro menu, or that places, sizes or writes a field on the
--- bag bar (their pictures and buttons get the Flat UI look, and Fading's Bag bar row writes the alpha of the bag bar, Fade.lua), and registers no setting of its own in the game's settings registry. The game's eight action bars
+-- bag bar (their pictures and buttons get the Flat UI look, Fading's Bag bar row writes the alpha of the bag bar, Fade.lua, and Hidden frames' Bag
+-- bar row puts it under a hidden frame in a secure snippet, Hide.lua), and registers no setting of its own in the game's settings registry. The game's eight action bars
 -- (bars 1 to 8) are covered by Action buttons (actionbars.own): with Flat UI's buttons they are parked by alpha and mouse only, with the game's
 -- buttons Flat UI leaves them alone. A click on an action button reads the bar, the button and the settings registry, and a call of this addon that
 -- touched one of them leaves the click refused (UseAction, ADDON_ACTION_FORBIDDEN).

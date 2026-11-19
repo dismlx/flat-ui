@@ -22,7 +22,13 @@ local _, ns = ...
 -- as the one to give back, and puts the frame under the holder again; one that the client had not made yet when the module started is found the
 -- same way. A managed frame that hides leaves its container's layout (ManagedFrameSystem.lua:21-23, 93-115), so the frames beside it close up, and it
 -- goes back in as it shows. While Leave the game's action bars alone is on (Flat UI page), the rows of the action bars, the stance, pet, possess
--- and totem bars, the leave vehicle button, the micro menu, the bag bar and the game's status bars hide nothing, as for the other modules.
+-- and totem bars, the leave vehicle button, the micro menu and the game's status bars hide nothing, as for the other modules. The bag bar row
+-- hides BagsBar either way, as Fading's Bag bar row fades it either way (Fade.lua): the snippet writes only its parent, which places, sizes and
+-- lays out nothing (its points stay, and the holder's corners and scale are UIParent's), and the bag buttons' clicks run none of the game's
+-- secure code. Movers still offers no box for it while that row is on; the list's Hidden group shows it again.
+-- Fading (Fade.lua) writes no alpha on a frame this module holds, nor on one under it (H.Holds): just before a frame goes under the holder, Fading
+-- gives it, and every frame under it that it fades, back the alpha it had (ns.FadeLetGo), and forgets them, so a frame comes back at its own alpha
+-- and Fading takes it up from there. Hidden wins over faded.
 -- The frames are the game's own that /flatui move moves (Movers.lua's list), but for the chat, the loot window and the tooltip's container, and the
 -- parts of the minimap that Minimap and buffs knows: MinimapCluster.ZoneTextButton, .Tracking and .IndicatorFrame, GameTimeFrame,
 -- TimeManagerClockButton, AddonCompartmentFrame, and the zoom buttons Minimap.ZoomIn and .ZoomOut (Blizzard_Minimap/Mainline/Minimap.xml:24-46,
@@ -52,7 +58,8 @@ local ENTRIES = {
 	{ key = "totem", bar = true, frames = { "MultiCastActionBarFrame" } },
 	{ key = "vehicleLeave", bar = true, frames = { "MainMenuBarVehicleLeaveButton" } },
 	{ key = "micro", bar = true, frames = { "MicroMenuContainer" } },
-	{ key = "bagBar", bar = true, frames = { "BagsBar" } },
+	-- Not a bar row: hidden also while Leave the game's action bars alone is on (above).
+	{ key = "bagBar", frames = { "BagsBar" } },
 	{ key = "xpBar", bar = true, frames = { "MainStatusTrackingBarContainer" } },
 	{ key = "statusBar", bar = true, frames = { "SecondaryStatusTrackingBarContainer" } },
 	-- Unit frames
@@ -244,6 +251,10 @@ local function Hold(frame, key)
 		return
 	end
 	local record = { parent = parent, strata = Read("GetFrameStrata", frame), level = Read("GetFrameLevel", frame), key = key }
+	-- Fading gives the frame, and what it fades under it, its own alpha while it still shows, and writes none on it while it is held (Fade.lua).
+	if type(ns.FadeLetGo) == "function" then
+		pcall(ns.FadeLetGo, frame)
+	end
 	if Snippet(frame, SNIPPET_HOLD) and Read("GetParent", frame) == holder then
 		state.held[frame] = record
 	end
@@ -419,6 +430,25 @@ end
 -- True while the row is ticked and the module on: the frame is hidden, or will be once a fight ends. Not for a row whose tick hides nothing now.
 function H.Hidden(key)
 	return BY_KEY[key] ~= nil and ns.Enabled(KEY) and Opt(key) == true and not H.Left(key)
+end
+
+-- True while a frame is off the screen by this module: it, or a frame it hangs from, is under the holder. Fading (Fade.lua) writes no alpha on
+-- such a frame. A held frame the game gave another parent in a fight is not, until the fight ends and it is held again.
+function H.Holds(frame)
+	local holder = state.holder
+	if not holder or next(state.held) == nil or type(frame) ~= "table" then
+		return false
+	end
+	local at = frame
+	for _ = 1, 20 do
+		if at == holder then
+			return true
+		elseif at == nil or at == UIParent then
+			return false
+		end
+		at = Read("GetParent", at)
+	end
+	return false
 end
 
 -- Ticks or unticks a row, the same setting as the page. Hiding a frame turns the module on.

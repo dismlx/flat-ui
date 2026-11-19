@@ -44,6 +44,13 @@ local _, ns = ...
 -- the pass a window opens, then waits Wait before fading as after the mouse leaves. A window in use is never faded: the mouse over any of
 -- them, an item on the cursor (as for every row), the game's split box (StackSplitFrame) open, or the keyboard in a box of one of them (the
 -- search box of Flat UI's bag window, GetCurrentKeyBoardFocus) holds them all at full.
+-- Hidden frames (Hide.lua) wins over this module. A frame it holds under its hidden frame, or one under such a frame (the player frame's container
+-- and content under a hidden PlayerFrame, the minimap's buttons under a hidden MinimapCluster, the bag bar under its hidden frame), gets no write:
+-- just before it goes under, Hidden frames asks this module to give it, and every frame under it that it fades, the alpha it had (ns.FadeLetGo),
+-- written while it still shows, and to forget them. A frame held so is passed by each step with no write (Gone), and does not count as under the
+-- mouse. When Hidden frames gives it back with its own alpha, as it came, this module takes it up from that alpha, as a frame it had never
+-- written: nothing is put back over it. The bag bar hidden while its row here is on is so: the row fades nothing while it is hidden, and fades
+-- the bar again once it is back. The bag windows are not on the Hidden frames page.
 --
 -- When shown: the target and focus frames, the buffs, the objective tracker and the damage meter each have a rule. Always (the default) leaves the
 -- frame alone. Only in combat, Only in a group, Only in an instance, Only outside an instance and Only when not mounted give it full opacity while that
@@ -203,8 +210,12 @@ local function Alpha(frame)
 	return 1, false
 end
 
--- A withheld answer counts as the frame being under the mouse, so that it stays shown.
+-- A withheld answer counts as the frame being under the mouse, so that it stays shown. A frame Hidden frames holds is not (Gone, below).
+local Gone
 local function Over(frame)
+	if Gone(frame) then
+		return false
+	end
 	local ok, over = pcall(frame.IsMouseOver, frame)
 	return ok and (ns.IsSecret(over) or over == true)
 end
@@ -324,6 +335,12 @@ local function Elsewhere(frame, name)
 	return (ns.BarBlockFades and ns.BarBlockFades(name)) or (ns.TrackerFades and ns.TrackerFades(frame)) or false
 end
 
+-- True for a frame Hidden frames (Hide.lua) has under its hidden frame, or one under such a frame: no alpha is written on it.
+function Gone(frame)
+	local hide = ns.HideFrames
+	return type(hide) == "table" and type(hide.Holds) == "function" and hide.Holds(frame) == true
+end
+
 -- The write. It raises when the game refuses, which ns.EachPart counts for the part.
 local function Put(frame, alpha)
 	if state.sent[frame] ~= alpha then
@@ -333,7 +350,7 @@ local function Put(frame, alpha)
 	state.value[frame] = alpha
 end
 
--- A frame goes back to the alpha it had, unless something else has set its own since.
+-- A frame goes back to the alpha it had, unless something else has set its own since, or Hidden frames holds it (no write then).
 local function Release(frame)
 	local alpha = state.orig[frame]
 	if alpha == nil then
@@ -341,7 +358,7 @@ local function Release(frame)
 	end
 	local sent = state.sent[frame]
 	state.orig[frame], state.sent[frame], state.value[frame] = nil, nil, nil
-	if sent ~= nil and math.abs(Alpha(frame) - sent) < 0.01 then
+	if sent ~= nil and not Gone(frame) and math.abs(Alpha(frame) - sent) < 0.01 then
 		pcall(frame.SetAlpha, frame, alpha)
 	end
 end
@@ -351,6 +368,37 @@ local function ReleaseAll()
 		Release(frame)
 	end
 	state.added = setmetatable({}, weak)
+end
+
+-- True when a frame is root or hangs from it, looked up through its parents.
+local function Under(frame, root)
+	local at = frame
+	for _ = 1, 20 do
+		if at == root then
+			return true
+		elseif type(at) ~= "table" or ns.IsSecret(at) or ns.Forbidden(at) then
+			return false
+		end
+		local ok, parent = pcall(at.GetParent, at)
+		if not ok then
+			return false
+		end
+		at = parent
+	end
+	return false
+end
+
+-- Hidden frames (Hide.lua) is about to put root under its hidden frame: root, and every frame under it this module fades, get the alpha they had
+-- now, while they still show, and are forgotten, so they come back at their own alpha and nothing is put back over it then.
+function ns.FadeLetGo(root)
+	if root == nil then
+		return
+	end
+	for frame in pairs(state.orig) do
+		if Under(frame, root) then
+			Release(frame)
+		end
+	end
 end
 
 -- The frames of other addons, or of Flat UI's own, that a row faded get their alpha back: those the row no longer lists, or with keep left out all of
@@ -482,6 +530,12 @@ end
 
 -- One frame toward the wanted alpha. A target of nil holds the frame where it is.
 local function Ease(frame, target, step, name)
+	-- Hidden frames holds it, or a frame it hangs from, off the screen: no write. Its alpha went back as it went (ns.FadeLetGo); anything still
+	-- kept is forgotten, so it is taken up from the alpha it comes back with.
+	if Gone(frame) then
+		state.orig[frame], state.sent[frame], state.value[frame] = nil, nil, nil
+		return
+	end
 	-- A button the minimap page switches off stays off whatever Fading says, and the objective tracker is left to its Opacity in combat while that
 	-- holds it in a fight: that has written its own alpha, so nothing is put back.
 	if (ns.MapButtonOff and ns.MapButtonOff(frame)) or (ns.TrackerFades and ns.TrackerFades(frame)) then
@@ -607,7 +661,7 @@ local function Step(dt)
 end
 
 -- The fight starts: every row with In combat ticked, and every row of When shown at Only in combat, is at full opacity now, not after the ease.
--- With In combat off a fight raises nothing else.
+-- With In combat off a fight raises nothing else. A frame Hidden frames holds is not written (Gone).
 local function FightStarts()
 	if ns.PartStopped(KEY, PART) then
 		return
@@ -618,12 +672,12 @@ local function FightStarts()
 			state.idle[entry.row] = 0
 			for _, name in ipairs(entry.frames) do
 				local frame = Resolve(name)
-				if frame and state.orig[frame] ~= nil and state.value[frame] < 1 and not Elsewhere(frame, name) then
+				if frame and state.orig[frame] ~= nil and state.value[frame] < 1 and not Elsewhere(frame, name) and not Gone(frame) then
 					ns.EachPart(KEY, PART, Put, frame, 1)
 				end
 			end
 			for frame, owner in pairs(state.added) do
-				if owner == entry.row and state.orig[frame] ~= nil and state.value[frame] < 1 then
+				if owner == entry.row and state.orig[frame] ~= nil and state.value[frame] < 1 and not Gone(frame) then
 					ns.EachPart(KEY, PART, Put, frame, 1)
 				end
 			end
