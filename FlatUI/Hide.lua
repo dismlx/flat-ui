@@ -11,11 +11,19 @@ local _, ns = ...
 -- The move under the holder runs in a snippet of the holder (Execute, SecureHandlers.lua:680-699), whose frame handle SetParent takes an explicitly
 -- protected parent (RestrictedFrames.lua:614-629), so the OnHide of the frame and of what it holds runs in the game's secure code and taints
 -- nothing: a protected frame (the unit frames, the action bars) keeps working, its keys included (ActionButtonDown and ActionButtonUp use the
--- button whether it shows or not: Blizzard_ActionBar/Shared/ActionButton.lua:146-174). The way back is the reverse, as a handle cannot be given
--- UIParent, which is not protected: a frame whose flag is shown is first hidden by the snippet while it is still not drawn (no OnHide), then put
--- back under the parent it had with the engine's own SetParent (GetFrameMetatable's methods, never a Lua method of the frame), which runs no
--- script while it is hidden, then given its frame strata and level again where the move changed them, and then shown by the snippet, so its
--- OnShow runs securely too. A frame the game had hidden meanwhile stays hidden, as the game left it.
+-- button whether it shows or not: Blizzard_ActionBar/Shared/ActionButton.lua:146-174). The way back depends on the frame. A protected frame
+-- (IsProtected: the unit frames, the action bars, the extra abilities, a tracker with quest item buttons) is never placed by a call of Flat UI's
+-- own, as Movers.lua says why (a placing call from an addon taints the frame's executions): the whole way back runs in one snippet, which hides
+-- it while it is still not drawn (no OnHide), puts it under the parent it had when that one is explicitly protected, else under the returner,
+-- and gives it its frame strata and level again where the move changed them, then shows it if its own flag was shown, so its OnShow runs
+-- securely. The returner is a second frame of Flat UI's own, explicitly protected and shown, with its corners on UIParent's (set in its own
+-- snippet), so the frame keeps its place, size, scale and opacity; a handle cannot be given UIParent, which is not protected. The frame stays
+-- under the returner until a reload, or until the game gives it a parent: a managed frame goes back into its container as it shows
+-- (ManagedFrameSystem.lua:17-19, 46-49). Any other frame is first hidden by the snippet while it is still not drawn, then put back under the
+-- parent it had with the engine's own SetParent (GetFrameMetatable's methods, never a Lua method of the frame), which runs no script while it is
+-- hidden, then given its strata and level again, and then shown by the snippet, so its OnShow runs securely too; nothing of Flat UI's own shows
+-- it. A frame the game had hidden meanwhile stays hidden, as the game left it. A frame that cannot go back stays hidden until a reload, and chat
+-- says so once.
 -- The game moves some frames to another parent itself: the managed frame containers (Blizzard_ManagedFrameSystem/Shared/ManagedFrameSystem.lua:46-49),
 -- Edit Mode as a frame leaves them (EditModeSystemTemplates.lua:335-344), the main bar when it attaches (MainActionBar.lua:68-87). Four times a
 -- second, out of combat, while a frame is ticked, a frame of Flat UI's own looks at the parent of each ticked frame, takes a parent the game gave
@@ -26,14 +34,22 @@ local _, ns = ...
 -- hides BagsBar either way, as Fading's Bag bar row fades it either way (Fade.lua): the snippet writes only its parent, which places, sizes and
 -- lays out nothing (its points stay, and the holder's corners and scale are UIParent's), and the bag buttons' clicks run none of the game's
 -- secure code. Movers still offers no box for it while that row is on; the list's Hidden group shows it again.
+-- The Alerts row: the toasts are not under AlertFrame. The game makes them under UIParent and gives each its fullscreen frame as it shows it
+-- (Blizzard_FrameXML/Mainline/AlertFrames.lua:92, 461-467), and only anchors them to AlertFrame. So each toast AlertFrame:AddAlertFrame shows
+-- (ns.Follow) also goes under the holder by the snippet, out of combat, and its OnHide, run securely, lets it go at once (AlertFrames.lua:111-116,
+-- 179), and the next one in the queue comes and goes the same way. A toast shown in a fight goes once the fight ends, if it is still up. A toast is
+-- not given back: the game gives it its parent each time it shows it.
 -- Fading (Fade.lua) writes no alpha on a frame this module holds, nor on one under it (H.Holds): just before a frame goes under the holder, Fading
 -- gives it, and every frame under it that it fades, back the alpha it had (ns.FadeLetGo), and forgets them, so a frame comes back at its own alpha
 -- and Fading takes it up from there. Hidden wins over faded.
--- The frames are the game's own that /flatui move moves (Movers.lua's list), but for the chat, the loot window and the tooltip's container, and the
--- parts of the minimap that Minimap and buffs knows: MinimapCluster.ZoneTextButton, .Tracking and .IndicatorFrame, GameTimeFrame,
+-- The frames are the game's HUD frames that /flatui move moves (Movers.lua's list), but for the chat, the loot window and the tooltip's container,
+-- and the parts of the minimap that Minimap and buffs knows: MinimapCluster.ZoneTextButton, .Tracking and .IndicatorFrame, GameTimeFrame,
 -- TimeManagerClockButton, AddonCompartmentFrame, and the zoom buttons Minimap.ZoomIn and .ZoomOut (Blizzard_Minimap/Mainline/Minimap.xml:24-46,
--- 71-100). Windows such as the Character window open only when asked and are left out. In /flatui move a box hides its frame with Shift and a
--- right-click, the inspector has Hide frame, and the list has a group Hidden whose eye shows a frame again (ns.HideFrames below).
+-- 71-100). Windows such as the Character window open only when asked and are left out, and so are Flat UI's own frames, which have their own
+-- switches. A frame that hangs from a held one goes with it: the pet frame, the totems and the class resource bars hang from the player frame
+-- while Edit Mode keeps them there (Blizzard_UnitFrame/Mainline/PetFrame.xml:11, TotemFrame.xml:56, Shared/PlayerFrameTemplates.xml:12), and
+-- /flatui move says so on their boxes (H.HeldBy). In /flatui move a box hides its frame with Shift and a right-click, the inspector has Hide frame,
+-- and the list has a group Hidden whose eye shows a frame again (ns.HideFrames below).
 
 local KEY = "hide"
 local PART = "hidden frames"
@@ -41,7 +57,7 @@ local EVERY = 0.25
 local WAITS = "Flat UI: hidden frames change when the fight ends."
 
 -- key: the row. frames: names in the game, a dotted name reaching down from a global. bar: a row that hides nothing while Leave the game's
--- action bars alone is on.
+-- action bars alone is on. toasts: the row also hides the toasts AlertFrame shows (above).
 local ENTRIES = {
 	-- Action bars
 	{ key = "main", bar = true, frames = { "MainActionBar" } },
@@ -94,7 +110,7 @@ local ENTRIES = {
 	{ key = "durability", frames = { "DurabilityFrame" } },
 	{ key = "archaeology", frames = { "ArcheologyDigsiteProgressBar" } },
 	-- Messages and alerts
-	{ key = "alerts", frames = { "AlertFrame" } },
+	{ key = "alerts", toasts = true, frames = { "AlertFrame" } },
 	{ key = "errors", frames = { "UIErrorsFrame" } },
 	{ key = "zoneText", frames = { "ZoneTextFrame", "SubZoneTextFrame" } },
 	{ key = "raidWarning", frames = { "RaidWarningFrame" } },
@@ -127,9 +143,10 @@ for _, entry in ipairs(ENTRIES) do
 	BY_KEY[entry.key] = entry
 end
 
--- held: per frame under the holder, what it goes back to: { parent, strata, level, key }. found: the frames reached by name. told: chat has
--- said this fight that a change waits. waiting: a change waits for the end of the fight.
-local state = { held = {}, found = {}, told = false, waiting = false, clock = 0 }
+-- held: per frame under the holder, what it goes back to: { parent, strata, level, key, stuck }, stuck once it could not go back. found: the
+-- frames reached by name. told: chat has said this fight that a change waits. waiting: a change waits for the end of the fight. toasts: the
+-- toasts AlertFrame has shown; toastsOn while the Alerts row hides them. inside: a snippet runs now.
+local state = { held = {}, found = {}, told = false, waiting = false, clock = 0, toasts = setmetatable({}, { __mode = "k" }) }
 local SNIPPET_HOLD = [[
 	local f = self:GetFrameRef("f")
 	if f then f:SetParent(self) end
@@ -138,6 +155,23 @@ local SNIPPET_SHOWN = [[
 	local f = self:GetFrameRef("f")
 	if not f then return end
 	if self:GetAttribute("show") then f:Show(true) else f:Hide(true) end
+]]
+-- The way back of a protected frame: hidden while it is not drawn, under p, its strata and level as they were, and shown again if it was.
+local SNIPPET_BACK = [[
+	local f, p = self:GetFrameRef("f"), self:GetFrameRef("p")
+	if not (f and p) then return end
+	local shown = self:GetAttribute("show")
+	if shown then f:Hide(true) end
+	f:SetParent(p)
+	local strata, level = self:GetAttribute("strata"), self:GetAttribute("level")
+	if strata and f:GetFrameStrata() ~= strata then f:SetFrameStrata(strata) end
+	if level and f:GetFrameLevel() ~= level then f:SetFrameLevel(level) end
+	if shown then f:Show(true) end
+]]
+-- The returner's corners on its parent's, UIParent's.
+local SNIPPET_FILL = [[
+	self:ClearAllPoints()
+	self:SetAllPoints("$parent")
 ]]
 
 local function Opt(key)
@@ -191,17 +225,60 @@ local function Holder()
 	return state.holder or nil
 end
 
--- Runs a snippet of the holder on a frame, out of combat. False when it could not run.
-local function Snippet(frame, body, show)
-	local holder = not InCombatLockdown() and Holder()
+-- True when the client says the frame is protected (IsProtected's first answer).
+local function Protected(frame)
+	return Read("IsProtected", frame) == true
+end
+
+-- True when the client says the frame is explicitly protected (IsProtected's second answer): a snippet's SetParent takes only such a parent
+-- (RestrictedFrames.lua:614-629).
+local function Explicit(frame)
+	local methods = Methods()
+	if type(frame) ~= "table" or not (methods and type(methods.IsProtected) == "function") then
+		return false
+	end
+	local ok, _, explicit = pcall(methods.IsProtected, frame)
+	return ok and not ns.IsSecret(explicit) and explicit == true
+end
+
+-- The returner, made out of combat the first time a protected frame goes back to a parent a snippet cannot give, or nil.
+local function Returner()
+	if state.returner ~= nil then
+		return state.returner or nil
+	end
+	if InCombatLockdown() then
+		return nil
+	end
+	local ok, frame = pcall(CreateFrame, "Frame", nil, UIParent, "SecureHandlerBaseTemplate")
+	if ok and type(frame) == "table" and not ns.IsSecret(frame) and pcall(frame.Execute, frame, SNIPPET_FILL) then
+		ns.Own[frame] = true
+		state.returner = frame
+	else
+		state.returner = false
+	end
+	return state.returner or nil
+end
+
+-- Runs a snippet of the holder on a frame, out of combat and not inside another one. back: for SNIPPET_BACK, { parent, strata, level }. False
+-- when it could not run.
+local function Snippet(frame, body, show, back)
+	local holder = not InCombatLockdown() and not state.inside and Holder()
 	if not holder then
 		return false
 	end
-	return (pcall(function()
+	state.inside = true
+	local ok = pcall(function()
 		holder:SetFrameRef("f", frame)
 		holder:SetAttribute("show", show == true or nil)
+		if back then
+			holder:SetFrameRef("p", back.parent)
+			holder:SetAttribute("strata", back.strata)
+			holder:SetAttribute("level", back.level)
+		end
 		holder:Execute(body)
-	end))
+	end)
+	state.inside = false
+	return ok
 end
 
 -- The frame behind a name, or nil while the game has not made it or it cannot be touched.
@@ -242,6 +319,10 @@ local function Hold(frame, key)
 	local holder = Holder()
 	local parent = Read("GetParent", frame)
 	if holder and parent == holder then
+		-- Ticked again: a frame that could not go back may try again at the next untick.
+		if state.held[frame] then
+			state.held[frame].stuck = nil
+		end
 		return
 	elseif InCombatLockdown() then
 		Wait()
@@ -260,33 +341,88 @@ local function Hold(frame, key)
 	end
 end
 
--- Gives a frame back to the parent it had, with its strata, level and shown state.
+-- Puts an unprotected frame back under the parent it had with the engine's SetParent while the snippet holds it hidden, with its strata and
+-- level, and has the snippet show it again if it was shown. False when it is not under that parent after.
+local function PutBack(frame, record, shown)
+	if shown then
+		Snippet(frame, SNIPPET_SHOWN, false)
+	end
+	if not (Call("SetParent", frame, record.parent) and Read("GetParent", frame) == record.parent) then
+		return false
+	end
+	if record.strata and Read("GetFrameStrata", frame) ~= record.strata then
+		Call("SetFrameStrata", frame, record.strata)
+	end
+	if ns.Finite(record.level) and Read("GetFrameLevel", frame) ~= record.level then
+		Call("SetFrameLevel", frame, record.level)
+	end
+	if shown then
+		Snippet(frame, SNIPPET_SHOWN, true)
+	end
+	return true
+end
+
+-- Gives a frame back to the parent it had, with its strata, level and shown state: a protected frame all in one snippet, to that parent when it
+-- is explicitly protected or else to the returner (header above). A frame that cannot go back stays held, and chat says once that a reload
+-- shows it.
 local function Release(frame)
 	local record = state.held[frame]
-	if not record then
+	if not record or record.stuck then
 		return
 	elseif InCombatLockdown() then
 		Wait()
 		return
 	end
 	local holder = Holder()
-	if holder and Read("GetParent", frame) == holder then
-		local shown = Read("IsShown", frame) == true
-		if shown then
-			Snippet(frame, SNIPPET_SHOWN, false)
+	if not (holder and Read("GetParent", frame) == holder) then
+		state.held[frame] = nil
+		return
+	end
+	local shown = Read("IsShown", frame) == true
+	local done
+	if Protected(frame) then
+		local parent = Explicit(record.parent) and record.parent or Returner()
+		local back = { parent = parent, strata = record.strata, level = ns.Finite(record.level) and record.level or nil }
+		done = parent ~= nil and Snippet(frame, SNIPPET_BACK, shown, back) and Read("GetParent", frame) == parent
+	else
+		done = PutBack(frame, record, shown)
+	end
+	if done then
+		state.held[frame] = nil
+	else
+		record.stuck = true
+		print(("Flat UI: %s could not be shown again. It comes back after a reload (/reload)."):format(ns.HideFrames.Label(record.key)))
+	end
+end
+
+-- Puts every toast that AlertFrame shows and that is not under the holder there (header above), while the Alerts row hides them, out of combat.
+-- A toast that lets go of its OnHide brings the next one in the queue, which is put there too, in the next round of the same call.
+local function HoldToasts()
+	if not state.toastsOn or state.inside or InCombatLockdown() or not Holder() then
+		return
+	end
+	for _ = 1, 8 do
+		local due = {}
+		for toast in pairs(state.toasts) do
+			if Read("IsShown", toast) == true and Read("GetParent", toast) ~= state.holder then
+				due[#due + 1] = toast
+			end
 		end
-		Call("SetParent", frame, record.parent)
-		if record.strata and Read("GetFrameStrata", frame) ~= record.strata then
-			Call("SetFrameStrata", frame, record.strata)
+		if #due == 0 then
+			return
 		end
-		if ns.Finite(record.level) and Read("GetFrameLevel", frame) ~= record.level then
-			Call("SetFrameLevel", frame, record.level)
-		end
-		if shown and not Snippet(frame, SNIPPET_SHOWN, true) then
-			Call("Show", frame)
+		for _, toast in ipairs(due) do
+			Snippet(toast, SNIPPET_HOLD)
 		end
 	end
-	state.held[frame] = nil
+end
+
+-- After each AlertFrame:AddAlertFrame (ns.Follow): the toast it showed, kept for the row, and put under the holder at once out of combat.
+local function AfterAlert(_, toast)
+	if type(toast) == "table" and not ns.IsSecret(toast) and not ns.Forbidden(toast) then
+		state.toasts[toast] = true
+		HoldToasts()
+	end
 end
 
 -- True while a row hides its frames: the module is on, the row is ticked, and for a bar the game's bars are not left alone.
@@ -308,6 +444,14 @@ local function Apply()
 				ns.EachPart(KEY, PART, Hold, frame, entry.key)
 			end
 		end
+	end
+	-- The toasts of the Alerts row, which are not under AlertFrame (header above).
+	state.toastsOn = Wanted(BY_KEY.alerts)
+	if state.toastsOn then
+		if not state.followed and type(AlertFrame) == "table" then
+			state.followed = ns.Follow(AlertFrame, "AddAlertFrame", AfterAlert) == true
+		end
+		HoldToasts()
 	end
 	-- A frame goes back also once the part or the module has stopped, and one that cannot is forgotten.
 	for frame in pairs(state.held) do
@@ -362,7 +506,8 @@ local function Refresh()
 	Run()
 end
 
--- The lines of /flatui status: how many frames are hidden, a change that waits, and the ticked rows the game has no frame for.
+-- The lines of /flatui status: how many frames are hidden, a change that waits, the unticked ones that come back after a reload, and the ticked
+-- rows the game has no frame for.
 local function Status()
 	local count = 0
 	for _ in pairs(state.held) do
@@ -374,6 +519,13 @@ local function Status()
 	end
 	if state.waiting then
 		lines[#lines + 1] = "Hidden frames: a change waits for the end of the fight"
+	end
+	local stuck = 0
+	for _, record in pairs(state.held) do
+		stuck = stuck + (record.stuck and 1 or 0)
+	end
+	if stuck > 0 then
+		lines[#lines + 1] = ("Hidden frames: %d unticked %s come back after a reload"):format(stuck, stuck == 1 and "frame" or "frames")
 	end
 	local missing = {}
 	for _, entry in ipairs(ENTRIES) do
@@ -465,9 +617,36 @@ function H.Set(key, on)
 	end
 end
 
+-- True while the row is ticked and the module on, also for a row whose tick hides nothing now (H.Left).
+function H.Ticked(key)
+	return BY_KEY[key] ~= nil and ns.Enabled(KEY) and Opt(key) == true
+end
+
 -- Hides the frame of a row, or shows it again: an untick for a row that is ticked, also one whose tick hides nothing now.
 function H.Toggle(key)
-	H.Set(key, not (ns.Enabled(KEY) and Opt(key) == true))
+	H.Set(key, not H.Ticked(key))
+end
+
+-- The row whose frame takes this one off the screen, the frame itself or one it hangs from, as the pet frame, the totems and the class bars
+-- hang from the player frame while Edit Mode keeps them there. Nil when none does.
+function H.HeldBy(frame)
+	local holder = state.holder
+	if not holder or next(state.held) == nil or type(frame) ~= "table" then
+		return nil
+	end
+	local at = frame
+	for _ = 1, 20 do
+		if at == nil or at == UIParent or at == holder then
+			return nil
+		end
+		local parent = Read("GetParent", at)
+		if parent == holder then
+			local record = state.held[at]
+			return record and record.key or nil
+		end
+		at = parent
+	end
+	return nil
 end
 
 -- The hidden rows in the order of the page: { key, label, name }, name the box of /flatui move that row has, or nil.

@@ -1317,7 +1317,7 @@ ns.SETUP_STEPS = {
 		{ "hide.bagBar", "o", "behaviour", "Hides the bag bar, also while Leave the game's action bars alone is on." },
 		{ "hide.xpBar", "o", "behaviour", "Hides the game's experience bar. Not while Leave the game's action bars alone is on." },
 		{ "hide.statusBar", "o", "behaviour", "Hides the game's second status bar. Not while Leave the game's action bars alone is on." },
-		{ "hide.playerFrame", "o", "behaviour", "Hides the player frame." },
+		{ "hide.playerFrame", "o", "behaviour", "Hides the player frame, with the pet frame, totems and class bars Edit Mode keeps under it." },
 		{ "hide.targetFrame", "o", "behaviour", "Hides the target frame." },
 		{ "hide.focusFrame", "o", "behaviour", "Hides the focus frame." },
 		{ "hide.petFrame", "o", "behaviour", "Hides the pet frame." },

@@ -2421,7 +2421,7 @@ ns.PAGES = {
 		{ key = "resetWindows", kind = "list", default = 0, label = "Reset windows", none = "Choose", items = "WindowResetLines", pick = "WindowsReset" },
 	},
 	-- Hide.lua: each tick puts a game frame under a hidden frame of Flat UI's own, out of combat, and the untick gives it back. The frames are the
-	-- game's own that /flatui move moves (its boxes and its list hide and show them too) and the parts of the minimap. Shown by default.
+	-- game's HUD frames that /flatui move moves (its boxes and its list hide and show them too) and the parts of the minimap. Shown by default.
 	{
 		key = "hide", label = "Hidden frames",
 		{ key = "enabled", kind = "bool", default = true, label = "Hide the ticked frames",
@@ -2445,10 +2445,10 @@ ns.PAGES = {
 		{ key = "xpBar", kind = "bool", default = false, label = "Game's experience bar", tip = "The game's experience or reputation bar, not Flat UI's own. " .. KEPT },
 		{ key = "statusBar", kind = "bool", default = false, label = "Game's second status bar", tip = "The game's second bar, for a reputation you watch. " .. KEPT },
 		{ section = "Unit frames", chips = true },
-		{ key = "playerFrame", kind = "bool", default = false, label = "Player frame", tip = "Your health and power. Your cast bar goes with it while Edit Mode locks it to the player frame." },
+		{ key = "playerFrame", kind = "bool", default = false, label = "Player frame", tip = "Your health and power. Your cast bar goes with it while Edit Mode locks it to the player frame, and so do the pet frame, the totems and the class resource bars while Edit Mode keeps them under it." },
 		{ key = "targetFrame", kind = "bool", default = false, label = "Target frame", tip = "With its cast bar, combo points and target of target. You still target as before." },
 		{ key = "focusFrame", kind = "bool", default = false, label = "Focus frame", tip = "With its cast bar and target of target." },
-		{ key = "petFrame", kind = "bool", default = false, label = "Pet frame", tip = "Your pet's health and power." },
+		{ key = "petFrame", kind = "bool", default = false, label = "Pet frame", tip = "Your pet's health and power. It also goes with the Player frame while Edit Mode keeps it under that one." },
 		{ key = "partyFrames", kind = "bool", default = false, label = "Party frames", tip = "The game's party frames." },
 		{ key = "raidFrames", kind = "bool", default = false, label = "Raid frames", tip = "The game's raid frames. The raid manager at the left edge stays." },
 		{ key = "bossFrames", kind = "bool", default = false, label = "Boss frames", tip = "The frames of a boss in a dungeon or raid." },
@@ -2476,7 +2476,7 @@ ns.PAGES = {
 		{ key = "durability", kind = "bool", default = false, label = "Durability", tip = "The armour figure that shows when your gear is damaged." },
 		{ key = "archaeology", kind = "bool", default = false, label = "Archaeology bar", tip = "The progress bar of a dig site." },
 		{ section = "Messages and alerts", chips = true },
-		{ key = "alerts", kind = "bool", default = false, label = "Alerts", tip = "The toasts for achievements, loot and the like." },
+		{ key = "alerts", kind = "bool", default = false, label = "Alerts", tip = "The toasts for achievements, loot and the like: each one goes as it comes, and one that comes in a fight goes when the fight ends." },
 		{ key = "errors", kind = "bool", default = false, label = "Error text", tip = "The red error messages and the yellow quest progress in the middle of the screen." },
 		{ key = "zoneText", kind = "bool", default = false, label = "Zone text", tip = "The zone and subzone names in the middle of the screen as you enter them." },
 		{ key = "raidWarning", kind = "bool", default = false, label = "Raid warning", tip = "Raid warnings in the middle of the screen." },

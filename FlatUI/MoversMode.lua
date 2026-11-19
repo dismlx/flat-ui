@@ -664,7 +664,8 @@ function MM.Refresh(force)
 	local hide = info and ns.HideFrames and ns.HideFrames.Key(name)
 	ui.hide:SetShown(hide ~= nil)
 	if hide then
-		ui.hideLabel:SetText(ns.HideFrames.Hidden(hide) and "Show frame" or "Hide frame")
+		-- From the saved tick, so a tick that hides nothing while Leave the game's action bars alone is on reads Show frame and is unticked by it.
+		ui.hideLabel:SetText(ns.HideFrames.Ticked(hide) and "Show frame" or "Hide frame")
 	end
 	ui.undoLabel:SetAlpha(#S.undo > 0 and 1 or 0.4)
 	MM.Spacing()

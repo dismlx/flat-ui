@@ -34,13 +34,17 @@ local ADDON_NAME, ns = ...
 -- still that name, and the name alone again when the row goes off.
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
--- Hidden frames (Hide.lua; on, with nothing ticked, by default) puts each frame of the game the player ticks, of those /flatui move moves and the
--- parts of the minimap, under a hidden frame of its own (a SecureHandlerBaseTemplate frame with its corners on UIParent's), out of combat only: in a
--- snippet of that frame (Execute; SetParent of the frame's handle), so the frame's OnHide runs in the game's secure code, and back under the parent
--- it had with the engine's own SetParent (the methods of GetFrameMetatable) while the snippet holds it hidden (Hide and Show of the handle, shown
--- again only if its own shown flag was), with its frame strata and level put back where the move changed them. It writes nothing else on the frame,
--- and four times a second, out of combat, it puts a ticked frame the game gave another parent under its own again. A change in a fight waits for
--- its end. While Leave the game's action bars alone is on it hides none of the game's bars but the bag bar (BagsBar), which it hides either way.
+-- Hidden frames (Hide.lua; on, with nothing ticked, by default) puts each frame of the game the player ticks, of the HUD frames /flatui move moves
+-- and the parts of the minimap, under a hidden frame of its own (a SecureHandlerBaseTemplate frame with its corners on UIParent's), out of combat
+-- only: in a snippet of that frame (Execute; SetParent of the frame's handle), so the frame's OnHide runs in the game's secure code. A protected
+-- frame goes back all in one snippet, never by a call of Flat UI's own: under the parent it had when that one is explicitly protected, else under a
+-- second, shown frame of its own with UIParent's corners and scale, until a reload or until the game gives it a parent. Any other frame goes back
+-- under the parent it had with the engine's own SetParent (the methods of GetFrameMetatable) while the snippet holds it hidden. Either way the
+-- snippet hides it and shows it again (Hide and Show of the handle, shown again only if its own shown flag was), and its frame strata and level are
+-- put back where the move changed them. It writes nothing else on the frame, and four times a second, out of combat, it puts a ticked frame the game
+-- gave another parent under its own again. The Alerts row also puts each toast AlertFrame:AddAlertFrame shows (ns.Follow) under that frame by the
+-- snippet, out of combat, as the toasts are only anchored to AlertFrame. A change in a fight waits for its end. While Leave the game's action bars
+-- alone is on it hides none of the game's bars but the bag bar (BagsBar), which it hides either way.
 -- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
 -- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
 -- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at
