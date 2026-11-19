@@ -26,7 +26,8 @@ local _, ns = ...
 -- the map showing again starts it. A line whose value the game withholds is hidden, and the lines of its place close up; /flatui status says why.
 -- The game's own coordinates under the map (Mainline/Minimap.xml:287-301, shown while its minimapShowPlayerCoords variable is on, Options,
 -- Interface, Coordinates) are left alone: the lines below the map start under them while that variable is on. MapButtons.lua leaves room under
--- the map for the lines below it (ns.MapTextBelow).
+-- the map for the lines below it (ns.MapTextBelow), and Hud.lua, while Close the gap under the zone name is on, leaves room under the zone name
+-- for the lines whose place is above the map (ns.MapTextAbove).
 -- These follow the minimap stats of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
 
 local KEY, PART = "hud", "map text"
@@ -52,9 +53,10 @@ local SLOW = 1
 
 -- frame: the frame of the lines; text[id]: the font string of a line; shown[id]: its text while it shows; colour[id]: its colour; why[id]: why a
 -- wanted line is hidden, for /flatui status; ticker, step, slow: the ticker, its step and the time since the slow lines were read; sig: the
--- layout last made; game: the game's own coordinates show under the map; below: the room the lines take under the map; queued, waiting,
--- hooked: a pass waits for the next frame, a make for the end of a fight, the map's OnShow is followed.
-local S = { text = {}, shown = {}, colour = {}, why = {}, below = 0 }
+-- layout last made; game: the game's own coordinates show under the map; below: the room the lines take under the map; above: the room the
+-- lines whose place is above the map ask for over it; queued, waiting, hooked: a pass waits for the next frame, a make for the end of a fight,
+-- the map's OnShow is followed.
+local S = { text = {}, shown = {}, colour = {}, why = {}, below = 0, above = 0 }
 
 -- The first value of a call that may be missing, raise or be withheld; nil then.
 local function Ask(fn, ...)
@@ -313,6 +315,17 @@ local function SetBelow(room)
 	end
 end
 
+-- Hud.lua leaves this room under the zone name while Close the gap under the zone name is on.
+local function SetAbove(room)
+	if room == S.above then
+		return
+	end
+	S.above = room
+	if ns.MapGapRoom then
+		pcall(ns.MapGapRoom)
+	end
+end
+
 local function StopTicker()
 	if S.ticker and S.ticker.Cancel then
 		pcall(S.ticker.Cancel, S.ticker)
@@ -449,17 +462,22 @@ end
 
 -- Puts the lines that show one after another, out from the map on each side, when which lines show, where, or the plate of the zone name has
 -- changed. Over the map, where the game puts the plate, the screen ends above it: the lines above that do not fit between the map and the plate
--- go below. Under the map (Header Underneath), a line below that would reach the plate goes on under it.
+-- go below (Hud.lua makes room for them while it hangs the plate from the map). Under the map (Header Underneath), a line below that would
+-- reach the plate goes on under it.
 local function Layout()
 	local places, sig = {}, { S.game and "game" or "" }
 	local side, near, far = Plate()
-	local used
+	local used, asked
 	for _, line in ipairs(LINES) do
 		if S.shown[line.id] then
 			local place = Opt(line.place) == "above" and "above" or "below"
+			if place == "above" then
+				asked = (asked and asked + SPACING or GAP) + Height(S.text[line.id])
+			end
 			if place == "above" and side == "above" then
 				used = (used and used + SPACING or GAP) + Height(S.text[line.id])
-				if used > near then
+				-- The room Hud.lua leaves comes back through two scales, a hair short at worst.
+				if used > near + 0.01 then
 					place = "below"
 				end
 			end
@@ -470,6 +488,7 @@ local function Layout()
 	if side then
 		sig[#sig + 1] = ("plate=%s %d %d"):format(side, math.floor(near + 0.5), math.floor(far + 0.5))
 	end
+	SetAbove(asked or 0)
 	sig = table.concat(sig, " ")
 	if sig == S.sig then
 		return
@@ -523,6 +542,7 @@ local function HideAll()
 	StopTicker()
 	S.sig = nil
 	SetBelow(0)
+	SetAbove(0)
 end
 
 local FAST_LINES, SLOW_LINES = { coords = true }, { coords = true, perf = true, clock = true }
@@ -675,4 +695,10 @@ end
 -- The room the lines below the map take under it, in the units of the map; 0 while none shows.
 function ns.MapTextBelow()
 	return S.below
+end
+
+-- The room the lines whose place is above the map ask for over it, in the units of the map, whether or not they fit under the zone name; 0
+-- while none shows.
+function ns.MapTextAbove()
+	return S.above
 end

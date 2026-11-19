@@ -617,6 +617,8 @@ ns.SETUP_STEPS = {
 		{ "hud.dayNight", "o", "mock-minimap" },
 		{ "hud.zoneText", "c", "mock-minimap" },
 		{ "hud.zoneSize", "o", "mock-minimap" },
+		{ "hud.zoneGapOwn", "o", "behaviour", "Brings the zone name and the buttons beside it down to the minimap, closing the room the game leaves for its ring." },
+		{ "hud.zoneGap", "r", "behaviour", "Sets how many pixels stay between the minimap's border and the zone name; 0 lays it on the border." },
 		{ "hud.btnTracking", "c", "mock-minimap" },
 		{ "hud.btnMail", "o", "mock-minimap" },
 		{ "hud.btnCalendar", "o", "mock-minimap" },

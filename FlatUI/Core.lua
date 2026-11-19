@@ -30,7 +30,11 @@ local ADDON_NAME, ns = ...
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
 -- still that name, and the name alone again when the row goes off.
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
--- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
+-- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
+-- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from
+-- the minimap with ClearAllPoints and SetPoint, out of combat if the game protects it, with a frame of its own in the cluster at the button's
+-- place so the cluster keeps its size; it gives the button back the points it read (GetPoint) when the row goes off, while Edit Mode is open, and
+-- until Edit Mode has applied its layout (the manager's layoutInfo, read with rawget; EventRegistry's EditMode.Enter and EditMode.Exit).
 -- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
 -- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
 -- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at

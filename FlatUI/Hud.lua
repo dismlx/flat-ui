@@ -7,7 +7,8 @@ local ADDON_NAME, ns = ...
 -- A frame the game may protect has nothing made on it in combat: ns.MaybeProtected asks the client each time.
 -- Each part has its own switch and puts the game's look back when it is off. The game's frame art is made
 -- transparent and left in place, and thin borders and flat fills take its place. The map keeps the shape of the
--- mask the game gives it: its border is a disc cut by the same mask, laid below the map.
+-- mask the game gives it: its border is a disc cut by the same mask, laid below the map. With Close the gap under the zone name on, the plate of
+-- the zone name and the buttons that hang from it hang from the map, as close as Gap under the zone name says (headerGap, below).
 -- Inside some cities the game shows a map of the city in the minimap, and the setting Minimap in cities says what is done then.
 
 local KEY = "hud"
@@ -806,6 +807,221 @@ function ns.MapButtonOff(frame)
 	return rec ~= nil and rec.off == true
 end
 
+-- The gap under the zone name. The game hangs the plate of the zone name, ZoneTextButton (152 by 23), from the top of the cluster, and the box of
+-- the map, MinimapContainer, 30 under that top, the size of the ring's picture with the map, 198 square, in its middle
+-- (Blizzard_Minimap/Camelot/MinimapZoneTextButton.xml:9-12, Mainline/Minimap.xml:47-64, Camelot/Minimap.lua:36-39): the top of the map is 7 under
+-- the plate plus half of what the box has over the map at Edit Mode's size, about 21 at 100%, room that the ring fills. Hide minimap ring and
+-- header and the square shape, which has no ring, leave that room empty, round or square alike. With Edit Mode's Header underneath the plate is 8
+-- over the bottom of the cluster and the box 30 (Camelot/Minimap.lua:68-80), the plate about 13 under the map. With Close the gap under the zone
+-- name on, the plate hangs from the map instead (ClearAllPoints and SetPoint, on a plate the game does not protect or out of combat), Gap under
+-- the zone name pixels from the map's border, or from the top line of text that MapText.lua puts above the map (ns.MapTextAbove), which keeps its
+-- place. Its left and right stay the game's. The tracking button, the clock, the calendar, the mail icon and the addon list button hang from the
+-- plate or the calendar (Mainline/Minimap.xml:31, Camelot/GameTimeFrameTemplate.xml:10, Camelot/MinimapIndicatorFrameTemplate.xml:9,
+-- Camelot/AddonCompartment.xml:10-12, Blizzard_TimeManager/Camelot/Blizzard_TimeManagerOverrides.lua:6) and come with it. The map, its box and
+-- the cluster stay where the game, Edit Mode and /flatui move put them: the cluster takes the size of its children (ResizeLayoutFrame,
+-- Blizzard_SharedXML/LayoutFrame.lua:488-528), so a frame of Flat UI's own, a child of the cluster the size of the plate, holds the plate's
+-- place at the points the game gave the plate. The game gives the plate its points again only in SetHeaderUnderneath, from Edit Mode as it
+-- applies a layout or a change of Header underneath or Size, and lays the cluster out at once (Camelot/Minimap.lua:68-92,
+-- Blizzard_EditMode/Shared/EditModeSystemTemplates.lua:1794-1809, Shared/EditModeManager.lua:1010-1035), so the plate keeps the game's place until
+-- Edit Mode has applied the layout of the login (its layoutInfo, read with rawget) and while Edit Mode is open (EventRegistry's EditMode.Enter and
+-- EditMode.Exit), and is hung from the map again on the next frame after them. A frame of Flat UI's own hung from the plate sees it move
+-- (OnSizeChanged): on the next frame the plate's points are read again and it hangs from the map again. Off, the plate gets back the points the
+-- game gave it, and the frame that held its place hides.
+-- game: the points the game gave the plate, while it hangs from the map; set: the point set here; holder: the frame that holds its place;
+-- probe: the frame hung from it; moved: true when the last pass moved it; listening, Look: EventRegistry is followed, and what it calls.
+local headerGap = {}
+
+-- The points of a frame, each { point, relative frame, relative point, x, y }, or nil when one of them cannot be read.
+function headerGap.Points(frame)
+	local ok, count = pcall(frame.GetNumPoints, frame)
+	if not ok or not ns.Finite(count) or count < 1 then
+		return nil
+	end
+	local points = {}
+	for i = 1, count do
+		local read, point, relativeTo, relativePoint, x, y = pcall(frame.GetPoint, frame, i)
+		if not read or ns.IsSecret(point) or type(point) ~= "string" or ns.IsSecret(relativePoint) or type(relativePoint) ~= "string"
+			or not ns.Finite(x) or not ns.Finite(y) then
+			return nil
+		end
+		points[i] = { point, relativeTo, relativePoint, x, y }
+	end
+	return points
+end
+
+-- True while the plate hangs from the map at the point set here.
+function headerGap.Ours(plate, map)
+	local set, points = headerGap.set, headerGap.Points(plate)
+	local p = set and points and #points == 1 and points[1]
+	return p and p[1] == set[1] and p[2] == map and p[3] == set[3] and math.abs(p[4] - set[4]) < 0.01 and math.abs(p[5] - set[5]) < 0.01 or false
+end
+
+-- The centre of a frame on the screen and its effective scale, or nil when the client does not say.
+function headerGap.Centre(frame)
+	local ok, x, y = pcall(frame.GetCenter, frame)
+	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
+	if not ok or not okScale or not ns.Finite(x) or not ns.Finite(y) or not ns.Finite(scale) or scale <= 0 then
+		return nil
+	end
+	return x * scale, y * scale, scale
+end
+
+-- Gives the plate back the points the game gave it, and hides the frame that held its place.
+function headerGap.Release(plate, map)
+	if not headerGap.game then
+		return
+	end
+	if headerGap.Ours(plate, map) then
+		if Later(plate) then
+			return
+		end
+		plate:ClearAllPoints()
+		for _, p in ipairs(headerGap.game) do
+			plate:SetPoint(p[1], p[2], p[3], p[4], p[5])
+		end
+		headerGap.moved = true
+	end
+	headerGap.game, headerGap.set = nil, nil
+	headerGap.holder:Hide()
+end
+
+-- Reads the points the game gave the plate and lays the frame that holds its place on them. False when they cannot be read.
+function headerGap.Take(cluster, plate)
+	local points = headerGap.Points(plate)
+	local okSize, width, height = pcall(plate.GetSize, plate)
+	local okScale, scale = pcall(plate.GetScale, plate)
+	if not points or not okSize or not okScale or not ns.Finite(width) or not ns.Finite(height) or not ns.Finite(scale) or scale <= 0 then
+		ns.Note(KEY, LABEL .. ": the game does not say where the zone name is, so it stays in the game's place.")
+		return false
+	end
+	local holder = headerGap.holder
+	if not holder then
+		holder = CreateFrame("Frame", nil, cluster)
+		ns.Own[holder] = true
+		headerGap.holder = holder
+		ns.Count(KEY)
+	end
+	holder:ClearAllPoints()
+	for _, p in ipairs(points) do
+		holder:SetPoint(p[1], p[2], p[3], p[4], p[5])
+	end
+	holder:SetScale(scale)
+	holder:SetSize(width, height)
+	holder:Show()
+	headerGap.game, headerGap.set = points, nil
+	return true
+end
+
+-- True once Edit Mode has applied the layout of the login, and on a client without Edit Mode.
+function headerGap.Ready()
+	local manager = _G.EditModeManagerFrame
+	if manager == nil or ns.Forbidden(manager) then
+		return manager == nil
+	end
+	local ok, info = pcall(rawget, manager, "layoutInfo")
+	return ok and info ~= nil
+end
+
+-- A pass on the next frame after Edit Mode opens, closes or applies a layout. EventRegistry is followed once, the first time the row is on.
+function headerGap.Listen()
+	if headerGap.listening or type(EventRegistry) ~= "table" or ns.IsSecret(EventRegistry) or type(EventRegistry.RegisterCallback) ~= "function" then
+		return
+	end
+	headerGap.listening = true
+	local function Look()
+		if headerGap.game or Val("minimap", "zoneGapOwn") == true then
+			Soon(headerGap, headerGap.Again)
+		end
+	end
+	pcall(EventRegistry.RegisterCallback, EventRegistry, "EditMode.Enter", Look, headerGap)
+	pcall(EventRegistry.RegisterCallback, EventRegistry, "EditMode.Exit", Look, headerGap)
+	headerGap.Look = Look
+end
+
+-- Hangs the plate of the zone name from the map while Close the gap under the zone name is on, and gives it back its points while it is off.
+function headerGap.Apply(cluster, border)
+	headerGap.moved = false
+	local plate, map = cluster and Child(cluster, "ZoneTextButton"), Frame("Minimap")
+	-- A client before 1.60.1.70425 has no button for the plate (see HEADER_PIECES), and its plate stays.
+	if not plate or not map or not Picture(plate, "StateTexture") then
+		return
+	end
+	local wanted = Val("minimap", "zoneGapOwn") == true
+	if wanted then
+		headerGap.Listen()
+	end
+	if not wanted or not headerGap.Ready() or (ns.EditModeOpen and ns.EditModeOpen()) then
+		headerGap.Release(plate, map)
+		return
+	end
+	if Later(plate) or Later(cluster) then
+		return
+	end
+	if not (headerGap.game and headerGap.Ours(plate, map)) and not headerGap.Take(cluster, plate) then
+		return
+	end
+	if not headerGap.probe then
+		local probe = CreateFrame("Frame", nil, UIParent)
+		ns.Own[probe] = true
+		probe:SetWidth(1)
+		probe:SetPoint("TOP", plate, "CENTER")
+		probe:SetPoint("BOTTOM", UIParent, "BOTTOM")
+		probe:SetScript("OnSizeChanged", function()
+			if headerGap.game then
+				Soon(headerGap, headerGap.Again)
+			end
+		end)
+		headerGap.probe = probe
+	end
+	local hx, hy = headerGap.Centre(headerGap.holder)
+	local mx, my, mapScale = headerGap.Centre(map)
+	local okScale, scale = pcall(plate.GetEffectiveScale, plate)
+	if not hx or not mx or not okScale or not ns.Finite(scale) or scale <= 0 then
+		return
+	end
+	local above = hy >= my
+	local px = Val("minimap", "zoneGap")
+	px = ns.Finite(px) and math.max(px, 0) or 0
+	local edge = border and not ns.Borderless() and ns.Get("general.thickness") or 0
+	local dy = ns.Pixels(plate, edge + px)
+	local room = above and ns.MapTextAbove and ns.MapTextAbove()
+	if ns.Finite(room) and room > 0 then
+		dy = math.max(dy, room * mapScale / scale + ns.Pixels(plate, px))
+	end
+	local dx = (hx - mx) / scale
+	local point, relativePoint = "BOTTOM", "TOP"
+	if not above then
+		point, relativePoint, dy = "TOP", "BOTTOM", -dy
+	end
+	local set = headerGap.set
+	if set and set[1] == point and math.abs(set[4] - dx) < 0.01 and math.abs(set[5] - dy) < 0.01 and headerGap.Ours(plate, map) then
+		return
+	end
+	plate:ClearAllPoints()
+	plate:SetPoint(point, map, relativePoint, dx, dy)
+	headerGap.set = { point, map, relativePoint, dx, dy }
+	headerGap.moved = true
+end
+
+-- A pass on the next frame after the plate moved or the lines above the map changed; the lines are laid out again when the plate moved.
+function headerGap.Again()
+	local cluster = Frame("MinimapCluster")
+	if not cluster or not ns.Enabled(KEY) then
+		return
+	end
+	Run("minimap", headerGap.Apply, cluster, On("minimap", "minimapBorder"))
+	if headerGap.moved and ns.MapTextRefresh then
+		ns.MapTextRefresh()
+	end
+end
+
+-- MapText.lua calls this when the room its lines above the map take changes.
+function ns.MapGapRoom()
+	if headerGap.game then
+		Soon(headerGap, headerGap.Again)
+	end
+end
+
 local function ApplyMinimap()
 	local art, border = On("minimap", "minimapArt"), On("minimap", "minimapBorder")
 	local choice, up = CityChoice(), CityShown() == true
@@ -860,6 +1076,7 @@ local function ApplyMinimap()
 	MapOutline(border and square)
 	-- The city map has a round mask of its own, which the square mask of the minimap does not reach: no round cover is drawn over a square map.
 	CityCover(choice == "cover" and up and not square, border)
+	headerGap.Apply(cluster, border)
 	local night = Val("minimap", "dayNight") == false
 	if diel and Moves("daynight", night) then
 		ns.SetFaded(diel, night)
@@ -2434,6 +2651,12 @@ local function After(events, fn, present, filter)
 	end
 end
 After({ "CVAR_UPDATE" }, ReMask, SquareMap, ForCVar)
+-- Edit Mode applies a layout: the plate of the zone name is hung from the map again on the next frame (headerGap.Apply).
+ns.AddEvent(KEY, "EDIT_MODE_LAYOUTS_UPDATED", function()
+	if headerGap.Look then
+		headerGap.Look()
+	end
+end)
 After({ "BAG_UPDATE", "BAG_UPDATE_DELAYED", "BAG_UPDATE_COOLDOWN", "PLAYER_EQUIPMENT_CHANGED", "UPDATE_INVENTORY_ALERTS", "INVENTORY_SEARCH_UPDATE",
 	"PLAYER_ENTERING_WORLD" }, BagsPass, BagsStyled)
 After({ "UNIT_AURA" }, RefreshAuras, AurasShown, ForPlayer)
