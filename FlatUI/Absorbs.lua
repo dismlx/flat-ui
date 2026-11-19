@@ -20,8 +20,9 @@ local _, ns = ...
 -- of the two shows, a change allowed at any time; the parts of its buttons are made inside the function the game calls while it builds a
 -- button, and a later change to them waits until the game says buffs are open. A shield that goes before its time while buffs are read,
 -- and is still listed, broke: a sound plays, if chosen, and the bars flash. The target's total can have a bar of its own. Out of a fight the
--- totals follow the game's events; in one, a step a few times a second. Every frame is Flat UI's own, and nothing of the game is changed or
--- hooked. The helpers are in one table, A.
+-- totals follow the game's events; in one, a step a few times a second. While test mode is on (TestMode.lua) the sample bars of /flatui absorbs
+-- test stay, with the target's (A.Hold). Every frame is Flat UI's own, and nothing of the game is changed or hooked. The helpers are in one
+-- table, A.
 
 local KEY = "absorbs"
 local MOVER, MOVER_TARGET = "FlatUIAbsorbs", "FlatUIAbsorbsTarget"
@@ -745,7 +746,7 @@ function A.WriteTotal(row, unit)
 end
 
 function A.Totals()
-	if A.sample then
+	if A.sample or A.held then
 		return
 	end
 	if A.total and A.total.frame:IsShown() then
@@ -911,7 +912,7 @@ end
 -- One pass: a read where the game shows buffs, and Flat UI's bars of the shields from it; else the game's rows.
 function A.Pass()
 	A.scheduled = false
-	if not ns.Enabled(KEY) or A.sample then
+	if not ns.Enabled(KEY) or A.sample or A.held then
 		return
 	end
 	A.wasOpen = T.Open()
@@ -942,20 +943,31 @@ function A.Queue()
 end
 
 -- The step of the bars: the time texts, and a few times a second the totals and whether the game shows buffs now. Out of a fight, while the
--- game shows buffs and no cast in a fight still counts, the events say every change of the totals, and the step leaves them.
+-- game shows buffs and no cast in a fight still counts, the events say every change of the totals, and the step leaves them. A sample held by
+-- test mode starts its time again when it runs out, and keeps its time left while Moving is off on the bar of test mode.
 function A.OnUpdate(elapsed)
 	if not Plain(elapsed, "number") then
 		return
 	end
 	A.acc, A.accTotal = A.acc + elapsed, A.accTotal + elapsed
 	if A.acc >= STEP then
+		local mode = ns.TestMode
+		local still = A.held and mode and not mode.Moving() and A.acc or 0
 		A.acc = 0
 		for index, item in ipairs(A.items) do
 			local row = A.rows[index]
 			if row and row.frame:IsShown() then
+				if still > 0 and item.expires > 0 then
+					item.expires = item.expires + still
+				end
 				local left = A.Clock(row, item)
-				if left and left <= 0 and not A.sample then
-					A.Queue()
+				if left and left <= 0 then
+					if A.held then
+						item.expires = Now() + item.length
+						A.Clock(row, item)
+					elseif not A.sample then
+						A.Queue()
+					end
 				end
 			end
 		end
@@ -964,7 +976,7 @@ function A.OnUpdate(elapsed)
 		A.accTotal = 0
 		if InCombatLockdown() or not A.wasOpen or next(A.casts) ~= nil then
 			A.Totals()
-			if not A.sample and T.Open() ~= A.wasOpen then
+			if not (A.sample or A.held) and T.Open() ~= A.wasOpen then
 				A.Queue()
 			end
 		end
@@ -1363,7 +1375,7 @@ end
 
 -- Switched off, Flat UI forgets what it read, so a shield that ends meanwhile is not taken for broken when it is on again.
 function A.Off()
-	A.sample = nil
+	A.sample, A.held, A.heldList = nil, nil, nil
 	A.known, A.casts, A.wasRead = {}, {}, false
 	A.Listen(false)
 	if A.holder then
@@ -1410,7 +1422,9 @@ function A.Refresh()
 		A.Flush()
 		A.Pass()
 	end)
-	A.Pass()
+	if not A.Hold() then
+		A.Pass()
+	end
 end
 
 -- True while the bars have a handle in the movers: while the page is on; the target's while its row is on too.
@@ -1432,28 +1446,73 @@ end
 
 -- The test, the check and the commands --------------------------------------------------------------------------------------------------
 
--- Sample bars for a few seconds: a Power Word: Shield partly used and a whole Fire Ward, and their total.
+-- The sample shields: a Power Word: Shield partly used and a whole Fire Ward.
+local function SampleList(now)
+	return {
+		{ id = 17, amount = 612, size = 942, mask = ALL, expires = now + 23, length = 30, file = SpellIcon(17), name = SpellName(17) or "Power Word: Shield" },
+		{ id = 543, amount = 913, size = 913, mask = 4, expires = now + 18, length = 30, file = SpellIcon(543), name = SpellName(543) or "Fire Ward" },
+	}
+end
+
+-- A sample on a total bar: amount of most, in Shield colour, its size written after it as Amount says when size is given.
+local function SampleTotal(row, amount, most, size)
+	Present(row, 1)
+	row.bar:SetMinMaxValues(0, most)
+	row.bar:SetValue(amount)
+	row.bar:SetStatusBarColor(A.Colour(ALL))
+	A.WriteAmount(row.amount, amount, size)
+end
+
+-- Test mode (TestMode.lua): while it is on (it pauses in a fight) with the page on, the samples of the test stay, with no end and no line in the
+-- chat, and the target's bar has one too (640 of a health of 2400) while Your target's total is on. A.held keeps the reads (A.Pass) and the totals
+-- off them. Each Refresh (On, resume, the page coming on, a change of most of its rows) and every change of a setting after it (TestMode.lua's
+-- Changed) draws them again with the look of the page; their times run on from where they were. A.Drop forgets them at Off, at the pause for a
+-- fight and when the page goes off, and the Refresh that test mode runs at Off and at the pause draws the real bars at once.
+function A.Holding()
+	local mode = ns.TestMode
+	return mode ~= nil and mode.IsOn() == true and ns.Enabled(KEY)
+end
+
+-- Draws the samples of test mode while it holds them, else forgets them; true while they show.
+function A.Hold()
+	if not A.Holding() then
+		A.held, A.heldList = nil, nil
+		return false
+	end
+	A.held = true
+	A.heldList = A.heldList or SampleList(Now())
+	A.ShowContainer(false)
+	A.Layout()
+	A.DrawRows(A.heldList)
+	local total = A.total
+	if total and total.frame:IsShown() then
+		SampleTotal(total, 1525, 1855, 1855)
+	end
+	if A.target and Opt("target") == true then
+		SampleTotal(A.target, 640, 2400, nil)
+	end
+	return true
+end
+
+-- The samples of test mode go, and those of the test with them.
+function A.Drop()
+	A.held, A.heldList, A.sample = nil, nil, nil
+end
+
+-- Sample bars for a few seconds: the sample shields and their total.
 function A.Test()
 	if not ns.Enabled(KEY) then
 		print("Absorb shields: turn on Absorb shields first.")
 		return
 	end
 	A.Refresh()
-	local token, now = {}, Now()
+	local token = {}
 	A.sample = token
-	local list = {
-		{ id = 17, amount = 612, size = 942, mask = ALL, expires = now + 23, length = 30, file = SpellIcon(17), name = SpellName(17) or "Power Word: Shield" },
-		{ id = 543, amount = 913, size = 913, mask = 4, expires = now + 18, length = 30, file = SpellIcon(543), name = SpellName(543) or "Fire Ward" },
-	}
 	A.ShowContainer(false)
-	A.DrawRows(list)
+	A.DrawRows(SampleList(Now()))
 	local total = A.total
 	if total and total.frame:IsShown() then
-		Present(total, 1)
-		total.bar:SetMinMaxValues(0, 1855)
-		total.bar:SetValue(1525)
-		total.bar:SetStatusBarColor(A.Colour(ALL))
-		A.WriteAmount(total.amount, 1525, 1855)
+		SampleTotal(total, 1525, 1855, 1855)
 	end
 	print("Absorb shields: sample bars for 8 seconds.")
 	if not After(TEST_TIME, function()
@@ -1589,5 +1648,19 @@ ns.Register(KEY, {
 	slash = { absorbs = A.Slash },
 	help = HELP,
 })
+
+-- The samples of test mode (A.Hold): On, resume and the page coming on draw them through A.Refresh, every change of a setting through Changed;
+-- Stop forgets them at Off, at the pause for a fight and when the page goes off.
+if ns.TestMode then
+	ns.TestMode.Register(KEY, {
+		module = KEY,
+		label = "Absorb shields",
+		refresh = true,
+		Stop = A.Drop,
+		Changed = function()
+			A.Hold()
+		end,
+	})
+end
 
 ns.Absorbs = A
