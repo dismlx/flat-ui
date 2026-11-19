@@ -25,7 +25,8 @@ local _, ns = ...
 -- and a row can hang under the player frame or the target frame. These follow the panels, their anchors and their visibility rules in EnhanceQoL's
 -- Cooldown Panels by Philipp Barth (R41Z0R), adapted with his permission (CooldownPanels.lua:2553-2722, 26865-26940, 26942-27267, 28581-28593):
 -- a frame of Flat UI's own hangs from the game's PlayerFrame or TargetFrame by SetPoint on Flat UI's frame, out of combat, as Your buffs hangs
--- from the player frame (OwnBuffs.lua). CooldownLooks.lua has the rules, the lists of one icon, the glows and the buff time.
+-- from the player frame (OwnBuffs.lua). CooldownLooks.lua has the rules, the lists of one icon, the glows, the buff time and the samples of test
+-- mode (TestMode.lua): Update, Ready and Recheck ask it first, and Layout asks it for the samples of an empty row.
 -- ns.SpellKnown, ns.SpellBookList, ns.BarSpells and ns.ActionSpell also give the gear comparison and the spell lines of Chat and tooltips their
 -- list, their bar import and the spell of a macro's slot (GearLines.lua, SpellLines.lua): the same reads of the spell book and the action slots as
 -- Add a spell and Add the spells of a bar make, whatever the switch of this page, and nothing is written.
@@ -1291,6 +1292,10 @@ end
 
 -- Safe in combat: only the sweep, the dimming, the tint and the count change.
 local function Update(record)
+	-- Test mode draws a sample cooldown in place of the game's (CooldownLooks.lua, R.Held).
+	if R.Call("Held", record) then
+		return
+	end
 	if record.kind then
 		ns.EachPart(KEY, ITEM_PART, UpdateKind, record)
 		return
@@ -1337,6 +1342,10 @@ end
 -- One sound when a dimmed icon's cooldown is over: the icon's own, else Sound. The global cooldown does not count, a cooldown the game
 -- does not answer for plays nothing, and a potion or healthstone with none in the bags that the player's level allows lets the moment pass.
 local function Ready(record)
+	-- A sample of test mode is no cooldown of the game's (CooldownLooks.lua).
+	if R.Call("Testing") then
+		return
+	end
 	local sound = SoundOf(record)
 	if not (record.dimmed and not record.readyPlayed and sound ~= "none") then
 		return
@@ -1379,6 +1388,10 @@ end
 -- No event says a cooldown has ended, so the icons that are dimmed are looked at again. Only the
 -- end of the cooldown changes what they show, and then they are updated in full.
 local function Recheck()
+	-- The samples of test mode follow its ticker instead (CooldownLooks.lua).
+	if R.Call("Testing") then
+		return
+	end
 	for _, record in ipairs(shown) do
 		if record.dimmed and not StillCooling(record) then
 			ns.Each(KEY, Ready, record)
@@ -2086,7 +2099,8 @@ local function Layout()
 	for _, id in ipairs(on and not ns.PartStopped(KEY, CD.OWN_PART) and Own.List() or {}) do
 		entries[#entries + 1] = { item = id, own = id }
 	end
-	if #entries == 0 and not (on and Opt("manager") and HasViewer()) then
+	-- Test mode fills an empty row with samples (CooldownLooks.lua, R.Samples), so it goes on.
+	if #entries == 0 and not (on and Opt("manager") and HasViewer()) and not R.Call("Testing") then
 		for row = 1, CD.MAX_ROWS do
 			if R.holders[row] then
 				R.holders[row]:Hide()
@@ -2118,6 +2132,7 @@ local function Layout()
 		local list = lists[lists[row] and R.RowOn(row) and row or 1]
 		list[#list + 1] = entry
 	end
+	R.Call("Samples", lists)
 	for row = 1, CD.MAX_ROWS do
 		if #lists[row] > 0 then
 			R.Holder(row):Show()
@@ -2170,16 +2185,18 @@ function R.LayoutRow(row, list, crop)
 	local step, grow, above = size + spacing, R.Opt(row, "grow"), Opt("rows") == "up"
 	for index, entry in ipairs(list) do
 		local record = Acquire(index, row)
-		if record.spell ~= entry.spell or record.item ~= entry.item or record.kind ~= entry.kind or record.slot ~= entry.slot or record.own ~= entry.own then
+		if record.spell ~= entry.spell or record.item ~= entry.item or record.kind ~= entry.kind or record.slot ~= entry.slot or record.own ~= entry.own
+			or record.sample ~= entry.sample then
 			record.dimmed, record.readyPlayed = nil, nil
 		end
 		record.spell, record.item, record.kind, record.empty, record.hasRange = entry.spell, entry.item, entry.kind, nil, nil
-		record.slot, record.own = entry.slot, entry.own
+		-- sample: one of the three pictures of IconRow.lua that test mode puts on an empty row (CooldownLooks.lua).
+		record.slot, record.own, record.sample = entry.slot, entry.own, entry.sample
 		Tip.Mouse(record)
 		if entry.spell then
 			record.hasRange = HasRange(entry.spell)
 		end
-		record.picture = entry.spell and SpellIcon(entry.spell) or ItemIcon(entry.item)
+		record.picture = entry.sample and ns.IconSamplePicture(entry.sample) or entry.spell and SpellIcon(entry.spell) or ItemIcon(entry.item)
 		record.texture:SetTexture(record.picture)
 		record.texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
 		local frame = record.frame
@@ -3051,6 +3068,7 @@ end
 R.KEY, R.Get, R.Ask, R.Field, R.Plain, R.Whole, R.IsTrue = KEY, Opt, Ask, Field, Plain, Whole, IsTrue
 R.SpellName, R.KeyOf, R.Crop, R.QueueLayout, R.UpdateAll = SpellName, SoundKey, Crop, QueueLayout, UpdateAll
 R.NumbersFont, R.Numbers, R.FONT_PART, R.NUMBERS_PART = NumbersFont, Looks.Numbers, FONT_PART, CD.NUMBERS_PART
+R.Look = Look
 
 ns.Register(KEY, {
 	label = "Cooldowns",
