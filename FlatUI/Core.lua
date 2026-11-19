@@ -21,7 +21,10 @@ local ADDON_NAME, ns = ...
 -- its row or the module goes off. With Hit numbers on player and pet
 -- portraits off, Unit frames does the same for the frame that holds the player's hit number (HitIndicator), and hides the pet's (PetHitIndicator,
 -- SetShown) each time CombatFeedback_OnCombatEvent has shown it; the game shows the next one again once the row is on.
--- Fade's frames include the game's DamageMeter and other addons' minimap buttons (LibDBIcon10_), whose alpha it reads first and puts back the same way.
+-- Fade's frames include the game's DamageMeter, other addons' minimap buttons (LibDBIcon10_) and, while they show, the bag windows, the game's
+-- (ContainerFrameCombinedBags, ContainerFrame1 to ContainerFrame7, BankFrame) and those of Bags, whose alpha it reads first and puts back the same way; its
+-- Bag bar row writes the alpha of BagsBar alone, also while Leave the game's action bars alone is on, never of a bag button. Fade writes no alpha
+-- on a frame Hidden frames holds (below) or one under it, and gives such a frame its own alpha back just before it goes under (ns.FadeLetGo).
 -- Movers and Tooltip are the exceptions that move Blizzard frames, with ClearAllPoints, SetPoint
 -- and SetScale only, and SetAnchorType and Hide on GameTooltip: Movers places the frames the player moves,
 -- Tooltip places GameTooltip and hides it when the game fades it out while it follows the cursor. The cast
@@ -30,7 +33,25 @@ local ADDON_NAME, ns = ...
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
 -- still that name, and the name alone again when the row goes off.
 -- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
--- a button back at the points it recorded when it is ticked in Leave in place or the row goes off.
+-- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
+-- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from
+-- the minimap with ClearAllPoints and SetPoint, out of combat if the game protects it, no further out than the game's place, with a frame of its
+-- own in the cluster at the button's place so the cluster keeps its size; the mail icon (MinimapCluster.IndicatorFrame) and the addon list button
+-- (AddonCompartmentFrame) that the game hangs between the button and the map it hangs on the button's other side, inside the button's old place,
+-- the same way, where they do not fit between. It gives each back the points it read (GetPoint) when the row goes off, while the game's ring
+-- shows, while Edit Mode is open, and until Edit Mode has applied its layout (the manager's layoutInfo, read with rawget; EventRegistry's
+-- EditMode.Enter and EditMode.Exit).
+-- Hidden frames (Hide.lua; on, with nothing ticked, by default) puts each frame of the game the player ticks, of the HUD frames /flatui move moves
+-- and the parts of the minimap, under a hidden frame of its own (a SecureHandlerBaseTemplate frame with its corners on UIParent's), out of combat
+-- only: in a snippet of that frame (Execute; SetParent of the frame's handle), so the frame's OnHide runs in the game's secure code. A protected
+-- frame goes back all in one snippet, never by a call of Flat UI's own: under the parent it had when that one is explicitly protected, else under a
+-- second, shown frame of its own with UIParent's corners and scale, until a reload or until the game gives it a parent. Any other frame goes back
+-- under the parent it had with the engine's own SetParent (the methods of GetFrameMetatable) while the snippet holds it hidden. Either way the
+-- snippet hides it and shows it again (Hide and Show of the handle, shown again only if its own shown flag was), and its frame strata and level are
+-- put back where the move changed them. It writes nothing else on the frame, and four times a second, out of combat, it puts a ticked frame the game
+-- gave another parent under its own again. The Alerts row also puts each toast AlertFrame:AddAlertFrame shows (ns.Follow) under that frame by the
+-- snippet, out of combat, as the toasts are only anchored to AlertFrame. A change in a fight waits for its end. While Leave the game's action bars
+-- alone is on it hides none of the game's bars but the bag bar (BagsBar), which it hides either way.
 -- With Loot rolls on, it gives the game's roll frames (GroupLootFrame1 to 4) Flat UI's look with widget calls only, each put back when the row goes
 -- off: the alpha of the toast, its border and the ring round the icon (SetAlpha), the crop of the icon (SetTexCoord), the fill of the timer, the
 -- timer across the foot of the frame and one level above it (ClearAllPoints, SetPoint, SetHeight, SetFrameLevel; the game sets that level again at
@@ -183,16 +204,20 @@ local ADDON_NAME, ns = ...
 -- (or Flat UI's picture or body, else the health bar, else PlayerFrame) and on PlayerBottomManagedFrameContainer, or on PlayerCastingBarFrame while
 -- Edit Mode locks the cast bar to the player frame (its field attachedToPlayerFrame, read only), else on PlayerFrame; it follows
 -- PlayerFrame_AttachCastBar and PlayerFrame_DetachCastBar with hooksecurefunc.
--- It only reads, and changes nothing: the place and size of those frames, of PetFrame, TargetFrame, FocusFrame, UIParent and Flat UI's own frames
--- under the player frame, and the font of the player cast bar's text; the player's level, class, form, power type, combat state, stats, weapon
--- skills and weapons; the target's level and kind, whether it exists, can be attacked, is dead or is a player, and whether it attacks the player:
--- the player's threat situation on it (UnitThreatSituation), else whether its target is the player (UnitIsUnit); and, while its row is For tanks
+-- Of the game's it only reads, and changes nothing: the place and size of those frames, of PetFrame, TargetFrame, FocusFrame, UIParent and Flat UI's own frames
+-- under the player frame, and the font of the player cast bar's text; the player's level, class, form, power type, combat state, stats (Spell
+-- Piercing among them, GetSpellPenetration; never the enemy's resistances), weapon skills and weapons; the target's level and kind, whether it
+-- exists, can be attacked, is dead or is a player, and whether it attacks the player: the player's threat situation on it (UnitThreatSituation),
+-- else whether its target is the player (UnitIsUnit); and, while its row is For tanks
 -- and damage dealers, the player's role (ns.PlayerRole: the group role, a tank stance, form or aura, the points spent in each talent tree of the set
 -- of talents in use, as last read while no pick waited unapplied on it in the talent window, the class), read again after each event the hud module
 -- hears that can change it. Its lines on an enemy's tooltip (HitTableTip.lua, On enemy tooltips, by the role too by default) are added to
 -- GameTooltip (AddDoubleLine, AddLine) from the chat module's post call while that module is on, for a unit the player can attack that is not
--- dead: they read the tooltip's unit (GetUnit under pcall, else UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level
--- and kind (C.Target with the unit), whether it attacks the player (C.Front), the player's form and power type (GetShapeshiftForm, UnitPowerType),
+-- dead, and with Text size on enemy tooltips other than 100% sized (SetFont on their font strings, GameTooltipTextLeftN and GameTooltipTextRightN),
+-- each put back in the font object and font it had at the next clear of GameTooltip (GameTooltip_ClearMoney, which its OnTooltipCleared calls,
+-- followed with ns.FollowGlobal), so every later tooltip has the game's sizes. They read the tooltip's unit (GetUnit under pcall, else
+-- UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level and kind (C.Target with the unit), whether it attacks the player
+-- (C.Front), the player's form and power type (GetShapeshiftForm, UnitPowerType),
 -- the combat state (InCombatLockdown, UnitAffectingCombat, C_Secrets.ShouldUnitStatsBeSecret) and the stats the table reads (ns.HitTableCalc,
 -- C.Inputs), those out of a fight only, at most every two seconds as GameTooltip is built whatever it shows, and worked out by C.Table; in a fight
 -- they count the last plain read, from before it, and say so.
@@ -224,6 +249,13 @@ local ADDON_NAME, ns = ...
 -- raidtarget action, /readycheck and /countdown. A plain button asks for a role poll, and it writes tooltips in GameTooltip.
 -- Cooldown pulse (off by default) is up to three frames of its own on UIParent that take no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
+-- Absorb shields draws bars of its own on frames of its own on UIParent (placed by the movers, FlatUIAbsorbs and FlatUIAbsorbsTarget) and makes
+-- one aura container of the game's own (CustomAuraContainerTemplate) out of combat, as Defensives on you does, whose groups, filters, layout and
+-- alpha it changes at any time and the parts of whose buttons only while the game shows buffs. It reads the player's buffs (C_UnitAuras.
+-- GetUnitAuras: the spell, its end and its amount, points[1]) only while the game shows them, and spell power and healing (GetSpellBonusDamage,
+-- GetSpellBonusHealing) only while plain; it hands UnitGetTotalAbsorbs and UnitHealthMax of the player and the target unread to SetMinMaxValues
+-- and SetValue of its own status bars and, through C_StringUtil.TruncateWhenZero, to SetText, and plays a sound kit (PlaySound) when a shield
+-- breaks while buffs are read. It changes nothing of the game's.
 -- Cooldown icons, with Tooltips on icons, let their own icons hear the mouse and take no click (SetMouseMotionEnabled, SetMouseClickEnabled:
 -- protected functions, called on its own icons only while InCombatLockdown() is false), and write GameTooltip (GameTooltip_SetDefaultAnchor or
 -- SetOwner, SetSpellByID, SetItemByID, SetInventoryItem, Show, and Hide while an icon owns it). The game is asked once to load each item of Add an
@@ -312,8 +344,23 @@ local ADDON_NAME, ns = ...
 -- With Hide the zone name or Hide the subzone name it sets the alpha of the game's zone text strings (SetAlpha), read first and put back when the row
 -- goes off, and once Hide the zone name has been on it follows SetZoneText with hooksecurefunc, to hide the zone's name in the smaller line; with
 -- Hide the talking head it takes TALKINGHEAD_REQUESTED from TalkingHeadFrame (UnregisterEvent) and gives it back, as above.
+-- Test mode (TestMode.lua) is a state of the session, never saved. While it is on, out of combat, the modules that register with it draw samples on
+-- their own frames, and frames of Flat UI's own on UIParent that take no mouse (stand-ins, TestUnits.lua and TestHud.lua) lie at the places of the
+-- game's party, raid, target, target of target, focus, focus target, pet, boss and totem frames, cast bars, swing timers and buff and debuff frames
+-- while those are hidden, with two loot rolls at the Loot rolls box and a sample nameplate in the middle of the screen, painted with Flat UI's look
+-- by the setup drawings. Of such a game frame a stand-in reads only the place and size (ns.MoverRect), the effective scale, strata, level and shown
+-- flag, and its parents (Hide.lua's H.Holds). TestUnits.lua also reads the layout in use (C_EditMode.GetLayouts, and for a preset
+-- EditModePresetLayoutManager.presetLayoutInfo with rawget), the raid frame variables raidFramesDisplayClassColor, raidFramesDisplayPowerBars,
+-- raidFramesDisplayOnlyHealerPowerBars, raidFramesHealthText, raidFramesDisplayDebuffs and raidFramesDispelIndicatorType and the variables
+-- showPartyPets and showTargetOfTarget (C_CVar.GetCVarBool, GetCVar), whether a target, focus, pet, boss, group or raid exists (UnitExists,
+-- IsInGroup, IsInRaid), the shown flags of PartyFrame.MemberFrame1 (rawget), CompactPartyFrame and Boss1TargetFrame and the effective scale of
+-- Boss1TargetFrame, and while test mode is on hears CVAR_UPDATE; TestHud.lua reads the slots of the player's auras (C_UnitAuras.GetAuraSlots) out of
+-- combat only, the shown flags of GroupLootFrame1 to 4, BuffFrame and DebuffFrame, whether Edit Mode is open, the variable showSwingTimer, the attack
+-- speeds of UnitAttackSpeed and the visibility field of the swing timer frames (rawget). Test mode writes no variable, binding, target, attribute or
+-- field, calls no other method of a game frame, adds no hook and never opens Edit Mode or a game window; a fight pauses it inside
+-- PLAYER_REGEN_DISABLED. Its key binding is a click on a plain button of its own (BINDING_NAME_CLICK FlatUITestButton:LeftButton).
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.
@@ -700,9 +747,26 @@ local RENAMED = { ["trackers.grow"] = { middle = "center" }, ["partycd.show"] = 
 for _, path in ipairs({ "fonts.outline", "chat.outline", "actionbars.textOutline" }) do
 	RENAMED[path] = { outline = "thin" }
 end
+-- Text size of the hit table was a slider of 50 to 200% until 0.5.26 and is a choice of sizes, ids in text, since: a saved number, or the text of
+-- one, that is no choice reads as the nearest choice, a tie as the larger.
+RENAMED["hud.hitTableSize"] = "nearest"
 
 local function Renamed(path, value)
 	local map = RENAMED[path]
+	if map == "nearest" then
+		local number, def = tonumber(value), defs[path]
+		if number == nil or def == nil or Normalise(def, value) ~= nil then
+			return value
+		end
+		local best, gap = value, nil
+		for _, choice in ipairs(ns.Choices(def)) do
+			local id = tonumber(choice[1])
+			if id and (gap == nil or math.abs(id - number) <= gap) then
+				best, gap = choice[1], math.abs(id - number)
+			end
+		end
+		return best
+	end
 	return map and type(value) == "string" and map[value] or value
 end
 
@@ -966,7 +1030,9 @@ function ns.Enabled(key)
 end
 
 -- True while Leave the game's action bars alone is on (the default). Flat UI then makes no call that places, groups, fades or restyles the game's
--- stance, pet or status bars, and none that places, sizes, fades or writes a field on the micro menu or bag bar (their pictures and buttons get the Flat UI look), and registers no setting of its own in the game's settings registry. The game's eight action bars
+-- stance, pet or status bars, and none that places, sizes, fades or writes a field on the micro menu, or that places, sizes or writes a field on the
+-- bag bar (their pictures and buttons get the Flat UI look, Fading's Bag bar row writes the alpha of the bag bar, Fade.lua, and Hidden frames' Bag
+-- bar row puts it under a hidden frame in a secure snippet, Hide.lua), and registers no setting of its own in the game's settings registry. The game's eight action bars
 -- (bars 1 to 8) are covered by Action buttons (actionbars.own): with Flat UI's buttons they are parked by alpha and mouse only, with the game's
 -- buttons Flat UI leaves them alone. A click on an action button reads the bar, the button and the settings registry, and a call of this addon that
 -- touched one of them leaves the click refused (UseAction, ADDON_ACTION_FORBIDDEN).
@@ -2452,6 +2518,31 @@ function ns.AddStart(key, fn)
 	return true
 end
 
+-- True while a module runs: started, not stopped by an error, and its page on. Test mode (TestMode.lua) runs a module's samples only then.
+function ns.ModuleOn(key)
+	local state = type(key) == "string" and status[key] or nil
+	return state ~= nil and state.started == true and not state.error and ns.Enabled(key)
+end
+
+-- Runs a module's Refresh while it runs (ns.ModuleOn), through ns.Try. False when it did not run or failed.
+function ns.RefreshModule(key)
+	if ns.ModuleOn(key) and modules[key].Refresh then
+		return ns.Try(key, modules[key].Refresh)
+	end
+	return false
+end
+
+-- Test mode hears every change after the module's own (TestMode.lua): its samples and stand-ins are drawn again from it.
+local function TestChanged(path)
+	local test = ns.TestMode
+	if type(test) == "table" and type(test.Changed) == "function" then
+		local ok, err = pcall(test.Changed, path)
+		if not ok then
+			geterrorhandler()(err)
+		end
+	end
+end
+
 local function StartModule(key)
 	local module, state = modules[key], status[key]
 	if state.started or not ns.Enabled(key) then
@@ -2578,6 +2669,8 @@ function ns.Set(path, value, quiet)
 		if def.changed or not ns.RowLive(def) then
 			Changed(path)
 		end
+		-- Also for a row that acts at once, such as partyScale and raidScale, which refresh no module.
+		TestChanged(path)
 		return
 	end
 	-- A value equal to the default is still saved: it is the player's choice from then on.
@@ -2585,6 +2678,7 @@ function ns.Set(path, value, quiet)
 	values[path] = value
 	if changed then
 		Changed(path)
+		TestChanged(path)
 	end
 end
 
@@ -2633,6 +2727,10 @@ function ns.StatusLines()
 				lines[#lines + 1] = extra
 			end
 		end
+	end
+	local test = ns.TestMode and ns.TestMode.Status()
+	if test then
+		lines[#lines + 1] = test
 	end
 	-- The faces are tried the first time a row asks for them.
 	if fontsOffered ~= nil then
@@ -3038,6 +3136,8 @@ local function Apply(wasSpots)
 			geterrorhandler()(err)
 		end
 	end
+	-- Every setting may have changed: test mode draws its samples and stand-ins again.
+	TestChanged("*")
 end
 
 -- Makes another profile the one in use.
@@ -3806,6 +3906,16 @@ SlashCmdList["FLATUI"] = function(msg)
 	end
 	local typed = (msg or ""):match("^%s*(.-)%s*$")
 	local text = typed:lower()
+	-- Test mode's words come before the modules' (Defensives has the word test, for test icons): test toggles, test on and test off.
+	local test = text:gsub("%s+", " ")
+	if (test == "test" or test == "test on" or test == "test off") and ns.TestMode then
+		local call = test == "test" and ns.TestMode.Toggle or test == "test on" and ns.TestMode.On or ns.TestMode.Off
+		local ok, err = pcall(call, test == "test off" and "toggle" or "slash")
+		if not ok then
+			geterrorhandler()(err)
+		end
+		return
+	end
 	-- A module's own commands: the first word picks the command, the rest goes to it as typed.
 	local verb, rest = typed:match("^(%S+)%s*(.-)$")
 	if verb then
@@ -3912,6 +4022,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui welcome - the welcome screen")
 		print("/flatui scale 70 - custom UI scale in percent, 65 to 115")
 		print("/flatui scale off - the game's own UI scale")
+		print("/flatui test - samples of your hidden frames on screen until you turn it off; test on and test off also work")
 		print("/flatui taint - the action button click path, checked for values an add-on changed")
 		print("/flatui cvar - each game setting row: value, default, secure flag")
 		print("/flatui cvar check - whether each of those can be changed, out of combat")

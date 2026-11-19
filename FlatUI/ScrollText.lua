@@ -39,7 +39,7 @@ local PATH = { straight = true, arc = true }
 -- this share of the number, this many units to the right of it.
 local POP = { peak = 1.15, up = 0.05, down = 0.10 }
 local CRIT, WORD, GAP = 1.25, 0.75, 4
--- The setup drawing of combat text moves its sample numbers by the same shape.
+-- The setup drawing of combat text moves its sample numbers by the same shape. ST.ClearSamples takes test mode's samples off the screen.
 SHAPE.crit = CRIT
 ns.CombatShape.scroll = SHAPE
 -- The height of a message in the game's combat text (CombatTextConstants.lua:6).
@@ -524,6 +524,17 @@ function ST.Clear(key)
 	for _, area in ipairs(ORDER) do
 		if key == nil or key == area.key then
 			for index = #area.live, 1, -1 do
+				Release(area, index)
+			end
+		end
+	end
+end
+
+-- Takes the samples off the screen in both areas (test mode's, when it ends or pauses for a fight), and leaves every other number.
+function ST.ClearSamples()
+	for _, area in ipairs(ORDER) do
+		for index = #area.live, 1, -1 do
+			if area.live[index].sample then
 				Release(area, index)
 			end
 		end

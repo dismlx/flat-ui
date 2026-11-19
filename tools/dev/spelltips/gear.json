@@ -382,39 +382,38 @@
   },
   {
    "key": "ITEM_MOD_SPELL_PENETRATION_SHORT",
-   "kind": "note",
-   "t": "TOOLTIP_ITEM_STAT_SPELL_PENETRATION_INCREASE",
-   "what": "spell penetration"
+   "kind": "pen",
+   "t": "TOOLTIP_ITEM_STAT_SPELL_PENETRATION_INCREASE"
   },
   {
+   "index": 3,
    "key": "ITEM_MOD_FIRE_PENETRATION_SHORT",
-   "kind": "note",
-   "t": "TOOLTIP_ITEM_STAT_FIRE_PENETRATION_INCREASE",
-   "what": "fire penetration"
+   "kind": "pen",
+   "t": "TOOLTIP_ITEM_STAT_FIRE_PENETRATION_INCREASE"
   },
   {
+   "index": 4,
    "key": "ITEM_MOD_NATURE_PENETRATION_SHORT",
-   "kind": "note",
-   "t": "TOOLTIP_ITEM_STAT_NATURE_PENETRATION_INCREASE",
-   "what": "nature penetration"
+   "kind": "pen",
+   "t": "TOOLTIP_ITEM_STAT_NATURE_PENETRATION_INCREASE"
   },
   {
+   "index": 5,
    "key": "ITEM_MOD_FROST_PENETRATION_SHORT",
-   "kind": "note",
-   "t": "TOOLTIP_ITEM_STAT_FROST_PENETRATION_INCREASE",
-   "what": "frost penetration"
+   "kind": "pen",
+   "t": "TOOLTIP_ITEM_STAT_FROST_PENETRATION_INCREASE"
   },
   {
+   "index": 6,
    "key": "ITEM_MOD_SHADOW_PENETRATION_SHORT",
-   "kind": "note",
-   "t": "TOOLTIP_ITEM_STAT_SHADOW_PENETRATION_INCREASE",
-   "what": "shadow penetration"
+   "kind": "pen",
+   "t": "TOOLTIP_ITEM_STAT_SHADOW_PENETRATION_INCREASE"
   },
   {
+   "index": 7,
    "key": "ITEM_MOD_ARCANE_PENETRATION_SHORT",
-   "kind": "note",
-   "t": "TOOLTIP_ITEM_STAT_ARCANE_PENETRATION_INCREASE",
-   "what": "arcane penetration"
+   "kind": "pen",
+   "t": "TOOLTIP_ITEM_STAT_ARCANE_PENETRATION_INCREASE"
   },
   {
    "key": "ITEM_MOD_SPELL_RESISTANCE_ALL_SCHOOLS_SHORT",

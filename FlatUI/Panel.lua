@@ -2285,6 +2285,9 @@ function RefreshAll()
 		if ui.preview and not ui.searching then
 			ui.preview.Update()
 		end
+		if ui.testSwitch then
+			ui.testSwitch.Update()
+		end
 		ShowStrip()
 	end
 end
@@ -2391,6 +2394,10 @@ local function SetMode(mode)
 	if mode and not mode.root then
 		mode.root = mode.Build(ui.window)
 	end
+	-- Setup paints a draft and the samples of test mode the live profile, so a mode that takes the window ends test mode (TestMode.lua).
+	if mode and type(ns.TestMode) == "table" then
+		ns.TestMode.Off("setup")
+	end
 	ui.mode = mode
 	SetParts()
 	ui.tip, ui.message = "", nil
@@ -2447,7 +2454,7 @@ local function BuildLeft(window)
 	end)
 	ui.search = box
 
-	ui.optionParts = { left, box }
+	ui.optionParts = { left, box, ui.testSwitch.frame }
 	ui.side = ns.PanelNav.Sidebar(left, {
 		height = HEIGHT - TITLE - STRIP,
 		Model = function()
@@ -2559,6 +2566,65 @@ local function BuildFoot(window)
 	ui.strip:SetWidth(WIDTH - 24 - 330)
 end
 
+-- Test mode (TestMode.lua): a switch just left of Close, with the track and knob of the Bool rows, in the parts of the options pages so it hides
+-- while Setup has the window. It reads the state again in RefreshAll; in a fight it is dim, reads After combat and does nothing.
+local function BuildTestSwitch(bar, close)
+	local tip = "Shows your frames on screen with sample content while you change options. Ends when you close the options or turn it off; "
+		.. "pauses in a fight."
+	local test = Frame(bar)
+	test:SetSize(160, BUTTON)
+	test:SetPoint("RIGHT", close, "LEFT", -16, 0)
+	local track = Frame(test)
+	track:SetSize(32, 16)
+	track:SetPoint("RIGHT", test, "RIGHT", 0, 0)
+	local outline = ns.Outline(track, track, true)
+	local mark = Fill(track, "ARTWORK")
+	mark:SetPoint("TOPLEFT", track, "TOPLEFT", 1, -1)
+	mark:SetPoint("BOTTOMRIGHT", track, "BOTTOMRIGHT", -1, 1)
+	local knob = Fill(track, "OVERLAY")
+	knob:SetSize(12, 12)
+	local word = Label(test, "GameFontHighlightSmall", "RIGHT")
+	word:SetPoint("RIGHT", track, "LEFT", -8, 0)
+	local switch = { frame = test, hovered = false }
+	function switch.Update()
+		local mode = ns.TestMode
+		local on = type(mode) == "table" and mode.Source() ~= nil
+		local fight = InCombatLockdown() == true
+		mark:SetShown(on)
+		knob:ClearAllPoints()
+		knob:SetPoint("LEFT", track, "LEFT", on and 18 or 2, 0)
+		knob:SetColorTexture(Look.Colour(on and "on-accent" or "text-dim"))
+		Backing(outline, "line", 1, switch.hovered and "text-faint" or "line-strong")
+		word:SetText(fight and "After combat" or "Test mode")
+		test:SetAlpha(fight and DIM or 1)
+	end
+	Painted(function()
+		mark:SetColorTexture(Accent())
+		switch.Update()
+	end)
+	Clickable(test, function()
+		if InCombatLockdown() then
+			Say("Test mode after combat.")
+		elseif type(ns.TestMode) == "table" then
+			ns.TestMode.Toggle("panel")
+		end
+		switch.Update()
+	end)
+	test:SetScript("OnEnter", function()
+		switch.hovered = true
+		switch.Update()
+		ui.message, ui.tip = nil, tip
+		ShowStrip()
+	end)
+	test:SetScript("OnLeave", function()
+		switch.hovered = false
+		switch.Update()
+		ui.tip = ""
+		ShowStrip()
+	end)
+	return switch
+end
+
 local function BuildBars(window)
 	local bar = Frame(window)
 	bar:SetSize(WIDTH, TITLE)
@@ -2616,6 +2682,7 @@ local function BuildBars(window)
 		end
 	end)
 	close:SetPoint("RIGHT", bar, "RIGHT", -8, 0)
+	ui.testSwitch = BuildTestSwitch(bar, close)
 
 	local strip = Frame(window)
 	strip:SetSize(WIDTH, STRIP)
@@ -2673,6 +2740,11 @@ local function Build()
 		CloseList()
 		HideConfirm()
 		ui.search:ClearFocus()
+		-- Test mode turned on here ends with the window, but not while /flatui move holds the window hidden (MoversMode.lua's Holding).
+		local test, movers = ns.TestMode, ns.MoversMode
+		if type(test) == "table" and test.Source() == "panel" and not (type(movers) == "table" and movers.Holding()) then
+			test.Off("panel")
+		end
 		-- Any hide ends a mode; the mode keeps what it needs to open again where it was.
 		if ui.mode then
 			local mode = ui.mode
@@ -2849,6 +2921,19 @@ function ns.OpenPanelMode(mode)
 		Place()
 	end
 	return ui.window:IsShown() == true
+end
+
+-- Opens the window at a page by its key (/flatui hide), and leaves it open when it is open already. False when the window or the page is not there.
+function ns.OpenPanelPage(key)
+	if not (ui.window and ui.window:IsShown()) then
+		ns.OpenPanel()
+	end
+	local entry = ui.model and ui.model.byKey[key]
+	if not (ui.window and ui.window:IsShown() and entry) then
+		return false
+	end
+	Go(entry)
+	return true
 end
 
 -- Opens the window at the Share section of Profiles, and leaves it open when it is open already.

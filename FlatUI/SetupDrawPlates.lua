@@ -13,6 +13,8 @@ local _, ns = ...
 -- (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:678-890) and of the cast bar (Blizzard_NamePlateCastingBar.lua:26-130). What each row changes is what
 -- Nameplates.lua, PlateText.lua, PlateColours.lua and HealthColour.lua do to a plate with the same row. The numbers are fixed samples: the game withholds the
 -- health, the cast times and the aura times of a unit (UnitDocumentation.lua:1526-1529).
+-- Test mode's sample plate (TestHud.lua) is P.NewPlate and P.Plate on a frame of its own; a sample's threat (threatGood, threatTransition or
+-- threatBad) colours its health bar as PlateColours.lua orders it, and P.CastProgress and P.Health change only its fills and time.
 
 local KEY = "nameplates"
 local P = {}
@@ -265,6 +267,11 @@ function P.BarColour(spec, o)
 	end
 	if Get("targetBar") == true and spec.target then
 		return Rgb(KEY .. ".targetBarColour")
+	end
+	-- A sample in a threat state (spec.threat: threatGood, threatTransition or threatBad) takes its colour while Threat on nameplates and Colour
+	-- health bars by threat are on, after the target's colour and before a reaction colour, as PlateColours.lua orders them.
+	if spec.threat and Get("threat") == true and Get("threatBar") == true then
+		return Rgb(KEY .. "." .. spec.threat)
 	end
 	if Get("colours") == true and not (spec.player and Get("colourPlayers") ~= "reaction") then
 		return P.Reaction(spec.friendly)
@@ -707,6 +714,7 @@ function P.Cast(p, spec, o, m)
 	box.t = math.max(box.t, barY + m.CB)
 	ns.SetOutline(p.cOutline, o.cast, o.castBackdrop)
 	local colour = cast.shield and Rgb("castbars.shieldColour") or Rgb("castbars.castColour")
+	p.castColour = colour
 	if o.castFlat then
 		P.Fill(p.cfill, p.cbar, m.BW, ns.BarTexture(o.castTexture), cast.share, colour)
 	else
@@ -761,6 +769,38 @@ function P.Cast(p, spec, o, m)
 	P.Text(p.ctime, P.CAST_FONT * m.v, o.castTextSize, o.castOutline, { 1, 1, 1 })
 	p.ctime:SetText(("%.1f"):format(cast.left))
 	p.ctime:SetShown(o.castTime and true or false)
+end
+
+-- The moving parts of a painted plate's cast, for test mode (TestHud.lua): the fill and spark at `share` of the bar and the seconds left. Only fills
+-- and text: P.Plate laid it out.
+function P.CastProgress(p, share, left)
+	local m, o = p.m, p.o
+	if not (m and o and p.castColour and p.cast:IsShown()) then
+		return
+	end
+	if o.castFlat then
+		P.Fill(p.cfill, p.cbar, m.BW, ns.BarTexture(o.castTexture), share, p.castColour)
+	else
+		P.GameFill(p.cfill, p.cbar, m.BW, share, { 1, 0.7, 0 }, P.ATLAS.cast)
+	end
+	p.spark:ClearAllPoints()
+	p.spark:SetPoint("CENTER", p.cbar, "LEFT", m.BW * share, 0)
+	p.ctime:SetText(("%.1f"):format(math.max(0, left)))
+end
+
+-- The health bar of a painted plate filled again in the colour its sample asks for now (a new threat state), for test mode. Only the fill.
+function P.Health(p, spec)
+	local m, o = p.m, p.o
+	if not (m and o) then
+		return
+	end
+	local colour = P.BarColour(spec, o)
+	local share = spec.health or P.SHARE
+	if o.flat then
+		P.Fill(p.fill, p.bar, m.HW, ns.BarTexture(o.texture), share, colour)
+	else
+		P.GameFill(p.fill, p.bar, m.HW, share, colour, P.ATLAS.bar)
+	end
 end
 
 -- The row of aura icons above the name.

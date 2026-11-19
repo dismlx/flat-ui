@@ -78,6 +78,7 @@ local ARENA_OPPONENTS = 5
 
 local IsSecret = ns.IsSecret
 local T = ns.Tracking
+local TM = ns.TestMode
 local E = { plates = {}, rows = setmetatable({}, { __mode = "k" }), stuck = {}, tex = {}, byKey = nil, order = nil, never = {}, holds = setmetatable({}, { __mode = "k" }),
 	owners = setmetatable({}, { __mode = "k" }),
 	-- The time buffs became readable again after the game hid them (E.Sight), and whether they were readable at the last look.
@@ -802,16 +803,22 @@ function E.RenderRec(rec)
 		return E.RenderBar(rec)
 	end
 	local row = E.rows[rec.frame]
-	if row and row.testing then
+	if row and row.testing and row.testing ~= E.HELD then
 		return
 	end
 	local items = E.PlatesOn() and E.Items(rec) or {}
 	if #items == 0 then
+		E.stuck[rec.frame] = nil
+		if E.Hold(rec) then
+			return
+		end
 		if row then
 			E.Blank(row)
 		end
-		E.stuck[rec.frame] = nil
 		return
+	end
+	if row and row.testing == E.HELD then
+		E.Unhold(row)
 	end
 	row = row or E.Make(rec.frame)
 	if not row then
@@ -1051,7 +1058,7 @@ end
 -- The icons of a bar, from the timers of the player it shows.
 function E.RenderBar(bar)
 	local row = E.rows[bar]
-	if row and row.testing then
+	if row and row.testing and row.testing ~= E.HELD then
 		return
 	end
 	local items = E.BarsOn() and bar.owner and E.Items(bar, BAR_MOST) or {}
@@ -1060,10 +1067,16 @@ function E.RenderBar(bar)
 		arena, duration = E.ArenaFor(bar)
 	end
 	if #items == 0 and not arena then
+		if E.Hold(bar) then
+			return
+		end
 		if row then
 			E.Blank(row)
 		end
 		return
+	end
+	if row and row.testing == E.HELD then
+		E.Unhold(row)
 	end
 	row = row or E.Make(UIParent, bar)
 	if not row then
@@ -1920,6 +1933,80 @@ function ns.EnemyRender()
 	end
 end
 
+-- Test mode (TestMode.lua) ---------------------------------------------------------------------------------------------------------------
+-- While it is on, out of combat, with the page on, the target and focus bars (with Show on target and focus on) and the row of each enemy player's
+-- plate on screen (with Show on nameplates on) that has nothing to show hold three sample icons, which need no unit: the bars at their spot. A
+-- real timer takes the row back. They are used abilities, dark with Show on Always, flashing at the end of the sweep with Flash when ready and
+-- with no sound. Each Render lays them out again with Icon size and the looks of the page, as E.Refresh forgets the old layout, and the ticker of
+-- test mode starts their sweeps again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop). Off, a fight and the page going off blank them at the
+-- next Render, which the Refresh after each runs.
+E.HELD = {}
+
+function E.Holding()
+	return TM.IsOn() and ns.Enabled(KEY) and not InCombatLockdown()
+end
+
+-- A row gives its samples up; the caller draws it again or blanks it.
+function E.Unhold(row)
+	row.testing = nil
+	for slot, icon in ipairs(row.icons) do
+		row.drawn[slot] = nil
+		icon.held = nil
+	end
+end
+
+-- The samples of a bar or a plate's record with nothing to show. True while it holds them.
+function E.Hold(rec)
+	local bar = rec.mover ~= nil
+	local row = E.rows[bar and rec or rec.frame]
+	if not (E.Holding() and (bar and E.BarsOn() or (not bar and E.PlatesOn()))) then
+		if row and row.testing == E.HELD then
+			E.Unhold(row)
+		end
+		return false
+	end
+	if bar then
+		row = row or E.Make(UIParent, rec)
+	else
+		row = row or E.Make(rec.frame)
+	end
+	if not row then
+		return false
+	end
+	if bar then
+		E.PlaceBar(row, rec)
+	else
+		E.Anchor(row, rec.frame)
+	end
+	row.rec, row.testing = rec, E.HELD
+	local count = E.Fit(row, 3)
+	local look = { numbers = Opt("seconds") == true, font = Opt("numbersFont"), kind = Opt("kindBorder") == true or nil, border = Opt("iconBorder"),
+		flash = Opt("flash") == true, sound = false }
+	local level = Opt("show") == "always" and DARK or 1
+	for slot, icon in ipairs(row.icons) do
+		row.drawn[slot] = nil
+		if slot <= count then
+			E.Mark(icon, false)
+			ns.IconSampleHeld(icon, slot, KEY, look)
+			icon.texture:SetDesaturated(level < 1)
+			icon.texture:SetVertexColor(level, level, level)
+		else
+			icon.held = nil
+			ns.IconClear(icon)
+		end
+	end
+	row.holder:Show()
+	return true
+end
+
+function E.TestTick(now)
+	for _, row in pairs(E.rows) do
+		if row.testing == E.HELD then
+			ns.IconSampleLoop(row.icons, now)
+		end
+	end
+end
+
 -- The test and the status -----------------------------------------------------------------------------------------------------------
 
 -- Three sample icons on a row, for the test.
@@ -1940,7 +2027,7 @@ function E.Sample(row, rec, token, now)
 	row.holder:Show()
 end
 
--- /flatui test: three sample icons on the plate of every enemy player on screen and on the target and focus bars, for a few seconds.
+-- /flatui test icons: three sample icons on the plate of every enemy player on screen and on the target and focus bars, for a few seconds.
 function ns.EnemyTest()
 	if not ns.Enabled(KEY) or InCombatLockdown() then
 		return
@@ -2048,6 +2135,13 @@ ns.Register(KEY, {
 	},
 	Status = E.Status,
 	slash = { enemy = E.Slash },
+})
+
+TM.Register(KEY, {
+	module = KEY,
+	label = "Enemy cooldowns",
+	refresh = true,
+	Tick = E.TestTick,
 })
 
 ns.EnemyCooldownsModule = E

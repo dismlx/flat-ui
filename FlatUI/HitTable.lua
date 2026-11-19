@@ -10,8 +10,11 @@ local ADDON_NAME, ns = ...
 --
 -- The table: a title with the enemy as counted and where the player stands, the weapon skill at its right, a heading, and a line for each attack
 -- (Swing, or Main and Off while dual wielding; Special; Ranged; Spell) with a column for each part of the roll that applies to a line shown: Miss,
--- Dodge, Parry, Glance, Block, Crit, Hit, and Cap, the crit cap of a swing. A crit above the cap turns the crit and the cap yellow; a miss, dodge or
--- parry down to its floor turns green. A part that does not apply is -, one the game withheld or refused is ?, and /flatui status says which.
+-- Dodge, Parry, Glance, Block, Crit, Hit, and Cap, the crit cap of a swing; then Resist, the Spell line's alone, no part of the roll: the share of a
+-- spell's damage resisted on average, below 0 the damage a creature takes more from the player's Spell Piercing (HitTableCalc.lua, Resist), with the
+-- piercing of every school the game gives (GetSpellPenetration), the piercing of one school (Fire Piercing...) only in the gear comparison and a
+-- spell tooltip's Expected line. A crit above the cap turns the crit and the cap yellow; a miss, dodge or parry down to its floor, and a resist below
+-- 0, turn green. A part that does not apply is -, one the game withheld or refused is ?, and /flatui status says which, and what Resist counts.
 --
 -- The frame is a frame of its own on UIParent, in the LOW strata of the player frame (Mainline/PlayerFrame.xml:13), with no mouse and no name, in a
 -- flat background with a thin border of the hud page's look (ns.Outline, made inside ns.EachPart). With no spot saved in the movers it hangs from a
@@ -31,6 +34,10 @@ local ADDON_NAME, ns = ...
 -- (Core.lua); a change asked for in a fight waits once for its end (ns.OutOfCombat). /flatui move places it (FlatUIHitTable in Movers.lua, with the
 -- table as its box), and a spot saved there wins.
 --
+-- Its text size is Text size (hud.hitTableSize: 70 to 200%, its ids the percent in text; a number saved while it was a slider, until 0.5.26, reads
+-- as the nearest, Core.lua, Renamed), set in the options window or Flat UI setup; the table takes no mouse, so clicks and drags on it reach the
+-- world under it.
+--
 -- What it hears: a frame of its own registers the events that change the numbers only while the table is wanted, the unit events for the player
 -- and the target alone (RegisterUnitEvent), as the character sheet registers its own (Camelot/PaperDollFrame.lua:314-351). An event only marks the
 -- table, and one OnUpdate on the next frame works it out once for a burst, as the sheet batches its events (Camelot/PaperDollFrame.lua:392-395). The
@@ -41,6 +48,8 @@ local ADDON_NAME, ns = ...
 -- (ROLE_EVENTS: a role the group gives, talents spent, reset or switched to the other set of dual spec, a new list of the sets of talents, a level,
 -- a form, a new world, the player's auras), which the hud module hears for it (ns.AddEvent) also while the table is hidden for a healer; such an
 -- event too only marks the table, and the next frame works the role out before the numbers, showing or hiding the table when its answer changed.
+-- While test mode is on (TestMode.lua), Show lets the table show whatever it says, and Against the target with no enemy targeted counts a boss,
+-- three levels above the player.
 -- Nothing of the game's is written: its frames are read and anchored to, never changed.
 
 local KEY, PART = "hud", "hit table"
@@ -70,17 +79,17 @@ local COOLDOWN_ROWS = { { "CooldownRow", "cooldowns.place", "FlatUICooldowns" },
 -- The game's frames the table ends before while one stands beside the player frame, and their names for /flatui status (Mainline/TargetFrame.xml:549,
 -- 572).
 local BESIDE = { { "TargetFrame", "target frame" }, { "FocusFrame", "focus frame" } }
--- The smallest Text size (Config.lua), under which a table made to fit gets no smaller, and the steps of the share of Text size it is made, so the
--- sizes it measures at stay few. Widths are kept for this many sizes at most.
+-- The share of the text at 100% under which a table made to fit gets no smaller (half, the smallest Text size of the slider it was until 0.5.26),
+-- and the steps of the share of Text size it is made, so the sizes it measures at stay few. Widths are kept for this many sizes at most.
 local SMALLEST_TEXT, FIT_STEP, MEASURED = 0.5, 0.05, 8
 -- Points of weapon skill a level, for the status line of a skill the game did not give (HitTableCalc.lua counts the same).
 local PER_LEVEL = 5
 -- The colours of the windows' text and states (PanelLook.lua:27-31), as Threat list and Data panels have them.
 local DIM, FAINT, PLAIN = { 0.66, 0.68, 0.62 }, { 0.48, 0.50, 0.45 }, { 1, 1, 1 }
 local OK, WARN = { 0.49, 0.80, 0.56 }, { 0.90, 0.72, 0.36 }
--- The columns, in the order of the roll.
+-- The columns, in the order of the roll, and Resist, a spell's damage resisted after it.
 local COLUMNS = { { "miss", "Miss" }, { "dodge", "Dodge" }, { "parry", "Parry" }, { "glance", "Glance" }, { "block", "Block" }, { "crit", "Crit" },
-	{ "hit", "Hit" }, { "cap", "Cap" } }
+	{ "hit", "Hit" }, { "cap", "Cap" }, { "resist", "Resist" } }
 -- The widest number a cell shows, which sets the width of a column.
 local WIDEST = "100.0"
 -- The parts whose floor is good news: no miss (1 for spells under Classic rules), no dodge, no parry.
@@ -142,6 +151,8 @@ local LINE_EMPTY = "Hit table: hidden, with no line to show."
 local LINE_NO_LEVEL = "Hit table: hidden, since the game does not give your level."
 local LINE_FACING = "Hit table: the game did not say whether your target attacks you, so the table counts you behind it."
 local LINE_OFF_CRIT = "Hit table: the game gives one crit chance, your main hand's, so crit talents for one kind of weapon may make your off hand's crit differ."
+local LINE_RESIST = "Hit table: Resist is the share of a spell's damage resisted on average, with your Spell Piercing %d. The enemy's own resistances are not known and count as none, so below 0 it is the damage a creature takes more from your piercing (Spell Vulnerability); against a player piercing does nothing below 0. Piercing of one school, as Fire Piercing, counts only in the gear comparison and the Expected line of a spell's tooltip, not here."
+local LINE_RESIST_LEVEL = "Hit table: Resist counts %s%% for the levels the enemy is above you, Classic's rule and an estimate on WoW: Forever; piercing does not lower it. A spell with an effect beyond its damage, as a slow, takes no such share but pays for the levels with its higher miss, and the gear comparison leaves the share out."
 local LINE_FIT = "Hit table: the text is %d%% of Text size, so the table ends before the %s. /flatui move places it elsewhere."
 -- At For tanks and damage dealers: on or off, the role, and what it was read from (the third answer of ns.PlayerRole, a phrase such as "your group
 -- role" or "most points in Holy"), as nameplate threat names its own (PlateThreat.lua); setup's sentence, a suggestion, is not said here.
@@ -798,7 +809,7 @@ local function Note(read)
 	return #skills > 0 and ("Skill " .. table.concat(skills, " / ")) or ""
 end
 
--- The text and colour of a cell.
+-- The text and colour of a cell: a resist below 0, the damage taken more, green, and one that rounds to 0 without its sign.
 local function Value(line, key)
 	local value = line.parts[key]
 	if value == false then
@@ -811,6 +822,11 @@ local function Value(line, key)
 		colour = WARN
 	elseif FLOORED[key] and value < (key == "miss" and line.floor or 0) + 0.05 then
 		colour = OK
+	elseif key == "resist" and value <= -0.05 then
+		colour = OK
+	end
+	if math.abs(value) < 0.05 then
+		value = 0
 	end
 	return ("%.1f"):format(value), colour
 end
@@ -935,9 +951,15 @@ end
 
 -- True while Show lets the table show: always, in combat, or with an enemy targeted, one that can be attacked and is alive (as the Threat list
 -- tells an enemy, Threat.lua, T.Enemy, without leaving out players, since a duel's foe can be attacked).
+-- While test mode is on (TestMode.lua) every rule lets it show.
+local function Testing()
+	local mode = ns.TestMode
+	return mode ~= nil and mode.IsOn() == true
+end
+
 local function Allowed()
 	local rule = Opt("hitTableShow")
-	if rule == "always" then
+	if rule == "always" or Testing() then
 		return true
 	elseif rule == "combat" then
 		return S.fighting
@@ -960,7 +982,12 @@ Update = function(force)
 		S.frame:SetAlpha(0)
 		return
 	end
-	local read = calc.Read({ lines = Opt("hitTableLines"), special = Opt("hitTableSpecial") ~= false, against = Opt("hitTableAgainst"),
+	-- Against the target, with no enemy targeted in test mode: a boss, three levels above the player, rather than a mob of the player's level.
+	local against = Opt("hitTableAgainst")
+	if against == "target" and Testing() and not (Ask(UnitExists, "target") == true and Ask(UnitCanAttack, "player", "target") == true and not S.dead) then
+		against = "boss"
+	end
+	local read = calc.Read({ lines = Opt("hitTableLines"), special = Opt("hitTableSpecial") ~= false, against = against,
 		facing = Opt("hitTableFacing"), rules = Opt("hitTableRules") })
 	S.read = read
 	local lines = read.lines
@@ -1306,7 +1333,7 @@ ns.AddStatus(KEY, function()
 	end
 	for _, why in ipairs({ "withheld", "refused", "missing" }) do
 		local names = {}
-		for _, what in ipairs({ "hit", "crit", "expertise" }) do
+		for _, what in ipairs({ "hit", "crit", "expertise", "spell piercing" }) do
 			if read.gaps[what] == why then
 				names[#names + 1] = what
 			end
@@ -1317,6 +1344,18 @@ ns.AddStatus(KEY, function()
 	end
 	for _, hand in ipairs(read.assumed) do
 		lines[#lines + 1] = LINE_ASSUMED:format(hand, read.level * PER_LEVEL)
+	end
+	-- What Resist counts, while the Spell line shows it.
+	for _, line in ipairs(read.lines) do
+		if line.id == "spell" and line.pen ~= nil then
+			lines[#lines + 1] = LINE_RESIST:format(math.floor(line.pen + 0.5))
+			local calc = ns.HitTableCalc
+			local level = line.levelResist and type(calc) == "table" and type(calc.Resist) == "function"
+				and calc.Resist(read.level, read.target.level, false, 0) or nil
+			if level then
+				lines[#lines + 1] = LINE_RESIST_LEVEL:format((("%.1f"):format(level):gsub("%.0$", "")))
+			end
+		end
 	end
 	local target = read.target
 	if target and target.unknown then
@@ -1341,3 +1380,8 @@ ns.AddStatus(KEY, function()
 	end
 	return lines
 end)
+
+-- Test mode: the table shows whatever Show says, against a boss with no enemy targeted (Allowed, Update); On and Off lay it out again.
+if ns.TestMode then
+	ns.TestMode.Register("hittable", { module = KEY, label = "Hit table", Start = ns.HitTableRefresh, Stop = ns.HitTableRefresh })
+end

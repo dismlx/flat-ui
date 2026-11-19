@@ -34,6 +34,8 @@ local _, ns = ...
 -- to the tooltip, which hangs from it at a fixed spot).
 -- A module can hold system frames at spots of its own with ns.MoverHold: they are placed like a frame with a saved spot, have no box and keep the
 -- saved spots they may also have.
+-- Shift and a right-click on a box hides its frame, or shows it again, when the Hidden frames page has a row for it (Hide.lua, ns.HideFrames), and
+-- the box of a hidden frame says so, as does the box of a frame that hangs from one. On any other box it resets nothing and says so in chat.
 
 local KEY = "movers"
 local TOOLTIP = "FlatUITooltip"
@@ -72,7 +74,7 @@ local WIN = { height = 22, right = 28, level = 2, start = 4, corner = 18, min = 
 	controls = { "Button", "EditBox", "Slider", "Model", "ModelScene", "ColorSelect", "SimpleHTML", "MessageFrame", "ScrollingMessageFrame", "MovieFrame", "Minimap" },
 	loose = { Model = true, ModelScene = true },
 	scripts = { "OnMouseDown", "OnMouseUp", "OnDragStart" } }
-local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back."
+local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back, Shift and right-click hides a HUD frame of the game."
 -- A bag has a menu button on its portrait, and another over its title that opens the same menu. The title bar of a bag starts to the right
 -- of the portrait, like the title bar of every window two levels above it, so the title drags the bag and the portrait still opens the menu.
 local BAG_GRIP = { left = 44, level = 2 }
@@ -168,6 +170,13 @@ local LIST = {
 	-- Where the row of Defensives on you hangs from with Place set to Own position: four icons and the room for the caster's name.
 	{ name = "FlatUIDefensives", label = "Defensives on you", point = "CENTER", kind = "hud", own = true, noScale = true, width = 137, height = 48, x = 0, y = 180,
 		gate = "DefensivesOwnShown", changed = "DefensivesMoved" },
+	-- The bars of Absorb shields (Absorbs.lua): they grow down from the middle of the top of the box, or up from the middle of its bottom, so they
+	-- stay centred on it at any width; it has the room of three bars at the default size. It starts under Your buffs. The target's total bar is
+	-- centred on its own box, above the character.
+	{ name = "FlatUIAbsorbs", label = "Absorb shields", point = "CENTER", kind = "hud", own = true, noScale = true, width = 180, height = 52, x = 0, y = -205,
+		gate = "AbsorbsShown", changed = "AbsorbsMoved" },
+	{ name = "FlatUIAbsorbsTarget", label = "Absorb shields: target", point = "CENTER", kind = "hud", own = true, noScale = true, width = 180, height = 16, x = 0, y = 140,
+		gate = "AbsorbsTargetShown", changed = "AbsorbsMoved" },
 	-- Where the party cooldown rows of a raid group stack: the player's own row and the subgroup's, each with the member's name to its left.
 	{ name = "FlatUIPartyRaid", label = "Party cooldowns: raid group", point = "CENTER", kind = "hud", own = true, noScale = true, width = 220, height = 150, x = -420, y = 0,
 		gate = "PartyRaidShown", changed = "PartyRaidMoved" },
@@ -2085,7 +2094,19 @@ local function MakeHandle(name)
 		ns.Try(KEY, ns.MoversMode.Press, name, button)
 	end)
 	handle:SetScript("OnMouseUp", function(_, mouseButton)
-		if mouseButton == "RightButton" then
+		-- Shift and a right-click hides the frame of the box, or shows it again, as its tick on the Hidden frames page does (Hide.lua). On a box
+		-- that page has no row for it does nothing but say so: only a plain right-click resets.
+		local shift = mouseButton == "RightButton" and type(IsShiftKeyDown) == "function" and IsShiftKeyDown()
+		local hide = shift and ns.HideFrames and ns.HideFrames.Key(name)
+		if hide then
+			ns.Try(KEY, ns.HideFrames.Toggle, hide)
+			ns.Try(KEY, ShowHandle, name)
+			ns.Try(KEY, ns.MoversMode.Layout)
+			ns.Try(KEY, ns.MoversMode.Refresh, true)
+		elseif shift then
+			local info = Describe(name)
+			print(("Flat UI: %s cannot be hidden. The Hidden frames page has the game's HUD frames."):format(info and info.label or name))
+		elseif mouseButton == "RightButton" then
 			ns.Try(KEY, ResetFrame, name)
 		elseif mouseButton == "LeftButton" then
 			ns.Try(KEY, centre.Click, name)
@@ -2146,6 +2167,18 @@ function ShowHandle(name)
 		if frame and not ns.Forbidden(frame) and KindOf(name, frame) == "layout" and ns.LayoutSpots.Mode() ~= "layout" then
 			text = ("%s (%s)"):format(text, BACK_IN_FIGHT)
 		end
+	end
+	-- A frame the Hidden frames page hides (Hide.lua) says so on its box, and so does one that hangs from a hidden frame, as the pet frame from
+	-- the player frame, and one unticked that could not come back before a reload.
+	local hidden = ns.HideFrames and ns.HideFrames.Key(name)
+	local frameOf = ns.HideFrames and not (hidden and ns.HideFrames.Hidden(hidden)) and GameFrame(name)
+	local by = frameOf and ns.HideFrames.HeldBy(frameOf)
+	if hidden and ns.HideFrames.Hidden(hidden) then
+		text = ("%s (hidden)"):format(text)
+	elseif by == hidden and by then
+		text = ("%s (hidden until a reload)"):format(text)
+	elseif by then
+		text = ("%s (hidden with %s)"):format(text, ns.HideFrames.Label(by))
 	end
 	if look.text ~= text then
 		look.text = text
@@ -4198,7 +4231,7 @@ local function BuildBar()
 	title:SetText("Movers")
 	local hint = Label(bar, "GameFontHighlightSmall", 416)
 	hint:SetPoint("TOPLEFT", bar, "TOPLEFT", 12, -30)
-	hint:SetText("Drag to move. Scroll or Shift and scroll to nudge. Ctrl and scroll to scale. Right-click to reset.")
+	hint:SetText("Drag to move. Scroll or Shift and scroll to nudge. Ctrl and scroll to scale. Right-click to reset, Shift and right-click to hide a HUD frame.")
 	local edit = Label(bar, "GameFontDisableSmall", 416)
 	edit:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -8)
 	edit:SetText(EVERY_FRAME)

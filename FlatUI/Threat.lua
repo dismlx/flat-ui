@@ -23,7 +23,8 @@ local _, ns = ...
 -- The window is a child of UIParent in the LOW strata with a flat background and a thin border in the colours of the Flat UI page, as the data
 -- panels have, its bars in the bar texture of that page; it takes no mouse and hides with the interface. /flatui move places it (FlatUIThreat in
 -- Movers.lua: the window's top left corner is the top left corner of the box). /flatui threat shows sample bars for a few seconds, out of
--- combat. Nothing of the game is changed.
+-- combat. While test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh and sorted again every 2 seconds as their shares
+-- move. Nothing of the game is changed.
 -- Built on the threat meter of EnhanceQoL's damage meter by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoLDamageMeter/DamageMeter.lua:2841-2936, 7345-7368, 7450-7468): the enemy it reads, the units of the group with their pets, the
 -- events that draw it again and the wait that draws a burst once. Its meter windows, its focus and focus target, and its share of the tank's
@@ -219,12 +220,34 @@ function T.Scan(mob)
 end
 
 -- The bars of /flatui threat.
+-- The sample bars. At each step of test mode (T.step, TestMode.lua's Tick) every bar but the first moves up or down by a share of SHIFT, in turn, and
+-- the bars are sorted again, highest first, as a fight would move them.
+local SHIFT = { 0, 7, -5, 11, -8, 4, -3, 9 }
+
 function T.Sample()
-	local entries = {}
+	local entries, step = {}, T.step or 0
 	for order, spec in ipairs(SAMPLE) do
-		entries[order] = { sample = spec, order = order, scaled = spec[3] }
+		local share = spec[3]
+		if step > 0 and order > 1 then
+			share = math.max(1, math.min(99, share + SHIFT[(order + step) % #SHIFT + 1]))
+		end
+		entries[order] = { sample = spec, order = order, scaled = share }
+	end
+	if step > 0 then
+		table.sort(entries, function(a, b)
+			if a.scaled ~= b.scaled then
+				return a.scaled > b.scaled
+			end
+			return a.order < b.order
+		end)
 	end
 	return entries
+end
+
+-- True while test mode is on (TestMode.lua), out of a fight: the sample bars are held with the rows' look, with no 8 second end.
+function T.Testing()
+	local mode = ns.TestMode
+	return mode ~= nil and mode.IsOn() == true
 end
 
 -- Drawing -----------------------------------------------------------------------------------------------------------------------------------
@@ -558,7 +581,7 @@ function T.Update()
 		local entries, withheld = T.Scan(mob)
 		T.withheld = withheld
 		T.Draw(mob, entries)
-	elseif on and T.sample and not T.fighting then
+	elseif on and (T.sample or T.Testing()) and not T.fighting then
 		T.Draw(nil, T.Sample())
 	else
 		T.Draw(nil, nil)
@@ -648,6 +671,10 @@ function ns.ThreatListMoved()
 	end
 end
 
+-- Test mode: the sample bars while it is on (T.Update reads T.Testing), each refresh of the page drawing them with its rows, and moved every 2 seconds
+-- while the bar's Moving is on. Off, the page refreshes and the bars go.
+local TEST_STEP = 2
+
 ns.Register(KEY, {
 	label = "Threat list",
 	counted = false,
@@ -676,3 +703,21 @@ ns.Register(KEY, {
 	slash = { threat = T.Slash },
 	help = HELP,
 })
+
+if ns.TestMode then
+	ns.TestMode.Register("threat", {
+		module = KEY,
+		label = "Threat list",
+		refresh = true,
+		Start = function()
+			T.step = 0
+		end,
+		every = TEST_STEP,
+		Tick = function()
+			T.step = (T.step or 0) + 1
+			if not T.fighting then
+				T.Update()
+			end
+		end,
+	})
+end

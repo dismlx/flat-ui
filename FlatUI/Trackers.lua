@@ -2095,6 +2095,10 @@ local function Draw(entry, reading)
 	if testing[entry.id] then
 		return
 	end
+	-- Test mode paints a sample in place of the reading (K.HeldDraw).
+	if K.held and K.HeldDraw(entry) then
+		return
+	end
 	local how = Drawn(entry, reading) or How(entry, reading)
 	local record = records[entry.id]
 	if record then
@@ -3597,6 +3601,67 @@ local function Paint(entry, state, length)
 	end
 end
 
+-- Test mode (TestMode.lua): while it is on, out of combat, with the page on, each tracker that is on and has a frame shows a sample in place of
+-- its reading, fine, low and missing in turn, a step every 4 seconds while Moving is on (HeldStep), at full opacity whatever its Show says, so a
+-- tracker set to Only when low or missing or Only in combat shows too. The sample has the widest numbers TrackerShapes.lua measures for, 20
+-- charges and 10:00 left, and 2 charges and 0:20 left when low. Draw paints it at every pass, so a change of a row shows at once. A kind with a
+-- test of its own (a proc) keeps its own drawing, but for the proc Procs.lua holds up (ns.ProcHeld), which shows fine. The game's own drawing
+-- (TrackerSlots.lua) stays off; the marks on the action buttons and the clicks keep what they had. Off and a fight end it, and the Refresh after
+-- each draws every tracker from its reading again.
+K.HELD_STATES, K.HELD_LENGTH, K.HELD_LOW, K.HELD_COUNT, K.HELD_LOW_COUNT = { "fine", "low", "missing" }, 600, 20, 20, 2
+
+-- True when the sample of a tracker was drawn.
+function K.HeldDraw(entry)
+	local held, record = K.held, records[entry.id]
+	if not held or not record or InCombatLockdown() then
+		return false
+	end
+	local kind = KINDS[entry.kind]
+	local own = kind ~= nil and type(kind.Test) == "function"
+	if own and not (type(ns.ProcHeld) == "function" and ns.ProcHeld(entry) == true) then
+		return false
+	end
+	local state = own and "fine" or K.HELD_STATES[held.step] or "fine"
+	local low = state == "low"
+	local reading = { state = state, hidden = false, expires = held.at + (low and K.HELD_LOW or K.HELD_LENGTH), length = K.HELD_LENGTH,
+		icon = EntryIcon(entry), count = entry.charged and state ~= "missing" and (low and K.HELD_LOW_COUNT or K.HELD_COUNT) or nil }
+	record.how = "live"
+	Apply(record, entry, Looks(entry, reading, "live"))
+	record.curved = nil
+	if record.alpha ~= 1 then
+		record.frame:SetAlpha(1)
+		record.alpha = 1
+	end
+	Slot("Show", entry, false, 1)
+	return true
+end
+
+-- Every tracker on screen takes its sample now.
+function K.HeldPaint()
+	for _, entry in ipairs(OnEntries()) do
+		if not testing[entry.id] then
+			K.HeldDraw(entry)
+		end
+	end
+end
+
+function K.HeldStart()
+	K.held = { step = 1, at = Now() }
+end
+
+function K.HeldStop()
+	K.held = nil
+end
+
+function K.HeldStep()
+	local held = K.held
+	if held then
+		held.step = held.step % #K.HELD_STATES + 1
+		held.at = Now()
+		K.HeldPaint()
+	end
+end
+
 -- Draws each look for 3 seconds and puts the real state back.
 local function Staged(entries, run)
 	local steps = {
@@ -3879,9 +3944,10 @@ local function Refresh()
 	if ns.Enabled(KEY) then
 		Watch()
 		-- A fight that ended while the page was off, or while the module was stopped, was not heard: Core.lua gives PLAYER_REGEN_ENABLED only to
-		-- a module that is on, and Watch reads the fight only when it makes the watcher. Refresh never runs while PLAYER_REGEN_DISABLED is handled,
-		-- the one moment of a fight before the lockdown (InCombatLockdown, RestrictedActionsDocumentation.lua:45-53), so out of the lockdown that
-		-- fight is over: the trackers leave it here, a click is offered again (TrackerClicks.lua) and a tracker set to Only in combat hides.
+		-- a module that is on, and Watch reads the fight only when it makes the watcher. Refresh runs while PLAYER_REGEN_DISABLED is handled, the
+		-- one moment of a fight before the lockdown (InCombatLockdown, RestrictedActionsDocumentation.lua:45-53), only from the pause of test mode,
+		-- whose frame hears that event before this module's (TestMode.lua), so fighting is still false then. Out of the lockdown a fight set here
+		-- is over: the trackers leave it here, a click is offered again (TrackerClicks.lua) and a tracker set to Only in combat hides.
 		if fighting and not InCombatLockdown() then
 			fighting = false
 			EndFight()
@@ -3929,4 +3995,15 @@ ns.Register(KEY, {
 	slash = { tracker = Slash },
 	help = HELP,
 	counted = "shown",
+})
+
+-- Test mode: the samples of the trackers (K.HeldDraw), a step every 4 seconds.
+ns.TestMode.Register(KEY, {
+	module = KEY,
+	label = "Trackers",
+	refresh = true,
+	Start = K.HeldStart,
+	Stop = K.HeldStop,
+	every = 4,
+	Tick = K.HeldStep,
 })

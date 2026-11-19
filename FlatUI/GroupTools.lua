@@ -3,7 +3,8 @@ local _, ns = ...
 -- Group tools: a row of buttons of Flat UI's own for a group, the eight raid markers and a clear for your target, a ready check, a role poll
 -- and a pull countdown, drawn as the icons of IconRow.lua are: square, with a thin border on a dark background. A module of its own, off by
 -- default, whose page is in the Combat group. The row shows in a group, or as Show says, and /flatui move places it (FlatUIGroupTools in
--- Movers.lua: the top left corner of the row is the top left corner of the box). No frame or setting of the game is changed.
+-- Movers.lua: the top left corner of the row is the top left corner of the box). While test mode is on (TestMode.lua, out of combat only) Show
+-- reads as Always. No frame or setting of the game is changed.
 --
 -- What the game allows. SetRaidTarget, RemoveRaidTargets, C_PartyInfo.DoReadyCheck and C_PartyInfo.DoCountdown have restrictions
 -- (HasRestrictions: RaidMarkersDocumentation.lua:108-124, PartyInfoDocumentation.lua:156-174), so they run only in the secure click of a button
@@ -197,7 +198,10 @@ end
 -- Whether Show lets the row show now: in a group, in a group where the player is the leader or an assistant, or anywhere.
 function G.Allowed(grouped, lead)
 	local show = Opt("show")
-	if show == "always" then
+	local mode = ns.TestMode
+	-- Test mode (TestMode.lua) reads Show as Always while it is on, which is out of combat only: a fight pauses it, and G.Apply lays the secure
+	-- buttons out out of combat.
+	if show == "always" or (mode ~= nil and mode.IsOn() == true) then
 		return true
 	end
 	return grouped == true and (show ~= "lead" or lead ~= false)
@@ -707,3 +711,9 @@ ns.Register(KEY, {
 		PLAYER_REGEN_ENABLED = G.AfterFight,
 	},
 })
+
+-- Test mode: On, Off and a pause refresh the page, which shows the row or puts it back to its own Show rule (G.Allowed), out of combat or once the
+-- fight ends (G.Apply).
+if ns.TestMode then
+	ns.TestMode.Register("grouptools", { module = KEY, label = "Group tools", refresh = true })
+end

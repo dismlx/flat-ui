@@ -84,7 +84,7 @@ local COLOURS = {
 	{ 1, 0.84, 0.3 },
 }
 
--- The icons and times of the three samples that /flatui test shows.
+-- The icons and times of the three samples that /flatui test icons and test mode show.
 local SAMPLES = { { 135940, 3 }, { 135964, 3 }, { 136089, 3 } }
 
 -- The red, green and blue of a kind (1 to 9), or nothing for any other value.
@@ -270,6 +270,86 @@ function ns.IconSample(icon, index, start, seconds, key)
 		return false
 	end
 	return ns.IconSet(icon, sample[1], start, seconds, { kind = sample[2], flash = true, sound = ns.SOUNDS[1][1], key = key })
+end
+
+-- The picture of sample `index` (1 to 3), for a row that draws its own icons (Cooldowns.lua), or nil.
+function ns.IconSamplePicture(index)
+	local sample = SAMPLES[index]
+	return sample and sample[1] or nil
+end
+
+-- Test mode (TestMode.lua) ------------------------------------------------------------------------------------------------------------------------
+-- The samples the rows of Defensives on you, Your buffs, Party cooldowns and Enemy cooldowns hold while test mode is on. Each sweep starts when
+-- the sample is first put on the icon; putting the same sample on again (a Refresh) keeps the sweep and takes the look the row has now. Its end
+-- flashes unless the look says not, and only the first end since test mode came on sounds, unless the look has no sound: the sound is asked of
+-- TM.Sound once, with the module's key, as the sweep starts. ns.IconSampleLoop starts an ended sweep again, from the ticker of test mode, so with
+-- Moving off a sweep ends and stays ended.
+-- HELD: the length of the sweep of samples 1 to 3, staggered so the row never ends all at once.
+local HELD = { 6, 10, 15 }
+
+local function Copy(look)
+	local copy = {}
+	for key, value in pairs(look or {}) do
+		copy[key] = value
+	end
+	return copy
+end
+
+-- Holds sample `index` (1 to 3) on an icon. look: the row's look of its own icons (numbers, font, border, kind; kind true is the sample's kind;
+-- flash false for none; sound false for none), else the sample's kind colour with the flash and the sound; texture: another picture than the
+-- sample's; seconds: another length than HELD's.
+function ns.IconSampleHeld(icon, index, key, look, texture, seconds)
+	local sample = SAMPLES[index]
+	if not sample then
+		return false
+	end
+	look = Copy(look or { kind = sample[2] })
+	if look.kind == true then
+		look.kind = sample[2]
+	end
+	local quiet = look.sound == false
+	look.flash, look.key, look.sound = look.flash ~= false, key, nil
+	local file = texture or sample[1]
+	local held = icon.held
+	if held and held.index == index and held.file == file and icon.frame:IsShown() then
+		held.look = look
+		-- No start and no length: the sweep that runs stays as it is, and so does its sound.
+		local kept = Copy(look)
+		kept.sound = held.kit
+		return ns.IconSet(icon, file, nil, nil, kept)
+	end
+	local length = type(seconds) == "number" and not IsSecret(seconds) and seconds > 0 and seconds or HELD[index]
+	local now = type(GetTime) == "function" and GetTime() or 0
+	held = { index = index, file = file, seconds = length, ends = now + length, look = look }
+	icon.held = held
+	local first = Copy(look)
+	local test = ns.TestMode
+	if key and not quiet and type(test) == "table" and test.Sound(key .. ".sample") then
+		held.kit = ns.SOUNDS[1][1]
+		first.sound = held.kit
+	end
+	return ns.IconSet(icon, file, now, length, first)
+end
+
+-- Starts again, from now, the sweep of each held sample in a list of icons whose sweep has ended. The look has no sound.
+function ns.IconSampleLoop(list, now)
+	for _, icon in ipairs(list or {}) do
+		local held = icon.held
+		if held and now >= held.ends and icon.frame:IsShown() then
+			held.ends, held.kit = now + held.seconds, nil
+			ns.IconSet(icon, nil, now, held.seconds, held.look)
+		end
+	end
+end
+
+-- Lets go of a held sample: the sweep and the icon go. True when the icon held one.
+function ns.IconSampleDrop(icon)
+	if not icon.held then
+		return false
+	end
+	icon.held = nil
+	ns.IconClear(icon)
+	return true
 end
 
 ns.IconRow = I

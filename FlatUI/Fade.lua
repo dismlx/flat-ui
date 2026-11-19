@@ -1,7 +1,7 @@
 local _, ns = ...
 
--- Fading: the action bars, the stance and pet bars, the micro menu, the bag bar, the player and pet frames and the minimap buttons, the game's and
--- other addons', go to a low opacity while nothing asks for them, and back to full when something does. The one thing written on a frame is its alpha
+-- Fading: the action bars, the stance and pet bars, the micro menu, the bag bar, the open bag windows, the player and pet frames and the minimap
+-- buttons, the game's and other addons', go to a low opacity while nothing asks for them, and back to full when something does. The one thing written on a frame is its alpha
 -- (SetAlpha, which the documentation leaves open to addons and does not mark protected:
 -- Blizzard_APIDocumentationGenerated/SimpleFrameAPIDocumentation.lua:1133-1142). The alpha a frame had is read before the first write and put
 -- back when the module, the row or the part goes off. A faded frame still takes clicks and shows tooltips, since alpha does not touch the mouse.
@@ -12,7 +12,7 @@ local _, ns = ...
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
 -- An alpha something else gives a frame after a write is taken as the frame's own, the one put back, and the frame eases again from it.
--- The frames are the game's own: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
+-- The frames are the game's own, but for Flat UI's bag and bank windows: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
 -- PetActionBar, MicroMenuContainer, BagsBar, PlayerFrame.PlayerFrameContainer and PlayerFrame.PlayerFrameContent (parentKeys of PlayerFrame with no global name: Blizzard_UnitFrame/Mainline/PlayerFrame.xml:23 and :68; the pet frame, totems and cast bar stay as they are),
 -- PetFrame, and under MinimapCluster the Tracking and IndicatorFrame frames, GameTimeFrame, TimeManagerClockButton and AddonCompartmentFrame
 -- (Blizzard_Minimap/Mainline/Minimap.xml:3, 25 and 46, GameTime.xml:3, Camelot/AddonCompartment.xml:3, Blizzard_TimeManager/Mainline/Blizzard_TimeManager.xml:178).
@@ -24,6 +24,33 @@ local _, ns = ...
 -- list gets its alpha back at once. In the column or row beside the map they lie outside MinimapCluster, so the mouse over any of them counts as
 -- over the map. An addon that fades its own buttons (LibDBIcon's own fade) gives them an alpha that is taken as theirs, as above, so the two do not fight.
 -- ExtraActionBarFrame, the swing timers and the resource display are left out because the game or Edit Mode sets their alpha.
+--
+-- The bag bar: on Forever every bag button hangs from BagsBar. The backpack (MainMenuBarBackpackButton) and the keyring (KeyRingButton) are its
+-- children, and the expand arrow (BagBarExpandToggle), the four bag slots (CharacterBag0Slot to CharacterBag3Slot) and the reagent bag
+-- (CharacterReagentBag0Slot) are children of BagSlotCluster, its child (Blizzard_MainMenuBarBagButtons/Camelot/MainMenuBarBagButtons.xml:51-97,
+-- Mainline/MainMenuBarBagButtonTemplates.xml:61-131). The game parents none of them elsewhere and sets the alpha of none of them, only of the
+-- highlight picture of each (Camelot/MainMenuBarBagButtons.lua:37); Hud.lua styles their pictures and Movers places and scales the bar, never a
+-- button. So the alpha of BagsBar fades every one of them together, and no button is written on its own: the template's SetAlpha is a Lua method
+-- of the game that fades the icon and count only (Blizzard_ItemButton/Shared/ItemButtonTemplate.lua:239-245). The mouse over the bar, or over any
+-- of the buttons that shows, wherever it lies, holds them all at full. What made the row miss them was Leave the game's action bars alone, on by
+-- default: the row was one of the action bar rows, which do nothing while it is on. It no longer is: its alpha places, scales and lays out
+-- nothing, and the bag buttons' clicks run none of the game's secure code (ToggleBag, PutItemInBag), so the row fades the bar either way. A bag
+-- button another addon takes into a bar of its own no longer hangs from BagsBar and is left to that addon.
+-- The bag windows: Flat UI's bag and bank windows (FlatUIBags and FlatUIBank, BagsWindow.lua) and the game's, the combined window
+-- (ContainerFrameCombinedBags), ContainerFrame1 to ContainerFrame7, the reagent bag's and the keyring's among them, and the bank (BankFrame)
+-- (Blizzard_UIPanels_Game/Mainline/ContainerFrame.xml:298-313, ContainerFrame.lua:1-12, Camelot/BankFrame.xml:59), whose alpha the game never
+-- sets. Only the windows that show are faded, asked for at each pass: with Bags on the game's windows are kept under a hidden frame
+-- (ns.BagsParked) and do not show, BankFrame too while Flat UI's bank window is the one used, and with it off Flat UI's do not. A window that closes gets its alpha back at once, so it opens at its own alpha, and the row is at full opacity
+-- the pass a window opens, then waits Wait before fading as after the mouse leaves. A window in use is never faded: the mouse over any of
+-- them, an item on the cursor (as for every row), the game's split box (StackSplitFrame) open, or the keyboard in a box of one of them (the
+-- search box of Flat UI's bag window, GetCurrentKeyBoardFocus) holds them all at full.
+-- Hidden frames (Hide.lua) wins over this module. A frame it holds under its hidden frame, or one under such a frame (the player frame's container
+-- and content under a hidden PlayerFrame, the minimap's buttons under a hidden MinimapCluster, the bag bar under its hidden frame), gets no write:
+-- just before it goes under, Hidden frames asks this module to give it, and every frame under it that it fades, the alpha it had (ns.FadeLetGo),
+-- written while it still shows, and to forget them. A frame held so is passed by each step with no write (Gone), and does not count as under the
+-- mouse. When Hidden frames gives it back with its own alpha, as it came, this module takes it up from that alpha, as a frame it had never
+-- written: nothing is put back over it. The bag bar hidden while its row here is on is so: the row fades nothing while it is hidden, and fades
+-- the bar again once it is back. The bag windows are not on the Hidden frames page.
 --
 -- When shown: the target and focus frames, the buffs, the objective tracker and the damage meter each have a rule. Always (the default) leaves the
 -- frame alone. Only in combat, Only in a group, Only in an instance, Only outside an instance and Only when not mounted give it full opacity while that
@@ -75,7 +102,9 @@ local HIDDEN = 0.001
 -- counts as under the mouse (the frames themselves when it is left out). rule: a row of When shown, whose setting is a rule (RULES) and not a switch.
 -- targeted: frames the game shows only while there is a target, which With a target does not hold at full. more: the function, or the name of the
 -- function of ns, that gives the frames of other addons or of Flat UI's own the row fades too, each { frame = frame }, asked at each pass, each also
--- under the mouse. beside: frames by name that do not fade with the row but count as under the mouse while they show.
+-- under the mouse. beside: frames by name that count as under the mouse while they show, whether or not the row fades them. opens: the row is at
+-- full the pass a frame joins its more. busy: the function that gives true while the frames of its more (the list of { frame, name } of this
+-- pass) are in use.
 -- The meter's session windows (DamageMeterSessionWindow1 to 3, DamageMeter.lua:285) and the breakdown of each, a parentKey with no global name
 -- (DamageMeterSessionWindow.lua:119-128, DamageMeterSessionWindow.xml:84 and 129).
 local METER_PARTS = {}
@@ -92,6 +121,16 @@ local function PlayerPieces()
 	end
 	return nil
 end
+-- The bag buttons, which fade with BagsBar and each count as under the mouse while it shows.
+local BAG_BUTTONS = { "MainMenuBarBackpackButton", "BagBarExpandToggle", "CharacterBag0Slot", "CharacterBag1Slot", "CharacterBag2Slot",
+	"CharacterBag3Slot", "CharacterReagentBag0Slot", "KeyRingButton" }
+-- The bag windows, Flat UI's and the game's.
+local BAG_WINDOWS = { "FlatUIBags", "FlatUIBank", "ContainerFrameCombinedBags", "BankFrame" }
+for index = 1, 7 do
+	BAG_WINDOWS[#BAG_WINDOWS + 1] = "ContainerFrame" .. index
+end
+-- The row of the bag windows, whose more and busy are given below, once the functions they call are made.
+local WINDOWS_ROW = { row = "bagWindows", label = "Bag windows", frames = {}, opens = true }
 local ENTRIES = {
 	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" } },
 	{ bar = true, row = "bar2", label = "Action bar 2", frames = { "MultiBarBottomLeft" } },
@@ -104,7 +143,8 @@ local ENTRIES = {
 	{ bar = true, row = "stance", label = "Stance bar", frames = { "StanceBar" } },
 	{ bar = true, row = "pet", label = "Pet bar", frames = { "PetActionBar" } },
 	{ bar = true, row = "micro", label = "Micro menu", frames = { "MicroMenuContainer" } },
-	{ bar = true, row = "bags", label = "Bag bar", frames = { "BagsBar" } },
+	{ row = "bags", label = "Bag bar", frames = { "BagsBar" }, beside = BAG_BUTTONS },
+	WINDOWS_ROW,
 	{ row = "playerFrame", label = "Player frame", frames = { "PlayerFrame.PlayerFrameContainer", "PlayerFrame.PlayerFrameContent" }, hover = "PlayerFrame",
 		more = PlayerPieces },
 	{ row = "petFrame", label = "Pet frame", frames = { "PetFrame" } },
@@ -121,7 +161,7 @@ local ENTRIES = {
 -- The forms of a druid that count as mounted, by GetShapeshiftFormID: travel, aquatic and flight form (Blizzard_FrameXMLBase/Constants.lua:329-333).
 local TRAVEL_FORMS = { [3] = true, [4] = true, [27] = true }
 
--- bar: a game action bar, or a frame its layout hangs from (micro menu, bag bar). While Leave the game's action bars alone is on the row does nothing, and a bar this module faded is given its alpha back.
+-- bar: a game action bar, or the micro menu, a frame its layout hangs from. While Leave the game's action bars alone is on the row does nothing, and a bar this module faded is given its alpha back.
 -- orig: the alpha a frame had before the first write. sent: the last alpha written. value: where the ease is. idle: seconds a row has had nothing to keep it
 -- at full. found: the frames reached by name. clock: seconds since the last step. added: per frame of another addon a row fades (more), that row.
 local weak = { __mode = "k" }
@@ -170,8 +210,12 @@ local function Alpha(frame)
 	return 1, false
 end
 
--- A withheld answer counts as the frame being under the mouse, so that it stays shown.
+-- A withheld answer counts as the frame being under the mouse, so that it stays shown. A frame Hidden frames holds is not (Gone, below).
+local Gone
 local function Over(frame)
+	if Gone(frame) then
+		return false
+	end
 	local ok, over = pcall(frame.IsMouseOver, frame)
 	return ok and (ns.IsSecret(over) or over == true)
 end
@@ -291,6 +335,12 @@ local function Elsewhere(frame, name)
 	return (ns.BarBlockFades and ns.BarBlockFades(name)) or (ns.TrackerFades and ns.TrackerFades(frame)) or false
 end
 
+-- True for a frame Hidden frames (Hide.lua) has under its hidden frame, or one under such a frame: no alpha is written on it.
+function Gone(frame)
+	local hide = ns.HideFrames
+	return type(hide) == "table" and type(hide.Holds) == "function" and hide.Holds(frame) == true
+end
+
 -- The write. It raises when the game refuses, which ns.EachPart counts for the part.
 local function Put(frame, alpha)
 	if state.sent[frame] ~= alpha then
@@ -300,7 +350,7 @@ local function Put(frame, alpha)
 	state.value[frame] = alpha
 end
 
--- A frame goes back to the alpha it had, unless something else has set its own since.
+-- A frame goes back to the alpha it had, unless something else has set its own since, or Hidden frames holds it (no write then).
 local function Release(frame)
 	local alpha = state.orig[frame]
 	if alpha == nil then
@@ -308,7 +358,7 @@ local function Release(frame)
 	end
 	local sent = state.sent[frame]
 	state.orig[frame], state.sent[frame], state.value[frame] = nil, nil, nil
-	if sent ~= nil and math.abs(Alpha(frame) - sent) < 0.01 then
+	if sent ~= nil and not Gone(frame) and math.abs(Alpha(frame) - sent) < 0.01 then
 		pcall(frame.SetAlpha, frame, alpha)
 	end
 end
@@ -318,6 +368,37 @@ local function ReleaseAll()
 		Release(frame)
 	end
 	state.added = setmetatable({}, weak)
+end
+
+-- True when a frame is root or hangs from it, looked up through its parents.
+local function Under(frame, root)
+	local at = frame
+	for _ = 1, 20 do
+		if at == root then
+			return true
+		elseif type(at) ~= "table" or ns.IsSecret(at) or ns.Forbidden(at) then
+			return false
+		end
+		local ok, parent = pcall(at.GetParent, at)
+		if not ok then
+			return false
+		end
+		at = parent
+	end
+	return false
+end
+
+-- Hidden frames (Hide.lua) is about to put root under its hidden frame: root, and every frame under it this module fades, get the alpha they had
+-- now, while they still show, and are forgotten, so they come back at their own alpha and nothing is put back over it then.
+function ns.FadeLetGo(root)
+	if root == nil then
+		return
+	end
+	for frame in pairs(state.orig) do
+		if Under(frame, root) then
+			Release(frame)
+		end
+	end
 end
 
 -- The frames of other addons, or of Flat UI's own, that a row faded get their alpha back: those the row no longer lists, or with keep left out all of
@@ -332,9 +413,9 @@ local function Forget(row, keep)
 end
 
 -- The frames of other addons, or of Flat UI's own, that a row fades this pass (entry.more, a function or the name of one of ns), each { frame, name }. A
--- frame the row no longer lists gets its alpha back.
+-- frame the row no longer lists gets its alpha back. The second answer is true when a frame joined the row in this pass.
 local function Added(entry)
-	local list, listed = {}, {}
+	local list, listed, fresh = {}, {}, false
 	local fn = entry.more
 	if type(fn) ~= "function" then
 		fn = ns[fn]
@@ -353,10 +434,65 @@ local function Added(entry)
 	end
 	Forget(entry.row, listed)
 	for frame in pairs(listed) do
+		fresh = fresh or state.added[frame] ~= entry.row
 		state.added[frame] = entry.row
+	end
+	return list, fresh
+end
+
+-- True while a frame shows. A withheld answer counts as shown.
+local function Shown(frame)
+	local ok, shown = pcall(frame.IsVisible, frame)
+	return ok and (ns.IsSecret(shown) or shown == true)
+end
+
+-- The bag windows that show, Flat UI's and the game's, each { frame, name }: the more of the row of the bag windows.
+local function BagWindows()
+	local list = {}
+	for _, name in ipairs(BAG_WINDOWS) do
+		local frame = Resolve(name)
+		if frame and Shown(frame) then
+			list[#list + 1] = { frame = frame, name = name }
+		end
 	end
 	return list
 end
+
+-- True while the bag windows are in use beyond the mouse: the game's split box shows, or the keyboard is in a box of one of the windows that
+-- show (added, the list of { frame, name } of this pass), looked up through the parents of the frame that has it. A withheld answer counts as in use.
+local function WindowsBusy(added)
+	local split = Resolve("StackSplitFrame")
+	if split and Shown(split) then
+		return true
+	end
+	if type(GetCurrentKeyBoardFocus) ~= "function" or added == nil or #added == 0 then
+		return false
+	end
+	local ok, at = pcall(GetCurrentKeyBoardFocus)
+	if not ok or at == nil then
+		return false
+	elseif ns.IsSecret(at) then
+		return true
+	end
+	local windows = {}
+	for _, held in ipairs(added) do
+		windows[held[1]] = true
+	end
+	for _ = 1, 20 do
+		if ns.Forbidden(at) then
+			return false
+		elseif windows[at] then
+			return true
+		end
+		local okParent, parent = pcall(at.GetParent, at)
+		if not okParent then
+			return false
+		end
+		at = parent
+	end
+	return false
+end
+WINDOWS_ROW.more, WINDOWS_ROW.busy = BagWindows, WindowsBusy
 
 -- True while the mouse is over one of the frames that count as a row's (entry.beside) and that shows. A withheld answer counts as shown.
 local function Beside(names)
@@ -394,6 +530,12 @@ end
 
 -- One frame toward the wanted alpha. A target of nil holds the frame where it is.
 local function Ease(frame, target, step, name)
+	-- Hidden frames holds it, or a frame it hangs from, off the screen: no write. Its alpha went back as it went (ns.FadeLetGo); anything still
+	-- kept is forgotten, so it is taken up from the alpha it comes back with.
+	if Gone(frame) then
+		state.orig[frame], state.sent[frame], state.value[frame] = nil, nil, nil
+		return
+	end
 	-- A button the minimap page switches off stays off whatever Fading says, and the objective tracker is left to its Opacity in combat while that
 	-- holds it in a fight: that has written its own alpha, so nothing is put back.
 	if (ns.MapButtonOff and ns.MapButtonOff(frame)) or (ns.TrackerFades and ns.TrackerFades(frame)) then
@@ -474,8 +616,13 @@ local function Step(dt)
 			end
 			state.idle[entry.row] = nil
 		elseif #frames > 0 or entry.more then
-			local added = entry.more and Added(entry) or nil
+			local added, fresh = nil, false
+			if entry.more then
+				added, fresh = Added(entry)
+			end
+			-- A bag window that opened this pass, or one in use, holds its row at full.
 			local full = always or (targeted and not entry.targeted) or (entry.rule == true and Holds(Opt(entry.row)))
+				or (entry.opens == true and fresh) or (entry.busy ~= nil and entry.busy(added) == true)
 			if not full then
 				local hover = entry.hover and Resolve(entry.hover)
 				if hover then
@@ -488,8 +635,8 @@ local function Step(dt)
 						end
 					end
 				end
-				-- Another addon's button beside the map, a frame of Flat UI's own on the player frame, or a window of the meter placed apart, counts as the
-				-- row's own under the mouse.
+				-- Another addon's button beside the map, a frame of Flat UI's own on the player frame, a bag window, a bag button wherever it lies, or a
+				-- window of the meter placed apart, counts as the row's own under the mouse.
 				for _, held in ipairs(not full and added or {}) do
 					if Over(held[1]) then
 						full = true
@@ -514,7 +661,7 @@ local function Step(dt)
 end
 
 -- The fight starts: every row with In combat ticked, and every row of When shown at Only in combat, is at full opacity now, not after the ease.
--- With In combat off a fight raises nothing else.
+-- With In combat off a fight raises nothing else. A frame Hidden frames holds is not written (Gone).
 local function FightStarts()
 	if ns.PartStopped(KEY, PART) then
 		return
@@ -525,12 +672,12 @@ local function FightStarts()
 			state.idle[entry.row] = 0
 			for _, name in ipairs(entry.frames) do
 				local frame = Resolve(name)
-				if frame and state.orig[frame] ~= nil and state.value[frame] < 1 and not Elsewhere(frame, name) then
+				if frame and state.orig[frame] ~= nil and state.value[frame] < 1 and not Elsewhere(frame, name) and not Gone(frame) then
 					ns.EachPart(KEY, PART, Put, frame, 1)
 				end
 			end
 			for frame, owner in pairs(state.added) do
-				if owner == entry.row and state.orig[frame] ~= nil and state.value[frame] < 1 then
+				if owner == entry.row and state.orig[frame] ~= nil and state.value[frame] < 1 and not Gone(frame) then
 					ns.EachPart(KEY, PART, Put, frame, 1)
 				end
 			end
@@ -568,7 +715,8 @@ local function Refresh()
 	end
 end
 
--- The lines of /flatui status: how many frames the module holds and fades, and the rows the game has no frame for.
+-- The lines of /flatui status: how many frames the module holds and fades, and the rows the game has no frame for (not the bag windows, which
+-- are faded only while they show).
 local function Status()
 	if not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) then
 		return {}
@@ -583,7 +731,7 @@ local function Status()
 	local lines = { ("Fading: %d %s, %d faded"):format(held, held == 1 and "frame" or "frames", faded) }
 	local missing = {}
 	for _, entry in ipairs(ENTRIES) do
-		if Active(entry) and not Left(entry) then
+		if Active(entry) and not Left(entry) and #entry.frames > 0 then
 			local any = false
 			for _, name in ipairs(entry.frames) do
 				any = any or Resolve(name) ~= nil

@@ -9,26 +9,31 @@ local _, ns = ...
 -- an empty hand and Feral Combat for a druid in a form (Camelot/PaperDollFrameStats.lua:22-40, 681-698), then rank plus modifier of
 -- C_SkillInfo.GetSkillLineInfoByID (Camelot/SkillsFrame.lua:268; SkillInfoDocumentation.lua:74-87, no secret return). Hit is the rating bonus plus
 -- the modifier of each kind, crit the sheet's three chances (Camelot/PaperDollFrameStats.lua:524-527, 602-604), expertise the three values of
--- GetExpertise in points of dodge and parry taken off (Camelot/PaperDollFrame.lua:546-574). Each of those is SecretWhenUnitStatsRestricted
--- (PlayerScriptDocumentation.lua): a withheld value is never compared, added or kept, and every part that needs it is unknown (nil), which the
--- table shows as ?. A call that raises counts the same; a client without a modifier has none of it. The target's level, kind and whether it can be
+-- GetExpertise in points of dodge and parry taken off (Camelot/PaperDollFrame.lua:546-574), Spell Piercing (Forever's name of spell penetration,
+-- STAT_SPELL_PENETRATION) GetSpellPenetration, one number for every school, as the sheet reads it (Camelot/PaperDollFrame.lua:1119-1136). Each of
+-- those is SecretWhenUnitStatsRestricted (PlayerScriptDocumentation.lua): a withheld value is never compared, added or kept, and every part that
+-- needs it is unknown (nil), which the table shows as ?. A call that raises counts the same; a client without a modifier, or without
+-- GetSpellPenetration, has none of it. The enemy's own resistances are not read: UnitResistance answers for the player and the pet alone, as the game
+-- asks it (Camelot/CharacterFrame.lua:1190-1200), so a 0 from it would not tell none from not sent. The target's level, kind and whether it can be
 -- attacked carry no secret tag (UnitDocumentation.lua). A level the game shows as ?? (UnitEffectiveLevel 0 or less, Mainline/TargetFrame.lua:297-315)
 -- counts as three levels above the player. The game does not say where the player stands: the first choice of Where you stand reads whether the
--- target attacks the player from the player's threat situation on it (C.Front). The client has one melee crit chance, the main hand's: apis.yaml lists
--- GetCritChance, GetRangedCritChance, GetSpellCritChance and GetPetCritChance and nothing for the off hand.
+-- target attacks the player from the player's threat situation on it (C.Front). The client has one melee crit chance, the main hand's: apis.yaml
+-- lists GetCritChance, GetRangedCritChance, GetSpellCritChance and GetPetCritChance and nothing for the off hand.
 --
 -- The rules are those of Classic's attack table, which Forever keeps (Forever hunter wiki, Ranged-Attack-Table.md:11-23), as tests of Classic found
 -- them (magey's Classic warrior wiki, Attack-table.md, with the posts of Blizzard it quotes at :22-33). D is five times the target's level and d is D
 -- less the weapon skill. A swing is one roll: miss, dodge, parry, glancing blow, block, crit and hit each take their chance in that order from what is
 -- left, so the crit cap is what the outcomes before crit leave (:184-347). A special attack, a ranged attack and a spell roll crit again on an attack
--- that lands (Ranged-Attack-Table.md:291-310), so their crit is a chance of its own and their hit is everything that lands.
+-- that lands (Ranged-Attack-Table.md:291-310), so their crit is a chance of its own and their hit is everything that lands. A spell's resist is no
+-- part of the roll: it is the share of a spell's damage resisted on average, after the hit and the crit (Resist, below).
 --
 -- C.Inputs reads the game and C.Table works the table out from what it read, reading nothing, so the gear comparison (GearModel.lua) works it out
 -- again with the weapon skill, hit, crit and expertise an item would give, keeping the skill the sheet's crit was read with; it can ask C.Inputs for
 -- the kinds its spells roll and for a ranged line with no ranged weapon worn (a paladin's judgements). C.Read is the two in a row. C.LineOf,
 -- C.Skill and C.SkillLine give it the skill line of an item, the skill of a line and its rank, modifier and name (the comparison counts every
 -- compared hand at the most for the level plus the modifier, while the hit table here counts the player's skill as it is), and C.Target counts
--- against an enemy of the player's level when it asks.
+-- against an enemy of the player's level when it asks. C.Resist gives it a resist with other Spell Piercing and levels: at the player's level, with
+-- the piercing of a school an item pierces on its own (Fire Piercing...), which GetSpellPenetration does not count.
 -- The enemy is the target unless spec.unit names another unit (C.Target, C.Front): HitTableTip.lua works the table out against the unit of an enemy's
 -- tooltip, from inputs it kept, with C.Target and C.Table.
 
@@ -70,6 +75,12 @@ local OVER = 0.05
 -- The lowest threat situation of a unit the enemy attacks: 2 tanking insecurely and 3 securely, as PlateThreat.lua:142-144 and CombatText.lua:2485
 -- read UnitThreatSituation (UnitDocumentation.lua:3279-3294).
 local TANKING = 2
+-- Resistance. A point takes RESIST_AVERAGE / (5 x the caster's level) of a spell's damage on average (ExpectedSpellResistance,
+-- Camelot/PaperDollFrameStats.lua:233-235, as Forever's sheet fills SPELL_PENETRATION_TOOLTIP, Camelot/PaperDollFrame.lua:1129-1130), at most 75%
+-- (RESIST_CAP, Classic's cap at 5 x the level); a point below 0, where Forever's Spell Piercing may take a creature ("Spell Vulnerability", its
+-- SPELL_PENETRATION_TOOLTIP), adds half that to the damage it takes. A creature above the player resists RESIST_LEVEL more a level of its own,
+-- which piercing cannot lower: Classic's rule (Wowpedia, Spell penetration: 2% a level, 8 points at 60), an estimate on Forever.
+local RESIST_AVERAGE, RESIST_CAP, RESIST_LEVEL = 0.75, 0.75, 0.02
 -- Why a value is missing, the worst kept: withheld before refused before a client without the call.
 local RANK = { withheld = 3, refused = 2, missing = 1 }
 
@@ -127,6 +138,18 @@ local function Crit(read, fn)
 	local value, why = Call(fn)
 	if why or not Finite(value) then
 		Gap(read, "crit", why or "refused")
+		return nil
+	end
+	return value
+end
+
+-- Spell Piercing (GetSpellPenetration), or nil when the game withholds or refuses it; a client without the call has none.
+local function Piercing(read)
+	local value, why = Call(GetSpellPenetration)
+	if why == "missing" then
+		return 0
+	elseif why or not Finite(value) then
+		Gap(read, "spell piercing", why or "refused")
 		return nil
 	end
 	return value
@@ -451,7 +474,7 @@ end
 -- of the tenth the table shows is lost, so a rounding of the game's numbers does not count. sheetSkill: the main hand's skill (WeaponCrit).
 local function Swing(ctx, id, label, skill, hit, expertise, crit, agility, extra, sheetSkill)
 	local parts = { miss = Miss(ctx, skill, hit, extra), dodge = Dodge(ctx, skill, expertise), parry = Parry(ctx, skill, expertise),
-		glance = Glance(ctx, skill), block = Block(ctx, skill) }
+		glance = Glance(ctx, skill), block = Block(ctx, skill), resist = false }
 	local cap = Roll(parts, { "miss", "dodge", "parry", "glance", "block" })
 	local chance = WeaponCrit(ctx, skill, crit, agility, sheetSkill)
 	local line = { id = id, label = label, skill = skill, parts = parts, floor = 0, over = false }
@@ -470,7 +493,7 @@ end
 -- (WeaponCrit), which the hit table reads as skill.
 local function Special(ctx, skill, hit, expertise, crit, agility, sheetSkill)
 	local parts = { miss = Miss(ctx, skill, hit, 0), dodge = Dodge(ctx, skill, expertise), parry = Parry(ctx, skill, expertise), glance = false,
-		block = Block(ctx, skill), cap = false }
+		block = Block(ctx, skill), cap = false, resist = false }
 	parts.hit = Roll(parts, { "miss", "dodge", "parry", "block" })
 	parts.crit = WeaponCrit(ctx, skill, crit, agility, sheetSkill)
 	return { id = "special", label = "Special", skill = skill, parts = parts, floor = 0, over = false }
@@ -479,17 +502,38 @@ end
 -- A ranged attack: it cannot be dodged, parried or glance, and only blocked from the front (Ranged-Attack-Table.md:5, 254-287); crit rolled again.
 -- sheetSkill: the ranged weapon's skill (WeaponCrit), which the hit table reads as skill.
 local function Ranged(ctx, skill, hit, crit, agility, sheetSkill)
-	local parts = { miss = Miss(ctx, skill, hit, 0), dodge = false, parry = false, glance = false, block = Block(ctx, skill), cap = false }
+	local parts = { miss = Miss(ctx, skill, hit, 0), dodge = false, parry = false, glance = false, block = Block(ctx, skill), cap = false,
+		resist = false }
 	parts.hit = Roll(parts, { "miss", "block" })
 	parts.crit = WeaponCrit(ctx, skill, crit, agility, sheetSkill)
 	return { id = "ranged", label = "Ranged", skill = skill, parts = parts, floor = 0, over = false }
 end
 
+-- The share of a spell's damage the enemy resists on average, in percent, with Spell Piercing pen: above 0 resisted, below 0 the damage a creature
+-- takes more. The enemy's own resistances are not known and count as 0, so piercing takes them below 0: against a creature each point adds half
+-- of what a point resists (Forever's Spell Vulnerability), against a player nothing. A creature above the player resists RESIST_LEVEL a level more,
+-- which piercing does not lower; RESIST_CAP holds what is resisted. That is the share of a spell that does damage alone: a spell with an effect
+-- beyond its damage (a slow, a root), which Classic resists whole or not at all, pays for the levels with its higher miss instead, and is resisted
+-- whole only by the enemy's own resistance, counted as 0, so it takes the damage piercing adds alone (T = L). Nil when pen is not known. L the
+-- player's level, T the enemy's, player: it is a player.
+local function Resist(L, T, player, pen)
+	if not (Finite(pen) and Finite(L) and L >= 1 and Finite(T)) then
+		return nil
+	end
+	local per, own = RESIST_AVERAGE / (PER_LEVEL * L), -pen
+	local resisted = player and 0 or RESIST_LEVEL * math.max(0, T - L)
+	resisted = math.min(RESIST_CAP, resisted + per * math.max(0, own))
+	local more = (not player and own < 0) and per / 2 * -own or 0
+	return (1 - (1 - resisted) * (1 + more)) * 100
+end
+C.Resist = Resist
+
 -- A spell. The chance to hit by the levels the enemy is above: 96, 95 and 94 up to two, then 11 less a level against a mob and 7 against a player,
 -- 97 to 99 under (the game's own spellMissChances, Camelot/PaperDollFrameStats.lua:461, and Allakhazam's Hit Rate). Spell hit adds to it; Classic
 -- tests cap it at 99, so 1% always misses, and the game's tooltip, which needs 17% against a boss (CR_DEFAULT_HIT_CAP_TOOLTIP), at 100. The crit is
--- the sheet's: no source found has it change with the enemy's level.
-local function Spell(ctx, hit, crit)
+-- the sheet's: no source found has it change with the enemy's level. The resist (Resist) takes nothing from the roll; the line keeps the piercing
+-- it counted (pen) and whether a level of the enemy's counts in it (levelResist, an estimate).
+local function Spell(ctx, hit, crit, pen)
 	local floor = ctx.classic and 1 or 0
 	local parts = { dodge = false, parry = false, glance = false, block = false, cap = false }
 	if hit ~= nil then
@@ -499,7 +543,9 @@ local function Spell(ctx, hit, crit)
 		parts.hit = 100 - parts.miss
 	end
 	parts.crit = crit ~= nil and Clamp(crit) or nil
-	return { id = "spell", label = "Spell", parts = parts, floor = floor, over = false }
+	parts.resist = Resist(ctx.L, ctx.T, ctx.player, pen)
+	return { id = "spell", label = "Spell", parts = parts, floor = floor, over = false, pen = parts.resist ~= nil and pen or nil,
+		levelResist = not ctx.player and ctx.T > ctx.L }
 end
 
 -- The reads and the table ---------------------------------------------------------------------------------------------------------------------------
@@ -512,7 +558,8 @@ end
 -- DefenseType 3 of SpellCategories, and which weapon skill counts without a ranged weapon no source says). The answer: { gaps, assumed, level,
 -- class, power, feral, target, front, facingUnsure, kinds, agility,
 -- melee = { expertise, offExpertise, crit, skill, sheetSkill, line, hit, dual, offSkill, offLine, offHit } (nil without melee),
--- ranged = { line, unknown, skill, sheetSkill, hit, crit, noWeapon } (nil without ranged), spell = { hit, crit } (nil without spells) }, with gaps
+-- ranged = { line, unknown, skill, sheetSkill, hit, crit, noWeapon } (nil without ranged), spell = { hit, crit, pen } (nil without spells; pen
+-- the Spell Piercing of every school, GetSpellPenetration) }, with gaps
 -- and assumed alone while the player's level cannot be read. sheetSkill is the skill the sheet's crit was read with (WeaponCrit): a caller that
 -- changes skill leaves it as it is. The off hand's three are there while the player dual wields (dual); a ranged skill, hit and crit while a ranged
 -- weapon is worn or, with noWeapon, while spec.rangedWithout asks for them.
@@ -575,18 +622,19 @@ function C.Inputs(spec)
 	end
 	if kinds.spell then
 		local hit = Hit(inputs, "spell", GetSpellHitModifier)
-		inputs.spell = { hit = hit, crit = Crit(inputs, GetSpellCritChance) }
+		inputs.spell = { hit = hit, crit = Crit(inputs, GetSpellCritChance), pen = Piercing(inputs) }
 	end
 	return inputs
 end
 
 -- Works the table out from inputs (C.Inputs' answer, or a copy a caller changed), reading nothing, for spec = { special, rules }. The answer holds
 -- level, target (C.Target), enemy, front, facingUnsure (the game did not say whether the target attacks the player), lines ({ id, label, skill, parts,
--- floor, over }, in the order shown), gaps (what the game withheld or refused, by name), assumed (the hands whose skill stood in), offCritFromMain (the
--- two hands hold weapons of two skill lines, while the off hand's crit is the main hand's), noRanged (Ranged asked for with no ranged weapon worn) and
--- rangedUnknown (the game did not say what the ranged slot holds); a ranged line asked for with no ranged weapon (noWeapon) is there all the same. A
--- part of a line is a number, false where it does not apply, and nil where the game did not give what it needs. No line at all while the player's
--- level cannot be read. gaps and assumed are copies, so inputs stay as they were for the next table.
+-- floor, over }, in the order shown; the Spell line also pen and levelResist, Spell), gaps (what the game withheld or refused, by name), assumed
+-- (the hands whose skill stood in), offCritFromMain (the two hands hold weapons of two skill lines, while the off hand's crit is the main hand's),
+-- noRanged (Ranged asked for with no ranged weapon worn) and rangedUnknown (the game did not say what the ranged slot holds); a ranged line asked
+-- for with no ranged weapon (noWeapon) is there all the same. A part of a line is a number, false where it does not apply, and nil where the game
+-- did not give what it needs; resist, the Spell line's alone, is below 0 for damage taken more. No line at all while the player's level cannot be
+-- read. gaps and assumed are copies, so inputs stay as they were for the next table.
 function C.Table(spec, inputs)
 	spec = type(spec) == "table" and spec or {}
 	local read = { gaps = {}, assumed = {}, lines = {} }
@@ -638,7 +686,7 @@ function C.Table(spec, inputs)
 		end
 	end
 	if type(spell) == "table" then
-		read.lines[#read.lines + 1] = Spell(ctx, spell.hit, spell.crit)
+		read.lines[#read.lines + 1] = Spell(ctx, spell.hit, spell.crit, spell.pen)
 	end
 	return read
 end
