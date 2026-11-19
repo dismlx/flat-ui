@@ -1463,11 +1463,13 @@ local function SampleTotal(row, amount, most, size)
 	A.WriteAmount(row.amount, amount, size)
 end
 
--- Test mode (TestMode.lua): while it is on (it pauses in a fight) with the page on, the samples of the test stay, with no end and no line in the
--- chat, and the target's bar has one too (640 of a health of 2400) while Your target's total is on. A.held keeps the reads (A.Pass) and the totals
--- off them. Each Refresh (On, resume, the page coming on, a change of most of its rows) and every change of a setting after it (TestMode.lua's
--- Changed) draws them again with the look of the page; their times run on from where they were. A.Drop forgets them at Off, at the pause for a
--- fight and when the page goes off, and the Refresh that test mode runs at Off and at the pause draws the real bars at once.
+-- Test mode (TestMode.lua): while it is on (it pauses in a fight) with the page on, the samples of the test stay, with no end and no line
+-- in the chat, and the target's bar has one too (640 of a health of 2400) while Your target's total is on. A.held keeps the reads
+-- (A.Pass) and the totals off them, and what was read before is not set against the first read after (A.wasRead, A.Track), so a shield
+-- that ended meanwhile is not taken for broken when the real bars come back. Each Refresh (On, resume, the page coming on, a change of
+-- most of its rows) and every change of a setting after it (TestMode.lua's Changed) draws them again with the look of the page; their
+-- times run on from where they were. A.Drop forgets them at Off, at the pause for a fight and when the page goes off, and the Refresh
+-- that test mode runs at Off and at the pause draws the real bars at once.
 function A.Holding()
 	local mode = ns.TestMode
 	return mode ~= nil and mode.IsOn() == true and ns.Enabled(KEY)
@@ -1479,7 +1481,7 @@ function A.Hold()
 		A.held, A.heldList = nil, nil
 		return false
 	end
-	A.held = true
+	A.held, A.wasRead = true, false
 	A.heldList = A.heldList or SampleList(Now())
 	A.ShowContainer(false)
 	A.Layout()
@@ -1499,7 +1501,7 @@ function A.Drop()
 	A.held, A.heldList, A.sample = nil, nil, nil
 end
 
--- Sample bars for a few seconds: the sample shields and their total.
+-- Sample bars for a few seconds: the sample shields and their total. While test mode holds its samples, the same ones, so their times go on.
 function A.Test()
 	if not ns.Enabled(KEY) then
 		print("Absorb shields: turn on Absorb shields first.")
@@ -1509,7 +1511,7 @@ function A.Test()
 	local token = {}
 	A.sample = token
 	A.ShowContainer(false)
-	A.DrawRows(SampleList(Now()))
+	A.DrawRows(A.held and A.heldList or SampleList(Now()))
 	local total = A.total
 	if total and total.frame:IsShown() then
 		SampleTotal(total, 1525, 1855, 1855)
