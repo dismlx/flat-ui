@@ -16,6 +16,9 @@ local ADDON_NAME, ns = ...
 -- own portrait (Flat UI portraits off, or a frame that is not restyled) is a disc of the game's size at the game's place beside the bars. A frame whose
 -- switch is off, and every frame while Restyle unit frames is off, is drawn as the game draws it: a grey plate, the game's portrait and the game's bar file.
 -- Each scene stands on a ground of muted earth, so that a see-through background looks as it does in the world.
+-- ns.DrawUnits, at the end of the file, gives the same painters to the stand-ins of test mode (TestUnits.lua): a frame made for a kind and painted
+-- for a sample of its own, a raid cell of any size, and the marks those have in test mode (offline, the dispel border and type icon, raid markers,
+-- leader and assistant icons, heal over time squares, the game's aura icons on a cell), which only its frames are made with.
 
 local KEY = "unitframes"
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
@@ -60,8 +63,9 @@ local CLASS = { WARRIOR = { 0.78, 0.61, 0.43 }, PALADIN = { 0.96, 0.55, 0.73 }, 
 	PRIEST = { 1, 1, 1 }, SHAMAN = { 0, 0.44, 0.87 }, MAGE = { 0.25, 0.78, 0.92 }, WARLOCK = { 0.53, 0.53, 0.93 }, DRUID = { 1, 0.49, 0.04 } }
 local HOSTILE, FRIENDLY = { 0.80, 0.20, 0.20 }, { 0.18, 0.78, 0.24 }
 local COMBAT, THREAT, GOLD = { 0.90, 0.15, 0.15 }, { 1, 0.2, 0.1 }, { 1, 0.82, 0 }
--- The colour of each debuff type, and of a buff that can be stolen (UnitFrames.lua:50).
-local TYPE = { magic = { 0.2, 0.6, 1 }, poison = { 0, 0.6, 0.1 }, curse = { 0.6, 0, 1 }, none = { 0.8, 0, 0 }, steal = { 0.2, 0.6, 1 } }
+-- The colour of each debuff type, and of a buff that can be stolen (UnitFrames.lua:50); disease as UnitGroupMarks.lua's COLOURS has it.
+local TYPE = { magic = { 0.2, 0.6, 1 }, poison = { 0, 0.6, 0.1 }, curse = { 0.6, 0, 1 }, disease = { 0.6, 0.4, 0 }, none = { 0.8, 0, 0 },
+	steal = { 0.2, 0.6, 1 } }
 -- The numbers of every frame, and the share of the health bar they fill.
 local HEALTH, POWER = { cur = 7000, max = 10000, pct = 70, miss = 3000 }, { cur = 4200, max = 6000, pct = 70, miss = 1800 }
 local FRACTION = 0.7
@@ -396,6 +400,22 @@ local function GameWords(numbers)
 	return big(numbers.cur) .. " / " .. big(numbers.max)
 end
 
+-- The words on a bar in a mode of its row: the game's own, none for hide, else the format.
+local function Says(mode, numbers)
+	if mode == "game" then
+		return GameWords(numbers)
+	elseif mode ~= "hide" then
+		return Words(mode, numbers)
+	end
+	return nil
+end
+
+-- The numbers of a bar of `max` at a share of it (a sample of test mode).
+local function Numbers(max, share)
+	local cur = math.floor(max * share + 0.5)
+	return { cur = cur, max = max, pct = math.floor(share * 100 + 0.5), miss = max - cur }
+end
+
 -- Outlines --------------------------------------------------------------------------------------------------------------------------------
 
 -- The background of unit frames, red, green, blue and opacity: the Unit frames page's own with Own border and background on, else the Flat UI page's
@@ -514,6 +534,89 @@ local function CutFill(bar, fill, radius)
 	end
 end
 
+-- Marks of party and raid frames ---------------------------------------------------------------------------------------------------------
+
+-- The thickness of the dispel border in screen pixels, the size of its type icon and the atlas of the type icons (UnitGroupMarks.lua RIM_PX, ICON,
+-- ATLAS), the word of each type in the atlas, and the point and the signs of the offsets of each Square corner (UnitHots.lua CORNERS).
+local DISPEL = { px = 2, icon = 12, atlas = "RaidFrame-Icon-Debuff" }
+local TYPE_WORD = { magic = "Magic", curse = "Curse", disease = "Disease", poison = "Poison" }
+local HOT_CORNERS = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } }
+
+-- The marks of a party frame or a raid cell of test mode, on a frame above its parts: the four edges of the dispel border, its type icon and four
+-- heal over time squares. Only ns.DrawUnits makes them, so the drawings of the setup have none.
+local function MakeMarks(root)
+	local m = { frame = Above(Frame(root), root, 5), edges = {}, squares = {} }
+	for index = 1, 4 do
+		m.edges[index] = Tex(m.frame, "OVERLAY", 5)
+		m.squares[index] = { back = Tex(m.frame, "OVERLAY", 4), fill = Tex(m.frame, "OVERLAY", 5) }
+	end
+	m.type = Tex(m.frame, "OVERLAY", 7)
+	return m
+end
+
+-- dispel: the type of a debuff the player can dispel, a border of its colour just inside `bar` with Border colour of a debuff you can dispel, and
+-- with typeIcon its icon 1 unit in from the right end of the bar (UnitGroupMarks.lua PlaceDispel). hots: the colours of the player's heals over
+-- time, a square each in a row from Square corner, Square size on a side with a dark rim of one screen pixel, just inside the dispel border, with
+-- Squares for your heals over time (UnitHots.lua Make and Place). on: the frame's switch.
+local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots)
+	m.frame:SetAllPoints(root)
+	local colour = on and dispel and Get("dispelBorder") == true and TYPE[dispel] or nil
+	local t = ns.Pixels(root, DISPEL.px)
+	for _, edge in ipairs(m.edges) do
+		edge:ClearAllPoints()
+		edge:SetShown(colour ~= nil)
+		if colour then
+			Solid(edge, colour[1], colour[2], colour[3], 1)
+		end
+	end
+	local top, bottom, left, right = m.edges[1], m.edges[2], m.edges[3], m.edges[4]
+	top:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+	top:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
+	top:SetHeight(t)
+	bottom:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+	bottom:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+	bottom:SetHeight(t)
+	left:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, -t)
+	left:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, t)
+	left:SetWidth(t)
+	right:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, -t)
+	right:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, t)
+	right:SetWidth(t)
+	local word = colour and typeIcon and TYPE_WORD[dispel] or nil
+	m.type:SetShown(word ~= nil)
+	if word then
+		m.type:ClearAllPoints()
+		m.type:SetSize(DISPEL.icon, DISPEL.icon)
+		m.type:SetPoint("RIGHT", bar, "RIGHT", -1 - t, 0)
+		m.type:SetTexCoord(0, 1, 0, 1)
+		if HasAtlas(DISPEL.atlas .. word) then
+			m.type:SetVertexColor(1, 1, 1, 1)
+			m.type:SetAtlas(DISPEL.atlas .. word)
+		else
+			Solid(m.type, colour[1], colour[2], colour[3], 1)
+		end
+	end
+	local lit = on and hots and Get("hotSquares") == true
+	local corner = HOT_CORNERS[Get("hotCorner")] or HOT_CORNERS.tr
+	local size, px = tonumber(Get("hotSize")) or 6, ns.Pixels(root, 1)
+	local inset = px * (DISPEL.px + 1)
+	for index, square in ipairs(m.squares) do
+		local c = lit and hots[index] or nil
+		square.back:SetShown(c ~= nil)
+		square.fill:SetShown(c ~= nil)
+		if c then
+			square.back:ClearAllPoints()
+			square.back:SetPoint(corner[1], bar, corner[1], corner[2] * (inset + (index - 1) * (size + px)), corner[3] * inset)
+			square.back:SetSize(size, size)
+			Solid(square.back, 0, 0, 0, 1)
+			square.fill:ClearAllPoints()
+			square.fill:SetPoint("TOPLEFT", square.back, "TOPLEFT", px, -px)
+			square.fill:SetPoint("BOTTOMRIGHT", square.back, "BOTTOMRIGHT", -px, px)
+			Solid(square.fill, c[1], c[2], c[3], 1)
+		end
+	end
+end
+
 -- Samples ---------------------------------------------------------------------------------------------------------------------------------
 
 -- The name, level and class of the player, which are plain values for the player's own unit.
@@ -581,9 +684,10 @@ end
 local E = {}
 
 -- Makes the frames of one unit frame on a parent. Nothing is shown or placed until E.draw. The levels above the root are those of the game's frames
--- (UnitFrames.lua FRAME.make): the body 1, the picture, the bars, the rim and the inner line 2, the name row 3, the icons and texts 4.
-function E.make(stage, id)
-	local sample = Sample(id)
+-- (UnitFrames.lua FRAME.make): the body 1, the picture, the bars, the rim and the inner line 2, the name row 3, the icons and texts 4. given: a sample
+-- in place of the fixed one of the id (ns.DrawUnits.Unit), whose auras give the number of aura icons made.
+function E.make(stage, id, given)
+	local sample = given or Sample(id)
 	local k = KIND[sample.kind]
 	-- cut: the textures the circle of a round picture cuts now (Cut).
 	local o = { id = id, k = k, s = sample, draw = E.draw, cut = {} }
@@ -1050,8 +1154,10 @@ end
 function E.bars(o, g, L)
 	local k, s, t = o.k, o.s, L.t
 	local size = L.size
-	-- The player's power at rest (REST): its colour, how full it is, and numbers to match. Every other frame shows mana at 70%.
-	local token, share, powerNumbers = "MANA", FRACTION, POWER
+	-- The player's power at rest (REST): its colour, how full it is, and numbers to match. Every other frame shows mana at 70%, or the health, power
+	-- and power type a sample of test mode gives (s.health, s.power, s.powerType, shares of 1).
+	local hp, healthNumbers = s.health or FRACTION, s.health and Numbers(HEALTH.max, s.health) or HEALTH
+	local token, share, powerNumbers = s.powerType or "MANA", s.power or FRACTION, s.power and Numbers(POWER.max, s.power) or POWER
 	local rest = s.kind == "player" and REST[s.class] or nil
 	if rest then
 		local full = math.floor(rest[2] * 100 + 0.5)
@@ -1072,9 +1178,14 @@ function E.bars(o, g, L)
 				r, gr, b, lost = HealthColour(o, g)
 				file = FileOf("health")
 				if g.healthByLeft then
-					r, gr, b = Left(FRACTION)
+					r, gr, b = Left(hp)
 				end
 			end
+			-- Offline: the grey the game gives an offline unit (UnitFrameCells.lua GREY).
+			if s.offline then
+				r, gr, b = 0.5, 0.5, 0.5
+			end
+			o.healthFile = file
 		else
 			r, gr, b = ns.PowerColour(token)
 			if r == nil then
@@ -1103,7 +1214,14 @@ function E.bars(o, g, L)
 		end
 		local radius = live and L.on and not L.joined and L.radius or nil
 		Round(outline, radius, t)
-		local width = size.bar * (s.dead and 0 or (role == "health" and FRACTION or share))
+		-- A dead unit's bars are empty; an offline one's health bar is full and grey, and its power bar empty.
+		local part = role == "health" and hp or share
+		if s.dead or (s.offline and role == "power") then
+			part = 0
+		elseif s.offline then
+			part = 1
+		end
+		local width = size.bar * part
 		fill:SetShown(live and width > 0)
 		Stretch(fill, frame, 0, width, height)
 		Fill(fill, file, r, gr, b, 1)
@@ -1111,10 +1229,11 @@ function E.bars(o, g, L)
 	end
 	-- Heal prediction, absorb shield and heal absorb on the health bar (UnitExtras.lua:190-216).
 	local bar = size.bar
-	local segments = { { o.pred, FRACTION, 0.12, g.healPrediction, 0.24, 0.86, 0.39, 0.75 }, { o.shield, FRACTION + 0.12, 0.10, g.absorbShield, 1, 1, 1, 0.6 },
-		{ o.absorb, FRACTION - 0.10, 0.10, g.healAbsorb, 0.47, 0.08, 0.08, 0.85 } }
+	local segments = { { o.pred, hp, 0.12, g.healPrediction, 0.24, 0.86, 0.39, 0.75 }, { o.shield, hp + 0.12, 0.10, g.absorbShield, 1, 1, 1, 0.6 },
+		{ o.absorb, hp - 0.10, 0.10, g.healAbsorb, 0.47, 0.08, 0.08, 0.85 } }
+	o.segments = segments
 	for _, segment in ipairs(segments) do
-		local shown = not s.dead and (not L.on or segment[4])
+		local shown = not s.dead and not s.offline and (not L.on or segment[4])
 		segment[1]:SetShown(shown)
 		if shown then
 			Stretch(segment[1], o.health, bar * segment[2], bar * (segment[2] + segment[3]), size.health)
@@ -1130,24 +1249,22 @@ function E.bars(o, g, L)
 	end
 	for _, role in ipairs({ "health", "power" }) do
 		local text, frame = o[role .. "Text"], o[role]
-		local numbers = role == "health" and HEALTH or powerNumbers
+		local numbers = role == "health" and healthNumbers or powerNumbers
 		local row = role == "health" and k.ht or k.pt
 		local mode = "game"
 		if L.on and row then
 			mode = Get(row .. (role == "health" and "HealthText" or "PowerText")) or "game"
 		end
-		local words
-		if mode == "game" then
-			words = GameWords(numbers)
-		elseif mode ~= "hide" then
-			words = Words(mode, numbers)
-		end
+		local words = Says(mode, numbers)
 		-- Show: while the mouse is over the frame. Nothing is over a frame in a drawing.
 		if mode ~= "game" and g.ownTextWhen == "hover" then
 			words = nil
 		end
-		if s.dead or (L.on and role == "power" and Get("lookNoPowerText") == true) or not (role == "health" or L.power) then
+		if s.dead or s.offline or (L.on and role == "power" and Get("lookNoPowerText") == true) or not (role == "health" or L.power) then
 			words = nil
+		end
+		if role == "health" then
+			o.healthMode = words ~= nil and mode or nil
 		end
 		text:SetShown(words ~= nil)
 		if words then
@@ -1179,11 +1296,11 @@ function E.bars(o, g, L)
 			text:SetJustifyH(at)
 		end
 	end
-	-- Dead text on the health bar of a dead unit (UnitParts.lua:117-127).
-	local dead = s.dead and (not L.on or g.deadText)
+	-- Dead text on the health bar of a dead unit (UnitParts.lua:117-127), and Offline on an offline one's.
+	local dead = (s.dead or s.offline) and (not L.on or g.deadText)
 	o.deadText:SetShown(dead and true or false)
 	if dead then
-		o.deadText:SetText("Dead")
+		o.deadText:SetText(s.offline and "Offline" or "Dead")
 		o.deadText:ClearAllPoints()
 		o.deadText:SetPoint("CENTER", o.health, "CENTER", 0, 0)
 	end
@@ -1418,13 +1535,13 @@ function E.icons(o, g, L)
 	o.picLevel:Hide()
 	o.pvpTimer:Hide()
 	o.shade:Hide()
-	local function Marker(anchor, point, relative, x, y)
+	local function Marker(anchor, point, relative, x, y, size)
 		local index = s.marker - 1
 		o.marker:SetTexture(MARKER)
 		o.marker:SetVertexColor(1, 1, 1, 1)
 		o.marker:SetTexCoord((index % 4) * 0.25, (index % 4) * 0.25 + 0.25, math.floor(index / 4) * 0.25, math.floor(index / 4) * 0.25 + 0.25)
 		o.marker:ClearAllPoints()
-		o.marker:SetSize(ICON, ICON)
+		o.marker:SetSize(size or ICON, size or ICON)
 		o.marker:SetPoint(point, anchor, relative, x, y)
 		o.marker:Show()
 	end
@@ -1477,6 +1594,10 @@ function E.icons(o, g, L)
 		end
 		if shown and s.marker and g.raidMarker and (s.kind == "target" or s.kind == "focus") then
 			Marker(o.pic, "BOTTOM", "TOP", 0, 1)
+		elseif s.marker and s.kind == "party" and L.on and Get("partyFrameMarker") == true then
+			-- A party member's marker is centred on the top of its picture, or of its health bar with none, at 16 units (UnitGroupMarks.lua MarkerSpot,
+			-- PARTY_MARK).
+			Marker(shown and o.pic or o.health, "CENTER", "TOP", 0, 0, 16)
 		end
 		if shown and s.happy and g.petHappiness then
 			Art(o.happy, "happy")
@@ -1500,47 +1621,55 @@ function E.auras(o, g, L)
 	local ax, ay = L.barsLeft, L.height + 2
 	local bottom, right = L.height, L.width
 	for index, icon in ipairs(o.auras) do
-		local aura = icon.aura
-		local px, py = ax + (index - 1) * (ICON + 2), ay
-		if s.kind == "party" then
-			px, py = L.width + 2, L.healthTop + (index - 1) * (ICON + 2)
+		-- The auras of the sample: a frame of ns.DrawUnits.Unit has more icons than a sample may have auras, and hides the rest.
+		local aura = s.auras and s.auras[index]
+		if aura == nil then
+			icon.frame:Hide()
+			icon.ring:Hide()
+			icon.count:Hide()
+			icon.time:Hide()
+		else
+			local px, py = ax + (index - 1) * (ICON + 2), ay
+			if s.kind == "party" then
+				px, py = L.width + 2, L.healthTop + (index - 1) * (ICON + 2)
+			end
+			icon.frame:SetSize(ICON, ICON)
+			icon.frame:ClearAllPoints()
+			icon.frame:SetPoint("TOPLEFT", root, "TOPLEFT", px, -py)
+			icon.frame:Show()
+			icon.texture:SetTexture(AURA_FILE)
+			local styled = L.on and g.auras
+			local crop = styled and g.auraCrop / 100 or 0
+			icon.texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
+			local bordering = (aura[3] and TYPE.steal) or (aura[2] ~= "none" and TYPE[aura[2]]) or nil
+			EdgePaint(icon.outline, styled, false, styled and g.auraTypeColours and bordering or nil)
+			-- The border the game draws on an icon it does not style: a ring in the colour of its type.
+			icon.ring:SetShown(not styled)
+			if not styled then
+				icon.ring:ClearAllPoints()
+				icon.ring:SetPoint("TOPLEFT", icon.frame, "TOPLEFT", -2, 2)
+				icon.ring:SetPoint("BOTTOMRIGHT", icon.frame, "BOTTOMRIGHT", 2, -2)
+				local c = bordering or { 0.5, 0.5, 0.5 }
+				Solid(icon.ring, c[1], c[2], c[3], 1)
+			end
+			local counted = aura[4] ~= nil
+			icon.count:SetShown(counted)
+			if counted then
+				icon.count:SetText(tostring(aura[4]))
+				icon.count:ClearAllPoints()
+				icon.count:SetPoint("BOTTOMRIGHT", icon.frame, "BOTTOMRIGHT", 1, -1)
+				Style(icon.count, { percent = L.on and g.auraCountSize or 100, flags = "OUTLINE", r = 1, g = 1, b = 1 })
+			end
+			local timed = aura[5] ~= nil and L.on and g.auraNumbers
+			icon.time:SetShown(timed and true or false)
+			if timed then
+				icon.time:SetText(aura[5])
+				icon.time:ClearAllPoints()
+				icon.time:SetPoint("CENTER", icon.frame, "CENTER", 0, 0)
+				Style(icon.time, { percent = 100, flags = "OUTLINE", r = 1, g = 1, b = 1 })
+			end
+			bottom, right = math.max(bottom, py + ICON), math.max(right, px + ICON)
 		end
-		icon.frame:SetSize(ICON, ICON)
-		icon.frame:ClearAllPoints()
-		icon.frame:SetPoint("TOPLEFT", root, "TOPLEFT", px, -py)
-		icon.frame:Show()
-		icon.texture:SetTexture(AURA_FILE)
-		local styled = L.on and g.auras
-		local crop = styled and g.auraCrop / 100 or 0
-		icon.texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
-		local bordering = (aura[3] and TYPE.steal) or (aura[2] ~= "none" and TYPE[aura[2]]) or nil
-		EdgePaint(icon.outline, styled, false, styled and g.auraTypeColours and bordering or nil)
-		-- The border the game draws on an icon it does not style: a ring in the colour of its type.
-		icon.ring:SetShown(not styled)
-		if not styled then
-			icon.ring:ClearAllPoints()
-			icon.ring:SetPoint("TOPLEFT", icon.frame, "TOPLEFT", -2, 2)
-			icon.ring:SetPoint("BOTTOMRIGHT", icon.frame, "BOTTOMRIGHT", 2, -2)
-			local c = bordering or { 0.5, 0.5, 0.5 }
-			Solid(icon.ring, c[1], c[2], c[3], 1)
-		end
-		local counted = aura[4] ~= nil
-		icon.count:SetShown(counted)
-		if counted then
-			icon.count:SetText(tostring(aura[4]))
-			icon.count:ClearAllPoints()
-			icon.count:SetPoint("BOTTOMRIGHT", icon.frame, "BOTTOMRIGHT", 1, -1)
-			Style(icon.count, { percent = L.on and g.auraCountSize or 100, flags = "OUTLINE", r = 1, g = 1, b = 1 })
-		end
-		local timed = aura[5] ~= nil and L.on and g.auraNumbers
-		icon.time:SetShown(timed and true or false)
-		if timed then
-			icon.time:SetText(aura[5])
-			icon.time:ClearAllPoints()
-			icon.time:SetPoint("CENTER", icon.frame, "CENTER", 0, 0)
-			Style(icon.time, { percent = 100, flags = "OUTLINE", r = 1, g = 1, b = 1 })
-		end
-		bottom, right = math.max(bottom, py + ICON), math.max(right, px + ICON)
 	end
 	L.height, L.width = bottom, right
 end
@@ -1593,6 +1722,11 @@ function E.draw(o, g)
 	E.row(o, g, L)
 	E.icons(o, g, L)
 	E.auras(o, g, L)
+	-- The marks of a party frame of test mode (ns.DrawUnits.Unit makes them; the setup's frames have none).
+	if o.marks then
+		PaintMarks(o.marks, o.health, o.root, L.on, o.s.dispel, Get("dispelIcon") == true, o.s.hots)
+	end
+	o.g = g
 	o.width, o.height = L.width, L.height
 	o.root:SetSize(L.width, L.height)
 	o.layout = L
@@ -1664,6 +1798,42 @@ local CELL = { width = 64, height = 32, gap = 3, thin = 4, game = 8 }
 local RAID = { { "Aria", "WARRIOR", "tank" }, { "Bex", "MAGE", "damage" }, { "Cole", "HUNTER", "damage" }, { "Dru", "DRUID", "healer" },
 	{ "Eli", "PRIEST", "healer" }, { "Fay", "ROGUE", "damage" }, { "Gus", "SHAMAN", "damage" }, { "Hale", "PALADIN", "tank" },
 	{ "Ivo", "WARLOCK", "damage" }, { "Jun", "WARRIOR", "damage" } }
+-- The marks of a raid cell of test mode: the size of a raid marker and of a leader or assistant icon, and how far they sit in from the top and the side
+-- (UnitGroupMarks.lua MARK, LEAD, LEAD_IN, LEAD_DOWN, MarkerSpot), the leader and assistant art (UnitGroupMarks.lua LEADER_ATLAS, LEADER_FILE,
+-- ASSISTANT_FILE), and the game's aura icons: 11 units, 3 in from the side and 2 above the power bar (Shared/CompactUnitFrame.lua:13, Legacy layout,
+-- CUF_AURA_BOTTOM_OFFSET), debuffs from the left and buffs from the right, at most three of each.
+local CELL_MARK = { marker = 14, lead = 10, leadIn = 3, leadDown = 16, aura = 11, auraIn = 3, auraUp = 2, auras = 3,
+	leader = "UI-HUD-UnitFrame-Player-Group-LeaderIcon", leaderFile = "Interface\\GroupFrame\\UI-Group-LeaderIcon",
+	assistant = "Interface\\GroupFrame\\UI-Group-AssistantIcon" }
+
+-- The frames of one raid cell on a parent. extra: the marks of test mode as well (ns.DrawUnits.Cell), which the setup's cells do not have.
+local function MakeCell(parent, extra)
+	local cell = {}
+	cell.frame = Frame(parent)
+	cell.plate = Tex(cell.frame, "BACKGROUND", -7)
+	cell.hback = Tex(cell.frame, "BACKGROUND", -6)
+	cell.health = Frame(cell.frame)
+	cell.hOutline = ns.Outline(cell.health, cell.health)
+	ns.SetOutlineArea(cell.hOutline, KEY)
+	cell.hFill = Tex(cell.health, "ARTWORK", 0)
+	cell.power = Frame(cell.frame)
+	cell.pOutline = ns.Outline(cell.power, cell.power)
+	ns.SetOutlineArea(cell.pOutline, KEY)
+	cell.pFill = Tex(cell.power, "ARTWORK", 0)
+	cell.top = Frame(cell.frame)
+	cell.name = Text(cell.top)
+	cell.status = Text(cell.top)
+	cell.role = Tex(cell.top, "OVERLAY", 2)
+	if extra then
+		cell.marks = MakeMarks(cell.frame)
+		cell.marker, cell.lead, cell.gameType = Tex(cell.marks.frame, "OVERLAY", 7), Tex(cell.marks.frame, "OVERLAY", 6), Tex(cell.marks.frame, "OVERLAY", 6)
+		cell.icons = {}
+		for index = 1, 2 * CELL_MARK.auras do
+			cell.icons[index] = ns.IconNew(cell.marks.frame)
+		end
+	end
+	return cell
+end
 
 function R.make(stage, count, columns)
 	local o = { id = "raid", draw = R.draw, cells = {}, columns = columns }
@@ -1671,22 +1841,10 @@ function R.make(stage, count, columns)
 	o.sample = { cap = "Raid" }
 	for index = 1, count do
 		local data = RAID[index]
-		local cell = { data = data, index = index }
-		cell.frame = Frame(o.root)
-		cell.plate = Tex(cell.frame, "BACKGROUND", -7)
-		cell.hback = Tex(cell.frame, "BACKGROUND", -6)
-		cell.health = Frame(cell.frame)
-		cell.hOutline = ns.Outline(cell.health, cell.health)
-		ns.SetOutlineArea(cell.hOutline, KEY)
-		cell.hFill = Tex(cell.health, "ARTWORK", 0)
-		cell.power = Frame(cell.frame)
-		cell.pOutline = ns.Outline(cell.power, cell.power)
-		ns.SetOutlineArea(cell.pOutline, KEY)
-		cell.pFill = Tex(cell.power, "ARTWORK", 0)
-		cell.top = Frame(cell.frame)
-		cell.name = Text(cell.top)
-		cell.status = Text(cell.top)
-		cell.role = Tex(cell.top, "OVERLAY", 2)
+		local cell = MakeCell(o.root)
+		cell.data, cell.index = data, index
+		-- The fixed sample of the setup: the seventh is dead, the eighth out of range and the third has threat.
+		cell.sample = { name = data[1], class = data[2], role = data[3], dead = index == 7, away = index == 8, threat = index == 3 }
 		o.cells[index] = cell
 	end
 	local first = o.cells[1]
@@ -1695,79 +1853,163 @@ function R.make(stage, count, columns)
 	return o
 end
 
-function R.draw(o, g)
+-- The marks of test mode on a raid cell: the raid marker at the top, the leader or assistant icon at the top right, the game's type icon of a debuff
+-- the player can dispel at the top right (raidFramesDispelIndicatorType, read by TestUnits.lua), the dispel border and the heal over time squares
+-- (PaintMarks), and the game's debuff and buff icons, which Flat UI styles as on its other frames.
+local function CellMarks(cell, s, width, height, g, on, powerHeight)
+	PaintMarks(cell.marks, cell.health, cell.frame, on, s.dispel, false, s.hots)
+	local marker = s.marker and on and Get("raidFrameMarker") == true
+	cell.marker:SetShown(marker and true or false)
+	if marker then
+		local index = s.marker - 1
+		cell.marker:SetTexture(MARKER)
+		cell.marker:SetVertexColor(1, 1, 1, 1)
+		cell.marker:SetTexCoord((index % 4) * 0.25, (index % 4) * 0.25 + 0.25, math.floor(index / 4) * 0.25, math.floor(index / 4) * 0.25 + 0.25)
+		cell.marker:ClearAllPoints()
+		cell.marker:SetSize(CELL_MARK.marker, CELL_MARK.marker)
+		cell.marker:SetPoint("TOP", cell.frame, "TOP", 0, -1)
+	end
+	local lead = (s.leader or s.assist) and on and Get("raidLeaderIcon") == true
+	cell.lead:SetShown(lead and true or false)
+	if lead then
+		cell.lead:SetTexCoord(0, 1, 0, 1)
+		cell.lead:SetVertexColor(1, 1, 1, 1)
+		if s.leader and HasAtlas(CELL_MARK.leader) then
+			cell.lead:SetAtlas(CELL_MARK.leader)
+		else
+			cell.lead:SetTexture(s.leader and CELL_MARK.leaderFile or CELL_MARK.assistant)
+		end
+		cell.lead:ClearAllPoints()
+		cell.lead:SetSize(CELL_MARK.lead, CELL_MARK.lead)
+		cell.lead:SetPoint("TOPRIGHT", cell.frame, "TOPRIGHT", -CELL_MARK.leadIn, -CELL_MARK.leadDown)
+	end
+	local word = s.dispel and s.gameDispel and TYPE_WORD[s.dispel] or nil
+	cell.gameType:SetShown(word ~= nil)
+	if word then
+		cell.gameType:ClearAllPoints()
+		cell.gameType:SetSize(DISPEL.icon, DISPEL.icon)
+		cell.gameType:SetPoint("TOPRIGHT", cell.frame, "TOPRIGHT", -3, -2)
+		cell.gameType:SetTexCoord(0, 1, 0, 1)
+		if HasAtlas(DISPEL.atlas .. word) then
+			cell.gameType:SetVertexColor(1, 1, 1, 1)
+			cell.gameType:SetAtlas(DISPEL.atlas .. word)
+		else
+			local c = TYPE[s.dispel]
+			Solid(cell.gameType, c[1], c[2], c[3], 1)
+		end
+	end
+	local styled = on and g.auras
+	local crop = styled and g.auraCrop / 100 or 0
+	local up = CELL_MARK.auraUp + powerHeight
+	for index, icon in ipairs(cell.icons) do
+		local buff = index > CELL_MARK.auras
+		local slot = buff and index - CELL_MARK.auras or index
+		local aura = buff and (s.buffs or 0) >= slot or (not buff and s.debuffs and s.debuffs[slot])
+		icon.frame:SetShown(aura and true or false)
+		if aura then
+			local size = CELL_MARK.aura
+			local x = CELL_MARK.auraIn + (slot - 1) * size
+			icon.frame:ClearAllPoints()
+			icon.frame:SetSize(size, size)
+			icon.frame:SetPoint(buff and "BOTTOMRIGHT" or "BOTTOMLEFT", cell.frame, buff and "BOTTOMRIGHT" or "BOTTOMLEFT", buff and -x or x, up)
+			icon.texture:SetTexture(AURA_FILE)
+			icon.texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
+			local bordering = not buff and TYPE[aura] or nil
+			EdgePaint(icon.outline, styled, false, styled and g.auraTypeColours and bordering or nil)
+		end
+	end
+end
+
+-- Paints one raid cell for a sample, the frame already placed and `width` by `height` (R.draw, ns.DrawUnits.PaintCell). s: name, class, role, and
+-- dead, away (out of range), threat; a sample of test mode may also give health and power (shares of 1), powerType, powerBar (false: none, as the
+-- game's raid frame options say), classColour (false: the game's green), offline, text (the game's health text), and the marks of CellMarks.
+local function PaintCell(cell, s, width, height, g)
 	local on = g.enabled and Get("raid") == true
 	local cells = on and Get("raidCells") == true
 	local t = g.t
+	local dead, away, threat = s.dead, s.away, s.threat
+	-- The range of the cell: Out of range opacity for a member out of range, the game's own half for every cell while the frames are not styled.
+	local alpha = away and (on and Get("raidRangeAlpha") or 50) / 100 or 1
+	cell.frame:SetAlpha(alpha)
+	local powerOn = s.powerBar ~= false
+	local powerHeight = powerOn and (cells and CELL.thin or CELL.game) or 0
+	local inset = on and t or 2
+	local healthHeight = height - 2 * inset - powerHeight - ((cells and powerOn) and 2 * t or 0)
+	cell.plate:SetShown(not cells)
+	if not cells then
+		Over(cell.plate, cell.frame)
+		Solid(cell.plate, 0.20, 0.18, 0.15, 1)
+	end
+	Box(cell.health, cell.frame, inset, inset, width - 2 * inset, healthHeight)
+	cell.power:SetShown(powerOn)
+	Box(cell.power, cell.frame, inset, height - inset - powerHeight, width - 2 * inset, powerHeight)
+	cell.hback:SetShown(not on)
+	if not on then
+		Over(cell.hback, cell.health)
+		Solid(cell.hback, 0, 0, 0, 0.6)
+	end
+	-- The health bar: the colour of the class, which the game gives it, in the image of the health row; grey for a unit that is dead with Raid cell look on,
+	-- and for one that is offline (UnitFrameCells.lua GREY).
+	local r, gr, b = ClassRgb(s.class)
+	if s.classColour == false then
+		r, gr, b = FRIENDLY[1], FRIENDLY[2], FRIENDLY[3]
+	end
+	if (cells and dead) or s.offline then
+		r, gr, b = 0.5, 0.5, 0.5
+	end
+	local file = on and g.flat and FileOf("health") or ns.BarFile("game")
+	EdgePaint(cell.hOutline, on, g.backdrop, threat and g.threat and on and THREAT or nil, nil, true)
+	Round(cell.hOutline, on and g.radius or nil, t)
+	cell.inner = width - 2 * inset
+	Stretch(cell.hFill, cell.health, 0, cell.inner * ((dead or s.offline) and 1 or (s.health or FRACTION)), healthHeight)
+	Fill(cell.hFill, file, r, gr, b, 1)
+	-- The power bar: thin and bordered with Raid cell look on, else the game's.
+	local pr, pg, pb = ns.PowerColour(s.powerType or "MANA")
+	if pr == nil then
+		pr, pg, pb = 0, 0, 1
+	end
+	local pfile = cells and g.flat and FileOf("power") or ns.BarFile("game")
+	EdgePaint(cell.pOutline, cells and powerOn, g.backdrop, nil, nil, true)
+	Round(cell.pOutline, cells and powerOn and g.radius or nil, t)
+	Stretch(cell.pFill, cell.power, 0, cell.inner * (s.power or 0.7), powerHeight)
+	Fill(cell.pFill, pfile, Mute(pr, pg, pb))
+	-- The name, the role icon and the status text (UnitExtras.lua:159-169).
+	cell.top:SetAllPoints(cell.frame)
+	local nameOn = not on or Get("raidName") == true
+	cell.name:SetShown(nameOn)
+	cell.name:SetText(s.name)
+	cell.name:ClearAllPoints()
+	cell.name:SetPoint("LEFT", cell.frame, "LEFT", 14, 3)
+	Style(cell.name, { percent = 100, r = 1, g = 1, b = 1 })
+	local roleOn = (not on or Get("raidRoleIcon") == true) and ART[s.role] ~= nil
+	cell.role:SetShown(roleOn)
+	if roleOn then
+		Art(cell.role, s.role)
+		cell.role:ClearAllPoints()
+		cell.role:SetSize(10, 10)
+		cell.role:SetPoint("LEFT", cell.frame, "LEFT", inset + 1, 3)
+	end
+	local status = (dead and "Dead") or (s.offline and "Offline") or s.text
+	local statusOn = status ~= nil and (not on or Get("raidStatusText") == true)
+	cell.status:SetShown(statusOn and true or false)
+	if statusOn then
+		cell.status:SetText(status)
+		cell.status:ClearAllPoints()
+		cell.status:SetPoint("CENTER", cell.frame, "CENTER", 0, -4)
+		Style(cell.status, { percent = 100, r = 0.8, g = 0.8, b = 0.8 })
+	end
+	if cell.marks then
+		CellMarks(cell, s, width, height, g, on, powerHeight)
+	end
+end
+
+function R.draw(o, g)
 	local columns = o.columns
 	local rows = math.ceil(#o.cells / columns)
 	for index, cell in ipairs(o.cells) do
-		local data = cell.data
 		local column, row = (index - 1) % columns, math.floor((index - 1) / columns)
 		Box(cell.frame, o.root, column * (CELL.width + CELL.gap), row * (CELL.height + CELL.gap), CELL.width, CELL.height)
-		local dead, away, threat = index == 7, index == 8, index == 3
-		-- The range of the cell: Out of range opacity for a member out of range, the game's own half for every cell while the frames are not styled.
-		local alpha = away and (on and Get("raidRangeAlpha") or 50) / 100 or 1
-		cell.frame:SetAlpha(alpha)
-		local powerHeight = cells and CELL.thin or CELL.game
-		local inset = on and t or 2
-		local healthHeight = CELL.height - 2 * inset - powerHeight - (cells and 2 * t or 0)
-		cell.plate:SetShown(not cells)
-		if not cells then
-			Over(cell.plate, cell.frame)
-			Solid(cell.plate, 0.20, 0.18, 0.15, 1)
-		end
-		Box(cell.health, cell.frame, inset, inset, CELL.width - 2 * inset, healthHeight)
-		Box(cell.power, cell.frame, inset, CELL.height - inset - powerHeight, CELL.width - 2 * inset, powerHeight)
-		cell.hback:SetShown(not on)
-		if not on then
-			Over(cell.hback, cell.health)
-			Solid(cell.hback, 0, 0, 0, 0.6)
-		end
-		-- The health bar: the colour of the class, which the game gives it, in the image of the health row; grey for a unit that is dead with Raid cell look on.
-		local r, gr, b = ClassRgb(data[2])
-		if cells and dead then
-			r, gr, b = 0.5, 0.5, 0.5
-		end
-		local file = on and g.flat and FileOf("health") or ns.BarFile("game")
-		EdgePaint(cell.hOutline, on, g.backdrop, threat and g.threat and on and THREAT or nil, nil, true)
-		Round(cell.hOutline, on and g.radius or nil, t)
-		Stretch(cell.hFill, cell.health, 0, (CELL.width - 2 * inset) * (dead and 1 or FRACTION), healthHeight)
-		Fill(cell.hFill, file, r, gr, b, 1)
-		-- The power bar: thin and bordered with Raid cell look on, else the game's.
-		local pr, pg, pb = ns.PowerColour("MANA")
-		if pr == nil then
-			pr, pg, pb = 0, 0, 1
-		end
-		local pfile = cells and g.flat and FileOf("power") or ns.BarFile("game")
-		EdgePaint(cell.pOutline, cells, g.backdrop, nil, nil, true)
-		Round(cell.pOutline, cells and g.radius or nil, t)
-		Stretch(cell.pFill, cell.power, 0, (CELL.width - 2 * inset) * 0.7, powerHeight)
-		Fill(cell.pFill, pfile, Mute(pr, pg, pb))
-		-- The name, the role icon and the status text (UnitExtras.lua:159-169).
-		cell.top:SetAllPoints(cell.frame)
-		local nameOn = not on or Get("raidName") == true
-		cell.name:SetShown(nameOn)
-		cell.name:SetText(data[1])
-		cell.name:ClearAllPoints()
-		cell.name:SetPoint("LEFT", cell.frame, "LEFT", 14, 3)
-		Style(cell.name, { percent = 100, r = 1, g = 1, b = 1 })
-		local roleOn = not on or Get("raidRoleIcon") == true
-		cell.role:SetShown(roleOn)
-		if roleOn then
-			Art(cell.role, data[3])
-			cell.role:ClearAllPoints()
-			cell.role:SetSize(10, 10)
-			cell.role:SetPoint("LEFT", cell.frame, "LEFT", inset + 1, 3)
-		end
-		local statusOn = dead and (not on or Get("raidStatusText") == true)
-		cell.status:SetShown(statusOn and true or false)
-		if statusOn then
-			cell.status:SetText("Dead")
-			cell.status:ClearAllPoints()
-			cell.status:SetPoint("CENTER", cell.frame, "CENTER", 0, -4)
-			Style(cell.status, { percent = 100, r = 0.8, g = 0.8, b = 0.8 })
-		end
+		PaintCell(cell, cell.sample, CELL.width, CELL.height, g)
 	end
 	o.width = columns * CELL.width + (columns - 1) * CELL.gap
 	o.height = rows * CELL.height + (rows - 1) * CELL.gap
@@ -2011,3 +2253,123 @@ Register("mock-raid-cells", { ids = { "raid", "boss", "boss2" }, raid = { 5, 2 }
 Register("mock-player", { ids = { "player" }, rows = { { "player" } } })
 -- Flat UI setup's stop Your target and party: the target beside four party members, the fourth out of range.
 Register("mock-group-frames", { ids = { "target", "party1", "party2", "party3", "party4" }, rows = { { "target", { "party1", "party2", "party3", "party4" } } } })
+
+-- Painters for test mode ---------------------------------------------------------------------------------------------------------------------------
+
+-- ns.DrawUnits: the same painters for the stand-ins of test mode (TestUnits.lua), so the setup and the test paint alike. A sample is a table of
+-- Sample's fields (name, class, level, react, player, role, leader, marker, threat, dead, away, auras, rank, lcol, happy), and of these for test mode:
+-- health and power (shares of 1), powerType, offline, dispel (the type of a debuff the player can dispel: magic, curse, disease or poison) and hots (the
+-- colours of the player's heals over time). A raid cell's sample is PaintCell's.
+-- The spot of the game's health bar in each kind of frame, from the frame's top left corner in its own units, where Offset puts the drawing's: a
+-- party member's health bar at 45,-19 of its 120 by 53 (Mainline/PartyFrameTemplates.xml:137-141); a party pet's at 43,-18 of its 64 by 23 at a
+-- scale of 0.5 (PartyFrameTemplates.xml:48-51); the target's and the focus's 126 wide and 15 high, its bottom right 147 right of and 9 below the
+-- middle of the left edge of 232 by 100 (Camelot/TargetFrame.lua:78-81); a target of target's 70 by 10, its bottom right 6 left of and 2.5 below the
+-- middle of the right edge of 120 by 49 (Mainline/TargetFrame.xml:441-445); the pet's 11 high, its bottom left 3 right of and 5 below the middle of
+-- the right edge of its portrait, 37 at 5,-5 (Mainline/PetFrame.xml:24-28, Camelot/PetFrame.lua:15-17); a boss's 84 by 10, its bottom right 145
+-- right of and 6 below the middle of the left edge (Mainline/TargetFrame.lua:1001-1003).
+local GAME_BAR = { party = { 45, 19 }, partypet = { 21.5, 9 }, target = { 21, 44 }, focus = { 21, 44 }, tot = { 44, 17 }, pet = { 45, 17.5 },
+	boss = { 61, 46 } }
+-- How many aura icons a frame of each kind is made with.
+local SLOTS = { party = 4, target = 4, focus = 4, tot = 2, pet = 2 }
+
+local D = {}
+ns.DrawUnits = D
+
+-- The frames of one unit frame of a kind on a parent: party, partypet, target, focus, tot, pet, boss or totem. A party frame has the marks of
+-- party frames too (MakeMarks). Nothing shows until PaintUnit.
+function D.Unit(parent, kind)
+	if kind == "totem" then
+		return T.make(parent)
+	end
+	local auras = {}
+	for index = 1, SLOTS[kind] or 0 do
+		auras[index] = { "buff", "none" }
+	end
+	local o = E.make(parent, kind, { kind = kind, name = "", level = 1, react = FRIENDLY, auras = auras })
+	if kind == "party" then
+		o.marks = MakeMarks(o.root)
+	end
+	return o
+end
+
+-- Lays out and paints a frame of Unit for a sample of its kind with the settings of Settings, at the top left of its root. sample.time is the time
+-- left on a totem. Returns the width and the height.
+function D.PaintUnit(o, sample, g)
+	if o.id == "totem" then
+		T.draw(o, g)
+		if sample and sample.time and o.time:IsShown() then
+			o.time:SetText(sample.time)
+		end
+		return o.width, o.height
+	end
+	o.s, o.k = sample, KIND[sample.kind] or o.k
+	E.draw(o, g)
+	return o.width, o.height
+end
+
+-- Gives a frame PaintUnit painted the health hp (a share of 1), as Animate may: the fill, its colour with Health by health left, the heal prediction
+-- and absorb segments and the words on the bar. It lays out nothing else.
+function D.Fill(o, hp)
+	local L, g, s = o.layout, o.g, o.s
+	if not (L and g and s and o.healthFill) or s.dead or s.offline then
+		return
+	end
+	local bar, height = L.size.bar, L.size.health
+	local width = bar * hp
+	o.healthFill:SetShown(width > 0)
+	Stretch(o.healthFill, o.health, 0, width, height)
+	if L.on and g.flat and g.healthByLeft then
+		local r, gr, b = Left(hp)
+		Fill(o.healthFill, o.healthFile, r, gr, b, 1)
+	end
+	local was = s.health or FRACTION
+	for _, segment in ipairs(o.segments or {}) do
+		segment[2] = hp + (segment[2] - was)
+		if segment[1]:IsShown() then
+			Stretch(segment[1], o.health, bar * segment[2], bar * (segment[2] + segment[3]), height)
+		end
+	end
+	s.health = hp
+	if o.healthMode and o.healthText:IsShown() then
+		local words = Says(o.healthMode, Numbers(HEALTH.max, hp))
+		if words then
+			o.healthText:SetText(words)
+		end
+	end
+end
+
+-- A raid cell with the marks of test mode on a parent (MakeCell), and its painter: PaintCell(cell, sample, width, height, g) paints a cell already
+-- placed and sized.
+function D.Cell(parent)
+	return MakeCell(parent, true)
+end
+D.PaintCell = PaintCell
+
+-- Gives a painted raid cell the health hp (a share of 1), and its status text `text` while that shows. It lays out nothing else.
+function D.FillCell(cell, hp, text)
+	if cell.inner then
+		Stretch(cell.hFill, cell.health, 0, cell.inner * hp, cell.health:GetHeight())
+	end
+	if text and cell.status:IsShown() then
+		cell.status:SetText(text)
+	end
+end
+
+-- The settings every frame of a paint shares, read from ns.Get (under ns.Viewing, from that view).
+D.Settings = Settings
+
+-- x and y from the top left corner of the game's frame to the top left of a painted frame's root, so that its health bar lies on the game's (GAME_BAR).
+function D.Offset(o)
+	local spot, L = GAME_BAR[o.id], o.layout
+	if not (spot and L) then
+		return 0, 0
+	end
+	return spot[1] - L.barsLeft, spot[2] - L.healthTop
+end
+
+-- The fixed samples of the setup's drawings by id (player, target, focus, pet, tot, boss, boss2, party1 to party5), a new table each call, and the
+-- player's name, level and class.
+D.Sample = Sample
+D.Me = Me
+-- The colour of each debuff type, by its word (magic, curse, disease, poison).
+D.TYPE = TYPE
