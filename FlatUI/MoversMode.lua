@@ -5,7 +5,9 @@ local _, ns = ...
 -- gives them their look and keeps what was done in a session (the spots at the start, the steps for Undo, the handles hidden by the eye). The
 -- options window is hidden while the session lasts and comes back with it. Movers.lua hands over through the calls it makes on ns.MoversMode and
 -- is read through ns.MoverKit. Every colour and size is a token of PanelLook.lua. The frames the Hidden frames page hides (Hide.lua, ns.HideFrames)
--- are listed first, under Hidden, where the eye shows one again, and the inspector's Hide frame hides the chosen frame or shows it again.
+-- are listed first, under Hidden, where the eye shows one again, and the inspector's Hide frame hides the chosen frame or shows it again. Samples
+-- on the toolbar turns test mode on or off (TestMode.lua), so the boxes of hidden frames hold their samples; a test mode turned on there passes to
+-- the options window when that is shown as the session ends for good, and ends otherwise.
 
 local MM = {}
 ns.MoversMode = MM
@@ -13,7 +15,7 @@ ns.MoversMode = MM
 local KEY = "movers"
 local GRID = 32
 local GRID_ALPHA, CENTRE_ALPHA = { dim = 0.12, bright = 0.25 }, 0.4
-local BAR_W, BAR_H = 560, 40
+local BAR_W, BAR_H = 650, 40
 local LIST_W, LIST_H, ROW_H, LIST_TOP = 240, 400, 24, 66
 local SIDE_W, SIDE_H = 224, 226
 local STEPS_KEPT, SHIFT_STEP = 100, 10
@@ -908,6 +910,24 @@ local function PaintToggle()
 	ui.knob:SetPoint("LEFT", ui.toggle, "LEFT", on and 18 or 2, 0)
 end
 
+-- Samples is on while test mode is (TestMode.lua), paused included.
+local function PaintSamples()
+	local test = ns.TestMode
+	local on = type(test) == "table" and test.Source() ~= nil
+	local L = Look()
+	L.Solid(ui.samplesBack, on and "accent" or "raised")
+	L.Solid(ui.samplesKnob, on and "on-accent" or "text-dim")
+	ui.samplesKnob:ClearAllPoints()
+	ui.samplesKnob:SetPoint("LEFT", ui.samples, "LEFT", on and 18 or 2, 0)
+end
+
+-- Test mode turned on or off from anywhere: Samples shows it.
+function MM.TestChanged()
+	if ui.samples then
+		PaintSamples()
+	end
+end
+
 local function BuildToolbar()
 	local bar = Make("Frame")
 	bar:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -966,6 +986,29 @@ local function BuildToolbar()
 		end
 	end)
 	Painted(PaintToggle)
+	-- Samples: test mode (TestMode.lua), so the boxes of hidden frames hold their samples while they are placed.
+	local samplesText = Text(bar, "GameFontHighlightSmall", "text-dim")
+	samplesText:SetPoint("LEFT", bar, "LEFT", 318, 0)
+	samplesText:SetText("Samples")
+	local samples = Make("Frame", bar)
+	samples:SetSize(32, 16)
+	samples:SetPoint("LEFT", bar, "LEFT", 368, 0)
+	samples:EnableMouse(true)
+	ui.samples = samples
+	ui.samplesBack = Fill(samples, "BACKGROUND")
+	ui.samplesBack:SetAllPoints(samples)
+	ui.samplesKnob = Fill(samples, "ARTWORK")
+	ui.samplesKnob:SetSize(12, 12)
+	samples:SetScript("OnMouseUp", function(_, mouseButton)
+		if mouseButton == "LeftButton" and type(ns.TestMode) == "table" then
+			local ok, err = pcall(ns.TestMode.Toggle, "movers")
+			if not ok then
+				geterrorhandler()(err)
+			end
+			PaintSamples()
+		end
+	end)
+	Painted(PaintSamples)
 	local listButton = Button(bar, "Frame list", 80, function()
 		S.list = not S.list
 		ui.list:SetShown(S.list)
@@ -973,13 +1016,13 @@ local function BuildToolbar()
 			MM.Layout()
 		end
 	end)
-	listButton:SetPoint("LEFT", bar, "LEFT", 318, 0)
+	listButton:SetPoint("LEFT", bar, "LEFT", 412, 0)
 	ui.undo, ui.undoLabel = Button(bar, "Undo", 64, MM.Undo)
-	ui.undo:SetPoint("LEFT", bar, "LEFT", 406, 0)
+	ui.undo:SetPoint("LEFT", bar, "LEFT", 500, 0)
 	local done = Button(bar, "Done", 70, function()
 		Kit().Close()
 	end, true)
-	done:SetPoint("LEFT", bar, "LEFT", 478, 0)
+	done:SetPoint("LEFT", bar, "LEFT", 572, 0)
 end
 
 -- The question when a close would leave changes ----------------------------------------------------------
@@ -1234,6 +1277,15 @@ function MM.Closed()
 			else
 				ns.OpenPanel()
 			end
+		end
+	end
+	-- Test mode turned on with Samples: the options window, shown now, takes it over; else it ends with the session (TestMode.lua).
+	local test = ns.TestMode
+	if type(test) == "table" and test.Source() == "movers" then
+		if type(ns.PanelShown) == "function" and ns.PanelShown() then
+			test.Pass("panel")
+		else
+			test.Off("movers")
 		end
 	end
 end

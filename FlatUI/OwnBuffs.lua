@@ -29,11 +29,12 @@ local NOTE_READING = "Your buffs: Buff tooltips has no effect while the game mak
 local LINE_OUT = "Your buffs: the game made no icon row, so icons show out of combat only."
 local HELP = {
 	"/flatui buffs check - the way the row is drawn, its groups and where it hangs",
-	"/flatui test - three sample icons for Your buffs",
+	"/flatui test icons - three sample icons for Your buffs, for 8 seconds",
 }
 
 local IsSecret = ns.IsSecret
 local T = ns.Tracking
+local TM = ns.TestMode
 local B = { list = {}, pending = {}, refused = {}, icons = {}, groups = {} }
 
 local function Opt(key)
@@ -701,7 +702,7 @@ end
 -- One pass of the reading path: the icons that match what was read, and none when nothing could be read.
 function B.Pass()
 	B.scheduled = false
-	if B.path ~= "reading" or not ns.Enabled(KEY) or B.testing then
+	if B.path ~= "reading" or not ns.Enabled(KEY) or B.testing or B.Holding() then
 		return
 	end
 	local found = B.Read() or {}
@@ -775,6 +776,7 @@ end
 function B.Sync()
 	B.on = B.Capable() and ns.Enabled(KEY)
 	if not B.on then
+		B.Held()
 		if B.holder and not B.testing then
 			B.holder:Hide()
 		end
@@ -799,6 +801,7 @@ function B.Sync()
 	elseif B.path == "reading" then
 		B.StartReading()
 	end
+	B.Held()
 	B.Tell()
 end
 
@@ -887,7 +890,7 @@ function B.EndTest(token)
 	B.Pass()
 end
 
--- Three sample icons, run by /flatui test with the samples of the other rows.
+-- Three sample icons, run by /flatui test icons with the samples of the other rows.
 function ns.OwnBuffsTest()
 	if not B.Capable() then
 		return
@@ -930,6 +933,50 @@ function ns.OwnBuffsTest()
 			B.EndTest(test)
 		end)
 	end
+end
+
+-- Test mode (TestMode.lua): while it is on, out of combat, with the page on, the holder shows three sample icons of its own, apart from those of
+-- /flatui test icons, with the look of Time left and Icon border and, as there, no flash or sound. Each Sync lays them out again (B.Row), so a
+-- change of Icon size shows at once, and the ticker of test mode starts their sweeps again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop). The
+-- icons of the reading path wait while they show, as for the 8-second test. Off, a fight and the page going off take them away.
+function B.Holding()
+	return TM.IsOn() and B.on == true and not InCombatLockdown()
+end
+
+function B.Held()
+	local list = B.held or {}
+	B.held = list
+	if not B.Holding() then
+		local had = B.Drop()
+		if had and B.on and B.path == "reading" then
+			B.Queue()
+		end
+		return
+	end
+	local holder = B.Holder()
+	for index = 1, 3 do
+		list[index] = list[index] or ns.IconNew(holder)
+		if not list[index] then
+			return
+		end
+	end
+	for _, icon in ipairs(B.icons) do
+		ns.IconClear(icon)
+	end
+	local look = { numbers = Opt("time") ~= "off", border = Opt("iconBorder"), flash = false, sound = false }
+	for index, icon in ipairs(list) do
+		ns.IconSampleHeld(icon, index, KEY, look)
+	end
+	B.Row(list)
+end
+
+-- True when a sample was shown.
+function B.Drop()
+	local had = false
+	for _, icon in ipairs(B.held or {}) do
+		had = ns.IconSampleDrop(icon) or had
+	end
+	return had
 end
 
 function B.Status()
@@ -984,6 +1031,17 @@ ns.Register(KEY, {
 	slash = { buffs = B.Slash },
 	help = HELP,
 	Status = B.Status,
+})
+
+-- The samples of test mode go at once at Off and at the start of a fight; the Refresh after it waits for the end of a fight (B.Refresh).
+TM.Register(KEY, {
+	module = KEY,
+	label = "Your buffs",
+	refresh = true,
+	Stop = B.Drop,
+	Tick = function(now)
+		ns.IconSampleLoop(B.held, now)
+	end,
 })
 
 ns.OwnBuffsModule = B

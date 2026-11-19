@@ -48,6 +48,8 @@ local ADDON_NAME, ns = ...
 -- (ROLE_EVENTS: a role the group gives, talents spent, reset or switched to the other set of dual spec, a new list of the sets of talents, a level,
 -- a form, a new world, the player's auras), which the hud module hears for it (ns.AddEvent) also while the table is hidden for a healer; such an
 -- event too only marks the table, and the next frame works the role out before the numbers, showing or hiding the table when its answer changed.
+-- While test mode is on (TestMode.lua), Show lets the table show whatever it says, and Against the target with no enemy targeted counts a boss,
+-- three levels above the player.
 -- Nothing of the game's is written: its frames are read and anchored to, never changed.
 
 local KEY, PART = "hud", "hit table"
@@ -949,9 +951,15 @@ end
 
 -- True while Show lets the table show: always, in combat, or with an enemy targeted, one that can be attacked and is alive (as the Threat list
 -- tells an enemy, Threat.lua, T.Enemy, without leaving out players, since a duel's foe can be attacked).
+-- While test mode is on (TestMode.lua) every rule lets it show.
+local function Testing()
+	local mode = ns.TestMode
+	return mode ~= nil and mode.IsOn() == true
+end
+
 local function Allowed()
 	local rule = Opt("hitTableShow")
-	if rule == "always" then
+	if rule == "always" or Testing() then
 		return true
 	elseif rule == "combat" then
 		return S.fighting
@@ -974,7 +982,12 @@ Update = function(force)
 		S.frame:SetAlpha(0)
 		return
 	end
-	local read = calc.Read({ lines = Opt("hitTableLines"), special = Opt("hitTableSpecial") ~= false, against = Opt("hitTableAgainst"),
+	-- Against the target, with no enemy targeted in test mode: a boss, three levels above the player, rather than a mob of the player's level.
+	local against = Opt("hitTableAgainst")
+	if against == "target" and Testing() and not (Ask(UnitExists, "target") == true and Ask(UnitCanAttack, "player", "target") == true and not S.dead) then
+		against = "boss"
+	end
+	local read = calc.Read({ lines = Opt("hitTableLines"), special = Opt("hitTableSpecial") ~= false, against = against,
 		facing = Opt("hitTableFacing"), rules = Opt("hitTableRules") })
 	S.read = read
 	local lines = read.lines
@@ -1367,3 +1380,8 @@ ns.AddStatus(KEY, function()
 	end
 	return lines
 end)
+
+-- Test mode: the table shows whatever Show says, against a boss with no enemy targeted (Allowed, Update); On and Off lay it out again.
+if ns.TestMode then
+	ns.TestMode.Register("hittable", { module = KEY, label = "Hit table", Start = ns.HitTableRefresh, Stop = ns.HitTableRefresh })
+end

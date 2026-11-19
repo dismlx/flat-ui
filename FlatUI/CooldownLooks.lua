@@ -23,6 +23,7 @@ local _, ns = ...
 -- aura is read that the game withholds (C_UnitAuras.GetPlayerAuraBySpellID and GetAuraDataBySpellName are SecretWhenUnitAuraRestricted:
 -- UnitAuraDocumentation.lua:245-262, 397-412). A frame of this file hears UNIT_AURA for the player only while Buff time on icons is on and an icon has
 -- a spell with a buff. These follow the Cooldown Panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
+-- Test mode (TestMode.lua) shows every row with sample cooldowns, the last part of this file.
 -- Every frame here is Flat UI's own, made, sized and levelled out of combat when the rows are laid out; in a fight only their alpha, their
 -- animations, their Cooldown and Show and Hide change, which the game allows on frames that are not protected, as Cooldowns.lua's sweep and flash do.
 
@@ -111,8 +112,11 @@ function RULES.unmounted()
 	return true
 end
 
--- False while the Show rule of a row hides it (Idle in Cooldowns.lua writes the alpha).
+-- False while the Show rule of a row hides it (Idle in Cooldowns.lua writes the alpha). Test mode shows every row (R.Testing, below).
 function R.Shows(row)
+	if R.Testing() then
+		return true
+	end
 	local rule = RULES[R.Opt(row, "show")]
 	if rule == nil then
 		return true
@@ -176,8 +180,11 @@ function R.RowOf(entry)
 	return R.Assigned(R.KeyOf(entry)) or 1
 end
 
--- What When one icon shows gives an icon: "cooling", "ready", "border", or nil for As its row.
+-- What When one icon shows gives an icon: "cooling", "ready", "border", or nil for As its row, which every icon is in test mode.
 function R.ShowOf(record)
+	if R.Testing() then
+		return nil
+	end
 	local list = Saved("cooldownShowOf")
 	local mode = list and list[R.KeyOf(record)] or nil
 	if mode == "cooling" or mode == "ready" or mode == "border" then
@@ -878,6 +885,162 @@ function R.AfterLayout()
 	Watch()
 	AuraAll()
 end
+
+-- Test mode (TestMode.lua) --------------------------------------------------------------------------------------------------------------
+-- While it is on, out of combat, with the page on: every row shows whatever its rule (R.Shows), each icon as its row (R.ShowOf), a row that is on
+-- and has no icon holds the three samples of IconRow.lua (R.Samples, laid out by Cooldowns.lua), and each icon draws a sample cooldown in place of
+-- its own (Update in Cooldowns.lua asks R.Held first): 6 to 15 seconds by its place, started at staggered moments, then ready for a moment and
+-- started again by the ticker of test mode while Moving is on (H.Tick), so the dimming, the opacities, the border colours, the flash and the glows
+-- show as in play. The first icon stays ready, with Glow when ready when that is on. The icon of the class interrupt (CooldownData.lua, every rank
+-- and name) has the gold border Interrupt.lua gives it while an enemy casts, with Glow on your interrupt on: a ring of this file's own in the same
+-- gold and width. No ready sound plays and no cooldown of the game's is asked for (Ready and Recheck in Cooldowns.lua wait); the counts keep what
+-- they showed. Off and a fight end it: the next Update draws each icon from the game again and the layout after it takes the samples away.
+-- READY: the seconds a sample stays ready before its sweep starts again. PX: the width of the interrupt's border, Interrupt.lua's.
+local H = { READY = 1.5, PX = 2, interrupts = nil }
+
+function R.Testing()
+	local test = ns.TestMode
+	return type(test) == "table" and test.IsOn() == true and ns.Enabled(KEY) and not InCombatLockdown()
+end
+
+-- Each row that is on and has no icon gets the three samples, while test mode is on.
+function R.Samples(lists)
+	if not R.Testing() then
+		return
+	end
+	for row = 1, L.MAX_ROWS do
+		if lists[row] and #lists[row] == 0 and R.RowOn(row) then
+			lists[row] = { { sample = 1 }, { sample = 2 }, { sample = 3 } }
+		end
+	end
+end
+
+-- The spell IDs and names of the interrupts of the player's class, as Interrupt.lua finds them (ns.ABILITIES of the kind "interrupt").
+local function Interrupts()
+	if H.interrupts then
+		return H.interrupts
+	end
+	local class, data, byClass, kind = Ask(UnitClassBase, "player"), ns.ABILITIES, ns.ABILITIES_BY_CLASS, nil
+	for index, name in ipairs(type(ns.COOLDOWN_KINDS) == "table" and ns.COOLDOWN_KINDS or {}) do
+		if name == "interrupt" then
+			kind = index
+		end
+	end
+	if not Plain(class, "string") or type(data) ~= "table" or type(byClass) ~= "table" or kind == nil then
+		return nil
+	end
+	local set = { ids = {}, names = {} }
+	for _, index in ipairs(type(byClass[class]) == "table" and byClass[class] or {}) do
+		local a = data[index]
+		if type(a) == "table" and a.kind == kind and type(a.casts) == "table" then
+			for _, id in ipairs(a.casts) do
+				set.ids[id] = true
+				local name = R.SpellName(id)
+				if name then
+					set.names[name] = true
+				end
+			end
+		end
+	end
+	H.interrupts = set
+	return set
+end
+
+-- The gold border of the interrupt in test mode: a ring of this file's own over the icon's texts, made the first time.
+local function Border(record, on)
+	local ring = record.heldRing
+	if on and not ring then
+		ring = Layer(record.frame)
+		local level = Ask(record.top.GetFrameLevel, record.top)
+		ring:SetFrameLevel((Plain(level, "number") and level or 0) + 1)
+		local outline = Ring(ring, H.PX)
+		ns.SetOutlineColour(outline, L.GOLD[1], L.GOLD[2], L.GOLD[3])
+		record.heldRing = ring
+	end
+	if ring then
+		ring:SetShown(on == true)
+	end
+end
+
+local function IsInterrupt(spell)
+	local set = spell and ns.Get(KEY .. ".interruptGlow") == true and Interrupts() or nil
+	if not set then
+		return false
+	end
+	local name = R.SpellName(spell)
+	return set.ids[spell] == true or (name ~= nil and set.names[name] == true)
+end
+
+-- Draws the sample of an icon and answers true while test mode is on; else takes the sample away and answers false.
+function R.Held(record)
+	if not R.Testing() then
+		if record.held then
+			record.held = nil
+			Border(record, false)
+		end
+		return false
+	end
+	local index = 1
+	for position, other in ipairs(R.Shown()) do
+		if other == record then
+			index = position
+			break
+		end
+	end
+	local epoch, now = ns.TestMode.Epoch(), GetTime()
+	local held = record.held
+	if not held or held.epoch ~= epoch or held.index ~= index then
+		local seconds = 6 + ((index - 1) * 3) % 10
+		held = { epoch = epoch, index = index, seconds = seconds, start = now - ((index - 1) * 2) % seconds, ready = index == 1 }
+		record.held = held
+	end
+	local cooling = not held.ready and now < held.start + held.seconds
+	local cooldown = record.cooldown
+	if cooling and held.drawn ~= held.start then
+		held.drawn = held.start
+		pcall(cooldown.SetCooldown, cooldown, held.start, held.seconds)
+	elseif not cooling and held.drawn ~= false then
+		held.drawn = false
+		pcall(cooldown.Clear, cooldown)
+	end
+	if record.sample then
+		record.count:SetText("")
+	end
+	R.Look(record, cooling, false, nil)
+	Border(record, IsInterrupt(record.spell))
+	return true
+end
+
+-- The ticker of test mode, while Moving is on: a sweep that has ended shows ready for READY seconds, then starts again.
+function H.Tick(now)
+	if not R.Testing() then
+		return
+	end
+	local due = false
+	for _, record in ipairs(R.Shown()) do
+		local held = record.held
+		if held and not held.ready then
+			local ends = held.start + held.seconds
+			if now >= ends + H.READY then
+				held.start = now
+				due = true
+			elseif now >= ends and held.drawn ~= false then
+				due = true
+			end
+		end
+	end
+	if due then
+		R.UpdateAll()
+	end
+end
+
+ns.TestMode.Register(KEY, {
+	module = KEY,
+	label = "Cooldown icons",
+	refresh = true,
+	every = 0.5,
+	Tick = H.Tick,
+})
 
 -- The events: the rules of a group, an instance and a travel form change with these, and a fight can make a buff secret or plain again.
 for _, event in ipairs({ "GROUP_ROSTER_UPDATE", "ZONE_CHANGED_NEW_AREA", "UPDATE_SHAPESHIFT_FORM" }) do

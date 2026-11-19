@@ -32,6 +32,8 @@ local _, ns = ...
 -- This follows the No Target Indicator and the combat text of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoL/Submodules/GroupTools.lua:913-1064 and Submodules/CombatText.lua:244-256, 431-526): his words, his second of delay and his 3 seconds
 -- between sounds, and the colour of No target.
+-- While test mode is on (TestMode.lua), +Combat, No target and -Combat show in turn, two seconds each, while their rows are on, and count in no
+-- number of /flatui status (ns.CombatCuesTestStep).
 
 local KEY, PART = "combattext", "combat alerts"
 -- The seconds +Combat and -Combat show and the second they start to fade (CombatTextConstants.lua:4-5), the step of the fade, the seconds a target
@@ -570,6 +572,67 @@ function ns.CombatCuesRefresh()
 	if ns.PartStopped(KEY, PART) or not ns.Enabled(KEY) then
 		pcall(HideAll)
 	end
+end
+
+-- Test mode (TestMode.lua): +Combat, No target and -Combat in turn, two seconds each, so one round every six seconds, each while its row is on and
+-- in the look of its rows. Its No target is a sample (S.sampled): it goes at the next step, and its sound plays the first time only (TM.Sound).
+-- S.testStep counts the steps. The counts of /flatui status are put back. The fight pauses test mode, and a real fight's lines are left alone.
+local function HideSample()
+	if S.sampled then
+		S.sampled = nil
+		if not S.fighting then
+			HideWarning()
+		end
+	end
+end
+
+function ns.CombatCuesTestStep()
+	if S.fighting then
+		return
+	end
+	Run(function()
+		local flashes, warnings = S.flashes, S.warnings
+		S.testStep = (S.testStep or -1) + 1
+		local phase = S.testStep % 3
+		HideSample()
+		if phase ~= 1 then
+			Flash(phase == 0 and "enter" or "leave")
+		elseif WarnWanted() and InterfaceShown() and Make() then
+			local line = S.warn
+			line:SetText(NO_TARGET)
+			Look(line, "warn")
+			line:Show()
+			S.warned, S.sampled = true, true
+			Place()
+			Shown()
+			local mode = ns.TestMode
+			if mode and mode.Sound("combatcues") then
+				Sound()
+			end
+		end
+		S.flashes, S.warnings = flashes, warnings
+	end)
+end
+
+function ns.CombatCuesTestEnd()
+	S.testStep = nil
+	Run(function()
+		HideSample()
+		if not S.fighting then
+			EndFlash()
+		end
+	end)
+end
+
+if ns.TestMode then
+	ns.TestMode.Register("combatcues", {
+		module = KEY,
+		label = "Combat alerts",
+		every = 2,
+		Start = ns.CombatCuesTestStep,
+		Tick = ns.CombatCuesTestStep,
+		Stop = ns.CombatCuesTestEnd,
+	})
 end
 
 -- True while one of the alerts is on, which is when the movers have a handle for where they show.

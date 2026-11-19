@@ -6,4 +6,8 @@
 	     live at the banker with Flat UI's bank window, else your bank as you last left it. BagsBank.lua names it in the game's Key Bindings. -->
 	<Binding name="CLICK FlatUIBankButton:LeftButton" category="Flat UI">
 	</Binding>
+	<!-- TestMode.lua: the key of test mode. It clicks a plain button of Flat UI's own that turns test mode on or off (out of combat), as
+	     /flatui test does. TestMode.lua names it in the game's Key Bindings. -->
+	<Binding name="CLICK FlatUITestButton:LeftButton" category="Flat UI">
+	</Binding>
 </Bindings>

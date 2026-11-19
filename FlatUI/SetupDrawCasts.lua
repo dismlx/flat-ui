@@ -25,6 +25,9 @@ local _, ns = ...
 -- label at the bottom right (drawing.gameLook(stage) says whether). Besides the shared functions the brief names, the drawing calls their companions
 -- ns.OwnText, ns.SetOutline, ns.SetOutlineColour, ns.Pixels and ns.IsSecret.
 -- Fixed samples: the part of each bar that is filled, the sample numbers, the latency zone (5 percent of the player bar), the swing times.
+-- ns.DrawCasts gives test mode's stand-ins (TestHud.lua) the same painters for one bar: DC.Cast and DC.PaintCast for a cast bar in a state (cast,
+-- channel, interrupted or shield, the interrupted one in Interrupted colour or the game's interrupted fill) at a share of its run, DC.Swing and
+-- DC.PaintSwing for a swing timer, and DC.CastProgress and DC.SwingProgress for the parts that move.
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
@@ -104,19 +107,27 @@ local function FillBar(fill, bar, width, part, reverse, file, r, g, b, atlas)
 	end
 end
 
--- Whether the client has an atlas, asked the way Core.lua asks for a class icon.
+-- Whether the client has an atlas, asked the way Core.lua asks for a class icon, once for each atlas: the client's atlases do not change in a session,
+-- and test mode's stand-ins ask on every frame they move (TestHud.lua).
+local atlasKnown = {}
 local function AtlasExists(name)
-	local api = C_Texture
+	if name == nil then
+		return false
+	elseif atlasKnown[name] ~= nil then
+		return atlasKnown[name]
+	end
+	local api, exists = C_Texture, false
 	if type(api) == "table" and not ns.IsSecret(api) then
 		if type(api.GetAtlasExists) == "function" then
-			local ok, exists = pcall(api.GetAtlasExists, name)
-			return ok and not ns.IsSecret(exists) and exists == true
+			local ok, answer = pcall(api.GetAtlasExists, name)
+			exists = ok and not ns.IsSecret(answer) and answer == true
 		elseif type(api.GetAtlasInfo) == "function" then
 			local ok, info = pcall(api.GetAtlasInfo, name)
-			return ok and info ~= nil
+			exists = ok and info ~= nil
 		end
 	end
-	return false
+	atlasKnown[name] = exists
+	return exists
 end
 
 -- A part the game draws: its atlas when the client answers for it, else a plain grey version, which the drawing labels Game look
@@ -266,9 +277,14 @@ local CAST_ROWS = {
 	{ opt = "target", label = "Target, uninterruptible", name = "Polymorph", state = "shield", part = 0.7, game = { 150, 10 }, small = true, time = "0.9",
 		shield = true },
 }
-local CAST_COLOURS = { cast = "castbars.castColour", channel = "castbars.channelColour", shield = "castbars.shieldColour" }
--- The atlas of the fill the game draws, by state (CastingBarFrame.xml:189, CastingBarFrame.lua:21-30 for the type names).
-local CAST_ATLAS = { cast = "ui-castingbar-filling-standard", channel = "ui-castingbar-filling-channel", shield = "ui-castingbar-uninterruptable" }
+-- The game's size of each bar (the rows above, and the boss bars of TargetFrame.xml:543-548, small bars as the target's).
+local CAST_GAME = { player = { 208, 11 }, pet = { 195, 13 }, target = { 150, 10 }, focus = { 150, 10 }, boss = { 150, 10 } }
+local CAST_COLOURS = { cast = "castbars.castColour", channel = "castbars.channelColour", shield = "castbars.shieldColour",
+	interrupted = "castbars.interruptedColour" }
+-- The atlas of the fill the game draws, by state (CastingBarFrame.xml:189, CastingBarFrame.lua:21-30 for the type names; the interrupted one as Bars.lua
+-- reads it).
+local CAST_ATLAS = { cast = "ui-castingbar-filling-standard", channel = "ui-castingbar-filling-channel", shield = "ui-castingbar-uninterruptable",
+	interrupted = "ui-castingbar-interrupted" }
 -- The border and the back of a cast bar (CastingBarFrame.xml:218-224, 253-258, 409-436) and the plate behind the spell name (xml:198, 403).
 local CAST_ART = { frame = "ui-castingbar-frame", back = "ui-castingbar-background", inset = { -1, 2, 1, -2 } }
 local GAME_PLATE, GAME_SHIELD, GAME_PIP = "ui-castingbar-textbox", "ui-castingbar-shield", "ui-castingbar-pip"
@@ -278,47 +294,55 @@ local CAST_LEFT, CAST_LABEL_GAP = 44, 30
 local castMade = setmetatable({}, { __mode = "k" })
 local castDrawing = {}
 
+-- One cast bar on `parent`: its frame, the game's art, the plate behind the spell name, the fill, the spark, the icon, the latency zone of the player
+-- bar, the shield of a bar that may show one (spec.shield), the outline, the spell name and the time of a bar with spec.time. inst holds the grey
+-- parts and the outlines of the drawing it belongs to.
+local function NewCastBar(inst, parent, spec)
+	local row = { spec = spec, inst = inst }
+	local bar = NewFrame(parent)
+	row.bar = bar
+	row.art = NewArt(inst, bar, CAST_ART)
+	row.plate = NewTexture(bar, "BACKGROUND", -6)
+	row.plate:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+	row.plate:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, -12)
+	row.fill = NewTexture(bar, "ARTWORK", 0)
+	row.spark = NewTexture(bar, "OVERLAY", 2)
+	row.icon = NewTexture(bar, "ARTWORK", 3)
+	row.icon:SetTexture(SPELL_ICON)
+	row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	if spec.opt == "player" then
+		row.latency = NewTexture(bar, "ARTWORK", 2)
+		row.latency:SetColorTexture(1, 0, 0, 0.6)
+	end
+	if spec.shield then
+		row.shield = NewTexture(bar, "ARTWORK", 4)
+		row.shield:SetPoint("TOPLEFT", bar, "TOPLEFT", -27, 4)
+		row.shield:SetSize(29, 33)
+	end
+	row.outline = ns.Outline(bar, bar)
+	inst.outlines[#inst.outlines + 1] = row.outline
+	row.text = NewText(bar)
+	if row.text then
+		row.text:SetHeight(16)
+		row.text:SetText(spec.name or "")
+	end
+	if spec.time then
+		row.time = NewText(bar)
+		if row.time then
+			row.time:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+			row.time:SetJustifyH("RIGHT")
+			row.time:SetText(spec.time)
+		end
+	end
+	return row
+end
+
 local function BuildCast(stage)
-	local inst = { parts = {}, outlines = {}, rows = {} }
+	local inst = { parts = {}, outlines = {}, rows = {}, grey = {} }
 	inst.root = NewFrame(stage)
 	inst.root:SetPoint("CENTER", stage, "CENTER", 0, 0)
 	for index, spec in ipairs(CAST_ROWS) do
-		local row = { spec = spec }
-		local bar = NewFrame(inst.root)
-		row.bar = bar
-		row.art = NewArt(inst, bar, CAST_ART)
-		row.plate = NewTexture(bar, "BACKGROUND", -6)
-		row.plate:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
-		row.plate:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, -12)
-		row.fill = NewTexture(bar, "ARTWORK", 0)
-		row.spark = NewTexture(bar, "OVERLAY", 2)
-		row.icon = NewTexture(bar, "ARTWORK", 3)
-		row.icon:SetTexture(SPELL_ICON)
-		row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-		if spec.opt == "player" then
-			row.latency = NewTexture(bar, "ARTWORK", 2)
-			row.latency:SetColorTexture(1, 0, 0, 0.6)
-		end
-		if spec.shield then
-			row.shield = NewTexture(bar, "ARTWORK", 4)
-			row.shield:SetPoint("TOPLEFT", bar, "TOPLEFT", -27, 4)
-			row.shield:SetSize(29, 33)
-		end
-		row.outline = ns.Outline(bar, bar)
-		inst.outlines[#inst.outlines + 1] = row.outline
-		row.text = NewText(bar)
-		if row.text then
-			row.text:SetHeight(16)
-			row.text:SetText(spec.name)
-		end
-		if spec.time then
-			row.time = NewText(bar)
-			if row.time then
-				row.time:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
-				row.time:SetJustifyH("RIGHT")
-				row.time:SetText(spec.time)
-			end
-		end
+		local row = NewCastBar(inst, inst.root, spec)
 		row.label = NewText(inst.root, "GameFontNormalSmall")
 		if row.label then
 			row.label:SetText(spec.label)
@@ -361,14 +385,18 @@ local function BuildCast(stage)
 	return inst
 end
 
--- The colour of the fill of a state on a place, as CastColour gives it.
-local function CastFillColour(opt, state)
-	if opt == "player" and (state == "cast" or state == "channel") and G("castbars.playerClass") then
+-- The colour of the fill of a state on a place, as CastColour gives it (Bars.lua): an enemy's cast or channel the player's interrupt is ready for
+-- (kick) takes Interrupt ready colour while Interrupt readiness on enemy casts is on, the player bar its class colour with Class colour, the target
+-- and focus bars their own colours, else the cast colours of the Flat UI page.
+local function CastFillColour(opt, state, kick)
+	if kick and (state == "cast" or state == "channel") and G("castbars.interrupt") == true then
+		return ns.Colour("castbars.interruptReady")
+	elseif opt == "player" and (state == "cast" or state == "channel") and G("castbars.playerClass") then
 		return ClassRGB()
 	elseif (opt == "target" or opt == "focus") and (state == "cast" or state == "channel") and G("castbars.targetOwn") then
 		return ns.Colour(state == "cast" and "castbars.targetCast" or "castbars.targetChannel")
 	end
-	return ns.Colour(CAST_COLOURS[state])
+	return ns.Colour(CAST_COLOURS[state] or CAST_COLOURS.cast)
 end
 
 -- Where the spell name goes on a bar. The player and pet bars have a name 185 wide at the top, 10 down (CastingBarFrame.xml:313-318); the small bars
@@ -390,126 +418,159 @@ local function PlaceCastText(text, bar, mode)
 	end
 end
 
+-- What the rows of the page say for every bar, read once for a paint. game: the look the game gives a bar Flat UI does not style (the boss bars).
+local function CastLook(game)
+	local look = { enabled = not game and G("castbars.enabled") == true }
+	local enabled = look.enabled
+	look.flat = enabled and G("castbars.flat") == true
+	look.file = look.flat and ns.BarTexture(G("castbars.texture")) or nil
+	if not look.flat then
+		look.file = ns.BarFile("game")
+	end
+	look.percent = enabled and G("castbars.textSize") or 100
+	look.outline = enabled and G("castbars.textOutline") or nil
+	look.hideName = enabled and not G("castbars.textShow")
+	look.justify = JUSTIFY[enabled and G("castbars.textAlign") or "game"] or "CENTER"
+	if enabled and G("castbars.textOwn") then
+		look.r, look.g, look.b = ns.Colour("castbars.textColour")
+	end
+	return look
+end
+
+-- The width and height of a bar of a place: the game's, the place's own size, or the width of the personal resource display at Bar width 100
+-- (Blizzard_PersonalResourceDisplay.xml:41) for the player bar matched to it, whose height stays the game's or the chosen one.
+local function CastSize(look, opt, game)
+	local w, h = game[1], game[2]
+	if look.enabled and G("castbars." .. opt .. "Size") then
+		w, h = G("castbars." .. opt .. "Width"), G("castbars." .. opt .. "Height")
+	end
+	if look.enabled and opt == "player" and G("castbars.playerMatch") == "resource" then
+		w = DISPLAY_WIDTH
+		h = G("castbars.playerSize") and G("castbars.playerHeight") or h
+	end
+	return w, h
+end
+
+-- The fill of a bar at `part` of its width in the colour of its state, the spark at its end and the shield of a cast that cannot be interrupted.
+-- The game's own fill is its atlas, or grey. Returns the colour of the fill.
+local function CastFill(row, look, opt, state, part, w, kick)
+	local inst, enabled = row.inst, look.enabled
+	local r, g, b
+	if look.flat then
+		r, g, b = CastFillColour(opt, state, kick)
+		FillBar(row.fill, row.bar, w, part, false, look.file, r, g, b)
+		inst.grey[row.fill] = nil
+	else
+		local atlas = AtlasExists(CAST_ATLAS[state] or CAST_ATLAS.cast) and CAST_ATLAS[state] or nil
+		r, g, b = GREY[1], GREY[2], GREY[3]
+		FillBar(row.fill, row.bar, w, part, false, look.file, r, g, b, atlas)
+		inst.grey[row.fill] = not atlas or nil
+	end
+	Place(row.spark, "CENTER", row.bar, "LEFT", w * part, 0)
+	if row.shield then
+		row.shield:SetShown(state == "shield" and not (enabled and not G("castbars.shield")))
+		GameTexture(inst, row.shield, GAME_SHIELD, { 0.62, 0.64, 0.7, 1 })
+	end
+	return r, g, b
+end
+
+-- The spell name of a bar: `name`, else its own, with the rank after it on the player bar while Spell rank on the player bar is on.
+local function CastName(row, look, name)
+	local spec = row.spec
+	if name then
+		return name
+	end
+	return spec.rank and look.enabled and G("castbars.rank") == true and (spec.name .. " (" .. spec.rank .. ")") or spec.name or ""
+end
+
+-- Paints one bar of a place (opt) in a state at `part` of its width, w by h. kick: an enemy cast the player's interrupt is ready for.
+local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
+	local inst, spec, bar = row.inst, row.spec, row.bar
+	local enabled, flat = look.enabled, look.flat
+	local on = enabled and G("castbars." .. opt) == true
+	local sizeOn = enabled and G("castbars." .. opt .. "Size") == true
+	bar:SetSize(w, h)
+	ns.SetOutline(row.outline, on, G("castbars.backdrop"))
+	ShowArt(row.art, not on)
+	row.plate:SetShown(not (on and not G("castbars.textPlate")))
+	GameTexture(inst, row.plate, GAME_PLATE, { 0.3, 0.3, 0.3, 0.7 })
+	local r, g, b = CastFill(row, look, opt, state, part, w, kick)
+	if flat and G("castbars.stateBorder") then
+		ns.SetOutlineColour(row.outline, r, g, b)
+	else
+		ns.SetOutlineColour(row.outline, nil, nil, nil)
+	end
+	-- The spark: 8 by 20 on the player and pet bars (higher by 9 than the bar with a size of its own on the player bar), 6 by 16 on the small ones.
+	local sparkW, sparkH = 8, 20
+	if spec.small then
+		sparkW, sparkH = 6, 16
+	elseif opt == "player" and sizeOn then
+		sparkH = h + 9
+	end
+	row.spark:SetSize(sparkW, sparkH)
+	row.spark:SetShown(not (enabled and not G("castbars.spark")))
+	GameTexture(inst, row.spark, GAME_PIP, { 0.9, 0.9, 0.9, 0.9 })
+	if row.latency then
+		row.latency:ClearAllPoints()
+		row.latency:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
+		row.latency:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+		row.latency:SetWidth(Max(w * 0.05, 0.01))
+		row.latency:SetShown(flat and G("castbars.latency") == true and state ~= "interrupted")
+	end
+	-- The icon: left of the small bars unless the row says right or hidden; on the player and pet bars only with the row on.
+	if spec.small then
+		local place = enabled and G("castbars.iconPos") or "game"
+		row.icon:SetSize(20, 20)
+		if place == "right" then
+			Place(row.icon, "LEFT", bar, "RIGHT", 5, 0)
+		else
+			Place(row.icon, "RIGHT", bar, "LEFT", -2, -5)
+		end
+		row.icon:SetShown(place ~= "hidden")
+	else
+		row.icon:SetSize(h, h)
+		Place(row.icon, "RIGHT", bar, "LEFT", -5, 0)
+		row.icon:SetShown(flat and G("castbars.playerIcon") == true and state ~= "interrupted")
+	end
+	-- The spell name.
+	if row.text then
+		local mode = "top10"
+		if spec.small then
+			mode = "top8"
+		elseif opt == "player" and sizeOn then
+			mode = G("castbars.playerText") == "inside" and "inside" or "below"
+		end
+		PlaceCastText(row.text, bar, mode)
+		row.text:SetText(CastName(row, look, name))
+		row.text:SetJustifyH(look.justify)
+		row.text:SetShown(not look.hideName)
+		Look(row.text, look.percent, look.r, look.g, look.b, look.outline)
+	end
+	if row.time then
+		row.time:SetShown(enabled and G("castbars.ownTime") == true and state ~= "interrupted")
+	end
+end
+
 function castDrawing.build(stage)
 	Instance(castMade, stage, castDrawing, BuildCast)
 end
 
 function castDrawing.draw(stage)
 	local inst = Instance(castMade, stage, castDrawing, BuildCast)
-	local enabled = G("castbars.enabled") == true
-	local flat = enabled and G("castbars.flat") == true
-	local file = flat and ns.BarTexture(G("castbars.texture")) or nil
-	if not flat then
-		file = ns.BarFile("game")
-	end
-	local percent = enabled and G("castbars.textSize") or 100
-	local outline = enabled and G("castbars.textOutline") or nil
-	local hideName = enabled and not G("castbars.textShow")
-	local justify = JUSTIFY[enabled and G("castbars.textAlign") or "game"] or "CENTER"
-	local tr, tg, tb
-	if enabled and G("castbars.textOwn") then
-		tr, tg, tb = ns.Colour("castbars.textColour")
-	end
+	local look = CastLook(false)
 	local sizes, widest = {}, 0
 	for index, row in ipairs(inst.rows) do
-		local opt = row.spec.opt
-		local w, h = row.spec.game[1], row.spec.game[2]
-		if enabled and G("castbars." .. opt .. "Size") then
-			w, h = G("castbars." .. opt .. "Width"), G("castbars." .. opt .. "Height")
-		end
-		-- The width of the personal resource display at Bar width 100 (Blizzard_PersonalResourceDisplay.xml:41); the height stays the game's or the chosen one.
-		if enabled and opt == "player" and G("castbars.playerMatch") == "resource" then
-			w = DISPLAY_WIDTH
-			h = G("castbars.playerSize") and G("castbars.playerHeight") or h
-		end
+		local w, h = CastSize(look, row.spec.opt, row.spec.game)
 		sizes[index] = { w, h }
 		widest = Max(widest, w)
 	end
 	local y = 10
 	local labelX = CAST_LEFT + widest + CAST_LABEL_GAP
 	for index, row in ipairs(inst.rows) do
-		local spec, bar = row.spec, row.bar
-		local opt = spec.opt
-		local w, h = sizes[index][1], sizes[index][2]
-		local on = enabled and G("castbars." .. opt) == true
-		local sizeOn = enabled and G("castbars." .. opt .. "Size") == true
-		bar:SetSize(w, h)
-		Place(bar, "TOPLEFT", inst.root, "TOPLEFT", CAST_LEFT, -y)
-		ns.SetOutline(row.outline, on, G("castbars.backdrop"))
-		ShowArt(row.art, not on)
-		row.plate:SetShown(not (on and not G("castbars.textPlate")))
-		GameTexture(inst, row.plate, GAME_PLATE, { 0.3, 0.3, 0.3, 0.7 })
-		-- The fill and its colour; the game's own fill is its atlas, or grey.
-		local r, g, b
-		if flat then
-			r, g, b = CastFillColour(opt, spec.state)
-			FillBar(row.fill, bar, w, spec.part, false, file, r, g, b)
-			inst.grey[row.fill] = nil
-		else
-			local atlas = AtlasExists(CAST_ATLAS[spec.state]) and CAST_ATLAS[spec.state] or nil
-			r, g, b = GREY[1], GREY[2], GREY[3]
-			FillBar(row.fill, bar, w, spec.part, false, file, r, g, b, atlas)
-			inst.grey[row.fill] = not atlas or nil
-		end
-		if flat and G("castbars.stateBorder") then
-			ns.SetOutlineColour(row.outline, r, g, b)
-		else
-			ns.SetOutlineColour(row.outline, nil, nil, nil)
-		end
-		-- The spark: 8 by 20 on the player and pet bars (higher by 9 than the bar with a size of its own on the player bar), 6 by 16 on the small ones.
-		local sparkW, sparkH = 8, 20
-		if spec.small then
-			sparkW, sparkH = 6, 16
-		elseif opt == "player" and sizeOn then
-			sparkH = h + 9
-		end
-		row.spark:SetSize(sparkW, sparkH)
-		Place(row.spark, "CENTER", bar, "LEFT", w * spec.part, 0)
-		row.spark:SetShown(not (enabled and not G("castbars.spark")))
-		GameTexture(inst, row.spark, GAME_PIP, { 0.9, 0.9, 0.9, 0.9 })
-		if row.shield then
-			row.shield:SetShown(not (enabled and not G("castbars.shield")))
-			GameTexture(inst, row.shield, GAME_SHIELD, { 0.62, 0.64, 0.7, 1 })
-		end
-		if row.latency then
-			row.latency:ClearAllPoints()
-			row.latency:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
-			row.latency:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
-			row.latency:SetWidth(Max(w * 0.05, 0.01))
-			row.latency:SetShown(flat and G("castbars.latency") == true)
-		end
-		-- The icon: left of the small bars unless the row says right or hidden; on the player and pet bars only with the row on.
-		if spec.small then
-			local place = enabled and G("castbars.iconPos") or "game"
-			row.icon:SetSize(20, 20)
-			if place == "right" then
-				Place(row.icon, "LEFT", bar, "RIGHT", 5, 0)
-			else
-				Place(row.icon, "RIGHT", bar, "LEFT", -2, -5)
-			end
-			row.icon:SetShown(place ~= "hidden")
-		else
-			row.icon:SetSize(h, h)
-			Place(row.icon, "RIGHT", bar, "LEFT", -5, 0)
-			row.icon:SetShown(flat and G("castbars.playerIcon") == true)
-		end
-		-- The spell name.
-		if row.text then
-			local mode = "top10"
-			if spec.small then
-				mode = "top8"
-			elseif opt == "player" and sizeOn then
-				mode = G("castbars.playerText") == "inside" and "inside" or "below"
-			end
-			PlaceCastText(row.text, bar, mode)
-			row.text:SetText(spec.rank and enabled and G("castbars.rank") == true and (spec.name .. " (" .. spec.rank .. ")") or spec.name)
-			row.text:SetJustifyH(justify)
-			row.text:SetShown(not hideName)
-			Look(row.text, percent, tr, tg, tb, outline)
-		end
-		if row.time then
-			row.time:SetShown(enabled and G("castbars.ownTime") == true)
-		end
+		local spec = row.spec
+		local h = sizes[index][2]
+		Place(row.bar, "TOPLEFT", inst.root, "TOPLEFT", CAST_LEFT, -y)
+		PaintCastBar(row, look, spec.opt, spec.state, spec.part, sizes[index][1], h)
 		if row.label then
 			Place(row.label, "LEFT", inst.root, "TOPLEFT", labelX, -(y + h / 2))
 		end
@@ -537,6 +598,47 @@ end
 
 castDrawing.parts = {}
 ns.SetupDrawings["mock-cast-bar"] = castDrawing
+
+-- The painters of the drawings, for test mode's stand-ins (TestHud.lua): one cast bar or one swing timer on a frame of the caller's, painted from the
+-- rows as the setup drawings paint theirs, at a share of its run (`part`, 0 to 1) and in a state (cast, channel, interrupted or shield).
+local DC = {}
+ns.DrawCasts = DC
+
+-- A cast bar on `parent`. spec: opt (player, pet, target, focus or boss), small (the small bars), shield (it may show one), time (it has a time text),
+-- name (the spell name). The caller anchors row.bar.
+function DC.Cast(parent, spec)
+	return NewCastBar({ grey = {}, outlines = {} }, parent, spec)
+end
+
+-- Paints a bar of `opt` in `state` at `part`, w by h (the size the rows give when nil), with the spell name `name` (else its own) and kick for an
+-- enemy cast the player's interrupt is ready for. Returns its width and height.
+function DC.PaintCast(row, opt, state, part, w, h, name, kick)
+	local look = CastLook(opt == "boss")
+	if not (ns.Finite(w) and ns.Finite(h)) then
+		w, h = CastSize(look, opt, CAST_GAME[opt] or CAST_GAME.target)
+	end
+	row.look, row.opt, row.w, row.kick, row.state = look, opt, w, kick, state
+	PaintCastBar(row, look, opt, state, part, w, h, name, kick)
+	return w, h
+end
+
+-- The moving parts of a painted bar: its fill and spark at `part`, its state's colour, the spell name of a new state and the seconds left.
+function DC.CastProgress(row, state, part, left, name)
+	if not row.look then
+		return
+	end
+	CastFill(row, row.look, row.opt, state, part, row.w, row.kick)
+	if row.text and (state ~= row.state or name) then
+		row.text:SetText(CastName(row, row.look, name))
+	end
+	row.state = state
+	if row.time and ns.Finite(left) then
+		row.time:SetText(("%.1f"):format(math.max(0, left)))
+	end
+	if row.latency then
+		row.latency:SetShown(row.look.flat and G("castbars.latency") == true and state ~= "interrupted")
+	end
+end
 
 -- Personal resource display -----------------------------------------------------------------------------------
 
@@ -762,44 +864,51 @@ local SWING_ROWS = {
 local swingMade = setmetatable({}, { __mode = "k" })
 local swingDrawing = {}
 
+-- One timer of `spec.hand` on `parent`: its frame with the game's art, the bar inside it with the fill, the Auto Shot window of a ranged one, the
+-- shadow of the name, the pip, the two outlines and the name and time texts. inst holds the grey parts and the outlines of its drawing.
+local function NewSwingTimer(inst, parent, spec)
+	local row = { spec = spec, inst = inst }
+	row.timer = NewFrame(parent)
+	row.timer:SetSize(SWING_FRAME_W, SWING_FRAME_H)
+	row.art = NewArt(inst, row.timer, SWING_ART)
+	row.bar = NewFrame(row.timer)
+	row.bar:SetPoint("TOPLEFT", row.timer, "TOPLEFT", 5, -4)
+	row.bar:SetPoint("BOTTOMRIGHT", row.timer, "BOTTOMRIGHT", -5, 4)
+	row.fill = NewTexture(row.bar, "ARTWORK", 0)
+	-- The Auto Shot window on the ranged timer: the last half second of its swing, over the fill (Bars.lua, ApplyAutoShot).
+	if spec.hand == "ranged" then
+		row.band = NewTexture(row.bar, "ARTWORK", 7)
+	end
+	row.shadow = NewTexture(row.bar, "OVERLAY", 0)
+	row.shadow:SetPoint("TOPLEFT", row.bar, "TOPLEFT", 0, 0)
+	row.shadow:SetPoint("BOTTOMLEFT", row.bar, "BOTTOMLEFT", 0, 0)
+	row.shadow:SetWidth(SWING_SHADOW)
+	row.pip = NewTexture(row.bar, "OVERLAY", 2)
+	row.pip:SetSize(3, SWING_BAR_H + 4)
+	row.barOutline = ns.Outline(row.bar, row.bar)
+	row.wholeOutline = ns.Outline(row.timer, row.timer)
+	inst.outlines[#inst.outlines + 1] = row.barOutline
+	inst.outlines[#inst.outlines + 1] = row.wholeOutline
+	row.type = NewText(row.bar)
+	row.time = NewText(row.bar)
+	if row.type then
+		row.type:SetPoint("LEFT", row.bar, "LEFT", 10, 0)
+		row.type:SetJustifyH("LEFT")
+		row.type:SetText(HandName(spec.hand))
+	end
+	if row.time then
+		row.time:SetPoint("RIGHT", row.bar, "RIGHT", -10, 0)
+		row.time:SetJustifyH("RIGHT")
+	end
+	return row
+end
+
 local function BuildSwing(stage)
-	local inst = { parts = {}, outlines = {}, rows = {}, clock = 0, looks = {} }
+	local inst = { parts = {}, outlines = {}, rows = {}, clock = 0, looks = {}, grey = {} }
 	inst.root = NewFrame(stage)
 	inst.root:SetPoint("CENTER", stage, "CENTER", 0, 0)
 	for index, spec in ipairs(SWING_ROWS) do
-		local row = { spec = spec }
-		row.timer = NewFrame(inst.root)
-		row.timer:SetSize(SWING_FRAME_W, SWING_FRAME_H)
-		row.art = NewArt(inst, row.timer, SWING_ART)
-		row.bar = NewFrame(row.timer)
-		row.bar:SetPoint("TOPLEFT", row.timer, "TOPLEFT", 5, -4)
-		row.bar:SetPoint("BOTTOMRIGHT", row.timer, "BOTTOMRIGHT", -5, 4)
-		row.fill = NewTexture(row.bar, "ARTWORK", 0)
-		-- The Auto Shot window on the ranged timer: the last half second of its swing, over the fill (Bars.lua, ApplyAutoShot).
-		if spec.hand == "ranged" then
-			row.band = NewTexture(row.bar, "ARTWORK", 7)
-		end
-		row.shadow = NewTexture(row.bar, "OVERLAY", 0)
-		row.shadow:SetPoint("TOPLEFT", row.bar, "TOPLEFT", 0, 0)
-		row.shadow:SetPoint("BOTTOMLEFT", row.bar, "BOTTOMLEFT", 0, 0)
-		row.shadow:SetWidth(SWING_SHADOW)
-		row.pip = NewTexture(row.bar, "OVERLAY", 2)
-		row.pip:SetSize(3, SWING_BAR_H + 4)
-		row.barOutline = ns.Outline(row.bar, row.bar)
-		row.wholeOutline = ns.Outline(row.timer, row.timer)
-		inst.outlines[#inst.outlines + 1] = row.barOutline
-		inst.outlines[#inst.outlines + 1] = row.wholeOutline
-		row.type = NewText(row.bar)
-		row.time = NewText(row.bar)
-		if row.type then
-			row.type:SetPoint("LEFT", row.bar, "LEFT", 10, 0)
-			row.type:SetJustifyH("LEFT")
-			row.type:SetText(HandName(spec.hand))
-		end
-		if row.time then
-			row.time:SetPoint("RIGHT", row.bar, "RIGHT", -10, 0)
-			row.time:SetJustifyH("RIGHT")
-		end
+		local row = NewSwingTimer(inst, inst.root, spec)
 		row.note = NewText(inst.root, "GameFontNormalSmall")
 		if row.note then
 			row.note:SetText(spec.note)
@@ -856,25 +965,117 @@ local function SwingProgress(spec, clock)
 	return run, spec.period * (1 - run)
 end
 
--- The parts of the timers that move: the fill, the spark at its end and the time left.
+-- The parts of a timer that move: the fill at `run` of the bar, the spark at its end and the seconds left.
+local function SwingFill(row, look, run, left)
+	local spec, colour = row.spec, look.colour[row.spec.hand]
+	FillBar(row.fill, row.bar, look.barW or SWING_BAR_W, run, look.reverse, look.file, colour[1], colour[2], colour[3], look.atlas[spec.hand])
+	-- The pip sits on the fill's end: its side on the fill's side (Bars.lua:507-509).
+	local side = look.reverse and "LEFT" or "RIGHT"
+	row.pip:ClearAllPoints()
+	row.pip:SetPoint(side, row.fill, side, 0, 0)
+	row.pip:SetShown(not spec.idle and look.spark)
+	if row.time then
+		row.time:SetText(("%.1f"):format(left))
+	end
+end
+
 local function PaintSwing(inst)
 	local look = inst.looks
 	if not look.ready then
 		return
 	end
 	for _, row in ipairs(inst.rows) do
-		local spec = row.spec
-		local run, left = SwingProgress(spec, inst.clock)
-		FillBar(row.fill, row.bar, inst.barW or SWING_BAR_W, run, look.reverse, look.file, look.colour[spec.hand][1], look.colour[spec.hand][2], look.colour[spec.hand][3],
-			look.atlas[spec.hand])
-		-- The pip sits on the fill's end: its side on the fill's side (Bars.lua:507-509).
-		local side = look.reverse and "LEFT" or "RIGHT"
-		row.pip:ClearAllPoints()
-		row.pip:SetPoint(side, row.fill, side, 0, 0)
-		row.pip:SetShown(not spec.idle and look.spark)
-		if row.time then
-			row.time:SetText(("%.1f"):format(left))
+		SwingFill(row, look, SwingProgress(row.spec, inst.clock))
+	end
+end
+
+-- What the rows of the page say for every timer, read once for a paint. frameW: the width of a timer (the rows' when nil).
+local function SwingLook(frameW)
+	local enabled = G("swing.enabled") == true
+	local flat = enabled and G("swing.flat") == true
+	local look = { ready = true, enabled = enabled, flat = flat, whole = enabled and G("swing.outline") == "frame",
+		idleHide = enabled and G("swing.idle") ~= "show" }
+	look.file = flat and ns.BarTexture(G("swing.texture")) or nil
+	if not flat then
+		look.file = ns.BarFile("game")
+	end
+	local colour, cr, cg, cb = {}, nil, nil, nil
+	if flat and G("swing.classColour") then
+		cr, cg, cb = ClassRGB()
+	end
+	for _, hand in ipairs({ "main", "off", "ranged" }) do
+		if not flat then
+			colour[hand] = GREY
+		elseif cr then
+			colour[hand] = { cr, cg, cb }
+		else
+			local r, g, b = ns.Colour("swing." .. hand .. "Colour")
+			colour[hand] = { r, g, b }
 		end
+	end
+	local atlas = {}
+	if not flat then
+		for hand, name in pairs(SWING_FILL_ATLAS) do
+			atlas[hand] = AtlasExists(name) and name or nil
+		end
+	end
+	look.colour, look.atlas = colour, atlas
+	look.reverse = enabled and G("swing.reverse") == true
+	look.spark = not (flat and not G("swing.spark"))
+	look.percent = enabled and G("swing.textSize") or 100
+	look.outline = enabled and G("swing.textOutline") or nil
+	look.hideName = enabled and not G("swing.name")
+	look.hideTime = enabled and not G("swing.time")
+	look.own = enabled and G("swing.textOwn")
+	look.rangeAlpha = enabled and G("swing.rangeAlpha") / 100 or GAME_RANGE_ALPHA
+	look.frameW = frameW or (enabled and G("swing.width") == "resource" and DISPLAY_WIDTH or SWING_FRAME_W)
+	look.barW = look.frameW - (SWING_FRAME_W - SWING_BAR_W)
+	return look
+end
+
+-- Paints the parts of one timer that the rows set: its size, borders, art, Auto Shot window, shadow and text looks.
+local function PaintSwingTimer(row, look)
+	local inst, spec = row.inst, row.spec
+	row.timer:SetSize(look.frameW, SWING_FRAME_H)
+	local on = look.enabled and G("swing." .. spec.hand) == true
+	local idle = look.idleHide and spec.idle
+	-- The border: around the bar or around the whole timer; the game's own border and background go when it is on.
+	ns.SetOutline(row.barOutline, on and not look.whole, G("swing.backdrop"))
+	ns.SetOutline(row.wholeOutline, on and look.whole and not idle, G("swing.backdrop"))
+	ShowArt(row.art, not on)
+	inst.grey[row.fill] = (not look.flat and not look.atlas[spec.hand]) or nil
+	GameTexture(inst, row.pip, SWING_PIP, { 0.9, 0.9, 0.9, 0.95 })
+	GameTexture(inst, row.shadow, SWING_SHADOW_ATLAS, { 0, 0, 0, 0.45 })
+	row.bar:SetShown(not idle)
+	row.bar:SetAlpha(spec.out and look.rangeAlpha or 1)
+	if row.band then
+		local shown = look.enabled and G("swing.autoShot") == true and not idle
+		if shown then
+			local br, bg, bb = ns.Colour("swing.autoShotColour")
+			row.band:SetColorTexture(br, bg, bb, 0.5)
+			local side = look.reverse and "LEFT" or "RIGHT"
+			row.band:ClearAllPoints()
+			row.band:SetPoint("TOP" .. side, row.bar, "TOP" .. side, 0, 0)
+			row.band:SetPoint("BOTTOM" .. side, row.bar, "BOTTOM" .. side, 0, 0)
+			row.band:SetWidth(look.barW * math.min(1, 0.5 / spec.period))
+		end
+		row.band:SetShown(shown)
+	end
+	row.shadow:SetShown(not (look.flat and not G("swing.textShadow")))
+	local r, g, b = GAME_IN[1], GAME_IN[2], GAME_IN[3]
+	if spec.out then
+		r, g, b = GAME_OUT[1], GAME_OUT[2], GAME_OUT[3]
+	end
+	if look.own then
+		r, g, b = ns.Colour(spec.out and "swing.rangeTextColour" or "swing.textColour")
+	end
+	if row.type then
+		row.type:SetShown(not look.hideName)
+		Look(row.type, look.percent, r, g, b, look.outline)
+	end
+	if row.time then
+		row.time:SetShown(not look.hideTime)
+		Look(row.time, look.percent, r, g, b, look.outline)
 	end
 end
 
@@ -884,104 +1085,20 @@ end
 
 function swingDrawing.draw(stage)
 	local inst = Instance(swingMade, stage, swingDrawing, BuildSwing)
-	local enabled = G("swing.enabled") == true
-	local flat = enabled and G("swing.flat") == true
-	local whole = enabled and G("swing.outline") == "frame"
-	local idleHide = enabled and G("swing.idle") ~= "show"
-	local file = flat and ns.BarTexture(G("swing.texture")) or nil
-	if not flat then
-		file = ns.BarFile("game")
-	end
-	local colour = {}
-	if flat then
-		local cr, cg, cb
-		if G("swing.classColour") then
-			cr, cg, cb = ClassRGB()
-		end
-		for _, hand in ipairs({ "main", "off", "ranged" }) do
-			if cr then
-				colour[hand] = { cr, cg, cb }
-			else
-				local r, g, b = ns.Colour("swing." .. hand .. "Colour")
-				colour[hand] = { r, g, b }
-			end
-		end
-	else
-		for _, hand in ipairs({ "main", "off", "ranged" }) do
-			colour[hand] = GREY
-		end
-	end
-	local atlas = {}
-	if not flat then
-		for hand, name in pairs(SWING_FILL_ATLAS) do
-			atlas[hand] = AtlasExists(name) and name or nil
-		end
-	end
-	local look = inst.looks
-	look.ready, look.file, look.colour, look.atlas = true, file, colour, atlas
-	look.reverse = enabled and G("swing.reverse") == true
-	look.spark = not (flat and not G("swing.spark"))
-	local percent = enabled and G("swing.textSize") or 100
-	local outline = enabled and G("swing.textOutline") or nil
-	local hideName = enabled and not G("swing.name")
-	local hideTime = enabled and not G("swing.time")
-	local own = enabled and G("swing.textOwn")
-	local rangeAlpha = enabled and G("swing.rangeAlpha") / 100 or GAME_RANGE_ALPHA
+	local look = SwingLook(nil)
+	inst.looks, inst.barW = look, look.barW
 	local y = SWING_TOP
-	local frameW = enabled and G("swing.width") == "resource" and DISPLAY_WIDTH or SWING_FRAME_W
-	inst.barW = frameW - (SWING_FRAME_W - SWING_BAR_W)
 	for _, row in ipairs(inst.rows) do
-		local spec = row.spec
-		row.timer:SetSize(frameW, SWING_FRAME_H)
-		local on = enabled and G("swing." .. spec.hand) == true
-		local idle = idleHide and spec.idle
 		Place(row.timer, "TOPLEFT", inst.root, "TOPLEFT", SWING_LEFT, -y)
-		-- The border: around the bar or around the whole timer; the game's own border and background go when it is on.
-		ns.SetOutline(row.barOutline, on and not whole, G("swing.backdrop"))
-		ns.SetOutline(row.wholeOutline, on and whole and not idle, G("swing.backdrop"))
-		ShowArt(row.art, not on)
-		inst.grey[row.fill] = (not flat and not atlas[spec.hand]) or nil
-		GameTexture(inst, row.pip, SWING_PIP, { 0.9, 0.9, 0.9, 0.95 })
-		GameTexture(inst, row.shadow, SWING_SHADOW_ATLAS, { 0, 0, 0, 0.45 })
-		row.bar:SetShown(not idle)
-		row.bar:SetAlpha(spec.out and rangeAlpha or 1)
-		if row.band then
-			local shown = enabled and G("swing.autoShot") == true and not idle
-			if shown then
-				local br, bg, bb = ns.Colour("swing.autoShotColour")
-				row.band:SetColorTexture(br, bg, bb, 0.5)
-				local side = look.reverse and "LEFT" or "RIGHT"
-				row.band:ClearAllPoints()
-				row.band:SetPoint("TOP" .. side, row.bar, "TOP" .. side, 0, 0)
-				row.band:SetPoint("BOTTOM" .. side, row.bar, "BOTTOM" .. side, 0, 0)
-				row.band:SetWidth(inst.barW * math.min(1, 0.5 / spec.period))
-			end
-			row.band:SetShown(shown)
-		end
-		row.shadow:SetShown(not (flat and not G("swing.textShadow")))
-		local r, g, b = GAME_IN[1], GAME_IN[2], GAME_IN[3]
-		if spec.out then
-			r, g, b = GAME_OUT[1], GAME_OUT[2], GAME_OUT[3]
-		end
-		if own then
-			r, g, b = ns.Colour(spec.out and "swing.rangeTextColour" or "swing.textColour")
-		end
-		if row.type then
-			row.type:SetShown(not hideName)
-			Look(row.type, percent, r, g, b, outline)
-		end
-		if row.time then
-			row.time:SetShown(not hideTime)
-			Look(row.time, percent, r, g, b, outline)
-		end
+		PaintSwingTimer(row, look)
 		if row.note then
-			Place(row.note, "LEFT", inst.root, "TOPLEFT", SWING_LEFT + frameW + 18, -(y + SWING_FRAME_H / 2))
+			Place(row.note, "LEFT", inst.root, "TOPLEFT", SWING_LEFT + look.frameW + 18, -(y + SWING_FRAME_H / 2))
 		end
 		y = y + SWING_FRAME_H + SWING_GAP
 	end
 	inst.paint = PaintSwing
 	PaintSwing(inst)
-	inst.root:SetSize(SWING_LEFT + frameW + 140, y + SWING_TOP)
+	inst.root:SetSize(SWING_LEFT + look.frameW + 140, y + SWING_TOP)
 	ShowGameLook(inst)
 end
 
@@ -1003,3 +1120,24 @@ end
 
 swingDrawing.parts = {}
 ns.SetupDrawings["mock-swing"] = swingDrawing
+
+-- A swing timer of `hand` (main, off or ranged) on `parent`, for test mode. period: the seconds of its swing. The caller anchors row.timer.
+function DC.Swing(parent, hand, period)
+	return NewSwingTimer({ grey = {}, outlines = {} }, parent, { hand = hand, part = 0, period = period or 2.6 })
+end
+
+-- Paints a timer from the rows, w wide (the rows' width when nil), and gives its width and height.
+function DC.PaintSwing(row, w)
+	local look = SwingLook(ns.Finite(w) and w > 0 and w or nil)
+	row.look = look
+	PaintSwingTimer(row, look)
+	SwingFill(row, look, 0, row.spec.period)
+	return look.frameW, SWING_FRAME_H
+end
+
+-- The moving parts of a painted timer: its fill at `run` of its swing and the seconds left.
+function DC.SwingProgress(row, run, left)
+	if row.look then
+		SwingFill(row, row.look, run, left)
+	end
+end

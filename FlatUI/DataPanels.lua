@@ -25,6 +25,7 @@ local ADDON_NAME, ns = ...
 -- refresh, which asks InCombatLockdown, and when a stream drawn again makes a panel or shows it again. A panel under the mouse, or whose menu is
 -- open, is at full opacity: the frame is asked IsMouseOver, which needs no mouse on it, on a ticker every HOVER seconds that runs only while a
 -- shown panel rests below full opacity, so slots that let clicks through still do. The alpha is written only when it changes.
+-- While test mode is on (TestMode.lua), a slot whose stream has nothing to show shows the stream's sample, the widest text it shows (P.TextOf).
 -- Built on the data panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission: its streams, the bridge to LibDataBroker,
 -- the ticker that runs only for the streams that are shown, and its looks: font style and colour, width, strata and the opacity in and out of
 -- combat (Core/DataPanel.lua:414-433, 1127-1180, 1484-1617). Panels made in Edit Mode, its height (Text size covers it), its fonts of other
@@ -634,12 +635,18 @@ function P.Build(panel)
 	end
 end
 
--- The text a slot's stream gives now, or nil.
+-- The text a slot's stream gives now, or nil. While test mode is on (TestMode.lua) a stream with nothing to show gives its own sample, the widest
+-- text it shows, so an empty slot and an empty panel can be seen.
 function P.TextOf(slot)
 	local stream = P.StreamOf(slot.id)
 	if stream and not ns.PartStopped(KEY, stream.label) then
 		local ok, answer = P.Run(stream, stream.Text)
-		return ok and P.Text(answer) or nil
+		local text = ok and P.Text(answer) or nil
+		local mode = ns.TestMode
+		if text == nil and type(stream.sample) == "string" and mode ~= nil and mode.IsOn() == true then
+			return stream.sample
+		end
+		return text
 	end
 	return nil
 end
@@ -1603,3 +1610,8 @@ ns.Register(KEY, {
 		end,
 	},
 })
+
+-- Test mode: On, Off and a pause refresh the page, so an empty slot shows its stream's sample while it is on (P.TextOf) and goes after.
+if ns.TestMode then
+	ns.TestMode.Register("datapanels", { module = KEY, label = "Data panels", refresh = true })
+end
