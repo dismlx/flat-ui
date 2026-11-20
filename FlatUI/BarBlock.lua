@@ -11,13 +11,19 @@ local _, ns = ...
 -- In /flatui move each bar of a block has a tab inside the block's box: dragged and let go, it puts the bar at that place of its block, or of
 -- the block whose box it is dropped on (Tabs, below).
 -- The blocks work whatever Leave the game's action bars alone says: while it is on it guards only the bars no block holds (Movers.lua,
--- hold.Off), and the stance, pet and experience bars stay with the game.
+-- hold.Off), and the stance and pet bars and the game's experience bars stay with the game.
+-- Flat UI's own experience bar goes under block 1 by default (Experience bar under the bar block, XpBar.lua, ns.XpUnder): the block keeps its
+-- room under its bars, the bar's height and the block's gap between bars, so the bottom of the block is the bottom of the bar, and the bar is
+-- exactly as wide as the block (Plan). It follows the block as bars are added or taken out, their size and the stack direction change and the
+-- box is moved; the box, the background panel and the fade take it in. This is whatever Stance, pet and experience bars and Leave the game's
+-- action bars alone say, since the bar is Flat UI's. A bar that shows nothing keeps no room, and hangs under the block until the next plan.
 -- With Stance, pet and experience bars on Above the block, the frames the game hangs from the main bar get spots over block 1 too: the
--- experience bars, then the stance bar on the left and the pet bar on the right, then the possess bar, then the totem bar of a character that has
--- one. Since 70425 the game stacks the totem bar last (Camelot/EditModeUtil.lua:21): in its default position it goes over the bars of the stack
--- still in theirs, so once the block's bars are kept in the Edit Mode layout it is 4 over the top of the main bar (EditModeManager.lua:666-668,
--- 692-716), across the next row of the block. The block holds it on a row of its own. The Leave vehicle button hangs from the main bar in the
--- game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed here; /flatui block facts still lists it.
+-- experience bars (Flat UI's while it is not under the block), then the stance bar on the left and the pet bar on the right, then the possess
+-- bar, then the totem bar of a character that has one. Since 70425 the game stacks the totem bar last (Camelot/EditModeUtil.lua:21): in its
+-- default position it goes over the bars of the stack still in theirs, so once the block's bars are kept in the Edit Mode layout it is 4 over
+-- the top of the main bar (EditModeManager.lua:666-668, 692-716), across the next row of the block. The block holds it on a row of its own. The
+-- Leave vehicle button hangs from the main bar in the game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed
+-- here; /flatui block facts still lists it.
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
 -- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours. Fade the block: the alpha of each
@@ -222,12 +228,15 @@ end
 -- between rows. A hidden frame has its spot too, so it shows in place; only a shown frame gives its row height. The stance bar is on the
 -- left and the pet bar on the right, and the pet bar goes on a row of its own above the stance bar when the stance bar is wider than half
 -- the block. The totem bar is on the left of the last row. Returns the spots, the part of the signature, whether the two bars would overlap,
--- and the top of the last shown row.
-local function AroundSpots(left, width, top, gap)
+-- and the top of the last shown row. Flat UI's experience bar under the block (under) has no row here.
+local function AroundSpots(left, width, top, gap, under)
 	local spots, parts, size = {}, {}, {}
 	local own = ns.XpOwn ~= nil and ns.XpOwn()
 	for _, name in ipairs(own and AROUND_OWN or AROUND) do
-		local w, h, shown, frame = AroundSize(name)
+		local w, h, shown, frame
+		if not (under and name == XPOWN) then
+			w, h, shown, frame = AroundSize(name)
+		end
 		if frame then
 			size[name] = { w = w, h = h, shown = shown }
 			parts[#parts + 1] = ("%s:%.1f:%.1f:%d"):format(name, w, h, shown and 1 or 0)
@@ -279,7 +288,20 @@ local function AroundSpots(left, width, top, gap)
 	return spots, table.concat(parts, ","), overlap, cursor
 end
 
--- The rows and the spot of each bar for block n whose bottom middle is at spotX, spotY (the units of UIParent from the bottom left).
+-- Flat UI's experience bar under block 1 (ns.XpUnder): the room the block keeps for it under its bars, its height and the gap while it shows
+-- something, else none, and the part of the signature. Nothing for the other blocks or while the bar is not under the block.
+local function UnderRoom(n, gap)
+	if n ~= 1 or not (ns.XpUnder ~= nil and ns.XpUnder()) then
+		return nil
+	end
+	local _, height, shown = ns.XpBarSize()
+	local room = shown and Number(height) and height > 0 and height + gap or 0
+	return room, ("%s:under:%.1f"):format(XPOWN, room)
+end
+
+-- The rows and the spot of each bar for block n whose bottom middle is at spotX, spotY (the units of UIParent from the bottom left). Under
+-- block 1 Flat UI's experience bar has its room first (UnderRoom), the bars stack over it, and its spot is the top left corner of that room
+-- with the width of the block (the bar hangs from it, so one that shows something before the next plan hangs under the block).
 local function Plan(n, spotX, spotY)
 	local rows = Slots(n)
 	if #rows == 0 then
@@ -294,15 +316,17 @@ local function Plan(n, spotX, spotY)
 		height = height + row.height + (index > 1 and gap or 0)
 		parts[#parts + 1] = ("%s:%.1f:%.1f"):format(row.bar.frame, row.width, row.height)
 	end
+	local room, underSig = UnderRoom(n, gap)
+	local base = spotY + (room or 0)
 	local left, align, down = spotX - width / 2, Opt("align" .. SUFFIX[n]), Opt("direction" .. SUFFIX[n]) == "down"
 	local spots, used = {}, down and height or 0
 	for _, row in ipairs(rows) do
 		local bottom
 		if down then
-			bottom = spotY + used - row.height
-			used = bottom - spotY - gap
+			bottom = base + used - row.height
+			used = bottom - base - gap
 		else
-			bottom = spotY + used
+			bottom = base + used
 			used = used + row.height + gap
 		end
 		local x = left
@@ -313,11 +337,16 @@ local function Plan(n, spotX, spotY)
 		end
 		spots[row.bar.frame] = { point = "BOTTOMLEFT", x = x, y = bottom }
 	end
+	if room then
+		spots[XPOWN] = { point = "TOPLEFT", x = left, y = room > 0 and base - gap or spotY - gap, width = width, under = true }
+		parts[#parts + 1] = underSig
+		height = height + room
+	end
 	local overlap, aboveTop = false, nil
 	-- Only block 1 has the stance, pet and experience bars over it, and none while Flat UI leaves those bars to the game.
 	if n == 1 and Opt("others") == "above" and not ns.HandsOff() then
 		local around, sig, cursor
-		around, sig, overlap, cursor = AroundSpots(left, width, spotY + height, gap)
+		around, sig, overlap, cursor = AroundSpots(left, width, spotY + height, gap, room ~= nil)
 		aboveTop = cursor
 		for name, spot in pairs(around) do
 			spots[name] = spot
@@ -491,7 +520,8 @@ local function Under(plan)
 	local left, bottom = plan.spotX - plan.width / 2, plan.spotY
 	local right, top = left + plan.width, bottom + plan.height
 	for name, spot in pairs(plan.spots) do
-		local seen = AROUND_SET[name] and state.seen[name]
+		-- Flat UI's experience bar under the block is in the block's own rectangle.
+		local seen = AROUND_SET[name] and not spot.under and state.seen[name]
 		local frame = seen and (name == XPOWN and ns.XpBarFrame() or GameFrame(name))
 		if frame and ns.MoverShown(frame) ~= false then
 			left, bottom = math.min(left, spot.x), math.min(bottom, spot.y)
@@ -678,8 +708,7 @@ local function Hold()
 		end
 	end
 	ns.MoverHold(KEY, next(held) ~= nil and held or nil)
-	local own = blocks[1].last and blocks[1].last.spots[XPOWN]
-	ns.XpBarBlock(own and own.x, own and own.y)
+	ns.XpBarBlock(blocks[1].last and blocks[1].last.spots[XPOWN])
 end
 
 local function Replan()
@@ -761,6 +790,13 @@ local function Queue()
 		state.queued = false
 		ns.Try(KEY, Replan)
 	end)
+end
+
+-- Flat UI's experience bar changed its rows (XpBar.lua): block 1 lays out again, for the room it keeps under its bars.
+function ns.BarBlockReplan()
+	if ns.Enabled(KEY) then
+		Queue()
+	end
 end
 
 -- A bar that is laid out later, or turned on in the game's options, changes the plan of its block.
@@ -1119,7 +1155,7 @@ local function Status()
 		return lines
 	end
 	if ns.HandsOff() and Opt("others") == "above" then
-		lines[#lines + 1] = "Action bar block: the stance, pet and experience bars stay with the game while Leave the game's action bars alone is on."
+		lines[#lines + 1] = "Action bar block: the stance and pet bars and the game's experience bars stay with the game while Leave the game's action bars alone is on."
 	end
 	local movers, systems, keep = ns.MoverHoldGates()
 	if not movers then

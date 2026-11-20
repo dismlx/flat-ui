@@ -18,7 +18,9 @@ local ADDON_NAME, ns = ...
 -- BarBlock gives Movers the spots of the action bars of up to three blocks (on by default with bars 3 and 2, the main bar and bar 4, top to
 -- bottom, in block 1, laid flat by One size and spacing for every bar, on by default), also while Leave the game's action bars alone is on, which
 -- then guards only the bars no block holds. In /flatui move a tab of its own on each bar of a block drags the bar to another place of a block's
--- list, a setting, out of combat; the block then lays out again. The one thing it writes on a Blizzard frame is
+-- list, a setting, out of combat; the block then lays out again. Flat UI's own experience bar (XpBar.lua, a frame of the addon's) goes right
+-- under block 1 by default, exactly as wide as the block, which keeps its room under its bars (Experience bar under the bar block); its own spot
+-- and width come back when that row is off. The one thing it writes on a Blizzard frame is
 -- the alpha of the bars of the blocks (SetAlpha, only with Fade the block on), put back when the fade goes off. At login and when the bars of
 -- a block change, out of combat, it turns on each of bars 2 to 8 a block holds that the game's options have off, with the game's own setting
 -- for that bar (Settings.SetValue of PROXY_SHOW_ACTIONBAR_2 to 8, once the game has made it), or SetActionBarToggles with the other bars as

@@ -13,6 +13,10 @@ local _, ns = ...
 -- (ns.XpBarRedraw), and the tooltip of a bar under the cursor is written again with each drawing.
 -- Its reputation bar shows the faction the Levelling errands follow, when they follow one (ErrandsLevelling.lua); the faction the game watches
 -- is not changed.
+-- With Experience bar under the bar block (on by default) block 1 of the Bar block page places the bar right under its bars, a bar gap below
+-- them and exactly as wide as the block, and keeps the bar's room in the block (BarBlock.lua, ns.XpUnder); the bar's own spot and the Width row
+-- are not used then, and its box in /flatui move says it follows the bar block. Off, or with the Bar block page off, the bar has its own spot
+-- and width again. Only Flat UI's own frames are placed and sized, so this goes on in a fight too.
 
 local KEY, MOVER = "hud", "FlatUIXpBar"
 -- The width of the game's full bar on Camelot, which 100% of the width row is (Camelot/StatusTrackingBarConstants.lua:1-14).
@@ -32,7 +36,8 @@ local OF_PLAYER = { PLAYER_XP_UPDATE = true, UNIT_LEVEL = true }
 
 -- mode: what is applied to the game's bars ("flat" parked, "game" given back, nil before the first look). frame: the bar's frame. bars: the two
 -- bars by id. xp, rep: the last values read, kept while the game withholds them. mouse: the game's frames whose mouse is off here. waiting: a switch
--- that waits for the end of a fight. block: the spot the action bar block gave, if any. put: how often the game put an alpha or a mouse back.
+-- that waits for the end of a fight. block: the spot the action bar block gave, if any ({ point, x, y, width }: the width only under the block).
+-- put: how often the game put an alpha or a mouse back.
 local S = { bars = {}, mouse = setmetatable({}, { __mode = "k" }), put = 0, queued = 0 }
 local F = {}
 
@@ -65,6 +70,21 @@ end
 -- True while the own bar is chosen and the page is on.
 function ns.XpOwn()
 	return ns.Enabled(KEY) and not ns.PartStopped(KEY, "xpbar") and ns.Get(KEY .. ".xpOwn") == "flat"
+end
+
+-- True while the own bar goes under block 1 of the Bar block page at its width (Experience bar under the bar block): BarBlock.lua then keeps
+-- its room under the bars and gives it its spot and width (ns.XpBarBlock).
+function ns.XpUnder()
+	return ns.XpOwn() and Opt("xpUnder") == true
+end
+
+-- The width of the bar: the block's under the bar block, else the Width row's share of the game's full bar.
+function F.Width()
+	local block = S.block
+	if block and ns.Finite(block.width) and block.width > 0 then
+		return block.width
+	end
+	return FULL * Opt("xpWidth") / 100
 end
 
 -- Text -----------------------------------------------------------------------------------------------------------------------------------------
@@ -254,7 +274,8 @@ function F.List()
 	return list
 end
 
--- The size the own bar has with the rows and the bars now shown: width, height, and whether any bar shows. The action bar block places the bar from it.
+-- The size the own bar has with the rows and the bars now shown: width (the Width row's, which the bar has unless it is under the block),
+-- height, and whether any bar shows. The action bar block places the bar from it.
 function ns.XpBarSize()
 	local count = #F.List()
 	local height, gap = Opt("xpHeight"), Opt("xpGap")
@@ -705,7 +726,7 @@ function F.Place()
 	end
 	local point, x, y = "BOTTOM", ns.MoverSpot(MOVER, "BOTTOM")
 	if S.block then
-		point, x, y = "BOTTOMLEFT", S.block.x, S.block.y
+		point, x, y = S.block.point, S.block.x, S.block.y
 	elseif not x then
 		local _, height = root:GetSize()
 		x, y = F.DefaultSpot(height)
@@ -725,7 +746,7 @@ end
 function F.Update(layout)
 	local root = F.Build()
 	local list = F.List()
-	local width, height, gap = FULL * Opt("xpWidth") / 100, Opt("xpHeight"), Opt("xpGap")
+	local width, height, gap = F.Width(), Opt("xpHeight"), Opt("xpGap")
 	local shown = {}
 	for index, id in ipairs(list) do
 		shown[id] = index
@@ -867,9 +888,13 @@ for _, event in ipairs(EVENTS) do
 	end or nil)
 end
 
--- The settings changed, or the page started: Hud.lua calls this at the end of its own refresh.
+-- The settings changed, or the page started: Hud.lua calls this at the end of its own refresh. The bar block lays out again, for the room it
+-- keeps for the bar under its bars (BarBlock.lua); its watch would see the change within half a second anyway.
 function ns.XpBarRefresh()
 	F.Refresh()
+	if ns.BarBlockReplan ~= nil then
+		ns.BarBlockReplan()
+	end
 end
 
 -- The levelling numbers changed (XpStats.lua): the bar is drawn again while it is Flat UI's.
@@ -901,13 +926,22 @@ function ns.XpBarFrame()
 	return S.frame
 end
 
--- The frame of the bar and the frame its handle hangs from, for Movers: nothing while the bar is off, held by the action bar block, or Movers are off.
+-- The frame of the bar and the frame its handle hangs from, for Movers: nothing while the bar is off or Movers are off. While the action bar
+-- block places the bar its box is there all the same, grey, and says so (ns.XpBarFollows).
 function ns.XpBarRow()
 	local movers = ns.MoverHoldGates()
-	if S.frame and S.mode == "flat" and movers and not S.block then
+	if S.frame and S.mode == "flat" and movers then
 		return { S.frame }, S.frame
 	end
 	return {}
+end
+
+-- What the bar follows, for its box in /flatui move (Movers.lua, follows): the bar block while a block places it, else nothing.
+function ns.XpBarFollows()
+	if S.block then
+		return "the bar block"
+	end
+	return nil
 end
 
 -- The spot was set or put back with the handle.
@@ -916,12 +950,23 @@ function ns.XpBarMoved()
 	F.Place()
 end
 
--- The action bar block gives the bar a spot (the bottom left corner, in the units of UIParent), or takes it back with nothing.
-function ns.XpBarBlock(x, y)
+-- The action bar block gives the bar a spot, or takes it back with nothing: { point, x, y } in the units of UIParent from its bottom left (the
+-- bottom left corner over the block, the top left corner under it), and under the block the width of the block. A new width draws the bar
+-- again at that width, a new spot only places it.
+function ns.XpBarBlock(spot)
 	local was = S.block
-	S.block = x and { x = x, y = y } or nil
-	if (was ~= nil) ~= (S.block ~= nil) or (was and S.block and (was.x ~= x or was.y ~= y)) then
-		S.placed = nil
+	S.block = type(spot) == "table" and ns.Finite(spot.x) and ns.Finite(spot.y)
+		and { point = spot.point or "BOTTOMLEFT", x = spot.x, y = spot.y, width = ns.Finite(spot.width) and spot.width or nil } or nil
+	local now = S.block
+	local moved = (was ~= nil) ~= (now ~= nil) or (was and now and (was.point ~= now.point or was.x ~= now.x or was.y ~= now.y))
+	local resized = (was and was.width) ~= (now and now.width)
+	if not (moved or resized) then
+		return
+	end
+	S.placed = nil
+	if resized and S.frame and S.mode == "flat" and not S.waiting and ns.XpOwn() then
+		F.Update()
+	else
 		F.Place()
 	end
 end

@@ -1923,8 +1923,13 @@ ns.PAGES = {
 		{ section = "Experience and reputation bars" },
 		{ key = "xpOwn", kind = "choice", default = "flat", label = "Experience bar", tip = "The game's bar stays in place and is not drawn.",
 			choices = { { "flat", "Flat UI's" }, { "game", "The game's" } } },
-		{ key = "xpWidth", kind = "number", default = 42, min = 10, max = 130, step = 1, unit = "%", label = "Width", tip = "100% is the game's bar at full width.",
+		-- Block 1 of the Bar block page places the bar under its bars at its width (XpBar.lua, BarBlock.lua); the Width row then says so (overText).
+		{ key = "xpUnder", kind = "bool", default = true, label = "Experience bar under the bar block",
+			tip = "Right under block 1 of the Bar block page, exactly as wide as the block, and it moves with the block. With the Bar block page off the bar keeps its own place in /flatui move. Off: its own place and the Width below.",
 			needs = "xpOwn", needsIn = { "flat" } },
+		{ key = "xpWidth", kind = "number", default = 42, min = 10, max = 130, step = 1, unit = "%", label = "Width",
+			tip = "100% is the game's bar at full width. Under the bar block the bar is as wide as the block.", needs = "xpUnder", needsIn = { false },
+			overText = "as wide as the block" },
 		{ key = "xpHeight", kind = "number", default = 8, min = 2, max = 24, step = 1, unit = " px", label = "Height", needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpShow", kind = "choice", default = "both", label = "Bars shown", tip = "Reputation shows for the faction you watch.",
 			needs = "xpOwn", needsIn = { "flat" },
@@ -2615,7 +2620,7 @@ ns.PAGES = {
 	{
 		key = "barblock", label = "Bar block",
 		{ key = "enabled", kind = "bool", default = true, label = "Group action bars into blocks",
-			tip = "Lines up the bars of each block below, at first action bars 3 and 2, the main bar and action bar 4 in block 1, top to bottom. /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars, with a tab on each bar to drag it to another place in its block or into another block. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
+			tip = "Lines up the bars of each block below, at first action bars 3 and 2, the main bar and action bar 4 in block 1, top to bottom, with Flat UI's experience bar under them at the block's width (Experience bar under the bar block). /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars, with a tab on each bar to drag it to another place in its block or into another block. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
 		{ section = "Block 1" },
 		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
 		-- Stacked upward from the first bar, action bar 4 is at the bottom and action bar 3 on top.
@@ -2665,7 +2670,7 @@ ns.PAGES = {
 		{ key = "showEmpty", kind = "bool", default = true, label = "Show empty buttons", tip = "Edit Mode's Always show buttons.", needs = "uniform", changed = "BarButtonsChanged" },
 		{ section = "Other bars" },
 		{ key = "others", kind = "choice", default = "above", label = "Stance, pet and experience bars",
-			tip = "Above the block: experience bars on top of block 1, stance bar left and pet bar right above them. " .. KEPT,
+			tip = "Above the block: experience bars on top of block 1, stance bar left and pet bar right above them. Flat UI's experience bar goes under the block instead while Experience bar under the bar block is on. " .. KEPT,
 			choices = { { "above", "Above the block" }, { "game", "Left to the game" } } },
 		{ section = "Background" },
 		{ key = "background", kind = "bool", default = false, label = "Background panel", tip = "A flat panel behind the bars of the block." },

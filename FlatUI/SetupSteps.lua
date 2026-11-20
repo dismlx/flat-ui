@@ -658,6 +658,7 @@ ns.SETUP_STEPS = {
 	{ id = "hud-bars", area = "HUD", title = "Experience and menu bars", draw = "mock-xp-micro", built = true, rows = {
 		{ "hud.bags", "c", "mock-xp-micro" },
 		{ "hud.xpOwn", "c", "mock-xp-micro" },
+		{ "hud.xpUnder", "o", "behaviour", "Puts Flat UI's experience bar right under block 1 of the Bar block page, exactly as wide as the block, and moves it with the block." },
 		{ "hud.xpWidth", "c", "mock-xp-micro" },
 		{ "hud.xpHeight", "c", "mock-xp-micro" },
 		{ "hud.xpShow", "o", "mock-xp-micro" },

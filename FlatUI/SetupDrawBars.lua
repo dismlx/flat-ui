@@ -686,16 +686,26 @@ local function XpSize(width)
 	return width, XP_H, XP_SPACER
 end
 
+-- Whether Flat UI's experience bar goes under the block (Experience bar under the bar block, XpBar.lua): the page on, Flat UI's bar, the row on.
+local function XpUnder()
+	return ns.Get("hud.enabled") == true and ns.Get("hud.xpOwn") == "flat" and ns.Get("hud.xpUnder") == true
+end
+
 -- The bars hung above the block (BarBlock.lua AroundSpots): the two experience bars, then the stance bar on the left and the pet bar on the right,
--- the pet bar on a row of its own above when the stance bar is wider than half the block. Returns the items and the top of the last row.
-local function Around(plan, alpha)
+-- the pet bar on a row of its own above when the stance bar is wider than half the block. Returns the items and the top of the last row. With the
+-- experience bar under the block (under) only the stance and pet bars are here.
+local function Around(plan, alpha, under)
 	local width = plan.width > 0 and plan.width or 12 * SIZE + 11 * GAP
 	local xw, xh, spacer = XpSize(width)
 	local size = { xp1 = { xw, xh }, xp2 = { xw, xh }, stance = { BarWidth("stance", SMALL), SMALL }, pet = { BarWidth("pet", SMALL), SMALL } }
 	local rows = { { { "xp2", "centre" } }, { { "xp1", "centre" }, closer = true }, { { "stance", "left" }, { "pet", "right" } } }
+	if under then
+		table.remove(rows, 1)
+		table.remove(rows, 1)
+	end
 	if size.stance[1] > width / 2 then
-		rows[3] = { { "stance", "left" } }
-		rows[4] = { { "pet", "right" } }
+		rows[#rows] = { { "stance", "left" } }
+		rows[#rows + 1] = { { "pet", "right" } }
 	end
 	local items, cursor, any = {}, plan.height, false
 	for _, row in ipairs(rows) do
@@ -715,39 +725,57 @@ local function Around(plan, alpha)
 	return items, cursor
 end
 
--- The same bars with no place: the game puts them where the game puts them.
-local function LooseAround(plan)
+-- The same bars with no place: the game puts them where the game puts them. The experience bar under the block (under) is not among them.
+local function LooseAround(plan, under)
 	local width = plan.width > 0 and plan.width or 12 * SIZE + 11 * GAP
 	local loose = {}
 	local xw, xh = XpSize(width)
-	for _, key in ipairs({ "xp2", "xp1", "stance", "pet" }) do
+	for _, key in ipairs(under and { "stance", "pet" } or { "xp2", "xp1", "stance", "pet" }) do
 		local xp = key:find("^xp") ~= nil
 		loose[#loose + 1] = { kind = xp and "xp" or "small", key = key, id = key, w = xp and xw or BarWidth(key, SMALL), h = xp and xh or SMALL }
 	end
 	return loose
 end
 
--- The Action bar block with what the Bar block page says: items, loose items, the plan and the top of the bars above it.
+-- The Action bar block with what the Bar block page says: items, loose items, the plan, the top of the bars above it and the room of Flat UI's
+-- experience bar under it. That bar is under the bars, a gap below them, exactly as wide as the block (BarBlock.lua, Plan), the two bars of
+-- Experience and reputation one under the other; the panel goes round it too.
 local function BlockScene(on)
 	local plan = BlockPlan(on)
 	local fade = on and ns.Get("barblock.fade") == true
 	local alpha = fade and ns.Get("barblock.fadeTo") / 100 or 1
-	local scene = { plan = plan, items = {}, loose = {} }
+	local scene = { plan = plan, items = {}, loose = {}, room = 0 }
+	local under = on and #plan.rows > 0 and XpUnder()
+	local xp = {}
+	if under then
+		local _, xh, spacer = XpSize(plan.width)
+		local y = -plan.gap
+		for _, key in ipairs(ns.Get("hud.xpShow") == "both" and { "xp1", "xp2" } or { "xp1" }) do
+			y = y - xh
+			xp[#xp + 1] = { kind = "xp", key = key, id = key, x = 0, y = y, w = plan.width, h = xh, alpha = alpha }
+			y = y - spacer
+		end
+		scene.room = plan.gap + #xp * xh + (#xp - 1) * spacer
+	end
 	if on and ns.Get("barblock.background") == true and #plan.rows > 0 then
 		local pad = ns.Get("barblock.backgroundPad")
-		scene.items[#scene.items + 1] = { kind = "panel", x = -pad, y = -pad, w = plan.width + 2 * pad, h = plan.height + 2 * pad, alpha = alpha }
+		scene.items[#scene.items + 1] = { kind = "panel", x = -pad, y = -scene.room - pad, w = plan.width + 2 * pad, h = plan.height + scene.room + 2 * pad,
+			alpha = alpha }
 	end
 	for _, row in ipairs(plan.rows) do
 		scene.items[#scene.items + 1] = { kind = "bar", id = row.id, x = row.x, y = row.y, w = row.w, h = SIZE, alpha = alpha, count = row.count }
 	end
+	for _, item in ipairs(xp) do
+		scene.items[#scene.items + 1] = item
+	end
 	if on and ns.Get("barblock.others") == "above" and not ns.HandsOff() and #plan.rows > 0 then
-		local around, top = Around(plan, alpha)
+		local around, top = Around(plan, alpha, under)
 		for _, item in ipairs(around) do
 			scene.items[#scene.items + 1] = item
 		end
 		scene.top = top
 	else
-		scene.loose = LooseAround(plan)
+		scene.loose = LooseAround(plan, under)
 	end
 	return scene
 end
@@ -912,7 +940,7 @@ local function PlacesScene()
 	local block = scene ~= nil and #scene.plan.rows > 0
 	if block then
 		items, loose = scene.items, scene.loose
-		ref = { left = 0, bottom = 0, right = scene.plan.width, top = scene.plan.height, above = scene.top }
+		ref = { left = 0, bottom = -scene.room, right = scene.plan.width, top = scene.plan.height, above = scene.top }
 		-- The Bar block page keeps the pet bar over the block when it holds the bars above; otherwise the pet bar is set on this page.
 		for index = #loose, 1, -1 do
 			if loose[index].key == "pet" then

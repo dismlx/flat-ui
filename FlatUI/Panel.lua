@@ -655,16 +655,27 @@ local function AddNumber(row, item)
 	box = Field(row.frame, 54, 8, Commit)
 	box:SetPoint("LEFT", row.frame, "LEFT", CONTROL + TRACK + 12, 0)
 	box:SetJustifyH("CENTER")
-	local unit = Dim(Label(row.frame, "GameFontHighlightSmall", "LEFT", 90))
+	-- A row another switch takes over (overText, as Width of the experience bar under the bar block) says so in place of its value and unit
+	-- while the switch it needs is on, which greys the row (needsIn { false }).
+	local unit = Dim(Label(row.frame, "GameFontHighlightSmall", "LEFT", item.overText and 160 or 90))
 	unit:SetPoint("LEFT", box, "RIGHT", 10, 0)
-	unit:SetText(((item.unit or ""):gsub("^%s+", "")))
+	local plain = ((item.unit or ""):gsub("^%s+", ""))
+	unit:SetText(plain)
 	local function Show()
 		local value = Read(item)
 		local fraction = Clamp((value - item.min) / (item.max - item.min), 0, 1)
 		bar:SetWidth(math.max(1, fraction * TRACK))
 		thumb:SetPoint("CENTER", track, "LEFT", fraction * TRACK, 0)
+		local over = IsText(item.overText) and item.needsPath ~= nil and ns.Get(item.needsPath) == true
+		local switch = over and ns.Def(item.needsPath)
+		if switch and switch.needsPath then
+			over = ns.NeedMet(switch, switch.needsPath)
+		end
+		if item.overText then
+			unit:SetText(over and item.overText or plain)
+		end
 		if not box:HasFocus() then
-			box:SetText(("%g"):format(value))
+			box:SetText(over and "" or ("%g"):format(value))
 		end
 	end
 	Drag(track, function()

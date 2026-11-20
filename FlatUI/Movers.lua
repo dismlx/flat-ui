@@ -167,7 +167,9 @@ local LIST = {
 	{ name = "FlatUIBarBlock3", label = "Action bar block 3", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow3",
 		changed = "BarBlockMoved3" },
 	-- Flat UI's own experience and reputation bar (XpBar.lua). Its box is the bar's own frame, wherever the bar is; with no spot saved it sits where XpBar.lua puts it.
-	{ name = "FlatUIXpBar", label = "Experience bar", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "XpBarRow", changed = "XpBarMoved" },
+	-- While the bar block places it (under block 1 by default) its box is grey, takes no mouse and says it follows the bar block (follows).
+	{ name = "FlatUIXpBar", label = "Experience bar", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "XpBarRow", changed = "XpBarMoved",
+		follows = "XpBarFollows" },
 	{ name = "FlatUITrackers", label = "Trackers", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "TrackerRow", changed = "TrackersMoved" },
 	-- Where the row of Your buffs hangs with Place set to Own position: a few icons and the room under them for the time.
 	{ name = "FlatUIOwnBuffs", label = "Your buffs", point = "CENTER", kind = "hud", own = true, noScale = true, width = 120, height = 42, x = 0, y = -150,
@@ -1681,8 +1683,20 @@ local function HandleRect(name, info)
 	return RectAt(point, 0, 0, NOMINAL_WIDTH, NOMINAL_HEIGHT)
 end
 
--- True for a system frame the game places itself, so a handle could not move it.
+-- True for a system frame the game places itself, so a handle could not move it, and for a frame of the addon's that follows another one now
+-- (info.follows names the call of ns that says what it follows, in words for its box), which is then the second value.
 local function PlacedByGame(name, info)
+	if info.follows then
+		local call = ns[info.follows]
+		local ok, what = false, nil
+		if type(call) == "function" then
+			ok, what = pcall(call)
+		end
+		if ok and type(what) == "string" and what ~= "" then
+			return true, what
+		end
+		return false
+	end
 	if not info.system then
 		return false
 	end
@@ -2172,14 +2186,16 @@ function ShowHandle(name)
 	local entry = saved and saved[name]
 	local percent = type(entry) == "table" and entry.scale and Number(entry.scale) and math.floor(entry.scale * 100 + 0.5) or nil
 	-- A box for a frame the game places is grey and takes no mouse.
-	local placedByGame = PlacedByGame(name, info)
+	local placedByGame, follows = PlacedByGame(name, info)
 	if look.placedByGame ~= placedByGame then
 		look.placedByGame = placedByGame
 		ns.MoversMode.Paint(name)
 	end
 	SetMouse(name)
 	local text = info.label
-	if placedByGame then
+	if follows then
+		text = ("%s (follows %s)"):format(text, follows)
+	elseif placedByGame then
 		text = ("%s (placed by the game)"):format(text)
 	else
 		if percent then
