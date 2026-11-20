@@ -1,20 +1,29 @@
 local _, ns = ...
 
--- The Bar block page lines the action bars up in up to three blocks, each with its own bars (BarBlockLists.lua: block 1 holds the main bar
--- and action bars 2 to 4 by default, blocks 2 and 3 are off until given a bar), stack direction, alignment and gap. This module works out one
--- rectangle for each bar and gives Movers the spot of each (ns.MoverHold); Movers places the bar exactly as it places a bar with a saved spot,
--- so this file calls no method of a Blizzard frame to place one, except SetAlpha for the fade below. It reads rectangles and sizes only. The
--- module owns one frame of its own for each block, sized to the whole block, which is its box in /flatui move (Action bar block, Action bar
--- block 2 and 3) and has a spot of its own saved in the profile. Block 1 saves the spot of its first bar the first time; blocks 2 and 3 with no
--- spot saved stand beside block 1, block 2 on its left and block 3 on its right.
+-- The Bar block page lines the action bars up in up to three blocks, each with its own bars (BarBlockLists.lua: block 1 holds action bars 3
+-- and 2, the main bar and action bar 4, top to bottom, by default, blocks 2 and 3 are off until given a bar), stack direction, alignment and
+-- gap. This module works out one rectangle for each bar and gives Movers the spot of each (ns.MoverHold); Movers places the bar exactly as it
+-- places a bar with a saved spot, so this file calls no method of a Blizzard frame to place one, except SetAlpha for the fade below. It reads
+-- rectangles and sizes only. The module owns one frame of its own for each block, sized to the whole block, which is its box in /flatui move
+-- (Action bar block, Action bar block 2 and 3) and has a spot of its own saved in the profile. Block 1 starts where the main bar is (its first
+-- bar when it holds no main bar): that bar keeps its left, the bottom of the block is that bar's bottom, and the spot is saved the first time.
+-- Blocks 2 and 3 with no spot saved stand beside block 1, block 2 on its left and block 3 on its right.
+-- In /flatui move each bar of a block has a tab inside the block's box: dragged and let go, it puts the bar at that place of its block, or of
+-- the block whose box it is dropped on (Tabs, below).
 -- The blocks work whatever Leave the game's action bars alone says: while it is on it guards only the bars no block holds (Movers.lua,
--- hold.Off), and the stance, pet and experience bars stay with the game.
+-- hold.Off), and the stance and pet bars and the game's experience bars stay with the game.
+-- Flat UI's own experience bar goes under block 1 by default (Experience bar under the bar block, XpBar.lua, ns.XpUnder): the block keeps its
+-- room under its bars, the bar's height and the block's gap between bars, so the bottom of the block is the bottom of the bar, and the bar is
+-- exactly as wide as the block (Plan). It follows the block as bars are added or taken out, their size and the stack direction change and the
+-- box is moved; the box, the background panel and the fade take it in. This is whatever Stance, pet and experience bars and Leave the game's
+-- action bars alone say, since the bar is Flat UI's. A bar that shows nothing keeps no room, and hangs under the block until the next plan.
 -- With Stance, pet and experience bars on Above the block, the frames the game hangs from the main bar get spots over block 1 too: the
--- experience bars, then the stance bar on the left and the pet bar on the right, then the possess bar, then the totem bar of a character that has
--- one. Since 70425 the game stacks the totem bar last (Camelot/EditModeUtil.lua:21): in its default position it goes over the bars of the stack
--- still in theirs, so once the block's bars are kept in the Edit Mode layout it is 4 over the top of the main bar (EditModeManager.lua:666-668,
--- 692-716), across the next row of the block. The block holds it on a row of its own. The Leave vehicle button hangs from the main bar in the
--- game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed here; /flatui block facts still lists it.
+-- experience bars (Flat UI's while it is not under the block), then the stance bar on the left and the pet bar on the right, then the possess
+-- bar, then the totem bar of a character that has one. Since 70425 the game stacks the totem bar last (Camelot/EditModeUtil.lua:21): in its
+-- default position it goes over the bars of the stack still in theirs, so once the block's bars are kept in the Edit Mode layout it is 4 over
+-- the top of the main bar (EditModeManager.lua:666-668, 692-716), across the next row of the block. The block holds it on a row of its own. The
+-- Leave vehicle button hangs from the main bar in the game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed
+-- here; /flatui block facts still lists it.
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
 -- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours. Fade the block: the alpha of each
@@ -81,6 +90,10 @@ local XP_SPACER = -1 -- EditModePresetLayoutConstants.lua:32 (Camelot)
 local LOOK = { every = 0.1, weak = { __mode = "k" } }
 local state = { queued = false, pending = false, seen = {}, fight = {}, orig = setmetatable({}, LOOK.weak), sent = setmetatable({}, LOOK.weak) }
 local blocks = { {}, {}, {} }
+-- The tabs of /flatui move (Tabs, below): width, height and inset of a tab, how far past a box a drop still counts, the thickness of the drop
+-- line, the strata over the boxes. tabs: the tabs made; shown: the handles are open; boxes: the blocks whose box shows; drag: the tab being
+-- dragged; mark and line: the drop line.
+local GRIP = { width = 40, height = 16, inset = 2, slack = 6, line = 2, strata = "DIALOG", tabs = {}, shown = false, boxes = {} }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -215,12 +228,15 @@ end
 -- between rows. A hidden frame has its spot too, so it shows in place; only a shown frame gives its row height. The stance bar is on the
 -- left and the pet bar on the right, and the pet bar goes on a row of its own above the stance bar when the stance bar is wider than half
 -- the block. The totem bar is on the left of the last row. Returns the spots, the part of the signature, whether the two bars would overlap,
--- and the top of the last shown row.
-local function AroundSpots(left, width, top, gap)
+-- and the top of the last shown row. Flat UI's experience bar under the block (under) has no row here.
+local function AroundSpots(left, width, top, gap, under)
 	local spots, parts, size = {}, {}, {}
 	local own = ns.XpOwn ~= nil and ns.XpOwn()
 	for _, name in ipairs(own and AROUND_OWN or AROUND) do
-		local w, h, shown, frame = AroundSize(name)
+		local w, h, shown, frame
+		if not (under and name == XPOWN) then
+			w, h, shown, frame = AroundSize(name)
+		end
 		if frame then
 			size[name] = { w = w, h = h, shown = shown }
 			parts[#parts + 1] = ("%s:%.1f:%.1f:%d"):format(name, w, h, shown and 1 or 0)
@@ -272,7 +288,20 @@ local function AroundSpots(left, width, top, gap)
 	return spots, table.concat(parts, ","), overlap, cursor
 end
 
--- The rows and the spot of each bar for block n whose bottom middle is at spotX, spotY (the units of UIParent from the bottom left).
+-- Flat UI's experience bar under block 1 (ns.XpUnder): the room the block keeps for it under its bars, its height and the gap while it shows
+-- something, else none, and the part of the signature. Nothing for the other blocks or while the bar is not under the block.
+local function UnderRoom(n, gap)
+	if n ~= 1 or not (ns.XpUnder ~= nil and ns.XpUnder()) then
+		return nil
+	end
+	local _, height, shown = ns.XpBarSize()
+	local room = shown and Number(height) and height > 0 and height + gap or 0
+	return room, ("%s:under:%.1f"):format(XPOWN, room)
+end
+
+-- The rows and the spot of each bar for block n whose bottom middle is at spotX, spotY (the units of UIParent from the bottom left). Under
+-- block 1 Flat UI's experience bar has its room first (UnderRoom), the bars stack over it, and its spot is the top left corner of that room
+-- with the width of the block (the bar hangs from it, so one that shows something before the next plan hangs under the block).
 local function Plan(n, spotX, spotY)
 	local rows = Slots(n)
 	if #rows == 0 then
@@ -287,15 +316,17 @@ local function Plan(n, spotX, spotY)
 		height = height + row.height + (index > 1 and gap or 0)
 		parts[#parts + 1] = ("%s:%.1f:%.1f"):format(row.bar.frame, row.width, row.height)
 	end
+	local room, underSig = UnderRoom(n, gap)
+	local base = spotY + (room or 0)
 	local left, align, down = spotX - width / 2, Opt("align" .. SUFFIX[n]), Opt("direction" .. SUFFIX[n]) == "down"
 	local spots, used = {}, down and height or 0
 	for _, row in ipairs(rows) do
 		local bottom
 		if down then
-			bottom = spotY + used - row.height
-			used = bottom - spotY - gap
+			bottom = base + used - row.height
+			used = bottom - base - gap
 		else
-			bottom = spotY + used
+			bottom = base + used
 			used = used + row.height + gap
 		end
 		local x = left
@@ -306,11 +337,16 @@ local function Plan(n, spotX, spotY)
 		end
 		spots[row.bar.frame] = { point = "BOTTOMLEFT", x = x, y = bottom }
 	end
+	if room then
+		spots[XPOWN] = { point = "TOPLEFT", x = left, y = room > 0 and base - gap or spotY - gap, width = width, under = true }
+		parts[#parts + 1] = underSig
+		height = height + room
+	end
 	local overlap, aboveTop = false, nil
 	-- Only block 1 has the stance, pet and experience bars over it, and none while Flat UI leaves those bars to the game.
 	if n == 1 and Opt("others") == "above" and not ns.HandsOff() then
 		local around, sig, cursor
-		around, sig, overlap, cursor = AroundSpots(left, width, spotY + height, gap)
+		around, sig, overlap, cursor = AroundSpots(left, width, spotY + height, gap, room ~= nil)
 		aboveTop = cursor
 		for name, spot in pairs(around) do
 			spots[name] = spot
@@ -321,18 +357,31 @@ local function Plan(n, spotX, spotY)
 		sig = table.concat(parts, ";") .. (";%.1f"):format(gap) }
 end
 
--- The bottom middle of block n that leaves its first bar where it is, or puts it at left, bottom.
+-- The bar of a block's rows its place starts from: the main bar where the block holds it, else its first bar.
+local function AnchorRow(rows)
+	for _, row in ipairs(rows) do
+		if row.id == "main" then
+			return row
+		end
+	end
+	return rows[1]
+end
+
+-- The bottom middle of block n that puts the left of that bar at `left` and the bottom of the block at `bottom`: the block stands where the bar
+-- is and stacks from there, so a bar the block puts under the main bar (action bar 4 of block 1 by default) stays on the screen.
 local function SpotFor(n, left, bottom)
 	local plan = Plan(n, 0, 0)
-	local first = plan and plan.spots[plan.rows[1].bar.frame]
-	if not first then
+	local row = plan and AnchorRow(plan.rows)
+	local spot = row and plan.spots[row.bar.frame]
+	if not spot then
 		return nil
 	end
-	return left - first.x, bottom - first.y
+	return left - spot.x, bottom
 end
 
 -- Where a block starts when the profile has no spot: block 1, after the player has put it back, with the main bar at the left of the micro
--- menu; block 2 on the left of block 1 and block 3 on its right, bottoms level; else the bottom middle of the screen.
+-- menu and the bottom of the block at the bottom of the main bar's place there; block 2 on the left of block 1 and block 3 on its right,
+-- bottoms level; else the bottom middle of the screen.
 local function DefaultSpot(n)
 	local plan = Plan(n, 0, 0)
 	if not plan then
@@ -347,10 +396,11 @@ local function DefaultSpot(n)
 		return left + one.width + BESIDE + plan.width / 2, one.spotY
 	end
 	local micro = GameFrame("MicroMenuContainer")
-	if n == 1 and plan.rows[1].id == "main" and micro then
+	local main = AnchorRow(plan.rows)
+	if n == 1 and main.id == "main" and micro then
 		local left, bottom = ns.MoverRect(micro)
 		if left then
-			return SpotFor(n, left - MICRO_GAP_X - plan.rows[1].width, bottom - MICRO_GAP_Y)
+			return SpotFor(n, left - MICRO_GAP_X - main.width, bottom - MICRO_GAP_Y)
 		end
 	end
 	local width = ScreenWidth()
@@ -361,7 +411,7 @@ local function DefaultSpot(n)
 end
 
 -- The spot of block n: the saved one, else for blocks 2 and 3 their place beside block 1, else for block 1 the default after a put back, else
--- its first bar where it is now, which is then saved.
+-- where its main bar (or first bar) is now, which is then saved.
 local function Spot(n)
 	local block = blocks[n]
 	block.waiting = nil
@@ -372,8 +422,7 @@ local function Spot(n)
 	if n > 1 or block.default then
 		return DefaultSpot(n)
 	end
-	local rows = Slots(n)
-	local first = rows[1]
+	local first = AnchorRow(Slots(n))
 	if not first then
 		return nil
 	end
@@ -471,7 +520,8 @@ local function Under(plan)
 	local left, bottom = plan.spotX - plan.width / 2, plan.spotY
 	local right, top = left + plan.width, bottom + plan.height
 	for name, spot in pairs(plan.spots) do
-		local seen = AROUND_SET[name] and state.seen[name]
+		-- Flat UI's experience bar under the block is in the block's own rectangle.
+		local seen = AROUND_SET[name] and not spot.under and state.seen[name]
 		local frame = seen and (name == XPOWN and ns.XpBarFrame() or GameFrame(name))
 		if frame and ns.MoverShown(frame) ~= false then
 			left, bottom = math.min(left, spot.x), math.min(bottom, spot.y)
@@ -658,8 +708,7 @@ local function Hold()
 		end
 	end
 	ns.MoverHold(KEY, next(held) ~= nil and held or nil)
-	local own = blocks[1].last and blocks[1].last.spots[XPOWN]
-	ns.XpBarBlock(own and own.x, own and own.y)
+	ns.XpBarBlock(blocks[1].last and blocks[1].last.spots[XPOWN])
 end
 
 local function Replan()
@@ -701,6 +750,10 @@ local function Replan()
 	Look()
 	if changed then
 		Tell()
+		-- The boxes and tabs of /flatui move follow at once.
+		if GRIP.shown and ns.MoverRelabel then
+			ns.MoverRelabel()
+		end
 	end
 end
 
@@ -737,6 +790,13 @@ local function Queue()
 		state.queued = false
 		ns.Try(KEY, Replan)
 	end)
+end
+
+-- Flat UI's experience bar changed its rows (XpBar.lua): block 1 lays out again, for the room it keeps under its bars.
+function ns.BarBlockReplan()
+	if ns.Enabled(KEY) then
+		Queue()
+	end
 end
 
 -- A bar that is laid out later, or turned on in the game's options, changes the plan of its block.
@@ -809,6 +869,281 @@ for n, block in ipairs(blocks) do
 	end
 end
 
+-- Tabs ---------------------------------------------------------------------------------------------------------------------------------------
+-- While the handles of /flatui move are open (Movers.lua calls ns.BarBlockGrips as it lays its boxes out, and as it closes), each bar a block
+-- places has a tab of the module's own at the left end of its row, inside the block's box and over it, which says which bar it is. A tab shows
+-- while its block's box shows where the block is (not while the box is dragged). Dragging a tab moves it with the cursor and draws a line across
+-- the block under the cursor where the bar would go: between two bars, or before the first or after the last, by the middles of the bars and
+-- the block's Stack direction. Letting go there puts the bar at that place of the list of that block, its own or another, out of the block it
+-- was in (ns.BarBlockPlace, BarBlockLists.lua), and the block lays out again from the list, as after the Bars and Add a bar rows of the page.
+-- Escape (MoversMode.lua, ns.BarBlockGripCancel), a drop outside every box, a fight and the handles closing put the tab back and change
+-- nothing. Nothing is dragged or dropped in a fight, where the handles close anyway: the block places protected bars.
+
+-- The word on the tab of a bar.
+local function GripText(id)
+	if id == "main" then
+		return "Main"
+	end
+	return ("Bar %s"):format((tostring(id):gsub("^bar", "")))
+end
+
+-- The colours of a tab, from the tokens of the options window (PanelLook.lua): the accent while it is under the cursor or dragged.
+local function GripPaint(tab, hot)
+	local look = ns.PanelLook
+	if not look then
+		return
+	end
+	local r, g, b = look.Colour(hot and "accent" or "text-dim")
+	ns.SetOutlineColour(tab.outline, r, g, b)
+	ns.SetOutlineAlpha(tab.outline, 1)
+	r, g, b = look.Colour(hot and "accent" or "window")
+	ns.SetOutlineFill(tab.outline, r, g, b, hot and 0.6 or 0.9)
+	tab.text:SetTextColor(look.Colour("text"))
+end
+
+-- The left mouse button is up: let go away from the tab, which the tab may not hear.
+local function Released()
+	if type(IsMouseButtonDown) ~= "function" then
+		return false
+	end
+	local ok, down = pcall(IsMouseButtonDown, "LeftButton")
+	return ok and not ns.IsSecret(down) and down == false
+end
+
+-- The block whose box is under x, y and the place in it there: slot is the bar of its rows the dragged bar goes before, one past the last for
+-- after it. Nothing outside every box shown.
+local function GripTarget(x, y)
+	if not x then
+		return nil
+	end
+	for n, block in ipairs(blocks) do
+		local plan = block.last
+		local left = plan and plan.spotX - plan.width / 2
+		if GRIP.boxes[n] and plan and x >= left - GRIP.slack and x <= left + plan.width + GRIP.slack and y >= plan.spotY - GRIP.slack
+			and y <= plan.spotY + plan.height + GRIP.slack then
+			local down = Opt("direction" .. SUFFIX[n]) == "down"
+			local slot = #plan.rows + 1
+			for index, row in ipairs(plan.rows) do
+				local middle = plan.spots[row.bar.frame].y + row.height / 2
+				if (down and y > middle) or (not down and y < middle) then
+					slot = index
+					break
+				end
+			end
+			return { n = n, plan = plan, slot = slot, down = down }
+		end
+	end
+	return nil
+end
+
+-- The bottom (top false) or top of a row of a plan.
+local function Edge(plan, row, top)
+	local y = plan.spots[row.bar.frame].y
+	return top and y + row.height or y
+end
+
+-- The height of the drop line of a target: halfway between the two bars it goes between, or half a gap past the first or the last.
+local function GripLineY(target)
+	local plan, rows, slot, down = target.plan, target.plan.rows, target.slot, target.down
+	local before, after, half = rows[slot - 1], rows[slot], plan.gap / 2
+	if before and after then
+		return (Edge(plan, before, not down) + Edge(plan, after, down)) / 2
+	elseif after then
+		return down and Edge(plan, after, true) + half or Edge(plan, after, false) - half
+	end
+	return down and Edge(plan, before, false) - half or Edge(plan, before, true) + half
+end
+
+-- Shows the drop line across the block of a target, or hides it with none.
+local function GripMark(target)
+	if not target then
+		if GRIP.mark then
+			GRIP.mark:Hide()
+		end
+		return
+	end
+	if not GRIP.mark then
+		GRIP.mark = CreateFrame("Frame", nil, UIParent)
+		ns.Own[GRIP.mark] = true
+		GRIP.mark:SetFrameStrata(GRIP.strata)
+		GRIP.mark:SetFrameLevel(20)
+		GRIP.mark:EnableMouse(false)
+		GRIP.line = GRIP.mark:CreateTexture(nil, "OVERLAY")
+		ns.Own[GRIP.line] = true
+		GRIP.line:SetAllPoints(GRIP.mark)
+		if ns.PanelLook then
+			ns.PanelLook.Solid(GRIP.line, "accent", 1)
+		end
+	end
+	local plan = target.plan
+	GRIP.mark:ClearAllPoints()
+	GRIP.mark:SetSize(plan.width + 2 * GRIP.slack, GRIP.line)
+	GRIP.mark:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", plan.spotX - plan.width / 2 - GRIP.slack, GripLineY(target) - GRIP.line / 2)
+	GRIP.mark:Show()
+end
+
+-- Makes the tab of a number (below).
+local GripMake
+
+-- Puts a tab on each bar the blocks place, at the left end of its row, while the box of its block shows at the block; the others are hidden.
+local function GripLayout()
+	local used, kit = 0, ns.MoverKit
+	for n, block in ipairs(blocks) do
+		local plan = block.last
+		local box = GRIP.shown and plan and kit and kit.handles[MOVERS[n]]
+		local at = false
+		if box and box:IsShown() then
+			local left, bottom = ns.MoverRect(box)
+			at = left ~= nil and math.abs(left - (plan.spotX - plan.width / 2)) <= 1 and math.abs(bottom - plan.spotY) <= 1
+		end
+		GRIP.boxes[n] = at
+		for _, row in ipairs(at and plan.rows or {}) do
+			local spot = plan.spots[row.bar.frame]
+			used = used + 1
+			local tab = GRIP.tabs[used] or GripMake(used)
+			tab.block, tab.id = n, row.id
+			local width, height = math.min(GRIP.width, row.width), math.min(GRIP.height, row.height)
+			local x, y = spot.x + GRIP.inset, spot.y + (row.height - height) / 2
+			if tab.x ~= x or tab.y ~= y or tab.w ~= width or tab.h ~= height then
+				tab.x, tab.y, tab.w, tab.h = x, y, width, height
+				tab.frame:ClearAllPoints()
+				tab.frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
+				tab.frame:SetSize(width, height)
+			end
+			tab.text:SetText(GripText(row.id))
+			GripPaint(tab, tab.hover)
+			tab.frame:Show()
+		end
+	end
+	for index = used + 1, #GRIP.tabs do
+		GRIP.tabs[index].frame:Hide()
+	end
+end
+
+-- Ends the drag of a tab: with drop, the bar goes to the place under the cursor when that is in a box. True when a tab was being dragged.
+local function GripEnd(drop)
+	local drag = GRIP.drag
+	if not drag then
+		return false
+	end
+	GRIP.drag = nil
+	drag.tab.frame:SetScript("OnUpdate", nil)
+	GripMark(nil)
+	local x, y = Cursor()
+	local target = drop and not InCombatLockdown() and GripTarget(x or drag.x, y or drag.y)
+	if target then
+		local rows = target.plan.rows
+		local anchor, after = rows[target.slot], false
+		if not anchor then
+			anchor, after = rows[#rows], true
+		end
+		ns.BarBlockPlace(drag.tab.id, target.n, anchor and anchor.id, after)
+	end
+	-- The tab goes back to its row, or to the new one once the block is laid out again.
+	drag.tab.x = nil
+	GripLayout()
+	return true
+end
+
+-- Each frame of a drag: the tab follows the cursor and the drop line shows where the bar would go. A fight ends the drag with no change.
+local function GripStep()
+	local drag = GRIP.drag
+	if not drag then
+		return
+	end
+	if InCombatLockdown() or not GRIP.shown then
+		GripEnd(false)
+		return
+	end
+	if Released() then
+		GripEnd(true)
+		return
+	end
+	local x, y = Cursor()
+	if not x then
+		return
+	end
+	drag.x, drag.y = x, y
+	drag.tab.frame:ClearAllPoints()
+	drag.tab.frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x - drag.grabX, y - drag.grabY)
+	GripMark(GripTarget(x, y))
+end
+
+local function GripStart(tab)
+	if GRIP.drag or InCombatLockdown() or not GRIP.shown then
+		return
+	end
+	local x, y = Cursor()
+	local left, bottom = ns.MoverRect(tab.frame)
+	if not (x and left) then
+		return
+	end
+	GRIP.drag = { tab = tab, grabX = x - left, grabY = y - bottom, x = x, y = y }
+	-- The accent may have changed since the last drag.
+	if GRIP.line and ns.PanelLook then
+		ns.PanelLook.Solid(GRIP.line, "accent", 1)
+	end
+	GripPaint(tab, true)
+	tab.frame:SetScript("OnUpdate", GripStep)
+	GripStep()
+end
+
+-- A tab: a frame of the module's own over the boxes of /flatui move, with an outline and the name of its bar. A press picks the block's box.
+function GripMake(index)
+	local frame = CreateFrame("Frame", nil, UIParent)
+	ns.Own[frame] = true
+	frame:SetFrameStrata(GRIP.strata)
+	frame:SetFrameLevel(10)
+	frame:SetClampedToScreen(true)
+	frame:EnableMouse(true)
+	frame:RegisterForDrag("LeftButton")
+	local tab = { frame = frame, outline = ns.Outline(frame, frame, true), hover = false }
+	ns.SetOutlineThickness(tab.outline, 1)
+	tab.text = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	local object = ns.PanelLook and ns.PanelLook.Object("GameFontHighlightSmall")
+	if object then
+		tab.text:SetFontObject(object)
+	end
+	tab.text:SetAllPoints(frame)
+	frame:SetScript("OnEnter", function()
+		tab.hover = true
+		GripPaint(tab, true)
+	end)
+	frame:SetScript("OnLeave", function()
+		tab.hover = false
+		GripPaint(tab, GRIP.drag ~= nil and GRIP.drag.tab == tab)
+	end)
+	frame:SetScript("OnMouseDown", function(_, button)
+		if button == "LeftButton" and ns.MoversMode and tab.block then
+			ns.Try(KEY, ns.MoversMode.Select, MOVERS[tab.block])
+		end
+	end)
+	frame:SetScript("OnDragStart", function()
+		ns.Try(KEY, GripStart, tab)
+	end)
+	frame:SetScript("OnDragStop", function()
+		ns.Try(KEY, GripEnd, true)
+	end)
+	GRIP.tabs[index] = tab
+	return tab
+end
+
+-- Movers.lua: the handles are laid out (open) or closed. Closing ends a drag with no change.
+function ns.BarBlockGrips(open)
+	GRIP.shown = open == true and ns.Enabled(KEY)
+	if not GRIP.shown then
+		GripEnd(false)
+	end
+	if not GRIP.drag then
+		GripLayout()
+	end
+end
+
+-- MoversMode.lua: Escape puts a dragged tab back. True when a tab was being dragged, so Escape does nothing else.
+function ns.BarBlockGripCancel()
+	return GripEnd(false)
+end
+
 -- The name of a held frame on the pages.
 local function Label(name)
 	return ns.MoverLabel(name) or name
@@ -820,7 +1155,7 @@ local function Status()
 		return lines
 	end
 	if ns.HandsOff() and Opt("others") == "above" then
-		lines[#lines + 1] = "Action bar block: the stance, pet and experience bars stay with the game while Leave the game's action bars alone is on."
+		lines[#lines + 1] = "Action bar block: the stance and pet bars and the game's experience bars stay with the game while Leave the game's action bars alone is on."
 	end
 	local movers, systems, keep = ns.MoverHoldGates()
 	if not movers then

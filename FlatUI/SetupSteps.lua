@@ -658,6 +658,7 @@ ns.SETUP_STEPS = {
 	{ id = "hud-bars", area = "HUD", title = "Experience and menu bars", draw = "mock-xp-micro", built = true, rows = {
 		{ "hud.bags", "c", "mock-xp-micro" },
 		{ "hud.xpOwn", "c", "mock-xp-micro" },
+		{ "hud.xpUnder", "o", "behaviour", "Puts Flat UI's experience bar right under block 1 of the Bar block page, exactly as wide as the block, and moves it with the block." },
 		{ "hud.xpWidth", "c", "mock-xp-micro" },
 		{ "hud.xpHeight", "c", "mock-xp-micro" },
 		{ "hud.xpShow", "o", "mock-xp-micro" },
@@ -909,6 +910,8 @@ ns.SETUP_STEPS = {
 	{ id = "hud-hittable", area = "Character and gear", title = "Hit table", draw = "mock-player", built = true, rows = {
 		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target, and the share of a spell's damage resisted with your Spell Piercing, while you are a tank or a damage dealer, or always." },
 		{ "hud.hitTableTip", "o", "behaviour", "Adds your hit table against an enemy to its tooltip, while you are a tank or a damage dealer, or always. Needs Restyle chat and tooltips on." },
+		{ "hud.hitTableTipCtrl", "o", "behaviour", "Shows the hit table on an enemy's tooltip only with Ctrl: pressing Ctrl adds the lines; they leave when the tooltip next changes." },
+		{ "hud.hitTableTipHint", "r", "behaviour", "Puts one dim line, Hold Ctrl for the hit table, on an enemy's tooltip while Ctrl is up." },
 		{ "hud.hitTableLines", "o", "behaviour", "Chooses whether the hit table shows melee, ranged or spells, or picks them by your class and form." },
 		{ "hud.hitTableSpecial", "o", "behaviour", "Adds a line for your special attacks, which do not glance and miss less while you dual wield." },
 		{ "hud.hitTableAgainst", "o", "behaviour", "Chooses whether the hit table is against your target or always against a boss three levels above you." },
@@ -1233,7 +1236,7 @@ ns.SETUP_STEPS = {
 	} },
 	{ id = "ab-block", area = "Bar block", title = "Bar block", draw = "mock-bar-block", built = true, rows = {
 		{ "barblock.enabled", "c", "mock-bar-block" },
-		{ "barblock.bars1", "r", "behaviour", "Holds the bars of block 1, first bar first: the main bar and action bars 2 to 4 at first." },
+		{ "barblock.bars1", "r", "behaviour", "Holds the bars of block 1, first bar first: action bar 4, the main bar and action bars 2 and 3 at first, so 3, 2, main, 4 top to bottom." },
 		{ "barblock.edit1", "c", "mock-bar-block" },
 		{ "barblock.add1", "c", "mock-bar-block" },
 		{ "barblock.direction", "c", "mock-bar-block" },

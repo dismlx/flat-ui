@@ -15,8 +15,12 @@ local ADDON_NAME, ns = ...
 -- SetStatusBarTexture, and put back with SetStatusBarTexture. The size, face and flags of a label are set with SetFont, its colour with
 -- SetTextColor and its shadow with SetShadowOffset, each remembered on first touch and put back. Any Blizzard method or global function may be
 -- followed with hooksecurefunc through ns.Follow, ns.FollowGlobal and ns.FollowTable, which run after the game's call and never change what it returns.
--- BarBlock gives Movers the spots of the action bars of up to three blocks (on by default with the main bar and bars 2 to 4 in block 1), also
--- while Leave the game's action bars alone is on, which then guards only the bars no block holds. The one thing it writes on a Blizzard frame is
+-- BarBlock gives Movers the spots of the action bars of up to three blocks (on by default with bars 3 and 2, the main bar and bar 4, top to
+-- bottom, in block 1, laid flat by One size and spacing for every bar, on by default), also while Leave the game's action bars alone is on, which
+-- then guards only the bars no block holds. In /flatui move a tab of its own on each bar of a block drags the bar to another place of a block's
+-- list, a setting, out of combat; the block then lays out again. Flat UI's own experience bar (XpBar.lua, a frame of the addon's) goes right
+-- under block 1 by default, exactly as wide as the block, which keeps its room under its bars (Experience bar under the bar block); its own spot
+-- and width come back when that row is off. The one thing it writes on a Blizzard frame is
 -- the alpha of the bars of the blocks (SetAlpha, only with Fade the block on), put back when the fade goes off. At login and when the bars of
 -- a block change, out of combat, it turns on each of bars 2 to 8 a block holds that the game's options have off, with the game's own setting
 -- for that bar (Settings.SetValue of PROXY_SHOW_ACTIONBAR_2 to 8, once the game has made it), or SetActionBarToggles with the other bars as
@@ -234,8 +238,14 @@ local ADDON_NAME, ns = ...
 -- GameTooltip (AddDoubleLine, AddLine) from the chat module's post call while that module is on, for a unit the player can attack that is not
 -- dead, and with Text size on enemy tooltips other than 100% sized (SetFont on their font strings, GameTooltipTextLeftN and GameTooltipTextRightN),
 -- each put back in the font object and font it had at the next clear of GameTooltip (GameTooltip_ClearMoney, which its OnTooltipCleared calls,
--- followed with ns.FollowGlobal), so every later tooltip has the game's sizes. They read the tooltip's unit (GetUnit under pcall, else
--- UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level and kind (C.Target with the unit), whether it attacks the player
+-- followed with ns.FollowGlobal), so every later tooltip has the game's sizes. With Only while Ctrl is held (on by default) they are added only
+-- while Ctrl is down (IsControlKeyDown), with Hint while Ctrl is up (off) one dim line in their place; while an enemy's tooltip built with Ctrl up
+-- is kept, a frame of its own hears MODIFIER_STATE_CHANGED, and as Ctrl goes down while GameTooltip still shows that build (IsShown, GetOwner,
+-- its infoList read only) and its owner has no UpdateTooltip (a unit frame's, which the game runs every 0.2 seconds), pressing Ctrl adds the
+-- lines there with the same AddDoubleLine and AddLine, the hint, a line of Flat UI's own, turned into their header (SetText, SetTextColor), and
+-- shows GameTooltip again (Show) so it takes their size, once a build; they leave when the tooltip next changes. No Lua method of GameTooltip is
+-- called and nothing is built again. They read the tooltip's unit (UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its
+-- level and kind (C.Target with the unit), whether it attacks the player
 -- (C.Front), the player's form and power type (GetShapeshiftForm, UnitPowerType),
 -- the combat state (InCombatLockdown, UnitAffectingCombat, C_Secrets.ShouldUnitStatsBeSecret) and the stats the table reads (ns.HitTableCalc,
 -- C.Inputs), those out of a fight only, at most every two seconds as GameTooltip is built whatever it shows, and worked out by C.Table; in a fight

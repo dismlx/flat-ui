@@ -1447,7 +1447,7 @@ AREAS = [
         PlateClick PlateThreatText PlateOverpower CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastRank
         Interrupt CastBarSize"""),
     ("actionbars", "Action bars", """ActionBars OwnBars OwnPaint ButtonText Cooldowns CooldownLooks ButtonStates CooldownData
-        ProcData Procs ProcArt ProcGlow ButtonEffects ProcTriggers BarBlock BarBlockButtons Blocks"""),
+        ProcData Procs ProcArt ProcGlow ButtonEffects ProcTriggers BarBlock BarBlockButtons BarBlockLists Blocks"""),
     ("trackers", "Trackers and cooldowns", """Trackers TrackerSound TrackerSlots IconRow Tracking Defensives PartyCooldowns
         PartySync EnemyCooldowns Threat HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
         TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs"""),

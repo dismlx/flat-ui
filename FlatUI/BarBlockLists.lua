@@ -2,10 +2,12 @@ local _, ns = ...
 
 -- The bars of the bar blocks (BarBlock.lua): up to three blocks, each a list of bars in order, first bar first, saved in the profile as text
 -- (barblock.bars1 to bars3: the ids main and bar2 to bar8 joined by commas). A bar is in one block only: a bar a list names again, in the same
--- block or in a later one, is left out. Block 1 holds the main bar and action bars 2 to 4 by default; blocks 2 and 3 hold none and are off until
--- they are given a bar. The rows of the Bar block page move a bar up or down in its block, take it out, or add a bar, which leaves the block it
--- was in. Before 0.5.27 the page had six fixed rows (barblock.slot1 to slot6); a profile that saved one of them has their bars moved into
--- block 1 once, as the settings load (Core.lua).
+-- block or in a later one, is left out. Block 1 holds action bar 4, the main bar and action bars 2 and 3 by default, in that order, so stacked
+-- upward they are 3, 2, main, 4 from the top (before 0.5.28 the main bar and bars 2 to 4); blocks 2 and 3 hold none and are off until they are
+-- given a bar. The rows of the Bar block page move a bar up or down in its block, take it out, or add a bar, which leaves the block it was in.
+-- In /flatui move a bar dragged by its tab (BarBlock.lua) is dropped at a place of a block, its own or another (ns.BarBlockPlace), which writes
+-- the same lists, so the page and the tabs show the same order. Before 0.5.27 the page had six fixed rows (barblock.slot1 to slot6); a profile
+-- that saved one of them has their bars moved into block 1 once, as the settings load (Core.lua).
 -- At login and when the bars of a block change, out of combat, each of bars 2 to 8 a block holds that the game's options have off is turned on
 -- with the game's own setting for that bar (Settings.SetValue of PROXY_SHOW_ACTIONBAR_2 to 8, Blizzard_SettingsDefinitions_Frame/ActionBars.lua:
 -- 29-35; the game's own code does the same for bar 2, ActionBarController.lua:98-107), once the game has made its settings (the setting is
@@ -189,6 +191,48 @@ local function Add(n, id)
 	list[#list + 1] = id
 	Write(n, list)
 	return true, ("Flat UI: %s added to block %d."):format(Label(id), n)
+end
+
+-- Puts a bar at a place of block n, out of the block it was in: just before the bar `anchor` of that block, just after it with `after`, or last
+-- with no anchor (or one the block does not hold). Only the lists that change are written. True when one did, and the line for chat.
+function ns.BarBlockPlace(id, n, anchor, after)
+	if not Bars()[id] or type(n) ~= "number" or n < 1 or n > COUNT or anchor == id then
+		return false, nil
+	end
+	local was, lists = ns.BarBlockLists(), Copy()
+	local texts = {}
+	for m = 1, COUNT do
+		texts[m] = table.concat(was[m], ",")
+		for index = #lists[m], 1, -1 do
+			if lists[m][index] == id then
+				table.remove(lists[m], index)
+			end
+		end
+	end
+	local list = lists[n]
+	local at = #list + 1
+	for index, each in ipairs(list) do
+		if each == anchor then
+			at = after and index + 1 or index
+		end
+	end
+	table.insert(list, at, id)
+	local changed = false
+	for m = 1, COUNT do
+		if table.concat(lists[m], ",") ~= texts[m] then
+			changed = true
+		end
+	end
+	if not changed then
+		return false, nil
+	end
+	-- The lists are all made before the first is written: each write reads the lists again (ns.BarBlockLists).
+	for m = 1, COUNT do
+		if table.concat(lists[m], ",") ~= texts[m] then
+			Write(m, lists[m])
+		end
+	end
+	return true, ("Flat UI: %s is bar %d of block %d."):format(Label(id), at, n)
 end
 
 -- The rows of the page name these: BarBlockLines1, BarBlockPick1, BarBlockFree1, BarBlockAdd1, and the same for blocks 2 and 3.

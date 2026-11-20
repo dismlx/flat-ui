@@ -1923,8 +1923,13 @@ ns.PAGES = {
 		{ section = "Experience and reputation bars" },
 		{ key = "xpOwn", kind = "choice", default = "flat", label = "Experience bar", tip = "The game's bar stays in place and is not drawn.",
 			choices = { { "flat", "Flat UI's" }, { "game", "The game's" } } },
-		{ key = "xpWidth", kind = "number", default = 42, min = 10, max = 130, step = 1, unit = "%", label = "Width", tip = "100% is the game's bar at full width.",
+		-- Block 1 of the Bar block page places the bar under its bars at its width (XpBar.lua, BarBlock.lua); the Width row then says so (overText).
+		{ key = "xpUnder", kind = "bool", default = true, label = "Experience bar under the bar block",
+			tip = "Right under block 1 of the Bar block page, exactly as wide as the block, and it moves with the block. With the Bar block page off the bar keeps its own place in /flatui move. Off: its own place and the Width below.",
 			needs = "xpOwn", needsIn = { "flat" } },
+		{ key = "xpWidth", kind = "number", default = 42, min = 10, max = 130, step = 1, unit = "%", label = "Width",
+			tip = "100% is the game's bar at full width. Under the bar block the bar is as wide as the block.", needs = "xpUnder", needsIn = { false },
+			overText = "as wide as the block" },
 		{ key = "xpHeight", kind = "number", default = 8, min = 2, max = 24, step = 1, unit = " px", label = "Height", needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpShow", kind = "choice", default = "both", label = "Bars shown", tip = "Reputation shows for the faction you watch.",
 			needs = "xpOwn", needsIn = { "flat" },
@@ -2050,8 +2055,9 @@ ns.PAGES = {
 	-- HitTable.lua and HitTableCalc.lua: a table of Flat UI's own under the player frame with the player's chances against the target, worked out again
 	-- as stats, gear, weapon skill, buffs, form and the target change. By default it shows for a tank or a damage dealer and not for a healer, by the
 	-- role Flat UI setup reads (ns.PlayerRole, Core.lua); Always and Off hold whatever the role. Attacks, Special attacks, Where you stand and Hit cap
-	-- against a boss serve On enemy tooltips (HitTableTip.lua) too and need nothing; Text size on enemy tooltips needs On enemy tooltips, and the
-	-- other rows apply at either of the first two choices of Hit table under the player frame. It was a tick in 0.5.18: a saved tick reads as Always
+	-- against a boss serve On enemy tooltips (HitTableTip.lua) too and need nothing; Only while Ctrl is held (0.5.28, on) and Text size on enemy
+	-- tooltips need On enemy tooltips, Hint while Ctrl is up (off) needs Only while Ctrl is held, and the other rows apply at either of the first
+	-- two choices of Hit table under the player frame. It was a tick in 0.5.18: a saved tick reads as Always
 	-- or Off (Core.lua, ns.MigrateText). Text size was a slider until 0.5.26: a saved number reads as the nearest size (Core.lua, Renamed).
 	{
 		key = "hudHitTable", label = "Hit table", owner = "hud",
@@ -2061,6 +2067,10 @@ ns.PAGES = {
 		{ key = "hitTableTip", kind = "choice", default = "role", label = "On enemy tooltips",
 			choices = { { "role", "For tanks and damage dealers" }, { "on", "Always" }, { "off", "Off" } },
 			tip = "Adds your hit table to the tooltip of an enemy you can attack: a line for each attack, as in Swing  M8 D6.5 G40 C12.1 H33.4 (M miss, D dodge, P parry, G glance, B block, C crit, H hit, in percent; on Spells, R a spell's damage resisted on average, as R-2.5 below 0 for the damage the enemy takes more from your Spell Piercing), against that enemy's level (a level shown as ??, or a boss of your level or above, counts as three levels above you). It counts Attacks, Special attacks, Where you stand (a tank counts in front) and Hit cap against a boss below, whatever Hit table under the player frame is set to. The game hides your stats in a fight, so there the numbers are from before it, and a line says so. For tanks and damage dealers leaves the lines out while you count as a healer. Needs Chat and tooltips on." },
+		{ key = "hitTableTipCtrl", kind = "bool", default = true, label = "Only while Ctrl is held", needs = "hitTableTip", needsIn = { "role", "on" },
+			tip = "The hit table's lines show on an enemy's tooltip only with Ctrl: held as the tooltip shows, or pressing Ctrl adds the lines; they leave when the tooltip next changes, not as you let go (over a unit frame, whose tooltip the game sets again every 0.2 seconds, they go with the key). Off, they show whenever the tooltip does." },
+		{ key = "hitTableTipHint", kind = "bool", default = false, label = "Hint while Ctrl is up", needs = "hitTableTipCtrl",
+			tip = "One dim line, Hold Ctrl for the hit table, on an enemy's tooltip in place of the lines while Ctrl is up." },
 		{ section = "What it shows" },
 		{ key = "hitTableLines", kind = "choice", default = "auto", label = "Attacks",
 			choices = { { "auto", "By your class and form" }, { "melee", "Melee" }, { "ranged", "Ranged" }, { "spell", "Spells" }, { "all", "Melee, ranged and spells" } },
@@ -2615,12 +2625,13 @@ ns.PAGES = {
 	{
 		key = "barblock", label = "Bar block",
 		{ key = "enabled", kind = "bool", default = true, label = "Group action bars into blocks",
-			tip = "Lines up the bars of each block below, at first the main bar and action bars 2 to 4 in block 1. /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
+			tip = "Lines up the bars of each block below, at first action bars 3 and 2, the main bar and action bar 4 in block 1, top to bottom, with Flat UI's experience bar under them at the block's width (Experience bar under the bar block). /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars, with a tab on each bar to drag it to another place in its block or into another block. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
 		{ section = "Block 1" },
-		-- The bars of the block, first bar first, as text the two rows under it show and change (BarBlockLists.lua).
-		{ key = "bars1", kind = "text", hidden = true, default = "main,bar2,bar3,bar4", label = "Bars of block 1" },
+		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
+		-- Stacked upward from the first bar, action bar 4 is at the bottom and action bar 3 on top.
+		{ key = "bars1", kind = "text", hidden = true, default = "bar4,main,bar2,bar3", label = "Bars of block 1" },
 		{ key = "edit1", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines1", pick = "BarBlockPick1",
-			tip = "The bars of the block, first bar first. A bar can be in one block only." },
+			tip = "The bars of the block, first bar first. A bar can be in one block only. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
 		{ key = "add1", kind = "list", default = 0, label = "Add a bar", none = "Choose a bar", items = "BarBlockFree1", pick = "BarBlockAdd1",
 			tip = "The bar goes last in the block. A bar in another block leaves that one." },
 		{ key = "direction", kind = "choice", default = "up", label = "Stack direction",
@@ -2630,10 +2641,10 @@ ns.PAGES = {
 		{ key = "ownGap", kind = "bool", default = false, label = "Own gap between bars", tip = "Off: the gap between buttons is used." },
 		{ key = "barGap", kind = "number", default = 2, min = 0, max = 20, step = 1, unit = " px", label = "Gap between bars", needs = "ownGap" },
 		{ section = "Block 2" },
-		-- The bars of the block, first bar first, as text the two rows under it show and change (BarBlockLists.lua).
+		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
 		{ key = "bars2", kind = "text", hidden = true, default = "", label = "Bars of block 2" },
 		{ key = "edit2", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines2", pick = "BarBlockPick2",
-			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar." },
+			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
 		{ key = "add2", kind = "list", default = 0, label = "Add a bar", none = "Choose a bar", items = "BarBlockFree2", pick = "BarBlockAdd2",
 			tip = "The bar goes last in the block. A bar in another block leaves that one." },
 		{ key = "direction2", kind = "choice", default = "up", label = "Stack direction",
@@ -2643,10 +2654,10 @@ ns.PAGES = {
 		{ key = "ownGap2", kind = "bool", default = false, label = "Own gap between bars", tip = "Off: the gap between buttons is used." },
 		{ key = "barGap2", kind = "number", default = 2, min = 0, max = 20, step = 1, unit = " px", label = "Gap between bars", needs = "ownGap2" },
 		{ section = "Block 3" },
-		-- The bars of the block, first bar first, as text the two rows under it show and change (BarBlockLists.lua).
+		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
 		{ key = "bars3", kind = "text", hidden = true, default = "", label = "Bars of block 3" },
 		{ key = "edit3", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines3", pick = "BarBlockPick3",
-			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar." },
+			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
 		{ key = "add3", kind = "list", default = 0, label = "Add a bar", none = "Choose a bar", items = "BarBlockFree3", pick = "BarBlockAdd3",
 			tip = "The bar goes last in the block. A bar in another block leaves that one." },
 		{ key = "direction3", kind = "choice", default = "up", label = "Stack direction",
@@ -2656,7 +2667,7 @@ ns.PAGES = {
 		{ key = "ownGap3", kind = "bool", default = false, label = "Own gap between bars", tip = "Off: the gap between buttons is used." },
 		{ key = "barGap3", kind = "number", default = 2, min = 0, max = 20, step = 1, unit = " px", label = "Gap between bars", needs = "ownGap3" },
 		{ section = "Buttons" },
-		{ key = "uniform", kind = "bool", default = false, label = "One size and spacing for every bar", tip = "Applies after a reload. Action bars 4 and 5 become horizontal.", changed = "BarButtonsChanged", reload = "change" },
+		{ key = "uniform", kind = "bool", default = true, label = "One size and spacing for every bar", tip = "Applies after a reload. Action bars 4 and 5 become horizontal, so action bar 4 lies in block 1 like the others.", changed = "BarButtonsChanged", reload = "change" },
 		{ key = "size", kind = "number", default = 100, unit = "%", min = 50, max = 200, step = 10, label = "Button size", tip = "100% is 45 px.", needs = "uniform", changed = "BarButtonsChanged" },
 		{ key = "spacing", kind = "number", default = 2, min = 2, max = 10, step = 1, unit = " px", label = "Button spacing", needs = "uniform", changed = "BarButtonsChanged" },
 		{ key = "perRow", kind = "choice", default = "12", label = "Buttons per row", needs = "uniform", changed = "BarButtonsChanged",
@@ -2664,7 +2675,7 @@ ns.PAGES = {
 		{ key = "showEmpty", kind = "bool", default = true, label = "Show empty buttons", tip = "Edit Mode's Always show buttons.", needs = "uniform", changed = "BarButtonsChanged" },
 		{ section = "Other bars" },
 		{ key = "others", kind = "choice", default = "above", label = "Stance, pet and experience bars",
-			tip = "Above the block: experience bars on top of block 1, stance bar left and pet bar right above them. " .. KEPT,
+			tip = "Above the block: experience bars on top of block 1, stance bar left and pet bar right above them. Flat UI's experience bar goes under the block instead while Experience bar under the bar block is on. " .. KEPT,
 			choices = { { "above", "Above the block" }, { "game", "Left to the game" } } },
 		{ section = "Background" },
 		{ key = "background", kind = "bool", default = false, label = "Background panel", tip = "A flat panel behind the bars of the block." },
