@@ -1420,6 +1420,12 @@ ns.PAGES = {
 		{ section = "Character window" },
 		{ key = "durability", kind = "bool", default = true, label = "Show durability",
 			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below." },
+		-- CharacterStats.lua: a strip of Flat UI's own under the window, on its character page.
+		{ key = "glance", kind = "bool", default = true, label = "Stats at a glance",
+			tip = "A strip under the Character window with the stats that matter most for your role: hit and crit against a boss, armor, defense to the crit cap, avoidance and crushing blows, spell power, healing, mana regen, item level and thorns. Green where a cap is reached, gold where it is close, red where it is far. Point at a stat for what counts in it." },
+		{ key = "glanceShow", kind = "choice", default = "role", label = "Stats to show", needs = "glance",
+			choices = { { "role", "For your role" }, { "all", "Everything" } },
+			tip = "For your role: what a tank, a healer or a damage dealer of your class looks at first, as the hit table reads your role. Everything: every stat with a number." },
 	},
 	-- Bags.lua and the Bags*.lua files: a bag window and a bank window of Flat UI's own in place of the game's, with sections, a search and the bags
 	-- and bank of your other characters. On by default for every character since 0.5.19 (a profile saved before then with every module that is on
