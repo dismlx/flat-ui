@@ -808,6 +808,8 @@ ns.SETUP_STEPS = {
 		{ "windows.combinedBags", "c", "mock-bag-slots" },
 		{ "windows.bagKey", "o", "behaviour", "Makes B, your key for Toggle Backpack, open every bag, the reagent bag too." },
 		{ "windows.durability", "c", "behaviour", "Shows the durability of your gear on the Character window." },
+		{ "windows.glance", "c", "behaviour", "Shows the stats that matter for your role under the Character window, thorns among them, with their caps against a boss." },
+		{ "windows.glanceShow", "o", "behaviour", "Chooses whether the strip shows the stats of your role or every stat." },
 		{ "windows.sortButton", "c", "mock-bag-slots" },
 		{ "windows.sortBank", "o", "behaviour", "Adds the clean up bags button to the bank." },
 		{ "windows.sortFrom", "o", "behaviour", "Chooses which end of the bags items gather at; the game's own clean up follows it." },

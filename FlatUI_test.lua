@@ -10811,6 +10811,8 @@ local PAGES = {
 		S("windows.combinedBags", "bool", false, "Combine bags"),
 		"Character window",
 		S("windows.durability", "bool", true, "Show durability", "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below."),
+		S("windows.glance", "bool", true, "Stats at a glance", "A strip under the Character window with the stats that matter most for your role: hit and crit against a boss, armor, defense to the crit cap, avoidance and crushing blows, spell power, healing, mana regen, item level and thorns. Green where a cap is reached, gold where it is close, red where it is far. Point at a stat for what counts in it."),
+		S("windows.glanceShow", "choice", "role", "Stats to show", "For your role: what a tank, a healer or a damage dealer of your class looks at first, as the hit table reads your role. Everything: every stat with a number.", { needs = "windows.glance", choices = { { "role", "For your role" }, { "all", "Everything" } } }),
 	} },
 	{ key = "unitframes", label = "Unit frames", rows = {
 		S("unitframes.enabled", "bool", true, "Restyle unit frames"),

@@ -2448,6 +2448,7 @@ local function Refresh()
 	ns.BagSort.Apply()
 	ns.BagKey.Apply()
 	ns.CharacterDurability.Apply()
+	ns.CharacterStats.Apply()
 	if ns.Enabled(KEY) and switched then
 		SweepAll()
 	end

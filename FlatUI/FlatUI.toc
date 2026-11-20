@@ -78,6 +78,7 @@ Windows.lua
 Items.lua
 ItemMarks.lua
 CharacterDurability.lua
+CharacterStats.lua
 UnitFrames.lua
 UnitFramePortrait.lua
 UnitFrameLevel.lua
