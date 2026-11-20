@@ -235,11 +235,13 @@ local ADDON_NAME, ns = ...
 -- dead, and with Text size on enemy tooltips other than 100% sized (SetFont on their font strings, GameTooltipTextLeftN and GameTooltipTextRightN),
 -- each put back in the font object and font it had at the next clear of GameTooltip (GameTooltip_ClearMoney, which its OnTooltipCleared calls,
 -- followed with ns.FollowGlobal), so every later tooltip has the game's sizes. With Only while Ctrl is held (on by default) they are added only
--- while Ctrl is down (IsControlKeyDown), with Hint while Ctrl is up (off) one dim line in their place; while an enemy's tooltip waits for the key
--- a frame of its own hears MODIFIER_STATE_CHANGED, and as Ctrl goes down or up over it, a tooltip of the game's unit getters (GetWorldCursor,
--- GetUnit) whose owner has no UpdateTooltip and whose data holds no secret is built again with GameTooltip's RefreshData, the game's own rebuild
--- from what it set it with, so its unit, anchor, owner and fade stay the game's. They read the tooltip's unit (GetUnit under pcall, else
--- UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level and kind (C.Target with the unit), whether it attacks the player
+-- while Ctrl is down (IsControlKeyDown), with Hint while Ctrl is up (off) one dim line in their place; while an enemy's tooltip built with Ctrl up
+-- is kept, a frame of its own hears MODIFIER_STATE_CHANGED, and as Ctrl goes down while GameTooltip still shows that build (IsShown, GetOwner,
+-- its infoList read only) and its owner has no UpdateTooltip (a unit frame's, which the game runs every 0.2 seconds), pressing Ctrl adds the
+-- lines there with the same AddDoubleLine and AddLine, the hint, a line of Flat UI's own, turned into their header (SetText, SetTextColor), and
+-- shows GameTooltip again (Show) so it takes their size, once a build; they leave when the tooltip next changes. No Lua method of GameTooltip is
+-- called and nothing is built again. They read the tooltip's unit (UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its
+-- level and kind (C.Target with the unit), whether it attacks the player
 -- (C.Front), the player's form and power type (GetShapeshiftForm, UnitPowerType),
 -- the combat state (InCombatLockdown, UnitAffectingCombat, C_Secrets.ShouldUnitStatsBeSecret) and the stats the table reads (ns.HitTableCalc,
 -- C.Inputs), those out of a fight only, at most every two seconds as GameTooltip is built whatever it shows, and worked out by C.Table; in a fight

@@ -18,28 +18,30 @@ local _, ns = ...
 -- up when asked, never as the files load.
 --
 -- Ctrl (0.5.28, the owner: "hide hit on tooltip unless holding ctrl key"): with Only while Ctrl is held (hud.hitTableTipCtrl, on by default) the
--- lines are added only while Ctrl is down (IsControlKeyDown) as the tooltip is built; with Hint while Ctrl is up (hud.hitTableTipHint, off by
--- default) one dim line, Hold Ctrl for the hit table, stands in for them while it is up. A build of an enemy's tooltip that waits for the key is
--- kept (its data, its owner and whether Ctrl was down), and while one is kept a frame of Flat UI's own hears MODIFIER_STATE_CHANGED
--- (KeyBindingsDocumentation.lua:158-167: the key, as LCTRL or RCTRL, and whether it went down). When Ctrl goes down or up and GameTooltip still
--- shows that build (IsShown, its owner, and the data of its first info, its field infoList read only), the tooltip is set again the game's own way
--- for its unit, as Flat UI's own buttons set theirs again with the key (OwnPaint.lua): an owner with an UpdateTooltip, as a unit frame has
--- (Mainline/UnitFrame.lua:396-407), or a tooltip with one, is set again by the game within 0.2 seconds (GameTooltip_OnUpdate, GameTooltip.lua:
--- 451-463), so nothing is done; else, for an info of the game's unit getters (getterName GetWorldCursor or GetUnit), GameTooltip's RefreshData,
--- the call the game makes after a TOOLTIP_DATA_UPDATE (GameTooltip.lua:959-976), builds it again from what the game set it with
--- (TooltipDataHandler.lua:358-391): the same unit, anchor, owner and fade, so the tooltip and every one after it stay as the game has them, and the
--- post call adds the lines or leaves them out by the key. A build run from here is tainted, and the game warns that a tainted build of a world
--- tooltip whose lines hold a secret may show none (GameTooltip.lua:994-1003), so a build whose data holds a secret text or colour is not set
--- again: there the lines follow the key at the game's next build. A kept build goes at the next build that is not an enemy's waiting for the key,
--- or at the next key once the tooltip shows something else, and the event with it.
+-- lines are added to a build only while Ctrl is down (IsControlKeyDown) as the tooltip is built; with Hint while Ctrl is up (hud.hitTableTipHint, off
+-- by default) one dim line, Hold Ctrl for the hit table, stands in for them while it is up. A build of an enemy's tooltip made while Ctrl is up is
+-- kept (its data and its owner), and while one is kept a frame of Flat UI's own hears MODIFIER_STATE_CHANGED (KeyBindingsDocumentation.lua:158-167:
+-- the key, as LCTRL or RCTRL, and whether it went down). When Ctrl goes down and GameTooltip still shows that build (IsShown, its owner, and the
+-- data of its first info, its field infoList read only), the lines are added to it there and then, with the same AddDoubleLine and AddLine a build
+-- adds them with, under the game's lines and any added since, and GameTooltip is shown again (Show) so it takes their size. The hint, where it still
+-- shows, becomes their header: SetText and SetTextColor on its left font string, a line Flat UI added, while it still reads the hint. Once they are
+-- added the build is no longer kept, so a build gets them once. Nothing is built again and no Lua method of GameTooltip is called: a rebuild run
+-- from here (RefreshData, GameTooltip.lua:959-962) would be tainted, and the game warns that tainted tooltip info can make a later tooltip whose
+-- data holds a secret text show no lines (GameTooltip.lua:994-1003); so the tooltip, its place, owner and fade, and every one after it stay the
+-- game's. Ctrl let go leaves the lines until the game builds that tooltip again: GameTooltip has no widget call that takes off some of its lines
+-- (ClearLines takes the game's too, and a font string emptied or hidden stays a line of the tooltip, NumLines), so they leave when the tooltip
+-- next changes. An owner with an UpdateTooltip, as a unit frame has (Mainline/UnitFrame.lua:396-407), or a tooltip with one, has the game build it
+-- again within 0.2 seconds (GameTooltip_OnUpdate, GameTooltip.lua:451-463), and that build follows the key as any does, so there nothing is done
+-- and the lines come and go with the key. A world tooltip fading out has no info (the game clears it first, GameTooltip.lua:1014-1017), so it is
+-- never touched. A kept build goes at the next build that is not kept again, or at the next press of Ctrl, and the event with it.
 --
 -- The tests, cheapest first: the row and the chat module; the tooltip GameTooltip (rawequal), one addons may touch (ns.Forbidden) and not one
 -- inside another tooltip (its field IsEmbedded, read only); then the look at the stats and the role (Look, below), at a build of any kind; the
 -- data of a unit (Enum.TooltipDataType.Unit 2, TooltipInfoSharedDocumentation.lua:98), the role no healer at For tanks and damage dealers and
 -- inputs kept; the same build not already given its lines (as SpellLines.lua tells a build: the same data with at least the lines added then still
--- there); the unit token from the tooltip, GetUnit under pcall (its second answer, Blizzard_GameTooltip/Mainline/GameTooltip.lua:1035-1037,
--- which reads the data's guid with UnitTokenFromGUID, Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua:34-42), else UnitTokenFromGUID of the
--- data's guid, else "mouseover" while its UnitGUID is that guid; a unit the player can attack (UnitCanAttack) that is not dead
+-- there); the unit token, UnitTokenFromGUID of the data's guid, as the game's GetUnit reads it (Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua:
+-- 34-42; GetUnit itself, a Lua method of GameTooltip, Blizzard_GameTooltip/Mainline/GameTooltip.lua:1035-1037, is not called), else "mouseover"
+-- while its UnitGUID is that guid; a unit the player can attack (UnitCanAttack) that is not dead
 -- (UnitIsDeadOrGhost); and a level the game gives plain (UnitLevel). A guid, a token or a level the game withholds (SecretWhenUnitIdentityRestricted,
 -- UnitDocumentation.lua:3296-3310) says nothing; so does every value that is not plain (ns.IsSecret, ns.Finite).
 --
@@ -79,7 +81,7 @@ local _, ns = ...
 -- /flatui status, and the first error goes once to the game's error handler (geterrorhandler), as SpellLines.lua sends its own. The only writes are
 -- widget calls on GameTooltip, each under pcall: NumLines, AddDoubleLine and AddLine, one the game refuses ending the adding for that build; on
 -- the font strings of the lines added, SetFont, put back with SetFontObject (and SetFont) at the next clear (The size, above); and, as Ctrl goes
--- down or up over a kept build, RefreshData (Ctrl, above). Chat.lua calls
+-- down over a kept build, Show, and SetText and SetTextColor on the hint's own font string (Ctrl, above). Chat.lua calls
 -- ns.HitTableTipLines from its post call of the game's tooltip data (TooltipDataProcessor.AddTooltipPostCall), after the spell and gear lines and
 -- before its own ID line.
 
@@ -93,11 +95,9 @@ local HT = {
 	DETAIL = "chat.tipDetail",
 	-- Text size on enemy tooltips (Config.lua), and the names of the font strings of a line of GameTooltip: the side and the number of the line.
 	SIZE = "hud.hitTableTipSize", FONT_STRING = "GameTooltipText%s%d",
-	-- Only while Ctrl is held and Hint while Ctrl is up (Config.lua), the hint, the keys of MODIFIER_STATE_CHANGED that are Ctrl, the getters of
-	-- the game's unit tooltips that are set again with the key, and the fields of a line of the data, and of a colour, that must be plain for it.
+	-- Only while Ctrl is held and Hint while Ctrl is up (Config.lua), the hint, and the keys of MODIFIER_STATE_CHANGED that are Ctrl.
 	CTRL = "hud.hitTableTipCtrl", HINT = "hud.hitTableTipHint", HINT_TEXT = "Hold Ctrl for the hit table",
-	CTRL_KEYS = { LCTRL = true, RCTRL = true }, GETTERS = { GetWorldCursor = true, GetUnit = true },
-	LINE_FIELDS = { "leftText", "rightText", "leftColor", "rightColor" }, COLOUR_FIELDS = { "r", "g", "b" },
+	CTRL_KEYS = { LCTRL = true, RCTRL = true },
 	-- Enum.TooltipDataType.Unit, for a client whose Enum does not say (TooltipInfoSharedDocumentation.lua:98).
 	UNIT = 2,
 	-- The kinds C.Inputs reads: every one, so a change of Attacks or of form later finds the kind it needs among the inputs kept.
@@ -130,7 +130,7 @@ local HT = {
 	JOIN = "; ",
 }
 
--- Per tooltip: { data, lines } of the build that has the lines: its data and the tooltip's lines after them.
+-- Per tooltip: { data, lines, hint } of the build that has the lines: its data, the tooltip's lines after them and the number of the hint's line.
 local added = setmetatable({}, { __mode = "k" })
 -- held: inputs (the last plain answer of C.Inputs), version (counts the answers kept), at (GetTime of the last look: a read tried and the role),
 -- fought (that look was in a fight), role (the player's role at that look: "tank", "healer" or "damage"), form (GetShapeshiftForm at that look)
@@ -143,7 +143,7 @@ local run = { reported = false }
 -- sized: the font strings of GameTooltip this file sized, each { fs, object, file, size, flags }: the font object and the font it had. follow: nil
 -- until the first size other than 100%, then whether the clear of GameTooltip is followed.
 local sizing = { sized = {} }
--- The build of an enemy's tooltip that waits for Ctrl: data, owner (the tooltip's owner then), down (Ctrl was down then); frame hears the key.
+-- The build of an enemy's tooltip made while Ctrl was up: data and owner (the tooltip's owner then); frame hears the key.
 local waiting = {}
 
 -- Reading -----------------------------------------------------------------------------------------------------------------------------------
@@ -212,21 +212,14 @@ local function UnitType()
 	return Finite(value) and value or HT.UNIT
 end
 
--- The unit of the tooltip and its guid: the token of GetUnit (under pcall), else UnitTokenFromGUID of the data's guid, else "mouseover" while it is
--- that unit. Nil when the game gives no plain guid or token.
-local function UnitOf(tooltip, data)
-	local guid, unit = Text(Field(data, "guid")), nil
-	local get = Field(tooltip, "GetUnit")
-	if type(get) == "function" then
-		local ok, _, token, found = pcall(get, tooltip)
-		if ok then
-			unit, guid = Text(token), guid or Text(found)
-		end
-	end
+-- The unit of the tooltip and its guid: UnitTokenFromGUID of the data's guid, as the game's GetUnit reads it (never called: a Lua method of
+-- GameTooltip), else "mouseover" while it is that unit. Nil when the game gives no plain guid or token.
+local function UnitOf(data)
+	local guid = Text(Field(data, "guid"))
 	if not guid then
 		return nil
 	end
-	unit = unit or Text(Ask(UnitTokenFromGUID, guid))
+	local unit = Text(Ask(UnitTokenFromGUID, guid))
 	if not unit and Ask(UnitGUID, "mouseover") == guid then
 		unit = "mouseover"
 	end
@@ -418,7 +411,7 @@ local function Shape(read, target, old)
 	if #figures == 0 then
 		return lines
 	elseif #figures > 1 then
-		lines[1] = { left = HT.HEADER, colour = style.header, wrap = false }
+		lines[1] = { left = HT.HEADER, colour = style.header, wrap = false, header = true }
 	end
 	for _, line in ipairs(figures) do
 		lines[#lines + 1] = line
@@ -545,6 +538,59 @@ local function Size(index, pair, percent)
 	end
 end
 
+-- Adding -----------------------------------------------------------------------------------------------------------------------------------------
+
+-- ns.HitTableCalc while it has every call the lines need, else nil.
+local function Calc()
+	local C = ns.HitTableCalc
+	if type(C) ~= "table" or type(C.Inputs) ~= "function" or type(C.Table) ~= "function" or type(C.Target) ~= "function"
+		or type(C.Front) ~= "function" or type(C.Kinds) ~= "function" then
+		return nil
+	end
+	return C
+end
+
+-- Adds one line to the tooltip: a label and its parts side by side, or a line alone, wrapped when it asks. True when the game took it.
+local function Put(tooltip, line)
+	local left, right = line.colour, line.rightColour
+	if line.right then
+		return (pcall(tooltip.AddDoubleLine, tooltip, line.left, line.right, left[1], left[2], left[3], right[1], right[2], right[3]))
+	end
+	return (pcall(tooltip.AddLine, tooltip, line.left, left[1], left[2], left[3], line.wrap == true))
+end
+
+-- Adds the lines from number `first` on under the `shown` lines of the tooltip, each sized by Text size on enemy tooltips; a line the game refuses
+-- ends the adding. Answers the tooltip's lines after them.
+local function Add(tooltip, lines, shown, first)
+	local percent = Percent()
+	for index = first, #lines do
+		local line = lines[index]
+		if not Put(tooltip, line) then
+			break
+		end
+		shown = shown + 1
+		if percent ~= 100 then
+			Size(shown, line.right ~= nil, percent)
+		end
+	end
+	return shown
+end
+
+-- Sends the first error of this part once to the game's error handler, as SpellLines.lua sends its own.
+local function Report(ok, err)
+	if ok or err == nil or run.reported then
+		return
+	end
+	run.reported = true
+	local found, handler = false, nil
+	if type(geterrorhandler) == "function" then
+		found, handler = pcall(geterrorhandler)
+	end
+	if found and type(handler) == "function" then
+		pcall(handler, ("Flat UI Chat and tooltips, %s: %s"):format(PART, tostring(err)))
+	end
+end
+
 -- Ctrl -------------------------------------------------------------------------------------------------------------------------------------------
 
 -- True while Ctrl is down. A key the game does not say is down counts as up.
@@ -566,81 +612,93 @@ local function FirstInfo(tooltip)
 	return Field(Field(tooltip, "infoList"), 1)
 end
 
--- True when the data and every text and colour of its lines are plain (the rebuild, run from here, is tainted: Ctrl, above).
-local function PlainData(data)
-	local lines = Field(data, "lines")
-	if IsSecret(lines) or type(lines) ~= "table" then
-		return false
-	end
-	for _, line in ipairs(lines) do
-		if IsSecret(line) or type(line) ~= "table" then
-			return false
-		end
-		for _, name in ipairs(HT.LINE_FIELDS) do
-			local value = line[name]
-			if IsSecret(value) then
-				return false
-			elseif type(value) == "table" then
-				for _, part in ipairs(HT.COLOUR_FIELDS) do
-					if IsSecret(value[part]) then
-						return false
-					end
-				end
-			end
-		end
-	end
-	return true
-end
-
 -- The kept build goes, and the event with it.
 local function Unwait()
-	waiting.data, waiting.owner, waiting.down = nil, nil, nil
+	waiting.data, waiting.owner = nil, nil
 	if waiting.frame then
 		pcall(waiting.frame.UnregisterEvent, waiting.frame, "MODIFIER_STATE_CHANGED")
 	end
 end
 
--- Ctrl went down or up: GameTooltip, while it still shows the kept build and its unit is not set again by the game anyway, is set again from
--- what the game set it with (RefreshData), so the post call adds the lines or leaves them out by the key. A build that holds a secret waits for
--- the game's next build.
+-- The left font string of line number `index` of the tooltip while it still reads the hint, else nil.
+local function HintString(index, shown)
+	if not Finite(index) or index > shown then
+		return nil
+	end
+	local fs = _G[HT.FONT_STRING:format("Left", index)]
+	if ns.Forbidden(fs) then
+		return nil
+	end
+	local ok, text = pcall(fs.GetText, fs)
+	if ok and not IsSecret(text) and text == HT.HINT_TEXT then
+		return fs
+	end
+	return nil
+end
+
+-- Ctrl went down over the kept build (KeyChanged, inside ns.EachPart): its lines, added there and then with the calls a build adds them with,
+-- under every line the tooltip has; the hint, where it still shows, becomes their header. Then GameTooltip is shown again so it takes their size.
+-- Once for the build: it is no longer kept, and the record of the lines says it has them.
+local function Pressed(data, tooltip)
+	Unwait()
+	local C = Calc()
+	if not C then
+		return
+	end
+	local old = Look(C)
+	if (Choice() == "role" and held.role == "healer") or not held.inputs then
+		return
+	end
+	local ok, shown = pcall(tooltip.NumLines, tooltip)
+	if not ok or not Finite(shown) then
+		return
+	end
+	local unit, guid = UnitOf(data)
+	if not unit or not Enemy(unit) then
+		return
+	end
+	local lines = LinesFor(C, unit, guid, old)
+	if not lines or #lines == 0 then
+		return
+	end
+	local record, first = added[tooltip], 1
+	local fs = record and rawequal(record.data, data) and HintString(record.hint, shown) or nil
+	if fs and pcall(fs.SetText, fs, HT.HEADER) then
+		local colour = Style().header
+		pcall(fs.SetTextColor, fs, colour[1], colour[2], colour[3])
+		first = lines[1].header and 2 or 1
+	end
+	shown = Add(tooltip, lines, shown, first)
+	added[tooltip] = { data = data, lines = shown }
+	pcall(tooltip.Show, tooltip)
+end
+
+-- A change of a modifier key: as Ctrl goes down while GameTooltip still shows the kept build, its lines are added (Pressed). Ctrl let go does
+-- nothing: the lines stay until the game builds the tooltip again. An owner or a tooltip with an UpdateTooltip, as a unit frame, is left to the
+-- game, which builds it again within 0.2 seconds with the key as it is then.
 local function KeyChanged(_, _, key)
-	if IsSecret(key) or not HT.CTRL_KEYS[key] then
+	if IsSecret(key) or not HT.CTRL_KEYS[key] or waiting.data == nil or not CtrlDown() then
 		return
 	end
 	local tip, data = GameTooltip, waiting.data
-	if data == nil or ns.Get(HT.CTRL) ~= true or Choice() == "off" or not ns.Enabled(KEY) or ns.PartStopped(KEY, PART)
+	if ns.Get(HT.CTRL) ~= true or Choice() == "off" or not ns.Enabled(KEY) or ns.PartStopped(KEY, PART)
 		or type(tip) ~= "table" or ns.Forbidden(tip) then
 		Unwait()
 		return
 	end
-	local down = CtrlDown()
-	if down == waiting.down then
-		return
-	end
-	local shown, info = Ask(tip.IsShown, tip), FirstInfo(tip)
-	if shown ~= true or not rawequal(Field(info, "tooltipData"), data) or not rawequal(OwnerOf(tip), waiting.owner) then
+	if Ask(tip.IsShown, tip) ~= true or not rawequal(Field(FirstInfo(tip), "tooltipData"), data)
+		or not rawequal(OwnerOf(tip), waiting.owner) then
 		Unwait()
 		return
 	end
-	-- An owner or a tooltip with an UpdateTooltip has it set again within 0.2 seconds (GameTooltip_OnUpdate), with the key as it is then.
 	if type(Field(waiting.owner, "UpdateTooltip")) == "function" or type(Field(tip, "UpdateTooltip")) == "function" then
 		return
 	end
-	local refresh = Field(tip, "RefreshData")
-	local readable, plain = pcall(PlainData, data)
-	if not HT.GETTERS[Field(info, "getterName")] or type(refresh) ~= "function" or not readable or plain ~= true then
-		return
-	end
-	-- The post call of the new build keeps it again when it waits for the key.
-	waiting.data = nil
-	pcall(refresh, tip)
-	if waiting.data == nil then
-		Unwait()
-	end
+	Report(ns.EachPart(KEY, PART, Pressed, data, tip))
 end
 
--- Keeps the build of an enemy's tooltip that waits for Ctrl, and hears the key while it is kept.
-local function Wait(tooltip, data, down)
+-- Keeps the build of an enemy's tooltip made while Ctrl is up, and hears the key while it is kept.
+local function Wait(tooltip, data)
 	if not waiting.frame and type(CreateFrame) == "function" then
 		local ok, frame = pcall(CreateFrame, "Frame")
 		if ok and not IsSecret(frame) and type(frame) == "table" then
@@ -652,20 +710,11 @@ local function Wait(tooltip, data, down)
 	if not waiting.frame then
 		return
 	end
-	waiting.data, waiting.owner, waiting.down = data, OwnerOf(tooltip), down
+	waiting.data, waiting.owner = data, OwnerOf(tooltip)
 	pcall(waiting.frame.RegisterEvent, waiting.frame, "MODIFIER_STATE_CHANGED")
 end
 
--- Adding -----------------------------------------------------------------------------------------------------------------------------------------
-
--- Adds one line to the tooltip: a label and its parts side by side, or a line alone, wrapped when it asks. True when the game took it.
-local function Put(tooltip, line)
-	local left, right = line.colour, line.rightColour
-	if line.right then
-		return (pcall(tooltip.AddDoubleLine, tooltip, line.left, line.right, left[1], left[2], left[3], right[1], right[2], right[3]))
-	end
-	return (pcall(tooltip.AddLine, tooltip, line.left, left[1], left[2], left[3], line.wrap == true))
-end
+-- Building ---------------------------------------------------------------------------------------------------------------------------------------
 
 -- The tests and the lines of one build (header), once for each build: the same data with at least the lines added then still there is the same
 -- build, so a second post call of it adds none, and a refused line ends the adding for that build. Every build of GameTooltip looks first, so the
@@ -682,9 +731,8 @@ local function Work(data, tooltip)
 	if waiting.data ~= nil and not rawequal(waiting.data, data) then
 		Unwait()
 	end
-	local C = ns.HitTableCalc
-	if type(C) ~= "table" or type(C.Inputs) ~= "function" or type(C.Table) ~= "function" or type(C.Target) ~= "function"
-		or type(C.Front) ~= "function" or type(C.Kinds) ~= "function" then
+	local C = Calc()
+	if not C then
 		return
 	end
 	local old = Look(C)
@@ -699,19 +747,17 @@ local function Work(data, tooltip)
 	if record and rawequal(record.data, data) and shown >= record.lines then
 		return
 	end
-	local unit, guid = UnitOf(tooltip, data)
+	local unit, guid = UnitOf(data)
 	if not unit or not Enemy(unit) then
 		return
 	end
-	-- Only while Ctrl is held: the build is kept for the key, and while it is up only the hint, with Hint while Ctrl is up, stands for the lines.
-	local waits = ns.Get(HT.CTRL) == true
-	local down = waits and CtrlDown()
-	if waits then
-		Wait(tooltip, data, down)
-	end
-	local hint = waits and not down
-	if hint and ns.Get(HT.HINT) ~= true then
-		return
+	-- Only while Ctrl is held: a build made while it is up is kept for the key, and only the hint, with Hint while Ctrl is up, stands for the lines.
+	local hint = ns.Get(HT.CTRL) == true and not CtrlDown()
+	if hint then
+		Wait(tooltip, data)
+		if ns.Get(HT.HINT) ~= true then
+			return
+		end
 	end
 	local lines = LinesFor(C, unit, guid, old)
 	if not lines or #lines == 0 then
@@ -722,32 +768,9 @@ local function Work(data, tooltip)
 	if #sizing.sized > 0 then
 		Unsize()
 	end
-	local percent = Percent()
-	for _, line in ipairs(lines) do
-		if not Put(tooltip, line) then
-			break
-		end
-		shown = shown + 1
-		if percent ~= 100 then
-			Size(shown, line.right ~= nil, percent)
-		end
-	end
-	added[tooltip] = { data = data, lines = shown }
-end
-
--- Sends the first error of this part once to the game's error handler, as SpellLines.lua sends its own.
-local function Report(ok, err)
-	if ok or err == nil or run.reported then
-		return
-	end
-	run.reported = true
-	local found, handler = false, nil
-	if type(geterrorhandler) == "function" then
-		found, handler = pcall(geterrorhandler)
-	end
-	if found and type(handler) == "function" then
-		pcall(handler, ("Flat UI Chat and tooltips, %s: %s"):format(PART, tostring(err)))
-	end
+	local before = shown
+	shown = Add(tooltip, lines, shown, 1)
+	added[tooltip] = { data = data, lines = shown, hint = hint and shown > before and shown or nil }
 end
 
 -- Called by Chat.lua's post call for every build of a tooltip of any kind: nothing unless the chat module is on and On enemy tooltips is not Off;
