@@ -402,10 +402,12 @@ local READERS = {
 	-- The health text of a nameplate follows Number style of the unit frames.
 	["unitframes.numberStyle"] = "nameplates",
 	-- The hit table at For tanks and damage dealers follows the player's role, which Your role of nameplate threat can make a tank (ns.PlayerRole),
-	-- and so do the spells the gear comparison of Chat and tooltips counts by default and where it counts the player standing (GearLines.lua).
-	["nameplates.threatRole"] = { "hud", "chat" },
-	-- The gear comparison counts the hit cap of the hit table at Hit cap against a boss: As on the Hit table tab (Config.lua, chat.gearRules).
-	["hud.hitTableRules"] = "chat",
+	-- and so do the spells the gear comparison of Chat and tooltips counts by default and where it counts the player standing (GearLines.lua), and
+	-- the tiles of Stats at a glance on the Character window (CharacterStats.lua, part of Windows).
+	["nameplates.threatRole"] = { "hud", "chat", "windows" },
+	-- The gear comparison counts the hit cap of the hit table at Hit cap against a boss: As on the Hit table tab (Config.lua, chat.gearRules), and
+	-- so do the hit tiles of Stats at a glance.
+	["hud.hitTableRules"] = { "chat", "windows" },
 	-- The name row, the fade, the trough and the rounded lines of unit frames follow them.
 	["unitframes.lookOwn"] = "unitframes", ["unitframes.lookBorder"] = "unitframes", ["unitframes.lookBack"] = "unitframes",
 	["unitframes.lookBackAlpha"] = "unitframes",

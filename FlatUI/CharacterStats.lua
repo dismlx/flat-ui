@@ -10,8 +10,9 @@ local _, ns = ...
 -- The tiles, by role (ns.PlayerRole's first answer, Core.lua, as the hit table shows by it) and by the kinds of attack of the class and form
 -- (ns.HitTableCalc.Kinds, the hit table's By your class and form): a tank has Armor, Defense, Avoidance, Block value (with a shield), Hit and
 -- Thorns; a healer Healing, Spell crit, Mana regen and Thorns; a damage dealer the tiles of each kind of attack: Attack power, Crit and Hit for
--- melee, the same for ranged, Spell power, Spell crit, Spell hit and Spell Piercing for spells, with Mana regen for a mana user; Item level leads
--- every set while the client has the call. At Everything (windows.glanceShow) every tile with a number shows, whatever the role.
+-- melee, the same for ranged (a hunter), Spell power, Spell crit, Spell hit and Spell Piercing for spells, Mana regen for a mana user, and Thorns;
+-- Item level leads every set while the client has the call. At Everything (windows.glanceShow) every tile with a number shows, whatever the role,
+-- the ranged ones with a ranged weapon worn. Hit cap against a boss and Your role of nameplate threat redraw it (Core.lua, READERS).
 --
 -- The reads are the character sheet's own calls (SpellModel.lua's header lists them, as research_tooltips.md §3.1 does): UnitAttackPower and
 -- UnitRangedAttackPower (base plus both buffs), GetCritChance, GetRangedCritChance, GetSpellCritChance and GetSpellBonusDamage for each school,
@@ -26,15 +27,18 @@ local _, ns = ...
 --
 -- Every stat call is SecretWhenUnitStatsRestricted. While C_Secrets.ShouldUnitStatsBeSecret answers true nothing is read and the last plain
 -- numbers stay, and the header says they are from before; a call that raises or gives a secret value leaves its tile at ?, never a mix of a
--- secret and a number. A call the client lacks leaves its tile out.
+-- secret and a number (Avoidance is ? when any of defense, dodge, parry, block or the shield is). A call the client lacks leaves its tile out.
+-- Before the first plain read the strip says it waits for the game to give the stats.
 --
 -- Thorns: the damage an enemy takes each time it hits the player, in total, with each source in the tooltip. Two kinds of source count. The
--- player's buffs (C_UnitAuras.GetUnitAuras, as Absorbs.lua reads them): Thorns and Retribution Aura by their spell IDs, every rank, with the
+-- player's buffs (C_UnitAuras.GetUnitAuras, as Absorbs.lua reads them, only while ns.AurasReadable says the game shows them, and never with one
+-- of them withheld): Thorns and Retribution Aura by their spell IDs, every rank, with the
 -- amount of the aura's first value (points[1], which holds what talents add) or else the rank's own from the client's data (damage shield auras,
 -- aura 15, tools/dev/spelltips/client_spells.json); on an English client also any other buff whose tooltip (C_TooltipInfo.GetUnitBuffByAuraInstanceID)
 -- says it deals damage to attackers, as Fire Shield's does. And on an English client the Equip lines of worn gear (C_TooltipInfo.GetInventoryItem,
--- as SpellModel.lua reads the lines of a worn item) that say the same ("When struck in combat inflicts 3 Nature damage to the attacker."). A
--- withheld buff list keeps the last thorns read.
+-- as SpellModel.lua reads the lines of a worn item) that say the same ("When struck in combat inflicts 3 Nature damage to the attacker."), unless
+-- the item is broken. A line that names a chance is a proc and counts not, "N to M" counts at its mean, and the word before "damage" must be a
+-- school. Withheld buffs keep the last thorns read.
 --
 -- It is part "stats at a glance" of the windows module, not a module: Windows.lua calls ns.CharacterStats.Apply whenever it applies its settings,
 -- as it calls ns.CharacterDurability.Apply. Its frame is made once, on the character page (PaperDollFrame), so it shows only with that page,
@@ -55,7 +59,9 @@ end
 local K = {
 	-- The strip: gap under the window, padding, the header's height, a tile's height and least width, the most columns, and the width taken when
 	-- the client gives none (the Character window without its stats pane, 398: GearButton.lua's header).
-	GAP = 2, PAD = 6, HEAD = 16, TILE_H = 40, TILE_W = 96, MOST_COLS = 8, WIDTH = 398, TILE_GAP = 4,
+	GAP = 2, PAD = 6, HEAD = 16, TILE_H = 40, TILE_W = 96, MOST_COLS = 9, WIDTH = 398, TILE_GAP = 4,
+	-- So the strip stays on the screen: at most this many rows while the tiles can narrow to TILE_LEAST to fit more columns.
+	MOST_ROWS = 3, TILE_LEAST = 64,
 	-- The least time between two reads after events.
 	STEP = 0.2,
 	-- The boss: three levels above; 5 skill a level, 0.04% a point, 5% miss and crit at an even skill (GearAvoid.lua, K).
@@ -78,16 +84,23 @@ local K = {
 		[467] = { 3, 4 }, [782] = { 6, 4 }, [1075] = { 9, 4 }, [8914] = { 12, 4 }, [9756] = { 15, 4 }, [9910] = { 18, 4 },
 		[7294] = { 5, 2 }, [10298] = { 8, 2 }, [10299] = { 12, 2 }, [10300] = { 16, 2 }, [10301] = { 20, 2 },
 	},
-	-- The words of a damage shield in an English tooltip: an amount and a school before them.
-	THORN_TEXT = { "(%d+) (%a+) damage to the attacker", "(%d+) (%a+) damage to attackers", "(%d+) (%a+) damage to any creature that strikes",
-		"(%d+) (%a+) damage to anyone that strikes", "(%d+) (%a+) damage to any enemy that strikes" },
+	-- The words that end a damage shield in an English tooltip, lower case; the amount (or "N to M", counted at its mean) and the school come
+	-- right before them, as in "inflicts 3 Nature damage to the attacker". A line that names a chance is a proc, not a damage shield.
+	THORN_ENDS = { "damage to the attacker", "damage to attackers", "damage to any creature that strikes", "damage to anyone that strikes",
+		"damage to any enemy that strikes" },
+	SCHOOL_WORDS = { Physical = true, Holy = true, Fire = true, Nature = true, Frost = true, Shadow = true, Arcane = true },
 	ENGLISH = { enUS = true, enGB = true },
 	MAX_LINES = 40,
 	-- The events after which a stat may differ: the player's, and the rest.
 	UNIT_EVENTS = { "UNIT_STATS", "UNIT_ATTACK_POWER", "UNIT_RANGED_ATTACK_POWER", "UNIT_DAMAGE", "UNIT_RANGEDDAMAGE", "UNIT_ATTACK_SPEED",
 		"UNIT_RESISTANCES", "UNIT_AURA", "UNIT_INVENTORY_CHANGED", "UNIT_MAXPOWER", "UNIT_LEVEL" },
+	-- ADDON_RESTRICTION_STATE_CHANGED: a restriction of an encounter can outlast the fight, and its end is told by this event alone (SpellModel.lua
+	-- and HitTable.lua hear it too); PLAYER_REGEN_DISABLED, so the header says "before the fight" at once.
 	EVENTS = { "COMBAT_RATING_UPDATE", "SPELL_POWER_CHANGED", "PLAYER_EQUIPMENT_CHANGED", "SKILL_LINES_CHANGED", "UPDATE_SHAPESHIFT_FORM",
-		"PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "PLAYER_REGEN_ENABLED", "PLAYER_ROLES_ASSIGNED", "GROUP_ROSTER_UPDATE" },
+		"PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "PLAYER_ROLES_ASSIGNED",
+		"GROUP_ROSTER_UPDATE", "ADDON_RESTRICTION_STATE_CHANGED", "UPDATE_INVENTORY_DURABILITY" },
+	-- The roll of a boss's swing, in order: each row takes what it can of what the rows before it leave of 100% (GearAvoid.lua, K.ROLL).
+	ROLL = { "missed", "dodged", "parried", "blocked", "crit", "crush" },
 	-- The tiles of each role and kind, in order.
 	SETS = {
 		tank = { "armor", "defense", "avoid", "block", "hit", "thorns" },
@@ -267,13 +280,17 @@ local function Defenses(stats)
 	end
 	stats.dodge, stats.parry = Number(_G.GetDodgeChance), Number(_G.GetParryChance)
 	stats.blockChance, stats.blockValue = Number(_G.GetBlockChance), Number(_G.GetShieldBlock)
-	local shield = Answers(Api("C_PaperDollInfo", "OffhandHasShield"))
+	-- Whether a shield is worn: the game's own answer, else a block chance above 0. shieldWithheld: the game withheld the answer, so neither.
+	local hasShield = Api("C_PaperDollInfo", "OffhandHasShield")
+	local shield = Answers(hasShield)
 	if shield and type(shield[1]) == "boolean" then
 		stats.shield = shield[1]
+	elseif (hasShield and shield == nil) or stats.blockChance == false then
+		stats.shield, stats.shieldWithheld = false, true
 	else
 		stats.shield = Finite(stats.blockChance) and stats.blockChance > 0
 	end
-	if not stats.shield then
+	if not stats.shield and not stats.shieldWithheld then
 		stats.blockChance, stats.blockValue = 0, nil
 	end
 	local armor = Answers(_G.UnitArmor, "player")
@@ -291,6 +308,35 @@ local function English()
 	return ok and Plain(locale, "string") and K.ENGLISH[locale] == true
 end
 
+-- The amount and school of a damage shield in one line of English text, or nil: the amount (the mean of "N to M") and the school right before
+-- one of K.THORN_ENDS, the school one of the game's. A line that names a chance is a proc on being struck, not a damage shield, and counts not.
+local function ShieldIn(text)
+	local lower = text:lower()
+	if lower:find("chance", 1, true) then
+		return nil
+	end
+	for _, ending in ipairs(K.THORN_ENDS) do
+		local at = lower:find(ending, 1, true)
+		if at then
+			local before = text:sub(1, at - 1)
+			local low, high, school = before:match("(%d+) to (%d+) (%a+) $")
+			if not low then
+				low, school = before:match("(%d+) (%a+) $")
+			end
+			if not low then
+				low = before:match("(%d+) $")
+				school = low and "Physical" or nil
+			end
+			school = school and (school:sub(1, 1):upper() .. school:sub(2):lower()) or nil
+			low, high = tonumber(low), tonumber(high)
+			if Finite(low) and low > 0 and school and K.SCHOOL_WORDS[school] then
+				return Finite(high) and high >= low and (low + high) / 2 or low, school
+			end
+		end
+	end
+	return nil
+end
+
 -- The amount and school of the first damage shield a tooltip's lines name, or nil. equip: only the lines that start with the game's Equip word.
 local function ThornLine(data, equip)
 	local lines = Field(data, "lines")
@@ -301,12 +347,9 @@ local function ThornLine(data, equip)
 		end
 		local text = Field(line, "leftText")
 		if Plain(text, "string") and (not equip or text:find("^Equip:")) then
-			for _, pattern in ipairs(K.THORN_TEXT) do
-				local amount, school = text:match(pattern)
-				amount = tonumber(amount)
-				if Finite(amount) and amount > 0 then
-					return amount, school
-				end
+			local amount, school = ShieldIn(text)
+			if amount then
+				return amount, school
 			end
 		end
 	end
@@ -319,14 +362,50 @@ local function SchoolName(school)
 end
 
 -- The damage shields on the player now: { total, sources = { { name, amount, school } } }, or nil while the game withholds the buffs.
+-- True while the game shows the player's buffs to addon code: ns.AurasReadable (Tracking.lua), and without an answer, out of a fight, as
+-- Absorbs.lua and Tracking.lua's T.Open ask it.
+local function BuffsOpen()
+	local ok, readable = pcall(ns.AurasReadable)
+	if ok and type(readable) == "boolean" then
+		return readable
+	end
+	return not InCombatLockdown()
+end
+
+-- True when a field of an aura is withheld: the call to read it raises or its value is secret.
+local function Hidden(aura, key)
+	if IsSecret(aura) or type(aura) ~= "table" then
+		return true
+	end
+	local ok, value = pcall(function()
+		return aura[key]
+	end)
+	return not ok or IsSecret(value)
+end
+
+-- True when the worn item of a slot is broken: its durability 0 of more than 0. A broken item gives none of its Equip effects.
+local function Broken(slot)
+	local answers = Answers(_G.GetInventoryItemDurability, slot)
+	local now, most = answers and answers[1], answers and answers[2]
+	return Finite(now) and Finite(most) and most > 0 and now <= 0
+end
+
 local function ReadThorns()
 	local found = { total = 0, sources = {} }
 	local english = English()
+	if not BuffsOpen() then
+		-- The game hides buffs: the last read stands for them.
+		return nil
+	end
 	local auras = Answers(Api("C_UnitAuras", "GetUnitAuras"), "player", "HELPFUL")
 	local list = auras and auras[1]
 	if auras and type(list) == "table" then
 		local tip = Api("C_TooltipInfo", "GetUnitBuffByAuraInstanceID")
 		for _, aura in ipairs(list) do
+			if Hidden(aura, "spellId") then
+				-- One buff withheld: the total cannot be told, so the last read stands.
+				return nil
+			end
 			local id, name, points, instance = Field(aura, "spellId"), Field(aura, "name"), Field(aura, "points"), Field(aura, "auraInstanceID")
 			local known = Finite(id) and K.THORNS[id] or nil
 			local amount, school = nil, nil
@@ -354,7 +433,9 @@ local function ReadThorns()
 		local link = Answers(_G.GetInventoryItemLink, "player", slot)
 		link = link and Plain(link[1], "string") and link[1] or nil
 		local kept = link and state.items[link]
-		if link and kept == nil then
+		if link and Broken(slot) then
+			kept = false
+		elseif link and kept == nil then
 			-- Read once a link; an item whose lines the client has not loaded yet is read again next time.
 			local data = Answers(itemTip, "player", slot)
 			local amount, school = nil, nil
@@ -390,11 +471,12 @@ local function ReadAll()
 	local okRole, role = pcall(ns.PlayerRole)
 	stats.role = okRole and K.ROLE_WORDS[role] and role or "damage"
 	stats.kinds = Kinds(stats.class)
-	stats.ilvl = nil
 	local ilvl = Answers(_G.GetAverageItemLevel)
 	if ilvl then
 		local equipped = Finite(ilvl[2]) and ilvl[2] or ilvl[1]
 		stats.ilvl, stats.ilvlBags = Finite(equipped) and equipped or nil, Finite(ilvl[1]) and ilvl[1] or nil
+	elseif type(_G.GetAverageItemLevel) == "function" then
+		stats.ilvl = false
 	end
 	stats.ap, stats.apBase = Power(_G.UnitAttackPower)
 	stats.rap, stats.rapBase = Power(_G.UnitRangedAttackPower)
@@ -498,7 +580,8 @@ local function HitTile(stats, kind, lineId, label)
 			tile.tip[#tile.tip + 1] = ("Against a boss (level %d) your %s miss %s of the time."):format(stats.bossLevel, what, Pct(miss, 1))
 		end
 		if lineId == "special" then
-			local swing = BossMiss(stats, "main") or BossMiss(stats, "swing")
+			-- The Main line is there only while the player dual wields; a single weapon's swing misses as its abilities do.
+			local swing = BossMiss(stats, "main")
 			if swing then
 				tile.tip[#tile.tip + 1] = ("Your white swings miss %s, the dual wield penalty included."):format(Pct(swing, 1))
 			end
@@ -508,7 +591,14 @@ local function HitTile(stats, kind, lineId, label)
 	return tile
 end
 
--- Adds the crit of a hit table line against a boss to a crit tile: a weapon's crit falls against an enemy above the player.
+-- True while a ranged weapon is worn, as the hit table reads the ranged slot.
+local function RangedWorn(stats)
+	local ranged = stats.boss and stats.boss.inputs and stats.boss.inputs.ranged
+	return type(ranged) == "table" and ranged.skill ~= nil and not ranged.noWeapon
+end
+
+-- Adds the crit of a weapon's hit table line against a boss to a crit tile: a weapon's crit falls against an enemy above the player. A spell's
+-- does not (HitTableCalc.lua, Spell), so the spell tiles have no such note.
 local function BossCrit(stats, lineId, tile)
 	local line = stats.boss and stats.boss.lines[lineId]
 	local crit = line and line.parts and line.parts.crit
@@ -523,7 +613,9 @@ end
 local TILES = {}
 
 TILES.ilvl = { label = "Item level", read = function(stats)
-	if not Finite(stats.ilvl) then
+	if stats.ilvl == false then
+		return Refused(false)
+	elseif not Finite(stats.ilvl) then
 		return nil
 	end
 	local tip = { ("Average item level of what you wear: %.1f."):format(stats.ilvl) }
@@ -547,7 +639,7 @@ TILES.ap = { label = "Attack power", read = function(stats)
 end }
 
 TILES.rap = { label = "Ranged power", read = function(stats)
-	if stats.rap == nil or not (stats.kinds.ranged or stats.class == "HUNTER") then
+	if stats.rap == nil or not (stats.kinds.ranged or RangedWorn(stats)) then
 		return nil
 	end
 	local withheld = Refused(stats.rap)
@@ -567,7 +659,7 @@ TILES.crit = { label = "Crit", read = function(stats)
 end }
 
 TILES.rcrit = { label = "Ranged crit", read = function(stats)
-	if stats.rcrit == nil or not (stats.kinds.ranged or stats.class == "HUNTER") then
+	if stats.rcrit == nil or not (stats.kinds.ranged or RangedWorn(stats)) then
 		return nil
 	end
 	return Refused(stats.rcrit) or BossCrit(stats, "ranged", { value = Pct(stats.rcrit),
@@ -579,9 +671,6 @@ TILES.hit = { label = "Hit", read = function(stats)
 end }
 
 TILES.rhit = { label = "Ranged hit", read = function(stats)
-	if not (stats.kinds.ranged or stats.class == "HUNTER") then
-		return nil
-	end
 	return HitTile(stats, "ranged", "ranged", "Ranged")
 end }
 
@@ -613,8 +702,8 @@ TILES.scrit = { label = "Spell crit", read = function(stats)
 	if stats.scrit == nil then
 		return nil
 	end
-	return Refused(stats.scrit) or BossCrit(stats, "spell", { value = Pct(stats.scrit),
-		tip = { ("Spell crit chance: %s, of the school with the most."):format(Pct(stats.scrit)) } })
+	return Refused(stats.scrit) or { value = Pct(stats.scrit), tip = { ("Spell crit chance: %s, of the school with the most."):format(Pct(stats.scrit)),
+		"A boss's level does not lower it." } }
 end }
 
 TILES.pen = { label = "Spell Piercing", read = function(stats)
@@ -628,7 +717,7 @@ TILES.pen = { label = "Spell Piercing", read = function(stats)
 end }
 
 TILES.mp5 = { label = "Mana regen", read = function(stats)
-	if stats.regen == nil or stats.power ~= K.MANA then
+	if stats.regen == nil or (stats.power ~= K.MANA and stats.power ~= false) then
 		return nil
 	end
 	local withheld = Refused(stats.regen)
@@ -683,26 +772,35 @@ TILES.defense = { label = "Defense", read = function(stats)
 	return tile
 end }
 
--- The roll of a boss's melee swing against the player (GearAvoid.lua's rules): missed, dodged, parried, blocked and crit, and the crushing blows
--- that what they leave of 100% has room for. Nil without defense.
+-- The roll of a boss's melee swing against the player (GearAvoid.lua's rules, its Work): missed, dodged, parried, blocked, crit and crushing, each
+-- taking what it can of what the rows before it leave of 100%, so the rows add up to 100% at most and a full roll leaves no room for crushing
+-- blows. Nil without defense, false when the game withheld one of the numbers it needs.
 local function BossRoll(stats)
-	if not Finite(stats.defense) then
+	if stats.defense == false or stats.dodge == false or stats.parry == false or stats.blockChance == false or stats.shieldWithheld then
+		return false
+	elseif not Finite(stats.defense) then
 		return nil
 	end
 	local skill = stats.bossLevel * K.PER_LEVEL
 	local diff, fall = skill - stats.defense, (skill - stats.level * K.PER_LEVEL) * K.PER_SKILL
-	local roll = {
-		missed = math.max(0, K.MISS - diff * K.PER_SKILL),
+	-- Crushing blows: (the boss's skill less the defense, counted up to the cap of the player's level) x 2% - 15%, from 15 points on.
+	local over = skill - math.min(stats.defense, stats.level * K.PER_LEVEL)
+	local raw = {
+		missed = math.max(0, math.min(100, K.MISS - diff * K.PER_SKILL)),
 		dodged = Finite(stats.dodge) and math.max(0, stats.dodge - fall) or 0,
 		parried = Finite(stats.parry) and stats.parry > 0 and math.max(0, stats.parry - fall) or 0,
 		blocked = Finite(stats.blockChance) and stats.blockChance > 0 and math.max(0, stats.blockChance - fall) or 0,
-		crit = math.max(0, K.CRIT + diff * K.PER_SKILL),
+		crit = math.max(0, math.min(100, K.CRIT + diff * K.PER_SKILL)),
+		crush = over >= 15 and over * 2 - 15 or 0,
 	}
+	local roll, left = {}, 100
+	for _, key in ipairs(K.ROLL) do
+		local got = math.min(raw[key], left)
+		roll[key], left = got, left - got
+		roll.cut = roll.cut or got < raw[key] - 0.005
+	end
 	roll.avoided = roll.missed + roll.dodged + roll.parried + roll.blocked
-	-- Crushing blows: (the boss's skill less the defense, counted up to the cap of the player's level) x 2% - 15%, from 15 points on.
-	local over = skill - math.min(stats.defense, stats.level * K.PER_LEVEL)
-	roll.crushChance = over >= 15 and over * 2 - 15 or 0
-	roll.crush = math.max(0, math.min(roll.crushChance, 100 - roll.avoided - roll.crit))
+	roll.crushChance = raw.crush
 	return roll
 end
 
@@ -710,6 +808,8 @@ TILES.avoid = { label = "Avoidance", read = function(stats)
 	local roll = BossRoll(stats)
 	if roll == nil then
 		return nil
+	elseif roll == false then
+		return Refused(false)
 	end
 	local tile = { value = "~" .. Pct(roll.avoided, 1) }
 	if roll.crush <= 0 then
@@ -723,14 +823,16 @@ TILES.avoid = { label = "Avoidance", read = function(stats)
 		("Missed %s, dodged %s, parried %s, blocked %s: %s avoided."):format(Pct(roll.missed, 1), Pct(roll.dodged, 1), Pct(roll.parried, 1),
 			Pct(roll.blocked, 1), Pct(roll.avoided, 1)),
 		("Critical %s, crushing %s."):format(Pct(roll.crit, 1), Pct(roll.crush, 1)),
-		"Uncrushable once missed, dodged, parried, blocked and critical fill 100%.",
+		"One roll: each row takes what the rows before it leave of 100%, so uncrushable once missed, dodged, parried, blocked and critical fill it.",
 		"~ Classic's rules: a boss is dodged, parried and blocked 0.6% less than the sheet shows.",
 	}
 	return tile
 end }
 
 TILES.block = { label = "Block value", read = function(stats)
-	if not stats.shield or stats.blockValue == nil then
+	if stats.shieldWithheld then
+		return Refused(false)
+	elseif not stats.shield or stats.blockValue == nil then
 		return nil
 	end
 	local withheld = Refused(stats.blockValue)
@@ -792,7 +894,7 @@ local function Chosen(stats)
 				Add(K.SETS[kind])
 			end
 		end
-		if stats.kinds.spell and stats.power == K.MANA then
+		if stats.power == K.MANA or stats.power == false then
 			Add({ "mp5" })
 		end
 		Add({ "thorns" })
@@ -903,7 +1005,11 @@ local function Draw(stats, old)
 	end
 	local width = Width()
 	local inner = width - 2 * K.PAD
-	local cols = math.max(1, math.min(K.MOST_COLS, math.floor((inner + K.TILE_GAP) / (K.TILE_W + K.TILE_GAP)), #shown))
+	-- As many columns of TILE_W as fit; more, down to TILE_LEAST wide, where the tiles would take more than MOST_ROWS rows.
+	local fit = math.floor((inner + K.TILE_GAP) / (K.TILE_W + K.TILE_GAP))
+	local most = math.floor((inner + K.TILE_GAP) / (K.TILE_LEAST + K.TILE_GAP))
+	local cols = math.max(fit, math.min(most, math.ceil(#shown / K.MOST_ROWS)))
+	cols = math.max(1, math.min(K.MOST_COLS, cols, #shown))
 	local tileW = (inner - (cols - 1) * K.TILE_GAP) / cols
 	for index, info in ipairs(shown) do
 		local tile = Tile(index)
@@ -949,6 +1055,9 @@ local function Update()
 		local stats = ReadAll()
 		if stats then
 			state.last = stats
+		else
+			-- The level could not be read: what shows is the last read, said to be from before.
+			old = true
 		end
 		local thorns = ReadThorns()
 		if thorns then
@@ -957,6 +1066,14 @@ local function Update()
 	end
 	if state.last then
 		Draw(state.last, old)
+	else
+		-- Nothing plain read yet since login: the strip says so instead of showing an empty box.
+		for _, tile in ipairs(state.tiles) do
+			pcall(tile.Hide, tile)
+		end
+		pcall(state.head.SetText, state.head, "Stats at a glance")
+		pcall(state.against.SetText, state.against, "shown once the game gives your stats")
+		pcall(state.frame.SetHeight, state.frame, 2 * K.PAD + K.HEAD)
 	end
 end
 
@@ -1039,6 +1156,8 @@ local function Make(page)
 		pcall(frame.SetWidth, frame, K.WIDTH)
 	end
 	pcall(frame.SetHeight, frame, 2 * K.PAD + K.HEAD + K.TILE_H)
+	-- Kept on the screen: where the window sits low, or is scaled up, the strip rises over its bottom edge rather than off the screen.
+	pcall(frame.SetClampedToScreen, frame, true)
 	ns.SetOutlineArea(ns.Outline(frame, frame), KEY)
 	pcall(state.head.SetPoint, state.head, "TOPLEFT", frame, "TOPLEFT", K.PAD, -K.PAD + 1)
 	pcall(state.against.SetPoint, state.against, "TOPRIGHT", frame, "TOPRIGHT", -K.PAD, -K.PAD + 1)
@@ -1130,6 +1249,13 @@ ns.AddStatus(KEY, function()
 	if not (state.frame and Wanted()) then
 		return {}
 	end
-	local thorns = state.thorns
-	return { ("Stats at a glance: %d tiles, thorns %s"):format(#CharacterStats.Lines(), thorns and Whole(thorns.total) or "?") }
+	local thorns, names = state.thorns, {}
+	for _, tile in ipairs(state.tiles) do
+		local ok, shown = pcall(tile.IsShown, tile)
+		if ok and shown == true and Plain(tile.label, "string") then
+			names[#names + 1] = tile.label
+		end
+	end
+	return { ("Stats at a glance: %s; thorns %s a hit"):format(#names > 0 and table.concat(names, ", ") or "no tiles yet",
+		thorns and Whole(thorns.total) or "?") }
 end)
