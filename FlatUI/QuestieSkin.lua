@@ -1,7 +1,7 @@
 local _, ns = ...
 
--- Questie's tracker in Flat UI's look. While the Questie addon is loaded, its tracker exists, the Minimap and buffs module is on and Questie's
--- tracker (hud.trackerQuestie, Tracker, loot and alerts tab) is on, the quest tracker Questie draws in place of the objective tracker takes
+-- Questie's tracker in Flat UI's look. While the Questie addon is loaded, its tracker exists, the Minimap and HUD module is on and Questie's
+-- tracker (hud.trackerQuestie, Quests and loot page) is on, the quest tracker Questie draws in place of the objective tracker takes
 -- the rows of the objective tracker: Tracker background (a flat background with a thin border round it, Questie's own backdrop faded),
 -- Tracker headers (a flat band with a thin border behind the Questie Tracker heading and each zone heading), Heading size (the zone headings),
 -- Tracker item buttons (a thin border round each quest item button and its icon cropped by Icon crop), Opacity in combat, and Flat UI's
@@ -48,7 +48,7 @@ local _, ns = ...
 -- a frame the game may protect in a fight (Questie's lines and base frame hold its secure item buttons): that waits for the end of the fight.
 -- A Questie whose tracker lacks these frames or functions is not one this file knows: nothing is done there, and /flatui status says so.
 
-local KEY, PART, LABEL = "hud", "questie tracker", "Minimap and buffs"
+local KEY, PART, LABEL = "hud", "questie tracker", "Minimap and HUD"
 local LINES, BUTTONS = "linePool", "Questie_ItemButton"
 -- More than Questie makes: the walk stops at the first name that is missing.
 local MOST_LINES, MOST_BUTTONS = 500, 100

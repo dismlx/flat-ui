@@ -13,7 +13,7 @@ local ADDON_NAME, ns = ...
 -- Inside some cities the game shows a map of the city in the minimap, and the setting Minimap in cities says what is done then.
 
 local KEY = "hud"
-local LABEL = "Minimap and buffs"
+local LABEL = "Minimap and HUD"
 local MAP_MASK = "ui-hud-minimap-frame-generic-mask"
 -- The mask of a square map: a plain white picture (the game's own code passes an atlas name to Minimap:SetMaskTexture, and the documentation takes any
 -- texture asset: MinimapFrameAPIDocumentation.lua:141-149).

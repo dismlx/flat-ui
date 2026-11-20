@@ -6,7 +6,7 @@ local _, ns = ...
 -- my screen, Ready-made looks and Keep this look), tiles (a drawn card of each ready-made look: a click puts it in use) and after (the profile in use,
 -- what needs a reload, then Reload, Change it, Move frames, Options and Done). The tiles, the profile in use and the flag come from Setup.lua
 -- (S.Presets, S.UseReady, S.Flag), the drawings from SetupDraw.lua (D.PaintIn with the frames build's mock-player, D.Card). When the screen shows and
--- what Keep this look keeps are settings in the Setup section of the Flat UI page (Config.lua). It hides when a fight starts, and no look is put in
+-- what Keep this look keeps are settings in the Setup section of the Options and setup tab of the Flat UI page (Config.lua). It hides when a fight starts, and no look is put in
 -- use in one.
 
 local kit = ns.PanelKit
@@ -48,7 +48,8 @@ function ns.WelcomeWanted()
 	return ns.Get("setup.welcomeWhen") ~= "account" or (next(ns.Account().profileOf) == nil and not (S.Store() or {}).welcomed)
 end
 
--- Puts the profile named Game look in use: the profile of that name as it is, else a new one with every module off. Returns true, or false and why.
+-- Puts the profile named Game look in use: the profile of that name as it is, else a new one with every module off, Custom UI scale off (on by
+-- default, it is no module) and no frame moved (not the positions a new profile starts with). Returns true, or false and why.
 function W.GameLook()
 	local found = S.FindProfile(GAME)
 	if found then
@@ -60,7 +61,8 @@ function W.GameLook()
 			picks[path] = false
 		end
 	end
-	return ns.NewProfile(GAME, nil, picks)
+	picks["general.scaleOn"] = false
+	return ns.NewProfile(GAME, nil, picks, {})
 end
 
 -- A choice of the screen ends here: the flag is set and the screen closes, or with `keep` stays for the after view. A ticked "Do not show on new
@@ -79,12 +81,25 @@ function W.Done(named, keep)
 	end
 end
 
--- The screen closes and Flat UI setup opens (Setup.lua), at this character's draft or at its first stop.
+-- The screen closes and Flat UI setup opens (Setup.lua), at this character's draft or at its first stop. Setup is told the view it came from, so that
+-- Back on its first screen opens this view again (ns.WelcomeReturn).
 function W.OpenSetup()
+	local view = W.view
 	W.frame:Hide()
 	if type(ns.OpenSetup) == "function" then
-		ns.OpenSetup()
+		ns.OpenSetup(nil, view)
 	end
+end
+
+-- Back from the first screen of a setup started here (Setup.lua, S.Leave): the view it was started from again, the start view or the after view with
+-- what was done. In a fight it opens after combat, as the screen hides in one.
+function ns.WelcomeReturn(view)
+	if InCombatLockdown() then
+		print("The welcome screen opens after combat.")
+	end
+	ns.OutOfCombat(function()
+		W.Open(view == "after" and "after" or "start", W.finished)
+	end)
 end
 
 -- Set up my screen sets no flag: setup left without a choice keeps no draft, so the screen comes back at the next login. The tick still counts.

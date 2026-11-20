@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- The drawings of the setup wizard for the minimap and buffs page (steps 28 to 31): mock-minimap, mock-buff-row, mock-xp-micro, mock-objective and
+-- The drawings of the setup wizard for the Minimap and HUD pages (steps 28 to 31): mock-minimap, mock-buff-row, mock-xp-micro, mock-objective and
 -- mock-loot. Each is { build(stage), draw(stage), parts = { [saved path] = region } }. build makes the frames once, all in ns.Own, and draw reads the
 -- settings of the page with ns.Get (the draft while the setup window views one) and puts every part in the look they ask for. The numbers are fixed samples.
 -- A part the page leaves to the game is drawn in a plain grey look, the same as the game's art would be without its pictures.

@@ -8,8 +8,8 @@ local _, ns = ...
 -- B.Buttons.Unsplit, the one field it writes itself (hasStackSplit, below). Besides the calls named below it makes widget calls on frames and
 -- regions of its own only (CreateFrame, CreateTexture, SetParent, GetParent, SetID, SetPoint, SetAllPoints, ClearAllPoints, GetFrameLevel,
 -- SetFrameLevel, Show, Hide, SetShown, IsShown, IsVisible, SetScript, RegisterForClicks, RegisterForDrag, and the texture, text and animation
--- calls of its look), and asks InCombatLockdown, GetTime and C_Timer.After. A hidden frame of its own on UIParent holds the holders until the bag
--- window exists.
+-- calls of its look; HookScript is BagsPins.lua's), and asks InCombatLockdown, GetTime and C_Timer.After. A hidden frame of its own on UIParent
+-- holds the holders until the bag window exists.
 --
 -- Live bag slots are the game's own template, ContainerFrameItemButtonTemplate (Blizzard_UIPanels_Game/Mainline/ContainerFrame.xml:77-169), made
 -- with CreateFrame("ItemButton", "FlatUIBag<bag + 10>Slot<slot>", holder, template), as the game makes item buttons elsewhere
@@ -23,7 +23,10 @@ local _, ns = ...
 -- (ContainerFrame.lua:120-135). A bag that gets smaller hides its extra buttons, and a larger one gets more.
 -- A click on a live slot is the game's own secure OnClick (ContainerFrame.lua:1503-1622, 1683-1698, 1777-1814): use and equip, also in a fight,
 -- sell, deposit at the banker, mail, trade, post at the auction house, split a stack, link, dress up and drag, and its OnEnter is the game's
--- tooltip with the compare, which also takes the game's new flag off (ContainerFrame.lua:1735-1775). No script is set on these buttons.
+-- tooltip with the compare, which also takes the game's new flag off (ContainerFrame.lua:1735-1775). No script is set on these buttons; each
+-- gets one post-hook of its OnClick as it is made (HookScript, B.Pins.Hook of BagsPins.lua), which runs after the game's click, changes nothing
+-- of it, and acts only on Ctrl+right-click, which the game does nothing with: it pins or unpins the slot. B.Buttons.Draw has B.Pins.Mark draw
+-- the mark of a pinned slot on a live button, in its top right corner, which nothing else uses.
 -- They are made out of combat only, STEP to a frame, by B.Buttons.Prepare (Bags.lua at Start, BagsData.lua at BAG_CONTAINER_UPDATE); a call made
 -- in a fight waits for its end with a flag of its own, since ns.OutOfCombat keeps every call it is given (Core.lua:1896-1903). The layout may ask
 -- for a missing one (B.Buttons.Live), which is then made at once, out of combat only. Bag addons of this client found slots made by addon code
@@ -1081,6 +1084,9 @@ function Buttons.Draw(button, record, opts)
 	local junk = JunkShown(record)
 	Marks(button, state, record, link, junk)
 	Junk(button, state, junk)
+	if state.kind == "live" then
+		Ask(B.Pins.Mark, button, state.kind, state.bag, state.slot, record)
+	end
 	FreeCount(button, state, empty and opts.free or nil)
 	if record ~= nil and record.name == nil then
 		Ask(Data.Want, record.id)
@@ -1416,6 +1422,8 @@ local function Make(bag, slot, warm)
 	states[button] = state
 	Style(button, state)
 	Lift(button, state)
+	-- Ctrl+right-click pins the slot (BagsPins.lua).
+	Ask(B.Pins.Hook, button, bag, slot)
 	list[slot] = button
 	if warm then
 		unwarmed[#unwarmed + 1] = button

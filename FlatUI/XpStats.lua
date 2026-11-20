@@ -983,7 +983,7 @@ end
 
 local function Slash(rest)
 	if not ns.Enabled(KEY) then
-		Say("the levelling numbers need the Minimap and buffs page on.")
+		Say("the levelling numbers need Restyle the minimap and HUD on (Minimap page).")
 		return
 	end
 	local word = type(rest) == "string" and rest:lower():match("^%s*(%S*)") or ""

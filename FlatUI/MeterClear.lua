@@ -1,7 +1,7 @@
 local _, ns = ...
 
--- Clear the damage meter: hud.meterClear on the Tracker, loot and alerts tab (Off, the default; When you enter a dungeon or raid; Ask when you
--- enter one) with At each raid boss (hud.meterClearBoss, off), part "damage meter clear" of Minimap and buffs, which stops alone after a few
+-- Clear the damage meter: hud.meterClear on the Messages and timers page (Off, the default; When you enter a dungeon or raid; Ask when you
+-- enter one) with At each raid boss (hud.meterClearBoss, off), part "damage meter clear" of Minimap and HUD, which stops alone after a few
 -- failures. Not a module: Hud.lua calls ns.MeterClearRefresh in every refresh of the page, and the events come through that module (ns.AddEvent),
 -- so nothing is heard while the page is off.
 -- The game's meter (Blizzard_DamageMeter, loaded at start on the standard and camelot clients: Blizzard_DamageMeter.toc:2) keeps its numbers until

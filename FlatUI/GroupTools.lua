@@ -2,7 +2,7 @@ local _, ns = ...
 
 -- Group tools: a row of buttons of Flat UI's own for a group, the eight raid markers and a clear for your target, a ready check, a role poll
 -- and a pull countdown, drawn as the icons of IconRow.lua are: square, with a thin border on a dark background. A module of its own, off by
--- default, whose page is in the Combat group. The row shows in a group, or as Show says, and /flatui move places it (FlatUIGroupTools in
+-- default, whose page is in the Group group. The row shows in a group, or as Show says, and /flatui move places it (FlatUIGroupTools in
 -- Movers.lua: the top left corner of the row is the top left corner of the box). While test mode is on (TestMode.lua, out of combat only) Show
 -- reads as Always. No frame or setting of the game is changed.
 --

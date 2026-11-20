@@ -6,7 +6,7 @@ local _, ns = ...
 -- is 0, and the mouse is off on the bars inside (StatusTrackingBar.xml:35-57, StatusTrackingBarTemplate.xml:3). Nothing of the game's is sized, moved,
 -- scaled, hidden, reparented, hooked or unregistered. The bar drawn here is a frame of this addon's on UIParent, any width and height, fed by the
 -- calls the game's own bar makes from insecure code (ExpBar.lua, ReputationBar.lua). Its settings are the Experience and reputation bars rows of
--- the Bars, bags and micro menu page (module hud); this file adds its handlers to that module with ns.AddEvent.
+-- the Experience and menu bars page (module hud); this file adds its handlers to that module with ns.AddEvent.
 -- The Levelling rows of that page add what XpStats.lua counts: a stretch for the experience of the quests ready to hand in, drawn as the rested
 -- stretch is and above it, the levelling text after the bar text, and lines in the tooltip; on the reputation bar, Reputation text after its bar
 -- text and the reputation pace in its tooltip, from the faction the bar shows (ns.XpRepNow). The bar is drawn again when those numbers change

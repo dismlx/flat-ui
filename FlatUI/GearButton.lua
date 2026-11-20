@@ -1,7 +1,7 @@
 local _, ns = ...
 
 -- The Compare gear button on the Character window: the part "gear button" of Chat and tooltips, while Button on the Character window is on
--- (chat.gearCharButton, Spells and gear tab). It is a button of Flat UI's own, FlatUIGearButton, made on UIParent (CreateFrame,
+-- (chat.gearCharButton, Window and finder tab of Gear comparison). It is a button of Flat UI's own, FlatUIGearButton, made on UIParent (CreateFrame,
 -- WL/apis.yaml:35213): Flat UI's gear icon left of the words Compare gear, 20 high, in the Windows page look. It is never parented to the
 -- Character window and writes nothing on it: of CharacterFrame it reads whether it shows (IsShown, WL/uiobjects.yaml:7680), where it is (GetRect
 -- and GetEffectiveScale, :7307, :7223), its strata (GetFrameStrata, :4217), whether the game protects it
@@ -79,7 +79,7 @@ local TIPS = {
 	"Click: open or close the Gear comparison window.",
 	"With an item on the cursor, or dropped here: compare that item.",
 	"Right-click: the item finder.",
-	"Untick Button on the Character window (Chat and tooltips, Spells and gear tab) to hide it.",
+	"Untick Button on the Character window (Gear comparison, Window and finder tab) to hide it.",
 }
 local DIM, PLAIN, WORD = { 0.66, 0.68, 0.62 }, { 1, 1, 1 }, { 0.9, 0.9, 0.88 }
 

@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
--- Hit table (hud.hitTable, on the Hit table tab of Minimap and buffs): a small table of Flat UI's own under the player frame with the player's
+-- Hit table (hud.hitTable, on the Hit table page of Minimap and HUD): a small table of Flat UI's own under the player frame with the player's
 -- chances against the target, worked out again as stats, gear, weapon skill, buffs, form and the target change; HitTableCalc.lua has the numbers and
 -- their sources. Its row is For tanks and damage dealers by default, which shows the table while the player's role (ns.PlayerRole, Core.lua, the role
 -- Flat UI setup suggests from) is tank or damage and hides it for a healer; Always and Off hold whatever the role. The row was a tick in 0.5.18:

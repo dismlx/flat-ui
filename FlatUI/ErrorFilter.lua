@@ -1,7 +1,7 @@
 local _, ns = ...
 
 -- Error messages: the red messages the game writes in the middle of the screen, hidden by kind with their sound and voice. The rows are Hide
--- error messages and the kinds under it on the Tracker, loot and alerts tab (hud.errors, hud.errorMana and the rest), part "error messages" of the
+-- error messages and the kinds under it on the Messages and timers page (hud.errors, hud.errorMana and the rest), part "error messages" of the
 -- module, which stops alone after a few failures. Not a module: Hud.lua calls ns.ErrorFilterRefresh in every refresh of the page.
 -- The game's frame, UIErrorsFrame, hears UI_ERROR_MESSAGE (Blizzard_UIErrorsFrame/Mainline/UIErrorsFrame.lua:3-6) and shows each message in its
 -- own Lua (OnEvent and TryDisplayMessage, :13-24 and 146-157). Its filter by kind is a Lua method that writes a global table of the game's

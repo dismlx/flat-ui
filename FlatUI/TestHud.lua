@@ -19,7 +19,7 @@ local _, ns = ...
 --   Debuffs and buffs: three icons each, from the top right corner of DebuffFrame while the player has no harmful aura and of BuffFrame while the
 --   player has no helpful aura at all (C_UnitAuras.GetAuraSlots, read out of combat only, when its answer is plain), only while the game shows that
 --   frame (its Edit Mode Visibility, Blizzard_BuffFrame/BuffFrame.lua:380-411) and not while Edit Mode is open, where it shows its example auras: a
---   magic, a curse and a poison debuff in the colours of their types, and times that count down and loop in the time format of Minimap and buffs
+--   magic, a curse and a poison debuff in the colours of their types, and times that count down and loop in the time format of Minimap and HUD
 --   (AuraTime.lua).
 --   Loot rolls: two rolls at the box Loot rolls of /flatui move, where the game's rolls show (ns.MoverSpot: the saved spot, else where the game
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4

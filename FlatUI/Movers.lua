@@ -159,8 +159,13 @@ local LIST = {
 	-- It has a handle while No target warning or Entering and leaving combat is on.
 	{ name = "FlatUICombatCues", label = "Combat text: alerts", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 60, x = 0, y = 100,
 		gate = "CombatCuesShown", changed = "CombatCuesMoved" },
-	-- The box of the action bar block: one box that moves every bar the Bar block page lines up. It starts where BarBlock.lua puts it.
+	-- The boxes of the action bar blocks: one box for each block of the Bar block page, which moves every bar of that block. Each starts where
+	-- BarBlock.lua puts it, and blocks 2 and 3 have a box only while they have a bar.
 	{ name = "FlatUIBarBlock", label = "Action bar block", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow", changed = "BarBlockMoved" },
+	{ name = "FlatUIBarBlock2", label = "Action bar block 2", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow2",
+		changed = "BarBlockMoved2" },
+	{ name = "FlatUIBarBlock3", label = "Action bar block 3", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow3",
+		changed = "BarBlockMoved3" },
 	-- Flat UI's own experience and reputation bar (XpBar.lua). Its box is the bar's own frame, wherever the bar is; with no spot saved it sits where XpBar.lua puts it.
 	{ name = "FlatUIXpBar", label = "Experience bar", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "XpBarRow", changed = "XpBarMoved" },
 	{ name = "FlatUITrackers", label = "Trackers", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "TrackerRow", changed = "TrackersMoved" },
@@ -189,6 +194,10 @@ local LIST = {
 	-- of every button at the default size in a row, and it grows down and to the right from there. It starts under the top of the screen.
 	{ name = "FlatUIGroupTools", label = "Group tools", point = "TOP", kind = "hud", own = true, noScale = true, width = 327, height = 24, x = 0, y = -100,
 		gate = "GroupToolsShown", changed = "GroupToolsMoved" },
+	-- The reload notice (Reload.lua), which shows while a change needs a reload: its top left corner is the top left corner of the box, which has the
+	-- notice's size. It starts at the top of the screen, in the middle, and has a box whether or not it shows.
+	{ name = "FlatUIReloadNotice", label = "Reload notice", point = "TOP", kind = "hud", own = true, noScale = true, width = 460, height = 52, x = 0, y = -40,
+		gate = "ReloadNoticeShown", changed = "ReloadNoticeMoved" },
 	-- The threat list (Threat.lua), which shows only in a fight: its top left corner is the top left corner of the box, which has the room of five
 	-- bars at the default size, and it grows down and to the right from there.
 	{ name = "FlatUIThreat", label = "Threat list", point = "CENTER", kind = "hud", own = true, noScale = true, width = 188, height = 112, x = 420, y = 0,
@@ -426,6 +435,12 @@ local hold = { owners = {}, by = {}, state = {}, order = { "barblock", "blocks" 
 -- laid out in them; a call of this addon that placed, scaled or laid one out, or that ran inside the game's pass over them, left the click refused
 -- (UseAction, ADDON_ACTION_FORBIDDEN, SecureTemplates.lua:357). While Leave the game's action bars alone is on, nothing here places, holds, puts back,
 -- queues a layout spot for or offers a handle for one of them, and the game's bottom bar pass is not watched. Their saved spots stay in the profile and are not used.
+-- The one exception is an action bar a block of the Bar block page holds (ns.BarBlockHolds, BarBlockLists.lua): the player put it in the block,
+-- so the block holds it whatever that row says, as Fading and Hidden frames still fade and hide the bag bar and the micro menu.
+-- The micro menu stays among them although Fading fades it and Hidden frames hides it while that row is on (an alpha of the container, and a
+-- parent with UIParent's corners for MicroMenu inside it, which leaves the container shown at its size, move nothing): Edit Mode hangs the main bar from it (Mainline/EditModePresetLayouts.lua:32-38 with Camelot's MAIN_ACTION_BAR_RELATIVE_TO)
+-- and measures the bottom stack by it (Camelot/EditModeUtil.lua:26-29, Shared/EditModeUtil.lua:71-75, UIParentPanelManager.lua:809), so a
+-- point or a scale of this addon's on it places the main bar and the stack, the calls this list keeps away from.
 hold.off = { MainActionBar = true, MultiBarBottomLeft = true, MultiBarBottomRight = true, MultiBarRight = true, MultiBarLeft = true, MultiBar5 = true,
 	MultiBar6 = true, MultiBar7 = true, StanceBar = true, PetActionBar = true, PossessActionBar = true, MultiCastActionBarFrame = true,
 	MainStatusTrackingBarContainer = true, SecondaryStatusTrackingBarContainer = true,
@@ -433,7 +448,13 @@ hold.off = { MainActionBar = true, MultiBarBottomLeft = true, MultiBarBottomRigh
 -- The game's two status bars are left alone as well while Flat UI draws its own experience bar (XpBar.lua parks them), whatever the setting says.
 hold.xp = { MainStatusTrackingBarContainer = true, SecondaryStatusTrackingBarContainer = true }
 function hold.Off(name)
-	return hold.off[name] == true and (ns.HandsOff() or (hold.xp[name] == true and ns.XpOwn ~= nil and ns.XpOwn()))
+	if hold.off[name] ~= true then
+		return false
+	end
+	if hold.xp[name] == true and ns.XpOwn ~= nil and ns.XpOwn() then
+		return true
+	end
+	return ns.HandsOff() and not (ns.BarBlockHolds ~= nil and ns.BarBlockHolds(name) ~= nil)
 end
 
 -- True when the named frame is a game bar that Flat UI leaves alone now.
@@ -876,7 +897,7 @@ ns.CleanSpot = Clean
 local function Describe(name, entry)
 	local listed = BY_NAME[name]
 	if listed then
-		-- A bar picked on the Bar blocks page has the name of its block.
+		-- A bar picked on the Class and item bars page has the name of its block.
 		local own = ns.BlockLabel and ns.BlockLabel(name)
 		if own and own ~= listed.label then
 			local copy = {}
@@ -1222,10 +1243,12 @@ end
 
 -- Puts a frame the addon placed back where the game had it. Nil when the addon never moved it.
 -- The second answer is true when the Edit Mode layout puts the frame back, because the spot was written into it.
-local function RestoreFrame(name)
+-- letGo: a module lets go of a frame it held (ns.MoverHold), which goes back also when it is a game bar Flat UI leaves alone now, as a bar
+-- taken out of a block of the Bar block page while Leave the game's action bars alone is on.
+local function RestoreFrame(name, letGo)
 	local frame = GameFrame(name)
 	local info = BY_NAME[name]
-	if hold.Off(name) or not (frame and not ns.Forbidden(frame)) then
+	if (hold.Off(name) and not letGo) or not (frame and not ns.Forbidden(frame)) then
 		return nil
 	end
 	local layout = KindOf(name, frame) == "layout"
@@ -1708,7 +1731,7 @@ end
 
 -- A module gives the spots of the system frames it holds, by frame name, or nil to let them go. One frame has one owner: the first of
 -- hold.order that holds it. A frame whose spot is new or changed is placed on the next frame; one let go goes back to its saved spot, or to
--- the game.
+-- the game (always to the game for a game bar Flat UI leaves alone now).
 function ns.MoverHold(owner, spots)
 	local known = false
 	for _, name in ipairs(hold.order) do
@@ -1740,10 +1763,10 @@ function ns.MoverHold(owner, spots)
 	for name in pairs(before) do
 		if not by[name] then
 			hold.state[name] = nil
-			if saved and type(saved[name]) == "table" then
+			if saved and type(saved[name]) == "table" and not hold.Off(name) then
 				ns.Each(KEY, ApplyEntry, name)
 			else
-				local restored, released = RestoreFrame(name)
+				local restored, released = RestoreFrame(name, true)
 				if restored ~= nil and not released and BY_NAME[name].stack then
 					left = true
 				end

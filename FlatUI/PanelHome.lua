@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- The Home page of the options window: the profile in use, the accent and density, the last changes of the session with Undo, the 24 modules
+-- The Home page of the options window: the profile in use, the accent and density, the last changes of the session with Undo, the modules
 -- with their switches, and the changes that need a reload. Also the record of the changes made in the window, which Panel.lua feeds.
 
 local Home = {}
@@ -16,40 +16,12 @@ local TILE_H, CARD_H = 64, 140
 
 -- The record --------------------------------------------------------------------------------------------
 
-local baseline
 local log = {}
 
--- The value of every setting that needs a reload, as the game runs it now. Taken when the window is first built, before it changes any.
-function Home.Start()
-	if baseline then
-		return
-	end
-	baseline = {}
-	for _, page in ipairs(ns.PAGES) do
-		for _, item in ipairs(page) do
-			if item.path and item.reload and not ns.RowUnsaved(item) then
-				baseline[item.path] = ns.Get(item.path)
-			end
-		end
-	end
-end
-
--- The changes that need a reload, by the reload field of the row in Config.lua: "off" for a switch that takes full effect after a reload when it
--- is turned off, "change" for a row that applies after a reload when its value changes. Entries { label, field }.
+-- The changes that need a reload, as ns.ReloadLines (Core.lua) gives them from the values at login, so a change made before the window was opened,
+-- in setup, by a profile switch or a slash command, is listed too. Entries { label, field, path, value }.
 function Home.ReloadLines()
-	local lines = {}
-	for _, page in ipairs(ns.PAGES) do
-		for _, item in ipairs(page) do
-			local was = baseline and item.path and baseline[item.path]
-			if was ~= nil then
-				local now = ns.Get(item.path)
-				if (item.reload == "off" and was == true and now == false) or (item.reload == "change" and was ~= now) then
-					lines[#lines + 1] = { item.label, item.reload }
-				end
-			end
-		end
-	end
-	return lines
+	return ns.ReloadLines()
 end
 
 local function ReloadText(entry)
@@ -132,6 +104,8 @@ function Home.Counts(model)
 		local entry = model.byKey[page.key]
 		if entry then
 			local top = Nav.Top(model, entry)
+			-- A page of the sidebar that is part of another module counts on that module's tile.
+			top = top.partOf and model.byKey[top.partOf] or top
 			for _, item in ipairs(page) do
 				if item.path and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowUnsaved(item) and ns.Get(item.path) ~= item.default then
 					counts[top] = (counts[top] or 0) + 1
@@ -142,12 +116,15 @@ function Home.Counts(model)
 	return counts
 end
 
--- The modules as the sidebar lists them: the entries of the groups, in order.
+-- The modules as the sidebar lists them: the entries of the groups, in order. A page of the sidebar that holds part of another module (Buffs
+-- and debuffs of Minimap and HUD) is no module of its own: it has its module's switch, and the module has one tile.
 function Home.Modules(model)
 	local list = {}
 	for _, group in ipairs(Nav.Groups(model)) do
 		for _, entry in ipairs(group.entries) do
-			list[#list + 1] = entry
+			if not entry.partOf then
+				list[#list + 1] = entry
+			end
 		end
 	end
 	return list
@@ -258,7 +235,6 @@ end
 
 -- host: Model(), right, width, top and height of the column, Show(entry), Setup(), Call(name), Act(name, ...), ProfileLines(), Profile(), Toggle(item).
 function Home.Build(host)
-	Home.Start()
 	local scroller = kit.Scroller(host.right, host.width, host.height)
 	scroller.frame:SetPoint("TOPLEFT", host.right, "TOPLEFT", 0, -host.top)
 	local child = scroller.child
@@ -444,7 +420,7 @@ function Home.Build(host)
 		tile.name:SetJustifyV("TOP")
 		tile.name:SetHeight(30)
 		tile.name:SetPoint("TOPLEFT", frame, "TOPLEFT", 40, -10)
-		tile.name:SetText(entry.label)
+		tile.name:SetText(entry.page and entry.page.moduleLabel or entry.label)
 		tile.state = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", tileW - 40 - 52))
 		tile.state:SetPoint("TOPLEFT", frame, "TOPLEFT", 40, -42)
 		if entry.switchItem then

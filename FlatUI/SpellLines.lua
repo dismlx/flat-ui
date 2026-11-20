@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Spell lines (part "spell lines" of Chat and tooltips, on its Spells and gear tab; design 1 and 4): inside the game's build of a spell tooltip,
+-- Spell lines (part "spell lines" of Chat and tooltips, on its Spell tooltips page; design 1 and 4): inside the game's build of a spell tooltip,
 -- lines with the share of spell damage, spell healing or attack power the spell adds and what that is with the player's stats (Spell power and
 -- attack power lines, With your stats, Less for low ranks), the total of one cast with the player's stats, base and bonus together (Total,
 -- chat.spellTotal; 0.5.20) and its rates (chat.spellRates: the expected value with crits, misses and a spell's piercing, a second of cast time, a
@@ -74,7 +74,7 @@ local IsSecret = ns.IsSecret
 
 -- The constants of this file, in one table so that the main chunk keeps few locals (as Cooldowns.lua keeps CD).
 local SL = {
-	-- The rows of the Spells and gear tab this file reads (Config.lua, saved as chat.<key>), and their defaults of design 4.9 for a profile that has
+	-- The rows of the Spell tooltips page this file reads (Config.lua, saved as chat.<key>), and their defaults of design 4.9 for a profile that has
 	-- none of them yet.
 	PATH = { spellPower = "chat.spellPower", spellStats = "chat.spellStats", spellLowRank = "chat.spellLowRank", spellThreat = "chat.spellThreat",
 		spellWhen = "chat.spellWhen", spellTotal = "chat.spellTotal", spellRates = "chat.spellRates", tipDetail = "chat.tipDetail" },

@@ -35,9 +35,10 @@ local _, ns = ...
 -- marked containers, and every bag when the last full scan is SWEEP seconds old, which also catches up a change no BAG_UPDATE marked (the bank is
 -- read in full at each open instead). A slot counts as changed when its item, link, count, lock or quality changed, and its text is written when
 -- its item, link, count, quality or binding changed. Bags is then told, in this order: B.Categories.New.Seen(changed) with the changed slots of the
--- bags, B.Request("items", "bags", changed) and the footer of the bags, and while the bank is open (or in the grace after its close, below)
--- B.Request("items", "bank", changed) and the footer of the bank, and B.Request("layout", "bank") when a bank bag slot changed what the tabs are
--- or, while the bank is open, a tab's size changed (a tab just bought, whose slots the client may give only after the layout that read it).
+-- bags, B.Pins.Scanned(changed) (BagsPins.lua), B.Request("items", "bags", changed) and the footer of the bags, and while the bank is open (or
+-- in the grace after its close, below) B.Request("items", "bank", changed) and the footer of the bank, and B.Request("layout", "bank") when a
+-- bank bag slot changed what the tabs are or, while the bank is open, a tab's size changed (a tab just bought, whose slots the client may give
+-- only after the layout that read it).
 -- BAG_CONTAINER_UPDATE (:623, a bag put in or taken out) reads the keyring test, the kinds and the bag items again, flags a full scan, and calls
 -- B.Buttons.Prepare with the bags' containers and B.Request("layout", "bags"); while the bank is open it reads the bank's tabs again too and asks
 -- B.Request("layout", "bank"). BAG_NEW_ITEMS_UPDATED (:629; the game's bag windows draw again on it, Mainline/ContainerFrame.lua:611-612) comes
@@ -1876,6 +1877,11 @@ local function Delayed()
 	end
 	if next(bags) ~= nil then
 		Part(NewSeen, bags)
+		-- Pinned slots (BagsPins.lua) count their items and go on putting them back; their work runs as a part of their own.
+		local scanned = type(B.Pins) == "table" and B.Pins.Scanned or nil
+		if type(scanned) == "function" then
+			scanned(bags)
+		end
 		Part(Request, "items", "bags", bags)
 		Part(Request, "footer", "bags")
 	end

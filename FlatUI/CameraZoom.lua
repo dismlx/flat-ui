@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Maximum camera distance (general.cameraZoom on the Flat UI page). The game's own Max Camera Distance slider stops at 2.0 on WoW: Forever
+-- Maximum camera distance (general.cameraZoom on the World and cursor page). The game's own Max Camera Distance slider stops at 2.0 on WoW: Forever
 -- (Blizzard_SettingsDefinitions_Frame/Camelot/ControlsOverrides.lua:5-14: 1.0 to 2.0 in steps of 0.1), while the variable behind it,
 -- cameraDistanceMaxZoomFactor, takes 2.6. The row holds no value of its own, like the rows that show a game setting: it reads the variable and is
 -- ticked while it is 2.6 or more, so it is the same in every profile, and a change made with the game's slider shows at once. It is not one of the

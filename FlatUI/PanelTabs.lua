@@ -1,7 +1,7 @@
 local ADDON_NAME, ns = ...
 
--- The tabs of a module page, the breadcrumb above its title and the frame chooser of the Per frame tab. The child pages of a module are tabs: the
--- sidebar lists modules only. The eight frame pages of Unit frames are one tab, Per frame, with a chooser that remembers its last frame per account in
+-- The tabs of a module page, the breadcrumb above its title and the frame chooser of the Per frame tab. The child pages of a page are tabs: the
+-- sidebar lists modules and the pages that hold part of one (Gear comparison, with its Window and finder tab). The eight frame pages of Unit frames are one tab, Per frame, with a chooser that remembers its last frame per account in
 -- FlatUIDB.panel. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit.
 
 local Tabs = {}

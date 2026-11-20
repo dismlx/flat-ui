@@ -634,13 +634,12 @@ end
 -- A scene is a list of items { kind, id, key, label, x, y, w, h, alpha } in the units of the game, y up, and a list of loose items with no place.
 -- kind: bar (a bar of 45 unit buttons), small (a stance or pet bar), xp (an experience bar), panel (the background of the block).
 
--- The ids of the bars in the rows of the Bar block page, in order: none and a bar already in a row are left out.
+-- The ids of the bars of block 1 of the Bar block page, in order (BarBlockLists.lua). Blocks 2 and 3 are not drawn.
 local function BlockIds()
-	local ids, seen = {}, {}
-	for index = 1, 6 do
-		local id = ns.Get("barblock.slot" .. index)
-		if BUTTONS[id] and id ~= "stance" and id ~= "pet" and not seen[id] then
-			seen[id] = true
+	local ids = {}
+	local lists = ns.BarBlockLists and ns.BarBlockLists() or {}
+	for _, id in ipairs(lists[1] or {}) do
+		if BUTTONS[id] and id ~= "stance" and id ~= "pet" then
 			ids[#ids + 1] = id
 		end
 	end
@@ -737,7 +736,7 @@ local function BlockScene(on)
 	for _, row in ipairs(plan.rows) do
 		scene.items[#scene.items + 1] = { kind = "bar", id = row.id, x = row.x, y = row.y, w = row.w, h = SIZE, alpha = alpha }
 	end
-	if on and ns.Get("barblock.others") == "above" and #plan.rows > 0 then
+	if on and ns.Get("barblock.others") == "above" and not ns.HandsOff() and #plan.rows > 0 then
 		local around, top = Around(plan, alpha)
 		for _, item in ipairs(around) do
 			scene.items[#scene.items + 1] = item
@@ -869,7 +868,7 @@ local BLOCK = { parts = {}, built = Instances() }
 function BLOCK.build(stage)
 	local inst = NewInstance(stage)
 	BLOCK.built[inst.root] = inst
-	NewPool(inst, 6)
+	NewPool(inst, 8)
 	BLOCK.draw(stage)
 	return inst
 end
@@ -887,9 +886,9 @@ function BLOCK.draw(stage)
 		return id and PieceOf(scene.items, id) or nil
 	end
 	parts["barblock.enabled"] = inst.box
-	for index = 1, 6 do
-		parts["barblock.slot" .. index] = Piece(ns.Get("barblock.slot" .. index)) or inst.box
-	end
+	local ids = BlockIds()
+	parts["barblock.edit1"] = Piece(ids[1]) or inst.box
+	parts["barblock.add1"] = Piece(ids[#ids]) or inst.box
 	local first, second = pool.bar[1].frame, (pool.bar[2] and pool.bar[2].frame) or pool.bar[1].frame
 	parts["barblock.direction"], parts["barblock.fade"], parts["barblock.fadeTo"] = first, first, first
 	parts["barblock.align"], parts["barblock.ownGap"], parts["barblock.barGap"] = second, second, second
@@ -960,7 +959,7 @@ end
 function PLACES.build(stage)
 	local inst = NewInstance(stage)
 	PLACES.built[inst.root] = inst
-	NewPool(inst, 9)
+	NewPool(inst, 11)
 	PLACES.draw(stage)
 	return inst
 end
@@ -1088,6 +1087,8 @@ function FADE.build(stage)
 		inst.parts["fade." .. entry[1]] = tile.body
 	end
 	inst.parts["fade.enabled"], inst.parts["fade.alpha"] = inst.box, inst.samples[2].holder
+	-- The faded opacity of the micro menu and of the bag bar shows on their tiles.
+	inst.parts["fade.microAlpha"], inst.parts["fade.bagsAlpha"] = inst.parts["fade.micro"], inst.parts["fade.bags"]
 	Publish(FADE, inst)
 	return inst
 end
@@ -1109,7 +1110,10 @@ function FADE.draw(stage)
 	Standin(inst, standin)
 	inst.samples[2].label:SetText(enabled and ("Faded opacity " .. ns.Get("fade.alpha") .. "%") or "Faded opacity")
 	for _, tile in ipairs(inst.tiles) do
-		tile.body:SetAlpha((enabled and ns.Get("fade." .. tile.key) == true) and alpha or 1)
+		-- The micro menu and the bag bar may have a faded opacity of their own (Micro menu faded opacity, Bag bar faded opacity): a percent, or
+		-- "page" for Faded opacity.
+		local own = (tile.key == "micro" or tile.key == "bags") and tonumber(ns.Get("fade." .. tile.key .. "Alpha")) or nil
+		tile.body:SetAlpha((enabled and ns.Get("fade." .. tile.key) == true) and (ns.Finite(own) and own / 100 or alpha) or 1)
 		if type(ns.RepaintOutline) == "function" then
 			ns.RepaintOutline(tile.outline)
 		end

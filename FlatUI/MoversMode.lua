@@ -678,7 +678,7 @@ end
 local function GroupOf(info)
 	if info.kind == "window" then
 		return "Windows"
-	elseif info.name == "FlatUIBarBlock" then
+	elseif info.name:find("^FlatUIBarBlock") then
 		return "Action bars"
 	elseif info.own then
 		return "Flat UI"

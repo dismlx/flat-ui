@@ -136,7 +136,7 @@ function Switch.Entered(initialLogin, reloadingUi)
 		return
 	end
 	local kind = Switch.Kind()
-	-- A login or a reload keeps the profile in use (profileOf restores it): the place is noted and nothing switches.
+	-- A login or a reload keeps the profile in use (FlatUICharDB.profile and profileOf restore it): the place is noted and nothing switches.
 	if initialLogin or reloadingUi then
 		last = kind
 		return

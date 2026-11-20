@@ -5,7 +5,8 @@ local _, ns = ...
 -- while it is on, and its bank window too for such a visit. This file is the module, and the other Bags files are its parts. It makes ns.Bags and
 -- every table the parts fill, for the files that load after it in this order: BagsData.lua (Data, the account cache), BagsCategories.lua
 -- (Categories and Categories.New), BagsSearch.lua (Search), BagsItems.lua (Buttons), BagsLayout.lua (Layout), BagsWindow.lua (Window),
--- BagsBank.lua (Bank) and BagsTooltip.lua (Tips). A part adds fields to its own table only, adds the events it owns with ns.AddEvent while the
+-- BagsBank.lua (Bank), BagsTooltip.lua (Tips), BagsOrder.lua (Order, the order of the sections) and BagsPins.lua (Pins, pinned slots and Keep
+-- in place). A part adds fields to its own table only, adds the events it owns with ns.AddEvent while the
 -- files load (Core.lua:2093-2141; so the module is registered here, first), and looks up the functions of the other parts when it calls them,
 -- never at load. This file holds what they share (Opt, Look, On, Part, Request, Me, Viewing), decides when the bag window opens and closes, keeps
 -- the game's windows hidden, stands down, and runs the redraw pass and the sort hold. Every part runs its work through Bags.Part (ns.EachPart,
@@ -103,8 +104,11 @@ local _, ns = ...
 -- does not paint. The sort hold: the game's clean up only asks the server, and the items then move over many BAG_UPDATE_DELAYED
 -- (BagSort.lua:294-325), so after BagSort says it asked (Bags.Sorted) the window keeps every place: its slots are drawn where they are, nothing
 -- moves to the arrivals (Bags.Sorting tells BagsWindow), and the fresh layout waits for 0.4 seconds with no change after one came, 1.5 seconds
--- when none comes, or 6 seconds at most; another character chosen meanwhile is laid out at once. A sort of the bags puts New items away, and
--- while New items at the top is on it first takes the game's new flags off the bags (Bags.ClearNew), before anything moves.
+-- when none comes, or 6 seconds at most; another character chosen meanwhile is laid out at once. When the hold of the bags is due to end it is
+-- handed once to BagsPins.lua (B.Pins.AfterSort, with the hold, which B.SortHold tells from a later one), which puts pinned items back in their
+-- slots: while it does, the hold lasts, until it is done or for SORT_PINS seconds at most, and the fresh layout follows it. A sort of the bags
+-- puts New items away, and while New items at the top is on it first takes the game's new flags off the bags (Bags.ClearNew), before anything
+-- moves.
 --
 -- The events this file owns, each heard only here, in this order: BAG_CLOSED (the swap wait above; ContainerDocumentation.lua:613);
 -- PLAYER_REGEN_ENABLED (with Errands off, ns.ErrandsSellJunk goes on with a Sell junk pass that a fight paused, which Errands does itself while
@@ -162,6 +166,8 @@ local CRITICAL_ORDER = { "follow", "cache", "window", "layout", "items" }
 -- Seconds: how long a closing waits after BAG_CLOSED, and the sort hold (quiet after a change, no change at all, at most).
 local SWAP_WAIT = 0.5
 local SORT_QUIET, SORT_NONE, SORT_CAP = 0.4, 1.5, 6
+-- The most seconds the hold of the bags lasts once BagsPins.lua puts pinned items back (its run lasts 10 at most).
+local SORT_PINS = 11
 -- No container has more slots than this.
 local MOST_SLOTS = 200
 -- The last bag and the keyring, and the last bag that combined bags show in the combined window (NUM_BAG_SLOTS; Mainline/ContainerFrame.lua:83-86),
@@ -218,6 +224,8 @@ local B = {
 	Window = {},
 	Bank = {},
 	Tips = {},
+	Order = {},
+	Pins = {},
 	-- True between MERCHANT_SHOW and MERCHANT_CLOSED.
 	atMerchant = false,
 }
@@ -1048,6 +1056,40 @@ end
 
 -- The sort hold ------------------------------------------------------------------------------------------------------------------------------
 
+-- The hold of a window ends: a fresh layout.
+local function EndHold(which, hold)
+	if sorting[which] == hold then
+		sorting[which] = nil
+		B.Request("layout", which)
+	end
+end
+
+-- The hold of the bags is due to end: once, BagsPins.lua may put pinned items back first (B.Pins.AfterSort, which calls done when it is
+-- through, and is told the hold, so a later sort's hold is waited for). True when the hold waits for it, and for SORT_PINS seconds at most.
+local function HandOver(which, hold)
+	if which ~= "bags" or hold.handed then
+		return false
+	end
+	hold.handed = true
+	local pins = B.Pins
+	local after = type(pins) == "table" and pins.AfterSort or nil
+	if type(after) ~= "function" then
+		return false
+	end
+	local ok, waits = pcall(after, function()
+		EndHold(which, hold)
+	end, hold)
+	if not (ok and waits == true) then
+		return false
+	end
+	if not After(SORT_PINS, function()
+		EndHold(which, hold)
+	end) then
+		return false
+	end
+	return true
+end
+
 -- Ends the hold of a window when it is due, or looks again when it will be: a fresh layout then.
 local function HoldEnd(which, hold)
 	if sorting[which] ~= hold then
@@ -1065,8 +1107,10 @@ local function HoldEnd(which, hold)
 	end) then
 		return
 	end
-	sorting[which] = nil
-	B.Request("layout", which)
+	if HandOver(which, hold) then
+		return
+	end
+	EndHold(which, hold)
 end
 
 -- BagSort's watcher: the game was asked to sort the bags or the bank. A layout or slots that waited for the next pass give way to the hold,
@@ -1093,6 +1137,11 @@ end
 -- when the window closed and opened again during the hold.
 function B.Sorting(which)
 	return sorting[which] ~= nil
+end
+
+-- The sort hold of a window under way, or nil: BagsPins.lua tells the hold it extends from a later one.
+function B.SortHold(which)
+	return sorting[which]
 end
 
 -- The bank -----------------------------------------------------------------------------------------------------------------------------------

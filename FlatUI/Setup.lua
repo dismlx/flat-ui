@@ -137,7 +137,7 @@ function S.Migrate(store)
 	end
 end
 
--- Reads the settings of the Setup section of the Flat UI page, held per account (Config.lua names these functions). A choice that no longer
+-- Reads the settings of the Setup section of the Options and setup tab of the Flat UI page, held per account (Config.lua names these functions). A choice that no longer
 -- exists, such as a profile that was deleted, reads as nothing, so as the default.
 function ns.SetupGet(def)
 	local db = ns.Account()
@@ -890,7 +890,26 @@ function S.Next()
 	end
 end
 
--- Back: the stop before, the last stop from Your screen; on a page the page before, and from the first the screen the pages came from.
+-- Leaves setup from its first screen to where it was opened from (S.from, set by ns.OpenSetup): the welcome screen at the view it was started
+-- from, over the options pages when they showed then, else the options pages as they were. The draft is kept as when the window closes (S.Hidden):
+-- one with a choice or a queued pick stays for next time, one with neither goes.
+function S.Leave()
+	local from = S.from
+	S.from = nil
+	if type(from) == "table" and type(ns.WelcomeReturn) == "function" then
+		if from.pages then
+			kit.Leave()
+		else
+			kit.Hide()
+		end
+		ns.WelcomeReturn(from.welcome)
+	else
+		kit.Leave()
+	end
+end
+
+-- Back: the stop before, the last stop from Your screen; on a page the page before, and from the first the screen the pages came from. Where there is
+-- no screen before (the first stop, Your screen while the walk has no stops) it leaves setup (S.Leave).
 function S.Back()
 	local screen = S.screen
 	if not screen then
@@ -899,11 +918,15 @@ function S.Back()
 		local before = S.StopScreen((S.StopIndex(screen.id) or 1) - 1)
 		if before then
 			S.Go(before)
+		else
+			S.Leave()
 		end
 	elseif screen.kind == "yours" then
 		local last = S.StopScreen(#S.Stops())
 		if last then
 			S.Go(last)
+		else
+			S.Leave()
 		end
 	else
 		local at = S.PageIndex(screen)
@@ -1330,26 +1353,26 @@ end
 
 -- The bar and the page drawing ------------------------------------------------------------------------
 
--- The bar: Back at the left; at the right the primary button and up to two more, relabelled for the screen shown. On a stop Next, Skip the rest
--- (not on the last) and More settings (when the stop has pages); on Your screen Finish (dim in combat, or while the name is refused and the draft has
--- something to save: with nothing chosen Finish only closes) and Start over; on a page Next and Done.
+-- The bar: Back at the left, on every screen (S.Back); at the right the primary button and up to two more, relabelled for the screen shown. On a
+-- stop Next, Skip the rest (not on the last) and More settings (when the stop has pages); on Your screen Finish (dim in combat, or while the name is
+-- refused and the draft has something to save: with nothing chosen Finish only closes) and Start over; on a page Next and Done.
 function S.Buttons()
 	local screen = S.screen
 	if not screen or not S.next then
 		return
 	end
-	local back, primary, first, second
+	local primary, first, second
 	if screen.kind == "stop" then
 		local at = S.StopIndex(screen.id) or 1
-		back, primary = at > 1, "Next"
+		primary = "Next"
 		first = at < #S.Stops() and "Skip the rest" or nil
 		second = #S.Pages(S.Stop(screen.id)) > 0 and "More settings" or nil
 	elseif screen.kind == "yours" then
-		back, primary, first = #S.Stops() > 0, "Finish", "Start over"
+		primary, first = "Finish", "Start over"
 	else
-		back, primary, first = true, "Next", "Done"
+		primary, first = "Next", "Done"
 	end
-	S.back:SetShown(back)
+	S.back:Show()
 	S.nextText:SetText(primary)
 	S.mid1:SetShown(first ~= nil)
 	S.mid1Text:SetText(first or "")
@@ -1750,8 +1773,8 @@ function S.Enter()
 	end
 end
 
--- The window was hidden: by Close, Escape, Finish or the game (a loading screen). A draft with a choice or a queued pick stays for next time; one with
--- neither is dropped.
+-- The window was hidden: by Close, Escape, Finish or the game (a loading screen), or setup gave it back to the options pages (Back on its first
+-- screen). A draft with a choice or a queued pick stays for next time; one with neither is dropped.
 function S.Hidden()
 	if S.draft then
 		S.Sync()
@@ -1781,7 +1804,11 @@ S.mode = {
 
 -- Opens setup at this character's draft, where it was left, or at the first stop. With an id it opens there: a stop, "yours" for Your screen, or a
 -- built step, whose page goes through every built step and back to the stop or Your screen last shown, with Every setting open in the list.
-function ns.OpenSetup(id)
+-- `welcome` is the view of the welcome screen setup was started from (SetupWelcome.lua), which Back from the first screen opens again; without
+-- it Back leaves to the options pages. Where it was opened from is kept while the window hides for /flatui move and opens setup again.
+function ns.OpenSetup(id, welcome)
+	local pages = type(ns.PanelShown) == "function" and ns.PanelShown() and not ns.PanelInMode()
+	S.from = welcome ~= nil and { welcome = welcome, pages = pages } or nil
 	local shown = ns.OpenPanelMode(S.mode)
 	local screen = id ~= nil and S.draft and S.ScreenOf(id)
 	if screen then
@@ -1822,8 +1849,9 @@ function S.Presets()
 	local defs = S.Defs()
 	local list, dropped = {}, {}
 	for _, raw in ipairs(type(ns.SETUP_PROFILES) == "table" and ns.SETUP_PROFILES or {}) do
-		local profile = { id = raw.id, label = raw.label, line = raw.line, values = {} }
-		-- Positions, by frame name; a spot that is not valid is dropped and said once, as a value is.
+		local profile = { id = raw.id, label = raw.label, line = raw.line, values = {}, screen = type(raw.screen) == "table" and raw.screen or nil }
+		-- Positions, by frame name; a spot that is not valid is dropped and said once, as a value is. They are as laid out on `screen`, and
+		-- S.SpotsOf fits them to the player's.
 		for _, spot in ipairs(type(raw.movers) == "table" and raw.movers or {}) do
 			local copy = { point = spot.point, x = spot.x, y = spot.y, scale = spot.scale, kind = spot.kind, label = spot.label }
 			if IsText(spot.frame) and ns.CleanSpot(copy) then
@@ -1876,10 +1904,19 @@ function S.PresetOf(id)
 	return nil
 end
 
+-- The positions a ready-made profile is put in use with: its own fitted to the player's screen under its values (ns.FitSpots) when it says the
+-- screen they were laid out on, else its own as they are; nil when it has none, so the new profile starts with those every new profile starts with.
+function S.SpotsOf(profile)
+	if profile.movers and profile.screen and type(ns.FitSpots) == "function" then
+		return ns.FitSpots(profile.movers, profile.screen, profile.values)
+	end
+	return profile.movers
+end
+
 -- A ready-made profile in the shape of a saved one: its values as the options and its positions as the movers.
 function S.Preset(id)
 	local profile = S.PresetOf(id)
-	return profile and { options = profile.values, movers = profile.movers or S.noSpots } or nil
+	return profile and { options = profile.values, movers = S.SpotsOf(profile) or S.noSpots } or nil
 end
 
 -- What a call of the client answers, or nil when the call is missing, raises or gives a withheld value.
@@ -1971,8 +2008,8 @@ function S.MostUsed()
 	return best
 end
 
--- Puts a ready-made profile in use: the profile of that name when there is one, as it is, else a new one made from the values. The flag is set and one
--- line said. Returns true, or false and why (in combat nothing changes).
+-- Puts a ready-made profile in use: the profile of that name when there is one, as it is, else a new one made from the values and positions
+-- (S.SpotsOf). The flag is set and one line said. Returns true, or false and why (in combat nothing changes).
 function S.UseReady(id)
 	local profile = S.PresetOf(id)
 	if not profile then
@@ -1985,7 +2022,7 @@ function S.UseReady(id)
 	if found then
 		ok, why = ns.UseProfile(found)
 	else
-		ok, why = ns.NewProfile(profile.label, nil, profile.values, profile.movers)
+		ok, why = ns.NewProfile(profile.label, nil, profile.values, S.SpotsOf(profile))
 	end
 	if ok then
 		S.Flag()
@@ -2018,12 +2055,13 @@ function S.Short(name)
 	return name
 end
 
--- True when this character has no profile of its own, has not been offered, and keeps no draft: a new character. With `asked` the welcome screen is
--- offered only when Profile on a new character is Show the welcome screen.
+-- True when this character has no profile of its own (ns.OwnProfile: neither FlatUICharDB.profile nor db.profileOf names one), has not been offered,
+-- and keeps no draft: a new character. A saved character is never one, so Profile on a new character never puts another profile over its own. With
+-- `asked` the welcome screen is offered only when Profile on a new character is Show the welcome screen.
 function S.Offerable(asked)
 	local db, key = ns.Account(), ns.CharacterKey()
 	local character = ns.Character()
-	return key ~= nil and type(db) == "table" and type(db.profileOf) == "table" and db.profileOf[key] == nil and type(character) == "table"
+	return key ~= nil and type(db) == "table" and type(db.profileOf) == "table" and ns.OwnProfile() == nil and type(character) == "table"
 		and character.setupOffered ~= true and (asked ~= true or ns.Get("setup.newCharacter") == "ask") and not S.Peek()
 end
 
@@ -2047,7 +2085,7 @@ function ns.SetupAuto()
 		end
 		name = S.FindProfile(profile.label)
 		picks = not name and profile.values or nil
-		spots = not name and profile.movers or nil
+		spots = not name and S.SpotsOf(profile) or nil
 		name = name or profile.label
 	elseif mode:find("^profile:") then
 		name = S.FindProfile(mode:sub(9))

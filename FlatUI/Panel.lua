@@ -1428,6 +1428,16 @@ local function BuildModel()
 					entry.switchItem = item
 				end
 			end
+			-- A page of its own in the sidebar that holds rows of another module (an owner and no parent) is part of that module: it shows the
+			-- module's switch in its header and its Off chip (the Flat UI page has none), and is not a module of its own on Home.
+			local from = page.owner or page.switch
+			if not page.parent and not entry.switchItem and from and from ~= page.key then
+				entry.partOf = from
+				local switch = from ~= "general" and ns.Def(from .. ".enabled") or nil
+				if switch and switch.kind == "bool" then
+					entry.switchItem = switch
+				end
+			end
 			model.pages[#model.pages + 1] = entry
 			model.byKey[page.key] = entry
 		end
@@ -2408,6 +2418,19 @@ local function SetMode(mode)
 	RefreshAll()
 end
 
+-- Gives the window back to the options pages from a mode, at the page they showed before it (Back from setup's first screen). The mode's Hidden runs
+-- first, as when the window closes, so the mode keeps what it keeps then.
+local function LeaveMode()
+	local mode = ui.mode
+	if not (ui.window and mode) then
+		return
+	end
+	mode.Hidden()
+	if ui.mode == mode then
+		SetMode(nil)
+	end
+end
+
 local function BuildLeft(window)
 	local left = Frame(window)
 	left:SetSize(SIDE, HEIGHT - TITLE - STRIP)
@@ -2713,7 +2736,6 @@ local function Build()
 	SIDE = Look.SideWidth()
 	CW = WIDTH - SIDE
 	ui.model = BuildModel()
-	ns.PanelHome.Start()
 	local window = CreateFrame("Frame", NAME, UIParent)
 	ns.Own[window] = true
 	ui.window = window
@@ -2888,6 +2910,7 @@ ns.PanelKit = {
 	Inset = function(parent, inset) insets[parent] = inset end,
 	Tip = function(text) ui.message, ui.tip = nil, text or "" ShowStrip() end, Refresh = function() RefreshAll() end,
 	Hide = function() if ui.window then ui.window:Hide() end end,
+	Leave = LeaveMode,
 	SetCounter = function(text) if ui.barCounter then ui.barCounter:SetText(text or "") end end,
 	WIDTH = WIDTH, HEIGHT = HEIGHT, TITLE = TITLE, LEFT = LEFT, STRIP = STRIP, HEADER = HEADER, RIGHT_W = RIGHT_W, PAD = PAD, ROW = ROW,
 	ROW_W = ROW_W, SECTION = SECTION, LABEL = LABEL, CONTROL = CONTROL, FIELD = FIELD, SMALL = SMALL, BUTTON = BUTTON,

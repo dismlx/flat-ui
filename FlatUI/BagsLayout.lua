@@ -5,7 +5,13 @@ local _, ns = ...
 -- everything here is in the units of that button: a cell is 40 of them, a button and a space of 3. Frames of Flat UI's own take that scale too,
 -- and the game's art on its item buttons stays in proportion. A window is as many cells wide as Width in slots (or Bank width in slots) says, and
 -- no wider than 95% of the screen (UIParent's width) with its padding. Two views, as Show items says.
--- Sections files every item with B.Categories.Of and sorts each section with B.Categories.Compare (BagsCategories.lua). A section lies under its
+-- Sections files every item with B.Categories.Of and sorts each section with B.Categories.Compare (BagsCategories.lua), but for Keep in place,
+-- whose cells go in the order of the bags and their slots, so it mirrors the bags and never reshuffles; in the player's own bag window an empty
+-- pinned slot (B.Pins.Get, BagsPins.lua) gets a cell there too, its live empty button, so an item dropped on it goes in the slot, and Free slots,
+-- which skips every slot that has a cell, shows another. Like any cell, it shows what fills its slot while the window is open, also loot the
+-- game puts there, with the pin's hollow mark, until the next layout. While this character has a pin, the bag window always has the title of
+-- Keep in place, as it has Junk's (B.Pins.Any). The sections go in the player's order (B.Order.Ranks, BagsOrder.lua), else in the order
+-- of B.Categories.LIST. A section lies under its
 -- title, as many cells wide as it has items, at least as wide as its title needs and at most as wide as the window. The title's width is measured
 -- once per layout with GetUnboundedStringWidth on Flat UI's own font string (WL/uiobjects.yaml:3738), and a title wider than the window is cut to
 -- it with an ellipsis (SetWidth and SetWordWrap, :3857). Titles and that font string take the face and outline the game's small font
@@ -45,6 +51,12 @@ local _, ns = ...
 -- read every tenth of a second while the window shows. A click on the top shelf's title puts its items away and lays the window out
 -- again: in the bag window, while New items at the top is on, B.ClearNew (Bags.lua) first takes the game's new flags off the items of the bags,
 -- as the window's close does, then B.Categories.New.Clear lets New items go.
+-- A drop on Keep in place goes to B.Pins.Drop instead, which pins the slot the item came from; a drop on any other section that takes one reads
+-- the item's slot first (B.Pins.Held) and, once B.Categories.Drop took it, calls B.Pins.Left, which unpins that slot when it was pinned for the
+-- item. Each title of the Sections view but the top shelf's and Free slots' is registered for a drag with the left button when it is placed
+-- (RegisterForDrag; every other title for none, so its clicks stay clicks), and its OnDragStart and OnDragStop go to B.Order (BagsOrder.lua), which
+-- moves the section; a right click on such a title with no item on the cursor opens B.Order's menu of it, and its tooltip says how. A window that
+-- closes ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
 -- The buttons are BagsItems.lua's: the game's item buttons for the player's own bags, buttons of Flat UI's own for the live bank and for
 -- everything else. They are drawn with B.Buttons.Draw, dimmed with B.Buttons.Dim and placed here (ClearAllPoints, SetPoint, Show, Hide). A holder
 -- of a bag's buttons (the frame whose ID is the bag, ContainerFrame.lua:1845-1851), or a button of Flat UI's own, that is not under the window's
@@ -79,7 +91,7 @@ local PARK = 200
 -- The defaults of the rows this file reads, for a value the options do not give.
 local DEFAULTS = { view = "sections", columns = 12, bankColumns = 16, slotSize = 36, freeSlots = "kinds", bank = "flat", gear = "one",
 	newItems = true }
-local NEW, FREE, OTHER, JUNK = "new", "free", "other", "junk"
+local NEW, FREE, OTHER, JUNK, KEEP = "new", "free", "other", "junk", "keep"
 local KEYRING = -1
 -- The bank's own slots, its first tab (Camelot/BankFrame.lua:301-327).
 local BANK_SLOTS = 6
@@ -353,8 +365,15 @@ local function KeyringShown(key, slots)
 	return math.min(size, slots)
 end
 
--- The display order of the sections, from the built-in list (B.Categories.LIST).
+-- The display order of the sections: the player's (B.Order.Ranks, BagsOrder.lua), else the built-in list (B.Categories.LIST).
 local function Orders()
+	local ranks = Fn(B.Order, "Ranks")
+	if ranks then
+		local ok, map = pcall(ranks)
+		if ok and type(map) == "table" then
+			return map
+		end
+	end
 	local map = {}
 	local list = Categories.LIST
 	if type(list) == "table" then
@@ -390,9 +409,9 @@ local function ShownNew(record)
 	end
 end
 
--- Sorts the cells of a section by B.Categories.Compare; when it raises, by bag and slot, so equal items never swap.
-local function SortEntries(st, entries)
-	local compare = Fn(Categories, "Compare")
+-- Sorts the cells of a section by B.Categories.Compare; when it raises, and with plain (Keep in place), by bag and slot, so equal items never swap.
+local function SortEntries(st, entries, plain)
+	local compare = not plain and Fn(Categories, "Compare")
 	if compare and pcall(table.sort, entries, function(a, b)
 		return compare(a.record, b.record) == true
 	end) then
@@ -503,6 +522,8 @@ local function TitleTip(title)
 		head = sec.label
 		if sec.key == JUNK then
 			line = "Drop the item here to sell it at merchants from now on."
+		elseif sec.key == KEEP then
+			line = "Drop the item here to pin the slot it came from to it."
 		else
 			line = ("Drop the item here to keep it in %s."):format(sec.label)
 		end
@@ -510,6 +531,17 @@ local function TitleTip(title)
 		head, line = sec.label, "Nothing to sell. Drop an item here to sell it at merchants from now on."
 	elseif sec.strip and not st.holding then
 		head, line = sec.label, "Click to put these items away now."
+	elseif not st.holding then
+		-- How to move the section, or what Keep in place is (BagsOrder.lua).
+		local tipOf = Fn(B.Order, "Tip")
+		local ok, text = false, nil
+		if tipOf then
+			ok, text = pcall(tipOf, st, sec)
+		end
+		if not (ok and type(text) == "string") then
+			return
+		end
+		head, line = sec.label, text
 	else
 		return
 	end
@@ -543,6 +575,14 @@ local function Title(st, index)
 	end)
 	frame:SetScript("OnReceiveDrag", function()
 		Run("layout", Drop, title)
+	end)
+	-- A drag of the title moves its section (BagsOrder.lua). PlaceTitle registers for a drag only a title whose section can move, since a drag
+	-- gives no click: a click on any other title that moves a little stays a click.
+	frame:SetScript("OnDragStart", function()
+		Run("order", Call, B.Order, "DragStart", title)
+	end)
+	frame:SetScript("OnDragStop", function()
+		Run("order", Call, B.Order, "DragStop", title)
 	end)
 	frame:SetScript("OnEnter", function()
 		title.over = true
@@ -678,6 +718,9 @@ local function DrawOpts(st, entry)
 		return { free = entry.free, kind = entry.kindTable }
 	elseif entry.record then
 		return nil
+	elseif entry.ghost then
+		-- An empty pinned slot in Keep in place: blank, and B.Pins.Mark draws the pinned item's icon faded.
+		return { hold = true, kind = st.kinds[entry.bag] }
 	elseif entry.freeSlot then
 		return { kind = entry.kindTable }
 	elseif st.view == "bags" then
@@ -723,6 +766,16 @@ local function PlaceTitle(st, title, sec, x, y, width)
 	title.text:SetText(TitleText(sec))
 	title.text:SetWidth(math.max(1, width - 1))
 	local frame = title.frame
+	-- The left button drags the title of a section of the Sections view that can move (BagsOrder.lua): not the top shelf, Free slots or a bag.
+	local drags = st.view == "sections" and not sec.block and not sec.strip and sec.key ~= FREE and sec.key ~= NEW
+	if title.drags ~= drags then
+		title.drags = drags
+		if drags then
+			pcall(frame.RegisterForDrag, frame, "LeftButton")
+		else
+			pcall(frame.RegisterForDrag, frame)
+		end
+	end
 	frame:ClearAllPoints()
 	frame:SetPoint("TOPLEFT", st.content, "TOPLEFT", x, y)
 	frame:SetSize(width, st.titleH)
@@ -918,12 +971,20 @@ local function BuildSections(st)
 	local orders = Orders()
 	local byKey, list = {}, {}
 	local strip = NewStrip(st)
+	-- The pins of the player's own live bags (B.Pins.Get, BagsPins.lua): an empty pinned slot keeps a cell in Keep in place.
+	local pinned = st.which == "bags" and st.live and Fn(B.Pins, "Get") or nil
 	for _, bag in ipairs(st.containers) do
 		for slot = 1, st.sizes[bag] do
 			local record = Item(st.key, bag, slot)
-			if record then
+			local ghost = nil
+			if not record and pinned then
+				local ok, id = pcall(pinned, bag, slot)
+				ghost = ok and Finite(id) and id or nil
+			end
+			if record or ghost then
 				local entry = Entry(bag, slot, record)
-				local key = SectionOf(record)
+				entry.ghost = ghost
+				local key = record and SectionOf(record) or KEEP
 				local sec
 				if key == NEW then
 					sec = strip
@@ -946,6 +1007,14 @@ local function BuildSections(st)
 		byKey[JUNK] = junk
 		list[#list + 1] = junk
 	end
+	-- While this character has a pin (B.Pins.Any), its live bag window always has the title of Keep in place too, with no cell while no pinned
+	-- slot holds its item, so its menu (Put pinned items back now, Unpin all) and its drop stay in reach.
+	local okAny, anyPin = pcall(Call, B.Pins, "Any")
+	if pinned and st.mine and not byKey[KEEP] and okAny and anyPin == true then
+		local keep = { key = KEEP, label = Label(KEEP), entries = {} }
+		byKey[KEEP] = keep
+		list[#list + 1] = keep
+	end
 	table.sort(list, function(a, b)
 		local oa, ob = orders[a.key] or LATE, orders[b.key] or LATE
 		if oa ~= ob then
@@ -954,7 +1023,8 @@ local function BuildSections(st)
 		return a.key < b.key
 	end)
 	for _, sec in ipairs(list) do
-		SortEntries(st, sec.entries)
+		-- Keep in place is not sorted: its cells go in the order of the bags and their slots.
+		SortEntries(st, sec.entries, sec.key == KEEP)
 		for _, entry in ipairs(sec.entries) do
 			st.cells[entry.sk] = entry
 		end
@@ -1376,6 +1446,7 @@ end
 -- The window closed: the next opening lays it out afresh, and the pooled buttons go back.
 function Layout.Closed(which)
 	Layout.CloseMenu(which)
+	Run("order", Call, B.Order, "Cancel", which)
 	local st = state[which]
 	if not st then
 		return
@@ -1418,8 +1489,16 @@ function Drop(title)
 		print(FIGHT_LINE)
 		return
 	end
-	if takes then
-		Call(Categories, "Drop", id, sec.key)
+	if takes and sec.key == KEEP then
+		-- Keep in place pins the slot the item came from (BagsPins.lua).
+		Run("pins", Call, B.Pins, "Drop")
+	elseif takes then
+		-- An item from a pinned slot dropped on another section unpins that slot once the section took it. Where it came from is read first,
+		-- since the drop gives the item back; a drop refused leaves the pin.
+		local okFrom, fromId, fromBag, fromSlot = pcall(Call, B.Pins, "Held")
+		if Call(Categories, "Drop", id, sec.key) == true and okFrom and fromId then
+			Run("pins", Call, B.Pins, "Left", fromId, fromBag, fromSlot)
+		end
 	end
 	pcall(ClearCursor)
 end
@@ -1436,6 +1515,11 @@ function TitleClick(title, mouse)
 	-- The click that ends a drop on the same title is that drop.
 	local dropped = title.dropped
 	if dropped and GetTime() - dropped < DROP_CLICK then
+		return
+	end
+	if mouse == "RightButton" and not sec.block and not sec.strip then
+		-- The menu that moves the section (BagsOrder.lua), with the lines of Keep in place on its own.
+		Run("order", Call, B.Order, "Menu", st, sec, title.frame)
 		return
 	end
 	if mouse ~= "LeftButton" then

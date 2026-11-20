@@ -5,7 +5,7 @@ local _, ns = ...
 -- the place to drop items and spells on, and it works with Your spells in item tooltips off: it is a tool of its own, and the list rows of the Spells
 -- and gear tab serve both. /flatui gear opens and closes it (ns.GearWindowToggle); the tab's Gear comparison window row opens it, or raises it when it
 -- is open, and /flatui gear <item> shows that item in it (ns.GearWindowShow); Escape closes it; the item and the switch are kept for the session.
--- While avoidance shows (Avoidance of the Spells and gear tab, GearAvoid.lua's A.Wanted) the switch has a fourth word, Avoidance: the attack table
+-- While avoidance shows (Avoidance of the Gear comparison page, GearAvoid.lua's A.Wanted) the switch has a fourth word, Avoidance: the attack table
 -- of an enemy's swing, armor and block value now and with the item, in the rows and words GearAvoid.lua writes (A.Window), which this file draws in
 -- the same columns; a tank's window starts on it, and its lines have no spell, so they have no tooltip and a right click takes nothing off.
 -- A fight is InCombatLockdown's answer (WL/apis.yaml:39650), a withheld one counting as a fight; the time of a drop is GetTime's (:39050).
@@ -157,7 +157,7 @@ local WORD_TIPS = {
 	cast = "What one cast does: its expected damage or healing, or its threat for a line that does no damage. Your auto attack, Auto Shot, wand and seals count a second of your swings or shots, so a slower weapon is not set against a faster one swing for swing.",
 	second = "What a second does: a cast over its cast time (at least the global cooldown), a spell over time over its duration, your swings and shots over their speed. A strike that takes the place of your next swing has none.",
 	threat = "The threat of one cast, and of a second of what rides on your swings and shots (your auto attack, Auto Shot, wand and seals), with your stance, form, Righteous Fury and talents.",
-	avoid = "How often an enemy's swing misses you, is dodged, parried or blocked, crits or crushes, and what your armor and block value take off: now, and with the item in each slot it can take. Avoidance on the Spells and gear tab chooses when it shows.",
+	avoid = "How often an enemy's swing misses you, is dodged, parried or blocked, crits or crushes, and what your armor and block value take off: now, and with the item in each slot it can take. Avoidance on the Gear comparison page chooses when it shows.",
 }
 -- Against at its first choice is a boss three levels above at the top level, else an enemy of the player's level (design 2.5, 4.9). The hit caps of
 -- Hit cap against a boss and of the hit table's row of the same name (Config.lua, hud.hitTableRules).
@@ -244,7 +244,7 @@ local T = {
 	UNKNOWN = "You do not know this spell now.",
 	REMOVE = "Right-click to take it off the comparison.",
 	CLEAR = "Right-click to take the item out of the window.",
-	OFF = "Gear comparison: turn on Restyle chat and tooltips on the Chat and tooltips page first.",
+	OFF = "Gear comparison: turn on Restyle chat and tooltips first (Chat page).",
 	MODULE_STOPPED = "Gear comparison: Chat and tooltips stopped after an error. /flatui status says why.",
 	STOPPED = "Gear comparison: the window stopped after an error. /flatui status says why.",
 	AFTER_FIGHT = "Gear comparison: the window opens when the fight ends.",
@@ -278,7 +278,7 @@ local T = {
 	NO_WEIGHT = "Gear comparison: the list of spells is not running, so the weight was not changed.",
 	GRIP = "Size",
 	GRIP_LINES = { "Drag to size the window; its size is kept for this character.",
-		"Reset the window on the Spells and gear tab puts its size and place back." },
+		"Reset the window on the Window and finder tab of Gear comparison puts its size and place back." },
 	RESET_LINE = "Put its size and place back",
 	RESET_DONE = "Gear comparison: the window is back at its first size and place.",
 	RESET_FAILED = "Gear comparison: the window could not be put back. /flatui status says why.",
@@ -607,7 +607,7 @@ local function PaintWords()
 	end
 end
 
--- True while the Avoidance view shows (GearAvoid.lua, A.Wanted: Avoidance of the Spells and gear tab).
+-- True while the Avoidance view shows (GearAvoid.lua, A.Wanted: Avoidance of the Gear comparison page).
 local function Avoiding()
 	return Ask(ns.GearAvoid, "Wanted") == true
 end

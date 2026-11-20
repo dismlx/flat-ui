@@ -9,7 +9,7 @@ local _, ns = ...
 -- placed out of combat, or on a heading the game does not protect; in a fight only its text, colour and font are set, and it is shown or hidden.
 -- It is redrawn on the next frame after the quest log changes, and only while a count can be shown, so a client without the quest log calls
 -- has no text and nothing waiting. It hides with the heading, so there is no count while no quest is tracked. Its row is Quest count on the
--- Tracker, loot and alerts tab (hud.trackerCount), part "quest count" of the module, which stops alone after a few failures.
+-- Quests and loot page (hud.trackerCount), part "quest count" of the module, which stops alone after a few failures.
 -- It follows EnhanceQoL's quest count on the tracker, adapted with the permission of its author.
 
 local KEY, PART = "hud", "quest count"

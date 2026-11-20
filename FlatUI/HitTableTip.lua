@@ -4,10 +4,10 @@ local _, ns = ...
 -- against it, a line for each attack the hit table under the player frame shows (HitTable.lua), as "Swing  M8 D6.5 G40 C12.1 H33.4" (0.5.21: a letter
 -- for each part, M miss, D dodge, P parry, G glance, B block, C crit, H hit, and one decimal unless it is 0; 0.5.26: R on the Spells line, the share
 -- of a spell's damage resisted on average, signed, as R-2.5 for damage taken more from Spell Piercing, HitTableCalc.lua's Resist). Its row is On
--- enemy tooltips (hud.hitTableTip, on the Hit table tab of Minimap and buffs): For tanks and damage dealers (the default) adds the lines while the
+-- enemy tooltips (hud.hitTableTip, on the Hit table page of Minimap and HUD): For tanks and damage dealers (the default) adds the lines while the
 -- player's role (ns.PlayerRole, Core.lua) is no healer, Always whatever the role, Off never. The lines follow that row alone, not Hit table under the
 -- player frame, so a player may hide the table and keep the lines; and they come only while the chat module is on, since its post call adds them.
--- They count what the Hit table tab says: Attacks (hud.hitTableLines, the kinds of C.Kinds by the class and the player's power type now,
+-- They count what the Hit table page says: Attacks (hud.hitTableLines, the kinds of C.Kinds by the class and the player's power type now,
 -- UnitPowerType, which carries no secret tag, so a druid who takes Bear or Cat Form in a fight gets the melee lines), Special attacks
 -- (hud.hitTableSpecial) and Hit cap against a boss (hud.hitTableRules); parry and block only from the front: by Where you stand (hud.hitTableFacing),
 -- at its first choice while the enemy attacks the player (C.Front) and always for a tank, who stands in front. The enemy counts at its level
@@ -71,7 +71,7 @@ local IsSecret, Finite = ns.IsSecret, ns.Finite
 
 -- The constants of this file, in one table so that the main chunk keeps few locals.
 local HT = {
-	-- The row of this file and the rows of the Hit table tab the lines follow (Config.lua), and Notes under the lines of Chat and tooltips.
+	-- The row of this file and the rows of the Hit table page the lines follow (Config.lua), and Notes under the lines of Chat and tooltips.
 	ROW = "hud.hitTableTip", LINES = "hud.hitTableLines", SPECIAL = "hud.hitTableSpecial", FACING = "hud.hitTableFacing", RULES = "hud.hitTableRules",
 	DETAIL = "chat.tipDetail",
 	-- Text size on enemy tooltips (Config.lua), and the names of the font strings of a line of GameTooltip: the side and the number of the line.

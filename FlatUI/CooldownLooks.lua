@@ -266,7 +266,7 @@ function ns.CooldownRowPick(id)
 	if R.RowOn(id) then
 		return true, ("%s is on row %d."):format(chosen[2], id)
 	end
-	return true, ("%s is on row %d, which is off: until Show row %d is on (More rows), it is on row 1."):format(chosen[2], id, id)
+	return true, ("%s is on row %d, which is off: until Show row %d is on (Rows 2 to 4), it is on row 1."):format(chosen[2], id, id)
 end
 
 -- When one icon shows is the same kind of list: the icons, each with its choice when it has one, and once one is chosen, the four choices.
