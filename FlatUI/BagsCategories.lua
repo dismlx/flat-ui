@@ -6,15 +6,21 @@ local _, ns = ...
 -- changed, or whose new flag is set, before it asks for a redraw, and the window's layout (BagsLayout.lua) asks Of, Compare and Label when it lays
 -- a window out.
 --
--- An item lands in the first section whose rule it meets: New items, then Junk, then the section the player placed it in by hand, then
--- Equipment sets, Quest items, Equipment, Consumables, Trade goods, Reagents, Recipes, Ammunition, Bags and quivers, Keys and Other. Free slots
--- holds the empty slots. The rules read the class, subclass and equip slot the game gives at once (C_Item.GetItemInfoInstant,
+-- An item lands in the first section whose rule it meets: New items, then Junk, then Keep in place, then the section the player placed it in by
+-- hand, then Equipment sets, Quest items, Equipment, Consumables, Trade goods, Reagents, Recipes, Ammunition, Bags and quivers, Keys and Other.
+-- Free slots holds the empty slots. The rules read the class, subclass and equip slot the game gives at once (C_Item.GetItemInfoInstant,
 -- ItemDocumentation.lua:659-679, which never waits for the server), as BagsData keeps them on each record or through B.Data.Info, and compare
 -- them with the numbers of Forever's Enum.ItemClass and Enum.ItemMiscellaneousSubclass (wowless, data/products/wowf/enums.yaml:4630-4651 and
 -- 5009-5016). An item in an equipment set (the record's set, from C_Container.GetContainerItemEquipmentSetInfo) and a quest item (class 12, or the
 -- record's quest and questStart, from C_Container.GetContainerItemQuestInfo, ContainerDocumentation.lua:281-295) are read by BagsData. With
 -- Equipment set to Weapons, armour and jewellery, Equipment is three sections. The sections are shown in an order of their own (LIST), which is
--- not the order their rules are tried in: New items first, Junk and Free slots last.
+-- not the order their rules are tried in: New items first, Keep in place next, Junk and Free slots last; the player may move every section but
+-- New items and Free slots (BagsOrder.lua), which changes the order they are shown in and never where an item is filed.
+--
+-- Keep in place holds the items of this character's bags (a live record of bags 0 to 5) that sit in the slot the player pinned for them
+-- (B.Pins.Of, BagsPins.lua). It comes after Junk, so the Junk section and Sell junk always agree; pinning takes an item off the sell list and puts a
+-- grey one on the keep list, so a pinned item is not junk. It takes no placement by hand: pins are per character and per slot, in
+-- FlatUICharDB.bagPins, and a drop on its title pins the slot the item came from (BagsLayout.lua hands that drop to BagsPins.lua).
 --
 -- New items: an item is new when the game's own flag is set (C_NewItems.IsNewItem, NewItemsDocumentation.lua:15-28) at the scan in which its
 -- slot changed, or when BagsData hears that the game set new flags (BAG_NEW_ITEMS_UPDATED), which it may do after that scan. It is then kept by
@@ -74,6 +80,7 @@ local LAST, KEYRING_PLACE, NO_BAG = 1000, 100, 200
 -- The sections in the order they are shown.
 local SECTIONS = {
 	{ key = "new", label = "New items" },
+	{ key = "keep", label = "Keep in place" },
 	{ key = "set", label = "Equipment sets" },
 	{ key = "gear", label = "Equipment" },
 	{ key = "weapon", label = "Weapons" },
@@ -112,8 +119,9 @@ local SLOT_LAST = 18
 local LABELS, PLACEABLE = {}, {}
 for _, section in ipairs(SECTIONS) do
 	LABELS[section.key] = section.label
-	-- New items follows the game's flag and Free slots is empty space, so neither can hold an item by its ID; Junk is Errands' lists.
-	if section.key ~= "new" and section.key ~= "junk" and section.key ~= "free" then
+	-- New items follows the game's flag and Free slots is empty space, so neither can hold an item by its ID; Junk is Errands' lists, and Keep in
+	-- place this character's pinned slots.
+	if section.key ~= "new" and section.key ~= "junk" and section.key ~= "free" and section.key ~= "keep" then
 		PLACEABLE[section.key] = true
 	end
 end
@@ -736,7 +744,8 @@ end
 
 -- Filing and order -----------------------------------------------------------------------------------------------------------------------
 
--- The section a record is shown in: New items, then Junk, then its placement, then the built-in rules. No record is a free slot.
+-- The section a record is shown in: New items, then Junk, then Keep in place (a record in the slot pinned for it, B.Pins.Of), then its placement,
+-- then the built-in rules. No record is a free slot.
 function Categories.Of(record)
 	if type(record) ~= "table" then
 		return "free"
@@ -746,6 +755,15 @@ function Categories.Of(record)
 	end
 	if Categories.IsJunk(record) then
 		return "junk"
+	end
+	if record.live == true then
+		local of = B.Pins and B.Pins.Of
+		if type(of) == "function" then
+			local ok, pinned = pcall(of, record)
+			if ok and pinned == true then
+				return "keep"
+			end
+		end
 	end
 	return PlacedIn(record) or Rules(record)
 end

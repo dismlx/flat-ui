@@ -157,6 +157,8 @@ BagsLayout.lua
 BagsWindow.lua
 BagsBank.lua
 BagsTooltip.lua
+BagsOrder.lua
+BagsPins.lua
 ConsumableData.lua
 Consumables.lua
 DataPanels.lua

@@ -173,7 +173,13 @@ local ADDON_NAME, ns = ...
 -- CooldownFrame_Set. The one field it writes on them itself is hasStackSplit: before its code hides one of them that owns the game's split box
 -- (StackSplitFrame), or a frame that holds one, and first in the OnHide of the bag window and of its title bar and footer buttons, it writes 0
 -- there, as the game does when the box closes (Mainline/StackSplitFrame.lua:5, 293), so the template's OnHide
--- (Mainline/ContainerFrame.lua:1816-1822) leaves the box to the game, and it stays until the player presses Okay or Cancel. Its bank slots are
+-- (Mainline/ContainerFrame.lua:1816-1822) leaves the box to the game, and it stays until the player presses Okay or Cancel. Each of those slots
+-- gets one post-hook of its OnClick when it is made (HookScript, on Flat UI's own button), which runs after the game's click and acts only on
+-- Ctrl+right-click, which the game does nothing with: it pins the slot to its item or unpins it (BagsPins.lua), a mark of its own in the slot's top
+-- right corner. Out of combat, while Put pinned items back is on, it puts pinned items back in their slots after a clean up of the bags and when
+-- one comes into the bags, with C_Container.PickupContainerItem twice (the item, then its slot; the game swaps what was there into the slot it
+-- came from), checking the cursor in between (GetCursorInfo) and giving back anything left on it (ClearCursor), never while the cursor holds
+-- anything, a spell waits for its target, Sell junk, Deposit or Take out run, or the trade window shows (TradeFrame, IsShown). Its bank slots are
 -- buttons of its own that pick up (C_Container.PickupContainerItem) and take out (C_Container.UseContainerItem with no bank type) on a click, out
 -- of combat, and its bank bag slots are buttons of its own that pick up the bag (C_Container.PickupContainerItem(-2, n)) on any click, drag or
 -- drop, out of combat, as the game's do; a modified click on a bank slot, or on a slot drawn from its records (another character's, or the bank
@@ -193,9 +199,11 @@ local ADDON_NAME, ns = ...
 -- (SetHyperlink, SetBagItem) never in a fight, and inside the game's build of an item tooltip, through one post call of its own
 -- (TooltipDataProcessor.AddTooltipPostCall), it adds lines naming the player's other characters on this realm and its connected realms that carry
 -- the item (AddDoubleLine). The game is asked once to load each item its windows show that the client has not loaded yet
--- (C_Item.RequestLoadItemDataByID). It adds FlatUIBags and FlatUIBank to UISpecialFrames, and names the key binding of its bank button
--- (BINDING_NAME_CLICK FlatUIBankButton:LeftButton). What it keeps of each character (items, gold, level, class, faction, realm and the time) and
--- the sections items were placed in by hand are in FlatUIDB.bags, and none of it leaves the client.
+-- (C_Item.RequestLoadItemDataByID). The titles of its sections are buttons of its own that can be dragged (RegisterForDrag) to set the order of
+-- the sections, kept for the account in FlatUIDB.bags.order. It adds FlatUIBags and FlatUIBank to UISpecialFrames, and names the key binding of its bank button
+-- (BINDING_NAME_CLICK FlatUIBankButton:LeftButton). What it keeps of each character (items, gold, level, class, faction, realm and the time),
+-- the sections items were placed in by hand and the order of the sections are in FlatUIDB.bags, the pinned slots of a character in
+-- FlatUICharDB.bagPins, and none of it leaves the client.
 -- Data panels (off by default) draws two panels of its own on UIParent and writes the lines of their tooltips in GameTooltip (SetOwner,
 -- SetText, AddLine, AddDoubleLine, Show, Hide). It asks the server for the guild roster (C_GuildInfo.GuildRoster) while a slot shows the guild,
 -- and the game for the memory of addons (UpdateAddOnMemoryUsage) when its frame rate tooltip opens out of combat. When another addon brought
