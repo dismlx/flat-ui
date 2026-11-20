@@ -2408,6 +2408,19 @@ local function SetMode(mode)
 	RefreshAll()
 end
 
+-- Gives the window back to the options pages from a mode, at the page they showed before it (Back from setup's first screen). The mode's Hidden runs
+-- first, as when the window closes, so the mode keeps what it keeps then.
+local function LeaveMode()
+	local mode = ui.mode
+	if not (ui.window and mode) then
+		return
+	end
+	mode.Hidden()
+	if ui.mode == mode then
+		SetMode(nil)
+	end
+end
+
 local function BuildLeft(window)
 	local left = Frame(window)
 	left:SetSize(SIDE, HEIGHT - TITLE - STRIP)
@@ -2888,6 +2901,7 @@ ns.PanelKit = {
 	Inset = function(parent, inset) insets[parent] = inset end,
 	Tip = function(text) ui.message, ui.tip = nil, text or "" ShowStrip() end, Refresh = function() RefreshAll() end,
 	Hide = function() if ui.window then ui.window:Hide() end end,
+	Leave = LeaveMode,
 	SetCounter = function(text) if ui.barCounter then ui.barCounter:SetText(text or "") end end,
 	WIDTH = WIDTH, HEIGHT = HEIGHT, TITLE = TITLE, LEFT = LEFT, STRIP = STRIP, HEADER = HEADER, RIGHT_W = RIGHT_W, PAD = PAD, ROW = ROW,
 	ROW_W = ROW_W, SECTION = SECTION, LABEL = LABEL, CONTROL = CONTROL, FIELD = FIELD, SMALL = SMALL, BUTTON = BUTTON,
