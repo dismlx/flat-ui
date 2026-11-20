@@ -12,7 +12,7 @@ local _, ns = ...
 -- Thorns; a healer Healing, Spell crit, Mana regen and Thorns; a damage dealer the tiles of each kind of attack: Attack power, Crit and Hit for
 -- melee, the same for ranged (a hunter), Spell power, Spell crit, Spell hit and Spell Piercing for spells, Mana regen for a mana user, and Thorns;
 -- Item level leads every set while the client has the call. At Everything (windows.glanceShow) every tile with a number shows, whatever the role,
--- the ranged ones with a ranged weapon worn. Hit cap against a boss and Your role of nameplate threat redraw it (Core.lua, READERS).
+-- the ranged ones with a ranged weapon worn (a hunter always has Ranged power and Ranged crit). Hit cap against a boss and Your role of nameplate threat redraw it (Core.lua, READERS).
 --
 -- The reads are the character sheet's own calls (SpellModel.lua's header lists them, as research_tooltips.md §3.1 does): UnitAttackPower and
 -- UnitRangedAttackPower (base plus both buffs), GetCritChance, GetRangedCritChance, GetSpellCritChance and GetSpellBonusDamage for each school,
@@ -31,21 +31,23 @@ local _, ns = ...
 -- Before the first plain read the strip says it waits for the game to give the stats.
 --
 -- Thorns: the damage an enemy takes each time it hits the player, in total, with each source in the tooltip. Two kinds of source count. The
--- player's buffs (C_UnitAuras.GetUnitAuras, as Absorbs.lua reads them, only while ns.AurasReadable says the game shows them, and never with one
+-- player's buffs (C_UnitAuras.GetUnitAuras, as Absorbs.lua reads them, unless ns.AurasReadable says the game hides them, and never with one
 -- of them withheld): Thorns and Retribution Aura by their spell IDs, every rank, with the
 -- amount of the aura's first value (points[1], which holds what talents add) or else the rank's own from the client's data (damage shield auras,
 -- aura 15, tools/dev/spelltips/client_spells.json); on an English client also any other buff whose tooltip (C_TooltipInfo.GetUnitBuffByAuraInstanceID)
 -- says it deals damage to attackers, as Fire Shield's does. And on an English client the Equip lines of worn gear (C_TooltipInfo.GetInventoryItem,
 -- as SpellModel.lua reads the lines of a worn item) that say the same ("When struck in combat inflicts 3 Nature damage to the attacker."), unless
 -- the item is broken. A line that names a chance is a proc and counts not, "N to M" counts at its mean, and the word before "damage" must be a
--- school. Withheld buffs keep the last thorns read.
+-- school (a line with none counts not). While the game hides the buffs, those of the last read stand for them and the tile says so ("buffs as
+-- last seen"); the gear is read all the same.
 --
 -- It is part "stats at a glance" of the windows module, not a module: Windows.lua calls ns.CharacterStats.Apply whenever it applies its settings,
 -- as it calls ns.CharacterDurability.Apply. Its frame is made once, on the character page (PaperDollFrame), so it shows only with that page,
 -- out of a fight when the game protects the page, as CharacterDurability.lua makes its frame. It reads while it shows: when it is shown, and
 -- after the events that change a stat, which its own frame hears only while it shows (RegisterUnitEvent for the player, else RegisterEvent;
 -- UnregisterAllEvents as it hides), at most every STEP seconds on its OnUpdate; and when its width changes, as the window's stats pane opens or
--- closes, so the tiles take the room there is: as many columns of at least TILE_W as fit, at most MOST_COLS. Nothing of the game's is written, hooked or read while the
+-- closes, so the tiles take the room there is: as many columns of TILE_W as fit, and more, down to TILE_LEAST wide, where that keeps the strip
+-- within MOST_ROWS rows (Everything's 18 tiles take 6 columns of 61 on the 398 wide window), at most MOST_COLS. Nothing of the game's is written, hooked or read while the
 -- window is closed.
 
 local KEY, PART, ROW, SHOW = "windows", "stats at a glance", "windows.glance", "windows.glanceShow"
@@ -61,7 +63,7 @@ local K = {
 	-- the client gives none (the Character window without its stats pane, 398: GearButton.lua's header).
 	GAP = 2, PAD = 6, HEAD = 16, TILE_H = 40, TILE_W = 96, MOST_COLS = 9, WIDTH = 398, TILE_GAP = 4,
 	-- So the strip stays on the screen: at most this many rows while the tiles can narrow to TILE_LEAST to fit more columns.
-	MOST_ROWS = 3, TILE_LEAST = 64,
+	MOST_ROWS = 3, TILE_LEAST = 56,
 	-- The least time between two reads after events.
 	STEP = 0.2,
 	-- The boss: three levels above; 5 skill a level, 0.04% a point, 5% miss and crit at an even skill (GearAvoid.lua, K).
@@ -88,7 +90,7 @@ local K = {
 	-- right before them, as in "inflicts 3 Nature damage to the attacker". A line that names a chance is a proc, not a damage shield.
 	THORN_ENDS = { "damage to the attacker", "damage to attackers", "damage to any creature that strikes", "damage to anyone that strikes",
 		"damage to any enemy that strikes" },
-	SCHOOL_WORDS = { Physical = true, Holy = true, Fire = true, Nature = true, Frost = true, Shadow = true, Arcane = true },
+	SCHOOL_WORDS = { Holy = true, Fire = true, Nature = true, Frost = true, Shadow = true, Arcane = true },
 	ENGLISH = { enUS = true, enGB = true },
 	MAX_LINES = 40,
 	-- The events after which a stat may differ: the player's, and the rest.
@@ -119,7 +121,8 @@ ns.CharacterStats = CharacterStats
 
 -- The frame and its parts, made once. broken: the game refused one of them, and nothing is tried again. waiting: the making waits for the end of a
 -- fight. dirty: an event came since the last read. last: the last plain read, kept while stats are withheld. thorns: the last thorns read.
--- items: the damage shield of each worn item link read (false for none). hearing: the frame hears the events.
+-- items: the damage shield of each worn item link read (false for none). buffThorns: the damage shields of the last plain read of the buffs.
+-- hearing: the frame hears the events.
 local state = { frame = nil, tiles = {}, broken = false, waiting = false, dirty = false, wait = 0, last = nil, thorns = nil, hearing = false,
 	items = {} }
 
@@ -285,7 +288,7 @@ local function Defenses(stats)
 	local shield = Answers(hasShield)
 	if shield and type(shield[1]) == "boolean" then
 		stats.shield = shield[1]
-	elseif (hasShield and shield == nil) or stats.blockChance == false then
+	elseif stats.blockChance == false or (hasShield and shield == nil and not Finite(stats.blockChance)) then
 		stats.shield, stats.shieldWithheld = false, true
 	else
 		stats.shield = Finite(stats.blockChance) and stats.blockChance > 0
@@ -323,10 +326,6 @@ local function ShieldIn(text)
 			if not low then
 				low, school = before:match("(%d+) (%a+) $")
 			end
-			if not low then
-				low = before:match("(%d+) $")
-				school = low and "Physical" or nil
-			end
 			school = school and (school:sub(1, 1):upper() .. school:sub(2):lower()) or nil
 			low, high = tonumber(low), tonumber(high)
 			if Finite(low) and low > 0 and school and K.SCHOOL_WORDS[school] then
@@ -362,14 +361,11 @@ local function SchoolName(school)
 end
 
 -- The damage shields on the player now: { total, sources = { { name, amount, school } } }, or nil while the game withholds the buffs.
--- True while the game shows the player's buffs to addon code: ns.AurasReadable (Tracking.lua), and without an answer, out of a fight, as
--- Absorbs.lua and Tracking.lua's T.Open ask it.
+-- False while the game says it hides the player's buffs from addon code (ns.AurasReadable, Tracking.lua); where it cannot say, the buffs are read,
+-- and a withheld list or buff keeps the last read all the same.
 local function BuffsOpen()
 	local ok, readable = pcall(ns.AurasReadable)
-	if ok and type(readable) == "boolean" then
-		return readable
-	end
-	return not InCombatLockdown()
+	return not (ok and readable == false)
 end
 
 -- True when a field of an aura is withheld: the call to read it raises or its value is secret.
@@ -390,45 +386,49 @@ local function Broken(slot)
 	return Finite(now) and Finite(most) and most > 0 and now <= 0
 end
 
-local function ReadThorns()
-	local found = { total = 0, sources = {} }
-	local english = English()
+-- The damage shields of the player's buffs now, as a list of sources, or nil while the game hides the buffs or withholds one of them.
+local function BuffThorns()
 	if not BuffsOpen() then
-		-- The game hides buffs: the last read stands for them.
 		return nil
 	end
-	local auras = Answers(Api("C_UnitAuras", "GetUnitAuras"), "player", "HELPFUL")
+	local call = Api("C_UnitAuras", "GetUnitAuras")
+	if not call then
+		return {}
+	end
+	local auras = Answers(call, "player", "HELPFUL")
 	local list = auras and auras[1]
-	if auras and type(list) == "table" then
-		local tip = Api("C_TooltipInfo", "GetUnitBuffByAuraInstanceID")
-		for _, aura in ipairs(list) do
-			if Hidden(aura, "spellId") then
-				-- One buff withheld: the total cannot be told, so the last read stands.
-				return nil
-			end
-			local id, name, points, instance = Field(aura, "spellId"), Field(aura, "name"), Field(aura, "points"), Field(aura, "auraInstanceID")
-			local known = Finite(id) and K.THORNS[id] or nil
-			local amount, school = nil, nil
-			if known then
-				local first = Field(points, 1)
-				amount = Finite(first) and first > 0 and first or known[1]
-				school = SchoolName(known[2])
-			elseif english and tip and Finite(instance) then
-				local data = Answers(tip, "player", instance)
-				if data then
-					amount, school = ThornLine(data[1], false)
-				end
-			end
-			if amount then
-				found.total = found.total + amount
-				found.sources[#found.sources + 1] = { name = Plain(name, "string") and name or "Buff", amount = amount, school = school }
+	if type(list) ~= "table" then
+		return nil
+	end
+	local english, tip, sources = English(), Api("C_TooltipInfo", "GetUnitBuffByAuraInstanceID"), {}
+	for _, aura in ipairs(list) do
+		if Hidden(aura, "spellId") then
+			return nil
+		end
+		local id, name, points, instance = Field(aura, "spellId"), Field(aura, "name"), Field(aura, "points"), Field(aura, "auraInstanceID")
+		local known = Finite(id) and K.THORNS[id] or nil
+		local amount, school = nil, nil
+		if known then
+			local first = Field(points, 1)
+			amount = Finite(first) and first > 0 and first or known[1]
+			school = SchoolName(known[2])
+		elseif english and tip and Finite(instance) then
+			local data = Answers(tip, "player", instance)
+			if data then
+				amount, school = ThornLine(data[1], false)
 			end
 		end
-	elseif type(Api("C_UnitAuras", "GetUnitAuras")) == "function" then
-		-- The game withholds the buffs: the last read stands for them.
-		return nil
+		if amount then
+			sources[#sources + 1] = { name = Plain(name, "string") and name or "Buff", amount = amount, school = school }
+		end
 	end
-	local itemTip = english and Api("C_TooltipInfo", "GetInventoryItem") or nil
+	return sources
+end
+
+-- The damage shields of worn gear, on an English client: the Equip lines of each worn item that is not broken, read once a link.
+local function ItemThorns()
+	local sources = {}
+	local itemTip = English() and Api("C_TooltipInfo", "GetInventoryItem") or nil
 	for slot = K.FIRST_SLOT, itemTip and K.LAST_SLOT or 0 do
 		local link = Answers(_G.GetInventoryItemLink, "player", slot)
 		link = link and Plain(link[1], "string") and link[1] or nil
@@ -436,7 +436,7 @@ local function ReadThorns()
 		if link and Broken(slot) then
 			kept = false
 		elseif link and kept == nil then
-			-- Read once a link; an item whose lines the client has not loaded yet is read again next time.
+			-- An item whose lines the client has not loaded yet is read again next time.
 			local data = Answers(itemTip, "player", slot)
 			local amount, school = nil, nil
 			if data then
@@ -448,8 +448,26 @@ local function ReadThorns()
 			end
 		end
 		if kept then
-			found.total = found.total + kept.amount
-			found.sources[#found.sources + 1] = { name = link:match("%[(.-)%]") or "Equipped item", amount = kept.amount, school = kept.school }
+			sources[#sources + 1] = { name = link:match("%[(.-)%]") or "Equipped item", amount = kept.amount, school = kept.school }
+		end
+	end
+	return sources
+end
+
+-- The damage shields on the player: { total, sources, old, unknown }. The gear is read every time; while the game hides the buffs, the buffs of
+-- the last read stand for them and old says so, and unknown says no buff was ever read.
+local function ReadThorns()
+	local buffs, old = BuffThorns(), false
+	if buffs then
+		state.buffThorns = buffs
+	else
+		buffs, old = state.buffThorns, true
+	end
+	local found = { total = 0, sources = {}, old = old, unknown = buffs == nil }
+	for _, list in ipairs({ buffs or {}, ItemThorns() }) do
+		for _, source in ipairs(list) do
+			found.total = found.total + source.amount
+			found.sources[#found.sources + 1] = source
 		end
 	end
 	return found
@@ -709,7 +727,10 @@ end }
 TILES.pen = { label = "Spell Piercing", read = function(stats)
 	local spell = stats.boss and stats.boss.inputs and stats.boss.inputs.spell
 	local pen = type(spell) == "table" and spell.pen or nil
-	if not Finite(pen) or pen <= 0 then
+	if type(spell) == "table" and pen == nil then
+		-- HitTableCalc gives nil for piercing the game withheld or refused (0 where the client has no call).
+		return Refused(false)
+	elseif not Finite(pen) or pen <= 0 then
 		return nil
 	end
 	return { value = Whole(pen), tip = { ("Spell Piercing %s: lowers the resistances of the enemies your spells hit."):format(Whole(pen)),
@@ -846,10 +867,10 @@ end }
 
 TILES.thorns = { label = "Thorns", read = function(stats)
 	local thorns = state.thorns
-	if thorns == nil then
-		return { value = "?", note = "buffs withheld", tip = { "The game withholds your buffs now." } }
+	if thorns == nil or (thorns.unknown and thorns.total <= 0) then
+		return { value = "?", note = "buffs hidden", tip = { "The game hides your buffs now." } }
 	end
-	if thorns.total <= 0 then
+	if thorns.total <= 0 and not thorns.old then
 		return { value = "0", colour = K.DIM, note = "none", tip = { "Damage an enemy takes each time it hits you.",
 			"None now: Thorns, Retribution Aura, a fire shield or gear with a damage shield would add it." } }
 	end
@@ -865,7 +886,13 @@ TILES.thorns = { label = "Thorns", read = function(stats)
 	end
 	tip[#tip + 1] = "A damage shield never crits, and the enemy's resistance to its school can lower it."
 	local note = count == 1 and ("%s, per hit"):format(only) or ("per hit, %d schools"):format(count)
-	return { value = Whole(thorns.total), colour = K.GOOD, note = note, tip = tip }
+	if thorns.old then
+		-- The game hides the buffs now: they are as last seen, the gear as it is.
+		tip[#tip + 1] = thorns.unknown and "The game hides your buffs now: only your gear is counted."
+			or "The game hides your buffs now: they are counted as last seen, your gear as it is."
+		note = "buffs as last seen"
+	end
+	return { value = Whole(thorns.total), colour = thorns.old and K.WHITE or K.GOOD, note = note, tip = tip }
 end }
 
 -- The ids of the tiles to show, in order, for a read.
@@ -1059,10 +1086,7 @@ local function Update()
 			-- The level could not be read: what shows is the last read, said to be from before.
 			old = true
 		end
-		local thorns = ReadThorns()
-		if thorns then
-			state.thorns = thorns
-		end
+		state.thorns = ReadThorns()
 	end
 	if state.last then
 		Draw(state.last, old)
@@ -1250,6 +1274,7 @@ ns.AddStatus(KEY, function()
 		return {}
 	end
 	local thorns, names = state.thorns, {}
+	thorns = thorns and not (thorns.unknown and thorns.total <= 0) and thorns or nil
 	for _, tile in ipairs(state.tiles) do
 		local ok, shown = pcall(tile.IsShown, tile)
 		if ok and shown == true and Plain(tile.label, "string") then
