@@ -1428,6 +1428,16 @@ local function BuildModel()
 					entry.switchItem = item
 				end
 			end
+			-- A page of its own in the sidebar that holds rows of another module (an owner and no parent) is part of that module: it shows the
+			-- module's switch in its header and its Off chip (the Flat UI page has none), and is not a module of its own on Home.
+			local from = page.owner or page.switch
+			if not page.parent and not entry.switchItem and from and from ~= page.key then
+				entry.partOf = from
+				local switch = from ~= "general" and ns.Def(from .. ".enabled") or nil
+				if switch and switch.kind == "bool" then
+					entry.switchItem = switch
+				end
+			end
 			model.pages[#model.pages + 1] = entry
 			model.byKey[page.key] = entry
 		end

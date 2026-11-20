@@ -153,7 +153,7 @@ local K = {
 	ALL = { "state", "stats", "talents", "gear", "spells", "role" },
 	GEAR = { "links", "enchants", "temp", "weapons", "shield", "shieldBlock", "ammo", "ammoKind", "twoHand", "dual", "rockbiter" },
 	SKIP = { time = true, old = true },
-	-- The rows of the Spells and gear tab (design 4.9), the hit table's hit cap row its Hit cap against a boss can follow, and Your role of
+	-- The rows of the Spell tooltips and Gear comparison pages (design 4.9), the hit table's hit cap row its Hit cap against a boss can follow, and Your role of
 	-- nameplate threat, which ns.PlayerRole reads: a change of any of them changes M.Version, and of the last the role too.
 	ROWS = { "chat.spellPower", "chat.spellStats", "chat.spellLowRank", "chat.spellThreat", "chat.spellWhen", "chat.spellTotal", "chat.spellRates",
 		"chat.tipDetail", "chat.gear", "chat.gearWhen", "chat.gearMost", "chat.gearAgainst", "chat.gearFacing", "chat.gearRules", "chat.gearTotals",

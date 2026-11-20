@@ -1,7 +1,7 @@
 local _, ns = ...
 
 -- The zone name and the talking head: two of the game's messages on the screen that the player can hide. The rows are Hide the zone name, Hide
--- the subzone name and Hide the talking head on the Tracker, loot and alerts tab (hud.zoneTitle, hud.subzoneTitle and hud.talkingHead, each off
+-- the subzone name and Hide the talking head on the Messages and timers page (hud.zoneTitle, hud.subzoneTitle and hud.talkingHead, each off
 -- by default), part "zone name and talking head" of the module, which stops alone after a few failures and then gives everything back. Not a
 -- module: Hud.lua calls ns.ScreenTextRefresh in every refresh of the page.
 -- The zone name fades in near the top of the screen as the player enters a zone or a part of one (ZoneText_OnEvent, Blizzard_FrameXML/Mainline/
@@ -10,7 +10,7 @@ local _, ns = ...
 -- (SubZoneTextString and PVPArenaTextString, :38-49). The game shows and hides both frames and sets their opacity on every frame while they
 -- fade (FadingFrame_Show and FadingFrame_OnUpdate, Blizzard_FrameXMLUtil/FadingFrame.lua:22-49); of the font strings it sets only the text, the
 -- colour and the anchors (ZoneText.lua:7-69, 83-121 and 173-177). So a row that is on makes its two font strings transparent (SetAlpha 0) and
--- leaves the frames to the game, as Unit frames does with the player's hit number (UnitParts.lua) and Minimap and buffs with the minimap's zone
+-- leaves the frames to the game, as Unit frames does with the player's hit number (UnitParts.lua) and Minimap and HUD with the minimap's zone
 -- name (Hud.lua): the opacity each string had is read before the first write and given back when the row, the page or the part goes off. The
 -- frames take no mouse, so a name that is hidden is in nobody's way. A string this client lacks is passed over, and a change of opacity the
 -- game refuses gives back the strings of that row, which then shows as usual until /reload, and /flatui status says so.

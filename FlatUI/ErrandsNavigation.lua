@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- In-game navigation (errands.navigation on the Levelling tab of Errands, under Waypoints, on by default). The game's variable
+-- In-game navigation (errands.navigation on the Quests and levelling tab of Errands, under Waypoints, on by default). The game's variable
 -- showInGameNavigation turns on its in-game navigation: a marker over the quest or map pin the game tracks (super-tracks), with its distance
 -- under it, that waits at the edge of the screen with an arrow while the place is out of view. The marker is the game's own SuperTrackedFrame
 -- (Blizzard_QuestNavigation/SuperTrackedFrame.lua and .xml; the .toc has no AllowLoadGameType or LoadOnDemand line), which follows the frame the

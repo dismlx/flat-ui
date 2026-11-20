@@ -137,7 +137,7 @@ function S.Migrate(store)
 	end
 end
 
--- Reads the settings of the Setup section of the Flat UI page, held per account (Config.lua names these functions). A choice that no longer
+-- Reads the settings of the Setup section of the Options and setup tab of the Flat UI page, held per account (Config.lua names these functions). A choice that no longer
 -- exists, such as a profile that was deleted, reads as nothing, so as the default.
 function ns.SetupGet(def)
 	local db = ns.Account()

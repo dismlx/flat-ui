@@ -6,7 +6,7 @@ local _, ns = ...
 -- my screen, Ready-made looks and Keep this look), tiles (a drawn card of each ready-made look: a click puts it in use) and after (the profile in use,
 -- what needs a reload, then Reload, Change it, Move frames, Options and Done). The tiles, the profile in use and the flag come from Setup.lua
 -- (S.Presets, S.UseReady, S.Flag), the drawings from SetupDraw.lua (D.PaintIn with the frames build's mock-player, D.Card). When the screen shows and
--- what Keep this look keeps are settings in the Setup section of the Flat UI page (Config.lua). It hides when a fight starts, and no look is put in
+-- what Keep this look keeps are settings in the Setup section of the Options and setup tab of the Flat UI page (Config.lua). It hides when a fight starts, and no look is put in
 -- use in one.
 
 local kit = ns.PanelKit

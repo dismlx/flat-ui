@@ -62,12 +62,14 @@ function Share.NewName(preview)
 	return "Imported"
 end
 
--- The module keys and names the export can be limited to: the pages that are not under another page.
+-- The module keys and names the export can be limited to: the pages that are not under another page and save under their own key, by the name of
+-- the module (Minimap and HUD for the Minimap page). A page of the sidebar with an owner (Buffs and debuffs, Gear comparison) saves under its
+-- owner's prefix, which its owner's module already exports.
 function Share.Modules()
 	local list = {}
 	for _, page in ipairs(type(ns.PAGES) == "table" and ns.PAGES or {}) do
-		if not page.parent and type(page.key) == "string" and type(page.label) == "string" then
-			list[#list + 1] = { key = page.key, label = page.label }
+		if not page.parent and not page.owner and type(page.key) == "string" and type(page.label) == "string" then
+			list[#list + 1] = { key = page.key, label = type(page.moduleLabel) == "string" and page.moduleLabel or page.label }
 		end
 	end
 	return list

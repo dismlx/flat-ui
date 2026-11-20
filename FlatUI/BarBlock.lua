@@ -705,7 +705,7 @@ local function Replan()
 end
 
 -- The left, bottom, width and height of block 1 in the units of UIParent, and the top of the bars the page puts over it. Nothing while the page
--- is off or the block has no row. The Bar blocks page hangs its bars from it.
+-- is off or the block has no row. The Class and item bars page hangs its bars from it.
 function ns.MainBlock()
 	local plan = blocks[1].last
 	if ns.Enabled(KEY) and plan and plan.width > 0 and plan.height > 0 then

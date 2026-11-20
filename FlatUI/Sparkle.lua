@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Quest item sparkle and Sparkle strength (general.questSparkle and general.sparkleStrength on the Flat UI page, under World). On WoW: Forever a
+-- Quest item sparkle and Sparkle strength (general.questSparkle and general.sparkleStrength on the World and cursor page, under World). On WoW: Forever a
 -- quest item in the world, and as players see a gathering node, gets the game's loot effect, a sparkle, while the game's variable
 -- outlineModeShowLootEffectWhenDisabled is 1. The game's options have no row for it on Forever: Blizzard_SettingsDefinitions_Frame/Camelot/
 -- InterfaceOverrides.lua:5-6 leaves RegisterOutlineSettings empty, so only /console sets it. The variable and its behaviour are from players of

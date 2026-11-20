@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- The Bar blocks page names up to three of the game's own bars (Class spells, Buffs to apply, Consumables) and hangs each from a side of
+-- The Class and item bars page names up to three of the game's own bars (Class spells, Buffs to apply, Consumables) and hangs each from a side of
 -- block 1 of the Bar block page (the Action bar block), or from the bar picked on the page when that block has no bar or the page is off. The
 -- game does the casting, the keys, the counts and the cooldowns of these bars; this file only names the bar's box, works out where the bar goes
 -- and gives Movers the spot (ns.MoverHold), so it never calls a method of a Blizzard frame. It reads rectangles and sizes only. A bar is held by one owner: the Bar block page comes first,
@@ -355,7 +355,7 @@ local function Status()
 		return lines
 	end
 	if ns.HandsOff() then
-		lines[#lines + 1] = "Bar blocks: not applied while Leave the game's action bars alone is on."
+		lines[#lines + 1] = "Class and item bars: not applied while Leave the game's action bars alone is on."
 		return lines
 	end
 	local plan = Plan()
@@ -367,13 +367,13 @@ local function Status()
 	end
 	local movers, systems, keep = ns.MoverHoldGates()
 	if not movers then
-		lines[#lines + 1] = "Bar blocks: Movers are off, so the bars are not placed."
+		lines[#lines + 1] = "Class and item bars: Movers are off, so the bars are not placed."
 	end
 	if not systems then
-		lines[#lines + 1] = "Bar blocks: Move the game's own frames is off, so the bars are not placed."
+		lines[#lines + 1] = "Class and item bars: Move the game's own frames is off, so the bars are not placed."
 	end
 	if not keep then
-		lines[#lines + 1] = "Bar blocks: Keep moved frames in place is off, so the game puts the bars back."
+		lines[#lines + 1] = "Class and item bars: Keep moved frames in place is off, so the game puts the bars back."
 	end
 	for _, item in ipairs(plan.list) do
 		local info = ns.MoverHeld(item.frame)
@@ -406,7 +406,7 @@ local function List()
 end
 
 ns.Register(KEY, {
-	label = "Bar blocks",
+	label = "Class and item bars",
 	counted = false,
 	Start = Refresh,
 	Refresh = Refresh,

@@ -3,7 +3,7 @@ local _, ns = ...
 -- Errands: small chores the game leaves to the player, done when the game asks for them. Selling grey items and repairing at a merchant
 -- (ErrandsMerchant.lua), looting every slot at once and making room in full bags (ErrandsLoot.lua), training every spell a trainer offers
 -- (ErrandsTrainer.lua), the release guard, summons, resurrections and the DELETE word of the game's popups (ErrandsPopups.lua), and group
--- invites, duels and the last mail recipient (ErrandsSocial.lua). On the Levelling tab: accepting and handing in quests and picking gossip
+-- invites, duels and the last mail recipient (ErrandsSocial.lua). On the Quests and levelling tab: accepting and handing in quests and picking gossip
 -- options (ErrandsQuests.lua), new spell ranks on the bars and the lines about learned spells (ErrandsRanks.lua), and the reputation you
 -- gain on Flat UI's bar, a reminder of talent points and the /way command (ErrandsLevelling.lua), and the game's in-game navigation
 -- (ErrandsNavigation.lua). Each file is a part of this module: it adds its events with ns.AddEvent and names itself here with Errands.Part,

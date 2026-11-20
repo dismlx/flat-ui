@@ -832,7 +832,7 @@ local function Way(msg)
 		Tell("Errands is off. Tick Run errands on the Errands page.")
 		return
 	elseif E.Opt("wayCommand") ~= true then
-		Tell("Add the /way command is off on the Levelling tab of the Errands page.")
+		Tell("Add the /way command is off on the Quests and levelling tab of the Errands page.")
 		return
 	elseif not Pins() then
 		Tell("this client has no map pins, so there is no waypoint to set.")

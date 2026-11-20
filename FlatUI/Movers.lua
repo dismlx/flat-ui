@@ -893,7 +893,7 @@ ns.CleanSpot = Clean
 local function Describe(name, entry)
 	local listed = BY_NAME[name]
 	if listed then
-		-- A bar picked on the Bar blocks page has the name of its block.
+		-- A bar picked on the Class and item bars page has the name of its block.
 		local own = ns.BlockLabel and ns.BlockLabel(name)
 		if own and own ~= listed.label then
 			local copy = {}

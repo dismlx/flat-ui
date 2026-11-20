@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- The Home page of the options window: the profile in use, the accent and density, the last changes of the session with Undo, the 24 modules
+-- The Home page of the options window: the profile in use, the accent and density, the last changes of the session with Undo, the modules
 -- with their switches, and the changes that need a reload. Also the record of the changes made in the window, which Panel.lua feeds.
 
 local Home = {}
@@ -132,6 +132,8 @@ function Home.Counts(model)
 		local entry = model.byKey[page.key]
 		if entry then
 			local top = Nav.Top(model, entry)
+			-- A page of the sidebar that is part of another module counts on that module's tile.
+			top = top.partOf and model.byKey[top.partOf] or top
 			for _, item in ipairs(page) do
 				if item.path and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowUnsaved(item) and ns.Get(item.path) ~= item.default then
 					counts[top] = (counts[top] or 0) + 1
@@ -142,12 +144,15 @@ function Home.Counts(model)
 	return counts
 end
 
--- The modules as the sidebar lists them: the entries of the groups, in order.
+-- The modules as the sidebar lists them: the entries of the groups, in order. A page of the sidebar that holds part of another module (Buffs
+-- and debuffs of Minimap and HUD) is no module of its own: it has its module's switch, and the module has one tile.
 function Home.Modules(model)
 	local list = {}
 	for _, group in ipairs(Nav.Groups(model)) do
 		for _, entry in ipairs(group.entries) do
-			list[#list + 1] = entry
+			if not entry.partOf then
+				list[#list + 1] = entry
+			end
 		end
 	end
 	return list
@@ -444,7 +449,7 @@ function Home.Build(host)
 		tile.name:SetJustifyV("TOP")
 		tile.name:SetHeight(30)
 		tile.name:SetPoint("TOPLEFT", frame, "TOPLEFT", 40, -10)
-		tile.name:SetText(entry.label)
+		tile.name:SetText(entry.page and entry.page.moduleLabel or entry.label)
 		tile.state = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", tileW - 40 - 52))
 		tile.state:SetPoint("TOPLEFT", frame, "TOPLEFT", 40, -42)
 		if entry.switchItem then

@@ -1184,7 +1184,7 @@ local function FollowData()
 			if type(ns.GearTipLines) == "function" then
 				ns.Each(KEY, ns.GearTipLines, tooltip, data)
 			end
-			-- HitTableTip.lua: the hit table against an enemy, on its tooltip, as its row on the Hit table tab asks.
+			-- HitTableTip.lua: the hit table against an enemy, on its tooltip, as its row on the Hit table page asks.
 			if type(ns.HitTableTipLines) == "function" then
 				ns.Each(KEY, ns.HitTableTipLines, tooltip, data)
 			end

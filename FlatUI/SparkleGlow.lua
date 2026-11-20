@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
--- Glow on the nearest object (general.sparkleGlow on the Flat UI page, under World; on, with Quest item sparkle): a strong golden sparkle of Flat
+-- Glow on the nearest object (general.sparkleGlow on the World and cursor page, under World; on, with Quest item sparkle): a strong golden sparkle of Flat
 -- UI's own on the object the game's Interact Key would use, while its cursor marks a herb, a vein, a quest object or loot. The game tracks that
 -- object as the unit softinteract and, while it gives it a nameplate, puts the plate over the object; its own nameplate code finds that plate the
 -- same way, by UnitIsUnit with softinteract (Blizzard_NamePlates/Blizzard_NamePlates.lua:187-219). The game gives a game object that plate only

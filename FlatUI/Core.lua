@@ -38,7 +38,7 @@ local ADDON_NAME, ns = ...
 -- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
 -- still that name, and the name alone again when the row goes off.
--- Minimap and buffs gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
+-- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
 -- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from
 -- the minimap with ClearAllPoints and SetPoint, out of combat if the game protects it, no further out than the game's place, with a frame of its
@@ -87,11 +87,11 @@ local ADDON_NAME, ns = ...
 -- opens every bag is on, it gives each key the player has for Toggle Backpack an override binding to Open All Bags (SetOverrideBinding, on a frame
 -- of its own, out of combat), so B opens the reagent bag too; ClearOverrideBindings takes them away when the row goes off, the player's bindings
 -- are never written, and the overrides end with the session.
--- Maximum camera distance, on the Flat UI page, writes the game's cameraDistanceMaxZoomFactor only when the player ticks or unticks it, out of
+-- Maximum camera distance, on the World and cursor page, writes the game's cameraDistanceMaxZoomFactor only when the player ticks or unticks it, out of
 -- combat: 2.6 when ticked, its text before that kept in FlatUIDB.cameraGame, and that text again (or the client's default) when unticked while
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.
 -- Its cast and global cooldown progress are Cooldown frames of its own fed the game's duration objects.
--- Quest item sparkle, on the Flat UI page, writes the game's outlineModeShowLootEffectWhenDisabled (1), and Sparkle strength raises
+-- Quest item sparkle, on the World and cursor page, writes the game's outlineModeShowLootEffectWhenDisabled (1), and Sparkle strength raises
 -- graphicsParticleDensity, raidGraphicsParticleDensity, graphicsSpellDensity and raidGraphicsSpellDensity to its level, never below the game's own,
 -- out of combat: at login, when a row or the profile changes, and a second after the game writes one of them or its graphics quality. The text
 -- each had before is kept in FlatUIDB (sparkleGame, sparkleParticleGame, sparkleRaidParticleGame, sparkleSpellGame, sparkleRaidSpellGame) and
@@ -99,7 +99,7 @@ local ADDON_NAME, ns = ...
 -- the text Flat UI wrote, and a value written since, also while Flat UI did not run, is the game's own. Glow on the nearest object is a frame of its
 -- own that takes no mouse, put on the game's nameplate of the object the Interact Key would use (its soft-interact game object), only while the
 -- game shows that plate, and parented, levelled and anchored there out of combat only; it writes no game setting.
--- In-game navigation, on the Levelling tab of Errands, writes the game's showInGameNavigation (1) while the row and Errands are on, out of combat:
+-- In-game navigation, on the Quests and levelling tab of Errands, writes the game's showInGameNavigation (1) while the row and Errands are on, out of combat:
 -- at every login whatever the switch of Errands, when the row, the switch or the profile changes, and a second after the game or the player
 -- writes it; a value already on is left as it is, and a 0 written another way after the variable was on while the row asked for it (/console,
 -- another addon or the game) is the player's own, kept in FlatUIDB.navigationOn and navigationOff, and given no 1 again until the row changes.
@@ -136,7 +136,7 @@ local ADDON_NAME, ns = ...
 -- the last recipient in the To box of the mail window (SetText), and lays frames of its own over the loot window, the trainer window and the
 -- Release Spirit button of the death popup, a bar beside the game's split box (StackSplitFrame) and a Sell next 12 button under the merchant
 -- window.
--- On its Levelling tab it accepts and hands in quests and picks gossip options with the game's calls for them (AcceptQuest, CompleteQuest,
+-- On its Quests and levelling tab it accepts and hands in quests and picks gossip options with the game's calls for them (AcceptQuest, CompleteQuest,
 -- GetQuestReward, the select calls of C_GossipInfo and of the quest greeting), and asks the game to load an offered quest
 -- (C_QuestLog.RequestLoadQuestByID); it touches no frame of the quest or gossip windows. It puts a higher rank of a spell on the action
 -- slots that hold a lower one (C_Spell.PickupSpell, PlaceAction, ClearCursor) only inside the click of its own Uprank and reload button,
@@ -218,7 +218,7 @@ local ADDON_NAME, ns = ...
 -- LibDataBroker, it listens to that library and calls the functions of the feeds a slot shows (OnEnter, OnLeave, OnTooltipShow, OnClick).
 -- Its Equipment set slot opens a menu of its own whose lines call C_EquipmentSet.UseEquipmentSet, never in a fight.
 -- Threat list (on by default) is a window of its own on UIParent; it only reads threat (UnitDetailedThreatSituation) and changes nothing.
--- Hit table (Minimap and buffs; on by default for a tank or a damage dealer and off for a healer, by ns.PlayerRole below) is a frame of its own on
+-- Hit table (Minimap and HUD; on by default for a tank or a damage dealer and off for a healer, by ns.PlayerRole below) is a frame of its own on
 -- UIParent that takes no mouse, hung out of combat by SetPoint from a second frame of its own whose corners are set on the player frame's portrait
 -- (or Flat UI's picture or body, else the health bar, else PlayerFrame) and on PlayerBottomManagedFrameContainer, or on PlayerCastingBarFrame while
 -- Edit Mode locks the cast bar to the player frame (its field attachedToPlayerFrame, read only), else on PlayerFrame; it follows
@@ -283,7 +283,7 @@ local ADDON_NAME, ns = ...
 -- Cooldown icons hangs a row from the game's PlayerFrame or TargetFrame by SetPoint on a frame of its own, out of combat, as Your buffs does, and
 -- writes nothing on them; its glows and buff time are frames of its own, and it hears the player's UNIT_AURA on a frame of its own while Buff time on
 -- icons is on.
--- With Clear the damage meter on (off by default), Minimap and buffs calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
+-- With Clear the damage meter on (off by default), Minimap and HUD calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
 -- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
 -- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.
 -- The combat alerts of Combat text (No target, off by default, and +Combat and -Combat, on by default) are font strings on a frame of its own;
@@ -355,7 +355,7 @@ local ADDON_NAME, ns = ...
 -- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
 -- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
 -- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
--- Minimap and buffs, with Hide error messages on (on by default), takes the game's red error messages from UIErrorsFrame: it reads with
+-- Minimap and HUD, with Hide error messages on (on by default), takes the game's red error messages from UIErrorsFrame: it reads with
 -- IsEventRegistered that the frame listens, stops it hearing UI_ERROR_MESSAGE with UnregisterEvent and hears that event on a frame of its own,
 -- puts each message of a kind it does not hide back in the frame with AddMessage (ResetMessageFadeByID for a repeat that still shows) with the
 -- game's sound for it (PlaySound, C_Sound.PlayVocalErrorSound), and gives the event back with RegisterEvent when the row, its page or the module goes off. It follows the game's two commands for
@@ -406,7 +406,7 @@ local READERS = {
 	-- The windows of Bags and the Gear comparison window of Chat and tooltips (GearWindow.lua) take the look of the Windows page: Window opacity,
 	-- Button and slot colour, Highlight colour and Icon crop. The chat input box takes the Highlight colour as well (Border while typing). The
 	-- Compare gear button on the Character window (GearButton.lua) takes it each time its driver starts, as that window opens and as Chat and
-	-- tooltips refresh. The rows of the Spells and gear tab are read by Chat and tooltips alone, whose refresh they bring, and Button on the
+	-- tooltips refresh. The rows of the Spell tooltips and Gear comparison pages are read by Chat and tooltips alone, whose refresh they bring, and Button on the
 	-- Character window by its own call (Config.lua, changed), so none of them is here.
 	["windows.accent"] = { "chat", "bags" }, ["windows.panel"] = { "chat", "bags" }, ["windows.opacity"] = { "chat", "bags" },
 	["windows.crop"] = { "chat", "bags" },
@@ -424,7 +424,7 @@ local READERS = {
 	-- The hit table at For tanks and damage dealers follows the player's role, which Your role of nameplate threat can make a tank (ns.PlayerRole),
 	-- and so do the spells the gear comparison of Chat and tooltips counts by default and where it counts the player standing (GearLines.lua).
 	["nameplates.threatRole"] = { "hud", "chat" },
-	-- The gear comparison counts the hit cap of the hit table at Hit cap against a boss: As on the Hit table tab (Config.lua, chat.gearRules).
+	-- The gear comparison counts the hit cap of the hit table at Hit cap against a boss: As on the Hit table page (Config.lua, chat.gearRules).
 	["hud.hitTableRules"] = "chat",
 	-- The name row, the fade, the trough and the rounded lines of unit frames follow them.
 	["unitframes.lookOwn"] = "unitframes", ["unitframes.lookBorder"] = "unitframes", ["unitframes.lookBack"] = "unitframes",

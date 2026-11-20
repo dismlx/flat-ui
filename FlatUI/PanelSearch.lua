@@ -70,11 +70,17 @@ function Search.Sort(groups)
 	return groups
 end
 
+-- The name a page is found by: its label, and the name of its module where that differs (Chat and tooltips finds the Chat page).
+local function Name(entry)
+	local module = entry.page and entry.page.moduleLabel
+	return (type(module) == "string" and (entry.label .. " " .. module) or entry.label):lower()
+end
+
 -- The pages whose names hold every word, in the order of the model: Home, the pages, Profiles.
 function Search.Pages(words, model)
 	local list = {}
 	local function Add(entry)
-		if entry and HasAll(entry.label:lower(), words) then
+		if entry and HasAll(Name(entry), words) then
 			list[#list + 1] = entry
 		end
 	end
@@ -90,7 +96,7 @@ end
 function Search.Closest(words, model)
 	local scored = {}
 	local function Add(entry, at)
-		local name, score = entry.label:lower(), 0
+		local name, score = Name(entry), 0
 		for _, word in ipairs(words) do
 			if #word >= 3 and name:find(word:sub(1, 3), 1, true) then
 				score = score + 1

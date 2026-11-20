@@ -52,7 +52,7 @@ local _, ns = ...
 -- gives it, and every frame under it that it fades, back the alpha it had (ns.FadeLetGo), and forgets them, so a frame comes back at its own alpha
 -- and Fading takes it up from there. Hidden wins over faded.
 -- The frames are the game's HUD frames that /flatui move moves (Movers.lua's list), but for the chat, the loot window and the tooltip's container,
--- and the parts of the minimap that Minimap and buffs knows: MinimapCluster.ZoneTextButton, .Tracking and .IndicatorFrame, GameTimeFrame,
+-- and the parts of the minimap that Minimap and HUD knows: MinimapCluster.ZoneTextButton, .Tracking and .IndicatorFrame, GameTimeFrame,
 -- TimeManagerClockButton, AddonCompartmentFrame, and the zoom buttons Minimap.ZoomIn and .ZoomOut (Blizzard_Minimap/Mainline/Minimap.xml:24-46,
 -- 71-100). Windows such as the Character window open only when asked and are left out, and so are Flat UI's own frames, which have their own
 -- switches. A frame that hangs from a held one goes with it: the pet frame, the totems and the class resource bars hang from the player frame

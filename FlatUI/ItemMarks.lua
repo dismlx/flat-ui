@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Bag marks: three marks of this addon's own on the item slots of the bags and the bank, each its own row in the Bags section of Item slots,
+-- Bag marks: three marks of this addon's own on the item slots of the bags and the bank, each its own row in The game's bag windows section of Item slots,
 -- all on by default. Not a module: Items.lua dresses a bag or bank slot and calls ItemMarks.Dress for it, in a part of its own (PART).
 -- Mark bind on equip items: BoE at the top left of an item that binds when equipped and is not bound yet. The binding is the 14th answer of
 -- C_Item.GetItemInfo (ItemDocumentation.lua:626-650; Enum.ItemBind.OnEquip is 2, ItemConstantsDocumentation.lua:249-266), kept per item ID as it

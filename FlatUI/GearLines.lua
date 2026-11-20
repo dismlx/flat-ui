@@ -102,7 +102,7 @@ local _, ns = ...
 -- the defaults it follows (the role, the form). The names are the game's (C_Spell.GetSpellName), with the rank of a kept line
 -- (C_Spell.GetSpellSubtext, as Cooldowns.lua:2271-2284 tells ranks apart), and a name typed after /flatui gear add is found in the data, else by
 -- C_Spell.GetSpellInfo (as Cooldowns.lua:362-375 resolves one).
--- The rows (Config.lua, the Spells and gear tab; the panel prints a pick's message, Panel.lua:762-791): Add a spell lists the spell book walked as
+-- The rows (Config.lua, the Gear comparison page; the panel prints a pick's message, Panel.lua:762-791): Add a spell lists the spell book walked as
 -- Cooldowns' Add a spell walks it (ns.SpellBookList, Cooldowns.lua:2287-2336), only the spells Flat UI can work out (an entry with cmp) at the
 -- highest rank known, with Attack, Auto Shot and Shoot added when the player has them; Remove a spell lists the lines, "(weight 2)" after one whose
 -- weight is not 1 and "(not known)" after one the character lost; Add the spells of a bar takes each entry once with the rank on the bar
@@ -2345,7 +2345,7 @@ local function AgainstStatus()
 	end
 	local from = ""
 	if rules == "hittable" then
-		rules, from = ns.Get("hud.hitTableRules"), " (as on the Hit table tab)"
+		rules, from = ns.Get("hud.hitTableRules"), " (as on the Hit table page)"
 	end
 	return ("Gear comparison: against a boss three levels above you, %s, with a hit cap of %s%s."):format(where, T.CAPS[rules] or T.CAPS.classic, from)
 end

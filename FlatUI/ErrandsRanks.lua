@@ -423,7 +423,7 @@ local function Answer(why)
 		if not ns.Enabled("errands") then
 			return "Flat UI: Errands is off. Tick Run errands on the Errands page."
 		end
-		return "Flat UI: Put new ranks on your bars is off on the Levelling tab of the Errands page."
+		return "Flat UI: Put new ranks on your bars is off on the Quests and levelling tab of the Errands page."
 	end
 	return ANSWER[why]
 end

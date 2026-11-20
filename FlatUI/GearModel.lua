@@ -17,7 +17,7 @@ local _, ns = ...
 -- of no ranged weapon while the ranged slot holds none (GetInventoryItemID, C.LineOf: a paladin's libram is no ranged weapon,
 -- HitTableCalc.lua:509-523). With no read since this file registered, a read is asked for (M.Mark, M.Stats), and with still none C.Inputs reads them
 -- here, only while the game gives stats plain (C_Secrets.ShouldUnitStatsBeSecret, SecretPredicateAPIDocumentation.lua:388-396). Against, Where you
--- stand and Hit cap against a boss come from the rows of the Spells and gear tab (chat.gearAgainst, chat.gearFacing, chat.gearRules, and the hit
+-- stand and Hit cap against a boss come from the rows of the Gear comparison page (chat.gearAgainst, chat.gearFacing, chat.gearRules, and the hit
 -- table's hud.hitTableRules) and the player's level (S.state, else UnitLevel), and the target of the table is the one those rows name, worked out
 -- again each time (C.Target), so a row changed since the read counts at once.
 -- An item: its kind (C_Item.GetItemInfoInstant, ItemDocumentation.lua:659-679), its name and quality (C_Item.GetItemInfo, :626-657, which gives
@@ -1641,7 +1641,7 @@ local function Role(state)
 end
 
 -- Against, Where you stand, the hit cap rule and the low rank rule the comparison counts: from opts, else the rows of the tab, the choices of the rows
--- worked out (auto: a boss at level 60, else an enemy of the player's level; role: in front for a tank; As on the Hit table tab: hud.hitTableRules).
+-- worked out (auto: a boss at level 60, else an enemy of the player's level; role: in front for a tank; As on the Hit table page: hud.hitTableRules).
 local function Spec(opts, state)
 	local level = Num(state.level) or Num((Call(UnitLevel, "player"))) or K.MAX_LEVEL
 	local against = opts.against or ns.Get("chat.gearAgainst") or "auto"

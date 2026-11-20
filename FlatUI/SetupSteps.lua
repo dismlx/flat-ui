@@ -603,7 +603,7 @@ ns.SETUP_STEPS = {
 		{ "swing.textColour", "r", "mock-swing" },
 		{ "swing.rangeTextColour", "r", "mock-swing" },
 	} },
-	{ id = "hud-minimap", area = "Minimap and buffs", title = "Minimap", draw = "mock-minimap", built = true, rows = {
+	{ id = "hud-minimap", area = "HUD", title = "Minimap", draw = "mock-minimap", built = true, rows = {
 		{ "hud.enabled", "c", "mock-minimap" },
 		{ "hud.lookOwn", "o", "mock-minimap" },
 		{ "hud.lookBorder", "r", "mock-minimap" },
@@ -641,7 +641,7 @@ ns.SETUP_STEPS = {
 		{ "hud.mapClockTime", "r", "behaviour", "Chooses whether the time by the minimap is your local time or the realm's." },
 		{ "hud.mapClockHours", "r", "behaviour", "Chooses whether the time by the minimap shows 24 hours or 12." },
 	} },
-	{ id = "hud-buffs", area = "Minimap and buffs", title = "Buffs and debuffs", draw = "mock-buff-row", built = true, rows = {
+	{ id = "hud-buffs", area = "HUD", title = "Buffs and debuffs", draw = "mock-buff-row", built = true, rows = {
 		{ "hud.auras", "c", "mock-buff-row" },
 		{ "hud.crop", "r", "mock-buff-row" },
 		{ "hud.auraTypes", "c", "mock-buff-row" },
@@ -655,7 +655,7 @@ ns.SETUP_STEPS = {
 		{ "hud.durationColour", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem is white, or gold as the game has it." },
 		{ "hud.countSize", "c", "mock-buff-row" },
 	} },
-	{ id = "hud-bars", area = "Minimap and buffs", title = "Experience bar, bags and micro menu", draw = "mock-xp-micro", built = true, rows = {
+	{ id = "hud-bars", area = "HUD", title = "Experience and menu bars", draw = "mock-xp-micro", built = true, rows = {
 		{ "hud.bags", "c", "mock-xp-micro" },
 		{ "hud.xpOwn", "c", "mock-xp-micro" },
 		{ "hud.xpWidth", "c", "mock-xp-micro" },
@@ -699,7 +699,7 @@ ns.SETUP_STEPS = {
 		{ "general.cursorRingGcd", "o", "behaviour", "Shows the global cooldown just inside the ring around the mouse pointer." },
 		{ "general.cursorRingGcdColour", "o", "behaviour", "Sets the colour of the global cooldown inside the ring." },
 	} },
-	{ id = "hud-tracker", area = "Minimap and buffs", title = "Objectives, loot and alerts", draw = "mock-objective", built = true, rows = {
+	{ id = "hud-tracker", area = "HUD", title = "Quests, loot and messages", draw = "mock-objective", built = true, rows = {
 		{ "hud.trackerHeaders", "c", "mock-objective" },
 		{ "hud.trackerCount", "o", "behaviour", "Shows how many quests your log holds, as 12/20, on the Quests heading." },
 		{ "hud.trackerBars", "c", "mock-objective" },
@@ -732,21 +732,6 @@ ns.SETUP_STEPS = {
 		{ "hud.meterClear", "o", "behaviour", "Clears the damage meter as you enter a dungeon or raid, or asks first; not again for the same one within an hour." },
 		{ "hud.meterClearBoss", "r", "behaviour", "Also clears the damage meter as each raid boss fight starts, without asking." },
 		{ "hud.zoneBars", "o", "mock-xp-micro" },
-	} },
-	-- The hit table hangs under the player frame, so its step shows the player's frame (mock-player, SetupDrawUnits.lua); every row describes itself.
-	{ id = "hud-hittable", area = "Minimap and buffs", title = "Hit table", draw = "mock-player", built = true, rows = {
-		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target, and the share of a spell's damage resisted with your Spell Piercing, while you are a tank or a damage dealer, or always." },
-		{ "hud.hitTableTip", "o", "behaviour", "Adds your hit table against an enemy to its tooltip, while you are a tank or a damage dealer, or always. Needs Chat and tooltips on." },
-		{ "hud.hitTableLines", "o", "behaviour", "Chooses whether the hit table shows melee, ranged or spells, or picks them by your class and form." },
-		{ "hud.hitTableSpecial", "o", "behaviour", "Adds a line for your special attacks, which do not glance and miss less while you dual wield." },
-		{ "hud.hitTableAgainst", "o", "behaviour", "Chooses whether the hit table is against your target or always against a boss three levels above you." },
-		{ "hud.hitTableFacing", "o", "behaviour", "Chooses whether the hit table counts parries and blocks, which come only from the front." },
-		{ "hud.hitTableRules", "r", "behaviour", "Chooses the hit cap against a boss: 9% as tests of Classic found it, or 8% as the game's tooltip says." },
-		{ "hud.hitTableShow", "o", "behaviour", "Chooses whether the hit table shows with an enemy targeted, in combat, or always." },
-		{ "hud.hitTableFont", "r", "behaviour", "Chooses Flat UI Sans or the game font for the hit table." },
-		{ "hud.hitTableSize", "o", "behaviour", "Sets the size of the text of the hit table, from 70% to 200%." },
-		{ "hud.hitTableBack", "r", "behaviour", "Draws a flat background with a thin border behind the hit table." },
-		{ "hud.hitTableTipSize", "o", "behaviour", "Sets the size of the hit table's lines on enemy tooltips, from 70% to 200%; the tooltip's other lines keep theirs." },
 	} },
 	{ id = "win-which", area = "Windows", title = "Which windows", draw = "mock-window-set", built = true, rows = {
 		{ "windows.enabled", "c", "mock-window-set" },
@@ -787,7 +772,13 @@ ns.SETUP_STEPS = {
 		{ "windows.titleOwn", "o", "mock-window" },
 		{ "windows.titleColour", "r", "mock-window" },
 	} },
-	{ id = "win-bags", area = "Windows", title = "Item slots", draw = "mock-bag-slots", built = true, rows = {
+	{ id = "win-art", area = "Windows", title = "Window backdrops", draw = "mock-window", built = true, rows = {
+		{ "windows.raceArt", "c", "mock-window" },
+		{ "windows.bookArt", "c", "mock-window" },
+		{ "windows.eye", "o", "mock-window" },
+		{ "windows.roleArt", "c", "mock-window" },
+	} },
+	{ id = "win-bags", area = "Bags and items", title = "Item slots", draw = "mock-bag-slots", built = true, rows = {
 		{ "windows.slots", "c", "mock-bag-slots" },
 		{ "windows.quality", "c", "mock-bag-slots" },
 		{ "windows.slotTints", "o", "mock-bag-slots" },
@@ -812,13 +803,7 @@ ns.SETUP_STEPS = {
 		{ "windows.sortBank", "o", "behaviour", "Adds the clean up bags button to the bank." },
 		{ "windows.sortFrom", "o", "behaviour", "Chooses which end of the bags items gather at; the game's own clean up follows it." },
 	} },
-	{ id = "win-art", area = "Windows", title = "Window backdrops", draw = "mock-window", built = true, rows = {
-		{ "windows.raceArt", "c", "mock-window" },
-		{ "windows.bookArt", "c", "mock-window" },
-		{ "windows.eye", "o", "mock-window" },
-		{ "windows.roleArt", "c", "mock-window" },
-	} },
-	{ id = "chat-window", area = "Chat and tooltips", title = "Chat windows and input", draw = "mock-chat", built = true, rows = {
+	{ id = "chat-window", area = "Chat", title = "Chat windows and input", draw = "mock-chat", built = true, rows = {
 		{ "chat.enabled", "c", "mock-chat" },
 		{ "chat.frames", "c", "mock-chat" },
 		{ "chat.opacity", "c", "mock-chat" },
@@ -835,7 +820,7 @@ ns.SETUP_STEPS = {
 		{ "chat.lookBack", "r", "mock-chat" },
 		{ "chat.lookBackAlpha", "r", "mock-chat" },
 	} },
-	{ id = "chat-text", area = "Chat and tooltips", title = "Chat text", draw = "mock-chat", built = true, rows = {
+	{ id = "chat-text", area = "Chat", title = "Chat text", draw = "mock-chat", built = true, rows = {
 		{ "chat.timestamps", "c", "mock-chat" },
 		{ "chat.classColour", "c", "mock-chat" },
 		{ "chat.font", "c", "mock-chat" },
@@ -850,7 +835,7 @@ ns.SETUP_STEPS = {
 		{ "chat.webLinks", "o", "behaviour", "Turns web addresses in chat into links that open a box to copy them." },
 		{ "chat.linkTips", "o", "behaviour", "Shows the tooltip of an item, spell or achievement link in chat while the mouse is over it." },
 	} },
-	{ id = "tips", area = "Chat and tooltips", title = "Tooltips", draw = "mock-tooltip", built = true, rows = {
+	{ id = "tips", area = "Tooltips", title = "Tooltips", draw = "mock-tooltip", built = true, rows = {
 		{ "chat.tooltips", "c", "mock-tooltip" },
 		{ "chat.tipBackground", "c", "mock-tooltip" },
 		{ "chat.tipOpacity", "c", "mock-tooltip" },
@@ -890,7 +875,7 @@ ns.SETUP_STEPS = {
 		{ "chat.compareShift", "c", "behaviour", "Shows the items you wear beside an item's tooltip only while Shift is held." },
 	} },
 	-- The spell and gear lines go into tooltips of spells and items the drawing does not show, so every row describes itself.
-	{ id = "tips-spells", area = "Chat and tooltips", title = "Spell and gear lines", draw = "mock-tooltip", built = true, rows = {
+	{ id = "tips-spells", area = "Character and gear", title = "Spell tooltips and gear comparison", draw = "mock-tooltip", built = true, rows = {
 		{ "chat.spellPower", "c", "behaviour", "Adds to a spell's tooltip the share of your spell damage, healing or attack power it adds." },
 		{ "chat.spellStats", "o", "behaviour", "Adds how much that share is with your stats now, and the threat your attack power adds." },
 		{ "chat.spellTotal", "c", "behaviour", "Adds to a spell's tooltip what one cast does now with your stats, base and bonus together, over its duration for a spell over time." },
@@ -919,6 +904,21 @@ ns.SETUP_STEPS = {
 		{ "chat.gearFind", "o", "behaviour", "Opens the Gear comparison window with the item finder, to find armor and weapons by name, slot, type, level and quality." },
 		{ "chat.gearFindLevel", "r", "behaviour", "Chooses whether the item finder starts on items near your level or at any level." },
 		{ "chat.gearFindUsable", "r", "behaviour", "Starts the item finder on only the armor and weapons your class can wear." },
+	} },
+	-- The hit table hangs under the player frame, so its step shows the player's frame (mock-player, SetupDrawUnits.lua); every row describes itself.
+	{ id = "hud-hittable", area = "Character and gear", title = "Hit table", draw = "mock-player", built = true, rows = {
+		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target, and the share of a spell's damage resisted with your Spell Piercing, while you are a tank or a damage dealer, or always." },
+		{ "hud.hitTableTip", "o", "behaviour", "Adds your hit table against an enemy to its tooltip, while you are a tank or a damage dealer, or always. Needs Restyle chat and tooltips on." },
+		{ "hud.hitTableLines", "o", "behaviour", "Chooses whether the hit table shows melee, ranged or spells, or picks them by your class and form." },
+		{ "hud.hitTableSpecial", "o", "behaviour", "Adds a line for your special attacks, which do not glance and miss less while you dual wield." },
+		{ "hud.hitTableAgainst", "o", "behaviour", "Chooses whether the hit table is against your target or always against a boss three levels above you." },
+		{ "hud.hitTableFacing", "o", "behaviour", "Chooses whether the hit table counts parries and blocks, which come only from the front." },
+		{ "hud.hitTableRules", "r", "behaviour", "Chooses the hit cap against a boss: 9% as tests of Classic found it, or 8% as the game's tooltip says." },
+		{ "hud.hitTableShow", "o", "behaviour", "Chooses whether the hit table shows with an enemy targeted, in combat, or always." },
+		{ "hud.hitTableFont", "r", "behaviour", "Chooses Flat UI Sans or the game font for the hit table." },
+		{ "hud.hitTableSize", "o", "behaviour", "Sets the size of the text of the hit table, from 70% to 200%." },
+		{ "hud.hitTableBack", "r", "behaviour", "Draws a flat background with a thin border behind the hit table." },
+		{ "hud.hitTableTipSize", "o", "behaviour", "Sets the size of the hit table's lines on enemy tooltips, from 70% to 200%; the tooltip's other lines keep theirs." },
 	} },
 	{ id = "tr-list", area = "Trackers", title = "What trackers watch and when they show", draw = "mock-tracker", built = true, rows = {
 		{ "trackers.enabled", "c", "mock-tracker" },
@@ -1231,7 +1231,7 @@ ns.SETUP_STEPS = {
 		{ "combattext.combatLeaveColour", "r", "behaviour", "Sets the colour of -Combat." },
 		{ "combattext.combatStateSize", "o", "behaviour", "Sets the size of +Combat and -Combat." },
 	} },
-	{ id = "ab-block", area = "Bar blocks", title = "Bar block", draw = "mock-bar-block", built = true, rows = {
+	{ id = "ab-block", area = "Bar block", title = "Bar block", draw = "mock-bar-block", built = true, rows = {
 		{ "barblock.enabled", "c", "mock-bar-block" },
 		{ "barblock.bars1", "r", "behaviour", "Holds the bars of block 1, first bar first: the main bar and action bars 2 to 4 at first." },
 		{ "barblock.edit1", "c", "mock-bar-block" },
@@ -1267,7 +1267,7 @@ ns.SETUP_STEPS = {
 		{ "barblock.fadeCombat", "r", "behaviour", "Brings the faded block to full opacity in combat." },
 		{ "barblock.fadeMouse", "r", "behaviour", "Brings the faded block to full opacity under the mouse." },
 	} },
-	{ id = "ab-places", area = "Bar blocks", title = "Class, buffs and consumables bars", draw = "mock-block-places", built = true, rows = {
+	{ id = "ab-places", area = "Bar block", title = "Class, buffs and consumables bars", draw = "mock-block-places", built = true, rows = {
 		{ "blocks.enabled", "c", "mock-block-places" },
 		{ "blocks.classBar", "c", "mock-block-places" },
 		{ "blocks.buffsBar", "c", "mock-block-places" },
