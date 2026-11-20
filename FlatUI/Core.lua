@@ -2865,6 +2865,20 @@ local function ReadCharacter()
 	return name .. " - " .. realm
 end
 
+-- The profile this character keeps, or nil: FlatUICharDB.profile first, which loads with the addon and needs no name, then db.profileOf under
+-- `key`. A name that is no profile now (deleted, or renamed while another character played) is passed over.
+local function OwnProfile(key)
+	local kept = charDB and charDB.profile
+	if type(kept) == "string" and db.profiles[kept] ~= nil then
+		return kept
+	end
+	local byKey = key and type(db.profileOf) == "table" and db.profileOf[key]
+	if type(byKey) == "string" and db.profiles[byKey] ~= nil then
+		return byKey
+	end
+	return nil
+end
+
 -- Rows of an older build read as the rows that replaced them: the three nameplate outline rows were ticks (on is As the game has it, off is None), Hit
 -- table under the player frame was a tick in 0.5.18 (on is Always, off is Off), and White names is Name colour White on the unit frames unless a Name
 -- colour is chosen. `old` holds the values the older rows were saved with, as booleans; `options` takes the new ones (the same table for a saved profile).
@@ -3114,7 +3128,10 @@ local function LoadSettings()
 	if db.profiles[DEFAULT] == nil then
 		db.profiles[DEFAULT] = { options = {}, movers = BaseSpots({}) }
 	end
-	-- The profile of each character, by "Name - Realm". A character with none uses Default.
+	-- The profile of each character, by "Name - Realm", and of this one in FlatUICharDB.profile too: at ADDON_LOADED the client may not say the
+	-- name yet (ReadCharacter), and that one needs none. A character with neither uses Default. The key is read again at PLAYER_LOGIN
+	-- (LoginProfile), and FlatUICharDB.profile is filled from db.profileOf by that reading alone. A change of profile writes FlatUICharDB.profile, and
+	-- db.profileOf once the key reads (Enter).
 	if type(db.profileOf) ~= "table" then
 		db.profileOf = {}
 	end
@@ -3123,8 +3140,11 @@ local function LoadSettings()
 			db.profileOf[key] = nil
 		end
 	end
+	if charDB.profile ~= nil and (type(charDB.profile) ~= "string" or db.profiles[charDB.profile] == nil) then
+		charDB.profile = nil
+	end
 	characterKey = ReadCharacter()
-	current = characterKey and db.profileOf[characterKey] or DEFAULT
+	current = OwnProfile(characterKey) or DEFAULT
 	profile = db.profiles[current]
 	values = profile.options
 	if version < SETTINGS_VERSION then
@@ -3269,6 +3289,7 @@ local function Enter(name)
 	if characterKey then
 		db.profileOf[characterKey] = name
 	end
+	charDB.profile = name
 	Apply(was)
 end
 
@@ -3413,9 +3434,34 @@ function ns.AssignProfile(name, picks, spots)
 		found = clean
 	end
 	db.profileOf[characterKey] = found
+	charDB.profile = found
 	current, profile = found, db.profiles[found]
 	values = profile.options
 	return true
+end
+
+-- The profile this character keeps (OwnProfile), or nil: none of its own, as on a new character.
+function ns.OwnProfile()
+	return db and OwnProfile(ns.CharacterKey()) or nil
+end
+
+-- At PLAYER_LOGIN, before Flat UI setup and the modules start: the key is read again, as the client may not have said the name at ADDON_LOADED, and
+-- a character that load left on Default (or on the profile of a key read wrong then) takes the profile it keeps, which both stores then hold. One
+-- that keeps none stays new: it is on Default and nothing is written. Nothing is applied: the modules start once with it.
+local function LoginProfile()
+	characterKey = ReadCharacter() or characterKey
+	local own = OwnProfile(characterKey)
+	if own then
+		charDB.profile = own
+		if characterKey then
+			db.profileOf[characterKey] = own
+		end
+	end
+	own = own or DEFAULT
+	if own ~= current then
+		current, profile = own, db.profiles[own]
+		values = profile.options
+	end
 end
 
 -- The settings and positions of the profile in use become a copy of those of another.
@@ -3491,6 +3537,9 @@ function ns.RenameProfile(from, to)
 				db.profileOf[key] = clean
 			end
 		end
+		if charDB.profile == found then
+			charDB.profile = clean
+		end
 		if current == found then
 			current = clean
 		end
@@ -3537,6 +3586,9 @@ function ns.DeleteProfile(name)
 		if used == found then
 			db.profileOf[key] = nil
 		end
+	end
+	if charDB.profile == found then
+		charDB.profile = nil
 	end
 	return true, ("Deleted %s."):format(found)
 end
@@ -3937,7 +3989,12 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		return
 	end
 	if event == "PLAYER_LOGIN" then
-		-- First, so that a profile chosen for a new character is in use before any module starts (ns.AssignProfile refuses once loggedIn is set).
+		-- First, the profile this character keeps, in case load could not read its name (LoginProfile).
+		local claimed, why = pcall(LoginProfile)
+		if not claimed then
+			geterrorhandler()(why)
+		end
+		-- Then, so that a profile chosen for a new character is in use before any module starts (ns.AssignProfile refuses once loggedIn is set).
 		if ns.SetupAuto then
 			local ok, err = pcall(ns.SetupAuto)
 			if not ok then

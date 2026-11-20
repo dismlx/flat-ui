@@ -2028,12 +2028,13 @@ function S.Short(name)
 	return name
 end
 
--- True when this character has no profile of its own, has not been offered, and keeps no draft: a new character. With `asked` the welcome screen is
--- offered only when Profile on a new character is Show the welcome screen.
+-- True when this character has no profile of its own (ns.OwnProfile: neither FlatUICharDB.profile nor db.profileOf names one), has not been offered,
+-- and keeps no draft: a new character. A saved character is never one, so Profile on a new character never puts another profile over its own. With
+-- `asked` the welcome screen is offered only when Profile on a new character is Show the welcome screen.
 function S.Offerable(asked)
 	local db, key = ns.Account(), ns.CharacterKey()
 	local character = ns.Character()
-	return key ~= nil and type(db) == "table" and type(db.profileOf) == "table" and db.profileOf[key] == nil and type(character) == "table"
+	return key ~= nil and type(db) == "table" and type(db.profileOf) == "table" and ns.OwnProfile() == nil and type(character) == "table"
 		and character.setupOffered ~= true and (asked ~= true or ns.Get("setup.newCharacter") == "ask") and not S.Peek()
 end
 
