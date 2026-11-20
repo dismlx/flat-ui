@@ -379,6 +379,12 @@ local ADDON_NAME, ns = ...
 -- speeds of UnitAttackSpeed and the visibility field of the swing timer frames (rawget). Test mode writes no variable, binding, target, attribute or
 -- field, calls no other method of a game frame, adds no hook and never opens Edit Mode or a game window; a fight pauses it inside
 -- PLAYER_REGEN_DISABLED. Its key binding is a click on a plain button of its own (BINDING_NAME_CLICK FlatUITestButton:LeftButton).
+-- A change that needs a reload (a row whose reload field in Config.lua is "off", "change" or true), made in the options, in setup, by a profile
+-- switch, copy, reset or import or by a slash command, shows a notice of Flat UI's own at the top of the screen (Reload.lua, FlatUIReloadNotice,
+-- in DIALOG strata so it shows over the options window, with an own entry in /flatui move) that names what needs it, with Reload (ns.SecureReload,
+-- the game's /reload on a secure button where ReloadUI is blocked, which waits for the end of a fight there) and Later, which hides it until the
+-- next such change. It goes when nothing needs a reload any more. What needs one is the value each such row had at login (ns.ReloadStart) against
+-- the profile in use (ns.ReloadLines), which Home's Needs a reload also lists.
 
 local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
@@ -2709,7 +2715,60 @@ function ns.Set(path, value, quiet)
 	if changed then
 		Changed(path)
 		TestChanged(path)
+		-- A row that needs a reload: the notice (Reload.lua) looks again on the next frame.
+		if def.reload and ns.ReloadNoticeUpdate then
+			ns.ReloadNoticeUpdate()
+		end
 	end
+end
+
+-- Reload tracking ----------------------------------------------------------------------------------------------------------------------------------
+
+-- The value of every row that needs a reload, by its path, as the game runs it: taken at login, before any module starts. Nil until then.
+local reloadBase
+
+-- Takes those values once a session (PLAYER_LOGIN). The value read is the one in the profile in use, never that of a drawing of setup (ns.Viewing).
+function ns.ReloadStart()
+	if reloadBase or not profile then
+		return
+	end
+	reloadBase = {}
+	for path, def in pairs(defs) do
+		if def.reload and not Unsaved(def) then
+			local value = profile.options and profile.options[path]
+			if value == nil then
+				value = def.default
+			end
+			reloadBase[path] = value
+		end
+	end
+end
+
+-- The changes that need a reload, by the reload field of the row in Config.lua: "off" for a switch that takes full effect after a reload when it
+-- is turned off, "change" (or true) for a row that applies after a reload when its value changes. Entries { label, field, path, value } in the
+-- order of the pages, one a row; none before login.
+function ns.ReloadLines()
+	local lines, seen = {}, {}
+	if not (reloadBase and profile) then
+		return lines
+	end
+	for _, page in ipairs(ns.PAGES) do
+		for _, item in ipairs(page) do
+			local was = item.path and reloadBase[item.path]
+			if was ~= nil and not seen[item.path] then
+				seen[item.path] = true
+				local now = profile.options and profile.options[item.path]
+				if now == nil then
+					now = item.default
+				end
+				local field = item.reload == true and "change" or item.reload
+				if (field == "off" and was == true and now == false) or (field == "change" and was ~= now) then
+					lines[#lines + 1] = { item.label, field, item.path, now }
+				end
+			end
+		end
+	end
+	return lines
 end
 
 -- The version in the TOC, or nil when the game does not say.
@@ -3277,6 +3336,10 @@ local function Apply(wasSpots)
 	end
 	-- Every setting may have changed: test mode draws its samples and stand-ins again.
 	TestChanged("*")
+	-- A switch, copy, reset or import of a profile may change a row that needs a reload: the notice (Reload.lua) looks again on the next frame.
+	if ns.ReloadNoticeUpdate then
+		ns.ReloadNoticeUpdate()
+	end
 end
 
 -- Makes another profile the one in use.
@@ -4001,6 +4064,8 @@ frame:SetScript("OnEvent", function(_, event, ...)
 				geterrorhandler()(err)
 			end
 		end
+		-- What the game runs now of the rows that need a reload, before any module starts and before any change (ns.ReloadLines).
+		ns.ReloadStart()
 		loggedIn = true
 		if resetNotice then
 			resetNotice = false

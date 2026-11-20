@@ -396,3 +396,246 @@ function ns.TaintReminder()
 	TaintWatch()
 	TaintShow()
 end
+
+-- Reload notice ------------------------------------------------------------------------------------------------------------------------------
+-- A change that needs a reload (ns.ReloadLines, Core.lua), made anywhere, shows a small notice of Flat UI's own at the top of the screen: what
+-- needs it, Reload and Later. Its Reload is a reload button like the others (ns.SecureReload): where ReloadUI is blocked, the game's own /reload
+-- runs on a secure button, which leaves the notice as a fight starts and comes back after it, so meanwhile the button is dimmed and says so. Later
+-- hides the notice until the next change that needs a reload; it goes when nothing needs one any more. It is in DIALOG strata, over the options
+-- window (HIGH), and has an own entry in /flatui move (FlatUIReloadNotice, Movers.lua), at whose spot it stands. While the options window shows
+-- and the notice would cover its title bar, it stands just above the window, or just under it where there is no room above. It is always placed
+-- from UIParent, never from the window, and only while nothing protected hangs from it.
+
+-- width and height of the notice, y: its start under the top of the screen, reload and later: the widths of the buttons, chars: about how many
+-- letters of names the line holds before the rest are counted, every: how often a shown notice looks where to stand, in seconds.
+local NOTICE = { name = "FlatUIReloadNotice", width = 460, height = 52, y = -40, reload = 80, later = 64, chars = 64, every = 0.25 }
+-- frame, text and reload: the parts once built. later: what Later held, the value of each change by its path, or nil. queued: a look on the
+-- next frame is asked for. placed: where it stands now. wait: the time to the next look while shown.
+local notice = { queued = false, wait = 0 }
+
+local function Finite(value)
+	return type(ns.Finite) == "function" and ns.Finite(value)
+end
+
+-- What the line says: how many changes need a reload, and their names, as many as fit, then how many more.
+local function NoticeText(lines)
+	local names, length = {}, 0
+	for _, entry in ipairs(lines) do
+		local label = type(entry[1]) == "string" and entry[1] or "a setting"
+		if #names > 0 and length + #label > NOTICE.chars then
+			break
+		end
+		names[#names + 1] = label
+		length = length + #label + 2
+	end
+	local list = table.concat(names, ", ")
+	if #lines > #names then
+		list = ("%s and %d more"):format(list, #lines - #names)
+	end
+	if #lines == 1 then
+		return ("1 change needs a reload: %s."):format(list)
+	end
+	return ("%d changes need a reload: %s."):format(#lines, list)
+end
+
+-- True while a press of Reload needs the secure button (ReloadUI is blocked here) and a fight keeps that button off it.
+local function NoticeWaits(fight)
+	return fight == true and (Wanted() or IsSecure())
+end
+
+local function NoticeDim(fight)
+	if notice.reload then
+		pcall(notice.reload.SetAlpha, notice.reload, NoticeWaits(fight) and 0.4 or 1)
+	end
+end
+
+-- The top left corner of the notice in the units of UIParent, or nil for its start at the top of the screen: the spot of its box in /flatui move,
+-- but off the title bar of the options window while that shows.
+local function NoticeSpot()
+	local x, y
+	if type(ns.MoverSpot) == "function" then
+		x, y = ns.MoverSpot(NOTICE.name, "TOPLEFT")
+	end
+	local kit = ns.PanelKit
+	local window = type(ns.PanelShown) == "function" and ns.PanelShown() and type(kit) == "table" and kit.Window() or nil
+	if not window then
+		return x, y
+	end
+	local left, bottom, width, height = kit.Rect(window)
+	local ok, screenW, screenH = pcall(UIParent.GetSize, UIParent)
+	if not (ok and Finite(left) and Finite(bottom) and Finite(width) and Finite(height) and Finite(screenW) and Finite(screenH)) or height <= 0 then
+		return x, y
+	end
+	if not x then
+		x, y = (screenW - NOTICE.width) / 2, screenH + NOTICE.y
+	end
+	local top = bottom + height
+	local title = top - height * kit.TITLE / kit.HEIGHT
+	if y - NOTICE.height >= top or y <= title or x + NOTICE.width <= left or x >= left + width then
+		return x, y
+	end
+	if top + NOTICE.height + 6 <= screenH then
+		return x, top + NOTICE.height + 6
+	end
+	return x, bottom - 6
+end
+
+local function NoticePlace()
+	local frame = notice.frame
+	local protected = false
+	if InCombatLockdown() then
+		local ok, value = pcall(frame.IsProtected, frame)
+		protected = not ok or value ~= false
+	end
+	if protected then
+		return
+	end
+	local x, y = NoticeSpot()
+	local key = x and ("%.1f:%.1f"):format(x, y) or "start"
+	if notice.placed == key then
+		return
+	end
+	notice.placed = key
+	pcall(function()
+		frame:ClearAllPoints()
+		if x then
+			frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+		else
+			frame:SetPoint("TOP", UIParent, "TOP", 0, NOTICE.y)
+		end
+	end)
+end
+
+-- Later: the changes that need a reload now are held, and the notice hides until another comes.
+local function NoticeLater()
+	notice.later = {}
+	for _, entry in ipairs(ns.ReloadLines()) do
+		notice.later[entry[3]] = entry[4]
+	end
+	notice.frame:Hide()
+end
+
+-- Reload: the secure button takes the press where it is on the button. A press that reaches this function in a fight, where the reload needs that
+-- button, is not made.
+local function NoticeReload()
+	if NoticeWaits(InCombatLockdown()) then
+		print("Flat UI: Reload works here again after the fight. Type /reload to reload now.")
+		return
+	end
+	ns.Reload()
+end
+
+local function NoticeBuild()
+	local kit = ns.PanelKit
+	if type(kit) ~= "table" then
+		return nil
+	end
+	local frame = CreateFrame("Frame", NOTICE.name, UIParent)
+	ns.Own[frame] = true
+	frame:Hide()
+	frame:SetSize(NOTICE.width, NOTICE.height)
+	frame:SetFrameStrata("DIALOG")
+	frame:SetClampedToScreen(true)
+	frame:EnableMouse(true)
+	local outline = ns.Outline(frame, frame, true)
+	kit.Painted(function()
+		kit.Backing(outline, "card", 1, "accent")
+	end)
+	local later = kit.Button(frame, "Later", NOTICE.later, NoticeLater)
+	later:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
+	local reload = kit.Button(frame, "Reload", NOTICE.reload, NoticeReload, true)
+	reload:SetPoint("RIGHT", later, "LEFT", -6, 0)
+	local text = kit.Label(frame, "GameFontHighlight", "LEFT", NOTICE.width - 36 - NOTICE.reload - NOTICE.later, true)
+	text:SetPoint("LEFT", frame, "LEFT", 12, 0)
+	pcall(text.SetMaxLines, text, 2)
+	notice.frame, notice.text, notice.reload = frame, text, reload
+	ns.SecureReload(reload)
+	frame:SetScript("OnUpdate", function(_, elapsed)
+		notice.wait = notice.wait - (Finite(elapsed) and elapsed or 0)
+		if notice.wait <= 0 then
+			notice.wait = NOTICE.every
+			NoticePlace()
+		end
+	end)
+	-- The secure button leaves Reload as a fight starts (Detach, above), before the lockdown, so the button is dimmed here as well.
+	pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_DISABLED")
+	pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_ENABLED")
+	frame:SetScript("OnEvent", function(_, event)
+		NoticeDim(event == "PLAYER_REGEN_DISABLED")
+	end)
+	return frame
+end
+
+-- Looks at what needs a reload, and shows the notice, says it again, hides it or leaves it hidden after Later.
+local function NoticeRefresh()
+	notice.queued = false
+	local ok, lines = pcall(ns.ReloadLines)
+	if not ok or type(lines) ~= "table" then
+		lines = {}
+	end
+	if #lines == 0 then
+		notice.later = nil
+		if notice.frame then
+			pcall(notice.frame.Hide, notice.frame)
+		end
+		return
+	end
+	if notice.later then
+		-- A change put back is no longer held, so making it again shows the notice; a change Later did not hold, or one with another value, shows it now.
+		local now, fresh = {}, false
+		for _, entry in ipairs(lines) do
+			now[entry[3]] = true
+			local held = notice.later[entry[3]]
+			fresh = fresh or held == nil or held ~= entry[4]
+		end
+		for path in pairs(notice.later) do
+			if not now[path] then
+				notice.later[path] = nil
+			end
+		end
+		if not fresh then
+			return
+		end
+		notice.later = nil
+	end
+	if not notice.frame then
+		local made, frame = pcall(NoticeBuild)
+		if not made or type(frame) ~= "table" then
+			if not made then
+				geterrorhandler()(frame)
+			end
+			return
+		end
+	end
+	notice.text:SetText(NoticeText(lines))
+	NoticeDim(InCombatLockdown())
+	notice.wait = 0
+	NoticePlace()
+	notice.frame:Show()
+end
+
+-- A change that may need a reload was made (ns.Set and a profile put in use, Core.lua): the notice looks on the next frame, once for a burst of
+-- changes such as Reset page, and outside any drawing of setup.
+function ns.ReloadNoticeUpdate()
+	if notice.queued then
+		return
+	end
+	notice.queued = true
+	if C_Timer and C_Timer.After then
+		C_Timer.After(0, NoticeRefresh)
+	else
+		NoticeRefresh()
+	end
+end
+
+-- The movers: the notice has a box whether or not it shows, so it can be placed before it is needed.
+function ns.ReloadNoticeShown()
+	return true
+end
+
+function ns.ReloadNoticeMoved()
+	notice.placed = nil
+	if notice.frame then
+		NoticePlace()
+	end
+end
