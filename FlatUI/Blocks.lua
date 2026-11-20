@@ -1,9 +1,11 @@
 local _, ns = ...
 
--- The Bar blocks page names up to three of the game's own bars (Class spells, Buffs to apply, Consumables) and hangs each from a side of the
--- Action bar block, or from the bar picked on the page when the Bar block page is off. The game does the casting, the keys, the counts and the
--- cooldowns of these bars; this file only names the bar's box, works out where the bar goes and gives Movers the spot (ns.MoverHold), so it
--- never calls a method of a Blizzard frame. It reads rectangles and sizes only. A bar is held by one owner: the Bar block page comes first.
+-- The Bar blocks page names up to three of the game's own bars (Class spells, Buffs to apply, Consumables) and hangs each from a side of
+-- block 1 of the Bar block page (the Action bar block), or from the bar picked on the page when that block has no bar or the page is off. The
+-- game does the casting, the keys, the counts and the cooldowns of these bars; this file only names the bar's box, works out where the bar goes
+-- and gives Movers the spot (ns.MoverHold), so it never calls a method of a Blizzard frame. It reads rectangles and sizes only. A bar is held by one owner: the Bar block page comes first,
+-- so a bar in any of its blocks is left out here. While Leave the game's action bars alone is on nothing here is held: those bars are in no
+-- block of the Bar block page.
 -- The pet bar can be hung from the same rectangle, above it on the right or the left.
 -- All of it is planned out of combat. Action bars 6 to 8 stay where they were put in a fight; the game stacks the pet bar and bars 2 to 5 again
 -- at the start and the end of a fight until each has been moved once in Edit Mode. Since 70425 it stacks the totem bar the same way
@@ -113,22 +115,15 @@ local function IsOff(bar)
 	return ok and not ns.IsSecret(value) and value == false
 end
 
--- Whether the Bar block page has the bar in a row.
+-- Whether a block of the Bar block page has the bar.
 local function InMainBlock(id)
-	if not ns.Enabled("barblock") then
-		return false
-	end
-	for index = 1, 6 do
-		if ns.Get("barblock.slot" .. index) == id then
-			return true
-		end
-	end
-	return false
+	local bar = BARS[id]
+	return bar ~= nil and ns.BarBlockHolds ~= nil and ns.BarBlockHolds(bar.frame) ~= nil
 end
 
--- Whether the Bar block page places the pet bar over the block.
+-- Whether the Bar block page places the pet bar over block 1.
 local function MainOwnsPet()
-	return ns.Enabled("barblock") and ns.Get("barblock.others") == "above" and ns.MainBlock() ~= nil
+	return ns.Enabled("barblock") and ns.Get("barblock.others") == "above" and not ns.HandsOff() and ns.MainBlock() ~= nil
 end
 
 -- The bars to place, block bars in page order and then the pet bar: frame, name of the bar, position and the bar's entry. `lines` collects what
@@ -144,7 +139,7 @@ local function Requests(lines)
 		elseif bar.frame == from then
 			-- Left where it is, without a line.
 		elseif InMainBlock(pick.id) then
-			lines[#lines + 1] = ("%s is already in the Action bar block."):format(bar.label)
+			lines[#lines + 1] = ("%s is already in a block of the Bar block page."):format(bar.label)
 		elseif IsOff(bar) then
 			lines[#lines + 1] = ("%s: %s is off in the game's options."):format(name, bar.label)
 		else
@@ -344,7 +339,7 @@ local function Refresh()
 	end
 end
 
--- The Action bar block changed or went: the blocks hang from it.
+-- Block 1 of the Bar block page changed or went: the blocks hang from it.
 function ns.BlocksReplan()
 	if state.on then
 		Queue()

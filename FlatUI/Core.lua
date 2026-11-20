@@ -15,8 +15,12 @@ local ADDON_NAME, ns = ...
 -- SetStatusBarTexture, and put back with SetStatusBarTexture. The size, face and flags of a label are set with SetFont, its colour with
 -- SetTextColor and its shadow with SetShadowOffset, each remembered on first touch and put back. Any Blizzard method or global function may be
 -- followed with hooksecurefunc through ns.Follow, ns.FollowGlobal and ns.FollowTable, which run after the game's call and never change what it returns.
--- BarBlock gives Movers the spots of the action bars. The one thing it writes on a Blizzard frame is the alpha of the bars of the block
--- (SetAlpha, only with Fade the block on), put back when the fade goes off. Fade does the same for the frames of the Fading page, the alpha only
+-- BarBlock gives Movers the spots of the action bars of up to three blocks (on by default with the main bar and bars 2 to 4 in block 1), also
+-- while Leave the game's action bars alone is on, which then guards only the bars no block holds. The one thing it writes on a Blizzard frame is
+-- the alpha of the bars of the blocks (SetAlpha, only with Fade the block on), put back when the fade goes off. At login and when the bars of
+-- a block change, out of combat, it turns on each of bars 2 to 8 a block holds that the game's options have off, with the game's own setting
+-- for that bar (Settings.SetValue of PROXY_SHOW_ACTIONBAR_2 to 8, once the game has made it), or SetActionBarToggles with the other bars as
+-- GetActionBarToggles gives them where that setting is not there (BarBlockLists.lua); it turns nothing off. Fade does the same for the frames of the Fading page, the alpha only
 -- (SetAlpha), read before the first write (and again when something else gives the frame another alpha after one) and put back when its page,
 -- its row or the module goes off. With Hit numbers on player and pet
 -- portraits off, Unit frames does the same for the frame that holds the player's hit number (HitIndicator), and hides the pet's (PetHitIndicator,
@@ -751,6 +755,11 @@ local function Normalise(def, value)
 				return value
 			end
 		end
+	elseif def.kind == "text" then
+		-- A text a module reads itself, such as the bars of a block of the Bar block page (BarBlockLists.lua).
+		if type(value) == "string" and #value <= 200 then
+			return value
+		end
 	end
 	return nil
 end
@@ -953,6 +962,10 @@ end
 -- False for a CVar row whose CVar this client does not have: it is left off the window and the game's options.
 function ns.RowShown(path)
 	local def = defs[path]
+	-- A hidden row holds a value in the profile that other rows of its page show and change (the bars of a block of the Bar block page).
+	if def and def.hidden then
+		return false
+	end
 	if def and def.cvar then
 		return CVarText(def.cvar) ~= nil
 	end
@@ -1048,7 +1061,8 @@ end
 -- Flat UI look; Fading's Micro menu and Bag bar rows write the alpha of MicroMenuContainer and of BagsBar, Fade.lua, and Hidden frames' Micro
 -- menu and Bag bar rows put MicroMenu and BagsBar under a hidden frame in a secure snippet, Hide.lua), and registers no setting of its own in the game's settings registry. The game's eight action bars
 -- (bars 1 to 8) are covered by Action buttons (actionbars.own): with Flat UI's buttons they are parked by alpha and mouse only, with the game's
--- buttons Flat UI leaves them alone. A click on an action button reads the bar, the button and the settings registry, and a call of this addon that
+-- buttons Flat UI leaves them alone, but for the bars a block of the Bar block page holds, which the block places, panels and fades, and may
+-- turn on with the game's own setting for the bar, and whose button size it writes into the Edit Mode layout with One size and spacing. A click on an action button reads the bar, the button and the settings registry, and a call of this addon that
 -- touched one of them leaves the click refused (UseAction, ADDON_ACTION_FORBIDDEN).
 function ns.HandsOff()
 	return ns.Get("general.handsOff") == true
@@ -2873,14 +2887,15 @@ end
 -- saved off, as Game look of the welcome screen makes one (SetupWelcome.lua, W.GameLook), and nothing saved for Bags keeps Bags off: it left the
 -- look to the game, and the modules that are off by default (Errands, Data panels and the others), which it may have turned on, are not read
 -- here. Run once, for the profiles saved before (LoadSettings, while FlatUIDB.bagsMigrated is not set, as soundsMigrated marks the move of the
--- sound rows). A Game look made since saves Bags off itself.
+-- sound rows). A Game look made since saves Bags off itself. The Bar block page, on by default since 0.5.27, was off by default then, so such
+-- a profile has nothing saved for it and it is not asked.
 local function KeepBagsOff(options)
 	if options["bags.enabled"] ~= nil then
 		return
 	end
 	local any = false
 	for path, def in pairs(defs) do
-		if def.key == "enabled" and def.kind == "bool" and def.default == true and path ~= "bags.enabled" then
+		if def.key == "enabled" and def.kind == "bool" and def.default == true and path ~= "bags.enabled" and path ~= "barblock.enabled" then
 			if options[path] ~= false then
 				return
 			end
@@ -2986,6 +3001,10 @@ local function LoadSettings()
 			-- Sound rows of an older build: one list of sounds.
 			if ns.MigrateSounds then
 				ns.MigrateSounds(saved.options, not db.soundsMigrated)
+			end
+			-- The six bar rows of the Bar block page before 0.5.27: the list of block 1, once.
+			if ns.MigrateBarBlock then
+				ns.MigrateBarBlock(saved.options)
 			end
 			-- The positions of the frames the player moved, by frame name.
 			saved.movers = type(saved.movers) == "table" and saved.movers or {}

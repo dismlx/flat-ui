@@ -133,6 +133,7 @@ MoversMode.lua
 MoversSnap.lua
 Hide.lua
 BarBlock.lua
+BarBlockLists.lua
 BarBlockButtons.lua
 Blocks.lua
 MountKey.lua

@@ -4,7 +4,8 @@ local _, ns = ...
 -- game's own code sizes the bars (EditModeSettingDisplayInfo.lua:50-88; EllesmereUI writes icon counts the same way,
 -- EllesmereUIActionBars/EllesmereUIActionBars.lua:7096-7180). This file is not a module: it registers a writer with LayoutSpots (the layout
 -- build), which saves the values in the Reload click, and it reads rectangles and scales only. Nothing here sets a scale or a size on a frame.
--- Stance, pet and possess bars are not in the block's six rows and are never touched.
+-- It writes the bars of all three blocks (BarBlockLists.lua), also while Leave the game's action bars alone is on, which guards only the bars
+-- no block holds. Stance, pet and possess bars are in no block and are never touched.
 -- Two checks decide at login whether the feature is on: the writer's own bookkeeping (a layout that still lacks the values after a save and a
 -- reload means Edit Mode did not keep them) and a read of the button container scale of each bar (the game applies IconSize as SetScale on
 -- every button container, EditModeSystemTemplates.lua:1077-1097, names ActionBar.lua:1-45). A failed check puts the writer off and gives one
@@ -12,7 +13,6 @@ local _, ns = ...
 
 local KEY = "barblock"
 local WRITER = "buttons"
-local SLOTS = 6
 -- Enum.EditModeActionBarSetting (EditModeManagerConstantsDocumentation.lua:250-266), for a client where the enum is not yet there.
 local SETTING = { Orientation = 0, NumRows = 1, NumIcons = 2, IconSize = 3, IconPadding = 4, AlwaysShowButtons = 9 }
 local LINES = {
@@ -75,19 +75,20 @@ end
 
 local ORDER = { "Orientation", "NumRows", "NumIcons", "IconSize", "IconPadding", "AlwaysShowButtons" }
 
--- The frame names of the bars in the six rows of the page, each once.
+-- The frame names of the bars of every block, each once.
 local function BlockFrames()
-	local names, seen = {}, {}
+	local names = {}
 	local bars = ns.BarFrames
-	if type(bars) ~= "table" then
+	if type(bars) ~= "table" or not ns.BarBlockLists then
 		return names
 	end
-	for index = 1, SLOTS do
-		local info = bars[Opt("slot" .. index)]
-		local name = type(info) == "table" and info.frame
-		if type(name) == "string" and not seen[name] then
-			seen[name] = true
-			names[#names + 1] = name
+	for _, list in ipairs(ns.BarBlockLists()) do
+		for _, id in ipairs(list) do
+			local info = bars[id]
+			local name = type(info) == "table" and info.frame
+			if type(name) == "string" then
+				names[#names + 1] = name
+			end
 		end
 	end
 	return names
@@ -123,7 +124,7 @@ local function Find(row, setting)
 end
 
 local function WantedFor(layout)
-	if state.off or not On() or ns.HandsOff() then
+	if state.off or not On() then
 		return false
 	end
 	local want = Wanted()
@@ -139,7 +140,7 @@ local function WantedFor(layout)
 end
 
 local function WriteTo(layout, note)
-	if state.off or not On() or ns.HandsOff() then
+	if state.off or not On() then
 		return false
 	end
 	local want = Wanted()
@@ -179,10 +180,6 @@ end
 
 -- Puts the earlier values back at the next Reload when nothing is wanted any more, then asks for the Reload notice.
 local function Sync()
-	-- No write into the layout and no release of an earlier one while Flat UI leaves the game's action bars alone.
-	if ns.HandsOff() then
-		return
-	end
 	if not On() then
 		Call("Unwrite", WRITER)
 		state.wrote = false
@@ -223,9 +220,6 @@ local function Check()
 	end
 	state.waiting = false
 	state.checked = true
-	if ns.HandsOff() then
-		return
-	end
 	if not On() then
 		Sync()
 		return

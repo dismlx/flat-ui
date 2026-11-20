@@ -1,10 +1,15 @@
 local _, ns = ...
 
--- The Bar block page lines the action bars up in one block. This module works out one rectangle for each bar and gives Movers the spot of
--- each (ns.MoverHold); Movers places the bar exactly as it places a bar with a saved spot, so this file calls no method of a Blizzard
--- frame to place one, except SetAlpha for the fade below. It reads rectangles and sizes only. The module owns one frame of its own, sized to the whole block, which is the one box of
--- /flatui move (Action bar block) and has a spot of its own saved in the profile.
--- With Stance, pet and experience bars on Above the block, the frames the game hangs from the main bar get spots over the block too: the
+-- The Bar block page lines the action bars up in up to three blocks, each with its own bars (BarBlockLists.lua: block 1 holds the main bar
+-- and action bars 2 to 4 by default, blocks 2 and 3 are off until given a bar), stack direction, alignment and gap. This module works out one
+-- rectangle for each bar and gives Movers the spot of each (ns.MoverHold); Movers places the bar exactly as it places a bar with a saved spot,
+-- so this file calls no method of a Blizzard frame to place one, except SetAlpha for the fade below. It reads rectangles and sizes only. The
+-- module owns one frame of its own for each block, sized to the whole block, which is its box in /flatui move (Action bar block, Action bar
+-- block 2 and 3) and has a spot of its own saved in the profile. Block 1 saves the spot of its first bar the first time; blocks 2 and 3 with no
+-- spot saved stand beside block 1, block 2 on its left and block 3 on its right.
+-- The blocks work whatever Leave the game's action bars alone says: while it is on it guards only the bars no block holds (Movers.lua,
+-- hold.Off), and the stance, pet and experience bars stay with the game.
+-- With Stance, pet and experience bars on Above the block, the frames the game hangs from the main bar get spots over block 1 too: the
 -- experience bars, then the stance bar on the left and the pet bar on the right, then the possess bar, then the totem bar of a character that has
 -- one. Since 70425 the game stacks the totem bar last (Camelot/EditModeUtil.lua:21): in its default position it goes over the bars of the stack
 -- still in theirs, so once the block's bars are kept in the Edit Mode layout it is 4 over the top of the main bar (EditModeManager.lua:666-668,
@@ -12,16 +17,21 @@ local _, ns = ...
 -- game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed here; /flatui block facts still lists it.
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
--- Background panel: a frame of the module's own behind the rectangle of the block, in the general colours. Fade the block: the alpha of each
--- held frame (SetAlpha, which the game allows in a fight) goes to the faded value except in a fight, under the mouse, with something on the
--- cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a child of the totem bar
--- that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107, MultiCastActionBarFrame.lua:637-641). The
--- arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while the game shows it. The alpha a frame had is
--- read once and put back when the fade goes off or the block stops.
+-- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours. Fade the block: the alpha of each
+-- held frame (SetAlpha, which the game allows in a fight) goes to the faded value except in a fight, under the mouse (over its own block),
+-- with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
+-- child of the totem bar that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107,
+-- MultiCastActionBarFrame.lua:637-641). The arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while
+-- the game shows it. The alpha a frame had is read once and put back when the fade goes off or the block stops.
 
 local KEY = "barblock"
-local MOVER = "FlatUIBarBlock"
--- The bars a row can hold: the choice, the frame, the name on the page and the place of the bar in GetActionBarToggles (bars 2 to 8).
+-- The box of each block in /flatui move, and the end of the names of its Stack direction, Line up bars and gap rows (block 1 keeps the names
+-- of before 0.5.27).
+local MOVERS = { "FlatUIBarBlock", "FlatUIBarBlock2", "FlatUIBarBlock3" }
+local SUFFIX = { "", "2", "3" }
+-- The space between block 1 and a block 2 or 3 that stands beside it.
+local BESIDE = 12
+-- The bars a block can hold: the id, the frame, the name on the page and the place of the bar in GetActionBarToggles (bars 2 to 8).
 local BARS = {
 	main = { frame = "MainActionBar", label = "Main action bar" },
 	bar2 = { frame = "MultiBarBottomLeft", label = "Action bar 2", toggle = 1 },
@@ -32,7 +42,7 @@ local BARS = {
 	bar7 = { frame = "MultiBar6", label = "Action bar 7", toggle = 6 },
 	bar8 = { frame = "MultiBar7", label = "Action bar 8", toggle = 7 },
 }
--- Blocks.lua names the same bars.
+-- Blocks.lua and BarBlockLists.lua name the same bars.
 ns.BarFrames = BARS
 -- A bar with no measure is taken to be as big as a full bar of 12 buttons. The gap between buttons is 2 where it cannot be measured, and a
 -- measured gap past 40 is not one.
@@ -62,13 +72,15 @@ end
 AROUND_SET[XPOWN] = true
 local XP_SPACER = -1 -- EditModePresetLayoutConstants.lua:32 (Camelot)
 
--- last: the plan in use. queued: a replan is waiting for the next frame. pending: a fight stopped a replan. waiting: the label of the bar
--- the first spot waits for. noToggles: the game does not say which bars are on. default: the spot was put back, so the block goes to its
--- default place. holder: the box. watch: the frame that looks at the sizes of the bars. seen: the last size of each frame hung from the main
--- bar, by name, for when it is hidden. fight: what the bars were doing at the start and the end of the last fight, for /flatui block facts.
--- panel: the background frame. fader: the frame that decides full or faded. orig: the alpha each faded frame had. sent: the last alpha written.
+-- queued: a replan is waiting for the next frame. pending: a fight stopped a replan. noToggles: the game does not say which bars are on.
+-- watch: the frame that looks at the sizes of the bars. seen: the last size of each frame hung from the main bar, by name, for when it is
+-- hidden. fight: what the bars were doing at the start and the end of the last fight, for /flatui block facts. fader: the frame that decides
+-- full or faded. orig: the alpha each faded frame had. sent: the last alpha written.
+-- Each block of `blocks`: last, the plan in use; waiting, the label of the bar the first spot waits for; default, the spot was put back, so the
+-- block goes to its default place; holder, the box; panel, the background frame; panelOn, the panel is shown.
 local LOOK = { every = 0.1, weak = { __mode = "k" } }
-local state = { queued = false, pending = false, default = false, seen = {}, fight = {}, orig = setmetatable({}, LOOK.weak), sent = setmetatable({}, LOOK.weak) }
+local state = { queued = false, pending = false, seen = {}, fight = {}, orig = setmetatable({}, LOOK.weak), sent = setmetatable({}, LOOK.weak) }
+local blocks = { {}, {}, {} }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -102,16 +114,13 @@ local function ScreenWidth()
 	return nil
 end
 
--- The bars of the rows, first row first: none, a bar twice (the first stays), a bar the game's options have off and a bar the client
--- does not have are left out.
-local function Slots()
-	local rows, seen = {}, {}
-	state.noToggles = false
-	for index = 1, 6 do
-		local id = Opt("slot" .. index)
+-- The bars of block n, first bar first: a bar the game's options have off and a bar the client does not have are left out.
+local function Slots(n)
+	local rows = {}
+	local lists = ns.BarBlockLists and ns.BarBlockLists() or {}
+	for _, id in ipairs(lists[n] or {}) do
 		local bar = BARS[id]
-		if bar and not seen[id] then
-			seen[id] = true
+		if bar then
 			local on = true
 			if bar.toggle then
 				if type(GetActionBarToggles) == "function" then
@@ -141,10 +150,11 @@ local function Measure(frame)
 	return FULL_WIDTH, FULL_HEIGHT
 end
 
--- The space between the buttons of a bar, from the first two button containers: the distance from the first to the second along the bar.
-local function Gap(bar)
-	if Opt("ownGap") then
-		return Opt("barGap")
+-- The space between the bars of block n: its own gap, or the space between the buttons of its first bar, from the first two button
+-- containers: the distance from the first to the second along the bar.
+local function Gap(n, bar)
+	if Opt("ownGap" .. SUFFIX[n]) then
+		return Opt("barGap" .. SUFFIX[n])
 	end
 	local first, second = GameFrame(bar.frame .. "ButtonContainer1"), GameFrame(bar.frame .. "ButtonContainer2")
 	if first and second then
@@ -262,13 +272,13 @@ local function AroundSpots(left, width, top, gap)
 	return spots, table.concat(parts, ","), overlap, cursor
 end
 
--- The rows and the spot of each bar for a block whose bottom middle is at spotX, spotY (the units of UIParent from the bottom left).
-local function Plan(spotX, spotY)
-	local rows = Slots()
+-- The rows and the spot of each bar for block n whose bottom middle is at spotX, spotY (the units of UIParent from the bottom left).
+local function Plan(n, spotX, spotY)
+	local rows = Slots(n)
 	if #rows == 0 then
 		return nil
 	end
-	local gap = Gap(rows[1].bar)
+	local gap = Gap(n, rows[1].bar)
 	local width, height = 0, 0
 	local parts = {}
 	for index, row in ipairs(rows) do
@@ -277,7 +287,7 @@ local function Plan(spotX, spotY)
 		height = height + row.height + (index > 1 and gap or 0)
 		parts[#parts + 1] = ("%s:%.1f:%.1f"):format(row.bar.frame, row.width, row.height)
 	end
-	local left, align, down = spotX - width / 2, Opt("align"), Opt("direction") == "down"
+	local left, align, down = spotX - width / 2, Opt("align" .. SUFFIX[n]), Opt("direction" .. SUFFIX[n]) == "down"
 	local spots, used = {}, down and height or 0
 	for _, row in ipairs(rows) do
 		local bottom
@@ -297,7 +307,8 @@ local function Plan(spotX, spotY)
 		spots[row.bar.frame] = { point = "BOTTOMLEFT", x = x, y = bottom }
 	end
 	local overlap, aboveTop = false, nil
-	if Opt("others") == "above" then
+	-- Only block 1 has the stance, pet and experience bars over it, and none while Flat UI leaves those bars to the game.
+	if n == 1 and Opt("others") == "above" and not ns.HandsOff() then
 		local around, sig, cursor
 		around, sig, overlap, cursor = AroundSpots(left, width, spotY + height, gap)
 		aboveTop = cursor
@@ -310,9 +321,9 @@ local function Plan(spotX, spotY)
 		sig = table.concat(parts, ";") .. (";%.1f"):format(gap) }
 end
 
--- The bottom middle of the block that leaves the first bar where it is, or puts it at left, bottom.
-local function SpotFor(left, bottom)
-	local plan = Plan(0, 0)
+-- The bottom middle of block n that leaves its first bar where it is, or puts it at left, bottom.
+local function SpotFor(n, left, bottom)
+	local plan = Plan(n, 0, 0)
 	local first = plan and plan.spots[plan.rows[1].bar.frame]
 	if not first then
 		return nil
@@ -320,15 +331,26 @@ local function SpotFor(left, bottom)
 	return left - first.x, bottom - first.y
 end
 
--- Where the block starts when the profile has no spot and the player has put it back: the main bar at the left of the micro menu, or the
--- bottom middle of the screen.
-local function DefaultSpot()
-	local plan = Plan(0, 0)
+-- Where a block starts when the profile has no spot: block 1, after the player has put it back, with the main bar at the left of the micro
+-- menu; block 2 on the left of block 1 and block 3 on its right, bottoms level; else the bottom middle of the screen.
+local function DefaultSpot(n)
+	local plan = Plan(n, 0, 0)
+	if not plan then
+		return nil
+	end
+	local one = blocks[1].last
+	if n > 1 and one then
+		local left = one.spotX - one.width / 2
+		if n == 2 then
+			return left - BESIDE - plan.width / 2, one.spotY
+		end
+		return left + one.width + BESIDE + plan.width / 2, one.spotY
+	end
 	local micro = GameFrame("MicroMenuContainer")
-	if plan and plan.rows[1].id == "main" and micro then
+	if n == 1 and plan.rows[1].id == "main" and micro then
 		local left, bottom = ns.MoverRect(micro)
 		if left then
-			return SpotFor(left - MICRO_GAP_X - plan.rows[1].width, bottom - MICRO_GAP_Y)
+			return SpotFor(n, left - MICRO_GAP_X - plan.rows[1].width, bottom - MICRO_GAP_Y)
 		end
 	end
 	local width = ScreenWidth()
@@ -338,17 +360,19 @@ local function DefaultSpot()
 	return nil
 end
 
--- The spot of the block: the saved one, else the default after a put back, else the first bar where it is now, which is then saved.
-local function Spot()
-	state.waiting = nil
-	local x, y = ns.MoverSpot(MOVER, "BOTTOM")
+-- The spot of block n: the saved one, else for blocks 2 and 3 their place beside block 1, else for block 1 the default after a put back, else
+-- its first bar where it is now, which is then saved.
+local function Spot(n)
+	local block = blocks[n]
+	block.waiting = nil
+	local x, y = ns.MoverSpot(MOVERS[n], "BOTTOM")
 	if x then
 		return x, y
 	end
-	if state.default then
-		return DefaultSpot()
+	if n > 1 or block.default then
+		return DefaultSpot(n)
 	end
-	local rows = Slots()
+	local rows = Slots(n)
 	local first = rows[1]
 	if not first then
 		return nil
@@ -356,14 +380,14 @@ local function Spot()
 	local left, bottom = ns.MoverRect(first.frame)
 	local width, spots = ScreenWidth(), ns.Spots()
 	if not (left and width and spots) then
-		state.waiting = first.bar.label
+		block.waiting = first.bar.label
 		return nil
 	end
-	x, y = SpotFor(left, bottom)
+	x, y = SpotFor(n, left, bottom)
 	if not x then
 		return nil
 	end
-	spots[MOVER] = ns.CleanSpot({ point = "BOTTOM", x = x - width / 2, y = y, kind = "hud" })
+	spots[MOVERS[n]] = ns.CleanSpot({ point = "BOTTOM", x = x - width / 2, y = y, kind = "hud" })
 	return x, y
 end
 
@@ -380,16 +404,24 @@ local function Same(plan, last)
 	return math.abs(plan.spotX - last.spotX) <= TOLERANCE and math.abs(plan.spotY - last.spotY) <= TOLERANCE
 end
 
--- The frames the block holds, rows first, then the ones hung from the main bar.
-local function HeldNames()
-	local names = {}
-	for _, row in ipairs(state.last and state.last.rows or {}) do
+-- The frames a plan holds, rows first, then the ones hung from the main bar.
+local function PlanNames(plan, names)
+	for _, row in ipairs(plan and plan.rows or {}) do
 		names[#names + 1] = row.bar.frame
 	end
 	for _, name in ipairs({ XP2, XP1, XPOWN, STANCE, PET, POSSESS, TOTEM }) do
-		if state.last and state.last.spots[name] then
+		if plan and plan.spots[name] then
 			names[#names + 1] = name
 		end
+	end
+	return names
+end
+
+-- The frames every block holds, block 1 first.
+local function HeldNames()
+	local names = {}
+	for _, block in ipairs(blocks) do
+		PlanNames(block.last, names)
 	end
 	return names
 end
@@ -418,14 +450,14 @@ local function Answers(name, method)
 	return ok and not ns.IsSecret(shown) and shown == true
 end
 
--- Whether the cursor is inside the block, the frames hung from its main bar and the padding of the panel, or on the arrow that opens the
+-- Whether the cursor is inside a block's plan, the frames hung from its main bar and the padding of the panel, or on the arrow that opens the
 -- flyout of a totem bar the block holds. The arrow is 18 high on the top of a totem slot that ends 5 under the top of the bar
 -- (MultiCastActionBarFrame.xml:3-4, 102, 156-157, 210-214; MultiCastActionBarFrame.lua:819-820), so most of it is over the bar. The game shows
 -- it only with the cursor on a totem slot or the summon button (MultiCastActionBarFrame.lua:378-381, 452-455, 604-606, 926-931) and hides it
 -- once the cursor is off them and off the arrow (:391-394, 457-460, 803-805, 825-830, 940-943), so a shown arrow is a cursor on the totem bar.
 -- It hangs from the slot, a child of the bar (MultiCastActionBarFrame.xml:210), so it is read with IsVisible.
-local function Under()
-	local plan, x, y = state.last, Cursor()
+local function Under(plan)
+	local x, y = Cursor()
 	if not plan then
 		return false
 	end
@@ -468,8 +500,8 @@ local function FlyoutOpen()
 	return Answers("SpellFlyout", "IsShown") or Answers(TOTEM_FLYOUT, "IsVisible")
 end
 
-local function Full()
-	return (Opt("fadeCombat") and InCombatLockdown()) or (Opt("fadeMouse") and Under()) or Holding() or FlyoutOpen()
+local function Full(plan)
+	return (Opt("fadeCombat") and InCombatLockdown()) or (Opt("fadeMouse") and Under(plan)) or Holding() or FlyoutOpen()
 end
 
 -- The alpha of a frame, or 1 when the client does not say.
@@ -505,21 +537,24 @@ local function PutBack(frame)
 	end
 end
 
--- Every held frame and the panel to full or faded; a frame that is no longer held gets its own alpha back.
+-- Every held frame and each panel to full or faded, block by block; a frame that is no longer held gets its own alpha back.
 local function Fade()
 	local keep = {}
-	if state.last then
-		local alpha = Full() and 1 or Opt("fadeTo") / 100
-		for _, name in ipairs(HeldNames()) do
-			local frame = GameFrame(name)
-			if frame then
-				keep[frame] = true
-				Write(frame, alpha)
+	for _, block in ipairs(blocks) do
+		local plan = block.last
+		if plan then
+			local alpha = Full(plan) and 1 or Opt("fadeTo") / 100
+			for _, name in ipairs(PlanNames(plan, {})) do
+				local frame = GameFrame(name)
+				if frame then
+					keep[frame] = true
+					Write(frame, alpha)
+				end
 			end
-		end
-		if state.panel and state.panelOn then
-			keep[state.panel] = true
-			Write(state.panel, alpha)
+			if block.panel and block.panelOn then
+				keep[block.panel] = true
+				Write(block.panel, alpha)
+			end
 		end
 	end
 	for frame in pairs(state.orig) do
@@ -538,28 +573,36 @@ local function FadeTick(_, elapsed)
 	ns.Try(KEY, Fade)
 end
 
--- The panel behind the block and the fade, from the plan in use and the options. Each is off with no plan, with the block off and with its
--- own switch off, and the alpha of every frame the fade touched is put back.
-local function Look()
-	local plan = state.last
-	local on = plan ~= nil and ns.Enabled(KEY)
-	state.panelOn = on and Opt("background") == true
-	if state.panelOn then
-		if not state.panel then
-			state.panel = CreateFrame("Frame", nil, UIParent)
-			ns.Own[state.panel] = true
-			state.panel:SetFrameStrata("BACKGROUND")
-			ns.Outline(state.panel, state.panel, true)
+-- The panel behind a block from its plan and the options: off with no plan, with the page off and with its own switch off.
+local function Panel(block, on)
+	local plan = block.last
+	block.panelOn = on and plan ~= nil and Opt("background") == true
+	if block.panelOn then
+		if not block.panel then
+			block.panel = CreateFrame("Frame", nil, UIParent)
+			ns.Own[block.panel] = true
+			block.panel:SetFrameStrata("BACKGROUND")
+			ns.Outline(block.panel, block.panel, true)
 		end
 		local pad = Opt("backgroundPad")
-		state.panel:ClearAllPoints()
-		state.panel:SetSize(plan.width + 2 * pad, plan.height + 2 * pad)
-		state.panel:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", plan.spotX - plan.width / 2 - pad, plan.spotY - pad)
-		state.panel:Show()
-	elseif state.panel then
-		state.panel:Hide()
+		block.panel:ClearAllPoints()
+		block.panel:SetSize(plan.width + 2 * pad, plan.height + 2 * pad)
+		block.panel:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", plan.spotX - plan.width / 2 - pad, plan.spotY - pad)
+		block.panel:Show()
+	elseif block.panel then
+		block.panel:Hide()
 	end
-	if on and Opt("fade") then
+	return plan ~= nil
+end
+
+-- The panels behind the blocks and the fade, from the plans in use and the options. The fade is off with no plan, with the page off and with
+-- its own switch off, and the alpha of every frame it touched is put back.
+local function Look()
+	local on, any = ns.Enabled(KEY), false
+	for _, block in ipairs(blocks) do
+		any = Panel(block, on) or any
+	end
+	if on and any and Opt("fade") then
 		if not state.fader then
 			state.fader = CreateFrame("Frame")
 			ns.Own[state.fader] = true
@@ -577,27 +620,51 @@ local function Look()
 	end
 end
 
--- The extra blocks hang from the rectangle of the block, so they are told when it changes or goes.
+-- The extra blocks hang from the rectangle of block 1, so they are told when it changes or goes.
 local function Tell()
 	if ns.BlocksReplan then
 		ns.BlocksReplan()
 	end
 end
 
+-- A block with no plan: its box goes.
+local function Drop(block)
+	block.last = nil
+	if block.holder then
+		block.holder:Hide()
+	end
+end
+
 local function Release()
-	state.last, state.pending, state.waiting, state.default = nil, false, nil, false
+	state.pending = false
+	for _, block in ipairs(blocks) do
+		block.waiting, block.default = nil, false
+		Drop(block)
+	end
 	ns.MoverHold(KEY, nil)
 	ns.XpBarBlock(nil)
-	if state.holder then
-		state.holder:Hide()
-	end
 	Look()
 	Tell()
 end
 
+-- The spots of every block for Movers; Flat UI's own experience bar is not a frame of the game's: its spot goes to XpBar.lua, and the rest are held.
+local function Hold()
+	local held = {}
+	for _, block in ipairs(blocks) do
+		for name, spot in pairs(block.last and block.last.spots or {}) do
+			if name ~= XPOWN then
+				held[name] = spot
+			end
+		end
+	end
+	ns.MoverHold(KEY, next(held) ~= nil and held or nil)
+	local own = blocks[1].last and blocks[1].last.spots[XPOWN]
+	ns.XpBarBlock(own and own.x, own and own.y)
+end
+
 local function Replan()
-	-- Nothing is held, panelled or faded while Flat UI leaves the game's action bars alone.
-	if not ns.Enabled(KEY) or ns.HandsOff() then
+	-- The blocks are planned whatever Leave the game's action bars alone says: it guards only the bars no block holds.
+	if not ns.Enabled(KEY) then
 		Release()
 		return
 	end
@@ -607,57 +674,49 @@ local function Replan()
 		return
 	end
 	state.pending = false
-	local x, y = Spot()
-	local plan = x and Plan(x, y)
-	if not plan then
-		state.last = nil
-		ns.MoverHold(KEY, nil)
-		ns.XpBarBlock(nil)
-		if state.holder then
-			state.holder:Hide()
-		end
-		Look()
-		Tell()
-		return
-	end
-	if Same(plan, state.last) then
-		Look()
-		return
-	end
-	state.last = plan
-	if not state.holder then
-		state.holder = CreateFrame("Frame", nil, UIParent)
-		ns.Own[state.holder] = true
-	end
-	state.holder:ClearAllPoints()
-	state.holder:SetSize(plan.width, plan.height)
-	state.holder:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", plan.spotX, plan.spotY)
-	state.holder:Show()
-	-- Flat UI's own experience bar is not a frame of the game's: its spot goes to XpBar.lua, and the rest are held.
-	local held, own = {}, plan.spots[XPOWN]
-	for name, spot in pairs(plan.spots) do
-		if name ~= XPOWN then
-			held[name] = spot
+	local changed = false
+	-- Block 1 first: blocks 2 and 3 with no spot of their own stand beside it.
+	for n, block in ipairs(blocks) do
+		local x, y = Spot(n)
+		local plan = x and Plan(n, x, y)
+		if not plan then
+			changed = changed or block.last ~= nil
+			Drop(block)
+		elseif not Same(plan, block.last) then
+			changed = true
+			block.last = plan
+			if not block.holder then
+				block.holder = CreateFrame("Frame", nil, UIParent)
+				ns.Own[block.holder] = true
+			end
+			block.holder:ClearAllPoints()
+			block.holder:SetSize(plan.width, plan.height)
+			block.holder:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", plan.spotX, plan.spotY)
+			block.holder:Show()
 		end
 	end
-	ns.MoverHold(KEY, held)
-	ns.XpBarBlock(own and own.x, own and own.y)
+	if changed then
+		Hold()
+	end
 	Look()
-	Tell()
+	if changed then
+		Tell()
+	end
 end
 
--- The left, bottom, width and height of the block in the units of UIParent, and the top of the bars the page puts over it. Nothing while the page is off or the block has no row.
+-- The left, bottom, width and height of block 1 in the units of UIParent, and the top of the bars the page puts over it. Nothing while the page
+-- is off or the block has no row. The Bar blocks page hangs its bars from it.
 function ns.MainBlock()
-	local plan = state.last
+	local plan = blocks[1].last
 	if ns.Enabled(KEY) and plan and plan.width > 0 and plan.height > 0 then
 		return plan.spotX - plan.width / 2, plan.spotY, plan.width, plan.height, plan.aboveTop or plan.spotY + plan.height
 	end
 	return nil
 end
 
--- Whether the fade of the block has the frame of this name (a bar of a row or a frame hung from the main bar), for the Fading page, which leaves it to that fade.
+-- Whether the fade of a block has the frame of this name (a bar of a block or a frame hung from the main bar), for the Fading page, which leaves it to that fade.
 function ns.BarBlockFades(name)
-	if not (state.last and ns.Enabled(KEY) and Opt("fade")) then
+	if not (ns.Enabled(KEY) and Opt("fade")) then
 		return false
 	end
 	for _, held in ipairs(HeldNames()) do
@@ -680,17 +739,21 @@ local function Queue()
 	end)
 end
 
--- A bar that is laid out later, or turned on in the game's options, changes the plan.
+-- A bar that is laid out later, or turned on in the game's options, changes the plan of its block.
 local function Watch(_, elapsed)
 	state.clock = (state.clock or 0) + elapsed
 	if state.clock < WATCH_EVERY then
 		return
 	end
 	state.clock = 0
-	if state.last and not InCombatLockdown() and not state.queued then
-		local plan = Plan(0, 0)
-		if not plan or plan.sig ~= state.last.sig then
+	if InCombatLockdown() or state.queued then
+		return
+	end
+	for n, block in ipairs(blocks) do
+		local plan = Plan(n, 0, 0)
+		if (plan and plan.sig) ~= (block.last and block.last.sig) then
 			Queue()
+			return
 		end
 	end
 end
@@ -703,6 +766,9 @@ local function Refresh()
 		Release()
 		if ns.BarButtonsChanged then
 			ns.BarButtonsChanged()
+		end
+		if ns.BarBlockTurnOn then
+			ns.BarBlockTurnOn()
 		end
 		return
 	end
@@ -717,23 +783,29 @@ local function Refresh()
 	if ns.BarButtonsChanged then
 		ns.BarButtonsChanged()
 	end
-end
-
--- The frames of the box and the frame they hang from, for the handle of the movers. Nothing while the block is off, the movers do not place
--- the game's own frames or the block has no row.
-function ns.BarBlockRow()
-	local movers, systems = ns.MoverHoldGates()
-	if state.holder and state.last and ns.Enabled(KEY) and movers and systems then
-		return { state.holder }, state.holder
+	-- At login and when the bars of a block change, a bar a block holds that the game's options have off is turned on (BarBlockLists.lua).
+	if ns.BarBlockTurnOn then
+		ns.BarBlockTurnOn()
 	end
-	return {}
 end
 
--- The movers set or put back the spot of the block. A spot put back sends the block to its default place.
-function ns.BarBlockMoved()
-	state.default = ns.MoverSpot(MOVER, "BOTTOM") == nil
-	if ns.Enabled(KEY) then
-		Queue()
+-- The frames of the box of each block and the frame they hang from, for the handle of the movers (BarBlockRow, BarBlockRow2, BarBlockRow3).
+-- Nothing while the page is off, the movers do not place the game's own frames or the block has no row.
+for n, block in ipairs(blocks) do
+	ns[n == 1 and "BarBlockRow" or ("BarBlockRow" .. n)] = function()
+		local movers, systems = ns.MoverHoldGates()
+		if block.holder and block.last and ns.Enabled(KEY) and movers and systems then
+			return { block.holder }, block.holder
+		end
+		return {}
+	end
+	-- The movers set or put back the spot of the block (BarBlockMoved, BarBlockMoved2, BarBlockMoved3). A spot put back sends block 1 to its
+	-- default place, and blocks 2 and 3 beside block 1.
+	ns[n == 1 and "BarBlockMoved" or ("BarBlockMoved" .. n)] = function()
+		block.default = ns.MoverSpot(MOVERS[n], "BOTTOM") == nil
+		if ns.Enabled(KEY) then
+			Queue()
+		end
 	end
 end
 
@@ -747,9 +819,8 @@ local function Status()
 	if not ns.Enabled(KEY) then
 		return lines
 	end
-	if ns.HandsOff() then
-		lines[#lines + 1] = "Action bar block: not applied while Leave the game's action bars alone is on."
-		return lines
+	if ns.HandsOff() and Opt("others") == "above" then
+		lines[#lines + 1] = "Action bar block: the stance, pet and experience bars stay with the game while Leave the game's action bars alone is on."
 	end
 	local movers, systems, keep = ns.MoverHoldGates()
 	if not movers then
@@ -761,15 +832,17 @@ local function Status()
 	if not keep then
 		lines[#lines + 1] = "Action bar block: Keep moved frames in place is off, so the game puts the bars back."
 	end
-	if state.waiting then
-		lines[#lines + 1] = ("Action bar block: waiting for %s."):format(state.waiting)
+	if blocks[1].waiting then
+		lines[#lines + 1] = ("Action bar block: waiting for %s."):format(blocks[1].waiting)
 	end
 	if state.noToggles then
-		lines[#lines + 1] = "Action bar block: the game does not say which bars are on, so every bar picked is in the block."
+		lines[#lines + 1] = "Action bar block: the game does not say which bars are on, so every bar picked is in its block."
 	end
-	for _, row in ipairs(state.last and state.last.rows or {}) do
-		if ns.MoverHeld(row.bar.frame).state == "refused" then
-			lines[#lines + 1] = ("%s is placed by the game, so it is left out of the block."):format(row.bar.label)
+	for _, block in ipairs(blocks) do
+		for _, row in ipairs(block.last and block.last.rows or {}) do
+			if ns.MoverHeld(row.bar.frame).state == "refused" then
+				lines[#lines + 1] = ("%s is placed by the game, so it is left out of its block."):format(row.bar.label)
+			end
 		end
 	end
 	local stacked = {}
@@ -787,7 +860,7 @@ local function Status()
 	if #stacked > 0 and movers and systems and keep then
 		lines[#lines + 1] = ("In a fight the game still stacks: %s. In Edit Mode press an arrow key once on each and save to keep them."):format(table.concat(stacked, ", "))
 	end
-	if state.last and state.last.overlap then
+	if blocks[1].last and blocks[1].last.overlap then
 		lines[#lines + 1] = "Stance bar and pet bar overlap: the block is narrower than both."
 	end
 	return lines
@@ -861,7 +934,8 @@ end
 
 -- /flatui block facts: what the game says about the bars and the layouts of Edit Mode. It reads and prints; it changes nothing.
 local function Facts()
-	local first = state.last and state.last.rows[1] and state.last.rows[1].bar.frame or "MainActionBar"
+	local one = blocks[1].last
+	local first = one and one.rows[1] and one.rows[1].bar.frame or "MainActionBar"
 	print(FactBar(first))
 	for _, name in ipairs(FACT_FRAMES) do
 		print(FactBar(name))
@@ -883,13 +957,15 @@ local function Record(which)
 	Soon(function()
 		pcall(function()
 			local held, at = 0, 0
-			for name, spot in pairs(state.last and state.last.spots or {}) do
-				local frame = GameFrame(name)
-				if frame and ns.MoverHeld(name).held then
-					held = held + 1
-					local left, bottom = ns.MoverRect(frame)
-					if left and math.abs(left - spot.x) <= TOLERANCE and math.abs(bottom - spot.y) <= TOLERANCE then
-						at = at + 1
+			for _, block in ipairs(blocks) do
+				for name, spot in pairs(block.last and block.last.spots or {}) do
+					local frame = GameFrame(name)
+					if frame and ns.MoverHeld(name).held then
+						held = held + 1
+						local left, bottom = ns.MoverRect(frame)
+						if left and math.abs(left - spot.x) <= TOLERANCE and math.abs(bottom - spot.y) <= TOLERANCE then
+							at = at + 1
+						end
 					end
 				end
 			end
