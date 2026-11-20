@@ -176,10 +176,13 @@ local ADDON_NAME, ns = ...
 -- (Mainline/ContainerFrame.lua:1816-1822) leaves the box to the game, and it stays until the player presses Okay or Cancel. Each of those slots
 -- gets one post-hook of its OnClick when it is made (HookScript, on Flat UI's own button), which runs after the game's click and acts only on
 -- Ctrl+right-click, which the game does nothing with: it pins the slot to its item or unpins it (BagsPins.lua), a mark of its own in the slot's top
--- right corner. Out of combat, while Put pinned items back is on, it puts pinned items back in their slots after a clean up of the bags and when
--- one comes into the bags, with C_Container.PickupContainerItem twice (the item, then its slot; the game swaps what was there into the slot it
--- came from), checking the cursor in between (GetCursorInfo) and giving back anything left on it (ClearCursor), never while the cursor holds
--- anything, a spell waits for its target, Sell junk, Deposit or Take out run, or the trade window shows (TradeFrame, IsShown). Its bank slots are
+-- right corner. While Ctrl is the player's Auto Loot Key the game opens an item that holds loot on that click (IsModifiedClick("AUTOLOOTTOGGLE"),
+-- Mainline/ContainerFrame.lua:1685-1692), and the hook pins nothing then. Out of combat, while Put pinned items back is on, it puts pinned items
+-- back in their slots after a clean up of the bags and when one comes into the bags, with C_Container.PickupContainerItem twice (the item, then
+-- its slot; the game swaps what was there into the slot it came from), checking the cursor in between (GetCursorInfo) and giving back anything
+-- left on it (ClearCursor), putting in a bag set to Ignore for clean up only an item pinned to that slot, and never while the cursor holds
+-- anything, a spell waits for its target, Sell junk, Deposit or Take out run, or the trade window or the split box shows (TradeFrame,
+-- StackSplitFrame, IsShown). Its bank slots are
 -- buttons of its own that pick up (C_Container.PickupContainerItem) and take out (C_Container.UseContainerItem with no bank type) on a click, out
 -- of combat, and its bank bag slots are buttons of its own that pick up the bag (C_Container.PickupContainerItem(-2, n)) on any click, drag or
 -- drop, out of combat, as the game's do; a modified click on a bank slot, or on a slot drawn from its records (another character's, or the bank

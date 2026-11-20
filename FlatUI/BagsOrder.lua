@@ -12,17 +12,18 @@ local _, ns = ...
 -- keep their places when that row changes, and a list that equals LIST again is not kept. The top shelf (New items or Added) always comes first
 -- and Free slots always last: they are shelves, not sections, and never move. BagsLayout.lua reads the ranks when it lays a window out.
 --
--- The drag: each title is a button of Flat UI's own (BagsLayout.lua), which BagsLayout registers for a drag with the left button
--- (RegisterForDrag) and whose OnDragStart and OnDragStop come here. A drag gives no click, so the drop of an item on a title and the click on
--- the top shelf's title stay as they are. No drag starts while the cursor holds an item (that is a drop, GetCursorInfo), from the top shelf, Free
+-- The drag: each title is a button of Flat UI's own (BagsLayout.lua), whose OnDragStart and OnDragStop come here. A drag gives no click, so
+-- BagsLayout registers for a drag with the left button (RegisterForDrag) only the titles that can move, and the click on the top shelf's title or
+-- a bag's label stays a click. No drag starts while the cursor holds an item (that is a drop, GetCursorInfo), from the top shelf, Free
 -- slots or a bag of Bag by bag, or outside the Sections view; any other section can be dragged, in both windows and for every character. While a
 -- title is dragged it fades to half (SetAlpha on the title of Flat UI's own), and a frame of this file's own in the window's content reads the
 -- cursor every 0.05 seconds (GetCursorPosition over the title's GetEffectiveScale, GetLeft, GetTop and GetWidth, and the section's height from the
 -- layout): the section under the cursor, title and cells, is the target, and the drop goes before it when the cursor is left of its middle, else
 -- after it. A bar 2 units wide in the Highlight colour of the Windows page marks the place in the gap beside it. Letting go there moves the section
--- and lays both windows out again (B.Request); letting go elsewhere, the window hiding, or the left button found up with no drop heard
--- (IsMouseButtonDown) changes nothing. The cursor counts only while it is over the window's scroll area (IsMouseOver), so a section scrolled out
--- of sight is never the target. There is no scrolling while dragging; the wheel still scrolls.
+-- and lays both windows out again (B.Request); letting go elsewhere, or the window hiding, changes nothing. The left button found up with no
+-- OnDragStop heard (IsMouseButtonDown; the title was laid out away meanwhile) counts as letting go where the cursor is. The cursor counts only
+-- while it is over the window's scroll area (IsMouseOver), so a section scrolled out of sight is never the target. There is no scrolling while
+-- dragging; the wheel still scrolls.
 --
 -- The menu: a right click on a title that can be dragged, with no item on the cursor, opens a menu of BagsLayout's (Layout.Menu) with Move to the
 -- top, Move up, Move down and Move to the bottom, among the sections that window shows, and while an order is saved, a line that puts Flat UI's
@@ -44,6 +45,9 @@ local TIPS = {
 	drag = "Drag the title to move this section. Right-click it to move it, or to put Flat UI's order back.",
 	keep = "Your pinned slots, in the order of your bags: nothing here is sorted, and after a clean up Flat UI puts each item back in its slot. "
 		.. "Ctrl+right-click an item to pin or unpin its slot. Drag the title to move this section, or right-click it for more.",
+	-- While Put pinned items back is off (BagsPins.lua).
+	keepStill = "Your pinned slots, in the order of your bags: nothing here is sorted. Put pinned items back is off, so after a clean up "
+		.. "right-click this title to put them back. Ctrl+right-click an item to pin or unpin its slot. Drag the title to move this section.",
 }
 
 -- The drag under way: { key, title, st, parts }, or nil.
@@ -457,13 +461,17 @@ function Order.Menu(st, sec, anchor)
 	Call(B.Layout, "Menu", anchor, label, items, st.which)
 end
 
--- The line of a title's tooltip while the cursor holds no item: how to move the section, or what Keep in place is. Nil for a title that cannot
--- be dragged.
+-- The line of a title's tooltip while the cursor holds no item: how to move the section, or what Keep in place is, as Put pinned items back
+-- says. Nil for a title that cannot be dragged.
 function Order.Tip(st, sec)
 	if not Movable(st, sec) then
 		return nil
 	end
-	return sec.key == "keep" and TIPS.keep or TIPS.drag
+	if sec.key ~= "keep" then
+		return TIPS.drag
+	end
+	local ok, moves = pcall(Call, B, "Opt", "pinMoves")
+	return (ok and moves == false) and TIPS.keepStill or TIPS.keep
 end
 
 -- The row Section order -----------------------------------------------------------------------------------------------------------------------

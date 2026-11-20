@@ -8,7 +8,9 @@ local _, ns = ...
 -- Sections files every item with B.Categories.Of and sorts each section with B.Categories.Compare (BagsCategories.lua), but for Keep in place,
 -- whose cells go in the order of the bags and their slots, so it mirrors the bags and never reshuffles; in the player's own bag window an empty
 -- pinned slot (B.Pins.Get, BagsPins.lua) gets a cell there too, its live empty button, so an item dropped on it goes in the slot, and Free slots,
--- which skips every slot that has a cell, shows another. The sections go in the player's order (B.Order.Ranks, BagsOrder.lua), else in the order
+-- which skips every slot that has a cell, shows another. Like any cell, it shows what fills its slot while the window is open, also loot the
+-- game puts there, with the pin's hollow mark, until the next layout. While this character has a pin, the bag window always has the title of
+-- Keep in place, as it has Junk's (B.Pins.Any). The sections go in the player's order (B.Order.Ranks, BagsOrder.lua), else in the order
 -- of B.Categories.LIST. A section lies under its
 -- title, as many cells wide as it has items, at least as wide as its title needs and at most as wide as the window. The title's width is measured
 -- once per layout with GetUnboundedStringWidth on Flat UI's own font string (WL/uiobjects.yaml:3738), and a title wider than the window is cut to
@@ -49,9 +51,10 @@ local _, ns = ...
 -- read every tenth of a second while the window shows. A click on the top shelf's title puts its items away and lays the window out
 -- again: in the bag window, while New items at the top is on, B.ClearNew (Bags.lua) first takes the game's new flags off the items of the bags,
 -- as the window's close does, then B.Categories.New.Clear lets New items go.
--- A drop on Keep in place goes to B.Pins.Drop instead, which pins the slot the item came from, and a drop on any other section that takes one
--- first goes to B.Pins.Left, which unpins that slot when it was pinned for the item. Each title of the Sections view but the top shelf's and Free
--- slots' is registered for a drag with the left button (RegisterForDrag), and its OnDragStart and OnDragStop go to B.Order (BagsOrder.lua), which
+-- A drop on Keep in place goes to B.Pins.Drop instead, which pins the slot the item came from; a drop on any other section that takes one reads
+-- the item's slot first (B.Pins.Held) and, once B.Categories.Drop took it, calls B.Pins.Left, which unpins that slot when it was pinned for the
+-- item. Each title of the Sections view but the top shelf's and Free slots' is registered for a drag with the left button when it is placed
+-- (RegisterForDrag; every other title for none, so its clicks stay clicks), and its OnDragStart and OnDragStop go to B.Order (BagsOrder.lua), which
 -- moves the section; a right click on such a title with no item on the cursor opens B.Order's menu of it, and its tooltip says how. A window that
 -- closes ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
 -- The buttons are BagsItems.lua's: the game's item buttons for the player's own bags, buttons of Flat UI's own for the live bank and for
@@ -573,8 +576,8 @@ local function Title(st, index)
 	frame:SetScript("OnReceiveDrag", function()
 		Run("layout", Drop, title)
 	end)
-	-- A drag of the title moves its section (BagsOrder.lua); a drag gives no click, so the clicks above stay as they are.
-	frame:RegisterForDrag("LeftButton")
+	-- A drag of the title moves its section (BagsOrder.lua). PlaceTitle registers for a drag only a title whose section can move, since a drag
+	-- gives no click: a click on any other title that moves a little stays a click.
 	frame:SetScript("OnDragStart", function()
 		Run("order", Call, B.Order, "DragStart", title)
 	end)
@@ -763,6 +766,16 @@ local function PlaceTitle(st, title, sec, x, y, width)
 	title.text:SetText(TitleText(sec))
 	title.text:SetWidth(math.max(1, width - 1))
 	local frame = title.frame
+	-- The left button drags the title of a section of the Sections view that can move (BagsOrder.lua): not the top shelf, Free slots or a bag.
+	local drags = st.view == "sections" and not sec.block and not sec.strip and sec.key ~= FREE and sec.key ~= NEW
+	if title.drags ~= drags then
+		title.drags = drags
+		if drags then
+			pcall(frame.RegisterForDrag, frame, "LeftButton")
+		else
+			pcall(frame.RegisterForDrag, frame)
+		end
+	end
 	frame:ClearAllPoints()
 	frame:SetPoint("TOPLEFT", st.content, "TOPLEFT", x, y)
 	frame:SetSize(width, st.titleH)
@@ -993,6 +1006,14 @@ local function BuildSections(st)
 		local junk = { key = JUNK, label = Label(JUNK), entries = {} }
 		byKey[JUNK] = junk
 		list[#list + 1] = junk
+	end
+	-- While this character has a pin (B.Pins.Any), its live bag window always has the title of Keep in place too, with no cell while no pinned
+	-- slot holds its item, so its menu (Put pinned items back now, Unpin all) and its drop stay in reach.
+	local okAny, anyPin = pcall(Call, B.Pins, "Any")
+	if pinned and st.mine and not byKey[KEEP] and okAny and anyPin == true then
+		local keep = { key = KEEP, label = Label(KEEP), entries = {} }
+		byKey[KEEP] = keep
+		list[#list + 1] = keep
 	end
 	table.sort(list, function(a, b)
 		local oa, ob = orders[a.key] or LATE, orders[b.key] or LATE
@@ -1472,9 +1493,12 @@ function Drop(title)
 		-- Keep in place pins the slot the item came from (BagsPins.lua).
 		Run("pins", Call, B.Pins, "Drop")
 	elseif takes then
-		-- An item from a pinned slot dropped on another section unpins that slot first, while the cursor still says where it came from.
-		Run("pins", Call, B.Pins, "Left")
-		Call(Categories, "Drop", id, sec.key)
+		-- An item from a pinned slot dropped on another section unpins that slot once the section took it. Where it came from is read first,
+		-- since the drop gives the item back; a drop refused leaves the pin.
+		local okFrom, fromId, fromBag, fromSlot = pcall(Call, B.Pins, "Held")
+		if Call(Categories, "Drop", id, sec.key) == true and okFrom and fromId then
+			Run("pins", Call, B.Pins, "Left", fromId, fromBag, fromSlot)
+		end
 	end
 	pcall(ClearCursor)
 end

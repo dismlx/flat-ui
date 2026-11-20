@@ -16,17 +16,22 @@ local _, ns = ...
 -- Blizzard_UIPanels_Game/Mainline/ContainerFrame.lua:1683-1697) sends any modified click to OnModifiedClick, never to use, sell or deposit, and
 -- that (:1781-1815) acts only for EXPANDITEM (SHIFT-BUTTON2), CHATLINK (SHIFT-BUTTON1), DRESSUP (CTRL-BUTTON1), SPLITSTACK and AUTOLOOTTOGGLE
 -- (SHIFT) (Bindings_Camelot.xml:1537-1543): the game tells Shift+left from Shift+right there, and Ctrl with the right button meets none of them,
--- so the game does nothing with it. Each live slot button of BagsItems.lua, Flat UI's own frame from the game's template, gets one post-hook of
--- its OnClick when it is made (HookScript), which runs after the game's secure click and changes nothing of it: it acts only for the right
--- button with Ctrl alone held (IsControlKeyDown, IsShiftKeyDown, IsAltKeyDown), an empty cursor (GetCursorInfo) and Bags in use. The bag and
--- slot are the ones the button was made for. An item in an unpinned slot (C_Container.GetContainerItemID) gets its slot pinned; a pinned slot,
--- whatever it holds, is unpinned; an empty slot that is not pinned does nothing. A pin of an item of Junk, or of a grey item, takes it off
--- Errands' sell list and puts a grey one on the keep list (ns.ErrandsJunkMark, as a drop on another section does), so Sell junk never sells a
--- pinned item. A toggle is data alone, so it works in a fight too; one line in chat says what changed.
+-- so the game does nothing with it. One exception: while the player has made Ctrl the Auto Loot Key (AUTOLOOTTOGGLE, a choice of Settings,
+-- Controls, Blizzard_SettingsDefinitions_Frame/Controls.lua:21-27, 65), the game takes a modified right click of an item that holds loot as a
+-- plain right click (ContainerFrame.lua:1685-1692), which opens, uses or sells it; the hook then leaves the pin as it was and says to drop the
+-- item on a title instead (IsModifiedClick, and hasLoot of C_Container.GetContainerItemInfo). Each live slot button of BagsItems.lua, Flat UI's
+-- own frame from the game's template, gets one post-hook of its OnClick when it is made (HookScript), which runs after the game's secure click and
+-- changes nothing of it: it acts only for the right button with Ctrl alone held (IsControlKeyDown, IsShiftKeyDown, IsAltKeyDown), an empty
+-- cursor (GetCursorInfo) and Bags in use. The bag and slot are the ones the button was made for. An item in an unpinned slot
+-- (C_Container.GetContainerItemID) gets its slot pinned; a pinned slot, whatever it holds, is unpinned; an empty slot that is not pinned does
+-- nothing. A pin of an item of Junk, or of a grey item, takes it off Errands' sell list and puts a grey one on the keep list (ns.ErrandsJunkMark,
+-- as a drop on another section does, and it says so in chat), so Sell junk never sells a pinned item; unpinning leaves both lists as they are
+-- (/flatui sell, /flatui keep). A toggle is data alone, so it works in a fight too; one line in chat says what changed.
 -- Other ways in and out: an item dropped on the title of Keep in place gets the slot it came from pinned (the cursor's slot, from
--- C_Cursor.GetCursorItem, as BagsCategories reads it); an item from a pinned slot dropped on another section's title unpins that slot
--- (BagsLayout.lua routes both drops here first, out of combat only, and gives the item back itself); the row Pinned slots unpins one slot or all;
--- and the menu of Keep in place's title has Put pinned items back now and Unpin all.
+-- C_Cursor.GetCursorItem, as BagsCategories reads it); an item from a pinned slot dropped on another section's title unpins that slot once that
+-- section took the drop (BagsLayout.lua reads the slot with Pins.Held before B.Categories.Drop gives the item back, then calls Pins.Left; out
+-- of combat only); the row Pinned slots unpins one slot or all; and the menu of Keep in place's title has Put pinned items back now and Unpin all.
+-- While this character has a pin, the bag window always has the title of Keep in place (Pins.Any), even when no pinned slot holds its item.
 --
 -- The mark (Pins.Mark, from B.Buttons.Draw for live slots, in both views): a square at the top right of the slot, a corner the slot does not use,
 -- in the Highlight colour of the Windows page. Solid with a dark edge while the slot holds its item; hollow (a dark middle in a coloured edge)
@@ -37,28 +42,36 @@ local _, ns = ...
 -- - after a clean up of the bags: the game's clean up (C_Container.SortBags, BagSort.lua) cannot leave single items alone (its ignore flags work on
 --   whole bags), so the items are put back after it. When the sort hold of Bags.lua is due to end it hands over to Pins.AfterSort, and the hold,
 --   with the busy sort button and no arrivals on the top shelf, lasts until the mover is done, MOST_RUN seconds at most; the window is laid out
---   once after it. In a fight AfterSort declines, the hold ends as before, and the mover runs once the fight is over.
+--   once after it. In a fight AfterSort declines, the hold ends as before, and the mover runs once the fight is over. The run belongs to that hold
+--   (B.SortHold): a clean up asked for while it runs makes it wait for that one's hold, which hands over to it again.
 -- - when a pinned item comes back: after each scan of BAG_UPDATE_DELAYED (Pins.Scanned) the count of each pinned item in the bags is read
 --   (C_Item.GetItemCount, bags only), and a count that rose while a pin of that item waits starts the mover ARRIVAL seconds later: loot, a purchase,
---   buyback, mail, the bank, a trade or a quest reward. A move inside the bags changes no count, so the mover never undoes the player's own drag.
---   Scans during the sort hold, and the first scan of a session, only take the counts.
+--   buyback, mail, the bank, a trade or a quest reward. That run puts back the items that came alone (only); a move inside the bags changes no
+--   count, so the mover never undoes the player's own drag of a pinned item until the next clean up or the next arrival of that item. Scans
+--   during the sort hold, and the first scan of a session, only take the counts.
 -- - at once from the menu of Keep in place's title, whatever that row says.
+-- A run that is not a sort hold's lays the window out when it moved something (B.Request), so an open window shows each item where it went.
 -- Each step reads the bags anew (C_Container.GetContainerNumSlots, GetContainerNumFreeSlots for the bag's family, GetContainerItemInfo), so steps
 -- that mix with the game's or the player's moves mend themselves. A pin is met while its slot holds its item, whatever the stack. For each pin
 -- that is not met, in the order of the bags: the source is the largest unlocked stack of the item that is not a met pin; an empty target gets
 -- the move; a target that holds another item gets a swap, which the game makes when the source is put on it, the other item going to the source
 -- slot, but only when that item fits the source's bag (a bag of family 0 that is not the reagent bag, or a special bag whose family
 -- C_Item.GetItemFamily matches, never a container; C_Item.GetItemInfoInstant); else that item first goes to a free slot of a normal bag that is
--- not pinned, or the pin waits for the next run. Nothing is put on a slot that holds the same item, so stacks never merge, and nothing is split.
+-- not pinned, or the pin waits for the next run. A bag the player set to Ignore for clean up (C_Container.GetBackpackAutosortDisabled, or the flag
+-- DisableAutoSort of C_Container.GetBagSlotFlag) is never given another item: no free slot is taken in it and no swap sends an item into it,
+-- which goes out of the way first instead; a pinned item may still be taken out of it, and a pin in it filled. Nothing is put on a slot that
+-- holds the same item, so stacks never merge, and nothing is split. The two slots of each move stay out of the next steps until the server
+-- answers (the target holds the item and neither is locked) or PENDING seconds pass, so no second stack is sent after the first.
 -- A move checks that neither slot is locked, picks the source up (C_Container.PickupContainerItem, not protected in the client list,
 -- wowless/data/products/wowf/apis.yaml:8767, whose documentation asks only for plain arguments), checks the cursor holds that item (GetCursorInfo)
 -- and puts it on the target; an item still on the cursor then goes back (CursorHasItem, ClearCursor) and counts as a failure of its pin. At most
 -- PER_STEP moves on different slots go in one step, then the mover waits for the next scan or STEP_WAIT seconds; a run ends when a step finds
--- nothing to do, after 2 moves a pin and 4 more, after MOST_RUN seconds, and a pin that failed FAILS times waits for the next run. One more run
--- looks again CHECK_AFTER seconds after a run that moved something. A step waits while the cursor holds anything, a spell waits for its target
--- (SpellIsTargeting), Sell junk sells (ns.ErrandsSelling), Deposit or Take out run (B.Bank.Busy), the trade window shows (TradeFrame, IsShown) or
--- a sort hold lasts that is not its own; in a fight (InCombatLockdown, UnitAffectingCombat) the run ends and one waits for the fight's end
--- (ns.OutOfCombat). Its work runs as the part pins of the module (B.Part), so a fault stops it alone.
+-- nothing to do, after 2 moves a pin and 4 more, after MOST_RUN seconds, and a pin that failed FAILS times waits for the next run. One more run,
+-- for the same pins, looks again CHECK_AFTER seconds after a run that moved something. A step waits while the cursor holds anything, a spell
+-- waits for its target (SpellIsTargeting), Sell junk sells (ns.ErrandsSelling), Deposit or Take out run (B.Bank.Busy), the trade window or the
+-- game's split box shows (TradeFrame, StackSplitFrame, IsShown; the box's Okay splits whatever its slot holds then) or a sort hold lasts that is
+-- not its own; in a fight (InCombatLockdown, UnitAffectingCombat) the run ends and one waits for the fight's end (ns.OutOfCombat). Its work runs
+-- as the part pins of the module (B.Part), so a fault stops it alone.
 -- Limits: the put back is seen, not instant; the game may still put loot in an empty pinned slot, and the pinned item is swapped in when it next
 -- comes or at the next clean up; a pin whose stack a clean up merged into another stays empty; only clean ups through BagSort are followed.
 
@@ -74,10 +87,15 @@ local CONTAINER, QUIVER = 1, 11
 -- The mover: moves in one step, seconds to wait for a scan, seconds a run lasts at most, seconds to the run that looks again, seconds from an
 -- item's arrival to its run, and the failures after which a pin waits for the next run.
 local PER_STEP, STEP_WAIT, MOST_RUN, CHECK_AFTER, ARRIVAL, FAILS = 4, 1, 10, 1, 0.2, 2
+-- Seconds a slot of a move stays out of the plans while the server has not answered it.
+local PENDING = 3
+-- Enum.BagSlotFlags.DisableAutoSort (wowless, data/products/wowf/enums.yaml:587), when the client does not give it.
+local DISABLE_AUTO_SORT = 1
 -- The mark, in the units of the game's item button of 37: the square, its inset from the corner, and the faded icon of an empty pinned slot.
 local MARK_SIZE, MARK_INSET, GHOST_ALPHA, CROP = 7, 2, 0.35, 0.08
 local SAY = {
-	pinned = "%s is pinned to %s, slot %d: Flat UI keeps it there. Ctrl+right-click it again to unpin it.",
+	pinned = "%s is pinned to %s, slot %d: Flat UI puts it back there after a clean up and when it comes back. Ctrl+right-click it again to unpin it.",
+	pinnedOff = "%s is pinned to %s, slot %d. Put pinned items back is off, so Flat UI does not move it there. Ctrl+right-click it again to unpin it.",
 	unpinned = "%s, slot %d is no longer pinned.",
 	full = "%d slots are pinned already. Unpin one with Pinned slots on the Bags page first.",
 	saved = "slots can be pinned once your saved settings have loaded.",
@@ -85,6 +103,8 @@ local SAY = {
 	all = "every pinned slot is unpinned.",
 	none = "no slot is pinned. Ctrl+right-click an item in your bags to pin its slot.",
 	fight = "pinned items are put back once the fight is over.",
+	loot = "Ctrl is your Auto Loot Key, so Ctrl+right-click opens an item that holds loot, as a right-click does, and its pin is left as it was. "
+		.. "Drop the item on the title of Keep in place to pin its slot, or on another section to unpin it.",
 }
 
 -- Per live button: the bag and slot it was made for. Per button: its mark { edge, fill, ghost }, or false when the game refused one.
@@ -92,10 +112,11 @@ local spots = setmetatable({}, { __mode = "k" })
 local marks = setmetatable({}, { __mode = "k" })
 -- The count of each pinned item in the bags at the last scan, nil before the first.
 local counts = nil
--- The run of the mover: { started, moves, moved, most, fails, skip, done, own (the sort hold's own), asked, check, token, waiting }, or nil. An
--- arrival run waits (soon); a run waits for the end of a fight (afterFight), asked by the player (fightAsked).
+-- The run of the mover: { started, moves, moved, most, fails, skip, pending, done, own (the sort hold's own), hold (that hold), asked, check, only
+-- (the item IDs of an arrival run), token, waiting }, or nil. An arrival run waits (soon) with the IDs that came (arrived); a run waits for the
+-- end of a fight (afterFight), asked by the player (fightAsked), for every pin (fightAll) or for the IDs that came (fightOnly).
 local run = nil
-local soon, afterFight, fightAsked = false, false, false
+local soon, arrived, afterFight, fightAsked, fightAll, fightOnly = false, nil, false, false, false, nil
 
 -- Small helpers -------------------------------------------------------------------------------------------------------------------------------
 
@@ -367,7 +388,7 @@ local function Pin(bag, slot, id)
 	if type(ns.ErrandsJunkMark) == "function" then
 		pcall(ns.ErrandsJunkMark, id, false)
 	end
-	Say(SAY.pinned:format(Named(id), BagLabel(bag), slot))
+	Say((MovesOn() and SAY.pinned or SAY.pinnedOff):format(Named(id), BagLabel(bag), slot))
 	Changed()
 	return true
 end
@@ -415,6 +436,26 @@ function Pins.Toggle(bag, slot)
 	return Pin(bag, slot, id)
 end
 
+-- Whether the game took a Ctrl+right-click of this slot as a plain right-click: while Ctrl is the Auto Loot Key (AUTOLOOTTOGGLE, a choice of
+-- Settings, Controls), on an item that holds loot (ContainerFrame.lua:1683-1697), which it then opened, used or sold.
+local function Looted(bag, slot)
+	if type(IsModifiedClick) ~= "function" then
+		return false
+	end
+	local ok, on = pcall(IsModifiedClick, "AUTOLOOTTOGGLE")
+	if not ok or ns.IsSecret(on) or on ~= true then
+		return false
+	end
+	local data = Ask(Container("GetContainerItemInfo"), bag, slot)
+	if type(data) ~= "table" then
+		return false
+	end
+	local okLoot, loot = pcall(function()
+		return data.hasLoot
+	end)
+	return okLoot and (ns.IsSecret(loot) or loot == true)
+end
+
 -- The post-hook of a live slot's OnClick: Ctrl+right-click with nothing else held and an empty cursor.
 local function Clicked(button, mouse)
 	if mouse ~= "RightButton" or not Down("IsControlKeyDown") or Down("IsShiftKeyDown") or Down("IsAltKeyDown") then
@@ -422,6 +463,10 @@ local function Clicked(button, mouse)
 	end
 	local spot = spots[button]
 	if not spot or Cursor() ~= nil or not On() then
+		return
+	end
+	if Looted(spot.bag, spot.slot) then
+		Say(SAY.loot)
 		return
 	end
 	Pins.Toggle(spot.bag, spot.slot)
@@ -459,12 +504,22 @@ function Pins.Drop()
 	return Pin(bag, slot, id)
 end
 
--- An item let go on another section's title (BagsLayout.lua): the pinned slot it came from is unpinned.
-function Pins.Left()
-	local id, bag, slot = Held()
-	if id and InBags(bag) and Pins.Get(bag, slot) == id then
+-- The item on the cursor and the bag and slot it came from (BagsLayout.lua reads it before a drop gives the item back).
+function Pins.Held()
+	return Held()
+end
+
+-- An item of Pins.Held was taken by another section's title (BagsLayout.lua, once B.Categories.Drop took it): the pinned slot it came from is
+-- unpinned. A drop the section refused leaves the pin as it is.
+function Pins.Left(id, bag, slot)
+	if Whole(id) and InBags(bag) and Pins.Get(bag, slot) == id then
 		Unpin(bag, slot, false)
 	end
+end
+
+-- True while this character has a pin: the bag window then always has the title of Keep in place (BagsLayout.lua).
+function Pins.Any()
+	return #List() > 0
 end
 
 -- The mark -------------------------------------------------------------------------------------------------------------------------------------
@@ -551,7 +606,20 @@ end
 
 local Start
 
--- The bags as they are now: per bag its size, its family and its slots, each { id, count, locked } or false when empty.
+-- Whether the player set a bag to be left out of clean up (Ignore, Clean Up in the bag menu): the backpack through its own call
+-- (C_Container.GetBackpackAutosortDisabled), the others through the flag DisableAutoSort (C_Container.GetBagSlotFlag), as BagsLayout's menu reads
+-- them. Only a plain true counts.
+local function Ignored(bag)
+	if bag == 0 then
+		return Ask(Container("GetBackpackAutosortDisabled")) == true
+	end
+	local enum = type(Enum) == "table" and not ns.IsSecret(Enum) and Enum.BagSlotFlags or nil
+	local flag = type(enum) == "table" and not ns.IsSecret(enum) and enum.DisableAutoSort or nil
+	return Ask(Container("GetBagSlotFlag"), bag, Whole(flag) and flag or DISABLE_AUTO_SORT) == true
+end
+
+-- The bags as they are now: per bag its size, its family, whether clean up leaves it alone, and its slots, each { id, count, locked } or false
+-- when empty.
 local function Read()
 	local bags = {}
 	local info, free = Container("GetContainerItemInfo"), Container("GetContainerNumFreeSlots")
@@ -579,7 +647,7 @@ local function Read()
 			end
 			slots[slot] = entry
 		end
-		bags[bag] = { size = size, family = family, slots = slots }
+		bags[bag] = { size = size, family = family, ignored = Ignored(bag), slots = slots }
 	end
 	return bags
 end
@@ -609,11 +677,11 @@ local function Fits(id, bag, family)
 	return Whole(itemFamily) and type(bit) == "table" and bit.band(itemFamily, family) ~= 0
 end
 
--- A free slot of a normal bag that no pin holds and this step does not use, or nil.
+-- A free slot of a normal bag that clean up does not leave alone, that no pin holds and this step does not use, or nil.
 local function FreeSlot(bags, pinned, used)
 	for bag = FIRST_BAG, LAST_BAG do
 		local b = bags[bag]
-		if TakesAny(bag, b.family) then
+		if TakesAny(bag, b.family) and not b.ignored then
 			for slot = 1, b.size do
 				local key = SlotKey(bag, slot)
 				if not b.slots[slot] and not pinned[key] and not used[key] then
@@ -645,12 +713,36 @@ local function Source(bags, id, met, used)
 	return best, locked
 end
 
--- The moves of one step: { { from, to, id, key (the pin) }, ... }, and whether something waits (a locked slot, or a swap after a move out of
--- the way).
+-- Whether a slot of a move the server has not answered yet has settled: the target holds the item moved and is not locked, the source is not
+-- locked.
+local function Settled(bags, key, wait)
+	local bag, slot = Parse(key)
+	local b = bag and bags[bag]
+	local entry = b and b.slots[slot]
+	if wait.id then
+		return entry and entry.id == wait.id and not entry.locked
+	end
+	return not (entry and entry.locked)
+end
+
+-- The moves of one step: { { from, to, id, key (the pin) }, ... }, and whether something waits (a locked slot, a move not answered yet, or a
+-- swap after a move out of the way). An arrival run (r.only) plans the pins of the items that came alone.
 local function Plan(r)
 	local bags = Read()
 	local pins = List()
 	local pinned, met, used = {}, {}, {}
+	local moves, waits = {}, false
+	-- The slots of the moves of earlier steps that the server has not answered (an empty target shows no lock) stay out of this step, so a second
+	-- stack is never sent to a slot one is on its way to, until they settle or PENDING seconds pass.
+	local now = Now()
+	for key, wait in pairs(r.pending) do
+		if Settled(bags, key, wait) or now - wait.at >= PENDING then
+			r.pending[key] = nil
+		else
+			used[key] = true
+			waits = true
+		end
+	end
 	for _, pin in ipairs(pins) do
 		pinned[pin.key] = pin.id
 		local b = bags[pin.bag]
@@ -659,14 +751,13 @@ local function Plan(r)
 			met[pin.key] = true
 		end
 	end
-	local moves, waits = {}, false
 	for _, pin in ipairs(pins) do
 		local b = bags[pin.bag]
 		if #moves >= PER_STEP then
 			waits = true
 			break
 		end
-		if not met[pin.key] and not r.skip[pin.key] and not used[pin.key] and b and pin.slot <= b.size then
+		if not met[pin.key] and not r.skip[pin.key] and not used[pin.key] and (not r.only or r.only[pin.id]) and b and pin.slot <= b.size then
 			local target = b.slots[pin.slot]
 			local source, locked = Source(bags, pin.id, met, used)
 			if not source then
@@ -675,7 +766,7 @@ local function Plan(r)
 				waits = true
 			elseif pin.bag ~= REAGENT_BAG and not Fits(pin.id, pin.bag, b.family) then
 				r.skip[pin.key] = true
-			elseif not target or Fits(target.id, source.bag, bags[source.bag].family) then
+			elseif not target or (not bags[source.bag].ignored and Fits(target.id, source.bag, bags[source.bag].family)) then
 				moves[#moves + 1] = { from = source, to = pin, id = pin.id, key = pin.key }
 				used[source.key], used[pin.key] = true, true
 			else
@@ -720,10 +811,25 @@ local function Move(r, move)
 		return true
 	end
 	r.moves, r.moved = r.moves + 1, r.moved + 1
+	local at = Now()
+	r.pending[move.from.key] = { at = at }
+	r.pending[move.to.key] = { at = at, id = move.id }
 	return true
 end
 
--- Why a step waits, or nil: the cursor, a spell waiting for its target, Sell junk, Deposit or Take out, a trade, or a sort hold not its own.
+-- True while a window of the game shows (read only, with IsShown).
+local function Shown(name)
+	local frame = _G[name]
+	if type(frame) ~= "table" or ns.Forbidden(frame) then
+		return false
+	end
+	local ok, shown = pcall(frame.IsShown, frame)
+	return ok and (ns.IsSecret(shown) or shown == true)
+end
+
+-- Why a step waits, or nil: the cursor, a spell waiting for its target, Sell junk, Deposit or Take out, a trade, the game's split box (its Okay
+-- splits whatever its slot holds then, ContainerFrame.lua:1777-1779, 1805-1813), or a sort hold not its own: any hold but the one it extends
+-- (B.SortHold), so a clean up asked for during a put-back is waited for.
 local function Busy(r)
 	if Cursor() ~= nil then
 		return "cursor"
@@ -738,45 +844,57 @@ local function Busy(r)
 	if B.Bank and type(B.Bank.Busy) == "function" and Ask(B.Bank.Busy) ~= nil then
 		return "bank"
 	end
-	local trade = _G.TradeFrame
-	if type(trade) == "table" and not ns.Forbidden(trade) then
-		local okShown, shown = pcall(trade.IsShown, trade)
-		if okShown and (ns.IsSecret(shown) or shown == true) then
-			return "trade"
-		end
+	if Shown("TradeFrame") then
+		return "trade"
 	end
-	if not r.own and type(B.Sorting) == "function" and B.Sorting("bags") then
-		return "sorting"
+	if Shown("StackSplitFrame") then
+		return "split"
+	end
+	if type(B.Sorting) == "function" and B.Sorting("bags") then
+		local hold = type(B.SortHold) == "function" and B.SortHold("bags") or nil
+		if not r.own or (r.hold ~= nil and hold ~= r.hold) then
+			return "sorting"
+		end
 	end
 	return nil
 end
 
--- A run that waits for the end of the fight, once; asked: the player asked for it, whatever Put pinned items back says.
-local function AfterFight(asked)
+-- A run that waits for the end of the fight, once; asked: the player asked for it, whatever Put pinned items back says; only: the item IDs of an
+-- arrival, nil for every pin. The calls meanwhile are merged into it: every pin once one asks for every pin.
+local function AfterFight(asked, only)
 	fightAsked = fightAsked or asked == true
+	if type(only) == "table" then
+		fightOnly = fightOnly or {}
+		for id in pairs(only) do
+			fightOnly[id] = true
+		end
+	else
+		fightAll = true
+	end
 	if afterFight then
 		return
 	end
 	afterFight = true
 	local function Again()
 		afterFight = false
-		local wanted = fightAsked
-		fightAsked = false
+		local wanted, all, ids = fightAsked, fightAll, fightOnly
+		fightAsked, fightAll, fightOnly = false, false, nil
 		if wanted or MovesOn() then
-			Part(Start, false, nil, false, wanted)
+			Part(Start, false, nil, false, wanted, not all and ids or nil)
 		end
 	end
 	local ok, lockdown = pcall(InCombatLockdown)
 	if ok and lockdown == true and type(ns.OutOfCombat) == "function" then
 		ns.OutOfCombat(Again)
 	elseif not After(STEP_WAIT, Again) then
-		afterFight = false
+		afterFight, fightAsked, fightAll, fightOnly = false, false, false, nil
 	end
 end
 
 local Step
 
--- Ends the run: the sort hold it extended ends, and a run that moved something is followed by one that looks again.
+-- Ends the run: the sort hold it extended ends, which lays the window out; a run with no hold that moved something lays it out itself, so an
+-- open window shows each item where it went. A run that moved something is followed by one that looks again, for the same pins.
 local function Finish()
 	local r = run
 	run = nil
@@ -785,11 +903,13 @@ local function Finish()
 	end
 	if type(r.done) == "function" then
 		pcall(r.done)
+	elseif r.moved > 0 then
+		Request("layout")
 	end
 	if r.moved > 0 and not r.check then
 		After(CHECK_AFTER, function()
 			if not run and (r.asked or MovesOn()) then
-				Part(Start, false, nil, true, r.asked)
+				Part(Start, false, nil, true, r.asked, r.only)
 			end
 		end)
 	end
@@ -820,7 +940,7 @@ function Step()
 	end
 	if Fighting() then
 		Finish()
-		return AfterFight(r.asked)
+		return AfterFight(r.asked, r.only)
 	end
 	if Busy(r) then
 		return Later(r, STEP_WAIT)
@@ -840,9 +960,10 @@ function Step()
 	Later(r, STEP_WAIT)
 end
 
--- Starts a run. own: the sort hold's own extension; done: called when it ends; check: the run that looks again; asked: the player asked. A run
--- under way takes over own and done. True when a run goes on (done is called then, maybe at once); false when there is nothing to put back.
-function Start(own, done, check, asked)
+-- Starts a run. own: the sort hold's own extension, of the hold hold; done: called when it ends; check: the run that looks again; asked: the
+-- player asked; only: the item IDs of an arrival run, nil for every pin. A run under way takes over own, its hold and done, and widens its pins:
+-- to every pin when only is nil. True when a run goes on (done is called then, maybe at once); false when there is nothing to put back.
+function Start(own, done, check, asked, only, hold)
 	if run then
 		if done then
 			local before = run.done
@@ -853,22 +974,31 @@ function Start(own, done, check, asked)
 				done()
 			end
 		end
-		run.own = run.own or own
+		if own then
+			run.own, run.hold = true, hold
+		end
 		run.asked = run.asked or asked
+		if type(only) ~= "table" then
+			run.only = nil
+		elseif run.only then
+			for id in pairs(only) do
+				run.only[id] = true
+			end
+		end
 		return true
 	end
 	local pins = List()
 	if #pins == 0 or not On() then
 		return false
 	end
-	run = { started = Now(), moves = 0, moved = 0, most = 2 * #pins + 4, fails = {}, skip = {}, done = done, own = own, check = check,
-		asked = asked }
+	run = { started = Now(), moves = 0, moved = 0, most = 2 * #pins + 4, fails = {}, skip = {}, pending = {}, done = done, own = own,
+		hold = own and hold or nil, check = check, asked = asked, only = type(only) == "table" and only or nil }
 	Step()
 	return true
 end
 
--- Bags.lua: the sort hold of the bags is due to end after a clean up. True when the hold waits for done.
-function Pins.AfterSort(done)
+-- Bags.lua: the sort hold of the bags (hold) is due to end after a clean up. True when the hold waits for done.
+function Pins.AfterSort(done, hold)
 	if not MovesOn() or #List() == 0 or not On() then
 		return false
 	end
@@ -879,13 +1009,14 @@ function Pins.AfterSort(done)
 	-- B.Part gives no answer back, so the answer of Start is kept here.
 	local going = false
 	Part(function()
-		going = Start(true, done, false, false) == true
+		going = Start(true, done, false, false, nil, hold) == true
 	end)
 	return going
 end
 
 -- BagsData.lua scanned the bags at BAG_UPDATE_DELAYED: a waiting step goes on, and a pinned item whose count rose while its pin waits starts a
--- run. The first scan of a session, and scans during a sort hold, only take the counts.
+-- run for the items that came alone (only), so a pinned item the player moved by hand stays where they put it. A run under way for some items
+-- takes the new ones in. The first scan of a session, and scans during a sort hold, only take the counts.
 local function Scanned()
 	if run and run.waiting then
 		Later(run, 0.1)
@@ -896,25 +1027,50 @@ local function Scanned()
 	end
 	local before = counts
 	counts = Counts()
-	if not before or run or soon or not MovesOn() or (type(B.Sorting) == "function" and B.Sorting("bags")) then
+	if not before or not MovesOn() or (type(B.Sorting) == "function" and B.Sorting("bags")) then
 		return
 	end
+	local rose = nil
 	for _, pin in ipairs(List()) do
 		local was = before[pin.id]
 		if was and (counts[pin.id] or 0) > was and Ask(Container("GetContainerItemID"), pin.bag, pin.slot) ~= pin.id then
-			soon = true
-			if not After(ARRIVAL, function()
-				soon = false
-				if Fighting() then
-					AfterFight(false)
-				else
-					Part(Start, false, nil, false, false)
-				end
-			end) then
-				soon = false
+			rose = rose or {}
+			rose[pin.id] = true
+		end
+	end
+	if not rose then
+		return
+	end
+	if run then
+		if run.only then
+			for id in pairs(rose) do
+				run.only[id] = true
 			end
+		end
+		return
+	end
+	arrived = arrived or {}
+	for id in pairs(rose) do
+		arrived[id] = true
+	end
+	if soon then
+		return
+	end
+	soon = true
+	if not After(ARRIVAL, function()
+		soon = false
+		local only = arrived
+		arrived = nil
+		if not only then
 			return
 		end
+		if Fighting() then
+			AfterFight(false, only)
+		else
+			Part(Start, false, nil, false, false, only)
+		end
+	end) then
+		soon, arrived = false, nil
 	end
 end
 
