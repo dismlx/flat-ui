@@ -234,7 +234,11 @@ local ADDON_NAME, ns = ...
 -- GameTooltip (AddDoubleLine, AddLine) from the chat module's post call while that module is on, for a unit the player can attack that is not
 -- dead, and with Text size on enemy tooltips other than 100% sized (SetFont on their font strings, GameTooltipTextLeftN and GameTooltipTextRightN),
 -- each put back in the font object and font it had at the next clear of GameTooltip (GameTooltip_ClearMoney, which its OnTooltipCleared calls,
--- followed with ns.FollowGlobal), so every later tooltip has the game's sizes. They read the tooltip's unit (GetUnit under pcall, else
+-- followed with ns.FollowGlobal), so every later tooltip has the game's sizes. With Only while Ctrl is held (on by default) they are added only
+-- while Ctrl is down (IsControlKeyDown), with Hint while Ctrl is up (off) one dim line in their place; while an enemy's tooltip waits for the key
+-- a frame of its own hears MODIFIER_STATE_CHANGED, and as Ctrl goes down or up over it, a tooltip of the game's unit getters (GetWorldCursor,
+-- GetUnit) whose owner has no UpdateTooltip and whose data holds no secret is built again with GameTooltip's RefreshData, the game's own rebuild
+-- from what it set it with, so its unit, anchor, owner and fade stay the game's. They read the tooltip's unit (GetUnit under pcall, else
 -- UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level and kind (C.Target with the unit), whether it attacks the player
 -- (C.Front), the player's form and power type (GetShapeshiftForm, UnitPowerType),
 -- the combat state (InCombatLockdown, UnitAffectingCombat, C_Secrets.ShouldUnitStatsBeSecret) and the stats the table reads (ns.HitTableCalc,

@@ -1,6 +1,7 @@
 ## 0.5.28
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Hit table**, new row **Only while Ctrl is held** (on), under **On enemy tooltips**: the hit table's lines show on an enemy's tooltip only while you hold Ctrl. Press or let go of Ctrl while the tooltip shows and the lines come or go at once: the game sets the tooltip again for its unit as it set it, so its place, owner and fade stay the game's, and every tooltip after it is as the game has it; over a unit frame the game sets it again by itself within 0.2 seconds. Where the game withholds a line of the tooltip, the lines follow Ctrl at its next build. New row **Hint while Ctrl is up** (off) puts one dim line, "Hold Ctrl for the hit table", in their place while Ctrl is up. Turn the row off for the lines on every enemy's tooltip, as before.
 
 ## 0.5.27
 

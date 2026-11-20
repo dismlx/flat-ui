@@ -2050,8 +2050,9 @@ ns.PAGES = {
 	-- HitTable.lua and HitTableCalc.lua: a table of Flat UI's own under the player frame with the player's chances against the target, worked out again
 	-- as stats, gear, weapon skill, buffs, form and the target change. By default it shows for a tank or a damage dealer and not for a healer, by the
 	-- role Flat UI setup reads (ns.PlayerRole, Core.lua); Always and Off hold whatever the role. Attacks, Special attacks, Where you stand and Hit cap
-	-- against a boss serve On enemy tooltips (HitTableTip.lua) too and need nothing; Text size on enemy tooltips needs On enemy tooltips, and the
-	-- other rows apply at either of the first two choices of Hit table under the player frame. It was a tick in 0.5.18: a saved tick reads as Always
+	-- against a boss serve On enemy tooltips (HitTableTip.lua) too and need nothing; Only while Ctrl is held (0.5.28, on) and Text size on enemy
+	-- tooltips need On enemy tooltips, Hint while Ctrl is up (off) needs Only while Ctrl is held, and the other rows apply at either of the first
+	-- two choices of Hit table under the player frame. It was a tick in 0.5.18: a saved tick reads as Always
 	-- or Off (Core.lua, ns.MigrateText). Text size was a slider until 0.5.26: a saved number reads as the nearest size (Core.lua, Renamed).
 	{
 		key = "hudHitTable", label = "Hit table", owner = "hud",
@@ -2061,6 +2062,10 @@ ns.PAGES = {
 		{ key = "hitTableTip", kind = "choice", default = "role", label = "On enemy tooltips",
 			choices = { { "role", "For tanks and damage dealers" }, { "on", "Always" }, { "off", "Off" } },
 			tip = "Adds your hit table to the tooltip of an enemy you can attack: a line for each attack, as in Swing  M8 D6.5 G40 C12.1 H33.4 (M miss, D dodge, P parry, G glance, B block, C crit, H hit, in percent; on Spells, R a spell's damage resisted on average, as R-2.5 below 0 for the damage the enemy takes more from your Spell Piercing), against that enemy's level (a level shown as ??, or a boss of your level or above, counts as three levels above you). It counts Attacks, Special attacks, Where you stand (a tank counts in front) and Hit cap against a boss below, whatever Hit table under the player frame is set to. The game hides your stats in a fight, so there the numbers are from before it, and a line says so. For tanks and damage dealers leaves the lines out while you count as a healer. Needs Chat and tooltips on." },
+		{ key = "hitTableTipCtrl", kind = "bool", default = true, label = "Only while Ctrl is held", needs = "hitTableTip", needsIn = { "role", "on" },
+			tip = "The hit table's lines show on an enemy's tooltip only while you hold Ctrl, and come or go at once as you press or let go of it. Off, they show whenever the tooltip does." },
+		{ key = "hitTableTipHint", kind = "bool", default = false, label = "Hint while Ctrl is up", needs = "hitTableTipCtrl",
+			tip = "One dim line, Hold Ctrl for the hit table, on an enemy's tooltip in place of the lines while Ctrl is up." },
 		{ section = "What it shows" },
 		{ key = "hitTableLines", kind = "choice", default = "auto", label = "Attacks",
 			choices = { { "auto", "By your class and form" }, { "melee", "Melee" }, { "ranged", "Ranged" }, { "spell", "Spells" }, { "all", "Melee, ranged and spells" } },
