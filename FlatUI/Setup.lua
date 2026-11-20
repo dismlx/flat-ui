@@ -890,7 +890,26 @@ function S.Next()
 	end
 end
 
--- Back: the stop before, the last stop from Your screen; on a page the page before, and from the first the screen the pages came from.
+-- Leaves setup from its first screen to where it was opened from (S.from, set by ns.OpenSetup): the welcome screen at the view it was started
+-- from, over the options pages when they showed then, else the options pages as they were. The draft is kept as when the window closes (S.Hidden):
+-- one with a choice or a queued pick stays for next time, one with neither goes.
+function S.Leave()
+	local from = S.from
+	S.from = nil
+	if type(from) == "table" and type(ns.WelcomeReturn) == "function" then
+		if from.pages then
+			kit.Leave()
+		else
+			kit.Hide()
+		end
+		ns.WelcomeReturn(from.welcome)
+	else
+		kit.Leave()
+	end
+end
+
+-- Back: the stop before, the last stop from Your screen; on a page the page before, and from the first the screen the pages came from. Where there is
+-- no screen before (the first stop, Your screen while the walk has no stops) it leaves setup (S.Leave).
 function S.Back()
 	local screen = S.screen
 	if not screen then
@@ -899,11 +918,15 @@ function S.Back()
 		local before = S.StopScreen((S.StopIndex(screen.id) or 1) - 1)
 		if before then
 			S.Go(before)
+		else
+			S.Leave()
 		end
 	elseif screen.kind == "yours" then
 		local last = S.StopScreen(#S.Stops())
 		if last then
 			S.Go(last)
+		else
+			S.Leave()
 		end
 	else
 		local at = S.PageIndex(screen)
@@ -1330,26 +1353,26 @@ end
 
 -- The bar and the page drawing ------------------------------------------------------------------------
 
--- The bar: Back at the left; at the right the primary button and up to two more, relabelled for the screen shown. On a stop Next, Skip the rest
--- (not on the last) and More settings (when the stop has pages); on Your screen Finish (dim in combat, or while the name is refused and the draft has
--- something to save: with nothing chosen Finish only closes) and Start over; on a page Next and Done.
+-- The bar: Back at the left, on every screen (S.Back); at the right the primary button and up to two more, relabelled for the screen shown. On a
+-- stop Next, Skip the rest (not on the last) and More settings (when the stop has pages); on Your screen Finish (dim in combat, or while the name is
+-- refused and the draft has something to save: with nothing chosen Finish only closes) and Start over; on a page Next and Done.
 function S.Buttons()
 	local screen = S.screen
 	if not screen or not S.next then
 		return
 	end
-	local back, primary, first, second
+	local primary, first, second
 	if screen.kind == "stop" then
 		local at = S.StopIndex(screen.id) or 1
-		back, primary = at > 1, "Next"
+		primary = "Next"
 		first = at < #S.Stops() and "Skip the rest" or nil
 		second = #S.Pages(S.Stop(screen.id)) > 0 and "More settings" or nil
 	elseif screen.kind == "yours" then
-		back, primary, first = #S.Stops() > 0, "Finish", "Start over"
+		primary, first = "Finish", "Start over"
 	else
-		back, primary, first = true, "Next", "Done"
+		primary, first = "Next", "Done"
 	end
-	S.back:SetShown(back)
+	S.back:Show()
 	S.nextText:SetText(primary)
 	S.mid1:SetShown(first ~= nil)
 	S.mid1Text:SetText(first or "")
@@ -1750,8 +1773,8 @@ function S.Enter()
 	end
 end
 
--- The window was hidden: by Close, Escape, Finish or the game (a loading screen). A draft with a choice or a queued pick stays for next time; one with
--- neither is dropped.
+-- The window was hidden: by Close, Escape, Finish or the game (a loading screen), or setup gave it back to the options pages (Back on its first
+-- screen). A draft with a choice or a queued pick stays for next time; one with neither is dropped.
 function S.Hidden()
 	if S.draft then
 		S.Sync()
@@ -1781,7 +1804,11 @@ S.mode = {
 
 -- Opens setup at this character's draft, where it was left, or at the first stop. With an id it opens there: a stop, "yours" for Your screen, or a
 -- built step, whose page goes through every built step and back to the stop or Your screen last shown, with Every setting open in the list.
-function ns.OpenSetup(id)
+-- `welcome` is the view of the welcome screen setup was started from (SetupWelcome.lua), which Back from the first screen opens again; without
+-- it Back leaves to the options pages. Where it was opened from is kept while the window hides for /flatui move and opens setup again.
+function ns.OpenSetup(id, welcome)
+	local pages = type(ns.PanelShown) == "function" and ns.PanelShown() and not ns.PanelInMode()
+	S.from = welcome ~= nil and { welcome = welcome, pages = pages } or nil
 	local shown = ns.OpenPanelMode(S.mode)
 	local screen = id ~= nil and S.draft and S.ScreenOf(id)
 	if screen then

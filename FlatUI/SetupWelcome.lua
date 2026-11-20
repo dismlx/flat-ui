@@ -81,12 +81,25 @@ function W.Done(named, keep)
 	end
 end
 
--- The screen closes and Flat UI setup opens (Setup.lua), at this character's draft or at its first stop.
+-- The screen closes and Flat UI setup opens (Setup.lua), at this character's draft or at its first stop. Setup is told the view it came from, so that
+-- Back on its first screen opens this view again (ns.WelcomeReturn).
 function W.OpenSetup()
+	local view = W.view
 	W.frame:Hide()
 	if type(ns.OpenSetup) == "function" then
-		ns.OpenSetup()
+		ns.OpenSetup(nil, view)
 	end
+end
+
+-- Back from the first screen of a setup started here (Setup.lua, S.Leave): the view it was started from again, the start view or the after view with
+-- what was done. In a fight it opens after combat, as the screen hides in one.
+function ns.WelcomeReturn(view)
+	if InCombatLockdown() then
+		print("The welcome screen opens after combat.")
+	end
+	ns.OutOfCombat(function()
+		W.Open(view == "after" and "after" or "start", W.finished)
+	end)
 end
 
 -- Set up my screen sets no flag: setup left without a choice keeps no draft, so the screen comes back at the next login. The tick still counts.
