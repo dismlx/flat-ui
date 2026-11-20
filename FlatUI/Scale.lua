@@ -95,6 +95,8 @@ local function Wanted()
 	end
 	return ns.Get("general.scale") / 100, "cvar"
 end
+-- Shared with Core.lua, which reads it under the settings of a profile it makes (ns.Viewing) to fit the positions that profile starts with.
+ns.ScaleWanted = Wanted
 
 -- What the game held before the first write, kept for the account.
 local function Remember()

@@ -9,7 +9,7 @@ local _, ns = ...
 -- (ErrandsNavigation.lua). Each file is a part of this module: it adds its events with ns.AddEvent and names itself here with Errands.Part,
 -- so /flatui status has a line for it and a refresh reaches it.
 --
--- Nothing here restyles anything, so the module counts nothing, and its page is off by default. Every errand is out of combat unless it
+-- Nothing here restyles anything, so the module counts nothing, and its page is on by default. Every errand is out of combat unless it
 -- says otherwise, and every call into the client goes through pcall: a client without the call leaves the errand undone and says so once.
 -- Several of these errands follow the ways EnhanceQoL by Philipp Barth does them, adapted with his permission.
 

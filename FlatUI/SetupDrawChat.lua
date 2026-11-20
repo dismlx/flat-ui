@@ -743,7 +743,7 @@ do
 		end
 		if classic then
 			local lines, holds = ns.Get("combattext.rows") or 4, ns.Get("combattext.classicCrit") == true
-			local down, wide = ns.Get("combattext.classicStack") == "down", (ns.Get("combattext.spreadWidth") or 100) / 100
+			local down, wide = ns.Get("combattext.classicStack") == "down", (ns.Get("combattext.spreadWidth") or 160) / 100
 			local mates = {}
 			for i, sample in ipairs(ENEMY) do
 				local entry = placed[i]

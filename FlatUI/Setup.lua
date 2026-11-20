@@ -1822,8 +1822,9 @@ function S.Presets()
 	local defs = S.Defs()
 	local list, dropped = {}, {}
 	for _, raw in ipairs(type(ns.SETUP_PROFILES) == "table" and ns.SETUP_PROFILES or {}) do
-		local profile = { id = raw.id, label = raw.label, line = raw.line, values = {} }
-		-- Positions, by frame name; a spot that is not valid is dropped and said once, as a value is.
+		local profile = { id = raw.id, label = raw.label, line = raw.line, values = {}, screen = type(raw.screen) == "table" and raw.screen or nil }
+		-- Positions, by frame name; a spot that is not valid is dropped and said once, as a value is. They are as laid out on `screen`, and
+		-- S.SpotsOf fits them to the player's.
 		for _, spot in ipairs(type(raw.movers) == "table" and raw.movers or {}) do
 			local copy = { point = spot.point, x = spot.x, y = spot.y, scale = spot.scale, kind = spot.kind, label = spot.label }
 			if IsText(spot.frame) and ns.CleanSpot(copy) then
@@ -1876,10 +1877,19 @@ function S.PresetOf(id)
 	return nil
 end
 
+-- The positions a ready-made profile is put in use with: its own fitted to the player's screen under its values (ns.FitSpots) when it says the
+-- screen they were laid out on, else its own as they are; nil when it has none, so the new profile starts with those every new profile starts with.
+function S.SpotsOf(profile)
+	if profile.movers and profile.screen and type(ns.FitSpots) == "function" then
+		return ns.FitSpots(profile.movers, profile.screen, profile.values)
+	end
+	return profile.movers
+end
+
 -- A ready-made profile in the shape of a saved one: its values as the options and its positions as the movers.
 function S.Preset(id)
 	local profile = S.PresetOf(id)
-	return profile and { options = profile.values, movers = profile.movers or S.noSpots } or nil
+	return profile and { options = profile.values, movers = S.SpotsOf(profile) or S.noSpots } or nil
 end
 
 -- What a call of the client answers, or nil when the call is missing, raises or gives a withheld value.
@@ -1971,8 +1981,8 @@ function S.MostUsed()
 	return best
 end
 
--- Puts a ready-made profile in use: the profile of that name when there is one, as it is, else a new one made from the values. The flag is set and one
--- line said. Returns true, or false and why (in combat nothing changes).
+-- Puts a ready-made profile in use: the profile of that name when there is one, as it is, else a new one made from the values and positions
+-- (S.SpotsOf). The flag is set and one line said. Returns true, or false and why (in combat nothing changes).
 function S.UseReady(id)
 	local profile = S.PresetOf(id)
 	if not profile then
@@ -1985,7 +1995,7 @@ function S.UseReady(id)
 	if found then
 		ok, why = ns.UseProfile(found)
 	else
-		ok, why = ns.NewProfile(profile.label, nil, profile.values, profile.movers)
+		ok, why = ns.NewProfile(profile.label, nil, profile.values, S.SpotsOf(profile))
 	end
 	if ok then
 		S.Flag()
@@ -2047,7 +2057,7 @@ function ns.SetupAuto()
 		end
 		name = S.FindProfile(profile.label)
 		picks = not name and profile.values or nil
-		spots = not name and profile.movers or nil
+		spots = not name and S.SpotsOf(profile) or nil
 		name = name or profile.label
 	elseif mode:find("^profile:") then
 		name = S.FindProfile(mode:sub(9))
