@@ -48,7 +48,8 @@ function ns.WelcomeWanted()
 	return ns.Get("setup.welcomeWhen") ~= "account" or (next(ns.Account().profileOf) == nil and not (S.Store() or {}).welcomed)
 end
 
--- Puts the profile named Game look in use: the profile of that name as it is, else a new one with every module off. Returns true, or false and why.
+-- Puts the profile named Game look in use: the profile of that name as it is, else a new one with every module off, Custom UI scale off (on by
+-- default, it is no module) and no frame moved (not the positions a new profile starts with). Returns true, or false and why.
 function W.GameLook()
 	local found = S.FindProfile(GAME)
 	if found then
@@ -60,7 +61,8 @@ function W.GameLook()
 			picks[path] = false
 		end
 	end
-	return ns.NewProfile(GAME, nil, picks)
+	picks["general.scaleOn"] = false
+	return ns.NewProfile(GAME, nil, picks, {})
 end
 
 -- A choice of the screen ends here: the flag is set and the screen closes, or with `keep` stays for the after view. A ticked "Do not show on new

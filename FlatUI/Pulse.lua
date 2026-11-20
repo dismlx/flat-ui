@@ -1,7 +1,7 @@
 local _, ns = ...
 
 -- Cooldown pulse: when the cooldown of one of your spells or items ends, its icon fades in and out in the middle of the screen, on a frame of
--- the addon's own that takes no mouse and that /flatui move places (FlatUIPulse in Movers.lua). A module of its own, off by default, whose page
+-- the addon's own that takes no mouse and that /flatui move places (FlatUIPulse in Movers.lua). A module of its own, on by default, whose page
 -- is listed under Cooldowns. Nothing of the game is changed.
 --
 -- Pulse spots: up to three spots, each a frame of its own with its own handle in /flatui move (FlatUIPulse, FlatUIPulse2 and FlatUIPulse3 in
