@@ -238,8 +238,14 @@ local ADDON_NAME, ns = ...
 -- GameTooltip (AddDoubleLine, AddLine) from the chat module's post call while that module is on, for a unit the player can attack that is not
 -- dead, and with Text size on enemy tooltips other than 100% sized (SetFont on their font strings, GameTooltipTextLeftN and GameTooltipTextRightN),
 -- each put back in the font object and font it had at the next clear of GameTooltip (GameTooltip_ClearMoney, which its OnTooltipCleared calls,
--- followed with ns.FollowGlobal), so every later tooltip has the game's sizes. They read the tooltip's unit (GetUnit under pcall, else
--- UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its level and kind (C.Target with the unit), whether it attacks the player
+-- followed with ns.FollowGlobal), so every later tooltip has the game's sizes. With Only while Ctrl is held (on by default) they are added only
+-- while Ctrl is down (IsControlKeyDown), with Hint while Ctrl is up (off) one dim line in their place; while an enemy's tooltip built with Ctrl up
+-- is kept, a frame of its own hears MODIFIER_STATE_CHANGED, and as Ctrl goes down while GameTooltip still shows that build (IsShown, GetOwner,
+-- its infoList read only) and its owner has no UpdateTooltip (a unit frame's, which the game runs every 0.2 seconds), pressing Ctrl adds the
+-- lines there with the same AddDoubleLine and AddLine, the hint, a line of Flat UI's own, turned into their header (SetText, SetTextColor), and
+-- shows GameTooltip again (Show) so it takes their size, once a build; they leave when the tooltip next changes. No Lua method of GameTooltip is
+-- called and nothing is built again. They read the tooltip's unit (UnitTokenFromGUID of the data's guid, else the mouseover by UnitGUID), its
+-- level and kind (C.Target with the unit), whether it attacks the player
 -- (C.Front), the player's form and power type (GetShapeshiftForm, UnitPowerType),
 -- the combat state (InCombatLockdown, UnitAffectingCombat, C_Secrets.ShouldUnitStatsBeSecret) and the stats the table reads (ns.HitTableCalc,
 -- C.Inputs), those out of a fight only, at most every two seconds as GameTooltip is built whatever it shows, and worked out by C.Table; in a fight
