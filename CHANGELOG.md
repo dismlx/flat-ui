@@ -1,6 +1,8 @@
 ## 0.5.28
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Bar block**: block 1 now holds, from the top, action bar 3, action bar 2, the main bar and action bar 4 (its list is action bar 4, the main bar, action bar 2 and action bar 3, stacked upward from the first bar), where it held the main bar and action bars 2 to 4 before. **One size and spacing for every bar** is on by default, so action bar 4 lies flat in the block like the others once you reload, with every bar of the blocks at 12 buttons in a row of the game's size. A profile that saved its own bars for block 1, or saved the row off, keeps them. A block with no place saved starts where the main bar is, on the main bar's bottom, so the bar under it stays on the screen. The setup drawing of the page shows the same.
+- **Bar block** in `/flatui move`: each bar of a block has a tab at the left end of its row, inside the block's box. Drag the tab up or down and let go, and the bar takes that place in its block; drop it on another block's box and it moves into that block. A line across the block shows where it goes while you drag, and the block lays out again as you let go. Escape, or letting go outside every box, leaves the bars as they were; nothing is dragged in combat. The **Bars** and **Add a bar** rows of the page change the same order and show what the tabs did.
 
 ## 0.5.27
 

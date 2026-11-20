@@ -1233,7 +1233,7 @@ ns.SETUP_STEPS = {
 	} },
 	{ id = "ab-block", area = "Bar block", title = "Bar block", draw = "mock-bar-block", built = true, rows = {
 		{ "barblock.enabled", "c", "mock-bar-block" },
-		{ "barblock.bars1", "r", "behaviour", "Holds the bars of block 1, first bar first: the main bar and action bars 2 to 4 at first." },
+		{ "barblock.bars1", "r", "behaviour", "Holds the bars of block 1, first bar first: action bar 4, the main bar and action bars 2 and 3 at first, so 3, 2, main, 4 top to bottom." },
 		{ "barblock.edit1", "c", "mock-bar-block" },
 		{ "barblock.add1", "c", "mock-bar-block" },
 		{ "barblock.direction", "c", "mock-bar-block" },

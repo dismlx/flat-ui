@@ -2615,12 +2615,13 @@ ns.PAGES = {
 	{
 		key = "barblock", label = "Bar block",
 		{ key = "enabled", kind = "bool", default = true, label = "Group action bars into blocks",
-			tip = "Lines up the bars of each block below, at first the main bar and action bars 2 to 4 in block 1. /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
+			tip = "Lines up the bars of each block below, at first action bars 3 and 2, the main bar and action bar 4 in block 1, top to bottom. /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars, with a tab on each bar to drag it to another place in its block or into another block. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
 		{ section = "Block 1" },
-		-- The bars of the block, first bar first, as text the two rows under it show and change (BarBlockLists.lua).
-		{ key = "bars1", kind = "text", hidden = true, default = "main,bar2,bar3,bar4", label = "Bars of block 1" },
+		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
+		-- Stacked upward from the first bar, action bar 4 is at the bottom and action bar 3 on top.
+		{ key = "bars1", kind = "text", hidden = true, default = "bar4,main,bar2,bar3", label = "Bars of block 1" },
 		{ key = "edit1", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines1", pick = "BarBlockPick1",
-			tip = "The bars of the block, first bar first. A bar can be in one block only." },
+			tip = "The bars of the block, first bar first. A bar can be in one block only. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
 		{ key = "add1", kind = "list", default = 0, label = "Add a bar", none = "Choose a bar", items = "BarBlockFree1", pick = "BarBlockAdd1",
 			tip = "The bar goes last in the block. A bar in another block leaves that one." },
 		{ key = "direction", kind = "choice", default = "up", label = "Stack direction",
@@ -2630,10 +2631,10 @@ ns.PAGES = {
 		{ key = "ownGap", kind = "bool", default = false, label = "Own gap between bars", tip = "Off: the gap between buttons is used." },
 		{ key = "barGap", kind = "number", default = 2, min = 0, max = 20, step = 1, unit = " px", label = "Gap between bars", needs = "ownGap" },
 		{ section = "Block 2" },
-		-- The bars of the block, first bar first, as text the two rows under it show and change (BarBlockLists.lua).
+		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
 		{ key = "bars2", kind = "text", hidden = true, default = "", label = "Bars of block 2" },
 		{ key = "edit2", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines2", pick = "BarBlockPick2",
-			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar." },
+			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
 		{ key = "add2", kind = "list", default = 0, label = "Add a bar", none = "Choose a bar", items = "BarBlockFree2", pick = "BarBlockAdd2",
 			tip = "The bar goes last in the block. A bar in another block leaves that one." },
 		{ key = "direction2", kind = "choice", default = "up", label = "Stack direction",
@@ -2643,10 +2644,10 @@ ns.PAGES = {
 		{ key = "ownGap2", kind = "bool", default = false, label = "Own gap between bars", tip = "Off: the gap between buttons is used." },
 		{ key = "barGap2", kind = "number", default = 2, min = 0, max = 20, step = 1, unit = " px", label = "Gap between bars", needs = "ownGap2" },
 		{ section = "Block 3" },
-		-- The bars of the block, first bar first, as text the two rows under it show and change (BarBlockLists.lua).
+		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
 		{ key = "bars3", kind = "text", hidden = true, default = "", label = "Bars of block 3" },
 		{ key = "edit3", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines3", pick = "BarBlockPick3",
-			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar." },
+			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
 		{ key = "add3", kind = "list", default = 0, label = "Add a bar", none = "Choose a bar", items = "BarBlockFree3", pick = "BarBlockAdd3",
 			tip = "The bar goes last in the block. A bar in another block leaves that one." },
 		{ key = "direction3", kind = "choice", default = "up", label = "Stack direction",
@@ -2656,7 +2657,7 @@ ns.PAGES = {
 		{ key = "ownGap3", kind = "bool", default = false, label = "Own gap between bars", tip = "Off: the gap between buttons is used." },
 		{ key = "barGap3", kind = "number", default = 2, min = 0, max = 20, step = 1, unit = " px", label = "Gap between bars", needs = "ownGap3" },
 		{ section = "Buttons" },
-		{ key = "uniform", kind = "bool", default = false, label = "One size and spacing for every bar", tip = "Applies after a reload. Action bars 4 and 5 become horizontal.", changed = "BarButtonsChanged", reload = "change" },
+		{ key = "uniform", kind = "bool", default = true, label = "One size and spacing for every bar", tip = "Applies after a reload. Action bars 4 and 5 become horizontal, so action bar 4 lies in block 1 like the others.", changed = "BarButtonsChanged", reload = "change" },
 		{ key = "size", kind = "number", default = 100, unit = "%", min = 50, max = 200, step = 10, label = "Button size", tip = "100% is 45 px.", needs = "uniform", changed = "BarButtonsChanged" },
 		{ key = "spacing", kind = "number", default = 2, min = 2, max = 10, step = 1, unit = " px", label = "Button spacing", needs = "uniform", changed = "BarButtonsChanged" },
 		{ key = "perRow", kind = "choice", default = "12", label = "Buttons per row", needs = "uniform", changed = "BarButtonsChanged",

@@ -74,7 +74,7 @@ local WIN = { height = 22, right = 28, level = 2, start = 4, corner = 18, min = 
 	controls = { "Button", "EditBox", "Slider", "Model", "ModelScene", "ColorSelect", "SimpleHTML", "MessageFrame", "ScrollingMessageFrame", "MovieFrame", "Minimap" },
 	loose = { Model = true, ModelScene = true },
 	scripts = { "OnMouseDown", "OnMouseUp", "OnDragStart" } }
-local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back, Shift and right-click hides a HUD frame of the game."
+local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back, Shift and right-click hides a HUD frame of the game. Drag the tab on a bar of a bar block to give it another place in the block, or to put it in another block."
 -- A bag has a menu button on its portrait, and another over its title that opens the same menu. The title bar of a bag starts to the right
 -- of the portrait, like the title bar of every window two levels above it, so the title drags the bag and the portrait still opens the menu.
 local BAG_GRIP = { left = 44, level = 2 }
@@ -2226,6 +2226,10 @@ local function ShowHandles()
 			ns.Each(KEY, ShowHandle, name)
 		end
 	end
+	-- The tabs of the bars of the bar blocks go on the boxes of the blocks (BarBlock.lua), to drag a bar to another place.
+	if ns.BarBlockGrips then
+		ns.Try(KEY, ns.BarBlockGrips, true)
+	end
 end
 
 -- The open boxes take the names they have now, after a block picked a bar or let it go.
@@ -4360,6 +4364,10 @@ function Close()
 	end
 	for name in pairs(handles) do
 		HideHandle(name)
+	end
+	-- A bar of a bar block being dragged by its tab goes back, and the tabs go.
+	if ns.BarBlockGrips then
+		ns.Try(KEY, ns.BarBlockGrips, false)
 	end
 	centre.Closed()
 	ns.MoversMode.Closed()

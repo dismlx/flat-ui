@@ -269,7 +269,7 @@ end
 
 -- Shows a bar of `id` at x, y in the box, with the alpha of the scene. Returns true when it draws grey for the game's art.
 local function SetBar(inst, bar, item, look, x, y)
-	local n = math.min(#bar.buttons, BUTTONS[item.id] or #bar.buttons)
+	local n = math.min(#bar.buttons, item.count or BUTTONS[item.id] or #bar.buttons)
 	bar.frame:SetSize(n * bar.size + (n - 1) * GAP, bar.size)
 	bar.frame:ClearAllPoints()
 	bar.frame:SetPoint("BOTTOMLEFT", inst.box, "BOTTOMLEFT", x, y)
@@ -634,7 +634,8 @@ end
 -- A scene is a list of items { kind, id, key, label, x, y, w, h, alpha } in the units of the game, y up, and a list of loose items with no place.
 -- kind: bar (a bar of 45 unit buttons), small (a stance or pet bar), xp (an experience bar), panel (the background of the block).
 
--- The ids of the bars of block 1 of the Bar block page, in order (BarBlockLists.lua). Blocks 2 and 3 are not drawn.
+-- The ids of the bars of block 1 of the Bar block page, in order (BarBlockLists.lua): by default action bar 4, the main bar and action bars 2
+-- and 3, which stacked upward from the first bar are 3, 2, main, 4 from the top. Blocks 2 and 3 are not drawn.
 local function BlockIds()
 	local ids = {}
 	local lists = ns.BarBlockLists and ns.BarBlockLists() or {}
@@ -647,13 +648,16 @@ local function BlockIds()
 end
 
 -- The rows of the block and the bars it places, from BarBlock.lua Plan: gap, width, height, and each row's left and bottom from the first bar.
+-- With One size and spacing for every bar on (BarBlockButtons.lua) every bar of the block has 12 buttons, drawn in one row.
 local function BlockPlan(on)
 	local ids = on and BlockIds() or { "main", "bar2", "bar3" }
 	local gap = (on and ns.Get("barblock.ownGap") == true) and ns.Get("barblock.barGap") or GAP
+	local uniform = on and ns.Get("barblock.uniform") == true
 	local plan = { rows = {}, gap = gap, width = 0, height = 0 }
 	for index, id in ipairs(ids) do
-		local w = BarWidth(id)
-		plan.rows[index] = { id = id, w = w }
+		local count = uniform and 12 or BUTTONS[id]
+		local w = count * SIZE + (count - 1) * GAP
+		plan.rows[index] = { id = id, w = w, count = count }
 		plan.width = math.max(plan.width, w)
 		plan.height = plan.height + SIZE + (index > 1 and gap or 0)
 	end
@@ -734,7 +738,7 @@ local function BlockScene(on)
 		scene.items[#scene.items + 1] = { kind = "panel", x = -pad, y = -pad, w = plan.width + 2 * pad, h = plan.height + 2 * pad, alpha = alpha }
 	end
 	for _, row in ipairs(plan.rows) do
-		scene.items[#scene.items + 1] = { kind = "bar", id = row.id, x = row.x, y = row.y, w = row.w, h = SIZE, alpha = alpha }
+		scene.items[#scene.items + 1] = { kind = "bar", id = row.id, x = row.x, y = row.y, w = row.w, h = SIZE, alpha = alpha, count = row.count }
 	end
 	if on and ns.Get("barblock.others") == "above" and not ns.HandsOff() and #plan.rows > 0 then
 		local around, top = Around(plan, alpha)

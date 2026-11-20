@@ -15,8 +15,10 @@ local ADDON_NAME, ns = ...
 -- SetStatusBarTexture, and put back with SetStatusBarTexture. The size, face and flags of a label are set with SetFont, its colour with
 -- SetTextColor and its shadow with SetShadowOffset, each remembered on first touch and put back. Any Blizzard method or global function may be
 -- followed with hooksecurefunc through ns.Follow, ns.FollowGlobal and ns.FollowTable, which run after the game's call and never change what it returns.
--- BarBlock gives Movers the spots of the action bars of up to three blocks (on by default with the main bar and bars 2 to 4 in block 1), also
--- while Leave the game's action bars alone is on, which then guards only the bars no block holds. The one thing it writes on a Blizzard frame is
+-- BarBlock gives Movers the spots of the action bars of up to three blocks (on by default with bars 3 and 2, the main bar and bar 4, top to
+-- bottom, in block 1, laid flat by One size and spacing for every bar, on by default), also while Leave the game's action bars alone is on, which
+-- then guards only the bars no block holds. In /flatui move a tab of its own on each bar of a block drags the bar to another place of a block's
+-- list, a setting, out of combat; the block then lays out again. The one thing it writes on a Blizzard frame is
 -- the alpha of the bars of the blocks (SetAlpha, only with Fade the block on), put back when the fade goes off. At login and when the bars of
 -- a block change, out of combat, it turns on each of bars 2 to 8 a block holds that the game's options have off, with the game's own setting
 -- for that bar (Settings.SetValue of PROXY_SHOW_ACTIONBAR_2 to 8, once the game has made it), or SetActionBarToggles with the other bars as

@@ -1122,7 +1122,7 @@ function MM.Spacing()
 	ui.space:SetShown(count >= 3)
 end
 
--- Keys: the arrows move the chosen frame, Escape asks or closes. Every other key goes on to the game.
+-- Keys: the arrows move the chosen frame, Escape puts back a bar being dragged by its tab, else asks or closes. Every other key goes on to the game.
 local function BuildKeys()
 	local keys = Make("Frame")
 	keys:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -1131,7 +1131,16 @@ local function BuildKeys()
 		local handled = false
 		if key == "ESCAPE" then
 			handled = true
-			if ui.ask and ui.ask:IsShown() then
+			-- A bar of a bar block dragged by its tab goes back first, and nothing else happens (BarBlock.lua).
+			local cancelled = false
+			if ns.BarBlockGripCancel then
+				Try(function()
+					cancelled = ns.BarBlockGripCancel()
+				end)
+			end
+			if cancelled then
+				handled = true
+			elseif ui.ask and ui.ask:IsShown() then
 				ui.ask:Hide()
 			else
 				Try(MM.Request)
