@@ -16,40 +16,12 @@ local TILE_H, CARD_H = 64, 140
 
 -- The record --------------------------------------------------------------------------------------------
 
-local baseline
 local log = {}
 
--- The value of every setting that needs a reload, as the game runs it now. Taken when the window is first built, before it changes any.
-function Home.Start()
-	if baseline then
-		return
-	end
-	baseline = {}
-	for _, page in ipairs(ns.PAGES) do
-		for _, item in ipairs(page) do
-			if item.path and item.reload and not ns.RowUnsaved(item) then
-				baseline[item.path] = ns.Get(item.path)
-			end
-		end
-	end
-end
-
--- The changes that need a reload, by the reload field of the row in Config.lua: "off" for a switch that takes full effect after a reload when it
--- is turned off, "change" for a row that applies after a reload when its value changes. Entries { label, field }.
+-- The changes that need a reload, as ns.ReloadLines (Core.lua) gives them from the values at login, so a change made before the window was opened,
+-- in setup, by a profile switch or a slash command, is listed too. Entries { label, field, path, value }.
 function Home.ReloadLines()
-	local lines = {}
-	for _, page in ipairs(ns.PAGES) do
-		for _, item in ipairs(page) do
-			local was = baseline and item.path and baseline[item.path]
-			if was ~= nil then
-				local now = ns.Get(item.path)
-				if (item.reload == "off" and was == true and now == false) or (item.reload == "change" and was ~= now) then
-					lines[#lines + 1] = { item.label, item.reload }
-				end
-			end
-		end
-	end
-	return lines
+	return ns.ReloadLines()
 end
 
 local function ReloadText(entry)
@@ -258,7 +230,6 @@ end
 
 -- host: Model(), right, width, top and height of the column, Show(entry), Setup(), Call(name), Act(name, ...), ProfileLines(), Profile(), Toggle(item).
 function Home.Build(host)
-	Home.Start()
 	local scroller = kit.Scroller(host.right, host.width, host.height)
 	scroller.frame:SetPoint("TOPLEFT", host.right, "TOPLEFT", 0, -host.top)
 	local child = scroller.child

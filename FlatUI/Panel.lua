@@ -2726,7 +2726,6 @@ local function Build()
 	SIDE = Look.SideWidth()
 	CW = WIDTH - SIDE
 	ui.model = BuildModel()
-	ns.PanelHome.Start()
 	local window = CreateFrame("Frame", NAME, UIParent)
 	ns.Own[window] = true
 	ui.window = window
