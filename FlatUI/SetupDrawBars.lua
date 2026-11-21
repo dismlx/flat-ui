@@ -634,8 +634,8 @@ end
 -- A scene is a list of items { kind, id, key, label, x, y, w, h, alpha } in the units of the game, y up, and a list of loose items with no place.
 -- kind: bar (a bar of 45 unit buttons), small (a stance or pet bar), xp (an experience bar), panel (the background of the block).
 
--- The ids of the bars of block 1 of the Bar block page, in order (BarBlockLists.lua): by default action bar 4, the main bar and action bars 2
--- and 3, which stacked upward from the first bar are 3, 2, main, 4 from the top. Blocks 2 and 3 are not drawn.
+-- The ids of the bars of block 1 of the Bar block page, in order (BarBlockLists.lua): by default the main bar and action bars 2, 4 and 3,
+-- which stacked upward from the first bar are 3, 4, 2, main from the top. Blocks 2 and 3 are not drawn.
 local function BlockIds()
 	local ids = {}
 	local lists = ns.BarBlockLists and ns.BarBlockLists() or {}

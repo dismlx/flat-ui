@@ -15,12 +15,12 @@ local ADDON_NAME, ns = ...
 -- SetStatusBarTexture, and put back with SetStatusBarTexture. The size, face and flags of a label are set with SetFont, its colour with
 -- SetTextColor and its shadow with SetShadowOffset, each remembered on first touch and put back. Any Blizzard method or global function may be
 -- followed with hooksecurefunc through ns.Follow, ns.FollowGlobal and ns.FollowTable, which run after the game's call and never change what it returns.
--- BarBlock gives Movers the spots of the action bars of up to three blocks (on by default with bars 3 and 2, the main bar and bar 4, top to
+-- BarBlock gives Movers the spots of the action bars of up to three blocks (off by default, with bars 3 and 4, bar 2 and the main bar, top to
 -- bottom, in block 1, laid flat by One size and spacing for every bar, on by default), also while Leave the game's action bars alone is on, which
 -- then guards only the bars no block holds. In /flatui move a tab of its own on each bar of a block drags the bar to another place of a block's
 -- list, a setting, out of combat; the block then lays out again. Flat UI's own experience bar (XpBar.lua, a frame of the addon's) goes right
--- under block 1 by default, exactly as wide as the block, which keeps its room under its bars (Experience bar under the bar block); its own spot
--- and width come back when that row is off. The one thing it writes on a Blizzard frame is
+-- under block 1 while the block is on, exactly as wide as the block, which keeps its room under its bars (Experience bar under the bar
+-- block, on by default); its own spot and width come back when that row or the block is off. The one thing it writes on a Blizzard frame is
 -- the alpha of the bars of the blocks (SetAlpha, only with Fade the block on), put back when the fade goes off. At login and when the bars of
 -- a block change, out of combat, it turns on each of bars 2 to 8 a block holds that the game's options have off, with the game's own setting
 -- for that bar (Settings.SetValue of PROXY_SHOW_ACTIONBAR_2 to 8, once the game has made it), or SetActionBarToggles with the other bars as
@@ -2973,7 +2973,8 @@ end
 -- look to the game, and the modules that were off by default then (Errands, Data panels and the others, OFF_UNTIL_0527), which it may have
 -- turned on, are not read here. Run once, for the profiles saved before (LoadSettings, while FlatUIDB.bagsMigrated is not set, as soundsMigrated
 -- marks the move of the sound rows). A Game look made since saves Bags off itself.
--- The Bar block page, on by default since 0.5.27, was off by default then, so such a profile has nothing saved for it and it is not asked.
+-- The Bar block page, on by default in 0.5.27 and 0.5.28 only, was off by default then, so such a profile has nothing saved for it and it is not
+-- asked.
 -- The modules off by default until 0.5.27, when the settings of Jon Default (SetupProfiles.lua) became the defaults: a Game look saved before
 -- 0.5.19 holds nothing for them.
 local OFF_UNTIL_0527 = { ["consumables.enabled"] = true, ["datapanels.enabled"] = true, ["errands.enabled"] = true, ["fade.enabled"] = true,

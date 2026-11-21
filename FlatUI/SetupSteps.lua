@@ -658,7 +658,7 @@ ns.SETUP_STEPS = {
 	{ id = "hud-bars", area = "HUD", title = "Experience and menu bars", draw = "mock-xp-micro", built = true, rows = {
 		{ "hud.bags", "c", "mock-xp-micro" },
 		{ "hud.xpOwn", "c", "mock-xp-micro" },
-		{ "hud.xpUnder", "o", "behaviour", "Puts Flat UI's experience bar right under block 1 of the Bar block page, exactly as wide as the block, and moves it with the block." },
+		{ "hud.xpUnder", "o", "behaviour", "Puts Flat UI's experience bar right under block 1 while the Bar block page is on, exactly as wide as the block, and moves it with the block." },
 		{ "hud.xpWidth", "c", "mock-xp-micro" },
 		{ "hud.xpHeight", "c", "mock-xp-micro" },
 		{ "hud.xpShow", "o", "mock-xp-micro" },
@@ -1236,7 +1236,7 @@ ns.SETUP_STEPS = {
 	} },
 	{ id = "ab-block", area = "Bar block", title = "Bar block", draw = "mock-bar-block", built = true, rows = {
 		{ "barblock.enabled", "c", "mock-bar-block" },
-		{ "barblock.bars1", "r", "behaviour", "Holds the bars of block 1, first bar first: action bar 4, the main bar and action bars 2 and 3 at first, so 3, 2, main, 4 top to bottom." },
+		{ "barblock.bars1", "r", "behaviour", "Holds the bars of block 1, first bar first: the main bar and action bars 2, 4 and 3 at first, so 3, 4, 2, main top to bottom." },
 		{ "barblock.edit1", "c", "mock-bar-block" },
 		{ "barblock.add1", "c", "mock-bar-block" },
 		{ "barblock.direction", "c", "mock-bar-block" },

@@ -13,10 +13,10 @@ local _, ns = ...
 -- (ns.XpBarRedraw), and the tooltip of a bar under the cursor is written again with each drawing.
 -- Its reputation bar shows the faction the Levelling errands follow, when they follow one (ErrandsLevelling.lua); the faction the game watches
 -- is not changed.
--- With Experience bar under the bar block (on by default) block 1 of the Bar block page places the bar right under its bars, a bar gap below
--- them and exactly as wide as the block, and keeps the bar's room in the block (BarBlock.lua, ns.XpUnder); the bar's own spot and the Width row
--- are not used then, and its box in /flatui move says it follows the bar block. Off, or with the Bar block page off, the bar has its own spot
--- and width again. Only Flat UI's own frames are placed and sized, so this goes on in a fight too.
+-- With Experience bar under the bar block (on by default) block 1 of the Bar block page, while it is on, places the bar right under its bars,
+-- a bar gap below them and exactly as wide as the block, and keeps the bar's room in the block (BarBlock.lua, ns.XpUnder); the bar's own spot
+-- and the Width row are not used then, and its box in /flatui move says it follows the bar block. Off, or with the Bar block page off (as it
+-- is by default), the bar has its own spot and width again. Only Flat UI's own frames are placed and sized, so this goes on in a fight too.
 
 local KEY, MOVER = "hud", "FlatUIXpBar"
 -- The width of the game's full bar on Camelot, which 100% of the width row is (Camelot/StatusTrackingBarConstants.lua:1-14).

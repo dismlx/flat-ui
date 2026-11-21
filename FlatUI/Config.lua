@@ -80,7 +80,7 @@ ns.PAGES = {
 		{ key = "borderless", kind = "bool", default = true, label = "Borderless",
 			tip = "Coloured borders stay: threat, Elite and Rare, debuff type, item quality." },
 		{ key = "backdrop", kind = "colour", default = "ff0f0f0f", label = "Background colour" },
-		{ key = "backdropAlpha", kind = "number", default = 85, min = 0, max = 100, step = 5, unit = "%", label = "Background opacity",
+		{ key = "backdropAlpha", kind = "number", default = 75, min = 0, max = 100, step = 5, unit = "%", label = "Background opacity",
 			tip = "Windows have their own opacity on the Windows page." },
 		{ section = "Bars" },
 		{ key = "barTexture", kind = "choice", default = "soft", label = "Bar texture", tip = "Used on every bar that has a flat fill.",
@@ -1925,7 +1925,7 @@ ns.PAGES = {
 			choices = { { "flat", "Flat UI's" }, { "game", "The game's" } } },
 		-- Block 1 of the Bar block page places the bar under its bars at its width (XpBar.lua, BarBlock.lua); the Width row then says so (overText).
 		{ key = "xpUnder", kind = "bool", default = true, label = "Experience bar under the bar block",
-			tip = "Right under block 1 of the Bar block page, exactly as wide as the block, and it moves with the block. With the Bar block page off the bar keeps its own place in /flatui move. Off: its own place and the Width below.",
+			tip = "Right under block 1 of the Bar block page, exactly as wide as the block, and it moves with the block. With the Bar block page off, as it is by default, the bar keeps its own place in /flatui move. Off: its own place and the Width below.",
 			needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpWidth", kind = "number", default = 42, min = 10, max = 130, step = 1, unit = "%", label = "Width",
 			tip = "100% is the game's bar at full width. Under the bar block the bar is as wide as the block.", needs = "xpUnder", needsIn = { false },
@@ -2624,12 +2624,12 @@ ns.PAGES = {
 	},
 	{
 		key = "barblock", label = "Bar block",
-		{ key = "enabled", kind = "bool", default = true, label = "Group action bars into blocks",
-			tip = "Lines up the bars of each block below, at first action bars 3 and 2, the main bar and action bar 4 in block 1, top to bottom, with Flat UI's experience bar under them at the block's width (Experience bar under the bar block). /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars, with a tab on each bar to drag it to another place in its block or into another block. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
+		{ key = "enabled", kind = "bool", default = false, label = "Group action bars into blocks",
+			tip = "Lines up the bars of each block below, at first action bars 3 and 4, action bar 2 and the main bar in block 1, top to bottom, with Flat UI's experience bar under them at the block's width (Experience bar under the bar block). /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars, with a tab on each bar to drag it to another place in its block or into another block. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
 		{ section = "Block 1" },
 		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
-		-- Stacked upward from the first bar, action bar 4 is at the bottom and action bar 3 on top.
-		{ key = "bars1", kind = "text", hidden = true, default = "bar4,main,bar2,bar3", label = "Bars of block 1" },
+		-- Stacked upward from the first bar, the main bar is at the bottom and action bar 3 on top.
+		{ key = "bars1", kind = "text", hidden = true, default = "main,bar2,bar4,bar3", label = "Bars of block 1" },
 		{ key = "edit1", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines1", pick = "BarBlockPick1",
 			tip = "The bars of the block, first bar first. A bar can be in one block only. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
 		{ key = "add1", kind = "list", default = 0, label = "Add a bar", none = "Choose a bar", items = "BarBlockFree1", pick = "BarBlockAdd1",
