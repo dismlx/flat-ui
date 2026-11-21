@@ -705,7 +705,8 @@ local function LiveBagItem(bag)
 end
 
 -- kind = { id = the bag's item ID, label, family, class, subclass, key, name }. key groups free slots: "bag" for normal bags (family 0), "reagent",
--- "keyring", and one key per class and subclass of special bag (or per family when the item is not known). name is the bag item's name, when loaded.
+-- one key per class and subclass of special bag (or per family when the item is not known), and "keyring", whose slots Data.Free leaves out.
+-- name is the bag item's name, when loaded.
 local function MakeKind(bag, id, family)
 	family = Count(family) or 0
 	local kind = { id = id, family = family }
@@ -1580,7 +1581,8 @@ local function StoredFree(slots, size)
 end
 
 -- The free slots of a window, one row per kind of bag in the order the kinds first come: { kind, label, free, total, bag, slot }, bag and slot
--- being the first free slot of that kind. Normal bags are one row, labelled Bags, or Bank in the bank.
+-- being the first free slot of that kind. Normal bags are one row, labelled Bags, or Bank in the bank. The keyring is left out: it holds only
+-- keys, so its slots are no room in the bags (its own label in Bag by bag still counts them, BagsLayout.lua).
 function Data.Free(key, which)
 	local me = Me()
 	if key == me then
@@ -1588,7 +1590,10 @@ function Data.Free(key, which)
 	end
 	local rows, groups = {}, {}
 	for _, bag in ipairs(Data.Containers(which, key)) do
-		local size, kind = Data.Size(key, bag)
+		local size, kind = 0, nil
+		if bag ~= KEYRING then
+			size, kind = Data.Size(key, bag)
+		end
 		if size > 0 and kind then
 			local free, first = 0, nil
 			if key == nil and (Held(bag) or bankLive) then

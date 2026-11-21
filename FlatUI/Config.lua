@@ -1472,7 +1472,7 @@ ns.PAGES = {
 			tip = "At most as many as fit on your screen." },
 		{ key = "slotSize", kind = "number", default = 36, min = 24, max = 48, step = 2, unit = " px", label = "Slot size" },
 		{ key = "freeSlots", kind = "choice", default = "kinds", label = "Free slots", needs = "view", needsIn = { "sections" },
-			tip = "One per kind shows one slot with the number free in normal bags, and one for each kind of special bag, such as a quiver or a soul bag. Drop an item on it to put it there.",
+			tip = "One per kind shows one slot with the number free in normal bags, and one for each kind of special bag, such as a quiver or a soul bag. Drop an item on it to put it there. The keyring holds only keys, so its slots are never counted here or in the free slots under the window.",
 			choices = { { "kinds", "One per kind of bag" }, { "all", "Every free slot" } } },
 		{ section = "Sections" },
 		{ key = "newItems", kind = "bool", default = true, label = "New items at the top",

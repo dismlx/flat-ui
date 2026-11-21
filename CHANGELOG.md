@@ -1,6 +1,7 @@
 ## 0.5.29
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Bags**: the keyring's slots no longer count as free space. Before, the free count under the bag window and its tooltip listed the keyring's empty slots, and in the Sections view the **Free slots** section added them to its number and showed a slot for the keyring (or, with **Every free slot**, each empty keyring slot), so your bags looked roomier than they were. Now the free count, its tooltip and **Free slots** count only the bags that take your items; the keyring's own label in **Bag by bag** still says how many of its slots are free.
 
 ## 0.5.28
 

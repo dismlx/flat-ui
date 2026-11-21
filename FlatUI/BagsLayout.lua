@@ -21,8 +21,8 @@ local _, ns = ...
 -- top shelf is as wide as the window, titled New items in the bag window while New items at the top is on and everything on it is new, else
 -- Added, as in the bank window; New items is told of everything the shelf shows (B.Categories.New.Shown), so it leaves when the window closes.
 -- Free slots is the last: one counted slot for each kind of bag (the live button of the first free slot of that kind, so a drop on it puts the
--- item there) or every free slot, as Free slots says. A title's text keeps an on-screen size of at least 9 units, so a small Slot size never makes
--- it unreadable.
+-- item there) or every free slot, as Free slots says, never the keyring's, which holds only keys, so neither its count nor its slots show there.
+-- A title's text keeps an on-screen size of at least 9 units, so a small Slot size never makes it unreadable.
 -- While the window is open nothing moves but what arrives. A slot that keeps an item is drawn again where it is, whatever it holds now. A slot that
 -- empties keeps its cell as a blank slot (B.Buttons.Draw with hold), Free slots is drawn again below everything, and an item in a slot that had no
 -- cell goes to the end of the top shelf, which moves what is below it only when it needs a new row (the first time, a row and its title). While a
@@ -338,7 +338,8 @@ local function KindField(kind, field)
 end
 
 -- A kind's name for matching two kinds: BagsData's key, which groups the free slots of B.Data.Free ("bag" for every normal bag, the backpack and
--- the bank's own slots included, "reagent", "keyring", and one for each kind of special bag); else its id, else its label.
+-- the bank's own slots included, "reagent", and one for each kind of special bag; "keyring" too, whose slots B.Data.Free leaves out); else its id,
+-- else its label.
 local function KindId(kind)
 	if type(kind) == "table" then
 		return KindField(kind, "key") or KindField(kind, "id") or KindField(kind, "label")
@@ -838,8 +839,8 @@ local function Unheld(st, kind)
 	return nil
 end
 
--- Free slots as they are now: one counted slot per kind of bag (B.Data.Free), or every free slot that has no cell, in the order of the bags. A slot
--- shown the same way as before keeps its drawing.
+-- Free slots as they are now: one counted slot per kind of bag (B.Data.Free), or every free slot that has no cell, in the order of the bags; the
+-- keyring's slots in neither, nor in the count of the title. A slot shown the same way as before keeps its drawing.
 local function MakeFree(st)
 	if st.view ~= "sections" then
 		st.free = nil
@@ -848,7 +849,7 @@ local function MakeFree(st)
 	local sec = { key = FREE, label = Label(FREE), entries = {}, count = 0 }
 	if Opt("freeSlots") == "all" then
 		for _, bag in ipairs(st.containers) do
-			for slot = 1, st.sizes[bag] do
+			for slot = 1, bag ~= KEYRING and st.sizes[bag] or 0 do
 				if not st.cells[SlotKey(bag, slot)] and not Item(st.key, bag, slot) then
 					local entry = Entry(bag, slot, nil)
 					entry.freeSlot, entry.kindTable = true, st.kinds[bag]

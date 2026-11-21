@@ -34,8 +34,9 @@ local _, ns = ...
 -- what shrank (Free slots losing a row as its slots fill). It takes its exact height again at its next fresh layout and at its opening.
 -- The bag window's footer has the gold of the character shown (Errands.Money, Errands.lua:65-85), whose tooltip lists the characters of this realm
 -- and its connected realms, richest first, each with its realm when that is not this character's, with their total, and one line for those of
--- other realms; its free slots by kind of bag (B.Data.Free), and, at a merchant, Sell junk (N): N is ns.ErrandsJunkCount, what the next pass of
--- Errands would sell, and a click runs ns.ErrandsSellJunk, which sells as Errands sells and says why when it cannot. The bank window's footer has
+-- other realms; its free slots by kind of bag (B.Data.Free, which leaves the keyring out, as its slots hold only keys), and, at a merchant, Sell
+-- junk (N): N is ns.ErrandsJunkCount, what the next pass of Errands would sell, and a click runs ns.ErrandsSellJunk, which sells as Errands
+-- sells and says why when it cannot. The bank window's footer has
 -- the free slots of the bank and, at the banker with a search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit,
 -- B.Bank.TakeOut, B.Bank.Busy, whose per-click fallback labels the button with what is left). These three buttons are this file's own, drawn as
 -- the title bar's are, and clicked as the game's buttons are, by the left button let go over them, as Errands.Button's are (Errands.lua:127-201).
@@ -1111,7 +1112,7 @@ local function GoldTip(w, owner)
 	tip:Show()
 end
 
--- The kinds of bag with room: { label, free, total }, the first being the bags of no special kind.
+-- The kinds of bag with room: { label, free, total }, the first being the bags of no special kind; never the keyring (B.Data.Free).
 local function Kinds(w)
 	local key = Layout.Viewed(w.which)
 	local list = Call(Data, "Free", key, w.which)
