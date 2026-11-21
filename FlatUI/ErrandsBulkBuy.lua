@@ -5,9 +5,10 @@ local _, ns = ...
 -- Blizzard_UIPanels_Game/Mainline/MerchantFrame.lua:713-752). A bar of Flat UI's own lies beside that box, at its right, with two buttons: Stack
 -- buys one bag stack (C_Item.GetItemMaxStackSizeByID, rounded down to the merchant's bundle, the stackCount of C_MerchantFrame.GetItemInfo), and
 -- Most as many as your gold, the merchant's stock (numAvailable, unless -1) and the room of the bags that take the item allow (the free slots of
--- C_Container.GetContainerNumFreeSlots whose bag family is 0 or shares a bit with C_Item.GetItemFamily, plus the room left in the stacks of the
--- same item). Each says its count and cost in its tooltip. Not under the box: the box sits on the item clicked (its BOTTOMLEFT on the item
--- button's TOPLEFT, MerchantFrame.lua:737), so a bar under it would lie under the cursor and take a second click on the item.
+-- C_Container.GetContainerNumFreeSlots whose bag family is 0 or shares a bit with C_Item.GetItemFamily, the reagent bag's, of family 0 too, only for
+-- a crafting reagent, the isCraftingReagent answer of C_Item.GetItemInfo, plus the room left in the stacks of the same item). Each says its count
+-- and cost in its tooltip. Not under the box: the box sits on the item clicked (its BOTTOMLEFT on the item button's TOPLEFT, MerchantFrame.lua:737),
+-- so a bar under it would lie under the cursor and take a second click on the item.
 -- The bar comes after the game's own call, followed with hooksecurefunc (ns.FollowGlobal), only on the merchant tab (MerchantFrame.selectedTab,
 -- read), with the split key held (IsModifiedClick), no box with the keyboard (GetCurrentKeyBoardFocus: a chat box takes the click as a link,
 -- MerchantFrame.lua:743-745) and the game's box shown for that button (StackSplitFrame.owner, read as MerchantFrame_CloseStackSplitFrame reads it,
@@ -43,6 +44,8 @@ local LOOK = 0.1
 -- Two buttons as wide together as the game's box (172, StackSplitFrame.xml:3-4), the gap between them, and the space between the box and the bar.
 local WIDTH, GAP, BESIDE = 84, 4, 2
 local DEFAULT_BAGS = 4
+-- The reagent bag (Enum.BagIndex.ReagentBag): of family 0, but it takes only crafting reagents.
+local REAGENT_BAG = 5
 local HIGH_COST = 1500000
 -- Why a count of nothing, in a tooltip; why Most is what it is; why a purchase stopped.
 local NONE = { gold = "Your gold does not pay for one purchase.", room = "Your bags have no room for it.", stock = "The merchant has none left.",
@@ -137,8 +140,22 @@ local function StackKey(link)
 	return table.concat(fields, ":")
 end
 
--- The items of one kind the bags can still take: a stack for each free slot of a bag that takes the item, and what the stacks of the same item can
--- still hold (EnhanceQoLVendor/BulkBuy.lua:31-49). Nil when the bags cannot be read.
+-- Whether an item is a crafting reagent, which the reagent bag takes: the 17th answer of C_Item.GetItemInfo (ItemDocumentation.lua:626-657),
+-- false when the client does not say.
+local function Reagent(link)
+	local info = type(C_Item) == "table" and C_Item.GetItemInfo or nil
+	if type(info) ~= "function" then
+		return false
+	end
+	local ok, value = pcall(function()
+		return (select(17, info(link)))
+	end)
+	return ok and not ns.IsSecret(value) and value == true
+end
+
+-- The items of one kind the bags can still take: a stack for each free slot of a bag that takes the item (a general bag; a special bag whose family
+-- shares a bit with the item's; the reagent bag for a crafting reagent only), and what the stacks of the same item can still hold
+-- (EnhanceQoLVendor/BulkBuy.lua:31-49). Nil when the bags cannot be read.
 local function Room(link, size)
 	if type(C_Container) ~= "table" then
 		return nil
@@ -148,7 +165,8 @@ local function Room(link, size)
 	local key, room = StackKey(link), 0
 	for bag = 0, Bags() do
 		local free, bagFamily = E.Ask(C_Container.GetContainerNumFreeSlots, bag)
-		if ns.Finite(free) and free > 0 and ns.Finite(bagFamily) and (bagFamily == 0 or (family ~= 0 and Band(family, bagFamily) ~= 0)) then
+		if ns.Finite(free) and free > 0 and ns.Finite(bagFamily) and (bagFamily == 0 or (family ~= 0 and Band(family, bagFamily) ~= 0))
+			and (bag ~= REAGENT_BAG or Reagent(link)) then
 			room = room + free * size
 		end
 		local slots = E.Ask(C_Container.GetContainerNumSlots, bag)

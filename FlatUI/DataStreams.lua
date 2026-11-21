@@ -1,8 +1,10 @@
 local ADDON_NAME, ns = ...
 
 -- The streams of the data panels (DataPanels.lua): what a slot shows and what its tooltip says.
---   Bag space: free and total slots of the bags the player wears (C_Container.GetContainerNumSlots and GetContainerNumFreeSlots). A bag of a
---     special kind (a quiver, an ammo pouch, a soul bag: its family is not 0) holds only its own kind of item, so it counts apart, in the tooltip.
+--   Bag space: free and total slots of the general bags the player wears, the backpack and the bags of family 0, the only room for any item
+--     (C_Container.GetContainerNumSlots and GetContainerNumFreeSlots). A special bag (a trade bag, a quiver, an ammo pouch, a soul bag: its
+--     family is not 0) and the reagent bag (Enum.BagIndex 5, of family 0 but for reagents only) hold only certain items, so they count apart,
+--     in the tooltip, which says so.
 --   Gold: the player's money (GetMoney) with the game's coins (C_CurrencyInfo.GetCoinTextureString). The tooltip lists the gold of each
 --     character of the account that logged in with the data panels on, kept in FlatUIDB.datapanels.gold by "Name - Realm".
 --   Durability: of all the equipped items together (GetInventoryItemDurability), coloured by how worn it is; the tooltip lists each item.
@@ -36,6 +38,8 @@ local HEARTHSTONE, HEARTHSTONE_ICON = 6948, 134414
 local ROSTER_EVERY = 15
 -- A cooldown this short is the global cooldown, not the hearthstone's own.
 local SHORT = 2
+-- The reagent bag (Enum.BagIndex.ReagentBag): its family is 0, but it takes only reagents, so it is not general room.
+local REAGENT_BAG = 5
 -- The equipment slots, by their numbers (INVSLOT_HEAD and the rest).
 local SLOT_NAMES = { [1] = "Head", [2] = "Neck", [3] = "Shoulders", [4] = "Shirt", [5] = "Chest", [6] = "Waist", [7] = "Legs", [8] = "Feet",
 	[9] = "Wrists", [10] = "Hands", [11] = "Finger", [12] = "Finger", [13] = "Trinket", [14] = "Trinket", [15] = "Back", [16] = "Main hand",
@@ -83,7 +87,8 @@ end
 
 -- Bag space ------------------------------------------------------------------------------------------------------------------------------------
 
--- Free and total slots of the ordinary bags, then of the special ones; nothing when the client withholds an answer.
+-- Free and total slots of the general bags (family 0, not the reagent bag), then of the bags that take only certain items; nothing when the
+-- client withholds an answer.
 local function BagSpace()
 	local bags = type(C_Container) == "table" and C_Container or nil
 	local slots = bags and bags.GetContainerNumSlots or _G.GetContainerNumSlots
@@ -102,7 +107,7 @@ local function BagSpace()
 				return nil
 			elseif empty then
 				empty = math.min(empty, size)
-				if family == nil or family == 0 then
+				if bag ~= REAGENT_BAG and (family == nil or family == 0) then
 					free, total = free + empty, total + size
 				else
 					otherFree, otherTotal = otherFree + empty, otherTotal + size
@@ -136,6 +141,7 @@ P.Stream({
 		if otherTotal > 0 then
 			lines[#lines + 1] = { "Special bags", ("%d of %d free"):format(otherFree, otherTotal) }
 		end
+		lines[#lines + 1] = { DIM .. "Counts only bags that take any item.|r" }
 		return lines
 	end,
 })

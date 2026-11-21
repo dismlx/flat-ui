@@ -167,7 +167,7 @@ local LIST = {
 	{ name = "FlatUIBarBlock3", label = "Action bar block 3", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow3",
 		changed = "BarBlockMoved3" },
 	-- Flat UI's own experience and reputation bar (XpBar.lua). Its box is the bar's own frame, wherever the bar is; with no spot saved it sits where XpBar.lua puts it.
-	-- While the bar block places it (under block 1 by default) its box is grey, takes no mouse and says it follows the bar block (follows).
+	-- While the bar block places it (under block 1 while the block is on) its box is grey, takes no mouse and says it follows the bar block (follows).
 	{ name = "FlatUIXpBar", label = "Experience bar", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "XpBarRow", changed = "XpBarMoved",
 		follows = "XpBarFollows" },
 	{ name = "FlatUITrackers", label = "Trackers", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "TrackerRow", changed = "TrackersMoved" },

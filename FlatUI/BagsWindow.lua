@@ -34,14 +34,17 @@ local _, ns = ...
 -- what shrank (Free slots losing a row as its slots fill). It takes its exact height again at its next fresh layout and at its opening.
 -- The bag window's footer has the gold of the character shown (Errands.Money, Errands.lua:65-85), whose tooltip lists the characters of this realm
 -- and its connected realms, richest first, each with its realm when that is not this character's, with their total, and one line for those of
--- other realms; its free slots by kind of bag (B.Data.Free), and, at a merchant, Sell junk (N): N is ns.ErrandsJunkCount, what the next pass of
--- Errands would sell, and a click runs ns.ErrandsSellJunk, which sells as Errands sells and says why when it cannot. The bank window's footer has
--- the free slots of the bank and, at the banker with a search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit,
--- B.Bank.TakeOut, B.Bank.Busy, whose per-click fallback labels the button with what is left). These three buttons are this file's own, drawn as
--- the title bar's are, and clicked as the game's buttons are, by the left button let go over them, as Errands.Button's are (Errands.lua:127-201).
+-- other realms; its free slots, those of the general bags alone (B.Data.Free: the backpack and normal bags, family 0, the only room for any
+-- item), whose tooltip names each special bag's free slots apart, uncounted (the reagent bag, a trade bag, a quiver, an ammo pouch, a soul bag
+-- take only certain items), and leaves the keyring out, as its slots hold only keys; and, at a merchant, Sell junk (N): N is
+-- ns.ErrandsJunkCount, what the next pass of Errands would sell, and a click runs ns.ErrandsSellJunk, which sells as Errands sells and says why
+-- when it cannot. The bank window's footer has the free slots of the bank, its general slots alone the same way, and, at the banker with a
+-- search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit, B.Bank.TakeOut, B.Bank.Busy, whose per-click
+-- fallback labels the button with what is left). These three buttons are this file's own, drawn as the title bar's are, and clicked as the
+-- game's buttons are, by the left button let go over them, as Errands.Button's are (Errands.lua:127-201).
 -- Each window keeps room in its least width for the buttons of its footer and the shortest text of its free slots, and the bag window for a gold
 -- of the usual length too, whatever shows now, so it never changes width as a button comes or goes or the gold changes; the free slots are
--- written as fully as the room left allows, the special kinds of bag left out first, then the word Free (their tooltip names them all).
+-- written as fully as the room left allows, the word Free left out first.
 -- The row above the bank window's footer, at the live bank only, is BagsBank.lua's (B.Bank.Slots), as high and as wide as that file says. A bank
 -- never seen says how to keep one.
 -- Escape closes either window: both are named in UISpecialFrames, as the options window is (Panel.lua:2700-2708), whose windows the game's
@@ -1111,7 +1114,8 @@ local function GoldTip(w, owner)
 	tip:Show()
 end
 
--- The kinds of bag with room: { label, free, total }, the first being the bags of no special kind.
+-- The kinds of bag with room: { label, free, total, general }, the general bags first (B.Data.Free), which take any item and alone count as free
+-- space, then each special kind, which takes only certain items; never the keyring.
 local function Kinds(w)
 	local key = Layout.Viewed(w.which)
 	local list = Call(Data, "Free", key, w.which)
@@ -1122,7 +1126,7 @@ local function Kinds(w)
 			if type(label) ~= "string" or IsSecret(label) or label == "" then
 				label = type(kind.kind) == "table" and type(kind.kind.label) == "string" and kind.kind.label or "Bags"
 			end
-			out[#out + 1] = { label = label, free = math.max(0, math.floor(kind.free)), total = math.floor(kind.total) }
+			out[#out + 1] = { label = label, free = math.max(0, math.floor(kind.free)), total = math.floor(kind.total), general = kind.general == true }
 		end
 	end
 	return out
@@ -1134,32 +1138,43 @@ local function FreeTip(w, owner)
 		return
 	end
 	tip:SetText("Free slots", 1, 1, 1)
-	for _, kind in ipairs(Kinds(w)) do
-		tip:AddDoubleLine(Plain(kind.label), ("%d of %d"):format(kind.free, kind.total), DIM[1], DIM[2], DIM[3], 1, 1, 1)
+	local kinds, apart = Kinds(w), false
+	for _, kind in ipairs(kinds) do
+		if kind.general then
+			tip:AddDoubleLine(Plain(kind.label), ("%d of %d"):format(kind.free, kind.total), DIM[1], DIM[2], DIM[3], 1, 1, 1)
+		end
+	end
+	-- A special bag takes only certain items, so its free slots are not in the count: they are named apart, under a line that says so.
+	for _, kind in ipairs(kinds) do
+		if not kind.general then
+			if not apart then
+				apart = true
+				tip:AddLine(" ")
+				tip:AddLine("Not counted, for certain items only", DIM[1], DIM[2], DIM[3])
+			end
+			tip:AddDoubleLine(Plain(kind.label), ("%d of %d"):format(kind.free, kind.total), DIM[1], DIM[2], DIM[3], 1, 1, 1)
+		end
 	end
 	tip:Show()
 end
 
--- The free slots as the footer may write them, longest first, for ArrangeFoot to take the first that fits: the bags of no special kind, low in gold
--- and none in red, then each special kind; the same without the special kinds; and the count alone, without the word Free.
+-- The free slots as the footer may write them, longest first, for ArrangeFoot to take the first that fits: those of the general bags, low in gold
+-- and none in red, and the count alone, without the word Free. The special bags are not counted, as they take only certain items (the tooltip
+-- names them apart).
 local function FreeTexts(w)
-	local kinds = Kinds(w)
-	local main = kinds[1]
+	local main
+	for _, kind in ipairs(Kinds(w)) do
+		if kind.general then
+			main = kind
+			break
+		end
+	end
 	if not main then
 		return { "" }
 	end
 	local colour = main.free <= 0 and NONE_HEX or (main.free <= LOW and LOW_HEX) or WHITE_HEX
 	local count = ("%s%d|r%s/%d|r"):format(colour, main.free, DIM_HEX, main.total)
-	local plain = DIM_HEX .. "Free|r " .. count
-	if #kinds < 2 then
-		return { plain, count }
-	end
-	local full = plain
-	for index = 2, #kinds do
-		local kind = kinds[index]
-		full = full .. ("%s  ·  %s|r %d"):format(DIM_HEX, Plain(kind.label), kind.free)
-	end
-	return { full, plain, count }
+	return { DIM_HEX .. "Free|r " .. count, count }
 end
 
 local function JunkCount()

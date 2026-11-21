@@ -12,11 +12,12 @@ local _, ns = ...
 -- the block whose box it is dropped on (Tabs, below).
 -- The blocks work whatever Leave the game's action bars alone says: while it is on it guards only the bars no block holds (Movers.lua,
 -- hold.Off), and the stance and pet bars and the game's experience bars stay with the game.
--- Flat UI's own experience bar goes under block 1 by default (Experience bar under the bar block, XpBar.lua, ns.XpUnder): the block keeps its
--- room under its bars, the bar's height and the block's gap between bars, so the bottom of the block is the bottom of the bar, and the bar is
--- exactly as wide as the block (Plan). It follows the block as bars are added or taken out, their size and the stack direction change and the
--- box is moved; the box, the background panel and the fade take it in. This is whatever Stance, pet and experience bars and Leave the game's
--- action bars alone say, since the bar is Flat UI's. A bar that shows nothing keeps no room, and hangs under the block until the next plan.
+-- Flat UI's own experience bar goes under block 1 while the block is on (Experience bar under the bar block, on by default, XpBar.lua,
+-- ns.XpUnder): the block keeps its room under its bars, the bar's height and the block's gap between bars, so the bottom of the block is the
+-- bottom of the bar, and the bar is exactly as wide as the block (Plan). It follows the block as bars are added or taken out, their size and
+-- the stack direction change and the box is moved; the box, the background panel and the fade take it in. This is whatever Stance, pet and
+-- experience bars and Leave the game's action bars alone say, since the bar is Flat UI's. A bar that shows nothing keeps no room, and hangs
+-- under the block until the next plan.
 -- With Stance, pet and experience bars on Above the block, the frames the game hangs from the main bar get spots over block 1 too: the
 -- experience bars (Flat UI's while it is not under the block), then the stance bar on the left and the pet bar on the right, then the possess
 -- bar, then the totem bar of a character that has one. Since 70425 the game stacks the totem bar last (Camelot/EditModeUtil.lua:21): in its
@@ -368,7 +369,8 @@ local function AnchorRow(rows)
 end
 
 -- The bottom middle of block n that puts the left of that bar at `left` and the bottom of the block at `bottom`: the block stands where the bar
--- is and stacks from there, so a bar the block puts under the main bar (action bar 4 of block 1 by default) stays on the screen.
+-- is and stacks from there, so a bar the block puts under the main bar (one listed before it, as action bar 4 was by default in 0.5.28) stays
+-- on the screen.
 local function SpotFor(n, left, bottom)
 	local plan = Plan(n, 0, 0)
 	local row = plan and AnchorRow(plan.rows)

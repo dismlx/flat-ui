@@ -387,8 +387,19 @@ local function Unmet(page, item)
 	end
 end
 
+-- True while something else takes a row over (overIf: the name of a function of ns that says so, as for Width of the experience bar while
+-- block 1 of the Bar block page holds the bar at its width): the row is greyed, and a number row shows its overText in place of its value.
+local function Over(item)
+	local call = IsText(item.overIf) and ns[item.overIf]
+	if type(call) ~= "function" then
+		return false
+	end
+	local ok, over = pcall(call)
+	return ok and over == true
+end
+
 local function IsOpen(page, item)
-	return Unmet(page, item) == nil
+	return Unmet(page, item) == nil and not Over(item)
 end
 
 local function Say(message)
@@ -655,8 +666,8 @@ local function AddNumber(row, item)
 	box = Field(row.frame, 54, 8, Commit)
 	box:SetPoint("LEFT", row.frame, "LEFT", CONTROL + TRACK + 12, 0)
 	box:SetJustifyH("CENTER")
-	-- A row another switch takes over (overText, as Width of the experience bar under the bar block) says so in place of its value and unit
-	-- while the switch it needs is on, which greys the row (needsIn { false }).
+	-- A row something else takes over (overIf, as Width of the experience bar under the bar block) says so (overText) in place of its value and
+	-- unit while it does, which greys the row (BuildRow).
 	local unit = Dim(Label(row.frame, "GameFontHighlightSmall", "LEFT", item.overText and 160 or 90))
 	unit:SetPoint("LEFT", box, "RIGHT", 10, 0)
 	local plain = ((item.unit or ""):gsub("^%s+", ""))
@@ -666,11 +677,7 @@ local function AddNumber(row, item)
 		local fraction = Clamp((value - item.min) / (item.max - item.min), 0, 1)
 		bar:SetWidth(math.max(1, fraction * TRACK))
 		thumb:SetPoint("CENTER", track, "LEFT", fraction * TRACK, 0)
-		local over = IsText(item.overText) and item.needsPath ~= nil and ns.Get(item.needsPath) == true
-		local switch = over and ns.Def(item.needsPath)
-		if switch and switch.needsPath then
-			over = ns.NeedMet(switch, switch.needsPath)
-		end
+		local over = IsText(item.overText) and Over(item)
 		if item.overText then
 			unit:SetText(over and item.overText or plain)
 		end
@@ -861,7 +868,7 @@ local function BuildRow(parent, page, item, y)
 	local mark = ns.PanelTrust and ns.PanelTrust.Attach(row, item)
 	function row.Update()
 		local unmet = Unmet(page, item)
-		SetActive(row, unmet == nil)
+		SetActive(row, unmet == nil and not Over(item))
 		show()
 		if mark then
 			mark(unmet)

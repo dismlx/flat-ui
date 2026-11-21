@@ -7,6 +7,8 @@ local _, ns = ...
 -- an exported profile has them (Core.lua, HeaderLine): the positions are fitted to the player's screen when the profile is put in use (ns.FitSpots).
 -- Setup.lua checks every value again when it first reads them (S.Presets). Jon Default, the author's own profile, is the baseline: its settings
 -- are the defaults of Config.lua, listed here all the same, and with base it gives its positions to every new profile (Core.lua, BaseSpots).
+-- Its Bar block settings (barblock.enabled off, barblock.bars1 main,bar2,bar4,bar3) are only the defaults: no ready-made profile sets a row of
+-- that page (S.Presets leaves one out and says so).
 
 ns.SETUP_PROFILES = {
 	{ id = "standard", label = "Standard", line = "Every setting at its default, as Jon Default has it.", values = {
@@ -208,6 +210,7 @@ ns.SETUP_PROFILES = {
 		["fade.delay"] = 100,
 		["fade.enabled"] = true,
 		["fade.micro"] = true,
+		["general.backdropAlpha"] = 75,
 		["general.barTexture"] = "soft",
 		["general.borderless"] = true,
 		["general.cursorRingCastColour"] = "ff33b6e6",
@@ -265,31 +268,13 @@ ns.SETUP_PROFILES = {
 		["windows.junkDim"] = true,
 		["windows.sortFrom"] = "other",
 	}, movers = {
-		{ frame = "AlertFrame", point = "BOTTOM", x = 0, y = 765.33355712890625, kind = "hud" },
-		{ frame = "BuffIconCooldownViewer", point = "CENTER", x = 253.74455261230469, y = -162.6778316497803, kind = "hud" },
-		{ frame = "CompactRaidFrameContainer", point = "LEFT", x = 12.399999618530273, y = 90.000177383422852, kind = "hud" },
-		{ frame = "EncounterBar", point = "CENTER", x = 0, y = 181.1332950592041, kind = "hud" },
-		{ frame = "EssentialCooldownViewer", point = "CENTER", x = 0, y = -35.999883651733398, kind = "hud" },
-		{ frame = "ExternalDefensivesFrame", point = "CENTER", x = 0, y = -78.499904632568359, kind = "hud" },
-		{ frame = "FlatUIAbsorbs", point = "CENTER", x = -245.37773895263672, y = -131.99991035461426, kind = "hud" },
-		{ frame = "FlatUIBags", point = "BOTTOMRIGHT", x = -1.100189208984375, y = 91.400009155273438, kind = "hud" },
-		{ frame = "FlatUIBank", point = "TOPLEFT", x = 1271.222045898438, y = -308.22217559814447, kind = "hud" },
-		{ frame = "FlatUICombatOut", point = "CENTER", x = 440.59995269775391, y = -27.333135604858398, kind = "hud" },
-		{ frame = "FlatUICombatSelf", point = "CENTER", x = 0, y = -20.666448593139648, kind = "hud" },
-		{ frame = "FlatUICooldowns", point = "CENTER", x = -1.5318393707275391e-05, y = -136.5000267624855, kind = "hud" },
-		{ frame = "FlatUIDataTop", point = "TOP", x = -791.77777099609375, y = 1.52587890625e-05, kind = "hud" },
-		{ frame = "FlatUIGear", point = "TOPLEFT", x = 824.88922119140625, y = -298.66665649414062, kind = "hud" },
-		{ frame = "FlatUIGroupTools", point = "TOP", x = 92.500137329101562, y = -992.59997177124023, kind = "hud" },
-		{ frame = "FlatUIHealerMana", point = "CENTER", x = 619.11129760742188, y = -45.333133697509773, kind = "hud" },
-		{ frame = "FlatUIHitTable", point = "TOPLEFT", x = 34, y = -180.49986267089841, kind = "hud" },
-		{ frame = "FlatUILootRolls", point = "BOTTOM", x = 365.59986877441406, y = 435.83364868164062, kind = "hud" },
-		{ frame = "FlatUIPartyRaid", point = "CENTER", x = -445.37773895263672, y = 210.77815246582031, kind = "hud" },
-		{ frame = "FlatUITrackers", point = "CENTER", x = 234.666484773159, y = -163.42223745584491, kind = "hud" },
-		{ frame = "LootFrame", point = "RIGHT", x = -633.67807006835938, y = 181.77793884277341, kind = "hud" },
-		{ frame = "PartyFrame", point = "TOPLEFT", x = 435.46661376953125, y = -327.70002365112305, kind = "hud" },
-		{ frame = "PlayerFrame", point = "TOPLEFT", x = 0, y = -0.0001068115234375, kind = "hud" },
-		{ frame = "SwingTimerMainHandFrame", point = "BOTTOM", x = 0, y = 347, kind = "hud" },
-		{ frame = "SwingTimerOffHandFrame", point = "BOTTOM", x = 0, y = 280.20001220703125, kind = "hud" },
-		{ frame = "TargetFrame", point = "TOPLEFT", x = 508.07772827148438, y = -15.500228881835939, kind = "hud" },
+		{ frame = "BuffIconCooldownViewer", point = "CENTER", x = 256, y = -157.9999141693115, kind = "hud" },
+		{ frame = "FlatUIAbsorbs", point = "CENTER", x = 0, y = -63.200014114379883, kind = "hud" },
+		{ frame = "FlatUIBarBlock", point = "BOTTOM", x = 0, y = 50.749969482421882, kind = "hud" },
+		{ frame = "FlatUICooldowns", point = "CENTER", x = -7.6353549957275391e-05, y = -137.9999352097511, kind = "hud" },
+		{ frame = "FlatUILootRolls", point = "BOTTOM", x = 375.60023498535162, y = 453.00009155273438, kind = "hud" },
+		{ frame = "FlatUIPartyRaid", point = "CENTER", x = -387.55528259277338, y = 105.00013732910161, kind = "hud" },
+		{ frame = "FlatUIXpBar", point = "BOTTOM", x = 0, y = 65.222366333007812, kind = "hud" },
+		{ frame = "SwingTimerMainHandFrame", point = "BOTTOM", x = 0, y = 350.89999389648438, kind = "hud" },
 	} },
 }

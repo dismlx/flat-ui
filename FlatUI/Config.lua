@@ -8,6 +8,8 @@ local _, ns = ...
 --     function of ns that is called with the id of the line chosen.
 --   needs: another setting on the same owner (the same page, or a page listed under the same page) that must be on for this one to apply
 --   needsIn: with needs naming a choice, the values of that choice for which this one applies
+--   overIf: the name of a function of ns that is true while something else takes the row over: the row is greyed (Panel.lua, Over), and a
+--     number row shows overText in place of its value and unit.
 --   page: the page whose setting this is, for a row shown on another page. The saved path is
 --     "<page>.<key>" and the row takes the switch of the page it is shown on.
 --   parent: on a page, the page it is listed under in the panel. A sub-page is listed right after its parent and the pages that share it.
@@ -80,7 +82,7 @@ ns.PAGES = {
 		{ key = "borderless", kind = "bool", default = true, label = "Borderless",
 			tip = "Coloured borders stay: threat, Elite and Rare, debuff type, item quality." },
 		{ key = "backdrop", kind = "colour", default = "ff0f0f0f", label = "Background colour" },
-		{ key = "backdropAlpha", kind = "number", default = 85, min = 0, max = 100, step = 5, unit = "%", label = "Background opacity",
+		{ key = "backdropAlpha", kind = "number", default = 75, min = 0, max = 100, step = 5, unit = "%", label = "Background opacity",
 			tip = "Windows have their own opacity on the Windows page." },
 		{ section = "Bars" },
 		{ key = "barTexture", kind = "choice", default = "soft", label = "Bar texture", tip = "Used on every bar that has a flat fill.",
@@ -1472,7 +1474,7 @@ ns.PAGES = {
 			tip = "At most as many as fit on your screen." },
 		{ key = "slotSize", kind = "number", default = 36, min = 24, max = 48, step = 2, unit = " px", label = "Slot size" },
 		{ key = "freeSlots", kind = "choice", default = "kinds", label = "Free slots", needs = "view", needsIn = { "sections" },
-			tip = "One per kind shows one slot with the number free in normal bags, and one for each kind of special bag, such as a quiver or a soul bag. Drop an item on it to put it there.",
+			tip = "Only the backpack and normal bags count as free space, here and under the window: trade bags, quivers, ammo pouches, soul bags, the reagent bag and the keyring take only certain items. One per kind shows a slot with the number free in normal bags and, in your own bags, one for each kind of special bag with room, not counted in the title. Drop an item on it to put it there. Bag by bag shows each bag's free slots on its label.",
 			choices = { { "kinds", "One per kind of bag" }, { "all", "Every free slot" } } },
 		{ section = "Sections" },
 		{ key = "newItems", kind = "bool", default = true, label = "New items at the top",
@@ -1923,13 +1925,14 @@ ns.PAGES = {
 		{ section = "Experience and reputation bars" },
 		{ key = "xpOwn", kind = "choice", default = "flat", label = "Experience bar", tip = "The game's bar stays in place and is not drawn.",
 			choices = { { "flat", "Flat UI's" }, { "game", "The game's" } } },
-		-- Block 1 of the Bar block page places the bar under its bars at its width (XpBar.lua, BarBlock.lua); the Width row then says so (overText).
+		-- Block 1 of the Bar block page places the bar under its bars at its width (XpBar.lua, BarBlock.lua); the Width row then says so (overText)
+		-- while it really does (ns.XpBarAtBlockWidth), and is live with its value while no block holds the bar.
 		{ key = "xpUnder", kind = "bool", default = true, label = "Experience bar under the bar block",
-			tip = "Right under block 1 of the Bar block page, exactly as wide as the block, and it moves with the block. With the Bar block page off the bar keeps its own place in /flatui move. Off: its own place and the Width below.",
+			tip = "While the Bar block page is on: right under block 1, exactly as wide as the block, and it moves with the block. With that page off, as it is by default, or this row off, the bar keeps its own place in /flatui move and the Width below.",
 			needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpWidth", kind = "number", default = 42, min = 10, max = 130, step = 1, unit = "%", label = "Width",
-			tip = "100% is the game's bar at full width. Under the bar block the bar is as wide as the block.", needs = "xpUnder", needsIn = { false },
-			overText = "as wide as the block" },
+			tip = "100% is the game's bar at full width. While block 1 of the Bar block page holds the bar under it, the bar is as wide as the block.",
+			needs = "xpOwn", needsIn = { "flat" }, overIf = "XpBarAtBlockWidth", overText = "as wide as the block" },
 		{ key = "xpHeight", kind = "number", default = 8, min = 2, max = 24, step = 1, unit = " px", label = "Height", needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpShow", kind = "choice", default = "both", label = "Bars shown", tip = "Reputation shows for the faction you watch.",
 			needs = "xpOwn", needsIn = { "flat" },
@@ -2624,12 +2627,12 @@ ns.PAGES = {
 	},
 	{
 		key = "barblock", label = "Bar block",
-		{ key = "enabled", kind = "bool", default = true, label = "Group action bars into blocks",
-			tip = "Lines up the bars of each block below, at first action bars 3 and 2, the main bar and action bar 4 in block 1, top to bottom, with Flat UI's experience bar under them at the block's width (Experience bar under the bar block). /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars, with a tab on each bar to drag it to another place in its block or into another block. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
+		{ key = "enabled", kind = "bool", default = false, label = "Group action bars into blocks",
+			tip = "Lines up the bars of each block below, at first action bars 3 and 4, action bar 2 and the main bar in block 1, top to bottom, with Flat UI's experience bar under them at the block's width (Experience bar under the bar block). /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars, with a tab on each bar to drag it to another place in its block or into another block. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
 		{ section = "Block 1" },
 		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
-		-- Stacked upward from the first bar, action bar 4 is at the bottom and action bar 3 on top.
-		{ key = "bars1", kind = "text", hidden = true, default = "bar4,main,bar2,bar3", label = "Bars of block 1" },
+		-- Stacked upward from the first bar, the main bar is at the bottom and action bar 3 on top.
+		{ key = "bars1", kind = "text", hidden = true, default = "main,bar2,bar4,bar3", label = "Bars of block 1" },
 		{ key = "edit1", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines1", pick = "BarBlockPick1",
 			tip = "The bars of the block, first bar first. A bar can be in one block only. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
 		{ key = "add1", kind = "list", default = 0, label = "Add a bar", none = "Choose a bar", items = "BarBlockFree1", pick = "BarBlockAdd1",
