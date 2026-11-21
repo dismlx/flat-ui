@@ -15,8 +15,9 @@ local _, ns = ...
 -- is not changed.
 -- With Experience bar under the bar block (on by default) block 1 of the Bar block page, while it is on, places the bar right under its bars,
 -- a bar gap below them and exactly as wide as the block, and keeps the bar's room in the block (BarBlock.lua, ns.XpUnder); the bar's own spot
--- and the Width row are not used then, and its box in /flatui move says it follows the bar block. Off, or with the Bar block page off (as it
--- is by default), the bar has its own spot and width again. Only Flat UI's own frames are placed and sized, so this goes on in a fight too.
+-- and the Width row are not used then (the row is grey and says so, ns.XpBarAtBlockWidth), and its box in /flatui move says it follows the bar
+-- block. Off, with the Bar block page off (as it is by default) or with block 1 empty, the bar has its own spot and width again, and the Width
+-- row is live. Only Flat UI's own frames are placed and sized, so this goes on in a fight too.
 
 local KEY, MOVER = "hud", "FlatUIXpBar"
 -- The width of the game's full bar on Camelot, which 100% of the width row is (Camelot/StatusTrackingBarConstants.lua:1-14).
@@ -78,11 +79,17 @@ function ns.XpUnder()
 	return ns.XpOwn() and Opt("xpUnder") == true
 end
 
+-- True while block 1 of the Bar block page holds the bar under its bars at its width (ns.XpBarBlock): the bar has the block's width, and the
+-- Width row (Config.lua, overIf) is grey and says so. Else, with that row or page off or block 1 empty, the bar has its own Width.
+function ns.XpBarAtBlockWidth()
+	local block = S.block
+	return block ~= nil and ns.Finite(block.width) and block.width > 0
+end
+
 -- The width of the bar: the block's under the bar block, else the Width row's share of the game's full bar.
 function F.Width()
-	local block = S.block
-	if block and ns.Finite(block.width) and block.width > 0 then
-		return block.width
+	if ns.XpBarAtBlockWidth() then
+		return S.block.width
 	end
 	return FULL * Opt("xpWidth") / 100
 end
@@ -952,9 +959,10 @@ end
 
 -- The action bar block gives the bar a spot, or takes it back with nothing: { point, x, y } in the units of UIParent from its bottom left (the
 -- bottom left corner over the block, the top left corner under it), and under the block the width of the block. A new width draws the bar
--- again at that width, a new spot only places it.
+-- again at that width, a new spot only places it. When the block takes the bar's width or gives it back, the options panel reads its rows
+-- again, so Width follows (ns.XpBarAtBlockWidth).
 function ns.XpBarBlock(spot)
-	local was = S.block
+	local was, wide = S.block, ns.XpBarAtBlockWidth()
 	S.block = type(spot) == "table" and ns.Finite(spot.x) and ns.Finite(spot.y)
 		and { point = spot.point or "BOTTOMLEFT", x = spot.x, y = spot.y, width = ns.Finite(spot.width) and spot.width or nil } or nil
 	local now = S.block
@@ -962,6 +970,9 @@ function ns.XpBarBlock(spot)
 	local resized = (was and was.width) ~= (now and now.width)
 	if not (moved or resized) then
 		return
+	end
+	if ns.XpBarAtBlockWidth() ~= wide and ns.RefreshPanel ~= nil then
+		ns.RefreshPanel()
 	end
 	S.placed = nil
 	if resized and S.frame and S.mode == "flat" and not S.waiting and ns.XpOwn() then

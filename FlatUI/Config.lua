@@ -8,6 +8,8 @@ local _, ns = ...
 --     function of ns that is called with the id of the line chosen.
 --   needs: another setting on the same owner (the same page, or a page listed under the same page) that must be on for this one to apply
 --   needsIn: with needs naming a choice, the values of that choice for which this one applies
+--   overIf: the name of a function of ns that is true while something else takes the row over: the row is greyed (Panel.lua, Over), and a
+--     number row shows overText in place of its value and unit.
 --   page: the page whose setting this is, for a row shown on another page. The saved path is
 --     "<page>.<key>" and the row takes the switch of the page it is shown on.
 --   parent: on a page, the page it is listed under in the panel. A sub-page is listed right after its parent and the pages that share it.
@@ -1923,13 +1925,14 @@ ns.PAGES = {
 		{ section = "Experience and reputation bars" },
 		{ key = "xpOwn", kind = "choice", default = "flat", label = "Experience bar", tip = "The game's bar stays in place and is not drawn.",
 			choices = { { "flat", "Flat UI's" }, { "game", "The game's" } } },
-		-- Block 1 of the Bar block page places the bar under its bars at its width (XpBar.lua, BarBlock.lua); the Width row then says so (overText).
+		-- Block 1 of the Bar block page places the bar under its bars at its width (XpBar.lua, BarBlock.lua); the Width row then says so (overText)
+		-- while it really does (ns.XpBarAtBlockWidth), and is live with its value while no block holds the bar.
 		{ key = "xpUnder", kind = "bool", default = true, label = "Experience bar under the bar block",
-			tip = "Right under block 1 of the Bar block page, exactly as wide as the block, and it moves with the block. With the Bar block page off, as it is by default, the bar keeps its own place in /flatui move. Off: its own place and the Width below.",
+			tip = "While the Bar block page is on: right under block 1, exactly as wide as the block, and it moves with the block. With that page off, as it is by default, or this row off, the bar keeps its own place in /flatui move and the Width below.",
 			needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpWidth", kind = "number", default = 42, min = 10, max = 130, step = 1, unit = "%", label = "Width",
-			tip = "100% is the game's bar at full width. Under the bar block the bar is as wide as the block.", needs = "xpUnder", needsIn = { false },
-			overText = "as wide as the block" },
+			tip = "100% is the game's bar at full width. While block 1 of the Bar block page holds the bar under it, the bar is as wide as the block.",
+			needs = "xpOwn", needsIn = { "flat" }, overIf = "XpBarAtBlockWidth", overText = "as wide as the block" },
 		{ key = "xpHeight", kind = "number", default = 8, min = 2, max = 24, step = 1, unit = " px", label = "Height", needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpShow", kind = "choice", default = "both", label = "Bars shown", tip = "Reputation shows for the faction you watch.",
 			needs = "xpOwn", needsIn = { "flat" },
