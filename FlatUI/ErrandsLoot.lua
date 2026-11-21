@@ -9,13 +9,14 @@ local _, ns = ...
 -- loot takes those, so that its question before an item binds is asked from its own code, never from inside a call of Flat UI's. With the
 -- game not looting by itself the window opens as it always does.
 --
--- Make room: while the loot window is open and every ordinary bag (family 0) is full, a button under the window deletes the grey stack worth
--- least at a vendor (a grey with no price counts as worth nothing). A quest item, a locked item, an item that binds to a quest and an item on
--- the keep list (/flatui keep) are never picked. The pick is read again at the click, and the item is picked up and deleted inside the click
--- itself (C_Container.PickupContainerItem, then DeleteCursorItem), which the game allows only from a click, with the cursor empty before and
--- the link checked after. After a delete the button stays hidden until the deleted slot reads empty or holds something else, so a quick second
--- click cannot delete a second stack while the server has not answered. A loot of money only has no button. The button is made out of combat
--- only, is never there under the gamepad interface, does nothing in a fight, and hides itself whenever it is no longer wanted.
+-- Make room: while the loot window is open and every general bag is full (the backpack and bags 1 to 4 of family 0; the reagent bag and the special
+-- bags, a trade bag, a quiver, an ammo pouch, a soul bag, take only certain items, so they are not counted), a button under the window deletes the
+-- grey stack worth least at a vendor (a grey with no price counts as worth nothing). A quest item, a locked item, an item that binds to a quest and
+-- an item on the keep list (/flatui keep) are never picked. The pick is read again at the click, and the item is picked up and deleted inside the
+-- click itself (C_Container.PickupContainerItem, then DeleteCursorItem), which the game allows only from a click, with the cursor empty before and
+-- the link checked after. After a delete the button stays hidden until the deleted slot reads empty or holds something else, so a quick second click
+-- cannot delete a second stack while the server has not answered. A loot of money only has no button. The button is made out of combat only, is
+-- never there under the gamepad interface, does nothing in a fight, and hides itself whenever it is no longer wanted.
 -- Both follow EnhanceQoL (quick loot, and the loot window junk button of its Forever version), adapted with the permission of its author.
 
 local E = ns.Errands
@@ -191,7 +192,8 @@ local function Candidate(bag, slot)
 	return { bag = bag, slot = slot, id = id, link = link, count = count, value = price * count }
 end
 
--- The cheapest grey item when every ordinary bag is full, or nil. A bag whose kind the game does not say, or a bag with room, means no button.
+-- The cheapest grey item when every general bag (family 0, bags 0 to NUM_BAG_SLOTS) is full, or nil. A bag whose kind the game does not say,
+-- or a bag with room, means no button.
 local function Cheapest()
 	if type(C_Container) ~= "table" then
 		return nil

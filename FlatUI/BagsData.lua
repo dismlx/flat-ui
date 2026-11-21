@@ -704,9 +704,11 @@ local function LiveBagItem(bag)
 	return nil
 end
 
--- kind = { id = the bag's item ID, label, family, class, subclass, key, name }. key groups free slots: "bag" for normal bags (family 0), "reagent",
--- one key per class and subclass of special bag (or per family when the item is not known), and "keyring", whose slots Data.Free leaves out.
--- name is the bag item's name, when loaded.
+-- kind = { id = the bag's item ID, label, family, class, subclass, key, name }. key groups free slots: "bag" for the general bags (the backpack,
+-- normal bags and the bank's own slots, family 0), which take any item and alone count as free space (Data.Free); "reagent" for the reagent bag,
+-- whose family is 0 too but which takes only reagents; one key per class and subclass of special bag, a trade bag, a quiver, an ammo pouch or a
+-- soul bag (or per family when the item is not known), each taking only its own items; and "keyring", whose slots Data.Free leaves out. name is
+-- the bag item's name, when loaded.
 local function MakeKind(bag, id, family)
 	family = Count(family) or 0
 	local kind = { id = id, family = family }
@@ -1580,9 +1582,12 @@ local function StoredFree(slots, size)
 	return free, first
 end
 
--- The free slots of a window, one row per kind of bag in the order the kinds first come: { kind, label, free, total, bag, slot }, bag and slot
--- being the first free slot of that kind. Normal bags are one row, labelled Bags, or Bank in the bank. The keyring is left out: it holds only
--- keys, so its slots are no room in the bags (its own label in Bag by bag still counts them, BagsLayout.lua).
+-- The free slots of a window, one row per kind of bag: { kind, label, free, total, bag, slot, general }, bag and slot being the first free slot
+-- of that kind. The general bags (key "bag", MakeKind) are one row, labelled Bags, or Bank in the bank, with general true, and always come
+-- first; the special kinds (the reagent bag, trade bags, quivers, ammo pouches, soul bags) follow in the order they first come. Only the general
+-- row is room for any item, so only it is the free space of the bags (the footer of BagsWindow.lua, the count of Free slots in BagsLayout.lua);
+-- a special row says how much room is left for its own items. The keyring is left out: it holds only keys, so its slots are no room in the bags
+-- (its own label in Bag by bag still counts them, BagsLayout.lua, as a special bag's does).
 function Data.Free(key, which)
 	local me = Me()
 	if key == me then
@@ -1609,7 +1614,7 @@ function Data.Free(key, which)
 			if not group then
 				if kind.key == "bag" then
 					local label = which == "bank" and Word("BANK", "Bank") or BAGS_WORD
-					group = { kind = { key = "bag", family = 0, label = label }, label = label, free = 0, total = 0 }
+					group = { kind = { key = "bag", family = 0, label = label }, label = label, free = 0, total = 0, general = true }
 				else
 					group = { kind = kind, label = kind.label, free = 0, total = 0 }
 				end
@@ -1622,6 +1627,16 @@ function Data.Free(key, which)
 				group.bag, group.slot = bag, first
 			end
 		end
+	end
+	local general = groups.bag
+	if general and rows[1] ~= general then
+		for index, row in ipairs(rows) do
+			if row == general then
+				table.remove(rows, index)
+				break
+			end
+		end
+		table.insert(rows, 1, general)
 	end
 	return rows
 end
