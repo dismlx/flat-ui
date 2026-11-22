@@ -95,6 +95,10 @@ local ADDON_NAME, ns = ...
 -- combat: 2.6 when ticked, its text before that kept in FlatUIDB.cameraGame, and that text again (or the client's default) when unticked while
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.
 -- Its cast and global cooldown progress are Cooldown frames of its own fed the game's duration objects.
+-- The lava tick timer, on the same page (LavaWalk.lua, In lava zones by default), is a bar of the addon's own on UIParent that takes no mouse. While
+-- its row is not Off a frame of its own hears the player's UNIT_COMBAT (RegisterUnitEvent), the zone changes and PLAYER_DEAD, and it reads only
+-- plain answers: the event, flag and school of a hit (never its amount), IsSwimming, IsFalling, UnitAffectingCombat, UnitChannelInfo, UnitClass,
+-- GetNetStats, GetInstanceInfo and the maps of C_Map. It plays its row's sound with PlaySound and writes nothing of the game.
 -- Quest item sparkle, on the World and cursor page, writes the game's outlineModeShowLootEffectWhenDisabled (1), and Sparkle strength raises
 -- graphicsParticleDensity, raidGraphicsParticleDensity, graphicsSpellDensity and raidGraphicsSpellDensity to its level, never below the game's own,
 -- out of combat: at login, when a row or the profile changes, and a second after the game writes one of them or its graphics quality. The text
@@ -2894,6 +2898,10 @@ function ns.StatusLines()
 	if ring then
 		lines[#lines + 1] = ring
 	end
+	local lava = ns.LavaStatus and ns.LavaStatus()
+	if lava then
+		lines[#lines + 1] = lava
+	end
 	for _, line in ipairs(ns.SetupStatus and ns.SetupStatus() or {}) do
 		lines[#lines + 1] = line
 	end
@@ -3349,6 +3357,9 @@ local function Apply(wasSpots)
 	end
 	if loggedIn and ns.CursorRingChanged then
 		ns.CursorRingChanged("general.cursorRing")
+	end
+	if loggedIn and ns.LavaChanged then
+		ns.LavaChanged("general.lavaTimer")
 	end
 	if ns.NotifyOption then
 		for path in pairs(defs) do
@@ -4126,6 +4137,13 @@ frame:SetScript("OnEvent", function(_, event, ...)
 				geterrorhandler()(err)
 			end
 		end
+		-- The lava tick timer hears from the login (LavaWalk.lua).
+		if ns.LavaChanged then
+			local ok, err = pcall(ns.LavaChanged)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end
 		-- Compare items only while holding Shift is written at every login, whatever the switch of Chat and tooltips (ItemCompare.lua).
 		if ns.ItemCompareSync then
 			local ok, err = pcall(ns.ItemCompareSync)
@@ -4211,6 +4229,13 @@ SlashCmdList["FLATUI"] = function(msg)
 	end
 	if verb and verb:lower() == "cvar" and type(ns.CVarCommand) == "function" then
 		local ok, err = pcall(ns.CVarCommand, rest)
+		if not ok then
+			geterrorhandler()(err)
+		end
+		return
+	end
+	if verb and verb:lower() == "lava" and type(ns.LavaCommand) == "function" then
+		local ok, err = pcall(ns.LavaCommand, rest)
 		if not ok then
 			geterrorhandler()(err)
 		end
@@ -4303,6 +4328,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui scale off - the game's own UI scale")
 		print("/flatui test - samples of your hidden frames on screen until you turn it off; test on and test off also work")
 		print("/flatui taint - the action button click path, checked for values an add-on changed")
+		print("/flatui lava - what the lava tick timer sees; lava test shows a sample, lava trace prints each hit on you")
 		print("/flatui cvar - each game setting row: value, default, secure flag")
 		print("/flatui cvar check - whether each of those can be changed, out of combat")
 		for _, key in ipairs(MODULE_ORDER) do

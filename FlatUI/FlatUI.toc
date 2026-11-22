@@ -21,6 +21,7 @@ Sparkle.lua
 SparkleGlow.lua
 CameraZoom.lua
 CursorRing.lua
+LavaWalk.lua
 Fonts.lua
 Nameplates.lua
 PlateThreat.lua

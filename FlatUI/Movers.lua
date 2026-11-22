@@ -208,6 +208,10 @@ local LIST = {
 	-- the room of three bars at the default size, under the Threat list, and it grows down and to the right from there.
 	{ name = "FlatUIHealerMana", label = "Healer mana", point = "CENTER", kind = "hud", own = true, noScale = true, width = 158, height = 76, x = 420, y = -130,
 		gate = "HealerManaShown", changed = "HealerManaMoved" },
+	-- The lava tick timer (LavaWalk.lua), which shows after a lava tick: its middle is the middle of the box, which has the bar's default size, just
+	-- under the character, clear of Combat text: alerts and Your buffs. It has a box while Lava tick timer is not Off.
+	{ name = "FlatUILavaTimer", label = "Lava tick timer", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 14, x = 0, y = -100,
+		gate = "LavaTimerShown", changed = "LavaTimerMoved" },
 	-- The game's loot rolls (Hud.lua): the room of four roll frames, 277 by 67, with the game's 100 from one to the next (GroupLootFrame.xml:292,
 	-- GroupLootFrame.lua:15, 125). It starts where the game stacks them, in its bottom stack above the action bars (ns.LootRollsStart). While no spot is
 	-- saved the game lays the rolls out; once one is, Hud.lua hangs them from the box, up from its bottom or down from its top.
