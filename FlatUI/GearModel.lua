@@ -6,8 +6,9 @@ local _, ns = ...
 -- tooltips and GearWindow.lua in the Gear comparison window. Nothing is drawn, written on a frame or hooked here; no frame is made and no event is
 -- heard. The player's state and stats are SpellModel.lua's (ns.SpellModel: M.State, M.Stats, M.Version, M.Mark, M.AfterRead, M.Highest,
 -- M.Multiplier), the attack table is the hit table's (ns.HitTableCalc: C.Inputs, C.Table, C.Target, C.LineOf, C.Skill, C.SkillLine), the spells'
--- values are SpellData.lua's (ns.SpellData), the chosen spells GearLines.lua's (ns.GearChosen, ns.GearListVersion) and the role Core.lua's
--- (ns.PlayerRole), each looked up when asked, never while the files load.
+-- values are SpellData.lua's (ns.SpellData), the chosen spells GearLines.lua's (ns.GearChosen, ns.GearListVersion), the role and the talent tree
+-- with the most points Core.lua's (ns.PlayerRole, ns.PlayerTree) and the WoWSims rotations RotationData.lua's (ns.RotationData), each looked up
+-- when asked, never while the files load.
 --
 -- What it asks the game, in this order. Each call is under pcall and each answer passes ns.IsSecret or ns.Finite before it is compared, added, joined
 -- or used as a key; a call that raises or a secret answer is withheld, and is told apart from none, as HitTableCalc.lua's Call does
@@ -93,7 +94,8 @@ local _, ns = ...
 -- the Character window) with that slot empty, so with - now is what the item gives in both; perSecond says the figure is a second (dps, a second, or
 -- the threat of what rides on the swings); estimate marks the change, nowEstimate and withEstimate each side; a next-swing strike's row also carries
 -- the swing it takes the place of (nowSwing, withSwing, nowSwings, withSwings: Rows). mean is the change of the role's figure
--- over a minute as G.Totals counts it, which picks the best slot. skills holds the notes of compared weapon lines under the most for the level; a
+-- over a minute as G.Totals counts it, which picks the best slot, and rotation the WoWSims rotation that minute follows (Rotation; false for the
+-- even share), which G.Totals then counts with. skills holds the notes of compared weapon lines under the most for the level; a
 -- candidate's notCounted, vs and skills are its own slot's, the result's the item's and every candidate's, the best's first. why
 -- (a row's: why it has no figure, for threat also a threat not known on Forever), each notCounted, vs and skills, notYet and random are the player's
 -- words (random may be true), and quiet marks a why no line should show. Every option a caller passes is read: listVersion, mode, data, guid, most,
@@ -103,7 +105,10 @@ local _, ns = ...
 -- the player with it and with - now is the item instead of it; each slot's change is against what is worn there, so an off hand the item compared
 -- against leaves stays worn. A candidate where it does not go is left out (G.BaseSlots), the result echoes base, each candidate carries base and
 -- baseSlots, and the header names it ("Instead of <base>"). G.Totals gives what an item does overall: what its rows do in a minute by damage, healing
--- and threat, with and without it, and the best and worst line of each. S.stats.per[stat].crit and .spellCrit are percent a point, as SpellModel.lua
+-- and threat, with and without it, and the best and worst line of each; G.Rotation names the WoWSims rotation its minute follows (0.5.30). The
+-- rotation is that of the player's class and spec in RotationData.lua: a druid's form (S.state.form), else a tank's spec (the role), else the spec
+-- of the talent tree with the most points (ns.PlayerTree), the class S.state's, else UnitClassBase's; read again at most once a K.ROTATION_KEEP
+-- seconds (GetTime), since ns.PlayerTree asks the client's talents. S.stats.per[stat].crit and .spellCrit are percent a point, as SpellModel.lua
 -- keeps them.
 
 local G = {}
@@ -218,6 +223,8 @@ local K = {
 	-- The minute G.Totals counts, the global cooldown when the data has none (D.MODEL.gcd), the share of a total's change from estimates under which
 	-- the total is no estimate (0.5.25), and the figure each role ranks the slots of an item by (G.Compare's best, the item tooltips' block).
 	MINUTE = 60, GCD = 1.5, GUESSED = 0.1, ROLE_KIND = { healer = "healing", tank = "threat" },
+	-- How long a read of the player's WoWSims rotation is kept (Rotation), in seconds.
+	ROTATION_KEEP = 1,
 	-- The note of a compared weapon line the player has yet to raise (SkillNotes): its name, the player's skill and the most for the level.
 	SKILL_NOTE = "%s %d/%d: until you raise it you miss more", SKILL_ANY = "Weapon skill",
 }
@@ -1640,6 +1647,57 @@ local function Role(state)
 	return ok and Text(found) or "damage"
 end
 
+-- The WoWSims rotation of the player's class and spec (RotationData.lua, ns.RotationData) that the Overall line counts (Minute, 0.5.30): { id,
+-- label, stand, abilities, swings }, or nil for none, as for a healer or a tree with no run. The spec is a druid's form's (state.form, the data's
+-- forms), else a tank's (role, the data's tank), else that of the talent tree with the most points (Core.lua's ns.PlayerTree, the data's trees;
+-- stand marks a tree that takes another tree's run). Kept for each role and form K.ROTATION_KEEP seconds, as ns.PlayerTree asks the client.
+local rotationKept = {}
+
+local function Rotation(state, role)
+	state = Table(state) or {}
+	role = Text(role) or Role(state)
+	local now, form = Num((Call(GetTime))), Num(state.form)
+	local kept = rotationKept[role]
+	if kept and now and kept.form == form and now >= kept.at and now - kept.at < K.ROTATION_KEEP then
+		return kept.value or nil
+	end
+	local value = false
+	local class = Text(state.class) or Text((Call(UnitClassBase, "player")))
+	local picks = class and Table(Field(Field(ns.RotationData, "CLASS"), class))
+	if picks and role ~= "healer" then
+		local spec, place
+		local forms = Table(picks.forms)
+		if form and forms and Text(forms[form]) then
+			spec = forms[form]
+		elseif role == "tank" then
+			spec = Text(picks.tank)
+		else
+			place = Num((Ask(ns.PlayerTree)))
+			spec = place and Text(Field(picks.trees, place))
+		end
+		local found = spec and Table(Field(picks.specs, spec))
+		if found then
+			value = { id = class .. "." .. spec, label = Text(found.label) or spec, stand = place ~= nil and Field(picks.stand, place) == true,
+				abilities = Table(found.abilities) or {}, swings = Table(found.swings) or {} }
+		end
+	end
+	if now then
+		rotationKept[role] = { at = now, form = form, value = value }
+	end
+	return value or nil
+end
+
+-- The WoWSims rotation the Overall line counts for the player now (Rotation): { id, label, stand }, or nil when it gives each spell an even share
+-- of the global cooldowns. role: as G.Compare's opts.role, else the player's.
+function G.Rotation(role)
+	local M = Model()
+	local found = Rotation(M and Table(Ask(M.State)) or {}, Text(role))
+	if found then
+		return { id = found.id, label = found.label, stand = found.stand }
+	end
+	return nil
+end
+
 -- Against, Where you stand, the hit cap rule and the low rank rule the comparison counts: from opts, else the rows of the tab, the choices of the rows
 -- worked out (auto: a boss at level 60, else an enemy of the player's level; role: in front for a tank; As on the Hit table page: hud.hitTableRules).
 local function Spec(opts, state)
@@ -3026,11 +3084,11 @@ end
 -- The rows counted over a minute (G.Totals), defined with the totals below.
 local Minute
 
--- The change of a candidate in percent, as G.Totals counts it (Minute) for the figure of the role (healing for a healer, threat for a tank where
--- the mode counts threat, damage for the others and a tank at A cast and A second, else the first there is), which ranks the slots of an item
--- (0.5.25: no longer the plain mean of the rows' percents); and whether none changes by K.NONE_UNDER percent or more. limit: the rows the tooltip
--- shows, all of them when there is at most one more (GearLines.lua's Build, so its block and this pick the same slot).
-local function Mean(rows, limit, role, mode)
+-- The change of a candidate in percent, as G.Totals counts it (Minute, with the comparison's rotation) for the figure of the role (healing for a
+-- healer, threat for a tank where the mode counts threat, damage for the others and a tank at A cast and A second, else the first there is), which
+-- ranks the slots of an item (0.5.25: no longer the plain mean of the rows' percents); and whether none changes by K.NONE_UNDER percent or more.
+-- limit: the rows the tooltip shows, all of them when there is at most one more (GearLines.lua's Build, so its block and this pick the same slot).
+local function Mean(rows, limit, role, mode, rotation)
 	local any, moved, n = false, false, 0
 	for _, row in ipairs(rows) do
 		if row.figure and Finite(row.now) and Finite(row.with) then
@@ -3041,7 +3099,7 @@ local function Mean(rows, limit, role, mode)
 			end
 		end
 	end
-	local sums = Minute(rows, {}, limit and n > limit + 1 and limit or nil)
+	local sums = Minute(rows, {}, limit and n > limit + 1 and limit or nil, rotation)
 	local kind = K.ROLE_KIND[role]
 	if kind == "threat" and mode ~= "threat" and mode ~= "tooltip" then
 		kind = nil
@@ -3162,7 +3220,8 @@ local function Instead(result, link, opts, chosen, state, stats, work)
 			candidate.base, candidate.baseSlots = work.base, baseSlots
 			candidate.rows = Rows(chosen, nowState, nowStats, state2, stats2, work, false, baseItem ~= nil)
 			PierceNotes(info, candidate.rows)
-			candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit, work.role, work.mode)
+			candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit, work.role, work.mode, work.rotation)
+			candidate.rotation = work.rotation or false
 			candidate.header, candidate.notCounted, candidate.vs = Header(candidate, nowState, work.unit), info.notCounted, info.vs
 			candidate.skills = info.skills
 			local index = #result.candidates + 1
@@ -3225,7 +3284,8 @@ local function WhatItGives(result, slot, chosen, state, stats, work)
 	local candidate = { slots = slots, label = Label(slots), empty = false, game = true, offEmpty = false, base = work.base, skills = result.skills }
 	candidate.rows = Rows(chosen, state, stats, state2, stats2, work, true, false)
 	PierceNotes(result, candidate.rows)
-	candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit, work.role, work.mode)
+	candidate.mean, candidate.noChange = Mean(candidate.rows, work.limit, work.role, work.mode, work.rotation)
+	candidate.rotation = work.rotation or false
 	if baseName then
 		candidate.header = ("What it gives your spells instead of %s, %s:"):format(baseName, work.unit)
 	else
@@ -3283,8 +3343,8 @@ end
 -- result from before the fight) and base (Against's item, echoed); the header of this file says what each holds. lines: the chosen lines
 -- (ns.GearChosen() when nil). opts: { listVersion, mode, data (the post call's data, for its lines and guid), guid, most, role, against, facing,
 -- rules, lowRank, inputs (the hit table's, else those of the last read), base (Against: an item link) }. Kept by link (or slot and the link worn
--- there) and base, M.Version(), opts.listVersion and opts.mode, with the rows' choices; in a fight and with stats from before it, the last result
--- for the item and base while it is among the last K.CACHE kept, else why.
+-- there) and base, M.Version(), opts.listVersion and opts.mode, with the rows' choices and the rotation (Rotation); in a fight and with stats
+-- from before it, the last result for the item and base while it is among the last K.CACHE kept, else why.
 function G.Compare(itemOrSlot, lines, opts)
 	opts = Table(opts) or {}
 	local mode = K.MODES[opts.mode] and opts.mode or "tooltip"
@@ -3323,8 +3383,10 @@ function G.Compare(itemOrSlot, lines, opts)
 	end
 	local spec = Spec(opts, state)
 	local role = Text(opts.role) or Role(state)
+	local rotation = Rotation(state, role)
 	local listVersion = Num(opts.listVersion) or Num(type(ns.GearListVersion) == "function" and Ask(ns.GearListVersion)) or 0
-	local key = table.concat({ subject, tostring(Ask(M.Version)), tostring(listVersion), mode, spec.key, role, Auras(D) }, "|")
+	local key = table.concat({ subject, tostring(Ask(M.Version)), tostring(listVersion), mode, spec.key, role, Auras(D),
+		rotation and rotation.id or "" }, "|")
 	if cache[key] then
 		return cache[key]
 	end
@@ -3334,7 +3396,7 @@ function G.Compare(itemOrSlot, lines, opts)
 		return result
 	end
 	local most = Num(opts.most) or Num(ns.Get("chat.gearMost")) or 5
-	local work = { mode = mode, role = role, unit = K.UNITS[mode], limit = mode == "tooltip" and most or nil, base = base,
+	local work = { mode = mode, role = role, unit = K.UNITS[mode], limit = mode == "tooltip" and most or nil, base = base, rotation = rotation,
 		opts = { against = spec.against, facing = spec.facing, rules = spec.rules, lowRank = spec.lowRank, inputs = inputs, full = true },
 		stamp = table.concat({ tostring(Ask(M.Version)), spec.key, tostring(inputs), tostring(stats), tostring(state) }, "|") }
 	local chosen = Chosen(lines)
@@ -3412,27 +3474,42 @@ local function LineName(line)
 end
 
 -- A cast row's minute (Minute): its value each use; a next-swing strike's (its swing known, Rows) its gain over the main hand's swing it takes the
--- place of, at most once a swing (0.5.25, the review: the minute's swings count whole already, so the strike is not counted on top of one).
-local function Uses(value, swing, swings, uses)
+-- place of, at most once a swing (0.5.25, the review: the minute's swings count whole already, so the strike is not counted on top of one). share:
+-- the share of the main hand's swings the WoWSims rotation gives the strike (0.5.30), of this side's swings a minute (K.MINUTE x swings), so a
+-- faster or slower weapon keeps the rotation's share.
+local function Uses(value, swing, swings, uses, share)
 	if Finite(swing) and Finite(swings) and swings > 0 then
-		return (value - swing) * math.min(uses, K.MINUTE * swings)
+		local most = K.MINUTE * swings
+		if share then
+			uses = share * most
+		end
+		return (value - swing) * math.min(uses, most)
 	end
 	return value * uses
 end
 
 -- The rows counted over a minute (0.5.25, the owner: Overall is the item's total effect, not a mean that sets a swing's percent beside a strike's
 -- as if they were equal). A row that is a second (row.perSecond: what rides on the swings or shots, and threat of it) counts K.MINUTE of its
--- seconds; each other row an even share of the minute's global cooldowns (K.MINUTE / D.MODEL.gcd casts) among the rows of its figure that are not a
--- second (so a heal line or Sunder Armor's threat does not thin the damage lines' casts), a next-swing strike its gain over the swing it takes the
--- place of (Uses). A row's weight (lines' weights, else its own line's, K.WEIGHT when none; 0 leaves it out) then multiplies what it counts, so the
--- weights are relative: 2 counts that row twice, and the same weight on every row changes nothing. By kind (TotalKind): { now, with, moved,
--- guessed, n, best, worst }: now and with what the rows do in the minute, moved the size of their changes summed, guessed that of the rows that are
--- estimates, n the rows counted, best and worst the rows of the largest and the smallest change in percent, { name, pct } (the first on a tie),
--- among every row on show, one of weight 0 too. Only rows with a figure and now and with known count. limit: only the first limit of them (the
--- tooltip's shown lines).
-function Minute(rows, weights, limit)
+-- seconds. Each other row, with a WoWSims rotation for the player (rotation: Rotation's, 0.5.30, the owner: "use wowsims data to determine
+-- optimal rotation to determine what the impact is. heroic strike tends to be equal to the damage of my melee attacks in totals"), counts the
+-- uses a minute of its spell in that rotation (rotation.abilities[key].m, a proc's hits for a proc), each chosen row its own whatever the others
+-- chosen, and a next-swing strike its gain over the swing it takes the place of on the rotation's share of the main hand's swings
+-- (rotation.swings.next[key], Uses), so a Heroic Strike the rotation queues on most swings counts about as much as the swings it replaces; a row
+-- whose spell the rotation never uses counts nothing then. That holds for each figure (TotalKind) with a row the rotation uses; a figure with
+-- none, a heal line's for one, and every figure with no rotation, keeps the even share: each row an even share of the minute's global cooldowns
+-- (K.MINUTE / D.MODEL.gcd casts) among the rows of its figure that are not a second (so a heal line or Sunder Armor's threat does not thin the
+-- damage lines' casts), a next-swing strike its gain over the swing it takes the place of (Uses). A row's weight (lines' weights, else its own
+-- line's, K.WEIGHT when none; 0 leaves it out) then multiplies what it counts, so the weights are relative: 2 counts that row twice, and the same
+-- weight on every row changes nothing. By kind (TotalKind): { now, with, moved, guessed, n, best, worst, rotation }: now and with what the rows do
+-- in the minute, moved the size of their changes summed, guessed that of the rows that are estimates, n the rows counted (a row the rotation never
+-- uses is not), best and worst the rows of the largest and the smallest change in percent, { name, pct } (the first on a tie), among every row on
+-- show, one of weight 0 too, and rotation whether the figure followed the rotation. Only rows with a figure and now and with known count. limit:
+-- only the first limit of them (the tooltip's shown lines).
+function Minute(rows, weights, limit, rotation)
 	local gcd = Num(Field(Field(Data(), "MODEL"), "gcd")) or K.GCD
-	local counted, casts, shown, sums = {}, {}, 0, {}
+	local abilities = rotation and Table(rotation.abilities)
+	local shares = rotation and Table(Field(rotation.swings, "next"))
+	local counted, casts, rotated, shown, sums = {}, {}, {}, 0, {}
 	for _, row in ipairs(rows) do
 		if Table(row) and row.figure and Finite(row.now) and Finite(row.with) then
 			shown = shown + 1
@@ -3455,9 +3532,16 @@ function Minute(rows, weights, limit)
 					end
 				end
 				if weight > 0 then
-					counted[#counted + 1] = { row = row, weight = weight, kind = kind }
+					local one = { row = row, weight = weight, kind = kind }
+					counted[#counted + 1] = one
 					if row.perSecond ~= true then
 						casts[kind] = (casts[kind] or 0) + 1
+						local used = abilities and key and Table(abilities[key])
+						one.uses = used and Num(used.m) or 0
+						one.share = shares and key and Num(shares[key]) or nil
+						if one.uses > 0 or one.share then
+							rotated[kind] = true
+						end
 					end
 				end
 			end
@@ -3468,29 +3552,41 @@ function Minute(rows, weights, limit)
 		local now, with
 		if row.perSecond == true then
 			now, with = row.now * K.MINUTE * weight, row.with * K.MINUTE * weight
+		elseif rotated[one.kind] then
+			if one.uses > 0 or one.share then
+				now = Uses(row.now, row.nowSwing, row.nowSwings, one.uses, one.share) * weight
+				with = Uses(row.with, row.withSwing, row.withSwings, one.uses, one.share) * weight
+			end
 		else
 			local uses = K.MINUTE / gcd / casts[one.kind]
 			now = Uses(row.now, row.nowSwing, row.nowSwings, uses) * weight
 			with = Uses(row.with, row.withSwing, row.withSwings, uses) * weight
 		end
-		local sum = sums[one.kind]
-		local moved = math.abs(with - now)
-		sum.now, sum.with, sum.moved, sum.n = sum.now + now, sum.with + with, sum.moved + moved, sum.n + 1
-		if row.estimate == true then
-			sum.guessed = sum.guessed + moved
+		if now and with then
+			local sum = sums[one.kind]
+			local moved = math.abs(with - now)
+			sum.now, sum.with, sum.moved, sum.n = sum.now + now, sum.with + with, sum.moved + moved, sum.n + 1
+			if row.estimate == true then
+				sum.guessed = sum.guessed + moved
+			end
 		end
+	end
+	for kind, sum in pairs(sums) do
+		sum.rotation = rotated[kind] == true
 	end
 	return sums
 end
 
 -- What an item does overall (item 3 of the 0.5.20 brief, a minute since 0.5.25): { damage = Tot, healing = Tot, threat = Tot }, a figure left out
--- where no row counts in it or the rows do nothing now, Tot = { pct, now, with, n, estimate, best = { name, pct }, worst = { name, pct } }. now and
--- with are what the rows do in a minute (Minute: a second's row for the whole minute, each other row an even share of the global cooldowns, a
--- next-swing strike its gain over the swing it takes the place of, each times its weight; lines: the chosen lines whose weights count,
--- ns.GearChosen()'s records), pct the change of with against now as a fraction (0.024 is +2.4%). n is the rows counted; estimate says the rows that
--- are estimates make K.GUESSED or more of the minute's change; best and worst the rows on show of the largest and the smallest change in percent,
--- weight 0 too. candidate: one of G.Compare's candidates, or its result (its best candidate). opts.limit: only the
--- first limit rows with a figure count, as the tooltip shows them; none, all.
+-- where no row counts in it or the rows do nothing now, Tot = { pct, now, with, n, estimate, best = { name, pct }, worst = { name, pct },
+-- rotation }. now and with are what the rows do in a minute (Minute: a second's row for the whole minute, each other row its uses a minute in the
+-- WoWSims rotation of the player's class and spec, else an even share of the global cooldowns, a next-swing strike its gain over the swing it
+-- takes the place of, each times its weight; lines: the chosen lines whose weights count, ns.GearChosen()'s records), pct the change of with
+-- against now as a fraction (0.024 is +2.4%). n is the rows counted; estimate says the rows that are estimates make K.GUESSED or more of the
+-- minute's change; best and worst the rows on show of the largest and the smallest change in percent, weight 0 too; rotation whether the figure
+-- followed the rotation. candidate: one of G.Compare's candidates, or its result (its best candidate), counted with the rotation of its
+-- comparison (candidate.rotation), else the player's now (Rotation, with opts.role). opts.limit: only the first limit rows with a figure count, as
+-- the tooltip shows them; none, all.
 function G.Totals(candidate, lines, opts)
 	local out = {}
 	candidate, opts = Table(candidate), Table(opts) or {}
@@ -3501,12 +3597,18 @@ function G.Totals(candidate, lines, opts)
 	if not rows then
 		return out
 	end
-	local sums = Minute(rows, Weights(lines), Num(opts.limit))
+	local rotation = candidate.rotation
+	if rotation == nil then
+		local M = Model()
+		rotation = Rotation(M and Table(Ask(M.State)) or {}, Text(opts.role))
+	end
+	local sums = Minute(rows, Weights(lines), Num(opts.limit), Table(rotation))
 	for _, kind in ipairs(K.TOTAL_KINDS) do
 		local sum = sums[kind]
 		if sum and sum.now ~= 0 then
 			out[kind] = { pct = (sum.with - sum.now) / math.abs(sum.now), now = sum.now, with = sum.with, n = sum.n,
-				estimate = sum.guessed > 0 and sum.guessed >= K.GUESSED * sum.moved, best = sum.best, worst = sum.worst }
+				estimate = sum.guessed > 0 and sum.guessed >= K.GUESSED * sum.moved, best = sum.best, worst = sum.worst,
+				rotation = sum.rotation == true }
 		end
 	end
 	return out

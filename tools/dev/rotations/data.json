@@ -1,0 +1,2705 @@
+{
+ "source": {
+  "repo": "https://github.com/wowsims/classic",
+  "commit": "7779ebbf79dc7f1341e6ab939b28a3402c9a730a",
+  "license": "MIT (Copyright (c) 2024 wowsims team), see LICENSE in the repository",
+  "secondaryRepo": {
+   "repo": "https://github.com/wowsims/sod",
+   "commit": "0e3f6eff5fa3ad356664a1c2abbd02903d4cc97e",
+   "license": "MIT (Copyright (c) 2024 wowsims team)",
+   "usedFor": [
+    "druid.feral_bear"
+   ]
+  },
+  "settings": {
+   "rules": "Classic Era (wowsims/classic: level 60, vanilla talents and ranks, no runes; content through Naxxramas, IncludeAQ = true so AQ ranks such as Heroic Strike rank 9 are used)",
+   "level": 60,
+   "target": "the sim's \"Level 60\" preset boss: level 63, 3731 armor, 1 target",
+   "fightLengthSeconds": 180,
+   "durationVariationSeconds": 0,
+   "executeProportions": {
+    "20": 0.2,
+    "25": 0.25,
+    "35": 0.35
+   },
+   "iterations": 3000,
+   "randomSeed": 1,
+   "reactionTimeMs": 200,
+   "presets": "each spec's own UI defaults (ui/<spec>/presets.ts and sim.ts): DefaultGear, DefaultTalents, DefaultAPL(s), DefaultConsumes, raid/party/individual buffs, debuffs, spec options, race, professions; tanks are in front of the target and listed as the raid tank",
+   "deviations": "listed per spec under run.deviations (borrowed gear where the preset is blank or has no weapon, derived APLs or talents where the sim has no preset)",
+   "fields": {
+    "abilities[].casts": "casts per minute (average over iterations; for procs and dots this is 0 and hitsPerMinute is given instead)",
+    "abilities[].damageShare": "share of the player's own damage (pets excluded; pet share is under pets)",
+    "abilities[].threatShare": "tank specs only (null otherwise): share of the player's total threat (all actions, including rage and mana gain threat)",
+    "abilities[].ids": "WoWSims action ids: spell:<id>, item:<id> or other:<OtherAction>; #n is the action tag (1 = queue press of a next-swing strike, for white hits 1 = main hand, 2 = off hand, 3 = extra attacks)",
+    "swings.mainHand.perMinute": "main-hand white swings that actually happened as white hits (swings replaced by next-swing strikes are not in it)",
+    "swings.replacedByNextSwingStrikes": "per minute, main-hand swings consumed by Heroic Strike / Cleave / Maul / Raptor Strike (each strike that goes off, landed or not)",
+    "swings.mainHandSwingTimerTotal": "white main-hand swings + replaced swings per minute (extra attacks excluded)",
+    "swings.replacedFraction": "replaced / mainHandSwingTimerTotal"
+   }
+  }
+ },
+ "specs": {
+  "warrior.fury": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "warrior",
+    "race": "RaceHuman",
+    "gear": "Pre-BiS (p0.bis, DefaultGear)",
+    "apl": "DPS (No Reck) (DefaultAPLs[0])",
+    "talents": "30305001302-05050005525010051",
+    "talentsLabel": "DPS (DefaultTalents)",
+    "tank": false,
+    "deviations": []
+   },
+   "dps": 1371.9,
+   "secondsOutOfManaPerFight": 0,
+   "abilities": {
+    "Heroic Strike": {
+     "ids": [
+      "spell:25286"
+     ],
+     "casts": 24.794,
+     "damageShare": 0.339,
+     "threatShare": null,
+     "damagePerMinute": 27970.2
+    },
+    "Execute": {
+     "ids": [
+      "spell:20662"
+     ],
+     "casts": 7.349,
+     "damageShare": 0.1778,
+     "threatShare": null,
+     "damagePerMinute": 14668.3,
+     "note": "the sim meters this ability under a passive spell without casts; casts = landed + missed attempts"
+    },
+    "Off Hand": {
+     "ids": [
+      "other:OtherActionAttack#2"
+     ],
+     "casts": 51.685,
+     "damageShare": 0.1754,
+     "threatShare": null,
+     "damagePerMinute": 14470.0
+    },
+    "Bloodthirst": {
+     "ids": [
+      "spell:23894"
+     ],
+     "casts": 8.0,
+     "damageShare": 0.1463,
+     "threatShare": null,
+     "damagePerMinute": 12072.7
+    },
+    "Extra Attacks": {
+     "ids": [
+      "other:OtherActionAttack#3"
+     ],
+     "casts": 7.938,
+     "damageShare": 0.0644,
+     "threatShare": null,
+     "damagePerMinute": 5313.4
+    },
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 5.852,
+     "damageShare": 0.0448,
+     "threatShare": null,
+     "damagePerMinute": 3699.3
+    },
+    "Whirlwind": {
+     "ids": [
+      "spell:1680"
+     ],
+     "casts": 4.005,
+     "damageShare": 0.0362,
+     "threatShare": null,
+     "damagePerMinute": 2990.6
+    },
+    "Goblin Sapper Charge": {
+     "ids": [
+      "item:10646"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0051,
+     "threatShare": null,
+     "damagePerMinute": 421.0
+    },
+    "Hamstring": {
+     "ids": [
+      "spell:7373"
+     ],
+     "casts": 4.644,
+     "damageShare": 0.0045,
+     "threatShare": null,
+     "damagePerMinute": 372.5
+    },
+    "Deep Wounds": {
+     "ids": [
+      "spell:12867"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0044,
+     "threatShare": null,
+     "damagePerMinute": 359.8,
+     "triggered": true,
+     "hitsPerMinute": 4.557
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0022,
+     "threatShare": null,
+     "damagePerMinute": 178.2,
+     "triggered": true,
+     "hitsPerMinute": 2.329
+    },
+    "Rage gain": {
+     "ids": [
+      "other:OtherActionRageGain"
+     ],
+     "casts": 63.176,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Sunder Armor": {
+     "ids": [
+      "spell:11597"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Heroic Strike (queue)": {
+     "ids": [
+      "spell:25286#1"
+     ],
+     "casts": 29.288,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "note": "APL queue presses of the next-swing strike; the strike itself is the row without \"(queue)\""
+    },
+    "Bloodrage": {
+     "ids": [
+      "spell:2687"
+     ],
+     "casts": 1.216,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Mighty Rage Potion": {
+     "ids": [
+      "item:13442"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Death Wish": {
+     "ids": [
+      "spell:12328"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 5.852,
+     "damageShare": 0.0448
+    },
+    "offHand": {
+     "perMinute": 51.685,
+     "damageShare": 0.1754
+    },
+    "extraAttacks": {
+     "perMinute": 7.938,
+     "damageShare": 0.0644,
+     "note": "extra main-hand swings from procs (Windfury, Hand of Justice, sword specialization, ...); they do not reset into next-swing strikes"
+    },
+    "replacedByNextSwingStrikes": {
+     "Heroic Strike": 24.794
+    },
+    "mainHandSwingTimerTotal": 30.646,
+    "replacedFraction": 0.809,
+    "nextSwingVsWhite": {
+     "strikeDamageShare": 0.339,
+     "whiteDamageShare": 0.2846,
+     "strikeToWhiteRatio": 1.191,
+     "damagePerStrikeOverMainHandWhite": 1.785,
+     "netGainDamageShare": 0.149,
+     "note": "netGainDamageShare = (strike damage - replaced swings x average main-hand white damage per swing) / total damage: the damage the strikes add over the white swings they consume"
+    }
+   }
+  },
+  "warrior.arms": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "warrior",
+    "race": "RaceHuman",
+    "gear": "Pre-BiS (p0.bis) with Arcanite Reaper (2H) instead of the two 1H weapons",
+    "apl": "DPS (No Reck) with Bloodthirst replaced by Mortal Strike",
+    "talents": "303050213525100001-05050005023",
+    "talentsLabel": "31/20/0 Mortal Strike build (Arms 303050213525100001, Fury 05050005023)",
+    "tank": false,
+    "deviations": [
+     "no Arms preset in the Classic sim: talents, 2H weapon and Mortal Strike in place of Bloodthirst are derived, everything else is the Fury preset"
+    ]
+   },
+   "dps": 1036.4,
+   "secondsOutOfManaPerFight": 0,
+   "abilities": {
+    "Heroic Strike": {
+     "ids": [
+      "spell:25286"
+     ],
+     "casts": 9.36,
+     "damageShare": 0.2412,
+     "threatShare": null,
+     "damagePerMinute": 15049.1
+    },
+    "Mortal Strike": {
+     "ids": [
+      "spell:21553"
+     ],
+     "casts": 7.802,
+     "damageShare": 0.1837,
+     "threatShare": null,
+     "damagePerMinute": 11457.2
+    },
+    "Execute": {
+     "ids": [
+      "spell:20662"
+     ],
+     "casts": 5.044,
+     "damageShare": 0.1705,
+     "threatShare": null,
+     "damagePerMinute": 10634.7,
+     "note": "the sim meters this ability under a passive spell without casts; casts = landed + missed attempts"
+    },
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 9.233,
+     "damageShare": 0.1693,
+     "threatShare": null,
+     "damagePerMinute": 10560.0
+    },
+    "Extra Attacks": {
+     "ids": [
+      "other:OtherActionAttack#3"
+     ],
+     "casts": 5.492,
+     "damageShare": 0.1116,
+     "threatShare": null,
+     "damagePerMinute": 6962.6
+    },
+    "Whirlwind": {
+     "ids": [
+      "spell:1680"
+     ],
+     "casts": 3.935,
+     "damageShare": 0.0762,
+     "threatShare": null,
+     "damagePerMinute": 4752.5
+    },
+    "Deep Wounds": {
+     "ids": [
+      "spell:12867"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0368,
+     "threatShare": null,
+     "damagePerMinute": 2293.1,
+     "triggered": true,
+     "hitsPerMinute": 14.106
+    },
+    "Goblin Sapper Charge": {
+     "ids": [
+      "item:10646"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0067,
+     "threatShare": null,
+     "damagePerMinute": 416.0
+    },
+    "Hamstring": {
+     "ids": [
+      "spell:7373"
+     ],
+     "casts": 1.804,
+     "damageShare": 0.0025,
+     "threatShare": null,
+     "damagePerMinute": 156.2
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0016,
+     "threatShare": null,
+     "damagePerMinute": 101.1,
+     "triggered": true,
+     "hitsPerMinute": 1.26
+    },
+    "Rage gain": {
+     "ids": [
+      "other:OtherActionRageGain"
+     ],
+     "casts": 40.839,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Sunder Armor": {
+     "ids": [
+      "spell:11597"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Heroic Strike (queue)": {
+     "ids": [
+      "spell:25286#1"
+     ],
+     "casts": 13.701,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "note": "APL queue presses of the next-swing strike; the strike itself is the row without \"(queue)\""
+    },
+    "Bloodrage": {
+     "ids": [
+      "spell:2687"
+     ],
+     "casts": 1.288,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Mighty Rage Potion": {
+     "ids": [
+      "item:13442"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 9.233,
+     "damageShare": 0.1693
+    },
+    "extraAttacks": {
+     "perMinute": 5.492,
+     "damageShare": 0.1116,
+     "note": "extra main-hand swings from procs (Windfury, Hand of Justice, sword specialization, ...); they do not reset into next-swing strikes"
+    },
+    "replacedByNextSwingStrikes": {
+     "Heroic Strike": 9.36
+    },
+    "mainHandSwingTimerTotal": 18.593,
+    "replacedFraction": 0.5034,
+    "nextSwingVsWhite": {
+     "strikeDamageShare": 0.2412,
+     "whiteDamageShare": 0.2809,
+     "strikeToWhiteRatio": 0.859,
+     "damagePerStrikeOverMainHandWhite": 1.406,
+     "netGainDamageShare": 0.0696,
+     "note": "netGainDamageShare = (strike damage - replaced swings x average main-hand white damage per swing) / total damage: the damage the strikes add over the white swings they consume"
+    }
+   }
+  },
+  "warrior.protection_default_apl": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "tank_warrior",
+    "race": "RaceDwarf",
+    "gear": "Pre-BiS (tank p0.bis Valor set) + jewelry and bow from the warrior p0.bis set + Rivenspike and Draconian Deflector",
+    "apl": "DPS (No Reck) (tank_warrior DefaultAPL)",
+    "talents": "20304300302-03-55200110530201051",
+    "talentsLabel": "Protection (DefaultTalents)",
+    "tank": true,
+    "deviations": [
+     "preset gear has no weapon, shield or jewelry: borrowed pieces added",
+     "this is the sim's default tank APL, which is a copy of the Fury DPS list"
+    ]
+   },
+   "dps": 620.8,
+   "secondsOutOfManaPerFight": 0,
+   "tps": 579.3,
+   "abilities": {
+    "Heroic Strike": {
+     "ids": [
+      "spell:25286"
+     ],
+     "casts": 20.557,
+     "damageShare": 0.4783,
+     "threatShare": 0.4687,
+     "damagePerMinute": 17814.7,
+     "threatPerMinute": 16288.8
+    },
+    "Execute": {
+     "ids": [
+      "spell:20662"
+     ],
+     "casts": 7.089,
+     "damageShare": 0.2581,
+     "threatShare": 0.2766,
+     "damagePerMinute": 9614.6,
+     "note": "the sim meters this ability under a passive spell without casts; casts = landed + missed attempts",
+     "threatPerMinute": 9614.6
+    },
+    "Extra Attacks": {
+     "ids": [
+      "other:OtherActionAttack#3"
+     ],
+     "casts": 4.953,
+     "damageShare": 0.0849,
+     "threatShare": 0.0728,
+     "damagePerMinute": 3160.8,
+     "threatPerMinute": 2528.6
+    },
+    "Whirlwind": {
+     "ids": [
+      "spell:1680"
+     ],
+     "casts": 4.995,
+     "damageShare": 0.0785,
+     "threatShare": 0.0841,
+     "damagePerMinute": 2923.6,
+     "threatPerMinute": 2923.6
+    },
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 3.59,
+     "damageShare": 0.0559,
+     "threatShare": 0.0479,
+     "damagePerMinute": 2080.9,
+     "threatPerMinute": 1664.7
+    },
+    "Deep Wounds": {
+     "ids": [
+      "spell:12867"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0421,
+     "threatShare": 0.0361,
+     "damagePerMinute": 1568.6,
+     "triggered": true,
+     "hitsPerMinute": 12.49,
+     "threatPerMinute": 1254.9
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0023,
+     "threatShare": 0.002,
+     "damagePerMinute": 85.4,
+     "triggered": true,
+     "hitsPerMinute": 1.014,
+     "threatPerMinute": 68.7
+    },
+    "Rage gain": {
+     "ids": [
+      "other:OtherActionRageGain"
+     ],
+     "casts": 17.748,
+     "damageShare": 0.0,
+     "threatShare": 0.0091,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability",
+     "threatPerMinute": 317.0
+    },
+    "Sunder Armor": {
+     "ids": [
+      "spell:11597"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": 0.0027,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 94.3
+    },
+    "Heroic Strike (queue)": {
+     "ids": [
+      "spell:25286#1"
+     ],
+     "casts": 24.757,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "note": "APL queue presses of the next-swing strike; the strike itself is the row without \"(queue)\"",
+     "threatPerMinute": 0.0
+    },
+    "Bloodrage": {
+     "ids": [
+      "spell:2687"
+     ],
+     "casts": 1.008,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    },
+    "Berserker Rage": {
+     "ids": [
+      "spell:18499"
+     ],
+     "casts": 0.737,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    },
+    "Mighty Rage Potion": {
+     "ids": [
+      "item:13442"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    },
+    "Berserker Stance": {
+     "ids": [
+      "spell:2458"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    },
+    "Last Stand": {
+     "ids": [
+      "spell:12975"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 3.59,
+     "damageShare": 0.0559,
+     "threatShare": 0.0479
+    },
+    "extraAttacks": {
+     "perMinute": 4.953,
+     "damageShare": 0.0849,
+     "threatShare": 0.0728,
+     "note": "extra main-hand swings from procs (Windfury, Hand of Justice, sword specialization, ...); they do not reset into next-swing strikes"
+    },
+    "replacedByNextSwingStrikes": {
+     "Heroic Strike": 20.557
+    },
+    "mainHandSwingTimerTotal": 24.147,
+    "replacedFraction": 0.8513,
+    "nextSwingVsWhite": {
+     "strikeDamageShare": 0.4783,
+     "whiteDamageShare": 0.1408,
+     "strikeToWhiteRatio": 3.397,
+     "damagePerStrikeOverMainHandWhite": 1.495,
+     "netGainDamageShare": 0.1584,
+     "note": "netGainDamageShare = (strike damage - replaced swings x average main-hand white damage per swing) / total damage: the damage the strikes add over the white swings they consume"
+    }
+   },
+   "chanceOfDeath": 1,
+   "chanceOfDeathNote": "the UI default healing model gives the tank no incoming healing; the sim keeps running the rotation after death, so casts and threat cover the whole fight"
+  },
+  "warrior.protection": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "tank_warrior",
+    "race": "RaceDwarf",
+    "gear": "Pre-BiS (tank p0.bis Valor set) + jewelry and bow from the warrior p0.bis set + Rivenspike and Draconian Deflector",
+    "apl": "derived single-target threat list: Bloodrage, Battle Shout, Shield Slam > Revenge > Heroic Strike at 40+ rage > Sunder Armor",
+    "talents": "20304300302-03-55200110530201051",
+    "talentsLabel": "Protection (DefaultTalents)",
+    "tank": true,
+    "deviations": [
+     "preset gear has no weapon, shield or jewelry: borrowed pieces added",
+     "derived APL (the sim's default tank APL is the Fury DPS list, see warrior.protection_default_apl)"
+    ]
+   },
+   "dps": 538.9,
+   "secondsOutOfManaPerFight": 0,
+   "tps": 1037.5,
+   "abilities": {
+    "Heroic Strike": {
+     "ids": [
+      "spell:25286"
+     ],
+     "casts": 24.806,
+     "damageShare": 0.5868,
+     "threatShare": 0.5294,
+     "damagePerMinute": 18973.4,
+     "threatPerMinute": 32955.0
+    },
+    "Shield Slam": {
+     "ids": [
+      "spell:23925"
+     ],
+     "casts": 10.032,
+     "damageShare": 0.2669,
+     "threatShare": 0.2949,
+     "damagePerMinute": 8630.8,
+     "threatPerMinute": 18357.8
+    },
+    "Extra Attacks": {
+     "ids": [
+      "other:OtherActionAttack#3"
+     ],
+     "casts": 4.107,
+     "damageShare": 0.0718,
+     "threatShare": 0.0558,
+     "damagePerMinute": 2321.6,
+     "threatPerMinute": 3470.9
+    },
+    "Deep Wounds": {
+     "ids": [
+      "spell:12867"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.041,
+     "threatShare": 0.0318,
+     "damagePerMinute": 1325.2,
+     "triggered": true,
+     "hitsPerMinute": 13.07,
+     "threatPerMinute": 1981.2
+    },
+    "Revenge": {
+     "ids": [
+      "spell:25288"
+     ],
+     "casts": 7.443,
+     "damageShare": 0.0239,
+     "threatShare": 0.0761,
+     "damagePerMinute": 772.1,
+     "threatPerMinute": 4736.5
+    },
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 0.535,
+     "damageShare": 0.007,
+     "threatShare": 0.0054,
+     "damagePerMinute": 225.5,
+     "threatPerMinute": 337.1
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0027,
+     "threatShare": 0.0021,
+     "damagePerMinute": 86.0,
+     "triggered": true,
+     "hitsPerMinute": 1.139,
+     "threatPerMinute": 128.6
+    },
+    "Rage gain": {
+     "ids": [
+      "other:OtherActionRageGain"
+     ],
+     "casts": 15.169,
+     "damageShare": 0.0,
+     "threatShare": 0.0032,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability",
+     "threatPerMinute": 201.1
+    },
+    "Sunder Armor": {
+     "ids": [
+      "spell:11597"
+     ],
+     "casts": 0.288,
+     "damageShare": 0.0,
+     "threatShare": 0.0013,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 79.9
+    },
+    "Heroic Strike (queue)": {
+     "ids": [
+      "spell:25286#1"
+     ],
+     "casts": 25.137,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "note": "APL queue presses of the next-swing strike; the strike itself is the row without \"(queue)\"",
+     "threatPerMinute": 0.0
+    },
+    "Bloodrage": {
+     "ids": [
+      "spell:2687"
+     ],
+     "casts": 1.002,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 0.535,
+     "damageShare": 0.007,
+     "threatShare": 0.0054
+    },
+    "extraAttacks": {
+     "perMinute": 4.107,
+     "damageShare": 0.0718,
+     "threatShare": 0.0558,
+     "note": "extra main-hand swings from procs (Windfury, Hand of Justice, sword specialization, ...); they do not reset into next-swing strikes"
+    },
+    "replacedByNextSwingStrikes": {
+     "Heroic Strike": 24.806
+    },
+    "mainHandSwingTimerTotal": 25.341,
+    "replacedFraction": 0.9789,
+    "nextSwingVsWhite": {
+     "strikeDamageShare": 0.5868,
+     "whiteDamageShare": 0.0788,
+     "strikeToWhiteRatio": 7.446,
+     "damagePerStrikeOverMainHandWhite": 1.814,
+     "netGainDamageShare": 0.2633,
+     "note": "netGainDamageShare = (strike damage - replaced swings x average main-hand white damage per swing) / total damage: the damage the strikes add over the white swings they consume"
+    }
+   },
+   "chanceOfDeath": 1,
+   "chanceOfDeathNote": "the UI default healing model gives the tank no incoming healing; the sim keeps running the rotation after death, so casts and threat cover the whole fight",
+   "notes": "rage comes mostly from damage taken (no healing model), so Heroic Strike replaces almost every main-hand swing"
+  },
+  "rogue.combat": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "rogue",
+    "race": "RaceDwarf",
+    "gear": "Sinister Strike Pre-BiS (DefaultGear)",
+    "apl": "Sinister Strike (DefaultAPLs[0])",
+    "talents": "005323105-0240052020050150231",
+    "talentsLabel": "Sinister Strike (DefaultTalents)",
+    "tank": false,
+    "deviations": []
+   },
+   "dps": 942.5,
+   "secondsOutOfManaPerFight": 0,
+   "abilities": {
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 30.962,
+     "damageShare": 0.3027,
+     "threatShare": null,
+     "damagePerMinute": 17165.6
+    },
+    "Sinister Strike": {
+     "ids": [
+      "spell:11294"
+     ],
+     "casts": 19.26,
+     "damageShare": 0.2576,
+     "threatShare": null,
+     "damagePerMinute": 14607.0
+    },
+    "Off Hand": {
+     "ids": [
+      "other:OtherActionAttack#2"
+     ],
+     "casts": 51.246,
+     "damageShare": 0.2415,
+     "threatShare": null,
+     "damagePerMinute": 13694.7
+    },
+    "Eviscerate": {
+     "ids": [
+      "spell:31016#5"
+     ],
+     "casts": 2.34,
+     "damageShare": 0.0677,
+     "threatShare": null,
+     "damagePerMinute": 3838.9
+    },
+    "Extra Attacks": {
+     "ids": [
+      "other:OtherActionAttack#3"
+     ],
+     "casts": 5.919,
+     "damageShare": 0.0579,
+     "threatShare": null,
+     "damagePerMinute": 3281.0
+    },
+    "Deadly Poison V": {
+     "ids": [
+      "spell:25347",
+      "spell:25347#100"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0359,
+     "threatShare": null,
+     "damagePerMinute": 2035.7,
+     "triggered": true,
+     "hitsPerMinute": 26.789
+    },
+    "Instant Poison VI": {
+     "ids": [
+      "spell:11340"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0192,
+     "threatShare": null,
+     "damagePerMinute": 1086.5,
+     "triggered": true,
+     "hitsPerMinute": 8.159
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.011,
+     "threatShare": null,
+     "damagePerMinute": 621.9,
+     "triggered": true,
+     "hitsPerMinute": 2.16
+    },
+    "Goblin Sapper Charge": {
+     "ids": [
+      "item:10646"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0066,
+     "threatShare": null,
+     "damagePerMinute": 372.7
+    },
+    "Slice and Dice": {
+     "ids": [
+      "spell:6774#1",
+      "spell:6774#2",
+      "spell:6774#3",
+      "spell:6774#4",
+      "spell:6774#5"
+     ],
+     "casts": 2.593,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Blade Flurry": {
+     "ids": [
+      "spell:13877"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Adrenaline Rush": {
+     "ids": [
+      "spell:13750"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Thistle Tea": {
+     "ids": [
+      "item:7676"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 30.962,
+     "damageShare": 0.3027
+    },
+    "offHand": {
+     "perMinute": 51.246,
+     "damageShare": 0.2415
+    },
+    "extraAttacks": {
+     "perMinute": 5.919,
+     "damageShare": 0.0579,
+     "note": "extra main-hand swings from procs (Windfury, Hand of Justice, sword specialization, ...); they do not reset into next-swing strikes"
+    }
+   }
+  },
+  "hunter.marksmanship": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "hunter",
+    "race": "RaceTroll",
+    "gear": "Pre-BiS (DefaultGear)",
+    "apl": "Marksmanship (DefaultAPL)",
+    "talents": "55000000505-05451002503051",
+    "talentsLabel": "Marksmanship (DefaultTalents)",
+    "tank": false,
+    "deviations": []
+   },
+   "dps": 814.4,
+   "secondsOutOfManaPerFight": 5.5,
+   "abilities": {
+    "Auto Shot": {
+     "ids": [
+      "other:OtherActionShoot"
+     ],
+     "casts": 21.576,
+     "damageShare": 0.4837,
+     "threatShare": null,
+     "damagePerMinute": 18723.0
+    },
+    "Aimed Shot": {
+     "ids": [
+      "spell:20904"
+     ],
+     "casts": 6.54,
+     "damageShare": 0.2864,
+     "threatShare": null,
+     "damagePerMinute": 11087.7
+    },
+    "Multi-Shot": {
+     "ids": [
+      "spell:25294"
+     ],
+     "casts": 5.379,
+     "damageShare": 0.1614,
+     "threatShare": null,
+     "damagePerMinute": 6249.6
+    },
+    "Serpent Sting": {
+     "ids": [
+      "spell:25295"
+     ],
+     "casts": 5.157,
+     "damageShare": 0.0685,
+     "threatShare": null,
+     "damagePerMinute": 2650.2
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 20.314,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Demonic Rune": {
+     "ids": [
+      "item:12662"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.337,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Aspect of the Hawk": {
+     "ids": [
+      "spell:25296"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Berserking": {
+     "ids": [
+      "spell:26297"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Rapid Fire": {
+     "ids": [
+      "spell:3045"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {
+    "ranged": {
+     "perMinute": 21.576,
+     "damageShare": 0.4837
+    }
+   },
+   "pets": {
+    "Cat": {
+     "damagePerMinute": 10150.8,
+     "shareOfPlayerPlusPet": 0.2077
+    }
+   }
+  },
+  "mage.frost": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "mage",
+    "race": "RaceTroll",
+    "gear": "Pre-BiS (DefaultGear)",
+    "apl": "DPS (DefaultAPL)",
+    "talents": "230205021002--05353203102351001",
+    "talentsLabel": "Frost DPS (DefaultTalents)",
+    "tank": false,
+    "deviations": []
+   },
+   "dps": 634.1,
+   "secondsOutOfManaPerFight": 0.7,
+   "abilities": {
+    "Frostbolt": {
+     "ids": [
+      "spell:25304"
+     ],
+     "casts": 23.944,
+     "damageShare": 1.0,
+     "threatShare": null,
+     "damagePerMinute": 38048.2
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 11.963,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.374,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Berserking": {
+     "ids": [
+      "spell:26297"
+     ],
+     "casts": 0.335,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Cold Snap": {
+     "ids": [
+      "spell:12472"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Mana Agate": {
+     "ids": [
+      "item:5514"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Mana Ruby": {
+     "ids": [
+      "item:8008"
+     ],
+     "casts": 0.207,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Mana Jade": {
+     "ids": [
+      "item:5513"
+     ],
+     "casts": 0.092,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Mana Citrine": {
+     "ids": [
+      "item:8007"
+     ],
+     "casts": 0.027,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {}
+  },
+  "mage.fire": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "mage",
+    "race": "RaceTroll",
+    "gear": "Pre-BiS (DefaultGear)",
+    "apl": "DPS (DefaultAPL; its Fire branch runs when Combustion is known)",
+    "talents": "21-5052300123033151-203500031",
+    "talentsLabel": "3/34/14 Fire build with Combustion (the level 60 Fire talents of the SoD sim's presets, same talent trees)",
+    "tank": false,
+    "deviations": [
+     "no Fire talent preset in the Classic sim: Fire talents borrowed, gear and APL are the preset ones"
+    ]
+   },
+   "dps": 513.5,
+   "secondsOutOfManaPerFight": 48.2,
+   "abilities": {
+    "Fireball": {
+     "ids": [
+      "spell:25306"
+     ],
+     "casts": 11.657,
+     "damageShare": 0.6259,
+     "threatShare": null,
+     "damagePerMinute": 19284.0
+    },
+    "Ignite": {
+     "ids": [
+      "spell:12654"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.2216,
+     "threatShare": null,
+     "damagePerMinute": 6826.6,
+     "triggered": true,
+     "hitsPerMinute": 8.206
+    },
+    "Frostbolt": {
+     "ids": [
+      "spell:25304"
+     ],
+     "casts": 2.709,
+     "damageShare": 0.1397,
+     "threatShare": null,
+     "damagePerMinute": 4304.3
+    },
+    "Scorch": {
+     "ids": [
+      "spell:10207"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0128,
+     "threatShare": null,
+     "damagePerMinute": 394.0
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 13.81,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Berserking": {
+     "ids": [
+      "spell:26297"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Cold Snap": {
+     "ids": [
+      "spell:12472"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Combustion": {
+     "ids": [
+      "spell:11129"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Mana Ruby": {
+     "ids": [
+      "item:8008"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Mana Agate": {
+     "ids": [
+      "item:5514"
+     ],
+     "casts": 0.171,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Mana Jade": {
+     "ids": [
+      "item:5513"
+     ],
+     "casts": 0.162,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {},
+   "notes": "the preset APL casts Frostbolt when Fireball cannot be cast; with pre-BiS gear the mage is out of mana about 48 s of 180, which is where the Frostbolt casts come from"
+  },
+  "warlock.destruction": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "warlock",
+    "race": "RaceGnome",
+    "gear": "Pre-BIS (DefaultGear)",
+    "apl": "Destruction (DefaultAPL)",
+    "talents": "25002-2050300152201-52500051020001",
+    "talentsLabel": "DS/Ruin (DefaultTalents)",
+    "tank": false,
+    "deviations": []
+   },
+   "dps": 675.0,
+   "secondsOutOfManaPerFight": 0.0,
+   "abilities": {
+    "Shadow Bolt": {
+     "ids": [
+      "spell:25307"
+     ],
+     "casts": 15.433,
+     "damageShare": 0.6043,
+     "threatShare": null,
+     "damagePerMinute": 24475.5
+    },
+    "Corruption": {
+     "ids": [
+      "spell:25311"
+     ],
+     "casts": 3.499,
+     "damageShare": 0.1448,
+     "threatShare": null,
+     "damagePerMinute": 5865.7
+    },
+    "Curse of Agony": {
+     "ids": [
+      "spell:11713"
+     ],
+     "casts": 2.802,
+     "damageShare": 0.1308,
+     "threatShare": null,
+     "damagePerMinute": 5298.1
+    },
+    "Immolate": {
+     "ids": [
+      "spell:25309"
+     ],
+     "casts": 3.581,
+     "damageShare": 0.1059,
+     "threatShare": null,
+     "damagePerMinute": 4288.4
+    },
+    "Shadowburn": {
+     "ids": [
+      "spell:18871"
+     ],
+     "casts": 0.303,
+     "damageShare": 0.0093,
+     "threatShare": null,
+     "damagePerMinute": 378.3
+    },
+    "Searing Pain": {
+     "ids": [
+      "spell:17923"
+     ],
+     "casts": 0.398,
+     "damageShare": 0.0048,
+     "threatShare": null,
+     "damagePerMinute": 194.2
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 15.508,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Life Tap": {
+     "ids": [
+      "spell:11689"
+     ],
+     "casts": 3.794,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Demonic Rune": {
+     "ids": [
+      "item:12662"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Demonic Sacrifice": {
+     "ids": [
+      "spell:18788"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Fel Domination": {
+     "ids": [
+      "spell:18708"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {}
+  },
+  "priest.shadow": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "shadow_priest",
+    "race": "RaceTroll",
+    "gear": "Pre-BiS (DefaultGear)",
+    "apl": "Shadow (DefaultAPL)",
+    "talents": "0512301302--5002504103501251",
+    "talentsLabel": "Shadow (DefaultTalents)",
+    "tank": false,
+    "deviations": []
+   },
+   "dps": 579.4,
+   "secondsOutOfManaPerFight": 9.4,
+   "abilities": {
+    "Mind Flay": {
+     "ids": [
+      "spell:18807"
+     ],
+     "casts": 14.658,
+     "damageShare": 0.512,
+     "threatShare": null,
+     "damagePerMinute": 17796.7
+    },
+    "Mind Blast": {
+     "ids": [
+      "spell:10947"
+     ],
+     "casts": 6.404,
+     "damageShare": 0.2636,
+     "threatShare": null,
+     "damagePerMinute": 9164.3
+    },
+    "Shadow Word: Pain": {
+     "ids": [
+      "spell:10894"
+     ],
+     "casts": 2.423,
+     "damageShare": 0.2244,
+     "threatShare": null,
+     "damagePerMinute": 7800.1
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 12.37,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Demonic Rune": {
+     "ids": [
+      "item:12662"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.653,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Berserking": {
+     "ids": [
+      "spell:26297"
+     ],
+     "casts": 0.337,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Inner Focus": {
+     "ids": [
+      "spell:14751"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Shadowform": {
+     "ids": [
+      "spell:15473"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {}
+  },
+  "druid.feral_cat": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "feral_druid",
+    "race": "RaceTauren",
+    "gear": "P4 BiS (DefaultGear)",
+    "apl": "Feral (DefaultAPL)",
+    "talents": "500005301-5500021323202151-05",
+    "talentsLabel": "Feral (DefaultTalents)",
+    "tank": false,
+    "deviations": []
+   },
+   "dps": 1173.6,
+   "secondsOutOfManaPerFight": 0,
+   "abilities": {
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 87.429,
+     "damageShare": 0.4157,
+     "threatShare": null,
+     "damagePerMinute": 29350.3
+    },
+    "Shred": {
+     "ids": [
+      "spell:9830"
+     ],
+     "casts": 24.718,
+     "damageShare": 0.3877,
+     "threatShare": null,
+     "damagePerMinute": 27375.9
+    },
+    "Ferocious Bite": {
+     "ids": [
+      "spell:31018"
+     ],
+     "casts": 5.731,
+     "damageShare": 0.1827,
+     "threatShare": null,
+     "damagePerMinute": 12896.8
+    },
+    "Goblin Sapper Charge": {
+     "ids": [
+      "item:10646"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0059,
+     "threatShare": null,
+     "damagePerMinute": 416.1
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0044,
+     "threatShare": null,
+     "damagePerMinute": 309.8,
+     "triggered": true,
+     "hitsPerMinute": 2.452
+    },
+    "Claw": {
+     "ids": [
+      "spell:9850"
+     ],
+     "casts": 0.384,
+     "damageShare": 0.0036,
+     "threatShare": null,
+     "damagePerMinute": 253.6
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 1.329,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Faerie Fire (Feral)": {
+     "ids": [
+      "spell:17392"
+     ],
+     "casts": 2.628,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Cat Form": {
+     "ids": [
+      "spell:768"
+     ],
+     "casts": 12.205,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Haste (Manual Crowd Pummeler)": {
+     "ids": [
+      "spell:13494"
+     ],
+     "casts": 1.0,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Demonic Rune": {
+     "ids": [
+      "item:12662"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.662,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Innervate": {
+     "ids": [
+      "spell:29166"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Tiger's Fury": {
+     "ids": [
+      "spell:9846"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 87.429,
+     "damageShare": 0.4157
+    }
+   }
+  },
+  "druid.balance": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "balance_druid",
+    "race": "RaceTauren",
+    "gear": "P5 BiS (DefaultGear)",
+    "apl": "Default Balance (DefaultAPL)",
+    "talents": "5000550012551251--5005031",
+    "talentsLabel": "Balance (DefaultTalents)",
+    "tank": false,
+    "deviations": []
+   },
+   "dps": 549.0,
+   "secondsOutOfManaPerFight": 36.0,
+   "abilities": {
+    "Starfire": {
+     "ids": [
+      "spell:25298"
+     ],
+     "casts": 14.699,
+     "damageShare": 0.8168,
+     "threatShare": null,
+     "damagePerMinute": 26905.2
+    },
+    "Moonfire": {
+     "ids": [
+      "spell:9835"
+     ],
+     "casts": 4.182,
+     "damageShare": 0.1785,
+     "threatShare": null,
+     "damagePerMinute": 5877.9
+    },
+    "Wrath": {
+     "ids": [
+      "spell:9912"
+     ],
+     "casts": 0.226,
+     "damageShare": 0.0047,
+     "threatShare": null,
+     "damagePerMinute": 154.7
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 9.749,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Talisman of Ephemeral Power": {
+     "ids": [
+      "item:18820"
+     ],
+     "casts": 0.743,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Innervate": {
+     "ids": [
+      "spell:29166"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {}
+  },
+  "druid.feral_bear": {
+   "run": {
+    "repo": "wowsims/sod",
+    "ui": "feral_tank_druid",
+    "race": "RaceTauren",
+    "gear": "Classic feral P2 Pre-BiS set (Classic Era items only, no runes); shoulders empty, rings Blackstone Ring + Naglering, Warden Staff",
+    "apl": "SoD \"Phase 6\" bear APL (rune abilities unavailable, so Swipe and Maul remain)",
+    "talents": "014005301-5050021323022151-05",
+    "talentsLabel": "SoD bear talent preset (standard talent trees)",
+    "tank": true,
+    "deviations": [
+     "SoD repository (Classic has no bear sim), no runes, Classic Era gear",
+     "consumes, buffs and debuffs are the Classic feral (cat) presets, because the SoD bear presets use SoD-only consumables and world buffs; spec options (starting rage 20) are the SoD bear preset"
+    ]
+   },
+   "dps": 602.4,
+   "secondsOutOfManaPerFight": 0,
+   "tps": 2130.9,
+   "abilities": {
+    "Maul": {
+     "ids": [
+      "spell:9881"
+     ],
+     "casts": 26.684,
+     "damageShare": 0.5873,
+     "threatShare": 0.4213,
+     "damagePerMinute": 21227.1,
+     "threatPerMinute": 53863.8
+    },
+    "Swipe": {
+     "ids": [
+      "spell:9908"
+     ],
+     "casts": 40.088,
+     "damageShare": 0.3961,
+     "threatShare": 0.5682,
+     "damagePerMinute": 14314.5,
+     "threatPerMinute": 72645.9
+    },
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 0.983,
+     "damageShare": 0.0113,
+     "threatShare": 0.0046,
+     "damagePerMinute": 406.7,
+     "threatPerMinute": 589.7
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0032,
+     "threatShare": 0.0013,
+     "damagePerMinute": 115.1,
+     "triggered": true,
+     "hitsPerMinute": 1.533,
+     "threatPerMinute": 166.9
+    },
+    "Naglering (thorns)": {
+     "ids": [
+      "item:11669"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0022,
+     "threatShare": 0.0009,
+     "damagePerMinute": 79.4,
+     "triggered": true,
+     "hitsPerMinute": 21.867,
+     "threatPerMinute": 115.1
+    },
+    "Rage gain": {
+     "ids": [
+      "other:OtherActionRageGain"
+     ],
+     "casts": 19.004,
+     "damageShare": 0.0,
+     "threatShare": 0.0037,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability",
+     "threatPerMinute": 474.4
+    },
+    "Maul (queue)": {
+     "ids": [
+      "spell:9881#1"
+     ],
+     "casts": 27.111,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "note": "APL queue presses of the next-swing strike; the strike itself is the row without \"(queue)\"",
+     "threatPerMinute": 0.0
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability",
+     "threatPerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 0.983,
+     "damageShare": 0.0113,
+     "threatShare": 0.0046
+    },
+    "replacedByNextSwingStrikes": {
+     "Maul": 26.684
+    },
+    "mainHandSwingTimerTotal": 27.667,
+    "replacedFraction": 0.9645,
+    "nextSwingVsWhite": {
+     "strikeDamageShare": 0.5873,
+     "whiteDamageShare": 0.0113,
+     "strikeToWhiteRatio": 51.975,
+     "damagePerStrikeOverMainHandWhite": 1.923,
+     "netGainDamageShare": 0.2819,
+     "note": "netGainDamageShare = (strike damage - replaced swings x average main-hand white damage per swing) / total damage: the damage the strikes add over the white swings they consume"
+    }
+   },
+   "chanceOfDeath": 1,
+   "chanceOfDeathNote": "the UI default healing model gives the tank no incoming healing; the sim keeps running the rotation after death, so casts and threat cover the whole fight",
+   "notes": "no runes: Mangle, Lacerate and the other rune spells in the SoD bear APL are not known and drop out, leaving Swipe and Maul (Maul queued at 30+ rage)"
+  },
+  "paladin.retribution": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "retribution_paladin",
+    "race": "RaceHuman",
+    "gear": "borrowed: warrior Pre-BiS armor and jewelry (p0.bis) + Arcanite Reaper (the preset is a blank set)",
+    "apl": "Basic Ret (DefaultAPL)",
+    "talents": "500501-503-52230351200315",
+    "talentsLabel": "P4/P5 Ret (DefaultTalents)",
+    "tank": false,
+    "deviations": [
+     "preset gear is blank (no items): borrowed plate pre-BiS armor and a 2H weapon"
+    ]
+   },
+   "dps": 559.8,
+   "secondsOutOfManaPerFight": 57.3,
+   "abilities": {
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 18.329,
+     "damageShare": 0.7171,
+     "threatShare": null,
+     "damagePerMinute": 24084.3
+    },
+    "Seal of Command (on-hit)": {
+     "ids": [
+      "spell:20424"
+     ],
+     "casts": 2.397,
+     "damageShare": 0.0892,
+     "threatShare": null,
+     "damagePerMinute": 2997.2,
+     "triggered": true,
+     "hitsPerMinute": 2.238,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD"
+    },
+    "Judgement of Righteousness": {
+     "ids": [
+      "spell:20286"
+     ],
+     "casts": 6.009,
+     "damageShare": 0.0818,
+     "threatShare": null,
+     "damagePerMinute": 2749.0
+    },
+    "Seal of Righteousness (on-hit)": {
+     "ids": [
+      "spell:25713"
+     ],
+     "casts": 7.935,
+     "damageShare": 0.0759,
+     "threatShare": null,
+     "damagePerMinute": 2550.4,
+     "triggered": true,
+     "hitsPerMinute": 7.935,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD"
+    },
+    "Extra Attacks": {
+     "ids": [
+      "other:OtherActionAttack#3"
+     ],
+     "casts": 0.399,
+     "damageShare": 0.0156,
+     "threatShare": null,
+     "damagePerMinute": 522.5
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0108,
+     "threatShare": null,
+     "damagePerMinute": 361.5,
+     "triggered": true,
+     "hitsPerMinute": 0.943
+    },
+    "Judgement of Command": {
+     "ids": [
+      "spell:20467"
+     ],
+     "casts": 1.023,
+     "damageShare": 0.0096,
+     "threatShare": null,
+     "damagePerMinute": 322.0
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 17.414,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Seal of Righteousness": {
+     "ids": [
+      "spell:20293"
+     ],
+     "casts": 11.379,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Seal of Command": {
+     "ids": [
+      "spell:20375"
+     ],
+     "casts": 5.257,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 18.329,
+     "damageShare": 0.7171
+    },
+    "extraAttacks": {
+     "perMinute": 0.399,
+     "damageShare": 0.0156,
+     "note": "extra main-hand swings from procs (Windfury, Hand of Justice, sword specialization, ...); they do not reset into next-swing strikes"
+    }
+   },
+   "notes": "the preset APL twists seals: Seal of Command just before a swing while Seal of Righteousness is up, then back"
+  },
+  "paladin.protection": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "protection_paladin",
+    "race": "RaceHuman",
+    "gear": "borrowed: tank warrior Valor set + warrior p0.bis jewelry + Rivenspike and Draconian Deflector (the preset is a blank set)",
+    "apl": "P5 Prot (DefaultAPL)",
+    "talents": "-053020335001551-0520335",
+    "talentsLabel": "P5 Prot (DefaultTalents)",
+    "tank": true,
+    "deviations": [
+     "preset gear is blank (no items): borrowed plate tank armor, 1H weapon and shield"
+    ]
+   },
+   "dps": 311.4,
+   "secondsOutOfManaPerFight": 66.7,
+   "tps": 467.0,
+   "abilities": {
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 20.995,
+     "damageShare": 0.6284,
+     "threatShare": 0.419,
+     "damagePerMinute": 11740.8,
+     "threatPerMinute": 11740.8
+    },
+    "Judgement of Righteousness": {
+     "ids": [
+      "spell:20286"
+     ],
+     "casts": 7.379,
+     "damageShare": 0.1168,
+     "threatShare": 0.1869,
+     "damagePerMinute": 2182.2,
+     "threatPerMinute": 5237.4
+    },
+    "Seal of Righteousness (on-hit)": {
+     "ids": [
+      "spell:25713"
+     ],
+     "casts": 12.782,
+     "damageShare": 0.0903,
+     "threatShare": 0.1445,
+     "damagePerMinute": 1687.0,
+     "triggered": true,
+     "hitsPerMinute": 12.782,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD",
+     "threatPerMinute": 4048.7
+    },
+    "Holy Shield (block damage)": {
+     "ids": [
+      "spell:20957"
+     ],
+     "casts": 7.894,
+     "damageShare": 0.0748,
+     "threatShare": 0.1437,
+     "damagePerMinute": 1398.0,
+     "triggered": true,
+     "hitsPerMinute": 7.894,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD",
+     "threatPerMinute": 4026.3
+    },
+    "Extra Attacks": {
+     "ids": [
+      "other:OtherActionAttack#3"
+     ],
+     "casts": 1.813,
+     "damageShare": 0.054,
+     "threatShare": 0.036,
+     "damagePerMinute": 1008.7,
+     "threatPerMinute": 1008.7
+    },
+    "Blessing of Sanctuary (block damage)": {
+     "ids": [
+      "spell:20914"
+     ],
+     "casts": 9.146,
+     "damageShare": 0.0172,
+     "threatShare": 0.0275,
+     "damagePerMinute": 321.3,
+     "triggered": true,
+     "hitsPerMinute": 7.587,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD",
+     "threatPerMinute": 771.1
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0097,
+     "threatShare": 0.0065,
+     "damagePerMinute": 182.0,
+     "triggered": true,
+     "hitsPerMinute": 1.011,
+     "threatPerMinute": 182.0
+    },
+    "Dense Dynamite": {
+     "ids": [
+      "item:18641"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0087,
+     "threatShare": 0.0058,
+     "damagePerMinute": 163.2,
+     "threatPerMinute": 163.2
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 28.647,
+     "damageShare": 0.0,
+     "threatShare": 0.0301,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability",
+     "threatPerMinute": 844.7
+    },
+    "Seal of Righteousness": {
+     "ids": [
+      "spell:20293"
+     ],
+     "casts": 7.589,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    },
+    "Holy Shield": {
+     "ids": [
+      "spell:20928"
+     ],
+     "casts": 3.807,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    },
+    "Lay on Hands": {
+     "ids": [
+      "spell:10310"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": 0.0,
+     "damagePerMinute": 0.0,
+     "threatPerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 20.995,
+     "damageShare": 0.6284,
+     "threatShare": 0.419
+    },
+    "extraAttacks": {
+     "perMinute": 1.813,
+     "damageShare": 0.054,
+     "threatShare": 0.036,
+     "note": "extra main-hand swings from procs (Windfury, Hand of Justice, sword specialization, ...); they do not reset into next-swing strikes"
+    }
+   },
+   "chanceOfDeath": 1,
+   "chanceOfDeathNote": "the UI default healing model gives the tank no incoming healing; the sim keeps running the rotation after death, so casts and threat cover the whole fight"
+  },
+  "shaman.enhancement": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "enhancement_shaman",
+    "race": "RaceOrc",
+    "gear": "Phase 1 (DefaultGear)",
+    "apl": "Default (DefaultAPL) with Strength of Earth Totem rank 4 -> rank 5 (25361) and Grace of Air Totem rank 2 -> rank 3 (25359)",
+    "talents": "05-5025002105023051-05105301",
+    "talentsLabel": "Level 60 (DefaultTalents)",
+    "tank": false,
+    "deviations": [
+     "preset APL fixed: its Strength of Earth aura check uses the rank 4 id while the sim applies rank 5, so the preset recasts the totem every GCD, goes out of mana and never casts Stormstrike (see shaman.enhancement_default_apl)"
+    ]
+   },
+   "dps": 717.5,
+   "secondsOutOfManaPerFight": 48.9,
+   "abilities": {
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 23.394,
+     "damageShare": 0.542,
+     "threatShare": null,
+     "damagePerMinute": 23335.4
+    },
+    "Windfury Weapon (proc)": {
+     "ids": [
+      "spell:16362#1"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.2972,
+     "threatShare": null,
+     "damagePerMinute": 12794.2,
+     "triggered": true,
+     "hitsPerMinute": 8.891
+    },
+    "Stormstrike": {
+     "ids": [
+      "spell:17364"
+     ],
+     "casts": 2.175,
+     "damageShare": 0.0568,
+     "threatShare": null,
+     "damagePerMinute": 2443.7
+    },
+    "Searing Totem (Attack)": {
+     "ids": [
+      "spell:10436"
+     ],
+     "casts": 22.0,
+     "damageShare": 0.0334,
+     "threatShare": null,
+     "damagePerMinute": 1436.1,
+     "triggered": true,
+     "hitsPerMinute": 18.898,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD"
+    },
+    "Earth Shock": {
+     "ids": [
+      "spell:10414"
+     ],
+     "casts": 1.859,
+     "damageShare": 0.0298,
+     "threatShare": null,
+     "damagePerMinute": 1281.6
+    },
+    "Fireball (Sulfuras proc)": {
+     "ids": [
+      "spell:21162"
+     ],
+     "casts": 2.061,
+     "damageShare": 0.0177,
+     "threatShare": null,
+     "damagePerMinute": 763.4,
+     "triggered": true,
+     "hitsPerMinute": 8.995,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD"
+    },
+    "Extra Attacks": {
+     "ids": [
+      "other:OtherActionAttack#3"
+     ],
+     "casts": 0.645,
+     "damageShare": 0.015,
+     "threatShare": null,
+     "damagePerMinute": 646.9
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0081,
+     "threatShare": null,
+     "damagePerMinute": 349.1,
+     "triggered": true,
+     "hitsPerMinute": 1.14
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 1.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Windfury Totem": {
+     "ids": [
+      "spell:10614"
+     ],
+     "casts": 5.949,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Grace of Air Totem": {
+     "ids": [
+      "spell:25359"
+     ],
+     "casts": 5.749,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Searing Totem": {
+     "ids": [
+      "spell:10438"
+     ],
+     "casts": 1.0,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Blood Fury": {
+     "ids": [
+      "spell:20572"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Demonic Rune": {
+     "ids": [
+      "item:12662"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Strength of Earth Totem": {
+     "ids": [
+      "spell:25361"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 23.394,
+     "damageShare": 0.542
+    },
+    "extraAttacks": {
+     "perMinute": 0.645,
+     "damageShare": 0.015,
+     "note": "extra main-hand swings from procs (Windfury, Hand of Justice, sword specialization, ...); they do not reset into next-swing strikes"
+    }
+   },
+   "notes": "Grace of Air and Windfury Totem alternate (totem twisting) in the preset APL"
+  },
+  "shaman.enhancement_default_apl": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "enhancement_shaman",
+    "race": "RaceOrc",
+    "gear": "Phase 1 (DefaultGear)",
+    "apl": "Default (DefaultAPL), unmodified",
+    "talents": "05-5025002105023051-05105301",
+    "talentsLabel": "Level 60 (DefaultTalents)",
+    "tank": false,
+    "deviations": [
+     "unmodified preset APL, kept for reference: broken at this commit (Strength of Earth Totem every GCD, out of mana 76 s of 180, no Stormstrike)"
+    ]
+   },
+   "dps": 637.0,
+   "secondsOutOfManaPerFight": 75.9,
+   "abilities": {
+    "Main Hand": {
+     "ids": [
+      "other:OtherActionAttack#1"
+     ],
+     "casts": 23.31,
+     "damageShare": 0.6113,
+     "threatShare": null,
+     "damagePerMinute": 23362.0
+    },
+    "Windfury Weapon (proc)": {
+     "ids": [
+      "spell:16362#1"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.3114,
+     "threatShare": null,
+     "damagePerMinute": 11900.8,
+     "triggered": true,
+     "hitsPerMinute": 8.257
+    },
+    "Searing Totem (Attack)": {
+     "ids": [
+      "spell:10436"
+     ],
+     "casts": 20.491,
+     "damageShare": 0.035,
+     "threatShare": null,
+     "damagePerMinute": 1339.3,
+     "triggered": true,
+     "hitsPerMinute": 17.617,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD"
+    },
+    "Fireball (Sulfuras proc)": {
+     "ids": [
+      "spell:21162"
+     ],
+     "casts": 1.898,
+     "damageShare": 0.0184,
+     "threatShare": null,
+     "damagePerMinute": 702.7,
+     "triggered": true,
+     "hitsPerMinute": 8.438,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD"
+    },
+    "Extra Attacks": {
+     "ids": [
+      "other:OtherActionAttack#3"
+     ],
+     "casts": 0.584,
+     "damageShare": 0.0155,
+     "threatShare": null,
+     "damagePerMinute": 590.9
+    },
+    "Dragonbreath Chili": {
+     "ids": [
+      "spell:15851"
+     ],
+     "casts": 0.0,
+     "damageShare": 0.0085,
+     "threatShare": null,
+     "damagePerMinute": 323.6,
+     "triggered": true,
+     "hitsPerMinute": 1.057
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 1.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Strength of Earth Totem": {
+     "ids": [
+      "spell:10442"
+     ],
+     "casts": 23.101,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Searing Totem": {
+     "ids": [
+      "spell:10438"
+     ],
+     "casts": 0.973,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Blood Fury": {
+     "ids": [
+      "spell:20572"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Demonic Rune": {
+     "ids": [
+      "item:12662"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Grace of Air Totem": {
+     "ids": [
+      "spell:10627"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Windfury Totem": {
+     "ids": [
+      "spell:10614"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {
+    "mainHand": {
+     "perMinute": 23.31,
+     "damageShare": 0.6113
+    },
+    "extraAttacks": {
+     "perMinute": 0.584,
+     "damageShare": 0.0155,
+     "note": "extra main-hand swings from procs (Windfury, Hand of Justice, sword specialization, ...); they do not reset into next-swing strikes"
+    }
+   }
+  },
+  "shaman.elemental": {
+   "run": {
+    "repo": "wowsims/classic",
+    "ui": "elemental_shaman",
+    "race": "RaceTroll",
+    "gear": "Phase 2 (DefaultGear)",
+    "apl": "Default (DefaultAPL)",
+    "talents": "050331552000151--50105301005",
+    "talentsLabel": "Level 60 (DefaultTalents)",
+    "tank": false,
+    "deviations": []
+   },
+   "dps": 514.4,
+   "secondsOutOfManaPerFight": 36.7,
+   "abilities": {
+    "Lightning Bolt": {
+     "ids": [
+      "spell:15208",
+      "spell:915"
+     ],
+     "casts": 20.044,
+     "damageShare": 0.6953,
+     "threatShare": null,
+     "damagePerMinute": 21456.9
+    },
+    "Chain Lightning": {
+     "ids": [
+      "spell:10605"
+     ],
+     "casts": 4.653,
+     "damageShare": 0.2101,
+     "threatShare": null,
+     "damagePerMinute": 6483.2
+    },
+    "Searing Totem (Attack)": {
+     "ids": [
+      "spell:10436"
+     ],
+     "casts": 21.451,
+     "damageShare": 0.0947,
+     "threatShare": null,
+     "damagePerMinute": 2921.6,
+     "triggered": true,
+     "hitsPerMinute": 18.456,
+     "note": "the sim counts each proc as a cast; it is not a player cast and uses no GCD"
+    },
+    "Mana gain": {
+     "ids": [
+      "other:OtherActionManaGain"
+     ],
+     "casts": 1.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0,
+     "resource": true,
+     "note": "resource bookkeeping (threat from resource gains), not an ability"
+    },
+    "Searing Totem": {
+     "ids": [
+      "spell:10438"
+     ],
+     "casts": 1.048,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Demonic Rune": {
+     "ids": [
+      "item:12662"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Major Mana Potion": {
+     "ids": [
+      "item:13444"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Talisman of Ephemeral Power": {
+     "ids": [
+      "item:18820"
+     ],
+     "casts": 0.667,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Berserking": {
+     "ids": [
+      "spell:26297"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    },
+    "Elemental Mastery": {
+     "ids": [
+      "spell:16166"
+     ],
+     "casts": 0.333,
+     "damageShare": 0.0,
+     "threatShare": null,
+     "damagePerMinute": 0.0
+    }
+   },
+   "swings": {}
+  }
+ },
+ "notRun": {
+  "healers (druid restoration, shaman restoration, priest holy/discipline, paladin holy)": "commented out of RegisterAll in both sims (sim/register_all.go); the CLI cannot run them",
+  "shaman.warden (tank shaman)": "registered in the Classic sim but not requested; its preset gear is blank"
+ }
+}

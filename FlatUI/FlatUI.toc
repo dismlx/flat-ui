@@ -114,6 +114,7 @@ ItemCompare.lua
 ChatHistory.lua
 SpellData.lua
 SpellModel.lua
+RotationData.lua
 GearModel.lua
 GearAvoid.lua
 SpellLines.lua

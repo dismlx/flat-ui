@@ -322,7 +322,11 @@ local ADDON_NAME, ns = ...
 -- GetAttackPowerForStat and the others, only while the game gives stats plain), reads once a session the description of one spell
 -- (C_Spell.GetSpellDescription) to see whether the game's texts count spell power, and reads the fields processingInfo, supportsItemComparison
 -- and suppressAutomaticCompareItem the game keeps on a tooltip it builds (TooltipDataHandler.lua:281, TooltipDataRules.lua:168-176). The spells
--- chosen are kept in FlatUICharDB.gearSpells.
+-- chosen are kept in FlatUICharDB.gearSpells. Their Overall line counts what they do in a minute: the swings and shots for the whole minute, and
+-- each other spell as often as a minute of WoWSims' rotation for the player's class and spec uses it (RotationData.lua, numbers of the WoWSims
+-- Classic simulator, MIT licence; a next-swing strike on the share of the swings it takes there), the spec read from a druid's form, a tank's
+-- role and the talent tree with the most points (ns.PlayerTree, the C_Traits calls of MostPoints); with no rotation for them, as for a healer,
+-- each spell takes an even share of the minute's global cooldowns.
 -- With Avoidance (for tanks by default) the item lines and the window also show an enemy's swing against the player now and with the item: in the
 -- same plain moment as the other stats it reads the defense skill (UnitDefenseSkill), the chances to dodge, parry and block (GetDodgeChance,
 -- GetParryChance, GetBlockChance), armor (UnitArmor), block value (GetShieldBlock), the dodge agility gives (GetDodgeChanceFromAttribute) and whether a
@@ -735,6 +739,18 @@ function ns.PlayerRole()
 		return class == "PRIEST" and "healer" or "damage", ("Suggested for a %s."):format(word), ("your class, %s"):format(word)
 	end
 	return "damage", nil, nil
+end
+
+-- The talent tree of the player's class with the most points of the talents applied (MostPoints, above): its place, 1 to 3 in the order of
+-- ROLE_TREES, and its name, or nil when no tree has a point, the client does not say or the class is none of the nine. The gear comparison's
+-- Overall line picks its WoWSims rotation by it (GearModel.lua, RotationData.lua). It only reads, as ns.PlayerRole does.
+function ns.PlayerTree()
+	local class = Ask(UnitClassBase, "player")
+	local trees = IsText(class) and ROLE_TREES[class] or nil
+	if not trees then
+		return nil
+	end
+	return MostPoints(#trees)
 end
 
 -- Options ---------------------------------------------------------------------------------
