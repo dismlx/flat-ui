@@ -63,10 +63,11 @@ local _, ns = ...
 -- by 0.05% or more, "Not wearable yet:" with the game's requirement and the level the numbers are for, each compared weapon line the player has yet
 -- to raise (G.Compare's skills: the numbers count every weapon at the full skill of its line), and what is not counted (design 2.3, 2.6), in Compact
 -- (chat.tipDetail) joined into one line with "; " between them, a note cut with "..." keeping its dots, and in Full each its own. Each block is kept
--- by the item's link (by its slot and link for a worn one), M.Version(), ns.GearListVersion(), A.Stamp and Overall totals, at most 64 and the oldest
--- first out (design 4.6), and all are dropped at each refresh of the module, where a row may have changed. A block is added once for each build of a
--- tooltip, as Chat.lua adds its own lines (Chat.lua:795-806): the game fetches new data for each build and may run the post calls more than once for
--- one, so the same data with the lines of the first call still there is the same build (NumLines). Each AddLine and AddDoubleLine is under pcall, and
+-- by the item's link (by its slot and link for a worn one), M.Version(), ns.GearListVersion(), A.Stamp, the WoWSims rotation of the Overall line
+-- (G.Rotation) and Overall totals, at most 64 and the oldest first out (design 4.6), and all are dropped at each refresh of the module, where a row
+-- may have changed. A block is added once for each build of a tooltip, as Chat.lua adds its own lines (Chat.lua:795-806): the game fetches new
+-- data for each build and may run the post calls more than once for one, so the same data with the lines of the first call still there is the
+-- same build (NumLines). Each AddLine and AddDoubleLine is under pcall, and
 -- one the game refuses stops the adding for that build. In a fight, where the game withholds the stats (design 4.7), a block worked out before it
 -- shows, else one dim line (InCombatLockdown, and SpellModel's old stats). A reason G.Compare gives shows as one light grey line ("Needs a one-hand
 -- weapon; not compared."), but one it marks quiet (ammunition the game does not use for the player, an off-hand weapon for one who does not dual
@@ -1910,7 +1911,13 @@ local function BlockFor(key, data, link, slot, guid)
 		return nil
 	end
 	local totals = Opt("gearTotals") ~= "off"
-	local cacheKey = table.concat({ key, tostring(Version(M)), list.version, tostring(Avoid("Stamp")), tostring(totals) }, "|")
+	-- The WoWSims rotation the Overall line follows (G.Rotation, 0.5.30) changes with the talents and the form, which M.Version() does not follow.
+	local ok, rotation = false, nil
+	if type(G.Rotation) == "function" then
+		ok, rotation = pcall(G.Rotation, info.role)
+	end
+	rotation = ok and type(rotation) == "table" and rotation.id or ""
+	local cacheKey = table.concat({ key, tostring(Version(M)), list.version, tostring(Avoid("Stamp")), tostring(totals), tostring(rotation) }, "|")
 	local kept = blocks.byKey[cacheKey]
 	if kept then
 		return kept

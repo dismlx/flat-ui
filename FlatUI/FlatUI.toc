@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.29
+## Version: 0.5.30
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -21,6 +21,7 @@ Sparkle.lua
 SparkleGlow.lua
 CameraZoom.lua
 CursorRing.lua
+LavaWalk.lua
 Fonts.lua
 Nameplates.lua
 PlateThreat.lua
@@ -78,6 +79,7 @@ Windows.lua
 Items.lua
 ItemMarks.lua
 CharacterDurability.lua
+CharacterThorns.lua
 UnitFrames.lua
 UnitFramePortrait.lua
 UnitFrameLevel.lua
@@ -114,6 +116,7 @@ ItemCompare.lua
 ChatHistory.lua
 SpellData.lua
 SpellModel.lua
+RotationData.lua
 GearModel.lua
 GearAvoid.lua
 SpellLines.lua
