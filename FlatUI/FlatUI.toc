@@ -58,6 +58,7 @@ EnemyCooldowns.lua
 Threat.lua
 HealerMana.lua
 GroupTools.lua
+PingBar.lua
 OwnBuffs.lua
 Absorbs.lua
 TrackerShapes.lua

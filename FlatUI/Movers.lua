@@ -196,6 +196,10 @@ local LIST = {
 	-- of every button at the default size in a row, and it grows down and to the right from there. It starts under the top of the screen.
 	{ name = "FlatUIGroupTools", label = "Group tools", point = "TOP", kind = "hud", own = true, noScale = true, width = 327, height = 24, x = 0, y = -100,
 		gate = "GroupToolsShown", changed = "GroupToolsMoved" },
+	-- The ping bar (PingBar.lua), which shows in a group: its top left corner is the top left corner of the box, which has the room of Ping and the
+	-- four pings of the game's wheel at the default size in a row, and it grows down or to the right from there. It starts under the group tools.
+	{ name = "FlatUIPingBar", label = "Ping bar", point = "TOP", kind = "hud", own = true, noScale = true, width = 132, height = 24, x = 0, y = -130,
+		gate = "PingBarShown", changed = "PingBarMoved" },
 	-- The reload notice (Reload.lua), which shows while a change needs a reload: its top left corner is the top left corner of the box, which has the
 	-- notice's size. It starts at the top of the screen, in the middle, and has a box whether or not it shows.
 	{ name = "FlatUIReloadNotice", label = "Reload notice", point = "TOP", kind = "hud", own = true, noScale = true, width = 460, height = 52, x = 0, y = -40,
