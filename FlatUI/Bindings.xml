@@ -2,6 +2,22 @@
 	<!-- MountKey.lua: the key of the Mount key page. It clicks the secure button Flat UI makes once the page is on and a key is bound. -->
 	<Binding name="CLICK FlatUIMountButton:LeftButton" category="Flat UI">
 	</Binding>
+	<!-- PingBar.lua: the keys of the Ping bar. Each clicks the secure button of one ping, which Flat UI makes once the page is on; it pings your
+	     target with the game's /ping, as the button's click does, in a fight too. PingBar.lua names them in the game's Key Bindings. -->
+	<Binding name="CLICK FlatUIPingPing:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIPingAttack:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIPingWarning:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIPingOnMyWay:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIPingAssist:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIPingNotThreat:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIPingThreat:LeftButton" category="Flat UI">
+	</Binding>
 	<!-- BagsBank.lua: the key of Flat UI bank. It clicks a plain button of Flat UI's own that opens or closes the bank window of the Bags page:
 	     live at the banker with Flat UI's bank window, else your bank as you last left it. BagsBank.lua names it in the game's Key Bindings. -->
 	<Binding name="CLICK FlatUIBankButton:LeftButton" category="Flat UI">

@@ -1382,6 +1382,28 @@ ns.PAGES = {
 		{ key = "layout", kind = "choice", default = "row", label = "Layout",
 			choices = { { "row", "In a row" }, { "rows", "Markers above the rest" }, { "column", "In a column" } } },
 	},
+	-- PingBar.lua: a bar of Flat UI's own with a button for each ping of the game, with its key. On by default; it shows in a group. /flatui move
+	-- places it.
+	{
+		key = "pingbar", label = "Ping bar",
+		{ key = "enabled", kind = "bool", default = true, label = "Show the ping bar",
+			tip = "A button for each ping of the game: Ping, Attack, Warning, On My Way and Assist. A click pings your target for your group, also in a fight. Each has a key under Flat UI in the game's Key Bindings. /flatui move places it." },
+		{ section = "When it shows" },
+		{ key = "show", kind = "choice", default = "group", label = "Show",
+			tip = "Hidden while pings are off in the game's options or your group lets only some members ping and you are not one; the tooltip of a button says why while a fight keeps it shown.",
+			choices = { { "group", "In a group" }, { "always", "Always" }, { "never", "Never, only its keys" } } },
+		{ section = "Pings" },
+		{ key = "noTarget", kind = "choice", default = "cursor", label = "With no target",
+			tip = "What a button or its key pings while you have no target. A click on the bar pings the ground behind it; a key pings where the mouse points.",
+			choices = { { "cursor", "The ground under the cursor" }, { "player", "You" }, { "none", "Nothing" } } },
+		{ key = "cooldown", kind = "bool", default = true, label = "Cooldown swipe",
+			tip = "The game lets you ping only so often: after a ping from the bar the buttons show when you can ping again." },
+		{ section = "Look" },
+		{ key = "size", kind = "number", default = 24, min = 16, max = 48, step = 2, label = "Button size" },
+		{ key = "spacing", kind = "number", default = 3, min = 0, max = 12, step = 1, label = "Spacing" },
+		{ key = "layout", kind = "choice", default = "row", label = "Layout", choices = { { "row", "Horizontal" }, { "column", "Vertical" } } },
+		{ key = "colours", kind = "bool", default = true, label = "Borders in the ping's colour" },
+	},
 	{
 		key = "windows", label = "Windows",
 		{ key = "enabled", kind = "bool", default = true, label = "Restyle windows", reload = "off", tip = "Also Which windows and Item slots. " .. RELOAD },
