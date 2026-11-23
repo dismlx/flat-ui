@@ -1,6 +1,7 @@
 ## 0.5.32
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Show thorns**: the line on the character page no longer runs under the weapon slots. It shows the total alone ("Thorns 34"), with a shield spike after it only where that fits ("Thorns 34, +20-30 on block"), sits under the right column of slots clear of the main hand, off hand, ranged and ammo slots, and is cut short with "..." rather than spill. The total of each school, which the line used to carry, is in its tooltip with each source, the spike and the total.
 
 ## 0.5.31
 

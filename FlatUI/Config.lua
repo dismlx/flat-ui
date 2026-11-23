@@ -1479,7 +1479,7 @@ ns.PAGES = {
 		{ key = "durability", kind = "bool", default = true, label = "Show durability",
 			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below." },
 		{ key = "thorns", kind = "bool", default = true, label = "Show thorns",
-			tip = "The damage an attacker takes each time it strikes you in melee, by school, under the right column of slots: Thorns, Retribution Aura, Fire Shield, items and shield spikes (on a block). Point at it for each source." },
+			tip = "The damage an attacker takes each time it strikes you in melee, one total under the right column of slots: Thorns, Retribution Aura, Fire Shield, items and shield spikes (on a block). Point at it for each source and school." },
 	},
 	-- Bags.lua and the Bags*.lua files: a bag window and a bank window of Flat UI's own in place of the game's, with sections, a search and the bags
 	-- and bank of your other characters. On by default for every character since 0.5.19 (a profile saved before then with every module that is on

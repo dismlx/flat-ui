@@ -1,12 +1,17 @@
 local _, ns = ...
 
--- Show thorns: what an attacker takes each time it strikes the player in melee, the damage shields, as one total a hit by school ("Thorns 45
--- (Nature 30, Arcane 15)"), on the character page of the Character window, under the right column of slots (the lowest is the second trinket,
--- Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:836-860), right-aligned, so it mirrors Show durability under the left column. The game's own
+-- Show thorns: what an attacker takes each time it strikes the player in melee, the damage shields, as one total a hit ("Thorns 45"), on the
+-- character page of the Character window, under the right column of slots (the lowest is the second trinket,
+-- Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:836-860), right-aligned, so it mirrors Show durability under the left column. The line lies
+-- at the height of the row of weapon slots (main hand, off hand, ranged and ammo, PaperDollFrame.xml:861-877, the main hand placed by
+-- PaperDollItemSlotButton_OnLoad, PaperDollFrame.lua:1934-1943), so it is never wider than the room between the right edge of the second trinket
+-- and the rightmost weapon slot that shows (GetRight and GetEffectiveScale of the slots, read each time it is written; 74 units where they cannot
+-- be read, the room left when the ammo slot shows), and text wider than that is cut with an ellipsis (SetWidth and SetWordWrap). A shield spike,
+-- which strikes only on a block, follows the total ("Thorns 45, +20-30 on block") only where that fits, and is not added to it. The game's own
 -- stats list is not touched: the text is this addon's, on a frame of its own made out of a fight on the item frame of the character page
--- (PaperDollItemsFrame, PaperDollFrame.xml:777), so it shows only on that page, as CharacterDurability.lua's does. A shield spike, which strikes
--- only on a block, follows the total ("block 20-30") and is not added to it. Pointing at the line lists each source in GameTooltip (SetOwner,
--- AddLine, AddDoubleLine, Show, and Hide only while IsOwned says the frame owns it), never in a fight, as the Compare gear button's tooltip.
+-- (PaperDollItemsFrame, PaperDollFrame.xml:777), so it shows only on that page, as CharacterDurability.lua's does. Pointing at the line lists
+-- each source with its school, the spike, the total and the total of each school in GameTooltip (SetOwner, AddLine, AddDoubleLine, Show, and
+-- Hide only while IsOwned says the frame owns it), never in a fight, as the Compare gear button's tooltip.
 -- What is read, only what the client gives addon code:
 --   The worn items' tooltip lines (ns.GearModel.TipLines, C_TooltipInfo.GetInventoryItem, TooltipInfoDocumentation.lua:389-405, the lines the
 --   Gear comparison reads): a line that says an attacker that strikes you takes a number of damage of a school ("Equip: When struck in combat
@@ -31,7 +36,12 @@ local KEY, PART, ROW = "windows", "thorns", "windows.thorns"
 local FONT = "GameFontHighlightSmall"
 -- The frame lies this far under the second trinket slot, and where the slot is not found, this far from the bottom left of the page.
 local GAP, FALLBACK_X, FALLBACK_Y = -12, 24, 24
-local HEIGHT, LEAST_WIDTH, PAD = 16, 40, 4
+local HEIGHT, LEAST_WIDTH = 16, 40
+-- The line keeps this far from the rightmost weapon slot. Where the slots cannot be read it is at most ROOM wide: the second trinket's right edge
+-- lies 81 units right of the ammo slot's (LeftPaneHost is 398 wide, CharacterFrame.xml:407-408; the trinket's right edge 20 in from it, the
+-- main hand's centre 60 left of its middle, then the off hand, the ranged slot and the ammo slot 6, 6 and 19 apart, 40, 40, 40 and 27 wide).
+local SPACE, ROOM = 6, 74
+local WEAPONS = { "CharacterMainHandSlot", "CharacterSecondaryHandSlot", "CharacterRangedSlot", "CharacterAmmoSlot" }
 local REREAD = 0.25
 local OFF_HAND, FIRST_SLOT, LAST_SLOT = 17, 1, 19
 -- The tooltip line kinds of Enum.TooltipDataLineType the Gear comparison names (GearModel.lua K): Use, Equip and Chance on hit lines.
@@ -304,8 +314,8 @@ local function Read()
 	return read
 end
 
--- The line: "Thorns 45 (Nature 30, Arcane 15)", the spike after it.
-local function Words(read)
+-- The total of each school, "Nature 30, Arcane 15", and how many schools there are.
+local function Schools(read)
 	local parts = {}
 	for school = 1, #ENGLISH do
 		local amount = read.schools[school]
@@ -313,17 +323,68 @@ local function Words(read)
 			parts[#parts + 1] = ("%s %d"):format(SchoolName(school), Round(amount))
 		end
 	end
+	return table.concat(parts, ", "), #parts
+end
+
+-- The line: "Thorns 45", and with the spike "Thorns 45, +20-30 on block".
+local function Words(read, spike)
 	local text = ("Thorns %d"):format(Round(read.total))
-	if #parts > 0 then
-		text = ("%s (%s)"):format(text, table.concat(parts, ", "))
-	end
-	if read.spike then
-		text = ("%s, block %d-%d"):format(text, read.spike.least, read.spike.most)
+	if spike and read.spike then
+		text = ("%s, +%d-%d on block"):format(text, read.spike.least, read.spike.most)
 	end
 	return text
 end
 
 -- Showing --------------------------------------------------------------------------------------------------------------------------------------
+
+-- The width a font string's text needs, whatever width it is given; 0 when the client does not say.
+local function TextWidth(text)
+	local ok, width = pcall(text.GetUnboundedStringWidth, text)
+	if not (ok and Finite(width)) then
+		ok, width = pcall(text.GetStringWidth, text)
+	end
+	return ok and Finite(width) and width or 0
+end
+
+-- The right edge of a frame in screen units, or nil when it is not there, does not show or the client does not say.
+local function Edge(frame, shown)
+	if not Usable(frame) or ns.Forbidden(frame) then
+		return nil
+	end
+	if shown then
+		local ok, on = pcall(frame.IsShown, frame)
+		if not ok or IsSecret(on) or on ~= true then
+			return nil
+		end
+	end
+	local ok, right = pcall(frame.GetRight, frame)
+	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
+	if ok and okScale and Finite(right) and Finite(scale) and scale > 0 then
+		return right * scale
+	end
+	return nil
+end
+
+-- The width the line may take in the frame's units: from the right edge of the second trinket slot to the rightmost weapon slot that shows,
+-- less SPACE; ROOM where they cannot be read.
+local function Room(frame)
+	local right = Edge(_G.CharacterTrinket1Slot, false)
+	local ok, scale = pcall(frame.GetEffectiveScale, frame)
+	if not (right and ok and Finite(scale) and scale > 0) then
+		return ROOM
+	end
+	local most
+	for _, name in ipairs(WEAPONS) do
+		local edge = Edge(_G[name], true)
+		if edge and edge < right and (most == nil or edge > most) then
+			most = edge
+		end
+	end
+	if most == nil then
+		return ROOM
+	end
+	return math.max(1, math.floor((right - most) / scale) - SPACE)
+end
 
 local function Update()
 	local text, frame = state.text, state.frame
@@ -338,12 +399,18 @@ local function Update()
 	state.read = read
 	local colour = (read.total > 0 or read.spike) and WHITE or NONE
 	pcall(text.SetTextColor, text, colour[1], colour[2], colour[3], 1)
-	pcall(text.SetText, text, Words(read))
-	pcall(text.Show, text)
-	local ok, width = pcall(text.GetStringWidth, text)
-	if ok and Finite(width) then
-		pcall(frame.SetWidth, frame, math.max(LEAST_WIDTH, width + PAD))
+	-- The spike follows the total only where both fit; the text is never wider than the room, and is cut with an ellipsis where it would be.
+	local room = Room(frame)
+	pcall(text.SetText, text, Words(read, true))
+	local need = TextWidth(text)
+	if read.spike and (need <= 0 or need > room) then
+		pcall(text.SetText, text, Words(read, false))
+		need = TextWidth(text)
 	end
+	local width = need > 0 and math.min(math.ceil(need) + 1, room) or room
+	pcall(text.SetWidth, text, width)
+	pcall(frame.SetWidth, frame, width)
+	pcall(text.Show, text)
 end
 
 -- A read a moment from now, once, while the page shows.
@@ -414,6 +481,10 @@ local function Say()
 	end
 	if any then
 		AddSource(tip, "Total a hit", nil, ("%d"):format(Round(read.total)))
+		local schools, count = Schools(read)
+		if count > 1 then
+			AddSource(tip, "By school", nil, schools, DIM)
+		end
 	else
 		pcall(tip.AddLine, tip, "Nothing you wear and no buff on you deals damage to attackers.", DIM[1], DIM[2], DIM[3], true)
 	end
@@ -463,6 +534,7 @@ local function Make(page)
 	end
 	pcall(text.SetPoint, text, "RIGHT", frame, "RIGHT", 0, 0)
 	pcall(text.SetJustifyH, text, "RIGHT")
+	pcall(text.SetWordWrap, text, false)
 	-- Over the line the mouse shows the sources; clicks go through to the page.
 	pcall(frame.EnableMouse, frame, true)
 	pcall(frame.SetMouseClickEnabled, frame, false)
