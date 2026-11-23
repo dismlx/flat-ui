@@ -282,6 +282,10 @@ local ADDON_NAME, ns = ...
 -- also with the page off, so the registrations are taken back once it can be made.
 -- Group tools (on by default) lays secure buttons of its own over its icons, made, placed, shown and given attributes only out of combat: the game's
 -- raidtarget action, /readycheck and /countdown. A plain button asks for a role poll, and it writes tooltips in GameTooltip.
+-- Ping bar (PingBar.lua, on by default, in a group) lays secure buttons of its own (SecureActionButtonTemplate, named FlatUIPingPing, FlatUIPingAttack
+-- and so on for their key bindings in Bindings.xml) over its icons, made, placed, shown and given attributes (type macro, a /ping macrotext) only out
+-- of combat, taken away when off; it reads C_Ping, C_PartyInfo.GetRestrictPings and enablePings, sets a PostClick of its own that reads
+-- C_Ping.GetCooldownInfo for a swipe of its own, and writes tooltips in GameTooltip. It writes no binding, setting or macro of the game's.
 -- Cooldown pulse (on by default) is up to three frames of its own on UIParent that take no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
 -- Absorb shields draws bars of its own on frames of its own on UIParent (placed by the movers, FlatUIAbsorbs and FlatUIAbsorbsTarget) and makes
@@ -406,7 +410,7 @@ local ADDON_NAME, ns = ...
 -- next such change. It goes when nothing needs a reload any more. What needs one is the value each such row had at login (ns.ReloadStart) against
 -- the profile in use (ns.ReloadLines), which Home's Needs a reload also lists.
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "fonts", "fade", "hide" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.
