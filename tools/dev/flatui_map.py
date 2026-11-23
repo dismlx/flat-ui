@@ -1452,13 +1452,13 @@ AREAS = [
         PartySync EnemyCooldowns Threat HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
         TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs"""),
     ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
-        BagsLayout BagsWindow BagsBank BagsTooltip BagsOrder BagsPins Windows ItemMarks CharacterDurability Hud MapButtons
+        BagsLayout BagsWindow BagsBank BagsTooltip BagsOrder BagsPins Windows ItemMarks CharacterDurability CharacterThorns Hud MapButtons
         AuraTime XpStats XpBar QuestCount QuestieSkin MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat
         ChatText ChatTips ChatLinks ItemCompare ChatHistory SpellData SpellModel GearModel GearAvoid SpellLines GearLines GearWindow
-        ItemIndex GearSearch GearButton Movers MoversMode MoversSnap Hide Tooltip"""),
+        ItemIndex RotationData GearSearch GearButton Movers MoversMode MoversSnap Hide Tooltip"""),
     ("errands", "Errands, panels and world", """Sparkle SparkleGlow CameraZoom CursorRing MountKey Errands ErrandsMerchant
         ErrandsLoot ErrandsTrainer ErrandsPopups ErrandsSocial ErrandsQuests ErrandsRanks ErrandsLevelling
-        ErrandsNavigation ErrandsBulkBuy ConsumableData Consumables DataPanels DataStreams"""),
+        ErrandsNavigation ErrandsBulkBuy ConsumableData Consumables DataPanels DataStreams LavaWalk"""),
 ]
 AREA_PATTERNS = [("SetupDraw*", re.compile(r"^SetupDraw"), "setup")]
 
