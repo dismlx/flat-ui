@@ -282,9 +282,15 @@ local ADDON_NAME, ns = ...
 -- also with the page off, so the registrations are taken back once it can be made.
 -- Group tools (on by default) lays secure buttons of its own over its icons, made, placed, shown and given attributes only out of combat: the game's
 -- raidtarget action, /readycheck and /countdown. A plain button asks for a role poll, and it writes tooltips in GameTooltip.
--- Ping bar (PingBar.lua, on by default, in a group) lays secure buttons of its own (SecureActionButtonTemplate, named FlatUIPingPing, FlatUIPingAttack
--- and so on for their key bindings in Bindings.xml) over its icons, made, placed, shown and given attributes (type macro, a /ping macrotext) only out
--- of combat, taken away when off; it reads C_Ping, C_PartyInfo.GetRestrictPings and enablePings, sets a PostClick of its own that reads
+-- Ping bar (PingBar.lua, on by default, in a group) lays secure buttons of its own (SecureActionButtonTemplate) over its icons, makes one more for
+-- each key (named FlatUIPingPing, FlatUIPingAttack and so on for their key bindings in Bindings.xml, no size, "/ping <n>": what is under the mouse)
+-- and a place button over the whole screen (FlatUIPingPlace, "/ping [@cursor] <n>"), all made, placed and given attributes (type macro, a /ping
+-- macrotext) only out of combat, taken away when off. A click on the bar arms its ping: a snippet wrapped round the button's OnClick
+-- (SecureHandlerWrapScript, a SecureHandlerBaseTemplate header of its own with a frame reference) gives the place button its line, shows it and
+-- gives Escape to it (SetBindingClick, an override binding owned by the place button), in a fight too; the next left click anywhere pings that spot
+-- and a snippet after it hides the place button, a right click or Escape hides it unsent, and a snippet on its OnHide clears the binding. A
+-- Shift-click with a target runs the bar button's "/ping [@target,exists] <n>" at once. Over the place button it sets the game's ping cursor
+-- (SetCursor, ResetCursor). It reads C_Ping, C_PartyInfo.GetRestrictPings and enablePings, sets a PostClick of its own that reads
 -- C_Ping.GetCooldownInfo for a swipe of its own, and writes tooltips in GameTooltip. It writes no binding, setting or macro of the game's.
 -- Cooldown pulse (on by default) is up to three frames of its own on UIParent that take no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.

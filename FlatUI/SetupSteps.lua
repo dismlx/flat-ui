@@ -1526,9 +1526,8 @@ ns.SETUP_STEPS = {
 		{ "grouptools.layout", "o", "behaviour", "Lays the buttons out in a row, in two rows or in a column." },
 	} },
 	{ id = "pingbar", area = "Ping bar", title = "Ping bar", draw = "mock-screen", built = false, rows = {
-		{ "pingbar.enabled", "c", "behaviour", "Shows a bar with a button for each ping of the game, each with a key in the game's Key Bindings, placed with the movers." },
+		{ "pingbar.enabled", "c", "behaviour", "Shows a bar with a button for each ping of the game: click one, then click where to ping. Each also has a key in the game's Key Bindings that pings what is under the mouse, and the movers place the bar." },
 		{ "pingbar.show", "o", "behaviour", "Chooses whether the bar shows in a group, always, or never, when only its keys ping." },
-		{ "pingbar.noTarget", "o", "behaviour", "Chooses what a ping hits while you have no target: the ground under the cursor, you, or nothing." },
 		{ "pingbar.cooldown", "r", "behaviour", "Shows on the buttons when you can ping again." },
 		{ "pingbar.size", "o", "behaviour", "Sets the size of the buttons." },
 		{ "pingbar.spacing", "r", "behaviour", "Sets the room between the buttons." },

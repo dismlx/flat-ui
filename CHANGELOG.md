@@ -1,6 +1,7 @@
 ## 0.5.33
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Ping bar**: click a ping, then click where. A click on a button no longer pings at once: the cursor turns into the game's ping cursor, a line by the bar says which ping waits, and the next left click anywhere on the screen pings that spot for your group, also in a fight; right-click or Esc cancels. Before, a click with no target pinged the world behind the bar itself, where the cursor was (often the sky, which the game refuses), so the bar seemed to do nothing. **Shift-click** pings your target at once, as a click did before (with no target it works as a click). The keys under **Flat UI** in the game's Key Bindings now ping what is under the mouse at once, as the game's own ping keys do, even with a target: hover the spot, press the key. **With no target** is gone, as neither a click nor a key uses it now. The tooltips say what a click, a Shift-click and the key do.
 
 ## 0.5.32
 
