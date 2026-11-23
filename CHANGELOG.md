@@ -1,6 +1,7 @@
 ## 0.5.31
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Combat text**, **Combat text for you**: each hit, heal or word on you shows once, where some showed twice. The game's own Scrolling Combat Text for Self kept drawing its numbers beside Flat UI's after a fresh login (the game puts back the values it keeps for your account after Flat UI has turned it off), after the game's options or another addon turned it on, and once loaded it never heard Flat UI turn it off again until a `/reload`. Flat UI now turns it off again each time it comes back on and tells the game's text through the game's own setting, so it stops at once. In a raid, with **Where friendly numbers show** on, a hit on you also showed over your own raid frame or your own nameplate from the other names the game gives you; those copies are left out while **Combat text for you** shows. Two equal hits in a row still show as two.
 
 ## 0.5.30
 

@@ -8,7 +8,9 @@ local _, ns = ...
 -- The same file works out the text for the player's own character from UNIT_COMBAT for "player" (or "vehicle") and hands it to the Incoming
 -- scroll area of ScrollText.lua, which also draws your hits in the Outgoing area. The game's own text for the player takes its place from the
 -- handle of the movers, which the game gives no setting for, so while Combat text for you is not Off the game's Scrolling Combat Text for
--- Self (enableFloatingCombatText) is written "0" as well.
+-- Self (enableFloatingCombatText) is written "0" as well, again whenever the game or anyone else turns it on, and through the game's own
+-- setting while the game's text is loaded (OwnSwitch). A hit on you shows there alone: the other tokens that name you (your raid token, your
+-- own nameplate, the target while you target yourself) show no copy of it (Yourself).
 -- Numbers over friendly units come from the same event, for the party and raid tokens and the pet token and for friendly nameplates. They
 -- are drawn over the plate or over the unit's party or raid frame, and while they show the game's healing row is written "0".
 -- The combat alerts of the page, No target and +Combat and -Combat, are CombatCues.lua.
@@ -425,8 +427,12 @@ end
 
 -- The game's own text for the player is off while Combat text for you shows the player's numbers. At login this is written at PLAYER_LOGIN,
 -- before the game registers its settings (Blizzard_SettingsRegistrar.lua:11-22) and loads its combat text only for a variable that is on
--- (CombatOverrides.lua:53, Blizzard_Settings.lua:667-679), so the game's text does not load at all. A change during a session goes through
--- the callback the game's text listens to (CombatText.lua:17-28 of the game's).
+-- (CombatOverrides.lua:53, Blizzard_Settings.lua:667-679), so the game's text does not load at all. Once loaded, the game's text hears its
+-- switch only through the callback of the game's own setting (CombatText.lua:17-28 of the game's, Blizzard_Setting.lua:124-136), and a plain
+-- C_CVar.SetCVar reaches that callback only while the game's options window is open (SettingsPanel OnShow, Blizzard_SettingsPanel.lua:104),
+-- so while it is loaded the switch is written through that setting (TellSetting). The game's values for the account can come after the
+-- login (VARIABLES_LOADED) and put the switch back on, and the game's options, its defaults or another addon can turn it on at any time:
+-- each time it is written "0" again (OnVariables, OnCVar), so the game's numbers for you never show beside Flat UI's.
 local function OwnSwitch()
 	if Opt("own") ~= "off" then
 		return "0"
@@ -450,9 +456,40 @@ local VARS = {
 	{ name = "WorldTextStartPosRandomness_v2", default = "1.0", value = Spread },
 	{ name = "WorldTextGravity_v2", default = "0.500000", value = Movement },
 	{ name = HEAL_VAR, default = "1", value = FriendHealSwitch },
-	-- Not first: Sync takes proven from the first row.
-	{ name = "enableFloatingCombatText", default = "0", value = OwnSwitch, keep = true },
+	-- Not first: Sync takes proven from the first row. Last: OnVariables takes it from here. setting: written through the game's setting
+	-- while the game's text is loaded (TellSetting).
+	{ name = "enableFloatingCombatText", default = "0", value = OwnSwitch, keep = true, setting = true },
 }
+local SELF_VAR = VARS[#VARS]
+
+-- True once the game's own text for the player is loaded: Blizzard_CombatText, which the game loads on demand while its switch is on
+-- (Blizzard_CombatText.toc). CombatText_UpdateDisplayedMessages is there only then (CombatOverrides.lua:254-260).
+local function GameTextLoaded()
+	if type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" then
+		local ok, loaded = pcall(C_AddOns.IsAddOnLoaded, "Blizzard_CombatText")
+		if ok and Plain(loaded, "boolean") then
+			return loaded
+		end
+	end
+	return type(CombatText_UpdateDisplayedMessages) == "function"
+end
+
+-- Writes a switch with the game's own setting (Settings.SetValue, applied at once), whose callback the loaded text of the game hears, as
+-- the game's options do. Only for a row marked setting, while the game's text is loaded and its setting is made. True when the variable
+-- now holds the text.
+local function TellSetting(var, text)
+	if not var.setting or (text ~= "0" and text ~= "1") or not GameTextLoaded() then
+		return false
+	end
+	if not (type(Settings) == "table" and type(Settings.GetSetting) == "function" and type(Settings.SetValue) == "function") then
+		return false
+	end
+	local ok, setting = pcall(Settings.GetSetting, var.name)
+	if not ok or setting == nil then
+		return false
+	end
+	return pcall(Settings.SetValue, var.name, text == "1", true) and Same(Read(var.name), text)
+end
 
 -- The string a variable is to hold, or nil.
 local function Wanted(var)
@@ -470,7 +507,9 @@ end
 -- afterwards. A value that changed to something else than asked was changed by the game. Returns what the game holds now.
 local function Write(var, text)
 	local before = Read(var.name)
-	pcall(C_CVar.SetCVar, var.name, text)
+	if not TellSetting(var, text) then
+		pcall(C_CVar.SetCVar, var.name, text)
+	end
 	local kept = Read(var.name)
 	if var.note then
 		ns.ClearNote(KEY, var.note)
@@ -621,7 +660,7 @@ local FRAMES_FOR = 1
 -- live and shown: friendly numbers on screen and shown. reports: hit reports that came for friendly units, by kind of token (plates, group, pet).
 -- same: reports dropped as the same hit under a second token. noAnchor: reports with no plate or frame to draw over. unknown: Target only
 -- answers the game withheld. forbidden: friendly plates the game kept from addons. recent: the last report for each anchor.
-local friend = { live = 0, shown = 0, reports = 0, plates = 0, group = 0, pet = 0, noAnchor = 0, unknown = 0, same = 0, forbidden = 0,
+local friend = { live = 0, shown = 0, reports = 0, plates = 0, group = 0, pet = 0, noAnchor = 0, unknown = 0, same = 0, forbidden = 0, self = 0,
 	last = {}, recent = setmetatable({}, { __mode = "k" }) }
 -- The frames of the party, the raid and the pet by unit token, and when they were read.
 local frames = { at = 0, byUnit = {} }
@@ -1641,6 +1680,18 @@ local function ActiveUnit()
 	return "player"
 end
 
+-- True when another token names the character whose hits the Incoming area shows while Combat text for you is not Off: in a raid the
+-- player's raid token, the player's own nameplate, or the target while you target yourself. The game sends UNIT_COMBAT once for each token
+-- of a unit, so one hit on you also comes under these, and it shows in the Incoming area alone, not again over your raid frame or your
+-- plate. A withheld answer is no (UnitIsUnit is secret only on addon-restricted maps, UnitDocumentation.lua:2410-2414).
+local function Yourself(unit)
+	if Opt("own") == "off" then
+		return false
+	end
+	local ok, same = pcall(UnitIsUnit, unit, ActiveUnit())
+	return ok and Plain(same, "boolean") and same
+end
+
 -- A hit report for the player's own character. It never sets proven and never writes a variable of the game's.
 local function OnOwn(unit, event, flag, amount, school)
 	if Opt("own") == "off" then
@@ -1850,6 +1901,10 @@ local function OnFriendToken(token, event, flag, amount, school)
 		end
 	else
 		friend.group = friend.group + 1
+		if Yourself(token) then
+			friend.self = friend.self + 1
+			return
+		end
 	end
 	if not ForTarget(token) then
 		return
@@ -1874,6 +1929,10 @@ end
 local function OnFriendPlate(plate, unit, event, flag, amount, school)
 	friend.reports, friend.plates = friend.reports + 1, friend.plates + 1
 	Remember(friend.last, unit, event, flag, amount, school)
+	if Yourself(unit) then
+		friend.self = friend.self + 1
+		return
+	end
 	if not Opt("friendPet") then
 		local ok, owned = pcall(UnitIsOwnerOrControllerOfUnit, "player", unit)
 		if ok and Plain(owned, "boolean") and owned then
@@ -3387,7 +3446,7 @@ end
 -- reports of the target token and leaves the nameplate tokens alone, so one enemy gives one copy of each report. A hit on an enemy that is
 -- not the target scrolls only with Both.
 local function OnTarget(unit, event, flag, amount, school)
-	if not Plain(event, "string") or event == "HEAL" then
+	if not Plain(event, "string") or event == "HEAL" or Yourself(unit) then
 		return
 	end
 	local ok, attackable = pcall(UnitCanAttack, "player", unit)
@@ -3559,6 +3618,42 @@ local function OnRoster()
 	end
 end
 
+-- The game's values for the account have come (VARIABLES_LOADED, which can come after the login and put back the values kept for the
+-- account, the switch of the game's text for you among them): every row is written again. The game loads its text for you once both this
+-- and PLAYER_ENTERING_WORLD have come (Blizzard_SettingsRegistrar.lua:11-22), maybe in this same event before this handler, so a game's
+-- text that loaded is told through its setting even when the switch already reads "0".
+local function OnVariables()
+	pcall(Sync)
+	local wanted = Wanted(SELF_VAR)
+	if wanted ~= nil and Same(Read(SELF_VAR.name), wanted) then
+		pcall(TellSetting, SELF_VAR, wanted)
+	end
+end
+
+-- A variable changed (CVAR_UPDATE gives its name and its new value, ConsoleDocumentation.lua:174-183). When the switch of the game's text
+-- for you is turned on while Combat text for you shows (the game's options, their defaults, another addon), it is written "0" again one frame
+-- later, out of the game's own write: a setting ignores a write made while it writes (Blizzard_Setting.lua:100-105). Flat UI's own write,
+-- the value it wants, asks for nothing.
+local resync = false
+local function OnCVar(name, value)
+	if resync or not Plain(name, "string") or name:lower() ~= SELF_VAR.name:lower() then
+		return
+	end
+	local wanted = Wanted(SELF_VAR)
+	if wanted == nil or (Plain(value, "string") and Same(value, wanted)) then
+		return
+	end
+	if type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
+		pcall(Sync)
+		return
+	end
+	resync = true
+	C_Timer.After(0, function()
+		resync = false
+		pcall(Sync)
+	end)
+end
+
 -- A friendly plate the game keeps from addons.
 local forbiddenSeen = {}
 local function OnForbidden(unit)
@@ -3646,7 +3741,7 @@ local function Status()
 			lines[#lines + 1] = ("Hit reports for you that raised an error: %d. The first: %s"):format(own.failed, own.first)
 		end
 		if Read("enableFloatingCombatText") == "1" then
-			lines[#lines + 1] = "Scrolling Combat Text for Self is ticked in the game's options, so your numbers show twice. /reload unticks it."
+			lines[#lines + 1] = "Scrolling Combat Text for Self is ticked in the game's options and the game kept it on, so your numbers may show twice. /reload unticks it."
 		end
 	end
 	-- From build 70755 the game withholds every amount (UnitDocumentation.lua:4178), so a count of them says nothing and has no line here.
@@ -3681,8 +3776,8 @@ local function Report()
 	print(("Last hit report: %s"):format(Reported(last) or "none"))
 	print(("Your hits: %d shown, %d left out. Casts and swings seen: %d. Swings and shots the game reported: %d. Auras the game would not tell about: %d. Last hit: %s."):format(mine.kept, mine.left, mine.heard, mine.swingCount, mine.blind, mine.last or "none"))
 	local modes = { off = "Off", frames = "Party and raid frames", plates = "Friendly nameplates", both = "Both" }
-	print(("Friendly numbers: %s. Hit reports: %d nameplate, %d party or raid, %d pet. Shown: %d. No frame or nameplate to show on: %d. Repeated reports skipped: %d. Target check failed: %d. Nameplates the game hides from interface mods: %d."):format(
-		modes[Opt("friend")] or tostring(Opt("friend")), friend.plates, friend.group, friend.pet, friend.shown, friend.noAnchor, friend.same, friend.unknown, friend.forbidden))
+	print(("Friendly numbers: %s. Hit reports: %d nameplate, %d party or raid, %d pet. Shown: %d. No frame or nameplate to show on: %d. Repeated reports skipped: %d. Yours, left to Combat text for you: %d. Target check failed: %d. Nameplates the game hides from interface mods: %d."):format(
+		modes[Opt("friend")] or tostring(Opt("friend")), friend.plates, friend.group, friend.pet, friend.shown, friend.noAnchor, friend.same, friend.self, friend.unknown, friend.forbidden))
 	print(("Last friendly hit report: %s"):format(Reported(friend.last) or "none"))
 	print(("Friendly nameplate variables: players %s, pets %s, minions %s, NPCs %s."):format(Read("nameplateShowFriendlyPlayers") or "not known",
 		Read("nameplateShowFriendlyPlayerPets") or "not known", Read("nameplateShowFriendlyPlayerMinions") or "not known", Read("nameplateShowFriendlyNpcs") or "not known"))
@@ -3970,6 +4065,8 @@ ns.Register(KEY, {
 		UNIT_PET = OnRoster,
 		FORBIDDEN_NAME_PLATE_UNIT_ADDED = OnForbidden,
 		FORBIDDEN_NAME_PLATE_UNIT_REMOVED = OnForbiddenGone,
+		VARIABLES_LOADED = OnVariables,
+		CVAR_UPDATE = OnCVar,
 		PLAYER_LOGOUT = Leave,
 	},
 	slash = { combat = Command },
