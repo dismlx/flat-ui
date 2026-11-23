@@ -85,7 +85,9 @@ local ADDON_NAME, ns = ...
 -- it never writes Questie's saved settings.
 -- Combat text is the one module that writes console variables: nine of the game's combat number variables and the switch of its
 -- own text for the player (enableFloatingCombatText), each remembered in FlatUIDB.cvars before its first write and put back when
--- its page goes off. Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.
+-- its page goes off. While the game's text for the player is loaded, that switch is written with the game's own setting (Settings.SetValue
+-- of enableFloatingCombatText), the only write that text hears; it is written again when the game's values come (VARIABLES_LOADED) and when
+-- something else turns it on (CVAR_UPDATE). Its numbers are font strings on a frame of its own, in font objects it makes with CreateFont.
 -- Windows writes one game setting: the direction of the game's clean up (C_Container.SetSortBagsRightToLeft), only while Items gather is
 -- From the other end, remembered in FlatUICharDB.sortDirection before the first write and put back as the variables above are. While Backpack key
 -- opens every bag is on, it gives each key the player has for Toggle Backpack an override binding to Open All Bags (SetOverrideBinding, on a frame
