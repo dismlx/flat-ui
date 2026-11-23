@@ -636,6 +636,8 @@ local function TipLines(given, link, slot)
 	end
 	return out
 end
+-- Show thorns reads the worn items' lines the same way (CharacterThorns.lua).
+G.TipLines = TipLines
 
 -- The two numbers of a damage range in one of the client's formats.
 local function Range(name, text)
