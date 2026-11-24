@@ -11,8 +11,9 @@ local _, ns = ...
 --
 -- Make room: while the loot window is open and every general bag is full (the backpack and bags 1 to 4 of family 0; the reagent bag and the special
 -- bags, a trade bag, a quiver, an ammo pouch, a soul bag, take only certain items, so they are not counted), a button under the window deletes the
--- grey stack worth least at a vendor (a grey with no price counts as worth nothing). A quest item, a locked item, an item that binds to a quest and
--- an item on the keep list (/flatui keep) are never picked. The pick is read again at the click, and the item is picked up and deleted inside the
+-- grey stack worth least at a vendor (a grey with no price counts as worth nothing), and names it: Delete, its icon, its name and the count, the
+-- name cut short when long. A quest item, a locked item, an item that binds to a quest and an item on the keep list (/flatui keep) are never
+-- picked. The pick is read again at the click, and the item is picked up and deleted inside the
 -- click itself (C_Container.PickupContainerItem, then DeleteCursorItem), which the game allows only from a click, with the cursor empty before and
 -- the link checked after. After a delete the button stays hidden until the deleted slot reads empty or holds something else, so a quick second click
 -- cannot delete a second stack while the server has not answered. A loot of money only has no button. The button is made out of combat only, is
@@ -29,12 +30,15 @@ local ITEM_SLOT = 1
 local MASTER = 2
 local DEFAULT_BAGS = 4
 local DEFAULT_THRESHOLD = 2
+-- The words of the button for an item whose name the game does not say, and the icon of an item with none (the game's question mark).
+local GENERIC = "Make room: delete a grey item"
+local QUESTION_ICON = 134400
 
 local lootOpen = false
 -- Quick loot has run for this loot window.
 local looted = false
 local button
--- The grey item the button deletes: { bag, slot, id, link, count, value }.
+-- The grey item the button deletes: { bag, slot, id, link, count, value, icon, name }.
 local target
 -- A delete waits for its slot to read empty or changed: { bag, slot, link }, or nil.
 local waitBags
@@ -189,7 +193,9 @@ local function Candidate(bag, slot)
 		return nil
 	end
 	price = type(price) == "number" and price >= 0 and price or 0
-	return { bag = bag, slot = slot, id = id, link = link, count = count, value = price * count }
+	local icon, name = Field(info, "iconFileID"), link:match("%[(.-)%]") or Field(info, "itemName")
+	return { bag = bag, slot = slot, id = id, link = link, count = count, value = price * count, icon = type(icon) == "number" and icon or nil,
+		name = type(name) == "string" and name ~= "" and name or nil }
 end
 
 -- The cheapest grey item when every general bag (family 0, bags 0 to NUM_BAG_SLOTS) is full, or nil. A bag whose kind the game does not say,
@@ -249,6 +255,14 @@ local function Explain(owner)
 end
 
 local Update
+
+-- The words of the button: the icon and the name of the stack it deletes, with the count; the game cuts a long name short (Errands.Button).
+local function Label(entry)
+	if not entry.name then
+		return GENERIC
+	end
+	return ("Delete |T%d:0|t %s%s"):format(entry.icon or QUESTION_ICON, entry.name, entry.count > 1 and (" x%d"):format(entry.count) or "")
+end
 
 -- Whether the loot window still holds an item: a loot of money only needs no room. A client that does not say counts as holding one.
 local function ItemLeft()
@@ -347,7 +361,7 @@ Update = function()
 			target = nil
 			return
 		end
-		button = E.Button(frame, "Make room: delete a grey item", 200, function()
+		button = E.Button(frame, GENERIC, 200, function()
 			if not E.Run(part, Delete) then
 				Hide()
 			end
@@ -357,6 +371,7 @@ Update = function()
 		button:SetPoint("TOP", frame, "BOTTOM", 0, -4)
 		button.Keep(Wanted)
 	end
+	button.SetLabel(Label(target))
 	button.SetUsable(not Fight() and CursorEmpty())
 	button:Show()
 	if E.TipOwned(button) then

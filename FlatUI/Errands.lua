@@ -123,7 +123,8 @@ local function Over(button)
 end
 
 -- A flat button of the addon's own, as Reload.lua makes them: a frame with an outline and a label, clicked when the left mouse button comes up
--- over it after going down on it, so the click is the player's own (a hardware click). button.SetUsable greys it and turns its click off.
+-- over it after going down on it, so the click is the player's own (a hardware click). button.SetUsable greys it and turns its click off, and
+-- button.SetLabel changes its words, on one line that a long text cannot run out of.
 function Errands.Button(parent, text, width, onClick, onEnter)
 	local button = CreateFrame("Frame", nil, parent)
 	ns.Own[button] = true
@@ -132,6 +133,9 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 	local label = ns.OwnText(button, "OVERLAY", "GameFontHighlightSmall")
 	if label then
 		label:SetPoint("CENTER", button, "CENTER", 0, 0)
+		-- One line inside the outline: a text too long for it is cut short with an ellipsis by the game.
+		label:SetWidth(width - 12)
+		label:SetWordWrap(false)
 		label:SetText(text)
 	end
 	local down, hover, usable = false, false, true

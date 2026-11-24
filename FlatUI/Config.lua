@@ -2407,9 +2407,9 @@ ns.PAGES = {
 		{ key = "quickLoot", kind = "bool", default = true, label = "Quick loot",
 			tip = "When the game loots by itself (Auto Loot, or its key held), every slot is taken at once. Rolls still ask." },
 		{ key = "makeRoom", kind = "bool", default = true, label = "Make room in full bags",
-			tip = "A button under the loot window deletes the cheapest grey item while every bag is full." },
+			tip = "A button under the loot window deletes the cheapest grey item while every bag is full. It names the item first, as Delete Broken Fang x3." },
 		{ key = "trainAll", kind = "bool", default = true, label = "Train all button",
-			tip = "On the trainer window: learns everything the trainer offers that you can pay for. A profession is left to Train, which asks first. /flatui train does the same." },
+			tip = "On the trainer window: learns everything the trainer offers that you can pay for, and says how many, as Train all (4). A profession is left to Train, which asks first. /flatui train does the same." },
 	},
 	{
 		key = "errandsPopups", label = "Popups and invites", parent = "errands", owner = "errands",
