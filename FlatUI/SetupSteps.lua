@@ -1152,6 +1152,8 @@ ns.SETUP_STEPS = {
 		{ "partycd.count", "o", "mock-party-cooldowns" },
 		{ "partycd.size", "c", "mock-party-cooldowns" },
 		{ "partycd.iconBorder", "o", "mock-party-cooldowns" },
+		{ "partycd.kindBorder", "o", "behaviour", "Gives the border of each party icon the colour of its kind: interrupts, defensives and the others." },
+		{ "partycd.flash", "o", "behaviour", "Flashes a party icon white as its cooldown ends." },
 		{ "partycd.seconds", "o", "mock-party-cooldowns" },
 		{ "partycd.numbersFont", "o", "mock-party-cooldowns" },
 		{ "partycd.tooltips", "o", "behaviour", "Names the ability, the member and the time left when you point at a party icon, always, out of combat only or never." },

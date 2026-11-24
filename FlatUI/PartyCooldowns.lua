@@ -12,8 +12,10 @@ local _, ns = ...
 -- the account (/flatui party). A member who also runs Flat UI sends his cooldowns as addon messages (PartySync.lua), which start his
 -- timers here and show his ready icons. Pointing at an icon writes the ability with its class, in its kind's colour, the member's name, Ready or
 -- the time left, and whether he shares by Flat UI, in GameTooltip (Icon tooltips: On, Out of combat only or Off); the icon takes the mouse's
--- motion only, never a click, so clicks go through to the party frame below (SetMouseClickEnabled false, as Your buffs does). The helpers are
--- in one table, P.
+-- motion only, never a click, so clicks go through to the party frame below (SetMouseClickEnabled false, as Your buffs does). The border of an
+-- icon takes the colour of its ability's kind (Border colour by kind), and with Flash when ready a white flash plays as its sweep ends
+-- (IconRow.lua's flash); with Show on Only while on cooldown the row waits that half second before the ready icon goes. The helpers are in
+-- one table, P.
 
 local KEY = "partycd"
 local SPACING = 2
@@ -26,6 +28,8 @@ local UNKNOWN_ICON = 134400
 -- The colours of a tooltip's lines: Ready, and the text-dim of the windows (PanelLook.lua).
 local READY = { 0.4, 0.9, 0.4 }
 local DIM = { 0.66, 0.68, 0.62 }
+-- How long the flash of Flash when ready plays (IconRow.lua: FLASH), which a row waits before a ready icon leaves it.
+local FLASH = 0.5
 -- The kinds each switch shows (CooldownData.lua: ns.COOLDOWN_KINDS), in the order of the rows.
 local SWITCHES = { { "interrupts", { 1 } }, { "defensives", { 2, 6 } }, { "externals", { 3 } }, { "breaks", { 5 } }, { "group", { 9 } } }
 local LINE_ROSTER = "Party cooldowns: your subgroup is read from the raid roster here."
@@ -469,7 +473,8 @@ function P.Draw(row, slot, item)
 		if row.own and item.start then
 			seconds = P.Sweep(item.a) or seconds
 		end
-		key = ("%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), type(seconds) == "table" and "object" or "number", tostring(Opt("seconds")), Opt("numbersFont"), tostring(Opt("iconBorder")))
+		key = ("%s:%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), type(seconds) == "table" and "object" or "number", tostring(Opt("seconds")),
+			Opt("numbersFont"), tostring(Opt("iconBorder")), tostring(Opt("kindBorder")), tostring(Opt("flash")))
 	end
 	if row.drawn[slot] == key then
 		return
@@ -485,7 +490,8 @@ function P.Draw(row, slot, item)
 	if not used then
 		pcall(icon.cooldown.Clear, icon.cooldown)
 	end
-	ns.IconSet(icon, P.Texture(item.a), item.start, seconds, { kind = item.a.kind, numbers = Opt("seconds") == true, font = Opt("numbersFont"), border = Opt("iconBorder") })
+	ns.IconSet(icon, P.Texture(item.a), item.start, seconds, { kind = Opt("kindBorder") ~= false and item.a.kind or nil, numbers = Opt("seconds") == true,
+		font = Opt("numbersFont"), border = Opt("iconBorder"), flash = Opt("flash") == true and used })
 	local level = used and DARK or 1
 	icon.texture:SetDesaturated(used)
 	icon.texture:SetVertexColor(level, level, level)
@@ -494,6 +500,13 @@ end
 function P.RenderRow(row)
 	if row.testing then
 		return
+	end
+	-- The flash of a ready icon plays its half second before the row lets the icon go and moves the others along (P.Done).
+	if row.flashEnd then
+		if T.Now() < row.flashEnd then
+			return
+		end
+		row.flashEnd = nil
 	end
 	local list = P.Visible(row)
 	for slot = 1, #row.icons do
@@ -515,6 +528,17 @@ function P.Done(row, icon)
 	end
 	if row.own and icon.key then
 		T.Drop(row.owner, icon.key)
+	end
+	local look = icon.look
+	if look and look.flash and Opt("show") ~= "always" and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+		local owner = row.owner
+		row.flashEnd = T.Now() + FLASH - 0.05
+		C_Timer.After(FLASH, function()
+			if row.owner == owner then
+				ns.Try(KEY, P.RenderRow, row)
+			end
+		end)
+		return
 	end
 	P.RenderRow(row)
 end
@@ -542,7 +566,7 @@ end
 
 function P.Release(row)
 	P.assigned[row.owner] = nil
-	row.owner, row.unit, row.frame, row.side, row.testing, row.stackAt = nil, nil, nil, nil, nil, nil
+	row.owner, row.unit, row.frame, row.side, row.testing, row.stackAt, row.flashEnd = nil, nil, nil, nil, nil, nil, nil
 	for slot, icon in ipairs(row.icons) do
 		ns.IconClear(icon)
 		row.drawn[slot] = nil
@@ -1575,7 +1599,8 @@ function P.Hold(row)
 		icon.key = a and a.key or nil
 		if slot <= count then
 			-- The kind of the row's ability colours the border, else the sample's (kind true, IconRow.lua).
-			local look = { kind = a and a.kind or nil, numbers = Opt("seconds") == true, font = Opt("numbersFont"), border = Opt("iconBorder") }
+			local look = { kind = Opt("kindBorder") ~= false and a and a.kind or nil, numbers = Opt("seconds") == true, font = Opt("numbersFont"),
+				border = Opt("iconBorder") }
 			local texture = a and P.Texture(a) or ns.IconSamplePicture(slot)
 			local used = slot > 1 or Opt("show") ~= "always"
 			if not used then
@@ -1583,7 +1608,7 @@ function P.Hold(row)
 				pcall(icon.cooldown.Clear, icon.cooldown)
 				ns.IconSet(icon, texture, nil, nil, look)
 			else
-				look.kind, look.flash, look.sound = look.kind or true, false, false
+				look.kind, look.flash, look.sound = look.kind or (Opt("kindBorder") ~= false or nil), Opt("flash") == true, false
 				ns.IconSampleHeld(icon, slot, KEY, look, texture)
 			end
 			local level = used and DARK or 1
