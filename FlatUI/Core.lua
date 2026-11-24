@@ -44,6 +44,8 @@ local ADDON_NAME, ns = ...
 -- still that name, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
 -- textures of its own on each of the player's two cast bars (CreateTexture, out of combat on a bar the game may protect) and places them with
 -- SetPoint while a channel runs; a frame of its own hears the player's channel events while the row is on, and it only reads UnitChannelInfo.
+-- Cast time on your bars (CastTime.lua, off by default) fades the game's own time on the player's two cast bars and the pet's (CastTimeText,
+-- SetAlpha 0) while it is on and gives it its alpha back when the row goes off; the seconds are font strings of its own inside each bar.
 -- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
 -- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from

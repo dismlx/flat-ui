@@ -271,13 +271,13 @@ end
 -- Cast bars ---------------------------------------------------------------------------------------------------
 
 local CAST_ROWS = {
-	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 } },
-	{ opt = "pet", label = "Pet", name = "Firebolt", state = "cast", part = 0.45, game = { 195, 13 } },
+	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 }, time = "1.0" },
+	{ opt = "pet", label = "Pet", name = "Firebolt", state = "cast", part = 0.45, game = { 195, 13 }, time = "1.4" },
 	{ opt = "target", label = "Target", name = "Fireball", state = "cast", part = 0.6, game = { 150, 10 }, small = true, time = "1.2" },
 	{ opt = "focus", label = "Focus", name = "Arcane Missiles", state = "channel", part = 0.4, game = { 150, 10 }, small = true, time = "1.8" },
 	{ opt = "target", label = "Target, uninterruptible", name = "Polymorph", state = "shield", part = 0.7, game = { 150, 10 }, small = true, time = "0.9",
 		shield = true },
-	{ opt = "player", label = "Player, channel", name = "Drain Life", state = "channel", part = 0.55, game = { 208, 11 }, ticks = 5 },
+	{ opt = "player", label = "Player, channel", name = "Drain Life", state = "channel", part = 0.55, game = { 208, 11 }, ticks = 5, time = "2.7" },
 }
 -- The game's size of each bar (the rows above, and the boss bars of TargetFrame.xml:543-548, small bars as the target's).
 local CAST_GAME = { player = { 208, 11 }, pet = { 195, 13 }, target = { 150, 10 }, focus = { 150, 10 }, boss = { 150, 10 } }
@@ -396,6 +396,7 @@ local function BuildCast(stage)
 		p["castbars." .. path] = player.text
 	end
 	p["castbars.ownTime"] = target.time
+	p["castbars.playerTime"] = player.time
 	p["castbars.iconPos"] = target.icon
 	p["castbars.playerIcon"] = player.icon
 	return inst
@@ -584,8 +585,12 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 		row.text:SetShown(not look.hideName)
 		Look(row.text, look.percent, look.r, look.g, look.b, look.outline)
 	end
+	-- The time: Cast time on your bars for the player's and the pet's, Cast time on target and focus bars for the small ones, in the spell name's
+	-- size and outline (CastTime.lua copies the font of the bar's spell name).
 	if row.time then
-		row.time:SetShown(enabled and G("castbars.ownTime") == true and state ~= "interrupted")
+		local timeRow = (opt == "player" or opt == "pet") and "castbars.playerTime" or "castbars.ownTime"
+		row.time:SetShown(enabled and G(timeRow) == true and state ~= "interrupted")
+		Look(row.time, look.percent, nil, nil, nil, look.outline)
 	end
 end
 

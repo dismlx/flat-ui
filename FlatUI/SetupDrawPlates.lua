@@ -801,7 +801,8 @@ function P.Cast(p, spec, o, m)
 	p.spark:SetShown(o.spark and true or false)
 	p.ctime:ClearAllPoints()
 	p.ctime:SetPoint("RIGHT", p.cbar, "RIGHT", -4, 0)
-	P.Text(p.ctime, P.CAST_FONT * m.v, o.castTextSize, o.castOutline, { 1, 1, 1 })
+	-- The time takes the spell name's face, size and outline, as CastTime.lua copies them.
+	P.Text(p.ctime, P.CAST_FONT * m.v, o.castTextSize, o.castOutline, { 1, 1, 1 }, o.face)
 	p.ctime:SetText(("%.1f"):format(cast.left))
 	p.ctime:SetShown(o.castTime and true or false)
 end

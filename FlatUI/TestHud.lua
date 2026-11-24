@@ -7,7 +7,7 @@ local _, ns = ...
 -- parts change in Animate, while it shows and the bar's Moving is on: fills, text and alpha only. The numbers are fixed samples.
 --   Cast bars: the player's at PlayerCastingBarFrame, wherever Edit Mode or Lock to player frame put it, while the player casts nothing: a cast that
 --   fills over 2.5 seconds and holds half a second, a channel that drains (with the marks of its 5 ticks while Channel ticks on the player bar is
---   on), then an interrupted cast that flashes, in the colours of the Flat UI page.
+--   on), then an interrupted cast that flashes, in the colours of the Flat UI page, with its seconds while Cast time on your bars is on.
 --   The target's, the focus's and the pet's at TargetFrameSpellBar, FocusFrameSpellBar and PetCastingBarFrame, and the first boss's at
 --   Boss1TargetFrameSpellBar, each only while the stand-in of its unit shows (TM.Shown of "target", "focus", "pet" and "boss", TestUnits.lua): an enemy
 --   cast the player's interrupt is ready for (Interrupt ready colour while Interrupt readiness on enemy casts is on), then one that cannot be
@@ -157,7 +157,7 @@ local function CastStandIn(spec)
 			return TM.Shown(spec.unit)
 		end or nil,
 		Build = function(holder)
-			holder.row = ns.DrawCasts.Cast(holder, { opt = spec.opt, small = spec.small, shield = true, time = spec.small and "" or nil,
+			holder.row = ns.DrawCasts.Cast(holder, { opt = spec.opt, small = spec.small, shield = true, time = "",
 				name = spec.opt == "player" and "Shadow Bolt" or spec.names.cast, rank = spec.opt == "player" and "Rank 3" or nil,
 				ticks = spec.ticks })
 			holder.row.bar:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
