@@ -27,7 +27,8 @@ local _, ns = ...
 -- as on a boss, warns of nothing. The samples preview it: the player's sample bar passes 90% at some steps of test mode, its sound once
 -- through TestMode.lua's gate (TM.Sound).
 -- The window is a child of UIParent in the LOW strata with a flat background and a thin border in the colours of the Flat UI page, as the data
--- panels have, its bars in the bar texture of that page; it takes no mouse and hides with the interface. /flatui move places it (FlatUIThreat in
+-- panels have, its bars in Bar texture (the bar texture of that page by default, else one of its own, set again at once when it changes); it
+-- takes no mouse and hides with the interface. /flatui move places it (FlatUIThreat in
 -- Movers.lua: the window's top left corner is the top left corner of the box). /flatui threat shows sample bars for a few seconds, out of
 -- combat. While test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh and sorted again every 2 seconds as their shares
 -- move. Nothing of the game is changed.
@@ -447,7 +448,7 @@ function T.Alarm(entry, who)
 	end
 end
 
--- The bar texture of the Flat UI page, and the height of the text, on one bar. A texture the game refuses leaves a flat fill.
+-- Bar texture, and the height of the text, on one bar. A texture the game refuses leaves a flat fill.
 local function Paint(row, file, text)
 	if row.file ~= file then
 		local ok, done = pcall(row.bar.SetStatusBarTexture, row.bar, file)
@@ -467,7 +468,7 @@ end
 function T.Layout(n)
 	local width, height = Number("barWidth", 180), Number("barHeight", 16)
 	local text = TextHeight(height)
-	local file = ns.BarTexture() or WHITE
+	local file = ns.BarTexture(Opt("barTexture")) or WHITE
 	for index = 1, n do
 		Paint(T.Row(index), file, text)
 	end

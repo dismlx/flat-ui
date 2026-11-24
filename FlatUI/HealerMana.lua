@@ -19,9 +19,10 @@ local _, ns = ...
 -- read again when it changes (GROUP_ROSTER_UPDATE, PLAYER_ROLES_ASSIGNED, PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA; a burst is read once,
 -- a moment after the first).
 -- The window is a child of UIParent in the LOW strata in the look of the Threat list (Threat.lua): a flat background and a thin border in the
--- colours of the Flat UI page, its bars in the bar texture of that page; it takes no mouse and hides with the interface. /flatui move places it
--- (FlatUIHealerMana in Movers.lua: the window's top left corner is the top left corner of the box). /flatui healers shows sample bars for a few
--- seconds; while test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh. Nothing of the game is changed.
+-- colours of the Flat UI page, its bars in Bar texture (the bar texture of that page by default); it takes no mouse and hides with the
+-- interface. /flatui move places it (FlatUIHealerMana in Movers.lua: the window's top left corner is the top left corner of the box).
+-- /flatui healers shows sample bars for a few seconds; while test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh.
+-- Nothing of the game is changed.
 -- This follows the Healer Mana indicator of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/
 -- GroupTools.lua:485-713): the healers of the group by their role, their mana share through UnitPowerPercent and the curve to 100, and the
 -- dungeon or raid rule. Its lines of text, fonts, alignment and name width are bars in the look of the Threat list here, and while nobody in the
@@ -356,7 +357,7 @@ function H.Wash(row, unit, sample, word)
 	end
 end
 
--- The bar texture of the Flat UI page, and the height of the text and of the cup, on one bar. A texture the game refuses leaves a flat fill.
+-- Bar texture, and the height of the text and of the cup, on one bar. A texture the game refuses leaves a flat fill.
 local function Paint(row, file, text)
 	if row.file ~= file then
 		local ok, done = pcall(row.bar.SetStatusBarTexture, row.bar, file)
@@ -378,7 +379,7 @@ end
 function H.Layout(n)
 	local width, height = Number("barWidth", 150), Number("barHeight", 16)
 	local text = math.max(7, math.min(14, height - 4))
-	local file = ns.BarTexture() or WHITE
+	local file = ns.BarTexture(Opt("barTexture")) or WHITE
 	for index = 1, n do
 		Paint(H.Row(index), file, text)
 	end
