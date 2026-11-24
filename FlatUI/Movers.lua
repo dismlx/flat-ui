@@ -148,6 +148,10 @@ local LIST = {
 		gate = "PulseShown2", changed = "PulseMoved" },
 	{ name = "FlatUIPulse3", label = "Cooldown pulse, spot 3", point = "CENTER", kind = "hud", own = true, noScale = true, width = 72, height = 72, x = 120, y = 0,
 		gate = "PulseShown3", changed = "PulseMoved" },
+	-- The large proc art beside the character (ProcArt.lua): the middle of its holder, 204.8 square, is the middle of the box, and Art height raises it
+	-- from there. It starts in the middle of the screen, where the game draws its own, and has a box while Art beside the character is on.
+	{ name = "FlatUIProcArt", label = "Proc art", point = "CENTER", kind = "hud", own = true, noScale = true, width = 204.8, height = 204.8, x = 0, y = 0,
+		gate = "ProcArtShown", changed = "ProcArtMoved" },
 	-- Where the player's own combat text starts: the middle of its first number is the middle of the box. The default is left of and
 	-- below the middle of the screen, where the character stands.
 	{ name = "FlatUICombatSelf", label = "Combat text: you", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 40, x = -170, y = -30,

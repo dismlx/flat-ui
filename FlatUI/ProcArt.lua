@@ -2,7 +2,8 @@ local _, ns = ...
 
 -- The large art beside the character while a proc is up. The game's own overlay (SpellActivationOverlay.lua) is not built in Forever
 -- (Blizzard_FrameXML.toc:109-110), so the pieces are drawn here on frames of the addon, laid out as the game lays them out
--- (SpellActivationOverlay.lua:75-127): a holder of 204.8 square at the middle of the screen, a piece 102.4 by 204.8 to the left of it, its
+-- (SpellActivationOverlay.lua:75-127): a holder of 204.8 square at the middle of the box Proc art of /flatui move (FlatUIProcArt, Movers.lua; the
+-- middle of the screen until it is moved), raised by Art height, a piece 102.4 by 204.8 to the left of it, its
 -- mirror to the right, 204.8 by 102.4 above and below, 102.4 square at the corners, all times Art size, which is 150% by default (the game's
 -- is 100%), and the holder at Art opacity, 40% by default (the game's is 65%), so the art is large and faint. With Glow style Soft (the
 -- default) a piece fades in over 0.4 s and pulses gently while the proc is up, 1.035 times and back over a second each way; with As the game
@@ -20,6 +21,8 @@ local _, ns = ...
 
 local KEY = "trackers"
 local IsSecret = ns.IsSecret
+-- The box of the art in /flatui move.
+local MOVER = "FlatUIProcArt"
 
 -- LONG, SHORT: the long and short side of a piece, units. FADE_IN, FADE_OUT, PULSE_UP, PULSE_DOWN, PULSE_TIME: the game's animation.
 -- SOFT_FADE_IN, SOFT_UP, SOFT_DOWN, SOFT_TIME: the softer one of Glow style Soft. SIZE, ALPHA: Art size and Art opacity when the row gives no
@@ -88,6 +91,18 @@ end
 
 function ns.ProcArtOn()
 	return On()
+end
+
+-- The gate of the box Proc art in /flatui move: the Trackers page and Art beside the character are on.
+function ns.ProcArtShown()
+	return ns.Enabled(KEY) and On()
+end
+
+-- The box Proc art was moved or put back: the holder goes to its new spot.
+function ns.ProcArtMoved()
+	if holder then
+		PlaceHolder()
+	end
 end
 
 -- The pieces a location stands for.
@@ -383,10 +398,19 @@ local function Layout(rec, again)
 	end
 end
 
--- The holder: 204.8 square at the middle of the screen, as high as Art height says, and as clear as Art opacity says.
+-- The holder: 204.8 square at the middle of its box in /flatui move (the middle of the screen while the movers give no spot), as far above it as
+-- Art height says, and as clear as Art opacity says. A frame of the addon's own, so it may move at any time.
 local function PlaceHolder()
+	local x, y
+	if type(ns.MoverSpot) == "function" then
+		x, y = ns.MoverSpot(MOVER, "CENTER")
+	end
 	holder:ClearAllPoints()
-	holder:SetPoint("CENTER", UIParent, "CENTER", 0, Setting("artY", 0))
+	if ns.Finite(x) and ns.Finite(y) then
+		holder:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y + Setting("artY", 0))
+	else
+		holder:SetPoint("CENTER", UIParent, "CENTER", 0, Setting("artY", 0))
+	end
 	holder:SetAlpha(Setting("artAlpha", K.ALPHA) / 100)
 end
 

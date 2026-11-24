@@ -256,7 +256,7 @@ ns.SETUP_STEPS = {
 	} },
 	{ id = "ab-text", area = "Action bars", title = "Button text", draw = "mock-action-row", built = true, rows = {
 		{ "actionbars.hotkeyShow", "o", "mock-action-row" },
-		{ "actionbars.hotkeyText", "o", "behaviour", "Chooses whether mouse button, mouse wheel, number pad and page keys show short (M4, WU, N1) or as the game has them." },
+		{ "actionbars.hotkeyText", "o", "behaviour", "Chooses whether mouse button, mouse wheel, number pad, page, arrow and other long key names show short (M4, WU, N1, Sp) or as the game has them, on the action buttons and the cooldown icons." },
 		{ "actionbars.hotkeySize", "o", "mock-action-row" },
 		{ "actionbars.hotkeyOwn", "o", "mock-action-row" },
 		{ "actionbars.hotkeyColour", "r", "mock-action-row" },
@@ -279,6 +279,7 @@ ns.SETUP_STEPS = {
 		{ "actionbars.sweepAlpha", "r", "mock-action-row" },
 		{ "actionbars.cdFont", "o", "mock-action-row" },
 		{ "actionbars.cdGrey", "o", "mock-action-row" },
+		{ "actionbars.readyFlash", "o", "behaviour", "Flashes the icon of one of Flat UI's buttons white for a moment as a cooldown longer than the global cooldown ends." },
 	} },
 	{ id = "ab-effects", area = "Action bars", title = "Glows and animations", draw = "mock-action-row", built = true, rows = {
 		{ "actionbars.proc", "o", "mock-action-row" },
@@ -1276,6 +1277,8 @@ ns.SETUP_STEPS = {
 		{ "barblock.backgroundPad", "r", "mock-bar-block" },
 		{ "barblock.fade", "c", "mock-bar-block" },
 		{ "barblock.fadeTo", "r", "mock-bar-block" },
+		{ "barblock.fadeDelay", "r", "behaviour", "Waits this long after the block was last wanted before it starts to fade." },
+		{ "barblock.fadeTime", "r", "behaviour", "Sets how long the block takes to ease down to its faded opacity; it comes back to full at once." },
 		{ "barblock.fadeCombat", "r", "behaviour", "Brings the faded block to full opacity in combat." },
 		{ "barblock.fadeMouse", "r", "behaviour", "Brings the faded block to full opacity under the mouse." },
 	} },
