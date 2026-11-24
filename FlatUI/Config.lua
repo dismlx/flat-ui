@@ -458,6 +458,13 @@ ns.PAGES = {
 		{ section = "Overpower" },
 		{ key = "overpower", kind = "bool", default = true, label = "Overpower on enemy nameplates", tip = "Warriors only: when an enemy dodges you, Overpower's icon shows over its nameplate for 5 seconds and glows while you can use it." },
 		{ key = "overpowerSize", kind = "number", default = 34, min = 16, max = 48, step = 1, label = "Overpower icon size", needs = "overpower" },
+		{ section = "Quest" },
+		{ key = "questMark", kind = "bool", default = true, label = "Quest mark on enemies you need for a quest",
+			tip = "A small ! beside an enemy the game says belongs to a quest in your log, gone once that objective is done. Questie has its own nameplate icons: turn one of the two off." },
+		{ key = "questMarkSize", kind = "number", default = 14, min = 8, max = 32, step = 1, label = "Quest mark size", needs = "questMark" },
+		{ key = "questMarkPlace", kind = "choice", default = "left", label = "Quest mark position", needs = "questMark",
+			tip = "Left goes past the raid marker and the elite or rare icon. Above shares its place with the enemy's debuffs.",
+			choices = { { "left", "Left" }, { "right", "Right" }, { "above", "Above" } } },
 	},
 	{
 		key = "nameplatesAuras", label = "Auras", parent = "nameplates", owner = "nameplates",

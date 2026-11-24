@@ -42,6 +42,8 @@ Nameplates show your threat on each enemy, on by default: the health bar shows t
 
 A warrior who knows **Overpower** sees its icon over the nameplate of an enemy that dodges them, on by default (**Overpower on enemy nameplates**, on the **Marks and icons** tab of **Nameplates**, with **Overpower icon size**). It glows while you can use Overpower now and is grey and still while you cannot (the wrong stance, too little rage, its cooldown), and it goes when you cast Overpower, after 5 seconds, or when the enemy dies or its nameplate goes. The game does not say whose attack was dodged, so a dodge counts as yours when that enemy is your target and you are in melee with it, or when Overpower turns usable at once after it.
 
+While you level, a small quest mark shows beside the nameplate of every enemy the game says belongs to a quest in your log, and goes once that objective is done (**Quest mark on enemies you need for a quest**, on by default on the **Marks and icons** tab of **Nameplates**, with **Quest mark size** and **Quest mark position**: left of the bar past the raid marker, right of it, or above the name). Questie draws its own nameplate icons, so with Questie you may want only one of the two.
+
 Enemy cast bars on your target, focus and nameplates show whether your class interrupt is ready, and its icon on the cooldown row gets a gold border while your target or focus casts something you can interrupt.
 
 **No target warning** and **Entering and leaving combat** (both on by default), on the **Combat text** page, show **No target** while you fight with no target or a dead or friendly one, and **+Combat** and **-Combat** as a fight starts and ends.

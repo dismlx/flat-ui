@@ -131,6 +131,10 @@ local ADDON_NAME, ns = ...
 -- above the name of the enemy that dodged the player, made, sized and anchored out of combat on a plate that may be protected; in a fight only its
 -- alpha, texture, grey and glow change. A frame of its own hears UNIT_COMBAT, SPELL_UPDATE_USABLE, ACTION_USABLE_CHANGED, SPELL_UPDATE_COOLDOWN, the
 -- player's casts and auto attack and NAME_PLATE_UNIT_REMOVED while the row is on, and SPELLS_CHANGED for a warrior, and only reads.
+-- The quest mark on nameplates (PlateQuest.lua, on by default) is a texture on a frame of its own, a child of the plate's unit frame, anchored
+-- beside the plate's raid marker frame (ClassificationFrame), level frame, health bars or name and sized out of combat on a plate that may be
+-- protected; in a fight only its alpha changes. A frame of its own hears QUEST_LOG_UPDATE and the player's UNIT_QUEST_LOG_CHANGED while the row is
+-- on, and it only reads (C_QuestLog.UnitIsRelatedToActiveQuest, UnitIsPlayer, UnitCanAttack).
 -- Errands (on by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- also for the Sell junk button of the bags, whatever the switch of Errands, repairs with RepairAllItems, buys with BuyMerchantItem, sells the
 -- cursor item with SellCursorItem, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click

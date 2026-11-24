@@ -11,8 +11,8 @@ local _, ns = ...
 -- What a plate is made of is the game's own layout for the nameplate style and size chosen: the sizes are Camelot's
 -- (Blizzard_NamePlates/Camelot/Blizzard_NamePlateConstants.lua:33-60, 62-68), the anchors those of NamePlateUnitFrameMixin:UpdateAnchors
 -- (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:678-890) and of the cast bar (Blizzard_NamePlateCastingBar.lua:26-130). What each row changes is what
--- Nameplates.lua, PlateText.lua, PlateColours.lua and HealthColour.lua do to a plate with the same row. The numbers are fixed samples: the game withholds the
--- health, the cast times and the aura times of a unit (UnitDocumentation.lua:1526-1529).
+-- Nameplates.lua, PlateText.lua, PlateColours.lua, HealthColour.lua and PlateQuest.lua (the quest mark of a sample with quest) do to a plate with the
+-- same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a unit (UnitDocumentation.lua:1526-1529).
 -- Test mode's sample plate (TestHud.lua) is P.NewPlate and P.Plate on a frame of its own; a sample's threat (threatGood, threatTransition or
 -- threatBad) colours its health bar as PlateColours.lua orders it, and P.CastProgress and P.Health change only its fills and time.
 
@@ -40,6 +40,8 @@ P.ICON, P.LEVEL_W, P.LEVEL_GAP, P.LEVEL_ABOVE, P.LEVEL_BELOW, P.AURA = 10, 28, 5
 P.RARITY = { elite = "nameplates-icon-elite-gold", boss = "nameplates-icon-elite-gold", rare = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star",
 	rareelite = "nameplates-icon-elite-silver" }
 P.RARITY_SIZE, P.RARITY_INDEX = 20, 3
+-- The quest mark of PlateQuest.lua: its atlas, else its file, and the units between it and what it stands beside.
+P.QUEST_ATLAS, P.QUEST_FILE, P.QUEST_GAP = "QuestNormal", "Interface\\GossipFrame\\AvailableQuestIcon", 2
 P.SPACING = 2
 -- The gap between a class icon and the row, and the border of an elite, a rare and a boss in screen pixels (Nameplates.lua:30, 46).
 P.GAP, P.KIND_PX = 3, 2
@@ -216,6 +218,7 @@ function P.Look(friend)
 	o.marker = Row("raidMarker", true)
 	o.markerSize = Row("raidMarkerSize", 22)
 	o.markerX, o.markerY = Row("raidMarkerX", 0), Row("raidMarkerY", 0)
+	o.quest = Get("enabled") == true and Get("questMark") == true
 	return o
 end
 
@@ -350,6 +353,7 @@ function P.NewPlate(S, parent)
 	p.marker = Tex(p.f, "OVERLAY", 3)
 	p.flag, p.buffA, p.buffB = Tex(p.f, "OVERLAY", 3), Tex(p.f, "OVERLAY", 3), Tex(p.f, "OVERLAY", 3)
 	p.rarity = Tex(p.f, "OVERLAY", 3)
+	p.quest = Tex(p.f, "OVERLAY", 4)
 	p.cast = Frame(p.f)
 	p.cbar = Frame(p.cast)
 	p.cfill = Tex(p.cbar, "ARTWORK", 0)
@@ -696,6 +700,37 @@ function P.Rarity(p, spec, o, m)
 	p.rarity:Show()
 end
 
+-- The quest mark of an enemy a quest needs (spec.quest), where PlateQuest.lua puts it: Left past the raid marker or the game's elite or rare icon,
+-- Right past the level box while it shows, Above over the name (over the bar while the name is inside it).
+function P.QuestMark(p, spec, o, m)
+	if not (spec.quest and o.quest and not spec.friendly and not spec.player) then
+		p.quest:Hide()
+		return
+	end
+	local size, place, gap = Get("questMarkSize"), Get("questMarkPlace"), P.QUEST_GAP
+	if P.AtlasExists(P.QUEST_ATLAS) then
+		P.SetAtlas(p.quest, P.QUEST_ATLAS)
+	else
+		p.quest:SetTexture(P.QUEST_FILE)
+	end
+	if place == "right" then
+		local edge = (m.levelOut and o.level ~= "hidden") and m.LX + m.LW or m.BW
+		P.Put(p, p.quest, "LEFT", edge + gap, m.center, size, size)
+	elseif place == "above" then
+		local top = m.healthY + m.HH + (m.nameAbove and (m.sp + m.NH) or 0)
+		P.Put(p, p.quest, "BOTTOM", m.BW / 2, top + gap, size, size)
+	else
+		local edge = 0
+		if p.marker:IsShown() then
+			edge = o.markerX - m.iconShift - o.markerSize
+		elseif p.rarity:IsShown() then
+			edge = o.markerX - m.iconShift - P.RARITY_SIZE
+		end
+		P.Put(p, p.quest, "RIGHT", edge - gap, m.center, size, size)
+	end
+	p.quest:Show()
+end
+
 -- The cast bar under the health bar, the icon, the shield, the spell name, the spark and the time.
 function P.Cast(p, spec, o, m)
 	local cast = spec.cast
@@ -961,6 +996,7 @@ function P.Plate(p, spec, sets)
 	end
 	P.LeftEnd(p, spec, o, m)
 	P.Rarity(p, spec, o, m)
+	P.QuestMark(p, spec, o, m)
 	P.Cast(p, spec, o, m)
 	P.Auras(p, spec, o, m)
 	return p.box
@@ -1216,6 +1252,7 @@ function P.Cells(kind)
 				{ id = "focus", label = "Focus", col = 1, spec = Enemy({ focus = true }) },
 				{ id = "marked", label = "Raid marker", col = 1, spec = Enemy({ marker = 8 }) },
 				{ id = "player", label = "Enemy player", col = 1, spec = Enemy({ name = names.player, player = true, leftEnd = true }) },
+				{ id = "quest", label = "Quest enemy", col = 1, spec = Enemy({ name = "Kobold Vermin", level = 3, quest = true }) },
 				{ id = "friend", label = "Friendly player", col = 2, spec = { name = names.friend, level = 18, friendly = true, player = true, health = P.SHARE, marker = 4 } },
 				{ id = "elite", label = "Elite", col = 2, spec = Enemy({ name = names.elite, level = 20, kind = "elite" }) },
 				{ id = "rare", label = "Rare", col = 2, spec = Enemy({ name = "Old Blanchy", level = 20, kind = "rare" }) },
@@ -1342,6 +1379,7 @@ function P.Parts(S)
 	Set({ "rareColour" }, (plates.rare or plate).bar)
 	Set({ "bossColour" }, (plates.boss or plate).bar)
 	Set({ "raidMarker", "raidMarkerSize", "raidMarkerX", "raidMarkerY" }, (plates.marked or plate).marker)
+	Set({ "questMark", "questMarkSize", "questMarkPlace" }, (Live("quest") or plate).quest)
 	Set({ "overlapH", "overlapV", "selectedScale" }, (Live("target") or plate).f)
 	Set({ "minScale", "minAlpha" }, (plates.far or plate).f)
 	Set({ "notSelectedAlpha" }, (plates.near or plate).f)
