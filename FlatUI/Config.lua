@@ -212,7 +212,7 @@ ns.PAGES = {
 		-- A ring of Flat UI's own around the mouse pointer (CursorRing.lua).
 		{ section = "Cursor" },
 		{ key = "cursorRing", kind = "choice", default = "off", label = "Cursor ring", changed = "CursorRingChanged",
-			choices = { { "always", "Always" }, { "combat", "In combat only" }, { "off", "Off" } }, tip = "A ring around the mouse pointer, so you find it at a glance. It takes no clicks." },
+			choices = { { "always", "Always" }, { "combat", "In combat only" }, { "off", "Off" } }, tip = "A ring around the mouse pointer, so you find it at a glance. It takes no clicks, hides while you turn the camera with the mouse, and in combat only fades in and out with the fight." },
 		{ key = "cursorRingSize", kind = "number", default = 32, min = 16, max = 160, step = 4, label = "Cursor ring size", needs = "cursorRing", needsIn = { "always", "combat" },
 			changed = "CursorRingChanged" },
 		{ key = "cursorRingColour", kind = "colour", default = "ffb991e4", label = "Cursor ring colour", needs = "cursorRing", needsIn = { "always", "combat" },
