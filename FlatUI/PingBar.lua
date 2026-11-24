@@ -32,10 +32,16 @@ local _, ns = ...
 --    FULLSCREEN_DIALOG), of the type macro, set out of combat. The release of the next left click anywhere runs its line, and @cursor pings the
 --    world under the cursor, passing through all frames (Blizzard_PingManager.lua:214-221); PLACED, after the click, hides it. A right click or
 --    Escape hides it in PLACE before its macro, which then does not run; CLEAR, on its OnHide, takes Escape back (ClearBindings, 537-539), also
---    when UIParent hides it. While the mouse is over it the cursor is the game's ping cursor, or its error cursor while the ping cooldown runs
---    (SetCursor "PING_CURSOR" and "PING_ERROR_CURSOR" from its OnShow and OnEnter, ResetCursor on OnLeave and OnHide, as Blizzard_PingUI.lua:
---    134-152 does), and a line of its own beside the bar says which ping is armed and how to cancel. Those scripts are insecure and change nothing
---    protected: the text is a FontString of the place button, set with SetText.
+--    when UIParent hides it. The place button covers the bar too, so PLACE first asks whether the release is on the bar (the header's frame
+--    references to the bar and to each bar button, set out of combat; IsVisible and IsUnderMouse of the handles, RestrictedFrames.lua:116,
+--    360-369): on another bar button it switches the waiting ping to that one (its line and kind, then Hide and Show, so CLEAR and the line below
+--    run again, and Escape is given back), on the armed button it cancels, a Shift-click with a target pings the target at once (the bar
+--    button's own line on the place button, then its macro), and between the buttons it does nothing, so a ping never lands behind the bar.
+--    While the mouse is over it the cursor is the game's ping cursor, or its error cursor while the ping cooldown runs (SetCursor "PING_CURSOR"
+--    and "PING_ERROR_CURSOR" from its OnShow and OnEnter, ResetCursor on OnLeave and OnHide, as Blizzard_PingUI.lua:134-152 does), a line of its
+--    own beside the bar says which ping is armed and how to cancel, and the armed button is lit in its ping's colour, border and background,
+--    until the ping is placed or cancelled. Those scripts are insecure and change nothing protected: the text is a FontString of the place
+--    button, set with SetText, and the light is the outline of the icon under the bar button.
 -- 3. A Shift-click with a target lets the bar button's own "/ping [@target,exists] <n>" run at once (ARM returns nothing: IsShiftKeyDown and
 --    UnitExists are in the restricted environment, RestrictedEnvironment.lua:84-88); with no target it arms as a click.
 -- 4. The keys ping at once what is under the mouse, as the game's own ping keys do: hover the spot, press the key. Each key clicks a secure button
@@ -80,12 +86,14 @@ local FONT = "GameFontHighlightSmall"
 -- The line of the place button, this far from the bar.
 local HINT_FONT = "GameFontHighlight"
 local HINT_GAP = 6
-local HINT = "%s: click where to ping · right-click or Esc to cancel"
+local HINT = "%s: click where to ping · click it again, right-click or Esc to cancel"
 -- The text-dim of the windows (PanelLook.lua) for the lines of a tooltip, and the warm colour of the reason a button is greyed, as Group tools has.
 local DIM = { 0.66, 0.68, 0.62 }
 local WARN = { 0.9, 0.72, 0.36 }
 local GREY_ALPHA = 0.4
 local LIGHTER = 0.17
+-- The opacity of the ping's colour behind the armed button.
+local ARMED_ALPHA = 0.35
 -- The cooldown is read this long after a press, once the game has sent the ping.
 local AFTER_PRESS = 0.1
 local SAMPLE = 3
@@ -125,7 +133,7 @@ local LINE_NEVER = "Ping bar: Show is Never, so only its keys ping."
 
 local IsSecret = ns.IsSecret
 -- panel: the frame of the bar. buttons: one entry for each of KINDS, { kind, frame (the icon), art, letter, outline, sweep, cover (the secure
--- button of the bar), key (the secure button of its key), hover, equipped }. header: the SecureHandlerBaseTemplate frame the snippets run
+-- button of the bar), key (the secure button of its key), hover, armed (its ping waits for a spot), equipped }. header: the SecureHandlerBaseTemplate frame the snippets run
 -- against. place: the place button, hint its line. order: the places in KINDS of the kinds the bar shows. placed, laid: the spot and the layout
 -- the bar was put at. queued: a change waits for the end of a fight. broken: the game made no secure button. why: the reason pings are blocked,
 -- as last painted. equipped: the buttons have their type and macrotext. sample: a sample swipe waits for the bar to be made.
@@ -356,13 +364,39 @@ place:SetBindingClick(true, "ESCAPE", place, "RightButton")
 return false
 ]=]
 -- PLACE, before a click on the place button (`self`): a right click or Escape hides it and stops its macro; the press of the left button waits
--- for the release, whose click runs the macro and then PLACED, which hides it.
+-- for the release. A release on the bar, which the place button covers, is a click of the bar: on another bar button it switches the waiting
+-- ping to that one, on the armed one it cancels, a Shift-click with a target runs that button's /ping [@target,exists] at once, and between the
+-- buttons it does nothing. Any other release runs the macro and then PLACED, which hides it.
 local PLACE_PRE = [=[
 if button == "RightButton" then
 	self:Hide()
 	return false
 end
 if button ~= "LeftButton" or down then
+	return false
+end
+local bar = control:GetFrameRef("bar")
+if bar and bar:IsVisible() and bar:IsUnderMouse() then
+	for index = 1, ]=] .. #KINDS .. [=[ do
+		local cover = control:GetFrameRef("cover" .. index)
+		if cover and cover:IsVisible() and cover:IsUnderMouse() then
+			if IsShiftKeyDown() and UnitExists("target") and cover:GetAttribute("macrotext") then
+				self:SetAttribute("macrotext", cover:GetAttribute("macrotext"))
+				return nil, "placed"
+			end
+			local line, kind = cover:GetAttribute("flatui-place"), cover:GetAttribute("flatui-kind")
+			if not line or kind == self:GetAttribute("flatui-kind") then
+				self:Hide()
+				return false
+			end
+			self:SetAttribute("macrotext", line)
+			self:SetAttribute("flatui-kind", kind)
+			self:Hide()
+			self:Show()
+			self:SetBindingClick(true, "ESCAPE", self, "RightButton")
+			return false
+		end
+	end
 	return false
 end
 return nil, "placed"
@@ -476,6 +510,7 @@ function P.MakePlace(header)
 		end)
 		place:SetScript("OnHide", function()
 			ns.Try(KEY, P.Uncursor)
+			ns.Try(KEY, P.Disarm)
 		end)
 		place:SetScript("OnEnter", function()
 			ns.Try(KEY, P.Cursor)
@@ -561,8 +596,8 @@ function P.Key(kind)
 	return key
 end
 
--- The bar, its buttons, their keys, the header and the place button, made the first time the module is on, out of combat. False when the game
--- made no secure button.
+-- The bar, its buttons, their keys, the header and the place button, made the first time the module is on, out of combat, with the header's
+-- frame references to the bar and to each bar button, which PLACE reads. False when the game made no secure button.
 function P.Build()
 	if P.panel then
 		return true
@@ -584,12 +619,16 @@ function P.Build()
 		local entry = P.Icon(panel, kind)
 		entry.cover = P.Cover(panel, entry, header)
 		entry.key = entry.cover and P.Key(kind)
-		if not entry.key then
+		if not entry.key or not pcall(header.SetFrameRef, header, "cover" .. index, entry.cover) then
 			P.broken = true
 			pcall(panel.Hide, panel)
 			return false
 		end
 		buttons[index] = entry
+	end
+	if not pcall(header.SetFrameRef, header, "bar", panel) then
+		P.broken = true
+		return false
 	end
 	P.buttons, P.panel, P.header, P.place = buttons, panel, header, place
 	return true
@@ -765,17 +804,27 @@ end
 
 -- Drawing ------------------------------------------------------------------------------------------------------------------------------------
 
--- The background of an icon: the Background colour of the Flat UI page, a little lighter under the mouse while pings can be sent.
+-- The background and border of an icon. The armed button, whose ping waits for its spot, is lit: its ping's colour behind it and on its border.
+-- Else the background is the Background colour of the Flat UI page, a little lighter under the mouse while pings can be sent, and the border
+-- takes its ping's colour while Borders in the ping's colour is on, else the general one.
 function P.Shade(entry)
-	if entry.hover and not P.why then
+	local colour = entry.kind.colour
+	if entry.armed then
+		ns.SetOutlineFill(entry.outline, colour[1], colour[2], colour[3], ARMED_ALPHA)
+	elseif entry.hover and not P.why then
 		local r, g, b = ns.Colour("general.backdrop")
 		ns.SetOutlineFill(entry.outline, math.min(1, r + LIGHTER), math.min(1, g + LIGHTER), math.min(1, b + LIGHTER), 1)
 	else
 		ns.SetOutlineFill(entry.outline, nil, nil, nil, nil)
 	end
+	if entry.armed or Opt("colours") ~= false then
+		ns.SetOutlineColour(entry.outline, colour[1], colour[2], colour[3])
+	else
+		ns.SetOutlineColour(entry.outline, nil, nil, nil)
+	end
 end
 
--- Greys the buttons while pings are blocked, gives each border its ping's colour or the general one, and writes again the tooltip of the one
+-- Greys the buttons while pings are blocked, gives each border and background its colour (P.Shade), and writes again the tooltip of the one
 -- under the mouse. Only the icons change, which are no secure frames, so this runs in a fight too. A hidden bar is left as it is.
 function P.Paint()
 	if not P.panel then
@@ -786,7 +835,7 @@ function P.Paint()
 		return
 	end
 	P.why = P.Blocked()
-	local usable, tinted = P.why == nil, Opt("colours") ~= false
+	local usable = P.why == nil
 	for _, entry in ipairs(P.buttons) do
 		if entry.art then
 			entry.art:SetDesaturated(not usable)
@@ -794,12 +843,6 @@ function P.Paint()
 		end
 		if entry.letter then
 			entry.letter:SetAlpha(usable and 1 or GREY_ALPHA)
-		end
-		local colour = tinted and entry.kind.colour or nil
-		if colour then
-			ns.SetOutlineColour(entry.outline, colour[1], colour[2], colour[3])
-		else
-			ns.SetOutlineColour(entry.outline, nil, nil, nil)
 		end
 		P.Shade(entry)
 		if entry.hover and P.Owned(entry) then
@@ -913,6 +956,7 @@ function P.Lines(entry)
 		lines[#lines + 1] = "Click, then click where to ping: the game picks the kind of ping for that spot. Right-click or Esc cancels."
 	end
 	lines[#lines + 1] = "Shift-click pings your target at once; with no target it works as a click."
+	lines[#lines + 1] = "While a ping waits, click another button to switch to it, or this one again to cancel."
 	local key = KeyText("CLICK FlatUIPing" .. kind.id .. ":LeftButton")
 	if key then
 		lines[#lines + 1] = ("Key: %s pings what is under the mouse at once: hover the spot, press the key."):format(key)
@@ -990,10 +1034,11 @@ function P.Uncursor()
 	end
 end
 
--- The place button shows, from ARM: its line names the ping that waits, in that ping's colour, and the cursor turns.
+-- The place button shows, from ARM or from a switch in PLACE: its line names the ping that waits, in that ping's colour, its button is lit and
+-- the cursor turns.
 function P.Shown()
 	local hint, place = P.hint, P.place
-	if hint and place then
+	if place then
 		local ok, id = pcall(place.GetAttribute, place, "flatui-kind")
 		local kind = KINDS[1]
 		for _, each in ipairs(KINDS) do
@@ -1001,11 +1046,27 @@ function P.Shown()
 				kind = each
 			end
 		end
-		local colour = kind.colour
-		hint:SetText(HINT:format(Name(kind)))
-		hint:SetTextColor(colour[1], colour[2], colour[3], 1)
+		if hint then
+			local colour = kind.colour
+			hint:SetText(HINT:format(Name(kind)))
+			hint:SetTextColor(colour[1], colour[2], colour[3], 1)
+		end
+		for _, entry in ipairs(P.buttons) do
+			entry.armed = entry.kind == kind
+			P.Shade(entry)
+		end
 	end
 	P.Cursor()
+end
+
+-- The place button hid: the ping was placed or cancelled, so no button is lit.
+function P.Disarm()
+	for _, entry in ipairs(P.buttons) do
+		if entry.armed then
+			entry.armed = false
+			P.Shade(entry)
+		end
+	end
 end
 
 -- The tooltip under the mouse, written again after a key changed.

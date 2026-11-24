@@ -1387,7 +1387,7 @@ ns.PAGES = {
 	{
 		key = "pingbar", label = "Ping bar",
 		{ key = "enabled", kind = "bool", default = true, label = "Show the ping bar",
-			tip = "A button for each ping of the game: Ping, Attack, Warning, On My Way and Assist. Click one, then click where to ping, also in a fight; right-click or Esc cancels. Shift-click pings your target at once. Each has a key under Flat UI in the game's Key Bindings that pings what is under the mouse at once: hover the spot, press the key. /flatui move places it." },
+			tip = "A button for each ping of the game: Ping, Attack, Warning, On My Way and Assist. Click one, then click where to ping, also in a fight: the button lights up while its ping waits. Click another to switch to it; click it again, right-click or Esc to cancel. Shift-click pings your target at once. Each has a key under Flat UI in the game's Key Bindings that pings what is under the mouse at once: hover the spot, press the key. /flatui move places it." },
 		{ section = "When it shows" },
 		{ key = "show", kind = "choice", default = "group", label = "Show",
 			tip = "Hidden while pings are off in the game's options or your group lets only some members ping and you are not one; the tooltip of a button says why while a fight keeps it shown.",
