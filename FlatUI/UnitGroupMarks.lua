@@ -20,6 +20,9 @@ local _, ns = ...
 -- frames only. Each frame hears UNIT_AURA for its own unit on a frame of the addon's own (RegisterUnitEvent), so the payload, which the game may
 -- withhold (UnitAuraDocumentation.lua:644-655), is never read; a burst is read once, a moment after the first. A frame the game hid hears nothing until
 -- the game draws it again.
+-- With Sound for a debuff you can dispel (None by default), the first read of a party or raid frame's unit records whether it has such a debuff, and a later
+-- read that finds one where there was none plays the row's sound (ns.SOUNDS, ns.PlayKit), at most once every 2 seconds whatever frame finds it; an
+-- answer the game would not give changes nothing, and a new unit on the frame starts again.
 --
 -- The game's raid frames have no raid marker (Shared/CompactUnitFrame.xml:3-111). The game gives the index of a marker to addons only withheld
 -- (GetRaidTargetIndex, RaidMarkersDocumentation.lua:55-69, SecretReturns), and SetSpriteSheetCell takes a withheld index (SimpleTextureBaseAPIDocumentation
@@ -414,6 +417,28 @@ end
 
 local Hear
 
+-- The sound of Sound for a debuff you can dispel: the places of its choices in ns.SOUNDS (IconRow.lua), as CombatCues.lua has them, the seconds it waits
+-- before it plays again, and when it last played.
+local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
+local SOUND_GAP = 2
+local lastSound = nil
+
+-- A party or raid member got a debuff the player can dispel: the sound of the row, at most once every SOUND_GAP seconds, so a debuff that lands on the
+-- whole raid at once plays once.
+local function Chime(rec)
+	if (rec.kind ~= "party" and rec.kind ~= "raid") or Opt("dispelBorder") ~= true then
+		return
+	end
+	local sound = ns.SOUNDS and ns.SOUNDS[KITS[Opt("dispelSound")] or 0]
+	local now = type(GetTime) == "function" and GetTime() or nil
+	if sound == nil or now == nil or (lastSound ~= nil and now - lastSound < SOUND_GAP and now >= lastSound) then
+		return
+	end
+	if ns.PlayKit(sound[1]) then
+		lastSound = now
+	end
+end
+
 -- Reads the unit of a frame and draws what it found. A frame with nothing to show, or that the game hid, stops hearing its unit.
 local function Read(rec)
 	local d = rec.dispel
@@ -439,6 +464,15 @@ local function Read(rec)
 	-- The game would not say, or withheld the debuff it has: read again once it stops withholding (Reread, below).
 	d.withheld = id == false or id == true
 	Say(NOTE_BLIND, rec, id == false)
+	-- Whether the member has such a debuff is a plain answer: a new one plays the sound. The first read of a unit only records it, and an answer the game
+	-- would not give keeps what was there.
+	if id ~= false then
+		local has = id ~= nil
+		if has and d.had == false then
+			Chime(rec)
+		end
+		d.had = has
+	end
 	if not id then
 		Clear(d)
 		Say(NOTE_TYPE, rec, false)
@@ -516,6 +550,10 @@ function Hear(rec, d, unit)
 		d.ear = ear
 	end
 	pcall(ear.UnregisterAllEvents, ear)
+	-- A new member, or none, starts again: the next read records the debuffs it has without a sound.
+	if d.unit ~= unit then
+		d.had = nil
+	end
 	d.unit, d.heard = unit, nil
 	if unit == nil then
 		return

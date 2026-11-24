@@ -332,6 +332,7 @@ ns.SETUP_STEPS = {
 	{ id = "uf-bars", area = "Unit frames", title = "Bars, heals and borders", draw = "mock-unit-frame", built = true, rows = {
 		{ "unitframes.backdrop", "c", "mock-unit-frame" },
 		{ "unitframes.barBorder", "o", "mock-unit-frame" },
+		{ "unitframes.hoverHighlight", "o", "behaviour", "Brightens the health bar of the unit frame under the mouse a little, so you see which frame a click hits." },
 		{ "unitframes.flat", "c", "mock-unit-frame" },
 		{ "unitframes.healthColour", "c", "mock-unit-frame" },
 		{ "unitframes.healthTexture", "c", "mock-unit-frame" },
@@ -344,6 +345,9 @@ ns.SETUP_STEPS = {
 		{ "unitframes.status", "o", "mock-unit-frame" },
 		{ "unitframes.threat", "o", "mock-unit-frame" },
 		{ "unitframes.threatTanks", "o", "behaviour", "Chooses whether a tank who holds aggro keeps a plain border on the party and raid frames." },
+		{ "unitframes.lowHealth", "o", "behaviour", "Turns the health bar border of your own, your party's and your raid's frames red while the member is low on health, also in a fight." },
+		{ "unitframes.lowHealthAt", "r", "behaviour", "Sets the health, from 5 to 50 percent, below which the low health border shows." },
+		{ "unitframes.lowHealthColour", "r", "behaviour", "Sets the colour of the low health border." },
 		{ "unitframes.healPrediction", "c", "mock-unit-frame" },
 		{ "unitframes.absorbShield", "c", "mock-unit-frame" },
 		{ "unitframes.healAbsorb", "o", "mock-unit-frame" },
@@ -415,6 +419,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.dispelBorder", "c", "behaviour", "Colours the border of a party or raid member's health bar by the type of a debuff you can dispel." },
 		{ "unitframes.dispelSelf", "o", "behaviour", "Colours the border of your own, your target's and your focus's health bar by the type of a debuff you can dispel." },
 		{ "unitframes.dispelIcon", "o", "behaviour", "Shows the type of a debuff you can dispel at the right end of a party member's health bar." },
+		{ "unitframes.dispelSound", "o", "behaviour", "Plays a sound as a party or raid member gets a debuff you can dispel, at most once every 2 seconds." },
 		{ "unitframes.raidFrameMarker", "o", "behaviour", "Shows the raid marker of a member on the game's raid frames." },
 		{ "unitframes.partyFrameMarker", "o", "behaviour", "Shows the raid marker of a member on the game's party frames." },
 		{ "unitframes.raidLeaderIcon", "o", "behaviour", "Shows the leader and the assistants of the group on the game's raid frames." },
@@ -465,6 +470,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.totName", "o", "mock-unit-frame" },
 		{ "unitframes.totNameFit", "o", "mock-unit-frame" },
 		{ "unitframes.totHealthBy", "o", "mock-unit-frame" },
+		{ "unitframes.totHealthText", "o", "mock-unit-frame" },
 		{ "unitframes.totPowerBar", "c", "mock-unit-frame" },
 	} },
 	{ id = "uf-party", area = "Unit frames", title = "Party frames", draw = "mock-party-frames", built = true, rows = {

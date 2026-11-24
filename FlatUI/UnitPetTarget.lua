@@ -13,13 +13,25 @@ local _, ns = ...
 -- watch writes an attribute of the game's protected state driver (:38-49, 178): the button is made, sized, placed and given attributes, and watched
 -- or no longer watched, only out of combat, and a change asked for in a fight, a login in one included, waits for its end (ns.OutOfCombat). Off, the
 -- watch is taken away (UnregisterUnitWatch, :47-49) and the button hidden, out of combat.
+-- A right click opens the unit's menu (type2 togglemenu, which the game's secure code opens, SecureTemplates.lua:269-321, so Set Focus in it works): the
+-- target menu, with Set Focus and the raid markers, while the unit is also your target, a player's menu for a player, and none for another creature,
+-- for which the game names no menu (:288-310). Under the mouse it shows the unit's tooltip as the game's unit frames do (Mainline/UnitFrame.lua:
+-- 387-410): GameTooltip at its default anchor, set again every 0.2 seconds through UpdateTooltip, a field of this button of the addon's own, and
+-- hidden as the mouse leaves while the button still owns it.
 -- Its children: a health bar in the reaction colour of Flat UI's unit frames (ns.ReactionColour; the Health colour of the Unit frames page when the
--- game withholds it, as UnitFrameLooks.lua falls back), the name on it, and Flat UI's outline around it in the look of the Unit frames page.
--- UnitHealth is always withheld and UnitHealthMax and UnitName may be (UnitDocumentation.lua:1472-1475, 1526-1529, 2489-2491): they go unread to
--- SetMinMaxValues, SetValue and SetText, which take them (SimpleStatusBarAPIDocumentation.lua:229-237, 355-363; SimpleFontStringAPIDocumentation.lua:
--- 664-673), on a bar with a texture, which a bar needs to take them (HealthColour.lua, Probe). They are written when the frame shows, when the pet
--- changes its target (UNIT_TARGET for pet), when the player's pet changes (UNIT_PET for player; UnitDocumentation.lua:4448-4457, 4868-4877), and on
--- a step of 0.2 seconds while it shows, since the game sends no health event for pettarget; the step stops when the frame hides.
+-- game withholds it, as UnitFrameLooks.lua falls back), grey with Dead at its right end while the unit is plainly dead, the name on it, the health in
+-- percent at its right end, and Flat UI's outline around it in the look of the Unit frames page. The name takes the face, size and outline of the name
+-- rows and the percent the face, outline and colour of the bar text rows of the Unit frames page (UnitText.lua, X.ownSpec).
+-- UnitHealth is always withheld and UnitHealthMax, UnitHealthPercent and UnitName may be (UnitDocumentation.lua:1472-1475, 1506-1529, 2489-2491): they
+-- go unread to SetMinMaxValues, SetValue, SetFormattedText and SetText, which take them (SimpleStatusBarAPIDocumentation.lua:229-237, 355-363;
+-- SimpleFontStringAPIDocumentation.lua:664-673), on a bar with a texture, which a bar needs to take them (HealthColour.lua, Probe). The value glides to
+-- each new one (the interpolation ExponentialEaseOut of SetValue, never withheld, SimpleStatusBarConstantsDocumentation.lua:27-28) where the client has
+-- it. They are written when the frame shows, when the pet changes its target (UNIT_TARGET for pet), when the player's pet changes (UNIT_PET for player;
+-- UnitDocumentation.lua:4448-4457, 4868-4877), and on a step of 0.2 seconds while it shows, since the game sends no health event for pettarget; the step
+-- stops when the frame hides.
+-- Test mode (TestMode.lua, TM.Register): a sample of the frame, a plain frame of the addon's own on UIParent that takes no mouse, with the same children,
+-- painted and placed as the button is and filled with fixed values (Training Dummy at 65% in the hostile colour), shows while test mode is on, the row is
+-- on and the game does not show the button; the button wins as soon as the game shows it. Nothing of it touches the secure button.
 -- /flatui move places it (FlatUIPetTarget in Movers.lua: the frame's top left corner is the top left corner of the box). With no spot saved the box
 -- is right of the pet frame where the game's default layout puts it. Nothing of the game is changed and none of the game's frames is touched; the
 -- button reads and writes nothing of the click path of the game's action buttons (TaintScan.lua).
@@ -47,12 +59,19 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 local LINE_BROKEN = "Unit frames: Pet target frame: the game did not make the frame, so it does not show until /reload."
 local LINE_NO_WATCH = "Unit frames: Pet target frame: this client has no unit watch, so the frame does not show."
 local LINE_WAITS = "Unit frames: Pet target frame: a change waits for the end of the fight."
+-- The grey of a dead unit's bar, the hostile colour of the sample while the Colours page has no reaction colours of its own (the game's, UnitSelectionColor),
+-- and the sample of test mode: its name and how full its bar is, in percent.
+local GREY = 0.5
+local HOSTILE = { 1, 0, 0 }
+local SAMPLE = { name = "Training Dummy", share = 65 }
 
 local IsSecret = ns.IsSecret
 
--- button: the secure button once made, broken: it could not be made and is not tried again. bar, name, outline: its children. watched: the game
--- watches it. width, placed, file: what was last set. later: a change waits for the end of the fight. ticker: the token of the step.
+-- button: the secure button once made (frame: the same), broken: it could not be made and is not tried again. bar, name, pct, outline: its children.
+-- watched: the game watches it. width, placed, file: what was last set. later: a change waits for the end of the fight. ticker: the token of the step.
+-- S: the sample of test mode, with the same fields.
 local P = { button = nil, broken = false, watched = false, later = false }
+local S = {}
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -96,9 +115,34 @@ end
 
 -- What is shown --------------------------------------------------------------------------------------------------------------------------------
 
--- The health, the name and the colour of the unit, unread where the game withholds them.
+-- True when the client says so plainly: a withheld answer is no.
+local function Yes(ok, value)
+	return ok and not IsSecret(value) and value == true
+end
+
+-- The format of the percent, the one the bar texts of the unit frames write (UnitText.lua, X.formats).
+local function Format()
+	return type(X.formats) == "table" and X.formats.pct or "%.0f%%"
+end
+
+-- Sets the value of a bar, gliding to it where the client has the interpolation, at once where it has not. False when the client refuses the value.
+local function Glide(bar, value)
+	local list = type(Enum) == "table" and Enum.StatusBarInterpolation or nil
+	local how = type(list) == "table" and list.ExponentialEaseOut or nil
+	if how ~= nil and pcall(bar.SetValue, bar, value, how) then
+		return true
+	end
+	return pcall(bar.SetValue, bar, value)
+end
+
+local function Percent(pct)
+	pct:SetFormattedText(Format(), UnitHealthPercent(UNIT, true, CurveConstants.ScaleTo100))
+end
+
+-- The health, the percent, the name and the colour of the unit, unread where the game withholds them. A unit that is plainly dead has a grey bar and
+-- says Dead.
 local function Fill()
-	local bar, name = P.bar, P.name
+	local bar, name, pct = P.bar, P.name, P.pct
 	if not bar then
 		return
 	end
@@ -108,7 +152,7 @@ local function Fill()
 	end
 	local ok, health = pcall(UnitHealth, UNIT)
 	if ok then
-		pcall(bar.SetValue, bar, health)
+		Glide(bar, health)
 	end
 	local okName, text = pcall(UnitName, UNIT)
 	if okName and (IsSecret(text) or type(text) == "string") then
@@ -116,12 +160,21 @@ local function Fill()
 	else
 		name:SetText("")
 	end
-	local r, g, b = ns.ReactionColour(UNIT)
-	if r == nil then
-		r, g, b = ns.Colour(KEY .. ".healthColour")
+	local dead = Yes(pcall(UnitIsDead, UNIT))
+	if dead then
+		pct:SetText(DEAD or "Dead")
+	elseif not pcall(Percent, pct) then
+		pct:SetText("")
 	end
-	if type(X.mute) == "function" then
-		r, g, b = X.mute(r, g, b)
+	local r, g, b = GREY, GREY, GREY
+	if not dead then
+		r, g, b = ns.ReactionColour(UNIT)
+		if r == nil then
+			r, g, b = ns.Colour(KEY .. ".healthColour")
+		end
+		if type(X.mute) == "function" then
+			r, g, b = X.mute(r, g, b)
+		end
 	end
 	pcall(bar.SetStatusBarColor, bar, r, g, b, 1)
 end
@@ -166,19 +219,71 @@ local function Tick(on)
 	end
 end
 
--- The game showed or hid the button.
+-- The game showed or hid the button. The sample of test mode makes way for it, and comes back after it.
 local function OnShow()
 	X.run(PART, Fill)
 	Tick(true)
+	X.run(PART, P.SampleOn)
 end
 
 local function OnHide()
 	Tick(false)
+	X.run(PART, P.SampleOn)
 end
 
 -- The button ------------------------------------------------------------------------------------------------------------------------------------
 
--- Made once, out of combat: the button, its bar, the name on it and the outline. False when the game refuses it, which is not tried again.
+-- The unit's tooltip, as the game's unit frames give it (Mainline/UnitFrame.lua:387-410): at the default anchor, and set again by the tooltip every 0.2
+-- seconds through UpdateTooltip while the mouse stays.
+local function Tooltip(self)
+	if type(GameTooltip_SetDefaultAnchor) ~= "function" or type(GameTooltip) ~= "table" then
+		return
+	end
+	GameTooltip_SetDefaultAnchor(GameTooltip, self)
+	GameTooltip:SetUnit(UNIT)
+	GameTooltip:Show()
+	self.UpdateTooltip = Tooltip
+end
+
+local function OnEnter(self)
+	if not pcall(Tooltip, self) then
+		self.UpdateTooltip = nil
+	end
+end
+
+local function OnLeave(self)
+	self.UpdateTooltip = nil
+	if type(GameTooltip) == "table" then
+		local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, self)
+		if Yes(ok, owned) then
+			pcall(GameTooltip.Hide, GameTooltip)
+		end
+	end
+end
+
+-- The children of the button or of the sample, on frame, into t: the bar, the percent at its right end, the name left of it, and the outline. Raises when
+-- the game refuses one.
+local function Children(frame, t)
+	local bar = CreateFrame("StatusBar", nil, frame)
+	ns.Own[bar] = true
+	bar:SetAllPoints(frame)
+	bar:SetStatusBarTexture(WHITE)
+	bar:SetMinMaxValues(0, 1)
+	bar:SetValue(0)
+	local pct = ns.OwnText(bar, "OVERLAY", FONT)
+	pct:SetJustifyH("RIGHT")
+	pct:SetWordWrap(false)
+	pct:SetPoint("RIGHT", bar, "RIGHT", -INSET, 0)
+	local name = ns.OwnText(bar, "OVERLAY", FONT)
+	name:SetJustifyH("LEFT")
+	name:SetWordWrap(false)
+	name:SetPoint("LEFT", bar, "LEFT", INSET, 0)
+	name:SetPoint("RIGHT", pct, "LEFT", -INSET, 0)
+	t.frame, t.bar, t.name, t.pct, t.file = frame, bar, name, pct, WHITE
+	t.outline = ns.Outline(frame, frame, true)
+end
+
+-- Made once, out of combat: the button, its bar, the name and the percent on it and the outline. False when the game refuses it, which is not tried again.
 local function Make()
 	if P.button then
 		return true
@@ -200,22 +305,13 @@ local function Make()
 		-- The game runs a click on the key press by default (ActionButtonUseKeyDown); the button listens for the release.
 		button:SetAttribute("useOnKeyDown", false)
 		button:SetAttribute("type1", "target")
+		button:SetAttribute("type2", "togglemenu")
 		button:SetAttribute("unit", UNIT)
-		local bar = CreateFrame("StatusBar", nil, button)
-		ns.Own[bar] = true
-		bar:SetAllPoints(button)
-		bar:SetStatusBarTexture(WHITE)
-		bar:SetMinMaxValues(0, 1)
-		bar:SetValue(0)
-		local name = ns.OwnText(bar, "OVERLAY", FONT)
-		name:SetJustifyH("LEFT")
-		name:SetWordWrap(false)
-		name:SetPoint("LEFT", bar, "LEFT", INSET, 0)
-		name:SetPoint("RIGHT", bar, "RIGHT", -INSET, 0)
-		P.bar, P.name, P.file = bar, name, WHITE
-		P.outline = ns.Outline(button, button, true)
+		Children(button, P)
 		button:SetScript("OnShow", OnShow)
 		button:SetScript("OnHide", OnHide)
+		button:SetScript("OnEnter", OnEnter)
+		button:SetScript("OnLeave", OnLeave)
 	end)
 	if not ok then
 		pcall(button.Hide, button)
@@ -226,48 +322,52 @@ local function Make()
 	return true
 end
 
--- The width of its row and the look of the Unit frames page.
-local function Paint()
+-- The width of its row, the look of the Unit frames page and the text rows, on the button or the sample.
+local function Paint(t)
 	local width = Opt("petTargetWidth")
 	width = ns.Finite(width) and width or BOX_W
-	if P.width ~= width and pcall(P.button.SetSize, P.button, width, HEIGHT) then
-		P.width = width
+	if t.width ~= width and pcall(t.frame.SetSize, t.frame, width, HEIGHT) then
+		t.width = width
 	end
 	local file = File()
-	if P.file ~= file then
-		local ok, done = pcall(P.bar.SetStatusBarTexture, P.bar, file)
+	if t.file ~= file then
+		local ok, done = pcall(t.bar.SetStatusBarTexture, t.bar, file)
 		if not ok or (not IsSecret(done) and done == false) then
-			pcall(P.bar.SetStatusBarTexture, P.bar, WHITE)
+			pcall(t.bar.SetStatusBarTexture, t.bar, WHITE)
 		end
-		P.file = file
+		t.file = file
 	end
-	if P.outline then
-		ns.SetOutlineEdges(P.outline, Opt("barBorder") ~= false)
-		X.outline(P.outline, true, Opt("backdrop"))
+	if t.outline then
+		ns.SetOutlineEdges(t.outline, Opt("barBorder") ~= false)
+		X.outline(t.outline, true, Opt("backdrop"))
+	end
+	if type(X.ownSpec) == "function" then
+		ns.TextStyle(t.name, X.ownSpec("name", { percent = 100 }))
+		ns.TextStyle(t.pct, X.ownSpec("bar", { percent = 100 }))
 	end
 end
 
--- Puts the button at the spot of its handle: its top left corner at the top left corner of the box.
-local function Place()
+-- Puts the button or the sample at the spot of its handle: its top left corner at the top left corner of the box.
+local function Place(t)
 	local x, y
 	if type(ns.MoverSpot) == "function" then
 		x, y = ns.MoverSpot(MOVER, "TOPLEFT")
 	end
 	local key = x and ("%.2f:%.2f"):format(x, y) or "start"
-	if P.placed == key then
+	if t.placed == key then
 		return
 	end
-	local button = P.button
+	local frame = t.frame
 	local ok = pcall(function()
-		button:ClearAllPoints()
+		frame:ClearAllPoints()
 		if x then
-			button:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+			frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
 		else
-			button:SetPoint("TOPLEFT", UIParent, "BOTTOM", BOX_X - BOX_W / 2, BOX_Y + BOX_H)
+			frame:SetPoint("TOPLEFT", UIParent, "BOTTOM", BOX_X - BOX_W / 2, BOX_Y + BOX_H)
 		end
 	end)
 	if ok then
-		P.placed = key
+		t.placed = key
 	end
 end
 
@@ -337,10 +437,76 @@ function P.Update()
 	if not Make() then
 		return
 	end
-	Paint()
-	Place()
+	Paint(P)
+	Place(P)
 	if Watch() and Shown() then
 		Fill()
+	end
+end
+
+-- Test mode -------------------------------------------------------------------------------------------------------------------------------------
+
+-- The sample: a plain frame of the addon's own on UIParent, made once out of combat, that takes no mouse. False when the game refuses it, which is not
+-- tried again.
+local function SampleMake()
+	if S.frame then
+		return true
+	end
+	if S.broken or Fighting() then
+		return false
+	end
+	local ok = pcall(function()
+		local frame = CreateFrame("Frame", nil, UIParent)
+		ns.Own[frame] = true
+		frame:Hide()
+		frame:SetFrameStrata("LOW")
+		frame:SetSize(BOX_W, HEIGHT)
+		Children(frame, S)
+	end)
+	if not ok or not S.frame then
+		S.broken = true
+		return false
+	end
+	return true
+end
+
+-- The fixed values of the sample: its name, 65% and the hostile colour of the unit frames (the Colours page's own while Custom reaction colours is on).
+local function SampleFill()
+	local bar = S.bar
+	bar:SetMinMaxValues(0, 100)
+	bar:SetValue(SAMPLE.share)
+	S.name:SetText(SAMPLE.name)
+	S.pct:SetFormattedText(Format(), SAMPLE.share)
+	local r, g, b = HOSTILE[1], HOSTILE[2], HOSTILE[3]
+	if ns.Get("general.reactionOwn") == true then
+		r, g, b = ns.Colour("general.reactionHostile")
+	end
+	if type(X.mute) == "function" then
+		r, g, b = X.mute(r, g, b)
+	end
+	bar:SetStatusBarColor(r, g, b, 1)
+end
+
+-- Shows the sample, painted, placed and filled, while test mode is on, the row is on and the game does not show the button, and hides it otherwise. Its
+-- Start, and each change of a setting while it runs.
+function P.SampleOn()
+	local TM = ns.TestMode
+	if not (TM and TM.IsOn() and Wanted() and not Shown()) then
+		P.SampleOff()
+		return
+	end
+	if not SampleMake() then
+		return
+	end
+	Paint(S)
+	Place(S)
+	SampleFill()
+	S.frame:Show()
+end
+
+function P.SampleOff()
+	if S.frame then
+		S.frame:Hide()
 	end
 end
 
@@ -353,7 +519,10 @@ end
 
 -- The movers set or put back the spot, which the button takes out of combat.
 function ns.PetTargetMoved()
-	P.placed = nil
+	P.placed, S.placed = nil, nil
+	if S.frame and S.frame:IsShown() then
+		X.run(PART, Place, S)
+	end
 	if P.button then
 		if Fighting() then
 			Later()
@@ -396,3 +565,7 @@ ns.AddStatus(KEY, function()
 end)
 
 table.insert(X.after.refresh, { part = PART, fn = P.Update })
+
+if ns.TestMode then
+	ns.TestMode.Register("pettarget", { module = KEY, label = "Pet target", Start = P.SampleOn, Stop = P.SampleOff, Changed = P.SampleOn })
+end
