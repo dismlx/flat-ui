@@ -1097,6 +1097,8 @@ ns.SETUP_STEPS = {
 		{ "pulse.time", "r", "behaviour", "Sets how long the pulse shows." },
 		{ "pulse.sound", "r", "behaviour", "Plays a sound with the pulse." },
 		{ "pulse.iconSound", "r", "behaviour", "Gives one spell or item of the pulse a sound of its own." },
+		{ "pulse.name", "r", "behaviour", "Shows the name of the spell or item under the pulse." },
+		{ "pulse.grow", "r", "behaviour", "Makes the pulse grow a little as it fades out." },
 		{ "pulse.spots", "r", "behaviour", "Pulses at up to three spots, each with its own handle in /flatui move." },
 		{ "pulse.size2", "r", "behaviour", "Sets the size of the pulse at spot 2." },
 		{ "pulse.size3", "r", "behaviour", "Sets the size of the pulse at spot 3." },

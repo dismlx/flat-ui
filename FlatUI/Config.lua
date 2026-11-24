@@ -1054,6 +1054,8 @@ ns.PAGES = {
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 		{ key = "iconSound", kind = "list", default = 0, label = "Sound of one spell or item", none = "Choose a spell or item", items = "PulseSoundLines", pick = "PulseSoundPick",
 			tip = "Choose one, then open the list again for its own sound. One without it plays Sound." },
+		{ key = "name", kind = "bool", default = true, label = "Name under the icon", tip = "The spell or item that is ready again, fading with the icon." },
+		{ key = "grow", kind = "bool", default = false, label = "Grow as it fades", tip = "The icon swells by a quarter as it fades out." },
 		-- Spots 2 and 3 have handles of their own in /flatui move (FlatUIPulse2 and FlatUIPulse3 in Movers.lua); Icon size above is spot 1's.
 		{ section = "Spots" },
 		{ key = "spots", kind = "choice", default = "1", label = "Pulse spots", choices = { { "1", "One" }, { "2", "Two" }, { "3", "Three" } },
