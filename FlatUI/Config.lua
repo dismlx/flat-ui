@@ -644,6 +644,12 @@ ns.PAGES = {
 		{ key = "combatLeaveColour", kind = "colour", default = "ff1aff1a", label = "Leaving combat colour", needs = "combatState" },
 		{ key = "combatStateSize", kind = "number", default = 100, min = 50, max = 200, step = 10, unit = "%", label = "Size of +Combat and -Combat", needs = "combatState",
 			tip = "100% is the size of the game's own combat messages." },
+		{ key = "combatEnterSound", kind = "choice", default = "none", label = "Entering combat sound", needs = "combatState", tip = "Plays as +Combat shows.",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
+		{ key = "combatLeaveSound", kind = "choice", default = "none", label = "Leaving combat sound", needs = "combatState", tip = "Plays as -Combat shows.",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
 	{
 		key = "actionbars", label = "Action bars",

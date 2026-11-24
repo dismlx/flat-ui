@@ -1249,6 +1249,8 @@ ns.SETUP_STEPS = {
 		{ "combattext.combatEnterColour", "r", "behaviour", "Sets the colour of +Combat." },
 		{ "combattext.combatLeaveColour", "r", "behaviour", "Sets the colour of -Combat." },
 		{ "combattext.combatStateSize", "o", "behaviour", "Sets the size of +Combat and -Combat." },
+		{ "combattext.combatEnterSound", "o", "behaviour", "Chooses the sound that plays as +Combat shows." },
+		{ "combattext.combatLeaveSound", "o", "behaviour", "Chooses the sound that plays as -Combat shows." },
 	} },
 	{ id = "ab-block", area = "Bar block", title = "Bar block", draw = "mock-bar-block", built = true, rows = {
 		{ "barblock.enabled", "c", "mock-bar-block" },
