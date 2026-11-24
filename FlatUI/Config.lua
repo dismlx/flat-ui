@@ -1366,6 +1366,10 @@ ns.PAGES = {
 		{ key = "rows", kind = "number", default = 5, min = 1, max = 40, step = 1, label = "Number of bars", tip = "In the order of your group." },
 		{ key = "barWidth", kind = "number", default = 150, min = 100, max = 400, step = 5, unit = " px", label = "Bar width" },
 		{ key = "barHeight", kind = "number", default = 16, min = 10, max = 30, step = 1, unit = " px", label = "Bar height", tip = "Also the height of text." },
+		{ key = "lowAt", kind = "number", default = 30, min = 0, max = 60, step = 5, unit = "%", label = "Low mana at",
+			tip = "0 means never. A bar turns red below it, also in a fight, where the game hides the number." },
+		{ key = "drinking", kind = "bool", default = true, label = "Show who is drinking",
+			tip = "Out of combat, a cup and Drinking show on the bar of a healer who drinks." },
 	},
 	-- GroupTools.lua: a row of buttons of Flat UI's own for a group. On by default; it shows in a group with every button. /flatui move places it.
 	{

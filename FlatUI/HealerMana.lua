@@ -8,9 +8,16 @@ local _, ns = ...
 -- UnitText.lua writes a power share, so a druid in a form shows mana too. The game may withhold it (SecretWhenUnitPowerRestricted): it is never
 -- read, compared or added, and goes as it is to SetValue of the bar and to SetFormattedText of its text, which take it
 -- (SimpleStatusBarAPIDocumentation.lua:355-365, SimpleFontStringAPIDocumentation.lua:539-548), as the Threat list does. A member offline or dead
--- has an empty bar with the word, from plain answers only. The window shows in a dungeon or raid, or in any group, as Show says, while the group
--- has a healer; it is drawn again on a step of half a second only while it shows, and the group is read again when it changes
--- (GROUP_ROSTER_UPDATE, PLAYER_ROLES_ASSIGNED, PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA; a burst is read once, a moment after the first).
+-- has an empty bar with the word, from plain answers only. Below Low mana at a bar takes a red wash, also in a fight while the game withholds
+-- the share: the share goes through a step curve of Flat UI's own (C_CurveUtil.CreateCurve, Enum.LuaCurveType.Step: 1 below the limit, 0
+-- from it, as HealthColour.lua's low health border has it) and its answer, withheld or not, to SetAlpha of the wash, which takes it
+-- (SimpleRegionAPIDocumentation.lua: SetAlpha, AllowedWhenTainted); a client that refuses leaves the wash off and says so in /flatui status.
+-- With Show who is drinking, out of combat and while the game lets auras be read (C_Secrets.ShouldAurasBeSecret false, as Trackers read the
+-- buffs of the group), a member with the buff named as spell 430 (Drink, in the client's language: C_Spell.GetSpellName) shows a cup and
+-- Drinking before his share, from C_UnitAuras.GetAuraDataBySpellName with a plain answer only. The window shows in a dungeon or raid, or in
+-- any group, as Show says, while the group has a healer; it is drawn again on a step of half a second only while it shows, and the group is
+-- read again when it changes (GROUP_ROSTER_UPDATE, PLAYER_ROLES_ASSIGNED, PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA; a burst is read once,
+-- a moment after the first).
 -- The window is a child of UIParent in the LOW strata in the look of the Threat list (Threat.lua): a flat background and a thin border in the
 -- colours of the Flat UI page, its bars in the bar texture of that page; it takes no mouse and hides with the interface. /flatui move places it
 -- (FlatUIHealerMana in Movers.lua: the window's top left corner is the top left corner of the box). /flatui healers shows sample bars for a few
@@ -45,10 +52,15 @@ local HEALERS = { PRIEST = true, PALADIN = true, SHAMAN = true, DRUID = true }
 local DIM = { 0.66, 0.68, 0.62 }
 local TRACK = { 0.2, 0.2, 0.2, 0.5 }
 local GREY = { 0.6, 0.6, 0.6 }
+-- The red wash of a bar below Low mana at.
+local LOW = { 0.85, 0.15, 0.1, 0.45 }
+-- The spell whose name is the buff of drinking (Drink), and the cup, cropped as Flat UI's icons are.
+local DRINK_SPELL, DRINK_ICON, CROP = 430, "Interface\\Icons\\INV_Drink_07", 0.08
 local LINE_MISSING = "Healer mana: this client has no UnitPowerPercent, so the list stays hidden."
+local LINE_LOW = "Healer mana: the game refused the red wash of Low mana at, so a bar may not turn red."
 local HELP = { "/flatui healers - sample bars of the healer mana list for a few seconds" }
--- The bars of /flatui healers: a name, a class and the share of mana.
-local SAMPLE = { { "Priest", "PRIEST", 82 }, { "Druid", "DRUID", 47 }, { "Shaman", "SHAMAN", 15 } }
+-- The bars of /flatui healers: a name, a class, the share of mana and whether the member drinks.
+local SAMPLE = { { "Priest", "PRIEST", 82 }, { "Druid", "DRUID", 47, true }, { "Shaman", "SHAMAN", 15 } }
 
 local IsSecret = ns.IsSecret
 -- frame: the window, title its line. rows: the bars. healers: the units of the healers, read from the group. pending: a read waits. ticker: the
@@ -95,6 +107,59 @@ end
 -- A timer of the client, false when there is none or it raises.
 local function After(seconds, fn)
 	return type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, seconds, fn)
+end
+
+-- The step curve of the red wash: 1 below Low mana at, 0 from it, made again when the row changes. Nil when the client has none or refuses it,
+-- which is noted for the status.
+local function LowCurve(at)
+	if H.step ~= nil and H.stepAt == at then
+		return H.step or nil
+	end
+	H.stepAt = at
+	local ok, curve = pcall(function()
+		local made = C_CurveUtil.CreateCurve()
+		made:SetType(Enum.LuaCurveType.Step)
+		made:AddPoint(0, 1)
+		made:AddPoint(at / 100, 0)
+		return made
+	end)
+	H.step = ok and curve or false
+	H.lowRefused = not ok or nil
+	return H.step or nil
+end
+
+-- Whether other units' auras may be read now: out of combat, and while the game says aura values are open.
+local function AurasOpen()
+	if Ask(InCombatLockdown) ~= false then
+		return false
+	end
+	local secrets = C_Secrets
+	local call = type(secrets) == "table" and not IsSecret(secrets) and secrets.ShouldAurasBeSecret or nil
+	if type(call) ~= "function" then
+		return true
+	end
+	return Ask(call) == false
+end
+
+-- The name of the buff of drinking in the client's language, or nil.
+local function DrinkName()
+	if H.drinkName == nil then
+		local spells = C_Spell
+		local name = type(spells) == "table" and not IsSecret(spells) and Ask(spells.GetSpellName, DRINK_SPELL) or nil
+		H.drinkName = type(name) == "string" and name ~= "" and name or false
+	end
+	return H.drinkName or nil
+end
+
+-- True while a unit has the buff of drinking, from a plain answer only.
+local function Drinking(unit)
+	local name = DrinkName()
+	local auras = C_UnitAuras
+	if not name or type(auras) ~= "table" or IsSecret(auras) then
+		return false
+	end
+	local aura = Ask(auras.GetAuraDataBySpellName, unit, name, "HELPFUL")
+	return type(aura) == "table"
 end
 
 -- The curve that turns a share of 1 into 100, or nil when the client has none.
@@ -241,12 +306,57 @@ function H.Row(index)
 	name:SetWordWrap(false)
 	name:SetPoint("LEFT", bar, "LEFT", INSET, 0)
 	name:SetPoint("RIGHT", share, "LEFT", -INSET, 0)
-	row = { bar = bar, track = track, name = name, share = share }
+	-- The red wash over the whole bar, under the text, and the cup left of the share.
+	local low = Own(bar:CreateTexture(nil, "OVERLAY", nil, -8))
+	low:SetAllPoints(bar)
+	low:SetColorTexture(LOW[1], LOW[2], LOW[3], LOW[4])
+	low:SetAlpha(0)
+	local drink = Own(bar:CreateTexture(nil, "OVERLAY", nil, 1))
+	drink:SetTexture(DRINK_ICON)
+	drink:SetTexCoord(CROP, 1 - CROP, CROP, 1 - CROP)
+	drink:SetPoint("RIGHT", share, "LEFT", -2, 0)
+	drink:Hide()
+	row = { bar = bar, track = track, name = name, share = share, low = low, drink = drink, drinking = false }
 	H.rows[index] = row
 	return row
 end
 
--- The bar texture of the Flat UI page, and the height of the text, on one bar. A texture the game refuses leaves a flat fill.
+-- Shows or hides the cup of a bar; the name ends at the cup while it shows, else at the share.
+function H.Cup(row, on)
+	if row.drinking == on then
+		return
+	end
+	row.drinking = on
+	row.drink:SetShown(on)
+	row.name:ClearAllPoints()
+	row.name:SetPoint("LEFT", row.bar, "LEFT", INSET, 0)
+	row.name:SetPoint("RIGHT", on and row.drink or row.share, "LEFT", -INSET, 0)
+end
+
+-- The red wash of a bar: shown below Low mana at, from the plain share of a sample or the share through the step curve, withheld or not. Off
+-- with Low mana at 0, for a member offline or dead, and where the client refuses.
+function H.Wash(row, unit, sample, word)
+	local at = Number("lowAt", 30)
+	if at <= 0 or word then
+		row.low:SetAlpha(0)
+		return
+	end
+	if sample then
+		row.low:SetAlpha(sample[3] < at and 1 or 0)
+		return
+	end
+	local curve = LowCurve(at)
+	if not curve then
+		row.low:SetAlpha(0)
+	elseif not pcall(function()
+		row.low:SetAlpha(UnitPowerPercent(unit, MANA, false, curve))
+	end) then
+		row.low:SetAlpha(0)
+		H.lowRefused = true
+	end
+end
+
+-- The bar texture of the Flat UI page, and the height of the text and of the cup, on one bar. A texture the game refuses leaves a flat fill.
 local function Paint(row, file, text)
 	if row.file ~= file then
 		local ok, done = pcall(row.bar.SetStatusBarTexture, row.bar, file)
@@ -258,6 +368,7 @@ local function Paint(row, file, text)
 	if row.text ~= text then
 		row.name:SetTextHeight(text)
 		row.share:SetTextHeight(text)
+		row.drink:SetSize(text, text)
 		row.text = text
 	end
 end
@@ -287,8 +398,8 @@ function H.Layout(n)
 	H.frame:SetSize(width + 2 * PAD, top + n * height + (n - 1) * GAP + PAD)
 end
 
--- Writes one bar: the class colour, the name and the share of mana; the share goes to the bar and its text untouched. A sample is a table of
--- SAMPLE.
+-- Writes one bar: the class colour, the name and the share of mana, the red wash below Low mana at and the cup while the member drinks; the
+-- share goes to the bar, its text and the wash untouched. A sample is a table of SAMPLE.
 function H.Fill(row, unit, sample)
 	local r, g, b
 	if sample then
@@ -301,10 +412,14 @@ function H.Fill(row, unit, sample)
 	end
 	row.bar:SetStatusBarColor(r, g, b, 1)
 	row.bar:Show()
+	local drinks = Opt("drinking") ~= false
 	if sample then
+		local cup = drinks and sample[4] == true
 		row.name:SetText(sample[1])
 		row.bar:SetValue(sample[3])
-		row.share:SetText(("%d%%"):format(sample[3]))
+		row.share:SetText((cup and "Drinking %d%%" or "%d%%"):format(sample[3]))
+		H.Wash(row, nil, sample)
+		H.Cup(row, cup)
 		return
 	end
 	SetName(row.name, unit)
@@ -314,17 +429,21 @@ function H.Fill(row, unit, sample)
 	elseif Ask(UnitIsDeadOrGhost, unit) == true then
 		word = "Dead"
 	end
+	H.Wash(row, unit, nil, word)
 	if word then
 		row.bar:SetValue(0)
 		row.share:SetText(word)
+		H.Cup(row, false)
 		return
 	end
+	local cup = drinks and AurasOpen() and Drinking(unit)
+	H.Cup(row, cup)
 	local ok, share = pcall(UnitPowerPercent, unit, MANA, false, Hundred())
 	if not ok or not pcall(row.bar.SetValue, row.bar, share) then
 		row.bar:SetValue(0)
 	end
-	if not ok or not pcall(row.share.SetFormattedText, row.share, "%.0f%%", share) then
-		row.share:SetText("")
+	if not ok or not pcall(row.share.SetFormattedText, row.share, cup and "Drinking %.0f%%" or "%.0f%%", share) then
+		row.share:SetText(cup and "Drinking" or "")
 	end
 end
 
@@ -496,6 +615,9 @@ function H.Status()
 	local lines = {}
 	if ns.Enabled(KEY) and type(UnitPowerPercent) ~= "function" then
 		lines[#lines + 1] = LINE_MISSING
+	end
+	if ns.Enabled(KEY) and H.lowRefused and Number("lowAt", 30) > 0 then
+		lines[#lines + 1] = LINE_LOW
 	end
 	return lines
 end

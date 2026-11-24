@@ -1503,6 +1503,8 @@ ns.SETUP_STEPS = {
 		{ "healermana.rows", "o", "behaviour", "Sets how many bars the healer mana list shows at most." },
 		{ "healermana.barWidth", "r", "behaviour", "Sets the width of the bars of the healer mana list." },
 		{ "healermana.barHeight", "r", "behaviour", "Sets the height of the bars of the healer mana list and of their text." },
+		{ "healermana.lowAt", "o", "behaviour", "Turns a healer's bar red below this share of mana, also in a fight." },
+		{ "healermana.drinking", "o", "behaviour", "Shows a cup on the bar of a healer who drinks, out of combat." },
 	} },
 	{ id = "consumables", area = "Drink and health macros", title = "Drink and health macros", draw = "mock-screen", built = false, rows = {
 		{ "consumables.enabled", "c", "behaviour", "Keeps two macros in your macro list, one that drinks and one that heals, up to date with your bags and level." },
