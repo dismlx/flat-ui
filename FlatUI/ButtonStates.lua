@@ -6,6 +6,9 @@ local _, ns = ...
 -- only marks buttons and paints them one frame later. The two hooks are on global functions, ActionButton_UpdateRangeIndicator (1289-1307)
 -- and ActionButton_ApplyCooldown (897-913), and their bodies only record. Every answer is used only when it is plain; a withheld answer leaves
 -- the game's colour and gives one line in /flatui status. A row at its default makes no call. This file is not a module.
+-- Flash when ready (off by default) is for Flat UI's own buttons: when a cooldown longer than the global cooldown ends on one (ns.OnOwnReady,
+-- OwnPaint.lua), a white flash goes over its icon, from clear to 60% and back in 0.35 s. Each button has one frame of this file's own for it, a
+-- child of the button's bar over the icon, made out of combat once the buttons are built and the row is on; in a fight only its animation plays.
 
 local KEY = "actionbars"
 local BARS = {
@@ -51,6 +54,10 @@ local all, queued, hooked, fontSet, touched = false, false, false, false, false
 -- refused.sweep, refused.swipe, refused.size: a call the game refused; the row stops making it.
 local refused = {}
 local watcher
+-- The flash of Flash when ready: by button, { frame, group } once made, or false when it could not be made. RISE and FALL are its two halves in
+-- seconds, PEAK its opacity at the top.
+local readyFlash = setmetatable({}, { __mode = "k" })
+local READY = { PEAK = 0.6, RISE = 0.1, FALL = 0.25, pending = false }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -397,6 +404,72 @@ local function Hook()
 	hooked = range == true or cooldown == true
 end
 
+-- One flash frame: a child of the button's bar, over its icon and above its cooldown, clear until its animation plays. Out of combat only.
+local function MakeReady(button)
+	local icon = button.icon
+	if icon == nil or ns.IsSecret(icon) then
+		return false
+	end
+	local ok, parent = pcall(button.GetParent, button)
+	if not ok or not Plain(parent, "table") then
+		parent = UIParent
+	end
+	local frame = CreateFrame("Frame", nil, parent)
+	ns.Own[frame] = true
+	frame:SetAllPoints(icon)
+	local okLevel, level = pcall(button.GetFrameLevel, button)
+	if okLevel and Plain(level, "number") then
+		frame:SetFrameLevel(level + 2)
+	end
+	frame:SetAlpha(0)
+	local texture = frame:CreateTexture(nil, "OVERLAY")
+	texture:SetAllPoints(frame)
+	texture:SetColorTexture(1, 1, 1, 1)
+	local group = frame:CreateAnimationGroup()
+	local rise = group:CreateAnimation("Alpha")
+	rise:SetFromAlpha(0)
+	rise:SetToAlpha(READY.PEAK)
+	rise:SetDuration(READY.RISE)
+	rise:SetOrder(1)
+	local fall = group:CreateAnimation("Alpha")
+	fall:SetFromAlpha(READY.PEAK)
+	fall:SetToAlpha(0)
+	fall:SetDuration(READY.FALL)
+	fall:SetOrder(2)
+	return { frame = frame, group = group }
+end
+
+-- The flash frames of Flat UI's buttons that have none yet, made once the fight is over; nothing while the row is off.
+local function PrepareReady()
+	if READY.pending or Opt("readyFlash") ~= true or type(ns.OwnOn) ~= "function" or not ns.OwnOn() then
+		return
+	end
+	READY.pending = true
+	ns.OutOfCombat(function()
+		READY.pending = false
+		for _, button in ipairs(type(ns.OwnButtons) == "function" and ns.OwnButtons() or {}) do
+			if readyFlash[button] == nil then
+				local ok, made = pcall(MakeReady, button)
+				readyFlash[button] = ok and made or false
+			end
+		end
+	end)
+end
+
+-- A cooldown longer than the global one ended on one of Flat UI's buttons: its flash plays, from the start.
+local function OnReady(button)
+	if Opt("readyFlash") ~= true or not Wanted() or Eligible()[button] == nil then
+		return
+	end
+	local made = readyFlash[button]
+	if made == nil then
+		PrepareReady()
+	elseif made then
+		made.group:Stop()
+		made.group:Play()
+	end
+end
+
 -- The Config rows of the page Colours and cooldowns call this.
 function ns.ButtonStatesChanged(path)
 	if fontSet and path == KEY .. ".cdFont" and Opt("cdFont") == "game" then
@@ -409,6 +482,14 @@ function ns.ButtonStatesChanged(path)
 	eligible = nil
 	Hook()
 	Ask(nil)
+	PrepareReady()
+end
+
+if type(ns.OnOwnReady) == "function" then
+	ns.OnOwnReady(OnReady)
+end
+if type(ns.OnOwnBuilt) == "function" then
+	ns.OnOwnBuilt(PrepareReady)
 end
 
 if CreateFrame then

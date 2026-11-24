@@ -8,6 +8,12 @@ local _, ns = ...
 -- header's Execute, a state driver, a handle). The game's bars stay shown and laid out at alpha 0 with the mouse off, so every key still reaches
 -- the game's own buttons, which keep their page from the game's own controller. Nothing is hooked, nothing of the game's is hidden, moved,
 -- reparented or given an attribute. All of it runs only while Action buttons (actionbars.own) is Flat UI's.
+-- The layout follows the game's bars: at login, on an Edit Mode or UI scale change, and every half second out of combat when the rectangle of a
+-- game bar moved since the last layout, as /flatui move, the bar block (ns.OwnRelayout) and a tab dragged in /flatui move place a bar with a
+-- snippet that fires no event.
+-- Quick Keybind Mode (the game's Key Bindings) works on the game's own buttons: while it is open the game's eight bars are given back where they
+-- are (alpha 1, the mouse on) and Flat UI's are hidden, out of combat; as it closes, or just before a fight starts, the game's bars are parked
+-- again and Flat UI's shown. A mode opened in a fight waits for its end.
 
 -- Flat UI bar n: the game bar and its buttons, the key command of the buttons, the slot before the first one.
 local BAR = {
@@ -34,6 +40,11 @@ local S = {
 	slots = {},
 	slotListeners = {}, builtListeners = {},
 	editWas = false,
+	-- the game bars' rectangles at the last layout, and the time since they were last compared
+	rect = {}, rectClock = 0,
+	-- Quick Keybind Mode: open (kbWant), the game's bars given back for it (kbHeld), the line printed for this opening (kbTold), between
+	-- PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED (fight), and the owner of its two callbacks
+	kbWant = false, kbHeld = false, kbTold = false, fight = false, kbOwner = {},
 }
 local F = {}
 
@@ -114,7 +125,7 @@ end
 local ON_SHOW = [=[
 local bar = self:GetFrameRef("bar")
 bar:SetAttribute("flatui-game", true)
-if bar:GetAttribute("flatui-pb") then
+if bar:GetAttribute("flatui-pb") or bar:GetAttribute("flatui-kb") then
 	bar:Hide()
 else
 	bar:Show()
@@ -128,7 +139,7 @@ bar:Hide()
 local ON_PETBATTLE = [=[
 local pb = tonumber(newstate) == 1
 self:SetAttribute("flatui-pb", pb)
-if self:GetAttribute("flatui-game") and not pb then
+if self:GetAttribute("flatui-game") and not pb and not self:GetAttribute("flatui-kb") then
 	self:Show()
 else
 	self:Hide()
@@ -165,6 +176,25 @@ for n = 1, 8 do
 	end
 end
 self:GetFrameRef("game1"):EnableMouse(true)
+]=]
+
+-- Quick Keybind Mode: the game's bars back (UNPARK) and Flat UI's hidden, with flatui-kb set so that neither a watcher nor the pet battle driver shows
+-- one again; KB_OFF parks the game's bars again and shows each Flat UI bar whose game bar shows outside a pet battle, as ON_SHOW does.
+local KB_ON = UNPARK .. [=[
+for n = 1, 8 do
+	local bar = self:GetFrameRef("bar" .. n)
+	bar:SetAttribute("flatui-kb", true)
+	bar:Hide()
+end
+]=]
+local KB_OFF = PARK .. [=[
+for n = 1, 8 do
+	local bar = self:GetFrameRef("bar" .. n)
+	bar:SetAttribute("flatui-kb", false)
+	if bar:GetAttribute("flatui-game") and not bar:GetAttribute("flatui-pb") then
+		bar:Show()
+	end
+end
 ]=]
 
 -- Setup -----------------------------------------------------------------------------------------------------------------------------------------
@@ -269,7 +299,7 @@ end
 -- A game frame's rectangle in the units of Flat UI's bars (those of UIParent), or nil when it has not been laid out.
 local function Rect(frame)
 	local ok, l, b, w, h = pcall(frame.GetRect, frame)
-	if not ok or type(l) ~= "number" or type(w) ~= "number" or w <= 0 or h <= 0 then
+	if not ok or not (ns.Finite(l) and ns.Finite(b) and ns.Finite(w) and ns.Finite(h)) or w <= 0 or h <= 0 then
 		return nil
 	end
 	local e = frame:GetEffectiveScale() / UIParent:GetEffectiveScale()
@@ -320,6 +350,7 @@ function F.Layout()
 	for n = 1, 8 do
 		local def = BAR[n]
 		local bl, bb, bw, bh = Rect(_G[def.game])
+		S.rect[n] = bl and { bl, bb, bw, bh } or nil
 		if bl then
 			local count = Count(n)
 			local dir = Direction(bl, bb, bw, bh, count)
@@ -354,6 +385,19 @@ function F.Layout()
 	end
 end
 
+-- True when a game bar's rectangle is not the one of the last layout, by more than half a unit on an edge.
+function F.Moved()
+	for n = 1, 8 do
+		local was = S.rect[n]
+		local l, b, w, h = Rect(_G[BAR[n].game])
+		if l and not (was and math.abs(was[1] - l) <= 0.5 and math.abs(was[2] - b) <= 0.5 and math.abs(was[3] - w) <= 0.5
+			and math.abs(was[4] - h) <= 0.5) then
+			return true
+		end
+	end
+	return false
+end
+
 -- Parking ---------------------------------------------------------------------------------------------------------------------------------------
 
 -- The game's bars stay where they are and shown, at alpha 0 with the mouse off on the bar, the pager buttons and the 96 buttons.
@@ -371,6 +415,10 @@ end
 
 -- The game may put an alpha back at once, in a fight too. The mouse is put back out of combat.
 function F.UpkeepAlpha()
+	-- Quick Keybind Mode has the game's bars shown.
+	if S.kbHeld then
+		return
+	end
 	for n = 1, 8 do
 		local game = _G[BAR[n].game]
 		if game:GetAlpha() ~= 0 then
@@ -381,6 +429,9 @@ function F.UpkeepAlpha()
 end
 
 function F.Upkeep()
+	if S.kbHeld then
+		return
+	end
 	F.UpkeepAlpha()
 	local t = {}
 	local main = _G.MainActionBar
@@ -422,7 +473,7 @@ function F.Revert()
 	if not S.parked then
 		return
 	end
-	S.parked = false
+	S.parked, S.kbHeld = false, false
 	Run(UNPARK)
 	for _, button in pairs({ Pager() }) do
 		if not button:IsMouseEnabled() then
@@ -550,6 +601,44 @@ function F.Build()
 	end
 end
 
+-- Quick Keybind Mode was seen to open or close (its EventRegistry callbacks and the 0.1 s watch). Only noted here: the bars change in F.Process.
+function F.KeybindSeen(open)
+	open = open == true
+	if open == S.kbWant then
+		return
+	end
+	S.kbWant = open
+	if not open then
+		S.kbTold = false
+	elseif S.built and InCombatLockdown() then
+		S.kbTold = true
+		print("Flat UI: the game's action buttons show for Quick Keybind Mode when combat ends.")
+	end
+end
+
+-- Out of combat: the game's bars while Quick Keybind Mode is open, Flat UI's again once it has closed.
+function F.Keybind()
+	local want = S.kbWant and S.parked and not S.fight
+	if want and not S.kbHeld then
+		S.kbHeld = true
+		Run(KB_ON)
+		if not S.kbTold then
+			S.kbTold = true
+			print("Flat UI: the game's action buttons show while Quick Keybind Mode is open.")
+		end
+	elseif not want and S.kbHeld then
+		F.KeybindEnd()
+	end
+end
+
+-- Flat UI's bars back and the game's parked again: the mode closed, or a fight is about to start (PLAYER_REGEN_DISABLED comes before the lockdown).
+function F.KeybindEnd()
+	if S.kbHeld and not InCombatLockdown() then
+		S.kbHeld = false
+		Run(KB_OFF)
+	end
+end
+
 -- Runs what an event left to do, when not in combat.
 function F.Process()
 	if S.busy or S.error or InCombatLockdown() then
@@ -587,9 +676,13 @@ function F.Process()
 		fl.resync = false
 		F.Resync()
 	end
+	if S.kbHeld ~= (S.kbWant and not S.fight) then
+		F.Keybind()
+	end
 end
 
--- Every 0.1 s: Edit Mode is polled while it is open (and once when it closes), and the twelve slots of the main bar are compared with the last seen.
+-- Every 0.1 s: Edit Mode is polled while it is open (and once when it closes), Quick Keybind Mode is polled, the twelve slots of the main bar are
+-- compared with the last seen and, every 0.5 s out of combat, the game bars' rectangles with those of the last layout.
 function F.Watch()
 	local manager = _G.EditModeManagerFrame
 	local active = false
@@ -603,6 +696,17 @@ function F.Watch()
 	S.editWas = active
 	if not S.built then
 		return
+	end
+	if type(KeybindFrames_InQuickKeybindMode) == "function" then
+		local ok, open = pcall(KeybindFrames_InQuickKeybindMode)
+		F.KeybindSeen(ok and not ns.IsSecret(open) and open and true or false)
+	end
+	S.rectClock = S.rectClock + 0.1
+	if S.rectClock >= 0.5 and not InCombatLockdown() then
+		S.rectClock = 0
+		if F.Moved() then
+			S.flag.layout = true
+		end
 	end
 	local changed = false
 	for i = 1, 12 do
@@ -656,10 +760,15 @@ function F.Event(event, name)
 		return
 	end
 	if event == "PLAYER_REGEN_ENABLED" then
+		S.fight = false
 		if S.built then
 			fl.upkeep, fl.lock = true, true
 		end
 		F.Process()
+		return
+	elseif event == "PLAYER_REGEN_DISABLED" then
+		S.fight = true
+		F.KeybindEnd()
 		return
 	end
 	if not S.built then
@@ -685,9 +794,9 @@ end
 
 -- The events and the frame's script are taken up at login, and only when Flat UI's buttons are on: a session of the game's buttons has one event.
 local frame = CreateFrame("Frame")
-local LATER = { "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR", "UPDATE_VEHICLE_ACTIONBAR",
-	"UPDATE_OVERRIDE_ACTIONBAR", "UPDATE_SHAPESHIFT_FORM", "ACTIONBAR_SLOT_CHANGED", "UPDATE_BINDINGS", "EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED",
-	"DISPLAY_SIZE_CHANGED", "CVAR_UPDATE" }
+local LATER = { "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
+	"UPDATE_VEHICLE_ACTIONBAR", "UPDATE_OVERRIDE_ACTIONBAR", "UPDATE_SHAPESHIFT_FORM", "ACTIONBAR_SLOT_CHANGED", "UPDATE_BINDINGS",
+	"EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED", "CVAR_UPDATE" }
 function F.Listen()
 	if S.listening then
 		return
@@ -699,6 +808,15 @@ function F.Listen()
 	frame:SetScript("OnUpdate", function(...)
 		Guard("update", F.Update, ...)
 	end)
+	-- The game's own callbacks of Quick Keybind Mode (QuickKeybind.lua OnShow and OnHide). They only note it; the watch polls it too.
+	if type(EventRegistry) == "table" and type(EventRegistry.RegisterCallback) == "function" then
+		pcall(EventRegistry.RegisterCallback, EventRegistry, "QuickKeybindFrame.QuickKeybindModeEnabled", function()
+			Guard("keybind", F.KeybindSeen, true)
+		end, S.kbOwner)
+		pcall(EventRegistry.RegisterCallback, EventRegistry, "QuickKeybindFrame.QuickKeybindModeDisabled", function()
+			Guard("keybind", F.KeybindSeen, false)
+		end, S.kbOwner)
+	end
 end
 pcall(frame.RegisterEvent, frame, "PLAYER_LOGIN")
 frame:SetScript("OnEvent", function(_, event, ...)
@@ -716,6 +834,12 @@ end
 -- to 8 are left alone from then on.
 function ns.OwnWanted()
 	return F.Mode() and not S.error
+end
+
+-- The overIf of the rows that apply with the game's buttons only (Hide bar frame, Hide end caps, Hide dividers, Rotation helper highlight): greyed
+-- while Flat UI's buttons are chosen (Panel.lua, Over).
+function ns.OwnButtonsChosen()
+	return ns.OwnWanted() == true
 end
 
 -- The first thing a build's snippets did not write, or nil.
@@ -738,6 +862,29 @@ end
 
 function ns.OwnBarFrame(n)
 	return S.bars[n]
+end
+
+-- The Flat UI bar that takes the place of the game bar of this name (MainActionBar, MultiBarBottomLeft and the rest), while Flat UI's buttons are
+-- built; nil for any other name.
+function ns.OwnBarOf(name)
+	if not S.built then
+		return nil
+	end
+	for n = 1, 8 do
+		if BAR[n].game == name then
+			return S.bars[n]
+		end
+	end
+	return nil
+end
+
+-- Lays Flat UI's bars out again on the next check out of combat: the bar block placed the game's bars. The rectangles are compared at the next watch
+-- as well, since the block's places are put down a frame later.
+function ns.OwnRelayout()
+	if S.built then
+		S.flag.layout = true
+		S.rectClock = 0.5
+	end
 end
 
 function ns.OwnSlot(button)
@@ -829,6 +976,9 @@ function ns.OwnStatus(id)
 			return ("Keys on flyout slots: sent to Flat UI's buttons, %d %s."):format(count, count == 1 and "key" or "keys")
 		end
 	elseif id == "parked" then
+		if S.kbHeld then
+			return "Game bars 1 to 8: shown for Quick Keybind Mode; Flat UI's come back when it closes."
+		end
 		local line = "Game bars 1 to 8: hidden."
 		if S.putBack > 0 then
 			line = line .. (" The game showed them again %d %s this session."):format(S.putBack, S.putBack == 1 and "time" or "times")

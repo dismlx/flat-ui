@@ -28,11 +28,14 @@ local _, ns = ...
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
 -- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours. Fade the block: the alpha of each
--- held frame (SetAlpha, which the game allows in a fight) goes to the faded value except in a fight, under the mouse (over its own block),
+-- held frame (SetAlpha, which the game allows in a fight) eases to the faded value over Fade time, once the block has not been wanted for Wait
+-- before fading, and back to full in a tenth of a second when it is: in a fight, under the mouse (over its own block),
 -- with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
 -- child of the totem bar that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107,
 -- MultiCastActionBarFrame.lua:637-641). The arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while
--- the game shows it. The alpha a frame had is read once and put back when the fade goes off or the block stops.
+-- the game shows it. The alpha a frame had is read once and put back when the fade goes off or the block stops. With Flat UI's own buttons
+-- (OwnBars.lua) the fade writes Flat UI's bar in place of each action bar of a block (ns.OwnBarOf), never the game's bar parked under it, and
+-- after a plan tells OwnBars to lay its bars out again (ns.OwnRelayout), as the game's bars it copies have moved.
 
 local KEY = "barblock"
 -- The box of each block in /flatui move, and the end of the names of its Stack direction, Line up bars and gap rows (block 1 keeps the names
@@ -87,9 +90,11 @@ local XP_SPACER = -1 -- EditModePresetLayoutConstants.lua:32 (Camelot)
 -- hidden. fight: what the bars were doing at the start and the end of the last fight, for /flatui block facts. fader: the frame that decides
 -- full or faded. orig: the alpha each faded frame had. sent: the last alpha written.
 -- Each block of `blocks`: last, the plan in use; waiting, the label of the bar the first spot waits for; default, the spot was put back, so the
--- block goes to its default place; holder, the box; panel, the background frame; panelOn, the panel is shown.
+-- block goes to its default place; holder, the box; panel, the background frame; panelOn, the panel is shown; idle, the seconds since the fade
+-- last had it at full. state.value holds the alpha the fade eases each frame from, and state.easing whether a pass still has one on its way.
 local LOOK = { every = 0.1, weak = { __mode = "k" } }
-local state = { queued = false, pending = false, seen = {}, fight = {}, orig = setmetatable({}, LOOK.weak), sent = setmetatable({}, LOOK.weak) }
+local state = { queued = false, pending = false, seen = {}, fight = {}, orig = setmetatable({}, LOOK.weak), sent = setmetatable({}, LOOK.weak),
+	value = setmetatable({}, LOOK.weak), easing = false }
 local blocks = { {}, {}, {} }
 -- The tabs of /flatui move (Tabs, below): width, height and inset of a tab, how far past a box a drop still counts, the thickness of the drop
 -- line, the strata over the boxes. tabs: the tabs made; shown: the handles are open; boxes: the blocks whose box shows; drag: the tab being
@@ -583,32 +588,80 @@ end
 
 local function PutBack(frame)
 	local alpha = state.orig[frame]
-	state.orig[frame], state.sent[frame] = nil, nil
+	state.orig[frame], state.sent[frame], state.value[frame] = nil, nil, nil
 	if alpha ~= nil then
 		pcall(frame.SetAlpha, frame, alpha)
 	end
 end
 
--- Every held frame and each panel to full or faded, block by block; a frame that is no longer held gets its own alpha back.
-local function Fade()
-	local keep = {}
+-- The frame the fade writes for a held name: Flat UI's own bar in place of an action bar while Flat UI's buttons are in use, since the game's bar
+-- is parked at alpha 0 under it (OwnBars.lua), else the game's frame. A game bar written before Flat UI's buttons were built is let go without a
+-- write, so the parked bar keeps its alpha 0.
+local function FadeFrame(name)
+	local own = ns.OwnOn and ns.OwnOn() and ns.OwnBarOf and ns.OwnBarOf(name)
+	if not own then
+		return GameFrame(name)
+	end
+	local game = GameFrame(name)
+	if game and state.orig[game] ~= nil then
+		state.orig[game], state.sent[game], state.value[game] = nil, nil, nil
+	end
+	return own
+end
+
+-- One step of a frame toward its alpha: up by `up`, down by `down`, from the alpha it was last given (its own the first time). True while it is
+-- not there yet.
+local function Ease(frame, target, up, down)
+	local value = state.value[frame]
+	if value == nil then
+		value = state.sent[frame] or Original(frame)
+	end
+	if value < target then
+		value = math.min(target, value + up)
+	elseif value > target then
+		value = math.max(target, value - down)
+	end
+	state.value[frame] = value
+	Write(frame, value)
+	return value ~= target
+end
+
+-- Every held frame and each panel toward full or faded, block by block; a frame that is no longer held gets its own alpha back. A block goes to
+-- full at once when it is wanted (in 0.1 s), and to its faded opacity over Fade time once it has not been wanted for Wait before fading. dt is the
+-- time since the last pass (0 for a pass of an option change).
+local function Fade(dt)
+	dt = Number(dt) and dt > 0 and math.min(dt, 1) or 0
+	local keep, easing = {}, false
+	local delay = (Number(Opt("fadeDelay")) and Opt("fadeDelay") or 500) / 1000
+	local up, down = dt / 0.1, dt / math.max(0.1, (Number(Opt("fadeTime")) and Opt("fadeTime") or 300) / 1000)
 	for _, block in ipairs(blocks) do
 		local plan = block.last
 		if plan then
-			local alpha = Full(plan) and 1 or Opt("fadeTo") / 100
+			local alpha = 1
+			if Full(plan) then
+				block.idle = 0
+			else
+				block.idle = (block.idle or 0) + dt
+				if block.idle >= delay then
+					alpha = Opt("fadeTo") / 100
+				end
+			end
+			-- Still waiting to fade counts as easing, so the next pass comes on the next frame.
+			easing = easing or alpha == 1 and block.idle > 0
 			for _, name in ipairs(PlanNames(plan, {})) do
-				local frame = GameFrame(name)
+				local frame = FadeFrame(name)
 				if frame then
 					keep[frame] = true
-					Write(frame, alpha)
+					easing = Ease(frame, alpha, up, down) or easing
 				end
 			end
 			if block.panel and block.panelOn then
 				keep[block.panel] = true
-				Write(block.panel, alpha)
+				easing = Ease(block.panel, alpha, up, down) or easing
 			end
 		end
 	end
+	state.easing = easing
 	for frame in pairs(state.orig) do
 		if not keep[frame] then
 			PutBack(frame)
@@ -616,13 +669,15 @@ local function Fade()
 	end
 end
 
+-- Every frame while a block eases or waits to fade, else every 0.1 s.
 local function FadeTick(_, elapsed)
-	state.fadeClock = (state.fadeClock or 0) + elapsed
-	if state.fadeClock < LOOK.every then
+	state.fadeClock = (state.fadeClock or 0) + (Number(elapsed) and elapsed or 0)
+	if not state.easing and state.fadeClock < LOOK.every then
 		return
 	end
+	local dt = state.fadeClock
 	state.fadeClock = 0
-	ns.Try(KEY, Fade)
+	ns.Try(KEY, Fade, dt)
 end
 
 -- The panel behind a block from its plan and the options: off with no plan, with the page off and with its own switch off.
@@ -697,6 +752,9 @@ local function Release()
 	ns.XpBarBlock(nil)
 	Look()
 	Tell()
+	if ns.OwnRelayout then
+		ns.OwnRelayout()
+	end
 end
 
 -- The spots of every block for Movers; Flat UI's own experience bar is not a frame of the game's: its spot goes to XpBar.lua, and the rest are held.
@@ -711,6 +769,10 @@ local function Hold()
 	end
 	ns.MoverHold(KEY, next(held) ~= nil and held or nil)
 	ns.XpBarBlock(blocks[1].last and blocks[1].last.spots[XPOWN])
+	-- Flat UI's own buttons copy the game bars' places, which a snippet sets with no event: they are laid out again.
+	if ns.OwnRelayout then
+		ns.OwnRelayout()
+	end
 end
 
 local function Replan()

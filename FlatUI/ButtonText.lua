@@ -100,7 +100,9 @@ local function IsDot(hotkey)
 end
 
 -- The short hotkey text. The game writes the key's name in full (GetBindingText(key, 1), ActionButton.lua:501): "Mouse Button 4", "Num Pad 1". The
--- box holds about four characters, so a key of these names becomes M4, N1, WU. The words are the client's own globals, matched exactly.
+-- box holds about four characters, so a key of these names becomes M4, N1, WU, and Spacebar, Backspace, Delete, Insert, Home, the arrow keys, Num
+-- Lock, Escape and Enter become Sp, Bs, Del, Ins, Hm, Up, Dn, Lt, Rt, NL, Esc and Ent. The words are the client's own globals, matched exactly; a
+-- global the client does not have is skipped. The key text of the cooldown icons (Cooldowns.lua) is made short the same way.
 local MODS = { "ALT", "CTRL", "META", "SHIFT" }
 local shortWords
 local function Words()
@@ -129,6 +131,18 @@ local function Words()
 	Add("KEY_NUMPADDECIMAL", "N.")
 	Add("KEY_PAGEUP", "PU")
 	Add("KEY_PAGEDOWN", "PD")
+	Add("KEY_SPACE", "Sp")
+	Add("KEY_BACKSPACE", "Bs")
+	Add("KEY_DELETE", "Del")
+	Add("KEY_INSERT", "Ins")
+	Add("KEY_HOME", "Hm")
+	Add("KEY_UP", "Up")
+	Add("KEY_DOWN", "Dn")
+	Add("KEY_LEFT", "Lt")
+	Add("KEY_RIGHT", "Rt")
+	Add("KEY_NUMLOCK", "NL")
+	Add("KEY_ESCAPE", "Esc")
+	Add("KEY_ENTER", "Ent")
 	if next(map) ~= nil then
 		shortWords = map
 	end
@@ -524,6 +538,10 @@ function ns.ButtonTextChanged(path)
 	end
 	state.dirty = true
 	Pass()
+	-- The keys on the cooldown icons follow Hotkey text too.
+	if path == KEY .. ".hotkeyText" and type(ns.CooldownBindsChanged) == "function" then
+		ns.CooldownBindsChanged()
+	end
 end
 
 local events = CreateFrame("Frame")

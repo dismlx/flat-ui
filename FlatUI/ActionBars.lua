@@ -7,6 +7,9 @@ local _, ns = ...
 -- of a button is set again by UpdateButtonArt only when the button loads and when Edit Mode applies Hide bar art (ActionButton.lua:1610,
 -- EditModeSystemTemplates.lua:1110-1121), so every button is styled again on the next frame after the events that run those: entering
 -- the world, a layout update and the end of Edit Mode. The dividers the game lays out are faded by a frame of the addon's own.
+-- The flat panel of Bar background is a frame of the addon's own behind a bar, shown with it and as faint as it: behind Flat UI's own bar in
+-- place of the main bar and bars 2 to 8 while Flat UI's buttons are in use (the game's bars are parked at alpha 0 under them), else behind the
+-- game's bar.
 
 local KEY = "actionbars"
 
@@ -491,6 +494,26 @@ local function SyncOwn()
 	return fresh
 end
 
+-- The bar a panel goes behind: Flat UI's own bar in place of the main bar and bars 2 to 8 while Flat UI's buttons are in use (ns.OwnBarOf,
+-- OwnBars.lua), since the game's bar is parked at alpha 0 under it, else the game's bar. The stance and pet bars are always the game's.
+local function PlateBar(name)
+	if OwnOn() and type(ns.OwnBarOf) == "function" then
+		local ok, own = pcall(ns.OwnBarOf, name)
+		if ok and type(own) == "table" then
+			return own
+		end
+	end
+	return _G[name]
+end
+
+-- A panel on the bar it goes behind, out of combat: made on the game's bar before Flat UI's buttons were built, it goes over to Flat UI's bar.
+local function PlateAnchor(state, bar)
+	state.anchor = bar
+	state.frame:ClearAllPoints()
+	state.frame:SetPoint("TOPLEFT", bar, "TOPLEFT", -4, 4)
+	state.frame:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 4, -4)
+end
+
 -- What the game does to a bar, copied to its panel: shown with the bar and as faint as the bar. Only a plain answer is used. SetShown and
 -- SetAlpha are calls on the addon's own frame, so this is allowed in combat.
 local function PlateSync(state, bar)
@@ -507,7 +530,7 @@ end
 -- The flat panel behind one bar, made out of combat and shown with the bar.
 local function Plate(entry)
 	local name = entry[1]
-	local bar = _G[name]
+	local bar = PlateBar(name)
 	local state = plates[name]
 	if state == false then
 		return
@@ -519,9 +542,8 @@ local function Plate(entry)
 				local made = CreateFrame("Frame", nil, UIParent)
 				ns.Own[made] = true
 				made:SetFrameStrata("BACKGROUND")
-				made:SetPoint("TOPLEFT", bar, "TOPLEFT", -4, 4)
-				made:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 4, -4)
 				plates[name] = { frame = made }
+				PlateAnchor(plates[name], bar)
 				ns.Each(KEY, function()
 					plates[name].outline = ns.Outline(made, made, true)
 				end)
@@ -542,6 +564,9 @@ local function Plate(entry)
 	end
 	if not state.outline then
 		return
+	end
+	if state.anchor ~= bar and not InCombatLockdown() then
+		PlateAnchor(state, bar)
 	end
 	local r, g, b = ns.Colour(KEY .. ".plateColour")
 	ns.SetOutlineFill(state.outline, r, g, b, Opt("plateAlpha") / 100)
@@ -600,7 +625,13 @@ local function PlateStep(_, elapsed)
 		end
 		local state = plates[name]
 		if state and state.outline and plateWatch.wanted[name] then
-			PlateSync(state, _G[name])
+			-- Flat UI's buttons were built since the panel was put: Plates puts it on their bar, out of combat.
+			local bar = PlateBar(name)
+			if state.anchor ~= bar and not InCombatLockdown() then
+				Plates()
+				return
+			end
+			PlateSync(state, bar)
 		end
 	end
 end
