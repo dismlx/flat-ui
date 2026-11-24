@@ -1353,6 +1353,14 @@ ns.PAGES = {
 		{ key = "rows", kind = "number", default = 5, min = 1, max = 10, step = 1, label = "Number of bars", tip = "The highest threat first." },
 		{ key = "barWidth", kind = "number", default = 180, min = 100, max = 400, step = 5, unit = " px", label = "Bar width" },
 		{ key = "barHeight", kind = "number", default = 16, min = 10, max = 30, step = 1, unit = " px", label = "Bar height", tip = "Also the height of text." },
+		{ key = "mine", kind = "bool", default = true, label = "Mark your own bar", tip = "A thin white outline round your bar." },
+		{ section = "Warning" },
+		{ key = "warn", kind = "bool", default = true, label = "Warn near aggro",
+			tip = "Your bar pulses red while you are not tanking and your share passes Warn at. Not on bosses, where the game hides threat." },
+		{ key = "warnAt", kind = "number", default = 90, min = 50, max = 100, step = 5, unit = "%", label = "Warn at", needs = "warn" },
+		{ key = "warnSound", kind = "choice", default = "raid", label = "Warning sound", needs = "warn", tip = "Plays once for each enemy.",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
 	-- HealerMana.lua: a window of Flat UI's own with the mana of the healers of the group. On by default; it shows in a dungeon or raid.
 	{

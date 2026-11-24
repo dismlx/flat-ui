@@ -20,6 +20,12 @@ local _, ns = ...
 -- on it, so then the members keep the order of the group, the player first in a party, and the pets come after all of them: Number of bars
 -- leaves out a pet before a member, so the five bars of the default show every member of a party. /flatui status says so. A member's name and
 -- the enemy's go to SetText the same way when the game withholds them (SimpleFontStringAPIDocumentation.lua:664-673).
+-- The player's own bar has a thin white outline (Mark your own bar; the player by UnitIsUnit, plain answers only, so his raid token counts).
+-- With Warn near aggro, while the player is not the one tanking (isTanking of UnitDetailedThreatSituation, plain only) and his plain share is
+-- at Warn at or above, his bar pulses red (a looping Alpha animation of a texture of Flat UI's own) and Warning sound plays once for that
+-- enemy: again only after his share fell more than 10 under Warn at, the enemy changed (UnitGUID, plain only) or the list hid. A withheld share,
+-- as on a boss, warns of nothing. The samples preview it: the player's sample bar passes 90% at some steps of test mode, its sound once
+-- through TestMode.lua's gate (TM.Sound).
 -- The window is a child of UIParent in the LOW strata with a flat background and a thin border in the colours of the Flat UI page, as the data
 -- panels have, its bars in the bar texture of that page; it takes no mouse and hides with the interface. /flatui move places it (FlatUIThreat in
 -- Movers.lua: the window's top left corner is the top left corner of the box). /flatui threat shows sample bars for a few seconds, out of
@@ -48,6 +54,12 @@ local DIM = { 0.66, 0.68, 0.62 }
 local TRACK = { 0.2, 0.2, 0.2, 0.5 }
 local GREY = { 0.6, 0.6, 0.6 }
 local PET = 0.7
+-- The outline of the player's bar, and the red of its pulse near aggro, its lowest opacity and the length of one swell.
+local MINE = { 1, 1, 1, 0.9 }
+local ALARM, ALARM_LOW, ALARM_TIME = { 1, 0.12, 0.08, 0.55 }, 0.15, 0.45
+-- The share under Warn at, in points, that lets the sound play again; the places of the Warning sound choices in ns.SOUNDS (IconRow.lua).
+local REARM = 10
+local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 -- What the frame of the addon's own hears in a fight Show allows, and while there is an enemy.
 local FIGHT_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local ENEMY_EVENTS = { "UNIT_THREAT_LIST_UPDATE", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_PET" }
@@ -178,7 +190,8 @@ function T.Members()
 	return list
 end
 
--- The members on the threat table of the enemy, each { member, order, scaled, value, withheld }, and true when the game withheld a value. The
+-- The members on the threat table of the enemy, each { member, order, scaled, value, withheld, tanking, me }, and true when the game withheld a
+-- value. tanking and me are true only from plain answers: the member has aggro, the member is the player. The
 -- game answers nothing for a member who is not on the table (MayReturnNothing; isTanking, status, scaledPercentage, rawPercentage, rawThreat).
 -- Plain shares are sorted, highest first, the raw threat and then the order of the group deciding a tie. A withheld share is kept as it is for
 -- the bar and its text, and then the entries are sorted on what Flat UI knows of them alone: the members first, then the pets, each in the order
@@ -187,14 +200,20 @@ function T.Scan(mob)
 	local entries, withheld = {}, false
 	for order, member in ipairs(T.Members()) do
 		if Ask(UnitExists, member.unit) == true then
-			local ok, _, _, scaled, _, value = pcall(UnitDetailedThreatSituation, member.unit, mob)
+			local ok, tanking, _, scaled, _, value = pcall(UnitDetailedThreatSituation, member.unit, mob)
+			local entry
 			if ok then
 				if IsSecret(scaled) or IsSecret(value) then
 					withheld = true
-					entries[#entries + 1] = { member = member, order = order, scaled = scaled, withheld = true }
+					entry = { member = member, order = order, scaled = scaled, withheld = true }
 				elseif ns.Finite(scaled) then
-					entries[#entries + 1] = { member = member, order = order, scaled = math.max(0, math.min(100, scaled)), value = ns.Finite(value) and value or 0 }
+					entry = { member = member, order = order, scaled = math.max(0, math.min(100, scaled)), value = ns.Finite(value) and value or 0 }
 				end
+			end
+			if entry then
+				entry.tanking = not IsSecret(tanking) and tanking == true
+				entry.me = not member.pet and Ask(UnitIsUnit, member.unit, "player") == true
+				entries[#entries + 1] = entry
 			end
 		end
 	end
@@ -231,7 +250,7 @@ function T.Sample()
 		if step > 0 and order > 1 then
 			share = math.max(1, math.min(99, share + SHIFT[(order + step) % #SHIFT + 1]))
 		end
-		entries[order] = { sample = spec, order = order, scaled = share }
+		entries[order] = { sample = spec, order = order, scaled = share, me = spec[1] == false, tanking = order == 1 }
 	end
 	if step > 0 then
 		table.sort(entries, function(a, b)
@@ -346,9 +365,86 @@ function T.Row(index)
 	name:SetWordWrap(false)
 	name:SetPoint("LEFT", bar, "LEFT", INSET, 0)
 	name:SetPoint("RIGHT", share, "LEFT", -INSET, 0)
-	row = { bar = bar, track = track, name = name, share = share }
+	-- The outline of the player's bar: four thin edges on a frame of the addon's own over the bar, hidden until it is his.
+	local mine = Own(CreateFrame("Frame", nil, bar))
+	mine:SetAllPoints(bar)
+	for _, edge in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
+		local line = Own(mine:CreateTexture(nil, "OVERLAY", nil, 7))
+		line:SetColorTexture(MINE[1], MINE[2], MINE[3], MINE[4])
+		line:SetPoint(edge[1], mine, edge[1], 0, 0)
+		line:SetPoint(edge[2], mine, edge[2], 0, 0)
+		if edge[3] then
+			line:SetHeight(1)
+		else
+			line:SetWidth(1)
+		end
+	end
+	mine:Hide()
+	-- The red pulse near aggro over the whole bar, under the text: a texture whose opacity swells and ebbs while it plays.
+	local alarm = Own(bar:CreateTexture(nil, "OVERLAY", nil, -8))
+	alarm:SetAllPoints(bar)
+	alarm:SetColorTexture(ALARM[1], ALARM[2], ALARM[3], ALARM[4])
+	alarm:Hide()
+	local made, pulse = pcall(function()
+		local group = alarm:CreateAnimationGroup()
+		group:SetLooping("BOUNCE")
+		local fade = group:CreateAnimation("Alpha")
+		fade:SetFromAlpha(ALARM_LOW)
+		fade:SetToAlpha(1)
+		fade:SetDuration(ALARM_TIME)
+		return group
+	end)
+	row = { bar = bar, track = track, name = name, share = share, mine = mine, alarm = alarm, pulse = made and pulse or nil }
 	T.rows[index] = row
 	return row
+end
+
+-- True when an entry of the player is near aggro: Warn near aggro is on, he is not tanking and his plain share is at Warn at or above.
+function T.Near(entry)
+	if Opt("warn") == false or not entry or not entry.me or entry.withheld or entry.tanking then
+		return false
+	end
+	return ns.Finite(entry.scaled) and entry.scaled >= Number("warnAt", 90)
+end
+
+-- Starts or stops the red pulse of a bar.
+function T.Pulse(row, on)
+	if on then
+		row.alarm:Show()
+		if row.pulse and not row.pulse:IsPlaying() then
+			pcall(row.pulse.Play, row.pulse)
+		end
+	elseif row.alarm:IsShown() then
+		if row.pulse then
+			pcall(row.pulse.Stop, row.pulse)
+		end
+		row.alarm:Hide()
+	end
+end
+
+-- Warning sound, once for an enemy while the player is near aggro on it: again once his plain share fell more than REARM under Warn at, he left
+-- its table, the enemy changed (its GUID, else its token, when the game withholds the GUID) or the list hid (who nil). A sample's sound plays
+-- once for each time test mode is turned on (TM.Sound).
+function T.Alarm(entry, who)
+	if who == nil or not entry then
+		T.warned = nil
+		return
+	end
+	if T.warned and T.warned ~= who then
+		T.warned = nil
+	end
+	if T.warned and not entry.withheld and ns.Finite(entry.scaled) and entry.scaled < Number("warnAt", 90) - REARM then
+		T.warned = nil
+	end
+	if T.warned or not T.Near(entry) then
+		return
+	end
+	T.warned = who
+	local sound = ns.SOUNDS[KITS[Opt("warnSound")] or 0]
+	local mode = ns.TestMode
+	if sound and (who ~= "sample" or (mode ~= nil and mode.Sound("threat.warn"))) then
+		ns.PlayKit(sound[1], KEY)
+	end
 end
 
 -- The bar texture of the Flat UI page, and the height of the text, on one bar. A texture the game refuses leaves a flat fill.
@@ -391,8 +487,11 @@ function T.Layout(n)
 	T.frame:SetSize(width + 2 * PAD, top + n * height + (n - 1) * GAP + PAD)
 end
 
--- Writes one bar: its colour, its name and its share. A withheld share goes to the bar and to its text untouched.
+-- Writes one bar: its colour, its name and its share, the outline of the player's own and its pulse near aggro. A withheld share goes to the bar
+-- and to its text untouched.
 function T.Fill(row, entry)
+	row.mine:SetShown(entry.me == true and Opt("mine") ~= false)
+	T.Pulse(row, T.Near(entry))
 	local r, g, b = T.Colour(entry)
 	row.bar:SetStatusBarColor(r, g, b, 1)
 	local spec = entry.sample
@@ -448,6 +547,7 @@ function T.Draw(mob, entries)
 		if T.frame then
 			T.frame:Hide()
 		end
+		T.Alarm(nil, nil)
 		T.Tick(mob == "targettarget")
 		return
 	end
@@ -457,8 +557,14 @@ function T.Draw(mob, entries)
 		T.Fill(T.rows[index], entries[index])
 	end
 	for index = n + 1, #T.rows do
+		T.Pulse(T.rows[index], false)
 		T.rows[index].bar:Hide()
 	end
+	local own = nil
+	for _, entry in ipairs(entries) do
+		own = own or (entry.me and entry or nil)
+	end
+	T.Alarm(own, mob and (Ask(UnitGUID, mob) or mob) or "sample")
 	if mob then
 		SetName(T.title, mob)
 	else
@@ -598,7 +704,7 @@ end
 
 -- Off, or stopped: the window hides, the frame hears nothing and the step ends.
 function T.Off()
-	T.sample, T.fighting, T.pending, T.withheld = nil, false, nil, false
+	T.sample, T.fighting, T.pending, T.withheld, T.warned = nil, false, nil, false, nil
 	HearAll(FIGHT_EVENTS, false)
 	HearAll(ENEMY_EVENTS, false)
 	Hear("UNIT_TARGET", false)

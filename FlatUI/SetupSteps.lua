@@ -1496,6 +1496,10 @@ ns.SETUP_STEPS = {
 		{ "threat.rows", "o", "behaviour", "Sets how many bars the threat list shows at most." },
 		{ "threat.barWidth", "r", "behaviour", "Sets the width of the bars of the threat list." },
 		{ "threat.barHeight", "r", "behaviour", "Sets the height of the bars of the threat list and of their text." },
+		{ "threat.mine", "o", "behaviour", "Puts a thin white outline round your own bar on the threat list." },
+		{ "threat.warn", "o", "behaviour", "Makes your bar pulse red while you are not tanking and are about to pull aggro." },
+		{ "threat.warnAt", "r", "behaviour", "Sets the share of threat at which the warning starts." },
+		{ "threat.warnSound", "r", "behaviour", "Chooses the sound that plays once for each enemy as the warning starts." },
 	} },
 	{ id = "healermana", area = "Healer mana", title = "Healer mana", draw = "mock-screen", built = false, rows = {
 		{ "healermana.enabled", "c", "behaviour", "Shows the mana of the healers in your group, in a window placed with the movers." },
