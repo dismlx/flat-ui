@@ -3999,14 +3999,15 @@ end
 -- The settings and positions of the profile in use are replaced by what a text from ExportProfile holds. A setting
 -- the text does not name goes back to its default; a setting this build does not have is ignored. With `opts`, `opts.settings` false keeps the
 -- settings in use, `opts.spots` false keeps the positions in use, and `opts.newName` puts what is left in a new profile, which is then the profile in use:
--- with the positions of the text alone, or with `opts.spots` false those every new profile starts with (ns.NewProfile). The positions of a text are
--- kept as it has them.
+-- with the positions of the text alone, or with `opts.spots` false those every new profile starts with (ns.NewProfile). The positions of a text whose
+-- first line names the screen it was made on are fitted to this screen under the settings the profile will have (ns.FitSpots), as the positions a new
+-- profile starts with are; `opts.fit` false, and a text of an older build without that line, keep them as the text has them.
 function ns.ImportProfile(text, opts)
 	local refusal = Refusal()
 	if refusal then
 		return false, refusal
 	end
-	local options, spots, _, moved = ReadProfile(text)
+	local options, spots, header, moved = ReadProfile(text)
 	if not options then
 		return false, spots
 	end
@@ -4016,6 +4017,9 @@ function ns.ImportProfile(text, opts)
 	end
 	if opts.spots == false then
 		spots = nil
+	end
+	if spots and opts.fit ~= false and type(header) == "table" and Finite(header.width) and header.width > 0 then
+		spots = ns.FitSpots(spots, header, options or (opts.newName ~= nil and {} or CopyOf(profile).options))
 	end
 	if opts.newName ~= nil then
 		local done, message = ns.NewProfile(opts.newName, nil, options or {}, spots)

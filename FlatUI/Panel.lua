@@ -39,7 +39,7 @@ local POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTE
 -- The parts of the window, and what it is showing.
 local ui = { views = {}, nav = {}, lines = {}, paints = {}, tip = "" }
 
-local OpenList, CloseList, Ask, HideConfirm, ShowStrip, RefreshAll, ShowPage
+local OpenList, CloseList, Ask, HideConfirm, ShowStrip, RefreshAll, ShowPage, Arrive
 
 -- Helpers ---------------------------------------------------------------------------------------
 
@@ -446,9 +446,14 @@ local function NewRow(parent, y, text, tip)
 	function row.Changed()
 		RefreshAll()
 	end
-	-- Every control of the row shows the tip too, since the game gives the mouse to the control and not to the row.
+	-- Every control of the row shows the tip too, since the game gives the mouse to the control and not to the row. A control that already
+	-- has a hover of its own, such as the fill of a button, keeps it: it runs first on the way in and last on the way out.
 	function row.Hover(target, enter, leave)
+		local ownEnter, ownLeave = target:GetScript("OnEnter"), target:GetScript("OnLeave")
 		target:SetScript("OnEnter", function()
+			if ownEnter then
+				ownEnter(target)
+			end
 			hover:Show()
 			ui.message = nil
 			-- Setup and the movers show the tip in the strip; the options pages show it in a tooltip.
@@ -479,6 +484,9 @@ local function NewRow(parent, y, text, tip)
 			end
 			ui.tip = ""
 			ShowStrip()
+			if ownLeave then
+				ownLeave(target)
+			end
 		end)
 	end
 	row.Hover(frame)
@@ -1571,8 +1579,9 @@ local function BuildProfiles()
 	end
 	local updates = {}
 	local y = 8
-	local function Row(text)
-		local row = NewRow(child, y, text)
+	-- Each row of the page says what it does in its tip, over the label and over each of its controls.
+	local function Row(text, tip)
+		local row = NewRow(child, y, text, tip)
 		y = y + ROW
 		return row
 	end
@@ -1584,6 +1593,7 @@ local function BuildProfiles()
 	local function Beside(row, text, onClick)
 		local button = Button(row.frame, text, SMALL, onClick)
 		button:SetPoint("LEFT", row.frame, "LEFT", CONTROL + FIELD + 10, 0)
+		row.Hover(button)
 		return button
 	end
 	local function Current()
@@ -1593,7 +1603,7 @@ local function BuildProfiles()
 
 	view.sections[1] = y
 	y = Header(child, "Profile", y)
-	local row = Row("Profile in use")
+	local row = Row("Profile in use", "The profile this character uses. Pick another to switch to it at once, out of combat.")
 	local used = Menu(row, {
 		lines = function()
 			return ProfileNames(function() return true end)
@@ -1608,21 +1618,47 @@ local function BuildProfiles()
 	end
 
 	if type(ns.NewProfile) == "function" then
-		row = Row("New profile")
+		row = Row("New profile", "Type a name. Create starts from the defaults and the frame positions a new profile starts with. Duplicate copies the "
+			.. "profile in use, its frame positions too, as \"<name> copy\" when no name is typed. The new profile is put in use.")
 		local name = Field(row.frame, FIELD, 32)
 		name:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
-		local function Create()
+		local function Typed()
 			local typed = name:GetText()
 			typed = IsText(typed) and typed or ""
-			if Act("NewProfile", (typed:match("^%s*(.-)%s*$"))) then
+			return (typed:match("^%s*(.-)%s*$"))
+		end
+		local function Create()
+			if Act("NewProfile", Typed()) then
+				name:SetText("")
+			end
+		end
+		-- A copy of the profile in use, settings and positions: under the typed name, else the first of "<name> copy" and "<name> copy 2" to 9 that is free.
+		local function Duplicate()
+			local from, typed = Current(), Typed()
+			if typed == "" then
+				for number = 1, 9 do
+					local candidate = number == 1 and ("%s copy"):format(from) or ("%s copy %d"):format(from, number)
+					if Call("ProfileNameCheck", candidate) then
+						typed = candidate
+						break
+					end
+				end
+			end
+			if typed == "" then
+				Say("Type a name for the copy.")
+			elseif Act("NewProfile", typed, from) then
 				name:SetText("")
 			end
 		end
 		name:SetScript("OnEnterPressed", Create)
 		row.Hover(name)
 		Beside(row, "Create", Create)
+		local copy = Button(row.frame, "Duplicate", SMALL, Duplicate)
+		copy:SetPoint("LEFT", row.frame, "LEFT", CONTROL + FIELD + 10 + SMALL + 8, 0)
+		row.Hover(copy)
 		if type(ns.OpenSetup) == "function" then
-			row = Row("Setup")
+			row = Row("Setup", "Set up my screen walks round your screen in six short stops and saves what you pick. Ready-made looks shows finished "
+				.. "profiles; a click puts one in use.")
 			local start, text = Button(row.frame, "Set up my screen", 170, function()
 				Call("OpenSetup")
 			end)
@@ -1641,7 +1677,7 @@ local function BuildProfiles()
 	end
 
 	if type(ns.CopyProfile) == "function" then
-		row = Row("Copy from")
+		row = Row("Copy from", "Replaces every setting and frame position of the profile in use with those of another profile. To keep both, use Duplicate.")
 		local from
 		local menu = Menu(row, {
 			lines = function()
@@ -1673,7 +1709,7 @@ local function BuildProfiles()
 	end
 
 	if type(ns.DeleteProfile) == "function" then
-		row = Row("Delete profile")
+		row = Row("Delete profile", "Deletes another profile for good. The profile in use and Default cannot be deleted.")
 		local doomed
 		local menu = Menu(row, {
 			lines = function()
@@ -1705,7 +1741,7 @@ local function BuildProfiles()
 	end
 
 	if type(ns.RenameProfile) == "function" then
-		row = Row("Rename profile")
+		row = Row("Rename profile", "Gives the profile in use a new name; the characters that use it keep it. Default cannot be renamed.")
 		local name = Field(row.frame, FIELD, 32)
 		name:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		local function Rename()
@@ -1721,13 +1757,14 @@ local function BuildProfiles()
 	end
 
 	if type(ns.ResetProfile) == "function" then
-		row = Row("Reset profile")
+		row = Row("Reset profile", "Every setting of the profile in use goes back to its default, and every frame you moved goes back to its own place.")
 		local reset = Button(row.frame, "Reset", SMALL, function()
 			Ask(('Reset every setting in "%s" to its default?'):format(Current()), function()
 				Act("ResetProfile")
 			end)
 		end)
 		reset:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
+		row.Hover(reset)
 	end
 
 	if ns.ProfileSwitch then
@@ -1741,7 +1778,7 @@ local function BuildProfiles()
 	end
 
 	if type(ns.ExportProfile) == "function" then
-		row = Row("Export profile")
+		row = Row("Export profile", "Export writes the profile in use, settings and frame positions, as one line of text to copy and share.")
 		local out = Field(row.frame, FIELD, 0)
 		out:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(out)
@@ -1759,7 +1796,7 @@ local function BuildProfiles()
 	end
 
 	if type(ns.TrackerExportText) == "function" then
-		row = Row("Export trackers")
+		row = Row("Export trackers", "Export writes your trackers as one line of text to copy and share.")
 		local out = Field(row.frame, FIELD, 0)
 		out:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(out)
@@ -1777,7 +1814,7 @@ local function BuildProfiles()
 	end
 
 	if type(ns.TrackerImport) == "function" then
-		row = Row("Import trackers")
+		row = Row("Import trackers", "Paste trackers someone exported, then press Import to add them.")
 		local into = Field(row.frame, FIELD, 0)
 		into:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(into)
@@ -1794,7 +1831,7 @@ local function BuildProfiles()
 	end
 
 	if type(ns.ImportProfile) == "function" then
-		row = Row("Import profile")
+		row = Row("Import profile", "Paste a profile someone exported. What it holds shows under the field, with what to import and where.")
 		local into = Field(row.frame, FIELD, 0)
 		into:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(into)
@@ -1861,6 +1898,10 @@ local function BuildHome()
 		end,
 		right = ui.right, width = CW, top = HEAD, height = RIGHT_H,
 		Show = Go,
+		-- A click on a recent change or a line of Needs a reload opens that setting's row, as a search result does.
+		Arrive = function(entry, item)
+			Arrive(entry, item)
+		end,
 		Setup = function()
 			Call("OpenSetup")
 		end,
@@ -2037,8 +2078,8 @@ local function Fade(seconds)
 	end
 end
 
--- Opens the tab of a setting, scrolls to its row and flashes it.
-local function Arrive(entry, item)
+-- Opens the tab of a setting, scrolls to its row and flashes it. Search, the preview and Home call it.
+function Arrive(entry, item)
 	ui.search:ClearFocus()
 	Go(entry)
 	local view = ui.views[entry]
@@ -3021,7 +3062,8 @@ function FlatUI_OnAddonCompartmentClick()
 end
 
 -- A Flat UI button in the game menu, right below the gap under Options. It is a frame of its own: the menu's layout places any shown child that
--- has a layoutIndex, so nothing of the game's menu is written. The hook runs after each build of the menu's buttons.
+-- has a layoutIndex, so nothing of the game's menu is written. It follows each build of the menu's buttons through ns.Follow, which leaves the method
+-- alone while taintLog is on (ns.HookMethod): the menu then works as the game has it, without the button, for that session.
 do
 	local button
 	local function OpenOptions()
@@ -3075,6 +3117,6 @@ do
 	end
 	local menu = GameMenuFrame
 	if menu and type(menu.InitButtons) == "function" then
-		hooksecurefunc(menu, "InitButtons", Place)
+		ns.Follow(menu, "InitButtons", Place)
 	end
 end

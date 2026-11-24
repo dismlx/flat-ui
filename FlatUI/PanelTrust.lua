@@ -1,10 +1,13 @@
 local ADDON_NAME, ns = ...
 
 -- What a row says about itself in the options window: a dot and a reset button on a changed row, the reason on a row that is off, a tooltip beside
--- the control, and the count of changed settings on the tab. The widgets are the ones of ns.PanelKit.
+-- the control, and the count of changed settings on the tab. The tooltip of the reset button names the value it puts back (Trust.DefaultLine). The
+-- widgets are the ones of ns.PanelKit.
 
 local Trust = {}
 ns.PanelTrust = Trust
+
+local SWATCH = "|TInterface\\Buttons\\WHITE8X8:12:12:0:0:8:8:0:8:0:8:%d:%d:%d|t"
 
 local TIP_W, TIP_PAD, TIP_DELAY = 280, 10, 0.35
 local tip, token = nil, 0
@@ -149,6 +152,32 @@ function Trust.Show(owner, body, need)
 	end
 end
 
+-- The tooltip of a row's reset button: the default it puts back, as "Reset to default: On", "Reset to default: 300 ms" or "Reset to default: Soft
+-- shade", and for a colour a swatch of it and its code, as "Reset to the default colour: #1E1E1E". Plain "Reset to default" for anything else.
+function Trust.DefaultLine(item)
+	local value = item.default
+	if item.kind == "bool" and type(value) == "boolean" then
+		return "Reset to default: " .. (value and "On" or "Off")
+	elseif item.kind == "number" and ns.Finite(value) then
+		return ("Reset to default: %g%s"):format(value, type(item.unit) == "string" and item.unit or "")
+	elseif item.kind == "choice" and value ~= nil then
+		local ok, lines = pcall(ns.Choices, item)
+		for _, line in ipairs(ok and type(lines) == "table" and lines or {}) do
+			if type(line) == "table" and line[1] == value and type(line[2]) == "string" and line[2] ~= "" then
+				return "Reset to default: " .. line[2]
+			end
+		end
+	elseif item.kind == "colour" and type(value) == "string" and value:find("^%x%x%x%x%x%x%x%x$") then
+		local r, g, b = tonumber(value:sub(3, 4), 16), tonumber(value:sub(5, 6), 16), tonumber(value:sub(7, 8), 16)
+		local line = ("Reset to the default colour: %s #%s"):format(SWATCH:format(r, g, b), value:sub(3):upper())
+		if item.alpha == true then
+			line = line .. (" at %d%%"):format(math.floor(tonumber(value:sub(1, 2), 16) * 100 / 255 + 0.5))
+		end
+		return line
+	end
+	return "Reset to default"
+end
+
 -- Gives a row its dot and reset button. Returns the function that sets them: it takes the unmet need of the row, or nil. A row of setup or of the tracker editor
 -- reads and writes a value of its own, so it has no dot and no reset.
 function Trust.Attach(row, item)
@@ -187,17 +216,9 @@ function Trust.Attach(row, item)
 			kit.Painted(function()
 				glyph:SetVertexColor(ns.PanelLook.Colour("text-dim"))
 			end)
-			-- Hover runs the fill of the button and then shows the tooltip.
-			local enter, leave = reset:GetScript("OnEnter"), reset:GetScript("OnLeave")
+			-- row.Hover keeps the fill of the button and then shows the tooltip.
 			row.Hover(reset, function()
-				if enter then
-					enter(reset)
-				end
-				Trust.Show(reset, "Reset to default")
-			end, function()
-				if leave then
-					leave(reset)
-				end
+				Trust.Show(reset, Trust.DefaultLine(item))
 			end)
 		end
 		if reset then
