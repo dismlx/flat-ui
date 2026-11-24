@@ -6,7 +6,11 @@ local ADDON_NAME, ns = ...
 -- frame is made the first time the ring shows. While it is shown, its OnUpdate script reads the cursor (GetCursorPosition, in screen pixels:
 -- InputDocumentation.lua:30-38) and moves the frame only when the cursor or the scale has moved; while it is hidden it has no script, so nothing
 -- runs. It hides with UIParent. In combat only, a frame of the addon's own listens to PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED, and only
--- while that choice is made. Nothing of the game is changed. Not a module: Core.lua applies the rows at login and when the profile changes, and
+-- while that choice is made; the ring then fades in over FADE_IN seconds as a fight starts and out over FADE_OUT as it ends, by the alpha of its
+-- own frame (SetAlpha) in the same OnUpdate, and is hidden with no script once it has faded out. A ring of Always, or one whose row goes off,
+-- shows and hides at once. While the player turns the camera with the mouse (IsMouselooking, the apis.yaml of wowless for wowf lists it; only a
+-- plain true counts), the game hides its cursor, so the ring and its swipes go to alpha 0 and stay where they are, and come back on the cursor as
+-- it is let go. Nothing of the game is changed. Not a module: Core.lua applies the rows at login and when the profile changes, and
 -- the rows call ns.CursorRingChanged themselves.
 -- Cast progress on the ring (general.cursorRingCast, on) and Global cooldown on the ring (general.cursorRingGcd, off), each with a colour row: two
 -- Cooldown frames of the ring's own (CooldownFrameTemplate, which sets all points and hides them: Blizzard_FrameXMLUtil/Mainline/Cooldown.xml:3),
@@ -44,6 +48,8 @@ local GCD_SPELL = 61304
 local GCD_SHARE = 0.8
 -- Refusals of a swipe after which it is left out until /reload.
 local MOST_REFUSED = 3
+-- Seconds the ring of In combat only takes to fade in as a fight starts and to fade out as it ends.
+local FADE_IN, FADE_OUT = 0.15, 0.3
 
 local ring
 -- The texture of the ring.
@@ -54,6 +60,10 @@ local listener
 local fighting = false
 -- Where the ring was last put, in the cursor's pixels and the frame's scale.
 local lastX, lastY, lastScale
+-- The fade under way, { from, to, start, duration }, or nil; fadeAlpha, the ring's alpha by the fade; looking, true while the player turns the
+-- camera with the mouse; shownAlpha, the alpha last written on the frame.
+local fade
+local fadeAlpha, looking, shownAlpha = 1, false, nil
 -- The error that stopped the ring, or nil.
 local broken
 -- The progress swipes: swipes.cast and swipes.gcd, the Cooldown frames; refused, per swipe the refusals of the game; hearer, the frame that hears
@@ -114,8 +124,69 @@ end
 
 local Stop
 
+-- True while the player turns the camera with the mouse, when the game hides its cursor. A withheld answer counts as not.
+local function Looking()
+	if type(IsMouselooking) ~= "function" then
+		return false
+	end
+	local ok, value = pcall(IsMouselooking)
+	return ok and not ns.IsSecret(value) and value == true
+end
+
+-- Writes the ring's alpha: none while the camera turns, else that of the fade. Only when it changes.
+local function Alpha(frame)
+	local alpha = looking and 0 or fadeAlpha
+	if alpha ~= shownAlpha then
+		shownAlpha = alpha
+		frame:SetAlpha(alpha)
+	end
+end
+
+-- Starts a fade from the alpha the ring has now to to; a fade of part of the way takes that part of the time.
+local function Fade(to, duration)
+	local start = GetTime()
+	if fadeAlpha == to or not ns.Finite(start) then
+		fade, fadeAlpha = nil, to
+		return
+	end
+	fade = { from = fadeAlpha, to = to, start = start, duration = duration * math.abs(to - fadeAlpha) }
+end
+
+-- The ring hides and runs nothing more.
+local function Hidden(frame)
+	fade = nil
+	frame:Hide()
+	frame:SetScript("OnUpdate", nil)
+end
+
+local function Tick(frame)
+	local now = Looking()
+	if now ~= looking then
+		looking = now
+		-- Let go, the ring goes to the cursor at once.
+		lastX = nil
+	end
+	if fade then
+		local share = fade.duration > 0 and (GetTime() - fade.start) / fade.duration or 1
+		if not ns.Finite(share) or share >= 1 then
+			fadeAlpha = fade.to
+			fade = nil
+			if fadeAlpha == 0 then
+				Hidden(frame)
+				return
+			end
+		else
+			fadeAlpha = fade.from + (fade.to - fade.from) * math.max(share, 0)
+		end
+	end
+	Alpha(frame)
+	if not looking then
+		Follow(frame)
+	end
+end
+
 local function Step(frame)
-	local ok, err = pcall(Follow, frame)
+	local ok, err = pcall(Tick, frame)
 	if not ok then
 		Stop(err)
 	end
@@ -404,19 +475,42 @@ end
 
 -- The ring -----------------------------------------------------------------------------------------------------------------------------------------
 
+-- In combat only the ring fades in and out; Always and a row turned off show and hide it at once.
 local function Show(on)
+	local fades = Mode() == "combat"
 	if on then
 		local frame = Make()
 		Look()
 		if not frame:IsShown() then
 			lastX, lastY, lastScale = nil, nil, nil
-			Follow(frame)
+			looking, shownAlpha = Looking(), nil
+			fadeAlpha, fade = fades and 0 or 1, nil
+			if fades then
+				Fade(1, FADE_IN)
+			end
+			Alpha(frame)
+			if not looking then
+				Follow(frame)
+			end
 			frame:SetScript("OnUpdate", Step)
 			frame:Show()
+		elseif not fades then
+			-- Always shows the ring whole at once, also one that was fading.
+			fade, fadeAlpha = nil, 1
+			Alpha(frame)
+		elseif fade and fade.to == 0 then
+			-- A fight that starts again while the ring fades out brings it back from where it is.
+			Fade(1, FADE_IN)
 		end
 	elseif ring and ring:IsShown() then
-		ring:Hide()
-		ring:SetScript("OnUpdate", nil)
+		if not fades then
+			Hidden(ring)
+		elseif not (fade and fade.to == 0) then
+			Fade(0, FADE_OUT)
+			if not fade then
+				Hidden(ring)
+			end
+		end
 	end
 	Swipes(on)
 end
@@ -455,6 +549,7 @@ function Stop(err)
 		return
 	end
 	broken = tostring(err)
+	fade = nil
 	pcall(Listen, false)
 	pcall(Progress, false)
 	if ring then

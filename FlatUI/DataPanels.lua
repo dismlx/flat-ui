@@ -1,18 +1,20 @@
 local ADDON_NAME, ns = ...
 
 -- Data panels: two panels of Flat UI's own, the top panel and the bottom panel, each a row of up to six slots on a flat background with a thin
--- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, the hearthstone,
--- coordinates, frame rate and latency, friends or guild members online, the equipment set worn, or the feed of another addon through
--- LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no library, and shows feeds of the
+-- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, the hearthstone, the time,
+-- the quests in the log, coordinates, frame rate and latency, friends or guild members online, the equipment set worn, or the feed of another
+-- addon through LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no library, and shows feeds of the
 -- kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to show is hidden, and a panel makes its frames
 -- only once a slot has something to show. The panels are children of UIParent, so they hide with the interface, and they are hidden in a pet
 -- battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading screen). /flatui move places them: each is
 -- in the list of the movers (FlatUIDataTop and FlatUIDataBottom) with the panel itself as its box.
 -- A stream is drawn again on its events, once for a burst of them, and the few that change by themselves (coordinates, frame rate and latency,
 -- the cooldown of the hearthstone) on a ticker that runs only while a shown panel holds one of them. Pointing at a slot writes its lines in
--- GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide when the cursor leaves). No click casts anything: a slot of Flat UI's
--- own takes no click but the equipment set's, which opens a menu of Flat UI's own (Menus, below), and a click on a feed goes to the feed's own
--- OnClick. Every value of the game is read in pcall, and one it withholds is left out, with the count it belongs to: no part of a count is
+-- GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide when the cursor leaves). No click casts anything: a left click on the
+-- equipment set opens a menu of Flat UI's own (Menus, below), one on Bag space opens or closes Flat UI's bag window while Bags is on
+-- (ns.BagsToggle, Bags.lua, never a window of the game's), a right click on any slot of Flat UI's own opens the Data panels page of the options
+-- (ns.OpenPanelPage, Panel.lua, after the fight in one), each tooltip ends with a dim line that says so, and a click on a feed goes to the feed's
+-- own OnClick. Every value of the game is read in pcall, and one it withholds is left out, with the count it belongs to: no part of a count is
 -- shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line for /flatui status.
 -- The gold of the account's characters is kept in FlatUIDB.datapanels.gold by "Name - Realm", and the feeds a slot of any profile shows in
 -- FlatUIDB.datapanels.feeds, so a slot keeps its feed while the addon that makes it loads after Flat UI.
@@ -227,7 +229,8 @@ end
 -- shown tooltip is written again), sample = the widest text it shows, so the slot keeps its width as its numbers change, every = seconds between
 -- two drawings while a slot shows it, or a function giving them (nil when it changes only on its events), live = true for a tooltip that is
 -- written again while it is shown, events = { EVENT = true or a function run before the slot is drawn again }, Start = function run when the
--- module starts and at each loading screen }.
+-- module starts and at each loading screen, Click = function(slot, button) for a slot that takes a left click, Hint = function giving the text
+-- of the tooltip's last line that says what that click does }.
 function P.Stream(stream)
 	P.streams[stream.id] = stream
 	P.order[#P.order + 1] = stream.id
@@ -831,7 +834,7 @@ function P.Fill(panel, wanted)
 		end
 		P.Style(slot)
 		P.Draw(slot, texts[index])
-		-- A feed and a stream with a click of its own (Equipment set) keep their clicks while the tooltips are off.
+		-- A feed and a stream with a click of its own (Equipment set, Bag space) keep their clicks while the tooltips are off.
 		local stream = P.StreamOf(slot.id)
 		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil or (stream ~= nil and type(stream.Click) == "function")))
 	end
@@ -1202,7 +1205,8 @@ function P.Anchor(panel)
 	return panel.spec.point:find("TOP", 1, true) and "ANCHOR_BOTTOM" or "ANCHOR_TOP"
 end
 
--- Writes the lines of a stream's tooltip: the title, then { left, right } as two columns (the left in the dim colour) or { left } alone.
+-- Writes the lines of a stream's tooltip: the title, then { left, right } as two columns (the left in the dim colour) or { left } alone, then a
+-- dim line with what a click does: the stream's own hint (Hint, a function giving a text or nil), and the right click that opens the options.
 function P.Tip(slot, fresh)
 	local stream, tip = P.StreamOf(slot.id), Tooltip()
 	if not (stream and stream.Tip and tip) or ns.PartStopped(KEY, stream.label) then
@@ -1213,6 +1217,12 @@ function P.Tip(slot, fresh)
 		return
 	end
 	slot.tipped = P.Now()
+	local hint
+	if type(stream.Hint) == "function" then
+		local said, text = P.Run(stream, stream.Hint)
+		hint = said and type(text) == "string" and text ~= "" and text or nil
+	end
+	hint = (hint and (hint .. " ") or "") .. "Right-click: Data panels options."
 	pcall(function()
 		tip:SetOwner(slot.frame, P.Anchor(slot.panel))
 		tip:SetText(lines.title or stream.label, 1, 1, 1)
@@ -1223,6 +1233,7 @@ function P.Tip(slot, fresh)
 				tip:AddLine(line[1] or " ", 1, 1, 1)
 			end
 		end
+		tip:AddLine(hint, DIM_RGB[1], DIM_RGB[2], DIM_RGB[3])
 		tip:Show()
 	end)
 end
@@ -1323,10 +1334,21 @@ function P.Leave(slot)
 end
 
 -- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment
--- set), with the slot and the button. Any other slot of Flat UI's own does nothing.
+-- set, Bag space), with the slot and the button. A right click on a slot of Flat UI's own closes its menu and opens the Data panels page of the
+-- options instead (in a fight the window says it opens after it). Any other click on a slot of Flat UI's own does nothing.
 function P.Click(slot, button)
 	if not slot.feed then
 		local stream = P.StreamOf(slot.id)
+		if button == "RightButton" and stream then
+			P.CloseMenu()
+			if Owned(slot) then
+				pcall(_G.GameTooltip.Hide, _G.GameTooltip)
+			end
+			if type(ns.OpenPanelPage) == "function" then
+				ns.OpenPanelPage(KEY)
+			end
+			return
+		end
 		if stream and type(stream.Click) == "function" and not ns.PartStopped(KEY, stream.label) then
 			P.Run(stream, stream.Click, slot, button)
 		end

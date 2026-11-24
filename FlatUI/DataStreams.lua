@@ -4,7 +4,8 @@ local ADDON_NAME, ns = ...
 --   Bag space: free and total slots of the general bags the player wears, the backpack and the bags of family 0, the only room for any item
 --     (C_Container.GetContainerNumSlots and GetContainerNumFreeSlots). A special bag (a trade bag, a quiver, an ammo pouch, a soul bag: its
 --     family is not 0) and the reagent bag (Enum.BagIndex 5, of family 0 but for reagents only) hold only certain items, so they count apart,
---     in the tooltip, which says so.
+--     in the tooltip, which says so. While Bags is on, a left click opens or closes Flat UI's bag window (ns.BagsToggle, Bags.lua, the checks
+--     of /flatui bags); with Bags off it does nothing, as Flat UI calls none of the game's bag functions.
 --   Gold: the player's money (GetMoney) with the game's coins (C_CurrencyInfo.GetCoinTextureString). The tooltip lists the gold of each
 --     character of the account that logged in with the data panels on, kept in FlatUIDB.datapanels.gold by "Name - Realm", and under them what
 --     this character made (in green) or spent (in red) since it logged in, kept over a /reload (ns.SessionMoney, BagsData.lua, the count the
@@ -13,6 +14,12 @@ local ADDON_NAME, ns = ...
 --   Hearthstone: where it is bound (GetBindLocation) and the time left on its cooldown (C_Container.GetItemCooldown).
 --   Coordinates: of the player on the map of the zone (C_Map.GetBestMapForUnit, GetPlayerMapPosition, read from the fields x and y of the
 --     answer); none where the game gives none, as in a dungeon.
+--   Time: the time of this computer (date) or of the realm (GetGameTime), 24 or 12 hours, as the game's own clock settings say
+--     (timeMgrUseLocalTime and timeMgrUseMilitaryTime, read with GetCVarBool; local and 24 hours when the client does not say), in the game's
+--     own formats. The tooltip has both times and how long this session has run (GetSessionTime).
+--   Quest log: the quests in the log over the most it holds, counted as the quest count on the objective tracker counts them (QuestCount.lua),
+--     red while the log is full. The tooltip has how many are ready to hand in (C_QuestLog.IsComplete) and, while Flat UI's experience bar knows
+--     it, their experience (ns.XpQuestReady, XpStats.lua).
 --   Frame rate and latency: GetFramerate, and the higher of the home and world latency (GetNetStats). The tooltip has both latencies and the
 --     memory Flat UI uses (UpdateAddOnMemoryUsage and GetAddOnMemoryUsage, read out of combat when the tooltip opens). With Colour frame rate
 --     and latency on, each number is in the panels' green, gold or red by the steps of the minimap's line (ns.PerfColour, MapText.lua).
@@ -145,6 +152,15 @@ P.Stream({
 		end
 		lines[#lines + 1] = { DIM .. "Counts only bags that take any item.|r" }
 		return lines
+	end,
+	Hint = function()
+		return ns.Enabled("bags") and type(ns.BagsToggle) == "function" and "Click: open your bags." or nil
+	end,
+	-- A left click opens Flat UI's bag window or closes it, only while Bags is on.
+	Click = function(_, button)
+		if button == "LeftButton" and ns.Enabled("bags") and type(ns.BagsToggle) == "function" then
+			ns.BagsToggle()
+		end
 	end,
 })
 
@@ -431,6 +447,183 @@ P.Stream({
 			lines[#lines + 1] = { DIM .. sub .. "|r" }
 		end
 		lines[#lines + 1] = { "Coordinates", x and ("%.1f, %.1f"):format(x, y) or "None here" }
+		return lines
+	end,
+})
+
+-- Time --------------------------------------------------------------------------------------------------------------------------------------------
+
+-- A setting of the game's clock (GetCVarBool, as GameTimeUtil.lua:10 and 88 read them), or the default when the client does not say.
+local function ClockSetting(name, default)
+	local cvars = type(C_CVar) == "table" and not ns.IsSecret(C_CVar) and C_CVar or nil
+	local value = Ask(cvars and cvars.GetCVarBool or _G.GetCVarBool, name)
+	if type(value) == "boolean" then
+		return value
+	end
+	return default
+end
+
+-- A text of the game's own format, or the fallback when it has none.
+local function Formatted(pattern, fallback, ...)
+	if type(pattern) == "string" and not ns.IsSecret(pattern) then
+		local ok, text = pcall(string.format, pattern, ...)
+		if ok and type(text) == "string" and text ~= "" then
+			return text
+		end
+	end
+	return fallback:format(...)
+end
+
+-- An hour and a minute as the game's clock writes them, 24 or 12 hours by its setting, or nothing when either is not a number.
+local function ClockText(hour, minute)
+	if not (ns.Finite(hour) and ns.Finite(minute)) then
+		return nil
+	end
+	hour, minute = math.floor(hour) % 24, math.floor(minute) % 60
+	if ClockSetting("timeMgrUseMilitaryTime", true) then
+		return Formatted(_G.TIMEMANAGER_TICKER_24HOUR, "%02d:%02d", hour, minute)
+	end
+	local shown = hour % 12
+	shown = shown == 0 and 12 or shown
+	if hour < 12 then
+		return Formatted(_G.TIME_TWELVEHOURAM, "%d:%02d AM", shown, minute)
+	end
+	return Formatted(_G.TIME_TWELVEHOURPM, "%d:%02d PM", shown, minute)
+end
+
+-- The time of this computer (date) and of the realm (GetGameTime).
+local function LocalClock()
+	if type(date) ~= "function" then
+		return nil
+	end
+	local ok, parts = pcall(date, "*t")
+	return ok and ClockText(Field(parts, "hour"), Field(parts, "min")) or nil
+end
+
+local function RealmClock()
+	local hour, minute = Ask(GetGameTime)
+	return ClockText(hour, minute)
+end
+
+P.Stream({
+	id = "clock", label = "Time", sample = "88:88 PM",
+	every = 1,
+	live = true,
+	Text = function()
+		if ClockSetting("timeMgrUseLocalTime", true) then
+			return LocalClock()
+		end
+		return RealmClock()
+	end,
+	Tip = function()
+		local lines = { title = "Time", { "Local time", LocalClock() or "Unknown" }, { "Realm time", RealmClock() or "Unknown" } }
+		local session = Ask(_G.GetSessionTime)
+		if ns.Finite(session) and session >= 0 then
+			lines[#lines + 1] = { "This session", P.Time(session) }
+		end
+		lines[#lines + 1] = { DIM .. "Local or realm time and 12 or 24 hours follow the game's clock settings.|r" }
+		return lines
+	end,
+})
+
+-- Quest log -------------------------------------------------------------------------------------------------------------------------------------
+
+local function QuestLog()
+	local log = _G.C_QuestLog
+	return type(log) == "table" and not ns.IsSecret(log) and type(log.GetNumQuestLogEntries) == "function" and log or nil
+end
+
+-- Each quest of the log once, as the quest count on the tracker walks it (QuestCount.lua): no header, not hidden, a quest ID above 0. fn(id) runs
+-- for each; the count of them, or nothing when the log cannot be walked.
+local function EachQuest(log, fn)
+	local entries = type(log.GetInfo) == "function" and Count((Ask(log.GetNumQuestLogEntries))) or nil
+	if not entries then
+		return nil
+	end
+	local count, seen = 0, {}
+	for index = 1, math.min(entries, 100) do
+		local info = Ask(log.GetInfo, index)
+		local id = Count(Field(info, "questID"))
+		if id and id > 0 and not seen[id] and Field(info, "isHeader") ~= true and Field(info, "isHidden") ~= true then
+			seen[id], count = true, count + 1
+			if fn then
+				fn(id)
+			end
+		end
+	end
+	return count
+end
+
+-- The quests in the log and the most it holds (nil when the game does not say), as the quest count on the tracker reads them: the second answer of
+-- C_QuestLog.GetNumQuestLogEntries, else the walk, over C_QuestLog.GetMaxNumQuestsCanAccept, else MAX_QUESTLOG_QUESTS or MAX_QUESTS. Nothing
+-- when the client withholds the count.
+local function Quests()
+	local log = QuestLog()
+	if not log then
+		return nil
+	end
+	local hidden, _, quests = Read(log.GetNumQuestLogEntries)
+	if hidden then
+		return nil
+	end
+	quests = Count(quests) or EachQuest(log)
+	if not quests then
+		return nil
+	end
+	local _, most = Read(log.GetMaxNumQuestsCanAccept)
+	most = Count(most)
+	if not (most and most > 0) then
+		most = Count(_G.MAX_QUESTLOG_QUESTS) or Count(_G.MAX_QUESTS)
+	end
+	return quests, most and most > 0 and most or nil
+end
+
+-- The quests of the log that are ready to hand in (C_QuestLog.IsComplete), or nothing when the log cannot be walked.
+local function ReadyQuests()
+	local log = QuestLog()
+	if not (log and type(log.IsComplete) == "function") then
+		return nil
+	end
+	local ready = 0
+	local walked = EachQuest(log, function(id)
+		if Ask(log.IsComplete, id) == true then
+			ready = ready + 1
+		end
+	end)
+	return walked and ready or nil
+end
+
+P.Stream({
+	id = "quests", label = "Quest log", sample = "Quests 88/88",
+	events = { QUEST_LOG_UPDATE = true },
+	Text = function()
+		local quests, most = Quests()
+		if not quests then
+			return nil
+		elseif not most then
+			return Labelled("Quests", quests)
+		end
+		local full = quests >= most
+		return Labelled("Quests", ("%s%d/%d%s"):format(full and BAD or "", quests, most, full and "|r" or ""))
+	end,
+	Tip = function()
+		local quests, most = Quests()
+		if not quests then
+			return { title = "Quest log", UNSAID }
+		end
+		local lines = { title = "Quest log", { "Quests", most and ("%d of %d"):format(quests, most) or quests } }
+		if most and quests >= most then
+			lines[#lines + 1] = { BAD .. "Your quest log is full.|r" }
+		end
+		local ready = ReadyQuests()
+		if ready then
+			lines[#lines + 1] = { "Ready to hand in", ready > 0 and (GOOD .. ready .. "|r") or ready }
+		end
+		local xp = type(ns.XpQuestReady) == "function" and ns.XpQuestReady() or 0
+		if ready and ready > 0 and ns.Finite(xp) and xp > 0 then
+			xp = math.floor(xp)
+			lines[#lines + 1] = { "Their experience", Text((Ask(_G.BreakUpLargeNumbers, xp))) or tostring(xp) }
+		end
 		return lines
 	end,
 })

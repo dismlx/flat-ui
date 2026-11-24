@@ -25,7 +25,10 @@ local ADDON_NAME, ns = ...
 -- drawn with the ADD blend in gold: Media/Glow.tga, a soft round glow, and Media/Star.tga, a four-pointed glint (both 64 by 64 and white), and
 -- Media/Ring.tga, the cursor ring's. The glow swells and brightens and back, a ring grows out of the object and fades, and four stars twinkle as
 -- they turn a quarter, each an AnimationGroup of its own texture (Alpha, Scale and Rotation animations, SimpleAnimAlphaAPIDocumentation.lua,
--- SimpleAnimScaleAPIDocumentation.lua, SimpleAnimRotationAPIDocumentation.lua), played only while the sparkle shows.
+-- SimpleAnimScaleAPIDocumentation.lua, SimpleAnimRotationAPIDocumentation.lua), played only while the sparkle shows. With Glow colour at By what
+-- it is (general.sparkleGlowColour; Gold, the look above, by default), the cursor that told the object's kind also gives its colour (COLOURS):
+-- herbs green, ore copper, quest objects gold, loot, things to pick up and locked chests white; the stars are that colour, lighter. The
+-- textures are tinted again (SetVertexColor) only when the colour changes.
 -- Nothing of the game's is written: the plate gets no field, no method call of its Lua and no hook, and its frame level and unit are only read.
 -- While the row is off no event is heard, and the frame, once made, is hidden and taken off its plate. An error stops the sparkle until /reload,
 -- with a line for /flatui status. Not a module: Sparkle.lua's ns.SparkleChanged calls ns.SparkleGlowChanged at login, at a change of profile and
@@ -37,6 +40,13 @@ local GLOW, STAR, RING = MEDIA .. "Glow.tga", MEDIA .. "Star.tga", MEDIA .. "Rin
 -- The size of the sparkle, and how far its middle is under the bottom of the plate, in the plate's units: the plate stands over the object.
 local SIZE, BELOW = 128, -40
 local GOLD, LIGHT = { 1, 0.78, 0.22 }, { 1, 0.93, 0.62 }
+-- Glow colour By what it is: the colour of each cursor of CURSORS (quest, the object of a quest of the player's, is gold), and how far the stars
+-- go from it towards white, as LIGHT does from GOLD.
+local COLOURS = {
+	Mine = { 1, 0.55, 0.25 }, GatherHerbs = { 0.45, 0.95, 0.35 }, Quest = GOLD, QuestRepeatable = GOLD, QuestTurnIn = GOLD, QuestInteract = GOLD,
+	quest = GOLD, LootAll = { 0.95, 0.95, 1 }, Pickup = { 0.95, 0.95, 1 }, PickLock = { 0.95, 0.95, 1 },
+}
+local STAR_WHITE = 0.55
 -- The stars: where each is from the middle, its size, the time of one twinkle and the way it turns.
 local STARS = {
 	{ x = -34, y = 12, size = 40, time = 1.5, turn = 90 },
@@ -48,16 +58,18 @@ local STARS = {
 local CURSORS = { "Mine", "GatherHerbs", "Quest", "QuestRepeatable", "QuestTurnIn", "QuestInteract", "LootAll", "Pickup", "PickLock" }
 local KINDS = {}
 for _, name in ipairs(CURSORS) do
-	KINDS[name:lower()] = true
+	KINDS[name:lower()] = name
 end
 local EVENTS = { "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_SOFT_INTERACT_CHANGED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }
 
--- The frame of the sparkle (made the first time it shows) and its animations; the plate it is on and the unit of that plate.
+-- The frame of the sparkle (made the first time it shows) and its animations; the plate it is on and the unit of that plate. Its textures for
+-- the colour: tinted.main (the glow and the ring) and tinted.light (the stars), and tinted.colour, the colour they have now.
 local holder, groups
+local tinted = { main = {}, light = {} }
 local anchor, anchorUnit
 -- The frame that hears the events while the row is on, whether it hears them, and the hidden texture that takes an object's cursor.
 local listener, hearing, probe
--- The cursor files of CURSORS by file ID, read the first time a cursor comes as a file ID.
+-- The cursor files of CURSORS by file ID (their names), read the first time a cursor comes as a file ID.
 local cursorIDs
 -- True once the sparkle has been on an object in this session. The error that stopped it, or nil.
 local seen, broken
@@ -89,7 +101,7 @@ local function PlateOf(unit)
 	return plate
 end
 
--- True for the name of a cursor of CURSORS, from a file ID, a path or an atlas name.
+-- The name of a cursor of CURSORS, from a file ID, a path or an atlas name, or nil.
 local function Glows(texture)
 	if type(texture) == "number" then
 		if cursorIDs == nil then
@@ -100,36 +112,38 @@ local function Glows(texture)
 					for _, file in ipairs({ path, path .. ".blp" }) do
 						local id = Ask(_G.GetFileIDFromPath, file)
 						if ns.Finite(id) and id > 0 then
-							cursorIDs[id] = true
+							cursorIDs[id] = name
 						end
 					end
 				end
 			end
 		end
-		return cursorIDs[texture] == true
+		return cursorIDs[texture]
 	end
 	if type(texture) ~= "string" or texture == "" then
-		return false
+		return nil
 	end
 	local text = texture:lower()
 	local file = (text:match("([^\\/]+)$") or text):gsub("%.blp$", ""):gsub("^unable", "")
 	if KINDS[file] then
-		return true
+		return KINDS[file]
 	end
-	-- An atlas of the gamepad's cursors names the cursor inside a longer name.
-	for kind in pairs(KINDS) do
-		if text:find(kind, 1, true) then
-			return true
+	-- An atlas of the gamepad's cursors names the cursor inside a longer name; the longest name found wins, so QuestTurnIn is not Quest.
+	local found
+	for kind, name in pairs(KINDS) do
+		if text:find(kind, 1, true) and (not found or #name > #found) then
+			found = name
 		end
 	end
-	return false
+	return found
 end
 
--- True for an object that gets the sparkle: one of a quest of the player's, or one whose cursor is that of ore, herbs, a quest or loot.
+-- What an object that gets the sparkle is: "quest" for one of a quest of the player's, else the name of its cursor of CURSORS (ore, herbs, a
+-- quest or loot); nil for any other.
 local function Sparkles(unit)
 	local quests = _G.C_QuestLog
 	if type(quests) == "table" and Ask(quests.UnitIsRelatedToActiveQuest, unit) == true then
-		return true
+		return "quest"
 	end
 	if not probe then
 		probe = listener:CreateTexture(nil, "ARTWORK")
@@ -137,12 +151,12 @@ local function Sparkles(unit)
 		probe:Hide()
 	end
 	if Ask(_G.SetUnitCursorTexture, probe, unit, nil, true) ~= true then
-		return false
+		return nil
 	end
 	return Glows(Ask(probe.GetTexture, probe)) or Glows(probe.GetAtlas and Ask(probe.GetAtlas, probe) or nil)
 end
 
--- The plate of a unit when the unit is the game object the Interact Key would use and gets the sparkle, else nil.
+-- The plate of a unit when the unit is the game object the Interact Key would use and gets the sparkle, and what it is (Sparkles), else nil.
 local function Match(unit)
 	if type(unit) ~= "string" or ns.IsSecret(unit) then
 		return nil
@@ -151,13 +165,14 @@ local function Match(unit)
 		return nil
 	end
 	local plate = PlateOf(unit)
-	if plate and Sparkles(unit) then
-		return plate
+	local kind = plate and Sparkles(unit)
+	if kind then
+		return plate, kind
 	end
 	return nil
 end
 
--- The plate and unit of that object among the shown nameplates, or nil.
+-- The plate, unit and kind of that object among the shown nameplates, or nil.
 local function Find()
 	local plates = _G.C_NamePlate
 	local shown = type(plates) == "table" and Ask(plates.GetNamePlates) or nil
@@ -170,8 +185,9 @@ local function Find()
 			if not ns.Forbidden(unitFrame) then
 				-- Match tests the unit with ns.IsSecret before anything else.
 				local unit = unitFrame.unit
-				if Match(unit) == plate then
-					return plate, unit
+				local found, kind = Match(unit)
+				if found == plate then
+					return plate, unit, kind
 				end
 			end
 		end
@@ -197,7 +213,9 @@ local function Build()
 	frame:Hide()
 	local made = {}
 	-- The glow swells and brightens, and back.
+	tinted.main, tinted.light, tinted.colour = {}, {}, GOLD
 	local glow = Art(frame, GLOW, "BACKGROUND", SIZE, GOLD)
+	tinted.main[#tinted.main + 1] = glow
 	glow:SetPoint("CENTER", frame, "CENTER", 0, 0)
 	local pulse = glow:CreateAnimationGroup()
 	local bright = pulse:CreateAnimation("Alpha")
@@ -214,6 +232,7 @@ local function Build()
 	made[#made + 1] = pulse
 	-- A ring grows out of the object and fades, again and again.
 	local ring = Art(frame, RING, "BORDER", SIZE / 2, GOLD)
+	tinted.main[#tinted.main + 1] = ring
 	ring:SetPoint("CENTER", frame, "CENTER", 0, 0)
 	local wave = ring:CreateAnimationGroup()
 	local grow = wave:CreateAnimation("Scale")
@@ -231,6 +250,7 @@ local function Build()
 	-- Each star comes up as it turns an eighth and goes out as it turns another, at its own pace; turned a quarter it looks as it began.
 	for _, spot in ipairs(STARS) do
 		local star = Art(frame, STAR, "ARTWORK", spot.size, LIGHT)
+		tinted.light[#tinted.light + 1] = star
 		star:SetPoint("CENTER", frame, "CENTER", spot.x, spot.y)
 		local twinkle = star:CreateAnimationGroup()
 		for order, step in ipairs({ { 0, 1, 0.4, "OUT" }, { 1, 0, 0.6, "IN" } }) do
@@ -249,6 +269,25 @@ local function Build()
 		made[#made + 1] = twinkle
 	end
 	holder, groups = frame, made
+end
+
+-- The colour of the sparkle: gold, or with Glow colour By what it is, the colour of what the object is. Written only when it changes.
+local function Tint(kind)
+	local colour = ns.Get("general.sparkleGlowColour") == "kind" and COLOURS[kind] or GOLD
+	if not holder or colour == tinted.colour then
+		return
+	end
+	tinted.colour = colour
+	for _, texture in ipairs(tinted.main) do
+		texture:SetVertexColor(colour[1], colour[2], colour[3])
+	end
+	local r, g, b = LIGHT[1], LIGHT[2], LIGHT[3]
+	if colour ~= GOLD then
+		r, g, b = colour[1] + (1 - colour[1]) * STAR_WHITE, colour[2] + (1 - colour[2]) * STAR_WHITE, colour[3] + (1 - colour[3]) * STAR_WHITE
+	end
+	for _, texture in ipairs(tinted.light) do
+		texture:SetVertexColor(r, g, b)
+	end
 end
 
 local function Play(on)
@@ -307,7 +346,7 @@ local function Evaluate()
 	if broken or not Wanted() then
 		return
 	end
-	local plate, unit = Find()
+	local plate, unit, kind = Find()
 	if plate == nil then
 		Hide()
 		if not InCombatLockdown() then
@@ -323,6 +362,7 @@ local function Evaluate()
 		Attach(plate, unit)
 	end
 	anchorUnit = unit
+	Tint(kind)
 	Show()
 end
 
@@ -332,7 +372,7 @@ local function OnEvent(_, event, unit)
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" then
 		-- Only the new plate is looked at: the others did not change.
-		local plate = Match(unit)
+		local plate, kind = Match(unit)
 		if plate == nil then
 			return
 		end
@@ -345,6 +385,7 @@ local function OnEvent(_, event, unit)
 			Attach(plate, unit)
 		end
 		anchorUnit = unit
+		Tint(kind)
 		Show()
 	elseif event == "NAME_PLATE_UNIT_REMOVED" then
 		if anchor and (ns.IsSecret(unit) or unit == anchorUnit) then

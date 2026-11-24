@@ -2,15 +2,18 @@ local _, ns = ...
 
 -- Drink and health macros: two macros of Flat UI's own in the account's macro list, Flat UI Drink and Flat UI Health, kept up to date out of
 -- combat. Flat UI Drink drinks the best drink in the bags that the level allows, conjured water first, and in a fight, where nobody can drink,
--- takes the best mana potion the level allows (Mana potion in a fight). Flat UI Health takes the best healthstone, then at the next press the
--- best healing potion (a cast sequence that starts again when the fight ends); out of combat it eats the best food instead, conjured food first
--- (Eat out of combat). The ranks are those of ns.COOLDOWN_ITEMS for the potions and healthstones (CooldownData.lua) and of ns.CONSUMABLE_KINDS
+-- takes the best mana potion the level allows (Mana potion in a fight), after a mage's best mana gem (Mana gem first in a fight: a cast
+-- sequence of the gem, then the potion, that starts again when the fight ends, as Flat UI Health's; the gems are GEMS, the ranks of the mage's
+-- Mana gem of ClassData.lua, and a gem and a potion each have a cooldown of their own). Flat UI Health takes the best healthstone, then at the
+-- next press the best healing potion (a cast sequence that starts again when the fight ends); out of combat it eats the best food instead,
+-- conjured food first (Eat out of combat). The ranks are those of ns.COOLDOWN_ITEMS for the potions and healthstones (CooldownData.lua) and of ns.CONSUMABLE_KINDS
 -- for the drinks and foods (ConsumableData.lua). An item counts when the bags hold one (C_Item.GetItemCount, ItemDocumentation.lua:451-468)
 -- and the level allows it: the level it needs is the fifth value of C_Item.GetItemInfo (ItemDocumentation.lua:626-657), as Cooldowns.lua:384-391
 -- reads it for a potion, else the level of the data; the player's is UnitLevel (UnitDocumentation.lua:2474-2487). A healthstone still cooling
 -- (C_Item.GetItemCooldown, ItemDocumentation.lua:434-448) goes after a potion that is ready, or that will be ready before it, since a cast
 -- sequence waits on an item that is not ready: it moves on only when the spell of that item succeeds (CastSequenceManager.lua:62-95), and
--- nothing writes the macro when the potion's cooldown ends. The healthstone goes first again when it is ready. A macro uses items by their ID
+-- nothing writes the macro when the potion's cooldown ends. The healthstone goes first again when it is ready. A mana gem still cooling goes
+-- after a mana potion the same way, and first again when it is ready. A macro uses items by their ID
 -- (item:159), so it works in every language, and #showtooltip gives its button the icon, the count and the tooltip of the item it uses. A
 -- character without mana (UnitPowerMax, UnitDocumentation.lua:2801-2817, a value the game may withhold) leaves Flat UI Drink as it is.
 --
@@ -83,8 +86,10 @@ local SOON, WAIT = 0.2, 1
 -- A cooldown this short is the one every item shares after a use, not the item's own.
 local SHORT = 1.5
 local LABEL = "Drink and health macros"
+-- A mage's mana gems, lowest to highest: Mana Agate, Mana Jade, Mana Citrine, Mana Ruby (the Mana gem of ClassData.lua).
+local GEMS = { 5514, 5513, 8007, 8008 }
 
--- What each macro uses now ({ drink, potion } or { stone, potion, food, order }), and why one is not kept ("mana", "taken", "full",
+-- What each macro uses now ({ drink, potion, gem, order } or { stone, potion, food, order }), and why one is not kept ("mana", "taken", "full",
 -- "blocked") or not deleted yet ("bar", "cursor"), by kind.
 local using, why = {}, {}
 -- Lines already said in chat this session.
@@ -94,8 +99,8 @@ local said = {}
 local kept = {}
 -- A run waiting for the end of the fight, for the macro window, or for a burst of events to end.
 local fight, window, soon = false, false, false
--- The health macro put a cooling healthstone after the potion: the time to write it again, or true while its cooldown has not started.
-local wakeAt, held = nil, false
+-- A macro put a cooling healthstone or mana gem after the potion: by kind, the time to write it again, or true while its cooldown has not started.
+local wakeAt, held = {}, {}
 -- The slot guard: true while a macro call of this file runs, and whether the game raised ACTIONBAR_SLOT_CHANGED inside one this session, in a
 -- write (slotTripped) or in a delete (slotDeleted).
 local writing, slotSeen, slotTripped, slotDeleted = false, false, false, false
@@ -258,6 +263,17 @@ local function BestItem(key, level)
 	return nil
 end
 
+-- The best mana gem that the bags hold and the level allows, or nil.
+local function BestGem(level)
+	for index = #GEMS, 1, -1 do
+		local id = GEMS[index]
+		if Count(id) > 0 and Allowed(id, nil, level) then
+			return id
+		end
+	end
+	return nil
+end
+
 -- Seconds until an item is ready again: 0 when it is, math.huge for a cooldown that has not started yet (enableCooldownTimer false, as for a
 -- potion drunk in a fight), nil when the client does not say.
 local function Left(id)
@@ -280,17 +296,35 @@ end
 
 -- The macros --------------------------------------------------------------------------------------------------------------------------------
 
+-- The body of Flat UI Drink, what it uses, and in how many seconds it wants writing again (a cooling mana gem put after the potion).
 local function DrinkBody(level)
 	local drink = Prefer("water", "drink", level)
 	local potion = Opt("manaPotion") == true and BestItem("mana", level) or nil
-	local lines = { "#showtooltip" }
+	local gem = Opt("manaGem") == true and BestGem(level) or nil
+	local order, wake = {}, nil
+	if gem then
+		order[#order + 1] = gem
+	end
 	if potion then
-		lines[#lines + 1] = ("/use [combat] item:%d"):format(potion)
+		order[#order + 1] = potion
+	end
+	if gem and potion then
+		local gemLeft, potionLeft = Left(gem), Left(potion)
+		-- As in Flat UI Health: a potion that is ready, or that will be ready before the gem, goes first.
+		if gemLeft and potionLeft and gemLeft > 0 and potionLeft < gemLeft then
+			order, wake = { potion, gem }, gemLeft
+		end
+	end
+	local lines = { "#showtooltip" }
+	if #order == 1 then
+		lines[#lines + 1] = ("/use [combat] item:%d"):format(order[1])
+	elseif #order == 2 then
+		lines[#lines + 1] = ("/castsequence [combat] reset=combat item:%d, item:%d"):format(order[1], order[2])
 	end
 	if drink then
-		lines[#lines + 1] = ("/use%s item:%d"):format(potion and " [nocombat]" or "", drink)
+		lines[#lines + 1] = ("/use%s item:%d"):format(#order > 0 and " [nocombat]" or "", drink)
 	end
-	return table.concat(lines, "\n"), { drink = drink, potion = potion }
+	return table.concat(lines, "\n"), { drink = drink, potion = potion, gem = gem, order = order }, wake
 end
 
 -- The body of Flat UI Health, what it uses, and in how many seconds it wants writing again (a cooling healthstone put after the potion).
@@ -428,22 +462,22 @@ local function Keep(kind)
 	local level = Level()
 	local body, uses, wake
 	if kind == "drink" then
-		body, uses = DrinkBody(level)
+		body, uses, wake = DrinkBody(level)
 	else
 		body, uses, wake = HealthBody(level)
-		held = wake == math.huge
-		if wake and wake ~= math.huge then
-			local now = Ask(GetTime)
-			if ns.Finite(now) and (not wakeAt or wakeAt <= now or wakeAt > now + wake + 0.1) then
-				local due = now + wake + 0.1
-				wakeAt = due
-				After(wake + 0.1, function()
-					if wakeAt == due then
-						wakeAt = nil
-						Again()
-					end
-				end)
-			end
+	end
+	held[kind] = wake == math.huge
+	if wake and wake ~= math.huge then
+		local now, at = Ask(GetTime), wakeAt[kind]
+		if ns.Finite(now) and (not at or at <= now or at > now + wake + 0.1) then
+			local due = now + wake + 0.1
+			wakeAt[kind] = due
+			After(wake + 0.1, function()
+				if wakeAt[kind] == due then
+					wakeAt[kind] = nil
+					Again()
+				end
+			end)
 		end
 	end
 	using[kind] = uses
@@ -508,9 +542,7 @@ end
 -- Deletes the macro of a kind that Flat UI made and kept this session, and forgets it once it is gone. One that a bar or the cursor holds waits.
 local function Remove(kind)
 	using[kind], why[kind] = nil, nil
-	if kind == "health" then
-		held, wakeAt = false, nil
-	end
+	held[kind], wakeAt[kind] = false, nil
 	if not kept[kind] then
 		return
 	end
@@ -652,8 +684,12 @@ local function Line(kind)
 	local parts = {}
 	if kind == "drink" then
 		parts[#parts + 1] = uses.drink and ("drinks %s"):format(Named(uses.drink)) or "finds nothing to drink"
-		if uses.potion then
-			parts[#parts + 1] = ("in a fight takes %s"):format(Named(uses.potion))
+		local fighting = {}
+		for index, id in ipairs(uses.order or {}) do
+			fighting[index] = Named(id)
+		end
+		if #fighting > 0 then
+			parts[#parts + 1] = ("in a fight takes %s"):format(table.concat(fighting, ", then "))
 		end
 	else
 		local order = uses.order or {}
@@ -730,9 +766,9 @@ ns.Register(KEY, {
 		BAG_UPDATE_DELAYED = Soon,
 		PLAYER_LEVEL_CHANGED = Soon,
 		PLAYER_ENTERING_WORLD = Soon,
-		-- The cooldown of a healthstone put after the potion has started, so the time it ends is known.
+		-- The cooldown of a healthstone or mana gem put after the potion has started, so the time it ends is known.
 		BAG_UPDATE_COOLDOWN = function()
-			if held then
+			if held.drink or held.health then
 				Soon()
 			end
 		end,
