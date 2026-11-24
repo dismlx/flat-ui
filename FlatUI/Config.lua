@@ -2489,6 +2489,8 @@ ns.PAGES = {
 			tip = "Flat UI Drink drinks the best drink in your bags that your level allows, conjured water first. A character without mana leaves it as it is." },
 		{ key = "manaPotion", kind = "bool", default = true, label = "Mana potion in a fight", needs = "drink",
 			tip = "In a fight, where you cannot drink, Flat UI Drink takes your best mana potion." },
+		{ key = "manaGem", kind = "bool", default = true, label = "Mana gem first in a fight", needs = "drink",
+			tip = "For a mage: in a fight Flat UI Drink takes your best mana gem, then your best mana potion at the next press, and starts with the gem again after the fight. A gem still cooling waits behind a potion that is ready." },
 		{ section = "Health" },
 		{ key = "health", kind = "bool", default = true, label = "Health macro",
 			tip = "Flat UI Health takes a healthstone, then at the next press your best healing potion, and starts with the healthstone again after the fight." },

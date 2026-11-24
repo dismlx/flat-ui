@@ -1,9 +1,9 @@
 local ADDON_NAME, ns = ...
 
 -- Data panels: two panels of Flat UI's own, the top panel and the bottom panel, each a row of up to six slots on a flat background with a thin
--- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, the hearthstone,
--- coordinates, the time, the quests in the log, frame rate and latency, friends or guild members online, the equipment set worn, or the feed of another addon through
--- LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no library, and shows feeds of the
+-- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, the hearthstone, the time,
+-- the quests in the log, coordinates, frame rate and latency, friends or guild members online, the equipment set worn, or the feed of another
+-- addon through LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no library, and shows feeds of the
 -- kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to show is hidden, and a panel makes its frames
 -- only once a slot has something to show. The panels are children of UIParent, so they hide with the interface, and they are hidden in a pet
 -- battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading screen). /flatui move places them: each is

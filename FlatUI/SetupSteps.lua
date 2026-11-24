@@ -1506,6 +1506,7 @@ ns.SETUP_STEPS = {
 		{ "consumables.enabled", "c", "behaviour", "Keeps two macros in your macro list, one that drinks and one that heals, up to date with your bags and level." },
 		{ "consumables.drink", "c", "behaviour", "Keeps a macro that drinks the best drink your level allows, conjured water first." },
 		{ "consumables.manaPotion", "o", "behaviour", "Has the drink macro take your best mana potion in a fight." },
+		{ "consumables.manaGem", "r", "behaviour", "Has the drink macro take a mage's mana gem before the potion in a fight." },
 		{ "consumables.health", "c", "behaviour", "Keeps a macro that takes a healthstone, then your best healing potion." },
 		{ "consumables.food", "o", "behaviour", "Has the health macro eat your best food out of combat." },
 	} },
