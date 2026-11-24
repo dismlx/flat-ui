@@ -198,7 +198,8 @@ local function Start(rec, casting, id, unit)
 		return
 	end
 	pcall(Restyle, rec)
-	fs = Spot(rec, unit)
+	local spotted, spot = pcall(Spot, rec, unit)
+	fs = spotted and spot or rec.fs
 	local other = fs == rec.fs and rec.out or rec.fs
 	if other ~= nil then
 		pcall(other.SetText, other, "")

@@ -280,7 +280,7 @@ local function Far(unit)
 	if kept and now and now >= kept.at and now - kept.at < RECHECK then
 		return kept.far
 	end
-	local call, far = C_Spell.IsSpellInRange, false
+	local call, far = type(C_Spell) == "table" and C_Spell.IsSpellInRange or nil, false
 	if type(call) == "function" then
 		for _, ab in ipairs(Abilities()) do
 			if ab.id ~= nil and ab.usable and ab.ready == true then
