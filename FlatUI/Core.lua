@@ -41,7 +41,11 @@ local ADDON_NAME, ns = ...
 -- bar sizes set the width and height of four cast bars, the height of the player bar's spark, the size of
 -- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
--- still that name, and the name alone again when the row goes off.
+-- still that name, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
+-- textures of its own on each of the player's two cast bars (CreateTexture, out of combat on a bar the game may protect) and places them with
+-- SetPoint while a channel runs; a frame of its own hears the player's channel events while the row is on, and it only reads UnitChannelInfo.
+-- Cast time on your bars (CastTime.lua, off by default) fades the game's own time on the player's two cast bars and the pet's (CastTimeText,
+-- SetAlpha 0) while it is on and gives it its alpha back when the row goes off; the seconds are font strings of its own inside each bar.
 -- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
 -- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from
@@ -129,8 +133,12 @@ local ADDON_NAME, ns = ...
 -- the same way.
 -- Overpower on enemy nameplates (PlateOverpower.lua, a warrior's) puts Overpower's icon on a frame of its own, a child of the plate's unit frame,
 -- above the name of the enemy that dodged the player, made, sized and anchored out of combat on a plate that may be protected; in a fight only its
--- alpha, texture, grey and glow change. A frame of its own hears UNIT_COMBAT, SPELL_UPDATE_USABLE, ACTION_USABLE_CHANGED, SPELL_UPDATE_COOLDOWN, the
+-- alpha, texture, grey, glow and the time-left swipe of a Cooldown frame of its own (SetCooldown, Clear) change. A frame of its own hears UNIT_COMBAT, SPELL_UPDATE_USABLE, ACTION_USABLE_CHANGED, SPELL_UPDATE_COOLDOWN, the
 -- player's casts and auto attack and NAME_PLATE_UNIT_REMOVED while the row is on, and SPELLS_CHANGED for a warrior, and only reads.
+-- The quest mark on nameplates (PlateQuest.lua, on by default) is a texture on a frame of its own, a child of the plate's unit frame, anchored
+-- beside the plate's raid marker frame (ClassificationFrame), level frame, health bars or name and sized out of combat on a plate that may be
+-- protected; in a fight only its alpha changes. A frame of its own hears QUEST_LOG_UPDATE and the player's UNIT_QUEST_LOG_CHANGED while the row is
+-- on, and it only reads (C_QuestLog.UnitIsRelatedToActiveQuest, UnitIsPlayer, UnitCanAttack).
 -- Errands (on by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- also for the Sell junk button of the bags, whatever the switch of Errands, repairs with RepairAllItems, buys with BuyMerchantItem, sells the
 -- cursor item with SellCursorItem, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click
@@ -313,7 +321,7 @@ local ADDON_NAME, ns = ...
 -- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
 -- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.
 -- The combat alerts of Combat text (No target and +Combat and -Combat, both on by default) are font strings on a frame of its own;
--- they change nothing.
+-- they play the sounds their rows choose (PlaySound, through ns.PlayKit) and change nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);
 -- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. While the mouse is over an item, spell or achievement

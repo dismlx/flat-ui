@@ -1,9 +1,14 @@
 local _, ns = ...
 
 -- Interrupt ready: whether the player's class interrupt can be used now. Two things show it. An enemy's cast that can be interrupted takes one of
--- two colours of the Colours page on the flat target, focus and nameplate cast bars (Bars.lua asks ns.InterruptReady for each bar it paints), and
--- the game's look for a cast that cannot be interrupted stays. The icon of the interrupt in the cooldown row gets a gold border while the target
--- or the focus casts something it can stop and the interrupt is ready (Cooldowns.lua hands its icons to ns.InterruptIcons).
+-- three colours of the Colours page on the flat target, focus and nameplate cast bars (Bars.lua asks ns.InterruptReady for each bar it paints):
+-- ready, ready while the caster is out of its range, and on cooldown; the game's look for a cast that cannot be interrupted stays. The icon of the
+-- interrupt in the cooldown row gets a gold border while the target or the focus casts something it can stop, the interrupt is ready and the
+-- caster is in its range (Cooldowns.lua hands its icons to ns.InterruptIcons).
+-- Range: while an interrupt is ready, the game is asked whether the caster is in range of it (C_Spell.IsSpellInRange, SpellDocumentation.lua:947-963,
+-- no withheld answer; read as Cooldowns.lua reads it), for the ready ones of the player's own that can be cast now: a plain false for every one
+-- of them is out of range, and no answer, or the pet's Spell Lock (whose range is the pet's), counts as in range. The answer for a unit is kept for
+-- RECHECK seconds, so the bars that paint every frame ask at most that often.
 -- The interrupts are those of CooldownData.lua (the kind "interrupt") of the player's class, every rank: Pummel and Shield Bash, Kick, Earth Shock,
 -- Counterspell, Silence, Feral Charge, and the Felhunter's Spell Lock, asked in the pet's book (SpellBookDocumentation.lua:738-771). A class with
 -- none known, a Hunter or a Paladin, shows nothing. The first rank of the list the book knows stands for them all, and an icon of any rank, or of
@@ -53,9 +58,9 @@ local IsSecret = ns.IsSecret
 -- dirty: the book is to be read again. checked: when the cooldowns were last looked at. frame: the frame of the events; book, pet, full, hearing:
 -- whether it hears BOOK, UNIT_PET, OWN and the casts of the two units; byUnit and petByUnit: whether the casts and UNIT_PET went by unit.
 -- glows: per icon of the cooldown row, its border. looping, wantLoop: a look of the row is waiting, and is wanted. fault: the first failure of a
--- look of a bar or of an event.
+-- look of a bar or of an event. range: per unit, the last range answer { at, far }.
 local S = { class = nil, list = nil, dirty = true, checked = nil, frame = nil, book = false, pet = false, full = false, hearing = false, byUnit = false,
-	petByUnit = false, glows = setmetatable({}, { __mode = "k" }), looping = false, wantLoop = false, fault = nil }
+	petByUnit = false, glows = setmetatable({}, { __mode = "k" }), looping = false, wantLoop = false, fault = nil, range = {} }
 
 -- The first answer of a game call, or nil when the call is missing, raises or is withheld.
 local function Ask(fn, ...)
@@ -267,6 +272,32 @@ local function Ready()
 	return answer
 end
 
+-- True while every ready interrupt of the player's own that can be cast now is out of range of the unit, as the game says it plainly; false while
+-- one is in range, the game does not say, or the ready one is the pet's. Kept for RECHECK seconds a unit.
+local function Far(unit)
+	local now = Now()
+	local kept = S.range[unit]
+	if kept and now and now >= kept.at and now - kept.at < RECHECK then
+		return kept.far
+	end
+	local call, far = type(C_Spell) == "table" and C_Spell.IsSpellInRange or nil, false
+	if type(call) == "function" then
+		for _, ab in ipairs(Abilities()) do
+			if ab.id ~= nil and ab.usable and ab.ready == true then
+				if ab.pet or Ask(call, ab.id, unit) ~= false then
+					far = false
+					break
+				end
+				far = true
+			end
+		end
+	end
+	kept = kept or {}
+	kept.at, kept.far = now or 0, far
+	S.range[unit] = kept
+	return far
+end
+
 -- A unit the player can attack (UnitDocumentation.lua:763-772). No answer, or a withheld one, is a friend.
 local function Hostile(unit)
 	return Ask(UnitCanAttack, "player", unit) == true
@@ -293,11 +324,16 @@ local function Answer(unit)
 		return nil
 	end
 	Recheck()
-	return Ready()
+	local ready = Ready()
+	if ready == true and Far(unit) then
+		return "far"
+	end
+	return ready
 end
 
--- For Bars.lua, each frame it paints the cover of a cast or a channel: true or false for the bar of `unit` while that unit is an enemy and Colour
--- enemy casts by your interrupt is on, nil for every other bar, which keeps its colours. It never raises.
+-- For Bars.lua, each frame it paints the cover of a cast or a channel: true (ready), "far" (ready, but the caster is out of its range) or false
+-- (on cooldown) for the bar of `unit` while that unit is an enemy and Interrupt readiness on enemy casts is on, nil for every other bar, which
+-- keeps its colours. It never raises.
 function ns.InterruptReady(unit)
 	if not S.full or not BarsOn() then
 		return nil
@@ -383,8 +419,9 @@ local function Glows()
 	for _, glow in pairs(S.glows) do
 		local ab = glow.ability
 		local ready = on and ab ~= nil and ab.id ~= nil and ab.usable == true and ab.ready == true
-		Paint(glow.layers.target, ready and targetCast, targetLocked)
-		Paint(glow.layers.focus, ready and focusCast, focusLocked)
+		-- No border while the caster is out of range of the interrupt.
+		Paint(glow.layers.target, ready and targetCast and not Far("target"), targetLocked)
+		Paint(glow.layers.focus, ready and focusCast and not Far("focus"), focusLocked)
 	end
 	Loop(on and (targetCast or focusCast))
 end
@@ -680,6 +717,9 @@ ns.AddStatus(BARS, function()
 		if #names > 0 then
 			local ready = Ready()
 			local word = ready == true and "ready" or ready == false and "on cooldown" or "not usable now"
+			if ready == true and Hostile("target") and Far("target") then
+				word = word .. ", out of range of your target"
+			end
 			lines[1] = ("Interrupt: %s, %s."):format(table.concat(names, " and "), word)
 		end
 	end

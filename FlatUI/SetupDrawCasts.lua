@@ -9,7 +9,8 @@ local _, ns = ...
 -- What each look is built from, so it matches what the module paints (Bars.lua):
 --   cast bars: the border and background of ApplyCastBar (Bars.lua:597-622), the plate behind the spell name, the spark, the shield, the icon and
 --   the spell name of ApplyCastParts and ns.CastText (Bars.lua:707-816), the cover colour of CastColour (956-972), the marks of Marks (1020-1088),
---   the sizes and the place of the spell name of CastBarSize.lua:92-150, and the rank after the spell name of CastRank.lua.
+--   the sizes and the place of the spell name of CastBarSize.lua:92-150, the rank after the spell name of CastRank.lua, and the tick marks of a
+--   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks).
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
 --   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530).
 -- Sizes and places of the game's own parts come from the client's interface source:
@@ -270,12 +271,13 @@ end
 -- Cast bars ---------------------------------------------------------------------------------------------------
 
 local CAST_ROWS = {
-	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 } },
-	{ opt = "pet", label = "Pet", name = "Firebolt", state = "cast", part = 0.45, game = { 195, 13 } },
+	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 }, time = "1.0" },
+	{ opt = "pet", label = "Pet", name = "Firebolt", state = "cast", part = 0.45, game = { 195, 13 }, time = "1.4" },
 	{ opt = "target", label = "Target", name = "Fireball", state = "cast", part = 0.6, game = { 150, 10 }, small = true, time = "1.2" },
 	{ opt = "focus", label = "Focus", name = "Arcane Missiles", state = "channel", part = 0.4, game = { 150, 10 }, small = true, time = "1.8" },
 	{ opt = "target", label = "Target, uninterruptible", name = "Polymorph", state = "shield", part = 0.7, game = { 150, 10 }, small = true, time = "0.9",
 		shield = true },
+	{ opt = "player", label = "Player, channel", name = "Drain Life", state = "channel", part = 0.55, game = { 208, 11 }, ticks = 5, time = "2.7" },
 }
 -- The game's size of each bar (the rows above, and the boss bars of TargetFrame.xml:543-548, small bars as the target's).
 local CAST_GAME = { player = { 208, 11 }, pet = { 195, 13 }, target = { 150, 10 }, focus = { 150, 10 }, boss = { 150, 10 } }
@@ -295,8 +297,8 @@ local castMade = setmetatable({}, { __mode = "k" })
 local castDrawing = {}
 
 -- One cast bar on `parent`: its frame, the game's art, the plate behind the spell name, the fill, the spark, the icon, the latency zone of the player
--- bar, the shield of a bar that may show one (spec.shield), the outline, the spell name and the time of a bar with spec.time. inst holds the grey
--- parts and the outlines of the drawing it belongs to.
+-- bar, the shield of a bar that may show one (spec.shield), the outline, the spell name, the time of a bar with spec.time and the tick marks of a
+-- channel of spec.ticks ticks (CastTicks.lua). inst holds the grey parts and the outlines of the drawing it belongs to.
 local function NewCastBar(inst, parent, spec)
 	local row = { spec = spec, inst = inst }
 	local bar = NewFrame(parent)
@@ -313,6 +315,15 @@ local function NewCastBar(inst, parent, spec)
 	if spec.opt == "player" then
 		row.latency = NewTexture(bar, "ARTWORK", 2)
 		row.latency:SetColorTexture(1, 0, 0, 0.6)
+	end
+	if spec.ticks then
+		row.ticks = {}
+		for k = 1, spec.ticks - 1 do
+			local mark = NewTexture(bar, "OVERLAY", 1)
+			mark:SetColorTexture(1, 1, 1, 0.6)
+			mark:Hide()
+			row.ticks[k] = mark
+		end
 	end
 	if spec.shield then
 		row.shield = NewTexture(bar, "ARTWORK", 4)
@@ -367,6 +378,11 @@ local function BuildCast(stage)
 	p["castbars.shield"] = rows[5].shield
 	p["castbars.stateBorder"] = player.bar
 	p["castbars.latency"] = player.latency
+	for _, row in ipairs(rows) do
+		if row.ticks then
+			p["castbars.ticks"] = p["castbars.ticks"] or row.bar
+		end
+	end
 	p["castbars.flat"] = player.fill
 	p["castbars.texture"] = player.fill
 	p["castbars.playerClass"] = player.fill
@@ -380,6 +396,7 @@ local function BuildCast(stage)
 		p["castbars." .. path] = player.text
 	end
 	p["castbars.ownTime"] = target.time
+	p["castbars.playerTime"] = player.time
 	p["castbars.iconPos"] = target.icon
 	p["castbars.playerIcon"] = player.icon
 	return inst
@@ -483,6 +500,25 @@ local function CastName(row, look, name)
 	return spec.rank and look.enabled and G("castbars.rank") == true and (spec.name .. " (" .. spec.rank .. ")") or spec.name or ""
 end
 
+-- The tick marks of a channel on a bar that has them, at even steps of its width, while Channel ticks on the player bar is on (CastTicks.lua).
+local function PaintTicks(row, look, state, w)
+	local list = row.ticks
+	if not list then
+		return
+	end
+	local on = look.enabled and G("castbars.ticks") == true and state == "channel"
+	local n = #list + 1
+	for k, mark in ipairs(list) do
+		if on then
+			mark:ClearAllPoints()
+			mark:SetPoint("TOP", row.bar, "TOPLEFT", w * k / n, 0)
+			mark:SetPoint("BOTTOM", row.bar, "BOTTOMLEFT", w * k / n, 0)
+			mark:SetWidth(ns.Pixels(row.bar, 1))
+		end
+		mark:SetShown(on)
+	end
+end
+
 -- Paints one bar of a place (opt) in a state at `part` of its width, w by h. kick: an enemy cast the player's interrupt is ready for.
 local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	local inst, spec, bar = row.inst, row.spec, row.bar
@@ -511,9 +547,11 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	row.spark:SetShown(not (enabled and not G("castbars.spark")))
 	GameTexture(inst, row.spark, GAME_PIP, { 0.9, 0.9, 0.9, 0.9 })
 	if row.latency then
+		-- A channel's delay is at the left end, where it drains to, as Marks of Bars.lua has it.
+		local side = state == "channel" and "LEFT" or "RIGHT"
 		row.latency:ClearAllPoints()
-		row.latency:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
-		row.latency:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+		row.latency:SetPoint("TOP" .. side, bar, "TOP" .. side, 0, 0)
+		row.latency:SetPoint("BOTTOM" .. side, bar, "BOTTOM" .. side, 0, 0)
 		row.latency:SetWidth(Max(w * 0.05, 0.01))
 		row.latency:SetShown(flat and G("castbars.latency") == true and state ~= "interrupted")
 	end
@@ -532,6 +570,7 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 		Place(row.icon, "RIGHT", bar, "LEFT", -5, 0)
 		row.icon:SetShown(flat and G("castbars.playerIcon") == true and state ~= "interrupted")
 	end
+	PaintTicks(row, look, state, w)
 	-- The spell name.
 	if row.text then
 		local mode = "top10"
@@ -546,8 +585,12 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 		row.text:SetShown(not look.hideName)
 		Look(row.text, look.percent, look.r, look.g, look.b, look.outline)
 	end
+	-- The time: Cast time on your bars for the player's and the pet's, Cast time on target and focus bars for the small ones, in the spell name's
+	-- size and outline (CastTime.lua copies the font of the bar's spell name).
 	if row.time then
-		row.time:SetShown(enabled and G("castbars.ownTime") == true and state ~= "interrupted")
+		local timeRow = (opt == "player" or opt == "pet") and "castbars.playerTime" or "castbars.ownTime"
+		row.time:SetShown(enabled and G(timeRow) == true and state ~= "interrupted")
+		Look(row.time, look.percent, nil, nil, nil, look.outline)
 	end
 end
 
@@ -630,6 +673,9 @@ function DC.CastProgress(row, state, part, left, name)
 	CastFill(row, row.look, row.opt, state, part, row.w, row.kick)
 	if row.text and (state ~= row.state or name) then
 		row.text:SetText(CastName(row, row.look, name))
+	end
+	if state ~= row.state then
+		PaintTicks(row, row.look, state, row.w)
 	end
 	row.state = state
 	if row.time and ns.Finite(left) then
