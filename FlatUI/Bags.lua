@@ -125,6 +125,7 @@ local _, ns = ...
 --
 -- /flatui bags opens or closes the bag window with the command hold, and /flatui bags Name shows the bags of a character Flat UI keeps;
 -- /flatui bank and /flatui bank Name ask BagsBank for the bank window. They run whatever the switch of the page, and say so while it is off.
+-- A left click on the Bag space slot of the data panels runs /flatui bags through ns.BagsToggle, only while the page is on.
 --
 -- Besides the calls above it reads GetTime, InCombatLockdown, ns.Enabled (to tell that the page came on again) and, when the page comes up,
 -- whether MerchantFrame is shown (IsShown); and it makes frames of its own with CreateFrame (the hidden frame, and in each window a frame that
@@ -1604,6 +1605,11 @@ local function SlashBags(rest)
 	if not bagsOpen then
 		B.Hold("command", true)
 	end
+end
+
+-- A click on the Bag space slot of the data panels (DataStreams.lua): /flatui bags with nothing after it, with the same checks.
+function ns.BagsToggle()
+	SlashBags("")
 end
 
 -- /flatui bank: the bank window, live at the banker while At the banker is Flat UI's bank window, else the snapshot (also at the banker with the
