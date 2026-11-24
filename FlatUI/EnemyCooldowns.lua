@@ -17,9 +17,11 @@ local _, ns = ...
 -- this addon's own, children of the nameplate's unit frame only when the game says plainly that it is not protected, else after
 -- combat, and placed again in a fight only on such a plate. In combat only the picture, the sweep, the colour and show or hide of icons
 -- that exist are touched. Two bars of up to eight icons, for the target and the focus, are rows of the same kind that hang from
--- UIParent, above the target and focus frames until a spot is saved with the movers. Flash when ready flashes the icon at the end of a
--- timer and, for the target and focus, plays a sound. The Add and Hide lists and /flatui enemy are kept for the account. The helpers are
--- in one table, E.
+-- UIParent, above the target and focus frames until a spot is saved with the movers. Pointing at an icon of those bars writes the ability with
+-- its class, in its kind's colour, the enemy's name and Ready, the time left or that its use is not known, in GameTooltip (Icon tooltips: On,
+-- Out of combat only or Off); those icons take the mouse's motion only, never a click. Icons on nameplates take no mouse, so plates are
+-- clicked as ever. Flash when ready flashes the icon at the end of a timer and, for the target and focus, plays a sound. The Add and Hide
+-- lists and /flatui enemy are kept for the account. The helpers are in one table, E.
 
 local KEY = "enemycd"
 local SPACING = 2
@@ -39,6 +41,9 @@ local JUST = 1
 local NET_LATE = 0.1
 -- The look of a used icon in Always, the abilities added by hand at most, and the longest cooldown and the highest spell ID that can be typed.
 local DARK = 0.6
+-- The colours of a tooltip's lines: Ready, and the text-dim of the windows (PanelLook.lua).
+local READY = { 0.4, 0.9, 0.4 }
+local DIM = { 0.66, 0.68, 0.62 }
 -- The look of an icon in Always whose ability may be ready or used: its use could not be seen. Its question mark takes the font of the
 -- countdown numbers of an icon that size (the largest size with each font).
 local UNKNOWN = 0.45
@@ -651,7 +656,7 @@ function E.Make(frame, bar)
 	end
 	ns.Own[holder] = true
 	holder:SetSize(1, 1)
-	row = { holder = holder, icons = {}, drawn = {} }
+	row = { holder = holder, icons = {}, drawn = {}, bar = bar }
 	E.rows[bar or frame] = row
 	return row
 end
@@ -699,7 +704,21 @@ function E.Fit(row, count)
 				E.RenderRec(rec)
 			end
 		end
+		-- The target and focus bars have tooltips; icons on a nameplate take no mouse.
+		if row.bar then
+			icon.frame:SetScript("OnEnter", function()
+				ns.Try(KEY, E.Tip, row, icon)
+			end)
+			icon.frame:SetScript("OnLeave", function()
+				ns.Try(KEY, E.Untip, icon)
+			end)
+		end
 		row.icons[#row.icons + 1] = icon
+	end
+	if row.bar then
+		for _, icon in ipairs(row.icons) do
+			E.Mouse(icon)
+		end
 	end
 	count = math.min(count, #row.icons)
 	local key = ("%s:%s:%s"):format(size, count, direction)
@@ -771,7 +790,7 @@ function E.Draw(row, slot, item)
 		ns.IconClear(icon)
 		return
 	end
-	icon.key = item.a.key
+	icon.key, icon.unknown = item.a.key, item.unknown == true
 	local look = { numbers = Opt("seconds") == true, font = Opt("numbersFont"), kind = Opt("kindBorder") == true and item.a.kind or nil, border = Opt("iconBorder") }
 	if item.ready then
 		icon.net = nil
@@ -845,6 +864,97 @@ function E.Render()
 	end
 	for _, bar in pairs(E.bars) do
 		E.RenderBar(bar)
+	end
+end
+
+-- Tooltips -------------------------------------------------------------------------------------------------------------------------
+
+local function Tooltip()
+	local tip = _G.GameTooltip
+	if tip == nil or ns.Forbidden(tip) then
+		return nil
+	end
+	return tip
+end
+
+-- Whether GameTooltip is the icon's.
+local function Owned(icon)
+	local tip = Tooltip()
+	if not tip then
+		return false
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, icon.frame)
+	return ok and not IsSecret(owned) and owned == true
+end
+
+-- An icon of a bar takes the mouse's motion while Icon tooltips is On or Out of combat only, never a click. Its own frame, so in a fight too;
+-- only when the row changed.
+function E.Mouse(icon)
+	local tips = Opt("tooltips") or "on"
+	if icon.tips == tips then
+		return
+	end
+	local frame = icon.frame
+	if pcall(frame.SetMouseClickEnabled, frame, false) and pcall(frame.SetMouseMotionEnabled, frame, tips ~= "off") then
+		icon.tips = tips
+	end
+	if tips == "off" then
+		E.Untip(icon)
+	end
+end
+
+-- The time left as 1:42.
+local function Clock(seconds)
+	seconds = math.max(0, math.ceil(seconds))
+	return ("%d:%02d"):format(math.floor(seconds / 60), seconds % 60)
+end
+
+-- The tooltip of an icon of a bar: the ability with its class in its kind's colour, the enemy, and Ready, the time left from the timer (plain
+-- numbers of Tracking.lua) or that its use is not known. A sample of test mode says so; the arena break, which has no ability, has none.
+-- Out of combat only shows nothing in a fight.
+function E.Tip(row, icon)
+	local tips = Opt("tooltips") or "on"
+	local tip = Tooltip()
+	if not tip or tips == "off" or (tips == "out" and InCombatLockdown()) then
+		return
+	end
+	local a = not row.testing and E.ByKey(icon.key) or nil
+	if not a and not row.testing then
+		return
+	end
+	local rec = row.rec
+	local who = rec and rec.unit and Text(UnitName, rec.unit) or nil
+	local start, seconds
+	if a and rec and rec.owner then
+		start, seconds = T.Timer(rec.owner, a.key)
+	end
+	pcall(function()
+		tip:SetOwner(icon.frame, "ANCHOR_TOP")
+		if row.testing then
+			tip:SetText("Sample", 1, 1, 1)
+			tip:AddLine("A sample of test mode.", DIM[1], DIM[2], DIM[3])
+			tip:Show()
+			return
+		end
+		local r, g, b = ns.KindColour(a.kind)
+		tip:SetText(E.Name(a), r or 1, g or 1, b or 1)
+		if who then
+			tip:AddLine(who, 1, 1, 1)
+		end
+		if start and seconds then
+			tip:AddLine(("Ready in %s"):format(Clock(start + seconds - T.Now())), DIM[1], DIM[2], DIM[3])
+		elseif icon.unknown then
+			tip:AddLine("Ready or used: the game hides its use here.", DIM[1], DIM[2], DIM[3], true)
+		else
+			tip:AddLine("Ready", READY[1], READY[2], READY[3])
+		end
+		tip:Show()
+	end)
+end
+
+function E.Untip(icon)
+	if Owned(icon) then
+		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 	end
 end
 
@@ -1859,6 +1969,9 @@ function E.Refresh()
 	for _, row in pairs(E.rows) do
 		for slot = 1, #row.icons do
 			row.drawn[slot] = nil
+			if row.bar then
+				E.Mouse(row.icons[slot])
+			end
 		end
 		row.fitKey, row.placeKey = nil, nil
 	end

@@ -10,7 +10,10 @@ local _, ns = ...
 -- no party member frames, so the player's own row and the rows of the subgroup stack in a holder of their own with a handle in
 -- /flatui move, each row labelled with the member's name. The abilities an account adds or hides, by name or spell ID, are kept in
 -- the account (/flatui party). A member who also runs Flat UI sends his cooldowns as addon messages (PartySync.lua), which start his
--- timers here and show his ready icons. The helpers are in one table, P.
+-- timers here and show his ready icons. Pointing at an icon writes the ability with its class, in its kind's colour, the member's name, Ready or
+-- the time left, and whether he shares by Flat UI, in GameTooltip (Icon tooltips: On, Out of combat only or Off); the icon takes the mouse's
+-- motion only, never a click, so clicks go through to the party frame below (SetMouseClickEnabled false, as Your buffs does). The helpers are
+-- in one table, P.
 
 local KEY = "partycd"
 local SPACING = 2
@@ -20,6 +23,9 @@ local LOOK = 0.5
 local TEST_TIME = 8
 local DARK = 0.6
 local UNKNOWN_ICON = 134400
+-- The colours of a tooltip's lines: Ready, and the text-dim of the windows (PanelLook.lua).
+local READY = { 0.4, 0.9, 0.4 }
+local DIM = { 0.66, 0.68, 0.62 }
 -- The kinds each switch shows (CooldownData.lua: ns.COOLDOWN_KINDS), in the order of the rows.
 local SWITCHES = { { "interrupts", { 1 } }, { "defensives", { 2, 6 } }, { "externals", { 3 } }, { "breaks", { 5 } }, { "group", { 9 } } }
 local LINE_ROSTER = "Party cooldowns: your subgroup is read from the raid roster here."
@@ -559,7 +565,16 @@ function P.Fit(row, size, count, side)
 		icon.onDone = function()
 			P.Done(row, icon)
 		end
+		icon.frame:SetScript("OnEnter", function()
+			ns.Try(KEY, P.Tip, row, icon)
+		end)
+		icon.frame:SetScript("OnLeave", function()
+			ns.Try(KEY, P.Untip, icon)
+		end)
 		row.icons[#row.icons + 1] = icon
+	end
+	for _, icon in ipairs(row.icons) do
+		P.Mouse(icon)
 	end
 	if row.fitKey == key and row.fitCount == #row.icons then
 		return
@@ -567,6 +582,109 @@ function P.Fit(row, size, count, side)
 	row.fitKey, row.fitCount = key, #row.icons
 	local width = ns.IconLayout(row.icons, row.holder, size, SPACING, side == "left" and "left" or "right")
 	row.holder:SetSize(math.max(width, 1), size)
+end
+
+-- Tooltips -------------------------------------------------------------------------------------------------------------------------
+
+local function Tooltip()
+	local tip = _G.GameTooltip
+	if tip == nil or ns.Forbidden(tip) then
+		return nil
+	end
+	return tip
+end
+
+-- Whether GameTooltip is the icon's.
+local function Owned(icon)
+	local tip = Tooltip()
+	if not tip then
+		return false
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, icon.frame)
+	return ok and not IsSecret(owned) and owned == true
+end
+
+-- An icon takes the mouse's motion while Icon tooltips is On or Out of combat only, never a click. Its own frame, so in a fight too; only
+-- when the row changed.
+function P.Mouse(icon)
+	local tips = Opt("tooltips") or "on"
+	if icon.tips == tips then
+		return
+	end
+	local frame = icon.frame
+	if pcall(frame.SetMouseClickEnabled, frame, false) and pcall(frame.SetMouseMotionEnabled, frame, tips ~= "off") then
+		icon.tips = tips
+	end
+	if tips == "off" then
+		P.Untip(icon)
+	end
+end
+
+function P.MouseAll()
+	for _, row in pairs(P.assigned) do
+		for _, icon in ipairs(row.icons) do
+			P.Mouse(icon)
+		end
+	end
+end
+
+-- The time left as 1:42.
+local function Clock(seconds)
+	seconds = math.max(0, math.ceil(seconds))
+	return ("%d:%02d"):format(math.floor(seconds / 60), seconds % 60)
+end
+
+-- The tooltip of an icon: the ability with its class in its kind's colour, the member, Ready or the time left from the timer (plain numbers of
+-- Tracking.lua), and whether the member shares by Flat UI. A sample of test mode says so. Out of combat only shows nothing in a fight.
+function P.Tip(row, icon)
+	local tips = Opt("tooltips") or "on"
+	local tip = Tooltip()
+	if not tip or tips == "off" or (tips == "out" and InCombatLockdown()) then
+		return
+	end
+	local a = P.ByKey(icon.key)
+	if not a and not row.testing then
+		return
+	end
+	local who = row.unit and Text(UnitName, row.unit) or row.labelText
+	local start, seconds
+	if a and not row.testing and row.owner then
+		start, seconds = T.Timer(row.owner, a.key)
+	end
+	local sync = ns.PartySync
+	local shares = not row.testing and not row.own and row.owner and sync and sync.Shares(row.owner)
+	pcall(function()
+		tip:SetOwner(icon.frame, "ANCHOR_TOP")
+		if row.testing then
+			tip:SetText("Sample", 1, 1, 1)
+			if a then
+				tip:AddLine(P.Name(a), ns.KindColour(a.kind))
+			end
+		else
+			local r, g, b = ns.KindColour(a.kind)
+			tip:SetText(P.Name(a), r or 1, g or 1, b or 1)
+		end
+		if type(who) == "string" and who ~= "" then
+			tip:AddLine(who, 1, 1, 1)
+		end
+		if row.testing then
+			tip:AddLine("A sample of test mode.", DIM[1], DIM[2], DIM[3])
+		elseif start and seconds then
+			tip:AddLine(("Ready in %s"):format(Clock(start + seconds - T.Now())), DIM[1], DIM[2], DIM[3])
+		else
+			tip:AddLine("Ready", READY[1], READY[2], READY[3])
+		end
+		if shares then
+			tip:AddLine("Shared by Flat UI", DIM[1], DIM[2], DIM[3])
+		end
+		tip:Show()
+	end)
+end
+
+function P.Untip(icon)
+	if Owned(icon) then
+		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
+	end
 end
 
 -- Hangs a row beside, or under, a member frame.
@@ -889,6 +1007,7 @@ function P.Refresh()
 	if ns.PartySync then
 		ns.PartySync.Refresh()
 	end
+	P.MouseAll()
 	if InCombatLockdown() then
 		if not P.queued then
 			P.queued = true
@@ -1453,6 +1572,7 @@ function P.Hold(row)
 	for slot, icon in ipairs(row.icons) do
 		row.drawn[slot] = nil
 		local a = abilities[slot]
+		icon.key = a and a.key or nil
 		if slot <= count then
 			-- The kind of the row's ability colours the border, else the sample's (kind true, IconRow.lua).
 			local look = { kind = a and a.kind or nil, numbers = Opt("seconds") == true, font = Opt("numbersFont"), border = Opt("iconBorder") }
