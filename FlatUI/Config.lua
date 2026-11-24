@@ -115,6 +115,8 @@ ns.PAGES = {
 			tip = "On target, focus and nameplate cast bars with a flat fill, an enemy cast you can interrupt shows whether your class interrupt is ready. A cast that cannot be interrupted keeps its colour." },
 		{ page = "castbars", key = "interruptReady", kind = "colour", default = "ff33d959", label = "Interrupt ready colour", needs = "interrupt" },
 		{ page = "castbars", key = "interruptCooling", kind = "colour", default = "ffd9732e", label = "Interrupt on cooldown colour", needs = "interrupt" },
+		{ page = "castbars", key = "interruptFar", kind = "colour", default = "ff7f8fa6", label = "Interrupt out of range colour", needs = "interrupt",
+			tip = "While your interrupt is ready but the caster is out of its range." },
 		{ section = "Borders" },
 		{ key = "borderMode", kind = "choice", default = "custom", label = "Border colour source",
 			choices = { { "custom", "Border colour on the Flat UI page" }, { "class", "Your class colour" }, { "faction", "Your faction colour" } } },

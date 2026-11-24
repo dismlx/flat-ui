@@ -44,7 +44,7 @@ A warrior who knows **Overpower** sees its icon over the nameplate of an enemy t
 
 While you level, a small quest mark shows beside the nameplate of every enemy the game says belongs to a quest in your log, and goes once that objective is done (**Quest mark on enemies you need for a quest**, on by default on the **Marks and icons** tab of **Nameplates**, with **Quest mark size** and **Quest mark position**: left of the bar past the raid marker, right of it, or above the name). Questie draws its own nameplate icons, so with Questie you may want only one of the two.
 
-Enemy cast bars on your target, focus and nameplates show whether your class interrupt is ready, and its icon on the cooldown row gets a gold border while your target or focus casts something you can interrupt.
+Enemy cast bars on your target, focus and nameplates show whether your class interrupt is ready, and its icon on the cooldown row gets a gold border while your target or focus casts something you can interrupt. While your interrupt is ready but the caster stands out of its range, the cast takes **Interrupt out of range colour** (grey-blue, on the **Colours** page) and the gold border waits, turning to **Interrupt ready colour** as you close in.
 
 While you channel a spell, thin marks cross your cast bar where each tick lands, so you can see the next tick of Arcane Missiles, Blizzard, Mind Flay, Drain Life or Hellfire coming and stop right after one (**Channel ticks on the player bar**, on by default under **Look** on the **Cast bars** page, with or without **Flat fill**).
 

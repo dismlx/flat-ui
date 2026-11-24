@@ -24,6 +24,7 @@ ns.SETUP_STEPS = {
 		{ "castbars.interrupt", "o", "behaviour", "Colours an enemy cast you can interrupt by whether your class interrupt is ready." },
 		{ "castbars.interruptReady", "r", "behaviour", "Colours an enemy cast you can interrupt while your interrupt is ready." },
 		{ "castbars.interruptCooling", "r", "behaviour", "Colours an enemy cast you can interrupt while your interrupt is on cooldown." },
+		{ "castbars.interruptFar", "r", "behaviour", "Colours an enemy cast you can interrupt while your interrupt is ready but the caster is out of its range." },
 		{ "general.reactionOwn", "c", "mock-bars" },
 		{ "general.reactionHostile", "r", "mock-bars" },
 		{ "general.reactionNeutral", "r", "mock-bars" },
