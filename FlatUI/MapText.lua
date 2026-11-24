@@ -6,6 +6,15 @@ local _, ns = ...
 -- of combat, or on a minimap the game does not protect, and only while a line has something the client can give; the text, its colour and its
 -- place are set at any time. Nothing of the game's is written: of the minimap only its level and whether it is protected are read, and its
 -- OnShow is followed with HookScript, which writes nothing on the frame.
+-- Over each line lies a button of the addon's own, a child of that frame the size of the line's text, made with the line's text out of combat
+-- or on a map the game does not protect, which shows and hides with the text; the frame itself still takes no mouse, so the map's own clicks
+-- are untouched. Pointing at a line, out of a fight, writes a tooltip in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide
+-- only while IsOwned says the button owns it), written again while it shows as the line changes: the zone, subzone and coordinates, each worn
+-- item's durability, and the frame rate, home and world latency and Flat UI's memory, all as the data panels write them (ns.DataPanels.TipAt
+-- with their streams), and the local and realm time. Shift-click on the coordinates puts the zone and the coordinates shown into the chat box
+-- (ns.PutInChat: ChatFrameUtil.InsertLink into a box that is open, else ChatFrameUtil.OpenChat); a click on the time opens the game's stopwatch
+-- and alarm (ToggleTimeManager) and a Shift-click its calendar (ToggleCalendar), out of a fight. The lines of durability and the frame rate let
+-- clicks through.
 --   Coordinates: the player's place on the map of the zone, from C_Map.GetBestMapForUnit("player") and C_Map.GetPlayerMapPosition(map,
 --     "player"), whose x and y are read as fields (the game's own line calls GetXY of that table: Mainline/Minimap.lua:1434-1457). Neither is
 --     secret on Forever, only their arguments are guarded (MapDocumentation.lua:49-63, 437-452), and the position is nil where the game
@@ -50,13 +59,23 @@ local FPS_MIDDLING, FPS_POOR, MS_MIDDLING, MS_POOR = 60, 30, 100, 200
 local FIRST_SLOT, LAST_SLOT = 1, 19
 -- The seconds between two reads of the lines that change once a second or less.
 local SLOW = 1
+-- The data panels' stream whose tooltip each line shows (DataStreams.lua), the tooltip's anchor, and the dim colour of its words.
+local STREAMS = { coords = "coords", durability = "durability", perf = "fps" }
+local ANCHOR = "ANCHOR_LEFT"
+local DIM_RGB = { 0.66, 0.68, 0.62 }
+-- The lines a click does something on, and the hints their tooltips end with.
+local CLICKS = { coords = true, clock = true }
+local HINTS = {
+	coords = { "Shift-click: put this in chat" },
+	clock = { "Click: stopwatch and alarm", "Shift-click: calendar" },
+}
 
--- frame: the frame of the lines; text[id]: the font string of a line; shown[id]: its text while it shows; colour[id]: its colour; why[id]: why a
--- wanted line is hidden, for /flatui status; ticker, step, slow: the ticker, its step and the time since the slow lines were read; sig: the
--- layout last made; game: the game's own coordinates show under the map; below: the room the lines take under the map; above: the room the
--- lines whose place is above the map ask for over it; queued, waiting, hooked: a pass waits for the next frame, a make for the end of a fight,
--- the map's OnShow is followed.
-local S = { text = {}, shown = {}, colour = {}, why = {}, below = 0, above = 0 }
+-- frame: the frame of the lines; text[id]: the font string of a line; button[id]: the button over it; shown[id]: its text while it shows;
+-- colour[id]: its colour; why[id]: why a wanted line is hidden, for /flatui status; over: the line under the mouse; ticker, step, slow: the
+-- ticker, its step and the time since the slow lines were read; sig: the layout last made; game: the game's own coordinates show under the
+-- map; below: the room the lines take under the map; above: the room the lines whose place is above the map ask for over it; queued, waiting,
+-- hooked: a pass waits for the next frame, a make for the end of a fight, the map's OnShow is followed.
+local S = { text = {}, button = {}, shown = {}, colour = {}, why = {}, below = 0, above = 0 }
 
 -- The first value of a call that may be missing, raise or be withheld; nil then.
 local function Ask(fn, ...)
@@ -262,9 +281,11 @@ local function Formatted(pattern, fallback, ...)
 	return fallback:format(...)
 end
 
-local function Clock()
+-- The hour and minute of local time (date, as GameTime_GetLocalTime) or of realm time (GetGameTime): nil on a client without the call, false
+-- when it does not say them.
+local function TimeParts(isLocal)
 	local hour, minute
-	if LocalTime() then
+	if isLocal then
 		local now = _G.date
 		if type(now) ~= "function" then
 			return nil
@@ -284,9 +305,13 @@ local function Clock()
 		end
 	end
 	if not (ns.Finite(hour) and ns.Finite(minute)) then
-		return nil, "hidden, the game does not say the time"
+		return false
 	end
-	hour, minute = math.floor(hour) % 24, math.floor(minute) % 60
+	return math.floor(hour) % 24, math.floor(minute) % 60
+end
+
+-- A time in the format Time format chooses.
+local function Stamp(hour, minute)
 	if Opt("mapClockHours") ~= "12" then
 		return Formatted(_G.TIMEMANAGER_TICKER_24HOUR, "%02d:%02d", hour, minute)
 	end
@@ -298,7 +323,155 @@ local function Clock()
 	return Formatted(_G.TIME_TWELVEHOURPM, "%d:%02d PM", shown, minute)
 end
 
+local function Clock()
+	local hour, minute = TimeParts(LocalTime())
+	if hour == nil then
+		return nil
+	elseif not hour then
+		return nil, "hidden, the game does not say the time"
+	end
+	return Stamp(hour, minute)
+end
+
 local READ = { coords = Coords, durability = Durability, perf = Perf, clock = Clock }
+
+-- Tooltips and clicks ---------------------------------------------------------------------------------------------------------------------
+
+local function Tooltip()
+	local tip = _G.GameTooltip
+	if tip == nil or ns.Forbidden(tip) then
+		return nil
+	end
+	return tip
+end
+
+-- True while GameTooltip is the button's.
+local function Owns(button)
+	local tip = Tooltip()
+	if not (tip and button) then
+		return false
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, button)
+	return ok and not ns.IsSecret(owned) and owned == true
+end
+
+-- The local and realm time, each in the format Time format chooses.
+local function ClockTip(button)
+	local tip = Tooltip()
+	if not tip then
+		return
+	end
+	local function Line(isLocal)
+		local hour, minute = TimeParts(isLocal)
+		return hour and Stamp(hour, minute) or "Unknown"
+	end
+	pcall(function()
+		tip:SetOwner(button, ANCHOR)
+		tip:SetText("Time", 1, 1, 1)
+		tip:AddDoubleLine("Local time", Line(true), DIM_RGB[1], DIM_RGB[2], DIM_RGB[3], 1, 1, 1)
+		tip:AddDoubleLine("Realm time", Line(false), DIM_RGB[1], DIM_RGB[2], DIM_RGB[3], 1, 1, 1)
+		for _, hint in ipairs(HINTS.clock) do
+			tip:AddLine(hint, DIM_RGB[1], DIM_RGB[2], DIM_RGB[3])
+		end
+		tip:Show()
+	end)
+end
+
+-- Writes the tooltip of a line on its button: the data panels' stream of the line, or the time. Not in a fight; fresh is false when a tooltip that
+-- shows is written again.
+local function Tip(_, line, button, fresh)
+	if InCombatLockdown() or not button or not S.shown[line.id] then
+		return
+	end
+	if line.id == "clock" then
+		ClockTip(button)
+		return
+	end
+	local panels = ns.DataPanels
+	if type(panels) == "table" and type(panels.TipAt) == "function" then
+		panels.TipAt(button, ANCHOR, STREAMS[line.id], fresh, HINTS[line.id])
+	end
+end
+
+-- A line under the mouse whose text changed writes its tooltip again, while it is still the button's.
+local function Retip(line)
+	local button = S.button[line.id]
+	if S.over == line.id and Owns(button) then
+		ns.EachPart(KEY, PART, Tip, {}, line, button, false)
+	end
+end
+
+-- The text the chat box takes for a line: the zone and the coordinates shown.
+local function ChatText(line)
+	local shown = S.shown[line.id]
+	if line.id ~= "coords" or type(shown) ~= "string" then
+		return nil
+	end
+	local zone = Ask(_G.GetZoneText)
+	return type(zone) == "string" and zone ~= "" and (zone .. " " .. shown) or shown
+end
+
+-- A click on a line: Shift on the coordinates puts them in the chat box; on the time a click opens the stopwatch and alarm, Shift the calendar.
+local function Click(_, line)
+	local shift = Ask(_G.IsShiftKeyDown) == true
+	if line.id == "coords" and shift then
+		local text = ChatText(line)
+		if text then
+			ns.PutInChat(text)
+		end
+	elseif line.id == "clock" and not InCombatLockdown() then
+		local toggle = shift and _G.ToggleCalendar or _G.ToggleTimeManager
+		if type(toggle) == "function" then
+			pcall(toggle)
+		end
+	end
+end
+
+-- The button over a line's text, made with the text out of combat or on a map the game does not protect; nil when it cannot be made now.
+local function MakeButton(line, text)
+	local map = _G.Minimap
+	if InCombatLockdown() and (map == nil or ns.MaybeProtected == nil or ns.MaybeProtected(map)) then
+		return nil
+	end
+	local ok, button = pcall(CreateFrame, "Button", nil, S.frame)
+	if not ok or type(button) ~= "table" then
+		return nil
+	end
+	ns.Own[button] = true
+	button:SetAllPoints(text)
+	button:EnableMouse(true)
+	if CLICKS[line.id] then
+		button:RegisterForClicks("LeftButtonUp")
+		button:SetScript("OnClick", function()
+			ns.EachPart(KEY, PART, Click, {}, line)
+		end)
+	else
+		pcall(button.SetMouseClickEnabled, button, false)
+	end
+	button:SetScript("OnEnter", function(self)
+		S.over = line.id
+		ns.EachPart(KEY, PART, Tip, {}, line, self, true)
+	end)
+	button:SetScript("OnLeave", function(self)
+		if S.over == line.id then
+			S.over = nil
+		end
+		if Owns(self) then
+			pcall(_G.GameTooltip.Hide, _G.GameTooltip)
+		end
+	end)
+	button:SetScript("OnHide", function(self)
+		if S.over == line.id then
+			S.over = nil
+		end
+		if Owns(self) then
+			pcall(_G.GameTooltip.Hide, _G.GameTooltip)
+		end
+	end)
+	button:Hide()
+	S.button[line.id] = button
+	return button
+end
 
 -- Drawing ---------------------------------------------------------------------------------------------------------------------------------
 
@@ -381,9 +554,12 @@ local function Make(map)
 end
 
 local function Hide(line)
-	local text = S.text[line.id]
+	local text, button = S.text[line.id], S.button[line.id]
 	if text and S.shown[line.id] then
 		text:Hide()
+	end
+	if button then
+		button:Hide()
 	end
 	S.shown[line.id] = nil
 end
@@ -404,12 +580,17 @@ local function Show(line, value, colour)
 		text:SetTextColor(colour[1], colour[2], colour[3])
 		S.colour[line.id] = colour
 	end
+	local button = S.button[line.id] or MakeButton(line, text)
+	if button then
+		button:Show()
+	end
 	if S.shown[line.id] ~= value then
 		if S.shown[line.id] == nil then
 			text:Show()
 		end
 		text:SetText(value)
 		S.shown[line.id] = value
+		Retip(line)
 	end
 end
 
@@ -701,4 +882,24 @@ end
 -- while none shows.
 function ns.MapTextAbove()
 	return S.above
+end
+
+-- Puts a text into the chat box: into the box that is open (ChatFrameUtil.InsertLink, which also fills the macro text and the other boxes that
+-- take a link), else into a box it opens (ChatFrameUtil.OpenChat), ready to send. The experience bar's Shift-click uses it too (XpBar.lua). True
+-- when a box took it.
+function ns.PutInChat(text)
+	local util = _G.ChatFrameUtil
+	if type(text) ~= "string" or text == "" or type(util) ~= "table" or ns.IsSecret(util) then
+		return false
+	end
+	if type(util.InsertLink) == "function" then
+		local ok, done = pcall(util.InsertLink, text)
+		if ok and done == true then
+			return true
+		end
+	end
+	if type(util.OpenChat) == "function" then
+		return (pcall(util.OpenChat, text))
+	end
+	return false
 end

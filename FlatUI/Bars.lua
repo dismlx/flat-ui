@@ -1330,10 +1330,10 @@ end
 
 -- The colour of a state of a cast on one bar, and a key that changes with it: the class colour for casts and channels on the player bar, the own
 -- colours of the target and focus bars, otherwise the cast colours of the Flat UI page. An enemy's cast or channel takes the colour of the player's
--- interrupt before those, ready or on cooldown, while record.kick holds that answer (PaintCast).
+-- interrupt before those, ready, ready while the caster is out of its range ("far") or on cooldown, while record.kick holds that answer (PaintCast).
 local function CastColour(record, state)
 	if record.kick ~= nil and (state == "cast" or state == "channel") then
-		local path = record.kick and "castbars.interruptReady" or "castbars.interruptCooling"
+		local path = record.kick == "far" and "castbars.interruptFar" or (record.kick and "castbars.interruptReady" or "castbars.interruptCooling")
 		local r, g, b = ns.Colour(path)
 		return r, g, b, ns.Get(path)
 	end
@@ -1502,8 +1502,9 @@ local function BarUnit(bar)
 	return bar.unit
 end
 
--- Whether the player's interrupt is ready for the cast on a bar, from Interrupt.lua: true or false for the target and focus bars and the bar of a
--- nameplate, whose unit is the field the game set (CastingBarFrame.lua:224-226), while their unit is an enemy; nil for any other bar or state.
+-- Whether the player's interrupt is ready for the cast on a bar, from Interrupt.lua: true, "far" (ready, out of range) or false for the target and
+-- focus bars and the bar of a nameplate, whose unit is the field the game set (CastingBarFrame.lua:224-226), while their unit is an enemy; nil for
+-- any other bar or state.
 local function Kick(bar, record, state)
 	if (state ~= "cast" and state ~= "channel" and state ~= "withheld") or type(ns.InterruptReady) ~= "function" then
 		return nil
@@ -1670,6 +1671,7 @@ local function RefreshCastBars()
 	end
 	if ns.CastBarSizes then ns.CastBarSizes() end
 	if ns.CastTimeSync then ns.CastTimeSync() end
+	if ns.CastTicksSync then ns.CastTicksSync() end
 	if ns.CastRankSync then ns.CastRankSync() end
 	if ns.InterruptSync then ns.InterruptSync() end
 end

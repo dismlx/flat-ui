@@ -2016,7 +2016,7 @@ function R.Fighting()
 end
 
 -- The key bound to the first action bar button that holds a spell, as the game writes it on its own buttons
--- (ActionButton.lua:498-501), or nothing.
+-- (ActionButton.lua:498-501), short as on the action buttons (M4, N1, Sp; ns.HotkeyText) while their Hotkey text is Short, or nothing.
 local function BindingText(spellID)
 	local slots = Ask(C_ActionBar and C_ActionBar.FindSpellActionButtons, spellID)
 	if type(slots) ~= "table" then
@@ -2028,6 +2028,12 @@ local function BindingText(spellID)
 				local key = Ask(GetBindingKey, bar[2] .. (slot - bar[1] + 1))
 				local text = Plain(key, "string") and Ask(GetBindingText, key, 1)
 				if Plain(text, "string") and text ~= "" then
+					if ns.Get("actionbars.hotkeyText") == "short" and type(ns.HotkeyText) == "function" then
+						local short = ns.HotkeyText(text)
+						if Plain(short, "string") and short ~= "" then
+							return short
+						end
+					end
 					return text
 				end
 			end
@@ -2066,6 +2072,13 @@ local function Binds()
 		elseif record.bind then
 			pcall(record.bind.SetText, record.bind, "")
 		end
+	end
+end
+
+-- Hotkey text of the action bars changed (ButtonText.lua): the keys on the icons are written again.
+function ns.CooldownBindsChanged()
+	if ns.Enabled(KEY) then
+		Binds()
 	end
 end
 

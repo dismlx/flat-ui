@@ -41,8 +41,13 @@ local ADDON_NAME, ns = ...
 -- bar sizes set the width and height of four cast bars, the height of the player bar's spark, the size of
 -- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
--- still that name, and the name alone again when the row goes off.
--- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
+-- still that name, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
+-- textures of its own on each of the player's two cast bars (CreateTexture, out of combat on a bar the game may protect) and places them with
+-- SetPoint while a channel runs; a frame of its own hears the player's channel events while the row is on, and it only reads UnitChannelInfo.
+-- Cast time on your bars (CastTime.lua, off by default) fades the game's own time on the player's two cast bars and the pet's (CastTimeText,
+-- SetAlpha 0) while it is on and gives it its alpha back when the row goes off; the seconds are font strings of its own inside each bar.
+-- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only (with Flat
+-- addon buttons on it also sets the alpha of their border and background regions and adds a plate and a hover square of its own), and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
 -- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from
 -- the minimap with ClearAllPoints and SetPoint, out of combat if the game protects it, no further out than the game's place, with a frame of its
@@ -129,8 +134,12 @@ local ADDON_NAME, ns = ...
 -- the same way.
 -- Overpower on enemy nameplates (PlateOverpower.lua, a warrior's) puts Overpower's icon on a frame of its own, a child of the plate's unit frame,
 -- above the name of the enemy that dodged the player, made, sized and anchored out of combat on a plate that may be protected; in a fight only its
--- alpha, texture, grey and glow change. A frame of its own hears UNIT_COMBAT, SPELL_UPDATE_USABLE, ACTION_USABLE_CHANGED, SPELL_UPDATE_COOLDOWN, the
+-- alpha, texture, grey, glow and the time-left swipe of a Cooldown frame of its own (SetCooldown, Clear) change. A frame of its own hears UNIT_COMBAT, SPELL_UPDATE_USABLE, ACTION_USABLE_CHANGED, SPELL_UPDATE_COOLDOWN, the
 -- player's casts and auto attack and NAME_PLATE_UNIT_REMOVED while the row is on, and SPELLS_CHANGED for a warrior, and only reads.
+-- The quest mark on nameplates (PlateQuest.lua, on by default) is a texture on a frame of its own, a child of the plate's unit frame, anchored
+-- beside the plate's raid marker frame (ClassificationFrame), level frame, health bars or name and sized out of combat on a plate that may be
+-- protected; in a fight only its alpha changes. A frame of its own hears QUEST_LOG_UPDATE and the player's UNIT_QUEST_LOG_CHANGED while the row is
+-- on, and it only reads (C_QuestLog.UnitIsRelatedToActiveQuest, UnitIsPlayer, UnitCanAttack).
 -- Errands (on by default) asks the game to do the player's chores: it sells with C_Container.UseContainerItem while a merchant is open,
 -- also for the Sell junk button of the bags, whatever the switch of Errands, repairs with RepairAllItems, buys with BuyMerchantItem, sells the
 -- cursor item with SellCursorItem, loots with LootSlot, learns with BuyTrainerService, deletes one grey item with DeleteCursorItem from a click
@@ -163,8 +172,10 @@ local ADDON_NAME, ns = ...
 -- those windows it reads the shown flag (IsShown), and when its own bag window hides, and when it gives the windows back, it hides the bag windows it
 -- moved that the game still has open (Hide, which runs no script under the hidden frame); it writes no field on them and calls none of their methods.
 -- It follows ToggleBackpack, ToggleBag, ToggleAllBags, OpenAllBags, OpenAllBagsMatchingContext, OpenBag, OpenBackpack, CloseAllBags, CloseBag,
--- CloseBackpack, HideUIPanel, ContainerFrame_SetFullScreenFrame and ContainerFrame_ClearFullScreenFrame with hooksecurefunc, and calls none of the
--- game's bag functions: they build the game's list of bag windows the first time they are asked (Mainline/ContainerFrame.lua:2335-2373), and a list
+-- CloseBackpack, HideUIPanel, ContainerFrame_SetFullScreenFrame and ContainerFrame_ClearFullScreenFrame with hooksecurefunc, and the OnEnter and
+-- OnLeave of the game's bag bar buttons with HookScript (which writes nothing on them; the mouse over one lights that bag's slots in its bag
+-- window), and calls none of the game's bag functions: they build the game's list of bag windows the first time they are asked
+-- (Mainline/ContainerFrame.lua:2335-2373), and a list
 -- built by Flat UI's code would be read by Escape. It asks C_GameRules.IsGameRuleActive whether the game shuts the bags and
 -- C_ActionBar.ShouldShowKeyring whether it shows a keyring, and after ToggleBag it reads the game's showKeyring and combinedBags settings
 -- (C_CVar.GetCVarBool) and the size of the bag named (C_Container.GetContainerNumSlots), so a toggle the game lets pass leaves its window alone. It
@@ -200,7 +211,9 @@ local ADDON_NAME, ns = ...
 -- StackSplitFrame, IsShown). Its bank slots are
 -- buttons of its own that pick up (C_Container.PickupContainerItem) and take out (C_Container.UseContainerItem with no bank type) on a click, out
 -- of combat, and its bank bag slots are buttons of its own that pick up the bag (C_Container.PickupContainerItem(-2, n)) on any click, drag or
--- drop, out of combat, as the game's do; a modified click on a bank slot, or on a slot drawn from its records (another character's, or the bank
+-- drop, out of combat, as the game's do; the bag slots over its bag window's footer are buttons of its own that put the item on the cursor in
+-- that bag slot (PutItemInBag, PutItemInBackpack) or pick the bag up (PickupBagFromSlot), out of combat, as the game's bag buttons do; a modified
+-- click on a bank slot, or on a slot drawn from its records (another character's, or the bank
 -- while its bank window is not the live one), links the item (HandleModifiedItemClick, and in a fight ChatFrameUtil.InsertLink only, never the
 -- dressing room). Deposit and Take out move the items that match its search with C_Container.UseContainerItem (Enum.BankType.Character to
 -- deposit) one at a time while its bank window is the live one, out of combat, and move nothing while a spell waits for its target
@@ -218,10 +231,14 @@ local ADDON_NAME, ns = ...
 -- (TooltipDataProcessor.AddTooltipPostCall), it adds lines naming the player's other characters on this realm and its connected realms that carry
 -- the item (AddDoubleLine). The game is asked once to load each item its windows show that the client has not loaded yet
 -- (C_Item.RequestLoadItemDataByID). The titles of its sections are buttons of its own that can be dragged (RegisterForDrag) to set the order of
--- the sections, kept for the account in FlatUIDB.bags.order. It adds FlatUIBags and FlatUIBank to UISpecialFrames, and names the key binding of its bank button
--- (BINDING_NAME_CLICK FlatUIBankButton:LeftButton). What it keeps of each character (items, gold, level, class, faction, realm and the time),
--- the sections items were placed in by hand and the order of the sections are in FlatUIDB.bags, the pinned slots of a character in
--- FlatUICharDB.bagPins, and none of it leaves the client.
+-- the sections, kept for the account in FlatUIDB.bags.order, and a click on one folds its section, kept the same way in FlatUIDB.bags.folded. It
+-- adds FlatUIBags and FlatUIBank to UISpecialFrames, and names the key bindings of its bank button (BINDING_NAME_CLICK FlatUIBankButton:LeftButton)
+-- and of its bag search button (BINDING_NAME_CLICK FlatUIBagSearchButton:LeftButton), which opens the bag window and gives its search box of Flat
+-- UI's own the keyboard (SetFocus). What it keeps of each character (items, gold, level, class, faction, realm and the time), the sections items
+-- were placed in by hand, the order of the sections and the folded ones are in FlatUIDB.bags, the pinned slots of a character in
+-- FlatUICharDB.bagPins, and the money a character had as it logged in in FlatUICharDB.sessionMoney (a frame of its own hears PLAYER_ENTERING_WORLD
+-- for it whatever the switches, for the gold made or spent this session, which its gold tooltip and the Gold slot of Data panels say), and none
+-- of it leaves the client.
 -- Data panels (on by default, with the Show rows of both panels off) draws two panels of its own on UIParent and writes the lines of their
 -- tooltips in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, Hide). It asks the server for the guild roster
 -- (C_GuildInfo.GuildRoster) while a slot shows the guild, and the game for the memory of addons (UpdateAddOnMemoryUsage) when its frame rate tooltip opens out of combat. When another addon brought
@@ -282,9 +299,15 @@ local ADDON_NAME, ns = ...
 -- also with the page off, so the registrations are taken back once it can be made.
 -- Group tools (on by default) lays secure buttons of its own over its icons, made, placed, shown and given attributes only out of combat: the game's
 -- raidtarget action, /readycheck and /countdown. A plain button asks for a role poll, and it writes tooltips in GameTooltip.
--- Ping bar (PingBar.lua, on by default, in a group) lays secure buttons of its own (SecureActionButtonTemplate, named FlatUIPingPing, FlatUIPingAttack
--- and so on for their key bindings in Bindings.xml) over its icons, made, placed, shown and given attributes (type macro, a /ping macrotext) only out
--- of combat, taken away when off; it reads C_Ping, C_PartyInfo.GetRestrictPings and enablePings, sets a PostClick of its own that reads
+-- Ping bar (PingBar.lua, on by default, in a group) lays secure buttons of its own (SecureActionButtonTemplate) over its icons, makes one more for
+-- each key (named FlatUIPingPing, FlatUIPingAttack and so on for their key bindings in Bindings.xml, no size, "/ping <n>": what is under the mouse)
+-- and a place button over the whole screen (FlatUIPingPlace, "/ping [@cursor] <n>"), all made, placed and given attributes (type macro, a /ping
+-- macrotext) only out of combat, taken away when off. A click on the bar arms its ping: a snippet wrapped round the button's OnClick
+-- (SecureHandlerWrapScript, a SecureHandlerBaseTemplate header of its own with a frame reference) gives the place button its line, shows it and
+-- gives Escape to it (SetBindingClick, an override binding owned by the place button), in a fight too; the next left click anywhere pings that spot
+-- and a snippet after it hides the place button, a right click or Escape hides it unsent, and a snippet on its OnHide clears the binding. A
+-- Shift-click with a target runs the bar button's "/ping [@target,exists] <n>" at once. Over the place button it sets the game's ping cursor
+-- (SetCursor, ResetCursor). It reads C_Ping, C_PartyInfo.GetRestrictPings and enablePings, sets a PostClick of its own that reads
 -- C_Ping.GetCooldownInfo for a swipe of its own, and writes tooltips in GameTooltip. It writes no binding, setting or macro of the game's.
 -- Cooldown pulse (on by default) is up to three frames of its own on UIParent that take no mouse, told when cooldowns end by invisible Cooldown frames of
 -- its own fed the game's duration objects; it changes nothing.
@@ -306,8 +329,8 @@ local ADDON_NAME, ns = ...
 -- With Clear the damage meter on (off by default), Minimap and HUD calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
 -- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
 -- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.
--- The combat alerts of Combat text (No target, off by default, and +Combat and -Combat, on by default) are font strings on a frame of its own;
--- they change nothing.
+-- The combat alerts of Combat text (No target and +Combat and -Combat, both on by default) are font strings on a frame of its own;
+-- they play the sounds their rows choose (PlaySound, through ns.PlayKit) and change nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);
 -- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. While the mouse is over an item, spell or achievement
@@ -406,9 +429,11 @@ local ADDON_NAME, ns = ...
 -- A change that needs a reload (a row whose reload field in Config.lua is "off", "change" or true), made in the options, in setup, by a profile
 -- switch, copy, reset or import or by a slash command, shows a notice of Flat UI's own at the top of the screen (Reload.lua, FlatUIReloadNotice,
 -- in DIALOG strata so it shows over the options window, with an own entry in /flatui move) that names what needs it, with Reload (ns.SecureReload,
--- the game's /reload on a secure button where ReloadUI is blocked, which waits for the end of a fight there) and Later, which hides it until the
--- next such change. It goes when nothing needs a reload any more. What needs one is the value each such row had at login (ns.ReloadStart) against
--- the profile in use (ns.ReloadLines), which Home's Needs a reload also lists.
+-- the game's /reload on a secure button where ReloadUI is blocked, which waits for the end of a fight there), Undo, which sets each such row back
+-- to its value at login with ns.Set (out of combat), and Later, which hides it until the next such change; pointed at, it lists every change with
+-- its value now and at login (GameTooltip). It keeps clear of the options window's title bar, the /flatui move toolbar and the test mode bar. It
+-- goes when nothing needs a reload any more. What needs one is the value each such row had at login (ns.ReloadStart) against the profile in use
+-- (ns.ReloadLines), which Home's Needs a reload also lists.
 
 local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
@@ -2781,8 +2806,9 @@ function ns.ReloadStart()
 end
 
 -- The changes that need a reload, by the reload field of the row in Config.lua: "off" for a switch that takes full effect after a reload when it
--- is turned off, "change" (or true) for a row that applies after a reload when its value changes. Entries { label, field, path, value } in the
--- order of the pages, one a row; none before login.
+-- is turned off, "change" (or true) for a row that applies after a reload when its value changes. Entries { label, field, path, value, was } in
+-- the order of the pages, one a row, with value the value saved now and was the one the game runs since login (the reload notice's Undo, Reload.lua,
+-- sets it back); none before login.
 function ns.ReloadLines()
 	local lines, seen = {}, {}
 	if not (reloadBase and profile) then
@@ -2799,7 +2825,7 @@ function ns.ReloadLines()
 				end
 				local field = item.reload == true and "change" or item.reload
 				if (field == "off" and was == true and now == false) or (field == "change" and was ~= now) then
-					lines[#lines + 1] = { item.label, field, item.path, now }
+					lines[#lines + 1] = { item.label, field, item.path, now, was }
 				end
 			end
 		end
@@ -3990,14 +4016,15 @@ end
 -- The settings and positions of the profile in use are replaced by what a text from ExportProfile holds. A setting
 -- the text does not name goes back to its default; a setting this build does not have is ignored. With `opts`, `opts.settings` false keeps the
 -- settings in use, `opts.spots` false keeps the positions in use, and `opts.newName` puts what is left in a new profile, which is then the profile in use:
--- with the positions of the text alone, or with `opts.spots` false those every new profile starts with (ns.NewProfile). The positions of a text are
--- kept as it has them.
+-- with the positions of the text alone, or with `opts.spots` false those every new profile starts with (ns.NewProfile). The positions of a text whose
+-- first line names the screen it was made on are fitted to this screen under the settings the profile will have (ns.FitSpots), as the positions a new
+-- profile starts with are; `opts.fit` false, and a text of an older build without that line, keep them as the text has them.
 function ns.ImportProfile(text, opts)
 	local refusal = Refusal()
 	if refusal then
 		return false, refusal
 	end
-	local options, spots, _, moved = ReadProfile(text)
+	local options, spots, header, moved = ReadProfile(text)
 	if not options then
 		return false, spots
 	end
@@ -4007,6 +4034,9 @@ function ns.ImportProfile(text, opts)
 	end
 	if opts.spots == false then
 		spots = nil
+	end
+	if spots and opts.fit ~= false and type(header) == "table" and Finite(header.width) and header.width > 0 then
+		spots = ns.FitSpots(spots, header, options or (opts.newName ~= nil and {} or CopyOf(profile).options))
 	end
 	if opts.newName ~= nil then
 		local done, message = ns.NewProfile(opts.newName, nil, options or {}, spots)

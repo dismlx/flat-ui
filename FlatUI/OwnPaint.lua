@@ -2,31 +2,35 @@ local _, ns = ...
 
 -- The paint of Flat UI's own action buttons (design 3.4, 3.6, 3.7, 6.3, research/own-buttons/design.md). OwnBars.lua makes the buttons; this file works out
 -- what each one shows from the slot it holds and draws it: icon, count, macro name, hotkey, cooldown, charges, loss of control, usable and range colours,
--- checked, equipped, proc, empty-slot opacity, the pressed look from a key, the tooltip (set again when a modifier key goes down or up) and the repaint
--- after a click. The look modules colour through painters (ns.OwnPainter) and take proc changes through ns.OnOwnProc; nothing here hooks a function of
--- the game.
+-- checked, the blink of Attack while it swings and of Auto Shot or Shoot while it repeats (the button's Flash texture, on and off every 0.4 s, as on the
+-- game's buttons), equipped, proc, empty-slot opacity, the pressed look from a key, the tooltip (set again when a modifier key goes down or up) and the
+-- repaint after a click. The look modules colour through painters (ns.OwnPainter) and take proc changes through ns.OnOwnProc; nothing here hooks a function of
+-- the game. ns.OnOwnReady tells them when a cooldown longer than the global cooldown has ended on a button (Flash when ready, ButtonStates.lua): seen
+-- between two passes, or as the button's own cooldown frame finishes its swipe (OnCooldownDone, hooked on Flat UI's own frame), once a cooldown.
 -- Calls on a button are plain ones (textures, text, alpha, SetChecked, Cooldown calls), so a pass in a fight touches nothing protected. Flat UI writes no
 -- field on a button: every table here is keyed by the button. The game's twins and OverrideActionBar are only read.
 -- Never called on a button, a twin or a game table: Update, UpdateAction, UpdateFlyout, SetShowGrid, RegisterActionUIButton, ShowAlert and
 -- EnableActionRangeCheck (the game's own range and usable frames keep watching the same slots through the twins).
 -- The state of a button (ns.OwnState) and its painters:
---   state: slot, has, texture, usable, noMana, inRange (true, false or nil), checksRange, cdActive, cdOnGCD, checked, equipped, proc, empty, grid, hotkey.
+--   state: slot, has, texture, usable, noMana, inRange (true, false or nil), checksRange, cdActive, cdOnGCD, checked, flash, equipped, proc, empty, grid,
+--   hotkey.
 --   painter "icon" and "hotkey": fn(button, state) returns r, g, b[, a] or nil for the game's look.
 --   painter "empty": fn(button, state) returns the opacity of an empty button (a number, or r, g, b, a with the opacity as a), nil for normal.
 -- This file is not a module. It works while ns.OwnOn() is true.
 
 local WEAK = { __mode = "k" }
-local ORDER = { "slot", "icon", "text", "hotkey", "cooldown", "usable", "range", "checked", "equipped", "proc", "empty" }
+local ORDER = { "slot", "icon", "text", "hotkey", "cooldown", "usable", "range", "checked", "flash", "equipped", "proc", "empty" }
 -- The events that start the work, and the events it listens for once it runs (design 3.4).
 local FIRST = { "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }
 local EVENTS = { "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_UPDATE_STATE", "ACTIONBAR_UPDATE_COOLDOWN", "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES",
 	"SPELL_UPDATE_ICON", "ACTION_USABLE_CHANGED", "ACTION_RANGE_CHECK_UPDATE", "PLAYER_TARGET_CHANGED", "UPDATE_BINDINGS", "GAME_PAD_ACTIVE_CHANGED",
 	"UPDATE_SHAPESHIFT_FORM", "PLAYER_MOUNT_DISPLAY_CHANGED", "UPDATE_INVENTORY_ALERTS", "LOSS_OF_CONTROL_ADDED", "LOSS_OF_CONTROL_UPDATE",
 	"START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL", "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW",
-	"SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", "ACTIONBAR_SHOWGRID", "ACTIONBAR_HIDEGRID", "MODIFIER_STATE_CHANGED" }
+	"SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", "ACTIONBAR_SHOWGRID", "ACTIONBAR_HIDEGRID", "MODIFIER_STATE_CHANGED", "PLAYER_ENTER_COMBAT",
+	"PLAYER_LEAVE_COMBAT" }
 -- The steps one event repaints. A slot change repaints every step.
 local SETS = {
-	state = { checked = true },
+	state = { checked = true, flash = true },
 	cooldown = { cooldown = true },
 	charges = { cooldown = true, text = true },
 	icon = { icon = true, text = true, usable = true, range = true },
@@ -47,9 +51,17 @@ local P = {
 	hooked = setmetatable({}, WEAK),
 	pressed = setmetatable({}, WEAK),
 	alpha = setmetatable({}, WEAK),
+	-- the buttons that blink now, the time since the last blink, and whether auto attack is on (PLAYER_ENTER_COMBAT and PLAYER_LEAVE_COMBAT; nil
+	-- until one of them is heard)
+	flashing = setmetatable({}, WEAK),
+	flashClock = 0,
+	attacking = nil,
 	queue = {},
 	painters = { icon = {}, hotkey = {}, empty = {} },
 	procs = {},
+	ready = {},
+	-- true while a pass sets or clears a cooldown frame, whose OnCooldownDone is then not a cooldown that ended
+	sweeping = false,
 	list = {},
 	keys = {},
 	grid = false,
@@ -335,14 +347,45 @@ local function Sweep(frame, show, name, slot)
 	end
 end
 
+-- A cooldown longer than the global cooldown ended on a button: the listeners hear it once for that cooldown (cdFired, cleared when the next one starts).
+local function Ready(button, st)
+	if st.cdFired then
+		return
+	end
+	st.cdFired = true
+	for _, fn in ipairs(P.ready) do
+		local ok, err = pcall(fn, button)
+		if not ok then
+			Failed("ready handler", err)
+		end
+	end
+end
+
+-- Whether the last cooldown pass found a cooldown longer than the global one, on the slot and icon the button holds now: a page, a drag or an empty
+-- slot is no cooldown that ended.
+local function WasLong(st)
+	return st.cdActive == true and st.cdOnGCD ~= true and st.cdSlot == st.slot and st.cdTexture == st.texture
+end
+
+local function ClearSweeps(button)
+	for _, key in ipairs({ "cooldown", "chargeCooldown", "lossOfControlCooldown" }) do
+		if button[key] ~= nil then
+			button[key]:Clear()
+		end
+	end
+end
+
 -- Cooldown, charges and loss of control by duration objects. isActive and isOnGCD are never withheld; the other fields are never read.
 function STEP.cooldown(button, st)
+	local was = WasLong(st)
+	st.cdSlot, st.cdTexture = st.slot, st.texture
 	if not st.has then
 		st.cdActive, st.cdOnGCD = false, false
-		for _, key in ipairs({ "cooldown", "chargeCooldown", "lossOfControlCooldown" }) do
-			if button[key] ~= nil then
-				button[key]:Clear()
-			end
+		P.sweeping = true
+		local ok, err = pcall(ClearSweeps, button)
+		P.sweeping = false
+		if not ok then
+			error(err, 0)
 		end
 		return
 	end
@@ -351,7 +394,18 @@ function STEP.cooldown(button, st)
 	local replace = type(loss) == "table" and Bool(loss.shouldReplaceNormalCooldown) == true
 	st.cdActive = type(cooldown) == "table" and Bool(cooldown.isActive) == true
 	st.cdOnGCD = type(cooldown) == "table" and Bool(cooldown.isOnGCD) == true
-	Sweep(button.cooldown, st.cdActive and not replace, "GetActionCooldownDuration", slot)
+	local long = st.cdActive and not st.cdOnGCD
+	if was and not long then
+		Ready(button, st)
+	elseif long and not was then
+		st.cdFired = false
+	end
+	P.sweeping = true
+	local ok, err = pcall(Sweep, button.cooldown, st.cdActive and not replace, "GetActionCooldownDuration", slot)
+	P.sweeping = false
+	if not ok then
+		error(err, 0)
+	end
 	Sweep(button.chargeCooldown, type(charges) == "table" and Bool(charges.isActive) == true and not replace, "GetActionChargeDuration", slot)
 	if type(loss) == "table" then
 		Sweep(button.lossOfControlCooldown, Bool(loss.isActive) == true, "GetActionLossOfControlCooldownDuration", slot)
@@ -393,6 +447,32 @@ function STEP.checked(button, st)
 	end
 	st.checked = checked
 	button:SetChecked(checked)
+end
+
+-- Attack blinks while auto attack is on, Auto Shot and Shoot while they repeat (the rule of ActionButton.lua:1314-1328 and its PLAYER_ENTER_COMBAT and
+-- PLAYER_LEAVE_COMBAT, 1018-1025). The blink is the clock of OnUpdate; a button that stops blinking hides its Flash at once.
+function STEP.flash(button, st)
+	local on = false
+	if st.has then
+		local attack, repeating = Bool(Call("IsAttackAction", st.slot)) == true, Bool(Call("IsAutoRepeatAction", st.slot)) == true
+		local swinging = P.attacking
+		if swinging == nil and attack then
+			swinging = Bool(Call("IsCurrentAction", st.slot)) == true
+		end
+		on = (attack and swinging == true) or repeating
+	end
+	if st.flash == on then
+		return
+	end
+	st.flash = on
+	if on then
+		P.flashing[button] = true
+	else
+		P.flashing[button] = nil
+		if button.Flash ~= nil then
+			button.Flash:Hide()
+		end
+	end
 end
 
 -- The green border of an equipped item (ActionButton.lua:612-620).
@@ -527,7 +607,21 @@ local function HideTip(button)
 	end
 end
 
--- The three hooks on a button: the tooltip, and a repaint on the next frame after a click. They only paint.
+-- The swipe of a button's cooldown finished: a cooldown longer than the global one has ended (Ready), and the button is painted again on the next frame.
+local function CooldownDone(button)
+	if P.sweeping then
+		return
+	end
+	local st = P.state[button]
+	if st ~= nil and st.cdActive == true and st.cdOnGCD ~= true then
+		Ready(button, st)
+	end
+	P.queue[button] = true
+	P.pending = true
+end
+
+-- The hooks on a button: the tooltip, a repaint on the next frame after a click, and the end of its cooldown's swipe (the cooldown is a child of Flat
+-- UI's own button). They only paint.
 local function Hook(button)
 	if P.hooked[button] then
 		return
@@ -539,6 +633,15 @@ local function Hook(button)
 		P.queue[self] = true
 		P.pending = true
 	end)
+	local cooldown = button.cooldown
+	if type(cooldown) == "table" and type(cooldown.HookScript) == "function" then
+		pcall(cooldown.HookScript, cooldown, "OnCooldownDone", function()
+			local ok, err = pcall(CooldownDone, button)
+			if not ok then
+				Failed("cooldown done", err)
+			end
+		end)
+	end
 end
 
 -- The buttons that have a key on their twin: the pressed look follows the twin's button state, which the game sets on a key (ActionButton.lua:146-174).
@@ -644,6 +747,14 @@ function H.SPELL_UPDATE_ICON() All(SETS.icon) end
 function H.PLAYER_TARGET_CHANGED() All(SETS.range) end
 function H.START_AUTOREPEAT_SPELL() All(SETS.state) end
 function H.STOP_AUTOREPEAT_SPELL() All(SETS.state) end
+function H.PLAYER_ENTER_COMBAT()
+	P.attacking = true
+	All(SETS.state)
+end
+function H.PLAYER_LEAVE_COMBAT()
+	P.attacking = false
+	All(SETS.state)
+end
 function H.UPDATE_INVENTORY_ALERTS() All(SETS.items) end
 function H.TRADE_SKILL_SHOW() All(SETS.items) end
 function H.TRADE_SKILL_CLOSE() All(SETS.items) end
@@ -740,16 +851,38 @@ end
 
 local frame = CreateFrame("Frame")
 
--- The one OnUpdate pass: a look at the list of buttons four times a second, the repaint a click asked for, and the pressed look.
+-- The blinking buttons' Flash, shown and hidden in turn every ATTACK_BUTTON_FLASH_TIME (0.4 s), all on one clock. Texture calls on Flat UI's own buttons.
+local function Blink(elapsed)
+	if next(P.flashing) == nil then
+		P.flashClock = 0
+		return
+	end
+	local every = Plain(ATTACK_BUTTON_FLASH_TIME, "number") and ATTACK_BUTTON_FLASH_TIME > 0 and ATTACK_BUTTON_FLASH_TIME or 0.4
+	P.flashClock = P.flashClock + elapsed
+	if P.flashClock < every then
+		return
+	end
+	P.flashClock = P.flashClock >= 2 * every and 0 or P.flashClock - every
+	for button in pairs(P.flashing) do
+		local flash = button.Flash
+		if flash ~= nil then
+			flash:SetShown(not flash:IsShown())
+		end
+	end
+end
+
+-- The one OnUpdate pass: a look at the list of buttons four times a second, the repaint a click asked for, the blink and the pressed look.
 local function OnUpdate(_, elapsed)
 	if not On() then
 		return
 	end
-	P.since = P.since + (Plain(elapsed, "number") and elapsed or 0)
+	elapsed = Plain(elapsed, "number") and elapsed or 0
+	P.since = P.since + elapsed
 	if P.since >= 0.25 then
 		P.since = 0
 		Sync()
 	end
+	Blink(elapsed)
 	if P.pending then
 		P.pending = false
 		local queue = P.queue
@@ -859,6 +992,13 @@ end
 function ns.OnOwnProc(fn)
 	if type(fn) == "function" then
 		P.procs[#P.procs + 1] = fn
+	end
+end
+
+-- fn(button) once when a cooldown longer than the global cooldown has ended on one of Flat UI's buttons.
+function ns.OnOwnReady(fn)
+	if type(fn) == "function" then
+		P.ready[#P.ready + 1] = fn
 	end
 end
 

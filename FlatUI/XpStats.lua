@@ -10,7 +10,9 @@ local _, ns = ...
 -- UnitXP and UnitXPMax, the calls the game's own bar reads (ExpBar.lua:18-25): at one level the difference, over a level up what was left of the
 -- old level and the new value. A withheld read counts nothing and the next plain one counts the gap. The pace is the experience of the last
 -- WINDOW seconds of play, or of the whole session while it is shorter, and is given after MIN_PLAY seconds of play; time flagged away
--- (UnitIsAFK) is left out. A level up starts the time at this level and the kill count again, and leaves the pace alone.
+-- (UnitIsAFK) is left out. A level up starts the time at this level and the kill count again, and leaves the pace alone. With Level up line in
+-- chat on (and Flat UI's bar shown) it first prints one line with the new level, the time the old one took where that is known (after a level
+-- up seen this session, or a /played at that level) and this session's play, once a level (s.saidLevel, kept over a reload).
 -- Kills come from the game's kill line, CHAT_MSG_COMBAT_XP_GAIN in the form of COMBATLOG_XPGAIN_FIRSTPERSON, whose number is the whole gain. The
 -- base of a kill is that number without the rested bonus, which the game takes from the rested pool (GetXPExhaustion), up to the base of the kill.
 -- Kills to level spends what is left of the pool first. The count starts again at a new level or a new size of group. Quests come from
@@ -40,7 +42,8 @@ local MAX_ENTRIES = 100
 local VERSION, SAVED = 1, "xpSession"
 
 -- s: the session, { v, started, savedAt, away, awaySince, gained, marks = { { play, gained } }, last = { level, value, total }, levelSince,
--- played = { level, at, seconds }, kills = { level, group, list }, quests = { list }, pool, resumed, rep = { id, at, started, gained, marks } }.
+-- played = { level, at, seconds }, kills = { level, group, list }, quests = { list }, pool, resumed, rep = { id, at, started, gained, marks },
+-- saidLevel }.
 -- In memory while the module runs, and in FlatUICharDB.xpSession from the logout or reload on, until the next start reads it.
 local s
 -- What the last look at the quest log found: { ready, readyXP, all, allXP }, or { missing = true } on a client without the calls.
@@ -178,6 +181,9 @@ local function Kept(saved, now)
 	if not Finite(saved.levelSince) then
 		saved.levelSince = nil
 	end
+	if not Finite(saved.saidLevel) then
+		saved.saidLevel = nil
+	end
 	local played = saved.played
 	if not (type(played) == "table" and Finite(played.level) and Finite(played.at) and Finite(played.seconds)) then
 		saved.played = nil
@@ -231,6 +237,10 @@ local function Gain(now, amount)
 	end
 end
 
+-- The chat line of a level up (Level up line in chat), set under Words: the new level, what was known of the old one before the read reset it
+-- ({ level, since, played }), and now.
+local LevelLine
+
 -- A plain read of the level and the experience, and what it adds to the session.
 local function Read()
 	-- A client without the two calls is asked nothing at all, its level included.
@@ -258,7 +268,9 @@ local function Read()
 	elseif level > last[1] then
 		-- What was left of the old level, then the new value. A jump of more than one level leaves the levels between out.
 		gain = math.max(last[3] - last[2], 0) + value
+		local before = { level = last[1], since = s.levelSince, played = s.played }
 		s.levelSince, s.played, s.kills = now, nil, nil
+		LevelLine(level, before, now)
 	else
 		s.levelSince, s.played, s.kills = nil, nil, nil
 	end
@@ -572,16 +584,19 @@ local function QuestsToLevel(remaining)
 	return math.max(1, math.ceil(remaining / each - 1e-9)), each
 end
 
--- Seconds at this level: from /played at this level, else from a level up seen in this session; nil when not known.
-local function LevelTime(now)
-	local level = s.last and s.last[1]
-	local played = s.played
+-- Seconds at a level: from /played at that level (played), else from a level up seen in this session (since); nil when not known.
+local function Spent(level, played, since, now)
 	if type(played) == "table" and level and played.level == level then
 		return played.seconds + math.max(0, now - played.at)
-	elseif s.levelSince then
-		return math.max(0, now - s.levelSince)
+	elseif since then
+		return math.max(0, now - since)
 	end
 	return nil
+end
+
+-- Seconds at this level, or nil when not known.
+local function LevelTime(now)
+	return Spent(s.last and s.last[1], s.played, s.levelSince, now)
 end
 
 local function Numbers()
@@ -641,6 +656,22 @@ end
 
 local function Quests(count)
 	return count == 1 and "1 quest" or ("%d quests"):format(count)
+end
+
+-- One line in chat at each new level, with Level up line in chat on and Flat UI's bar shown: the new level, the time the old one took where it is
+-- known, and the play of this session. A level is said once (s.saidLevel), also over a reload.
+LevelLine = function(level, before, now)
+	if Opt("xpLevelLine") ~= true or not (ns.XpOwn and ns.XpOwn()) or (Finite(s.saidLevel) and s.saidLevel >= level) then
+		return
+	end
+	s.saidLevel = level
+	local took = Spent(before.level, before.played, before.since, now)
+	local play = ("%s of play this session"):format(Elapsed(Play(now)))
+	if took then
+		print(("Flat UI: level %d, after %s at level %d (%s)."):format(level, Elapsed(took), before.level, play))
+	else
+		print(("Flat UI: level %d (%s)."):format(level, play))
+	end
 end
 
 -- The levelling text of the bar by the row Levelling text, or nil when there is nothing to say yet.
@@ -968,7 +999,8 @@ local function Reset()
 	if not s or not now then
 		return false
 	end
-	local kept = { last = s.last, levelSince = s.levelSince, played = s.played, kills = s.kills, quests = s.quests, pool = s.pool }
+	local kept = { last = s.last, levelSince = s.levelSince, played = s.played, kills = s.kills, quests = s.quests, pool = s.pool,
+		saidLevel = s.saidLevel }
 	s = Fresh(now)
 	for key, value in pairs(kept) do
 		s[key] = value

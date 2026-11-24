@@ -1014,14 +1014,22 @@ local function FreeCount(button, state, count)
 	end
 end
 
--- B.Buttons.Dim(button, matched): the search's answer for the record the button shows. Only a search that is typed dims, and an empty slot never.
--- matched is true, false, or nil while the item's data has not loaded; nil dims until it has (design §5.2).
-function Buttons.Dim(button, matched)
+-- B.Buttons.Dim(button, matched, lit): the search's answer for the record the button shows. Only a search that is typed dims, and an empty slot
+-- never.
+-- matched is true, false, or nil while the item's data has not loaded; nil dims until it has (design §5.2). With lit, a bag is lit (the mouse
+-- over its button on the bag bar or in the bag slot row, B.Layout.Light): matched is the answer for the slot, false for a slot of another bag,
+-- and dims it whether a search is typed or not, an empty slot too.
+function Buttons.Dim(button, matched, lit)
 	local state = states[button]
 	if state == nil then
 		return
 	end
-	local dim = state.record ~= nil and matched ~= true and Searching()
+	local dim
+	if lit then
+		dim = matched ~= true
+	else
+		dim = state.record ~= nil and matched ~= true and Searching()
+	end
 	pcall(button.SetMatchesSearch, button, not dim)
 	local alpha = dim and FADED or 1
 	for _, key in ipairs(FADES) do

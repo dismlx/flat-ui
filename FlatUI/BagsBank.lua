@@ -91,7 +91,10 @@ local _, ns = ...
 -- since the same call would sell, trade, mail or post; and the slot still holding the same unlocked item. A slot still unchanged WAIT seconds after
 -- its move stops the pass with "the bank has no room" or "your bags have no room"; one the game still holds locked is looked at again. After a fight
 -- the pass reads the bags or the bank again, and stops if the search was cleared meanwhile, since every item would match then. A second click on
--- the same button stops a running pass. The end is said through Errands.Say (Errands.lua:86-91): "Deposited 12 items." In a fight, or with the
+-- the same button stops a running pass. A section's right-click menu (BagsOrder.lua), at the live bank, starts the same pass with a filter in
+-- place of the search, the section's items (B.Categories.Of): Put Trade goods in the bank in the bag window, Take Trade goods out in the bank
+-- window; it needs no search, keeps its filter after a fight, and ends a pass that runs before it starts. The end is said through Errands.Say
+-- (Errands.lua:86-91): "Deposited 12 items." In a fight, or with the
 -- cursor full, a spell waiting for its target, a window above open or no search typed, a click moves nothing and says why (print). With PER_CLICK
 -- true each click moves the next matching item inside the click and Bank.Busy gives how many are left: the fallback for a server that ignores bank
 -- moves made from a timer (design 10.2, in-game check 5), the only precedent for a bank type from addon code being inside a click.
@@ -106,7 +109,8 @@ local _, ns = ...
 -- either bank window: nothing becomes new then, and the tip of the bag window's bank button says which window is live), Bank.Settle (Bags.lua, when
 -- the page comes up, once the bag slots are made, since a visit it starts may open the bag window), Bank.Hidden (BagsWindow's Window.Hide and
 -- Missed, and Bags.lua, for the bank window hidden while the player could not see it),
--- Bank.Toggle (the slash word bank and the key), Bank.Deposit, Bank.TakeOut and Bank.Busy (the buttons of the bank window), Bank.Slots (the row in
+-- Bank.Toggle (the slash word bank and the key), Bank.Deposit, Bank.TakeOut and Bank.Busy (the buttons of the bank window, and with a filter the
+-- menu of a section's title, BagsOrder.lua), Bank.Slots (the row in
 -- the strip of the bank window, which takes the height Slots returns and hides when it is 0).
 --
 -- Every game call runs inside pcall (each piece of work runs in B.Part, which is one), every game answer goes through ns.IsSecret or ns.Finite before
@@ -151,9 +155,9 @@ local BLOCKERS = {
 }
 local WORDS = {
 	deposit = { label = "Deposit", done = "Deposited", none = "Deposited nothing", room = "the bank has no room for %s",
-		empty = "no item in your bags matches the search" },
+		empty = "no item in your bags matches the search", emptyOf = "no item of that section is in your bags" },
 	takeout = { label = "Take out", done = "Took out", none = "Took nothing out", room = "your bags have no room for %s",
-		empty = "no item in your bank matches the search" },
+		empty = "no item in your bank matches the search", emptyOf = "no item of that section is in your bank" },
 }
 -- The row: the size of a bag slot and the space between two, the size of the Buy button, and its template.
 local SLOT, GAP = 28, 4
@@ -833,8 +837,18 @@ local function Sources(kind, me)
 	return type(list) == "table" and list or {}
 end
 
--- The slots whose unlocked item matches the search (B.Search.Match of the record B.Data.Item gives for it), in the order of the window.
-local function Queue(kind)
+-- Whether a pass takes the item of a record: filter's answer (a section's menu, BagsOrder.lua) when the pass has one, else the search's
+-- (B.Search.Match). Only a plain true counts, and a filter that raises takes nothing.
+local function Takes(record, filter)
+	if filter then
+		local ok, yes = pcall(filter, record)
+		return ok and yes == true
+	end
+	return B.Search.Match(record) == true
+end
+
+-- The slots whose unlocked item matches the search, or filter, of the record B.Data.Item gives for it, in the order of the window.
+local function Queue(kind, filter)
 	local queue, me = {}, B.Me()
 	local slotsOf = Container("GetContainerNumSlots")
 	if type(me) ~= "string" or not slotsOf then
@@ -848,7 +862,7 @@ local function Queue(kind)
 				local held = Held(bag, slot)
 				if held and held.link and not held.locked then
 					local record = B.Data.Item(me, bag, slot)
-					if Usable(record) and record.id == held.id and B.Search.Match(record) == true then
+					if Usable(record) and record.id == held.id and Takes(record, filter) then
 						queue[#queue + 1] = { bag = bag, slot = slot, id = held.id, link = held.link }
 					end
 				end
@@ -858,8 +872,8 @@ local function Queue(kind)
 	return queue
 end
 
--- Why a click of Deposit or Take out cannot move anything now, or nil.
-local function Refusal()
+-- Why a click of Deposit or Take out cannot move anything now, or nil. A pass with a filter needs no search.
+local function Refusal(filter)
 	if not Bank.Live() then
 		return "the bank is not open"
 	end
@@ -876,7 +890,7 @@ local function Refusal()
 	if blocker then
 		return ("the %s is open"):format(blocker)
 	end
-	if B.Search.Active() ~= true then
+	if not filter and B.Search.Active() ~= true then
 		return "type a search first, and what matches it moves"
 	end
 	return nil
@@ -1016,13 +1030,13 @@ Resume = function(run)
 		end
 		return
 	end
-	-- A pass moves only what matches a search: with the search cleared meanwhile, every item would.
-	if B.Search.Active() ~= true then
+	-- A pass of the search moves only what matches it: with the search cleared meanwhile, every item would. A pass of a section keeps its filter.
+	if not run.filter and B.Search.Active() ~= true then
 		Finish("the search was cleared")
 		return
 	end
 	run.paused = false
-	run.queue, run.next = Queue(run.kind), 1
+	run.queue, run.next = Queue(run.kind, run.filter), 1
 	Step(run)
 end
 
@@ -1048,38 +1062,39 @@ Finish = function(why)
 	RequestFooter()
 end
 
--- A click of Deposit or Take out.
-local function Start(kind)
+-- A click of Deposit or Take out, or with filter a line of a section's menu (BagsOrder.lua), which moves that section's items whatever the search
+-- says. A second click of the same button stops its pass; a line of a menu ends a pass that runs and starts its own.
+local function Start(kind, filter)
 	local run = pass
 	if run and run.draining then
 		Finish(nil)
 		run = nil
 	end
-	if run and run.kind == kind and not PER_CLICK then
+	if run and run.kind == kind and not PER_CLICK and not filter then
 		Finish(true)
 		return true
 	end
-	if run and run.kind ~= kind then
+	if run and (run.kind ~= kind or filter or run.filter) then
 		Finish(true)
 		run = nil
 	end
-	local why = Refusal()
+	local why = Refusal(filter)
 	if why then
 		print(("Flat UI: %s: %s."):format(WORDS[kind].none, why))
 		return false, why
 	end
-	local queue = Queue(kind)
+	local queue = Queue(kind, filter)
 	if #queue == 0 then
 		if run then
 			Drain(run)
 		else
-			print(("Flat UI: %s: %s."):format(WORDS[kind].none, WORDS[kind].empty))
+			print(("Flat UI: %s: %s."):format(WORDS[kind].none, filter and WORDS[kind].emptyOf or WORDS[kind].empty))
 		end
 		RequestFooter()
 		return false, "nothing matches"
 	end
 	if PER_CLICK then
-		run = run or { kind = kind, moved = 0, checks = 0 }
+		run = run or { kind = kind, moved = 0, checks = 0, filter = filter }
 		pass = run
 		run.left = #queue - 1
 		Move(run, queue[1])
@@ -1089,27 +1104,28 @@ local function Start(kind)
 		RequestFooter()
 		return true
 	end
-	run = { kind = kind, queue = queue, next = 1, moved = 0, checks = 0 }
+	run = { kind = kind, queue = queue, next = 1, moved = 0, checks = 0, filter = filter }
 	pass = run
 	Step(run)
 	RequestFooter()
 	return true
 end
 
--- Deposit and Take out start a pass, or stop the one running (true, or false and why). Busy gives the kind of the pass under way ("deposit" or
--- "takeout"), how many matching items it has left, and true when each click moves the next one (PER_CLICK; else a click stops it), or nil.
-function Bank.Deposit()
+-- Deposit and Take out start a pass, or stop the one running (true, or false and why). filter: a function of a record, true for an item the pass
+-- takes in place of the search (a section's menu, BagsOrder.lua). Busy gives the kind of the pass under way ("deposit" or "takeout"), how many
+-- matching items it has left, and true when each click moves the next one (PER_CLICK; else a click stops it), or nil.
+function Bank.Deposit(filter)
 	local ok, why = false, nil
 	Run(function()
-		ok, why = Start("deposit")
+		ok, why = Start("deposit", type(filter) == "function" and filter or nil)
 	end)
 	return ok, why
 end
 
-function Bank.TakeOut()
+function Bank.TakeOut(filter)
 	local ok, why = false, nil
 	Run(function()
-		ok, why = Start("takeout")
+		ok, why = Start("takeout", type(filter) == "function" and filter or nil)
 	end)
 	return ok, why
 end

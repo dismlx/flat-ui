@@ -38,7 +38,9 @@ local _, ns = ...
 -- own keyring window would (GetKeyRingSize, Blizzard_MainMenuBarBagButtons/Camelot/MainMenuBarBagButtons.lua:64-92: the last filled slot rounded
 -- up to four, and four more once every slot up to it is filled), worked out here from the records, since the game's function reads the logged-in
 -- character's keyring only. A bag's label is its name (C_Container.GetBagName, WL/apis.yaml:8530) for the player's own live bags, else the label of
--- its kind, with the kind after a special bag's name, and the number of its free slots. A click on the label of one of the player's own bags opens a
+-- its kind, with the kind after a special bag's name, and the number of its free slots, after the bag's icon: the item's (C_Item.GetItemIconByID)
+-- for a bag, the game's own for the backpack and the keyring, none for the bank's own slots. A click on the label of one of the player's own bags
+-- opens a
 -- menu of Flat UI's own with what the game's bag menu sets, which is out of reach while Bags keeps the game's bag windows hidden (Mainline/
 -- ContainerFrame.lua:643-711, 765-776): Assign To on bags 1 to 4 that are not special bags, with the six filters of the game's list (:2383-2390;
 -- C_Container.GetBagSlotFlag and SetBagSlotFlag, WL/apis.yaml:8538, 8800; Enum.BagSlotFlags, WL/enums.yaml:579-590), and Ignore for clean up and
@@ -50,7 +52,9 @@ local _, ns = ...
 -- The title of a section takes a drop. An item on the cursor (GetCursorInfo, WL/apis.yaml:36258) let go or clicked on it goes to
 -- B.Categories.Drop, which keeps it in that section, puts it on Errands' sell list (on Junk), or takes a junk item off that list and a grey one
 -- onto the keep list (on another section), and asks for the layout when it took the drop; either way the item goes back to its slot
--- (ClearCursor, :34956, which is not protected). That happens out of combat only: in a fight the item only goes back, with one line. The top
+-- (ClearCursor, :34956, which is not protected). That happens out of combat only: in a fight the item only goes back, with one line. The
+-- tooltip of the Junk title, in any window and for any character, also says what its items bring at a merchant: the sell price of each
+-- (C_Item.GetItemInfo) times its count, "at least" while a price has not loaded. The top
 -- shelf and Free slots take no drop, and their titles only give the item back. While the cursor holds an item the titles that take one are lit,
 -- read every tenth of a second while the window shows. A click on the top shelf's title puts its items away and lays the window out
 -- again: in the bag window, while New items at the top is on, B.ClearNew (Bags.lua) first takes the game's new flags off the items of the bags,
@@ -59,10 +63,18 @@ local _, ns = ...
 -- the item's slot first (B.Pins.Held) and, once B.Categories.Drop took it, calls B.Pins.Left, which unpins that slot when it was pinned for the
 -- item. Each title of the Sections view but the top shelf's and Free slots' is registered for a drag with the left button when it is placed
 -- (RegisterForDrag; every other title for none, so its clicks stay clicks), and its OnDragStart and OnDragStop go to B.Order (BagsOrder.lua), which
--- moves the section; a right click on such a title with no item on the cursor opens B.Order's menu of it, and its tooltip says how. A window that
--- closes ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
+-- moves the section; a right click on such a title with no item on the cursor opens B.Order's menu of it, and its tooltip says how. A left click
+-- on it with no item on the cursor, and not the end of a drop, folds the section or opens it again (B.Order.Fold, one set for the account, in both
+-- windows), and such a title is lit under the cursor as a title that takes a click is. A folded section is laid out as its title alone, as the
+-- empty Junk title is, with a + after its count; its items keep their cells, so a slot of it that changes while the window is open stays in it
+-- and does not go to the top shelf, but no button is placed for them. While a search is typed, Layout.Dim writes on a folded title how many of its
+-- items match ("3 of 24") in the Highlight colour, and its count alone again once the search is cleared, with no layout: the title is measured
+-- for the widest of those texts. A window that closes ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so
+-- a fault of theirs stops them alone.
 -- The buttons are BagsItems.lua's: the game's item buttons for the player's own bags, buttons of Flat UI's own for the live bank and for
--- everything else. They are drawn with B.Buttons.Draw, dimmed with B.Buttons.Dim and placed here (ClearAllPoints, SetPoint, Show, Hide). A holder
+-- everything else. They are drawn with B.Buttons.Draw, dimmed with B.Buttons.Dim and placed here (ClearAllPoints, SetPoint, Show, Hide). While the
+-- mouse points at a bag on the game's bag bar (Bags.lua) or in the bag slot row (BagsSlots.lua), Layout.Light dims every slot of the bag window
+-- that is not in that bag, as the game's combined bag marks a bag's items, in the player's own live bags only. A holder
 -- of a bag's buttons (the frame whose ID is the bag, ContainerFrame.lua:1845-1851), or a button of Flat UI's own, that is not under the window's
 -- content frame is put under it (SetParent, on frames of Flat UI's own only), so it takes the content's scale and scrolls with it. Before a live
 -- button hides here, B.Buttons.Unsplit leaves the game's split box it may own to the game (BagsItems.lua), so the template's OnHide does not hide
@@ -99,6 +111,8 @@ local NEW, FREE, OTHER, JUNK, KEEP = "new", "free", "other", "junk", "keep"
 local KEYRING = -1
 -- The bank's own slots, its first tab (Camelot/BankFrame.lua:301-327).
 local BANK_SLOTS = 6
+-- The icons of the backpack and the keyring on the game's bag bar (Camelot/MainMenuBarBagButtons.xml, bagIcon), for the labels of Bag by bag.
+local BACKPACK_ICON, KEYRING_ICON = "Interface\\Icons\\ui-hud-actionbar-bag", "Interface\\Icons\\ui-hud-actionbar-keyring"
 -- The top shelf of the bank window: what was put in while it is open.
 local ADDED = "Added"
 -- A section the order does not know comes after the ones it does.
@@ -517,13 +531,45 @@ local function PaintTitle(title)
 	end
 end
 
+-- An amount of copper as the game writes money (Errands.Money), else in gold alone.
+local function Money(copper)
+	local errands = ns.Errands
+	if type(errands) == "table" and type(errands.Money) == "function" then
+		return errands.Money(copper)
+	end
+	return ("%dg"):format(math.floor(copper / 10000))
+end
+
+-- What the items of a section bring at a merchant, in copper: the sell price C_Item.GetItemInfo gives each (its 11th answer) times its count; and
+-- true when the price of one has not loaded, so the worth is at least that.
+local function Worth(sec)
+	if type(C_Item) ~= "table" or type(C_Item.GetItemInfo) ~= "function" then
+		return 0, true
+	end
+	local value, unknown = 0, false
+	for _, entry in ipairs(sec.entries) do
+		local record = entry.record
+		local item = record and ((type(record.link) == "string" and not IsSecret(record.link)) and record.link or record.id)
+		if item then
+			local ok, name, _, _, _, _, _, _, _, _, _, price = pcall(C_Item.GetItemInfo, item)
+			local count = Finite(record.count) and record.count > 0 and record.count or 1
+			if ok and not IsSecret(name) and name ~= nil and Finite(price) and price >= 0 then
+				value = value + price * count
+			else
+				unknown = true
+			end
+		end
+	end
+	return value, unknown
+end
+
 local function TitleTip(title)
 	local st, sec = title.st, title.sec
 	local tip = GameTooltip
 	if not (st and sec) or type(tip) ~= "table" or ns.Forbidden(tip) then
 		return
 	end
-	local head, line
+	local head, line, worth
 	if sec.block then
 		if not title.clickable then
 			return
@@ -553,11 +599,21 @@ local function TitleTip(title)
 			return
 		end
 		head, line = sec.label, text
+		-- What the junk brings, in any window and for any character, though only the player's own bags can sell it.
+		if sec.key == JUNK and #sec.entries > 0 then
+			local value, unknown = Worth(sec)
+			if value > 0 then
+				worth = (unknown and "Worth at least %s at a merchant." or "Worth %s at a merchant."):format(Money(value))
+			end
+		end
 	else
 		return
 	end
 	tip:SetOwner(title.frame, "ANCHOR_TOP")
 	tip:SetText(head, 1, 1, 1)
+	if worth then
+		tip:AddLine(worth, 1, 1, 1, true)
+	end
 	tip:AddLine(line, DIM[1], DIM[2], DIM[3], true)
 	tip:Show()
 end
@@ -609,13 +665,33 @@ local function Title(st, index)
 	return title
 end
 
--- The text of a title: a section's label and how many items it holds, or a bag's name and how many of its slots are free, the count darker.
-local function TitleText(sec)
+-- The Highlight colour of the Windows page as a colour code of the client's.
+local function AccentHex()
+	local r, g, b = LookRGB("accent", 0.85, 0.85, 0.85)
+	local function Byte(value)
+		return math.max(0, math.min(255, math.floor(value * 255 + 0.5)))
+	end
+	return ("|cff%02x%02x%02x"):format(Byte(r), Byte(g), Byte(b))
+end
+
+-- The text of a title: a section's label and how many items it holds, or a bag's name (after its icon, BagIcon) and how many of its slots are
+-- free, the count darker. A folded section has a + after its count, and while a search is typed (sec.matches, Layout.Dim) how many of its items
+-- match, "3 of 24", in the Highlight colour. With widest, a folded title's text as wide as it can get with that count ("24 of 24"), which it is
+-- measured by, so the text that the search writes later fits its title.
+local function TitleText(sec, widest)
 	if sec.block then
 		local count = sec.full and (FULL_HEX .. "full|r") or (COUNT_HEX .. (sec.freeCount or 0) .. " free|r")
-		return Plain(sec.name) .. "  " .. count
+		return (sec.icon or "") .. Plain(sec.name) .. "  " .. count
 	end
-	return Plain(sec.label) .. "  " .. COUNT_HEX .. (sec.count or #sec.entries) .. "|r"
+	local count = sec.count or #sec.entries
+	if not sec.folded then
+		return Plain(sec.label) .. "  " .. COUNT_HEX .. count .. "|r"
+	end
+	local matches = widest and count or sec.matches
+	if Finite(matches) then
+		return ("%s  %s%d of %d|r  %s+|r"):format(Plain(sec.label), AccentHex(), matches, count, COUNT_HEX)
+	end
+	return ("%s  %s%d|r  %s+|r"):format(Plain(sec.label), COUNT_HEX, count, COUNT_HEX)
 end
 
 -- The width a title's text needs, in the content's units: measured on a font string of Flat UI's own in the titles' font, else guessed from its
@@ -768,17 +844,18 @@ end
 
 local function PlaceTitle(st, title, sec, x, y, width)
 	title.st, title.sec = st, sec
+	-- The left button drags the title of a section of the Sections view that can move (BagsOrder.lua): not the top shelf, Free slots or a bag. A
+	-- click on such a title folds its section or opens it, so it is lit under the cursor as the top shelf's title and a bag's label are.
+	local drags = st.view == "sections" and not sec.block and not sec.strip and sec.key ~= FREE and sec.key ~= NEW
 	if sec.block then
 		title.clickable = st.mine and st.live and st.which == "bags" and sec.bag ~= KEYRING
 	else
-		title.clickable = sec.strip == true
+		title.clickable = sec.strip == true or drags
 	end
 	SetSize(title.text, st.textSize)
 	title.text:SetText(TitleText(sec))
 	title.text:SetWidth(math.max(1, width - 1))
 	local frame = title.frame
-	-- The left button drags the title of a section of the Sections view that can move (BagsOrder.lua): not the top shelf, Free slots or a bag.
-	local drags = st.view == "sections" and not sec.block and not sec.strip and sec.key ~= FREE and sec.key ~= NEW
 	if title.drags ~= drags then
 		title.drags = drags
 		if drags then
@@ -816,10 +893,14 @@ local function Height(st, n, w)
 	return st.titleH + math.ceil(n / w) * PITCH - SPACE
 end
 
--- Places one section: its title at x, y and its cells in rows of w below it.
+-- Places one section: its title at x, y and its cells in rows of w below it. A folded section is its title alone: its cells stay in the layout's
+-- cells, so a slot of it that changes keeps its place there, but no button is placed for them, and the pass hides the ones it showed.
 local function PlaceSection(st, sec, x, y)
 	st.used = st.used + 1
 	PlaceTitle(st, Title(st, st.used), sec, x, y, sec.w * PITCH - SPACE)
+	if sec.folded then
+		return
+	end
 	local w = sec.w
 	for index, entry in ipairs(sec.entries) do
 		local button = Resolve(st, entry)
@@ -947,7 +1028,8 @@ local function Pack(st)
 	local width = st.columns * PITCH - SPACE
 	local x, y, shelf = 0, 0, 0
 	for _, sec in ipairs(st.sections) do
-		local n = #sec.entries
+		-- A folded section is as wide as its title and no taller (BagsOrder.lua).
+		local n = sec.folded and 0 or #sec.entries
 		local need = math.ceil(((sec.titleWidth or 0) + TITLE_ROOM) / PITCH)
 		local w = math.min(st.columns, math.max(n, need, 1))
 		local size = w * PITCH - SPACE
@@ -1043,7 +1125,10 @@ local function BuildSections(st)
 		for _, entry in ipairs(sec.entries) do
 			st.cells[entry.sk] = entry
 		end
-		sec.titleWidth = Measure(st, TitleText(sec))
+		-- A folded section keeps its cells, for Visit, and shows its title alone (BagsOrder.lua).
+		local okFold, folded = pcall(Call, B.Order, "Folded", sec.key)
+		sec.folded = okFold and folded == true or nil
+		sec.titleWidth = Measure(st, TitleText(sec, true))
 	end
 	SortEntries(st, strip.entries)
 	for _, entry in ipairs(strip.entries) do
@@ -1117,13 +1202,40 @@ local function Recount(st, sec)
 	end
 end
 
+-- The icon a bag block's label starts with, as a texture code of the client's at the size of the title's text, cropped as the slots are: the
+-- game's own backpack and keyring icons of its bag bar (Blizzard_MainMenuBarBagButtons/Camelot/MainMenuBarBagButtons.xml, their bagIcon), and for
+-- a bag, the bag in a bag slot or in a bank bag slot, its item's icon (C_Item.GetItemIconByID of the kind's id, BagsData.lua), for the player's
+-- own bags and for another character's alike. The bank's own slots have none.
+local function BagIcon(st, bag, kind)
+	local icon
+	if bag == 0 then
+		icon = BACKPACK_ICON
+	elseif bag == KEYRING then
+		icon = KEYRING_ICON
+	elseif bag ~= BANK_SLOTS then
+		local id = KindField(kind, "id")
+		if Finite(id) and id > 0 and type(C_Item) == "table" and type(C_Item.GetItemIconByID) == "function" then
+			local ok, file = pcall(C_Item.GetItemIconByID, id)
+			if ok and (Finite(file) or (type(file) == "string" and not IsSecret(file) and file ~= "")) then
+				icon = file
+			end
+		end
+	end
+	if not icon then
+		return nil
+	end
+	local size = math.floor(st.textSize + 2)
+	return ("|T%s:%d:%d:0:0:64:64:5:59:5:59|t "):format(tostring(icon), size, size)
+end
+
 local function BuildBlocks(st)
 	local blocks = {}
 	for _, bag in ipairs(st.containers) do
 		local slots = st.sizes[bag]
 		if slots > 0 then
 			local kind = st.kinds[bag]
-			local block = { key = "bag", block = true, bag = bag, kind = kind, entries = {}, name = BagName(st, bag, kind) }
+			local block = { key = "bag", block = true, bag = bag, kind = kind, entries = {}, name = BagName(st, bag, kind),
+				icon = BagIcon(st, bag, kind) }
 			for slot = 1, slots do
 				local record = Item(st.key, bag, slot)
 				local entry = Entry(bag, slot, record)
@@ -1250,6 +1362,8 @@ function Layout.Dim(which)
 	end
 	local active = Call(Search, "Active") == true
 	local match = Fn(Search, "Match")
+	-- The bag the mouse points at on the bag bar or in the bag slot row (Layout.Light), in the player's own live bags only.
+	local lit = st.mine and st.live and st.lit or nil
 	for button, entry in pairs(st.placed) do
 		local matched = true
 		if active and entry.record and match then
@@ -1260,7 +1374,56 @@ function Layout.Dim(which)
 				matched = nil
 			end
 		end
-		dim(button, matched)
+		if lit ~= nil then
+			dim(button, entry.bag == lit and matched, true)
+		else
+			dim(button, matched)
+		end
+	end
+	-- A folded section shows no button, so its title says how many of its items match while a search is typed, and only its count again once
+	-- the search is cleared; its title was measured for that text (TitleText), so nothing is laid out.
+	for index = 1, st.used do
+		local title = st.titles[index]
+		local sec = title and title.sec
+		if sec and sec.folded then
+			local matches = nil
+			if active and match then
+				matches = 0
+				for _, entry in ipairs(sec.entries) do
+					if entry.record then
+						local ok, answer = pcall(match, entry.record)
+						if ok and answer == true then
+							matches = matches + 1
+						end
+					end
+				end
+			end
+			if sec.matches ~= matches then
+				sec.matches = matches
+				title.text:SetText(TitleText(sec))
+			end
+		end
+	end
+end
+
+-- The mouse points at a bag's button on the game's bag bar (Bags.lua) or in the bag slot row of the bag window (BagsSlots.lua): while the bag
+-- window shows the player's own live bags, every slot it shows that is not in that bag is dimmed, empty ones too, and what the search dims stays
+-- dimmed; bag nil gives the window back as the search has it. The bag is kept (st.lit) through the passes that draw again until the mouse leaves,
+-- and the window closing forgets it. Nothing is laid out.
+function Layout.Light(which, bag)
+	local st = state[which]
+	if not st then
+		return
+	end
+	if bag ~= nil and not Finite(bag) then
+		bag = nil
+	end
+	if st.lit == bag then
+		return
+	end
+	st.lit = bag
+	if st.built then
+		Layout.Dim(which)
 	end
 end
 
@@ -1466,7 +1629,7 @@ function Layout.Closed(which)
 	if not st then
 		return
 	end
-	st.built = false
+	st.built, st.lit = false, nil
 	for button in pairs(st.placed) do
 		Hide(button)
 	end
@@ -1544,6 +1707,9 @@ function TitleClick(title, mouse)
 		if title.clickable then
 			Layout.BagMenu(st, sec, title.frame)
 		end
+	elseif not sec.strip and sec.key ~= FREE then
+		-- A section that can move folds to its title, or opens again, in both windows (BagsOrder.lua).
+		Run("order", Call, B.Order, "Fold", st, sec)
 	elseif sec.strip then
 		if st.which == "bags" then
 			-- While New items at the top is on, the game's new flags come off the items of the bags first, as the window's close takes them

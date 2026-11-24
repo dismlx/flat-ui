@@ -12,6 +12,14 @@ local _, ns = ...
 -- window (QUEST_COMPLETE) with GetQuestReward when there is one reward or none, as the game's own button does. With a choice of rewards the window
 -- stays open for you. Left to you: a quest that takes money (GetQuestMoneyToGet), a currency, or an item of green quality or better, and one that
 -- can be done again unless its row is ticked.
+-- Mark the reward worth most: with a choice of two or more rewards in the quest window (its offer or its rewards), a gold coin of Flat UI's own lies
+-- in the top right corner of the choice a merchant pays most for: the sell price (C_Item.GetItemInfo, its 11th answer) times the count
+-- (GetQuestItemInfo, GetQuestItemLink). No coin on a tie, when every price is 0, or when a price is not known (a currency, or an item the game
+-- has not loaded: GET_ITEM_INFO_RECEIVED looks again, a few times a window). The coin follows the game's QuestInfo_ShowRewards (ns.FollowGlobal),
+-- finds the choice's button among QuestInfoRewardsFrame.RewardButtons by its type and ID (fields read only), and is anchored to it with SetPoint
+-- of its own frame, which takes no mouse and hides when the button is no longer seen, at QUEST_FINISHED and when the row goes off; never for the
+-- quest log. The tooltip of that choice ends with what it sells for, a line added by a post call of the game's item tooltips (as BagsTooltip.lua
+-- adds its own) while the coin lies on the button that owns GameTooltip. Nothing is picked for you, and nothing protected is touched.
 -- From an NPC's list (GOSSIP_SHOW with C_GossipInfo, and the old greeting, QUEST_GREETING): a finished quest is picked first, then a new one,
 -- under the same rules, each once in a talk. Gossip options: the options you saved (/flatui gossip), everywhere; and, in the open world only, the
 -- one option the game marks (Quest), or the NPC's only option when it has no quest for you, unless the game picks that one itself. An option the
@@ -78,6 +86,8 @@ local handedIn = {}
 -- Quests left to you this session, by ID, with why: a list does not open them again until they are taken or handed in, or a row changes. The
 -- lines said about them, so one is said once a session (a full log is said once a talk). A load that failed is not kept: it may work next time.
 local kept, spoken = {}, {}
+-- Mark the reward worth most (below).
+local RewardWanted, Unmark, Mark, FollowRewards
 
 local Decide
 
@@ -818,6 +828,202 @@ local function Gossip()
 	Choose(current, options, #active + #available, others)
 end
 
+-- The reward worth most -----------------------------------------------------------------------------------------------------------------------
+
+-- The coin over the choice a merchant pays most for (the game's gold coin), its size, and how far it lies inside the button's top right corner.
+local COIN, COIN_SIZE, COIN_INSET = "Interface\\MoneyFrame\\UI-GoldIcon", 14, 3
+local COIN_TEXT = { 1, 0.82, 0 }
+-- The choices looked at, at most, and the looks a window gets again when the game comes to know one of its items (GET_ITEM_INFO_RECEIVED).
+local MOST_CHOICES, MOST_TRIES = 10, 10
+-- The kind of tooltip data of an item, when the game does not say (Enum.TooltipDataType.Item).
+local ITEM_TIP = 0
+-- frame: the coin, a frame of the addon's own; button: the game's reward button it lies on; index and value: that choice and what it sells for;
+-- waiting: a price was not known, and the next GET_ITEM_INFO_RECEIVED looks again (tries counts those looks); followed and posted: the follow of
+-- QuestInfo_ShowRewards and the post call of the tooltip are made; built: for each tooltip, the data whose build has the line.
+local reward = { waiting = false, tries = 0, built = setmetatable({}, { __mode = "k" }) }
+
+function RewardWanted()
+	return E.On("rewardValue") and not ns.PartStopped("errands", part.label)
+end
+
+-- What a merchant pays for one of an item (C_Item.GetItemInfo, its 11th answer), or nil while the game does not know the item yet.
+local function SellPrice(link)
+	if type(C_Item) ~= "table" or type(C_Item.GetItemInfo) ~= "function" then
+		return nil
+	end
+	local ok, _, _, _, _, _, _, _, _, _, _, price = pcall(C_Item.GetItemInfo, link)
+	if not ok or not ns.Finite(price) or price < 0 then
+		return nil
+	end
+	return price
+end
+
+-- The choice of the window that sells for the most (its price times its count) and that worth. Nothing on a tie, when every price is 0, or with
+-- fewer than two choices; nothing and true when a price is not known (a currency has none).
+local function Best()
+	local choices = E.Ask(GetNumQuestChoices)
+	if not ns.Finite(choices) or choices < 2 then
+		return nil
+	end
+	local best, most, tie = nil, 0, false
+	for index = 1, math.min(choices, MOST_CHOICES) do
+		local _, _, count = E.Ask(GetQuestItemInfo, "choice", index)
+		local link = E.Ask(GetQuestItemLink, "choice", index)
+		local price = type(link) == "string" and SellPrice(link) or nil
+		if not price then
+			return nil, nil, true
+		end
+		local worth = price * (ns.Finite(count) and count >= 1 and math.floor(count) or 1)
+		if worth > most then
+			best, most, tie = index, worth, false
+		elseif worth == most and worth > 0 then
+			tie = true
+		end
+	end
+	if tie or not best then
+		return nil
+	end
+	return best, most
+end
+
+local function Visible(frame)
+	local ok, shown = pcall(frame.IsVisible, frame)
+	return ok and not ns.IsSecret(shown) and shown == true
+end
+
+-- The game's button of a choice: a reward button of QuestInfoRewardsFrame (its RewardButtons, read only) of the type choice whose ID is the
+-- choice (Mainline/QuestInfo.lua:446-455, 518-531, 777-794), shown.
+local function ChoiceButton(index)
+	local buttons = Field(_G.QuestInfoRewardsFrame, "RewardButtons")
+	if type(buttons) ~= "table" then
+		return nil
+	end
+	for slot = 1, 40 do
+		local button = Field(buttons, slot)
+		if type(button) ~= "table" then
+			return nil
+		end
+		if not ns.Forbidden(button) and Field(button, "type") == "choice" and Visible(button) then
+			local ok, id = pcall(button.GetID, button)
+			if ok and ns.Finite(id) and id == index then
+				return button
+			end
+		end
+	end
+	return nil
+end
+
+-- The coin, made once: it takes no mouse, and goes when its button is no longer seen, whatever closed the window.
+local function Coin()
+	if reward.frame then
+		return reward.frame
+	end
+	local frame = CreateFrame("Frame", nil, UIParent)
+	ns.Own[frame] = true
+	frame:Hide()
+	frame:EnableMouse(false)
+	frame:SetSize(COIN_SIZE, COIN_SIZE)
+	local icon = frame:CreateTexture(nil, "OVERLAY")
+	ns.Own[icon] = true
+	icon:SetAllPoints(frame)
+	icon:SetTexture(COIN)
+	frame:SetScript("OnUpdate", function(self)
+		if not (reward.button and Visible(reward.button)) then
+			self:Hide()
+			reward.index, reward.value, reward.button = nil, nil, nil
+		end
+	end)
+	reward.frame = frame
+	return frame
+end
+
+function Unmark()
+	reward.index, reward.value, reward.button = nil, nil, nil
+	if reward.frame then
+		reward.frame:Hide()
+	end
+end
+
+-- The line in the tooltip of the marked choice, once for each build of it (as BagsTooltip.lua adds its own).
+local function TipLine(tooltip, data)
+	local ok, owner = pcall(tooltip.GetOwner, tooltip)
+	local counted, shown = pcall(tooltip.NumLines, tooltip)
+	if not (ok and reward.button and rawequal(owner, reward.button) and counted and ns.Finite(shown)) then
+		return
+	end
+	local record = reward.built[tooltip]
+	if record and record.data == data and shown >= record.lines then
+		return
+	end
+	local text = ("Sells for %s, the most of these rewards"):format(E.Money(reward.value))
+	if pcall(tooltip.AddLine, tooltip, text, COIN_TEXT[1], COIN_TEXT[2], COIN_TEXT[3]) then
+		reward.built[tooltip] = { data = data, lines = shown + 1 }
+	end
+end
+
+-- The post call of item tooltips (TooltipDataProcessor.AddTooltipPostCall), added the first time a coin shows. It cannot be taken back, so it
+-- does nothing but for GameTooltip while a coin lies on the button that owns it.
+local function Post()
+	if reward.posted then
+		return
+	end
+	reward.posted = true
+	local processor = _G.TooltipDataProcessor
+	local kinds = type(Enum) == "table" and not ns.IsSecret(Enum) and Field(Enum, "TooltipDataType") or nil
+	local item = Field(kinds, "Item")
+	if type(processor) ~= "table" or ns.IsSecret(processor) or type(processor.AddTooltipPostCall) ~= "function" then
+		return
+	end
+	pcall(processor.AddTooltipPostCall, ns.Finite(item) and item or ITEM_TIP, function(tooltip, data)
+		if reward.index and rawequal(tooltip, GameTooltip) then
+			E.Run(part, TipLine, tooltip, data)
+		end
+	end)
+end
+
+-- Lays the coin on the choice worth most of the window that shows, or takes it away. Not for the quest log (QuestInfoFrame.questLog, read only).
+function Mark()
+	reward.waiting = false
+	Unmark()
+	if not RewardWanted() or Field(_G.QuestInfoFrame, "questLog") == true then
+		return
+	end
+	local index, value, unknown = Best()
+	if unknown and reward.tries < MOST_TRIES then
+		reward.waiting, reward.tries = true, reward.tries + 1
+	end
+	local button = index and ChoiceButton(index)
+	if not button then
+		return
+	end
+	local frame = Coin()
+	local okStrata, strata = pcall(button.GetFrameStrata, button)
+	local okLevel, level = pcall(button.GetFrameLevel, button)
+	frame:SetFrameStrata(okStrata and type(strata) == "string" and strata or "HIGH")
+	frame:SetFrameLevel(okLevel and ns.Finite(level) and math.min(level + 5, 9000) or 100)
+	frame:ClearAllPoints()
+	frame:SetPoint("TOPRIGHT", button, "TOPRIGHT", -COIN_INSET, -COIN_INSET)
+	reward.index, reward.value, reward.button = index, value, button
+	frame:Show()
+	Post()
+end
+
+-- The game lays out the rewards of a window (QuestInfo_ShowRewards, also at QUEST_ITEM_UPDATE: Mainline/QuestFrame.lua:75-84): the coin follows.
+-- A follow cannot be taken back, so it asks the row first.
+function FollowRewards()
+	if reward.followed then
+		return
+	end
+	reward.followed = ns.FollowGlobal("QuestInfo_ShowRewards", function()
+		if RewardWanted() or reward.index then
+			E.Run(part, function()
+				reward.tries = 0
+				Mark()
+			end)
+		end
+	end) == true
+end
+
 E.Listen(part, "GOSSIP_SHOW", Gossip)
 E.Listen(part, "GOSSIP_CLOSED", function()
 	Closed("gossip")
@@ -828,6 +1034,7 @@ E.Listen(part, "QUEST_PROGRESS", Progress)
 E.Listen(part, "QUEST_COMPLETE", Complete)
 E.Listen(part, "QUEST_FINISHED", function()
 	Closed("quest")
+	Unmark()
 end)
 E.Listen(part, "QUEST_DATA_LOAD_RESULT", function(id, success)
 	if not pending or ns.IsSecret(id) or id ~= pending.id then
@@ -840,6 +1047,13 @@ E.Listen(part, "QUEST_DATA_LOAD_RESULT", function(id, success)
 		return
 	end
 	Decide(wait.talk, id, true)
+end)
+-- An item of a choice the game did not know yet has come: the choices are looked at again, a few times a window at most. The event comes often,
+-- so it is heard only while a look waits (the filter of ns.AddEvent).
+ns.AddEvent("errands", "GET_ITEM_INFO_RECEIVED", function()
+	E.Run(part, Mark)
+end, function()
+	return reward.waiting
 end)
 -- The game says what it did: the modern event gives the quest's ID, the classic one its index and then its ID.
 E.Listen(part, "QUEST_ACCEPTED", function(a, b)
@@ -869,6 +1083,7 @@ end)
 
 function part.Start()
 	talk, pending, handedIn, kept, spoken = nil, nil, {}, {}, {}
+	FollowRewards()
 end
 
 function part.Refresh()
@@ -876,6 +1091,13 @@ function part.Refresh()
 	kept = {}
 	if not ns.Enabled("errands") or E.Opt("questAccept") ~= true then
 		pending = nil
+	end
+	-- Mark the reward worth most: off takes the coin away, on marks the window that is open.
+	if not RewardWanted() then
+		Unmark()
+	elseif E.Shown(QuestFrame) then
+		reward.tries = 0
+		Mark()
 	end
 end
 

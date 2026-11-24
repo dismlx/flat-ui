@@ -4,8 +4,9 @@ local _, ns = ...
 -- (ns.OpenProfiles: /flatui profiles, Ready-made on Home, the Profiles page and the list of setup open it) and the card that says what setup's Finish or
 -- a look did (ns.SetupAfter). One frame of Flat UI's own with three views: start (the player's frame drawn as the profile in use draws it, then Set up
 -- my screen, Ready-made looks and Keep this look), tiles (a drawn card of each ready-made look: a click puts it in use) and after (the profile in use,
--- what needs a reload, then Reload, Change it, Move frames, Options and Done). The tiles, the profile in use and the flag come from Setup.lua
--- (S.Presets, S.UseReady, S.Flag), the drawings from SetupDraw.lua (D.PaintIn with the frames build's mock-player, D.Card). When the screen shows and
+-- what needs a reload, Back to the profile in use before a look was picked, then Reload, Change it, Move frames, Options and Done). The tiles, the
+-- profile in use and the flag come from Setup.lua (S.Presets, S.UseReady, S.Flag), the drawings from SetupDraw.lua (D.PaintIn with the frames build's
+-- mock-player, D.Card). When the screen shows and
 -- what Keep this look keeps are settings in the Setup section of the Options and setup tab of the Flat UI page (Config.lua). It hides when a fight starts, and no look is put in
 -- use in one.
 
@@ -171,13 +172,14 @@ function W.ReloadSince(before)
 end
 
 -- A click on a tile: its look is put in use (S.UseReady sets the flag and says it in chat), and the after view says which, with Reload when the look
--- changes a row that applies only after /reload. In combat the line says so and nothing changes.
+-- changes a row that applies only after /reload, and Back to the profile that was in use before (W.Back). In combat the line says so and nothing changes.
 function W.Pick(index)
 	local tile = W.tiles[index]
 	if not tile then
 		return
 	end
 	local before = W.ReloadBefore()
+	local previous, shared = ns.Profile(), ns.Get("setup.newCharacter")
 	local ok, why = S.UseReady(tile.profile.id)
 	if not ok then
 		W.line:SetText(why == "combat" and COMBAT or tostring(why))
@@ -188,7 +190,28 @@ function W.Pick(index)
 	end
 	W.Done(true, true)
 	W.Used()
-	W.ShowAfter({ name = ns.Profile() or tile.profile.label, ready = true, reloadLines = W.ReloadSince(before) })
+	W.ShowAfter({ name = ns.Profile() or tile.profile.label, ready = true, reloadLines = W.ReloadSince(before),
+		previous = previous ~= ns.Profile() and previous or nil, shared = W.share and shared or nil })
+end
+
+-- Back to: the profile in use before the look was picked is put in use again, and new characters get what they got before when the look was given
+-- to them too. The look stays in the list of profiles. Chat says which profile is in use, and the screen closes.
+function W.Back()
+	local finished = W.finished or {}
+	local name = finished.previous and S.FindProfile(finished.previous)
+	if not name then
+		return
+	end
+	local ok, why = ns.UseProfile(name)
+	if not ok then
+		W.line:SetText(tostring(why))
+		return
+	end
+	if finished.shared ~= nil then
+		ns.Set("setup.newCharacter", finished.shared)
+	end
+	print(("Flat UI: using %s."):format(name))
+	W.frame:Hide()
 end
 
 -- Same as: the profile most characters of the account use, put in use as it is.
@@ -478,6 +501,9 @@ function W.Build()
 	W.done = kit.Button(frame, "Done", 90, function()
 		frame:Hide()
 	end)
+	W.backTo, W.backToText = kit.Button(frame, "Back to", SAME_W, function()
+		W.Back()
+	end)
 	-- The foot and the tick, under the start and tiles views.
 	W.foot = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", 220))
 	W.foot:SetText("Open it again with /flatui setup.")
@@ -490,8 +516,8 @@ function W.Build()
 	W.tickLabel:SetPoint("RIGHT", W.tickBox, "LEFT", -8, 0)
 	W.tickLabel:SetJustifyH("RIGHT")
 	-- Every part a view may show, hidden before each layout.
-	W.parts = { W.band, W.caption, W.setup, W.ready, W.keep, W.same, W.back, W.shareBox, W.shareLabel, W.change, W.move, W.options, W.done, W.foot,
-		W.tickBox, W.tickLabel }
+	W.parts = { W.band, W.caption, W.setup, W.ready, W.keep, W.same, W.back, W.shareBox, W.shareLabel, W.change, W.move, W.options, W.done, W.backTo,
+		W.foot, W.tickBox, W.tickLabel }
 	-- The view is set before the screen shows (W.Open); the ticks start empty each time.
 	frame:SetScript("OnShow", function()
 		W.tick, W.share = false, false
@@ -612,8 +638,8 @@ function W.LayoutTiles(y)
 	return y + 20 + FOOT + PAD
 end
 
--- The after view: what is in use now, a note a line, then the buttons in a row (Reload only when a reload is needed, Change it only after a look).
--- No foot and no tick.
+-- The after view: what is in use now, a note a line, Back to on a line of its own after a look that took the place of another profile, then the
+-- buttons in a row (Reload only when a reload is needed, Change it only after a look). No foot and no tick.
 function W.LayoutAfter(y)
 	local finished = W.finished or {}
 	W.title:SetText("Your screen is set")
@@ -633,6 +659,13 @@ function W.LayoutAfter(y)
 	end
 	if #texts > 0 then
 		y = y + 6
+	end
+	local previous = finished.ready and finished.previous and S.FindProfile(finished.previous)
+	if previous then
+		W.backToText:SetText("Back to " .. S.Short(previous))
+		W.At(W.backTo, y)
+		W.backTo:Show()
+		y = y + kit.BUTTON + GAP
 	end
 	local x = PAD
 	local function Put(button, width)

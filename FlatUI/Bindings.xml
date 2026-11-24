@@ -2,8 +2,9 @@
 	<!-- MountKey.lua: the key of the Mount key page. It clicks the secure button Flat UI makes once the page is on and a key is bound. -->
 	<Binding name="CLICK FlatUIMountButton:LeftButton" category="Flat UI">
 	</Binding>
-	<!-- PingBar.lua: the keys of the Ping bar. Each clicks the secure button of one ping, which Flat UI makes once the page is on; it pings your
-	     target with the game's /ping, as the button's click does, in a fight too. PingBar.lua names them in the game's Key Bindings. -->
+	<!-- PingBar.lua: the keys of the Ping bar. Each clicks the secure button of one ping, which Flat UI makes once the page is on; it pings what
+	     is under the mouse at once with the game's /ping, as the game's own ping keys do, in a fight too. PingBar.lua names them in the game's
+	     Key Bindings. -->
 	<Binding name="CLICK FlatUIPingPing:LeftButton" category="Flat UI">
 	</Binding>
 	<Binding name="CLICK FlatUIPingAttack:LeftButton" category="Flat UI">
@@ -21,6 +22,10 @@
 	<!-- BagsBank.lua: the key of Flat UI bank. It clicks a plain button of Flat UI's own that opens or closes the bank window of the Bags page:
 	     live at the banker with Flat UI's bank window, else your bank as you last left it. BagsBank.lua names it in the game's Key Bindings. -->
 	<Binding name="CLICK FlatUIBankButton:LeftButton" category="Flat UI">
+	</Binding>
+	<!-- BagsSearch.lua: the key of the bag search. It clicks a plain button of Flat UI's own that opens the bag window of the Bags page, if it is
+	     closed, and puts the cursor in its search box. BagsSearch.lua names it in the game's Key Bindings. -->
+	<Binding name="CLICK FlatUIBagSearchButton:LeftButton" category="Flat UI">
 	</Binding>
 	<!-- TestMode.lua: the key of test mode. It clicks a plain button of Flat UI's own that turns test mode on or off (out of combat), as
 	     /flatui test does. TestMode.lua names it in the game's Key Bindings. -->

@@ -4,6 +4,8 @@ local ADDON_NAME, ns = ...
 -- words on the health and power bars. The sizes of the bar text and of the name on small frames are in UnitFrames.lua, which asks this file for the rest of each
 -- font call (ns.UnitFrameExtra.nameSpec and barSpec), so that a font is set once. This file adds its work after the steps of that file through
 -- ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run twice with the same result. A row at its default makes no call.
+-- Raid frames and raid-style party frames take the name rows on their names and the font and outline of the bar text rows on their status text (RaidName),
+-- and the pet target frame of Flat UI's own takes them through X.ownSpec.
 -- The level rows are not here: Level colour and Level size are in UnitFrames.lua. The health and power text rows are at the end of this file.
 
 local X = ns.UnitFrameExtra
@@ -206,14 +208,63 @@ local function Final(rec, on)
 	NameText(rec, on)
 end
 
+-- Raid frames: the name of a raid frame, and of a raid-style party frame, takes the face, size, outline and colour of the name rows, and its status text
+-- the face and outline of the bar text rows. The game sets only the text, the points and the vertex colour of its name (Shared/CompactUnitFrame.lua:
+-- 857-889, 1802-1836, 2006-2009) and the text of its status (:1095-1113), never their font, so a font set once holds. Its vertex colour is white unless
+-- the game greys a unit or colours names by class, and it multiplies the text colour set here, so a class colour of the name rows lasts through the
+-- game's updates. The game names a new unit with CompactUnitFrame_UpdateName, which this follows (ns.FollowGlobal) for the colour of the new unit.
+local raidFollowed = false
+local RaidName
+
+local function OnRaidName(frame)
+	if frame == nil or ns.IsSecret(frame) then
+		return
+	end
+	local rec = X.known(frame)
+	if rec ~= nil and rec.kind == "raid" and rec.made and X.active(rec) then
+		X.run(PART, RaidName, rec, true)
+	end
+end
+
+function RaidName(rec, on)
+	if rec.kind ~= "raid" then
+		return
+	end
+	local live = on and not Off()
+	Cleared(rec, "names", "name")
+	Cleared(rec, "bars", "status")
+	local name = X.path(rec.frame, "name")
+	if name ~= nil then
+		local spec = { percent = 100 }
+		local styled = live and NameLook(rec, spec)
+		if ns.TextStyle(name, spec) == false and styled then
+			X.refused(rec, "names", "name")
+		end
+	end
+	local status = X.path(rec.frame, "statusText")
+	if status ~= nil then
+		local spec = {}
+		if live then
+			spec.face = Face(Opt("barTextFace"), "barFace")
+			spec.flags = FLAGS[Opt("barTextOutline")]
+		end
+		if ns.TextStyle(status, spec) == false and (spec.face ~= nil or spec.flags ~= nil) then
+			X.refused(rec, "bars", "status")
+		end
+	end
+	if live and not raidFollowed then
+		raidFollowed = ns.FollowGlobal("CompactUnitFrame_UpdateName", OnRaidName) == true
+	end
+end
+
 -- A new unit on a frame: the colour of the name follows the unit. The frame with a name row has its name written again by the game's call.
 local was = X.unitChanged
 function X.unitChanged(rec)
 	if was ~= nil then
 		was(rec)
 	end
-	if rec.made and rec.kind ~= "raid" and X.active(rec) then
-		X.run(PART, NameText, rec, true)
+	if rec.made and X.active(rec) then
+		X.run(PART, rec.kind == "raid" and RaidName or NameText, rec, true)
 	end
 end
 
@@ -224,7 +275,9 @@ function X.unitsChanged()
 		wasAll()
 	end
 	for _, rec in pairs(X.records) do
-		if rec.made and rec.kind ~= "raid" and X.active(rec) then
+		if rec.made and rec.kind == "raid" and X.active(rec) then
+			X.run(PART, RaidName, rec, true)
+		elseif rec.made and X.active(rec) then
 			X.run(PART, NameText, rec, true)
 			if rec.row ~= nil and X.rowOn(rec) then
 				X.run(PART, RowName, rec)
@@ -264,6 +317,27 @@ function X.barSpec(rec, entry, on, spec)
 	return answer.styled == true
 end
 
+-- The text rows for a frame of Flat UI's own that has no record (the pet target frame, UnitPetTarget.lua), added to spec: on slot "name" the face, the
+-- outline and the size of the name rows, on any other slot the face, the outline and the colour of the bar text rows. Nothing while the part stopped.
+-- The name keeps its own colour, white on a bar in the colour of the unit.
+function X.ownSpec(slot, spec)
+	if Off() then
+		return spec
+	end
+	if slot == "name" then
+		spec.face = Face(Opt("nameFace"), "nameFace")
+		spec.flags = FLAGS[Opt("nameOutline")]
+		spec.percent = (spec.percent or 100) * Opt("nameSize") / 100
+	else
+		spec.face = Face(Opt("barTextFace"), "barFace")
+		spec.flags = FLAGS[Opt("barTextOutline")]
+		if Opt("barTextColourOwn") == true then
+			spec.r, spec.g, spec.b = ns.Colour(KEY .. ".barTextColour")
+		end
+	end
+	return spec
+end
+
 table.insert(X.after.rowText, { part = PART, fn = RowName })
 -- A large frame or a boss frame whose name row came back: the game's name text goes back to the face, size and colour it had before the rows set them under the row.
 local function Restore(rec, on)
@@ -274,6 +348,8 @@ local function Restore(rec, on)
 end
 
 table.insert(X.after.apply, { part = PART, fn = Restore })
+table.insert(X.after.apply, { part = PART, fn = RaidName })
+table.insert(X.after.raid, { part = PART, fn = RaidName })
 table.insert(X.after.final, { part = PART, fn = Final })
 
 -- Health and power text -------------------------------------------------------------------------------------------
@@ -281,12 +357,20 @@ table.insert(X.after.final, { part = PART, fn = Final })
 -- A format other than the game's makes the game's words on that bar transparent and puts one font string of this file's over the bar. The game only calls
 -- SetText, Show and Hide on its words (TextStatusBar.lua:101-215). Every 0.1 s, and only while a bar has a format, the values go to the string without being
 -- read, compared or added: they stay withheld values from the call that gets them to the call that writes them. The part is "health and power text": three
--- calls the client refuses switch it off, and the game's words come back.
+-- calls the client refuses switch it off, and the game's words come back. The game's words are faded with its Dead and Offline, so a health bar says Offline
+-- (UnitIsConnected plainly false), Ghost (UnitIsGhost plainly true) or Dead (UnitIsDeadOrGhost plainly true) itself, centred and whatever Show says; on
+-- the target, focus, boss, target of target and focus target frames a dead unit's bar stays empty, as the game's own Dead text shows there. The target of
+-- target and focus target have a Health text row of their own (Target of target frame page), on a bar that has no words of the game's.
 local TEXT = "health and power text"
-local HEALTH_KEY = { player = "player", target = "target", focus = "focus", pet = "pet", party = "party", partypet = "party", boss = "boss" }
+-- The target of target and the focus target (tot) have a Health text row and no Power text row; their health bar has no words of the game's.
+local HEALTH_KEY = { player = "player", target = "target", focus = "focus", pet = "pet", tot = "tot", party = "party", partypet = "party", boss = "boss" }
 local POWER_KEY = { player = "player", target = "target", focus = "focus", pet = "pet", party = "party", partypet = "party", boss = "boss" }
 local ANCHOR = { left = "LEFT", centre = "CENTER", right = "RIGHT" }
 local OFFSET = { left = 3, centre = 0, right = -3 }
+-- The kinds whose health bar has the game's own Dead text (UnitParts.lua, the Dead text row), and the word of a unit that released, which the game's
+-- strings do not name.
+local OWN_DEAD = { target = true, focus = true, boss = true, tot = true }
+local GHOST = "Ghost"
 local NOTE_MADE = "Health and power text: the client did not make the text, so the game's words stay"
 -- The calls for each kind of bar: what the game's own text shows, as the documentation lists them (UnitDocumentation.lua).
 local FROM = {
@@ -395,6 +479,35 @@ local function Place(entry)
 	end
 end
 
+-- The word a health bar says for its unit in place of its numbers, or nil for the numbers: Offline for a unit the client plainly says is not
+-- connected, Ghost for one that released, Dead for a dead one, and the empty string for a dead one on a frame that has the game's own Dead text
+-- (OWN_DEAD), so the word is not drawn twice and the Dead text row keeps its meaning. A withheld answer says nothing.
+local function Status(rec, unit)
+	local ok, connected = pcall(UnitIsConnected, unit)
+	if ok and not ns.IsSecret(connected) and connected == false then
+		return PLAYER_OFFLINE or "Offline"
+	elseif Yes(pcall(UnitIsGhost, unit)) then
+		return GHOST
+	elseif Yes(pcall(UnitIsDeadOrGhost, unit)) then
+		return OWN_DEAD[rec.kind] and "" or DEAD or "Dead"
+	end
+	return nil
+end
+
+-- A status word on the bar, centred whatever Health text position says; the next numbers take that position again (Place).
+local function Say(entry, word)
+	local own = entry.own
+	if own.pos ~= "word" then
+		own.pos = "word"
+		own.text:ClearAllPoints()
+		own.text:SetPoint("CENTER", own.frame, "CENTER", 0, 0)
+		own.text:SetJustifyH("CENTER")
+	end
+	own.blank = false
+	pcall(own.frame.Show, own.frame)
+	own.text:SetText(word)
+end
+
 -- One write of one bar. job is { rec, entry }, new for each call, so that each refused call counts as a failure of its own.
 local function Fill(job)
 	local rec, entry = job.rec, job.entry
@@ -407,14 +520,29 @@ local function Fill(job)
 		return
 	end
 	local unit = X.unitOf(rec)
-	local present = unit ~= nil and Yes(pcall(UnitExists, unit)) and not Yes(pcall(UnitIsDeadOrGhost, unit))
-	if present and Opt("ownTextWhen") == "hover" then
-		present = Yes(pcall(rec.frame.IsMouseOver, rec.frame))
-	end
-	if not present then
+	if unit == nil or not Yes(pcall(UnitExists, unit)) then
 		Blank(own)
 		return
 	end
+	-- The health bar says Offline, Ghost or Dead in place of its numbers, whatever Show says; the power bar of a dead unit stays empty.
+	if entry.role == "health" then
+		local word = Status(rec, unit)
+		if word == "" then
+			Blank(own)
+			return
+		elseif word ~= nil then
+			Say(entry, word)
+			return
+		end
+	elseif Yes(pcall(UnitIsDeadOrGhost, unit)) then
+		Blank(own)
+		return
+	end
+	if Opt("ownTextWhen") == "hover" and not Yes(pcall(rec.frame.IsMouseOver, rec.frame)) then
+		Blank(own)
+		return
+	end
+	Place(entry)
 	own.blank = false
 	pcall(own.frame.Show, own.frame)
 	Write(own.text, mode, unit, entry.role)

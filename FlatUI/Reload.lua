@@ -399,19 +399,28 @@ end
 
 -- Reload notice ------------------------------------------------------------------------------------------------------------------------------
 -- A change that needs a reload (ns.ReloadLines, Core.lua), made anywhere, shows a small notice of Flat UI's own at the top of the screen: what
--- needs it, Reload and Later. Its Reload is a reload button like the others (ns.SecureReload): where ReloadUI is blocked, the game's own /reload
--- runs on a secure button, which leaves the notice as a fight starts and comes back after it, so meanwhile the button is dimmed and says so. Later
--- hides the notice until the next change that needs a reload; it goes when nothing needs one any more. It is in DIALOG strata, over the options
--- window (HIGH), and has an own entry in /flatui move (FlatUIReloadNotice, Movers.lua), at whose spot it stands. While the options window shows
--- and the notice would cover its title bar, it stands just above the window, or just under it where there is no room above. It is always placed
--- from UIParent, never from the window, and only while nothing protected hangs from it.
+-- needs it, Reload, Undo and Later. Its Reload is a reload button like the others (ns.SecureReload): where ReloadUI is blocked, the game's own
+-- /reload runs on a secure button, which leaves the notice as a fight starts and comes back after it, so meanwhile the button is dimmed and says so.
+-- Undo sets every change it lists back to the value the game runs since login, in the profile in use, with ns.Set, out of combat and while Setup
+-- does not have the options window; each goes into Home's record of changes (ns.PanelHome.Noted) and one line in chat says how many. Later hides
+-- the notice until the next change that needs a reload; it goes when nothing needs one any more. Pointing at the notice, or at Undo, shows
+-- GameTooltip with every change, its value now and at login. It fades in over 0.2 s each time it shows from hidden (its own alpha). It is in
+-- DIALOG strata, over the options window (HIGH), and has an own entry in /flatui move (FlatUIReloadNotice, Movers.lua), at whose spot it stands.
+-- It keeps clear of the title bar of the options window while that shows, of the toolbar of /flatui move while that is open and of the test mode
+-- bar while that shows (TM.BarRect, TestMode.lua): covering any of them, it takes the nearest place just above or just under one of them that
+-- covers none and fits on the screen, else just above the window, or just under it where there is no room above, as before. It is always placed
+-- from UIParent, never from those frames, and only while nothing protected hangs from it.
 
--- width and height of the notice, y: its start under the top of the screen, reload and later: the widths of the buttons, chars: about how many
--- letters of names the line holds before the rest are counted, every: how often a shown notice looks where to stand, in seconds.
-local NOTICE = { name = "FlatUIReloadNotice", width = 460, height = 52, y = -40, reload = 80, later = 64, chars = 64, every = 0.25 }
--- frame, text and reload: the parts once built. later: what Later held, the value of each change by its path, or nil. queued: a look on the
--- next frame is asked for. placed: where it stands now. wait: the time to the next look while shown.
-local notice = { queued = false, wait = 0 }
+-- width and height of the notice, y: its start under the top of the screen, reload, undo and later: the widths of the buttons, chars: about how
+-- many letters of names the line holds before the rest are counted, every: how often a shown notice looks where to stand, in seconds, fade: how
+-- long it takes to come in, in seconds, gap: the room it keeps from what it steps clear of.
+local NOTICE = { name = "FlatUIReloadNotice", width = 520, height = 52, y = -40, reload = 80, undo = 60, later = 64, chars = 64, every = 0.25,
+	fade = 0.2, gap = 6 }
+-- frame, text, reload and undo: the parts once built. later: what Later held, the value of each change by its path, or nil. queued: a look on the
+-- next frame is asked for. placed: where it stands now. wait: the time to the next look while shown. alpha: how far it has faded in.
+local notice = { queued = false, wait = 0, alpha = 1 }
+-- The colours of the tooltip's lines: the value, and the line that says what the buttons do.
+local VALUE, HINT = { 0.66, 0.68, 0.62 }, { 0.9, 0.72, 0.36 }
 
 local function Finite(value)
 	return type(ns.Finite) == "function" and ns.Finite(value)
@@ -449,35 +458,105 @@ local function NoticeDim(fight)
 	end
 end
 
+-- What the notice keeps clear of, each { left, right, top, bottom, up, down } in the units of UIParent: the band it must not cover, and the top of the
+-- notice just above and just under the frame. The title bar of the options window, whose place under it is under the whole window, is window.
+local function NoticeBlocks()
+	local blocks = {}
+	local function Add(left, bottom, width, height, under)
+		if Finite(left) and Finite(bottom) and Finite(width) and Finite(height) and width > 0 and height > 0 then
+			local top = bottom + height
+			blocks[#blocks + 1] = { left, left + width, top, bottom, top + NOTICE.height + NOTICE.gap, (under or bottom) - NOTICE.gap }
+			return blocks[#blocks]
+		end
+		return nil
+	end
+	local kit = ns.PanelKit
+	local window = type(ns.PanelShown) == "function" and ns.PanelShown() and type(kit) == "table" and kit.Window() or nil
+	if window then
+		local left, bottom, width, height = kit.Rect(window)
+		if Finite(bottom) and Finite(height) and height > 0 then
+			local title = bottom + height - height * kit.TITLE / kit.HEIGHT
+			blocks.window = Add(left, title, width, bottom + height - title, bottom)
+		end
+	end
+	-- The toolbar of /flatui move while it is open and shows (MoversMode.lua, at the top of the screen; MM.State gives its parts).
+	local movers, mode = ns.MoverKit, ns.MoversMode
+	if type(movers) == "table" and type(movers.IsOpen) == "function" and movers.IsOpen() == true and type(kit) == "table"
+		and type(mode) == "table" and type(mode.State) == "function" then
+		local _, parts = mode.State()
+		local bar = type(parts) == "table" and parts.bar
+		local ok, shown = false, false
+		if type(bar) == "table" then
+			ok, shown = pcall(bar.IsVisible, bar)
+		end
+		if ok and shown == true then
+			Add(kit.Rect(bar))
+		end
+	end
+	local test = ns.TestMode
+	if type(test) == "table" and type(test.BarRect) == "function" then
+		Add(test.BarRect())
+	end
+	return blocks
+end
+
+-- True when a notice with its top left corner at x, y covers a block.
+local function NoticeCovers(x, y, blocks)
+	for _, block in ipairs(blocks) do
+		if y - NOTICE.height < block[3] and y > block[4] and x + NOTICE.width > block[1] and x < block[2] then
+			return true
+		end
+	end
+	return false
+end
+
+-- The top of the notice nearest to y, just above or just under a block, that covers none of them and fits on the screen, or nil.
+local function NoticeNearest(x, y, blocks, screenH)
+	local best
+	for _, block in ipairs(blocks) do
+		for side = 5, 6 do
+			local at = block[side]
+			if at <= screenH and at - NOTICE.height >= 0 and not NoticeCovers(x, at, blocks)
+				and (best == nil or math.abs(at - y) < math.abs(best - y)) then
+				best = at
+			end
+		end
+	end
+	return best
+end
+
 -- The top left corner of the notice in the units of UIParent, or nil for its start at the top of the screen: the spot of its box in /flatui move,
--- but off the title bar of the options window while that shows.
+-- but clear of the title bar of the options window, the toolbar of /flatui move and the test mode bar while they show.
 local function NoticeSpot()
 	local x, y
 	if type(ns.MoverSpot) == "function" then
 		x, y = ns.MoverSpot(NOTICE.name, "TOPLEFT")
 	end
-	local kit = ns.PanelKit
-	local window = type(ns.PanelShown) == "function" and ns.PanelShown() and type(kit) == "table" and kit.Window() or nil
-	if not window then
-		return x, y
-	end
-	local left, bottom, width, height = kit.Rect(window)
 	local ok, screenW, screenH = pcall(UIParent.GetSize, UIParent)
-	if not (ok and Finite(left) and Finite(bottom) and Finite(width) and Finite(height) and Finite(screenW) and Finite(screenH)) or height <= 0 then
+	if not (ok and Finite(screenW) and Finite(screenH)) then
 		return x, y
 	end
-	if not x then
+	local blocks = NoticeBlocks()
+	if #blocks == 0 then
+		return x, y
+	end
+	local fromX, fromY = x, y
+	if not (Finite(x) and Finite(y)) then
 		x, y = (screenW - NOTICE.width) / 2, screenH + NOTICE.y
 	end
-	local top = bottom + height
-	local title = top - height * kit.TITLE / kit.HEIGHT
-	if y - NOTICE.height >= top or y <= title or x + NOTICE.width <= left or x >= left + width then
-		return x, y
+	if not NoticeCovers(x, y, blocks) then
+		return fromX, fromY
 	end
-	if top + NOTICE.height + 6 <= screenH then
-		return x, top + NOTICE.height + 6
+	local best = NoticeNearest(x, y, blocks, screenH)
+	if best then
+		return x, best
 	end
-	return x, bottom - 6
+	-- No place is clear of them all: clear of the window's title bar, as before the bars counted.
+	local window = blocks.window
+	if window and NoticeCovers(x, y, { window }) then
+		return x, window[5] <= screenH and window[5] or window[6]
+	end
+	return x, y
 end
 
 local function NoticePlace()
@@ -525,6 +604,106 @@ local function NoticeReload()
 	ns.Reload()
 end
 
+-- The words for a value of a row: On or Off, the text of a choice, or a number with its unit.
+local function NoticeValue(path, value)
+	if type(value) == "boolean" then
+		return value and "On" or "Off"
+	end
+	local def = type(ns.Def) == "function" and ns.Def(path) or nil
+	if type(def) == "table" and def.kind == "choice" and type(ns.Choices) == "function" then
+		for _, line in ipairs(ns.Choices(def)) do
+			if type(line) == "table" and line[1] == value and line[2] ~= nil then
+				return tostring(line[2])
+			end
+		end
+	end
+	if type(value) == "number" then
+		return ("%g%s"):format(value, type(def) == "table" and type(def.unit) == "string" and def.unit or "")
+	end
+	return type(value) == "string" and value or "changed"
+end
+
+-- The tooltip of the notice and of Undo, under owner: every change that needs a reload, with its value now and at login, and what the buttons do.
+local function NoticeTip(owner)
+	if ns.Forbidden(GameTooltip) then
+		return
+	end
+	local ok, lines = pcall(ns.ReloadLines)
+	if not ok or type(lines) ~= "table" or #lines == 0 then
+		return
+	end
+	notice.tip = owner
+	pcall(function()
+		GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
+		GameTooltip:SetText("Needs a reload", 1, 1, 1)
+		for _, entry in ipairs(lines) do
+			local label = type(entry[1]) == "string" and entry[1] or "a setting"
+			GameTooltip:AddDoubleLine(label, ("%s now, %s at login"):format(NoticeValue(entry[3], entry[4]), NoticeValue(entry[3], entry[5])), 1, 1, 1,
+				VALUE[1], VALUE[2], VALUE[3])
+		end
+		GameTooltip:AddLine("Reload applies them. Undo puts them all back as the game runs them, with no reload. Later hides this until your next "
+			.. "change that needs a reload.", HINT[1], HINT[2], HINT[3], true)
+		GameTooltip:Show()
+	end)
+end
+
+-- Hides the tooltip while it is the notice's: owner's, or either's when owner is nil (the notice hid under the cursor).
+local function NoticeUntip(owner)
+	owner = owner or notice.tip
+	if not owner or ns.Forbidden(GameTooltip) then
+		return
+	end
+	if notice.tip == owner then
+		notice.tip = nil
+	end
+	local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, owner)
+	if ok and owned == true then
+		GameTooltip:Hide()
+	end
+end
+
+-- Undo: every change the notice lists goes back to the value the game runs since login, in the profile in use, so no reload is needed; ns.Set
+-- asks the notice to look again, and it goes once nothing needs a reload. Not in a fight, where a module's change could need what is locked, and
+-- not while Setup has the options window, whose Finish would write its draft over it.
+local function NoticeUndo()
+	if InCombatLockdown() then
+		print("Flat UI: Undo after the fight.")
+		return
+	end
+	if type(ns.PanelInMode) == "function" and ns.PanelInMode() then
+		print("Flat UI: finish or close Setup first.")
+		return
+	end
+	local ok, lines = pcall(ns.ReloadLines)
+	if not ok or type(lines) ~= "table" then
+		return
+	end
+	local home, count = ns.PanelHome, 0
+	for _, entry in ipairs(lines) do
+		local path, now, was = entry[3], entry[4], entry[5]
+		if type(path) == "string" and was ~= nil then
+			local done, err = pcall(ns.Set, path, was)
+			if not done then
+				geterrorhandler()(err)
+			elseif ns.Get(path) == was then
+				count = count + 1
+				-- Into Home's record like a change made in the window, so its Undo can make the change again.
+				if type(home) == "table" and type(home.Noted) == "function" then
+					pcall(home.Noted, type(ns.Def) == "function" and ns.Def(path) or { path = path, label = entry[1] }, now, was)
+				end
+			end
+		end
+	end
+	if type(ns.RefreshPanel) == "function" then
+		pcall(ns.RefreshPanel)
+	end
+	if count == 1 then
+		print("Flat UI: put back 1 change, no reload needed.")
+	elseif count > 1 then
+		print(("Flat UI: put back %d changes, no reload needed."):format(count))
+	end
+end
+
 local function NoticeBuild()
 	local kit = ns.PanelKit
 	if type(kit) ~= "table" then
@@ -543,15 +722,30 @@ local function NoticeBuild()
 	end)
 	local later = kit.Button(frame, "Later", NOTICE.later, NoticeLater)
 	later:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
+	local undo = kit.Button(frame, "Undo", NOTICE.undo, NoticeUndo)
+	undo:SetPoint("RIGHT", later, "LEFT", -6, 0)
 	local reload = kit.Button(frame, "Reload", NOTICE.reload, NoticeReload, true)
-	reload:SetPoint("RIGHT", later, "LEFT", -6, 0)
-	local text = kit.Label(frame, "GameFontHighlight", "LEFT", NOTICE.width - 36 - NOTICE.reload - NOTICE.later, true)
+	reload:SetPoint("RIGHT", undo, "LEFT", -6, 0)
+	local text = kit.Label(frame, "GameFontHighlight", "LEFT", NOTICE.width - 42 - NOTICE.reload - NOTICE.undo - NOTICE.later, true)
 	text:SetPoint("LEFT", frame, "LEFT", 12, 0)
 	pcall(text.SetMaxLines, text, 2)
-	notice.frame, notice.text, notice.reload = frame, text, reload
+	notice.frame, notice.text, notice.reload, notice.undo = frame, text, reload, undo
 	ns.SecureReload(reload)
+	-- The list of changes under the notice and under Undo, whose hover fill (kit.Button) stays; the tooltip goes with the notice.
+	frame:SetScript("OnEnter", NoticeTip)
+	frame:SetScript("OnLeave", NoticeUntip)
+	undo:HookScript("OnEnter", NoticeTip)
+	undo:HookScript("OnLeave", NoticeUntip)
+	frame:SetScript("OnHide", function()
+		NoticeUntip(nil)
+	end)
 	frame:SetScript("OnUpdate", function(_, elapsed)
-		notice.wait = notice.wait - (Finite(elapsed) and elapsed or 0)
+		local step = Finite(elapsed) and elapsed or 0
+		if notice.alpha < 1 then
+			notice.alpha = math.min(1, notice.alpha + step / NOTICE.fade)
+			pcall(frame.SetAlpha, frame, notice.alpha)
+		end
+		notice.wait = notice.wait - step
 		if notice.wait <= 0 then
 			notice.wait = NOTICE.every
 			NoticePlace()
@@ -611,6 +805,16 @@ local function NoticeRefresh()
 	NoticeDim(InCombatLockdown())
 	notice.wait = 0
 	NoticePlace()
+	-- From hidden it fades in (OnUpdate, above); shown already, it only says the new line, and an open list says it again.
+	if not notice.frame:IsShown() then
+		notice.alpha = 0
+		pcall(notice.frame.SetAlpha, notice.frame, 0)
+	elseif notice.tip then
+		local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, notice.tip)
+		if ok and owned == true then
+			NoticeTip(notice.tip)
+		end
+	end
 	notice.frame:Show()
 end
 

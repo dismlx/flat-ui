@@ -12,6 +12,11 @@ local _, ns = ...
 --
 -- Unit frames: UnitFrames.lua asks healthLeft while it sets a health fill. The fill is then an image in white (the bar texture of the page, or a white
 -- file) and a frame of the addon's own tints it every 0.1 s. Raid frames are left out. The fill record of ns.FlatFill is what puts the colour back.
+-- Low health border of unit frames (off by default, All frames: bars and pictures): on the player, party, party pet and raid frames, a frame of the
+-- addon's own over the outlined health bar, one level above Flat UI's own outline of it, holds four edges in the row's colour just outside the bar (and
+-- the rounded line in place of them while the bar's own outline is rounded), and takes the alpha of a step curve at its limit every 0.1 s, as a plate's
+-- does. It is made out of combat, on a frame the game protects; in a fight only its alpha, its colour and whether it shows change. It hides while the
+-- unit is plainly dead, a ghost or offline, and while the row, the frame or the part is off.
 -- Nameplates: the game's CompactUnitFrame_UpdateHealthColor runs for each health change (Shared\CompactUnitFrame.lua:725-737, 645), and this file
 -- answers it in the same call unless PlateColours.lua paints the plate in a colour of its own (the target, threat or reaction colour).
 -- Personal resource display: the same frame tints its health bar, and Bars.lua leaves the health colour to it while the row is on.
@@ -22,8 +27,9 @@ local EVERY = 0.1
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local weak = { __mode = "k" }
 
--- works: the feature test passed. probed: it has run. curve and step: the objects last made, with the settings they were made from.
-local state = { probed = false, works = false, why = nil }
+-- works: the feature test passed. probed: it has run. curve: the colour curve last made, with the settings it was made from. steps: the step curve of
+-- each limit asked for, kept, as the plates and the unit frames each have a limit of their own.
+local state = { probed = false, works = false, why = nil, steps = {} }
 -- bars: the unit frame health bars asked for, each with its record. painted: the bars the fill of which is this file's.
 local bars, painted = setmetatable({}, weak), setmetatable({}, weak)
 -- plates: per plate unit frame, the colour the game gave (game), whether this file painted the bar (painted) and the border it made (low).
@@ -69,17 +75,18 @@ function ns.HealthLeftColour(fraction)
 	return r1 + (r2 - r1) * at, g1 + (g2 - g1) * at, b1 + (b2 - b1) * at
 end
 
--- The step curve of the low health border: 1 under the limit, 0 from it. Raises when the game refuses.
-local function Step()
-	local at = Get("nameplates.lowHealthAt")
-	if state.step == nil or state.stepAt ~= at then
-		local curve = C_CurveUtil.CreateCurve()
+-- The step curve of a low health border at a limit in percent: 1 under the limit, 0 from it. One is made for each limit and kept. Raises when the game
+-- refuses.
+local function Step(at)
+	local curve = state.steps[at]
+	if curve == nil then
+		curve = C_CurveUtil.CreateCurve()
 		curve:SetType(Enum.LuaCurveType.Step)
 		curve:AddPoint(0, 1)
 		curve:AddPoint(at / 100, 0)
-		state.step, state.stepAt = curve, at
+		state.steps[at] = curve
 	end
-	return state.step
+	return curve
 end
 
 -- Tints a status bar in the colour of the health left of a unit. Raises when the game refuses.
@@ -113,7 +120,8 @@ local function Probe(again)
 end
 
 local function Switches()
-	return (Get("unitframes.healthByLeft") == true and ns.Enabled("unitframes")) or (Get("resource.healthByLeft") == true and ns.Enabled("resource"))
+	return (ns.Enabled("unitframes") and (Get("unitframes.healthByLeft") == true or Get("unitframes.lowHealth") == true))
+		or (Get("resource.healthByLeft") == true and ns.Enabled("resource"))
 		or (ns.Enabled("nameplates") and (Get("nameplates.healthByLeft") == true or Get("nameplates.lowHealth") == true))
 end
 
@@ -212,6 +220,151 @@ local function StepFrames()
 	end
 end
 
+-- The low health border of unit frames --------------------------------------------------------------------
+
+local LOW_FRAMES = "Low health border"
+-- The kinds of frame that take it: your own, your party's, their pets' and your raid's. The corner radius of each Corners choice (UnitFrames.lua ROUND).
+local LOW_KINDS = { player = true, party = true, partypet = true, raid = true }
+local RADIUS = { slight = 1, soft = 2 }
+-- The records whose frame has a border.
+local lows = setmetatable({}, weak)
+
+-- True for a plain true of the client; a withheld answer is no.
+local function Yes(ok, value)
+	return ok and not ns.IsSecret(value) and value == true
+end
+
+-- True while a frame takes the border: the row on, the frame styled, the part not stopped and the curves working.
+local function LowOn(rec)
+	return LOW_KINDS[rec.kind] == true and rec.made == true and Get("unitframes.lowHealth") == true and X.active(rec)
+		and not ns.PartStopped("unitframes", LOW_FRAMES) and Probe(false)
+end
+
+-- The frame over the outlined health bar, one level above the frame that holds Flat UI's outline of it, with an outline of its own (its edges alone, no
+-- background) and a texture for the rounded line. Made once, out of combat. Nil when the frame has no outlined health bar.
+local function MakeLow(rec)
+	local entry = rec.byRole.health
+	local box = entry and entry.target
+	if box == nil or ns.Forbidden(box) then
+		return nil
+	end
+	local under = entry.outline and entry.outline.holder or box
+	local ok, level = pcall(under.GetFrameLevel, under)
+	local holder = X.frame(box, ok and X.number(level) and level + 1 or nil)
+	holder:SetAllPoints(box)
+	holder:Hide()
+	local outline = ns.Outline(holder, holder)
+	if outline == nil then
+		return nil
+	end
+	ns.SetOutline(outline, true, false)
+	local line = holder:CreateTexture(nil, "OVERLAY", nil, 7)
+	ns.Own[line] = true
+	line:Hide()
+	local low = { holder = holder, outline = outline, line = line }
+	rec.lowHealth = low
+	lows[rec] = true
+	return low
+end
+
+-- True while the border draws the rounded line in place of its edges: while the bar's own outline draws its rounded line (Corners, UnitFrames.lua Rim).
+-- The line has the file of the radius of Corners and lies over the bar's own line. False while the corners are square or the client refuses the file.
+local function Rounded(rec, low)
+	local entry = rec.byRole.health
+	local rim = entry and type(X.rimLine) == "function" and X.rimLine(entry.outline) or nil
+	local radius = nil
+	if rim ~= nil and Yes(pcall(rim.IsShown, rim)) then
+		radius = RADIUS[Get("unitframes.corners")]
+	end
+	if radius ~= low.radius then
+		low.radius = radius
+		low.rounded = radius ~= nil and type(X.shape) == "function" and X.shape(low.line, radius, true) == true
+		if low.rounded and low.rim ~= rim then
+			low.line:ClearAllPoints()
+			low.line:SetAllPoints(rim)
+			low.rim = rim
+		end
+	end
+	return low.rounded == true
+end
+
+-- The border of one frame: its colour, its edges or its rounded line, and its alpha, the step curve at the health left, unread. Hidden while the frame does
+-- not take it and for a unit that is gone, or plainly dead, a ghost or offline.
+local function PaintLow(rec)
+	local low = rec.lowHealth
+	if low == nil then
+		return
+	end
+	local unit = LowOn(rec) and X.unitOf(rec) or nil
+	local show = type(unit) == "string" and not ns.IsSecret(unit) and Yes(pcall(UnitExists, unit)) and not Yes(pcall(UnitIsDeadOrGhost, unit))
+	if show then
+		local ok, connected = pcall(UnitIsConnected, unit)
+		show = not (ok and not ns.IsSecret(connected) and connected == false)
+	end
+	if not show then
+		if low.shown then
+			low.shown = nil
+			low.holder:Hide()
+		end
+		return
+	end
+	local r, g, b = ns.Colour("unitframes.lowHealthColour")
+	ns.SetOutlineColour(low.outline, r, g, b)
+	local round = Rounded(rec, low)
+	ns.SetOutlineEdges(low.outline, not round)
+	low.line:SetShown(round)
+	if round then
+		low.line:SetVertexColor(r, g, b, 1)
+	end
+	local at = Get("unitframes.lowHealthAt")
+	low.holder:SetAlpha(UnitHealthPercent(unit, true, Step(ns.Finite(at) and at or 20)))
+	if not low.shown then
+		low.shown = true
+		low.holder:Show()
+	end
+end
+
+local function StepLow()
+	for rec in pairs(lows) do
+		local low = rec.lowHealth
+		if low ~= nil and (low.shown or LowOn(rec)) then
+			X.run(LOW_FRAMES, PaintLow, rec)
+		end
+	end
+end
+
+-- After each pass of the unit frames over a frame: the border made out of combat the first time the row asks, the driver shown, and the border painted.
+local ApplyLow
+function ApplyLow(rec, on)
+	if not LOW_KINDS[rec.kind] then
+		return
+	end
+	if not (on and LowOn(rec)) then
+		PaintLow(rec)
+		return
+	end
+	if rec.lowHealth == nil then
+		if InCombatLockdown() then
+			if not rec.lowQueued then
+				rec.lowQueued = true
+				ns.OutOfCombat(function()
+					rec.lowQueued = nil
+					X.run(LOW_FRAMES, ApplyLow, rec, X.active(rec))
+				end)
+			end
+			return
+		end
+		if MakeLow(rec) == nil then
+			return
+		end
+	end
+	Drive()
+	PaintLow(rec)
+end
+
+table.insert(X.after.apply, { part = LOW_FRAMES, fn = ApplyLow })
+table.insert(X.after.raid, { part = LOW_FRAMES, fn = ApplyLow })
+
 -- The personal resource display ---------------------------------------------------------------------------
 
 local function ResourceBar()
@@ -273,6 +426,7 @@ function Tick(_, elapsed)
 	end
 	clock = 0
 	StepFrames()
+	StepLow()
 	StepResource()
 	Sync()
 end
@@ -382,7 +536,7 @@ local function BorderPlate(frame, rec)
 		ns.SetOutline(low.outline, true, false)
 	end
 	ns.SetOutlineColour(low.outline, ns.Colour("nameplates.lowHealthColour"))
-	low.holder:SetAlpha(UnitHealthPercent(unit, true, Step()))
+	low.holder:SetAlpha(UnitHealthPercent(unit, true, Step(Get("nameplates.lowHealthAt"))))
 	if not low.shown then
 		low.shown = true
 		low.holder:Show()
@@ -476,7 +630,7 @@ local function StatusLine()
 	if Probe(false) then
 		return "Health curve: works"
 	end
-	return "Health curve: refused. Colouring by health left and Low health border do nothing. " .. tostring(state.why)
+	return "Health curve: refused. Colouring by health left and Low health border, on unit frames and nameplates, do nothing. " .. tostring(state.why)
 end
 
 local base = ns.StatusLines

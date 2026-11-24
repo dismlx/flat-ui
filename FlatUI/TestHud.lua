@@ -6,7 +6,8 @@ local _, ns = ...
 -- drawings share (ns.DrawCasts of SetupDrawCasts.lua, ns.DrawHud of SetupDrawHud.lua, ns.SetupDrawPlates of SetupDrawPlates.lua), and its moving
 -- parts change in Animate, while it shows and the bar's Moving is on: fills, text and alpha only. The numbers are fixed samples.
 --   Cast bars: the player's at PlayerCastingBarFrame, wherever Edit Mode or Lock to player frame put it, while the player casts nothing: a cast that
---   fills over 2.5 seconds and holds half a second, a channel that drains, then an interrupted cast that flashes, in the colours of the Flat UI page.
+--   fills over 2.5 seconds and holds half a second, a channel that drains (with the marks of its 5 ticks while Channel ticks on the player bar is
+--   on), then an interrupted cast that flashes, in the colours of the Flat UI page, with its seconds while Cast time on your bars is on.
 --   The target's, the focus's and the pet's at TargetFrameSpellBar, FocusFrameSpellBar and PetCastingBarFrame, and the first boss's at
 --   Boss1TargetFrameSpellBar, each only while the stand-in of its unit shows (TM.Shown of "target", "focus", "pet" and "boss", TestUnits.lua): an enemy
 --   cast the player's interrupt is ready for (Interrupt ready colour while Interrupt readiness on enemy casts is on), then one that cannot be
@@ -24,9 +25,10 @@ local _, ns = ...
 --   Loot rolls: two rolls at the box Loot rolls of /flatui move, where the game's rolls show (ns.MoverSpot: the saved spot, else where the game
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
 --   shows; their timers drain over 10 seconds and loop. They stand in for UIParent, so their place is the box's.
---   The sample nameplate: an enemy plate with its cast bar and auras at the middle of the screen, 160 units up, with a dim Sample nameplate under it,
---   as plates have no place of their own. Its cast fills, and its health bar takes the threat colours in turn every 3 seconds (You want, Changing
---   hands, You do not want) while Threat on nameplates and Colour health bars by threat are on.
+--   The sample nameplate: an enemy plate with its cast bar, auras and quest mark (while Quest mark on enemies you need for a quest is on) at the
+--   middle of the screen, 160 units up, with a dim Sample nameplate under it, as plates have no place of their own. Its cast fills, and its health
+--   bar takes the threat colours in turn every 3 seconds (You want, Changing hands, You do not want) while Threat on nameplates and Colour health
+--   bars by threat are on.
 -- The cursor ring is no module, so it cannot register with test mode (TM.Register runs an entry only while its module is on): at every On, Off,
 -- pause and resume (TM.Watch) the ring applies its rows again (ns.CursorRingChanged, which reads TM.IsOn: In combat only reads as shown while it
 -- is on), and while test mode is on and Moving a frame of this file gives the ring a sample cast and global cooldown every 3 seconds
@@ -42,7 +44,7 @@ end
 -- The cast bars: their stand-in, game frame, module, place on the Cast bars page (opt), the stand-in of their unit, how much later their round
 -- starts, and their spell names by state.
 local CASTS = {
-	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0,
+	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0, ticks = 5,
 		names = { channel = "Drain Life" } },
 	{ id = "castTarget", game = "TargetFrameSpellBar", module = "castbars", opt = "target", label = "Target cast bar", unit = "target", offset = 0.8,
 		small = true, kick = true, names = { cast = "Fireball", shield = "Polymorph" } },
@@ -155,8 +157,9 @@ local function CastStandIn(spec)
 			return TM.Shown(spec.unit)
 		end or nil,
 		Build = function(holder)
-			holder.row = ns.DrawCasts.Cast(holder, { opt = spec.opt, small = spec.small, shield = true, time = spec.small and "" or nil,
-				name = spec.opt == "player" and "Shadow Bolt" or spec.names.cast, rank = spec.opt == "player" and "Rank 3" or nil })
+			holder.row = ns.DrawCasts.Cast(holder, { opt = spec.opt, small = spec.small, shield = true, time = "",
+				name = spec.opt == "player" and "Shadow Bolt" or spec.names.cast, rank = spec.opt == "player" and "Rank 3" or nil,
+				ticks = spec.ticks })
 			holder.row.bar:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
 		end,
 		Paint = function(holder, w, h)
@@ -421,7 +424,8 @@ TM.StandIn({
 			holder.caption:SetText("Sample nameplate")
 			holder.caption:SetTextColor(DIM[1], DIM[2], DIM[3])
 		end
-		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, cast = { name = "Shadow Bolt", share = 0, left = PLATE_CAST } }
+		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true,
+			cast = { name = "Shadow Bolt", share = 0, left = PLATE_CAST } }
 	end,
 	Paint = function(holder)
 		local P, p, spec = ns.SetupDrawPlates, holder.plate, holder.spec

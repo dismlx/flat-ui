@@ -1444,15 +1444,15 @@ AREAS = [
         UnitFrameHead UnitText UnitParts UnitExtras UnitGroupMarks UnitDruidMana UnitPetTarget UnitHots HealthColour
         PetFrameSize"""),
     ("nameplates", "Nameplates, combat text and cast bars", """Nameplates PlateThreat PlateColours PlateThreatLook PlateText
-        PlateClick PlateThreatText PlateOverpower CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastRank
+        PlateClick PlateThreatText PlateOverpower PlateQuest CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastTicks CastRank
         Interrupt CastBarSize"""),
     ("actionbars", "Action bars", """ActionBars OwnBars OwnPaint ButtonText Cooldowns CooldownLooks ButtonStates CooldownData
         ProcData Procs ProcArt ProcGlow ButtonEffects ProcTriggers BarBlock BarBlockButtons BarBlockLists Blocks"""),
     ("trackers", "Trackers and cooldowns", """Trackers TrackerSound TrackerSlots IconRow Tracking Defensives PartyCooldowns
         PartySync EnemyCooldowns Threat HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
-        TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs"""),
+        TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs PingBar"""),
     ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
-        BagsLayout BagsWindow BagsBank BagsTooltip BagsOrder BagsPins Windows ItemMarks CharacterDurability CharacterThorns Hud MapButtons
+        BagsLayout BagsWindow BagsBank BagsSlots BagsTooltip BagsOrder BagsPins Windows ItemMarks CharacterDurability CharacterThorns Hud MapButtons
         AuraTime XpStats XpBar QuestCount QuestieSkin MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat
         ChatText ChatTips ChatLinks ItemCompare ChatHistory SpellData SpellModel GearModel GearAvoid SpellLines GearLines GearWindow
         ItemIndex RotationData GearSearch GearButton Movers MoversMode MoversSnap Hide Tooltip"""),

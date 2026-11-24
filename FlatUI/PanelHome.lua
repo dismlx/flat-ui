@@ -1,7 +1,8 @@
 local _, ns = ...
 
 -- The Home page of the options window: the profile in use, the accent and density, the last changes of the session with Undo, the modules
--- with their switches, and the changes that need a reload. Also the record of the changes made in the window, which Panel.lua feeds.
+-- with their switches, and the changes that need a reload. A click on a recent change or on a line of Needs a reload opens the tab of its setting,
+-- scrolls to the row and flashes it, as a search result does (host.Arrive). Also the record of the changes made in the window, which Panel.lua feeds.
 
 local Home = {}
 ns.PanelHome = Home
@@ -19,7 +20,7 @@ local TILE_H, CARD_H = 64, 140
 local log = {}
 
 -- The changes that need a reload, as ns.ReloadLines (Core.lua) gives them from the values at login, so a change made before the window was opened,
--- in setup, by a profile switch or a slash command, is listed too. Entries { label, field, path, value }.
+-- in setup, by a profile switch or a slash command, is listed too. Entries { label, field, path, value, was }, was being the value at login.
 function Home.ReloadLines()
 	return ns.ReloadLines()
 end
@@ -142,9 +143,9 @@ function Home.Subtitle(model)
 	return ("%d of %d modules on"):format(on, total)
 end
 
--- The words that say where a setting is: its module, and the page when that is a tab of the module.
+-- The page of the sidebar a row of a page is on, or nil.
 local pageOf
-local function Crumb(model, item)
+function Home.EntryOf(model, item)
 	if not pageOf or pageOf.model ~= model then
 		pageOf = { model = model }
 		for _, entry in ipairs(model.pages) do
@@ -155,7 +156,24 @@ local function Crumb(model, item)
 			end
 		end
 	end
-	local entry = pageOf[item]
+	return item and pageOf[item]
+end
+
+-- The row of the options pages that sets a saved path, and its page, or nil.
+function Home.RowOf(model, path)
+	for _, entry in ipairs(model.pages) do
+		for _, row in ipairs(entry.page) do
+			if row.key and row.path == path then
+				return Home.EntryOf(model, row), row
+			end
+		end
+	end
+	return nil
+end
+
+-- The words that say where a setting is: its module, and the page when that is a tab of the module.
+local function Crumb(model, item)
+	local entry = Home.EntryOf(model, item)
 	if not entry then
 		return ""
 	end
@@ -233,7 +251,8 @@ local function Segmented(row, choices, path, label)
 	end
 end
 
--- host: Model(), right, width, top and height of the column, Show(entry), Setup(), Call(name), Act(name, ...), ProfileLines(), Profile(), Toggle(item).
+-- host: Model(), right, width, top and height of the column, Show(entry), Arrive(entry, item), Setup(), Call(name), Act(name, ...), ProfileLines(),
+-- Profile(), Toggle(item).
 function Home.Build(host)
 	local scroller = kit.Scroller(host.right, host.width, host.height)
 	scroller.frame:SetPoint("TOPLEFT", host.right, "TOPLEFT", 0, -host.top)
@@ -341,10 +360,44 @@ function Home.Build(host)
 	local reloadButton = kit.Button(reload, "Reload", 88, ns.Reload)
 	reloadButton:SetPoint("TOPRIGHT", reload, "TOPRIGHT", -16, -4)
 	ns.SecureReload(reloadButton)
+	-- A line of a setting lights up under the mouse, and a click opens its row (Open). line.path, or line.entry of a recent change, names it.
+	local function Opens(frame, line)
+		local fill = kit.Fill(frame, "BACKGROUND")
+		fill:SetAllPoints(frame)
+		fill:Hide()
+		kit.Painted(function()
+			Look.Solid(fill, "hover")
+		end)
+		local function Target()
+			if line.path then
+				return Home.RowOf(model, line.path)
+			end
+			local item = line.entry and line.entry.item
+			return Home.EntryOf(model, item), item
+		end
+		kit.Clickable(frame, function()
+			local entry, item = Target()
+			if entry and host.Arrive then
+				host.Arrive(entry, item)
+			end
+		end)
+		frame:SetScript("OnEnter", function()
+			fill:SetShown(Target() ~= nil)
+		end)
+		frame:SetScript("OnLeave", function()
+			fill:Hide()
+		end)
+	end
 	local reloadLines = {}
 	for index = 1, 8 do
-		local line = kit.Label(reload, "GameFontHighlight", "LEFT", inner - 32)
-		line:SetPoint("TOPLEFT", reload, "TOPLEFT", 16, -(34 + (index - 1) * 22))
+		local frame = kit.Frame(reload)
+		frame:SetHeight(22)
+		frame:SetPoint("TOPLEFT", reload, "TOPLEFT", 12, -(30 + (index - 1) * 22))
+		frame:SetPoint("TOPRIGHT", reload, "TOPRIGHT", -12, -(30 + (index - 1) * 22))
+		local line = { frame = frame }
+		line.label = kit.Label(frame, "GameFontHighlight", "LEFT", inner - 32)
+		line.label:SetPoint("LEFT", frame, "LEFT", 4, 0)
+		Opens(frame, line)
 		reloadLines[index] = line
 	end
 
@@ -369,6 +422,7 @@ function Home.Build(host)
 		local frame = kit.Frame(recent)
 		frame:SetHeight(rowH)
 		local line = { frame = frame }
+		Opens(frame, line)
 		line.label = kit.Label(frame, "GameFontHighlight", "LEFT", 300)
 		line.label:SetPoint("LEFT", frame, "LEFT", 0, 0)
 		local rule = kit.Fill(frame, "BORDER")
@@ -501,14 +555,16 @@ function Home.Build(host)
 		end
 		-- What needs a reload
 		local needed = Home.ReloadLines()
-		for index, label in ipairs(reloadLines) do
+		for index, line in ipairs(reloadLines) do
 			local entry = needed[index]
 			if index == #reloadLines and #needed > #reloadLines then
-				label:SetText(("%d more"):format(#needed - #reloadLines + 1))
+				line.label:SetText(("%d more"):format(#needed - #reloadLines + 1))
+				line.path = nil
 			else
-				label:SetText(entry and ReloadText(entry) or "")
+				line.label:SetText(entry and ReloadText(entry) or "")
+				line.path = entry and entry[3]
 			end
-			label:SetShown(entry ~= nil)
+			line.frame:SetShown(entry ~= nil)
 		end
 		-- The modules
 		local counts, on = Home.Counts(model), 0

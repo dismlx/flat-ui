@@ -3,7 +3,7 @@ local _, ns = ...
 -- Combat alerts: No target and +Combat and -Combat in the middle of the screen. The rows are under Your character on the Combat text page
 -- (combattext.noTarget and the four rows under it, combattext.combatState and the three under it), part "combat alerts" of the module, which
 -- stops alone after a few failures. Not a module: CombatText.lua calls ns.CombatCuesRefresh in every refresh of the page, and the events come
--- through the module (ns.AddEvent), so nothing runs while the page is off. No target is off by default and +Combat and -Combat on; nothing is
+-- through the module (ns.AddEvent), so nothing runs while the page is off. No target and +Combat and -Combat are on by default; nothing is
 -- made until a line first shows.
 -- No target warning: in a fight, from PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED (Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:3885-3895),
 -- with no target, a dead one or one the player cannot attack (UnitExists, UnitIsDeadOrGhost and UnitCanAttack, UnitDocumentation.lua:1192-1205, 1931-1944,
@@ -21,7 +21,9 @@ local _, ns = ...
 -- Entering and leaving combat: +Combat as a fight starts and -Combat as it ends, in the words the game's own combat text has for the two
 -- (COMBAT_TEXT_ENTERING_COMBAT or ENTERING_COMBAT, and the same for LEAVING_COMBAT: Blizzard_CombatText/Shared/CombatText.lua:99-102 and 284-288),
 -- so in the language of the client, for as long as the game shows its own: whole for 1.3 seconds, then fading out until 1.9
--- (CombatTextConstants.lua:4-5). The game shows its own only with Scrolling Combat Text for Self, which Combat text for you turns off.
+-- (CombatTextConstants.lua:4-5). The game shows its own only with Scrolling Combat Text for Self, which Combat text for you turns off. As +Combat
+-- or -Combat starts, the sound of Entering combat sound or Leaving combat sound plays (the choices of No target sound, None by default) through
+-- ns.PlayKit, so one held back by another module's sound of the second before is not tried again; /flatui status counts those played.
 -- The two lines are font strings on one frame of the addon's own on UIParent, which takes no mouse, at the spot of Combat text: alerts in the movers:
 -- +Combat and -Combat above the middle of the box and No target under it. They are made on the game's combat font (CombatTextFont,
 -- Blizzard_Fonts_Shared/Shared/GameFontStyles.xml:150-152), else its large number font (:25), at their own size with a thin outline. A size of
@@ -34,7 +36,7 @@ local _, ns = ...
 -- (EnhanceQoL/Submodules/GroupTools.lua:913-1064 and Submodules/CombatText.lua:244-256, 431-526): his words, his second of delay and his 3 seconds
 -- between sounds, and the colour of No target.
 -- While test mode is on (TestMode.lua), +Combat, No target and -Combat show in turn, two seconds each, while their rows are on, and count in no
--- number of /flatui status (ns.CombatCuesTestStep).
+-- number of /flatui status (ns.CombatCuesTestStep); +Combat and -Combat play no sound there.
 
 local KEY, PART = "combattext", "combat alerts"
 -- The seconds +Combat and -Combat show and the second they start to fade (CombatTextConstants.lua:4-5), the step of the fade, the seconds a target
@@ -49,7 +51,7 @@ local WORDS = { enter = { "COMBAT_TEXT_ENTERING_COMBAT", "ENTERING_COMBAT", "+Co
 local NO_TARGET = "No target"
 -- The rows of each line's colour and size.
 local LOOKS = { enter = { "combatEnterColour", "combatStateSize" }, leave = { "combatLeaveColour", "combatStateSize" }, warn = { "noTargetColour", "noTargetSize" } }
--- The places of the No target sound choices in ns.SOUNDS (IconRow.lua), as EnemyCooldowns.lua has them.
+-- The places of the No target, Entering combat and Leaving combat sound choices in ns.SOUNDS (IconRow.lua), as EnemyCooldowns.lua has them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 -- The seconds after a sound in which ns.PlayKit plays no other (IconRow.lua:12): a No target sound it held back is tried again this long after.
 local AGAIN = 1
@@ -60,9 +62,10 @@ local TARGET_EVENTS = { "UNIT_HEALTH", "UNIT_FLAGS", "UNIT_FACTION" }
 -- flashAt and flashKind: when +Combat or -Combat started, and which. ticker: the token of the fade timer. fighting: between PLAYER_REGEN_DISABLED
 -- and PLAYER_REGEN_ENABLED. missingAt: since when the target is missing; waiting: the token of the timer that judges again when the second is up.
 -- warned: No target shows. soundAt: when its sound last played. listener and listening: the frame that hears the target, and whether it does.
--- flashes, warnings and withheld: what /flatui status counts. silent: the No target sounds the game has not played since it last played one;
--- /flatui status says so while there are any. blind: the last judgement had an answer the game withheld.
-local S = { fighting = false, warned = false, listening = false, blind = false, flashes = 0, warnings = 0, withheld = 0, silent = 0 }
+-- flashes, warnings, withheld and stateSounds (the +Combat and -Combat sounds played): what /flatui status counts. silent: the No target sounds
+-- the game has not played since it last played one; /flatui status says so while there are any. blind: the last judgement had an answer the game
+-- withheld.
+local S = { fighting = false, warned = false, listening = false, blind = false, flashes = 0, warnings = 0, withheld = 0, silent = 0, stateSounds = 0 }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -285,8 +288,8 @@ local function StartTicker()
 	end
 end
 
--- +Combat or -Combat for a moment.
-local function Flash(kind)
+-- +Combat or -Combat for a moment, with its sound unless quiet (test mode).
+local function Flash(kind, quiet)
 	if not FlashWanted() or not InterfaceShown() then
 		return
 	end
@@ -304,6 +307,10 @@ local function Flash(kind)
 	Place()
 	Shown()
 	StartTicker()
+	local sound = not quiet and ns.SOUNDS and ns.SOUNDS[KITS[Opt(kind == "enter" and "combatEnterSound" or "combatLeaveSound")] or 0]
+	if sound and ns.PlayKit(sound[1]) then
+		S.stateSounds = S.stateSounds + 1
+	end
 end
 
 local function HideWarning()
@@ -562,7 +569,11 @@ ns.AddStatus(KEY, function()
 		end
 	end
 	if Opt("combatState") then
-		lines[#lines + 1] = ("Entering and leaving combat: %d shown."):format(S.flashes)
+		if KITS[Opt("combatEnterSound")] or KITS[Opt("combatLeaveSound")] then
+			lines[#lines + 1] = ("Entering and leaving combat: %d shown, %d sounds played."):format(S.flashes, S.stateSounds)
+		else
+			lines[#lines + 1] = ("Entering and leaving combat: %d shown."):format(S.flashes)
+		end
 	end
 	return lines
 end)
@@ -597,7 +608,7 @@ function ns.CombatCuesTestStep()
 		local phase = S.testStep % 3
 		HideSample()
 		if phase ~= 1 then
-			Flash(phase == 0 and "enter" or "leave")
+			Flash(phase == 0 and "enter" or "leave", true)
 		elseif WarnWanted() and InterfaceShown() and Make() then
 			local line = S.warn
 			line:SetText(NO_TARGET)

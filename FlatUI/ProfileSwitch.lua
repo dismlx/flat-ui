@@ -170,11 +170,13 @@ pcall(events.RegisterEvent, events, "PLAYER_REGEN_ENABLED")
 -- The rows on the Profiles page ---------------------------------------------------------------------
 
 -- Adds the section to the page below y with the widgets of ns.PanelKit (`kit`), puts a function that reads the rows again into `updates`,
--- and returns the y below the section.
+-- and returns the y below the section. Each row's tip says what its choice does.
+local TIP = "The profile this character switches to on entering such a place. No change keeps the profile in use."
+
 function Switch.Build(kit, child, y, updates)
 	y = kit.Header(child, "Switch automatically", y)
 	for _, entry in ipairs(Switch.KINDS) do
-		local row = kit.NewRow(child, y, entry.label)
+		local row = kit.NewRow(child, y, entry.label, TIP)
 		local menu = kit.Dropdown(row, kit.FIELD, {
 			lines = function()
 				local lines = { { "", NONE } }

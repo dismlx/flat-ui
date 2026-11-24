@@ -23,7 +23,9 @@ local _, ns = ...
 -- combat, on a frame the game protects; it is no protected frame itself, so it shows and hides in a fight. It hears UNIT_POWER_UPDATE and
 -- UNIT_MAXPOWER of mana and UNIT_DISPLAYPOWER for the player on a frame of its own (RegisterUnitEvent, as UnitGroupMarks.lua hears the auras of
 -- one member, so no other unit's power reaches Flat UI; UnitDocumentation.lua:4234-4243, 4406-4416, 4551-4561), and UPDATE_SHAPESHIFT_FORM
--- (SpellBookDocumentation.lua:989-994), only while it is wanted. The game's player frame is not changed: no field written, no method called.
+-- (SpellBookDocumentation.lua:989-994), only while it is wanted. The value glides to each new one (the interpolation ExponentialEaseOut of SetValue, never
+-- withheld) where the client has it. In test mode (TestMode.lua, TM.Watch) it shows for a druid in any form, at 60% in caster form, and is painted again as
+-- the rows change; the real rule comes back as test mode ends. The game's player frame is not changed: no field written, no method called.
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLResourceBars/Init.lua:19, resourceBarsDruidFixedMana, a
 -- Forever and TBC option whose bar is not in the package; EnhanceQoLUnitFrames/UF_Helper.lua:1773-1823, a druid's second power is mana, shown
 -- while the main power is not): the mana of a druid in forms, here a bar under the game's player frame.
@@ -175,6 +177,16 @@ local function Paint(d)
 	end
 end
 
+-- Sets the value of a bar, gliding to it where the client has the interpolation (Enum.StatusBarInterpolation, never withheld), at once where it has not.
+local function Glide(bar, value)
+	local list = type(Enum) == "table" and Enum.StatusBarInterpolation or nil
+	local how = type(list) == "table" and list.ExponentialEaseOut or nil
+	if how ~= nil and pcall(bar.SetValue, bar, value, how) then
+		return true
+	end
+	return pcall(bar.SetValue, bar, value)
+end
+
 -- The mana and its most, unread, onto the bar.
 local function Feed(d)
 	local okMost, most = pcall(UnitPowerMax, "player", MANA)
@@ -183,8 +195,13 @@ local function Feed(d)
 	end
 	local ok, mana = pcall(UnitPower, "player", MANA)
 	if ok then
-		pcall(d.bar.SetValue, d.bar, mana)
+		Glide(d.bar, mana)
 	end
+end
+
+-- True while test mode is on and not paused (TestMode.lua).
+local function Testing()
+	return ns.TestMode ~= nil and ns.TestMode.IsOn() == true
 end
 
 -- True while the power is plainly not mana. A withheld or missing answer keeps the last one.
@@ -196,14 +213,20 @@ local function InForm(d)
 	return d.form == true
 end
 
--- Shows the bar while the druid's power is not mana, with the mana on it.
+-- Shows the bar while the druid's power is not mana, with the mana on it. In test mode it shows in any form, a sample at 60% in caster form (d.sample),
+-- so the look rows can be seen on it; the real rule comes back as test mode ends.
 local function Show(d)
-	local show = Wanted() and InForm(d)
+	local form = InForm(d)
+	local show = Wanted() and (form or Testing())
 	if d.shown ~= show then
 		d.holder:SetShown(show)
 		d.shown = show
 	end
-	if show then
+	d.sample = show and not form or nil
+	if d.sample then
+		pcall(d.bar.SetMinMaxValues, d.bar, 0, 1)
+		pcall(d.bar.SetValue, d.bar, 0.6)
+	elseif show then
 		Feed(d)
 	end
 end
@@ -217,7 +240,7 @@ local function OnEvent(d, event, unit, token)
 		if not IsSecret(token) and token ~= TOKEN then
 			return
 		end
-		if d.shown then
+		if d.shown and not d.sample then
 			Feed(d)
 		end
 		return
@@ -333,3 +356,13 @@ end)
 
 table.insert(X.after.apply, { part = PART, fn = DruidMana })
 table.insert(X.after.refresh, { part = PART, fn = OnRefresh })
+
+-- Test mode turned on or off, paused or resumed: the bar is shown, or not, by the rule of the moment.
+if ns.TestMode then
+	ns.TestMode.Watch(function()
+		local rec = X.known(_G.PlayerFrame)
+		if rec then
+			X.run(PART, DruidMana, rec)
+		end
+	end)
+end

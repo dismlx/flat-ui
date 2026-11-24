@@ -44,6 +44,8 @@ local _, ns = ...
 --   TM.Repaint()         while on: the shown stand-ins are painted again on the next frame (a game variable they are drawn from changed).
 --   TM.Watch(fn)         at load: fn(TM.IsOn()) runs after every On, Off, pause and resume, so a file can run something only while test mode is on.
 --   TM.Status()          the line of /flatui status while on, paused included; nil while off.
+--   TM.BarRect()         while the bar shows: its left, bottom, width and height in the units of UIParent, and where it stands ("top", "above" or
+--                        "below" the options window, or "dragged"); else nil. The reload notice (Reload.lua) keeps clear of it.
 --   TM.Register(id, spec)  at load, after the module's ns.Register. spec: module (a module key, required), label, refresh (true: On, Off, pause,
 --                        resume and the group run ns.RefreshModule), Start, Stop, Changed(path), Tick(now) with every (seconds, default 1; one shared
 --                        ticker, skipped while not TM.Moving()). Each runs through ns.Try(module, ...), and only while ns.ModuleOn(module). Start
@@ -91,6 +93,20 @@ local SAY = {
 	line = "Samples fill in for hidden frames; your real frames take over when they show. Esc > Edit Mode shows the game's own previews.",
 	windows = "Open a game window (C, P, N...) to see its look change.",
 	place = "%s: no place yet (open Edit Mode once)",
+}
+-- The tooltip of each control of the bar, by the id of a Group choice or the name of the control: its title, then one line.
+local TIPS = {
+	solo = { "Solo", "No party or raid samples: you alone, with your target, focus and pet." },
+	party = { "Party", "Four sample party members, while you are in no group." },
+	raid10 = { "Raid 10", "10 sample members in groups, as Edit Mode lays them out, while you are in no raid." },
+	raid20 = { "Raid 20", "20 sample members in groups, as Edit Mode lays them out, while you are in no raid." },
+	raid40 = { "Raid 40", "40 sample members in groups, as Edit Mode lays them out, while you are in no raid." },
+	moving = { "Moving", "Casts fill, health drifts and cooldowns run. Off holds every sample still, so a look can be judged." },
+	Bags = { "Bags", "Opens or closes Flat UI's bag window, as /flatui bags." },
+	Bank = { "Bank", "Opens or closes your bank window, as /flatui bank: live at the banker, else as you last left it." },
+	Gear = { "Gear", "Opens or closes the Gear comparison window, as /flatui gear." },
+	Finder = { "Finder", "Opens or closes the item finder, as the Find button of the Gear comparison window." },
+	End = { "End", "Turns test mode off. Nothing was saved." },
 }
 
 local function Report(err)
@@ -449,14 +465,51 @@ local function Finder()
 	end
 end
 
+-- The tooltip of a control of the bar (TIPS), under it, as the other tooltips of Flat UI's own: GameTooltip, unless the game forbids it.
+local function Tip(owner, key)
+	local tip = TIPS[key]
+	if not tip or ns.Forbidden(GameTooltip) then
+		return
+	end
+	ui.tipOwner = owner
+	pcall(function()
+		GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
+		GameTooltip:SetText(tip[1], 1, 1, 1)
+		GameTooltip:AddLine(tip[2], 0.66, 0.68, 0.62, true)
+		GameTooltip:Show()
+	end)
+end
+
+-- Hides the tooltip while it is the bar's: owner, or any control of the bar when owner is nil (the bar hid under the cursor).
+local function Untip(owner)
+	owner = owner or ui.tipOwner
+	if not owner or ns.Forbidden(GameTooltip) then
+		return
+	end
+	if ui.tipOwner == owner then
+		ui.tipOwner = nil
+	end
+	local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, owner)
+	if ok and owned == true then
+		GameTooltip:Hide()
+	end
+end
+
+-- A chosen segment is in the accent, one under the cursor takes the hover backing, as the controls of the options window do; Moving lightens under
+-- the cursor the same way.
 local function PaintBar()
 	local look = ns.PanelLook
 	for _, segment in ipairs(ui.segments) do
 		local chosen = S.group == segment.id
-		look.Backing(segment.outline, chosen and "accent" or "card", chosen and 0.18 or 1, chosen and "accent" or "line")
-		ns.PanelKit.Tint(segment.label, chosen and "text" or "text-dim")
+		local hover = segment.hover == true and not chosen
+		look.Backing(segment.outline, chosen and "accent" or hover and "hover" or "card", chosen and 0.18 or 1, chosen and "accent" or "line")
+		ns.PanelKit.Tint(segment.label, (chosen or hover) and "text" or "text-dim")
 	end
-	look.Solid(ui.track, S.moving and "accent" or "raised")
+	if ui.toggleHover then
+		look.Solid(ui.track, S.moving and "accent-hover" or "hover")
+	else
+		look.Solid(ui.track, S.moving and "accent" or "raised")
+	end
 	look.Solid(ui.knob, S.moving and "on-accent" or "text-dim")
 	ui.knob:ClearAllPoints()
 	ui.knob:SetPoint("LEFT", ui.toggle, "LEFT", S.moving and 18 or 2, 0)
@@ -535,7 +588,7 @@ local function UpdateBar()
 end
 
 -- A label and a row of choices, a switch, the windows and End, with a dim line under them. Built with the widgets of the options window
--- (ns.PanelKit), the first time test mode is on.
+-- (ns.PanelKit), the first time test mode is on. Each control lights up under the cursor and has a one-line tooltip (TIPS).
 local function BuildBar()
 	local kit, look = ns.PanelKit, ns.PanelLook
 	local bar = kit.Frame(UIParent)
@@ -579,6 +632,16 @@ local function BuildBar()
 		kit.Clickable(segment, function()
 			TM.SetGroup(choice[1])
 		end)
+		segment:SetScript("OnEnter", function()
+			entry.hover = true
+			PaintBar()
+			Tip(segment, choice[1])
+		end)
+		segment:SetScript("OnLeave", function()
+			entry.hover = false
+			PaintBar()
+			Untip(segment)
+		end)
 		ui.segments[index] = entry
 	end
 	local moving = kit.Dim(kit.Label(live, "GameFontHighlightSmall", "LEFT"))
@@ -595,21 +658,66 @@ local function BuildBar()
 	kit.Clickable(toggle, function()
 		TM.SetMoving(not S.moving)
 	end)
+	toggle:SetScript("OnEnter", function()
+		ui.toggleHover = true
+		PaintBar()
+		Tip(toggle, "moving")
+	end)
+	toggle:SetScript("OnLeave", function()
+		ui.toggleHover = false
+		PaintBar()
+		Untip(toggle)
+	end)
+	-- The buttons keep the hover fill of kit.Button (Panel.lua); the tooltip runs after it (HookScript on a frame of Flat UI's own).
+	local function Tipped(made, key)
+		made:HookScript("OnEnter", function()
+			Tip(made, key)
+		end)
+		made:HookScript("OnLeave", function()
+			Untip(made)
+		end)
+	end
 	local x = 622
 	for _, button in ipairs({ { "Bags", 50, function() Word("bags") end }, { "Bank", 50, function() Word("bank") end },
 		{ "Gear", 50, function() Word("gear") end }, { "Finder", 60, Finder } }) do
 		local made = kit.Button(live, button[1], button[2], button[3])
 		made:SetPoint("LEFT", live, "LEFT", x, 0)
+		Tipped(made, button[1])
 		x = x + button[2] + 4
 	end
 	local finish = kit.Button(bar, "End", 56, function()
 		TM.Off("toggle")
 	end, true)
 	finish:SetPoint("RIGHT", bar, "TOPRIGHT", -12, -BAR_H / 2)
+	Tipped(finish, "End")
+	-- A control that hides under the cursor (End, or the controls of a pause for a fight) takes its tooltip with it; a hover it had is gone when
+	-- it shows again.
+	local function Gone()
+		Untip(nil)
+		ui.toggleHover = false
+		for _, entry in ipairs(ui.segments) do
+			entry.hover = false
+		end
+	end
+	bar:SetScript("OnHide", Gone)
+	live:SetScript("OnHide", Gone)
 	ui.line = kit.Dim(kit.Label(bar, "GameFontHighlightSmall", "LEFT", BAR_W - 24, true))
 	ui.line:SetPoint("TOPLEFT", bar, "TOPLEFT", 12, -BAR_H)
 	kit.Painted(PaintBar)
 	ui.bar = bar
+end
+
+-- The bar's rectangle while it shows, and where it stands (TM.BarRect).
+local function BarRect()
+	local bar = ui.bar
+	if not bar or Read(bar, "IsVisible") ~= true or type(ns.PanelKit) ~= "table" then
+		return nil
+	end
+	local left, bottom, width, height = ns.PanelKit.Rect(bar)
+	if not (ns.Finite(left) and ns.Finite(bottom) and ns.Finite(width) and ns.Finite(height)) then
+		return nil
+	end
+	return left, bottom, width, height, ui.dragged and "dragged" or ui.spot or "top"
 end
 
 -- The bar while on, the switch of the options window and Samples of /flatui move.
@@ -883,6 +991,10 @@ function TM.Status()
 	end
 	return ("Test mode: %s (%s), %d samples, %d stand-ins shown"):format(S.paused and "paused for combat" or "on", SOURCES[S.source] or "?",
 		running, shown)
+end
+
+function TM.BarRect()
+	return BarRect()
 end
 
 function TM.Register(id, spec)

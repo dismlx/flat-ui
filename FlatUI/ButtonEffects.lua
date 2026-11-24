@@ -6,6 +6,12 @@ local _, ns = ...
 -- (a plain table, ActionButtonSpellAlerts.lua:117-135) only record the button, and everything is done in a pass one frame later, also after
 -- the events and the callbacks of the assisted combat manager (ActionButtonSpellAlerts.lua:110-111). Only alpha is set, so a pass in a fight
 -- touches no protected part. This file is not a module.
+-- Flat UI's own buttons run none of the game's button code, so the cast fill and the interrupt flash are drawn on them here: one frame of this
+-- file's own for each button, a child of its bar over the icon, made out of combat once the buttons are built. The player's casts (UNIT_SPELLCAST_*,
+-- RegisterUnitEvent "player"; the spell ID is used only when plain) light the buttons that hold the spell (C_ActionBar.FindSpellActionButtons, else
+-- the spell's name): a flat fill in the cast bar colour rises from the bottom of the icon over the cast time (UnitCastingInfo, plain for the player)
+-- and empties over a channel (UnitChannelInfo), fades as the cast lands, and a red flash shows when the cast is interrupted. Only heights, alpha,
+-- Show, Hide and animations of these frames are set in a fight.
 
 local KEY = "actionbars"
 local PATH = KEY .. "."
@@ -79,7 +85,7 @@ end
 -- One of Flat UI's own buttons (OwnBars.lua) has no alert frame of the game's. OwnPaint.lua says when the spell of its slot starts or stops
 -- glowing (ns.OnOwnProc), and the proc row decides what that shows: the game's glow drawn by ProcGlow.lua's frame, in the look Glow style of the
 -- Trackers page gives it (soft by default), the coloured border, or nothing.
--- The rotation helper highlight, the cast fill animation and the interrupt flash are not drawn on these buttons.
+-- The rotation helper highlight is not drawn on these buttons; the cast fill and the interrupt flash are drawn below (CAST).
 local procOn = setmetatable({}, WEAK)
 local listenedOwn = false
 
@@ -147,6 +153,217 @@ local function Mark(button, mode)
 	end
 end
 
+-- The cast fill and the interrupt flash of Flat UI's own buttons. frames[button] = { frame, fill, flash, group } once made, or false; lit: the buttons
+-- of the cast that shows; spell: its spell ID; start and finish: its times in seconds; channel: it empties; landed: when it landed (the fill fades for
+-- FADE seconds).
+local CAST = { frames = setmetatable({}, WEAK), lit = {}, pending = false, FADE = 0.2, ALPHA = 0.4, FLASH = 0.7 }
+
+local function CastMake(button)
+	local icon = button.icon
+	if not Plain(icon, "table") then
+		return false
+	end
+	local ok, parent = pcall(button.GetParent, button)
+	local made = CreateFrame("Frame", nil, ok and Plain(parent, "table") and parent or UIParent)
+	ns.Own[made] = true
+	made:SetAllPoints(icon)
+	local okLevel, level = pcall(button.GetFrameLevel, button)
+	if okLevel and Plain(level, "number") then
+		made:SetFrameLevel(level + 2)
+	end
+	local fill = made:CreateTexture(nil, "ARTWORK")
+	fill:SetPoint("BOTTOMLEFT", made, "BOTTOMLEFT", 0, 0)
+	fill:SetPoint("BOTTOMRIGHT", made, "BOTTOMRIGHT", 0, 0)
+	fill:SetHeight(1)
+	fill:SetColorTexture(1, 1, 1, 1)
+	fill:Hide()
+	local flash = made:CreateTexture(nil, "OVERLAY")
+	flash:SetAllPoints(made)
+	flash:SetColorTexture(1, 0.1, 0.1, 1)
+	flash:SetAlpha(0)
+	local group = flash:CreateAnimationGroup()
+	local rise = group:CreateAnimation("Alpha")
+	rise:SetFromAlpha(0)
+	rise:SetToAlpha(CAST.FLASH)
+	rise:SetDuration(0.1)
+	rise:SetOrder(1)
+	local fall = group:CreateAnimation("Alpha")
+	fall:SetFromAlpha(CAST.FLASH)
+	fall:SetToAlpha(0)
+	fall:SetDuration(0.4)
+	fall:SetOrder(2)
+	return { frame = made, fill = fill, flash = flash, group = group }
+end
+
+-- The frames of Flat UI's buttons that have none, out of combat, while Cast fill animation or Interrupt flash is on.
+local function CastPrepare()
+	if CAST.pending or not (On() and (Opt("castAnim") or Opt("interruptAnim"))) or not (type(ns.OwnOn) == "function" and ns.OwnOn()) then
+		return
+	end
+	CAST.pending = true
+	ns.OutOfCombat(function()
+		CAST.pending = false
+		for _, button in ipairs(OwnButtons()) do
+			if CAST.frames[button] == nil then
+				local ok, made = pcall(CastMake, button)
+				CAST.frames[button] = ok and made or false
+			end
+		end
+	end)
+end
+
+-- The Flat UI buttons that hold a spell: by the slots the game finds for its ID, else by its name (every rank).
+local function CastButtons(spellID)
+	local list = {}
+	local find = C_ActionBar and C_ActionBar.FindSpellActionButtons
+	local ok, slots = false, nil
+	if type(find) == "function" then
+		ok, slots = pcall(find, spellID)
+	end
+	if ok and Plain(slots, "table") then
+		local want = {}
+		for _, slot in ipairs(slots) do
+			if Plain(slot, "number") then
+				want[slot] = true
+			end
+		end
+		for _, button in ipairs(OwnButtons()) do
+			local slot = type(ns.OwnSlot) == "function" and ns.OwnSlot(button)
+			if Plain(slot, "number") and want[slot] then
+				list[#list + 1] = button
+			end
+		end
+		return list
+	end
+	local named, name = false, nil
+	if C_Spell and type(C_Spell.GetSpellName) == "function" then
+		named, name = pcall(C_Spell.GetSpellName, spellID)
+	end
+	if named and Plain(name, "string") and type(ns.ButtonsFor) == "function" then
+		for _, button in ipairs(ns.ButtonsFor("spell", name:lower())) do
+			if type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) then
+				list[#list + 1] = button
+			end
+		end
+	end
+	return list
+end
+
+local function CastClear()
+	for _, button in ipairs(CAST.lit) do
+		local made = CAST.frames[button]
+		if made then
+			made.fill:Hide()
+		end
+	end
+	CAST.lit, CAST.landed, CAST.spell = {}, nil, nil
+	if CAST.driver then
+		CAST.driver:Hide()
+	end
+end
+
+-- Each frame while a cast shows: the fill's height from the cast's times, or its fade once the cast landed.
+local function CastStep()
+	local now = GetTime()
+	local fade, progress = 1, 1
+	if CAST.landed then
+		fade = 1 - (now - CAST.landed) / CAST.FADE
+		if fade <= 0 then
+			CastClear()
+			return
+		end
+	elseif CAST.finish > CAST.start then
+		progress = math.min(1, math.max(0, (now - CAST.start) / (CAST.finish - CAST.start)))
+		if CAST.channel then
+			progress = 1 - progress
+		end
+	end
+	for _, button in ipairs(CAST.lit) do
+		local made = CAST.frames[button]
+		if made then
+			local height = made.frame:GetHeight()
+			if ns.Finite(height) and height > 0 then
+				made.fill:SetHeight(math.max(0.01, height * progress))
+				made.fill:SetAlpha(CAST.ALPHA * fade)
+				made.fill:SetShown(progress > 0)
+			end
+		end
+	end
+end
+
+-- A cast or a channel of the player started: the times are read from the game, in milliseconds.
+local function CastStart(spellID, channel)
+	CastClear()
+	if not (On() and Opt("castAnim")) then
+		return
+	end
+	local read = channel and UnitChannelInfo or UnitCastingInfo
+	if type(read) ~= "function" then
+		return
+	end
+	local ok, _, _, _, start, finish = pcall(read, "player")
+	if not (ok and ns.Finite(start) and ns.Finite(finish) and finish > start) then
+		return
+	end
+	CAST.lit, CAST.start, CAST.finish, CAST.channel, CAST.spell = CastButtons(spellID), start / 1000, finish / 1000, channel, spellID
+	local r, g, b = ns.Colour("castbars.castColour")
+	for _, button in ipairs(CAST.lit) do
+		local made = CAST.frames[button]
+		if made then
+			made.fill:SetColorTexture(r, g, b, 1)
+		end
+	end
+	if #CAST.lit == 0 then
+		CAST.spell = nil
+		return
+	end
+	if not CAST.driver then
+		CAST.driver = CreateFrame("Frame")
+		ns.Own[CAST.driver] = true
+		CAST.driver:SetScript("OnUpdate", function()
+			if not pcall(CastStep) then
+				CastClear()
+			end
+		end)
+	end
+	CAST.driver:Show()
+	CastStep()
+end
+
+local function CastEvent(event, unit, _, spellID)
+	if unit ~= "player" or not Plain(spellID, "number") then
+		return
+	end
+	if event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" then
+		CastStart(spellID, event == "UNIT_SPELLCAST_CHANNEL_START")
+		return
+	end
+	-- An event of another spell (an instant cast meanwhile, a spell the game refused) leaves the fill alone.
+	local mine = CAST.spell ~= nil and spellID == CAST.spell
+	if event == "UNIT_SPELLCAST_SUCCEEDED" then
+		-- A channel's SUCCEEDED comes as it starts; a cast lands.
+		if mine and not CAST.channel and not CAST.landed then
+			CAST.landed = GetTime()
+		end
+	elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
+		if mine then
+			CastClear()
+		end
+		if On() and Opt("interruptAnim") then
+			for _, button in ipairs(CastButtons(spellID)) do
+				local made = CAST.frames[button]
+				if made then
+					made.group:Stop()
+					made.group:Play()
+				end
+			end
+		end
+	elseif mine and not CAST.landed then
+		-- STOP, CHANNEL_STOP and FAILED end the fill at once, unless the cast landed and the fill fades.
+		CastClear()
+	end
+end
+
 local Ask
 
 local function Run()
@@ -162,6 +379,10 @@ local function Run()
 	local ownMode = on and Opt("proc") or "game"
 	for _, button in ipairs(OwnButtons()) do
 		OwnProc(button, ownMode)
+	end
+	CastPrepare()
+	if not (on and Opt("castAnim")) then
+		CastClear()
 	end
 	for _, button in ipairs(ns.ActionButtons()) do
 		if not (type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button)) then
@@ -275,6 +496,25 @@ frame:SetScript("OnEvent", function()
 	Hook()
 	Ask()
 end)
+
+-- The player's casts, for the cast fill and the interrupt flash of Flat UI's own buttons.
+local casts = CreateFrame("Frame")
+ns.Own[casts] = true
+for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
+	"UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" }) do
+	pcall(casts.RegisterUnitEvent, casts, event, "player")
+end
+casts:SetScript("OnEvent", function(_, event, ...)
+	if type(ns.OwnOn) == "function" and ns.OwnOn() then
+		if not pcall(CastEvent, event, ...) then
+			pcall(CastClear)
+		end
+	end
+end)
+
+if type(ns.OnOwnBuilt) == "function" then
+	ns.OnOwnBuilt(CastPrepare)
+end
 
 -- The rows of the Glows and animations page call this.
 function ns.ButtonEffectsChanged()

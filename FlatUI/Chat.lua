@@ -7,6 +7,8 @@ local _, ns = ...
 -- from the lines the kind of a unit, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
 -- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
 -- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only.
+-- With Health text on the bar (Percent by default) a frame of the addon's own on GameTooltip's health bar, made out of combat, writes the health
+-- of the tooltip's unit on it every 0.1 s while the bar shows, the game's withheld values passed straight to the text (BT, Health bar below).
 -- The fade of GameTooltip is seen as a fall of its alpha in a frame of the
 -- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
@@ -87,6 +89,8 @@ local X = { seats = setmetatable({}, { __mode = "k" }), scales = setmetatable({}
 local hooked = {}
 local postCall = false
 local barOutline
+-- Health text on the bar (below): its functions; X.barText is its frame and string, X.barUnit the unit of the unit tooltip that shows.
+local BT = { PART = "tooltip health text", EVERY = 0.1, FORMATS = { curmax = "%s / %s", pct = "%.0f%%", curpct = "%s (%.0f%%)" } }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -1189,6 +1193,7 @@ local function FollowData()
 				ns.Each(KEY, ns.HitTableTipLines, tooltip, data)
 			end
 			ns.Each(KEY, Filled, tooltip, data)
+			ns.Each(KEY, BT.Unit, tooltip, data)
 			ns.Each(KEY, Extras, tooltip, data)
 			ns.Each(KEY, Combat, tooltip, data)
 			ns.Each(KEY, FadeCancel, tooltip)
@@ -1353,6 +1358,128 @@ local function BuildBar(bar)
 	PaintBar(bar)
 end
 
+-- Health text on the bar: a frame of the addon's own on the health bar of GameTooltip, made out of combat, with one outlined font string centred
+-- on it, so it shows and hides with the bar. The post call keeps the unit of a unit tooltip's data (BT.Unit); every 0.1 s while the bar shows, the
+-- unit's health goes to the string as the game gives it (UnitHealth, UnitHealthMax, UnitHealthPercent, AbbreviateNumbers), withheld values
+-- too, never read, compared or added, as UnitText.lua writes the health text of the unit frames. Its part stops alone after three refusals.
+
+-- The format Health text on the bar asks for, or nil for None, with Hide the health bar on, the module off or the part stopped.
+function BT.Mode()
+	local mode = Opt("barText")
+	if not ns.Enabled(KEY) or ns.PartStopped(KEY, BT.PART) or Opt("barHide") == true or BT.FORMATS[mode] == nil then
+		return nil
+	end
+	return mode
+end
+
+-- The unit of GameTooltip's health bar: of a unit tooltip's data, by the guid the bar watches or the data's guid (UnitTokenFromGUID), else the
+-- mouseover; nil for any other tooltip.
+function BT.Unit(tooltip, data)
+	if not rawequal(tooltip, Global("GameTooltip")) then
+		return
+	end
+	X.barUnit = nil
+	if BT.Mode() == nil or not IsData(data, "Unit") then
+		return
+	end
+	local token
+	for _, field in ipairs({ "healthGUID", "guid" }) do
+		local guid = data[field]
+		if not token and not ns.IsSecret(guid) and type(guid) == "string" and guid ~= "" and type(UnitTokenFromGUID) == "function" then
+			local ok, found = pcall(UnitTokenFromGUID, guid)
+			if ok and not ns.IsSecret(found) and type(found) == "string" and found ~= "" then
+				token = found
+			end
+		end
+	end
+	if not token and type(UnitExists) == "function" then
+		local ok, exists = pcall(UnitExists, "mouseover")
+		if ok and not ns.IsSecret(exists) and exists == true then
+			token = "mouseover"
+		end
+	end
+	X.barUnit = token
+end
+
+-- One write. job is new for each call, so each refused call counts as a failure of its own. A unit that is gone leaves the string empty.
+function BT.Fill(_)
+	local own, mode, unit = X.barText, BT.Mode(), X.barUnit
+	if not (own and mode) then
+		return
+	end
+	local ok, exists = false, nil
+	if unit and type(UnitExists) == "function" then
+		ok, exists = pcall(UnitExists, unit)
+	end
+	if not (ok and not ns.IsSecret(exists) and exists == true) then
+		own.text:SetText("")
+		return
+	end
+	if mode == "curmax" then
+		own.text:SetFormattedText(BT.FORMATS.curmax, AbbreviateNumbers(UnitHealth(unit)), AbbreviateNumbers(UnitHealthMax(unit)))
+	elseif mode == "curpct" then
+		own.text:SetFormattedText(BT.FORMATS.curpct, AbbreviateNumbers(UnitHealth(unit)), UnitHealthPercent(unit, true, CurveConstants.ScaleTo100))
+	else
+		own.text:SetFormattedText(BT.FORMATS.pct, UnitHealthPercent(unit, true, CurveConstants.ScaleTo100))
+	end
+end
+
+-- The frame and its string on the bar, made out of combat, once.
+function BT.Build(bar)
+	if X.barText or ns.Forbidden(bar) or BT.Mode() == nil then
+		return
+	end
+	local frame = CreateFrame("Frame", nil, bar)
+	ns.Own[frame] = true
+	frame:SetAllPoints(bar)
+	local okLevel, level = pcall(bar.GetFrameLevel, bar)
+	if okLevel and IsNumber(level) then
+		frame:SetFrameLevel(level + 2)
+	end
+	local text = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
+	if text == nil then
+		frame:Hide()
+		return
+	end
+	text:SetPoint("CENTER", frame, "CENTER", 0, 0)
+	ns.TextStyle(text, { percent = 90, flags = "OUTLINE" })
+	local own = { frame = frame, text = text, wait = 0 }
+	X.barText = own
+	frame:SetScript("OnUpdate", function(_, elapsed)
+		own.wait = own.wait + (IsNumber(elapsed) and elapsed or 0)
+		if own.wait < BT.EVERY or ns.IsStopped(KEY) then
+			return
+		end
+		own.wait = 0
+		if not ns.EachPart(KEY, BT.PART, BT.Fill, {}) and ns.PartStopped(KEY, BT.PART) then
+			pcall(text.SetText, text, "")
+			pcall(frame.Hide, frame)
+		end
+	end)
+	-- The bar hides with its tooltip, and the next unit tooltip names its unit again.
+	frame:SetScript("OnHide", function()
+		X.barUnit = nil
+	end)
+	BT.Show(bar)
+end
+
+-- Shows the string while a format is chosen, or makes it out of combat; hides it for None.
+function BT.Show(bar)
+	local own, mode = X.barText, BT.Mode()
+	if own then
+		if mode == nil then
+			pcall(own.text.SetText, own.text, "")
+		end
+		pcall(own.frame.SetShown, own.frame, mode ~= nil)
+	elseif mode ~= nil and not X.barTextQueued then
+		X.barTextQueued = true
+		ns.OutOfCombat(function()
+			X.barTextQueued = nil
+			ns.Each(KEY, BT.Build, bar)
+		end)
+	end
+end
+
 local function HealthBar()
 	local tooltip = Global("GameTooltip")
 	local bar = tooltip and not ns.Forbidden(tooltip) and tooltip.StatusBar
@@ -1368,6 +1495,7 @@ local function HealthBar()
 			ns.Each(KEY, BuildBar, bar)
 		end)
 	end
+	BT.Show(bar)
 end
 
 -- Done out of combat: a tooltip and its bar are frames the game uses in secure code.

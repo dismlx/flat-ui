@@ -85,7 +85,8 @@ local AURA_FILE = 135940
 
 -- What each kind of frame has. group: its sizes. pic: it has a picture. side: "right" for a picture on the right of the bars, as the game has it on the target
 -- and focus (UnitFrames.lua Describe), else it is on the left. on: its switch. sw: the switch of its picture. pick: the row of its picture. name, level, by, ht,
--- pt, power: the rows of its name, level, health colour, health text, power text and power bar. ranked: its unit can be an elite or a rare.
+-- pt, power: the rows of its name, level, health colour, health text, power text and power bar. ranked: its unit can be an elite or a rare. bare: the game
+-- draws no words on its health bar, so As the game has it shows none (UnitText.lua).
 local KIND = {
 	player = { group = "large", pic = true, on = "player", sw = "portraitPlayer", pick = "playerPicture", name = "playerName", level = "playerLevel",
 		by = "playerHealthBy", ht = "player", pt = "player", power = "playerPowerBar" },
@@ -95,7 +96,8 @@ local KIND = {
 		by = "focusHealthBy", ht = "focus", pt = "focus", power = "focusPowerBar", ranked = true },
 	pet = { group = "small", pic = true, on = "pet", sw = "portraitPet", pick = "petPicture", name = "petName", by = "petHealthBy", ht = "pet", pt = "pet",
 		power = "petPowerBar" },
-	tot = { group = "small", pic = true, on = "tot", sw = "portraitTot", pick = "totPicture", name = "totName", by = "totHealthBy", power = "totPowerBar" },
+	tot = { group = "small", pic = true, on = "tot", sw = "portraitTot", pick = "totPicture", name = "totName", by = "totHealthBy", ht = "tot", bare = true,
+		power = "totPowerBar" },
 	party = { group = "small", pic = true, on = "party", sw = "portraitParty", pick = "partyPicture", name = "partyName", by = "partyHealthBy", ht = "party",
 		pt = "party", power = "partyPowerBar" },
 	partypet = { group = "pet2", pic = true, on = "partypet", sw = "portraitPartypet", pick = "partypetPicture", name = "partyName", ht = "party" },
@@ -1256,6 +1258,9 @@ function E.bars(o, g, L)
 			mode = Get(row .. (role == "health" and "HealthText" or "PowerText")) or "game"
 		end
 		local words = Says(mode, numbers)
+		if mode == "game" and k.bare then
+			words = nil
+		end
 		-- Show: while the mouse is over the frame. Nothing is over a frame in a drawing.
 		if mode ~= "game" and g.ownTextWhen == "hover" then
 			words = nil
@@ -1980,7 +1985,25 @@ local function PaintCell(cell, s, width, height, g)
 	cell.name:SetText(s.name)
 	cell.name:ClearAllPoints()
 	cell.name:SetPoint("LEFT", cell.frame, "LEFT", 14, 3)
-	Style(cell.name, { percent = 100, r = 1, g = 1, b = 1 })
+	-- The name rows reach the raid names (UnitText.lua RaidName): the face, the outline, the size, and the colour of Class, Reaction or Custom over the
+	-- game's white; the status text takes the face and outline of the bar text rows.
+	local nameSpec = { percent = 100, r = 1, g = 1, b = 1 }
+	local statusSpec = { percent = 100, r = 0.8, g = 0.8, b = 0.8 }
+	if on then
+		nameSpec.face = g.nameFace ~= "default" and ns.FontFile(g.nameFace) or nil
+		nameSpec.flags = FLAGS[g.nameOutline]
+		nameSpec.percent = g.nameSize
+		if g.nameColour == "custom" then
+			nameSpec.r, nameSpec.g, nameSpec.b = ns.Colour(KEY .. ".nameCustom")
+		elseif g.nameColour == "class" then
+			nameSpec.r, nameSpec.g, nameSpec.b = ClassRgb(s.class)
+		elseif g.nameColour == "reaction" then
+			nameSpec.r, nameSpec.g, nameSpec.b = FRIENDLY[1], FRIENDLY[2], FRIENDLY[3]
+		end
+		statusSpec.face = g.barTextFace ~= "default" and ns.FontFile(g.barTextFace) or nil
+		statusSpec.flags = FLAGS[g.barTextOutline]
+	end
+	Style(cell.name, nameSpec)
 	local roleOn = (not on or Get("raidRoleIcon") == true) and ART[s.role] ~= nil
 	cell.role:SetShown(roleOn)
 	if roleOn then
@@ -1996,7 +2019,7 @@ local function PaintCell(cell, s, width, height, g)
 		cell.status:SetText(status)
 		cell.status:ClearAllPoints()
 		cell.status:SetPoint("CENTER", cell.frame, "CENTER", 0, -4)
-		Style(cell.status, { percent = 100, r = 0.8, g = 0.8, b = 0.8 })
+		Style(cell.status, statusSpec)
 	end
 	if cell.marks then
 		CellMarks(cell, s, width, height, g, on, powerHeight)
@@ -2030,6 +2053,7 @@ local MARK = {
 	frameStyle = { "player", "body" }, powerSpace = { "player", "body" }, barBorder = { "player", "body" }, corners = { "player", "body" }, elite = { "target", "pic" },
 	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
 	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
+	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
 	healPrediction = { "player", "pred" }, absorbShield = { "player", "shield" }, healAbsorb = { "player", "absorb" }, lookOwn = { "player", "health" },
 	lookBorder = { "player", "health" }, lookBack = { "player", "health" }, lookBackAlpha = { "player", "health" },
 	smallRow = { "pet", "row" }, levelPosition = { "target", "level" }, levelColour = { "player", "level" }, pvpWordColour = { "player", "level" }, levelSize = { "player", "level" },
@@ -2053,7 +2077,8 @@ local MARK = {
 	focusHealthText = { "focus", "healthText" }, focusPowerText = { "focus", "powerText" }, focusPowerBar = { "focus", "power" },
 	petPicture = { "pet", "pic" }, petName = { "pet", "name" }, petNameFit = { "pet", "name" }, petHealthBy = { "pet", "health" }, petHealthText = { "pet", "healthText" },
 	petPowerText = { "pet", "powerText" }, petPowerBar = { "pet", "power" },
-	totPicture = { "tot", "pic" }, totName = { "tot", "name" }, totNameFit = { "tot", "name" }, totHealthBy = { "tot", "health" }, totPowerBar = { "tot", "power" },
+	totPicture = { "tot", "pic" }, totName = { "tot", "name" }, totNameFit = { "tot", "name" }, totHealthBy = { "tot", "health" }, totHealthText = { "tot", "healthText" },
+	totPowerBar = { "tot", "power" },
 	partyPicture = { "party1", "pic" }, partypetPicture = { "partypet1", "pic" }, partyName = { "party1", "name" }, partyNameFit = { "party1", "name" }, partyHealthBy = { "party1", "health" },
 	partyHealthText = { "party1", "healthText" }, partyPowerText = { "party1", "powerText" }, partyPowerBar = { "party1", "power" },
 	partyRangeDim = { "party4", "root" }, partyRangeOpacity = { "party4", "root" },

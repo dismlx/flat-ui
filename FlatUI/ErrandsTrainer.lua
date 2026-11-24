@@ -7,7 +7,8 @@ local _, ns = ...
 -- A profession is left to the game's Train button, which asks before it uses one of your two places; so is a row whose price or flags cannot
 -- be read. Both shapes of the client's answers are read: GetTrainerServiceInfo gives name, type, ... (the mainline trainer) or name, rank,
 -- type, ... (the classic one), and GetTrainerServiceCost gives cost, isProfession or cost, talent points, profession points.
--- The tooltip says what a click learns and why anything is left. After a click the button waits SETTLE seconds, so a double click asks once.
+-- The button says how many it would learn, Train all (4), and Train all alone, greyed, when there is nothing; the tooltip says what a click
+-- learns and why anything is left. After a click the button waits SETTLE seconds, so a double click asks once.
 -- It follows the game's ClassTrainerFrame_Update and TRAINER_UPDATE to stay right. Not in combat: the button is made only out of the lockdown
 -- and does nothing in a fight. Never under the gamepad interface, whose navigation could not reach it; /flatui train does the same there.
 -- While EnhanceQoL's own Train All button (EQOLTrainAllButton) is shown in the same place, this one stands aside.
@@ -21,7 +22,9 @@ local KINDS = { available = true, unavailable = true, used = true, header = true
 local SETTLE = 1
 local MAX_ROWS = 500
 local GAP = 2
-local WIDTH = 80
+-- Wide enough for Train all (12); it grows leftwards from the Train button and stays clear of the money at the window's bottom left
+-- (ClassTrainerFrameMoneyBg ends 153 from the left of the 338 wide window, the Train button, 80 wide, sits in its bottom right corner).
+local WIDTH = 92
 
 local button
 local followed = false
@@ -305,6 +308,7 @@ Update = function()
 		return
 	end
 	local plan = Plan()
+	button.SetLabel(#plan.buy > 0 and ("%s (%d)"):format(LABEL, #plan.buy) or LABEL)
 	button.SetUsable(#plan.buy > 0 and not settling and not E.Fighting())
 	button:Show()
 	if E.TipOwned(button) then

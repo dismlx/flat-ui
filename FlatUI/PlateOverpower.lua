@@ -15,7 +15,10 @@ local _, ns = ...
 -- Nameplates.lua). One enemy shows it at a time, as a dodge gives the warrior one Overpower: a later dodge of yours moves it.
 -- The window is the time of Overpower's row in ProcData.lua (5 seconds, the time of its hidden buff 1289681 in the DB2 tables of build 1.60.1, which
 -- that file was written from), and 5 seconds when the row is missing: the game's UI source and API documentation name no time for it. A dodge
--- renews it, as a new dodge renews Overpower's.
+-- renews it, as a new dodge renews Overpower's. With Time left on the Overpower icon (on by default) a dark swipe drains clockwise over the icon
+-- for the window: a Cooldown frame of Flat UI's own (CooldownFrameTemplate, reversed, no edge, no bling, no countdown numbers) over the icon, given
+-- the dodge's time and the window (SetCooldown, not protected on a frame of the addon's own, so a renewed window starts it again in a fight too)
+-- and cleared when the icon goes.
 -- Which enemy dodged you. UNIT_COMBAT names the unit that dodged and the action ("DODGE", a plain string; only the amount is withheld,
 -- UnitDocumentation.lua:4169-4180) but no source, and the combat log is not open to addons on this client (CombatLogGetCurrentEventInfo is not in
 -- its list of calls, wowless data/products/wowf/apis.yaml; CombatText.lua's Whose hits says the same). So a dodge heard for a nameplate unit, the
@@ -33,7 +36,7 @@ local _, ns = ...
 -- Combat: the icon is a frame of Flat UI's own, a child of the plate's unit frame so it moves, fades and hides with the plate, made, sized and
 -- anchored only out of combat on a plate the game may protect (ns.MaybeProtected, Movers.lua), as the threat ring is (PlateThreatLook.lua): its
 -- frame is made on each enemy plate as the plate shows while the row is on, so the first dodge of a fight has it. In a fight only its alpha, its
--- texture, its grey and the glow's Play and Stop change, which are not protected. A plate first seen in a fight gets its icon when the fight ends;
+-- texture, its grey, the swipe's SetCooldown and Clear and the glow's Play and Stop change, which are not protected. A plate first seen in a fight gets its icon when the fight ends;
 -- /flatui status counts those. Nothing of the game is written: every call on the game only reads.
 
 local KEY = "nameplates"
@@ -60,9 +63,10 @@ for _, id in ipairs(K.RANKS) do
 	RANK[id] = true
 end
 
--- recs[unitFrame]: holder (the icon's frame), icon (its texture), outline, glow (the soft look of ProcGlow.lua) or pulse (this file's own), to and
--- size (what it was anchored to and sized at), file (the texture it shows), shown, usable (the look it shows), glowing, waiting (for the end of a
--- fight). Kept when the plate leaves, so a plate's icon is made once.
+-- recs[unitFrame]: holder (the icon's frame), icon (its texture), outline, swipe (its Cooldown frame, false when the client gave none), at (the dodge
+-- the swipe runs from), glow (the soft look of ProcGlow.lua) or pulse (this file's own), to and size (what it was anchored to and sized at), file
+-- (the texture it shows), shown, usable (the look it shows), glowing, waiting (for the end of a fight). Kept when the plate leaves, so a plate's
+-- icon is made once.
 local recs = setmetatable({}, { __mode = "k" })
 -- lit: the plate that shows the icon, { unitFrame, unit (its nameplate token), expires }. pending: dodges not yet known to be yours, { unitFrame,
 -- unit, at, target }.
@@ -260,6 +264,33 @@ local function MakeGlow(rec)
 	rec.pulse = group
 end
 
+-- The swipe of the window's time left: a Cooldown frame of the addon's own over the icon. Out of combat only.
+local function MakeSwipe(rec)
+	local ok, swipe = pcall(CreateFrame, "Cooldown", nil, rec.holder, "CooldownFrameTemplate")
+	if not ok or type(swipe) ~= "table" then
+		rec.swipe = false
+		return
+	end
+	ns.Own[swipe] = true
+	swipe:SetAllPoints(rec.icon)
+	pcall(swipe.SetReverse, swipe, true)
+	pcall(swipe.SetDrawEdge, swipe, false)
+	pcall(swipe.SetDrawBling, swipe, false)
+	pcall(swipe.SetHideCountdownNumbers, swipe, true)
+	local level = Ask(rec.holder.GetFrameLevel, rec.holder)
+	if type(level) == "number" then
+		pcall(swipe.SetFrameLevel, swipe, level + 1)
+	end
+	rec.swipe = swipe
+end
+
+local function ClearSwipe(rec)
+	if rec.swipe and rec.at ~= nil then
+		rec.at = nil
+		pcall(rec.swipe.Clear, rec.swipe)
+	end
+end
+
 -- The icon of a plate, made the first time the plate needs one; nil while it waits for the end of a fight.
 local function Make(unitFrame)
 	local rec = recs[unitFrame]
@@ -281,8 +312,14 @@ local function Make(unitFrame)
 	icon:SetAllPoints(holder)
 	icon:SetTexCoord(K.CROP, 1 - K.CROP, K.CROP, 1 - K.CROP)
 	rec.holder, rec.icon = holder, icon
+	MakeSwipe(rec)
 	rec.outline = ns.Outline(holder, holder)
 	ns.SetOutline(rec.outline, true, true)
+	-- The thin border stays over the swipe.
+	local edges, level = rec.outline and rec.outline.holder, Ask(holder.GetFrameLevel, holder)
+	if rec.swipe and type(edges) == "table" and type(level) == "number" then
+		pcall(edges.SetFrameLevel, edges, level + 2)
+	end
 	MakeGlow(rec)
 	return rec
 end
@@ -355,6 +392,7 @@ local function Hide(rec)
 		rec.holder:SetAlpha(0)
 		Glow(rec, false)
 	end
+	ClearSwipe(rec)
 end
 
 -- Shows the icon on the lit plate: glowing while Overpower can be used now, grey, dim and still while it cannot.
@@ -377,6 +415,13 @@ function Draw()
 	if rec.file ~= S.texture then
 		rec.file = S.texture
 		rec.icon:SetTexture(S.texture)
+	end
+	-- The swipe runs from the dodge that lit the icon, and again from a dodge that renews it.
+	if Opt("overpowerSwipe") ~= true then
+		ClearSwipe(rec)
+	elseif rec.swipe and rec.at ~= lit.at then
+		rec.at = lit.at
+		pcall(rec.swipe.SetCooldown, rec.swipe, lit.at, lit.expires - lit.at)
 	end
 	local usable = UsableState() == "usable" and S.ready ~= false
 	if rec.shown and rec.usable == usable then
