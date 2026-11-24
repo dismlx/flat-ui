@@ -133,7 +133,7 @@ local ADDON_NAME, ns = ...
 -- the same way.
 -- Overpower on enemy nameplates (PlateOverpower.lua, a warrior's) puts Overpower's icon on a frame of its own, a child of the plate's unit frame,
 -- above the name of the enemy that dodged the player, made, sized and anchored out of combat on a plate that may be protected; in a fight only its
--- alpha, texture, grey and glow change. A frame of its own hears UNIT_COMBAT, SPELL_UPDATE_USABLE, ACTION_USABLE_CHANGED, SPELL_UPDATE_COOLDOWN, the
+-- alpha, texture, grey, glow and the time-left swipe of a Cooldown frame of its own (SetCooldown, Clear) change. A frame of its own hears UNIT_COMBAT, SPELL_UPDATE_USABLE, ACTION_USABLE_CHANGED, SPELL_UPDATE_COOLDOWN, the
 -- player's casts and auto attack and NAME_PLATE_UNIT_REMOVED while the row is on, and SPELLS_CHANGED for a warrior, and only reads.
 -- The quest mark on nameplates (PlateQuest.lua, on by default) is a texture on a frame of its own, a child of the plate's unit frame, anchored
 -- beside the plate's raid marker frame (ClassificationFrame), level frame, health bars or name and sized out of combat on a plate that may be

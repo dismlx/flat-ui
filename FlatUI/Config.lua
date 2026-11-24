@@ -461,6 +461,8 @@ ns.PAGES = {
 		{ section = "Overpower" },
 		{ key = "overpower", kind = "bool", default = true, label = "Overpower on enemy nameplates", tip = "Warriors only: when an enemy dodges you, Overpower's icon shows over its nameplate for 5 seconds and glows while you can use it." },
 		{ key = "overpowerSize", kind = "number", default = 34, min = 16, max = 48, step = 1, label = "Overpower icon size", needs = "overpower" },
+		{ key = "overpowerSwipe", kind = "bool", default = true, label = "Time left on the Overpower icon", needs = "overpower",
+			tip = "A dark swipe drains over the icon for its 5 seconds, and starts again when a new dodge renews it." },
 		{ section = "Quest" },
 		{ key = "questMark", kind = "bool", default = true, label = "Quest mark on enemies you need for a quest",
 			tip = "A small ! beside an enemy the game says belongs to a quest in your log, gone once that objective is done. Questie has its own nameplate icons: turn one of the two off." },

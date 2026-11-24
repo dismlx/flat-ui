@@ -205,6 +205,7 @@ ns.SETUP_STEPS = {
 		{ "nameplates.offscreenIcon", "o", "behaviour", "Shows an arrow at the screen edge for nameplates behind you." },
 		{ "nameplates.overpower", "o", "behaviour", "For a warrior, shows Overpower over an enemy that dodged you, glowing while you can use it." },
 		{ "nameplates.overpowerSize", "r", "behaviour", "Sets the size of the Overpower icon over an enemy's nameplate." },
+		{ "nameplates.overpowerSwipe", "r", "behaviour", "Drains a dark swipe over the Overpower icon for the seconds its window has left." },
 		{ "nameplates.questMark", "c", "mock-nameplate-marks" },
 		{ "nameplates.questMarkSize", "o", "mock-nameplate-marks" },
 		{ "nameplates.questMarkPlace", "o", "mock-nameplate-marks" },
