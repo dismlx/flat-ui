@@ -38,7 +38,9 @@ local _, ns = ...
 -- and its queue, and its sound for one spell over the one of all (Runtime.lua:89-101, Core.lua:114-123, Editor.lua:171-207). Its notification
 -- groups, each a frame of its own with its own spot, icon size and queue (Core.lua:168-175, Runtime.lua:26-43 and 138-153, Editor.lua:246-250),
 -- are the pulse spots here, which share one list of what pulses and give each spell or item the spot it pulses at. Flat UI has one look in place
--- of its styles, text, glows, growth and editor, and the sounds of its other pages in place of a choice of files and channels.
+-- of its styles, glows and editor: the icon, the name of the spell or item under it (Name under the icon, a FontString of the frame, so it
+-- fades with it), and with Grow as it fades a Scale animation of the frame that swells it by a quarter while it fades out, from its middle;
+-- and the sounds of its other pages in place of a choice of files and channels.
 
 local KEY = "pulse"
 local MOVER = "FlatUIPulse"
@@ -46,6 +48,8 @@ local CROP = 0.08
 -- The opacity at the height of a pulse, and the share of its time it takes to come in; the rest it fades out
 -- (EnhanceQoLCooldownPulse/Core.lua:13: 0.3 seconds in, 0.7 out, 0.7 at most).
 local PEAK, RISE = 0.7, 0.3
+-- How much larger a pulse grows as it fades with Grow as it fades, the room between the icon and its name, and the font of the name.
+local GROW, NAME_GAP, NAME_FONT = 1.25, 4, "GameFontHighlightLarge"
 -- A cooldown of this many seconds or fewer is the global cooldown (EnhanceQoLCooldownPulse/Runtime.lua:254 counts items over 2 seconds).
 local GCD = 2
 -- Pulses waiting at most (EnhanceQoLCooldownPulse/Runtime.lua:147), items watched at most, spells and items left out at most.
@@ -763,7 +767,9 @@ end
 
 -- The pulse ----------------------------------------------------------------------------------------------------------------------------
 
--- In, then out: two Alpha animations one after the other (SimpleAnimAlphaAPIDocumentation.lua, SimpleAnimAPIDocumentation.lua SetOrder).
+-- In, then out: two Alpha animations one after the other (SimpleAnimAlphaAPIDocumentation.lua, SimpleAnimAPIDocumentation.lua SetOrder), and with
+-- the second a Scale animation from the middle (SimpleAnimScaleAPIDocumentation.lua: SetOrigin, SetScaleFrom, SetScaleTo), whose end P.Fade sets:
+-- the size it had for no grow. A client that refuses the Scale gives a pulse with no grow.
 function P.MakeFade(frame)
 	local group = frame:CreateAnimationGroup()
 	local rise = group:CreateAnimation("Alpha")
@@ -774,7 +780,15 @@ function P.MakeFade(frame)
 	fall:SetOrder(2)
 	fall:SetFromAlpha(PEAK)
 	fall:SetToAlpha(0)
-	return { group = group, rise = rise, fall = fall }
+	local made, grow = pcall(function()
+		local scale = group:CreateAnimation("Scale")
+		scale:SetOrder(2)
+		scale:SetOrigin("CENTER", 0, 0)
+		scale:SetScaleFrom(1, 1)
+		scale:SetScaleTo(1, 1)
+		return scale
+	end)
+	return { group = group, rise = rise, fall = fall, grow = made and grow or nil }
 end
 
 -- The number of spots in use: Pulse spots, 1 to 3.
@@ -787,7 +801,7 @@ function P.InUse()
 end
 
 -- A spot by its number: { index, mover, size (the key of its Icon size row), x, queue (the entries waiting to pulse there), current (the one that
--- pulses), token (the pulse a timer belongs to), and once it has pulsed frame, icon, outline and fade }.
+-- pulses), token (the pulse a timer belongs to), and once it has pulsed frame, icon, name, outline and fade }.
 function P.Spot(index)
 	local spot = P.spots[index]
 	if not spot then
@@ -798,7 +812,8 @@ function P.Spot(index)
 	return spot
 end
 
--- The frame of a spot: an icon with Flat UI's thin border, as on the Cooldown icons, above the other frames of the screen. It takes no mouse.
+-- The frame of a spot: an icon with Flat UI's thin border, as on the Cooldown icons, above the other frames of the screen, and the line of the
+-- name under it. It takes no mouse.
 function P.Frame(spot)
 	local frame = spot.frame
 	if frame then
@@ -815,6 +830,14 @@ function P.Frame(spot)
 	icon:SetAllPoints(frame)
 	icon:SetTexCoord(CROP, 1 - CROP, CROP, 1 - CROP)
 	spot.frame, spot.icon = frame, icon
+	local name = ns.OwnText(frame, "OVERLAY", NAME_FONT)
+	if name then
+		name:SetPoint("TOP", frame, "BOTTOM", 0, -NAME_GAP)
+		name:SetWordWrap(false)
+		pcall(name.SetShadowOffset, name, 1, -1)
+		pcall(name.SetShadowColor, name, 0, 0, 0, 1)
+		spot.name = name
+	end
 	spot.outline = ns.Outline(frame, frame)
 	local ok, fade = pcall(P.MakeFade, frame)
 	spot.fade = ok and fade or nil
@@ -862,6 +885,11 @@ function P.Fade(spot, seconds)
 	return pcall(function()
 		fade.rise:SetDuration(seconds * RISE)
 		fade.fall:SetDuration(seconds * (1 - RISE))
+		if fade.grow then
+			local to = Opt("grow") == true and GROW or 1
+			fade.grow:SetDuration(seconds * (1 - RISE))
+			fade.grow:SetScaleTo(to, to)
+		end
 		fade.group:Stop()
 		fade.group:Play()
 	end)
@@ -885,7 +913,15 @@ function P.Show(spot, entry)
 	local frame = P.Frame(spot)
 	P.Size(spot)
 	P.Place(spot)
+	if entry.kind == "item" then
+		entry.name = P.ItemName(entry.id)
+	end
 	spot.icon:SetTexture(P.Icon(entry))
+	if spot.name then
+		local size = Opt(spot.size)
+		spot.name:SetText(Opt("name") ~= false and (entry.label or entry.name) or "")
+		spot.name:SetTextHeight(math.max(10, math.floor((ns.Finite(size) and size or 72) / 5)))
+	end
 	frame:SetAlpha(0)
 	frame:Show()
 	if not P.Fade(spot, seconds) then
@@ -894,9 +930,6 @@ function P.Show(spot, entry)
 	local sound = not entry.quiet and ns.SOUNDS and ns.SOUNDS[KITS[P.OwnSound(entry.key) or Opt("sound")] or 0]
 	if sound and ns.PlayKit then
 		ns.PlayKit(sound[1], KEY)
-	end
-	if entry.kind == "item" then
-		entry.name = P.ItemName(entry.id)
 	end
 	P.last = entry.name
 	spot.token = spot.token + 1
@@ -1491,7 +1524,8 @@ function P.Test(quiet)
 	end
 	local icon = first and P.Icon(first) or UNKNOWN_ICON
 	for index = 1, P.InUse() do
-		P.Queue({ kind = "test", key = "test", name = "a test", icon = icon, spot = index, quiet = quiet == true or index > 1 })
+		P.Queue({ kind = "test", key = "test", name = "a test", label = first and first.name or "Cooldown pulse", icon = icon, spot = index,
+			quiet = quiet == true or index > 1 })
 	end
 end
 
