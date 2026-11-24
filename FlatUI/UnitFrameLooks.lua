@@ -6,7 +6,8 @@ local ADDON_NAME, ns = ...
 -- work after the steps of that file through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run twice with the same
 -- result. The text looks and the soft shade are in UnitFrames.lua and Core.lua, where the text and the fill are set. With Frame style One frame, this file
 -- also gives the background of each bar the trough, a strip a little lighter than the plate behind the frame (darker on a light plate), so that an empty
--- bar still reads as a bar, and puts the shadow round the frame's body (ns.UnitFrameExtra.joined and body, UnitFrames.lua).
+-- bar still reads as a bar, and puts the shadow round the frame's body (ns.UnitFrameExtra.joined and body, UnitFrames.lua). It also draws Highlight under the
+-- mouse of the Frame section of the bars and pictures page: the health bar of the frame under the mouse brightens a little (at the end of this file).
 
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
@@ -354,6 +355,139 @@ local function Follow(rec)
 	Shadow(rec, X.active(rec))
 end
 
+-- Highlight under the mouse ---------------------------------------------------------------------------------
+
+-- Highlight under the mouse (on by default): a white layer of the addon's own, added to the colours under it (blend mode ADD) at HOVER.alpha, on a frame of
+-- its own one level above the health bar and over the outlined bar, on each styled frame, raid frames too. The game binds UnitFrame_OnEnter in the XML of its
+-- frames (Mainline/PlayerFrame.xml:471, TargetFrame.xml:370, Shared/CompactUnitFrame.xml:105), so a hook on the global would miss them, and the game's
+-- scripts are not touched: a frame of the addon's own reads the frame under the mouse (GetMouseFoci, as Movers.lua does) every HOVER.every seconds while the
+-- row is on and a layer is made, walks up at most HOVER.steps parents to a frame this module knows, shows that frame's layer and hides the last one. The
+-- layers are made out of combat; in a fight only Show and Hide change. The stand-ins of test mode take no mouse, so they show none.
+local HOVER_PART = "Mouse highlight"
+local HOVER = { alpha = 0.12, every = 0.05, steps = 6, file = "Interface\\Buttons\\WHITE8X8" }
+-- made: the records with a layer. lit: the record whose layer shows. on: the driver runs. waited: the time since the last read.
+local hover = { made = setmetatable({}, { __mode = "k" }), waited = 0 }
+
+local function HoverOn(rec)
+	return rec.made == true and Opt("hoverHighlight") == true and X.active(rec) and not ns.PartStopped(KEY, HOVER_PART)
+end
+
+-- The record of the frame under the mouse, or of the nearest of its parents this module knows, or nil.
+local function Under()
+	local ok, foci = pcall(GetMouseFoci)
+	local frame = ok and type(foci) == "table" and not ns.IsSecret(foci) and foci[1] or nil
+	for _ = 0, HOVER.steps do
+		if frame == nil or ns.IsSecret(frame) or type(frame) ~= "table" then
+			return nil
+		end
+		local rec = X.known(frame)
+		if rec ~= nil then
+			return rec
+		end
+		local okParent, parent = pcall(frame.GetParent, frame)
+		frame = okParent and parent or nil
+	end
+	return nil
+end
+
+-- Shows the layer of one record, or of none, and hides the one that showed.
+local function Light(rec)
+	if rec == hover.lit then
+		return
+	end
+	if hover.lit ~= nil and hover.lit.hoverFrame ~= nil then
+		hover.lit.hoverFrame:Hide()
+	end
+	hover.lit = rec
+	if rec ~= nil then
+		rec.hoverFrame:Show()
+	end
+end
+
+local Drive
+
+local function Look()
+	Drive()
+	if not hover.on then
+		return
+	end
+	local rec = Under()
+	if rec ~= nil and (rec.hoverFrame == nil or not HoverOn(rec)) then
+		rec = nil
+	end
+	Light(rec)
+end
+
+local function OnUpdate(_, elapsed)
+	hover.waited = hover.waited + elapsed
+	if hover.waited < HOVER.every then
+		return
+	end
+	hover.waited = 0
+	X.run(HOVER_PART, Look)
+end
+
+-- The driver runs while the row is on and a layer is made; when it stops, the layer that showed goes.
+function Drive()
+	local want = Opt("hoverHighlight") == true and ns.Enabled(KEY) and not ns.PartStopped(KEY, HOVER_PART) and next(hover.made) ~= nil
+	if want == (hover.on == true) then
+		return
+	end
+	hover.on = want
+	if want and hover.driver == nil then
+		hover.driver = X.frame(nil)
+	end
+	if hover.driver ~= nil then
+		hover.driver:SetScript("OnUpdate", want and OnUpdate or nil)
+	end
+	if not want then
+		Light(nil)
+	end
+end
+
+-- The frame and the layer of one record, out of combat: a child of the health bar, so one level above it, on the points of the outlined bar.
+local function MakeHover(rec)
+	local entry = rec.byRole.health
+	local box = entry and entry.target
+	if box == nil or ns.Forbidden(box) or ns.Forbidden(entry.bar) then
+		return
+	end
+	local frame = X.frame(entry.bar)
+	frame:SetAllPoints(box)
+	frame:Hide()
+	local layer = X.layer(frame, "OVERLAY", 7)
+	layer:SetTexture(HOVER.file)
+	layer:SetBlendMode("ADD")
+	layer:SetVertexColor(1, 1, 1, HOVER.alpha)
+	layer:Show()
+	rec.hoverFrame = frame
+	hover.made[rec] = true
+end
+
+local Hover
+function Hover(rec, on)
+	local want = on and HoverOn(rec)
+	if want and rec.hoverFrame == nil then
+		if InCombatLockdown() then
+			if not rec.hoverQueued then
+				rec.hoverQueued = true
+				ns.OutOfCombat(function()
+					rec.hoverQueued = nil
+					X.run(HOVER_PART, Hover, rec, X.active(rec))
+				end)
+			end
+			return
+		end
+		MakeHover(rec)
+	end
+	if not want and hover.lit == rec then
+		Light(nil)
+	end
+	Drive()
+end
+
 table.insert(X.after.apply, { part = PART, fn = Settle })
 table.insert(X.after.apply, { part = PART, fn = Shadow })
+table.insert(X.after.apply, { part = HOVER_PART, fn = Hover })
+table.insert(X.after.raid, { part = HOVER_PART, fn = Hover })
 table.insert(X.after.layout, { part = PART, fn = Follow })
