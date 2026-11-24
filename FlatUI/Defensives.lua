@@ -4,8 +4,8 @@ local _, ns = ...
 -- its charges and the name of the caster. The game draws them: an aura container of the game's own lists the buffs on the player
 -- that match a list of spell IDs (CooldownData.lua), also while the game hides buffs from addon code in a fight. The parts of each
 -- icon are made inside the function the game calls while it builds the button, because from then on the game closes the button to
--- addon code while it hides buffs. A change to those parts waits until the game says buffs are open; a change to the container
--- itself is allowed at any time. Where the game will not make the container, the same icons show out of combat from a read of the
+-- addon code while it hides buffs. A change to those parts, and Icon size on the buttons already shown, waits until the game says buffs
+-- are open; a change to the container itself (its layout of sizes and spacing) is allowed at any time. Where the game will not make the container, the same icons show out of combat from a read of the
 -- player's buffs. The helpers are in one table, D, and the lines of /flatui check are Tracking.lua's.
 
 local KEY = "defensives"
@@ -25,6 +25,7 @@ local BARS = { "HealthBarsContainer", "PowerBar", "AlternatePowerBar" }
 local CASTER = { useClassColors = true }
 local NOTE_NO_POSITION = "Defensives on you: the personal resource display has no position, so the row is above the player frame."
 local NOTE_REFUSED = "Defensives on you: the game refused the %s, so icons show without it."
+local NOTE_SIZE = "Defensives on you: the game refused a new icon size, so icons already shown keep their old one until you log in again."
 local LINE_OUT = "Defensives on you: icons show out of combat only."
 local LINE_OWN = "Defensives on you: Your own defensives is off here, since the game made no icon row."
 local LINE_FRAME = "Defensives on you: the game's External Defensives frame is also on. Type /console externalDefensivesEnabled 0."
@@ -190,7 +191,7 @@ function D.Init(button)
 	D.list[#D.list + 1] = parts
 	pcall(button.EnableMouse, button, false)
 	pcall(button.SetHideTooltipInCombat, button, true)
-	pcall(button.SetSize, button, Opt("size"), Opt("size"))
+	parts.size = pcall(button.SetSize, button, Opt("size"), Opt("size")) and Opt("size") or nil
 	local function Part(name, fn)
 		if not pcall(fn) then
 			D.refused[name] = true
@@ -291,18 +292,30 @@ local function Layout()
 	return { elementSpacing = Opt("spacing"), elementWidth = Opt("size"), elementHeight = Opt("size") }
 end
 
--- The layout of the groups again where Icon size or Spacing has changed; the game places the slots from it; buttons already shown keep their size until /reload.
+-- The layout of the groups again where Icon size or Spacing has changed, from which the game places the slots, and the new size on every
+-- button already made (its parts are set on all its points and follow). Run while buttons are open (D.Change); a button that refuses keeps
+-- its size, is tried again at the next change and is named in the status.
 function D.ApplySize()
 	local size, spacing = Opt("size"), Opt("spacing")
-	if D.sized == size .. ":" .. spacing then
-		return
-	end
-	D.sized = size .. ":" .. spacing
-	for _, group in ipairs(GROUPS) do
-		if D.container then
-			pcall(D.container.SetAuraGroupLayout, D.container, group, Layout())
+	if D.sized ~= size .. ":" .. spacing then
+		D.sized = size .. ":" .. spacing
+		for _, group in ipairs(GROUPS) do
+			if D.container then
+				pcall(D.container.SetAuraGroupLayout, D.container, group, Layout())
+			end
 		end
 	end
+	local refused = nil
+	for _, parts in ipairs(D.list) do
+		if parts.size ~= size then
+			if pcall(parts.button.SetSize, parts.button, size, size) then
+				parts.size = size
+			else
+				refused = true
+			end
+		end
+	end
+	D.refused.size = refused
 end
 
 -- The border again where its thickness or colour has changed.
@@ -1079,6 +1092,9 @@ function D.Status()
 	end
 	for _, name in ipairs(parts) do
 		lines[#lines + 1] = NOTE_REFUSED:format(name)
+	end
+	if D.refused.size then
+		lines[#lines + 1] = NOTE_SIZE
 	end
 	local on = T.Ask(GetCVarBool, "externalDefensivesEnabled")
 	if on == true then

@@ -5,14 +5,16 @@ local _, ns = ...
 -- in a fight. The class group matches the spell IDs of ns.ClassShortBuffs, the time group every buff the player casts that is not longer than
 -- the time limit. The game compares the length of a buff with the limit, and its own parts draw the sweep, the time and the thin bar from the
 -- length of each buff, so Flat UI never reads a time. The parts of each icon are made inside the function the game calls while it builds the
--- button, because from then on the game closes the button to addon code while it hides buffs. A change to those parts waits until the game
--- says buffs are open; a change to the container itself (its groups, their filters and their layout) is allowed at any time. Where the game
+-- button, because from then on the game closes the button to addon code while it hides buffs. A change to those parts, and Icon size on the
+-- buttons already shown, waits until the game says buffs are open; a change to the container itself (its groups, their filters and their
+-- layout of Icon size and Spacing) is allowed at any time. Where the game
 -- will not make the container, the same icons show out of combat from a read of the player's buffs. Nothing may anchor to the container: the
 -- other rows of the display hang from the holder (ns.OwnBuffsHolder), which keeps its height when no buff is up.
 
 local KEY = "ownbuffs"
 -- The name of the row among the saved spots of the movers.
 local MOVER = "FlatUIOwnBuffs"
+-- SPACING is the default of Spacing, for a value that is not a number.
 local SPACING, GAP, CROP = 3, 4, 0.08
 -- Room under the icon for the time as text, and for the thin bar and its gap.
 local ROOM_TEXT, ROOM_BAR, BAR_HEIGHT = 14, 5, 3
@@ -25,6 +27,7 @@ local BLUE = { 0.302, 0.6, 0.902 }
 local NOTE_NO_POSITION = "Your buffs: the personal resource display has no position, so the row is above the player frame."
 local NOTE_REFUSED = "Your buffs: the game refused the %s, so icons show without it."
 local NOTE_MOUSE = "Your buffs: the game refused a mouse setting of the icons, so clicks or tooltips may not work."
+local NOTE_SIZE = "Your buffs: the game refused a new icon size, so icons already shown keep their old one until you log in again."
 local NOTE_READING = "Your buffs: Buff tooltips has no effect while the game makes no icon row."
 local LINE_OUT = "Your buffs: the game made no icon row, so icons show out of combat only."
 local HELP = {
@@ -39,6 +42,12 @@ local B = { list = {}, pending = {}, refused = {}, icons = {}, groups = {} }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
+end
+
+-- The room between the icons: Spacing.
+local function Spacing()
+	local value = Opt("spacing")
+	return ns.Finite(value) and value or SPACING
 end
 
 local function Own(object)
@@ -390,7 +399,7 @@ function B.Init(button)
 	local parts = { button = button }
 	B.list[#B.list + 1] = parts
 	Mouse(parts)
-	pcall(button.SetSize, button, Opt("size"), Opt("size"))
+	parts.size = pcall(button.SetSize, button, Opt("size"), Opt("size")) and Opt("size") or nil
 	local function Part(name, fn)
 		if not pcall(fn) then
 			B.refused[name] = true
@@ -503,7 +512,23 @@ function B.ApplyTips()
 	end
 end
 
-B.apply = { time = B.ApplyTime, border = B.ApplyBorder, tips = B.ApplyTips }
+-- Icon size on every button already made (its parts are set on all its points and follow); a button that refuses keeps its size, is tried
+-- again at the next change and is named in the status.
+function B.ApplySize()
+	local size, refused = Opt("size"), nil
+	for _, parts in ipairs(B.list) do
+		if parts.size ~= size then
+			if pcall(parts.button.SetSize, parts.button, size, size) then
+				parts.size = size
+			else
+				refused = true
+			end
+		end
+	end
+	B.refused.size = refused
+end
+
+B.apply = { time = B.ApplyTime, border = B.ApplyBorder, tips = B.ApplyTips, size = B.ApplySize }
 
 -- Runs what waited, once the game says buffs are open.
 function B.Flush()
@@ -539,7 +564,7 @@ end
 
 local function Layout()
 	local size = Opt("size")
-	return { elementSpacing = SPACING, elementWidth = size, elementHeight = size }
+	return { elementSpacing = Spacing(), elementWidth = size, elementHeight = size }
 end
 
 local function SortMethod()
@@ -615,13 +640,13 @@ function B.Lists()
 	pcall(container.SetAuraGroupCandidateFilters, container, "time", time)
 end
 
--- The size of the icons. A container call, allowed at any time.
+-- The size of the icons and the room between them, as the layout of the groups. A container call, allowed at any time.
 function B.Sizes()
 	local container = B.container
 	if not container then
 		return
 	end
-	local size = Opt("size")
+	local size = Opt("size") .. ":" .. Spacing()
 	if size == B.sized then
 		return
 	end
@@ -689,13 +714,13 @@ end
 
 -- Puts icons in a row from the middle of the top of the holder.
 function B.Row(list)
-	local size = Opt("size")
+	local size, spacing = Opt("size"), Spacing()
 	local count = #list
-	local width = count > 0 and (count * size + (count - 1) * SPACING) or 0
+	local width = count > 0 and (count * size + (count - 1) * spacing) or 0
 	for index, icon in ipairs(list) do
 		icon.frame:SetSize(size, size)
 		icon.frame:ClearAllPoints()
-		icon.frame:SetPoint("TOPLEFT", B.Holder(), "TOP", (index - 1) * (size + SPACING) - width / 2, 0)
+		icon.frame:SetPoint("TOPLEFT", B.Holder(), "TOP", (index - 1) * (size + spacing) - width / 2, 0)
 	end
 end
 
@@ -795,6 +820,7 @@ function B.Sync()
 		B.Groups(true)
 		B.Lists()
 		B.Sizes()
+		B.Change("size")
 		B.Change("time")
 		B.Change("border")
 		B.Change("tips")
@@ -995,6 +1021,9 @@ function B.Status()
 	end
 	if B.refused.tips then
 		lines[#lines + 1] = NOTE_MOUSE
+	end
+	if B.refused.size then
+		lines[#lines + 1] = NOTE_SIZE
 	end
 	if B.path == "reading" then
 		lines[#lines + 1] = NOTE_READING

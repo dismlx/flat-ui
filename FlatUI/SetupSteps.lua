@@ -567,6 +567,7 @@ ns.SETUP_STEPS = {
 		{ "ownbuffs.trackers", "o", "behaviour", "Chooses whether a buff that has a tracker shows in the row too or is left out." },
 		{ "ownbuffs.time", "o", "behaviour", "Chooses whether the time left shows under the icon, on it, as a thin bar, or not at all." },
 		{ "ownbuffs.size", "o", "behaviour", "Sets the size of the icons in the row." },
+		{ "ownbuffs.spacing", "r", "behaviour", "Sets the room between the icons in the row." },
 		{ "ownbuffs.iconBorder", "o", "behaviour", "Chooses whether the icons in the row have a border." },
 		{ "ownbuffs.barTexture", "o", "behaviour", "Chooses the texture of the thin bar under the icon." },
 		{ "ownbuffs.tooltips", "o", "behaviour", "Chooses whether the game's tooltip shows over a buff always, out of combat only, or never." },
