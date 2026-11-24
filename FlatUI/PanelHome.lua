@@ -20,7 +20,7 @@ local TILE_H, CARD_H = 64, 140
 local log = {}
 
 -- The changes that need a reload, as ns.ReloadLines (Core.lua) gives them from the values at login, so a change made before the window was opened,
--- in setup, by a profile switch or a slash command, is listed too. Entries { label, field, path, value }.
+-- in setup, by a profile switch or a slash command, is listed too. Entries { label, field, path, value, was }, was being the value at login.
 function Home.ReloadLines()
 	return ns.ReloadLines()
 end

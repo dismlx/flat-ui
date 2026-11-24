@@ -12,7 +12,7 @@ local _, ns = ...
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
 -- An alpha something else gives a frame after a write is taken as the frame's own, the one put back, and the frame eases again from it.
--- The frames are the game's own, but for Flat UI's bag and bank windows: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
+-- The frames are the game's own, but for Flat UI's bag and bank windows and, while Flat UI's buttons are in use, Flat UI's own bars in the bar rows: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
 -- PetActionBar, MicroMenuContainer, BagsBar, PlayerFrame.PlayerFrameContainer and PlayerFrame.PlayerFrameContent (parentKeys of PlayerFrame with no global name: Blizzard_UnitFrame/Mainline/PlayerFrame.xml:23 and :68; the pet frame, totems and cast bar stay as they are),
 -- PetFrame, and under MinimapCluster the Tracking and IndicatorFrame frames, GameTimeFrame, TimeManagerClockButton and AddonCompartmentFrame
 -- (Blizzard_Minimap/Mainline/Minimap.xml:3, 25 and 46, GameTime.xml:3, Camelot/AddonCompartment.xml:3, Blizzard_TimeManager/Mainline/Blizzard_TimeManager.xml:178).
@@ -511,6 +511,28 @@ local function WindowsBusy(added)
 	return false
 end
 WINDOWS_ROW.more, WINDOWS_ROW.busy = BagWindows, WindowsBusy
+
+-- While Flat UI's buttons are in use, the game's main bar and bars 2 to 8 are parked at alpha 0, which this module leaves alone, so each of those
+-- rows fades Flat UI's own bar in their place (ns.OwnBarOf, OwnBars.lua), under the game bar's name so Fade the block still takes it over.
+for _, entry in ipairs(ENTRIES) do
+	local game = entry.bar and entry.row ~= "stance" and entry.row ~= "pet" and entry.frames[1] or nil
+	if game then
+		entry.more = function()
+			if type(ns.OwnOn) ~= "function" or type(ns.OwnBarOf) ~= "function" then
+				return nil
+			end
+			local okOn, on = pcall(ns.OwnOn)
+			if not (okOn and on == true) then
+				return nil
+			end
+			local okBar, own = pcall(ns.OwnBarOf, game)
+			if okBar and own then
+				return { { frame = own, name = game } }
+			end
+			return nil
+		end
+	end
+end
 
 -- True while the mouse is over one of the frames that count as a row's (entry.beside) and that shows. A withheld answer counts as shown.
 local function Beside(names)

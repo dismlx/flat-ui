@@ -46,7 +46,8 @@ local ADDON_NAME, ns = ...
 -- SetPoint while a channel runs; a frame of its own hears the player's channel events while the row is on, and it only reads UnitChannelInfo.
 -- Cast time on your bars (CastTime.lua, off by default) fades the game's own time on the player's two cast bars and the pet's (CastTimeText,
 -- SetAlpha 0) while it is on and gives it its alpha back when the row goes off; the seconds are font strings of its own inside each bar.
--- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
+-- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only (with Flat
+-- addon buttons on it also sets the alpha of their border and background regions and adds a plate and a hover square of its own), and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
 -- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from
 -- the minimap with ClearAllPoints and SetPoint, out of combat if the game protects it, no further out than the game's place, with a frame of its
