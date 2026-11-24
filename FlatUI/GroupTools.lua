@@ -23,7 +23,15 @@ local _, ns = ...
 -- icon can be greyed in a fight while its secure button is not touched. The secure buttons make the frame of the row protected, so the row and
 -- its buttons are made, placed, sized, shown, hidden and given attributes only out of combat: a change in a fight (a group joined, a row of the
 -- page changed, the row moved) waits for its end (ns.OutOfCombat), and in a fight nothing on them changes. Nothing of the module runs but on
--- its events and the mouse; no ticker and no OnUpdate.
+-- its events, the mouse and, only while a countdown runs, a ticker of one second; no OnUpdate.
+-- The tally of a ready check: from READY_CHECK to READY_CHECK_FINISHED (and on each READY_CHECK_CONFIRM: PartyInfoDocumentation.lua:839-870)
+-- the tick's icon shows how many are ready of those asked, as 3/5, read with GetReadyCheckStatus for the player and party1 to party4, or raid1
+-- to the size of the raid (the call the game's own frames make, CompactUnitFrame.lua:1371; plain answers only): green when all are ready, in
+-- the warm colour once someone is not ready or, after the check, did not answer. Its tooltip names who is not ready and who has not answered,
+-- by plain names only, and the result stays 8 seconds after the check ends. The pull countdown: from START_TIMER of the player countdown type
+-- (Enum.StartTimerType.PlayerCountdown, TimerConstantsDocumentation.lua:13-16; timeRemaining, WorldStateInfoDocumentation.lua:43-62) its
+-- number counts the seconds left in the warm colour, once a second (C_Timer.NewTicker), and goes back to Countdown length at 0 or on
+-- STOP_TIMER_OF_TYPE. Both change only FontStrings of the icons of Flat UI's own, never a secure button, so in a fight too.
 -- A button that cannot work for the player now is greyed, as the game's own group manager decides (Mainline/
 -- Blizzard_CompactRaidFrameManager.lua:601-645, 698, 1263): a marker without a target the game lets be marked (CanBeRaidTarget), and every
 -- marker and the clear in a raid unless the player is its leader or an assistant or everyone is; the ready check, the role poll and the
@@ -51,6 +59,11 @@ local FONT = "GameFontHighlightSmall"
 -- The text-dim of the windows (PanelLook.lua) for the lines of a tooltip, and the warm colour of the reason a button is greyed.
 local DIM = { 0.66, 0.68, 0.62 }
 local WARN = { 0.9, 0.72, 0.36 }
+-- The green of a ready check that all answered ready, how long its tally stays after it ends, and the step of the countdown's number.
+local ALL_READY = { 0.4, 0.9, 0.4 }
+local KEEP_TALLY, COUNT_STEP = 8, 1
+-- The player countdown among the types of START_TIMER, where the client has no enum.
+local PLAYER_COUNTDOWN = 2
 local GREY_ALPHA = 0.4
 -- How much lighter the background of an icon is under the mouse, as Errands.Button has it.
 local LIGHTER = 0.17
@@ -90,9 +103,10 @@ SPECS[#SPECS + 1] = { kind = "pull", row = "pull", group = 2 }
 
 local IsSecret = ns.IsSecret
 -- panel: the frame of the row. buttons: one entry for each of SPECS, { kind, row, group, marker, frame (the icon), art, text (the countdown's
--- number), outline, cover (the secure button over the icon; none for the role poll), usable, why, hover, seconds }. placed: the spot the row
--- was put at. laid: the buttons, size, spacing and layout the row was laid out for. queued: a change waits for the end of a fight. broken: the
--- game made no secure button.
+-- number), tally (the ready check's count), outline, cover (the secure button over the icon; none for the role poll), usable, why, hover,
+-- seconds }. placed: the spot the row was put at. laid: the buttons, size, spacing and layout the row was laid out for. queued: a change waits
+-- for the end of a fight. broken: the game made no secure button. check: the tally of the last ready check, { ready, total, notReady, waiting,
+-- over }. ends: when the running countdown ends, on the clock of GetTime; ticker its step.
 local G = { buttons = {}, queued = false, broken = false }
 ns.GroupTools = G
 
@@ -126,6 +140,23 @@ local function Truth(fn, ...)
 		return nil
 	end
 	return value ~= nil and value ~= false
+end
+
+-- The first answer of a call of the client, or nil when the call is missing, raises or the answer is withheld.
+local function Ask(fn, ...)
+	if type(fn) ~= "function" then
+		return nil
+	end
+	local ok, value = pcall(fn, ...)
+	if ok and not IsSecret(value) then
+		return value
+	end
+	return nil
+end
+
+-- A timer of the client, false when there is none or it raises.
+local function After(seconds, fn)
+	return type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, seconds, fn)
 end
 
 -- True when either is true, false when both are false, nil while one of them is not known.
@@ -266,6 +297,14 @@ function G.Icon(panel, spec)
 			art:SetTexture(CLEAR)
 		elseif spec.kind == "check" then
 			art:SetTexture(READY)
+			local tally = ns.OwnText(frame, "OVERLAY", FONT)
+			if tally then
+				tally:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+				tally:SetWordWrap(false)
+				pcall(tally.SetShadowOffset, tally, 1, -1)
+				pcall(tally.SetShadowColor, tally, 0, 0, 0, 1)
+				entry.tally = tally
+			end
 		else
 			art:SetTexture(ROLES)
 			art:SetTexCoord(0, ROLES_CUT, 0, ROLES_CUT)
@@ -399,6 +438,10 @@ function G.Layout(list)
 	if pull and pull.text then
 		pull.text:SetTextHeight(math.max(8, math.floor(size / 2 + 0.5)))
 	end
+	local check = G.Entry("check")
+	if check and check.tally then
+		check.tally:SetTextHeight(math.max(7, math.floor(size / 3 + 0.5)))
+	end
 	local key = ("%s|%s|%s|%s"):format(table.concat(list, ","), size, spacing, tostring(layout))
 	if G.laid == key then
 		return
@@ -450,10 +493,25 @@ function G.Countdown()
 	if entry.seconds ~= seconds then
 		entry.cover:SetAttribute("macrotext", "/countdown " .. seconds)
 		entry.seconds = seconds
-		if entry.text then
-			entry.text:SetText(tostring(seconds))
-		end
+		G.PullText(entry)
 	end
+end
+
+-- The countdown's number: the seconds left in the warm colour while a countdown runs, else Countdown length, dim while the button is greyed.
+function G.PullText(entry)
+	local text = entry and entry.text
+	if not text then
+		return
+	end
+	local now = G.ends and Ask(GetTime)
+	if now then
+		text:SetText(tostring(math.max(0, math.floor(G.ends - now + 0.5))))
+		text:SetTextColor(WARN[1], WARN[2], WARN[3], 1)
+		return
+	end
+	text:SetText(tostring(entry.seconds or Seconds()))
+	local shade = entry.usable and 1 or 0.6
+	text:SetTextColor(shade, shade, shade, 1)
 end
 
 -- Puts the row at the spot of its handle: its top left corner at the top left corner of the box.
@@ -559,8 +617,7 @@ function G.Paint()
 			entry.art:SetAlpha(usable and 1 or GREY_ALPHA)
 		end
 		if entry.text then
-			local shade = usable and 1 or 0.6
-			entry.text:SetTextColor(shade, shade, shade, 1)
+			G.PullText(entry)
 		end
 		G.Shade(entry)
 		if entry.hover and G.Owned(entry) then
@@ -594,7 +651,17 @@ function G.Lines(entry)
 	elseif entry.kind == "clear" then
 		return "Clear markers", { "Left-click takes the marker off your target.", "Right-click takes every marker off." }
 	elseif entry.kind == "check" then
-		return "Ready check", { "Asks everyone in the group whether they are ready." }
+		local lines, check = { "Asks everyone in the group whether they are ready." }, G.check
+		if check then
+			lines[#lines + 1] = ("%s: %d of %d ready."):format(check.over and "Last check" or "Now", check.ready, check.total)
+			if #check.notReady > 0 then
+				lines[#lines + 1] = "Not ready: " .. table.concat(check.notReady, ", ")
+			end
+			if #check.waiting > 0 then
+				lines[#lines + 1] = "No answer: " .. table.concat(check.waiting, ", ")
+			end
+		end
+		return "Ready check", lines
 	elseif entry.kind == "roles" then
 		return "Role poll", { "Asks everyone in the group to pick a role." }
 	end
@@ -645,6 +712,166 @@ function G.Leave(entry)
 	G.Shade(entry)
 	if G.Owned(entry) then
 		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
+	end
+end
+
+-- The ready check and the countdown ---------------------------------------------------------------------------------------------------------
+
+-- The units of the group: raid1 to the size of the raid, else the player and party1 to party4.
+local function Units()
+	local units = {}
+	if Truth(IsInRaid) == true then
+		local count = Ask(GetNumGroupMembers)
+		for index = 1, ns.Finite(count) and math.min(math.floor(count), 40) or 0 do
+			units[#units + 1] = "raid" .. index
+		end
+	else
+		units[1] = "player"
+		local count = Ask(GetNumSubgroupMembers)
+		for index = 1, ns.Finite(count) and math.min(math.floor(count), 4) or 0 do
+			units[#units + 1] = "party" .. index
+		end
+	end
+	return units
+end
+
+-- Reads the answers of the ready check that runs: how many are ready of those asked, and the plain names of who is not ready and who has not
+-- answered. A unit the game gives no answer for was not asked.
+function G.Tally()
+	local check = { ready = 0, total = 0, notReady = {}, waiting = {} }
+	for _, unit in ipairs(Units()) do
+		local status = Ask(GetReadyCheckStatus, unit)
+		if status == "ready" or status == "notready" or status == "waiting" then
+			check.total = check.total + 1
+			local name = Ask(UnitName, unit)
+			name = type(name) == "string" and name ~= "" and name or nil
+			if status == "ready" then
+				check.ready = check.ready + 1
+			elseif name then
+				local list = status == "notready" and check.notReady or check.waiting
+				list[#list + 1] = name
+			end
+		end
+	end
+	return check
+end
+
+-- Writes the tally on the tick's icon, or clears it, and writes the tooltip again when it is the tick's.
+function G.ShowTally()
+	local entry = G.Entry("check")
+	if not entry then
+		return
+	end
+	local check, tally = G.check, entry.tally
+	if tally then
+		if check and check.total > 0 then
+			local colour = (check.ready == check.total and ALL_READY) or ((#check.notReady > 0 or (check.over and #check.waiting > 0)) and WARN) or nil
+			tally:SetText(("%d/%d"):format(check.ready, check.total))
+			if colour then
+				tally:SetTextColor(colour[1], colour[2], colour[3], 1)
+			else
+				tally:SetTextColor(1, 1, 1, 1)
+			end
+			tally:Show()
+		else
+			tally:SetText("")
+			tally:Hide()
+		end
+	end
+	if entry.hover and G.Owned(entry) then
+		G.Tip(entry)
+	end
+end
+
+-- READY_CHECK and READY_CHECK_CONFIRM: the answers so far.
+function G.Checking()
+	G.check = G.Tally()
+	G.ShowTally()
+end
+
+-- READY_CHECK_FINISHED: the last tally stays, those still waiting now did not answer, and it goes KEEP_TALLY seconds later.
+function G.Checked()
+	local check = G.check
+	if not check then
+		return
+	end
+	check.over = true
+	G.ShowTally()
+	if not After(KEEP_TALLY, function()
+		if G.check == check then
+			G.check = nil
+			ns.Try(KEY, G.ShowTally)
+		end
+	end) then
+		G.check = nil
+		G.ShowTally()
+	end
+end
+
+-- True for a plain timer type of the player countdown.
+local function PlayerCountdown(kind)
+	if IsSecret(kind) or not ns.Finite(kind) then
+		return false
+	end
+	local enums = type(Enum) == "table" and not IsSecret(Enum) and Enum.StartTimerType or nil
+	local value = type(enums) == "table" and enums.PlayerCountdown or nil
+	return kind == (ns.Finite(value) and value or PLAYER_COUNTDOWN)
+end
+
+-- Stops the countdown's step and gives the number back its length.
+function G.CountdownOver()
+	G.ends = nil
+	local ticker = G.ticker
+	G.ticker = nil
+	if ticker and type(ticker.Cancel) == "function" then
+		pcall(ticker.Cancel, ticker)
+	end
+	G.PullText(G.Entry("pull"))
+end
+
+-- One step of the countdown: the number, and the end at 0.
+function G.CountStep()
+	local now = Ask(GetTime)
+	if not G.ends or not now or G.ends - now < 0.5 then
+		G.CountdownOver()
+		return
+	end
+	G.PullText(G.Entry("pull"))
+end
+
+-- START_TIMER: a player countdown counts on the pull button, once a second until it ends.
+function G.TimerStarted(kind, remaining)
+	if not PlayerCountdown(kind) then
+		return
+	end
+	local now = Ask(GetTime)
+	if IsSecret(remaining) or not ns.Finite(remaining) or remaining <= 0 or not now then
+		G.CountdownOver()
+		return
+	end
+	G.ends = now + remaining
+	if not G.ticker and type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
+		local ok, ticker = pcall(C_Timer.NewTicker, COUNT_STEP, function()
+			ns.Try(KEY, G.CountStep)
+		end)
+		G.ticker = ok and ticker or nil
+	end
+	-- With no ticker the number shows the length the countdown started with, until it ends.
+	if not G.ticker then
+		local ends = G.ends
+		After(remaining, function()
+			if G.ends == ends then
+				ns.Try(KEY, G.CountdownOver)
+			end
+		end)
+	end
+	G.PullText(G.Entry("pull"))
+end
+
+-- STOP_TIMER_OF_TYPE: a stopped player countdown.
+function G.TimerStopped(kind)
+	if PlayerCountdown(kind) then
+		G.CountdownOver()
 	end
 end
 
@@ -709,6 +936,12 @@ ns.Register(KEY, {
 		PLAYER_TARGET_CHANGED = G.Paint,
 		PARTY_LFG_RESTRICTED = G.Paint,
 		PLAYER_REGEN_ENABLED = G.AfterFight,
+		-- A ready check and its answers, and a countdown started or stopped: only the FontStrings of the icons change.
+		READY_CHECK = G.Checking,
+		READY_CHECK_CONFIRM = G.Checking,
+		READY_CHECK_FINISHED = G.Checked,
+		START_TIMER = G.TimerStarted,
+		STOP_TIMER_OF_TYPE = G.TimerStopped,
 	},
 })
 
