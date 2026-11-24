@@ -5,8 +5,9 @@ local _, ns = ...
 -- while it is on, and its bank window too for such a visit. This file is the module, and the other Bags files are its parts. It makes ns.Bags and
 -- every table the parts fill, for the files that load after it in this order: BagsData.lua (Data, the account cache), BagsCategories.lua
 -- (Categories and Categories.New), BagsSearch.lua (Search), BagsItems.lua (Buttons), BagsLayout.lua (Layout), BagsWindow.lua (Window),
--- BagsBank.lua (Bank), BagsTooltip.lua (Tips), BagsOrder.lua (Order, the order of the sections) and BagsPins.lua (Pins, pinned slots and Keep
--- in place). A part adds fields to its own table only, adds the events it owns with ns.AddEvent while the
+-- BagsBank.lua (Bank), BagsTooltip.lua (Tips), BagsOrder.lua (Order, the order and the folds of the sections), BagsPins.lua (Pins, pinned slots
+-- and Keep in place) and BagsSlots.lua (Slots, the bag slots of the bag window). A part adds fields to its own table only, adds the events it owns
+-- with ns.AddEvent while the
 -- files load (Core.lua:2093-2141; so the module is registered here, first), and looks up the functions of the other parts when it calls them,
 -- never at load. This file holds what they share (Opt, Look, On, Part, Request, Me, Viewing), decides when the bag window opens and closes, keeps
 -- the game's windows hidden, stands down, and runs the redraw pass and the sort hold. Every part runs its work through Bags.Part (ns.EachPart,
@@ -123,6 +124,11 @@ local _, ns = ...
 -- slots are made); and when the page comes on again after Start, which runs Refresh and not Start, BagsData reads again what its Start reads
 -- (Data.Resume), whether Bags stands down or not.
 --
+-- The bag bar: the OnEnter and OnLeave of the game's bag buttons (MainMenuBarBackpackButton, CharacterBag0Slot to CharacterBag3Slot,
+-- CharacterReagentBag0Slot and KeyRingButton, each named here with its bag) are followed once with HookScript, at Start and when the page comes up,
+-- which runs after the game's script and writes nothing on the button; while the page is on, the mouse over one lights that bag's slots in the bag
+-- window (B.Layout.Light, BagsLayout.lua) and leaving it gives the window back. Hidden frames and Fading leave those scripts alone.
+--
 -- /flatui bags opens or closes the bag window with the command hold, and /flatui bags Name shows the bags of a character Flat UI keeps;
 -- /flatui bank and /flatui bank Name ask BagsBank for the bank window. They run whatever the switch of the page, and say so while it is off.
 --
@@ -153,6 +159,10 @@ local FOLLOW = {
 	{ "OpenAllBags", "opened" }, { "OpenAllBagsMatchingContext", "opened" }, { "OpenBag", "opened" }, { "OpenBackpack", "opened" },
 	{ "CloseAllBags", "closed" }, { "CloseBag", "closed" }, { "CloseBackpack", "closed" },
 }
+-- The buttons of the game's bag bar and the bag each stands for (Enum.BagIndex: the backpack 0, the bags 1 to 4, the reagent bag 5, the keyring
+-- -1), by their global names (Blizzard_MainMenuBarBagButtons/Camelot/MainMenuBarBagButtons.xml), never by the mixin's GetBagID.
+local BAG_BAR = { MainMenuBarBackpackButton = 0, CharacterBag0Slot = 1, CharacterBag1Slot = 2, CharacterBag2Slot = 3, CharacterBag3Slot = 4,
+	CharacterReagentBag0Slot = 5, KeyRingButton = -1 }
 -- The two windows, by the word the parts use, and the global names BagsWindow gives them.
 local WINDOWS = { "bags", "bank" }
 local NAMES = { bags = "FlatUIBags", bank = "FlatUIBank" }
@@ -226,6 +236,7 @@ local B = {
 	Tips = {},
 	Order = {},
 	Pins = {},
+	Slots = {},
 	-- True between MERCHANT_SHOW and MERCHANT_CLOSED.
 	atMerchant = false,
 }
@@ -245,6 +256,8 @@ local bagsOpen = false
 local holds = {}
 -- The calls of the game heard since the last settle; the time of the last BAG_CLOSED; the token of a closing that waits.
 local burst, swapAt, swapToken
+-- The buttons of the bag bar whose OnEnter and OnLeave are followed (BagBarHooks).
+local barHooked = {}
 -- What each window must draw again: { flags, changed (the slots to look at), all (every slot) }; a pass waits for the next frame; the sort hold
 -- of each window.
 local wants = { bags = { flags = {} }, bank = { flags = {} } }
@@ -1253,6 +1266,30 @@ local function Special()
 	end
 end
 
+-- The mouse over a button of the game's bag bar lights that bag's slots in the bag window, and leaving it gives the window back (B.Layout.Light,
+-- BagsLayout.lua), only while the page stands in for the game's bags; the layout itself keeps to the player's own live bags. Each button's OnEnter
+-- and OnLeave are followed once with HookScript, which runs after the game's script and writes nothing on the button, as Hud.lua follows the
+-- scripts of the game's frames; a hook cannot be taken back, so each asks first whether the page is on. A button missing now is followed when the
+-- page comes up again (Up).
+local function BagBarHooks()
+	for name, bag in pairs(BAG_BAR) do
+		local button = Game(name)
+		if button and not barHooked[button] and type(button.HookScript) == "function" then
+			local okEnter = pcall(button.HookScript, button, "OnEnter", function()
+				if B.On() then
+					Call("layout", B.Layout, "Light", "bags", bag)
+				end
+			end)
+			local okLeave = pcall(button.HookScript, button, "OnLeave", function()
+				if B.On() then
+					Call("layout", B.Layout, "Light", "bags", nil)
+				end
+			end)
+			barHooked[button] = okEnter or okLeave
+		end
+	end
+end
+
 -- The page stands in for the game's bags: the game's windows go under the hidden frame, the bag slots are made, and with fresh (the page has
 -- just come up) a game bag that is open already opens the bag window beside it.
 local function Up(fresh)
@@ -1261,6 +1298,7 @@ local function Up(fresh)
 		-- MERCHANT_SHOW reached no handler while the page was off.
 		B.atMerchant = Shown(Game("MerchantFrame"))
 		Safely(Special)
+		Safely(BagBarHooks)
 	end
 	Safely(Sync)
 	Call("items", B.Buttons, "Prepare")
@@ -1315,6 +1353,7 @@ local function Start()
 	started = true
 	enabled = ns.Enabled(KEY) == true
 	Safely(Follow)
+	Safely(BagBarHooks)
 	Judge()
 	if B.On() then
 		Up(true)

@@ -37,9 +37,20 @@ local _, ns = ...
 -- colour, Windows.lua:1230-1253), with the edge in the Highlight colour while it has the keyboard (HasFocus): GameFontHighlightSmall, a Search
 -- hint in the dim text colour (Threat.lua:46), and a cross that clears it, a Button of its own drawn as two lines (CreateLine, as Windows draws
 -- its close button, Windows.lua:490-524). The box is written and read with SetText and GetText.
--- Escape and Enter give the keyboard back (ClearFocus), so a second Escape is the game's, and a box that hides gives it back too. Pointing at the
--- box out of a fight (InCombatLockdown and UnitAffectingCombat, through Errands.Fighting) writes the grammar in GameTooltip in plain lines
--- (SetOwner, SetText, AddLine, Show, and Hide while the box owns it, IsOwned); the search itself, typing and the cross work in a fight too.
+-- Escape and Enter give the keyboard back (ClearFocus), so a second Escape is the game's, and a box that hides gives it back too. Pointing at an
+-- empty box that does not have the keyboard, out of a fight (InCombatLockdown and UnitAffectingCombat, through Errands.Fighting), writes the
+-- grammar in GameTooltip in plain lines (SetOwner, SetText, AddLine, Show, and Hide while the box owns it, IsOwned); a box that holds a search
+-- gets two short lines instead, the search and what the cross does, and a click in the box or a letter typed takes the tooltip away, so it never
+-- lies over the slots the search lights. The search itself, typing and the cross work in a fight too.
+-- A right click on the box (OnMouseUp) opens a menu of BagsLayout's (B.Layout.Menu) of quick searches, New items, Junk, Bind on equip, Quest items,
+-- Cannot use, Consumables, Trade goods, Green and better and Epic and better, each with its term at the right; a pick types the term (the one
+-- typed now is ticked), and Clear, while a search is typed, clears it. The menu belongs to the box's window, and closes with it.
+-- The bag search key: Bindings.xml binds a click of FlatUIBagSearchButton (CLICK FlatUIBagSearchButton:LeftButton), a plain button of Flat UI's own
+-- made here as the file loads, a child of UIParent with no size and no point that hears the release only, as the bank key's (BagsBank.lua), named
+-- in the game's Key Bindings by the global BINDING_NAME_CLICK FlatUIBagSearchButton:LeftButton. It opens the bag window with the command hold, as
+-- /flatui bags does (B.Hold, Bags.lua), and on the next frame (C_Timer.After) gives its search box the keyboard (SetFocus, through B.Window.Focus
+-- of BagsWindow.lua); with the window open it gives the box the keyboard, or takes it back (ClearFocus). Escape then leaves the box, and a second
+-- Escape closes the window as before. In a fight too: the window and the box are Flat UI's own.
 
 local KEY = "bags"
 local B = ns.Bags
@@ -77,7 +88,33 @@ local HELP = {
 	"Quality: q:rare, q>=uncommon, q<3. Item level: ilvl:20-30, ilvl>40.",
 	"For example: #boe q>=uncommon, !#junk mail, (cloth | leather) #gear.",
 	"Items that do not match are dimmed. Enter or Escape leaves the box, and the cross clears it.",
+	"Right-click the box for quick searches. A key under Flat UI in Key Bindings opens the bags with this box ready.",
 }
+-- The tooltip of a box that holds a search, under its text.
+local SHORT = "The cross clears it. Right-click the box for quick searches."
+-- The quick searches of the box's right-click menu: what each line says and the term it types.
+local QUICK = {
+	{ "New items", "#new" },
+	{ "Junk", "#junk" },
+	{ "Bind on equip", "#boe" },
+	{ "Quest items", "#quest" },
+	{ "Cannot use", "#unusable" },
+	{ "Consumables", "#consumable" },
+	{ "Trade goods", "#trade" },
+	{ "Green and better", "q>=uncommon" },
+	{ "Epic and better", "q>=epic" },
+}
+-- The bag search key: Bindings.xml binds a click of this plain button of Flat UI's own (CLICK FlatUIBagSearchButton:LeftButton).
+local KEY_BUTTON = "FlatUIBagSearchButton"
+local KEY_BINDING = "CLICK " .. KEY_BUTTON .. ":LeftButton"
+local KEY_SAY = {
+	off = "Flat UI: Bags is off. Turn on Flat UI bags on the Bags page.",
+	down = "Flat UI: Bags is not in use now, so the bag search key does nothing. /flatui status says why.",
+	shut = "Flat UI: the game keeps the bags shut here.",
+}
+
+-- The name of the binding in the game's Key Bindings, under Flat UI.
+_G["BINDING_NAME_" .. KEY_BINDING] = "Flat UI bags: search"
 
 -- The shared text, every box made (each with what it drew: { outline, hint, clear, lines, hover }), and whether this file is writing the boxes.
 local text = ""
@@ -828,13 +865,21 @@ local function Typed(box)
 	end
 end
 
--- The grammar under the box, out of a fight only, as the tooltips of the bag window keep to.
+-- The grammar under the box, out of a fight only, as the tooltips of the bag window keep to, and only while the box is empty and not being typed
+-- in, since it would lie over the top rows of the window, the slots a search lights. A box that holds a search gets two short lines instead.
 local function Tip(box)
 	local tip = GameTooltip
-	if type(tip) ~= "table" or ns.Forbidden(tip) or Errands.Fighting() then
+	if type(tip) ~= "table" or ns.Forbidden(tip) or Errands.Fighting() or Focused(box) then
 		return
 	end
 	tip:SetOwner(box, "ANCHOR_BOTTOM", 0, -4)
+	if text ~= "" then
+		-- The text keeps a typed bar as "||", which the tooltip shows as one bar.
+		tip:SetText("Searching: " .. text, 1, 1, 1)
+		tip:AddLine(SHORT, DIM[1], DIM[2], DIM[3], true)
+		tip:Show()
+		return
+	end
 	tip:SetText(HELP[1])
 	for index = 2, #HELP do
 		tip:AddLine(HELP[index], 1, 1, 1, true)
@@ -892,8 +937,33 @@ local function Cross(box, own)
 	return button
 end
 
--- A search box of the addon's own on parent, WIDTH by HEIGHT until the caller sizes and places it. It shows the shared text.
-function Search.Box(parent)
+-- The quick searches of the box: a menu of BagsLayout's (Layout.Menu) under the box, each line a term to type, the one typed now ticked, and Clear
+-- while a search is typed. owner: the window of the box, whose closing closes the menu.
+local function Quick(box, owner)
+	local items = {}
+	for _, quick in ipairs(QUICK) do
+		local term = quick[2]
+		items[#items + 1] = { text = quick[1], right = term, tick = text == term, part = "search", pick = function()
+			Search.SetText(term)
+			box:ClearFocus()
+		end }
+	end
+	if text ~= "" then
+		items[#items + 1] = { text = "Clear", part = "search", pick = function()
+			Search.SetText("")
+			box:ClearFocus()
+		end }
+	end
+	local layout = B.Layout
+	if type(layout) == "table" and type(layout.Menu) == "function" then
+		TipAway(box)
+		layout.Menu(box, "Quick searches", items, owner)
+	end
+end
+
+-- A search box of the addon's own on parent, WIDTH by HEIGHT until the caller sizes and places it. It shows the shared text. owner: the window
+-- it is in ("bags", "bank"), for its right-click menu of quick searches.
+function Search.Box(parent, owner)
 	local box = CreateFrame("EditBox", nil, parent)
 	ns.Own[box] = true
 	box:SetSize(WIDTH, HEIGHT)
@@ -912,6 +982,8 @@ function Search.Box(parent)
 	own.clear = Cross(box, own)
 	box:SetScript("OnTextChanged", function(self, typed)
 		if typed and not writing then
+			-- Typing takes the help away, so it never lies over the slots the search lights.
+			TipAway(self)
 			Run(Typed, self)
 		end
 		Refresh(self)
@@ -923,6 +995,7 @@ function Search.Box(parent)
 		self:ClearFocus()
 	end)
 	box:SetScript("OnEditFocusGained", function(self)
+		TipAway(self)
 		Paint(self)
 		Refresh(self)
 	end)
@@ -952,10 +1025,52 @@ function Search.Box(parent)
 	box:SetScript("OnLeave", function(self)
 		TipAway(self)
 	end)
+	-- A right click opens the quick searches, or closes them when they are open.
+	box:SetScript("OnMouseUp", function(self, mouse)
+		if mouse == "RightButton" then
+			Run(Quick, self, owner)
+		end
+	end)
 	writing = true
 	pcall(box.SetText, box, text)
 	writing = false
 	Paint(box)
 	Refresh(box)
 	return box
+end
+
+-- The bag search key -----------------------------------------------------------------------------------------------------------------------
+
+-- Opens the bag window, as /flatui bags does (the command hold of Bags.lua), and on the next frame gives its search box the keyboard (B.Window.Focus,
+-- BagsWindow.lua), so the player can type at once; with the window open already it gives the box the keyboard, or takes it back when the box has
+-- it. In a fight too, since the window and the box are Flat UI's own. While Bags is off or not in use it only says so.
+local function KeyPressed()
+	local window = B.Window
+	if type(B.On) ~= "function" or B.On() ~= true or type(window) ~= "table" or type(window.Focus) ~= "function" then
+		print(ns.Enabled(KEY) and KEY_SAY.down or KEY_SAY.off)
+		return
+	end
+	if window.Focus("bags", true) then
+		return
+	end
+	if type(B.Hold) ~= "function" or B.Hold("command", true) ~= true then
+		print(KEY_SAY.shut)
+		return
+	end
+	C_Timer.After(0, function()
+		Run(window.Focus, "bags")
+	end)
+end
+
+-- The button the key clicks: a child of UIParent with no size and no point, so it shows nothing and takes no mouse, hearing the release only, as
+-- the bank key's (BagsBank.lua).
+do
+	local ok, button = pcall(CreateFrame, "Button", KEY_BUTTON, UIParent)
+	if ok and type(button) == "table" then
+		ns.Own[button] = true
+		pcall(button.RegisterForClicks, button, "LeftButtonUp")
+		button:SetScript("OnClick", function()
+			Run(KeyPressed)
+		end)
+	end
 end

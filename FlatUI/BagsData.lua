@@ -6,8 +6,11 @@ local _, ns = ...
 -- on the module (ns.AddEvent, Core.lua:2093-2141), and each handler runs as the part cache of the module (B.Part, a fresh key per call as
 -- Errands.Run does, Errands.lua:212-227), so a failure counts against this part alone. Nothing else tells the windows that the bags changed, so
 -- cache is one of the parts Bags cannot do without (Bags.lua): when it stops, both windows hide and the game's bags come back. The tooltip index
--- alone (below) is built as the part tooltips, the part of BagsTooltip.lua that it serves. It touches no frame, the game's or its own: it reads the
--- game, writes FlatUIDB.bags, and looks up the other parts of Bags and the functions of Core.lua when it calls them, never at load.
+-- alone (below) is built as the part tooltips, the part of BagsTooltip.lua that it serves. It touches no frame of the game's: it reads the
+-- game, writes FlatUIDB.bags, and looks up the other parts of Bags and the functions of Core.lua when it calls them, never at load. Its one frame
+-- of its own hears PLAYER_ENTERING_WORLD whatever the switches of the pages, for the gold of the session: the money this character had as it
+-- logged in, kept in FlatUICharDB.sessionMoney (written at a login, and at a loading screen while nothing is kept, so a /reload keeps the session),
+-- which ns.SessionMoney sets against GetMoney for the gold tooltip of the bag window (BagsWindow.lua) and the Gold slot of Data panels.
 --
 -- The record. FlatUIDB.bags is account data outside every profile, made only while the module is on, as FlatUIDB.datapanels is
 -- (DataPanels.lua:193-212). v is its layout, 1; a store of another layout starts its characters again and keeps placed, the hand placements of
@@ -1653,6 +1656,48 @@ function Data.Money(key)
 	end
 	local record = Character(key)
 	return record and Count(record.money) or nil
+end
+
+-- The gold of this session -------------------------------------------------------------------------------------------------------------------
+
+-- The money this character had as it logged in, kept in FlatUICharDB.sessionMoney so a /reload keeps the session: written at the
+-- PLAYER_ENTERING_WORLD of a login (its first value, isInitialLogin, SystemDocumentation.lua:136), and at any other one while nothing is kept yet.
+-- A frame of this file's own hears it, whatever the switches of the pages, since the Gold slot of Data panels (DataStreams.lua) says it too.
+local function SessionStart(initial)
+	local char = ns.Character()
+	local money = Count(Ask(Client(nil, "GetMoney")))
+	if type(char) ~= "table" or not money then
+		return
+	end
+	if (not IsSecret(initial) and initial == true) or not Count(char.sessionMoney) then
+		char.sessionMoney = money
+	end
+end
+
+-- What this character made (more than 0) or spent (less) since it logged in, in copper; nil while the client does not say.
+function ns.SessionMoney()
+	local char = ns.Character()
+	local start = type(char) == "table" and Count(char.sessionMoney) or nil
+	local money = Count(Ask(Client(nil, "GetMoney")))
+	if not (start and money) then
+		return nil
+	end
+	return money - start
+end
+Data.SessionMoney = ns.SessionMoney
+
+do
+	local ok, frame = pcall(CreateFrame, "Frame")
+	if ok and type(frame) == "table" then
+		ns.Own[frame] = true
+		frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+		frame:SetScript("OnEvent", function(_, _, initial)
+			local done, err = pcall(SessionStart, initial)
+			if not done then
+				geterrorhandler()(err)
+			end
+		end)
+	end
 end
 
 -- Asks the game once a session to load an item a window shows with no name, and notes it as pending until ITEM_DATA_LOAD_RESULT or

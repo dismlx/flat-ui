@@ -10,7 +10,8 @@ local _, ns = ...
 -- Flat UI's own (BagsLayout.lua) with every character Bags keeps, by realm, this realm first; while a search is typed each line says how many items
 -- match there, the keyring's included, worked out one character a frame once the menu opens, never while the player types, from names the client
 -- has loaded only;
--- the search box (B.Search.Box, BagsSearch.lua); the view button, Sections or Bag by bag; the sort button, on live slots only: ns.BagSort.Run and
+-- the search box (B.Search.Box, BagsSearch.lua, told its window for its menu of quick searches), which B.Window.Focus gives the keyboard for the
+-- bag search key; the view button, Sections or Bag by bag; the sort button, on live slots only: ns.BagSort.Run and
 -- ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the game is asked to sort (BagSort tells its
 -- watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving, six and a half seconds at most, and for as
 -- long as the sort hold of Bags.lua lasts (B.Sorting), also when the window closed and opened again meanwhile; nothing arrives at the top shelf
@@ -34,11 +35,14 @@ local _, ns = ...
 -- what shrank (Free slots losing a row as its slots fill). It takes its exact height again at its next fresh layout and at its opening.
 -- The bag window's footer has the gold of the character shown (Errands.Money, Errands.lua:65-85), whose tooltip lists the characters of this realm
 -- and its connected realms, richest first, each with its realm when that is not this character's, with their total, and one line for those of
--- other realms; its free slots, those of the general bags alone (B.Data.Free: the backpack and normal bags, family 0, the only room for any
+-- other realms, and while the window shows the player's own bags what this character made (in green) or spent (in red) since it logged in
+-- (ns.SessionMoney, BagsData.lua; a /reload keeps the session, and nothing shows while it made and spent nothing); its free slots, those of the
+-- general bags alone (B.Data.Free: the backpack and normal bags, family 0, the only room for any
 -- item), whose tooltip names each special bag's free slots apart, uncounted (the reagent bag, a trade bag, a quiver, an ammo pouch, a soul bag
 -- take only certain items), and leaves the keyring out, as its slots hold only keys; and, at a merchant, Sell junk (N): N is
--- ns.ErrandsJunkCount, what the next pass of Errands would sell, and a click runs ns.ErrandsSellJunk, which sells as Errands sells and says why
--- when it cannot. The bank window's footer has the free slots of the bank, its general slots alone the same way, and, at the banker with a
+-- ns.ErrandsJunkCount, what the next pass of Errands would sell, whose tooltip says what it brings (Errands.Money; "at least" while the price of
+-- one has not loaded), and a click runs ns.ErrandsSellJunk, which sells as Errands sells and says why when it cannot. The bank window's footer has
+-- the free slots of the bank, its general slots alone the same way, and, at the banker with a
 -- search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit, B.Bank.TakeOut, B.Bank.Busy, whose per-click
 -- fallback labels the button with what is left). These three buttons are this file's own, drawn as the title bar's are, and clicked as the
 -- game's buttons are, by the left button let go over them, as Errands.Button's are (Errands.lua:127-201).
@@ -46,7 +50,8 @@ local _, ns = ...
 -- of the usual length too, whatever shows now, so it never changes width as a button comes or goes or the gold changes; the free slots are
 -- written as fully as the room left allows, the word Free left out first.
 -- The row above the bank window's footer, at the live bank only, is BagsBank.lua's (B.Bank.Slots), as high and as wide as that file says. A bank
--- never seen says how to keep one.
+-- never seen says how to keep one. The row above the bag window's footer, while it shows the player's own live bags and Bag slots is on, is the
+-- bag slots of BagsSlots.lua (B.Slots.Row): the backpack, the four bags and the reagent bag, to put a bag in or swap one.
 -- Escape closes either window: both are named in UISpecialFrames, as the options window is (Panel.lua:2700-2708), whose windows the game's
 -- CloseSpecialWindows hides (UIParentPanelManager.lua:21-27). Whatever hid a window (its close button, a key, Escape, the page going off), its
 -- OnHide ends what is the window's own: a drag (where it was let go is kept), the keyboard of the search box, a menu and the busy sort button.
@@ -125,8 +130,9 @@ local GOLD_ROOM, FREE_ROOM, FOOT_GAP = 96, 40, 12
 -- layout ends it; how many characters the gold tooltip names.
 local POLL, BUSY_MOST, BUSY_LEAST, MOST_GOLD = 0.5, 6.5, 0.35, 15
 local KEYRING = -1
--- The text-dim of the windows (Threat.lua), and colours for a free count that is low or nothing.
+-- The text-dim of the windows (Threat.lua), and colours for a free count that is low or nothing; the gold made and spent this session.
 local DIM = { 0.66, 0.68, 0.62 }
+local SESSION_GAIN, SESSION_LOSS = { 0.3, 0.85, 0.3 }, { 1, 0.35, 0.24 }
 local DIM_HEX, WHITE_HEX, LOW_HEX, NONE_HEX = "|cffa8ad9e", "|cffffffff", "|cffffd100", "|cffff5a3d"
 local LOW = 4
 -- The separators under the title bar and over the footer, white at this opacity.
@@ -153,8 +159,9 @@ end
 
 -- Per window ("bags", "bank"): which, frame, outline; bar and its controls (picker, search, icons, close); scroll, child (the scroll child) and
 -- content (the frame BagsLayout.lua lays out in, scaled); track and thumb of the scroll bar; foot and its labels and buttons, with plates, the
--- drawing of each button; freeTexts, the texts of the free slots, longest first; strip (the bank's row of BagsBank.lua) and stripW, the width of
--- that row; message. viewH, contentH, offset: the height shown, the height of the content and the scroll. placed: the spot it hangs from now;
+-- drawing of each button; freeTexts, the texts of the free slots, longest first; strip (the bank's row of BagsBank.lua, or the bag slots of
+-- BagsSlots.lua) and stripW, the width of that row; message. viewH, contentH, offset: the height shown, the height of the content and the scroll.
+-- placed: the spot it hangs from now;
 -- dropped: where it was let go when the movers could not keep it. mode: what the last layout showed. busy: when the sort began; pulsing: the sort
 -- button pulses. warming: the warm-up shows it; parked: it stands off the screen for the warm-up; wantShow: an opening asked for meanwhile;
 -- warmQueued: the end of a warm-up is queued; warmButtons: the new buttons a warm-up showed in the open window. open: shown for real.
@@ -842,7 +849,7 @@ local function MakeBar(w)
 	if w.which == "bags" then
 		Icon(w, "bank", { "bank" })
 	end
-	local box = Call(Search, "Box", bar)
+	local box = Call(Search, "Box", bar, w.which)
 	if type(box) == "table" then
 		w.search = box
 		pcall(box.SetHeight, box, SEARCH_HEIGHT)
@@ -1111,6 +1118,17 @@ local function GoldTip(w, owner)
 	if #near == 0 and others == 0 then
 		tip:AddLine("Flat UI keeps the gold of each character that logs in with Flat UI bags on.", DIM[1], DIM[2], DIM[3], true)
 	end
+	-- What the character you play made or spent since it logged in (ns.SessionMoney, BagsData.lua), while the window shows your own bags.
+	local _, mine = Layout.Viewed(w.which)
+	local okSession, session = pcall(Call, ns, "SessionMoney")
+	if mine and okSession and Finite(session) and session ~= 0 then
+		tip:AddLine(" ")
+		if session > 0 then
+			tip:AddDoubleLine("This session", "+" .. Money(session), DIM[1], DIM[2], DIM[3], SESSION_GAIN[1], SESSION_GAIN[2], SESSION_GAIN[3])
+		else
+			tip:AddDoubleLine("This session", "-" .. Money(-session), DIM[1], DIM[2], DIM[3], SESSION_LOSS[1], SESSION_LOSS[2], SESSION_LOSS[3])
+		end
+	end
 	tip:Show()
 end
 
@@ -1177,16 +1195,19 @@ local function FreeTexts(w)
 	return { DIM_HEX .. "Free|r " .. count, count }
 end
 
+-- What Sell junk would sell now (ns.ErrandsJunkCount): how many items, how many of the sell list wait for the next click, what they are worth in
+-- copper, and true when a price has not loaded, so the worth is at least that.
 local function JunkCount()
 	local count = ns.ErrandsJunkCount
 	if type(count) ~= "function" then
-		return 0, 0
+		return 0, 0, 0, false
 	end
-	local ok, n, waits = pcall(count)
+	local ok, n, waits, value, unknown = pcall(count)
 	if not ok then
-		return 0, 0
+		return 0, 0, 0, false
 	end
-	return Finite(n) and math.max(0, math.floor(n)) or 0, Finite(waits) and math.max(0, math.floor(waits)) or 0
+	return Finite(n) and math.max(0, math.floor(n)) or 0, Finite(waits) and math.max(0, math.floor(waits)) or 0,
+		Finite(value) and math.max(0, math.floor(value)) or 0, not IsSecret(unknown) and unknown == true
 end
 
 local function Selling()
@@ -1202,10 +1223,16 @@ local function Plural(n, one, many)
 	return n == 1 and one or many
 end
 
+-- The tooltip of Sell junk: how many items the click sells and what they bring ("for at least" while a price has not loaded; no amount at 0).
 local function SellTip(w, owner)
-	local n, waits = w.sellCount or 0, w.sellWaits or 0
+	local n, waits, value = w.sellCount or 0, w.sellWaits or 0, w.sellValue or 0
+	local worth = ""
+	if value > 0 then
+		worth = (w.sellUnknown and " for at least %s" or " for %s"):format(Money(value))
+	end
 	Say(owner, "Sell junk",
-		("Sells %d %s, as Errands sells: grey items with a price and the items of your sell list, one at a time."):format(n, Plural(n, "item", "items")),
+		("Sells %d %s%s, as Errands sells: grey items with a price and the items of your sell list, one at a time."):format(n, Plural(n, "item",
+			"items"), worth),
 		waits > 0 and ("%d more of your sell list %s for the next click."):format(waits, Plural(waits, "waits", "wait")) or nil)
 end
 
@@ -1326,15 +1353,14 @@ local function MakeFoot(w)
 	w.footRule = rule
 	w.free = FootLabel(w, FreeTip)
 	w.free.text:SetJustifyH(w.which == "bags" and "RIGHT" or "LEFT")
-	if w.which == "bank" then
-		-- The row of BagsBank.lua: the bank bag slots and the Buy button, above the footer. Hidden until the row gives its height (Slots).
-		local strip = Own(CreateFrame("Frame", nil, frame))
-		strip:SetPoint("BOTTOMLEFT", foot, "TOPLEFT", 0, INNER)
-		strip:SetPoint("BOTTOMRIGHT", foot, "TOPRIGHT", 0, INNER)
-		strip:SetHeight(STRIP)
-		strip:Hide()
-		w.strip = strip
-	end
+	-- The row above the footer: the bank bag slots and the Buy button of BagsBank.lua in the bank window, the bag slots of BagsSlots.lua in the bag
+	-- window. Hidden until the row gives its height (Slots).
+	local strip = Own(CreateFrame("Frame", nil, frame))
+	strip:SetPoint("BOTTOMLEFT", foot, "TOPLEFT", 0, INNER)
+	strip:SetPoint("BOTTOMRIGHT", foot, "TOPRIGHT", 0, INNER)
+	strip:SetHeight(STRIP)
+	strip:Hide()
+	w.strip = strip
 	if w.which == "bags" then
 		w.gold = FootLabel(w, GoldTip)
 		w.gold.text:SetJustifyH("LEFT")
@@ -1448,12 +1474,12 @@ function Footer(w)
 		end
 		if w.sell then
 			local wanted = mine and live and B.atMerchant == true and Opt("sellButton") ~= false
-			local n, waits, selling = 0, 0, false
+			local n, waits, value, unknown, selling = 0, 0, 0, false, false
 			if wanted then
-				n, waits = JunkCount()
+				n, waits, value, unknown = JunkCount()
 				selling = Selling()
 			end
-			w.sellCount, w.sellWaits = n, waits
+			w.sellCount, w.sellWaits, w.sellValue, w.sellUnknown = n, waits, value, unknown
 			w.sellOn = wanted and (n > 0 or selling)
 			if w.sellOn then
 				w.sell.SetLabel(selling and "Selling..." or ("Sell junk (%d)"):format(n))
@@ -1499,7 +1525,7 @@ function Footer(w)
 	ArrangeFoot(w)
 end
 
--- How high the bank's row of BagsBank.lua is, as that file left it: nothing while it is hidden.
+-- How high the row over the footer is, as BagsBank.lua or BagsSlots.lua left it: nothing while it is hidden.
 local function StripHeight(w)
 	local strip = w.strip
 	if not strip or not strip:IsShown() then
@@ -1586,18 +1612,24 @@ function Resize(w, keep)
 	ArrangeFoot(w)
 end
 
--- The bank's row of BagsBank.lua is laid out again in the strip this file gives it, which takes the height B.Bank.Slots returns and hides when
--- that is 0 (away from the live bank); the width it returns is kept (stripW), so the window is never narrower than the row. The row belongs to
--- the live bank, so it is not asked for while the window shows a snapshot or another character.
+-- The row over the footer is laid out again in the strip this file gives it, which takes the height the row returns and hides when that is 0;
+-- the width it returns is kept (stripW), so the window is never narrower than the row. In the bank window it is BagsBank.lua's row of bank bag
+-- slots (B.Bank.Slots), which belongs to the live bank, so it is not asked for while the window shows a snapshot or another character; in the bag
+-- window the bag slots of BagsSlots.lua (B.Slots.Row), only while it shows the player's own live bags and Bag slots is on.
 local function Slots(w)
 	local strip = w.strip
 	if not strip then
 		return
 	end
 	local width, height = 0, 0
-	local _, _, live = Layout.Viewed(w.which)
+	local _, mine, live = Layout.Viewed(w.which)
 	if live then
-		local wide, h = Call(Bank, "Slots", strip)
+		local wide, h
+		if w.which == "bank" then
+			wide, h = Call(Bank, "Slots", strip)
+		elseif mine and Opt("bagSlots") ~= false then
+			wide, h = Call(B.Slots, "Row", strip)
+		end
 		height = Finite(h) and h > 0 and h or 0
 		width = Finite(wide) and wide > 0 and wide or 0
 	end
@@ -1870,6 +1902,23 @@ function Window.Show(which)
 	end
 	Window.Place(which)
 	w.frame:Show()
+end
+
+-- Gives the search box of a window that shows the keyboard (SetFocus), so the player can type at once; with toggle, a box that has it gives it back
+-- (ClearFocus). The bag search key of BagsSearch.lua. True when the window shows.
+function Window.Focus(which, toggle)
+	local w = windows[which]
+	if not (Shown(w) and w.search) then
+		return false
+	end
+	local box = w.search
+	local ok, focus = pcall(box.HasFocus, box)
+	if toggle and ok and not IsSecret(focus) and focus == true then
+		box:ClearFocus()
+	else
+		box:SetFocus()
+	end
+	return true
 end
 
 -- Hides the window, once a slot that owns the game's split box has left it to the game. A window the player cannot see (the interface hidden) hears

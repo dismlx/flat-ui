@@ -26,9 +26,20 @@ local _, ns = ...
 -- dragging; the wheel still scrolls.
 --
 -- The menu: a right click on a title that can be dragged, with no item on the cursor, opens a menu of BagsLayout's (Layout.Menu) with Move to the
--- top, Move up, Move down and Move to the bottom, among the sections that window shows, and while an order is saved, a line that puts Flat UI's
--- order back. On Keep in place it also has BagsPins.lua's lines. The row Section order on the Bags page does the same reset. Moving sections
--- works in a fight: it only lays the windows out, and their buttons are not protected (BagsLayout.lua).
+-- top, Move up, Move down and Move to the bottom, among the sections that window shows, Fold or Unfold, and while an order is saved, a line that
+-- puts Flat UI's order back, and while a section is folded, Unfold every section. At the live bank (B.Bank.Live) a section of the player's own
+-- slots also has Put <section> in the bank in the bag window and Take <section> out in the bank window, which run the pass of Deposit and Take out
+-- of BagsBank.lua with the section (B.Categories.Of) in place of the search, and its tooltip says so; not on Keep in place, whose items stay
+-- pinned. On Keep in place it also has BagsPins.lua's lines. The row Section order on the Bags page does the same reset. Moving sections works in
+-- a fight: it only lays the windows out, and their buttons are not protected (BagsLayout.lua).
+--
+-- Folds: a left click on a title that can be dragged, with no item on the cursor (BagsLayout.lua's TitleClick, after its check that the click is
+-- not the end of a drop), folds the section to its title, or opens it again. The folded sections are one set of section keys for the whole
+-- account, FlatUIDB.bags.folded = { [key] = true }, beside the order and kept the same way, so the bag window, the bank window and every
+-- character's view fold the same sections; an empty set is not kept. BagsLayout lays a folded section out as its title alone, as the empty Junk
+-- title is, with a + after its count, while its items keep their cells, so an item that changes in a folded section stays there and does not
+-- go to the top shelf; while a search is typed the title says how many of its items match. The menu's Fold or Unfold, Unfold every section and
+-- the row Folded sections on the Bags page (ns.BagsFoldLines, ns.BagsFoldPick) do the same. Folding works in a fight too, as a move does.
 
 local B = ns.Bags
 local Order = B.Order
@@ -48,6 +59,23 @@ local TIPS = {
 	-- While Put pinned items back is off (BagsPins.lua).
 	keepStill = "Your pinned slots, in the order of your bags: nothing here is sorted. Put pinned items back is off, so after a clean up "
 		.. "right-click this title to put them back. Ctrl+right-click an item to pin or unpin its slot. Drag the title to move this section.",
+	-- After each of them: what a click on the title does.
+	fold = "Click to fold it.",
+	unfold = "Folded: click to open it.",
+}
+local UNFOLD_ALL = "Unfold every section"
+-- The lines of a section's menu at the live bank, and what its tooltip says of them.
+local BANK_LINES = {
+	put = "Put %s in the bank",
+	take = "Take %s out",
+	putTip = "Right-click it to put it in the bank.",
+	takeTip = "Right-click it to take it out of the bank.",
+}
+local FOLD_NONE = "No section is folded. Click a section's title in the bag window to fold it."
+local FOLD_SAY = {
+	all = "Flat UI: every bag section is open again.",
+	one = "Flat UI: %s is open again.",
+	none = "Flat UI: no bag section is folded.",
 }
 
 -- The drag under way: { key, title, st, parts }, or nil.
@@ -252,6 +280,66 @@ function Order.Reset()
 	return true
 end
 
+-- The folds ---------------------------------------------------------------------------------------------------------------------------------
+
+-- FlatUIDB.bags.folded, or nil when no section is folded or the saved variables have not loaded.
+local function Folds()
+	local db = ns.Account()
+	local bags = type(db) == "table" and db.bags or nil
+	local folded = type(bags) == "table" and bags.folded or nil
+	if type(folded) == "table" and next(folded) ~= nil then
+		return folded
+	end
+	return nil
+end
+
+-- True when the section key is folded.
+function Order.Folded(key)
+	local folded = Folds()
+	return folded ~= nil and type(key) == "string" and folded[key] == true
+end
+
+-- Folds the section key, or opens it with on false; an empty set is not kept. True when the folds changed; false before the saved variables load.
+local function SetFold(key, on)
+	local db = ns.Account()
+	if type(db) ~= "table" or type(key) ~= "string" or SHELVES[key] then
+		return false
+	end
+	if on then
+		if type(db.bags) ~= "table" then
+			db.bags = {}
+		end
+		if type(db.bags.folded) ~= "table" then
+			db.bags.folded = {}
+		end
+		if db.bags.folded[key] == true then
+			return false
+		end
+		db.bags.folded[key] = true
+		return true
+	end
+	local folded = Folds()
+	if not folded or folded[key] ~= true then
+		return false
+	end
+	folded[key] = nil
+	if next(folded) == nil then
+		db.bags.folded = nil
+	end
+	return true
+end
+
+-- Opens every folded section. True when one was folded.
+function Order.UnfoldAll()
+	local db = ns.Account()
+	if not Folds() or type(db) ~= "table" or type(db.bags) ~= "table" then
+		return false
+	end
+	db.bags.folded = nil
+	Request()
+	return true
+end
+
 -- The drag -------------------------------------------------------------------------------------------------------------------------------------
 
 -- True for a section of the Sections view whose title can be dragged.
@@ -416,6 +504,26 @@ end
 
 -- The menu and the tooltip ------------------------------------------------------------------------------------------------------------------------
 
+-- True when a section's menu can move its items at the bank: Flat UI's bank window is the live bank (B.Bank.Live), the window shows the player's
+-- own live slots, and the section is not Keep in place.
+local function Banking(st, sec)
+	if not (st.mine and st.live) or sec.key == "keep" then
+		return false
+	end
+	local ok, live = pcall(Call, B.Bank, "Live")
+	return ok and live == true
+end
+
+-- A left click on a title that can be dragged, with no item on the cursor (BagsLayout.lua's TitleClick): the section folds to its title, or opens
+-- again, in both windows. True when it changed.
+function Order.Fold(st, sec)
+	if not Movable(st, sec) or not SetFold(sec.key, not Order.Folded(sec.key)) then
+		return false
+	end
+	Request()
+	return true
+end
+
 -- The menu of a title (a right click with no item on the cursor), under anchor.
 function Order.Menu(st, sec, anchor)
 	if not Movable(st, sec) then
@@ -445,8 +553,33 @@ function Order.Menu(st, sec, anchor)
 		Line("Move down", shown[at + 1], true)
 		Line("Move to the bottom", shown[#shown], true)
 	end
+	items[#items + 1] = { text = Order.Folded(key) and "Unfold" or "Fold", part = "order", pick = function()
+		Order.Fold(st, sec)
+	end }
+	-- At the live bank, the section's items go into the bank from the bag window, or out of it from the bank window, by the pass of Deposit and Take
+	-- out (BagsBank.lua) with the section in place of the search. Not Keep in place, whose items stay in their pinned slots.
+	local label = type(sec.label) == "string" and sec.label:gsub("|", "||") or key
+	if Banking(st, sec) then
+		local function Mine(record)
+			return Call(B.Categories, "Of", record) == key
+		end
+		if st.which == "bags" then
+			items[#items + 1] = { text = BANK_LINES.put:format(label), part = "bank", pick = function()
+				Call(B.Bank, "Deposit", Mine)
+				Call(B, "Request", "footer")
+			end }
+		else
+			items[#items + 1] = { text = BANK_LINES.take:format(label), part = "bank", pick = function()
+				Call(B.Bank, "TakeOut", Mine)
+				Call(B, "Request", "footer")
+			end }
+		end
+	end
 	if Saved() then
 		items[#items + 1] = { text = RESET_LINE, part = "order", pick = Order.Reset }
+	end
+	if Folds() then
+		items[#items + 1] = { text = UNFOLD_ALL, part = "order", pick = Order.UnfoldAll }
 	end
 	if key == "keep" then
 		local more = Call(B.Pins, "MenuLines")
@@ -454,24 +587,24 @@ function Order.Menu(st, sec, anchor)
 			items[#items + 1] = item
 		end
 	end
-	if #items == 0 then
-		items[1] = { text = "Drag a title to move its section.", header = true }
-	end
-	local label = type(sec.label) == "string" and sec.label:gsub("|", "||") or key
 	Call(B.Layout, "Menu", anchor, label, items, st.which)
 end
 
 -- The line of a title's tooltip while the cursor holds no item: how to move the section, or what Keep in place is, as Put pinned items back
--- says. Nil for a title that cannot be dragged.
+-- says, then what a click on it does (fold it, or open it while it is folded). Nil for a title that cannot be dragged.
 function Order.Tip(st, sec)
 	if not Movable(st, sec) then
 		return nil
 	end
+	local click = Order.Folded(sec.key) and TIPS.unfold or TIPS.fold
+	if Banking(st, sec) then
+		click = click .. " " .. (st.which == "bags" and BANK_LINES.putTip or BANK_LINES.takeTip)
+	end
 	if sec.key ~= "keep" then
-		return TIPS.drag
+		return TIPS.drag .. " " .. click
 	end
 	local ok, moves = pcall(Call, B, "Opt", "pinMoves")
-	return (ok and moves == false) and TIPS.keepStill or TIPS.keep
+	return ((ok and moves == false) and TIPS.keepStill or TIPS.keep) .. " " .. click
 end
 
 -- The row Section order -----------------------------------------------------------------------------------------------------------------------
@@ -488,4 +621,59 @@ function ns.BagsOrderPick(id)
 		return false, "Flat UI: the bag sections are in Flat UI's order already."
 	end
 	return true, "Flat UI: the bag sections are back in Flat UI's order."
+end
+
+-- The row Folded sections ---------------------------------------------------------------------------------------------------------------------
+
+-- The label of a section key for the row (B.Categories.Label), else the key.
+local function FoldLabel(key)
+	local ok, label = pcall(Call, B.Categories, "Label", key)
+	if ok and type(label) == "string" and not ns.IsSecret(label) and label ~= "" then
+		return label
+	end
+	return key
+end
+
+function ns.BagsFoldLines()
+	local folded = Folds()
+	if not folded then
+		return { { "none", FOLD_NONE } }
+	end
+	local keys = {}
+	for key in pairs(folded) do
+		if type(key) == "string" then
+			keys[#keys + 1] = key
+		end
+	end
+	local ranks = Order.Ranks()
+	table.sort(keys, function(a, b)
+		local ra, rb = ranks[a] or math.huge, ranks[b] or math.huge
+		if ra ~= rb then
+			return ra < rb
+		end
+		return a < b
+	end)
+	local lines = {}
+	if #keys >= 2 then
+		lines[1] = { "all", UNFOLD_ALL }
+	end
+	for _, key in ipairs(keys) do
+		lines[#lines + 1] = { "fold:" .. key, FoldLabel(key) }
+	end
+	return lines
+end
+
+function ns.BagsFoldPick(id)
+	if id == "all" then
+		if Order.UnfoldAll() then
+			return true, FOLD_SAY.all
+		end
+		return false, FOLD_SAY.none
+	end
+	local key = type(id) == "string" and id:match("^fold:(.+)$") or nil
+	if not key or not SetFold(key, false) then
+		return false, FOLD_SAY.none
+	end
+	Request()
+	return true, FOLD_SAY.one:format(FoldLabel(key))
 end
