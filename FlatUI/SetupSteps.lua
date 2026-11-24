@@ -1438,6 +1438,7 @@ ns.SETUP_STEPS = {
 		{ "errands.mailRecipient", "r", "behaviour", "Keeps the last mail recipient in the To box while the mailbox is open." },
 		{ "errands.questAccept", "c", "behaviour", "Accepts the quests NPCs offer and your group shares." },
 		{ "errands.questTurnIn", "c", "behaviour", "Hands in finished quests that have one reward or none." },
+		{ "errands.rewardValue", "r", "behaviour", "Marks the quest reward a merchant pays most for." },
 		{ "errands.questLow", "r", "behaviour", "Accepts grey quests too." },
 		{ "errands.questRepeat", "r", "behaviour", "Accepts and hands in repeatable quests too." },
 		{ "errands.questKey", "r", "behaviour", "Chooses the key to hold to talk to an NPC yourself." },
