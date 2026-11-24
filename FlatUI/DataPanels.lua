@@ -26,6 +26,7 @@ local ADDON_NAME, ns = ...
 -- open, is at full opacity: the frame is asked IsMouseOver, which needs no mouse on it, on a ticker every HOVER seconds that runs only while a
 -- shown panel rests below full opacity, so slots that let clicks through still do. The alpha is written only when it changes.
 -- While test mode is on (TestMode.lua), a slot whose stream has nothing to show shows the stream's sample, the widest text it shows (P.TextOf).
+-- The lines around the minimap write the tooltips of the same streams on buttons of their own (P.TipAt, MapText.lua), also with the panels off.
 -- Built on the data panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission: its streams, the bridge to LibDataBroker,
 -- the ticker that runs only for the streams that are shown, and its looks: font style and colour, width, strata and the opacity in and out of
 -- combat (Core/DataPanel.lua:414-433, 1127-1180, 1484-1617). Panels made in Edit Mode, its height (Text size covers it), its fonts of other
@@ -1224,6 +1225,34 @@ function P.Tip(slot, fresh)
 		end
 		tip:Show()
 	end)
+end
+
+-- The same lines on another frame of Flat UI's own, for the lines around the minimap (MapText.lua): the frame that owns the tooltip, its anchor,
+-- the stream's id and fresh as above, and hints, dim lines after them. True when the tooltip shows.
+function P.TipAt(owner, anchor, id, fresh, hints)
+	local stream, tip = P.StreamOf(id), Tooltip()
+	if not (owner and stream and stream.Tip and tip) or ns.PartStopped(KEY, stream.label) then
+		return false
+	end
+	local ok, lines = P.Run(stream, stream.Tip, fresh)
+	if not ok or type(lines) ~= "table" then
+		return false
+	end
+	return (pcall(function()
+		tip:SetOwner(owner, anchor or "ANCHOR_TOP")
+		tip:SetText(lines.title or stream.label, 1, 1, 1)
+		for _, line in ipairs(lines) do
+			if line[2] ~= nil then
+				tip:AddDoubleLine(line[1], line[2], DIM_RGB[1], DIM_RGB[2], DIM_RGB[3], 1, 1, 1)
+			else
+				tip:AddLine(line[1] or " ", 1, 1, 1)
+			end
+		end
+		for _, hint in ipairs(type(hints) == "table" and hints or {}) do
+			tip:AddLine(hint, DIM_RGB[1], DIM_RGB[2], DIM_RGB[3])
+		end
+		tip:Show()
+	end))
 end
 
 -- A tooltip that is shown is written again, while it is still the slot's.

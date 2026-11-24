@@ -1,9 +1,11 @@
 local _, ns = ...
 
 -- The tooltip of units, action buttons and the world. The game anchors it to Edit Mode's tooltip box in
--- GameTooltip_SetDefaultAnchor. A hook on that function marks GameTooltip as placed by this module, and
+-- GameTooltip_SetDefaultAnchor. Following that function (ns.FollowGlobal) marks GameTooltip as placed by this module, and
 -- a frame of the addon's own places it again each frame at the cursor or at the Tooltip handle of the
--- movers. No method of GameTooltip is hooked: the scripts of GameTooltip are followed with HookScript (OnShow, OnHide), so with Every
+-- movers. At the cursor, a tooltip that would pass the screen's edge goes to the cursor's other side on that axis, mirrored (Flip), so the
+-- game's clamp to the screen never pushes it over the cursor; it comes back once there is room.
+-- No method of GameTooltip is hooked: the scripts of GameTooltip are followed with HookScript (OnShow, OnHide), so with Every
 -- tooltip a tooltip anchored beside its owner is placed before it is drawn there (but for a buff or debuff icon of the party frames, PartyAura),
 -- and the frame of the addon's own that places the tooltip sees the game fade it (the alpha falls) and hides a tooltip at the cursor at once.
 -- SetOwner is never called, and Edit Mode's
@@ -60,6 +62,42 @@ local function Baseline(tooltip)
 	end
 end
 
+-- How far a span from low to high passes the edges 0 and limit, both together.
+local function Past(low, high, limit)
+	return math.max(0, -low) + math.max(0, high - limit)
+end
+
+-- The point and offsets of a tooltip at the cursor, mirrored to the cursor's other side on each axis where the tooltip would pass the screen's
+-- edge and passes it less on the other side: the game keeps the tooltip on the screen (clampedToScreen), and pushed back it would lie over the
+-- cursor and what it points at. It flips back as soon as there is room, since each placement starts again from the chosen point. A point centred
+-- on an axis (Top, Bottom, Left, Right, Centre) is left as it is on that axis. x, y and the offsets are in the units of UIParent; size is the
+-- tooltip's scale over UIParent's. A size that cannot be read leaves the point as chosen.
+local function Flip(tooltip, point, x, y, offsetX, offsetY, size)
+	local okWidth, width = pcall(tooltip.GetWidth, tooltip)
+	local okHeight, height = pcall(tooltip.GetHeight, tooltip)
+	local okScreenW, screenW = pcall(UIParent.GetWidth, UIParent)
+	local okScreenH, screenH = pcall(UIParent.GetHeight, UIParent)
+	if type(point) ~= "string" or not (okWidth and okHeight and okScreenW and okScreenH and Number(width) and Number(height) and Number(screenW)
+		and Number(screenH)) then
+		return point, offsetX, offsetY
+	end
+	width, height = width * size, height * size
+	-- The chosen side on each axis: the span the tooltip takes there and the span it takes mirrored.
+	local here, there = x + offsetX, x - offsetX
+	if point:find("LEFT", 1, true) and Past(there - width, there, screenW) < Past(here, here + width, screenW) then
+		point, offsetX = point:gsub("LEFT", "RIGHT"), -offsetX
+	elseif point:find("RIGHT", 1, true) and Past(there, there + width, screenW) < Past(here - width, here, screenW) then
+		point, offsetX = point:gsub("RIGHT", "LEFT"), -offsetX
+	end
+	here, there = y + offsetY, y - offsetY
+	if point:find("BOTTOM", 1, true) and Past(there - height, there, screenH) < Past(here, here + height, screenH) then
+		point, offsetY = point:gsub("BOTTOM", "TOP"), -offsetY
+	elseif point:find("TOP", 1, true) and Past(there, there + height, screenH) < Past(here - height, here, screenH) then
+		point, offsetY = point:gsub("TOP", "BOTTOM"), -offsetY
+	end
+	return point, offsetX, offsetY
+end
+
 -- Where the chosen point of the tooltip goes, in the units of the tooltip: point, x, y. Nil when a scale, the cursor or the spot cannot be read.
 local function Where(tooltip)
 	local okScale, scale = pcall(tooltip.GetEffectiveScale, tooltip)
@@ -84,6 +122,9 @@ local function Where(tooltip)
 	end
 	if not x then
 		return nil
+	end
+	if Opt("mode") == "cursor" then
+		point, offsetX, offsetY = Flip(tooltip, point, x, y, offsetX, offsetY, scale / base)
 	end
 	-- The offsets are in the units of UIParent. SetPoint takes the units of the tooltip.
 	local ratio = base / scale
@@ -300,13 +341,12 @@ local function Install()
 		return
 	end
 	if not hooked then
-		if type(GameTooltip_SetDefaultAnchor) ~= "function" or type(hooksecurefunc) ~= "function" or ns.Forbidden(GameTooltip) then
+		if ns.Forbidden(GameTooltip) or not ns.FollowGlobal("GameTooltip_SetDefaultAnchor", function(tooltip, parent)
+			ns.Try(KEY, Arm, tooltip, parent)
+		end) then
 			return
 		end
 		hooked = true
-		hooksecurefunc("GameTooltip_SetDefaultAnchor", function(tooltip, parent)
-			ns.Try(KEY, Arm, tooltip, parent)
-		end)
 		driver = CreateFrame("Frame")
 		ns.Own[driver] = true
 		driver:SetScript("OnUpdate", function(_, elapsed)
