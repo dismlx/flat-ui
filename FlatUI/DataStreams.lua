@@ -6,7 +6,9 @@ local ADDON_NAME, ns = ...
 --     family is not 0) and the reagent bag (Enum.BagIndex 5, of family 0 but for reagents only) hold only certain items, so they count apart,
 --     in the tooltip, which says so.
 --   Gold: the player's money (GetMoney) with the game's coins (C_CurrencyInfo.GetCoinTextureString). The tooltip lists the gold of each
---     character of the account that logged in with the data panels on, kept in FlatUIDB.datapanels.gold by "Name - Realm".
+--     character of the account that logged in with the data panels on, kept in FlatUIDB.datapanels.gold by "Name - Realm", and under them what
+--     this character made (in green) or spent (in red) since it logged in, kept over a /reload (ns.SessionMoney, BagsData.lua, the count the
+--     bag window's gold tooltip says too); nothing while it made and spent nothing. The slot itself keeps its width.
 --   Durability: of all the equipped items together (GetInventoryItemDurability), coloured by how worn it is; the tooltip lists each item.
 --   Hearthstone: where it is bound (GetBindLocation) and the time left on its cooldown (C_Container.GetItemCooldown).
 --   Coordinates: of the player on the map of the zone (C_Map.GetBestMapForUnit, GetPlayerMapPosition, read from the fields x and y of the
@@ -229,6 +231,14 @@ P.Stream({
 		if #list > 1 then
 			lines[#lines + 1] = { " " }
 			lines[#lines + 1] = { "Total", P.Money(total) }
+		end
+		-- What this character made or spent since it logged in (ns.SessionMoney, BagsData.lua), the same count as the bag window's gold.
+		local okSession, session = pcall(function()
+			return type(ns.SessionMoney) == "function" and ns.SessionMoney() or nil
+		end)
+		if okSession and ns.Finite(session) and session ~= 0 then
+			lines[#lines + 1] = { " " }
+			lines[#lines + 1] = { "This session", (session > 0 and (GOOD .. "+") or (BAD .. "-")) .. P.Money(math.abs(session)) .. "|r" }
 		end
 		return lines
 	end,

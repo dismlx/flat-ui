@@ -163,8 +163,10 @@ local ADDON_NAME, ns = ...
 -- those windows it reads the shown flag (IsShown), and when its own bag window hides, and when it gives the windows back, it hides the bag windows it
 -- moved that the game still has open (Hide, which runs no script under the hidden frame); it writes no field on them and calls none of their methods.
 -- It follows ToggleBackpack, ToggleBag, ToggleAllBags, OpenAllBags, OpenAllBagsMatchingContext, OpenBag, OpenBackpack, CloseAllBags, CloseBag,
--- CloseBackpack, HideUIPanel, ContainerFrame_SetFullScreenFrame and ContainerFrame_ClearFullScreenFrame with hooksecurefunc, and calls none of the
--- game's bag functions: they build the game's list of bag windows the first time they are asked (Mainline/ContainerFrame.lua:2335-2373), and a list
+-- CloseBackpack, HideUIPanel, ContainerFrame_SetFullScreenFrame and ContainerFrame_ClearFullScreenFrame with hooksecurefunc, and the OnEnter and
+-- OnLeave of the game's bag bar buttons with HookScript (which writes nothing on them; the mouse over one lights that bag's slots in its bag
+-- window), and calls none of the game's bag functions: they build the game's list of bag windows the first time they are asked
+-- (Mainline/ContainerFrame.lua:2335-2373), and a list
 -- built by Flat UI's code would be read by Escape. It asks C_GameRules.IsGameRuleActive whether the game shuts the bags and
 -- C_ActionBar.ShouldShowKeyring whether it shows a keyring, and after ToggleBag it reads the game's showKeyring and combinedBags settings
 -- (C_CVar.GetCVarBool) and the size of the bag named (C_Container.GetContainerNumSlots), so a toggle the game lets pass leaves its window alone. It
@@ -200,7 +202,9 @@ local ADDON_NAME, ns = ...
 -- StackSplitFrame, IsShown). Its bank slots are
 -- buttons of its own that pick up (C_Container.PickupContainerItem) and take out (C_Container.UseContainerItem with no bank type) on a click, out
 -- of combat, and its bank bag slots are buttons of its own that pick up the bag (C_Container.PickupContainerItem(-2, n)) on any click, drag or
--- drop, out of combat, as the game's do; a modified click on a bank slot, or on a slot drawn from its records (another character's, or the bank
+-- drop, out of combat, as the game's do; the bag slots over its bag window's footer are buttons of its own that put the item on the cursor in
+-- that bag slot (PutItemInBag, PutItemInBackpack) or pick the bag up (PickupBagFromSlot), out of combat, as the game's bag buttons do; a modified
+-- click on a bank slot, or on a slot drawn from its records (another character's, or the bank
 -- while its bank window is not the live one), links the item (HandleModifiedItemClick, and in a fight ChatFrameUtil.InsertLink only, never the
 -- dressing room). Deposit and Take out move the items that match its search with C_Container.UseContainerItem (Enum.BankType.Character to
 -- deposit) one at a time while its bank window is the live one, out of combat, and move nothing while a spell waits for its target
@@ -218,10 +222,14 @@ local ADDON_NAME, ns = ...
 -- (TooltipDataProcessor.AddTooltipPostCall), it adds lines naming the player's other characters on this realm and its connected realms that carry
 -- the item (AddDoubleLine). The game is asked once to load each item its windows show that the client has not loaded yet
 -- (C_Item.RequestLoadItemDataByID). The titles of its sections are buttons of its own that can be dragged (RegisterForDrag) to set the order of
--- the sections, kept for the account in FlatUIDB.bags.order. It adds FlatUIBags and FlatUIBank to UISpecialFrames, and names the key binding of its bank button
--- (BINDING_NAME_CLICK FlatUIBankButton:LeftButton). What it keeps of each character (items, gold, level, class, faction, realm and the time),
--- the sections items were placed in by hand and the order of the sections are in FlatUIDB.bags, the pinned slots of a character in
--- FlatUICharDB.bagPins, and none of it leaves the client.
+-- the sections, kept for the account in FlatUIDB.bags.order, and a click on one folds its section, kept the same way in FlatUIDB.bags.folded. It
+-- adds FlatUIBags and FlatUIBank to UISpecialFrames, and names the key bindings of its bank button (BINDING_NAME_CLICK FlatUIBankButton:LeftButton)
+-- and of its bag search button (BINDING_NAME_CLICK FlatUIBagSearchButton:LeftButton), which opens the bag window and gives its search box of Flat
+-- UI's own the keyboard (SetFocus). What it keeps of each character (items, gold, level, class, faction, realm and the time), the sections items
+-- were placed in by hand, the order of the sections and the folded ones are in FlatUIDB.bags, the pinned slots of a character in
+-- FlatUICharDB.bagPins, and the money a character had as it logged in in FlatUICharDB.sessionMoney (a frame of its own hears PLAYER_ENTERING_WORLD
+-- for it whatever the switches, for the gold made or spent this session, which its gold tooltip and the Gold slot of Data panels say), and none
+-- of it leaves the client.
 -- Data panels (on by default, with the Show rows of both panels off) draws two panels of its own on UIParent and writes the lines of their
 -- tooltips in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, Hide). It asks the server for the guild roster
 -- (C_GuildInfo.GuildRoster) while a slot shows the guild, and the game for the memory of addons (UpdateAddOnMemoryUsage) when its frame rate tooltip opens out of combat. When another addon brought

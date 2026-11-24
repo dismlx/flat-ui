@@ -971,14 +971,23 @@ function ns.ErrandsJunkRule(id, quality, noValue, quest)
 	return ns.Finite(quality) and quality == POOR and lists.keep[id] ~= true
 end
 
--- What the next click of the Sell junk button sells: the length of the queue Scan makes for a new pass, and how many items of the sell list wait
--- for the click after it with Sell at most 12 at a time on (Sell). 0 and 0 on a client that cannot sell.
+-- What the next click of the Sell junk button sells: the length of the queue Scan makes for a new pass, how many items of the sell list wait for
+-- the click after it with Sell at most 12 at a time on (Sell), what the queue is worth at the merchant in copper (each sale's price times its
+-- count), and true when the price of one of them has not loaded, so the worth is at least that. 0, 0, 0 on a client that cannot sell.
 function ns.ErrandsJunkCount()
 	if type(C_Container) ~= "table" or type(C_Container.UseContainerItem) ~= "function" then
-		return 0, 0
+		return 0, 0, 0, false
 	end
 	local queue, waits = Scan(Capped() and Buyback() or nil, 0)
-	return #queue, waits
+	local value, unknown = 0, false
+	for _, sale in ipairs(queue) do
+		if ns.Finite(sale.price) and ns.Finite(sale.count) then
+			value = value + sale.price * sale.count
+		else
+			unknown = true
+		end
+	end
+	return #queue, waits, value, unknown
 end
 
 -- A click of the Sell junk button. Before anything is sold it makes the checks of a click of Sell next 12 (SellMore), so a click they refuse says
