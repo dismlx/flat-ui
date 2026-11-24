@@ -6,7 +6,8 @@ local _, ns = ...
 -- drawings share (ns.DrawCasts of SetupDrawCasts.lua, ns.DrawHud of SetupDrawHud.lua, ns.SetupDrawPlates of SetupDrawPlates.lua), and its moving
 -- parts change in Animate, while it shows and the bar's Moving is on: fills, text and alpha only. The numbers are fixed samples.
 --   Cast bars: the player's at PlayerCastingBarFrame, wherever Edit Mode or Lock to player frame put it, while the player casts nothing: a cast that
---   fills over 2.5 seconds and holds half a second, a channel that drains, then an interrupted cast that flashes, in the colours of the Flat UI page.
+--   fills over 2.5 seconds and holds half a second, a channel that drains (with the marks of its 5 ticks while Channel ticks on the player bar is
+--   on), then an interrupted cast that flashes, in the colours of the Flat UI page.
 --   The target's, the focus's and the pet's at TargetFrameSpellBar, FocusFrameSpellBar and PetCastingBarFrame, and the first boss's at
 --   Boss1TargetFrameSpellBar, each only while the stand-in of its unit shows (TM.Shown of "target", "focus", "pet" and "boss", TestUnits.lua): an enemy
 --   cast the player's interrupt is ready for (Interrupt ready colour while Interrupt readiness on enemy casts is on), then one that cannot be
@@ -43,7 +44,7 @@ end
 -- The cast bars: their stand-in, game frame, module, place on the Cast bars page (opt), the stand-in of their unit, how much later their round
 -- starts, and their spell names by state.
 local CASTS = {
-	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0,
+	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0, ticks = 5,
 		names = { channel = "Drain Life" } },
 	{ id = "castTarget", game = "TargetFrameSpellBar", module = "castbars", opt = "target", label = "Target cast bar", unit = "target", offset = 0.8,
 		small = true, kick = true, names = { cast = "Fireball", shield = "Polymorph" } },
@@ -157,7 +158,8 @@ local function CastStandIn(spec)
 		end or nil,
 		Build = function(holder)
 			holder.row = ns.DrawCasts.Cast(holder, { opt = spec.opt, small = spec.small, shield = true, time = spec.small and "" or nil,
-				name = spec.opt == "player" and "Shadow Bolt" or spec.names.cast, rank = spec.opt == "player" and "Rank 3" or nil })
+				name = spec.opt == "player" and "Shadow Bolt" or spec.names.cast, rank = spec.opt == "player" and "Rank 3" or nil,
+				ticks = spec.ticks })
 			holder.row.bar:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
 		end,
 		Paint = function(holder, w, h)

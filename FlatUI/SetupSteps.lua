@@ -507,6 +507,7 @@ ns.SETUP_STEPS = {
 		{ "castbars.shield", "o", "mock-cast-bar" },
 		{ "castbars.stateBorder", "o", "mock-cast-bar" },
 		{ "castbars.latency", "c", "mock-cast-bar" },
+		{ "castbars.ticks", "c", "mock-cast-bar" },
 		{ "castbars.flat", "c", "mock-cast-bar" },
 		{ "castbars.texture", "c", "mock-cast-bar" },
 		{ "castbars.playerClass", "o", "mock-cast-bar" },

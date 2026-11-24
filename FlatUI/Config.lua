@@ -834,6 +834,8 @@ ns.PAGES = {
 		{ key = "shield", kind = "bool", default = true, label = "Uninterruptible shield icon" },
 		{ key = "stateBorder", kind = "bool", default = false, label = "Border takes the cast colour", needs = "flat" },
 		{ key = "latency", kind = "bool", default = false, label = "Latency zone on the player bar", tip = "The end of the bar your connection delay covers.", needs = "flat" },
+		{ key = "ticks", kind = "bool", default = true, label = "Channel ticks on the player bar",
+			tip = "A thin mark where each tick of a channel lands, such as Arcane Missiles, Blizzard, Mind Flay or Drain Life." },
 		{ section = "Fill" },
 		{ key = "flat", kind = "bool", default = false, label = "Flat fill" },
 		{ key = "texture", kind = "choice", default = "default", label = "Bar texture", needs = "flat", choices = "BarChoicesDefault" },

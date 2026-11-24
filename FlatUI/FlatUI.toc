@@ -129,6 +129,7 @@ GearSearch.lua
 GearButton.lua
 HealthColour.lua
 CastTime.lua
+CastTicks.lua
 CastRank.lua
 Interrupt.lua
 LayoutSpots.lua

@@ -41,7 +41,9 @@ local ADDON_NAME, ns = ...
 -- bar sizes set the width and height of four cast bars, the height of the player bar's spark, the size of
 -- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
--- still that name, and the name alone again when the row goes off.
+-- still that name, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
+-- textures of its own on each of the player's two cast bars (CreateTexture, out of combat on a bar the game may protect) and places them with
+-- SetPoint while a channel runs; a frame of its own hears the player's channel events while the row is on, and it only reads UnitChannelInfo.
 -- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only, and puts
 -- a button back at the points it recorded when it is ticked in Leave in place or the row goes off. With Close the gap under the zone name on, it
 -- hangs the game's zone name button (MinimapCluster.ZoneTextButton), and with it the clock, calendar and tracking button that hang from it, from

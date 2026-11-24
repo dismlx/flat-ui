@@ -1670,6 +1670,7 @@ local function RefreshCastBars()
 	end
 	if ns.CastBarSizes then ns.CastBarSizes() end
 	if ns.CastTimeSync then ns.CastTimeSync() end
+	if ns.CastTicksSync then ns.CastTicksSync() end
 	if ns.CastRankSync then ns.CastRankSync() end
 	if ns.InterruptSync then ns.InterruptSync() end
 end
