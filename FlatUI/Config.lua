@@ -188,7 +188,7 @@ ns.PAGES = {
 			choices = { { "line", "One line" }, { "none", "None" } }, tip = "One line says in chat which profile is in use when setup finishes." },
 		{ section = "Game menu" },
 		{ key = "menuButton", kind = "bool", default = true, label = "Flat UI button in the game menu",
-			tip = "A Flat UI button under Options. It does not work in combat." },
+			tip = "A Flat UI button under Options. It does not work in combat, and it does not show while the game's taintLog is on." },
 		{ key = "menuOpens", kind = "choice", default = "options", label = "Flat UI button opens", needs = "menuButton",
 			choices = { { "options", "Options window" }, { "setup", "Flat UI setup" } } },
 	},

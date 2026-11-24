@@ -1,13 +1,14 @@
 local ADDON_NAME, ns = ...
 
 -- Profiles page, Share: a pasted profile text is read before it is imported (name, build, number of settings and positions, a warning when it was
--- made for another screen size), what to import is chosen, and a profile is exported by module. The rows are the widgets of ns.PanelKit and sit at
--- the end of the page. The functions of Core.lua that read and write the text are ns.ProfilePreview, ns.ImportProfile and ns.ExportProfile.
+-- made for another screen size, with Fit positions to this screen, on, which scales its positions to this screen as ns.FitSpots does), what to import
+-- is chosen, and a profile is exported by module. Each row says what it does in its tip. The rows are the widgets of ns.PanelKit and sit at the end
+-- of the page. The functions of Core.lua that read and write the text are ns.ProfilePreview, ns.ImportProfile and ns.ExportProfile.
 
 local Share = {}
 ns.ProfileShare = Share
 
-local state = { settings = true, positions = true, as = "new", name = "" }
+local state = { settings = true, positions = true, fit = true, as = "new", name = "" }
 
 local function Text(value)
 	return type(value) == "string" and value or ""
@@ -39,10 +40,13 @@ function Share.Summary(preview)
 	return table.concat(parts, ", ")
 end
 
--- The warning for a profile made on another screen size, or nil.
+-- The warning for a profile made on another screen size, or nil. With Fit positions to this screen on it says the positions are fitted.
 function Share.Warning(preview)
 	local width, height = Screen()
 	if preview.spots > 0 and preview.width > 0 and width > 0 and (preview.width ~= width or preview.height ~= height) then
+		if state.fit ~= false and state.positions ~= false then
+			return ("Made for %d x %d. Positions are fitted to this %d x %d screen."):format(preview.width, preview.height, width, height)
+		end
 		return ("Made for %d x %d. This screen is %d x %d. Check the positions after the import."):format(preview.width, preview.height, width, height)
 	end
 	return nil
@@ -144,7 +148,7 @@ function Share.Import(text)
 		kit.Say("Choose what to import.")
 		return true
 	end
-	local opts = { settings = state.settings, spots = state.positions }
+	local opts = { settings = state.settings, spots = state.positions, fit = state.fit }
 	local function Run()
 		local ok, done, message = pcall(ns.ImportProfile, text, opts)
 		if not ok then
@@ -170,7 +174,7 @@ end
 -- Adds the rows below y to the page of `child` and returns the y below the shown ones. `scroller` has the page height, `updates` gets a function that
 -- reads the rows again. The rows that depend on a pasted text or an open list are shown and placed by Layout.
 function Share.Build(kit, child, y, updates, scroller, paste)
-	state = { settings = true, positions = true, as = "new", name = "", field = state.field, kit = kit, chosen = {}, listed = false }
+	state = { settings = true, positions = true, fit = true, as = "new", name = "", field = state.field, kit = kit, chosen = {}, listed = false }
 	if state.field then
 		Share.Watch(state.field)
 	end
@@ -183,8 +187,8 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 		updates[#updates + 1] = draw
 	end
 
-	local function Add(label, show)
-		local row = kit.NewRow(child, y, label)
+	local function Add(label, show, tip)
+		local row = kit.NewRow(child, y, label, tip)
 		row.frame:Hide()
 		rows[#rows + 1] = { row = row, show = show }
 		return row
@@ -199,7 +203,8 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 	-- Export by module: one row, and the Modules button opens the list of modules under the other rows.
 	-- The paste row (Import profile), when given, moves under it so the import rows follow the paste field.
 	local at = paste and y - kit.ROW or y
-	local fixed = kit.NewRow(child, at, "Export by module")
+	local fixed = kit.NewRow(child, at, "Export by module", "Modules lists what an export holds; Export chosen under the list writes only those, as one "
+		.. "line of text to copy.")
 	if paste then
 		paste.Place(at + kit.ROW)
 	end
@@ -217,20 +222,29 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 
 	-- A pasted profile: what it is, and what to import.
 	local function Pasted() return Preview() ~= nil end
-	local summary = Note(Add("Pasted profile", Pasted))
+	local summary = Note(Add("Pasted profile", Pasted, "The name, the Flat UI build and what the pasted text holds."))
 	local warning = Note(Add("Screen", function()
 		local preview = Preview()
 		return preview ~= nil and Share.Warning(preview) ~= nil
-	end))
-	local settings = Add("Settings", Pasted)
+	end, "The pasted profile was made on a screen of another size."))
+	local settings = Add("Settings", Pasted, "Imports the settings of the text. Off keeps the settings in use.")
 	Switch(settings, function() return state.settings end, function(on) state.settings = on end)
 	local settingsCount = Note(settings)
 	settingsCount:SetPoint("LEFT", settings.frame, "LEFT", kit.CONTROL + 44, 0)
-	local positions = Add("Frame positions", Pasted)
+	local positions = Add("Frame positions", Pasted, "Imports the frame positions of the text. Off keeps the positions in use, or for a new "
+		.. "profile those a new profile starts with.")
 	Switch(positions, function() return state.positions end, function(on) state.positions = on end)
 	local positionsCount = Note(positions)
 	positionsCount:SetPoint("LEFT", positions.frame, "LEFT", kit.CONTROL + 44, 0)
-	local into = Add("Import as", Pasted)
+	-- Shown while the positions are imported from a text made on a screen of another size.
+	local fit = Add("Fit positions to this screen", function()
+		local preview = Preview()
+		return preview ~= nil and state.positions and Share.Warning(preview) ~= nil
+	end, "Scales each position of the text to this screen, so a frame keeps its share of the screen and none lands off the edge. Off keeps the "
+		.. "positions as the text has them.")
+	Switch(fit, function() return state.fit end, function(on) state.fit = on end)
+	local into = Add("Import as", Pasted, "New profile puts the import in a profile of its own under the name beside it; Replace overwrites the profile "
+		.. "in use.")
 	local menu = kit.Dropdown(into, kit.FIELD, {
 		lines = function()
 			return { { "new", "New profile" }, { "replace", "Replace " .. Text(ns.Profile and ns.Profile()) } }
@@ -246,7 +260,7 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 	named:SetPoint("LEFT", into.frame, "LEFT", kit.CONTROL + kit.FIELD + 10, 0)
 	into.Hover(named)
 	state.nameField = named
-	local go = Add("Import now", Pasted)
+	local go = Add("Import now", Pasted, "Imports what is chosen above.")
 	local button = kit.Button(go.frame, "Import selected", 130, function()
 		Share.Import(Text(state.field and state.field:GetText()))
 	end, true)
@@ -256,12 +270,14 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 	-- The modules an export can hold.
 	local function Listed() return state.listed end
 	local exportSpots = true
-	Switch(Add("Frame positions", Listed), function() return exportSpots end, function(on) exportSpots = on end)
+	Switch(Add("Frame positions", Listed, "Puts the frame positions in the export."), function() return exportSpots end,
+		function(on) exportSpots = on end)
 	for _, module in ipairs(Share.Modules()) do
 		state.chosen[module.key] = true
-		Switch(Add(module.label, Listed), function() return state.chosen[module.key] == true end, function(on) state.chosen[module.key] = on end)
+		Switch(Add(module.label, Listed, "Puts the settings of this module in the export."), function() return state.chosen[module.key] == true end,
+			function(on) state.chosen[module.key] = on end)
 	end
-	local export = Add("Export chosen", Listed)
+	local export = Add("Export chosen", Listed, "Writes the chosen parts as one line of text to copy.")
 	local run = kit.Button(export.frame, "Export chosen", 130, function()
 		local picked = {}
 		for key, on in pairs(state.chosen) do
