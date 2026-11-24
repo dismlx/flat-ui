@@ -18,6 +18,14 @@ local _, ns = ...
 -- and the Width row are not used then (the row is grey and says so, ns.XpBarAtBlockWidth), and its box in /flatui move says it follows the bar
 -- block. Off, with the Bar block page off (as it is by default) or with block 1 empty, the bar has its own spot and width again, and the Width
 -- row is live. Only Flat UI's own frames are placed and sized, so this goes on in a fight too.
+-- The experience fill takes Rested colour while the player is rested (GetRestState 1), as the game's bar turns blue, only with Rested experience
+-- on; with it off the fill is Experience colour.
+-- With Clicks on the bar (on by default) a Shift-click on a bar puts its progress in the chat box ("Level 34: 12,345 / 27,000 (45%), 1h 20m to
+-- level", "Stormwind: Honored 4,200 / 12,000 (35%)", ns.PutInChat), and a plain click on the reputation bar opens the Reputation tab of the
+-- Character window out of a fight (ToggleCharacter("ReputationFrame"), the call of the game's own key); the tooltip ends with a dim hint.
+-- In test mode (TestMode.lua, entry "xpbar") a bar that Bars shown asks for and that has nothing to show, as at the top level or with no faction
+-- watched, shows a sample (experience at 45% with rested and quest stretches, Stormwind at Honored), drawn with every row; samples are kept apart
+-- from what the game gave (F.Data), are never put in chat, and give XpStats.lua nothing to count (ns.XpRepNow).
 
 local KEY, MOVER = "hud", "FlatUIXpBar"
 -- The width of the game's full bar on Camelot, which 100% of the width row is (Camelot/StatusTrackingBarConstants.lua:1-14).
@@ -34,6 +42,15 @@ local EVENTS = { "PLAYER_ENTERING_WORLD", "PLAYER_XP_UPDATE", "UPDATE_EXHAUSTION
 	"DISABLE_XP_GAIN", "PLAYER_MAX_LEVEL_UPDATE", "UPDATE_EXPANSION_LEVEL", "UNIT_LEVEL", "UPDATE_FACTION", "MAJOR_FACTION_RENOWN_LEVEL_CHANGED",
 	"CVAR_UPDATE", "PLAYER_REGEN_ENABLED", "EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }
 local OF_PLAYER = { PLAYER_XP_UPDATE = true, UNIT_LEVEL = true }
+-- The dim colour of the tooltip's hints and notes.
+local DIM = "|cffa9ae9f"
+-- The sample bars of test mode, shown in place of a bar that has nothing to show: experience at 45% with rested experience, the share of the
+-- quests ready to hand in, reputation at Honored, and the levelling and reputation text each mode of their rows gives.
+local SAMPLE_XP = { value = 12150, total = 27000, rested = 8000, state = 1 }
+local SAMPLE_REP = { name = "Stormwind", standing = "Honored", reaction = 6, value = 4200, total = 12000 }
+local SAMPLE_QUEST = 2700
+local SAMPLE_STATS = { time = "1h 20m to level", rate = "9,800 an hour", both = "1h 20m to level, 9,800 an hour", kills = "42 kills to level" }
+local SAMPLE_REP_STATS = { time = "3h 10m to next standing", rate = "2,500 an hour", both = "3h 10m to next standing, 2,500 an hour" }
 
 -- mode: what is applied to the game's bars ("flat" parked, "game" given back, nil before the first look). frame: the bar's frame. bars: the two
 -- bars by id. xp, rep: the last values read, kept while the game withholds them. mouse: the game's frames whose mouse is off here. waiting: a switch
@@ -264,11 +281,16 @@ function F.ReadRep()
 	return rep
 end
 
--- The ids of the bars to show, the top bar first.
+-- The ids of the bars to show, the top bar first. While test mode is on a bar Bars shown asks for that has nothing to show shows a sample
+-- (S.sampleXp, S.sampleRep, read through F.Data), kept apart from what the game gave.
 function F.List()
 	local show, list = Opt("xpShow"), {}
 	local xp = show ~= "rep" and F.ReadXp() ~= nil and F.XpShown()
 	local rep = show ~= "xp" and F.ReadRep() ~= nil
+	local testing = ns.TestMode ~= nil and ns.TestMode.IsOn()
+	S.sampleXp = testing and show ~= "rep" and not xp or nil
+	S.sampleRep = testing and show ~= "xp" and not rep or nil
+	xp, rep = xp or S.sampleXp, rep or S.sampleRep
 	local first, second = "xp", "rep"
 	if Opt("xpOrder") == "rep" then
 		first, second = "rep", "xp"
@@ -279,6 +301,20 @@ function F.List()
 		end
 	end
 	return list
+end
+
+-- What a bar shows: the values the game gave (S.xp, S.rep), or in test mode the sample of a bar that has none, and true for a sample.
+function F.Data(bar)
+	if bar.id == "xp" then
+		if S.sampleXp then
+			return SAMPLE_XP, true
+		end
+		return S.xp, false
+	end
+	if S.sampleRep then
+		return SAMPLE_REP, true
+	end
+	return S.rep, false
 end
 
 -- The size the own bar has with the rows and the bars now shown: width (the Width row's, which the bar has unless it is under the block),
@@ -406,6 +442,64 @@ function F.Hover(bar, on)
 	F.Text(bar)
 end
 
+-- A whole number as the game writes large ones (BreakUpLargeNumbers), or plain.
+local function Grouped(value)
+	value = math.floor(value + 0.5)
+	local ok, text = pcall(_G.BreakUpLargeNumbers, value)
+	if ok and type(text) == "string" and not ns.IsSecret(text) and text ~= "" then
+		return text
+	end
+	return tostring(value)
+end
+
+-- The line a Shift-click puts in the chat box: "Level 34: 12,345 / 27,000 (45%), 1h 20m to level", or "Stormwind: Honored 4,200 / 12,000 (35%)".
+-- Nothing for a sample.
+function F.ChatLine(bar)
+	local data, sample = F.Data(bar)
+	if not data or sample then
+		return nil
+	end
+	local value, total = math.floor(data.value), math.floor(data.total)
+	if bar.id == "xp" then
+		if total <= 0 then
+			return nil
+		end
+		local line = ("%s / %s (%d%%)"):format(Grouped(value), Grouped(total), math.floor(value * 100 / total))
+		local ok, level = Ask(_G.UnitLevel, "player")
+		if ok == "ok" and ns.Finite(level) then
+			line = ("Level %d: %s"):format(level, line)
+		end
+		local eta = ns.XpStatsText ~= nil and ns.XpStatsText("time") or nil
+		if type(eta) == "string" and eta ~= "" then
+			line = line .. ", " .. eta
+		end
+		return line
+	end
+	local standing = type(data.standing) == "string" and data.standing or nil
+	if data.capped or total <= 0 then
+		return standing and ("%s: %s"):format(data.name, standing) or data.name
+	end
+	local line = ("%s / %s (%d%%)"):format(Grouped(value), Grouped(total), math.floor(value * 100 / total))
+	return ("%s: %s%s"):format(data.name, standing and (standing .. " ") or "", line)
+end
+
+-- Clicks on the bar, with Clicks on the bar on: Shift puts the bar's line in the chat box (ns.PutInChat, MapText.lua), and a plain click on the
+-- reputation bar opens the Reputation tab of the Character window (ToggleCharacter, as the game's key does), out of a fight.
+function F.Click(bar, button)
+	if Opt("xpClicks") ~= true or button ~= "LeftButton" or not bar.shown then
+		return
+	end
+	local _, shift = Ask(_G.IsShiftKeyDown)
+	if shift == true then
+		local line = F.ChatLine(bar)
+		if line and ns.PutInChat ~= nil then
+			ns.PutInChat(line)
+		end
+	elseif bar.id == "rep" and not InCombatLockdown() and type(_G.ToggleCharacter) == "function" then
+		pcall(_G.ToggleCharacter, "ReputationFrame")
+	end
+end
+
 function F.NewBar(root, id)
 	local bar = { id = id }
 	local frame = CreateFrame("StatusBar", nil, root)
@@ -433,6 +527,9 @@ function F.NewBar(root, id)
 	end)
 	frame:SetScript("OnLeave", function()
 		F.Hover(bar, false)
+	end)
+	frame:SetScript("OnMouseUp", function(_, button)
+		F.Click(bar, button)
 	end)
 	return bar
 end
@@ -476,13 +573,18 @@ local function Fmt(text, fallback, ...)
 	return ok and line or ""
 end
 
+-- The lines of a bar's tooltip; a sample's say it is one, and with Clicks on the bar a dim hint ends them.
 function F.TipLines(bar)
 	local lines = {}
-	if bar.id == "xp" and S.xp then
-		local xp = S.xp
+	local data, sample = F.Data(bar)
+	if bar.id == "xp" and data then
+		local xp = data
 		local percent = xp.total > 0 and math.ceil(xp.value / xp.total * 100) or 0
 		lines[1] = Fmt(_G.XP_TEXT, "Experience: %s/%s (%s%%)", tostring(xp.value), tostring(xp.total), tostring(percent))
-		local ok, id, name, factor = Ask(_G.GetRestState)
+		local ok, id, name, factor = "none", nil, nil, nil
+		if not sample then
+			ok, id, name, factor = Ask(_G.GetRestState)
+		end
 		if ok == "ok" and id ~= nil and type(name) == "string" and ns.Finite(factor) then
 			lines[#lines + 1] = Fmt(_G.EXHAUST_TOOLTIP1, "You are %s. (%d%% of normal experience)", name, factor * 100)
 			local _, resting = Ask(_G.IsResting)
@@ -494,12 +596,12 @@ function F.TipLines(bar)
 			lines[#lines + 1] = ("Rested: %d"):format(math.floor(xp.rested))
 		end
 		-- The quests ready to hand in and the levelling numbers (XpStats.lua).
-		local more = ns.XpStatsLines ~= nil and ns.XpStatsLines(Opt("xpQuest") == true, Opt("xpStatsTip") == true) or nil
+		local more = not sample and ns.XpStatsLines ~= nil and ns.XpStatsLines(Opt("xpQuest") == true, Opt("xpStatsTip") == true) or nil
 		for _, line in ipairs(type(more) == "table" and more or {}) do
 			lines[#lines + 1] = line
 		end
-	elseif bar.id == "rep" and S.rep then
-		local rep = S.rep
+	elseif bar.id == "rep" and data then
+		local rep = data
 		lines[1] = rep.name
 		if rep.standing then
 			lines[#lines + 1] = rep.standing
@@ -508,13 +610,18 @@ function F.TipLines(bar)
 			lines[#lines + 1] = ("%d / %d"):format(math.floor(rep.value), math.floor(rep.total))
 		end
 		-- The reputation this session, per hour and the time to the next standing, with Levelling in the tooltip (XpStats.lua).
-		local more = Opt("xpStatsTip") == true and ns.XpStatsRepLines ~= nil and ns.XpStatsRepLines() or nil
+		local more = not sample and Opt("xpStatsTip") == true and ns.XpStatsRepLines ~= nil and ns.XpStatsRepLines() or nil
 		for _, line in ipairs(type(more) == "table" and more or {}) do
 			lines[#lines + 1] = line
 		end
 		if rep.followed then
 			lines[#lines + 1] = "The last faction you gained reputation with."
 		end
+	end
+	if #lines > 0 and sample then
+		lines[#lines + 1] = DIM .. "A sample while test mode is on.|r"
+	elseif #lines > 0 and Opt("xpClicks") == true then
+		lines[#lines + 1] = DIM .. (bar.id == "rep" and "Click: your reputations. Shift-click: put this in chat" or "Shift-click: put this in chat") .. "|r"
 	end
 	return lines
 end
@@ -524,8 +631,9 @@ end
 -- the same.
 function F.Line(bar)
 	local mode = Opt("xpText")
-	if bar.id == "xp" and S.xp then
-		local xp, line = S.xp, nil
+	local data, sample = F.Data(bar)
+	if bar.id == "xp" and data then
+		local xp, line = data, nil
 		local value, total = math.floor(xp.value), math.floor(xp.total)
 		if mode == "game" then
 			line = Fmt(_G.XP_STATUS_BAR_TEXT, "%s / %s", tostring(value), tostring(total))
@@ -535,21 +643,31 @@ function F.Line(bar)
 		if line == "" then
 			line = nil
 		end
-		local extra = ns.XpStatsText ~= nil and ns.XpStatsText(Opt("xpStats")) or nil
+		local extra
+		if sample then
+			extra = SAMPLE_STATS[Opt("xpStats")]
+		else
+			extra = ns.XpStatsText ~= nil and ns.XpStatsText(Opt("xpStats")) or nil
+		end
 		if type(extra) == "string" and extra ~= "" then
 			line = line and (line .. ", " .. extra) or extra
 		end
 		return line
 	end
-	if bar.id == "rep" and S.rep then
-		local rep, line = S.rep, nil
+	if bar.id == "rep" and data then
+		local rep, line = data, nil
 		local value, total = math.floor(rep.value), math.floor(rep.total)
 		if mode == "game" then
 			line = rep.capped and rep.name or ("%s %d / %d"):format(rep.name, value, total)
 		elseif mode ~= "hide" then
 			line = rep.capped and rep.name or (total > 0 and ns.XpText(value, total, rep.name, mode) or rep.name)
 		end
-		local extra = ns.XpStatsRepText ~= nil and ns.XpStatsRepText(Opt("xpRepStats")) or nil
+		local extra
+		if sample then
+			extra = SAMPLE_REP_STATS[Opt("xpRepStats")]
+		else
+			extra = ns.XpStatsRepText ~= nil and ns.XpStatsRepText(Opt("xpRepStats")) or nil
+		end
 		if type(extra) == "string" and extra ~= "" then
 			line = line and (line .. ", " .. extra) or extra
 		end
@@ -644,13 +762,16 @@ function F.Look(bar, index, width, height, gap)
 	F.Ticks(bar, width, height)
 end
 
+-- The fill of a bar. The experience fill takes Rested colour while you are rested, as the game's bar turns blue, only with Rested experience on,
+-- the row that colour belongs to; with it off the fill is always Experience colour.
 function F.Colour(bar)
 	local colour
+	local data = F.Data(bar)
 	if bar.id == "xp" then
-		colour = S.xp and S.xp.state == 1 and "xpRestedColour" or "xpColour"
+		colour = Opt("xpRested") == true and data and data.state == 1 and "xpRestedColour" or "xpColour"
 		return ns.Colour(KEY .. "." .. colour)
 	end
-	local rep = S.rep
+	local rep = data
 	if Opt("xpRepMode") == "one" then
 		return ns.Colour(KEY .. ".xpRepColour")
 	end
@@ -660,7 +781,7 @@ end
 
 -- The value of a bar, its fill colour and the stretch of rested experience.
 function F.Fill(bar, width)
-	local data = bar.id == "xp" and S.xp or S.rep
+	local data, sample = F.Data(bar)
 	local ratio = 0
 	if data then
 		local total = bar.id == "xp" and data.total or data.total
@@ -670,7 +791,7 @@ function F.Fill(bar, width)
 	local r, g, b = F.Colour(bar)
 	bar.frame:SetStatusBarColor(r, g, b, 1)
 	local stretch = bar.rested
-	local xp = S.xp
+	local xp = bar.id == "xp" and data or nil
 	if bar.id == "xp" and Opt("xpRested") and xp and xp.rested > 0 and xp.total > 0 then
 		local reach = math.max(0, math.min((xp.value + xp.rested) / xp.total, 1))
 		local rr, rg, rb = ns.Colour(KEY .. ".xpRestedColour")
@@ -685,7 +806,10 @@ function F.Fill(bar, width)
 	end
 	-- The quests ready to hand in, from the left edge as the rested stretch, so the fill covers what is already earned.
 	local quest = bar.quest
-	local ready = bar.id == "xp" and Opt("xpQuest") == true and xp ~= nil and xp.total > 0 and ns.XpQuestReady ~= nil and ns.XpQuestReady() or 0
+	local ready = 0
+	if bar.id == "xp" and Opt("xpQuest") == true and xp ~= nil and xp.total > 0 then
+		ready = sample and SAMPLE_QUEST or ns.XpQuestReady ~= nil and ns.XpQuestReady() or 0
+	end
 	if ns.Finite(ready) and ready > 0 then
 		local reach = math.max(0, math.min((xp.value + ready) / xp.total, 1))
 		local qr, qg, qb = ns.Colour(KEY .. ".xpQuestColour")
@@ -758,7 +882,7 @@ function F.Update(layout)
 	for index, id in ipairs(list) do
 		shown[id] = index
 	end
-	local mouse = Opt("xpTooltip") or Opt("xpTextWhen") == "hover"
+	local mouse = Opt("xpTooltip") or Opt("xpTextWhen") == "hover" or Opt("xpClicks") == true
 	for id, bar in pairs(S.bars) do
 		bar.shown = shown[id] ~= nil
 		if bar.shown then
@@ -923,7 +1047,7 @@ end
 -- last plain read stands, so nothing is counted until the next one. Nothing while Flat UI's bar or its reputation bar is not shown.
 function ns.XpRepNow()
 	local rep, bar = S.rep, S.bars.rep
-	if not (rep and bar and bar.shown and S.mode == "flat" and ns.XpOwn() and ns.Finite(rep.id) and ns.Finite(rep.at)) then
+	if not (rep and bar and bar.shown and not S.sampleRep and S.mode == "flat" and ns.XpOwn() and ns.Finite(rep.id) and ns.Finite(rep.at)) then
 		return nil
 	end
 	return rep.id, rep.at, not rep.capped and math.max(rep.total - rep.value, 0) or nil, rep.name
@@ -999,3 +1123,9 @@ ns.ClickPathReporter(function()
 		return "Experience bar: the game's bar is hidden after the fight."
 	end
 end)
+
+-- Test mode: a bar that has nothing to show, as at the top level or with no faction watched, shows a sample at its spot (F.List, F.Data), drawn
+-- with every row; On and Off draw the bar again.
+if ns.TestMode then
+	ns.TestMode.Register("xpbar", { module = KEY, label = "Experience bar", Start = ns.XpBarRedraw, Stop = ns.XpBarRedraw })
+end
