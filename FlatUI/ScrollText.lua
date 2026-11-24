@@ -17,6 +17,9 @@ local _, ns = ...
 -- and kept that place all the way), and none is left out while the area has a record free. A Horizontal or Static number takes a free
 -- row, and when every row is busy the oldest number in a row goes and the new one takes its row. When every record of an area is alive,
 -- the oldest number goes.
+-- Outgoing direction and Incoming direction (Up or Down; Outgoing up and Incoming down by default, the areas' own dir) set which way the
+-- numbers of an area move and which way the rows of a Horizontal or Static area stack, read as each number starts, so a number on its way keeps
+-- the direction it started with.
 -- The icon of an amount is written in its text (a texture escape), so that a withheld zero, which the client writes as nothing, draws no icon,
 -- name or (Extra attack) either; a word has the icon beside it, a texture of the record's own.
 -- A secret amount or name goes to SetText and SetFormattedText only; nothing here compares, counts or measures it.
@@ -52,12 +55,15 @@ local EXTRA_TEXT = "|cffff9926(Extra attack)|r"
 -- The icon of a spell in the text of a number: a texture escape as high as the text, its edge trimmed as the icon beside a word is (5 to 59
 -- of the 64 texels), and a space after it.
 local INLINE = "|T%d:0:0:0:0:64:64:5:59:5:59|t "
--- The two areas: the name of the handle, the row of the style, the row of the size, the direction (1 up, -1 down), the side an arc and a
+-- The two areas: the name of the handle, the row of the style, the row of the size, the row of the direction and the direction when that row
+-- gives none (1 up, -1 down), the side an arc and a
 -- horizontal number go to, the most numbers alive, those that wait for a lane too (room for a burst of 20 and the numbers still on screen
 -- before it), and, with no handle to take the place from, where the area starts as units from the middle of the screen.
 local AREAS = {
-	out = { label = "Outgoing", mover = "FlatUICombatOut", style = "outStyle", size = "size", dir = 1, side = 1, max = 32, dx = 170, dy = -30 },
-	inc = { label = "Incoming", mover = "FlatUICombatSelf", style = "inStyle", size = "ownSize", dir = -1, side = -1, max = 32, dx = -170, dy = -30 },
+	out = { label = "Outgoing", mover = "FlatUICombatOut", style = "outStyle", size = "size", dirRow = "outDir", dir = 1, side = 1, max = 32, dx = 170,
+		dy = -30 },
+	inc = { label = "Incoming", mover = "FlatUICombatSelf", style = "inStyle", size = "ownSize", dirRow = "inDir", dir = -1, side = -1, max = 32,
+		dx = -170, dy = -30 },
 }
 local ORDER = { AREAS.out, AREAS.inc }
 for key, area in pairs(AREAS) do
@@ -343,7 +349,18 @@ local function Row(area, item, now)
 	end
 	area.rows[pick] = item
 	item.row = pick
-	return area.dir * pick * item.height * SHAPE.line
+	return item.dir * pick * item.height * SHAPE.line
+end
+
+-- The direction of an area's numbers now: its row, Up 1 or Down -1, else the area's own.
+local function Direction(area)
+	local choice = Opt(area.dirRow)
+	if choice == "up" then
+		return 1
+	elseif choice == "down" then
+		return -1
+	end
+	return area.dir
 end
 
 -- The height of a number in an area: the game's height at the Size of the area, times scale (a smaller partial effect) and a quarter
@@ -441,7 +458,7 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, 
 	Fill(item, height, kind, value, format, r, g, b, flag, icon, value2)
 	serial = serial + 1
 	item.serial, item.sample = serial, sample and true or false
-	item.style, item.dir, item.side = style, area.dir, area.side
+	item.style, item.dir, item.side = style, Direction(area), area.side
 	item.arc = SHAPE.arcs[Opt("arcWidth")] or SHAPE.arc
 	item.length = SHAPE.length * ns.CombatWorldScale()
 	item.life = style == "static" and SHAPE.still or SHAPE.life[Opt("speed")] or SHAPE.life.normal

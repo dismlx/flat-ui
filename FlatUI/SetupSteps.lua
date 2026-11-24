@@ -1195,6 +1195,8 @@ ns.SETUP_STEPS = {
 		{ "combattext.where", "c", "behaviour", "Chooses whether your hits show in the Outgoing scroll area, over each enemy, or both." },
 		{ "combattext.outStyle", "o", "behaviour", "Chooses how numbers in the Outgoing scroll area move: straight, in an arc, horizontal or static." },
 		{ "combattext.inStyle", "o", "mock-combat-text" },
+		{ "combattext.outDir", "o", "behaviour", "Chooses whether numbers in the Outgoing scroll area move up or down." },
+		{ "combattext.inDir", "o", "mock-combat-text" },
 		{ "combattext.arcWidth", "o", "mock-combat-text" },
 		{ "combattext.icons", "o", "behaviour", "Chooses whether the Outgoing area and your heals show the icon of your spell, swing or shot: all, spells only or off." },
 		{ "combattext.speed", "o", "behaviour", "Sets how long numbers stay on screen in the scroll areas: fast, normal or slow." },

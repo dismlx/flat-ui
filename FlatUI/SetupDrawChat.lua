@@ -801,12 +801,15 @@ do
 				end
 			end
 		end
-		-- Over the character: the numbers of the Incoming scroll area, moved by Incoming style. They come a quarter of a second apart, as
+		-- Over the character: the numbers of the Incoming scroll area, moved by Incoming style, up or down as Incoming direction says (from the
+		-- bottom of the mock area when up). They come a quarter of a second apart, as
 		-- /flatui combat test sends them. Straight and Arc numbers take their lanes by the rule of the game (ns.ScrollLane, ScrollText.lua): one
 		-- that would start within a line of a number still near the start takes the next free lane, the same path a lane to the left (away from
 		-- the character) first and then to the right, so they lie side by side and none starts lower; one that waits for a lane is not seen
 		-- yet. Horizontal and Static numbers take a row each.
 		local level, style, scroll = ns.Get("combattext.own"), ns.Get("combattext.inStyle"), SHAPE.scroll
+		local dir = ns.Get("combattext.inDir") == "up" and 1 or -1
+		local top = dir == 1 and OWN_TOP - OWN_LENGTH or OWN_TOP
 		local ownSize = ns.Get("combattext.ownSize") / 100
 		local life = style == "static" and scroll.still or scroll.life[ns.Get("combattext.speed")] or scroll.life.normal
 		local hold = style == "static" and scroll.stillHold or scroll.hold
@@ -819,7 +822,7 @@ do
 			local shown = level == "more" or (level == "take" and sample.level == "take")
 			fs:SetShown(shown)
 			local height = base * (sample.crit and scroll.crit or 1)
-			local start, rx, ry = 0.25 * (i - 1), 0, -(i - 1) * height * scroll.line
+			local start, rx, ry = 0.25 * (i - 1), 0, dir * (i - 1) * height * scroll.line
 			if shown and path then
 				local lane
 				lane, start = ns.ScrollLane(newest, height, start)
@@ -829,11 +832,11 @@ do
 			if shown then
 				local age = snapshot - start
 				local u = math.max(0, age / life)
-				local dx, dy = ns.ScrollPath(style, u, OWN_LENGTH, -1, -1, scroll.arcs[ns.Get("combattext.arcWidth")])
+				local dx, dy = ns.ScrollPath(style, u, OWN_LENGTH, dir, -1, scroll.arcs[ns.Get("combattext.arcWidth")])
 				fs:SetText(sample.word and ns.CombatParen(sample.text) or sample.text)
 				U.font(fs, file, Height(base, sample.crit, math.max(0, age), pops), flags, shadow, sample.colour)
 				fs:SetAlpha(age < 0 and 0 or ns.ScrollAlpha(u, hold))
-				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OWN_X + rx + dx, OWN_TOP + ry + dy)
+				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OWN_X + rx + dx, top + ry + dy)
 			end
 		end
 	end
@@ -849,6 +852,7 @@ do
 		end
 		p["combattext.height"], p["combattext.crit"], p["combattext.classicCrit"] = S.enemy[6], S.enemy[6], S.enemy[6]
 		p["combattext.inStyle"], p["combattext.ownSize"], p["combattext.arcWidth"] = S.own[1], S.own[1], S.own[1]
+		p["combattext.inDir"] = S.own[1]
 		p["combattext.missWords"] = S.enemy[5]
 		for _, key in ipairs({ "friend", "friendUnits", "friendDamage", "friendHeal", "friendPet", "friendWords", "friendSigns", "friendDamageColour", "friendHealColour", "friendSize", "friendHeight" }) do
 			p["combattext." .. key] = S.friends[key == "friendHeight" and 1 or 2].frame
