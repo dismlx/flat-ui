@@ -3,7 +3,7 @@ local _, ns = ...
 -- Combat alerts: No target and +Combat and -Combat in the middle of the screen. The rows are under Your character on the Combat text page
 -- (combattext.noTarget and the four rows under it, combattext.combatState and the three under it), part "combat alerts" of the module, which
 -- stops alone after a few failures. Not a module: CombatText.lua calls ns.CombatCuesRefresh in every refresh of the page, and the events come
--- through the module (ns.AddEvent), so nothing runs while the page is off. No target is off by default and +Combat and -Combat on; nothing is
+-- through the module (ns.AddEvent), so nothing runs while the page is off. No target and +Combat and -Combat are on by default; nothing is
 -- made until a line first shows.
 -- No target warning: in a fight, from PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED (Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:3885-3895),
 -- with no target, a dead one or one the player cannot attack (UnitExists, UnitIsDeadOrGhost and UnitCanAttack, UnitDocumentation.lua:1192-1205, 1931-1944,

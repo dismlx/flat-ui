@@ -44,7 +44,7 @@ A warrior who knows **Overpower** sees its icon over the nameplate of an enemy t
 
 Enemy cast bars on your target, focus and nameplates show whether your class interrupt is ready, and its icon on the cooldown row gets a gold border while your target or focus casts something you can interrupt.
 
-**No target warning** (off by default) and **Entering and leaving combat** (on by default), on the **Combat text** page, show **No target** while you fight with no target or a dead or friendly one, and **+Combat** and **-Combat** as a fight starts and ends.
+**No target warning** and **Entering and leaving combat** (both on by default), on the **Combat text** page, show **No target** while you fight with no target or a dead or friendly one, and **+Combat** and **-Combat** as a fight starts and ends.
 
 In the chat windows, a web address becomes a link that opens a box to copy it, and an item, spell or achievement link shows its tooltip while the mouse is over it. The **Tooltips** page names what a unit targets, colours a player's class line and puts icons before item and spell names; with IDs on it shows the ID of the poison, oil or stone on your weapon, and **Show IDs** can wait for Shift, Ctrl or Alt. The items you wear show beside an item's tooltip only while you hold Shift. With **Show recent chat after a reload** the chat of the last hour comes back in your main window after a reload. Tooltips can hide by kind (spells, items, and your buffs and debuffs and those on party and raid frames), unit tooltips by enemy or friend and only in dungeons and raids, and the unit tooltips of party and raid frames; **Icon ID** adds the icon's number.
 

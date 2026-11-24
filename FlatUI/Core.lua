@@ -312,7 +312,7 @@ local ADDON_NAME, ns = ...
 -- With Clear the damage meter on (off by default), Minimap and HUD calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
 -- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
 -- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.
--- The combat alerts of Combat text (No target, off by default, and +Combat and -Combat, on by default) are font strings on a frame of its own;
+-- The combat alerts of Combat text (No target and +Combat and -Combat, both on by default) are font strings on a frame of its own;
 -- they change nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);

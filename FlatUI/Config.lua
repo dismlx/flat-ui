@@ -538,20 +538,20 @@ ns.PAGES = {
 			choices = { { "scroll", "Scroll area" }, { "over", "Over enemies" }, { "both", "Both" } } },
 		{ key = "outStyle", kind = "choice", default = "arc", label = "Outgoing style", needs = "where", needsIn = { "scroll", "both" },
 			choices = { { "straight", "Straight" }, { "arc", "Arc" }, { "horizontal", "Horizontal" }, { "static", "Static" } } },
-		{ key = "inStyle", kind = "choice", default = "arc", label = "Incoming style", needs = "own", needsIn = { "take", "more" },
+		{ key = "inStyle", kind = "choice", default = "straight", label = "Incoming style", needs = "own", needsIn = { "take", "more" },
 			choices = { { "straight", "Straight" }, { "arc", "Arc" }, { "horizontal", "Horizontal" }, { "static", "Static" } } },
 		{ key = "arcWidth", kind = "choice", default = "wide", label = "Arc width", tip = "How far an arc number curves out to the side.",
 			choices = { { "narrow", "Narrow" }, { "wide", "Wide" } } },
 		{ key = "icons", kind = "choice", default = "all", label = "Spell icons", needs = "whose", needsIn = { "one" },
 			tip = "Shows the icon of your spell, swing or shot. Damage on you shows none.",
 			choices = { { "all", "All" }, { "spells", "Spells only" }, { "off", "Off" } } },
-		{ key = "speed", kind = "choice", default = "normal", label = "Speed", tip = "How long a number stays in the scroll areas.",
+		{ key = "speed", kind = "choice", default = "slow", label = "Speed", tip = "How long a number stays in the scroll areas.",
 			choices = { { "fast", "Fast" }, { "normal", "Normal" }, { "slow", "Slow" } } },
 		{ section = "Classic" },
 		{ key = "classicColour", kind = "choice", default = "portrait", label = "Colours", tip = "Colour by school of magic, when on, takes their place.",
 			needs = "style", needsIn = { "classic" }, choices = { { "portrait", "White and yellow" }, { "game", "Red and purple" } } },
 		{ key = "classicSigns", kind = "bool", default = false, label = "Plus and minus signs over enemies", needs = "style", needsIn = { "classic" } },
-		{ key = "classicRise", kind = "number", default = 100, min = 40, max = 225, step = 5, unit = "", label = "Rise distance", needs = "style", needsIn = { "classic" } },
+		{ key = "classicRise", kind = "number", default = 175, min = 40, max = 225, step = 5, unit = "", label = "Rise distance", needs = "style", needsIn = { "classic" } },
 		{ key = "classicTime", kind = "number", default = 100, min = 50, max = 160, step = 10, unit = "%", label = "Time on screen", tip = "100% is the game's own 1.9 seconds.",
 			needs = "style", needsIn = { "classic" } },
 		{ key = "classicStack", kind = "choice", default = "up", label = "Stacking", needs = "style", needsIn = { "classic" },
@@ -583,12 +583,12 @@ ns.PAGES = {
 	{
 		key = "combattextFriendly", label = "Friendly units", parent = "combattext", owner = "combattext",
 		{ section = "Friendly units" },
-		{ key = "friend", kind = "choice", default = "off", label = "Where friendly numbers show", tip = "Party and raid frames show numbers where friendly nameplates are not available.",
+		{ key = "friend", kind = "choice", default = "both", label = "Where friendly numbers show", tip = "Party and raid frames show numbers where friendly nameplates are not available.",
 			choices = { { "off", "Off" }, { "frames", "Party and raid frames" }, { "plates", "Friendly nameplates" }, { "both", "Both" } } },
 		{ key = "friendUnits", kind = "choice", default = "all", label = "Friendly units", needs = "friend", needsIn = { "frames", "plates", "both" },
 			choices = { { "all", "Every friendly unit" }, { "target", "Target only" } } },
 		{ key = "friendDamage", kind = "bool", default = true, label = "Damage friendly units take", needs = "friend", needsIn = { "frames", "plates", "both" } },
-		{ key = "friendHeal", kind = "choice", default = "taken", label = "Healing over friendly units", tip = "Healing you do is the game's own number, on your target only and behind the nameplate.",
+		{ key = "friendHeal", kind = "choice", default = "done", label = "Healing over friendly units", tip = "Healing you do is the game's own number, on your target only and behind the nameplate.",
 			needs = "friend", needsIn = { "frames", "plates", "both" },
 			choices = { { "taken", "Healing they take from anyone" }, { "done", "Healing you do" }, { "off", "Off" } } },
 		{ key = "friendPet", kind = "bool", default = true, label = "Your pet", needs = "friend", needsIn = { "frames", "plates", "both" } },
@@ -613,10 +613,10 @@ ns.PAGES = {
 			needs = "source", needsIn = { "front" },
 			choices = { { "own", "Same as your text" }, { "smaller", "Smaller than your text" }, { "game", "The game's own size" }, { "enemy", "Same as numbers over enemies" } } },
 		{ section = "Warnings" },
-		-- CombatCues.lua: two alerts of the addon's own in the middle of the screen, at the spot of Combat text: alerts in the movers. No target is off
-		-- by default, and +Combat and -Combat on since 0.5.27 (Jon Default), though the game has its own (floatingCombatTextCombatState_v2 is 0) and
-		-- EnhanceQoL has both.
-		{ key = "noTarget", kind = "bool", default = false, label = "No target warning",
+		-- CombatCues.lua: two alerts of the addon's own in the middle of the screen, at the spot of Combat text: alerts in the movers. No target is on
+		-- by default since 0.5.33 and +Combat and -Combat since 0.5.27 (Jon Default), though the game has its own (floatingCombatTextCombatState_v2
+		-- is 0) and EnhanceQoL has both.
+		{ key = "noTarget", kind = "bool", default = true, label = "No target warning",
 			tip = "In a fight with no target, or with a dead or friendly one, No target shows in the middle of the screen after a second." },
 		{ key = "noTargetFriendly", kind = "bool", default = true, label = "Warn with a friendly target", needs = "noTarget",
 			tip = "Off for healing in a group: a friendly target then keeps the warning away." },
