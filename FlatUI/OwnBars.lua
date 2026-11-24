@@ -836,6 +836,12 @@ function ns.OwnWanted()
 	return F.Mode() and not S.error
 end
 
+-- The overIf of the rows that apply with the game's buttons only (Hide bar frame, Hide end caps, Hide dividers, Rotation helper highlight): greyed
+-- while Flat UI's buttons are chosen (Panel.lua, Over).
+function ns.OwnButtonsChosen()
+	return ns.OwnWanted() == true
+end
+
 -- The first thing a build's snippets did not write, or nil.
 function ns.OwnMissing()
 	return F.Missing()
