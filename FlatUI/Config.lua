@@ -2392,7 +2392,7 @@ ns.PAGES = {
 			pick = "ErrandsSellPick", tip = "/flatui sell and an item adds one." },
 		{ key = "keepList", kind = "list", default = 0, label = "Items never sold", none = "Choose one to sell it again", items = "ErrandsKeepLines",
 			pick = "ErrandsKeepPick", tip = "/flatui keep and an item adds one. Make room never deletes them either." },
-		{ key = "repair", kind = "choice", default = "own", label = "Repair", tip = "When a merchant who repairs opens.",
+		{ key = "repair", kind = "choice", default = "own", label = "Repair", tip = "When a merchant who repairs opens. With items sold too, one chat line says both.",
 			choices = { { "off", "Off" }, { "own", "With your gold" }, { "guild", "Guild gold first" } } },
 		{ key = "guildWhere", kind = "choice", default = "everywhere", label = "Guild gold where", needs = "repair", needsIn = { "guild" },
 			tip = "Elsewhere the repair is paid with your own gold.",

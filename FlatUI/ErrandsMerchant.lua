@@ -36,7 +36,10 @@ local _, ns = ...
 -- you cannot pay is tried again once the selling is done and the money for it has come (PLAYER_MONEY), or MONEY_WAIT seconds later. The cost
 -- is GetRepairAllCost before the repair. Guild gold where keeps the guild's money for some places: inside an instance (IsInInstance,
 -- InstanceDocumentation.lua:170-177) a raid, a dungeon (party) or a battleground (pvp or arena); outside one, a raid group (IsInRaid) or a
--- group (IsInGroup); anywhere else, a withheld answer included, the open world. Elsewhere the bill is paid with your own gold.
+-- group (IsInGroup); anywhere else, a withheld answer included, the open world. Elsewhere the bill is paid with your own gold. A repair paid
+-- with your own gold as the opening of the merchant starts a sell pass is said in the pass's line at its end (Sold 9 items for 38s 2c and
+-- repaired for 1g 4s.), or alone when the pass sells nothing; a repair of the guild's, one paid with your gold because of Guild gold where, and
+-- one tried again after the selling keep lines of their own.
 -- The Sell junk button of Bags (BagsWindow.lua) sells through the same pass, with all its checks, whatever the switch of Errands and of Sell grey
 -- items: ns.ErrandsSellJunk starts a pass (or goes on with one a fight paused), the pass then counts as wanted until it ends (manual), and since
 -- this module hears no event while it is off, Bags ends the visit at its own MERCHANT_CLOSED with ns.ErrandsMerchantClosed, which does what
@@ -93,6 +96,8 @@ local paused, waiting = false, false
 local retryRepair, moneyWait, guildRefused, repairAfterFight = false, false, false, false
 -- A visit that waits for the end of a fight: { at, keep }.
 local pending
+-- The cost of a repair made with your gold as a sell pass starts, said in the pass's own line (Finish) rather than a line of its own.
+local repairSaid
 -- What /flatui status says about the last visit: what was repaired and sold, in that order.
 local notes = {}
 -- Items of the sell list that wait for Sell next at this visit, and the button. A make of the button failed: it is not tried again.
@@ -313,7 +318,16 @@ local function WaitsFor()
 	return E.Gamepad() and "until you next open a merchant" or "for Sell next"
 end
 
--- Ends the selling of the visit, and says what was sold: why it stopped when it did not end by itself, else how many of the sell list wait.
+-- A repair line kept for the pass, said alone: the pass sold nothing, or there was none.
+local function SayRepair()
+	if repairSaid then
+		E.Say(("Repaired for %s."):format(repairSaid))
+		repairSaid = nil
+	end
+end
+
+-- Ends the selling of the visit, and says what was sold: why it stopped when it did not end by itself, else how many of the sell list wait. A
+-- repair made as the pass started is said in the same line, or alone first when nothing was sold.
 local function Finish(why)
 	local done = run
 	run, paused = nil, false
@@ -324,15 +338,20 @@ local function Finish(why)
 	if done and done.sold > 0 then
 		local amount = done.unknown and "" or (" for " .. E.Money(done.value))
 		notes[#notes + 1] = ("sold %d%s"):format(done.sold, amount)
+		local repaired = repairSaid and (" and repaired for " .. repairSaid) or ""
+		repairSaid = nil
 		local tail = ""
 		if why then
 			tail = ", then stopped: " .. why
 		elseif waits then
 			tail = ("; %d more on your sell list %s %s"):format(more, Wait(more), waits)
 		end
-		E.Say(("Sold %d %s%s%s."):format(done.sold, Items(done.sold), amount, tail))
-	elseif waits then
-		E.Say(("%d %s of your sell list %s %s."):format(more, Items(more), Wait(more), waits))
+		E.Say(("Sold %d %s%s%s%s."):format(done.sold, Items(done.sold), amount, repaired, tail))
+	else
+		SayRepair()
+		if waits then
+			E.Say(("%d %s of your sell list %s %s."):format(more, Items(more), Wait(more), waits))
+		end
 	end
 	-- A pass of the Sell junk button of Bags ends here, after its line: Sell next follows Errands' own selling again.
 	manual = false
@@ -568,8 +587,9 @@ local function GuildHere()
 end
 
 -- Repairs everything. last: the try after the selling, which says when there is not enough gold; the first try waits for the selling instead.
--- In a fight nothing is repaired: the repair waits for its end, if the merchant is still open then.
-Repair = function(last)
+-- hold: a sell pass follows at once, so a repair with your gold is said in its line (repairSaid). In a fight nothing is repaired: the repair
+-- waits for its end, if the merchant is still open then.
+Repair = function(last, hold)
 	local how = E.Opt("repair")
 	if how ~= "own" and how ~= "guild" or not ns.Enabled("errands") then
 		return
@@ -614,7 +634,11 @@ Repair = function(last)
 			E.Say(("Repaired for %s with your gold: guild gold is for %s."):format(E.Money(cost), PLACE_WORDS[E.Opt("guildWhere")] or "other places"))
 		else
 			notes[#notes + 1] = ("repaired for %s"):format(E.Money(cost))
-			E.Say(("Repaired for %s."):format(E.Money(cost)))
+			if hold then
+				repairSaid = E.Money(cost)
+			else
+				E.Say(("Repaired for %s."):format(E.Money(cost)))
+			end
 		end
 	end
 end
@@ -633,11 +657,17 @@ local function Visit(at, keep, tries)
 		end
 		return
 	end
-	Repair(false)
+	-- A pass that follows says the repair in its own line.
+	local selling = not keep and Wanted()
+	Repair(false, selling)
 	if keep then
 		notes[#notes + 1] = "kept with Shift"
-	elseif Wanted() then
+	elseif selling then
 		Sell()
+	end
+	-- A pass that could not start says the repair alone.
+	if not run then
+		SayRepair()
 	end
 	if retryRepair and not run then
 		retryRepair = false
@@ -663,6 +693,7 @@ E.Listen(part, "MERCHANT_SHOW", function()
 	if run then
 		Finish("the merchant closed")
 	end
+	SayRepair()
 	visit = visit + 1
 	open, notes, run, paused, retryRepair, moneyWait, guildRefused, pending, repairAfterFight = true, {}, nil, false, false, false, false, nil, false
 	more, manual = 0, false
@@ -687,6 +718,7 @@ local function Closed()
 	if run then
 		Finish("the merchant closed")
 	end
+	SayRepair()
 	open, waiting, paused, retryRepair, moneyWait, pending, repairAfterFight = false, false, false, false, false, nil, false
 	more, manual = 0, false
 	if nextButton then
