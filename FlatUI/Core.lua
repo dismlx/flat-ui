@@ -412,9 +412,11 @@ local ADDON_NAME, ns = ...
 -- A change that needs a reload (a row whose reload field in Config.lua is "off", "change" or true), made in the options, in setup, by a profile
 -- switch, copy, reset or import or by a slash command, shows a notice of Flat UI's own at the top of the screen (Reload.lua, FlatUIReloadNotice,
 -- in DIALOG strata so it shows over the options window, with an own entry in /flatui move) that names what needs it, with Reload (ns.SecureReload,
--- the game's /reload on a secure button where ReloadUI is blocked, which waits for the end of a fight there) and Later, which hides it until the
--- next such change. It goes when nothing needs a reload any more. What needs one is the value each such row had at login (ns.ReloadStart) against
--- the profile in use (ns.ReloadLines), which Home's Needs a reload also lists.
+-- the game's /reload on a secure button where ReloadUI is blocked, which waits for the end of a fight there), Undo, which sets each such row back
+-- to its value at login with ns.Set (out of combat), and Later, which hides it until the next such change; pointed at, it lists every change with
+-- its value now and at login (GameTooltip). It keeps clear of the options window's title bar, the /flatui move toolbar and the test mode bar. It
+-- goes when nothing needs a reload any more. What needs one is the value each such row had at login (ns.ReloadStart) against the profile in use
+-- (ns.ReloadLines), which Home's Needs a reload also lists.
 
 local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
@@ -2787,8 +2789,9 @@ function ns.ReloadStart()
 end
 
 -- The changes that need a reload, by the reload field of the row in Config.lua: "off" for a switch that takes full effect after a reload when it
--- is turned off, "change" (or true) for a row that applies after a reload when its value changes. Entries { label, field, path, value } in the
--- order of the pages, one a row; none before login.
+-- is turned off, "change" (or true) for a row that applies after a reload when its value changes. Entries { label, field, path, value, was } in
+-- the order of the pages, one a row, with value the value saved now and was the one the game runs since login (the reload notice's Undo, Reload.lua,
+-- sets it back); none before login.
 function ns.ReloadLines()
 	local lines, seen = {}, {}
 	if not (reloadBase and profile) then
@@ -2805,7 +2808,7 @@ function ns.ReloadLines()
 				end
 				local field = item.reload == true and "change" or item.reload
 				if (field == "off" and was == true and now == false) or (field == "change" and was ~= now) then
-					lines[#lines + 1] = { item.label, field, item.path, now }
+					lines[#lines + 1] = { item.label, field, item.path, now, was }
 				end
 			end
 		end
