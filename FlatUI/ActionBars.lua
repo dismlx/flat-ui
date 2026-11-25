@@ -11,9 +11,10 @@ local _, ns = ...
 -- place of the main bar and bars 2 to 8 while Flat UI's buttons are in use (the game's bars are parked at alpha 0 under them), else behind the
 -- game's bar.
 -- Test mode (TM.Register "actionbars", Action buttons): while it is on, every 5 s, the first four shown buttons of Flat UI's main bar that hold
--- something (ns.ButtonSamples) play samples of their looks, all on Flat UI's own frames and out of combat: button 1 fills as a 2 s cast that lands,
--- button 2 flashes as an interrupt, button 3 pulses as an aim (ButtonEffects.lua), and button 4 runs a 4 s sweep in the Sweep colour and opacity,
--- with its edge line and numbers, that ends with the ready flash (ButtonStates.lua). A change of an action bar row or of the cast bar's colours
+-- something (ns.ButtonSamples; with fewer there, the next of bars 2 to 8) play samples of their looks, all on Flat UI's own frames and out of
+-- combat: button 1 fills as a 2 s cast that lands, button 2 flashes as an interrupt, button 3 pulses as an aim (ButtonEffects.lua), and button 4,
+-- or the last when there are fewer than four, runs a 4 s sweep in the Sweep colour and opacity, with its edge line and numbers, that ends with the
+-- ready flash (ButtonStates.lua). A change of an action bar row or of the cast bar's colours
 -- gives the samples that show the new look and plays the others; a change of profile plays them all again. Each part plays only while its row is
 -- on. With test mode off, a change of one of those rows with the options window open plays its sample once (ns.ButtonStatesChanged,
 -- ns.ButtonEffectsChanged). A Refresh (a change of profile among them) tells OwnBars.lua to place the page arrows again (ns.OwnPagerChanged).
@@ -980,21 +981,25 @@ local function Marked()
 	return n
 end
 
--- The first shown buttons of Flat UI's main bar that hold something, at most four, in the bar's order: the buttons the samples of test mode and of a
--- change of a row play on. Empty without Flat UI's buttons.
+-- The first shown buttons of Flat UI's main bar that hold something, at most four, in the bar's order, then as many as are missing from bars 2 to 8
+-- in bar order: the buttons the samples of test mode and of a change of a row play on, so a character with few spells on the main bar sees them
+-- too. The first is the main bar's first when it has one. Empty without Flat UI's buttons.
 function ns.ButtonSamples()
 	local list = {}
 	if not OwnOn() then
 		return list
 	end
-	for _, button in ipairs(OwnList()) do
-		if OwnBarOf(button) == 1 then
-			local okShown, shown = pcall(button.IsVisible, button)
-			local st = type(ns.OwnState) == "function" and ns.OwnState(button)
-			if okShown and not ns.IsSecret(shown) and shown == true and type(st) == "table" and st.has == true then
-				list[#list + 1] = button
-				if #list >= 4 then
-					break
+	local buttons = OwnList()
+	for bar = 1, 8 do
+		for _, button in ipairs(buttons) do
+			if #list >= 4 then
+				return list
+			end
+			if OwnBarOf(button) == bar then
+				local okShown, shown = pcall(button.IsVisible, button)
+				local st = type(ns.OwnState) == "function" and ns.OwnState(button)
+				if okShown and not ns.IsSecret(shown) and shown == true and type(st) == "table" and st.has == true then
+					list[#list + 1] = button
 				end
 			end
 		end
@@ -1084,8 +1089,10 @@ local function Sample(force)
 	if type(ns.ButtonEffectsSample) == "function" then
 		ns.ButtonEffectsSample({ cast = list[1], interrupt = list[2], aim = list[3] }, force)
 	end
-	if list[4] and type(ns.ButtonStatesSample) == "function" then
-		ns.ButtonStatesSample(list[4], force)
+	-- With fewer than four buttons, the sweep plays on the last one.
+	local sweep = list[4] or list[#list]
+	if sweep and type(ns.ButtonStatesSample) == "function" then
+		ns.ButtonStatesSample(sweep, force)
 	end
 end
 
@@ -1124,7 +1131,8 @@ local function SampleChanged(path)
 			ns.ButtonEffectsSample({ [row[1]] = button })
 		end
 	elseif path:match("^actionbars%.") then
-		local button = ns.ButtonSamples()[4]
+		local list = ns.ButtonSamples()
+		local button = list[4] or list[#list]
 		if button and type(ns.ButtonStatesSample) == "function" then
 			ns.ButtonStatesSample(button)
 		end
