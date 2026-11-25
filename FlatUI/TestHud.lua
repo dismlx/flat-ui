@@ -109,7 +109,8 @@ local function Class()
 	return nil
 end
 
--- Where a bar is in its round at `now`: its state, the share of the bar filled, the seconds left and the seconds into the state.
+-- Where a bar is in its round at `now`: its state, the share of the bar filled, the seconds left, the seconds into the state and the seconds the
+-- state runs (the whole cast, for Total cast time too).
 local function Phase(round, offset, now)
 	local total = 0
 	for _, step in ipairs(round) do
@@ -122,15 +123,15 @@ local function Phase(round, offset, now)
 			local run = math.min(1, t / step[2])
 			local state = step[1]
 			if state == "channel" then
-				return state, 1 - run, step[2] * (1 - run), t
+				return state, 1 - run, step[2] * (1 - run), t, step[2]
 			elseif state == "interrupted" then
-				return state, 1, 0, t
+				return state, 1, 0, t, step[2]
 			end
-			return state, run, step[2] * (1 - run), t
+			return state, run, step[2] * (1 - run), t, step[2]
 		end
 		t = t - length
 	end
-	return round[1][1], 0, round[1][2], 0
+	return round[1][1], 0, round[1][2], 0, round[1][2]
 end
 
 local function Now()
@@ -153,8 +154,8 @@ end
 
 local function CastStandIn(spec)
 	local round = ROUNDS[spec.round or (spec.opt == "player" and "player" or "enemy")]
-	local function Shows(holder, state, part, left, into)
-		ns.DrawCasts.CastProgress(holder.row, state, part, left, holder.row.state ~= state and CastName(spec, state) or nil)
+	local function Shows(holder, state, part, left, into, total)
+		ns.DrawCasts.CastProgress(holder.row, state, part, left, holder.row.state ~= state and CastName(spec, state) or nil, total)
 		holder.row.bar:SetAlpha(state == "interrupted" and (0.45 + 0.55 * math.abs(math.cos(into * 6))) or 1)
 	end
 	TM.StandIn({
@@ -173,9 +174,9 @@ local function CastStandIn(spec)
 			holder.row.bar:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
 		end,
 		Paint = function(holder, w, h)
-			local state, part, left, into = Phase(round, spec.offset, Now())
+			local state, part, left, into, total = Phase(round, spec.offset, Now())
 			ns.DrawCasts.PaintCast(holder.row, spec.opt, state, part, w, h, CastName(spec, state), spec.kick)
-			Shows(holder, state, part, left, into)
+			Shows(holder, state, part, left, into, total)
 		end,
 		Animate = function(holder, _, now)
 			Shows(holder, Phase(round, spec.offset, now))

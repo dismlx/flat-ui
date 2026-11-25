@@ -6,6 +6,8 @@ local _, ns = ...
 -- The fills are flat too: a solid fill on swing timers and resource bars, and on cast bars a
 -- texture laid over the game's fill. The chosen bar texture is an image file in place of the solid colour. While Heroic Strike, Cleave, Maul
 -- or Raptor Strike waits for the next swing, a texture of the addon's own lays Queued ability colour over the main hand timer's fill (Q, below).
+-- With Flat fill off, a thin strip of the addon's own along the bottom of the target and focus bars takes the colour of the player's interrupt
+-- for an enemy cast that can be interrupted (Interrupt strip, below).
 -- The names and numbers on the bars are sized and hidden with the font and the alpha of their font strings.
 
 local BAR_BACKGROUND = "UI-HUD-CoolDownManager-Bar-BG"
@@ -1867,6 +1869,174 @@ end
 
 local function ApplyCastFill(bar)
 	ns.CastFill("castbars", bar, ns.Enabled("castbars") and ns.Get("castbars.flat") and not ns.PartStopped("castbars", "flat fill"))
+end
+
+-- Interrupt strip (0.5.37): with Flat fill off there is no cover to colour, so while Interrupt readiness on enemy casts is on and an interrupt is
+-- known (ns.InterruptKnown, Interrupt.lua), the target and focus bars get a thin strip of the addon's own along their bottom edge (2 screen
+-- pixels, OVERLAY), made and anchored out of a fight, since these bars hang from protected unit frames (ns.MaybeProtected, as ApplyCastIcon
+-- waits). A frame of its own looks at the two bars every 0.1 s while the strip is wanted (ns.CastKickSync, called by Interrupt.lua's Sync, which
+-- the refresh of the cast bars and the interrupt row run): the strip shows while the bar's casting or channeling is a plain true and
+-- ns.InterruptReady answers for its unit, in Interrupt ready colour, Interrupt out of range colour or Interrupt on cooldown colour as CastColour
+-- picks them for a cover. It hides on a plain shown BorderShield (a cast that cannot be interrupted), and takes a withheld answer of it with
+-- SetAlphaFromBoolean (SimpleRegionAPIDocumentation.lua:134-145), as Interrupt.lua's border does. With Flat fill on, the cover takes the colour
+-- and no strip shows. Only Show, Hide, SetColorTexture, SetAlpha and SetAlphaFromBoolean reach it in a fight.
+do
+	local KICK_BARS = { { "TargetFrameSpellBar", "target" }, { "FocusFrameSpellBar", "focus" } }
+	local KICK_EVERY, KICK_PX = 0.1, 2
+	-- strips: per bar, its strip { tex, hex, alpha, shown }, or false when the game refused it. queued: a make waits for the end of the fight.
+	local strips, queued = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+	local kickFrame, kickClock, kicking = nil, 0, false
+
+	local function KickWanted()
+		return ns.Enabled("castbars") and ns.Get("castbars.interrupt") == true and ns.Get("castbars.flat") ~= true
+			and type(ns.InterruptReady) == "function" and type(ns.InterruptKnown) == "function" and ns.InterruptKnown() == true
+	end
+
+	local function HideStrip(strip)
+		if strip and strip.shown then
+			pcall(strip.tex.Hide, strip.tex)
+			strip.shown = false
+		end
+	end
+
+	-- The strip of a bar, made once out of a fight; nil while it cannot be made.
+	local function MakeStrip(bar)
+		local strip = strips[bar]
+		if strip ~= nil then
+			return strip or nil
+		end
+		if InCombatLockdown() and ns.MaybeProtected(bar) then
+			if not queued[bar] then
+				queued[bar] = true
+				ns.OutOfCombat(function()
+					queued[bar] = nil
+					pcall(ns.CastKickSync)
+				end)
+			end
+			return nil
+		end
+		local ok, tex = pcall(bar.CreateTexture, bar, nil, "OVERLAY", nil, 7)
+		if not ok or ns.IsSecret(tex) or type(tex) ~= "table" then
+			strips[bar] = false
+			return nil
+		end
+		ns.Own[tex] = true
+		tex:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+		tex:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+		tex:SetHeight(ns.Pixels(bar, KICK_PX))
+		tex:Hide()
+		if not Anchored(tex) then
+			strips[bar] = false
+			ns.Note("castbars", "Cast bars: the game refused the interrupt strip on a target or focus bar, so it does not show there.")
+			return nil
+		end
+		strip = { tex = tex, shown = false }
+		strips[bar] = strip
+		return strip
+	end
+
+	-- One look at one bar: shown in the colour of the player's interrupt while its unit casts something that can be interrupted.
+	local function PaintStrip(bar, unit)
+		local strip = strips[bar]
+		if not strip then
+			return
+		end
+		local answer = nil
+		if IsTrue(bar.casting) or IsTrue(bar.channeling) then
+			answer = ns.InterruptReady(unit)
+		end
+		if answer == nil then
+			HideStrip(strip)
+			return
+		end
+		local locked = false
+		local shield = bar.BorderShield
+		if shield ~= nil and not ns.IsSecret(shield) and type(shield) == "table" then
+			local ok, shown = pcall(shield.IsShown, shield)
+			if ok then
+				locked = shown
+			end
+		end
+		if not ns.IsSecret(locked) and locked == true then
+			HideStrip(strip)
+			return
+		end
+		local tex = strip.tex
+		local path = answer == "far" and "castbars.interruptFar" or (answer and "castbars.interruptReady" or "castbars.interruptCooling")
+		local hex = ns.Get(path)
+		if strip.hex ~= hex then
+			local r, g, b = ns.Colour(path)
+			tex:SetColorTexture(r, g, b, 1)
+			strip.hex = hex
+		end
+		if ns.IsSecret(locked) then
+			-- The answer goes to the texture untouched, so it is given every look.
+			if not (tex.SetAlphaFromBoolean and pcall(tex.SetAlphaFromBoolean, tex, locked, 0, 1)) then
+				tex:SetAlpha(1)
+			end
+			strip.alpha = nil
+		elseif strip.alpha ~= 1 then
+			tex:SetAlpha(1)
+			strip.alpha = 1
+		end
+		if not strip.shown then
+			tex:Show()
+			strip.shown = true
+		end
+	end
+
+	local function KickTick(_, elapsed)
+		kickClock = kickClock + elapsed
+		if kickClock < KICK_EVERY then
+			return
+		end
+		kickClock = 0
+		-- A row, the page or the interrupt gone since: the strips hide and the look stops.
+		if not KickWanted() then
+			ns.CastKickSync()
+			return
+		end
+		for _, entry in ipairs(KICK_BARS) do
+			local bar = _G[entry[1]]
+			local strip = bar ~= nil and strips[bar]
+			if strip then
+				local ok, err = pcall(PaintStrip, bar, entry[2])
+				if not ok then
+					HideStrip(strip)
+					strips[bar] = false
+					ns.Note("castbars", "Cast bars: the interrupt strip of a target or focus bar failed, so it no longer shows there. " .. tostring(err))
+				end
+			end
+		end
+	end
+
+	-- The strips are made, sized and looked at while they are wanted, and hidden while they are not.
+	function ns.CastKickSync()
+		local wanted = KickWanted()
+		for _, entry in ipairs(KICK_BARS) do
+			local bar = _G[entry[1]]
+			if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) then
+				if wanted then
+					local strip = MakeStrip(bar)
+					if strip and not InCombatLockdown() then
+						pcall(strip.tex.SetHeight, strip.tex, ns.Pixels(bar, KICK_PX))
+					end
+				else
+					HideStrip(strips[bar])
+				end
+			end
+		end
+		if wanted ~= kicking then
+			if wanted and kickFrame == nil then
+				kickFrame = CreateFrame("Frame")
+				ns.Own[kickFrame] = true
+			end
+			if kickFrame then
+				kickFrame:SetScript("OnUpdate", wanted and KickTick or nil)
+			end
+			kicking = wanted
+		end
+	end
 end
 
 local function RefreshCastBars()
