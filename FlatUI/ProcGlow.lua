@@ -14,7 +14,8 @@ local _, ns = ...
 -- A proc that came again soon after it ended (again, Procs.lua) carries on: no burst, and the soft look breathes on from where it stopped.
 -- A button Flat UI does not restyle glows too: Flat UI's own buttons, or the game's action bars unless Flat UI leaves them alone; it gets the
 -- glow without the border. The glow frames of the buttons that hold the spells of the procs are made ahead, out of combat (ns.ProcGlowPrepare), so
--- the first proc of a fight glows at once. A proc whose entry says glow false (a proc any spell uses) lights no button.
+-- the first proc of a fight glows at once. A proc whose entry says glow false (a proc any spell uses) lights no button. A change of Glow on the
+-- action button or Glow style with the options window open shows the first proc of the class for 4 s (ns.ProcPreview, Procs.lua).
 
 local KEY = "trackers"
 local ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
@@ -692,6 +693,7 @@ end
 
 -- A row of the glow changed. Glow on the action button: the procs that are up take the border and the glow, or give them back. Glow style: every
 -- glow that is playing takes the new look at once, and so do the art's pulse (ProcArt.lua) and the glow on the cooldown icons (CooldownLooks.lua).
+-- Either way, with the options window open, out of combat and with test mode off, the first proc of the class then shows for 4 s (ns.ProcPreview).
 function ns.ProcGlowChanged(path)
 	for _, rec in pairs(active) do
 		Apply(rec, Wanted() and Holders(rec.entry) or {})
@@ -707,6 +709,10 @@ function ns.ProcGlowChanged(path)
 				pcall(ns[name])
 			end
 		end
+	end
+	-- The first proc of the class shows for a moment in the new look (Procs.lua); ns.ProcArtChanged has already asked for it on Glow style.
+	if path ~= KEY .. ".glowStyle" and type(ns.ProcPreview) == "function" then
+		ns.ProcPreview()
 	end
 end
 

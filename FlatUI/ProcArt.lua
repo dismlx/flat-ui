@@ -11,7 +11,8 @@ local _, ns = ...
 -- Either way it fades out over 0.1 s. Each piece has both looks made with it and plays the one the row asks for. Procs.lua calls
 -- ns.ProcArtShow when a proc comes up, with again true when the same proc came again soon after it ended (then the art is there at once,
 -- with no fade-in), and ns.ProcArtHide when it ends. Every call here is a frame, texture or animation call on a frame of the addon that is not
--- protected, so all of it is allowed in combat; the holder is made out of combat like every Flat UI frame.
+-- protected, so all of it is allowed in combat; the holder is made out of combat like every Flat UI frame. A change of Art beside the character,
+-- Art size, Art opacity or Art height with the options window open shows the first proc of the class for 4 s (ns.ProcPreview, Procs.lua).
 -- A second way to draw, for a proc whose buff the game hides in a fight: ns.ProcArtParts makes the same pieces as textures that are children of
 -- the button of the game's own icon of the buff (TrackerSlots.lua), inside the function the game calls while it builds the slot. The game shows
 -- that button exactly while the buff is up, so these pieces show exactly then. While that icon is on show the pieces of the holder stay hidden.
@@ -572,7 +573,8 @@ function ns.ProcArtReset()
 end
 
 -- A row of Proc alerts changed: the art goes at once when it is off, else the holder and the pieces take the new size, height or opacity, and
--- the look of Glow style (ns.ProcGlowChanged calls this for that row).
+-- the look of Glow style (ns.ProcGlowChanged calls this for that row). Then the preview of Procs.lua (ns.ProcPreview) shows the first proc of the
+-- class in that look for 4 s, while the options window shows, out of combat and with test mode off.
 function ns.ProcArtChanged()
 	if holder then
 		if not On() then
@@ -588,6 +590,10 @@ function ns.ProcArtChanged()
 	local slots = ns.TrackerSlots
 	if type(slots) == "table" and type(slots.Flush) == "function" then
 		slots.Flush()
+	end
+	-- With the options window open and test mode off, the first proc of the class shows for a moment in the new look (Procs.lua).
+	if type(ns.ProcPreview) == "function" then
+		ns.ProcPreview()
 	end
 end
 

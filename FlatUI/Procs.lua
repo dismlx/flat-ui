@@ -13,6 +13,8 @@ local _, ns = ...
 -- without being added. These are not saved: ns.ProcAutoEntries gives them to the trackers that are on (Trackers.lua), each with the id "auto:"
 -- and its name, one table kept for good so what the trackers know of it stays. One added by hand takes its place, with its own colour, time
 -- and sound, and Remove a proc turns one off for the character (FlatUICharDB.procsOff, by name) until Bring back a proc.
+-- The preview (ns.ProcPreview): with the options window open, out of combat and with test mode off, a change of a row of the art, the glow or
+-- Colour shows the first proc of the class for 4 s in the new look, its art and glow with no sound, held while a slider is dragged.
 
 local KEY = "trackers"
 local PART = "procs"
@@ -288,7 +290,12 @@ end
 local function Start(entry)
 	local id, now = entry.id, Now()
 	local ended = P.stopped[id]
-	local again = P.up[id] ~= nil or (ended ~= nil and now >= ended and now - ended <= K.AGAIN)
+	-- A real proc that comes while the preview of a row shows it (ns.ProcPreview) takes the alert over as a new one, with its sound.
+	local previewed = P.preview ~= nil and P.preview.entry == entry
+	if previewed then
+		P.preview = nil
+	end
+	local again = (P.up[id] ~= nil and not previewed) or (ended ~= nil and now >= ended and now - ended <= K.AGAIN)
 	P.up[id], P.since[id] = entry, now
 	if not again then
 		Sound(entry, false)
@@ -1014,8 +1021,97 @@ local function Lines(entry)
 	return lines
 end
 
+-- The preview of a row (ns.ProcPreview) -----------------------------------------------------------------------------------------------
+-- A change of Art beside the character, Art size, Art opacity, Art height, Glow on the action button, Glow style or Colour, made with the options
+-- window open, out of combat and with test mode off, shows the first proc of the class (as test mode picks it) for PREVIEW seconds in the new look:
+-- its art and its glow, with no sound and no icon in the row. Each change bumps the token and arms the timer again, so a dragged slider keeps it
+-- up until PREVIEW seconds after its last step. An alert of that proc that is really up is only drawn again. A real proc coming meanwhile takes
+-- the alert over (Start); a fight (PLAYER_REGEN_DISABLED), test mode turned on and a test of the proc end the preview.
+P.PREVIEW = 4
+
+-- The first proc of the class that is on, else the first of the list that is on.
+local function First()
+	for _, list in ipairs({ ns.ProcAutoEntries(), All() }) do
+		for _, entry in ipairs(list) do
+			if entry.on ~= false and not Off(entry) then
+				return entry
+			end
+		end
+	end
+	return nil
+end
+
+-- The preview ends: its art and glow go, unless test mode holds the same proc. The moment of its end is not one of a real alert, so a real proc
+-- soon after still sounds (Start).
+local function PreviewEnd()
+	local preview = P.preview
+	if not preview then
+		return
+	end
+	P.preview = nil
+	local entry = preview.entry
+	if P.up[entry.id] == entry and P.held ~= entry then
+		local stopped = P.stopped[entry.id]
+		Stop(entry)
+		P.stopped[entry.id] = stopped
+	end
+end
+
+function ns.ProcPreview()
+	if InCombatLockdown() or not ns.Enabled(KEY) or ns.TestMode.IsOn() or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
+		return
+	end
+	local entry = First()
+	if P.preview and P.preview.entry ~= entry then
+		PreviewEnd()
+	end
+	if not entry then
+		return
+	end
+	if P.up[entry.id] ~= nil and not P.preview then
+		-- Really up: drawn again in the new look.
+		ShowArt(entry, true)
+		Call(ns.ProcGlowStart, entry, true)
+		return
+	end
+	local again = P.preview ~= nil and P.up[entry.id] == entry
+	P.preview = P.preview or { entry = entry, token = 0 }
+	local preview = P.preview
+	preview.token = preview.token + 1
+	P.up[entry.id] = entry
+	ShowArt(entry, again)
+	Call(ns.ProcGlowStart, entry, again)
+	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+		local token = preview.token
+		C_Timer.After(P.PREVIEW, function()
+			if P.preview == preview and preview.token == token then
+				PreviewEnd()
+			end
+		end)
+	end
+end
+
+-- Colour of the page: the trackers are refreshed as without a changed function of the row (Core.lua's Changed), then the preview shows it.
+function ns.ProcColourChanged()
+	ns.RefreshModule(KEY)
+	ns.ProcPreview()
+end
+
+P.fight = CreateFrame("Frame")
+ns.Own[P.fight] = true
+pcall(P.fight.RegisterEvent, P.fight, "PLAYER_REGEN_DISABLED")
+P.fight:SetScript("OnEvent", function()
+	local ok, err = pcall(PreviewEnd)
+	if not ok then
+		geterrorhandler()(err)
+	end
+end)
+
 -- The test: the icon is in the row, the sound plays once, and the art and glow start. Test(entry, false) ends them.
 local function Test(entry, on)
+	if on then
+		PreviewEnd()
+	end
 	P.before = P.before or {}
 	if not on then
 		Stop(entry)
@@ -1055,14 +1151,7 @@ local function Pick()
 	if InCombatLockdown() or not ns.Enabled(KEY) or not ns.TestMode.IsOn() then
 		return nil
 	end
-	for _, list in ipairs({ ns.ProcAutoEntries(), All() }) do
-		for _, entry in ipairs(list) do
-			if entry.on ~= false and not Off(entry) then
-				return entry
-			end
-		end
-	end
-	return nil
+	return First()
 end
 
 local function Hold(entry)
@@ -1093,6 +1182,7 @@ function ns.ProcHeld(entry)
 end
 
 local function HeldStart()
+	PreviewEnd()
 	local entry = Pick()
 	if entry then
 		Hold(entry)
