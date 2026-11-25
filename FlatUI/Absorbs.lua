@@ -19,7 +19,7 @@ local _, ns = ...
 -- fills by the time left; the game gives no amount of a single shield then, so only the total bar has one. The container's alpha says which
 -- of the two shows, a change allowed at any time; the parts of its buttons are made inside the function the game calls while it builds a
 -- button, and a later change to them waits until the game says buffs are open. A shield that goes before its time while buffs are read,
--- and is still listed, broke: a sound plays, if chosen, and the bars flash. The target's total can have a bar of its own. Out of a fight the
+-- and is still listed, broke: a sound plays, if chosen, and a red wash over every bar shown fades out. The target's total can have a bar of its own. Out of a fight the
 -- totals follow the game's events; in one, a step a few times a second. While test mode is on (TestMode.lua) the sample bars of /flatui absorbs
 -- test stay, with the target's (A.Hold). Every frame is Flat UI's own, and nothing of the game is changed or hooked. The helpers are in one
 -- table, A.
@@ -757,22 +757,51 @@ function A.Totals()
 	end
 end
 
--- The bars flash red once and the sound plays, when a shield broke.
+-- The bars flash red once and the sound plays, when a shield broke. A.Track calls this before A.DrawRows takes the broken shield's bar away,
+-- so the bars shown now are the stack as it was: the red wash covers them all, from the total (or the first slot) to the last bar shown, from
+-- the top or, while Bars grow is Up, from the bottom, as A.Layout anchors it, and fades out over FLASH by an Alpha animation of the texture,
+-- made once. Where the game refuses the animation, a timer hides it after FLASH.
 function A.Broke()
 	local sound = KITS[Opt("sound")]
 	local kit = sound and ns.SOUNDS and ns.SOUNDS[sound]
 	if kit and type(ns.PlayKit) == "function" then
 		ns.PlayKit(kit[1], KEY)
 	end
-	A.flash:Show()
+	local flash = A.flash
+	local last = A.Total().frame:IsShown() and 0 or -1
+	for index, row in ipairs(A.rows) do
+		if row.frame:IsShown() then
+			last = math.max(last, FirstSlot() + index - 1)
+		end
+	end
+	local slots, h = math.max(1, last + 1), Number("barHeight", 16)
+	flash:SetSize(Number("barWidth", 180), slots * h + (slots - 1) * Number("spacing", 2))
+	if A.flashFade == nil then
+		local ok, group = pcall(function()
+			local made = flash:CreateAnimationGroup()
+			local alpha = made:CreateAnimation("Alpha")
+			alpha:SetFromAlpha(1)
+			alpha:SetToAlpha(0)
+			alpha:SetDuration(FLASH)
+			made:SetScript("OnFinished", function()
+				flash:Hide()
+			end)
+			return made
+		end)
+		A.flashFade = ok and group or false
+	end
+	flash:Show()
+	if A.flashFade and pcall(A.flashFade.Stop, A.flashFade) and pcall(A.flashFade.Play, A.flashFade) then
+		return
+	end
 	local token = {}
 	A.flashing = token
 	if not After(FLASH, function()
 		if A.flashing == token then
-			A.flash:Hide()
+			flash:Hide()
 		end
 	end) then
-		A.flash:Hide()
+		flash:Hide()
 	end
 end
 
