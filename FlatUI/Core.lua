@@ -41,7 +41,7 @@ local ADDON_NAME, ns = ...
 -- bar sizes set the width and height of four cast bars, the height of the player bar's spark, the size of
 -- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
--- still that name, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
+-- still that name, also in a fight, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
 -- textures of its own on each of the player's two cast bars, each hung from an invisible spacer of its own (CreateTexture and SetPoint, once, out of
 -- combat on a bar the game may protect), and while a channel runs only sets their widths, Show, Hide and SetAlpha; a frame of its own hears the
 -- player's channel events while the row is on, and it only reads UnitChannelInfo. Finish flash (Bars.lua, In the cast colour by default) tints the
@@ -338,8 +338,9 @@ local ADDON_NAME, ns = ...
 -- With Clear the damage meter on (off by default), Minimap and HUD calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
 -- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
 -- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.
--- The combat alerts of Combat text (No target and +Combat and -Combat, both on by default) are font strings on a frame of its own;
--- they play the sounds their rows choose (PlaySound, through ns.PlayKit) and change nothing.
+-- The combat alerts of Combat text (No target, Low health and Low mana, and +Combat and -Combat, all on by default) are font strings on a frame of
+-- its own; Low health and Low mana only read the player's health and mana through a curve (UnitHealthPercent, UnitPowerPercent) into the
+-- opacity of frames of their own; they play the sounds their rows choose (PlaySound, through ns.PlayKit) and change nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);
 -- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. While the mouse is over an item, spell or achievement

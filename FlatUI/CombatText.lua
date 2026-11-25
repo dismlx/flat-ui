@@ -3826,8 +3826,11 @@ end
 
 -- Four sample numbers over the target's plate, a quarter of a second apart. They are not hit reports: the counters they raise
 -- are put back.
--- The fifth value of the first one is true: in the Outgoing scroll area it shows the icon of a swing.
-local SAMPLES = { { "WOUND", "", 412, 1, true }, { "WOUND", "GLANCING", 412, 1 }, { "WOUND", "CRITICAL", 824, 1 }, { "DODGE", "", 0, 1 } }
+local SAMPLES = { { "WOUND", "", 412, 1 }, { "WOUND", "GLANCING", 412, 1 }, { "WOUND", "CRITICAL", 824, 1 }, { "DODGE", "", 0, 1 } }
+-- The same four in the Outgoing scroll area, where the critical hit is a Fire spell's, as in the setup picture. The fifth value names the icon a
+-- real hit of that kind gets there (MineOne): the swing's with Spell icons on All, the spell's (Fireball) on All or Spells only, both only while
+-- Whose hits is Yours.
+local OUT_SAMPLES = { { "WOUND", "", 412, 1, "swing" }, { "WOUND", "GLANCING", 412, 1 }, { "WOUND", "CRITICAL", 824, 4, "spell" }, { "DODGE", "", 0, 1 } }
 
 local function Sample(sample)
 	local plate = Plate("target")
@@ -3855,12 +3858,24 @@ local function OwnSample(sample)
 	stats.kind, stats.amount = kinds, amounts
 end
 
--- The same four samples in the Outgoing scroll area.
+-- The icon of an Outgoing sample by the rules a real hit follows, or nil.
+local function OutIcon(which)
+	if which == nil or Opt("whose") ~= "one" then
+		return nil
+	end
+	local mode = Opt("icons")
+	if which == "swing" then
+		return mode == "all" and Icon(6603) or nil
+	end
+	return (mode == "all" or mode == "spells") and Icon(133) or nil
+end
+
+-- The samples of the Outgoing scroll area (OUT_SAMPLES).
 local function OutSample(sample)
 	local kinds, amounts = stats.kind, stats.amount
 	local kind, value, _, crit, r, g, b, _, scale = Describe(sample[1], sample[2], sample[3], sample[4])
 	if kind then
-		ns.ScrollText.Show("out", kind, value, "%s", crit, r, g, b, scale, sample[2], true, sample[5] and Opt("icons") ~= "off" and Icon(6603) or nil)
+		ns.ScrollText.Show("out", kind, value, "%s", crit, r, g, b, scale, sample[2], true, OutIcon(sample[5]))
 	end
 	stats.kind, stats.amount = kinds, amounts
 end
@@ -3925,7 +3940,7 @@ local function Test()
 		print("Combat text for you is off.")
 	end
 	if ns.ScrollText.On("out") then
-		Run(SAMPLES, OutSample)
+		Run(OUT_SAMPLES, OutSample)
 	end
 	if Opt("where") == "scroll" then
 		-- No numbers over enemies to sample.
@@ -3953,7 +3968,8 @@ end
 
 -- Test mode (TestMode.lua): one sample number in each place that shows them, every 1.5 seconds while it is on and its bar's Moving is on, in turn a
 -- hit, a critical hit, a heal (a glancing blow in the Outgoing area and over the target), a dodge and an absorb, each in the look the rows give
--- it now. Over the target's plate only while numbers show there and an enemy target has a plate. Like the samples of /flatui combat test they are
+-- it now; in the Outgoing area the critical hit is a Fire spell's, and the hit and the crit take the icons real ones get (OutIcon). Over the
+-- target's plate only while numbers show there and an enemy target has a plate. Like the samples of /flatui combat test they are
 -- no hit reports: the counters they raise are put back, and the scroll areas count none of them (ScrollText.lua).
 function ns.CombatTextTestStep(now)
 	if not ns.Enabled(KEY) or not ns.Finite(now) then
@@ -3961,7 +3977,8 @@ function ns.CombatTextTestStep(now)
 	end
 	local absorb = { "WOUND", "ABSORB", 0, 1 }
 	local own = { OWN_SAMPLES[1], OWN_SAMPLES[2], OWN_SAMPLES[3], OWN_SAMPLES[4], absorb }
-	local out = { SAMPLES[1], SAMPLES[3], SAMPLES[2], SAMPLES[4], absorb }
+	local over = { SAMPLES[1], SAMPLES[3], SAMPLES[2], SAMPLES[4], absorb }
+	local out = { OUT_SAMPLES[1], OUT_SAMPLES[3], OUT_SAMPLES[2], OUT_SAMPLES[4], absorb }
 	local index = math.floor(now / 1.5) % #own + 1
 	if Opt("own") ~= "off" then
 		ns.Try(KEY, OwnSample, own[index])
@@ -3970,7 +3987,7 @@ function ns.CombatTextTestStep(now)
 		ns.Try(KEY, OutSample, out[index])
 	end
 	if Opt("where") ~= "scroll" and Opt("source") == "front" and Plate("target") then
-		ns.Try(KEY, Sample, out[index])
+		ns.Try(KEY, Sample, over[index])
 	end
 end
 

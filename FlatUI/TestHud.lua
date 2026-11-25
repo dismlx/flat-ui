@@ -7,16 +7,18 @@ local _, ns = ...
 -- parts change in Animate, while it shows and the bar's Moving is on: fills, text and alpha only. The numbers are fixed samples.
 --   Cast bars: the player's at PlayerCastingBarFrame, wherever Edit Mode or Lock to player frame put it, while the player casts nothing: a cast that
 --   fills over 2.5 seconds and holds half a second, a channel that drains (with the marks of its 5 ticks while Channel ticks on the player bar is
---   on), then an interrupted cast that flashes, in the colours of the Flat UI page, with its seconds while Cast time on your bars is on.
+--   on), then an interrupted cast that flashes, in the colours of the Flat UI page, with its seconds while Cast time on your bars is on and a sample
+--   pushback over the second half of the cast and of the channel while Pushback on your bar is on.
 --   The target's, the focus's and the pet's at TargetFrameSpellBar, FocusFrameSpellBar and PetCastingBarFrame, and the first boss's at
 --   Boss1TargetFrameSpellBar, each only while the stand-in of its unit shows (TM.Shown of "target", "focus", "pet" and "boss", TestUnits.lua): an enemy
---   cast the player's interrupt is ready for (Interrupt ready colour while Interrupt readiness on enemy casts is on), then one that cannot be
---   interrupted, a little later than the player's. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
+--   cast, the target's and the focus's in the colour of the player's interrupt while Interrupt readiness on enemy casts and Flat fill are on (the
+--   target's ready, the focus's ready but out of range), then one that cannot be interrupted, a little later than the player's. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
 --   styles no boss bar, and hangs on the unit frames' module, whose boss stand-in it follows.
 --   Swing timers: at SwingTimerMainHandFrame for every class, SwingTimerOffHandFrame for a warrior and a rogue with an off-hand weapon,
 --   SwingTimerRangedFrame for a hunter with a ranged weapon (UnitAttackSpeed, as the game's HasOffHandWeapon and HasRangedWeapon), while the game's
 --   timer is hidden and would show in play: Enable Swing Timer (the variable showSwingTimer) on and the frame's Edit Mode Visibility not Hidden
---   (its visibility field, read with rawget; Blizzard_SwingTimer.lua:241-263): a swing of 2.6 seconds that loops.
+--   (its visibility field, read with rawget; Blizzard_SwingTimer.lua:241-263): a swing of 2.6 seconds that loops, the main hand of a warrior, druid
+--   or hunter in Queued ability colour over the second half of each swing while Queued next melee ability is on.
 --   Debuffs and buffs: three icons each, from the top right corner of DebuffFrame while the player has no harmful aura and of BuffFrame while the
 --   player has no helpful aura at all (C_UnitAuras.GetAuraSlots, read out of combat only, when its answer is plain), only while the game shows that
 --   frame (its Edit Mode Visibility, Blizzard_BuffFrame/BuffFrame.lua:380-411) and not while Edit Mode is open, where it shows its example auras: a
@@ -44,18 +46,19 @@ if type(TM) ~= "table" then
 end
 
 -- The cast bars: their stand-in, game frame, module, place on the Cast bars page (opt), the stand-in of their unit, how much later their round
--- starts, and their spell names by state.
+-- starts, and their spell names by state. kick: the interrupt colour an enemy bar shows, ready on the target's and out of range on the focus's (the
+-- setup picture shows on cooldown); the boss bar keeps the game's look, which takes none.
 local CASTS = {
 	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0, ticks = 5,
 		names = { channel = "Drain Life" } },
 	{ id = "castTarget", game = "TargetFrameSpellBar", module = "castbars", opt = "target", label = "Target cast bar", unit = "target", offset = 0.8,
-		small = true, kick = true, names = { cast = "Fireball", shield = "Polymorph" } },
+		small = true, kick = "ready", names = { cast = "Fireball", shield = "Polymorph" } },
 	{ id = "castFocus", game = "FocusFrameSpellBar", module = "castbars", opt = "focus", label = "Focus cast bar", unit = "focus", offset = 1.6,
-		small = true, kick = true, names = { cast = "Frostbolt", shield = "Fear" } },
+		small = true, kick = "far", names = { cast = "Frostbolt", shield = "Fear" } },
 	{ id = "castPet", game = "PetCastingBarFrame", module = "castbars", opt = "pet", label = "Pet cast bar", unit = "pet", offset = 2.4,
 		round = "pet", names = { cast = "Firebolt" } },
 	{ id = "castBoss", game = "Boss1TargetFrameSpellBar", module = "unitframes", opt = "boss", label = "Boss cast bar", unit = "boss", offset = 1.2,
-		small = true, kick = true, names = { cast = "Shadow Bolt Volley", shield = "Enrage" } },
+		small = true, names = { cast = "Shadow Bolt Volley", shield = "Enrage" } },
 }
 -- A round of each kind of bar: the state, the seconds it runs and the seconds it holds at its end. The pet's casts are the player's own, so they
 -- are neither shielded nor interrupted.

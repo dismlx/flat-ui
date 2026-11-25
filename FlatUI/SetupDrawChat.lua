@@ -7,7 +7,7 @@ local _, ns = ...
 -- functions the modules paint with (ns.Outline, ns.SetOutlineFill, ns.TipShades, ns.FontFile, ns.OutlineFlags, ns.FlatFill, ns.BarTexture,
 -- ns.CombatOffsets, ns.CombatPopHeight, ns.CombatOwnEdge, ns.CombatColour, ns.CombatFont, and for the two scroll areas ns.ScrollLane, ns.ScrollPath,
 -- ns.ScrollAlpha and ns.ScrollSize). mock-combat-text draws the numbers over an enemy plate and over friendly units, the Incoming area's numbers
--- on you and, right of them, the Outgoing area's column of your hits.
+-- on you and, right of them, the Outgoing area's column of your hits, kept whole inside the picture.
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
@@ -679,7 +679,9 @@ do
 	-- direction says, as big as Size of the Outgoing area makes them (ns.ScrollSize), with the icon Spell icons gives a swing (All) or a spell (All
 	-- or Spells only) while Whose hits is Yours, and none on a word, for the life Speed gives them (an old one has gone at Fast). Straight and Arc
 	-- numbers take their lanes by the rule of the game (ns.ScrollLane), the lanes to the right, away from the character; Horizontal and Static
-	-- numbers take a row each. look: file, flags, shadow, pops, palette and bySchool of the drawing.
+	-- numbers take a row each. look: file, flags, shadow, pops, palette and bySchool of the drawing. The column stays inside the picture at any
+	-- style and size: a lane is at most half the room right of OUT_X, the whole column moves left as far as its widest number crosses the right edge,
+	-- so it keeps its shape, and each number is held inside the top and bottom edges.
 	local function DrawOut(S, look)
 		local shown = ns.Get("combattext.enabled") ~= false and ns.Get("combattext.where") ~= "over"
 		local scroll, style = SHAPE.scroll, ns.Get("combattext.outStyle")
@@ -691,7 +693,8 @@ do
 		local path = style == "straight" or style == "arc"
 		local icons = ns.Get("combattext.whose") == "one" and ns.Get("combattext.icons") or "off"
 		local snapshot = OUT_GAP * (#OUT - 1) + 0.1
-		local newest = {}
+		local newest, spots, over = {}, {}, 0
+		local laneStep = math.min(scroll.lane * base, (WIDE - OUT_X - 8) / 2)
 		for i, sample in ipairs(OUT) do
 			local fs = S.out[i]
 			fs:SetShown(shown)
@@ -702,7 +705,7 @@ do
 					local lane
 					lane, start = ns.ScrollLane(newest, height, start)
 					newest[lane] = { start = start, height = height, life = life, length = OUT_LENGTH, serial = i }
-					rx, ry = scroll.lanes[lane] * scroll.lane * base, 0
+					rx, ry = scroll.lanes[lane] * laneStep, 0
 				end
 				local age = snapshot - start
 				local u = math.max(0, age / life)
@@ -718,10 +721,22 @@ do
 					end
 				end
 				fs:SetText(text)
-				U.font(fs, look.file, Height(base, sample.crit, math.max(0, age), look.pops), look.flags, look.shadow, { r, g, b })
-				fs:SetAlpha((age < 0 or u >= 1) and 0 or ns.ScrollAlpha(u, hold))
-				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OUT_X + rx + dx, start0 + ry + dy)
+				local h = Height(base, sample.crit, math.max(0, age), look.pops)
+				U.font(fs, look.file, h, look.flags, look.shadow, { r, g, b })
+				local seen = not (age < 0 or u >= 1)
+				fs:SetAlpha(seen and ns.ScrollAlpha(u, hold) or 0)
+				local ok, w = pcall(fs.GetStringWidth, fs)
+				w = (ok and not ns.IsSecret(w) and type(w) == "number" and w == w) and w or 0
+				local x = OUT_X + rx + dx
+				spots[i] = { x = x, y = start0 + ry + dy, h = h }
+				if seen then
+					over = math.max(over, x + w / 2 - (WIDE - 6))
+				end
 			end
+		end
+		for i, spot in pairs(spots) do
+			local half = spot.h / 2 + 2
+			U.at(S.out[i], "CENTER", S.root, "BOTTOMLEFT", spot.x - over, math.max(half, math.min(HIGH - half, spot.y)))
 		end
 	end
 

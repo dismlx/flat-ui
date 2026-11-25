@@ -7,8 +7,9 @@ local _, ns = ...
 -- rank of that spell ID, the one cast and not the highest known, and writes the name and the rank in the same font string with SetText, only while the
 -- game's text is still the name of that cast: Failed, Interrupted (CastingBarFrame.lua:531-537), a text the client withholds and the name of another
 -- cast are left as the game has them. The font, size, colour, place and alpha of the text stay as the game and the rows of the Cast bars page set them.
--- A rank text with no number in it (Racial, Apprentice, Summon) is not shown, as ErrandsRanks.lua reads ranks. In a fight a bar that says it is
--- protected, or will not say, is not written. Off puts back the name the game wrote while the bar still shows the rank. This follows the cast bar of
+-- A rank text with no number in it (Racial, Apprentice, Summon) is not shown, as ErrandsRanks.lua reads ranks. A cast in a fight is written too, on
+-- any bar that is not forbidden: SetText is a call on a font string, not on the protected bar, as CastTicks.lua sets widths and alpha on these bars
+-- in a fight. Off puts back the name the game wrote while the bar still shows the rank. This follows the cast bar of
 -- EnhanceQoL by Philipp Barth (UF_Helper.lua:2855-2866), adapted with his permission. Not a module: the cast bars module calls ns.CastRankSync
 -- whenever it applies its settings.
 
@@ -21,7 +22,7 @@ local MAX_RANK = 1000
 -- Per bar, { name = the name the game wrote, text = what was written here }.
 local written = setmetatable({}, { __mode = "k" })
 -- What /flatui status says: the last text written, and what kept a rank away. waiting is the spell whose rank text the game had not loaded yet.
-local state = { shown = nil, noCall = false, refused = false, protected = false, cut = nil, waiting = nil }
+local state = { shown = nil, noCall = false, refused = false, cut = nil, waiting = nil }
 local frame, listening, queued = nil, false, false
 local Listen
 
@@ -86,11 +87,6 @@ local function Current(text)
 	return nil
 end
 
--- In a fight a bar that is protected, or will not say, is left alone; so is every bar while Movers.lua, which asks, is not there.
-local function Blocked(bar)
-	return InCombatLockdown() and (type(ns.MaybeProtected) ~= "function" or ns.MaybeProtected(bar))
-end
-
 local function Write(bar, shown, rank)
 	local text = Text(bar)
 	if not text then
@@ -104,10 +100,6 @@ local function Write(bar, shown, rank)
 	local want = shown .. suffix
 	local current = Current(text)
 	if current ~= shown then
-		return
-	end
-	if Blocked(bar) then
-		state.protected = true
 		return
 	end
 	if pcall(text.SetText, text, want) then
@@ -131,7 +123,7 @@ local function Restore(bar)
 	local mine = written[bar]
 	written[bar] = nil
 	local text = mine and Text(bar)
-	if text and Current(text) == mine.text and not Blocked(bar) then
+	if text and Current(text) == mine.text then
 		pcall(text.SetText, text, mine.name)
 	end
 end
@@ -258,9 +250,6 @@ ns.AddStatus(KEY, function()
 	end
 	if state.cut then
 		lines[#lines + 1] = ("Spell rank: %s did not fit the bar, so the name was left as the game wrote it."):format(state.cut)
-	end
-	if state.protected then
-		lines[#lines + 1] = "Spell rank: the player bar is protected here in a fight, so a rank cast in a fight is not shown."
 	end
 	return lines
 end)

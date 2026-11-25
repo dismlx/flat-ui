@@ -1,10 +1,10 @@
 local _, ns = ...
 
--- Combat alerts: No target and +Combat and -Combat in the middle of the screen. The rows are under Your character on the Combat text page
--- (combattext.noTarget and the four rows under it, combattext.combatState and the three under it), part "combat alerts" of the module, which
--- stops alone after a few failures. Not a module: CombatText.lua calls ns.CombatCuesRefresh in every refresh of the page, and the events come
--- through the module (ns.AddEvent), so nothing runs while the page is off. No target and +Combat and -Combat are on by default; nothing is
--- made until a line first shows.
+-- Combat alerts: No target, Low health and Low mana, and +Combat and -Combat in the middle of the screen. The rows are under Your character on
+-- the Combat text page (combattext.noTarget and the five rows under it, combattext.lowHealth and lowColour, combattext.combatState and the four
+-- rows under it), part "combat alerts" of the module, which stops alone after a few failures. Not a module: CombatText.lua calls
+-- ns.CombatCuesRefresh in every refresh of the page, and the events come through the module (ns.AddEvent), so nothing runs while the page is off.
+-- No target, Low health and +Combat and -Combat are on by default; nothing is made until a line first shows or Low health and mana warning is on.
 -- No target warning: in a fight, from PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED (Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:3885-3895),
 -- with no target, a dead one or one the player cannot attack (UnitExists, UnitIsDeadOrGhost and UnitCanAttack, UnitDocumentation.lua:1192-1205, 1931-1944,
 -- 763-777), No target shows after a second and stays until a target that can be attacked is taken or the fight ends. With Warn with a friendly
@@ -18,7 +18,9 @@ local _, ns = ...
 -- game withholds is never compared: the warning stays away until the game says. As it shows, the sound of No target sound (ns.SOUNDS, IconRow.lua)
 -- plays, at most every 3 seconds. ns.PlayKit plays no sound within a second of the last it played for any module and keeps none for later
 -- (IconRow.lua:12 and 244-249), so a sound it did not play for that is tried again a second later (C_Timer.After, UITimerDocumentation.lua:11-20),
--- for as long as the same No target shows. A ghost counts as dead, as it does for the game's own Target dead alert and its raid frames
+-- for as long as the same No target shows. With Name the key to target an enemy on (the default) and while the player does not heal, No target
+-- names the key bound to Target Nearest Enemy, as No target  (Tab) (GetBindingKey of TARGETNEARESTENEMY in the words of GetBindingText), read
+-- each time it shows so that a new binding counts; nothing is added with no key bound. A ghost counts as dead, as it does for the game's own Target dead alert and its raid frames
 -- (Blizzard_CombatAudioAlerts/Blizzard_CombatAudioAlertManager.lua:661 and 679-681, Blizzard_UnitFrame/Shared/CompactUnitFrame.lua:1097-1098):
 -- a party or raid member stays a target on another map too (Blizzard_UnitFrame/Shared/TargetFrame.lua:2-5 and 14), so one who has released
 -- can still be the target, and UnitIsDead is false for a ghost (Blizzard_UnitFrame/Mainline/TargetFrame.lua:762-765 tints the two apart).
@@ -27,7 +29,19 @@ local _, ns = ...
 -- so in the language of the client, for as long as the game shows its own: whole for 1.3 seconds, then fading out until 1.9
 -- (CombatTextConstants.lua:4-5). The game shows its own only with Scrolling Combat Text for Self, which Combat text for you turns off. As +Combat
 -- or -Combat starts, the sound of Entering combat sound or Leaving combat sound plays (the choices of No target sound, None by default) through
--- ns.PlayKit, so one held back by another module's sound of the second before is not tried again; /flatui status counts those played.
+-- ns.PlayKit, so one held back by another module's sound of the second before is not tried again; /flatui status counts those played. With Fight
+-- length on -Combat on (the default), -Combat says how long the fight lasted, as -Combat  1:24 (1:02:03 from an hour), from GetTime at
+-- PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED; a fight these events did not start here, as after a reload in one, has no length, and /flatui
+-- status names the last fight's.
+-- Low health and mana warning (on by default): the game's own combat text says Low Health and Low Mana as the player's health or mana falls to
+-- 20% (Blizzard_CombatText/Shared/CombatText.lua:61-90, CombatTextConstants.lua:12-13), but only with Scrolling Combat Text for Self, which
+-- Combat text for you turns off. Here Low health, and for a mana user Low mana, stand under No target while the share is under 20%, in Low health
+-- colour at the size of No target, breathing as it does. The player's health and mana may be withheld in a fight, so they are never compared:
+-- each line is on a holder frame of its own whose opacity is UnitHealthPercent or UnitPowerPercent of the player through a step curve, 1 under
+-- 20% and 0 from it (C_CurveUtil, as HealthColour.lua's low health border), set at each UNIT_HEALTH, UNIT_MAXHEALTH, UNIT_POWER_UPDATE,
+-- UNIT_MAXPOWER and UNIT_DISPLAYPOWER of the player, which a frame of the addon's own hears while the row is on, and at each refresh. Low mana
+-- shows only while UnitPowerType is plainly mana (not in a druid's cat or bear form), and both hide while the player is plainly dead or a ghost
+-- (PLAYER_DEAD, PLAYER_ALIVE, PLAYER_UNGHOST). A client that refuses the curve or the call leaves the line off, and /flatui status says so.
 -- The two lines are font strings on one frame of the addon's own on UIParent, which takes no mouse, at the spot of Combat text: alerts in the movers:
 -- +Combat and -Combat above the middle of the box and No target under it. They are made on the game's combat font (CombatTextFont,
 -- Blizzard_Fonts_Shared/Shared/GameFontStyles.xml:150-152), else its large number font (:25), at their own size with a thin outline. A size of
@@ -42,8 +56,9 @@ local _, ns = ...
 -- This follows the No Target Indicator and the combat text of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoL/Submodules/GroupTools.lua:913-1064 and Submodules/CombatText.lua:244-256, 431-526): his words, his second of delay and his 3 seconds
 -- between sounds, and the colour of No target.
--- While test mode is on (TestMode.lua), +Combat, No target and -Combat show in turn, two seconds each, while their rows are on, and count in no
--- number of /flatui status (ns.CombatCuesTestStep); +Combat and -Combat play no sound there.
+-- While test mode is on (TestMode.lua), +Combat, No target with Low health under it, and -Combat (as -Combat  0:42 while Fight length on
+-- -Combat is on) show in turn, two seconds each, while their rows are on, and count in no number of /flatui status (ns.CombatCuesTestStep);
+-- +Combat and -Combat play no sound there.
 -- Picking a sound in No target sound, Entering combat sound or Leaving combat sound plays it once (ns.CombatCueSoundPicked, the rows' changed
 -- handler in Config.lua, so Core.lua calls it for a change made with ns.Set), only while the options window shows (ns.PanelShown) and out of a
 -- fight; None plays nothing.
@@ -60,10 +75,21 @@ local BREATHE_TO, BREATHE_TIME, POP_FROM, POP_TIME = 0.55, 0.6, 1.3, 0.15
 -- screen when the movers give no spot.
 local MOVER, WIDTH, TALL, GAP, X, Y = "FlatUICombatCues", 200, 60, 2, 0, 100
 -- The words of each line: the game's own names for them, in the order its combat text tries them, then the words when the client has neither.
-local WORDS = { enter = { "COMBAT_TEXT_ENTERING_COMBAT", "ENTERING_COMBAT", "+Combat" }, leave = { "COMBAT_TEXT_LEAVING_COMBAT", "LEAVING_COMBAT", "-Combat" } }
+-- Low health and Low mana take the words of the game's own HEALTH_LOW and MANA_LOW messages, in the order it tries them
+-- (Blizzard_CombatText/Shared/CombatText.lua:284-288).
+local WORDS = { enter = { "COMBAT_TEXT_ENTERING_COMBAT", "ENTERING_COMBAT", "+Combat" }, leave = { "COMBAT_TEXT_LEAVING_COMBAT", "LEAVING_COMBAT", "-Combat" },
+	health = { "COMBAT_TEXT_HEALTH_LOW", "HEALTH_LOW", "Low health" }, mana = { "COMBAT_TEXT_MANA_LOW", "MANA_LOW", "Low mana" } }
 local NO_TARGET = "No target"
--- The rows of each line's colour and size.
-local LOOKS = { enter = { "combatEnterColour", "combatStateSize" }, leave = { "combatLeaveColour", "combatStateSize" }, warn = { "noTargetColour", "noTargetSize" } }
+-- The rows of each line's colour and size. Low health and Low mana are the size of No target.
+local LOOKS = { enter = { "combatEnterColour", "combatStateSize" }, leave = { "combatLeaveColour", "combatStateSize" }, warn = { "noTargetColour", "noTargetSize" },
+	low = { "lowColour", "noTargetSize" } }
+-- The share of health or mana under which Low health or Low mana shows (CombatTextConstants.lua:12-13), the mana power type
+-- (Enum.PowerType.Mana), the two lines in the order they stand under No target, and the player's events that change them: health, mana, the
+-- power type (a druid's form) and death.
+local LOW_AT, MANA = 0.2, 0
+local LOW_KINDS = { "health", "mana" }
+local LOW_UNIT_EVENTS = { UNIT_HEALTH = "health", UNIT_MAXHEALTH = "health", UNIT_POWER_UPDATE = "mana", UNIT_MAXPOWER = "mana", UNIT_DISPLAYPOWER = "mana" }
+local LOW_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
 -- The places of the No target, Entering combat and Leaving combat sound choices in ns.SOUNDS (IconRow.lua), as EnemyCooldowns.lua has them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 -- The seconds after a sound in which ns.PlayKit plays no other (IconRow.lua:12): a No target sound it held back is tried again this long after.
@@ -78,6 +104,9 @@ local TARGET_EVENTS = { "UNIT_HEALTH", "UNIT_FLAGS", "UNIT_FACTION" }
 -- flashes, warnings, withheld and stateSounds (the +Combat and -Combat sounds played): what /flatui status counts. silent: the No target sounds
 -- the game has not played since it last played one; /flatui status says so while there are any. blind: the last judgement had an answer the game
 -- withheld. healer: the player heals (ns.PlayerRole), read out of a fight. breathe and pop: the animation groups of No target and of the flash line.
+-- fightAt: GetTime as this fight started; lastFight: the seconds the last fight lasted. low: the Low health and Low mana lines ({ holder, line,
+-- breathe, on } by kind), lowCurve their step curve, lowListener and lowListening the frame that hears the player and whether it does, lowSampled:
+-- test mode shows Low health; lowRefused and manaRefused: the game refused the curve or the call.
 local S = { fighting = false, warned = false, listening = false, blind = false, healer = false, flashes = 0, warnings = 0, withheld = 0, silent = 0,
 	stateSounds = 0 }
 
@@ -95,6 +124,10 @@ end
 
 local function FlashWanted()
 	return On() and Opt("combatState") == true
+end
+
+local function LowWanted()
+	return On() and Opt("lowHealth") == true
 end
 
 -- The answer of a client call, or nil when the client lacks it, raises or withholds the answer.
@@ -270,10 +303,11 @@ local function Look(line, kind)
 	pcall(line.SetTextColor, line, ns.Colour(KEY .. "." .. rows[1]))
 end
 
--- The frame shows while one of its lines does.
+-- The frame shows while one of its lines does, and while Low health and mana warning is on: the opacity of each of those lines' holders says
+-- whether it shows.
 local function Shown()
 	if S.frame then
-		pcall(S.frame.SetShown, S.frame, S.flashAt ~= nil or S.warned)
+		pcall(S.frame.SetShown, S.frame, S.flashAt ~= nil or S.warned or (S.low ~= nil and LowWanted()))
 	end
 end
 
@@ -345,8 +379,18 @@ local function StartTicker()
 	end
 end
 
--- +Combat or -Combat for a moment, with its sound unless quiet (test mode).
-local function Flash(kind, quiet)
+-- The length of a fight in seconds, as 1:24, or 1:02:03 from an hour.
+local function Length(seconds)
+	local whole = math.floor(seconds + 0.5)
+	local hours, minutes, rest = math.floor(whole / 3600), math.floor(whole % 3600 / 60), whole % 60
+	if hours > 0 then
+		return ("%d:%02d:%02d"):format(hours, minutes, rest)
+	end
+	return ("%d:%02d"):format(minutes, rest)
+end
+
+-- +Combat or -Combat for a moment, with its sound unless quiet (test mode), and extra after the words when given (the fight's length).
+local function Flash(kind, quiet, extra)
 	if not FlashWanted() or not InterfaceShown() then
 		return
 	end
@@ -355,7 +399,7 @@ local function Flash(kind, quiet)
 		return
 	end
 	local line = S.flash
-	line:SetText(Words(kind))
+	line:SetText(extra and (Words(kind) .. "  " .. extra) or Words(kind))
 	Look(line, kind)
 	line:SetAlpha(1)
 	line:Show()
@@ -412,12 +456,26 @@ local function Sound()
 	end
 end
 
+-- No target, with the key bound to Target Nearest Enemy after it while Name the key to target an enemy is on and the player does not heal, read
+-- each time so that a new binding counts (GetBindingKey and GetBindingText, the key in the words of the client). Only a plain string is taken.
+local function WarnText()
+	if Opt("noTargetKey") ~= true or S.healer then
+		return NO_TARGET
+	end
+	local key = Ask(GetBindingKey, "TARGETNEARESTENEMY")
+	if type(key) ~= "string" or key == "" then
+		return NO_TARGET
+	end
+	local words = Ask(GetBindingText, key)
+	return NO_TARGET .. "  (" .. ((type(words) == "string" and words ~= "") and words or key) .. ")"
+end
+
 local function ShowWarning()
 	if S.warned or not Make() then
 		return
 	end
 	local line = S.warn
-	line:SetText(NO_TARGET)
+	line:SetText(WarnText())
 	Look(line, "warn")
 	line:Show()
 	Animate(S.breathe, true)
@@ -426,6 +484,195 @@ local function ShowWarning()
 	Place()
 	Shown()
 	Sound()
+end
+
+-- Low health and Low mana --------------------------------------------------------------------------------------------------------------
+
+-- The step curve of both lines: 1 under LOW_AT, 0 from it (C_CurveUtil, as HealthColour.lua makes its low health border's). Made once; a client
+-- that will not make it leaves both lines off, and the status says so.
+local function LowCurve()
+	if S.lowCurve == nil and not S.lowRefused then
+		local ok, curve = pcall(function()
+			local made = C_CurveUtil.CreateCurve()
+			made:SetType(Enum.LuaCurveType.Step)
+			made:AddPoint(0, 1)
+			made:AddPoint(LOW_AT, 0)
+			return made
+		end)
+		if ok and curve ~= nil and not ns.IsSecret(curve) then
+			S.lowCurve = curve
+		else
+			S.lowRefused = true
+		end
+	end
+	return S.lowCurve
+end
+
+-- Makes the two lines under No target, once: each a font string on a holder frame of its own on the frame of the lines, so that the holder's
+-- opacity says whether it shows while the line breathes as No target does. False when the game would not make them.
+local function MakeLow()
+	if S.low then
+		return true
+	elseif S.lowRefused or not Make() then
+		return false
+	end
+	local low = {}
+	for _, kind in ipairs(LOW_KINDS) do
+		local made, holder = pcall(CreateFrame, "Frame", nil, S.frame)
+		local line = made and not ns.IsSecret(holder) and type(holder) == "table" and ns.OwnText(holder, "OVERLAY", Template()) or nil
+		if not line then
+			S.lowRefused = true
+			return false
+		end
+		ns.Own[holder] = true
+		pcall(holder.SetAllPoints, holder, S.frame)
+		pcall(holder.EnableMouse, holder, false)
+		pcall(holder.Hide, holder)
+		pcall(line.SetJustifyH, line, "CENTER")
+		low[kind] = { holder = holder, line = line, breathe = Breathe(line) }
+	end
+	S.low = low
+	return true
+end
+
+-- The words, look and spot of the two lines: under the spot of No target, a line of its size apart, read each time so a new size counts.
+local function LookLow()
+	if not S.low then
+		return
+	end
+	local step = HEIGHT * (Opt("noTargetSize") or 100) / 100 + GAP
+	for index, kind in ipairs(LOW_KINDS) do
+		local line = S.low[kind].line
+		line:SetText(Words(kind))
+		Look(line, "low")
+		line:ClearAllPoints()
+		line:SetPoint("TOP", S.frame, "CENTER", 0, -GAP - step * index)
+	end
+end
+
+-- Shows or hides one line's holder, its breath playing while it shows.
+local function ShowLow(rec, on)
+	if rec.on == on then
+		return
+	end
+	rec.on = on
+	pcall(rec.holder.SetShown, rec.holder, on)
+	Animate(rec.breathe, on)
+	if not on then
+		pcall(rec.line.SetAlpha, rec.line, 1)
+	end
+end
+
+-- The share through the curve goes as it is to SetAlpha, withheld or not: health and mana are never compared here.
+local function HealthAlpha(holder, curve)
+	holder:SetAlpha(UnitHealthPercent("player", true, curve))
+end
+
+local function ManaAlpha(holder, curve)
+	holder:SetAlpha(UnitPowerPercent("player", MANA, false, curve))
+end
+
+-- One line: its holder's opacity from the player's health or mana, the line hidden while the row is off, the player is plainly dead or a ghost, and
+-- for mana while the power is not plainly mana. A refusal of the game leaves that line off and is noted for the status.
+local function PaintLow(kind)
+	local rec = S.low and S.low[kind]
+	if not rec or S.lowSampled then
+		return
+	end
+	local curve = LowWanted() and not S.lowRefused and Ask(UnitIsDeadOrGhost, "player") ~= true and LowCurve()
+	local on = false
+	if curve and kind == "health" then
+		on = pcall(HealthAlpha, rec.holder, curve)
+		S.lowRefused = not on
+		if not on then
+			ShowLow(S.low.mana, false)
+		end
+	elseif curve and not S.manaRefused and Ask(UnitPowerType, "player") == MANA then
+		on = pcall(ManaAlpha, rec.holder, curve)
+		S.manaRefused = not on
+	end
+	ShowLow(rec, on)
+end
+
+local function PaintHealth()
+	PaintLow("health")
+end
+
+local function PaintMana()
+	PaintLow("mana")
+end
+
+local function PaintBoth()
+	PaintLow("health")
+	PaintLow("mana")
+end
+
+local function OnPlayerEvent(_, event, unit)
+	local kind = LOW_UNIT_EVENTS[event]
+	if kind == nil then
+		Run(PaintBoth)
+	elseif not ns.IsSecret(unit) and unit == "player" then
+		Run(kind == "health" and PaintHealth or PaintMana)
+	end
+end
+
+-- Hears the player's health, mana, power type and death while the row is on: for the player alone where the client can, else for every unit, and
+-- OnPlayerEvent keeps the player's.
+local function ListenLow(on)
+	if on and not S.lowListening then
+		if not S.lowListener then
+			local made, frame = pcall(CreateFrame, "Frame")
+			if not made or ns.IsSecret(frame) or type(frame) ~= "table" then
+				return
+			end
+			ns.Own[frame] = true
+			frame:SetScript("OnEvent", OnPlayerEvent)
+			S.lowListener = frame
+		end
+		local frame = S.lowListener
+		for event in pairs(LOW_UNIT_EVENTS) do
+			local done = false
+			if frame.RegisterUnitEvent then
+				local ok, result = pcall(frame.RegisterUnitEvent, frame, event, "player")
+				done = ok and (ns.IsSecret(result) or result ~= false)
+			end
+			if not done then
+				pcall(frame.RegisterEvent, frame, event)
+			end
+		end
+		for _, event in ipairs(LOW_EVENTS) do
+			pcall(frame.RegisterEvent, frame, event)
+		end
+		S.lowListening = true
+	elseif not on and S.lowListening then
+		pcall(S.lowListener.UnregisterAllEvents, S.lowListener)
+		S.lowListening = false
+	end
+end
+
+-- Both lines hidden and the events no longer heard.
+local function HideLow()
+	ListenLow(false)
+	S.lowSampled = nil
+	if S.low then
+		for _, kind in ipairs(LOW_KINDS) do
+			ShowLow(S.low[kind], false)
+		end
+	end
+	Shown()
+end
+
+-- A refresh of the two lines: made, looked and painted while the row is on, else hidden.
+local function ApplyLow()
+	if LowWanted() and MakeLow() then
+		LookLow()
+		ListenLow(true)
+		PaintBoth()
+		Place()
+		Shown()
+	else
+		HideLow()
+	end
 end
 
 -- Whether the player heals, from ns.PlayerRole, read only out of a fight: in one the last answer stays. A withheld answer counts as no healer.
@@ -557,6 +804,8 @@ local function HideAll()
 	EndFlash()
 	HideWarning()
 	Listen(false)
+	HideLow()
+	S.fightAt = nil
 end
 
 -- Runs the part. Each run has a key of its own, so every failure counts toward stopping the part; a stopped part takes its lines away.
@@ -574,6 +823,10 @@ local function Apply()
 	local flash, warn = FlashWanted(), WarnWanted()
 	if flash or warn then
 		S.fighting = InFight()
+		-- A fight the events did not start here (a reload in one) has no known length.
+		if not S.fighting then
+			S.fightAt = nil
+		end
 	end
 	if warn then
 		ReadRole()
@@ -591,11 +844,13 @@ local function Apply()
 			Look(S.warn, "warn")
 		end
 	end
+	ApplyLow()
 	Judge()
 end
 
 ns.AddEvent(KEY, "PLAYER_REGEN_DISABLED", function()
 	S.fighting = true
+	S.fightAt = Now()
 	if FlashWanted() or WarnWanted() then
 		Run(function()
 			Flash("enter")
@@ -607,6 +862,12 @@ end)
 
 ns.AddEvent(KEY, "PLAYER_REGEN_ENABLED", function()
 	S.fighting = false
+	local now, at = Now(), S.fightAt
+	S.fightAt = nil
+	local length = now and at and now >= at and now - at or nil
+	if length then
+		S.lastFight = length
+	end
 	if WarnWanted() then
 		Run(ReadRole)
 	end
@@ -614,7 +875,7 @@ ns.AddEvent(KEY, "PLAYER_REGEN_ENABLED", function()
 		Run(function()
 			Listen(false)
 			Judge()
-			Flash("leave")
+			Flash("leave", nil, length and Opt("combatLength") == true and Length(length) or nil)
 		end)
 	end
 end)
@@ -636,7 +897,7 @@ end)
 
 ns.AddStatus(KEY, function()
 	local lines = {}
-	if not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) or not (Opt("noTarget") or Opt("combatState")) then
+	if not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) or not (Opt("noTarget") or Opt("combatState") or Opt("lowHealth")) then
 		return lines
 	end
 	if S.unmade then
@@ -657,10 +918,18 @@ ns.AddStatus(KEY, function()
 		end
 	end
 	if Opt("combatState") then
+		local last = S.lastFight and (" Last fight %s."):format(Length(S.lastFight)) or ""
 		if KITS[Opt("combatEnterSound")] or KITS[Opt("combatLeaveSound")] then
-			lines[#lines + 1] = ("Entering and leaving combat: %d shown, %d sounds played."):format(S.flashes, S.stateSounds)
+			lines[#lines + 1] = ("Entering and leaving combat: %d shown, %d sounds played.%s"):format(S.flashes, S.stateSounds, last)
 		else
-			lines[#lines + 1] = ("Entering and leaving combat: %d shown."):format(S.flashes)
+			lines[#lines + 1] = ("Entering and leaving combat: %d shown.%s"):format(S.flashes, last)
+		end
+	end
+	if Opt("lowHealth") then
+		if S.lowRefused then
+			lines[#lines + 1] = "Low health warning: the game would not give your health through a curve, so neither Low health nor Low mana shows."
+		elseif S.manaRefused then
+			lines[#lines + 1] = "Low mana warning: the game would not give your mana through a curve, so Low mana does not show."
 		end
 	end
 	return lines
@@ -684,6 +953,10 @@ local function HideSample()
 			HideWarning()
 		end
 	end
+	if S.lowSampled then
+		S.lowSampled = nil
+		PaintLow("health")
+	end
 end
 
 function ns.CombatCuesTestStep()
@@ -696,19 +969,31 @@ function ns.CombatCuesTestStep()
 		local phase = S.testStep % 3
 		HideSample()
 		if phase ~= 1 then
-			Flash(phase == 0 and "enter" or "leave", true)
-		elseif WarnWanted() and InterfaceShown() and Make() then
-			local line = S.warn
-			line:SetText(NO_TARGET)
-			Look(line, "warn")
-			line:Show()
-			Animate(S.breathe, true)
-			S.warned, S.sampled = true, true
-			Place()
-			Shown()
-			local mode = ns.TestMode
-			if mode and mode.Sound("combatcues") then
-				Sound()
+			Flash(phase == 0 and "enter" or "leave", true, phase == 2 and Opt("combatLength") == true and "0:42" or nil)
+		elseif InterfaceShown() then
+			if WarnWanted() and Make() then
+				local line = S.warn
+				line:SetText(WarnText())
+				Look(line, "warn")
+				line:Show()
+				Animate(S.breathe, true)
+				S.warned, S.sampled = true, true
+				Place()
+				Shown()
+				local mode = ns.TestMode
+				if mode and mode.Sound("combatcues") then
+					Sound()
+				end
+			end
+			-- Low health, whole, under the sample No target, until the next step paints it again.
+			if LowWanted() and MakeLow() then
+				local rec = S.low.health
+				LookLow()
+				ShowLow(rec, true)
+				pcall(rec.holder.SetAlpha, rec.holder, 1)
+				S.lowSampled = true
+				Place()
+				Shown()
 			end
 		end
 		S.flashes, S.warnings = flashes, warnings
@@ -738,7 +1023,7 @@ end
 
 -- True while one of the alerts is on, which is when the movers have a handle for where they show.
 function ns.CombatCuesShown()
-	return ns.Enabled(KEY) and (Opt("noTarget") == true or Opt("combatState") == true)
+	return ns.Enabled(KEY) and (Opt("noTarget") == true or Opt("combatState") == true or Opt("lowHealth") == true)
 end
 
 -- The movers set or put back the spot.
