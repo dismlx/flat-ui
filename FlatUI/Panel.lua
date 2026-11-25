@@ -4,9 +4,11 @@ local ADDON_NAME, ns = ...
 -- textures and font strings of the addon's own and is built the first time it is opened. None of its frames is protected, so it
 -- works in combat. It is only built out of combat, since UIParent is protected.
 --
--- It fades in with the game's window sounds (Build). Its keys (BuildKeys, out of combat): Ctrl+F for Search, Escape for an open list or question
--- before the window, Enter for a question's first button; a long list's filter field has the cursor as it opens. The wheel scrolls a page over a
--- slider too, and Shift and the wheel step the slider (AddNumber). Search lights the typed words in its results and counts them, and a Profiles
+-- It fades in with the game's window sounds (Build). Its keys (BuildKeys, out of combat): Ctrl+F for Search, Ctrl+Z to put back the newest change of
+-- Home's Recent changes, Escape for the colour picker (Cancel), an open list or a question before the window, Enter for the picker's Apply or a
+-- question's first button, but not for a careful question (Delete, Reset, Copy from, Replace); a long list's filter field has the cursor as it opens.
+-- The wheel scrolls a page over a slider too, and Shift and the wheel step the slider (AddNumber). A sound row plays a line once as it is picked and
+-- has a Play button (AddChoice). Search lights the typed words in its results and counts them, and a Profiles
 -- result opens its row (view.byLabel of BuildProfiles). Reset page says what it did, and is dimmed while nothing on the tab is changed.
 -- It lies in the strata HIGH at level LEVEL, above the frames of the HUD in that strata, which are made at the level UIParent gives
 -- them: the combat alerts (CombatCues.lua), the cooldown pulse (Pulse.lua) and the combat text, and the stand-ins of test mode, which
@@ -802,9 +804,40 @@ local function AddColour(row, item)
 	end
 end
 
+-- The sound kit of each line of a choice row whose lines are the names of ns.SOUNDS (IconRow.lua), by the line's value, or nil for a row of no
+-- sound. Every sound row of Config.lua has those names, so a row is a sound row by its lines alone, three of them at least, so that one line that
+-- happens to share a name makes no sound row; None has no kit.
+local soundKits
+local function SoundKits(item)
+	if not soundKits then
+		soundKits = {}
+		for _, sound in ipairs(type(ns.SOUNDS) == "table" and ns.SOUNDS or {}) do
+			soundKits[sound[2]] = sound[1]
+		end
+	end
+	local kits, count = {}, 0
+	for _, line in ipairs(ns.Choices(item)) do
+		local kit = soundKits[line[2]]
+		if kit then
+			kits[line[1]] = kit
+			count = count + 1
+		end
+	end
+	return count >= 3 and kits or nil
+end
+
+-- A sound row plays a line once as it is picked, out of a fight (the changed handler of the combat cue sounds plays it too, and ns.PlayKit plays
+-- once a second at most), and has a Play button for the sound it has now, dimmed at None. The same on the options pages, in setup and in the
+-- tracker editor.
 local function AddChoice(row, item)
 	if item.segments and ns.PanelCards then
 		return ns.PanelCards.Segments(row, item)
+	end
+	local kits = SoundKits(item)
+	local function Play(value)
+		if kits and kits[value] and type(ns.PlayKit) == "function" then
+			ns.PlayKit(kits[value])
+		end
 	end
 	local menu = Dropdown(row, FIELD, {
 		lines = function()
@@ -815,14 +848,35 @@ local function AddChoice(row, item)
 		end,
 		sample = ns.PanelSamples and ns.PanelSamples.Kind(item) or nil,
 		pick = function(value)
+			local shown = row.frame:IsVisible()
 			Write(item, value)
 			row.Changed()
+			if shown and not InCombatLockdown() then
+				Play(value)
+			end
 		end,
 	})
 	menu.frame:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
+	local play
+	if kits then
+		play = Button(row.frame, "Play", 52, function()
+			if not row.active then
+				return
+			elseif kits[Read(item)] then
+				Play(Read(item))
+			else
+				Say("None plays no sound.")
+			end
+		end)
+		play:SetPoint("LEFT", row.frame, "LEFT", CONTROL + FIELD + 10, 0)
+		row.Hover(play)
+	end
 	return function()
 		menu.SetText(Chosen(ns.Choices(item), Read(item)) or "")
 		menu.SetSample(Read(item))
+		if play then
+			play:SetAlpha(kits[Read(item)] and 1 or DIM)
+		end
 	end
 end
 
@@ -1483,12 +1537,13 @@ function OpenList(owner, spec)
 end
 
 -- The question box: onYes runs on the first button, onNo (when given) on the second. A click outside the box closes it and runs neither. The buttons
--- say yesText and noText when those are given, and Yes and No otherwise.
-function Ask(question, onYes, onNo, yesText, noText)
+-- say yesText and noText when those are given, and Yes and No otherwise. Enter presses the first button (BuildKeys), but not for a careful question,
+-- one whose first button loses something for good (Delete, Reset, Copy from, Replace): an Enter meant for chat must not answer it.
+function Ask(question, onYes, onNo, yesText, noText, careful)
 	BuildPopups()
 	CloseList()
 	ui.question:SetText(question)
-	ui.onYes, ui.onNo = onYes, onNo
+	ui.onYes, ui.onNo, ui.careful = onYes, onNo, careful == true
 	local wide = yesText ~= nil or noText ~= nil
 	ui.yesText:SetText(yesText or "Yes")
 	ui.noText:SetText(noText or "No")
@@ -1500,10 +1555,23 @@ end
 
 function HideConfirm()
 	if ui.confirm and ui.confirm:IsShown() then
-		ui.onYes, ui.onNo = nil, nil
+		ui.onYes, ui.onNo, ui.careful = nil, nil, nil
 		ui.confirm:Hide()
 		SyncShade()
 	end
+end
+
+-- What Escape closes before the window: the colour picker (its Cancel puts the old colour back), else an open list, else a question; nil while
+-- none of them shows. The options pages' keys (BuildKeys) and setup's (ns.PanelKit.Escape) both use it.
+function ui.EscapeAction()
+	if ns.PanelColour and ns.PanelColour.Shown() then
+		return ns.PanelColour.Cancel
+	elseif ui.listOwner then
+		return CloseList
+	elseif ui.confirm and ui.confirm:IsShown() then
+		return HideConfirm
+	end
+	return nil
 end
 
 -- Pages ----------------------------------------------------------------------------------------
@@ -1628,6 +1696,24 @@ end
 
 local function Removable(name, current)
 	return name ~= current and name ~= "Default"
+end
+
+-- The question of Delete profile: the name, and how many other characters use it. They start as new characters at their next login (Core.lua,
+-- ns.DeleteProfile and OwnProfile), on Default.
+function ui.DeleteQuestion(name)
+	local db, count = ns.Account(), 0
+	local me = type(ns.CharacterKey) == "function" and ns.CharacterKey() or nil
+	for key, used in pairs(type(db) == "table" and type(db.profileOf) == "table" and db.profileOf or {}) do
+		if used == name and key ~= me then
+			count = count + 1
+		end
+	end
+	if count == 0 then
+		return ('Delete "%s" for good? No other character uses it.'):format(name)
+	elseif count == 1 then
+		return ('Delete "%s" for good? 1 other character uses it and starts as a new character at its next login.'):format(name)
+	end
+	return ('Delete "%s" for good? %d other characters use it and start as new characters at their next login.'):format(name, count)
 end
 
 local function BuildProfiles()
@@ -1764,7 +1850,7 @@ local function BuildProfiles()
 			if from then
 				Ask(('Replace "%s" with a copy of "%s"?'):format(Current(), from), function()
 					Act("CopyProfile", from)
-				end)
+				end, nil, "Replace", "Keep", true)
 			else
 				Say("Choose a profile to copy.")
 			end
@@ -1794,9 +1880,9 @@ local function BuildProfiles()
 		})
 		Beside(row, "Delete", function()
 			if doomed then
-				Ask(('Delete the profile "%s"?'):format(doomed), function()
+				Ask(ui.DeleteQuestion(doomed), function()
 					Act("DeleteProfile", doomed)
-				end)
+				end, nil, "Delete", "Keep", true)
 			else
 				Say("Choose a profile to delete.")
 			end
@@ -1828,9 +1914,9 @@ local function BuildProfiles()
 	if type(ns.ResetProfile) == "function" then
 		row = Row("Reset profile", "Every setting of the profile in use goes back to its default, and every frame you moved goes back to its own place.")
 		local reset = Button(row.frame, "Reset", SMALL, function()
-			Ask(('Reset every setting in "%s" to its default?'):format(Current()), function()
+			Ask(('Reset "%s"? Every setting and every frame position goes back to its default.'):format(Current()), function()
 				Act("ResetProfile")
-			end)
+			end, nil, "Reset", "Keep", true)
 		end)
 		reset:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(reset)
@@ -1918,7 +2004,7 @@ local function BuildProfiles()
 					if Act("ImportProfile", text) then
 						into:SetText("")
 					end
-				end)
+				end, nil, "Replace", "Keep", true)
 			else
 				Say("Paste the settings first.")
 			end
@@ -2009,7 +2095,7 @@ end
 
 local FLASH, FLASH_ALPHA = 0.8, 0.24
 local CHIP_H = 28
-local STEPS_GROUP, PROFILES_GROUP = "Flat UI setup", "Profiles"
+local STEPS_GROUP, PROFILES_GROUP, ACTIONS_GROUP = "Flat UI setup", "Profiles", "Actions"
 
 -- The pages whose names match, as chips under a small heading. The frames of the block hold their own text, so that the block is not a row of the results.
 local function BuildChips(parent)
@@ -2083,15 +2169,20 @@ local function BuildSearchView()
 	return view
 end
 
--- A result that opens a page or a step of setup instead of holding a control: the name and a button.
+-- A result that opens a page or a step of setup, or runs an action of the window, instead of holding a control: the name and a button, which says
+-- Open, or what hit.Button gives (Test mode's Turn on or Turn off).
 local function BuildLink(view, hit, y)
-	local row = NewRow(view.scroller.child, y, hit.label, "")
-	local open = Button(row.frame, "Open", SMALL, function()
+	local row = NewRow(view.scroller.child, y, hit.label, hit.tip or "")
+	local open, text = Button(row.frame, "Open", SMALL, function()
 		hit.Open()
 	end)
 	open:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 	row.Hover(open)
-	function row.Update() end
+	function row.Update()
+		if hit.Button then
+			text:SetText(hit.Button())
+		end
+	end
 	return row
 end
 
@@ -2245,7 +2336,20 @@ local function Collect(words)
 			end }
 		end
 	end
-	for _, group in ipairs({ profiles, steps }) do
+	-- The window's own actions (PanelSearch.ACTIONS, ui.actions): each Open leaves the search field first.
+	local actions = { label = ACTIONS_GROUP, hits = {} }
+	for _, action in ipairs(ns.PanelSearch.ACTIONS or {}) do
+		local does = ui.actions and ui.actions[action.id]
+		local tier = does and ns.PanelSearch.Tier(words, action.label, action.tip, ACTIONS_GROUP, ACTIONS_GROUP)
+		if tier then
+			actions.hits[#actions.hits + 1] = { tier = tier, label = action.label, link = true, key = ACTIONS_GROUP .. "/" .. action.id, tip = does.tip,
+				Button = does.Button, Open = function()
+					ui.search:ClearFocus()
+					does.Run()
+				end }
+		end
+	end
+	for _, group in ipairs({ profiles, steps, actions }) do
 		if #group.hits > 0 then
 			groups[#groups + 1] = group
 		end
@@ -2555,6 +2659,28 @@ local function ToggleMovers()
 		end
 	end
 end
+
+-- The window's own actions that Search finds (PanelSearch.ACTIONS), by id: what Open runs, its tip and, for Test mode, the word of its button. Test
+-- mode is the switch of the title bar (BuildTestSwitch), and does nothing in a fight.
+ui.actions = {
+	test = {
+		tip = "Shows your frames on screen with sample content while you change options. The switch at the top right does the same.",
+		Run = function()
+			if InCombatLockdown() then
+				Say("Test mode after combat.")
+			elseif type(ns.TestMode) == "table" then
+				ns.TestMode.Toggle("panel")
+			end
+			RefreshAll()
+		end,
+		Button = function()
+			return type(ns.TestMode) == "table" and ns.TestMode.Source() ~= nil and "Turn off" or "Turn on"
+		end,
+	},
+	move = { tip = "Shows a box on each frame to drag it to its place, as /flatui move does.", Run = ToggleMovers },
+	welcome = { tip = "The welcome screen, with its ready-made looks and setup.", Run = function() Call("OpenWelcome") end },
+	looks = { tip = "The ready-made looks of the welcome screen. Nothing changes until you pick one.", Run = function() Call("OpenProfiles") end },
+}
 
 -- Shows the parts of the options pages, or the root of the mode that has the window, and the title of whichever it is.
 local function SetParts()
@@ -2972,15 +3098,23 @@ local function BuildKeys(window)
 	local function Find()
 		ui.search:SetFocus()
 	end
+	-- Ctrl+Z: the newest change of Home's Recent changes goes back, and the strip says what (PanelHome.lua, Home.UndoNewest).
+	local function Undo()
+		Say(ns.PanelHome.UndoNewest())
+		RefreshAll()
+	end
 	keys:SetScript("OnKeyDown", function(self, key)
 		local asking = ui.confirm ~= nil and ui.confirm:IsShown() == true
+		local picker = ns.PanelColour and ns.PanelColour.Shown() and ns.PanelColour or nil
 		local action
 		if key == "ESCAPE" then
-			action = (ui.listOwner and CloseList) or (asking and HideConfirm) or nil
+			action = ui.EscapeAction()
 		elseif key == "ENTER" or key == "NUMPADENTER" then
-			action = asking and ui.AnswerYes or nil
+			action = (picker and picker.Apply) or (asking and not ui.careful and ui.AnswerYes) or nil
 		elseif key == "F" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and ui.search:IsVisible() then
 			action = Find
+		elseif key == "Z" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and ns.PanelHome and not ui.EscapeAction() then
+			action = Undo
 		end
 		if not InCombatLockdown() then
 			local done, failed = pcall(self.SetPropagateKeyboardInput, self, action == nil)
@@ -3199,7 +3333,7 @@ function ns.OpenPanel()
 		if InCombatLockdown() then
 			if not ui.waiting then
 				ui.waiting = true
-				print("Options open after combat.")
+				print("Flat UI: Options open after combat.")
 				ns.OutOfCombat(function()
 					ui.waiting = false
 					if not ui.window then
@@ -3232,6 +3366,8 @@ ns.PanelKit = {
 	Tip = function(text) ui.message, ui.tip = nil, text or "" ShowStrip() end, Refresh = function() RefreshAll() end,
 	Hide = function() if ui.window then ui.window:Hide() end end,
 	Leave = LeaveMode,
+	-- Closes the colour picker, an open list or a question, the one on top; true when one was open.
+	Escape = function() local action = ui.EscapeAction() if action then action() return true end return false end,
 	SetCounter = function(text) if ui.barCounter then ui.barCounter:SetText(text or "") end end,
 	WIDTH = WIDTH, HEIGHT = HEIGHT, TITLE = TITLE, LEFT = LEFT, STRIP = STRIP, HEADER = HEADER, RIGHT_W = RIGHT_W, PAD = PAD, ROW = ROW,
 	ROW_W = ROW_W, SECTION = SECTION, LABEL = LABEL, CONTROL = CONTROL, FIELD = FIELD, SMALL = SMALL, BUTTON = BUTTON,
@@ -3244,7 +3380,7 @@ function ns.OpenPanelMode(mode)
 		if InCombatLockdown() then
 			if not ui.waiting then
 				ui.waiting = true
-				print(mode.waiting or "Options open after combat.")
+				print(mode.waiting or "Flat UI: Options open after combat.")
 				ns.OutOfCombat(function()
 					ui.waiting = false
 					if not ui.window then

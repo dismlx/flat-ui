@@ -1,7 +1,7 @@
 local ADDON_NAME, ns = ...
 
 -- The search of the options window: the words of the field, which of the four tiers a row falls in, the order of the results, the pages whose names match,
--- and the index of Profiles and Flat UI setup. The window draws the results (Panel.lua).
+-- and the index of Profiles, Flat UI setup and the window's own actions. The window draws the results and runs an action (Panel.lua).
 
 local Search = {}
 ns.PanelSearch = Search
@@ -11,6 +11,14 @@ Search.PROFILE_ROWS = { "Profile in use", "New profile", "Duplicate profile", "S
 	"In a battleground or arena", "Everywhere else", "Export profile", "Import profile", "Export trackers", "Import trackers", "Export by module" }
 -- A result that is a part of another row of the Profiles page opens that row: Duplicate is a button of New profile.
 Search.ALIAS = { ["Duplicate profile"] = "New profile" }
+-- The window's own actions, found by their name and by the words of their tip: the Test mode switch, the sidebar's Move frames, the welcome screen
+-- and its ready-made looks. Panel.lua (ui.actions) runs each by its id.
+Search.ACTIONS = {
+	{ id = "test", label = "Test mode", tip = "samples sample frames preview" },
+	{ id = "move", label = "Move frames", tip = "movers positions drag place" },
+	{ id = "welcome", label = "Welcome screen", tip = "start first" },
+	{ id = "looks", label = "Ready-made looks", tip = "profiles presets layouts" },
+}
 
 function Search.Words(typed)
 	local words = {}

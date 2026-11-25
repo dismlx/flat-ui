@@ -97,7 +97,7 @@ end
 -- what was done. In a fight it opens after combat, as the screen hides in one.
 function ns.WelcomeReturn(view)
 	if InCombatLockdown() then
-		print("The welcome screen opens after combat.")
+		print("Flat UI: The welcome screen opens after combat.")
 	end
 	ns.OutOfCombat(function()
 		W.Open(view == "after" and "after" or "start", W.finished)
@@ -771,7 +771,7 @@ end
 -- /flatui welcome: the start view, for any character. Nothing is chosen until a button is pressed.
 function ns.OpenWelcome()
 	if InCombatLockdown() then
-		print("The welcome screen opens after combat.")
+		print("Flat UI: The welcome screen opens after combat.")
 	end
 	ns.OutOfCombat(W.Show)
 	return true
