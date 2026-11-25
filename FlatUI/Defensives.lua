@@ -11,6 +11,12 @@ local _, ns = ...
 -- through to the world; Out of combat only has the game hide it in a fight. The samples of test mode follow Icon border, Borderless and the
 -- border colour as the real icons do, and with Caster's name on carry the names of test mode's party under them. Sound when one lands (None by
 -- default) has the game play a sound as a listed defensive you do not know yourself comes on you, also in a fight (D.SyncSounds).
+-- Flash when one lands (on by default) gives each icon a quick white flash as its defensive lands: on the game's buttons an animation the game
+-- plays itself as the button shows (AddAuraShownAnimation), so also in a fight; on the icons of a read, a flash of IconRow.lua. The time left
+-- turns amber in its last 5 seconds, coloured by the game (a colour curve on the time text, D.TimeOptions). The samples of the test and of
+-- test mode flash as they appear and play Sound when one lands, not a sound at the end of their sweep. Out of combat with test mode off and no
+-- defensive on you, a change of Icon size, Spacing, Caster's name or Icon border shows the samples for 4 seconds in the new look, with no line
+-- in the chat (ns.DefensivesLookChanged).
 
 local KEY = "defensives"
 -- The name of the row among the saved spots of the movers.
@@ -22,6 +28,14 @@ local ROOM = 16
 local CROP = 0.08
 local REREAD = 0.2
 local TEST_TIME = 8
+-- How long the samples a change of the look shows stay after the last change.
+local PREVIEW = 4
+-- The flash of a defensive that lands: from this opacity to none in FLASH seconds. The time left is amber under LOW seconds, in the amber
+-- of the trackers' low.
+local FLASH_FROM, FLASH = 0.8, 0.5
+local LOW, AMBER = 5, { 1, 0.7, 0.2 }
+-- The sound kits of Sound when one lands, for the samples: the game plays the files of these kits for a real one (TrackerSound.lua).
+local KITS = { raid = 8959, alarm = 12889, whisper = 37666 }
 local MOST_LISTED, MOST_EXTERNAL = 6, 4
 local GROUPS = { "listed", "external", "own" }
 local MOST_OWN, MOST_ADDED, MAX_ID = 4, 40, 2147483647
@@ -208,6 +222,22 @@ function D.Mouse(parts)
 	end
 end
 
+-- The options of the game's time text: white, amber in the last LOW seconds. The game colours the text by a step curve of the time left
+-- (DurationTextBindingProperty.RemainingDuration), so also in a fight. Made once; nil where the game has no colour curve.
+function D.TimeOptions()
+	if D.timeOptions == nil then
+		local ok, options = pcall(function()
+			local curve = C_CurveUtil.CreateColorCurve()
+			curve:SetType(Enum.LuaCurveType.Step)
+			curve:AddPoint(0, CreateColor(AMBER[1], AMBER[2], AMBER[3], 1))
+			curve:AddPoint(LOW, CreateColor(1, 1, 1, 1))
+			return { textColor = { curve = curve, property = Enum.DurationTextBindingProperty.RemainingDuration } }
+		end)
+		D.timeOptions = ok and type(options) == "table" and options or false
+	end
+	return D.timeOptions or nil
+end
+
 -- Makes the parts of one button. Run by the game inside AddAuraGroup while the button is still open; nothing here may raise, and a
 -- part the game refuses is left out and named in the status.
 function D.Init(button)
@@ -244,7 +274,7 @@ function D.Init(button)
 		return frame
 	end)
 	if not made then
-		D.refused.count, D.refused.time, D.refused.name, D.refused.border = true, true, true, true
+		D.refused.count, D.refused.time, D.refused.name, D.refused.border, D.refused.flash = true, true, true, true, true
 		return
 	end
 	parts.top = top
@@ -258,8 +288,10 @@ function D.Init(button)
 		local left = Own(top:CreateFontString(nil, "OVERLAY", "NumberFontNormal"))
 		left:SetPoint("CENTER", top, "CENTER", 0, 0)
 		parts.left = left
-		-- The game's time text; the sweep's own numbers are the way out only when it is refused.
-		if not pcall(button.SetDurationText, button, left, nil) and parts.sweep then
+		-- The game's time text, amber in its last seconds, else white; the sweep's own numbers are the way out only when it is refused.
+		local options = D.TimeOptions()
+		local bound = options ~= nil and pcall(button.SetDurationText, button, left, options)
+		if not bound and not pcall(button.SetDurationText, button, left, nil) and parts.sweep then
 			pcall(parts.sweep.SetHideCountdownNumbers, parts.sweep, false)
 			error("the time text was refused", 0)
 		end
@@ -285,6 +317,24 @@ function D.Init(button)
 		end
 		parts.edges = edges
 		D.PaintEdges(parts)
+	end)
+	-- A white square over the button, at no opacity but while its fade plays: the game plays the fade as the button shows, as a defensive
+	-- lands. The square is a child of the button, as the game asks of the regions of such an animation.
+	Part("flash", function()
+		local flash = Own(top:CreateTexture(nil, "OVERLAY", nil, 7))
+		flash:SetAllPoints(button)
+		flash:SetColorTexture(1, 1, 1, 1)
+		flash:SetAlpha(0)
+		local group = flash:CreateAnimationGroup()
+		local fade = group:CreateAnimation("Alpha")
+		fade:SetFromAlpha(FLASH_FROM)
+		fade:SetToAlpha(0)
+		fade:SetDuration(FLASH)
+		group:SetToFinalAlpha(true)
+		button:AddAuraShownAnimation(group)
+		parts.flash = flash
+		parts.flashOn = Opt("flash") ~= false
+		flash:SetShown(parts.flashOn)
 	end)
 end
 
@@ -361,7 +411,21 @@ function D.ApplyTips()
 	end
 end
 
-D.apply = { caster = D.ApplyCaster, border = D.ApplyBorder, size = D.ApplySize, tips = D.ApplyTips }
+-- Flash when one lands again where it has changed: the square shows or hides, and the fade the game plays stays registered.
+function D.ApplyFlash()
+	local want = Opt("flash") ~= false
+	for _, parts in ipairs(D.list) do
+		if parts.flash and parts.flashOn ~= want then
+			if pcall(parts.flash.SetShown, parts.flash, want) then
+				parts.flashOn = want
+			else
+				D.refused.flash = true
+			end
+		end
+	end
+end
+
+D.apply = { caster = D.ApplyCaster, border = D.ApplyBorder, size = D.ApplySize, tips = D.ApplyTips, flash = D.ApplyFlash }
 
 -- Runs what waited, once the game says buffs are open.
 function D.Flush()
@@ -816,13 +880,23 @@ function D.Pass()
 	if D.path ~= "reading" or not ns.Enabled(KEY) or D.testing then
 		return
 	end
-	local found = D.Read() or {}
+	local read = D.Read()
+	local found = read or {}
 	local shown = {}
+	-- A defensive that was not in the last read (by its spell and its end, so a new cast counts) flashes as it lands; none at the first read,
+	-- nor at the first after the game hid buffs.
+	local before, now = D.landed, {}
+	D.landed = read and now or nil
 	for index = 1, math.min(#found, MOST_LISTED) do
 		local item, icon = found[index], D.Icon(index)
 		if icon then
 			-- No kind: the border keeps the colour of the page and Borderless hides it, as on the game's buttons (EdgeColour).
 			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { border = Opt("iconBorder") })
+			local landing = item.id .. ":" .. item.expires
+			now[landing] = true
+			if before and not before[landing] and Opt("flash") ~= false then
+				ns.IconFlash(icon)
+			end
 			local name = nil
 			if Opt("caster") and item.source then
 				name = T.Ask(UnitName, item.source)
@@ -889,6 +963,7 @@ function D.StopReading()
 	if D.watcher then
 		pcall(D.watcher.UnregisterAllEvents, D.watcher)
 	end
+	D.landed = nil
 	for _, icon in ipairs(D.icons) do
 		ns.IconClear(icon)
 		icon.name:Hide()
@@ -1034,6 +1109,7 @@ function D.Sync()
 		D.Change("border")
 		D.Change("size")
 		D.Change("tips")
+		D.Change("flash")
 	elseif D.path == "reading" then
 		D.StartReading()
 	end
@@ -1175,19 +1251,36 @@ function D.EndTest(token)
 	end
 	local sound = ns.IconRow.sound
 	local text = sound == "played" and "played" or (sound == nil and "not tried" or "the game played no sound")
-	print(("Test: the sweep ended on %d of 3 icons. Sound: %s."):format(done, text))
+	if not test.quiet then
+		print(("Test: the sweep ended on %d of 3 icons. Sound: %s."):format(done, text))
+	end
 	if D.holder and not (ns.Enabled(KEY) and Opt("place") ~= "off") then
 		D.holder:Hide()
 	end
 end
 
-function D.Test()
+-- Sound when one lands, once, for the samples: the kit whose file the game plays for a real defensive. None plays nothing.
+function D.SampleSound()
+	local kit = KITS[Opt("sound")]
+	if kit and type(ns.PlayKit) == "function" then
+		ns.PlayKit(kit, KEY)
+	end
+end
+
+-- Three samples for 8 seconds, each flashing as it appears as a defensive that lands does, with Sound when one lands once. quiet: for
+-- PREVIEW seconds, with no sound and no line in the chat (ns.DefensivesLookChanged).
+function D.Test(quiet)
+	quiet = quiet == true
 	if not D.Capable() then
-		print("Defensives on you: the game gives no buff information.")
+		if not quiet then
+			print("Defensives on you: the game gives no buff information.")
+		end
 		return
 	end
 	if InCombatLockdown() then
-		print("Defensives on you: the test shows out of combat only.")
+		if not quiet then
+			print("Defensives on you: the test shows out of combat only.")
+		end
 		return
 	end
 	if D.testing then
@@ -1208,22 +1301,58 @@ function D.Test()
 		list[index] = icon
 	end
 	ns.IconRow.sound = nil
-	local now = Now()
+	local now, flash = Now(), Opt("flash") ~= false
 	for index, icon in ipairs(list) do
-		local look = D.SampleLook()
-		look.flash, look.sound, look.key = true, ns.SOUNDS[1][1], KEY
-		ns.IconSet(icon, ns.IconSamplePicture(index), now, 2 * index, look)
+		ns.IconSet(icon, ns.IconSamplePicture(index), now, 2 * index, D.SampleLook())
 		D.SampleName(icon, index)
+		if flash then
+			ns.IconFlash(icon)
+		end
 	end
 	ns.IconLayout(list, holder, Opt("size"), Opt("spacing"), "right")
-	local test = { list = list }
+	local test = { list = list, quiet = quiet }
 	D.testing = test
-	print("Defensives on you: three sample icons for 8 seconds.")
+	if not quiet then
+		D.SampleSound()
+		print("Defensives on you: three sample icons for 8 seconds.")
+	end
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
-		C_Timer.After(TEST_TIME, function()
+		C_Timer.After(quiet and PREVIEW or TEST_TIME, function()
 			D.EndTest(test)
 		end)
 	end
+end
+
+-- True when a defensive the row would show is on the player: one of the list from another player, or with Your own defensives on one of the
+-- player's own.
+function D.Up()
+	if #(D.Read() or {}) > 0 then
+		return true
+	end
+	if Opt("own") == true then
+		for id in pairs(D.OwnIDs()) do
+			if ns.UnitBuff("player", id) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- A row of the look changed (Icon size, Spacing, Caster's name, Icon border, Flash when one lands): the page is refreshed, as without a changed
+-- function of the row (Core.lua's Changed), and out of combat with test mode off (its own samples show then), no test of /flatui test icons
+-- under way and no defensive on the player, the three samples show for PREVIEW seconds in the new look with no line in the chat. Each change
+-- starts them again, so a slider dragged keeps them up until PREVIEW after its last step.
+function ns.DefensivesLookChanged()
+	ns.Try(KEY, D.Refresh)
+	if InCombatLockdown() or TM.IsOn() or not (D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off") then
+		return
+	end
+	local read, up = pcall(D.Up)
+	if (D.testing and not D.testing.quiet) or not read or up then
+		return
+	end
+	ns.Try(KEY, D.Test, true)
 end
 
 -- Test mode (TestMode.lua): while it is on, out of combat, with the page on and Place not Off, the holder shows three sample icons of its own, apart
@@ -1244,11 +1373,42 @@ function D.Held()
 			return
 		end
 	end
+	-- No flash and no sound at the end of a sweep: a sample that comes flashes, and the first to come since test mode came on plays Sound
+	-- when one lands, as a defensive that lands does.
+	local look, flash, came = D.SampleLook(), Opt("flash") ~= false, false
+	look.flash, look.sound = false, false
 	for index, icon in ipairs(list) do
-		ns.IconSampleHeld(icon, index, KEY, D.SampleLook())
+		local fresh = not (icon.held and icon.frame:IsShown())
+		ns.IconSampleHeld(icon, index, KEY, look)
 		D.SampleName(icon, index)
+		if fresh and icon.held then
+			came = true
+			if flash then
+				ns.IconFlash(icon)
+			end
+		end
+	end
+	if came and TM.Sound(KEY .. ".sample") then
+		D.SampleSound()
 	end
 	ns.IconLayout(list, holder, Opt("size"), Opt("spacing"), "right")
+end
+
+-- The ticker of test mode: a sample whose sweep ended starts again, and flashes as a defensive cast again does.
+function D.Tick(now)
+	local again = {}
+	if Opt("flash") ~= false then
+		for _, icon in ipairs(D.held or {}) do
+			local held = icon.held
+			if held and now >= held.ends and icon.frame:IsShown() then
+				again[#again + 1] = icon
+			end
+		end
+	end
+	ns.IconSampleLoop(D.held, now)
+	for _, icon in ipairs(again) do
+		ns.IconFlash(icon)
+	end
 end
 
 function D.Drop()
@@ -1274,7 +1434,7 @@ function D.Status()
 		lines[#lines + 1] = LINE_OWN
 	end
 	local parts = {}
-	for _, name in ipairs({ "icon", "sweep", "count", "time", "name", "border" }) do
+	for _, name in ipairs({ "icon", "sweep", "count", "time", "name", "border", "flash" }) do
 		if D.refused[name] then
 			parts[#parts + 1] = name == "sweep" and "sweep" or (name == "name" and "caster's name" or (name == "time" and "time left" or name))
 		end
@@ -1351,7 +1511,7 @@ TM.Register(KEY, {
 	refresh = true,
 	Stop = D.Drop,
 	Tick = function(now)
-		ns.IconSampleLoop(D.held, now)
+		D.Tick(now)
 	end,
 })
 

@@ -16,7 +16,8 @@ local _, ns = ...
 -- CooldownViewer.lua:2182-2186), until that cooldown is over; and, when the page goes on and after a loading screen, the items in the bags
 -- whose cooldown runs, one for each cooldown they share. A cooldown read out of combat that is shorter than Shortest cooldown does not pulse,
 -- nor the global cooldown, nor what is left out. While test mode is on (TestMode.lua) a test pulse shows at each spot in use every 3 seconds, with
--- the sound the first time only. Out of combat, a change of a row of the look shows a test pulse in the new look (ns.PulseLookChanged).
+-- the sound the first time only. Out of combat, a change of a row of the look or of Pulse spots shows a test pulse in the new look
+-- (ns.PulseLookChanged), and a pick of Sound or Spot of one spell or item pulses that one at its spot with its sound (P.Preview).
 --
 -- The end of a cooldown is found without reading what the game withholds in a fight. The flags of a spell's cooldown are never withheld
 -- (isEnabled, isActive and isOnGCD, SpellSharedDocumentation.lua:19-31), and isOnGCD is believed only inside SPELL_UPDATE_COOLDOWN, the one
@@ -968,7 +969,8 @@ function P.Show(spot, entry)
 	if not P.Fade(spot, seconds) then
 		frame:SetAlpha(P.Peak())
 	end
-	local sound = not entry.quiet and ns.SOUNDS and ns.SOUNDS[KITS[P.OwnSound(entry.key) or Opt("sound")] or 0]
+	-- A test of one spell or item (P.Preview) plays that one's own sound, by its key in soundKey.
+	local sound = not entry.quiet and ns.SOUNDS and ns.SOUNDS[KITS[P.OwnSound(entry.soundKey or entry.key) or Opt("sound")] or 0]
 	if sound and ns.PlayKit then
 		ns.PlayKit(sound[1], KEY)
 	end
@@ -1355,6 +1357,7 @@ function ns.PulseSoundPick(id)
 		return true, nil
 	end
 	P.SetOwnSound(chosen[3], word)
+	ns.Try(KEY, P.Preview, chosen)
 	return true, P.SoundSaid(chosen[2], word)
 end
 
@@ -1475,6 +1478,7 @@ function ns.PulseSpotPick(id)
 		return true, nil
 	end
 	P.SetOwnSpot(chosen[3], id)
+	ns.Try(KEY, P.Preview, chosen)
 	return true, P.SpotSaid(chosen[2], id)
 end
 
@@ -1570,9 +1574,22 @@ function P.Test(quiet)
 	end
 end
 
--- A row of the look changed (Icon size, How long it shows, Opacity, Sound, Name under the icon, Grow as it fades, the sizes of spots 2 and 3):
--- the page is refreshed, as without a changed function of the row (Core.lua's Changed), and out of combat a test pulse shows at each spot in
--- use in the new look, quiet but for the Sound row, which plays the sound picked. P.Queue drops a test while one shows or waits there, so a
+-- A pick of Sound of one spell or item or Spot of one spell or item (chosen: { line ID, name, key } of P.Chosen), out of combat with the page on
+-- and test mode off: a test pulse of that spell or item, with its own icon and name, at its spot and with its own sound (soundKey, which
+-- P.Show reads), none for no sound. Kind test keeps it out of the real queues, and P.TestEnd takes it away as the other tests.
+function P.Preview(chosen)
+	local mode = ns.TestMode
+	if InCombatLockdown() or not ns.Enabled(KEY) or (mode and mode.IsOn()) or type(chosen) ~= "table" or not P.Plain(chosen[1], "number") then
+		return
+	end
+	local id = chosen[1]
+	P.Queue({ kind = "test", key = "test", name = "a test", label = chosen[2], icon = P.Icon({ kind = id > 0 and "spell" or "item", id = math.abs(id) }),
+		spot = P.OwnSpot(chosen[3]) or 1, soundKey = chosen[3] })
+end
+
+-- A row of the look changed (Icon size, How long it shows, Opacity, Sound, Name under the icon, Grow as it fades, Pulse spots, the sizes of
+-- spots 2 and 3): the page is refreshed, as without a changed function of the row (Core.lua's Changed), and out of combat a test pulse shows
+-- at each spot in use in the new look, quiet but for the Sound row, which plays the sound picked. P.Queue drops a test while one shows or waits there, so a
 -- slider dragged makes one pulse, not one for each step. Not while test mode is on, whose own test pulses show every 3 seconds.
 function ns.PulseLookChanged(path)
 	ns.Try(KEY, P.Refresh)

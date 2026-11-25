@@ -1,7 +1,8 @@
 local _, ns = ...
 
 -- Marks on action buttons: a tracker that is low or missing puts a border on the button that casts its spell or uses its item, amber
--- when low and red when missing, the colours of the tracker itself.
+-- when low and red when missing, the colours of the tracker itself. A button shared by trackers keeps its mark while any of them is
+-- low or missing, red while any of them is missing and amber only when all of them are just low.
 -- Trackers.lua calls ns.TrackerMarkStep after it draws a tracker and ns.TrackerMarkSweep once per pass. The borders are drawn by
 -- ns.SetButtonMark in ActionBars.lua, which is only texture calls. This file makes no frame and is not a module.
 
@@ -10,8 +11,10 @@ local RED = { 0.851, 0.251, 0.251 }
 local AMBER = { 1, 0.7, 0.2 }
 local MAX_IDS = 40
 
--- marked[entry.id] = { entry = entry, set = { [button] = true }, colour = AMBER or RED }
+-- marked[entry.id] = { id = entry.id, entry = entry, set = { [button] = true }, colour = AMBER or RED }
 local marked = {}
+-- owners[button] = { [entry.id] = AMBER or RED }: every tracker that marks the button, so one taking its mark leaves the others'.
+local owners = {}
 
 local function Plain(value, kind)
 	return type(value) == kind and not ns.IsSecret(value)
@@ -75,16 +78,48 @@ local function Count(set)
 	return n
 end
 
--- Marks the buttons of the set in the colour, the record's own when none is given, and takes the mark from the ones that held it before.
+-- Draws one button from all the trackers on it: red when any is missing, amber when all are low, no mark when none is left.
+local function Paint(button)
+	local list, colour = owners[button], nil
+	if list then
+		for _, own in pairs(list) do
+			if own == RED then
+				colour = RED
+				break
+			end
+			colour = AMBER
+		end
+	end
+	if colour then
+		ns.SetButtonMark(button, "missing", colour[1], colour[2], colour[3])
+	else
+		owners[button] = nil
+		ns.SetButtonMark(button, "missing", nil)
+	end
+end
+
+-- Marks the buttons of the set in the colour, the record's own when none is given, and takes the record's mark from the ones that
+-- held it before. Each button is drawn from every tracker on it.
 local function Apply(record, set, colour)
 	colour = colour or record.colour or RED
+	local id = record.id
 	for button in pairs(record.set) do
 		if not set[button] then
-			ns.SetButtonMark(button, "missing", nil)
+			local list = owners[button]
+			if list then
+				list[id] = nil
+			end
+			Paint(button)
 		end
 	end
 	for button in pairs(set) do
-		ns.SetButtonMark(button, "missing", colour[1], colour[2], colour[3])
+		local list = owners[button]
+		if not list then
+			list = {}
+			owners[button] = list
+		end
+		list[id] = colour
+		Paint(button)
 	end
 	record.set, record.colour = set, colour
 end
@@ -116,7 +151,7 @@ function ns.TrackerMarkStep(entry, reading, how)
 	end
 	local record = marked[entry.id]
 	if not record then
-		record = { set = {} }
+		record = { id = entry.id, set = {} }
 		marked[entry.id] = record
 	end
 	record.entry = entry
