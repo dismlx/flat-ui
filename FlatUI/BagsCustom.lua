@@ -1503,6 +1503,29 @@ function Custom.Arriving(which, bag, slot, id)
 	arrivals[#arrivals + 1] = { which = which, bag = bag, slot = slot, id = id, at = Now() }
 end
 
+-- True when an item a drop moved into the bags is in its slot now (BagsData's record, B.Data.Item): it is waited for no longer. Arrivals older than
+-- ARRIVE_WAIT go too.
+local function Landed(st)
+	if #arrivals == 0 or type(st) ~= "table" then
+		return false
+	end
+	local read = Fn(B.Data, "Item")
+	local now, arrived = Now(), false
+	for index = #arrivals, 1, -1 do
+		local arrival = arrivals[index]
+		if now - arrival.at > ARRIVE_WAIT then
+			table.remove(arrivals, index)
+		elseif arrival.which == st.which and read then
+			local okRecord, record = pcall(read, st.key, arrival.bag, arrival.slot)
+			if okRecord and type(record) == "table" and Whole(record.id) == arrival.id then
+				table.remove(arrivals, index)
+				arrived = true
+			end
+		end
+	end
+	return arrived
+end
+
 -- The layout hooks ------------------------------------------------------------------------------------------------------------------------------
 
 -- A pass of a window starts (BagsLayout's Render): no + slot or catcher is used yet.
@@ -1516,6 +1539,13 @@ function Custom.Begin(st)
 		pool.flash.placed = false
 	end
 	byWhich[st.which] = st
+	-- A pass of a fresh layout (B.Layout.Builds counts them) files every item where it belongs, so an item that arrived before it is waited for no
+	-- longer, and its next change of slots lays nothing out again.
+	local builds = Call(B.Layout, "Builds", st.which)
+	if builds ~= pool.builds then
+		pool.builds = builds
+		Landed(st)
+	end
 	if st.holding then
 		pool.held = pool.held or ReadHeld()
 	else
@@ -1623,24 +1653,7 @@ end
 -- is laid out afresh and the item shows in its section. held: a sort still moves items, and the layout after it shows the item. Arrivals older than
 -- ARRIVE_WAIT go.
 function Custom.Arrived(st, changed, held)
-	if #arrivals == 0 or type(st) ~= "table" then
-		return false
-	end
-	local read = Fn(B.Data, "Item")
-	local now, arrived = Now(), false
-	for index = #arrivals, 1, -1 do
-		local arrival = arrivals[index]
-		if now - arrival.at > ARRIVE_WAIT then
-			table.remove(arrivals, index)
-		elseif arrival.which == st.which and read then
-			local okRecord, record = pcall(read, st.key, arrival.bag, arrival.slot)
-			if okRecord and type(record) == "table" and Whole(record.id) == arrival.id then
-				table.remove(arrivals, index)
-				arrived = true
-			end
-		end
-	end
-	return arrived and not held
+	return Landed(st) and not held
 end
 
 -- A window closed (BagsLayout's Layout.Closed): its + slots, catchers and flash hide, what waited for it goes, and the name box it opened closes.
