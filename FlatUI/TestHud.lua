@@ -33,7 +33,8 @@ local _, ns = ...
 --   under 10, as Hud.lua draws the real one with Breath and fatigue timers and Seconds on the timers on, or in the game's look while the first is
 --   off (ns.DrawHud.Mirror, SetupDrawHud.lua).
 --   The sample nameplate: an enemy plate with its cast bar, auras and quest mark with its kill count (while Quest mark on enemies you need for a
---   quest is on and the marks are not left to Questie), and for a warrior the Overpower icon with its swipe over the auras, at the middle of the
+--   quest is on and the marks are not left to Questie), for a warrior the Overpower icon (a hunter's Mongoose Bite) with its swipe over the auras,
+--   and for a rogue or a druid the row of combo points under the cast bar (SetupDrawPlates.lua's P.Combo), at the middle of the
 --   screen, 160 units up, with a dim Sample nameplate under it, as plates have no place of their own. Its cast fills, and it takes the threat states
 --   in turn every 3 seconds (You want, Changing hands, You do not want) while Threat on nameplates is on: its health bar in the threat colour while
 --   Colour health bars by threat is on, the threat ring as Threat glow asks (flashing as it reaches You do not want, with Flash the ring when threat
@@ -41,7 +42,10 @@ local _, ns = ...
 --   the threat colour, the threat colour on the border and the background as their rows ask, the name of the enemy's target right of the bar ([Gorvak]
 --   in the warrior colour, and you on You do not want unless Not when it attacks you), and the fade of Fade enemies held for you
 --   (SetupDrawPlates.lua's P.Threat); the quest mark moves past a value and the enemy's target on its side, and its kill count goes up with each
---   threat round (3/8 to 7/8), popping as it does. While Moving is off the Overpower swipe holds still with the rest (the stage's still).
+--   threat round (3/8 to 8/8), popping as it does, turns green at 8/8, and the mark and count fade just after that pop settles and fade back in at
+--   3/8 the round after, as a live mark does (P.QuestFade). The combo points gain one each threat round (1 to 5, then 1 again), the newest popping
+--   as it lands. The Overpower icon pops and fades on its own 5-second rounds whatever Time left on the Overpower icon says, which only sets its
+--   swipe. While Moving is off all of it holds still with the rest (the stage's still).
 -- The cursor ring is no module, so it cannot register with test mode (TM.Register runs an entry only while its module is on): at every On, Off,
 -- pause and resume (TM.Watch) the ring applies its rows again (ns.CursorRingChanged, which reads TM.IsOn: In combat only reads as shown while it
 -- is on), and while test mode is on and Moving a frame of this file gives the ring a sample cast and global cooldown every 3 seconds
@@ -467,6 +471,15 @@ TM.StandIn({
 
 -- The sample nameplate --------------------------------------------------------------------------------------------------------------------------
 
+-- What counts up with each threat round: the kill count, 3/8 to 8/8 and back to 3/8, and a rogue's or a druid's combo points, 1 to 5 and back to 1.
+local function Rounds(spec, now)
+	local round = math.floor(now / THREAT_EVERY)
+	spec.questHave = 3 + round % 6
+	if spec.combo ~= nil then
+		spec.combo = 1 + round % 5
+	end
+end
+
 local function PlateMoves(holder, now)
 	local P, p, spec = ns.SetupDrawPlates, holder.plate, holder.spec
 	local t = now % PLATE_ROUND
@@ -475,10 +488,12 @@ local function PlateMoves(holder, now)
 	local threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
 	if spec.threat ~= threat then
 		spec.threat = threat
-		spec.questHave = 3 + math.floor(now / THREAT_EVERY) % 5
+		Rounds(spec, now)
 		P.Health(p, spec)
-		-- The ring, the value and the fade of the new state, and the quest mark again past a value of another width.
+		-- The combo points of the round (the value at Below hangs under them), the ring, the value and the fade of the new state, and the quest mark
+		-- again past a value of another width.
 		if p.o and p.m then
+			P.Combo(p, spec, p.o, p.m)
 			P.Threat(p, spec, p.o, p.m)
 			P.QuestMark(p, spec, p.o, p.m)
 		end
@@ -504,8 +519,11 @@ TM.StandIn({
 			holder.caption:SetText("Sample nameplate")
 			holder.caption:SetTextColor(DIM[1], DIM[2], DIM[3])
 		end
-		-- A warrior's sample also dodged them, so it carries the Overpower icon.
-		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true, overpower = Class() == "WARRIOR",
+		-- A warrior's sample also dodged them, so it carries the Overpower icon (a hunter's, Mongoose Bite); a rogue's or a druid's has their combo
+		-- points under it.
+		local class = Class()
+		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true,
+			overpower = class == "WARRIOR" or class == "HUNTER", combo = (class == "ROGUE" or class == "DRUID") and 1 or nil,
 			cast = { name = "Shadow Bolt", share = 0, left = PLATE_CAST } }
 	end,
 	Paint = function(holder)
@@ -514,7 +532,7 @@ TM.StandIn({
 		local run = math.min(1, (now % PLATE_ROUND) / PLATE_CAST)
 		spec.cast.share, spec.cast.left = run, PLATE_CAST * (1 - run)
 		spec.threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
-		spec.questHave = 3 + math.floor(now / THREAT_EVERY) % 5
+		Rounds(spec, now)
 		local box = P.Plate(p, spec, P.Sets())
 		p.f:ClearAllPoints()
 		p.f:SetPoint("BOTTOM", holder, "CENTER", 0, PLATE_UP)
