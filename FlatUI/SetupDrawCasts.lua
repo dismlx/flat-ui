@@ -9,8 +9,10 @@ local _, ns = ...
 -- What each look is built from, so it matches what the module paints (Bars.lua):
 --   cast bars: the border and background of ApplyCastBar (Bars.lua:597-622), the plate behind the spell name, the spark, the shield, the icon and
 --   the spell name of ApplyCastParts and ns.CastText (Bars.lua:707-816), the cover colour of CastColour (956-972), the marks of Marks (1020-1088),
---   the sizes and the place of the spell name of CastBarSize.lua:92-150, the rank after the spell name of CastRank.lua, and the tick marks of a
---   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks), dim where the channel has passed them.
+--   the sizes and the place of the spell name of CastBarSize.lua:92-150, the rank after the spell name of CastRank.lua, the tick marks of a
+--   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks), dim where the channel has passed them, the pushback past
+--   the right end of the player bar of CastTime.lua (+0.4 on the first row), and the interrupt colours of Interrupt.lua on the Target row (ready)
+--   and the Focus row (on cooldown) while Interrupt readiness and Flat fill are on.
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
 --   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530), and the
 --   Queued ability colour of Q over the first main hand timer in the second half of each of its swings.
@@ -28,8 +30,10 @@ local _, ns = ...
 -- ns.OwnText, ns.SetOutline, ns.SetOutlineColour, ns.Pixels and ns.IsSecret.
 -- Fixed samples: the part of each bar that is filled, the sample numbers, the latency zone (5 percent of the player bar), the swing times.
 -- ns.DrawCasts gives test mode's stand-ins (TestHud.lua) the same painters for one bar: DC.Cast and DC.PaintCast for a cast bar in a state (cast,
--- channel, interrupted or shield, the interrupted one in Interrupted colour or the game's interrupted fill) at a share of its run, DC.Swing and
--- DC.PaintSwing for a swing timer, and DC.CastProgress and DC.SwingProgress for the parts that move.
+-- channel, interrupted or shield, the interrupted one in Interrupted colour or the game's interrupted fill) at a share of its run, an enemy's in
+-- the interrupt colour its kick names (ready, cooling or far), DC.Swing and DC.PaintSwing for a swing timer (the main hand of a warrior, druid or
+-- hunter with Queued ability colour over the second half of each swing), and DC.CastProgress and DC.SwingProgress for the parts that move (the
+-- player bar's pushback, +0.4 over the second half of a cast and -0.8 of a channel).
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
@@ -272,10 +276,11 @@ end
 -- Cast bars ---------------------------------------------------------------------------------------------------
 
 local CAST_ROWS = {
-	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 }, time = "1.0" },
+	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 }, time = "1.0", push = "+0.4" },
 	{ opt = "pet", label = "Pet", name = "Firebolt", state = "cast", part = 0.45, game = { 195, 13 }, time = "1.4" },
-	{ opt = "target", label = "Target", name = "Fireball", state = "cast", part = 0.6, game = { 150, 10 }, small = true, time = "1.2" },
-	{ opt = "focus", label = "Focus", name = "Arcane Missiles", state = "channel", part = 0.4, game = { 150, 10 }, small = true, time = "1.8" },
+	{ opt = "target", label = "Target", name = "Fireball", state = "cast", part = 0.6, game = { 150, 10 }, small = true, time = "1.2", kick = "ready" },
+	{ opt = "focus", label = "Focus", name = "Arcane Missiles", state = "channel", part = 0.4, game = { 150, 10 }, small = true, time = "1.8",
+		kick = "cooling" },
 	{ opt = "target", label = "Target, uninterruptible", name = "Polymorph", state = "shield", part = 0.7, game = { 150, 10 }, small = true, time = "0.9",
 		shield = true },
 	{ opt = "player", label = "Player, channel", name = "Drain Life", state = "channel", part = 0.55, game = { 208, 11 }, ticks = 5, time = "2.7" },
@@ -298,8 +303,9 @@ local castMade = setmetatable({}, { __mode = "k" })
 local castDrawing = {}
 
 -- One cast bar on `parent`: its frame, the game's art, the plate behind the spell name, the fill, the spark, the icon, the latency zone of the player
--- bar, the shield of a bar that may show one (spec.shield), the outline, the spell name, the time of a bar with spec.time and the tick marks of a
--- channel of spec.ticks ticks (CastTicks.lua). inst holds the grey parts and the outlines of the drawing it belongs to.
+-- bar, the shield of a bar that may show one (spec.shield), the outline, the spell name, the time of a bar with spec.time, the tick marks of a
+-- channel of spec.ticks ticks (CastTicks.lua) and the pushback of a player bar (CastTime.lua), spec.push on a setup row. inst holds the grey parts
+-- and the outlines of the drawing it belongs to.
 local function NewCastBar(inst, parent, spec)
 	local row = { spec = spec, inst = inst }
 	local bar = NewFrame(parent)
@@ -344,6 +350,15 @@ local function NewCastBar(inst, parent, spec)
 			row.time:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
 			row.time:SetJustifyH("RIGHT")
 			row.time:SetText(spec.time)
+		end
+	end
+	if spec.opt == "player" then
+		row.push = NewText(bar)
+		if row.push then
+			row.push:SetPoint("LEFT", bar, "RIGHT", 4, 0)
+			row.push:SetJustifyH("LEFT")
+			row.push:SetText(spec.push or "")
+			row.push:Hide()
 		end
 	end
 	return row
@@ -398,17 +413,20 @@ local function BuildCast(stage)
 	end
 	p["castbars.ownTime"] = target.time
 	p["castbars.playerTime"] = player.time
+	p["castbars.pushback"] = player.push
 	p["castbars.iconPos"] = target.icon
 	p["castbars.playerIcon"] = player.icon
 	return inst
 end
 
--- The colour of the fill of a state on a place, as CastColour gives it (Bars.lua): an enemy's cast or channel the player's interrupt is ready for
--- (kick) takes Interrupt ready colour while Interrupt readiness on enemy casts is on, the player bar its class colour with Class colour, the target
--- and focus bars their own colours, else the cast colours of the Flat UI page.
+-- The colour of the fill of a state on a place, as CastColour gives it (Bars.lua): an enemy's cast or channel takes the colour of the player's
+-- interrupt (kick: "ready" or true, "cooling" for on cooldown, "far" for ready while the caster is out of its range) while Interrupt readiness on
+-- enemy casts is on, the player bar its class colour with Class colour, the target and focus bars their own colours, else the cast colours of the
+-- Flat UI page.
+local KICK_COLOURS = { ready = "castbars.interruptReady", cooling = "castbars.interruptCooling", far = "castbars.interruptFar" }
 local function CastFillColour(opt, state, kick)
 	if kick and (state == "cast" or state == "channel") and G("castbars.interrupt") == true then
-		return ns.Colour("castbars.interruptReady")
+		return ns.Colour(KICK_COLOURS[kick] or KICK_COLOURS.ready)
 	elseif opt == "player" and (state == "cast" or state == "channel") and G("castbars.playerClass") then
 		return ClassRGB()
 	elseif (opt == "target" or opt == "focus") and (state == "cast" or state == "channel") and G("castbars.targetOwn") then
@@ -625,6 +643,13 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 		ShowTime(row, look, opt, state)
 		Look(row.time, look.percent, nil, nil, nil, look.outline)
 	end
+	-- The pushback past the right end of a player bar while Pushback on your bar is on: the setup row's sample, in red in the spell name's size.
+	if row.push then
+		row.pushOn = enabled and G("castbars.pushback") == true
+		row.push:SetText(spec.push or "")
+		row.push:SetShown(row.pushOn and spec.push ~= nil and state ~= "interrupted")
+		Look(row.push, look.percent, 1, 0.3, 0.3, look.outline)
+	end
 end
 
 function castDrawing.build(stage)
@@ -646,7 +671,7 @@ function castDrawing.draw(stage)
 		local spec = row.spec
 		local h = sizes[index][2]
 		Place(row.bar, "TOPLEFT", inst.root, "TOPLEFT", CAST_LEFT, -y)
-		PaintCastBar(row, look, spec.opt, spec.state, spec.part, sizes[index][1], h)
+		PaintCastBar(row, look, spec.opt, spec.state, spec.part, sizes[index][1], h, nil, spec.kick)
 		if row.label then
 			Place(row.label, "LEFT", inst.root, "TOPLEFT", labelX, -(y + h / 2))
 		end
@@ -687,7 +712,7 @@ function DC.Cast(parent, spec)
 end
 
 -- Paints a bar of `opt` in `state` at `part`, w by h (the size the rows give when nil), with the spell name `name` (else its own) and kick for an
--- enemy cast the player's interrupt is ready for. Returns its width and height.
+-- enemy cast: the state of the player's interrupt, "ready" (or true), "cooling" or "far", whose colour it takes. Returns its width and height.
 function DC.PaintCast(row, opt, state, part, w, h, name, kick)
 	local look = CastLook(opt == "boss")
 	if not (ns.Finite(w) and ns.Finite(h)) then
@@ -698,7 +723,8 @@ function DC.PaintCast(row, opt, state, part, w, h, name, kick)
 	return w, h
 end
 
--- The moving parts of a painted bar: its fill and spark at `part`, its state's colour, the spell name of a new state and the seconds left.
+-- The moving parts of a painted bar: its fill and spark at `part`, its state's colour, the spell name of a new state, the seconds left, and on a
+-- player bar a sample pushback over the second half of a cast (+0.4) or a channel (-0.8, the share left under a half).
 function DC.CastProgress(row, state, part, left, name)
 	if not row.look then
 		return
@@ -718,6 +744,13 @@ function DC.CastProgress(row, state, part, left, name)
 	row.state = state
 	if row.time and ns.Finite(left) then
 		row.time:SetText(("%.1f"):format(math.max(0, left)))
+	end
+	if row.push then
+		local sample = ns.Finite(part) and ((state == "cast" and part >= 0.5 and "+0.4") or (state == "channel" and part <= 0.5 and "-0.8")) or nil
+		if sample then
+			row.push:SetText(sample)
+		end
+		row.push:SetShown(row.pushOn == true and sample ~= nil)
 	end
 end
 
@@ -1226,9 +1259,20 @@ end
 swingDrawing.parts = {}
 ns.SetupDrawings["mock-swing"] = swingDrawing
 
--- A swing timer of `hand` (main, off or ranged) on `parent`, for test mode. period: the seconds of its swing. The caller anchors row.timer.
+-- True for a class whose next melee ability waits for the swing (Bars.lua, Q.Wanted): a warrior, a druid or a hunter. Only a plain class counts.
+local QUEUE_CLASSES = { WARRIOR = true, DRUID = true, HUNTER = true }
+local function Queues()
+	if type(UnitClassBase) ~= "function" then
+		return false
+	end
+	local ok, class = pcall(UnitClassBase, "player")
+	return ok and not ns.IsSecret(class) and type(class) == "string" and QUEUE_CLASSES[class] == true
+end
+
+-- A swing timer of `hand` (main, off or ranged) on `parent`, for test mode. period: the seconds of its swing. The caller anchors row.timer. The main
+-- hand of a class that queues a next melee ability takes Queued ability colour over the second half of each swing, as the first setup row does.
 function DC.Swing(parent, hand, period)
-	return NewSwingTimer({ grey = {}, outlines = {} }, parent, { hand = hand, part = 0, period = period or 2.6 })
+	return NewSwingTimer({ grey = {}, outlines = {} }, parent, { hand = hand, part = 0, period = period or 2.6, queued = hand == "main" and Queues() })
 end
 
 -- Paints a timer from the rows, w wide (the rows' width when nil), and gives its width and height.

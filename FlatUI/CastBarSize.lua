@@ -4,7 +4,7 @@ local _, ns = ...
 -- size of the spell name on all four. Edit Mode has only a scale for these bars. SetWidth and SetHeight
 -- are widget calls it does not replace.
 -- The game sets the size of the player and pet bars again whenever Edit Mode locks the player bar to
--- the player frame or unlocks it, in these two functions, so a hook on each puts the size back. The
+-- the player frame or unlocks it, in these two functions, so a hook on each (ns.FollowGlobal) puts the size back. The
 -- same two functions give the spell name of those bars a font object again, in SetLook. The target and
 -- focus bars are created at one size and one font and nothing sets either again. This is not a module:
 -- the cast bars module calls ns.CastBarSizes whenever it applies its settings.
@@ -193,7 +193,7 @@ local function Resize()
 end
 
 local function Hook()
-	if hooked or type(hooksecurefunc) ~= "function" or not ns.Enabled(KEY) or not (ns.Get("castbars.playerSize") or ns.Get("castbars.playerMatch") == "resource" or ns.Get("castbars.petSize") or ns.Get("castbars.textOutline") ~= "game" or ns.Get("castbars.textSize") ~= 100
+	if hooked or not ns.Enabled(KEY) or not (ns.Get("castbars.playerSize") or ns.Get("castbars.playerMatch") == "resource" or ns.Get("castbars.petSize") or ns.Get("castbars.textOutline") ~= "game" or ns.Get("castbars.textSize") ~= 100
 		or ns.Get("castbars.textAlign") ~= "game" or ns.Get("castbars.textOwn")) then
 		return
 	end
@@ -201,10 +201,9 @@ local function Hook()
 	if ns.WatchEditModePass then
 		ns.WatchEditModePass()
 	end
+	-- ns.FollowGlobal hooks each once, and only where the game has it.
 	for _, name in ipairs({ "PlayerFrame_AttachCastBar", "PlayerFrame_DetachCastBar" }) do
-		if type(_G[name]) == "function" then
-			hooksecurefunc(name, Resize)
-		end
+		ns.FollowGlobal(name, Resize)
 	end
 end
 
