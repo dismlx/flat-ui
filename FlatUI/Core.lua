@@ -408,6 +408,21 @@ local ADDON_NAME, ns = ...
 -- with hooksecurefunc (ns.FollowGlobal), and a frame of its own looks four times a second, while the row and the module are on, whether the window
 -- shows. With an item on the cursor it gives one lifted from a slot back with ClearCursor, as the window does, and its tooltip is GameTooltip,
 -- never in a fight.
+-- Trinket queue (TrinketQueue.lua, TrinketQueueWindow.lua, TrinketQueueButtons.lua; on by default, the Auto queue of each slot off) is the one
+-- part of Flat UI that puts on the player's gear by itself: for a slot whose Auto queue is on, out of combat only (InCombatLockdown and
+-- UnitAffectingCombat both plainly false: the game changes no slot but the weapons in a fight, Constants.lua:158-162), not while the player casts
+-- or channels, is dead or a ghost, the cursor holds anything, a spell waits for its target, or Sell junk, Deposit, Take out, a clean up, a trade
+-- or the split box is busy, it puts a bound trinket of that slot's list from the bags into slot 13 or 14 with C_Item.EquipItemByName(link, slot),
+-- or, for a second copy of an item worn in the other slot, with C_Container.PickupContainerItem and PickupInventoryItem as the game's equipment
+-- manager does, giving back anything left on the cursor (ClearCursor); a click on a row of its window puts one on the same way. It reads the
+-- items' cooldowns (C_Item.GetItemCooldown, GetInventoryItemCooldown, C_Container.GetContainerItemCooldown) and, where those are withheld, their
+-- tooltip data (C_TooltipInfo), every answer through ns.IsSecret and ns.Finite, and hears the player's UNIT_SPELLCAST_SUCCEEDED on a frame of its
+-- own (RegisterUnitEvent) while a delay or that fallback needs it. It keeps its lists, Pause all and the slots held by hand in
+-- FlatUICharDB.trinketQueue. Its window, FlatUITrinkets, is a frame of its own on UIParent, in UISpecialFrames so Escape closes it, placed by
+-- the movers; its two buttons are frames of their own on UIParent hung beside CharacterTrinket0Slot and CharacterTrinket1Slot with SetPoint,
+-- never parented to them, and of those slots and the Character window they read only whether they show, where they are, their scale, strata
+-- and protection. It follows ShowUIPanel and HideUIPanel with ns.FollowGlobal, writes nothing on the game's frames, and its tooltips are
+-- GameTooltip, never in a fight.
 -- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
 -- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
 -- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
@@ -444,7 +459,7 @@ local ADDON_NAME, ns = ...
 -- goes when nothing needs a reload any more. What needs one is the value each such row had at login (ns.ReloadStart) against the profile in use
 -- (ns.ReloadLines), which Home's Needs a reload also lists.
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "trinkets", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.

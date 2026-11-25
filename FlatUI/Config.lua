@@ -2564,6 +2564,31 @@ ns.PAGES = {
 		{ key = "gearFindUsable", kind = "bool", default = true, label = "Only what you can wear",
 			tip = "The finder starts with only the armor and weapon types your class can learn, and items for your class. You can change it in the finder." },
 	},
+	-- TrinketQueue.lua, TrinketQueueWindow.lua and TrinketQueueButtons.lua: a list of trinkets for each trinket slot, put on by themselves out of a
+	-- fight. On by default, each slot's Auto queue off.
+	{
+		key = "trinkets", label = "Trinket queue",
+		{ key = "enabled", kind = "bool", default = true, label = "Trinket queue",
+			tip = "A list of your trinkets for each trinket slot, best first. With a slot's Auto queue on, whenever the trinket you wear is on cooldown Flat UI puts on the highest one of the list that you carry and that is ready, and goes back to a higher one as soon as it is ready again; only out of a fight, since the game changes no trinket in one. /flatui queue, the small square beside each trinket slot on the Character window or Trinket queue window opens the lists. The lists are kept for each character." },
+		{ section = "Auto queue" },
+		{ key = "autoTop", kind = "bool", default = false, label = "Top trinket slot",
+			tip = "Swaps the top trinket slot by its list. Also the Auto queue box in the window and a right-click on the slot's square." },
+		{ key = "autoBottom", kind = "bool", default = false, label = "Bottom trinket slot",
+			tip = "Swaps the bottom trinket slot by its list. Also the Auto queue box in the window and a right-click on the slot's square." },
+		{ key = "ready", kind = "number", default = 30, min = 0, max = 60, step = 5, unit = " s", label = "Ready with this much left",
+			tip = "A trinket whose cooldown has this many seconds or fewer left counts as ready: putting on a trinket with a use starts a 30 second cooldown on it anyway. At 0 only a trinket off cooldown counts. A trinket just put on is never swapped for a lower one in that 30 seconds." },
+		{ key = "window", kind = "list", default = 0, label = "Trinket queue window", none = "Choose a slot", items = "TrinketWindowLines", pick = "TrinketWindowPick",
+			tip = "Opens the window on that slot's list: add trinkets from your bags, put them in order, set a delay or Stop, and pause the queue. /flatui queue opens it too." },
+		{ section = "When it swaps" },
+		{ key = "say", kind = "bool", default = true, label = "Say each swap in chat",
+			tip = "One line with the trinket put on and the one it replaced, and why." },
+		{ key = "sound", kind = "choice", default = "none", label = "Sound on a swap",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
+		{ section = "Character window" },
+		{ key = "slotButtons", kind = "bool", default = true, label = "Buttons by the trinket slots", changed = "TrinketButtonsChanged",
+			tip = "A small square right of each trinket slot: its colour says whether that slot's queue is on, waits for the end of a fight or for a delay, is held or paused, or is off; point at it for why. Click it for the window, right-click to turn that slot's queue on or off, drop a trinket on it to add it to that slot's list." },
+	},
 	-- Errands.lua and the Errands*.lua files: chores done when the game asks for them. On by default; each row has the choice of a player
 	-- levelling on Forever.
 	{
