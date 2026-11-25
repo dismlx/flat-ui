@@ -16,6 +16,8 @@ local ADDON_NAME, ns = ...
 -- circle; a 3D head stays square. Game portrait is the face drawn by Flat UI in the frame's picture, as Face draws it, in both Frame styles. The game's
 -- own portrait (Flat UI portraits off, or a frame that is not restyled) is a disc of the game's size at the game's place beside the bars. A frame whose
 -- switch is off, and every frame while Restyle unit frames is off, is drawn as the game draws it: a grey plate, the game's portrait and the game's bar file.
+-- The face in a picture is the player's own portrait on the player's frame, a class icon on any other player and on a humanoid of the world (the target a
+-- mage's, the target of target a warrior's), and the hunter's pet family icon on a beast (the pet, the focus and the party pets), never a grey placeholder.
 -- Each scene stands on a ground of muted earth, so that a see-through background looks as it does in the world.
 -- ns.DrawUnits, at the end of the file, gives the same painters to the stand-ins of test mode (TestUnits.lua): a frame made for a kind and painted
 -- for a sample of its own, a raid cell of any size, and the marks those have in test mode (offline, the dispel border and type icon, raid markers,
@@ -691,22 +693,27 @@ local PARTY = { { "Mara", "PALADIN", "tank" }, { "Bex", "MAGE", "healer" }, { "C
 local PETS = { "Cat", "Boar", "Owl", "Wolf", "Bear" }
 
 -- The sample of one frame. player: a player, with a class colour; the others take the colour of their reaction. aura: kind, type, stealable, count, time.
--- threat: the unit has threat. It is on the boss and not on the elite target, since in One frame threat would hide the target's Elite gold.
+-- threat: the unit has threat. It is on the boss and not on the elite target, since in One frame threat would hide the target's Elite gold. face: the picture
+-- of a unit that has no face of its own (E.picture): a class, whose class icon it shows, as a humanoid of the world has a class, or an icon file, the hunter's
+-- pet family icon for a beast. A player shows the icon of its class without one.
 local function Sample(id)
+	local BEAST = "Interface\\Icons\\Ability_Hunter_Pet_"
 	local name, level, class = Me()
 	if id == "player" then
 		return { kind = "player", cap = "Player", name = name, level = level, class = class, player = true, react = FRIENDLY, lcol = GOLD, state = COMBAT, leader = true,
 			flag = "PvP", timer = "3:05", own = true }
 	elseif id == "target" then
 		return { kind = "target", cap = "Target", name = "Defias Pillager", level = 18, react = HOSTILE, lcol = { 1, 0.5, 0.25 }, rank = "elite", marker = 8,
-			auras = { { "buff", "none", true }, { "buff", "none" }, { "debuff", "magic" }, { "debuff", "poison" } } }
+			face = "MAGE", auras = { { "buff", "none", true }, { "buff", "none" }, { "debuff", "magic" }, { "debuff", "poison" } } }
 	elseif id == "focus" then
-		return { kind = "focus", cap = "Focus", name = "Gruff Swiftbite", level = 18, react = HOSTILE, lcol = { 0.25, 0.75, 0.25 }, rank = "rare" }
+		return { kind = "focus", cap = "Focus", name = "Gruff Swiftbite", level = 18, react = HOSTILE, lcol = { 0.25, 0.75, 0.25 }, rank = "rare",
+			face = BEAST .. "Wolf" }
 	elseif id == "pet" then
-		return { kind = "pet", cap = "Pet", name = "Wolf", level = 20, class = class, react = FRIENDLY, state = COMBAT, happy = true,
+		return { kind = "pet", cap = "Pet", name = "Wolf", level = 20, class = class, react = FRIENDLY, state = COMBAT, happy = true, face = BEAST .. "Wolf",
 			auras = { { "debuff", "curse", false, 3, "12" } } }
 	elseif id == "tot" then
-		return { kind = "tot", cap = "Target of target", name = "Defias Pillager Captain", level = 18, react = HOSTILE, auras = { { "debuff", "magic" } } }
+		return { kind = "tot", cap = "Target of target", name = "Defias Pillager Captain", level = 18, react = HOSTILE, face = "WARRIOR",
+			auras = { { "debuff", "magic" } } }
 	elseif id == "boss" then
 		return { kind = "boss", cap = "Boss", name = "Hogger", level = "??", react = HOSTILE, lcol = { 1, 0.1, 0.1 }, marker = 1, threat = true }
 	elseif id == "boss2" then
@@ -723,7 +730,8 @@ local function Sample(id)
 	end
 	number = tonumber(id:match("^partypet(%d)$"))
 	if number then
-		return { kind = "partypet", cap = number == 1 and "Party pet" or nil, name = PETS[number], level = 19, react = FRIENDLY, owner = PARTY[number][2] }
+		return { kind = "partypet", cap = number == 1 and "Party pet" or nil, name = PETS[number], level = 19, react = FRIENDLY, owner = PARTY[number][2],
+			face = BEAST .. PETS[number] }
 	end
 end
 
@@ -1113,8 +1121,8 @@ function E.picture(o, g, L)
 		EdgePaint(o.inner, inner, false, inner and rim.inner or nil)
 		ns.SetOutlineThickness(o.inner, 1)
 	end
-	-- The face fills the square: the player's portrait unmasked, as UnitFrames.lua Draw draws it, a class icon on a player, else a plain silhouette. Under the
-	-- game's own portrait is a black disc, as the game draws it.
+	-- The face fills the square: the player's portrait unmasked, as UnitFrames.lua Draw draws it (the player's own frame, and the player as a target of
+	-- target), a class icon on a player, else the sample's face. Under the game's own portrait is a black disc, as the game draws it.
 	o.ring:SetShown(L.gameFace)
 	o.face:SetShown(shown)
 	Over(o.face, pic)
@@ -1132,7 +1140,7 @@ function E.picture(o, g, L)
 	elseif icon then
 		local r, gr, b = ClassRgb(s.class)
 		Solid(o.face, r * 0.8, gr * 0.8, b * 0.8, 1)
-	elseif s.own and shown and type(SetPortraitTexture) == "function" and pcall(SetPortraitTexture, o.face, "player", true) then
+	elseif (s.own or s.me) and shown and type(SetPortraitTexture) == "function" and pcall(SetPortraitTexture, o.face, "player", true) then
 		o.face:SetVertexColor(1, 1, 1, 1)
 		-- A drawn face loses CROP at each edge, as UnitFrames.lua Draw cuts it; a 3D head is drawn as the face cut tighter, tighter still for the framing Face
 		-- and looser for Head and shoulders (stand-ins). The game's own portrait is whole.
@@ -1142,8 +1150,21 @@ function E.picture(o, g, L)
 		end
 		o.face:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
 	else
-		Solid(o.face, 0.29, 0.32, 0.38, 1)
-		plain = shown
+		-- Any other unit shows its sample's face (Sample): the icon of its class, a player's own class without one, or its icon file cut by CROP at each
+		-- edge, as Flat UI cuts the border off an icon. The grey silhouette is left for a sample with neither, or a client with no such art.
+		local face = s.face
+		local class = (CLASS[face] and face) or (s.player and s.class) or nil
+		local art = class and ns.ClassAtlas(class) or nil
+		if art then
+			o.face:SetVertexColor(1, 1, 1, 1)
+			o.face:SetAtlas(art)
+		elseif type(face) == "string" and not CLASS[face] and pcall(o.face.SetTexture, o.face, face) then
+			o.face:SetVertexColor(1, 1, 1, 1)
+			o.face:SetTexCoord(CROP, 1 - CROP, CROP, 1 - CROP)
+		else
+			Solid(o.face, 0.29, 0.32, 0.38, 1)
+			plain = shown
+		end
 	end
 	-- The circle cuts a round picture, its fade, its grey shapes and the game's black disc.
 	local round = L.round or L.gameFace

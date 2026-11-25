@@ -3,7 +3,10 @@ local _, ns = ...
 -- Test mode's unit frames (TestMode.lua, spec Part B): stand-ins for the party and raid frames first, as the owner asked for them by name, then the
 -- target, target of target, focus, focus target, pet, boss and totem frames. Each is a TM.StandIn of the unitframes module: a frame of Flat UI's own
 -- at the place, scale, strata and level of the game's frame, painted by the drawings of the setup (ns.DrawUnits, SetupDrawUnits.lua) from the live
--- profile, so every row of the Unit frames page changes it at once. Every number shown is fixed (the real ones are secret values).
+-- profile, so every row of the Unit frames page changes it at once. Every number shown is fixed (the real ones are secret values). Each picture is a
+-- real one (SetupDrawUnits.lua Sample and E.picture): the player's own face on the target of target, which is the player, a class icon on a party
+-- member and on a humanoid enemy (a mage's on the target Defias Pillager, a warrior's on the focus target), the hunter's pet family icon on a beast
+-- (the pet Wolf, the focus Gruff Swiftbite) and the Voidwalker's icon on the warlock's party pet, in place of a grey silhouette.
 --
 -- Party (the bar's Party, while the player is in no group): four members, as the game lays its party frames out under PartyFrame (Shared/
 -- PartyFrame.xml:3-36, a VerticalLayoutFrame 10 units apart, 26 with showPartyPets; each member 120 by 53, Mainline/PartyFrameTemplates.xml:79-80,
@@ -110,7 +113,7 @@ local PARTY = {
 	{ name = "Eli", class = "PRIEST", role = "healer", base = 0.64, power = 0.38, powerType = "MANA", dispel = "magic", away = true, hot = true,
 		debuffs = { "magic" } },
 	{ name = "Ivo", class = "WARLOCK", role = "damage", base = 0.16, power = 0.71, powerType = "MANA", dispel = "curse", debuffs = { "curse" },
-		pet = { kind = "partypet", name = "Voidwalker", react = FRIENDLY, owner = "WARLOCK", health = 0.9 } },
+		pet = { kind = "partypet", name = "Voidwalker", react = FRIENDLY, owner = "WARLOCK", health = 0.9, face = "Interface\\Icons\\Spell_Shadow_SummonVoidWalker" } },
 	{ name = "Fay", class = "ROGUE", role = "damage", base = 0, power = 0, powerType = "ENERGY", dead = true },
 }
 -- Eli's drift: from 64% to 40% and back over 6 seconds.
@@ -569,10 +572,10 @@ local function Fixed(id)
 	end
 end
 
--- The player as the target of the target.
+-- The player as the target of the target, with the player's own face in the picture (me), as the game's frame shows it.
 local function MeAsTarget()
 	local name, level, class = ns.DrawUnits.Me()
-	return { kind = "tot", name = name, level = level, class = class, player = true, react = FRIENDLY }
+	return { kind = "tot", name = name, level = level, class = class, player = true, me = true, react = FRIENDLY }
 end
 
 -- The pet: the setup's, with the happiness face for a hunter only.

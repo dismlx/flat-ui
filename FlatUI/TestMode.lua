@@ -16,7 +16,8 @@ local _, ns = ...
 -- /flatui move, /flatui move open again), or for "slash" and "key" always, and ends otherwise.
 --
 -- A stand-in reads of the game frame it stands in for only its place and size (ns.MoverRect), its effective scale against UIParent's, its strata,
--- its level and its shown flag (ns.MoverShown), each through ns.IsSecret or ns.Finite; it writes nothing on it, calls no other method of it and adds
+-- its level (at most 300 in HIGH, so that it lies under the options window and the welcome screen there) and its shown flag
+-- (ns.MoverShown), each through ns.IsSecret or ns.Finite; it writes nothing on it, calls no other method of it and adds
 -- no hook; Hide.lua's H.Holds reads its parents. It shows while test mode is on and not paused, its module is on (ns.ModuleOn), its gate passes,
 -- the game frame is not shown (or its own real rule says the real one is not), the Hidden frames page does not hide that frame or a frame it
 -- hangs from (ns.HideFrames: its row ticked, or H.Holds, as the pet frame and the totems hang from the player frame), and the frame has a place:
@@ -77,6 +78,10 @@ local ui = { notes = {} }
 local clock = { poll = 0, bar = 0 }
 
 local POLL, BAR_EVERY = 0.25, 0.5
+-- The most level a stand-in takes in HIGH, the strata of the options window (level 500, Panel.lua's LEVEL) and the welcome screen (800,
+-- SetupWelcome.lua), so it and its drawing stay under both. A game frame there can stand at any level: the player's cast bar is a toplevel frame
+-- of HIGH, which the game raises above the others (Blizzard_UIPanels_Game/Mainline/CastingBarFrame.xml:468), and its stand-in drew over the window.
+local UNDER_PANEL = 300
 local BAR_W, BAR_H, TOP = 930, 40, -8
 local SOURCES = { panel = "options", movers = "/flatui move", slash = "/flatui test", key = "key" }
 local GROUPS = { { "solo", "Solo", 0 }, { "party", "Party", 4 }, { "raid10", "Raid 10", 10 }, { "raid20", "Raid 20", 20 }, { "raid40", "Raid 40", 40 } }
@@ -332,7 +337,8 @@ local function Want(si)
 	return true, left, bottom, width, height, Scale(frame), frame
 end
 
--- Puts the holder's corner on the same corner of the game frame's rectangle, at the game frame's scale. Offsets are in the holder's own units.
+-- Puts the holder's corner on the same corner of the game frame's rectangle, at the game frame's scale, strata and level, at most UNDER_PANEL in HIGH.
+-- Offsets are in the holder's own units.
 local function Place(si, frame)
 	local holder, at, k = si.holder, si.at, si.at.k
 	local share = CORNERS[si.corner]
@@ -343,10 +349,11 @@ local function Place(si, frame)
 		holder:SetSize(math.max(1, at.w / k), math.max(1, at.h / k))
 	end
 	local strata = Read(frame, "GetFrameStrata")
-	holder:SetFrameStrata(type(strata) == "string" and STRATA[strata] and strata or "MEDIUM")
+	strata = type(strata) == "string" and STRATA[strata] and strata or "MEDIUM"
+	holder:SetFrameStrata(strata)
 	local level = Read(frame, "GetFrameLevel")
 	if ns.Finite(level) and level >= 0 then
-		holder:SetFrameLevel(math.min(level, 9000))
+		holder:SetFrameLevel(math.min(level, strata == "HIGH" and UNDER_PANEL or 9000))
 	end
 end
 
