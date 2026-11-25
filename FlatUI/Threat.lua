@@ -21,14 +21,22 @@ local _, ns = ...
 -- leaves out a pet before a member, so the five bars of the default show every member of a party. /flatui status says so. A member's name and
 -- the enemy's go to SetText the same way when the game withholds them (SimpleFontStringAPIDocumentation.lua:664-673).
 -- The player's own bar has a thin white outline (Mark your own bar; the player by UnitIsUnit, plain answers only, so his raid token counts).
+-- With Always show your bar, when the player ranks below the last bar of Number of bars (2 or more), the last bar is his, his place before his
+-- name ("12. Jon"; on a boss, where the bars keep the order of the group, with no number), so his outline and his pulse are always on screen.
 -- With Warn near aggro, while the player is not the one tanking (isTanking of UnitDetailedThreatSituation, plain only) and his plain share is
 -- at Warn at or above, his bar pulses red (a looping Alpha animation of a texture of Flat UI's own) and Warning sound plays once for that
 -- enemy: again only after his share fell more than 10 under Warn at, the enemy changed (UnitGUID, plain only) or the list hid. A withheld share,
--- as on a boss, warns of nothing. The samples preview it: the player's sample bar passes 90% at some steps of test mode, its sound once
--- through TestMode.lua's gate (TM.Sound).
+-- as on a boss, warns of nothing. Not for a tank: while ns.PlayerRole (Core.lua: the group role, else the stance, form or aura nameplate
+-- threat reads, else the talents) says tank, read at the start of each fight and at each refresh, his bar never pulses near aggro. A tank has
+-- Warn when you lose aggro instead: when an enemy he was tanking (isTanking, plain only, on that enemy's GUID) turns to someone else while it is
+-- still the enemy of the list, his bar pulses red for 2 seconds and Warning sound plays once; a new enemy, a withheld share or the list hiding
+-- forgets what he held. The samples preview the near-aggro warning: the player's sample bar passes 90% at some steps of test mode, its sound
+-- once through TestMode.lua's gate (TM.Sound).
 -- The window is a child of UIParent in the LOW strata with a flat background and a thin border in the colours of the Flat UI page, as the data
 -- panels have, its bars in Bar texture (the bar texture of that page by default, else one of its own, set again at once when it changes); it
--- takes no mouse and hides with the interface. /flatui move places it (FlatUIThreat in
+-- takes no mouse and hides with the interface. It fades in over 0.15 seconds as it shows and out over 0.35 as it hides (two Alpha animation
+-- groups of the window, T.Showing); showing again while it fades out stops the fade at once, and turning the module off hides it at once.
+-- /flatui move places it (FlatUIThreat in
 -- Movers.lua: the window's top left corner is the top left corner of the box). /flatui threat shows sample bars for a few seconds, out of
 -- combat. While test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh and sorted again every 2 seconds as their shares
 -- move. Nothing of the game is changed.
@@ -60,6 +68,10 @@ local MINE = { 1, 1, 1, 0.9 }
 local ALARM, ALARM_LOW, ALARM_TIME = { 1, 0.12, 0.08, 0.55 }, 0.15, 0.45
 -- The share under Warn at, in points, that lets the sound play again; the places of the Warning sound choices in ns.SOUNDS (IconRow.lua).
 local REARM = 10
+-- How long the player's bar pulses after he lost aggro as a tank.
+local LOST_TIME = 2
+-- How long the window fades in as it shows and out as it hides.
+local FADE_IN, FADE_OUT = 0.15, 0.35
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 -- What the frame of the addon's own hears in a fight Show allows, and while there is an enemy.
 local FIGHT_EVENTS = { "PLAYER_TARGET_CHANGED" }
@@ -313,13 +325,75 @@ function T.Colour(entry)
 	return r, g, b
 end
 
--- Writes the name of a unit, or nothing; a withheld name goes to the text as it is.
-local function SetName(text, unit)
+-- Writes the name of a unit, or nothing; a withheld name goes to the text as it is. With a rank, the place goes before the name ("12. Jon"), a
+-- withheld name through SetFormattedText, which takes it.
+local function SetName(text, unit, rank)
 	local ok, name = pcall(UnitName, unit)
 	if ok and (IsSecret(name) or type(name) == "string") then
-		text:SetText(name)
+		if not rank or not pcall(text.SetFormattedText, text, "%d. %s", rank, name) then
+			text:SetText(name)
+		end
 	else
-		text:SetText("")
+		text:SetText(rank and ("%d."):format(rank) or "")
+	end
+end
+
+-- The fades of a window of the addon's own: an Alpha animation from 0 to 1, and one from 1 to 0 that hides the window as it ends and puts its
+-- opacity back. Nil for each where the client makes none. Healer mana has the same (HealerMana.lua).
+local function Fades(frame)
+	local ok, fadeIn, fadeOut = pcall(function()
+		local come = frame:CreateAnimationGroup()
+		local rise = come:CreateAnimation("Alpha")
+		rise:SetFromAlpha(0)
+		rise:SetToAlpha(1)
+		rise:SetDuration(FADE_IN)
+		local go = frame:CreateAnimationGroup()
+		local fall = go:CreateAnimation("Alpha")
+		fall:SetFromAlpha(1)
+		fall:SetToAlpha(0)
+		fall:SetDuration(FADE_OUT)
+		pcall(go.SetToFinalAlpha, go, true)
+		go:SetScript("OnFinished", function()
+			frame:Hide()
+			frame:SetAlpha(1)
+		end)
+		return come, go
+	end)
+	if ok then
+		return fadeIn, fadeOut
+	end
+	return nil, nil
+end
+
+-- Shows or hides a window with its fades: on shows it, fading in when it was hidden, and stops a fade out at once; off fades it out, or hides it
+-- at once with now or with no fades.
+local function Showing(frame, fadeIn, fadeOut, on, now)
+	local fading = fadeOut ~= nil and fadeOut:IsPlaying()
+	if on then
+		if fading then
+			pcall(fadeOut.Stop, fadeOut)
+			frame:SetAlpha(1)
+		end
+		if not frame:IsShown() then
+			frame:SetAlpha(1)
+			frame:Show()
+			if fadeIn and not now then
+				pcall(fadeIn.Play, fadeIn)
+			end
+		end
+		return
+	end
+	if fadeIn and fadeIn:IsPlaying() then
+		pcall(fadeIn.Stop, fadeIn)
+	end
+	if now or not fadeOut or not frame:IsShown() then
+		if fading then
+			pcall(fadeOut.Stop, fadeOut)
+		end
+		frame:Hide()
+		frame:SetAlpha(1)
+	elseif not fading and not pcall(fadeOut.Play, fadeOut) then
+		frame:Hide()
 	end
 end
 
@@ -342,7 +416,16 @@ function T.Frame()
 	title:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD + INSET, -PAD)
 	title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + INSET), -PAD)
 	T.title = title
+	T.fadeIn, T.fadeOut = Fades(frame)
 	return frame
+end
+
+-- Shows the window with its fade in, or hides it with its fade out; at once with now, or where the client made no fades. Showing while it fades
+-- out stops the fade and puts its opacity back.
+function T.Showing(on, now)
+	if T.frame then
+		Showing(T.frame, T.fadeIn, T.fadeOut, on, now)
+	end
 end
 
 -- Bar number index, made the first time the list needs it: a track, the fill, the name on the left and the share on the right.
@@ -400,12 +483,52 @@ function T.Row(index)
 	return row
 end
 
--- True when an entry of the player is near aggro: Warn near aggro is on, he is not tanking and his plain share is at Warn at or above.
+-- True when an entry of the player is near aggro: Warn near aggro is on, his role is no tank's (T.tank), he is not tanking and his plain share is
+-- at Warn at or above.
 function T.Near(entry)
-	if Opt("warn") == false or not entry or not entry.me or entry.withheld or entry.tanking then
+	if Opt("warn") == false or T.tank or not entry or not entry.me or entry.withheld or entry.tanking then
 		return false
 	end
 	return ns.Finite(entry.scaled) and entry.scaled >= Number("warnAt", 90)
+end
+
+-- True while the player's bar pulses because he lost aggro as a tank (T.Lost).
+function T.Losing(entry)
+	if not T.lostUntil or not entry or not entry.me then
+		return false
+	end
+	local now = Ask(GetTime)
+	return ns.Finite(now) and now < T.lostUntil
+end
+
+-- Reads the player's role for the warnings: true while ns.PlayerRole says tank (Core.lua). Read at the start of a fight and at each refresh.
+function T.ReadRole()
+	local ok, role = pcall(ns.PlayerRole)
+	T.tank = ok and not IsSecret(role) and role == "tank" or false
+end
+
+-- Warn when you lose aggro: while the player is a tank, his plain isTanking on the enemy (its GUID, else its token: who) is kept, and when an
+-- enemy he held is still the enemy of the list but no longer his, his bar pulses red for LOST_TIME and Warning sound plays once. A new enemy, a
+-- withheld entry, no entry of his or the list hiding (who nil) forget what he held.
+function T.Lost(entry, who)
+	if who ~= T.lostOn then
+		T.held, T.lostUntil, T.lostOn = nil, nil, who
+	end
+	if who == nil or who == "sample" or not T.tank or Opt("lost") == false or not entry or entry.withheld then
+		T.held = nil
+		return
+	end
+	if entry.tanking then
+		T.held = who
+	elseif T.held == who then
+		T.held = nil
+		local now = Ask(GetTime)
+		T.lostUntil = ns.Finite(now) and now + LOST_TIME or nil
+		local sound = ns.SOUNDS[KITS[Opt("warnSound")] or 0]
+		if sound then
+			ns.PlayKit(sound[1], KEY)
+		end
+	end
 end
 
 -- Starts or stops the red pulse of a bar.
@@ -492,14 +615,14 @@ end
 -- and to its text untouched.
 function T.Fill(row, entry)
 	row.mine:SetShown(entry.me == true and Opt("mine") ~= false)
-	T.Pulse(row, T.Near(entry))
+	T.Pulse(row, T.Near(entry) or T.Losing(entry))
 	local r, g, b = T.Colour(entry)
 	row.bar:SetStatusBarColor(r, g, b, 1)
 	local spec = entry.sample
 	if spec and spec[1] ~= false then
-		row.name:SetText(spec[1])
+		row.name:SetText(entry.rank and ("%d. %s"):format(entry.rank, spec[1]) or spec[1])
 	else
-		SetName(row.name, spec and "player" or entry.member.unit)
+		SetName(row.name, spec and "player" or entry.member.unit, entry.rank)
 	end
 	if entry.withheld then
 		if not pcall(row.bar.SetValue, row.bar, entry.scaled) then
@@ -536,7 +659,8 @@ function T.Place()
 end
 
 -- Shows the bars of the entries, as many as Number of bars allows, with the name of the enemy (Sample for /flatui threat), or hides the window
--- when there are none. The step runs while the list of an enemy shows, and also while the target of the target is an enemy nobody is on yet:
+-- when there are none. With Always show your bar and 2 bars or more, a player who ranks below the last bar takes the last one, with his place
+-- (T.Shown). The step runs while the list of an enemy shows, and also while the target of the target is an enemy nobody is on yet:
 -- the game names the enemy whose threat list changed by a token of its own (UNIT_THREAT_LIST_UPDATE, UnitDocumentation.lua:4889-4898; Blizzard
 -- hears it for a frame's own unit, CompactUnitFrame.lua:349-350, and draws its target of target in an OnUpdate, Mainline/TargetFrame.lua:893-899),
 -- never as the target of the target, and a member who fights another enemy keeps its threat situation, the highest on any enemy
@@ -545,35 +669,54 @@ end
 function T.Draw(mob, entries)
 	local n = math.min(entries and #entries or 0, Number("rows", 5), MOST_ROWS)
 	if n < 1 then
-		if T.frame then
-			T.frame:Hide()
-		end
+		T.Showing(false)
 		T.Alarm(nil, nil)
+		T.Lost(nil, nil)
 		T.Tick(mob == "targettarget")
 		return
 	end
 	T.Frame()
 	T.Layout(n)
+	local own, at = nil, nil
+	for index, entry in ipairs(entries) do
+		if entry.me and not own then
+			own, at = entry, index
+		end
+	end
+	local who = mob and (Ask(UnitGUID, mob) or mob) or "sample"
+	T.Lost(own, who)
+	local shown = T.Shown(entries, n, own, at)
 	for index = 1, n do
-		T.Fill(T.rows[index], entries[index])
+		T.Fill(T.rows[index], shown[index])
 	end
 	for index = n + 1, #T.rows do
 		T.Pulse(T.rows[index], false)
 		T.rows[index].bar:Hide()
 	end
-	local own = nil
-	for _, entry in ipairs(entries) do
-		own = own or (entry.me and entry or nil)
-	end
-	T.Alarm(own, mob and (Ask(UnitGUID, mob) or mob) or "sample")
+	T.Alarm(own, who)
 	if mob then
 		SetName(T.title, mob)
 	else
 		T.title:SetText("Sample")
 	end
 	T.Place()
-	T.frame:Show()
+	T.Showing(true)
 	T.Tick(mob ~= nil)
+end
+
+-- The entries the n bars show: the first n, or with Always show your bar, n of 2 or more and the player's entry (own, at its place at) below
+-- them, the first n - 1 and then his, his place on it (rank) where the shares are plain. On a boss the order is the group's, so no place.
+function T.Shown(entries, n, own, at)
+	if not own or not at or at <= n or n < 2 or Opt("keepMine") == false then
+		return entries
+	end
+	local shown = {}
+	for index = 1, n - 1 do
+		shown[index] = entries[index]
+	end
+	own.rank = not own.withheld and at or nil
+	shown[n] = own
+	return shown
 end
 
 -- Listening ---------------------------------------------------------------------------------------------------------------------------------
@@ -699,20 +842,20 @@ function T.Fight(on)
 	T.fighting = on
 	if on then
 		T.sample = nil
+		T.ReadRole()
 	end
 	T.Update()
 end
 
--- Off, or stopped: the window hides, the frame hears nothing and the step ends.
+-- Off, or stopped: the window hides at once, the frame hears nothing and the step ends.
 function T.Off()
 	T.sample, T.fighting, T.pending, T.withheld, T.warned = nil, false, nil, false, nil
+	T.held, T.lostUntil, T.lostOn = nil, nil, nil
 	HearAll(FIGHT_EVENTS, false)
 	HearAll(ENEMY_EVENTS, false)
 	Hear("UNIT_TARGET", false)
 	T.Tick(false)
-	if T.frame then
-		T.frame:Hide()
-	end
+	T.Showing(false, true)
 end
 
 function T.Refresh()
@@ -722,6 +865,7 @@ function T.Refresh()
 		return
 	end
 	T.fighting = InFight()
+	T.ReadRole()
 	T.Update()
 end
 
