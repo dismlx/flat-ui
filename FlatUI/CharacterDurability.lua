@@ -2,7 +2,10 @@ local _, ns = ...
 
 -- Show durability: the durability of all the gear you wear in one percent, on the character page of the Character window, under the left column
 -- of slots (the lowest is the wrist, Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-818). It is white above 80%, the game's yellow for worn
--- gear above 50% and its red for broken gear at 50% and below (Blizzard_DurabilityFrame/DurabilityFrame.lua:14-16), after the game's word for it.
+-- gear above 50% and its red for broken gear at 50% and below (Blizzard_DurabilityFrame/DurabilityFrame.lua:14-16), after the game's word for it;
+-- and since 0.5.35 red while any item is broken (0%, so it gives no stats) and at least yellow while any is at 20% or less, as the minimap's lowest
+-- item line colours (MapText.lua), so one broken weapon among whole gear never reads white. Where the game rule RepairArmorDisabled is on (gear
+-- does not wear out, C_GameRules.IsGameRuleActive) the line is hidden, as the minimap's and the game's own durability figure are.
 -- The percent is the sum of what GetInventoryItemDurability gives for each worn slot over the sum of their most, the call the game's own repair
 -- checks make (Camelot/PaperDollFrame.lua:1594-1602, Blizzard_FrameXML/Mainline/EquipmentManager.lua:234); a slot without durability counts
 -- for nothing, and gear with none at all is 100%. A value the client withholds hides the text. The text is this addon's, on a frame of its own
@@ -11,8 +14,9 @@ local _, ns = ...
 -- UPDATE_INVENTORY_DURABILITY, UPDATE_INVENTORY_ALERTS and PLAYER_EQUIPMENT_CHANGED (PaperDollInfoDocumentation.lua:384-392, 436-446), as the game's
 -- own durability figure is (DurabilityFrame.lua:20-29), so it is right whenever the page opens and nothing runs while nothing changes. Nothing of the
 -- game's is written, and on a client without the call nothing is made. The frame is as wide as the words. Pointing at it lists in GameTooltip
--- (SetOwner, AddLine, AddDoubleLine, Show, and Hide only while IsOwned says the frame owns it), never in a fight, as Show thorns does, each worn
--- item that wears out, lowest first, its name in its quality's colour (GetInventoryItemLink) and its percent in white, yellow or red, then All
+-- (SetOwner, AddLine, AddDoubleLine, Show, and Hide only while IsOwned says the frame owns it), never in a fight, as Show thorns does, first a red
+-- line with the number of broken items while there is one, then each worn item that wears out, lowest first, its icon (GetInventoryItemTexture)
+-- and its name in its quality's colour without brackets (from GetInventoryItemLink) and its percent in white, yellow or red, then All
 -- items and, where the worn items' tooltip data gives one (repairCost of C_TooltipInfo.GetInventoryItem, the figure the game's repair tooltip
 -- shows, TooltipDataRules.lua:151-156), the sum of their repair costs; clicks go through to the page. This follows the durability of EnhanceQoL by
 -- Philipp Barth (R41Z0R) on its Character frame, adapted with his permission. Not a module: the windows module calls ns.CharacterDurability.Apply
@@ -23,6 +27,8 @@ local KEY, PART, ROW = "windows", "durability", "windows.durability"
 local FIRST_SLOT, LAST_SLOT = 1, 19
 local WHITE, YELLOW, RED = { 1, 1, 1 }, { 1, 0.82, 0.18 }, { 0.93, 0.07, 0.07 }
 local HIGH, LOW = 80, 50
+-- An item at this percent or less turns the line at least yellow, as the minimap's lowest item line does (MapText.lua).
+local WORN = 20
 local FONT = "GameFontHighlightSmall"
 -- The frame lies this far under the wrist slot, and where the slot is not found, this far from the bottom left of the page, beside the weapons.
 local GAP, FALLBACK_X, FALLBACK_Y = -12, 24, 40
@@ -98,29 +104,6 @@ local function Words(percent)
 	return ("%s %d%%"):format(word, percent)
 end
 
--- Reads the percent and shows it, or hides the text when it cannot be read. The frame takes the width of the words, so the mouse finds them.
-local function Update()
-	local text = state.text
-	if text == nil then
-		return
-	end
-	local percent = Wanted() and Percent() or nil
-	if percent == nil then
-		pcall(text.Hide, text)
-		return
-	end
-	local colour = Colour(percent)
-	pcall(text.SetTextColor, text, colour[1], colour[2], colour[3], 1)
-	pcall(text.SetText, text, Words(percent))
-	pcall(text.Show, text)
-	local ok, width = pcall(text.GetStringWidth, text)
-	if ok and ns.Finite(width) and width > 0 and state.frame then
-		pcall(state.frame.SetWidth, state.frame, math.ceil(width))
-	end
-end
-
--- The tooltip ---------------------------------------------------------------------------------------------------------------------------------
-
 -- Each worn item that wears out: { slot, percent }, lowest first, or nil when the client has no call or withholds a value.
 local function Items()
 	local call = _G.GetInventoryItemDurability
@@ -146,11 +129,81 @@ local function Items()
 	return items
 end
 
--- The item in a slot as its link writes it, in its quality's colour, or the slot's name.
+-- True where the game rule that keeps gear from wearing out is on (Enum.GameRule.RepairArmorDisabled, C_GameRules.IsGameRuleActive), as the
+-- minimap's durability line reads it (MapText.lua; the game's own durability figure hides there too, DurabilityFrame.lua:51-55). An answer the game
+-- withholds or does not give counts as off.
+local function NoWear()
+	local rules, enum = _G.C_GameRules, _G.Enum
+	local kinds = Usable(enum) and enum.GameRule or nil
+	local rule = Usable(kinds) and kinds.RepairArmorDisabled or nil
+	if not Usable(rules) or rule == nil or ns.IsSecret(rule) or type(rules.IsGameRuleActive) ~= "function" then
+		return false
+	end
+	local ok, on = pcall(rules.IsGameRuleActive, rule)
+	return ok and not ns.IsSecret(on) and on == true
+end
+
+-- The colour of the line: red while any item is broken (at 0%, so it gives no stats), at least yellow while any is at WORN% or less, else the
+-- colour of the percent of all items, so one broken weapon among whole gear is never white.
+local function LineColour(percent, items)
+	local lowest = items and items[1] and items[1].percent or nil
+	if lowest ~= nil and lowest <= 0 then
+		return RED
+	end
+	local colour = Colour(percent)
+	if lowest ~= nil and lowest <= WORN and colour == WHITE then
+		return YELLOW
+	end
+	return colour
+end
+
+-- Reads the percent and shows it, or hides the text when it cannot be read or gear does not wear out here; the frame answers the mouse only while
+-- the text shows, so no empty spot does. The frame takes the width of the words, so the mouse finds them.
+local function Update()
+	local text, frame = state.text, state.frame
+	if text == nil then
+		return
+	end
+	local percent = Wanted() and not NoWear() and Percent() or nil
+	if percent == nil then
+		pcall(text.Hide, text)
+		if frame then
+			pcall(frame.EnableMouse, frame, false)
+		end
+		return
+	end
+	local colour = LineColour(percent, Items())
+	pcall(text.SetTextColor, text, colour[1], colour[2], colour[3], 1)
+	pcall(text.SetText, text, Words(percent))
+	pcall(text.Show, text)
+	if frame then
+		pcall(frame.EnableMouse, frame, true)
+		pcall(frame.SetMouseClickEnabled, frame, false)
+	end
+	local ok, width = pcall(text.GetStringWidth, text)
+	if ok and ns.Finite(width) and width > 0 and frame then
+		pcall(frame.SetWidth, frame, math.ceil(width))
+	end
+end
+
+-- The tooltip ---------------------------------------------------------------------------------------------------------------------------------
+
+-- The item in a slot: its icon (GetInventoryItemTexture) and its name in its quality's colour without the brackets of a link, else its link as it
+-- comes, else the slot's name.
 local function ItemName(slot)
 	local ok, link = pcall(_G.GetInventoryItemLink, "player", slot)
 	if ok and not ns.IsSecret(link) and type(link) == "string" and link ~= "" then
-		return link
+		local name = link:match("|h%[(.-)%]|h")
+		if not name or name == "" then
+			return link
+		end
+		local colour = link:match("^(|c%x%x%x%x%x%x%x%x)") or link:match("^(|cn[^:|]*:)") or ""
+		local okIcon, icon = pcall(_G.GetInventoryItemTexture, "player", slot)
+		local mark = ""
+		if okIcon and not ns.IsSecret(icon) and (type(icon) == "number" or (type(icon) == "string" and icon ~= "")) then
+			mark = ("|T%s:14|t "):format(tostring(icon))
+		end
+		return mark .. colour .. name .. (colour ~= "" and "|r" or "")
 	end
 	local word = _G[SLOT_WORDS[slot] or ""]
 	return not ns.IsSecret(word) and type(word) == "string" and word ~= "" and word or ("Slot %d"):format(slot)
@@ -208,10 +261,10 @@ local function Untip()
 	end
 end
 
--- Each item with its percent, All items and the repair cost. Not in a fight.
+-- Each item with its percent, All items and the repair cost, and first, while any item is broken, a red line that says how many. Not in a fight.
 local function Say()
 	local tip, frame = Tooltip(), state.frame
-	local items = Wanted() and Items() or nil
+	local items = Wanted() and not NoWear() and Items() or nil
 	if InCombatLockdown() or not (tip and frame and items) or not pcall(tip.SetOwner, tip, frame, "ANCHOR_RIGHT") then
 		return
 	end
@@ -220,6 +273,14 @@ local function Say()
 		word = "Durability"
 	end
 	pcall(tip.AddLine, tip, word, 1, 1, 1)
+	local broken = 0
+	for _, item in ipairs(items) do
+		broken = broken + (item.percent <= 0 and 1 or 0)
+	end
+	if broken > 0 then
+		pcall(tip.AddLine, tip, ("%d %s broken: no stats until repaired"):format(broken, broken == 1 and "item" or "items"), RED[1], RED[2], RED[3],
+			true)
+	end
 	if #items == 0 then
 		pcall(tip.AddLine, tip, "Nothing you wear wears out.", DIM[1], DIM[2], DIM[3], true)
 	else

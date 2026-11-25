@@ -1608,9 +1608,12 @@ ns.PAGES = {
 			choices = { { "game", "As the game sorts" }, { "other", "From the other end" } } },
 		{ section = "Character window" },
 		{ key = "durability", kind = "bool", default = true, label = "Show durability",
-			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below. Point at it for each item, lowest first, and about what a repair costs." },
+			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below, and red while an item is broken, yellow while one is at 20% or less. Point at it for each item with its icon, lowest first, and about what a repair costs. Not where gear does not wear out." },
 		{ key = "thorns", kind = "bool", default = true, label = "Show thorns",
-			tip = "The damage an attacker takes each time it strikes you in melee, one total under the right column of slots: Thorns, Retribution Aura, Fire Shield, items and shield spikes (on a block). Point at it for each source and school." },
+			tip = "The damage an attacker takes each time it strikes you in melee, one total under the right column of slots: Thorns, Retribution Aura, Fire Shield, items and shield spikes (on a block). Point at it for each source and school. It shows only while something deals such damage." },
+		-- CharacterThorns.lua: keeps the grey line while the total is 0 (0.5.35).
+		{ key = "thornsZero", kind = "bool", default = false, label = "Also at 0", needs = "thorns",
+			tip = "Shows Thorns 0 in grey while nothing deals damage to attackers." },
 		-- StatTips.lua and StatTipsMore.lua: plain lines after the game's own in the tooltip of each stat of the Character window's stats list.
 		{ key = "statTips", kind = "bool", default = true, label = "Explain the stats", changed = "StatTipsChanged",
 			tip = "Point at a stat on the Character window for a few plain lines under the game's own, in your numbers now: what it does for you, against an enemy of your level and a boss three levels above (from level 60, or as Against on the Gear comparison page names one), and what to aim for. Defense shows what 100 melee swings of each do to you (missed, dodged, parried, blocked, crits, crushing blows and normal hits) and how far you are from 440 defense, for no crits from a raid boss, and from 100% avoided, for no crushing blows. Block says how much one block stops and where it comes from; armor and resistances what share of the damage they take off. In a fight, the numbers from before it." },
@@ -2329,6 +2332,9 @@ ns.PAGES = {
 		{ key = "inputIdle", kind = "number", default = 35, min = 0, max = 100, step = 5, unit = "%", label = "Input box opacity when idle" },
 		{ key = "inputFocus", kind = "choice", default = "type", label = "Border while typing", needs = "editbox",
 			choices = { { "type", "Chat type colour" }, { "accent", "Highlight colour" }, { "plain", "Plain border" } } },
+		-- Chat.lua (Arrows): the input box's arrow key mode, a widget method (0.5.35).
+		{ key = "arrows", kind = "bool", default = true, label = "Arrow keys without Alt",
+			tip = "While you type, the arrow keys move the cursor and Up and Down bring back the lines you sent. Off, they turn and move your character as the game has it, and edit the text with Alt held." },
 		{ section = "Border and background" },
 		{ key = "lookOwn", kind = "bool", default = false, label = "Own border and background" },
 		{ key = "lookBorder", kind = "colour", default = "ff000000", label = "Border colour", needs = "lookOwn" },
@@ -2360,11 +2366,16 @@ ns.PAGES = {
 		{ key = "restoreLines", kind = "number", default = 50, min = 10, max = 200, step = 10, unit = " lines", label = "Lines to show again",
 			tip = "None older than an hour, and no more than three quarters of Lines kept per window, so that the other lines of a login stay in the window.", needs = "restore" },
 		{ key = "restoreChannels", kind = "bool", default = false, label = "Numbered channels too", tip = "General, Trade and the other numbered channels.", needs = "restore" },
+		-- ChatLinks.lua: a chat filter that puts the short label in place of the game's on numbered channel lines (0.5.35).
+		{ section = "Channels" },
+		{ key = "channelNames", kind = "choice", default = "short", label = "Channel names",
+			tip = "The label before a line of General, Trade, LocalDefense and the other numbered channels. A click on it still opens the channel.",
+			choices = { { "game", "As the game has it ([2. Trade - City])" }, { "short", "Number and name ([2. Trade])" } } },
 		{ section = "Links" },
 		{ key = "webLinks", kind = "bool", default = true, label = "Web addresses as links",
 			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy." },
 		{ key = "linkTips", kind = "bool", default = true, label = "Tooltips of chat links",
-			tip = "While the mouse is over an item, spell or achievement link in a chat window, its tooltip shows. Not in a fight." },
+			tip = "While the mouse is over an item, spell, achievement or quest link in a chat window, its tooltip shows. Not in a fight." },
 	},
 	-- Tooltips, Spell tooltips and Gear comparison: rows of Chat and tooltips (saved as chat.*), each on a page of its own in the sidebar with the
 	-- switch of Chat and tooltips (Panel.lua, BuildModel).
@@ -2396,9 +2407,10 @@ ns.PAGES = {
 		{ key = "health", kind = "bool", default = true, label = "Health bar border and fill" },
 		{ key = "barTexture", kind = "choice", default = "default", label = "Bar texture", needs = "health", choices = "BarChoicesDefault" },
 		{ key = "barHide", kind = "bool", default = false, label = "Hide the health bar" },
-		{ key = "barHeight", kind = "number", default = 8, min = 2, max = 16, step = 1, unit = " px", label = "Health bar height" },
-		{ key = "barText", kind = "choice", default = "pct", label = "Health text on the bar",
-			tip = "The health of the unit in a small outlined text on the tooltip's health bar, kept up to date while you point at the unit, also in a fight.",
+		{ key = "barHeight", kind = "number", default = 8, min = 2, max = 16, step = 1, unit = " px", label = "Health bar height",
+			needs = "barHide", needsIn = { false } },
+		{ key = "barText", kind = "choice", default = "pct", label = "Health text on the bar", needs = "barHide", needsIn = { false },
+			tip = "The health of the unit in a small outlined text on the tooltip's health bar, kept up to date while you point at the unit, also in a fight. Its size follows Health bar height, and a bar under 5 px has none; a dead unit reads Dead.",
 			choices = { { "none", "None" }, { "pct", "Percent" }, { "curmax", "Current / max" }, { "curpct", "Current and percent" } } },
 	},
 	{
@@ -2436,9 +2448,14 @@ ns.PAGES = {
 			choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } } },
 		{ key = "enchantId", kind = "bool", default = true, label = "Temporary enchant ID", tip = "On a weapon you wear: the ID of its poison, oil, stone or imbue.", needs = "ids" },
 		{ key = "count", kind = "bool", default = true, label = "Item count in bags and bank" },
+		-- Chat.lua (ItemLevelLine): a gold line under the game's own lines of a weapon or a piece of armour (0.5.35).
+		{ key = "itemLevel", kind = "bool", default = true, label = "Item level", tip = "On armor and weapons, as Item level 63 in gold, also in the comparison beside them." },
 		{ key = "icons", kind = "bool", default = true, label = "Item and spell icons",
 			tip = "The icon before the name of an item, a spell, a buff or a debuff: not on the target and focus frames, whose buff tooltip is the game's own." },
-		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you." },
+		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you, in red while it is a unit you can attack." },
+		-- ChatTips.lua (TargetedBy): the targets of the party or raid members (0.5.35).
+		{ key = "targetedBy", kind = "bool", default = true, label = "Who in your group targets it",
+			tip = "In a party or raid, a grey line under a unit's tooltip naming the members whose target it is, in their class colours: at most six, then +N." },
 		{ section = "Item comparison" },
 		{ key = "compareShift", kind = "bool", default = true, label = "Compare items only while holding Shift",
 			tip = "The items you wear show beside the tooltip of an item only while you hold Shift. Sets a game setting that the game's options do not show. Turned off, the game's own value is back." },
@@ -2461,6 +2478,9 @@ ns.PAGES = {
 		-- serve the window (design 2.5: the low rank factor while its row is on).
 		{ key = "spellLowRank", kind = "bool", default = true, label = "Less for low ranks (estimate)",
 			tip = "On WoW: Forever a rank far below your level gets less of your spell damage and healing. Blizzard gave no formula, so Flat UI uses an estimate from players' tests on heals up to level 30: in full for 17 levels after the rank is learned, then 5% less a level. Marked ~." },
+		-- SpellLines.lua: one line after the spell lines with the rank after the one shown, from the rank's level in SpellData.lua (0.5.35).
+		{ key = "spellNextRank", kind = "bool", default = true, label = "Next rank",
+			tip = "On a spell with more ranks: the level of the next rank, as Next rank: Rank 6 at level 32, or in green that you can learn it now. Not at the top rank or once you know a higher one, nor on talents, pet spells and judgements." },
 		{ key = "spellThreat", kind = "choice", default = "special", label = "Threat lines",
 			choices = { { "special", "Where threat is special or changed" }, { "all", "On every spell" }, { "off", "Off" } },
 			tip = "Where threat is special or changed: abilities with threat of their own, and spells whose threat your stance, form, Righteous Fury, talents or gear change, with what changes it; not a damage dealer's Battle Stance or Cat Form, nor heals at the usual half a point a point healed. Stances, forms and Righteous Fury say what their own text does not. A spell whose threat on WoW: Forever is not known, such as Whirlwind, Execute, Power Word: Shield and the absorbs, gets no line." },

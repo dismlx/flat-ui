@@ -11,7 +11,9 @@ local _, ns = ...
 -- stats list is not touched: the text is this addon's, on a frame of its own made out of a fight on the item frame of the character page
 -- (PaperDollItemsFrame, PaperDollFrame.xml:777), so it shows only on that page, as CharacterDurability.lua's does. Pointing at the line lists
 -- each source with its school, the spike, the total and the total of each school in GameTooltip (SetOwner, AddLine, AddDoubleLine, Show, and
--- Hide only while IsOwned says the frame owns it), never in a fight, as the Compare gear button's tooltip.
+-- Hide only while IsOwned says the frame owns it), never in a fight, as the Compare gear button's tooltip. Since 0.5.35 the line shows only while
+-- something deals damage to attackers (a total above 0 or a shield spike); with nothing, its text hides and its frame stops answering the mouse,
+-- unless Also at 0 (windows.thornsZero, off by default) keeps the grey "Thorns 0". The frame itself stays, so the reads below go on.
 -- What is read, only what the client gives addon code:
 --   The worn items' tooltip lines (ns.GearModel.TipLines, C_TooltipInfo.GetInventoryItem, TooltipInfoDocumentation.lua:389-405, the lines the
 --   Gear comparison reads): a line that says an attacker that strikes you takes a number of damage of a school ("Equip: When struck in combat
@@ -33,6 +35,8 @@ local _, ns = ...
 -- settings.
 
 local KEY, PART, ROW = "windows", "thorns", "windows.thorns"
+-- Also at 0 (0.5.35, off by default): the grey "Thorns 0" while nothing deals damage to attackers.
+local ZERO = "windows.thornsZero"
 local FONT = "GameFontHighlightSmall"
 -- The frame lies this far under the second trinket slot, and where the slot is not found, this far from the bottom left of the page.
 local GAP, FALLBACK_X, FALLBACK_Y = -12, 24, 24
@@ -397,6 +401,13 @@ local function Update()
 	end
 	local read = Read()
 	state.read = read
+	-- Nothing deals damage to attackers: no line unless Also at 0 is on, and no empty spot that answers the mouse. The frame stays shown, so
+	-- its events still come and a Thorns buff gained while the page is open brings the line back within REREAD.
+	if read.total <= 0 and not read.spike and ns.Get(ZERO) ~= true then
+		pcall(text.Hide, text)
+		pcall(frame.EnableMouse, frame, false)
+		return
+	end
 	local colour = (read.total > 0 or read.spike) and WHITE or NONE
 	pcall(text.SetTextColor, text, colour[1], colour[2], colour[3], 1)
 	-- The spike follows the total only where both fit; the text is never wider than the room, and is cut with an ellipsis where it would be.
@@ -411,6 +422,8 @@ local function Update()
 	pcall(text.SetWidth, text, width)
 	pcall(frame.SetWidth, frame, width)
 	pcall(text.Show, text)
+	pcall(frame.EnableMouse, frame, true)
+	pcall(frame.SetMouseClickEnabled, frame, false)
 end
 
 -- A read a moment from now, once, while the page shows.
