@@ -8,6 +8,10 @@ local _, ns = ...
 -- (EllesmereUINameplates/EllesmereUINameplatesFriendly.lua:1813-1818). Hit testing is clamped to the plate (NamePlateManagerDocumentation.lua:51),
 -- so extra width and height reach only as far as the plate. Nothing is hooked on a plate: the game's own per-plate area (UpdateHitTestArea)
 -- stays as it is, and the insets widen, narrow or remove it. A row at its default makes no call the game did not make.
+-- The insets are the game's, set per kind of plate, and no part of the look, so the rows work on friendly plates whether or not Restyle friendly
+-- nameplates is on. With Where friendly nameplates are clicked through at In dungeons and raids, friendly plates are clicked through only while
+-- IsInInstance says a party or raid instance; PLAYER_ENTERING_WORLD and ZONE_CHANGED_NEW_AREA set the area again as you zone (after the fight when
+-- you zone in one, as every change of the area waits for).
 
 local KEY = "nameplates"
 local PART = "nameplate click area"
@@ -51,16 +55,28 @@ local function Say(text)
 	end
 end
 
+-- True while the player is in a dungeon or a raid (IsInInstance: a plain true and the instance type party or raid).
+local function Inside()
+	if type(IsInInstance) ~= "function" then
+		return false
+	end
+	local ok, inside, kind = pcall(IsInInstance)
+	return ok and Plain(inside, "boolean") and inside and Plain(kind, "string") and (kind == "party" or kind == "raid") or false
+end
+
 -- Sets the area of both kinds. Out of combat only.
 local function Apply(force)
 	local types = Plain(Enum, "table") and Plain(Enum.NamePlateType, "table") and Enum.NamePlateType
 	local manager = C_NamePlateManager
 	local live = ns.Enabled(KEY) and not ns.IsStopped(KEY) and not ns.PartStopped(KEY, PART)
 	local rows, any = {}, false
+	local inside = Inside()
 	for i, kind in ipairs(KINDS) do
-		local on = live and (not kind.friendly or Opt("friendly"))
-		local through = on and Opt(kind.through) or false
-		local dx, dy = on and Opt("clickExtraX") or 0, on and Opt("clickExtraY") or 0
+		local through = live and Opt(kind.through) or false
+		if through and kind.friendly and Opt("clickThroughFriendlyWhere") == "instances" and not inside then
+			through = false
+		end
+		local dx, dy = live and Opt("clickExtraX") or 0, live and Opt("clickExtraY") or 0
 		rows[i] = { through = through, dx = dx, dy = dy }
 		if through or dx ~= 0 or dy ~= 0 then
 			any = true
@@ -113,3 +129,12 @@ local function Queue(force)
 end
 
 EXTRA.refresh[#EXTRA.refresh + 1] = Queue
+
+-- Zoning in or out: friendly plates take the area of the place while friendly plates are clicked through only in dungeons and raids.
+local function Zoned()
+	if Opt("clickThroughFriendly") == true and Opt("clickThroughFriendlyWhere") == "instances" then
+		Queue()
+	end
+end
+ns.AddEvent(KEY, "PLAYER_ENTERING_WORLD", Zoned)
+ns.AddEvent(KEY, "ZONE_CHANGED_NEW_AREA", Zoned)
