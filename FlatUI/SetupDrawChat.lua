@@ -7,7 +7,8 @@ local _, ns = ...
 -- functions the modules paint with (ns.Outline, ns.SetOutlineFill, ns.TipShades, ns.FontFile, ns.OutlineFlags, ns.FlatFill, ns.BarTexture,
 -- ns.CombatOffsets, ns.CombatPopHeight, ns.CombatOwnEdge, ns.CombatColour, ns.CombatFont, and for the two scroll areas ns.ScrollLane, ns.ScrollPath,
 -- ns.ScrollAlpha and ns.ScrollSize). mock-combat-text draws the numbers over an enemy plate and over friendly units, the Incoming area's numbers
--- on you and, right of them, the Outgoing area's column of your hits, kept whole inside the picture.
+-- on you and, right of them, the Outgoing area's column of your hits, kept whole inside the picture; it shows in setup and in the options
+-- window's preview band above every Combat text tab (PanelPreview.lua), each stage with its own marks (partsOf).
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
@@ -943,10 +944,18 @@ do
 			bySchool = ns.Get("combattext.school") == true })
 	end
 
-	local drawing = { draw = Draw, parts = {} }
+	-- Each stage (setup's and the options window's preview band) keeps its own marks, so neither outlines the other's numbers; drawing.parts
+	-- stays those of the first stage built.
+	local drawing = { draw = Draw }
+	function drawing.partsOf(stage)
+		local S = instances[stage]
+		return S and S.parts
+	end
 	drawing.build = function(stage)
 		local S = Build(stage)
-		local p = drawing.parts
+		local p = {}
+		S.parts = p
+		drawing.parts = drawing.parts or p
 		p.enemy, p.own, p.plate = S.enemy[1], S.own[1], S.plate
 		for _, key in ipairs({ "font", "outline", "shadow", "pop", "size", "spread", "movement", "partial", "school", "style", "classicColour", "classicSigns",
 			"classicRise", "classicTime", "classicStack" }) do
