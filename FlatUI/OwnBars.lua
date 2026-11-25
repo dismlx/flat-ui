@@ -13,7 +13,8 @@ local _, ns = ...
 -- snippet that fires no event.
 -- Quick Keybind Mode (the game's Key Bindings) works on the game's own buttons: while it is open the game's eight bars are given back where they
 -- are (alpha 1, the mouse on) and Flat UI's are hidden, out of combat; as it closes, or just before a fight starts, the game's bars are parked
--- again and Flat UI's shown. A mode opened in a fight waits for its end.
+-- again and Flat UI's shown. A mode opened in a fight waits for its end. A fight that starts while the mode is open says so in one chat line: Flat
+-- UI's buttons are back for the fight and the game's show again when it ends, or, when the lockdown came first, that the game's stay for the fight.
 
 -- Flat UI bar n: the game bar and its buttons, the key command of the buttons, the slot before the first one.
 local BAR = {
@@ -768,7 +769,14 @@ function F.Event(event, name)
 		return
 	elseif event == "PLAYER_REGEN_DISABLED" then
 		S.fight = true
+		local held = S.kbHeld
 		F.KeybindEnd()
+		-- One chat line says what the fight does to Quick Keybind Mode's buttons; kbTold stays, so the reopening after it says nothing more.
+		if held and not S.kbHeld then
+			print("Flat UI: your action buttons are back for the fight; the game's show again for Quick Keybind Mode when it ends.")
+		elseif held then
+			print("Flat UI: the game's action buttons stay for this fight; Flat UI's come back after it.")
+		end
 		return
 	end
 	if not S.built then

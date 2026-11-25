@@ -29,7 +29,8 @@ local _, ns = ...
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
 -- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours. Fade the block: the alpha of each
 -- held frame (SetAlpha, which the game allows in a fight) eases to the faded value over Fade time, once the block has not been wanted for Wait
--- before fading, and back to full in a tenth of a second when it is: in a fight, under the mouse (over its own block),
+-- before fading, and back to full in a tenth of a second when it is: in a fight, under the mouse (over its own block), with a target (Full
+-- opacity with a target, off by default; UnitExists("target"), a withheld answer counting as a target, read at each pass of the fade),
 -- with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
 -- child of the totem bar that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107,
 -- MultiCastActionBarFrame.lua:637-641). The arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while
@@ -558,7 +559,15 @@ local function FlyoutOpen()
 end
 
 local function Full(plan)
-	return (Opt("fadeCombat") and InCombatLockdown()) or (Opt("fadeMouse") and Under(plan)) or Holding() or FlyoutOpen()
+	if (Opt("fadeCombat") and InCombatLockdown()) or (Opt("fadeMouse") and Under(plan)) or Holding() or FlyoutOpen() then
+		return true
+	end
+	-- Full opacity with a target: a withheld answer counts as a target, as on the Fading page (Fade.lua, HasTarget).
+	if Opt("fadeTarget") and type(UnitExists) == "function" then
+		local ok, exists = pcall(UnitExists, "target")
+		return ok and (ns.IsSecret(exists) or exists == true)
+	end
+	return false
 end
 
 -- The alpha of a frame, or 1 when the client does not say.

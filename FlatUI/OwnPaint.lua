@@ -3,10 +3,12 @@ local _, ns = ...
 -- The paint of Flat UI's own action buttons (design 3.4, 3.6, 3.7, 6.3, research/own-buttons/design.md). OwnBars.lua makes the buttons; this file works out
 -- what each one shows from the slot it holds and draws it: icon, count, macro name, hotkey, cooldown, charges, loss of control, usable and range colours,
 -- checked, the blink of Attack while it swings and of Auto Shot or Shoot while it repeats (the button's Flash texture, on and off every 0.4 s, as on the
--- game's buttons), equipped, proc, empty-slot opacity, the pressed look from a key, the tooltip (set again when a modifier key goes down or up) and the
--- repaint after a click. The look modules colour through painters (ns.OwnPainter) and take proc changes through ns.OnOwnProc; nothing here hooks a function of
+-- game's buttons), equipped, proc, empty-slot opacity, the pressed look from a key, the tooltip (set again every 0.2 s while it is up, as the game's buttons
+-- set theirs, so a cooldown remaining counts down, and at once when a modifier key goes down or up) and the repaint after a click. The look modules colour through painters (ns.OwnPainter) and take proc changes through ns.OnOwnProc; nothing here hooks a function of
 -- the game. ns.OnOwnReady tells them when a cooldown longer than the global cooldown has ended on a button (Flash when ready, ButtonStates.lua): seen
--- between two passes, or as the button's own cooldown frame finishes its swipe (OnCooldownDone, hooked on Flat UI's own frame), once a cooldown.
+-- between two passes, or as the button's own cooldown frame finishes its swipe (OnCooldownDone, hooked on Flat UI's own frame), once a cooldown. When
+-- the global cooldown outlasts the end of such a cooldown, the action reads as on the global cooldown while it still cools; the call then waits for
+-- the end of that sweep, when the button really is ready.
 -- Calls on a button are plain ones (textures, text, alpha, SetChecked, Cooldown calls), so a pass in a fight touches nothing protected. Flat UI writes no
 -- field on a button: every table here is keyed by the button. The game's twins and OverrideActionBar are only read.
 -- Never called on a button, a twin or a game table: Update, UpdateAction, UpdateFlyout, SetShowGrid, RegisterActionUIButton, ShowAlert and
@@ -62,6 +64,9 @@ local P = {
 	ready = {},
 	-- true while a pass sets or clears a cooldown frame, whose OnCooldownDone is then not a cooldown that ended
 	sweeping = false,
+	-- tip: the Flat UI button whose tooltip is up, set again every TOOLTIP_UPDATE_TIME (tipClock) while it owns GameTooltip; nil when none
+	tip = nil,
+	tipClock = 0,
 	list = {},
 	keys = {},
 	grid = false,
@@ -378,9 +383,12 @@ end
 -- Cooldown, charges and loss of control by duration objects. isActive and isOnGCD are never withheld; the other fields are never read.
 function STEP.cooldown(button, st)
 	local was = WasLong(st)
+	if st.cdSlot ~= st.slot or st.cdTexture ~= st.texture then
+		st.cdWait = nil
+	end
 	st.cdSlot, st.cdTexture = st.slot, st.texture
 	if not st.has then
-		st.cdActive, st.cdOnGCD = false, false
+		st.cdActive, st.cdOnGCD, st.cdWait = false, false, nil
 		P.sweeping = true
 		local ok, err = pcall(ClearSweeps, button)
 		P.sweeping = false
@@ -395,10 +403,17 @@ function STEP.cooldown(button, st)
 	st.cdActive = type(cooldown) == "table" and Bool(cooldown.isActive) == true
 	st.cdOnGCD = type(cooldown) == "table" and Bool(cooldown.isOnGCD) == true
 	local long = st.cdActive and not st.cdOnGCD
-	if was and not long then
+	if was and not long and st.cdActive then
+		-- The global cooldown outlasts what was left of the cooldown, so the action reads as on the global cooldown while the button still cools:
+		-- Ready waits for the real end (cdWait), seen by a later pass or as the swipe finishes (CooldownDone).
+		st.cdWait = true
+	elseif was and not long then
+		Ready(button, st)
+	elseif st.cdWait and not st.cdActive then
+		st.cdWait = nil
 		Ready(button, st)
 	elseif long and not was then
-		st.cdFired = false
+		st.cdFired, st.cdWait = false, nil
 	end
 	P.sweeping = true
 	local ok, err = pcall(Sweep, button.cooldown, st.cdActive and not replace, "GetActionCooldownDuration", slot)
@@ -594,26 +609,58 @@ local function ShowTip(button)
 	if not placed and not pcall(tip.SetOwner, tip, button, "ANCHOR_RIGHT") then
 		return
 	end
-	local ok, err = pcall(tip.SetAction, tip, slot)
+	local ok, answer = pcall(tip.SetAction, tip, slot)
 	if not ok then
-		Failed("tooltip", err)
+		Failed("tooltip", answer)
 	end
+	-- As the game's button, the tooltip is set again while it is up only when SetAction gave one (ActionButton.lua:1125-1129).
+	P.tip, P.tipClock = (ok and Bool(answer) ~= false) and button or nil, 0
 end
 
 local function HideTip(button)
 	local tip = GameTooltip
+	if rawequal(P.tip, button) then
+		P.tip = nil
+	end
 	if tip ~= nil and Owns(tip, button) then
 		pcall(tip.Hide, tip)
 	end
 end
 
--- The swipe of a button's cooldown finished: a cooldown longer than the global one has ended (Ready), and the button is painted again on the next frame.
+-- Every TOOLTIP_UPDATE_TIME (0.2 s) while a Flat UI button owns the shown GameTooltip, its tooltip is set again through the same calls as OnEnter, as
+-- the game's tooltip does for the game's buttons (GameTooltip.lua:450-463, owner:UpdateTooltip): the cooldown remaining counts down and the red lines
+-- (not enough mana, out of range) follow. No field is written on the button and RefreshData is not called. Another owner, or a hidden tooltip, ends it.
+local function TipTick(elapsed)
+	if P.tip == nil then
+		return
+	end
+	P.tipClock = P.tipClock + elapsed
+	local every = Plain(TOOLTIP_UPDATE_TIME, "number") and TOOLTIP_UPDATE_TIME > 0 and TOOLTIP_UPDATE_TIME or 0.2
+	if P.tipClock < every then
+		return
+	end
+	P.tipClock = 0
+	local tip, button = GameTooltip, P.tip
+	local okShown, shown = false, nil
+	if tip ~= nil then
+		okShown, shown = pcall(tip.IsShown, tip)
+	end
+	if okShown and Bool(shown) == true and Owns(tip, button) then
+		ShowTip(button)
+	else
+		P.tip = nil
+	end
+end
+
+-- The swipe of a button's cooldown finished: a cooldown longer than the global one has ended (Ready), also one whose end the global cooldown covered
+-- (cdWait), and the button is painted again on the next frame.
 local function CooldownDone(button)
 	if P.sweeping then
 		return
 	end
 	local st = P.state[button]
-	if st ~= nil and st.cdActive == true and st.cdOnGCD ~= true then
+	if st ~= nil and (st.cdWait == true or (st.cdActive == true and st.cdOnGCD ~= true)) then
+		st.cdWait = nil
 		Ready(button, st)
 	end
 	P.queue[button] = true
@@ -766,10 +813,10 @@ end
 function H.UPDATE_SHAPESHIFT_FORM() All() end
 function H.PLAYER_MOUNT_DISPLAY_CHANGED() All() end
 
--- A modifier key went down or up: the tooltip of the Flat UI button that owns it is set again, through the same calls as OnEnter. The game's buttons
--- set theirs again every 0.2 s (UpdateTooltip, ActionButton.lua:1114-1130, GameTooltip.lua:451-463); a Flat UI button has no UpdateTooltip, so
--- without this a line that waits for a key (Show IDs of ChatTips.lua, the comparison of an item, a macro's [mod] choice) would not follow the key.
--- A hidden tooltip has no owner and is left alone.
+-- A modifier key went down or up: the tooltip of the Flat UI button that owns it is set again at once, through the same calls as OnEnter, so a line
+-- that waits for a key (Show IDs of ChatTips.lua, the comparison of an item, a macro's [mod] choice) follows the key before the next 0.2 s setting of
+-- TipTick, which does what the game's buttons do with UpdateTooltip (ActionButton.lua:1114-1130, GameTooltip.lua:451-463); a Flat UI button has no
+-- UpdateTooltip. A hidden tooltip has no owner and is left alone.
 function H.MODIFIER_STATE_CHANGED()
 	local tip = GameTooltip
 	if tip == nil then
@@ -883,6 +930,7 @@ local function OnUpdate(_, elapsed)
 		Sync()
 	end
 	Blink(elapsed)
+	TipTick(elapsed)
 	if P.pending then
 		P.pending = false
 		local queue = P.queue
