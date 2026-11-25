@@ -245,10 +245,10 @@ local LIST = {
 	{ name = "FlatUIBank", label = "Flat UI bank", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 420, height = 300, x = 25, y = -110,
 		gate = "BankWindowShown", changed = "BankWindowMoved" },
 	-- The pet target frame (UnitPetTarget.lua), which the game shows while the pet has a target: its top left corner is the top left corner of the box,
-	-- which has the room of the frame at the default width, right of the pet frame where the game's default layout puts it. A secure frame: it
-	-- takes a spot out of combat.
+	-- which is as wide as Pet target width (widthFrom, 120 at the default) and starts right of the pet frame where the game's default layout puts it.
+	-- The box keeps its bottom middle as the width changes, so the frame grows from its middle too. A secure frame: it takes a spot out of combat.
 	{ name = "FlatUIPetTarget", label = "Pet target", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 120, height = 20, x = -246, y = 238,
-		gate = "PetTargetShown", changed = "PetTargetMoved" },
+		widthFrom = "unitframes.petTargetWidth", gate = "PetTargetShown", changed = "PetTargetMoved" },
 	-- The hit table (HitTable.lua): its box is the table's own frame, and its spot is its top left corner, which stays where it is as lines come and
 	-- go. With no spot saved it hangs under the player frame, under the pet frame and the totems the game hangs there.
 	{ name = "FlatUIHitTable", label = "Hit table", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "HitTableRow",
@@ -819,6 +819,13 @@ end
 -- the least size winning on a screen smaller than it; with no size kept, or one that is no pair of numbers, its entry's.
 local function BoxSize(info)
 	local width, height = info.width, info.height
+	-- An own frame whose width is a setting (widthFrom, a saved path) has a box of that width; the handles look again four times a second.
+	if info.widthFrom then
+		local wide = ns.Get(info.widthFrom)
+		if Number(wide) and wide > 0 then
+			width = wide
+		end
+	end
 	local character = info.sized and ns.Character and ns.Character()
 	local kept = type(character) == "table" and character[info.sized] or nil
 	if type(kept) ~= "table" or ns.IsSecret(kept) then

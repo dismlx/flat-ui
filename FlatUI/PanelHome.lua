@@ -4,7 +4,7 @@ local _, ns = ...
 -- with their switches, and the changes that need a reload. A recent change says what it was, from the value before to the value now ("Off to On",
 -- "300 ms to 450 ms"), in the words of the reset arrow's tooltip (ns.PanelTrust.ValueText), and its Undo names the value it puts back. A click on a
 -- recent change or on a line of Needs a reload opens the tab of its setting, scrolls to the row and flashes it, as a search result does
--- (host.Arrive). Also the record of the changes made in the window, which Panel.lua feeds.
+-- (host.Arrive). Also the record of the changes made in the window, which Panel.lua feeds; Ctrl+Z on any page puts back the newest (Home.UndoNewest).
 
 local Home = {}
 ns.PanelHome = Home
@@ -82,6 +82,22 @@ function Home.Undo(entry)
 		end
 	end
 	ns.Set(entry.item.path, entry.old)
+end
+
+-- Ctrl+Z on the options pages (Panel.lua, BuildKeys): the newest change of Log goes back, as its Undo does, and each press goes one change further
+-- back. Returns what the strip says.
+function Home.UndoNewest()
+	local entry = Home.Log()[1]
+	if not entry then
+		return "Nothing to undo."
+	end
+	local old = ns.PanelTrust and ns.PanelTrust.ValueText(entry.item, entry.old) or "changed"
+	local label = type(entry.item.label) == "string" and entry.item.label or "a setting"
+	Home.Undo(entry)
+	if old == "changed" then
+		return ("Undid %s."):format(label)
+	end
+	return ("Undid %s: back to %s."):format(label, old)
 end
 
 -- A change made on Home goes into the record like the same change on the Flat UI page: with the row of Config.lua of the key.
@@ -448,7 +464,7 @@ function Home.Build(host)
 		undo:HookScript("OnEnter", function()
 			if line.entry then
 				local old = ns.PanelTrust.ValueText(line.entry.item, line.entry.old)
-				kit.Tip(old == "changed" and "Puts back the value before this change." or ("Puts back: " .. old))
+				kit.Tip((old == "changed" and "Puts back the value before this change." or ("Puts back: " .. old)) .. " Ctrl+Z puts back the newest change.")
 			end
 		end)
 		undo:HookScript("OnLeave", function()
