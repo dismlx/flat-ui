@@ -53,8 +53,9 @@ local _, ns = ...
 -- written as fully as the room left allows, the word Free left out first.
 -- The row above the bank window's footer, at the live bank only, is BagsBank.lua's (B.Bank.Slots), as high and as wide as that file says. A bank
 -- never seen says how to keep one. The row above the bag window's footer, while it shows the player's own live bags and Bag slots is on, is the
--- bag slots of BagsSlots.lua (B.Slots.Row): the backpack, the four bags and the reagent bag, to put a bag in or swap one. Either row stands a
--- little apart from the content under a thin line of the separators' look, so its slots never read as one more row of the keyring or a bag.
+-- bag slots of BagsSlots.lua (B.Slots.Row): the backpack, the four bags, the reagent bag and the keyring, to put a bag in or swap one. Either
+-- row stands a little apart from the content under a thin line of the separators' look, so its slots never read as one more row of the keyring
+-- or a bag.
 -- Escape closes either window: both are named in UISpecialFrames, as the options window is (Panel.lua:2700-2708), whose windows the game's
 -- CloseSpecialWindows hides (UIParentPanelManager.lua:21-27). Whatever hid a window (its close button, a key, Escape, the page going off), its
 -- OnHide ends what is the window's own: a drag (where it was let go is kept), the keyboard of the search box, a menu and the busy sort button.
