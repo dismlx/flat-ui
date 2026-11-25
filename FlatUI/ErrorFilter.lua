@@ -36,6 +36,11 @@ local _, ns = ...
 -- while stunned." and the like (LE_GAME_ERR_ATTACK_STUNNED, PACIFIED, FLEEING, CONFUSED and CHARMED, which Forever has: wowless wowf
 -- globals.yaml) and "Can't do that while stunned." and the like (the spell failures SPELL_FAILED_STUNNED, SILENCED, PACIFIED, FLEEING, CONFUSED,
 -- CHARMED and POSSESSED, matched by their words, each passed over where the client lacks it).
+-- Wrong stance or form (hud.errorForm, off by default) hides the messages of a key of a stance or form you are not in: "Must be in Battle
+-- Stance" and the like (LE_GAME_ERR_SPELL_FAILED_SHAPESHIFT_FORM_S, a formatted line, so it is matched by its type), "Can't do that while
+-- shapeshifted" and "Can't use items while shapeshifted" (ERR_NOT_WHILE_SHAPESHIFTED and ERR_NO_ITEMS_WHILE_SHAPESHIFTED: wowless wowf
+-- globals.yaml), and the spell failures SPELL_FAILED_NOT_SHAPESHIFT and ONLY_SHAPESHIFT by their words where the client has them. Talking to an
+-- NPC while shapeshifted (ERR_CANT_INTERACT_SHAPESHIFTED) still shows, so a player learns why it will not talk.
 -- This follows the error message filter of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (Submodules/UIErrors.lua). Only the
 -- kinds a character of the classic classes meets are offered, and the spell failures are added to them.
 
@@ -62,6 +67,8 @@ local KINDS = {
 	{ row = "errorControl", types = { "ERR_ATTACK_STUNNED", "ERR_ATTACK_PACIFIED", "ERR_ATTACK_FLEEING", "ERR_ATTACK_CONFUSED", "ERR_ATTACK_CHARMED" },
 		words = { "SPELL_FAILED_STUNNED", "SPELL_FAILED_SILENCED", "SPELL_FAILED_PACIFIED", "SPELL_FAILED_FLEEING", "SPELL_FAILED_CONFUSED",
 			"SPELL_FAILED_CHARMED", "SPELL_FAILED_POSSESSED" } },
+	{ row = "errorForm", types = { "ERR_SPELL_FAILED_SHAPESHIFT_FORM_S", "ERR_NOT_WHILE_SHAPESHIFTED", "ERR_NO_ITEMS_WHILE_SHAPESHIFTED" },
+		words = { "SPELL_FAILED_NOT_SHAPESHIFT", "SPELL_FAILED_ONLY_SHAPESHIFT" } },
 }
 -- The types whose repeat keeps the line that shows in place of a new one (UIErrorsFrame.lua:52-75, a local table of the game's file).
 local REPEATS = { "ERR_SPELL_FAILED_TOTEMS", "ERR_SPELL_FAILED_EQUIPPED_ITEM", "ERR_SPELL_ALREADY_KNOWN_S", "ERR_SPELL_FAILED_SHAPESHIFT_FORM_S",
