@@ -4,7 +4,9 @@ local _, ns = ...
 -- with their switches, and the changes that need a reload. A recent change says what it was, from the value before to the value now ("Off to On",
 -- "300 ms to 450 ms"), in the words of the reset arrow's tooltip (ns.PanelTrust.ValueText), and its Undo names the value it puts back. A click on a
 -- recent change or on a line of Needs a reload opens the tab of its setting, scrolls to the row and flashes it, as a search result does
--- (host.Arrive). Also the record of the changes made in the window, which Panel.lua feeds; Ctrl+Z on any page puts back the newest (Home.UndoNewest).
+-- (host.Arrive). Also the record of the changes made in the window, which Panel.lua feeds; Ctrl+Z on any page puts back the newest (Home.UndoNewest),
+-- and a whole Reset page in one press. A change whose value was taken away since (Reset profile, Copy from, an import, setup's Finish) is left off the
+-- list until the value comes back, and a renamed profile keeps its changes (Home.Renamed).
 
 local Home = {}
 ns.PanelHome = Home
@@ -40,37 +42,73 @@ local function Where(item)
 	return item.path:sub(1, 6) == "panel." and "" or ns.Profile()
 end
 
+-- Two values alike; a number the game holds can come back a hair off.
+local function Same(a, b)
+	if type(a) == "number" and type(b) == "number" then
+		return math.abs(a - b) <= 1e-6 * math.max(1, math.abs(b))
+	end
+	return a == b
+end
+
+-- True while the value a change made is still the setting's value: a reset, a copy, an import that replaces or setup's Finish can take it away.
+local function Stands(entry)
+	local ok, now = pcall(ns.Get, entry.item.path)
+	if not ok or ns.IsSecret(now) then
+		return true
+	end
+	return Same(now, entry.new)
+end
+
 -- A change made in the window: the setting, the profile it was saved in, the value it had and the value it has. A setting has one line: a new change
--- to it replaces the line and keeps the first value, so a slider that moves 20 times is one line, and a change back to the first value takes the line away.
-function Home.Noted(item, before, after)
+-- to it replaces the line and keeps the first value, so a slider that moves 20 times is one line, and a change back to the first value takes the line
+-- away. A line whose value was taken away meanwhile (Stands) is replaced without its first value. A change of a batch (Reset page: { label }) is a line
+-- of its own, merged with nothing, so the line of an earlier change of the setting waits under it, hidden while the reset stands (Log).
+function Home.Noted(item, before, after, batch)
 	if type(item) ~= "table" or not item.path or before == after then
 		return
 	end
 	local where = Where(item)
-	for index, entry in ipairs(log) do
-		if entry.item == item and entry.profile == where then
-			table.remove(log, index)
-			before = entry.old
-			break
+	if type(batch) == "table" then
+		table.insert(log, 1, { item = item, profile = where, old = before, new = after, batch = batch })
+	else
+		for index, entry in ipairs(log) do
+			if entry.item == item and entry.profile == where then
+				table.remove(log, index)
+				if Same(entry.new, before) then
+					before = entry.old
+				end
+				break
+			end
 		end
-	end
-	if before ~= after then
-		table.insert(log, 1, { item = item, profile = where, old = before, new = after })
+		if before ~= after then
+			table.insert(log, 1, { item = item, profile = where, old = before, new = after })
+		end
 	end
 	while #log > MAX do
 		table.remove(log)
 	end
 end
 
--- The changes made in the profile in use and in the window, newest first. A change made in another profile is not listed.
+-- The changes made in the profile in use and in the window, newest first. A change made in another profile is not listed, nor one whose value no
+-- longer stands (Reset profile, Copy from, an import, setup's Finish, a profile switch): Undo and Ctrl+Z cannot reach it, and it shows again when
+-- the value comes back.
 function Home.Log()
 	local list, profile = {}, ns.Profile()
 	for _, entry in ipairs(log) do
-		if entry.profile == "" or entry.profile == profile then
+		if (entry.profile == "" or entry.profile == profile) and Stands(entry) then
 			list[#list + 1] = entry
 		end
 	end
 	return list
+end
+
+-- A renamed profile keeps its changes (ns.RenameProfile, Core.lua).
+function Home.Renamed(old, new)
+	for _, entry in ipairs(log) do
+		if entry.profile == old then
+			entry.profile = new
+		end
+	end
 end
 
 -- Puts a setting back to the value it had before the change.
@@ -85,11 +123,22 @@ function Home.Undo(entry)
 end
 
 -- Ctrl+Z on the options pages (Panel.lua, BuildKeys): the newest change of Log goes back, as its Undo does, and each press goes one change further
--- back. Returns what the strip says.
+-- back. A Reset page goes back whole in one press, every row it reset. Returns what the strip says.
 function Home.UndoNewest()
-	local entry = Home.Log()[1]
+	local list = Home.Log()
+	local entry = list[1]
 	if not entry then
 		return "Nothing to undo."
+	end
+	if entry.batch then
+		local batch, count = entry.batch, 0
+		for _, other in ipairs(list) do
+			if other.batch == batch then
+				Home.Undo(other)
+				count = count + 1
+			end
+		end
+		return ("Undid %s: %d setting%s back."):format(batch.label or "Reset page", count, count == 1 and "" or "s")
 	end
 	local old = ns.PanelTrust and ns.PanelTrust.ValueText(entry.item, entry.old) or "changed"
 	local label = type(entry.item.label) == "string" and entry.item.label or "a setting"
@@ -203,7 +252,8 @@ local function Crumb(model, item)
 	return top.label .. " > " .. (ns.PanelTabs.Label(model, entry) or entry.label) .. (frame and " > " .. frame or "")
 end
 
-local function Users(name)
+-- How many characters use a profile; the profile in use counts this character at least. The title bar of the window says it too (Panel.lua).
+function Home.UserCount(name)
 	local db = ns.Account()
 	local count = 0
 	for _, used in pairs(type(db) == "table" and type(db.profileOf) == "table" and db.profileOf or {}) do
@@ -214,6 +264,11 @@ local function Users(name)
 	if count == 0 and name == ns.Profile() then
 		count = 1
 	end
+	return count
+end
+
+local function Users(name)
+	local count = Home.UserCount(name)
 	return count == 1 and "Used by 1 character" or ("Used by %d characters"):format(count)
 end
 
