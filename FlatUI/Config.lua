@@ -2008,7 +2008,7 @@ ns.PAGES = {
 			tip = "Gives each gathered button a square dark plate with a thin border in place of its round gold ring, and a light square when you point at it. A button you tick in Leave in place keeps its own art." },
 		-- MapText.lua draws these: lines of text above and below the map.
 		{ section = "Text around the map" },
-		{ key = "mapCoords", kind = "bool", default = true, label = "Coordinates", tip = "Your place on the zone map. Hidden in instances and where the game gives no position. Point at it for the zone and subzone; Shift-click puts the zone and coordinates in the chat box." },
+		{ key = "mapCoords", kind = "bool", default = true, label = "Coordinates", tip = "Your place on the zone map. Hidden in instances, where the game gives no position, and while the game's own coordinates show under the map (the game's Options, Interface, Coordinates), so you see one line; turn those off for this one. Point at it for the zone and subzone; Shift-click puts the zone and coordinates in the chat box." },
 		{ key = "mapCoordsPlace", kind = "choice", default = "below", label = "Coordinates place", needs = "mapCoords", choices = MAP_TEXT_PLACES },
 		{ key = "mapCoordsDecimals", kind = "choice", default = "1", label = "Coordinate decimals", needs = "mapCoords",
 			choices = { { "0", "None (45, 62)" }, { "1", "One (45.3, 62.1)" }, { "2", "Two (45.31, 62.08)" } } },
@@ -2074,7 +2074,8 @@ ns.PAGES = {
 		{ key = "xpOrder", kind = "choice", default = "xp", label = "Top bar", needs = "xpOwn", needsIn = { "flat" },
 			choices = { { "xp", "Experience" }, { "rep", "Reputation" } } },
 		{ key = "xpGap", kind = "number", default = 2, min = 0, max = 10, step = 1, unit = " px", label = "Space between bars", needs = "xpOwn", needsIn = { "flat" } },
-		{ key = "xpFrame", kind = "bool", default = true, label = "Bar border", tip = "Thin border around the bar. " .. KEPT_XP },
+		{ key = "xpFrame", kind = "bool", default = true, label = "Bar border",
+			tip = "Thin border around the bar, so its empty part reads as a bar. On Flat UI's bar it is drawn with Borderless on too. " .. KEPT_XP },
 		{ key = "xpBack", kind = "bool", default = true, label = "Bar background", needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpTicks", kind = "choice", default = "none", label = "Dividers", needs = "xpOwn", needsIn = { "flat" },
 			choices = { { "none", "None" }, { "4", "4" }, { "10", "10" }, { "20", "20" } } },
