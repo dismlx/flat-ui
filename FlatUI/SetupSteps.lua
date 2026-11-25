@@ -608,6 +608,8 @@ ns.SETUP_STEPS = {
 		{ "swing.reverse", "o", "mock-swing" },
 		{ "swing.autoShot", "c", "mock-swing" },
 		{ "swing.autoShotColour", "r", "mock-swing" },
+		{ "swing.queued", "o", "mock-swing" },
+		{ "swing.queuedColour", "r", "mock-swing" },
 		{ "swing.rangeAlpha", "r", "mock-swing" },
 		{ "swing.idle", "o", "mock-swing" },
 		{ "swing.textSize", "o", "mock-swing" },

@@ -12,7 +12,8 @@ local _, ns = ...
 --   the sizes and the place of the spell name of CastBarSize.lua:92-150, the rank after the spell name of CastRank.lua, and the tick marks of a
 --   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks), dim where the channel has passed them.
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
---   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530).
+--   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530), and the
+--   Queued ability colour of Q over the first main hand timer in the second half of each of its swings.
 -- Sizes and places of the game's own parts come from the client's interface source:
 --   Blizzard_UIPanels_Game/Mainline/CastingBarFrame.xml:198-204, 241-252, 313-318, 326-331 (player and pet bar: plate 12 below the bar, shield 29 by 33 at
 --   -27, 4, icon 16 by 16 at -5, spell name at the top -10, spark 8 by 20), CastingBarFrame.xml:399-452 (small bar: icon 20 by 20 at -2, -5, spark 6 by 16,
@@ -932,9 +933,11 @@ local function HandName(hand)
 	end
 	return SWING_TIMER_RANGED or "Ranged"
 end
--- Fixed samples: how far each timer has run at the start, and how long a swing lasts in seconds.
+-- Fixed samples: how far each timer has run at the start, and how long a swing lasts in seconds. The first main hand timer has a next melee
+-- ability queued over the second half of each swing (QUEUED_FROM of it), which lands with the swing.
+local QUEUED_FROM = 0.5
 local SWING_ROWS = {
-	{ hand = "main", note = "In range", part = 0.64, period = 2.6 },
+	{ hand = "main", note = "In range", part = 0.64, period = 2.6, queued = true },
 	{ hand = "off", note = "In range", part = 0.4, period = 2.6 },
 	{ hand = "ranged", note = "In range", part = 0.8, period = 3.2 },
 	{ hand = "main", note = "Out of range", part = 0.55, period = 2.6, out = true },
@@ -958,6 +961,13 @@ local function NewSwingTimer(inst, parent, spec)
 	-- The Auto Shot window on the ranged timer: the last half second of its swing, over the fill (Bars.lua, ApplyAutoShot).
 	if spec.hand == "ranged" then
 		row.band = NewTexture(row.bar, "ARTWORK", 7)
+	end
+	-- Queued ability colour over the fill of a main hand timer with spec.queued (Bars.lua, Q).
+	if spec.queued then
+		row.queued = NewTexture(row.bar, "ARTWORK", 6)
+		row.queued:SetPoint("TOPLEFT", row.fill, "TOPLEFT", 0, 0)
+		row.queued:SetPoint("BOTTOMRIGHT", row.fill, "BOTTOMRIGHT", 0, 0)
+		row.queued:Hide()
 	end
 	row.shadow = NewTexture(row.bar, "OVERLAY", 0)
 	row.shadow:SetPoint("TOPLEFT", row.bar, "TOPLEFT", 0, 0)
@@ -1016,6 +1026,7 @@ local function BuildSwing(stage)
 	p["swing.reverse"] = main.fill
 	p["swing.autoShot"] = ranged.band
 	p["swing.autoShotColour"] = ranged.band
+	p["swing.queued"], p["swing.queuedColour"] = main.queued, main.queued
 	p["swing.rangeAlpha"] = out.bar
 	p["swing.idle"] = idle.timer
 	for _, key in ipairs({ "textSize", "textOutline", "name", "textOwn", "textColour" }) do
@@ -1056,6 +1067,9 @@ local function SwingFill(row, look, run, left)
 	row.pip:SetShown(not spec.idle and look.spark)
 	if row.time then
 		row.time:SetText(("%.1f"):format(left))
+	end
+	if row.queued then
+		row.queued:SetShown(look.queued and not spec.idle and run >= QUEUED_FROM)
 	end
 end
 
@@ -1101,6 +1115,7 @@ local function SwingLook(frameW)
 	end
 	look.colour, look.atlas = colour, atlas
 	look.reverse = enabled and G("swing.reverse") == true
+	look.queued = enabled and G("swing.queued") == true
 	look.spark = not (flat and not G("swing.spark"))
 	look.percent = enabled and G("swing.textSize") or 100
 	look.outline = enabled and G("swing.textOutline") or nil
@@ -1140,6 +1155,16 @@ local function PaintSwingTimer(row, look)
 			row.band:SetWidth(look.barW * math.min(1, 0.5 / spec.period))
 		end
 		row.band:SetShown(shown)
+	end
+	if row.queued and look.queued then
+		-- The swing texture, else the Flat UI page's, else white, in Queued ability colour.
+		local file = ns.BarTexture(G("swing.texture"))
+		if file then
+			row.queued:SetTexture(file)
+		else
+			row.queued:SetColorTexture(1, 1, 1, 1)
+		end
+		row.queued:SetVertexColor(ns.Colour("swing.queuedColour"))
 	end
 	row.shadow:SetShown(not (look.flat and not G("swing.textShadow")))
 	local r, g, b = GAME_IN[1], GAME_IN[2], GAME_IN[3]
