@@ -18,6 +18,9 @@ local _, ns = ...
 -- combat, and in a fight nothing moves (K.Arrange). Hide while mounted or flying also hides them on a flight path (UnitOnTaxi). Tracker tooltips (Out of combat only by default) shows, with the mouse over a
 -- tracker on screen, its name, its state with the time left and charges, and a kind's own lines (a group buff: who lacks it); the frame takes no
 -- click, so a click goes through to the world, and a tracker that cannot be seen (a proc that is down, one the game's own icon hides) takes no mouse. Sound when it turns low plays the kit of Sound once as a tracker goes from fine to low.
+-- Out of combat, a change of a row of Look and position or of When missing shows every tracker that is on as its sample in the new look for 4
+-- seconds after the last change, and a change of a tracker's own look in Edit a tracker shows that tracker alone (K.Preview). A tracker you fix,
+-- low or missing to fine where the addon reads it, flashes green for 0.6 seconds and stays up for that time before Show takes it away (K.Fixed).
 
 local KEY = "trackers"
 -- The name of the row among the saved spots of the movers.
@@ -1225,10 +1228,12 @@ function ns.TrackerSet(index, word, text)
 	end
 	word = Plain(word, "string") and word:lower() or ""
 	text = Plain(text, "string") and text:match("^%s*(.-)%s*$") or ""
-	local function Done(message)
+	-- look: the saved key of a value of the look that changed, for its preview (K.OwnPreview).
+	local function Done(message, look)
 		edited = true
 		QueueLayout()
 		Dirty()
+		K.OwnPreview(entry, look)
 		return true, message
 	end
 	if word == "clear" and text == "" then
@@ -1279,7 +1284,7 @@ function ns.TrackerSet(index, word, text)
 	end
 	if text:lower() == "clear" then
 		entry[key] = nil
-		return Done(("Tracker %d: %s follows the page."):format(index, word))
+		return Done(("Tracker %d: %s follows the page."):format(index, word), key)
 	end
 	local value = Typed(key, text)
 	local valid = key == "name" and value ~= nil or key == "on" and type(value) == "boolean" or (OWN[key] and Valid(key, value, entry))
@@ -1290,7 +1295,7 @@ function ns.TrackerSet(index, word, text)
 		value = nil
 	end
 	entry[key] = value
-	return Done(("Tracker %d: %s is %s."):format(index, word, text))
+	return Done(("Tracker %d: %s is %s."):format(index, word, text), key)
 end
 
 -- The editor on the Tracker page -----------------------------------------------------------------
@@ -1344,6 +1349,7 @@ function ns.TrackerSetOwn(index, key, value)
 		edited = true
 		QueueLayout()
 		Dirty()
+		K.OwnPreview(entry, key)
 		return true
 	end
 	if key == "name" then
@@ -2207,6 +2213,14 @@ local function Draw(entry, reading)
 			Apply(record, entry, Looks(entry, reading, how))
 			alpha, reason = Wanted(entry, reading.state, how)
 		end
+		-- A tracker just fixed stays at full opacity while it flashes green (K.Fixed); the pass after the flash takes it away as Show says.
+		if alpha == 0 and record.alpha == 1 and how ~= "hidden" and record.fixedUntil then
+			if Now() < record.fixedUntil then
+				alpha = 1
+			else
+				record.fixedUntil = nil
+			end
+		end
 		-- A tracker that comes or goes by Show fades in or out (K.Fade). Its first alpha, a curved one and one under the game's own icon it
 		-- takes at once: the game's icon may hide the frame by an alpha it withholds (TrackerSlots.lua's Hide), which a fade would cover.
 		local faded = false
@@ -2627,6 +2641,61 @@ function K.Came(entry, old, reading, pending)
 	end
 end
 
+-- A tracker you fix flashes green, the Up colour of the tracker tooltips (K.TIP.fine), over 0.6 seconds (K.FIXED) as it goes from low or
+-- missing to fine, and Draw holds it at full opacity for that time before Show takes it away (record.fixedUntil). Only where the addon read the
+-- fix itself: a tracker drawn live and on screen, out of combat, and in a fight for the kinds the game never hides (weapon enchants, items,
+-- ammunition); not for a sample of test mode or of /flatui tracker test. Texture and animation calls on Flat UI's own frame, allowed in fights.
+K.FIXED = 0.6
+function K.Fixed(entry)
+	local record = records[entry.id]
+	if not record or record.alpha ~= 1 or record.how ~= "live" or K.held or testing[entry.id] then
+		return
+	end
+	local fix = record.fix
+	if not fix then
+		fix = record.top:CreateTexture(nil, "OVERLAY", nil, 6)
+		ns.Own[fix] = true
+		local green = K.TIP.fine
+		fix:SetColorTexture(green[1], green[2], green[3], 0.6)
+		fix:Hide()
+		record.fix = fix
+		local ok, group = pcall(function()
+			local made = fix:CreateAnimationGroup()
+			local alpha = made:CreateAnimation("Alpha")
+			alpha:SetFromAlpha(1)
+			alpha:SetToAlpha(0)
+			alpha:SetDuration(K.FIXED)
+			pcall(made.SetToFinalAlpha, made, true)
+			made:SetScript("OnFinished", function()
+				fix:Hide()
+				fix:SetAlpha(1)
+			end)
+			return made
+		end)
+		record.fixGroup = ok and group or false
+	end
+	-- Over the whole tracker: the icon, or the bar with its icon, or the text.
+	fix:ClearAllPoints()
+	fix:SetAllPoints(record.frame)
+	local group = record.fixGroup
+	if group then
+		pcall(group.Stop, group)
+	end
+	fix:SetAlpha(1)
+	fix:Show()
+	if not (group and pcall(group.Play, group)) then
+		-- No animation from the game: the green shows for the same time and goes.
+		C_Timer.After(K.FIXED, function()
+			if not (record.fixedUntil and Now() < record.fixedUntil) then
+				fix:Hide()
+			end
+		end)
+	end
+	record.fixedUntil = Now() + K.FIXED
+	-- The pass after the flash lets Show fade the tracker out, as it says.
+	C_Timer.After(K.FIXED + 0.02, Dirty)
+end
+
 -- Keeps a reading and plays the sound for a drop: a tracker that goes from fine or low to missing, and
 -- is still missing at the next pass 0.2 seconds later, outside the first 2 seconds after login; and with Sound when it turns low, the sound
 -- for a tracker that goes from fine to low.
@@ -2654,6 +2723,10 @@ local function Track(entry, reading)
 	-- minimum or the pet rows. A buff the game hides in a fight is read again after it, so it turns low by sound between fights.
 	if before == "fine" and state == "low" and Value(entry, "lowSound") == true and not Quiet(Now()) and not (kind and kind.noDrop == true) then
 		Ding(K.KITS[Value(entry, "kit")] or K.KITS.raid)
+	end
+	-- A tracker that was low or missing and is fine again flashes green (K.Fixed).
+	if (before == "missing" or before == "low") and state == "fine" and not Quiet(Now()) then
+		K.Fixed(entry)
 	end
 	if kind and before ~= state and type(kind.Changed) == "function" then
 		ns.EachPart(KEY, Part(entry.kind), kind.Changed, entry, before, state)
@@ -3201,6 +3274,14 @@ local function Release(wanted)
 			record.alpha = nil
 			record.seen, record.leaving = nil, nil
 			K.StopFade(record)
+			-- A green flash of a fix ends with the tracker (K.Fixed).
+			record.fixedUntil = nil
+			if record.fix then
+				if record.fixGroup then
+					pcall(record.fixGroup.Stop, record.fixGroup)
+				end
+				record.fix:Hide()
+			end
 			if record.motion then
 				record.motion = not pcall(record.frame.SetMouseMotionEnabled, record.frame, false)
 			end
@@ -3692,7 +3773,7 @@ function K.TipLines(entry, tip, noClick)
 	local what = kind and kind.what or "buff on you"
 	tip:AddLine((what:gsub("^%l", string.upper)), dim[1], dim[2], dim[3])
 	-- Test mode paints samples only out of combat (K.HeldDraw), and the test of /flatui tracker test its own looks.
-	if (K.held and not InCombatLockdown()) or testing[entry.id] then
+	if (K.held and not InCombatLockdown() and (not K.held.only or K.held.only == entry.id)) or testing[entry.id] then
 		tip:AddLine("A sample of the test.", dim[1], dim[2], dim[3])
 		return
 	end
@@ -4102,7 +4183,7 @@ K.HELD_STATES, K.HELD_LENGTH, K.HELD_LOW, K.HELD_COUNT, K.HELD_LOW_COUNT = { "fi
 -- True when the sample of a tracker was drawn.
 function K.HeldDraw(entry)
 	local held, record = K.held, records[entry.id]
-	if not held or not record or InCombatLockdown() then
+	if not held or not record or InCombatLockdown() or (held.only and held.only ~= entry.id) then
 		return false
 	end
 	local kind = KINDS[entry.kind]
@@ -4138,6 +4219,39 @@ end
 
 function K.HeldStart()
 	K.held = { step = 1, at = Now() }
+end
+
+-- The look preview: out of combat, with test mode off and no /flatui tracker test running, a change of a row of Look and position, or of When
+-- missing, shows every tracker that is on as test mode's sample (K.HeldDraw), at full opacity, fine, or missing for When missing, in the new
+-- look; a change of Shape, Icon size, Colour, Place, X, Y or When missing in Edit a tracker shows that tracker alone (only). The samples stay
+-- until 4 seconds after the last change (K.PREVIEW): each change is a new hold, so the timer of an earlier one finds it replaced and leaves it,
+-- and test mode's own hold (K.HeldStart) replaces it the same way. Draw's normal path then fades each tracker back to what it shows (K.Fade),
+-- and Close up the gaps closes the row again after the fade (K.Packed).
+K.PREVIEW = 4
+K.OWN_LOOK = { shape = true, size = true, colour = true, x = true, y = true, place = true, missing = true }
+
+function K.CanPreview()
+	return not InCombatLockdown() and not (ns.TestMode and ns.TestMode.IsOn()) and ns.Enabled(KEY) and next(testing) == nil
+		and not (K.held and not K.held.preview) and C_Timer ~= nil and C_Timer.After ~= nil
+end
+
+function K.Preview(only, step)
+	local held = { step = step or 1, at = Now(), preview = true, only = only }
+	K.held = held
+	K.HeldPaint()
+	C_Timer.After(K.PREVIEW, function()
+		if K.held == held then
+			K.held = nil
+			Dirty()
+		end
+	end)
+end
+
+-- A tracker's own value of the look, set in Edit a tracker or by /flatui tracker set: that tracker alone takes its sample for a moment.
+function K.OwnPreview(entry, key)
+	if key and K.OWN_LOOK[key] and K.CanPreview() then
+		K.Preview(entry.id, key == "missing" and 3 or 1)
+	end
 end
 
 function K.HeldStop()
@@ -4473,6 +4587,15 @@ function ns.TrackerKitChanged()
 	ns.Try(KEY, Refresh)
 	if not InCombatLockdown() and type(ns.PlayKit) == "function" then
 		ns.PlayKit(K.KITS[Opt("kit")] or K.KITS.raid, KEY)
+	end
+end
+
+-- A row of Look and position, or When missing, changed on the page: the page is refreshed, as without a changed function of the row, and out of
+-- combat every tracker that is on shows its sample in the new look for a few seconds (K.Preview), missing for When missing.
+function ns.TrackerLookChanged(path)
+	ns.Try(KEY, Refresh)
+	if K.CanPreview() then
+		K.Preview(nil, path == KEY .. ".missing" and 3 or 1)
 	end
 end
 
