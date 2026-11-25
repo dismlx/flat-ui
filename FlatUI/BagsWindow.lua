@@ -32,7 +32,9 @@ local _, ns = ...
 -- WL/apis.yaml:36266). It is as wide as the layout (BagsLayout.lua) and its padding of 8 on each side, at least as wide as its title bar and its
 -- footer need, and the bank window at least as wide as the row of BagsBank.lua over its footer. While a window is open, an update that does not
 -- lay it out afresh never makes it shorter: the bag window hangs from its bottom right corner, so a shorter window would move everything above
--- what shrank (Free slots losing a row as its slots fill). It takes its exact height again at its next fresh layout and at its opening.
+-- what shrank (Free slots losing a row as its slots fill), and neither does a fold or an unfold of a section the player clicked (B.Window.KeepHeight,
+-- asked by BagsOrder.lua), so the title clicked stays under the mouse. It takes its exact height again at its next other fresh layout and at its
+-- opening.
 -- The bag window's footer has the gold of the character shown (Errands.Money, Errands.lua:65-85), whose tooltip lists the characters of this realm
 -- and its connected realms, richest first, each with its realm when that is not this character's, with their total, and one line for those of
 -- other realms, and while the window shows the player's own bags what this character made (in green) or spent (in red) since it logged in
@@ -1737,6 +1739,7 @@ function Showing(w)
 		return
 	end
 	w.open = true
+	w.keepNext = nil
 	Run("window", Call, B, "LaidOut", w.which)
 	Sound("IG_BACKPACK_OPEN")
 	Watching()
@@ -1986,8 +1989,22 @@ local function Updating(w, flags, changed)
 		end
 	end
 	Footer(w)
-	Resize(w, not flags.layout and Call(Layout, "Builds", which) == builds)
+	-- A fold or an unfold the player clicked (Window.KeepHeight) is a fresh layout that keeps the height too, so the title clicked stays under the
+	-- mouse; the next one that is not asked for that way takes its exact height again.
+	local keep = w.keepNext == true
+	w.keepNext = nil
+	Resize(w, keep or (not flags.layout and Call(Layout, "Builds", which) == builds))
 	Window.Place(which)
+end
+
+-- The next update of the open window keeps its height, though it lays the window out afresh: BagsOrder.lua asks it before the layout of a fold or
+-- an unfold the player clicked, so the bag window, which hangs from its bottom right corner, does not move the title clicked away from the mouse
+-- by the height of the rows that folded. An unfold that needs more room still grows the window; its opening takes its exact height (Showing).
+function Window.KeepHeight(which)
+	local w = windows[which]
+	if Shown(w) then
+		w.keepNext = true
+	end
 end
 
 function Window.Update(which, flags, changed)
