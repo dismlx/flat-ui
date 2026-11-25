@@ -8,13 +8,17 @@ local _, ns = ...
 -- own coordinates line whether it is shown, and the map's OnShow is followed with HookScript, which writes nothing on the frame.
 -- Over each line lies a button of the addon's own, a child of that frame the size of the line's text, made with the line's text out of combat
 -- or on a map the game does not protect, which shows and hides with the text; the frame itself still takes no mouse, so the map's own clicks
--- are untouched. Pointing at a line, out of a fight, writes a tooltip in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide
--- only while IsOwned says the button owns it), written again while it shows as the line changes: the zone, subzone and coordinates, each worn
--- item's durability, and the frame rate, home and world latency and Flat UI's memory, all as the data panels write them (ns.DataPanels.TipAt
--- with their streams), and the local and realm time. Shift-click on the coordinates puts the zone and the coordinates shown into the chat box
--- (ns.PutInChat: ChatFrameUtil.InsertLink into a box that is open, else ChatFrameUtil.OpenChat); a click on the time opens the game's stopwatch
--- and alarm (ToggleTimeManager) and a Shift-click its calendar (ToggleCalendar), out of a fight. The lines of durability and the frame rate let
--- clicks through.
+-- are untouched. Pointing at a line, also in a fight, writes a tooltip in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide
+-- only while IsOwned says the button owns it), written again while it shows as the line changes, so the coordinates stay live as you walk: the
+-- zone, subzone and coordinates, each worn item's durability, and the frame rate, home and world latency and Flat UI's memory, all as the data
+-- panels write them (ns.DataPanels.TipAt with their streams), and the local and realm time. Tooltips in combat on the Tooltips page, at Hide every
+-- tooltip, hides this one in a fight with the others. Shift-click on the coordinates puts the zone and the coordinates shown into the chat box
+-- (ns.PutInChat: Insert into the chat box that is open, else ChatFrameUtil.OpenChat, never the game's link insert, which writes a /cast line
+-- into a macro being written); a click on the time opens the game's stopwatch and alarm (ToggleTimeManager) and a Shift-click its calendar
+-- (ToggleCalendar). In a fight, where the game opens no such window, the click waits for the end of the fight (ns.OpenAfterFight): chat says
+-- once "Flat UI: the stopwatch opens when the fight ends.", the window opens as the fight ends, and the tooltip's hints say "after the fight".
+-- The lines of durability and the frame rate let clicks through. Text size (hud.mapTextSize) sizes the four lines at once (ns.TextStyle on
+-- each, a share of the game's small font), and the lines, the addon button row under the map and the room under the zone name follow it.
 --   Coordinates: the player's place on the map of the zone, from C_Map.GetBestMapForUnit("player") and C_Map.GetPlayerMapPosition(map,
 --     "player"), whose x and y are read as fields (the game's own line calls GetXY of that table: Mainline/Minimap.lua:1434-1457). Neither is
 --     secret on Forever, only their arguments are guarded (MapDocumentation.lua:49-63, 437-452), and the position is nil where the game
@@ -71,13 +75,19 @@ local HINTS = {
 	coords = { "Shift-click: put this in chat" },
 	clock = { "Click: stopwatch and alarm", "Shift-click: calendar" },
 }
+-- The time's hints in a fight, when its windows open as the fight ends.
+local FIGHT_HINTS = { "Click: stopwatch and alarm, after the fight", "Shift-click: calendar, after the fight" }
+-- The chat lines of a click on the time in a fight.
+local LATER_STOPWATCH = "Flat UI: the stopwatch opens when the fight ends."
+local LATER_CALENDAR = "Flat UI: the calendar opens when the fight ends."
 
 -- frame: the frame of the lines; text[id]: the font string of a line; button[id]: the button over it; shown[id]: its text while it shows;
--- colour[id]: its colour; why[id]: why a wanted line is hidden, for /flatui status; over: the line under the mouse; ticker, step, slow: the
+-- colour[id]: its colour; size[id]: the Text size it was given; why[id]: why a wanted line is hidden, for /flatui status; over: the line under
+-- the mouse; ticker, step, slow: the
 -- ticker, its step and the time since the slow lines were read; sig: the layout last made; game: the game's own coordinates show under the
 -- map; below: the room the lines take under the map; above: the room the lines whose place is above the map ask for over it; queued, waiting,
 -- hooked: a pass waits for the next frame, a make for the end of a fight, the map's OnShow is followed.
-local S = { text = {}, button = {}, shown = {}, colour = {}, why = {}, below = 0, above = 0 }
+local S = { text = {}, button = {}, shown = {}, colour = {}, size = {}, why = {}, below = 0, above = 0 }
 
 -- The first value of a call that may be missing, raise or be withheld; nil then.
 local function Ask(fn, ...)
@@ -376,17 +386,17 @@ local function ClockTip(button)
 		tip:SetText("Time", 1, 1, 1)
 		tip:AddDoubleLine("Local time", Line(true), DIM_RGB[1], DIM_RGB[2], DIM_RGB[3], 1, 1, 1)
 		tip:AddDoubleLine("Realm time", Line(false), DIM_RGB[1], DIM_RGB[2], DIM_RGB[3], 1, 1, 1)
-		for _, hint in ipairs(HINTS.clock) do
+		for _, hint in ipairs(InCombatLockdown() and FIGHT_HINTS or HINTS.clock) do
 			tip:AddLine(hint, DIM_RGB[1], DIM_RGB[2], DIM_RGB[3])
 		end
 		tip:Show()
 	end)
 end
 
--- Writes the tooltip of a line on its button: the data panels' stream of the line, or the time. Not in a fight; fresh is false when a tooltip that
--- shows is written again.
+-- Writes the tooltip of a line on its button: the data panels' stream of the line, or the time, in a fight too; fresh is false when a tooltip
+-- that shows is written again.
 local function Tip(_, line, button, fresh)
-	if InCombatLockdown() or not button or not S.shown[line.id] then
+	if not button or not S.shown[line.id] then
 		return
 	end
 	if line.id == "clock" then
@@ -417,7 +427,8 @@ local function ChatText(line)
 	return type(zone) == "string" and zone ~= "" and (zone .. " " .. shown) or shown
 end
 
--- A click on a line: Shift on the coordinates puts them in the chat box; on the time a click opens the stopwatch and alarm, Shift the calendar.
+-- A click on a line: Shift on the coordinates puts them in the chat box; on the time a click opens the stopwatch and alarm, Shift the calendar,
+-- in a fight as it ends.
 local function Click(_, line)
 	local shift = Ask(_G.IsShiftKeyDown) == true
 	if line.id == "coords" and shift then
@@ -425,10 +436,12 @@ local function Click(_, line)
 		if text then
 			ns.PutInChat(text)
 		end
-	elseif line.id == "clock" and not InCombatLockdown() then
-		local toggle = shift and _G.ToggleCalendar or _G.ToggleTimeManager
-		if type(toggle) == "function" then
-			pcall(toggle)
+	elseif line.id == "clock" then
+		local name = shift and "ToggleCalendar" or "ToggleTimeManager"
+		if type(_G[name]) == "function" then
+			ns.OpenAfterFight(function()
+				_G[name]()
+			end, shift and LATER_CALENDAR or LATER_STOPWATCH)
 		end
 	end
 end
@@ -586,6 +599,12 @@ local function Show(line, value, colour)
 		text:Hide()
 		S.text[line.id] = text
 	end
+	-- Text size, a share of the game's small font; the layout reads the new height (Layout's sig holds the size).
+	local size = tonumber(Opt("mapTextSize")) or 100
+	if S.size[line.id] ~= size then
+		ns.TextStyle(text, { percent = size })
+		S.size[line.id] = size
+	end
 	colour = colour or WHITE
 	if S.colour[line.id] ~= colour then
 		text:SetTextColor(colour[1], colour[2], colour[3])
@@ -657,7 +676,7 @@ end
 -- go below (Hud.lua makes room for them, as far as the game's place, while it hangs the plate from the map). Under the map (Header Underneath),
 -- a line below that would reach the plate goes on under it.
 local function Layout()
-	local places, sig = {}, { S.game and "game" or "" }
+	local places, sig = {}, { S.game and "game" or "", "size=" .. tostring(Opt("mapTextSize")) }
 	local side, near, far = Plate()
 	local used, asked
 	for _, line in ipairs(LINES) do
@@ -895,22 +914,54 @@ function ns.MapTextAbove()
 	return S.above
 end
 
--- Puts a text into the chat box: into the box that is open (ChatFrameUtil.InsertLink, which also fills the macro text and the other boxes that
--- take a link), else into a box it opens (ChatFrameUtil.OpenChat), ready to send. The experience bar's Shift-click uses it too (XpBar.lua). True
--- when a box took it.
+-- Puts a text into the chat box: into the chat box that is open (ChatFrameUtil.GetActiveWindow, then the box's Insert and SetFocus), else into
+-- a box it opens (ChatFrameUtil.OpenChat), ready to send. Not ChatFrameUtil.InsertLink, the game's link insert: with the macro editor open it
+-- writes "/cast " before any text that is no item link (Mainline/ChatFrameUtilOverrides.lua:19-38). The experience bar's Shift-click uses it
+-- too (XpBar.lua). True when a box took it.
 function ns.PutInChat(text)
 	local util = _G.ChatFrameUtil
 	if type(text) ~= "string" or text == "" or type(util) ~= "table" or ns.IsSecret(util) then
 		return false
 	end
-	if type(util.InsertLink) == "function" then
-		local ok, done = pcall(util.InsertLink, text)
-		if ok and done == true then
+	if type(util.GetActiveWindow) == "function" then
+		local ok, box = pcall(util.GetActiveWindow)
+		if ok and type(box) == "table" and not ns.IsSecret(box) and not ns.Forbidden(box) and type(box.Insert) == "function"
+			and pcall(box.Insert, box, text) then
+			pcall(box.SetFocus, box)
 			return true
 		end
 	end
 	if type(util.OpenChat) == "function" then
 		return (pcall(util.OpenChat, text))
+	end
+	return false
+end
+
+-- A window of the game opened by a click of Flat UI's: now, or in a fight as the fight ends, since the game opens its windows as panels it does
+-- not show in a fight (ShowUIPanel) or loads them with their addon. open is the call, made in a pcall; said is the line chat says in a fight, once
+-- for each window asked for ("Flat UI: the stopwatch opens when the fight ends."). The last window asked for in a fight is the one that opens. The
+-- time's clicks use it, and the reputation bar's (XpBar.lua) and the quest count's (QuestCount.lua). True when the window was opened now.
+local opening = {}
+function ns.OpenAfterFight(open, said)
+	if type(open) ~= "function" then
+		return false
+	end
+	if not InCombatLockdown() then
+		return (pcall(open))
+	end
+	if type(said) == "string" and said ~= opening.said then
+		print(said)
+	end
+	opening.open, opening.said = open, said
+	if not opening.queued then
+		opening.queued = true
+		ns.OutOfCombat(function()
+			local fn = opening.open
+			opening.queued, opening.open, opening.said = false, nil, nil
+			if type(fn) == "function" then
+				pcall(fn)
+			end
+		end)
 	end
 	return false
 end

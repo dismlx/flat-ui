@@ -42,6 +42,9 @@ local _, ns = ...
 -- the nine pieces of its backdrop (ns.SetFaded), the font of its heading and of each line's label (SetFont, SetShadowOffset, through
 -- ns.TextStyle, which remembers Questie's font and takes a new one Questie sets as the one to go back to), the height of a zone heading's
 -- label (SetHeight, by Heading size), the texture coordinates of the item icons (SetTexCoord) and, in a fight, the alpha of Questie_BaseFrame.
+-- The Objective tracker rule of the Fading page fades Questie_BaseFrame too (Fade.lua). While Opacity in combat holds it in a fight the Fading page
+-- leaves it alone (ns.QuestieFades); the opacity read before the first write is the one it had before Fading (ns.FadeGiven), and after the fight
+-- it goes back to Fading with that one (ns.FadeTakesBack), which eases on from the opacity of the fight, so the tracker does not flash to full.
 -- Sizes stay Questie's own: its labels have the height of its font size and the Questie Tracker heading is sized by Questie at every redraw,
 -- so Heading size goes on the zone headings alone. After a change of the look Questie is asked to lay its lines out again (QuestieTracker:Update,
 -- as its own options do), out of combat. Off, the row puts Questie's look back. Questie's saved settings are never written. Nothing is made on
@@ -373,7 +376,8 @@ local function Panel(base)
 	end
 end
 
--- The opacity of the tracker in a fight, as the objective tracker's: the opacity it had is read before the first write and put back after.
+-- The opacity of the tracker in a fight, as the objective tracker's: the opacity it had is read before the first write and put back after,
+-- or handed to the Fading page while its Objective tracker rule fades the tracker (Hud.lua's TrackerAlpha does the same for the game's).
 -- fight is nothing when the game's own state is to be asked.
 local function Alpha(base, fight)
 	if fight == nil then
@@ -383,17 +387,25 @@ local function Alpha(base, fight)
 	local wanted = fight and percent < 100 and percent / 100 or nil
 	if wanted ~= nil then
 		if S.alpha == nil then
+			local given = ns.FadeGiven and ns.FadeGiven(base)
 			local ok, alpha = pcall(base.GetAlpha, base)
-			S.alpha = (ok and ns.Finite(alpha)) and alpha or 1
+			S.alpha = ns.Finite(given) and given or ((ok and ns.Finite(alpha)) and alpha or 1)
 		end
 		if S.sent ~= wanted then
 			base:SetAlpha(wanted)
 			S.sent = wanted
 		end
 	elseif S.alpha ~= nil then
-		base:SetAlpha(S.alpha)
+		if not (ns.FadeTakesBack and ns.FadeTakesBack(base, S.alpha)) then
+			base:SetAlpha(S.alpha)
+		end
 		S.alpha, S.sent = nil, nil
 	end
+end
+
+-- True for Questie's tracker while Opacity in combat holds its alpha in a fight, for the Fading page, which leaves it to this file then.
+function ns.QuestieFades(frame)
+	return S.sent ~= nil and frame ~= nil and frame == rawget(_G, "Questie_BaseFrame")
 end
 
 -- Looks at every frame of the tracker; full also at lines that are hidden. A line that is put away keeps its look until Questie hands it out
