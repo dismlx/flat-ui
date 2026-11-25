@@ -1080,7 +1080,8 @@ local function Visible(on, now)
 		end
 		if S.visible ~= true then
 			frame:SetAlpha(1)
-			if come and not now and S.visible == false then
+			-- Only a table fully faded out fades in; one caught in its fade out is back at once.
+			if come and not now and not fading and S.visible == false then
 				pcall(come.Play, come)
 			end
 		end
