@@ -9,6 +9,10 @@ local _, ns = ...
 -- between two passes, or as the button's own cooldown frame finishes its swipe (OnCooldownDone, hooked on Flat UI's own frame), once a cooldown. When
 -- the global cooldown outlasts the end of such a cooldown, the action reads as on the global cooldown while it still cools; the call then waits for
 -- the end of that sweep, when the button really is ready.
+-- The cooldown sweep shows for the global cooldown too unless Global cooldown sweep (actionbars.sweepGcd, on by default) is off while Restyle action bars is
+-- on: a button that only waits for the global cooldown then shows no sweep, and real cooldowns still do. The countdown numbers follow the game's Show
+-- numbers on cooldowns (the CVar countdownForCooldowns, as ActionButton.lua:857-860 does it for the game's buttons), set on each button as it is
+-- hooked and again when the CVar changes (CVAR_UPDATE), each time only when the answer changed.
 -- Calls on a button are plain ones (textures, text, alpha, SetChecked, Cooldown calls), so a pass in a fight touches nothing protected. Flat UI writes no
 -- field on a button: every table here is keyed by the button. The game's twins and OverrideActionBar are only read.
 -- Never called on a button, a twin or a game table: Update, UpdateAction, UpdateFlyout, SetShowGrid, RegisterActionUIButton, ShowAlert and
@@ -29,7 +33,7 @@ local EVENTS = { "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_UPDATE_STATE", "ACTIONBAR_
 	"UPDATE_SHAPESHIFT_FORM", "PLAYER_MOUNT_DISPLAY_CHANGED", "UPDATE_INVENTORY_ALERTS", "LOSS_OF_CONTROL_ADDED", "LOSS_OF_CONTROL_UPDATE",
 	"START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL", "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW",
 	"SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", "ACTIONBAR_SHOWGRID", "ACTIONBAR_HIDEGRID", "MODIFIER_STATE_CHANGED", "PLAYER_ENTER_COMBAT",
-	"PLAYER_LEAVE_COMBAT" }
+	"PLAYER_LEAVE_COMBAT", "CVAR_UPDATE" }
 -- The steps one event repaints. A slot change repaints every step.
 local SETS = {
 	state = { checked = true, flash = true },
@@ -51,6 +55,8 @@ local DOT = "\226\151\143"
 local P = {
 	state = setmetatable({}, WEAK),
 	hooked = setmetatable({}, WEAK),
+	-- the last Hide countdown numbers given to each button's cooldown, from Show numbers on cooldowns
+	numbersHidden = setmetatable({}, WEAK),
 	pressed = setmetatable({}, WEAK),
 	alpha = setmetatable({}, WEAK),
 	-- the buttons that blink now, the time since the last blink, and whether auto attack is on (PLAYER_ENTER_COMBAT and PLAYER_LEAVE_COMBAT; nil
@@ -415,8 +421,10 @@ function STEP.cooldown(button, st)
 	elseif long and not was then
 		st.cdFired, st.cdWait = false, nil
 	end
+	-- Global cooldown sweep off: a button that only waits for the global cooldown shows no sweep. A cdWait then ends at the next pass, not by the swipe.
+	local gcdOff = st.cdOnGCD and ns.Enabled("actionbars") and ns.Get("actionbars.sweepGcd") == false
 	P.sweeping = true
-	local ok, err = pcall(Sweep, button.cooldown, st.cdActive and not replace, "GetActionCooldownDuration", slot)
+	local ok, err = pcall(Sweep, button.cooldown, st.cdActive and not replace and not gcdOff, "GetActionCooldownDuration", slot)
 	P.sweeping = false
 	if not ok then
 		error(err, 0)
@@ -667,13 +675,42 @@ local function CooldownDone(button)
 	P.pending = true
 end
 
+-- The game's Show numbers on cooldowns, as a plain answer: true to hide the numbers, nil when it cannot be read.
+local function NumbersOff()
+	local read = C_CVar and C_CVar.GetCVarBool or GetCVarBool
+	if type(read) ~= "function" then
+		return nil
+	end
+	local ok, on = pcall(read, "countdownForCooldowns")
+	if not ok or ns.IsSecret(on) then
+		return nil
+	end
+	return on ~= true
+end
+
+-- The countdown numbers of a button's cooldown hidden or shown as the game's setting says (Cooldown:SetHideCountdownNumbers on Flat UI's own
+-- cooldown frame), written only when the answer changed. hide may be given, read once for all the buttons.
+local function NumbersHidden(button, hide)
+	if hide == nil then
+		hide = NumbersOff()
+	end
+	local cooldown = button.cooldown
+	if hide == nil or type(cooldown) ~= "table" or type(cooldown.SetHideCountdownNumbers) ~= "function" or P.numbersHidden[button] == hide then
+		return
+	end
+	if pcall(cooldown.SetHideCountdownNumbers, cooldown, hide) then
+		P.numbersHidden[button] = hide
+	end
+end
+
 -- The hooks on a button: the tooltip, a repaint on the next frame after a click, and the end of its cooldown's swipe (the cooldown is a child of Flat
--- UI's own button). They only paint.
+-- UI's own button). They only paint. The countdown numbers take the game's setting here, once for each button.
 local function Hook(button)
 	if P.hooked[button] then
 		return
 	end
 	P.hooked[button] = true
+	NumbersHidden(button)
 	button:HookScript("OnEnter", function(self) ShowTip(self) end)
 	button:HookScript("OnLeave", function(self) HideTip(self) end)
 	button:HookScript("PostClick", function(self)
@@ -812,6 +849,17 @@ function H.UNIT_INVENTORY_CHANGED(unit)
 end
 function H.UPDATE_SHAPESHIFT_FORM() All() end
 function H.PLAYER_MOUNT_DISPLAY_CHANGED() All() end
+
+-- Show numbers on cooldowns changed in the game's options: the numbers on every button follow at once.
+function H.CVAR_UPDATE(name)
+	if not Plain(name, "string") or name:lower() ~= "countdownforcooldowns" then
+		return
+	end
+	local hide = NumbersOff()
+	for _, button in ipairs(P.list) do
+		NumbersHidden(button, hide)
+	end
+end
 
 -- A modifier key went down or up: the tooltip of the Flat UI button that owns it is set again at once, through the same calls as OnEnter, so a line
 -- that waits for a key (Show IDs of ChatTips.lua, the comparison of an item, a macro's [mod] choice) follows the key before the next 0.2 s setting of

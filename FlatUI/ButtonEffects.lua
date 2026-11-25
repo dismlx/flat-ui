@@ -12,8 +12,11 @@ local _, ns = ...
 -- the spell's name), a macro whose spell it is and an item whose use spell it is (GetActionInfo and C_ActionBar.GetSpell, the game's rule): a flat
 -- fill in the cast bar's Cast colour rises from the bottom of the icon over the cast time (UnitCastingInfo, plain for the player) and, in its Channel
 -- colour, empties over a channel (UnitChannelInfo). A pushback (UNIT_SPELLCAST_DELAYED, UNIT_SPELLCAST_CHANNEL_UPDATE) reads the times again, so the
--- fill follows the real cast. It fades as the cast lands, and a red flash shows when the cast is interrupted. Only heights, alpha, Show, Hide and
--- animations of these frames are set in a fight.
+-- fill follows the real cast. It fades as the cast lands, and a red flash shows when the cast is interrupted. Aim highlight (on by default): while a
+-- spell placed on the ground waits for its spot (UNIT_SPELLCAST_RETICLE_TARGET, as the game's buttons play their reticle, ActionButton.lua:1100-1103),
+-- its buttons pulse in the cast bar's Cast colour, 15% to 50% and back every half second, until it is placed or cancelled (RETICLE_CLEAR, SENT and the
+-- cast's own events). Only buttons that show light up: one the layout hid keeps its place over empty space. Only heights, alpha, colours, Show, Hide
+-- and animations of these frames are set in a fight.
 
 local KEY = "actionbars"
 local PATH = KEY .. "."
@@ -155,10 +158,11 @@ local function Mark(button, mode)
 	end
 end
 
--- The cast fill and the interrupt flash of Flat UI's own buttons. frames[button] = { frame, fill, flash, group } once made, or false; lit: the buttons
--- of the cast that shows; spell: its spell ID; start and finish: its times in seconds; channel: it empties; landed: when it landed (the fill fades for
--- FADE seconds).
-local CAST = { frames = setmetatable({}, WEAK), lit = {}, pending = false, FADE = 0.2, ALPHA = 0.4, FLASH = 0.7 }
+-- The cast fill, the interrupt flash and the aim highlight of Flat UI's own buttons. frames[button] = { frame, fill, flash, group, aim, pulse } once
+-- made, or false; lit: the buttons of the cast that shows; aimed: the buttons that pulse while a spell waits for its spot; spell: its spell ID; start
+-- and finish: its times in seconds; channel: it empties; landed: when it landed (the fill fades for FADE seconds).
+local CAST = { frames = setmetatable({}, WEAK), lit = {}, aimed = {}, pending = false, FADE = 0.2, ALPHA = 0.4, FLASH = 0.7, AIM_LOW = 0.15, AIM_HIGH = 0.5,
+	AIM_TIME = 0.5 }
 
 local function CastMake(button)
 	local icon = button.icon
@@ -194,12 +198,22 @@ local function CastMake(button)
 	fall:SetToAlpha(0)
 	fall:SetDuration(0.4)
 	fall:SetOrder(2)
-	return { frame = made, fill = fill, flash = flash, group = group }
+	local aim = made:CreateTexture(nil, "OVERLAY")
+	aim:SetAllPoints(made)
+	aim:SetColorTexture(1, 1, 1, 1)
+	aim:SetAlpha(0)
+	local pulse = aim:CreateAnimationGroup()
+	pulse:SetLooping("BOUNCE")
+	local beat = pulse:CreateAnimation("Alpha")
+	beat:SetFromAlpha(CAST.AIM_LOW)
+	beat:SetToAlpha(CAST.AIM_HIGH)
+	beat:SetDuration(CAST.AIM_TIME)
+	return { frame = made, fill = fill, flash = flash, group = group, aim = aim, pulse = pulse }
 end
 
--- The frames of Flat UI's buttons that have none, out of combat, while Cast fill animation or Interrupt flash is on.
+-- The frames of Flat UI's buttons that have none, out of combat, while Cast fill animation, Interrupt flash or Aim highlight is on.
 local function CastPrepare()
-	if CAST.pending or not (On() and (Opt("castAnim") or Opt("interruptAnim"))) or not (type(ns.OwnOn) == "function" and ns.OwnOn()) then
+	if CAST.pending or not (On() and (Opt("castAnim") or Opt("interruptAnim") or Opt("aimAnim"))) or not (type(ns.OwnOn) == "function" and ns.OwnOn()) then
 		return
 	end
 	CAST.pending = true
@@ -250,8 +264,14 @@ local function UsesSpell(slot, spellID)
 	return Plain(id, "number") and id == spellID
 end
 
--- The Flat UI buttons that hold a spell: by the slots the game finds for its ID, else by its name (every rank), and the macros and items whose spell
--- it is (UsesSpell).
+-- True while the button is drawn: a button past its bar's Number of icons is hidden by the layout and keeps its last place (OwnBars.lua, F.Layout).
+local function Visible(button)
+	local ok, shown = pcall(button.IsVisible, button)
+	return ok and not ns.IsSecret(shown) and shown == true
+end
+
+-- The Flat UI buttons that show and hold a spell: by the slots the game finds for its ID, else by its name (every rank), and the macros and items
+-- whose spell it is (UsesSpell).
 local function CastButtons(spellID)
 	local list, listed, want = {}, {}, nil
 	local find = C_ActionBar and C_ActionBar.FindSpellActionButtons
@@ -273,7 +293,7 @@ local function CastButtons(spellID)
 		end
 		if named and Plain(name, "string") and type(ns.ButtonsFor) == "function" then
 			for _, button in ipairs(ns.ButtonsFor("spell", name:lower())) do
-				if type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) and not listed[button] then
+				if type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) and not listed[button] and Visible(button) then
 					list[#list + 1] = button
 					listed[button] = true
 				end
@@ -281,7 +301,7 @@ local function CastButtons(spellID)
 		end
 	end
 	for _, button in ipairs(OwnButtons()) do
-		if not listed[button] then
+		if not listed[button] and Visible(button) then
 			local slot = type(ns.OwnSlot) == "function" and ns.OwnSlot(button)
 			if Plain(slot, "number") and ((want and want[slot]) or UsesSpell(slot, spellID)) then
 				list[#list + 1] = button
@@ -302,6 +322,36 @@ local function CastClear()
 	CAST.lit, CAST.landed, CAST.spell = {}, nil, nil
 	if CAST.driver then
 		CAST.driver:Hide()
+	end
+end
+
+-- The aim highlight off on every button that pulses.
+local function AimClear()
+	for _, button in ipairs(CAST.aimed) do
+		local made = CAST.frames[button]
+		if made and made.pulse then
+			made.pulse:Stop()
+			made.aim:SetAlpha(0)
+		end
+	end
+	CAST.aimed = {}
+end
+
+-- A spell placed on the ground waits for its spot: its buttons pulse in the Cast colour until it is placed or cancelled.
+local function AimStart(spellID)
+	AimClear()
+	if not (On() and Opt("aimAnim")) then
+		return
+	end
+	local r, g, b = ns.Colour("castbars.castColour")
+	for _, button in ipairs(CastButtons(spellID)) do
+		local made = CAST.frames[button]
+		if made and made.pulse then
+			made.aim:SetColorTexture(r, g, b, 1)
+			made.aim:SetAlpha(CAST.AIM_LOW)
+			made.pulse:Play()
+			CAST.aimed[#CAST.aimed + 1] = button
+		end
 	end
 end
 
@@ -386,7 +436,21 @@ local function CastTimes()
 end
 
 local function CastEvent(event, unit, _, spellID)
-	if unit ~= "player" or not Plain(spellID, "number") then
+	if unit ~= "player" then
+		return
+	end
+	-- The aim highlight: on while the spot is wanted, off as the spell is placed, cancelled, cast or fails (the game's rule, ActionButton.lua:1077-1103).
+	if event == "UNIT_SPELLCAST_RETICLE_TARGET" then
+		if Plain(spellID, "number") then
+			AimStart(spellID)
+		else
+			AimClear()
+		end
+		return
+	elseif #CAST.aimed > 0 and event ~= "UNIT_SPELLCAST_DELAYED" and event ~= "UNIT_SPELLCAST_CHANNEL_UPDATE" then
+		AimClear()
+	end
+	if event == "UNIT_SPELLCAST_RETICLE_CLEAR" or event == "UNIT_SPELLCAST_SENT" or not Plain(spellID, "number") then
 		return
 	end
 	if event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_CHANNEL_START" then
@@ -443,6 +507,9 @@ local function Run()
 	CastPrepare()
 	if not (on and Opt("castAnim")) then
 		CastClear()
+	end
+	if not (on and Opt("aimAnim")) then
+		AimClear()
 	end
 	for _, button in ipairs(ns.ActionButtons()) do
 		if not (type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button)) then
@@ -557,17 +624,19 @@ frame:SetScript("OnEvent", function()
 	Ask()
 end)
 
--- The player's casts, for the cast fill and the interrupt flash of Flat UI's own buttons.
+-- The player's casts, for the cast fill, the interrupt flash and the aim highlight of Flat UI's own buttons.
 local casts = CreateFrame("Frame")
 ns.Own[casts] = true
 for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
-	"UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_UPDATE" }) do
+	"UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_UPDATE",
+	"UNIT_SPELLCAST_RETICLE_TARGET", "UNIT_SPELLCAST_RETICLE_CLEAR", "UNIT_SPELLCAST_SENT" }) do
 	pcall(casts.RegisterUnitEvent, casts, event, "player")
 end
 casts:SetScript("OnEvent", function(_, event, ...)
 	if type(ns.OwnOn) == "function" and ns.OwnOn() then
 		if not pcall(CastEvent, event, ...) then
 			pcall(CastClear)
+			pcall(AimClear)
 		end
 	end
 end)

@@ -235,6 +235,7 @@ ns.SETUP_STEPS = {
 	} },
 	{ id = "ab-bars", area = "Action bars", title = "Action buttons", draw = "mock-action-row", built = true, rows = {
 		{ "actionbars.own", "c", "behaviour", "Mouse clicks go to Flat UI's buttons. Keys go through the game's buttons." },
+		{ "actionbars.pageArrows", "o", "behaviour", "Shows the main bar's page number with up and down arrows left of Flat UI's main bar, where the game has them; the arrows page the bar in a fight too." },
 		{ "actionbars.enabled", "c", "mock-action-row" },
 		{ "actionbars.main", "c", "mock-action-row" },
 		{ "actionbars.extra", "c", "mock-action-row" },
@@ -286,12 +287,17 @@ ns.SETUP_STEPS = {
 		{ "actionbars.rangeColour", "r", "mock-action-row" },
 		{ "actionbars.sweep", "o", "mock-action-row" },
 		{ "actionbars.sweepOwn", "r", "mock-action-row" },
+		{ "actionbars.sweepColour", "r", "behaviour", "Gives the cooldown sweep on the action buttons its own colour, at Sweep opacity." },
 		{ "actionbars.sweepAlpha", "r", "mock-action-row" },
+		{ "actionbars.sweepGcd", "o", "behaviour", "Off, a button of Flat UI's that only waits for the global cooldown shows no sweep, so only real cooldowns sweep." },
+		{ "actionbars.sweepEdge", "o", "behaviour", "Draws a bright line along the edge of the cooldown sweep on the action buttons." },
+		{ "actionbars.sweepEdgeColour", "r", "behaviour", "Sets the colour of the line along the edge of the cooldown sweep." },
 		{ "actionbars.cdFont", "o", "mock-action-row" },
 		{ "actionbars.cdColour", "o", "mock-action-row" },
 		{ "actionbars.cdTenths", "r", "mock-action-row" },
 		{ "actionbars.cdGrey", "o", "mock-action-row" },
-		{ "actionbars.readyFlash", "o", "behaviour", "Flashes the icon of one of Flat UI's buttons white for a moment as a cooldown longer than the global cooldown ends." },
+		{ "actionbars.readyFlash", "o", "behaviour", "Flashes the icon of one of Flat UI's buttons for a moment as a cooldown longer than the global cooldown ends." },
+		{ "actionbars.readyColour", "r", "behaviour", "Sets the colour of the flash as a cooldown ends, white by default." },
 	} },
 	{ id = "ab-effects", area = "Action bars", title = "Glows and animations", draw = "mock-action-row", built = true, rows = {
 		{ "actionbars.proc", "o", "mock-action-row" },
@@ -299,6 +305,7 @@ ns.SETUP_STEPS = {
 		{ "actionbars.assist", "o", "mock-action-row" },
 		{ "actionbars.castAnim", "o", "mock-action-row" },
 		{ "actionbars.interruptAnim", "o", "mock-action-row" },
+		{ "actionbars.aimAnim", "o", "behaviour", "Makes the button of a spell you place on the ground, such as Blizzard or Volley, pulse on Flat UI's bars while the spell waits for its spot." },
 		{ "actionbars.abilityArt", "o", "mock-action-row" },
 	} },
 	{ id = "uf-frames", area = "Unit frames", title = "Which frames and how big", draw = "mock-unit-frames", built = true, rows = {
@@ -1347,6 +1354,7 @@ ns.SETUP_STEPS = {
 		{ "barblock.fadeCombat", "r", "behaviour", "Brings the faded block to full opacity in combat." },
 		{ "barblock.fadeMouse", "r", "behaviour", "Brings the faded block to full opacity under the mouse." },
 		{ "barblock.fadeTarget", "r", "behaviour", "Brings the faded block to full opacity while you have a target." },
+		{ "barblock.fadeCast", "r", "behaviour", "Brings the faded block to full opacity as you cast or use an item, and for Wait before fading after." },
 	} },
 	{ id = "ab-places", area = "Bar block", title = "Class, buffs and consumables bars", draw = "mock-block-places", built = true, rows = {
 		{ "blocks.enabled", "c", "mock-block-places" },
