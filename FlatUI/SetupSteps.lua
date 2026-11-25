@@ -1255,6 +1255,7 @@ ns.SETUP_STEPS = {
 		{ "partycd.kindBorder", "o", "behaviour", "Gives the border of each party icon the colour of its kind: interrupts, defensives and the others." },
 		{ "partycd.flash", "o", "behaviour", "Flashes a party icon white as its cooldown ends." },
 		{ "partycd.sound", "o", "behaviour", "Chooses the sound that plays when a party icon's cooldown ends." },
+		{ "partycd.soundMinimum", "o", "behaviour", "Sets the shortest party cooldown whose end plays the sound." },
 		{ "partycd.seconds", "o", "mock-party-cooldowns" },
 		{ "partycd.numbersFont", "o", "mock-party-cooldowns" },
 		{ "partycd.tooltips", "o", "behaviour", "Names the ability, the member and the time left when you point at a party icon, always, out of combat only or never." },
@@ -1631,6 +1632,7 @@ ns.SETUP_STEPS = {
 		{ "threat.warn", "o", "behaviour", "Makes your bar pulse red while you deal damage or heal, are not tanking and are about to pull aggro, and keeps it red once you hold it." },
 		{ "threat.warnAt", "r", "behaviour", "Sets the share of threat at which the warning starts." },
 		{ "threat.lost", "o", "behaviour", "As a tank, makes your bar pulse red and plays the warning sound once when an enemy you held turns to someone else." },
+		{ "threat.others", "o", "behaviour", "As a tank, turns amber the bar of a member who is about to pull aggro from you." },
 		{ "threat.warnSound", "r", "behaviour", "Chooses the sound that plays once for either warning." },
 	} },
 	{ id = "healermana", area = "Healer mana", title = "Healer mana", draw = "mock-screen", built = false, rows = {
@@ -1644,6 +1646,8 @@ ns.SETUP_STEPS = {
 		{ "healermana.lowAt", "o", "behaviour", "Turns a healer's bar red below this share of mana, also in a fight." },
 		{ "healermana.drinking", "o", "behaviour", "Shows a cup and the seconds left on the drink on the bar of a healer who drinks, out of combat." },
 		{ "healermana.range", "o", "behaviour", "Fades the bar of a healer who is too far from you, also in a fight." },
+		{ "healermana.readyAt", "o", "behaviour", "Turns the title green and reads ready once every healer has this share of mana, out of combat." },
+		{ "healermana.readySound", "o", "behaviour", "Chooses the sound that plays once as the healers turn ready to pull." },
 	} },
 	{ id = "consumables", area = "Drink and health macros", title = "Drink and health macros", draw = "mock-screen", built = false, rows = {
 		{ "consumables.enabled", "c", "behaviour", "Keeps two macros in your macro list, one that drinks and one that heals, up to date with your bags and level." },

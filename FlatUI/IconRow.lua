@@ -370,13 +370,24 @@ function ns.PlayKit(id, key)
 	return true
 end
 
--- Puts sample `index` (1 to 3) on an icon, with a flash and a sound at the end of its sweep.
-function ns.IconSample(icon, index, start, seconds, key)
+-- Puts sample `index` (1 to 3) on an icon, with a flash and a sound at the end of its sweep. look, when given, is the row's own cue
+-- ({ flash = false for none, sound = false for none or the sound kit of the row's own choice }), so /flatui test icons follows Flash when ready
+-- and Sound of Party cooldowns and Enemy cooldowns; without it the flash and Spell alert play.
+function ns.IconSample(icon, index, start, seconds, key, look)
 	local sample = SAMPLES[index]
 	if not sample then
 		return false
 	end
-	return ns.IconSet(icon, sample[1], start, seconds, { kind = sample[2], flash = true, sound = ns.SOUNDS[1][1], key = key })
+	local flash, sound = true, ns.SOUNDS[1][1]
+	if type(look) == "table" then
+		flash = look.flash ~= false
+		if look.sound == false then
+			sound = nil
+		elseif type(look.sound) == "number" then
+			sound = look.sound
+		end
+	end
+	return ns.IconSet(icon, sample[1], start, seconds, { kind = sample[2], flash = flash, sound = sound, key = key })
 end
 
 -- The picture of sample `index` (1 to 3), for a row that draws its own icons (Cooldowns.lua), or nil.
