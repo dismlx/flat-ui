@@ -1822,6 +1822,11 @@ ns.PAGES = {
 		-- UnitDruidMana.lua: a thin bar of Flat UI's own under the power bar of the player frame.
 		{ key = "druidMana", kind = "bool", default = true, label = "Druid mana in forms",
 			tip = "For a druid in Bear or Cat Form: a thin mana bar under the player frame's bars. In the other forms the frame's own bar shows mana." },
+		{ key = "druidManaText", kind = "choice", default = "pct", label = "Mana text", needs = "druidMana",
+			tip = "The mana just right of the bar, in the bar text font. It fades in and out with the bar.",
+			choices = { { "none", "None" }, { "pct", "Percent" }, { "cur", "Current" } } },
+		{ key = "druidManaHeight", kind = "number", default = 4, min = 2, max = 12, step = 1, unit = " px", label = "Mana bar height", needs = "druidMana",
+			tip = "Changed out of combat." },
 	},
 	{
 		key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes",

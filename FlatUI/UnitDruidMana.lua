@@ -7,7 +7,7 @@ local _, ns = ...
 -- (Mainline/AlternatePowerBar.lua:2-5, 17-26). In Aquatic, Travel and Moonkin Form the power stays mana and the frame's own bar shows it, so the
 -- bar shows only while UnitPowerType says plainly that the power is not mana (UnitDocumentation.lua:2859-2878, no secret tag; Enum.PowerType.Mana
 -- is 0, PowerTypeConstantsDocumentation.lua:25), and a withheld answer keeps what shows. It is made for a druid alone (UnitClass plainly DRUID).
--- The bar: a StatusBar 4 pixels high, in the fill of the frame's power bar (Power bar texture, else the bar texture of the Flat UI page; a white
+-- The bar: a StatusBar Mana bar height screen pixels high (4 at first, 2 to 12, laid out again out of combat), in the fill of the frame's power bar (Power bar texture, else the bar texture of the Flat UI page; a white
 -- image for a solid fill) and the colour of mana (ns.PowerColour, with Muted colours as the frame's bars have it), with Flat UI's outline in the
 -- look of the Unit frames page, both with the corners of Corners (a rounded line and background, and a mask of the radius on the fill; UnitFrames.lua,
 -- X.ownCorners), changed with the row. A status bar with a texture takes withheld values and one without refuses them (HealthColour.lua, Probe), so it
@@ -31,6 +31,11 @@ local _, ns = ...
 -- Alpha animations of its own frame; the row going off, or the sample of test mode going, hides it at once. In test mode (TestMode.lua, TM.Watch) it
 -- shows for a druid in any form, at 60% in caster form, and is painted again as the rows change; the real rule comes back as test mode ends. The
 -- game's player frame is not changed: no field written, no method called.
+-- Mana text (Percent by default; Current or None): a font string of the addon's own just right of the bar, on its frame, so it fades in and out with
+-- it, in the face, outline and colour of the bar text rows of the Unit frames page (X.ownSpec, UnitText.lua) at 85% of the game's small font. Each feed
+-- writes it unread: UnitPowerPercent of mana through the curve CurveConstants.ScaleTo100 (UnitDocumentation.lua:2838-2856, as UnitText.lua writes a
+-- power percent) to SetFormattedText, or UnitPower of mana through AbbreviateNumbers (or BreakUpLargeNumbers with Number style Full) to SetText, both
+-- of which take withheld values. The sample of test mode reads 60%, or 3.6K with Current.
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLResourceBars/Init.lua:19, resourceBarsDruidFixedMana, a
 -- Forever and TBC option whose bar is not in the package; EnhanceQoLUnitFrames/UF_Helper.lua:1773-1823, a druid's second power is mana, shown
 -- while the main power is not): the mana of a druid in forms, here a bar under the game's player frame.
@@ -38,8 +43,12 @@ local _, ns = ...
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local PART = "Druid mana"
--- The power type of mana (Enum.PowerType.Mana) and its token, the height of the bar in screen pixels, and the fill of a solid bar.
+-- The power type of mana (Enum.PowerType.Mana) and its token, the height of the bar in screen pixels where Mana bar height has none, and the fill of a
+-- solid bar.
 local MANA, TOKEN, HEIGHT_PX = 0, "MANA", 4
+-- The units between the bar and its text, the size of the text against the game's small font, and the mana the sample of test mode shows with
+-- Current (its 60%).
+local TEXT_GAP, TEXT_PERCENT, SAMPLE_MANA = 4, 85, 3600
 -- The seconds of the fade as the bar shows and as it goes.
 local FADE_IN, FADE_OUT = 0.15, 0.2
 local WHITE = "Interface\\Buttons\\WHITE8X8"
@@ -144,6 +153,13 @@ local function Make(rec)
 	bar:SetMinMaxValues(0, 1)
 	bar:SetValue(0)
 	d.outline = ns.Outline(holder, bar)
+	-- The mana text, on the frame that fades, just right of the bar.
+	d.text = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
+	if d.text then
+		d.text:SetPoint("LEFT", holder, "RIGHT", TEXT_GAP, 0)
+		d.text:SetJustifyH("LEFT")
+		d.text:Hide()
+	end
 	if type(bar.CreateMaskTexture) == "function" then
 		local okMask, mask = pcall(bar.CreateMaskTexture, bar)
 		if okMask and mask ~= nil then
@@ -172,7 +188,8 @@ local function Layout(rec, d)
 	else
 		gap = math.max(1, ns.Pixels(d.holder, 2 * t))
 	end
-	local tall = ns.Pixels(d.holder, HEIGHT_PX)
+	local px = tonumber(Opt("druidManaHeight"))
+	local tall = ns.Pixels(d.holder, px and px >= 1 and px or HEIGHT_PX)
 	return anchor, gap, tall, ("%.3f:%.3f"):format(gap, tall) .. (joined and ":body" or "")
 end
 
@@ -196,7 +213,30 @@ local function Place(rec, d)
 	d.placed, d.anchor = key, anchor
 end
 
--- The fill, the colour of mana, the corners and the outline as the frame's bars have them.
+-- The Mana text row: "pct", "cur" or nil for none.
+local function TextMode()
+	local mode = Opt("druidManaText")
+	if mode == "pct" or mode == "cur" then
+		return mode
+	end
+	return nil
+end
+
+-- A number of mana as the frame's bar text writes one: 12.3k, or 12,345 with Number style Full. The value goes through as it came.
+local function Num(value)
+	local call = Opt("numberStyle") == "full" and BreakUpLargeNumbers or AbbreviateNumbers or BreakUpLargeNumbers
+	if type(call) ~= "function" then
+		return value
+	end
+	return call(value)
+end
+
+-- The format of a percent, the one the bar texts write with (UnitText.lua X.formats).
+local function PctFormat()
+	return type(X.formats) == "table" and X.formats.pct or "%.0f%%"
+end
+
+-- The fill, the colour of mana, the corners and the outline as the frame's bars have them, and the face of the mana text.
 local function Paint(d)
 	local file = File()
 	if d.file ~= file then
@@ -221,6 +261,14 @@ local function Paint(d)
 		ns.SetOutlineEdges(d.outline, Opt("barBorder") ~= false)
 		X.outline(d.outline, true, Opt("backdrop"))
 	end
+	if d.text then
+		local spec = { percent = TEXT_PERCENT }
+		if type(X.ownSpec) == "function" then
+			spec = X.ownSpec("bar", spec)
+		end
+		ns.TextStyle(d.text, spec)
+		d.text:SetShown(TextMode() ~= nil)
+	end
 end
 
 -- Sets the value of a bar, gliding to it where the client has the interpolation (Enum.StatusBarInterpolation, never withheld), at once where it has not.
@@ -244,6 +292,19 @@ local function Feed(d, jump)
 		pcall(d.bar.SetValue, d.bar, mana)
 	elseif ok then
 		Glide(d.bar, mana)
+	end
+	local mode, text = TextMode(), d.text
+	if text == nil or mode == nil then
+		return
+	end
+	if mode == "pct" then
+		pcall(function()
+			text:SetFormattedText(PctFormat(), UnitPowerPercent("player", MANA, false, CurveConstants.ScaleTo100))
+		end)
+	elseif ok then
+		pcall(function()
+			text:SetText(Num(mana))
+		end)
 	end
 end
 
@@ -307,6 +368,13 @@ local function Show(d)
 	if d.sample then
 		pcall(d.bar.SetMinMaxValues, d.bar, 0, 1)
 		pcall(d.bar.SetValue, d.bar, 0.6)
+		if d.text then
+			if TextMode() == "cur" then
+				pcall(d.text.SetText, d.text, Num(SAMPLE_MANA))
+			else
+				pcall(d.text.SetFormattedText, d.text, PctFormat(), 60)
+			end
+		end
 	elseif show then
 		Feed(d, fresh)
 	end

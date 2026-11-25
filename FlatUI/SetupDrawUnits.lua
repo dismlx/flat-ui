@@ -24,6 +24,9 @@ local ADDON_NAME, ns = ...
 -- for a sample of its own, a raid cell of any size, and the marks those have in test mode (offline, the dispel border and type icon, raid markers,
 -- leader and assistant icons, heal over time squares, the game's aura icons on a cell), which only its frames are made with, but for the dispel border,
 -- its type icon and the heal over time squares of a party frame, which the setup's party frames draw too (Mara's Magic debuff, Bex's two squares).
+-- Right of the setup's pet (Wolf), while Pet target frame is on, the pet target frame of UnitPetTarget.lua is drawn as test mode draws its sample:
+-- Training Dummy at 65% in the hostile colour, Pet target width wide, a Skull left of it with Raid marker on target, focus, boss and pet target frames,
+-- and its border in Not your target colour with Border while it is not your target.
 
 local KEY = "unitframes"
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
@@ -580,8 +583,8 @@ local function LowShown(on, g, s, hp)
 	return on and g.lowHealth and not s.dead and not s.offline and hp * 100 < limit
 end
 
--- True for a kind of frame that takes the border with the settings g: your own and your group's always, the target, focus and boss frames with Also on
--- target, focus and boss frames.
+-- True for a kind of frame that takes the border with the settings g: your own and your group's always, the target, focus, boss and target of target
+-- frames with Also on target, focus, boss and target of target frames.
 local function LowKind(kind, g)
 	return LOW[kind] == true or (g.lowTarget == true and ENEMY_LOW[kind] == true)
 end
@@ -704,6 +707,36 @@ local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots)
 			Solid(square.fill, c[1], c[2], c[3], 1)
 		end
 	end
+end
+
+-- The pet target frame ------------------------------------------------------------------------------------------------------------------
+
+-- The pet target frame of the setup's pet (UnitPetTarget.lua): its height, the room between its edge and its words, the room left of it, which holds its
+-- raid marker, and the sample of test mode (Training Dummy at 65%, with a Skull, UnitPetTarget.lua SAMPLE) in the game's hostile colour.
+local PET_TARGET = { height = 20, inset = 4, gap = 22, name = "Training Dummy", share = 0.65, marker = 8, hostile = { 1, 0, 0 } }
+
+-- The frames of the pet target frame on the pet's root: the bar with its border, background and fill, its name and percent, the raid marker left of it,
+-- and a frame over it with edges of its own for Border while it is not your target.
+local function MakePetTarget(root)
+	local p = { frame = Above(Frame(root), root, 2) }
+	p.outline = ns.Outline(p.frame, p.frame)
+	ns.SetOutlineArea(p.outline, KEY)
+	p.fill = Tex(p.frame, "ARTWORK", 0)
+	p.top = Above(Frame(p.frame), root, 4)
+	p.top:SetAllPoints(p.frame)
+	p.name, p.pct = Text(p.top, "GameFontHighlightSmall"), Text(p.top, "GameFontHighlightSmall")
+	p.name:SetJustifyH("LEFT")
+	p.pct:SetJustifyH("RIGHT")
+	p.marker = Tex(p.top, "OVERLAY", 3)
+	p.warn = Above(Frame(root), root, 4)
+	p.warn:SetAllPoints(p.frame)
+	p.warnOutline = ns.Outline(p.warn, p.warn)
+	if p.warnOutline then
+		ns.SetOutlineArea(p.warnOutline, KEY)
+	end
+	p.frame:Hide()
+	p.warn:Hide()
+	return p
 end
 
 -- Samples ---------------------------------------------------------------------------------------------------------------------------------
@@ -844,6 +877,10 @@ function E.make(stage, id, given)
 	if sample.kind == "party" then
 		o.marks = MakeMarks(root)
 	end
+	-- The pet target frame right of the setup's pet (E.petTarget); test mode draws its own (UnitPetTarget.lua).
+	if sample.kind == "pet" and given == nil then
+		o.petTarget = MakePetTarget(root)
+	end
 	local row = Above(Frame(root), root, 3)
 	o.row = row
 	o.rBase, o.rGrad, o.rFill = Tex(row, "BACKGROUND", -8), Tex(row, "BACKGROUND", 0), Tex(row, "BACKGROUND", 0)
@@ -878,7 +915,8 @@ function E.make(stage, id, given)
 	o.parts = { root = root, body = o.box, pic = o.pic, health = o.health, power = o.power, row = row, name = o.name, level = o.level, healthText = o.healthText,
 		powerText = o.powerText, pred = o.pred, shield = o.shield, absorb = o.absorb, kmark = o.kmark, kword = o.kword, kline = o.rLine, plate = o.plateIcon,
 		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, aura = o.auras[1] and o.auras[1].frame,
-		count = o.auras[1] and o.auras[1].count, time = o.auras[1] and o.auras[1].time, picLevel = o.picLevel, timer = o.pvpTimer, shadow = o.shadow }
+		count = o.auras[1] and o.auras[1].count, time = o.auras[1] and o.auras[1].time, picLevel = o.picLevel, timer = o.pvpTimer, shadow = o.shadow,
+		petTarget = o.petTarget and o.petTarget.frame }
 	return o
 end
 
@@ -1810,6 +1848,71 @@ function E.auras(o, g, L)
 end
 
 -- Draws one frame at the top left corner of its root. Sets o.width and o.height.
+-- The pet target frame right of the pet's bars while Pet target frame is on, as test mode draws its sample (UnitPetTarget.lua Children, Paint and
+-- SampleFill): Pet target width units wide, the bar at 65% in the hostile colour (the Colours page's own with Custom reaction colours) in the fill, border,
+-- background and Corners of the unit frames, Training Dummy in the name rows' face and 65% in the bar text rows', a Skull left of it with Raid marker on
+-- target, focus, boss and pet target frames, and with Border while it is not your target its border in Not your target colour. Returns the right edge of
+-- the frame in units of the pet's root, or nil while it is off.
+function E.petTarget(o, g, L)
+	local p = o.petTarget
+	local shown = g.enabled and Get("petTarget") == true
+	p.frame:SetShown(shown)
+	p.warn:SetShown(shown and Get("petTargetWarn") == true)
+	if not shown then
+		return nil
+	end
+	local width = tonumber(Get("petTargetWidth"))
+	width = width and width > 0 and width or 120
+	local height, radius = PET_TARGET.height, g.radius
+	local x = L.width + PET_TARGET.gap
+	local y = math.max(0, L.healthTop + (L.size.health - height) / 2)
+	Box(p.frame, o.root, x, y, width, height)
+	EdgePaint(p.outline, true, g.backdrop, nil, nil, true)
+	Round(p.outline, radius, L.t)
+	local r, gr, b = PET_TARGET.hostile[1], PET_TARGET.hostile[2], PET_TARGET.hostile[3]
+	if ns.Get("general.reactionOwn") == true then
+		r, gr, b = ns.Colour("general.reactionHostile")
+	end
+	r, gr, b = Mute(r, gr, b)
+	Stretch(p.fill, p.frame, 0, width * PET_TARGET.share, height)
+	Fill(p.fill, FileOf("health"), r, gr, b, 1)
+	CutFill(p.frame, p.fill, radius)
+	local formats = ns.UnitFrameExtra and ns.UnitFrameExtra.formats
+	p.pct:SetText(((formats and formats.pct) or "%.0f%%"):format(PET_TARGET.share * 100))
+	p.pct:ClearAllPoints()
+	p.pct:SetPoint("RIGHT", p.frame, "RIGHT", -PET_TARGET.inset, 0)
+	p.name:SetText(PET_TARGET.name)
+	p.name:ClearAllPoints()
+	p.name:SetPoint("LEFT", p.frame, "LEFT", PET_TARGET.inset, 0)
+	p.name:SetPoint("RIGHT", p.pct, "LEFT", -PET_TARGET.inset, 0)
+	local nameSpec = { percent = g.nameSize, flags = FLAGS[g.nameOutline], face = g.nameFace ~= "default" and ns.FontFile(g.nameFace) or nil }
+	local pctSpec = { percent = 100, flags = FLAGS[g.barTextOutline], face = g.barTextFace ~= "default" and ns.FontFile(g.barTextFace) or nil }
+	if g.barTextOwn then
+		pctSpec.r, pctSpec.g, pctSpec.b = ns.Colour(KEY .. ".barTextColour")
+	end
+	Style(p.name, nameSpec)
+	Style(p.pct, pctSpec)
+	p.marker:SetShown(g.raidMarker)
+	if g.raidMarker then
+		local index = PET_TARGET.marker - 1
+		p.marker:SetTexture(MARKER)
+		p.marker:SetVertexColor(1, 1, 1, 1)
+		p.marker:SetTexCoord((index % 4) * 0.25, (index % 4) * 0.25 + 0.25, math.floor(index / 4) * 0.25, math.floor(index / 4) * 0.25 + 0.25)
+		p.marker:ClearAllPoints()
+		p.marker:SetSize(height - 2, height - 2)
+		p.marker:SetPoint("RIGHT", p.frame, "LEFT", -2, 0)
+	end
+	if Get("petTargetWarn") == true and p.warnOutline then
+		local wr, wg, wb = ns.Colour(KEY .. ".petTargetWarnColour")
+		ns.SetOutline(p.warnOutline, true, false)
+		ns.SetOutlineColour(p.warnOutline, wr, wg, wb)
+		ns.SetOutlineEdges(p.warnOutline, true)
+		ns.SetOutlineThickness(p.warnOutline, ns.Get("general.thickness"))
+		Round(p.warnOutline, LowRadius(p.outline, radius), L.t)
+	end
+	return x + width
+end
+
 function E.draw(o, g)
 	local L = Layout(o, g)
 	o.root:SetSize(L.width, L.height)
@@ -1864,6 +1967,11 @@ function E.draw(o, g)
 	o.g = g
 	o.width, o.height = L.width, L.height
 	o.root:SetSize(L.width, L.height)
+	-- The pet target frame right of the pet widens its place in the scene, so the next frame moves over.
+	local right = o.petTarget and E.petTarget(o, g, L)
+	if right then
+		o.width = math.max(o.width, right)
+	end
 	o.layout = L
 	return k
 end
@@ -2191,6 +2299,7 @@ local MARK = {
 	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
 	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
+	petTarget = { "pet", "petTarget" }, petTargetWidth = { "pet", "petTarget" }, petTargetWarn = { "pet", "petTarget" }, petTargetWarnColour = { "pet", "petTarget" },
 	lowHealthTarget = { "target", "health" }, lowHealthTargetAt = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
 	hotSquares = { "party2", "health" }, hotCorner = { "party2", "health" }, hotSize = { "party2", "health" },
 	healPrediction = { "player", "pred" }, absorbShield = { "player", "shield" }, healAbsorb = { "player", "absorb" }, lookOwn = { "player", "health" },
