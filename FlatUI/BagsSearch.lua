@@ -8,12 +8,13 @@ local _, ns = ...
 -- other characters. Bags.lua makes ns.Bags with B.Search; this file only adds its fields. It owns no event: BagsData.lua asks for the search
 -- again (B.Request("search")) when the data of an item arrives.
 --
--- The grammar is Flat UI's own. Brackets bind first, then ! (not), then and (a space or &), then | (or). A term is a #keyword, a comparison
--- (q or ilvl, then :, =, <, <=, > or >=, then a value; ilvl also takes a range such as 20-30), or a word: any other run of letters, or "quoted
--- text". Text that does not parse, such as an open bracket while typing, is looked for whole as one word, so typing never fails, and a #word
--- that is no keyword is looked for as a word without its #. The text is compiled once for each change. The box keeps a typed bar as "||", the
--- escape of the game's edit boxes (its login box reads it back the same way, Blizzard_GlueXML/Mainline/AccountLogin.lua:212-213), so the text is
--- compiled with each "||" read as one bar, and a run of bars is one or; the text itself is kept as the box gives it.
+-- The grammar is Flat UI's own. Brackets bind first, then ! (not), then and (a space or &), then | (or). A term is a #keyword, a comparison (q or
+-- ilvl, then :, =, <, <=, > or >=, then a value; ilvl also takes a range such as 20-30), tip: and a word or "quoted text" right after it, or a word:
+-- any other run of letters, or "quoted text". Text that does not parse, such as an open bracket while typing, is looked for whole as one word, so
+-- typing never fails, and a #word that is no keyword is looked for as a word without its #. The text is compiled once for each change. The box keeps
+-- a typed bar as "||", the escape of the game's edit boxes (its login box reads it back the same way,
+-- Blizzard_GlueXML/Mainline/AccountLogin.lua:212-213), so the text is compiled with each "||" read as one bar, and a run of bars is one or; the text
+-- itself is kept as the box gives it.
 --
 -- A word is plain text, never a pattern (string.find with plain on), found without regard to case (string.lower, which folds A to Z only) in the
 -- item's name (the record's, else C_Item.GetItemNameByID), its type and subtype as C_Item.GetItemInfoInstant gives them in the client's language,
@@ -26,10 +27,13 @@ local _, ns = ...
 -- (the rules of those sections), #boe (ItemMarks' answer, ns.ItemMarks.BoE, ItemMarks.lua:184-191), #bound, #set, #usable and #unusable (ItemMarks'
 -- tooltip test, ns.ItemMarks.Unusable, :247-279), and the qualities #poor to #legendary. q takes 0 to 7, the English names or the client's
 -- (ITEM_QUALITY0_DESC to ITEM_QUALITY7_DESC, Enum.ItemQuality, enums.yaml:5101-5111); ilvl compares the item level of weapons and armour
--- (ns.Items.LevelOf, Items.lua:425-438), and an item with no level never matches it.
+-- (ns.Items.LevelOf, Items.lua:425-438), and an item with no level never matches it. tip:stamina or tip:"chance to hit" looks for its text,
+-- plainly and in lower case, in the item's tooltip: every left and right text of C_TooltipInfo.GetHyperlink of the record's link (the "item:" link
+-- of a kept record), with the client's colour codes taken out, read once per link and kept for the session (at most TIP_MOST links, then begun
+-- again), so the picker of characters counts it cheaply.
 --
 -- A record whose name the client has not loaded yet matches nil, unknown, when only its name could decide: it is drawn dimmed until the name
--- comes. The search never asks the server for an item: the name, the binding, the tooltip and the item level are read only once
+-- comes. The search never asks the server for an item: the name, the binding, the tooltips and the item level are read only once
 -- C_Item.IsItemDataCachedByID says the client has the item, since the picker of characters counts matches over items no window shows. #usable
 -- and #unusable say what this character can use, so another character's items match neither.
 --
@@ -86,6 +90,7 @@ local HELP = {
 	"#trade  #reagent  #recipe  #ammo  #bag  #key",
 	"#poor  #common  #uncommon  #rare  #epic  #legendary",
 	"Quality: q:rare, q>=uncommon, q<3. Item level: ilvl:20-30, ilvl>40.",
+	"tip: looks in each item's tooltip: tip:stamina, tip:\"fire resistance\", tip:agility #boe.",
 	"For example: #boe q>=uncommon, !#junk mail, (cloth | leather) #gear.",
 	"Items that do not match are dimmed. Enter or Escape leaves the box, and the cross clears it.",
 	"Right-click the box for quick searches. A key under Flat UI in Key Bindings opens the bags with this box ready.",
@@ -122,6 +127,9 @@ local boxes = setmetatable({}, { __mode = "k" })
 local writing = false
 -- The text last compiled and what it compiled to (nil for a text with nothing to look for).
 local compiled = { text = nil, query = nil }
+-- The text of the tooltips read for tip: (texts, by link, in lower case), how many are kept, and the most kept before they are read anew.
+local tips = { texts = {}, count = 0 }
+local TIP_MOST = 3000
 
 -- A text the client gave plainly, or nil.
 local function Text(value)
@@ -518,6 +526,41 @@ local function Level(record)
 	return level
 end
 
+-- The text of the record's tooltip in lower case, every left and right text in one, without colour codes; nil while the client has not loaded
+-- the item (Cached), false when the client gives no tooltip. Read once per link. Nothing is asked of the server.
+local function TipText(record)
+	if not Cached() then
+		return nil
+	end
+	local link = Text(record.link) or ("item:" .. record.id)
+	local known = tips.texts[link]
+	if known ~= nil then
+		return known
+	end
+	local api = C_TooltipInfo
+	local get = type(api) == "table" and not ns.IsSecret(api) and api.GetHyperlink or nil
+	if type(get) ~= "function" then
+		return false
+	end
+	local ok, data = pcall(get, link)
+	if not ok or type(data) ~= "table" or ns.IsSecret(data) or type(data.lines) ~= "table" or ns.IsSecret(data.lines) then
+		return nil
+	end
+	local parts = {}
+	for _, line in ipairs(data.lines) do
+		if type(line) == "table" and not ns.IsSecret(line) then
+			parts[#parts + 1] = Text(line.leftText)
+			parts[#parts + 1] = Text(line.rightText)
+		end
+	end
+	local found = table.concat(parts, "\n"):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):lower()
+	if tips.count >= TIP_MOST then
+		tips.texts, tips.count = {}, 0
+	end
+	tips.texts[link], tips.count = found, tips.count + 1
+	return found
+end
+
 -- Parsing ----------------------------------------------------------------------------------------------------------------------------------
 
 local OPERATORS = { ["("] = true, [")"] = true, ["|"] = true, ["&"] = true, ["!"] = true }
@@ -560,6 +603,9 @@ local function Term(token)
 	if token.quoted then
 		return { op = "word", text = low }
 	end
+	if low:sub(1, 4) == "tip:" and #low > 4 then
+		return { op = "tip", text = low:sub(5) }
+	end
 	if low:sub(1, 1) == "#" then
 		local name = low:sub(2)
 		local test = KEYWORDS[name]
@@ -590,6 +636,12 @@ local function Primary(state)
 		return node
 	elseif token.kind == "text" then
 		state.at = state.at + 1
+		-- tip: with "quoted text" right after it looks for that text in the tooltip.
+		local quoted = state.tokens[state.at]
+		if not token.quoted and token.text:lower() == "tip:" and quoted and quoted.kind == "text" and quoted.quoted then
+			state.at = state.at + 1
+			return { op = "tip", text = quoted.text:lower() }
+		end
 		return Term(token)
 	end
 	return nil
@@ -702,6 +754,12 @@ local function Test(node, record)
 			return level
 		end
 		return Compare(level, node.cmp, node.low, node.high)
+	elseif op == "tip" then
+		local found = TipText(record)
+		if found == nil or found == false then
+			return found
+		end
+		return found:find(node.text, 1, true) ~= nil
 	end
 	return false
 end

@@ -2,8 +2,14 @@ local _, ns = ...
 
 -- Bags: the row of bag slots over the bag window's footer (B.Slots, in the strip of Flat UI's own that BagsWindow.lua gives it), so a bag can be put
 -- in or swapped while the game's bag bar is hidden (Hidden frames, Bag bar) or faded away. Bags.lua makes ns.Bags with B.Slots; this file only adds
--- its fields, makes frames and textures of its own only, and owns no event: BagsData.lua lays the bag window out again at BAG_CONTAINER_UPDATE, and
--- every pass of the window asks for the row again (Row), which draws it from the game as it is then.
+-- its fields and makes frames, textures and animations of its own only. BagsData.lua lays the bag window out again at BAG_CONTAINER_UPDATE, and
+-- every pass of the window asks for the row again (Row), which draws it from the game as it is then. The three events this file adds to the module
+-- (ns.AddEvent, beside the other parts' handlers of the same events) are the ones the game's bag buttons hear (PaperDollFrame.lua:2002-2013,
+-- 2068-2080; MainMenuBarBagButtons.lua:16, 44-49), and do something only while the row shows (IsVisible): CURSOR_CHANGED keeps the hover tint of
+-- each slot whose inventory slot the cursor's item can go in lit (LockHighlight, from C_PaperDollInfo.CursorCanGoInSlot; never the backpack),
+-- ITEM_LOCK_CHANGED with no slot (an inventory slot locked or freed) draws that bag's slot again, greyed (SetDesaturated, IsInventoryItemLocked)
+-- while its bag is lifted, and ITEM_PUSH (bagSlot, iconFileID: the backpack's is 0) plays the item's icon on that bag's slot, from FLY_SCALE times
+-- its size down into it while it fades, FLY_SECONDS long, on a texture and an animation group of the slot's own, so loot is seen going in.
 --
 -- The row shows while the bag window shows the player's own live bags and the row Bag slots on the Bags page is on: the backpack, the four bags and
 -- the reagent bag (Enum.BagIndex 0 to 5), each a button of Flat UI's own in the shape of BagsBank.lua's bank bag slots (SLOT units, GAP apart, an
@@ -18,12 +24,17 @@ local _, ns = ...
 --
 -- The clicks are the game's own bag buttons' (Blizzard_MainMenuBarBagButtons/Shared/MainMenuBarBagButtons.lua:68-95), out of combat only: a drop,
 -- or a click with an item on the cursor (CursorHasItem), puts it in the slot with PutItemInBag(slot), and on the backpack with PutItemInBackpack; a
--- drag, or a click with nothing on the cursor, picks the bag up with PickupBagFromSlot(slot), as the bank's bag slots pick theirs up (BagsBank.lua).
--- None of them is protected. In a fight a click says so in one line and does nothing. The tooltip is the game's of the bag
--- (GameTooltip:SetInventoryItem) out of combat, plain lines in a fight or for an empty slot, and a line of the bag's free and total slots
--- (C_Container.GetContainerNumFreeSlots and GetContainerNumSlots); it is hidden when the cursor leaves the button that owns it (IsOwned). The mouse
--- over a slot lights that bag's items in the window (B.Layout.Light, BagsLayout.lua), as the game's bag bar does with Bags (Bags.lua), and leaving
--- it gives the window back.
+-- drag picks the bag up with PickupBagFromSlot(slot), as the game's bag button does (:88-90). None of them is protected. In a fight they say so in
+-- one line and do nothing. A plain click with nothing on the cursor, where the game's button opens that bag, keeps that bag lit in the window
+-- (B.Layout.Stick, BagsLayout.lua): every other slot dimmed as under the mouse, the search still applied, and the slot's edge in the Highlight
+-- colour of the Windows page (SetOutlineColour); a click on it again, on another slot, or the window closing gives everything back. That touches
+-- frames of Flat UI's own only, so it works in a fight too. A right click with nothing on the cursor opens that bag's settings (B.Layout.BagMenuOf:
+-- Assign To, Ignore Clean Up and Ignore Junk Selling, as on a label of Bag by bag), in either view and in a fight too, since those flags are not
+-- protected. The tooltip is the game's of the bag (GameTooltip:SetInventoryItem) out of combat, plain lines in a fight or for an empty slot, a
+-- line of the bag's free and total slots (C_Container.GetContainerNumFreeSlots and GetContainerNumSlots), what its settings say (B.Layout.BagFlags:
+-- what it is assigned to, and whether clean up or junk selling leaves it alone) and what the clicks do; it is hidden when the cursor leaves the
+-- button that owns it (IsOwned). The mouse over a slot that holds a bag lights that bag's items in the window (B.Layout.Light, BagsLayout.lua), as
+-- the game's bag bar does with Bags (Bags.lua), and leaving it gives the window back; an empty slot lights nothing.
 
 local B = ns.Bags
 if type(B) ~= "table" or type(B.Slots) ~= "table" then
@@ -32,7 +43,7 @@ end
 local Slots = B.Slots
 local E = ns.Errands
 
-local PART = "slots"
+local KEY, PART = "bags", "slots"
 -- The bags of the row: the backpack, the four bags and the reagent bag (Enum.BagIndex).
 local FIRST, LAST = 0, 5
 -- The size of a slot and the space between two, as the bank's bag slots (BagsBank.lua).
@@ -51,6 +62,8 @@ local COUNT_FONT, COUNT_SIZE = "NumberFontNormal", 11
 local ROOM, FULL = { 1, 1, 1 }, { 1, 0.35, 0.24 }
 -- The crop of an icon when the Windows page does not say.
 local CROP = 8
+-- Loot going in (ITEM_PUSH): the size its icon starts at, as times the slot's, and how long it takes to shrink into the slot, fading after FLY_FADE.
+local FLY_SCALE, FLY_SECONDS, FLY_FADE = 1.8, 0.45, 0.15
 local FIGHT_LINE = "Flat UI: the bag slots of the bag window take no clicks in a fight."
 
 -- The row, made by Slots.Row: { frame, parent, slots = { [bag] = slot } }.
@@ -165,23 +178,74 @@ local function TipGone(owner)
 	end
 end
 
+-- A function of the layout (B.Layout, BagsLayout.lua), or nil.
+local function LayoutFn(name)
+	local layout = B.Layout
+	local fn = Usable(layout) and layout[name] or nil
+	return type(fn) == "function" and fn or nil
+end
+
 -- The bag window lights the bag under the cursor, or gives itself back with nil.
 local function Light(bag)
-	local layout = B.Layout
-	if Usable(layout) and type(layout.Light) == "function" then
-		B.Part("layout", layout.Light, "bags", bag)
+	local light = LayoutFn("Light")
+	if light then
+		B.Part("layout", light, "bags", bag)
 	end
 end
 
--- A click, a drag or a drop on the slot of bag: an item on the cursor goes in, else the bag comes up on the cursor; out of combat only.
-local function Use(bag, drag)
+-- The bag a click keeps lit in the bag window, or nil.
+local function Stuck()
+	local stuck = LayoutFn("Stuck")
+	if not stuck then
+		return nil
+	end
+	local ok, bag = pcall(stuck, "bags")
+	return ok and ns.Finite(bag) and bag or nil
+end
+
+-- True when the slot of bag holds a bag: the backpack always.
+local function Holds(bag)
+	return bag == 0 or BagIcon(bag) ~= nil
+end
+
+-- The edge of a slot: in the Highlight colour while a click keeps its bag lit, else the outline's own.
+local function Edge(slot, bag)
+	if Stuck() == bag and Holds(bag) then
+		local r, g, b = ns.Colour("windows.accent")
+		ns.SetOutlineColour(slot.box, r, g, b)
+	else
+		ns.SetOutlineColour(slot.box, nil, nil, nil)
+	end
+end
+
+-- A plain click on a slot that holds a bag keeps that bag lit in the window, or, on the one lit already, gives every bag back.
+local function Stick(bag)
+	local stick = LayoutFn("Stick")
+	if not stick or not Holds(bag) then
+		return
+	end
+	B.Part("layout", stick, "bags", Stuck() ~= bag and bag or nil)
+	for other, slot in pairs(row and row.slots or {}) do
+		Edge(slot, other)
+	end
+end
+
+-- A click, a drag or a drop (how) on the slot of bag. A click with nothing on the cursor keeps that bag lit, in a fight too; else, out of combat
+-- only, an item on the cursor goes in on a click or a drop, and a drag lifts the bag onto the cursor.
+local function Use(bag, how)
+	local holding = E.Ask(CursorHasItem) == true
+	if not holding and how ~= "drag" then
+		if how == "click" then
+			Stick(bag)
+		end
+		return
+	end
 	if E.Fighting() then
 		print(FIGHT_LINE)
 		return
 	end
-	local holding = E.Ask(CursorHasItem) == true
 	if bag == 0 then
-		if holding and not drag then
+		if holding and how ~= "drag" then
 			E.Call(PutItemInBackpack)
 		end
 		return
@@ -190,14 +254,48 @@ local function Use(bag, drag)
 	if not slot then
 		return
 	end
-	if holding and not drag then
+	if holding and how ~= "drag" then
 		E.Call(PutItemInBag, slot)
-	elseif not holding then
+	elseif not holding and how == "drag" then
 		E.Call(PickupBagFromSlot, slot)
 	end
 end
 
--- The game's tooltip of the bag out of combat, plain lines in a fight or for an empty slot; then the bag's free and total slots.
+-- A click on a slot: the right button with nothing on the cursor opens the bag's settings under it (B.Layout.BagMenuOf), any other the click above.
+local function Click(button, bag, mouse)
+	if mouse == "RightButton" and E.Ask(CursorHasItem) ~= true then
+		local menu = LayoutFn("BagMenuOf")
+		if menu then
+			B.Part("layout", menu, "bags", bag, button)
+		end
+		return
+	end
+	Use(bag, "click")
+end
+
+-- The settings of a held bag in its tooltip, from the bag menu's flags (B.Layout.BagFlags).
+local function FlagLines(tip, bag)
+	local flags = LayoutFn("BagFlags")
+	if not flags then
+		return
+	end
+	local ok, sortOff, junkOff, assigned = pcall(flags, bag)
+	if not ok then
+		return
+	end
+	if type(assigned) == "string" and assigned ~= "" then
+		tip:AddLine(("Assigned to: %s"):format(assigned), 1, 1, 1, true)
+	end
+	if sortOff == true then
+		tip:AddLine("Clean up leaves this bag alone.", DIM[1], DIM[2], DIM[3], true)
+	end
+	if junkOff == true then
+		tip:AddLine("Sell junk leaves this bag alone.", DIM[1], DIM[2], DIM[3], true)
+	end
+end
+
+-- The game's tooltip of the bag out of combat, plain lines in a fight or for an empty slot; then the bag's free and total slots, its settings and
+-- what the clicks do.
 local function SlotTip(button, bag)
 	local tip = GameTooltip
 	if not Usable(tip) or ns.Forbidden(tip) then
@@ -230,10 +328,30 @@ local function SlotTip(button, bag)
 	if held and free then
 		tip:AddLine(("%d of %d slots free"):format(free, total), 1, 1, 1)
 	end
-	if held and bag ~= 0 then
-		tip:AddLine("Drag or click it to pick the bag up, or drop another bag on it to swap them.", DIM[1], DIM[2], DIM[3], true)
+	if held then
+		FlagLines(tip, bag)
+		local click = Stuck() == bag and "Click again to show every bag" or "Click to show only this bag"
+		if bag ~= 0 then
+			click = click .. "; drag it to pick it up, or drop another bag on it to swap."
+		else
+			click = click .. "."
+		end
+		tip:AddLine(click, DIM[1], DIM[2], DIM[3], true)
+		tip:AddLine("Right-click for this bag's settings.", DIM[1], DIM[2], DIM[3], true)
 	end
 	tip:Show()
+end
+
+-- The tooltip again after a click, which may have changed what it says, while this slot still owns it.
+local function Retip(button, bag)
+	local tip = GameTooltip
+	if not Usable(tip) or ns.Forbidden(tip) then
+		return
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, button)
+	if ok and not ns.IsSecret(owned) and owned == true then
+		SlotTip(button, bag)
+	end
 end
 
 local function MakeSlot(bag)
@@ -257,20 +375,26 @@ local function MakeSlot(bag)
 		slot.count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
 		slot.count:SetJustifyH("RIGHT")
 	end
-	button:RegisterForClicks("LeftButtonUp")
+	button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	button:RegisterForDrag("LeftButton")
-	button:SetScript("OnClick", function()
-		Run(Use, bag, false)
+	button:SetScript("OnClick", function(self, mouse)
+		Run(Click, self, bag, mouse)
+		if mouse ~= "RightButton" then
+			Run(Retip, self, bag)
+		end
 	end)
 	button:SetScript("OnDragStart", function()
-		Run(Use, bag, true)
+		Run(Use, bag, "drag")
 	end)
 	button:SetScript("OnReceiveDrag", function()
-		Run(Use, bag, false)
+		Run(Use, bag, "drop")
 	end)
 	button:SetScript("OnEnter", function(self)
 		Run(SlotTip, self, bag)
-		Light(bag)
+		-- An empty slot lights nothing, so the window does not dim whole.
+		if Holds(bag) then
+			Light(bag)
+		end
 	end)
 	button:SetScript("OnLeave", function(self)
 		Run(TipGone, self)
@@ -300,21 +424,97 @@ local function DrawCount(slot, bag, held)
 	text:Show()
 end
 
--- Draws a slot: the bag's icon, cropped, with its free slots in the corner, or the game's art of an empty slot, faded.
+-- True while the game holds the bag of a slot lifted (on the cursor, or on its way to another slot); never the backpack.
+local function Lifted(bag)
+	local slot = InventorySlot(bag)
+	return slot ~= nil and E.Ask(IsInventoryItemLocked, slot) == true
+end
+
+-- Draws a slot: the bag's icon, cropped, greyed while the bag is lifted, with its free slots in the corner, or the game's art of an empty slot,
+-- faded; its edge in the Highlight colour while a click keeps its bag lit.
 local function DrawSlot(slot, bag, crop)
 	local icon = BagIcon(bag)
 	if icon then
 		slot.icon:SetTexture(icon)
 		slot.icon:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
 		slot.icon:SetAlpha(1)
+		pcall(slot.icon.SetDesaturated, slot.icon, Lifted(bag))
 	else
 		slot.icon:SetTexture(EmptyArt(bag))
 		slot.icon:SetTexCoord(0, 1, 0, 1)
 		slot.icon:SetAlpha(0.5)
+		pcall(slot.icon.SetDesaturated, slot.icon, false)
 	end
 	slot.icon:Show()
 	DrawCount(slot, bag, icon ~= nil)
 	Paint(slot.box)
+	Edge(slot, bag)
+end
+
+-- True while the row shows: its frame and every parent up to the screen.
+local function Showing()
+	if not row then
+		return false
+	end
+	local ok, visible = pcall(row.frame.IsVisible, row.frame)
+	return ok and visible == true
+end
+
+-- Each slot whose bag slot the cursor's item can go in keeps its hover tint lit, as the game's bag buttons do; the backpack never.
+local function Fits()
+	local api = C_PaperDollInfo
+	local can = Usable(api) and api.CursorCanGoInSlot or nil
+	for bag, slot in pairs(row.slots) do
+		local inventory = InventorySlot(bag)
+		if inventory and E.Ask(can, inventory) == true then
+			slot.button:LockHighlight()
+		else
+			slot.button:UnlockHighlight()
+		end
+	end
+end
+
+-- The icon of an item that came into a bag plays on its slot: from FLY_SCALE times the slot's size down into it while it fades. Made the first
+-- time, and false when the client has no such animation.
+local function Fly(slot, icon)
+	if slot.fly == nil then
+		local ok, fly, group = pcall(function()
+			local texture = slot.button:CreateTexture(nil, "OVERLAY", nil, 7)
+			ns.Own[texture] = true
+			texture:SetAllPoints(slot.button)
+			texture:Hide()
+			local made = texture:CreateAnimationGroup()
+			local scale = made:CreateAnimation("Scale")
+			scale:SetScaleFrom(FLY_SCALE, FLY_SCALE)
+			scale:SetScaleTo(1, 1)
+			scale:SetOrigin("CENTER", 0, 0)
+			scale:SetDuration(FLY_SECONDS)
+			scale:SetSmoothing("IN")
+			local alpha = made:CreateAnimation("Alpha")
+			alpha:SetFromAlpha(1)
+			alpha:SetToAlpha(0)
+			alpha:SetStartDelay(FLY_FADE)
+			alpha:SetDuration(FLY_SECONDS - FLY_FADE)
+			made:SetScript("OnFinished", function()
+				texture:Hide()
+			end)
+			made:SetScript("OnStop", function()
+				texture:Hide()
+			end)
+			return texture, made
+		end)
+		slot.fly = ok and fly or false
+		slot.flyGroup = ok and group or nil
+	end
+	if not slot.fly then
+		return
+	end
+	local crop = Crop()
+	slot.flyGroup:Stop()
+	slot.fly:SetTexture(icon)
+	slot.fly:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
+	slot.fly:Show()
+	slot.flyGroup:Play()
 end
 
 -- Lays the row out: a slot for each bag that has an inventory slot, left to right. Returns the width and height it takes in its frame.
@@ -337,6 +537,7 @@ local function Update()
 	local width = math.max(x - GAP, 1)
 	frame:SetSize(width, SLOT)
 	frame:Show()
+	Fits()
 	return width, SLOT
 end
 
@@ -364,3 +565,50 @@ function Slots.Row(frame)
 	end)
 	return width, height
 end
+
+-- Events -------------------------------------------------------------------------------------------------------------------------------------
+
+-- The slot of a bag slot row whose inventory slot is that one (the backpack's is 0, as ITEM_PUSH gives it), with its bag.
+local function SlotOf(inventory)
+	for bag, slot in pairs(row.slots) do
+		if (bag == 0 and inventory == 0) or (bag ~= 0 and InventorySlot(bag) == inventory) then
+			return slot, bag
+		end
+	end
+	return nil
+end
+
+ns.AddEvent(KEY, "CURSOR_CHANGED", function()
+	if Showing() then
+		Run(Fits)
+	end
+end)
+
+-- An inventory slot locked or freed (no second argument): the bag's slot is drawn again, greyed while its bag is lifted.
+ns.AddEvent(KEY, "ITEM_LOCK_CHANGED", function(inventory)
+	if Showing() then
+		Run(function()
+			local slot, bag = SlotOf(inventory)
+			if slot and slot.button:IsShown() then
+				DrawSlot(slot, bag, Crop())
+			end
+		end)
+	end
+end, function(inventory, slot)
+	return ns.Finite(inventory) and slot == nil
+end)
+
+-- An item came into a bag: its icon plays on that bag's slot.
+ns.AddEvent(KEY, "ITEM_PUSH", function(inventory, icon)
+	if Showing() then
+		Run(function()
+			local slot = SlotOf(inventory)
+			icon = Texture(icon)
+			if slot and icon and slot.button:IsShown() then
+				Fly(slot, icon)
+			end
+		end)
+	end
+end, function(inventory)
+	return ns.Finite(inventory)
+end)
