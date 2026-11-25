@@ -14,10 +14,12 @@ local _, ns = ...
 -- something (ns.ButtonSamples; with fewer there, the next of bars 2 to 8) play samples of their looks, all on Flat UI's own frames and out of
 -- combat: button 1 fills as a 2 s cast that lands, button 2 flashes as an interrupt, button 3 pulses as an aim (ButtonEffects.lua), and button 4,
 -- or the last when there are fewer than four, runs a 4 s sweep in the Sweep colour and opacity, with its edge line and numbers, that ends with the
--- ready flash (ButtonStates.lua). A change of an action bar row or of the cast bar's colours
--- gives the samples that show the new look and plays the others; a change of profile plays them all again. Each part plays only while its row is
--- on. With test mode off, a change of one of those rows with the options window open plays its sample once (ns.ButtonStatesChanged,
--- ns.ButtonEffectsChanged). A Refresh (a change of profile among them) tells OwnBars.lua to place the page arrows again (ns.OwnPagerChanged).
+-- ready flash (ButtonStates.lua). A change of an action bar row or of the cast bar's colours gives the samples that show the new look and plays
+-- the others; a change of profile plays them all again. Each part plays only while its row is on. Moving off on the bar of test mode holds them
+-- mid-way (button 1's fill at about 60%, button 3's pulse bright, the sweep at 2 s of its 4 with its edge and numbers) so a look can be judged,
+-- and Moving on carries on from there. With test mode off, a change of one of those rows with the options window open plays its sample once
+-- (ns.ButtonStatesChanged, ns.ButtonEffectsChanged). A Refresh (a change of profile among them) tells OwnBars.lua to place the page arrows again
+-- (ns.OwnPagerChanged).
 
 local KEY = "actionbars"
 
@@ -1110,11 +1112,36 @@ local SAMPLE_COLOURS = { ["castbars.castColour"] = true, ["castbars.channelColou
 	["castbars.playerClass"] = true, ["castbars.flat"] = true }
 local SAMPLE_ROWS = { ["actionbars.castAnim"] = { "cast", 1 }, ["actionbars.interruptAnim"] = { "interrupt", 2 }, ["actionbars.aimAnim"] = { "aim", 3 } }
 
+-- Moving on the bar of test mode: off holds the samples still, the fill at about 60%, the aim pulse bright and the sweep at half its time with its
+-- edge and numbers, and holds the ones that start meanwhile the same way; on carries on from there.
+local function Hold(held)
+	if type(ns.ButtonEffectsSampleHold) == "function" then
+		ns.ButtonEffectsSampleHold(held)
+	end
+	if type(ns.ButtonStatesSampleHold) == "function" then
+		ns.ButtonStatesSampleHold(held)
+	end
+end
+
+local function Still()
+	local mode = ns.TestMode
+	return mode ~= nil and type(mode.Moving) == "function" and not mode.Moving()
+end
+
 -- A change while test mode is on: a change of profile plays every sample again; Cast fill animation, Interrupt flash or Aim highlight plays its own
--- unless it shows; a cast bar colour colours the samples that show; any other action bar row gives the sweep sample its look, or plays it.
+-- unless it shows; a cast bar colour colours the samples that show; any other action bar row gives the sweep sample its look, or plays it. Moving
+-- off holds them (every sample started again, then held mid-way, so each look shows), and Moving on lets them go on.
 local function SampleChanged(path)
 	if path == "*" then
 		Sample(true)
+		return
+	end
+	if path == "test.moving" then
+		local held = Still()
+		Hold(held)
+		if held then
+			Sample(true)
+		end
 		return
 	end
 	if type(path) ~= "string" or not OwnOn() then
@@ -1145,6 +1172,9 @@ if ns.TestMode then
 		label = "Action buttons",
 		every = 5,
 		Start = function()
+			if Still() then
+				Hold(true)
+			end
 			Sample(true)
 		end,
 		Tick = function()

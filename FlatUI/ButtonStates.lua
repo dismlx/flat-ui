@@ -26,6 +26,8 @@ local _, ns = ...
 -- as the game's Show numbers on cooldowns says) and ends with the button's Flash when ready while that row is on. Test mode plays it every 5 s on
 -- the fourth shown button of the main bar (ActionBars.lua); with test mode off, a change of one of those rows with the options window open plays it
 -- once on the first, and a change while it still runs gives it the new look without starting it again, so a dragged slider plays it once.
+-- Moving off on the bar of test mode holds it at 2 s of its 4 (ns.ButtonStatesSampleHold, Cooldown:Pause), with its edge and numbers, until Moving
+-- on resumes it and its end moves on by the time held.
 
 local KEY = "actionbars"
 local BARS = {
@@ -797,7 +799,7 @@ function ns.ButtonStatesSample(button, force)
 		return
 	end
 	local frame = SAMPLE.frame
-	if frame and not force and SAMPLE.button == button and SAMPLE.ends and GetTime() < SAMPLE.ends then
+	if frame and not force and SAMPLE.button == button and (SAMPLE.heldAt or (SAMPLE.ends and GetTime() < SAMPLE.ends)) then
 		SampleLook(frame)
 		return
 	end
@@ -820,7 +822,39 @@ function ns.ButtonStatesSample(button, force)
 	if not ok then
 		error(err, 0)
 	end
+	if SAMPLE.heldAt then
+		ns.ButtonStatesSampleHold(true)
+	end
 	SAMPLE.ends = GetTime() + SAMPLE.TIME + READY.RISE + READY.FALL
+end
+
+-- Moving on the bar of test mode (ActionBars.lua): held true holds the sweep still at half its time, its edge and numbers with it (Cooldown:Pause),
+-- and a sample started meanwhile the same way; false carries on from there (Resume), its end moved on by the time it was held.
+function ns.ButtonStatesSampleHold(held)
+	local frame, now = SAMPLE.frame, GetTime()
+	if not held then
+		local since = SAMPLE.heldAt
+		SAMPLE.heldAt = nil
+		if since and frame then
+			if SAMPLE.ends then
+				SAMPLE.ends = SAMPLE.ends + (now - since)
+			end
+			pcall(frame.Resume, frame)
+		end
+		return
+	end
+	SAMPLE.heldAt = now
+	if not (frame and SAMPLE.button) then
+		return
+	end
+	SAMPLE.busy = true
+	local ok = pcall(frame.SetCooldown, frame, now - SAMPLE.TIME / 2, SAMPLE.TIME)
+	if ok then
+		frame:Show()
+		pcall(frame.Pause, frame)
+		SAMPLE.ends = now + SAMPLE.TIME / 2 + READY.RISE + READY.FALL
+	end
+	SAMPLE.busy = false
 end
 
 -- Test mode ends or pauses: the sample goes.
@@ -832,7 +866,7 @@ function ns.ButtonStatesSampleOff()
 		frame:Hide()
 		SAMPLE.busy = false
 	end
-	SAMPLE.button, SAMPLE.ends = nil, nil
+	SAMPLE.button, SAMPLE.ends, SAMPLE.heldAt = nil, nil, nil
 end
 
 -- A look row changed with the options window open, out of combat and out of test mode (which plays the sample itself): the sample plays once on the

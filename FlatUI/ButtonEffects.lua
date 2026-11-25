@@ -27,7 +27,9 @@ local _, ns = ...
 -- Samples (ns.ButtonEffectsSample, out of combat): test mode (ActionBars.lua) plays the cast fill as a 2 s cast that lands, the interrupt flash and a
 -- 2 s aim on the first shown buttons of Flat UI's main bar, and a change of Cast fill animation, Interrupt flash or Aim highlight with the options
 -- window open plays that one on the first. A sample's spell is 0, which no event of the game's names, so a real cast or aim replaces it at once and
--- the events of other spells leave it alone; a sample never replaces a real cast or aim that shows.
+-- the events of other spells leave it alone; a sample never replaces a real cast or aim that shows. Moving off on the bar of test mode holds them
+-- (ns.ButtonEffectsSampleHold): the fill at 60% of its cast with its driver hidden, the aim pulse stopped bright and its time left kept, and a
+-- sample started meanwhile held the same way; Moving on moves their times on by the time held and lets them go on.
 
 local KEY = "actionbars"
 local PATH = KEY .. "."
@@ -674,20 +676,82 @@ local function SampleInterrupt(button, force)
 	CAST.sample.flashed = button
 end
 
+-- The aim sample ends after seconds, unless another aim or a hold (SampleFreeze) came first.
+local function SampleAimFor(seconds)
+	local sample = CAST.sample
+	sample.aim = sample.aim + 1
+	sample.aimArmed = GetTime()
+	sample.aimEnds = sample.aimArmed + seconds
+	local token = sample.aim
+	if C_Timer and C_Timer.After then
+		C_Timer.After(seconds, function()
+			if CAST.aimSpell == 0 and sample.aim == token then
+				AimClear()
+			end
+		end)
+	end
+end
+
 local function SampleAim(button, force)
 	local made = CAST.frames[button]
 	if not (made and made.pulse) or not Opt("aimAnim") or (CAST.aimSpell ~= nil and CAST.aimSpell ~= 0) or (CAST.aimSpell == 0 and not force) then
 		return
 	end
 	AimLight({ button }, 0)
-	CAST.sample.aim = CAST.sample.aim + 1
-	local token = CAST.sample.aim
-	if C_Timer and C_Timer.After then
-		C_Timer.After(CAST.SAMPLE_TIME, function()
-			if CAST.aimSpell == 0 and CAST.sample.aim == token then
-				AimClear()
+	SampleAimFor(CAST.SAMPLE_TIME)
+end
+
+-- Moving off on the bar of test mode holds the samples still (heldAt): the fill at SAMPLE_HELD of its cast, the aim pulse bright, and the time left
+-- of the aim kept; any sample started meanwhile is held the same way. Moving on carries on from there.
+local SAMPLE_HELD = 0.6
+local function SampleFreeze()
+	local sample, now = CAST.sample, GetTime()
+	local was = sample.heldAt
+	sample.heldAt = now
+	if CAST.spell == 0 then
+		CAST.start, CAST.landed = now - CAST.SAMPLE_TIME * SAMPLE_HELD, nil
+		CAST.finish = CAST.start + CAST.SAMPLE_TIME
+		CastStep()
+		if CAST.driver then
+			CAST.driver:Hide()
+		end
+	end
+	if CAST.aimSpell == 0 then
+		-- The time left of an aim armed since the last hold; one held already keeps what it had left.
+		if was == nil or (sample.aimArmed or 0) >= was then
+			sample.aimLeft = math.max(0, (sample.aimEnds or now) - now)
+		end
+		sample.aim = sample.aim + 1
+		for _, button in ipairs(CAST.aimed) do
+			local made = CAST.frames[button]
+			if made and made.pulse then
+				made.pulse:Stop()
+				made.aim:SetAlpha(CAST.AIM_HIGH)
 			end
-		end)
+		end
+	end
+end
+
+local function SampleThaw()
+	local sample = CAST.sample
+	if not sample.heldAt then
+		return
+	end
+	local gap = GetTime() - sample.heldAt
+	sample.heldAt = nil
+	if CAST.spell == 0 then
+		CAST.start, CAST.finish = CAST.start + gap, CAST.finish + gap
+		CastDriver():Show()
+	end
+	if CAST.aimSpell == 0 then
+		for _, button in ipairs(CAST.aimed) do
+			local made = CAST.frames[button]
+			if made and made.pulse then
+				made.aim:SetAlpha(CAST.AIM_LOW)
+				made.pulse:Play()
+			end
+		end
+		SampleAimFor(sample.aimLeft or CAST.SAMPLE_TIME)
 	end
 end
 
@@ -707,6 +771,18 @@ function ns.ButtonEffectsSample(spec, force)
 	end
 	if Plain(spec.aim, "table") then
 		SampleAim(spec.aim, force)
+	end
+	if CAST.sample.heldAt then
+		SampleFreeze()
+	end
+end
+
+-- Moving on the bar of test mode (ActionBars.lua): held true holds the samples that show still, and the ones started after; false carries on.
+function ns.ButtonEffectsSampleHold(held)
+	if held then
+		SampleFreeze()
+	else
+		SampleThaw()
 	end
 end
 
@@ -738,6 +814,7 @@ end
 
 -- Test mode ends or pauses: the samples that show go.
 function ns.ButtonEffectsSampleOff()
+	CAST.sample.heldAt = nil
 	if CAST.spell == 0 then
 		CastClear()
 	end
