@@ -244,10 +244,14 @@ local ADDON_NAME, ns = ...
 -- adds FlatUIBags and FlatUIBank to UISpecialFrames, and names the key bindings of its bank button (BINDING_NAME_CLICK FlatUIBankButton:LeftButton)
 -- and of its bag search button (BINDING_NAME_CLICK FlatUIBagSearchButton:LeftButton), which opens the bag window and gives its search box of Flat
 -- UI's own the keyboard (SetFocus). What it keeps of each character (items, gold, level, class, faction, realm and the time), the sections items
--- were placed in by hand, the order of the sections and the folded ones are in FlatUIDB.bags, the pinned slots of a character in
+-- were placed in by hand, the sections the player made and named, the order of the sections and the folded ones are in FlatUIDB.bags, the pinned
+-- slots of a character in
 -- FlatUICharDB.bagPins, and the money a character had as it logged in in FlatUICharDB.sessionMoney (a frame of its own hears PLAYER_ENTERING_WORLD
 -- for it whatever the switches, for the gold made or spent this session, which its gold tooltip and the Gold slot of Data panels say), and none
--- of it leaves the client.
+-- of it leaves the client. An item dropped on the + slot that ends a section, or among a section's slots, from the bank or worn gear goes into a
+-- free slot of the bags first, and a merchant's item dropped on a + slot is bought into one unless the game would ask, out of combat only
+-- (C_Container.PickupContainerItem on an empty slot, then CursorHasItem), and the name of a section of the player's own is typed in a box of its
+-- own (an EditBox on UIParent in the DIALOG strata), which takes the keyboard out of combat only and gives it back as a fight starts.
 -- Data panels (on by default, with the Show rows of both panels off) draws two panels of its own on UIParent and writes the lines of their
 -- tooltips in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, Hide). It asks the server for the guild roster
 -- (C_GuildInfo.GuildRoster) while a slot shows the guild, and the game for the memory of addons (UpdateAddOnMemoryUsage) when its frame rate tooltip opens out of combat. When another addon brought
