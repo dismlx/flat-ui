@@ -2,8 +2,10 @@ local ADDON_NAME, ns = ...
 
 -- The streams of the data panels (DataPanels.lua): what a slot shows, what its tooltip says and what a left click on it does. A click that
 -- opens a window of the game calls the game's own toggle of it (ToggleCharacter, ToggleQuestLog, ToggleFriendsFrame, ToggleGuildFrame,
--- ToggleTimeManager, ToggleCalendar, as its keys and buttons do) out of a fight only, and the tooltip's dim last line says so ("Out of a fight,
--- click: ..." in one). Every other button is the panels' own (DataPanels.lua: the right click opens the options).
+-- ToggleTimeManager, ToggleCalendar, as its keys and buttons do): at once out of a fight, and in one as the fight ends, with a line in chat once
+-- ("Flat UI: the quest log opens when the fight ends.", ns.OpenAfterFight, MapText.lua, as the time by the minimap and the quest count do). The
+-- tooltip's dim last line says so ("Click: open the quest log, after the fight." in one). Every other button is the panels' own (DataPanels.lua:
+-- the right click opens the options).
 --   Bag space: free and total slots of the general bags the player wears, the backpack and the bags of family 0, the only room for any item
 --     (C_Container.GetContainerNumSlots and GetContainerNumFreeSlots). A special bag (a trade bag, a quiver, an ammo pouch, a soul bag: its
 --     family is not 0) and the reagent bag (Enum.BagIndex 5, of family 0 but for reagents only) hold only certain items, so they count apart,
@@ -14,9 +16,11 @@ local ADDON_NAME, ns = ...
 --     this character made (in green) or spent (in red) since it logged in, kept over a /reload (ns.SessionMoney, BagsData.lua, the count the
 --     bag window's gold tooltip says too), and from HOURLY_AFTER seconds into the session what that is an hour (its second answer, the seconds
 --     since the session began); nothing while it made and spent nothing. The slot itself keeps its width.
---   Durability: of all the equipped items together (GetInventoryItemDurability), coloured by how worn it is; the tooltip lists each item, and out
---     of a fight the repair cost of the worn items under 100% (repairCost of C_TooltipInfo.GetInventoryItem, as the character window's durability
---     line reads it). A click opens the character window.
+--   Durability: of all the equipped items together (GetInventoryItemDurability), coloured by how worn it is, then in red how many items are
+--     broken (at 0%: "1 broken"), else how many are at 50% or less; the tooltip opens with a red line while any is broken ("1 item broken: no
+--     stats until repaired"), lists each item, the lowest first, and out of a fight the repair cost of the worn items under 100% (repairCost of
+--     C_TooltipInfo.GetInventoryItem), as the character window's durability line does (CharacterDurability.lua). The slot takes no room where
+--     the game rule that keeps gear from wearing is on (RepairArmorDisabled), as that line hides there. A click opens the character window.
 --   Hearthstone: where it is bound (GetBindLocation) and the time left on its cooldown (C_Container.GetItemCooldown).
 --   Coordinates: of the player on the map of the zone (C_Map.GetBestMapForUnit, GetPlayerMapPosition, read from the fields x and y of the
 --     answer); none where the game gives none, as in a dungeon. Shift-click puts the zone and the coordinates in the chat box (ns.PutInChat,
@@ -33,6 +37,12 @@ local ADDON_NAME, ns = ...
 --     tooltip has the experience over the most, what is left to level, the rested experience, the experience of the quests ready to hand in
 --     (ns.XpQuestReady) and, while Flat UI's experience bar counts them, the time to level and the pace (ns.XpStatsText, XpStats.lua).
 --     Shift-click puts the experience bar's own chat line in the chat box.
+--   Reputation: the faction Flat UI's reputation bar shows (ns.XpRepNow, XpBar.lua; with Errands' Show the reputation you gain, the one last
+--     gained with, ns.ErrandsRepFollowed), else the one the game watches (C_Reputation.GetWatchedFactionData, read by its ID with
+--     GetFactionDataByID), its standing in the colour of the game's reputation bar (FACTION_BAR_COLORS) and the share of it done; nothing with no
+--     faction. The tooltip has the standing, the reputation over the standing's most, what is left to the next standing and, for the faction of
+--     Flat UI's bar, its pace and the time to the next standing (ns.XpStatsRepText, XpStats.lua). A click opens the Reputation tab of the character
+--     window; Shift-click puts "Stormwind: Honored 4,200 / 12,000 (35%)" in the chat box.
 --   Frame rate and latency: GetFramerate, and the higher of the home and world latency (GetNetStats). The tooltip has both latencies and the
 --     memory Flat UI uses (UpdateAddOnMemoryUsage and GetAddOnMemoryUsage, read out of combat when the tooltip opens). With Colour frame rate
 --     and latency on, each number is in the panels' green, gold or red by the steps of the minimap's line (ns.PerfColour, MapText.lua).
@@ -118,18 +128,31 @@ local function Shift()
 end
 
 -- Runs one of the game's own toggles of a window by its global name (ToggleCharacter and the rest, as the game's keys and buttons open them) with
--- its arguments, out of a fight only. True when it ran.
-local function Toggle(name, ...)
+-- its arguments: now out of a fight, and in one as the fight ends, with later said once in chat (ns.OpenAfterFight, MapText.lua, as the time by
+-- the minimap and the quest count do). Without ns.OpenAfterFight, out of a fight only. True when it ran now.
+local function Toggle(name, later, ...)
 	local toggle = _G[name]
-	if P.InCombat() or type(toggle) ~= "function" then
+	if type(toggle) ~= "function" then
+		return false
+	end
+	if type(ns.OpenAfterFight) == "function" then
+		local count, args = select("#", ...), { ... }
+		return ns.OpenAfterFight(function()
+			_G[name](unpack(args, 1, count))
+		end, later) == true
+	end
+	if P.InCombat() then
 		return false
 	end
 	return (pcall(toggle, ...))
 end
 
--- The hint of a click that opens a window, with "Out of a fight, " before it while in one.
+-- The hint of a click that opens a window, with ", after the fight" at the end of each clause while in one ("Click: open the quest log, after
+-- the fight."), as the time by the minimap and the quest count word it.
 local function WindowHint(text)
-	if P.InCombat() then
+	if P.InCombat() and type(ns.OpenAfterFight) == "function" then
+		return (text:gsub("%.", ", after the fight."))
+	elseif P.InCombat() then
 		return "Out of a fight, " .. text:sub(1, 1):lower() .. text:sub(2)
 	end
 	return text
@@ -350,13 +373,14 @@ local function Worn(percent)
 	return whole > 80 and GOOD or whole > 50 and WARN or BAD
 end
 
--- The durability of all the equipped items together, in percent, each item: { slot, percent }, and how many items are nearly broken (at 50% or
--- less, red in the tooltip). 100 with no item that wears, and nothing when the client withholds an answer.
+-- The durability of all the equipped items together, in percent, each item: { slot, percent }, lowest first, then by slot, as the character
+-- window's line lists them (CharacterDurability.lua), how many items are nearly broken (at 50% or less, red in the tooltip) and how many are
+-- broken (at 0%, so they give no stats). 100 with no item that wears, and nothing when the client withholds an answer.
 local function Durability()
 	if type(GetInventoryItemDurability) ~= "function" then
 		return nil
 	end
-	local items, now, most, broken = {}, 0, 0, 0
+	local items, now, most, broken, zero = {}, 0, 0, 0, 0
 	for slot = 1, 19 do
 		local hidden, current, maximum = Read(GetInventoryItemDurability, slot)
 		current, maximum = Count(current), Count(maximum)
@@ -369,9 +393,31 @@ local function Durability()
 			if Worn(current / maximum * 100) == BAD then
 				broken = broken + 1
 			end
+			if current <= 0 then
+				zero = zero + 1
+			end
 		end
 	end
-	return most > 0 and now / most * 100 or 100, items, broken
+	table.sort(items, function(a, b)
+		if a.percent ~= b.percent then
+			return a.percent < b.percent
+		end
+		return a.slot < b.slot
+	end)
+	return most > 0 and now / most * 100 or 100, items, broken, zero
+end
+
+-- True where the game rule that keeps gear from wearing out is on (Enum.GameRule.RepairArmorDisabled, C_GameRules.IsGameRuleActive), as the
+-- character window's durability line and the minimap's read it (CharacterDurability.lua, MapText.lua). An answer the game withholds or does not
+-- give counts as off.
+local function NoWear()
+	local kinds = Field(_G.Enum, "GameRule")
+	local rule = Field(kinds, "RepairArmorDisabled")
+	local active = Field(_G.C_GameRules, "IsGameRuleActive")
+	if rule == nil or type(active) ~= "function" then
+		return false
+	end
+	return Ask(active, rule) == true
 end
 
 -- What the worn items under 100% cost to repair: the sum of the repairCost their tooltip data gives (C_TooltipInfo.GetInventoryItem, the figure the
@@ -397,20 +443,33 @@ P.Stream({
 	id = "durability", label = "Durability", sample = "Durability 100%",
 	events = { UPDATE_INVENTORY_DURABILITY = true, PLAYER_EQUIPMENT_CHANGED = true },
 	Text = function()
-		local percent, _, broken = Durability()
+		if NoWear() then
+			return nil
+		end
+		local percent, _, broken, zero = Durability()
 		if not percent then
 			return nil
 		end
 		local text = Labelled("Durability", ("%s%d%%|r"):format(Worn(percent), math.floor(percent + 0.5)))
-		-- One broken item hardly moves the average, so the items at 50% or less are counted after it in red, as EnhanceQoL does by default.
+		-- One broken item hardly moves the average, so the items at 0% are counted after it in red ("1 broken"), else the items at 50% or less,
+		-- as EnhanceQoL does by default.
+		if zero > 0 then
+			return ("%s  %s%d broken|r"):format(text, BAD, zero)
+		end
 		return broken > 0 and ("%s  %s%d|r%s at 50%% or less|r"):format(text, BAD, broken, DIM) or text
 	end,
 	Tip = function()
-		local percent, items = Durability()
+		if NoWear() then
+			return { title = "Durability", { DIM .. "Gear does not wear out here.|r" } }
+		end
+		local percent, items, _, zero = Durability()
 		if not percent then
 			return { title = "Durability", UNSAID }
 		end
 		local lines = { title = "Durability" }
+		if zero > 0 then
+			lines[#lines + 1] = { ("%s%d %s broken: no stats until repaired|r"):format(BAD, zero, zero == 1 and "item" or "items") }
+		end
 		for _, item in ipairs(items) do
 			local link = Text((Ask(GetInventoryItemLink, "player", item.slot)))
 			lines[#lines + 1] = { link or SLOT_NAMES[item.slot] or ("Slot %d"):format(item.slot),
@@ -431,10 +490,10 @@ P.Stream({
 	Hint = function()
 		return WindowHint("Click: open the character window.")
 	end,
-	-- A left click opens the character window, out of a fight (ToggleCharacter, as the game's key does).
+	-- A left click opens the character window, in a fight as it ends (ToggleCharacter, as the game's key does).
 	Click = function(_, button)
 		if button == "LeftButton" then
-			Toggle("ToggleCharacter", "PaperDollFrame")
+			Toggle("ToggleCharacter", "Flat UI: the character window opens when the fight ends.", "PaperDollFrame")
 		end
 	end,
 })
@@ -629,10 +688,15 @@ P.Stream({
 	Hint = function()
 		return WindowHint("Click: stopwatch and alarm. Shift-click: calendar.")
 	end,
-	-- As the time by the minimap (MapText.lua): a left click opens the game's stopwatch and alarm, Shift and a click its calendar, out of a fight.
+	-- As the time by the minimap (MapText.lua): a left click opens the game's stopwatch and alarm, Shift and a click its calendar, in a fight as it
+	-- ends.
 	Click = function(_, button)
 		if button == "LeftButton" then
-			Toggle(Shift() and "ToggleCalendar" or "ToggleTimeManager")
+			if Shift() then
+				Toggle("ToggleCalendar", "Flat UI: the calendar opens when the fight ends.")
+			else
+				Toggle("ToggleTimeManager", "Flat UI: the stopwatch opens when the fight ends.")
+			end
 		end
 	end,
 })
@@ -740,10 +804,10 @@ P.Stream({
 	Hint = function()
 		return WindowHint("Click: open the quest log.")
 	end,
-	-- A left click opens the game's quest log, out of a fight (ToggleQuestLog, as the game's key does).
+	-- A left click opens the game's quest log, in a fight as it ends (ToggleQuestLog, as the game's key does).
 	Click = function(_, button)
 		if button == "LeftButton" then
-			Toggle("ToggleQuestLog")
+			Toggle("ToggleQuestLog", "Flat UI: the quest log opens when the fight ends.")
 		end
 	end,
 })
@@ -838,6 +902,132 @@ P.Stream({
 				ns.PutInChat(line)
 			end
 		end
+	end,
+})
+
+-- Reputation ------------------------------------------------------------------------------------------------------------------------------------
+
+local LATER_REP = "Flat UI: your reputations open when the fight ends."
+
+-- The faction a Reputation slot follows: the one Flat UI's reputation bar shows (ns.XpRepNow, XpBar.lua, which follows Errands' Show the
+-- reputation you gain), else the one Show the reputation you gain follows (ns.ErrandsRepFollowed, ErrandsLevelling.lua), else the one the game
+-- watches (C_Reputation.GetWatchedFactionData, as XpBar.lua reads it): { name, reaction, value, total, capped, bar }, bar true for the faction of
+-- Flat UI's bar, whose pace XpStats.lua counts. Nothing with none, or when the game withholds a value.
+local function Reputation()
+	local api = _G.C_Reputation
+	api = type(api) == "table" and not ns.IsSecret(api) and api or nil
+	local data, bar
+	local okNow, id = pcall(function()
+		return type(ns.XpRepNow) == "function" and ns.XpRepNow() or nil
+	end)
+	if okNow and Count(id) and id > 0 and api then
+		data = Ask(api.GetFactionDataByID, id)
+		bar = type(data) == "table"
+	end
+	if type(data) ~= "table" and type(ns.ErrandsRepFollowed) == "function" then
+		local okFollow, followed = pcall(ns.ErrandsRepFollowed)
+		data = okFollow and P.Plain(followed) or nil
+	end
+	if type(data) ~= "table" and api then
+		data = Ask(api.GetWatchedFactionData)
+	end
+	if type(data) ~= "table" then
+		return nil
+	end
+	local name, faction, reaction = Text(Field(data, "name")), Count(Field(data, "factionID")), Count(Field(data, "reaction"))
+	local low, high, value = Field(data, "currentReactionThreshold"), Field(data, "nextReactionThreshold"), Field(data, "currentStanding")
+	if not (name and faction and faction > 0 and ns.Finite(low) and ns.Finite(high) and ns.Finite(value)) then
+		return nil
+	end
+	local total = high - low
+	local capped = total <= 0 or (reaction ~= nil and reaction >= 8)
+	return { name = name, reaction = reaction, total = math.max(total, 0), value = math.max(0, math.min(value - low, math.max(total, 0))),
+		capped = capped, bar = bar == true }
+end
+
+-- The game's name of a standing (FACTION_STANDING_LABEL1 to 8), or nil.
+local function Standing(reaction)
+	return reaction and Text(P.Plain(_G["FACTION_STANDING_LABEL" .. reaction])) or nil
+end
+
+-- A standing in the colour of the game's reputation bar for it (FACTION_BAR_COLORS), plain where the client gives none.
+local function StandingText(rep)
+	local text = Standing(rep.reaction) or "Unknown"
+	local colour = rep.reaction and Field(_G.FACTION_BAR_COLORS, rep.reaction)
+	local r, g, b = Field(colour, "r"), Field(colour, "g"), Field(colour, "b")
+	if ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+		return P.Hex(r, g, b) .. text .. "|r"
+	end
+	return text
+end
+
+local function RepShare(rep)
+	return rep.total > 0 and math.floor(rep.value * 100 / rep.total) or 100
+end
+
+-- The line a Shift-click puts in the chat box: "Stormwind: Honored 4,200 / 12,000 (35%)", or "Stormwind: Exalted" at the top.
+local function RepChatLine()
+	local rep = Reputation()
+	if not rep then
+		return nil
+	end
+	local standing = Standing(rep.reaction) or "Unknown"
+	if rep.capped then
+		return ("%s: %s"):format(rep.name, standing)
+	end
+	return ("%s: %s %s / %s (%d%%)"):format(rep.name, standing, Grouped(rep.value), Grouped(rep.total), RepShare(rep))
+end
+
+P.Stream({
+	id = "rep", label = "Reputation", sample = "Stormwind Exalted 88%",
+	events = { UPDATE_FACTION = true },
+	Text = function()
+		local rep = Reputation()
+		if not rep then
+			return nil
+		end
+		local text = ("%s %s"):format(rep.name, StandingText(rep))
+		return rep.capped and text or ("%s %d%%"):format(text, RepShare(rep))
+	end,
+	Tip = function()
+		local rep = Reputation()
+		if not rep then
+			return { title = "Reputation", { DIM .. "No faction is watched. Tick Show as Experience Bar for one in your reputations.|r" } }
+		end
+		local lines = { title = rep.name, { "Standing", StandingText(rep) } }
+		if not rep.capped then
+			lines[#lines + 1] = { "Reputation", ("%s / %s (%d%%)"):format(Grouped(rep.value), Grouped(rep.total), RepShare(rep)) }
+			local following = Standing(rep.reaction and rep.reaction + 1)
+			lines[#lines + 1] = { following and ("To " .. following) or "To the next standing", Grouped(rep.total - rep.value) }
+		end
+		-- Flat UI's own count of the reputation pace and the time to the next standing (XpStats.lua), for the faction of its bar.
+		if rep.bar and type(ns.XpStatsRepText) == "function" then
+			local pace, eta = Text(ns.XpStatsRepText("rate")), Text(ns.XpStatsRepText("time"))
+			if pace then
+				lines[#lines + 1] = { "Pace", pace }
+			end
+			if eta then
+				lines[#lines + 1] = { "Next standing in", (eta:gsub(" to next standing$", "")) }
+			end
+		end
+		return lines
+	end,
+	Hint = function()
+		return WindowHint("Click: open your reputations.") .. " Shift-click: put this in chat."
+	end,
+	-- A left click opens the Reputation tab of the character window, in a fight as it ends (ToggleCharacter, as Flat UI's reputation bar does);
+	-- Shift and a click put the faction's line in the chat box (ns.PutInChat, MapText.lua), in a fight too.
+	Click = function(_, button)
+		if button ~= "LeftButton" then
+			return
+		elseif Shift() then
+			local line = type(ns.PutInChat) == "function" and RepChatLine() or nil
+			if line then
+				ns.PutInChat(line)
+			end
+			return
+		end
+		Toggle("ToggleCharacter", LATER_REP, "ReputationFrame")
 	end,
 })
 
@@ -994,10 +1184,10 @@ P.Stream({
 	Hint = function()
 		return WindowHint("Click: open your friends list.")
 	end,
-	-- A left click opens the friends list on its Friends tab, out of a fight (ToggleFriendsFrame, Camelot/FriendsFrame.lua).
+	-- A left click opens the friends list on its Friends tab, in a fight as it ends (ToggleFriendsFrame, Camelot/FriendsFrame.lua).
 	Click = function(_, button)
 		if button == "LeftButton" then
-			Toggle("ToggleFriendsFrame", Count(_G.FRIEND_TAB_FRIENDS) or 1)
+			Toggle("ToggleFriendsFrame", "Flat UI: your friends list opens when the fight ends.", Count(_G.FRIEND_TAB_FRIENDS) or 1)
 		end
 	end,
 })
@@ -1078,10 +1268,11 @@ P.Stream({
 	Hint = function()
 		return Ask(IsInGuild) == true and WindowHint("Click: open the guild window.") or nil
 	end,
-	-- A left click opens the guild window, out of a fight and only in a guild (ToggleGuildFrame, Blizzard_Game/Mainline/Game.lua, as the game's key).
+	-- A left click opens the guild window, only in a guild and in a fight as it ends (ToggleGuildFrame, Blizzard_Game/Mainline/Game.lua, as the
+	-- game's key).
 	Click = function(_, button)
 		if button == "LeftButton" and Ask(IsInGuild) == true then
-			Toggle("ToggleGuildFrame")
+			Toggle("ToggleGuildFrame", "Flat UI: the guild window opens when the fight ends.")
 		end
 	end,
 })

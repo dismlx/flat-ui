@@ -49,9 +49,18 @@ local _, ns = ...
 -- attribute and the key does what its macro says. Each press is a press and a release, and each has its PreClick and its PostClick. Both scripts
 -- are set and taken away out of combat only: when the row or the module goes off (the module also takes the macro away, as above) and when the
 -- spell is no longer known. Both spells take a Light Feather, and the game says so when the bags have none.
--- With the module off its type and macro are taken away, so the key does nothing; the binding is the player's and stays. It writes no binding, no
--- macro of the game's macro list and no field of a frame, and no global but the button's name and BINDING_NAME_CLICK FlatUIMountButton:LeftButton,
--- the name of the binding.
+-- Key (a list row): Press a key to set it shows a small prompt of the module's own in the middle of the screen (DIALOG strata, with the keyboard
+-- while it shows, out of a fight only, as EnableKeyboard and SetPropagateKeyboardInput are protected in one; a fight that starts hides it). The
+-- next key, with Shift, Ctrl or Alt held (CreateKeyChordStringUsingMetaKeyState, Blizzard_SharedXML/BindingUtil.lua:116-140), is kept in
+-- FlatUIDB.mountKey for the account, and Escape or a click on the prompt cancels (it is not placed with /flatui move and has no test mode sample:
+-- it shows only while it waits for a key). While the module is on and the button is made, that key is an override binding owned by
+-- a frame of the module's own (SetOverrideBindingClick, out of combat, as BagKey.lua does with SetOverrideBinding), so the player's own binding of
+-- the key (GetBindingAction, named in chat: "it was Toggle Sheathe") stays and comes back when the module goes off (ClearOverrideBindings).
+-- Clear Flat UI's key forgets it. A key bound in the game's Key Bindings works beside it, and Flat UI's key counts as bound for the making of
+-- the button and the hearing of the moving.
+-- With the module off its type and macro are taken away, so the key does nothing; the binding is the player's and stays. It writes none of the
+-- player's bindings, no macro of the game's macro list and no field of a frame, and no global but the button's name and BINDING_NAME_CLICK
+-- FlatUIMountButton:LeftButton, the name of the binding.
 -- This follows the random mount key of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/MountActions.lua:
 -- 25-26, 106-132, 225-246, 261-336, 376-424, 426-499, 553-569, 580-602; EnhanceQoL/Bindings.xml:12-15): the button the binding clicks, the usable
 -- mounts of the journal and its favourites, the random pick, the combat lines, the druid and shaman forms while moving, and Slow Fall and Levitate
@@ -70,7 +79,12 @@ local FALLS = { 130, 1706 }
 -- A burst of events writes the macro once, this long after the first.
 local STEP = 0.2
 local MOVING = { "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING" }
-local LINE_UNBOUND = "Mount key: no key is bound yet. Bind one to Mount or travel form, under Flat UI in the game's Key Bindings."
+local LINE_UNBOUND = "Mount key: no key is bound yet. Pick Press a key to set it in the row Key, or bind one to Mount or travel form under Flat UI in the game's Key Bindings."
+local LINE_KEY = "Mount key: %s is Flat UI's key for it."
+local LINE_KEY_REFUSED = "Mount key: the game would not bind %s to it."
+local LINE_IN_FIGHT = "Flat UI: not in a fight. Pick it again after the fight."
+-- The keys that are only held with another (CreateKeyChordStringUsingMetaKeyState puts them in front of it).
+local META = { LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true, LMETA = true, RMETA = true }
 local LINE_NOTHING = "Mount key: no mount or travel form to use yet."
 -- The character has mounts in the journal, but the game lets none of them be used now: GetMountUsabilityByID answers false with the reason as
 -- useError (MountJournalDocumentation.lua:340-357), and the journal shows that reason on the tooltip of its Mount button, also while the button
@@ -93,8 +107,11 @@ local IsSecret = ns.IsSecret
 -- listener: the frame that hears the moving, hearing: it does, soonMove: a read of the moving waits for the next frame. soon: a write waits a
 -- moment; later: one waits for the end of the fight. fall: the name of the spell of the falling safety, nil while it is off; fallText: its macro.
 -- scripted: the button has the PreClick and the PostClick of the safety. held: the button holds the falling macro, which the PostClick takes away.
+-- owner: the frame that owns the override binding of Flat UI's key; chord: the key bound now, refused: the key the game would not bind. prompt:
+-- the frame that waits for a key.
 local S = { button = nil, broken = false, text = nil, texts = nil, cast = false, mount = nil, list = nil, dirty = true, pick = nil, moving = false,
-	listener = nil, hearing = false, soonMove = false, soon = false, later = false, fall = nil, fallText = nil, scripted = false, held = false }
+	listener = nil, hearing = false, soonMove = false, soon = false, later = false, fall = nil, fallText = nil, scripted = false, held = false,
+	owner = nil, chord = nil, refused = nil, prompt = nil }
 local M = {}
 
 local function Opt(key)
@@ -142,10 +159,33 @@ local function Journal()
 	return nil
 end
 
--- True while a key of the game's Key Bindings clicks the button.
-local function Bound()
+-- Flat UI's key, kept for the account (FlatUIDB.mountKey), or nil.
+local function OwnKey()
+	local db = ns.Account()
+	local chord = type(db) == "table" and db.mountKey or nil
+	return type(chord) == "string" and chord ~= "" and chord or nil
+end
+
+-- The key of the game's Key Bindings that clicks the button (without overrides, so Flat UI's own is not counted), or nil.
+local function GameKey()
 	local key = Ask(GetBindingKey, BINDING)
-	return type(key) == "string" and key ~= ""
+	return type(key) == "string" and key ~= "" and key or nil
+end
+
+-- True while a key of the game's Key Bindings clicks the button, or Flat UI's key is set (M.Update binds it once the button is made).
+local function Bound()
+	return GameKey() ~= nil or OwnKey() ~= nil
+end
+
+-- A key as the game writes it ("Shift-Z", GetBindingText), or as it is kept where the client does not say.
+local function KeyText(chord)
+	local text = Ask(GetBindingText, chord)
+	if type(text) == "string" and text ~= "" then
+		return text
+	end
+	return (chord:gsub("(%u+)%-", function(meta)
+		return meta:sub(1, 1) .. meta:sub(2):lower() .. "-"
+	end))
 end
 
 local function SpellName(id)
@@ -355,6 +395,40 @@ local function Later()
 	end)
 end
 
+-- Binds Flat UI's key to a click of the button (want, or nothing), as an override owned by a frame of the module's own: the player's own binding
+-- of the key stays under it. Out of combat only; in one it waits for the end of the fight.
+local function BindKey(want)
+	if want == nil and S.chord == nil then
+		S.refused = nil
+		return
+	end
+	-- A key the game refused is not asked again until it changes, since each call fires UPDATE_BINDINGS, which runs this again.
+	if want == S.chord or want == S.refused then
+		return
+	end
+	if Fighting() then
+		Later()
+		return
+	end
+	if not S.owner then
+		local ok, frame = pcall(CreateFrame, "Frame")
+		if not ok or IsSecret(frame) or type(frame) ~= "table" then
+			return
+		end
+		ns.Own[frame] = true
+		S.owner = frame
+	end
+	if type(ClearOverrideBindings) == "function" then
+		pcall(ClearOverrideBindings, S.owner)
+	end
+	S.chord, S.refused = nil, nil
+	if want and type(SetOverrideBindingClick) == "function" and pcall(SetOverrideBindingClick, S.owner, false, want, BUTTON, "LeftButton") then
+		S.chord = want
+	elseif want then
+		S.refused = want
+	end
+end
+
 -- Puts the macro of now on the button, if it is not there yet.
 local function Apply()
 	if not S.button or not S.texts then
@@ -482,6 +556,7 @@ function M.Off()
 	Hear(false)
 	S.texts, S.cast, S.mount = nil, false, nil
 	Arm(nil)
+	BindKey(nil)
 	if not S.button or S.text == nil then
 		return
 	end
@@ -515,6 +590,10 @@ function M.Update()
 	-- No key presses the button while none is bound or the button is not made, so the moving is not heard then. Setting or clearing the key runs
 	-- this again (UPDATE_BINDINGS, KeyBindingsDocumentation.lua:175-179), and the hearing reads the moving as it starts.
 	Hear(moving ~= still and S.button ~= nil and bound)
+	-- Flat UI's key, once the button it clicks is made.
+	if S.button then
+		BindKey(OwnKey())
+	end
 	Apply()
 	-- The falling safety, with the spell the book knows now: learning or losing it runs this again (SPELLS_CHANGED).
 	Arm(Opt("falling") == true and Fall() or nil)
@@ -555,6 +634,11 @@ function M.Status()
 	elseif not Bound() then
 		lines[#lines + 1] = LINE_UNBOUND
 	end
+	if S.refused then
+		lines[#lines + 1] = LINE_KEY_REFUSED:format(KeyText(S.refused))
+	elseif S.chord then
+		lines[#lines + 1] = LINE_KEY:format(KeyText(S.chord))
+	end
 	if not Journal() then
 		lines[#lines + 1] = LINE_JOURNAL
 	end
@@ -577,6 +661,149 @@ function M.Status()
 		lines[#lines + 1] = LINE_WAITS
 	end
 	return lines
+end
+
+-- The key row ------------------------------------------------------------------------------------------------------------------------------
+
+-- The key pressed with the Shift, Ctrl and Alt held now, as the game's Key Bindings write it ("SHIFT-Z").
+local function Chord(key)
+	if type(CreateKeyChordStringUsingMetaKeyState) == "function" then
+		local ok, chord = pcall(CreateKeyChordStringUsingMetaKeyState, key)
+		if ok and type(chord) == "string" and not IsSecret(chord) and chord ~= "" then
+			return chord
+		end
+	end
+	local parts = {}
+	for _, meta in ipairs({ { "ALT", IsAltKeyDown }, { "CTRL", IsControlKeyDown }, { "SHIFT", IsShiftKeyDown } }) do
+		if Yes(Ask(meta[2])) then
+			parts[#parts + 1] = meta[1]
+		end
+	end
+	parts[#parts + 1] = key
+	return table.concat(parts, "-")
+end
+
+-- What the player's own bindings do with a key, by the game's name of it ("Toggle Sheathe"), or nil when nothing or the button itself.
+local function WasBound(chord)
+	local action = Ask(GetBindingAction, chord)
+	if type(action) ~= "string" or action == "" or action == BINDING then
+		return nil
+	end
+	local name = _G["BINDING_NAME_" .. action]
+	return type(name) == "string" and not IsSecret(name) and name ~= "" and name or action
+end
+
+-- A key was pressed while the prompt waited (it is hidden by now): Escape cancels, any other key, with Shift, Ctrl or Alt if held, becomes Flat
+-- UI's key.
+local function OnKey(key)
+	if key == "ESCAPE" then
+		print("Flat UI: Mount key not changed.")
+		return
+	end
+	local chord = Chord(key)
+	local db = ns.Account()
+	if type(db) ~= "table" then
+		return
+	end
+	local was = WasBound(chord)
+	db.mountKey = chord
+	local line = ("Flat UI: Mount key is %s."):format(KeyText(chord))
+	if was then
+		line = ("Flat UI: Mount key is %s (it was %s; that comes back when Mount key is off)."):format(KeyText(chord), was)
+	end
+	if not ns.Enabled(KEY) then
+		line = line .. " It works once Mount key is on."
+	end
+	print(line)
+	ns.Try(KEY, M.Update)
+end
+
+-- The prompt that waits for a key, made the first time it is asked for: a frame of the module's own in the middle of the screen, over the options
+-- window, with the keyboard while it shows. Nil when the client refuses it.
+local function Prompt()
+	if S.prompt then
+		return S.prompt
+	end
+	local ok, frame = pcall(CreateFrame, "Frame", nil, UIParent)
+	if not ok or IsSecret(frame) or type(frame) ~= "table" then
+		return nil
+	end
+	ns.Own[frame] = true
+	frame:Hide()
+	frame:SetFrameStrata("DIALOG")
+	frame:SetSize(420, 56)
+	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
+	ns.Outline(frame, frame, true)
+	local text = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	ns.Own[text] = true
+	text:SetPoint("CENTER", frame, "CENTER", 0, 0)
+	text:SetText("Press the key for Mount or travel form. Escape cancels.")
+	frame:EnableMouse(true)
+	if not pcall(frame.EnableKeyboard, frame, true) then
+		return nil
+	end
+	-- Shift, Ctrl and Alt alone wait on; any other key hides the prompt first, whatever follows, so the keyboard is never kept.
+	frame:SetScript("OnKeyDown", function(self, key)
+		local plain = not IsSecret(key) and type(key) == "string"
+		if plain and META[key] then
+			return
+		end
+		self:Hide()
+		if plain then
+			ns.Try(KEY, OnKey, key)
+		end
+	end)
+	-- A click on it cancels too.
+	frame:SetScript("OnMouseDown", function(self)
+		self:Hide()
+		print("Flat UI: Mount key not changed.")
+	end)
+	-- A fight takes the keyboard from it as it starts, the last moment that may, and the key is not changed.
+	frame:SetScript("OnEvent", function(self)
+		if self:IsShown() then
+			self:Hide()
+			print("Flat UI: Mount key not changed; pick it again after the fight.")
+		end
+	end)
+	frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+	S.prompt = frame
+	return frame
+end
+
+-- The lines of the row Key: set a key, with the one in use now, and clear Flat UI's key while there is one.
+function ns.MountKeyLines()
+	local own, game = OwnKey(), GameKey()
+	local now = own and KeyText(own) or game and (KeyText(game) .. ", from Key Bindings") or "none"
+	local lines = { { 1, ("Press a key to set it (now: %s)"):format(now) } }
+	if own then
+		lines[#lines + 1] = { 2, "Clear Flat UI's key" }
+	end
+	return lines
+end
+
+-- A pick of the row Key, out of a fight only.
+function ns.MountKeyPick(id)
+	if Fighting() then
+		return false, LINE_IN_FIGHT
+	end
+	if id == 2 then
+		local db = ns.Account()
+		if type(db) == "table" then
+			db.mountKey = nil
+		end
+		ns.Try(KEY, M.Update)
+		BindKey(nil)
+		return true, "Flat UI: Flat UI's Mount key is cleared. A key bound in the game's Key Bindings still works."
+	elseif id ~= 1 then
+		return false
+	end
+	local frame = Prompt()
+	if not frame then
+		return false, "Flat UI: the game did not make the prompt; bind the key under Flat UI in the game's Key Bindings."
+	end
+	frame:Show()
+	pcall(frame.SetPropagateKeyboardInput, frame, false)
+	return true
 end
 
 -- The button and the macro, for the test.

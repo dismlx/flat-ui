@@ -609,6 +609,8 @@ end
 S.APART = {
 	["cooldowns.iconSound"] = true, ["cooldowns.iconShow"] = true, ["cooldowns.rowOf"] = true, ["pulse.iconSound"] = true, ["pulse.iconSpot"] = true,
 	["trackers.clickUse"] = true, ["movers.layoutText"] = true, ["chat.gearOpen"] = true,
+	-- The Mount key's Key waits for the next key pressed, which cannot wait for Finish either.
+	["mount.bind"] = true,
 }
 
 -- A copy of a row of Config.lua that reads and writes the draft: it has no saved path, so the row builders never touch a profile. A list row queues

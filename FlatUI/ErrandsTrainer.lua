@@ -8,7 +8,8 @@ local _, ns = ...
 -- be read. Both shapes of the client's answers are read: GetTrainerServiceInfo gives name, type, ... (the mainline trainer) or name, rank,
 -- type, ... (the classic one), and GetTrainerServiceCost gives cost, isProfession or cost, talent points, profession points.
 -- The button says how many it would learn, Train all (4), and Train all alone, greyed, when there is nothing; the tooltip says what a click
--- learns and why anything is left. After a click the button waits SETTLE seconds, so a double click asks once.
+-- learns, each skill with its rank (the classic shape's second answer) and price, up to TIP_SKILLS of them, and why anything is left. The chat
+-- line of a click names the first CHAT_SKILLS skills it learns. After a click the button waits SETTLE seconds, so a double click asks once.
 -- It follows the game's ClassTrainerFrame_Update and TRAINER_UPDATE to stay right. Not in combat: the button is made only out of the lockdown
 -- and does nothing in a fight. Never under the gamepad interface, whose navigation could not reach it; /flatui train does the same there.
 -- While EnhanceQoL's own Train All button (EQOLTrainAllButton) is shown in the same place, this one stands aside.
@@ -25,6 +26,8 @@ local GAP = 2
 -- Wide enough for Train all (12); it grows leftwards from the Train button and stays clear of the money at the window's bottom left
 -- (ClassTrainerFrameMoneyBg ends 153 from the left of the 338 wide window, the Train button, 80 wide, sits in its bottom right corner).
 local WIDTH = 92
+-- The skills the tooltip lists by name, and those the chat line of a click names; the rest are counted.
+local TIP_SKILLS, CHAT_SKILLS = 8, 3
 
 local button
 local followed = false
@@ -53,7 +56,8 @@ local function TheirsShown()
 	return E.Shown(_G.EQOLTrainAllButton)
 end
 
--- One row of the trainer's list: { kind, name, price, profession, other }, or nil when it cannot be read.
+-- One row of the trainer's list: { kind, name, rank, price, profession, other }, or nil when it cannot be read. rank is the second answer of the
+-- classic shape (name, rank, type) when it is a text that is not empty ("Rank 3").
 local function Service(index)
 	local ok, name, a, b = pcall(GetTrainerServiceInfo, index)
 	if not ok then
@@ -69,6 +73,9 @@ local function Service(index)
 		return nil
 	end
 	local row = { kind = kind, name = (not ns.IsSecret(name) and type(name) == "string") and name or nil }
+	if kind == b and kind ~= a and not ns.IsSecret(a) and type(a) == "string" and a ~= "" then
+		row.rank = a
+	end
 	if kind ~= "available" then
 		return row
 	end
@@ -113,7 +120,7 @@ local function Plan()
 				elseif row.other then
 					plan.other = plan.other + 1
 				elseif row.price <= left then
-					plan.buy[#plan.buy + 1] = { index = index, name = row.name, price = row.price }
+					plan.buy[#plan.buy + 1] = { index = index, name = row.name, rank = row.rank, price = row.price }
 					plan.cost, left = plan.cost + row.price, left - row.price
 				else
 					plan.short, plan.shortCost = plan.short + 1, plan.shortCost + row.price
@@ -131,6 +138,8 @@ local function Learn()
 	end
 	local plan = Plan()
 	local calls, asked, cost = 0, 0, 0
+	-- The skills the game took, in the order of the list, for the chat line.
+	plan.taken = {}
 	for i = #plan.buy, 1, -1 do
 		local want = plan.buy[i]
 		local now = Service(want.index)
@@ -138,6 +147,7 @@ local function Learn()
 			calls = calls + 1
 			if E.Call(BuyTrainerService, want.index) then
 				asked, cost = asked + 1, cost + want.price
+				table.insert(plan.taken, 1, want)
 			end
 		end
 	end
@@ -154,9 +164,38 @@ local function Learn()
 	return asked, cost, plan
 end
 
+-- A skill by its name and its rank, "Frostbolt (Rank 3)", or nil when the game gave no name.
+local function SkillName(entry)
+	if type(entry.name) ~= "string" then
+		return nil
+	end
+	return entry.rank and ("%s (%s)"):format(entry.name, entry.rank) or entry.name
+end
+
+-- The first CHAT_SKILLS names of the skills a click learns, ": Frostbolt (Rank 3), Fireball (Rank 2) and 2 more", or nothing without names.
+local function Names(list)
+	local names = {}
+	for _, entry in ipairs(list or {}) do
+		local name = #names < CHAT_SKILLS and SkillName(entry) or nil
+		if name then
+			names[#names + 1] = name
+		end
+	end
+	if #names == 0 then
+		return ""
+	end
+	local more = #list - #names
+	if more > 0 then
+		return (": %s and %d more"):format(table.concat(names, ", "), more)
+	elseif #names == 1 then
+		return ": " .. names[1]
+	end
+	return (": %s and %s"):format(table.concat(names, ", ", 1, #names - 1), names[#names])
+end
+
 -- What a click says: what it learns, and what the money did not reach.
 local function Said(asked, cost, plan)
-	local text = ("Learning %d %s%s."):format(asked, Skills(asked), For(cost))
+	local text = ("Learning %d %s%s%s."):format(asked, Skills(asked), For(cost), Names(plan and plan.taken))
 	if plan and plan.short > 0 then
 		text = text .. (" Not enough money for %d more (%s)."):format(plan.short, E.Money(plan.shortCost))
 	end
@@ -195,6 +234,18 @@ Explain = function(owner, plan)
 		Line("Waiting for the trainer.")
 	elseif #plan.buy > 0 then
 		Line(("Learns %d %s%s."):format(#plan.buy, Skills(#plan.buy), For(plan.cost)))
+		-- Each skill with its rank and price, the first TIP_SKILLS of them.
+		local listed = 0
+		for _, entry in ipairs(plan.buy) do
+			local name = listed < TIP_SKILLS and SkillName(entry) or nil
+			if name then
+				listed = listed + 1
+				GameTooltip:AddDoubleLine(name, entry.price > 0 and E.Money(entry.price) or "Free", 1, 1, 1, 1, 1, 1)
+			end
+		end
+		if listed > 0 and #plan.buy > listed then
+			GameTooltip:AddLine(("and %d more"):format(#plan.buy - listed), 0.66, 0.68, 0.62)
+		end
 	elseif plan.rows > 0 and plan.read == 0 then
 		Line("The game did not say what the trainer offers.")
 	else
