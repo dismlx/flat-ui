@@ -10,9 +10,9 @@ local _, ns = ...
 -- One frame of the addon's own runs every 0.05 s while the module is on. A row is at full opacity while the mouse is over the row's hover frame
 -- (the Main action bar row's includes Flat UI's page arrows, FlatUIBar1PageUp and FlatUIBar1PageDown, left of its bar),
 -- in a fight (with In combat ticked), with a target (With a target ticked; not the Target frame row, see When shown), while you cast or channel
--- and for a moment after an instant spell or an item use (While casting ticked: UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player
--- heard on the module's own frame, and UnitCastingInfo and UnitChannelInfo), while the cursor holds something, while the spell flyout is open and
--- in Edit Mode.
+-- and for 1.5 s, a global cooldown, after an instant spell or an item use, so its cooldown sweep can be read (While casting ticked:
+-- UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the module's own frame, and UnitCastingInfo and UnitChannelInfo), while
+-- the cursor holds something, while the spell flyout is open and in Edit Mode.
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. Back to full it comes in a tenth
 -- of a second (RETURN_TIME), or over Fade time where that is shorter, as the bar block does. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
@@ -326,8 +326,9 @@ local function HasTarget()
 end
 
 -- While casting: true while the player casts or channels, or for CAST_HOLD seconds after a spell or an item was used (state.castAt, heard on the
--- driver's own frame), so an instant spell counts too. A withheld name counts as no cast.
-local CAST_HOLD = 0.15
+-- driver's own frame), so an instant spell counts too: the length of a global cooldown, so the frames stay up long enough to read its sweep before
+-- Wait before fading starts. Every row of While casting uses it; the bar block holds the same (BarBlock.lua). A withheld name counts as no cast.
+local CAST_HOLD = 1.5
 local function Casting()
 	if state.castAt and GetTime() - state.castAt < CAST_HOLD then
 		return true

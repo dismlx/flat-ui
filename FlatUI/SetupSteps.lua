@@ -304,6 +304,7 @@ ns.SETUP_STEPS = {
 		{ "actionbars.readyFlash", "o", "behaviour", "Flashes the icon of one of Flat UI's buttons for a moment as a cooldown longer than the global cooldown ends." },
 		{ "actionbars.readyColour", "r", "behaviour", "Sets the colour of the flash as a cooldown ends, white by default." },
 		{ "actionbars.readyMinimum", "r", "behaviour", "Lets a cooldown shorter than this end without a flash, so only the long ones flash; 0 flashes every one." },
+		{ "actionbars.readySound", "r", "behaviour", "Plays a sound as a cooldown that flashes ends on Flat UI's buttons, at most once a second." },
 	} },
 	{ id = "ab-effects", area = "Action bars", title = "Glows and animations", draw = "mock-action-row", built = true, rows = {
 		{ "actionbars.proc", "o", "mock-action-row" },
@@ -311,7 +312,7 @@ ns.SETUP_STEPS = {
 		{ "actionbars.assist", "o", "mock-action-row" },
 		{ "actionbars.castAnim", "o", "mock-action-row" },
 		{ "actionbars.interruptAnim", "o", "mock-action-row" },
-		{ "actionbars.aimAnim", "o", "behaviour", "Makes the button of a spell you place on the ground, such as Blizzard or Volley, pulse on Flat UI's bars while the spell waits for its spot." },
+		{ "actionbars.aimAnim", "o", "behaviour", "Makes the button of a spell you place on the ground, such as Blizzard or Volley, pulse on Flat UI's bars while the spell waits for its spot or for a click on its target." },
 		{ "actionbars.abilityArt", "o", "mock-action-row" },
 	} },
 	{ id = "uf-frames", area = "Unit frames", title = "Which frames and how big", draw = "mock-unit-frames", built = true, rows = {
@@ -1410,6 +1411,9 @@ ns.SETUP_STEPS = {
 		{ "barblock.others", "o", "mock-bar-block" },
 		{ "barblock.background", "c", "mock-bar-block" },
 		{ "barblock.backgroundPad", "r", "mock-bar-block" },
+		{ "barblock.backgroundOwn", "r", "behaviour", "Gives the panel behind each block its own colour and opacity instead of the Flat UI page's background." },
+		{ "barblock.backgroundColour", "r", "behaviour", "Sets the colour of the panel behind each block." },
+		{ "barblock.backgroundAlpha", "r", "behaviour", "Sets how opaque the panel behind each block is; it still fades with the block." },
 		{ "barblock.fade", "c", "mock-bar-block" },
 		{ "barblock.fadeTo", "r", "mock-bar-block" },
 		{ "barblock.fadeDelay", "r", "behaviour", "Waits this long after the block was last wanted before it starts to fade." },

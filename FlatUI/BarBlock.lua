@@ -27,14 +27,15 @@ local _, ns = ...
 -- here; /flatui block facts still lists it.
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
--- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours. Fade the block: the alpha of each
+-- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours, or with Own panel colour in Panel
+-- colour at Panel opacity (75% by default), set at once (ns.SetOutlineFill). Fade the block: the alpha of each
 -- held frame (SetAlpha, which the game allows in a fight) eases to the faded value over Fade time, once the block has not been wanted for Wait
 -- before fading, and back to full in a tenth of a second when it is: in a fight, under the mouse (over its own block, or over Flat UI's page arrows
 -- left of a main bar it holds, ns.OwnPagerOver), with a target (Full
 -- opacity with a target, off by default; UnitExists("target"), a withheld answer counting as a target, read at each pass of the fade), as you
 -- cast (Full opacity as you cast, off by default: while UnitCastingInfo or UnitChannelInfo of the player gives a plain name, and for a moment
 -- after each spell or item used, UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the fade's own frame, so an instant
--- use counts too and Wait before fading holds the block after it),
+-- use holds the block for 1.5 s, a global cooldown, and Wait before fading after it),
 -- with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
 -- child of the totem bar that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107,
 -- MultiCastActionBarFrame.lua:637-641). The arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while
@@ -566,10 +567,11 @@ local function FlyoutOpen()
 	return Answers("SpellFlyout", "IsShown") or Answers(TOTEM_FLYOUT, "IsVisible")
 end
 
--- Whether the player casts or channels now, or used a spell or an item a moment ago (state.castAt, from the fade frame's events). A withheld
--- name does not count.
+-- Whether the player casts or channels now, or used a spell or an item within CAST_HOLD seconds (state.castAt, from the fade frame's events): a
+-- global cooldown, as Fade.lua's CAST_HOLD, so an instant spell's sweep can be read before Wait before fading starts. A withheld name does not count.
+local CAST_HOLD = 1.5
 local function Casting()
-	if state.castAt and GetTime() - state.castAt < 0.15 then
+	if state.castAt and GetTime() - state.castAt < CAST_HOLD then
 		return true
 	end
 	for _, read in ipairs({ "UnitCastingInfo", "UnitChannelInfo" }) do
@@ -727,7 +729,15 @@ local function Panel(block, on)
 			block.panel = CreateFrame("Frame", nil, UIParent)
 			ns.Own[block.panel] = true
 			block.panel:SetFrameStrata("BACKGROUND")
-			ns.Outline(block.panel, block.panel, true)
+		end
+		-- The outline is made once and given back after; Own panel colour gives it a fill of its own, else the general colour and opacity.
+		local outline = ns.Outline(block.panel, block.panel, true)
+		if Opt("backgroundOwn") == true then
+			local r, g, b = ns.Colour(KEY .. ".backgroundColour")
+			local alpha = Opt("backgroundAlpha")
+			ns.SetOutlineFill(outline, r, g, b, (ns.Finite(alpha) and alpha or 75) / 100)
+		else
+			ns.SetOutlineFill(outline, nil)
 		end
 		local pad = Opt("backgroundPad")
 		block.panel:ClearAllPoints()
