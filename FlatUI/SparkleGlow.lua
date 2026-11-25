@@ -494,7 +494,8 @@ end
 local KEY_ON, KEY_ANY = 2, 3
 -- The four variables the game's Interact Key Icons sets to 1 at Show All (Accessibility.lua:196-201).
 local SHOW_ALL = { "SoftTargetIconEnemy", "SoftTargetIconInteract", "SoftTargetIconGameObject", "SoftTargetLowPriorityIcons" }
-local HINT_LINE = "Flat UI: Glow on the nearest object shows only with the game's Interact Key on. Turn on what the glow needs, on the World and cursor page, sets it up."
+local HINT_LINE = "Flat UI: Glow on the nearest object shows only with the game's Interact Key on. Turn on what the glow needs, on the World and "
+	.. "cursor page, sets it up."
 
 -- Whether the key is on and the icons take in objects; nil on a client without the Interact Key.
 local function Ready()
@@ -577,7 +578,8 @@ function ns.SparkleGlowSetup(id)
 	end
 	ns.SparkleGlowChanged()
 	if failed then
-		return false, "Flat UI: the game did not take every setting. Tick Enable Interact Key in its Controls options and set Interact Key Icons to Show All in Accessibility."
+		return false, "Flat UI: the game did not take every setting. Tick Enable Interact Key in its Controls options and set Interact Key Icons to "
+			.. "Show All in Accessibility."
 	elseif #changed == 0 then
 		return true, "Flat UI: Enable Interact Key and Interact Key Icons are on already."
 	end

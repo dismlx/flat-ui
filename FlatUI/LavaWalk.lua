@@ -20,14 +20,15 @@ local _, ns = ...
 -- 1428 and Un'Goro Crater 1449, which also holds the Blackrock Mountain hub under the first two. These are the classic IDs; names are never read,
 -- since the game gives them in the player's language. /flatui lava says the IDs of the place, for a place that turns out to be missing.
 -- The timeline: a tick seen at time A puts the k-th next one at A + 2k, and the server judges where the player is by what it last heard, so the
--- danger moment is A + 2k minus the world latency of GetNetStats (its 4th answer, ConnectionDocumentation.lua:40-49), held to 0 to 0.4 seconds.
--- The bar fills from one danger moment to the next; the jump window, Jump lead long, is a band at its right end in the jump colour with a mark at its
--- start, and the fill takes that colour inside it. Crossing into the window cues once a period: the word Jump, a flash if Flash when it is time
--- to jump is on, and the sound of Jump sound on the Gameplay SFX channel (as Cooldowns.lua plays its ready sounds). Around each danger moment
--- (0.1 seconds either side) it reads IsFalling('player') each frame (UnitDocumentation.lua:405-418). 0.3 seconds after the tick was due, a tick
--- seen says Hit and starts the timeline again; none while the player was in the air says Dodged; none on the ground says nothing (the player most
--- likely left the lava). The bar hides 5 seconds after the last tick or dodge, and after ten dodges in a row with no tick in between only a tick
--- keeps it. It hides at death. Nothing is protected: an addon cannot jump for the player (JumpOrAscendStart is protected), so the bar only cues.
+-- danger moment is A + 2k minus the world latency of GetNetStats (its 4th answer, ConnectionDocumentation.lua:40-49), held to 0 to 0.4 seconds. The
+-- bar fills from one danger moment to the next; the jump window, Jump lead long, is a band at its right end in the jump colour with a mark at its
+-- start, and the fill takes that colour inside it. Crossing into the window cues once a period: the word Jump, a flash if Flash when it is time to
+-- jump is on, and the sound of Jump sound on the Gameplay SFX channel (as Cooldowns.lua plays its ready sounds). Around each danger moment (0.1
+-- seconds either side) it reads IsFalling('player') each frame (UnitDocumentation.lua:405-418). 0.3 seconds after the tick was due, a tick seen
+-- says Hit and starts the timeline again; none while the player was in the air says Dodged (Dodged x2, x3 as the dodges in a row build, and a hit
+-- ends the streak); none on the ground says nothing (the player most likely left the lava). The bar hides 5 seconds after the last tick or dodge,
+-- and after ten dodges in a row with no tick in between only a tick keeps it. It hides at death. Nothing is protected: an addon cannot jump for the
+-- player (JumpOrAscendStart is protected), so the bar only cues.
 -- The bar is a frame of the addon's own, a child of UIParent in the LOW strata that takes no mouse and hides with the interface, with the outline
 -- of the Flat UI page (ns.Outline), a StatusBar in the bar texture of that page over a dim track, and its words in GameFontHighlightSmall. It is
 -- made the first time it shows, and it runs OnUpdate only while it shows. /flatui move places it (FlatUILavaTimer in Movers.lua, its middle at the
@@ -37,12 +38,12 @@ local _, ns = ...
 -- cursor ring (CursorRing.lua): Core.lua applies the rows at login and when the profile changes, and the rows call ns.LavaChanged themselves.
 -- Test mode (TestMode.lua) cannot run an entry of a file that is no module (TM.Register runs one only while its module is on), so at every On, Off,
 -- pause and resume (TM.Watch) the rows are applied again, and while it is on the bar shows a sample at its spot: a tick every 2 seconds, the
--- window, the cue and its flash, Hit and Dodged in turn, frozen while the bar's Moving is off. Its sound plays only when TM.Sound('lava') allows it,
--- the first time after an On. /flatui lava test shows the same sample for 8 seconds, with one sound. A real tick takes over from the sample.
--- /flatui lava says the mode, the place and its IDs, the ticks seen, dodged and not seen this session, the last hit on the player, the last gaps
--- between ticks and the latency used; /flatui lava trace prints a line for every UNIT_COMBAT of the player with what the timer made of it, the way
--- to check in lava that this client reports its ticks at all. /flatui status has a line only when the hits could not be heard, or after an error,
--- which stops the timer until /reload.
+-- window, the cue and its flash, a Hit and then Dodged and Dodged x2, frozen while the bar's Moving is off. Its sound plays only when
+-- TM.Sound('lava') allows it, the first time after an On. /flatui lava test shows the same sample for 8 seconds, with one sound. A real tick takes
+-- over from the sample. /flatui lava says the mode, the place and its IDs, the ticks seen, dodged (with the most in a row) and not seen this
+-- session, the last hit on the player, the last gaps between ticks and the latency used; /flatui lava trace prints a line for every UNIT_COMBAT of
+-- the player with what the timer made of it, the way to check in lava that this client reports its ticks at all. /flatui status has a line only
+-- when the hits could not be heard, or after an error, which stops the timer until /reload.
 -- The idea is the timing bar of the Classic WeakAura "Avoid lava damage" (wago.io), which shows when to jump before the tick; none of its code or
 -- text is used, and its trigger, the combat log, is not open here.
 
@@ -54,6 +55,8 @@ local MODES = { zones = true, anywhere = true }
 -- after the last tick or dodge, the dodges in a row that keep it, the time either side of a danger moment that the jump is read, and the periods
 -- a tick is kept to judge the rhythm by.
 local PERIOD, SLACK, GRACE, HIDE, DODGE_MAX, AIR, KEEP = 2, 0.25, 0.3, 5, 10, 0.1, 4
+-- The sample ticks once every this many periods and dodges the others.
+local SAMPLE_EVERY = 3
 -- The highest latency counted, the time of a flash, of a word after a tick, and of /flatui lava test.
 local RTT_MAX, FLASH_TIME, SAY_TIME, TEST_TIME = 0.4, 0.3, 0.6, 8
 -- The fire school (CombatText.lua:98).
@@ -78,15 +81,16 @@ local STEPS_MOST = 50
 
 local IsSecret, Finite = ns.IsSecret, ns.Finite
 
--- The state. mode: the row's choice in use. lava: this is a lava place; where: what the place was read from. listening: the hearer hears;
--- deaf: the game took no UNIT_COMBAT. live: a real timeline runs; sample: the sample runs; sampleUntil: the end of /flatui lava test; testSound: its
--- one sound is still to play. anchor: the tick the timeline runs from; k: the period counted down; cued: the last period cued; air: the player was
--- in the air at the danger moment of k; pendK and pendAir: the period past its danger moment and not yet judged. lastReal: the last real tick;
--- held: a fire hit in a fight that waits for a second to set the rhythm. lastAlive: the last tick or dodge; streak: the dodges in a row. rtt: the
--- latency of the timeline. say, sayRGB and sayUntil: the word after a tick. flashAt and flashPeak: the flash. seen, dodged, unseen and gaps: what
--- /flatui lava counts. trace: /flatui lava trace is on. broken: the error that stopped the timer.
+-- The state. mode: the row's choice in use. lava: this is a lava place; where: what the place was read from. listening: the hearer hears; deaf: the
+-- game took no UNIT_COMBAT. live: a real timeline runs; sample: the sample runs; sampleUntil: the end of /flatui lava test; testSound: its one
+-- sound is still to play. anchor: the tick the timeline runs from; k: the period counted down; cued: the last period cued; air: the player was in
+-- the air at the danger moment of k; pendK and pendAir: the period past its danger moment and not yet judged. lastReal: the last real tick; held: a
+-- fire hit in a fight that waits for a second to set the rhythm. lastAlive: the last tick or dodge; streak: the dodges in a row, and best the most
+-- of real ones this session; flip: the period of the sample, a tick every SAMPLE_EVERY. rtt: the latency of the timeline. say, sayRGB and sayUntil:
+-- the word after a tick. flashAt and flashPeak: the flash. seen, dodged, unseen and gaps: what /flatui lava counts. trace: /flatui lava trace is
+-- on. broken: the error that stopped the timer.
 local S = { lava = false, where = {}, listening = false, deaf = false, live = false, sample = false, k = 1, cued = 0, air = false, pendAir = false,
-	streak = 0, rtt = 0, seen = 0, dodged = 0, unseen = 0, gaps = {}, trace = false, flip = false }
+	streak = 0, best = 0, rtt = 0, seen = 0, dodged = 0, unseen = 0, gaps = {}, trace = false, flip = 0 }
 -- The last UNIT_COMBAT of the player, for /flatui lava.
 local LAST = {}
 -- The bar: frame, outline, bar, track, band, mark, flash, word and count, once made; placed: the spot it was put at; file: the bar texture on it;
@@ -337,6 +341,8 @@ local function Paint()
 	end
 	local text = math.max(7, math.min(16, height - 2))
 	U.word:SetTextHeight(text)
+	-- The word stops short of the count at the right end, so "Dodged x3" never runs under it on a narrow bar.
+	U.word:SetWidth(math.max(20, width - 36))
 	U.count:SetTextHeight(text)
 	U.lavaRGB = { ns.Colour("general.lavaColour") }
 	U.jumpRGB = { ns.Colour("general.lavaJumpColour") }
@@ -390,11 +396,12 @@ local function Tick(at, sample)
 	end
 end
 
--- Period k is past and no tick came: Dodged when the player was in the air, else nothing.
+-- Period k is past and no tick came: Dodged when the player was in the air, with the dodges in a row from the second ("Dodged x2"), else nothing.
+-- The sample ticks every SAMPLE_EVERY periods and dodges the others, so its count shows too.
 local function Settle(k, air, now)
 	if S.sample then
-		S.flip = not S.flip
-		if S.flip then
+		S.flip = (S.flip + 1) % SAMPLE_EVERY
+		if S.flip == 1 then
 			Tick(S.anchor + k * PERIOD, true)
 			return
 		end
@@ -404,11 +411,12 @@ local function Settle(k, air, now)
 		S.streak = S.streak + 1
 		if not S.sample then
 			S.dodged = S.dodged + 1
+			S.best = math.max(S.best, S.streak)
 		end
 		if S.streak <= DODGE_MAX then
 			S.lastAlive = now
 		end
-		Say("Dodged", GREEN, now)
+		Say(S.streak > 1 and ("Dodged x%d"):format(S.streak) or "Dodged", GREEN, now)
 		Flash(GREEN, 0.3, now)
 	elseif not S.sample then
 		S.unseen = S.unseen + 1
@@ -548,7 +556,7 @@ local function SafeStep(frame, elapsed)
 end
 
 local function StartSample(now)
-	S.sample, S.flip, S.rtt = true, false, 0
+	S.sample, S.flip, S.rtt = true, 0, 0
 	S.anchor, S.k, S.cued, S.air, S.pendK, S.pendAir = now, 1, 0, false, nil, false
 	S.say, S.sayUntil, S.flashAt = nil, nil, nil
 end
@@ -744,7 +752,8 @@ local function Report()
 			mode == "zones" and "in lava zones" or mode == "anywhere" and "anywhere" or "off"),
 		("This place: %s (instance %s, maps %s)."):format(S.lava and ("lava, " .. tostring(where.name)) or "no lava place", Plain(where.instance),
 			#where.chain > 0 and table.concat(where.chain, " > ") or "none"),
-		("This session: %d ticks seen, %d dodged, %d not seen (you most likely left the lava)."):format(S.seen, S.dodged, S.unseen),
+		("This session: %d ticks seen, %d dodged (at best %d in a row), %d not seen (you most likely left the lava)."):format(S.seen, S.dodged,
+			S.best, S.unseen),
 		LAST.at and ("Last hit on you: %s, flag %s, school %s, amount %s, %.1f s ago."):format(LAST.action, LAST.flag, LAST.school, LAST.amount,
 			GetTime() - LAST.at) or "No hit on you heard yet.",
 		#gaps > 0 and ("Last gaps between ticks: %s s."):format(table.concat(gaps, ", ")) or "No gap between two ticks seen yet.",

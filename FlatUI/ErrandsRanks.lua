@@ -1,15 +1,15 @@
 local _, ns = ...
 
--- Spell ranks: after training, a line at the top of the screen names the action buttons that hold a lower rank of a spell the spell book now
--- knows higher, with an Uprank and reload button. /flatui move places the line (FlatUIUprankNotice, a box while Put new ranks on your bars is on;
--- ns.MoverSpot, placed again out of a fight), and test mode shows a sample of it with Uprank greyed and no secure button. Its click puts the new ranks on those slots (C_Spell.PickupSpell, PlaceAction, ClearCursor)
--- and its secure /reload macro reloads the interface in the same click. No slot is written anywhere else. The game raises ACTIONBAR_SLOT_CHANGED,
--- ACTIONBAR_SHOWGRID, ACTIONBAR_HIDEGRID and CURSOR_CHANGED inside the call that changes a slot or the cursor (SynchronousEvent,
--- ActionBarFrameDocumentation.lua, CursorDocumentation.lua), so its buttons and bars write action, flashing, showAllButtons and their list of
--- shown buttons under the caller (ActionButton.lua:529-553, ActionBar.lua:144-171, 198-217): fields the click of an action button reads, and
--- which the game writes again only behind a read of them, so they would taint every later update of the button, in a fight too. The reload in
--- the same click throws all of that away before any later click or fight reads it; LayoutSpots.lua keeps its one risky write in its Reload
--- click for the same reason.
+-- Spell ranks: after training, a line at the top of the screen names the action buttons that hold a lower rank of a spell the spell book now knows
+-- higher, with an Uprank and reload button. /flatui move places the line (FlatUIUprankNotice, a box while Put new ranks on your bars is on;
+-- ns.MoverSpot, placed again out of a fight), and test mode shows a sample of it with Uprank greyed and no secure button. Its click puts the new
+-- ranks on those slots (C_Spell.PickupSpell, PlaceAction, ClearCursor) and its secure /reload macro reloads the interface in the same click. No
+-- slot is written anywhere else. The game raises ACTIONBAR_SLOT_CHANGED, ACTIONBAR_SHOWGRID, ACTIONBAR_HIDEGRID and CURSOR_CHANGED inside the call
+-- that changes a slot or the cursor (SynchronousEvent, ActionBarFrameDocumentation.lua, CursorDocumentation.lua), so its buttons and bars write
+-- action, flashing, showAllButtons and their list of shown buttons under the caller (ActionButton.lua:529-553, ActionBar.lua:144-171, 198-217):
+-- fields the click of an action button reads, and which the game writes again only behind a read of them, so they would taint every later update of
+-- the button, in a fight too. The reload in the same click throws all of that away before any later click or fight reads it; LayoutSpots.lua keeps
+-- its one risky write in its Reload click for the same reason.
 -- The ranks come from the spell book by name and number: the best rank the book lists of each name (the first number of its rank text), and a
 -- slot is offered when it holds a spell of that name with a lower number that is also the highest of that name on its pages (each stance or
 -- form page on its own, the other pages together). A lower rank kept beside a higher one (Frostbolt Rank 1 for its slow, a cheaper heal) is the
@@ -710,7 +710,8 @@ Explain = function(owner)
 	tip:SetOwner(owner, "ANCHOR_BOTTOM", 0, -4)
 	tip:SetText("Uprank and reload")
 	if sample then
-		tip:AddLine("A sample of test mode. After training, this line names the buttons that hold a lower rank, and this button puts the new ranks on them and reloads.", 1, 1, 1, true)
+		tip:AddLine("A sample of test mode. After training, this line names the buttons that hold a lower rank, and this button puts the new ranks "
+			.. "on them and reloads.", 1, 1, 1, true)
 		tip:Show()
 		return
 	end
