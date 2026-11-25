@@ -11,12 +11,13 @@ local _, ns = ...
 -- match there, the keyring's included, worked out one character a frame once the menu opens, never while the player types, from names the client
 -- has loaded only;
 -- the search box (B.Search.Box, BagsSearch.lua, told its window for its menu of quick searches), which B.Window.Focus gives the keyboard for the
--- bag search key; the view button, Sections or Bag by bag; the sort button, on live slots only: ns.BagSort.Run and
--- ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the game is asked to sort (BagSort tells its
--- watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving, six and a half seconds at most, and for as
--- long as the sort hold of Bags.lua lasts (B.Sorting), also when the window closed and opened again meanwhile; nothing arrives at the top shelf
--- then either; the bank button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close button, a cross with no box, as Windows draws the
--- game's.
+-- bag search key, and which shows how many items match there while a search is typed (B.Search.SetCount, at the opening and at each update: the
+-- stacks of the character shown added up, the keyring's included, as the picker counts them); the view button, Sections or Bag by bag; the sort
+-- button, on live slots only: ns.BagSort.Run and ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the
+-- game is asked to sort (BagSort tells its watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving,
+-- six and a half seconds at most, and for as long as the sort hold of Bags.lua lasts (B.Sorting), also when the window closed and opened again
+-- meanwhile; nothing arrives at the top shelf then either; the bank button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close
+-- button, a cross with no box, as Windows draws the game's.
 -- Dragging the title bar or the character picker moves the window (StartMoving and StopMovingOrSizing, :4797, 4813, with SetDontSavePosition and
 -- SetUserPlaced, :4605, 4778, so the client keeps no place of its own); a drag that starts on the picker opens no menu. Where it is let go is saved
 -- as its spot in the movers, also when the window closes during the drag: the box of its entry in Movers.lua, put with its corner at the window's,
@@ -469,6 +470,16 @@ local function Matches(which, key, stacks)
 		end
 	end
 	return math.floor(count)
+end
+
+-- The search boxes of a window show how many items match there (B.Search.SetCount, BagsSearch.lua): for the character it shows, the stacks added up
+-- as the picker counts them, so the two numbers agree; nil while no search is typed, which hides the count.
+local function MatchCount(w)
+	local n = nil
+	if Call(Search, "Active") == true then
+		n = Matches(w.which, (Layout.Viewed(w.which)), true)
+	end
+	Call(Search, "SetCount", w.which, n)
 end
 
 -- Drawing ----------------------------------------------------------------------------------------------------------------------------------------
@@ -1751,6 +1762,7 @@ function Showing(w)
 	w.offset = 0
 	TitleLine(w)
 	Footer(w)
+	Run("search", MatchCount, w)
 	Resize(w)
 	Window.Place(w.which)
 end
@@ -1990,6 +2002,7 @@ local function Updating(w, flags, changed)
 		end
 	end
 	Footer(w)
+	Run("search", MatchCount, w)
 	-- A fold or an unfold the player clicked (Window.KeepHeight) is a fresh layout that keeps the height too, so the title clicked stays under the
 	-- mouse; the next one that is not asked for that way takes its exact height again.
 	local keep = w.keepNext == true

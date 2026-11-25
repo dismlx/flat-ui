@@ -45,8 +45,10 @@ local _, ns = ...
 -- Escape and Enter give the keyboard back (ClearFocus), so a second Escape is the game's, and a box that hides gives it back too. Pointing at an
 -- empty box that does not have the keyboard, out of a fight (InCombatLockdown and UnitAffectingCombat, through Errands.Fighting), writes the
 -- grammar in GameTooltip in plain lines (SetOwner, SetText, AddLine, Show, and Hide while the box owns it, IsOwned); a box that holds a search
--- gets two short lines instead, the search and what the cross does, and a click in the box or a letter typed takes the tooltip away, so it never
--- lies over the slots the search lights. The search itself, typing and the cross work in a fight too.
+-- gets short lines instead, the search, how many items match and what the cross does, and a click in the box or a letter typed takes the tooltip
+-- away, so it never lies over the slots the search lights. The search itself, typing and the cross work in a fight too. While a search is typed
+-- the box shows how many items match at its right, left of the cross, in the dim text colour and red at 0: its window counts them for the
+-- character it shows, as its character picker does (Search.SetCount, BagsWindow.lua), and the text keeps clear of it (SetTextInsets).
 -- A right click on the box (OnMouseUp) opens a menu of BagsLayout's (B.Layout.Menu) of quick searches, New items, Junk, Bind on equip, Quest items,
 -- Cannot use, Recipes you can learn, Consumables, Trade goods, Green and better and Epic and better, each with its term at the right; a pick
 -- types the term (the one typed now is ticked), and Clear, while a search is typed, clears it. Under a Recent header it lists the last RECENT (5)
@@ -73,8 +75,10 @@ local INSET_LEFT, INSET_RIGHT = 6, 18
 local CROSS, CROSS_LINE, CROSS_ALPHA = 7, 1.5, 0.6
 local MOST_LETTERS = 80
 local HINT = "Search"
--- The text-dim of the windows (PanelLook.lua), as the Threat list uses it.
+-- The text-dim of the windows (PanelLook.lua), as the Threat list uses it, and the red of a full bag (BagsWindow.lua, NONE_HEX) for a search
+-- that matches nothing; the space between the count of matches and the cross.
 local DIM = { 0.66, 0.68, 0.62 }
+local NONE_RGB, COUNT_GAP = { 1, 0.35, 0.24 }, 4
 
 -- Enum.ItemClass and Enum.ItemConsumableSubclass on Forever (enums.yaml:4630-4651, 4694-4711).
 local CONSUMABLE, WEAPON, ARMOR = 0, 2, 4
@@ -887,7 +891,31 @@ local function Paint(box)
 	PaintCross(own)
 end
 
--- The hint shows on an empty box without the keyboard, the cross on a box with text.
+-- The count of matches at the right of a box, left of the cross, while a search is typed and its window gave one (Search.SetCount): dim, red at
+-- 0. The text of the box keeps clear of it (SetTextInsets).
+local function Count(box, own)
+	local label = own.count
+	if not label then
+		return
+	end
+	local inset = INSET_RIGHT
+	if own.matches ~= nil and text ~= "" then
+		local colour = own.matches == 0 and NONE_RGB or DIM
+		label:SetTextColor(colour[1], colour[2], colour[3])
+		label:SetText(tostring(own.matches))
+		label:Show()
+		local ok, width = pcall(label.GetStringWidth, label)
+		inset = INSET_RIGHT + (ok and ns.Finite(width) and math.ceil(width) or 12) + COUNT_GAP
+	else
+		label:Hide()
+	end
+	if own.inset ~= inset then
+		own.inset = inset
+		pcall(box.SetTextInsets, box, INSET_LEFT, inset, 0, 0)
+	end
+end
+
+-- The hint shows on an empty box without the keyboard, the cross on a box with text, and the count of matches while one is known.
 local function Refresh(box)
 	local own = boxes[box]
 	if not own then
@@ -899,6 +927,7 @@ local function Refresh(box)
 		own.hint:SetShown(empty and not Focused(box))
 	end
 	own.clear:SetShown(not empty)
+	Count(box, own)
 end
 
 local function WriteBoxes()
@@ -967,6 +996,18 @@ function Search.SetText(value)
 	end
 end
 
+-- How many items match the search in that window ("bags", "bank"), for the character it shows (BagsWindow.lua, the count of its character
+-- picker), or nil while no search is typed: written at the right of its boxes and in their tooltip.
+function Search.SetCount(owner, n)
+	n = ns.Finite(n) and n >= 0 and math.floor(n) or nil
+	for box, own in pairs(boxes) do
+		if own.owner == owner and own.matches ~= n then
+			own.matches = n
+			Count(box, own)
+		end
+	end
+end
+
 -- Repaints every box: for a change of the Windows look while a window shows.
 function Search.Paint()
 	for box in pairs(boxes) do
@@ -992,6 +1033,11 @@ local function Tip(box)
 	if text ~= "" then
 		-- The text keeps a typed bar as "||", which the tooltip shows as one bar.
 		tip:SetText("Searching: " .. text, 1, 1, 1)
+		local own = boxes[box]
+		local n = own and own.matches or nil
+		if n then
+			tip:AddLine(n == 1 and "1 item matches" or ("%d items match"):format(n), 1, 1, 1)
+		end
 		tip:AddLine(SHORT, DIM[1], DIM[2], DIM[3], true)
 		tip:Show()
 		return
@@ -1111,12 +1157,18 @@ function Search.Box(parent, owner)
 	box:SetFontObject(FONT)
 	box:SetTextInsets(INSET_LEFT, INSET_RIGHT, 0, 0)
 	pcall(box.SetMaxLetters, box, MOST_LETTERS)
-	local own = { outline = ns.SetOutlineArea(ns.Outline(box, box, true), KEY), hover = false }
+	local own = { outline = ns.SetOutlineArea(ns.Outline(box, box, true), KEY), hover = false, owner = owner }
 	own.hint = ns.OwnText(box, "ARTWORK", FONT)
 	if own.hint then
 		own.hint:SetPoint("LEFT", box, "LEFT", INSET_LEFT, 0)
 		own.hint:SetText(HINT)
 		own.hint:SetTextColor(DIM[1], DIM[2], DIM[3])
+	end
+	own.count = ns.OwnText(box, "ARTWORK", FONT)
+	if own.count then
+		own.count:SetPoint("RIGHT", box, "RIGHT", -INSET_RIGHT, 0)
+		own.count:SetJustifyH("RIGHT")
+		own.count:Hide()
 	end
 	boxes[box] = own
 	own.clear = Cross(box, own)
