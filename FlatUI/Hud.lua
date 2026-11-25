@@ -16,6 +16,8 @@ local ADDON_NAME, ns = ...
 -- (SetStatusBarColor, given back as the roll ends or the row goes off; ROLL.Time), and Seconds on the timers puts the time left, as 1:12, at the
 -- right under the breath, fatigue and feign death bars, red under 10 while the timer runs out (MIRROR.Time). Opacity in combat eases the objective
 -- tracker down as a fight starts and back up as it ends, and Questie's the same way (ns.TrackerEase).
+-- Sound before a roll ends (hud.lootRollSound, None by default) plays once as a roll still on the screen comes down to 5 seconds left, read from
+-- the same seconds (ROLL.Tick, ROLL.Sound); the game takes a roll away once you roll on it, so only a roll you have not rolled on rings.
 
 local KEY = "hud"
 local LABEL = "Minimap and HUD"
@@ -2245,9 +2247,36 @@ function ROLL.Tick(clock, value)
 	if secs == clock.secs then
 		return
 	end
+	local was = clock.secs
 	clock.secs = secs
 	clock.text:SetText(secs and tostring(secs) or "")
 	ROLL.Red(clock, secs ~= nil and secs < 10)
+	-- Sound before a roll ends: once, as a roll still on the screen (the game takes a roll away once you roll on it) comes down to ROLL.warnAt
+	-- seconds from above them, so a roll that starts with less, the Need animation's 0 and a roll that ends say nothing. ns.PlayKit plays one
+	-- sound a second at most, so rolls that end together ring once.
+	if secs ~= nil and secs <= ROLL.warnAt and ns.Finite(was) and was > ROLL.warnAt then
+		ROLL.Sound(ns.Get(KEY .. ".lootRollSound"))
+	end
+end
+
+-- The sounds of Sound before a roll ends, by choice, as places in ns.SOUNDS (IconRow.lua), and the seconds left it plays at.
+ROLL.kits, ROLL.warnAt = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }, 5
+
+-- Plays the sound of a choice of Sound before a roll ends; None plays nothing.
+function ROLL.Sound(choice)
+	local kit = ROLL.kits[choice]
+	local sound = kit and type(ns.SOUNDS) == "table" and ns.SOUNDS[kit]
+	if type(sound) == "table" and type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1])
+	end
+end
+
+-- Picking a Sound before a roll ends plays it once, so it can be chosen by ear, only while the options window shows and out of a fight.
+function ns.LootRollSoundPicked(path)
+	if type(path) ~= "string" or InCombatLockdown() or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+		return
+	end
+	ROLL.Sound(ns.Get(path))
 end
 
 -- Seconds left on rolls: a text of Flat UI's own at the right end just above the timer, on a frame of its own on the roll frame one level over the

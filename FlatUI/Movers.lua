@@ -38,6 +38,9 @@ local _, ns = ...
 -- saved spots they may also have.
 -- Shift and a right-click on a box hides its frame, or shows it again, when the Hidden frames page has a row for it (Hide.lua, ns.HideFrames), and
 -- the box of a hidden frame says so, as does the box of a frame that hangs from one. On any other box it resets nothing and says so in chat.
+-- /flatui move in a fight (the options window's Move frames row and test mode's Move button give the same command) opens the movers as the
+-- fight ends: chat says so once, and a second one in the same fight takes it back (win.waitOpen). Every chat line of the movers starts with
+-- "Flat UI:" (win.Say).
 
 local KEY = "movers"
 local TOOLTIP = "FlatUITooltip"
@@ -445,6 +448,11 @@ local resettingAll, systemReset, barsLeft = false, false, false
 -- has been told in this fight that a window cannot be moved or sized. toldHow: whether the player has been told how to move things.
 -- last: the last press on a window that started no drag.
 local win = { grips = {}, corners = {}, art = {}, clocks = {}, levels = {}, why = {}, resizes = {}, heard = false, barUsed = false }
+-- Every chat line of the movers starts with "Flat UI:", as the rest of the addon's do. waitOpen: the source of a /flatui move given in a fight,
+-- which opens the movers as the fight ends (Open; a second one in the same fight takes it back).
+function win.Say(text)
+	print("Flat UI: " .. tostring(text))
+end
 -- Sizes by hooks. marked: the windows a hook has marked, sized on the next frame. wrote: the windows whose scale the game has written since they
 -- were last sized. markers: the two functions hooked on a window, by name. scaleHooked and showHooked: the frames that have each hook. guards: the
 -- scale calls of this addon, wrapped so that a hook can tell them from the game's. writing: how many of those are running. sizer: the one hidden
@@ -1331,7 +1339,7 @@ local function RestoreAll()
 		end
 	end
 	if left then
-		print("Bars " .. BARS_STAY)
+		win.Say("Bars " .. BARS_STAY)
 	end
 end
 
@@ -1357,7 +1365,7 @@ local function ReleaseSystems()
 		end
 	end
 	if left then
-		print("Bars " .. BARS_STAY)
+		win.Say("Bars " .. BARS_STAY)
 	end
 end
 
@@ -1828,7 +1836,7 @@ function ns.MoverHold(owner, spots)
 		end
 	end
 	if left then
-		print("Bars " .. BARS_STAY)
+		win.Say("Bars " .. BARS_STAY)
 	end
 	UpdateDriver()
 end
@@ -2059,7 +2067,7 @@ function ns.SetMoverScale(def, percent)
 	local function Refuse(text)
 		local now = GetTime and GetTime() or 0
 		if not ns.moverTold or now - ns.moverTold >= 0.5 then
-			print(text)
+			win.Say(text)
 		end
 		ns.moverTold = now
 		if def.path and C_Timer and C_Timer.After then
@@ -2317,19 +2325,19 @@ function ResetFrame(name, was)
 	-- The panel manager places a window again the next time it opens.
 	if moved and released then
 		if not resettingAll then
-			print(("%s goes back to Edit Mode's spot after a reload."):format(info.label))
+			win.Say(("%s goes back to Edit Mode's spot after a reload."):format(info.label))
 		end
 	elseif moved and info.stack and restored ~= nil then
 		barsLeft = true
 		if not resettingAll then
-			print(("%s stays where it is until the game places it again at its next layout or after /reload."):format(info.label))
+			win.Say(("%s stays where it is until the game places it again at its next layout or after /reload."):format(info.label))
 		end
 	elseif moved and restored == false and info.kind ~= "window" then
-		print(("%s goes back to its place after /reload."):format(info.label))
+		win.Say(("%s goes back to its place after /reload."):format(info.label))
 	elseif moved and restored and info.system then
 		systemReset = laidOut and "layout" or systemReset or "system"
 		if not resettingAll then
-			print(laidOut and ("%s is back where it was. The game places it again at the next layout or after /reload."):format(info.label)
+			win.Say(laidOut and ("%s is back where it was. The game places it again at the next layout or after /reload."):format(info.label)
 				or ("%s is back where it was, and /reload gives it back to Edit Mode fully."):format(info.label))
 		end
 	end
@@ -2353,14 +2361,14 @@ local function ResetAll(was)
 	end
 	resettingAll = false
 	if barsLeft then
-		print((was and "Bars " or "Moved frames are back where the game has them, but bars ") .. BARS_STAY)
+		win.Say((was and "Bars " or "Moved frames are back where the game has them, but bars ") .. BARS_STAY)
 	elseif not was then
-		print("Moved frames are back where the game has them.")
+		win.Say("Moved frames are back where the game has them.")
 	end
 	if systemReset == "layout" then
-		print("The game places the frames it lays out again at the next layout or after /reload.")
+		win.Say("The game places the frames it lays out again at the next layout or after /reload.")
 	elseif systemReset then
-		print("/reload gives the game's own frames back to Edit Mode fully.")
+		win.Say("/reload gives the game's own frames back to Edit Mode fully.")
 	end
 end
 
@@ -2539,7 +2547,7 @@ function centre.Everything()
 	end
 	table.sort(names)
 	if #names == 0 then
-		print("No handle is ticked. Tick the box on each handle, then press Centre ticked.")
+		win.Say("No handle is ticked. Tick the box on each handle, then press Centre ticked.")
 		return
 	end
 	local done = 0
@@ -2551,9 +2559,9 @@ function centre.Everything()
 		centre.Look(name)
 	end
 	if done == 0 then
-		print("Nothing was centred: the ticked handles are hidden or placed by the game.")
+		win.Say("Nothing was centred: the ticked handles are hidden or placed by the game.")
 	else
-		print(("%d %s centred."):format(done, done == 1 and "handle" or "handles"))
+		win.Say(("%d %s centred."):format(done, done == 1 and "handle" or "handles"))
 	end
 end
 
@@ -2995,7 +3003,7 @@ local function Take(frame)
 	ns.MoversMode.Changed(name)
 	ShowHandle(name)
 	UpdateDriver()
-	print(("%s can be moved now."):format(name))
+	win.Say(("%s can be moved now."):format(name))
 end
 
 local keys = { shift = false, alt = false }
@@ -3092,7 +3100,7 @@ local function StartPick()
 	SetMouseAll()
 	keys.shift, keys.alt = KeyDown(IsShiftKeyDown), KeyDown(IsAltKeyDown)
 	tag:Show()
-	print("Point at a frame and press Alt to take it. Shift picks the frame around it.")
+	win.Say("Point at a frame and press Alt to take it. Shift picks the frame around it.")
 end
 
 -- Windows ----------------------------------------------------------------------------------------
@@ -3362,11 +3370,11 @@ function win.Locked(frame, mode)
 	if mode == "size" then
 		if not win.toldSize then
 			win.toldSize = true
-			print(WIN.noSize)
+			win.Say(WIN.noSize)
 		end
 	elseif not win.toldMove then
 		win.toldMove = true
-		print(WIN.noMove)
+		win.Say(WIN.noMove)
 	end
 	return true
 end
@@ -4282,9 +4290,9 @@ function win.Reset()
 	ns.Set("movers.windowSize", 100)
 	win.SizeOpen()
 	ns.ResizeAll()
-	print("Windows are back at their default place and size.")
+	win.Say("Windows are back at their default place and size.")
 	if InCombatLockdown() then
-		print("Some windows go back after combat.")
+		win.Say("Some windows go back after combat.")
 	end
 end
 
@@ -4490,9 +4498,17 @@ function Open(source)
 		return
 	end
 	if InCombatLockdown() then
-		print("Movers open out of combat.")
+		-- In a fight the movers wait for its end; a second call in the same fight takes that back.
+		if win.waitOpen then
+			win.waitOpen = nil
+			win.Say("/flatui move will not open after the fight.")
+		else
+			win.waitOpen = source or "slash"
+			win.Say("/flatui move opens when the fight ends.")
+		end
 		return
 	end
+	win.waitOpen = nil
 	if not bar then
 		BuildBar()
 	end
@@ -4618,7 +4634,7 @@ local function KeepEditModeChanges()
 	end
 	if #labels > 0 then
 		table.sort(labels)
-		print(("Changed in Edit Mode, so the saved spot is dropped: %s."):format(table.concat(labels, ", ")))
+		win.Say(("Changed in Edit Mode, so the saved spot is dropped: %s."):format(table.concat(labels, ", ")))
 		UpdateDriver()
 	end
 end
@@ -4721,7 +4737,7 @@ local function DropCorners()
 	end
 	if #corner > 0 then
 		table.sort(corner)
-		print(("Dropped the saved spot of %s: it was the top left corner of the screen."):format(table.concat(corner, ", ")))
+		win.Say(("Dropped the saved spot of %s: it was the top left corner of the screen."):format(table.concat(corner, ", ")))
 	end
 end
 
@@ -4886,7 +4902,7 @@ function ns.WindowsReset(id)
 	end
 	local why = Unavailable()
 	if why then
-		print(why)
+		win.Say(why)
 	else
 		ns.Try(KEY, win.Reset)
 	end
@@ -4967,7 +4983,7 @@ ns.Register(KEY, {
 				-- The movers wait for the end of the fight and open again then, with what was done in them.
 				ns.MoversMode.Pause()
 				Close()
-				print("Movers pause for combat.")
+				win.Say("Movers pause for combat.")
 			end
 		end,
 		PLAYER_REGEN_ENABLED = function()
@@ -4975,6 +4991,16 @@ ns.Register(KEY, {
 			local again = ns.MoversMode.Resume()
 			if again and not open then
 				Open(again)
+			end
+			-- A /flatui move given in the fight opens now, with the line on how it works the first time.
+			local waited = win.waitOpen
+			win.waitOpen = nil
+			if waited and not open and not Unavailable() then
+				Open(waited)
+				if open and not win.toldHow then
+					win.toldHow = true
+					win.Say(HOW)
+				end
 			end
 			if win.waiting then
 				win.waiting = false
@@ -4988,7 +5014,7 @@ ns.Register(KEY, {
 			rest = rest:match("^%s*(.-)%s*$"):gsub("%s+", " ")
 			local why = Unavailable()
 			if why then
-				print(why)
+				win.Say(why)
 			elseif rest:lower() == "reset windows" then
 				win.Reset()
 			elseif rest:lower() == "reset" then
@@ -4999,14 +5025,14 @@ ns.Register(KEY, {
 				Open("slash")
 				if open and not win.toldHow then
 					win.toldHow = true
-					print(HOW)
+					win.Say(HOW)
 				end
 			end
 		end,
 		grab = function()
 			local why = Unavailable()
 			if why then
-				print(why)
+				win.Say(why)
 				return
 			end
 			Open("slash")

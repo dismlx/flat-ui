@@ -32,6 +32,10 @@ local _, ns = ...
 -- of a fight either way, so nothing is taken from or given back to the game's frame as a fight starts or ends; Judge only asks at each message.
 -- Not in line of sight (hud.errorSight, off by default) hides "Target not in line of sight." (SPELL_FAILED_LINE_OF_SIGHT, a spell failure that
 -- comes under the one type of all of them, so it is matched by its words).
+-- While stunned, silenced or feared (hud.errorControl, off by default) hides the messages of a key pressed while you cannot act: "Can't attack
+-- while stunned." and the like (LE_GAME_ERR_ATTACK_STUNNED, PACIFIED, FLEEING, CONFUSED and CHARMED, which Forever has: wowless wowf
+-- globals.yaml) and "Can't do that while stunned." and the like (the spell failures SPELL_FAILED_STUNNED, SILENCED, PACIFIED, FLEEING, CONFUSED,
+-- CHARMED and POSSESSED, matched by their words, each passed over where the client lacks it).
 -- This follows the error message filter of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (Submodules/UIErrors.lua). Only the
 -- kinds a character of the classic classes meets are offered, and the spell failures are added to them.
 
@@ -55,6 +59,9 @@ local KINDS = {
 		"ERR_PET_SPELL_TARGETS_DEAD" }, words = { "SPELL_FAILED_BAD_TARGETS", "SPELL_FAILED_BAD_IMPLICIT_TARGETS", "SPELL_FAILED_TARGETS_DEAD" } },
 	{ row = "errorMoving", types = { "ERR_NOT_WHILE_MOVING", "ERR_NOEMOTEWHILERUNNING" }, words = { "SPELL_FAILED_MOVING" } },
 	{ row = "errorSight", types = {}, words = { "SPELL_FAILED_LINE_OF_SIGHT" } },
+	{ row = "errorControl", types = { "ERR_ATTACK_STUNNED", "ERR_ATTACK_PACIFIED", "ERR_ATTACK_FLEEING", "ERR_ATTACK_CONFUSED", "ERR_ATTACK_CHARMED" },
+		words = { "SPELL_FAILED_STUNNED", "SPELL_FAILED_SILENCED", "SPELL_FAILED_PACIFIED", "SPELL_FAILED_FLEEING", "SPELL_FAILED_CONFUSED",
+			"SPELL_FAILED_CHARMED", "SPELL_FAILED_POSSESSED" } },
 }
 -- The types whose repeat keeps the line that shows in place of a new one (UIErrorsFrame.lua:52-75, a local table of the game's file).
 local REPEATS = { "ERR_SPELL_FAILED_TOTEMS", "ERR_SPELL_FAILED_EQUIPPED_ITEM", "ERR_SPELL_ALREADY_KNOWN_S", "ERR_SPELL_FAILED_SHAPESHIFT_FORM_S",

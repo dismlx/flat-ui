@@ -9,12 +9,12 @@ local _, ns = ...
 --
 -- One frame of the addon's own runs every 0.05 s while the module is on. A row is at full opacity while the mouse is over the row's hover frame
 -- (the Main action bar row's includes Flat UI's page arrows, FlatUIBar1PageUp and FlatUIBar1PageDown, left of its bar),
--- in a fight (with In combat ticked), with a target (With a target ticked; not the Target frame row, see When shown), as you cast (As you cast ticked;
--- the action bar, stance and pet bar rows only: while UnitCastingInfo or UnitChannelInfo of the player gives a plain name, and for a moment after each
--- spell or item used, UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the module's own frame, as the bar block's Full opacity
--- as you cast does, so an instant use counts and Wait before fading holds the bars after it), while the cursor holds something, while
--- the spell flyout is open and in Edit Mode.
--- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. A frame is written only when its value changes.
+-- in a fight (with In combat ticked), with a target (With a target ticked; not the Target frame row, see When shown), while you cast or channel
+-- and for a moment after an instant spell or an item use (While casting ticked: UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player
+-- heard on the module's own frame, and UnitCastingInfo and UnitChannelInfo), while the cursor holds something, while the spell flyout is open and
+-- in Edit Mode.
+-- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. Back to full it comes in a tenth
+-- of a second (RETURN_TIME), or over Fade time where that is shorter, as the bar block does. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
 -- An alpha something else gives a frame after a write is taken as the frame's own, the one put back, and the frame eases again from it.
 -- The frames are the game's own, but for Flat UI's bag and bank windows and, while Flat UI's buttons are in use, Flat UI's own bars in the rows of the
@@ -120,6 +120,8 @@ local _, ns = ...
 local KEY = "fade"
 local PART = "fade"
 local EVERY = 0.05
+-- The most seconds a faded frame takes to come back to full, whatever Fade time says.
+local RETURN_TIME = 0.1
 -- An alpha at or under this is a frame something else holds hidden.
 local HIDDEN = 0.001
 
@@ -323,17 +325,18 @@ local function HasTarget()
 	return ok and (ns.IsSecret(exists) or exists == true)
 end
 
--- Whether the player casts or channels now, or used a spell or an item a moment ago (state.castAt, from the driver's events). A withheld name does
--- not count.
+-- While casting: true while the player casts or channels, or for CAST_HOLD seconds after a spell or an item was used (state.castAt, heard on the
+-- driver's own frame), so an instant spell counts too. A withheld name counts as no cast.
+local CAST_HOLD = 0.15
 local function Casting()
-	if state.castAt and GetTime() - state.castAt < 0.15 then
+	if state.castAt and GetTime() - state.castAt < CAST_HOLD then
 		return true
 	end
-	for _, read in ipairs({ "UnitCastingInfo", "UnitChannelInfo" }) do
-		local fn = _G[read]
-		if type(fn) == "function" then
-			local ok, name = pcall(fn, "player")
-			if ok and not ns.IsSecret(name) and type(name) == "string" then
+	for _, name in ipairs({ "UnitCastingInfo", "UnitChannelInfo" }) do
+		local read = _G[name]
+		if type(read) == "function" then
+			local ok, spell = pcall(read, "player")
+			if ok and not ns.IsSecret(spell) and type(spell) == "string" then
 				return true
 			end
 		end
@@ -343,7 +346,7 @@ end
 
 -- What keeps every row at full opacity, whatever the mouse does. With a target is asked apart (Step), as it does not hold a targeted row.
 local function Wanted()
-	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen()
+	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen() or (Opt("cast") == true and Casting())
 end
 
 -- In a party or a raid.
@@ -705,9 +708,10 @@ local function Step(dt)
 		return
 	end
 	local floor, delay, seconds = Opt("alpha") / 100, Opt("delay") / 1000, math.max(Opt("time") / 1000, 0.05)
+	-- Down over Fade time; back to full in a tenth of a second at most, as the bar block does.
 	local step = dt / seconds
+	local up = dt / math.min(seconds, RETURN_TIME)
 	local always, targeted = Wanted(), Opt("target") and HasTarget()
-	local casting = Opt("cast") == true and Casting()
 	for rule in pairs(asked) do
 		asked[rule] = nil
 	end
@@ -756,7 +760,7 @@ local function Step(dt)
 				added, fresh = Added(entry)
 			end
 			-- A bag window that opened this pass, or one in use, holds its row at full.
-			local full = always or (targeted and not entry.targeted) or (casting and entry.bar == true) or (entry.rule == true and Holds(Opt(entry.row)))
+			local full = always or (targeted and not entry.targeted) or (entry.rule == true and Holds(Opt(entry.row)))
 				or (entry.opens == true and fresh) or (entry.busy ~= nil and entry.busy(added) == true)
 			if not full then
 				local hover = entry.hover and Resolve(entry.hover)
@@ -785,11 +789,12 @@ local function Step(dt)
 			local idle = full and 0 or (state.idle[entry.row] or 0) + dt
 			state.idle[entry.row] = idle
 			local target = full and 1 or (idle >= delay and RowFloor(entry, floor) or nil)
+			local by = target == 1 and up or step
 			for _, held in ipairs(frames) do
-				Ease(held[1], target, step, held[2])
+				Ease(held[1], target, by, held[2])
 			end
 			for _, held in ipairs(added or {}) do
-				Ease(held[1], target, step, held[2])
+				Ease(held[1], target, by, held[2])
 			end
 		end
 	end
@@ -838,7 +843,7 @@ local function Refresh()
 			driver = CreateFrame("Frame")
 			ns.Own[driver] = true
 			driver:SetScript("OnUpdate", Tick)
-			-- As you cast: the time of the player's last spell or item use. An event reaches a hidden frame too.
+			-- While casting: the time of the player's last spell or item use. An event reaches a hidden frame too.
 			for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_SUCCEEDED" }) do
 				pcall(driver.RegisterUnitEvent, driver, event, "player")
 			end
