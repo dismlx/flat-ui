@@ -5,7 +5,9 @@ local _, ns = ...
 -- plate and says when it changes; this file draws what that state says and asks the game nothing about threat. Before the core is there every row
 -- here does nothing.
 -- The ring is a frame of Flat UI's own on the health bar with an outline of its own (ns.Outline), made and anchored out of combat on a plate the game
--- may protect, as the low health border is (HealthColour.lua); in a fight only its colour and visibility change, which are texture calls.
+-- may protect, as the low health border is (HealthColour.lua); in a fight only its colour and visibility change, which are texture calls, and its
+-- flash plays: with Flash the ring when threat goes wrong (on by default) the ring flashes twice as an enemy's threat turns to threat you do not want
+-- (it turns to you, or away from you while you tank), an animation of the ring's own frame (ns.PlateRingFlash).
 -- The border is a slot of the plate's border colour in Nameplates.lua (ns.PlateThreatBorder): below the target, the focus and the mouseover, above
 -- the colours of Elite, Rare and Boss.
 -- The fade is the alpha of the game's nameplate unit frame (SetAlpha: not a protected function, and it takes withheld values from addons,
@@ -16,8 +18,10 @@ local _, ns = ...
 -- UNIT_CTR_OPTIONS, UNIT_OTHER_PARTY_CHANGED and the INCOMING_ events (CompactUnitFrame.lua:154-168) and in UpdateAll (463 and 472), which a plate
 -- runs when it gets its unit (Blizzard_NamePlates/Blizzard_NamePlateBase.lua:69, CompactUnitFrame.lua:276). That call is followed and the fade set
 -- again after it, as the raid frames' range opacity is (UnitExtras.lua). The fade multiplies with the game's own nameplate alphas and with Dim other
--- nameplates, which stay as they are. Its opacity is by want and role, as Threat Plates' threat transparency is a table per role and level
--- (Constants.lua:2114-2139; Modules/Transparency.lua:102-123): enemies held for you (one opacity, or one for a tank and one for damage or healer) and
+-- nameplates, which stay as they are. As threat moves the plate eases to its new opacity (and back to its own) over EASE_SECONDS, one step a frame
+-- on a frame of the file's own that runs only while a fade is on its way, each step a SetAlpha that ends where something else wrote the alpha since;
+-- a write of the game's, a plate that leaves and a change of the rows set it at once. Its opacity is by want and role, as Threat Plates' threat
+-- transparency is a table per role and level (Constants.lua:2114-2139; Modules/Transparency.lua:102-123): enemies held for you (one opacity, or one for a tank and one for damage or healer) and
 -- threat changing hands; threat you do not want never fades. With Raid-marked enemies stay clear an enemy with a raid marker never fades, as
 -- Threat Plates' threat.marked.alpha puts its opacity of marked units (1 by default) in place of the threat one while that opacity is on
 -- (Constants.lua:2140-2144, 2160 and 2199; Modules/Transparency.lua:43-48 and 109-114); its colour, ring and value stay.
@@ -30,22 +34,30 @@ local RING, BORDER, BACK, FADE = "threat ring", "threat border", "threat backgro
 local HOOK = "CompactUnitFrame_UpdateCenterStatusIcon"
 -- The edges of the ring in screen pixels, and its gap from the health bar beyond the border thickness, which clears the 2 px border of an Elite or a Rare.
 local RING_PX, GAP_PX = 2, 2
+-- The flash of the ring as threat goes wrong: FLASHES times down to FLASH_LOW of its opacity and back, FLASH_SECONDS each way.
+local FLASHES, FLASH_LOW, FLASH_SECONDS = 2, 0.2, 0.15
 -- The share of the threat colour's brightness the background has. Threat Plates draws the bar's colour behind it at 30% opacity (its background
 -- opacity of 70%, Constants.lua:624-626); here it is a dark shade of the colour at the opacity the background already has, so the empty part of
 -- the bar stays apart from the full part.
 local BACK_SHARE = 0.3
 -- The game's health colour call, which Flat UI follows to colour a health bar (PlateColours.lua).
 local HEALTH_HOOK = "CompactUnitFrame_UpdateHealthColor"
+-- The seconds the fade takes for the whole way from clear to gone; a step of a fade moves the alpha by that share of the time passed.
+local EASE_SECONDS = 0.2
 
 -- Per unit frame: levelBox (Flat UI's square level box sits beside the bar, from the layout hook), ring ({ frame, outline, right: the frame its right
--- side follows, d: its gap, shown }), waiting (the plate waits for the end of a fight), border (the colour given to Nameplates.lua), back ({ r, g, b,
--- a, outline: the fill given to the outline of the health bar }) and fade ({ orig: the alpha the frame had, sent: the alpha written }). A record is
--- kept when the plate leaves, so its ring is made once.
+-- side follows, d: its gap, shown, flash: its animation group, nil on a client without it }), want (the want of the state the ring last drew),
+-- waiting (the plate waits for the end of a fight), border (the colour given to Nameplates.lua), back ({ r, g, b, a, outline: the fill given to the
+-- outline of the health bar }) and fade ({ orig: the alpha the frame had, sent: the alpha written, goal: the
+-- alpha it eases to, back: it eases back to orig and ends there }). A record is kept when the plate leaves, so its ring is made once.
 local recs = setmetatable({}, { __mode = "k" })
 -- What Nameplates.lua keeps of each plate, from its show and layout hooks: own.health is its outline of the health bar.
 local owns = setmetatable({}, { __mode = "k" })
 -- followed: the game's opacity call is followed; missing: the client has none. subscribed: the core tells this file of each change.
 local followed, missing, subscribed = false, false, false
+-- easing[frame] = rec: the plates whose fade is on its way, stepped by the OnUpdate of ticker, a frame of the file's own that runs only while one is.
+local easing = setmetatable({}, { __mode = "k" })
+local ticker
 local RunPart, Wait, OnStatusIcon
 
 local function Opt(key)
@@ -201,6 +213,27 @@ local function Locked(bar, level)
 	return InCombatLockdown() and (ns.MaybeProtected(bar) or (level ~= nil and ns.MaybeProtected(level)))
 end
 
+-- The flash of a ring: FLASHES times an Alpha animation of the ring's own frame down to FLASH_LOW and one back up, one after another (SetOrder), so
+-- the frame keeps its own alpha when it ends. Not protected on a frame of Flat UI's own, so it plays in a fight. Nil when the client will not make
+-- it. Also the flash of the threat ring of setup's sample plate (SetupDrawPlates.lua's P.Threat).
+function ns.PlateRingFlash(holder)
+	local ok, group = pcall(function()
+		local made = holder:CreateAnimationGroup()
+		ns.Own[made] = true
+		for index = 1, FLASHES * 2 do
+			local step = made:CreateAnimation("Alpha")
+			ns.Own[step] = true
+			local down = index % 2 == 1
+			step:SetFromAlpha(down and 1 or FLASH_LOW)
+			step:SetToAlpha(down and FLASH_LOW or 1)
+			step:SetDuration(FLASH_SECONDS)
+			step:SetOrder(index)
+		end
+		return made
+	end)
+	return ok and type(group) == "table" and group or nil
+end
+
 -- The ring of a plate, made the first time the plate needs one. In a fight on a plate the game may protect, it waits for the end of the fight.
 local function Make(frame, rec)
 	local bar = Bar(frame)
@@ -224,6 +257,7 @@ local function Make(frame, rec)
 	ns.SetOutlineThickness(outline, RING_PX)
 	ns.KeepOutline(outline)
 	ns.SetOutline(outline, false, false)
+	ring.flash = ns.PlateRingFlash(holder)
 	return ring
 end
 
@@ -248,6 +282,9 @@ local function HideRing(_, rec)
 	local ring = rec.ring
 	if ring ~= nil and ring.shown then
 		ring.shown = nil
+		if ring.flash then
+			pcall(ring.flash.Stop, ring.flash)
+		end
 		ns.SetOutline(ring.outline, false, false)
 	end
 end
@@ -256,6 +293,17 @@ end
 local function Rings(state)
 	local mode = Opt("threatGlow")
 	return mode == "all" or (mode == "needs" and (state.want == "changing" or state.want == "bad"))
+end
+
+-- With Flash the ring when threat goes wrong, the ring of a plate whose threat has just turned to threat you do not want (from another state, or from
+-- none as the pull starts or the plate shows) flashes, in a fight too.
+local function Flash(ring, rec, want)
+	local was = rec.want
+	rec.want = want
+	if want == "bad" and was ~= "bad" and ring.flash and Opt("threatFlash") == true then
+		pcall(ring.flash.Stop, ring.flash)
+		pcall(ring.flash.Play, ring.flash)
+	end
 end
 
 -- place: anchor the ring again first where needed.
@@ -269,6 +317,7 @@ local function Ring(frame, rec, state, place)
 	end
 	if r == nil then
 		HideRing(frame, rec)
+		rec.want = state ~= nil and state.want or nil
 		return
 	end
 	local ring = rec.ring or Make(frame, rec)
@@ -295,6 +344,7 @@ local function Ring(frame, rec, state, place)
 		ring.shown = true
 		ns.SetOutline(ring.outline, true, false)
 	end
+	Flash(ring, rec, state.want)
 end
 
 -- After a fight: the ring a plate waited for is made while Threat glow still asks for rings, so it is there in the next fight, and anchored again.
@@ -410,22 +460,72 @@ local function ReadAlpha(frame)
 	return 1
 end
 
--- The frame goes back to the alpha it had, unless something else has given it one of its own since the write: the game's own call, which is then the
--- alpha it should have.
-local function Release(frame, rec)
+-- True while something else has given the frame an alpha of its own since the last write: the game's own call, which is then the alpha it should have.
+local function Overwritten(frame, fade)
+	local ok, now = pcall(frame.GetAlpha, frame)
+	return fade.sent ~= nil and ok and ns.Finite(now) and math.abs(now - fade.sent) > 0.01
+end
+
+-- Writes one alpha of a fade. A refusal is counted by the part, which stops after enough plates and gives every plate its alpha back.
+local function Write(frame, fade, alpha)
+	if not pcall(frame.SetAlpha, frame, alpha) then
+		error("the game refused the opacity of a nameplate", 0)
+	end
+	fade.sent = alpha
+end
+
+local Tick
+
+-- The frame goes back to the alpha it had, unless something else has given it one of its own since the write. ease: over EASE_SECONDS, as threat
+-- moves on a plate that stays; else at once, as the plate leaves, the game writes its own alpha, or the part, the row or the page goes off.
+local function Release(frame, rec, ease)
 	local fade = rec.fade
 	if fade == nil then
 		return
 	end
-	rec.fade = nil
-	if fade.sent == nil then
+	if fade.sent == nil or Overwritten(frame, fade) then
+		rec.fade, easing[frame] = nil, nil
 		return
 	end
-	local ok, now = pcall(frame.GetAlpha, frame)
-	if ok and ns.Finite(now) and math.abs(now - fade.sent) > 0.01 then
+	if ease then
+		fade.back = true
+		easing[frame] = rec
+		Tick(true)
 		return
 	end
+	rec.fade, easing[frame] = nil, nil
 	pcall(frame.SetAlpha, frame, fade.orig)
+end
+
+-- One step of a plate's fade on its way: the alpha moves toward its goal (or back to the alpha it had) by the share of EASE_SECONDS that passed. A
+-- write by something else since the last step ends it, as Release would.
+local function Step(frame, rec, elapsed)
+	local fade = rec.fade
+	if fade == nil or easing[frame] ~= rec or ns.Forbidden(frame) then
+		easing[frame] = nil
+		return
+	end
+	if Overwritten(frame, fade) then
+		easing[frame] = nil
+		if fade.back then
+			rec.fade = nil
+		end
+		return
+	end
+	local goal = fade.back and fade.orig or fade.goal
+	local from = fade.sent or goal
+	local step = (ns.Finite(elapsed) and elapsed > 0 and elapsed or 0) / EASE_SECONDS
+	local value = goal
+	if math.abs(goal - from) > step then
+		value = from + (goal > from and step or -step)
+	end
+	Write(frame, fade, value)
+	if value == goal then
+		easing[frame] = nil
+		if fade.back then
+			rec.fade = nil
+		end
+	end
 end
 
 -- Follows the game's opacity call, once, the first time a plate fades. Without it the game's next write ends a fade until the threat changes again.
@@ -489,11 +589,13 @@ local function FadeAlpha(frame, state, marks)
 	return math.max(percent, 0) / 100
 end
 
--- fromGame: the game has just set the frame's alpha itself, and that is the one to put back.
-local function Fade(frame, rec, state, marks, fromGame)
+-- fromGame: the game has just set the frame's alpha itself, and that is the one to put back; the fade is written again at once. snap: at once too (the
+-- plate leaves, or the rows changed). Else the plate eases to its new opacity over EASE_SECONDS (Step), so plates near the edge of threat changing
+-- hands do not blink as threat moves.
+local function Fade(frame, rec, state, marks, fromGame, snap)
 	local alpha = FadeAlpha(frame, state, marks)
 	if alpha == nil then
-		Release(frame, rec)
+		Release(frame, rec, not (fromGame or snap))
 		return
 	end
 	Install()
@@ -504,12 +606,56 @@ local function Fade(frame, rec, state, marks, fromGame)
 	elseif fromGame then
 		fade.orig, fade.sent = ReadAlpha(frame), nil
 	end
-	if fade.sent ~= alpha then
-		-- A refusal is counted by the part, which stops after enough plates and gives every plate its alpha back.
-		if not pcall(frame.SetAlpha, frame, alpha) then
-			error("the game refused the opacity of a nameplate", 0)
+	fade.goal, fade.back = alpha, nil
+	if fade.sent == alpha then
+		easing[frame] = nil
+		return
+	end
+	if fromGame or snap then
+		easing[frame] = nil
+		Write(frame, fade, alpha)
+		return
+	end
+	-- A fade that starts eases from the alpha the frame has.
+	if fade.sent == nil then
+		fade.sent = fade.orig
+	end
+	easing[frame] = rec
+	Tick(true)
+end
+
+-- The fades on their way, one step each frame; the ticker stops once none is.
+local function OnTick(_, elapsed)
+	for frame, rec in pairs(easing) do
+		RunPart(FADE, Step, frame, rec, elapsed)
+	end
+	if next(easing) == nil then
+		Tick(false)
+	end
+end
+
+function Tick(on)
+	if on and ticker == nil then
+		local ok, frame = pcall(CreateFrame, "Frame")
+		if not ok or type(frame) ~= "table" then
+			-- No frame to step with: every fade on its way ends where it is going.
+			for plate, rec in pairs(easing) do
+				easing[plate] = nil
+				local fade = rec.fade
+				if fade then
+					pcall(Write, plate, fade, fade.back and fade.orig or fade.goal)
+					if fade.back then
+						rec.fade = nil
+					end
+				end
+			end
+			return
 		end
-		fade.sent = alpha
+		ns.Own[frame] = true
+		ticker = frame
+	end
+	if ticker then
+		ticker:SetScript("OnUpdate", on and OnTick or nil)
 	end
 end
 
@@ -542,27 +688,28 @@ function RunPart(part, fn, frame, rec, ...)
 	end
 end
 
--- The four parts of one plate from its state. No state puts each back.
-local function Draw(frame, rec, state, marks, place)
+-- The four parts of one plate from its state. No state puts each back. snap: the fade goes to its new opacity at once.
+local function Draw(frame, rec, state, marks, place, snap)
 	RunPart(RING, Ring, frame, rec, state, place)
 	RunPart(BORDER, Border, frame, rec, state)
 	RunPart(BACK, Back, frame, rec, state, marks)
-	RunPart(FADE, Fade, frame, rec, state, marks)
+	RunPart(FADE, Fade, frame, rec, state, marks, false, snap)
 end
 
--- Every plate with a unit from its state, and every other plate drawn before put back. place: anchor the rings again where needed.
+-- Every plate with a unit from its state, and every other plate drawn before put back. place: anchor the rings again where needed. The rows
+-- changed, so the fades go to their new opacity at once.
 local function DrawAll(place)
 	local marks, seen = Marks(), {}
 	ns.EachPlate(function(frame)
 		seen[frame] = true
 		local state, rec = StateOf(frame), recs[frame]
 		if rec ~= nil or state ~= nil then
-			Draw(frame, rec or Record(frame), state, marks, place)
+			Draw(frame, rec or Record(frame), state, marks, place, true)
 		end
 	end)
 	for frame, rec in pairs(recs) do
 		if not seen[frame] and not ns.Forbidden(frame) then
-			Draw(frame, rec, nil, marks)
+			Draw(frame, rec, nil, marks, nil, true)
 		end
 	end
 end
@@ -662,10 +809,10 @@ extra.show[#extra.show + 1] = function(frame, own)
 	Draw(frame, rec, state)
 end
 extra.leave[#extra.leave + 1] = function(frame)
-	-- The game takes the plate back for another unit: the ring hides, the border slot and the background are cleared and the alpha goes back.
+	-- The game takes the plate back for another unit: the ring hides, the border slot and the background are cleared and the alpha goes back at once.
 	local rec = recs[frame]
 	if rec ~= nil then
-		Draw(frame, rec, nil)
+		Draw(frame, rec, nil, nil, nil, true)
 	end
 end
 extra.refresh[#extra.refresh + 1] = function()

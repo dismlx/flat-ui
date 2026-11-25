@@ -22,8 +22,13 @@ local _, ns = ...
 -- icon on the left, Nameplates.lua's Marker), both of which take no room while hidden (collapsesLayout, Blizzard_NamePlates.xml:186-199), so the
 -- value moves as a marker comes or goes, in a fight too, and keeps its height while Raid marker vertical offset moves the marker. A client whose
 -- frames do not say they take no room while hidden (CollapsesLayout, a plain true) keeps the value at the bar.
--- PlateQuest.lua's quest mark sits past both texts: ns.PlateThreatTexts gives it the value and the enemy's target of a plate, and a text placed
--- anew places the plate's quest mark again (ns.PlateQuestPlace).
+-- The game's rows of aura icons beside the bar are kept clear (AuraRow): while the enemy's buffs show (the Buffs bit of the game's enemy aura
+-- display), the value on the left hangs from the left end of their row, which grows left from the elite or rare icon, and while its crowd control
+-- shows, the value on the right and the enemy's target hang after that row. Each row is 1 across while empty and grows with its icons, so the texts
+-- move as icons come and go, in a fight too; a row whose icons Nameplates.lua fades to nothing (Show auras Only on the target, on another plate)
+-- keeps no room, and the texts are placed again as the target changes.
+-- PlateQuest.lua's quest mark sits past both texts: ns.PlateThreatTexts gives it the value and the enemy's target of a plate, ns.PlateAuraRow the
+-- row of aura icons on a side, and a text placed anew places the plate's quest mark again (ns.PlateQuestPlace).
 
 local KEY = "nameplates"
 local EXTRA = ns.PlateExtra
@@ -33,8 +38,9 @@ end
 
 local VALUE, TARGET = "threat value", "enemy's target"
 local FONT_OBJECT = "SystemFont_NamePlate"
--- Nameplate units between a text and what it sits beside.
-local GAP = 4
+-- Nameplate units between a text and what it sits beside, and between a text and a row of the game's aura icons (whose list keeps 5 of its own from
+-- what it hangs on, so an empty row moves a text only a few units).
+local GAP, ROW_GAP = 4, 1
 -- The kinds of Threat value that show a number.
 local SHOWN = { scaled = true, raw = true, lead = true }
 -- How the value is aligned on each side of the bar: away from the bar, and centred above or below it (Threat Plates aligns its value right on the
@@ -340,13 +346,47 @@ local function Collapses(frame)
 	return frame ~= nil and Ask(frame.CollapsesLayout, frame) == true
 end
 
--- The left end of the plate's raid marker and elite or rare icon: the ClassificationFrame, while it and the RaidTargetFrame take no room hidden.
-local function LeftEnd(unitFrame)
-	local class, marker = Frame(unitFrame, "ClassificationFrame"), Frame(unitFrame, "RaidTargetFrame")
-	if Collapses(class) and Collapses(marker) then
-		return class
+-- False on a plate whose auras Nameplates.lua fades to nothing: one that is not the target while Show auras is Only on the target (AurasAlpha). The
+-- target's plate is compared as a frame, so no unit comparison the client can withhold is needed.
+local function AurasSeen(unitFrame, rec)
+	local own = rec.own
+	if not (ns.Enabled(KEY) and type(own) == "table" and own.styleOn == true and Opt("aurasWhen") == "target") then
+		return true
+	end
+	return ns.PlateUnitFrame("target") == unitFrame
+end
+
+-- A row of the game's aura icons of a plate while it and the plate's AurasFrame show and its icons are seen: BuffListFrame (an enemy's buffs, at
+-- most 2, growing left from 5 left of the ClassificationFrame, Blizzard_NamePlates.xml:228-236) or CrowdControlListFrame (its crowd control, hung
+-- 5 right of the level frame while it shows, else of the health bars, Blizzard_NamePlateUnitFrame.lua:892-907). Each is shown by its bit of the
+-- game's aura display options (Blizzard_NamePlateAuras.lua:404-416) and, laid out by size, is 1 across while empty, so a text hung from its far end
+-- moves out as icons come and go, in a fight too.
+local function AuraRow(unitFrame, rec, key)
+	local auras = Frame(unitFrame, "AurasFrame")
+	local list = auras and Frame(auras, key)
+	if list and Ask(auras.IsShown, auras) == true and Ask(list.IsShown, list) == true and AurasSeen(unitFrame, rec) then
+		return list
 	end
 	return nil
+end
+
+-- What ends the row left of the bar: the enemy's buffs while their row shows, else the left end of the plate's raid marker and elite or rare icon,
+-- the ClassificationFrame, while it and the RaidTargetFrame take no room hidden.
+local function LeftEnd(unitFrame, rec)
+	local buffs = AuraRow(unitFrame, rec, "BuffListFrame")
+	if buffs then
+		return buffs, "buffs"
+	end
+	local class, marker = Frame(unitFrame, "ClassificationFrame"), Frame(unitFrame, "RaidTargetFrame")
+	if Collapses(class) and Collapses(marker) then
+		return class, "class"
+	end
+	return nil
+end
+
+-- The units between a text and what it hangs from: less from a row of aura icons, which keeps room of its own.
+local function GapFrom(key)
+	return (key == "buffs" or key == "cc") and ROW_GAP or GAP
 end
 
 -- How far Raid marker vertical offset moved the raid marker of a plate (Nameplates.lua's Marker keeps it), which the value left of the bar takes off.
@@ -374,9 +414,10 @@ local function PlaceValue(unitFrame, rec, text)
 	x, y = ns.Finite(x) and x or 0, ns.Finite(y) and y or 0
 	local frame, key, lift = healthBar, "bar", 0
 	if place == "left" then
-		local left = LeftEnd(unitFrame)
+		-- The buffs hang from the elite or rare icon, so they move with the raid marker too.
+		local left, leftKey = LeftEnd(unitFrame, rec)
 		if left then
-			frame, key, lift = left, "class", MarkerLift(rec)
+			frame, key, lift = left, leftKey, MarkerLift(rec)
 		end
 	elseif place == "right" then
 		frame, key = Beside(unitFrame, rec)
@@ -403,9 +444,9 @@ local function PlaceValue(unitFrame, rec, text)
 	text:ClearAllPoints()
 	text:SetJustifyH(JUSTIFY[place])
 	if place == "left" then
-		text:SetPoint("RIGHT", frame, "LEFT", x - GAP, y - lift)
+		text:SetPoint("RIGHT", frame, "LEFT", x - GapFrom(key), y - lift)
 	elseif place == "right" then
-		text:SetPoint("LEFT", frame, "RIGHT", x + GAP, y)
+		text:SetPoint("LEFT", frame, "RIGHT", x + GapFrom(key), y)
 	elseif place == "above" then
 		text:SetPoint("BOTTOM", healthBar, "TOP", x, y + lift + GAP)
 	else
@@ -447,14 +488,18 @@ end
 
 -- The enemy's target -------------------------------------------------------------------------
 
--- What ends the bar on the right, which the value on the right and the target text sit after: a class icon on the right of the bar, else the level
--- frame while it shows (the game's hangs past the end of the bar, Camelot/Blizzard_NamePlateLevelFrame.xml:5-8, and Flat UI's square box ends the
--- bar), else the bar.
+-- What ends the bar on the right, which the value on the right and the target text sit after: a class icon on the right of the bar, else the row of
+-- the enemy's crowd control icons while it shows (AuraRow; it hangs past the level frame or the bar), else the level frame while it shows (the
+-- game's hangs past the end of the bar, Camelot/Blizzard_NamePlateLevelFrame.xml:5-8, and Flat UI's square box ends the bar), else the bar.
 function Beside(unitFrame, rec)
 	local own = rec.own
 	own = type(own) == "table" and own or {}
 	if own.classShown and own.iconSide == "right" and type(own.icon) == "table" then
 		return own.icon, "icon"
+	end
+	local cc = AuraRow(unitFrame, rec, "CrowdControlListFrame")
+	if cc then
+		return cc, "cc"
 	end
 	local level = Frame(unitFrame, "PlayerLevelDiffFrame")
 	if level and not own.levelFade then
@@ -486,9 +531,30 @@ local function Place(unitFrame, rec, text)
 		return
 	end
 	text:ClearAllPoints()
-	text:SetPoint("LEFT", frame, "RIGHT", GAP, 0)
+	text:SetPoint("LEFT", frame, "RIGHT", GapFrom(key), 0)
 	rec.place = key
 	QuestPlace(unitFrame)
+end
+
+-- The target changed while Show auras is Only on the target: the aura rows of the old target and the new one faded or came back, so the texts and
+-- the quest mark of every plate are placed again where that changed what they hang from.
+local function AurasMoved()
+	if Opt("aurasWhen") ~= "target" then
+		return
+	end
+	ns.EachPlate(function(unitFrame)
+		local rec = recs[unitFrame]
+		if rec == nil or ns.Forbidden(unitFrame) then
+			return
+		end
+		if rec.value ~= nil and rec.valueShown == true then
+			pcall(PlaceValue, unitFrame, rec, rec.value)
+		end
+		if rec.target ~= nil and rec.targetShown == true then
+			pcall(Place, unitFrame, rec, rec.target)
+		end
+		QuestPlace(unitFrame)
+	end)
 end
 
 -- The unit the enemy of a plate attacks, or nil while its name is not to show: an attackable plate with its health bar, in a fight with Only in
@@ -697,6 +763,15 @@ function ns.PlateThreatTexts(unitFrame)
 	return value, value and rec.valueSide or nil, target
 end
 
+-- The row of the game's aura icons on one side of a plate, for PlateQuest.lua: left, the enemy's buffs; right, its crowd control. Nil while that row
+-- does not show or its icons are faded (AuraRow).
+function ns.PlateAuraRow(unitFrame, side)
+	if unitFrame == nil or ns.Forbidden(unitFrame) then
+		return nil
+	end
+	return AuraRow(unitFrame, Rec(unitFrame), side == "left" and "BuffListFrame" or "CrowdControlListFrame")
+end
+
 -- Hooks into the plates --------------------------------------------------------------------------
 
 EXTRA.show[#EXTRA.show + 1] = function(unitFrame, own)
@@ -746,4 +821,5 @@ ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
 	if Opt("aggroTarget") == true then
 		ns.EachPlate(DrawTarget)
 	end
+	AurasMoved()
 end)
