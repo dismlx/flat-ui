@@ -179,13 +179,16 @@ local function OnUpdate(_, elapsed)
 end
 
 -- The marks of one bar for a channel of `length` milliseconds whose ticks come every `step` milliseconds: only widths change, with no anchor.
--- False when the bar has no marks yet or no width.
+-- True when placed, false when the bar has no marks yet, nil when it has no width.
 local function Place(bar, length, step)
 	local set = Marks(bar)
-	local ok, width = pcall(bar.GetWidth, bar)
-	if not set or not ok or not ns.Finite(width) or width <= 0 then
-		HideBar(bar)
+	if not set then
 		return false
+	end
+	local ok, width = pcall(bar.GetWidth, bar)
+	if not ok or not ns.Finite(width) or width <= 0 then
+		HideBar(bar)
+		return nil
 	end
 	local reverse = false
 	if type(bar.GetReverseFill) == "function" then
@@ -236,9 +239,10 @@ local function Draw(fresh)
 	for _, key in ipairs(BARS) do
 		local bar = Bar(key)
 		if bar then
-			if Place(bar, length, S.step) then
+			local done = Place(bar, length, S.step)
+			if done then
 				placed = true
-			else
+			elseif done == false then
 				missing = true
 			end
 		end
@@ -334,7 +338,7 @@ ns.AddStatus(KEY, function()
 		lines[1] = "Channel ticks: no channel with ticks seen yet."
 	end
 	if S.missed > 0 then
-		lines[#lines + 1] = ("Channel ticks: %d channels showed no marks, as the cast bar had none made yet (they are made out of a fight)."):format(S.missed)
+		lines[#lines + 1] = ("Channel ticks: channels with no marks, as the cast bar had none made yet (they are made out of a fight): %d."):format(S.missed)
 	end
 	return lines
 end)
