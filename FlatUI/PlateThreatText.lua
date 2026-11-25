@@ -17,7 +17,13 @@ local _, ns = ...
 -- Threat Plates sets with the point of the text opposite that side (Modules/Font.lua:94-104), moved by the two offsets, with Threat value outline
 -- and, while Threat value in the threat colour is off, Threat value colour (its CustomColor, Widgets/ThreatWidget.lua:398-406). Right of the bar
 -- it sits after the level frame, as the enemy's target does, and the enemy's target then sits after it; above the bar it clears the name and below
--- it the cast bar, as Nameplates.lua places a class icon (PlaceIcon).
+-- it the cast bar, as Nameplates.lua places a class icon (PlaceIcon). Left of the bar it sits past the game's raid marker and its elite or rare icon:
+-- it hangs from the left of the plate's ClassificationFrame, which hangs left of the RaidTargetFrame, which hangs left of the bar (past a class
+-- icon on the left, Nameplates.lua's Marker), both of which take no room while hidden (collapsesLayout, Blizzard_NamePlates.xml:186-199), so the
+-- value moves as a marker comes or goes, in a fight too, and keeps its height while Raid marker vertical offset moves the marker. A client whose
+-- frames do not say they take no room while hidden (CollapsesLayout, a plain true) keeps the value at the bar.
+-- PlateQuest.lua's quest mark sits past both texts: ns.PlateThreatTexts gives it the value and the enemy's target of a plate, and a text placed
+-- anew places the plate's quest mark again (ns.PlateQuestPlace).
 
 local KEY = "nameplates"
 local EXTRA = ns.PlateExtra
@@ -322,11 +328,39 @@ local function Lift()
 	return (ns.Finite(spacing) and spacing or 0) + (ns.Finite(height) and height or 0) * (ns.Finite(size) and size or 100) / 100
 end
 
--- Anchors the value on the side Threat value position gives, moved by its offsets: left of the bar and aligned right (as Threat Plates has it, and
--- as before), right of what ends the bar and aligned left, centred above the name, or centred below the cast bar, whose frame the game keeps under
--- the health bar (Blizzard_NamePlateUnitFrame.lua:699-700, 714-715). Done again only when the place changes. The first anchors of a text just made
--- follow the rule it was made by (Text); a text placed before keeps its anchors in a fight on a plate that may be protected, as the enemy's target
--- does, until the fight ends.
+-- The quest mark of a plate placed again (PlateQuest.lua), after a text of this file took a new anchor, so the mark keeps clear of it.
+local function QuestPlace(unitFrame)
+	if type(ns.PlateQuestPlace) == "function" then
+		pcall(ns.PlateQuestPlace, unitFrame)
+	end
+end
+
+-- True for a frame that says it takes no room while hidden (CollapsesLayout, SimpleScriptRegionAPIDocumentation.lua:60-70).
+local function Collapses(frame)
+	return frame ~= nil and Ask(frame.CollapsesLayout, frame) == true
+end
+
+-- The left end of the plate's raid marker and elite or rare icon: the ClassificationFrame, while it and the RaidTargetFrame take no room hidden.
+local function LeftEnd(unitFrame)
+	local class, marker = Frame(unitFrame, "ClassificationFrame"), Frame(unitFrame, "RaidTargetFrame")
+	if Collapses(class) and Collapses(marker) then
+		return class
+	end
+	return nil
+end
+
+-- How far Raid marker vertical offset moved the raid marker of a plate (Nameplates.lua's Marker keeps it), which the value left of the bar takes off.
+local function MarkerLift(rec)
+	local own = rec.own
+	local y = type(own) == "table" and own.markY or nil
+	return ns.Finite(y) and y or 0
+end
+
+-- Anchors the value on the side Threat value position gives, moved by its offsets: left of the bar's raid marker and elite or rare icon (LeftEnd,
+-- else left of the bar) and aligned right (as Threat Plates has it, and as before), right of what ends the bar and aligned left, centred above
+-- the name, or centred below the cast bar, whose frame the game keeps under the health bar (Blizzard_NamePlateUnitFrame.lua:699-700, 714-715).
+-- Done again only when the place changes. The first anchors of a text just made follow the rule it was made by (Text); a text placed before keeps
+-- its anchors in a fight on a plate that may be protected, as the enemy's target does, until the fight ends.
 local function PlaceValue(unitFrame, rec, text)
 	local healthBar = HealthBarOf(unitFrame)
 	if healthBar == nil then
@@ -338,8 +372,13 @@ local function PlaceValue(unitFrame, rec, text)
 	end
 	local x, y = Opt("threatValueX"), Opt("threatValueY")
 	x, y = ns.Finite(x) and x or 0, ns.Finite(y) and y or 0
-	local frame, key = healthBar, "bar"
-	if place == "right" then
+	local frame, key, lift = healthBar, "bar", 0
+	if place == "left" then
+		local left = LeftEnd(unitFrame)
+		if left then
+			frame, key, lift = left, "class", MarkerLift(rec)
+		end
+	elseif place == "right" then
 		frame, key = Beside(unitFrame, rec)
 	elseif place == "below" then
 		local cast = Frame(unitFrame, "CastBarsContainer")
@@ -350,7 +389,9 @@ local function PlaceValue(unitFrame, rec, text)
 	if frame == nil then
 		return
 	end
-	local lift = place == "above" and Lift() or 0
+	if place == "above" then
+		lift = Lift()
+	end
 	local wanted = ("%s:%s:%s:%s:%s"):format(place, x, y, key, lift)
 	if rec.valuePlace == wanted then
 		return
@@ -362,7 +403,7 @@ local function PlaceValue(unitFrame, rec, text)
 	text:ClearAllPoints()
 	text:SetJustifyH(JUSTIFY[place])
 	if place == "left" then
-		text:SetPoint("RIGHT", healthBar, "LEFT", x - GAP, y)
+		text:SetPoint("RIGHT", frame, "LEFT", x - GAP, y - lift)
 	elseif place == "right" then
 		text:SetPoint("LEFT", frame, "RIGHT", x + GAP, y)
 	elseif place == "above" then
@@ -371,6 +412,7 @@ local function PlaceValue(unitFrame, rec, text)
 		text:SetPoint("TOP", frame, "BOTTOM", x, y - GAP)
 	end
 	rec.valuePlace, rec.valueSide = wanted, place
+	QuestPlace(unitFrame)
 end
 
 -- Shown while the plate has a state, Threat value shows a number, the plate shows its health bar and Show threat value allows. The number is
@@ -446,6 +488,7 @@ local function Place(unitFrame, rec, text)
 	text:ClearAllPoints()
 	text:SetPoint("LEFT", frame, "RIGHT", GAP, 0)
 	rec.place = key
+	QuestPlace(unitFrame)
 end
 
 -- The unit the enemy of a plate attacks, or nil while its name is not to show: an attackable plate with its health bar, in a fight with Only in
@@ -633,6 +676,25 @@ local function Fight(on)
 	if Opt("aggroTarget") == true and Opt("aggroTargetCombat") == true then
 		ns.EachPlate(DrawTarget)
 	end
+end
+
+-- The texts of a plate for PlateQuest.lua: the value, the side it was anchored on and the enemy's target, each nil while it has not been made (or
+-- placed), its part is stopped or its row is off (Threat value Off, Name of the enemy's target off). A text that shows nothing is empty, so a frame anchored
+-- to its far end sits at its anchor and follows the text's width as it changes, in a fight too.
+function ns.PlateThreatTexts(unitFrame)
+	local rec = unitFrame ~= nil and recs[unitFrame]
+	if not rec or ns.IsStopped(KEY) then
+		return nil
+	end
+	local value, target = rec.value, rec.target
+	if ns.PartStopped(KEY, VALUE) or not SHOWN[Opt("threatValue")] then
+		value = nil
+	end
+	-- A target text is given once it has its anchor (Place), so nothing hangs from a text the game has not laid out.
+	if ns.PartStopped(KEY, TARGET) or Opt("aggroTarget") ~= true or rec.place == nil then
+		target = nil
+	end
+	return value, value and rec.valueSide or nil, target
 end
 
 -- Hooks into the plates --------------------------------------------------------------------------
