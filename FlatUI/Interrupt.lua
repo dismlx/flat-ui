@@ -2,7 +2,9 @@ local _, ns = ...
 
 -- Interrupt ready: whether the player's class interrupt can be used now. Two things show it. An enemy's cast that can be interrupted takes one of
 -- three colours of the Colours page on the flat target, focus and nameplate cast bars (Bars.lua asks ns.InterruptReady for each bar it paints):
--- ready, ready while the caster is out of its range, and on cooldown; the game's look for a cast that cannot be interrupted stays. The icon of the
+-- ready, ready while the caster is out of its range, and on cooldown; the game's look for a cast that cannot be interrupted stays. With Flat fill
+-- off, the target and focus bars take the colour on a thin strip along their bottom edge instead (Bars.lua, ns.CastKickSync, 0.5.37), so the row
+-- shows on those bars at the defaults too. The icon of the
 -- interrupt in the cooldown row gets a gold border while the target or the focus casts something it can stop, the interrupt is ready and the
 -- caster is in its range (Cooldowns.lua hands its icons to ns.InterruptIcons).
 -- Range: while an interrupt is ready, the game is asked whether the caster is in range of it (C_Spell.IsSpellInRange, SpellDocumentation.lua:947-963,
@@ -305,12 +307,13 @@ end
 
 -- The cast bars ---------------------------------------------------------------------------------------------------------
 
--- The row is on, and a bar has a cover to colour: the flat fill of the Cast bars page or of the nameplates (Bars.lua, ns.CastFill).
+-- The row is on, and a bar has something to colour: the target and focus bars of the Cast bars page (their flat fill's cover, or with Flat fill
+-- off the strip along their bottom edge, Bars.lua) or the flat fill of the nameplates (ns.CastFill).
 local function BarsOn()
 	if ns.Get(BARS_ROW) ~= true then
 		return false
 	end
-	return (ns.Enabled(BARS) and ns.Get("castbars.flat") == true) or (ns.Enabled("nameplates") and ns.Get("nameplates.castFlat") == true)
+	return ns.Enabled(BARS) or (ns.Enabled("nameplates") and ns.Get("nameplates.castFlat") == true)
 end
 
 local function Answer(unit)
@@ -329,6 +332,11 @@ local function Answer(unit)
 		return "far"
 	end
 	return ready
+end
+
+-- For Bars.lua: true while an interrupt of the player's is known and its events are heard (the strip of the target and focus bars waits for it).
+function ns.InterruptKnown()
+	return S.full == true
 end
 
 -- For Bars.lua, each frame it paints the cover of a cast or a channel: true (ready), "far" (ready, but the caster is out of its range) or false
@@ -645,6 +653,10 @@ function Sync()
 	else
 		Dark()
 		S.wantLoop = false
+	end
+	-- The strip of the target and focus bars with Flat fill off starts or stops with what is known now.
+	if type(ns.CastKickSync) == "function" then
+		ns.CastKickSync()
 	end
 end
 

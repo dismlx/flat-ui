@@ -13,7 +13,7 @@ local _, ns = ...
 --   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks), dim where the channel has passed them, the pushback past
 --   the right end of the player bar of CastTime.lua (+0.4 on the first row), the whole cast after the seconds left while Total cast time too is
 --   on (1.0 / 2.5 on the first row), and the interrupt colours of Interrupt.lua on the Target row (ready)
---   and the Focus row (on cooldown) while Interrupt readiness and Flat fill are on.
+--   and the Focus row (on cooldown) while Interrupt readiness is on: on the fill with Flat fill, else on the strip along the bar's bottom edge.
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
 --   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530), and the
 --   Queued ability colour of Q over the first main hand timer in the second half of each of its swings.
@@ -337,6 +337,13 @@ local function NewCastBar(inst, parent, spec)
 			row.ticks[k] = mark
 		end
 	end
+	-- The interrupt strip of the small bars with Flat fill off (Bars.lua): 2 screen pixels along the bottom edge.
+	if spec.small then
+		row.kickStrip = NewTexture(bar, "OVERLAY", 3)
+		row.kickStrip:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+		row.kickStrip:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+		row.kickStrip:Hide()
+	end
 	if spec.shield then
 		row.shield = NewTexture(bar, "ARTWORK", 4)
 		row.shield:SetPoint("TOPLEFT", bar, "TOPLEFT", -27, 4)
@@ -410,6 +417,9 @@ local function BuildCast(stage)
 	p["castbars.targetOwn"] = target.fill
 	p["castbars.targetCast"] = target.fill
 	p["castbars.targetChannel"] = focus.fill
+	-- The interrupt colours: the Target row is ready and the Focus row on cooldown, on the fill with Flat fill and on the strip without.
+	p["castbars.interrupt"], p["castbars.interruptReady"] = target.bar, target.bar
+	p["castbars.interruptCooling"], p["castbars.interruptFar"] = focus.bar, focus.bar
 	p["castbars.playerText"] = player.text
 	-- Spell rank on the player bar writes the rank after the name (CastRank.lua).
 	p["castbars.rank"] = player.text
@@ -512,6 +522,16 @@ local function CastFill(row, look, opt, state, part, w, kick)
 	if row.shield then
 		row.shield:SetShown(state == "shield" and not (enabled and not G("castbars.shield")))
 		GameTexture(inst, row.shield, GAME_SHIELD, { 0.62, 0.64, 0.7, 1 })
+	end
+	-- With Flat fill off, the colour of the player's interrupt goes on the strip along the bottom of an enemy's cast or channel.
+	if row.kickStrip then
+		local strip = kick and enabled and not look.flat and G("castbars.interrupt") == true and (state == "cast" or state == "channel") or false
+		if strip then
+			local kr, kg, kb = ns.Colour(KICK_COLOURS[kick] or KICK_COLOURS.ready)
+			row.kickStrip:SetColorTexture(kr, kg, kb, 1)
+			row.kickStrip:SetHeight(ns.Pixels(row.bar, 2))
+		end
+		row.kickStrip:SetShown(strip)
 	end
 	return r, g, b
 end

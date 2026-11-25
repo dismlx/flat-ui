@@ -115,7 +115,7 @@ ns.PAGES = {
 			tip = "The glow as a cast or channel ends, on flat cast bars and nameplate cast bars. The game's is gold for a cast and green for a channel.",
 			choices = { { "cast", "In the cast colour" }, { "game", "The game's" }, { "off", "Off" } } },
 		{ page = "castbars", key = "interrupt", kind = "bool", default = true, label = "Interrupt readiness on enemy casts", changed = "InterruptChanged",
-			tip = "On target, focus and nameplate cast bars with a flat fill, an enemy cast you can interrupt shows whether your class interrupt is ready. A cast that cannot be interrupted keeps its colour." },
+			tip = "An enemy cast you can interrupt shows whether your class interrupt is ready: on the fill of flat target, focus and nameplate cast bars, and with Flat fill off on a thin strip along the bottom of the target and focus bars. A cast that cannot be interrupted keeps its colour." },
 		{ page = "castbars", key = "interruptReady", kind = "colour", default = "ff33d959", label = "Interrupt ready colour", needs = "interrupt" },
 		{ page = "castbars", key = "interruptCooling", kind = "colour", default = "ffd9732e", label = "Interrupt on cooldown colour", needs = "interrupt" },
 		{ page = "castbars", key = "interruptFar", kind = "colour", default = "ff7f8fa6", label = "Interrupt out of range colour", needs = "interrupt",
