@@ -11,6 +11,9 @@ local _, ns = ...
 -- will not make the container, the same icons show out of combat from a read of the player's buffs. Nothing may anchor to the container: the
 -- other rows of the display hang from the holder (ns.OwnBuffsHolder), which keeps its height when no buff is up. The samples of test mode
 -- and /flatui test icons show Time left as the row draws it: under the icon, as a thin bar under it, on the icon or not at all (B.SampleTime).
+-- The time left under or on an icon turns amber in its last 5 seconds: the game colours its text by a colour curve (B.TimeOptions), so also
+-- in a fight, and the samples do the same. Out of combat with test mode off and none of the row's buffs up, a change of Time left, Icon size,
+-- Spacing, Icon border or Bar texture shows the samples for 4 seconds in the new look, with no line in the chat (ns.OwnBuffsLookChanged).
 
 local KEY = "ownbuffs"
 -- The name of the row among the saved spots of the movers.
@@ -22,6 +25,10 @@ local ROOM_TEXT, ROOM_BAR, BAR_HEIGHT = 14, 5, 3
 local WIDTH = 120
 local MOST_CLASS, MOST_TIME = 8, 6
 local REREAD, TEST_TIME = 0.2, 8
+-- How long the samples a change of the look shows stay after the last change. The time left is amber under LOW seconds, in the amber of the
+-- trackers' low.
+local PREVIEW = 4
+local LOW, AMBER = 5, { 1, 0.7, 0.2 }
 local BARS = { "HealthBarsContainer", "PowerBar", "AlternatePowerBar" }
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local BLUE = { 0.302, 0.6, 0.902 }
@@ -344,7 +351,24 @@ local function BarOptions()
 	return { interpolation = interpolation or 0, direction = direction or 1 }
 end
 
--- Binds the time of the buffs to the string, the bar or nothing, as Time left says. Raises when the game refuses a binding.
+-- The options of the game's time text: white, amber in the last LOW seconds. The game colours the text by a step curve of the time left
+-- (DurationTextBindingProperty.RemainingDuration), so also in a fight. Made once; nil where the game has no colour curve.
+function B.TimeOptions()
+	if B.timeOptions == nil then
+		local ok, options = pcall(function()
+			local curve = C_CurveUtil.CreateColorCurve()
+			curve:SetType(Enum.LuaCurveType.Step)
+			curve:AddPoint(0, CreateColor(AMBER[1], AMBER[2], AMBER[3], 1))
+			curve:AddPoint(LOW, CreateColor(1, 1, 1, 1))
+			return { textColor = { curve = curve, property = Enum.DurationTextBindingProperty.RemainingDuration } }
+		end)
+		B.timeOptions = ok and type(options) == "table" and options or false
+	end
+	return B.timeOptions or nil
+end
+
+-- Binds the time of the buffs to the string, the bar or nothing, as Time left says, the string amber in its last seconds where the game
+-- takes the colour, else white. Raises when the game refuses a binding.
 function B.Bind(parts, want)
 	if parts.bound == want then
 		return
@@ -363,9 +387,11 @@ function B.Bind(parts, want)
 	end
 	parts.bound = nil
 	if want == "under" or want == "on" then
-		local font = parts[want]
+		local font, options = parts[want], B.TimeOptions()
 		font:Show()
-		button:SetDurationText(font, nil)
+		if not (options and pcall(button.SetDurationText, button, font, options)) then
+			button:SetDurationText(font, nil)
+		end
 	elseif want == "bar" then
 		parts.bar:Show()
 		button:SetDurationBar(parts.bar, BarOptions())
@@ -905,8 +931,9 @@ end
 -- The time of a sample as Time left shows it on the game's buttons: Under the icon as whole seconds in the row's small font, Thin bar as a bar
 -- of BAR_HEIGHT under it in the row's blue and Bar texture that runs down with the sweep, On the icon as the sweep's own countdown (the look's
 -- numbers) and Off as the sweep alone. The text and the bar are made once on the sample's frame, and one OnUpdate of their own runs only while
--- one of them shows: it reads the end and the length of a sample of test mode from icon.held, which ns.IconSampleLoop starts again, else the
--- start and the length given here.
+-- one of them or the countdown shows: it reads the end and the length of a sample of test mode from icon.held, which ns.IconSampleLoop starts
+-- again, else the start and the length given here. The text under the icon and the countdown on it turn amber in the last LOW seconds, as the
+-- game colours them on its buttons.
 function B.SampleTime(icon, start, seconds)
 	local parts = icon.time
 	if parts == nil then
@@ -931,8 +958,15 @@ function B.SampleTime(icon, start, seconds)
 				local held = icon.held
 				local length = held and held.seconds or parts.seconds
 				local left = math.max(0, (held and held.ends or (parts.start + parts.seconds)) - Now())
+				local low = left > 0 and left <= LOW
 				if parts.want == "under" then
 					parts.text:SetText(left > 0 and ("%d"):format(math.ceil(left)) or "")
+					if parts.low ~= low then
+						parts.low = low
+						parts.text:SetTextColor(low and AMBER[1] or 1, low and AMBER[2] or 1, low and AMBER[3] or 1)
+					end
+				elseif parts.want == "on" then
+					B.SampleTint(icon, low)
 				else
 					parts.bar:SetMinMaxValues(0, length > 0 and length or 1)
 					parts.bar:SetValue(left)
@@ -951,7 +985,19 @@ function B.SampleTime(icon, start, seconds)
 		pcall(parts.bar.SetStatusBarTexture, parts.bar, ns.BarTexture(Opt("barTexture")) or WHITE)
 		pcall(parts.bar.SetStatusBarColor, parts.bar, BLUE[1], BLUE[2], BLUE[3], 1)
 	end
-	parts.clock:SetShown(want == "under" or want == "bar")
+	parts.clock:SetShown(want == "under" or want == "bar" or want == "on")
+end
+
+-- The countdown on a sample with Time left On the icon: amber while low, else white. The cooldown is the sample's own.
+function B.SampleTint(icon, low)
+	if icon.tint == low then
+		return
+	end
+	local ok, text = pcall(icon.cooldown.GetCountdownFontString, icon.cooldown)
+	if ok and not IsSecret(text) and type(text) == "table" then
+		text:SetTextColor(low and AMBER[1] or 1, low and AMBER[2] or 1, low and AMBER[3] or 1)
+		icon.tint = low
+	end
 end
 
 -- The time of a sample goes with the sample.
@@ -977,17 +1023,23 @@ function B.EndTest(token)
 	B.Pass()
 end
 
--- Three sample icons, run by /flatui test icons with the samples of the other rows.
-function ns.OwnBuffsTest()
+-- Three sample icons, run by /flatui test icons with the samples of the other rows. quiet: for PREVIEW seconds and with no line in the chat
+-- (ns.OwnBuffsLookChanged).
+function ns.OwnBuffsTest(quiet)
+	quiet = quiet == true
 	if not B.Capable() then
 		return
 	end
 	if not (B.on and ns.Enabled(KEY)) then
-		print("Your buffs: the row is off.")
+		if not quiet then
+			print("Your buffs: the row is off.")
+		end
 		return
 	end
 	if InCombatLockdown() then
-		print("Your buffs: the test shows out of combat only.")
+		if not quiet then
+			print("Your buffs: the test shows out of combat only.")
+		end
 		return
 	end
 	if B.testing then
@@ -1013,14 +1065,32 @@ function ns.OwnBuffsTest()
 		B.SampleTime(icon, now, 2 * index + 2)
 	end
 	B.Row(list)
-	local test = { list = list }
+	local test = { list = list, quiet = quiet }
 	B.testing = test
-	print("Your buffs: three sample icons for 8 seconds.")
+	if not quiet then
+		print("Your buffs: three sample icons for 8 seconds.")
+	end
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
-		C_Timer.After(TEST_TIME, function()
+		C_Timer.After(quiet and PREVIEW or TEST_TIME, function()
 			B.EndTest(test)
 		end)
 	end
+end
+
+-- A row of the look changed (Time left, Icon size, Spacing, Icon border, Bar texture): the row is refreshed, as without a changed function of
+-- the row (Core.lua's Changed), and out of combat with test mode off (its own samples show then), no test of /flatui test icons under way and
+-- none of the row's buffs up, the three samples show for PREVIEW seconds in the new look with no line in the chat. Each change starts them
+-- again, so a slider dragged keeps them up until PREVIEW after its last step.
+function ns.OwnBuffsLookChanged()
+	ns.Try(KEY, B.Refresh)
+	if InCombatLockdown() or TM.IsOn() or not (B.Capable() and B.on and ns.Enabled(KEY)) then
+		return
+	end
+	local read, found = pcall(B.Read)
+	if (B.testing and not B.testing.quiet) or not read or (type(found) == "table" and #found > 0) then
+		return
+	end
+	ns.Try(KEY, ns.OwnBuffsTest, true)
 end
 
 -- Test mode (TestMode.lua): while it is on, out of combat, with the page on, the holder shows three sample icons of its own, apart from those of

@@ -20,9 +20,10 @@ local _, ns = ...
 -- of the two shows, a change allowed at any time; the parts of its buttons are made inside the function the game calls while it builds a
 -- button, and a later change to them waits until the game says buffs are open. A shield that goes before its time while buffs are read,
 -- and is still listed, broke: a sound plays, if chosen, and a red wash over every bar shown fades out; out of combat, a pick of the sound plays
--- both once (ns.AbsorbSoundChanged). The target's total can have a bar of its own. Out of a fight the
--- totals follow the game's events; in one, a step a few times a second. While test mode is on (TestMode.lua) the sample bars of /flatui absorbs
--- test stay, with the target's (A.Hold). Bar tooltips (On by default) shows the game's tooltip of a shield over its bar and the shields on you over
+-- both once, on the samples when no bar shows (ns.AbsorbSoundChanged). Out of combat with no shield up, a change of a row of the look shows
+-- the samples in the new look for 4 seconds, with no line in the chat (ns.AbsorbLookChanged). The target's total can have a bar of its own.
+-- Out of a fight the totals follow the game's events; in one, a step a few times a second. While test mode is on (TestMode.lua) the sample
+-- bars of /flatui absorbs test stay, with the target's (A.Hold). Bar tooltips (On by default) shows the game's tooltip of a shield over its bar and the shields on you over
 -- the total bar, and never takes a click (A.TipShow). Every frame is Flat UI's own, and nothing of the game is changed or hooked. The helpers are
 -- in one table, A.
 
@@ -35,6 +36,8 @@ local CROP = 0.08
 -- The most bars of single shields. A read is made at most this often; the time texts step, the total step, a test and a flash last so long.
 local MOST = 6
 local REREAD, STEP, TOTAL_STEP, TEST_TIME, FLASH = 0.2, 0.1, 0.25, 8, 0.4
+-- How long the samples a change of the look shows stay after the last change.
+local PREVIEW = 4
 -- A shield gone this long or more before its end broke; one gone later ran out. One read this soon after it was put on is read whole.
 local EARLY, FRESH = 0.3, 1
 -- School masks: every school, and physical (Mana Shield).
@@ -955,8 +958,9 @@ function A.Wash()
 end
 
 -- Sound of When a shield breaks picked on the page: the page is refreshed, as without a changed function of the row (Core.lua's Changed), and out
--- of combat the sound plays once and the bars shown, real or the samples of a test, flash red, so the whole warning is seen and heard. Only a
--- pick in the options calls this, not a profile switch or a reset.
+-- of combat the sound plays once and the bars shown, real or the samples of a test, flash red, so the whole warning is seen and heard; with no
+-- bar shown, the samples show for a few seconds first (A.Preview) and flash. Only a pick in the options calls this, not a profile switch or a
+-- reset.
 function ns.AbsorbSoundChanged()
 	ns.Try(KEY, A.Refresh)
 	if InCombatLockdown() or not ns.Enabled(KEY) then
@@ -966,6 +970,10 @@ function ns.AbsorbSoundChanged()
 	local shown = A.total and A.total.frame:IsShown() and next(A.items or {}) ~= nil
 	for _, row in ipairs(A.rows) do
 		shown = shown or row.frame:IsShown()
+	end
+	if not shown then
+		ns.Try(KEY, A.Preview)
+		shown = A.sample ~= nil
 	end
 	if A.flash and shown then
 		ns.Try(KEY, A.Wash)
@@ -1716,13 +1724,9 @@ function A.Drop()
 	A.held, A.heldList, A.sample = nil, nil, nil
 end
 
--- Sample bars for a few seconds: the sample shields and their total. While test mode holds its samples, the same ones, so their times go on.
-function A.Test()
-	if not ns.Enabled(KEY) then
-		print("Absorb shields: turn on Absorb shields first.")
-		return
-	end
-	A.Refresh()
+-- The sample shields and their total for so many seconds, drawn again in the look of the page. While test mode holds its samples, the same
+-- ones, so their times go on. Each call takes a new token, so the last call's time is the one that ends them.
+function A.Samples(seconds)
 	local token = {}
 	A.sample = token
 	A.ShowContainer(false)
@@ -1731,8 +1735,7 @@ function A.Test()
 	if total and total.frame:IsShown() then
 		SampleTotal(total, 1525, 1855, 1855)
 	end
-	print("Absorb shields: sample bars for 8 seconds.")
-	if not After(TEST_TIME, function()
+	if not After(seconds, function()
 		if A.sample == token then
 			A.sample = nil
 			ns.Try(KEY, A.Pass)
@@ -1740,6 +1743,36 @@ function A.Test()
 	end) then
 		A.sample = nil
 	end
+end
+
+-- Sample bars for a few seconds: the sample shields and their total.
+function A.Test()
+	if not ns.Enabled(KEY) then
+		print("Absorb shields: turn on Absorb shields first.")
+		return
+	end
+	A.Refresh()
+	A.Samples(TEST_TIME)
+	print("Absorb shields: sample bars for 8 seconds.")
+end
+
+-- The samples for PREVIEW seconds with no line in the chat, out of combat with the page on, test mode off (its own samples show then) and no
+-- shield of the player's up (its bars show the look then). A change while they show draws them again and starts their time again, so a slider
+-- dragged keeps them up until PREVIEW after its last step.
+function A.Preview()
+	if InCombatLockdown() or not ns.Enabled(KEY) or A.Holding() or (next(A.items or {}) ~= nil and not A.sample) then
+		return
+	end
+	A.Samples(PREVIEW)
+end
+
+-- A row of the look changed (Show, Total bar is full at, Bar width and height, Spacing, Bars grow, Bar texture, Time strip, Amount, Time left,
+-- Spell name, Colour by school, Shield colour): the page is refreshed, as without a changed function of the row (Core.lua's Changed), and out
+-- of combat with no shield up the samples show in the new look for a few seconds (A.Preview). A.Pass leaves bars alone while samples show, so
+-- the samples are drawn again after the refresh.
+function ns.AbsorbLookChanged()
+	ns.Try(KEY, A.Refresh)
+	ns.Try(KEY, A.Preview)
 end
 
 -- What the game gives of each listed shield on the player: its amount, its end and whether the game hides its aura.
