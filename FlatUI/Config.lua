@@ -1394,7 +1394,7 @@ ns.PAGES = {
 		{ key = "amount", kind = "choice", default = "left", label = "Amount", changed = "AbsorbLookChanged",
 			tip = "The size of a shield is the most it held as Flat UI read it, or for your own shield what Flat UI works out from your spell power.",
 			choices = { { "left", "Amount left" }, { "leftmax", "Amount left and size" }, { "none", "None" } } },
-		{ key = "time", kind = "bool", default = true, label = "Time left", changed = "AbsorbLookChanged" },
+		{ key = "time", kind = "bool", default = true, label = "Time left", changed = "AbsorbLookChanged", tip = "Amber in its last 5 seconds." },
 		{ key = "name", kind = "bool", default = false, label = "Spell name", changed = "AbsorbLookChanged" },
 		{ key = "tooltips", kind = "choice", default = "on", label = "Bar tooltips",
 			choices = { { "on", "On" }, { "out", "Out of combat only" }, { "off", "Off" } },
@@ -1418,7 +1418,8 @@ ns.PAGES = {
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 		{ section = "Your target" },
-		{ key = "target", kind = "bool", default = false, label = "Your target's total", tip = "A bar with the total of every absorb on your target. /flatui move places it." },
+		{ key = "target", kind = "bool", default = false, label = "Your target's total", changed = "AbsorbLookChanged",
+			tip = "A bar with the total of every absorb on your target. /flatui move places it. Out of combat, turning it on shows sample bars for a few seconds." },
 	},
 	{
 		key = "partycd", label = "Party cooldowns",
