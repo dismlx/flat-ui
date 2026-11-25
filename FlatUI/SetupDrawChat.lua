@@ -362,6 +362,8 @@ do
 	local WIDTH, PAD, GAP, BAR_FILE = 190, 8, 14, "Interface\\TargetingFrame\\UI-TargetingFrame-BarFill"
 	local EPIC = { 0.64, 0.21, 0.93 }
 	local GREY, YELLOW = { 0.8, 0.8, 0.8 }, { 1, 0.82, 0 }
+	-- The green the game gives a tooltip's health bar (HealthBar.lua).
+	local GAME_GREEN = { 0, 1, 0 }
 	local DEFS
 
 	local function Build(stage)
@@ -512,7 +514,9 @@ do
 				else
 					ns.RestoreFill(bar)
 				end
-				bar:SetStatusBarColor(def.health[1], def.health[2], def.health[3])
+				-- Health bar colour: the enemy's reaction red and your class colour, or the game's green.
+				local tint = mod and ns.Get("chat.barColour") == "class" and (def.mine or def.health) or GAME_GREEN
+				bar:SetStatusBarColor(tint[1], tint[2], tint[3])
 				ns.SetOutline(tip.barOutline, health and barOn, health and barOn)
 				U.repaint(tip.barOutline)
 			end
@@ -534,6 +538,7 @@ do
 		p["chat.nameClass"] = player.title
 		p["chat.tipTitleSize"], p["chat.tipTextSize"] = item.title, item.lines[1]
 		p["chat.health"], p["chat.barHide"], p["chat.barHeight"], p["chat.barTexture"] = mob.bar, mob.bar, mob.bar, mob.bar
+		p["chat.barColour"] = player.bar
 		p["chat.ids"], p["chat.count"] = item.lines[4], item.lines[5]
 		return S
 	end

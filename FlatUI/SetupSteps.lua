@@ -905,6 +905,7 @@ ns.SETUP_STEPS = {
 		{ "chat.tipTextSize", "o", "mock-tooltip" },
 		{ "chat.health", "o", "mock-tooltip" },
 		{ "chat.barTexture", "o", "mock-tooltip" },
+		{ "chat.barColour", "o", "mock-tooltip" },
 		{ "chat.barHide", "c", "mock-tooltip" },
 		{ "chat.barHeight", "o", "mock-tooltip" },
 		{ "chat.barText", "o", "behaviour", "Writes the health of the unit on the tooltip's health bar, as a percent, current and most, or both." },

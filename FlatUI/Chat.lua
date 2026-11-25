@@ -11,6 +11,8 @@ local _, ns = ...
 -- without Alt (on by default) each input box gets the widget method SetAltArrowKeyMode(false), so the arrow keys edit the text (Arrows below).
 -- With Health text on the bar (Percent by default) a frame of the addon's own on GameTooltip's health bar, made out of combat, writes the health
 -- of the tooltip's unit on it every 0.1 s while the bar shows, the game's withheld values passed straight to the text (BT, Health bar below).
+-- With Health bar colour (Class colour for players, reaction for the rest, by default) the bar takes its unit's colour (SetStatusBarColor), set again
+-- after each change of its value through one HookScript of its OnValueChanged (BT.Hook), and the game's green goes back at Green.
 -- The fade of GameTooltip is seen as a fall of its alpha in a frame of the
 -- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
@@ -1268,6 +1270,7 @@ local function FollowData()
 			end
 			ns.Each(KEY, Filled, tooltip, data)
 			ns.Each(KEY, BT.Unit, tooltip, data)
+			ns.Each(KEY, BT.Pick, tooltip, data)
 			ns.Each(KEY, Extras, tooltip, data)
 			ns.Each(KEY, Combat, tooltip, data)
 			ns.Each(KEY, FadeCancel, tooltip)
@@ -1461,16 +1464,8 @@ function BT.Size(text)
 	ns.TextStyle(text, { percent = math.max(BT.SIZE[1], math.min(BT.SIZE[2], (height + 1) * 10)), flags = "OUTLINE" })
 end
 
--- The unit of GameTooltip's health bar: of a unit tooltip's data, by the guid the bar watches or the data's guid (UnitTokenFromGUID), else the
--- mouseover; nil for any other tooltip.
-function BT.Unit(tooltip, data)
-	if not rawequal(tooltip, Global("GameTooltip")) then
-		return
-	end
-	X.barUnit = nil
-	if BT.Mode() == nil or not IsData(data, "Unit") then
-		return
-	end
+-- The unit of a unit tooltip's data, by the guid the bar watches or the data's guid (UnitTokenFromGUID), else the mouseover, or nil.
+function BT.Token(data)
 	local token
 	for _, field in ipairs({ "healthGUID", "guid" }) do
 		local guid = data[field]
@@ -1487,7 +1482,19 @@ function BT.Unit(tooltip, data)
 			token = "mouseover"
 		end
 	end
-	X.barUnit = token
+	return token
+end
+
+-- The unit of GameTooltip's health bar: of a unit tooltip's data (BT.Token); nil for any other tooltip.
+function BT.Unit(tooltip, data)
+	if not rawequal(tooltip, Global("GameTooltip")) then
+		return
+	end
+	X.barUnit = nil
+	if BT.Mode() == nil or not IsData(data, "Unit") then
+		return
+	end
+	X.barUnit = BT.Token(data)
 	-- The next pass of the frame writes the new unit's health at once.
 	if X.barText then
 		X.barText.wait = BT.EVERY
@@ -1589,6 +1596,82 @@ function BT.Show(bar)
 	end
 end
 
+-- Health bar colour (chat.barColour, 0.5.36; Class colour for players, reaction for the rest, by default): the game colours GameTooltip's health
+-- bar green at every change of its value (HealthBar_OnValueChanged, Blizzard_GameTooltip/HealthBar.lua:2-30, from the bar's OnValueChanged,
+-- Mainline/GameTooltip.xml:18-20). The post call picks the colour for each build of GameTooltip (BT.Pick): a player's class colour
+-- (ns.ClassColourOf), else the unit's reaction colour (ns.ReactionColour, as the unit frames have it), and none for any other tooltip or a colour
+-- the game withholds. It is set on the bar at once and again after each change of its value, through one HookScript of the bar's OnValueChanged that
+-- reads nothing of the call (BT.Hook); SetStatusBarColor is the one write, and the game's green (0, 1, 0) is put back when the row is at Green, the
+-- bar is hidden, the module goes off or a tooltip has no colour. PaintBar keeps the game's colour on the flat fill, so a texture file takes it.
+
+-- True while the bar takes the colour of its unit.
+function BT.Tinted()
+	return ns.Enabled(KEY) and Opt("barColour") == "class" and Opt("barHide") ~= true
+end
+
+-- The bar of GameTooltip, or nil.
+function BT.Bar()
+	local tooltip = Global("GameTooltip")
+	local bar = tooltip and not ns.Forbidden(tooltip) and tooltip.StatusBar
+	if Usable(bar) and not ns.Forbidden(bar) then
+		return bar
+	end
+	return nil
+end
+
+-- Sets the colour picked on the bar, or the game's green once where a colour was set before.
+function BT.Tint()
+	local bar, colour = BT.Bar(), X.barColour
+	if not bar then
+		return
+	end
+	if colour then
+		pcall(bar.SetStatusBarColor, bar, colour[1], colour[2], colour[3])
+	elseif X.barTinted then
+		pcall(bar.SetStatusBarColor, bar, 0, 1, 0)
+	end
+	X.barTinted = colour ~= nil
+end
+
+-- The colour of the unit of a build of GameTooltip, kept in X.barColour and set on the bar. Every other build clears it.
+function BT.Pick(tooltip, data)
+	if not rawequal(tooltip, Global("GameTooltip")) then
+		return
+	end
+	X.barColour = nil
+	local token = BT.Tinted() and IsData(data, "Unit") and BT.Token(data)
+	if token then
+		local r, g, b
+		local ok, player = false, nil
+		if type(UnitIsPlayer) == "function" then
+			ok, player = pcall(UnitIsPlayer, token)
+		end
+		if ok and not ns.IsSecret(player) and player == true then
+			r, g, b = ns.ClassColourOf(token)
+		end
+		if not r then
+			r, g, b = ns.ReactionColour(token)
+		end
+		if IsNumber(r) and IsNumber(g) and IsNumber(b) then
+			X.barColour = { r, g, b }
+		end
+	end
+	BT.Tint()
+end
+
+-- The one hook of the bar: after the game's green, the colour picked goes back on. The value of the call is never read.
+function BT.Hook(bar)
+	if X.barHooked or not BT.Tinted() or type(bar.HookScript) ~= "function" then
+		return
+	end
+	X.barHooked = pcall(bar.HookScript, bar, "OnValueChanged", function(self)
+		local colour = X.barColour
+		if colour and not ns.IsStopped(KEY) then
+			pcall(self.SetStatusBarColor, self, colour[1], colour[2], colour[3])
+		end
+	end)
+end
+
 local function HealthBar()
 	local tooltip = Global("GameTooltip")
 	local bar = tooltip and not ns.Forbidden(tooltip) and tooltip.StatusBar
@@ -1605,6 +1688,12 @@ local function HealthBar()
 		end)
 	end
 	BT.Show(bar)
+	-- Health bar colour, after the fill: the game's green while the bar does not take the colour of its unit.
+	BT.Hook(bar)
+	if not BT.Tinted() then
+		X.barColour = nil
+	end
+	BT.Tint()
 end
 
 -- Done out of combat: a tooltip and its bar are frames the game uses in secure code.
