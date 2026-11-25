@@ -15,6 +15,9 @@ local _, ns = ...
 -- this file loads; a frame after the fight ends it comes back while what turned it on is still open (the options window shown or held hidden by
 -- /flatui move, /flatui move open again), or for "slash" and "key" always, and ends otherwise.
 --
+-- The bar (BuildBar) picks the group and Moving, opens Bags, Bank, Gear, Finder and Move (/flatui move, with the samples kept on) and has End. It
+-- stands above or under the options window (BarSpot); dragged, it stays where it was dropped until a double-click on its title puts it back.
+--
 -- A stand-in reads of the game frame it stands in for only its place and size (ns.MoverRect), its effective scale against UIParent's, its strata,
 -- its level (at most 300 in HIGH, so that it lies under the options window and the welcome screen there) and its shown flag
 -- (ns.MoverShown), each through ns.IsSecret or ns.Finite; it writes nothing on it, calls no other method of it and adds
@@ -82,7 +85,9 @@ local POLL, BAR_EVERY = 0.25, 0.5
 -- SetupWelcome.lua), so it and its drawing stay under both. A game frame there can stand at any level: the player's cast bar is a toplevel frame
 -- of HIGH, which the game raises above the others (Blizzard_UIPanels_Game/Mainline/CastingBarFrame.xml:468), and its stand-in drew over the window.
 local UNDER_PANEL = 300
-local BAR_W, BAR_H, TOP = 930, 40, -8
+local BAR_W, BAR_H, TOP = 990, 40, -8
+-- The most time between the two clicks of a double-click on the bar's title, in seconds.
+local DOUBLE = 0.3
 local SOURCES = { panel = "options", movers = "/flatui move", slash = "/flatui test", key = "key" }
 local GROUPS = { { "solo", "Solo", 0 }, { "party", "Party", 4 }, { "raid10", "Raid 10", 10 }, { "raid20", "Raid 20", 20 }, { "raid40", "Raid 40", 40 } }
 local GROUP_SIZE = { solo = 0, party = 4, raid10 = 10, raid20 = 20, raid40 = 40 }
@@ -111,6 +116,8 @@ local TIPS = {
 	Bank = { "Bank", "Opens or closes your bank window, as /flatui bank: live at the banker, else as you last left it." },
 	Gear = { "Gear", "Opens or closes the Gear comparison window, as /flatui gear." },
 	Finder = { "Finder", "Opens or closes the item finder, as the Find button of the Gear comparison window." },
+	Move = { "Move", "Opens /flatui move with these samples, so each frame can be placed where it shows. Press it again to close it." },
+	Title = { "Test mode bar", "Drag the bar to move it; double-click here to put it back." },
 	End = { "End", "Turns test mode off. Nothing was saved." },
 }
 
@@ -551,7 +558,7 @@ local function BarSpot()
 	return "below", window
 end
 
--- Places the bar at BarSpot, unless it was dragged this session: it then stays where it was dropped.
+-- Places the bar at BarSpot, unless it was dragged this session: it then stays where it was dropped, until a double-click on its title.
 local function PlaceBar()
 	if ui.dragged then
 		return
@@ -619,6 +626,38 @@ local function BuildBar()
 	end)
 	ui.title = kit.Label(bar, "GameFontNormal", "LEFT", 190)
 	ui.title:SetPoint("LEFT", bar, "TOPLEFT", 12, -BAR_H / 2)
+	-- Over the title: a drag moves the bar as from any other part, and a double-click puts a dragged bar back at its own place (PlaceBar).
+	local grip = kit.Frame(bar)
+	grip:SetSize(190, BAR_H)
+	grip:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+	grip:EnableMouse(true)
+	grip:RegisterForDrag("LeftButton")
+	grip:SetScript("OnDragStart", function()
+		bar:StartMoving()
+	end)
+	grip:SetScript("OnDragStop", function()
+		bar:StopMovingOrSizing()
+		ui.dragged = true
+	end)
+	grip:SetScript("OnMouseDown", function(_, button)
+		if button ~= "LeftButton" then
+			return
+		end
+		local now = GetTime()
+		if ui.clicked and now - ui.clicked <= DOUBLE then
+			ui.clicked = nil
+			ui.dragged, ui.spot, ui.at = false, nil, nil
+			Safe(PlaceBar)
+		else
+			ui.clicked = now
+		end
+	end)
+	grip:SetScript("OnEnter", function()
+		Tip(grip, "Title")
+	end)
+	grip:SetScript("OnLeave", function()
+		Untip(grip)
+	end)
 	-- What hides while paused: the group, Moving and the windows.
 	local live = kit.Frame(bar)
 	live:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
@@ -685,8 +724,10 @@ local function BuildBar()
 		end)
 	end
 	local x = 622
+	-- Move opens /flatui move (Movers' word, as the options window's Move frames runs it); the options window that turned test mode on is held
+	-- hidden there (MoversMode's Holding), so test mode stays on.
 	for _, button in ipairs({ { "Bags", 50, function() Word("bags") end }, { "Bank", 50, function() Word("bank") end },
-		{ "Gear", 50, function() Word("gear") end }, { "Finder", 60, Finder } }) do
+		{ "Gear", 50, function() Word("gear") end }, { "Finder", 60, Finder }, { "Move", 54, function() Word("move") end } }) do
 		local made = kit.Button(live, button[1], button[2], button[3])
 		made:SetPoint("LEFT", live, "LEFT", x, 0)
 		Tipped(made, button[1])

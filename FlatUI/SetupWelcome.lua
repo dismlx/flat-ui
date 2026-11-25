@@ -8,7 +8,8 @@ local _, ns = ...
 -- profile in use and the flag come from Setup.lua (S.Presets, S.UseReady, S.Flag), the drawings from SetupDraw.lua (D.PaintIn with the frames build's
 -- mock-player, D.Card). When the screen shows and
 -- what Keep this look keeps are settings in the Setup section of the Options and setup tab of the Flat UI page (Config.lua). It hides when a fight starts, and no look is put in
--- use in one.
+-- use in one; a screen a fight hid says so in chat and opens again on the same view when the fight ends (the after card with the same result, the
+-- ticks as they were), unless it was opened or closed meanwhile.
 
 local kit = ns.PanelKit
 local S = ns.Setup
@@ -533,9 +534,32 @@ function W.Build()
 	listener:RegisterEvent("PLAYER_REGEN_ENABLED")
 	listener:RegisterEvent("UI_SCALE_CHANGED")
 	listener:RegisterEvent("DISPLAY_SIZE_CHANGED")
+	-- A screen a fight hides is kept in W.fought, after the hide (OnHide forgets it, so a screen closed on purpose stays closed), and opens again
+	-- on the same view when the fight ends.
+	frame:SetScript("OnHide", function()
+		W.fought = nil
+	end)
 	listener:SetScript("OnEvent", function(_, event)
 		if event == "PLAYER_REGEN_DISABLED" then
+			local shown = frame:IsShown()
+			local fought = shown and { view = W.view, fromStart = W.fromStart, tick = W.tick, share = W.share } or nil
 			frame:Hide()
+			if fought then
+				W.fought = fought
+				print("Flat UI: the welcome screen comes back after the fight.")
+			end
+		elseif event == "PLAYER_REGEN_ENABLED" and W.fought then
+			local fought = W.fought
+			W.fought = nil
+			if not frame:IsShown() then
+				W.Open(fought.view, W.finished)
+				-- The screen comes back as it was left: Back of the tiles and the two ticks (OnShow clears them).
+				W.fromStart = fought.fromStart
+				W.tick, W.share = fought.tick == true, fought.share == true
+				W.tickMark:SetShown(W.tick)
+				W.shareMark:SetShown(W.share)
+			end
+			W.Update()
 		elseif frame:IsShown() then
 			W.Update()
 		end

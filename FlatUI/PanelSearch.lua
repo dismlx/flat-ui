@@ -9,6 +9,8 @@ ns.PanelSearch = Search
 -- The rows of the Profiles page, which have no rows in ns.PAGES.
 Search.PROFILE_ROWS = { "Profile in use", "New profile", "Duplicate profile", "Setup", "Copy from", "Delete profile", "Rename profile", "Reset profile", "In a dungeon", "In a raid",
 	"In a battleground or arena", "Everywhere else", "Export profile", "Import profile", "Export trackers", "Import trackers", "Export by module" }
+-- A result that is a part of another row of the Profiles page opens that row: Duplicate is a button of New profile.
+Search.ALIAS = { ["Duplicate profile"] = "New profile" }
 
 function Search.Words(typed)
 	local words = {}
