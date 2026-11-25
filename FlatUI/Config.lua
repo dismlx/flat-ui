@@ -962,7 +962,7 @@ ns.PAGES = {
 		{ key = "playerTime", kind = "bool", default = false, label = "Cast time on your bars",
 			tip = "Seconds left, inside the right end of your cast bar and your pet's; the game's own time from Edit Mode is hidden meanwhile." },
 		{ key = "pushback", kind = "bool", default = true, label = "Pushback on your bar",
-			tip = "How far hits have set your cast back, as +0.5 in red just past the right end of your cast bar; a channel cut short shows -0.8." },
+			tip = "How far hits have set your cast back, as +0.5 in red just past the right end of your cast bar, or after the game's own seconds from Edit Mode; a channel cut short shows -0.8." },
 		{ section = "Icon" },
 		{ key = "iconPos", kind = "choice", default = "game", label = "Target and focus bar icon",
 			choices = { { "game", "Left of the bar" }, { "right", "Right of the bar" }, { "hidden", "Hidden" } } },
