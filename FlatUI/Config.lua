@@ -2470,7 +2470,7 @@ ns.PAGES = {
 		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you, in red while it is a unit you can attack." },
 		-- ChatTips.lua (TargetedBy): the targets of the party or raid members (0.5.35).
 		{ key = "targetedBy", kind = "bool", default = true, label = "Who in your group targets it",
-			tip = "In a party or raid, a grey line under a unit's tooltip naming the members whose target it is, in their class colours: at most six, then +N." },
+			tip = "In a party or raid, a grey line under a unit's tooltip naming the members whose target it is, in their class colours: at most six, then +N. Kept up to date while you point at the unit, and it shows as soon as a first member takes it." },
 		{ section = "Item comparison" },
 		{ key = "compareShift", kind = "bool", default = true, label = "Compare items only while holding Shift",
 			tip = "The items you wear show beside the tooltip of an item only while you hold Shift. Sets a game setting that the game's options do not show. Turned off, the game's own value is back." },

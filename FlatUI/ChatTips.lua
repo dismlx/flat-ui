@@ -12,8 +12,9 @@ local _, ns = ...
 -- last line, and its extra lines ask ns.ChatTipIds for the ID lines. The game runs the post calls once it has added its lines and before it shows
 -- the tooltip (TooltipDataHandler.lua:283-300), and sets the index of each line in the data as it adds it (TooltipDataHandler.lua:319-336).
 -- What is written on a tooltip: the target line and after it the line of who targets the unit with AddLine, once for each build as Chat.lua adds
--- its lines, and the target line with SetText and Show when the
--- target of the unit changes while the mouse stays on it (The target line while the mouse stays on the unit); the colour of the class line with
+-- its lines, and both lines with SetText and Show when the target of the unit, or who in the group targets it, changes while the mouse stays on
+-- it (The target line while the mouse stays on the unit; the line of who targets it is added then with AddLine and Show where it had none, 0.5.36);
+-- the colour of the class line with
 -- SetTextColor; and with Item and spell icons the text of the first line with SetText: the icon of the item or the spell (C_Item.GetItemIconByID,
 -- ItemDocumentation.lua:611-624; C_Spell.GetSpellTexture, SpellDocumentation.lua:595-612) before the name the game wrote, only when the first line of
 -- the data is the first line of the tooltip and that line still holds the same text, so a second post call for one build adds none. A text the
@@ -46,7 +47,9 @@ local WEAPONS = { [16] = true, [17] = true, [18] = true }
 -- data with that line still there is the same build. text is what the line holds while it is kept current ("" while the unit targets nothing), nil
 -- once it is not.
 local added = setmetatable({}, { __mode = "k" })
--- Per tooltip: { data, lines } of the line of who in the group targets the unit, so that the post calls of one build add it once (0.5.35).
+-- Per tooltip: { data, at, lines, text } of the line of who in the group targets the unit, so that the post calls of one build add it once
+-- (0.5.35). at is the number of lines the tooltip had at its build, lines the index of the line (nil while no one in the group targets the unit
+-- and no line was added), text what the line holds while it is kept current ("" while there is no line), nil once it is not (0.5.36).
 local byAdded = setmetatable({}, { __mode = "k" })
 -- Who in your group targets it: at most BY_MOST names, then +N. YOU_RED is You on the target line while a unit you can attack targets you.
 local BY_MOST, YOU_RED = 6, { 1, 0.25, 0.25 }
@@ -262,9 +265,13 @@ end
 -- game does after its own lines (Mainline/UnitFrame.lua:400-402). While the unit targets nothing the line is empty, and the next target it takes
 -- is written there. The line is written only while it still holds the text written here: a tooltip that is hidden, has fewer lines or other text
 -- there, or whose unit has left the mouse (the game fades it then, GameTooltip.lua:1012-1020) is left alone until a new build adds the line again.
--- A unit with no target at its build gets no line until then.
+-- A unit with no target at its build gets no line until then. The line of who in the group targets the unit is kept current the same way (KeepBy,
+-- 0.5.36): names come and go as members change target, "Targeted by: no one" once none has it, and a unit no one in the group had at its build
+-- gets the line, added at the end, once a first member takes it.
 local KEEP_EVERY = 0.2
 local keeper, keepWait = nil, 0
+-- Keeps the line of who targets the unit (below, after TargetedBy).
+local KeepBy
 
 -- Writes the target line of a tooltip again when the target of its unit changed. The record stays current only while this gives it its text back.
 local function Keep(tooltip, record)
@@ -316,6 +323,14 @@ local function KeepAll(frame, elapsed)
 			kept = kept or record.text ~= nil
 		end
 	end
+	for tooltip, record in pairs(byAdded) do
+		if record.text ~= nil then
+			if ns.IsStopped(KEY) or not ns.EachPart(KEY, PART, KeepBy, tooltip, record) then
+				record.text = nil
+			end
+			kept = kept or record.text ~= nil
+		end
+	end
 	if not kept then
 		frame:Hide()
 	end
@@ -356,7 +371,8 @@ end
 -- Who in your group targets it (chat.targetedBy, 0.5.35) ----------------------------------------------------------------------
 -- In a raid raid1 to raidN (GetNumGroupMembers, the player skipped), in a party party1 to party4 (GetNumSubgroupMembers): each member whose target
 -- the game plainly says is the unit (UnitIsUnit of its target and the unit), by name (UnitName) in its class colour, at most BY_MOST, then +N. An
--- answer the game withholds counts as no, and a unit whose identity it withholds gets no line. Nil solo or when no one does.
+-- answer the game withholds counts as no, and a unit whose identity it withholds gets no line. Nil solo or when no one does; the second answer is
+-- true in a group whose members could be read, also when no one targets the unit.
 local function TargetedBy(unit)
 	if Hidden(unit) then
 		return nil
@@ -382,23 +398,77 @@ local function TargetedBy(unit)
 		end
 	end
 	if #names == 0 then
-		return nil
+		return nil, true
 	end
-	return "Targeted by: " .. table.concat(names, ", ") .. (more > 0 and (" +%d"):format(more) or "")
+	return "Targeted by: " .. table.concat(names, ", ") .. (more > 0 and (" +%d"):format(more) or ""), true
 end
 
--- Adds the line of who targets the unit once for each build, after the target line, so the target line keeps its index for Keep.
+-- The line of who targets the unit once no one in the group does any more.
+local NO_ONE = "Targeted by: no one"
+
+-- Adds the line of who targets the unit once for each build, after the target line, so the target line keeps its index for Keep. With no text
+-- (a group in which no one targets the unit) only the record is made, so the line comes once a member takes the unit.
 local function AddBy(tooltip, data, text)
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	if not ok or not Plain(shown, "number") then
 		return
 	end
 	local record = byAdded[tooltip]
-	if record and rawequal(record.data, data) and shown >= record.lines then
+	if record and rawequal(record.data, data) and shown >= (record.lines or record.at) then
 		return
 	end
-	if pcall(tooltip.AddLine, tooltip, text, GREY[1], GREY[2], GREY[3]) then
-		byAdded[tooltip] = { data = data, lines = shown + 1 }
+	if text == nil then
+		byAdded[tooltip] = { data = data, at = shown, text = "" }
+		Watch()
+	elseif pcall(tooltip.AddLine, tooltip, text, GREY[1], GREY[2], GREY[3]) then
+		byAdded[tooltip] = { data = data, at = shown, lines = shown + 1, text = text }
+		Watch()
+	end
+end
+
+-- Writes the line of who targets the unit again when that changed, or adds it at the end of the tooltip once a first member takes a unit no one
+-- had (AddLine, then Show for the size, as the hit table adds its lines on Ctrl). The same guards as Keep: the tooltip shown with at least the lines
+-- it had, the line still holding the text written here, and the unit still the mouseover. The record stays current only while this gives it its
+-- text back.
+function KeepBy(tooltip, record)
+	local text = record.text
+	record.text = nil
+	if not text or not ns.Enabled(KEY) or Opt("targetedBy") ~= true or ns.Forbidden(tooltip) then
+		return
+	end
+	local okShown, shown = pcall(tooltip.IsShown, tooltip)
+	local okCount, count = pcall(tooltip.NumLines, tooltip)
+	if not okShown or IsSecret(shown) or shown ~= true or not okCount or not Plain(count, "number") or count < (record.lines or record.at) then
+		return
+	end
+	local line
+	if record.lines then
+		line = LeftLine(tooltip, record.lines)
+		local okText, now = false, nil
+		if line then
+			okText, now = pcall(line.GetText, line)
+		end
+		if not okText or IsSecret(now) or (now or "") ~= text then
+			return
+		end
+	end
+	local unit = UnitOf(record.data)
+	if not unit or Ask(UnitIsUnit, unit, "mouseover") ~= true then
+		return
+	end
+	local by = TargetedBy(unit)
+	local new = by or (line and NO_ONE or "")
+	if new == text then
+		record.text = text
+	elseif line then
+		if pcall(line.SetText, line, new) then
+			pcall(tooltip.Show, tooltip)
+			record.text = new
+		end
+	elseif pcall(tooltip.AddLine, tooltip, new, GREY[1], GREY[2], GREY[3]) then
+		record.lines = count + 1
+		pcall(tooltip.Show, tooltip)
+		record.text = new
 	end
 end
 
@@ -499,6 +569,12 @@ local function Lines(tooltip, data)
 	if not Plain(tooltip, "table") or not Plain(data, "table") or ns.Forbidden(tooltip) then
 		return
 	end
+	-- A new build of the tooltip, of whatever kind, ends the keeping of who targeted the unit of the last one: a record with no line has no
+	-- text of its own to tell the builds apart.
+	local by = byAdded[tooltip]
+	if by and not rawequal(by.data, data) then
+		by.text = nil
+	end
 	if IsData(data, "Unit") then
 		local unit = (Opt("classLine") == true or Opt("targetLine") == true or Opt("targetedBy") == true) and UnitOf(data)
 		if not unit then
@@ -511,9 +587,11 @@ local function Lines(tooltip, data)
 		if text then
 			AddOnce(tooltip, data, text)
 		end
-		local by = Opt("targetedBy") == true and TargetedBy(unit)
-		if by then
-			AddBy(tooltip, data, by)
+		if Opt("targetedBy") == true then
+			local who, grouped = TargetedBy(unit)
+			if grouped then
+				AddBy(tooltip, data, who)
+			end
 		end
 	elseif Opt("icons") == true then
 		-- A buff or a debuff has the icon of its spell before its name, as a spell does.
