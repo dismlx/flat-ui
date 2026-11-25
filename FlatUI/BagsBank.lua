@@ -66,7 +66,11 @@ local _, ns = ...
 -- empty bag slot, faded, as the bag window's row draws one (BagsSlots.lua). A bag shows its free slots in its corner, in the game's font of item
 -- counts with an outline, white, gold at LOW (4) or fewer and red when it is full, the colours of the footer's free slots. A drag or a drop, or a
 -- click with an item on the cursor (CursorHasItem), calls C_Container.PickupContainerItem(-2, n), as the game's own bag slot does
--- (BankFrame.lua:378-395), out of combat. A plain click on a bought slot that holds a bag keeps that bag lit in the bank window (B.Layout.Stick with
+-- (BankFrame.lua:378-395), out of combat. A bag lifted out of its slot greys there (SetDesaturated, the slot locked, isLocked of
+-- C_Container.GetContainerItemInfo, drawn again at ITEM_LOCK_CHANGED of its container or an inventory slot) until it is put down, and while the
+-- cursor holds a bag (CURSOR_CHANGED: GetCursorInfo, the equip slot INVTYPE_BAG of C_Item.GetItemInfoInstant) every bought slot keeps its hover tint
+-- lit (LockHighlight), as the bag window's row does (BagsSlots.lua). A right click with an empty cursor does nothing, as on the game's slot. A plain
+-- left click on a bought slot that holds a bag keeps that bag lit in the bank window (B.Layout.Stick with
 -- its container, as the bag window's row does with its bags; B.Layout.Closed lets it go when the window closes), its edge in the Highlight colour
 -- (SetOutlineColour), and a click on it again gives every bag back; that touches frames of Flat UI's own only, so it works in a fight too. A bag
 -- lifted out of that slot, or swapped for a bag dropped on it, lets that go, so the next bag there shows like any other. The
@@ -793,8 +797,11 @@ local function MakeSlot(n)
 	end
 	button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	button:RegisterForDrag("LeftButton")
-	button:SetScript("OnClick", function(self)
-		Run(Click, n)
+	-- A right click with an empty cursor does nothing, as on the game's bank bag slot; with an item on the cursor either button puts it there.
+	button:SetScript("OnClick", function(self, mouse)
+		if mouse == "LeftButton" or E.Ask(CursorHasItem) == true then
+			Run(Click, n)
+		end
 		Run(Retip, self, n)
 	end)
 	button:SetScript("OnDragStart", function()
@@ -821,9 +828,9 @@ local function MakeSlot(n)
 	return slot
 end
 
--- Draws bank bag slot n: the bag's icon, cropped, with its free slots in the corner (white, gold at LOW or fewer, red when full); a bought slot
--- with no bag the game's art of an empty bag slot, faded; one not bought the game's lock. Its edge is in the Highlight colour while a click keeps
--- its bag lit.
+-- Draws bank bag slot n: the bag's icon, cropped, greyed while the bag is lifted (its slot locked), with its free slots in the corner (white, gold
+-- at LOW or fewer, red when full); a bought slot with no bag the game's art of an empty bag slot, faded; one not bought the game's lock. Its edge
+-- is in the Highlight colour while a click keeps its bag lit.
 local function DrawSlot(slot, n, bought, crop)
 	local isBought = n <= bought
 	local held = isBought and Held(BANK_BAGS, n) or nil
@@ -832,11 +839,13 @@ local function DrawSlot(slot, n, bought, crop)
 		slot.icon:SetTexture(held.icon)
 		slot.icon:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
 		slot.icon:SetAlpha(1)
+		pcall(slot.icon.SetDesaturated, slot.icon, held.locked == true)
 		slot.icon:Show()
 	elseif isBought and not held then
 		slot.icon:SetTexture(EMPTY_ART)
 		slot.icon:SetTexCoord(0, 1, 0, 1)
 		slot.icon:SetAlpha(0.5)
+		pcall(slot.icon.SetDesaturated, slot.icon, false)
 		slot.icon:Show()
 	else
 		slot.icon:Hide()
@@ -853,6 +862,51 @@ local function DrawSlot(slot, n, bought, crop)
 	slot.button:SetAlpha(isBought and 1 or 0.6)
 	Paint(slot.box)
 	Edge(slot, n)
+end
+
+-- True while the row of bank bag slots shows the live bank: its frame and every parent up to the screen.
+local function RowShowing()
+	if not row or not Bank.Live() then
+		return false
+	end
+	local ok, visible = pcall(row.frame.IsVisible, row.frame)
+	return ok and visible == true
+end
+
+-- Each bank bag slot shown is drawn again, where it is: a bag lifted or put down greys or comes back (ITEM_LOCK_CHANGED).
+local function Redraw()
+	if not RowShowing() then
+		return
+	end
+	local bought, crop = Bought(), Crop()
+	for n, slot in pairs(row.slots) do
+		if slot.button:IsShown() then
+			DrawSlot(slot, n, bought, crop)
+		end
+	end
+end
+
+-- Each bought bank bag slot keeps its hover tint lit while the cursor holds a bag (GetCursorInfo, and the equip slot INVTYPE_BAG of
+-- C_Item.GetItemInfoInstant), as the bag window's row lights the slots a bag fits (BagsSlots.lua); none else.
+local function Fits()
+	if not row then
+		return
+	end
+	local lit = false
+	if RowShowing() then
+		local kind, id = E.Ask(GetCursorInfo)
+		local api = C_Item
+		local equip = kind == "item" and ns.Finite(id) and Usable(api) and select(4, E.Ask(api.GetItemInfoInstant, id)) or nil
+		lit = equip == "INVTYPE_BAG"
+	end
+	local bought = Bought()
+	for n, slot in pairs(row.slots) do
+		if lit and n <= bought then
+			slot.button:LockHighlight()
+		else
+			slot.button:UnlockHighlight()
+		end
+	end
 end
 
 local function BuyTip(button)
@@ -1530,6 +1584,20 @@ ns.AddEvent(KEY, "PLAYER_INTERACTION_MANAGER_FRAME_HIDE", function(kind)
 end)
 ns.AddEvent(KEY, "PLAYERBANKSLOTS_CHANGED", function()
 	Changed()
+end)
+-- A bank bag lifted or put down (its container, or an inventory slot with no second answer): the row greys it while it is lifted.
+ns.AddEvent(KEY, "ITEM_LOCK_CHANGED", function()
+	if RowShowing() then
+		Run(Redraw)
+	end
+end, function(bag, slot)
+	return ns.Finite(bag) and (bag == BANK_BAGS or (not ns.IsSecret(slot) and slot == nil))
+end)
+-- A bag on the cursor lights every bought bank bag slot, as the bag window's row lights the slots it fits.
+ns.AddEvent(KEY, "CURSOR_CHANGED", function()
+	if row then
+		Run(Fits)
+	end
 end)
 -- Only the character bank: the account bank is never read (design 10.1).
 ns.AddEvent(KEY, "BANK_TABS_CHANGED", function(kind)

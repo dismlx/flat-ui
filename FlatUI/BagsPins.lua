@@ -21,12 +21,18 @@ local _, ns = ...
 -- plain right click (ContainerFrame.lua:1685-1692), which opens, uses or sells it; the hook then leaves the pin as it was and says to drop the
 -- item on a title instead (IsModifiedClick, and hasLoot of C_Container.GetContainerItemInfo). Each live slot button of BagsItems.lua, Flat UI's
 -- own frame from the game's template, gets one post-hook of its OnClick when it is made (HookScript), which runs after the game's secure click and
--- changes nothing of it: it acts only for the right button with Ctrl alone held (IsControlKeyDown, IsShiftKeyDown, IsAltKeyDown), an empty
--- cursor (GetCursorInfo) and Bags in use. The bag and slot are the ones the button was made for. An item in an unpinned slot
+-- changes nothing of it: it acts only for the right button with Ctrl alone held (IsControlKeyDown, IsShiftKeyDown, IsAltKeyDown), or Alt alone
+-- (below), an empty cursor (GetCursorInfo) and Bags in use. The bag and slot are the ones the button was made for. An item in an unpinned slot
 -- (C_Container.GetContainerItemID) gets its slot pinned; a pinned slot, whatever it holds, is unpinned; an empty slot that is not pinned does
 -- nothing. A pin of an item of Junk, or of a grey item, takes it off Errands' sell list and puts a grey one on the keep list (ns.ErrandsJunkMark,
 -- as a drop on another section does, and it says so in chat), so Sell junk never sells a pinned item; unpinning leaves both lists as they are
 -- (/flatui sell, /flatui keep). A toggle is data alone, so it works in a fight too; one line in chat says what changed.
+-- Alt+right-click goes to OnModifiedClick in the game too, as Ctrl+right does, and meets none of its bindings, so the game does nothing with it:
+-- the same hook puts the item on Errands' sell list, as a drop on Junk's title does (B.Categories.File with "junk", which refuses a quest item
+-- and one with no sell price with its own lines; Junk flashes, B.Custom.Took), or, for an item of Junk (B.Categories.IsJunk), takes it off that
+-- list and puts a grey one on the keep list (ns.ErrandsJunkMark). An item pinned to its slot is never sold, so it is refused with a line, and so
+-- is either change in a fight. While Alt is the Auto Loot Key, an item that holds loot was opened by the game, and a line says to drop it on
+-- Junk's title instead (Looted).
 -- Other ways in and out: an item dropped on the title of Keep in place gets the slot it came from pinned (the cursor's slot, from
 -- C_Cursor.GetCursorItem, as BagsCategories reads it); an item from a pinned slot dropped on another section's title unpins that slot once that
 -- section took the drop (BagsLayout.lua reads the slot with Pins.Held before B.Categories.Drop gives the item back, then calls Pins.Left; out
@@ -105,6 +111,10 @@ local SAY = {
 	fight = "pinned items are put back once the fight is over.",
 	loot = "Ctrl is your Auto Loot Key, so Ctrl+right-click opens an item that holds loot, as a right-click does, and its pin is left as it was. "
 		.. "Drop the item on the title of Keep in place to pin its slot, or on another section to unpin it.",
+	lootJunk = "Alt is your Auto Loot Key, so Alt+right-click opens an item that holds loot, as a right-click does. Drop the item on Junk's title "
+		.. "to put it on your sell list instead.",
+	junkPinned = "%s is pinned to its slot, so it is never sold. Unpin it first (Ctrl+right-click).",
+	junkFight = "your sell list changes out of combat only. Try again once the fight is over.",
 }
 
 -- Per live button: the bag and slot it was made for. Per button: its mark { edge, fill, ghost }, or false when the game refused one.
@@ -456,9 +466,60 @@ local function Looted(bag, slot)
 	return okLoot and (ns.IsSecret(loot) or loot == true)
 end
 
--- The post-hook of a live slot's OnClick: Ctrl+right-click with nothing else held and an empty cursor.
+-- Alt+right-click of an item: on Errands' sell list, or off it. An item of Junk (B.Categories.IsJunk, the slot's own test) comes off the sell list
+-- and a grey one goes on the keep list (ns.ErrandsJunkMark with false, which says so); any other goes on the sell list as a drop on Junk's title
+-- puts it there (B.Categories.File with "junk", which refuses a quest item and one that cannot be sold with its own lines, and lays the window out),
+-- and Junk flashes (B.Custom.Took). An item pinned to its slot is never sold, so it is refused with a line. Out of combat only.
+local function Junk(bag, slot)
+	local id = Ask(Container("GetContainerItemID"), bag, slot)
+	if not Whole(id) or id <= 0 then
+		return
+	end
+	if Fighting() then
+		Say(SAY.junkFight)
+		return
+	end
+	local read = B.Data and B.Data.Item
+	local okRecord, record = false, nil
+	if type(read) == "function" then
+		okRecord, record = pcall(read, ns.CharacterKey(), bag, slot)
+	end
+	if not okRecord or type(record) ~= "table" or record.id ~= id then
+		record = { id = id, bag = bag, slot = slot, live = true }
+	end
+	if Pins.Get(bag, slot) == id then
+		Say(SAY.junkPinned:format(Named(id)))
+		return
+	end
+	local categories = B.Categories
+	local isJunk = type(categories) == "table" and type(categories.IsJunk) == "function" and categories.IsJunk(record) == true
+	if isJunk then
+		local mark = ns.ErrandsJunkMark
+		if type(mark) == "function" and mark(id, false) then
+			Request("items")
+			Request("layout")
+		end
+		return
+	end
+	local file = type(categories) == "table" and categories.File or nil
+	if type(file) == "function" and file(id, "junk", type(record.link) == "string" and not ns.IsSecret(record.link) and record.link or nil, bag, slot)
+		== true then
+		local took = B.Custom and B.Custom.Took
+		if type(took) == "function" then
+			B.Part("custom", took, "bags", "junk", id)
+		end
+	end
+end
+
+-- The post-hook of a live slot's OnClick: Ctrl+right-click (a pin) or Alt+right-click (the sell list) with nothing else held and an empty
+-- cursor.
 local function Clicked(button, mouse)
-	if mouse ~= "RightButton" or not Down("IsControlKeyDown") or Down("IsShiftKeyDown") or Down("IsAltKeyDown") then
+	if mouse ~= "RightButton" then
+		return
+	end
+	local ctrl, shift, alt = Down("IsControlKeyDown"), Down("IsShiftKeyDown"), Down("IsAltKeyDown")
+	local pin, junk = ctrl and not shift and not alt, alt and not ctrl and not shift
+	if not pin and not junk then
 		return
 	end
 	local spot = spots[button]
@@ -466,10 +527,14 @@ local function Clicked(button, mouse)
 		return
 	end
 	if Looted(spot.bag, spot.slot) then
-		Say(SAY.loot)
+		Say(pin and SAY.loot or SAY.lootJunk)
 		return
 	end
-	Pins.Toggle(spot.bag, spot.slot)
+	if pin then
+		Pins.Toggle(spot.bag, spot.slot)
+	else
+		Junk(spot.bag, spot.slot)
+	end
 end
 
 local function Click(button, mouse)
