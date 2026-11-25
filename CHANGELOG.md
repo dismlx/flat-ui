@@ -1,6 +1,7 @@
 ## 0.5.36
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **Bags**: the bag window's footer now shows the currencies you tick **Show on Backpack** on the Currency tab of the Character window, next to your gold, in the game's order, each as its count and icon. Before, no currency showed anywhere while Flat UI bags were on, since the game's backpack that shows them stays hidden. Point at one for the game's tooltip of that currency, and click it to open the Currency tab, out of a fight. Another character's bags show its currencies as Flat UI last saw them. When the window is too narrow, the last ones lose their counts first, and the gold and free slots are never covered. New row **Currencies in the footer** (on) in the **Window** section of the **Bags** page.
 
 ## 0.5.35
 
