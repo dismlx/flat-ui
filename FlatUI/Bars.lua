@@ -1688,6 +1688,43 @@ local function Kick(bar, record, state)
 	return ns.InterruptReady(unit)
 end
 
+-- Finish flash: the game's glow as a cast or channel ends, the Flash of the bar (ADD-blended, CastingBarFrame.xml:306-311), which the game gives the
+-- glow of the bar's kind and shows at every finish and stop (Shared/CastingBarFrame.lua:467-472, 585-590). The game sets only its atlas, alpha and
+-- shown state, never its colour, so a tint set here holds through its animations. In the cast colour (the default): desaturated and tinted the
+-- colour of the cover, so the flash matches the flat fill; for a state the game withholds, tinted from the same answer as the cover
+-- (SetVertexColorFromBoolean). Off: black, which adds nothing. The game's: white and not desaturated, as the game draws it, which is also what
+-- it gets back when the cover goes. The texture is called only when the tint changes (record.flashTint), but for a withheld state.
+local function SetFlash(bar, record, tint, r, g, b, shield, otherwise)
+	if tint ~= "withheld" and record.flashTint == tint then
+		return
+	end
+	local flash = BarPart(bar, "Flash")
+	if flash then
+		pcall(flash.SetDesaturated, flash, tint ~= nil and tint ~= "off")
+		if tint == "withheld" then
+			pcall(flash.SetVertexColorFromBoolean, flash, shield, ColourObject(record, "shield"), ColourObject(record, otherwise))
+		elseif tint == nil then
+			pcall(flash.SetVertexColor, flash, 1, 1, 1)
+		else
+			pcall(flash.SetVertexColor, flash, r, g, b)
+		end
+	end
+	record.flashTint = tint
+end
+
+local function PaintFlash(bar, record, state, r, g, b, shield, otherwise)
+	local rule = ns.Get("castbars.flash")
+	if rule == "off" then
+		SetFlash(bar, record, "off", 0, 0, 0)
+	elseif rule ~= "cast" then
+		SetFlash(bar, record, nil)
+	elseif state == "withheld" then
+		SetFlash(bar, record, "withheld", nil, nil, nil, shield, otherwise)
+	else
+		SetFlash(bar, record, ("%s,%s,%s"):format(r, g, b), r, g, b)
+	end
+end
+
 -- Colours the cover for the state of the cast. The texture is called only when the state or its
 -- colour changed.
 local function PaintCast(bar, record)
@@ -1717,6 +1754,7 @@ local function PaintCast(bar, record)
 		record.state, record.hex = state, nil
 		-- The border keeps the Flat UI colour: the colour of the cast is not known.
 		PaintBorder(bar, nil)
+		PaintFlash(bar, record, state, nil, nil, nil, shield, otherwise)
 	else
 		local r, g, b, hex = CastColour(record, state)
 		if record.state ~= state or record.hex ~= hex then
@@ -1728,6 +1766,7 @@ local function PaintCast(bar, record)
 		else
 			PaintBorder(bar, nil)
 		end
+		PaintFlash(bar, record, state, r, g, b)
 	end
 	if not record.shown then
 		cover:Show()
@@ -1816,6 +1855,10 @@ function ns.CastFill(key, bar, on)
 		record.shown, record.state = false, nil
 		PaintBorder(bar, nil)
 		HideMarks(record)
+	end
+	if not on and record.flashTint ~= nil and not forbidden then
+		-- The game's own flash again.
+		SetFlash(bar, record, nil)
 	end
 	if changed then
 		Watch()

@@ -21,6 +21,7 @@ ns.SETUP_STEPS = {
 		{ "castbars.shieldColour", "r", "mock-bars" },
 		{ "castbars.interruptedColour", "r", "mock-bars" },
 		{ "castbars.craftColour", "r", "mock-bars" },
+		{ "castbars.flash", "o", "behaviour", "Chooses the glow as a cast ends on flat cast bars: in the cast colour, the game's own, or none." },
 		{ "castbars.interrupt", "o", "behaviour", "Colours an enemy cast you can interrupt by whether your class interrupt is ready." },
 		{ "castbars.interruptReady", "r", "behaviour", "Colours an enemy cast you can interrupt while your interrupt is ready." },
 		{ "castbars.interruptCooling", "r", "behaviour", "Colours an enemy cast you can interrupt while your interrupt is on cooldown." },

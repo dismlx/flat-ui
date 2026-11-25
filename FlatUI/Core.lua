@@ -44,7 +44,9 @@ local ADDON_NAME, ns = ...
 -- still that name, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
 -- textures of its own on each of the player's two cast bars, each hung from an invisible spacer of its own (CreateTexture and SetPoint, once, out of
 -- combat on a bar the game may protect), and while a channel runs only sets their widths, Show, Hide and SetAlpha; a frame of its own hears the
--- player's channel events while the row is on, and it only reads UnitChannelInfo.
+-- player's channel events while the row is on, and it only reads UnitChannelInfo. Finish flash (Bars.lua, In the cast colour by default) tints the
+-- game's end-of-cast glow (the bar's Flash) on flat cast bars and nameplate cast bars with SetDesaturated and SetVertexColor, and puts it back
+-- white and not desaturated when the flat fill goes.
 -- Cast time on your bars (CastTime.lua, off by default) fades the game's own time on the player's two cast bars and the pet's (CastTimeText,
 -- SetAlpha 0) while it is on and gives it its alpha back when the row goes off; the seconds are font strings of its own inside each bar.
 -- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only (with Flat
