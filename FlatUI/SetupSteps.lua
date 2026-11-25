@@ -444,11 +444,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.dispelIcon", "o", "mock-unit-frame" },
 		{ "unitframes.dispelSound", "o", "behaviour", "Plays a sound as a party or raid member gets a debuff you can dispel, at most once every 2 seconds." },
 		{ "unitframes.dispelFlash", "o", "behaviour", "Blinks the border and its type icon three times as a party or raid member gets a debuff you can dispel." },
-		{ "unitframes.raidFrameMarker", "o", "behaviour", "Shows the raid marker of a member on the game's raid frames." },
-		{ "unitframes.partyFrameMarker", "o", "behaviour", "Shows the raid marker of a member on the game's party frames." },
-		{ "unitframes.raidLeaderIcon", "o", "behaviour", "Shows the leader and the assistants of the group on the game's raid frames." },
-		{ "unitframes.targetBorder", "o", "behaviour", "Chooses the border of your target on the raid frames, and with Own colour an outline on the party frames." },
-		{ "unitframes.targetColour", "r", "behaviour", "Sets the colour of the border of your target." },
+		{ "unitframes.partyFrameMarker", "o", "mock-unit-frame" },
 	} },
 	{ id = "uf-player", area = "Unit frames", title = "Player and target frames", draw = "mock-unit-frame", built = true, rows = {
 		{ "unitframes.playerPicture", "c", "mock-unit-frame" },
@@ -525,6 +521,10 @@ ns.SETUP_STEPS = {
 		{ "unitframes.raidRoleIcon", "c", "mock-raid-cells" },
 		{ "unitframes.raidName", "c", "mock-raid-cells" },
 		{ "unitframes.raidStatusText", "o", "mock-raid-cells" },
+		{ "unitframes.raidFrameMarker", "o", "mock-raid-cells" },
+		{ "unitframes.raidLeaderIcon", "o", "mock-raid-cells" },
+		{ "unitframes.targetBorder", "o", "mock-raid-cells" },
+		{ "unitframes.targetColour", "r", "mock-raid-cells" },
 	} },
 	{ id = "cb-look", area = "Cast bars and timers", title = "Cast bar look", draw = "mock-cast-bar", built = true, rows = {
 		{ "castbars.enabled", "c", "mock-cast-bar" },

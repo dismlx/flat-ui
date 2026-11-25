@@ -56,6 +56,19 @@ local HOTS = {
 		{ id = 408124, colour = { 1, 0.85, 0.2 }, word = "yellow" }, { id = 408120, colour = { 0.2, 0.8, 0.9 }, word = "teal" } },
 	SHAMAN = { { id = 408521, colour = { 0.25, 0.55, 1 }, word = "blue" }, { id = 408514, colour = { 1, 0.55, 0.1 }, word = "orange" } },
 }
+-- The colours of the squares of a class file in the order of their places, for the setup's drawing of Bex (SetupDrawUnits.lua Sample), or nil for a
+-- class with none. A new list each time, so the drawing cannot change HOTS.
+function X.hotColours(class)
+	local list = HOTS[class]
+	if list == nil then
+		return nil
+	end
+	local colours = {}
+	for index, spec in ipairs(list) do
+		colours[index] = { spec.colour[1], spec.colour[2], spec.colour[3] }
+	end
+	return colours
+end
 -- The point of the health bar each Square corner puts the first square on, and the signs of its offsets across and up, which keep the row inside.
 local CORNERS = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } }
 local NOTE_KEPT = "Unit frames: Heal over time squares: the game keeps your auras on a member from addons now, so a square read before stays until one of your buffs there ends, and a new one waits for the end of the fight."
