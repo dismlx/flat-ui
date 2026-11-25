@@ -12,7 +12,8 @@ local _, ns = ...
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
 -- An alpha something else gives a frame after a write is taken as the frame's own, the one put back, and the frame eases again from it.
--- The frames are the game's own, but for Flat UI's bag and bank windows and, while Flat UI's buttons are in use, Flat UI's own bars in the bar rows: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
+-- The frames are the game's own, but for Flat UI's bag and bank windows and, while Flat UI's buttons are in use, Flat UI's own bars in the rows of the
+-- main bar and bars 2 to 8, which then fade Flat UI's bar alone, whatever Leave the game's action bars alone says, and never write the game's parked bar. The game's frames: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
 -- PetActionBar, MicroMenuContainer, BagsBar, PlayerFrame.PlayerFrameContainer and PlayerFrame.PlayerFrameContent (parentKeys of PlayerFrame with no global name: Blizzard_UnitFrame/Mainline/PlayerFrame.xml:23 and :68; the pet frame, totems and cast bar stay as they are),
 -- PetFrame, and under MinimapCluster the Tracking and IndicatorFrame frames, GameTimeFrame, TimeManagerClockButton and AddonCompartmentFrame
 -- (Blizzard_Minimap/Mainline/Minimap.xml:3, 25 and 46, GameTime.xml:3, Camelot/AddonCompartment.xml:3, Blizzard_TimeManager/Mainline/Blizzard_TimeManager.xml:178).
@@ -179,7 +180,8 @@ local ENTRIES = {
 -- The forms of a druid that count as mounted, by GetShapeshiftFormID: travel, aquatic and flight form (Blizzard_FrameXMLBase/Constants.lua:329-333).
 local TRAVEL_FORMS = { [3] = true, [4] = true, [27] = true }
 
--- bar: a game action bar. While Leave the game's action bars alone is on the row does nothing, and a bar this module faded is given its alpha back.
+-- bar: a game action bar. While Leave the game's action bars alone is on the row does nothing, and a bar this module faded is given its alpha back,
+-- but for the main bar and bars 2 to 8 while Flat UI's buttons are in use, which fade Flat UI's own bar either way (OwnRow).
 -- orig: the alpha a frame had before the first write. sent: the last alpha written. value: where the ease is. idle: seconds a row has had nothing to keep it
 -- at full. found: the frames reached by name. clock: seconds since the last step. added: per frame of another addon a row fades (more), that row.
 local weak = { __mode = "k" }
@@ -190,9 +192,20 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
+-- True for a row of the main bar or bars 2 to 8 (those with a more, given below) while Flat UI's buttons are in use: the row fades Flat UI's own
+-- bar, a frame of the addon's, whatever Leave the game's action bars alone says, and never the game's parked bar, which Quick Keybind Mode shows
+-- at full for a time (OwnBars.lua).
+local function OwnRow(entry)
+	if entry.bar ~= true or type(entry.more) ~= "function" or type(ns.OwnOn) ~= "function" then
+		return false
+	end
+	local ok, on = pcall(ns.OwnOn)
+	return ok and on == true
+end
+
 -- True for a row of a game action bar that is left alone now.
 local function Left(entry)
-	return entry.bar == true and ns.HandsOff()
+	return entry.bar == true and ns.HandsOff() and not OwnRow(entry)
 end
 
 -- The frame behind a name, or nil while the game has not made it or it cannot be touched.
@@ -636,7 +649,16 @@ local function Step(dt)
 	end
 	for _, entry in ipairs(ENTRIES) do
 		local frames = entry.cache
-		if not frames and Left(entry) then
+		if OwnRow(entry) then
+			-- Flat UI's bar only, through Added: the game's bar gets back any alpha this module gave it before the switch.
+			frames = {}
+			for _, name in ipairs(entry.frames) do
+				local frame = state.found[name]
+				if frame and state.orig[frame] ~= nil then
+					Release(frame)
+				end
+			end
+		elseif not frames and Left(entry) then
 			frames = {}
 			for _, name in ipairs(entry.frames) do
 				local frame = state.found[name]

@@ -287,6 +287,8 @@ ns.SETUP_STEPS = {
 		{ "actionbars.sweepOwn", "r", "mock-action-row" },
 		{ "actionbars.sweepAlpha", "r", "mock-action-row" },
 		{ "actionbars.cdFont", "o", "mock-action-row" },
+		{ "actionbars.cdColour", "o", "mock-action-row" },
+		{ "actionbars.cdTenths", "r", "mock-action-row" },
 		{ "actionbars.cdGrey", "o", "mock-action-row" },
 		{ "actionbars.readyFlash", "o", "behaviour", "Flashes the icon of one of Flat UI's buttons white for a moment as a cooldown longer than the global cooldown ends." },
 	} },
@@ -1320,6 +1322,7 @@ ns.SETUP_STEPS = {
 		{ "barblock.fadeTime", "r", "behaviour", "Sets how long the block takes to ease down to its faded opacity; it comes back to full at once." },
 		{ "barblock.fadeCombat", "r", "behaviour", "Brings the faded block to full opacity in combat." },
 		{ "barblock.fadeMouse", "r", "behaviour", "Brings the faded block to full opacity under the mouse." },
+		{ "barblock.fadeTarget", "r", "behaviour", "Brings the faded block to full opacity while you have a target." },
 	} },
 	{ id = "ab-places", area = "Bar block", title = "Class, buffs and consumables bars", draw = "mock-block-places", built = true, rows = {
 		{ "blocks.enabled", "c", "mock-block-places" },

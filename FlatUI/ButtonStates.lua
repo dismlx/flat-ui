@@ -1,7 +1,8 @@
 local _, ns = ...
 
 -- Button colours and cooldowns on the main and extra action bars: own colours for not enough power and cannot use, a tint on the icon when out of
--- range, and the cooldown sweep, its numbers and a grey icon on cooldown. Pet and stance buttons keep the game's colours. Nothing here hooks a
+-- range, and the cooldown sweep, its numbers (size, colour and tenths below a number of seconds, each put back at once when set to the game's
+-- again) and a grey icon on cooldown. Pet and stance buttons keep the game's colours. Nothing here hooks a
 -- button method. The game's own handlers run first (ActionButton.lua:415-428 for ACTION_USABLE_CHANGED, UpdateUsable at 721-735); this file
 -- only marks buttons and paints them one frame later. The two hooks are on global functions, ActionButton_UpdateRangeIndicator (1289-1307)
 -- and ActionButton_ApplyCooldown (897-913), and their bodies only record. Every answer is used only when it is plain; a withheld answer leaves
@@ -32,6 +33,7 @@ local LINES = {
 	range = "Tint icon when out of range: the game withholds the range, so those icons keep their colour.",
 	grey = "Grey out icon on cooldown: the game hides cooldowns in fights, so icons stay coloured there.",
 	font = "Cooldown number size: As the game has it applies after /reload.",
+	look = "Cooldown number colour and Tenths below: the game refused the change.",
 	sweep = "Cooldown sweep: the game refused the change.",
 	swipe = "Own sweep opacity: the game refused the change.",
 	size = "Cooldown number size: the game refused the change.",
@@ -49,8 +51,12 @@ local tinted = setmetatable({}, { __mode = "k" })
 local greyed = setmetatable({}, { __mode = "k" })
 local swipeOff = setmetatable({}, { __mode = "k" })
 local swipeSet = setmetatable({}, { __mode = "k" })
+-- numbers[cooldown]: the look this file gave the countdown of a cooldown, { font = the game's font { file, size, flags } read before the first size
+-- change (false when it could not be read), sized = true while a size is set, colour = the colour set, tenths = the tenths set }.
+local numbers = setmetatable({}, { __mode = "k" })
+local WHITE = "ffffffff"
 local dirty = setmetatable({}, { __mode = "k" })
-local all, queued, hooked, fontSet, touched = false, false, false, false, false
+local all, queued, hooked, touched = false, false, false, false
 -- refused.sweep, refused.swipe, refused.size: a call the game refused; the row stops making it.
 local refused = {}
 local watcher
@@ -207,9 +213,107 @@ local function Grey(button, cooldown)
 	end
 end
 
+-- Tenths below, a whole number of seconds from 0 (never).
+local function Tenths()
+	local tenths = Opt("cdTenths")
+	return Plain(tenths, "number") and tenths > 0 and tenths or 0
+end
+
 -- True when a cooldown row is off its default or this file changed a cooldown before, so the game's cooldown call is worth a pass.
 local function CooldownWork()
 	return touched or Opt("sweep") ~= true or Opt("sweepOwn") == true or FONTS[Opt("cdFont")] ~= nil or Opt("cdGrey") == true
+		or Opt("cdColour") ~= WHITE or Tenths() ~= 0
+end
+
+-- The countdown's font string of a cooldown (Cooldown:GetCountdownFontString, FrameAPICooldownDocumentation.lua:78-89), or nil.
+local function Countdown(cooldown)
+	if type(cooldown.GetCountdownFontString) ~= "function" then
+		return nil
+	end
+	local ok, fs = pcall(cooldown.GetCountdownFontString, cooldown)
+	if ok and Plain(fs, "table") then
+		return fs
+	end
+	return nil
+end
+
+-- The game's font of the countdown, read before the first size change (SimpleFont GetFont), as Cooldowns.lua reads it for the cooldown icons.
+local function GameFont(cooldown)
+	local fs = Countdown(cooldown)
+	if fs == nil then
+		return false
+	end
+	local ok, file, size, flags = pcall(fs.GetFont, fs)
+	if ok and Plain(file, "string") and Plain(size, "number") and (flags == nil or Plain(flags, "string")) then
+		return { file, size, flags or "" }
+	end
+	return false
+end
+
+-- Cooldown number size, colour and Tenths below on the countdown of a button's cooldown. The size is set at each pass, as before; As the game has it
+-- puts back the font read before the first change, at once. The colour is written when it changes and again after each font change (a font object
+-- brings its own colour), the tenths when they change (SetCountdownMillisecondsThreshold, FrameAPICooldownDocumentation.lua:379-386); at the
+-- defaults (white, 0) nothing is written on a countdown this file never changed, as Cooldowns.lua does for the cooldown icons (Looks.Numbers).
+local function Numbers(cooldown)
+	local record = numbers[cooldown]
+	local size, fresh = FONTS[Opt("cdFont")], false
+	if size ~= nil and not refused.size then
+		if record == nil then
+			record = {}
+			numbers[cooldown] = record
+		end
+		if record.font == nil then
+			record.font = GameFont(cooldown)
+		end
+		if pcall(cooldown.SetCountdownFont, cooldown, size) then
+			touched, fresh, record.sized = true, true, true
+		else
+			refused.size = true
+			Say("size")
+		end
+	elseif record ~= nil and record.sized then
+		record.sized = nil
+		local saved, fs = record.font, Countdown(cooldown)
+		record.font = nil
+		if saved and fs and pcall(fs.SetFont, fs, saved[1], saved[2], saved[3]) then
+			fresh = true
+		else
+			Say("font")
+		end
+	end
+	if refused.look then
+		return
+	end
+	local colour, tenths = Opt("cdColour"), Tenths()
+	colour = Plain(colour, "string") and colour or WHITE
+	local had = record ~= nil and record.colour or nil
+	if (colour ~= WHITE or had ~= nil) and (had ~= colour or fresh) then
+		local fs = Countdown(cooldown)
+		local r, g, b = ns.Colour(KEY .. ".cdColour")
+		if fs and pcall(fs.SetTextColor, fs, r, g, b, 1) then
+			if record == nil then
+				record = {}
+				numbers[cooldown] = record
+			end
+			record.colour, touched = colour ~= WHITE and colour or nil, true
+		else
+			refused.look = true
+			Say("look")
+		end
+	end
+	local before = record ~= nil and record.tenths or nil
+	if not refused.look and (tenths ~= 0 or before ~= nil) and before ~= tenths then
+		if type(cooldown.SetCountdownMillisecondsThreshold) == "function" and pcall(cooldown.SetCountdownMillisecondsThreshold, cooldown, tenths) then
+			if record == nil then
+				record = {}
+				numbers[cooldown] = record
+			end
+			record.tenths, touched = tenths ~= 0 and tenths or nil, true
+		else
+			refused.look = true
+			Say("look")
+		end
+	end
 end
 
 local function Sweep(button)
@@ -246,16 +350,7 @@ local function Sweep(button)
 			end
 		end
 	end
-	local size = FONTS[Opt("cdFont")]
-	if size ~= nil and not refused.size then
-		if pcall(cooldown.SetCountdownFont, cooldown, size) then
-			fontSet = true
-			touched = true
-		else
-			refused.size = true
-			Say("size")
-		end
-	end
+	Numbers(cooldown)
 	-- The grey of an own button is given by the icon painter, from the state the cooldown has.
 	if not IsOwn(button) then
 		Grey(button, cooldown)
@@ -472,9 +567,8 @@ end
 
 -- The Config rows of the page Colours and cooldowns call this.
 function ns.ButtonStatesChanged(path)
-	if fontSet and path == KEY .. ".cdFont" and Opt("cdFont") == "game" then
-		fontSet = false
-		Say("font")
+	if refused.look and (path == KEY .. ".cdColour" or path == KEY .. ".cdTenths") then
+		refused.look = nil
 	end
 	if refused.sweep and path == KEY .. ".sweep" then
 		refused.sweep = nil

@@ -64,8 +64,9 @@ local G = {
 }
 
 -- holder: the frame everything hangs on, made out of combat. pool: pieces not in use. ups: the procs drawn, in the order they came up.
--- fading: pieces that are fading out. last: what each entry was last drawn with, for the check.
-local holder
+-- fading: pieces that are fading out. last: what each entry was last drawn with, for the check. PlaceHolder is declared here and made below, so
+-- ns.ProcArtMoved, which comes before it, calls the local and not a global.
+local holder, PlaceHolder
 local pool, ups, fading, last = {}, {}, {}, {}
 
 local function Plain(value, kind)
@@ -400,7 +401,7 @@ end
 
 -- The holder: 204.8 square at the middle of its box in /flatui move (the middle of the screen while the movers give no spot), as far above it as
 -- Art height says, and as clear as Art opacity says. A frame of the addon's own, so it may move at any time.
-local function PlaceHolder()
+function PlaceHolder()
 	local x, y
 	if type(ns.MoverSpot) == "function" then
 		x, y = ns.MoverSpot(MOVER, "CENTER")

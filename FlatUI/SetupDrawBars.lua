@@ -516,7 +516,7 @@ function ACTION.build(stage)
 		parts["actionbars." .. key] = main.buttons[5].frame
 	end
 	parts["actionbars.hotkeyText"] = inst.rows[2].buttons[9].frame
-	for _, key in ipairs({ "usableOwn", "manaColour", "unusableColour", "rangeTint", "rangeColour", "sweep", "sweepOwn", "sweepAlpha", "cdFont", "cdGrey" }) do
+	for _, key in ipairs({ "usableOwn", "manaColour", "unusableColour", "rangeTint", "rangeColour", "sweep", "sweepOwn", "sweepAlpha", "cdFont", "cdColour", "cdTenths", "cdGrey" }) do
 		parts["actionbars." .. key] = main.buttons[1].frame
 	end
 	for _, key in ipairs({ "proc", "procColour", "assist", "castAnim", "interruptAnim", "abilityArt" }) do
@@ -592,6 +592,11 @@ function ACTION.draw(stage)
 			b.sweep:SetShown(not (on and ns.Get(AREA .. ".sweep") ~= true))
 			Colour(b.sweep, { 0, 0, 0 }, on and sweepOwn and ns.Get(AREA .. ".sweepAlpha") / 100 or 0.64)
 			b.sweepText:SetFontObject(on and COUNT_FONTS[ns.Get(AREA .. ".cdFont")] or "NumberFontNormal")
+			if on then
+				b.sweepText:SetTextColor(ns.Colour(AREA .. ".cdColour"))
+			else
+				b.sweepText:SetTextColor(1, 1, 1)
+			end
 		end
 		b.icon:SetDesaturated(on and grey and b.cooling == true)
 	end

@@ -9,9 +9,11 @@ local _, ns = ...
 -- Flat UI's own buttons run none of the game's button code, so the cast fill and the interrupt flash are drawn on them here: one frame of this
 -- file's own for each button, a child of its bar over the icon, made out of combat once the buttons are built. The player's casts (UNIT_SPELLCAST_*,
 -- RegisterUnitEvent "player"; the spell ID is used only when plain) light the buttons that hold the spell (C_ActionBar.FindSpellActionButtons, else
--- the spell's name): a flat fill in the cast bar colour rises from the bottom of the icon over the cast time (UnitCastingInfo, plain for the player)
--- and empties over a channel (UnitChannelInfo), fades as the cast lands, and a red flash shows when the cast is interrupted. Only heights, alpha,
--- Show, Hide and animations of these frames are set in a fight.
+-- the spell's name), a macro whose spell it is and an item whose use spell it is (GetActionInfo and C_ActionBar.GetSpell, the game's rule): a flat
+-- fill in the cast bar's Cast colour rises from the bottom of the icon over the cast time (UnitCastingInfo, plain for the player) and, in its Channel
+-- colour, empties over a channel (UnitChannelInfo). A pushback (UNIT_SPELLCAST_DELAYED, UNIT_SPELLCAST_CHANNEL_UPDATE) reads the times again, so the
+-- fill follows the real cast. It fades as the cast lands, and a red flash shows when the cast is interrupted. Only heights, alpha, Show, Hide and
+-- animations of these frames are set in a fight.
 
 local KEY = "actionbars"
 local PATH = KEY .. "."
@@ -212,37 +214,78 @@ local function CastPrepare()
 	end)
 end
 
--- The Flat UI buttons that hold a spell: by the slots the game finds for its ID, else by its name (every rank).
+-- A call of the game's for an action slot, by C_ActionBar first and then the global of the same name, as OwnPaint.lua reads them. Returns the first
+-- three answers, nothing when it fails.
+local function ActionCall(name, ...)
+	local fn = C_ActionBar and C_ActionBar[name]
+	if type(fn) ~= "function" then
+		fn = _G[name]
+	end
+	if type(fn) ~= "function" then
+		return nil
+	end
+	local ok, a, b, c = pcall(fn, ...)
+	if ok then
+		return a, b, c
+	end
+	return nil
+end
+
+-- True when the slot holds a macro whose spell is spellID, or an item whose use spell is (C_ActionBar.GetSpell): the game's rule for its own buttons
+-- (Blizzard_ActionBar/Shared/ActionButton.lua:953-963, MatchesActiveButtonSpellID). A macro that uses an item gives the item's ID, never compared.
+local function UsesSpell(slot, spellID)
+	local kind, id, sub = ActionCall("GetActionInfo", slot)
+	if not Plain(kind, "string") then
+		return false
+	elseif kind == "item" then
+		local getSpell = C_ActionBar and C_ActionBar.GetSpell
+		if type(getSpell) ~= "function" then
+			return false
+		end
+		local ok, spell = pcall(getSpell, slot)
+		id = ok and spell or nil
+	elseif kind ~= "macro" or (Plain(sub, "string") and sub == "item") then
+		return false
+	end
+	return Plain(id, "number") and id == spellID
+end
+
+-- The Flat UI buttons that hold a spell: by the slots the game finds for its ID, else by its name (every rank), and the macros and items whose spell
+-- it is (UsesSpell).
 local function CastButtons(spellID)
-	local list = {}
+	local list, listed, want = {}, {}, nil
 	local find = C_ActionBar and C_ActionBar.FindSpellActionButtons
 	local ok, slots = false, nil
 	if type(find) == "function" then
 		ok, slots = pcall(find, spellID)
 	end
 	if ok and Plain(slots, "table") then
-		local want = {}
+		want = {}
 		for _, slot in ipairs(slots) do
 			if Plain(slot, "number") then
 				want[slot] = true
 			end
 		end
-		for _, button in ipairs(OwnButtons()) do
-			local slot = type(ns.OwnSlot) == "function" and ns.OwnSlot(button)
-			if Plain(slot, "number") and want[slot] then
-				list[#list + 1] = button
+	else
+		local named, name = false, nil
+		if C_Spell and type(C_Spell.GetSpellName) == "function" then
+			named, name = pcall(C_Spell.GetSpellName, spellID)
+		end
+		if named and Plain(name, "string") and type(ns.ButtonsFor) == "function" then
+			for _, button in ipairs(ns.ButtonsFor("spell", name:lower())) do
+				if type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) and not listed[button] then
+					list[#list + 1] = button
+					listed[button] = true
+				end
 			end
 		end
-		return list
 	end
-	local named, name = false, nil
-	if C_Spell and type(C_Spell.GetSpellName) == "function" then
-		named, name = pcall(C_Spell.GetSpellName, spellID)
-	end
-	if named and Plain(name, "string") and type(ns.ButtonsFor) == "function" then
-		for _, button in ipairs(ns.ButtonsFor("spell", name:lower())) do
-			if type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) then
+	for _, button in ipairs(OwnButtons()) do
+		if not listed[button] then
+			local slot = type(ns.OwnSlot) == "function" and ns.OwnSlot(button)
+			if Plain(slot, "number") and ((want and want[slot]) or UsesSpell(slot, spellID)) then
 				list[#list + 1] = button
+				listed[button] = true
 			end
 		end
 	end
@@ -306,7 +349,7 @@ local function CastStart(spellID, channel)
 		return
 	end
 	CAST.lit, CAST.start, CAST.finish, CAST.channel, CAST.spell = CastButtons(spellID), start / 1000, finish / 1000, channel, spellID
-	local r, g, b = ns.Colour("castbars.castColour")
+	local r, g, b = ns.Colour(channel and "castbars.channelColour" or "castbars.castColour")
 	for _, button in ipairs(CAST.lit) do
 		local made = CAST.frames[button]
 		if made then
@@ -330,6 +373,18 @@ local function CastStart(spellID, channel)
 	CastStep()
 end
 
+-- The times of the cast that shows, read again from the game after a pushback, in milliseconds; left as they were when the game gives none.
+local function CastTimes()
+	local read = CAST.channel and UnitChannelInfo or UnitCastingInfo
+	if type(read) ~= "function" then
+		return
+	end
+	local ok, _, _, _, start, finish = pcall(read, "player")
+	if ok and ns.Finite(start) and ns.Finite(finish) and finish > start then
+		CAST.start, CAST.finish = start / 1000, finish / 1000
+	end
+end
+
 local function CastEvent(event, unit, _, spellID)
 	if unit ~= "player" or not Plain(spellID, "number") then
 		return
@@ -340,7 +395,12 @@ local function CastEvent(event, unit, _, spellID)
 	end
 	-- An event of another spell (an instant cast meanwhile, a spell the game refused) leaves the fill alone.
 	local mine = CAST.spell ~= nil and spellID == CAST.spell
-	if event == "UNIT_SPELLCAST_SUCCEEDED" then
+	if event == "UNIT_SPELLCAST_DELAYED" or event == "UNIT_SPELLCAST_CHANNEL_UPDATE" then
+		-- Pushback: a cast set back, or a channel cut short. The times are read again; the next frame of CastStep draws from them.
+		if mine and not CAST.landed then
+			CastTimes()
+		end
+	elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
 		-- A channel's SUCCEEDED comes as it starts; a cast lands.
 		if mine and not CAST.channel and not CAST.landed then
 			CAST.landed = GetTime()
@@ -501,7 +561,7 @@ end)
 local casts = CreateFrame("Frame")
 ns.Own[casts] = true
 for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED",
-	"UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP" }) do
+	"UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_DELAYED", "UNIT_SPELLCAST_CHANNEL_UPDATE" }) do
 	pcall(casts.RegisterUnitEvent, casts, event, "player")
 end
 casts:SetScript("OnEvent", function(_, event, ...)

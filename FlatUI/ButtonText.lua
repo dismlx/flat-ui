@@ -7,17 +7,27 @@ local _, ns = ...
 -- the answer and asks for a pass one frame later, the way EllesmereUI keeps its hooks small (EllesmereUIActionBars/EllesmereUIActionBars.lua:1069-1090).
 -- The game re-anchors the hotkey in UpdateHotkeys (ActionButton.lua:480-519), which its OnEvent runs on UPDATE_BINDINGS (ActionButton.lua:994-995),
 -- so the position is set again a frame after that event. A button whose hotkey text is the range dot (ActionButton.lua:503, 1289-1300) is left alone.
+-- At a Hotkey position other than the top right the hotkey is also justified to that side or the middle (SetJustifyH), since the game's box is
+-- right-justified and nearly as wide as the button. A Hotkey size or Macro name size above 100% gives that text a box as tall as it is
+-- (SetHeight; the game's is 10, too short for a larger font, which then draws nothing), set again with the position and put back at 100%.
 
 local KEY = "actionbars"
 local POINTS = {
 	topright = "TOPRIGHT", topleft = "TOPLEFT", top = "TOP", center = "CENTER", bottomleft = "BOTTOMLEFT", bottom = "BOTTOM", bottomright = "BOTTOMRIGHT",
 }
+-- How the hotkey lines up in its box at each spot. The box is the game's, about the width of the button (ActionButton.lua:515; 32 on Flat UI's
+-- buttons, ActionButtonTemplate.xml:85-90) and right-justified, so without this a short key such as "1" stays near the right.
+local JUSTIFY = { topleft = "LEFT", bottomleft = "LEFT", top = "CENTER", center = "CENTER", bottom = "CENTER", topright = "RIGHT", bottomright = "RIGHT" }
+-- The height the game gives the hotkey and the macro name (ActionButton.lua:515, ActionButtonTemplate.xml:43-47 and 85-90): the text of a size
+-- above 100% does not fit in it and is not drawn, so those get a box as tall as their text.
+local TEXT_HEIGHT = 10
 local LINE_RANGE = "Hotkey colour: the game withholds the range, so those hotkeys keep the game's colour."
 local LINE_WAIT = "Hotkey position: waits for the end of the fight."
 
 local weak = { __mode = "k" }
 -- Per button: { hotFaded, nameFaded = true while faded here, coloured = true while the own colour is set, placed = true while the position is
--- set here, gx, gy = the game's offsets of the hotkey }
+-- set here, gx, gy = the game's offsets of the hotkey, hotHeight, nameHeight = the height the hotkey and the name had while a taller one is set
+-- here }
 local records = setmetatable({}, weak)
 -- The range answers the game passed: out[button] is true while the button is out of range, false in range. withheld[button] marks an answer the
 -- game withheld; that button keeps the game's colour.
@@ -305,6 +315,7 @@ local function Place(record, button, hotkey, custom, o)
 		end
 		hotkey:ClearAllPoints()
 		hotkey:SetPoint(point, button, point, o.hotkeyX, o.hotkeyY)
+		pcall(hotkey.SetJustifyH, hotkey, JUSTIFY[o.hotkeyPoint] or "RIGHT")
 		record.placed = true
 	elseif record.placed then
 		hotkey:ClearAllPoints()
@@ -316,8 +327,29 @@ local function Place(record, button, hotkey, custom, o)
 		else
 			hotkey:SetPoint("TOPRIGHT", button, "TOPRIGHT", record.gx or 0, record.gy or 0)
 		end
+		pcall(hotkey.SetJustifyH, hotkey, "RIGHT")
 		record.placed = nil
 	end
+end
+
+-- A size above 100%: the hotkey or the macro name gets a box as tall as its text, and the height it had is kept (record[key]); at 100% that height
+-- goes back. The game sets the hotkey's height again in UpdateHotkeys (UPDATE_BINDINGS), so this runs with the position. Out of combat only.
+local function Tall(record, key, fontString, percent)
+	if Plain(percent) and type(percent) == "number" and percent > 100 then
+		if record[key] == nil then
+			local ok, height = pcall(fontString.GetHeight, fontString)
+			record[key] = ok and ns.Finite(height) and height > 0 and height or TEXT_HEIGHT
+		end
+		pcall(fontString.SetHeight, fontString, math.ceil(TEXT_HEIGHT * percent / 100) + 2)
+	elseif record[key] ~= nil then
+		pcall(fontString.SetHeight, fontString, record[key])
+		record[key] = nil
+	end
+end
+
+-- True for a text that shows here at a size above 100%.
+local function Big(on, percent)
+	return on and Plain(percent) and type(percent) == "number" and percent > 100
 end
 
 local Later, Ranged, Signature, PageChanged
@@ -379,12 +411,13 @@ local function Pass()
 					end
 					Style(hotkey, hotOn, o.hotkeySize, flags)
 					Colour(record, button, hotkey, hotOn, o)
-					local put = styled and custom
-					if placing and (put or record.placed) then
+					local put, tall = styled and custom, Big(hotOn, o.hotkeySize)
+					if placing and (put or record.placed or tall or record.hotHeight ~= nil) then
 						if fight then
 							waits = true
 						else
 							Place(record, button, hotkey, put, o)
+							Tall(record, "hotHeight", hotkey, tall and o.hotkeySize or 100)
 						end
 					end
 				end
@@ -392,6 +425,14 @@ local function Pass()
 			if name ~= nil then
 				Fade(record, "nameFaded", name, not nameShown)
 				Style(name, nameOn, o.nameSize, flags)
+				local tall = Big(nameOn, o.nameSize)
+				if placing and (tall or record.nameHeight ~= nil) then
+					if fight then
+						waits = true
+					else
+						Tall(record, "nameHeight", name, tall and o.nameSize or 100)
+					end
+				end
 			end
 			if count ~= nil then
 				Style(count, styled, o.countSize, flags)
@@ -533,7 +574,8 @@ end
 
 -- Config changed callback of every row of the Button text page.
 function ns.ButtonTextChanged(path)
-	if type(path) == "string" and path:find("^" .. KEY .. "%.hotkey[PXY]") then
+	if type(path) == "string" and (path:find("^" .. KEY .. "%.hotkey[PXY]") or path == KEY .. ".hotkeySize" or path == KEY .. ".nameSize"
+		or path == KEY .. ".hotkeyShow" or path == KEY .. ".nameShow") then
 		state.place = true
 	end
 	state.dirty = true
