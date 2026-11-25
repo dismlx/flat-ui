@@ -2477,6 +2477,8 @@ ns.PAGES = {
 		{ section = "Item comparison" },
 		{ key = "compareShift", kind = "bool", default = true, label = "Compare items only while holding Shift",
 			tip = "The items you wear show beside the tooltip of an item only while you hold Shift. Sets a game setting that the game's options do not show. Turned off, the game's own value is back." },
+		{ key = "compareHint", kind = "bool", default = true, label = "Hint while Shift is up", needs = "compareShift",
+			tip = "An item you could wear ends its tooltip with a dim line, Shift: compare with what you wear, and your spells while the gear lines wait for the comparison. It goes once you hold Shift; not on the items you wear." },
 	},
 	-- SpellLines.lua (part of Chat and tooltips): spell power, attack power and threat in spell tooltips. The gear comparison has the page after it.
 	{

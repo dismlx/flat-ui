@@ -929,6 +929,7 @@ ns.SETUP_STEPS = {
 		{ "chat.targetLine", "c", "behaviour", "Adds a line naming what a unit targets to its tooltip." },
 		{ "chat.targetedBy", "o", "behaviour", "In a group, adds a line naming the members who target the unit to its tooltip." },
 		{ "chat.compareShift", "c", "behaviour", "Shows the items you wear beside an item's tooltip only while Shift is held." },
+		{ "chat.compareHint", "o", "behaviour", "Adds a dim line to an item's tooltip saying Shift compares it with what you wear, while Shift is up." },
 	} },
 	-- The spell and gear lines go into tooltips of spells and items the drawing does not show, so every row describes itself.
 	{ id = "tips-spells", area = "Character and gear", title = "Spell tooltips and gear comparison", draw = "mock-tooltip", built = true, rows = {

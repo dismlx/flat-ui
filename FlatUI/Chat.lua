@@ -5,7 +5,7 @@ local _, ns = ...
 -- is followed on a global function of the game through ns.FollowGlobal (Core.lua's one hooksecurefunc for each global), with HookScript on
 -- GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an item level, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
+-- from the lines the kind of a unit, an item level, the hint that Shift compares, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
 -- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
 -- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only. With Arrow keys
 -- without Alt (on by default) each input box gets the widget method SetAltArrowKeyMode(false), so the arrow keys edit the text (Arrows below).
@@ -1245,6 +1245,55 @@ local function FadeWatch()
 	fadeDriver:SetShown(IsShown(tooltip))
 end
 
+-- Hint while Shift is up (chat.compareHint, 0.5.36): while Compare items only while holding Shift stands (ns.ItemCompareHeld, ItemCompare.lua), the
+-- tooltip of an item the player could wear (C_Item.IsEquippableItem) on GameTooltip or ItemRefTooltip ends its game lines with one dim line saying
+-- that Shift compares it with what the player wears, and on GameTooltip, while the gear lines wait for the game's comparison (chat.gear with
+-- chat.gearWhen at With the game's comparison), with the spells too. Not while Shift is down, not on an item the player wears (its data.guid in a
+-- slot, C_Item.GetItemLocation, as on the Character window, which compares nothing), and not on the comparison tooltips. Once for each build, as
+-- ItemLevelLine: the bag slots build their tooltip again every 0.2 s, so there the hint goes as Shift goes down and the comparison comes.
+X.hints = setmetatable({}, { __mode = "k" })
+local HINT, HINT_SPELLS, HINT_COLOUR = "Shift: compare with what you wear", " and your spells", { 0.66, 0.68, 0.62 }
+
+local function CompareHint(tooltip, data)
+	if not ns.Enabled(KEY) or Opt("compareHint") ~= true or Opt("compareShift") ~= true or not IsData(data, "Item") or not Usable(tooltip)
+		or ns.Forbidden(tooltip) then
+		return
+	end
+	local game = rawequal(tooltip, Global("GameTooltip"))
+	if not (game or rawequal(tooltip, Global("ItemRefTooltip"))) or type(ns.ItemCompareHeld) ~= "function" or ns.ItemCompareHeld() ~= true
+		or KeyDown("shift") then
+		return
+	end
+	local items, id = C_Item, data.id
+	if not Usable(items) or not IsNumber(id) or type(items.IsEquippableItem) ~= "function" then
+		return
+	end
+	local okEquip, equippable = pcall(items.IsEquippableItem, id)
+	if not okEquip or ns.IsSecret(equippable) or equippable ~= true then
+		return
+	end
+	local guid = data.guid
+	if not ns.IsSecret(guid) and type(guid) == "string" and guid ~= "" and type(items.GetItemLocation) == "function" then
+		local okWhere, where = pcall(items.GetItemLocation, guid)
+		local slot = okWhere and Usable(where) and where.equipmentSlotIndex or nil
+		if IsNumber(slot) then
+			return
+		end
+	end
+	local ok, shown = pcall(tooltip.NumLines, tooltip)
+	local record = X.hints[tooltip]
+	if not ok or not IsNumber(shown) or (record and record.data == data and shown >= record.lines) then
+		return
+	end
+	local text = HINT
+	if game and Opt("gear") == true and Opt("gearWhen") == "compare" then
+		text = text .. HINT_SPELLS
+	end
+	if pcall(tooltip.AddLine, tooltip, text, HINT_COLOUR[1], HINT_COLOUR[2], HINT_COLOUR[3]) then
+		X.hints[tooltip] = { data = data, lines = shown + 1 }
+	end
+end
+
 local function FollowData()
 	if postCall or type(TooltipDataProcessor) ~= "table" or type(TooltipDataProcessor.AddTooltipPostCall) ~= "function" or TooltipDataProcessor.AllTypes == nil then
 		return
@@ -1256,6 +1305,8 @@ local function FollowData()
 			ns.Each(KEY, ns.ChatTipLines, tooltip, data)
 			-- The item level of a weapon or a piece of armour, right under the game's own lines (ItemLevelLine).
 			ns.Each(KEY, ItemLevelLine, tooltip, data)
+			-- The dim line that Shift compares, while Flat UI holds the comparison for Shift (CompareHint).
+			ns.Each(KEY, CompareHint, tooltip, data)
 			-- SpellLines.lua and GearLines.lua: the spell and the gear lines, after the game's own and before the ID and count lines (Extras), so that
 			-- the ID line stays after them. Each runs its work inside ns.EachPart, so a fault there stops that part alone.
 			if type(ns.SpellTipLines) == "function" then

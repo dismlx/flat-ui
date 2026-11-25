@@ -94,6 +94,12 @@ local function Apply()
 	end
 end
 
+-- True while Flat UI's write stands: the row and Chat and tooltips on, and the variable at 0, so the game compares only while Shift is held. Chat.lua
+-- asks it for the hint on an item's tooltip while Shift is up (chat.compareHint, 0.5.36).
+function ns.ItemCompareHeld()
+	return Wanted() and Text() == OFF
+end
+
 -- Chat.lua calls this at the start of each refresh, and Core.lua at every login, whatever the switch of Chat and tooltips: the variable is the
 -- account's, so a character whose profile has the row or the module off gets the game's value back. Nothing is written in combat.
 function ns.ItemCompareSync()
