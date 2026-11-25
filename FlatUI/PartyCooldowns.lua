@@ -18,7 +18,8 @@ local _, ns = ...
 -- while the mouse stays, so the time counts down and turns to Ready (P.TipTick); the icon takes the mouse's
 -- motion only, never a click, so clicks go through to the party frame below (SetMouseClickEnabled false, as Your buffs does). The border of an
 -- icon takes the colour of its ability's kind (Border colour by kind), and with Flash when ready a white flash plays as its sweep ends
--- (IconRow.lua's flash); with Show on Only while on cooldown the row waits that half second before the ready icon goes. The helpers are in
+-- (IconRow.lua's flash); with Show on Only while on cooldown the row waits that half second before the ready icon goes. Sound (None by
+-- default, the eight sounds of Enemy cooldowns) plays as an icon's sweep ends, through ns.PlayKit, so at most once a second. The helpers are in
 -- one table, P.
 
 local KEY = "partycd"
@@ -34,6 +35,8 @@ local READY = { 0.4, 0.9, 0.4 }
 local DIM = { 0.66, 0.68, 0.62 }
 -- The opacity of the row of a member who is dead or offline.
 local GONE = 0.35
+-- The places of the Sound choices in ns.SOUNDS (IconRow.lua), as Enemy cooldowns has them.
+local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 -- How long the flash of Flash when ready plays (IconRow.lua: FLASH), which a row waits before a ready icon leaves it.
 local FLASH = 0.5
 -- The kinds each switch shows (CooldownData.lua: ns.COOLDOWN_KINDS), in the order of the rows.
@@ -56,8 +59,9 @@ local HELP = {
 local IsSecret = ns.IsSecret
 local T = ns.Tracking
 local TM = ns.TestMode
--- The sample party of test mode (TestMode.lua) for a player in no group, by name and class: a paladin, a priest, a warlock and a rogue.
-local SAMPLE_PARTY = { { "Mara", "PALADIN" }, { "Eli", "PRIEST" }, { "Ivo", "WARLOCK" }, { "Fay", "ROGUE" } }
+-- The sample party of test mode (TestMode.lua) for a player in no group, by name and class: a paladin, a priest, a warlock and a rogue. The
+-- warlock is shown dead, so the fade of a dead member's row can be seen.
+local SAMPLE_PARTY = { { "Mara", "PALADIN" }, { "Eli", "PRIEST" }, { "Ivo", "WARLOCK", "Dead" }, { "Fay", "ROGUE" } }
 local P = { assigned = {}, pool = {}, known = {}, level = {}, never = {}, tex = {}, last = {}, frames = {}, raidUnits = {} }
 
 local function Own(object)
@@ -469,6 +473,13 @@ function P.Sweep(a)
 	return nil
 end
 
+-- The sound of Sound (ns.SOUNDS, IconRow.lua) that plays as an icon's sweep ends, or nil for None. IconRow.lua plays it through ns.PlayKit, at most
+-- once a second however many icons end together.
+function P.Kit()
+	local sound = ns.SOUNDS[KITS[Opt("sound")] or 0]
+	return sound and sound[1] or nil
+end
+
 -- Puts what a slot shows on its icon, when it is not what the icon already shows.
 function P.Draw(row, slot, item)
 	local icon = row.icons[slot]
@@ -479,8 +490,8 @@ function P.Draw(row, slot, item)
 		if row.own and item.start then
 			seconds = P.Sweep(item.a) or seconds
 		end
-		key = ("%s:%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), type(seconds) == "table" and "object" or "number", tostring(Opt("seconds")),
-			Opt("numbersFont"), tostring(Opt("iconBorder")), tostring(Opt("kindBorder")), tostring(Opt("flash")))
+		key = ("%s:%s:%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), type(seconds) == "table" and "object" or "number", tostring(Opt("seconds")),
+			Opt("numbersFont"), tostring(Opt("iconBorder")), tostring(Opt("kindBorder")), tostring(Opt("flash")), tostring(Opt("sound")))
 	end
 	if row.drawn[slot] == key then
 		return
@@ -496,8 +507,9 @@ function P.Draw(row, slot, item)
 	if not used then
 		pcall(icon.cooldown.Clear, icon.cooldown)
 	end
+	local kit = used and P.Kit() or nil
 	ns.IconSet(icon, P.Texture(item.a), item.start, seconds, { kind = Opt("kindBorder") ~= false and item.a.kind or nil, numbers = Opt("seconds") == true,
-		font = Opt("numbersFont"), border = Opt("iconBorder"), flash = Opt("flash") == true and used })
+		font = Opt("numbersFont"), border = Opt("iconBorder"), flash = Opt("flash") == true and used, sound = kit, key = KEY })
 	local level = used and DARK or 1
 	icon.texture:SetDesaturated(used)
 	icon.texture:SetVertexColor(level, level, level)
@@ -519,11 +531,12 @@ function P.Fade(row, word)
 end
 
 -- Offline or Dead for the member of a row (Offline first, as Healer mana says it), from plain answers; false while he is up, and nil while the
--- game withholds whether he is dead, which leaves the row as it was. A sample has no member, and is up.
+-- game withholds whether he is dead, which leaves the row as it was. A sample row has no member: it says what the sample party gives it
+-- (row.sampleGone, P.SyncSample), else up. A row of a real member that holds samples keeps his real state.
 function P.Gone(row)
 	local unit = row.unit
-	if not unit or row.testing then
-		return false
+	if not unit then
+		return row.testing and row.sampleGone or false
 	end
 	if T.Ask(UnitIsConnected, unit) == false then
 		return "Offline"
@@ -610,7 +623,7 @@ end
 
 function P.Release(row)
 	P.assigned[row.owner] = nil
-	row.owner, row.unit, row.frame, row.side, row.testing, row.stackAt, row.flashEnd = nil, nil, nil, nil, nil, nil, nil
+	row.owner, row.unit, row.frame, row.side, row.testing, row.stackAt, row.flashEnd, row.sampleGone = nil, nil, nil, nil, nil, nil, nil, nil
 	for slot, icon in ipairs(row.icons) do
 		P.Untip(icon)
 		ns.IconClear(icon)
@@ -1683,11 +1696,12 @@ end
 -- Test mode (TestMode.lua) -------------------------------------------------------------------------------------------------------------------
 -- While it is on, out of combat, with the page on: in a party or a raid group each row the module shows holds samples in place of its timers, and
 -- with no group the raid group stack holds sample rows, the player's own (with Your own row on) and, unless the bar's Group is Solo, one for each
--- member of the sample party, each with its name. A row holds up to three icons: with Show on Always the first ready and bright, and the others
--- used, dark, with a sweep that the ticker of test mode starts again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop), with no flash or sound
--- as the rows have none, in the pictures of the row's own abilities (by class, P.Candidates) or of the samples. Each Sync draws them again with
--- the page's look and size, so a change shows at once; Off, a fight and the page going off give the rows their own icons back or take the sample
--- rows away.
+-- member of the sample party, each with its name, Ivo's faded as a dead member's with Dead in his tooltips. A row holds up to three icons: with
+-- Show on Always the first ready and bright, and the others used, dark, with a sweep that the ticker of test mode starts again (IconRow.lua:
+-- ns.IconSampleHeld, ns.IconSampleLoop), with the flash of Flash when ready and, for the first end since test mode came on, the sound of Sound,
+-- in the pictures of the row's own abilities (by class, P.Candidates) or of the samples. Each Sync draws them again with the page's look and
+-- size, so a change shows at once; Off, a fight and the page going off give the rows their own icons back or take the sample rows away. A row
+-- of a real member that holds samples keeps his real state, faded while he is dead or offline.
 P.HELD = {}
 
 function P.Holding()
@@ -1714,7 +1728,8 @@ function P.Hold(row)
 				pcall(icon.cooldown.Clear, icon.cooldown)
 				ns.IconSet(icon, texture, nil, nil, look)
 			else
-				look.kind, look.flash, look.sound = look.kind or (Opt("kindBorder") ~= false or nil), Opt("flash") == true, false
+				-- The sound of Sound, or none for None: the first sample's end since test mode came on plays it once (TM.Sound).
+				look.kind, look.flash, look.sound = look.kind or (Opt("kindBorder") ~= false or nil), Opt("flash") == true, P.Kit() or false
 				ns.IconSampleHeld(icon, slot, KEY, look, texture)
 			end
 			local level = used and DARK or 1
@@ -1764,7 +1779,7 @@ function P.SyncSample()
 	end
 	if TM.Group() ~= "solo" then
 		for index, member in ipairs(SAMPLE_PARTY) do
-			list[#list + 1] = { owner = "test:" .. index, class = member[2], name = member[1] }
+			list[#list + 1] = { owner = "test:" .. index, class = member[2], name = member[1], gone = member[3] }
 		end
 	end
 	local wanted, position = {}, 0
@@ -1774,10 +1789,12 @@ function P.SyncSample()
 			position = position + 1
 			wanted[member.owner] = true
 			row.unit, row.class, row.own, row.level, row.race, row.raceFile = nil, member.class, nil, nil, nil, nil
+			row.sampleGone = member.gone
 			P.Fit(row, size, count, "right")
 			P.Stacked(row, stack, position, size)
 			P.Label(row, stack, member.name, member.class)
 			P.Hold(row)
+			P.Fade(row, member.gone)
 			row.holder:Show()
 		end
 	end

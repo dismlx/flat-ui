@@ -82,9 +82,9 @@ local _, ns = ...
 -- keys on the buttons and the tooltip); no OnUpdate, and a ticker only while the icons fade (Fade until you point at it). Pointing at a button writes its name, what a click and a Shift-click do,
 -- its key and the game's own key for that ping in GameTooltip (SetOwner on the icon, SetText, AddLine, Show, and Hide when the mouse leaves), as Group tools does.
 -- Fade until you point at it (off by default): the icons stay at 30% until the mouse comes over any button, back to full at once, and fade again
--- over a quarter of a second a second after the mouse leaves (ns.IconFader, IconRow.lua), as Group tools has it; they stay full while a ping waits
--- and while test mode is on. Only the opacity of the icons changes, frames of Flat UI's own and no secure button, so in a fight too, and the faint
--- buttons take their clicks and keys as ever.
+-- over a quarter of a second a second after the mouse leaves (ns.IconFader, IconRow.lua), as Group tools has it; they stay full while a ping
+-- waits. Test mode holds nothing, so the fade can be tried there. Only the opacity of the icons changes, frames of Flat UI's own and no secure
+-- button, so in a fight too, and the faint buttons take their clicks and keys as ever.
 
 local KEY = "pingbar"
 local MOVER = "FlatUIPingBar"
@@ -731,9 +731,6 @@ function P.Layout(list)
 			frame:SetSize(size, size)
 			frame:Show()
 		end
-		if entry.keyText then
-			entry.keyText:SetTextHeight(math.max(7, math.floor(size / 3 + 0.5)))
-		end
 		width, height = math.max(width, x + size), math.max(height, y + size)
 	end
 	for _, entry in ipairs(P.buttons) do
@@ -1028,13 +1025,18 @@ local function ShortKey(binding)
 	return text
 end
 
--- Keys on the buttons: the key of each button's key binding in its top right corner, nothing with the row off or no key bound. Only FontStrings
+-- Keys on the buttons: the key of each button's key binding in its top right corner, a third of Button size high, nothing with the row off or no
+-- key bound. The height is given on every call, before and apart from the layout, which P.Layout keeps while nothing of it changed: Fonts, which
+-- starts after this module at login (MODULE_ORDER in Core.lua), may set the font object of the label again (Fonts.lua), and a string can take
+-- its font object's height back, as Group tools notes for its countdown number. P.Lay, P.Refresh and UPDATE_BINDINGS run this. Only FontStrings
 -- of the icons change, so this runs in a fight too.
 function P.KeyLabels()
 	local on = Opt("keys") ~= false
+	local high = math.max(7, math.floor(Number("size", BOX_H) / 3 + 0.5))
 	for _, entry in ipairs(P.buttons) do
 		local text = entry.keyText
 		if text then
+			text:SetTextHeight(high)
 			local label = on and ShortKey("CLICK FlatUIPing" .. entry.kind.id .. ":LeftButton") or nil
 			text:SetText(label or "")
 			text:SetShown(label ~= nil)
@@ -1198,10 +1200,10 @@ end
 
 -- Fade until you point at it -------------------------------------------------------------------------------------------------------------
 
--- True while the icons stay full: the row off, test mode on, the mouse over a button or a ping that waits.
+-- True while the icons stay full: the row off, the mouse over a button or a ping that waits. Test mode holds nothing, so Fade until you point at
+-- it can be tried there, where a player in no group sees the bar.
 function P.Held()
-	local mode = ns.TestMode
-	if Opt("fade") ~= true or (mode ~= nil and mode.IsOn() == true) then
+	if Opt("fade") ~= true then
 		return true
 	end
 	for _, entry in ipairs(P.buttons) do

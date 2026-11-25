@@ -5,8 +5,9 @@ local _, ns = ...
 -- colour each marker's border takes the colour the game's own menu gives it (UnitPopupSharedButtonMixins.lua:2653-2752, GetColor of
 -- RaidTarget1 to 8). A module of its own, on by default, whose page is in the Group group. The row shows in a group, or as Show says, and /flatui move places it (FlatUIGroupTools in
 -- Movers.lua: the top left corner of the row is the top left corner of the box). While test mode is on (TestMode.lua, out of combat only) Show
--- reads as Always, the tick shows a sample tally of 4/5 with a sample Eli not ready, and the pull button counts down from Countdown length in
--- the warm colour, again and again (G.SampleOn); a real ready check or countdown takes their place. No frame or setting of the game is changed.
+-- reads as Always, the tick shows a sample tally of 4/5 with a sample Eli not ready, the pull button counts down from Countdown length in
+-- the warm colour, again and again, the Skull is lit as your target's marker while the target wears none, and the role poll's tooltip lists a
+-- sample party's roles (G.SampleOn); a real ready check, countdown, marker or roles take their place. No frame or setting of the game is changed.
 --
 -- What the game allows. SetRaidTarget, RemoveRaidTargets, C_PartyInfo.DoReadyCheck and C_PartyInfo.DoCountdown have restrictions
 -- (HasRestrictions: RaidMarkersDocumentation.lua:108-124, PartyInfoDocumentation.lua:156-174), so they run only in the secure click of a button
@@ -46,10 +47,16 @@ local _, ns = ...
 -- GameTooltip (SetOwner on the icon, SetText, AddLine, Show, and Hide when the mouse leaves), as the data panels do; a marker's and the clear's
 -- name the game's own key for them where one is bound (RAIDTARGET1 to 8 and RAIDTARGETNONE, Blizzard_FrameXML/Bindings_Standard.xml:1573-1597),
 -- written again on UPDATE_BINDINGS.
+-- The marker your target wears (GetRaidTargetIndex, whose answer may be secret, RaidMarkersDocumentation.lua:55-69: plain answers only, so a
+-- withheld index lights nothing) is lit, its colour at 35% behind it and on its border, as the Ping bar lights a waiting ping, and its tooltip
+-- says a left-click takes it off. It follows PLAYER_TARGET_CHANGED and RAID_TARGET_UPDATE (EncounterInfoDocumentation.lua:86), in a fight too,
+-- as only the outline of an icon of Flat UI's own changes. The role poll's tooltip lists who has which role (UnitGroupRolesAssigned and UnitName,
+-- plain answers only): a line for each role in a party, the counts in a raid, and in the warm colour who has none, written again on
+-- PLAYER_ROLES_ASSIGNED (PartyInfoDocumentation.lua:829) while the mouse is over it.
 -- Fade until you point at it (off by default): the icons stay at 30% until the mouse comes over any button, back to full at once, and fade again
--- over a quarter of a second a second after the mouse leaves (ns.IconFader, IconRow.lua). They stay full during a ready check and its tally, a
--- countdown and while test mode is on. Only the opacity of the icons changes, frames of Flat UI's own and no secure button, so in a fight too, and
--- the faint buttons take their clicks and keys as ever.
+-- over a quarter of a second a second after the mouse leaves (ns.IconFader, IconRow.lua). They stay full during a real ready check and its tally
+-- and a real countdown; the samples of test mode hold nothing, so the fade can be tried there. Only the opacity of the icons changes, frames of
+-- Flat UI's own and no secure button, so in a fight too, and the faint buttons take their clicks and keys as ever.
 -- Adapted from the Mark Bar of the data panels and the Group Tools panel of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoL/Core/Streams/Stream_MarkBarCommon.lua:4-16, Stream_MarkBarTarget.lua:20-40, Stream_MarkBarUtility.lua:51-75,
 -- EnhanceQoLDungeonRaid/GroupTools.lua:29-31, 272-289, 472): its secure buttons for the markers, the ready check and the countdown and the
@@ -95,6 +102,16 @@ local COLOURS = {
 }
 -- The sample ready check of test mode.
 local SAMPLE_READY, SAMPLE_TOTAL, SAMPLE_NAME = 4, 5, "Eli"
+-- The marker your target wears is lit: its colour behind it at this opacity, as the Ping bar lights a waiting ping (PingBar.lua ARMED_ALPHA). The
+-- sample of test mode is the Skull.
+local LIT_ALPHA, SAMPLE_MARK = 0.35, 8
+local LIT = "On your target now: a left-click takes it off."
+local LIT_SAMPLE = "Sample: lit as it is when your target wears it."
+-- The roles of the role poll's tooltip in their order, the word of a party's line and of a raid's count, the most names of those with no role in
+-- a raid, and the sample party of test mode (the names of PartyCooldowns.lua's sample party, and a Kai who picked no role).
+local ROLE_WORDS = { { "TANK", "Tank", "Tanks" }, { "HEALER", "Healer", "Healers" }, { "DAMAGER", "Damage", "Damage" } }
+local ROLE_NAMES = 8
+local SAMPLE_ROLES = { "Sample roles:", "Tank: Mara", "Healer: Eli", "Damage: Ivo, Fay", "No role: Kai" }
 local NO_TARGET = "You have no target."
 local NO_MARK = "Your target cannot be marked."
 local RAID_MARK = "In a raid only the leader and assistants can mark."
@@ -195,6 +212,12 @@ end
 local function Over(frame)
 	local ok, over = pcall(frame.IsMouseOver, frame)
 	return not ok or IsSecret(over) or over ~= false
+end
+
+-- True while test mode is on (TestMode.lua).
+local function Testing()
+	local mode = ns.TestMode
+	return mode ~= nil and mode.IsOn() == true
 end
 
 -- What may be done ----------------------------------------------------------------------------------------------------------------------------
@@ -606,16 +629,20 @@ end
 
 -- The background of an icon: the Background colour of the Flat UI page, a little lighter under the mouse while the button can work. The border
 -- of a marker takes its colour while Borders in the marker's colour is on, greyed or not, else the general one, as the Ping bar does for its
--- pings (PingBar.lua).
+-- pings (PingBar.lua). The marker your target wears (G.mark) is lit as the Ping bar lights a waiting ping: its colour behind it at LIT_ALPHA
+-- and on its border, under the mouse too and whatever Borders in the marker's colour says.
 function G.Shade(entry)
-	if entry.hover and entry.usable then
+	local colour = entry.kind == "mark" and COLOURS[entry.marker] or nil
+	local lit = colour ~= nil and entry.marker == G.mark
+	if lit then
+		ns.SetOutlineFill(entry.outline, colour[1], colour[2], colour[3], LIT_ALPHA)
+	elseif entry.hover and entry.usable then
 		local r, g, b = ns.Colour("general.backdrop")
 		ns.SetOutlineFill(entry.outline, math.min(1, r + LIGHTER), math.min(1, g + LIGHTER), math.min(1, b + LIGHTER), 1)
 	else
 		ns.SetOutlineFill(entry.outline, nil, nil, nil, nil)
 	end
-	local colour = entry.kind == "mark" and COLOURS[entry.marker] or nil
-	if colour and Opt("markColours") ~= false then
+	if colour and (lit or Opt("markColours") ~= false) then
 		ns.SetOutlineColour(entry.outline, colour[1], colour[2], colour[3])
 	else
 		ns.SetOutlineColour(entry.outline, nil, nil, nil)
@@ -635,6 +662,7 @@ function G.Paint()
 		return
 	end
 	local grouped, raid, lead = G.State()
+	G.Marked()
 	for _, entry in ipairs(G.buttons) do
 		local usable, why = G.Usable(entry.kind, grouped, raid, lead)
 		entry.usable, entry.why = usable, why
@@ -651,6 +679,15 @@ function G.Paint()
 		end
 	end
 	G.fader.Settle()
+end
+
+-- The marker your target wears, from a plain answer of GetRaidTargetIndex only (Ask): a withheld index or none lights nothing. While test mode is on
+-- and the target wears none the Skull is lit as a sample (G.markSample), as the Threat list's sample title shows a Skull.
+function G.Marked()
+	local mark = Ask(GetRaidTargetIndex, "target")
+	mark = ns.Finite(mark) and COLOURS[mark] and mark or nil
+	G.markSample = mark == nil and Testing()
+	G.mark = mark or (G.markSample and SAMPLE_MARK or nil)
 end
 
 local function Tooltip()
@@ -695,6 +732,9 @@ function G.Lines(entry)
 		if key then
 			lines[#lines + 1] = "Key: " .. key
 		end
+		if entry.kind == "mark" and entry.marker == G.mark then
+			lines[#lines + 1] = G.markSample and LIT_SAMPLE or LIT
+		end
 		return title, lines
 	elseif entry.kind == "check" then
 		local lines, check = { "Asks everyone in the group whether they are ready." }, G.check
@@ -710,7 +750,8 @@ function G.Lines(entry)
 		end
 		return "Ready check", lines
 	elseif entry.kind == "roles" then
-		return "Role poll", { "Asks everyone in the group to pick a role." }
+		local lines, warm = G.Roles({ "Asks everyone in the group to pick a role." })
+		return "Role poll", lines, warm
 	end
 	return "Pull countdown", { ("Left-click counts down %d seconds for the group."):format(entry.seconds or Seconds()), "Right-click stops the countdown." }
 end
@@ -731,12 +772,13 @@ function G.Tip(entry)
 	if not tip then
 		return
 	end
-	local title, lines = G.Lines(entry)
+	local title, lines, warm = G.Lines(entry)
 	pcall(function()
 		tip:SetOwner(entry.frame, G.Anchor())
 		tip:SetText(title, 1, 1, 1)
-		for _, line in ipairs(lines) do
-			tip:AddLine(line, DIM[1], DIM[2], DIM[3], true)
+		for index, line in ipairs(lines) do
+			local colour = warm and warm[index] and WARN or DIM
+			tip:AddLine(line, colour[1], colour[2], colour[3], true)
 		end
 		if not entry.usable and entry.why then
 			tip:AddLine(entry.why, WARN[1], WARN[2], WARN[3], true)
@@ -782,6 +824,61 @@ local function Units()
 		end
 	end
 	return units
+end
+
+-- The roles of the group for the role poll's tooltip, added to lines: who has which role, from plain answers of UnitGroupRolesAssigned and UnitName
+-- only (UnitDocumentation.lua:1318-1332; a withheld role or name is left out). In a party a line for each role that has names; in a raid one line
+-- of counts, then the names of those with no role, ROLE_NAMES at most. The second answer marks the line of those with no role, written in the
+-- warm colour. Out of a group nothing is added, but while test mode is on and the group gives no plain role a sample party's roles are, one of
+-- them with no role.
+function G.Roles(lines)
+	local names, any = { TANK = {}, HEALER = {}, DAMAGER = {}, NONE = {} }, false
+	if Truth(IsInGroup) == true then
+		for _, unit in ipairs(Units()) do
+			local role, name = Ask(UnitGroupRolesAssigned, unit), Ask(UnitName, unit)
+			local list = type(role) == "string" and names[role] or nil
+			if list and type(name) == "string" and name ~= "" then
+				list[#list + 1] = name
+				any = true
+			end
+		end
+	end
+	if not any then
+		if not Testing() then
+			return lines, nil
+		end
+		for _, line in ipairs(SAMPLE_ROLES) do
+			lines[#lines + 1] = line
+		end
+		return lines, { [#lines] = true }
+	end
+	if Truth(IsInRaid) == true then
+		local counts = {}
+		for _, role in ipairs(ROLE_WORDS) do
+			counts[#counts + 1] = ("%s %d"):format(role[3], #names[role[1]])
+		end
+		lines[#lines + 1] = table.concat(counts, " · ")
+	else
+		for _, role in ipairs(ROLE_WORDS) do
+			if #names[role[1]] > 0 then
+				lines[#lines + 1] = role[2] .. ": " .. table.concat(names[role[1]], ", ")
+			end
+		end
+	end
+	local none = names.NONE
+	if #none == 0 then
+		return lines, nil
+	end
+	local shown = {}
+	for index = 1, math.min(#none, ROLE_NAMES) do
+		shown[index] = none[index]
+	end
+	local line = "No role: " .. table.concat(shown, ", ")
+	if #none > ROLE_NAMES then
+		line = ("%s and %d more"):format(line, #none - ROLE_NAMES)
+	end
+	lines[#lines + 1] = line
+	return lines, { [#lines] = true }
 end
 
 -- Reads the answers of the ready check that runs: how many are ready of those asked, and the plain names of who is not ready and who has not
@@ -882,12 +979,6 @@ function G.CountdownOver()
 	G.Faint()
 end
 
--- True while test mode is on (TestMode.lua).
-local function Testing()
-	local mode = ns.TestMode
-	return mode ~= nil and mode.IsOn() == true
-end
-
 -- One step of the countdown: the number, and the end at 0. The sample of test mode starts again from Countdown length while test mode is on.
 function G.CountStep()
 	local now = Ask(GetTime)
@@ -962,6 +1053,7 @@ function G.SampleOn()
 		end
 		G.PullText(G.Entry("pull"))
 	end
+	G.Paint()
 end
 
 -- Test mode off or paused: the samples go, a real check or countdown stays.
@@ -973,13 +1065,15 @@ function G.SampleOff()
 		G.CountdownOver()
 	end
 	G.ShowTally()
+	G.Paint()
 end
 
 -- Fade until you point at it -------------------------------------------------------------------------------------------------------------
 
--- True while the icons stay full: the row off, test mode on, the mouse over a button, a ready check or its tally, or a countdown.
+-- True while the icons stay full: the row off, the mouse over a button, a real ready check or its tally, or a real countdown. The samples of test
+-- mode hold nothing, so Fade until you point at it can be tried there, where a player in no group sees the row.
 function G.Held()
-	if Opt("fade") ~= true or Testing() then
+	if Opt("fade") ~= true then
 		return true
 	end
 	for _, entry in ipairs(G.buttons) do
@@ -988,7 +1082,7 @@ function G.Held()
 		end
 	end
 	local check = G.check
-	return (check ~= nil and ns.Finite(check.total) and check.total > 0) or G.ends ~= nil
+	return (check ~= nil and not check.sample and ns.Finite(check.total) and check.total > 0) or (G.ends ~= nil and not G.sampleCount)
 end
 
 G.fader = ns.IconFader(function()
@@ -1057,13 +1151,17 @@ ns.Register(KEY, {
 	Refresh = G.Refresh,
 	Resized = G.Refresh,
 	Status = G.Status,
-	-- The group or its leader changed, or a loading screen ended: the row shows or hides and the greying follows. The target changes only that.
+	-- The group or its leader changed, or a loading screen ended: the row shows or hides and the greying follows. The target and its marker
+	-- change only that and the lit marker.
 	events = {
 		GROUP_ROSTER_UPDATE = G.Apply,
 		PARTY_LEADER_CHANGED = G.Apply,
 		PLAYER_ENTERING_WORLD = G.Apply,
 		PLAYER_TARGET_CHANGED = G.Paint,
+		RAID_TARGET_UPDATE = G.Paint,
 		PARTY_LFG_RESTRICTED = G.Paint,
+		-- A role changed: the role poll's tooltip under the mouse lists the new roles.
+		PLAYER_ROLES_ASSIGNED = G.Paint,
 		PLAYER_REGEN_ENABLED = G.AfterFight,
 		-- A ready check and its answers, and a countdown started or stopped: only the FontStrings of the icons change.
 		READY_CHECK = G.Checking,
