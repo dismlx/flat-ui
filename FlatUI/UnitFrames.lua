@@ -3880,6 +3880,34 @@ ns.UnitFrameExtra.gradient = Gradient
 ns.UnitFrameExtra.solid = Solid
 ns.UnitFrameExtra.shape = Shape
 ns.UnitFrameExtra.slice = Slice
+-- The corners of Corners on a bar of the addon's own (the pet target frame, the druid's mana bar), as Reshape gives them to a frame in Separate parts:
+-- t has outline, bar and mask (a mask texture of the addon's own on the bar, or nil), and keeps its state in t.corners, t.round and t.cut. The outline
+-- takes the rounded line and background of the radius (Round) or its square ones again (Unround), and the fill, the texture the bar has now, the
+-- mask in the shape of the radius while the corners are rounded. Run out of combat; Rim anchors the line after a fight itself. Returns the radius in
+-- use, nil while the corners are square or the client refuses them, and whether it changed.
+function ns.UnitFrameExtra.ownCorners(t)
+	local radius = Radius()
+	local key = tostring(radius)
+	local changed = t.corners ~= key
+	if changed then
+		t.corners = key
+		local round = radius ~= nil and t.outline ~= nil and Round(t.outline, radius) == true and t.mask ~= nil and Shape(t.mask, radius, false, true) == true
+		if not round and t.outline ~= nil then
+			Unround(t.outline)
+		end
+		t.round = round
+	end
+	local ok, fill = pcall(t.bar.GetStatusBarTexture, t.bar)
+	fill = ok and not ns.IsSecret(fill) and type(fill) == "table" and fill or nil
+	if t.cut ~= nil and (t.cut ~= fill or not t.round) then
+		pcall(t.cut.RemoveMaskTexture, t.cut, t.mask)
+		t.cut = nil
+	end
+	if t.round and fill ~= nil and t.cut == nil and pcall(fill.AddMaskTexture, fill, t.mask) then
+		t.cut = fill
+	end
+	return t.round and radius or nil, changed
+end
 ns.UnitFrameExtra.rowOn = RowOn
 ns.UnitFrameExtra.barTexts = Texts
 ns.UnitFrameExtra.squared = Squared

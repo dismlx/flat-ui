@@ -1,6 +1,9 @@
 local ADDON_NAME, ns = ...
 
--- The streams of the data panels (DataPanels.lua): what a slot shows and what its tooltip says.
+-- The streams of the data panels (DataPanels.lua): what a slot shows, what its tooltip says and what a left click on it does. A click that
+-- opens a window of the game calls the game's own toggle of it (ToggleCharacter, ToggleQuestLog, ToggleFriendsFrame, ToggleGuildFrame,
+-- ToggleTimeManager, ToggleCalendar, as its keys and buttons do) out of a fight only, and the tooltip's dim last line says so ("Out of a fight,
+-- click: ..." in one). Every other button is the panels' own (DataPanels.lua: the right click opens the options).
 --   Bag space: free and total slots of the general bags the player wears, the backpack and the bags of family 0, the only room for any item
 --     (C_Container.GetContainerNumSlots and GetContainerNumFreeSlots). A special bag (a trade bag, a quiver, an ammo pouch, a soul bag: its
 --     family is not 0) and the reagent bag (Enum.BagIndex 5, of family 0 but for reagents only) hold only certain items, so they count apart,
@@ -9,23 +12,35 @@ local ADDON_NAME, ns = ...
 --   Gold: the player's money (GetMoney) with the game's coins (C_CurrencyInfo.GetCoinTextureString). The tooltip lists the gold of each
 --     character of the account that logged in with the data panels on, kept in FlatUIDB.datapanels.gold by "Name - Realm", and under them what
 --     this character made (in green) or spent (in red) since it logged in, kept over a /reload (ns.SessionMoney, BagsData.lua, the count the
---     bag window's gold tooltip says too); nothing while it made and spent nothing. The slot itself keeps its width.
---   Durability: of all the equipped items together (GetInventoryItemDurability), coloured by how worn it is; the tooltip lists each item.
+--     bag window's gold tooltip says too), and from HOURLY_AFTER seconds into the session what that is an hour (its second answer, the seconds
+--     since the session began); nothing while it made and spent nothing. The slot itself keeps its width.
+--   Durability: of all the equipped items together (GetInventoryItemDurability), coloured by how worn it is; the tooltip lists each item, and out
+--     of a fight the repair cost of the worn items under 100% (repairCost of C_TooltipInfo.GetInventoryItem, as the character window's durability
+--     line reads it). A click opens the character window.
 --   Hearthstone: where it is bound (GetBindLocation) and the time left on its cooldown (C_Container.GetItemCooldown).
 --   Coordinates: of the player on the map of the zone (C_Map.GetBestMapForUnit, GetPlayerMapPosition, read from the fields x and y of the
---     answer); none where the game gives none, as in a dungeon.
+--     answer); none where the game gives none, as in a dungeon. Shift-click puts the zone and the coordinates in the chat box (ns.PutInChat,
+--     MapText.lua), in a fight too.
 --   Time: the time of this computer (date) or of the realm (GetGameTime), 24 or 12 hours, as the game's own clock settings say
 --     (timeMgrUseLocalTime and timeMgrUseMilitaryTime, read with GetCVarBool; local and 24 hours when the client does not say), in the game's
---     own formats. The tooltip has both times and how long this session has run (GetSessionTime).
+--     own formats. The tooltip has both times and how long this session has run (GetSessionTime). A click opens the stopwatch and alarm,
+--     Shift-click the calendar, as the time by the minimap does (MapText.lua).
 --   Quest log: the quests in the log over the most it holds, counted as the quest count on the objective tracker counts them (QuestCount.lua),
 --     red while the log is full. The tooltip has how many are ready to hand in (C_QuestLog.IsComplete) and, while Flat UI's experience bar knows
---     it, their experience (ns.XpQuestReady, XpStats.lua).
+--     it, their experience (ns.XpQuestReady, XpStats.lua). A click opens the quest log.
+--   Experience: the share of this level done and, in a rested blue, the rested experience as a share of the level (UnitXP, UnitXPMax,
+--     GetXPExhaustion); nothing at the top level or with experience turned off (GameRulesUtil.CanShowExperienceBar, as XpBar.lua asks). The
+--     tooltip has the experience over the most, what is left to level, the rested experience, the experience of the quests ready to hand in
+--     (ns.XpQuestReady) and, while Flat UI's experience bar counts them, the time to level and the pace (ns.XpStatsText, XpStats.lua).
+--     Shift-click puts the experience bar's own chat line in the chat box.
 --   Frame rate and latency: GetFramerate, and the higher of the home and world latency (GetNetStats). The tooltip has both latencies and the
 --     memory Flat UI uses (UpdateAddOnMemoryUsage and GetAddOnMemoryUsage, read out of combat when the tooltip opens). With Colour frame rate
 --     and latency on, each number is in the panels' green, gold or red by the steps of the minimap's line (ns.PerfColour, MapText.lua).
---   Friends online: counted as the game's own button counts them (BNGetNumFriends, C_FriendList.GetNumOnlineFriends); the tooltip lists who.
+--   Friends online: counted as the game's own button counts them (BNGetNumFriends, C_FriendList.GetNumOnlineFriends); the tooltip lists who. A
+--     click opens the friends list.
 --   Guild online: GetNumGuildMembers; the tooltip lists who (GetGuildRosterInfo). The roster is asked for (C_GuildInfo.GuildRoster) when the client
---     holds none, when the game says it may be asked again, and when the tooltip opens, at most every ROSTER_EVERY seconds.
+--     holds none, when the game says it may be asked again, and when the tooltip opens, at most every ROSTER_EVERY seconds. In a guild, a click
+--     opens the guild window.
 --   Equipment set: the set of the game's equipment manager that the player wears, with its icon (C_EquipmentSet.GetEquipmentSetIDs and
 --     GetEquipmentSetInfo, in the game's order). The tooltip lists the sets, the one worn in green and one with items missing in red, as the
 --     character window colours them (Camelot/PaperDollFrame.lua:3159-3181). A left click opens a menu of Flat UI's own (DataPanels.lua) whose
@@ -45,6 +60,8 @@ local DIM, GOOD, WARN, BAD = P.DIM, P.GOOD, P.WARN, P.BAD
 local MOST = 25
 local HEARTHSTONE, HEARTHSTONE_ICON = 6948, 134414
 local ROSTER_EVERY = 15
+-- Seconds into a session before the Gold tooltip says what it made an hour.
+local HOURLY_AFTER = 600
 -- A cooldown this short is the global cooldown, not the hearthstone's own.
 local SHORT = 2
 -- The reagent bag (Enum.BagIndex.ReagentBag): its family is 0, but it takes only reagents, so it is not general room.
@@ -92,6 +109,36 @@ local function ClassFile(localised)
 		end
 	end
 	return classFiles[localised]
+end
+
+-- Clicks ----------------------------------------------------------------------------------------------------------------------------------------
+
+local function Shift()
+	return Ask(_G.IsShiftKeyDown) == true
+end
+
+-- Runs one of the game's own toggles of a window by its global name (ToggleCharacter and the rest, as the game's keys and buttons open them) with
+-- its arguments, out of a fight only. True when it ran.
+local function Toggle(name, ...)
+	local toggle = _G[name]
+	if P.InCombat() or type(toggle) ~= "function" then
+		return false
+	end
+	return (pcall(toggle, ...))
+end
+
+-- The hint of a click that opens a window, with "Out of a fight, " before it while in one.
+local function WindowHint(text)
+	if P.InCombat() then
+		return "Out of a fight, " .. text:sub(1, 1):lower() .. text:sub(2)
+	end
+	return text
+end
+
+-- A whole number with the game's thousands marks (BreakUpLargeNumbers), or plain where the client has none.
+local function Grouped(value)
+	value = math.floor(value + 0.5)
+	return Text((Ask(_G.BreakUpLargeNumbers, value))) or tostring(value)
 end
 
 -- Bag space ------------------------------------------------------------------------------------------------------------------------------------
@@ -248,13 +295,21 @@ P.Stream({
 			lines[#lines + 1] = { " " }
 			lines[#lines + 1] = { "Total", P.Money(total) }
 		end
-		-- What this character made or spent since it logged in (ns.SessionMoney, BagsData.lua), the same count as the bag window's gold.
-		local okSession, session = pcall(function()
-			return type(ns.SessionMoney) == "function" and ns.SessionMoney() or nil
+		-- What this character made or spent since it logged in (ns.SessionMoney, BagsData.lua), the same count as the bag window's gold, and from
+		-- HOURLY_AFTER seconds into the session what that is an hour.
+		local okSession, session, seconds = pcall(function()
+			if type(ns.SessionMoney) == "function" then
+				return ns.SessionMoney()
+			end
+			return nil
 		end)
 		if okSession and ns.Finite(session) and session ~= 0 then
+			local hourly = ""
+			if ns.Finite(seconds) and seconds >= HOURLY_AFTER then
+				hourly = (" (%s an hour)"):format(P.Money(math.abs(session) * 3600 / seconds))
+			end
 			lines[#lines + 1] = { " " }
-			lines[#lines + 1] = { "This session", (session > 0 and (GOOD .. "+") or (BAD .. "-")) .. P.Money(math.abs(session)) .. "|r" }
+			lines[#lines + 1] = { "This session", (session > 0 and (GOOD .. "+") or (BAD .. "-")) .. P.Money(math.abs(session)) .. hourly .. "|r" }
 		end
 		return lines
 	end,
@@ -319,6 +374,25 @@ local function Durability()
 	return most > 0 and now / most * 100 or 100, items, broken
 end
 
+-- What the worn items under 100% cost to repair: the sum of the repairCost their tooltip data gives (C_TooltipInfo.GetInventoryItem, the figure the
+-- game's repair tooltip shows, as the character window's durability line reads it), or nil when none gives one. Never in a fight.
+local function RepairCost(items)
+	local call = Field(_G.C_TooltipInfo, "GetInventoryItem")
+	if type(call) ~= "function" or P.InCombat() then
+		return nil
+	end
+	local total = 0
+	for _, item in ipairs(items) do
+		if item.percent < 100 then
+			local cost = Field((Ask(call, "player", item.slot)), "repairCost")
+			if ns.Finite(cost) and cost > 0 then
+				total = total + cost
+			end
+		end
+	end
+	return total > 0 and total or nil
+end
+
 P.Stream({
 	id = "durability", label = "Durability", sample = "Durability 100%",
 	events = { UPDATE_INVENTORY_DURABILITY = true, PLAYER_EQUIPMENT_CHANGED = true },
@@ -347,8 +421,21 @@ P.Stream({
 		else
 			lines[#lines + 1] = { " " }
 			lines[#lines + 1] = { "All items", ("%s%d%%|r"):format(Worn(percent), math.floor(percent + 0.5)) }
+			local cost = RepairCost(items)
+			if cost then
+				lines[#lines + 1] = { "Repair cost", P.Money(cost) }
+			end
 		end
 		return lines
+	end,
+	Hint = function()
+		return WindowHint("Click: open the character window.")
+	end,
+	-- A left click opens the character window, out of a fight (ToggleCharacter, as the game's key does).
+	Click = function(_, button)
+		if button == "LeftButton" then
+			Toggle("ToggleCharacter", "PaperDollFrame")
+		end
 	end,
 })
 
@@ -449,6 +536,21 @@ P.Stream({
 		lines[#lines + 1] = { "Coordinates", x and ("%.1f, %.1f"):format(x, y) or "None here" }
 		return lines
 	end,
+	Hint = function()
+		return "Shift-click: put this in chat."
+	end,
+	-- Shift and a left click put the zone and the coordinates in the chat box (ns.PutInChat, MapText.lua), in a fight too: "Elwynn Forest 45.2, 61.8".
+	Click = function(_, button)
+		if button ~= "LeftButton" or not Shift() or type(ns.PutInChat) ~= "function" then
+			return
+		end
+		local x, y = Position()
+		if x then
+			local zone = Text((Ask(GetZoneText)))
+			local shown = ("%.1f, %.1f"):format(x, y)
+			ns.PutInChat(zone and (zone .. " " .. shown) or shown)
+		end
+	end,
 })
 
 -- Time --------------------------------------------------------------------------------------------------------------------------------------------
@@ -523,6 +625,15 @@ P.Stream({
 		end
 		lines[#lines + 1] = { DIM .. "Local or realm time and 12 or 24 hours follow the game's clock settings.|r" }
 		return lines
+	end,
+	Hint = function()
+		return WindowHint("Click: stopwatch and alarm. Shift-click: calendar.")
+	end,
+	-- As the time by the minimap (MapText.lua): a left click opens the game's stopwatch and alarm, Shift and a click its calendar, out of a fight.
+	Click = function(_, button)
+		if button == "LeftButton" then
+			Toggle(Shift() and "ToggleCalendar" or "ToggleTimeManager")
+		end
 	end,
 })
 
@@ -625,6 +736,108 @@ P.Stream({
 			lines[#lines + 1] = { "Their experience", Text((Ask(_G.BreakUpLargeNumbers, xp))) or tostring(xp) }
 		end
 		return lines
+	end,
+	Hint = function()
+		return WindowHint("Click: open the quest log.")
+	end,
+	-- A left click opens the game's quest log, out of a fight (ToggleQuestLog, as the game's key does).
+	Click = function(_, button)
+		if button == "LeftButton" then
+			Toggle("ToggleQuestLog")
+		end
+	end,
+})
+
+-- Experience ------------------------------------------------------------------------------------------------------------------------------------
+
+-- The rested share in the slot: the blue of the game's rested bar, made light enough to read on the panel.
+local RESTED = "|cff6fa8ff"
+
+-- The player's experience, the most of this level and the rested experience (UnitXP, UnitXPMax, GetXPExhaustion, as Flat UI's experience bar reads
+-- them, XpBar.lua). Nothing while the game would show no experience bar (GameRulesUtil.CanShowExperienceBar, as XpBar.lua asks: at the top
+-- level, or with experience turned off, IsXPUserDisabled) or withholds a value.
+local function Experience()
+	local can, shown = Field(_G.GameRulesUtil, "CanShowExperienceBar"), nil
+	if type(can) == "function" then
+		shown = Ask(can)
+	end
+	if type(shown) ~= "boolean" then
+		local level, top = Count((Ask(UnitLevel, "player"))), Count((Ask(_G.GetMaxPlayerLevel)))
+		shown = Ask(_G.IsXPUserDisabled) ~= true and not (level and top and top > 0 and level >= top)
+	end
+	if shown ~= true then
+		return nil
+	end
+	local value, total = Count((Ask(UnitXP, "player"))), Count((Ask(UnitXPMax, "player")))
+	if not (value and total and total > 0) then
+		return nil
+	end
+	return math.min(value, total), total, Count((Ask(GetXPExhaustion))) or 0
+end
+
+-- The line a Shift-click puts in the chat box, as the experience bar's (XpBar.lua): "Level 34: 12,345 / 27,000 (45%), 1h 20m to level".
+local function XpChatLine()
+	local value, total = Experience()
+	if not value then
+		return nil
+	end
+	local line = ("%s / %s (%d%%)"):format(Grouped(value), Grouped(total), math.floor(value * 100 / total))
+	local level = Count((Ask(UnitLevel, "player")))
+	if level then
+		line = ("Level %d: %s"):format(level, line)
+	end
+	local eta = type(ns.XpStatsText) == "function" and Text(ns.XpStatsText("time")) or nil
+	return eta and (line .. ", " .. eta) or line
+end
+
+P.Stream({
+	id = "xp", label = "Experience", sample = "XP 88.8%  +88%",
+	events = { PLAYER_XP_UPDATE = true, UPDATE_EXHAUSTION = true, PLAYER_LEVEL_UP = true, PLAYER_UPDATE_RESTING = true, ENABLE_XP_GAIN = true,
+		DISABLE_XP_GAIN = true },
+	Text = function()
+		local value, total, rest = Experience()
+		if not value then
+			return nil
+		end
+		local text = Labelled("XP", ("%.1f%%"):format(value / total * 100))
+		local share = math.floor(rest / total * 100 + 0.5)
+		return share > 0 and ("%s  %s+%d%%|r"):format(text, RESTED, share) or text
+	end,
+	Tip = function()
+		local value, total, rest = Experience()
+		if not value then
+			return { title = "Experience", { DIM .. "No experience to gain now.|r" } }
+		end
+		local lines = { title = "Experience", { "Experience", ("%s / %s (%.1f%%)"):format(Grouped(value), Grouped(total), value / total * 100) },
+			{ "To level", Grouped(total - value) } }
+		if rest > 0 then
+			lines[#lines + 1] = { "Rested", ("%s%s (%d%%)|r"):format(RESTED, Grouped(rest), math.floor(rest / total * 100 + 0.5)) }
+		end
+		local ready = type(ns.XpQuestReady) == "function" and ns.XpQuestReady() or 0
+		if ns.Finite(ready) and ready > 0 then
+			lines[#lines + 1] = { "Quests ready to hand in", GOOD .. Grouped(ready) .. "|r" }
+		end
+		-- Flat UI's own count of the time to level and the pace (XpStats.lua), while the experience bar knows them.
+		local eta = type(ns.XpStatsText) == "function" and Text(ns.XpStatsText("time")) or nil
+		local pace = type(ns.XpStatsText) == "function" and Text(ns.XpStatsText("rate")) or nil
+		if eta then
+			lines[#lines + 1] = { "Time to level", (eta:gsub(" to level$", "")) }
+		end
+		if pace then
+			lines[#lines + 1] = { "Pace", pace }
+		end
+		return lines
+	end,
+	Hint = function()
+		return "Shift-click: put this in chat."
+	end,
+	Click = function(_, button)
+		if button == "LeftButton" and Shift() and type(ns.PutInChat) == "function" then
+			local line = XpChatLine()
+			if line then
+				ns.PutInChat(line)
+			end
+		end
 	end,
 })
 
@@ -778,6 +991,15 @@ P.Stream({
 		end
 		return lines
 	end,
+	Hint = function()
+		return WindowHint("Click: open your friends list.")
+	end,
+	-- A left click opens the friends list on its Friends tab, out of a fight (ToggleFriendsFrame, Camelot/FriendsFrame.lua).
+	Click = function(_, button)
+		if button == "LeftButton" then
+			Toggle("ToggleFriendsFrame", Count(_G.FRIEND_TAB_FRIENDS) or 1)
+		end
+	end,
 })
 
 -- Guild -----------------------------------------------------------------------------------------------------------------------------------------
@@ -852,6 +1074,15 @@ P.Stream({
 		lines[#lines + 1] = { " " }
 		lines[#lines + 1] = { "Online", ("%d of %d"):format(Count(online) or #found, total) }
 		return lines
+	end,
+	Hint = function()
+		return Ask(IsInGuild) == true and WindowHint("Click: open the guild window.") or nil
+	end,
+	-- A left click opens the guild window, out of a fight and only in a guild (ToggleGuildFrame, Blizzard_Game/Mainline/Game.lua, as the game's key).
+	Click = function(_, button)
+		if button == "LeftButton" and Ask(IsInGuild) == true then
+			Toggle("ToggleGuildFrame")
+		end
 	end,
 })
 

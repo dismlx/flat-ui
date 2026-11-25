@@ -1,14 +1,15 @@
 local _, ns = ...
 
--- Spell ranks: after training, a line at the top of the screen names the action buttons that hold a lower rank of a spell the spell book now
--- knows higher, with an Uprank and reload button. Its click puts the new ranks on those slots (C_Spell.PickupSpell, PlaceAction, ClearCursor)
--- and its secure /reload macro reloads the interface in the same click. No slot is written anywhere else. The game raises ACTIONBAR_SLOT_CHANGED,
--- ACTIONBAR_SHOWGRID, ACTIONBAR_HIDEGRID and CURSOR_CHANGED inside the call that changes a slot or the cursor (SynchronousEvent,
--- ActionBarFrameDocumentation.lua, CursorDocumentation.lua), so its buttons and bars write action, flashing, showAllButtons and their list of
--- shown buttons under the caller (ActionButton.lua:529-553, ActionBar.lua:144-171, 198-217): fields the click of an action button reads, and
--- which the game writes again only behind a read of them, so they would taint every later update of the button, in a fight too. The reload in
--- the same click throws all of that away before any later click or fight reads it; LayoutSpots.lua keeps its one risky write in its Reload
--- click for the same reason.
+-- Spell ranks: after training, a line at the top of the screen names the action buttons that hold a lower rank of a spell the spell book now knows
+-- higher, with an Uprank and reload button. /flatui move places the line (FlatUIUprankNotice, a box while Put new ranks on your bars is on;
+-- ns.MoverSpot, placed again out of a fight), and test mode shows a sample of it with Uprank greyed and no secure button. Its click puts the new
+-- ranks on those slots (C_Spell.PickupSpell, PlaceAction, ClearCursor) and its secure /reload macro reloads the interface in the same click. No
+-- slot is written anywhere else. The game raises ACTIONBAR_SLOT_CHANGED, ACTIONBAR_SHOWGRID, ACTIONBAR_HIDEGRID and CURSOR_CHANGED inside the call
+-- that changes a slot or the cursor (SynchronousEvent, ActionBarFrameDocumentation.lua, CursorDocumentation.lua), so its buttons and bars write
+-- action, flashing, showAllButtons and their list of shown buttons under the caller (ActionButton.lua:529-553, ActionBar.lua:144-171, 198-217):
+-- fields the click of an action button reads, and which the game writes again only behind a read of them, so they would taint every later update of
+-- the button, in a fight too. The reload in the same click throws all of that away before any later click or fight reads it; LayoutSpots.lua keeps
+-- its one risky write in its Reload click for the same reason.
 -- The ranks come from the spell book by name and number: the best rank the book lists of each name (the first number of its rank text), and a
 -- slot is offered when it holds a spell of that name with a lower number that is also the highest of that name on its pages (each stance or
 -- form page on its own, the other pages together). A lower rank kept beside a higher one (Frostbolt Rank 1 for its slow, a cheaper heal) is the
@@ -56,6 +57,9 @@ local CHAT_NAMES, NOTICE_NAMES, TIP_SPELLS, NOTE_NAMES, LEFT_NAMES = 4, 2, 8, 3,
 -- time: UIErrorsFrame is TOP -122, 512 by 60, DIALOG (Blizzard_UIErrorsFrame/*/UIErrorsFrame.xml:3-7). The line of LayoutSpots.lua is above it
 -- (TOP -90, 30 high). What the line covers is the first line of the raid warning frame (HIGH, hidden unless a raid warning comes).
 local NOTICE_WIDTH, NOTICE_HEIGHT, NOTICE_Y = 360, 30, -186
+-- Its entry in the movers (Movers.lua: a box of the line's default size at TOP 0, NOTICE_Y), and the words of test mode's sample.
+local MOVER = "FlatUIUprankNotice"
+local SAMPLE_TEXT = "New ranks for 3 buttons: Frostbolt, Fireball and 1 more."
 local UPRANK_WIDTH, LATER_WIDTH, GAP = 124, 60, 4
 local MAX_RANK = 1000
 -- The game's own words, the last one for an unlearned spell.
@@ -67,6 +71,8 @@ local MACRO = "/stopmacro [combat]\n/reload"
 -- The line: { frame, text, uprank, later, overlay }. broken: the line or its secure button could not be made, and is not tried again.
 local notice
 local broken = false
+-- True while the line shows test mode's sample: no secure button on it, Uprank greyed, and a real offer takes its place.
+local sample = false
 -- A hide asked for in the lockdown waits for its end, once.
 local hideQueued = false
 -- Inside the swaps of a click, and whether a pickup or a placement was made in this click.
@@ -430,8 +436,27 @@ end
 
 -- The line ----------------------------------------------------------------------------------------------------------------------------------
 
+-- The line shows a real offer (test mode's sample is not one).
 local function Showing()
-	return notice ~= nil and E.Shown(notice.frame)
+	return notice ~= nil and not sample and E.Shown(notice.frame)
+end
+
+-- Puts the top of the line at the top of its box in the movers, or TOP 0, NOTICE_Y with no spot saved. Out of combat only: the line is protected
+-- while its secure button is on it.
+local function Place(frame)
+	if not frame or E.InCombat() then
+		return
+	end
+	local x, y
+	if type(ns.MoverSpot) == "function" then
+		x, y = ns.MoverSpot(MOVER, "TOP")
+	end
+	frame:ClearAllPoints()
+	if ns.Finite(x) and ns.Finite(y) then
+		frame:SetPoint("TOP", UIParent, "BOTTOMLEFT", x, y)
+	else
+		frame:SetPoint("TOP", UIParent, "TOP", 0, NOTICE_Y)
+	end
 end
 
 -- The secure button sits on Uprank only while the line shows out of combat: a secure child makes the frames above it protected, so the line
@@ -482,7 +507,7 @@ local function Build()
 		local frame = CreateFrame("Frame", nil, UIParent)
 		ns.Own[frame] = true
 		frame:SetSize(NOTICE_WIDTH, NOTICE_HEIGHT)
-		frame:SetPoint("TOP", UIParent, "TOP", 0, NOTICE_Y)
+		Place(frame)
 		-- Above the options window (HIGH, Panel.lua).
 		frame:SetFrameStrata("DIALOG")
 		pcall(frame.SetClampedToScreen, frame, true)
@@ -501,7 +526,10 @@ local function Build()
 		uprank:SetPoint("RIGHT", frame, "RIGHT", -GAP, 0)
 		local later = E.Button(frame, "Later", LATER_WIDTH, function()
 			E.Run(part, function()
-				SetLater(Signature(Plan()))
+				-- Later on the sample only puts the sample away.
+				if not sample then
+					SetLater(Signature(Plan()))
+				end
 				HideNotice()
 			end)
 		end)
@@ -558,20 +586,28 @@ end
 -- Greyed while a click could not uprank: it still sits under the secure button, whose click then says why and cancels its own reload.
 Usable = function()
 	if notice and not swapping then
-		notice.uprank.SetUsable(Refusal() == nil)
+		notice.uprank.SetUsable(not sample and Refusal() == nil)
 	end
 end
 
-ShowNotice = function(plan)
-	if E.InCombat() or not Build() then
-		return false
-	end
-	local n = #plan
-	notice.text:SetText(("New ranks for %d %s: %s."):format(n, Buttons(n), Join(UniqueNames(plan), NOTICE_NAMES)))
+-- The line as wide as its words and its two buttons.
+local function Fit()
 	local okWidth, width = pcall(notice.text.GetStringWidth, notice.text)
 	if okWidth and ns.Finite(width) then
 		notice.frame:SetWidth(math.max(NOTICE_WIDTH, math.ceil(width) + UPRANK_WIDTH + LATER_WIDTH + 30))
 	end
+end
+
+-- A real offer takes the place of test mode's sample.
+ShowNotice = function(plan)
+	if E.InCombat() or not Build() then
+		return false
+	end
+	sample = false
+	local n = #plan
+	notice.text:SetText(("New ranks for %d %s: %s."):format(n, Buttons(n), Join(UniqueNames(plan), NOTICE_NAMES)))
+	Fit()
+	Place(notice.frame)
 	hideQueued = false
 	Attach()
 	Usable()
@@ -584,6 +620,12 @@ end
 
 HideNotice = function()
 	if not notice then
+		return
+	end
+	-- The sample has no secure button on it, so it hides at once, in a fight too.
+	if sample then
+		sample = false
+		notice.frame:Hide()
 		return
 	end
 	if E.InCombat() then
@@ -602,6 +644,56 @@ HideNotice = function()
 	notice.frame:Hide()
 end
 
+-- Test mode's sample (TestMode.lua): the line with words of its own and Uprank greyed, never its secure button, out of a fight and only while no
+-- real offer shows. A real offer takes its place, and the end of test mode hides only a sample.
+local function SampleOn()
+	if sample or Showing() or not Wanted() or E.Gamepad() or E.InCombat() or not Build() then
+		return
+	end
+	sample = true
+	notice.text:SetText(SAMPLE_TEXT)
+	Fit()
+	Place(notice.frame)
+	notice.uprank.SetUsable(false)
+	notice.frame:Show()
+end
+
+local function SampleOff()
+	if sample and notice then
+		sample = false
+		notice.frame:Hide()
+	end
+end
+
+if type(ns.TestMode) == "table" and type(ns.TestMode.Register) == "function" then
+	ns.TestMode.Register("errandsuprank", { module = "errands", label = "New spell ranks", Start = function()
+		E.Run(part, SampleOn)
+	end, Stop = function()
+		E.Run(part, SampleOff)
+	end })
+end
+
+-- The movers (Movers.lua): the line has a box while Put new ranks on your bars is on, and a new spot places it, out of a fight (it waits for the
+-- end of one).
+function ns.ErrandsUprankShown()
+	return E.On("uprank")
+end
+
+function ns.ErrandsUprankMoved()
+	if not notice then
+		return
+	end
+	if E.InCombat() then
+		ns.OutOfCombat(function()
+			if notice then
+				Place(notice.frame)
+			end
+		end)
+		return
+	end
+	Place(notice.frame)
+end
+
 -- A reason as a sentence of the tooltip: the answer without "Flat UI: ".
 local function Sentence(line)
 	local text = line:gsub("^Flat UI: ", "")
@@ -615,9 +707,15 @@ Explain = function(owner)
 	end
 	-- The button's look follows the tooltip's reason: a popup or Edit Mode opened since the line showed raises no event here.
 	Usable()
-	local plan, left = Plan()
 	tip:SetOwner(owner, "ANCHOR_BOTTOM", 0, -4)
 	tip:SetText("Uprank and reload")
+	if sample then
+		tip:AddLine("A sample of test mode. After training, this line names the buttons that hold a lower rank, and this button puts the new ranks "
+			.. "on them and reloads.", 1, 1, 1, true)
+		tip:Show()
+		return
+	end
+	local plan, left = Plan()
 	local function Line(text)
 		tip:AddLine(text, 1, 1, 1, true)
 	end

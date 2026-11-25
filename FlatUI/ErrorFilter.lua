@@ -27,6 +27,11 @@ local _, ns = ...
 -- of the words of the spell failures that come under one type for all (SPELL_FAILED_*, matched with or without a closing full stop); a type or a
 -- word this client lacks is passed over. The payload of UI_ERROR_MESSAGE is not marked secret (SystemDocumentation.lua:226-236); one that is
 -- withheld is never compared or shown. Every client call is in a pcall.
+-- When (hud.errorsWhen): Always hides the kinds that are on at all times; Only in a fight hides them only while InCombatLockdown says a fight is
+-- on, and shows every message out of combat, so a player still learns why a cast on a mob or a mailbox failed. The event stays held in and out
+-- of a fight either way, so nothing is taken from or given back to the game's frame as a fight starts or ends; Judge only asks at each message.
+-- Not in line of sight (hud.errorSight, off by default) hides "Target not in line of sight." (SPELL_FAILED_LINE_OF_SIGHT, a spell failure that
+-- comes under the one type of all of them, so it is matched by its words).
 -- This follows the error message filter of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (Submodules/UIErrors.lua). Only the
 -- kinds a character of the classic classes meets are offered, and the spell failures are added to them.
 
@@ -49,6 +54,7 @@ local KINDS = {
 	{ row = "errorTarget", types = { "ERR_GENERIC_NO_TARGET", "ERR_NO_ATTACK_TARGET", "ERR_INVALID_ATTACK_TARGET", "ERR_GENERIC_NO_VALID_TARGETS",
 		"ERR_PET_SPELL_TARGETS_DEAD" }, words = { "SPELL_FAILED_BAD_TARGETS", "SPELL_FAILED_BAD_IMPLICIT_TARGETS", "SPELL_FAILED_TARGETS_DEAD" } },
 	{ row = "errorMoving", types = { "ERR_NOT_WHILE_MOVING", "ERR_NOEMOTEWHILERUNNING" }, words = { "SPELL_FAILED_MOVING" } },
+	{ row = "errorSight", types = {}, words = { "SPELL_FAILED_LINE_OF_SIGHT" } },
 }
 -- The types whose repeat keeps the line that shows in place of a new one (UIErrorsFrame.lua:52-75, a local table of the game's file).
 local REPEATS = { "ERR_SPELL_FAILED_TOTEMS", "ERR_SPELL_FAILED_EQUIPPED_ITEM", "ERR_SPELL_ALREADY_KNOWN_S", "ERR_SPELL_FAILED_SHAPESHIFT_FORM_S",
@@ -226,9 +232,14 @@ local function Hides(messageType, message)
 	return type(message) == "string" and S.words[Bare(message)] == true
 end
 
+-- True while the kinds that are on hide their messages now: always, or with When at Only in a fight while a fight is on.
+local function Now()
+	return ns.Get(KEY .. ".errorsWhen") ~= "combat" or InCombatLockdown()
+end
+
 -- One message while the filter is on. The first argument is a table of its own for each message, so every failure counts toward stopping the part.
 local function Judge(_, errors, messageType, message)
-	if Hides(messageType, message) then
+	if Hides(messageType, message) and Now() then
 		S.hidden = S.hidden + 1
 		return
 	end
@@ -451,7 +462,8 @@ ns.AddStatus(KEY, function()
 	elseif S.gameOff then
 		return { "Error messages: the game's command turned its error text off, so none shows until it is turned on again." }
 	elseif S.held then
-		local lines = { ("Error messages: %d of %d kinds hidden, %d messages so far."):format(S.kinds, #KINDS, S.hidden) }
+		local lines = { ("Error messages: %d of %d kinds hidden%s, %d messages so far."):format(S.kinds, #KINDS,
+			ns.Get(KEY .. ".errorsWhen") == "combat" and " in fights only" or "", S.hidden) }
 		if S.relistened > 0 then
 			lines[2] = ("Error messages: another addon gave the game its error text back, and %d messages then showed whatever their kind.")
 				:format(S.relistened)

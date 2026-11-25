@@ -25,10 +25,12 @@ local _, ns = ...
 --   Loot rolls: two rolls at the box Loot rolls of /flatui move, where the game's rolls show (ns.MoverSpot: the saved spot, else where the game
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
 --   shows; their timers drain over 10 seconds and loop. They stand in for UIParent, so their place is the box's.
---   The sample nameplate: an enemy plate with its cast bar, auras and quest mark (while Quest mark on enemies you need for a quest is on) at the
---   middle of the screen, 160 units up, with a dim Sample nameplate under it, as plates have no place of their own. Its cast fills, and its health
---   bar takes the threat colours in turn every 3 seconds (You want, Changing hands, You do not want) while Threat on nameplates and Colour health
---   bars by threat are on.
+--   The sample nameplate: an enemy plate with its cast bar, auras and quest mark with its kill count (while Quest mark on enemies you need for a
+--   quest is on), and for a warrior the Overpower icon with its swipe, at the middle of the screen, 160 units up, with a dim Sample nameplate under
+--   it, as plates have no place of their own. Its cast fills, and it takes the threat states in turn every 3 seconds (You want, Changing hands, You
+--   do not want) while Threat on nameplates is on: its health bar in the threat colour while Colour health bars by threat is on, the threat ring as
+--   Threat glow asks, a sample threat value (40%, 92%, 110%) at Threat value position, size, offsets, outline and colour, and the fade of Fade
+--   enemies held for you (SetupDrawPlates.lua's P.Threat); the quest mark moves past a value on its side.
 -- The cursor ring is no module, so it cannot register with test mode (TM.Register runs an entry only while its module is on): at every On, Off,
 -- pause and resume (TM.Watch) the ring applies its rows again (ns.CursorRingChanged, which reads TM.IsOn: In combat only reads as shown while it
 -- is on), and while test mode is on and Moving a frame of this file gives the ring a sample cast and global cooldown every 3 seconds
@@ -403,6 +405,11 @@ local function PlateMoves(holder, now)
 	if spec.threat ~= threat then
 		spec.threat = threat
 		P.Health(p, spec)
+		-- The ring, the value and the fade of the new state, and the quest mark again past a value of another width.
+		if p.o and p.m then
+			P.Threat(p, spec, p.o, p.m)
+			P.QuestMark(p, spec, p.o, p.m)
+		end
 	end
 end
 
@@ -424,7 +431,8 @@ TM.StandIn({
 			holder.caption:SetText("Sample nameplate")
 			holder.caption:SetTextColor(DIM[1], DIM[2], DIM[3])
 		end
-		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true,
+		-- A warrior's sample also dodged them, so it carries the Overpower icon.
+		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true, overpower = Class() == "WARRIOR",
 			cast = { name = "Shadow Bolt", share = 0, left = PLATE_CAST } }
 	end,
 	Paint = function(holder)

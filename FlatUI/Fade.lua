@@ -1,7 +1,8 @@
 local _, ns = ...
 
--- Fading: the action bars, the stance and pet bars, the micro menu, the bag bar, the open bag windows, the player and pet frames and the minimap
--- buttons, the game's and other addons', go to a low opacity while nothing asks for them, and back to full when something does. The one thing written on a frame is its alpha
+-- Fading: the action bars, the stance and pet bars, the micro menu, the bag bar, the open bag windows, the player and pet frames, Flat UI's
+-- experience bar and the minimap buttons, the game's and other addons', go to a low opacity while nothing asks for them, and back to full when
+-- something does. The one thing written on a frame is its alpha
 -- (SetAlpha, which the documentation leaves open to addons and does not mark protected:
 -- Blizzard_APIDocumentationGenerated/SimpleFrameAPIDocumentation.lua:1133-1142). The alpha a frame had is read before the first write and put
 -- back when the module, the row or the part goes off. A faded frame still takes clicks and shows tooltips, since alpha does not touch the mouse.
@@ -12,10 +13,14 @@ local _, ns = ...
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
 -- An alpha something else gives a frame after a write is taken as the frame's own, the one put back, and the frame eases again from it.
--- The frames are the game's own, but for Flat UI's bag and bank windows and, while Flat UI's buttons are in use, Flat UI's own bars in the bar rows: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
+-- The frames are the game's own, but for Flat UI's bag and bank windows and, while Flat UI's buttons are in use, Flat UI's own bars in the rows of the
+-- main bar and bars 2 to 8, which then fade Flat UI's bar alone, whatever Leave the game's action bars alone says, and never write the game's parked bar. The game's frames: MainActionBar, MultiBarBottomLeft, MultiBarBottomRight, MultiBarRight, MultiBarLeft, MultiBar5, MultiBar6, MultiBar7, StanceBar,
 -- PetActionBar, MicroMenuContainer, BagsBar, PlayerFrame.PlayerFrameContainer and PlayerFrame.PlayerFrameContent (parentKeys of PlayerFrame with no global name: Blizzard_UnitFrame/Mainline/PlayerFrame.xml:23 and :68; the pet frame, totems and cast bar stay as they are),
 -- PetFrame, and under MinimapCluster the Tracking and IndicatorFrame frames, GameTimeFrame, TimeManagerClockButton and AddonCompartmentFrame
 -- (Blizzard_Minimap/Mainline/Minimap.xml:3, 25 and 46, GameTime.xml:3, Camelot/AddonCompartment.xml:3, Blizzard_TimeManager/Mainline/Blizzard_TimeManager.xml:178).
+-- The Experience bar row fades FlatUIXpBar, Flat UI's own experience and reputation bar (XpBar.lua), while it is the one in use (ns.XpOwn); the
+-- bar itself is the hover area. While block 1 of the Bar block page holds it with Fade the block on, the block's fade takes it over by its name
+-- (ns.BarBlockFades), as it does the action bars; with the game's bar in use the row has nothing to fade and gives the bar its alpha back.
 -- The Player frame row also fades the frames of Flat UI's own that Unit frames puts on PlayerFrame itself, outside its container and its content: the
 -- body, the name row and the shadow (ns.UnitFrameExtra.pieces, UnitFrames.lua), so the plate and its border fade with the bars and the portrait. The
 -- picture, the level on it and the bars' borders of Unit frames are inside the container and the content, and fade once, with them.
@@ -74,7 +79,8 @@ local _, ns = ...
 -- TargetFrameTemplate (Blizzard_UnitFrame/Mainline/TargetFrame.xml:52, 549 and 572) whose cast bar and target of target are their children and fade
 -- with them (Mainline/TargetFrame.lua:711-718 and 738-740), as do the combo points on Forever (Camelot/ComboFrame.lua:16); BuffFrame, the buffs and
 -- weapon enchants (Blizzard_BuffFrame/BuffFrame.xml:6; the debuffs are DebuffFrame and stay); ObjectiveTrackerFrame
--- (Blizzard_ObjectiveTracker/Blizzard_ObjectiveTracker.xml:3); and DamageMeter, the game's damage meter (Blizzard_DamageMeter/DamageMeter.xml:11, loaded
+-- (Blizzard_ObjectiveTracker/Blizzard_ObjectiveTracker.xml:3), and with it Questie_BaseFrame, the tracker the Questie addon draws in its place,
+-- while Questie is loaded (QuestieSkin.lua), the mouse over either counting for both; and DamageMeter, the game's damage meter (Blizzard_DamageMeter/DamageMeter.xml:11, loaded
 -- at start on the standard and camelot clients: Blizzard_DamageMeter.toc:2). The game sets the alpha of none of the five but the tracker: of the target
 -- frame's portrait and icons (Mainline/TargetFrame.lua:156, 160 and 624), of the buff buttons (BuffFrame.lua:1268 and 1357) and of the meter's session
 -- windows (Blizzard_DamageMeter/DamageMeter.lua:298 and 556), never of DamageMeter itself. The windows are children of the meter (DamageMeter.lua:285),
@@ -91,7 +97,8 @@ local _, ns = ...
 -- the alpha is written in a fight too, since SetAlpha is not protected; nothing is shown, hidden or moved. While the tracker's Opacity in combat
 -- (Hud.lua) holds the tracker in a fight, Fading forgets the tracker with no write (ns.TrackerFades); that row reads the alpha the tracker had before
 -- Fading from ns.FadeGiven, and after the fight gives the tracker back with it (ns.FadeTakesBack): the ease goes on from the alpha of the fight, so
--- the tracker does not show at full for a moment. The rules: in combat as for In combat below; in a group, IsInGroup, as the game's own group headers
+-- the tracker does not show at full for a moment. Questie's tracker is handed over the same way while QuestieSkin.lua's Opacity in combat holds it
+-- (ns.QuestieFades). The rules: in combat as for In combat below; in a group, IsInGroup, as the game's own group headers
 -- ask (Blizzard_RestrictedAddOnEnvironment/SecureGroupHeaders.lua:268); in an instance, IsInInstance (InstanceDocumentation.lua:170-178); outside
 -- an instance, unless IsInInstance plainly says the player is in a dungeon, a raid, a battleground or an arena; mounted,
 -- IsMounted (PlayerScriptDocumentation.lua:1399-1406) or a druid's travel, aquatic or flight form, by GetShapeshiftFormID as the game asks it
@@ -142,6 +149,29 @@ local MICRO_BUTTONS = { "CharacterMicroButton", "ProfessionMicroButton", "Spellb
 -- The bag buttons, which fade with BagsBar and each count as under the mouse while it shows.
 local BAG_BUTTONS = { "MainMenuBarBackpackButton", "BagBarExpandToggle", "CharacterBag0Slot", "CharacterBag1Slot", "CharacterBag2Slot",
 	"CharacterBag3Slot", "CharacterReagentBag0Slot", "KeyRingButton" }
+-- Flat UI's own experience and reputation bar (XpBar.lua), while it is the one in use, under its name, so Fade the block takes it over while block 1
+-- holds it (ns.BarBlockFades). None while the game's bar is in use or the bar is not made yet.
+local XP_BAR = "FlatUIXpBar"
+local function XpBarFrames()
+	if type(ns.XpOwn) ~= "function" or type(ns.XpBarFrame) ~= "function" or not ns.XpOwn() then
+		return nil
+	end
+	local frame = ns.XpBarFrame()
+	return frame ~= nil and { { frame = frame, name = XP_BAR } } or nil
+end
+-- Questie's tracker, which takes the place of the objective tracker while the Questie addon is loaded (QuestieSkin.lua). None without it.
+local QUESTIE = "Questie_BaseFrame"
+local function QuestieFrame()
+	local base = rawget(_G, QUESTIE)
+	if type(base) ~= "table" or ns.IsSecret(base) or ns.Forbidden(base) then
+		return nil
+	end
+	return base
+end
+local function QuestieTracker()
+	local base = QuestieFrame()
+	return base ~= nil and { { frame = base, name = QUESTIE } } or nil
+end
 -- The bag windows, Flat UI's and the game's.
 local BAG_WINDOWS = { "FlatUIBags", "FlatUIBank", "ContainerFrameCombinedBags", "BankFrame" }
 for index = 1, 7 do
@@ -166,6 +196,7 @@ local ENTRIES = {
 	{ row = "playerFrame", label = "Player frame", frames = { "PlayerFrame.PlayerFrameContainer", "PlayerFrame.PlayerFrameContent" }, hover = "PlayerFrame",
 		more = PlayerPieces },
 	{ row = "petFrame", label = "Pet frame", frames = { "PetFrame" } },
+	{ row = "xpBar", label = "Experience bar", frames = {}, more = XpBarFrames },
 	{ row = "minimapButtons", label = "Minimap buttons", hover = "MinimapCluster", more = "MapAddonButtons",
 		frames = { "MinimapCluster.Tracking", "MinimapCluster.IndicatorFrame", "GameTimeFrame", "TimeManagerClockButton", "AddonCompartmentFrame" } },
 	{ rule = true, targeted = true, row = "targetFrame", label = "Target frame", frames = { "TargetFrame" } },
@@ -173,13 +204,15 @@ local ENTRIES = {
 	{ rule = true, row = "buffs", label = "Buffs", frames = { "BuffFrame" } },
 	-- The tracker's own frame runs down to the foot of the right column whatever it lists (Blizzard_ObjectiveTrackerContainer.lua:207-228,
 	-- UIParentPanelManager.lua:822-829); its NineSlice runs from its top to under the last module (Blizzard_ObjectiveTrackerContainer.lua:117-119).
-	{ rule = true, row = "objectiveTracker", label = "Objective tracker", frames = { "ObjectiveTrackerFrame" }, hover = "ObjectiveTrackerFrame.NineSlice" },
+	{ rule = true, row = "objectiveTracker", label = "Objective tracker", frames = { "ObjectiveTrackerFrame" }, hover = "ObjectiveTrackerFrame.NineSlice",
+		more = QuestieTracker },
 	{ rule = true, row = "damageMeter", label = "Damage meter", frames = { "DamageMeter" }, beside = METER_PARTS },
 }
 -- The forms of a druid that count as mounted, by GetShapeshiftFormID: travel, aquatic and flight form (Blizzard_FrameXMLBase/Constants.lua:329-333).
 local TRAVEL_FORMS = { [3] = true, [4] = true, [27] = true }
 
--- bar: a game action bar. While Leave the game's action bars alone is on the row does nothing, and a bar this module faded is given its alpha back.
+-- bar: a game action bar. While Leave the game's action bars alone is on the row does nothing, and a bar this module faded is given its alpha back,
+-- but for the main bar and bars 2 to 8 while Flat UI's buttons are in use, which fade Flat UI's own bar either way (OwnRow).
 -- orig: the alpha a frame had before the first write. sent: the last alpha written. value: where the ease is. idle: seconds a row has had nothing to keep it
 -- at full. found: the frames reached by name. clock: seconds since the last step. added: per frame of another addon a row fades (more), that row.
 local weak = { __mode = "k" }
@@ -190,9 +223,20 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
+-- True for a row of the main bar or bars 2 to 8 (those with a more, given below) while Flat UI's buttons are in use: the row fades Flat UI's own
+-- bar, a frame of the addon's, whatever Leave the game's action bars alone says, and never the game's parked bar, which Quick Keybind Mode shows
+-- at full for a time (OwnBars.lua).
+local function OwnRow(entry)
+	if entry.bar ~= true or type(entry.more) ~= "function" or type(ns.OwnOn) ~= "function" then
+		return false
+	end
+	local ok, on = pcall(ns.OwnOn)
+	return ok and on == true
+end
+
 -- True for a row of a game action bar that is left alone now.
 local function Left(entry)
-	return entry.bar == true and ns.HandsOff()
+	return entry.bar == true and ns.HandsOff() and not OwnRow(entry)
 end
 
 -- The frame behind a name, or nil while the game has not made it or it cannot be touched.
@@ -347,10 +391,11 @@ local function Active(entry)
 	return value == true
 end
 
--- True for a frame another part of Flat UI holds the alpha of now: a bar the action bar block fades, or the objective tracker while its Opacity in
--- combat has it in a fight.
+-- True for a frame another part of Flat UI holds the alpha of now: a bar the action bar block fades, or the objective tracker or Questie's while
+-- Opacity in combat has it in a fight.
 local function Elsewhere(frame, name)
-	return (ns.BarBlockFades and ns.BarBlockFades(name)) or (ns.TrackerFades and ns.TrackerFades(frame)) or false
+	return (name ~= nil and ns.BarBlockFades and ns.BarBlockFades(name)) or (ns.TrackerFades and ns.TrackerFades(frame))
+		or (ns.QuestieFades and ns.QuestieFades(frame)) or false
 end
 
 -- True for a frame Hidden frames (Hide.lua) has under its hidden frame, or one under such a frame: no alpha is written on it.
@@ -555,16 +600,24 @@ function ns.FadeGiven(frame)
 end
 
 -- The tracker's Opacity in combat (Hud.lua) gives the tracker back here when it lets it go (the fight is over, or that row or its page changed), while
--- the tracker's row of When shown fades it. alpha, the one it had before Fading, is kept to be put back, and the ease goes on from the alpha the tracker
--- has now, so it does not go to full and fade again. False when this module does not take the tracker, or alpha is one something else held hidden,
--- which this module leaves alone (Ease): that row then puts alpha back itself.
+-- the tracker's row of When shown fades it, and QuestieSkin.lua gives Questie's tracker back the same way. alpha, the one it had before Fading, is
+-- kept to be put back, and the ease goes on from the alpha the tracker has now, so it does not go to full and fade again. False when this module
+-- does not take the tracker, or alpha is one something else held hidden, which this module leaves alone (Ease): that row then puts alpha back itself.
 function ns.FadeTakesBack(frame, alpha)
 	if frame == nil or not ns.Finite(alpha) or alpha <= HIDDEN or not ns.Enabled(KEY) or ns.PartStopped(KEY, PART)
-		or RULES[Opt("objectiveTracker")] == nil or frame ~= Resolve("ObjectiveTrackerFrame") then
+		or RULES[Opt("objectiveTracker")] == nil then
+		return false
+	end
+	local questie = frame == QuestieFrame()
+	if not questie and frame ~= Resolve("ObjectiveTrackerFrame") then
 		return false
 	end
 	local current = Alpha(frame)
 	state.orig[frame], state.value[frame], state.sent[frame] = alpha, current, current
+	-- Questie's tracker is one of the row's more frames, given back with the row (Forget).
+	if questie then
+		state.added[frame] = "objectiveTracker"
+	end
 	return true
 end
 
@@ -576,9 +629,9 @@ local function Ease(frame, target, step, name)
 		state.orig[frame], state.sent[frame], state.value[frame] = nil, nil, nil
 		return
 	end
-	-- A button the minimap page switches off stays off whatever Fading says, and the objective tracker is left to its Opacity in combat while that
-	-- holds it in a fight: that has written its own alpha, so nothing is put back.
-	if (ns.MapButtonOff and ns.MapButtonOff(frame)) or (ns.TrackerFades and ns.TrackerFades(frame)) then
+	-- A button the minimap page switches off stays off whatever Fading says, and the objective tracker and Questie's are left to their Opacity in
+	-- combat while that holds them in a fight: that has written its own alpha, so nothing is put back.
+	if (ns.MapButtonOff and ns.MapButtonOff(frame)) or (ns.TrackerFades and ns.TrackerFades(frame)) or (ns.QuestieFades and ns.QuestieFades(frame)) then
 		state.orig[frame], state.sent[frame], state.value[frame] = nil, nil, nil
 		return
 	end
@@ -636,7 +689,16 @@ local function Step(dt)
 	end
 	for _, entry in ipairs(ENTRIES) do
 		local frames = entry.cache
-		if not frames and Left(entry) then
+		if OwnRow(entry) then
+			-- Flat UI's bar only, through Added: the game's bar gets back any alpha this module gave it before the switch.
+			frames = {}
+			for _, name in ipairs(entry.frames) do
+				local frame = state.found[name]
+				if frame and state.orig[frame] ~= nil then
+					Release(frame)
+				end
+			end
+		elseif not frames and Left(entry) then
 			frames = {}
 			for _, name in ipairs(entry.frames) do
 				local frame = state.found[name]
@@ -726,7 +788,7 @@ local function FightStarts()
 				end
 			end
 			for frame, owner in pairs(state.added) do
-				if owner == entry.row and state.orig[frame] ~= nil and state.value[frame] < 1 and not Gone(frame) then
+				if owner == entry.row and state.orig[frame] ~= nil and state.value[frame] < 1 and not Elsewhere(frame) and not Gone(frame) then
 					ns.EachPart(KEY, PART, Put, frame, 1)
 				end
 			end

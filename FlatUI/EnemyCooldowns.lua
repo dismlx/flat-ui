@@ -19,7 +19,8 @@ local _, ns = ...
 -- that exist are touched. Two bars of up to eight icons, for the target and the focus, are rows of the same kind that hang from
 -- UIParent, above the target and focus frames until a spot is saved with the movers. Pointing at an icon of those bars writes the ability with
 -- its class, in its kind's colour, the enemy's name and Ready, the time left or that its use is not known, in GameTooltip (Icon tooltips: On,
--- Out of combat only or Off); those icons take the mouse's motion only, never a click. Icons on nameplates take no mouse, so plates are
+-- Out of combat only or Off), written again each second while the mouse stays, so the time counts down and turns to Ready (E.TipTick); those
+-- icons take the mouse's motion only, never a click. Icons on nameplates take no mouse, so plates are
 -- clicked as ever. Flash when ready flashes the icon at the end of a timer and, for the target and focus, plays a sound. The Add and Hide
 -- lists and /flatui enemy are kept for the account. The helpers are in one table, E.
 
@@ -708,6 +709,7 @@ function E.Fit(row, count)
 		if row.bar then
 			icon.frame:SetScript("OnEnter", function()
 				ns.Try(KEY, E.Tip, row, icon)
+				E.TipTick(row, icon)
 			end)
 			icon.frame:SetScript("OnLeave", function()
 				ns.Try(KEY, E.Untip, icon)
@@ -911,7 +913,7 @@ end
 
 -- The tooltip of an icon of a bar: the ability with its class in its kind's colour, the enemy, and Ready, the time left from the timer (plain
 -- numbers of Tracking.lua) or that its use is not known. A sample of test mode says so; the arena break, which has no ability, has none.
--- Out of combat only shows nothing in a fight.
+-- Out of combat only shows nothing in a fight. True when it wrote the tooltip.
 function E.Tip(row, icon)
 	local tips = Opt("tooltips") or "on"
 	local tip = Tooltip()
@@ -950,9 +952,35 @@ function E.Tip(row, icon)
 		end
 		tip:Show()
 	end)
+	return true
+end
+
+-- While the mouse stays on an icon, its tooltip is written again each second (C_Timer.NewTicker), so the time counts down, turns to Ready as
+-- the sweep ends and follows the ability that moves into the slot. The step ends, and the tooltip hides, once GameTooltip is no longer the
+-- icon's, the icon hides, Icon tooltips no longer allows it (Out of combat only in a fight) or the slot is empty.
+function E.TipTick(row, icon)
+	if icon.tipTicker or type(C_Timer) ~= "table" or type(C_Timer.NewTicker) ~= "function" then
+		return
+	end
+	local ok, ticker = pcall(C_Timer.NewTicker, 1, function()
+		ns.Try(KEY, E.Retip, row, icon)
+	end)
+	icon.tipTicker = ok and ticker or nil
+end
+
+function E.Retip(row, icon)
+	local ok, visible = pcall(icon.frame.IsVisible, icon.frame)
+	if not Owned(icon) or not ok or visible ~= true or not E.Tip(row, icon) then
+		E.Untip(icon)
+	end
 end
 
 function E.Untip(icon)
+	local ticker = icon.tipTicker
+	icon.tipTicker = nil
+	if ticker then
+		pcall(ticker.Cancel, ticker)
+	end
 	if Owned(icon) then
 		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 	end

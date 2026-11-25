@@ -2,11 +2,13 @@ local _, ns = ...
 
 -- The chat windows, the chat input box and the look of tooltips. The game fades the plates of a chat window with SetAlpha, so those are
 -- hidden; art whose alpha the game leaves alone is made transparent. The flat boxes are textures of the addon's own. What the game sets again
--- is followed with hooksecurefunc on a global function of the game, with HookScript on GameTooltip, and with EventRegistry for the input box; no
+-- is followed on a global function of the game through ns.FollowGlobal (Core.lua's one hooksecurefunc for each global), with HookScript on
+-- GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
+-- from the lines the kind of a unit, an item level, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
 -- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
--- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only.
+-- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only. With Arrow keys
+-- without Alt (on by default) each input box gets the widget method SetAltArrowKeyMode(false), so the arrow keys edit the text (Arrows below).
 -- With Health text on the bar (Percent by default) a frame of the addon's own on GameTooltip's health bar, made out of combat, writes the health
 -- of the tooltip's unit on it every 0.1 s while the bar shows, the game's withheld values passed straight to the text (BT, Health bar below).
 -- The fade of GameTooltip is seen as a fall of its alpha in a frame of the
@@ -85,12 +87,15 @@ local queued = setmetatable({}, { __mode = "k" })
 -- be read), unit = true for the data of a unit, kind = "spell", "aura" or "item" (only with the owner read), hostile = whether you can attack the
 -- unit (nil when the game will not say or no row asks), group = true when the owner is one of the game's party or raid frames }.
 local X = { seats = setmetatable({}, { __mode = "k" }), scales = setmetatable({}, { __mode = "k" }), fonts = setmetatable({}, { __mode = "k" }),
-	extras = setmetatable({}, { __mode = "k" }), built = setmetatable({}, { __mode = "k" }), bar = {} }
+	extras = setmetatable({}, { __mode = "k" }), built = setmetatable({}, { __mode = "k" }), bar = {}, levels = setmetatable({}, { __mode = "k" }),
+	arrows = setmetatable({}, { __mode = "k" }) }
 local hooked = {}
 local postCall = false
 local barOutline
 -- Health text on the bar (below): its functions; X.barText is its frame and string, X.barUnit the unit of the unit tooltip that shows.
-local BT = { PART = "tooltip health text", EVERY = 0.1, FORMATS = { curmax = "%s / %s", pct = "%.0f%%", curpct = "%s (%.0f%%)" } }
+-- The text takes (height + 1) * 10 percent of its font for the bar's height (Health bar height), within SIZE, and shows on bars of LEAST px and more.
+local BT = { PART = "tooltip health text", EVERY = 0.1, FORMATS = { curmax = "%s / %s", pct = "%.0f%%", curpct = "%s (%.0f%%)" },
+	SIZE = { 70, 130 }, LEAST = 5 }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -461,6 +466,27 @@ local function SeatBox(box, restore, frame)
 	IdleBox(box, record, not restore)
 end
 
+-- Arrow keys without Alt (chat.arrows, 0.5.35): the game makes every input box with ignoreArrows (Blizzard_ChatFrameBase/Mainline/
+-- ChatFrameEditBox.xml:3), so the arrow keys move the character while one has the focus and edit the text only with Alt held. With the row on, the
+-- widget method SetAltArrowKeyMode(false) of the box lets the arrow keys move the cursor, and Up and Down bring back the lines sent (its
+-- historyLines, 32). Only a box Flat UI changed gets the game's mode (true) back, as the row, the part or the module goes off, so a box another addon
+-- set is left as it set it. The game's name completion keeps and gives back a box's mode around its list (Blizzard_AutoComplete/AutoComplete.lua:
+-- 171-174, 236-240).
+local function Arrows(box, restore)
+	if ns.Forbidden(box) or type(box.SetAltArrowKeyMode) ~= "function" then
+		return
+	end
+	if not restore and Opt("arrows") == true then
+		if pcall(box.SetAltArrowKeyMode, box, false) then
+			X.arrows[box] = true
+		end
+	elseif X.arrows[box] then
+		if pcall(box.SetAltArrowKeyMode, box, true) then
+			X.arrows[box] = nil
+		end
+	end
+end
+
 -- The passes of an input box. The game calls EventRegistry for the four moments a box changes (Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua:389,
 -- 394, 407, 415): the callbacks only queue a pass for the next frame, because Deactivate, ActivateChat and the tint run inside the game's own calls.
 -- No method of an input box is hooked (EllesmereUIChat/EllesmereUIChat.lua:4410-4417, 4236-4260 and the same callbacks).
@@ -562,6 +588,7 @@ local function Chat()
 			if box then
 				ns.Each(KEY, StyleBox, box, name)
 				Part("input box place", SeatBox, box, frame)
+				Part("input arrows", Arrows, box)
 			end
 		end
 	end
@@ -809,6 +836,51 @@ local function Extras(tooltip, data)
 		shown = shown + 1
 	end
 	X.extras[tooltip] = { data = data, lines = shown }
+end
+
+-- True when the data already has a line of the kind ItemLevel (Enum.TooltipDataLineType, 31 in TooltipInfoSharedDocumentation.lua:65), which a
+-- client that writes its own item level line gives; a kind the game does not say counts as none.
+local function HasLevelLine(data)
+	local kinds, list = type(Enum) == "table" and Enum.TooltipDataLineType, data.lines
+	local kind = Usable(kinds) and kinds.ItemLevel or nil
+	if not IsNumber(kind) or not Usable(list) then
+		return false
+	end
+	for _, line in ipairs(list) do
+		if Usable(line) and IsNumber(line.type) and line.type == kind then
+			return true
+		end
+	end
+	return false
+end
+
+-- Item level (chat.itemLevel, 0.5.35): a line "Item level 63" in the game's gold (NORMAL_FONT_COLOR) after the game's own lines of a weapon or a
+-- piece of armour and before the spell, gear and ID lines, on every tooltip the game builds from data, so the comparison beside it
+-- (ShoppingTooltip1 and 2) says its level too. The level is ns.Items.LevelOf's (Items.lua: weapons and armour only, C_Item.GetItemInfoInstant and
+-- C_Item.GetDetailedItemLevelInfo) of the data's hyperlink, else of its id; an item the client has not loaded yet gets none, and so does data that
+-- already has the game's own item level line (HasLevelLine). Once for each build, as Extras: the same data with the line still there is the same
+-- build.
+local function ItemLevelLine(tooltip, data)
+	if not ns.Enabled(KEY) or Opt("itemLevel") ~= true or not IsData(data, "Item") or not Usable(tooltip) or ns.Forbidden(tooltip) then
+		return
+	end
+	local items, link = ns.Items, data.hyperlink
+	if ns.IsSecret(link) or type(link) ~= "string" or link == "" then
+		link = data.id
+	end
+	if not Usable(items) or type(items.LevelOf) ~= "function" or not (IsNumber(link) or type(link) == "string") or HasLevelLine(data) then
+		return
+	end
+	local okLevel, level = pcall(items.LevelOf, link)
+	local ok, shown = pcall(tooltip.NumLines, tooltip)
+	local record = X.levels[tooltip]
+	if not okLevel or not ns.Finite(level) or level <= 0 or not ok or not IsNumber(shown)
+		or (record and record.data == data and shown >= record.lines) then
+		return
+	end
+	if pcall(tooltip.AddLine, tooltip, ("Item level %d"):format(math.floor(level + 0.5)), 1, 0.82, 0) then
+		X.levels[tooltip] = { data = data, lines = shown + 1 }
+	end
 end
 
 -- The colour of a unit tooltip's border and of the name on its first line. Called by the game for the name line of a unit, after it is added
@@ -1180,6 +1252,8 @@ local function FollowData()
 		if not ns.IsStopped(KEY) then
 			-- ChatTips.lua: the target line, the class line and the icons, before the kind word so that it stays the last line.
 			ns.Each(KEY, ns.ChatTipLines, tooltip, data)
+			-- The item level of a weapon or a piece of armour, right under the game's own lines (ItemLevelLine).
+			ns.Each(KEY, ItemLevelLine, tooltip, data)
 			-- SpellLines.lua and GearLines.lua: the spell and the gear lines, after the game's own and before the ID and count lines (Extras), so that
 			-- the ID line stays after them. Each runs its work inside ns.EachPart, so a fault there stops that part alone.
 			if type(ns.SpellTipLines) == "function" then
@@ -1362,14 +1436,29 @@ end
 -- on it, so it shows and hides with the bar. The post call keeps the unit of a unit tooltip's data (BT.Unit); every 0.1 s while the bar shows, the
 -- unit's health goes to the string as the game gives it (UnitHealth, UnitHealthMax, UnitHealthPercent, AbbreviateNumbers), withheld values
 -- too, never read, compared or added, as UnitText.lua writes the health text of the unit frames. Its part stops alone after three refusals.
+-- Since 0.5.35 the text grows and shrinks with Health bar height (BT.Size) and shows on bars of 5 px and more; a unit the game plainly says is
+-- dead or a ghost (UnitIsDeadOrGhost) reads Dead (the game's DEAD); and once the unit is gone, as the mouseover is the moment the mouse leaves it,
+-- the last text stays while the bar fades with its tooltip, as the game's bar keeps its last value, and goes as the bar hides.
 
--- The format Health text on the bar asks for, or nil for None, with Hide the health bar on, the module off or the part stopped.
+-- The format Health text on the bar asks for, or nil for None, with Hide the health bar on, a bar under LEAST px, the module off or the part
+-- stopped.
 function BT.Mode()
-	local mode = Opt("barText")
-	if not ns.Enabled(KEY) or ns.PartStopped(KEY, BT.PART) or Opt("barHide") == true or BT.FORMATS[mode] == nil then
+	local mode, height = Opt("barText"), Opt("barHeight")
+	if not ns.Enabled(KEY) or ns.PartStopped(KEY, BT.PART) or Opt("barHide") == true or BT.FORMATS[mode] == nil
+		or (IsNumber(height) and height < BT.LEAST) then
 		return nil
 	end
 	return mode
+end
+
+-- The size of the string for the bar's height: (height + 1) * 10 percent of its font (GameFontHighlightSmall, 10 px), so 90% on the game's 8 px
+-- bar, within SIZE, outlined. A font call on Flat UI's own string, so it can change in a fight.
+function BT.Size(text)
+	local height = Opt("barHeight")
+	if not IsNumber(height) then
+		height = BAR_HEIGHT
+	end
+	ns.TextStyle(text, { percent = math.max(BT.SIZE[1], math.min(BT.SIZE[2], (height + 1) * 10)), flags = "OUTLINE" })
 end
 
 -- The unit of GameTooltip's health bar: of a unit tooltip's data, by the guid the bar watches or the data's guid (UnitTokenFromGUID), else the
@@ -1399,20 +1488,37 @@ function BT.Unit(tooltip, data)
 		end
 	end
 	X.barUnit = token
+	-- The next pass of the frame writes the new unit's health at once.
+	if X.barText then
+		X.barText.wait = BT.EVERY
+	end
 end
 
--- One write. job is new for each call, so each refused call counts as a failure of its own. A unit that is gone leaves the string empty.
+-- One write. job is new for each call, so each refused call counts as a failure of its own. No unit leaves the string empty; a unit that is gone
+-- keeps the last text until the bar hides (its OnHide empties it); a dead one reads Dead.
 function BT.Fill(_)
 	local own, mode, unit = X.barText, BT.Mode(), X.barUnit
 	if not (own and mode) then
 		return
 	end
+	if not unit then
+		own.text:SetText("")
+		return
+	end
 	local ok, exists = false, nil
-	if unit and type(UnitExists) == "function" then
+	if type(UnitExists) == "function" then
 		ok, exists = pcall(UnitExists, unit)
 	end
 	if not (ok and not ns.IsSecret(exists) and exists == true) then
-		own.text:SetText("")
+		return
+	end
+	local okDead, dead = false, nil
+	if type(UnitIsDeadOrGhost) == "function" then
+		okDead, dead = pcall(UnitIsDeadOrGhost, unit)
+	end
+	if okDead and not ns.IsSecret(dead) and dead == true then
+		local word = DEAD
+		own.text:SetText(not ns.IsSecret(word) and type(word) == "string" and word ~= "" and word or "Dead")
 		return
 	end
 	if mode == "curmax" then
@@ -1442,7 +1548,7 @@ function BT.Build(bar)
 		return
 	end
 	text:SetPoint("CENTER", frame, "CENTER", 0, 0)
-	ns.TextStyle(text, { percent = 90, flags = "OUTLINE" })
+	BT.Size(text)
 	local own = { frame = frame, text = text, wait = 0 }
 	X.barText = own
 	frame:SetScript("OnUpdate", function(_, elapsed)
@@ -1456,19 +1562,22 @@ function BT.Build(bar)
 			pcall(frame.Hide, frame)
 		end
 	end)
-	-- The bar hides with its tooltip, and the next unit tooltip names its unit again.
+	-- The bar hides with its tooltip, and the next unit tooltip names its unit again: the last text goes with it, so it never shows on the next.
 	frame:SetScript("OnHide", function()
 		X.barUnit = nil
+		pcall(text.SetText, text, "")
 	end)
 	BT.Show(bar)
 end
 
--- Shows the string while a format is chosen, or makes it out of combat; hides it for None.
+-- Shows the string while a format is chosen, at the size of the bar's height, or makes it out of combat; hides it for None.
 function BT.Show(bar)
 	local own, mode = X.barText, BT.Mode()
 	if own then
 		if mode == nil then
 			pcall(own.text.SetText, own.text, "")
+		else
+			BT.Size(own.text)
 		end
 		pcall(own.frame.SetShown, own.frame, mode ~= nil)
 	elseif mode ~= nil and not X.barTextQueued then
@@ -1519,17 +1628,19 @@ end
 
 -- Hooks -------------------------------------------------------------------------------------
 
--- A hook on a global function of the game, put on once and only when the function exists.
+-- A hook on a global function of the game, put on once and only when the function exists, through ns.FollowGlobal (Core.lua), which runs each
+-- follower of a global under pcall, so a fault here stops no other follower of it (0.5.35).
 local function Follow(name, fn)
-	if hooked[name] or type(hooksecurefunc) ~= "function" or type(_G[name]) ~= "function" then
+	if hooked[name] or type(_G[name]) ~= "function" then
 		return
 	end
-	hooked[name] = true
-	hooksecurefunc(name, function(...)
+	if ns.FollowGlobal(name, function(...)
 		if not ns.IsStopped(KEY) then
 			ns.Each(KEY, fn, ...)
 		end
-	end)
+	end) then
+		hooked[name] = true
+	end
 end
 
 -- The game colours a tab with the state it is in: true for the selected tab.

@@ -5,7 +5,9 @@ local _, ns = ...
 -- ns.Own; draw reads the settings only through ns.Get, so under the draft view of the wizard it draws the draft, and it lays everything
 -- out again each time it runs. Sample text and numbers are fixed. The look of a frame, a fill, a face and a colour comes from the same
 -- functions the modules paint with (ns.Outline, ns.SetOutlineFill, ns.TipShades, ns.FontFile, ns.OutlineFlags, ns.FlatFill, ns.BarTexture,
--- ns.CombatOffsets, ns.CombatPopHeight, ns.CombatOwnEdge, ns.CombatColour, ns.CombatFont).
+-- ns.CombatOffsets, ns.CombatPopHeight, ns.CombatOwnEdge, ns.CombatColour, ns.CombatFont, and for the two scroll areas ns.ScrollLane, ns.ScrollPath,
+-- ns.ScrollAlpha and ns.ScrollSize). mock-combat-text draws the numbers over an enemy plate and over friendly units, the Incoming area's numbers
+-- on you and, right of them, the Outgoing area's column of your hits.
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
@@ -543,7 +545,7 @@ end
 do
 	local instances = setmetatable({}, { __mode = "k" })
 	local SHAPE = ns.CombatShape
-	local WIDE, HIGH, PLATE_X, PLATE_Y, OWN_X = 560, 204, 150, 44, 440
+	local WIDE, HIGH, PLATE_X, PLATE_Y, OWN_X = 650, 204, 150, 44, 430
 	-- The age a Burst critical hit is drawn at: 0.03 s, 2.06 times its settled height.
 	local BURST_AGE = 0.03
 	-- Over an enemy, in the order they appeared: the text, the kind of hit the game reports, the school of magic mask, whether it is a
@@ -575,9 +577,21 @@ do
 		{ text = "Miss", kind = "word", age = 0.25 },
 	}
 	local FRIEND_X, FRIEND_FRAME_Y, FRIEND_PLATE_Y = 330, 150, 44
+	-- In the Outgoing scroll area, right of the numbers on you, from the oldest: a swing with the icon of Attack, a critical Fire spell hit with its
+	-- icon and a Dodge, a steady run of hits OUT_GAP seconds apart. The column is OUT_X from the left; it starts OUT_LOW from the bottom of the mock
+	-- area when it moves up (from OUT_LOW + OUT_LENGTH when it moves down) and reaches OUT_LENGTH. The icon of a swing when the client gives none.
+	local OUT = {
+		{ text = "412", school = 1, icon = "swing" },
+		{ text = "824", school = 4, crit = true, icon = "spell" },
+		{ text = "Dodge", word = true },
+	}
+	local OUT_X, OUT_LOW, OUT_LENGTH, OUT_GAP = 545, 18, 168, 0.85
+	local SWING_ICON, SPELL_ICON = "Interface\\Icons\\INV_Sword_04", "Interface\\Icons\\Spell_Fire_FlameBolt"
+	-- An icon in the text of a number, as the Outgoing area writes it (ScrollText.lua, INLINE): as high as the text, its edge trimmed.
+	local INLINE = "|T%s:0:0:0:0:64:64:5:59:5:59|t "
 
 	local function Build(stage)
-		local S = { enemy = {}, own = {} }
+		local S = { enemy = {}, own = {}, out = {} }
 		instances[stage] = S
 		S.root = U.frame(stage, WIDE, HIGH)
 		S.root:SetPoint("CENTER", stage, "CENTER", 0, 0)
@@ -610,6 +624,10 @@ do
 		for i = 1, #OWN do
 			S.own[i] = U.text(S.front)
 			S.own[i]:SetWordWrap(false)
+		end
+		for i = 1, #OUT do
+			S.out[i] = U.text(S.front)
+			S.out[i]:SetWordWrap(false)
 		end
 		-- Two friendly units, a party frame and a friendly plate, each with its own numbers.
 		S.friends = {}
@@ -644,6 +662,67 @@ do
 			return 1
 		end
 		return math.max(0, 1 - (age - fade) / (life - fade))
+	end
+
+	-- The icon of Attack, as the module takes it (C_Spell.GetSpellTexture of 6603, CombatText.lua), else a sword.
+	local function SwingIcon()
+		if type(C_Spell) == "table" and type(C_Spell.GetSpellTexture) == "function" then
+			local ok, file = pcall(C_Spell.GetSpellTexture, 6603)
+			if ok and not ns.IsSecret(file) and type(file) == "number" then
+				return file
+			end
+		end
+		return SWING_ICON
+	end
+
+	-- The numbers of the Outgoing scroll area, while Where your hits show is not Over enemies: moved by Outgoing style, up or down as Outgoing
+	-- direction says, as big as Size of the Outgoing area makes them (ns.ScrollSize), with the icon Spell icons gives a swing (All) or a spell (All
+	-- or Spells only) while Whose hits is Yours, and none on a word, for the life Speed gives them (an old one has gone at Fast). Straight and Arc
+	-- numbers take their lanes by the rule of the game (ns.ScrollLane), the lanes to the right, away from the character; Horizontal and Static
+	-- numbers take a row each. look: file, flags, shadow, pops, palette and bySchool of the drawing.
+	local function DrawOut(S, look)
+		local shown = ns.Get("combattext.enabled") ~= false and ns.Get("combattext.where") ~= "over"
+		local scroll, style = SHAPE.scroll, ns.Get("combattext.outStyle")
+		local dir = ns.Get("combattext.outDir") == "down" and -1 or 1
+		local start0 = dir == 1 and OUT_LOW or OUT_LOW + OUT_LENGTH
+		local life = style == "static" and scroll.still or scroll.life[ns.Get("combattext.speed")] or scroll.life.normal
+		local hold = style == "static" and scroll.stillHold or scroll.hold
+		local base = SHAPE.text * (ns.ScrollSize and ns.ScrollSize("out") or ns.Get("combattext.size")) / 100
+		local path = style == "straight" or style == "arc"
+		local icons = ns.Get("combattext.whose") == "one" and ns.Get("combattext.icons") or "off"
+		local snapshot = OUT_GAP * (#OUT - 1) + 0.1
+		local newest = {}
+		for i, sample in ipairs(OUT) do
+			local fs = S.out[i]
+			fs:SetShown(shown)
+			if shown then
+				local height = base * (sample.crit and scroll.crit or 1)
+				local start, rx, ry = OUT_GAP * (i - 1), 0, dir * (i - 1) * height * scroll.line
+				if path then
+					local lane
+					lane, start = ns.ScrollLane(newest, height, start)
+					newest[lane] = { start = start, height = height, life = life, length = OUT_LENGTH, serial = i }
+					rx, ry = scroll.lanes[lane] * scroll.lane * base, 0
+				end
+				local age = snapshot - start
+				local u = math.max(0, age / life)
+				local dx, dy = ns.ScrollPath(style, u, OUT_LENGTH, dir, 1, scroll.arcs[ns.Get("combattext.arcWidth")])
+				local text, r, g, b = sample.text, 1, 1, 1
+				if sample.word then
+					text = ns.CombatParen(text)
+				else
+					r, g, b = ns.CombatColour(sample.school, look.bySchool, look.palette)
+					local icon = (sample.icon == "swing" and icons == "all" and SwingIcon()) or (sample.icon == "spell" and (icons == "all" or icons == "spells") and SPELL_ICON)
+					if icon then
+						text = INLINE:format(tostring(icon)) .. text
+					end
+				end
+				fs:SetText(text)
+				U.font(fs, look.file, Height(base, sample.crit, math.max(0, age), look.pops), look.flags, look.shadow, { r, g, b })
+				fs:SetAlpha((age < 0 or u >= 1) and 0 or ns.ScrollAlpha(u, hold))
+				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OUT_X + rx + dx, start0 + ry + dy)
+			end
+		end
 	end
 
 	local function Draw(stage)
@@ -839,6 +918,9 @@ do
 				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OWN_X + rx + dx, top + ry + dy)
 			end
 		end
+		-- The Outgoing area colours its hits as the module does, by the rows themselves, whichever numbers show over enemies.
+		DrawOut(S, { file = file, flags = flags, shadow = shadow, pops = pops, palette = chosen and ns.Get("combattext.classicColour") or nil,
+			bySchool = ns.Get("combattext.school") == true })
 	end
 
 	local drawing = { draw = Draw, parts = {} }
@@ -853,6 +935,9 @@ do
 		p["combattext.height"], p["combattext.crit"], p["combattext.classicCrit"] = S.enemy[6], S.enemy[6], S.enemy[6]
 		p["combattext.inStyle"], p["combattext.ownSize"], p["combattext.arcWidth"] = S.own[1], S.own[1], S.own[1]
 		p["combattext.inDir"] = S.own[1]
+		for _, key in ipairs({ "where", "outStyle", "outSize", "outDir", "icons", "speed" }) do
+			p["combattext." .. key] = S.out[1]
+		end
 		p["combattext.missWords"] = S.enemy[5]
 		for _, key in ipairs({ "friend", "friendUnits", "friendDamage", "friendHeal", "friendPet", "friendWords", "friendSigns", "friendDamageColour", "friendHealColour", "friendSize", "friendHeight" }) do
 			p["combattext." .. key] = S.friends[key == "friendHeight" and 1 or 2].frame

@@ -42,8 +42,11 @@ local ADDON_NAME, ns = ...
 -- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
 -- still that name, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
--- textures of its own on each of the player's two cast bars (CreateTexture, out of combat on a bar the game may protect) and places them with
--- SetPoint while a channel runs; a frame of its own hears the player's channel events while the row is on, and it only reads UnitChannelInfo.
+-- textures of its own on each of the player's two cast bars, each hung from an invisible spacer of its own (CreateTexture and SetPoint, once, out of
+-- combat on a bar the game may protect), and while a channel runs only sets their widths, Show, Hide and SetAlpha; a frame of its own hears the
+-- player's channel events while the row is on, and it only reads UnitChannelInfo. Finish flash (Bars.lua, In the cast colour by default) tints the
+-- game's end-of-cast glow (the bar's Flash) on flat cast bars and nameplate cast bars with SetDesaturated and SetVertexColor, and puts it back
+-- white and not desaturated when the flat fill goes.
 -- Cast time on your bars (CastTime.lua, off by default) fades the game's own time on the player's two cast bars and the pet's (CastTimeText,
 -- SetAlpha 0) while it is on and gives it its alpha back when the row goes off; the seconds are font strings of its own inside each bar.
 -- Minimap and HUD gathers other addons' minimap buttons beside or under the map with ClearAllPoints and SetPoint, unprotected ones only (with Flat
@@ -98,6 +101,12 @@ local ADDON_NAME, ns = ...
 -- opens every bag is on, it gives each key the player has for Toggle Backpack an override binding to Open All Bags (SetOverrideBinding, on a frame
 -- of its own, out of combat), so B opens the reagent bag too; ClearOverrideBindings takes them away when the row goes off, the player's bindings
 -- are never written, and the overrides end with the session.
+-- With Explain the stats on (StatTips.lua and StatTipsMore.lua, Item slots, on by default), Windows adds lines of its own to GameTooltip (AddLine,
+-- AddDoubleLine, then Show) after the game has written the tooltip of a row of the Character window's stats list, only while that row owns it
+-- (IsOwned, IsShown). To learn which stat a row shows it follows the Init of the rows' mixin (CharacterStatFrameScrollBoxBaseElementMixin) and
+-- the updateFunc of each stat of PAPERDOLL_STATCATEGORIES in PAPERDOLL_STATINFO with ns.FollowTable, reading only what they are given and the
+-- row's parents (GetParent), follows each row's OnEnter and OnLeave once with HookScript (which writes nothing on the row), and follows
+-- MovementSpeed_OnEnter with ns.FollowGlobal, as the game writes that row's tooltip again while it shows. It writes nothing else of the game's.
 -- Maximum camera distance, on the World and cursor page, writes the game's cameraDistanceMaxZoomFactor only when the player ticks or unticks it, out of
 -- combat: 2.6 when ticked, its text before that kept in FlatUIDB.cameraGame, and that text again (or the client's default) when unticked while
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.

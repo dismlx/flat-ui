@@ -8,7 +8,11 @@ local _, ns = ...
 -- No target warning: in a fight, from PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED (Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:3885-3895),
 -- with no target, a dead one or one the player cannot attack (UnitExists, UnitIsDeadOrGhost and UnitCanAttack, UnitDocumentation.lua:1192-1205, 1931-1944,
 -- 763-777), No target shows after a second and stays until a target that can be attacked is taken or the fight ends. With Warn with a friendly
--- target off, a living target that cannot be attacked keeps it away too. The target is judged again when it changes (PLAYER_TARGET_CHANGED,
+-- target off, a living target that cannot be attacked keeps it away too, and so it does while the player heals: ns.PlayerRole (Core.lua) says
+-- healer, from the group role, else the most talent points in a healing tree, else a priest. The role is read only out of a fight (talents may be
+-- withheld in one; a withheld answer counts as no healer): at each refresh, as a fight ends, and when the group, its roles or the talents change
+-- (GROUP_ROSTER_UPDATE, PLAYER_ROLES_ASSIGNED, PartyInfoDocumentation.lua:680 and 829; PLAYER_TALENT_UPDATE and CHARACTER_POINTS_CHANGED,
+-- SpecializationInfoDocumentation.lua:503, PaperDollInfoDocumentation.lua:297). The target is judged again when it changes (PLAYER_TARGET_CHANGED,
 -- :3974-3978) and, in a fight, when its health, flags or faction change (UNIT_HEALTH, UNIT_FLAGS and UNIT_FACTION, :4318-4327, 4267-4275 and
 -- 4257-4265), which a frame of the addon's own hears for the target alone, and only in a fight. None of these is marked secret, but an answer the
 -- game withholds is never compared: the warning stays away until the game says. As it shows, the sound of No target sound (ns.SOUNDS, IconRow.lua)
@@ -28,7 +32,10 @@ local _, ns = ...
 -- +Combat and -Combat above the middle of the box and No target under it. They are made on the game's combat font (CombatTextFont,
 -- Blizzard_Fonts_Shared/Shared/GameFontStyles.xml:150-152), else its large number font (:25), at their own size with a thin outline. A size of
 -- 100% is the height of the game's own combat messages, 25 units (CombatTextConstants.lua:6). The fade is stepped by a timer of its own
--- (C_Timer.NewTicker), which runs only while +Combat or -Combat shows. Nothing shows while the interface is hidden: Alt+Z hides UIParent
+-- (C_Timer.NewTicker), which runs only while +Combat or -Combat shows. Each line has an animation group of its own (UISharedDocumentation.lua): No
+-- target breathes while it shows, its opacity from whole to 0.55 and back every 1.2 seconds (an Alpha animation that bounces), and +Combat and
+-- -Combat start a third larger and settle in 0.15 seconds (a Scale animation in Vertex mode, as the scroll areas pop their numbers, ScrollText.lua);
+-- a client that will not make them shows the lines still, as before 0.5.35. Nothing shows while the interface is hidden: Alt+Z hides UIParent
 -- (Blizzard_FrameXML/Bindings_Camelot.xml:1310-1318), a cinematic is a full screen panel that hides it (Blizzard_UIParentPanelManager/Mainline/
 -- UIPanelWindows.lua:42, Shared/UIParentPanelManager.lua:281-283 and 444-446) and a movie hides it (Blizzard_FrameXML/MovieFrame.lua:59-62). Then
 -- +Combat and -Combat do not start, a fading one goes, and no sound plays; No target is hidden with UIParent. Nothing of the game is changed.
@@ -37,12 +44,18 @@ local _, ns = ...
 -- between sounds, and the colour of No target.
 -- While test mode is on (TestMode.lua), +Combat, No target and -Combat show in turn, two seconds each, while their rows are on, and count in no
 -- number of /flatui status (ns.CombatCuesTestStep); +Combat and -Combat play no sound there.
+-- Picking a sound in No target sound, Entering combat sound or Leaving combat sound plays it once (ns.CombatCueSoundPicked, the rows' changed
+-- handler in Config.lua, so Core.lua calls it for a change made with ns.Set), only while the options window shows (ns.PanelShown) and out of a
+-- fight; None plays nothing.
 
 local KEY, PART = "combattext", "combat alerts"
 -- The seconds +Combat and -Combat show and the second they start to fade (CombatTextConstants.lua:4-5), the step of the fade, the seconds a target
 -- is missing before No target shows and the least seconds between two of its sounds (GroupTools.lua:1018 and 1043-1047 of EnhanceQoL), and the
 -- height of a size of 100% (CombatTextConstants.lua:6).
 local LIFE, FADE_FROM, STEP, DELAY, SOUND_GAP, HEIGHT = 1.9, 1.3, 0.05, 1, 3, 25
+-- The breath of No target: the opacity it dims to and the seconds each way. The pop of +Combat and -Combat: the scale it starts at and the seconds it
+-- takes to settle.
+local BREATHE_TO, BREATHE_TIME, POP_FROM, POP_TIME = 0.55, 0.6, 1.3, 0.15
 -- The box of the movers (Movers.lua): its name and size, the units between its middle and each line, and where it is from the middle of the
 -- screen when the movers give no spot.
 local MOVER, WIDTH, TALL, GAP, X, Y = "FlatUICombatCues", 200, 60, 2, 0, 100
@@ -64,8 +77,9 @@ local TARGET_EVENTS = { "UNIT_HEALTH", "UNIT_FLAGS", "UNIT_FACTION" }
 -- warned: No target shows. soundAt: when its sound last played. listener and listening: the frame that hears the target, and whether it does.
 -- flashes, warnings, withheld and stateSounds (the +Combat and -Combat sounds played): what /flatui status counts. silent: the No target sounds
 -- the game has not played since it last played one; /flatui status says so while there are any. blind: the last judgement had an answer the game
--- withheld.
-local S = { fighting = false, warned = false, listening = false, blind = false, flashes = 0, warnings = 0, withheld = 0, silent = 0, stateSounds = 0 }
+-- withheld. healer: the player heals (ns.PlayerRole), read out of a fight. breathe and pop: the animation groups of No target and of the flash line.
+local S = { fighting = false, warned = false, listening = false, blind = false, healer = false, flashes = 0, warnings = 0, withheld = 0, silent = 0,
+	stateSounds = 0 }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -144,6 +158,47 @@ local function Template()
 	return "NumberFontNormalHuge"
 end
 
+-- The breath of No target: an Alpha animation from whole to BREATHE_TO and back, looping while it plays. Nil when the client will not make it.
+local function Breathe(line)
+	local ok, group = pcall(function()
+		local made = line:CreateAnimationGroup()
+		made:SetLooping("BOUNCE")
+		local fade = made:CreateAnimation("Alpha")
+		fade:SetFromAlpha(1)
+		fade:SetToAlpha(BREATHE_TO)
+		fade:SetDuration(BREATHE_TIME)
+		pcall(fade.SetSmoothing, fade, "IN_OUT")
+		return made
+	end)
+	return ok and not ns.IsSecret(group) and type(group) == "table" and group or nil
+end
+
+-- The pop of +Combat and -Combat: a Scale animation in Vertex mode (UISharedDocumentation.lua:6-15), from POP_FROM down to whole, grown from the
+-- middle of the centred line. Nil when the client will not make it.
+local function Pop(line)
+	local ok, group = pcall(function()
+		line:SetScaleAnimationMode(Enum and Enum.FontStringScaleAnimationMode and Enum.FontStringScaleAnimationMode.Vertex or 1)
+		local made = line:CreateAnimationGroup()
+		local scale = made:CreateAnimation("Scale")
+		scale:SetScaleFrom(POP_FROM, POP_FROM)
+		scale:SetScaleTo(1, 1)
+		scale:SetDuration(POP_TIME)
+		scale:SetOrigin("CENTER", 0, 0)
+		return made
+	end)
+	return ok and not ns.IsSecret(group) and type(group) == "table" and group or nil
+end
+
+-- Plays or stops an animation group of the lines, if it was made.
+local function Animate(group, play)
+	if group then
+		pcall(group.Stop, group)
+		if play then
+			pcall(group.Play, group)
+		end
+	end
+end
+
 -- Makes the frame and its two lines, once. False when the game would not make them: no line shows then, and status says so.
 local function Make()
 	if S.frame then
@@ -179,6 +234,7 @@ local function Make()
 		S.file = file
 	end
 	S.frame, S.flash, S.warn = frame, flash, warn
+	S.breathe, S.pop = Breathe(warn), Pop(flash)
 	return true
 end
 
@@ -232,6 +288,7 @@ end
 local function EndFlash()
 	StopTicker()
 	S.flashAt, S.flashKind = nil, nil
+	Animate(S.pop, false)
 	if S.flash then
 		pcall(S.flash.Hide, S.flash)
 		pcall(S.flash.SetAlpha, S.flash, 1)
@@ -302,6 +359,7 @@ local function Flash(kind, quiet)
 	Look(line, kind)
 	line:SetAlpha(1)
 	line:Show()
+	Animate(S.pop, true)
 	S.flashAt, S.flashKind = now, kind
 	S.flashes = S.flashes + 1
 	Place()
@@ -317,8 +375,10 @@ local function HideWarning()
 	S.missingAt, S.waiting = nil, nil
 	if S.warned then
 		S.warned = false
+		Animate(S.breathe, false)
 		if S.warn then
 			pcall(S.warn.Hide, S.warn)
+			pcall(S.warn.SetAlpha, S.warn, 1)
 		end
 		Shown()
 	end
@@ -360,6 +420,7 @@ local function ShowWarning()
 	line:SetText(NO_TARGET)
 	Look(line, "warn")
 	line:Show()
+	Animate(S.breathe, true)
 	S.warned = true
 	S.warnings = S.warnings + 1
 	Place()
@@ -367,8 +428,17 @@ local function ShowWarning()
 	Sound()
 end
 
+-- Whether the player heals, from ns.PlayerRole, read only out of a fight: in one the last answer stays. A withheld answer counts as no healer.
+local function ReadRole()
+	if Ask(InCombatLockdown) == true or type(ns.PlayerRole) ~= "function" then
+		return
+	end
+	local ok, role = pcall(ns.PlayerRole)
+	S.healer = ok and not ns.IsSecret(role) and role == "healer"
+end
+
 -- True when the player has nothing to fight: no target, a dead one or a ghost, or one that cannot be attacked while Warn with a friendly target
--- is on. Nil while the game withholds an answer.
+-- is on and the player does not heal. Nil while the game withholds an answer.
 local function Missing()
 	local exists = Ask(UnitExists, "target")
 	if type(exists) ~= "boolean" then
@@ -386,7 +456,7 @@ local function Missing()
 	if type(attack) ~= "boolean" then
 		return nil
 	end
-	return not attack and Opt("noTargetFriendly") == true
+	return not attack and Opt("noTargetFriendly") == true and not S.healer
 end
 
 local Wait
@@ -505,6 +575,9 @@ local function Apply()
 	if flash or warn then
 		S.fighting = InFight()
 	end
+	if warn then
+		ReadRole()
+	end
 	if not flash then
 		EndFlash()
 	end
@@ -534,6 +607,9 @@ end)
 
 ns.AddEvent(KEY, "PLAYER_REGEN_ENABLED", function()
 	S.fighting = false
+	if WarnWanted() then
+		Run(ReadRole)
+	end
 	if FlashWanted() or S.warned or S.listening or S.waiting then
 		Run(function()
 			Listen(false)
@@ -542,6 +618,15 @@ ns.AddEvent(KEY, "PLAYER_REGEN_ENABLED", function()
 		end)
 	end
 end)
+
+-- The group, its roles and the talents say whether the player heals.
+for _, event in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED" }) do
+	ns.AddEvent(KEY, event, function()
+		if WarnWanted() then
+			Run(ReadRole)
+		end
+	end)
+end
 
 ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
 	if S.fighting and WarnWanted() then
@@ -566,6 +651,9 @@ ns.AddStatus(KEY, function()
 		end
 		if S.silent > 0 and KITS[Opt("noTargetSound")] then
 			lines[#lines + 1] = "No target sound: the game played no sound, so the warning is silent."
+		end
+		if S.healer and Opt("noTargetFriendly") == true then
+			lines[#lines + 1] = "No target warning: friendly targets count while you heal."
 		end
 	end
 	if Opt("combatState") then
@@ -614,6 +702,7 @@ function ns.CombatCuesTestStep()
 			line:SetText(NO_TARGET)
 			Look(line, "warn")
 			line:Show()
+			Animate(S.breathe, true)
 			S.warned, S.sampled = true, true
 			Place()
 			Shown()
@@ -656,5 +745,18 @@ end
 function ns.CombatCuesMoved()
 	if S.frame then
 		Run(Place)
+	end
+end
+
+-- Picking a sound in the options window plays it once, so it can be chosen by ear: the changed handler of No target sound, Entering combat sound
+-- and Leaving combat sound (Config.lua). Only while the options window shows and out of a fight; None plays nothing.
+function ns.CombatCueSoundPicked(path)
+	if type(path) ~= "string" or Ask(InCombatLockdown) == true or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+		return
+	end
+	local kit = KITS[ns.Get(path)]
+	local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+	if sound and type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1])
 	end
 end

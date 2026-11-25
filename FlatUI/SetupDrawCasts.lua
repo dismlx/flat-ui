@@ -10,9 +10,10 @@ local _, ns = ...
 --   cast bars: the border and background of ApplyCastBar (Bars.lua:597-622), the plate behind the spell name, the spark, the shield, the icon and
 --   the spell name of ApplyCastParts and ns.CastText (Bars.lua:707-816), the cover colour of CastColour (956-972), the marks of Marks (1020-1088),
 --   the sizes and the place of the spell name of CastBarSize.lua:92-150, the rank after the spell name of CastRank.lua, and the tick marks of a
---   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks).
+--   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks), dim where the channel has passed them.
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
---   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530).
+--   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530), and the
+--   Queued ability colour of Q over the first main hand timer in the second half of each of its swings.
 -- Sizes and places of the game's own parts come from the client's interface source:
 --   Blizzard_UIPanels_Game/Mainline/CastingBarFrame.xml:198-204, 241-252, 313-318, 326-331 (player and pet bar: plate 12 below the bar, shield 29 by 33 at
 --   -27, 4, icon 16 by 16 at -5, spell name at the top -10, spark 8 by 20), CastingBarFrame.xml:399-452 (small bar: icon 20 by 20 at -2, -5, spark 6 by 16,
@@ -500,8 +501,22 @@ local function CastName(row, look, name)
 	return spec.rank and look.enabled and G("castbars.rank") == true and (spec.name .. " (" .. spec.rank .. ")") or spec.name or ""
 end
 
--- The tick marks of a channel on a bar that has them, at even steps of its width, while Channel ticks on the player bar is on (CastTicks.lua).
-local function PaintTicks(row, look, state, w)
+-- Dims the tick marks a channel at `part` of its width (the share left: the fill ends there) has passed, those right of the end of the fill, as
+-- CastTicks.lua dims a mark once its tick has landed; the next one stays bright. On the Drain Life row, at 0.55, the marks at 0.6 and 0.8 are dim.
+local function DimTicks(row, part)
+	local list = row.ticks
+	if not (list and ns.Finite(part)) then
+		return
+	end
+	local n = #list + 1
+	for k, mark in ipairs(list) do
+		mark:SetAlpha(k / n > part and 0.25 or 1)
+	end
+end
+
+-- The tick marks of a channel on a bar that has them, at even steps of its width, while Channel ticks on the player bar is on (CastTicks.lua), the
+-- ones the channel has passed dimmed.
+local function PaintTicks(row, look, state, w, part)
 	local list = row.ticks
 	if not list then
 		return
@@ -516,6 +531,33 @@ local function PaintTicks(row, look, state, w)
 			mark:SetWidth(ns.Pixels(row.bar, 1))
 		end
 		mark:SetShown(on)
+	end
+	if on then
+		DimTicks(row, part)
+	end
+end
+
+-- The latency zone of the player bar: at the right end of a cast, at the left end of a channel, where it drains to, as Marks of Bars.lua has it;
+-- shown with Flat fill and Latency zone on, and not while the cast is interrupted.
+local function PlaceLatency(row, look, state, w)
+	local latency = row.latency
+	if not latency then
+		return
+	end
+	local side = state == "channel" and "LEFT" or "RIGHT"
+	latency:ClearAllPoints()
+	latency:SetPoint("TOP" .. side, row.bar, "TOP" .. side, 0, 0)
+	latency:SetPoint("BOTTOM" .. side, row.bar, "BOTTOM" .. side, 0, 0)
+	latency:SetWidth(Max(w * 0.05, 0.01))
+	latency:SetShown(look.flat and G("castbars.latency") == true and state ~= "interrupted")
+end
+
+-- The time of a bar: the row of Cast time on your bars for the player's and the pet's, Cast time on target and focus bars for the others, and none
+-- while the cast is interrupted, as CastTime.lua empties it when the cast ends.
+local function ShowTime(row, look, opt, state)
+	if row.time then
+		local timeRow = (opt == "player" or opt == "pet") and "castbars.playerTime" or "castbars.ownTime"
+		row.time:SetShown(look.enabled and G(timeRow) == true and state ~= "interrupted")
 	end
 end
 
@@ -546,15 +588,7 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	row.spark:SetSize(sparkW, sparkH)
 	row.spark:SetShown(not (enabled and not G("castbars.spark")))
 	GameTexture(inst, row.spark, GAME_PIP, { 0.9, 0.9, 0.9, 0.9 })
-	if row.latency then
-		-- A channel's delay is at the left end, where it drains to, as Marks of Bars.lua has it.
-		local side = state == "channel" and "LEFT" or "RIGHT"
-		row.latency:ClearAllPoints()
-		row.latency:SetPoint("TOP" .. side, bar, "TOP" .. side, 0, 0)
-		row.latency:SetPoint("BOTTOM" .. side, bar, "BOTTOM" .. side, 0, 0)
-		row.latency:SetWidth(Max(w * 0.05, 0.01))
-		row.latency:SetShown(flat and G("castbars.latency") == true and state ~= "interrupted")
-	end
+	PlaceLatency(row, look, state, w)
 	-- The icon: left of the small bars unless the row says right or hidden; on the player and pet bars only with the row on.
 	if spec.small then
 		local place = enabled and G("castbars.iconPos") or "game"
@@ -570,7 +604,7 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 		Place(row.icon, "RIGHT", bar, "LEFT", -5, 0)
 		row.icon:SetShown(flat and G("castbars.playerIcon") == true and state ~= "interrupted")
 	end
-	PaintTicks(row, look, state, w)
+	PaintTicks(row, look, state, w, part)
 	-- The spell name.
 	if row.text then
 		local mode = "top10"
@@ -588,8 +622,7 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	-- The time: Cast time on your bars for the player's and the pet's, Cast time on target and focus bars for the small ones, in the spell name's
 	-- size and outline (CastTime.lua copies the font of the bar's spell name).
 	if row.time then
-		local timeRow = (opt == "player" or opt == "pet") and "castbars.playerTime" or "castbars.ownTime"
-		row.time:SetShown(enabled and G(timeRow) == true and state ~= "interrupted")
+		ShowTime(row, look, opt, state)
 		Look(row.time, look.percent, nil, nil, nil, look.outline)
 	end
 end
@@ -675,14 +708,16 @@ function DC.CastProgress(row, state, part, left, name)
 		row.text:SetText(CastName(row, row.look, name))
 	end
 	if state ~= row.state then
-		PaintTicks(row, row.look, state, row.w)
+		-- A new state: the ticks, the side of the latency zone and whether the time shows, as PaintCastBar sets them.
+		PaintTicks(row, row.look, state, row.w, part)
+		PlaceLatency(row, row.look, state, row.w)
+		ShowTime(row, row.look, row.opt, state)
+	elseif state == "channel" then
+		DimTicks(row, part)
 	end
 	row.state = state
 	if row.time and ns.Finite(left) then
 		row.time:SetText(("%.1f"):format(math.max(0, left)))
-	end
-	if row.latency then
-		row.latency:SetShown(row.look.flat and G("castbars.latency") == true and state ~= "interrupted")
 	end
 end
 
@@ -898,9 +933,11 @@ local function HandName(hand)
 	end
 	return SWING_TIMER_RANGED or "Ranged"
 end
--- Fixed samples: how far each timer has run at the start, and how long a swing lasts in seconds.
+-- Fixed samples: how far each timer has run at the start, and how long a swing lasts in seconds. The first main hand timer has a next melee
+-- ability queued over the second half of each swing (QUEUED_FROM of it), which lands with the swing.
+local QUEUED_FROM = 0.5
 local SWING_ROWS = {
-	{ hand = "main", note = "In range", part = 0.64, period = 2.6 },
+	{ hand = "main", note = "In range", part = 0.64, period = 2.6, queued = true },
 	{ hand = "off", note = "In range", part = 0.4, period = 2.6 },
 	{ hand = "ranged", note = "In range", part = 0.8, period = 3.2 },
 	{ hand = "main", note = "Out of range", part = 0.55, period = 2.6, out = true },
@@ -924,6 +961,13 @@ local function NewSwingTimer(inst, parent, spec)
 	-- The Auto Shot window on the ranged timer: the last half second of its swing, over the fill (Bars.lua, ApplyAutoShot).
 	if spec.hand == "ranged" then
 		row.band = NewTexture(row.bar, "ARTWORK", 7)
+	end
+	-- Queued ability colour over the fill of a main hand timer with spec.queued (Bars.lua, Q).
+	if spec.queued then
+		row.queued = NewTexture(row.bar, "ARTWORK", 6)
+		row.queued:SetPoint("TOPLEFT", row.fill, "TOPLEFT", 0, 0)
+		row.queued:SetPoint("BOTTOMRIGHT", row.fill, "BOTTOMRIGHT", 0, 0)
+		row.queued:Hide()
 	end
 	row.shadow = NewTexture(row.bar, "OVERLAY", 0)
 	row.shadow:SetPoint("TOPLEFT", row.bar, "TOPLEFT", 0, 0)
@@ -982,6 +1026,7 @@ local function BuildSwing(stage)
 	p["swing.reverse"] = main.fill
 	p["swing.autoShot"] = ranged.band
 	p["swing.autoShotColour"] = ranged.band
+	p["swing.queued"], p["swing.queuedColour"] = main.queued, main.queued
 	p["swing.rangeAlpha"] = out.bar
 	p["swing.idle"] = idle.timer
 	for _, key in ipairs({ "textSize", "textOutline", "name", "textOwn", "textColour" }) do
@@ -1022,6 +1067,9 @@ local function SwingFill(row, look, run, left)
 	row.pip:SetShown(not spec.idle and look.spark)
 	if row.time then
 		row.time:SetText(("%.1f"):format(left))
+	end
+	if row.queued then
+		row.queued:SetShown(look.queued and not spec.idle and run >= QUEUED_FROM)
 	end
 end
 
@@ -1067,6 +1115,7 @@ local function SwingLook(frameW)
 	end
 	look.colour, look.atlas = colour, atlas
 	look.reverse = enabled and G("swing.reverse") == true
+	look.queued = enabled and G("swing.queued") == true
 	look.spark = not (flat and not G("swing.spark"))
 	look.percent = enabled and G("swing.textSize") or 100
 	look.outline = enabled and G("swing.textOutline") or nil
@@ -1106,6 +1155,16 @@ local function PaintSwingTimer(row, look)
 			row.band:SetWidth(look.barW * math.min(1, 0.5 / spec.period))
 		end
 		row.band:SetShown(shown)
+	end
+	if row.queued and look.queued then
+		-- The swing texture, else the Flat UI page's, else white, in Queued ability colour.
+		local file = ns.BarTexture(G("swing.texture"))
+		if file then
+			row.queued:SetTexture(file)
+		else
+			row.queued:SetColorTexture(1, 1, 1, 1)
+		end
+		row.queued:SetVertexColor(ns.Colour("swing.queuedColour"))
 	end
 	row.shadow:SetShown(not (look.flat and not G("swing.textShadow")))
 	local r, g, b = GAME_IN[1], GAME_IN[2], GAME_IN[3]

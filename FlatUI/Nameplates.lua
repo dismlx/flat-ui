@@ -848,13 +848,15 @@ local function LevelBox(unitFrame, own, on, fresh)
 end
 
 -- Size and place of the raid marker. The game sets its anchor in UpdateAnchors, above the name in name-only mode, and that one is not moved.
--- The offsets are added to the game's own anchor, which is read after every UpdateAnchors.
+-- The offsets are added to the game's own anchor, which is read after every UpdateAnchors. With Raid marker off the marker is faded (Look) and its
+-- frame is 1 across, so what hangs past it (the quest mark, the threat value) keeps no room for a marker nobody sees. own.markY is the vertical
+-- offset the marker has now, which the threat value left of the bar takes off (PlateThreatText.lua).
 local function Marker(unitFrame, own, on, fresh)
 	local frame = unitFrame.RaidTargetFrame
 	if ns.Forbidden(frame) then
 		return
 	end
-	local size = on and Opt("raidMarkerSize") or MARK_SIZE
+	local size = on and (Opt("raidMarker") and Opt("raidMarkerSize") or 1) or MARK_SIZE
 	local x, y = on and Opt("raidMarkerX") or 0, on and Opt("raidMarkerY") or 0
 	-- A class icon on the left takes the slot beside the bar, so the marker moves out past it.
 	x = x - ClassRoom(own, "left")
@@ -891,6 +893,8 @@ local function Marker(unitFrame, own, on, fresh)
 			frame:SetPoint(base[1], base[2], base[3], base[4] + x, base[5] + y)
 		end
 	end
+	local at, base = own.markAt, own.markBase
+	own.markY = (own.markMoved and at and base) and at[2] - base[5] or 0
 end
 
 -- The health bar fill is a plain white texture or the image file of the chosen bar texture, and the bar

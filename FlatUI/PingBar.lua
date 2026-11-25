@@ -33,14 +33,14 @@ local _, ns = ...
 --    world under the cursor, passing through all frames (Blizzard_PingManager.lua:214-221); PLACED, after the click, hides it. A right click or
 --    Escape hides it in PLACE before its macro, which then does not run; CLEAR, on its OnHide, takes Escape back (ClearBindings, 537-539), also
 --    when UIParent hides it. The place button covers the bar too, so PLACE first asks whether the release is on the bar (the header's frame
---    references to the bar and to each bar button, set out of combat; IsVisible and IsUnderMouse of the handles, RestrictedFrames.lua:116,
---    360-369): on another bar button it switches the waiting ping to that one (its line and kind, then Hide and Show, so CLEAR and the line below
---    run again, and Escape is given back), on the armed button it cancels, a Shift-click with a target pings the target at once (the bar
+--    references to the bar, protected of its own as SecureFrameTemplate, and to each bar button, set out of combat; IsVisible and IsUnderMouse
+--    of the handles, RestrictedFrames.lua:116, 360-369): on another bar button it switches the waiting ping to that one (its line and kind,
+--    then Hide and Show, so CLEAR and the line below run again, and Escape is given back), on the armed button it cancels, a Shift-click with a target pings the target at once (the bar
 --    button's own line on the place button, then its macro), and between the buttons it does nothing, so a ping never lands behind the bar.
 --    While the mouse is over it the cursor is the game's ping cursor, or its error cursor while the ping cooldown runs (SetCursor "PING_CURSOR"
 --    and "PING_ERROR_CURSOR" from its OnShow and OnEnter, ResetCursor on OnLeave and OnHide, as Blizzard_PingUI.lua:134-152 does), a line of its
---    own beside the bar says which ping is armed and how to cancel, and the armed button is lit in its ping's colour, border and background,
---    until the ping is placed or cancelled. Those scripts are insecure and change nothing protected: the text is a FontString of the place
+--    own beside the bar, hanging inward from it (P.Hint), says which ping is armed and how to cancel, and the armed button is lit in its ping's
+--    colour, border and background, until the ping is placed or cancelled. Those scripts are insecure and change nothing protected: the text is a FontString of the place
 --    button, set with SetText, and the light is the outline of the icon under the bar button.
 -- 3. A Shift-click with a target lets the bar button's own "/ping [@target,exists] <n>" run at once (ARM returns nothing: IsShiftKeyDown and
 --    UnitExists are in the restricted environment, RestrictedEnvironment.lua:84-88); with no target it arms as a click.
@@ -53,13 +53,18 @@ local _, ns = ...
 -- The bar buttons lie over icons of Flat UI's own, as Group tools' do, so an icon can be greyed or swiped in a fight while its secure button is
 -- not touched. The bar shows Ping and each ping the game's wheel offers (C_Ping.GetDefaultPingOptions, in its orderIndex, as Blizzard_PingManager.lua:
 -- 53-69 sorts them), else the four of the game's ping keys; every kind has its button and its key, shown on the bar or not. The secure buttons
--- make the bar protected, so the bar, its buttons, the key buttons, the header and the place button are made, placed, sized and given attributes
+-- make the bar protected, and it is made from SecureFrameTemplate (protected="true", SecureTemplatesBase.xml:4) so PLACE may read its handle in a
+-- fight whatever the rules for a frame protected only by its children (RestrictedFrames.lua:79-85, GetPossiblyForbiddenHandleFrame); so the
+-- bar, its buttons, the key buttons, the header and the place button are made, placed, sized and given attributes
 -- only out of combat, and shown or hidden by Flat UI's own Lua only then: a change in a fight waits for its end (ns.OutOfCombat); in a fight only
 -- the snippets above show and hide the place button and set its line. With the module off their type and macrotext are taken away and the place
 -- button hides, so the keys and the bar do nothing; the bindings are the player's and stay.
 -- The icons are the game's wheel icons, the atlas Ping_Wheel_Icon_ and the texture kit of the ping (Blizzard_PingManager.lua:59-63; the kits of
 -- Blizzard_PingUI.lua:276-283), else its marker icon (Ping_Marker_Icon_, Blizzard_PingUI.lua:329), each only when the client has the atlas
--- (C_Texture.GetAtlasInfo), else a letter. The border of a button takes a colour near that of its icon (Borders in the ping's colour).
+-- (C_Texture.GetAtlasInfo), else a letter. The border of a button takes a colour near that of its icon (Borders in the ping's colour). With
+-- Keys on the buttons, the first key bound to a button's key binding shows short in its top right corner, as action bars write it ("M4",
+-- "s-F": GetBindingText(key, 1) as ActionButton.lua:501 asks, through ns.HotkeyText, ButtonText.lua), a FontString of the icon written again
+-- on UPDATE_BINDINGS, so in a fight too.
 -- Blocked: the bar hides, out of combat, while the game's ping system is off (C_Ping.IsPingSystemEnabled, as Blizzard_CompactRaidFrameManager.lua:
 -- 163 asks), while Enable Pings is off in the game's options (the variable enablePings, Blizzard_SettingsDefinitions_Frame/PingSystem.lua:15) or
 -- while the group lets only some members ping and you are not one (C_PartyInfo.GetRestrictPings, PartyInfoDocumentation.lua:348-355; Lead,
@@ -71,8 +76,8 @@ local _, ns = ...
 -- place button or a key (a PostClick of Flat UI's own, set out of combat, which runs after the game's secure code and changes no attribute) and
 -- when the mouse comes over a button, as the game's listener reads it (Blizzard_PingUI.lua:134-147). The changes are heard on the module's events
 -- (GROUP_ROSTER_UPDATE, PARTY_LEADER_CHANGED, PLAYER_ROLES_ASSIGNED, CVAR_UPDATE of enablePings, PLAYER_ENTERING_WORLD, UPDATE_BINDINGS for the
--- tooltip); no ticker and no OnUpdate. Pointing at a button writes its name, what a click and a Shift-click do, its key and the game's own key for
--- that ping in GameTooltip (SetOwner on the icon, SetText, AddLine, Show, and Hide when the mouse leaves), as Group tools does.
+-- keys on the buttons and the tooltip); no ticker and no OnUpdate. Pointing at a button writes its name, what a click and a Shift-click do,
+-- its key and the game's own key for that ping in GameTooltip (SetOwner on the icon, SetText, AddLine, Show, and Hide when the mouse leaves), as Group tools does.
 
 local KEY = "pingbar"
 local MOVER = "FlatUIPingBar"
@@ -435,7 +440,7 @@ local function Atlas(kit)
 end
 
 -- The icon of a button: a frame of the addon's own with the border and dark background of Group tools' icons, the game's ping icon inside (else
--- the first letter of its name in its colour) and a swipe for the cooldown.
+-- the first letter of its name in its colour), the text of its key and a swipe for the cooldown.
 function P.Icon(panel, kind)
 	local frame = Own(CreateFrame("Frame", nil, panel))
 	frame:SetSize(BOX_H, BOX_H)
@@ -456,6 +461,16 @@ function P.Icon(panel, kind)
 			letter:SetTextColor(kind.colour[1], kind.colour[2], kind.colour[3], 1)
 			entry.letter = letter
 		end
+	end
+	-- The key of its key binding, short, in the top right corner (P.KeyLabels), under the swipe as on action buttons.
+	local keyText = ns.OwnText(frame, "OVERLAY", FONT)
+	if keyText then
+		keyText:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+		keyText:SetJustifyH("RIGHT")
+		keyText:SetWordWrap(false)
+		pcall(keyText.SetShadowOffset, keyText, 1, -1)
+		pcall(keyText.SetShadowColor, keyText, 0, 0, 0, 1)
+		entry.keyText = keyText
 	end
 	local made, sweep = pcall(CreateFrame, "Cooldown", nil, frame, "CooldownFrameTemplate")
 	if made and type(sweep) == "table" then
@@ -610,7 +625,15 @@ function P.Build()
 		P.broken = true
 		return false
 	end
-	local panel = Own(CreateFrame("Frame", nil, UIParent))
+	-- Protected of its own, so PLACE reads its handle in a fight (IsVisible, IsUnderMouse) whatever the game's rules for a frame protected only by
+	-- its secure children.
+	local madePanel, panel = pcall(CreateFrame, "Frame", nil, UIParent, "SecureFrameTemplate")
+	if not madePanel or type(panel) ~= "table" or IsSecret(panel) then
+		P.broken = true
+		pcall(place.Hide, place)
+		return false
+	end
+	Own(panel)
 	panel:SetFrameStrata("LOW")
 	panel:SetSize(BOX_W, BOX_H)
 	panel:Hide()
@@ -696,6 +719,9 @@ function P.Layout(list)
 			frame:SetSize(size, size)
 			frame:Show()
 		end
+		if entry.keyText then
+			entry.keyText:SetTextHeight(math.max(7, math.floor(size / 3 + 0.5)))
+		end
 		width, height = math.max(width, x + size), math.max(height, y + size)
 	end
 	for _, entry in ipairs(P.buttons) do
@@ -708,14 +734,16 @@ function P.Layout(list)
 	P.laid = key
 end
 
--- Puts the bar at the spot of its handle: its top left corner at the top left corner of the box. The line of the place button goes under the
--- bar while the bar's top is in the upper half of the screen, else over it.
+-- Puts the bar at the spot of its handle: its top left corner at the top left corner of the box. The line of the place button hangs inward from
+-- the bar, so it can always be read: under the bar while the bar's centre is in the upper half of the screen, else over it, from the bar's left
+-- edge while it is in the left third, its right edge in the right third, else centred; beside a column (Layout Vertical), to its right, or to
+-- its left in the right half of the screen.
 function P.Place()
 	local x, y
 	if type(ns.MoverSpot) == "function" then
 		x, y = ns.MoverSpot(MOVER, "TOPLEFT")
 	end
-	local key = x and ("%.2f:%.2f"):format(x, y) or "start"
+	local key = (x and ("%.2f:%.2f"):format(x, y) or "start") .. ":" .. tostring(Opt("layout"))
 	if P.placed == key then
 		return
 	end
@@ -727,16 +755,36 @@ function P.Place()
 	else
 		panel:SetPoint("TOPLEFT", UIParent, "TOP", -BOX_W / 2, BOX_Y)
 	end
-	local hint = P.hint
-	if hint then
-		local ok, height = pcall(UIParent.GetHeight, UIParent)
-		local upper = not (x and ns.Finite(y) and ok and ns.Finite(height)) or y > height / 2
-		hint:ClearAllPoints()
-		if upper then
-			hint:SetPoint("TOP", panel, "BOTTOM", 0, -HINT_GAP)
+	if P.hint then
+		P.Hint(panel, P.hint)
+	end
+end
+
+-- Anchors the line of the place button by where the bar is (P.Place). With no answer about the screen, it goes centred under the bar.
+function P.Hint(panel, hint)
+	local okWidth, width = pcall(UIParent.GetWidth, UIParent)
+	local okHeight, height = pcall(UIParent.GetHeight, UIParent)
+	local okCentre, cx, cy = pcall(panel.GetCenter, panel)
+	local known = okWidth and okHeight and okCentre and ns.Finite(width) and ns.Finite(height) and ns.Finite(cx) and ns.Finite(cy) and width > 0
+	hint:ClearAllPoints()
+	if known and Opt("layout") == "column" then
+		if cx > width / 2 then
+			hint:SetPoint("RIGHT", panel, "LEFT", -HINT_GAP, 0)
 		else
-			hint:SetPoint("BOTTOM", panel, "TOP", 0, HINT_GAP)
+			hint:SetPoint("LEFT", panel, "RIGHT", HINT_GAP, 0)
 		end
+		return
+	end
+	local side = ""
+	if known and cx < width / 3 then
+		side = "LEFT"
+	elseif known and cx > width * 2 / 3 then
+		side = "RIGHT"
+	end
+	if not known or cy > height / 2 then
+		hint:SetPoint("TOP" .. side, panel, "BOTTOM" .. side, 0, -HINT_GAP)
+	else
+		hint:SetPoint("BOTTOM" .. side, panel, "TOP" .. side, 0, HINT_GAP)
 	end
 end
 
@@ -754,6 +802,7 @@ function P.Lay()
 		return
 	end
 	P.Equip(true)
+	P.KeyLabels()
 	local wanted = P.Wanted()
 	if #wanted == 0 then
 		P.panel:Hide()
@@ -947,6 +996,38 @@ local function KeyText(binding)
 	return type(text) == "string" and text ~= "" and text or key
 end
 
+-- The first key bound to a binding, short as action bars write it (GetBindingText(key, 1), then ns.HotkeyText of ButtonText.lua with no button,
+-- which always shortens), or nil.
+local function ShortKey(binding)
+	local key = Ask(GetBindingKey, binding)
+	if type(key) ~= "string" or key == "" then
+		return nil
+	end
+	local text = Ask(GetBindingText, key, 1)
+	text = type(text) == "string" and text ~= "" and text or key
+	if type(ns.HotkeyText) == "function" then
+		local ok, short = pcall(ns.HotkeyText, text)
+		if ok and not IsSecret(short) and type(short) == "string" and short ~= "" then
+			text = short
+		end
+	end
+	return text
+end
+
+-- Keys on the buttons: the key of each button's key binding in its top right corner, nothing with the row off or no key bound. Only FontStrings
+-- of the icons change, so this runs in a fight too.
+function P.KeyLabels()
+	local on = Opt("keys") ~= false
+	for _, entry in ipairs(P.buttons) do
+		local text = entry.keyText
+		if text then
+			local label = on and ShortKey("CLICK FlatUIPing" .. entry.kind.id .. ":LeftButton") or nil
+			text:SetText(label or "")
+			text:SetShown(label ~= nil)
+		end
+	end
+end
+
 -- The lines of a button's tooltip: what a click and a Shift-click ping, its key and the game's own key for that ping.
 function P.Lines(entry)
 	local kind, lines = entry.kind, {}
@@ -1069,8 +1150,9 @@ function P.Disarm()
 	end
 end
 
--- The tooltip under the mouse, written again after a key changed.
+-- The keys on the buttons and the tooltip under the mouse, written again after a key changed.
 function P.Retip()
+	P.KeyLabels()
 	for _, entry in ipairs(P.buttons) do
 		if entry.hover and P.Owned(entry) then
 			P.Tip(entry)
@@ -1086,6 +1168,7 @@ function P.Refresh()
 		P.Swipe(nil)
 	end
 	P.Apply()
+	P.KeyLabels()
 end
 
 -- The end of a fight: a change that still waits is applied, should the game have said it was in a fight when ns.OutOfCombat ran it.
@@ -1141,7 +1224,7 @@ ns.Register(KEY, {
 	Resized = P.Refresh,
 	Status = P.Status,
 	-- The group, its leader, the roles, Enable Pings or a loading screen: the bar shows or hides and the greying follows. A key changed only
-	-- writes the tooltip again.
+	-- writes the keys on the buttons and the tooltip again.
 	events = {
 		GROUP_ROSTER_UPDATE = P.Apply,
 		PARTY_LEADER_CHANGED = P.Apply,

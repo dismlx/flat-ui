@@ -25,7 +25,14 @@ local _, ns = ...
 -- and a bar at low experience still reads as a bar from end to end.
 -- With Clicks on the bar (on by default) a Shift-click on a bar puts its progress in the chat box ("Level 34: 12,345 / 27,000 (45%), 1h 20m to
 -- level", "Stormwind: Honored 4,200 / 12,000 (35%)", ns.PutInChat), and a plain click on the reputation bar opens the Reputation tab of the
--- Character window out of a fight (ToggleCharacter("ReputationFrame"), the call of the game's own key); the tooltip ends with a dim hint.
+-- Character window (ToggleCharacter("ReputationFrame"), the call of the game's own key), in a fight as it ends: chat says once "Flat UI: your
+-- reputations open when the fight ends." (ns.OpenAfterFight, MapText.lua). The tooltip ends with a dim hint, "after the fight" in one.
+-- Large numbers are grouped as the game writes them (BreakUpLargeNumbers: 12,150 / 27,000) in the bar text of Value and percent and Amount to
+-- go, in the tooltip and in the chat line; As the game has it keeps the game's own text of its bar.
+-- With Animate gains (hud.xpSmooth, on by default) a fill that grows slides to its new value over EASE_FILL seconds, easing out, and the stretch
+-- just gained lights up on the bar (a white texture of Flat UI's own, added over the fill) and fades over EASE_GLOW seconds; a new level,
+-- another faction, a loss, a sample or a hidden bar sets the fill at once. One frame of Flat UI's own per bar runs the ease, shown only while
+-- it runs, so this goes on in a fight too.
 -- In test mode (TestMode.lua, entry "xpbar") a bar that Bars shown asks for and that has nothing to show, as at the top level or with no faction
 -- watched, shows a sample (experience at 45% with rested and quest stretches, Stormwind at Honored), drawn with every row; samples are kept apart
 -- from what the game gave (F.Data), are never put in chat, and give XpStats.lua nothing to count (ns.XpRepNow).
@@ -36,6 +43,11 @@ local FULL = 1192
 local FILE = "Interface\\Buttons\\WHITE8X8"
 -- The opacity of the stretch of the quests ready to hand in; the rested stretch has 0.4.
 local QUEST_ALPHA = 0.6
+-- Animate gains: the seconds the fill slides, the seconds the stretch gained glows, its opacity at the start, and the least share of the bar
+-- that counts as a gain.
+local EASE_FILL, EASE_GLOW, GLOW_ALPHA, EASE_LEAST = 0.4, 0.8, 0.5, 0.0005
+-- The chat line of a click on the reputation bar in a fight.
+local LATER_REP = "Flat UI: your reputations open when the fight ends."
 local MANAGER = "StatusTrackingBarManager"
 local CONTAINERS = { "MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer" }
 -- The reputation fills by standing, as Hud.lua colours the game's pictures (ReputationBar.lua:1-12), and the blue of a renown or paragon bar.
@@ -116,15 +128,26 @@ end
 
 -- Text -----------------------------------------------------------------------------------------------------------------------------------------
 
--- The text a Bar text mode gives for a value and a total, with the name in front for a reputation. Nothing for the game's own text.
+-- A whole number as the game writes large ones (BreakUpLargeNumbers), or plain.
+local function Grouped(value)
+	value = math.floor(value + 0.5)
+	local ok, text = pcall(_G.BreakUpLargeNumbers, value)
+	if ok and type(text) == "string" and not ns.IsSecret(text) and text ~= "" then
+		return text
+	end
+	return tostring(value)
+end
+
+-- The text a Bar text mode gives for a value and a total, with the name in front for a reputation, the numbers grouped as the game writes them
+-- (12,150 / 27,000). Nothing for the game's own text.
 function ns.XpText(value, total, name, mode)
 	local line
 	if mode == "percent" then
 		line = ("%d%%"):format(math.floor(value * 100 / total))
 	elseif mode == "both" then
-		line = ("%d / %d (%d%%)"):format(value, total, math.floor(value * 100 / total))
+		line = ("%s / %s (%d%%)"):format(Grouped(value), Grouped(total), math.floor(value * 100 / total))
 	elseif mode == "togo" then
-		line = ("%d to go"):format(math.max(total - value, 0))
+		line = Grouped(math.max(total - value, 0)) .. " to go"
 	else
 		return nil
 	end
@@ -428,6 +451,10 @@ function F.Unpark()
 	if S.frame then
 		S.frame:Hide()
 	end
+	-- The bar comes back with its fill set at once.
+	for _, bar in pairs(S.bars) do
+		bar.ratio, bar.key = nil, nil
+	end
 end
 
 -- The bar -----------------------------------------------------------------------------------------------------------------------------------
@@ -443,16 +470,6 @@ function F.Hover(bar, on)
 		end
 	end
 	F.Text(bar)
-end
-
--- A whole number as the game writes large ones (BreakUpLargeNumbers), or plain.
-local function Grouped(value)
-	value = math.floor(value + 0.5)
-	local ok, text = pcall(_G.BreakUpLargeNumbers, value)
-	if ok and type(text) == "string" and not ns.IsSecret(text) and text ~= "" then
-		return text
-	end
-	return tostring(value)
 end
 
 -- The line a Shift-click puts in the chat box: "Level 34: 12,345 / 27,000 (45%), 1h 20m to level", or "Stormwind: Honored 4,200 / 12,000 (35%)".
@@ -487,7 +504,8 @@ function F.ChatLine(bar)
 end
 
 -- Clicks on the bar, with Clicks on the bar on: Shift puts the bar's line in the chat box (ns.PutInChat, MapText.lua), and a plain click on the
--- reputation bar opens the Reputation tab of the Character window (ToggleCharacter, as the game's key does), out of a fight.
+-- reputation bar opens the Reputation tab of the Character window (ToggleCharacter, as the game's key does), in a fight as it ends
+-- (ns.OpenAfterFight, MapText.lua).
 function F.Click(bar, button)
 	if Opt("xpClicks") ~= true or button ~= "LeftButton" or not bar.shown then
 		return
@@ -498,8 +516,10 @@ function F.Click(bar, button)
 		if line and ns.PutInChat ~= nil then
 			ns.PutInChat(line)
 		end
-	elseif bar.id == "rep" and not InCombatLockdown() and type(_G.ToggleCharacter) == "function" then
-		pcall(_G.ToggleCharacter, "ReputationFrame")
+	elseif bar.id == "rep" and type(_G.ToggleCharacter) == "function" and ns.OpenAfterFight ~= nil then
+		ns.OpenAfterFight(function()
+			_G.ToggleCharacter("ReputationFrame")
+		end, LATER_REP)
 	end
 end
 
@@ -585,7 +605,7 @@ function F.TipLines(bar)
 	if bar.id == "xp" and data then
 		local xp = data
 		local percent = xp.total > 0 and math.ceil(xp.value / xp.total * 100) or 0
-		lines[1] = Fmt(_G.XP_TEXT, "Experience: %s/%s (%s%%)", tostring(xp.value), tostring(xp.total), tostring(percent))
+		lines[1] = Fmt(_G.XP_TEXT, "Experience: %s/%s (%s%%)", Grouped(xp.value), Grouped(xp.total), tostring(percent))
 		local ok, id, name, factor = "none", nil, nil, nil
 		if not sample then
 			ok, id, name, factor = Ask(_G.GetRestState)
@@ -598,7 +618,7 @@ function F.TipLines(bar)
 			end
 		end
 		if xp.rested > 0 then
-			lines[#lines + 1] = ("Rested: %d"):format(math.floor(xp.rested))
+			lines[#lines + 1] = "Rested: " .. Grouped(math.floor(xp.rested))
 		end
 		-- The quests ready to hand in and the levelling numbers (XpStats.lua).
 		local more = not sample and ns.XpStatsLines ~= nil and ns.XpStatsLines(Opt("xpQuest") == true, Opt("xpStatsTip") == true) or nil
@@ -612,7 +632,7 @@ function F.TipLines(bar)
 			lines[#lines + 1] = rep.standing
 		end
 		if not rep.capped then
-			lines[#lines + 1] = ("%d / %d"):format(math.floor(rep.value), math.floor(rep.total))
+			lines[#lines + 1] = ("%s / %s"):format(Grouped(math.floor(rep.value)), Grouped(math.floor(rep.total)))
 		end
 		-- The reputation this session, per hour and the time to the next standing, with Levelling in the tooltip (XpStats.lua).
 		local more = not sample and Opt("xpStatsTip") == true and ns.XpStatsRepLines ~= nil and ns.XpStatsRepLines() or nil
@@ -626,7 +646,9 @@ function F.TipLines(bar)
 	if #lines > 0 and sample then
 		lines[#lines + 1] = DIM .. "A sample while test mode is on.|r"
 	elseif #lines > 0 and Opt("xpClicks") == true then
-		lines[#lines + 1] = DIM .. (bar.id == "rep" and "Click: your reputations. Shift-click: put this in chat" or "Shift-click: put this in chat") .. "|r"
+		local hint = InCombatLockdown() and "Click: your reputations, after the fight. Shift-click: put this in chat"
+			or "Click: your reputations. Shift-click: put this in chat"
+		lines[#lines + 1] = DIM .. (bar.id == "rep" and hint or "Shift-click: put this in chat") .. "|r"
 	end
 	return lines
 end
@@ -784,6 +806,107 @@ function F.Colour(bar)
 	return rgb[1], rgb[2], rgb[3]
 end
 
+-- Animate gains -------------------------------------------------------------------------------------------------------------------------------
+
+-- What a bar shows, for Animate gains: the level for experience, the faction for reputation, or a sample. A fill eases only while this stays.
+function F.Key(bar, data, sample)
+	if sample or not data then
+		return "sample"
+	elseif bar.id == "xp" then
+		local ok, level = Ask(_G.UnitLevel, "player")
+		return "xp:" .. tostring(ok == "ok" and ns.Finite(level) and level or "?")
+	end
+	return "rep:" .. tostring(data.id)
+end
+
+-- Ends the ease of a bar where it was going: the fill at its new value, the glow away; hide also hides the frame that runs it.
+function F.EaseEnd(bar, hide)
+	if not bar.easing then
+		return
+	end
+	bar.easing, bar.at = false, nil
+	bar.frame:SetValue(bar.to or bar.ratio or 0)
+	if bar.gain then
+		bar.gain:Hide()
+	end
+	if hide and bar.anim then
+		bar.anim:Hide()
+	end
+end
+
+-- The glow over the stretch gained, from bar.from to bar.to of the bar's width.
+function F.PlaceGain(bar, width)
+	local gain, left = bar.gain, bar.from * width
+	bar.easeWidth = width
+	gain:ClearAllPoints()
+	gain:SetPoint("TOPLEFT", bar.frame, "TOPLEFT", left, 0)
+	gain:SetPoint("BOTTOMLEFT", bar.frame, "BOTTOMLEFT", left, 0)
+	gain:SetWidth(math.max((bar.to - bar.from) * width, 1))
+end
+
+-- One frame of the ease: the fill slides out to its value over EASE_FILL seconds, and the glow fades over EASE_GLOW seconds.
+function F.EaseStep(bar, elapsed)
+	if not bar.easing then
+		bar.anim:Hide()
+		return
+	end
+	bar.t = bar.t + (ns.Finite(elapsed) and elapsed or 0)
+	local fill, glow = math.min(bar.t / EASE_FILL, 1), math.min(bar.t / EASE_GLOW, 1)
+	bar.at = bar.from + (bar.to - bar.from) * (1 - (1 - fill) ^ 2)
+	bar.frame:SetValue(bar.at)
+	bar.gain:SetAlpha(GLOW_ALPHA * (1 - glow))
+	if fill >= 1 and glow >= 1 then
+		F.EaseEnd(bar, true)
+	end
+end
+
+-- Starts the ease of a bar from the value it shows to its new one. The frame that runs it and the glow are Flat UI's own, made once.
+function F.Ease(bar, from, to, width)
+	if not bar.anim then
+		local anim = CreateFrame("Frame", nil, bar.frame)
+		ns.Own[anim] = true
+		anim:Hide()
+		anim:SetScript("OnUpdate", function(_, elapsed)
+			F.EaseStep(bar, elapsed)
+		end)
+		-- The bar hid, its own frame or the whole bar: the fill is set where it was going.
+		anim:SetScript("OnHide", function()
+			F.EaseEnd(bar, false)
+		end)
+		bar.anim = anim
+		-- Over the fill and under the dividers and the text (F.NewBar).
+		bar.gain = bar.over:CreateTexture(nil, "ARTWORK", nil, 1)
+		bar.gain:SetColorTexture(1, 1, 1, 1)
+		pcall(bar.gain.SetBlendMode, bar.gain, "ADD")
+		bar.gain:Hide()
+	end
+	bar.from, bar.to, bar.t, bar.easing, bar.at = from, to, 0, true, from
+	bar.frame:SetValue(from)
+	F.PlaceGain(bar, width)
+	bar.gain:SetAlpha(GLOW_ALPHA)
+	bar.gain:Show()
+	bar.anim:Show()
+end
+
+-- The fill of a bar at ratio: with Animate gains a fill that grows on the same level or faction eases there, else it is set at once. A redraw
+-- of the same value lets an ease that runs go on, as F.Update draws the bar on every change of its rows and numbers.
+function F.Value(bar, ratio, key, sample, width)
+	local smooth = Opt("xpSmooth") == true and not sample
+	local before = bar.key == key and bar.ratio or nil
+	if smooth and bar.easing and before ~= nil and math.abs(ratio - before) < EASE_LEAST then
+		bar.to = ratio
+		if bar.easeWidth ~= width then
+			F.PlaceGain(bar, width)
+		end
+	elseif smooth and before ~= nil and ratio > before + EASE_LEAST then
+		F.Ease(bar, bar.easing and bar.at or before, ratio, width)
+	else
+		F.EaseEnd(bar, true)
+		bar.frame:SetValue(ratio)
+	end
+	bar.ratio, bar.key = ratio, key
+end
+
 -- The value of a bar, its fill colour and the stretch of rested experience.
 function F.Fill(bar, width)
 	local data, sample = F.Data(bar)
@@ -792,7 +915,7 @@ function F.Fill(bar, width)
 		local total = bar.id == "xp" and data.total or data.total
 		ratio = total > 0 and math.max(0, math.min(data.value / total, 1)) or 0
 	end
-	bar.frame:SetValue(ratio)
+	F.Value(bar, ratio, F.Key(bar, data, sample), sample, width)
 	local r, g, b = F.Colour(bar)
 	bar.frame:SetStatusBarColor(r, g, b, 1)
 	local stretch = bar.rested
@@ -896,8 +1019,11 @@ function F.Update(layout)
 			bar.frame:EnableMouse(mouse)
 			bar.frame:Show()
 		else
+			-- A bar that hides stops its ease, and comes back with its fill set at once.
+			F.EaseEnd(bar, true)
 			bar.frame:Hide()
 			bar.hover = false
+			bar.ratio, bar.key = nil, nil
 		end
 		F.Text(bar)
 	end

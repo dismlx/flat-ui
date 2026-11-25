@@ -2,27 +2,29 @@ local ADDON_NAME, ns = ...
 
 -- Data panels: two panels of Flat UI's own, the top panel and the bottom panel, each a row of up to six slots on a flat background with a thin
 -- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, the hearthstone, the time,
--- the quests in the log, coordinates, frame rate and latency, friends or guild members online, the equipment set worn, or the feed of another
--- addon through LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no library, and shows feeds of the
--- kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to show is hidden, and a panel makes its frames
--- only once a slot has something to show. The panels are children of UIParent, so they hide with the interface, and they are hidden in a pet
--- battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading screen). /flatui move places them: each is
+-- the quests in the log, experience, coordinates, frame rate and latency, friends or guild members online, the equipment set worn, or the feed of
+-- another addon through LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no library, and
+-- shows feeds of the kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to show is hidden, and a panel makes
+-- its frames only once a slot has something to show. The panels are children of UIParent, so they hide with the interface, and they are hidden in a
+-- pet battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading screen). /flatui move places them: each is
 -- in the list of the movers (FlatUIDataTop and FlatUIDataBottom) with the panel itself as its box.
 -- A stream is drawn again on its events, once for a burst of them, and the few that change by themselves (coordinates, frame rate and latency,
 -- the cooldown of the hearthstone) on a ticker that runs only while a shown panel holds one of them. Pointing at a slot writes its lines in
 -- GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide when the cursor leaves). No click casts anything: a left click on the
 -- equipment set opens a menu of Flat UI's own (Menus, below), one on Bag space opens or closes Flat UI's bag window while Bags is on
--- (ns.BagsToggle, Bags.lua, never a window of the game's), a right click on any slot of Flat UI's own opens the Data panels page of the options
--- (ns.OpenPanelPage, Panel.lua, after the fight in one), each tooltip ends with a dim line that says so, and a click on a feed goes to the feed's
--- own OnClick. Every value of the game is read in pcall, and one it withholds is left out, with the count it belongs to: no part of a count is
--- shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line for /flatui status.
+-- (ns.BagsToggle, Bags.lua), one on Time, Quest log, Friends, Guild or Durability opens the game's window for it out of a fight, and Shift-click on
+-- Coordinates or Experience puts its line in the chat box (DataStreams.lua), a right click on any slot of Flat UI's own opens the Data panels page
+-- of the options (ns.OpenPanelPage, Panel.lua, after the fight in one), each tooltip ends with a dim line that says so, and a click on a feed goes
+-- to the feed's own OnClick. Every value of the game is read in pcall, and one it withholds is left out, with the count it belongs to: no part of a
+-- count is shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line for /flatui status.
 -- The gold of the account's characters is kept in FlatUIDB.datapanels.gold by "Name - Realm", and the feeds a slot of any profile shows in
 -- FlatUIDB.datapanels.feeds, so a slot keeps its feed while the addon that makes it loads after Flat UI.
 -- The looks of the Look rows are calls on Flat UI's own frames and font strings only: the outline of the text in the flags of SetFont, its shadow
 -- (SetShadowOffset) and its colour (SetTextColor: white, the player's class colour, white while the game withholds the class, or an own colour),
--- under the colour codes of the streams, which keep the parts they colour; the menu of Equipment set keeps its own look. Panel width shares the
--- room a panel has beyond what its slots need evenly among the slots shown; Layer is the strata of the panel's frame (SetFrameStrata), and the
--- slots follow it. Opacity in combat and out of combat are the alpha of the panel's frame (SetAlpha, which the game does not protect:
+-- under the colour codes of the streams, which keep the parts they colour; the menu of Equipment set keeps its own look. The slot under the mouse
+-- has a faint light behind it (HOVER_LIGHT, a texture of the slot's own), kept while its menu is open. Panel width shares the room a panel has
+-- beyond what its slots need evenly among the slots shown; Layer is the strata of the panel's frame (SetFrameStrata), and the slots follow it.
+-- Opacity in combat and out of combat are the alpha of the panel's frame (SetAlpha, which the game does not protect:
 -- SimpleFrameAPIDocumentation.lua:1133-1143), set at the start and the end of a fight (PLAYER_REGEN_DISABLED, PLAYER_REGEN_ENABLED), at each
 -- refresh, which asks InCombatLockdown, and when a stream drawn again makes a panel or shows it again. A panel under the mouse, or whose menu is
 -- open, is at full opacity: the frame is asked IsMouseOver, which needs no mouse on it, on a ticker every HOVER seconds that runs only while a
@@ -42,6 +44,8 @@ local BASE, PAD_X, PAD_Y = 12, 8, 4
 local SETTLE, STEP, LIVE = 0.1, 0.5, 1
 -- How often the mouse is looked for while a shown panel rests below full opacity.
 local HOVER = 0.1
+-- The faint light behind the slot under the mouse.
+local HOVER_LIGHT = { 1, 1, 1, 0.07 }
 -- The strata of a panel by its Layer row.
 local STRATA = { low = "LOW", medium = "MEDIUM", high = "HIGH" }
 local SANS = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Fonts\\IBMPlexSans-Regular.ttf"
@@ -587,6 +591,12 @@ function P.MakeSlot(panel, slot)
 	-- The line between this slot and the one before it.
 	slot.line = Own(panel.frame:CreateTexture(nil, "ARTWORK", nil, 0))
 	slot.line:Hide()
+	-- The faint light behind a slot under the mouse, as Flat UI's own buttons lighten, a pixel inside the slot so the lines stay clear.
+	slot.hover = Own(frame:CreateTexture(nil, "BACKGROUND", nil, 1))
+	slot.hover:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+	slot.hover:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+	slot.hover:SetColorTexture(HOVER_LIGHT[1], HOVER_LIGHT[2], HOVER_LIGHT[3], HOVER_LIGHT[4])
+	slot.hover:Hide()
 	frame:SetScript("OnEnter", Guard(function()
 		P.Enter(slot)
 	end))
@@ -598,6 +608,7 @@ function P.MakeSlot(panel, slot)
 		if P.MenuOpen(slot) then
 			P.CloseMenu()
 		end
+		slot.hover:Hide()
 	end))
 	frame:SetScript("OnMouseDown", function(_, button)
 		slot.down = button
@@ -834,7 +845,7 @@ function P.Fill(panel, wanted)
 		end
 		P.Style(slot)
 		P.Draw(slot, texts[index])
-		-- A feed and a stream with a click of its own (Equipment set, Bag space) keep their clicks while the tooltips are off.
+		-- A feed and a stream with a click of its own (Equipment set, Bag space, Time and the others) keep their clicks while the tooltips are off.
 		local stream = P.StreamOf(slot.id)
 		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil or (stream ~= nil and type(stream.Click) == "function")))
 	end
@@ -1300,6 +1311,9 @@ end
 
 function P.Enter(slot)
 	slot.over = true
+	if slot.hover then
+		slot.hover:Show()
+	end
 	-- A dimmed panel is at full opacity at once, before the ticker sees the mouse.
 	P.Fade(slot.panel)
 	-- The slot's menu lies where its tooltip would.
@@ -1330,12 +1344,17 @@ function P.Leave(slot)
 	if Owned(slot) then
 		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 	end
+	-- The light stays while the slot's menu is open.
+	if slot.hover and not P.MenuOpen(slot) then
+		slot.hover:Hide()
+	end
 	P.Fade(slot.panel)
 end
 
--- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment
--- set, Bag space), with the slot and the button. A right click on a slot of Flat UI's own closes its menu and opens the Data panels page of the
--- options instead (in a fight the window says it opens after it). Any other click on a slot of Flat UI's own does nothing.
+-- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment set, Bag
+-- space, Time, Coordinates, Quest log, Experience, Friends, Guild, Durability), with the slot and the button. A right click on a slot of Flat UI's
+-- own closes its menu and opens the Data panels page of the options instead (in a fight the window says it opens after it). Any other click on a
+-- slot of Flat UI's own does nothing.
 function P.Click(slot, button)
 	if not slot.feed then
 		local stream = P.StreamOf(slot.id)
@@ -1389,8 +1408,11 @@ function P.CloseMenu()
 	if not (menu and menu.slot) then
 		return
 	end
-	local panel = menu.slot.panel
+	local panel, slot = menu.slot.panel, menu.slot
 	menu.slot, menu.stream = nil, nil
+	if slot.hover and not slot.over then
+		slot.hover:Hide()
+	end
 	pcall(menu.listener.UnregisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
 	menu.frame:Hide()
 	-- The panel held at full opacity for its menu rests again once the mouse is off it.

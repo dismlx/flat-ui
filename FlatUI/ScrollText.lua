@@ -20,6 +20,9 @@ local _, ns = ...
 -- Outgoing direction and Incoming direction (Up or Down; Outgoing up and Incoming down by default, the areas' own dir) set which way the
 -- numbers of an area move and which way the rows of a Horizontal or Static area stack, read as each number starts, so a number on its way keeps
 -- the direction it started with.
+-- Size of your text sizes the numbers of the Incoming area. Size of the Outgoing area (outSize) sizes those of the Outgoing area: Same as numbers
+-- over enemies (the default, the Size row of the numbers over enemies, as up to 0.5.34), Same as your text, or Smaller than numbers over enemies
+-- (three quarters of it), read as each number starts (ns.ScrollSize).
 -- The icon of an amount is written in its text (a texture escape), so that a withheld zero, which the client writes as nothing, draws no icon,
 -- name or (Extra attack) either; a word has the icon beside it, a texture of the record's own.
 -- A secret amount or name goes to SetText and SetFormattedText only; nothing here compares, counts or measures it.
@@ -42,6 +45,8 @@ local PATH = { straight = true, arc = true }
 -- this share of the number, this many units to the right of it.
 local POP = { peak = 1.15, up = 0.05, down = 0.10 }
 local CRIT, WORD, GAP = 1.25, 0.75, 4
+-- The share of the Size of the numbers over enemies the Outgoing area takes with Size of the Outgoing area on Smaller.
+local SMALLER = 0.75
 -- The setup drawing of combat text moves its sample numbers by the same shape. ST.ClearSamples takes test mode's samples off the screen.
 SHAPE.crit = CRIT
 ns.CombatShape.scroll = SHAPE
@@ -55,13 +60,13 @@ local EXTRA_TEXT = "|cffff9926(Extra attack)|r"
 -- The icon of a spell in the text of a number: a texture escape as high as the text, its edge trimmed as the icon beside a word is (5 to 59
 -- of the 64 texels), and a space after it.
 local INLINE = "|T%d:0:0:0:0:64:64:5:59:5:59|t "
--- The two areas: the name of the handle, the row of the style, the row of the size, the row of the direction and the direction when that row
--- gives none (1 up, -1 down), the side an arc and a
+-- The two areas: the name of the handle, the row of the style, the row of the size (and for Outgoing the row that says which size it takes,
+-- ns.ScrollSize), the row of the direction and the direction when that row gives none (1 up, -1 down), the side an arc and a
 -- horizontal number go to, the most numbers alive, those that wait for a lane too (room for a burst of 20 and the numbers still on screen
 -- before it), and, with no handle to take the place from, where the area starts as units from the middle of the screen.
 local AREAS = {
-	out = { label = "Outgoing", mover = "FlatUICombatOut", style = "outStyle", size = "size", dirRow = "outDir", dir = 1, side = 1, max = 32, dx = 170,
-		dy = -30 },
+	out = { label = "Outgoing", mover = "FlatUICombatOut", style = "outStyle", size = "size", sizeRow = "outSize", dir = 1, dirRow = "outDir", side = 1,
+		max = 32, dx = 170, dy = -30 },
 	inc = { label = "Incoming", mover = "FlatUICombatSelf", style = "inStyle", size = "ownSize", dirRow = "inDir", dir = -1, side = -1, max = 32,
 		dx = -170, dy = -30 },
 }
@@ -363,10 +368,26 @@ local function Direction(area)
 	return area.dir
 end
 
+-- The Size of an area in percent: Incoming takes Size of your text; Outgoing takes Size of the Outgoing area, the Size of the numbers over enemies
+-- (the default), Size of your text, or three quarters of the Size of the numbers over enemies. The setup drawing of combat text sizes its Outgoing
+-- column by it too.
+function ns.ScrollSize(key)
+	local area = AREAS[key]
+	if area == AREAS.out then
+		local rule = Opt(area.sizeRow)
+		if rule == "own" then
+			return Opt("ownSize")
+		elseif rule == "smaller" then
+			return Opt(area.size) * SMALLER
+		end
+	end
+	return Opt(area.size)
+end
+
 -- The height of a number in an area: the game's height at the Size of the area, times scale (a smaller partial effect) and a quarter
 -- more for a critical hit.
 local function Height(area, crit, scale)
-	return TEXT_HEIGHT * Opt(area.size) / 100 * (scale or 1) * (crit and CRIT or 1)
+	return TEXT_HEIGHT * ns.ScrollSize(area.key) / 100 * (scale or 1) * (crit and CRIT or 1)
 end
 
 local function Fill(item, height, kind, value, format, r, g, b, flag, icon, value2)

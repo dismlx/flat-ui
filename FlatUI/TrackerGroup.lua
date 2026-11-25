@@ -561,14 +561,8 @@ local function UnitLabel(unit)
 	return Plain(name, "string") and name ~= "" and name or unit
 end
 
-local function Lines(entry)
-	if not Grouped() then
-		return { "Group buff: not in a group, so it is hidden." }
-	end
-	local read = S.read[entry.id]
-	if not read then
-		return { "Group buff: not read yet. Other members are read out of combat only." }
-	end
+-- " (Mara, Eli)": the names of the members who lack the buff at the last look, at most K.MAX_NAMES and how many more, or "" for none.
+local function Who(read)
 	local names = {}
 	for index, unit in ipairs(read.lacking) do
 		if index > K.MAX_NAMES then
@@ -577,9 +571,30 @@ local function Lines(entry)
 		end
 		names[#names + 1] = UnitLabel(unit)
 	end
-	local who = #names > 0 and (" (" .. table.concat(names, ", ") .. ")") or ""
+	return #names > 0 and (" (" .. table.concat(names, ", ") .. ")") or ""
+end
+
+local function Lines(entry)
+	if not Grouped() then
+		return { "Group buff: not in a group, so it is hidden." }
+	end
+	local read = S.read[entry.id]
+	if not read then
+		return { "Group buff: not read yet. Other members are read out of combat only." }
+	end
 	local blessing = Others(entry) and " A member with another of your blessings counts as having it." or ""
-	return { ("Group buff: %d of %d lack it%s.%s Other members are read out of combat only."):format(read.missing, read.total, who, blessing) }
+	return { ("Group buff: %d of %d lack it%s.%s Other members are read out of combat only."):format(read.missing, read.total, Who(read), blessing) }
+end
+
+-- The line of the tracker's tooltip (Tracker tooltips, Trackers.lua): who lacks the buff at the last look, which is made out of combat only.
+local function Tip(entry)
+	local read = Grouped() and S.read[entry.id]
+	if not read then
+		return { "Not read yet: the others are read out of combat only." }
+	elseif read.missing == 0 then
+		return { ("All %d have it."):format(read.total) }
+	end
+	return { ("%d of %d lack it%s."):format(read.missing, read.total, Who(read)) }
 end
 
 -- Forgets what was read of a tracker that is gone, and stops hearing the group when no group tracker is left.
@@ -646,7 +661,7 @@ end
 
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("group", {
-		Read = Read, Clean = Clean, Add = Add, Label = Label, Icon = Icon, Lines = Lines, Wanted = Wanted, Count = Count, Gone = Gone,
+		Read = Read, Clean = Clean, Add = Add, Label = Label, Icon = Icon, Lines = Lines, Tip = Tip, Wanted = Wanted, Count = Count, Gone = Gone,
 		World = Old, what = "group buff",
 	})
 end

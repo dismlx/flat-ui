@@ -35,7 +35,9 @@ local _, ns = ...
 -- against an enemy of the player's level when it asks. C.Resist gives it a resist with other Spell Piercing and levels: at the player's level, with
 -- the piercing of a school an item pierces on its own (Fire Piercing...), which GetSpellPenetration does not count.
 -- The enemy is the target unless spec.unit names another unit (C.Target, C.Front): HitTableTip.lua works the table out against the unit of an enemy's
--- tooltip, from inputs it kept, with C.Target and C.Table.
+-- tooltip, from inputs it kept, with C.Target and C.Table. Each line of C.Table also says the hit that takes its miss to none, or to the 1% of
+-- spells that always miss under Classic tests (need, 0.5.35): StatTipsMore.lua words it on the Character window's Hit Chance as the hit still
+-- wanted, against an enemy of the player's level and a boss.
 
 local C = {}
 ns.HitTableCalc = C
@@ -383,11 +385,8 @@ end
 -- The miss of a weapon after hit. Against a mob 5% and 0.1 a point up to 10 points, 0.2 a point past them, scaled down under level 10
 -- (Attack-table.md:45-59); then past 10 points the first (d - 10) x 0.2 of hit counts for nothing with Classic tests (Blizzard's post at :30),
 -- and the game's tooltip, which needs 8% against a boss (CR_WARRIOR_HIT_CAP_TOOLTIP), leaves that out. Against a player 5% and 0.04 a point.
--- extra is the dual wield penalty of a swing.
-local function Miss(ctx, skill, hit, extra)
-	if hit == nil then
-		return nil
-	end
+-- extra is the dual wield penalty of a swing. Before gives the miss before hit and extra, and the hit lost.
+local function Before(ctx, skill)
 	local d = ctx.D - skill
 	local miss, lost
 	if ctx.player then
@@ -400,9 +399,24 @@ local function Miss(ctx, skill, hit, extra)
 	if not ctx.player and ctx.T < 10 then
 		miss = miss * ctx.T / 10
 	end
+	return math.max(0, miss), lost
+end
+
+local function Miss(ctx, skill, hit, extra)
+	if hit == nil then
+		return nil
+	end
+	local miss, lost = Before(ctx, skill)
 	-- The hit lost comes off what gear and talents give; a hit under none, from a debuff, adds to the miss whole.
 	local counted = hit > 0 and math.max(0, hit - lost) or hit
-	return Clamp(math.max(0, miss) + extra - counted)
+	return Clamp(miss + extra - counted)
+end
+
+-- The hit, in percent, that takes the miss of a weapon to none (a line's need, 0.5.35, for StatTipsMore.lua): the miss before hit and extra, and
+-- the hit that counts for nothing (Miss). It reads no hit, so a line has it while the game withholds the hit.
+local function Need(ctx, skill, extra)
+	local miss, lost = Before(ctx, skill)
+	return miss + extra + lost
 end
 
 -- Dodge: 5% and a step a point, less expertise (Attack-table.md:117-137; Forever's expertise takes it off dodge and parry, CR_EXPERTISE_TOOLTIP).
@@ -477,7 +491,7 @@ local function Swing(ctx, id, label, skill, hit, expertise, crit, agility, extra
 		glance = Glance(ctx, skill), block = Block(ctx, skill), resist = false }
 	local cap = Roll(parts, { "miss", "dodge", "parry", "glance", "block" })
 	local chance = WeaponCrit(ctx, skill, crit, agility, sheetSkill)
-	local line = { id = id, label = label, skill = skill, parts = parts, floor = 0, over = false }
+	local line = { id = id, label = label, skill = skill, parts = parts, floor = 0, over = false, need = Need(ctx, skill, extra) }
 	parts.cap = cap
 	if cap ~= nil and chance ~= nil then
 		line.over = chance > cap + OVER
@@ -496,7 +510,7 @@ local function Special(ctx, skill, hit, expertise, crit, agility, sheetSkill)
 		block = Block(ctx, skill), cap = false, resist = false }
 	parts.hit = Roll(parts, { "miss", "dodge", "parry", "block" })
 	parts.crit = WeaponCrit(ctx, skill, crit, agility, sheetSkill)
-	return { id = "special", label = "Special", skill = skill, parts = parts, floor = 0, over = false }
+	return { id = "special", label = "Special", skill = skill, parts = parts, floor = 0, over = false, need = Need(ctx, skill, 0) }
 end
 
 -- A ranged attack: it cannot be dodged, parried or glance, and only blocked from the front (Ranged-Attack-Table.md:5, 254-287); crit rolled again.
@@ -506,7 +520,7 @@ local function Ranged(ctx, skill, hit, crit, agility, sheetSkill)
 		resist = false }
 	parts.hit = Roll(parts, { "miss", "block" })
 	parts.crit = WeaponCrit(ctx, skill, crit, agility, sheetSkill)
-	return { id = "ranged", label = "Ranged", skill = skill, parts = parts, floor = 0, over = false }
+	return { id = "ranged", label = "Ranged", skill = skill, parts = parts, floor = 0, over = false, need = Need(ctx, skill, 0) }
 end
 
 -- The share of a spell's damage the enemy resists on average, in percent, with Spell Piercing pen: above 0 resisted, below 0 the damage a creature
@@ -536,16 +550,17 @@ C.Resist = Resist
 local function Spell(ctx, hit, crit, pen)
 	local floor = ctx.classic and 1 or 0
 	local parts = { dodge = false, parry = false, glance = false, block = false, cap = false }
+	local above = ctx.T - ctx.L
+	local chance = above <= 2 and math.min(99, 96 - above) or 94 - (above - 2) * (ctx.player and 7 or 11)
+	local before = Clamp(100 - chance)
 	if hit ~= nil then
-		local above = ctx.T - ctx.L
-		local chance = above <= 2 and math.min(99, 96 - above) or 94 - (above - 2) * (ctx.player and 7 or 11)
-		parts.miss = math.max(floor, Clamp(Clamp(100 - chance) - hit))
+		parts.miss = math.max(floor, Clamp(before - hit))
 		parts.hit = 100 - parts.miss
 	end
 	parts.crit = crit ~= nil and Clamp(crit) or nil
 	parts.resist = Resist(ctx.L, ctx.T, ctx.player, pen)
 	return { id = "spell", label = "Spell", parts = parts, floor = floor, over = false, pen = parts.resist ~= nil and pen or nil,
-		levelResist = not ctx.player and ctx.T > ctx.L }
+		levelResist = not ctx.player and ctx.T > ctx.L, need = math.max(0, before - floor) }
 end
 
 -- The reads and the table ---------------------------------------------------------------------------------------------------------------------------
@@ -629,7 +644,8 @@ end
 
 -- Works the table out from inputs (C.Inputs' answer, or a copy a caller changed), reading nothing, for spec = { special, rules }. The answer holds
 -- level, target (C.Target), enemy, front, facingUnsure (the game did not say whether the target attacks the player), lines ({ id, label, skill, parts,
--- floor, over }, in the order shown; the Spell line also pen and levelResist, Spell), gaps (what the game withheld or refused, by name), assumed
+-- floor, over, need }, in the order shown, need the hit that takes the line's miss to its floor, Need and Spell; the Spell line also pen and
+-- levelResist, Spell), gaps (what the game withheld or refused, by name), assumed
 -- (the hands whose skill stood in), offCritFromMain (the two hands hold weapons of two skill lines, while the off hand's crit is the main hand's),
 -- noRanged (Ranged asked for with no ranged weapon worn) and rangedUnknown (the game did not say what the ranged slot holds); a ranged line asked
 -- for with no ranged weapon (noWeapon) is there all the same. A part of a line is a number, false where it does not apply, and nil where the game

@@ -1,10 +1,12 @@
 local _, ns = ...
 
 -- Group tools: a row of buttons of Flat UI's own for a group, the eight raid markers and a clear for your target, a ready check, a role poll
--- and a pull countdown, drawn as the icons of IconRow.lua are: square, with a thin border on a dark background. A module of its own, off by
--- default, whose page is in the Group group. The row shows in a group, or as Show says, and /flatui move places it (FlatUIGroupTools in
+-- and a pull countdown, drawn as the icons of IconRow.lua are: square, with a thin border on a dark background. With Borders in the marker's
+-- colour each marker's border takes the colour the game's own menu gives it (UnitPopupSharedButtonMixins.lua:2653-2752, GetColor of
+-- RaidTarget1 to 8). A module of its own, on by default, whose page is in the Group group. The row shows in a group, or as Show says, and /flatui move places it (FlatUIGroupTools in
 -- Movers.lua: the top left corner of the row is the top left corner of the box). While test mode is on (TestMode.lua, out of combat only) Show
--- reads as Always. No frame or setting of the game is changed.
+-- reads as Always, the tick shows a sample tally of 4/5 with a sample Eli not ready, and the pull button counts down from Countdown length in
+-- the warm colour, again and again (G.SampleOn); a real ready check or countdown takes their place. No frame or setting of the game is changed.
 --
 -- What the game allows. SetRaidTarget, RemoveRaidTargets, C_PartyInfo.DoReadyCheck and C_PartyInfo.DoCountdown have restrictions
 -- (HasRestrictions: RaidMarkersDocumentation.lua:108-124, PartyInfoDocumentation.lua:156-174), so they run only in the secure click of a button
@@ -40,7 +42,9 @@ local _, ns = ...
 -- UnitDocumentation.lua:2023-2055) greys nothing and is not read: the click lets the game decide, and the game refuses what it does not allow.
 -- The greying follows the group, its leader and the target while the row shows (GROUP_ROSTER_UPDATE, PARTY_LEADER_CHANGED, PARTY_LFG_RESTRICTED:
 -- PartyInfoDocumentation.lua:680, 784, 790; PLAYER_TARGET_CHANGED: UnitDocumentation.lua:3976). Pointing at a button writes its lines in
--- GameTooltip (SetOwner on the icon, SetText, AddLine, Show, and Hide when the mouse leaves), as the data panels do.
+-- GameTooltip (SetOwner on the icon, SetText, AddLine, Show, and Hide when the mouse leaves), as the data panels do; a marker's and the clear's
+-- name the game's own key for them where one is bound (RAIDTARGET1 to 8 and RAIDTARGETNONE, Blizzard_FrameXML/Bindings_Standard.xml:1573-1597),
+-- written again on UPDATE_BINDINGS.
 -- Adapted from the Mark Bar of the data panels and the Group Tools panel of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoL/Core/Streams/Stream_MarkBarCommon.lua:4-16, Stream_MarkBarTarget.lua:20-40, Stream_MarkBarUtility.lua:51-75,
 -- EnhanceQoLDungeonRaid/GroupTools.lua:29-31, 272-289, 472): its secure buttons for the markers, the ready check and the countdown and the
@@ -77,8 +81,15 @@ local CLEAR = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
 local READY = "Interface\\RaidFrame\\ReadyCheck-Ready"
 local ROLES = "Interface\\LFGFrame\\UI-LFG-ICON-ROLES"
 local ROLES_CUT = 134 / 256
--- The markers by index, the game's RAID_TARGET_1 to RAID_TARGET_8.
+-- The markers by index, the game's RAID_TARGET_1 to RAID_TARGET_8, and the colour of each as the game's menu gives it
+-- (UnitPopupSharedButtonMixins.lua:2653-2752).
 local NAMES = { "Star", "Circle", "Diamond", "Triangle", "Moon", "Square", "Cross", "Skull" }
+local COLOURS = {
+	{ 1, 0.92, 0 }, { 0.98, 0.57, 0 }, { 0.83, 0.22, 0.9 }, { 0.04, 0.95, 0 },
+	{ 0.7, 0.82, 0.875 }, { 0, 0.71, 1 }, { 1, 0.24, 0.168 }, { 0.98, 0.98, 0.98 },
+}
+-- The sample ready check of test mode.
+local SAMPLE_READY, SAMPLE_TOTAL, SAMPLE_NAME = 4, 5, "Eli"
 local NO_TARGET = "You have no target."
 local NO_MARK = "Your target cannot be marked."
 local RAID_MARK = "In a raid only the leader and assistants can mark."
@@ -106,7 +117,7 @@ local IsSecret = ns.IsSecret
 -- number), tally (the ready check's count), outline, cover (the secure button over the icon; none for the role poll), usable, why, hover,
 -- seconds }. placed: the spot the row was put at. laid: the buttons, size, spacing and layout the row was laid out for. queued: a change waits
 -- for the end of a fight. broken: the game made no secure button. check: the tally of the last ready check, { ready, total, notReady, waiting,
--- over }. ends: when the running countdown ends, on the clock of GetTime; ticker its step.
+-- over, sample (test mode's) }. ends: when the running countdown ends, on the clock of GetTime; ticker its step; sampleCount: it is test mode's.
 local G = { buttons = {}, queued = false, broken = false }
 ns.GroupTools = G
 
@@ -548,6 +559,7 @@ function G.Lay()
 	end
 	G.Layout(wanted)
 	G.Countdown()
+	G.ShowTally()
 	G.Place()
 	G.panel:Show()
 end
@@ -586,13 +598,21 @@ end
 
 -- Drawing ------------------------------------------------------------------------------------------------------------------------------------
 
--- The background of an icon: the Background colour of the Flat UI page, a little lighter under the mouse while the button can work.
+-- The background of an icon: the Background colour of the Flat UI page, a little lighter under the mouse while the button can work. The border
+-- of a marker takes its colour while Borders in the marker's colour is on, greyed or not, else the general one, as the Ping bar does for its
+-- pings (PingBar.lua).
 function G.Shade(entry)
 	if entry.hover and entry.usable then
 		local r, g, b = ns.Colour("general.backdrop")
 		ns.SetOutlineFill(entry.outline, math.min(1, r + LIGHTER), math.min(1, g + LIGHTER), math.min(1, b + LIGHTER), 1)
 	else
 		ns.SetOutlineFill(entry.outline, nil, nil, nil, nil)
+	end
+	local colour = entry.kind == "mark" and COLOURS[entry.marker] or nil
+	if colour and Opt("markColours") ~= false then
+		ns.SetOutlineColour(entry.outline, colour[1], colour[2], colour[3])
+	else
+		ns.SetOutlineColour(entry.outline, nil, nil, nil)
 	end
 end
 
@@ -644,16 +664,36 @@ function G.Owned(entry)
 	return ok and not IsSecret(owned) and owned == true
 end
 
--- The title and the lines of a button's tooltip.
+-- The text of the first key bound to a binding of the game, or nil.
+local function KeyText(binding)
+	local key = Ask(GetBindingKey, binding)
+	if type(key) ~= "string" or key == "" then
+		return nil
+	end
+	local text = Ask(GetBindingText, key)
+	return type(text) == "string" and text ~= "" and text or key
+end
+
+-- The title and the lines of a button's tooltip. A marker and the clear add the game's own key for them, where one is bound.
 function G.Lines(entry)
-	if entry.kind == "mark" then
-		return NAMES[entry.marker], { "Left-click puts it on your target, or takes it off.", "Right-click takes your target's marker off." }
-	elseif entry.kind == "clear" then
-		return "Clear markers", { "Left-click takes the marker off your target.", "Right-click takes every marker off." }
+	if entry.kind == "mark" or entry.kind == "clear" then
+		local title, lines, key
+		if entry.kind == "mark" then
+			title, lines = NAMES[entry.marker], { "Left-click puts it on your target, or takes it off.", "Right-click takes your target's marker off." }
+			key = KeyText("RAIDTARGET" .. entry.marker)
+		else
+			title, lines = "Clear markers", { "Left-click takes the marker off your target.", "Right-click takes every marker off." }
+			key = KeyText("RAIDTARGETNONE")
+		end
+		if key then
+			lines[#lines + 1] = "Key: " .. key
+		end
+		return title, lines
 	elseif entry.kind == "check" then
 		local lines, check = { "Asks everyone in the group whether they are ready." }, G.check
 		if check then
-			lines[#lines + 1] = ("%s: %d of %d ready."):format(check.over and "Last check" or "Now", check.ready, check.total)
+			local when = check.sample and "Sample" or (check.over and "Last check" or "Now")
+			lines[#lines + 1] = ("%s: %d of %d ready."):format(when, check.ready, check.total)
 			if #check.notReady > 0 then
 				lines[#lines + 1] = "Not ready: " .. table.concat(check.notReady, ", ")
 			end
@@ -820,7 +860,7 @@ end
 
 -- Stops the countdown's step and gives the number back its length.
 function G.CountdownOver()
-	G.ends = nil
+	G.ends, G.sampleCount = nil, nil
 	local ticker = G.ticker
 	G.ticker = nil
 	if ticker and type(ticker.Cancel) == "function" then
@@ -829,14 +869,35 @@ function G.CountdownOver()
 	G.PullText(G.Entry("pull"))
 end
 
--- One step of the countdown: the number, and the end at 0.
+-- True while test mode is on (TestMode.lua).
+local function Testing()
+	local mode = ns.TestMode
+	return mode ~= nil and mode.IsOn() == true
+end
+
+-- One step of the countdown: the number, and the end at 0. The sample of test mode starts again from Countdown length while test mode is on.
 function G.CountStep()
 	local now = Ask(GetTime)
 	if not G.ends or not now or G.ends - now < 0.5 then
+		if G.sampleCount and now and Testing() then
+			G.ends = now + Seconds()
+			G.PullText(G.Entry("pull"))
+			return
+		end
 		G.CountdownOver()
 		return
 	end
 	G.PullText(G.Entry("pull"))
+end
+
+-- The step of one second of the countdown, where the client has NewTicker.
+function G.StartTicker()
+	if not G.ticker and type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
+		local ok, ticker = pcall(C_Timer.NewTicker, COUNT_STEP, function()
+			ns.Try(KEY, G.CountStep)
+		end)
+		G.ticker = ok and ticker or nil
+	end
 end
 
 -- START_TIMER: a player countdown counts on the pull button, once a second until it ends.
@@ -849,13 +910,8 @@ function G.TimerStarted(kind, remaining)
 		G.CountdownOver()
 		return
 	end
-	G.ends = now + remaining
-	if not G.ticker and type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
-		local ok, ticker = pcall(C_Timer.NewTicker, COUNT_STEP, function()
-			ns.Try(KEY, G.CountStep)
-		end)
-		G.ticker = ok and ticker or nil
-	end
+	G.ends, G.sampleCount = now + remaining, nil
+	G.StartTicker()
 	-- With no ticker the number shows the length the countdown started with, until it ends.
 	if not G.ticker then
 		local ends = G.ends
@@ -873,6 +929,36 @@ function G.TimerStopped(kind)
 	if PlayerCountdown(kind) then
 		G.CountdownOver()
 	end
+end
+
+-- Test mode on: a sample tally on the tick (4/5, a sample member not ready, in the warm colour) and a sample countdown on the pull button,
+-- shown only, no /countdown sent, from Countdown length again and again. A real ready check or countdown replaces them, as it sets G.check and
+-- G.ends. Only FontStrings of the icons change.
+function G.SampleOn()
+	if not G.check then
+		G.check = { ready = SAMPLE_READY, total = SAMPLE_TOTAL, notReady = { SAMPLE_NAME }, waiting = {}, over = false, sample = true }
+	end
+	G.ShowTally()
+	local now = Ask(GetTime)
+	if not G.ends and now then
+		G.ends, G.sampleCount = now + Seconds(), true
+		G.StartTicker()
+		if not G.ticker then
+			G.ends, G.sampleCount = nil, nil
+		end
+		G.PullText(G.Entry("pull"))
+	end
+end
+
+-- Test mode off or paused: the samples go, a real check or countdown stays.
+function G.SampleOff()
+	if G.check and G.check.sample then
+		G.check = nil
+	end
+	if G.sampleCount then
+		G.CountdownOver()
+	end
+	G.ShowTally()
 end
 
 -- The module ---------------------------------------------------------------------------------------------------------------------------------
@@ -942,11 +1028,13 @@ ns.Register(KEY, {
 		READY_CHECK_FINISHED = G.Checked,
 		START_TIMER = G.TimerStarted,
 		STOP_TIMER_OF_TYPE = G.TimerStopped,
+		-- A key changed: the tooltip under the mouse names the new one.
+		UPDATE_BINDINGS = G.Paint,
 	},
 })
 
 -- Test mode: On, Off and a pause refresh the page, which shows the row or puts it back to its own Show rule (G.Allowed), out of combat or once the
--- fight ends (G.Apply).
+-- fight ends (G.Apply); On shows the sample tally and countdown (G.SampleOn), Off and a pause take them away.
 if ns.TestMode then
-	ns.TestMode.Register("grouptools", { module = KEY, label = "Group tools", refresh = true })
+	ns.TestMode.Register("grouptools", { module = KEY, label = "Group tools", refresh = true, Start = G.SampleOn, Stop = G.SampleOff })
 end

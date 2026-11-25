@@ -362,9 +362,13 @@ end
 -- frames (Mainline/PlayerFrame.xml:471, TargetFrame.xml:370, Shared/CompactUnitFrame.xml:105), so a hook on the global would miss them, and the game's
 -- scripts are not touched: a frame of the addon's own reads the frame under the mouse (GetMouseFoci, as Movers.lua does) every HOVER.every seconds while the
 -- row is on and a layer is made, walks up at most HOVER.steps parents to a frame this module knows, shows that frame's layer and hides the last one. The
--- layers are made out of combat; in a fight only Show and Hide change. The stand-ins of test mode take no mouse, so they show none.
+-- layers are made out of combat; in a fight only Show and Hide change. A layer has the shape of its bar: the rounded rectangle of Corners (UnitFrames.lua
+-- Shape, the file of the radius, sliced) while the record's bars are rounded in Separate parts, else the crisp square, so no corner outside a rounded
+-- border lights up; it is shaped again on the pass after Corners changes, out of combat. The stand-ins of test mode take no mouse, so they show none.
+-- The pet target frame (UnitPetTarget.lua) has no record and lights its own layer by the same amount (X.hoverAlpha).
 local HOVER_PART = "Mouse highlight"
 local HOVER = { alpha = 0.12, every = 0.05, steps = 6, file = "Interface\\Buttons\\WHITE8X8" }
+X.hoverAlpha = HOVER.alpha
 -- made: the records with a layer. lit: the record whose layer shows. on: the driver runs. waited: the time since the last read.
 local hover = { made = setmetatable({}, { __mode = "k" }), waited = 0 }
 
@@ -460,8 +464,24 @@ local function MakeHover(rec)
 	layer:SetBlendMode("ADD")
 	layer:SetVertexColor(1, 1, 1, HOVER.alpha)
 	layer:Show()
-	rec.hoverFrame = frame
+	rec.hoverFrame, rec.hoverLayer = frame, layer
 	hover.made[rec] = true
+end
+
+-- The layer in the shape of the bar: the radius of the record's corners while they are rounded in Separate parts, else the crisp square (the plain
+-- white file while the client refuses the slicing). Only when that changed, and out of combat.
+local function HoverShape(rec)
+	local layer = rec.hoverLayer
+	local radius = not rec.joined and rec.radius or nil
+	if layer == nil or rec.hoverRadius == (radius or 0) or InCombatLockdown() then
+		return
+	end
+	rec.hoverRadius = radius or 0
+	if type(X.shape) ~= "function" or not X.shape(layer, radius) then
+		pcall(layer.SetTexture, layer, HOVER.file)
+	end
+	layer:SetBlendMode("ADD")
+	layer:SetVertexColor(1, 1, 1, HOVER.alpha)
 end
 
 local Hover
@@ -479,6 +499,9 @@ function Hover(rec, on)
 			return
 		end
 		MakeHover(rec)
+	end
+	if want then
+		HoverShape(rec)
 	end
 	if not want and hover.lit == rec then
 		Light(nil)
