@@ -11,6 +11,9 @@ local _, ns = ...
 -- The label of a box is one line as wide as the box, cut with an ellipsis where the name is longer and hidden in a box too small for a line, so
 -- the labels of small boxes in a crowd stay inside them. The box under the cursor is drawn again over every box, with its whole name on a plate
 -- over its middle, by a frame of the addon's own that takes no mouse, so the smaller box under the cursor still takes it.
+-- Each control of the toolbar has a tooltip that says what it does (TIPS): the grid's Off, Dim and Bright, Snap, Samples, Frame list, Undo with the
+-- steps it holds ("Puts back the last change, 3 to undo.") and Done. Ctrl-Z does what Undo does while the movers are open (the keys frame, unless
+-- the question of a close shows or a box of the inspector has the keyboard).
 
 local MM = {}
 ns.MoversMode = MM
@@ -214,7 +217,49 @@ local function Text(parent, font, token, justify)
 	return text
 end
 
-local function Button(parent, text, width, onClick, primary)
+-- The tooltip of a control of the toolbar: tip gives its title and a dim line under it. GameTooltip is written with its own methods (SetOwner,
+-- SetText, AddLine, Show) and hidden on leave only while IsOwned says the control owns it.
+local function ShowTip(owner, tip)
+	local tooltip = _G.GameTooltip
+	if type(tip) ~= "function" or tooltip == nil or ns.IsSecret(tooltip) then
+		return
+	end
+	local ok, title, line = pcall(tip)
+	if not ok or type(title) ~= "string" then
+		return
+	end
+	tooltip:SetOwner(owner, "ANCHOR_BOTTOM")
+	tooltip:SetText(title, 1, 1, 1)
+	if type(line) == "string" and line ~= "" then
+		local r, g, b = Look().Colour("text-dim")
+		tooltip:AddLine(line, r, g, b, true)
+	end
+	tooltip:Show()
+end
+
+local function HideTip(owner)
+	local tooltip = _G.GameTooltip
+	if tooltip == nil or ns.IsSecret(tooltip) then
+		return
+	end
+	local ok, owned = pcall(tooltip.IsOwned, tooltip, owner)
+	if ok and owned == true then
+		tooltip:Hide()
+	end
+end
+
+-- A control of the toolbar that has nothing to paint on the mouse: its tooltip only.
+local function Tipped(frame, tip)
+	frame:SetScript("OnEnter", function()
+		ShowTip(frame, tip)
+	end)
+	frame:SetScript("OnLeave", function()
+		HideTip(frame)
+	end)
+end
+
+-- A button with a label; tip, when given, is its tooltip (ShowTip).
+local function Button(parent, text, width, onClick, primary, tip)
 	local button = Make("Frame", parent)
 	button:SetSize(width, 28)
 	button:EnableMouse(true)
@@ -231,10 +276,12 @@ local function Button(parent, text, width, onClick, primary)
 	button:SetScript("OnEnter", function()
 		over = true
 		Paint()
+		ShowTip(button, tip)
 	end)
 	button:SetScript("OnLeave", function()
 		over, down = false, false
 		Paint()
+		HideTip(button)
 	end)
 	button:SetScript("OnMouseDown", function()
 		down = true
@@ -957,7 +1004,45 @@ end
 
 -- The toolbar -------------------------------------------------------------------------------------------
 
-local GRID_CHOICES = { { "off", "Off" }, { "dim", "Dim" }, { "bright", "Bright" } }
+local GRID_CHOICES = { { "off", "Off", "No grid behind the frames." }, { "dim", "Dim", "A faint grid behind the frames, the middle of the screen marked." },
+	{ "bright", "Bright", "A brighter grid behind the frames, the middle of the screen marked." } }
+
+-- The steps Undo holds: the steps of a group (Space across, Space down) count as one, as Undo puts them back together.
+local function UndoSteps()
+	local count, group = 0, nil
+	for _, step in ipairs(S.undo) do
+		if not (step[3] ~= nil and step[3] == group) then
+			count = count + 1
+		end
+		group = step[3]
+	end
+	return count
+end
+
+-- The tooltips of the toolbar.
+local TIPS = {
+	snap = function(on)
+		return on and "Snap: On" or "Snap: Off", "A dragged box snaps to the middle of the screen and to the other boxes. Click to turn it "
+			.. (on and "off." or "on.")
+	end,
+	samples = function(on)
+		return on and "Samples: On" or "Samples: Off", "Test mode: frames that are hidden until a fight, a target or a group show samples in their "
+			.. "boxes while you place them."
+	end,
+	list = function()
+		return "Frame list", "Shows or hides the list of frames at the left. Click a name to choose its frame; the arrow keys move it, Shift ten at a time."
+	end,
+	undo = function()
+		local count = UndoSteps()
+		if count == 0 then
+			return "Undo", "Nothing to undo yet. Ctrl-Z does the same."
+		end
+		return "Undo", ("Puts back the last change, %d to undo. Ctrl-Z does the same."):format(count)
+	end,
+	done = function()
+		return "Done", "Ends the session and keeps the changes. Escape asks first."
+	end,
+}
 
 local function PaintSegments()
 	local L = Look()
@@ -1033,6 +1118,9 @@ local function BuildToolbar()
 				PaintSegments()
 			end
 		end)
+		Tipped(segment, function()
+			return "Grid: " .. choice[2], choice[3] .. " Kept for your account."
+		end)
 		ui.segments[index] = entry
 	end
 	Painted(PaintSegments)
@@ -1055,7 +1143,13 @@ local function BuildToolbar()
 			Try(ns.Set, "movers.snap", on and "off" or "middle")
 			Try(ns.Set, "panel.snapFrames", on and "off" or "on")
 			PaintToggle()
+			ShowTip(toggle, function()
+				return TIPS.snap(SnapOn())
+			end)
 		end
+	end)
+	Tipped(toggle, function()
+		return TIPS.snap(SnapOn())
 	end)
 	Painted(PaintToggle)
 	-- Samples: test mode (TestMode.lua), so the boxes of hidden frames hold their samples while they are placed.
@@ -1080,6 +1174,10 @@ local function BuildToolbar()
 			PaintSamples()
 		end
 	end)
+	Tipped(samples, function()
+		local test = ns.TestMode
+		return TIPS.samples(type(test) == "table" and test.Source() ~= nil)
+	end)
 	Painted(PaintSamples)
 	local listButton = Button(bar, "Frame list", 80, function()
 		S.list = not S.list
@@ -1087,13 +1185,17 @@ local function BuildToolbar()
 		if S.list then
 			MM.Layout()
 		end
-	end)
+	end, nil, TIPS.list)
 	listButton:SetPoint("LEFT", bar, "LEFT", 412, 0)
-	ui.undo, ui.undoLabel = Button(bar, "Undo", 64, MM.Undo)
+	ui.undo, ui.undoLabel = Button(bar, "Undo", 64, function()
+		MM.Undo()
+		-- The count of the tooltip under the cursor follows.
+		ShowTip(ui.undo, TIPS.undo)
+	end, nil, TIPS.undo)
 	ui.undo:SetPoint("LEFT", bar, "LEFT", 500, 0)
 	local done = Button(bar, "Done", 70, function()
 		Kit().Close()
-	end, true)
+	end, true, TIPS.done)
 	done:SetPoint("LEFT", bar, "LEFT", 572, 0)
 end
 
@@ -1194,7 +1296,8 @@ function MM.Spacing()
 	ui.space:SetShown(count >= 3)
 end
 
--- Keys: the arrows move the chosen frame, Escape puts back a bar being dragged by its tab, else asks or closes. Every other key goes on to the game.
+-- Keys: the arrows move the chosen frame, Ctrl-Z undoes the last step, Escape puts back a bar being dragged by its tab, else asks or closes. Every
+-- other key goes on to the game.
 local function BuildKeys()
 	local keys = Make("Frame")
 	keys:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -1217,6 +1320,10 @@ local function BuildKeys()
 			else
 				Try(MM.Request)
 			end
+		elseif key == "Z" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
+			-- Ctrl-Z: Undo, the last move, size or reset.
+			handled = true
+			Try(MM.Undo)
 		elseif ARROWS[key] and S.selected and not (ui.ask and ui.ask:IsShown()) then
 			local step = type(IsShiftKeyDown) == "function" and IsShiftKeyDown() and SHIFT_STEP or 1
 			Try(function()

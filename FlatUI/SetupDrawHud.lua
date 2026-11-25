@@ -1047,8 +1047,8 @@ ns.SetupDrawings["mock-xp-micro"] = XpMicro
 ns.SetupDrawings["mock-objective"] = Objective
 ns.SetupDrawings["mock-loot"] = Loot
 
--- The painters of the drawings, for test mode's stand-ins (TestHud.lua): aura icons and loot rolls on frames of the caller's, painted from the rows
--- as mock-buff-row and mock-loot paint theirs.
+-- The painters of the drawings, for test mode's stand-ins (TestHud.lua): aura icons, loot rolls and a breath timer on frames of the caller's,
+-- painted from the rows as mock-buff-row, mock-loot and mock-xp-micro paint theirs.
 local DH = { ICONS = ICONS, QUALITY = QUALITY }
 ns.DrawHud = DH
 
@@ -1079,5 +1079,50 @@ function DH.RollTime(r, secs)
 	if secs ~= r.secs then
 		r.secs = secs
 		RollClock(r)
+	end
+end
+
+-- A breath timer as Hud.lua draws it, on `parent`: the game's timer frame of 206 by 32 units with its bar of 195 by 13 at the top
+-- (Blizzard_MirrorTimer/Mainline/MirrorTimer.xml), the label "Breath" centred under the bar and the time left at the right there, where
+-- Hud.lua's MIRROR.Time puts it ("RIGHT" of the bar's bottom right, -4, -7). Parts on m: m.frame (the caller anchors it), m.plate, m.bar, m.time.
+function DH.Mirror(parent)
+	local m = { frame = NewFrame(parent, 206, 32) }
+	m.plate = NewBar(m.frame, 195, 13, 100)
+	m.plate.frame:SetPoint("TOP", m.frame, "TOP", 0, -2)
+	m.bar = m.plate.bar
+	local label = NewText(m.frame, "GameFontHighlightSmall", "CENTER", 0, 0, "Breath")
+	label:ClearAllPoints()
+	label:SetPoint("CENTER", m.plate.frame, "BOTTOM", 0, -7)
+	m.time = Owned(m.frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+	m.time:SetJustifyH("RIGHT")
+	m.time:SetPoint("RIGHT", m.plate.frame, "BOTTOMRIGHT", -4, -7)
+	return m
+end
+
+-- Paints a timer of DH.Mirror from the rows: with Breath and fatigue timers on the thin border and the flat fill in Crafting colour, the colour
+-- Hud.lua gives a breath bar (MIRROR_FILLS: its picture is the crafting fill), else the game's grey look and gloss; the time shows while Seconds
+-- on the timers is on too, as MIRROR.Tick writes it only then.
+function DH.PaintMirror(m)
+	local on = On("mirror")
+	local r, g, b = ns.Colour("castbars.craftColour")
+	Style(m.plate, on, true, not on)
+	Fill(m.bar, r, g, b, Chosen(on, "gloss"))
+	m.time:SetShown(on and ns.Get("hud.mirrorTime") == true)
+	m.secs = nil
+end
+
+-- The value of a timer of DH.Mirror, `left` of `total` seconds, and its time as 0:30, red under 10 as the timer runs out (MIRROR.Tick). The text
+-- is set only when the whole second changes.
+function DH.MirrorTime(m, left, total)
+	m.bar:SetValue(total > 0 and 100 * left / total or 0)
+	local secs = math.max(0, math.ceil(left))
+	if secs ~= m.secs then
+		m.secs = secs
+		m.time:SetText(("%d:%02d"):format(math.floor(secs / 60), secs % 60))
+		if secs < 10 then
+			m.time:SetTextColor(1, 0.25, 0.25)
+		else
+			m.time:SetTextColor(1, 1, 1)
+		end
 	end
 end

@@ -26,7 +26,9 @@ local _, ns = ...
 -- With Clicks on the bar (on by default) a Shift-click on a bar puts its progress in the chat box ("Level 34: 12,345 / 27,000 (45%), 1h 20m to
 -- level", "Stormwind: Honored 4,200 / 12,000 (35%)", ns.PutInChat), and a plain click on the reputation bar opens the Reputation tab of the
 -- Character window (ToggleCharacter("ReputationFrame"), the call of the game's own key), in a fight as it ends: chat says once "Flat UI: your
--- reputations open when the fight ends." (ns.OpenAfterFight, MapText.lua). The tooltip ends with a dim hint, "after the fight" in one.
+-- reputations open when the fight ends." (ns.OpenAfterFight, MapText.lua). A Ctrl-click on either bar counts the levelling and reputation
+-- numbers of this session from now, as /flatui xp reset does (ns.XpStatsReset, XpStats.lua): "Flat UI: the experience and reputation count
+-- starts again now.". The tooltip ends with dim hints, "after the fight" in one, and "Ctrl-click: count this session from now"; none on a sample.
 -- The tooltip's rested line is in Rested colour with the share of the level it covers ("Rested: 8,000 (30% of the level)"), and with Rested share
 -- in the text (hud.xpTextRested, on by default) Percent and Value and percent end with that share, "  +30%", in Rested colour while you are rested.
 -- Large numbers are grouped as the game writes them (BreakUpLargeNumbers: 12,150 / 27,000) in the bar text of Value and percent and Amount to
@@ -534,15 +536,23 @@ function F.ChatLine(bar)
 	return ("%s: %s%s"):format(data.name, standing and (standing .. " ") or "", line)
 end
 
--- Clicks on the bar, with Clicks on the bar on: Shift puts the bar's line in the chat box (ns.PutInChat, MapText.lua), and a plain click on the
--- reputation bar opens the Reputation tab of the Character window (ToggleCharacter, as the game's key does), in a fight as it ends
--- (ns.OpenAfterFight, MapText.lua).
+-- Clicks on the bar, with Clicks on the bar on: Ctrl counts the levelling numbers of this session from now (ns.XpStatsReset), Shift puts the
+-- bar's line in the chat box (ns.PutInChat, MapText.lua), and a plain click on the reputation bar opens the Reputation tab of the Character
+-- window (ToggleCharacter, as the game's key does), in a fight as it ends (ns.OpenAfterFight, MapText.lua).
 function F.Click(bar, button)
 	if Opt("xpClicks") ~= true or button ~= "LeftButton" or not bar.shown then
 		return
 	end
+	local _, ctrl = Ask(_G.IsControlKeyDown)
 	local _, shift = Ask(_G.IsShiftKeyDown)
-	if shift == true then
+	if ctrl == true then
+		-- Ctrl-click: the levelling and reputation numbers count this session from now (XpStats.lua); nothing on a sample.
+		local _, sample = F.Data(bar)
+		if not sample and ns.XpStatsReset ~= nil then
+			print(ns.XpStatsReset() and "Flat UI: the experience and reputation count starts again now."
+				or "Flat UI: the experience and reputation count starts with the next login.")
+		end
+	elseif shift == true then
 		local line = F.ChatLine(bar)
 		if line and ns.PutInChat ~= nil then
 			ns.PutInChat(line)
@@ -683,6 +693,7 @@ function F.TipLines(bar)
 		local hint = InCombatLockdown() and "Click: your reputations, after the fight. Shift-click: put this in chat"
 			or "Click: your reputations. Shift-click: put this in chat"
 		lines[#lines + 1] = DIM .. (bar.id == "rep" and hint or "Shift-click: put this in chat") .. "|r"
+		lines[#lines + 1] = DIM .. "Ctrl-click: count this session from now|r"
 	end
 	return lines
 end

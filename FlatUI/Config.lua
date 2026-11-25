@@ -2217,7 +2217,7 @@ ns.PAGES = {
 		{ key = "xpTooltip", kind = "bool", default = true, label = "Tooltip", tip = "Experience, rested and standing on mouse-over.",
 			needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpClicks", kind = "bool", default = true, label = "Clicks on the bar",
-			tip = "Shift-click puts your progress in the chat box, ready to send. A click on the reputation bar opens your reputations, in a fight as it ends.",
+			tip = "Shift-click puts your progress in the chat box, ready to send. Ctrl-click counts the session's levelling and reputation numbers from now. A click on the reputation bar opens your reputations, in a fight as it ends.",
 			needs = "xpOwn", needsIn = { "flat" } },
 		{ key = "xpSmooth", kind = "bool", default = true, label = "Animate gains",
 			tip = "The fill slides up to its new value and the part you just gained glows for a moment. A new level flashes the bar gold, and a new standing in its colour; another faction shows at once.",
