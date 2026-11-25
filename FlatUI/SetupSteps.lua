@@ -1118,6 +1118,7 @@ ns.SETUP_STEPS = {
 		{ "pulse.unignore", "r", "behaviour", "Puts a spell or item back in the pulse." },
 		{ "pulse.size", "o", "behaviour", "Sets the size of the pulse." },
 		{ "pulse.time", "r", "behaviour", "Sets how long the pulse shows." },
+		{ "pulse.alpha", "r", "behaviour", "Sets how solid the pulse is at its brightest." },
 		{ "pulse.sound", "r", "behaviour", "Plays a sound with the pulse." },
 		{ "pulse.iconSound", "r", "behaviour", "Gives one spell or item of the pulse a sound of its own." },
 		{ "pulse.name", "r", "behaviour", "Shows the name of the spell or item under the pulse." },
