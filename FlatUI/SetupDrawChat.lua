@@ -1,13 +1,16 @@
 local _, ns = ...
 
--- The setup drawings of chat, tooltips and combat text: mock-chat (chat windows and chat text), mock-tooltip and mock-combat-text. Each is a
+-- The setup drawings of chat, tooltips and combat text: mock-chat (chat windows and chat text), mock-tooltip, mock-combat-text and
+-- mock-combat-alerts (No target, Low health, Low mana, +Combat and -Combat of CombatCues.lua). Each is a
 -- table { build(stage), draw(stage), parts } as the drawing library of the setup wizard takes it. build makes the frames once, all marked
 -- ns.Own; draw reads the settings only through ns.Get, so under the draft view of the wizard it draws the draft, and it lays everything
 -- out again each time it runs. Sample text and numbers are fixed. The look of a frame, a fill, a face and a colour comes from the same
 -- functions the modules paint with (ns.Outline, ns.SetOutlineFill, ns.TipShades, ns.FontFile, ns.OutlineFlags, ns.FlatFill, ns.BarTexture,
 -- ns.CombatOffsets, ns.CombatPopHeight, ns.CombatOwnEdge, ns.CombatColour, ns.CombatFont, and for the two scroll areas ns.ScrollLane, ns.ScrollPath,
 -- ns.ScrollAlpha and ns.ScrollSize). mock-combat-text draws the numbers over an enemy plate and over friendly units, the Incoming area's numbers
--- on you and, right of them, the Outgoing area's column of your hits, kept whole inside the picture.
+-- on you and, right of them, the Outgoing area's column of your hits, kept whole inside the picture; it shows in setup and in the options
+-- window's preview band above every Combat text tab but You and warnings, which shows mock-combat-alerts (PanelPreview.lua), each stage with its
+-- own marks (partsOf).
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
@@ -564,13 +567,15 @@ do
 		{ text = "824", flag = "CRITICAL", school = 1, crit = true, age = 0.12 },
 	}
 	-- For the player, as the module's own samples: the report, the text with its sign, whether it is a critical hit, whether it shows
-	-- from Damage and healing you take, the colour, and whether it starts a few units to one side.
+	-- from Damage and healing you take, the colour, and whether it starts a few units to one side. The last is a Frost spell's hit: the game's
+	-- purple, or light blue with Colour by school of magic on (school, ns.CombatColour).
 	local OWN = {
 		{ text = "-412", level = "take", colour = { 1, 0.1, 0.1 }, side = true },
 		{ text = "-824", level = "take", colour = { 1, 0.1, 0.1 }, crit = true },
 		{ text = "+300", level = "take", colour = { 0.1, 1, 0.1 } },
 		{ text = "Dodge", level = "more", colour = { 1, 1, 1 }, side = true, word = true },
 		{ text = "+20", level = "more", colour = { 0.41, 0.8, 0.94 } },
+		{ text = "-510", level = "take", colour = { 0.79, 0.3, 0.85 }, school = 16 },
 	}
 	-- Where the sample numbers for the player start, and how far the mock Incoming area reaches.
 	local OWN_TOP, OWN_LENGTH = 150, 120
@@ -916,6 +921,7 @@ do
 		local path = style == "straight" or style == "arc"
 		local snapshot = 0.25 * (#OWN - 1) + 0.1
 		local newest = {}
+		local ownSchool = ns.Get("combattext.school") == true
 		for i, sample in ipairs(OWN) do
 			local fs = S.own[i]
 			local shown = level == "more" or (level == "take" and sample.level == "take")
@@ -933,7 +939,11 @@ do
 				local u = math.max(0, age / life)
 				local dx, dy = ns.ScrollPath(style, u, OWN_LENGTH, dir, -1, scroll.arcs[ns.Get("combattext.arcWidth")])
 				fs:SetText(sample.word and ns.CombatParen(sample.text) or sample.text)
-				U.font(fs, file, Height(base, sample.crit, math.max(0, age), pops), flags, shadow, sample.colour)
+				local colour = sample.colour
+				if sample.school and ownSchool then
+					colour = { ns.CombatColour(sample.school, true) }
+				end
+				U.font(fs, file, Height(base, sample.crit, math.max(0, age), pops), flags, shadow, colour)
 				fs:SetAlpha(age < 0 and 0 or ns.ScrollAlpha(u, hold))
 				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OWN_X + rx + dx, top + ry + dy)
 			end
@@ -943,10 +953,18 @@ do
 			bySchool = ns.Get("combattext.school") == true })
 	end
 
-	local drawing = { draw = Draw, parts = {} }
+	-- Each stage (setup's and the options window's preview band) keeps its own marks, so neither outlines the other's numbers; drawing.parts
+	-- stays those of the first stage built.
+	local drawing = { draw = Draw }
+	function drawing.partsOf(stage)
+		local S = instances[stage]
+		return S and S.parts
+	end
 	drawing.build = function(stage)
 		local S = Build(stage)
-		local p = drawing.parts
+		local p = {}
+		S.parts = p
+		drawing.parts = drawing.parts or p
 		p.enemy, p.own, p.plate = S.enemy[1], S.own[1], S.plate
 		for _, key in ipairs({ "font", "outline", "shadow", "pop", "size", "spread", "movement", "partial", "school", "style", "classicColour", "classicSigns",
 			"classicRise", "classicTime", "classicStack" }) do
@@ -965,4 +983,147 @@ do
 		return S
 	end
 	ns.SetupDrawings["mock-combat-text"] = drawing
+end
+
+-- Combat alerts ---------------------------------------------------------------------------------------------------------------------
+
+-- mock-combat-alerts: the lines of CombatCues.lua as the real frame lays them out, round a middle line: +Combat above it, No target under it,
+-- and Low health and Low mana under that, a line of No target's size apart; -Combat with a sample fight length to the right of +Combat, as the
+-- same line shows the two in turn. Each shows while its row is on, in the colour and size of its rows (a size of 100% is 25 units,
+-- CombatCues.lua), on the game's combat font (CombatTextFont, else its large number font) with a thin outline. No target names the key bound to
+-- Target Nearest Enemy while Name the key to target an enemy is on, read as the module reads it. The whole is kept inside the picture at any size:
+-- it shrinks as one, so the sizes keep their proportions.
+do
+	local instances = setmetatable({}, { __mode = "k" })
+	local WIDE, HIGH, EDGE, GAP, SIDE, HEIGHT = 460, 190, 8, 2, 30, 25
+	local KINDS = { "enter", "leave", "warn", "health", "mana" }
+	local FALLBACK = { enter = "+Combat", leave = "-Combat", health = "Low health", mana = "Low mana" }
+	-- The colour row of each line.
+	local COLOUR = { enter = "combatEnterColour", leave = "combatLeaveColour", warn = "noTargetColour", health = "lowColour", mana = "lowManaColour" }
+
+	-- The file of the game's combat font, read from the font object, else of its large number font, else Friz Quadrata.
+	local function AlertFile()
+		local ok, file = pcall(function()
+			local font = _G.CombatTextFont or _G.NumberFontNormalHuge
+			return font and font:GetFont()
+		end)
+		if ok and not ns.IsSecret(file) and type(file) == "string" and file ~= "" then
+			return file
+		end
+		return U.FRIZ
+	end
+
+	-- No target, with the key of Target Nearest Enemy while its row is on and a key is bound.
+	local function WarnWords()
+		local text = "No target"
+		if ns.Get("combattext.noTargetKey") ~= true then
+			return text
+		end
+		local ok, key = pcall(GetBindingKey, "TARGETNEARESTENEMY")
+		if not ok or ns.IsSecret(key) or type(key) ~= "string" or key == "" then
+			return text
+		end
+		local done, words = pcall(GetBindingText, key)
+		words = done and not ns.IsSecret(words) and type(words) == "string" and words ~= "" and words or key
+		return text .. "  (" .. words .. ")"
+	end
+
+	local function Words(kind)
+		if kind == "warn" then
+			return WarnWords()
+		end
+		local words = type(ns.CombatCueWords) == "function" and ns.CombatCueWords(kind) or nil
+		return type(words) == "string" and words or FALLBACK[kind]
+	end
+
+	local function Build(stage)
+		local S = { lines = {}, parts = {} }
+		instances[stage] = S
+		S.root = U.frame(stage, WIDE, HIGH)
+		S.root:SetPoint("CENTER", stage, "CENTER", 0, 0)
+		S.root:SetClipsChildren(true)
+		for _, kind in ipairs(KINDS) do
+			local fs = U.text(S.root)
+			fs:SetJustifyH("CENTER")
+			S.lines[kind] = fs
+		end
+		return S
+	end
+
+	-- Sets the words, face and size of a line and gives its width.
+	local function Set(fs, text, file, size, kind)
+		fs:SetText(text)
+		U.font(fs, file, size, "OUTLINE", false, { ns.Colour("combattext." .. COLOUR[kind]) })
+		local ok, w = pcall(fs.GetStringWidth, fs)
+		return (ok and not ns.IsSecret(w) and type(w) == "number" and w == w and w > 0) and w or size * #text * 0.5
+	end
+
+	local function Draw(stage)
+		local S = instances[stage]
+		if not S then
+			return
+		end
+		local on = ns.Get("combattext.enabled") ~= false
+		local flash, warn, low = on and ns.Get("combattext.combatState") == true, on and ns.Get("combattext.noTarget") == true, on and ns.Get("combattext.lowHealth") == true
+		local file = AlertFile()
+		local hFlash = HEIGHT * (ns.Get("combattext.combatStateSize") or 100) / 100
+		local hWarn = HEIGHT * (ns.Get("combattext.noTargetSize") or 100) / 100
+		local step = hWarn + GAP
+		local shown = { enter = flash, leave = flash, warn = warn, health = low, mana = low }
+		local texts = {
+			enter = Words("enter"), warn = Words("warn"), health = Words("health"), mana = Words("mana"),
+			leave = ns.Get("combattext.combatLength") == true and Words("leave") .. "  1:24" or Words("leave"),
+		}
+		-- Measured whole first; then the whole shrinks as one to fit, both high and wide.
+		local widths = {}
+		for _, kind in ipairs(KINDS) do
+			widths[kind] = Set(S.lines[kind], texts[kind], file, (kind == "enter" or kind == "leave") and hFlash or hWarn, kind)
+		end
+		local above = flash and (GAP + hFlash) or 0
+		local below = (low and (GAP + 2 * step + hWarn)) or (warn and (GAP + hWarn)) or 0
+		local half = 0
+		for _, kind in ipairs({ "enter", "warn", "health", "mana" }) do
+			if shown[kind] then
+				half = math.max(half, widths[kind] / 2)
+			end
+		end
+		local right = flash and (widths.enter / 2 + SIDE + widths.leave) or half
+		local room, tall = WIDE - 2 * EDGE, HIGH - 2 * EDGE
+		local span = half + math.max(half, right)
+		local k = math.min(1, tall / math.max(1, above + below), room / math.max(1, span))
+		local cx = EDGE + half * k + (room - span * k) / 2
+		local cy = EDGE + below * k + (tall - (above + below) * k) / 2
+		for _, kind in ipairs(KINDS) do
+			local fs = S.lines[kind]
+			fs:SetShown(shown[kind])
+			if shown[kind] and k < 1 then
+				Set(fs, texts[kind], file, ((kind == "enter" or kind == "leave") and hFlash or hWarn) * k, kind)
+			end
+		end
+		local lines = S.lines
+		U.at(lines.enter, "BOTTOM", S.root, "BOTTOMLEFT", cx, cy + GAP * k)
+		U.at(lines.leave, "BOTTOMLEFT", S.root, "BOTTOMLEFT", cx + (widths.enter / 2 + SIDE) * k, cy + GAP * k)
+		U.at(lines.warn, "TOP", S.root, "BOTTOMLEFT", cx, cy - GAP * k)
+		U.at(lines.health, "TOP", S.root, "BOTTOMLEFT", cx, cy - (GAP + step) * k)
+		U.at(lines.mana, "TOP", S.root, "BOTTOMLEFT", cx, cy - (GAP + 2 * step) * k)
+	end
+
+	local drawing = { draw = Draw }
+	function drawing.partsOf(stage)
+		local S = instances[stage]
+		return S and S.parts
+	end
+	drawing.build = function(stage)
+		local S = Build(stage)
+		local p, lines = S.parts, S.lines
+		drawing.parts = drawing.parts or p
+		for _, key in ipairs({ "noTarget", "noTargetKey", "noTargetColour", "noTargetSize" }) do
+			p["combattext." .. key] = lines.warn
+		end
+		p["combattext.lowHealth"], p["combattext.lowColour"], p["combattext.lowManaColour"] = lines.health, lines.health, lines.mana
+		p["combattext.combatState"], p["combattext.combatEnterColour"], p["combattext.combatStateSize"] = lines.enter, lines.enter, lines.enter
+		p["combattext.combatLeaveColour"], p["combattext.combatLength"] = lines.leave, lines.leave
+		return S
+	end
+	ns.SetupDrawings["mock-combat-alerts"] = drawing
 end

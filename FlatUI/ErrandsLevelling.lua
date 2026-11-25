@@ -235,10 +235,14 @@ local function Followed()
 	return rep.followed or nil
 end
 
--- Flat UI's bar is drawn again (XpBar.lua). Its failures are its module's, not this part's.
+-- Flat UI's bar is drawn again (XpBar.lua), then the Reputation slot of the data panels, which reads the bar's drawing (ns.XpRepNow) and
+-- hears no event when the faction followed changes. Their failures are their modules', not this part's.
 local function Redraw()
 	if type(ns.XpBarRedraw) == "function" then
 		pcall(ns.XpBarRedraw)
+	end
+	if type(ns.DataPanelMark) == "function" then
+		pcall(ns.DataPanelMark, "rep")
 	end
 end
 

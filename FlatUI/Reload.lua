@@ -3,7 +3,8 @@ local _, ns = ...
 -- Reloads the interface. If the game blocks ReloadUI from add-on code, the first press says so and the
 -- button gets a secure button on top that runs the game's own /reload on the next press. That secure button leaves in a fight, so there every
 -- reload button (the options window's strip, Home's Needs a reload, the reload notice, the welcome screen's) is dimmed, and a press says that
--- Reload works again after the fight and that /reload works now (ns.Reload); the buttons come back as the fight ends.
+-- Reload works again after the fight and that /reload works now (ns.Reload); the buttons come back as the fight ends. The strip's Reload of the
+-- options window counts the changes that wait ("Reload (2)") and lists them in the notice's tooltip (ns.ReloadTip).
 
 local secure = false
 local buttons = {}
@@ -674,7 +675,8 @@ local function NoticeValue(path, value)
 end
 
 -- The tooltip of the notice and of Undo, under owner: every change that needs a reload, with its value now and at login, and what the buttons do.
-local function NoticeTip(owner)
+-- Another Reload button (ns.ReloadTip) gives the anchor and its own last line.
+local function NoticeTip(owner, anchor, hint)
 	if ns.Forbidden(GameTooltip) then
 		return
 	end
@@ -684,15 +686,15 @@ local function NoticeTip(owner)
 	end
 	notice.tip = owner
 	pcall(function()
-		GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
+		GameTooltip:SetOwner(owner, anchor or "ANCHOR_BOTTOM")
 		GameTooltip:SetText("Needs a reload", 1, 1, 1)
 		for _, entry in ipairs(lines) do
 			local label = type(entry[1]) == "string" and entry[1] or "a setting"
 			GameTooltip:AddDoubleLine(label, ("%s now, %s at login"):format(NoticeValue(entry[3], entry[4]), NoticeValue(entry[3], entry[5])), 1, 1, 1,
 				VALUE[1], VALUE[2], VALUE[3])
 		end
-		GameTooltip:AddLine("Reload applies them. Undo puts them all back as the game runs them, with no reload. Later hides this until your next "
-			.. "change that needs a reload.", HINT[1], HINT[2], HINT[3], true)
+		GameTooltip:AddLine(hint or ("Reload applies them. Undo puts them all back as the game runs them, with no reload. Later hides this until your "
+			.. "next change that needs a reload."), HINT[1], HINT[2], HINT[3], true)
 		GameTooltip:Show()
 	end)
 end
@@ -710,6 +712,16 @@ local function NoticeUntip(owner)
 	if ok and owned == true then
 		GameTooltip:Hide()
 	end
+end
+
+-- The same list for the Reload button of the options window's strip (Panel.lua, BuildFoot), above it, with what that button does; nothing while no
+-- change waits for a reload.
+function ns.ReloadTip(owner)
+	NoticeTip(owner, "ANCHOR_TOP", "Reload applies them. Home's Needs a reload lists them too.")
+end
+
+function ns.ReloadUntip(owner)
+	NoticeUntip(owner)
 end
 
 -- Undo: every change the notice lists goes back to the value the game runs since login, in the profile in use, so no reload is needed; ns.Set

@@ -1712,7 +1712,9 @@ end
 -- Enter presses the primary button and Left and Right pick the card before or after on a stop. The keys come through a frame of Flat UI's own
 -- that has the keyboard while setup shows and only out of combat (EnableKeyboard and SetPropagateKeyboardInput are protected); every key it does not
 -- use goes on to the game. Escape closes the colour picker, an open list or a question first (ns.PanelKit.Escape), and with none of them open goes
--- on too, so Escape closes the window. A box with the cursor takes the keys first.
+-- on too, so Escape closes the window. A box with the cursor takes the keys first. A key taken here lets the keys through again from the next frame,
+-- and the frame shows letting keys through (S.Keys), so the release of a key held meanwhile, such as one that walks, still reaches the game, as on
+-- the options pages (Panel.lua, BuildKeys).
 function S.BuildKeys(root)
 	local keys = kit.Frame(root)
 	keys:SetAllPoints(root)
@@ -1730,7 +1732,17 @@ function S.BuildKeys(root)
 			handled = Reported(pcall(kit.Escape)) == true
 		end
 		if not InCombatLockdown() then
-			Reported(pcall(self.SetPropagateKeyboardInput, self, not handled))
+			local done, failed = pcall(self.SetPropagateKeyboardInput, self, not handled)
+			if not done then
+				geterrorhandler()(failed)
+			end
+			if handled and done and C_Timer and C_Timer.After then
+				C_Timer.After(0, function()
+					if not InCombatLockdown() then
+						pcall(self.SetPropagateKeyboardInput, self, true)
+					end
+				end)
+			end
 		end
 		-- Enter is always taken, so that it never opens chat while setup has the keys; under a list, a question or the welcome screen it does nothing.
 		if enter and not covered then
@@ -1763,6 +1775,10 @@ function S.Keys(on)
 	local ok, err = pcall(keys.EnableKeyboard, keys, on)
 	if not ok then
 		geterrorhandler()(err)
+	end
+	-- It shows letting keys through, so a key held as it shows (one that walks) is let go in the game too.
+	if on and ok then
+		pcall(keys.SetPropagateKeyboardInput, keys, true)
 	end
 	keys:SetShown(on and ok)
 end

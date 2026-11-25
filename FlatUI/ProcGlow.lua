@@ -3,7 +3,8 @@ local _, ns = ...
 -- Glow on the action button: while a proc is up, the button that casts the spell it is for gets the proc's border colour and a glow, in the look
 -- the row Glow style gives it. Procs.lua calls ns.ProcGlowStart(entry, again) and ns.ProcGlowStop(entry), which tell the cooldown rows too
 -- (ns.CooldownProcs, CooldownLooks.lua). The border is drawn by ns.SetButtonMark in ActionBars.lua. The glow is a frame of this addon next to the
--- button (a child of the button's parent, anchored to the button), made out of combat and kept at alpha 0; in a fight only SetAlpha and SetScript
+-- button (a child of the button's parent, anchored to the button; on Flat UI's own buttons a child of the button itself, so it hides with a button
+-- the layout hides past its bar's Number of icons), made out of combat and kept at alpha 0; in a fight only SetAlpha and SetScript
 -- on its frames, the texture calls that colour its ring and halo, and the Play, Pause and Stop of its animation are run on it. A button the game
 -- glows itself is left alone. This file is not a module.
 -- Soft (the default): no burst; a ring of Flat UI's own (ns.Outline) 2 pixels wide just outside the button and a halo of Media/Shadow.tga 4 pixels
@@ -155,12 +156,17 @@ local function Refused()
 	ns.Note(KEY, REFUSED)
 end
 
--- The glow frame of a button: one texture with the game's flipbook, stepped from the frame's own OnUpdate. The frame hangs from the button's
--- parent and is anchored to the button, so nothing is added under a protected button, and no animation group runs on a game frame
--- (EllesmereUI/EllesmereUIActionBars.lua:759-766, EllesmereUI/EUI_ActionBars_Glows.lua:114-120). Out of combat only.
+-- The glow frame of a button: one texture with the game's flipbook, stepped from the frame's own OnUpdate. On a game's button the frame hangs from the
+-- button's parent and is anchored to the button, so nothing is added under a protected button of the game's, and no animation group runs on a game
+-- frame (EllesmereUI/EllesmereUIActionBars.lua:759-766, EllesmereUI/EUI_ActionBars_Glows.lua:114-120); on Flat UI's own button it hangs from the
+-- button (ParentOf). Out of combat only.
 local ROWS, COLUMNS, FRAMES, SECONDS = 6, 5, 30, 1
 
 local function ParentOf(button)
+	-- Flat UI's own button (OwnBars.lua) is a frame of the addon's: its glow hangs from it, and shows and hides with it.
+	if type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) then
+		return button
+	end
 	local ok, parent = pcall(button.GetParent, button)
 	if ok and Plain(parent, "table") then
 		return parent

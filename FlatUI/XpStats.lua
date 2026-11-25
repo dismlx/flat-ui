@@ -24,6 +24,7 @@ local _, ns = ...
 -- the next standing never mixes two factions or scales. The pace is that of the last WINDOW seconds of play with the faction, given after
 -- MIN_PLAY seconds of them; the time to the next standing is what is left of the standing over the pace, none at the top standing. A withheld
 -- read counts nothing and the next plain one counts the gap, as for experience.
+-- /flatui xp reset and a Ctrl-click on the bar (ns.XpStatsReset) count the session from now, the reputation pace with it.
 -- Nothing of the game's is written or hooked and no frame is made here. The played time is never asked for, since RequestTimePlayed prints two
 -- lines in every chat window (ChatFrameUtil.lua:184-196): the time at this level is known after a level up, or after a /played of the player's own.
 -- These follow EnhanceQoL's experience and reputation bars by Philipp Barth (R41Z0R), adapted with his permission.
@@ -1013,6 +1014,16 @@ local function Say(text)
 	print("Flat UI: " .. text)
 end
 
+-- Counts this session from now, the reputation pace with it: /flatui xp reset, and a Ctrl-click on the experience or reputation bar
+-- (XpBar.lua). True when it did; false while nothing is counted yet, which then starts with the next login.
+function ns.XpStatsReset()
+	if Safe(Reset) then
+		Redraw()
+		return true
+	end
+	return false
+end
+
 local function Slash(rest)
 	if not ns.Enabled(KEY) then
 		Say("the levelling numbers need Restyle the minimap and HUD on (Minimap page).")
@@ -1020,11 +1031,10 @@ local function Slash(rest)
 	end
 	local word = type(rest) == "string" and rest:lower():match("^%s*(%S*)") or ""
 	if word == "reset" then
-		if Safe(Reset) then
-			Redraw()
-			Say("the experience count starts again now.")
+		if ns.XpStatsReset() then
+			Say("the experience and reputation count starts again now.")
 		else
-			Say("the experience count starts with the next login.")
+			Say("the experience and reputation count starts with the next login.")
 		end
 		return
 	end

@@ -26,8 +26,10 @@ local _, ns = ...
 -- jump is on, and the sound of Jump sound on the Gameplay SFX channel (as Cooldowns.lua plays its ready sounds). Around each danger moment (0.1
 -- seconds either side) it reads IsFalling('player') each frame (UnitDocumentation.lua:405-418). 0.3 seconds after the tick was due, a tick seen
 -- says Hit and starts the timeline again; none while the player was in the air says Dodged (Dodged x2, x3 as the dodges in a row build, and a hit
--- ends the streak); none on the ground says nothing (the player most likely left the lava). The bar hides 5 seconds after the last tick or dodge,
--- and after ten dodges in a row with no tick in between only a tick keeps it. It hides at death. Nothing is protected: an addon cannot jump for the
+-- ends the streak); none on the ground says nothing (the player most likely left the lava). The bar fades in over FADE_IN seconds as it shows,
+-- and fades out over FADE_OUT 5 seconds after the last tick or dodge, with nothing counted or cued while it fades; a tick then brings it back
+-- whole at once. After ten dodges in a row with no tick in between only a tick keeps it. Death, the row going Off and the end of test mode hide it
+-- at once. Its fades are the alpha of its own frame (SetAlpha), written only when it changes. Nothing is protected: an addon cannot jump for the
 -- player (JumpOrAscendStart is protected), so the bar only cues.
 -- The bar is a frame of the addon's own, a child of UIParent in the LOW strata that takes no mouse and hides with the interface, with the outline
 -- of the Flat UI page (ns.Outline), a StatusBar in the bar texture of that page over a dim track, and its words in GameFontHighlightSmall. It is
@@ -61,6 +63,8 @@ local PERIOD, SLACK, GRACE, HIDE, DODGE_MAX, AIR, KEEP = 2, 0.25, 0.3, 5, 10, 0.
 local SAMPLE_EVERY = 3
 -- The highest latency counted, the time of a flash, of a word after a tick, and of /flatui lava test.
 local RTT_MAX, FLASH_TIME, SAY_TIME, TEST_TIME = 0.4, 0.3, 0.6, 8
+-- The seconds the bar takes to fade in as it shows, and to fade out once you left the lava.
+local FADE_IN, FADE_OUT = 0.15, 0.4
 -- The fire school (CombatText.lua:98).
 local FIRE = 4
 local HITS = { WOUND = true, IMMUNE = true }
@@ -96,7 +100,8 @@ local S = { lava = false, where = {}, listening = false, deaf = false, live = fa
 -- The last UNIT_COMBAT of the player, for /flatui lava.
 local LAST = {}
 -- The bar: frame, outline, bar, track, band, mark, flash, word and count, once made; placed: the spot it was put at; file: the bar texture on it;
--- width and lead: of the rows; lavaRGB and jumpRGB: the colours; shown: the word, its colour, the count and the band width written last.
+-- width and lead: of the rows; lavaRGB and jumpRGB: the colours; shown: the word, its colour, the count and the band width written last. alpha:
+-- the frame's alpha written last; fadeInAt: when it began to fade in; fadeOutAt and fadeFrom: when it began to fade out, and from what alpha.
 local U = {}
 
 local Stop
@@ -531,19 +536,48 @@ local function Draw(now)
 	end
 end
 
+-- The alpha of the bar's own frame, written only when it changes.
+local function FrameAlpha(alpha)
+	if U.alpha ~= alpha then
+		U.alpha = alpha
+		U.frame:SetAlpha(alpha)
+	end
+end
+
+local Run
+
 local function Step(_, elapsed)
 	local now = GetTime()
+	-- Fading out, the bar keeps what it last drew: no period is counted, cued or sounded any more.
+	if U.fadeOutAt then
+		local alpha = (U.fadeFrom or 1) * (1 - (now - U.fadeOutAt) / FADE_OUT)
+		if not Finite(alpha) or alpha <= 0 then
+			Run(false)
+		else
+			FrameAlpha(math.min(1, alpha))
+		end
+		return
+	end
+	if U.fadeInAt then
+		local part = (now - U.fadeInAt) / FADE_IN
+		if not Finite(part) or part >= 1 or part < 0 then
+			U.fadeInAt = nil
+			FrameAlpha(1)
+		else
+			FrameAlpha(1 - (1 - part) * (1 - part))
+		end
+	end
 	if S.sample and not Moving() then
 		-- A frozen sample keeps its place in the period.
 		S.anchor = S.anchor + (Finite(elapsed) and elapsed or 0)
 	end
 	if S.live and now - S.lastAlive > HIDE then
 		S.live = false
-		Refresh()
+		Refresh(true)
 		return
 	elseif S.sample and not Sampling(now) then
 		S.sample = false
-		Refresh()
+		Refresh(true)
 		return
 	end
 	Advance(now)
@@ -563,23 +597,38 @@ local function StartSample(now)
 	S.say, S.sayUntil, S.flashAt = nil, nil, nil
 end
 
--- Shows the bar, painted and placed, with its step, or hides it with none.
-local function Run(on)
+-- Shows the bar, painted and placed, with its step, fading in from hidden over FADE_IN; a bar fading out is whole again at once. Hides it with
+-- no step: at once, or with fade over FADE_OUT, which its step runs and then hides it.
+function Run(on, fade)
 	if on then
 		local frame = Build()
 		Paint()
 		if not frame:IsShown() then
+			U.fadeInAt = GetTime()
+			FrameAlpha(0)
 			frame:SetScript("OnUpdate", SafeStep)
 			frame:Show()
+		elseif U.fadeOutAt then
+			U.fadeInAt = nil
+			FrameAlpha(1)
 		end
+		U.fadeOutAt, U.fadeFrom = nil, nil
 	elseif U.frame and U.frame:IsShown() then
+		if fade then
+			if not U.fadeOutAt then
+				U.fadeOutAt, U.fadeFrom, U.fadeInAt = GetTime(), U.alpha or 1, nil
+			end
+			return
+		end
+		U.fadeInAt, U.fadeOutAt, U.fadeFrom = nil, nil, nil
 		U.frame:Hide()
 		U.frame:SetScript("OnUpdate", nil)
 	end
 end
 
--- Shows the real timeline, else the sample while one is wanted, else nothing.
-function Refresh()
+-- Shows the real timeline, else the sample while one is wanted, else nothing: at once, or with fade (the bar's own end, 5 seconds after the last
+-- tick or as /flatui lava test ends) over FADE_OUT. Death, the row going Off and the end of test mode hide it at once.
+function Refresh(fade)
 	local now = GetTime()
 	if S.broken or Mode() == nil then
 		S.live, S.sample = false, false
@@ -594,7 +643,7 @@ function Refresh()
 		Run(true)
 	else
 		S.sample = false
-		Run(false)
+		Run(false, fade)
 	end
 end
 
@@ -683,6 +732,7 @@ function Stop(err)
 	S.broken = tostring(err)
 	S.live, S.sample = false, false
 	pcall(Listen, false)
+	U.fadeInAt, U.fadeOutAt = nil, nil
 	if U.frame then
 		pcall(U.frame.SetScript, U.frame, "OnUpdate", nil)
 		pcall(U.frame.Hide, U.frame)

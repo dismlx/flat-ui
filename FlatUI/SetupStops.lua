@@ -119,7 +119,7 @@ ns.SETUP_STOPS = {
 	},
 	{
 		id = "helpers", title = "Helpers", line = "Things Flat UI can do for you. Tick the ones you want.",
-		more = { "tr-list", "tr-look", "tr-proc", "tr-def", "cd-row", "cd-states", "pcd", "ecd", "ct" },
+		more = { "tr-list", "tr-look", "tr-proc", "tr-def", "cd-row", "cd-states", "pcd", "ecd", "ct", "ct-alerts" },
 		parts = {
 			{ id = "helpers", label = "Helpers", kind = "ticks", cards = {
 				{ id = "trackers", label = "Class trackers", line = "Icons for your class's buffs and items, red when one runs low.", icon = "trackers",

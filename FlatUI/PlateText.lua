@@ -4,6 +4,8 @@ local _, ns = ...
 -- the colour and the visibility of the health text, a health text of the addon's own in another format, the size, outline and colour of the
 -- spell name, the size of the spell icon, and the spark and the shield. Every call is in a pcall; a part that fails on enough plates stops
 -- alone, puts back what it changed and has a line in /flatui status. A row at its default makes no call the game did not make.
+-- Show health text at Only on the target finds the target by its plate frame (ns.PlateUnitFrame), as Nameplates.lua's Show auras does, since the
+-- game's isTarget comes from a unit comparison the client can withhold; the texts are looked at again as the target changes.
 
 local KEY = "nameplates"
 local EXTRA = ns.PlateExtra
@@ -275,8 +277,8 @@ local function HealthPart(unitFrame, st, on)
 	end
 	local mine = when ~= "always" or format ~= "game"
 	if mine or st.htFaded then
-		-- isTarget comes from a unit comparison the client can withhold; only a plain boolean is used.
-		local target = Plain(unitFrame.isTarget, "boolean") and unitFrame.isTarget
+		-- The target's plate is compared as a frame: the game's isTarget comes from a unit comparison the client can withhold.
+		local target = ns.PlateUnitFrame("target") == unitFrame
 		local fade = (ns.Enabled(KEY) and not Opt("healthText")) or format ~= "game" or (when == "target" and not target)
 		for _, fontString in ipairs(strings) do
 			ns.SetFaded(fontString, fade)
@@ -363,7 +365,7 @@ local function FormatPart(unitFrame, st, on)
 	end
 	own:SetTextColor(colourR, colourG, colourB, 1)
 	local unit = unitFrame.unit
-	local target = Plain(unitFrame.isTarget, "boolean") and unitFrame.isTarget
+	local target = ns.PlateUnitFrame("target") == unitFrame
 	local shown = Opt("healthText") and (Opt("healthTextWhen") ~= "target" or target) and Plain(unit, "string")
 		and AnyShown(Strings(healthBar, HEALTH_TEXTS))
 	own:SetShown(shown and true or false)

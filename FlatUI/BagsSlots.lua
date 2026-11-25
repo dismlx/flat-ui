@@ -40,12 +40,14 @@ local _, ns = ...
 -- cursor, where the game's button opens that bag, keeps that bag lit in the window
 -- (B.Layout.Stick, BagsLayout.lua): every other slot dimmed as under the mouse, the search still applied, and the slot's edge in the Highlight
 -- colour of the Windows page (SetOutlineColour); a click on it again, on another slot, or the window closing gives everything back. That touches
--- frames of Flat UI's own only, so it works in a fight too. A right click with nothing on the cursor opens that bag's settings (B.Layout.BagMenuOf:
+-- frames of Flat UI's own only, so it works in a fight too. A bag dragged out of its slot, or swapped for a bag dropped on it, lets that go,
+-- so the next bag in that slot shows like any other. A right click with nothing on the cursor opens that bag's settings (B.Layout.BagMenuOf:
 -- Assign To, Ignore Clean Up and Ignore Junk Selling, as on a label of Bag by bag), in either view and in a fight too, since those flags are not
 -- protected; the keyring has none, as in the game. The tooltip is the game's of the bag (GameTooltip:SetInventoryItem) out of combat, plain lines
 -- in a fight or for an empty slot (with the spare bag a click puts in, "Linen Bag (6 slots)"), a line of the bag's free and total slots
 -- (C_Container.GetContainerNumFreeSlots and GetContainerNumSlots), what its settings say (B.Layout.BagFlags: what it is assigned to, and whether
--- clean up or junk selling leaves it alone) and what the clicks do; the keyring's says Keyring (KEYRING), how many keys and what the clicks do. It
+-- clean up or junk selling leaves it alone) and what the clicks do; the keyring's says Keyring (KEYRING), how many keys, each key it holds with its
+-- icon and link, by name (at most KEY_LINES, then how many more; "No keys yet." when it holds none), and what the clicks do. It
 -- opens beside the bag window (B.Window.Get, a frame of Flat UI's own; SetOwner with ANCHOR_NONE, ClearAllPoints and SetPoint), left of it while
 -- the window's middle is right of the screen's and right of it otherwise, its bottom at the window's, so it never covers the items the slot lights;
 -- it is hidden when the cursor leaves the button that owns it (IsOwned). The mouse over a slot that holds a bag (the keyring too) lights that
@@ -92,6 +94,8 @@ local CROP = 8
 -- Loot going in (ITEM_PUSH): the size its icon starts at, as times the slot's, and how long it takes to shrink into the slot, fading after FLY_FADE.
 local FLY_SCALE, FLY_SECONDS, FLY_FADE = 1.8, 0.45, 0.15
 local FIGHT_LINE = "Flat UI: the bag slots of the bag window take no clicks in a fight."
+-- The most keys the keyring's tooltip lists, and the size of their icons there (as a folded section's, BagsLayout.lua).
+local KEY_LINES, KEY_ICON = 12, 14
 local NO_ROOM_LINE = "Flat UI: your keyring is full."
 
 -- The row, made by Slots.Row: { frame, parent, slots = { [bag] = slot }, spares = { bag, reagent } (Spares, worked out once a pass) }.
@@ -185,8 +189,9 @@ local function Room(bag)
 end
 
 -- The keys on the keyring, its slots and its first empty slot, or nil when the client does not say. A slot the client does not answer for is never
--- taken as empty, so a key is never put on one that may hold a key already.
-local function Keys()
+-- taken as empty, so a key is never put on one that may hold a key already. With list, each key also goes in it as { link, icon, name }: its
+-- hyperlink and icon as the client gives them (plain values only), for the keyring's tooltip.
+local function Keys(list)
 	local total = E.Ask(Container("GetContainerNumSlots"), KEYRING)
 	local info = Container("GetContainerItemInfo")
 	if not (info and ns.Finite(total) and total > 0) then
@@ -199,6 +204,10 @@ local function Keys()
 			empty = empty or index
 		elseif ok and Usable(item) then
 			keys = keys + 1
+			local link = item.hyperlink
+			if list and type(link) == "string" and not ns.IsSecret(link) and link:find("|H", 1, true) then
+				list[#list + 1] = { link = link, icon = Texture(item.iconFileID), name = link:match("|h%[(.-)%]|h") or link }
+			end
 		end
 	end
 	return keys, math.floor(total), empty
@@ -507,8 +516,17 @@ local function Use(bag, how)
 		return
 	end
 	if holding and how ~= "drag" then
+		-- A bag on the cursor takes the place of the one a click keeps lit, which lets that go, so the new bag shows like any other.
+		local kind, id = E.Ask(GetCursorInfo)
+		if kind == "item" and Instant(id) == BAG_EQUIP and Stuck() == bag then
+			Stick(bag)
+		end
 		E.Call(PutItemInBag, slot)
 	elseif not holding and how == "drag" then
+		-- The bag a click keeps lit lets that go as it is lifted out, its edge at once.
+		if Stuck() == bag then
+			Stick(bag)
+		end
 		E.Call(PickupBagFromSlot, slot)
 	end
 end
@@ -548,13 +566,29 @@ local function FlagLines(tip, bag)
 	end
 end
 
--- The keyring's tooltip: its name, how many keys it holds and what the clicks do.
+-- The keyring's tooltip: its name, how many keys it holds, each key with its icon and its link (in its quality's colour), by name, at most
+-- KEY_LINES and then how many more, as a folded section's tooltip lists its items (BagsLayout.lua, FoldedTip), or that it holds none yet; and
+-- what the clicks do. Read live, as the row shows only for the player's own bags; plain lines, so in a fight too.
 local function KeyTip(tip, button)
 	Anchor(tip, button)
 	tip:SetText(Word("KEYRING", "Keyring"), 1, 1, 1)
-	local keys = Keys()
-	if keys then
+	local list = {}
+	local keys = Keys(list)
+	if keys == 0 then
+		tip:AddLine("No keys yet.", DIM[1], DIM[2], DIM[3])
+	elseif keys then
 		tip:AddLine(keys == 1 and "1 key" or ("%d keys"):format(keys), 1, 1, 1)
+		table.sort(list, function(a, b)
+			return a.name < b.name
+		end)
+		for index = 1, math.min(#list, KEY_LINES) do
+			local key = list[index]
+			local icon = key.icon and ("|T%s:%d:%d:0:0:64:64:5:59:5:59|t "):format(tostring(key.icon), KEY_ICON, KEY_ICON) or ""
+			tip:AddLine(icon .. key.link, 1, 1, 1)
+		end
+		if #list > KEY_LINES then
+			tip:AddLine(("and %d more"):format(#list - KEY_LINES), DIM[1], DIM[2], DIM[3])
+		end
 	end
 	tip:AddLine("Drop a key here to put it on your keyring.", DIM[1], DIM[2], DIM[3], true)
 	tip:AddLine(Stuck() == KEYRING and "Click again to show every bag." or "Click to show only your keyring.", DIM[1], DIM[2], DIM[3], true)

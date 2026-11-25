@@ -1,7 +1,8 @@
 local _, ns = ...
 
 -- Clean up bags. A small flat button of this addon's own lies on each bag window and on the bank, and /flatui sort and the clean up key
--- under Flat UI in Key Bindings (FlatUIBagSortButton, at the end of this file) do the same job from the keyboard. All call the game's sort:
+-- under Flat UI in Key Bindings (FlatUIBagSortButton, at the end of this file, which also works while only Flat UI bags is on, and waits out a
+-- clean up still running) do the same job from the keyboard. All call the game's sort:
 -- C_Container.SortBags for the bags and C_Container.SortBank for the bank that is shown, which sorts every tab of that bank
 -- (BANK_CONFIRM_CLEANUP_PROMPT, GlobalStrings enUS.lua:1512). ContainerDocumentation.lua lists neither call with a restriction, and the game's
 -- own buttons sort with no check for combat (ContainerFrame.xml:371-374, BankFrameTemplates.lua:1857-1876), so this part has none either.
@@ -707,18 +708,48 @@ ns.BagSort = { Apply = Apply, Logout = Logout, Command = Command, help = HELP, R
 -- a child of UIParent with no size and no point that hears the release only, as the bank key's (BagsBank.lua), named in the game's Key Bindings
 -- by the global BINDING_NAME_CLICK FlatUIBagSortButton:LeftButton. A press cleans up the bags as /flatui sort does (Run, which tells the
 -- watchers, so Bags' sort button looks busy as after a click), with the game's clean up sound when the game was asked; in a fight too, as the
--- button. While the Windows page is off, which /flatui sort belongs to, it only says so.
+-- button. It works while the Windows page, which /flatui sort belongs to, or Flat UI bags is on (ns.Bags.On), as Bags' own sort button sorts
+-- through Run whatever the Windows page says; with both off it only says so. While a clean up still runs, as Bags' sort button shows it busy
+-- (ns.Bags.Window.Sorting, else ns.Bags.Sorting), a press says so in one line and does not start the game's sort again in the middle.
 do
 	local name = "FlatUIBagSortButton"
 	_G["BINDING_NAME_CLICK " .. name .. ":LeftButton"] = "Flat UI bags: clean up"
+	-- Flat UI bags is on, and the bag window's clean up still runs.
+	local function BagsOn()
+		local bags = ns.Bags
+		local on = type(bags) == "table" and bags.On or nil
+		if type(on) ~= "function" then
+			return false
+		end
+		local okOn, yes = pcall(on)
+		return okOn and yes == true
+	end
+	local function Busy()
+		local bags = ns.Bags
+		if type(bags) ~= "table" then
+			return false
+		end
+		local window = bags.Window
+		for _, fn in ipairs({ type(window) == "table" and window.Sorting or false, bags.Sorting or false }) do
+			if type(fn) == "function" then
+				local okBusy, busy = pcall(fn, "bags")
+				if okBusy and busy == true then
+					return true
+				end
+			end
+		end
+		return false
+	end
 	local ok, button = pcall(CreateFrame, "Button", name, UIParent)
 	if ok and type(button) == "table" then
 		ns.Own[button] = true
 		pcall(button.RegisterForClicks, button, "LeftButtonUp")
 		button:SetScript("OnClick", function()
 			local okRun, err = pcall(function()
-				if not ns.Enabled(KEY) then
-					print("Flat UI: the clean up key is part of the Windows page, which is off. Turn on Restyle windows there.")
+				if not ns.Enabled(KEY) and not BagsOn() then
+					print("Flat UI: the clean up key works while the Windows page (Restyle windows) or Flat UI bags is on.")
+				elseif Busy() then
+					print("Flat UI: your bags are still being cleaned up.")
 				elseif Run("bags") then
 					Sound()
 				end

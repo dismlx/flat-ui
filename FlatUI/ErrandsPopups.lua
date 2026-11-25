@@ -11,6 +11,14 @@ local _, ns = ...
 -- the game's button; not held, they are on. So a key-up the game did not report (a window change with Alt held) cannot leave the button
 -- uncovered for the rest of that death. When the game does not say whether the key is held as the popup shows, there is no cover. Under
 -- the gamepad interface, whose own press of the button no mouse cover can stop, there is no cover either.
+-- Release at once in battlegrounds (off by default): while the death popup (DEATH) shows in a battleground (IsInInstance says pvp, and
+-- IsActiveBattlefieldArena is not true), RELEASE_WAIT seconds after it showed RepopMe is called, the one call the game's own Release Spirit makes
+-- (OnButton1 of DEATH, Blizzard_StaticPopup_Game/Mainline/GameDialogDefs.lua:228-236; RepopMe is not protected, the apis.yaml of wowless for
+-- wowf), once for each death (PLAYER_DEAD counts them), with "Flat UI: Released your spirit (battleground)." in chat. Not while the game offers a
+-- way back (C_DeathInfo.GetSelfResurrectOptions gives anything but nothing or an empty table: a soulstone, Reincarnation), so it is left to you;
+-- not in an arena, the open world or a dungeon. While the game holds the release (HasNoReleaseAura, or IsFalling, when the game greys the
+-- button) it is tried again every RELEASE_WAIT seconds, RELEASE_TRIES times. The popup is left to the game, which hides it as you become a
+-- ghost. Hold a key to release does not hold it back: the row is the choice to release.
 -- Accept summons: CONFIRM_SUMMON is answered with C_SummonInfo.ConfirmSummon when the game's own popup would let you: not in a fight and while
 -- PlayerCanTeleport, tried every second while the summon is open (time left and a summoner). The game does not close its summon popup after
 -- an accept made by code, and a stale one cancels the next summon when the game reuses it; so once the game says the summon is no longer
@@ -46,6 +54,8 @@ local SUMMON_RETRY = 1
 local SUMMON_LOOK, SUMMON_LOOKS = 0.1, 50
 -- Seconds added to the game's wait before a resurrection is taken.
 local RES_MARGIN = 0.2
+-- Seconds after the death popup shows before the spirit is released in a battleground, and the tries while the game holds the release.
+local RELEASE_WAIT, RELEASE_TRIES = 0.5, 20
 local DELETE_WORDS = { DELETE_GOOD_ITEM = true, DELETE_GOOD_QUEST_ITEM = true }
 -- The merchant's questions the two rows answer, and the row of each.
 local CONFIRMS = { CONFIRM_PURCHASE_TOKEN_ITEM = "confirmTokens", CONFIRM_MERCHANT_TRADE_TIMER_REMOVAL = "confirmTradeable" }
@@ -65,6 +75,8 @@ local covers, coverPopup = {}, {}
 -- The summon being tried: counts up at each new summon, so a try of an older one stops.
 local summon = 0
 local resurrection = 0
+-- Release in battlegrounds: deaths counts PLAYER_DEAD; asked, the death a release waits for; done, the death that was released.
+local release = { deaths = 0 }
 -- What /flatui status says.
 local lastAccepted
 -- Notes said once: a popup whose button or box was not found.
@@ -356,10 +368,79 @@ local function Confirm()
 	end
 end
 
+-- Release at once in battlegrounds ---------------------------------------------------------------------------------------------------------
+
+-- True while the row is on, the death popup shows, you are in a battleground and the game offers no way back but the graveyard.
+local function MayRelease()
+	if not E.On("releaseBattleground") then
+		return false
+	end
+	local death = false
+	for _, popup in ipairs(Popups()) do
+		death = death or popup.which == "DEATH"
+	end
+	if not death then
+		return false
+	end
+	local inside, kind = E.Ask(IsInInstance)
+	if inside ~= true or kind ~= "pvp" or E.Ask(IsActiveBattlefieldArena) == true then
+		return false
+	end
+	-- A soulstone, Reincarnation or another way back is the player's to choose; a client that cannot say is left alone.
+	local info = C_DeathInfo
+	if type(info) ~= "table" or type(info.GetSelfResurrectOptions) ~= "function" then
+		return false
+	end
+	local ok, options = pcall(info.GetSelfResurrectOptions)
+	if not ok or ns.IsSecret(options) or (options ~= nil and (type(options) ~= "table" or #options > 0)) then
+		return false
+	end
+	return true
+end
+
+local function TryRelease(at, tries)
+	if at ~= release.deaths or release.done == at or not MayRelease() then
+		return
+	end
+	if E.Ask(UnitIsDeadOrGhost, "player") ~= true or E.Ask(UnitIsGhost, "player") == true then
+		return
+	end
+	-- The game greys Release Spirit while an effect holds it or you fall: try again in a moment.
+	if E.Ask(HasNoReleaseAura) == true or E.Ask(IsFalling) == true then
+		if tries > 1 then
+			C_Timer.After(RELEASE_WAIT, function()
+				E.Run(part, TryRelease, at, tries - 1)
+			end)
+		end
+		return
+	end
+	if not E.Call(RepopMe) then
+		return
+	end
+	release.done = at
+	lastAccepted = "a release in a battleground"
+	E.Say("Released your spirit (battleground).")
+end
+
+-- The death popup shows, or a death was heard: one release is asked for each death.
+local function ReleaseInBattleground()
+	local at = release.deaths
+	if release.asked == at or release.done == at or not MayRelease() then
+		return
+	end
+	release.asked = at
+	C_Timer.After(RELEASE_WAIT, function()
+		if ns.Enabled("errands") then
+			E.Run(part, TryRelease, at, RELEASE_TRIES)
+		end
+	end)
+end
+
 local function PopupShown()
 	Guard()
 	FillDelete()
 	Confirm()
+	ReleaseInBattleground()
 end
 
 local function OnShow()
@@ -544,11 +625,14 @@ E.Listen(part, "RESURRECT_REQUEST", function(offerer)
 end)
 E.Listen(part, "MODIFIER_STATE_CHANGED", Guard)
 E.Listen(part, "INPUT_DEVICE_INTERFACE_TRANSITION", Guard)
--- A backstop: the death popup shows on PLAYER_DEAD, and a pass a frame later lays the cover even if a follow was missed.
+-- A backstop: the death popup shows on PLAYER_DEAD, and a pass a frame later lays the cover even if a follow was missed. Each death counts, so a
+-- battleground's release is made once for each.
 E.Listen(part, "PLAYER_DEAD", function()
+	release.deaths = release.deaths + 1
 	C_Timer.After(0, function()
 		if ns.Enabled("errands") then
 			E.Run(part, Guard)
+			E.Run(part, ReleaseInBattleground)
 		end
 	end)
 end)
@@ -585,6 +669,9 @@ function part.Status()
 	local where = E.Opt("releaseGuard")
 	if where == "always" or where == "instances" then
 		does[#does + 1] = ("hold %s to release%s"):format(Key().label, where == "instances" and " in dungeons and raids" or "")
+	end
+	if E.Opt("releaseBattleground") == true then
+		does[#does + 1] = "releases at once in battlegrounds"
 	end
 	if E.Opt("summons") == true then
 		does[#does + 1] = "accepts summons"

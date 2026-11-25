@@ -1248,11 +1248,14 @@ end
 -- Hint while Shift is up (chat.compareHint, 0.5.36): while Compare items only while holding Shift stands (ns.ItemCompareHeld, ItemCompare.lua), the
 -- tooltip of an item the player could wear (C_Item.IsEquippableItem) on GameTooltip or ItemRefTooltip ends its game lines with one dim line saying
 -- that Shift compares it with what the player wears, and on GameTooltip, while the gear lines wait for the game's comparison (chat.gear with
--- chat.gearWhen at With the game's comparison), with the spells too. Not while Shift is down, not on an item the player wears (its data.guid in a
+-- chat.gearWhen at With the game's comparison) and the item is of a kind they take (ns.GearLinesFor, GearLines.lua: not a tabard, shirt or relic;
+-- 0.5.37), with the spells too. Not on a bag, a quiver or an item the game cannot equip (its itemEquipLoc, C_Item.GetItemInfoInstant's fourth
+-- answer, NO_HINT; 0.5.37), which Shift compares with nothing; not while Shift is down, not on an item the player wears (its data.guid in a
 -- slot, C_Item.GetItemLocation, as on the Character window, which compares nothing), and not on the comparison tooltips. Once for each build, as
 -- ItemLevelLine: the bag slots build their tooltip again every 0.2 s, so there the hint goes as Shift goes down and the comparison comes.
 X.hints = setmetatable({}, { __mode = "k" })
 local HINT, HINT_SPELLS, HINT_COLOUR = "Shift: compare with what you wear", " and your spells", { 0.66, 0.68, 0.62 }
+X.NO_HINT = { INVTYPE_BAG = true, INVTYPE_QUIVER = true, INVTYPE_NON_EQUIP = true, INVTYPE_NON_EQUIP_IGNORE = true }
 
 local function CompareHint(tooltip, data)
 	if not ns.Enabled(KEY) or Opt("compareHint") ~= true or Opt("compareShift") ~= true or not IsData(data, "Item") or not Usable(tooltip)
@@ -1272,6 +1275,14 @@ local function CompareHint(tooltip, data)
 	if not okEquip or ns.IsSecret(equippable) or equippable ~= true then
 		return
 	end
+	local loc
+	if type(items.GetItemInfoInstant) == "function" then
+		local okLoc, _, _, _, equipLoc = pcall(items.GetItemInfoInstant, id)
+		loc = okLoc and not ns.IsSecret(equipLoc) and type(equipLoc) == "string" and equipLoc or nil
+	end
+	if loc and X.NO_HINT[loc] then
+		return
+	end
 	local guid = data.guid
 	if not ns.IsSecret(guid) and type(guid) == "string" and guid ~= "" and type(items.GetItemLocation) == "function" then
 		local okWhere, where = pcall(items.GetItemLocation, guid)
@@ -1286,7 +1297,7 @@ local function CompareHint(tooltip, data)
 		return
 	end
 	local text = HINT
-	if game and Opt("gear") == true and Opt("gearWhen") == "compare" then
+	if game and Opt("gear") == true and Opt("gearWhen") == "compare" and (type(ns.GearLinesFor) ~= "function" or ns.GearLinesFor(loc) == true) then
 		text = text .. HINT_SPELLS
 	end
 	if pcall(tooltip.AddLine, tooltip, text, HINT_COLOUR[1], HINT_COLOUR[2], HINT_COLOUR[3]) then

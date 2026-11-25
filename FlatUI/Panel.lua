@@ -5,8 +5,12 @@ local ADDON_NAME, ns = ...
 -- works in combat. It is only built out of combat, since UIParent is protected.
 --
 -- It fades in with the game's window sounds (Build). Its keys (BuildKeys, out of combat): Ctrl+F for Search, Ctrl+Z to put back the newest change of
--- Home's Recent changes, Escape for the colour picker (Cancel), an open list or a question before the window, Enter for the picker's Apply or a
--- question's first button, but not for a careful question (Delete, Reset, Copy from, Replace); a long list's filter field has the cursor as it opens.
+-- Home's Recent changes (a whole Reset page in one press), Escape for the colour picker (Cancel), an open list or a question before the window, Enter
+-- for the picker's Apply or a question's first button, but not for a careful question (Delete, Reset, Copy from, Replace); a long list's filter field
+-- has the cursor as it opens. The question box fades in, its first button in the accent, or red with "Enter does not answer this." under a careful
+-- question (Ask). A message of the strip holds for SAY_HOLD seconds whatever the mouse crosses, fading in, then the strip shows its count again (Say).
+-- The title bar names the profile in use, which a click opens (BuildProfileName), and the strip's Reload counts the changes that wait for a reload
+-- (BuildFoot). Every switch plays the game's checkbox sound on a click and its knob slides (SwitchClick, Slider).
 -- The wheel scrolls a page over a slider too, and Shift and the wheel step the slider (AddNumber). A sound row plays a line once as it is picked and
 -- has a Play button (AddChoice). Search lights the typed words in its results and counts them, and a Profiles
 -- result opens its row (view.byLabel of BuildProfiles). Reset page says what it did, and is dimmed while nothing on the tab is changed.
@@ -42,8 +46,8 @@ local TRACK = 176
 local SEARCH = 28
 local REFRESH = 0.5
 local DIM = 0.4
--- How long the window takes to fade in as it opens, in seconds.
-local FADE_IN = 0.12
+-- How long the window takes to fade in as it opens, and the question box as it shows, in seconds.
+local FADE_IN, CONFIRM_FADE = 0.12, 0.08
 local Look = ns.PanelLook
 local PROFILE_CALLS = { "Profile", "Profiles", "UseProfile" }
 
@@ -243,7 +247,51 @@ local function Chevron(parent)
 	end
 end
 
--- A flat button. A primary button is in the accent.
+-- The click of a switch: the game's own checkbox sounds, a higher one for on and a lower one for off, as the game's Settings play them. Only a
+-- click of the player plays it; a switch that changes by itself (a profile switch, Reset page, Ctrl+Z) slides with no sound (Slider).
+local function SwitchClick(on)
+	if type(PlaySound) == "function" and type(SOUNDKIT) == "table" then
+		local sound = on and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF
+		if sound then
+			pcall(PlaySound, sound)
+		end
+	end
+end
+
+-- The knob of a switch 32 wide, at the left of its track (2) while off and the right (18) while on. The function it gives, Place(on, instant), puts
+-- the knob at its end: at once the first time, when told (a switch that now shows another setting) and while the switch is not on screen, else
+-- sliding there over SLIDE seconds with an OnUpdate of `frame`, a frame of the switch that has none of its own.
+local SLIDE = 0.08
+local function Slider(knob, track, frame)
+	local x, from, to, spent
+	local function Put(at)
+		knob:ClearAllPoints()
+		knob:SetPoint("LEFT", track, "LEFT", at, 0)
+	end
+	local function Step(_, seconds)
+		spent = spent + (Number(seconds) and seconds or SLIDE)
+		local done = math.min(1, spent / SLIDE)
+		x = from + (to - from) * done
+		Put(x)
+		if done >= 1 then
+			frame:SetScript("OnUpdate", nil)
+		end
+	end
+	return function(on, instant)
+		local goal = on and 18 or 2
+		if instant or x == nil or not frame:IsVisible() then
+			x, to = goal, goal
+			frame:SetScript("OnUpdate", nil)
+			Put(goal)
+		elseif goal ~= to then
+			from, to, spent = x, goal, 0
+			frame:SetScript("OnUpdate", Step)
+		end
+	end
+end
+
+-- A flat button. A primary button is in the accent. The third result, SetTone(tone), gives it another tone after it is made: "accent", "danger"
+-- (red, for the first button of a careful question) or nil for the plain one; the label of a coloured one is in the colour that reads on the accent.
 local function Button(parent, text, width, onClick, primary)
 	local button = Frame(parent)
 	button:SetSize(width, BUTTON)
@@ -255,25 +303,37 @@ local function Button(parent, text, width, onClick, primary)
 		Tint(label, "on-accent")
 	end
 	local hover = false
+	local tone = primary and "accent" or nil
 	local function Tone()
-		if primary then
+		if tone == "accent" then
 			return hover and "accent-hover" or "accent"
+		elseif tone == "danger" then
+			return "danger"
 		end
 		return hover and "hover" or "raised"
 	end
-	Painted(function()
-		Backing(outline, Tone(), 1, "line-strong")
-	end)
+	-- Red has no lighter token of its own, so under the mouse its fill lets a little of the card through.
+	local function Paint()
+		Backing(outline, Tone(), (tone == "danger" and hover) and 0.85 or 1, "line-strong")
+	end
+	Painted(Paint)
 	Clickable(button, onClick)
 	button:SetScript("OnEnter", function()
 		hover = true
-		Backing(outline, Tone(), 1, "line-strong")
+		Paint()
 	end)
 	button:SetScript("OnLeave", function()
 		hover = false
-		Backing(outline, Tone(), 1, "line-strong")
+		Paint()
 	end)
-	return button, label
+	local function SetTone(new)
+		if new ~= tone then
+			tone = new
+			Tint(label, new and "on-accent" or "text")
+			Paint()
+		end
+	end
+	return button, label, SetTone
 end
 
 -- A box to type in, with a thin border that takes the highlight colour while it has the cursor. onLost runs when it loses the cursor.
@@ -415,9 +475,23 @@ local function IsOpen(page, item)
 	return Unmet(page, item) == nil and not Over(item)
 end
 
+-- A message of the strip holds for SAY_HOLD seconds, whatever the mouse crosses on the options pages (a row's tip is a tooltip there), and then the
+-- strip goes back to its tip or the count of changes (ShowStrip, and the window's OnUpdate). A new message fades in over SAY_FADE from SAY_FROM, so
+-- a second Ctrl+Z reads as a new line; the same message said again only holds longer, so setup's fight line, said at each refresh, does not flicker.
+local SAY_HOLD, SAY_FADE, SAY_FROM = 6, 0.15, 0.4
+
+local function Now()
+	return type(GetTime) == "function" and GetTime() or 0
+end
+
 local function Say(message)
 	if IsText(message) and message ~= "" then
-		ui.message = message
+		local again = ui.message == message
+		ui.message, ui.messageAt = message, Now()
+		if not again and ui.strip then
+			ui.sayFade = 0
+			ui.strip:SetAlpha(SAY_FROM)
+		end
 		ShowStrip()
 	end
 end
@@ -474,9 +548,9 @@ local function NewRow(parent, y, text, tip)
 				ownEnter(target)
 			end
 			hover:Show()
-			ui.message = nil
-			-- Setup and the movers show the tip in the strip; the options pages show it in a tooltip.
+			-- Setup and the movers show the tip in the strip, in place of a message; the options pages show it in a tooltip and keep the message.
 			if ui.mode then
+				ui.message = nil
 				ui.tip = row.tip
 			elseif ns.PanelTrust then
 				ui.tip = ""
@@ -600,8 +674,9 @@ local function Write(item, value)
 	end
 	local before = ns.Get(item.path)
 	local result = ns.Set(item.path, value)
+	-- A write of Reset page is noted with its batch (ui.batch), so Ctrl+Z puts the whole page back in one press (PanelHome.lua).
 	if ns.PanelHome then
-		ns.PanelHome.Noted(item, before, ns.Get(item.path))
+		ns.PanelHome.Noted(item, before, ns.Get(item.path), ui.batch)
 	end
 	return result
 end
@@ -617,9 +692,14 @@ local function AddBool(row, item)
 	mark:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1)
 	local knob = Fill(box, "OVERLAY")
 	knob:SetSize(12, 12)
-	local on = false
+	-- nil until the row first reads its value, where the knob is put at once; after that it slides to its end, and a click plays the game's
+	-- checkbox sound (SwitchClick).
+	local on
+	local Place = Slider(knob, box, box)
 	local function Knob()
-		knob:SetPoint("LEFT", box, "LEFT", on and 18 or 2, 0)
+		if on ~= nil then
+			Place(on)
+		end
 		knob:SetColorTexture(Look.Colour(on and "on-accent" or "text-dim"))
 	end
 	local hovered = false
@@ -634,6 +714,7 @@ local function AddBool(row, item)
 	local function Toggle()
 		if row.active then
 			Write(item, Read(item) ~= true)
+			SwitchClick(Read(item) == true)
 			row.Changed()
 		end
 	end
@@ -1370,8 +1451,15 @@ local function BuildPopups()
 			run()
 		end
 	end
-	local yes, yesText = Button(confirm, "Yes", SMALL, ui.AnswerYes)
+	-- The first button is in the accent, the one Enter presses; for a careful question it is red, and the note under the question says Enter does
+	-- not answer it (Ask).
+	local yes, yesText, yesTone = Button(confirm, "Yes", SMALL, ui.AnswerYes)
 	yes:SetPoint("BOTTOMRIGHT", confirm, "BOTTOM", -6, 14)
+	local note = Dim(Label(confirm, "GameFontHighlightSmall", "CENTER", 330))
+	note:SetPoint("TOP", confirm, "TOP", 0, -68)
+	note:SetText("Enter does not answer this.")
+	note:Hide()
+	ui.careNote, ui.yesTone = note, yesTone
 	local no, noText = Button(confirm, "No", SMALL, function()
 		local run = ui.onNo
 		HideConfirm()
@@ -1549,6 +1637,21 @@ function Ask(question, onYes, onNo, yesText, noText, careful)
 	ui.noText:SetText(noText or "No")
 	ui.yes:SetWidth(wide and 130 or SMALL)
 	ui.no:SetWidth(wide and 130 or SMALL)
+	ui.yesTone(ui.careful and "danger" or "accent")
+	ui.careNote:SetShown(ui.careful)
+	ui.confirm:SetHeight(ui.careful and 126 or 110)
+	-- It fades in over CONFIRM_FADE, as the colour picker does.
+	local waited = 0
+	ui.confirm:SetAlpha(0)
+	ui.confirm:SetScript("OnUpdate", function(self, elapsed)
+		waited = waited + (Number(elapsed) and elapsed or CONFIRM_FADE)
+		if waited >= CONFIRM_FADE then
+			self:SetAlpha(1)
+			self:SetScript("OnUpdate", nil)
+		else
+			self:SetAlpha(waited / CONFIRM_FADE)
+		end
+	end)
 	ui.confirm:Show()
 	SyncShade()
 end
@@ -1556,6 +1659,8 @@ end
 function HideConfirm()
 	if ui.confirm and ui.confirm:IsShown() then
 		ui.onYes, ui.onNo, ui.careful = nil, nil, nil
+		ui.confirm:SetScript("OnUpdate", nil)
+		ui.confirm:SetAlpha(1)
 		ui.confirm:Hide()
 		SyncShade()
 	end
@@ -2032,9 +2137,10 @@ local function CurrentProfile()
 	return IsText(name) and name or ""
 end
 
--- Flips the switch of a module, in the header or on a tile of Home.
+-- Flips the switch of a module, in the header or on a tile of Home, with the click of a switch.
 local function Toggle(item)
 	Write(item, Read(item) ~= true)
+	SwitchClick(Read(item) == true)
 	RefreshAll()
 end
 
@@ -2501,6 +2607,11 @@ function ShowStrip()
 	if ui.strip then
 		local text = ui.message
 		if not text then
+			-- A message taken away before its fade in ends leaves the strip at full strength.
+			if ui.sayFade then
+				ui.sayFade = nil
+				ui.strip:SetAlpha(1)
+			end
 			text = ui.tip or ""
 			if text == "" and not ui.searching and not ui.mode and ns.PanelTrust then
 				text = ns.PanelTrust.Status(ui.current)
@@ -2579,6 +2690,12 @@ function RefreshAll()
 		end
 		if ui.testSwitch then
 			ui.testSwitch.Update()
+		end
+		if ui.barProfile then
+			ui.barProfile.Update()
+		end
+		if ui.ShowReload then
+			ui.ShowReload()
 		end
 		-- Reset page is dimmed while nothing on the tab is changed.
 		local entry = ui.current
@@ -2789,7 +2906,7 @@ local function BuildLeft(window)
 	end)
 	ui.search = box
 
-	ui.optionParts = { left, box, ui.testSwitch.frame }
+	ui.optionParts = { left, box, ui.testSwitch.frame, ui.barProfile.frame }
 	ui.side = ns.PanelNav.Sidebar(left, {
 		height = HEIGHT - TITLE - STRIP,
 		Model = function()
@@ -2871,7 +2988,8 @@ local function BuildRight(window)
 end
 
 -- Reset page, Reload and Done, at the right of the strip. Reset page sets every setting of the tab to its default after a question, and the strip
--- says how many went back; with nothing changed on the tab it is dimmed and a click only says so (RefreshAll dims it).
+-- says how many went back; its writes are one batch of Home's record (ui.batch), so one Ctrl+Z puts the page back. With nothing changed on the tab
+-- it is dimmed and a click only says so (RefreshAll dims it).
 local function BuildFoot(window)
 	local foot = Frame(ui.stripFrame)
 	foot:SetAllPoints(ui.stripFrame)
@@ -2880,9 +2998,46 @@ local function BuildFoot(window)
 		window:Hide()
 	end, true)
 	done:SetPoint("RIGHT", foot, "RIGHT", -12, 0)
-	local reload = Button(foot, "Reload", 88, ns.Reload)
+	-- While changes wait for a reload it reads "Reload (2)" in the accent (RefreshAll, ui.ShowReload), and pointing at it lists them as the reload
+	-- notice does (Reload.lua, ns.ReloadTip); with none it is plain and its tip says so. The tone is its colour and not its alpha, which Reload.lua dims
+	-- in a fight. Its hover scripts are wrapped with SetScript, since the secure button over it runs them through GetScript (Reload.lua's Cover),
+	-- which leaves hooks out.
+	local reload, reloadLabel, reloadTone = Button(foot, "Reload", 88, ns.Reload)
 	reload:SetPoint("RIGHT", done, "LEFT", -8, 0)
+	local waiting = 0
+	function ui.ShowReload()
+		local ok, lines = pcall(ns.ReloadLines)
+		local count = ok and type(lines) == "table" and #lines or 0
+		if count ~= waiting then
+			waiting = count
+			reloadLabel:SetText(count > 0 and ("Reload (%d)"):format(count) or "Reload")
+			reloadTone(count > 0 and "accent" or nil)
+		end
+	end
+	local ownEnter, ownLeave = reload:GetScript("OnEnter"), reload:GetScript("OnLeave")
+	reload:SetScript("OnEnter", function(self, ...)
+		if ownEnter then
+			ownEnter(self, ...)
+		end
+		if waiting > 0 and ns.ReloadTip then
+			ns.ReloadTip(self)
+		else
+			ui.message, ui.tip = nil, "Nothing needs a reload."
+			ShowStrip()
+		end
+	end)
+	reload:SetScript("OnLeave", function(self, ...)
+		if ownLeave then
+			ownLeave(self, ...)
+		end
+		if ns.ReloadUntip then
+			ns.ReloadUntip(self)
+		end
+		ui.tip = ""
+		ShowStrip()
+	end)
 	ns.SecureReload(reload)
+	ui.ShowReload()
 	ui.reset = Button(foot, "Reset page", 100, function()
 		local entry = ui.current
 		if entry and not entry.profiles and not entry.home then
@@ -2896,15 +3051,23 @@ local function BuildFoot(window)
 			local place = top ~= entry and ("%s > %s"):format(top.label, name) or name
 			Ask(ns.PanelTrust.Question(entry, name), function()
 				local before = ns.PanelTrust.Count(entry)
-				for _, item in ipairs(entry.page) do
-					-- A row the game holds is not written: its default is the game's, not this page's.
-					if item.key and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowLive(item) then
-						Write(item, item.default)
+				-- Every row it writes is noted in one batch, which Ctrl+Z puts back whole.
+				ui.batch = { label = "Reset page on " .. place }
+				local ok, err = pcall(function()
+					for _, item in ipairs(entry.page) do
+						-- A row the game holds is not written: its default is the game's, not this page's.
+						if item.key and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowLive(item) then
+							Write(item, item.default)
+						end
 					end
+				end)
+				ui.batch = nil
+				if not ok then
+					geterrorhandler()(err)
 				end
 				RefreshAll()
 				local done = before - ns.PanelTrust.Count(entry)
-				Say(("Reset %d setting%s on %s. Home's Recent changes can undo each."):format(done, done == 1 and "" or "s", place))
+				Say(("Reset %d setting%s on %s. Ctrl+Z puts %s back."):format(done, done == 1 and "" or "s", place, done == 1 and "it" or "them"))
 			end)
 		end
 	end)
@@ -2938,6 +3101,7 @@ local function BuildTestSwitch(bar, close)
 	mark:SetPoint("BOTTOMRIGHT", track, "BOTTOMRIGHT", -1, 1)
 	local knob = Fill(track, "OVERLAY")
 	knob:SetSize(12, 12)
+	local Place = Slider(knob, track, track)
 	local word = Label(test, "GameFontHighlightSmall", "RIGHT")
 	word:SetPoint("RIGHT", track, "LEFT", -8, 0)
 	local switch = { frame = test, hovered = false }
@@ -2946,8 +3110,7 @@ local function BuildTestSwitch(bar, close)
 		local on = type(mode) == "table" and mode.Source() ~= nil
 		local fight = InCombatLockdown() == true
 		mark:SetShown(on)
-		knob:ClearAllPoints()
-		knob:SetPoint("LEFT", track, "LEFT", on and 18 or 2, 0)
+		Place(on)
 		knob:SetColorTexture(Look.Colour(on and "on-accent" or "text-dim"))
 		Backing(outline, "line", 1, switch.hovered and "text-faint" or "line-strong")
 		word:SetText(fight and "After combat" or "Test mode")
@@ -2962,6 +3125,7 @@ local function BuildTestSwitch(bar, close)
 			Say("Test mode after combat.")
 		elseif type(ns.TestMode) == "table" then
 			ns.TestMode.Toggle("panel")
+			SwitchClick(ns.TestMode.Source() ~= nil)
 		end
 		switch.Update()
 	end)
@@ -2978,6 +3142,71 @@ local function BuildTestSwitch(bar, close)
 		ShowStrip()
 	end)
 	return switch
+end
+
+-- The profile the changes go into, dim, left of the Test mode switch on every options page ("Profile: Raid"); a long name is cut short. Pointing at
+-- it says how many characters use the profile, a click opens Profiles, and a change of profile while the window is open (Switch automatically, a
+-- slash command) tints it in the accent for a second (PROFILE_FLASH). RefreshAll sets it; it is in the parts of the options pages, so it hides
+-- while a mode has the window.
+local PROFILE_FLASH, PROFILE_HOLD = 1, 0.4
+local function BuildProfileName(bar)
+	local frame = Frame(bar)
+	frame:SetSize(160, BUTTON)
+	frame:SetPoint("RIGHT", ui.testSwitch.frame, "LEFT", -12, 0)
+	local text = Dim(Label(frame, "GameFontHighlightSmall", "RIGHT", 160))
+	text:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+	local shown, seenAt, flash
+	local function Glow(_, seconds)
+		flash = flash + (Number(seconds) and seconds or 0)
+		local t = Clamp((flash - PROFILE_HOLD) / (PROFILE_FLASH - PROFILE_HOLD), 0, 1)
+		local r1, g1, b1 = Accent()
+		local r2, g2, b2 = Look.Colour("text-dim")
+		text:SetTextColor(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t)
+		if t >= 1 then
+			frame:SetScript("OnUpdate", nil)
+		end
+	end
+	local name = { frame = frame, text = text }
+	function name.Update()
+		local now = CurrentProfile()
+		local at = Now()
+		-- Refreshed every REFRESH while the window is open, so a change seen within two seconds of the last look is one made while it was open.
+		local open = ui.window and ui.window:IsShown() and seenAt ~= nil and at - seenAt < 2
+		if ui.window and ui.window:IsShown() then
+			seenAt = at
+		end
+		if now == shown then
+			return
+		end
+		local first = shown == nil
+		shown = now
+		text:SetText(now ~= "" and ("Profile: " .. now) or "")
+		if not first and open and now ~= "" then
+			flash = 0
+			Glow(nil, 0)
+			frame:SetScript("OnUpdate", Glow)
+		end
+	end
+	Clickable(frame, function()
+		if ui.model and ui.model.profiles and not ui.mode then
+			Go(ui.model.profiles)
+		end
+	end)
+	frame:SetScript("OnEnter", function()
+		local now = CurrentProfile()
+		if now == "" then
+			return
+		end
+		local count = ns.PanelHome and ns.PanelHome.UserCount and ns.PanelHome.UserCount(now) or 1
+		ui.message = nil
+		ui.tip = ("Changes here are saved in %s, used by %d character%s. Click for Profiles."):format(now, count, count == 1 and "" or "s")
+		ShowStrip()
+	end)
+	frame:SetScript("OnLeave", function()
+		ui.tip = ""
+		ShowStrip()
+	end)
+	ui.barProfile = name
 end
 
 local function BuildBars(window)
@@ -3059,6 +3288,7 @@ local function BuildBars(window)
 	end)
 	close:SetPoint("RIGHT", bar, "RIGHT", -8, 0)
 	ui.testSwitch = BuildTestSwitch(bar, close)
+	BuildProfileName(bar)
 
 	local strip = Frame(window)
 	strip:SetSize(WIDTH, STRIP)
@@ -3238,6 +3468,19 @@ local function Build()
 		if ui.flash then
 			Fade(seconds)
 		end
+		-- A message of the strip fades in, and goes after SAY_HOLD (Say).
+		if ui.sayFade then
+			ui.sayFade = ui.sayFade + (Number(seconds) and seconds or 0)
+			local t = math.min(1, ui.sayFade / SAY_FADE)
+			ui.strip:SetAlpha(SAY_FROM + (1 - SAY_FROM) * t)
+			if t >= 1 then
+				ui.sayFade = nil
+			end
+		end
+		if ui.message and ui.messageAt and Now() - ui.messageAt > SAY_HOLD then
+			ui.message, ui.messageAt = nil, nil
+			ShowStrip()
+		end
 		elapsed = elapsed + seconds
 		if elapsed >= REFRESH then
 			elapsed = 0
@@ -3360,7 +3603,7 @@ ns.PanelKit = {
 	Scroller = Scroller, Dropdown = Dropdown, NewRow = NewRow, BuildRow = BuildRow, IsOpen = IsOpen, Unmet = Unmet, Header = Header, Painted = Painted,
 	Solid = Solid, Backing = Backing, Accent = Accent, Shade = Shade, Clamp = Clamp, Rect = Rect, IsText = IsText, Cursor = Cursor, Drag = Drag,
 	Say = Say, Ask = Ask, CloseList = CloseList, OpenList = OpenList, Read = Read, Write = Write,
-	Bool = AddBool,
+	Bool = AddBool, SwitchClick = SwitchClick, Slider = Slider,
 	Window = function() return ui.window end,
 	Inset = function(parent, inset) insets[parent] = inset end,
 	Tip = function(text) ui.message, ui.tip = nil, text or "" ShowStrip() end, Refresh = function() RefreshAll() end,

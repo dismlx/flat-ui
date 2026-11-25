@@ -15,8 +15,9 @@ local _, ns = ...
 -- this file loads; a frame after the fight ends it comes back while what turned it on is still open (the options window shown or held hidden by
 -- /flatui move, /flatui move open again), or for "slash" and "key" always, and ends otherwise.
 --
--- The bar (BuildBar) picks the group and Moving, opens Bags, Bank, Gear, Finder, Queue (the Trinket queue window) and Move (/flatui move, with the
--- samples kept on) and has End. It stands above or under the options window (BarSpot); dragged, it stays where it was dropped until a
+-- The bar (BuildBar) picks the group and Moving (a switch that clicks and slides as the options window's do, ns.PanelKit.SwitchClick and Slider),
+-- opens Bags, Bank, Gear, Finder, Queue (the Trinket queue window) and Move (/flatui move, with the samples kept on) and has End. It stands above
+-- or under the options window (BarSpot); dragged, it stays where it was dropped until a
 -- double-click on its title puts it back. The bar is 1044 wide since Queue joined it (the controls end at 956 of a live strip 968 wide, End at
 -- 976).
 --
@@ -528,8 +529,13 @@ local function PaintBar()
 		look.Solid(ui.track, S.moving and "accent" or "raised")
 	end
 	look.Solid(ui.knob, S.moving and "on-accent" or "text-dim")
-	ui.knob:ClearAllPoints()
-	ui.knob:SetPoint("LEFT", ui.toggle, "LEFT", S.moving and 18 or 2, 0)
+	-- The knob slides to its end (ns.PanelKit.Slider), as the switches of the options window do.
+	if ui.placeKnob then
+		ui.placeKnob(S.moving == true)
+	else
+		ui.knob:ClearAllPoints()
+		ui.knob:SetPoint("LEFT", ui.toggle, "LEFT", S.moving and 18 or 2, 0)
+	end
 end
 
 -- Where the bar goes: under the toolbar of /flatui move while it shows, else at the top of the screen; but while the options window shows and that
@@ -704,8 +710,13 @@ local function BuildBar()
 	ui.track:SetAllPoints(toggle)
 	ui.knob = kit.Fill(toggle, "ARTWORK")
 	ui.knob:SetSize(12, 12)
+	ui.placeKnob = type(kit.Slider) == "function" and kit.Slider(ui.knob, toggle, toggle) or nil
+	-- A click plays the game's checkbox sound, higher for on, as the switches of the options window do.
 	kit.Clickable(toggle, function()
 		TM.SetMoving(not S.moving)
+		if type(kit.SwitchClick) == "function" then
+			kit.SwitchClick(S.moving == true)
+		end
 	end)
 	toggle:SetScript("OnEnter", function()
 		ui.toggleHover = true

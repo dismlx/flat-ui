@@ -4,7 +4,11 @@ local _, ns = ...
 -- attack of yours, Overpower's own icon (C_Spell.GetSpellTexture, SpellDocumentation.lua:595) shows above that enemy's name, centred, with Flat UI's
 -- thin border (ns.Outline) at Overpower icon size: over the row of the enemy's debuffs while the game shows it (the icon stands on a guide frame of
 -- Flat UI's own whose top is the row's top, so it rises as the row wraps to a second line, in a fight too, and shows the debuffs under it), else
--- over the name, and over the bar while the name is inside it. ns.PlateDebuffTop gives the same guide to PlateQuest.lua's mark at Above.
+-- over the name, and over the bar while the name is inside it. A row whose icons Nameplates.lua fades to nothing (Show auras Only on the target,
+-- on another plate; ns.PlateAurasSeen) counts as hidden, and the guides stand anew as the target changes. With Threat value position at Above the
+-- icon stands over the threat value, which stands on the guide (ns.PlateOverpowerPlace places it again as the value moves). ns.PlateDebuffTop
+-- gives the same guide to PlateQuest.lua's mark and PlateThreatText.lua's value at Above, and ns.PlateOverpowerIcon the icon to that mark, which
+-- stands over it while it shows (the mark is placed again as the icon pops in and once it has gone).
 -- It glows, with the calm proc glow of the action buttons (ns.ProcGlowSoft, ProcGlow.lua; a calm pulse of the icon of this file's own on a client
 -- that refuses it), while Overpower can be used now: C_Spell.IsSpellUsable of the highest rank you know says yes (SpellDocumentation.lua:980-995, plain in fights) and its cooldown is off or is the global cooldown alone. The cooldown is read as
 -- Interrupt.lua reads it: GetSpellCooldown never withholds isEnabled, isActive and isOnGCD (SpellSharedDocumentation.lua:19-31), isOnGCD is believed
@@ -17,8 +21,9 @@ local _, ns = ...
 -- Nameplates.lua). One enemy shows it at a time, as a dodge gives the warrior one Overpower: a later dodge of yours moves it.
 -- The window is the time of Overpower's row in ProcData.lua (5 seconds, the time of its hidden buff 1289681 in the DB2 tables of build 1.60.1, which
 -- that file was written from), and 5 seconds when the row is missing: the game's UI source and API documentation name no time for it. A dodge
--- renews it, as a new dodge renews Overpower's. The icon pops in as it lights (a quick fade in and a shrink from 130% of its size) and, when its
--- window runs out, fades away over a quarter of a second; any other end hides it at once. With Time left on the Overpower icon (on by default) a
+-- renews it, as a new dodge renews Overpower's. The icon pops in as it lights (a quick fade in and a shrink from 130% of its size), gives a smaller
+-- pop (from 115% over 0.15 seconds) each time a dodge renews its window, and, when its window runs out, fades away over a quarter of a second; any
+-- other end hides it at once. With Time left on the Overpower icon (on by default) a
 -- dark swipe drains clockwise over the icon for the window: a Cooldown frame of Flat UI's own (CooldownFrameTemplate, reversed, no edge, no
 -- bling, no countdown numbers) over the icon, given the dodge's time and the window (SetCooldown, not protected on a frame of the addon's own, so a renewed window starts it again in a fight too)
 -- and cleared when the icon goes.
@@ -54,12 +59,13 @@ end
 -- and the name. LEVEL: frame levels above the plate's unit frame, over its auras. DIM: the opacity of a grey icon. PULSE_LOW and PULSE_SECONDS: the
 -- pulse of this file's own, from full to PULSE_LOW and back, PULSE_SECONDS each way. CROP: the share of each edge of the icon cut off, as the
 -- aura icons of the plates have it. ICON: Overpower's icon file, for a client that does not give it. POP_FROM, POP_IN and POP_SCALE: the pop as the
--- icon lights (a fade in over POP_IN seconds and a shrink from POP_FROM of its size over POP_SCALE); FADE_OUT: the seconds it fades as its window
--- runs out.
+-- icon lights (a fade in over POP_IN seconds and a shrink from POP_FROM of its size over POP_SCALE); RENEW_FROM and RENEW_SECONDS: the smaller pop
+-- as a new dodge renews the window (from RENEW_FROM of its size back to whole); FADE_OUT: the seconds it fades as its window runs out.
 local K = {
 	RANKS = { 7384, 7887, 11584, 11585 },
 	WINDOW = 5, MATCH = 0.5, LOOK = 0.1, GAP = 2, LEVEL = 20, DIM = 0.45, PULSE_LOW = 0.55, PULSE_SECONDS = 1.2, CROP = 0.08,
 	AUTO_ATTACK = 6603, SIZE = 26, ICON = "Interface\\Icons\\Ability_MeleeDamage", POP_FROM = 1.3, POP_IN = 0.12, POP_SCALE = 0.15, FADE_OUT = 0.25,
+	RENEW_FROM = 1.15, RENEW_SECONDS = 0.15,
 	ACTIVE = { "UNIT_COMBAT", "SPELL_UPDATE_USABLE", "ACTION_USABLE_CHANGED", "SPELL_UPDATE_COOLDOWN", "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT",
 		"NAME_PLATE_UNIT_REMOVED" },
 }
@@ -70,8 +76,8 @@ end
 
 -- recs[unitFrame]: holder (the icon's frame), icon (its texture), outline, swipe (its Cooldown frame, false when the client gave none), at (the dodge
 -- the swipe runs from), glow (the soft look of ProcGlow.lua) or pulse (this file's own), to and size (what it was anchored to and sized at), file
--- (the texture it shows), shown, usable (the look it shows), glowing, pop and fadeOut (its animation groups, nil on a client without them), waiting
--- (for the end of a fight). Kept when the plate leaves, so a plate's icon is made once.
+-- (the texture it shows), shown, usable (the look it shows), glowing, pop, renew and fadeOut (its animation groups, nil on a client without them),
+-- owner (the plate's unit frame), waiting (for the end of a fight). Kept when the plate leaves, so a plate's icon is made once.
 local recs = setmetatable({}, { __mode = "k" })
 -- guides[unitFrame]: { frame (a frame of Flat UI's own on the plate, the icon's anchor), top and bottom (the regions its corners are on) }. Kept when
 -- the plate leaves, as the icons are.
@@ -233,12 +239,22 @@ local function AnchorOf(unitFrame)
 	return bars or name
 end
 
--- The row of the enemy's debuffs while the game shows it: the plate's AurasFrame and its DebuffListFrame both shown (the Debuffs bit of the game's
--- aura display options, Blizzard_NamePlateAuras.lua:404-416).
+-- False on a plate whose auras Nameplates.lua fades to nothing (Show auras Only on the target, on another plate), as PlateThreatText.lua reads it
+-- for the rows beside the bar (ns.PlateAurasSeen); true where that cannot be asked.
+local function Seen(unitFrame)
+	if type(ns.PlateAurasSeen) ~= "function" then
+		return true
+	end
+	local ok, seen = pcall(ns.PlateAurasSeen, unitFrame)
+	return not ok or seen ~= false
+end
+
+-- The row of the enemy's debuffs while the game shows it and its icons are seen: the plate's AurasFrame and its DebuffListFrame both shown (the
+-- Debuffs bit of the game's aura display options, Blizzard_NamePlateAuras.lua:404-416), on a plate whose auras are not faded (Seen).
 local function DebuffRow(unitFrame)
 	local auras = Region(unitFrame, "AurasFrame")
 	local list = auras and Region(auras, "DebuffListFrame")
-	if list and Ask(auras.IsShown, auras) == true and Ask(list.IsShown, list) == true then
+	if list and Ask(auras.IsShown, auras) == true and Ask(list.IsShown, list) == true and Seen(unitFrame) then
 		return list
 	end
 	return nil
@@ -338,12 +354,29 @@ local function MakeSwipe(rec)
 	rec.swipe = swipe
 end
 
--- The pop as the icon lights (an Alpha animation from nothing and a Scale animation from POP_FROM to whole, from its middle) and the fade as its
--- window runs out (an Alpha animation to nothing that keeps its end), animation groups of the icon's own frame, not protected, so they play in a
+-- True while an animation group plays.
+local function Playing(group)
+	if not group then
+		return false
+	end
+	local ok, playing = pcall(group.IsPlaying, group)
+	return ok and playing == true
+end
+
+-- The quest mark of a plate placed again (PlateQuest.lua), as the icon shows or has gone: a mark at Above stands over the icon while it shows.
+local function QuestPlace(unitFrame)
+	if unitFrame ~= nil and type(ns.PlateQuestPlace) == "function" then
+		pcall(ns.PlateQuestPlace, unitFrame)
+	end
+end
+
+-- The pop as the icon lights (an Alpha animation from nothing and a Scale animation from POP_FROM to whole, from its middle), the smaller pop as a
+-- dodge renews the window (a Scale animation from RENEW_FROM to whole, no fade) and the fade as its window runs out (an Alpha animation to nothing
+-- that keeps its end; the plate's quest mark drops back once it ends), animation groups of the icon's own frame, not protected, so they play in a
 -- fight. Out of combat only, with the icon; a client that refuses them shows and hides the icon at once.
 local function MakeMotion(rec)
 	local holder = rec.holder
-	local ok, pop, fadeOut = pcall(function()
+	local ok, pop, fadeOut, renew = pcall(function()
 		local popGroup = holder:CreateAnimationGroup()
 		ns.Own[popGroup] = true
 		local appear = popGroup:CreateAnimation("Alpha")
@@ -369,12 +402,23 @@ local function MakeMotion(rec)
 		fadeGroup:SetScript("OnFinished", function()
 			if not rec.shown then
 				holder:SetAlpha(0)
+				QuestPlace(rec.owner)
 			end
 		end)
-		return popGroup, fadeGroup
+		local renewGroup = holder:CreateAnimationGroup()
+		ns.Own[renewGroup] = true
+		local swell = renewGroup:CreateAnimation("Scale")
+		ns.Own[swell] = true
+		swell:SetScaleFrom(K.RENEW_FROM, K.RENEW_FROM)
+		swell:SetScaleTo(1, 1)
+		swell:SetDuration(K.RENEW_SECONDS)
+		swell:SetOrigin("CENTER", 0, 0)
+		pcall(swell.SetSmoothing, swell, "OUT")
+		return popGroup, fadeGroup, renewGroup
 	end)
 	if ok and type(pop) == "table" and type(fadeOut) == "table" then
 		rec.pop, rec.fadeOut = pop, fadeOut
+		rec.renew = type(renew) == "table" and renew or nil
 	end
 end
 
@@ -382,6 +426,9 @@ end
 local function Pop(rec)
 	if rec.fadeOut then
 		pcall(rec.fadeOut.Stop, rec.fadeOut)
+	end
+	if rec.renew then
+		pcall(rec.renew.Stop, rec.renew)
 	end
 	rec.holder:SetAlpha(1)
 	if rec.pop then
@@ -409,6 +456,7 @@ local function Make(unitFrame)
 	end
 	rec = rec or {}
 	recs[unitFrame] = rec
+	rec.owner = unitFrame
 	local holder = CreateFrame("Frame", nil, unitFrame)
 	ns.Own[holder] = true
 	holder:SetSize(K.SIZE, K.SIZE)
@@ -431,9 +479,20 @@ local function Make(unitFrame)
 	return rec
 end
 
--- Sizes and anchors the icon on the plate's guide (Guide) when its size changed or it has none yet, out of combat on a plate that may be protected.
+-- The threat value of a plate while it shows above the plate (PlateThreatText.lua, ns.PlateThreatTexts; it stands on the guide), or nil.
+local function AboveValue(unitFrame)
+	if type(ns.PlateThreatTexts) ~= "function" then
+		return nil
+	end
+	local ok, value, side = pcall(ns.PlateThreatTexts, unitFrame)
+	return ok and type(value) == "table" and side == "above" and Ask(value.IsShown, value) == true and value or nil
+end
+
+-- Sizes and anchors the icon on the plate's guide (Guide), or on the threat value while it shows above the plate, when its size or what it stands
+-- on changed or it has none yet, out of combat on a plate that may be protected.
 local function Place(unitFrame, rec)
 	local to, stale = Guide(unitFrame)
+	to = AboveValue(unitFrame) or to
 	local size = Opt("overpowerSize")
 	size = type(size) == "number" and size > 0 and size or K.SIZE
 	if stale then
@@ -499,25 +558,35 @@ end
 
 -- fade: the window ran out, so the icon fades away (FADE_OUT); every other end (a cast of Overpower, the enemy's death, its plate leaving, a later dodge
 -- on another plate, the part going off) hides it at once, which also cuts short a fade still running.
+-- An icon gone at once places the plate's quest mark again (a fade does that as it ends, MakeMotion).
 local function Hide(rec, fade)
 	local holder = rec.holder
+	local gone = false
 	if holder and rec.shown then
 		rec.shown, rec.usable = nil, nil
 		Glow(rec, false)
 		if rec.pop then
 			pcall(rec.pop.Stop, rec.pop)
 		end
+		if rec.renew then
+			pcall(rec.renew.Stop, rec.renew)
+		end
 		if not (fade and rec.fadeOut and pcall(rec.fadeOut.Play, rec.fadeOut)) then
 			if rec.fadeOut then
 				pcall(rec.fadeOut.Stop, rec.fadeOut)
 			end
 			holder:SetAlpha(0)
+			gone = true
 		end
 	elseif holder and not fade and rec.fadeOut then
+		gone = Playing(rec.fadeOut)
 		pcall(rec.fadeOut.Stop, rec.fadeOut)
 		holder:SetAlpha(0)
 	end
 	ClearSwipe(rec)
+	if gone then
+		QuestPlace(rec.owner)
+	end
 end
 
 -- Shows the icon on the lit plate: glowing while Overpower can be used now, grey, dim and still while it cannot.
@@ -558,6 +627,7 @@ function Draw()
 	rec.icon:SetAlpha(usable and 1 or K.DIM)
 	if first then
 		Pop(rec)
+		QuestPlace(unitFrame)
 	else
 		rec.holder:SetAlpha(1)
 	end
@@ -593,11 +663,13 @@ local function Unlight(fade)
 	Ticking(false)
 end
 
--- The dodge at `at` on a plate was yours: the icon moves there, for the window from that dodge.
+-- The dodge at `at` on a plate was yours: the icon moves there, for the window from that dodge. A later dodge on the plate that already shows it
+-- renews the window, and the icon gives a small pop (RENEW_FROM) unless its pop in or its fade still plays.
 local function Light(unitFrame, unit, at)
 	if lit and lit.unitFrame ~= unitFrame then
 		Unlight()
 	end
+	local renewed = lit ~= nil and lit.unitFrame == unitFrame and lit.at ~= at
 	if not (lit and lit.unitFrame == unitFrame and lit.at == at) then
 		S.mine = S.mine + 1
 	end
@@ -610,6 +682,11 @@ local function Light(unitFrame, unit, at)
 	lit = { unitFrame = unitFrame, unit = unit, at = at, expires = at + Window() }
 	Ticking(true)
 	Draw()
+	local rec = recs[unitFrame]
+	if renewed and rec and rec.shown and rec.renew and not Playing(rec.pop) and not Playing(rec.fadeOut) then
+		pcall(rec.renew.Stop, rec.renew)
+		pcall(rec.renew.Play, rec.renew)
+	end
 end
 
 local function Gone(unitFrame)
@@ -900,8 +977,9 @@ EXTRA.refresh[#EXTRA.refresh + 1] = function()
 		pcall(StandDown)
 	end
 end
--- The guide of a plate for PlateQuest.lua's mark at Above: its top is the top of the enemy's debuffs while their row shows, else of the name. Made
--- out of combat when the plate has none; nil while it waits for the end of a fight. Anchored again on each ask where what it spans changed.
+-- The guide of a plate for PlateQuest.lua's mark at Above and PlateThreatText.lua's value at Above: its top is the top of the enemy's debuffs
+-- while their row shows and is seen, else of the name. Made out of combat when the plate has none; nil while it waits for the end of a fight.
+-- Anchored again on each ask where what it spans changed.
 function ns.PlateDebuffTop(unitFrame)
 	if unitFrame == nil or ns.Forbidden(unitFrame) then
 		return nil
@@ -909,6 +987,40 @@ function ns.PlateDebuffTop(unitFrame)
 	local frame, stale = Guide(unitFrame)
 	return frame, stale
 end
+
+-- The icon of a plate while it shows or fades, for PlateQuest.lua's mark at Above, which then stands over it; nil otherwise.
+function ns.PlateOverpowerIcon(unitFrame)
+	local rec = unitFrame ~= nil and recs[unitFrame]
+	if S.on and rec and rec.holder and rec.to ~= nil and (rec.shown or Playing(rec.fadeOut)) then
+		return rec.holder
+	end
+	return nil
+end
+
+-- The icon of a plate placed again, for PlateThreatText.lua after the threat value took a new anchor: at Above the icon stands over the value.
+function ns.PlateOverpowerPlace(unitFrame)
+	local rec = unitFrame ~= nil and recs[unitFrame]
+	if S.on and rec and rec.holder and not ns.Forbidden(unitFrame) then
+		ns.EachPart(KEY, PART, Place, unitFrame, rec)
+	end
+end
+
+-- The target changed while Show auras is Only on the target: the debuff rows of the old target and the new one faded or came back, so each guide
+-- stands on the row or on the name again, and the icon, the quest mark and the threat value at Above with it. Out of combat on a plate that may be
+-- protected; a guide that must wait has its plate's icon wait for the end of the fight.
+ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
+	if Opt("aurasWhen") ~= "target" then
+		return
+	end
+	for unitFrame in pairs(guides) do
+		if not ns.Forbidden(unitFrame) then
+			local ok, _, stale = pcall(Guide, unitFrame)
+			if ok and stale and S.on then
+				Wait(unitFrame)
+			end
+		end
+	end
+end)
 
 EXTRA.status[#EXTRA.status + 1] = function()
 	if Opt("overpower") ~= true or not Warrior() then

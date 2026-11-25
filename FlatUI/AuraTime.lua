@@ -8,10 +8,15 @@ local _, ns = ...
 -- left out, so nothing runs twice. Nothing is read back from the text. The unit format of a locale that keeps a space in its cooldown form keeps its space.
 -- A totem time the game withholds in a fight is not formatted, and /flatui status says so. The time size of a totem is set once and set again only when the
 -- row changes: the totem path sets no font (TotemFrame.lua:70-71).
+-- Duration colour: White sets the text white after the game's colour on each tick; White, red in the last 10 s (0.5.37) sets it red while the time
+-- left the game passes is a plain number under WARN seconds and white otherwise, so a fresh aura is white again at its next tick and a time the
+-- game withholds stays white; As the game has it leaves the game's gold and white.
 
 local FORMAT, COLOUR, TOTEM_SIZE = "hud.durationFormat", "hud.durationColour", "unitframes.totemTimeSize"
 local FRAMES = { "BuffFrame", "DebuffFrame", "ExternalDefensivesFrame" }
 local NOTE = "Unit frames: Duration format: the game withholds totem times in fights, and they keep the game's format."
+-- White, red in the last 10 s: the seconds left under which the time is red, and its red.
+local WARN, RED = 10, { 1, 0.3, 0.3 }
 local weak = { __mode = "k" }
 -- The percent last set on a totem time, per button.
 local sized = setmetatable({}, weak)
@@ -79,8 +84,14 @@ local function After(button, timeLeft)
 	end
 	-- A colour with no fourth number resets the opacity, which would show a totem time that Totem time left hides with SetAlpha(0) (UnitExtras.lua:297-299).
 	-- The same condition as KeepTimer (UnitExtras.lua:305-309): a stopped Totems part hides nothing, so its time takes the white.
-	if ns.Get(COLOUR) == "white" and not (totem and ns.Get("unitframes.totemTimer") == false and not ns.UnitFrameExtra.off("Totem timers")) then
-		text:SetVertexColor(1, 1, 1)
+	local mode = ns.Get(COLOUR)
+	if (mode == "white" or mode == "warn")
+		and not (totem and ns.Get("unitframes.totemTimer") == false and not ns.UnitFrameExtra.off("Totem timers")) then
+		if mode == "warn" and not ns.IsSecret(timeLeft) and type(timeLeft) == "number" and timeLeft < WARN then
+			text:SetVertexColor(RED[1], RED[2], RED[3])
+		else
+			text:SetVertexColor(1, 1, 1)
+		end
 	end
 end
 

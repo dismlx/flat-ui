@@ -77,10 +77,12 @@ local _, ns = ...
 -- empty Junk title is, with a + after its count; its items keep their cells, so a slot of it that changes while the window is open stays in it
 -- and does not go to the top shelf, but no button is placed for them, so its title's tooltip lists them from their records (FoldedTip): each
 -- item once with its icon, its name in its quality's colour and its stacks counted together, the most first, at most FOLD_LINES. While a search
--- is typed, Layout.Dim writes on a folded title how many of its items match ("3 of 24") in the Highlight colour, and its count alone again once
--- the search is cleared, with no layout: the title is measured for the widest of those texts. A title still under the mouse after a layout (a fold
--- clicked, which keeps the window's height, BagsWindow.lua) draws its tooltip again, so it says what the next click does. A window that closes
--- ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
+-- is typed, Layout.Dim writes on every section's title, open or folded, how many of its items match ("3 of 24") in the Highlight colour, and its
+-- count alone again once the search is cleared, with no layout: a folded title is measured for the widest of those texts, and an open one keeps
+-- the width of its plain count and says the matches alone ("3") where "3 of 24" would not fit. A section with no match, or a bag's label in Bag
+-- by bag, fades to 40% meanwhile (SetAlpha of its text and rule); the top shelf and Free slots keep theirs. A title still under the mouse after a
+-- layout (a fold clicked, which keeps the window's height, BagsWindow.lua) draws its tooltip again, so it says what the next click does. A window
+-- that closes ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
 -- The + slot, the catcher and the flash are BagsCustom.lua's, as the part custom: each pass starts and ends them (B.Custom.Begin, Done) and places
 -- them with each section (B.Custom.Place: the + slot's cell, and the rectangle of the section's cells for its catcher, a frame under the buttons
 -- that takes the mouse only while the cursor holds an item, in both windows); Watch tells it when the cursor comes to hold an item or lets it go
@@ -93,7 +95,8 @@ local _, ns = ...
 -- mouse points at a bag on the game's bag bar (Bags.lua) or in the bag slot row (BagsSlots.lua), Layout.Light dims every slot of the bag window
 -- that is not in that bag, as the game's combined bag marks a bag's items, in the player's own live bags only, and a bank bag slot of the bank
 -- window's row (BagsBank.lua) does the same in the live bank; an empty bag slot dims nothing. A click on a slot of the bag slot row keeps its bag
--- lit so (Layout.Stick) until it is clicked again, another is clicked or the window closes. A holder
+-- lit so (Layout.Stick) until it is clicked again, another is clicked, the bag leaves its slot (the next layout drops a stuck bag with no slots,
+-- Layout.Build) or the window closes. A holder
 -- of a bag's buttons (the frame whose ID is the bag, ContainerFrame.lua:1845-1851), or a button of Flat UI's own, that is not under the window's
 -- content frame is put under it (SetParent, on frames of Flat UI's own only), so it takes the content's scale and scrolls with it. Before a live
 -- button hides here, B.Buttons.Unsplit leaves the game's split box it may own to the game (BagsItems.lua), so the template's OnHide does not hide
@@ -125,7 +128,7 @@ local WINDOW_PAD, SCREEN_SHARE = 8, 0.95
 local PARK = 200
 -- The defaults of the rows this file reads, for a value the options do not give.
 local DEFAULTS = { view = "sections", columns = 12, bankColumns = 16, slotSize = 36, freeSlots = "kinds", bank = "flat", gear = "one",
-	newItems = true, addSlots = true }
+	consumables = "one", newItems = true, addSlots = true }
 local NEW, FREE, OTHER, JUNK, KEEP = "new", "free", "other", "junk", "keep"
 local KEYRING = -1
 -- The bank's own slots, its first tab (Camelot/BankFrame.lua:301-327).
@@ -140,8 +143,9 @@ local LATE = 1000
 local DIM = { 0.66, 0.68, 0.62 }
 local COUNT_HEX = "|cff7d8078"
 local FULL_HEX = "|cffff5a3d"
--- How strongly a title that takes a drop is lit, and the same under the cursor; the faint line after a title's text.
-local LIT, LIT_HOVER, RULE_ALPHA = 0.14, 0.3, 0.16
+-- How strongly a title that takes a drop is lit, and the same under the cursor; the faint line after a title's text; a title with no match of the
+-- search (Layout.Dim).
+local LIT, LIT_HOVER, RULE_ALPHA, TITLE_FADED = 0.14, 0.3, 0.16, 0.4
 -- How often the cursor is read while a window shows, and how long after a drop a click on the same title is the same action.
 local CURSOR_STEP, DROP_CLICK = 0.1, 0.3
 -- The most items the tooltip of a folded title lists, and the size of their icons there.
@@ -348,7 +352,7 @@ end
 
 -- What else a layout depends on: a change of any of these is a change of row, and lays the window out afresh.
 local function Sign()
-	return ("%s:%s:%s:%s"):format(tostring(Opt("freeSlots")), tostring(Opt("gear")), tostring(Opt("newItems")), tostring(Opt("addSlots")))
+	return ("%s:%s:%s:%s:%s"):format(tostring(Opt("freeSlots")), tostring(Opt("gear")), tostring(Opt("consumables")), tostring(Opt("newItems")), tostring(Opt("addSlots")))
 end
 
 -- The containers of a window for a character, in order, as BagsData.lua gives them.
@@ -777,10 +781,11 @@ local function AccentHex()
 end
 
 -- The text of a title: a section's label and how many items it holds, or a bag's name (after its icon, BagIcon) and how many of its slots are
--- free, the count darker. A folded section has a + after its count, and while a search is typed (sec.matches, Layout.Dim) how many of its items
--- match, "3 of 24", in the Highlight colour. With widest, a folded title's text as wide as it can get with that count ("24 of 24"), which it is
--- measured by, so the text that the search writes later fits its title.
-local function TitleText(sec, widest)
+-- free, the count darker. A folded section has a + after its count. While a search is typed (sec.matches, Layout.Dim) a section's title says how
+-- many of its items match, "3 of 24", in the Highlight colour, open or folded; with short, an open one says "3" alone (WriteTitle, where the
+-- longer text would not fit). With widest, a folded title's text as wide as it can get with that count ("24 of 24"), which it is measured by, so
+-- the text that the search writes later fits its title; an open title is measured by its plain count, so its section keeps its width.
+local function TitleText(sec, widest, short)
 	if sec.block then
 		local count = sec.full and (FULL_HEX .. "full|r") or (COUNT_HEX .. (sec.freeCount or 0) .. " free|r")
 		return (sec.icon or "") .. Plain(sec.name) .. "  " .. count
@@ -801,6 +806,12 @@ local function TitleText(sec, widest)
 	end
 	local count = sec.count or #sec.entries
 	if not sec.folded then
+		if not widest and Finite(sec.matches) then
+			if short then
+				return ("%s  %s%d|r"):format(Plain(sec.label), AccentHex(), sec.matches)
+			end
+			return ("%s  %s%d of %d|r"):format(Plain(sec.label), AccentHex(), sec.matches, count)
+		end
 		return Plain(sec.label) .. "  " .. COUNT_HEX .. count .. "|r"
 	end
 	local matches = widest and count or sec.matches
@@ -958,8 +969,38 @@ local function Draw(st, entry, button)
 	end
 end
 
+-- The faint rule after a title's text, in the room the text leaves of the title's width, or none where too little is left.
+local function PlaceRule(title, width)
+	local frame = title.frame
+	local textWidth = TextWidth(title.text)
+	if textWidth <= 0 then
+		textWidth = title.sec and title.sec.titleWidth or width
+	end
+	textWidth = math.min(textWidth, width)
+	local room = width - textWidth - 6
+	if room >= 8 then
+		title.rule:ClearAllPoints()
+		title.rule:SetPoint("LEFT", frame, "LEFT", textWidth + 5, 0)
+		title.rule:SetSize(room - 1, ns.Pixels(frame, 1))
+		title.rule:Show()
+	else
+		title.rule:Hide()
+	end
+end
+
+-- Writes a title's text (TitleText) and places its rule. An open section's "3 of 24" that would not fit the width its title has (measured for
+-- its plain count) says "3" alone, so nothing is laid out again.
+local function WriteTitle(title, sec)
+	local width = title.width or 0
+	title.text:SetText(TitleText(sec))
+	if not sec.block and not sec.folded and Finite(sec.matches) and TextWidth(title.text) > width - TITLE_ROOM then
+		title.text:SetText(TitleText(sec, false, true))
+	end
+	PlaceRule(title, width)
+end
+
 local function PlaceTitle(st, title, sec, x, y, width)
-	title.st, title.sec = st, sec
+	title.st, title.sec, title.width = st, sec, width
 	-- The left button drags the title of a section of the Sections view that can move (BagsOrder.lua): not the top shelf, Free slots or a bag. A
 	-- click on such a title folds its section or opens it, so it is lit under the cursor as the top shelf's title and a bag's label are.
 	local drags = st.view == "sections" and not sec.block and not sec.strip and sec.key ~= FREE and sec.key ~= NEW and not sec.add
@@ -969,7 +1010,6 @@ local function PlaceTitle(st, title, sec, x, y, width)
 		title.clickable = sec.strip == true or sec.add == true or drags
 	end
 	SetSize(title.text, st.textSize)
-	title.text:SetText(TitleText(sec))
 	title.text:SetWidth(math.max(1, width - 1))
 	local frame = title.frame
 	if title.drags ~= drags then
@@ -983,20 +1023,7 @@ local function PlaceTitle(st, title, sec, x, y, width)
 	frame:ClearAllPoints()
 	frame:SetPoint("TOPLEFT", st.content, "TOPLEFT", x, y)
 	frame:SetSize(width, st.titleH)
-	local textWidth = TextWidth(title.text)
-	if textWidth <= 0 then
-		textWidth = sec.titleWidth or width
-	end
-	textWidth = math.min(textWidth, width)
-	local room = width - textWidth - 6
-	if room >= 8 then
-		title.rule:ClearAllPoints()
-		title.rule:SetPoint("LEFT", frame, "LEFT", textWidth + 5, 0)
-		title.rule:SetSize(room - 1, ns.Pixels(frame, 1))
-		title.rule:Show()
-	else
-		title.rule:Hide()
-	end
+	WriteTitle(title, sec)
 	PaintTitle(title)
 	frame:Show()
 	-- The title under the mouse after a fold or an unfold, or any other layout, keeps its tooltip, drawn again with what it says now ("Folded: click
@@ -1573,6 +1600,8 @@ function Layout.Dim(which)
 	if lit ~= nil and not ((st.sizes and st.sizes[lit] or 0) > 0) then
 		lit = nil
 	end
+	-- What the search gave each placed cell, so the titles below count them without asking again.
+	local seen = {}
 	for button, entry in pairs(st.placed) do
 		local matched = true
 		if active and entry.record and match then
@@ -1582,6 +1611,7 @@ function Layout.Dim(which)
 			else
 				matched = nil
 			end
+			seen[entry] = matched == true
 		end
 		if lit ~= nil then
 			dim(button, entry.bag == lit and matched, true)
@@ -1589,19 +1619,26 @@ function Layout.Dim(which)
 			dim(button, matched)
 		end
 	end
-	-- A folded section shows no button, so its title says how many of its items match while a search is typed, and only its count again once
-	-- the search is cleared; its title was measured for that text (TitleText), so nothing is laid out.
+	-- While a search is typed every section's title says how many of its items match ("3 of 24", TitleText; a folded one shows no button, so its
+	-- title is all it has), and its count alone again once the search is cleared; a section, or a bag's label in Bag by bag (which keeps its
+	-- free count), with no match fades to TITLE_FADED. The top shelf and Free slots keep their titles. Nothing is laid out: a folded title was
+	-- measured for that text, and an open one too narrow for it says the matches alone (WriteTitle).
 	for index = 1, st.used do
 		local title = st.titles[index]
 		local sec = title and title.sec
-		if sec and sec.folded then
+		if sec then
 			local matches = nil
-			if active and match then
+			if active and match and not sec.strip and sec.key ~= FREE then
 				matches = 0
 				for _, entry in ipairs(sec.entries) do
-					if entry.record then
-						local ok, answer = pcall(match, entry.record)
-						if ok and answer == true then
+					local record = entry.record
+					if record then
+						local hit = seen[entry]
+						if hit == nil then
+							local ok, answer = pcall(match, record)
+							hit = ok and answer == true
+						end
+						if hit then
 							matches = matches + 1
 						end
 					end
@@ -1609,8 +1646,13 @@ function Layout.Dim(which)
 			end
 			if sec.matches ~= matches then
 				sec.matches = matches
-				title.text:SetText(TitleText(sec))
+				if not sec.block then
+					WriteTitle(title, sec)
+				end
 			end
+			local alpha = matches == 0 and TITLE_FADED or 1
+			title.text:SetAlpha(alpha)
+			title.rule:SetAlpha(alpha)
 		end
 	end
 end
@@ -1642,8 +1684,8 @@ function Layout.Light(which, bag)
 end
 
 -- A click on a bag's slot in the bag slot row (BagsSlots.lua) keeps that bag lit as Layout.Light lights it, until a click on it again (bag nil), a
--- click on another slot, or the window closing or showing another character or a snapshot; the mouse over another bag still lights that one
--- while it points there. Nothing is laid out.
+-- click on another slot, the bag leaving its slot (picked up there, or gone at the next layout, Layout.Build), or the window closing or showing
+-- another character or a snapshot; the mouse over another bag still lights that one while it points there. Nothing is laid out.
 function Layout.Stick(which, bag)
 	local st = state[which]
 	if not st then
@@ -1690,6 +1732,11 @@ function Layout.Build(which)
 	st.content:SetScale(st.scale)
 	st.cells, st.where, st.sections, st.strip, st.free = {}, {}, {}, nil, nil
 	Gather(st)
+	-- A bag a click kept lit that has left its slot lets that go, so a bag put in that slot later shows like any other (taking a bag out lays the
+	-- window out again, BagsData.lua).
+	if st.stuck ~= nil and not ((st.sizes[st.stuck] or 0) > 0) then
+		st.stuck = nil
+	end
 	if st.view == "bags" then
 		BuildBlocks(st)
 	else
@@ -2188,6 +2235,11 @@ end
 -- True while a menu is open on that frame.
 function Layout.MenuOn(anchor)
 	return menu ~= nil and menu.anchor ~= nil and menu.anchor == anchor
+end
+
+-- True while a menu of that window ("bags", "bank") is open: the window keeps a height kept taller meanwhile (BagsWindow.lua, Unslack).
+function Layout.MenuOf(owner)
+	return menu ~= nil and menu.anchor ~= nil and menu.owner == owner
 end
 
 -- Closes the menu, or only one opened from that window ("bags", "bank"). It is closed here too, since a menu hidden already (with its parent)

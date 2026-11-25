@@ -98,6 +98,18 @@ end
 -- Shared with Core.lua, which reads it under the settings of a profile it makes (ns.Viewing) to fit the positions that profile starts with.
 ns.ScaleWanted = Wanted
 
+-- The overIf of Custom scale and Small scale (Config.lua): in the order of Wanted, Pixel-perfect scale sets the scale before Scale below 65%, and
+-- either before Custom scale, so the row they pass over is greyed and reads "not used now" on the options pages. Setup, where ns.Get reads the draft,
+-- shows only the rows that apply (Setup.lua, S.Shown), so its Scale step shows Custom scale or Small scale, whichever sets the scale, beside the
+-- switches that choose.
+function ns.ScaleCustomOver()
+	return ns.Get("general.scaleOn") == true and (ns.Get("general.pixelPerfect") == true or ns.Get("general.scaleBelow") == true)
+end
+
+function ns.ScaleSmallOver()
+	return ns.Get("general.scaleOn") == true and ns.Get("general.pixelPerfect") == true
+end
+
 -- What the game held before the first write, kept for the account.
 local function Remember()
 	local db = FlatUIDB

@@ -1,9 +1,10 @@
 local _, ns = ...
 
 -- Combat alerts: No target, Low health and Low mana, and +Combat and -Combat in the middle of the screen. The rows are under Your character on
--- the Combat text page (combattext.noTarget and the five rows under it, combattext.lowHealth and lowColour, combattext.combatState and the four
--- rows under it), part "combat alerts" of the module, which stops alone after a few failures. Not a module: CombatText.lua calls
--- ns.CombatCuesRefresh in every refresh of the page, and the events come through the module (ns.AddEvent), so nothing runs while the page is off.
+-- the Combat text page (combattext.noTarget and the five rows under it, combattext.lowHealth, lowFight, lowColour and lowManaColour,
+-- combattext.combatState and the four rows under it), part "combat alerts" of the module, which stops alone after a few failures. Not a module:
+-- CombatText.lua calls ns.CombatCuesRefresh in every refresh of the page, and the events come through the module (ns.AddEvent), so nothing runs
+-- while the page is off.
 -- No target, Low health and +Combat and -Combat are on by default; nothing is made until a line first shows or Low health and mana warning is on.
 -- No target warning: in a fight, from PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED (Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:3885-3895),
 -- with no target, a dead one or one the player cannot attack (UnitExists, UnitIsDeadOrGhost and UnitCanAttack, UnitDocumentation.lua:1192-1205, 1931-1944,
@@ -36,14 +37,18 @@ local _, ns = ...
 -- Low health and mana warning (on by default): the game's own combat text says Low Health and Low Mana as the player's health or mana falls to
 -- 20% (Blizzard_CombatText/Shared/CombatText.lua:61-90, CombatTextConstants.lua:12-13), but only with Scrolling Combat Text for Self, which
 -- Combat text for you turns off. Here Low health, and for a mana user Low mana, stand under No target while the share is under 20%, in Low health
--- colour at the size of No target, breathing as it does. The player's health and mana may be withheld in a fight, so they are never compared:
+-- colour and Low mana colour (0.5.37; both took Low health colour before) at the size of No target, breathing as it does. With Only in a fight on
+-- (the default since 0.5.37) both show only from PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED, each of which paints them again, so eating or
+-- drinking at 10% after a pull shows neither and no breath loops out of sight; off keeps them out of a fight too, as before. The player's health
+-- and mana may be withheld in a fight, so they are never compared:
 -- each line is on a holder frame of its own whose opacity is UnitHealthPercent or UnitPowerPercent of the player through a step curve, 1 under
 -- 20% and 0 from it (C_CurveUtil, as HealthColour.lua's low health border), set at each UNIT_HEALTH, UNIT_MAXHEALTH, UNIT_POWER_UPDATE,
 -- UNIT_MAXPOWER and UNIT_DISPLAYPOWER of the player, which a frame of the addon's own hears while the row is on, and at each refresh. Low mana
 -- shows only while UnitPowerType is plainly mana (not in a druid's cat or bear form), and both hide while the player is plainly dead or a ghost
 -- (PLAYER_DEAD, PLAYER_ALIVE, PLAYER_UNGHOST). A client that refuses the curve or the call leaves the line off, and /flatui status says so.
 -- The two lines are font strings on one frame of the addon's own on UIParent, which takes no mouse, at the spot of Combat text: alerts in the movers:
--- +Combat and -Combat above the middle of the box and No target under it. They are made on the game's combat font (CombatTextFont,
+-- +Combat and -Combat above the middle of the box, No target under it and Low health and Low mana under that; the frame and the box are 200 by 170,
+-- from +Combat to Low mana at their 100% size. They are made on the game's combat font (CombatTextFont,
 -- Blizzard_Fonts_Shared/Shared/GameFontStyles.xml:150-152), else its large number font (:25), at their own size with a thin outline. A size of
 -- 100% is the height of the game's own combat messages, 25 units (CombatTextConstants.lua:6). The fade is stepped by a timer of its own
 -- (C_Timer.NewTicker), which runs only while +Combat or -Combat shows. Each line has an animation group of its own (UISharedDocumentation.lua): No
@@ -56,9 +61,11 @@ local _, ns = ...
 -- This follows the No Target Indicator and the combat text of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoL/Submodules/GroupTools.lua:913-1064 and Submodules/CombatText.lua:244-256, 431-526): his words, his second of delay and his 3 seconds
 -- between sounds, and the colour of No target.
--- While test mode is on (TestMode.lua), +Combat, No target with Low health under it, and -Combat (as -Combat  0:42 while Fight length on
--- -Combat is on) show in turn, two seconds each, while their rows are on, and count in no number of /flatui status (ns.CombatCuesTestStep);
--- +Combat and -Combat play no sound there.
+-- While test mode is on (TestMode.lua), +Combat, No target with Low health under it (and Low mana under that for a mana user), and -Combat (as
+-- -Combat  0:42 while Fight length on -Combat is on) show in turn, two seconds each, while their rows are on, whatever Only in a fight says, and
+-- count in no number of /flatui status (ns.CombatCuesTestStep); +Combat and -Combat play no sound there. /flatui combat test plays the same
+-- round once, quietly, out of a fight while test mode is off (ns.CombatCuesTestRound). Setup's picture of the alerts (mock-combat-alerts,
+-- SetupDrawChat.lua) takes the words of the lines from ns.CombatCueWords.
 -- Picking a sound in No target sound, Entering combat sound or Leaving combat sound plays it once (ns.CombatCueSoundPicked, the rows' changed
 -- handler in Config.lua, so Core.lua calls it for a change made with ns.Set), only while the options window shows (ns.PanelShown) and out of a
 -- fight; None plays nothing.
@@ -72,17 +79,17 @@ local LIFE, FADE_FROM, STEP, DELAY, SOUND_GAP, HEIGHT = 1.9, 1.3, 0.05, 1, 3, 25
 -- takes to settle.
 local BREATHE_TO, BREATHE_TIME, POP_FROM, POP_TIME = 0.55, 0.6, 1.3, 0.15
 -- The box of the movers (Movers.lua): its name and size, the units between its middle and each line, and where it is from the middle of the
--- screen when the movers give no spot.
-local MOVER, WIDTH, TALL, GAP, X, Y = "FlatUICombatCues", 200, 60, 2, 0, 100
+-- screen when the movers give no spot. The box reaches from +Combat down to Low mana at their 100% size.
+local MOVER, WIDTH, TALL, GAP, X, Y = "FlatUICombatCues", 200, 170, 2, 0, 100
 -- The words of each line: the game's own names for them, in the order its combat text tries them, then the words when the client has neither.
 -- Low health and Low mana take the words of the game's own HEALTH_LOW and MANA_LOW messages, in the order it tries them
 -- (Blizzard_CombatText/Shared/CombatText.lua:284-288).
 local WORDS = { enter = { "COMBAT_TEXT_ENTERING_COMBAT", "ENTERING_COMBAT", "+Combat" }, leave = { "COMBAT_TEXT_LEAVING_COMBAT", "LEAVING_COMBAT", "-Combat" },
 	health = { "COMBAT_TEXT_HEALTH_LOW", "HEALTH_LOW", "Low health" }, mana = { "COMBAT_TEXT_MANA_LOW", "MANA_LOW", "Low mana" } }
 local NO_TARGET = "No target"
--- The rows of each line's colour and size. Low health and Low mana are the size of No target.
+-- The rows of each line's colour and size. Low health and Low mana are the size of No target, each in its own colour.
 local LOOKS = { enter = { "combatEnterColour", "combatStateSize" }, leave = { "combatLeaveColour", "combatStateSize" }, warn = { "noTargetColour", "noTargetSize" },
-	low = { "lowColour", "noTargetSize" } }
+	low = { "lowColour", "noTargetSize" }, mana = { "lowManaColour", "noTargetSize" } }
 -- The share of health or mana under which Low health or Low mana shows (CombatTextConstants.lua:12-13), the mana power type
 -- (Enum.PowerType.Mana), the two lines in the order they stand under No target, and the player's events that change them: health, mana, the
 -- power type (a druid's form) and death.
@@ -178,6 +185,14 @@ end
 local function Words(kind)
 	local words = WORDS[kind]
 	return Global(words[1]) or Global(words[2]) or words[3]
+end
+
+-- The words of a line (enter, leave, health or mana) for setup's picture of the alerts (SetupDrawChat.lua).
+function ns.CombatCueWords(kind)
+	if WORDS[kind] then
+		return Words(kind)
+	end
+	return nil
 end
 
 -- The font object the lines are made on: the game's combat font where the client has it, else its large number font.
@@ -544,7 +559,7 @@ local function LookLow()
 	for index, kind in ipairs(LOW_KINDS) do
 		local line = S.low[kind].line
 		line:SetText(Words(kind))
-		Look(line, "low")
+		Look(line, kind == "mana" and "mana" or "low")
 		line:ClearAllPoints()
 		line:SetPoint("TOP", S.frame, "CENTER", 0, -GAP - step * index)
 	end
@@ -572,14 +587,16 @@ local function ManaAlpha(holder, curve)
 	holder:SetAlpha(UnitPowerPercent("player", MANA, false, curve))
 end
 
--- One line: its holder's opacity from the player's health or mana, the line hidden while the row is off, the player is plainly dead or a ghost, and
--- for mana while the power is not plainly mana. A refusal of the game leaves that line off and is noted for the status.
+-- One line: its holder's opacity from the player's health or mana, the line hidden while the row is off, the player is plainly dead or a ghost,
+-- out of a fight while Only in a fight is on, and for mana while the power is not plainly mana. A refusal of the game leaves that line off and is
+-- noted for the status.
 local function PaintLow(kind)
 	local rec = S.low and S.low[kind]
 	if not rec or S.lowSampled then
 		return
 	end
-	local curve = LowWanted() and not S.lowRefused and Ask(UnitIsDeadOrGhost, "player") ~= true and LowCurve()
+	local fight = Opt("lowFight") ~= true or S.fighting
+	local curve = LowWanted() and fight and not S.lowRefused and Ask(UnitIsDeadOrGhost, "player") ~= true and LowCurve()
 	local on = false
 	if curve and kind == "health" then
 		on = pcall(HealthAlpha, rec.holder, curve)
@@ -818,10 +835,10 @@ Run = function(fn)
 	end
 end
 
--- A refresh: a changed row, the page, the profile, the module stopped. Nothing is read of the game while both rows are off.
+-- A refresh: a changed row, the page, the profile, the module stopped. Nothing is read of the game while the three rows are off.
 local function Apply()
 	local flash, warn = FlashWanted(), WarnWanted()
-	if flash or warn then
+	if flash or warn or LowWanted() then
 		S.fighting = InFight()
 		-- A fight the events did not start here (a reload in one) has no known length.
 		if not S.fighting then
@@ -851,6 +868,10 @@ end
 ns.AddEvent(KEY, "PLAYER_REGEN_DISABLED", function()
 	S.fighting = true
 	S.fightAt = Now()
+	-- Only in a fight: Low health and Low mana start to follow health and mana now, and stop as the fight ends.
+	if LowWanted() then
+		Run(PaintBoth)
+	end
 	if FlashWanted() or WarnWanted() then
 		Run(function()
 			Flash("enter")
@@ -867,6 +888,9 @@ ns.AddEvent(KEY, "PLAYER_REGEN_ENABLED", function()
 	local length = now and at and now >= at and now - at or nil
 	if length then
 		S.lastFight = length
+	end
+	if LowWanted() then
+		Run(PaintBoth)
 	end
 	if WarnWanted() then
 		Run(ReadRole)
@@ -931,6 +955,9 @@ ns.AddStatus(KEY, function()
 		elseif S.manaRefused then
 			lines[#lines + 1] = "Low mana warning: the game would not give your mana through a curve, so Low mana does not show."
 		end
+		if not S.lowRefused and Opt("lowFight") == true then
+			lines[#lines + 1] = "Low health warning: only in a fight."
+		end
 	end
 	return lines
 end)
@@ -955,11 +982,12 @@ local function HideSample()
 	end
 	if S.lowSampled then
 		S.lowSampled = nil
-		PaintLow("health")
+		PaintBoth()
 	end
 end
 
-function ns.CombatCuesTestStep()
+-- One step; quiet: one of the round of /flatui combat test, which plays no sound.
+local function TestStep(quiet)
 	if S.fighting then
 		return
 	end
@@ -981,16 +1009,21 @@ function ns.CombatCuesTestStep()
 				Place()
 				Shown()
 				local mode = ns.TestMode
-				if mode and mode.Sound("combatcues") then
+				if not quiet and mode and mode.Sound("combatcues") then
 					Sound()
 				end
 			end
-			-- Low health, whole, under the sample No target, until the next step paints it again.
+			-- Low health, whole, under the sample No target, and Low mana under it for a mana user, until the next step paints them again.
 			if LowWanted() and MakeLow() then
-				local rec = S.low.health
 				LookLow()
-				ShowLow(rec, true)
-				pcall(rec.holder.SetAlpha, rec.holder, 1)
+				for _, kind in ipairs(LOW_KINDS) do
+					local rec = S.low[kind]
+					local shown = kind == "health" or Ask(UnitPowerType, "player") == MANA
+					ShowLow(rec, shown)
+					if shown then
+						pcall(rec.holder.SetAlpha, rec.holder, 1)
+					end
+				end
 				S.lowSampled = true
 				Place()
 				Shown()
@@ -1000,14 +1033,51 @@ function ns.CombatCuesTestStep()
 	end)
 end
 
+function ns.CombatCuesTestStep()
+	S.round = nil
+	TestStep(false)
+end
+
 function ns.CombatCuesTestEnd()
-	S.testStep = nil
+	S.testStep, S.round = nil, nil
 	Run(function()
 		HideSample()
 		if not S.fighting then
 			EndFlash()
 		end
 	end)
+end
+
+-- /flatui combat test (CombatText.lua): one quiet round of the alerts as test mode shows them, +Combat, No target with Low health (and Low mana)
+-- under it, and -Combat, two seconds apart (C_Timer.After), then gone. Only out of a fight and while test mode is off; a fight, or test mode
+-- starting, ends the round. False when it did not start.
+function ns.CombatCuesTestRound()
+	local mode = ns.TestMode
+	if not On() or S.fighting or InFight() or (mode and mode.IsOn()) or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
+		return false
+	end
+	local token = {}
+	S.round, S.testStep = token, nil
+	local function At(n)
+		if S.round ~= token then
+			return
+		end
+		if n > 3 or S.fighting or (mode and mode.IsOn()) then
+			S.round = nil
+			if not (mode and mode.IsOn()) then
+				ns.CombatCuesTestEnd()
+			end
+			return
+		end
+		TestStep(true)
+		if not pcall(C_Timer.After, 2, function()
+			At(n + 1)
+		end) then
+			ns.CombatCuesTestEnd()
+		end
+	end
+	At(1)
+	return true
 end
 
 if ns.TestMode then

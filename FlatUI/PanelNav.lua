@@ -146,7 +146,8 @@ end
 
 -- The switch --------------------------------------------------------------------------------------------
 
--- A switch 32 by 16: the track in the accent while it is on, and the knob at the end. onClick runs on a click.
+-- A switch 32 by 16: the track in the accent while it is on, and the knob at the end, which slides there (kit.Slider). onClick runs on a click; the
+-- click sound is its caller's (Panel.lua's Toggle plays kit.SwitchClick), so a switch set by a change elsewhere slides with no sound.
 function Nav.Switch(parent, onClick)
 	local frame = kit.Frame(parent)
 	frame:SetSize(32, 16)
@@ -154,23 +155,25 @@ function Nav.Switch(parent, onClick)
 	track:SetAllPoints(frame)
 	local knob = kit.Fill(frame, "ARTWORK")
 	knob:SetSize(12, 12)
+	local Place = kit.Slider(knob, frame, frame)
 	local object = { frame = frame, on = false }
 	local function Paint()
 		Look.Solid(track, object.on and "accent" or "line")
 		Look.Solid(knob, object.on and "on-accent" or "text-dim")
 	end
 	kit.Painted(Paint)
-	function object.Set(on)
+	-- instant puts the knob at its end at once, as the first Set does: the header's switch that now shows another module's setting.
+	function object.Set(on, instant)
 		on = on == true
 		if object.placed == nil or object.on ~= on then
+			Place(on, instant or object.placed == nil)
 			object.on, object.placed = on, true
-			knob:ClearAllPoints()
-			knob:SetPoint(on and "RIGHT" or "LEFT", frame, on and "RIGHT" or "LEFT", on and -2 or 2, 0)
 			Paint()
 		end
 	end
 	kit.Clickable(frame, onClick)
-	object.Set(false)
+	Place(false, true)
+	Paint()
 	return object
 end
 
@@ -457,12 +460,13 @@ function Nav.Header(right, host)
 	head.switch = switch
 	-- The page shown, and the words under its title. A page with no switch of its own shows none.
 	function head.Set(entry, text)
+		local was = head.item
 		head.item = entry and entry.switchItem or nil
 		sub:SetText(text or "")
 		box:SetShown(head.item ~= nil)
 		if head.item then
 			label:SetText(head.item.label)
-			switch.Set(ns.Get(head.item.path) == true)
+			switch.Set(ns.Get(head.item.path) == true, head.item ~= was)
 		end
 	end
 	function head.Update()

@@ -1,22 +1,26 @@
 local ADDON_NAME, ns = ...
 
--- Cursor ring (general.cursorRing on the Flat UI page): a ring of the addon's own around the mouse pointer, so it is found at a glance, always or
--- only in combat, in the size and colour of its rows. It is one frame of the addon's own on UIParent, in the TOOLTIP strata, that takes no mouse
--- and holds one texture, Media/Ring.tga (a white ring, 128 by 128, its edges 61 and 51 pixels from the centre, tinted with SetVertexColor). The
--- frame is made the first time the ring shows. While it is shown, its OnUpdate script reads the cursor (GetCursorPosition, in screen pixels:
--- InputDocumentation.lua:30-38) and moves the frame only when the cursor or the scale has moved; while it is hidden it has no script, so nothing
--- runs. It hides with UIParent. In combat only, a frame of the addon's own listens to PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED, and only
--- while that choice is made; the ring then fades in over FADE_IN seconds as a fight starts and out over FADE_OUT as it ends, by the alpha of its
--- own frame (SetAlpha) in the same OnUpdate, and is hidden with no script once it has faded out. A ring of Always, or one whose row goes off,
--- shows and hides at once. While the player turns the camera with the mouse (IsMouselooking, the apis.yaml of wowless for wowf lists it; only a
--- plain true counts), the game hides its cursor, so the ring and its swipes go to alpha 0 and stay where they are, and come back on the cursor as
--- it is let go. Nothing of the game is changed. Not a module: Core.lua applies the rows at login and when the profile changes, and
--- the rows call ns.CursorRingChanged themselves.
+-- Cursor ring (general.cursorRing on the Flat UI page): a ring of the addon's own around the mouse pointer, so it is found at a glance, always,
+-- only in combat or only when the mouse is shaken, in the size and colour of its rows. It is one frame of the addon's own on UIParent, in the
+-- TOOLTIP strata, that takes no mouse and holds one texture, Media/Ring.tga (a white ring, 128 by 128, its edges 61 and 51 pixels from the centre,
+-- tinted with SetVertexColor). The frame is made the first time the ring shows. While it is shown, its OnUpdate script reads the cursor
+-- (GetCursorPosition, in screen pixels: InputDocumentation.lua:30-38) and moves the frame only when the cursor or the scale has moved; while it is
+-- hidden it has no script, so nothing runs. It hides with UIParent. In combat only, a frame of the addon's own listens to PLAYER_REGEN_DISABLED and
+-- PLAYER_REGEN_ENABLED, and only while that choice is made; the ring then fades in over FADE_IN seconds as a fight starts and out over FADE_OUT as
+-- it ends, by the alpha of its own frame (SetAlpha) in the same OnUpdate, and is hidden with no script once it has faded out. A ring of Always, or
+-- one whose row goes off, shows and hides at once. While the player turns the camera with the mouse (IsMouselooking, the apis.yaml of wowless for
+-- wowf lists it; only a plain true counts), the game hides its cursor, so the ring and its swipes go to alpha 0 and stay where they are, and come
+-- back on the cursor as it is let go. Nothing of the game is changed. Not a module: Core.lua applies the rows at login and when the profile
+-- changes, and the rows call ns.CursorRingChanged themselves.
 -- Grow when you shake the mouse (general.cursorRingShake, on): the same OnUpdate watches the cursor's x. Each time it goes back the other way by at
 -- least SHAKE_STEP of the interface's units (in the cursor's pixels, times UIParent's effective scale) from the farthest it went, that is a turn;
 -- SHAKE_TURNS turns within SHAKE_WINDOW seconds swell the ring to 1 + GROW times its size over GROW_UP seconds and ease it back by GROW_END, by the
 -- scale of its own frame (SetScale), so its swipes, its children, grow with it and Follow keeps its centre on the cursor. No new swell starts
 -- while one runs, and the scale is 1 again when it ends or the ring hides.
+-- When you shake the mouse (the third choice of Cursor ring): the ring is shown at alpha 0 with its OnUpdate, so the shake is watched whatever
+-- Grow when you shake the mouse says, but not moved while unseen. A shake fades it in over FADE_IN, already swollen (the swell starts at its
+-- top), it eases back to its size, and SHAKE_HOLD seconds later it fades out over FADE_OUT; a shake during the fade-out swells it again. It has
+-- no swipes (no cast event is heard for it), and test mode shows it whole.
 -- Cast progress on the ring (general.cursorRingCast, on) and Global cooldown on the ring (general.cursorRingGcd, on), each with a colour row: two
 -- Cooldown frames of the ring's own (CooldownFrameTemplate, which sets all points and hides them: Blizzard_FrameXMLUtil/Mainline/Cooldown.xml:3),
 -- made the first time one of the rows is on while the ring shows. Each draws Media/Ring.tga as its swipe (SetSwipeTexture) in its row's colour
@@ -38,7 +42,7 @@ local ADDON_NAME, ns = ...
 -- cooldown every 3 seconds (ns.CursorRingSample), timed by the ring's own plain numbers (SetCooldown with GetTime).
 
 local TEXTURE = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Ring.tga"
-local MODES = { always = true, combat = true }
+local MODES = { always = true, combat = true, shake = true }
 local FIGHT_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
 -- The player's cast events, those of a channel, those of a cast or channel that has ended, and the event of the cooldowns.
 local CAST_EVENTS = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_DELAYED",
@@ -57,7 +61,8 @@ local MOST_REFUSED = 3
 local FADE_IN, FADE_OUT = 0.15, 0.3
 -- Shaking the mouse: the least way back that is a turn, in the interface's units; the turns and the seconds they fall within; how much bigger the
 -- ring grows, the seconds it takes to grow and the second it is back by.
-local SHAKE_STEP, SHAKE_TURNS, SHAKE_WINDOW = 8, 4, 0.5
+-- SHAKE_HOLD: the seconds a ring of When you shake the mouse stays at its own size before it fades out.
+local SHAKE_STEP, SHAKE_TURNS, SHAKE_WINDOW, SHAKE_HOLD = 8, 4, 0.5, 0.6
 local GROW, GROW_UP, GROW_END = 1.5, 0.15, 0.6
 
 local ring
@@ -83,7 +88,8 @@ local hearing = { cast = false, gcd = false }
 local gcdExists
 local stopped
 -- The shake: shake.edge, the farthest x the cursor went this way, and shake.way, the way (1 or -1, nil before the first move); shake.turns, the
--- times of the last turns; grow, when the swell began, nil while none runs; grownScale, the scale last written on the frame.
+-- times of the last turns; shake.hold, for When you shake the mouse, when the ring that showed for a swell fades out (nil: at once, once no swell
+-- runs); grow, when the swell began, nil while none runs; grownScale, the scale last written on the frame.
 local shake = { turns = {} }
 local grow
 local grownScale = 1
@@ -115,7 +121,12 @@ local function Wanted()
 	if broken or mode == nil then
 		return false
 	end
-	return mode == "always" or fighting or Testing()
+	return mode == "always" or mode == "shake" or fighting or Testing()
+end
+
+-- True for When you shake the mouse out of test mode: the ring is shown but unseen (alpha 0) until a shake, so its OnUpdate can watch for one.
+local function Unseen()
+	return Mode() == "shake" and not Testing()
 end
 
 -- Puts the centre of the ring on the cursor.
@@ -176,15 +187,18 @@ end
 
 -- Ends the swell and forgets the shake.
 local function Settle(frame)
-	grow, shake.edge, shake.way = nil, nil, nil
+	grow, shake.edge, shake.way, shake.hold = nil, nil, nil, nil
 	shake.turns = {}
 	Scale(frame, 1)
 end
 
 -- Watches the cursor's x for a shake, starts a swell after SHAKE_TURNS turns within SHAKE_WINDOW seconds, and writes the scale of a swell under
--- way: up over GROW_UP seconds, then eased back to 1 by GROW_END.
+-- way: up over GROW_UP seconds, then eased back to 1 by GROW_END. When you shake the mouse watches whatever Grow when you shake the mouse says:
+-- a swell fades the ring in, already at its biggest when it was unseen, and SHAKE_HOLD seconds after the swell it fades out again; a shake
+-- during the fade-out swells it again.
 local function Shake(frame, now)
-	if ns.Get("general.cursorRingShake") ~= true then
+	local unseen = Unseen()
+	if not unseen and Mode() ~= "shake" and ns.Get("general.cursorRingShake") ~= true then
 		if grow or grownScale ~= 1 then
 			Settle(frame)
 		end
@@ -213,16 +227,28 @@ local function Shake(frame, now)
 			turns[#turns + 1] = now
 			shake.turns = turns
 			if #turns >= SHAKE_TURNS and not grow then
-				grow, shake.turns = now, {}
+				grow, shake.turns, shake.hold = now, {}, nil
+				if unseen then
+					-- A ring nobody saw appears at its biggest and eases back, as a pointer that is found does.
+					if fadeAlpha == 0 and not fade then
+						grow = now - GROW_UP
+					end
+					Fade(1, FADE_IN)
+				end
 			end
 		end
 	end
 	if not grow then
+		if unseen and fadeAlpha > 0 and not fade and not (shake.hold and now < shake.hold) then
+			shake.hold = nil
+			Fade(0, FADE_OUT)
+		end
 		return
 	end
 	local t = now - grow
 	if not ns.Finite(t) or t >= GROW_END or t < 0 then
 		grow = nil
+		shake.hold = unseen and now + SHAKE_HOLD or nil
 		Scale(frame, 1)
 		return
 	end
@@ -248,16 +274,20 @@ local function Tick(frame)
 	local now = Looking()
 	if now ~= looking then
 		looking = now
-		-- Let go, the ring goes to the cursor at once, and a shake starts afresh.
+		-- Let go, the ring goes to the cursor at once, and a shake starts afresh; a ring of When you shake the mouse is unseen again.
 		lastX = nil
 		Settle(frame)
+		if Unseen() then
+			fade, fadeAlpha = nil, 0
+		end
 	end
 	if fade then
 		local share = fade.duration > 0 and (GetTime() - fade.start) / fade.duration or 1
 		if not ns.Finite(share) or share >= 1 then
 			fadeAlpha = fade.to
 			fade = nil
-			if fadeAlpha == 0 then
+			-- Faded out, it hides, but for a ring of When you shake the mouse, which stays shown, unseen, to watch for the next shake.
+			if fadeAlpha == 0 and Mode() ~= "shake" then
 				Hidden(frame)
 				return
 			end
@@ -272,7 +302,10 @@ local function Tick(frame)
 		if ns.Finite(time) then
 			Shake(frame, time)
 		end
-		Follow(frame)
+		-- An unseen ring is not moved; it goes to the cursor in the frame it is seen again.
+		if shownAlpha ~= 0 then
+			Follow(frame)
+		end
 	end
 end
 
@@ -327,12 +360,13 @@ local function GcdExists()
 	return gcdExists
 end
 
+-- The swipes are off for a ring of When you shake the mouse, which is mostly unseen, so no cast event is heard for it.
 local function CastOn()
-	return ns.Get("general.cursorRingCast") == true and refused.cast < MOST_REFUSED
+	return ns.Get("general.cursorRingCast") == true and refused.cast < MOST_REFUSED and Mode() ~= "shake"
 end
 
 local function GcdOn()
-	return ns.Get("general.cursorRingGcd") == true and refused.gcd < MOST_REFUSED and GcdExists()
+	return ns.Get("general.cursorRingGcd") == true and refused.gcd < MOST_REFUSED and Mode() ~= "shake" and GcdExists()
 end
 
 -- The Cooldown frame of a swipe, made once on the ring.
@@ -566,16 +600,17 @@ end
 
 -- The ring -----------------------------------------------------------------------------------------------------------------------------------------
 
--- In combat only the ring fades in and out; Always and a row turned off show and hide it at once.
+-- In combat only the ring fades in and out; Always and a row turned off show and hide it at once. When you shake the mouse shows it unseen,
+-- at alpha 0, and its shakes fade it in and out (Shake); in test mode it shows whole.
 local function Show(on)
-	local fades = Mode() == "combat"
+	local fades, unseen = Mode() == "combat", Unseen()
 	if on then
 		local frame = Make()
 		Look()
 		if not frame:IsShown() then
 			lastX, lastY, lastScale = nil, nil, nil
 			looking, shownAlpha = Looking(), nil
-			fadeAlpha, fade = fades and 0 or 1, nil
+			fadeAlpha, fade = (fades or unseen) and 0 or 1, nil
 			if fades then
 				Fade(1, FADE_IN)
 			end
@@ -585,12 +620,14 @@ local function Show(on)
 			end
 			frame:SetScript("OnUpdate", Step)
 			frame:Show()
+		elseif unseen then
+			-- Nothing at once: a ring that test mode or another choice showed fades out in Shake, once no fade in, swell or hold keeps it.
 		elseif not fades then
 			-- Always shows the ring whole at once, also one that was fading.
 			fade, fadeAlpha = nil, 1
 			Alpha(frame)
-		elseif fade and fade.to == 0 then
-			-- A fight that starts again while the ring fades out brings it back from where it is.
+		elseif (fade and fade.to == 0) or (not fade and fadeAlpha < 1) then
+			-- A fight that starts again while the ring fades out, or a ring left unseen by When you shake the mouse, comes back from where it is.
 			Fade(1, FADE_IN)
 		end
 	elseif ring and ring:IsShown() then
@@ -720,6 +757,8 @@ function ns.CursorRingStatus()
 		line = "Cursor ring: on, always."
 	elseif mode == "combat" then
 		line = "Cursor ring: on, in combat only."
+	elseif mode == "shake" then
+		line = "Cursor ring: on, when you shake the mouse."
 	else
 		return nil
 	end

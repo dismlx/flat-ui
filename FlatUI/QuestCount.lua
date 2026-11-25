@@ -6,7 +6,8 @@ local _, ns = ...
 -- C_QuestLog.GetMaxNumQuestsCanAccept, else MAX_QUESTLOG_QUESTS or MAX_QUESTS; with no most known, the count alone. The text is a font string
 -- of the addon's own on the heading, in the font of the heading's text and its colour, red while the log is full. With Warn as the log fills
 -- (hud.trackerCountWarn, on by default) the count is amber with one free slot, and when the log becomes full in play (from the second read after
--- login or a reload) it pulses twice and chat says once "Flat UI: your quest log is full (20/20).". Nothing of the heading is
+-- login or a reload) it pulses twice and chat says once "Flat UI: your quest log is full (20/20).". A jump of more than two quests between two
+-- reads never warns, nor does a first read of 0 quests just after entering the world, so a log that loads late stays quiet. Nothing of the heading is
 -- changed: its Text is read for the font and the colour (GetFont and GetTextColor), and its MinimizeButton for the place. The text is made and
 -- placed out of combat, or on a heading the game does not protect; in a fight only its text, colour and font are set, and it is shown or hidden.
 -- It is redrawn on the next frame after the quest log changes, and only while a count can be shown, so a client without the quest log calls
@@ -32,6 +33,9 @@ local GOLD = { 1, 0.82, 0 }
 local AMBER = { 1, 0.6, 0.15 }
 local PULSE = { time = 0.6, count = 2, low = 0.35 }
 local FILLED = "Flat UI: your quest log is full (%d/%d)."
+-- The most quests one read may add and still count as the log filling (an accept adds one, a shared chain two), and the seconds after entering
+-- the world in which a read of 0 quests is taken as a log that loads.
+local FILL_STEP, LOAD_WAIT = 2, 2
 local NOTE = "Quest count: the objective tracker has no Quests heading here, so there is no count."
 local ANCHOR = "ANCHOR_LEFT"
 local HINT, FIGHT_HINT = { "Click: open the quest log" }, { "Click: open the quest log, after the fight" }
@@ -39,7 +43,8 @@ local LATER = "Flat UI: the quest log opens when the fight ends."
 
 -- text: the font string; button: the button over it; header: the heading it is on; queued: a redraw waits for the next frame; waiting: a make
 -- waits for the end of a fight; last: the quests of the last read, nil before the first after login or a reload and while the row is off;
--- pulse: the frame of Flat UI's own that runs the pulse, shown only while it runs, and pulsed: its seconds so far.
+-- pulse: the frame of Flat UI's own that runs the pulse, shown only while it runs, and pulsed: its seconds so far; entered: when the player last
+-- entered the world (PLAYER_ENTERING_WORLD); seen: a read has seen a quest since login or a reload.
 local S = {}
 
 local function Wanted()
@@ -266,11 +271,13 @@ local function Pulse()
 	S.pulse:Show()
 end
 
--- True when the log became full since the last read, with Warn as the log fills on: the first read after login or a reload never warns.
+-- True when the log became full since the last read, with Warn as the log fills on: the first read after login or a reload never warns, and
+-- neither does a log that grows by more than FILL_STEP quests in one read, which is a log that loads, not quests accepted.
 local function Filled(quests, most)
 	local last = S.last
 	S.last = quests
 	return ns.Get(KEY .. ".trackerCountWarn") == true and last ~= nil and most ~= nil and last < most and quests >= most
+		and quests - last <= FILL_STEP
 end
 
 local function Update()
@@ -285,8 +292,14 @@ local function Update()
 		ns.ClearNote(KEY, NOTE)
 		return
 	end
-	-- Warn as the log fills: one line in chat as the log becomes full, also while the heading is not there, and a pulse of the count below.
-	local filled = Filled(quests, most)
+	-- Warn as the log fills: one line in chat as the log becomes full, also while the heading is not there, and a pulse of the count below. A read
+	-- of 0 quests within LOAD_WAIT seconds of entering the world, before any read has seen a quest, may be a log still loading: it is not taken
+	-- as the first read (S.last stays nil).
+	local loading = quests == 0 and S.last == nil and not S.seen and ns.Finite(S.entered) and GetTime() - S.entered < LOAD_WAIT
+	if quests > 0 then
+		S.seen = true
+	end
+	local filled = not loading and Filled(quests, most)
 	if filled then
 		print(FILLED:format(quests, most))
 	end
@@ -353,6 +366,9 @@ local function Changed()
 	end
 end
 
+ns.AddEvent(KEY, "PLAYER_ENTERING_WORLD", function()
+	S.entered = GetTime()
+end)
 for _, event in ipairs({ "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "PLAYER_ENTERING_WORLD" }) do
 	ns.AddEvent(KEY, event, Changed)
 end

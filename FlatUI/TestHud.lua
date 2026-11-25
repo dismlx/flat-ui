@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Test mode's stand-ins for the bars, auras, rolls and the sample plate (spec section 1.3, Part C), and the cursor ring's samples. Each stand-in is
+-- Test mode's stand-ins for the bars, auras, rolls, the timer bars and the sample plate (spec section 1.3, Part C), and the cursor ring's samples. Each stand-in is
 -- a frame of Flat UI's own that TestMode.lua makes, places and shows (TM.StandIn): at the place, scale, strata and level of a game frame that is
 -- hidden now, while test mode is on, its module is on and the real frame does not show. It is painted from the rows by the painters the setup
 -- drawings share (ns.DrawCasts of SetupDrawCasts.lua, ns.DrawHud of SetupDrawHud.lua, ns.SetupDrawPlates of SetupDrawPlates.lua), and its moving
@@ -28,6 +28,10 @@ local _, ns = ...
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
 --   shows; their timers drain over 10 seconds and loop, with the seconds of a 60 second roll counting down over them, red under 10, while Seconds
 --   left on rolls is on. They stand in for UIParent, so their place is the box's.
+--   Timer bars: a breath timer at the top of MirrorTimerContainer, where the game's first timer shows, while none of its timers shows (Edit Mode's
+--   empty bars count as shown): it drains over 30 seconds and loops, with "Breath" centred under it and the time left at its right ("0:30"), red
+--   under 10, as Hud.lua draws the real one with Breath and fatigue timers and Seconds on the timers on, or in the game's look while the first is
+--   off (ns.DrawHud.Mirror, SetupDrawHud.lua).
 --   The sample nameplate: an enemy plate with its cast bar, auras and quest mark with its kill count (while Quest mark on enemies you need for a
 --   quest is on and the marks are not left to Questie), and for a warrior the Overpower icon with its swipe over the auras, at the middle of the
 --   screen, 160 units up, with a dim Sample nameplate under it, as plates have no place of their own. Its cast fills, and it takes the threat states
@@ -93,6 +97,8 @@ local AURA_GOLD = { 1, 0.82, 0 }
 -- the seconds its timer runs, and the items, those of mock-loot.
 local ROLL_BOX, ROLL_STEP, ROLL_W, ROLL_TIME = "FlatUILootRolls", 100, 277, 10
 local ROLL_ITEMS = { { icon = 2, name = "Sturdy Shield", quality = 2 }, { icon = 3, name = "Royal Crown", quality = 3 } }
+-- Timer bars: the seconds of the sample breath timer, which drains and loops.
+local MIRROR_TIME = 30
 -- The sample plate: how far above the middle of the screen, its cast's round, the seconds of each threat colour and the colours in turn.
 local PLATE_UP, PLATE_ROUND, PLATE_CAST, THREAT_EVERY = 160, 3, 2.5, 3
 local THREAT = { "threatGood", "threatTransition", "threatBad" }
@@ -109,7 +115,8 @@ local function Class()
 	return nil
 end
 
--- Where a bar is in its round at `now`: its state, the share of the bar filled, the seconds left and the seconds into the state.
+-- Where a bar is in its round at `now`: its state, the share of the bar filled, the seconds left, the seconds into the state and the seconds the
+-- state runs (the whole cast, for Total cast time too).
 local function Phase(round, offset, now)
 	local total = 0
 	for _, step in ipairs(round) do
@@ -122,15 +129,15 @@ local function Phase(round, offset, now)
 			local run = math.min(1, t / step[2])
 			local state = step[1]
 			if state == "channel" then
-				return state, 1 - run, step[2] * (1 - run), t
+				return state, 1 - run, step[2] * (1 - run), t, step[2]
 			elseif state == "interrupted" then
-				return state, 1, 0, t
+				return state, 1, 0, t, step[2]
 			end
-			return state, run, step[2] * (1 - run), t
+			return state, run, step[2] * (1 - run), t, step[2]
 		end
 		t = t - length
 	end
-	return round[1][1], 0, round[1][2], 0
+	return round[1][1], 0, round[1][2], 0, round[1][2]
 end
 
 local function Now()
@@ -153,8 +160,8 @@ end
 
 local function CastStandIn(spec)
 	local round = ROUNDS[spec.round or (spec.opt == "player" and "player" or "enemy")]
-	local function Shows(holder, state, part, left, into)
-		ns.DrawCasts.CastProgress(holder.row, state, part, left, holder.row.state ~= state and CastName(spec, state) or nil)
+	local function Shows(holder, state, part, left, into, total)
+		ns.DrawCasts.CastProgress(holder.row, state, part, left, holder.row.state ~= state and CastName(spec, state) or nil, total)
 		holder.row.bar:SetAlpha(state == "interrupted" and (0.45 + 0.55 * math.abs(math.cos(into * 6))) or 1)
 	end
 	TM.StandIn({
@@ -173,9 +180,9 @@ local function CastStandIn(spec)
 			holder.row.bar:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
 		end,
 		Paint = function(holder, w, h)
-			local state, part, left, into = Phase(round, spec.offset, Now())
+			local state, part, left, into, total = Phase(round, spec.offset, Now())
 			ns.DrawCasts.PaintCast(holder.row, spec.opt, state, part, w, h, CastName(spec, state), spec.kick)
-			Shows(holder, state, part, left, into)
+			Shows(holder, state, part, left, into, total)
 		end,
 		Animate = function(holder, _, now)
 			Shows(holder, Phase(round, spec.offset, now))
@@ -319,7 +326,8 @@ local function AuraStandIn(id, game, label, list, filter)
 			end
 		end,
 		Paint = function(holder)
-			local white = ns.Get("hud.enabled") == true and ns.Get("hud.durationColour") == "white"
+			local colour = ns.Get("hud.durationColour")
+			local white = ns.Get("hud.enabled") == true and (colour == "white" or colour == "warn")
 			for index, aura in ipairs(list) do
 				local cell = holder.cells[index]
 				ns.DrawHud.PaintAura(cell, aura.kind)
@@ -401,6 +409,48 @@ TM.StandIn({
 	end,
 	Animate = function(holder, _, now)
 		RollTimers(holder, now)
+	end,
+})
+
+-- Timer bars -------------------------------------------------------------------------------------------------------------------------------------
+
+-- True while one of the game's breath, fatigue or feign death timers shows (MirrorTimerContainer.mirrorTimers, MirrorTimer.xml), Edit Mode's empty
+-- bars too; also while the timers cannot be read, so no sample stands over a real one.
+local function MirrorShown()
+	local container = _G.MirrorTimerContainer
+	if type(container) ~= "table" or ns.IsSecret(container) or ns.Forbidden(container) or type(ns.MoverShown) ~= "function" then
+		return true
+	end
+	local timers = container.mirrorTimers
+	if type(timers) ~= "table" or ns.IsSecret(timers) then
+		return true
+	end
+	for _, timer in pairs(timers) do
+		if type(timer) == "table" and not ns.IsSecret(timer) and ns.MoverShown(timer) == true then
+			return true
+		end
+	end
+	return false
+end
+
+TM.StandIn({
+	id = "mirror",
+	module = "hud",
+	game = "MirrorTimerContainer",
+	label = "Timer bars",
+	corner = "TOP",
+	real = MirrorShown,
+	Build = function(holder)
+		holder.mirror = ns.DrawHud.Mirror(holder)
+		holder.mirror.frame:SetPoint("TOP", holder, "TOP", 0, 0)
+	end,
+	Paint = function(holder)
+		ns.DrawHud.PaintMirror(holder.mirror)
+		ns.DrawHud.MirrorTime(holder.mirror, MIRROR_TIME - Now() % MIRROR_TIME, MIRROR_TIME)
+		return 206, 32
+	end,
+	Animate = function(holder, _, now)
+		ns.DrawHud.MirrorTime(holder.mirror, MIRROR_TIME - now % MIRROR_TIME, MIRROR_TIME)
 	end,
 })
 

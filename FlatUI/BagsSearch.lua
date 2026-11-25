@@ -53,8 +53,11 @@ local _, ns = ...
 -- Cannot use, Recipes you can learn, Consumables, Trade goods, Green and better and Epic and better, each with its term at the right; a pick
 -- types the term (the one typed now is ticked), and Clear, while a search is typed, clears it. Under a Recent header it lists the last RECENT (5)
 -- searches typed, newest first, the one typed now ticked, and Clear recent: a search is kept when Enter is pressed, when the box loses the keyboard
--- and when it is cleared (the cross, Clear, the bags closing), but not a quick search, in FlatUIDB.bags.recent for the account (ns.Account;
--- BagsData.lua resets only its v and chars), so they last between sessions. The menu belongs to the box's window, and closes with it.
+-- and when it is cleared (the cross, Clear, the bags closing), but not a quick search or one of fewer than two letters, in FlatUIDB.bags.recent
+-- for the account (ns.Account; BagsData.lua resets only its v and chars), so they last between sessions. The menu belongs to the box's window, and
+-- closes with it. Up and Down in a box that has the keyboard (OnArrowPressed, Recall) bring the recent searches back, newest first, and Down goes
+-- forward again to what was typed. The help and the short lines end with the bag search key as the client names it (B.Window.KeyName,
+-- BagsWindow.lua: GetBindingKey and GetBindingText), or how to bind one.
 -- The bag search key: Bindings.xml binds a click of FlatUIBagSearchButton (CLICK FlatUIBagSearchButton:LeftButton), a plain button of Flat UI's own
 -- made here as the file loads, a child of UIParent with no size and no point that hears the release only, as the bank key's (BagsBank.lua), named
 -- in the game's Key Bindings by the global BINDING_NAME_CLICK FlatUIBagSearchButton:LeftButton. It opens the bag window with the command hold, as
@@ -101,10 +104,11 @@ local HELP = {
 	"tip: looks in each item's tooltip: tip:stamina, tip:\"fire resistance\", tip:agility #boe.",
 	"For example: #boe q>=uncommon, !#junk mail, (cloth | leather) #gear.",
 	"Items that do not match are dimmed. Enter or Escape leaves the box, and the cross clears it.",
-	"Right-click the box for quick searches and your last five searches. A key under Flat UI in Key Bindings opens the bags with this box ready.",
+	"Right-click the box for quick searches and your last five searches. Up and Down bring back your last searches.",
+	"The bag search key opens the bags with this box ready.",
 }
 -- The tooltip of a box that holds a search, under its text.
-local SHORT = "The cross clears it. Right-click the box for quick searches and your recent ones."
+local SHORT = "The cross clears it. Right-click the box for quick searches and your recent ones; Up and Down bring them back."
 -- The quick searches of the box's right-click menu: what each line says and the term it types.
 local QUICK = {
 	{ "New items", "#new" },
@@ -951,11 +955,12 @@ local function Recent()
 	return nil
 end
 
--- Keeps a search the player typed as the newest of the recent ones: not an empty one or a quick search; one kept already moves to the front, and
--- the oldest past RECENT goes.
+-- Keeps a search the player typed as the newest of the recent ones: not one of fewer than two letters (a stray letter left in the box) or a quick
+-- search; one kept already moves to the front, and the oldest past RECENT goes.
 local function Remember(value)
 	value = Text(value)
-	if not value or not value:find("%S") or QUICK_TERMS[value] then
+	local letters = value and value:gsub("%s", "") or ""
+	if #letters < 2 or QUICK_TERMS[value] then
 		return
 	end
 	local db = ns.Account()
@@ -1022,8 +1027,23 @@ local function Typed(box)
 	end
 end
 
+-- The bag search key in the client's words (B.Window.KeyName, BagsWindow.lua: "Key: Ctrl-K"), or how to bind one.
+local function KeyLine()
+	local window = B.Window
+	local name = type(window) == "table" and window.KeyName or nil
+	local ok, line = false, nil
+	if type(name) == "function" then
+		ok, line = pcall(name, "CLICK FlatUIBagSearchButton:LeftButton")
+	end
+	if not (ok and type(line) == "string") then
+		return "Bind a key under Flat UI in Key Bindings."
+	end
+	return line
+end
+
 -- The grammar under the box, out of a fight only, as the tooltips of the bag window keep to, and only while the box is empty and not being typed
--- in, since it would lie over the top rows of the window, the slots a search lights. A box that holds a search gets two short lines instead.
+-- in, since it would lie over the top rows of the window, the slots a search lights. A box that holds a search gets short lines instead. Both end
+-- with the bag search key (KeyLine).
 local function Tip(box)
 	local tip = GameTooltip
 	if type(tip) ~= "table" or ns.Forbidden(tip) or Errands.Fighting() or Focused(box) then
@@ -1039,6 +1059,7 @@ local function Tip(box)
 			tip:AddLine(n == 1 and "1 item matches" or ("%d items match"):format(n), 1, 1, 1)
 		end
 		tip:AddLine(SHORT, DIM[1], DIM[2], DIM[3], true)
+		tip:AddLine(KeyLine(), DIM[1], DIM[2], DIM[3], true)
 		tip:Show()
 		return
 	end
@@ -1046,6 +1067,7 @@ local function Tip(box)
 	for index = 2, #HELP do
 		tip:AddLine(HELP[index], 1, 1, 1, true)
 	end
+	tip:AddLine(KeyLine(), 1, 1, 1, true)
 	tip:Show()
 end
 
@@ -1147,6 +1169,45 @@ local function Quick(box, owner)
 	end
 end
 
+-- Up and Down in a box that has the keyboard step through the recent searches (Recent), newest first, as the group finder's search box steps
+-- through its list (OnArrowPressed, Blizzard_GroupFinder/Mainline/LFGList.lua:3034-3040): Up brings back the last search, Up again the one before,
+-- and Down goes forward again, ending at what was typed before the first Up (own.typed). A recent search that is the text now is stepped over. The
+-- cursor goes to the end of the text. Typing starts from what is typed again (own.recall 0).
+local function Recall(box, key)
+	local own, list = boxes[box], Recent()
+	if not (own and list) or (key ~= "UP" and key ~= "DOWN") then
+		return
+	end
+	local at = math.min(own.recall or 0, #list)
+	if key == "UP" then
+		if at == 0 then
+			own.typed = text
+		end
+		local was = at
+		at = at + 1
+		while list[at] == text and at < #list do
+			at = at + 1
+		end
+		if list[at] == nil or list[at] == text then
+			at = was
+		end
+	elseif at > 0 then
+		at = at - 1
+		while at > 0 and list[at] == text do
+			at = at - 1
+		end
+	end
+	if at == (own.recall or 0) then
+		return
+	end
+	own.recall = at
+	Search.SetText(at == 0 and (own.typed or "") or list[at])
+	local ok, typed = pcall(box.GetText, box)
+	if ok and type(typed) == "string" then
+		pcall(box.SetCursorPosition, box, #typed)
+	end
+end
+
 -- A search box of the addon's own on parent, WIDTH by HEIGHT until the caller sizes and places it. It shows the shared text. owner: the window
 -- it is in ("bags", "bank"), for its right-click menu of quick searches.
 function Search.Box(parent, owner)
@@ -1174,11 +1235,15 @@ function Search.Box(parent, owner)
 	own.clear = Cross(box, own)
 	box:SetScript("OnTextChanged", function(self, typed)
 		if typed and not writing then
-			-- Typing takes the help away, so it never lies over the slots the search lights.
+			-- Typing takes the help away, so it never lies over the slots the search lights, and Up starts from what is typed again.
+			own.recall = 0
 			TipAway(self)
 			Run(Typed, self)
 		end
 		Refresh(self)
+	end)
+	box:SetScript("OnArrowPressed", function(self, key)
+		Run(Recall, self, key)
 	end)
 	box:SetScript("OnEscapePressed", function(self)
 		self:ClearFocus()
@@ -1188,6 +1253,7 @@ function Search.Box(parent, owner)
 		self:ClearFocus()
 	end)
 	box:SetScript("OnEditFocusGained", function(self)
+		own.recall = 0
 		TipAway(self)
 		Paint(self)
 		Refresh(self)

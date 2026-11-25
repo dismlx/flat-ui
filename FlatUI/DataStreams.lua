@@ -1,11 +1,11 @@
 local ADDON_NAME, ns = ...
 
--- The streams of the data panels (DataPanels.lua): what a slot shows, what its tooltip says and what a left click on it does. A click that
--- opens a window of the game calls the game's own toggle of it (ToggleCharacter, ToggleQuestLog, ToggleFriendsFrame, ToggleGuildFrame,
--- ToggleTimeManager, ToggleCalendar, as its keys and buttons do): at once out of a fight, and in one as the fight ends, with a line in chat once
+-- The streams of the data panels (DataPanels.lua): what a slot shows, what its tooltip says and what a left click on it does. A click that opens a
+-- window of the game calls the game's own toggle of it (ToggleCharacter, ToggleQuestLog, ToggleFriendsFrame, ToggleGuildFrame, ToggleTimeManager,
+-- ToggleCalendar, ToggleWorldMap, as its keys and buttons do): at once out of a fight, and in one as the fight ends, with a line in chat once
 -- ("Flat UI: the quest log opens when the fight ends.", ns.OpenAfterFight, MapText.lua, as the time by the minimap and the quest count do). The
 -- tooltip's dim last line says so ("Click: open the quest log, after the fight." in one). Every other button is the panels' own (DataPanels.lua:
--- the right click opens the options).
+-- the right click opens the slot's menu).
 --   Bag space: free and total slots of the general bags the player wears, the backpack and the bags of family 0, the only room for any item
 --     (C_Container.GetContainerNumSlots and GetContainerNumFreeSlots). A special bag (a trade bag, a quiver, an ammo pouch, a soul bag: its
 --     family is not 0) and the reagent bag (Enum.BagIndex 5, of family 0 but for reagents only) hold only certain items, so they count apart,
@@ -21,10 +21,18 @@ local ADDON_NAME, ns = ...
 --     stats until repaired"), lists each item, the lowest first, and out of a fight the repair cost of the worn items under 100% (repairCost of
 --     C_TooltipInfo.GetInventoryItem), as the character window's durability line does (CharacterDurability.lua). The slot takes no room where
 --     the game rule that keeps gear from wearing is on (RepairArmorDisabled), as that line hides there. A click opens the character window.
+--   Ammunition: for a bow, crossbow or gun in the ranged slot (GetInventoryItemID 18, class and subclass of C_Item.GetItemInfoInstant), the
+--     arrows or bullets of the ammunition slot (0), the larger of C_Item.GetItemCount and GetInventoryItemCount, as the ammunition tracker counts
+--     them (TrackerKinds.lua): red at 0, also with none in the slot or ammunition the weapon does not fire, gold at or under the Trackers page's
+--     Ammunition minimum (trackers.ammoMin). A thrown weapon shows its stack (GetInventoryItemCount 18, gold at Thrown weapon minimum), or its
+--     durability where it wears out. Nothing with no such weapon, a wand included. The tooltip names the ammunition (GetInventoryItemLink), the
+--     count in the bags, the free slots of quivers and ammo pouches (the family bits 1 and 2 of GetContainerNumFreeSlots) and the minimum.
+--   Soul shards: for a warlock (UnitClass), the soul shards in the bags (C_Item.GetItemCount 6265), red at 0, with the free slots of the soul
+--     bags (family bit 4) in the tooltip; nothing for another class.
 --   Hearthstone: where it is bound (GetBindLocation) and the time left on its cooldown (C_Container.GetItemCooldown).
 --   Coordinates: of the player on the map of the zone (C_Map.GetBestMapForUnit, GetPlayerMapPosition, read from the fields x and y of the
---     answer); none where the game gives none, as in a dungeon. Shift-click puts the zone and the coordinates in the chat box (ns.PutInChat,
---     MapText.lua), in a fight too.
+--     answer); none where the game gives none, as in a dungeon. A click opens the world map (ToggleWorldMap, as the coordinates by the minimap
+--     do), and Shift-click puts the zone and the coordinates in the chat box (ns.PutInChat, MapText.lua), in a fight too.
 --   Time: the time of this computer (date) or of the realm (GetGameTime), 24 or 12 hours, as the game's own clock settings say
 --     (timeMgrUseLocalTime and timeMgrUseMilitaryTime, read with GetCVarBool; local and 24 hours when the client does not say), in the game's
 --     own formats. The tooltip has both times and how long this session has run (GetSessionTime). A click opens the stopwatch and alarm,
@@ -42,7 +50,9 @@ local ADDON_NAME, ns = ...
 --     GetFactionDataByID), its standing in the colour of the game's reputation bar (FACTION_BAR_COLORS) and the share of it done; nothing with no
 --     faction. The tooltip has the standing, the reputation over the standing's most, what is left to the next standing and, for the faction of
 --     Flat UI's bar, its pace and the time to the next standing (ns.XpStatsRepText, XpStats.lua). A click opens the Reputation tab of the character
---     window; Shift-click puts "Stormwind: Honored 4,200 / 12,000 (35%)" in the chat box.
+--     window; Shift-click puts "Stormwind: Honored 4,200 / 12,000 (35%)" in the chat box. The slot is drawn again on UPDATE_FACTION and each time
+--     Errands switches the faction of the bar (ns.DataPanelMark, DataPanels.lua), half a second after the gain, so it follows the bar. A faction
+--     at the top shows no share, so test mode's sample is "Stormwind Revered 88%".
 --   Frame rate and latency: GetFramerate, and the higher of the home and world latency (GetNetStats). The tooltip has both latencies and the
 --     memory Flat UI uses (UpdateAddOnMemoryUsage and GetAddOnMemoryUsage, read out of combat when the tooltip opens). With Colour frame rate
 --     and latency on, each number is in the panels' green, gold or red by the steps of the minimap's line (ns.PerfColour, MapText.lua).
@@ -498,6 +508,186 @@ P.Stream({
 	end,
 })
 
+-- Ammunition and soul shards ------------------------------------------------------------------------------------------------------------------
+
+-- The inventory slots of the ammunition and of the ranged weapon (INVSLOT_AMMO, INVSLOT_RANGED), the item classes of weapons and projectiles, the
+-- projectile each weapon subclass fires (bows and crossbows arrows, 2; guns bullets, 3: ItemConstantsDocumentation.lua), the thrown subclass, the
+-- soul shard, the bag families (the bits of the family GetContainerNumFreeSlots gives) of quivers and ammo pouches and of soul bags, and the
+-- minimums the slots use when the Trackers rows give none.
+local AMMO = { slot = 0, ranged = 18, weapon = 2, projectile = 6, fires = { [2] = 2, [18] = 2, [3] = 3 }, thrown = 16, shard = 6265,
+	quiver = { 1, 2 }, soul = { 4 }, low = 200, thrownLow = 20, worn = 20 }
+
+-- Free and total slots of the bags of a family, nil when the client withholds an answer; 0 and 0 with no such bag.
+local function FamilySpace(bits)
+	local bags = type(C_Container) == "table" and C_Container or nil
+	local slots = bags and bags.GetContainerNumSlots or _G.GetContainerNumSlots
+	local empties = bags and bags.GetContainerNumFreeSlots or _G.GetContainerNumFreeSlots
+	local last = math.min(Count(NUM_TOTAL_EQUIPPED_BAG_SLOTS) or Count(NUM_BAG_SLOTS) or 4, 12)
+	local free, total = 0, 0
+	for bag = 1, last do
+		local hidden, size = Read(slots, bag)
+		size = Count(size)
+		if hidden then
+			return nil
+		elseif size and size > 0 then
+			local withheld, empty, family = Read(empties, bag)
+			empty, family = Count(empty), Count(family)
+			if withheld then
+				return nil
+			end
+			local match = false
+			for _, bit in ipairs(bits) do
+				match = match or (family ~= nil and math.floor(family / bit) % 2 == 1)
+			end
+			if match and empty then
+				free, total = free + math.min(empty, size), total + size
+			end
+		end
+	end
+	return free, total
+end
+
+-- The line of a tooltip with the free slots of the bags of a family, or nil with none.
+local function FamilyLine(label, bits)
+	local free, total = FamilySpace(bits)
+	if free and total > 0 then
+		return { label, ("%d of %d free"):format(free, total) }
+	end
+	return nil
+end
+
+-- A minimum of the Trackers page (trackers.ammoMin or trackers.thrownMin), or the fallback.
+local function Least(path, fallback)
+	local value = ns.Get(path)
+	return ns.Finite(value) and value >= 0 and value or fallback
+end
+
+-- The colour of a count: red at 0, gold at or under the minimum (0: never).
+local function Low(count, least)
+	return count <= 0 and BAD or (least > 0 and count <= least) and WARN or ""
+end
+
+-- The ranged weapon and what it takes: { fired, ammo = the item ID in the ammunition slot (nil with none), wrong = true for ammunition the weapon
+-- does not fire, count }, or { thrown, count } for a stack of thrown weapons, or { thrown, percent } for one that wears out. Nil with no weapon
+-- that takes ammunition (none, a wand) or while the game withholds an answer.
+local function Ammunition()
+	local hidden, weapon = Read(GetInventoryItemID, "player", AMMO.ranged)
+	local items = type(C_Item) == "table" and C_Item or nil
+	if hidden or not Count(weapon) or not (items and type(items.GetItemInfoInstant) == "function") then
+		return nil
+	end
+	local ok, _, _, _, _, _, class, subclass = pcall(items.GetItemInfoInstant, weapon)
+	if not ok or ns.IsSecret(class) or ns.IsSecret(subclass) or class ~= AMMO.weapon then
+		return nil
+	end
+	if subclass == AMMO.thrown then
+		local now, most = Ask(GetInventoryItemDurability, AMMO.ranged)
+		if ns.Finite(now) and ns.Finite(most) and most > 0 then
+			return { thrown = true, percent = math.max(0, now) * 100 / most }
+		end
+		local count = Count((Ask(GetInventoryItemCount, "player", AMMO.ranged)))
+		return count and { thrown = true, count = count } or nil
+	end
+	local fires = AMMO.fires[subclass]
+	if not fires then
+		return nil
+	end
+	local withheld, ammo = Read(GetInventoryItemID, "player", AMMO.slot)
+	if withheld then
+		return nil
+	elseif not Count(ammo) then
+		return { fired = true, count = 0 }
+	end
+	local okAmmo, _, _, _, _, _, ammoClass, ammoSub = pcall(items.GetItemInfoInstant, ammo)
+	if okAmmo and not ns.IsSecret(ammoClass) and not ns.IsSecret(ammoSub) and (ammoClass ~= AMMO.projectile or ammoSub ~= fires) then
+		return { fired = true, ammo = ammo, wrong = true, count = 0 }
+	end
+	-- The larger of the bag count and the slot's, the number on the character window, as the ammunition tracker counts it.
+	local bags = Count((Ask(items.GetItemCount, ammo)))
+	local held = Count((Ask(GetInventoryItemCount, "player", AMMO.slot)))
+	local count = (bags and held) and math.max(bags, held) or bags or held
+	return count and { fired = true, ammo = ammo, count = count } or nil
+end
+
+P.Stream({
+	id = "ammo", label = "Ammunition", sample = "Ammo 8,888",
+	events = { BAG_UPDATE_DELAYED = true, PLAYER_EQUIPMENT_CHANGED = true, UNIT_INVENTORY_CHANGED = true },
+	Text = function()
+		local ammo = Ammunition()
+		if not ammo then
+			return nil
+		elseif ammo.percent then
+			local colour = ammo.percent <= 0 and BAD or ammo.percent <= AMMO.worn and WARN or ""
+			return Labelled("Thrown", ("%s%d%%%s"):format(colour, math.floor(ammo.percent + 0.5), colour ~= "" and "|r" or ""))
+		end
+		local least = ammo.thrown and Least("trackers.thrownMin", AMMO.thrownLow) or Least("trackers.ammoMin", AMMO.low)
+		local colour = Low(ammo.count, least)
+		return Labelled("Ammo", ("%s%s%s"):format(colour, Grouped(ammo.count), colour ~= "" and "|r" or ""))
+	end,
+	Tip = function()
+		local ammo = Ammunition()
+		if not ammo then
+			return { title = "Ammunition", { DIM .. "No bow, crossbow, gun or thrown weapon in your ranged slot.|r" } }
+		end
+		local lines = { title = "Ammunition" }
+		if ammo.percent then
+			lines[#lines + 1] = { Text((Ask(GetInventoryItemLink, "player", AMMO.ranged))) or "Thrown weapon", ("%d%%"):format(math.floor(ammo.percent + 0.5)) }
+			lines[#lines + 1] = { DIM .. "It wears out as you throw it; a merchant who repairs mends it.|r" }
+			return lines
+		end
+		local least
+		if ammo.thrown then
+			least = Least("trackers.thrownMin", AMMO.thrownLow)
+			lines[#lines + 1] = { Text((Ask(GetInventoryItemLink, "player", AMMO.ranged))) or "Thrown weapon", Grouped(ammo.count) }
+		else
+			least = Least("trackers.ammoMin", AMMO.low)
+			local link = ammo.ammo and Text((Ask(GetInventoryItemLink, "player", AMMO.slot))) or nil
+			if not ammo.ammo then
+				lines[#lines + 1] = { BAD .. "No arrows or bullets in the ammunition slot.|r" }
+			elseif ammo.wrong then
+				lines[#lines + 1] = { link or "Ammunition", BAD .. "Does not fit this weapon|r" }
+			else
+				lines[#lines + 1] = { link or "Ammunition" }
+				lines[#lines + 1] = { "In your bags", Grouped(ammo.count) }
+			end
+			lines[#lines + 1] = FamilyLine("Quiver or ammo pouch", AMMO.quiver)
+		end
+		lines[#lines + 1] = { " " }
+		local row = ammo.thrown and "Thrown weapon minimum" or "Ammunition minimum"
+		lines[#lines + 1] = { DIM .. (least > 0 and ("Low at %s: %s on the Trackers page."):format(Grouped(least), row)
+			or ("Never low: %s is 0 on the Trackers page."):format(row)) .. "|r" }
+		return lines
+	end,
+})
+
+-- True for a warlock; a withheld class is none.
+local function Warlock()
+	local _, class = Ask(UnitClass, "player")
+	return class == "WARLOCK"
+end
+
+P.Stream({
+	id = "shards", label = "Soul shards", sample = "Shards 88",
+	events = { BAG_UPDATE_DELAYED = true },
+	Text = function()
+		local count = Warlock() and type(C_Item) == "table" and Count((Ask(C_Item.GetItemCount, AMMO.shard))) or nil
+		if not count then
+			return nil
+		end
+		local colour = count == 0 and BAD or ""
+		return Labelled("Shards", ("%s%d%s"):format(colour, count, colour ~= "" and "|r" or ""))
+	end,
+	Tip = function()
+		local count = Warlock() and type(C_Item) == "table" and Count((Ask(C_Item.GetItemCount, AMMO.shard))) or nil
+		if not count then
+			return { title = "Soul shards", { DIM .. (Warlock() and "The game does not say now." or "Only a warlock keeps soul shards.") .. "|r" } }
+		end
+		local lines = { title = "Soul shards", { "In your bags", count == 0 and (BAD .. "0|r") or Grouped(count) } }
+		lines[#lines + 1] = FamilyLine("Soul bags", AMMO.soul)
+		return lines
+	end,
+})
+
 -- Hearthstone -----------------------------------------------------------------------------------------------------------------------------------
 
 -- Seconds left on the hearthstone's cooldown: 0 when it is ready or the client has no answer, nil when it withholds it.
@@ -596,11 +786,17 @@ P.Stream({
 		return lines
 	end,
 	Hint = function()
-		return "Shift-click: put this in chat."
+		return WindowHint("Click: open the world map.") .. " Shift-click: put this in chat."
 	end,
-	-- Shift and a left click put the zone and the coordinates in the chat box (ns.PutInChat, MapText.lua), in a fight too: "Elwynn Forest 45.2, 61.8".
+	-- A left click opens the world map (ToggleWorldMap, in a fight as it ends), as the coordinates by the minimap do (MapText.lua). Shift and a left
+	-- click put the zone and the coordinates in the chat box (ns.PutInChat, MapText.lua), in a fight too: "Elwynn Forest 45.2, 61.8".
 	Click = function(_, button)
-		if button ~= "LeftButton" or not Shift() or type(ns.PutInChat) ~= "function" then
+		if button ~= "LeftButton" then
+			return
+		elseif not Shift() then
+			Toggle("ToggleWorldMap", "Flat UI: the world map opens when the fight ends.")
+			return
+		elseif type(ns.PutInChat) ~= "function" then
 			return
 		end
 		local x, y = Position()
@@ -979,7 +1175,7 @@ local function RepChatLine()
 end
 
 P.Stream({
-	id = "rep", label = "Reputation", sample = "Stormwind Exalted 88%",
+	id = "rep", label = "Reputation", sample = "Stormwind Revered 88%",
 	events = { UPDATE_FACTION = true },
 	Text = function()
 		local rep = Reputation()

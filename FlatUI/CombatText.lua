@@ -21,7 +21,8 @@ local _, ns = ...
 -- seconds, so a cast, a swing and a hit sent together count in any order. It cannot know whose hit it is when a player outside your group hits
 -- an enemy you hold, nor, in a group, a proc that casts nothing.
 -- While test mode is on (TestMode.lua), a sample number shows in each place that shows them every 1.5 seconds (ns.CombatTextTestStep); like the
--- samples of /flatui combat test they are no hit reports and count in no number of /flatui status.
+-- samples of /flatui combat test they are no hit reports and count in no number of /flatui status. /flatui combat test also plays one quiet round
+-- of the combat alerts whose rows are on, two seconds apart, out of a fight while test mode is off (ns.CombatCuesTestRound).
 
 local KEY = "combattext"
 -- 40 is the game's own height above the enemy, and every 5 points are 0.00375 of WorldTextScreenY_v2: 60 gives 0.015, the value Retail ships (CVars_live.lua:1652).
@@ -960,7 +961,8 @@ end
 -- What a hit report for the player's own character shows, in the form Describe gives, with the format of the amount in place of what
 -- follows it. level is Combat text for you: take shows the damage and the healing, more adds the words and the gains. The colours are
 -- the game's own for damage and healing (CombatTextConstants.lua:28, 38, 57; red for a physical hit or a school that is not known, purple
--- for any other school) and white for a word (:29-37 colour a missed swing red and :39-45 a missed spell white; the report does not say
+-- for any other school, or with Colour by school of magic on the colour of a single school, SCHOOLS, the school mask of UNIT_COMBAT being plain)
+-- and white for a word (:29-37 colour a missed swing red and :39-45 a missed spell white; the report does not say
 -- which it was). A gain has the colour of the portrait's (CombatFeedback.lua:78-80): the game's combat text colours it by power
 -- (CombatTextUtil.lua:44-49) and the report does not name the power.
 -- WOUND with 0 is a word as on the portrait (CombatFeedback.lua:53-64).
@@ -974,10 +976,16 @@ local function DescribeOwn(level, event, flag, amount, none, school)
 			local name = (flag == "ABSORB" or flag == "BLOCK" or flag == "RESIST") and flag or "MISS"
 			return "word", Word(name), "%s", false, 1, 1, 1, nil, KindSize(flag, name)
 		end
+		local crit = flag == "CRITICAL" or flag == "CRUSHING"
 		if Plain(school, "number") and school ~= 1 then
-			return "amount", amount, "-%s", flag == "CRITICAL" or flag == "CRUSHING", 0.79, 0.3, 0.85
+			-- Colour by school of magic: a spell of one school in its colour (Frost light blue, Fire orange); several schools stay purple.
+			local colour = Opt("school") == true and SCHOOLS[school]
+			if colour then
+				return "amount", amount, "-%s", crit, colour[1], colour[2], colour[3]
+			end
+			return "amount", amount, "-%s", crit, 0.79, 0.3, 0.85
 		end
-		return "amount", amount, "-%s", flag == "CRITICAL" or flag == "CRUSHING", 1, 0.1, 0.1
+		return "amount", amount, "-%s", crit, 1, 0.1, 0.1
 	elseif event == "HEAL" then
 		if none then
 			return nil
@@ -3942,6 +3950,10 @@ local function Test()
 	if ns.ScrollText.On("out") then
 		Run(OUT_SAMPLES, OutSample)
 	end
+	-- One quiet round of the combat alerts whose rows are on, two seconds apart (CombatCues.lua).
+	if type(ns.CombatCuesTestRound) == "function" then
+		ns.CombatCuesTestRound()
+	end
 	if Opt("where") == "scroll" then
 		-- No numbers over enemies to sample.
 	elseif Opt("source") ~= "front" then
@@ -4046,7 +4058,7 @@ end
 
 local HELP = {
 	"/flatui combat - the game's combat number settings: now, default, wanted",
-	"/flatui combat test - sample numbers for you, over your target and over friendly units",
+	"/flatui combat test - sample numbers for you, over your target and over friendly units, and one round of the combat alerts",
 	"/flatui combat reset - the game's defaults, and Place combat numbers off",
 	"/flatui combat trace - each hit report and signal of yours in chat, until you type it again",
 }

@@ -1,7 +1,7 @@
 local _, ns = ...
 
 -- A row of flat square icons for the buffs on the player that the player picks: one icon for each, with
--- its charges, a sweep and countdown, an amber rim and count when it is low, a red icon when it is missing, and a
+-- its charges, a sweep and countdown, an amber rim, count and countdown when it is low, a red icon when it is missing, and a
 -- sound when it drops. In fights the game withholds aura values from addons, so a buff is checked only
 -- while C_Secrets says its values are open. While they are not, the icon shows the game's own drawing
 -- of the buff where ns.TrackerSlots has one, else what was known last. Nothing runs every frame: an
@@ -53,6 +53,8 @@ local K = {
 	PULSE_LOW = 0.35, PULSE_TIME = 0.6, GREY = 0.6, ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789",
 	-- ffffb333, the colour of a low buff: its rim, count, bar and the Low of its tooltip. Missing stays RED.
 	AMBER = { 1, 0.7, 0.2 },
+	-- The countdown's colour while a tracker is not low.
+	WHITE_RGB = { 1, 1, 1 },
 	SHOWS = { always = true, low = true, combat = true },
 	MISSING_LOOKS = { red = true, pulse = true, word = true },
 	SHOWN_AS = {
@@ -2089,6 +2091,17 @@ local function Apply(record, entry, look)
 		record.cooldown:SetHideCountdownNumbers(not (Value(entry, "numbers") and shape == "icon"))
 	end
 	ns.IconCountdownFont(record, Opt("numbersFont"))
+	-- The countdown is amber while low, as the game's own icon colours its time in fights, and white again once it is fine. It is set again
+	-- after a change of Countdown number size, whose new font may take the colour away.
+	local numbers = look.amber and "amber" or "white"
+	if record.cdTint ~= numbers or record.cdTintFont ~= record.cdFont then
+		local read, text = pcall(record.cooldown.GetCountdownFontString, record.cooldown)
+		if read and not IsSecret(text) and type(text) == "table" then
+			local colour = look.amber and K.AMBER or K.WHITE_RGB
+			text:SetTextColor(colour[1], colour[2], colour[3])
+			record.cdTint, record.cdTintFont = numbers, record.cdFont
+		end
+	end
 	Sweep(record, look)
 	-- The rim is amber when low, red when missing, or the colour a kind asked for; the colour is set again only when it changes.
 	local tint = look.rimColour and (look.rimColour[1] .. "," .. look.rimColour[2] .. "," .. look.rimColour[3]) or (look.amber and "amber" or "red")
@@ -3182,6 +3195,8 @@ local function Release(wanted)
 				pcall(record.hid.Leave)
 			end
 			record.how = nil
+			-- The next tracker on the record starts with a white countdown (Apply).
+			record.cdTint = nil
 			-- The next tracker on the record takes its first alpha at once (Draw), and a fade of this one ends with it.
 			record.alpha = nil
 			record.seen, record.leaving = nil, nil
@@ -3235,7 +3250,8 @@ end
 -- The frames of a place's row, from what Layout kept in K.rows, each at its own X and Y offset. In list order; with Close up the gaps the
 -- trackers that are seen come first, so they sit together, centred on their own width or from the start of the row as Row direction says, a
 -- column from its top (downward) or bottom (upward), and the hidden ones follow in list order, so that a tracker that shows in a fight, where
--- nothing moves, takes a place after them and no two overlap. One that fades out keeps its place until its fade is over (record.leaving).
+-- nothing moves, takes a place after them and no two overlap. One that fades out keeps its place until its fade is over (record.leaving), and
+-- the row is placed again once the last such fade is over, so a second tracker that fades out just after another closes up too.
 -- A proc of your class that shows without being added comes last and is not in the width. Out of combat only.
 function K.Arrange(place)
 	local row = K.rows and K.rows[place]
@@ -3244,6 +3260,7 @@ function K.Arrange(place)
 	end
 	local spacing, grow = Opt("spacing"), Opt("grow")
 	local list, total = row.sized, row.total
+	local wait = 0
 	if Opt("pack") == true then
 		local now, first, after, last = Now(), {}, {}, {}
 		total = 0
@@ -3256,6 +3273,9 @@ function K.Arrange(place)
 			elseif seen or (record.leaving and record.leaving > now) then
 				first[#first + 1] = item
 				total = total + item[3]
+				if not seen then
+					wait = math.max(wait, record.leaving - now)
+				end
 			else
 				after[#after + 1] = item
 			end
@@ -3291,9 +3311,14 @@ function K.Arrange(place)
 		end
 		x = grow == "left" and x - spacing or x + width + spacing
 	end
+	if wait > 0 then
+		K.QueueArrange(place, wait + 0.05)
+	end
 end
 
 -- One K.Arrange of a place after `delay` seconds, and out of combat: a fight's ask waits for its end, and two asks of the same delay are one.
+-- A tracker still fading out when it runs asks again for the end of its fade (K.Arrange); the ask is cleared before K.Arrange runs, so that
+-- ask is kept, and one dropped because another waits is made by that other as it runs.
 K.arranging = {}
 function K.QueueArrange(place, delay)
 	local key = place .. (delay > 0 and "+" or "")
@@ -4039,13 +4064,15 @@ local function SecretAuras()
 	return ok and not IsSecret(answer) and answer == true
 end
 
--- A look for the test: the icon of the game's own drawing alone leaves the frame bare.
+-- A look for the test: the icon of the game's own drawing alone leaves the frame bare. Each sample takes the mouse as Tracker tooltips allows,
+-- also on a tracker that was hidden before the test, so its tooltip shows; the Draw after the test gives the mouse back as the reading says.
 local function Bare(entry)
 	local record = records[entry.id]
 	if record then
 		Apply(record, entry, { icon = nil, sweep = "clear" })
 		K.SetAlpha(record, 1)
 		record.alpha = 1
+		K.Mouse(record, entry)
 		K.Packed(record, false)
 	end
 end
@@ -4058,6 +4085,7 @@ local function Paint(entry, state, length)
 		Apply(record, entry, Looks(entry, reading, "live"))
 		K.SetAlpha(record, 1)
 		record.alpha = 1
+		K.Mouse(record, entry)
 		K.Packed(record, false)
 	end
 end
@@ -4440,10 +4468,11 @@ end
 
 -- Sound picked on the page: the page is refreshed, as without a changed function of the row (Core.lua's Changed), which also registers the
 -- game's own sounds by the kit (GameSound), and out of combat the kit plays once, so the pick is heard. Only a pick in the options calls this.
+-- It plays through ns.PlayKit, at most once a second, so the panel's own play of a pick right after it is not heard a second time over it.
 function ns.TrackerKitChanged()
 	ns.Try(KEY, Refresh)
-	if not InCombatLockdown() then
-		Ding(K.KITS[Opt("kit")] or K.KITS.raid)
+	if not InCombatLockdown() and type(ns.PlayKit) == "function" then
+		ns.PlayKit(K.KITS[Opt("kit")] or K.KITS.raid, KEY)
 	end
 end
 

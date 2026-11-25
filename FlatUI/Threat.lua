@@ -38,8 +38,8 @@ local _, ns = ...
 -- mode is turned on (TestMode.lua's gate, TM.Sound).
 -- A bar glides to each new share (Enum.StatusBarInterpolation.ExponentialEaseOut, as the pet target bar has it, UnitPetTarget.lua), a withheld one
 -- too, while it shows the same member (his unit token, or the same sample) on the same enemy; a bar that turns to another member as the order
--- changes, a new enemy, a list that just showed or a client with no interpolation takes the value at once, so a bar never slides between two
--- people.
+-- changes, a bar that was hidden as the list shrank, a new enemy, a list that just showed or a client with no interpolation takes the value at
+-- once, so a bar never slides between two people or from a stale share.
 -- The title has the enemy's raid marker before its name, from GetRaidTargetIndex: an index the game withholds goes unread to SetSpriteSheetCell, as
 -- the game's own target frame hands it on (Mainline/TargetFrame.lua:697-701), and RAID_TARGET_UPDATE draws it again while there is an enemy. The
 -- sample shows a Skull.
@@ -48,7 +48,8 @@ local _, ns = ...
 -- takes no mouse and hides with the interface. It fades in over 0.15 seconds as it shows and out over 0.35 as it hides (two Alpha animation
 -- groups of the window, T.Showing); showing again while it fades out stops the fade at once, and turning the module off hides it at once.
 -- /flatui move places it (FlatUIThreat in
--- Movers.lua: the window's top left corner is the top left corner of the box). /flatui threat shows sample bars for a few seconds, out of
+-- Movers.lua: the window's top left corner is the top left corner of the box, or with Bars stack Up its bottom left corner the bottom left
+-- corner of the box, so a list above the action bars grows upward). /flatui threat shows sample bars for a few seconds, out of
 -- combat. While test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh and sorted again every 2 seconds as their shares
 -- move. Nothing of the game is changed.
 -- Built on the threat meter of EnhanceQoL's damage meter by Philipp Barth (R41Z0R), adapted with his permission
@@ -683,7 +684,9 @@ function T.Alarm(entry, who)
 	end
 end
 
--- Bar texture, and the height of the text, on one bar. A texture the game refuses leaves a flat fill.
+-- Bar texture, and the height of the text, on one bar. A texture the game refuses leaves a flat fill. The height is given on every draw, a few
+-- calls: Fonts, which starts after this module at login (MODULE_ORDER in Core.lua), may set the font object of the text again (Fonts.lua),
+-- and a string can take its font object's height back, as Group tools notes for its countdown number.
 local function Paint(row, file, text)
 	if row.file ~= file then
 		local ok, done = pcall(row.bar.SetStatusBarTexture, row.bar, file)
@@ -692,14 +695,12 @@ local function Paint(row, file, text)
 		end
 		row.file = file
 	end
-	if row.text ~= text then
-		row.name:SetTextHeight(text)
-		row.share:SetTextHeight(text)
-		row.text = text
-	end
+	row.name:SetTextHeight(text)
+	row.share:SetTextHeight(text)
 end
 
--- Lays out the enemy's name and n bars, and sizes the window to them. A layout that is already in place is left as it is.
+-- Lays out the enemy's name and n bars, and sizes the window to them. The heights of the text are given each time (Paint); a layout that is
+-- already in place is left as it is.
 function T.Layout(n)
 	local width, height = Number("barWidth", 180), Number("barHeight", 16)
 	local text = TextHeight(height)
@@ -707,14 +708,14 @@ function T.Layout(n)
 	for index = 1, n do
 		Paint(T.Row(index), file, text)
 	end
+	T.title:SetTextHeight(text)
+	T.marker:SetSize(text + 2, text + 2)
 	local key = ("%s:%s:%s"):format(n, width, height)
 	if T.laid == key then
 		return
 	end
 	T.laid = key
 	local top = PAD + text + 2 + GAP
-	T.title:SetTextHeight(text)
-	T.marker:SetSize(text + 2, text + 2)
 	for index = 1, n do
 		local bar = T.rows[index].bar
 		bar:ClearAllPoints()
@@ -755,13 +756,16 @@ function T.Fill(row, entry)
 	row.bar:Show()
 end
 
--- Puts the window at the spot of its handle: its top left corner at the top left corner of the box.
+-- Puts the window at the spot of its handle: its top left corner at the top left corner of the box, or with Bars stack Up its bottom left corner at
+-- the bottom left corner of the box, so more bars push the title up (as Rolls stack has it for the loot rolls, Hud.lua). The bars inside keep
+-- their order, the title on top.
 function T.Place()
+	local corner = Opt("grow") == "up" and "BOTTOMLEFT" or "TOPLEFT"
 	local x, y
 	if type(ns.MoverSpot) == "function" then
-		x, y = ns.MoverSpot(MOVER, "TOPLEFT")
+		x, y = ns.MoverSpot(MOVER, corner)
 	end
-	local key = x and ("%.2f:%.2f"):format(x, y) or "start"
+	local key = (x and ("%.2f:%.2f"):format(x, y) or "start") .. ":" .. corner
 	if T.placed == key then
 		return
 	end
@@ -769,9 +773,11 @@ function T.Place()
 	local frame = T.frame
 	frame:ClearAllPoints()
 	if x then
-		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+		frame:SetPoint(corner, UIParent, "BOTTOMLEFT", x, y)
+	elseif corner == "BOTTOMLEFT" then
+		frame:SetPoint(corner, UIParent, "CENTER", BOX_X - BOX_W / 2, BOX_Y - BOX_H / 2)
 	else
-		frame:SetPoint("TOPLEFT", UIParent, "CENTER", BOX_X - BOX_W / 2, BOX_Y + BOX_H / 2)
+		frame:SetPoint(corner, UIParent, "CENTER", BOX_X - BOX_W / 2, BOX_Y + BOX_H / 2)
 	end
 end
 
@@ -813,9 +819,11 @@ function T.Draw(mob, entries)
 	for index = 1, n do
 		T.Fill(T.rows[index], shown[index])
 	end
+	-- A bar that hides forgets its member, so it takes its share at once when it shows again (T.Fill).
 	for index = n + 1, #T.rows do
 		T.Pulse(T.rows[index], false)
 		T.rows[index].bar:Hide()
+		T.rows[index].who = nil
 	end
 	T.Alarm(own, who)
 	if mob then

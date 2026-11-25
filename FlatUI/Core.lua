@@ -3725,6 +3725,10 @@ function ns.RenameProfile(from, to)
 		if ns.ProfileSwitch then
 			ns.ProfileSwitch.Renamed(found, clean)
 		end
+		-- Home's Recent changes follow the name, so Ctrl+Z still reaches them.
+		if ns.PanelHome and ns.PanelHome.Renamed then
+			ns.PanelHome.Renamed(found, clean)
+		end
 		if type(ns.RefreshPanel) == "function" then
 			local ok, err = pcall(ns.RefreshPanel)
 			if not ok then
