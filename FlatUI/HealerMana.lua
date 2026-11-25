@@ -14,16 +14,17 @@ local _, ns = ...
 -- (SimpleRegionAPIDocumentation.lua: SetAlpha, AllowedWhenTainted); a client that refuses leaves the wash off and says so in /flatui status.
 -- With Show who is drinking, out of combat and while the game lets auras be read (C_Secrets.ShouldAurasBeSecret false, as Trackers read the
 -- buffs of the group), a member with the buff named as spell 430 (Drink, in the client's language: C_Spell.GetSpellName) shows a cup and
--- Drinking before his share, from C_UnitAuras.GetAuraDataBySpellName with a plain answer only. With Dim healers out of range, the bar of a
--- healer who is not the player (UnitIsUnit, plain answers only) and not offline or dead fades to 45% while UnitInRange says he is out of range,
--- also in a fight: that answer is always withheld (UnitDocumentation.lua UnitInRange), so it goes as it is to SetAlphaFromBoolean of the bar,
+-- the seconds left on his drink before his share, "18s 47%", from C_UnitAuras.GetAuraDataBySpellName and its expirationTime with plain answers
+-- only, counting down at each step of half a second until he stands; where the game gives no plain time it reads "Drinking 47%".
+-- With Dim healers out of range, the bar of a healer who is not the player (UnitIsUnit, plain answers only) and not offline or dead fades to
+-- 45% while UnitInRange says he is out of range, also in a fight: that answer is always withheld (UnitDocumentation.lua UnitInRange), so it goes as it is to SetAlphaFromBoolean of the bar,
 -- which takes it, as the party frames dim (UnitExtras.lua); a client that refuses leaves the bars bright and says so in /flatui status. The window shows in a dungeon or raid, or in
 -- any group, as Show says, while the group has a healer; it is drawn again on a step of half a second only while it shows, and the group is
 -- read again when it changes (GROUP_ROSTER_UPDATE, PLAYER_ROLES_ASSIGNED, PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA; a burst is read once,
 -- a moment after the first).
 -- A bar glides to each new share (Enum.StatusBarInterpolation.ExponentialEaseOut, as the Threat list and the pet target bar have it), a withheld one
--- too, while it shows the same healer (his unit token); a bar that turns to another healer, comes back from Offline or Dead, a sample, a list that
--- just showed or a client with no interpolation takes the value at once.
+-- too, while it shows the same healer (his unit token); a bar that turns to another healer, comes back from Offline or Dead or from hiding as the
+-- list shrank, a sample, a list that just showed or a client with no interpolation takes the value at once.
 -- While the game gives every share of the healers shown plainly (out of a fight, as a rule), the title reads their average, "Healer mana 64%",
 -- the members offline or dead left out, in the red of the wash while it is under Low mana at; as soon as one share is withheld it reads Healer
 -- mana alone, as nothing withheld is added. The samples read 48%.
@@ -31,7 +32,8 @@ local _, ns = ...
 -- colours of the Flat UI page, its bars in Bar texture (the bar texture of that page by default); it takes no mouse and hides with the
 -- interface. It fades in over 0.15 seconds as it shows and out over 0.35 as it hides, as the Threat list does (H.Showing); showing again while it
 -- fades out stops the fade at once, and turning the module off hides it at once. /flatui move places it (FlatUIHealerMana in Movers.lua: the
--- window's top left corner is the top left corner of the box). /flatui healers shows sample bars for a few seconds, the Shaman out of range;
+-- window's top left corner is the top left corner of the box, or with Bars stack Up its bottom left corner the bottom left corner of the box, so
+-- a list above the action bars grows upward). /flatui healers shows sample bars for a few seconds, the Shaman out of range;
 -- while test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh.
 -- Nothing of the game is changed.
 -- This follows the Healer Mana indicator of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/
@@ -77,6 +79,8 @@ local FADE_IN, FADE_OUT = 0.15, 0.35
 local HELP = { "/flatui healers - sample bars of the healer mana list for a few seconds" }
 -- The bars of /flatui healers: a name, a class, the share of mana, whether the member drinks and whether he is out of range.
 local SAMPLE = { { "Priest", "PRIEST", 82 }, { "Druid", "DRUID", 47, true }, { "Shaman", "SHAMAN", 15, false, true } }
+-- The seconds left on the sample Druid's drink.
+local SAMPLE_DRINK = 18
 
 local IsSecret = ns.IsSecret
 -- frame: the window, title its line. rows: the bars. healers: the units of the healers, read from the group. pending: a read waits. ticker: the
@@ -167,7 +171,8 @@ local function DrinkName()
 	return H.drinkName or nil
 end
 
--- True while a unit has the buff of drinking, from a plain answer only.
+-- True while a unit has the buff of drinking, from a plain answer only, and then when the drink ends on the clock of GetTime (expirationTime of
+-- its AuraData, read so by Blizzard_AuraContainer/Blizzard_AuraButton.lua:166), or nil when the game gives no plain time.
 local function Drinking(unit)
 	local name = DrinkName()
 	local auras = C_UnitAuras
@@ -175,7 +180,25 @@ local function Drinking(unit)
 		return false
 	end
 	local aura = Ask(auras.GetAuraDataBySpellName, unit, name, "HELPFUL")
-	return type(aura) == "table"
+	if type(aura) ~= "table" then
+		return false
+	end
+	local ok, ends = pcall(function()
+		return aura.expirationTime
+	end)
+	if ok and not IsSecret(ends) and ns.Finite(ends) and ends > 0 then
+		return true, ends
+	end
+	return true, nil
+end
+
+-- The seconds left on a drink that ends at ends, whole and rounded up, or nil when there is no plain time or it is over.
+local function DrinkLeft(ends)
+	local now = ends and Ask(GetTime)
+	if not ns.Finite(now) or ends <= now then
+		return nil
+	end
+	return math.ceil(ends - now)
 end
 
 -- The curve that turns a share of 1 into 100, or nil when the client has none.
@@ -480,7 +503,9 @@ function H.Range(row, unit, sample, word)
 	end
 end
 
--- Bar texture, and the height of the text and of the cup, on one bar. A texture the game refuses leaves a flat fill.
+-- Bar texture, and the height of the text and of the cup, on one bar. A texture the game refuses leaves a flat fill. The heights are given on
+-- every draw, a few calls: Fonts, which starts after this module at login (MODULE_ORDER in Core.lua), may set the font object of the text again
+-- (Fonts.lua), and a string can take its font object's height back, as the Threat list has it.
 local function Paint(row, file, text)
 	if row.file ~= file then
 		local ok, done = pcall(row.bar.SetStatusBarTexture, row.bar, file)
@@ -489,16 +514,13 @@ local function Paint(row, file, text)
 		end
 		row.file = file
 	end
-	if row.text ~= text then
-		row.name:SetTextHeight(text)
-		row.share:SetTextHeight(text)
-		row.drink:SetSize(text, text)
-		row.text = text
-	end
+	row.name:SetTextHeight(text)
+	row.share:SetTextHeight(text)
+	row.drink:SetSize(text, text)
 end
 
--- Lays out the title and n bars, and sizes the window to them. A layout that is already in place is left as it is. The text is as high as the bar
--- allows, as on the Threat list.
+-- Lays out the title and n bars, and sizes the window to them. The heights of the text are given each time (Paint); a layout that is already in
+-- place is left as it is. The text is as high as the bar allows, as on the Threat list.
 function H.Layout(n)
 	local width, height = Number("barWidth", 150), Number("barHeight", 16)
 	local text = math.max(7, math.min(14, height - 4))
@@ -506,13 +528,13 @@ function H.Layout(n)
 	for index = 1, n do
 		Paint(H.Row(index), file, text)
 	end
+	H.title:SetTextHeight(text)
 	local key = ("%s:%s:%s"):format(n, width, height)
 	if H.laid == key then
 		return
 	end
 	H.laid = key
 	local top = PAD + text + 2 + GAP
-	H.title:SetTextHeight(text)
 	for index = 1, n do
 		local bar = H.rows[index].bar
 		bar:ClearAllPoints()
@@ -545,7 +567,11 @@ function H.Fill(row, unit, sample)
 		row.bar:SetValue(sample[3])
 		row.who = nil
 		H.sum, H.count = (H.sum or 0) + sample[3], (H.count or 0) + 1
-		row.share:SetText((cup and "Drinking %d%%" or "%d%%"):format(sample[3]))
+		if cup then
+			row.share:SetText(("%ds %d%%"):format(SAMPLE_DRINK, sample[3]))
+		else
+			row.share:SetText(("%d%%"):format(sample[3]))
+		end
 		H.Wash(row, nil, sample)
 		H.Cup(row, cup)
 		H.Range(row, nil, sample)
@@ -567,8 +593,12 @@ function H.Fill(row, unit, sample)
 		H.Cup(row, false)
 		return
 	end
-	local cup = drinks and AurasOpen() and Drinking(unit)
+	local cup, ends = false, nil
+	if drinks and AurasOpen() then
+		cup, ends = Drinking(unit)
+	end
 	H.Cup(row, cup)
+	local left = cup and DrinkLeft(ends) or nil
 	local ok, share = pcall(UnitPowerPercent, unit, MANA, false, Hundred())
 	local jump = row.who ~= unit or not H.frame:IsShown()
 	row.who = unit
@@ -580,8 +610,14 @@ function H.Fill(row, unit, sample)
 	else
 		H.hidden = true
 	end
-	if not ok or not pcall(row.share.SetFormattedText, row.share, cup and "Drinking %.0f%%" or "%.0f%%", share) then
-		row.share:SetText(cup and "Drinking" or "")
+	local written
+	if left then
+		written = ok and pcall(row.share.SetFormattedText, row.share, "%ds %.0f%%", left, share)
+	else
+		written = ok and pcall(row.share.SetFormattedText, row.share, cup and "Drinking %.0f%%" or "%.0f%%", share)
+	end
+	if not written then
+		row.share:SetText(left and ("%ds"):format(left) or (cup and "Drinking" or ""))
 	end
 end
 
@@ -619,13 +655,16 @@ function H.Sampling()
 	return H.sample ~= nil or (mode ~= nil and mode.IsOn() == true)
 end
 
--- Puts the window at the spot of its handle: its top left corner at the top left corner of the box.
+-- Puts the window at the spot of its handle: its top left corner at the top left corner of the box, or with Bars stack Up its bottom left corner at
+-- the bottom left corner of the box, so more bars push the title up (as Rolls stack has it for the loot rolls, Hud.lua). The bars inside keep
+-- their order, the title on top.
 function H.Place()
+	local corner = Opt("grow") == "up" and "BOTTOMLEFT" or "TOPLEFT"
 	local x, y
 	if type(ns.MoverSpot) == "function" then
-		x, y = ns.MoverSpot(MOVER, "TOPLEFT")
+		x, y = ns.MoverSpot(MOVER, corner)
 	end
-	local key = x and ("%.2f:%.2f"):format(x, y) or "start"
+	local key = (x and ("%.2f:%.2f"):format(x, y) or "start") .. ":" .. corner
 	if H.placed == key then
 		return
 	end
@@ -633,9 +672,11 @@ function H.Place()
 	local frame = H.frame
 	frame:ClearAllPoints()
 	if x then
-		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+		frame:SetPoint(corner, UIParent, "BOTTOMLEFT", x, y)
+	elseif corner == "BOTTOMLEFT" then
+		frame:SetPoint(corner, UIParent, "CENTER", BOX_X - BOX_W / 2, BOX_Y - BOX_H / 2)
 	else
-		frame:SetPoint("TOPLEFT", UIParent, "CENTER", BOX_X - BOX_W / 2, BOX_Y + BOX_H / 2)
+		frame:SetPoint(corner, UIParent, "CENTER", BOX_X - BOX_W / 2, BOX_Y + BOX_H / 2)
 	end
 end
 
@@ -660,8 +701,10 @@ function H.Draw()
 		end
 	end
 	H.Title()
+	-- A bar that hides forgets its healer, so it takes his share at once when it shows again (H.Fill).
 	for index = n + 1, #H.rows do
 		H.rows[index].bar:Hide()
+		H.rows[index].who = nil
 	end
 	H.Place()
 	H.Showing(true)

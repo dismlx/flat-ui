@@ -403,8 +403,8 @@ local function Copy(look)
 end
 
 -- Holds sample `index` (1 to 3) on an icon. look: the row's look of its own icons (numbers, font, border, kind; kind true is the sample's kind;
--- flash false for none; sound false for none), else the sample's kind colour with the flash and the sound; texture: another picture than the
--- sample's; seconds: another length than HELD's.
+-- flash false for none; sound false for none, or the sound kit of the row's own choice), else the sample's kind colour with the flash and the
+-- sound; texture: another picture than the sample's; seconds: another length than HELD's.
 function ns.IconSampleHeld(icon, index, key, look, texture, seconds)
 	local sample = SAMPLES[index]
 	if not sample then
@@ -415,6 +415,7 @@ function ns.IconSampleHeld(icon, index, key, look, texture, seconds)
 		look.kind = sample[2]
 	end
 	local quiet = look.sound == false
+	local kit = type(look.sound) == "number" and look.sound or ns.SOUNDS[1][1]
 	look.flash, look.key, look.sound = look.flash ~= false, key, nil
 	local file = texture or sample[1]
 	local held = icon.held
@@ -432,7 +433,7 @@ function ns.IconSampleHeld(icon, index, key, look, texture, seconds)
 	local first = Copy(look)
 	local test = ns.TestMode
 	if key and not quiet and type(test) == "table" and test.Sound(key .. ".sample") then
-		held.kit = ns.SOUNDS[1][1]
+		held.kit = kit
 		first.sound = held.kit
 	end
 	return ns.IconSet(icon, file, now, length, first)
