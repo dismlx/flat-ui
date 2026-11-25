@@ -1,9 +1,11 @@
 local _, ns = ...
 
 -- Errands at a merchant: grey items are sold and gear is repaired when the merchant window opens: MERCHANT_SHOW, then the window itself shown,
--- looked for every LOOK seconds for up to LOOKS tries (the game can show it a moment after the event, or load it first). Holding Shift as it
--- opens keeps the items for that visit; the repair is still made. Out of combat only: a merchant opened in a fight waits for its end, and a
--- fight that starts while items are being sold pauses the selling until it ends, if the merchant is still open then.
+-- looked for every LOOK seconds for up to LOOKS tries (the game can show it a moment after the event, or load it first). Holding Shift as it opens
+-- keeps the items for that visit, and one line says so with how many would have sold ("Kept 7 grey items this visit (Shift was held as the merchant
+-- opened)."), only when there were some and Say what was done is on; the repair is still made, with its own line. Out of combat only: a merchant
+-- opened in a fight waits for its end, and a fight that starts while items are being sold pauses the selling until it ends, if the merchant is
+-- still open then.
 --
 -- Selling walks the bags (C_Container.GetContainerNumSlots and GetContainerItemInfo, bags 0 to NUM_TOTAL_EQUIPPED_BAG_SLOTS) and sells one item
 -- every SPACING seconds with C_Container.UseContainerItem, which sells while a merchant is open and uses or equips the item otherwise. So before
@@ -643,6 +645,22 @@ Repair = function(last, hold)
 	end
 end
 
+-- Shift held as the merchant opened: one line says what a pass would have sold, so a Shift held by chance does not read as selling broken. Only
+-- while Sell grey items is on and there was something to sell; "grey items" while all of it is grey.
+local function Kept()
+	if not SellOn() then
+		return
+	end
+	local queue = Scan(nil, 0)
+	local grey = true
+	for _, sale in ipairs(queue) do
+		grey = grey and not sale.listed
+	end
+	if #queue > 0 then
+		E.Say(("Kept %d %s%s this visit (Shift was held as the merchant opened)."):format(#queue, grey and "grey " or "", Items(#queue)))
+	end
+end
+
 local function Visit(at, keep, tries)
 	waiting = false
 	if at ~= visit or not open or not ns.Enabled("errands") then
@@ -662,6 +680,7 @@ local function Visit(at, keep, tries)
 	Repair(false, selling)
 	if keep then
 		notes[#notes + 1] = "kept with Shift"
+		Kept()
 	elseif selling then
 		Sell()
 	end

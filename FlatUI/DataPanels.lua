@@ -1,23 +1,24 @@
 local ADDON_NAME, ns = ...
 
 -- Data panels: two panels of Flat UI's own, the top panel and the bottom panel, each a row of up to six slots on a flat background with a thin
--- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, the hearthstone, the time,
--- the quests in the log, experience, reputation, coordinates, frame rate and latency, friends or guild members online, the equipment set worn, or
--- the feed of another addon through LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no
--- library, and shows feeds of the kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to show is hidden, and
--- a panel makes its frames only once a slot has something to show. The panels are children of UIParent, so they hide with the interface, and they
--- are hidden in a pet battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading screen). /flatui move places them: each is
--- in the list of the movers (FlatUIDataTop and FlatUIDataBottom) with the panel itself as its box.
--- A stream is drawn again on its events, once for a burst of them, and the few that change by themselves (coordinates, frame rate and latency,
--- the cooldown of the hearthstone) on a ticker that runs only while a shown panel holds one of them. Pointing at a slot writes its lines in
--- GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide when the cursor leaves). No click casts anything: a left click on the
--- equipment set opens a menu of Flat UI's own (Menus, below), one on Bag space opens or closes Flat UI's bag window while Bags is on
--- (ns.BagsToggle, Bags.lua), one on Time, Quest log, Friends, Guild, Durability or Reputation opens the game's window for it (in a fight as the
+-- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, ammunition, soul shards, the
+-- hearthstone, the time, the quests in the log, experience, reputation, coordinates, frame rate and latency, friends or guild members online, the
+-- equipment set worn, or the feed of another addon through LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with
+-- it (Flat UI ships no library, and shows feeds of the kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to
+-- show is hidden, and a panel makes its frames only once a slot has something to show. The panels are children of UIParent, so they hide with the
+-- interface, and they are hidden in a pet battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading
+-- screen). /flatui move places them: each is in the list of the movers (FlatUIDataTop and FlatUIDataBottom) with the panel itself as its box. A
+-- stream is drawn again on its events, once for a burst of them, and the few that change by themselves (coordinates, frame rate and latency, the
+-- cooldown of the hearthstone) on a ticker that runs only while a shown panel holds one of them. Pointing at a slot writes its lines in GameTooltip
+-- (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide when the cursor leaves). No click casts anything: a left click on the equipment set
+-- opens a menu of Flat UI's own (Menus, below), one on Bag space opens or closes Flat UI's bag window while Bags is on (ns.BagsToggle, Bags.lua),
+-- one on Time, Quest log, Friends, Guild, Durability, Reputation or Coordinates (the world map) opens the game's window for it (in a fight as the
 -- fight ends, with a line in chat), and Shift-click on Coordinates, Experience or Reputation puts its line in the chat box (DataStreams.lua), a
--- right click on any slot of Flat UI's own opens the Data panels page of the options (ns.OpenPanelPage, Panel.lua, after the fight in one), each
--- tooltip ends with a dim line that says so, and a click on a feed goes to the feed's own OnClick. A press is a click only when it is let go over
--- the slot. Every value of the game is read in pcall, and one it withholds is left out, with the count it belongs to: no part of a
--- count is shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line for /flatui status.
+-- right click on any slot of Flat UI's own opens a menu of Flat UI's own under it ("Top panel, third slot") to choose what the slot shows, the one
+-- shown now in gold with a tick, whose last line opens the Data panels page of the options (ns.OpenPanelPage, Panel.lua, after the fight in one;
+-- P.SlotMenu, Menus), each tooltip ends with a dim line that says so, and a click on a feed goes to the feed's own OnClick. A press is a click only
+-- when it is let go over the slot. Every value of the game is read in pcall, and one it withholds is left out, with the count it belongs to: no
+-- part of a count is shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line for /flatui status.
 -- The gold of the account's characters is kept in FlatUIDB.datapanels.gold by "Name - Realm", and the feeds a slot of any profile shows in
 -- FlatUIDB.datapanels.feeds, so a slot keeps its feed while the addon that makes it loads after Flat UI.
 -- The looks of the Look rows are calls on Flat UI's own frames and font strings only: the outline of the text in the flags of SetFont, its shadow
@@ -1237,7 +1238,7 @@ function P.Tip(slot, fresh)
 		local said, text = P.Run(stream, stream.Hint)
 		hint = said and type(text) == "string" and text ~= "" and text or nil
 	end
-	hint = (hint and (hint .. " ") or "") .. "Right-click: Data panels options."
+	hint = (hint and (hint .. " ") or "") .. "Right-click: choose what this slot shows."
 	pcall(function()
 		tip:SetOwner(slot.frame, P.Anchor(slot.panel))
 		tip:SetText(lines.title or stream.label, 1, 1, 1)
@@ -1357,19 +1358,21 @@ end
 
 -- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment set, Bag
 -- space, Time, Coordinates, Quest log, Experience, Reputation, Friends, Guild, Durability), with the slot and the button. A right click on a slot
--- of Flat UI's own closes its menu and opens the Data panels page of the options instead (in a fight the window says it opens after it). Any other
--- click on a slot of Flat UI's own does nothing.
+-- of Flat UI's own opens the slot's menu of what it shows (P.SlotMenu, below), or closes it when it is open; another menu open on the slot
+-- closes first. Any other click on a slot of Flat UI's own does nothing.
 function P.Click(slot, button)
 	if not slot.feed then
 		local stream = P.StreamOf(slot.id)
 		if button == "RightButton" and stream then
+			if P.MenuOpen(slot) and P.menu.stream == P.SLOT_MENU then
+				P.CloseMenu()
+				return
+			end
 			P.CloseMenu()
 			if Owned(slot) then
 				pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 			end
-			if type(ns.OpenPanelPage) == "function" then
-				ns.OpenPanelPage(KEY)
-			end
+			P.SlotMenu(slot)
 			return
 		end
 		if stream and type(stream.Click) == "function" and not ns.PartStopped(KEY, stream.label) then
@@ -1386,12 +1389,12 @@ end
 
 -- Menus -------------------------------------------------------------------------------------------------------------------------------------------
 
--- A menu of Flat UI's own that a stream opens from its slot (Equipment set): a title and a column of lines in the face and size of the panels, on
--- a flat background with a thin border, under the slot when the panel is in the upper half of the screen and over it in the lower half, as its
--- tooltip opens. A line is { text, pick = function, inert = true for a line that does nothing }. A click on a line closes the menu and runs its
--- pick as a part of the stream. A press anywhere else (GLOBAL_MOUSE_DOWN, heard on a frame of Flat UI's own only while the menu is shown), a
--- second click on the slot, the start of a fight, the slot hiding or showing another stream and the module going off close it. Nothing of the
--- game's is used for it: neither the game's menus nor its list of the windows that Escape closes.
+-- A menu of Flat UI's own that a stream opens from its slot (Equipment set), or a right click (the slot's menu, P.SlotMenu): a title and a column
+-- of lines in the face and size of the panels, on a flat background with a thin border, under the slot when the panel is in the upper half of the
+-- screen and over it in the lower half, as its tooltip opens. A line is { text, pick = function, inert = true for a line that does nothing }. A
+-- click on a line closes the menu and runs its pick as a part of the stream. A press anywhere else (GLOBAL_MOUSE_DOWN, heard on a frame of Flat
+-- UI's own only while the menu is shown), a second click on the slot, the start of a fight, the slot hiding or showing another stream and the
+-- module going off close it. Nothing of the game's is used for it: neither the game's menus nor its list of the windows that Escape closes.
 local EDGE = 4
 -- The light behind the line under the cursor.
 local LIGHT = { 1, 1, 1, 0.08 }
@@ -1563,6 +1566,56 @@ function P.OpenMenu(slot, stream, title, items)
 	return true
 end
 
+-- The menu of a slot: a right click on a slot of Flat UI's own opens it, titled with the panel and the slot ("Top panel, third slot"). It lists
+-- None, every stream and the feeds, as the slot's row on the options page does (ns.DataPanelChoices), the one the slot shows now in gold with a
+-- tick, which does nothing; a pick sets the slot's row (ns.Set, and Home's Recent changes as for a change on the page, so Ctrl+Z and the reset
+-- arrow take it back) and the module's refresh draws the panel again. Its last line opens the Data panels page of the options (ns.OpenPanelPage,
+-- Panel.lua; in a fight the window says it opens after it). SLOT_MENU stands for a stream in P.OpenMenu, for the label of its part.
+P.SLOT_MENU = { label = "Slot menu" }
+local ORDINALS = { "first", "second", "third", "fourth", "fifth", "sixth" }
+local TICK = " |TInterface\\Buttons\\UI-CheckBox-Check:0|t"
+
+-- Sets the row of a slot, and notes the change in Home's Recent changes with the row of Config.lua, as a change made on the page is noted.
+local function SetSlot(path, id)
+	local before = ns.Get(path)
+	ns.Set(path, id)
+	local home = ns.PanelHome
+	if not (type(home) == "table" and type(home.Noted) == "function" and type(ns.PAGES) == "table") then
+		return
+	end
+	for _, page in ipairs(ns.PAGES) do
+		for _, row in ipairs(page) do
+			if type(row) == "table" and row.path == path then
+				home.Noted(row, before, ns.Get(path))
+				return
+			end
+		end
+	end
+end
+
+function P.SlotMenu(slot)
+	local spec = slot.panel and slot.panel.spec
+	if not (spec and slot.index) then
+		return
+	end
+	local path, now = KEY .. "." .. spec.id .. slot.index, slot.id or "none"
+	local items = {}
+	for _, choice in ipairs(ns.DataPanelChoices()) do
+		local id, label = choice[1], choice[2]
+		local shown = id == now
+		items[#items + 1] = { text = shown and (WARN .. label .. "|r" .. TICK) or label, inert = shown, pick = function()
+			SetSlot(path, id)
+		end }
+	end
+	items[#items + 1] = { text = DIM .. "Data panels options|r", pick = function()
+		if type(ns.OpenPanelPage) == "function" then
+			ns.OpenPanelPage(KEY)
+		end
+	end }
+	local title = ("%s panel, %s slot"):format(spec.id == "top" and "Top" or "Bottom", ORDINALS[slot.index] or tostring(slot.index))
+	P.OpenMenu(slot, P.SLOT_MENU, title, items)
+end
+
 -- The module --------------------------------------------------------------------------------------------------------------------------------------
 
 local function EachStream(method)
@@ -1658,6 +1711,14 @@ function ns.DataPanelsMoved()
 		if panel.wanted and panel.frame then
 			ns.Try(KEY, P.Place, panel)
 		end
+	end
+end
+
+-- Another file changed what a stream reads without an event the stream hears (Errands' Show the reputation you gain switches the faction of
+-- Flat UI's bar BURST seconds after the gain, by a timer, ErrandsLevelling.lua): its slots are drawn again, once for a burst, as on its events.
+function ns.DataPanelMark(id)
+	if ns.Enabled(KEY) then
+		ns.Try(KEY, P.Mark, id)
 	end
 end
 
