@@ -129,6 +129,9 @@ GearWindow.lua
 ItemIndex.lua
 GearSearch.lua
 GearButton.lua
+TrinketQueue.lua
+TrinketQueueWindow.lua
+TrinketQueueButtons.lua
 HealthColour.lua
 CastTime.lua
 CastTicks.lua
