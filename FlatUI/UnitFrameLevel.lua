@@ -191,7 +191,7 @@ end
 -- The level of the player frame as you level: in the name row, from the end the row puts it at, and on the portrait, from its corner.
 local function LevelUp()
 	local rec = X.known(_G.PlayerFrame)
-	if rec == nil then
+	if rec == nil or ns.PartStopped(KEY, PART) then
 		return
 	end
 	local row = rec.row
