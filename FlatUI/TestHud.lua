@@ -26,11 +26,15 @@ local _, ns = ...
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
 --   shows; their timers drain over 10 seconds and loop. They stand in for UIParent, so their place is the box's.
 --   The sample nameplate: an enemy plate with its cast bar, auras and quest mark with its kill count (while Quest mark on enemies you need for a
---   quest is on), and for a warrior the Overpower icon with its swipe, at the middle of the screen, 160 units up, with a dim Sample nameplate under
---   it, as plates have no place of their own. Its cast fills, and it takes the threat states in turn every 3 seconds (You want, Changing hands, You
---   do not want) while Threat on nameplates is on: its health bar in the threat colour while Colour health bars by threat is on, the threat ring as
---   Threat glow asks, a sample threat value (40%, 92%, 110%) at Threat value position, size, offsets, outline and colour, and the fade of Fade
---   enemies held for you (SetupDrawPlates.lua's P.Threat); the quest mark moves past a value on its side.
+--   quest is on and the marks are not left to Questie), and for a warrior the Overpower icon with its swipe over the auras, at the middle of the
+--   screen, 160 units up, with a dim Sample nameplate under it, as plates have no place of their own. Its cast fills, and it takes the threat states
+--   in turn every 3 seconds (You want, Changing hands, You do not want) while Threat on nameplates is on: its health bar in the threat colour while
+--   Colour health bars by threat is on, the threat ring as Threat glow asks (flashing as it reaches You do not want, with Flash the ring when threat
+--   goes wrong), a sample threat value (40%, 92%, 110%) at Threat value position, size, offsets, outline and colour, the name and the health text in
+--   the threat colour, the threat colour on the border and the background as their rows ask, the name of the enemy's target right of the bar ([Gorvak]
+--   in the warrior colour, and you on You do not want unless Not when it attacks you), and the fade of Fade enemies held for you
+--   (SetupDrawPlates.lua's P.Threat); the quest mark moves past a value and the enemy's target on its side, and its kill count goes up with each
+--   threat round (3/8 to 7/8), popping as it does. While Moving is off the Overpower swipe holds still with the rest (the stage's still).
 -- The cursor ring is no module, so it cannot register with test mode (TM.Register runs an entry only while its module is on): at every On, Off,
 -- pause and resume (TM.Watch) the ring applies its rows again (ns.CursorRingChanged, which reads TM.IsOn: In combat only reads as shown while it
 -- is on), and while test mode is on and Moving a frame of this file gives the ring a sample cast and global cooldown every 3 seconds
@@ -425,7 +429,8 @@ TM.StandIn({
 	end,
 	Build = function(holder)
 		local P = ns.SetupDrawPlates
-		holder.state = { stage = holder, plates = {}, parts = {}, outlines = {} }
+		-- still: the sample's Overpower swipe holds still with the rest while Moving is off.
+		holder.state = { stage = holder, plates = {}, parts = {}, outlines = {}, still = function() return not TM.Moving() end }
 		holder.plate = P.NewPlate(holder.state, holder)
 		holder.caption = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
 		if holder.caption then

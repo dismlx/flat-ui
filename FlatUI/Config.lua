@@ -341,6 +341,8 @@ ns.PAGES = {
 		{ key = "threatGlow", kind = "choice", default = "needs", label = "Threat glow", needs = "threat",
 			choices = { { "off", "Off" }, { "needs", "When the enemy needs you" }, { "all", "Every threat state" } },
 			tip = "A ring in the threat colour around the health bar; When the enemy needs you leaves out threat you want." },
+		{ key = "threatFlash", kind = "bool", default = true, label = "Flash the ring when threat goes wrong", needs = "threatGlow", needsIn = { "needs", "all" },
+			tip = "The ring flashes twice as an enemy turns to you, or away from you while you tank." },
 		{ key = "threatBorder", kind = "bool", default = false, label = "Threat colour on the health bar border", needs = "threat",
 			tip = "Your target, focus and mouseover keep their border colour, and it needs Health bar border." },
 		{ key = "threatBackground", kind = "bool", default = false, label = "Health bar background in the threat colour", needs = "threatBar",

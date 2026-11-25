@@ -15,9 +15,12 @@ local _, ns = ...
 -- PlateOverpower.lua (the Overpower icon of a sample with overpower, whose swipe drains over its 5 seconds and starts again) do to a plate with the
 -- same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a unit (UnitDocumentation.lua:1526-1529).
 -- Test mode's sample plate (TestHud.lua) is P.NewPlate and P.Plate on a frame of its own; a sample's threat (threatGood, threatTransition or
--- threatBad) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua and PlateThreatText.lua draw it (P.Threat), gives it
--- the threat ring, a sample threat value and the fade of an enemy held for you or changing hands; P.CastProgress, P.Health and P.Threat change only
--- its fills, time, ring, value and alpha. Setup's plates have no threat, so they show none of the three.
+-- threatBad) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua, PlateText.lua and PlateThreatText.lua draw it
+-- (P.Threat), gives it the threat ring (flashing as it turns to threatBad), a sample threat value, the threat colour on its name, health text,
+-- border and background as their rows ask, the name of the enemy's target and the fade of an enemy held for you or changing hands; P.CastProgress,
+-- P.Health and P.Threat change only its fills, time, ring, colours, texts and alpha. Setup's plates have no threat, so they show none of these. A
+-- stage whose state has still (test mode's, true while Moving is off) pauses the sample's Overpower swipe with it (P.SwipeStill), and a sample with
+-- questHave counts that many of 8 kills and pops its count as it goes up.
 
 local KEY = "nameplates"
 local P = {}
@@ -53,6 +56,9 @@ P.QUEST_POP, P.QUEST_POP_SECONDS = 1.6, 0.3
 -- GAP), and the ring's thickness and its gap past the border in pixels (PlateThreatLook.lua's RING_PX and GAP_PX).
 P.THREAT_VALUES = { threatGood = "40%", threatTransition = "92%", threatBad = "110%" }
 P.THREAT_GAP, P.RING_PX, P.RING_GAP = 4, 2, 2
+-- The name of the enemy's target on the sample (PlateThreatText.lua's TargetPart): a warrior who holds it, and you while it attacks you; the share of
+-- the threat colour the background takes (PlateThreatLook.lua's BACK_SHARE).
+P.THREAT_HOLDER, P.THREAT_HOLDER_CLASS, P.BACK_SHARE = "Gorvak", "WARRIOR", 0.3
 -- The Overpower icon of PlateOverpower.lua: its spell, its file when the client gives none, the crop of each edge, the units over the name and its
 -- window in seconds.
 P.OP_SPELL, P.OP_FILE, P.OP_CROP, P.OP_GAP, P.OP_WINDOW = 7384, "Interface\\Icons\\Ability_MeleeDamage", 0.08, 2, 5
@@ -401,7 +407,10 @@ function P.NewPlate(S, parent)
 	p.ringOutline = P.Outline(S, p.ring, p.ring)
 	ns.KeepOutline(p.ringOutline)
 	ns.SetOutline(p.ringOutline, false, false)
+	p.ringFlash = type(ns.PlateRingFlash) == "function" and ns.PlateRingFlash(p.ring) or nil
 	p.tvalue = Txt(p.f, "OVERLAY")
+	p.ttarget = Txt(p.f, "OVERLAY")
+	p.ttarget:Hide()
 	-- The Overpower icon, its border and its swipe, a Cooldown frame of the drawing's own set up as PlateOverpower.lua's MakeSwipe sets its own.
 	p.opFrame = Frame(p.f)
 	p.op = Tex(p.opFrame, "ARTWORK", 0)
@@ -417,9 +426,21 @@ function P.NewPlate(S, parent)
 		pcall(swipe.SetDrawBling, swipe, false)
 		pcall(swipe.SetHideCountdownNumbers, swipe, true)
 		swipe:SetScript("OnCooldownDone", function()
+			-- A round that ends while the stage holds still starts again once it moves.
+			if P.Still(p) then
+				p.opDone = true
+				return
+			end
 			P.OverpowerSwipe(p, true)
 		end)
 		p.opSwipe = swipe
+		-- A stage that can hold still (test mode's Moving off, S.still) pauses the swipe with it and lets it run on where it stopped; the frame's
+		-- OnUpdate runs only while the icon shows.
+		if type(S.still) == "function" then
+			p.opFrame:SetScript("OnUpdate", function()
+				P.SwipeStill(p)
+			end)
+		end
 	end
 	p.opFrame:Hide()
 	p.cast = Frame(p.f)
@@ -583,6 +604,12 @@ function P.Border(p, spec, o)
 	ns.SetOutlineThickness(p.lvlOutline, px)
 	if r == nil and o.hover and spec.hover then
 		r, g, b = ns.Colour(KEY .. ".hoverColour")
+	end
+	-- A sample in a threat state (test mode's) takes the threat colour with Threat colour on the health bar border, after the target, the focus and
+	-- the mouseover and before the kind of unit, KIND_PX thick, as Nameplates.lua's Mark orders ns.PlateThreatBorder.
+	if r == nil and spec.threat and P.THREAT_VALUES[spec.threat] and o.styled and Get("threat") == true and Get("threatBorder") == true then
+		r, g, b = ns.Colour(KEY .. "." .. spec.threat)
+		px = P.KIND_PX
 	end
 	if r == nil and o.kindBorder and spec.kind then
 		local colour = P.KindColour(spec.kind)
@@ -803,6 +830,10 @@ function P.QuestMark(p, spec, o, m)
 		if side == "right" then
 			x, y = p.tvalueR, p.tvalueY
 		end
+		-- The name of the enemy's target sits after the value on the right, so the mark goes past it.
+		if p.ttarget:IsShown() and ns.Finite(p.ttargetR) then
+			x, y = p.ttargetR, m.center
+		end
 		x = x + gap
 	elseif place == "above" then
 		-- Over the sample's auras while it has them (m.top), as the live mark stands over the debuff row.
@@ -870,10 +901,21 @@ function P.Threat(p, spec, o, m)
 		ns.SetOutlineColour(p.ringOutline, r, g, b)
 		ns.SetOutline(p.ringOutline, true, false)
 		p.ring:Show()
+		-- A sample that has just turned to threat you do not want flashes its ring, with Flash the ring when threat goes wrong.
+		local flash = p.ringFlash
+		if flash and threat == "threatBad" and p.lastThreat ~= "threatBad" and Get("threatFlash") == true then
+			pcall(flash.Stop, flash)
+			pcall(flash.Play, flash)
+		end
 	else
+		if p.ringFlash then
+			pcall(p.ringFlash.Stop, p.ringFlash)
+		end
 		ns.SetOutline(p.ringOutline, false, false)
 		p.ring:Hide()
 	end
+	p.lastThreat = threat
+	P.ThreatLooks(p, spec, o, on)
 	local text = p.tvalue
 	local mode = on and Get("threatValue") or "off"
 	p.tvalueSide = nil
@@ -908,6 +950,7 @@ function P.Threat(p, spec, o, m)
 		p.tvalueSide = place
 		text:Show()
 	end
+	P.ThreatTarget(p, spec, o, m, on)
 	local alpha = spec.alpha or 1
 	if on and Get("threatFade") == true and not (spec.target or spec.focus) then
 		local row = threat == "threatGood" and "threatFadeAlpha" or threat == "threatTransition" and "threatFadeChanging" or nil
@@ -917,6 +960,68 @@ function P.Threat(p, spec, o, m)
 		end
 	end
 	p.f:SetAlpha(alpha)
+end
+
+-- The rest of the threat look of the sample, from its state while the threat is on (on), else the look without threat: the name in the threat colour
+-- with Threat colour on the name and the health text with it with Health text in the name's colour (PlateText.lua's ThreatColour), the border with
+-- Threat colour on the health bar border (P.Border), and a dark shade of the threat colour behind the bar with Health bar background in the threat
+-- colour while threat colours the bar and Health bar background is on, and not on a target that keeps the target's colour (PlateThreatLook.lua's
+-- Back). Only colours and the fill: P.Plate laid them out.
+function P.ThreatLooks(p, spec, o, on)
+	local r, g, b
+	if on then
+		r, g, b = ns.Colour(KEY .. "." .. spec.threat)
+	end
+	-- Through ns.TextStyle at the size P.Text gave them, which keeps the colour it last set.
+	local named = on and Get("threatName") == true
+	local name = named and { r, g, b } or P.NameColour(spec, o)
+	ns.TextStyle(p.name, { percent = o.nameSize, r = name[1], g = name[2], b = name[3] })
+	local text = (named and Get("threatHealthText") == true) and { r, g, b } or o.textColour
+	ns.TextStyle(p.htext, { percent = o.textSize, r = text[1], g = text[2], b = text[3] })
+	P.Border(p, spec, o)
+	local back = on and o.backdrop and Get("threatBackground") == true and Get("threatBar") == true
+		and not (Get("targetBar") == true and spec.target)
+	if back then
+		local share = P.BACK_SHARE
+		ns.SetOutlineFill(p.outline, r * share, g * share, b * share, ns.OutlineBackdropAlpha(p.outline))
+	else
+		ns.SetOutlineFill(p.outline, nil, nil, nil, nil)
+	end
+end
+
+-- The name of the enemy's target right of the sample (PlateThreatText.lua's TargetPart) while Name of the enemy's target is on, and only on your
+-- target with Only on your target: a warrior who holds it in the warrior colour, and your own name in your class colour while it attacks you, hidden
+-- then with Not when it attacks you. In brackets, in the health text's font at Threat value size, after the value on the right, else after the end
+-- of the bar or the level box. p.ttargetR is its right end, which a quest mark on the right goes past.
+function P.ThreatTarget(p, spec, o, m, on)
+	local text = p.ttarget
+	local mine = spec.threat == "threatBad"
+	if not (on and Get("aggroTarget") == true and not (Get("aggroTargetOnly") == true and not spec.target)
+		and not (mine and Get("aggroTargetNotMe") == true)) then
+		text:Hide()
+		p.ttargetR = nil
+		return
+	end
+	local name, class = P.THREAT_HOLDER, P.THREAT_HOLDER_CLASS
+	if mine then
+		name, class = P.Player()
+	end
+	local colour = type(RAID_CLASS_COLORS) == "table" and RAID_CLASS_COLORS[class]
+	colour = type(colour) == "table" and { colour.r, colour.g, colour.b } or { 1, 1, 1 }
+	local percent = Get("threatValueSize")
+	P.Text(text, P.FONT * m.v, percent, "game", colour, o.face)
+	text:SetText(("[%s]"):format(name))
+	local width = text:GetStringWidth()
+	local height = P.FONT * m.v * (ns.Finite(percent) and percent or 100) / 100
+	width = ns.Finite(width) and width or height * 4
+	local edge = (m.levelOut and o.level ~= "hidden") and m.LX + m.LW or m.BW
+	if p.tvalue:IsShown() and p.tvalueSide == "right" and ns.Finite(p.tvalueR) then
+		edge = p.tvalueR
+	end
+	edge = edge + P.THREAT_GAP
+	P.Put(p, text, "LEFT", edge, m.center, width, height)
+	p.ttargetR = edge + width
+	text:Show()
 end
 
 -- Overpower's own icon (C_Spell.GetSpellTexture), else its file, asked once.
@@ -934,8 +1039,43 @@ function P.OverpowerIcon()
 	return P.opIcon
 end
 
+-- True while the stage of a plate holds still (test mode's Moving off: S.still), when it has a say.
+function P.Still(p)
+	local still = p.S and p.S.still
+	if type(still) ~= "function" then
+		return false
+	end
+	local ok, answer = pcall(still)
+	return ok and answer == true
+end
+
+-- The swipe pauses as the stage holds still and runs on where it stopped as it moves again; a round that ended while still starts the next one.
+-- From the Overpower frame's OnUpdate, which runs only while the icon shows.
+function P.SwipeStill(p)
+	local swipe = p.opSwipe
+	local still = P.Still(p)
+	if not swipe or still == (p.opStill == true) then
+		return
+	end
+	p.opStill = still
+	if still then
+		if swipe.Pause then
+			pcall(swipe.Pause, swipe)
+		end
+		return
+	end
+	if swipe.Resume then
+		pcall(swipe.Resume, swipe)
+	end
+	if p.opDone then
+		p.opDone = nil
+		P.OverpowerSwipe(p, true)
+	end
+end
+
 -- The swipe drains over the window and starts again each new round of P.OP_WINDOW seconds, while Time left on the Overpower icon is on. done: the
--- last round's swipe just ended, so the next round starts even when the clock still reads the end of the last.
+-- last round's swipe just ended, so the next round starts even when the clock still reads the end of the last. While the stage holds still a swipe
+-- that runs is not started again, so a repaint leaves it where it stopped.
 function P.OverpowerSwipe(p, done)
 	local swipe = p.opSwipe
 	if not swipe then
@@ -946,6 +1086,10 @@ function P.OverpowerSwipe(p, done)
 			p.opRound = nil
 			pcall(swipe.Clear, swipe)
 		end
+		p.opDone = nil
+		return
+	end
+	if p.opRound and P.Still(p) then
 		return
 	end
 	local now = type(GetTime) == "function" and GetTime() or 0

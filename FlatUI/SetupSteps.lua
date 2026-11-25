@@ -128,6 +128,7 @@ ns.SETUP_STEPS = {
 		{ "nameplates.hover", "o", "mock-nameplate" },
 		{ "nameplates.hoverColour", "r", "mock-nameplate" },
 		{ "nameplates.threatGlow", "o", "behaviour", "Draws a ring in the threat colour around the health bar of an enemy that needs you." },
+		{ "nameplates.threatFlash", "r", "behaviour", "Flashes the threat ring as an enemy turns to you, or away from you while you tank." },
 		{ "nameplates.threatBorder", "r", "behaviour", "Colours the health bar border by threat." },
 		{ "nameplates.threatBackground", "r", "behaviour", "Gives an enemy's health bar background a dark shade of its threat colour." },
 		{ "nameplates.threatFade", "o", "behaviour", "Fades enemies whose threat you want, so the ones that need you stand out." },
