@@ -48,7 +48,10 @@ local _, ns = ...
 -- lies over the slots the search lights. The search itself, typing and the cross work in a fight too.
 -- A right click on the box (OnMouseUp) opens a menu of BagsLayout's (B.Layout.Menu) of quick searches, New items, Junk, Bind on equip, Quest items,
 -- Cannot use, Consumables, Trade goods, Green and better and Epic and better, each with its term at the right; a pick types the term (the one
--- typed now is ticked), and Clear, while a search is typed, clears it. The menu belongs to the box's window, and closes with it.
+-- typed now is ticked), and Clear, while a search is typed, clears it. Under a Recent header it lists the last RECENT (5) searches typed, newest
+-- first, the one typed now ticked, and Clear recent: a search is kept when Enter is pressed, when the box loses the keyboard and when it is cleared
+-- (the cross, Clear, the bags closing), but not a quick search, in FlatUIDB.bags.recent for the account (ns.Account; BagsData.lua resets only its v
+-- and chars), so they last between sessions. The menu belongs to the box's window, and closes with it.
 -- The bag search key: Bindings.xml binds a click of FlatUIBagSearchButton (CLICK FlatUIBagSearchButton:LeftButton), a plain button of Flat UI's own
 -- made here as the file loads, a child of UIParent with no size and no point that hears the release only, as the bank key's (BagsBank.lua), named
 -- in the game's Key Bindings by the global BINDING_NAME_CLICK FlatUIBagSearchButton:LeftButton. It opens the bag window with the command hold, as
@@ -93,10 +96,10 @@ local HELP = {
 	"tip: looks in each item's tooltip: tip:stamina, tip:\"fire resistance\", tip:agility #boe.",
 	"For example: #boe q>=uncommon, !#junk mail, (cloth | leather) #gear.",
 	"Items that do not match are dimmed. Enter or Escape leaves the box, and the cross clears it.",
-	"Right-click the box for quick searches. A key under Flat UI in Key Bindings opens the bags with this box ready.",
+	"Right-click the box for quick searches and your last five searches. A key under Flat UI in Key Bindings opens the bags with this box ready.",
 }
 -- The tooltip of a box that holds a search, under its text.
-local SHORT = "The cross clears it. Right-click the box for quick searches."
+local SHORT = "The cross clears it. Right-click the box for quick searches and your recent ones."
 -- The quick searches of the box's right-click menu: what each line says and the term it types.
 local QUICK = {
 	{ "New items", "#new" },
@@ -109,6 +112,13 @@ local QUICK = {
 	{ "Green and better", "q>=uncommon" },
 	{ "Epic and better", "q>=epic" },
 }
+-- The searches the menu keeps under Recent, for the account (FlatUIDB.bags.recent, newest first): at most RECENT, none of them a quick search, and
+-- the room a line of it takes in the menu before it is cut.
+local RECENT, RECENT_LETTERS = 5, 40
+local QUICK_TERMS = {}
+for _, quick in ipairs(QUICK) do
+	QUICK_TERMS[quick[2]] = true
+end
 -- The bag search key: Bindings.xml binds a click of this plain button of Flat UI's own (CLICK FlatUIBagSearchButton:LeftButton).
 local KEY_BUTTON = "FlatUIBagSearchButton"
 local KEY_BINDING = "CLICK " .. KEY_BUTTON .. ":LeftButton"
@@ -891,11 +901,49 @@ local function WriteBoxes()
 	end
 end
 
--- Sets the shared text, writes every box that shows another, and asks for the search again in both windows.
+-- The recent searches (FlatUIDB.bags.recent), or nil when none is kept or the saved variables have not loaded.
+local function Recent()
+	local db = ns.Account()
+	local bags = type(db) == "table" and db.bags or nil
+	local list = type(bags) == "table" and bags.recent or nil
+	if type(list) == "table" and #list > 0 then
+		return list
+	end
+	return nil
+end
+
+-- Keeps a search the player typed as the newest of the recent ones: not an empty one or a quick search; one kept already moves to the front, and
+-- the oldest past RECENT goes.
+local function Remember(value)
+	value = Text(value)
+	if not value or not value:find("%S") or QUICK_TERMS[value] then
+		return
+	end
+	local db = ns.Account()
+	if type(db) ~= "table" then
+		return
+	end
+	if type(db.bags) ~= "table" then
+		db.bags = {}
+	end
+	local list = { value }
+	for _, kept in ipairs(Recent() or {}) do
+		if type(kept) == "string" and kept ~= value and #list < RECENT then
+			list[#list + 1] = kept
+		end
+	end
+	db.bags.recent = list
+end
+
+-- Sets the shared text, writes every box that shows another, and asks for the search again in both windows. A search cleared (the cross, Clear, or
+-- the bags closing) is kept as a recent one first.
 function Search.SetText(value)
 	value = Text(value) or ""
 	if value == text then
 		return
+	end
+	if value == "" then
+		Remember(text)
 	end
 	text = value
 	if not writing then
@@ -996,7 +1044,8 @@ local function Cross(box, own)
 end
 
 -- The quick searches of the box: a menu of BagsLayout's (Layout.Menu) under the box, each line a term to type, the one typed now ticked, and Clear
--- while a search is typed. owner: the window of the box, whose closing closes the menu.
+-- while a search is typed; then, while any is kept, Recent with the searches typed before, newest first (a pick types it), and Clear recent.
+-- owner: the window of the box, whose closing closes the menu.
 local function Quick(box, owner)
 	local items = {}
 	for _, quick in ipairs(QUICK) do
@@ -1010,6 +1059,29 @@ local function Quick(box, owner)
 		items[#items + 1] = { text = "Clear", part = "search", pick = function()
 			Search.SetText("")
 			box:ClearFocus()
+		end }
+	end
+	-- The searches typed before, newest first; the box keeps a typed bar as "||", which the menu shows as one bar. A long one is cut.
+	local recent = Recent()
+	if recent then
+		items[#items + 1] = { text = "Recent", header = true }
+		for _, kept in ipairs(recent) do
+			if type(kept) == "string" and kept ~= "" then
+				local shown = kept
+				if #shown > RECENT_LETTERS then
+					shown = shown:sub(1, RECENT_LETTERS - 3):gsub("|+$", "") .. "..."
+				end
+				items[#items + 1] = { text = shown, tick = text == kept, part = "search", pick = function()
+					Search.SetText(kept)
+					box:ClearFocus()
+				end }
+			end
+		end
+		items[#items + 1] = { text = "Clear recent", part = "search", pick = function()
+			local db = ns.Account()
+			if type(db) == "table" and type(db.bags) == "table" then
+				db.bags.recent = nil
+			end
 		end }
 	end
 	local layout = B.Layout
@@ -1050,6 +1122,7 @@ function Search.Box(parent, owner)
 		self:ClearFocus()
 	end)
 	box:SetScript("OnEnterPressed", function(self)
+		Run(Remember, text)
 		self:ClearFocus()
 	end)
 	box:SetScript("OnEditFocusGained", function(self)
@@ -1058,6 +1131,7 @@ function Search.Box(parent, owner)
 		Refresh(self)
 	end)
 	box:SetScript("OnEditFocusLost", function(self)
+		Run(Remember, text)
 		Paint(self)
 		Refresh(self)
 	end)
