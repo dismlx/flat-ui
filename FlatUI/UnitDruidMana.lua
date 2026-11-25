@@ -9,7 +9,8 @@ local _, ns = ...
 -- is 0, PowerTypeConstantsDocumentation.lua:25), and a withheld answer keeps what shows. It is made for a druid alone (UnitClass plainly DRUID).
 -- The bar: a StatusBar 4 pixels high, in the fill of the frame's power bar (Power bar texture, else the bar texture of the Flat UI page; a white
 -- image for a solid fill) and the colour of mana (ns.PowerColour, with Muted colours as the frame's bars have it), with Flat UI's outline in the
--- look of the Unit frames page. A status bar with a texture takes withheld values and one without refuses them (HealthColour.lua, Probe), so it
+-- look of the Unit frames page, both with the corners of Corners (a rounded line and background, and a mask of the radius on the fill; UnitFrames.lua,
+-- X.ownCorners), changed with the row. A status bar with a texture takes withheld values and one without refuses them (HealthColour.lua, Probe), so it
 -- always has one. It is fed UnitPowerMax and UnitPower of mana unread (SecretWhenUnitPowerMaxRestricted and SecretWhenUnitPowerRestricted,
 -- UnitDocumentation.lua:2732-2734 and 2801-2803), which SetMinMaxValues and SetValue take (SimpleStatusBarAPIDocumentation.lua:229-237,
 -- 355-363). It hangs under the power bar (ManaBarArea.ManaBar, 124 by 10 at TOPLEFT 87,-61 of the frame, Camelot/PlayerFrame.lua:91-96) as wide
@@ -24,7 +25,8 @@ local _, ns = ...
 -- UNIT_MAXPOWER of mana and UNIT_DISPLAYPOWER for the player on a frame of its own (RegisterUnitEvent, as UnitGroupMarks.lua hears the auras of
 -- one member, so no other unit's power reaches Flat UI; UnitDocumentation.lua:4234-4243, 4406-4416, 4551-4561), and UPDATE_SHAPESHIFT_FORM
 -- (SpellBookDocumentation.lua:989-994), only while it is wanted. The value glides to each new one (the interpolation ExponentialEaseOut of SetValue, never
--- withheld) where the client has it. In test mode (TestMode.lua, TM.Watch) it shows for a druid in any form, at 60% in caster form, and is painted again as
+-- withheld) where the client has it, but is set at once as the bar shows, or as it stops being the sample of test mode, since the mana it last had is
+-- stale by then (nothing feeds a hidden bar). In test mode (TestMode.lua, TM.Watch) it shows for a druid in any form, at 60% in caster form, and is painted again as
 -- the rows change; the real rule comes back as test mode ends. The game's player frame is not changed: no field written, no method called.
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLResourceBars/Init.lua:19, resourceBarsDruidFixedMana, a
 -- Forever and TBC option whose bar is not in the package; EnhanceQoLUnitFrames/UF_Helper.lua:1773-1823, a druid's second power is mana, shown
@@ -86,7 +88,7 @@ local function Anchor(rec, joined)
 	return power and power.target or rec.parts.power
 end
 
--- The frame, the bar and its outline, made once out of combat. Nil when the player frame has no bar to hang it from, or when the game refuses the
+-- The frame, the bar, its outline and the mask that cuts its fill to the corners, made once out of combat. Nil when the player frame has no bar to hang it from, or when the game refuses the
 -- texture the bar needs, which is not tried again.
 local function Make(rec)
 	local parent, anchor = rec.parts.badges or rec.parts.owner, Anchor(rec)
@@ -109,6 +111,14 @@ local function Make(rec)
 	bar:SetMinMaxValues(0, 1)
 	bar:SetValue(0)
 	d.outline = ns.Outline(holder, bar)
+	if type(bar.CreateMaskTexture) == "function" then
+		local okMask, mask = pcall(bar.CreateMaskTexture, bar)
+		if okMask and mask ~= nil then
+			ns.Own[mask] = true
+			mask:SetAllPoints(bar)
+			d.mask = mask
+		end
+	end
 	rec.druidMana = d
 	return d
 end
@@ -153,7 +163,7 @@ local function Place(rec, d)
 	d.placed, d.anchor = key, anchor
 end
 
--- The fill, the colour of mana and the outline as the frame's bars have them.
+-- The fill, the colour of mana, the corners and the outline as the frame's bars have them.
 local function Paint(d)
 	local file = File()
 	if d.file ~= file then
@@ -171,6 +181,9 @@ local function Paint(d)
 		r, g, b = X.mute(r, g, b)
 	end
 	pcall(d.bar.SetStatusBarColor, d.bar, r, g, b, 1)
+	if type(X.ownCorners) == "function" then
+		X.ownCorners(d)
+	end
 	if d.outline then
 		ns.SetOutlineEdges(d.outline, Opt("barBorder") ~= false)
 		X.outline(d.outline, true, Opt("backdrop"))
@@ -187,14 +200,16 @@ local function Glide(bar, value)
 	return pcall(bar.SetValue, bar, value)
 end
 
--- The mana and its most, unread, onto the bar.
-local function Feed(d)
+-- The mana and its most, unread, onto the bar: at once with jump (a bar that just showed), else gliding.
+local function Feed(d, jump)
 	local okMost, most = pcall(UnitPowerMax, "player", MANA)
 	if okMost then
 		pcall(d.bar.SetMinMaxValues, d.bar, 0, most)
 	end
 	local ok, mana = pcall(UnitPower, "player", MANA)
-	if ok then
+	if ok and jump then
+		pcall(d.bar.SetValue, d.bar, mana)
+	elseif ok then
 		Glide(d.bar, mana)
 	end
 end
@@ -218,6 +233,8 @@ end
 local function Show(d)
 	local form = InForm(d)
 	local show = Wanted() and (form or Testing())
+	-- The bar was hidden or showed the sample: the mana on it is not the player's of now.
+	local fresh = not d.shown or d.sample == true
 	if d.shown ~= show then
 		d.holder:SetShown(show)
 		d.shown = show
@@ -227,7 +244,7 @@ local function Show(d)
 		pcall(d.bar.SetMinMaxValues, d.bar, 0, 1)
 		pcall(d.bar.SetValue, d.bar, 0.6)
 	elseif show then
-		Feed(d)
+		Feed(d, fresh)
 	end
 end
 

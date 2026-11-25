@@ -19,18 +19,25 @@ local _, ns = ...
 -- 387-410): GameTooltip at its default anchor, set again every 0.2 seconds through UpdateTooltip, a field of this button of the addon's own, and
 -- hidden as the mouse leaves while the button still owns it.
 -- Its children: a health bar in the reaction colour of Flat UI's unit frames (ns.ReactionColour; the Health colour of the Unit frames page when the
--- game withholds it, as UnitFrameLooks.lua falls back), grey with Dead at its right end while the unit is plainly dead, the name on it, the health in
--- percent at its right end, and Flat UI's outline around it in the look of the Unit frames page. The name takes the face, size and outline of the name
--- rows and the percent the face, outline and colour of the bar text rows of the Unit frames page (UnitText.lua, X.ownSpec).
+-- game withholds it, as UnitFrameLooks.lua falls back), full and grey with Dead at its right end while the unit is plainly dead, as the raid cells
+-- draw a dead member, the name on it, the health in percent at its right end, and Flat UI's outline around it in the look of the Unit frames page.
+-- The outline and the fill take the corners of Corners (UnitFrames.lua Round and Shape: a rounded line and background, and a mask of the radius on
+-- the fill), out of combat. The raid marker of the unit sits just left of the frame while Raid marker on target, focus, boss and pet target frames
+-- is on (the index of GetRaidTargetIndex goes unread to SetSpriteSheetCell, as UnitGroupMarks.lua has it, and the icon shows only when the client
+-- took it), drawn again on RAID_TARGET_UPDATE. While the mouse is over the button and Highlight under the mouse is on, a white layer of its own over
+-- the bar brightens it by the amount the unit frames use (UnitFrameLooks.lua, X.hoverAlpha), in the shape of the corners; the button is the addon's
+-- own, so its OnEnter and OnLeave show and hide it. The name takes the face, size and outline of the name rows and the percent the face, outline and
+-- colour of the bar text rows of the Unit frames page (UnitText.lua, X.ownSpec).
 -- UnitHealth is always withheld and UnitHealthMax, UnitHealthPercent and UnitName may be (UnitDocumentation.lua:1472-1475, 1506-1529, 2489-2491): they
 -- go unread to SetMinMaxValues, SetValue, SetFormattedText and SetText, which take them (SimpleStatusBarAPIDocumentation.lua:229-237, 355-363;
 -- SimpleFontStringAPIDocumentation.lua:664-673), on a bar with a texture, which a bar needs to take them (HealthColour.lua, Probe). The value glides to
 -- each new one (the interpolation ExponentialEaseOut of SetValue, never withheld, SimpleStatusBarConstantsDocumentation.lua:27-28) where the client has
--- it. They are written when the frame shows, when the pet changes its target (UNIT_TARGET for pet), when the player's pet changes (UNIT_PET for player;
--- UnitDocumentation.lua:4448-4457, 4868-4877), and on a step of 0.2 seconds while it shows, since the game sends no health event for pettarget; the step
--- stops when the frame hides.
+-- it, but is set at once for a new unit and after a dead one, so the bar never slides from the last unit's health. They are written at once when the
+-- frame shows, when the pet changes its target (UNIT_TARGET for pet) and when the player's pet changes (UNIT_PET for player; UnitDocumentation.lua:
+-- 4448-4457, 4868-4877), and gliding on a step of 0.2 seconds while it shows, since the game sends no health event for pettarget; the step stops when
+-- the frame hides.
 -- Test mode (TestMode.lua, TM.Register): a sample of the frame, a plain frame of the addon's own on UIParent that takes no mouse, with the same children,
--- painted and placed as the button is and filled with fixed values (Training Dummy at 65% in the hostile colour), shows while test mode is on, the row is
+-- painted and placed as the button is and filled with fixed values (Training Dummy at 65% in the hostile colour, with a Skull), shows while test mode is on, the row is
 -- on and the game does not show the button; the button wins as soon as the game shows it. Nothing of it touches the secure button.
 -- /flatui move places it (FlatUIPetTarget in Movers.lua: the frame's top left corner is the top left corner of the box). With no spot saved the box
 -- is right of the pet frame where the game's default layout puts it. Nothing of the game is changed and none of the game's frames is touched; the
@@ -56,6 +63,7 @@ local BOX_W, BOX_H, BOX_X, BOX_Y = 120, 20, -246, 238
 local HEIGHT, INSET, TICK = 20, 4, 0.2
 local FONT = "GameFontHighlightSmall"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
+local MARKER = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local LINE_BROKEN = "Unit frames: Pet target frame: the game did not make the frame, so it does not show until /reload."
 local LINE_NO_WATCH = "Unit frames: Pet target frame: this client has no unit watch, so the frame does not show."
 local LINE_WAITS = "Unit frames: Pet target frame: a change waits for the end of the fight."
@@ -139,28 +147,68 @@ local function Percent(pct)
 	pct:SetFormattedText(Format(), UnitHealthPercent(UNIT, true, CurveConstants.ScaleTo100))
 end
 
--- The health, the percent, the name and the colour of the unit, unread where the game withholds them. A unit that is plainly dead has a grey bar and
--- says Dead.
-local function Fill()
+-- The cell of a marker on the sheet of the eight icons, 4 by 4 (UnitGroupMarks.lua Cell). True when the icon shows a marker.
+local function Cell(icon, index)
+	if type(icon.SetSpriteSheetCell) == "function" then
+		return (pcall(icon.SetSpriteSheetCell, icon, index, 4, 4))
+	elseif ns.Finite(index) then
+		local column, row = (index - 1) % 4, math.floor((index - 1) / 4)
+		return (pcall(icon.SetTexCoord, icon, column / 4, (column + 1) / 4, row / 4, (row + 1) / 4))
+	end
+	return false
+end
+
+-- The raid marker of the unit, or of the sample (index 8, Skull), while Raid marker on target, focus, boss and pet target frames is on. The index the game
+-- withholds goes unread to the icon.
+local function Marker(t, sample)
+	local icon = t.marker
+	if icon == nil then
+		return
+	end
+	local shown = false
+	if Opt("raidMarker") == true then
+		if sample then
+			shown = Cell(icon, 8)
+		elseif type(GetRaidTargetIndex) == "function" then
+			local ok, index = pcall(GetRaidTargetIndex, UNIT)
+			if ok and (IsSecret(index) or (ns.Finite(index) and index >= 1 and index <= 8 and index == math.floor(index))) then
+				shown = Cell(icon, index)
+			end
+		end
+	end
+	icon:SetShown(shown)
+end
+
+-- The health, the percent, the name, the colour and the raid marker of the unit, unread where the game withholds them. A unit that is plainly dead has a
+-- full grey bar and says Dead. jump: a new unit, or a bar that just showed, takes its value at once; so does the first living unit after a dead one.
+local function Fill(jump)
 	local bar, name, pct = P.bar, P.name, P.pct
 	if not bar then
 		return
 	end
-	local okMost, most = pcall(UnitHealthMax, UNIT)
-	if okMost then
-		pcall(bar.SetMinMaxValues, bar, 0, most)
+	local dead = Yes(pcall(UnitIsDead, UNIT))
+	if dead then
+		pcall(bar.SetMinMaxValues, bar, 0, 1)
+		pcall(bar.SetValue, bar, 1)
+	else
+		local okMost, most = pcall(UnitHealthMax, UNIT)
+		if okMost then
+			pcall(bar.SetMinMaxValues, bar, 0, most)
+		end
+		local ok, health = pcall(UnitHealth, UNIT)
+		if ok and (jump == true or P.dead) then
+			pcall(bar.SetValue, bar, health)
+		elseif ok then
+			Glide(bar, health)
+		end
 	end
-	local ok, health = pcall(UnitHealth, UNIT)
-	if ok then
-		Glide(bar, health)
-	end
+	P.dead = dead or nil
 	local okName, text = pcall(UnitName, UNIT)
 	if okName and (IsSecret(text) or type(text) == "string") then
 		name:SetText(text)
 	else
 		name:SetText("")
 	end
-	local dead = Yes(pcall(UnitIsDead, UNIT))
 	if dead then
 		pct:SetText(DEAD or "Dead")
 	elseif not pcall(Percent, pct) then
@@ -177,6 +225,7 @@ local function Fill()
 		end
 	end
 	pcall(bar.SetStatusBarColor, bar, r, g, b, 1)
+	Marker(P)
 end
 
 -- The step of 0.2 seconds while the frame shows. A client without NewTicker gets a timer that sets the next one while the token is the step's, as
@@ -221,12 +270,15 @@ end
 
 -- The game showed or hid the button. The sample of test mode makes way for it, and comes back after it.
 local function OnShow()
-	X.run(PART, Fill)
+	X.run(PART, Fill, true)
 	Tick(true)
 	X.run(PART, P.SampleOn)
 end
 
 local function OnHide()
+	if P.lit then
+		P.lit:Hide()
+	end
 	Tick(false)
 	X.run(PART, P.SampleOn)
 end
@@ -245,13 +297,20 @@ local function Tooltip(self)
 	self.UpdateTooltip = Tooltip
 end
 
+-- The layer of Highlight under the mouse shows while the mouse is over the button and the row is on.
 local function OnEnter(self)
+	if P.lit then
+		P.lit:SetShown(Opt("hoverHighlight") == true)
+	end
 	if not pcall(Tooltip, self) then
 		self.UpdateTooltip = nil
 	end
 end
 
 local function OnLeave(self)
+	if P.lit then
+		P.lit:Hide()
+	end
 	self.UpdateTooltip = nil
 	if type(GameTooltip) == "table" then
 		local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, self)
@@ -261,8 +320,8 @@ local function OnLeave(self)
 	end
 end
 
--- The children of the button or of the sample, on frame, into t: the bar, the percent at its right end, the name left of it, and the outline. Raises when
--- the game refuses one.
+-- The children of the button or of the sample, on frame, into t: the bar, the percent at its right end, the name left of it, the outline, the mask that
+-- cuts the fill to the corners, the raid marker left of the frame and the layer of Highlight under the mouse. Raises when the game refuses one.
 local function Children(frame, t)
 	local bar = CreateFrame("StatusBar", nil, frame)
 	ns.Own[bar] = true
@@ -281,6 +340,27 @@ local function Children(frame, t)
 	name:SetPoint("RIGHT", pct, "LEFT", -INSET, 0)
 	t.frame, t.bar, t.name, t.pct, t.file = frame, bar, name, pct, WHITE
 	t.outline = ns.Outline(frame, frame, true)
+	if type(bar.CreateMaskTexture) == "function" then
+		local mask = bar:CreateMaskTexture()
+		ns.Own[mask] = true
+		mask:SetAllPoints(bar)
+		t.mask = mask
+	end
+	local marker = bar:CreateTexture(nil, "OVERLAY", nil, 7)
+	ns.Own[marker] = true
+	marker:SetTexture(MARKER)
+	marker:SetSize(HEIGHT - 2, HEIGHT - 2)
+	marker:SetPoint("RIGHT", frame, "LEFT", -2, 0)
+	marker:Hide()
+	t.marker = marker
+	local lit = bar:CreateTexture(nil, "OVERLAY", nil, 6)
+	ns.Own[lit] = true
+	lit:SetAllPoints(bar)
+	lit:SetTexture(WHITE)
+	lit:SetBlendMode("ADD")
+	lit:SetVertexColor(1, 1, 1, X.hoverAlpha or 0.12)
+	lit:Hide()
+	t.lit = lit
 end
 
 -- Made once, out of combat: the button, its bar, the name and the percent on it and the outline. False when the game refuses it, which is not tried again.
@@ -322,7 +402,23 @@ local function Make()
 	return true
 end
 
--- The width of its row, the look of the Unit frames page and the text rows, on the button or the sample.
+-- The corners of Corners on the outline and the fill of the button or the sample (UnitFrames.lua, X.ownCorners), out of combat as Paint is, and the
+-- highlight in the same shape (the crisp square while the corners are square).
+local function Corners(t)
+	if type(X.ownCorners) ~= "function" then
+		return
+	end
+	local radius, changed = X.ownCorners(t)
+	if changed and t.lit then
+		if type(X.shape) ~= "function" or not X.shape(t.lit, radius) then
+			pcall(t.lit.SetTexture, t.lit, WHITE)
+		end
+		pcall(t.lit.SetBlendMode, t.lit, "ADD")
+		pcall(t.lit.SetVertexColor, t.lit, 1, 1, 1, X.hoverAlpha or 0.12)
+	end
+end
+
+-- The width of its row, the look of the Unit frames page, its corners and the text rows, on the button or the sample.
 local function Paint(t)
 	local width = Opt("petTargetWidth")
 	width = ns.Finite(width) and width or BOX_W
@@ -337,6 +433,7 @@ local function Paint(t)
 		end
 		t.file = file
 	end
+	Corners(t)
 	if t.outline then
 		ns.SetOutlineEdges(t.outline, Opt("barBorder") ~= false)
 		X.outline(t.outline, true, Opt("backdrop"))
@@ -485,6 +582,7 @@ local function SampleFill()
 		r, g, b = X.mute(r, g, b)
 	end
 	bar:SetStatusBarColor(r, g, b, 1)
+	Marker(S, true)
 end
 
 -- Shows the sample, painted, placed and filled, while test mode is on, the row is on and the game does not show the button, and hides it otherwise. Its
@@ -532,22 +630,26 @@ function ns.PetTargetMoved()
 	end
 end
 
--- The pet changed its target, or the player's pet changed: the frame, if it shows, is written again.
-local function Changed()
+-- The pet changed its target, or the player's pet changed (jump: a new unit, whose value is set at once), or a raid marker changed: the frame, if it
+-- shows, is written again.
+local function Changed(jump)
 	if Shown() then
-		Fill()
+		Fill(jump)
 	end
 end
 
 ns.AddEvent(KEY, "UNIT_TARGET", function()
-	X.run(PART, Changed)
+	X.run(PART, Changed, true)
 end, function(unit)
 	return not IsSecret(unit) and unit == "pet"
 end)
 ns.AddEvent(KEY, "UNIT_PET", function()
-	X.run(PART, Changed)
+	X.run(PART, Changed, true)
 end, function(unit)
 	return not IsSecret(unit) and unit == "player"
+end)
+ns.AddEvent(KEY, "RAID_TARGET_UPDATE", function()
+	X.run(PART, Changed)
 end)
 
 ns.AddStatus(KEY, function()

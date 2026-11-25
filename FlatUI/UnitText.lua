@@ -78,8 +78,9 @@ local function NameColour(rec)
 	if mode == "custom" then
 		return ns.Colour(KEY .. ".nameCustom")
 	elseif mode == "white" then
-		-- White names was a look of the name rows alone, so a frame without a row keeps the game's colour.
-		if X.rowOn(rec) then
+		-- White names was a look of the name rows alone, so a frame without a row keeps the game's colour. A raid frame has no row, and its name
+		-- is white there, also while the game colours raid names by class.
+		if X.rowOn(rec) or rec.kind == "raid" then
 			return 1, 1, 1
 		end
 		return nil
@@ -211,8 +212,11 @@ end
 -- Raid frames: the name of a raid frame, and of a raid-style party frame, takes the face, size, outline and colour of the name rows, and its status text
 -- the face and outline of the bar text rows. The game sets only the text, the points and the vertex colour of its name (Shared/CompactUnitFrame.lua:
 -- 857-889, 1802-1836, 2006-2009) and the text of its status (:1095-1113), never their font, so a font set once holds. Its vertex colour is white unless
--- the game greys a unit or colours names by class, and it multiplies the text colour set here, so a class colour of the name rows lasts through the
--- game's updates. The game names a new unit with CompactUnitFrame_UpdateName, which this follows (ns.FollowGlobal) for the colour of the new unit.
+-- the game greys a unit or colours names by class (Class colours on the game's raid frame options), and it multiplies the text colour set here, so a
+-- name of the rows would come out as its colour times the game's. While a name row gives the name a colour, the vertex colour of the name is set
+-- white (SetVertexColor, a widget call) after each of the game's writes, and the name has exactly the colour of the row. The game's last vertex colour
+-- is read first (rec.raidVertexWas) and put back when the row gives no colour again or the part stops. The game names a new unit and sets that
+-- colour with CompactUnitFrame_UpdateName, which this follows (ns.FollowGlobal) for the colour of the new unit and to read the game's colour again.
 local raidFollowed = false
 local RaidName
 
@@ -222,11 +226,32 @@ local function OnRaidName(frame)
 	end
 	local rec = X.known(frame)
 	if rec ~= nil and rec.kind == "raid" and rec.made and X.active(rec) then
-		X.run(PART, RaidName, rec, true)
+		X.run(PART, RaidName, rec, true, true)
 	end
 end
 
-function RaidName(rec, on)
+-- The vertex colour of a raid name: white while the rows colour it, the game's own again when they stop. fresh is true just after the game set it.
+local function RaidVertex(rec, name, coloured, fresh)
+	if coloured then
+		if rec.raidVertexWas == nil or fresh then
+			local ok, r, g, b = pcall(name.GetVertexColor, name)
+			if ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+				rec.raidVertexWas = { r, g, b }
+			elseif fresh then
+				rec.raidVertexWas = nil
+			end
+		end
+		rec.raidWhite = pcall(name.SetVertexColor, name, 1, 1, 1) or rec.raidWhite
+	elseif rec.raidWhite then
+		local was = rec.raidVertexWas
+		if was ~= nil then
+			pcall(name.SetVertexColor, name, was[1], was[2], was[3])
+		end
+		rec.raidVertexWas, rec.raidWhite = nil, nil
+	end
+end
+
+function RaidName(rec, on, fresh)
 	if rec.kind ~= "raid" then
 		return
 	end
@@ -237,9 +262,11 @@ function RaidName(rec, on)
 	if name ~= nil then
 		local spec = { percent = 100 }
 		local styled = live and NameLook(rec, spec)
-		if ns.TextStyle(name, spec) == false and styled then
+		local set = ns.TextStyle(name, spec)
+		if set == false and styled then
 			X.refused(rec, "names", "name")
 		end
+		RaidVertex(rec, name, live and spec.r ~= nil and set ~= false, fresh)
 	end
 	local status = X.path(rec.frame, "statusText")
 	if status ~= nil then
