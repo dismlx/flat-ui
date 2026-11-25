@@ -935,7 +935,7 @@ ns.SETUP_STEPS = {
 		{ "chat.spellPower", "c", "behaviour", "Adds to a spell's tooltip the share of your spell damage, healing or attack power it adds." },
 		{ "chat.spellStats", "o", "behaviour", "Adds how much that share is with your stats now, and the threat your attack power adds." },
 		{ "chat.spellTotal", "c", "behaviour", "Adds to a spell's tooltip what one cast does now with your stats, base and bonus together, over its duration for a spell over time." },
-		{ "chat.spellRates", "o", "behaviour", "Adds a dim line under the total with what a cast does on average with crits, misses and Spell Piercing, for a second of cast time and for a point of mana." },
+		{ "chat.spellRates", "o", "behaviour", "Adds a dim line under the total with what a cast does on average with crits, misses and Spell Piercing, for a second of cast time and for a point of mana, and how many casts a full bar of mana gives." },
 		{ "chat.spellLowRank", "r", "behaviour", "Counts less spell power for ranks far below your level, by an estimate from players' tests on WoW: Forever." },
 		{ "chat.spellNextRank", "o", "behaviour", "Adds to a spell's tooltip the level of its next rank, that you can learn it now, or that it comes from a book." },
 		{ "chat.spellThreat", "c", "behaviour", "Adds a spell's threat where it is special or your stance, form, aura, talents or gear change it, or to every spell whose threat is known." },

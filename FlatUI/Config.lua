@@ -2491,7 +2491,7 @@ ns.PAGES = {
 		{ key = "spellTotal", kind = "bool", default = true, label = "Total of a cast", needs = "spellPower",
 			tip = "What one cast does now with your stats, base and bonus together, as in Total 973 a cast (556 + 417). A spell over time says its total over its duration and a tick, a channel its whole channel, a heal its healing, and a weapon strike one hit with the weapon you wear." },
 		{ key = "spellRates", kind = "bool", default = true, label = "Average and rates", needs = "spellTotal",
-			tip = "A dim line under the total: what a cast does on average with crits, misses and, for a spell, the damage your Spell Piercing adds, against the enemy Against names under Gear comparison, and that for a second of cast time (the global cooldown for an instant) and for a point of mana. Not for rage or energy." },
+			tip = "A dim line under the total: what a cast does on average with crits, misses and, for a spell, the damage your Spell Piercing adds, against the enemy Against names under Gear comparison, and that for a second of cast time (the global cooldown for an instant) and for a point of mana, with how many casts a full bar of mana gives. Not for rage or energy." },
 		-- It needs no other row: the gear comparison counts it too, in item tooltips and the window (GearModel.lua), as Against and the rows after it
 		-- serve the window (design 2.5: the low rank factor while its row is on).
 		{ key = "spellLowRank", kind = "bool", default = true, label = "Less for low ranks (estimate)",
