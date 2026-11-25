@@ -961,7 +961,8 @@ end
 -- What a hit report for the player's own character shows, in the form Describe gives, with the format of the amount in place of what
 -- follows it. level is Combat text for you: take shows the damage and the healing, more adds the words and the gains. The colours are
 -- the game's own for damage and healing (CombatTextConstants.lua:28, 38, 57; red for a physical hit or a school that is not known, purple
--- for any other school) and white for a word (:29-37 colour a missed swing red and :39-45 a missed spell white; the report does not say
+-- for any other school, or with Colour by school of magic on the colour of a single school, SCHOOLS, the school mask of UNIT_COMBAT being plain)
+-- and white for a word (:29-37 colour a missed swing red and :39-45 a missed spell white; the report does not say
 -- which it was). A gain has the colour of the portrait's (CombatFeedback.lua:78-80): the game's combat text colours it by power
 -- (CombatTextUtil.lua:44-49) and the report does not name the power.
 -- WOUND with 0 is a word as on the portrait (CombatFeedback.lua:53-64).
@@ -975,10 +976,16 @@ local function DescribeOwn(level, event, flag, amount, none, school)
 			local name = (flag == "ABSORB" or flag == "BLOCK" or flag == "RESIST") and flag or "MISS"
 			return "word", Word(name), "%s", false, 1, 1, 1, nil, KindSize(flag, name)
 		end
+		local crit = flag == "CRITICAL" or flag == "CRUSHING"
 		if Plain(school, "number") and school ~= 1 then
-			return "amount", amount, "-%s", flag == "CRITICAL" or flag == "CRUSHING", 0.79, 0.3, 0.85
+			-- Colour by school of magic: a spell of one school in its colour (Frost light blue, Fire orange); several schools stay purple.
+			local colour = Opt("school") == true and SCHOOLS[school]
+			if colour then
+				return "amount", amount, "-%s", crit, colour[1], colour[2], colour[3]
+			end
+			return "amount", amount, "-%s", crit, 0.79, 0.3, 0.85
 		end
-		return "amount", amount, "-%s", flag == "CRITICAL" or flag == "CRUSHING", 1, 0.1, 0.1
+		return "amount", amount, "-%s", crit, 1, 0.1, 0.1
 	elseif event == "HEAL" then
 		if none then
 			return nil

@@ -618,7 +618,7 @@ ns.PAGES = {
 			choices = { { "game", "The game's own numbers" }, { "flat", "Flat UI numbers" } } },
 		{ key = "units", kind = "choice", default = "all", label = "Enemies", choices = { { "all", "Every enemy with a nameplate" }, { "target", "Target only" } } },
 		{ key = "school", kind = "bool", default = false, label = "Colour by school of magic",
-			tip = "Off shows hits of your spells in yellow, and swings and shots in white. Special attacks are yellow unless Physical ability hits is White. On colours each hit by its school." },
+			tip = "Off shows hits of your spells in yellow, and swings and shots in white. Special attacks are yellow unless Physical ability hits is White. On colours each hit by its school, also spells that hit you in the Incoming area." },
 		{ key = "abilityColour", kind = "choice", default = "spell", label = "Physical ability hits", needs = "whose", needsIn = { "one" },
 			tip = "Maul, Heroic Strike and other special attacks: Yellow shows them as spells and White as swings.",
 			choices = { { "spell", "Yellow" }, { "white", "White" } } },

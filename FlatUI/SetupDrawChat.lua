@@ -567,13 +567,15 @@ do
 		{ text = "824", flag = "CRITICAL", school = 1, crit = true, age = 0.12 },
 	}
 	-- For the player, as the module's own samples: the report, the text with its sign, whether it is a critical hit, whether it shows
-	-- from Damage and healing you take, the colour, and whether it starts a few units to one side.
+	-- from Damage and healing you take, the colour, and whether it starts a few units to one side. The last is a Frost spell's hit: the game's
+	-- purple, or light blue with Colour by school of magic on (school, ns.CombatColour).
 	local OWN = {
 		{ text = "-412", level = "take", colour = { 1, 0.1, 0.1 }, side = true },
 		{ text = "-824", level = "take", colour = { 1, 0.1, 0.1 }, crit = true },
 		{ text = "+300", level = "take", colour = { 0.1, 1, 0.1 } },
 		{ text = "Dodge", level = "more", colour = { 1, 1, 1 }, side = true, word = true },
 		{ text = "+20", level = "more", colour = { 0.41, 0.8, 0.94 } },
+		{ text = "-510", level = "take", colour = { 0.79, 0.3, 0.85 }, school = 16 },
 	}
 	-- Where the sample numbers for the player start, and how far the mock Incoming area reaches.
 	local OWN_TOP, OWN_LENGTH = 150, 120
@@ -919,6 +921,7 @@ do
 		local path = style == "straight" or style == "arc"
 		local snapshot = 0.25 * (#OWN - 1) + 0.1
 		local newest = {}
+		local ownSchool = ns.Get("combattext.school") == true
 		for i, sample in ipairs(OWN) do
 			local fs = S.own[i]
 			local shown = level == "more" or (level == "take" and sample.level == "take")
@@ -936,7 +939,11 @@ do
 				local u = math.max(0, age / life)
 				local dx, dy = ns.ScrollPath(style, u, OWN_LENGTH, dir, -1, scroll.arcs[ns.Get("combattext.arcWidth")])
 				fs:SetText(sample.word and ns.CombatParen(sample.text) or sample.text)
-				U.font(fs, file, Height(base, sample.crit, math.max(0, age), pops), flags, shadow, sample.colour)
+				local colour = sample.colour
+				if sample.school and ownSchool then
+					colour = { ns.CombatColour(sample.school, true) }
+				end
+				U.font(fs, file, Height(base, sample.crit, math.max(0, age), pops), flags, shadow, colour)
 				fs:SetAlpha(age < 0 and 0 or ns.ScrollAlpha(u, hold))
 				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OWN_X + rx + dx, top + ry + dy)
 			end
