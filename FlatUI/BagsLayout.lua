@@ -84,8 +84,8 @@ local _, ns = ...
 -- The + slot, the catcher and the flash are BagsCustom.lua's, as the part custom: each pass starts and ends them (B.Custom.Begin, Done) and places
 -- them with each section (B.Custom.Place: the + slot's cell, and the rectangle of the section's cells for its catcher, a frame under the buttons
 -- that takes the mouse only while the cursor holds an item, in both windows); Watch tells it when the cursor comes to hold an item or lets it go
--- (B.Custom.Holding). A drop on either is Layout.Take, the title's drop, unless BagsCustom first moves an item from the bank or worn gear into a
--- free slot of the bags; when that item arrives Layout.Update lays the window out afresh (B.Custom.Arrived), so it shows in its section. A
+-- (B.Custom.Holding). A drop on either is Layout.Take, the title's drop, unless BagsCustom first puts an item of the bank, worn gear or a merchant in
+-- a free slot of the bags; when that item arrives Layout.Update lays the window out afresh (B.Custom.Arrived), so it shows in its section. A
 -- section that took a drop flashes (B.Custom.Took). + New section takes a drop (B.Custom.DropNew), a click (B.Custom.AddClick, a name box or the
 -- menu of the player's sections) and gives its tooltip line (B.Custom.AddTip); the tooltip of Free slots says what it counts.
 -- The buttons are BagsItems.lua's: the game's item buttons for the player's own bags, buttons of Flat UI's own for the live bank and for

@@ -2,14 +2,14 @@ local _, ns = ...
 
 -- Bags: the sections the player makes and names (B.Custom), the + slot that ends each section of the player's own bag window, and the drops on a
 -- section's slots. Bags.lua makes ns.Bags with B.Custom; this file only adds its fields, makes frames, textures and font strings of its own only
--- (ns.Own, ns.OwnText), owns no event of the module, and looks up the functions of the other parts when it calls them, never at load (Bags.lua:9-14).
--- BagsCategories.lua asks Is and Name when it files and names an item, BagsLayout.lua calls Begin, Place, Done, Holding, Arrived, Closed, Took,
--- AddClick, AddTip and DropNew as it lays a window out and takes a drop, and BagsOrder.lua asks Keys for the built-in order and MenuLines for a
--- title's menu. Its work runs as the part custom of the module (B.Part, Bags.lua:378-396), which is not critical, so a fault stops it alone and the
--- windows go on without + slots and catchers.
+-- (ns.Own, ns.OwnText), owns no event of the module, and looks up the functions of the other parts when it calls them, never at load
+-- (Bags.lua:10-14). BagsCategories.lua asks Is and Name when it files and names an item, BagsLayout.lua calls Begin, Place, Done, Holding, Arrived,
+-- Closed, Took, AddClick, AddTip and DropNew as it lays a window out and takes a drop, and BagsOrder.lua asks Keys for the built-in order and
+-- MenuLines for a title's menu. Its work runs as the part custom of the module (B.Part, Bags.lua:379-399), which is not critical, so a fault stops it
+-- alone and the windows go on without + slots and catchers.
 --
 -- The sections: FlatUIDB.bags.custom, { { key = "custom1", name = "Raid" }, ... } in the order they were made, for the whole account beside the
--- placements, the order and the folds (ns.Account, Core.lua:3006-3008; a new layout of BagsData's record resets only its v and chars), and
+-- placements, the order and the folds (ns.Account, Core.lua:3010-3012; a new layout of BagsData's record resets only its v and chars), and
 -- FlatUIDB.bags.customNext, the number of the next key. A key is "custom" and digits, so it never meets a key of Flat UI's own (B.Categories.LIST,
 -- "bag" of Bag by bag, "+add" of the title that makes one), and none is used twice: the next number is above every number saved in the list, the
 -- placements, the folds and the order. At most MOST sections, a name of 1 to LONGEST letters, trimmed, with no bar, unique and none of Flat UI's
@@ -20,7 +20,7 @@ local _, ns = ...
 -- Read keeps what it read until a write or until the saved list changes, since Is is asked for every item at each layout.
 --
 -- The name box: one frame of Flat UI's own on UIParent, made the first time a name is asked, in the DIALOG strata as the bag menus are
--- (BagsLayout.lua:2013), clamped to the screen (SetClampedToScreen, WL/uiobjects.yaml:4581) and taking the mouse (EnableMouse, :7170), in the bag
+-- (BagsLayout.lua:2155), clamped to the screen (SetClampedToScreen, WL/uiobjects.yaml:4581) and taking the mouse (EnableMouse, :7170), in the bag
 -- window's look (the general backdrop at Window opacity, its outline named for the Bags page, as ChatLinks.lua:581-582 names its own), a title, an
 -- EditBox of Flat UI's own (SetAutoFocus, :2976; SetMaxLetters, :3050; SetFocus, :3019; HighlightText, :2877; HasFocus, :2867) with the search box's
 -- look, a note and Cancel and Make (or Rename) in the look of the footer's buttons. Enter (OnEnterPressed) makes or renames, Escape (OnEscapePressed)
@@ -34,7 +34,7 @@ local _, ns = ...
 -- content frame (whose scale is Slot size, so it lines up with the item buttons), as an empty slot of BagsItems.lua is drawn (BagsItems.lua:660-711:
 -- the outline filled in Button and slot colour) with a + in FREE_COLOUR of BagsItems.lua:140. It reads Free slots' count (the free slots of the
 -- general bags, the layout's st.free.count): with none left it dims, and it keeps its cell, so nothing moves while the window is open
--- (BagsLayout.lua:29-31). While the cursor holds an item that it takes, it is lit in the Highlight colour of the Windows page as the titles are.
+-- (BagsLayout.lua:35-37). While the cursor holds an item that it takes, it is lit in the Highlight colour of the Windows page as the titles are.
 -- The catcher: a plain Frame of Flat UI's own per section whose title takes a drop, in both windows, over the rectangle of the section's cells
 -- (title left out), at the content frame's own level (SetFrameLevel, :4646), under the holders of the bags, the item buttons, the titles and the +
 -- slots, and taking the mouse only while the cursor holds an item, so it never takes a click, a tooltip or a drag from a real slot; a drop on a
@@ -44,51 +44,63 @@ local _, ns = ...
 -- GetCursorInfo (WL/apis.yaml:36258) and C_Cursor.GetCursorItem (:10071), whose ItemLocation's bagID, slotIndex and equipmentSlotIndex
 -- (WL/structures.yaml:12645-12656) are read inside a pcall, every value through ns.Finite. No drop is taken in a fight (InCombatLockdown,
 -- :39650, and UnitAffectingCombat, :42083, through Errands.Fighting): the item goes back (ClearCursor, :34956), with one line. An item of the
--- bags (Enum.BagIndex 0 to 5 and the keyring, WL/enums.yaml:544-572), one whose place the game does not say, and every drop in the bank window
--- go to BagsLayout's Layout.Take, the drop on the title: kept in that section (B.Categories.Drop), on Junk the sell list, on Keep in place a pin,
--- and the item goes back to its slot. An item from outside the bags (a bank slot, or worn gear: equipmentSlotIndex 0 to 19, INVSLOT_AMMO to
--- INVSLOT_TABARD, Blizzard_FrameXMLBase/Constants.lua:135-155) dropped in the player's own live bag window first goes into a free slot of the
--- bags: the first empty slot (C_Container.GetContainerItemID, :8603) of the backpack or a normal bag (family 0, the second answer of
--- C_Container.GetContainerNumFreeSlots, :8693; slots C_Container.GetContainerNumSlots, :8704) that is not pinned for another item (B.Pins.Get),
--- else of a special bag 1 to 4 it fits (BagsPins.lua's test: C_Item.GetItemInfoInstant, :16569, and C_Item.GetItemFamily, :16447), never the
--- reagent bag or the keyring; C_Container.PickupContainerItem (:8767, not protected) on that empty slot puts the item there, as the game's own slot
--- click does (ContainerFrame.lua:1535), and the item is kept in the section by its ID (B.Categories.File). A bag from the bag bar (a worn slot
--- past 19) is refused, as is an item for which the bags have no room, with a line in chat (items named by C_Item.GetItemNameByID, :16685). When
--- the moved item has arrived (BagsLayout's Layout.Update asks Arrived), the window is laid out afresh, so it shows in its section and not on the
--- top shelf. A drop on the + New section title (DropNew) gives the item back and asks for a name: the item is kept in the new section by its ID
--- where it lies. A cursor that holds no item (a merchant's item is "merchant", a spell or money is not an item) takes no drop.
+-- bags (Enum.BagIndex 0 to 5 and the keyring, WL/enums.yaml:544-572) and every drop in the bank window go to BagsLayout's Layout.Take, the drop
+-- on the title: kept in that section (B.Categories.Drop), on Junk the sell list, on Keep in place a pin, and the item goes back to its slot. An
+-- item the game gives no place for (C_Cursor.GetCursorItem gives no ItemLocation: an item of the trade window) is refused with a line, since it is
+-- not in the bags. An item from outside the bags (a bank slot, or worn gear: equipmentSlotIndex 0 to 19, INVSLOT_AMMO to INVSLOT_TABARD,
+-- Blizzard_FrameXMLBase/Constants.lua:135-155), or a merchant's item (GetCursorInfo's "merchant" and its index, named by GetMerchantItemID,
+-- :37507, and GetMerchantItemLink, :37514), dropped in the player's own live bag window first goes into a free slot of the bags: the first empty
+-- slot (C_Container.GetContainerItemID, :8603) of the backpack or a normal bag (family 0, the second answer of C_Container.GetContainerNumFreeSlots,
+-- :8693; slots C_Container.GetContainerNumSlots, :8704) that is not pinned (B.Pins.Get), else of a special bag 1 to 4 it fits (BagsPins.lua's
+-- test: C_Item.GetItemInfoInstant, :16569, and C_Item.GetItemFamily, :16447), else the slot pinned for that item itself; never a slot pinned for
+-- another item, the reagent bag or the keyring. The section is asked first (B.Categories.Takes: Junk takes no quest item and none that cannot be
+-- sold, and no section a placement past the most), so a drop it refuses moves nothing, buys nothing and says why. Then
+-- C_Container.PickupContainerItem (:8767, not protected) on that empty slot puts the item there, or buys the merchant's item into it, as the
+-- game's own slot click does (ContainerFrame.lua:1517-1535); the item is kept in the section by its ID (B.Categories.File), and a slot pinned
+-- for it is unpinned (B.Pins.Left), as a title's drop unpins the slot an item came from, so it shows in that section and not in Keep in place. A
+-- merchant's item the game asks about first (a cost in items, or 150 gold or more: MerchantFrame.extendedCost and highPrice, read only, as the
+-- slot click reads them) is refused with a line, so that question is never skipped, and so is a merchant's item on Keep in place, which pins
+-- slots of the bags only. A bag from the bag bar (a worn slot past 19) is refused, as is an item for which the bags have no room, with a line in
+-- chat (items named by C_Item.GetItemNameByID, :16685). When the moved item has arrived (BagsLayout's Layout.Update asks Arrived), the window is
+-- laid out afresh, so it shows in its section and not on the top shelf. BagsLayout reads only an "item" as held (its Holding), so a + slot is
+-- lit for a merchant's item while the mouse is over it, and no catcher takes one: among a section's slots it is the game's buy into the slot it
+-- is let go on. A drop on the + New section title (DropNew) gives the item back and asks for a name: the item is kept in the new section by its
+-- ID where it lies. A cursor that holds no item (a spell or money) takes no drop.
 --
--- The bells: the section that took an item flashes in the Highlight colour and says what happened at the right of its title for a moment
--- ("Kept: Linen Cloth", "Moved in: ...", "On your sell list", "Pinned", "Made", "Renamed"), on a frame of its own over the section; a section that
--- is not laid out within FLASH_WAIT of the drop shows nothing. Refusals keep their lines in chat. The tooltips are GameTooltip (SetOwner, SetText,
--- AddLine, Show, Hide). The row Custom sections (ns.BagsCustomLines, ns.BagsCustomPick) makes, renames and deletes a section with the page on or off,
--- and /flatui status counts them (ns.AddStatus).
+-- The bells: the section that took an item flashes in the Highlight colour and says what happened for a moment ("Kept: Linen Cloth", "Moved in: ...",
+-- "Bought: ...", "On your sell list", "Pinned", "Made", "Renamed"), on a frame of its own over the section. The words are on a tag of their own (the
+-- panel colour, outlined in the Highlight colour), as wide as they need and in the title's font, so a narrow section never cuts them: on the title's
+-- row right after its text; where that would pass the content's right edge, over the first row of the section's cells; for a section with no cells,
+-- at the content's right edge on its title's row. Only a window narrower than the words cuts them. A section that is not laid out within FLASH_WAIT
+-- of the drop shows nothing. Refusals keep their lines in chat. The tooltips are GameTooltip (SetOwner, SetText, AddLine, Show, Hide). The row Custom
+-- sections (ns.BagsCustomLines, ns.BagsCustomPick) makes, renames and deletes a section with the page on or off, and /flatui status counts them
+-- (ns.AddStatus).
 --
--- It never writes a field of a frame or table of the game's, hooks nothing, calls no protected function, moves nothing in a fight, and never
--- touches StaticPopupDialogs, UISpecialFrames or the panel layout of UIParent.
+-- It never writes a field of a frame or table of the game's (it reads two of MerchantFrame, above), hooks nothing, calls no protected function, moves
+-- nothing in a fight, and never touches StaticPopupDialogs, UISpecialFrames or the panel layout of UIParent.
 
 local KEY = "bags"
 local B = ns.Bags
 local Custom = B.Custom
 
 local PART, PREFIX, MOST, LONGEST = "custom", "custom", 20, 24
--- The game's item button in the content's units (BagsLayout.lua:106), and the + on it: two bars, long and thick.
+-- The game's item button in the content's units (BagsLayout.lua:118), and the + on it: two bars, long and thick.
 local SLOT, PLUS_LONG, PLUS_THICK = 37, 13, 2
 -- How strongly a + slot or a catcher that takes the item on the cursor is lit, the same under the mouse, and a + slot under the mouse with an empty
--- cursor (white) (BagsLayout.lua:132).
+-- cursor (white) (BagsLayout.lua:144).
 local LIT, LIT_HOVER, HOVER = 0.14, 0.3, 0.12
 -- The text-dim of the windows, the + of a free slot (BagsItems.lua:140) at rest and dimmed while the bags are full, and the red of a refusal
 -- (BagsWindow.lua:144).
 local DIM = { 0.66, 0.68, 0.62 }
 local PLUS, PLUS_ALPHA, PLUS_DIM = { 0.85, 0.85, 0.85 }, 0.85, 0.3
 local RED = { 1, 0.35, 0.24 }
--- How long after a drop a click on the same frame is that drop (BagsLayout.lua:134).
+-- How long after a drop a click on the same frame is that drop (BagsLayout.lua:146).
 local DROP_CLICK = 0.3
 -- The bells, in seconds: how long a drop waits for its section to be laid out, the fade of the flash, how long the words stay and fade, how long a
--- moved item is waited for; the flash's frame level over the content (below BagsOrder's drop bar at 50, BagsOrder.lua:58), its opacity at the
--- start, and the least room the words need at the right of a title.
+-- moved item is waited for; the flash's frame level over the content (below BagsOrder's drop bar at 50, BagsOrder.lua:62), its opacity at the
+-- start, and the tag of the words: the room inside it on each side, and the space between a title's text and it.
 local FLASH_WAIT, FLASH_FADE, SAY_HOLD, SAY_FADE, ARRIVE_WAIT = 1.5, 0.6, 1.5, 0.5, 5
-local FLASH_LEVEL, FLASH_ALPHA, SAY_LEAST = 40, 0.3, 30
+local FLASH_LEVEL, FLASH_ALPHA, SAY_PAD, SAY_GAP = 40, 0.3, 4, 6
 -- The + slot's level over the content: above the catcher, which lies at the content's own.
 local CELL_LEVEL = 2
 local FIGHT_LINE = "Flat UI: Bags: an item is put in a section out of combat only."
@@ -119,12 +131,15 @@ local SAY = {
 	bagBar = "Put a bag in with the Bag slots row of the bag window.",
 	noRoom = "Your bags have no free slot for %s.",
 	notPut = "The game did not put %s in your bags.",
+	nowhere = "%s is not in your bags. Put it there first, then drop it here.",
+	asks = "The game asks before it buys %s. Buy it into your bags first, then drop it here.",
+	buyFirst = "Buy %s into your bags first, then drop it here.",
 	full = "You have 20 sections, the most. Delete one to make another.",
 }
 local NOTES = { make = "Enter makes it, Escape cancels.", rename = "Enter renames it, Escape cancels." }
 local TIPS = {
 	idle = "Drop an item here, or click here with one on your cursor, to keep it in %s. An item from your bank or one you wear goes into a free "
-		.. "slot of your bags first.",
+		.. "slot of your bags first, and a merchant's item is bought into one.",
 	idleJunk = "Drop an item here, or click here with one on your cursor, to sell it at merchants from now on.",
 	idleKeep = "Drop an item of your bags here, or click here with one on your cursor, to pin the slot it came from to it.",
 	full = " Your bags are full: only an item already in them can be kept here.",
@@ -132,6 +147,9 @@ local TIPS = {
 	bagBar = "A bag goes in with the Bag slots row of the bag window.",
 	keepOutside = "Only an item of your bags can be pinned.",
 	move = "%s to move it into your bags and keep it in %s.",
+	buy = "%s to buy it into a free slot of your bags and keep it in %s.",
+	asks = "The game asks before it buys this item. Buy it into your bags first.",
+	nowhere = "This item is not in your bags. Put it there first.",
 	junk = "%s to sell it at merchants from now on.",
 	keep = "%s to pin the slot it came from to it.",
 	kept = "%s to keep it in %s.",
@@ -141,7 +159,8 @@ local TIPS = {
 	add = "Click to make a section of your own and name it, then drop items on its title or its + slot. Right-click for your sections.",
 	addFull = " You have 20, the most Flat UI keeps.",
 }
-local FLASH = { junk = "On your sell list", keep = "Pinned", moved = "Moved in: %s", kept = "Kept: %s", made = "Made", renamed = "Renamed" }
+local FLASH = { junk = "On your sell list", keep = "Pinned", moved = "Moved in: %s", kept = "Kept: %s", made = "Made", renamed = "Renamed",
+	bought = "Bought: %s" }
 
 -- Small helpers -------------------------------------------------------------------------------------------------------------------------------
 
@@ -970,7 +989,7 @@ end
 -- Drops ---------------------------------------------------------------------------------------------------------------------------------------
 
 -- An item from outside the bags: worn gear, or a container that is not one of the bags (the bank's tabs, 6 to 14, and its bag slots, -2). An item
--- whose place the game does not say counts as one of the bags, so it is handled as a title handles it.
+-- the game gives no place for is neither (Cursor marks it nowhere).
 local function Outside(bag, worn)
 	if worn ~= nil then
 		return true
@@ -981,27 +1000,70 @@ local function Outside(bag, worn)
 	return false
 end
 
--- The item on the cursor: { id, link, bag, slot, worn, outside }, or nil when it holds no item.
+-- A text the client gave, or nil.
+local function Link(link)
+	if type(link) == "string" and not ns.IsSecret(link) and link ~= "" then
+		return link
+	end
+	return nil
+end
+
+-- True while the game would ask before it buys the merchant's item on the cursor: a cost in items, or a price from MERCHANT_HIGH_PRICE_COST
+-- (MerchantFrame.extendedCost and highPrice, set as the item is picked up, Mainline/MerchantFrame.lua:688-695, and read by the slot click,
+-- Mainline/ContainerFrame.lua:1517-1524). Read only; a frame or field it cannot read counts as a question.
+local function Asks()
+	local merchant = MerchantFrame
+	if type(merchant) ~= "table" or ns.Forbidden(merchant) then
+		return true
+	end
+	local ok, extended, high = pcall(function()
+		return merchant.extendedCost, merchant.highPrice
+	end)
+	return not ok or extended ~= nil or high ~= nil
+end
+
+-- A merchant's item on the cursor (GetCursorInfo's "merchant" and its index): { id, link, merchant, outside }, or nil.
+local function MerchantItem(index)
+	index = Whole(index)
+	local id = index and Whole(Ask(GetMerchantItemID, index))
+	if not id or id <= 0 then
+		return nil
+	end
+	return { id = id, link = Link(Ask(GetMerchantItemLink, index)), merchant = index, outside = true, bagBar = false }
+end
+
+-- The item on the cursor: { id, link, bag, slot, worn, outside, nowhere, merchant, bagBar }, or nil when it holds none. nowhere: the game gives no
+-- place for it (no ItemLocation); a client without C_Cursor.GetCursorItem, or a read that fails, leaves it unset.
 local function Cursor()
 	local ok, kind, id, link = pcall(GetCursorInfo)
-	if not ok or ns.IsSecret(kind) or kind ~= "item" then
+	if not ok or ns.IsSecret(kind) then
+		return nil
+	end
+	if kind == "merchant" then
+		return MerchantItem(id)
+	end
+	if kind ~= "item" then
 		return nil
 	end
 	id = Whole(id)
 	if not id or id <= 0 then
 		return nil
 	end
-	local held = { id = id, link = (type(link) == "string" and not ns.IsSecret(link) and link ~= "") and link or nil }
+	local held = { id = id, link = Link(link) }
 	local getItem = type(C_Cursor) == "table" and C_Cursor.GetCursorItem or nil
 	if type(getItem) == "function" then
 		local okItem, location = pcall(getItem)
-		if okItem and not ns.IsSecret(location) and type(location) == "table" then
-			local okSlot, bag, slot, worn = pcall(function()
-				return location.bagID, location.slotIndex, location.equipmentSlotIndex
-			end)
+		if okItem and not ns.IsSecret(location) then
+			local okSlot, bag, slot, worn = false, nil, nil, nil
+			if type(location) == "table" then
+				okSlot, bag, slot, worn = pcall(function()
+					return location.bagID, location.slotIndex, location.equipmentSlotIndex
+				end)
+			end
 			if okSlot then
 				held.bag, held.slot, held.worn = Whole(bag), Whole(slot), Whole(worn)
 			end
+			held.nowhere = (location == nil or okSlot) and held.bag == nil and held.worn == nil or nil
 		end
 	end
 	held.outside = Outside(held.bag, held.worn)
@@ -1009,14 +1071,20 @@ local function Cursor()
 	return held
 end
 
+-- True while the cursor holds an item or a merchant's item.
 local function HasItem()
 	local ok, kind = pcall(GetCursorInfo)
-	return ok and not ns.IsSecret(kind) and kind == "item"
+	return ok and not ns.IsSecret(kind) and (kind == "item" or kind == "merchant")
 end
 
+-- True while the cursor still holds something after a move: CursorHasItem, or any kind GetCursorInfo gives (a merchant's item too).
 local function CursorHeld()
 	local ok, held = pcall(CursorHasItem)
-	return ok and (ns.IsSecret(held) or held == true)
+	if ok and (ns.IsSecret(held) or held == true) then
+		return true
+	end
+	local okKind, kind = pcall(GetCursorInfo)
+	return okKind and (ns.IsSecret(kind) or kind ~= nil)
 end
 
 local function Clear()
@@ -1041,20 +1109,21 @@ local function Fits(id, family)
 	return itemFamily ~= nil and type(bit) == "table" and type(bit.band) == "function" and bit.band(itemFamily, family) ~= 0
 end
 
--- The empty slot an item from outside the bags goes in, read anew: the first of the backpack or a normal bag that is not pinned for another item,
--- else the first such slot of a special bag that fits it; never the reagent bag or the keyring. Nil when there is none.
+-- The empty slot an item from outside the bags goes in, read anew: the first of the backpack or a normal bag that is not pinned, else the first
+-- unpinned slot of a special bag that fits it, else the first slot pinned for this item itself (Categories.Of would file it in Keep in place
+-- there, so Drop unpins it); never a slot pinned for another item, the reagent bag or the keyring. Nil when there is none.
 local function FreeFor(id)
 	local numSlots, numFree, itemOf = Container("GetContainerNumSlots"), Container("GetContainerNumFreeSlots"), Container("GetContainerItemID")
 	if type(numSlots) ~= "function" or type(numFree) ~= "function" or type(itemOf) ~= "function" then
 		return nil
 	end
 	local pinned = Fn(B.Pins, "Get")
-	local spareBag, spareSlot
+	local spareBag, spareSlot, ownBag, ownSlot
 	for bag = FIRST_BAG, LAST_BAG do
 		local okFree, _, family = pcall(numFree, bag)
 		family = okFree and Whole(family) or nil
 		local general = family == 0
-		if general or (family ~= nil and not spareBag and bag > 0 and Fits(id, family)) then
+		if general or (family ~= nil and bag > 0 and Fits(id, family)) then
 			for slot = 1, Whole(Ask(numSlots, bag)) or 0 do
 				local okItem, inSlot = pcall(itemOf, bag, slot)
 				if okItem and not ns.IsSecret(inSlot) and inSlot == nil then
@@ -1063,27 +1132,44 @@ local function FreeFor(id)
 						local okPin, pinId = pcall(pinned, bag, slot)
 						pin = okPin and Whole(pinId) or nil
 					end
-					if pin == nil or pin == id then
-						if general then
-							return bag, slot
-						end
+					if pin == nil and general then
+						return bag, slot
+					elseif pin == nil and not spareBag then
 						spareBag, spareSlot = bag, slot
-						break
+					elseif pin == id and not ownBag then
+						ownBag, ownSlot = bag, slot
 					end
 				end
 			end
 		end
 	end
-	return spareBag, spareSlot
+	if spareBag then
+		return spareBag, spareSlot
+	end
+	return ownBag, ownSlot
 end
 
--- The cursor as the frames of a window last read it: what Holding read as the cursor came to hold an item, and whether it would go in.
+-- The cursor as the frames of a window last read it: what Holding read as the cursor came to hold an item (or Enter, under the mouse), whether
+-- it would go in, and for a merchant's item whether the game would ask first.
 local function ReadHeld()
 	local held = Cursor()
 	if held and held.outside and not held.bagBar then
 		held.fits = FreeFor(held.id) ~= nil
 	end
+	if held and held.merchant then
+		held.asks = Asks()
+	end
 	return held
+end
+
+-- What a + slot shows of the cursor: what it holds while BagsLayout says it holds an item (st.holding), and a merchant's item, which BagsLayout
+-- does not read, while Enter read it under the mouse.
+local function Shown(st, pool)
+	local held = pool.held
+	if held and (st.holding or held.merchant) then
+		return held
+	end
+	return nil
 end
 
 -- True when a drop of the held item in that window moves it into the bags first: from outside the bags, in the player's own live bag window.
@@ -1091,18 +1177,19 @@ local function Moves(st, held)
 	return held.outside and st.which == "bags" and st.mine == true and st.live == true
 end
 
--- Whether a + slot or a catcher takes the held item.
+-- Whether a + slot or a catcher takes the held item: not one the game gives no place for, nothing from outside the bags on Keep in place, and a
+-- merchant's item only where it is bought into a free slot, when the game would not ask first.
 local function Accepts(st, sec, held)
-	if not held then
+	if not held or held.nowhere then
 		return false
 	end
 	if held.outside and sec.key == "keep" then
 		return false
 	end
 	if Moves(st, held) then
-		return not held.bagBar and held.fits == true
+		return not held.bagBar and not held.asks and held.fits == true
 	end
-	return true
+	return not held.merchant
 end
 
 -- Whether the bags have a free slot of the general bags, as Free slots counts them (BagsLayout.lua, st.free.count).
@@ -1132,11 +1219,26 @@ local function Drop(target)
 		print(FIGHT_LINE)
 		return
 	end
+	local name = Plain(ItemName(held.id))
+	if held.nowhere then
+		Clear()
+		Say(SAY.nowhere:format(name))
+		return
+	end
+	if held.merchant and (sec.key == "keep" or not Moves(st, held)) then
+		Clear()
+		Say(SAY.buyFirst:format(name))
+		return
+	end
 	if Moves(st, held) and sec.key ~= "keep" then
-		local name = Plain(ItemName(held.id))
 		if held.bagBar then
 			Clear()
 			Say(SAY.bagBar)
+			return
+		end
+		if held.merchant and Asks() then
+			Clear()
+			Say(SAY.asks:format(name))
 			return
 		end
 		local toBag, toSlot = FreeFor(held.id)
@@ -1146,16 +1248,23 @@ local function Drop(target)
 			Say(SAY.noRoom:format(name))
 			return
 		end
+		-- The section is asked first, so a drop it refuses moves and buys nothing; B.Categories.Takes says why.
+		if Call(B.Categories, "Takes", held.id, sec.key, held.link, held.bag, held.slot) ~= true then
+			Clear()
+			return
+		end
 		pcall(pickup, toBag, toSlot)
 		if CursorHeld() then
 			Clear()
 			Say(SAY.notPut:format(name))
 			return
 		end
-		-- The slot of BagsData is not read yet, so the item is judged by its ID; once it arrives the window is laid out afresh (Arrived).
+		-- The slot of BagsData is not read yet, so the item is judged by its ID; once it arrives the window is laid out afresh (Arrived). A slot pinned
+		-- for the item (FreeFor's last choice) is unpinned, so it shows in this section and not in Keep in place.
 		if Call(B.Categories, "File", held.id, sec.key, held.link, toBag, toSlot) == true then
+			Call(B, "Part", "pins", Call, B.Pins, "Left", held.id, toBag, toSlot)
 			Custom.Arriving(st.which, toBag, toSlot, held.id)
-			Custom.Took(st.which, sec.key, held.id, true)
+			Custom.Took(st.which, sec.key, held.id, true, held.merchant and sec.key ~= "junk" and FLASH.bought:format(name) or nil)
 		end
 		return
 	end
@@ -1210,7 +1319,8 @@ local function Paint(cell)
 	local ar, ag, ab = Accent()
 	local pr, pg, pb = Colour("windows.panel", 0.12, 0.12, 0.12)
 	ns.SetOutlineFill(cell.outline, pr, pg, pb, 1)
-	if st.holding and Accepts(st, sec, pool.held) then
+	local held = Shown(st, pool)
+	if held and Accepts(st, sec, held) then
 		ns.SetOutlineColour(cell.outline, ar, ag, ab)
 		for _, line in ipairs(cell.lines) do
 			line:SetColorTexture(ar, ag, ab, 1)
@@ -1224,7 +1334,7 @@ local function Paint(cell)
 	for _, line in ipairs(cell.lines) do
 		line:SetColorTexture(PLUS[1], PLUS[2], PLUS[3], alpha)
 	end
-	if cell.over and not st.holding then
+	if cell.over and not held then
 		cell.light:SetColorTexture(1, 1, 1, HOVER)
 		cell.light:Show()
 	else
@@ -1240,18 +1350,22 @@ local function Tip(target)
 		return
 	end
 	local label = Plain(sec.label or sec.key)
-	local held = st.holding and target.pool.held or nil
+	local held = Shown(st, target.pool)
 	local verb = target.catcher and TIPS.letGo or TIPS.drop
 	local line
 	if held then
-		if held.outside and sec.key == "keep" then
+		if held.nowhere then
+			line = TIPS.nowhere
+		elseif held.outside and sec.key == "keep" then
 			line = TIPS.keepOutside
 		elseif Moves(st, held) and held.bagBar then
 			line = TIPS.bagBar
+		elseif held.merchant and (held.asks or not Moves(st, held)) then
+			line = TIPS.asks
 		elseif Moves(st, held) and not held.fits then
 			line = TIPS.noRoom
 		elseif Moves(st, held) then
-			line = TIPS.move:format(verb, label)
+			line = (held.merchant and TIPS.buy or TIPS.move):format(verb, label)
 		elseif sec.key == "junk" then
 			line = TIPS.junk:format(verb)
 		elseif sec.key == "keep" then
@@ -1274,7 +1388,8 @@ local function Tip(target)
 	tip:Show()
 end
 
--- The mouse comes over a + slot or a catcher: what the cursor holds is read again, since a click may have swapped it.
+-- The mouse comes over a + slot or a catcher: what the cursor holds is read again, since a click may have swapped it; over a + slot also with no
+-- item held for BagsLayout, so a merchant's item is seen (Shown).
 local function Enter(target)
 	local st = target.st
 	if not st then
@@ -1282,7 +1397,7 @@ local function Enter(target)
 	end
 	target.over = true
 	local pool = target.pool
-	if st.holding then
+	if st.holding or not target.catcher then
 		pool.held = ReadHeld()
 	end
 	if target.catcher then
@@ -1302,11 +1417,15 @@ local function Enter(target)
 	Tip(target)
 end
 
+-- The mouse leaves: a merchant's item read under it is forgotten, as BagsLayout does not tell when it leaves the cursor.
 local function Leave(target)
 	target.over = false
 	if target.catcher then
 		target.light:Hide()
 	else
+		if not (target.st and target.st.holding) then
+			target.pool.held = nil
+		end
 		Paint(target)
 	end
 	Untip(target.frame)
@@ -1417,7 +1536,7 @@ local function Tick(pool)
 		return
 	end
 	flash.fill:SetColorTexture(flash.r, flash.g, flash.b, math.max(0, light))
-	flash.say:SetAlpha(math.max(0, words))
+	flash.tag:SetAlpha(math.max(0, words))
 end
 
 local function FlashFrame(pool)
@@ -1430,8 +1549,16 @@ local function FlashFrame(pool)
 	local flash = { frame = frame }
 	flash.fill = Own(frame:CreateTexture(nil, "ARTWORK"))
 	flash.fill:SetAllPoints(frame)
-	flash.say = ns.OwnText(frame, "OVERLAY", "GameFontNormalSmall")
-	flash.say:SetJustifyH("RIGHT")
+	-- The tag of the words: a frame of its own on the flash, which may reach past the section's edges, with its outline drawn on itself (direct), so
+	-- it lies at the tag's level and fades with it.
+	local tag = Own(CreateFrame("Frame", nil, frame))
+	tag:EnableMouse(false)
+	flash.tag = tag
+	flash.outline = ns.SetOutlineArea(ns.Outline(tag, tag, true), KEY)
+	flash.say = ns.OwnText(tag, "OVERLAY", "GameFontNormalSmall")
+	flash.say:SetPoint("LEFT", tag, "LEFT", SAY_PAD, 0)
+	flash.say:SetPoint("RIGHT", tag, "RIGHT", -SAY_PAD, 0)
+	flash.say:SetJustifyH("LEFT")
 	flash.say:SetWordWrap(false)
 	frame:SetScript("OnUpdate", function()
 		Part(Tick, pool)
@@ -1440,40 +1567,73 @@ local function FlashFrame(pool)
 	return flash
 end
 
--- Puts the flash over a section's title and cells (ah: the height of its cells, nil for a title alone), and its words at the right of the title in
--- the title's font, where they fit; title frames are pooled by index, so each placing anchors it again.
+-- The left edge of a title in the content, read from its own anchor (BagsLayout's PlaceTitle puts its TOPLEFT on the content's TOPLEFT), or nil.
+local function TitleLeft(st, title)
+	local ok, point, relative, relativePoint, x = pcall(title.frame.GetPoint, title.frame, 1)
+	if not ok or ns.IsSecret(point) or ns.IsSecret(relativePoint) or not ns.Finite(x) then
+		return nil
+	end
+	if point == "TOPLEFT" and relativePoint == "TOPLEFT" and relative == st.content then
+		return x
+	end
+	return nil
+end
+
+-- Puts the flash over a section's title and cells (ah: the height of its cells, nil for a title alone), and its words on their tag, in the title's
+-- font and as wide as they need: on the title's row after its text; where that passes the content's right edge (st.width), over the first row of
+-- cells from the section's left, or with no cells on the title's row against that edge; never past the content's left edge, and cut only when the
+-- content is narrower than the words. Title frames are pooled by index, so each placing anchors it again.
 local function Anchor(pool, title, ah)
-	local flash = pool.flash
-	local frame, say = flash.frame, flash.say
+	local flash, st = pool.flash, pool.st
+	local frame, tag, say = flash.frame, flash.tag, flash.say
 	local width = Number(title.frame, "GetWidth") or 0
+	local height = Number(title.frame, "GetHeight") or 16
 	frame:ClearAllPoints()
 	frame:SetPoint("TOPLEFT", title.frame, "TOPLEFT", -2, 2)
-	frame:SetSize(math.max(1, width + 4), math.max(1, (Number(title.frame, "GetHeight") or 16) + (ah or 0) + 4))
+	frame:SetSize(math.max(1, width + 4), math.max(1, height + (ah or 0) + 4))
+	flash.placed = true
+	if not flash.text then
+		tag:Hide()
+		return
+	end
 	local okFont, file, size, flags = pcall(title.text.GetFont, title.text)
 	if okFont and type(file) == "string" and not ns.IsSecret(file) and ns.Finite(size) then
 		pcall(say.SetFont, say, file, size, type(flags) == "string" and not ns.IsSecret(flags) and flags or "")
 	end
-	local room = width - TextWidth(title.text) - 12
-	if flash.text and room >= SAY_LEAST then
-		say:ClearAllPoints()
-		say:SetPoint("RIGHT", title.frame, "RIGHT", -2, 0)
-		say:SetWidth(room)
-		say:SetText(flash.text)
-		say:SetTextColor(flash.r, flash.g, flash.b, 1)
-		say:Show()
-	else
-		say:Hide()
+	say:SetText(flash.text)
+	say:SetTextColor(flash.r, flash.g, flash.b, 1)
+	-- In the content's units, from the title's left edge: where its text ends, the tag's width, and the room right of that edge.
+	local textEnd = math.min(TextWidth(title.text), width) + SAY_GAP
+	local tagW = math.ceil(TextWidth(say)) + 2 * SAY_PAD
+	local left = TitleLeft(st, title)
+	local inside = left and ns.Finite(st.width) and st.width - left or nil
+	local x, y = textEnd, 0
+	if inside then
+		tagW = math.min(tagW, st.width)
+		if textEnd + tagW > inside then
+			x = math.max(-left, math.min(ah and 0 or textEnd, inside - tagW))
+			y = ah and -height or 0
+		end
 	end
-	flash.placed = true
+	tag:ClearAllPoints()
+	tag:SetPoint("TOPLEFT", title.frame, "TOPLEFT", x, y)
+	tag:SetSize(math.max(1, tagW), math.max(1, height))
+	tag:Show()
 end
 
 local function StartFlash(pool, title, ah, key, text)
 	local flash = FlashFrame(pool)
 	flash.key, flash.text, flash.started = key, text, Now()
 	flash.r, flash.g, flash.b = Accent()
-	flash.frame:SetFrameLevel((Number(pool.st.content, "GetFrameLevel") or 0) + FLASH_LEVEL)
+	local level = (Number(pool.st.content, "GetFrameLevel") or 0) + FLASH_LEVEL
+	flash.frame:SetFrameLevel(level)
+	flash.tag:SetFrameLevel(level + 1)
 	flash.fill:SetColorTexture(flash.r, flash.g, flash.b, FLASH_ALPHA)
-	flash.say:SetAlpha(1)
+	local pr, pg, pb = Colour("windows.panel", 0.12, 0.12, 0.12)
+	ns.SetOutlineFill(flash.outline, pr, pg, pb, 1)
+	ns.SetOutlineColour(flash.outline, flash.r, flash.g, flash.b)
+	ns.SetOutline(flash.outline, true, true)
+	flash.tag:SetAlpha(1)
 	Anchor(pool, title, ah)
 	flash.frame:Show()
 end
@@ -1686,7 +1846,7 @@ end
 -- The row Custom sections ------------------------------------------------------------------------------------------------------------------------
 
 -- Make a new section (or, at MOST, why not), then Rename and Delete for each section in the order the windows show them, as the lines of Section
--- order and Items placed by hand are given (BagsOrder.lua:692-705, BagsCategories.lua:909-949).
+-- order and Items placed by hand are given (BagsOrder.lua:722-734, BagsCategories.lua:986-1026).
 function ns.BagsCustomLines()
 	local lines = {}
 	local keys, names = Sorted()

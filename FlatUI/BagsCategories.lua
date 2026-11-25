@@ -60,8 +60,9 @@ local _, ns = ...
 -- Sections the player makes and names (keys custom1, custom2 and on, in FlatUIDB.bags.custom; B.Custom.Is, BagsCustom.lua) take placements too,
 -- within the same MOST_PLACED; a placement in a section that is not there is skipped, and deleting a section of the player's own takes its
 -- placements away. Categories.File is the same drop without the cursor, which BagsCustom calls for an item it put in a free slot of the bags and
--- for the item a new section is made for. Categories.Label names a section of the player's own by its name, so the windows, the rows and the
--- search's section words use it.
+-- for the item a new section is made for; Categories.Takes makes its tests without writing, so BagsCustom moves no item a section would refuse,
+-- and says the same line. Categories.Label names a section of the player's own by its name, so the windows, the rows and the search's section
+-- words use it.
 --
 -- Inside a section, equipment sorts by the place of its slot in the Character window (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-873),
 -- then by item level (ns.Items.LevelOf, Items.lua:425-438), quality and name; everything else by class, subclass, quality, name and count. An item
@@ -764,6 +765,47 @@ function Categories.File(id, key, link, bag, slot)
 		Request("layout")
 	end
 	return taken
+end
+
+-- Whether section key would take item id, changing nothing: the tests Categories.File makes before it writes (Junk takes no quest item and none
+-- that cannot be sold; another section no new placement past MOST_PLACED, unless it is the section the item reaches by itself), saying the same
+-- line on a refusal. BagsCustom.lua asks it before it moves an item from the bank, worn gear or a merchant into the bags, so a drop refused moves
+-- nothing. True when the section would take it.
+function Categories.Takes(id, key, link, bag, slot)
+	id = Whole(id)
+	if not id or id <= 0 or (key ~= "junk" and not Placeable(key)) then
+		return false
+	end
+	if Errands.Fighting() then
+		Say("Items are not placed in sections in a fight. Try again once it is over.")
+		return false
+	end
+	local record = Probe(id, Source(id, Whole(bag), Whole(slot)))
+	if key == "junk" then
+		if Quest(record) then
+			Say(("%s is a quest item, and quest items are never sold."):format(Named(id)))
+			return false
+		elseif type(ns.ErrandsJunkMark) ~= "function" then
+			Say("Junk takes no items: this build of Flat UI cannot write the sell list.")
+			return false
+		elseif Unsellable(record, Text(link)) then
+			Say(("%s cannot be sold, so it does not go in Junk."):format(Named(id)))
+			return false
+		end
+		return true
+	end
+	local placed = Store(false)
+	if key ~= Rules(record) and not (placed and placed[id] ~= nil) then
+		local count = 0
+		for _ in pairs(placed or {}) do
+			count = count + 1
+		end
+		if count >= MOST_PLACED then
+			Say(("%d items are placed by hand already. Take one off with Items placed by hand on the Bags page first."):format(MOST_PLACED))
+			return false
+		end
+	end
+	return true
 end
 
 -- A click or drop on the title of a section while the cursor holds an item. id: the item ID the caller read, or nil to read the cursor here;
