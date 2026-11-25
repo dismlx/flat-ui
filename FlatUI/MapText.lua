@@ -11,13 +11,15 @@ local _, ns = ...
 -- are untouched. Pointing at a line, also in a fight, writes a tooltip in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide
 -- only while IsOwned says the button owns it), written again while it shows as the line changes, so the coordinates stay live as you walk: the
 -- zone, subzone and coordinates, each worn item's durability, and the frame rate, home and world latency and Flat UI's memory, all as the data
--- panels write them (ns.DataPanels.TipAt with their streams), and the local and realm time. Tooltips in combat on the Tooltips page, at Hide every
--- tooltip, hides this one in a fight with the others. Shift-click on the coordinates puts the zone and the coordinates shown into the chat box
--- (ns.PutInChat: Insert into the chat box that is open, else ChatFrameUtil.OpenChat, never the game's link insert, which writes a /cast line
--- into a macro being written); a click on the time opens the game's stopwatch and alarm (ToggleTimeManager) and a Shift-click its calendar
--- (ToggleCalendar). In a fight, where the game opens no such window, the click waits for the end of the fight (ns.OpenAfterFight): chat says
--- once "Flat UI: the stopwatch opens when the fight ends.", the window opens as the fight ends, and the tooltip's hints say "after the fight".
--- The lines of durability and the frame rate let clicks through. Text size (hud.mapTextSize) sizes the four lines at once (ns.TextStyle on
+-- panels write them (ns.DataPanels.TipAt with their streams), and the local and realm time and the time of this session (GetSessionTime, as the
+-- data panels' Time tooltip). Tooltips in combat on the Tooltips page, at Hide every tooltip, hides this one in a fight with the others.
+-- Shift-click on the coordinates puts the zone and the coordinates shown into the chat box (ns.PutInChat: Insert into the chat box that is
+-- open, else ChatFrameUtil.OpenChat, never the game's link insert, which writes a /cast line into a macro being written), and a plain click
+-- opens the world map (ToggleWorldMap); a click on the durability opens the character window (ToggleCharacter), as the data panels' Durability
+-- slot does; a click on the time opens the game's stopwatch and alarm (ToggleTimeManager) and a Shift-click its calendar (ToggleCalendar). In a
+-- fight, where the game opens no such window, the click waits for the end of the fight (ns.OpenAfterFight): chat says once, for example,
+-- "Flat UI: the stopwatch opens when the fight ends.", the window opens as the fight ends, and the tooltip's hints say "after the fight".
+-- The line of the frame rate lets clicks through. Text size (hud.mapTextSize) sizes the four lines at once (ns.TextStyle on
 -- each, a share of the game's small font), and the lines, the addon button row under the map and the room under the zone name follow it.
 --   Coordinates: the player's place on the map of the zone, from C_Map.GetBestMapForUnit("player") and C_Map.GetPlayerMapPosition(map,
 --     "player"), whose x and y are read as fields (the game's own line calls GetXY of that table: Mainline/Minimap.lua:1434-1457). Neither is
@@ -69,17 +71,24 @@ local SLOW = 1
 local STREAMS = { coords = "coords", durability = "durability", perf = "fps" }
 local ANCHOR = "ANCHOR_LEFT"
 local DIM_RGB = { 0.66, 0.68, 0.62 }
--- The lines a click does something on, and the hints their tooltips end with.
-local CLICKS = { coords = true, clock = true }
+-- The lines a click does something on, and the hints their tooltips end with. The frame rate line lets clicks through.
+local CLICKS = { coords = true, durability = true, clock = true }
 local HINTS = {
-	coords = { "Shift-click: put this in chat" },
+	coords = { "Click: world map", "Shift-click: put this in chat" },
+	durability = { "Click: character window" },
 	clock = { "Click: stopwatch and alarm", "Shift-click: calendar" },
 }
--- The time's hints in a fight, when its windows open as the fight ends.
-local FIGHT_HINTS = { "Click: stopwatch and alarm, after the fight", "Shift-click: calendar, after the fight" }
--- The chat lines of a click on the time in a fight.
+-- The hints in a fight, when the windows open as the fight ends; Shift-click on the coordinates works in a fight too.
+local FIGHT_HINTS = {
+	coords = { "Click: world map, after the fight", "Shift-click: put this in chat" },
+	durability = { "Click: character window, after the fight" },
+	clock = { "Click: stopwatch and alarm, after the fight", "Shift-click: calendar, after the fight" },
+}
+-- The chat lines of a click in a fight.
 local LATER_STOPWATCH = "Flat UI: the stopwatch opens when the fight ends."
 local LATER_CALENDAR = "Flat UI: the calendar opens when the fight ends."
+local LATER_CHARACTER = "Flat UI: the character window opens when the fight ends."
+local LATER_MAP = "Flat UI: the map opens when the fight ends."
 
 -- frame: the frame of the lines; text[id]: the font string of a line; button[id]: the button over it; shown[id]: its text while it shows;
 -- colour[id]: its colour; size[id]: the Text size it was given; why[id]: why a wanted line is hidden, for /flatui status; over: the line under
@@ -371,7 +380,27 @@ local function Owns(button)
 	return ok and not ns.IsSecret(owned) and owned == true
 end
 
--- The local and realm time, each in the format Time format chooses.
+-- The time of this session (GetSessionTime), as the data panels' Time tooltip writes it (P.Time: 1h 20m, 45m, 30s), or nil when the game does
+-- not say it.
+local function SessionTime()
+	local seconds = Ask(_G.GetSessionTime)
+	if not ns.Finite(seconds) or seconds < 0 then
+		return nil
+	end
+	local panels = ns.DataPanels
+	if type(panels) == "table" and type(panels.Time) == "function" then
+		local ok, text = pcall(panels.Time, seconds)
+		if ok and type(text) == "string" then
+			return text
+		end
+	end
+	if seconds >= 3600 then
+		return ("%dh %dm"):format(math.floor(seconds / 3600), math.floor(seconds % 3600 / 60))
+	end
+	return ("%dm"):format(math.ceil(seconds / 60))
+end
+
+-- The local and realm time, each in the format Time format chooses, and the time of this session.
 local function ClockTip(button)
 	local tip = Tooltip()
 	if not tip then
@@ -381,12 +410,16 @@ local function ClockTip(button)
 		local hour, minute = TimeParts(isLocal)
 		return hour and Stamp(hour, minute) or "Unknown"
 	end
+	local session = SessionTime()
 	pcall(function()
 		tip:SetOwner(button, ANCHOR)
 		tip:SetText("Time", 1, 1, 1)
 		tip:AddDoubleLine("Local time", Line(true), DIM_RGB[1], DIM_RGB[2], DIM_RGB[3], 1, 1, 1)
 		tip:AddDoubleLine("Realm time", Line(false), DIM_RGB[1], DIM_RGB[2], DIM_RGB[3], 1, 1, 1)
-		for _, hint in ipairs(InCombatLockdown() and FIGHT_HINTS or HINTS.clock) do
+		if session then
+			tip:AddDoubleLine("This session", session, DIM_RGB[1], DIM_RGB[2], DIM_RGB[3], 1, 1, 1)
+		end
+		for _, hint in ipairs(InCombatLockdown() and FIGHT_HINTS.clock or HINTS.clock) do
 			tip:AddLine(hint, DIM_RGB[1], DIM_RGB[2], DIM_RGB[3])
 		end
 		tip:Show()
@@ -405,7 +438,7 @@ local function Tip(_, line, button, fresh)
 	end
 	local panels = ns.DataPanels
 	if type(panels) == "table" and type(panels.TipAt) == "function" then
-		panels.TipAt(button, ANCHOR, STREAMS[line.id], fresh, HINTS[line.id])
+		panels.TipAt(button, ANCHOR, STREAMS[line.id], fresh, (InCombatLockdown() and FIGHT_HINTS[line.id]) or HINTS[line.id])
 	end
 end
 
@@ -427,14 +460,27 @@ local function ChatText(line)
 	return type(zone) == "string" and zone ~= "" and (zone .. " " .. shown) or shown
 end
 
--- A click on a line: Shift on the coordinates puts them in the chat box; on the time a click opens the stopwatch and alarm, Shift the calendar,
--- in a fight as it ends.
+-- A click on a line: Shift on the coordinates puts them in the chat box, and a plain click opens the world map (ToggleWorldMap); on the
+-- durability a click opens the character window (ToggleCharacter("PaperDollFrame"), as the data panels' Durability slot does); on the time a
+-- click opens the stopwatch and alarm, Shift the calendar. A window waits for the end of a fight (ns.OpenAfterFight).
 local function Click(_, line)
 	local shift = Ask(_G.IsShiftKeyDown) == true
 	if line.id == "coords" and shift then
 		local text = ChatText(line)
 		if text then
 			ns.PutInChat(text)
+		end
+	elseif line.id == "coords" then
+		if type(_G.ToggleWorldMap) == "function" then
+			ns.OpenAfterFight(function()
+				_G.ToggleWorldMap()
+			end, LATER_MAP)
+		end
+	elseif line.id == "durability" then
+		if type(_G.ToggleCharacter) == "function" then
+			ns.OpenAfterFight(function()
+				_G.ToggleCharacter("PaperDollFrame")
+			end, LATER_CHARACTER)
 		end
 	elseif line.id == "clock" then
 		local name = shift and "ToggleCalendar" or "ToggleTimeManager"
@@ -940,7 +986,8 @@ end
 -- A window of the game opened by a click of Flat UI's: now, or in a fight as the fight ends, since the game opens its windows as panels it does
 -- not show in a fight (ShowUIPanel) or loads them with their addon. open is the call, made in a pcall; said is the line chat says in a fight, once
 -- for each window asked for ("Flat UI: the stopwatch opens when the fight ends."). The last window asked for in a fight is the one that opens. The
--- time's clicks use it, and the reputation bar's (XpBar.lua) and the quest count's (QuestCount.lua). True when the window was opened now.
+-- clicks on the time, the durability and the coordinates use it, and the reputation bar's (XpBar.lua) and the quest count's (QuestCount.lua).
+-- True when the window was opened now.
 local opening = {}
 function ns.OpenAfterFight(open, said)
 	if type(open) ~= "function" then

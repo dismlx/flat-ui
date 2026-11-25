@@ -24,7 +24,8 @@ local _, ns = ...
 --   (AuraTime.lua).
 --   Loot rolls: two rolls at the box Loot rolls of /flatui move, where the game's rolls show (ns.MoverSpot: the saved spot, else where the game
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
---   shows; their timers drain over 10 seconds and loop. They stand in for UIParent, so their place is the box's.
+--   shows; their timers drain over 10 seconds and loop, with the seconds of a 60 second roll counting down over them, red under 10, while Seconds
+--   left on rolls is on. They stand in for UIParent, so their place is the box's.
 --   The sample nameplate: an enemy plate with its cast bar, auras and quest mark with its kill count (while Quest mark on enemies you need for a
 --   quest is on), and for a warrior the Overpower icon with its swipe, at the middle of the screen, 160 units up, with a dim Sample nameplate under
 --   it, as plates have no place of their own. Its cast fills, and it takes the threat states in turn every 3 seconds (You want, Changing hands, You
@@ -347,6 +348,8 @@ local function RollTimers(holder, now)
 	for index, roll in ipairs(holder.rolls) do
 		local run = ((now + (index - 1) * 3) % ROLL_TIME) / ROLL_TIME
 		roll.timer:SetValue(100 * (1 - run))
+		-- The seconds of a 60 second roll, so the loop shows the count and its red end.
+		ns.DrawHud.RollTime(roll, math.max(1, math.ceil(60 * (1 - run))))
 	end
 end
 

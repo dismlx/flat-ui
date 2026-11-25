@@ -39,7 +39,8 @@ local BLOCKS = { { name = "Class spells", bar = "classBar", place = "classPlace"
 local FADERS = { { "main", "Main action bar", "bar" }, { "bar2", "Action bar 2", "bar" }, { "bar3", "Action bar 3", "bar" }, { "bar4", "Action bar 4", "bar" },
 	{ "bar5", "Action bar 5", "bar" }, { "bar6", "Action bar 6", "bar" }, { "bar7", "Action bar 7", "bar" }, { "bar8", "Action bar 8", "bar" },
 	{ "stance", "Stance bar", "stance" }, { "pet", "Pet bar", "pet" }, { "micro", "Micro menu", "micro" }, { "bags", "Bag bar", "bags" },
-	{ "playerFrame", "Player frame", "player" }, { "petFrame", "Pet frame", "pet frame" }, { "minimapButtons", "Minimap buttons", "map" } }
+	{ "bagWindows", "Bag windows", "bag window" }, { "playerFrame", "Player frame", "player" }, { "petFrame", "Pet frame", "pet frame" },
+	{ "xpBar", "Experience bar", "xp" }, { "minimapButtons", "Minimap buttons", "map" } }
 
 local function Own(object)
 	ns.Own[object] = true
@@ -1037,7 +1038,7 @@ end
 
 local TILE_W, TILE_H, TILE_PITCH, TILE_ROW = 124, 28, 130, 46
 local FADE_W = 5 * TILE_PITCH
-local FADE_H = 34 + 12 + 3 * TILE_ROW
+local FADE_H = 34 + 12 + 4 * TILE_ROW
 local FADE = { parts = {}, built = Instances() }
 
 -- What a faded part looks like: icons for a bar, a row of buttons for the micro menu, and so on, on a body that fades as one.
@@ -1083,6 +1084,23 @@ local function TileArt(inst, tile, kind, index)
 		for position = 1, 3 do
 			Block(10, 10, 80 + (position - 1) * 12, 0, { 0.7, 0.62, 0.4 })
 		end
+	elseif kind == "bag window" then
+		-- A small window with two rows of three slots, the window under the slots.
+		local window = Tex(body, "ARTWORK", -1)
+		window:SetSize(48, 24)
+		window:SetPoint("LEFT", body, "LEFT", 6, 0)
+		Colour(window, { 0.22, 0.22, 0.25 }, 1)
+		for position = 1, 6 do
+			Block(12, 8, 9 + ((position - 1) % 3) * 15, position <= 3 and 5 or -5, { 0.5, 0.36, 0.2 })
+		end
+	elseif kind == "xp" then
+		-- Flat UI's experience bar, a fill on a dark track, with the reputation bar under it.
+		local track = Tex(body, "ARTWORK", -1)
+		track:SetSize(110, 6)
+		track:SetPoint("LEFT", body, "LEFT", 6, 4)
+		Colour(track, { 0.2, 0.2, 0.22 }, 1)
+		Block(50, 6, 6, 4, { 0.58, 0, 0.55 })
+		Block(80, 4, 6, -4, { 0, 0.6, 0.1 })
 	end
 end
 

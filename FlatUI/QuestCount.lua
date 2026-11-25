@@ -4,7 +4,9 @@ local _, ns = ...
 -- (QuestObjectiveTracker.Header, a heading of the modern tracker that Hud.lua styles). The numbers are the game's: the quests of
 -- C_QuestLog.GetNumQuestLogEntries (its second answer, the count the game itself compares with MAX_QUESTS before an escort's question) and
 -- C_QuestLog.GetMaxNumQuestsCanAccept, else MAX_QUESTLOG_QUESTS or MAX_QUESTS; with no most known, the count alone. The text is a font string
--- of the addon's own on the heading, in the font of the heading's text and its colour, red while the log is full. Nothing of the heading is
+-- of the addon's own on the heading, in the font of the heading's text and its colour, red while the log is full. With Warn as the log fills
+-- (hud.trackerCountWarn, on by default) the count is amber with one free slot, and when the log becomes full in play (from the second read after
+-- login or a reload) it pulses twice and chat says once "Flat UI: your quest log is full (20/20).". Nothing of the heading is
 -- changed: its Text is read for the font and the colour (GetFont and GetTextColor), and its MinimizeButton for the place. The text is made and
 -- placed out of combat, or on a heading the game does not protect; in a fight only its text, colour and font are set, and it is shown or hidden.
 -- It is redrawn on the next frame after the quest log changes, and only while a count can be shown, so a client without the quest log calls
@@ -25,13 +27,19 @@ local KEY, PART = "hud", "quest count"
 local GAP, EDGE = 4, -22
 local FULL = { 1, 0.3, 0.3 }
 local GOLD = { 1, 0.82, 0 }
+-- Warn as the log fills: the count with one free slot, the pulse as the log becomes full (its seconds, its pulses and the lowest opacity), and
+-- the chat line then.
+local AMBER = { 1, 0.6, 0.15 }
+local PULSE = { time = 0.6, count = 2, low = 0.35 }
+local FILLED = "Flat UI: your quest log is full (%d/%d)."
 local NOTE = "Quest count: the objective tracker has no Quests heading here, so there is no count."
 local ANCHOR = "ANCHOR_LEFT"
 local HINT, FIGHT_HINT = { "Click: open the quest log" }, { "Click: open the quest log, after the fight" }
 local LATER = "Flat UI: the quest log opens when the fight ends."
 
 -- text: the font string; button: the button over it; header: the heading it is on; queued: a redraw waits for the next frame; waiting: a make
--- waits for the end of a fight.
+-- waits for the end of a fight; last: the quests of the last read, nil before the first after login or a reload and while the row is off;
+-- pulse: the frame of Flat UI's own that runs the pulse, shown only while it runs, and pulsed: its seconds so far.
 local S = {}
 
 local function Wanted()
@@ -232,6 +240,39 @@ local function Hide()
 	end
 end
 
+-- The count dips to PULSE.low and back PULSE.count times over PULSE.time seconds, from a frame of Flat UI's own. Only Flat UI's own font string
+-- changes, so it goes on in a fight too.
+local function Pulse()
+	if not S.text then
+		return
+	end
+	if not S.pulse then
+		local frame = CreateFrame("Frame")
+		ns.Own[frame] = true
+		frame:Hide()
+		frame:SetScript("OnUpdate", function(self, elapsed)
+			S.pulsed = S.pulsed + (ns.Finite(elapsed) and elapsed or 0)
+			local share = math.min(S.pulsed / PULSE.time, 1)
+			local dip = math.abs(math.sin(math.pi * PULSE.count * share))
+			S.text:SetAlpha(1 - (1 - PULSE.low) * dip)
+			if share >= 1 then
+				S.text:SetAlpha(1)
+				self:Hide()
+			end
+		end)
+		S.pulse = frame
+	end
+	S.pulsed = 0
+	S.pulse:Show()
+end
+
+-- True when the log became full since the last read, with Warn as the log fills on: the first read after login or a reload never warns.
+local function Filled(quests, most)
+	local last = S.last
+	S.last = quests
+	return ns.Get(KEY .. ".trackerCountWarn") == true and last ~= nil and most ~= nil and last < most and quests >= most
+end
+
 local function Update()
 	-- Nothing is made, and nothing noted, while the game gives no count: a client without the quest log calls has no text at all.
 	local quests, most
@@ -239,9 +280,15 @@ local function Update()
 		quests, most = Numbers()
 	end
 	if not quests then
+		S.last = nil
 		Hide()
 		ns.ClearNote(KEY, NOTE)
 		return
+	end
+	-- Warn as the log fills: one line in chat as the log becomes full, also while the heading is not there, and a pulse of the count below.
+	local filled = Filled(quests, most)
+	if filled then
+		print(FILLED:format(quests, most))
 	end
 	local header = Header()
 	if not header then
@@ -258,10 +305,15 @@ local function Update()
 	local r, g, b = Look(S.text, S.header)
 	if most and quests >= most then
 		r, g, b = FULL[1], FULL[2], FULL[3]
+	elseif most and quests == most - 1 and ns.Get(KEY .. ".trackerCountWarn") == true then
+		r, g, b = AMBER[1], AMBER[2], AMBER[3]
 	end
 	S.text:SetTextColor(r, g, b)
 	S.text:SetText(most and ("%d/%d"):format(quests, most) or tostring(quests))
 	S.text:Show()
+	if filled then
+		Pulse()
+	end
 	if S.button then
 		S.button:Show()
 		-- A tooltip that shows follows the new count, while it is still the button's.

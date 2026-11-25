@@ -27,12 +27,17 @@ local _, ns = ...
 -- level", "Stormwind: Honored 4,200 / 12,000 (35%)", ns.PutInChat), and a plain click on the reputation bar opens the Reputation tab of the
 -- Character window (ToggleCharacter("ReputationFrame"), the call of the game's own key), in a fight as it ends: chat says once "Flat UI: your
 -- reputations open when the fight ends." (ns.OpenAfterFight, MapText.lua). The tooltip ends with a dim hint, "after the fight" in one.
+-- The tooltip's rested line is in Rested colour with the share of the level it covers ("Rested: 8,000 (30% of the level)"), and with Rested share
+-- in the text (hud.xpTextRested, on by default) Percent and Value and percent end with that share, "  +30%", in Rested colour while you are rested.
 -- Large numbers are grouped as the game writes them (BreakUpLargeNumbers: 12,150 / 27,000) in the bar text of Value and percent and Amount to
--- go, in the tooltip and in the chat line; As the game has it keeps the game's own text of its bar.
+-- go, in the tooltip and in the chat line; As the game has it writes the game's words, with grouped numbers, on this bar (the game's own bar,
+-- which Hud.lua styles, keeps the game's text).
 -- With Animate gains (hud.xpSmooth, on by default) a fill that grows slides to its new value over EASE_FILL seconds, easing out, and the stretch
 -- just gained lights up on the bar (a white texture of Flat UI's own, added over the fill) and fades over EASE_GLOW seconds; a new level,
--- another faction, a loss, a sample or a hidden bar sets the fill at once. One frame of Flat UI's own per bar runs the ease, shown only while
--- it runs, so this goes on in a fight too.
+-- another faction, a loss, a sample or a hidden bar sets the fill at once. A new level also lights the whole bar in soft gold, and a new
+-- standing of the same faction in the fill of that standing, fading over EASE_FLASH seconds as the fill drops to its new value (F.Rose,
+-- F.Flash); the first drawing after login or after the bar showed again, a sample and a bar off the screen never flash. One frame of Flat UI's
+-- own per bar runs the ease, shown only while it runs, so this goes on in a fight too.
 -- In test mode (TestMode.lua, entry "xpbar") a bar that Bars shown asks for and that has nothing to show, as at the top level or with no faction
 -- watched, shows a sample (experience at 45% with rested and quest stretches, Stormwind at Honored), drawn with every row; samples are kept apart
 -- from what the game gave (F.Data), are never put in chat, and give XpStats.lua nothing to count (ns.XpRepNow).
@@ -46,6 +51,8 @@ local QUEST_ALPHA = 0.6
 -- Animate gains: the seconds the fill slides, the seconds the stretch gained glows, its opacity at the start, and the least share of the bar
 -- that counts as a gain.
 local EASE_FILL, EASE_GLOW, GLOW_ALPHA, EASE_LEAST = 0.4, 0.8, 0.5, 0.0005
+-- The flash of a new level or standing over the whole bar: the seconds it fades over, its opacity at the start, and the gold of a new level.
+local EASE_FLASH, FLASH_ALPHA, FLASH_GOLD = 1.0, 0.6, { 1, 0.82, 0 }
 -- The chat line of a click on the reputation bar in a fight.
 local LATER_REP = "Flat UI: your reputations open when the fight ends."
 local MANAGER = "StatusTrackingBarManager"
@@ -136,6 +143,23 @@ local function Grouped(value)
 		return text
 	end
 	return tostring(value)
+end
+
+-- The colour code of Rested colour, for the rested share in the tooltip and the bar text.
+local function RestedCode()
+	local r, g, b = ns.Colour(KEY .. ".xpRestedColour")
+	local function Byte(value)
+		return math.max(0, math.min(255, math.floor((ns.Finite(value) and value or 1) * 255 + 0.5)))
+	end
+	return ("|cff%02x%02x%02x"):format(Byte(r), Byte(g), Byte(b))
+end
+
+-- The share of the level the rested experience covers, in whole percent, or 0.
+local function RestedShare(xp)
+	if not (xp and ns.Finite(xp.rested) and ns.Finite(xp.total) and xp.total > 0 and xp.rested > 0) then
+		return 0
+	end
+	return math.floor(xp.rested / xp.total * 100 + 0.5)
 end
 
 -- The text a Bar text mode gives for a value and a total, with the name in front for a reputation, the numbers grouped as the game writes them
@@ -451,9 +475,10 @@ function F.Unpark()
 	if S.frame then
 		S.frame:Hide()
 	end
-	-- The bar comes back with its fill set at once.
+	-- The bar comes back with its fill set at once, and without a flash.
 	for _, bar in pairs(S.bars) do
 		bar.ratio, bar.key = nil, nil
+		bar.level, bar.repId, bar.reaction = nil, nil, nil
 	end
 end
 
@@ -618,7 +643,10 @@ function F.TipLines(bar)
 			end
 		end
 		if xp.rested > 0 then
-			lines[#lines + 1] = "Rested: " .. Grouped(math.floor(xp.rested))
+			-- In Rested colour, with the share of the level it covers, as the data panels' Experience slot writes it.
+			local share = RestedShare(xp)
+			lines[#lines + 1] = RestedCode() .. "Rested: " .. Grouped(math.floor(xp.rested))
+				.. (xp.total > 0 and (" (%d%% of the level)"):format(share) or "") .. "|r"
 		end
 		-- The quests ready to hand in and the levelling numbers (XpStats.lua).
 		local more = not sample and ns.XpStatsLines ~= nil and ns.XpStatsLines(Opt("xpQuest") == true, Opt("xpStatsTip") == true) or nil
@@ -663,9 +691,14 @@ function F.Line(bar)
 		local xp, line = data, nil
 		local value, total = math.floor(xp.value), math.floor(xp.total)
 		if mode == "game" then
-			line = Fmt(_G.XP_STATUS_BAR_TEXT, "%s / %s", tostring(value), tostring(total))
+			line = Fmt(_G.XP_STATUS_BAR_TEXT, "%s / %s", Grouped(value), Grouped(total))
 		elseif mode ~= "hide" and total > 0 then
 			line = ns.XpText(value, total, nil, mode)
+			-- Rested share in the text: "  +30%" in Rested colour after Percent and Value and percent while you are rested.
+			local share = (mode == "percent" or mode == "both") and Opt("xpTextRested") == true and Opt("xpRested") == true and RestedShare(xp) or 0
+			if line and share > 0 then
+				line = ("%s  %s+%d%%|r"):format(line, RestedCode(), share)
+			end
 		end
 		if line == "" then
 			line = nil
@@ -685,7 +718,7 @@ function F.Line(bar)
 		local rep, line = data, nil
 		local value, total = math.floor(rep.value), math.floor(rep.total)
 		if mode == "game" then
-			line = rep.capped and rep.name or ("%s %d / %d"):format(rep.name, value, total)
+			line = rep.capped and rep.name or ("%s %s / %s"):format(rep.name, Grouped(value), Grouped(total))
 		elseif mode ~= "hide" then
 			line = rep.capped and rep.name or (total > 0 and ns.XpText(value, total, rep.name, mode) or rep.name)
 		end
@@ -824,7 +857,7 @@ function F.EaseEnd(bar, hide)
 	if not bar.easing then
 		return
 	end
-	bar.easing, bar.at = false, nil
+	bar.easing, bar.at, bar.flashing = false, nil, nil
 	bar.frame:SetValue(bar.to or bar.ratio or 0)
 	if bar.gain then
 		bar.gain:Hide()
@@ -834,23 +867,36 @@ function F.EaseEnd(bar, hide)
 	end
 end
 
--- The glow over the stretch gained, from bar.from to bar.to of the bar's width.
+-- The glow over the stretch gained, from bar.from to bar.to of the bar's width, or over the whole bar for the flash of a new level or standing.
 function F.PlaceGain(bar, width)
 	local gain, left = bar.gain, bar.from * width
 	bar.easeWidth = width
 	gain:ClearAllPoints()
+	if bar.flashing then
+		gain:SetAllPoints(bar.frame)
+		return
+	end
 	gain:SetPoint("TOPLEFT", bar.frame, "TOPLEFT", left, 0)
 	gain:SetPoint("BOTTOMLEFT", bar.frame, "BOTTOMLEFT", left, 0)
 	gain:SetWidth(math.max((bar.to - bar.from) * width, 1))
 end
 
--- One frame of the ease: the fill slides out to its value over EASE_FILL seconds, and the glow fades over EASE_GLOW seconds.
+-- One frame of the ease: the fill slides out to its value over EASE_FILL seconds, and the glow fades over EASE_GLOW seconds. A flash leaves the
+-- fill where it is set and fades over EASE_FLASH seconds, easing out.
 function F.EaseStep(bar, elapsed)
 	if not bar.easing then
 		bar.anim:Hide()
 		return
 	end
 	bar.t = bar.t + (ns.Finite(elapsed) and elapsed or 0)
+	if bar.flashing then
+		local fade = math.min(bar.t / EASE_FLASH, 1)
+		bar.gain:SetAlpha(FLASH_ALPHA * (1 - fade) ^ 2)
+		if fade >= 1 then
+			F.EaseEnd(bar, true)
+		end
+		return
+	end
 	local fill, glow = math.min(bar.t / EASE_FILL, 1), math.min(bar.t / EASE_GLOW, 1)
 	bar.at = bar.from + (bar.to - bar.from) * (1 - (1 - fill) ^ 2)
 	bar.frame:SetValue(bar.at)
@@ -860,8 +906,8 @@ function F.EaseStep(bar, elapsed)
 	end
 end
 
--- Starts the ease of a bar from the value it shows to its new one. The frame that runs it and the glow are Flat UI's own, made once.
-function F.Ease(bar, from, to, width)
+-- The frame that runs the ease of a bar and the glow it fades, Flat UI's own, made once.
+function F.Parts(bar)
 	if not bar.anim then
 		local anim = CreateFrame("Frame", nil, bar.frame)
 		ns.Own[anim] = true
@@ -880,26 +926,76 @@ function F.Ease(bar, from, to, width)
 		pcall(bar.gain.SetBlendMode, bar.gain, "ADD")
 		bar.gain:Hide()
 	end
-	bar.from, bar.to, bar.t, bar.easing, bar.at = from, to, 0, true, from
+end
+
+-- Starts the ease of a bar from the value it shows to its new one, with the glow white again after a flash.
+function F.Ease(bar, from, to, width)
+	F.Parts(bar)
+	bar.from, bar.to, bar.t, bar.easing, bar.at, bar.flashing = from, to, 0, true, from, nil
 	bar.frame:SetValue(from)
 	F.PlaceGain(bar, width)
+	bar.gain:SetVertexColor(1, 1, 1, 1)
 	bar.gain:SetAlpha(GLOW_ALPHA)
 	bar.gain:Show()
 	bar.anim:Show()
 end
 
--- The fill of a bar at ratio: with Animate gains a fill that grows on the same level or faction eases there, else it is set at once. A redraw
--- of the same value lets an ease that runs go on, as F.Update draws the bar on every change of its rows and numbers.
-function F.Value(bar, ratio, key, sample, width)
+-- The flash of a new level or standing: the fill is set at its new value at once, and the glow lights the whole bar in rgb and fades.
+function F.Flash(bar, ratio, width, rgb)
+	F.Parts(bar)
+	bar.from, bar.to, bar.t, bar.easing, bar.at, bar.flashing = ratio, ratio, 0, true, ratio, true
+	bar.frame:SetValue(ratio)
+	F.PlaceGain(bar, width)
+	bar.gain:SetVertexColor(rgb[1], rgb[2], rgb[3], 1)
+	bar.gain:SetAlpha(FLASH_ALPHA)
+	bar.gain:Show()
+	bar.anim:Show()
+end
+
+-- What a new level or standing flashes in, for Animate gains: gold for a level that rose, the fill of the new standing for a standing of the same
+-- faction that rose, else nothing. bar.level, bar.repId and bar.reaction keep what was drawn last, so the first drawing after login, a bar that
+-- shows again, a sample and a bar that is not on the screen never flash.
+function F.Rose(bar, data, sample)
+	if sample or not data then
+		return nil
+	end
+	local okSeen, seen = pcall(bar.frame.IsVisible, bar.frame)
+	seen = okSeen and seen == true
+	if bar.id == "xp" then
+		local ok, level = Ask(_G.UnitLevel, "player")
+		if ok ~= "ok" or not ns.Finite(level) then
+			return nil
+		end
+		local was = bar.level
+		bar.level = level
+		return (seen and ns.Finite(was) and level > was) and FLASH_GOLD or nil
+	end
+	local id, reaction = data.id, data.reaction
+	local wasId, was = bar.repId, bar.reaction
+	bar.repId, bar.reaction = id, reaction
+	if seen and wasId ~= nil and wasId == id and ns.Finite(was) and ns.Finite(reaction) and reaction > was then
+		local r, g, b = F.Colour(bar)
+		return { r, g, b }
+	end
+	return nil
+end
+
+-- The fill of a bar at ratio: with Animate gains a fill that grows on the same level or faction eases there, and a new level or standing (flash,
+-- from F.Rose) flashes the bar as the fill is set; else it is set at once. A redraw of the same value lets an ease or a flash that runs go on, as
+-- F.Update draws the bar on every change of its rows and numbers.
+function F.Value(bar, ratio, key, sample, width, flash)
 	local smooth = Opt("xpSmooth") == true and not sample
 	local before = bar.key == key and bar.ratio or nil
-	if smooth and bar.easing and before ~= nil and math.abs(ratio - before) < EASE_LEAST then
+	if smooth and flash then
+		F.EaseEnd(bar, false)
+		F.Flash(bar, ratio, width, flash)
+	elseif smooth and bar.easing and before ~= nil and math.abs(ratio - before) < EASE_LEAST then
 		bar.to = ratio
 		if bar.easeWidth ~= width then
 			F.PlaceGain(bar, width)
 		end
 	elseif smooth and before ~= nil and ratio > before + EASE_LEAST then
-		F.Ease(bar, bar.easing and bar.at or before, ratio, width)
+		F.Ease(bar, (bar.easing and not bar.flashing and bar.at) or before, ratio, width)
 	else
 		F.EaseEnd(bar, true)
 		bar.frame:SetValue(ratio)
@@ -915,7 +1011,7 @@ function F.Fill(bar, width)
 		local total = bar.id == "xp" and data.total or data.total
 		ratio = total > 0 and math.max(0, math.min(data.value / total, 1)) or 0
 	end
-	F.Value(bar, ratio, F.Key(bar, data, sample), sample, width)
+	F.Value(bar, ratio, F.Key(bar, data, sample), sample, width, F.Rose(bar, data, sample))
 	local r, g, b = F.Colour(bar)
 	bar.frame:SetStatusBarColor(r, g, b, 1)
 	local stretch = bar.rested
@@ -1024,6 +1120,7 @@ function F.Update(layout)
 			bar.frame:Hide()
 			bar.hover = false
 			bar.ratio, bar.key = nil, nil
+			bar.level, bar.repId, bar.reaction = nil, nil, nil
 		end
 		F.Text(bar)
 	end
