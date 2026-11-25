@@ -42,9 +42,10 @@ local _, ns = ...
 -- the nine pieces of its backdrop (ns.SetFaded), the font of its heading and of each line's label (SetFont, SetShadowOffset, through
 -- ns.TextStyle, which remembers Questie's font and takes a new one Questie sets as the one to go back to), the height of a zone heading's
 -- label (SetHeight, by Heading size), the texture coordinates of the item icons (SetTexCoord) and, in a fight, the alpha of Questie_BaseFrame.
--- The Objective tracker rule of the Fading page fades Questie_BaseFrame too (Fade.lua). While Opacity in combat holds it in a fight the Fading page
--- leaves it alone (ns.QuestieFades); the opacity read before the first write is the one it had before Fading (ns.FadeGiven), and after the fight
--- it goes back to Fading with that one (ns.FadeTakesBack), which eases on from the opacity of the fight, so the tracker does not flash to full.
+-- The Objective tracker rule of the Fading page fades Questie_BaseFrame too (Fade.lua). Opacity in combat eases it down over a quarter of a second
+-- as a fight starts and back up over 0.2 seconds as it ends (ns.TrackerEase, Hud.lua). While Opacity in combat holds it, the ease back included,
+-- the Fading page leaves it alone (ns.QuestieFades); the opacity read before the first write is the one it had before Fading (ns.FadeGiven), and
+-- after the fight it goes back to Fading with that one (ns.FadeTakesBack), which eases on from the opacity it has, so the tracker does not flash to full.
 -- Sizes stay Questie's own: its labels have the height of its font size and the Questie Tracker heading is sized by Questie at every redraw,
 -- so Heading size goes on the zone headings alone. After a change of the look Questie is asked to lay its lines out again (QuestieTracker:Update,
 -- as its own options do), out of combat. Off, the row puts Questie's look back. Questie's saved settings are never written. Nothing is made on
@@ -67,7 +68,8 @@ local NO_MODE = LABEL .. ": the lines of Questie's tracker have no SetMode here,
 
 -- lines: per line { label, band, anchor, hGame = the label height Questie set, hSet = the one set here }; buttons: per item button
 -- { outline, cropped }; header: { label, band, anchor }; panel: the outline round the base frame; faded: Questie's backdrop is faded; alpha,
--- sent: the opacity of the base frame before a fight and the one set; followed: QuestieTracker.Update is followed; key: the look the lines were
+-- sent: the opacity of the base frame before a fight and the one set last, and the ease of Opacity in combat (ns.TrackerEase: target, from, t,
+-- span, back, driver); followed: QuestieTracker.Update is followed; key: the look the lines were
 -- last laid out with; queued, waiting: a pass waits for the next frame, a make for the end of a fight; noMode: a line had no SetMode.
 local S = { lines = setmetatable({}, { __mode = "k" }), buttons = setmetatable({}, { __mode = "k" }) }
 
@@ -376,8 +378,9 @@ local function Panel(base)
 	end
 end
 
--- The opacity of the tracker in a fight, as the objective tracker's: the opacity it had is read before the first write and put back after,
--- or handed to the Fading page while its Objective tracker rule fades the tracker (Hud.lua's TrackerAlpha does the same for the game's).
+-- The opacity of the tracker in a fight, as the objective tracker's: the opacity it had is read before the first write, and the tracker eases down to
+-- the opacity of the fight and back up after (ns.TrackerEase, Hud.lua, with the steps run as this file's part), or is handed to the Fading page while
+-- its Objective tracker rule fades the tracker (Hud.lua's TrackerAlpha does the same for the game's). Without Hud.lua's ease it is set at once.
 -- fight is nothing when the game's own state is to be asked.
 local function Alpha(base, fight)
 	if fight == nil then
@@ -385,21 +388,31 @@ local function Alpha(base, fight)
 	end
 	local percent = Wanted() and Opt("trackerCombat") or 100
 	local wanted = fight and percent < 100 and percent / 100 or nil
+	local ease = ns.TrackerEase
 	if wanted ~= nil then
 		if S.alpha == nil then
 			local given = ns.FadeGiven and ns.FadeGiven(base)
 			local ok, alpha = pcall(base.GetAlpha, base)
 			S.alpha = ns.Finite(given) and given or ((ok and ns.Finite(alpha)) and alpha or 1)
 		end
-		if S.sent ~= wanted then
+		if ease then
+			ease(S, base, wanted, false, Run)
+		elseif S.sent ~= wanted then
 			base:SetAlpha(wanted)
 			S.sent = wanted
 		end
 	elseif S.alpha ~= nil then
-		if not (ns.FadeTakesBack and ns.FadeTakesBack(base, S.alpha)) then
+		if ns.FadeTakesBack and ns.FadeTakesBack(base, S.alpha) then
+			if ns.TrackerEaseStop then
+				ns.TrackerEaseStop(S)
+			end
+			S.alpha, S.sent = nil, nil
+		elseif ease then
+			ease(S, base, S.alpha, true, Run)
+		else
 			base:SetAlpha(S.alpha)
+			S.alpha, S.sent = nil, nil
 		end
-		S.alpha, S.sent = nil, nil
 	end
 end
 

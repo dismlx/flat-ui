@@ -11,6 +11,11 @@ local ADDON_NAME, ns = ...
 -- hidden, the plate of the zone name and the buttons beside it hang from the map, as close as Gap under the zone name says and no further out
 -- than the game's place, and the mail icon and the addon list button move out of the room it closes (headerGap, below).
 -- Inside some cities the game shows a map of the city in the minimap, and the setting Minimap in cities says what is done then.
+-- Two rows add a text of Flat UI's own, on a frame of its own whose OnUpdate reads a bar's value ten times a second (no method of the game's is
+-- followed): Seconds left on rolls puts the whole seconds left over the right end of each roll's timer, the number and the timer's bar red under 10
+-- (SetStatusBarColor, given back as the roll ends or the row goes off; ROLL.Time), and Seconds on the timers puts the time left, as 1:12, at the
+-- right under the breath, fatigue and feign death bars, red under 10 while the timer runs out (MIRROR.Time). Opacity in combat eases the objective
+-- tracker down as a fight starts and back up as it ends, and Questie's the same way (ns.TrackerEase).
 
 local KEY = "hud"
 local LABEL = "Minimap and HUD"
@@ -112,6 +117,8 @@ local ALERT_ART = { "Background", "PvPBackground", "RatedPvPBackground", "BGAtla
 local MIRROR_FILLS = { ["ui-castingbar-filling-standard"] = "castColour", ["ui-castingbar-filling-applyingcrafting"] = "craftColour",
 	["ui-castingbar-filling-channel"] = "channelColour" }
 local MIRROR_BACKGROUND = "ui-castingbar-background"
+-- Seconds on the timers: how often the time left is read, and the red of its last 10 seconds. The functions of that row (MIRROR.Time, below).
+local MIRROR = { every = 0.1, red = { 1, 0.25, 0.25 } }
 local WIDGET_CONTAINERS = { "UIWidgetTopCenterContainerFrame", "UIWidgetBelowMinimapContainerFrame", "UIWidgetCenterScreenContainerFrame",
 	"UIWidgetPowerBarContainerFrame" }
 local WIDGET_ART = { "BorderLeft", "BorderRight", "BorderCenter", "BGLeft", "BGRight", "BGCenter" }
@@ -142,7 +149,8 @@ local sized = setmetatable({}, { __mode = "k" })
 local mapButtons = setmetatable({}, { __mode = "k" })
 -- Per experience or reputation bar: { game = the text the game set last, ours = true while the text shown is ours, line = that text }
 local xpTexts = setmetatable({}, { __mode = "k" })
--- The objective tracker: alpha = the opacity the game had while a lower one is set here, sent = the one set.
+-- The objective tracker: alpha = the opacity the game had while a lower one is set here, sent = the one set last, and the ease of Opacity in combat
+-- (ns.TrackerEase: target, from, t, span, back, driver).
 local look = {}
 local retry = false
 local Refresh
@@ -1904,11 +1912,86 @@ local function ApplyTrackerPanel(container)
 	end
 end
 
+-- Opacity in combat eases the tracker, the game's and Questie's (QuestieSkin.lua), to its opacity: down over DOWN seconds as a fight starts and back
+-- up over UP seconds as it ends, easing out, from the alpha it has now, so a fight that starts while it comes back turns it round. state is the
+-- tracker's record (look here, S in QuestieSkin.lua): alpha, the opacity to put back; sent, the alpha written last, set at once so the Fading page
+-- leaves the tracker alone for the whole ease (ns.TrackerFades, ns.QuestieFades); target; back, true while it goes back to alpha, which lets the
+-- tracker go as it gets there (alpha and sent nil). run runs each step as the file runs its parts, so a failure counts toward stopping the part,
+-- and a step that failed stops the ease. The driver is a frame of Flat UI's own, shown only while it eases. SetAlpha is no protected call.
+do
+	local DOWN, UP = 0.25, 0.2
+
+	local function Step(state, elapsed)
+		local frame = state.frame
+		if frame == nil or state.target == nil then
+			state.driver:Hide()
+			return
+		end
+		state.t = state.t + (ns.Finite(elapsed) and elapsed or 0)
+		local share = math.min(state.t / state.span, 1)
+		local alpha = state.from + (state.target - state.from) * (1 - (1 - share) ^ 2)
+		frame:SetAlpha(alpha)
+		state.sent, state.broken = alpha, nil
+		if share >= 1 then
+			state.driver:Hide()
+			if state.back then
+				state.alpha, state.sent, state.target, state.back = nil, nil, nil, nil
+			end
+		end
+	end
+
+	function ns.TrackerEase(state, frame, target, back, run)
+		state.run, state.back = run, back or nil
+		local driver = state.driver
+		local moving = driver ~= nil and driver:IsShown()
+		if state.frame == frame and state.target == target and (moving or state.sent == target) then
+			-- Already there: going back lets the tracker go now.
+			if back and not moving then
+				state.alpha, state.sent, state.target, state.back = nil, nil, nil, nil
+			end
+			return
+		end
+		if not driver then
+			driver = CreateFrame("Frame")
+			ns.Own[driver] = true
+			driver:Hide()
+			driver:SetScript("OnUpdate", function(_, elapsed)
+				if state.broken then
+					driver:Hide()
+					return
+				end
+				state.broken = true
+				state.run(Step, state, elapsed)
+			end)
+			state.driver = driver
+		end
+		local ok, now = pcall(frame.GetAlpha, frame)
+		local from = (ok and ns.Finite(now)) and now or state.sent or target
+		state.frame, state.target, state.from, state.t, state.broken = frame, target, from, 0, nil
+		state.span = target < from and DOWN or UP
+		state.sent = from
+		driver:Show()
+	end
+
+	-- Stops an ease where it is; the caller lets the tracker go.
+	function ns.TrackerEaseStop(state)
+		if state.driver then
+			state.driver:Hide()
+		end
+		state.target, state.back = nil, nil
+	end
+end
+
+-- Runs a step of the tracker's ease as the tracker's part.
+function look.run(fn, ...)
+	Run("tracker panel", fn, ...)
+end
+
 -- The opacity of the tracker while the player is in a fight. fight is nothing when the game's own state is to be asked. The opacity the tracker had is
--- read the first time a lower one is set and put back when the fight is over or the setting goes back to 100. Of a tracker the Fading page holds it is
--- the opacity that page read before its first write (ns.FadeGiven); that page leaves the tracker alone meanwhile (ns.TrackerFades). While that page fades
--- the tracker by its row of When shown, the opacity to put back goes to it in place of the write (ns.FadeTakesBack; not an opacity of 0, which that
--- page leaves alone), and the tracker fades on from the opacity of the fight instead of showing at full for a moment.
+-- read the first time a lower one is set and eased back to when the fight is over or the setting goes back to 100 (ns.TrackerEase). Of a tracker the
+-- Fading page holds it is the opacity that page read before its first write (ns.FadeGiven); that page leaves the tracker alone meanwhile, the ease back
+-- included (ns.TrackerFades). While that page fades the tracker by its row of When shown, the opacity to put back goes to it in place of the ease
+-- (ns.FadeTakesBack; not an opacity of 0, which that page leaves alone), and the tracker fades on from the alpha it has instead of showing at full.
 local function TrackerAlpha(_, fight)
 	local frame = Frame("ObjectiveTrackerFrame")
 	if not frame or type(frame.SetAlpha) ~= "function" then
@@ -1925,15 +2008,14 @@ local function TrackerAlpha(_, fight)
 			local ok, alpha = pcall(frame.GetAlpha, frame)
 			look.alpha = ns.Finite(given) and given or ((ok and ns.Finite(alpha)) and alpha or 1)
 		end
-		if look.sent ~= wanted then
-			frame:SetAlpha(wanted)
-			look.sent = wanted
-		end
+		ns.TrackerEase(look, frame, wanted, false, look.run)
 	elseif look.alpha ~= nil then
-		if not (ns.FadeTakesBack and ns.FadeTakesBack(frame, look.alpha)) then
-			frame:SetAlpha(look.alpha)
+		if ns.FadeTakesBack and ns.FadeTakesBack(frame, look.alpha) then
+			ns.TrackerEaseStop(look)
+			look.alpha, look.sent = nil, nil
+		else
+			ns.TrackerEase(look, frame, look.alpha, true, look.run)
 		end
-		look.alpha, look.sent = nil, nil
 	end
 end
 
@@ -2125,9 +2207,102 @@ function ROLL.Buttons(frame, on, rec)
 	end
 end
 
+-- The red of the last seconds of a roll: the text, and the timer's bar, which the game colours 1, 1, 0 (GroupLootFrame.xml:381). The seconds are
+-- read ten times a second.
+ROLL.red, ROLL.redBar, ROLL.every = { 1, 0.25, 0.25 }, { 1, 0.2, 0.2 }, 0.1
+
+-- The timer's bar in the red of the last seconds, or back in the colour it had, which is read before the first write. SetStatusBarColor is a widget
+-- method, and the roll frames are not protected. FillOf keeps the game's colour on this bar (tinted), so the two do not fight.
+function ROLL.Red(clock, red)
+	if red == (clock.red == true) then
+		return
+	end
+	local timer = clock.timer
+	if red and clock.colour == nil then
+		local ok, r, g, b = pcall(timer.GetStatusBarColor, timer)
+		clock.colour = (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) and { r, g, b } or { 1, 1, 0 }
+	end
+	local bar = red and ROLL.redBar or clock.colour
+	if bar then
+		pcall(timer.SetStatusBarColor, timer, bar[1], bar[2], bar[3])
+	end
+	if red then
+		clock.text:SetTextColor(ROLL.red[1], ROLL.red[2], ROLL.red[3])
+	else
+		clock.text:SetTextColor(1, 1, 1)
+	end
+	clock.red = red or nil
+end
+
+-- The seconds left, from the timer's value in thousandths (the game sets it every frame to GetLootRollTimeLeft, from 0 to the roll's time:
+-- GroupLootFrame.lua:162-168, 421-435). Nothing for a value of 0, which the Need animation sets (:438-439), or while the row or the part is off.
+-- The text is written only when the whole second changes; under 10 it and the bar are red, and back at 10 or more, as when a new roll starts.
+function ROLL.Tick(clock, value)
+	local secs
+	if clock.on and Wanted("loot rolls") and ns.Get(KEY .. ".lootRollTime") == true and ns.Finite(value) and value > 0 then
+		secs = math.ceil(value / 1000)
+	end
+	if secs == clock.secs then
+		return
+	end
+	clock.secs = secs
+	clock.text:SetText(secs and tostring(secs) or "")
+	ROLL.Red(clock, secs ~= nil and secs < 10)
+end
+
+-- Seconds left on rolls: a text of Flat UI's own at the right end just above the timer, on a frame of its own on the roll frame one level over the
+-- timer, so it hides with the roll. Its OnUpdate reads the timer's value ten times a second while the roll shows; no method of the game's is
+-- followed. Only on the four roll frames: a gamepad card keeps the game's look of its timer.
+function ROLL.Time(frame, timer, on, rec)
+	local want = on and ROLL.Ours(frame) and ns.Get(KEY .. ".lootRollTime") == true
+	local clock = rec.clock
+	if want and clock == nil and not Later(frame) then
+		local holder = CreateFrame("Frame", nil, frame)
+		ns.Own[holder] = true
+		holder:SetAllPoints(frame)
+		local text = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
+		if not text then
+			rec.clock = false
+			return
+		end
+		text:SetJustifyH("RIGHT")
+		text:SetPoint("BOTTOMRIGHT", timer, "TOPRIGHT", 0, 2)
+		clock = { holder = holder, text = text, timer = timer, wait = 0 }
+		rec.clock = clock
+		holder:SetScript("OnUpdate", function(_, elapsed)
+			clock.wait = clock.wait - elapsed
+			if clock.wait > 0 then
+				return
+			end
+			clock.wait = ROLL.every
+			local ok, value = pcall(timer.GetValue, timer)
+			ROLL.Tick(clock, ok and value or nil)
+		end)
+		-- A roll that ends takes its red with it, so the next one on this frame starts in the game's colour.
+		holder:SetScript("OnHide", function()
+			ROLL.Tick(clock, nil)
+		end)
+	end
+	if not clock then
+		return
+	end
+	clock.on = want or nil
+	if want then
+		local level = Level(timer)
+		if level then
+			clock.holder:SetFrameLevel(level + 1)
+		end
+		clock.wait = 0
+	else
+		ROLL.Tick(clock, nil)
+	end
+	clock.holder:SetShown(want)
+end
+
 -- A roll in Flat UI's look: a flat background and a thin border round the frame in place of the game's toast, the icon cropped with a thin border
 -- in the colour of the item's quality, which the game gives the frame's border, the name in that colour as the game writes it, a flat timer with a
--- thin border, and the buttons in a row. The game sets the icon, the colours and the timer's level every time a roll starts.
+-- thin border, and the buttons in a row. The game sets the icon, the colours and the timer's level every time a roll starts. With Seconds left on
+-- rolls on, the seconds stand at the right end over the timer (ROLL.Time).
 local function ApplyRoll(frame)
 	local icon, timer = Child(frame, "IconFrame"), Child(frame, "Timer")
 	if not icon then
@@ -2162,6 +2337,7 @@ local function ApplyRoll(frame)
 		ns.SetOutline(rec.timer, on, false)
 		FillOf(timer, on, ROLL_FILE, 1, 1, 1, true)
 		ROLL.Timer(frame, timer, on, rec)
+		ROLL.Time(frame, timer, on, rec)
 	end
 	ROLL.Buttons(frame, on, rec)
 end
@@ -2377,8 +2553,102 @@ end
 
 -- Breath and countdown timers --------------------------------------------------------------------------------
 
+-- The time left on a timer goes back to nothing: no text, white, and no value to compare the next one with.
+function MIRROR.Reset(clock)
+	clock.last, clock.falling = nil, nil
+	if clock.secs ~= nil then
+		clock.secs = nil
+		clock.text:SetText("")
+	end
+	if clock.red then
+		clock.red = nil
+		clock.text:SetTextColor(1, 1, 1)
+	end
+end
+
+-- The time left on a breath, fatigue or feign death timer, from its bar's value, which is in seconds: the game sets it every frame to
+-- GetMirrorTimerProgress / 1000 on a range of 0 to the timer's length (MirrorTimer.lua:130-136, 146-156, 174-176). It is written as 1:12 when the
+-- whole second changes, red under 10 while the value falls (the timer runs out) and white while it rises (breath comes back); a paused timer
+-- (MIRROR_TIMER_PAUSE) keeps its text and colour. Nothing while the timer runs none (Edit Mode shows the bars empty), or the row or the part is off.
+function MIRROR.Tick(clock)
+	local value
+	if clock.on and Wanted("mirror timers") and ns.Get(KEY .. ".mirrorTime") == true then
+		local running = clock.timer.timer
+		if running ~= nil and not ns.IsSecret(running) then
+			local ok, seconds = pcall(clock.bar.GetValue, clock.bar)
+			if ok and ns.Finite(seconds) and seconds >= 0 then
+				value = seconds
+			end
+		end
+	end
+	if value == nil then
+		MIRROR.Reset(clock)
+		return
+	end
+	if clock.last ~= nil and value ~= clock.last then
+		clock.falling = value < clock.last
+	end
+	clock.last = value
+	local secs = math.ceil(value)
+	if secs ~= clock.secs then
+		clock.secs = secs
+		clock.text:SetText(("%d:%02d"):format(math.floor(secs / 60), secs % 60))
+	end
+	local red = clock.falling == true and secs < 10
+	if red ~= (clock.red == true) then
+		clock.red = red or nil
+		if red then
+			clock.text:SetTextColor(MIRROR.red[1], MIRROR.red[2], MIRROR.red[3])
+		else
+			clock.text:SetTextColor(1, 1, 1)
+		end
+	end
+end
+
+-- Seconds on the timers: a text of Flat UI's own at the right end of the label box under the bar, where the game's label stays centred
+-- (MirrorTimer.xml: Text fills the 14 units under the StatusBar), on a frame of its own on the timer, so it hides with the timer. Its OnUpdate reads
+-- the bar's value ten times a second while the timer shows; no method of the game's is followed.
+function MIRROR.Time(timer, bar, on, rec)
+	local want = on and ns.Get(KEY .. ".mirrorTime") == true
+	local clock = rec.clock
+	if want and clock == nil and not Later(timer) then
+		local holder = CreateFrame("Frame", nil, timer)
+		ns.Own[holder] = true
+		holder:SetAllPoints(timer)
+		local text = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
+		if not text then
+			rec.clock = false
+			return
+		end
+		text:SetJustifyH("RIGHT")
+		text:SetPoint("RIGHT", bar, "BOTTOMRIGHT", -4, -7)
+		clock = { holder = holder, text = text, timer = timer, bar = bar, wait = 0 }
+		rec.clock = clock
+		holder:SetScript("OnUpdate", function(_, elapsed)
+			clock.wait = clock.wait - elapsed
+			if clock.wait > 0 then
+				return
+			end
+			clock.wait = MIRROR.every
+			MIRROR.Tick(clock)
+		end)
+		holder:SetScript("OnHide", function()
+			MIRROR.Reset(clock)
+		end)
+	end
+	if not clock then
+		return
+	end
+	clock.on = want or nil
+	clock.wait = 0
+	if not want then
+		MIRROR.Reset(clock)
+	end
+	clock.holder:SetShown(want)
+end
+
 -- The three timers exist from the start. The game puts a new picture in the fill every time one starts, so the fill is made solid again then,
--- in the cast colour that stands for the picture.
+-- in the cast colour that stands for the picture. With Seconds on the timers on, the time left stands at the right under the bar (MIRROR.Time).
 local function ApplyMirror(timer)
 	local on = Wanted("mirror timers")
 	local bar = Child(timer, "StatusBar")
@@ -2406,6 +2676,7 @@ local function ApplyMirror(timer)
 	end
 	local r, g, b = ns.Colour("castbars." .. (MIRROR_FILLS[(rec.atlas or ""):lower()] or "castColour"))
 	FillOf(bar, on, rec.atlas, r, g, b)
+	MIRROR.Time(timer, bar, on, rec)
 end
 
 -- The bar of a countdown timer has its frame as a texture with a name of its own. The game fades the bar in and out, and the border goes with it.
