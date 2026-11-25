@@ -213,6 +213,10 @@ local LIST = {
 	-- notice's size. It starts at the top of the screen, in the middle, and has a box whether or not it shows.
 	{ name = "FlatUIReloadNotice", label = "Reload notice", point = "TOP", kind = "hud", own = true, noScale = true, width = 520, height = 52, x = 0, y = -40,
 		gate = "ReloadNoticeShown", changed = "ReloadNoticeMoved" },
+	-- The line of new spell ranks (ErrandsRanks.lua), which shows after training: its top is the middle of the top of the box, which has the line's
+	-- least size, and it grows to both sides from there. It starts under the game's error text. It has a box while Put new ranks on your bars is on.
+	{ name = "FlatUIUprankNotice", label = "New spell ranks line", point = "TOP", kind = "hud", own = true, noScale = true, width = 360, height = 30, x = 0, y = -186,
+		gate = "ErrandsUprankShown", changed = "ErrandsUprankMoved" },
 	-- The threat list (Threat.lua), which shows only in a fight: its top left corner is the top left corner of the box, which has the room of five
 	-- bars at the default size, and it grows down and to the right from there.
 	{ name = "FlatUIThreat", label = "Threat list", point = "CENTER", kind = "hud", own = true, noScale = true, width = 188, height = 112, x = 420, y = 0,
