@@ -16,9 +16,21 @@ local _, ns = ...
 -- 609-613; DurationUtilDocumentation.lua:21, StringUtilDocumentation.lua:31). If any of those calls raises, then by the poll: SetFormattedText of the
 -- remaining duration on each look (LuaDurationObjectAPIDocumentation.lua:271, SimpleFontStringAPIDocumentation.lua:539-548, which accepts a withheld text).
 -- The client may refuse both for units other than the player and the pet. When both ways fail on three casts the part stops for the session, the text
--- stays empty and /flatui status says so. A row at its default makes no call.
+-- stays empty and /flatui status says so. A row at its default makes no call. The font strings of the target, focus, player and pet bars are made
+-- ahead, out of a fight, at every refresh of the cast bars while their row is on (ns.CastTimeSync), and one a fight kept from being made is made as
+-- it ends (ns.OutOfCombat), so the first cast in a fight shows its seconds also on a bar the game protects then (Edit Mode's Lock to player frame);
+-- /flatui status counts the casts that showed none for want of it, as after a reload in a fight.
+-- Pushback on your bar (on by default, Text and icon tab of Cast bars): one more font string of the addon's own on each of the player's two cast bars,
+-- just past the right end (LEFT of the bar's RIGHT, +4), in the font of the bar's spell name and red (1, 0.3, 0.3), made ahead out of a fight as the
+-- time is. While the row and the page are on, a frame of the file's own hears the player's UNIT_SPELLCAST_START, _CHANNEL_START, _DELAYED,
+-- _CHANNEL_UPDATE, _STOP, _CHANNEL_STOP, _INTERRUPTED and _FAILED (RegisterUnitEvent; the events the game's bar hears, Shared/CastingBarFrame.lua:
+-- 231-242). At a start it keeps the end of the cast (UnitCastingInfo, else UnitChannelInfo, in milliseconds: plain for the player and tested with
+-- ns.Finite all the same); at each delay or channel update it adds how far the end moved, so a cast pushed back twice by half a second reads +1.0
+-- and a channel cut short -0.8 (%+.1f), hidden while the total is under 0.05 either way. A stop or an interrupt empties it, and so does a failed
+-- cast once the player no longer casts or channels (a second cast tried during one fails and leaves it). Only SetText, SetFont, Show and Hide
+-- reach it in a fight. /flatui status names the last pushback shown.
 
-local OWN_ROW, MINE_ROW, PLATE_ROW = "castbars.ownTime", "castbars.playerTime", "nameplates.castTime"
+local OWN_ROW, MINE_ROW, PLATE_ROW, PUSH_ROW = "castbars.ownTime", "castbars.playerTime", "nameplates.castTime", "castbars.pushback"
 local EVERY = 0.1
 local FAILED_CASTS = 3
 local weak = { __mode = "k" }
@@ -26,8 +38,9 @@ local weak = { __mode = "k" }
 local OWN = { { "TargetFrameSpellBar", "target" }, { "FocusFrameSpellBar", "focus" } }
 local MINE = { { "PlayerCastingBarFrame", "player" }, { "OverlayPlayerCastingBarFrame", "player" }, { "PetCastingBarFrame", "pet" } }
 
--- failed: casts both ways failed on. worked: a time was written once. stopped: the part is off for the session, with the reason.
-local state = { failed = 0, worked = false, stopped = false, why = nil }
+-- failed: casts both ways failed on. worked: a time was written once. stopped: the part is off for the session, with the reason. missed: the
+-- casts that showed no time, as their bar's font string could not be made yet in a fight.
+local state = { failed = 0, worked = false, stopped = false, why = nil, missed = 0 }
 -- recs: per cast bar, its record: fs (the font string inside the bar), out (a nameplate bar's one past its end), write (the one the cast writes),
 -- font (the font last copied from the spell name). byFrame: per nameplate unit frame, the record of its cast bar. faded: the player's and the pet's
 -- bars whose own CastTimeText Flat UI faded.
@@ -66,6 +79,14 @@ local function Text(rec)
 	end
 	local bar = rec.bar
 	if InCombatLockdown() and ns.MaybeProtected(bar) then
+		-- Made as the fight ends, once however many casts asked.
+		if not rec.queued then
+			rec.queued = true
+			ns.OutOfCombat(function()
+				rec.queued = nil
+				pcall(Text, rec)
+			end)
+		end
 		return nil
 	end
 	local fs = ns.OwnText(bar, "OVERLAY", "GameFontHighlightSmall")
@@ -186,6 +207,11 @@ end
 local function Start(rec, casting, id, unit)
 	local fs = Text(rec)
 	if fs == nil then
+		-- Counted once a cast, by its ID.
+		local key = id or true
+		if rec.missed ~= key then
+			rec.missed, state.missed = key, state.missed + 1
+		end
 		return
 	end
 	local ok, duration = pcall(casting and UnitCastingDuration or UnitChannelDuration, unit)
@@ -245,7 +271,7 @@ local function Look(rec, wanted, unit)
 		if rec.active then
 			Finish(rec)
 		end
-		rec.gaveUp = nil
+		rec.gaveUp, rec.missed = nil, nil
 		return
 	end
 	local id = bar.castID
@@ -376,6 +402,176 @@ function Tick(_, elapsed)
 	Sync()
 end
 
+-- Pushback ------------------------------------------------------------------------------------------------
+
+-- The player's two bars, the colour of the text, the least total shown, and what each event of the player's cast does.
+local PUSH_BARS = { "PlayerCastingBarFrame", "OverlayPlayerCastingBarFrame" }
+local PUSH_COLOUR, PUSH_LEAST = { 1, 0.3, 0.3 }, 0.05
+local PUSH_EVENTS = { UNIT_SPELLCAST_START = "start", UNIT_SPELLCAST_CHANNEL_START = "start", UNIT_SPELLCAST_DELAYED = "move",
+	UNIT_SPELLCAST_CHANNEL_UPDATE = "move", UNIT_SPELLCAST_STOP = "stop", UNIT_SPELLCAST_CHANNEL_STOP = "stop",
+	UNIT_SPELLCAST_INTERRUPTED = "stop", UNIT_SPELLCAST_FAILED = "failed" }
+-- texts: per bar, its font string. queued: per bar, a make waits for the end of the fight. P: frame (the file's own, false when it could not be
+-- made), on (the events are heard), lastEnd and chan (the end in milliseconds of the cast now and whether it is a channel), total (the seconds it
+-- moved), last (the last total shown, for /flatui status).
+local pushTexts, pushQueued = setmetatable({}, weak), setmetatable({}, weak)
+local P = { frame = nil, on = false, lastEnd = nil, chan = nil, total = 0, last = nil }
+
+local function PushOn()
+	return Get(PUSH_ROW) == true and ns.Enabled("castbars")
+end
+
+local function PlayerBar(name)
+	local bar = _G[name]
+	if bar == nil or ns.IsSecret(bar) or ns.Forbidden(bar) then
+		return nil
+	end
+	return bar
+end
+
+-- The font string of a bar, made once out of a fight on a bar the game may protect; a fight that keeps it from being made makes it as it ends.
+local function PushText(bar)
+	local fs = pushTexts[bar]
+	if fs ~= nil then
+		return fs or nil
+	end
+	if InCombatLockdown() and ns.MaybeProtected(bar) then
+		if not pushQueued[bar] then
+			pushQueued[bar] = true
+			ns.OutOfCombat(function()
+				pushQueued[bar] = nil
+				pcall(PushText, bar)
+			end)
+		end
+		return nil
+	end
+	fs = ns.OwnText(bar, "OVERLAY", "GameFontHighlightSmall")
+	if fs == nil then
+		pushTexts[bar] = false
+		return nil
+	end
+	fs:SetPoint("LEFT", bar, "RIGHT", 4, 0)
+	fs:SetJustifyH("LEFT")
+	fs:SetTextColor(PUSH_COLOUR[1], PUSH_COLOUR[2], PUSH_COLOUR[3])
+	fs:SetText("")
+	fs:Hide()
+	pushTexts[bar] = fs
+	return fs
+end
+
+-- The face, size and flags of the bar's spell name on its pushback text.
+local function PushFont(bar, fs)
+	local name = bar.Text
+	if ns.IsSecret(name) or type(name) ~= "table" or type(name.GetFont) ~= "function" then
+		return
+	end
+	local ok, file, size, flags = pcall(name.GetFont, name)
+	if ok and not (ns.IsSecret(file) or ns.IsSecret(size) or ns.IsSecret(flags)) and type(file) == "string" and ns.Finite(size) and size > 0 then
+		pcall(fs.SetFont, fs, file, size, type(flags) == "string" and flags or "")
+	end
+end
+
+-- The end of the player's cast or channel now, in milliseconds, and true for a channel; nil while there is none or it is withheld.
+local function CastEnd()
+	local ok, name, _, _, _, endMs = pcall(UnitCastingInfo, "player")
+	if ok and not ns.IsSecret(name) and type(name) == "string" then
+		return ns.Finite(endMs) and endMs or nil, false
+	end
+	ok, name, _, _, _, endMs = pcall(UnitChannelInfo, "player")
+	if ok and not ns.IsSecret(name) and type(name) == "string" then
+		return ns.Finite(endMs) and endMs or nil, true
+	end
+	return nil
+end
+
+-- Writes the total on both bars, or hides it while it is under PUSH_LEAST either way. restyle: a new cast, whose font is copied first.
+local function PushShow(restyle)
+	local shown = math.abs(P.total) >= PUSH_LEAST
+	for _, name in ipairs(PUSH_BARS) do
+		local bar = PlayerBar(name)
+		local fs = bar and PushText(bar)
+		if fs then
+			if restyle then
+				PushFont(bar, fs)
+			end
+			if shown then
+				fs:SetFormattedText("%+.1f", P.total)
+			end
+			fs:SetShown(shown)
+		end
+	end
+	if shown then
+		P.last = P.total
+	end
+end
+
+local function PushClear()
+	P.lastEnd, P.chan, P.total = nil, nil, 0
+	for _, fs in pairs(pushTexts) do
+		if fs then
+			pcall(fs.Hide, fs)
+		end
+	end
+end
+
+local function PushHeard(what)
+	if what == "start" then
+		P.lastEnd, P.chan = CastEnd()
+		P.total = 0
+		PushShow(true)
+	elseif what == "move" then
+		local endMs, chan = CastEnd()
+		if endMs and P.lastEnd and chan == P.chan then
+			P.total = P.total + (endMs - P.lastEnd) / 1000
+			PushShow(false)
+		end
+		if endMs then
+			P.lastEnd, P.chan = endMs, chan
+		end
+	elseif what == "stop" or CastEnd() == nil then
+		-- A failed cast clears only once the player casts nothing: a second cast tried during one fails and leaves it.
+		PushClear()
+	end
+end
+
+local function PushEvent(_, event, unit)
+	local what = PUSH_EVENTS[event]
+	if what and not ns.IsSecret(unit) and unit == "player" and P.on then
+		if not pcall(PushHeard, what) then
+			pcall(PushClear)
+		end
+	end
+end
+
+-- The events are heard only while the row and the page are on; off empties the text.
+local function PushListen(on)
+	if on == P.on then
+		return
+	end
+	if P.frame == nil then
+		local ok, frame = pcall(CreateFrame, "Frame")
+		P.frame = ok and not ns.IsSecret(frame) and type(frame) == "table" and frame or false
+		if P.frame then
+			ns.Own[frame] = true
+			frame:SetScript("OnEvent", PushEvent)
+		end
+	end
+	local frame = P.frame
+	if not frame then
+		return
+	end
+	P.on = on
+	for event in pairs(PUSH_EVENTS) do
+		if not on then
+			pcall(frame.UnregisterEvent, frame, event)
+		elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, event, "player")) then
+			pcall(frame.RegisterEvent, frame, event)
+		end
+	end
+	if not on then
+		PushClear()
+	end
+end
+
 -- Hooks ---------------------------------------------------------------------------------------------------
 
 local extra = ns.PlateExtra
@@ -396,10 +592,35 @@ extra.leave[#extra.leave + 1] = function(frame)
 end
 extra.refresh[#extra.refresh + 1] = Sync
 
--- Called by Bars.lua at the end of a refresh of the cast bars: the frame starts or stops with the rows, and the game's own time on the player's and
--- the pet's bars is faded or given back.
+-- The font strings of the bars whose row is on, made ahead out of a fight so that a cast in one shows its time and its pushback.
+local function MakeAhead()
+	local own, mine = OwnOn(), MineOn()
+	for _, list in ipairs({ own and OWN, mine and MINE }) do
+		for _, entry in ipairs(list or {}) do
+			local bar = PlayerBar(entry[1])
+			if bar then
+				Text(Record(bar, nil))
+			end
+		end
+	end
+	if PushOn() then
+		for _, name in ipairs(PUSH_BARS) do
+			local bar = PlayerBar(name)
+			if bar then
+				PushText(bar)
+			end
+		end
+	end
+end
+
+-- Called by Bars.lua at the end of a refresh of the cast bars: the frame starts or stops with the rows, the game's own time on the player's and
+-- the pet's bars is faded or given back, the font strings are made ahead out of a fight, and the pushback events start or stop with their row.
 function ns.CastTimeSync()
 	pcall(Fades)
+	if not InCombatLockdown() and not state.stopped then
+		pcall(MakeAhead)
+	end
+	pcall(PushListen, PushOn())
 	Sync()
 end
 
@@ -410,7 +631,11 @@ local function StatusLine()
 	if not (OwnOn() or MineOn() or PlateRow()) then
 		return nil
 	end
-	return state.worked and "Cast time: works" or "Cast time: no cast seen yet"
+	local line = state.worked and "Cast time: works" or "Cast time: no cast seen yet"
+	if state.missed > 0 then
+		line = line .. (". Casts that showed no time, as their bar's text is made out of a fight and none was yet: %d"):format(state.missed)
+	end
+	return line
 end
 
 local base = ns.StatusLines
@@ -419,6 +644,9 @@ function ns.StatusLines()
 	local line = StatusLine()
 	if line ~= nil then
 		lines[#lines + 1] = line
+	end
+	if PushOn() then
+		lines[#lines + 1] = P.last and ("Pushback on your bar: the last shown was %+.1f."):format(P.last) or "Pushback on your bar: no pushback seen yet."
 	end
 	return lines
 end

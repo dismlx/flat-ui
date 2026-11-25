@@ -17,7 +17,8 @@ local IsSecret = ns.IsSecret
 -- REFUSED: the line a refused part leaves in the status.
 local K = {
 	PLATE = { 0.06, 0.06, 0.06, 0.85 }, MISSING = { 0.32, 0.08, 0.08, 0.9 },
-	RED = { 0.851, 0.251, 0.251 }, GREY = { 0.6, 0.6, 0.6 }, BLUE = { 0.302, 0.6, 0.902 },
+	-- RED: the fill and strings of a missing tracker, AMBER of a low one (ffffb333, as Trackers.lua K.AMBER).
+	RED = { 0.851, 0.251, 0.251 }, AMBER = { 1, 0.7, 0.2 }, GREY = { 0.6, 0.6, 0.6 }, BLUE = { 0.302, 0.6, 0.902 },
 	WHITE = "Interface\\Buttons\\WHITE8X8", FONT = "GameFontHighlightSmall",
 	PAD = 3, GAP = 4, TICK = 0.25, SAMPLE_COUNT = "20", SAMPLE_TIME = "10:00",
 	-- The widest count of a group buff tracker (TrackerGroup.lua): how many of a full raid lack the buff.
@@ -270,7 +271,8 @@ local function Row(host, list, point, sign)
 	end
 end
 
--- The look of a bar or a text tracker: the plate, the fill, the strings and their colour. A look with no fill keeps the fill drawn last.
+-- The look of a bar or a text tracker: the plate, the fill, the strings and their colour, amber when low and red with a red plate when
+-- missing. A look with no fill keeps the fill drawn last.
 function Shapes.Apply(record, entry, look)
 	local part = record.parts[record.shape]
 	if not part then
@@ -281,7 +283,8 @@ function Shapes.Apply(record, entry, look)
 		r, g, b = K.GREY[1], K.GREY[2], K.GREY[3]
 	end
 	if look.countRed or look.red then
-		r, g, b = K.RED[1], K.RED[2], K.RED[3]
+		local colour = (look.amber and not look.red) and K.AMBER or K.RED
+		r, g, b = colour[1], colour[2], colour[3]
 	end
 	local plate = look.red and K.MISSING or K.PLATE
 	if part.plate ~= plate then

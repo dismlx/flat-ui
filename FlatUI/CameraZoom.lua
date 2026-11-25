@@ -8,13 +8,19 @@ local _, ns = ...
 -- FlatUIDB.cameraGame, then writes 2.6, out of combat; a value of 2.6 or more is never lowered, and a write the game does not keep whole is undone.
 -- Unticked while the variable is still 2.6 or more, it writes back the kept text, or the client's default when it kept none, and forgets it; a value
 -- the game or the player lowered meanwhile is left as it is. C_CVar.GetCVar, GetCVarDefault and SetCVar take a name and plain text
--- (CVarDocumentation.lua:20-33, 66-80, 131-148).
+-- (CVarDocumentation.lua:20-33, 66-80, 131-148). Ticked by the player out of a fight, from below the top, once the game keeps 2.6 the camera glides
+-- out to it (CameraZoomOut, which the game clamps to the new factor and smooths; not protected: the apis.yaml of wowless for wowf, and the game's
+-- own Blizzard_GamepadTargeting/TargetLogic.lua:80 calls it), so the extra room shows at once. Nothing moves the camera at login, at a change of
+-- profile, for a choice made in a fight (written as it ends) or when the row is unticked: the game pulls the camera in to its own limit then.
 -- This follows the maximum camera zoom of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Settings/Camera.lua:1-29).
 
 local CVAR = "cameraDistanceMaxZoomFactor"
 -- The factor the row writes, and how far below it a value read back may be and still count as it.
 local TOP, TOP_TEXT, SLACK = 2.6, "2.6", 1e-4
 local LABEL = "Maximum camera distance"
+
+-- How far the camera is asked to zoom out once the row is ticked: more than the farthest distance, which the game clamps it to.
+local ZOOM_OUT = 50
 
 -- The value waiting for the end of a fight, or nil.
 local pending = nil
@@ -156,7 +162,12 @@ function ns.CameraZoomSet(_, value)
 		return
 	end
 	pending = nil
+	local below = on and not AtTop(Factor(Text()))
 	Apply(on)
+	-- Ticked from below the top and kept: the camera glides out to the new farthest distance, so the row is seen to work.
+	if below and result == "ok" and AtTop(Factor(Text())) and type(_G.CameraZoomOut) == "function" then
+		pcall(_G.CameraZoomOut, ZOOM_OUT)
+	end
 end
 
 -- The line of /flatui status, or nil when there is nothing to say: the client has no such variable, or the row is off and nothing waits.

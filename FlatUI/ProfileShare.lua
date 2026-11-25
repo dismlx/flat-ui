@@ -1,9 +1,11 @@
 local ADDON_NAME, ns = ...
 
 -- Profiles page, Share: a pasted profile text is read before it is imported (name, build, number of settings and positions, a warning when it was
--- made for another screen size, with Fit positions to this screen, on, which scales its positions to this screen as ns.FitSpots does), what to import
--- is chosen, and a profile is exported by module. Each row says what it does in its tip. The rows are the widgets of ns.PanelKit and sit at the end
--- of the page. The functions of Core.lua that read and write the text are ns.ProfilePreview, ns.ImportProfile and ns.ExportProfile.
+-- made for another screen size, with Fit positions to this screen, on, which scales its positions to this screen as ns.FitSpots does; neither shows
+-- while Frame positions is off), what to import is chosen (the count of a part left out is fainter), and a profile is exported by module. Each row
+-- says what it does in its tip. The rows are the widgets of ns.PanelKit and sit at the end of the page. Replace asks first, and Enter does not answer
+-- that question (a careful one, Panel.lua Ask). The functions of Core.lua that read and write the text are ns.ProfilePreview, ns.ImportProfile and
+-- ns.ExportProfile.
 
 local Share = {}
 ns.ProfileShare = Share
@@ -40,8 +42,12 @@ function Share.Summary(preview)
 	return table.concat(parts, ", ")
 end
 
--- The warning for a profile made on another screen size, or nil. With Fit positions to this screen on it says the positions are fitted.
+-- The warning for a profile made on another screen size, or nil. With Fit positions to this screen on it says the positions are fitted. With Frame
+-- positions off no position is imported, so there is no warning and the Screen row goes.
 function Share.Warning(preview)
+	if state.positions == false then
+		return nil
+	end
 	local width, height = Screen()
 	if preview.spots > 0 and preview.width > 0 and width > 0 and (preview.width ~= width or preview.height ~= height) then
 		if state.fit ~= false and state.positions ~= false then
@@ -166,7 +172,8 @@ function Share.Import(text)
 		opts.newName = Text(state.nameField and state.nameField:GetText() or state.name):match("^%s*(.-)%s*$")
 		Run()
 	else
-		kit.Ask(('Replace "%s" with the pasted settings?'):format(Text(ns.Profile and ns.Profile())), Run)
+		-- A careful question: Enter does not answer it (Panel.lua, Ask).
+		kit.Ask(('Replace "%s" with the pasted settings?'):format(Text(ns.Profile and ns.Profile())), Run, nil, "Replace", "Keep", true)
 	end
 	return true
 end
@@ -309,6 +316,9 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 			warning:SetText(Share.Warning(preview) or "")
 			settingsCount:SetText(tostring(preview.settings))
 			positionsCount:SetText(tostring(preview.spots))
+			-- A count of what is left out is fainter.
+			settingsCount:SetAlpha(state.settings == false and 0.4 or 1)
+			positionsCount:SetAlpha(state.positions == false and 0.4 or 1)
 			menu.SetText(state.as == "new" and "New profile" or "Replace " .. Text(ns.Profile and ns.Profile()))
 			named:SetShown(state.as == "new")
 		end

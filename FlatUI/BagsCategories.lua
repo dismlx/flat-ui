@@ -53,7 +53,8 @@ local _, ns = ...
 -- never sells them. Dropped on the section it reaches by itself, an item loses its placement. An item whose slot the game does not say is judged by
 -- its ID alone, with its quality from C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight
 -- (InCombatLockdown and UnitAffectingCombat, through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands
--- does, by C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off.
+-- does, by C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off, or, from its first line while
+-- two or more are placed, every one; with none it says how to place an item.
 --
 -- Inside a section, equipment sorts by the place of its slot in the Character window (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-873),
 -- then by item level (ns.Items.LevelOf, Items.lua:425-438), quality and name; everything else by class, subclass, quality, name and count. An item
@@ -900,20 +901,43 @@ end
 
 -- The row Items placed by hand ---------------------------------------------------------------------------------------------------------
 
--- Every placement, by the name of its item: { { itemID, "Name (ID): Section" }, ... }.
+local PLACED_ALL = "Put every item back in its own section"
+local PLACED_NONE = "No item is placed by hand. Drop an item from your bags on a section's title to keep it there."
+
+-- Every placement, by the name of its item: { { itemID, "Name (ID): Section" }, ... }, after a line that takes them all off while two or more
+-- are placed, as Folded sections and Pinned slots have; with none, one line that says how to place one.
 function ns.BagsPlacedLines()
 	local lines = {}
 	for id, key in pairs(Categories.Placed()) do
 		lines[#lines + 1] = { id, ("%s: %s"):format(Named(id), Categories.Label(Fit(key, { id = id }))) }
 	end
+	if #lines == 0 then
+		return { { "none", PLACED_NONE } }
+	end
 	table.sort(lines, function(a, b)
 		return a[2] < b[2]
 	end)
+	if #lines >= 2 then
+		table.insert(lines, 1, { "all", PLACED_ALL })
+	end
 	return lines
 end
 
--- Takes one placement off, with the page on or off; a window that shows is laid out again.
+-- Takes one placement off, or every one ("all"), with the page on or off; a window that shows is laid out again.
 function ns.BagsPlacedPick(id)
+	if id == "all" then
+		local placed = Store(false)
+		if not placed or next(placed) == nil then
+			return false, "Flat UI: no item is placed by hand."
+		end
+		for key in pairs(placed) do
+			placed[key] = nil
+		end
+		Request("layout")
+		return true, "Flat UI: every item placed by hand goes back to its own section."
+	elseif id == "none" then
+		return false, "Flat UI: no item is placed by hand."
+	end
 	id = Whole(id)
 	local placed = Store(false)
 	if not id or not placed or placed[id] == nil then

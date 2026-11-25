@@ -62,13 +62,21 @@ local _, ns = ...
 -- 301-327; enums.yaml:561), and a slot is bought when n is no more than C_Bank.FetchNumPurchasedBankTabs (the game lights slot n when the n-th entry
 -- of its list of bought tabs exists, BankFrame.lua:172-183). The row shows slots 2 to C_Bank.FetchMaxNumBankTabs, at most nine
 -- (Constants.InventoryConstants.NumCharacterBankSlots), as buttons of Flat UI's own: the bag's icon from C_Container.GetContainerItemInfo(-2, n), the
--- game's lock (the atlas bankslot-icon-lock, Camelot/BankFrame.xml:11) on a slot not bought. A click, a drag or a drop calls
--- C_Container.PickupContainerItem(-2, n), as the game's own bag slot does (BankFrame.lua:378-395), out of combat. The tooltip is the game's for the
--- bag (GameTooltip:SetOwner, SetBagItem, Show) out of combat, as the game's slot shows it (BankFrame.lua:329-342), and plain lines (SetText, AddLine)
--- in a fight or for an empty or unbought slot, with the bag's free and total slots (C_Container.GetContainerNumFreeSlots and GetContainerNumSlots
--- of its container, tab TAB_OF_SLOT + n); it is hidden (Hide) when the cursor leaves the button that owns it (IsOwned). While the mouse points at a
--- bought slot that holds a bag, the bank window dims every slot that is not in that bag (B.Layout.Light, BagsLayout.lua), as the bag slots of the
--- bag window do with its bags, and leaving the slot gives the window back.
+-- game's lock (the atlas bankslot-icon-lock, Camelot/BankFrame.xml:11) on a slot not bought, and on a bought slot with no bag the game's art of an
+-- empty bag slot, faded, as the bag window's row draws one (BagsSlots.lua). A bag shows its free slots in its corner, in the game's font of item
+-- counts with an outline, white, gold at LOW (4) or fewer and red when it is full, the colours of the footer's free slots. A drag or a drop, or a
+-- click with an item on the cursor (CursorHasItem), calls C_Container.PickupContainerItem(-2, n), as the game's own bag slot does
+-- (BankFrame.lua:378-395), out of combat. A plain click on a bought slot that holds a bag keeps that bag lit in the bank window (B.Layout.Stick with
+-- its container, as the bag window's row does with its bags; B.Layout.Closed lets it go when the window closes), its edge in the Highlight colour
+-- (SetOutlineColour), and a click on it again gives every bag back; that touches frames of Flat UI's own only, so it works in a fight too. The
+-- tooltip is the game's for the bag (GameTooltip:SetOwner, SetBagItem, Show) out of combat, as the game's slot shows it (BankFrame.lua:329-342), and
+-- plain lines (SetText, AddLine) in a fight or for an empty or unbought slot, with the bag's free and total slots
+-- (C_Container.GetContainerNumFreeSlots and GetContainerNumSlots of its container, tab TAB_OF_SLOT + n) and what the clicks do, drawn again after a
+-- click while the slot owns it. It
+-- opens beside the bank window (B.Window.Get; SetOwner with ANCHOR_NONE, ClearAllPoints and SetPoint), right of it while the window's middle is left
+-- of the screen's and left of it otherwise, its bottom at the window's, so it never covers the items the slot lights; it is hidden (Hide) when the
+-- cursor leaves the button that owns it (IsOwned). While the mouse points at a bought slot that holds a bag, the bank window dims every slot that is
+-- not in that bag (B.Layout.Light, BagsLayout.lua), as the bag slots of the bag window do with its bags, and leaving the slot gives the window back.
 -- The first slots and the Buy button. The game's bank window buys the first tab itself whenever it selects a tab while that tab costs nothing
 -- (BankFrame.lua:197-206 and 232-236), which never runs while BankFrame is hidden. So while no tab is bought the row says "Your bank has no space
 -- yet." beside a Buy button, and later the button stays beside the slots while C_Bank.CanPurchaseBankTab says more can be bought (apis.yaml:3321).
@@ -170,13 +178,19 @@ local TEMPLATE = "BankPanelPurchaseButtonScriptTemplate"
 -- The game's question its click shows (Camelot/BankFrame.lua:1).
 local BUY_POPUP = "CONFIRM_BUY_BANK_TAB"
 local LOCK = "bankslot-icon-lock"
+-- The game's art of an empty bag slot, faded on a bought bank bag slot that holds no bag, as on the bag window's row (BagsSlots.lua).
+local EMPTY_ART = "Interface\\PaperDoll\\UI-PaperDoll-Slot-Bag"
 local NO_SPACE = "Your bank has no space yet."
 -- The tint under the cursor, as on the slots of the windows (Windows.lua:59), and the colour of the plain lines of a tooltip.
 local HOVER = { 1, 1, 1, 0.3 }
 local DIM = { 0.8, 0.8, 0.8 }
 local RED = { 1, 0.35, 0.24 }
--- The crop of an icon when the Windows page does not say.
-local CROP = 8
+-- The free count in a bank bag's corner, as on the bag window's row (BagsSlots.lua): the game's font of item counts at a size of its own with an
+-- outline, white, gold at LOW free slots or fewer and red when the bag is full, the colours of the footer's free slots (BagsWindow.lua).
+local COUNT_FONT, COUNT_SIZE = "NumberFontNormal", 11
+local ROOM, SHORT, LOW = { 1, 1, 1 }, { 1, 0.82, 0 }, 4
+-- The crop of an icon when the Windows page does not say; how far beside the bank window a slot's tooltip opens.
+local CROP, TIP_GAP = 8, 4
 
 local BUTTON = "FlatUIBankButton"
 local BINDING = "CLICK " .. BUTTON .. ":LeftButton"
@@ -566,7 +580,8 @@ local function Hover(button)
 	hover:SetColorTexture(HOVER[1], HOVER[2], HOVER[3], HOVER[4])
 end
 
--- A click, a drag or a drop on bank bag slot n: the game's pickup, which lifts the bag or puts the one on the cursor there.
+-- A drag or a drop on bank bag slot n, or a click with an item on the cursor: the game's pickup, which lifts the bag or puts the one on the cursor
+-- there.
 local function Pickup(n)
 	if not Bank.Live() or n > Bought() then
 		return
@@ -578,19 +593,109 @@ local function Pickup(n)
 	E.Call(Container("PickupContainerItem"), BANK_BAGS, n)
 end
 
--- The free and total slots of the bag in bank bag slot n, as a line of its tooltip, or nil when the client does not say.
-local function RoomLine(n)
+-- The free and total slots of the bag in bank bag slot n, or nil when the client does not say.
+local function Room(n)
 	local free = E.Ask(Container("GetContainerNumFreeSlots"), n + TAB_OF_SLOT)
 	local total = E.Ask(Container("GetContainerNumSlots"), n + TAB_OF_SLOT)
 	if ns.Finite(free) and ns.Finite(total) and total > 0 then
-		return ("%d of %d slots free"):format(math.max(0, math.floor(free)), math.floor(total))
+		return math.max(0, math.floor(free)), math.floor(total)
+	end
+	return nil, nil
+end
+
+-- The free and total slots of the bag in bank bag slot n, as a line of its tooltip, or nil when the client does not say.
+local function RoomLine(n)
+	local free, total = Room(n)
+	if free then
+		return ("%d of %d slots free"):format(free, total)
 	end
 	return nil
 end
 
+-- The bank bag slot whose bag a click keeps lit in the bank window (B.Layout.Stuck, its container less TAB_OF_SLOT), or nil.
+local function Stuck()
+	local layout = B.Layout
+	local stuck = Usable(layout) and layout.Stuck or nil
+	if type(stuck) ~= "function" then
+		return nil
+	end
+	local ok, c = pcall(stuck, "bank")
+	return ok and ns.Finite(c) and (c - TAB_OF_SLOT) or nil
+end
+
+-- The edge of a slot: in the Highlight colour while a click keeps its bag lit, else the outline's own.
+local function Edge(slot, n)
+	if Stuck() == n then
+		local r, g, b = ns.Colour("windows.accent")
+		ns.SetOutlineColour(slot.box, r, g, b)
+	else
+		ns.SetOutlineColour(slot.box, nil, nil, nil)
+	end
+end
+
+-- A click on bank bag slot n: with an item on the cursor the game's pickup puts it there; else, on a bought slot that holds a bag, that bag stays
+-- lit in the bank window (B.Layout.Stick with its container), or, on the one lit already, every bag comes back, as the bag window's row does with
+-- its bags (BagsSlots.lua). That touches frames of Flat UI's own only, so it works in a fight too.
+local function Click(n)
+	if E.Ask(CursorHasItem) == true then
+		Pickup(n)
+		return
+	end
+	local layout = B.Layout
+	if not (Bank.Live() and n <= Bought() and Held(BANK_BAGS, n)) or not Usable(layout) or type(layout.Stick) ~= "function" then
+		return
+	end
+	B.Part("layout", layout.Stick, "bank", Stuck() ~= n and (n + TAB_OF_SLOT) or nil)
+	for other, slot in pairs(row and row.slots or {}) do
+		Edge(slot, other)
+	end
+end
+
+-- The centre of a frame across the screen, in screen units, or nil.
+local function Middle(frame)
+	local ok, left, right, scale = pcall(function()
+		return frame:GetLeft(), frame:GetRight(), frame:GetEffectiveScale()
+	end)
+	if ok and ns.Finite(left) and ns.Finite(right) and ns.Finite(scale) and scale > 0 then
+		return (left + right) / 2 * scale
+	end
+	return nil
+end
+
+-- The tooltip of a slot opens beside the bank window (B.Window.Get, a frame of Flat UI's own), on the side of the screen with room: right of a
+-- window left of the screen's middle, else left of it, its bottom at the window's, so the window and the bag the slot lights stay in view. Right of
+-- the slot when the window does not say where it is.
+local function Anchor(tip, button)
+	local window
+	local get = Usable(B.Window) and B.Window.Get or nil
+	if type(get) == "function" then
+		local ok, frame = pcall(get, "bank")
+		window = ok and Usable(frame) and frame or nil
+	end
+	local at, screen = window and Middle(window), Middle(UIParent)
+	if not (at and screen) then
+		tip:SetOwner(button, "ANCHOR_RIGHT")
+		return
+	end
+	tip:SetOwner(button, "ANCHOR_NONE")
+	tip:ClearAllPoints()
+	if at > screen then
+		tip:SetPoint("BOTTOMRIGHT", window, "BOTTOMLEFT", -TIP_GAP, 0)
+	else
+		tip:SetPoint("BOTTOMLEFT", window, "BOTTOMRIGHT", TIP_GAP, 0)
+	end
+end
+
+-- What the clicks on a bought slot that holds a bag do, after its tooltip's lines.
+local function ClickLines(tip, n)
+	local click = Stuck() == n and "Click again to show every bag" or "Click to show only this bag"
+	tip:AddLine(click .. "; drag it to pick it up, or drop another bag on it to swap.", DIM[1], DIM[2], DIM[3], true)
+end
+
 -- The game's tooltip of the bag in slot n, out of combat; plain lines in a fight, for an empty slot, for one not bought, or when the game gives none
 -- (it hides the tooltip then, Camelot/BankFrame.lua:334-337 and Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:264-270, so the owner is
--- set again first). A bag adds its free and total slots, as the bag slots of the bag window say them (BagsSlots.lua).
+-- set again first). A bag adds its free and total slots and what the clicks do, as the bag slots of the bag window say them (BagsSlots.lua). It
+-- opens beside the bank window (Anchor).
 local function SlotTip(button, n)
 	local tip = GameTooltip
 	if not Usable(tip) or ns.Forbidden(tip) then
@@ -599,17 +704,18 @@ local function SlotTip(button, n)
 	local bought = n <= Bought()
 	local held = bought and Held(BANK_BAGS, n) or nil
 	local room = held and RoomLine(n) or nil
-	tip:SetOwner(button, "ANCHOR_RIGHT")
+	Anchor(tip, button)
 	if held and not E.Fighting() then
 		local ok, shown = pcall(tip.SetBagItem, tip, BANK_BAGS, n)
 		if ok and not ns.IsSecret(shown) and shown ~= false then
 			if room then
 				tip:AddLine(room, 1, 1, 1)
 			end
+			ClickLines(tip, n)
 			tip:Show()
 			return
 		end
-		tip:SetOwner(button, "ANCHOR_RIGHT")
+		Anchor(tip, button)
 	end
 	if not bought then
 		tip:SetText("Bank bag slot")
@@ -620,11 +726,24 @@ local function SlotTip(button, n)
 			tip:AddLine(room, 1, 1, 1)
 		end
 		tip:AddLine("In a bank bag slot.", DIM[1], DIM[2], DIM[3], true)
+		ClickLines(tip, n)
 	else
 		tip:SetText("Bank bag slot")
-		tip:AddLine("Drop a bag here to add its slots to your bank.", DIM[1], DIM[2], DIM[3], true)
+		tip:AddLine("Drop a bag here, or click with one on your cursor, to add its slots to your bank.", DIM[1], DIM[2], DIM[3], true)
 	end
 	tip:Show()
+end
+
+-- The tooltip again after a click, which may have changed what it says, while this slot still owns it.
+local function Retip(button, n)
+	local tip = GameTooltip
+	if not Usable(tip) or ns.Forbidden(tip) then
+		return
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, button)
+	if ok and not ns.IsSecret(owned) and owned == true then
+		SlotTip(button, n)
+	end
 end
 
 -- The bank window lights the items of the bag in bank bag slot n (B.Layout.Light, BagsLayout.lua), or gives itself back with nil; a slot with no
@@ -649,10 +768,20 @@ local function MakeSlot(n)
 	slot.lock:SetAllPoints(button)
 	pcall(slot.lock.SetAtlas, slot.lock, LOCK)
 	Hover(button)
+	slot.count = ns.OwnText(button, "OVERLAY", COUNT_FONT)
+	if slot.count then
+		local ok, file = pcall(slot.count.GetFont, slot.count)
+		if ok and type(file) == "string" and not ns.IsSecret(file) and file ~= "" then
+			pcall(slot.count.SetFont, slot.count, file, COUNT_SIZE, "OUTLINE")
+		end
+		slot.count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
+		slot.count:SetJustifyH("RIGHT")
+	end
 	button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	button:RegisterForDrag("LeftButton")
-	button:SetScript("OnClick", function()
-		Run(Pickup, n)
+	button:SetScript("OnClick", function(self)
+		Run(Click, n)
+		Run(Retip, self, n)
 	end)
 	button:SetScript("OnDragStart", function()
 		Run(Pickup, n)
@@ -678,6 +807,9 @@ local function MakeSlot(n)
 	return slot
 end
 
+-- Draws bank bag slot n: the bag's icon, cropped, with its free slots in the corner (white, gold at LOW or fewer, red when full); a bought slot
+-- with no bag the game's art of an empty bag slot, faded; one not bought the game's lock. Its edge is in the Highlight colour while a click keeps
+-- its bag lit.
 local function DrawSlot(slot, n, bought, crop)
 	local isBought = n <= bought
 	local held = isBought and Held(BANK_BAGS, n) or nil
@@ -685,12 +817,28 @@ local function DrawSlot(slot, n, bought, crop)
 	if held and held.icon then
 		slot.icon:SetTexture(held.icon)
 		slot.icon:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
+		slot.icon:SetAlpha(1)
+		slot.icon:Show()
+	elseif isBought and not held then
+		slot.icon:SetTexture(EMPTY_ART)
+		slot.icon:SetTexCoord(0, 1, 0, 1)
+		slot.icon:SetAlpha(0.5)
 		slot.icon:Show()
 	else
 		slot.icon:Hide()
 	end
+	local free = held and Room(n) or nil
+	if slot.count and free then
+		local colour = free == 0 and RED or free <= LOW and SHORT or ROOM
+		slot.count:SetTextColor(colour[1], colour[2], colour[3], 1)
+		slot.count:SetText(tostring(free))
+		slot.count:Show()
+	elseif slot.count then
+		slot.count:Hide()
+	end
 	slot.button:SetAlpha(isBought and 1 or 0.6)
 	Paint(slot.box)
+	Edge(slot, n)
 end
 
 local function BuyTip(button)

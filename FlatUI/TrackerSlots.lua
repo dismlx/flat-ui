@@ -24,9 +24,9 @@ local CROP = 0.08
 -- The thickness of the low rim, in screen pixels.
 local RIM = 2
 local UNKNOWN_ICON = 134400
--- ffd94040, the colour of a low count and of the low rim.
-local RED = { 0.851, 0.251, 0.251 }
-local LOW_FORMAT = "|cffd94040%d|r"
+-- ffffb333, the amber of a low count, of the low rim and of a low time left, as on the trackers' own frames (Trackers.lua K.AMBER).
+local AMBER = { 1, 0.7, 0.2 }
+local LOW_FORMAT = "|cffffb333%d|r"
 local PLAIN_FORMAT = "%d"
 local NOTE_REFUSED = "Trackers: the game refused its own icon for buffs, so in fights trackers show the last known charges and time, or are hidden, as In fights without the game's icon says."
 local NOTE_LATE = "Trackers: a setting did not reach the game's own icon. /reload applies it."
@@ -212,14 +212,15 @@ local function Want(rec)
 	return { charged = charged, counts = Value(entry, "counts") and true or false, low = low, lowTime = LowTime(entry), numbers = Value(entry, "numbers") and true or false,
 		art = entry.seen or entry.spells[1], thick = ns.Pixels(rec.frame, RIM), shape = shape, fill = FillOf(entry, shape), top = Top(entry),
 		height = Number("barHeight", 14), width = Number("barWidth", 140), name = Plain(label, "string") and label or "",
-		hex = Plain(hex, "string") and hex or "" }
+		hex = Plain(hex, "string") and hex or "", texture = ns.BarTexture(ns.Get(KEY .. ".barTexture")) or WHITE }
 end
 
--- Which parts differ from what was applied, and what they should be. shape: the wrappers and the strings, fill: what the bars show.
+-- Which parts differ from what was applied, and what they should be. shape: the wrappers and the strings, fill: what the bars show, texture:
+-- the Bar texture of both bars.
 local function Dirty(rec)
 	local want, was = Want(rec), rec.applied
 	return { count = want.charged ~= was.charged or want.counts ~= was.counts or want.low ~= was.low, time = want.lowTime ~= was.lowTime or want.numbers ~= was.numbers,
-		art = want.art ~= was.art, rim = want.thick ~= was.thick,
+		art = want.art ~= was.art, rim = want.thick ~= was.thick, texture = want.texture ~= was.texture,
 		shape = want.shape ~= was.shape or want.height ~= was.height or want.width ~= was.width or want.name ~= was.name or want.hex ~= was.hex,
 		fill = want.fill ~= was.fill or want.top ~= was.top or want.shape ~= was.shape or want.hex ~= was.hex }, want
 end
@@ -251,7 +252,7 @@ local function PlaceRim(rec, thick)
 	rim[4]:SetWidth(thick)
 end
 
--- What shows under the cover once a count is at or under Low at: a black square, a still of the spell and the red rim.
+-- What shows under the cover once a count is at or under Low at: a black square, a still of the spell and the amber rim.
 local function Look(rec, button, entry)
 	local parts = rec.parts
 	local back = Own(button:CreateTexture(nil, "BACKGROUND", nil, 0))
@@ -268,14 +269,14 @@ local function Look(rec, button, entry)
 		if edge.SetSnapToPixelGrid then
 			pcall(edge.SetSnapToPixelGrid, edge, false)
 		end
-		edge:SetColorTexture(RED[1], RED[2], RED[3], 1)
+		edge:SetColorTexture(AMBER[1], AMBER[2], AMBER[3], 1)
 		rim[index] = edge
 	end
 	parts.rim = rim
 	PlaceRim(rec, ns.Pixels(rec.frame, RIM))
 end
 
--- A formatter for the count: red up to Low at, plain from Low at + 1. Nil when the game refuses a breakpoint.
+-- A formatter for the count: amber up to Low at, plain from Low at + 1. Nil when the game refuses a breakpoint.
 local function Digits(low, colour)
 	local call = type(C_StringUtil) == "table" and C_StringUtil.CreateNumericRuleFormatter
 	local ok, formatter = pcall(call)
@@ -350,13 +351,13 @@ local function Cover(rec, entry, low)
 	return cleared and shown
 end
 
--- The colour of the time left: red under `seconds`, white from there on. A step curve takes the value of the last
+-- The colour of the time left: amber under `seconds`, white from there on. A step curve takes the value of the last
 -- point at or under its input.
 local function Colours(seconds)
 	local ok, options = pcall(function()
 		local curve = C_CurveUtil.CreateColorCurve()
 		curve:SetType(Enum.LuaCurveType.Step)
-		curve:AddPoint(0, CreateColor(RED[1], RED[2], RED[3], 1))
+		curve:AddPoint(0, CreateColor(AMBER[1], AMBER[2], AMBER[3], 1))
 		curve:AddPoint(seconds, CreateColor(1, 1, 1, 1))
 		return { textColor = { curve = curve, property = Enum.DurationTextBindingProperty.RemainingDuration } }
 	end)
@@ -739,7 +740,7 @@ local function Apply(rec)
 		ok = pcall(PlaceRim, rec, want.thick) and ok
 	end
 	local was = rec.applied
-	local shaped, filled = true, true
+	local shaped, filled, textured = true, true, true
 	if dirty.shape then
 		local called, done = pcall(Shape, rec, want)
 		shaped = called and done and true or false
@@ -748,13 +749,26 @@ local function Apply(rec)
 		local called, done = pcall(Bars, rec, want)
 		filled = called and done and true or false
 	end
-	ok = shaped and filled and ok
+	-- A new Bar texture: the bar of the time left and the bar of the charges, both Flat UI's own bars on the button.
+	if dirty.texture then
+		local second = rec.parts2
+		for _, bar in pairs({ parts.timeBar or false, second and second.bar or false }) do
+			if bar then
+				local called, done = pcall(bar.SetStatusBarTexture, bar, want.texture)
+				textured = textured and called and (IsSecret(done) or done ~= false)
+			end
+		end
+	end
+	ok = shaped and filled and textured and ok
 	-- A change the game refused stays asked for: the record keeps what the button has, and the next Flush sends it again.
 	if not shaped then
 		want.shape, want.height, want.width, want.name, want.hex = was.shape, was.height, was.width, was.name, was.hex
 	end
 	if not filled then
 		want.fill, want.top = was.fill, was.top
+	end
+	if not textured then
+		want.texture = was.texture
 	end
 	rec.applied = want
 	if not ok then
@@ -1165,7 +1179,7 @@ local CHARGES = { made = "made", refused = "refused" }
 local function Parts(rec)
 	local parts = rec.parts
 	local list = { parts.countKind and ("charges as " .. DIGITS[parts.countKind]) or "no charges",
-		parts.plainText and "time as text without the red colour" or TIMES[parts.timeKind or "none"],
+		parts.plainText and "time as text without the amber colour" or TIMES[parts.timeKind or "none"],
 		"low border " .. (parts.coverOn and "yes" or "no") }
 	if not parts.sweepOk then
 		list[#list + 1] = "no sweep"
@@ -1296,5 +1310,10 @@ local function Safe(fn)
 	end
 end
 
+-- Hid: true while the game's own icon hides the tracker's frame by an alpha it withholds (Hide), so the frame may not be seen and takes no mouse.
 ns.TrackerSlots = { Sync = Safe(Sync), Show = Safe(Show), Live = Safe(Live), InUse = Safe(Used), Flush = Safe(Flush), Lines = Safe(Lines), FightLines = Safe(FightLines),
-	Probe = Safe(Probe), LowTest = Safe(LowTest), Retarget = Safe(Retarget) }
+	Probe = Safe(Probe), LowTest = Safe(LowTest), Retarget = Safe(Retarget),
+	Hid = Safe(function(entry)
+		local rec = RecOf(entry)
+		return rec ~= nil and rec.hid == true
+	end) }

@@ -6,8 +6,9 @@ local _, ns = ...
 -- behind More settings and Every setting, the draft and Finish. Every choice goes into a draft kept for this character in FlatUIDB.setup.drafts.
 -- Nothing reaches a profile, a game setting or a list before Finish: the drawings read the draft through ns.Viewing, and a list row queues its pick.
 -- Finish saves the draft into the profile in use in one call (ns.ChangeProfile), or makes a profile of the character's own from it while the
--- character is on Default (ns.NewProfile), then closes the window so that the real screen shows the change. Enter and the arrow keys come through
--- a frame of Flat UI's own that has the keyboard only out of combat. Everything here is in the table S, so that the file keeps few locals.
+-- character is on Default (ns.NewProfile), then closes the window so that the real screen shows the change. Enter, the arrow keys and Escape (which
+-- closes an open list, question or the colour picker before the window) come through a frame of Flat UI's own that has the keyboard only out of
+-- combat. Everything here is in the table S, so that the file keeps few locals.
 
 local kit = ns.PanelKit
 local STEPS = ns.SETUP_STEPS
@@ -608,6 +609,8 @@ end
 S.APART = {
 	["cooldowns.iconSound"] = true, ["cooldowns.iconShow"] = true, ["cooldowns.rowOf"] = true, ["pulse.iconSound"] = true, ["pulse.iconSpot"] = true,
 	["trackers.clickUse"] = true, ["movers.layoutText"] = true, ["chat.gearOpen"] = true,
+	-- The Mount key's Key waits for the next key pressed, which cannot wait for Finish either.
+	["mount.bind"] = true,
 }
 
 -- A copy of a row of Config.lua that reads and writes the draft: it has no saved path, so the row builders never touch a profile. A list row queues
@@ -1708,7 +1711,8 @@ end
 
 -- Enter presses the primary button and Left and Right pick the card before or after on a stop. The keys come through a frame of Flat UI's own
 -- that has the keyboard while setup shows and only out of combat (EnableKeyboard and SetPropagateKeyboardInput are protected); every key it does not
--- use goes on to the game, Escape too, so Escape closes the window. A box with the cursor takes the keys first.
+-- use goes on to the game. Escape closes the colour picker, an open list or a question first (ns.PanelKit.Escape), and with none of them open goes
+-- on too, so Escape closes the window. A box with the cursor takes the keys first.
 function S.BuildKeys(root)
 	local keys = kit.Frame(root)
 	keys:SetAllPoints(root)
@@ -1720,6 +1724,10 @@ function S.BuildKeys(root)
 		local handled = enter
 		if arrow and not covered and S.screen and S.screen.kind == "stop" then
 			handled = S.Walk("Key", key) == true
+		elseif key == "ESCAPE" and type(kit.Escape) == "function" then
+			-- Escape closes the colour picker, an open list or a question first, as on the options pages; with none open it goes on and the window
+			-- closes.
+			handled = Reported(pcall(kit.Escape)) == true
 		end
 		if not InCombatLockdown() then
 			Reported(pcall(self.SetPropagateKeyboardInput, self, not handled))
@@ -1798,7 +1806,7 @@ function S.Close()
 end
 
 S.mode = {
-	title = "Flat UI setup", waiting = "Setup opens after combat.",
+	title = "Flat UI setup", waiting = "Flat UI: Setup opens after combat.",
 	Build = S.Build, Enter = S.Enter, Update = S.Update, Frame = S.Frame, Hidden = S.Hidden, Close = S.Close,
 }
 

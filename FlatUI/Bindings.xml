@@ -27,6 +27,10 @@
 	     closed, and puts the cursor in its search box. BagsSearch.lua names it in the game's Key Bindings. -->
 	<Binding name="CLICK FlatUIBagSearchButton:LeftButton" category="Flat UI">
 	</Binding>
+	<!-- BagSort.lua: the key of Clean up bags. It clicks a plain button of Flat UI's own that cleans up your bags with the game's sort and its
+	     sound, as /flatui sort does, in a fight too. BagSort.lua names it in the game's Key Bindings. -->
+	<Binding name="CLICK FlatUIBagSortButton:LeftButton" category="Flat UI">
+	</Binding>
 	<!-- TestMode.lua: the key of test mode. It clicks a plain button of Flat UI's own that turns test mode on or off (out of combat), as
 	     /flatui test does. TestMode.lua names it in the game's Key Bindings. -->
 	<Binding name="CLICK FlatUITestButton:LeftButton" category="Flat UI">

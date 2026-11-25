@@ -6,10 +6,14 @@ local _, ns = ...
 -- Mainline/CompactUnitFrameOptions.lua:17), its party frames do not, and neither tells them apart at a glance.
 --
 -- The heals over time are those of the player's class on Forever, each found by the name the client gives one of its spells, so every rank counts:
--- Renew (139) for a priest; Rejuvenation (774), Regrowth (8936), and the runes Lifebloom (408124) and Wild Growth (408120) for a druid; the rune
--- Riptide (408521) for a shaman. Every rank of Rejuvenation and Regrowth is in ProcData.lua, which is read from the DB2 tables of build 1.60.1;
--- Renew's ranks and the three runes are in the client's SkillLineAbility table (Holy 56, the druid runes 573, Restoration 374). A spell the client
--- does not name (C_Spell.GetSpellName gives nil for one it does not have, SpellDocumentation.lua:518-533) has no square, so each is checked in the game.
+-- Renew (139), Power Word: Shield (17) and the rune Prayer of Mending (401859) for a priest; Rejuvenation (774), Regrowth (8936), and the runes
+-- Lifebloom (408124) and Wild Growth (408120) for a druid; the runes Riptide (408521) and Earth Shield (408514) for a shaman. The shields count as the
+-- buffs of the player's that healers watch on a tank, and Prayer of Mending's square moves with the bounce, since the aura stays the caster's. At most
+-- four for a class, the squares the drawings of the setup and test mode make (SetupDrawUnits.lua MakeMarks). Every rank of Rejuvenation and Regrowth
+-- is in ProcData.lua, which is read from the DB2 tables of build 1.60.1; Renew's ranks, Lifebloom, Wild Growth and Riptide are in the client's
+-- SkillLineAbility table (Holy 56, the druid runes 573, Restoration 374), Power Word: Shield's ranks and Earth Shield in CooldownData.lua, and Power
+-- Word: Shield and Prayer of Mending in tools/dev/spelltips/client_spells.json (build 70938). A spell the client does not name (C_Spell.GetSpellName
+-- gives nil for one it does not have, SpellDocumentation.lua:518-533) has no square, so each is checked in the game.
 -- A class without one, or a client that does not read auras by slot, makes nothing. Each heal over time has a place of its own in a row from the
 -- corner (Square corner), so a square never moves while the others come and go; Square size is its side in units, with a dark rim of one screen pixel,
 -- and the row sits just inside the dispel border of UnitGroupMarks.lua (2 screen pixels inside the health bar).
@@ -43,10 +47,11 @@ local RIM_PX, SOON, MOST_ASKS = 2, 0.1, 4
 -- The heals over time of each class by the class file UnitClass gives, in the order of their places from the corner: the spell the name comes from,
 -- and the colour of its square with the word /flatui status says for it.
 local HOTS = {
-	PRIEST = { { id = 139, colour = { 0.3, 0.9, 0.35 }, word = "green" } },
+	PRIEST = { { id = 139, colour = { 0.3, 0.9, 0.35 }, word = "green" }, { id = 17, colour = { 1, 1, 1 }, word = "white" },
+		{ id = 401859, colour = { 1, 0.85, 0.2 }, word = "yellow" } },
 	DRUID = { { id = 774, colour = { 0.75, 0.3, 1 }, word = "purple" }, { id = 8936, colour = { 0.3, 0.9, 0.35 }, word = "green" },
 		{ id = 408124, colour = { 1, 0.85, 0.2 }, word = "yellow" }, { id = 408120, colour = { 0.2, 0.8, 0.9 }, word = "teal" } },
-	SHAMAN = { { id = 408521, colour = { 0.25, 0.55, 1 }, word = "blue" } },
+	SHAMAN = { { id = 408521, colour = { 0.25, 0.55, 1 }, word = "blue" }, { id = 408514, colour = { 1, 0.55, 0.1 }, word = "orange" } },
 }
 -- The point of the health bar each Square corner puts the first square on, and the signs of its offsets across and up, which keep the row inside.
 local CORNERS = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } }

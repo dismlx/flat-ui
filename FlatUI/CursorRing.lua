@@ -12,7 +12,12 @@ local ADDON_NAME, ns = ...
 -- plain true counts), the game hides its cursor, so the ring and its swipes go to alpha 0 and stay where they are, and come back on the cursor as
 -- it is let go. Nothing of the game is changed. Not a module: Core.lua applies the rows at login and when the profile changes, and
 -- the rows call ns.CursorRingChanged themselves.
--- Cast progress on the ring (general.cursorRingCast, on) and Global cooldown on the ring (general.cursorRingGcd, off), each with a colour row: two
+-- Grow when you shake the mouse (general.cursorRingShake, on): the same OnUpdate watches the cursor's x. Each time it goes back the other way by at
+-- least SHAKE_STEP of the interface's units (in the cursor's pixels, times UIParent's effective scale) from the farthest it went, that is a turn;
+-- SHAKE_TURNS turns within SHAKE_WINDOW seconds swell the ring to 1 + GROW times its size over GROW_UP seconds and ease it back by GROW_END, by the
+-- scale of its own frame (SetScale), so its swipes, its children, grow with it and Follow keeps its centre on the cursor. No new swell starts
+-- while one runs, and the scale is 1 again when it ends or the ring hides.
+-- Cast progress on the ring (general.cursorRingCast, on) and Global cooldown on the ring (general.cursorRingGcd, on), each with a colour row: two
 -- Cooldown frames of the ring's own (CooldownFrameTemplate, which sets all points and hides them: Blizzard_FrameXMLUtil/Mainline/Cooldown.xml:3),
 -- made the first time one of the rows is on while the ring shows. Each draws Media/Ring.tga as its swipe (SetSwipeTexture) in its row's colour
 -- (SetSwipeColor), with no edge, bling or numbers; the uiobjects.yaml of build 70790 lists SetSwipeTexture, SetReverse, SetDrawEdge, SetDrawBling and
@@ -50,6 +55,10 @@ local GCD_SHARE = 0.8
 local MOST_REFUSED = 3
 -- Seconds the ring of In combat only takes to fade in as a fight starts and to fade out as it ends.
 local FADE_IN, FADE_OUT = 0.15, 0.3
+-- Shaking the mouse: the least way back that is a turn, in the interface's units; the turns and the seconds they fall within; how much bigger the
+-- ring grows, the seconds it takes to grow and the second it is back by.
+local SHAKE_STEP, SHAKE_TURNS, SHAKE_WINDOW = 8, 4, 0.5
+local GROW, GROW_UP, GROW_END = 1.5, 0.15, 0.6
 
 local ring
 -- The texture of the ring.
@@ -73,6 +82,11 @@ local hearer
 local hearing = { cast = false, gcd = false }
 local gcdExists
 local stopped
+-- The shake: shake.edge, the farthest x the cursor went this way, and shake.way, the way (1 or -1, nil before the first move); shake.turns, the
+-- times of the last turns; grow, when the swell began, nil while none runs; grownScale, the scale last written on the frame.
+local shake = { turns = {} }
+local grow
+local grownScale = 1
 
 local function Mode()
 	local mode = ns.Get("general.cursorRing")
@@ -152,9 +166,80 @@ local function Fade(to, duration)
 	fade = { from = fadeAlpha, to = to, start = start, duration = duration * math.abs(to - fadeAlpha) }
 end
 
+-- The scale of the ring, written only when it changes.
+local function Scale(frame, scale)
+	if scale ~= grownScale then
+		grownScale = scale
+		frame:SetScale(scale)
+	end
+end
+
+-- Ends the swell and forgets the shake.
+local function Settle(frame)
+	grow, shake.edge, shake.way = nil, nil, nil
+	shake.turns = {}
+	Scale(frame, 1)
+end
+
+-- Watches the cursor's x for a shake, starts a swell after SHAKE_TURNS turns within SHAKE_WINDOW seconds, and writes the scale of a swell under
+-- way: up over GROW_UP seconds, then eased back to 1 by GROW_END.
+local function Shake(frame, now)
+	if ns.Get("general.cursorRingShake") ~= true then
+		if grow or grownScale ~= 1 then
+			Settle(frame)
+		end
+		return
+	end
+	local read, x = pcall(GetCursorPosition)
+	local okScale, scale = pcall(UIParent.GetEffectiveScale, UIParent)
+	if read and ns.Finite(x) and okScale and ns.Finite(scale) and scale > 0 then
+		local step = SHAKE_STEP * scale
+		if shake.edge == nil then
+			shake.edge = x
+		elseif shake.way == nil then
+			if math.abs(x - shake.edge) >= step then
+				shake.way, shake.edge = x > shake.edge and 1 or -1, x
+			end
+		elseif (x - shake.edge) * shake.way > 0 then
+			shake.edge = x
+		elseif math.abs(x - shake.edge) >= step then
+			shake.way, shake.edge = -shake.way, x
+			local turns = {}
+			for _, at in ipairs(shake.turns) do
+				if now - at <= SHAKE_WINDOW then
+					turns[#turns + 1] = at
+				end
+			end
+			turns[#turns + 1] = now
+			shake.turns = turns
+			if #turns >= SHAKE_TURNS and not grow then
+				grow, shake.turns = now, {}
+			end
+		end
+	end
+	if not grow then
+		return
+	end
+	local t = now - grow
+	if not ns.Finite(t) or t >= GROW_END or t < 0 then
+		grow = nil
+		Scale(frame, 1)
+		return
+	end
+	local curve
+	if t < GROW_UP then
+		curve = math.sin(t / GROW_UP * math.pi / 2)
+	else
+		local back = (t - GROW_UP) / (GROW_END - GROW_UP)
+		curve = (1 - back) * (1 - back)
+	end
+	Scale(frame, 1 + GROW * curve)
+end
+
 -- The ring hides and runs nothing more.
 local function Hidden(frame)
 	fade = nil
+	Settle(frame)
 	frame:Hide()
 	frame:SetScript("OnUpdate", nil)
 end
@@ -163,8 +248,9 @@ local function Tick(frame)
 	local now = Looking()
 	if now ~= looking then
 		looking = now
-		-- Let go, the ring goes to the cursor at once.
+		-- Let go, the ring goes to the cursor at once, and a shake starts afresh.
 		lastX = nil
+		Settle(frame)
 	end
 	if fade then
 		local share = fade.duration > 0 and (GetTime() - fade.start) / fade.duration or 1
@@ -181,6 +267,11 @@ local function Tick(frame)
 	end
 	Alpha(frame)
 	if not looking then
+		-- The scale first, so Follow puts the centre on the cursor at the new scale in the same frame.
+		local time = GetTime()
+		if ns.Finite(time) then
+			Shake(frame, time)
+		end
 		Follow(frame)
 	end
 end

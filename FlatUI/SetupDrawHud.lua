@@ -5,7 +5,9 @@ local _, ns = ...
 -- settings of the page with ns.Get (the draft while the setup window views one) and puts every part in the look they ask for. The numbers are fixed samples.
 -- A part the page leaves to the game is drawn in a plain grey look, the same as the game's art would be without its pictures.
 -- The game's own art is not drawn: the minimap is one frame of the game and its terrain is a plain fill (Hud.lua keeps the map's own mask and ring).
--- ns.DrawHud gives test mode's stand-ins (TestHud.lua) the painters of an aura icon (DH.Aura, DH.PaintAura) and of a loot roll (DH.Roll, DH.PaintRoll).
+-- mock-minimap also draws the lines of text around the map (MapText.lua) with sample values, above or below the map as their rows say.
+-- ns.DrawHud gives test mode's stand-ins (TestHud.lua) the painters of an aura icon (DH.Aura, DH.PaintAura) and of a loot roll (DH.Roll, DH.PaintRoll,
+-- and DH.RollTime for the seconds left on it).
 
 local GAME = 0.55
 local BAR_FILE = "Interface\\TargetingFrame\\UI-StatusBar"
@@ -192,6 +194,15 @@ end
 -- Minimap -------------------------------------------------------------------------------------------------------
 
 local Minimap = { parts = {} }
+-- The lines of text around the map, from the map outwards, as MapText.lua stacks them: the row of each and of its place. GAP is between the map and
+-- the first line, SPACING between two lines, LINE the height of a line when the client does not say it (MapText.lua).
+local MAP_LINES = {
+	{ id = "coords", option = "mapCoords", place = "mapCoordsPlace" },
+	{ id = "durability", option = "mapDurability", place = "mapDurabilityPlace" },
+	{ id = "perf", option = "mapPerf", place = "mapPerfPlace" },
+	{ id = "clock", option = "mapClock", place = "mapClockPlace" },
+}
+local MAP_TEXT = { gap = 4, spacing = 2, line = 10 }
 
 local function MapDisc(parent, layer, sub, r, g, b)
 	local texture = NewTexture(parent, layer, sub, r, g, b, 1)
@@ -206,7 +217,7 @@ local function MapDisc(parent, layer, sub, r, g, b)
 end
 
 function Minimap.build(stage)
-	local s = Start(Minimap, stage, 300, 196)
+	local s = Start(Minimap, stage, 300, 236)
 	if not s then
 		return Minimap.state.root
 	end
@@ -255,8 +266,9 @@ function Minimap.build(stage)
 	NewTexture(s.calendar, "ARTWORK", 0, 0.9, 0.88, 0.8, 1):SetAllPoints(s.calendar)
 	local day = NewText(s.calendar, "GameFontHighlightSmall", "CENTER", 0, 0, "12")
 	day:SetTextColor(0.1, 0.1, 0.1, 1)
+	-- The game's clock on the foot of the map, so the lines under the map start where MapText.lua puts them.
 	s.clock = NewFrame(root, 56, 16)
-	At(s.clock, root, 122, 176)
+	At(s.clock, root, 122, 162)
 	NewTexture(s.clock, "BACKGROUND", 0, 0.05, 0.05, 0.05, 0.7):SetAllPoints(s.clock)
 	NewText(s.clock, "GameFontHighlightSmall", "CENTER", 0, 0, "7:42")
 	s.addons = NewFrame(root, 18, 18)
@@ -267,10 +279,25 @@ function Minimap.build(stage)
 		dot:SetSize(3, 3)
 		dot:SetPoint("LEFT", s.addons, "LEFT", 3 + index * 5, 0)
 	end
+	-- The lines of text around the map (MapText.lua), placed by Minimap.draw.
+	s.lines = {}
+	for _, line in ipairs(MAP_LINES) do
+		s.lines[line.id] = NewText(root, "GameFontHighlightSmall", "TOP", 0, 0, "")
+	end
 	s.label = NewGameLabel(root)
 	parts["hud.enabled"] = root
 	for _, path in ipairs({ "hud.lookOwn", "hud.lookBorder", "hud.lookBack", "hud.lookBackAlpha" }) do
 		parts[path] = s.header.frame
+	end
+	for _, path in ipairs({ "hud.mapCoords", "hud.mapCoordsPlace", "hud.mapCoordsDecimals", "hud.mapTextSize" }) do
+		parts[path] = s.lines.coords
+	end
+	parts["hud.mapDurability"], parts["hud.mapDurabilityPlace"] = s.lines.durability, s.lines.durability
+	for _, path in ipairs({ "hud.mapPerf", "hud.mapPerfPlace", "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour" }) do
+		parts[path] = s.lines.perf
+	end
+	for _, path in ipairs({ "hud.mapClock", "hud.mapClockPlace", "hud.mapClockTime", "hud.mapClockHours" }) do
+		parts[path] = s.lines.clock
 	end
 	parts["hud.minimapArt"], parts["hud.minimapBorder"], parts["hud.shape"] = map, map, map
 	parts["hud.dayNight"] = s.diel.frame
@@ -280,8 +307,89 @@ function Minimap.build(stage)
 	return root
 end
 
+-- The sample text of a line around the map, from its rows: the coordinates by Coordinate decimals; the durability; the frame rate and latency by
+-- Show and Latency, each number in its colour while Colour by value is on (ns.PerfColour, MapText.lua); the time, local or the realm's, by Time
+-- format.
+local function MapLineText(id)
+	if id == "coords" then
+		local decimals = Val("mapCoordsDecimals")
+		return (decimals == "0" and "45, 62") or (decimals == "2" and "45.31, 62.08") or "45.3, 62.1"
+	elseif id == "durability" then
+		return "Durability 92%"
+	elseif id == "perf" then
+		local colour = Val("mapPerfColour") == true and type(ns.PerfColour) == "function"
+		local function Number(kind, value)
+			local code = colour and ns.PerfColour(kind, value) or nil
+			return code and (code .. value .. "|r") or tostring(value)
+		end
+		local show, which, parts = Val("mapPerfShow"), Val("mapLatency"), {}
+		if show ~= "ms" then
+			parts[#parts + 1] = Number("fps", 60) .. " fps"
+		end
+		if show ~= "fps" then
+			if which == "home" then
+				parts[#parts + 1] = Number("ms", 42) .. " ms"
+			elseif which == "world" or which == "max" then
+				parts[#parts + 1] = Number("ms", 48) .. " ms"
+			else
+				parts[#parts + 1] = Number("ms", 42) .. " / " .. Number("ms", 48) .. " ms"
+			end
+		end
+		return table.concat(parts, "   ")
+	end
+	local realm = Val("mapClockTime") == "realm"
+	if Val("mapClockHours") == "12" then
+		return realm and "3:05 PM" or "2:05 PM"
+	end
+	return realm and "15:05" or "14:05"
+end
+
+-- The map and what sits on it, down by drop units from where it is drawn: the room the lines above the map take, as Hud.lua leaves room for them
+-- under the zone name. The zone name, the tracking button and the calendar stay at the top.
+local function PlaceMap(s, drop)
+	for _, spot in ipairs({ { s.map, 80, 34 }, { s.diel.frame, 222, 30 }, { s.mail, 54, 80 }, { s.clock, 122, 162 }, { s.addons, 228, 104 } }) do
+		spot[1]:ClearAllPoints()
+		At(spot[1], Minimap.state.root, spot[2], spot[3] + drop)
+	end
+end
+
+-- The lines of text around the map, as MapText.lua lays them out: each line its rows show, at Text size, stacked out from the map in the order of
+-- MAP_LINES, above or below as its place says; the map goes down to make room for those above.
+local function MapLines(s)
+	local size, above, below = Val("mapTextSize") or 100, {}, {}
+	for _, line in ipairs(MAP_LINES) do
+		local text = s.lines[line.id]
+		local shown = On(line.option)
+		text:SetShown(shown)
+		if shown then
+			text:SetText(MapLineText(line.id))
+			ns.TextStyle(text, { percent = size })
+			local list = Val(line.place) == "above" and above or below
+			list[#list + 1] = text
+		end
+	end
+	local drop = 0
+	for index, text in ipairs(above) do
+		local ok, height = pcall(text.GetStringHeight, text)
+		drop = drop + (index == 1 and MAP_TEXT.gap or MAP_TEXT.spacing) + ((ok and ns.Finite(height) and height > 0) and height or MAP_TEXT.line)
+	end
+	PlaceMap(s, drop)
+	for _, list in ipairs({ above, below }) do
+		local up = list == above
+		for index, text in ipairs(list) do
+			text:ClearAllPoints()
+			if up then
+				text:SetPoint("BOTTOM", index == 1 and s.map or list[index - 1], "TOP", 0, index == 1 and MAP_TEXT.gap or MAP_TEXT.spacing)
+			else
+				text:SetPoint("TOP", index == 1 and s.map or list[index - 1], "BOTTOM", 0, -(index == 1 and MAP_TEXT.gap or MAP_TEXT.spacing))
+			end
+		end
+	end
+end
+
 function Minimap.draw(stage)
 	local s = Ready(Minimap, stage)
+	MapLines(s)
 	local art, border = On("minimapArt"), On("minimapBorder")
 	local square = Val("shape") == "square"
 	-- The game's ring and its north pointer come back while the page leaves them; a square map has neither.
@@ -399,21 +507,27 @@ end
 
 local XpMicro = { parts = {} }
 local XP_TOTAL, XP_VALUE, REP_VALUE, REP_TOTAL = 10000, 3700, 6000, 12000
+-- The rested experience of the sample, which reaches 60% of the bar: 23% of the level.
+local XP_RESTED = 2300
 -- The quests ready to hand in, and the levelling text by the row Levelling text, for the 6300 to go of the sample.
 local QUEST_SAMPLE = 1500
 local STATS_SAMPLE = { time = "1h 20m to level", rate = "4,725 an hour", both = "1h 20m to level, 4,725 an hour", kills = "26 kills to level" }
 
--- The text a bar shows by the row Bar text: the game's own text, a percent, the value and the percent, or what is left.
+-- A whole number as the game writes large ones (BreakUpLargeNumbers: 3,700), or plain.
+local function Grouped(value)
+	local ok, text = pcall(_G.BreakUpLargeNumbers, value)
+	if ok and type(text) == "string" and not ns.IsSecret(text) and text ~= "" then
+		return text
+	end
+	return tostring(value)
+end
+
+-- The text a bar shows by the row Bar text: the game's own text, a percent, the value and the percent, or what is left, with the numbers grouped
+-- as XpBar.lua writes them (ns.XpText).
 local function XpLine(mode, value, total, name)
-	local line
-	if mode == "percent" then
-		line = ("%d%%"):format(math.floor(value * 100 / total))
-	elseif mode == "both" then
-		line = ("%d / %d (%d%%)"):format(value, total, math.floor(value * 100 / total))
-	elseif mode == "togo" then
-		line = ("%d to go"):format(math.max(total - value, 0))
-	else
-		line = ("%d / %d"):format(value, total)
+	local line = type(ns.XpText) == "function" and ns.XpText(value, total, nil, mode) or nil
+	if not line then
+		line = ("%s / %s"):format(Grouped(value), Grouped(total))
 	end
 	return name and (name .. " " .. line) or line
 end
@@ -496,8 +610,8 @@ function XpMicro.build(stage)
 	-- The tooltip of Flat UI's own bar.
 	s.tip = NewPlate(root, 180, 30)
 	At(s.tip.frame, root, 60, 32)
-	NewText(s.tip.frame, "GameFontHighlightSmall", "TOPLEFT", 6, -5, "Experience: 3700 / 10000", "LEFT")
-	NewText(s.tip.frame, "GameFontHighlightSmall", "BOTTOMLEFT", 6, 5, "Rested: 2400", "LEFT")
+	NewText(s.tip.frame, "GameFontHighlightSmall", "TOPLEFT", 6, -5, "Experience: 3,700 / 10,000", "LEFT")
+	s.tipRested = NewText(s.tip.frame, "GameFontHighlightSmall", "BOTTOMLEFT", 6, 5, "Rested: 2,300 (23% of the level)", "LEFT")
 	s.bags = {}
 	for index = 1, 5 do
 		local plate = NewPlate(root, 28, 28)
@@ -519,7 +633,9 @@ function XpMicro.build(stage)
 	-- Breath timer, countdown, queue panel, damage meter header and a zone event bar on the right.
 	s.mirror = NewBar(root, 220, 14, 70)
 	At(s.mirror.frame, root, 340, 8)
-	NewText(s.mirror.bar, "GameFontHighlightSmall", "CENTER", 0, 0, "Breath 1:12")
+	NewText(s.mirror.bar, "GameFontHighlightSmall", "CENTER", 0, 0, "Breath")
+	-- The time left at the right, as Hud.lua writes it while Seconds on the timers is on.
+	s.mirrorTime = NewText(s.mirror.bar, "GameFontHighlightSmall", "RIGHT", -4, 0, "1:12", "RIGHT")
 	s.countdown = NewBar(root, 220, 12, 80)
 	At(s.countdown.frame, root, 340, 36)
 	NewText(s.countdown.bar, "GameFontHighlightSmall", "CENTER", 0, 0, "Pull in 8")
@@ -547,10 +663,11 @@ function XpMicro.build(stage)
 	parts["hud.xpColour"], parts["hud.xpRested"], parts["hud.xpRestedColour"] = s.xp.bar, s.xp.bar, s.xp.bar
 	parts["hud.xpRepMode"], parts["hud.xpRepColour"] = s.rep.bar, s.rep.bar
 	parts["hud.xpTextWhen"], parts["hud.xpTextPlace"] = s.xp.words, s.xp.words
-	parts["hud.xpText"], parts["hud.xpTextSize"] = s.xp.words, s.xp.words
+	parts["hud.xpText"], parts["hud.xpTextSize"], parts["hud.xpTextRested"] = s.xp.words, s.xp.words, s.xp.words
 	parts["hud.xpQuest"], parts["hud.xpQuestColour"], parts["hud.xpStats"] = s.xp.quest, s.xp.quest, s.xp.words
 	parts["hud.micro"] = s.micro[1].frame
 	parts["hud.mirror"], parts["hud.countdown"] = s.mirror.frame, s.countdown.frame
+	parts["hud.mirrorTime"] = s.mirrorTime
 	parts["hud.queue"], parts["hud.meter"], parts["hud.zoneBars"] = s.queue.frame, s.meter.frame, s.zoneBar.frame
 	return root
 end
@@ -590,6 +707,7 @@ local function DrawOwn(s, mode, size, file)
 	local r, g, b = ns.Colour("hud.xpColour")
 	Fill(s.xp.bar, r, g, b, file)
 	local rr, rg, rb = ns.Colour("hud.xpRestedColour")
+	s.tipRested:SetTextColor(rr, rg, rb)
 	s.xp.rested:SetColorTexture(rr, rg, rb, 0.4)
 	s.xp.rested:ClearAllPoints()
 	s.xp.rested:SetPoint("TOPLEFT", s.xp.bar, "TOPLEFT", 0, 0)
@@ -657,6 +775,12 @@ function XpMicro.draw(stage)
 	-- On Flat UI's bar the levelling text follows the bar text, or stands alone while Bar text is Hidden.
 	local extra = own and STATS_SAMPLE[ns.Get("hud.xpStats")] or nil
 	local line = mode ~= "hide" and XpLine(mode, XP_VALUE, XP_TOTAL) or nil
+	-- Rested share in the text, on Flat UI's bar: "  +23%" in Rested colour after Percent and Value and percent.
+	if line and own and (mode == "percent" or mode == "both") and ns.Get("hud.xpTextRested") == true and ns.Get("hud.xpRested") == true then
+		local r, g, b = ns.Colour("hud.xpRestedColour")
+		line = ("%s  |cff%02x%02x%02x+%d%%|r"):format(line, math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5),
+			math.floor(XP_RESTED * 100 / XP_TOTAL + 0.5))
+	end
 	s.xp.words:SetText(line and extra and (line .. ", " .. extra) or line or extra or "")
 	if extra then
 		s.xp.words:Show()
@@ -676,6 +800,7 @@ function XpMicro.draw(stage)
 	local r, g, b = ns.Colour("castbars.castColour")
 	Style(s.mirror, on, true, not on)
 	Fill(s.mirror.bar, r, g, b, Chosen(on, "gloss"))
+	s.mirrorTime:SetShown(on and ns.Get("hud.mirrorTime") == true)
 	on = On("countdown")
 	Style(s.countdown, on, false, not on)
 	Fill(s.countdown.bar, 1, 0.82, 0, Chosen(on, "game"))
@@ -764,7 +889,8 @@ local function NewSlot(parent, x, y, size, icon)
 end
 
 -- A roll as Hud.lua draws it, w units wide on `parent`, its parts on r: the plate (r.roll), the item (r.rollIcon) and its name in the colour of its
--- quality, the timer (r.timer, filled to 65 of 100) and the Need, Greed and Pass buttons (r.rollButtons). The caller anchors r.roll.frame.
+-- quality, the timer (r.timer, filled to 65 of 100), the seconds left over its right end (r.timeText, 39 of a 60 second roll) and the Need, Greed
+-- and Pass buttons (r.rollButtons). The caller anchors r.roll.frame.
 local function NewRoll(r, parent, icon, name, quality, w)
 	r.roll = NewPlate(parent, w, 50)
 	r.rollIcon = NewSlot(r.roll.frame, 7, 6, 28, icon)
@@ -777,6 +903,10 @@ local function NewRoll(r, parent, icon, name, quality, w)
 	r.timer:SetValue(65)
 	NewTexture(r.timer, "BACKGROUND", 0, 0, 0, 0, 1):SetAllPoints(r.timer)
 	r.timerEdge = { outline = ns.SetOutlineArea(ns.Outline(r.timer, r.timer), "hud") }
+	r.timeText = Owned(r.roll.frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+	r.timeText:SetJustifyH("RIGHT")
+	r.timeText:SetPoint("BOTTOMRIGHT", r.timer, "TOPRIGHT", 0, 2)
+	r.secs = 39
 	r.rollButtons = {}
 	for index, kind in ipairs({ "need", "greed", "pass" }) do
 		local button = NewTexture(r.roll.frame, "ARTWORK", 1)
@@ -784,6 +914,28 @@ local function NewRoll(r, parent, icon, name, quality, w)
 		r.rollButtons[index] = button
 	end
 	return r
+end
+
+-- The seconds left on a roll and the colour of its timer: the seconds while Loot rolls and Seconds left on rolls are on, and under 10 the seconds and
+-- the fill in red, as Hud.lua's ROLL.Red; the fill is gold otherwise. The fill is set again only when its colour or file changes.
+local function RollClock(r)
+	local shown = On("lootRolls") and ns.Get("hud.lootRollTime") == true
+	local red = shown and r.secs < 10
+	r.timeText:SetShown(shown)
+	r.timeText:SetText(tostring(r.secs))
+	if red then
+		r.timeText:SetTextColor(1, 0.25, 0.25)
+	else
+		r.timeText:SetTextColor(1, 1, 1)
+	end
+	if r.painted ~= red or r.paintedFile ~= r.file then
+		r.painted, r.paintedFile = red, r.file
+		if red then
+			Fill(r.timer, 1, 0.2, 0.2, r.file)
+		else
+			Fill(r.timer, 1, 0.82, 0, r.file)
+		end
+	end
 end
 
 -- Paints a roll from the rows: the timer across the foot and Need, Greed and Pass in a row at the right while Loot rolls is on, else where the game
@@ -822,7 +974,8 @@ local function PaintRoll(r)
 	for _, button in ipairs(r.rollButtons) do
 		button:SetSize(side, side)
 	end
-	Fill(r.timer, 1, 0.82, 0, file)
+	r.file, r.painted = file, nil
+	RollClock(r)
 end
 
 function Loot.build(stage)
@@ -860,6 +1013,7 @@ function Loot.build(stage)
 	parts["hud.lootWindow"] = s.window.frame
 	parts["hud.lootQualityText"] = s.cards[1].words
 	parts["hud.lootRolls"] = s.roll.frame
+	parts["hud.lootRollTime"] = s.timeText
 	parts["hud.alerts"] = s.alert.frame
 	return root
 end
@@ -916,3 +1070,11 @@ function DH.Roll(parent, icon, name, quality, w)
 end
 
 DH.PaintRoll = PaintRoll
+
+-- The seconds left on a roll of DH.Roll, red with its fill under 10 while Seconds left on rolls is on. Nothing is set while the seconds stay the same.
+function DH.RollTime(r, secs)
+	if secs ~= r.secs then
+		r.secs = secs
+		RollClock(r)
+	end
+end

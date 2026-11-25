@@ -1664,9 +1664,18 @@ function ns.TrackerAddItem(id)
 	return ns.TrackerAddKind("item", id)
 end
 
+-- The line of the tooltip (Tracker tooltips, Trackers.lua) that says what counts as low: none when nothing does.
+local function ItemTip(entry)
+	local words = LowWords(entry, false)
+	if words == "never" or words == "not known" then
+		return {}
+	end
+	return { ("Low %s in your bags"):format(words) }
+end
+
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("item", {
-		Read = ItemRead, Clean = ItemClean, Add = ItemAdd, Icon = ItemIcons, Lines = ItemLines,
+		Read = ItemRead, Clean = ItemClean, Add = ItemAdd, Icon = ItemIcons, Lines = ItemLines, Tip = ItemTip,
 		events = { "BAG_UPDATE_DELAYED", "BAG_UPDATE_COOLDOWN" },
 		what = "item", hiddenAble = false,
 	})
@@ -1923,9 +1932,23 @@ end
 
 local AmmoClean, AmmoAdd = Single("ammo")
 
+-- The line of the tooltip that says what counts as low: by the arrows or bullets, the thrown weapons, or a thrown weapon that wears out by a fifth
+-- of its durability.
+local function AmmoTip(entry)
+	local last = mem.last[entry.id]
+	if last and last.thrown and last.percent then
+		return { ("Low at %d%% of its durability or less"):format(I.WORN) }
+	end
+	local words = LowWords(entry, (last and last.thrown) and "thrown" or true)
+	if words == "never" or words == "not known" then
+		return {}
+	end
+	return { "Low " .. words }
+end
+
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("ammo", {
-		Read = AmmoRead, Clean = AmmoClean, Add = AmmoAdd, Icon = AmmoIcons, Lines = AmmoLines, Wanted = AmmoWanted,
+		Read = AmmoRead, Clean = AmmoClean, Add = AmmoAdd, Icon = AmmoIcons, Lines = AmmoLines, Wanted = AmmoWanted, Tip = AmmoTip,
 		events = { "UNIT_INVENTORY_CHANGED", "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED", "UPDATE_INVENTORY_DURABILITY" },
 		what = "ammunition", hiddenAble = false,
 	})
@@ -2140,9 +2163,15 @@ local function DurabilityLines(entry)
 		math.floor(last.now), math.floor(last.most), low > 0 and ("at %d%% or less"):format(low) or "never", ready) }
 end
 
+-- The line of the tooltip that says what counts as low, the 40% of a ready check's window included.
+local function DurabilityTip(entry)
+	local low = DurabilityLow(entry)
+	return low > 0 and { ("Low at %d%% or less"):format(low) } or {}
+end
+
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("durability", {
-		Read = DurabilityRead, Clean = DurabilityClean, Add = DurabilityAdd, Icon = function() return D.ICON end, Lines = DurabilityLines,
+		Read = DurabilityRead, Clean = DurabilityClean, Add = DurabilityAdd, Icon = function() return D.ICON end, Lines = DurabilityLines, Tip = DurabilityTip,
 		Wanted = DurabilityWanted, Event = DurabilityEvent,
 		events = { "UPDATE_INVENTORY_DURABILITY", "PLAYER_EQUIPMENT_CHANGED", "READY_CHECK" },
 		what = "durability", hiddenAble = false,

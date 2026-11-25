@@ -19,10 +19,12 @@ local _, ns = ...
 -- fills by the time left; the game gives no amount of a single shield then, so only the total bar has one. The container's alpha says which
 -- of the two shows, a change allowed at any time; the parts of its buttons are made inside the function the game calls while it builds a
 -- button, and a later change to them waits until the game says buffs are open. A shield that goes before its time while buffs are read,
--- and is still listed, broke: a sound plays, if chosen, and a red wash over every bar shown fades out. The target's total can have a bar of its own. Out of a fight the
+-- and is still listed, broke: a sound plays, if chosen, and a red wash over every bar shown fades out; out of combat, a pick of the sound plays
+-- both once (ns.AbsorbSoundChanged). The target's total can have a bar of its own. Out of a fight the
 -- totals follow the game's events; in one, a step a few times a second. While test mode is on (TestMode.lua) the sample bars of /flatui absorbs
--- test stay, with the target's (A.Hold). Every frame is Flat UI's own, and nothing of the game is changed or hooked. The helpers are in one
--- table, A.
+-- test stay, with the target's (A.Hold). Bar tooltips (On by default) shows the game's tooltip of a shield over its bar and the shields on you over
+-- the total bar, and never takes a click (A.TipShow). Every frame is Flat UI's own, and nothing of the game is changed or hooked. The helpers are
+-- in one table, A.
 
 local KEY = "absorbs"
 local MOVER, MOVER_TARGET = "FlatUIAbsorbs", "FlatUIAbsorbsTarget"
@@ -448,6 +450,14 @@ function A.NewRow(parent, presence)
 	row.time:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
 	row.name:SetPoint("LEFT", bar, "LEFT", 3, 0)
 	row.name:SetPoint("RIGHT", row.time, "LEFT", -3, 0)
+	-- Bar tooltips: never a click, so a click goes through to the world; the mouse only while A.Mouse lets it.
+	pcall(frame.SetMouseClickEnabled, frame, false)
+	frame:SetScript("OnEnter", function()
+		A.TipEnter(row)
+	end)
+	frame:SetScript("OnLeave", function()
+		A.TipLeave(row)
+	end)
 	return row
 end
 
@@ -502,6 +512,7 @@ function A.Row(index)
 	if not row then
 		row = A.NewRow(A.Holder(), false)
 		row.frame:Hide()
+		row.index = index
 		A.rows[index] = row
 		A.laid = nil
 	end
@@ -664,6 +675,134 @@ function A.DrawRows(list)
 		A.rows[index].frame:Hide()
 	end
 	A.items = list or {}
+	A.Mouse()
+end
+
+-- Bar tooltips ------------------------------------------------------------------------------------------------------------------------------
+
+-- Bar tooltips (On by default, as on Defensives on you): the mouse over the bar of a shield shows the game's own tooltip of its buff with the
+-- amount it has left under it, or for a sample and in a fight its name, amount and time left; over the total bar, the shields on you, each with
+-- its amount and time left. Never a click. Out of combat only takes the mouse away in a fight (A.fighting, set at PLAYER_REGEN_DISABLED, before
+-- the lockdown), Off always. A bar takes the mouse only while it is seen: a shield's bar while it shows, the total bar while a shield on you is
+-- known, since it draws a withheld total that is empty at none. In a fight the game's own rows have the game's own tooltip (A.ButtonMouse).
+-- Only GameTooltip's widget calls and SetUnitBuffByAuraInstanceID, as the game's own frames call it; it is hidden only while a bar owns it.
+function A.TipsNow()
+	local tips = Opt("tooltips")
+	return tips == "on" or (tips == "out" and not (A.fighting or InCombatLockdown()))
+end
+
+function A.Mouse()
+	local want = A.TipsNow()
+	local function Set(row, on)
+		if row and row.motion ~= on and pcall(row.frame.SetMouseMotionEnabled, row.frame, on) then
+			row.motion = on
+		end
+	end
+	Set(A.total, want and next(A.items or {}) ~= nil)
+	for _, row in ipairs(A.rows) do
+		Set(row, want)
+	end
+end
+
+-- "612 left of 942" for a plain amount, else nil; and "0:23 left" for a shield with an end.
+function A.TipWords(item)
+	local words = {}
+	if ns.Finite(item.amount) then
+		local size = ns.Finite(item.size) and item.size > 0 and (" of %d"):format(math.floor(item.size + 0.5)) or ""
+		words[#words + 1] = ("%d left%s"):format(math.floor(item.amount + 0.5), size)
+	end
+	if ns.Finite(item.expires) and item.expires > 0 then
+		local left = math.max(0, item.expires - Now())
+		words[#words + 1] = ("%d:%02d left"):format(math.floor(left / 60), math.floor(left % 60))
+	end
+	return table.concat(words, ", ")
+end
+
+local TIP_DIM = { 0.7, 0.7, 0.7 }
+
+function A.TipLines(tip, row)
+	local sample = A.sample or A.held
+	if row == A.total then
+		tip:SetText("Absorbs on you", 1, 1, 1)
+		for _, item in ipairs(A.items or {}) do
+			tip:AddDoubleLine(item.name or "?", A.TipWords(item), TIP_DIM[1], TIP_DIM[2], TIP_DIM[3], TIP_DIM[1], TIP_DIM[2], TIP_DIM[3])
+		end
+	else
+		local item = row.index and (A.items or {})[row.index]
+		if not item then
+			error("no shield", 0)
+		end
+		local own = not sample and not (A.fighting or InCombatLockdown()) and Plain(item.instance, "number") and type(tip.SetUnitBuffByAuraInstanceID) == "function"
+			and pcall(tip.SetUnitBuffByAuraInstanceID, tip, "player", item.instance, "HELPFUL")
+		local lines = own and select(2, pcall(tip.NumLines, tip)) or 0
+		if not (Plain(lines, "number") and lines > 0) then
+			tip:SetText(item.name or "Shield", 1, 1, 1)
+		end
+		local words = A.TipWords(item)
+		if words ~= "" then
+			tip:AddLine(words, TIP_DIM[1], TIP_DIM[2], TIP_DIM[3])
+		end
+	end
+	if sample then
+		tip:AddLine("A sample of the test.", TIP_DIM[1], TIP_DIM[2], TIP_DIM[3])
+	end
+end
+
+-- The tooltip of a bar, drawn again each second while the mouse stays: false when none may show now, and it is then hidden if it is the bar's.
+function A.TipShow(row)
+	local tip = GameTooltip
+	if type(tip) ~= "table" or ns.Forbidden(tip) then
+		return false
+	end
+	if not (ns.Enabled(KEY) and A.TipsNow() and row.motion and row.frame:IsVisible()) then
+		A.TipHide(row)
+		return false
+	end
+	local ok = pcall(function()
+		tip:SetOwner(row.frame, "ANCHOR_RIGHT")
+		A.TipLines(tip, row)
+		tip:Show()
+	end)
+	if not ok then
+		A.TipHide(row)
+	end
+	return ok
+end
+
+function A.TipHide(row)
+	local tip = GameTooltip
+	if type(tip) ~= "table" or ns.Forbidden(tip) then
+		return
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, row.frame)
+	if ok and not IsSecret(owned) and owned == true then
+		pcall(tip.Hide, tip)
+	end
+end
+
+function A.TipEnter(row)
+	if A.tipTicker then
+		A.tipTicker:Cancel()
+		A.tipTicker = nil
+	end
+	if not A.TipShow(row) or not (type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function") then
+		return
+	end
+	A.tipRow = row
+	A.tipTicker = C_Timer.NewTicker(1, function()
+		local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, row.frame)
+		if not (ok and not IsSecret(owned) and owned == true and A.TipShow(row)) then
+			A.TipLeave(row)
+		end
+	end)
+end
+
+function A.TipLeave(row)
+	if A.tipRow == row and A.tipTicker then
+		A.tipTicker:Cancel()
+		A.tipTicker, A.tipRow = nil, nil
+	end
+	A.TipHide(row)
 end
 
 -- Gives a withheld total to the pieces that show the bar at all.
@@ -762,11 +901,21 @@ end
 -- the top or, while Bars grow is Up, from the bottom, as A.Layout anchors it, and fades out over FLASH by an Alpha animation of the texture,
 -- made once. Where the game refuses the animation, a timer hides it after FLASH.
 function A.Broke()
+	A.Sound()
+	A.Wash()
+end
+
+-- The sound of When a shield breaks, when one is picked.
+function A.Sound()
 	local sound = KITS[Opt("sound")]
 	local kit = sound and ns.SOUNDS and ns.SOUNDS[sound]
 	if kit and type(ns.PlayKit) == "function" then
 		ns.PlayKit(kit[1], KEY)
 	end
+end
+
+-- The red wash over the bars shown now.
+function A.Wash()
 	local flash = A.flash
 	local last = A.Total().frame:IsShown() and 0 or -1
 	for index, row in ipairs(A.rows) do
@@ -802,6 +951,24 @@ function A.Broke()
 		end
 	end) then
 		flash:Hide()
+	end
+end
+
+-- Sound of When a shield breaks picked on the page: the page is refreshed, as without a changed function of the row (Core.lua's Changed), and out
+-- of combat the sound plays once and the bars shown, real or the samples of a test, flash red, so the whole warning is seen and heard. Only a
+-- pick in the options calls this, not a profile switch or a reset.
+function ns.AbsorbSoundChanged()
+	ns.Try(KEY, A.Refresh)
+	if InCombatLockdown() or not ns.Enabled(KEY) then
+		return
+	end
+	A.Sound()
+	local shown = A.total and A.total.frame:IsShown() and next(A.items or {}) ~= nil
+	for _, row in ipairs(A.rows) do
+		shown = shown or row.frame:IsShown()
+	end
+	if A.flash and shown then
+		ns.Try(KEY, A.Wash)
 	end
 end
 
@@ -1157,13 +1324,29 @@ function A.NameEnd(parts, text)
 	end
 end
 
+-- Bar tooltips on the game's rows in a fight, as Defensives on you has them (Defensives.lua's D.Mouse): the game's own tooltip on hover and never
+-- a click; Out of combat only has the game hide the tooltip in a fight, and Off takes the mouse away. A refused call leaves parts.tips empty, so
+-- A.Flush tries again, and the status names it.
+function A.ButtonMouse(parts)
+	local button, tips = parts.button, Opt("tooltips")
+	local ok = pcall(button.SetMouseClickEnabled, button, false)
+	ok = pcall(button.SetMouseMotionEnabled, button, tips ~= "off") and ok
+	ok = pcall(button.SetHideTooltipInCombat, button, tips ~= "on") and ok
+	parts.tips = ok and tips or nil
+	A.refused.tooltips = nil
+	for _, other in ipairs(A.buttons) do
+		if other.tips == nil then
+			A.refused.tooltips = true
+		end
+	end
+end
+
 -- Makes the parts of one button. Run by the game inside AddAuraGroup while the button is still open; nothing here may raise, and a part the
 -- game refuses is left out and named in the status.
 function A.Init(button, mask)
 	local parts = { button = button, mask = mask }
 	A.buttons[#A.buttons + 1] = parts
-	pcall(button.EnableMouse, button, false)
-	pcall(button.SetHideTooltipInCombat, button, true)
+	A.ButtonMouse(parts)
 	local function Part(name, fn)
 		if not pcall(fn) then
 			A.refused[name] = true
@@ -1243,6 +1426,9 @@ function A.Flush()
 	end
 	A.waiting = false
 	for _, parts in ipairs(A.buttons) do
+		if parts.tips ~= Opt("tooltips") then
+			A.ButtonMouse(parts)
+		end
 		pcall(A.PaintButton, parts)
 		if not pcall(A.BindText, parts, "time") then
 			A.refused.time = true
@@ -1646,6 +1832,9 @@ function A.Status()
 			lines[#lines + 1] = NOTE_REFUSED:format(name == "size" and "size" or name)
 		end
 	end
+	if A.refused.tooltips then
+		lines[#lines + 1] = "Absorb shields: the game refused a mouse setting of its rows in a fight, so Bar tooltips may not work there."
+	end
 	return lines
 end
 
@@ -1666,8 +1855,15 @@ ns.Register(KEY, {
 			A.wasRead = false
 			A.Refresh()
 		end,
-		PLAYER_REGEN_DISABLED = Soon,
+		-- Bar tooltips: Out of combat only takes the bars' mouse away from the start of a fight to its end.
+		PLAYER_REGEN_DISABLED = function()
+			A.fighting = true
+			A.Mouse()
+			Soon()
+		end,
 		PLAYER_REGEN_ENABLED = function()
+			A.fighting = false
+			A.Mouse()
 			A.ReadBonus()
 			A.Queue()
 		end,

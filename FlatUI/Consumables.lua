@@ -44,6 +44,10 @@ local _, ns = ...
 -- deleted and are there on another computer, where FlatUIDB, a file of one computer, does not name them: a macro of Flat UI's name whose body is
 -- one Flat UI writes (#showtooltip, then the /use and /castsequence lines of item IDs of DrinkBody and HealthBody) is taken as one it made, and
 -- kept in FlatUIDB.consumables from then on.
+-- Say when a macro changes (on by default): once a macro of Flat UI's is written again with another drink or food (by item ID), or another set
+-- of items in its cast sequence or fight line (a cooldown that only reorders them does not count), or with none left, chat says so ("Flat UI:
+-- Flat UI Drink now drinks Morning Glory Dew."). The first write of the session (login, /reload) says nothing, and nor does one that follows a
+-- change of the rows the macro follows (Mana potion in a fight, Mana gem first in a fight, Eat out of combat), or one Flat UI did not write.
 -- Turned off (its row, the page, a profile without it, or a stop after errors) in a session that kept it, a macro Flat UI made is deleted, out
 -- of combat, for every character of the account, whose list it is; a character whose profile has it off at login leaves it alone. A delete
 -- takes the macro off every action slot that holds it, as when a player deletes a macro, so a macro that an action slot or the cursor still
@@ -449,6 +453,74 @@ end
 -- A run that waited for a timer or the end of a fight (below).
 local Again
 
+local function Named(id)
+	local name = Ask(C_Item and C_Item.GetItemNameByID, id)
+	return type(name) == "string" and name ~= "" and name or ("item " .. tostring(id))
+end
+
+-- Say when a macro changes ---------------------------------------------------------------------------------------------------------------
+
+-- The IDs of a list in one text, sorted, so a list whose order alone changed (a healthstone or a mana gem still cooling goes after the potion,
+-- and first again when it is ready) reads the same.
+local function Set(list)
+	local ids = {}
+	for index, id in ipairs(list or {}) do
+		ids[index] = tostring(id)
+	end
+	table.sort(ids)
+	return table.concat(ids, ",")
+end
+
+local function Listed(list)
+	local names = {}
+	for index, id in ipairs(list) do
+		names[index] = Named(id)
+	end
+	return table.concat(names, ", then ")
+end
+
+-- The rows a macro of a kind follows: a change of them is the player's own, and says nothing.
+local function Rows(kind)
+	if kind == "drink" then
+		return tostring(Opt("manaPotion")) .. tostring(Opt("manaGem"))
+	end
+	return tostring(Opt("food"))
+end
+
+-- The lines chat says when a macro moves to other items: the drink or the food it takes (by ID), and the items of its cast sequence or fight
+-- line (as a set, so a cooldown that only reorders them says nothing), or that it has none left. Nil when nothing changed.
+local function Change(kind, old, new)
+	if type(old) ~= "table" or type(new) ~= "table" then
+		return nil
+	end
+	local name, lines = NAMES[kind], {}
+	local item = kind == "drink" and "drink" or "food"
+	if old[item] ~= new[item] then
+		if new[item] and kind == "drink" then
+			lines[#lines + 1] = ("%s now drinks %s."):format(name, Named(new.drink))
+		elseif new[item] then
+			lines[#lines + 1] = ("%s now eats %s out of combat."):format(name, Named(new.food))
+		elseif old[item] then
+			lines[#lines + 1] = kind == "drink" and ("%s has nothing left to drink in your bags."):format(name)
+				or ("%s has no food left in your bags."):format(name)
+		end
+	end
+	local before, after = old.order or {}, new.order or {}
+	if Set(before) ~= Set(after) then
+		if #after > 0 then
+			lines[#lines + 1] = kind == "drink" and ("%s now takes %s in a fight."):format(name, Listed(after))
+				or ("%s now takes %s."):format(name, Listed(after))
+		elseif #before > 0 then
+			lines[#lines + 1] = kind == "drink" and ("%s has no mana potion or gem left for a fight."):format(name)
+				or ("%s has no healthstone or healing potion left in your bags."):format(name)
+		end
+	end
+	return #lines > 0 and lines or nil
+end
+
+-- primed: the kinds kept once this session, so the first write after login or /reload says nothing. rowsAt: the rows each followed then.
+local primed, rowsAt = {}, {}
+
 -- Makes or writes the macro of a kind, as its row wants it.
 local function Keep(kind)
 	why[kind] = nil
@@ -480,6 +552,13 @@ local function Keep(kind)
 			end)
 		end
 	end
+	-- What chat says once the macro is written: only after the first write of the session, while Say when a macro changes is on, and not for a
+	-- change of the rows the macro follows.
+	local rows, changes = Rows(kind), nil
+	if primed[kind] and rowsAt[kind] == rows and Opt("say") == true then
+		changes = Change(kind, using[kind], uses)
+	end
+	primed[kind], rowsAt[kind] = true, rows
 	using[kind] = uses
 	if Blocked() then
 		why[kind] = "blocked"
@@ -515,8 +594,10 @@ local function Keep(kind)
 		end
 		return
 	end
-	if BodyAt(index) ~= body then
-		Call(false, EditMacro, index, nil, nil, body)
+	if BodyAt(index) ~= body and Call(false, EditMacro, index, nil, nil, body) and changes then
+		for _, line in ipairs(changes) do
+			print("Flat UI: " .. line)
+		end
 	end
 end
 
@@ -664,11 +745,6 @@ watch:SetScript("OnEvent", function()
 end)
 
 -- /flatui status --------------------------------------------------------------------------------------------------------------------------
-
-local function Named(id)
-	local name = Ask(C_Item and C_Item.GetItemNameByID, id)
-	return type(name) == "string" and name ~= "" and name or ("item " .. tostring(id))
-end
 
 local function Line(kind)
 	local name, reason, uses = NAMES[kind], why[kind], using[kind]

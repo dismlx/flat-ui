@@ -1,7 +1,7 @@
 local _, ns = ...
 
--- Links in the chat windows: a web address in a chat line becomes a link of Flat UI's own that opens a box to copy it, and the tooltip of an item,
--- spell, achievement or quest link shows while the mouse is over it. Runs with the chat module: Chat.lua calls ns.ChatLinksSync at the end of each refresh.
+-- Links in the chat windows: a web address in a chat line becomes a link of Flat UI's own that opens a box to copy it, the tooltip of an item,
+-- spell, achievement or quest link shows while the mouse is over it, and your name in other players' lines takes a colour. Runs with the chat module: Chat.lua calls ns.ChatLinksSync at the end of each refresh.
 -- Web addresses: a filter in the game's own chat filter registry (ChatFrameUtil.AddMessageEventFilter, Blizzard_ChatFrameBase/Shared/
 -- ChatFrameFilters.lua:112-124 and 202-215) reads the text of the lines players write and of the game's system lines. The registry calls it securely
 -- and only with a line whose every value an addon may read (canaccessvalue), so a line of the chat lockdown is passed on untouched, and the filter
@@ -26,12 +26,18 @@ local _, ns = ...
 -- only while its label is longer than the name of the channel of the window's list that it matches (ChatFrameOverrides.lua:346-360), so a label
 -- is made short in a window only where it still is (Fits, which reads the window's channelList and zoneChannelList, never writes them). As the
 -- game has it gives the long names back.
+-- Your name in chat (chat.mentions, 0.5.36; on): a third filter in the same registry, for what players say, yell and emote and the party, raid,
+-- instance, guild, officer and numbered channel lines (not whispers, not the game's own lines), colours each whole-word match of the player's own
+-- name (UnitName, case aside) in the plain text of a line another player wrote, in Your name colour. Links, textures and colour codes are passed
+-- over whole, as for the addresses, and so is a web address; a line of the chat lockdown never comes. With Sound when you are named, the sound
+-- plays once for each line (its lineID), at most one a second (ns.PlayKit). The text alone changes; the filters chain, each rewriting what the
+-- last gave.
 -- These follow the clickable addresses and the link tooltips of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoLChatSocial/ChatIcons.lua). Left out: its item and currency icons and the item levels in links.
 
 local KEY = "chat"
-local LINKS, TIPS, CHANNELS = "web links", "link tooltips", "channel names"
-local ROW = { [LINKS] = "webLinks", [TIPS] = "linkTips" }
+local LINKS, TIPS, CHANNELS, MENTIONS = "web links", "link tooltips", "channel names", "name in chat"
+local ROW = { [LINKS] = "webLinks", [TIPS] = "linkTips", [MENTIONS] = "mentions" }
 -- What comes after |H in a link this file makes: the game's addon link type, then Flat UI's own name and kind.
 local PREFIX = "addon:FlatUI:url:"
 local LINK_COLOUR = "ff6cb8ff"
@@ -48,10 +54,18 @@ local CLOSING = { T = "|t", A = "|a", K = "|k" }
 local BOX_WIDTH, BOX_HEIGHT, FIELD_HEIGHT = 380, 50, 20
 -- Seconds between two looks at a link tooltip that is up.
 local WATCH = 0.1
+-- The lines your name is looked for in: what players say, yell and emote, and the party, raid, instance, guild, officer and numbered channel
+-- lines. Not whispers, which are to you anyway, nor the game's own lines.
+local MENTION_EVENTS = { "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID",
+	"CHAT_MSG_RAID_LEADER", "CHAT_MSG_RAID_WARNING", "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER",
+	"CHAT_MSG_CHANNEL" }
+-- The sound choices of Sound when you are named, as ns.SOUNDS (IconRow.lua) numbers them.
+local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 
 -- The state of the file: whether the filter is in the registry, whether each callback was given (true) or refused (false), the last line
--- rewritten (the same line comes once for each window that shows it), the lines with a link made, the copy box and the tooltip's owner.
-local S = { filtering = false, made = 0, waited = 0 }
+-- rewritten (the same line comes once for each window that shows it), the lines with a link made, the lines that named you, the copy box and
+-- the tooltip's owner.
+local S = { filtering = false, made = 0, waited = 0, mentioned = 0 }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -379,6 +393,164 @@ local function SyncChannels()
 	end
 end
 
+-- Your name in chat --------------------------------------------------------------------------
+
+-- The player's own name, read once it is plain, or nil before the game gives it.
+local function MyName()
+	if S.name == nil and type(UnitName) == "function" then
+		local ok, name = pcall(UnitName, "player")
+		if ok and Plain(name, "string") and #name > 1 and name ~= UNKNOWNOBJECT then
+			S.name = name
+		end
+	end
+	return S.name
+end
+
+-- The code of Your name colour, |c and its eight digits.
+local function MentionColour()
+	local hex = Opt("mentionColour")
+	if Plain(hex, "string") and hex:find("^%x%x%x%x%x%x%x%x$") then
+		return "|cff" .. hex:sub(3)
+	end
+	return "|cffff9933"
+end
+
+-- A letter, a digit or a byte of a letter outside ASCII touches a name, so "Jonny" and "Jöna" do not name Jon; a space, punctuation and the end
+-- of a word do.
+local function Touches(char)
+	return char ~= "" and char:find("[%w\128-\255]") ~= nil
+end
+
+-- One word of plain text with each whole match of the name (lower case, `lower`) wrapped in the colour, or nil when it has none. A web address
+-- is passed over, so its link is still made whichever filter comes first.
+local function MarkWord(word, lower, colour)
+	local _, core = Split(word)
+	if core ~= "" and IsAddress(core) then
+		return nil
+	end
+	local low, size = word:lower(), #lower
+	local first = low:find(lower, 1, true)
+	local parts, at = nil, 1
+	while first do
+		local last = first + size - 1
+		if not Touches(word:sub(first - 1, first - 1)) and not Touches(word:sub(last + 1, last + 1)) then
+			parts = parts or {}
+			parts[#parts + 1] = word:sub(at, first - 1)
+			parts[#parts + 1] = colour .. word:sub(first, last) .. "|r"
+			at = last + 1
+		end
+		first = low:find(lower, last + 1, true)
+	end
+	if parts == nil then
+		return nil
+	end
+	parts[#parts + 1] = word:sub(at)
+	return table.concat(parts)
+end
+
+-- The line with the name coloured in its plain text, or nil when it is not named there. Links, textures, names and colour codes are passed
+-- over whole, as Rewrite passes them.
+local function MarkLine(msg, lower, colour)
+	if not msg:lower():find(lower, 1, true) then
+		return nil
+	end
+	local parts, made, at, size = {}, 0, 1, #msg
+	local function Word(word)
+		local out = MarkWord(word, lower, colour)
+		if out then
+			made = made + 1
+		end
+		return out
+	end
+	while at <= size do
+		local bar = msg:find("|", at, true)
+		local stop = bar and bar - 1 or size
+		if stop >= at then
+			parts[#parts + 1] = (msg:sub(at, stop):gsub("%S+", Word))
+		end
+		if not bar then
+			break
+		end
+		local close = EscapeEnd(msg, bar)
+		parts[#parts + 1] = msg:sub(bar, close)
+		at = close + 1
+	end
+	if made == 0 then
+		return nil
+	end
+	return table.concat(parts)
+end
+
+-- One line of one window: S.marked is the line to show in its place, or nil to leave it. A line you wrote is left. The same line comes once for
+-- each window that shows it, so the last answer is kept and the sound plays once for each lineID.
+local function Mark(_, msg, author, lineID)
+	local name = MyName()
+	if not name then
+		return
+	end
+	if Plain(author, "string") and (author:match("^([^%-]+)") or author) == name then
+		return
+	end
+	if S.mentionIn ~= msg then
+		S.mentionIn, S.mentionOut = msg, MarkLine(msg, name:lower(), MentionColour())
+	end
+	if S.mentionOut == nil then
+		return
+	end
+	local id = Plain(lineID, "number") and lineID or nil
+	if id == nil or id ~= S.mentionLine then
+		S.mentioned = S.mentioned + 1
+		local sound = ns.SOUNDS and ns.SOUNDS[KITS[Opt("mentionSound")] or 0]
+		if sound then
+			-- At most one a second (ns.PlayKit), so a line with no lineID shown in several windows plays once too.
+			ns.PlayKit(sound[1], KEY)
+		end
+	end
+	S.mentionLine = id
+	S.marked = S.mentionOut
+end
+
+-- The game's registry calls it with the window, the event and the values of the line: the text first, its author second ("Name" or
+-- "Name-Realm"), lineID eleventh. The text alone is put in its place; every other value stays as it came. It chains with the address filter,
+-- each rewriting what the other gave.
+local function Mentions(frame, event, msg, author, ...)
+	if not Wanted(MENTIONS) or not Plain(msg, "string") or msg == "" then
+		return false
+	end
+	S.marked = nil
+	-- A part that fails is counted once for each window it fails on.
+	ns.EachPart(KEY, MENTIONS, Mark, Plain(frame, "table") and frame or Mentions, msg, author, (select(9, ...)))
+	local out = S.marked
+	S.marked = nil
+	if out ~= nil then
+		return false, out, author, ...
+	end
+	return false
+end
+
+-- The filter is given once for each event and taken back with the same function value. A change of a row forgets the last line, so a new
+-- colour shows on the next.
+local function SyncMentions()
+	S.mentionIn, S.mentionOut = nil, nil
+	local add, remove = Registry()
+	if not add then
+		S.mentions = false
+		return
+	end
+	local want = Wanted(MENTIONS)
+	if want and not S.mentions then
+		for _, event in ipairs(MENTION_EVENTS) do
+			pcall(add, event, Mentions)
+		end
+		S.mentions = true
+	elseif not want and S.mentions then
+		for _, event in ipairs(MENTION_EVENTS) do
+			pcall(remove, event, Mentions)
+		end
+		S.mentions = false
+	end
+end
+
 -- The copy box --------------------------------------------------------------------------------
 
 local function CloseBox()
@@ -669,6 +841,7 @@ function ns.ChatLinksSync()
 	Part(LINKS, SyncLinks)
 	Part(TIPS, SyncTips)
 	Part(CHANNELS, SyncChannels)
+	Part(MENTIONS, SyncMentions)
 	if not ns.Enabled(KEY) then
 		CloseBox()
 	end
@@ -693,6 +866,13 @@ ns.AddStatus(KEY, function()
 	end
 	if Wanted(TIPS) and S.hover == false then
 		lines[#lines + 1] = "Link tooltips: the game would not say when the mouse is over a link."
+	end
+	if Wanted(MENTIONS) then
+		if S.noRegistry and Windows() then
+			lines[#lines + 1] = "Your name in chat: this game has no chat filters, so it is not coloured."
+		elseif S.mentioned > 0 then
+			lines[#lines + 1] = ("Your name in chat: coloured in %d chat %s."):format(S.mentioned, S.mentioned == 1 and "line" or "lines")
+		end
 	end
 	return lines
 end)

@@ -41,7 +41,10 @@ local _, ns = ...
 --    and "PING_ERROR_CURSOR" from its OnShow and OnEnter, ResetCursor on OnLeave and OnHide, as Blizzard_PingUI.lua:134-152 does), a line of its
 --    own beside the bar, hanging inward from it (P.Hint), says which ping is armed and how to cancel, and the armed button is lit in its ping's
 --    colour, border and background, until the ping is placed or cancelled. Those scripts are insecure and change nothing protected: the text is a FontString of the place
---    button, set with SetText, and the light is the outline of the icon under the bar button.
+--    button, set with SetText, and the light is the outline of the icon under the bar button. A ping that waits gives up after 10 seconds out of
+--    combat (P.Shown sets a timer for each arm and switch, P.Cancel hides the place button, whose CLEAR gives Escape back), so a stray click on
+--    the bar never eats the next click on the world; one that waited 10 seconds in a fight, where Flat UI's Lua may not hide the place button,
+--    is cancelled as the fight ends (P.stale, P.AfterFight).
 -- 3. A Shift-click with a target lets the bar button's own "/ping [@target,exists] <n>" run at once (ARM returns nothing: IsShiftKeyDown and
 --    UnitExists are in the restricted environment, RestrictedEnvironment.lua:84-88); with no target it arms as a click.
 -- 4. The keys ping at once what is under the mouse, as the game's own ping keys do: hover the spot, press the key. Each key clicks a secure button
@@ -76,8 +79,12 @@ local _, ns = ...
 -- place button or a key (a PostClick of Flat UI's own, set out of combat, which runs after the game's secure code and changes no attribute) and
 -- when the mouse comes over a button, as the game's listener reads it (Blizzard_PingUI.lua:134-147). The changes are heard on the module's events
 -- (GROUP_ROSTER_UPDATE, PARTY_LEADER_CHANGED, PLAYER_ROLES_ASSIGNED, CVAR_UPDATE of enablePings, PLAYER_ENTERING_WORLD, UPDATE_BINDINGS for the
--- keys on the buttons and the tooltip); no ticker and no OnUpdate. Pointing at a button writes its name, what a click and a Shift-click do,
+-- keys on the buttons and the tooltip); no OnUpdate, and a ticker only while the icons fade (Fade until you point at it). Pointing at a button writes its name, what a click and a Shift-click do,
 -- its key and the game's own key for that ping in GameTooltip (SetOwner on the icon, SetText, AddLine, Show, and Hide when the mouse leaves), as Group tools does.
+-- Fade until you point at it (off by default): the icons stay at 30% until the mouse comes over any button, back to full at once, and fade again
+-- over a quarter of a second a second after the mouse leaves (ns.IconFader, IconRow.lua), as Group tools has it; they stay full while a ping waits
+-- and while test mode is on. Only the opacity of the icons changes, frames of Flat UI's own and no secure button, so in a fight too, and the faint
+-- buttons take their clicks and keys as ever.
 
 local KEY = "pingbar"
 local MOVER = "FlatUIPingBar"
@@ -99,8 +106,8 @@ local GREY_ALPHA = 0.4
 local LIGHTER = 0.17
 -- The opacity of the ping's colour behind the armed button.
 local ARMED_ALPHA = 0.35
--- The cooldown is read this long after a press, once the game has sent the ping.
-local AFTER_PRESS = 0.1
+-- The cooldown is read this long after a press, once the game has sent the ping. A ping that waits this long out of combat gives up.
+local AFTER_PRESS, GIVE_UP = 0.1, 10
 local SAMPLE = 3
 -- The kinds, in the order the bar shows them while the game offers no order: id (the button's name after FlatUIPing), the name of the enum value
 -- of Enum.PingSubjectType and its number where the client has no enum (PingConstantsDocumentation), the number /ping reads, the texture kit, the
@@ -185,6 +192,11 @@ local function Truth(fn, ...)
 		return nil
 	end
 	return value ~= nil and value ~= false
+end
+
+-- A timer of the client, false when there is none or it raises.
+local function After(seconds, fn)
+	return type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, seconds, fn)
 end
 
 -- In a fight, or the game will not say: the secure buttons are left alone then.
@@ -812,6 +824,7 @@ function P.Lay()
 	P.Layout(wanted)
 	P.Place()
 	P.panel:Show()
+	P.fader.Settle()
 	local mode = ns.TestMode
 	if P.sample and mode ~= nil and mode.IsOn() == true then
 		P.Sample()
@@ -898,6 +911,7 @@ function P.Paint()
 			P.Tip(entry)
 		end
 	end
+	P.fader.Settle()
 end
 
 -- The cooldown -------------------------------------------------------------------------------------------------------------------------------
@@ -1038,6 +1052,7 @@ function P.Lines(entry)
 	end
 	lines[#lines + 1] = "Shift-click pings your target at once; with no target it works as a click."
 	lines[#lines + 1] = "While a ping waits, click another button to switch to it, or this one again to cancel."
+	lines[#lines + 1] = ("A ping that waits gives up after %d seconds, or as the fight ends if it waited through one."):format(GIVE_UP)
 	local key = KeyText("CLICK FlatUIPing" .. kind.id .. ":LeftButton")
 	if key then
 		lines[#lines + 1] = ("Key: %s pings what is under the mouse at once: hover the spot, press the key."):format(key)
@@ -1083,6 +1098,7 @@ end
 
 function P.Enter(entry)
 	entry.hover = true
+	P.Wake()
 	P.why = P.Blocked()
 	P.Shade(entry)
 	P.Tip(entry)
@@ -1094,6 +1110,7 @@ function P.Leave(entry)
 		return
 	end
 	entry.hover = false
+	P.Faint()
 	P.Shade(entry)
 	if P.Owned(entry) then
 		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
@@ -1116,9 +1133,25 @@ function P.Uncursor()
 end
 
 -- The place button shows, from ARM or from a switch in PLACE: its line names the ping that waits, in that ping's colour, its button is lit and
--- the cursor turns.
+-- the cursor turns. GIVE_UP seconds later, should the same ping still wait, it is cancelled out of combat, or marked to be as the fight ends.
 function P.Shown()
 	local hint, place = P.hint, P.place
+	local token = {}
+	P.waiting, P.stale = token, nil
+	After(GIVE_UP, function()
+		if P.waiting ~= token or not P.place then
+			return
+		end
+		local ok, shown = pcall(P.place.IsShown, P.place)
+		if not ok or IsSecret(shown) or shown ~= true then
+			return
+		end
+		if Fighting() then
+			P.stale = true
+		else
+			ns.Try(KEY, P.Cancel)
+		end
+	end)
 	if place then
 		local ok, id = pcall(place.GetAttribute, place, "flatui-kind")
 		local kind = KINDS[1]
@@ -1137,17 +1170,20 @@ function P.Shown()
 			P.Shade(entry)
 		end
 	end
+	P.Wake()
 	P.Cursor()
 end
 
--- The place button hid: the ping was placed or cancelled, so no button is lit.
+-- The place button hid: the ping was placed or cancelled, so no button is lit and nothing waits to give up.
 function P.Disarm()
+	P.waiting, P.stale = nil, nil
 	for _, entry in ipairs(P.buttons) do
 		if entry.armed then
 			entry.armed = false
 			P.Shade(entry)
 		end
 	end
+	P.Faint()
 end
 
 -- The keys on the buttons and the tooltip under the mouse, written again after a key changed.
@@ -1158,6 +1194,35 @@ function P.Retip()
 			P.Tip(entry)
 		end
 	end
+end
+
+-- Fade until you point at it -------------------------------------------------------------------------------------------------------------
+
+-- True while the icons stay full: the row off, test mode on, the mouse over a button or a ping that waits.
+function P.Held()
+	local mode = ns.TestMode
+	if Opt("fade") ~= true or (mode ~= nil and mode.IsOn() == true) then
+		return true
+	end
+	for _, entry in ipairs(P.buttons) do
+		if entry.hover or entry.armed then
+			return true
+		end
+	end
+	return false
+end
+
+P.fader = ns.IconFader(function()
+	return P.buttons
+end, P.Held)
+
+-- Full at once; faint a second after nothing holds the icons full (ns.IconFader).
+function P.Wake()
+	P.fader.Wake()
+end
+
+function P.Faint()
+	P.fader.Faint()
 end
 
 -- The module ---------------------------------------------------------------------------------------------------------------------------------
@@ -1171,8 +1236,12 @@ function P.Refresh()
 	P.KeyLabels()
 end
 
--- The end of a fight: a change that still waits is applied, should the game have said it was in a fight when ns.OutOfCombat ran it.
+-- The end of a fight: a ping that waited GIVE_UP seconds in it gives up, and a change that still waits is applied, should the game have said it
+-- was in a fight when ns.OutOfCombat ran it.
 function P.AfterFight()
+	if P.stale then
+		P.Cancel()
+	end
 	if P.queued and not Fighting() then
 		P.queued = false
 		P.Apply()

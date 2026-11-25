@@ -11,12 +11,13 @@ local _, ns = ...
 -- match there, the keyring's included, worked out one character a frame once the menu opens, never while the player types, from names the client
 -- has loaded only;
 -- the search box (B.Search.Box, BagsSearch.lua, told its window for its menu of quick searches), which B.Window.Focus gives the keyboard for the
--- bag search key; the view button, Sections or Bag by bag; the sort button, on live slots only: ns.BagSort.Run and
--- ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the game is asked to sort (BagSort tells its
--- watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving, six and a half seconds at most, and for as
--- long as the sort hold of Bags.lua lasts (B.Sorting), also when the window closed and opened again meanwhile; nothing arrives at the top shelf
--- then either; the bank button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close button, a cross with no box, as Windows draws the
--- game's.
+-- bag search key, and which shows how many items match there while a search is typed (B.Search.SetCount, at the opening and at each update: the
+-- stacks of the character shown added up, the keyring's included, as the picker counts them); the view button, Sections or Bag by bag; the sort
+-- button, on live slots only: ns.BagSort.Run and ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the
+-- game is asked to sort (BagSort tells its watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving,
+-- six and a half seconds at most, and for as long as the sort hold of Bags.lua lasts (B.Sorting), also when the window closed and opened again
+-- meanwhile; nothing arrives at the top shelf then either; the bank button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close
+-- button, a cross with no box, as Windows draws the game's.
 -- Dragging the title bar or the character picker moves the window (StartMoving and StopMovingOrSizing, :4797, 4813, with SetDontSavePosition and
 -- SetUserPlaced, :4605, 4778, so the client keeps no place of its own); a drag that starts on the picker opens no menu. Where it is let go is saved
 -- as its spot in the movers, also when the window closes during the drag: the box of its entry in Movers.lua, put with its corner at the window's,
@@ -32,7 +33,9 @@ local _, ns = ...
 -- WL/apis.yaml:36266). It is as wide as the layout (BagsLayout.lua) and its padding of 8 on each side, at least as wide as its title bar and its
 -- footer need, and the bank window at least as wide as the row of BagsBank.lua over its footer. While a window is open, an update that does not
 -- lay it out afresh never makes it shorter: the bag window hangs from its bottom right corner, so a shorter window would move everything above
--- what shrank (Free slots losing a row as its slots fill). It takes its exact height again at its next fresh layout and at its opening.
+-- what shrank (Free slots losing a row as its slots fill), and neither does a fold or an unfold of a section the player clicked (B.Window.KeepHeight,
+-- asked by BagsOrder.lua), so the title clicked stays under the mouse. It takes its exact height again at its next other fresh layout and at its
+-- opening.
 -- The bag window's footer has the gold of the character shown (Errands.Money, Errands.lua:65-85), whose tooltip lists the characters of this realm
 -- and its connected realms, richest first, each with its realm when that is not this character's, with their total, and one line for those of
 -- other realms, and while the window shows the player's own bags what this character made (in green) or spent (in red) since it logged in
@@ -46,13 +49,17 @@ local _, ns = ...
 -- search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit, B.Bank.TakeOut, B.Bank.Busy, whose per-click
 -- fallback labels the button with what is left). These three buttons are this file's own, drawn as the title bar's are, and clicked as the
 -- game's buttons are, by the left button let go over them, as Errands.Button's are (Errands.lua:127-201).
+-- Between its gold and its free slots the bag window's footer has the currencies the Currency tab marks Show on Backpack, which are
+-- BagsCurrency.lua's: Footer has B.Currency.Read read them for the character shown, and ArrangeFoot gives B.Currency.Fit the room the shortest
+-- text of the free slots leaves after the gold, and hangs the frame it gives back after the gold, so they never reach either.
 -- Each window keeps room in its least width for the buttons of its footer and the shortest text of its free slots, and the bag window for a gold
 -- of the usual length too, whatever shows now, so it never changes width as a button comes or goes or the gold changes; the free slots are
 -- written as fully as the room left allows, the word Free left out first.
 -- The row above the bank window's footer, at the live bank only, is BagsBank.lua's (B.Bank.Slots), as high and as wide as that file says. A bank
 -- never seen says how to keep one. The row above the bag window's footer, while it shows the player's own live bags and Bag slots is on, is the
--- bag slots of BagsSlots.lua (B.Slots.Row): the backpack, the four bags and the reagent bag, to put a bag in or swap one. Either row stands a
--- little apart from the content under a thin line of the separators' look, so its slots never read as one more row of the keyring or a bag.
+-- bag slots of BagsSlots.lua (B.Slots.Row): the backpack, the four bags, the reagent bag and the keyring, to put a bag in or swap one. Either
+-- row stands a little apart from the content under a thin line of the separators' look, so its slots never read as one more row of the keyring
+-- or a bag.
 -- Escape closes either window: both are named in UISpecialFrames, as the options window is (Panel.lua:2700-2708), whose windows the game's
 -- CloseSpecialWindows hides (UIParentPanelManager.lua:21-27). Whatever hid a window (its close button, a key, Escape, the page going off), its
 -- OnHide ends what is the window's own: a drag (where it was let go is kept), the keyboard of the search box, a menu and the busy sort button.
@@ -466,6 +473,16 @@ local function Matches(which, key, stacks)
 		end
 	end
 	return math.floor(count)
+end
+
+-- The search boxes of a window show how many items match there (B.Search.SetCount, BagsSearch.lua): for the character it shows, the stacks added up
+-- as the picker counts them, so the two numbers agree; nil while no search is typed, which hides the count.
+local function MatchCount(w)
+	local n = nil
+	if Call(Search, "Active") == true then
+		n = Matches(w.which, (Layout.Viewed(w.which)), true)
+	end
+	Call(Search, "SetCount", w.which, n)
 end
 
 -- Drawing ----------------------------------------------------------------------------------------------------------------------------------------
@@ -1439,6 +1456,17 @@ function ArrangeFoot(w)
 			left = gold.frame
 			room = room - goldW - FOOT_GAP
 		end
+		-- The currencies of BagsCurrency.lua come after the gold, in what the shortest text of the free slots leaves (B.Currency.Fit gives back its
+		-- frame and width).
+		local texts = w.freeTexts or { "" }
+		w.free.text:SetText(texts[#texts])
+		local least = math.max(FREE_ROOM, math.ceil(TextWidth(w.free.text)))
+		local coins, coinsW = Call(B.Currency, "Fit", w, room - least - FOOT_GAP)
+		if coins and Finite(coinsW) then
+			coins:ClearAllPoints()
+			coins:SetPoint("LEFT", left, left == foot and "LEFT" or "RIGHT", left == foot and 0 or FOOT_GAP, 0)
+			left, room = coins, room - coinsW - FOOT_GAP
+		end
 		w.free.frame:ClearAllPoints()
 		w.free.frame:SetPoint("LEFT", left, left == foot and "LEFT" or "RIGHT", left == foot and 0 or FOOT_GAP, 0)
 		w.free.frame:SetPoint("RIGHT", right, right == foot and "RIGHT" or "LEFT", gap, 0)
@@ -1479,6 +1507,8 @@ function Footer(w)
 			local money = Call(Data, "Money", key)
 			w.gold.text:SetText(Finite(money) and money >= 0 and Money(money) or "")
 		end
+		-- The currencies shown on the backpack (BagsCurrency.lua): this character's as the game has them, another's as kept.
+		Call(B.Currency, "Read", w, key, mine)
 		if w.sell then
 			local wanted = mine and live and B.atMerchant == true and Opt("sellButton") ~= false
 			local n, waits, value, unknown, selling = 0, 0, 0, false, false
@@ -1737,6 +1767,7 @@ function Showing(w)
 		return
 	end
 	w.open = true
+	w.keepNext = nil
 	Run("window", Call, B, "LaidOut", w.which)
 	Sound("IG_BACKPACK_OPEN")
 	Watching()
@@ -1747,6 +1778,7 @@ function Showing(w)
 	w.offset = 0
 	TitleLine(w)
 	Footer(w)
+	Run("search", MatchCount, w)
 	Resize(w)
 	Window.Place(w.which)
 end
@@ -1986,8 +2018,23 @@ local function Updating(w, flags, changed)
 		end
 	end
 	Footer(w)
-	Resize(w, not flags.layout and Call(Layout, "Builds", which) == builds)
+	Run("search", MatchCount, w)
+	-- A fold or an unfold the player clicked (Window.KeepHeight) is a fresh layout that keeps the height too, so the title clicked stays under the
+	-- mouse; the next one that is not asked for that way takes its exact height again.
+	local keep = w.keepNext == true
+	w.keepNext = nil
+	Resize(w, keep or (not flags.layout and Call(Layout, "Builds", which) == builds))
 	Window.Place(which)
+end
+
+-- The next update of the open window keeps its height, though it lays the window out afresh: BagsOrder.lua asks it before the layout of a fold or
+-- an unfold the player clicked, so the bag window, which hangs from its bottom right corner, does not move the title clicked away from the mouse
+-- by the height of the rows that folded. An unfold that needs more room still grows the window; its opening takes its exact height (Showing).
+function Window.KeepHeight(which)
+	local w = windows[which]
+	if Shown(w) then
+		w.keepNext = true
+	end
 end
 
 function Window.Update(which, flags, changed)

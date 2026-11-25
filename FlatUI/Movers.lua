@@ -245,10 +245,10 @@ local LIST = {
 	{ name = "FlatUIBank", label = "Flat UI bank", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 420, height = 300, x = 25, y = -110,
 		gate = "BankWindowShown", changed = "BankWindowMoved" },
 	-- The pet target frame (UnitPetTarget.lua), which the game shows while the pet has a target: its top left corner is the top left corner of the box,
-	-- which has the room of the frame at the default width, right of the pet frame where the game's default layout puts it. A secure frame: it
-	-- takes a spot out of combat.
+	-- which is as wide as the frame (widthOf: Pet target width, 120 at first), right of the pet frame where the game's default layout puts it, its left
+	-- edge where the default width has it (start). A secure frame: it takes a spot out of combat.
 	{ name = "FlatUIPetTarget", label = "Pet target", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 120, height = 20, x = -246, y = 238,
-		gate = "PetTargetShown", changed = "PetTargetMoved" },
+		gate = "PetTargetShown", changed = "PetTargetMoved", widthOf = "PetTargetWidth", start = "PetTargetStart" },
 	-- The hit table (HitTable.lua): its box is the table's own frame, and its spot is its top left corner, which stays where it is as lines come and
 	-- go. With no spot saved it hangs under the player frame, under the pet frame and the totems the game hangs there.
 	{ name = "FlatUIHitTable", label = "Hit table", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "HitTableRow",
@@ -276,6 +276,13 @@ local LIST = {
 	-- now; the x here is the window's full 631); a spot saved or put back is told to the button (changed: ns.GearButtonMoved).
 	{ name = "FlatUIGearButton", label = "Compare gear button", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 112, height = 20,
 		x = 485, y = -1, from = "CharacterFrame", gate = "GearButtonShown", changed = "GearButtonMoved", start = "GearButtonStart" },
+	-- The Trinket queue window (TrinketQueueWindow.lua), which shows while /flatui queue, its row or a trinket slot's square has it open: its top left
+	-- corner is the top left corner of the box, 320 by 404, its fixed size. It starts at the Gear comparison window's corner, right of the Character
+	-- window (680, -120, as FlatUIGear above); both raise when they open, and a drag of either title bar gives it a spot of its own. It has a handle
+	-- while the trinket queue runs and its window part is not stopped, open or not (gate: ns.TrinketWindowShown), and a spot saved or put back is
+	-- told to the window (changed: ns.TrinketWindowMoved).
+	{ name = "FlatUITrinkets", label = "Trinket queue", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 320, height = 404,
+		x = 680, y = -120, gate = "TrinketWindowShown", changed = "TrinketWindowMoved" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
@@ -816,9 +823,17 @@ end
 
 -- The width and height of the box of an own frame. One the player sizes (sized: the key of FlatUICharDB, ns.Character, where its size is kept, as
 -- { w, h } or { w = w, h = h }, in the units of UIParent, which the frame on UIParent has) has that size, cut to its least size and to the screen,
--- the least size winning on a screen smaller than it; with no size kept, or one that is no pair of numbers, its entry's.
+-- the least size winning on a screen smaller than it; with no size kept, or one that is no pair of numbers, its entry's. One whose width a row sets
+-- (widthOf: a function of ns that gives it) has that width while it gives a plain number above 0.
 local function BoxSize(info)
 	local width, height = info.width, info.height
+	local widthOf = info.widthOf and ns[info.widthOf]
+	if type(widthOf) == "function" then
+		local ok, w = pcall(widthOf)
+		if ok and Number(w) and w > 0 then
+			width = w
+		end
+	end
 	local character = info.sized and ns.Character and ns.Character()
 	local kept = type(character) == "table" and character[info.sized] or nil
 	if type(kept) ~= "table" or ns.IsSecret(kept) then

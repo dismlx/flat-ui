@@ -73,8 +73,9 @@ local _, ns = ...
 -- and does not go to the top shelf, but no button is placed for them, so its title's tooltip lists them from their records (FoldedTip): each
 -- item once with its icon, its name in its quality's colour and its stacks counted together, the most first, at most FOLD_LINES. While a search
 -- is typed, Layout.Dim writes on a folded title how many of its items match ("3 of 24") in the Highlight colour, and its count alone again once
--- the search is cleared, with no layout: the title is measured for the widest of those texts. A window that closes ends a drag in it
--- (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
+-- the search is cleared, with no layout: the title is measured for the widest of those texts. A title still under the mouse after a layout (a fold
+-- clicked, which keeps the window's height, BagsWindow.lua) draws its tooltip again, so it says what the next click does. A window that closes
+-- ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
 -- The buttons are BagsItems.lua's: the game's item buttons for the player's own bags, buttons of Flat UI's own for the live bank and for
 -- everything else. They are drawn with B.Buttons.Draw, dimmed with B.Buttons.Dim and placed here (ClearAllPoints, SetPoint, Show, Hide). While the
 -- mouse points at a bag on the game's bag bar (Bags.lua) or in the bag slot row (BagsSlots.lua), Layout.Light dims every slot of the bag window
@@ -946,6 +947,14 @@ local function PlaceTitle(st, title, sec, x, y, width)
 	end
 	PaintTitle(title)
 	frame:Show()
+	-- The title under the mouse after a fold or an unfold, or any other layout, keeps its tooltip, drawn again with what it says now ("Folded: click
+	-- to open it." and what the section holds).
+	if title.over and type(GameTooltip) == "table" and not ns.Forbidden(GameTooltip) then
+		local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, frame)
+		if ok and not ns.IsSecret(owned) and owned == true then
+			Run("layout", TitleTip, title)
+		end
+	end
 end
 
 -- The height of a section of n cells, w wide, under its title; a section of no cell (the empty Junk of the bag window) is its title alone.

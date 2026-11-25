@@ -2,20 +2,21 @@ local ADDON_NAME, ns = ...
 
 -- Data panels: two panels of Flat UI's own, the top panel and the bottom panel, each a row of up to six slots on a flat background with a thin
 -- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, the hearthstone, the time,
--- the quests in the log, experience, coordinates, frame rate and latency, friends or guild members online, the equipment set worn, or the feed of
--- another addon through LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no library, and
--- shows feeds of the kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to show is hidden, and a panel makes
--- its frames only once a slot has something to show. The panels are children of UIParent, so they hide with the interface, and they are hidden in a
--- pet battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading screen). /flatui move places them: each is
+-- the quests in the log, experience, reputation, coordinates, frame rate and latency, friends or guild members online, the equipment set worn, or
+-- the feed of another addon through LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with it (Flat UI ships no
+-- library, and shows feeds of the kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to show is hidden, and
+-- a panel makes its frames only once a slot has something to show. The panels are children of UIParent, so they hide with the interface, and they
+-- are hidden in a pet battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading screen). /flatui move places them: each is
 -- in the list of the movers (FlatUIDataTop and FlatUIDataBottom) with the panel itself as its box.
 -- A stream is drawn again on its events, once for a burst of them, and the few that change by themselves (coordinates, frame rate and latency,
 -- the cooldown of the hearthstone) on a ticker that runs only while a shown panel holds one of them. Pointing at a slot writes its lines in
 -- GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide when the cursor leaves). No click casts anything: a left click on the
 -- equipment set opens a menu of Flat UI's own (Menus, below), one on Bag space opens or closes Flat UI's bag window while Bags is on
--- (ns.BagsToggle, Bags.lua), one on Time, Quest log, Friends, Guild or Durability opens the game's window for it out of a fight, and Shift-click on
--- Coordinates or Experience puts its line in the chat box (DataStreams.lua), a right click on any slot of Flat UI's own opens the Data panels page
--- of the options (ns.OpenPanelPage, Panel.lua, after the fight in one), each tooltip ends with a dim line that says so, and a click on a feed goes
--- to the feed's own OnClick. Every value of the game is read in pcall, and one it withholds is left out, with the count it belongs to: no part of a
+-- (ns.BagsToggle, Bags.lua), one on Time, Quest log, Friends, Guild, Durability or Reputation opens the game's window for it (in a fight as the
+-- fight ends, with a line in chat), and Shift-click on Coordinates, Experience or Reputation puts its line in the chat box (DataStreams.lua), a
+-- right click on any slot of Flat UI's own opens the Data panels page of the options (ns.OpenPanelPage, Panel.lua, after the fight in one), each
+-- tooltip ends with a dim line that says so, and a click on a feed goes to the feed's own OnClick. A press is a click only when it is let go over
+-- the slot. Every value of the game is read in pcall, and one it withholds is left out, with the count it belongs to: no part of a
 -- count is shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line for /flatui status.
 -- The gold of the account's characters is kept in FlatUIDB.datapanels.gold by "Name - Realm", and the feeds a slot of any profile shows in
 -- FlatUIDB.datapanels.feeds, so a slot keeps its feed while the addon that makes it loads after Flat UI.
@@ -613,10 +614,13 @@ function P.MakeSlot(panel, slot)
 	frame:SetScript("OnMouseDown", function(_, button)
 		slot.down = button
 	end)
-	frame:SetScript("OnMouseUp", Guard(function(_, button)
+	-- A press is a click only when it is let go over the slot, as with a button of the game's (Errands.lua does the same); a client that does not say
+	-- counts as over.
+	frame:SetScript("OnMouseUp", Guard(function(self, button)
 		local pressed = slot.down == button
 		slot.down = nil
-		if pressed then
+		local ok, over = pcall(self.IsMouseOver, self)
+		if pressed and (not ok or ns.IsSecret(over) or over ~= false) then
 			P.Click(slot, button)
 		end
 	end))
@@ -1352,9 +1356,9 @@ function P.Leave(slot)
 end
 
 -- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment set, Bag
--- space, Time, Coordinates, Quest log, Experience, Friends, Guild, Durability), with the slot and the button. A right click on a slot of Flat UI's
--- own closes its menu and opens the Data panels page of the options instead (in a fight the window says it opens after it). Any other click on a
--- slot of Flat UI's own does nothing.
+-- space, Time, Coordinates, Quest log, Experience, Reputation, Friends, Guild, Durability), with the slot and the button. A right click on a slot
+-- of Flat UI's own closes its menu and opens the Data panels page of the options instead (in a fight the window says it opens after it). Any other
+-- click on a slot of Flat UI's own does nothing.
 function P.Click(slot, button)
 	if not slot.feed then
 		local stream = P.StreamOf(slot.id)

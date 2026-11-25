@@ -105,6 +105,11 @@ local _, ns = ...
 -- part tooltips (so an index that keeps failing stops the counts alone), and kept for the session, since the others do not change while this one
 -- plays; Forget, or connected realms the client names later, have it built again.
 --
+-- The currencies (BagsCurrency.lua). A character's record also keeps currencies: the currencies its Currency tab marked Show on Backpack when
+-- they were last read, in the game's order, as { ID, icon, count } (whole numbers, and a file ID or a path), for the bag window's footer while it
+-- shows that character. B.Data.KeepCurrencies writes this character's, only when they changed and only while the record may be written (Mine),
+-- and B.Data.Currencies reads a character's back, each entry checked as it is read, or nil when none are kept. Forget takes them out with the rest.
+--
 -- Forget a character (ns.BagsCharacterLines and ns.BagsCharacterForget, a list row as Forget a character's gold is, DataStreams.lua:239-257, its
 -- ids numbers as the game's options need, Options.lua:165-195) takes a character out of the record; this character is then not written again
 -- until it logs in again. /flatui status (ns.AddStatus, Core.lua:2143-2165) says how many characters and items are kept and how old this
@@ -1657,6 +1662,69 @@ function Data.Money(key)
 	end
 	local record = Character(key)
 	return record and Count(record.money) or nil
+end
+
+-- The currencies of the bag window's footer (BagsCurrency.lua) -------------------------------------------------------------------------------
+
+-- A character's currencies as last kept, { { id, icon, count }, ... } in the order of its backpack, each entry checked, or nil when none are
+-- kept. key nil is this character.
+function Data.Currencies(key)
+	if key == nil then
+		key = Me()
+	end
+	local record = Character(key)
+	local kept = record and record.currencies
+	if type(kept) ~= "table" then
+		return nil
+	end
+	local list = {}
+	for _, entry in ipairs(kept) do
+		if type(entry) == "table" then
+			local id, icon, count = Count(entry[1]), Icon(entry[2]), Count(entry[3])
+			if id and id > 0 and icon and count then
+				list[#list + 1] = { id, icon, count }
+			end
+		end
+	end
+	return list
+end
+
+-- Keeps this character's currencies, { { id, icon, count }, ... }, only when they changed and only while the record may be written (Mine). True
+-- when it wrote.
+function Data.KeepCurrencies(list)
+	if IsSecret(list) or type(list) ~= "table" then
+		return false
+	end
+	local fresh = {}
+	for _, entry in ipairs(list) do
+		if not IsSecret(entry) and type(entry) == "table" then
+			local id, icon, count = Count(entry[1]), Icon(entry[2]), Count(entry[3])
+			if id and id > 0 and icon and count then
+				fresh[#fresh + 1] = { id, icon, count }
+			end
+		end
+	end
+	local record = Mine(false)
+	local kept = record and record.currencies
+	if type(kept) == "table" and #kept == #fresh then
+		local same = true
+		for index, entry in ipairs(fresh) do
+			local old = kept[index]
+			if type(old) ~= "table" or old[1] ~= entry[1] or old[2] ~= entry[2] or old[3] ~= entry[3] then
+				same = false
+				break
+			end
+		end
+		if same then
+			return false
+		end
+	end
+	record = Mine(true)
+	if not record then
+		return false
+	end
+	record.currencies = fresh
+	return true
 end
 
 -- The gold of this session -------------------------------------------------------------------------------------------------------------------

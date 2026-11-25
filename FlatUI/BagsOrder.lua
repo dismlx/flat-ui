@@ -42,7 +42,9 @@ local _, ns = ...
 -- title alone, as the empty Junk title is, with a + after its count, while its items keep their cells, so an item that changes in a folded section
 -- stays there and does not go to the top shelf; while a search is typed the title says how many of its items match, and its tooltip lists what it
 -- holds (BagsLayout.lua). The menu's Fold or Unfold, Fold every section, Unfold every section and the row Folded sections on the Bags page
--- (ns.BagsFoldLines, ns.BagsFoldPick) do the same. Folding works in a fight too, as a move does.
+-- (ns.BagsFoldLines, ns.BagsFoldPick) do the same. Folding works in a fight too, as a move does. A fold or an unfold clicked in a window (its title,
+-- a Shift-click or its menu) keeps that window's height while it stays open (B.Window.KeepHeight), so the title clicked stays under the mouse and
+-- its tooltip, drawn again by BagsLayout.lua, says what the next click does.
 
 local B = ns.Bags
 local Order = B.Order
@@ -112,6 +114,15 @@ end
 -- Both windows are laid out again on the next pass.
 local function Request()
 	Call(B, "Request", "layout")
+end
+
+-- The window the player clicked a fold in keeps its height at that layout (B.Window.KeepHeight, BagsWindow.lua), so the title stays under the mouse:
+-- the bag window hangs from its bottom right corner and would otherwise move the title by the height of the rows that folded. Asked before the
+-- layout only when the folds changed.
+local function Keep(st)
+	if type(st) == "table" then
+		Call(B.Window, "KeepHeight", st.which)
+	end
 end
 
 -- A number of a widget call, or nil.
@@ -335,12 +346,14 @@ local function SetFold(key, on)
 end
 
 -- Opens every folded section. True when one was folded.
-function Order.UnfoldAll()
+-- st: the window's layout when the player asked it there (a Shift-click or its menu), which keeps that window's height (Keep); nil from the row.
+function Order.UnfoldAll(st)
 	local db = ns.Account()
 	if not Folds() or type(db) ~= "table" or type(db.bags) ~= "table" then
 		return false
 	end
 	db.bags.folded = nil
+	Keep(st)
 	Request()
 	return true
 end
@@ -533,6 +546,7 @@ function Order.FoldAll(st, except)
 		end
 	end
 	if changed then
+		Keep(st)
 		Request()
 	end
 	return changed
@@ -561,6 +575,7 @@ local function Toggle(st, sec)
 	if not Movable(st, sec) or not SetFold(sec.key, not Order.Folded(sec.key)) then
 		return false
 	end
+	Keep(st)
 	Request()
 	return true
 end
@@ -574,7 +589,7 @@ function Order.Fold(st, sec)
 	end
 	if Shifted() then
 		if Alone(st, sec) then
-			return Order.UnfoldAll()
+			return Order.UnfoldAll(st)
 		end
 		return Order.FoldAll(st, sec.key)
 	end
@@ -642,7 +657,9 @@ function Order.Menu(st, sec, anchor)
 		end }
 	end
 	if Folds() then
-		items[#items + 1] = { text = UNFOLD_ALL, part = "order", pick = Order.UnfoldAll }
+		items[#items + 1] = { text = UNFOLD_ALL, part = "order", pick = function()
+			Order.UnfoldAll(st)
+		end }
 	end
 	if key == "keep" then
 		local more = Call(B.Pins, "MenuLines")

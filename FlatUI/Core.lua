@@ -41,7 +41,7 @@ local ADDON_NAME, ns = ...
 -- bar sizes set the width and height of four cast bars, the height of the player bar's spark, the size of
 -- its mask and the anchor of its text. With Spell rank on the player bar on, the cast bars write the text of the player's two cast bars
 -- (SetText): a frame after the game wrote the name of a cast, the same name with the rank of that spell after it, only while the text is
--- still that name, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
+-- still that name, also in a fight, and the name alone again when the row goes off. Channel ticks on the player bar (CastTicks.lua, on by default) makes 15
 -- textures of its own on each of the player's two cast bars, each hung from an invisible spacer of its own (CreateTexture and SetPoint, once, out of
 -- combat on a bar the game may protect), and while a channel runs only sets their widths, Show, Hide and SetAlpha; a frame of its own hears the
 -- player's channel events while the row is on, and it only reads UnitChannelInfo. Finish flash (Bars.lua, In the cast colour by default) tints the
@@ -338,11 +338,16 @@ local ADDON_NAME, ns = ...
 -- With Clear the damage meter on (off by default), Minimap and HUD calls C_DamageMeter.ResetAllCombatSessions as the player enters a dungeon or
 -- raid, after its own popup FLATUI_METER_CLEAR when it asks (an entry of StaticPopupDialogs with an OnAccept only, shown with StaticPopup_Show as Clean
 -- up bags' is); it hides that popup with StaticPopup_Hide only while it is the one popup shown, once the player has left or the rows no longer ask.
--- The combat alerts of Combat text (No target and +Combat and -Combat, both on by default) are font strings on a frame of its own;
--- they play the sounds their rows choose (PlaySound, through ns.PlayKit) and change nothing.
+-- The combat alerts of Combat text (No target, Low health and Low mana, and +Combat and -Combat, all on by default) are font strings on a frame of
+-- its own; Low health and Low mana only read the player's health and mana through a curve (UnitHealthPercent, UnitPowerPercent) into the
+-- opacity of frames of their own; they play the sounds their rows choose (PlaySound, through ns.PlayKit) and change nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);
--- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. While the mouse is over an item, spell or achievement
+-- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. With Your name in chat (on by default) a filter of the same
+-- registry colours the player's own name in the plain text of other players' lines (|c...|r) and may play a sound (PlaySound, through ns.PlayKit).
+-- With Health bar colour (Class colour for players, reaction for the rest, by default) it colours GameTooltip's health bar (SetStatusBarColor),
+-- again after each change of its value through one HookScript of its OnValueChanged (which writes nothing else on it), and puts the game's green
+-- (0, 1, 0) back at Green. While the mouse is over an item, spell or achievement
 -- link in a chat window (EventRegistry: ChatFrame.OnHyperlinkEnter and ChatFrame.OnHyperlinkLeave) it fills GameTooltip from the link
 -- (SetOwner on a frame of its own, SetHyperlink) and hides it when the mouse leaves (Hide), only while that frame owns it and never in a fight.
 -- Inside the game's build of a tooltip, Chat and tooltips colours a player's class line (SetTextColor) and, with Item and spell icons, writes
@@ -351,6 +356,9 @@ local ADDON_NAME, ns = ...
 -- line still holds the text it wrote. With Compare items only while holding Shift
 -- (on by default) it writes the game's alwaysCompareItems, out of combat: 0, its text before that kept in FlatUIDB.compareGame, and that text
 -- again when the row, its page or the module goes off while the variable is still 0.
+-- With Dark quest, gossip and book pages (on by default) Windows writes the game's questTextContrast, out of combat: 4, the game's own dark
+-- pages with light text, its text before that kept in FlatUIDB.questContrastGame, and that text again when the row or the module goes off
+-- while the variable is still 4.
 -- Inside the game's build of a spell tooltip, through the same post call, Chat and tooltips adds lines with the share of spell damage, spell
 -- healing or attack power the spell adds, what that is with the player's stats, and its threat (AddLine, AddDoubleLine), and inside the build of
 -- an item tooltip lines with what wearing the item changes for the spells the player chose (AddLine, AddDoubleLine), each once for each build and
@@ -408,6 +416,22 @@ local ADDON_NAME, ns = ...
 -- with hooksecurefunc (ns.FollowGlobal), and a frame of its own looks four times a second, while the row and the module are on, whether the window
 -- shows. With an item on the cursor it gives one lifted from a slot back with ClearCursor, as the window does, and its tooltip is GameTooltip,
 -- never in a fight.
+-- Trinket queue (TrinketQueue.lua, TrinketQueueWindow.lua, TrinketQueueButtons.lua; on by default, the Auto queue of each slot off) is the one
+-- part of Flat UI that puts on the player's gear by itself: for a slot whose Auto queue is on, out of combat only (InCombatLockdown and
+-- UnitAffectingCombat both plainly false: the game changes no slot but the weapons in a fight, Constants.lua:158-162), not while the player casts
+-- or channels, is dead or a ghost, the cursor holds anything, a spell waits for its target, or Sell junk, Deposit, Take out, a clean up, a trade
+-- or the split box is busy, it puts a bound trinket of that slot's list from the bags into slot 13 or 14 with C_Item.EquipItemByName(link, slot),
+-- or, for a second copy of an item worn in the other slot and while the bags hold a bound and an unbound copy of the item, with
+-- C_Container.PickupContainerItem and PickupInventoryItem as the game's equipment manager does, giving back anything left on the cursor
+-- (ClearCursor); a click on a row of its window puts one on the same way, a bound copy first. It reads the items' cooldowns
+-- (C_Item.GetItemCooldown, GetInventoryItemCooldown, C_Container.GetContainerItemCooldown) and, where those are withheld, their tooltip data
+-- (C_TooltipInfo), every answer through ns.IsSecret and ns.Finite, and hears the player's UNIT_SPELLCAST_SUCCEEDED on a frame of its own
+-- (RegisterUnitEvent) while a delay or that fallback needs it. It keeps its lists, each slot's Auto queue (its two rows read and write it
+-- there with get and set, never in a profile), Pause all and the slots held by hand in FlatUICharDB.trinketQueue. Its window, FlatUITrinkets, is
+-- a frame of its own on UIParent, in UISpecialFrames so Escape closes it, placed by the movers; its two buttons are frames of their own on
+-- UIParent hung beside CharacterTrinket0Slot and CharacterTrinket1Slot with SetPoint, never parented to them, and of those slots and the
+-- Character window they read only whether they show, their scale, strata and protection. It follows ShowUIPanel and HideUIPanel with
+-- ns.FollowGlobal, writes nothing on the game's frames, and its tooltips are GameTooltip, never in a fight.
 -- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
 -- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
 -- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
@@ -444,7 +468,7 @@ local ADDON_NAME, ns = ...
 -- goes when nothing needs a reload any more. What needs one is the value each such row had at login (ns.ReloadStart) against the profile in use
 -- (ns.ReloadLines), which Home's Needs a reload also lists.
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "trinkets", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.
@@ -4192,6 +4216,13 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		-- Compare items only while holding Shift is written at every login, whatever the switch of Chat and tooltips (ItemCompare.lua).
 		if ns.ItemCompareSync then
 			local ok, err = pcall(ns.ItemCompareSync)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end
+		-- Dark quest, gossip and book pages is written at every login, whatever the switch of Windows (Windows.lua).
+		if ns.QuestPagesSync then
+			local ok, err = pcall(ns.QuestPagesSync)
 			if not ok then
 				geterrorhandler()(err)
 			end

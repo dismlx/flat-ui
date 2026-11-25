@@ -7,16 +7,18 @@ local _, ns = ...
 -- parts change in Animate, while it shows and the bar's Moving is on: fills, text and alpha only. The numbers are fixed samples.
 --   Cast bars: the player's at PlayerCastingBarFrame, wherever Edit Mode or Lock to player frame put it, while the player casts nothing: a cast that
 --   fills over 2.5 seconds and holds half a second, a channel that drains (with the marks of its 5 ticks while Channel ticks on the player bar is
---   on), then an interrupted cast that flashes, in the colours of the Flat UI page, with its seconds while Cast time on your bars is on.
+--   on), then an interrupted cast that flashes, in the colours of the Flat UI page, with its seconds while Cast time on your bars is on and a sample
+--   pushback over the second half of the cast and of the channel while Pushback on your bar is on.
 --   The target's, the focus's and the pet's at TargetFrameSpellBar, FocusFrameSpellBar and PetCastingBarFrame, and the first boss's at
 --   Boss1TargetFrameSpellBar, each only while the stand-in of its unit shows (TM.Shown of "target", "focus", "pet" and "boss", TestUnits.lua): an enemy
---   cast the player's interrupt is ready for (Interrupt ready colour while Interrupt readiness on enemy casts is on), then one that cannot be
---   interrupted, a little later than the player's. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
+--   cast, the target's and the focus's in the colour of the player's interrupt while Interrupt readiness on enemy casts and Flat fill are on (the
+--   target's ready, the focus's ready but out of range), then one that cannot be interrupted, a little later than the player's. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
 --   styles no boss bar, and hangs on the unit frames' module, whose boss stand-in it follows.
 --   Swing timers: at SwingTimerMainHandFrame for every class, SwingTimerOffHandFrame for a warrior and a rogue with an off-hand weapon,
 --   SwingTimerRangedFrame for a hunter with a ranged weapon (UnitAttackSpeed, as the game's HasOffHandWeapon and HasRangedWeapon), while the game's
 --   timer is hidden and would show in play: Enable Swing Timer (the variable showSwingTimer) on and the frame's Edit Mode Visibility not Hidden
---   (its visibility field, read with rawget; Blizzard_SwingTimer.lua:241-263): a swing of 2.6 seconds that loops.
+--   (its visibility field, read with rawget; Blizzard_SwingTimer.lua:241-263): a swing of 2.6 seconds that loops, the main hand of a warrior, druid
+--   or hunter in Queued ability colour over the second half of each swing while Queued next melee ability is on.
 --   Debuffs and buffs: three icons each, from the top right corner of DebuffFrame while the player has no harmful aura and of BuffFrame while the
 --   player has no helpful aura at all (C_UnitAuras.GetAuraSlots, read out of combat only, when its answer is plain), only while the game shows that
 --   frame (its Edit Mode Visibility, Blizzard_BuffFrame/BuffFrame.lua:380-411) and not while Edit Mode is open, where it shows its example auras: a
@@ -24,13 +26,18 @@ local _, ns = ...
 --   (AuraTime.lua).
 --   Loot rolls: two rolls at the box Loot rolls of /flatui move, where the game's rolls show (ns.MoverSpot: the saved spot, else where the game
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
---   shows; their timers drain over 10 seconds and loop. They stand in for UIParent, so their place is the box's.
+--   shows; their timers drain over 10 seconds and loop, with the seconds of a 60 second roll counting down over them, red under 10, while Seconds
+--   left on rolls is on. They stand in for UIParent, so their place is the box's.
 --   The sample nameplate: an enemy plate with its cast bar, auras and quest mark with its kill count (while Quest mark on enemies you need for a
---   quest is on), and for a warrior the Overpower icon with its swipe, at the middle of the screen, 160 units up, with a dim Sample nameplate under
---   it, as plates have no place of their own. Its cast fills, and it takes the threat states in turn every 3 seconds (You want, Changing hands, You
---   do not want) while Threat on nameplates is on: its health bar in the threat colour while Colour health bars by threat is on, the threat ring as
---   Threat glow asks, a sample threat value (40%, 92%, 110%) at Threat value position, size, offsets, outline and colour, and the fade of Fade
---   enemies held for you (SetupDrawPlates.lua's P.Threat); the quest mark moves past a value on its side.
+--   quest is on and the marks are not left to Questie), and for a warrior the Overpower icon with its swipe over the auras, at the middle of the
+--   screen, 160 units up, with a dim Sample nameplate under it, as plates have no place of their own. Its cast fills, and it takes the threat states
+--   in turn every 3 seconds (You want, Changing hands, You do not want) while Threat on nameplates is on: its health bar in the threat colour while
+--   Colour health bars by threat is on, the threat ring as Threat glow asks (flashing as it reaches You do not want, with Flash the ring when threat
+--   goes wrong), a sample threat value (40%, 92%, 110%) at Threat value position, size, offsets, outline and colour, the name and the health text in
+--   the threat colour, the threat colour on the border and the background as their rows ask, the name of the enemy's target right of the bar ([Gorvak]
+--   in the warrior colour, and you on You do not want unless Not when it attacks you), and the fade of Fade enemies held for you
+--   (SetupDrawPlates.lua's P.Threat); the quest mark moves past a value and the enemy's target on its side, and its kill count goes up with each
+--   threat round (3/8 to 7/8), popping as it does. While Moving is off the Overpower swipe holds still with the rest (the stage's still).
 -- The cursor ring is no module, so it cannot register with test mode (TM.Register runs an entry only while its module is on): at every On, Off,
 -- pause and resume (TM.Watch) the ring applies its rows again (ns.CursorRingChanged, which reads TM.IsOn: In combat only reads as shown while it
 -- is on), and while test mode is on and Moving a frame of this file gives the ring a sample cast and global cooldown every 3 seconds
@@ -44,18 +51,19 @@ if type(TM) ~= "table" then
 end
 
 -- The cast bars: their stand-in, game frame, module, place on the Cast bars page (opt), the stand-in of their unit, how much later their round
--- starts, and their spell names by state.
+-- starts, and their spell names by state. kick: the interrupt colour an enemy bar shows, ready on the target's and out of range on the focus's (the
+-- setup picture shows on cooldown); the boss bar keeps the game's look, which takes none.
 local CASTS = {
 	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0, ticks = 5,
 		names = { channel = "Drain Life" } },
 	{ id = "castTarget", game = "TargetFrameSpellBar", module = "castbars", opt = "target", label = "Target cast bar", unit = "target", offset = 0.8,
-		small = true, kick = true, names = { cast = "Fireball", shield = "Polymorph" } },
+		small = true, kick = "ready", names = { cast = "Fireball", shield = "Polymorph" } },
 	{ id = "castFocus", game = "FocusFrameSpellBar", module = "castbars", opt = "focus", label = "Focus cast bar", unit = "focus", offset = 1.6,
-		small = true, kick = true, names = { cast = "Frostbolt", shield = "Fear" } },
+		small = true, kick = "far", names = { cast = "Frostbolt", shield = "Fear" } },
 	{ id = "castPet", game = "PetCastingBarFrame", module = "castbars", opt = "pet", label = "Pet cast bar", unit = "pet", offset = 2.4,
 		round = "pet", names = { cast = "Firebolt" } },
 	{ id = "castBoss", game = "Boss1TargetFrameSpellBar", module = "unitframes", opt = "boss", label = "Boss cast bar", unit = "boss", offset = 1.2,
-		small = true, kick = true, names = { cast = "Shadow Bolt Volley", shield = "Enrage" } },
+		small = true, names = { cast = "Shadow Bolt Volley", shield = "Enrage" } },
 }
 -- A round of each kind of bar: the state, the seconds it runs and the seconds it holds at its end. The pet's casts are the player's own, so they
 -- are neither shielded nor interrupted.
@@ -347,6 +355,8 @@ local function RollTimers(holder, now)
 	for index, roll in ipairs(holder.rolls) do
 		local run = ((now + (index - 1) * 3) % ROLL_TIME) / ROLL_TIME
 		roll.timer:SetValue(100 * (1 - run))
+		-- The seconds of a 60 second roll, so the loop shows the count and its red end.
+		ns.DrawHud.RollTime(roll, math.max(1, math.ceil(60 * (1 - run))))
 	end
 end
 
@@ -404,6 +414,7 @@ local function PlateMoves(holder, now)
 	local threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
 	if spec.threat ~= threat then
 		spec.threat = threat
+		spec.questHave = 3 + math.floor(now / THREAT_EVERY) % 5
 		P.Health(p, spec)
 		-- The ring, the value and the fade of the new state, and the quest mark again past a value of another width.
 		if p.o and p.m then
@@ -424,7 +435,8 @@ TM.StandIn({
 	end,
 	Build = function(holder)
 		local P = ns.SetupDrawPlates
-		holder.state = { stage = holder, plates = {}, parts = {}, outlines = {} }
+		-- still: the sample's Overpower swipe holds still with the rest while Moving is off.
+		holder.state = { stage = holder, plates = {}, parts = {}, outlines = {}, still = function() return not TM.Moving() end }
 		holder.plate = P.NewPlate(holder.state, holder)
 		holder.caption = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
 		if holder.caption then
@@ -441,6 +453,7 @@ TM.StandIn({
 		local run = math.min(1, (now % PLATE_ROUND) / PLATE_CAST)
 		spec.cast.share, spec.cast.left = run, PLATE_CAST * (1 - run)
 		spec.threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
+		spec.questHave = 3 + math.floor(now / THREAT_EVERY) % 5
 		local box = P.Plate(p, spec, P.Sets())
 		p.f:ClearAllPoints()
 		p.f:SetPoint("BOTTOM", holder, "CENTER", 0, PLATE_UP)

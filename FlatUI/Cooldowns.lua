@@ -104,7 +104,8 @@ local NO_KIND_SWEEP = "Cooldown icons: the game hides item cooldowns, so potion 
 -- The first action bar slot of each bar of twelve and the key bindings of its buttons (MultiActionBars.lua:1-9 for the pages,
 -- Blizzard_Keybindings.lua:321-335 for the bars; slot = (page - 1) * 12 + button). The main bar shows page 2 or a
 -- bonus bar (stealth, forms, stances) through the same buttons, which keep their ACTIONBUTTON bindings
--- (ActionBarController.lua:167-170, ActionButton.lua:497-501), so slots 13-24 and 73-132 map to ACTIONBUTTON too.
+-- (ActionBarController.lua:167-170, ActionButton.lua:497-501), so slots 13-24 and 73-132 map to ACTIONBUTTON too. While the page the main bar
+-- shows can be read (its actionpage, ActionBarController.lua:159-171), only that page's slots take the ACTIONBUTTON keys (BindingText).
 local BAR_SLOTS = { { 1, "ACTIONBUTTON" }, { 13, "ACTIONBUTTON" }, { 73, "ACTIONBUTTON" }, { 85, "ACTIONBUTTON" }, { 97, "ACTIONBUTTON" },
 	{ 109, "ACTIONBUTTON" }, { 121, "ACTIONBUTTON" }, { 25, "MULTIACTIONBAR3BUTTON" }, { 37, "MULTIACTIONBAR4BUTTON" }, { 49, "MULTIACTIONBAR2BUTTON" },
 	{ 61, "MULTIACTIONBAR1BUTTON" }, { 145, "MULTIACTIONBAR5BUTTON" }, { 157, "MULTIACTIONBAR6BUTTON" }, { 169, "MULTIACTIONBAR7BUTTON" } }
@@ -2015,16 +2016,39 @@ function R.Fighting()
 	return fighting
 end
 
+-- The first slot of the page the main bar shows now: the game's actionpage of MainActionBar, which the game sets for its stances, forms, stealth,
+-- vehicles and pages (ActionBarController.lua:159-171) and Flat UI's buttons follow (OwnBars.lua), else the page Flat UI's bar 1 computed. Nil
+-- when neither can be read.
+local function MainFirstSlot()
+	local main = _G.MainActionBar
+	local page = main and Ask(main.GetAttribute, main, "actionpage")
+	if not Whole(page) and type(ns.OwnPage) == "function" then
+		page = Ask(ns.OwnPage)
+	end
+	if Whole(page) and page >= 1 then
+		return (page - 1) * 12 + 1
+	end
+	return nil
+end
+
 -- The key bound to the first action bar button that holds a spell, as the game writes it on its own buttons
 -- (ActionButton.lua:498-501), short as on the action buttons (M4, N1, Sp; ns.HotkeyText) while their Hotkey text is Short, or nothing.
+-- A slot of the main bar's pages counts only while its page shows, so the key is the one that casts the spell now.
 local function BindingText(spellID)
 	local slots = Ask(C_ActionBar and C_ActionBar.FindSpellActionButtons, spellID)
 	if type(slots) ~= "table" then
 		return ""
 	end
+	local first = MainFirstSlot()
 	for _, slot in ipairs(slots) do
-		for _, bar in ipairs(BAR_SLOTS) do
-			if Plain(slot, "number") and slot >= bar[1] and slot < bar[1] + 12 then
+		for index = 0, #BAR_SLOTS do
+			local bar = BAR_SLOTS[index]
+			if index == 0 then
+				bar = first and { first, "ACTIONBUTTON" } or nil
+			elseif first and bar[2] == "ACTIONBUTTON" then
+				bar = nil
+			end
+			if bar and Plain(slot, "number") and slot >= bar[1] and slot < bar[1] + 12 then
 				local key = Ask(GetBindingKey, bar[2] .. (slot - bar[1] + 1))
 				local text = Plain(key, "string") and Ask(GetBindingText, key, 1)
 				if Plain(text, "string") and text ~= "" then
@@ -2072,6 +2096,28 @@ local function Binds()
 		elseif record.bind then
 			pcall(record.bind.SetText, record.bind, "")
 		end
+	end
+end
+
+-- The keys on the icons written again on the next frame, once the game has set the main bar's page; once however many events ask in a frame.
+local BindsSoon
+do
+	local queued = false
+	function BindsSoon()
+		if not (C_Timer and C_Timer.After) then
+			Binds()
+			return
+		end
+		if queued then
+			return
+		end
+		queued = true
+		C_Timer.After(0, function()
+			queued = false
+			if ns.Enabled(KEY) then
+				Binds()
+			end
+		end)
 	end
 end
 
@@ -3095,6 +3141,10 @@ ns.Register(KEY, {
 		PLAYER_EQUIPMENT_CHANGED = QueueLayout,
 		UPDATE_BINDINGS = Binds,
 		ACTIONBAR_SLOT_CHANGED = Binds,
+		-- The page the main bar shows changed: the game sets its actionpage in its own handler of the same events, so the keys are read a frame later.
+		UPDATE_BONUS_ACTIONBAR = BindsSoon,
+		ACTIONBAR_PAGE_CHANGED = BindsSoon,
+		UPDATE_SHAPESHIFT_FORM = BindsSoon,
 		PLAYER_REGEN_DISABLED = function()
 			fighting = true
 			Idle()

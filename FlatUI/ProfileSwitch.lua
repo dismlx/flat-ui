@@ -2,7 +2,8 @@ local ADDON_NAME, ns = ...
 
 -- Switch automatically: a profile for each kind of place, chosen on the Profiles page. The rules belong to the character, so they are saved in
 -- FlatUIDB.profileRules under "Name - Realm" beside FlatUIDB.profileOf, outside every profile and outside the text form of a profile.
--- A rule with no profile is No change, which is what every character has until a rule is chosen.
+-- A rule with no profile is No change, which is what every character has until a rule is chosen. A rule picked for the kind of place the character
+-- is in now asks whether to switch now (Switch now or Later); otherwise the switch waits for the next change of place.
 
 local Switch = {}
 ns.ProfileSwitch = Switch
@@ -171,7 +172,24 @@ pcall(events.RegisterEvent, events, "PLAYER_REGEN_ENABLED")
 
 -- Adds the section to the page below y with the widgets of ns.PanelKit (`kit`), puts a function that reads the rows again into `updates`,
 -- and returns the y below the section. Each row's tip says what its choice does.
-local TIP = "The profile this character switches to on entering such a place. No change keeps the profile in use."
+local TIP = "The profile this character switches to on entering such a place. No change keeps the profile in use. Picked for the place you are in, "
+	.. "it asks to switch now."
+-- Where the character is, by kind of place, in the question of a rule picked for the place the character is in.
+local PLACE = { dungeon = "You are in a dungeon now.", raid = "You are in a raid now.", pvp = "You are in a battleground or arena now.",
+	other = "You are outside dungeons, raids and battlegrounds now." }
+
+-- A rule picked for the kind of place the character is in now asks to put its profile in use at once, since the switch itself waits for the next change
+-- of place. Switch now uses the call that picking by hand makes, and in a fight it says that profiles change after combat.
+local function Offer(kit, kind, name)
+	if name == "" or kind ~= Switch.Kind() or name == ns.Profile() or type(kit.Ask) ~= "function" then
+		return
+	end
+	kit.Ask(("%s Switch to %s now?"):format(PLACE[kind] or "", name), function()
+		local _, message = ns.UseProfile(name)
+		kit.Say(message)
+		kit.Refresh()
+	end, nil, "Switch now", "Later")
+end
 
 function Switch.Build(kit, child, y, updates)
 	y = kit.Header(child, "Switch automatically", y)
@@ -189,8 +207,11 @@ function Switch.Build(kit, child, y, updates)
 				return Switch.Get(entry.key) or ""
 			end,
 			pick = function(name)
-				Switch.Set(entry.key, name ~= "" and name or nil)
+				local set = Switch.Set(entry.key, name ~= "" and name or nil)
 				kit.Refresh()
+				if set then
+					Offer(kit, entry.key, name)
+				end
 			end,
 		})
 		menu.frame:SetPoint("LEFT", row.frame, "LEFT", kit.CONTROL, 0)
@@ -201,6 +222,6 @@ function Switch.Build(kit, child, y, updates)
 	end
 	local note = kit.Dim(kit.Label(child, "GameFontHighlightSmall", "LEFT", kit.ROW_W))
 	note:SetPoint("TOPLEFT", child, "TOPLEFT", kit.PAD, -(y + 4))
-	note:SetText("Switches wait until the fight ends.")
+	note:SetText("Switches wait until the fight ends. A rule for the place you are in asks to switch now.")
 	return y + kit.ROW
 end
