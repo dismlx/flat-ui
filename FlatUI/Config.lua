@@ -858,7 +858,7 @@ ns.PAGES = {
 		{ key = "readyColour", kind = "colour", default = "ffffffff", label = "Flash colour", needs = "readyFlash", changed = "ButtonStatesChanged" },
 		{ key = "readyMinimum", kind = "number", default = 0, min = 0, max = 120, step = 5, unit = " s", label = "Shortest cooldown that flashes",
 			needs = "readyFlash", changed = "ButtonStatesChanged",
-			tip = "A shorter cooldown ends without a flash. 0 flashes every cooldown longer than the global cooldown." },
+			tip = "A shorter cooldown ends without a flash, after a stance, form or page change too. 0 flashes every cooldown longer than the global cooldown." },
 	},
 	{
 		key = "swing", label = "Swing timers",

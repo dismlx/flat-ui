@@ -16,8 +16,9 @@ local _, ns = ...
 -- OwnPaint.lua), a flash in Flash colour (white by default) goes over its icon, from clear to 60% and back in 0.35 s. Each button has one frame of this
 -- file's own for it, a child of the button's bar over the icon, made out of combat once the buttons are built and the row is on; in a fight only its
 -- animation plays, and a change of Flash colour colours the frames made. Shortest cooldown that flashes (actionbars.readyMinimum, 0 s by default)
--- lets a cooldown shorter than it end without a flash: OwnPaint.lua measures each cooldown from its start on its own clock (a plain number), and a
--- cooldown whose length it does not know (one already running at login or after a page change) still flashes.
+-- lets a cooldown shorter than it end without a flash: OwnPaint.lua measures each cooldown from its start on its own clock (a plain number). One
+-- already running when a button first holds it (after a stance, form, Stealth or page change, a drag or a reload) takes the start seen for its spell
+-- on another slot, or else its spell's base cooldown, so short ones end quietly in every stance; only an item's of unknown length still flashes.
 -- The sweep sample (ns.ButtonStatesSample, out of combat): one Cooldown frame of this file's own (CooldownFrameTemplate) over a Flat UI button, a
 -- child of its bar one level above it, runs a 4 s sweep in the looks of the rows above (sweep, Sweep colour and opacity, Edge line, the numbers
 -- as the game's Show numbers on cooldowns says) and ends with the button's Flash when ready while that row is on. Test mode plays it every 5 s on
