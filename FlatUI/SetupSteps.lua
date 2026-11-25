@@ -277,6 +277,8 @@ ns.SETUP_STEPS = {
 		{ "actionbars.nameShow", "o", "mock-action-row" },
 		{ "actionbars.nameSize", "o", "mock-action-row" },
 		{ "actionbars.countSize", "o", "mock-action-row" },
+		{ "actionbars.countColour", "r", "behaviour", "Sets the colour of the count on the action buttons, the reagents, arrows or stacks a button has; white by default." },
+		{ "actionbars.countPoint", "r", "behaviour", "Chooses the corner of the action buttons where the count shows: bottom right as the game has it, bottom left, top left, top right or bottom." },
 		{ "actionbars.textOutline", "r", "mock-action-row" },
 	} },
 	{ id = "ab-colours", area = "Action bars", title = "Button colours and cooldowns", draw = "mock-action-row", built = true, rows = {
@@ -298,6 +300,7 @@ ns.SETUP_STEPS = {
 		{ "actionbars.cdGrey", "o", "mock-action-row" },
 		{ "actionbars.readyFlash", "o", "behaviour", "Flashes the icon of one of Flat UI's buttons for a moment as a cooldown longer than the global cooldown ends." },
 		{ "actionbars.readyColour", "r", "behaviour", "Sets the colour of the flash as a cooldown ends, white by default." },
+		{ "actionbars.readyMinimum", "r", "behaviour", "Lets a cooldown shorter than this end without a flash, so only the long ones flash; 0 flashes every one." },
 	} },
 	{ id = "ab-effects", area = "Action bars", title = "Glows and animations", draw = "mock-action-row", built = true, rows = {
 		{ "actionbars.proc", "o", "mock-action-row" },
@@ -1425,6 +1428,7 @@ ns.SETUP_STEPS = {
 		{ "fade.time", "r", "behaviour", "Sets how many milliseconds the fade takes." },
 		{ "fade.combat", "o", "behaviour", "Keeps faded frames fully visible in combat." },
 		{ "fade.target", "o", "behaviour", "Keeps faded frames fully visible while you have a target." },
+		{ "fade.cast", "o", "behaviour", "Keeps faded action bars fully visible as you cast, and for a moment after each spell or item you use." },
 	} },
 	{ id = "movers", area = "Positions", title = "Moving frames and windows", draw = "mock-screen", built = true, rows = {
 		{ "movers.enabled", "c", "behaviour", "Turns on frame moving; /flatui move shows the handles." },

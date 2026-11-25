@@ -8,9 +8,10 @@ local _, ns = ...
 -- the game. ns.OnOwnReady tells them when a cooldown longer than the global cooldown has ended on a button (Flash when ready, ButtonStates.lua): seen
 -- between two passes, or as the button's own cooldown frame finishes its swipe (OnCooldownDone, hooked on Flat UI's own frame), once a cooldown. When
 -- the global cooldown outlasts the end of such a cooldown, the action reads as on the global cooldown while it still cools; the call then waits for
--- the end of that sweep, when the button really is ready.
+-- the end of that sweep, when the button really is ready. Each call says how long the cooldown ran, measured from the pass that saw it start (st.cdSince).
 -- The cooldown sweep shows for the global cooldown too unless Global cooldown sweep (actionbars.sweepGcd, on by default) is off while Restyle action bars is
--- on: a button that only waits for the global cooldown then shows no sweep, and real cooldowns still do. The countdown numbers follow the game's Show
+-- on: a button that only waits for the global cooldown then shows no sweep, and real cooldowns still do, also one whose last moments the global
+-- cooldown covers, whose sweep runs to the end of the global cooldown and ends with its ready call. The countdown numbers follow the game's Show
 -- numbers on cooldowns (the CVar countdownForCooldowns, as ActionButton.lua:857-860 does it for the game's buttons), set on each button as it is
 -- hooked and again when the CVar changes (CVAR_UPDATE), each time only when the answer changed.
 -- Calls on a button are plain ones (textures, text, alpha, SetChecked, Cooldown calls), so a pass in a fight touches nothing protected. Flat UI writes no
@@ -358,14 +359,16 @@ local function Sweep(frame, show, name, slot)
 	end
 end
 
--- A cooldown longer than the global cooldown ended on a button: the listeners hear it once for that cooldown (cdFired, cleared when the next one starts).
+-- A cooldown longer than the global cooldown ended on a button: the listeners hear it once for that cooldown (cdFired, cleared when the next one starts),
+-- with how long it ran in seconds, measured from its start on Flat UI's side (cdSince), or nil when its start was not seen.
 local function Ready(button, st)
 	if st.cdFired then
 		return
 	end
 	st.cdFired = true
+	local seconds = st.cdSince and GetTime() - st.cdSince or nil
 	for _, fn in ipairs(P.ready) do
-		local ok, err = pcall(fn, button)
+		local ok, err = pcall(fn, button, seconds)
 		if not ok then
 			Failed("ready handler", err)
 		end
@@ -389,7 +392,9 @@ end
 -- Cooldown, charges and loss of control by duration objects. isActive and isOnGCD are never withheld; the other fields are never read.
 function STEP.cooldown(button, st)
 	local was = WasLong(st)
-	if st.cdSlot ~= st.slot or st.cdTexture ~= st.texture then
+	-- A pass on another slot or icon than the last: a cooldown found running now did not start in sight, and its length is not known.
+	local seen = st.cdSlot ~= nil and st.cdSlot == st.slot and st.cdTexture == st.texture
+	if not seen then
 		st.cdWait = nil
 	end
 	st.cdSlot, st.cdTexture = st.slot, st.texture
@@ -420,9 +425,12 @@ function STEP.cooldown(button, st)
 		Ready(button, st)
 	elseif long and not was then
 		st.cdFired, st.cdWait = false, nil
+		-- Its start, on Flat UI's own clock (a plain number), for Shortest cooldown that flashes; false when it did not start in sight.
+		st.cdSince = seen and GetTime() or false
 	end
-	-- Global cooldown sweep off: a button that only waits for the global cooldown shows no sweep. A cdWait then ends at the next pass, not by the swipe.
-	local gcdOff = st.cdOnGCD and ns.Enabled("actionbars") and ns.Get("actionbars.sweepGcd") == false
+	-- Global cooldown sweep off: a button that only waits for the global cooldown shows no sweep. A button whose real cooldown ends under the global
+	-- one (cdWait) keeps its sweep to the end of it, so it does not look ready before it is and its swipe's end says when it is (CooldownDone).
+	local gcdOff = st.cdOnGCD and not st.cdWait and ns.Enabled("actionbars") and ns.Get("actionbars.sweepGcd") == false
 	P.sweeping = true
 	local ok, err = pcall(Sweep, button.cooldown, st.cdActive and not replace and not gcdOff, "GetActionCooldownDuration", slot)
 	P.sweeping = false
@@ -1091,7 +1099,8 @@ function ns.OnOwnProc(fn)
 	end
 end
 
--- fn(button) once when a cooldown longer than the global cooldown has ended on one of Flat UI's buttons.
+-- fn(button, seconds) once when a cooldown longer than the global cooldown has ended on one of Flat UI's buttons. seconds is how long it ran, from the
+-- pass that saw it start to its end, or nil when it was already running when first seen (at login, after a page change or a drag).
 function ns.OnOwnReady(fn)
 	if type(fn) == "function" then
 		P.ready[#P.ready + 1] = fn

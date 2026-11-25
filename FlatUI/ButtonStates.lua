@@ -15,7 +15,14 @@ local _, ns = ...
 -- Flash when ready (off by default) is for Flat UI's own buttons: when a cooldown longer than the global cooldown ends on one that shows (ns.OnOwnReady,
 -- OwnPaint.lua), a flash in Flash colour (white by default) goes over its icon, from clear to 60% and back in 0.35 s. Each button has one frame of this
 -- file's own for it, a child of the button's bar over the icon, made out of combat once the buttons are built and the row is on; in a fight only its
--- animation plays, and a change of Flash colour colours the frames made.
+-- animation plays, and a change of Flash colour colours the frames made. Shortest cooldown that flashes (actionbars.readyMinimum, 0 s by default)
+-- lets a cooldown shorter than it end without a flash: OwnPaint.lua measures each cooldown from its start on its own clock (a plain number), and a
+-- cooldown whose length it does not know (one already running at login or after a page change) still flashes.
+-- The sweep sample (ns.ButtonStatesSample, out of combat): one Cooldown frame of this file's own (CooldownFrameTemplate) over a Flat UI button, a
+-- child of its bar one level above it, runs a 4 s sweep in the looks of the rows above (sweep, Sweep colour and opacity, Edge line, the numbers
+-- as the game's Show numbers on cooldowns says) and ends with the button's Flash when ready while that row is on. Test mode plays it every 5 s on
+-- the fourth shown button of the main bar (ActionBars.lua); with test mode off, a change of one of those rows with the options window open plays it
+-- once on the first, and a change while it still runs gives it the new look without starting it again, so a dragged slider plays it once.
 
 local KEY = "actionbars"
 local BARS = {
@@ -77,6 +84,11 @@ local watcher
 -- halves in seconds, PEAK its opacity at the top.
 local readyFlash = setmetatable({}, { __mode = "k" })
 local READY = { PEAK = 0.6, RISE = 0.1, FALL = 0.25, pending = false }
+-- The sweep sample: its Cooldown frame once made, the button it lies over, when it and its flash are over (ends), busy while this file sets or clears
+-- it (its OnCooldownDone then does not count) and TIME, the sample cooldown in seconds. LOOKS: the rows a change of which plays it.
+local SAMPLE = { frame = nil, button = nil, ends = nil, busy = false, TIME = 4 }
+local LOOKS = { sweep = true, sweepOwn = true, sweepColour = true, sweepAlpha = true, sweepEdge = true, sweepEdgeColour = true, cdFont = true,
+	cdColour = true, cdTenths = true, readyFlash = true, readyColour = true }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -672,9 +684,14 @@ local function PrepareReady()
 	end)
 end
 
--- A cooldown longer than the global one ended on one of Flat UI's buttons: its flash plays, from the start. A button the layout hid has no flash.
-local function OnReady(button)
+-- A cooldown longer than the global one ended on one of Flat UI's buttons: its flash plays, from the start. A button the layout hid has no flash, nor
+-- a cooldown shorter than Shortest cooldown that flashes; seconds, the length OwnPaint.lua measured, is nil when it does not know it.
+local function OnReady(button, seconds)
 	if Opt("readyFlash") ~= true or not Wanted() or Eligible()[button] == nil or not Visible(button) then
+		return
+	end
+	local least = Opt("readyMinimum")
+	if Plain(least, "number") and least > 0 and ns.Finite(seconds) and seconds < least then
 		return
 	end
 	local made = readyFlash[button]
@@ -683,6 +700,131 @@ local function OnReady(button)
 	elseif made then
 		made.group:Stop()
 		made.group:Play()
+	end
+end
+
+-- The game's Show numbers on cooldowns as a plain answer: true to hide the numbers, nil when it cannot be read.
+local function NumbersOff()
+	local read = C_CVar and C_CVar.GetCVarBool or GetCVarBool
+	if type(read) ~= "function" then
+		return nil
+	end
+	local ok, on = pcall(read, "countdownForCooldowns")
+	if not ok or ns.IsSecret(on) then
+		return nil
+	end
+	return on ~= true
+end
+
+-- The looks of the rows on the sample's cooldown; what it changes does not count as a change of a button's (touched).
+local function SampleLook(frame)
+	local was = touched
+	SweepLook(frame, GAME.swipe)
+	Edge(frame)
+	touched = was
+	local hide = NumbersOff()
+	if hide ~= nil then
+		pcall(frame.SetHideCountdownNumbers, frame, hide)
+	end
+end
+
+-- The sample's sweep ended: the button's Flash when ready plays while the row is on, its frame made first when it has none.
+local function SampleDone()
+	if SAMPLE.busy then
+		return
+	end
+	local button = SAMPLE.button
+	if not button or Opt("readyFlash") ~= true or not Wanted() or not Visible(button) then
+		return
+	end
+	local made = readyFlash[button]
+	if made == nil and not InCombatLockdown() then
+		local ok, built = pcall(MakeReady, button)
+		made = ok and built or false
+		readyFlash[button] = made
+	end
+	if made then
+		made.group:Stop()
+		made.group:Play()
+	end
+end
+
+-- The sample's frame over the button: a child of the button's bar, one level above the button, on the button's own cooldown frame.
+local function SampleStart(frame, button)
+	local okParent, parent = pcall(button.GetParent, button)
+	frame:SetParent(okParent and Plain(parent, "table") and parent or UIParent)
+	frame:ClearAllPoints()
+	local under = button.cooldown
+	if not Plain(under, "table") then
+		under = button.icon
+	end
+	frame:SetAllPoints(Plain(under, "table") and under or button)
+	local okLevel, level = pcall(button.GetFrameLevel, button)
+	if okLevel and Plain(level, "number") then
+		frame:SetFrameLevel(level + 1)
+	end
+	SAMPLE.button = button
+	SampleLook(frame)
+	frame:SetCooldown(GetTime(), SAMPLE.TIME)
+	frame:Show()
+end
+
+-- The sweep sample on a Flat UI button, out of combat. Without force, a sample that still runs on that button takes the looks of now and goes on.
+function ns.ButtonStatesSample(button, force)
+	if InCombatLockdown() or not Wanted() or not Plain(button, "table") then
+		return
+	end
+	local frame = SAMPLE.frame
+	if frame and not force and SAMPLE.button == button and SAMPLE.ends and GetTime() < SAMPLE.ends then
+		SampleLook(frame)
+		return
+	end
+	if not frame then
+		frame = CreateFrame("Cooldown", nil, UIParent, "CooldownFrameTemplate")
+		ns.Own[frame] = true
+		pcall(frame.SetDrawBling, frame, false)
+		pcall(frame.SetDrawEdge, frame, false)
+		frame:SetScript("OnCooldownDone", function()
+			local ok, err = pcall(SampleDone)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end)
+		SAMPLE.frame = frame
+	end
+	SAMPLE.busy = true
+	local ok, err = pcall(SampleStart, frame, button)
+	SAMPLE.busy = false
+	if not ok then
+		error(err, 0)
+	end
+	SAMPLE.ends = GetTime() + SAMPLE.TIME + READY.RISE + READY.FALL
+end
+
+-- Test mode ends or pauses: the sample goes.
+function ns.ButtonStatesSampleOff()
+	local frame = SAMPLE.frame
+	if frame then
+		SAMPLE.busy = true
+		pcall(frame.Clear, frame)
+		frame:Hide()
+		SAMPLE.busy = false
+	end
+	SAMPLE.button, SAMPLE.ends = nil, nil
+end
+
+-- A look row changed with the options window open, out of combat and out of test mode (which plays the sample itself): the sample plays once on the
+-- first shown button of Flat UI's main bar, or the one that runs takes the new look.
+local function Preview(path)
+	local row = type(path) == "string" and path:match("^" .. KEY .. "%.(.+)$")
+	local mode = ns.TestMode
+	if not (row and LOOKS[row]) or InCombatLockdown() or (mode and mode.IsOn()) or type(ns.PanelShown) ~= "function" or not ns.PanelShown()
+		or type(ns.ButtonSamples) ~= "function" then
+		return
+	end
+	local first = ns.ButtonSamples()[1]
+	if first then
+		ns.ButtonStatesSample(first)
 	end
 end
 
@@ -704,6 +846,7 @@ function ns.ButtonStatesChanged(path)
 	Hook()
 	Ask(nil)
 	PrepareReady()
+	Preview(path)
 end
 
 if type(ns.OnOwnReady) == "function" then
