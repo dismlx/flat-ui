@@ -520,7 +520,7 @@ function B.Init(button)
 		parts.edges = edges
 		B.PaintEdges(parts)
 	end)
-	B.SizeText(parts, Opt("size"))
+	pcall(B.SizeText, parts, Opt("size"))
 end
 
 -- Changes that wait for the game to open its buttons ------------------------------------------------------------------------------------

@@ -364,7 +364,7 @@ function D.Init(button)
 		parts.flashOn = Opt("flash") ~= false
 		flash:SetShown(parts.flashOn)
 	end)
-	D.SizeText(parts, Opt("size"))
+	pcall(D.SizeText, parts, Opt("size"))
 end
 
 -- Changes that wait for the game to open its buttons ------------------------------------------------------------------------------
