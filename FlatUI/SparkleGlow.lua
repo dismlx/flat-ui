@@ -6,9 +6,13 @@ local ADDON_NAME, ns = ...
 -- same way, by UnitIsUnit with softinteract (Blizzard_NamePlates/Blizzard_NamePlates.lua:187-219). The game gives a game object that plate only
 -- while the player's Interact Key is on (Enable Interact Key in its Controls options, Controls.lua:72-86, or a gamepad) and its interact icons take
 -- in objects (Interact Key Icons at Show All in Accessibility, Accessibility.lua:175-222, or a gamepad, Blizzard_Gamepad/Core.lua:28); without the
--- icons a world object gets no nameplate, as ForeverLootSparkles and NodeSight Sparkles found in the client. Flat UI changes neither: they are the
--- player's choices, the Interact Key's variable is secure (cvars.yaml of build 70790:3866), and a plate for every object would change what the
--- player sees of the key. So this row writes no game setting, and the sparkle shows only where the game already shows such a plate.
+-- icons a world object gets no nameplate, as ForeverLootSparkles and NodeSight Sparkles found in the client. The glow's row changes neither: they
+-- are the player's choices, the Interact Key's variable is secure (cvars.yaml of build 70790:3866), and a plate for every object would change
+-- what the player sees of the key. So this row writes no game setting, and the sparkle shows only where the game already shows such a plate.
+-- Turn on what the glow needs (general.sparkleSetup, a list row) sets both when the player picks it, out of a fight, as the game's own options
+-- write them: softTargetInteract to Enum.SoftTargetEnableFlags.Any unless the key is on already (Controls.lua:78-80), and the four variables of
+-- Interact Key Icons at Show All to 1 (Accessibility.lua:196-201), with C_CVar.SetCVar; a line in chat says what it changed. Once for the
+-- account (FlatUIDB.sparkleHint), at the first look of a session while the glow is on and the Interact Key is off, one line in chat points to it.
 -- The plate is found among the nameplates the game shows (C_NamePlate.GetNamePlates, and C_NamePlate.GetNamePlateForUnit for the unit of
 -- NAME_PLATE_UNIT_ADDED: NamePlateDocumentation.lua:11-25) by UnitIsGameObject and UnitIsUnit(unit, "softinteract") (UnitDocumentation.lua:
 -- 1993-2006), looked at again at NAME_PLATE_UNIT_ADDED, NAME_PLATE_UNIT_REMOVED, PLAYER_SOFT_INTERACT_CHANGED (UnitDocumentation.lua:3909-3919),
@@ -440,6 +444,8 @@ function Stop(err)
 	geterrorhandler()(err)
 end
 
+local Setting, Hint
+
 local function Apply()
 	if broken then
 		return
@@ -448,6 +454,7 @@ local function Apply()
 		Off()
 		return
 	end
+	Hint()
 	if not listener then
 		listener = CreateFrame("Frame")
 		ns.Own[listener] = true
@@ -471,7 +478,7 @@ function ns.SparkleGlowChanged()
 end
 
 -- The number in the text of one of the game's variables, or nil.
-local function Setting(name)
+function Setting(name)
 	local cvar = _G.C_CVar
 	if type(cvar) ~= "table" or type(cvar.GetCVar) ~= "function" then
 		return nil
@@ -479,6 +486,102 @@ local function Setting(name)
 	local text = Ask(cvar.GetCVar, name)
 	local number = type(text) == "string" and tonumber(text) or nil
 	return ns.Finite(number) and number or nil
+end
+
+-- Turn on what the glow needs --------------------------------------------------------------------------------------------------------------
+
+-- Enum.SoftTargetEnableFlags: Kbm 2 and Any 3 (SoftTargetConstantsDocumentation.lua:5-17): from Kbm up the key works with the keyboard and mouse.
+local KEY_ON, KEY_ANY = 2, 3
+-- The four variables the game's Interact Key Icons sets to 1 at Show All (Accessibility.lua:196-201).
+local SHOW_ALL = { "SoftTargetIconEnemy", "SoftTargetIconInteract", "SoftTargetIconGameObject", "SoftTargetLowPriorityIcons" }
+local HINT_LINE = "Flat UI: Glow on the nearest object shows only with the game's Interact Key on. Turn on what the glow needs, on the World and cursor page, sets it up."
+
+-- Whether the key is on and the icons take in objects; nil on a client without the Interact Key.
+local function Ready()
+	local key = Setting("SoftTargetInteract")
+	if key == nil then
+		return nil
+	end
+	return key >= KEY_ON and Setting("SoftTargetIconGameObject") ~= 0
+end
+
+-- The one line in chat, once for the account, at the first look of a session while the glow is on and the key is off.
+local hintLooked = false
+function Hint()
+	if hintLooked then
+		return
+	end
+	hintLooked = true
+	local db = ns.Account()
+	local key = Setting("SoftTargetInteract")
+	if type(db) ~= "table" or db.sparkleHint ~= nil or key == nil or key >= KEY_ON then
+		return
+	end
+	db.sparkleHint = true
+	print(HINT_LINE)
+end
+
+-- The lines of the row: what a pick does, or that it is done.
+function ns.SparkleGlowSetupLines()
+	local ready = Ready()
+	if ready == nil then
+		return { { 3, "This client has no Interact Key" } }
+	elseif ready then
+		return { { 2, "Already on: Enable Interact Key and Interact Key Icons" } }
+	end
+	return { { 1, "Turn on Enable Interact Key and Interact Key Icons: Show All" } }
+end
+
+local function Write(name, value)
+	local cvar = _G.C_CVar
+	if type(cvar) ~= "table" or type(cvar.SetCVar) ~= "function" then
+		return false
+	end
+	local ok, done = pcall(cvar.SetCVar, name, value)
+	return ok and done ~= false
+end
+
+-- Sets what the glow needs, out of a fight, and says what it changed.
+function ns.SparkleGlowSetup(id)
+	if id == 2 then
+		return true, "Flat UI: Enable Interact Key and Interact Key Icons are on already."
+	elseif id ~= 1 then
+		return false, id == 3 and "Flat UI: this client has no Interact Key." or nil
+	end
+	if InCombatLockdown() then
+		return false, "Flat UI: not in a fight. Pick it again after the fight."
+	end
+	local changed, failed = {}, false
+	local key = Setting("SoftTargetInteract")
+	if key ~= nil and key < KEY_ON then
+		local flags = type(Enum) == "table" and not ns.IsSecret(Enum) and Enum.SoftTargetEnableFlags or nil
+		local any = type(flags) == "table" and not ns.IsSecret(flags) and ns.Finite(flags.Any) and flags.Any or KEY_ANY
+		if Write("softTargetInteract", tostring(any)) then
+			changed[#changed + 1] = "Enable Interact Key"
+		else
+			failed = true
+		end
+	end
+	local icons = false
+	for _, name in ipairs(SHOW_ALL) do
+		if Setting(name) ~= 1 then
+			if Write(name, "1") then
+				icons = true
+			else
+				failed = true
+			end
+		end
+	end
+	if icons then
+		changed[#changed + 1] = "Interact Key Icons: Show All"
+	end
+	ns.SparkleGlowChanged()
+	if failed then
+		return false, "Flat UI: the game did not take every setting. Tick Enable Interact Key in its Controls options and set Interact Key Icons to Show All in Accessibility."
+	elseif #changed == 0 then
+		return true, "Flat UI: Enable Interact Key and Interact Key Icons are on already."
+	end
+	return true, ("Flat UI: %s on. The glow shows on the next herb, vein or quest object near you."):format(table.concat(changed, " and "))
 end
 
 -- The line of /flatui status, or nil while the row is off or the client has no Interact Key.
@@ -498,10 +601,10 @@ function ns.SparkleGlowStatus()
 		return "Glow on the nearest object: on."
 	end
 	if key < 2 then
-		return "Glow on the nearest object: on. It shows once Enable Interact Key is ticked in the game's Controls options and Interact Key Icons is at Show All in Accessibility."
+		return "Glow on the nearest object: on. It shows once Enable Interact Key is ticked in the game's Controls options and Interact Key Icons is at Show All in Accessibility: Turn on what the glow needs sets both."
 	end
 	if Setting("SoftTargetIconGameObject") == 0 then
-		return "Glow on the nearest object: on. It shows once Interact Key Icons is at Show All in the game's Accessibility options."
+		return "Glow on the nearest object: on. It shows once Interact Key Icons is at Show All in the game's Accessibility options: Turn on what the glow needs sets it."
 	end
 	return "Glow on the nearest object: on. No herb, vein or quest object near you has had a nameplate from the game yet."
 end

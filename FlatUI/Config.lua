@@ -207,10 +207,13 @@ ns.PAGES = {
 			tip = "Thickens the sparkle by raising the game's Particle Density, and its Spell Density where the game has one, raid settings too: Strong to High and Reduced, Strongest to Ultra and Everything. A higher value of yours stays. More particles can cost frame rate in busy fights. As the game has it, or Quest item sparkle off, puts your own values back." },
 		-- A sparkle of Flat UI's own on the game's nameplate of the object the Interact Key would use (SparkleGlow.lua).
 		{ key = "sparkleGlow", kind = "bool", default = true, label = "Glow on the nearest object", needs = "questSparkle", changed = "SparkleChanged",
-			tip = "A pulsing golden glow with twinkling stars on the herb, vein or quest object your Interact Key would use. It shows only while the game gives that object a nameplate: tick Enable Interact Key in the game's Controls options and set Interact Key Icons to Show All in Accessibility. In a fight, a new object gets it once the fight ends." },
+			tip = "A pulsing glow, gold or by what it is, with twinkling stars on the herb, vein or quest object your Interact Key would use. It shows only while the game gives that object a nameplate: Enable Interact Key in the game's Controls options and Interact Key Icons at Show All in Accessibility. Turn on what the glow needs sets both. In a fight, a new object gets it once the fight ends." },
 		{ key = "sparkleGlowColour", kind = "choice", default = "gold", label = "Glow colour", needs = "sparkleGlow", changed = "SparkleChanged",
 			choices = { { "gold", "Gold" }, { "kind", "By what it is" } },
 			tip = "By what it is: herbs glow green, ore copper, quest objects gold, and loot and chests white, so you tell nodes apart at a glance." },
+		{ key = "sparkleSetup", kind = "list", default = 0, label = "Turn on what the glow needs", none = "Choose", items = "SparkleGlowSetupLines",
+			pick = "SparkleGlowSetup", needs = "sparkleGlow",
+			tip = "Ticks the game's Enable Interact Key and sets its Interact Key Icons to Show All, out of a fight, so herbs, veins and quest objects get the nameplate the glow sits on. Show All also shows the key's icons over enemies. A line in chat says what changed." },
 		-- The game holds this one (CameraZoom.lua): it is ticked while the game's camera distance is at Flat UI's top, in every profile.
 		{ key = "cameraZoom", kind = "bool", default = false, label = "Maximum camera distance", live = true, get = "CameraZoomGet", set = "CameraZoomSet",
 			tip = "The camera zooms out to 2.6, past the 2.0 that the game's Max Camera Distance allows. A game setting, the same in every profile. Turned off, the distance you had is back." },
