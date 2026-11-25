@@ -3,6 +3,11 @@ local ADDON_NAME, ns = ...
 -- A window of the addon's own with every page of ns.PAGES, a search over all settings, and the profiles. It is made of frames,
 -- textures and font strings of the addon's own and is built the first time it is opened. None of its frames is protected, so it
 -- works in combat. It is only built out of combat, since UIParent is protected.
+--
+-- It fades in with the game's window sounds (Build). Its keys (BuildKeys, out of combat): Ctrl+F for Search, Escape for an open list or question
+-- before the window, Enter for a question's first button; a long list's filter field has the cursor as it opens. The wheel scrolls a page over a
+-- slider too, and Shift and the wheel step the slider (AddNumber). Search lights the typed words in its results and counts them, and a Profiles
+-- result opens its row (view.byLabel of BuildProfiles). Reset page says what it did, and is dimmed while nothing on the tab is changed.
 
 local NAME = "FlatUIOptionsFrame"
 local WIDTH, HEIGHT = 1040, 680
@@ -31,6 +36,8 @@ local TRACK = 176
 local SEARCH = 28
 local REFRESH = 0.5
 local DIM = 0.4
+-- How long the window takes to fade in as it opens, in seconds.
+local FADE_IN = 0.12
 local Look = ns.PanelLook
 local PROFILE_CALLS = { "Profile", "Profiles", "UseProfile" }
 
@@ -437,6 +444,12 @@ local function NewRow(parent, y, text, tip)
 	local label = Label(frame, "GameFontHighlight", "LEFT", LABEL)
 	label:SetPoint("LEFT", frame, "LEFT", 0, 0)
 	label:SetText(text)
+	-- Search lights the typed words in the label of a result. While the Profiles page is built, its rows are kept by their label (ui.collect), so a
+	-- search result can open the row.
+	row.label = label
+	if ui.collect and IsText(text) and not ui.collect[text] then
+		ui.collect[text] = row
+	end
 	function row.Place(top)
 		row.top = top
 		frame:ClearAllPoints()
@@ -701,13 +714,35 @@ local function AddNumber(row, item)
 			row.Changed()
 		end
 	end)
-	track:EnableMouseWheel(true)
-	track:SetScript("OnMouseWheel", function(_, delta)
-		if row.active then
-			Write(item, Read(item) + (delta > 0 and 1 or -1) * item.step)
-			row.Changed()
+	-- The wheel scrolls the page under the slider (the first ScrollFrame up its parents, Flat UI's own Scroller), so a page scrolled past a slider
+	-- keeps scrolling. Shift and the wheel, or the wheel while the number box has the cursor, step the value.
+	local function Wheel(_, delta)
+		local shift = type(IsShiftKeyDown) == "function" and IsShiftKeyDown()
+		if shift or box:HasFocus() then
+			if row.active then
+				Write(item, Read(item) + (delta > 0 and 1 or -1) * item.step)
+				row.Changed()
+			end
+			return
 		end
-	end)
+		local frame = track:GetParent()
+		for _ = 1, 8 do
+			if not frame then
+				return
+			end
+			local ok, kind = pcall(frame.GetObjectType, frame)
+			if ok and kind == "ScrollFrame" then
+				local script = frame:GetScript("OnMouseWheel")
+				if script then
+					script(frame, delta)
+				end
+				return
+			end
+			frame = frame:GetParent()
+		end
+	end
+	track:EnableMouseWheel(true)
+	track:SetScript("OnMouseWheel", Wheel)
 	box:SetScript("OnEnterPressed", function(self)
 		self:ClearFocus()
 	end)
@@ -716,7 +751,7 @@ local function AddNumber(row, item)
 		self:ClearFocus()
 	end)
 	box:EnableMouseWheel(true)
-	box:SetScript("OnMouseWheel", track:GetScript("OnMouseWheel"))
+	box:SetScript("OnMouseWheel", Wheel)
 	row.Hover(track)
 	row.Hover(box)
 	return Show
@@ -1225,12 +1260,30 @@ local function BuildPopups()
 	ui.listScroller = Scroller(list, FIELD, LINE)
 	ui.listScroller.frame:SetPoint("TOPLEFT", list, "TOPLEFT", 0, 0)
 	-- A list of more than LINES lines has a field that keeps the lines holding what is typed.
+	-- It has the cursor as the list opens (OpenList), so the player can type at once; Enter picks the first line shown and Escape closes the list.
 	ui.listSearch = Field(list, FIELD - 8, 40)
 	ui.listSearch:SetPoint("TOPLEFT", list, "TOPLEFT", 4, -2)
-	ui.listSearch:SetScript("OnTextChanged", function()
+	local filterHint = Dim(Label(ui.listSearch, "GameFontHighlightSmall", "LEFT"))
+	filterHint:SetPoint("LEFT", ui.listSearch, "LEFT", 8, 0)
+	filterHint:SetText("Type to filter")
+	ui.listSearch:SetScript("OnTextChanged", function(self)
+		local typed = self:GetText()
+		filterHint:SetShown(not (IsText(typed) and typed ~= ""))
 		if ui.listOwner and ui.listSearch:IsShown() then
 			ui.ShowLines(false)
 		end
+	end)
+	ui.listSearch:SetScript("OnEnterPressed", function()
+		local line = ui.lines[1]
+		local pick = ui.listSpec and ui.listSpec.pick
+		if line and line.live and pick and line.frame:IsShown() then
+			local value = line.value
+			CloseList()
+			pick(value)
+		end
+	end)
+	ui.listSearch:SetScript("OnEscapePressed", function()
+		CloseList()
 	end)
 	ui.listSearch:Hide()
 
@@ -1247,13 +1300,15 @@ local function BuildPopups()
 	question:SetJustifyV("TOP")
 	question:SetPoint("TOP", confirm, "TOP", 0, -18)
 	question:SetHeight(44)
-	local yes, yesText = Button(confirm, "Yes", SMALL, function()
+	-- The first button, which Enter presses too while the question shows (BuildKeys).
+	function ui.AnswerYes()
 		local run = ui.onYes
 		HideConfirm()
 		if run then
 			run()
 		end
-	end)
+	end
+	local yes, yesText = Button(confirm, "Yes", SMALL, ui.AnswerYes)
 	yes:SetPoint("BOTTOMRIGHT", confirm, "BOTTOM", -6, 14)
 	local no, noText = Button(confirm, "No", SMALL, function()
 		local run = ui.onNo
@@ -1413,6 +1468,10 @@ function OpenList(owner, spec)
 	end
 	ui.list:Show()
 	SyncShade()
+	-- A long list's filter field takes the cursor, so typing filters at once.
+	if search > 0 then
+		ui.listSearch:SetFocus()
+	end
 end
 
 -- The question box: onYes runs on the first button, onNo (when given) on the second. A click outside the box closes it and runs neither. The buttons
@@ -1579,6 +1638,8 @@ local function BuildProfiles()
 	end
 	local updates = {}
 	local y = 8
+	-- Every row made from here on, here and in ProfileSwitch.lua and ProfileShare.lua, is kept by its label (NewRow), for search (view.byLabel).
+	ui.collect = {}
 	-- Each row of the page says what it does in its tip, over the label and over each of its controls.
 	local function Row(text, tip)
 		local row = NewRow(child, y, text, tip)
@@ -1859,6 +1920,7 @@ local function BuildProfiles()
 	if ns.ProfileShare and type(ns.ExportProfile) == "function" and type(ns.ImportProfile) == "function" then
 		y = ns.ProfileShare.Build(ns.PanelKit, child, y, updates, scroller, row)
 	end
+	view.byLabel, ui.collect = ui.collect, nil
 
 	scroller.SetContent(y + PAD)
 	function view.Update()
@@ -2151,7 +2213,15 @@ local function Collect(words)
 		local tier = ns.PanelSearch.Tier(words, label, "", PROFILES_GROUP, PROFILES_GROUP)
 		if tier then
 			profiles.hits[#profiles.hits + 1] = { tier = tier, label = label, link = true, key = PROFILES_GROUP .. "/" .. label, Open = function()
+				ui.search:ClearFocus()
 				Go(ui.model.profiles)
+				-- The row of the result, scrolled to and flashed as a setting's row is (Arrive); a name that is a part of another row opens that row.
+				local view = ui.views[ui.model.profiles]
+				local row = view and view.byLabel and view.byLabel[ns.PanelSearch.ALIAS[label] or label]
+				if row and row.frame:IsShown() then
+					view.scroller.Scroll(math.max(0, (row.top or 0) - 2 * ROW))
+					Flash(row)
+				end
 			end }
 		end
 	end
@@ -2173,6 +2243,40 @@ local function Collect(words)
 		end
 	end
 	return ns.PanelSearch.Sort(groups)
+end
+
+-- A label with each typed word lit in the accent, wherever it is in the label, in the label's own letters.
+local function Lit(label, words)
+	if not IsText(label) or label == "" then
+		return label or ""
+	end
+	local lower, lit = label:lower(), {}
+	for _, word in ipairs(words) do
+		local from = 1
+		while #word > 0 do
+			local first, last = lower:find(word, from, true)
+			if not first then
+				break
+			end
+			for at = first, last do
+				lit[at] = true
+			end
+			from = last + 1
+		end
+	end
+	local r, g, b = Accent()
+	local open = ("|cff%02x%02x%02x"):format(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+	local parts, at = {}, 1
+	while at <= #label do
+		local stop = at
+		while stop < #label and (lit[stop + 1] == true) == (lit[at] == true) do
+			stop = stop + 1
+		end
+		local run = label:sub(at, stop)
+		parts[#parts + 1] = lit[at] and (open .. run .. "|r") or run
+		at = stop + 1
+	end
+	return table.concat(parts)
 end
 
 local function Search(typed)
@@ -2234,6 +2338,9 @@ local function Search(typed)
 				row.Place(y)
 				row.frame:Show()
 				row.Update()
+				if row.label then
+					row.label:SetText(Lit(hit.label, words))
+				end
 				view.shown[#view.shown + 1] = row
 				view.picks[#view.picks + 1] = { row = row, Open = hit.Open }
 				y = y + ROW
@@ -2251,7 +2358,8 @@ local function Search(typed)
 	Pick(view, #view.picks > 0 and 1 or 0)
 	Show(view)
 	ui.title:SetText("Search")
-	ui.head.Set(nil, "")
+	local found = #view.shown
+	ui.head.Set(nil, found == 0 and "No results" or found == 1 and "1 result" or ("%d results"):format(found))
 	ui.tabs.Hide()
 	ui.preview.Set(nil, 0)
 	ui.reset:Hide()
@@ -2327,6 +2435,9 @@ function ShowPage(entry)
 		view.scroller.Resize(CW, RIGHT_H - band)
 	end
 	ui.reset:SetShown(not entry.profiles and not entry.home)
+	if not entry.profiles and not entry.home and ns.PanelTrust then
+		ui.reset:SetAlpha(ns.PanelTrust.Count(entry) == 0 and DIM or 1)
+	end
 	ui.tip, ui.message = "", nil
 	ShowStrip()
 	LayoutNav()
@@ -2356,6 +2467,11 @@ function RefreshAll()
 		end
 		if ui.testSwitch then
 			ui.testSwitch.Update()
+		end
+		-- Reset page is dimmed while nothing on the tab is changed.
+		local entry = ui.current
+		if ui.reset and entry and not entry.home and not entry.profiles and ns.PanelTrust then
+			ui.reset:SetAlpha(ns.PanelTrust.Count(entry) == 0 and DIM or 1)
 		end
 		ShowStrip()
 	end
@@ -2452,6 +2568,9 @@ local function SetParts()
 	ui.barCounter:SetShown(mode ~= nil)
 	-- The buttons of the options pages are at the right of the strip; a mode has the whole width.
 	ui.strip:SetWidth(mode and WIDTH - 24 or WIDTH - 24 - 330)
+	if ui.Keys then
+		ui.Keys()
+	end
 end
 
 -- Gives the window to a mode (a table with title, Build(window) that returns its root frame, Enter, Update, Frame(seconds), Hidden and Close), or back
@@ -2617,7 +2736,8 @@ local function BuildRight(window)
 	})
 end
 
--- Reset page, Reload and Done, at the right of the strip. Reset page sets every setting of the page to its default after a question.
+-- Reset page, Reload and Done, at the right of the strip. Reset page sets every setting of the tab to its default after a question, and the strip
+-- says how many went back; with nothing changed on the tab it is dimmed and a click only says so (RefreshAll dims it).
 local function BuildFoot(window)
 	local foot = Frame(ui.stripFrame)
 	foot:SetAllPoints(ui.stripFrame)
@@ -2632,8 +2752,16 @@ local function BuildFoot(window)
 	ui.reset = Button(foot, "Reset page", 100, function()
 		local entry = ui.current
 		if entry and not entry.profiles and not entry.home then
+			local count = ns.PanelTrust.Count(entry)
+			if count == 0 then
+				Say("Nothing to reset: every setting on this tab is at its default.")
+				return
+			end
 			local name = ns.PanelTabs.Label(ui.model, entry) or entry.label
+			local top = ns.PanelNav.Top(ui.model, entry)
+			local place = top ~= entry and ("%s > %s"):format(top.label, name) or name
 			Ask(ns.PanelTrust.Question(entry, name), function()
+				local before = ns.PanelTrust.Count(entry)
 				for _, item in ipairs(entry.page) do
 					-- A row the game holds is not written: its default is the game's, not this page's.
 					if item.key and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowLive(item) then
@@ -2641,10 +2769,21 @@ local function BuildFoot(window)
 					end
 				end
 				RefreshAll()
+				local done = before - ns.PanelTrust.Count(entry)
+				Say(("Reset %d setting%s on %s. Home's Recent changes can undo each."):format(done, done == 1 and "" or "s", place))
 			end)
 		end
 	end)
 	ui.reset:SetPoint("RIGHT", reload, "LEFT", -8, 0)
+	-- Its tip in the strip; the hover fill of the button stays (HookScript on a frame of Flat UI's own).
+	ui.reset:HookScript("OnEnter", function()
+		ui.message, ui.tip = nil, "Puts every setting of this tab back to its default. Settings the game holds keep their value."
+		ShowStrip()
+	end)
+	ui.reset:HookScript("OnLeave", function()
+		ui.tip = ""
+		ShowStrip()
+	end)
 	ui.strip:SetWidth(WIDTH - 24 - 330)
 end
 
@@ -2720,13 +2859,34 @@ local function BuildBars(window)
 		window:StopMovingOrSizing()
 		SavePosition()
 	end)
-	-- Ctrl and the wheel over the title bar set Window scale, 5% a step, between 80% and 150%.
+	-- Ctrl and the wheel over the title bar set Window scale, 5% a step, between 80% and 150%, and the strip says the new scale. Pointing at the bar
+	-- says so, with the scale now.
 	bar:EnableMouseWheel(true)
 	bar:SetScript("OnMouseWheel", function(_, delta)
 		local ok, held = pcall(IsControlKeyDown)
 		local scale = ns.Get("panel.scale")
 		if ok and held == true and type(delta) == "number" and not ns.IsSecret(delta) and type(scale) == "number" then
 			ns.Set("panel.scale", math.max(80, math.min(150, scale + (delta > 0 and 5 or -5))))
+			local now = ns.Get("panel.scale")
+			if Number(now) then
+				Say(("Window scale %d%%"):format(now))
+			end
+		end
+	end)
+	-- Setup keeps the strip for its own words.
+	bar:SetScript("OnEnter", function()
+		if ui.mode then
+			return
+		end
+		local scale = ns.Get("panel.scale")
+		ui.message = nil
+		ui.tip = ("Drag to move. Ctrl and the mouse wheel: Window scale, now %d%%."):format(Number(scale) and scale or 100)
+		ShowStrip()
+	end)
+	bar:SetScript("OnLeave", function()
+		if not ui.mode then
+			ui.tip = ""
+			ShowStrip()
 		end
 	end)
 	local back = Fill(bar, "BACKGROUND")
@@ -2787,6 +2947,66 @@ local function BuildBars(window)
 	ui.strip = text
 end
 
+-- The keys of the options pages come through a frame of Flat UI's own that has the keyboard while the pages show, out of combat only
+-- (EnableKeyboard and SetPropagateKeyboardInput are protected in a fight; Setup.lua's S.BuildKeys does the same for setup, whose window this frame
+-- leaves to it): Ctrl+F puts the cursor in Search, Escape closes an open list or question and leaves the window open, and Enter answers a question
+-- with its first button. Every other key goes on to the game, and Escape too when nothing is open, so it closes the window as before. A box with
+-- the cursor takes the keys first.
+local function BuildKeys(window)
+	local keys = Frame(window)
+	keys:SetAllPoints(window)
+	keys:Hide()
+	local ok, err = pcall(keys.EnableKeyboard, keys, true)
+	if not ok then
+		geterrorhandler()(err)
+		return
+	end
+	local function Find()
+		ui.search:SetFocus()
+	end
+	keys:SetScript("OnKeyDown", function(self, key)
+		local asking = ui.confirm ~= nil and ui.confirm:IsShown() == true
+		local action
+		if key == "ESCAPE" then
+			action = (ui.listOwner and CloseList) or (asking and HideConfirm) or nil
+		elseif key == "ENTER" or key == "NUMPADENTER" then
+			action = asking and ui.AnswerYes or nil
+		elseif key == "F" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and ui.search:IsVisible() then
+			action = Find
+		end
+		if not InCombatLockdown() then
+			local done, failed = pcall(self.SetPropagateKeyboardInput, self, action == nil)
+			if not done then
+				geterrorhandler()(failed)
+			end
+			-- A key taken here lets the next keys through again from the next frame, so the release of a key held meanwhile, such as one that
+			-- walks, still reaches the game.
+			if action and done and C_Timer and C_Timer.After then
+				C_Timer.After(0, function()
+					if not InCombatLockdown() then
+						pcall(self.SetPropagateKeyboardInput, self, true)
+					end
+				end)
+			end
+		end
+		if action then
+			action()
+		end
+	end)
+	-- A fight takes the keyboard from it at its start, the last moment that may, and gives it back after while the pages show.
+	keys:RegisterEvent("PLAYER_REGEN_DISABLED")
+	keys:RegisterEvent("PLAYER_REGEN_ENABLED")
+	keys:SetScript("OnEvent", function(_, event)
+		ui.Keys(event ~= "PLAYER_REGEN_DISABLED")
+	end)
+	ui.keys = keys
+	-- Shown while the options pages have the window (no mode) and out of combat; allowed false hides it, at the start of a fight.
+	function ui.Keys(allowed)
+		keys:SetShown(allowed ~= false and ui.mode == nil and not InCombatLockdown())
+	end
+	ui.Keys()
+end
+
 local function Build()
 	-- The height of a row is read here, since the account is loaded by now.
 	ROW = Look.RowHeight()
@@ -2812,8 +3032,26 @@ local function Build()
 	BuildLeft(window)
 	BuildRight(window)
 	BuildFoot(window)
-	window:SetScript("OnShow", RefreshAll)
+	BuildKeys(window)
+	-- It fades in over FADE_IN (OnUpdate, below) with the game's sound of a window opening, and plays the sound of one closing as it hides; it hides at
+	-- once, since Escape hides it through UISpecialFrames. Hidden and shown again by /flatui move (MoversMode's Holding), it plays neither.
+	window:SetScript("OnShow", function()
+		RefreshAll()
+		ui.fade = 0
+		window:SetAlpha(0)
+		if ui.held then
+			ui.held = nil
+		elseif ui.ready and type(PlaySound) == "function" and type(SOUNDKIT) == "table" and SOUNDKIT.IG_MAINMENU_OPEN then
+			pcall(PlaySound, SOUNDKIT.IG_MAINMENU_OPEN)
+		end
+	end)
 	window:SetScript("OnHide", function()
+		local holding = type(ns.MoversMode) == "table" and ns.MoversMode.Holding() == true
+		ui.held = holding or nil
+		ui.fade = nil
+		if ui.ready and not holding and type(PlaySound) == "function" and type(SOUNDKIT) == "table" and SOUNDKIT.IG_MAINMENU_CLOSE then
+			pcall(PlaySound, SOUNDKIT.IG_MAINMENU_CLOSE)
+		end
 		-- Under the setting that sends windows back when they close, the options window opens at its default place.
 		if ns.Get("movers.keepSpots") == "reset" then
 			Look.ClearPosition()
@@ -2838,6 +3076,13 @@ local function Build()
 	end)
 	local elapsed = 0
 	window:SetScript("OnUpdate", function(_, seconds)
+		if ui.fade then
+			ui.fade = math.min(1, ui.fade + (Number(seconds) and seconds or 0) / FADE_IN)
+			window:SetAlpha(ui.fade)
+			if ui.fade >= 1 then
+				ui.fade = nil
+			end
+		end
 		if ui.mode and ui.mode.Frame then
 			ui.mode.Frame(seconds)
 		end
@@ -2861,6 +3106,8 @@ local function Build()
 		end
 	end
 	window:Hide()
+	-- From here on its showing and hiding play the game's window sounds (the hide just above was the build's own).
+	ui.ready = true
 	-- The first time it opens on Home; after that on the page it was left on.
 	local key = Look.Page()
 	ShowPage((key == "profiles" and ui.model.profiles) or ui.model.byKey[key] or ui.model.home)

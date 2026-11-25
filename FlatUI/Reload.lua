@@ -403,13 +403,15 @@ end
 -- /reload runs on a secure button, which leaves the notice as a fight starts and comes back after it, so meanwhile the button is dimmed and says so.
 -- Undo sets every change it lists back to the value the game runs since login, in the profile in use, with ns.Set, out of combat and while Setup
 -- does not have the options window; each goes into Home's record of changes (ns.PanelHome.Noted) and one line in chat says how many. Later hides
--- the notice until the next change that needs a reload; it goes when nothing needs one any more. Pointing at the notice, or at Undo, shows
--- GameTooltip with every change, its value now and at login. It fades in over 0.2 s each time it shows from hidden (its own alpha). It is in
+-- the notice until the next change that needs a reload; it goes when nothing needs one any more. Undo is dimmed while it would do nothing (in a fight,
+-- while Setup has the window). Pointing at the notice, or at any of its buttons, shows GameTooltip with every change, its value now and at login,
+-- in the words of the options window (ns.PanelTrust.ValueText). It fades in over 0.2 s each time it shows from hidden (its own alpha). It is in
 -- DIALOG strata, over the options window (HIGH), and has an own entry in /flatui move (FlatUIReloadNotice, Movers.lua), at whose spot it stands.
 -- It keeps clear of the title bar of the options window while that shows, of the toolbar of /flatui move while that is open and of the test mode
 -- bar while that shows (TM.BarRect, TestMode.lua): covering any of them, it takes the nearest place just above or just under one of them that
 -- covers none and fits on the screen, else just above the window, or just under it where there is no room above, as before. It is always placed
--- from UIParent, never from those frames, and only while nothing protected hangs from it.
+-- from UIParent, never from those frames, and only while nothing protected hangs from it; an error in the placing leaves it at its start, reported
+-- once.
 
 -- width and height of the notice, y: its start under the top of the screen, reload, undo and later: the widths of the buttons, chars: about how
 -- many letters of names the line holds before the rest are counted, every: how often a shown notice looks where to stand, in seconds, fade: how
@@ -452,9 +454,14 @@ local function NoticeWaits(fight)
 	return fight == true and (Wanted() or IsSecure())
 end
 
+-- Reload is dimmed while it waits for the end of a fight, and Undo in a fight and while Setup has the options window, where it does nothing.
 local function NoticeDim(fight)
 	if notice.reload then
 		pcall(notice.reload.SetAlpha, notice.reload, NoticeWaits(fight) and 0.4 or 1)
+	end
+	if notice.undo then
+		local held = fight == true or (type(ns.PanelInMode) == "function" and ns.PanelInMode() == true)
+		pcall(notice.undo.SetAlpha, notice.undo, held and 0.4 or 1)
 	end
 end
 
@@ -493,9 +500,11 @@ local function NoticeBlocks()
 			Add(kit.Rect(bar))
 		end
 	end
+	-- Only the rectangle: BarRect's fifth return is where the bar stands ("top", "above", "below" or "dragged"), not the place under it.
 	local test = ns.TestMode
 	if type(test) == "table" and type(test.BarRect) == "function" then
-		Add(test.BarRect())
+		local left, bottom, width, height = test.BarRect()
+		Add(left, bottom, width, height)
 	end
 	return blocks
 end
@@ -569,7 +578,15 @@ local function NoticePlace()
 	if protected then
 		return
 	end
-	local x, y = NoticeSpot()
+	-- An error in the placing leaves the notice at its start at the top, so it still shows and the OnUpdate below does not repeat the error.
+	local ok, x, y = pcall(NoticeSpot)
+	if not ok then
+		if not notice.failed then
+			notice.failed = true
+			geterrorhandler()(x)
+		end
+		x, y = nil, nil
+	end
 	local key = x and ("%.1f:%.1f"):format(x, y) or "start"
 	if notice.placed == key then
 		return
@@ -604,21 +621,19 @@ local function NoticeReload()
 	ns.Reload()
 end
 
--- The words for a value of a row: On or Off, the text of a choice, or a number with its unit.
+-- The words for a value of a row, as the options window says them (ns.PanelTrust.ValueText: On or Off, the text of a choice, a number with its
+-- unit), so the notice's list and Home's Recent changes say a value alike.
 local function NoticeValue(path, value)
-	if type(value) == "boolean" then
-		return value and "On" or "Off"
-	end
-	local def = type(ns.Def) == "function" and ns.Def(path) or nil
-	if type(def) == "table" and def.kind == "choice" and type(ns.Choices) == "function" then
-		for _, line in ipairs(ns.Choices(def)) do
-			if type(line) == "table" and line[1] == value and line[2] ~= nil then
-				return tostring(line[2])
-			end
+	local trust = ns.PanelTrust
+	if type(trust) == "table" and type(trust.ValueText) == "function" then
+		local def = type(ns.Def) == "function" and ns.Def(path) or nil
+		local ok, text = pcall(trust.ValueText, type(def) == "table" and def or { path = path }, value)
+		if ok and type(text) == "string" then
+			return text
 		end
 	end
-	if type(value) == "number" then
-		return ("%g%s"):format(value, type(def) == "table" and type(def.unit) == "string" and def.unit or "")
+	if type(value) == "boolean" then
+		return value and "On" or "Off"
 	end
 	return type(value) == "string" and value or "changed"
 end
@@ -731,11 +746,27 @@ local function NoticeBuild()
 	pcall(text.SetMaxLines, text, 2)
 	notice.frame, notice.text, notice.reload, notice.undo = frame, text, reload, undo
 	ns.SecureReload(reload)
-	-- The list of changes under the notice and under Undo, whose hover fill (kit.Button) stays; the tooltip goes with the notice.
+	-- The list of changes under the notice and under each button, whose hover fill (kit.Button) stays; the tooltip goes with the notice. Reload's
+	-- own scripts are wrapped, not hooked: the secure button over it runs them through GetScript (Cover, above), which leaves a hook out.
 	frame:SetScript("OnEnter", NoticeTip)
 	frame:SetScript("OnLeave", NoticeUntip)
-	undo:HookScript("OnEnter", NoticeTip)
-	undo:HookScript("OnLeave", NoticeUntip)
+	for _, button in ipairs({ undo, later }) do
+		button:HookScript("OnEnter", NoticeTip)
+		button:HookScript("OnLeave", NoticeUntip)
+	end
+	local enter, leave = reload:GetScript("OnEnter"), reload:GetScript("OnLeave")
+	reload:SetScript("OnEnter", function(self, ...)
+		if enter then
+			enter(self, ...)
+		end
+		NoticeTip(self)
+	end)
+	reload:SetScript("OnLeave", function(self, ...)
+		NoticeUntip(self)
+		if leave then
+			leave(self, ...)
+		end
+	end)
 	frame:SetScript("OnHide", function()
 		NoticeUntip(nil)
 	end)
@@ -749,6 +780,8 @@ local function NoticeBuild()
 		if notice.wait <= 0 then
 			notice.wait = NOTICE.every
 			NoticePlace()
+			-- Setup taking the options window or giving it back, and the lockdown, are followed here.
+			NoticeDim(InCombatLockdown())
 		end
 	end)
 	-- The secure button leaves Reload as a fight starts (Detach, above), before the lockdown, so the button is dimmed here as well.

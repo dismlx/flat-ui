@@ -1,8 +1,9 @@
 local ADDON_NAME, ns = ...
 
 -- What a row says about itself in the options window: a dot and a reset button on a changed row, the reason on a row that is off, a tooltip beside
--- the control, and the count of changed settings on the tab. The tooltip of the reset button names the value it puts back (Trust.DefaultLine). The
--- widgets are the ones of ns.PanelKit.
+-- the control, and the count of changed settings on the tab. The tooltip of the reset button names the value it puts back (Trust.DefaultLine), in
+-- the words Trust.ValueText gives a value, which Home's Recent changes and the reload notice (Reload.lua) use too. The widgets are the ones of
+-- ns.PanelKit.
 
 local Trust = {}
 ns.PanelTrust = Trust
@@ -39,12 +40,9 @@ function Trust.Status(entry)
 	return count > 0 and ("%d changed on this tab"):format(count) or ""
 end
 
--- The question of Reset page.
+-- The question of Reset page, which asks only while something on the tab is changed.
 function Trust.Question(entry, name)
 	local count = Trust.Count(entry)
-	if count == 0 then
-		return "Reset every setting on this page?"
-	end
 	return ("Reset %d setting%s on %s?"):format(count, count == 1 and "" or "s", name)
 end
 
@@ -152,28 +150,67 @@ function Trust.Show(owner, body, need)
 	end
 end
 
+-- The text of a choice's value, or nil when the row lists no text for it.
+local function ChoiceLabel(def, value)
+	if value == nil then
+		return nil
+	end
+	local ok, lines = pcall(ns.Choices, def)
+	for _, line in ipairs(ok and type(lines) == "table" and lines or {}) do
+		if type(line) == "table" and line[1] == value and type(line[2]) == "string" and line[2] ~= "" then
+			return line[2]
+		end
+	end
+	return nil
+end
+
+local function IsColour(value)
+	return type(value) == "string" and value:find("^%x%x%x%x%x%x%x%x$") ~= nil
+end
+
+-- The words for a value of a row: On or Off, the text of a choice, a number with its unit ("300 ms"), a swatch and the code of a colour
+-- ("#1E1E1E", with "at 80%" for a colour with alpha), else the value itself. A row with no kind, as Home's record keeps for a change made on
+-- Home, is read as its setting's row in Config.lua (ns.Def).
+function Trust.ValueText(item, value)
+	local def = type(item) == "table" and item or {}
+	if def.kind == nil and type(def.path) == "string" and type(ns.Def) == "function" then
+		local found = ns.Def(def.path)
+		def = type(found) == "table" and found or def
+	end
+	if type(value) == "boolean" then
+		return value and "On" or "Off"
+	end
+	local choice = def.kind == "choice" and ChoiceLabel(def, value) or nil
+	if choice then
+		return choice
+	end
+	if def.kind == "colour" and IsColour(value) then
+		local r, g, b = tonumber(value:sub(3, 4), 16), tonumber(value:sub(5, 6), 16), tonumber(value:sub(7, 8), 16)
+		local text = ("%s #%s"):format(SWATCH:format(r, g, b), value:sub(3):upper())
+		if def.alpha == true then
+			text = text .. (" at %d%%"):format(math.floor(tonumber(value:sub(1, 2), 16) * 100 / 255 + 0.5))
+		end
+		return text
+	end
+	if ns.Finite(value) then
+		return ("%g%s"):format(value, type(def.unit) == "string" and def.unit or "")
+	end
+	if type(value) == "string" and not ns.IsSecret(value) then
+		return value
+	end
+	return value == nil and "None" or "changed"
+end
+
 -- The tooltip of a row's reset button: the default it puts back, as "Reset to default: On", "Reset to default: 300 ms" or "Reset to default: Soft
 -- shade", and for a colour a swatch of it and its code, as "Reset to the default colour: #1E1E1E". Plain "Reset to default" for anything else.
 function Trust.DefaultLine(item)
 	local value = item.default
-	if item.kind == "bool" and type(value) == "boolean" then
-		return "Reset to default: " .. (value and "On" or "Off")
-	elseif item.kind == "number" and ns.Finite(value) then
-		return ("Reset to default: %g%s"):format(value, type(item.unit) == "string" and item.unit or "")
-	elseif item.kind == "choice" and value ~= nil then
-		local ok, lines = pcall(ns.Choices, item)
-		for _, line in ipairs(ok and type(lines) == "table" and lines or {}) do
-			if type(line) == "table" and line[1] == value and type(line[2]) == "string" and line[2] ~= "" then
-				return "Reset to default: " .. line[2]
-			end
-		end
-	elseif item.kind == "colour" and type(value) == "string" and value:find("^%x%x%x%x%x%x%x%x$") then
-		local r, g, b = tonumber(value:sub(3, 4), 16), tonumber(value:sub(5, 6), 16), tonumber(value:sub(7, 8), 16)
-		local line = ("Reset to the default colour: %s #%s"):format(SWATCH:format(r, g, b), value:sub(3):upper())
-		if item.alpha == true then
-			line = line .. (" at %d%%"):format(math.floor(tonumber(value:sub(1, 2), 16) * 100 / 255 + 0.5))
-		end
-		return line
+	if item.kind == "colour" and IsColour(value) then
+		return "Reset to the default colour: " .. Trust.ValueText(item, value)
+	end
+	if (item.kind == "bool" and type(value) == "boolean") or (item.kind == "number" and ns.Finite(value))
+		or (item.kind == "choice" and ChoiceLabel(item, value)) then
+		return "Reset to default: " .. Trust.ValueText(item, value)
 	end
 	return "Reset to default"
 end

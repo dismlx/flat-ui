@@ -1,8 +1,10 @@
 local _, ns = ...
 
 -- The Home page of the options window: the profile in use, the accent and density, the last changes of the session with Undo, the modules
--- with their switches, and the changes that need a reload. A click on a recent change or on a line of Needs a reload opens the tab of its setting,
--- scrolls to the row and flashes it, as a search result does (host.Arrive). Also the record of the changes made in the window, which Panel.lua feeds.
+-- with their switches, and the changes that need a reload. A recent change says what it was, from the value before to the value now ("Off to On",
+-- "300 ms to 450 ms"), in the words of the reset arrow's tooltip (ns.PanelTrust.ValueText), and its Undo names the value it puts back. A click on a
+-- recent change or on a line of Needs a reload opens the tab of its setting, scrolls to the row and flashes it, as a search result does
+-- (host.Arrive). Also the record of the changes made in the window, which Panel.lua feeds.
 
 local Home = {}
 ns.PanelHome = Home
@@ -423,8 +425,11 @@ function Home.Build(host)
 		frame:SetHeight(rowH)
 		local line = { frame = frame }
 		Opens(frame, line)
-		line.label = kit.Label(frame, "GameFontHighlight", "LEFT", 300)
+		line.label = kit.Label(frame, "GameFontHighlight", "LEFT", 200)
 		line.label:SetPoint("LEFT", frame, "LEFT", 0, 0)
+		-- What the change was: the value before it to the value now.
+		line.value = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", 190))
+		line.value:SetPoint("LEFT", line.label, "RIGHT", 8, 0)
 		local rule = kit.Fill(frame, "BORDER")
 		rule:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
 		rule:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
@@ -439,7 +444,16 @@ function Home.Build(host)
 			end
 		end)
 		undo:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
-		line.crumb = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "RIGHT", 260))
+		-- Its tip in the strip names the value it puts back; the hover fill of kit.Button stays (HookScript on a frame of Flat UI's own).
+		undo:HookScript("OnEnter", function()
+			if line.entry then
+				kit.Tip("Puts back: " .. ns.PanelTrust.ValueText(line.entry.item, line.entry.old))
+			end
+		end)
+		undo:HookScript("OnLeave", function()
+			kit.Tip("")
+		end)
+		line.crumb = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "RIGHT", 240))
 		line.crumb:SetPoint("RIGHT", undo, "LEFT", -12, 0)
 		lines[index] = line
 		return line
@@ -543,6 +557,8 @@ function Home.Build(host)
 				local line, entry = Line(index), mine[index]
 				line.entry = entry
 				line.label:SetText(entry.item.label or "")
+				local Value = ns.PanelTrust.ValueText
+				line.value:SetText(("%s to %s"):format(Value(entry.item, entry.old), Value(entry.item, entry.new)))
 				line.crumb:SetText(Crumb(model, entry.item))
 				line.frame:ClearAllPoints()
 				line.frame:SetPoint("TOPLEFT", recent, "TOPLEFT", 16, -(32 + (index - 1) * rowH))
