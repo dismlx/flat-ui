@@ -211,7 +211,7 @@ ns.SETUP_STEPS = {
 		{ "nameplates.questMarkSize", "o", "mock-nameplate-marks" },
 		{ "nameplates.questMarkCount", "o", "mock-nameplate-marks" },
 		{ "nameplates.questMarkPlace", "o", "mock-nameplate-marks" },
-		{ "nameplates.questMarkQuestie", "r", "behaviour", "Leaves the quest marks on nameplates to Questie while it is loaded." },
+		{ "nameplates.questMarkQuestie", "r", "behaviour", "Leaves the quest marks on nameplates to Questie while it draws its own icons, which it does not in dungeons." },
 	} },
 	{ id = "np-game", area = "Nameplates", title = "Nameplate size, distance and clicks", draw = "mock-nameplate-stack", built = true, rows = {
 		{ "nameplates.showCastBars", "o", "mock-nameplate-stack" },

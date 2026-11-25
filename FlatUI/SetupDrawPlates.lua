@@ -47,6 +47,8 @@ P.RARITY_SIZE, P.RARITY_INDEX = 20, 3
 -- size as a share of the mark's, and the units between the two.
 P.QUEST_ATLAS, P.QUEST_FILE, P.QUEST_GAP = "QuestNormal", "Interface\\GossipFrame\\AvailableQuestIcon", 2
 P.QUEST_COUNT, P.QUEST_COUNT_SIZE, P.QUEST_COUNT_GAP = "3/8", 0.8, 1
+-- The pop of a kill count that goes up, as PlateQuest.lua's: from P.QUEST_POP of its size back to whole over P.QUEST_POP_SECONDS, white until it ends.
+P.QUEST_POP, P.QUEST_POP_SECONDS = 1.6, 0.3
 -- The threat of test mode's sample plate: the sample value of each state, the units between the value and what it sits beside (PlateThreatText.lua's
 -- GAP), and the ring's thickness and its gap past the border in pixels (PlateThreatLook.lua's RING_PX and GAP_PX).
 P.THREAT_VALUES = { threatGood = "40%", threatTransition = "92%", threatBad = "110%" }
@@ -230,7 +232,8 @@ function P.Look(friend)
 	o.marker = Row("raidMarker", true)
 	o.markerSize = Row("raidMarkerSize", 22)
 	o.markerX, o.markerY = Row("raidMarkerX", 0), Row("raidMarkerY", 0)
-	o.quest = Get("enabled") == true and Get("questMark") == true
+	-- No mark while the marks are left to Questie (PlateQuest.lua's ns.PlateQuestYields), as in the game.
+	o.quest = Get("enabled") == true and Get("questMark") == true and not (type(ns.PlateQuestYields) == "function" and ns.PlateQuestYields())
 	return o
 end
 
@@ -330,6 +333,31 @@ function P.NewIcon(S, parent)
 	return icon
 end
 
+-- The pop of the sample kill count (P.QuestMark), a Scale animation of the font string from its middle that gives it its gold back as it ends; nil
+-- when the client will not make it.
+function P.CountPop(text)
+	local ok, group = pcall(function()
+		local modes = Enum and Enum.FontStringScaleAnimationMode
+		pcall(text.SetScaleAnimationMode, text, modes and modes.Vertex or 1)
+		local made = text:CreateAnimationGroup()
+		ns.Own[made] = true
+		local grow = made:CreateAnimation("Scale")
+		ns.Own[grow] = true
+		grow:SetScaleFrom(P.QUEST_POP, P.QUEST_POP)
+		grow:SetScaleTo(1, 1)
+		grow:SetDuration(P.QUEST_POP_SECONDS)
+		grow:SetOrigin("CENTER", 0, 0)
+		pcall(grow.SetSmoothing, grow, "OUT")
+		local function Done()
+			text:SetTextColor(P.GOLD[1], P.GOLD[2], P.GOLD[3], 1)
+		end
+		made:SetScript("OnFinished", Done)
+		made:SetScript("OnStop", Done)
+		return made
+	end)
+	return ok and type(group) == "table" and group or nil
+end
+
 function P.NewPlate(S, parent)
 	local p = { S = S }
 	p.f = Frame(parent)
@@ -367,6 +395,7 @@ function P.NewPlate(S, parent)
 	p.rarity = Tex(p.f, "OVERLAY", 3)
 	p.quest = Tex(p.f, "OVERLAY", 4)
 	p.questCount = Txt(p.f, "OVERLAY")
+	p.questPop = P.CountPop(p.questCount)
 	-- The threat ring round the bar, and the threat value.
 	p.ring = Frame(p.f)
 	p.ringOutline = P.Outline(S, p.ring, p.ring)
@@ -753,8 +782,8 @@ end
 
 -- The quest mark of an enemy a quest needs (spec.quest), where PlateQuest.lua puts it: Left past the threat value on the left, else past the raid
 -- marker or the game's elite or rare icon (at the marker's height); Right past the threat value on the right, else past the level box while it shows;
--- Above over the name (over the bar while the name is inside it). With Kill count beside the quest mark a sample count sits beside it, left of it
--- at Left and right of it at Right and Above.
+-- Above over the sample's auras, else over the name (over the bar while the name is inside it). With Kill count beside the quest mark a sample count sits beside it, left of it
+-- at Left and right of it at Right and Above; test mode's sample counts up with its threat rounds and pops as it does.
 function P.QuestMark(p, spec, o, m)
 	if not (spec.quest and o.quest and not spec.friendly and not spec.player) then
 		p.quest:Hide()
@@ -776,7 +805,8 @@ function P.QuestMark(p, spec, o, m)
 		end
 		x = x + gap
 	elseif place == "above" then
-		point, x, y = "BOTTOM", m.BW / 2, m.healthY + m.HH + (m.nameAbove and (m.sp + m.NH) or 0) + gap
+		-- Over the sample's auras while it has them (m.top), as the live mark stands over the debuff row.
+		point, x, y = "BOTTOM", m.BW / 2, m.top + gap
 	else
 		point, x, y = "RIGHT", P.LeftEdge(p, o, m), m.center + o.markerY
 		if side == "left" then
@@ -793,7 +823,9 @@ function P.QuestMark(p, spec, o, m)
 	end
 	local height = math.max(6, size * P.QUEST_COUNT_SIZE)
 	P.Text(count, height, 100, "game", P.GOLD, o.face)
-	count:SetText(P.QUEST_COUNT)
+	-- Test mode's sample counts up with its threat rounds (spec.questHave); setup's drawings keep the fixed count.
+	local have = spec.questHave
+	count:SetText(ns.Finite(have) and ("%d/8"):format(have) or P.QUEST_COUNT)
 	local width = count:GetStringWidth()
 	width = (ns.Finite(width) and width or height * 2) + 1
 	local middle = y + size * (0.5 - P.AY[point])
@@ -803,6 +835,14 @@ function P.QuestMark(p, spec, o, m)
 		P.Put(p, count, "LEFT", x + size * (1 - P.AX[point]) + P.QUEST_COUNT_GAP, middle, width, height)
 	end
 	count:Show()
+	-- A count that went up pops, white until it settles, as a live one does as a kill counts.
+	local pop = p.questPop
+	if pop and ns.Finite(have) and ns.Finite(p.questHave) and have ~= p.questHave then
+		pcall(pop.Stop, pop)
+		count:SetTextColor(1, 1, 1, 1)
+		pcall(pop.Play, pop)
+	end
+	p.questHave = have
 end
 
 -- The threat of test mode's sample plate (spec.threat), as a live plate has it: the ring in the threat colour round the bar (and Flat UI's square
@@ -919,8 +959,8 @@ function P.OverpowerSwipe(p, done)
 	end
 end
 
--- The Overpower icon of a sample that dodged a warrior (spec.overpower), where PlateOverpower.lua puts it: centred over the name (over the bar while
--- the name is inside it) at Overpower icon size, in Flat UI's thin border, with its swipe.
+-- The Overpower icon of a sample that dodged a warrior (spec.overpower), where PlateOverpower.lua puts it: centred over the sample's auras, else over
+-- the name (over the bar while the name is inside it), at Overpower icon size, in Flat UI's thin border, with its swipe.
 function P.Overpower(p, spec, o, m)
 	if not (spec.overpower and o.styled and Get("overpower") == true) then
 		p.opFrame:Hide()
@@ -929,8 +969,8 @@ function P.Overpower(p, spec, o, m)
 	end
 	local size = Get("overpowerSize")
 	size = ns.Finite(size) and size > 0 and size or 34
-	local top = m.healthY + m.HH + (m.nameAbove and (m.sp + m.NH) or 0)
-	P.Put(p, p.opFrame, "BOTTOM", m.BW / 2, top + P.OP_GAP, size, size)
+	-- Over the sample's auras while it has them, else over the name (m.top), as the live icon stands over the debuff row.
+	P.Put(p, p.opFrame, "BOTTOM", m.BW / 2, m.top + P.OP_GAP, size, size)
 	p.op:SetTexture(P.OverpowerIcon())
 	ns.SetOutline(p.opOutline, true, false)
 	p.opFrame:SetFrameLevel(p.f:GetFrameLevel() + 10)

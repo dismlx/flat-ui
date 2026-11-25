@@ -479,10 +479,10 @@ ns.PAGES = {
 		{ key = "questMarkCount", kind = "bool", default = true, label = "Kill count beside the quest mark", needs = "questMark",
 			tip = "How many of that enemy you have slain and need, such as 3/8. Enemies that drop a quest item have no count." },
 		{ key = "questMarkPlace", kind = "choice", default = "left", label = "Quest mark position", needs = "questMark",
-			tip = "Left goes past the threat value, the raid marker and the elite or rare icon. Above shares its place with the enemy's debuffs.",
+			tip = "Left goes past the threat value, the enemy's buffs, the raid marker and the elite or rare icon. Right goes past the threat texts and the enemy's crowd control icons. Above sits over the enemy's debuffs.",
 			choices = { { "left", "Left" }, { "right", "Right" }, { "above", "Above" } } },
 		{ key = "questMarkQuestie", kind = "bool", default = true, label = "Leave quest marks to Questie", needs = "questMark",
-			tip = "While Questie is loaded it draws its own icons on quest enemies, so Flat UI's mark stays away. Off, both show." },
+			tip = "While Questie draws its own icons on quest enemies, Flat UI's mark stays away. In dungeons, where Questie draws none on this game, and with Questie's nameplate icons off, Flat UI's marks show. Off, both show." },
 	},
 	{
 		key = "nameplatesAuras", label = "Auras", parent = "nameplates", owner = "nameplates",

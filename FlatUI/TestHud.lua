@@ -404,6 +404,7 @@ local function PlateMoves(holder, now)
 	local threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
 	if spec.threat ~= threat then
 		spec.threat = threat
+		spec.questHave = 3 + math.floor(now / THREAT_EVERY) % 5
 		P.Health(p, spec)
 		-- The ring, the value and the fade of the new state, and the quest mark again past a value of another width.
 		if p.o and p.m then
@@ -441,6 +442,7 @@ TM.StandIn({
 		local run = math.min(1, (now % PLATE_ROUND) / PLATE_CAST)
 		spec.cast.share, spec.cast.left = run, PLATE_CAST * (1 - run)
 		spec.threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
+		spec.questHave = 3 + math.floor(now / THREAT_EVERY) % 5
 		local box = P.Plate(p, spec, P.Sets())
 		p.f:ClearAllPoints()
 		p.f:SetPoint("BOTTOM", holder, "CENTER", 0, PLATE_UP)

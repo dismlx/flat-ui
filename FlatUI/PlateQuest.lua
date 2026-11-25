@@ -6,35 +6,43 @@ local _, ns = ...
 -- it), on by default (Quest mark on enemies you need for a quest, the Marks and icons tab of Nameplates), Quest mark size big and at Quest mark
 -- position:
 --   Left, past the threat value while it sits left of the bar (PlateThreatText.lua, ns.PlateThreatTexts: the value is anchored by its right end and
---   an empty value has no width, so the mark follows the number as it grows, in a fight too), else past the game's raid marker and its elite or
---   rare icon: anchored to the left of the plate's ClassificationFrame, which hangs left of the RaidTargetFrame, while both say they take no room
---   while hidden (CollapsesLayout, a plain true; collapsesLayout, Blizzard_NamePlates.xml:186-199), so the mark follows them in a fight too, else
---   left of the health bars. With Raid marker off the marker frame is 1 across (Nameplates.lua's Marker), so it keeps no room either.
+--   an empty value has no width, so the mark follows the number as it grows, in a fight too), else past the row of the enemy's buffs while the
+--   game shows it (ns.PlateAuraRow: it grows left from the elite or rare icon and is 1 across while empty, so the mark moves out as buffs come and
+--   go), else past the game's raid marker and its elite or rare icon: anchored to the left of the plate's ClassificationFrame, which hangs left of
+--   the RaidTargetFrame, while both say they take no room while hidden (CollapsesLayout, a plain true; collapsesLayout,
+--   Blizzard_NamePlates.xml:186-199), so the mark follows them in a fight too, else left of the health bars. With Raid marker off the marker frame is 1 across (Nameplates.lua's Marker), so it keeps no room either.
 --   Right, past the name of the enemy's target while that text is made (it sits after the threat value on the right, PlateThreatText.lua's After),
---   else past the threat value on the right, else past the level frame while it shows and Level box is not Hidden (which only fades it), else past
---   the health bar.
---   Above, over the name (the top of the health bars while the name is inside them), where the plate's debuffs and the Overpower icon
---   (PlateOverpower.lua, a level above) also sit.
+--   else past the threat value on the right, else past the row of the enemy's crowd control icons while the game shows it (ns.PlateAuraRow), else
+--   past the level frame while it shows and Level box is not Hidden (which only fades it), else past the health bar.
+--   Above, over the row of the enemy's debuffs while the game shows it, else over the name (the top of the health bars while the name is inside
+--   them), on the guide frame PlateOverpower.lua keeps on each plate (ns.PlateDebuffTop), so the mark rises as the row wraps, in a fight too, and
+--   leaves the debuffs clear; the Overpower icon (a level above) stands there too.
 -- A text of PlateThreatText.lua that takes a new anchor places the mark again (ns.PlateQuestPlace), so a text made after the mark still has it clear.
 -- With Kill count beside the quest mark (on by default) a small gold count such as 3/8 sits beside the mark (left of it at Left, right of it at
 -- Right and Above) on an enemy a kill objective of the log names: the objectives are read again with the quest log (C_QuestLog.GetNumQuestLogEntries,
--- GetQuestIDForLogIndex and GetQuestObjectives, QuestLogDocumentation.lua:1581-1592), and the first unfinished "monster" objective whose text
--- starts with the enemy's name (UnitName, which is withheld only while the unit's identity is, UnitDocumentation.lua:2489-2504; the game writes
--- "Name slain: 3/8" in every language) gives its count. An enemy that only drops a quest item, or whose name is withheld, shows the mark alone.
--- The count is a font string of the mark's frame, outlined, in Text font, at 0.8 of Quest mark size.
+-- GetQuestIDForLogIndex and GetQuestObjectives, QuestLogDocumentation.lua:1581-1592), and the unfinished "monster" objective whose text starts
+-- with the enemy's name (UnitName, which is withheld only while the unit's identity is, UnitDocumentation.lua:2489-2504; the game writes
+-- "Name slain: 3/8" in every language) gives its count: of several, the one with no letter right after the name and the shortest rest, so one
+-- enemy's name that starts another's ("Plaguehound" and "Plaguehound Runt") takes its own objective. An enemy that only drops a quest item, or
+-- whose name is withheld, shows the mark alone.
+-- The count is a font string of the mark's frame, outlined, in Text font, at 0.8 of Quest mark size. As a kill counts, the count on every other
+-- plate of that enemy pops (grows to 1.6 of its size and settles back over 0.3 seconds, white until it ends, then gold, or grey on a tapped enemy).
 -- On an enemy someone else has tapped (UnitIsTapDenied and not UnitPlayerControlled, as PlateThreat.lua and the game's CompactUnitFrame read it)
 -- the mark and its count are grey and faint, and bright again once the tap drops (UNIT_FACTION, which the game's plate also hears for it).
 -- A mark fades in over FADE_IN seconds and out over FADE_OUT as its objective is done; a plate that leaves or is handed out again clears at once.
 -- No mark shows on a plate in name-only or widgets-only mode, nor on a unit the player cannot attack (UnitCanAttack). The game is asked again as a
 -- plate shows and, merged onto the next frame, on QUEST_LOG_UPDATE and the player's UNIT_QUEST_LOG_CHANGED, over every plate (ns.EachPlate): a mark
--- goes once that objective is done. With Leave quest marks to Questie (on by default) the part stands down while Questie is loaded, since Questie
--- draws its own icons on quest enemies (C_AddOns.IsAddOnLoaded, asked again as Questie loads after Flat UI, as QuestieSkin.lua hears it).
+-- goes once that objective is done. With Leave quest marks to Questie (on by default) the part stands down while Questie is loaded and draws its own
+-- icons on quest enemies (C_AddOns.IsAddOnLoaded, asked again as Questie loads after Flat UI, as QuestieSkin.lua hears it). Questie draws none while
+-- its own nameplate icons are off, nor inside an instance on this game (QuestieDraws), so the marks then show: asked again as you zone in and out
+-- (PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA) and as a plate shows, which catches a change of Questie's option. ns.PlateQuestYields tells setup's
+-- drawing and test mode's sample whether the marks are left to Questie now.
 -- Combat: the mark is a frame of Flat UI's own, a child of the plate's unit frame so it moves, fades and hides with the plate, made, sized and
 -- anchored only out of combat on a plate the game may protect (ns.MaybeProtected, Movers.lua), as the Overpower icon is: it is made on each plate
 -- that is no player's as the plate shows while the row is on, and kept when the plate goes, so a plate the game hands out again in a fight has it.
--- In a fight only its alpha, its fade (an animation of its own frame, as PlateOverpower.lua plays its pulse), its grey and the count's text
--- change. A plate first seen in a fight gets its mark when the fight ends; /flatui status counts those and the marks shown. Nothing of the game is
--- written: every call on the game only reads.
+-- In a fight only its alpha, its fade (an animation of its own frame, as PlateOverpower.lua plays its pulse), its grey and the count's text, colour
+-- and pop change. A plate first seen in a fight gets its mark when the fight ends; /flatui status counts those and the marks shown. Nothing of the
+-- game is written: every call on the game only reads.
 
 local KEY = "nameplates"
 local PART = "Quest mark"
@@ -43,21 +51,23 @@ if type(EXTRA) ~= "table" then
 	return
 end
 
--- SIZE: the mark when the row gives no size. GAP: nameplate units between the mark and what it stands beside. LEVEL: frame levels above the
--- plate's unit frame, under the Overpower icon's. ATLAS and FILE: the mark's art, the atlas first. EVENTS: what makes the plates be asked again
--- (UNIT_FACTION only for the plate of its unit). COUNT: the count's size, a share of the mark's; COUNT_GAP: units between the two; GOLD and GREY: its
--- colours. TAPPED: the opacity of a tapped enemy's mark. FADE_IN and FADE_OUT: the seconds a mark fades in and out. ENTRIES: the most quest log
--- lines read. ADDON: the folder of Questie.
+-- SIZE: the mark when the row gives no size. GAP: nameplate units between the mark and what it stands beside, ROW_GAP beside a row of the game's
+-- aura icons (which keeps 5 of its own from what it hangs on). LEVEL: frame levels above the plate's unit frame, under the Overpower icon's. ATLAS
+-- and FILE: the mark's art, the atlas first. EVENTS: what makes the plates be asked again (UNIT_FACTION only for the plate of its unit). COUNT: the
+-- count's size, a share of the mark's; COUNT_GAP: units between the two; GOLD and GREY: its colours, WHITE its colour as it pops, and POP and
+-- POP_SECONDS the pop of a count that goes up (from POP of its size back to whole). TAPPED: the opacity of a tapped enemy's mark. FADE_IN and
+-- FADE_OUT: the seconds a mark fades in and out. ENTRIES: the most quest log lines read. ADDON: the folder of Questie.
 local K = {
-	SIZE = 14, GAP = 2, LEVEL = 15,
+	SIZE = 14, GAP = 2, ROW_GAP = 1, LEVEL = 15,
 	ATLAS = "QuestNormal", FILE = "Interface\\GossipFrame\\AvailableQuestIcon",
 	EVENTS = { "QUEST_LOG_UPDATE", "UNIT_FACTION" },
-	COUNT = 0.8, COUNT_GAP = 1, GOLD = { 1, 0.82, 0 }, GREY = { 0.6, 0.6, 0.6 }, TAPPED = 0.4,
+	COUNT = 0.8, COUNT_GAP = 1, GOLD = { 1, 0.82, 0 }, GREY = { 0.6, 0.6, 0.6 }, WHITE = { 1, 1, 1 }, POP = 1.6, POP_SECONDS = 0.3, TAPPED = 0.4,
 	FADE_IN = 0.15, FADE_OUT = 0.3, ENTRIES = 100, ADDON = "Questie",
 }
 
 -- recs[unitFrame]: holder (the mark's frame), icon (its texture), count (its kill count), countBase (the font object's file), countFont and
--- countText (what the count was given), fade and fadeAnim (the fade's animation group and its Alpha animation, nil on a client without them) and fadeTo (the alpha it ends at),
+-- countText (what the count was given), countPop (the count's pop, nil on a client without it) and popping (it plays), fade and fadeAnim (the
+-- fade's animation group and its Alpha animation, nil on a client without them) and fadeTo (the alpha it ends at),
 -- to, point, relative, size and side (what it was anchored to, by which points, its size and the count's side), tapped (the grey look is on),
 -- shown, waiting (for the end of a fight). Kept when the plate leaves, so a plate's mark is made once.
 local recs = setmetatable({}, { __mode = "k" })
@@ -119,9 +129,30 @@ local function Asked()
 	return ns.Enabled(KEY) and not ns.IsStopped(KEY) and not ns.PartStopped(KEY, PART) and Opt("questMark") == true
 end
 
--- True while Leave quest marks to Questie has the part stand down.
+-- False while Questie says it draws no icons on nameplates now (facts read from Questie's QuestieNameplate, whose NameplateCreated draws nothing):
+-- its own nameplate icons are off (Questie.db.profile.nameplateEnabled a plain false), or on this game inside an instance (Questie.IsForever and
+-- IsInInstance both a plain true). Each step is read in a pcall with its type checked; anything that cannot be read counts as drawing.
+local function QuestieDraws()
+	local ok, draws = pcall(function()
+		local questie = rawget(_G, K.ADDON)
+		if not Plain(questie, "table") then
+			return true
+		end
+		local db = questie.db
+		local profile = Plain(db, "table") and db.profile or nil
+		local enabled = Plain(profile, "table") and profile.nameplateEnabled or nil
+		if Plain(enabled, "boolean") and enabled == false then
+			return false
+		end
+		local forever = questie.IsForever
+		return not (Plain(forever, "boolean") and forever and Ask(IsInInstance) == true)
+	end)
+	return not ok or draws ~= false
+end
+
+-- True while Leave quest marks to Questie has the part stand down: Questie is loaded and draws its own icons on quest enemies here.
 local function Yielding()
-	return Opt("questMarkQuestie") == true and QuestieLoaded()
+	return Opt("questMarkQuestie") == true and QuestieLoaded() and QuestieDraws()
 end
 
 local function Wanted()
@@ -160,6 +191,15 @@ local function Collapses(frame)
 	return frame ~= nil and Ask(frame.CollapsesLayout, frame) == true
 end
 
+-- The row of the game's aura icons on a side of a plate (left the enemy's buffs, right its crowd control), from PlateThreatText.lua, or nil.
+local function AuraRow(unitFrame, side)
+	if type(ns.PlateAuraRow) ~= "function" then
+		return nil
+	end
+	local ok, row = pcall(ns.PlateAuraRow, unitFrame, side)
+	return ok and type(row) == "table" and row or nil
+end
+
 -- The threat value, the side it sits on and the enemy's target of a plate, from PlateThreatText.lua, or nothing.
 local function Texts(unitFrame)
 	if type(ns.PlateThreatTexts) ~= "function" then
@@ -172,18 +212,40 @@ local function Texts(unitFrame)
 	return value, side, target
 end
 
--- What the mark stands beside, the point of the mark and the point of that region, and the offsets, for a position.
+-- The guide of PlateOverpower.lua over a plate (ns.PlateDebuffTop): its top is the top of the enemy's debuffs while their row shows, else of the name.
+-- Also true while its anchors wait for the end of a fight.
+local function DebuffTop(unitFrame)
+	if type(ns.PlateDebuffTop) ~= "function" then
+		return nil, false
+	end
+	local ok, guide, stale = pcall(ns.PlateDebuffTop, unitFrame)
+	if not ok or type(guide) ~= "table" then
+		return nil, ok and stale == true
+	end
+	return guide, stale == true
+end
+
+-- What the mark stands beside, the point of the mark and the point of that region, and the offsets, for a position; for Above also true while the
+-- guide it stands on waits for the end of a fight.
 local function Target(unitFrame, place)
 	local bars = Region(unitFrame, "HealthBarsContainer")
 	if place == "above" then
+		local guide, stale = DebuffTop(unitFrame)
+		if guide then
+			return guide, "BOTTOM", "TOP", 0, K.GAP, stale
+		end
 		local name = Region(unitFrame, "name")
-		return (NameInside() and bars or name) or bars, "BOTTOM", "TOP", 0, K.GAP
+		return (NameInside() and bars or name) or bars, "BOTTOM", "TOP", 0, K.GAP, stale
 	end
 	local value, side, target = Texts(unitFrame)
 	if place == "right" then
 		local after = target or (side == "right" and value) or nil
 		if after then
 			return after, "LEFT", "RIGHT", K.GAP, 0
+		end
+		local cc = AuraRow(unitFrame, "right")
+		if cc then
+			return cc, "LEFT", "RIGHT", K.ROW_GAP, 0
 		end
 		local own = owns[unitFrame]
 		local level = Region(unitFrame, "PlayerLevelDiffFrame")
@@ -192,6 +254,10 @@ local function Target(unitFrame, place)
 	end
 	if value and side == "left" then
 		return value, "RIGHT", "LEFT", -K.GAP, 0
+	end
+	local buffs = AuraRow(unitFrame, "left")
+	if buffs then
+		return buffs, "RIGHT", "LEFT", -K.ROW_GAP, 0
 	end
 	local class, marker = Region(unitFrame, "ClassificationFrame"), Region(unitFrame, "RaidTargetFrame")
 	if Collapses(class) and Collapses(marker) then
@@ -217,6 +283,57 @@ local function Wait(unitFrame)
 			ns.EachPart(KEY, PART, Draw, unitFrame)
 		end
 	end)
+end
+
+-- The count's colour: grey on an enemy someone else has tapped, else gold, and white while its pop plays.
+local function CountColour(rec)
+	local count = rec.count
+	if count then
+		local colour = rec.popping and K.WHITE or (rec.tapped and K.GREY or K.GOLD)
+		count:SetTextColor(colour[1], colour[2], colour[3], 1)
+	end
+end
+
+-- The count's pop as a kill counts: a Scale animation of the count from POP of its size back to whole, from its middle (a font string scales by its
+-- vertices, as CombatCues.lua pops its lines), white while it plays. Not protected, so it plays in a fight. Nil when the client will not make it.
+local function MakeCountPop(rec)
+	local count = rec.count
+	local ok, group = pcall(function()
+		local modes = Enum and Enum.FontStringScaleAnimationMode
+		pcall(count.SetScaleAnimationMode, count, modes and modes.Vertex or 1)
+		local made = count:CreateAnimationGroup()
+		ns.Own[made] = true
+		local grow = made:CreateAnimation("Scale")
+		ns.Own[grow] = true
+		grow:SetScaleFrom(K.POP, K.POP)
+		grow:SetScaleTo(1, 1)
+		grow:SetDuration(K.POP_SECONDS)
+		grow:SetOrigin("CENTER", 0, 0)
+		pcall(grow.SetSmoothing, grow, "OUT")
+		local function Done()
+			rec.popping = nil
+			CountColour(rec)
+		end
+		made:SetScript("OnFinished", Done)
+		made:SetScript("OnStop", Done)
+		return made
+	end)
+	rec.countPop = ok and type(group) == "table" and group or nil
+end
+
+-- The count pops: white, grown, and back to its colour as it settles.
+local function PopCount(rec)
+	local group = rec.countPop
+	if not group then
+		return
+	end
+	pcall(group.Stop, group)
+	rec.popping = true
+	CountColour(rec)
+	if not pcall(group.Play, group) then
+		rec.popping = nil
+		CountColour(rec)
+	end
 end
 
 -- The mark of a plate, made the first time the plate needs one; nil while it waits for the end of a fight.
@@ -250,6 +367,7 @@ local function Make(unitFrame)
 		count:SetTextColor(K.GOLD[1], K.GOLD[2], K.GOLD[3], 1)
 		count:SetText("")
 		rec.count, rec.countText = count, ""
+		MakeCountPop(rec)
 	end
 	-- The fade: one Alpha animation of the mark's own frame, which ends at the alpha it was played for.
 	local made, group = pcall(holder.CreateAnimationGroup, holder)
@@ -297,8 +415,11 @@ local function Place(unitFrame, rec)
 	local size = Opt("questMarkSize")
 	size = type(size) == "number" and size > 0 and size or K.SIZE
 	local place = Opt("questMarkPlace")
-	local to, point, relative, x, y = Target(unitFrame, place)
+	local to, point, relative, x, y, stale = Target(unitFrame, place)
 	local side = place == "left" and "left" or "right"
+	if stale then
+		Wait(unitFrame)
+	end
 	if to == nil or (rec.to == to and rec.point == point and rec.relative == relative and rec.size == size and rec.side == side) then
 		return
 	end
@@ -392,13 +513,31 @@ local function Tapped(rec, unit)
 	rec.icon:SetAlpha(tapped and K.TAPPED or 1)
 	local count = rec.count
 	if count then
-		local colour = tapped and K.GREY or K.GOLD
-		count:SetTextColor(colour[1], colour[2], colour[3], 1)
+		CountColour(rec)
 		count:SetAlpha(tapped and K.TAPPED or 1)
 	end
 end
 
--- The kill count of the first unfinished kill objective whose text starts with the enemy's name, or nothing.
+-- The unfinished kill objective that names this enemy, of those whose text starts with its name: one where no letter follows the name first (a
+-- space or a colon: "Plaguehound slain" for a Plaguehound, not "Plaguehounds"), then the one whose rest, without its count and punctuation, is the
+-- shortest (" slain" before " Runt slain", so a Plaguehound is not counted on the Plaguehound Runts' objective), the first in the log on a tie.
+local function Objective(list, name)
+	local best, bestLetter, bestLength
+	for _, entry in ipairs(list) do
+		local words = entry.text
+		if words:find(name, 1, true) == 1 then
+			local rest = words:sub(#name + 1)
+			local letter = rest:find("^%a") ~= nil
+			local length = #(rest:gsub("[%s%d/:]+$", ""))
+			if best == nil or (bestLetter and not letter) or (letter == bestLetter and length < bestLength) then
+				best, bestLetter, bestLength = entry, letter, length
+			end
+		end
+	end
+	return best
+end
+
+-- The kill count of the unfinished kill objective that names the enemy (Objective), or nothing.
 local function Count(rec, unit)
 	local count = rec.count
 	if not count then
@@ -408,16 +547,19 @@ local function Count(rec, unit)
 	local list = Opt("questMarkCount") == true and S.counts or nil
 	local name = list and #list > 0 and Ask(UnitName, unit) or nil
 	if Plain(name, "string") and name ~= "" then
-		for _, entry in ipairs(list) do
-			if entry.text:find(name, 1, true) == 1 then
-				text = ("%d/%d"):format(entry.have, entry.need)
-				break
-			end
+		local entry = Objective(list, name)
+		if entry then
+			text = ("%d/%d"):format(entry.have, entry.need)
 		end
 	end
 	if rec.countText ~= text then
+		-- A count that changes on a mark that shows is a kill that counted: it pops. Not as it first comes, nor as it goes.
+		local before = rec.countText
 		rec.countText = text
 		count:SetText(text)
+		if rec.shown and before ~= nil and before ~= "" and text ~= "" then
+			PopCount(rec)
+		end
 	end
 end
 
@@ -587,6 +729,10 @@ end
 
 EXTRA.show[#EXTRA.show + 1] = function(unitFrame, own)
 	owns[unitFrame] = own
+	-- A change of Questie's own nameplate option is seen at the next plate that shows.
+	if Wanted() ~= S.on then
+		ns.EachPart(KEY, PART, Sync)
+	end
 	if S.on then
 		ns.EachPart(KEY, PART, Draw, unitFrame)
 	end
@@ -618,6 +764,17 @@ ns.AddEvent(KEY, "ADDON_LOADED", function()
 end, function(name)
 	return not ns.IsSecret(name) and name == K.ADDON
 end)
+-- Questie draws no nameplate icons inside an instance on this game: as you zone in and out the part starts or stands down.
+for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }) do
+	ns.AddEvent(KEY, event, function()
+		ns.EachPart(KEY, PART, Sync)
+	end)
+end
+-- True while the marks are left to Questie (Leave quest marks to Questie on, Questie loaded and drawing its own icons here), for setup's drawing and
+-- test mode's sample plate (SetupDrawPlates.lua's P.Look), which then show no mark either.
+function ns.PlateQuestYields()
+	return Yielding()
+end
 EXTRA.status[#EXTRA.status + 1] = function()
 	if not S.on then
 		if Asked() and Yielding() then
@@ -631,5 +788,9 @@ EXTRA.status[#EXTRA.status + 1] = function()
 			shown = shown + 1
 		end
 	end
-	return ("Quest marks on nameplates: %d shown, %d plates waited for the end of a fight for their mark."):format(shown, S.waited)
+	local line = ("Quest marks on nameplates: %d shown, %d plates waited for the end of a fight for their mark."):format(shown, S.waited)
+	if Opt("questMarkQuestie") == true and QuestieLoaded() then
+		line = line .. " Questie draws no nameplate icons here, so Flat UI's quest marks show."
+	end
+	return line
 end
