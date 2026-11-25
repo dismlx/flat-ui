@@ -264,7 +264,9 @@ local function Heard(event)
 	if event == "UNIT_SPELLCAST_CHANNEL_STOP" then
 		HideAll()
 	elseif event == "PLAYER_REGEN_ENABLED" then
+		-- The marks a fight kept from being made, and a channel that runs on past the fight gets them now.
 		MakeAll()
+		Draw(false)
 	else
 		Draw(event == "UNIT_SPELLCAST_CHANNEL_START")
 	end
