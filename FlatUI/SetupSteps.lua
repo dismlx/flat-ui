@@ -845,6 +845,7 @@ ns.SETUP_STEPS = {
 		{ "chat.inputPlace", "c", "mock-chat" },
 		{ "chat.inputIdle", "r", "mock-chat" },
 		{ "chat.inputFocus", "o", "mock-chat" },
+		{ "chat.arrows", "o", "behaviour", "Lets the arrow keys move the cursor in the chat input box and Up and Down bring back the lines you sent, without Alt." },
 		{ "chat.lookOwn", "o", "mock-chat" },
 		{ "chat.lookBorder", "r", "mock-chat" },
 		{ "chat.lookBack", "r", "mock-chat" },
