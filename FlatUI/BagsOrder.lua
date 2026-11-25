@@ -27,19 +27,22 @@ local _, ns = ...
 --
 -- The menu: a right click on a title that can be dragged, with no item on the cursor, opens a menu of BagsLayout's (Layout.Menu) with Move to the
 -- top, Move up, Move down and Move to the bottom, among the sections that window shows, Fold or Unfold, and while an order is saved, a line that
--- puts Flat UI's order back, and while a section is folded, Unfold every section. At the live bank (B.Bank.Live) a section of the player's own
--- slots also has Put <section> in the bank in the bag window and Take <section> out in the bank window, which run the pass of Deposit and Take out
--- of BagsBank.lua with the section (B.Categories.Of) in place of the search, and its tooltip says so; not on Keep in place, whose items stay
--- pinned. On Keep in place it also has BagsPins.lua's lines. The row Section order on the Bags page does the same reset. Moving sections works in
--- a fight: it only lays the windows out, and their buttons are not protected (BagsLayout.lua).
+-- puts Flat UI's order back, while a section that window shows is open, Fold every section, and while a section is folded, Unfold every section.
+-- At the live bank (B.Bank.Live), while Deposit and Take out is on (the row that shows those buttons, B.Opt("bankButtons")), a section of the
+-- player's own slots also has Put <section> in the bank in the bag window and Take <section> out in the bank window, which run the pass of Deposit
+-- and Take out of BagsBank.lua with the section (B.Categories.Of) in place of the search, and its tooltip says so; not on Keep in place, whose
+-- items stay pinned. On Keep in place it also has BagsPins.lua's lines. The row Section order on the Bags page does the same reset. Moving
+-- sections works in a fight: it only lays the windows out, and their buttons are not protected (BagsLayout.lua).
 --
--- Folds: a left click on a title that can be dragged, with no item on the cursor (BagsLayout.lua's TitleClick, after its check that the click is
--- not the end of a drop), folds the section to its title, or opens it again. The folded sections are one set of section keys for the whole
--- account, FlatUIDB.bags.folded = { [key] = true }, beside the order and kept the same way, so the bag window, the bank window and every
--- character's view fold the same sections; an empty set is not kept. BagsLayout lays a folded section out as its title alone, as the empty Junk
--- title is, with a + after its count, while its items keep their cells, so an item that changes in a folded section stays there and does not
--- go to the top shelf; while a search is typed the title says how many of its items match. The menu's Fold or Unfold, Unfold every section and
--- the row Folded sections on the Bags page (ns.BagsFoldLines, ns.BagsFoldPick) do the same. Folding works in a fight too, as a move does.
+-- Folds: a left click on a title that can be dragged, with no item on the cursor (BagsLayout.lua's TitleClick, after its check that the click is not
+-- the end of a drop), folds the section to its title, or opens it again. With Shift held (IsShiftKeyDown) it opens that section alone and folds every
+-- other the window shows (Order.FoldAll), and on a section that is open alone already it opens them all again (Order.UnfoldAll). The folded sections
+-- are one set of section keys for the whole account, FlatUIDB.bags.folded = { [key] = true }, beside the order and kept the same way, so the bag
+-- window, the bank window and every character's view fold the same sections; an empty set is not kept. BagsLayout lays a folded section out as its
+-- title alone, as the empty Junk title is, with a + after its count, while its items keep their cells, so an item that changes in a folded section
+-- stays there and does not go to the top shelf; while a search is typed the title says how many of its items match, and its tooltip lists what it
+-- holds (BagsLayout.lua). The menu's Fold or Unfold, Fold every section, Unfold every section and the row Folded sections on the Bags page
+-- (ns.BagsFoldLines, ns.BagsFoldPick) do the same. Folding works in a fight too, as a move does.
 
 local B = ns.Bags
 local Order = B.Order
@@ -63,7 +66,9 @@ local TIPS = {
 	fold = "Click to fold it.",
 	unfold = "Folded: click to open it.",
 }
-local UNFOLD_ALL = "Unfold every section"
+local UNFOLD_ALL, FOLD_ALL = "Unfold every section", "Fold every section"
+-- After the tip of a click: what a Shift-click does, on a section among others open and on the one open alone.
+local SHIFT_TIPS = { only = "Shift-click to open only this one.", all = "Shift-click to open every section again." }
 -- The lines of a section's menu at the live bank, and what its tooltip says of them.
 local BANK_LINES = {
 	put = "Put %s in the bank",
@@ -510,13 +515,49 @@ local function Banking(st, sec)
 	if not (st.mine and st.live) or sec.key == "keep" then
 		return false
 	end
+	-- Deposit and Take out off leaves the section's lines out too, as that row says.
+	local okRow, buttons = pcall(Call, B, "Opt", "bankButtons")
+	if okRow and buttons == false then
+		return false
+	end
 	local ok, live = pcall(Call, B.Bank, "Live")
 	return ok and live == true
 end
 
--- A left click on a title that can be dragged, with no item on the cursor (BagsLayout.lua's TitleClick): the section folds to its title, or opens
--- again, in both windows. True when it changed.
-function Order.Fold(st, sec)
+-- Folds every section the window shows but the one keyed except (nil for none), which opens. True when the folds changed.
+function Order.FoldAll(st, except)
+	local changed = false
+	for _, sec in ipairs(type(st) == "table" and st.sections or {}) do
+		if Movable(st, sec) and SetFold(sec.key, sec.key ~= except) then
+			changed = true
+		end
+	end
+	if changed then
+		Request()
+	end
+	return changed
+end
+
+-- True when the section is open and every other the window shows is folded.
+local function Alone(st, sec)
+	if Order.Folded(sec.key) then
+		return false
+	end
+	for _, other in ipairs(st.sections or {}) do
+		if other ~= sec and Movable(st, other) and not Order.Folded(other.key) then
+			return false
+		end
+	end
+	return true
+end
+
+local function Shifted()
+	local ok, down = pcall(IsShiftKeyDown)
+	return ok and not ns.IsSecret(down) and down == true
+end
+
+-- Folds the section, or opens it, alone. True when it changed.
+local function Toggle(st, sec)
 	if not Movable(st, sec) or not SetFold(sec.key, not Order.Folded(sec.key)) then
 		return false
 	end
@@ -524,15 +565,32 @@ function Order.Fold(st, sec)
 	return true
 end
 
+-- A left click on a title that can be dragged, with no item on the cursor (BagsLayout.lua's TitleClick): the section folds to its title, or opens
+-- again, in both windows. With Shift it opens alone, every other section the window shows folded, or, open alone already, opens them all. True
+-- when it changed.
+function Order.Fold(st, sec)
+	if not Movable(st, sec) then
+		return false
+	end
+	if Shifted() then
+		if Alone(st, sec) then
+			return Order.UnfoldAll()
+		end
+		return Order.FoldAll(st, sec.key)
+	end
+	return Toggle(st, sec)
+end
+
 -- The menu of a title (a right click with no item on the cursor), under anchor.
 function Order.Menu(st, sec, anchor)
 	if not Movable(st, sec) then
 		return
 	end
-	local shown = {}
+	local shown, open = {}, false
 	for _, other in ipairs(st.sections or {}) do
 		if Movable(st, other) then
 			shown[#shown + 1] = other.key
+			open = open or not Order.Folded(other.key)
 		end
 	end
 	local key = sec.key
@@ -554,7 +612,7 @@ function Order.Menu(st, sec, anchor)
 		Line("Move to the bottom", shown[#shown], true)
 	end
 	items[#items + 1] = { text = Order.Folded(key) and "Unfold" or "Fold", part = "order", pick = function()
-		Order.Fold(st, sec)
+		Toggle(st, sec)
 	end }
 	-- At the live bank, the section's items go into the bank from the bag window, or out of it from the bank window, by the pass of Deposit and Take
 	-- out (BagsBank.lua) with the section in place of the search. Not Keep in place, whose items stay in their pinned slots.
@@ -578,6 +636,11 @@ function Order.Menu(st, sec, anchor)
 	if Saved() then
 		items[#items + 1] = { text = RESET_LINE, part = "order", pick = Order.Reset }
 	end
+	if open then
+		items[#items + 1] = { text = FOLD_ALL, part = "order", pick = function()
+			Order.FoldAll(st)
+		end }
+	end
 	if Folds() then
 		items[#items + 1] = { text = UNFOLD_ALL, part = "order", pick = Order.UnfoldAll }
 	end
@@ -596,7 +659,7 @@ function Order.Tip(st, sec)
 	if not Movable(st, sec) then
 		return nil
 	end
-	local click = Order.Folded(sec.key) and TIPS.unfold or TIPS.fold
+	local click = (Order.Folded(sec.key) and TIPS.unfold or TIPS.fold) .. " " .. (Alone(st, sec) and SHIFT_TIPS.all or SHIFT_TIPS.only)
 	if Banking(st, sec) then
 		click = click .. " " .. (st.which == "bags" and BANK_LINES.putTip or BANK_LINES.takeTip)
 	end

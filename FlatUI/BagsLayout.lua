@@ -41,8 +41,8 @@ local _, ns = ...
 -- its kind, with the kind after a special bag's name, and the number of its free slots, after the bag's icon: the item's (C_Item.GetItemIconByID)
 -- for a bag, the game's own for the backpack and the keyring, none for the bank's own slots. Two or more bags of a window with the same name each
 -- have their number after it ("Journeyman's Backpack · bag 3": bags 1 to 4 and the reagent bag 5, bank bags 1 to 8), so they can be told apart;
--- the backpack, the keyring and the bank's own slots keep their names. A click on the label of one of the player's own bags
--- opens a
+-- the backpack, the keyring and the bank's own slots keep their names. A click or a right click on the label of one of the player's own bags,
+-- or a right click on its slot in the bag slot row (BagsSlots.lua, Layout.BagMenuOf) in either view, opens a
 -- menu of Flat UI's own with what the game's bag menu sets, which is out of reach while Bags keeps the game's bag windows hidden (Mainline/
 -- ContainerFrame.lua:643-711, 765-776): Assign To on bags 1 to 4 that are not special bags, with the six filters of the game's list (:2383-2390;
 -- C_Container.GetBagSlotFlag and SetBagSlotFlag, WL/apis.yaml:8538, 8800; Enum.BagSlotFlags, WL/enums.yaml:579-590), and Ignore for clean up and
@@ -50,7 +50,8 @@ local _, ns = ...
 -- SetBackpackSellJunkDisabled (WL/apis.yaml:8520, 8781, 8525, 8786) and on the other bags through the flags DisableAutoSort and ExcludeJunkSell,
 -- as the game's menu does it. Its words are the game's own global strings (BAG_FILTER_ASSIGN_TO, BAG_FILTER_IGNORE, BAG_FILTER_CLEANUP,
 -- SELL_ALL_JUNK_ITEMS_EXCLUDE_FLAG and the six BAG_FILTER labels, ContainerFrame.lua:46-53, 648, 667, 686, 708), in English when the client has
--- none. A change asks for the junk coin and the Sell junk count again, since Errands follows these flags.
+-- none. A change asks for the junk coin and the Sell junk count again, since Errands follows these flags. Layout.BagFlags reads the same flags
+-- for the tooltip of a bag's slot in that row.
 -- The title of a section takes a drop. An item on the cursor (GetCursorInfo, WL/apis.yaml:36258) let go or clicked on it goes to
 -- B.Categories.Drop, which keeps it in that section, puts it on Errands' sell list (on Junk), or takes a junk item off that list and a grey one
 -- onto the keep list (on another section), and asks for the layout when it took the drop; either way the item goes back to its slot
@@ -69,14 +70,17 @@ local _, ns = ...
 -- on it with no item on the cursor, and not the end of a drop, folds the section or opens it again (B.Order.Fold, one set for the account, in both
 -- windows), and such a title is lit under the cursor as a title that takes a click is. A folded section is laid out as its title alone, as the
 -- empty Junk title is, with a + after its count; its items keep their cells, so a slot of it that changes while the window is open stays in it
--- and does not go to the top shelf, but no button is placed for them. While a search is typed, Layout.Dim writes on a folded title how many of its
--- items match ("3 of 24") in the Highlight colour, and its count alone again once the search is cleared, with no layout: the title is measured
--- for the widest of those texts. A window that closes ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so
--- a fault of theirs stops them alone.
+-- and does not go to the top shelf, but no button is placed for them, so its title's tooltip lists them from their records (FoldedTip): each
+-- item once with its icon, its name in its quality's colour and its stacks counted together, the most first, at most FOLD_LINES. While a search
+-- is typed, Layout.Dim writes on a folded title how many of its items match ("3 of 24") in the Highlight colour, and its count alone again once
+-- the search is cleared, with no layout: the title is measured for the widest of those texts. A window that closes ends a drag in it
+-- (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
 -- The buttons are BagsItems.lua's: the game's item buttons for the player's own bags, buttons of Flat UI's own for the live bank and for
 -- everything else. They are drawn with B.Buttons.Draw, dimmed with B.Buttons.Dim and placed here (ClearAllPoints, SetPoint, Show, Hide). While the
 -- mouse points at a bag on the game's bag bar (Bags.lua) or in the bag slot row (BagsSlots.lua), Layout.Light dims every slot of the bag window
--- that is not in that bag, as the game's combined bag marks a bag's items, in the player's own live bags only. A holder
+-- that is not in that bag, as the game's combined bag marks a bag's items, in the player's own live bags only, and a bank bag slot of the bank
+-- window's row (BagsBank.lua) does the same in the live bank; an empty bag slot dims nothing. A click on a slot of the bag slot row keeps its bag
+-- lit so (Layout.Stick) until it is clicked again, another is clicked or the window closes. A holder
 -- of a bag's buttons (the frame whose ID is the bag, ContainerFrame.lua:1845-1851), or a button of Flat UI's own, that is not under the window's
 -- content frame is put under it (SetParent, on frames of Flat UI's own only), so it takes the content's scale and scrolls with it. Before a live
 -- button hides here, B.Buttons.Unsplit leaves the game's split box it may own to the game (BagsItems.lua), so the template's OnHide does not hide
@@ -127,6 +131,8 @@ local FULL_HEX = "|cffff5a3d"
 local LIT, LIT_HOVER, RULE_ALPHA = 0.14, 0.3, 0.16
 -- How often the cursor is read while a window shows, and how long after a drop a click on the same title is the same action.
 local CURSOR_STEP, DROP_CLICK = 0.1, 0.3
+-- The most items the tooltip of a folded title lists, and the size of their icons there.
+local FOLD_LINES, FOLD_ICON = 12, 14
 -- The six filters of the game's bag menu, in its order (ContainerFrame.lua:2383-2390), with the flag's value in this client
 -- (WL/enums.yaml:579-590), the game's word for it and the English one; and the two flags of Ignore.
 local FILTERS = {
@@ -156,7 +162,8 @@ end
 -- sections: the sections or bag blocks in order; strip: the top shelf; free: Free slots. cells: the cell of each slot that has one, by slot key.
 -- placed: the cell or free slot each button placed by the last pass shows, by button. where: where each button was put. titles: the title frames,
 -- used: how many the last pass used. ruler: the font string titles are measured on. holding: the cursor held an item at the last reading.
--- built: a layout stands; builds: how many times the window was laid out afresh (Layout.Builds).
+-- built: a layout stands; builds: how many times the window was laid out afresh (Layout.Builds). lit, stuck: the bag the mouse lights
+-- (Layout.Light) and the one a click on its slot keeps lit (Layout.Stick).
 local state = {}
 
 local function Own(object)
@@ -565,18 +572,67 @@ local function Worth(sec)
 	return value, unknown
 end
 
+-- What a folded section holds, under its title's tooltip: one line per item, its icon and its name (the record's link, in its quality's colour,
+-- else its name in that colour), and the counts of its stacks added up at the right, the most first, then by name; at most FOLD_LINES, then how
+-- many more. From the records alone, so in either window, for any character and in a fight.
+local function FoldedTip(tip, sec)
+	local byId, list = {}, {}
+	for _, entry in ipairs(sec.entries) do
+		local record = entry.record
+		local id = record and record.id
+		if Finite(id) then
+			local item = byId[id]
+			if not item then
+				local link, name = record.link, record.name
+				item = { id = id, count = 0, icon = record.icon, quality = record.quality,
+					link = type(link) == "string" and not IsSecret(link) and link:find("|H", 1, true) and link or nil,
+					name = type(name) == "string" and not IsSecret(name) and name ~= "" and name or nil }
+				byId[id] = item
+				list[#list + 1] = item
+			end
+			local count = record.count
+			item.count = item.count + ((Finite(count) and count >= 1) and math.floor(count) or 1)
+		end
+	end
+	table.sort(list, function(a, b)
+		if a.count ~= b.count then
+			return a.count > b.count
+		end
+		return (a.name or "") < (b.name or "")
+	end)
+	local colour = type(C_Item) == "table" and C_Item.GetItemQualityColor or nil
+	for index = 1, math.min(#list, FOLD_LINES) do
+		local item = list[index]
+		local icon = item.icon
+		icon = (Finite(icon) or (type(icon) == "string" and not IsSecret(icon) and icon ~= ""))
+			and ("|T%s:%d:%d:0:0:64:64:5:59:5:59|t "):format(tostring(icon), FOLD_ICON, FOLD_ICON) or ""
+		local r, g, b = 1, 1, 1
+		if not item.link and Finite(item.quality) and type(colour) == "function" then
+			local ok, qr, qg, qb = pcall(colour, item.quality)
+			if ok and Finite(qr) and Finite(qg) and Finite(qb) then
+				r, g, b = qr, qg, qb
+			end
+		end
+		local name = item.link or Plain(item.name or ("Item %d"):format(item.id))
+		tip:AddDoubleLine(icon .. name, item.count > 1 and ("x" .. item.count) or " ", r, g, b, DIM[1], DIM[2], DIM[3])
+	end
+	if #list > FOLD_LINES then
+		tip:AddLine(("and %d more"):format(#list - FOLD_LINES), DIM[1], DIM[2], DIM[3])
+	end
+end
+
 local function TitleTip(title)
 	local st, sec = title.st, title.sec
 	local tip = GameTooltip
 	if not (st and sec) or type(tip) ~= "table" or ns.Forbidden(tip) then
 		return
 	end
-	local head, line, worth
+	local head, line, worth, folded
 	if sec.block then
 		if not title.clickable then
 			return
 		end
-		head, line = sec.name, "Click for this bag's settings, as the game's bag menu has them."
+		head, line = sec.name, "Click or right-click for this bag's settings, as the game's bag menu has them."
 	elseif st.holding and Takes(st, sec) then
 		head = sec.label
 		if sec.key == JUNK then
@@ -601,6 +657,8 @@ local function TitleTip(title)
 			return
 		end
 		head, line = sec.label, text
+		-- A folded section lists what it holds, since none of it shows.
+		folded = sec.folded and #sec.entries > 0
 		-- What the junk brings, in any window and for any character, though only the player's own bags can sell it.
 		if sec.key == JUNK and #sec.entries > 0 then
 			local value, unknown = Worth(sec)
@@ -615,6 +673,9 @@ local function TitleTip(title)
 	tip:SetText(head, 1, 1, 1)
 	if worth then
 		tip:AddLine(worth, 1, 1, 1, true)
+	end
+	if folded then
+		FoldedTip(tip, sec)
 	end
 	tip:AddLine(line, DIM[1], DIM[2], DIM[3], true)
 	tip:Show()
@@ -1394,8 +1455,12 @@ function Layout.Dim(which)
 	end
 	local active = Call(Search, "Active") == true
 	local match = Fn(Search, "Match")
-	-- The bag the mouse points at on the bag bar or in the bag slot row (Layout.Light), in the player's own live bags only.
-	local lit = st.mine and st.live and st.lit or nil
+	-- The bag the mouse points at on the bag bar or in a row of bag slots (Layout.Light), else the one a click on its slot keeps lit (Layout.Stick),
+	-- in the player's own live bags or bank only, and only while that bag has slots in the window, so an empty bag slot dims nothing.
+	local lit = st.mine and st.live and (st.lit ~= nil and st.lit or st.stuck) or nil
+	if lit ~= nil and not ((st.sizes and st.sizes[lit] or 0) > 0) then
+		lit = nil
+	end
 	for button, entry in pairs(st.placed) do
 		local matched = true
 		if active and entry.record and match then
@@ -1438,16 +1503,21 @@ function Layout.Dim(which)
 	end
 end
 
--- The mouse points at a bag's button on the game's bag bar (Bags.lua) or in the bag slot row of the bag window (BagsSlots.lua): while the bag
--- window shows the player's own live bags, every slot it shows that is not in that bag is dimmed, empty ones too, and what the search dims stays
--- dimmed; bag nil gives the window back as the search has it. The bag is kept (st.lit) through the passes that draw again until the mouse leaves,
--- and the window closing forgets it. Nothing is laid out.
+-- The mouse points at a bag's button on the game's bag bar (Bags.lua) or in the bag slot row of the bag window (BagsSlots.lua), or at a bank bag
+-- slot in the bank window's row (BagsBank.lua, which passes that bag's container): while the window shows the player's own live bags or bank,
+-- every slot it shows that is not in that bag is dimmed, empty ones too, and what the search dims stays dimmed; bag nil gives the window back as
+-- the search has it, or to the bag a click keeps lit (Layout.Stick). A bag with no slots in the window, an empty bag slot, lights nothing, so the
+-- window does not dim whole. The bag is kept (st.lit) through the passes that draw again until the mouse leaves, and the window closing forgets
+-- it. Nothing is laid out.
 function Layout.Light(which, bag)
 	local st = state[which]
 	if not st then
 		return
 	end
 	if bag ~= nil and not Finite(bag) then
+		bag = nil
+	end
+	if st.built and bag ~= nil and not ((st.sizes and st.sizes[bag] or 0) > 0) then
 		bag = nil
 	end
 	if st.lit == bag then
@@ -1457,6 +1527,32 @@ function Layout.Light(which, bag)
 	if st.built then
 		Layout.Dim(which)
 	end
+end
+
+-- A click on a bag's slot in the bag slot row (BagsSlots.lua) keeps that bag lit as Layout.Light lights it, until a click on it again (bag nil), a
+-- click on another slot, or the window closing or showing another character or a snapshot; the mouse over another bag still lights that one
+-- while it points there. Nothing is laid out.
+function Layout.Stick(which, bag)
+	local st = state[which]
+	if not st then
+		return
+	end
+	if bag ~= nil and not Finite(bag) then
+		bag = nil
+	end
+	if st.stuck == bag then
+		return
+	end
+	st.stuck = bag
+	if st.built then
+		Layout.Dim(which)
+	end
+end
+
+-- The bag a click keeps lit in a window, or nil.
+function Layout.Stuck(which)
+	local st = state[which]
+	return st and st.stuck or nil
 end
 
 -- Lays a window out afresh for the character it shows.
@@ -1471,6 +1567,10 @@ function Layout.Build(which)
 		Call(Buttons, "Release", st.content)
 	end
 	st.key, st.mine, st.live = Layout.Viewed(which)
+	if not (st.mine and st.live) then
+		-- Another character or a snapshot has no bag slot row, so nothing keeps a bag lit.
+		st.stuck = nil
+	end
 	st.view, st.columns, st.scale, st.sign = View(), Columns(which), Scale(), Sign()
 	st.width = st.columns * PITCH - SPACE
 	st.textSize = TextSize(st.scale)
@@ -1661,7 +1761,7 @@ function Layout.Closed(which)
 	if not st then
 		return
 	end
-	st.built, st.lit = false, nil
+	st.built, st.lit, st.stuck = false, nil, nil
 	for button in pairs(st.placed) do
 		Hide(button)
 	end
@@ -1725,6 +1825,13 @@ function TitleClick(title, mouse)
 	-- The click that ends a drop on the same title is that drop.
 	local dropped = title.dropped
 	if dropped and GetTime() - dropped < DROP_CLICK then
+		return
+	end
+	if mouse == "RightButton" and sec.block then
+		-- A right click on a bag's label opens its settings too, as the left one does.
+		if title.clickable then
+			Layout.BagMenu(st, sec, title.frame)
+		end
 		return
 	end
 	if mouse == "RightButton" and not sec.block and not sec.strip then
@@ -2099,4 +2206,43 @@ function Layout.BagMenu(st, block, anchor)
 		Toggle(bag, junkFlag, "GetBackpackSellJunkDisabled", "SetBackpackSellJunkDisabled")
 	end }
 	Layout.Menu(anchor, Plain(block.name), items, st.which)
+end
+
+-- What the bag menu has set on one of the player's own bags, for the tooltip of its slot in the bag slot row (BagsSlots.lua): whether clean up
+-- and junk selling leave it alone, and the labels of what it is assigned to (bags 1 to 4 only, as the menu offers it), or nil for none.
+function Layout.BagFlags(bag)
+	if not Finite(bag) or bag == KEYRING then
+		return false, false, nil
+	end
+	local sortOff, junkOff
+	if bag == 0 then
+		sortOff, junkOff = Backpack("GetBackpackAutosortDisabled"), Backpack("GetBackpackSellJunkDisabled")
+	else
+		sortOff = SlotFlag(bag, FlagValue("DisableAutoSort", DISABLE_AUTO_SORT))
+		junkOff = SlotFlag(bag, FlagValue("ExcludeJunkSell", EXCLUDE_JUNK_SELL))
+	end
+	local assigned
+	if bag >= 1 and bag <= 4 then
+		for _, filter in ipairs(FILTERS) do
+			if SlotFlag(bag, FlagValue(filter[1], filter[2])) then
+				local word = Word(filter[3], filter[4])
+				assigned = assigned and (assigned .. ", " .. word) or word
+			end
+		end
+	end
+	return sortOff, junkOff, assigned
+end
+
+-- The bag menu of one of the player's own bags from outside the layout: a right click on its slot in the bag slot row (BagsSlots.lua), in either
+-- view, under anchor. Only while the window shows the player's own live bags and that bag has slots; the menu itself then asks the rest.
+function Layout.BagMenuOf(which, bag, anchor)
+	local st = state[which]
+	if not (st and st.built and st.mine and st.live and Finite(bag) and st.sizes and st.kinds) then
+		return
+	end
+	if not ((st.sizes[bag] or 0) > 0) then
+		return
+	end
+	local kind = st.kinds[bag]
+	Layout.BagMenu(st, { bag = bag, kind = kind, name = BagName(st, bag, kind) }, anchor)
 end

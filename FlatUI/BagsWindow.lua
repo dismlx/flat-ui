@@ -1964,7 +1964,7 @@ local function Updating(w, flags, changed)
 		Run("search", Call, Search, "Paint")
 		Call(Buttons, "Paint")
 	end
-	-- The bank's row first, so its height and width go into the size below; the bag window has none.
+	-- The row over the footer first (the bank's bag slots, or the bag slots of the bag window), so its height and width go into the size below.
 	Slots(w)
 	if flags.layout then
 		Run("layout", Layout.Build, which)
