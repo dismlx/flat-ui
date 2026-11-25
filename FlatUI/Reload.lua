@@ -431,7 +431,8 @@ end
 -- needs it, Reload, Undo and Later. Its Reload is a reload button like the others (ns.SecureReload): where ReloadUI is blocked, the game's own
 -- /reload runs on a secure button, which leaves the notice as a fight starts and comes back after it, so meanwhile the button is dimmed and says so.
 -- Undo sets every change it lists back to the value the game runs since login, in the profile in use, with ns.Set, out of combat and while Setup
--- does not have the options window; each goes into Home's record of changes (ns.PanelHome.Noted) and one line in chat says how many. Later hides
+-- does not have the options window; they go into Home's record of changes as one batch (ns.PanelHome.Noted), so Recent changes shows them as one
+-- line with one Undo and one Ctrl+Z puts them all back, and one line in chat says how many. Later hides
 -- the notice until the next change that needs a reload; it goes when nothing needs one any more. Undo is dimmed while it would do nothing (in a fight,
 -- while Setup has the window). Pointing at the notice, or at any of its buttons, shows GameTooltip with every change, its value now and at login,
 -- in the words of the options window (ns.PanelTrust.ValueText). It fades in over 0.2 s each time it shows from hidden (its own alpha). It is in
@@ -740,7 +741,9 @@ local function NoticeUndo()
 	if not ok or type(lines) ~= "table" then
 		return
 	end
+	-- Its changes are one batch of Home's record: one line of Recent changes, one Undo and one Ctrl+Z.
 	local home, count = ns.PanelHome, 0
+	local batch = { label = "Undo of the reload notice", what = "the notice's Undo" }
 	for _, entry in ipairs(lines) do
 		local path, now, was = entry[3], entry[4], entry[5]
 		if type(path) == "string" and was ~= nil then
@@ -751,7 +754,7 @@ local function NoticeUndo()
 				count = count + 1
 				-- Into Home's record like a change made in the window, so its Undo can make the change again.
 				if type(home) == "table" and type(home.Noted) == "function" then
-					pcall(home.Noted, type(ns.Def) == "function" and ns.Def(path) or { path = path, label = entry[1] }, now, was)
+					pcall(home.Noted, type(ns.Def) == "function" and ns.Def(path) or { path = path, label = entry[1] }, now, was, batch)
 				end
 			end
 		end

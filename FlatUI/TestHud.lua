@@ -22,8 +22,8 @@ local _, ns = ...
 --   Debuffs and buffs: three icons each, from the top right corner of DebuffFrame while the player has no harmful aura and of BuffFrame while the
 --   player has no helpful aura at all (C_UnitAuras.GetAuraSlots, read out of combat only, when its answer is plain), only while the game shows that
 --   frame (its Edit Mode Visibility, Blizzard_BuffFrame/BuffFrame.lua:380-411) and not while Edit Mode is open, where it shows its example auras: a
---   magic, a curse and a poison debuff in the colours of their types, and times that count down and loop in the time format of Minimap and HUD
---   (AuraTime.lua).
+--   magic, a curse and a poison debuff in the colours of their types, and times that count down and loop in the time format and Duration colour
+--   of Minimap and HUD (AuraTime.lua): gold, white, or white that turns red under 10 seconds.
 --   Loot rolls: two rolls at the box Loot rolls of /flatui move, where the game's rolls show (ns.MoverSpot: the saved spot, else where the game
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
 --   shows; their timers drain over 10 seconds and loop, with the seconds of a 60 second roll counting down over them, red under 10, while Seconds
@@ -93,6 +93,8 @@ local DEBUFFS = {
 local BUFFS = { { kind = nil, seconds = 25 }, { kind = nil, seconds = 290 }, { kind = nil, seconds = 1700 } }
 -- The game's colour of an aura's time (GameFontNormalSmall), which Duration colour White replaces.
 local AURA_GOLD = { 1, 0.82, 0 }
+-- White, red in the last 10 s: the seconds under which a sample's time is red, and the red, as AuraTime.lua's WARN and RED paint the real ones.
+local AURA_WARN, AURA_RED = 10, { 1, 0.3, 0.3 }
 -- The rolls: the box of /flatui move, the game's room for each roll (GroupLootFrame.lua:15, Hud.lua's ROLL.step), its width (GroupLootFrame.xml:292),
 -- the seconds its timer runs, and the items, those of mock-loot.
 local ROLL_BOX, ROLL_STEP, ROLL_W, ROLL_TIME = "FlatUILootRolls", 100, 277, 10
@@ -298,6 +300,14 @@ local function AuraStandIn(id, game, label, list, filter)
 			if cell.left ~= left then
 				cell.left = left
 				cell.time:SetText(AuraTime(left))
+				-- Under White, red in the last 10 s, each loop turns red under 10 seconds and white again as it starts over.
+				if holder.warn then
+					if left < AURA_WARN then
+						cell.time:SetTextColor(AURA_RED[1], AURA_RED[2], AURA_RED[3])
+					else
+						cell.time:SetTextColor(1, 1, 1)
+					end
+				end
 			end
 		end
 	end
@@ -328,6 +338,7 @@ local function AuraStandIn(id, game, label, list, filter)
 		Paint = function(holder)
 			local colour = ns.Get("hud.durationColour")
 			local white = ns.Get("hud.enabled") == true and (colour == "white" or colour == "warn")
+			holder.warn = ns.Get("hud.enabled") == true and colour == "warn"
 			for index, aura in ipairs(list) do
 				local cell = holder.cells[index]
 				ns.DrawHud.PaintAura(cell, aura.kind)

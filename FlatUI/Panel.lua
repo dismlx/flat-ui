@@ -5,10 +5,13 @@ local ADDON_NAME, ns = ...
 -- works in combat. It is only built out of combat, since UIParent is protected.
 --
 -- It fades in with the game's window sounds (Build). Its keys (BuildKeys, out of combat): Ctrl+F for Search, Ctrl+Z to put back the newest change of
--- Home's Recent changes (a whole Reset page in one press), Escape for the colour picker (Cancel), an open list or a question before the window, Enter
--- for the picker's Apply or a question's first button, but not for a careful question (Delete, Reset, Copy from, Replace); a long list's filter field
--- has the cursor as it opens. The question box fades in, its first button in the accent, or red with "Enter does not answer this." under a careful
+-- Home's Recent changes (a whole Reset page in one press), Ctrl+Y or Ctrl+Shift+Z to make it again, Escape for the colour picker (Cancel), an open
+-- list or a question before the window, Enter for the picker's Apply or a question's first button, but not for a careful question (Delete, Reset,
+-- Copy from, Replace, setup's Start over); setup has the same Enter (ns.PanelKit.Enter). A long list's filter field has the cursor as it opens. The
+-- question box fades in and grows with its question, its first button in the accent, or red with "Enter does not answer this." under a careful
 -- question (Ask). A message of the strip holds for SAY_HOLD seconds whatever the mouse crosses, fading in, then the strip shows its count again (Say).
+-- A press counts as a click only when it is let go over what it pressed, as with the game's buttons, and a button's label sinks 1 px while it is
+-- held (Clickable, Button).
 -- The title bar names the profile in use, which a click opens (BuildProfileName), and the strip's Reload counts the changes that wait for a reload
 -- (BuildFoot). Every switch plays the game's checkbox sound on a click and its knob slides (SwitchClick, Slider).
 -- The wheel scrolls a page over a slider too, and Shift and the wheel step the slider (AddNumber). A sound row plays a line once as it is picked and
@@ -198,17 +201,23 @@ local function Dim(text)
 	return Tint(text, "text-dim")
 end
 
--- A frame that takes clicks: onClick runs when the left button goes down and comes up on it.
+-- A frame that takes clicks: onClick runs when the left button goes down on it and is let go over it, as with a button of the game's. The game sends
+-- the release to the frame the press began on, wherever the cursor is, so a press slid off before it is let go is not a click (DataPanels.lua and
+-- Errands.lua keep the same rule); a client that will not say whether the cursor is over counts as over.
 local function Clickable(frame, onClick)
 	local down = false
 	frame:EnableMouse(true)
 	frame:SetScript("OnMouseDown", function(_, button)
 		down = button == "LeftButton"
 	end)
-	frame:SetScript("OnMouseUp", function(_, button)
+	frame:SetScript("OnMouseUp", function(self, button)
 		local wanted = down and button == "LeftButton"
 		down = false
-		if wanted then
+		if not wanted then
+			return
+		end
+		local ok, over = pcall(self.IsMouseOver, self)
+		if not ok or ns.IsSecret(over) or over ~= false then
 			onClick()
 		end
 	end)
@@ -292,6 +301,8 @@ end
 
 -- A flat button. A primary button is in the accent. The third result, SetTone(tone), gives it another tone after it is made: "accent", "danger"
 -- (red, for the first button of a careful question) or nil for the plain one; the label of a coloured one is in the colour that reads on the accent.
+-- While the left button holds it down its label sinks 1 px and its fill goes back to the resting tone; the press counts only when it is let go over
+-- the button (Clickable). The pressed look is hooked, so a caller's own scripts stay as they are.
 local function Button(parent, text, width, onClick, primary)
 	local button = Frame(parent)
 	button:SetSize(width, BUTTON)
@@ -302,22 +313,41 @@ local function Button(parent, text, width, onClick, primary)
 	if primary then
 		Tint(label, "on-accent")
 	end
-	local hover = false
+	local hover, pressed = false, false
 	local tone = primary and "accent" or nil
 	local function Tone()
+		local lit = hover and not pressed
 		if tone == "accent" then
-			return hover and "accent-hover" or "accent"
+			return lit and "accent-hover" or "accent"
 		elseif tone == "danger" then
 			return "danger"
 		end
-		return hover and "hover" or "raised"
+		return lit and "hover" or "raised"
 	end
 	-- Red has no lighter token of its own, so under the mouse its fill lets a little of the card through.
 	local function Paint()
-		Backing(outline, Tone(), (tone == "danger" and hover) and 0.85 or 1, "line-strong")
+		Backing(outline, Tone(), (tone == "danger" and hover and not pressed) and 0.85 or 1, "line-strong")
 	end
 	Painted(Paint)
 	Clickable(button, onClick)
+	local function Press(down)
+		if down ~= pressed then
+			pressed = down
+			label:SetPoint("CENTER", button, "CENTER", 0, down and -1 or 0)
+			Paint()
+		end
+	end
+	button:HookScript("OnMouseDown", function(_, mouse)
+		if mouse == "LeftButton" then
+			Press(true)
+		end
+	end)
+	button:HookScript("OnMouseUp", function()
+		Press(false)
+	end)
+	button:HookScript("OnHide", function()
+		Press(false)
+	end)
 	button:SetScript("OnEnter", function()
 		hover = true
 		Paint()
@@ -336,8 +366,10 @@ local function Button(parent, text, width, onClick, primary)
 	return button, label, SetTone
 end
 
--- A box to type in, with a thin border that takes the highlight colour while it has the cursor. onLost runs when it loses the cursor.
-local function Field(parent, width, limit, onLost)
+-- A box to type in, with a thin border that takes the highlight colour while it has the cursor. onLost runs when it loses the cursor. With a hint,
+-- a dim line says what goes in it while it is empty (the second result, to change it later); it follows every change of the text, a SetText("")
+-- too, through a hook, so a caller's own OnTextChanged must be hooked as well.
+local function Field(parent, width, limit, onLost, hint)
 	local box = Frame(parent, "EditBox")
 	box:SetSize(width, BUTTON)
 	box:SetFontObject(Look.FontFor("GameFontHighlight"))
@@ -363,7 +395,19 @@ local function Field(parent, width, limit, onLost)
 	box:SetScript("OnEscapePressed", function(self)
 		self:ClearFocus()
 	end)
-	return box
+	if not hint then
+		return box
+	end
+	local note = Dim(Label(box, "GameFontHighlight", "LEFT", width - 16))
+	note:SetPoint("LEFT", box, "LEFT", 8, 0)
+	note:SetText(hint)
+	local function Sync()
+		local typed = box:GetText()
+		note:SetShown(not (IsText(typed) and typed ~= ""))
+	end
+	box:HookScript("OnTextChanged", Sync)
+	Sync()
+	return box, note
 end
 
 -- A scrolling area with a thin bar of its own. The content hangs from `child`.
@@ -494,6 +538,27 @@ local function Say(message)
 		end
 		ShowStrip()
 	end
+end
+
+-- A box that holds text to copy (Export): a click in it selects all of it again, and Ctrl+C there says in the strip that it was copied.
+local function CopyField(box)
+	box:HookScript("OnEditFocusGained", function(self)
+		self:HighlightText()
+		-- Once more on the next frame, after the click has put the cursor where it landed.
+		if C_Timer and C_Timer.After then
+			C_Timer.After(0, function()
+				if self:HasFocus() then
+					self:HighlightText()
+				end
+			end)
+		end
+	end)
+	box:SetScript("OnKeyDown", function(self, key)
+		local text = self:GetText()
+		if key == "C" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and IsText(text) and text ~= "" then
+			Say("Copied. Paste it where you share it.")
+		end
+	end)
 end
 
 -- How far the rows hung from a parent stand in from its edges: a page of cards sets it, any other parent has the margin PAD.
@@ -1439,10 +1504,10 @@ local function BuildPopups()
 	Painted(function()
 		Backing(box, "card", 1, "line-strong")
 	end)
+	-- The question has no height of its own, so it takes every line its words need (Ask measures it).
 	local question = Label(confirm, "GameFontHighlight", "CENTER", 330, true)
 	question:SetJustifyV("TOP")
 	question:SetPoint("TOP", confirm, "TOP", 0, -18)
-	question:SetHeight(44)
 	-- The first button, which Enter presses too while the question shows (BuildKeys).
 	function ui.AnswerYes()
 		local run = ui.onYes
@@ -1455,6 +1520,7 @@ local function BuildPopups()
 	-- not answer it (Ask).
 	local yes, yesText, yesTone = Button(confirm, "Yes", SMALL, ui.AnswerYes)
 	yes:SetPoint("BOTTOMRIGHT", confirm, "BOTTOM", -6, 14)
+	-- The note hangs just under the question's lines, and the box grows with the question (Ask).
 	local note = Dim(Label(confirm, "GameFontHighlightSmall", "CENTER", 330))
 	note:SetPoint("TOP", confirm, "TOP", 0, -68)
 	note:SetText("Enter does not answer this.")
@@ -1626,11 +1692,18 @@ end
 
 -- The question box: onYes runs on the first button, onNo (when given) on the second. A click outside the box closes it and runs neither. The buttons
 -- say yesText and noText when those are given, and Yes and No otherwise. Enter presses the first button (BuildKeys), but not for a careful question,
--- one whose first button loses something for good (Delete, Reset, Copy from, Replace): an Enter meant for chat must not answer it.
+-- one whose first button loses something for good (Delete, Reset, Copy from, Replace): an Enter meant for chat must not answer it. The box grows
+-- with the question, at least two lines of its 330 px column, so a long Delete or Copy from question is never cut short; the note and the buttons
+-- move down with it.
 function Ask(question, onYes, onNo, yesText, noText, careful)
 	BuildPopups()
 	CloseList()
+	-- The question takes at least two lines' room, and every line its words need.
 	ui.question:SetText(question)
+	local ok, tall = pcall(ui.question.GetStringHeight, ui.question)
+	local qh = math.max(44, (ok and Number(tall)) and math.ceil(tall) or 44)
+	ui.careNote:ClearAllPoints()
+	ui.careNote:SetPoint("TOP", ui.confirm, "TOP", 0, -(18 + qh + 6))
 	ui.onYes, ui.onNo, ui.careful = onYes, onNo, careful == true
 	local wide = yesText ~= nil or noText ~= nil
 	ui.yesText:SetText(yesText or "Yes")
@@ -1639,7 +1712,7 @@ function Ask(question, onYes, onNo, yesText, noText, careful)
 	ui.no:SetWidth(wide and 130 or SMALL)
 	ui.yesTone(ui.careful and "danger" or "accent")
 	ui.careNote:SetShown(ui.careful)
-	ui.confirm:SetHeight(ui.careful and 126 or 110)
+	ui.confirm:SetHeight(110 + (qh - 44) + (ui.careful and 16 or 0))
 	-- It fades in over CONFIRM_FADE, as the colour picker does.
 	local waited = 0
 	ui.confirm:SetAlpha(0)
@@ -1775,8 +1848,33 @@ local function Call(name, ...)
 	return first, second
 end
 
--- Runs a function of Core that changes a profile and shows the sentence it answers with.
+-- Profile in use picked in a fight (the Profiles page, Home's Profile card): the pick waits for the fight's end in ui.wantProfile, which the title
+-- bar shows ("Profile: Default, Raid after the fight"), and a frame of the window's own switches to it then (BuildProfileWait). The pick wins over a
+-- rule of Switch automatically that waits too (ProfileSwitch.lua, Switch.Drop); a pick of the profile in use takes the wish back.
+local function KeepProfile(pick)
+	local current = Call("Profile")
+	current = IsText(current) and current or ""
+	if not IsText(pick) or pick == current then
+		local had = ui.wantProfile ~= nil
+		ui.wantProfile = nil
+		Say(had and ("Stays on %s."):format(current) or ("Using %s."):format(current))
+	else
+		ui.wantProfile = pick
+		local switch = ns.ProfileSwitch
+		if type(switch) == "table" and type(switch.Drop) == "function" then
+			switch.Drop()
+		end
+		Say(("Switches to %s when the fight ends."):format(pick))
+	end
+	RefreshAll()
+	return false
+end
+
+-- Runs a function of Core that changes a profile and shows the sentence it answers with. Profile in use in a fight waits for its end (KeepProfile).
 local function Act(name, ...)
+	if name == "UseProfile" and InCombatLockdown() then
+		return KeepProfile(...)
+	end
 	local done, message = Call(name, ...)
 	Say(IsText(message) and message or (done == nil and "That did not work." or nil))
 	RefreshAll()
@@ -1863,7 +1961,8 @@ local function BuildProfiles()
 
 	view.sections[1] = y
 	y = Header(child, "Profile", y)
-	local row = Row("Profile in use", "The profile this character uses. Pick another to switch to it at once, out of combat.")
+	local row = Row("Profile in use", "The profile this character uses. Pick another to switch to it at once; picked in a fight, it switches as the "
+		.. "fight ends.")
 	local used = Menu(row, {
 		lines = function()
 			return ProfileNames(function() return true end)
@@ -1880,7 +1979,7 @@ local function BuildProfiles()
 	if type(ns.NewProfile) == "function" then
 		row = Row("New profile", "Type a name. Create starts from the defaults and the frame positions a new profile starts with. Duplicate copies the "
 			.. "profile in use, its frame positions too, as \"<name> copy\" when no name is typed. The new profile is put in use.")
-		local name = Field(row.frame, FIELD, 32)
+		local name = Field(row.frame, FIELD, 32, nil, "Name of the new profile")
 		name:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		local function Typed()
 			local typed = name:GetText()
@@ -2002,8 +2101,13 @@ local function BuildProfiles()
 
 	if type(ns.RenameProfile) == "function" then
 		row = Row("Rename profile", "Gives the profile in use a new name; the characters that use it keep it. Default cannot be renamed.")
-		local name = Field(row.frame, FIELD, 32)
+		local name, hint = Field(row.frame, FIELD, 32, nil, "New name")
 		name:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
+		-- The hint names the profile in use, which the new name replaces.
+		updates[#updates + 1] = function()
+			local now = Current()
+			hint:SetText(now ~= "" and ("New name for %s"):format(now) or "New name")
+		end
 		local function Rename()
 			local typed = name:GetText()
 			typed = IsText(typed) and typed or ""
@@ -2039,8 +2143,9 @@ local function BuildProfiles()
 
 	if type(ns.ExportProfile) == "function" then
 		row = Row("Export profile", "Export writes the profile in use, settings and frame positions, as one line of text to copy and share.")
-		local out = Field(row.frame, FIELD, 0)
+		local out = Field(row.frame, FIELD, 0, nil, "Press Export, then Ctrl+C")
 		out:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
+		CopyField(out)
 		row.Hover(out)
 		Beside(row, "Export", function()
 			local text = Call("ExportProfile", {})
@@ -2057,8 +2162,9 @@ local function BuildProfiles()
 
 	if type(ns.TrackerExportText) == "function" then
 		row = Row("Export trackers", "Export writes your trackers as one line of text to copy and share.")
-		local out = Field(row.frame, FIELD, 0)
+		local out = Field(row.frame, FIELD, 0, nil, "Press Export, then Ctrl+C")
 		out:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
+		CopyField(out)
 		row.Hover(out)
 		Beside(row, "Export", function()
 			local text, message = Call("TrackerExportText")
@@ -2075,7 +2181,7 @@ local function BuildProfiles()
 
 	if type(ns.TrackerImport) == "function" then
 		row = Row("Import trackers", "Paste trackers someone exported, then press Import to add them.")
-		local into = Field(row.frame, FIELD, 0)
+		local into = Field(row.frame, FIELD, 0, nil, "Paste trackers here")
 		into:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(into)
 		Beside(row, "Import", function()
@@ -2092,7 +2198,7 @@ local function BuildProfiles()
 
 	if type(ns.ImportProfile) == "function" then
 		row = Row("Import profile", "Paste a profile someone exported. What it holds shows under the field, with what to import and where.")
-		local into = Field(row.frame, FIELD, 0)
+		local into = Field(row.frame, FIELD, 0, nil, "Paste a profile here (Ctrl+V)")
 		into:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(into)
 		if ns.ProfileShare then
@@ -2778,16 +2884,13 @@ local function ToggleMovers()
 end
 
 -- The window's own actions that Search finds (PanelSearch.ACTIONS), by id: what Open runs, its tip and, for Test mode, the word of its button. Test
--- mode is the switch of the title bar (BuildTestSwitch), and does nothing in a fight.
+-- mode is the switch of the title bar (BuildTestSwitch); in a fight it asks for test mode at the fight's end, or takes that back (TestToggle).
+local TestToggle
 ui.actions = {
 	test = {
 		tip = "Shows your frames on screen with sample content while you change options. The switch at the top right does the same.",
 		Run = function()
-			if InCombatLockdown() then
-				Say("Test mode after combat.")
-			elseif type(ns.TestMode) == "table" then
-				ns.TestMode.Toggle("panel")
-			end
+			TestToggle()
 			RefreshAll()
 		end,
 		Button = function()
@@ -3052,7 +3155,7 @@ local function BuildFoot(window)
 			Ask(ns.PanelTrust.Question(entry, name), function()
 				local before = ns.PanelTrust.Count(entry)
 				-- Every row it writes is noted in one batch, which Ctrl+Z puts back whole.
-				ui.batch = { label = "Reset page on " .. place }
+				ui.batch = { label = "Reset page on " .. place, what = "Reset page" }
 				local ok, err = pcall(function()
 					for _, item in ipairs(entry.page) do
 						-- A row the game holds is not written: its default is the game's, not this page's.
@@ -3084,8 +3187,26 @@ local function BuildFoot(window)
 	ui.strip:SetWidth(WIDTH - 24 - 330)
 end
 
+-- A click of Test mode (the switch, or its Search result): out of a fight it turns test mode on or off with the switch's sound. In a fight TestMode
+-- keeps the wish (TM.On), so the fight's end turns it on while the window is open, and a second click takes it back; the strip says which.
+function TestToggle()
+	local mode = ns.TestMode
+	if type(mode) ~= "table" then
+		return
+	end
+	if InCombatLockdown() then
+		local was = mode.Source() ~= nil
+		mode.Toggle("panel")
+		Say(was and "Test mode is off." or mode.Wanted() == "panel" and "Test mode comes on when the fight ends." or "Test mode stays off.")
+		return
+	end
+	mode.Toggle("panel")
+	SwitchClick(mode.Source() ~= nil)
+end
+
 -- Test mode (TestMode.lua): a switch just left of Close, with the track and knob of the Bool rows, in the parts of the options pages so it hides
--- while Setup has the window. It reads the state again in RefreshAll; in a fight it is dim, reads After combat and does nothing.
+-- while Setup has the window. It reads the state again in RefreshAll; in a fight it is dim and reads After combat, and a click asks for test mode at
+-- the fight's end, which shows as the knob on, dimmed, until it comes on or the window closes (TestToggle).
 local function BuildTestSwitch(bar, close)
 	local tip = "Shows your frames on screen with sample content while you change options. Ends when you close the options or turn it off; "
 		.. "pauses in a fight."
@@ -3107,7 +3228,7 @@ local function BuildTestSwitch(bar, close)
 	local switch = { frame = test, hovered = false }
 	function switch.Update()
 		local mode = ns.TestMode
-		local on = type(mode) == "table" and mode.Source() ~= nil
+		local on = type(mode) == "table" and (mode.Source() ~= nil or mode.Wanted() == "panel")
 		local fight = InCombatLockdown() == true
 		mark:SetShown(on)
 		Place(on)
@@ -3121,12 +3242,7 @@ local function BuildTestSwitch(bar, close)
 		switch.Update()
 	end)
 	Clickable(test, function()
-		if InCombatLockdown() then
-			Say("Test mode after combat.")
-		elseif type(ns.TestMode) == "table" then
-			ns.TestMode.Toggle("panel")
-			SwitchClick(ns.TestMode.Source() ~= nil)
-		end
+		TestToggle()
 		switch.Update()
 	end)
 	test:SetScript("OnEnter", function()
@@ -3146,8 +3262,9 @@ end
 
 -- The profile the changes go into, dim, left of the Test mode switch on every options page ("Profile: Raid"); a long name is cut short. Pointing at
 -- it says how many characters use the profile, a click opens Profiles, and a change of profile while the window is open (Switch automatically, a
--- slash command) tints it in the accent for a second (PROFILE_FLASH). RefreshAll sets it; it is in the parts of the options pages, so it hides
--- while a mode has the window.
+-- slash command) tints it in the accent for a second (PROFILE_FLASH). A profile picked in a fight shows after it until the fight ends
+-- ("Profile: Default, Raid after the fight", KeepProfile). RefreshAll sets it; it is in the parts of the options pages, so it hides while a mode
+-- has the window.
 local PROFILE_FLASH, PROFILE_HOLD = 1, 0.4
 local function BuildProfileName(bar)
 	local frame = Frame(bar)
@@ -3167,6 +3284,7 @@ local function BuildProfileName(bar)
 		end
 	end
 	local name = { frame = frame, text = text }
+	local shownWant
 	function name.Update()
 		local now = CurrentProfile()
 		local at = Now()
@@ -3175,12 +3293,23 @@ local function BuildProfileName(bar)
 		if ui.window and ui.window:IsShown() then
 			seenAt = at
 		end
-		if now == shown then
+		local want = ui.wantProfile
+		if now == shown and want == shownWant then
 			return
 		end
-		local first = shown == nil
-		shown = now
-		text:SetText(now ~= "" and ("Profile: " .. now) or "")
+		local first, moved = shown == nil, now ~= shown
+		shown, shownWant = now, want
+		-- A pick of a fight names the profile it waits to switch to (KeepProfile).
+		local words = now ~= "" and ("Profile: " .. now) or ""
+		if now ~= "" and want then
+			words = ("Profile: %s, %s after the fight"):format(now, want)
+		end
+		-- The longer line takes room to its left, where the title bar has none of its own.
+		text:SetWidth(want and 260 or 160)
+		text:SetText(words)
+		if not moved then
+			return
+		end
 		if not first and open and now ~= "" then
 			flash = 0
 			Glow(nil, 0)
@@ -3207,6 +3336,41 @@ local function BuildProfileName(bar)
 		ShowStrip()
 	end)
 	ui.barProfile = name
+end
+
+-- The wish of KeepProfile, a frame after the fight ends: the profile picked in a fight goes in use, whether the window is still open or not, and
+-- chat says so. It is a frame of its own, since the keys' frame stops being built when the keyboard is refused (BuildKeys). A new fight in that
+-- frame keeps the wish for its end.
+local function BuildProfileWait(window)
+	local wait = Frame(window)
+	wait:RegisterEvent("PLAYER_REGEN_ENABLED")
+	local function Switch()
+		local want = ui.wantProfile
+		if not want or InCombatLockdown() then
+			return
+		end
+		ui.wantProfile = nil
+		local done, message = Call("UseProfile", want)
+		if done then
+			print(("Flat UI: using %s."):format(want))
+		elseif IsText(message) then
+			print("Flat UI: " .. message)
+		end
+		if ui.window and ui.window:IsShown() then
+			Say(IsText(message) and message or nil)
+			RefreshAll()
+		end
+	end
+	wait:SetScript("OnEvent", function()
+		if not ui.wantProfile then
+			return
+		end
+		if C_Timer and C_Timer.After then
+			C_Timer.After(0, Switch)
+		else
+			Switch()
+		end
+	end)
 end
 
 local function BuildBars(window)
@@ -3328,9 +3492,14 @@ local function BuildKeys(window)
 	local function Find()
 		ui.search:SetFocus()
 	end
-	-- Ctrl+Z: the newest change of Home's Recent changes goes back, and the strip says what (PanelHome.lua, Home.UndoNewest).
+	-- Ctrl+Z: the newest change of Home's Recent changes goes back, and the strip says what (PanelHome.lua, Home.UndoNewest). Ctrl+Y or
+	-- Ctrl+Shift+Z makes again what it took back (Home.Redo).
 	local function Undo()
 		Say(ns.PanelHome.UndoNewest())
+		RefreshAll()
+	end
+	local function Redo()
+		Say(ns.PanelHome.Redo())
 		RefreshAll()
 	end
 	keys:SetScript("OnKeyDown", function(self, key)
@@ -3343,8 +3512,9 @@ local function BuildKeys(window)
 			action = (picker and picker.Apply) or (asking and not ui.careful and ui.AnswerYes) or nil
 		elseif key == "F" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and ui.search:IsVisible() then
 			action = Find
-		elseif key == "Z" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and ns.PanelHome and not ui.EscapeAction() then
-			action = Undo
+		elseif (key == "Y" or key == "Z") and type(IsControlKeyDown) == "function" and IsControlKeyDown() and ns.PanelHome and not ui.EscapeAction() then
+			local shift = type(IsShiftKeyDown) == "function" and IsShiftKeyDown()
+			action = (key == "Y" or shift) and Redo or Undo
 		end
 		if not InCombatLockdown() then
 			local done, failed = pcall(self.SetPropagateKeyboardInput, self, action == nil)
@@ -3412,6 +3582,7 @@ local function Build()
 	BuildRight(window)
 	BuildFoot(window)
 	BuildKeys(window)
+	BuildProfileWait(window)
 	-- It fades in over FADE_IN (OnUpdate, below) with the game's sound of a window opening, and plays the sound of one closing as it hides; it hides at
 	-- once, since Escape hides it through UISpecialFrames. Hidden and shown again by /flatui move (MoversMode's Holding), it plays neither.
 	window:SetScript("OnShow", function()
@@ -3440,8 +3611,12 @@ local function Build()
 		ui.search:ClearFocus()
 		-- Test mode turned on here ends with the window, but not while /flatui move holds the window hidden (MoversMode.lua's Holding).
 		local test, movers = ns.TestMode, ns.MoversMode
-		if type(test) == "table" and test.Source() == "panel" and not (type(movers) == "table" and movers.Holding()) then
-			test.Off("panel")
+		if type(test) == "table" and not (type(movers) == "table" and movers.Holding()) then
+			if test.Source() == "panel" then
+				test.Off("panel")
+			end
+			-- A wish of a fight made here goes with the window too.
+			test.Drop("panel")
 		end
 		-- Any hide ends a mode; the mode keeps what it needs to open again where it was.
 		if ui.mode then
@@ -3611,6 +3786,20 @@ ns.PanelKit = {
 	Leave = LeaveMode,
 	-- Closes the colour picker, an open list or a question, the one on top; true when one was open.
 	Escape = function() local action = ui.EscapeAction() if action then action() return true end return false end,
+	-- Enter as on the options pages (BuildKeys): the colour picker's Apply, else a question's first button but not a careful question's; true when
+	-- it did one.
+	Enter = function()
+		local picker = ns.PanelColour
+		if picker and picker.Shown() then
+			picker.Apply()
+			return true
+		end
+		if ui.confirm and ui.confirm:IsShown() and not ui.careful then
+			ui.AnswerYes()
+			return true
+		end
+		return false
+	end,
 	SetCounter = function(text) if ui.barCounter then ui.barCounter:SetText(text or "") end end,
 	WIDTH = WIDTH, HEIGHT = HEIGHT, TITLE = TITLE, LEFT = LEFT, STRIP = STRIP, HEADER = HEADER, RIGHT_W = RIGHT_W, PAD = PAD, ROW = ROW,
 	ROW_W = ROW_W, SECTION = SECTION, LABEL = LABEL, CONTROL = CONTROL, FIELD = FIELD, SMALL = SMALL, BUTTON = BUTTON,

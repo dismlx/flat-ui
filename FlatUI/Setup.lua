@@ -974,9 +974,9 @@ function S.More()
 	end
 end
 
--- True while something shows over setup that Enter and the arrow keys must not act under: a list, a question or the colour picker of the window,
--- which puts them and the shade under them 40 levels and more above itself (Panel.lua, PanelColour.lua), or the welcome screen with the ready-made
--- looks (SetupWelcome.lua). It is read when a key comes, so it is right however a box closed, by a click outside it too.
+-- True while something shows over setup that the primary button's Enter and the arrow keys must not act under (Enter goes to it instead, through
+-- ns.PanelKit.Enter): a list, a question or the colour picker of the window, which puts them and the shade under them 40 levels and more above
+-- itself (Panel.lua, PanelColour.lua), or the welcome screen with the ready-made looks (SetupWelcome.lua). It is read when a key comes, so it is right however a box closed, by a click outside it too.
 function S.Covered()
 	local welcome = _G.FlatUIWelcome
 	if type(welcome) == "table" and type(welcome.IsShown) == "function" then
@@ -1013,10 +1013,10 @@ function S.Reset()
 	S.Go(S.FirstScreen())
 end
 
--- Start over on Your screen asks first when there is something to lose.
+-- Start over on Your screen asks first when there is something to lose. It is a careful question: Start over is red and Enter does not answer it.
 function S.StartOver()
 	if S.Has(S.draft) then
-		kit.Ask("Start over. Every choice made here goes.", S.Reset, nil, "Start over", "Keep choices")
+		kit.Ask("Start over. Every choice made here goes.", S.Reset, nil, "Start over", "Keep choices", true)
 	else
 		S.Reset()
 	end
@@ -1709,7 +1709,8 @@ function S.Build(window)
 	return root
 end
 
--- Enter presses the primary button and Left and Right pick the card before or after on a stop. The keys come through a frame of Flat UI's own
+-- Enter presses the primary button, or the colour picker's Apply or a question's accent button over it (not a careful question's, such as Start
+-- over), and Left and Right pick the card before or after on a stop. The keys come through a frame of Flat UI's own
 -- that has the keyboard while setup shows and only out of combat (EnableKeyboard and SetPropagateKeyboardInput are protected); every key it does not
 -- use goes on to the game. Escape closes the colour picker, an open list or a question first (ns.PanelKit.Escape), and with none of them open goes
 -- on too, so Escape closes the window. A box with the cursor takes the keys first. A key taken here lets the keys through again from the next frame,
@@ -1744,9 +1745,15 @@ function S.BuildKeys(root)
 				end)
 			end
 		end
-		-- Enter is always taken, so that it never opens chat while setup has the keys; under a list, a question or the welcome screen it does nothing.
-		if enter and not covered then
-			Reported(pcall(S.Primary))
+		-- Enter is always taken, so that it never opens chat while setup has the keys. Under the colour picker it applies the colour and under a
+		-- question it presses the accent button, as on the options pages (ns.PanelKit.Enter); a careful question, an open list and the welcome
+		-- screen it leaves alone.
+		if enter then
+			if covered then
+				Reported(pcall(kit.Enter))
+			else
+				Reported(pcall(S.Primary))
+			end
 		end
 	end)
 	-- A fight takes the keyboard from it at its start, the last moment that may, and gives it back after while setup still shows.

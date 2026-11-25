@@ -116,7 +116,8 @@ end
 -- Called with the paste field of Import profile: the preview and the rows under it follow its text.
 function Share.Watch(field)
 	state.field = field
-	field:SetScript("OnTextChanged", function()
+	-- Hooked, so the field's own hint (Panel.lua's Field) still follows the text.
+	field:HookScript("OnTextChanged", function()
 		if state.Refresh then
 			state.Refresh()
 		end

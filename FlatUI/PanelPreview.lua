@@ -32,6 +32,8 @@ local DRAWINGS = {
 	swing = "mock-swing",
 	combattext = "mock-combat-text", combattextScroll = "mock-combat-text", combattextHits = "mock-combat-text", combattextFriendly = "mock-combat-text",
 	combattextYou = "mock-combat-alerts",
+	-- The Fonts page: a title, a body line, a number line and small print in the chosen faces beside the game's pop-up text (SetupDrawLook.lua).
+	fonts = "mock-text",
 }
 
 -- The page of each frame of the Unit frames drawings, which the Per frame chooser shows.
