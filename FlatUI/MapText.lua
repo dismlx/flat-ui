@@ -4,8 +4,8 @@ local _, ns = ...
 -- rows after it), part "map text" of the hud module, which stops alone after a few failures. The lines are font strings on a frame of the
 -- addon's own, a child of the minimap the size of the map that takes no mouse, so they move, scale and hide with the map. The frame is made out
 -- of combat, or on a minimap the game does not protect, and only while a line has something the client can give; the text, its colour and its
--- place are set at any time. Nothing of the game's is written: of the minimap only its level and whether it is protected are read, and its
--- OnShow is followed with HookScript, which writes nothing on the frame.
+-- place are set at any time. Nothing of the game's is written: of the minimap only its level and whether it is protected are read, of the game's
+-- own coordinates line whether it is shown, and the map's OnShow is followed with HookScript, which writes nothing on the frame.
 -- Over each line lies a button of the addon's own, a child of that frame the size of the line's text, made with the line's text out of combat
 -- or on a map the game does not protect, which shows and hides with the text; the frame itself still takes no mouse, so the map's own clicks
 -- are untouched. Pointing at a line, out of a fight, writes a tooltip in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide
@@ -18,7 +18,8 @@ local _, ns = ...
 --   Coordinates: the player's place on the map of the zone, from C_Map.GetBestMapForUnit("player") and C_Map.GetPlayerMapPosition(map,
 --     "player"), whose x and y are read as fields (the game's own line calls GetXY of that table: Mainline/Minimap.lua:1434-1457). Neither is
 --     secret on Forever, only their arguments are guarded (MapDocumentation.lua:49-63, 437-452), and the position is nil where the game
---     withholds it. Nothing shows in an instance (IsInInstance). 0 to 2 decimals.
+--     withholds it. Nothing shows in an instance (IsInInstance), nor while the game's own coordinates show under the map (below). 0 to 2
+--     decimals.
 --   Durability: the lowest share of the current to the most durability of the equipped items (GetInventoryItemDurability, slots 1 to 19),
 --     white, yellow at 50% or less and red at 20% or less, in the colours of the game's damaged and broken items (INVENTORY_ALERT_COLORS,
 --     Blizzard_DurabilityFrame/DurabilityFrame.lua:14-16). It is read on the game's durability and equipment events and a second after a
@@ -34,7 +35,8 @@ local _, ns = ...
 -- second otherwise. It runs only while one of them can be shown and the frame is on the screen: it stops when the frame hides with the map, and
 -- the map showing again starts it. A line whose value the game withholds is hidden, and the lines of its place close up; /flatui status says why.
 -- The game's own coordinates under the map (Mainline/Minimap.xml:287-301, shown while its minimapShowPlayerCoords variable is on, Options,
--- Interface, Coordinates) are left alone: the lines below the map start under them while that variable is on. MapButtons.lua leaves room under
+-- Interface, Coordinates) are left alone: while that variable is on and their line, MinimapCluster.PlayerCoords, is shown, Flat UI's
+-- Coordinates line is hidden, so the place shows once, and the lines below the map start under the game's. MapButtons.lua leaves room under
 -- the map for the lines below it (ns.MapTextBelow), and Hud.lua, while Close the gap under the zone name is on, leaves room under the zone name
 -- for the lines whose place is above the map (ns.MapTextAbove).
 -- These follow the minimap stats of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
@@ -144,9 +146,10 @@ local function Available(line)
 	return type(_G.GetGameTime) == "function"
 end
 
--- True when the ticker has a line to read: wanted, with the client's calls, and for the coordinates outside an instance.
+-- True when the ticker has a line to read: wanted, with the client's calls, and for the coordinates outside an instance while the game's own
+-- coordinates do not show.
 local function Live(line)
-	return line.every ~= nil and Wanted(line) and Available(line) and not (line.id == "coords" and InInstance())
+	return line.every ~= nil and Wanted(line) and Available(line) and not (line.id == "coords" and (S.game or InInstance()))
 end
 
 -- The readers: the text of a line and its colour, or nil and why it is hidden. A client without the calls of a line has no line and no reason.
@@ -155,6 +158,9 @@ local function Coords()
 	local api = MapCalls()
 	if not api then
 		return nil
+	end
+	if S.game then
+		return nil, "hidden while the game's own coordinates show under the map (the game's Options, Interface, Coordinates)"
 	end
 	if InInstance() then
 		return nil, "hidden in an instance"
@@ -506,13 +512,18 @@ local function StopTicker()
 	S.ticker, S.step = nil, nil
 end
 
--- The game's own coordinates show under the map while its variable is on.
+-- The game's own coordinates show under the map while its variable is on and their line is shown; a client without that line is taken at the
+-- word of the variable. Of the line only IsShown is read.
 local function GameCoords()
 	local cvar = _G.C_CVar
-	if type(cvar) ~= "table" or ns.IsSecret(cvar) then
+	if type(cvar) ~= "table" or ns.IsSecret(cvar) or Ask(cvar.GetCVar, "minimapShowPlayerCoords") ~= "1" then
 		return false
 	end
-	return Ask(cvar.GetCVar, "minimapShowPlayerCoords") == "1"
+	local line = Field(_G.MinimapCluster, "PlayerCoords")
+	if type(line) ~= "table" or ns.Forbidden(line) then
+		return true
+	end
+	return Ask(line.IsShown, line) ~= false
 end
 
 -- Makes the frame of the lines on the map, once. False while it cannot be made now: in a fight on a map the game may protect, the make waits

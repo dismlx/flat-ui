@@ -3,9 +3,13 @@ local ADDON_NAME, ns = ...
 -- A window of the addon's own with every page of ns.PAGES, a search over all settings, and the profiles. It is made of frames,
 -- textures and font strings of the addon's own and is built the first time it is opened. None of its frames is protected, so it
 -- works in combat. It is only built out of combat, since UIParent is protected.
+-- It lies in the strata HIGH at level LEVEL, above the frames of the HUD in that strata, which are made at the level UIParent gives
+-- them: the combat alerts (CombatCues.lua), the cooldown pulse (Pulse.lua) and the combat text, and the stand-ins of test mode, which
+-- TestMode.lua keeps under it there. At the level UIParent gave it too, the samples of test mode drew inside it over its rows (0.5.32).
+-- The welcome screen lies above it (SetupWelcome.lua), and its own lists and the colour picker above its rows.
 
 local NAME = "FlatUIOptionsFrame"
-local WIDTH, HEIGHT = 1040, 680
+local WIDTH, HEIGHT, LEVEL = 1040, 680, 500
 local TITLE = 36
 -- LEFT, HEADER and RIGHT_W are the measures Setup builds its pages for (ns.PanelKit). The options pages use SIDE and CW, which follow Sidebar, and
 -- HEAD, the header with the line under the title and the module switch.
@@ -2800,6 +2804,8 @@ local function Build()
 	ui.window = window
 	window:SetSize(WIDTH, HEIGHT)
 	window:SetFrameStrata("HIGH")
+	-- Set before its parts are made, so each is made above it.
+	window:SetFrameLevel(LEVEL)
 	window:SetClampedToScreen(true)
 	window:SetMovable(true)
 	window:EnableMouse(true)
