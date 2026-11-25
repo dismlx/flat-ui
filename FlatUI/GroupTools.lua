@@ -6,8 +6,9 @@ local _, ns = ...
 -- RaidTarget1 to 8). A module of its own, on by default, whose page is in the Group group. The row shows in a group, or as Show says, and /flatui move places it (FlatUIGroupTools in
 -- Movers.lua: the top left corner of the row is the top left corner of the box). While test mode is on (TestMode.lua, out of combat only) Show
 -- reads as Always, the tick shows a sample tally of 4/5 with a sample Eli not ready, the pull button counts down from Countdown length in
--- the warm colour, again and again, the Skull is lit as your target's marker while the target wears none, and the role poll's tooltip lists a
--- sample party's roles (G.SampleOn); a real ready check, countdown, marker or roles take their place. No frame or setting of the game is changed.
+-- the warm colour, again and again, with its red last seconds and its flash at each 0, the Skull is lit as your target's marker while the target
+-- wears none, and the role poll's tooltip lists a sample party's roles, names in their class colours, while its count reads 1 for the sample Kai
+-- (G.SampleOn); a real ready check, countdown, marker or roles take their place. No frame or setting of the game is changed.
 --
 -- What the game allows. SetRaidTarget, RemoveRaidTargets, C_PartyInfo.DoReadyCheck and C_PartyInfo.DoCountdown have restrictions
 -- (HasRestrictions: RaidMarkersDocumentation.lua:108-124, PartyInfoDocumentation.lua:156-174), so they run only in the secure click of a button
@@ -17,7 +18,10 @@ local _, ns = ...
 -- (SecureTemplates.lua:450-463) with its own /readycheck, which does nothing for a member who is neither the leader nor an assistant, and
 -- /countdown (Blizzard_ChatFrameBase/Shared/SlashCommands.lua:1275-1279, 1666-1672); /countdown 0 stops a countdown, as
 -- EnhanceQoLDungeonRaid/Init.lua:440 stops one. The right button reads the attributes that end in 2, with any key held (SecureTemplates.lua:
--- 101-133), so a right-click takes the marker off your target, every marker with the clear, and stops the countdown. A secure button listens for
+-- 101-133), so a right-click takes the marker off your target, every marker with the clear, and stops the countdown. Shift and Ctrl turn a
+-- marker and the clear on the player and on the focus (shift-unit* and ctrl-unit*, which SecureButton_GetModifiedUnit reads: SecureTemplates.lua:
+-- 118-143), with either button, so Shift-right-click takes the player's marker off; a focus that does not exist makes the click do nothing
+-- (717-718), and a marker greyed for no target still marks the player with Shift. A secure button listens for
 -- the release of the mouse button (useOnKeyDown false, SecureTemplates.lua:792-800), as those of Reload.lua do. InitiateRolePoll has no
 -- restriction (UnitRoleDocumentation.lua:29-36) and the game's own buttons call it from a plain click (Mainline/
 -- Blizzard_CompactRaidFrameManager.lua:1435-1438, Blizzard_GroupFinder_VanillaStyle/Blizzard_LFGVanilla_Listing.lua:626-629), so the role poll
@@ -31,11 +35,15 @@ local _, ns = ...
 -- The tally of a ready check: from READY_CHECK to READY_CHECK_FINISHED (and on each READY_CHECK_CONFIRM: PartyInfoDocumentation.lua:839-870)
 -- the tick's icon shows how many are ready of those asked, as 3/5, read with GetReadyCheckStatus for the player and party1 to party4, or raid1
 -- to the size of the raid (the call the game's own frames make, CompactUnitFrame.lua:1371; plain answers only): green when all are ready, in
--- the warm colour once someone is not ready or, after the check, did not answer. Its tooltip names who is not ready and who has not answered,
--- by plain names only, and the result stays 8 seconds after the check ends. The pull countdown: from START_TIMER of the player countdown type
--- (Enum.StartTimerType.PlayerCountdown, TimerConstantsDocumentation.lua:13-16; timeRemaining, WorldStateInfoDocumentation.lua:43-62) its
--- number counts the seconds left in the warm colour, once a second (C_Timer.NewTicker), and goes back to Countdown length at 0 or on
--- STOP_TIMER_OF_TYPE. Both change only FontStrings of the icons of Flat UI's own, never a secure button, so in a fight too.
+-- the warm colour once someone is not ready or, after the check, did not answer; the tick gives the white flash of cooldown icons (IconRow.lua)
+-- the moment the last member answers ready. Its tooltip names who is not ready and who has not answered, by plain names only, each in his class
+-- colour (ns.ClassColourOf, plain answers only), and the result stays 8 seconds after the check ends. The pull countdown: from START_TIMER of the
+-- player countdown type (Enum.StartTimerType.PlayerCountdown, TimerConstantsDocumentation.lua:13-16; timeRemaining,
+-- WorldStateInfoDocumentation.lua:43-62) its number counts the seconds left in the warm colour, the last three in red, once a second
+-- (C_Timer.NewTicker), and goes back to Countdown length at 0, with the white flash, or on STOP_TIMER_OF_TYPE. Both change only FontStrings and
+-- textures of the icons of Flat UI's own, never a secure button, so in a fight too. Out of combat the mouse wheel over the pull button makes
+-- Countdown length a second longer or shorter (3 to 60 seconds, G.Wheel): an OnMouseWheel script of the addon's own on its own secure button, set
+-- as the button is made, out of combat; in a fight it does nothing.
 -- A button that cannot work for the player now is greyed, as the game's own group manager decides (Mainline/
 -- Blizzard_CompactRaidFrameManager.lua:601-645, 698, 1263): a marker without a target the game lets be marked (CanBeRaidTarget), and every
 -- marker and the clear in a raid unless the player is its leader or an assistant or everyone is; the ready check, the role poll and the
@@ -51,8 +59,10 @@ local _, ns = ...
 -- withheld index lights nothing) is lit, its colour at 35% behind it and on its border, as the Ping bar lights a waiting ping, and its tooltip
 -- says a left-click takes it off. It follows PLAYER_TARGET_CHANGED and RAID_TARGET_UPDATE (EncounterInfoDocumentation.lua:86), in a fight too,
 -- as only the outline of an icon of Flat UI's own changes. The role poll's tooltip lists who has which role (UnitGroupRolesAssigned and UnitName,
--- plain answers only): a line for each role in a party, the counts in a raid, and in the warm colour who has none, written again on
--- PLAYER_ROLES_ASSIGNED (PartyInfoDocumentation.lua:829) while the mouse is over it.
+-- plain answers only), each name in its class colour: a line for each role in a party, and there "No tank" or "No healer" in the warm colour
+-- when nobody holds that role while someone holds one, the counts in a raid, and in the warm colour who has none, written again on
+-- PLAYER_ROLES_ASSIGNED (PartyInfoDocumentation.lua:829) while the mouse is over it. The corner of its icon counts in the warm colour how many
+-- members have no role (a plain NONE), as the tick shows its tally, hidden at 0 and out of a group (G.RoleCount), on each paint.
 -- Fade until you point at it (off by default): the icons stay at 30% until the mouse comes over any button, back to full at once, and fade again
 -- over a quarter of a second a second after the mouse leaves (ns.IconFader, IconRow.lua). They stay full during a real ready check and its tally
 -- and a real countdown; the samples of test mode hold nothing, so the fade can be tried there. Only the opacity of the icons changes, frames of
@@ -78,6 +88,10 @@ local WARN = { 0.9, 0.72, 0.36 }
 -- The green of a ready check that all answered ready, how long its tally stays after it ends, and the step of the countdown's number.
 local ALL_READY = { 0.4, 0.9, 0.4 }
 local KEEP_TALLY, COUNT_STEP = 8, 1
+-- The red of the last seconds of a countdown, from how many seconds left, and the shortest and longest Countdown length the mouse wheel sets (the
+-- row's own limits, Config.lua).
+local LAST_RED, LAST_FROM = { 1, 0.3, 0.3 }, 3
+local PULL_LEAST, PULL_MOST = 3, 60
 -- The player countdown among the types of START_TIMER, where the client has no enum.
 local PLAYER_COUNTDOWN = 2
 local GREY_ALPHA = 0.4
@@ -100,20 +114,24 @@ local COLOURS = {
 	{ 1, 0.92, 0 }, { 0.98, 0.57, 0 }, { 0.83, 0.22, 0.9 }, { 0.04, 0.95, 0 },
 	{ 0.7, 0.82, 0.875 }, { 0, 0.71, 1 }, { 1, 0.24, 0.168 }, { 0.98, 0.98, 0.98 },
 }
--- The sample ready check of test mode.
-local SAMPLE_READY, SAMPLE_TOTAL, SAMPLE_NAME = 4, 5, "Eli"
+-- The sample ready check of test mode, its member not ready with his class (PartyCooldowns.lua's sample priest).
+local SAMPLE_READY, SAMPLE_TOTAL, SAMPLE_NAME, SAMPLE_CLASS = 4, 5, "Eli", "PRIEST"
 -- The marker your target wears is lit: its colour behind it at this opacity, as the Ping bar lights a waiting ping (PingBar.lua ARMED_ALPHA). The
 -- sample of test mode is the Skull.
 local LIT_ALPHA, SAMPLE_MARK = 0.35, 8
 local LIT = "On your target now: a left-click takes it off."
 local LIT_SAMPLE = "Sample: lit as it is when your target wears it."
--- The roles of the role poll's tooltip in their order, the word of a party's line and of a raid's count, the most names of those with no role in
--- a raid, and the sample party of test mode (the names of PartyCooldowns.lua's sample party, and a Kai who picked no role).
-local ROLE_WORDS = { { "TANK", "Tank", "Tanks" }, { "HEALER", "Healer", "Healers" }, { "DAMAGER", "Damage", "Damage" } }
+-- The roles of the role poll's tooltip in their order, the word of a party's line and of a raid's count and the line of a party where nobody holds
+-- it, the most names of those with no role in a raid, and the sample party of test mode by line, each name with its class (the names and classes of
+-- PartyCooldowns.lua's sample party, and a Kai who picked no role).
+local ROLE_WORDS = { { "TANK", "Tank", "Tanks", "No tank" }, { "HEALER", "Healer", "Healers", "No healer" }, { "DAMAGER", "Damage", "Damage" } }
 local ROLE_NAMES = 8
-local SAMPLE_ROLES = { "Sample roles:", "Tank: Mara", "Healer: Eli", "Damage: Ivo, Fay", "No role: Kai" }
-local NO_TARGET = "You have no target."
-local NO_MARK = "Your target cannot be marked."
+local SAMPLE_ROLES = {
+	{ "Tank", { "Mara", "PALADIN" } }, { "Healer", { "Eli", "PRIEST" } }, { "Damage", { "Ivo", "WARLOCK" }, { "Fay", "ROGUE" } },
+	{ "No role", { "Kai", "MAGE" } },
+}
+local NO_TARGET = "You have no target (Shift-click still marks you)."
+local NO_MARK = "Your target cannot be marked (Shift-click still marks you)."
 local RAID_MARK = "In a raid only the leader and assistants can mark."
 local NO_GROUP = "You are not in a group."
 local NOT_LEAD = "Only the leader or an assistant can do this."
@@ -220,6 +238,31 @@ local function Testing()
 	return mode ~= nil and mode.IsOn() == true
 end
 
+-- The colour code of red, green and blue from 0 to 1.
+local function Hex(r, g, b)
+	local function Byte(value)
+		return math.floor(math.max(0, math.min(1, value)) * 255 + 0.5)
+	end
+	return ("|cff%02x%02x%02x"):format(Byte(r), Byte(g), Byte(b))
+end
+
+-- A plain name in the class colour of its unit (ns.ClassColourOf, plain answers only), as Targeted by writes the group (ChatTips.lua), or as it is.
+-- The line's own colour comes back after it, so a label keeps its dim or warm colour.
+local function Coloured(unit, name)
+	local r, g, b = ns.ClassColourOf(unit)
+	return r and (Hex(r, g, b) .. name .. "|r") or name
+end
+
+-- A sample name in the colour of a class by its file name (RAID_CLASS_COLORS), or as it is.
+local function ClassName(name, class)
+	local colours = RAID_CLASS_COLORS
+	local colour = type(colours) == "table" and not IsSecret(colours) and colours[class] or nil
+	if type(colour) == "table" and not IsSecret(colour) and ns.Finite(colour.r) and ns.Finite(colour.g) and ns.Finite(colour.b) then
+		return Hex(colour.r, colour.g, colour.b) .. name .. "|r"
+	end
+	return name
+end
+
 -- What may be done ----------------------------------------------------------------------------------------------------------------------------
 
 -- What the game says of the player's group now: in a group, in a raid, and leading (the leader or an assistant, or in a raid where everyone is an
@@ -297,12 +340,15 @@ end
 
 -- The buttons -------------------------------------------------------------------------------------------------------------------------------
 
--- The attributes of a secure button; those that end in 2 are for the right button (header). The countdown's macrotext is set by G.Countdown.
+-- The attributes of a secure button; those that end in 2 are for the right button (header). The countdown's macrotext is set by G.Countdown. A
+-- marker and the clear act on the player with Shift held and on the focus with Ctrl, either button: the secure marker action reads its unit
+-- through SecureButton_GetModifiedUnit (SecureTemplates.lua:118-143, 582-603), which finds shift-unit* and ctrl-unit*, and does nothing for a
+-- focus that does not exist (717-718); no modifier leaves the unit to the action, the target.
 function G.Attributes(entry)
 	if entry.kind == "mark" then
-		return { type = "raidtarget", marker = entry.marker, action = "toggle", ["*action2"] = "clear" }
+		return { type = "raidtarget", marker = entry.marker, action = "toggle", ["*action2"] = "clear", ["shift-unit*"] = "player", ["ctrl-unit*"] = "focus" }
 	elseif entry.kind == "clear" then
-		return { type = "raidtarget", action = "clear", ["*action2"] = "clear-all" }
+		return { type = "raidtarget", action = "clear", ["*action2"] = "clear-all", ["shift-unit*"] = "player", ["ctrl-unit*"] = "focus" }
 	elseif entry.kind == "check" then
 		return { type = "macro", macrotext = "/readycheck" }
 	end
@@ -347,6 +393,16 @@ function G.Icon(panel, spec)
 		else
 			art:SetTexture(ROLES)
 			art:SetTexCoord(0, ROLES_CUT, 0, ROLES_CUT)
+			-- How many members have no role, in the corner as the ready check's tally (G.RoleCount).
+			local count = ns.OwnText(frame, "OVERLAY", FONT)
+			if count then
+				count:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+				count:SetWordWrap(false)
+				pcall(count.SetShadowOffset, count, 1, -1)
+				pcall(count.SetShadowColor, count, 0, 0, 0, 1)
+				count:Hide()
+				entry.count = count
+			end
 		end
 		entry.art = art
 	end
@@ -418,6 +474,14 @@ function G.Cover(panel, entry)
 		cover:SetScript("OnLeave", function()
 			ns.Try(KEY, G.Leave, entry)
 		end)
+		-- The mouse wheel over the pull button sets Countdown length, out of combat (G.Wheel): an insecure script of the addon's own on its own
+		-- button, set once as it is made, out of combat.
+		if entry.kind == "pull" then
+			cover:EnableMouseWheel(true)
+			cover:SetScript("OnMouseWheel", function(_, delta)
+				ns.Try(KEY, G.Wheel, entry, delta)
+			end)
+		end
 	end)
 	if not done then
 		pcall(cover.Hide, cover)
@@ -481,6 +545,10 @@ function G.Layout(list)
 	if check and check.tally then
 		check.tally:SetTextHeight(math.max(7, math.floor(size / 3 + 0.5)))
 	end
+	local roles = G.Entry("roles")
+	if roles and roles.count then
+		roles.count:SetTextHeight(math.max(7, math.floor(size / 3 + 0.5)))
+	end
 	local key = ("%s|%s|%s|%s"):format(table.concat(list, ","), size, spacing, tostring(layout))
 	if G.laid == key then
 		return
@@ -536,7 +604,8 @@ function G.Countdown()
 	end
 end
 
--- The countdown's number: the seconds left in the warm colour while a countdown runs, else Countdown length, dim while the button is greyed.
+-- The countdown's number: the seconds left in the warm colour while a countdown runs, red for the last LAST_FROM of them, else Countdown length,
+-- dim while the button is greyed.
 function G.PullText(entry)
 	local text = entry and entry.text
 	if not text then
@@ -544,13 +613,29 @@ function G.PullText(entry)
 	end
 	local now = G.ends and Ask(GetTime)
 	if now then
-		text:SetText(tostring(math.max(0, math.floor(G.ends - now + 0.5))))
-		text:SetTextColor(WARN[1], WARN[2], WARN[3], 1)
+		local left = math.max(0, math.floor(G.ends - now + 0.5))
+		local colour = left <= LAST_FROM and LAST_RED or WARN
+		text:SetText(tostring(left))
+		text:SetTextColor(colour[1], colour[2], colour[3], 1)
 		return
 	end
 	text:SetText(tostring(entry.seconds or Seconds()))
 	local shade = entry.usable and 1 or 0.6
 	text:SetTextColor(shade, shade, shade, 1)
+end
+
+-- The mouse wheel over the pull button: Countdown length one second longer (up) or shorter (down), from PULL_LEAST to PULL_MOST, out of combat
+-- only (a withheld answer counts as a fight). ns.Set refreshes the module, which writes the macrotext, the number and the tooltip under the
+-- mouse again (G.Countdown, G.Paint).
+function G.Wheel(entry, delta)
+	if Fighting() or IsSecret(delta) or not ns.Finite(delta) or delta == 0 then
+		return
+	end
+	local now = Seconds()
+	local seconds = math.max(PULL_LEAST, math.min(PULL_MOST, now + (delta > 0 and 1 or -1)))
+	if seconds ~= now then
+		ns.Set(KEY .. ".pullTime", seconds)
+	end
 end
 
 -- Puts the row at the spot of its handle: its top left corner at the top left corner of the box.
@@ -663,6 +748,7 @@ function G.Paint()
 	end
 	local grouped, raid, lead = G.State()
 	G.Marked()
+	G.RoleCount(G.Entry("roles"))
 	for _, entry in ipairs(G.buttons) do
 		local usable, why = G.Usable(entry.kind, grouped, raid, lead)
 		entry.usable, entry.why = usable, why
@@ -688,6 +774,39 @@ function G.Marked()
 	mark = ns.Finite(mark) and COLOURS[mark] and mark or nil
 	G.markSample = mark == nil and Testing()
 	G.mark = mark or (G.markSample and SAMPLE_MARK or nil)
+end
+
+-- The role poll's count: how many members of the group have no role (a plain NONE of UnitGroupRolesAssigned; a withheld role counts for
+-- nothing), in the warm colour in the icon's corner, hidden at 0 and out of a group. While test mode is on and the group gave no plain role it
+-- reads 1, for the sample Kai. Only a FontString of the icon changes, so in a fight too.
+function G.RoleCount(entry)
+	local count = entry and entry.count
+	if not count then
+		return
+	end
+	local none, read = 0, false
+	if Truth(IsInGroup) == true then
+		for _, unit in ipairs(G.Units()) do
+			local role = Ask(UnitGroupRolesAssigned, unit)
+			if type(role) == "string" and role ~= "" then
+				read = true
+				if role == "NONE" then
+					none = none + 1
+				end
+			end
+		end
+	end
+	if not read and Testing() then
+		none = 1
+	end
+	if none > 0 then
+		count:SetText(tostring(none))
+		count:SetTextColor(WARN[1], WARN[2], WARN[3], 1)
+		count:Show()
+	else
+		count:SetText("")
+		count:Hide()
+	end
 end
 
 local function Tooltip()
@@ -723,10 +842,12 @@ function G.Lines(entry)
 	if entry.kind == "mark" or entry.kind == "clear" then
 		local title, lines, key
 		if entry.kind == "mark" then
-			title, lines = NAMES[entry.marker], { "Left-click puts it on your target, or takes it off.", "Right-click takes your target's marker off." }
+			title, lines = NAMES[entry.marker], { "Left-click puts it on your target, or takes it off.", "Right-click takes your target's marker off.",
+				"Shift-click: on yourself · Ctrl-click: on your focus." }
 			key = KeyText("RAIDTARGET" .. entry.marker)
 		else
-			title, lines = "Clear markers", { "Left-click takes the marker off your target.", "Right-click takes every marker off." }
+			title, lines = "Clear markers", { "Left-click takes the marker off your target.", "Right-click takes every marker off.",
+				"Shift-click takes yours off, Ctrl-click your focus's." }
 			key = KeyText("RAIDTARGETNONE")
 		end
 		if key then
@@ -753,7 +874,8 @@ function G.Lines(entry)
 		local lines, warm = G.Roles({ "Asks everyone in the group to pick a role." })
 		return "Role poll", lines, warm
 	end
-	return "Pull countdown", { ("Left-click counts down %d seconds for the group."):format(entry.seconds or Seconds()), "Right-click stops the countdown." }
+	return "Pull countdown", { ("Left-click counts down %d seconds for the group."):format(entry.seconds or Seconds()), "Right-click stops the countdown.",
+		"Mouse wheel: longer or shorter, out of combat." }
 end
 
 -- Where a tooltip opens: above the row in the lower half of the screen, below it in the upper half (as the data panels have it).
@@ -808,7 +930,7 @@ end
 
 -- The ready check and the countdown ---------------------------------------------------------------------------------------------------------
 
--- The units of the group: raid1 to the size of the raid, else the player and party1 to party4.
+-- The units of the group: raid1 to the size of the raid, else the player and party1 to party4. G.Units for the role poll's count, written above.
 local function Units()
 	local units = {}
 	if Truth(IsInRaid) == true then
@@ -825,6 +947,7 @@ local function Units()
 	end
 	return units
 end
+G.Units = Units
 
 -- The roles of the group for the role poll's tooltip, added to lines: who has which role, from plain answers of UnitGroupRolesAssigned and UnitName
 -- only (UnitDocumentation.lua:1318-1332; a withheld role or name is left out). In a party a line for each role that has names; in a raid one line
@@ -838,7 +961,7 @@ function G.Roles(lines)
 			local role, name = Ask(UnitGroupRolesAssigned, unit), Ask(UnitName, unit)
 			local list = type(role) == "string" and names[role] or nil
 			if list and type(name) == "string" and name ~= "" then
-				list[#list + 1] = name
+				list[#list + 1] = Coloured(unit, name)
 				any = true
 			end
 		end
@@ -847,11 +970,17 @@ function G.Roles(lines)
 		if not Testing() then
 			return lines, nil
 		end
-		for _, line in ipairs(SAMPLE_ROLES) do
-			lines[#lines + 1] = line
+		lines[#lines + 1] = "Sample roles:"
+		for _, sample in ipairs(SAMPLE_ROLES) do
+			local shown = {}
+			for index = 2, #sample do
+				shown[#shown + 1] = ClassName(sample[index][1], sample[index][2])
+			end
+			lines[#lines + 1] = sample[1] .. ": " .. table.concat(shown, ", ")
 		end
 		return lines, { [#lines] = true }
 	end
+	local warm = {}
 	if Truth(IsInRaid) == true then
 		local counts = {}
 		for _, role in ipairs(ROLE_WORDS) do
@@ -859,15 +988,24 @@ function G.Roles(lines)
 		end
 		lines[#lines + 1] = table.concat(counts, " · ")
 	else
+		local held = false
 		for _, role in ipairs(ROLE_WORDS) do
 			if #names[role[1]] > 0 then
 				lines[#lines + 1] = role[2] .. ": " .. table.concat(names[role[1]], ", ")
+				held = true
+			end
+		end
+		-- A party where someone holds a role but nobody the tank's or the healer's: that is named, in the warm colour.
+		for _, role in ipairs(held and ROLE_WORDS or {}) do
+			if role[4] and #names[role[1]] == 0 then
+				lines[#lines + 1] = role[4]
+				warm[#lines] = true
 			end
 		end
 	end
 	local none = names.NONE
 	if #none == 0 then
-		return lines, nil
+		return lines, next(warm) and warm or nil
 	end
 	local shown = {}
 	for index = 1, math.min(#none, ROLE_NAMES) do
@@ -878,7 +1016,8 @@ function G.Roles(lines)
 		line = ("%s and %d more"):format(line, #none - ROLE_NAMES)
 	end
 	lines[#lines + 1] = line
-	return lines, { [#lines] = true }
+	warm[#lines] = true
+	return lines, warm
 end
 
 -- Reads the answers of the ready check that runs: how many are ready of those asked, and the plain names of who is not ready and who has not
@@ -890,7 +1029,7 @@ function G.Tally()
 		if status == "ready" or status == "notready" or status == "waiting" then
 			check.total = check.total + 1
 			local name = Ask(UnitName, unit)
-			name = type(name) == "string" and name ~= "" and name or nil
+			name = type(name) == "string" and name ~= "" and Coloured(unit, name) or nil
 			if status == "ready" then
 				check.ready = check.ready + 1
 			elseif name then
@@ -929,11 +1068,19 @@ function G.ShowTally()
 	end
 end
 
--- READY_CHECK and READY_CHECK_CONFIRM: the answers so far.
+-- READY_CHECK and READY_CHECK_CONFIRM: the answers so far. The tick flashes as cooldown icons do (IconRow.lua) the moment the last member answers
+-- ready: all ready now, not so at the answer before in the same check (an ended check or the sample counts as not).
 function G.Checking()
-	G.check = G.Tally()
+	local was = G.check
+	local check = G.Tally()
+	G.check = check
 	G.Wake()
 	G.ShowTally()
+	local before = was ~= nil and not was.over and not was.sample and was.total > 0 and was.ready == was.total
+	local entry = G.Entry("check")
+	if entry and check.total > 0 and check.ready == check.total and not before then
+		ns.IconFlash(entry)
+	end
 end
 
 -- READY_CHECK_FINISHED: the last tally stays, those still waiting now did not answer, and it goes KEEP_TALLY seconds later.
@@ -979,10 +1126,15 @@ function G.CountdownOver()
 	G.Faint()
 end
 
--- One step of the countdown: the number, and the end at 0. The sample of test mode starts again from Countdown length while test mode is on.
+-- One step of the countdown: the number, and the end at 0, where the pull button gives the white flash of cooldown icons (IconRow.lua). The sample
+-- of test mode flashes too, and starts again from Countdown length while test mode is on.
 function G.CountStep()
 	local now = Ask(GetTime)
 	if not G.ends or not now or G.ends - now < 0.5 then
+		local entry = G.ends and now and G.Entry("pull")
+		if entry then
+			ns.IconFlash(entry)
+		end
 		if G.sampleCount and now and Testing() then
 			G.ends = now + Seconds()
 			G.PullText(G.Entry("pull"))
@@ -1041,7 +1193,7 @@ end
 -- G.ends. Only FontStrings of the icons change.
 function G.SampleOn()
 	if not G.check then
-		G.check = { ready = SAMPLE_READY, total = SAMPLE_TOTAL, notReady = { SAMPLE_NAME }, waiting = {}, over = false, sample = true }
+		G.check = { ready = SAMPLE_READY, total = SAMPLE_TOTAL, notReady = { ClassName(SAMPLE_NAME, SAMPLE_CLASS) }, waiting = {}, over = false, sample = true }
 	end
 	G.ShowTally()
 	local now = Ask(GetTime)

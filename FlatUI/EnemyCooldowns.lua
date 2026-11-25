@@ -21,7 +21,8 @@ local _, ns = ...
 -- its class, in its kind's colour, the enemy's name and Ready, the time left or that its use is not known, in GameTooltip (Icon tooltips: On,
 -- Out of combat only or Off), written again each second while the mouse stays, so the time counts down and turns to Ready (E.TipTick); those
 -- icons take the mouse's motion only, never a click. Icons on nameplates take no mouse, so plates are
--- clicked as ever. Flash when ready flashes the icon at the end of a timer and, for the target and focus, plays a sound. The Add and Hide
+-- clicked as ever. Flash when ready flashes the icon at the end of a timer and, for the target and focus, Sound plays; /flatui test icons and
+-- the samples of test mode follow both rows. The Add and Hide
 -- lists and /flatui enemy are kept for the account. The helpers are in one table, E.
 
 local KEY = "enemycd"
@@ -590,6 +591,12 @@ function E.Ended(rec, key, last)
 			end)
 		end
 	end
+end
+
+-- The sound kit of Sound (ns.SOUNDS, IconRow.lua), or nil for None.
+function E.Kit()
+	local sound = ns.SOUNDS[KITS[Opt("sound")] or 0]
+	return sound and sound[1] or nil
 end
 
 -- The icon of an ability that was used is now ready: it flashes, and for the target and the focus the sound plays.
@@ -2077,10 +2084,11 @@ end
 -- Test mode (TestMode.lua) ---------------------------------------------------------------------------------------------------------------
 -- While it is on, out of combat, with the page on, the target and focus bars (with Show on target and focus on) and the row of each enemy player's
 -- plate on screen (with Show on nameplates on) that has nothing to show hold three sample icons, which need no unit: the bars at their spot. A
--- real timer takes the row back. They are used abilities, dark with Show on Always, flashing at the end of the sweep with Flash when ready and
--- with no sound. Each Render lays them out again with Icon size and the looks of the page, as E.Refresh forgets the old layout, and the ticker of
--- test mode starts their sweeps again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop). Off, a fight and the page going off blank them at the
--- next Render, which the Refresh after each runs.
+-- real timer takes the row back. They are used abilities, dark with Show on Always, flashing at the end of the sweep with Flash when ready. The
+-- first end on a target or focus bar since test mode came on plays Sound once (TM.Sound, as Party cooldowns has it), the plates none, as the
+-- sound is for the target and focus (E.Hears). Each Render lays them out again with Icon size and the looks of the page, as E.Refresh forgets the
+-- old layout, and the ticker of test mode starts their sweeps again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop). Off, a fight and the
+-- page going off blank them at the next Render, which the Refresh after each runs.
 E.HELD = {}
 
 function E.Holding()
@@ -2122,7 +2130,7 @@ function E.Hold(rec)
 	row.rec, row.testing = rec, E.HELD
 	local count = E.Fit(row, 3)
 	local look = { numbers = Opt("seconds") == true, font = Opt("numbersFont"), kind = Opt("kindBorder") == true or nil, border = Opt("iconBorder"),
-		flash = Opt("flash") == true, sound = false }
+		flash = Opt("flash") == true, sound = bar and E.Kit() or false }
 	local level = Opt("show") == "always" and DARK or 1
 	for slot, icon in ipairs(row.icons) do
 		row.drawn[slot] = nil
@@ -2150,15 +2158,17 @@ end
 
 -- The test and the status -----------------------------------------------------------------------------------------------------------
 
--- Three sample icons on a row, for the test.
+-- Three sample icons on a row, for the test: their ends flash with Flash when ready, and sound with Sound on the target and focus bars and on
+-- the plate of the target or focus (E.Hears).
 function E.Sample(row, rec, token, now)
 	row.rec, row.testing = rec, token
 	local count = E.Fit(row, 3)
+	local cue = { flash = Opt("flash") == true, sound = E.Hears(rec) and E.Kit() or false }
 	for slot = 1, #row.icons do
 		row.drawn[slot] = nil
 		if slot <= count then
 			E.Mark(row.icons[slot], false)
-			ns.IconSample(row.icons[slot], slot, now, 2 * slot, KEY)
+			ns.IconSample(row.icons[slot], slot, now, 2 * slot, KEY, cue)
 			row.icons[slot].texture:SetDesaturated(false)
 			row.icons[slot].texture:SetVertexColor(1, 1, 1)
 		else

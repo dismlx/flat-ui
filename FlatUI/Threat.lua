@@ -32,10 +32,13 @@ local _, ns = ...
 -- threat reads, else the talents) says tank, read at the start of each fight and at each refresh, his bar never pulses near aggro. A tank has
 -- Warn when you lose aggro instead: when an enemy he was tanking (isTanking, plain only, on that enemy's GUID) turns to someone else while it is
 -- still the enemy of the list, his bar pulses red for 2 seconds and Warning sound plays once; a new enemy, a withheld share or the list hiding
--- forgets what he held. The samples preview both: for a damage dealer or healer the player's sample bar passes 90% at some steps of test mode
--- and every fifth step reaches 100% and holds aggro; while his role is a tank's his sample bar holds aggro at 100% and every fifth step (10
--- seconds) a sample Mage takes it for one step, so his bar pulses as Warn when you lose aggro has it. Each sound plays once for each time test
--- mode is turned on (TestMode.lua's gate, TM.Sound).
+-- forgets what he held. With Show who is near your aggro, while his role is a tank's, the bar of any other member or pet at Warn at or above who
+-- is not tanking (plain share and isTanking only) wears a steady amber wash under its text, with no sound, so he sees who is about to pull and
+-- can taunt or slow down (T.Others). The samples preview all three: for a damage dealer or healer the player's sample bar passes 90% at some
+-- steps of test mode and every fifth step reaches 100% and holds aggro; while his role is a tank's his sample bar holds aggro at 100%, every
+-- fifth step (10 seconds) a sample Mage takes it for one step, so his bar pulses as Warn when you lose aggro has it, and two steps after each of
+-- those the sample Rogue climbs to 94% and turns amber. Each sound plays once for each time test mode is turned on (TestMode.lua's gate,
+-- TM.Sound).
 -- A bar glides to each new share (Enum.StatusBarInterpolation.ExponentialEaseOut, as the pet target bar has it, UnitPetTarget.lua), a withheld one
 -- too, while it shows the same member (his unit token, or the same sample) on the same enemy; a bar that turns to another member as the order
 -- changes, a bar that was hidden as the list shrank, a new enemy, a list that just showed or a client with no interpolation takes the value at
@@ -78,6 +81,8 @@ local PET = 0.7
 -- The outline of the player's bar, and the red of its pulse near aggro, its lowest opacity and the length of one swell.
 local MINE = { 1, 1, 1, 0.9 }
 local ALARM, ALARM_LOW, ALARM_TIME = { 1, 0.12, 0.08, 0.55 }, 0.15, 0.45
+-- The steady amber over the bar of a member about to pull aggro from a tank (Show who is near your aggro).
+local NEAR = { 1, 0.65, 0.1, 0.4 }
 -- The share under Warn at, in points, that lets the sound play again; the places of the Warning sound choices in ns.SOUNDS (IconRow.lua).
 local REARM = 10
 -- How long the player's bar pulses after he lost aggro as a tank.
@@ -269,7 +274,8 @@ end
 -- The sample bars. At each step of test mode (T.step, TestMode.lua's Tick) every bar but the first moves up or down by a share of SHIFT, in turn, and
 -- the bars are sorted again, highest first, as a fight would move them. Every TURN steps the aggro moves: a damage dealer or healer's own sample
 -- takes it (100%, the Tank 96%) for one step; while the player's role is a tank's (T.tank) his sample holds it (100%, the Tank 88%) and the Mage
--- takes it from him (100%, his 97%) for one step, so Warn when you lose aggro shows.
+-- takes it from him (100%, his 97%) for one step, so Warn when you lose aggro shows; between the Mage's turns (the second step of each TURN) the
+-- Rogue climbs to 94% without the aggro, so Show who is near your aggro turns his bar amber.
 local SHIFT = { 0, 7, -5, 11, -8, 4, -3, 9 }
 local TURN = 5
 
@@ -288,6 +294,8 @@ function T.Sample()
 				share, tanking = 88, false
 			elseif turn and spec[1] == "Mage" then
 				share, tanking = 100, true
+			elseif step > 0 and step % TURN == 2 and spec[1] == "Rogue" then
+				share, tanking = 94, false
 			end
 		elseif turn and me then
 			share, tanking = 100, true
@@ -564,6 +572,11 @@ function T.Row(index)
 	alarm:SetAllPoints(bar)
 	alarm:SetColorTexture(ALARM[1], ALARM[2], ALARM[3], ALARM[4])
 	alarm:Hide()
+	-- The steady amber of a member about to pull aggro from a tank (T.Others), under the text; never on the player's bar, so never with the red.
+	local near = Own(bar:CreateTexture(nil, "OVERLAY", nil, -8))
+	near:SetAllPoints(bar)
+	near:SetColorTexture(NEAR[1], NEAR[2], NEAR[3], NEAR[4])
+	near:Hide()
 	local made, pulse = pcall(function()
 		local group = alarm:CreateAnimationGroup()
 		group:SetLooping("BOUNCE")
@@ -573,7 +586,7 @@ function T.Row(index)
 		fade:SetDuration(ALARM_TIME)
 		return group
 	end)
-	row = { bar = bar, track = track, name = name, share = share, mine = mine, alarm = alarm, pulse = made and pulse or nil }
+	row = { bar = bar, track = track, name = name, share = share, mine = mine, alarm = alarm, near = near, pulse = made and pulse or nil }
 	T.rows[index] = row
 	return row
 end
@@ -591,6 +604,15 @@ end
 -- His bar then keeps a steady red wash (T.Pulse), and Warning sound plays if it has not for that enemy (T.Alarm).
 function T.Holding(entry)
 	return Opt("warn") ~= false and not T.tank and entry ~= nil and entry.me == true and not entry.withheld and entry.tanking == true
+end
+
+-- True when an entry of another member is about to pull aggro from the player as a tank: Show who is near your aggro is on, ns.PlayerRole says
+-- tank (T.tank), the member is not tanking and his plain share is at Warn at or above. His bar then turns a steady amber, with no sound.
+function T.Others(entry)
+	if not T.tank or Opt("others") == false or not entry or entry.me or entry.withheld or entry.tanking then
+		return false
+	end
+	return ns.Finite(entry.scaled) and entry.scaled >= Number("warnAt", 90)
 end
 
 -- True while the player's bar pulses because he lost aggro as a tank (T.Lost).
@@ -730,6 +752,7 @@ end
 -- token, or the same sample) in a window that shows; else it takes it at once.
 function T.Fill(row, entry)
 	row.mine:SetShown(entry.me == true and Opt("mine") ~= false)
+	row.near:SetShown(T.Others(entry))
 	T.Pulse(row, T.Near(entry) or T.Losing(entry), T.Holding(entry))
 	local who = entry.sample or entry.member.unit
 	local jump = row.who ~= who or not T.frame:IsShown()
@@ -822,6 +845,7 @@ function T.Draw(mob, entries)
 	-- A bar that hides forgets its member, so it takes its share at once when it shows again (T.Fill).
 	for index = n + 1, #T.rows do
 		T.Pulse(T.rows[index], false)
+		T.rows[index].near:Hide()
 		T.rows[index].bar:Hide()
 		T.rows[index].who = nil
 	end
