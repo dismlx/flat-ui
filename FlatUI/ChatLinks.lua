@@ -20,11 +20,17 @@ local _, ns = ...
 -- game's tooltip data (Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:488-519, 590), as OwnPaint.lua fills it with SetAction; Chat.lua's
 -- lines and border apply to it as to any tooltip. It is hidden when the mouse leaves the link, the window hides or a fight starts, and only while
 -- that frame still owns it. None is shown in a fight, nor while the game restricts addons (C_RestrictedActions, every restriction but the map's).
+-- Channel names (chat.channelNames, 0.5.35; Number and name by default): a second filter in the same registry, for the lines of numbered channels
+-- alone (CHAT_MSG_CHANNEL), puts the label "2. Trade" in place of "2. Trade - City" (the event's fourth value), from which the game writes the
+-- label of the line (Mainline/ChatFrameOverrides.lua:667-668); the text and every other value stay as they came. A window takes a channel line
+-- only while its label is longer than the name of the channel of the window's list that it matches (ChatFrameOverrides.lua:346-360), so a label
+-- is made short in a window only where it still is (Fits, which reads the window's channelList and zoneChannelList, never writes them). As the
+-- game has it gives the long names back.
 -- These follow the clickable addresses and the link tooltips of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoLChatSocial/ChatIcons.lua). Left out: its item and currency icons and the item levels in links.
 
 local KEY = "chat"
-local LINKS, TIPS = "web links", "link tooltips"
+local LINKS, TIPS, CHANNELS = "web links", "link tooltips", "channel names"
 local ROW = { [LINKS] = "webLinks", [TIPS] = "linkTips" }
 -- What comes after |H in a link this file makes: the game's addon link type, then Flat UI's own name and kind.
 local PREFIX = "addon:FlatUI:url:"
@@ -272,6 +278,103 @@ local function SyncLinks()
 			pcall(remove, event, Filter)
 		end
 		S.filtering = false
+	end
+end
+
+-- Channel names ------------------------------------------------------------------------------
+
+-- True while channel names are to be short: the module on, Channel names at Number and name, the part not stopped.
+local function ShortNames()
+	return ns.Enabled(KEY) and Opt("channelNames") == "short" and not ns.PartStopped(KEY, CHANNELS)
+end
+
+-- The label of a channel line without its zone, "2. Trade" for "2. Trade - City" and "1. General" for "1. General - Elwynn Forest", or nil for a
+-- name with no " - " after its number and name (a channel a player made, or the game's own text as it comes).
+local function ShortName(name)
+	if not Plain(name, "string") then
+		return nil
+	end
+	local at = name:find(" - ", 1, true)
+	local short = at and name:sub(1, at - 1) or nil
+	if not short or not short:find("^%d+%. %S") then
+		return nil
+	end
+	return short
+end
+
+-- True when this window still takes the line with the short name. The game's window match (Mainline/ChatFrameOverrides.lua:346-360) looks at a
+-- channel of the window's list (its channelList, by the zoneChannelList of the same index or by name) only while the line's name is longer than
+-- that channel's, and drops a line no channel of the list takes; so every channel of the list the line matches, by its zone channel (arg7) or by
+-- its name (arg9), must be shorter than the short name. Both lists are read only; a list the window does not have, or a value withheld, keeps the
+-- line as it is.
+local function Fits(frame, short, zone, base)
+	local list, zones = rawget(frame, "channelList"), rawget(frame, "zoneChannelList")
+	if not Plain(list, "table") then
+		return false
+	end
+	local upper = Plain(base, "string") and base:upper() or nil
+	local byZone = Plain(zone, "number") and zone > 0
+	for index, value in pairs(list) do
+		if not Plain(value, "string") then
+			return false
+		end
+		local of = Plain(zones, "table") and zones[index] or nil
+		local match = (byZone and Plain(of, "number") and of == zone) or (upper ~= nil and value:upper() == upper)
+		if match and #short <= #value then
+			return false
+		end
+	end
+	return true
+end
+
+-- One channel line of one window: S.short is its short label, or nil to leave it.
+local function Shorten(frame, name, zone, base)
+	local short = Plain(frame, "table") and ShortName(name) or nil
+	if short and Fits(frame, short, zone, base) then
+		S.short = short
+	end
+end
+
+-- The game's registry calls it with the window, the event and the values of a channel line: the text first, the channel's label fourth
+-- ("2. Trade - City"), its zone channel seventh, its number eighth and its name ninth. The label alone is put in its place, every other value as
+-- it came; the game builds the line's channel link from the number (Mainline/ChatFrameOverrides.lua:667-668), so a click on the label still
+-- opens the channel.
+local function Channels(frame, event, msg, a2, a3, a4, ...)
+	if not ShortNames() or not Plain(msg, "string") then
+		return false
+	end
+	S.short = nil
+	-- A part that fails is counted once for each window it fails on.
+	ns.EachPart(KEY, CHANNELS, Shorten, Plain(frame, "table") and frame or Channels, a4, (select(3, ...)), (select(5, ...)))
+	local short = S.short
+	S.short = nil
+	if short ~= nil then
+		return false, msg, a2, a3, short, ...
+	end
+	return false
+end
+
+-- The label of a channel as the chat windows show it now: short while Channel names is at Number and name, else as it came. ChatHistory.lua
+-- writes the channel lines it shows again after a reload with it, so they read as the lines around them.
+function ns.ChatChannelLabel(name)
+	return ShortNames() and ShortName(name) or name
+end
+
+-- The filter of channel names is given for the lines of numbered channels alone (CHAT_MSG_CHANNEL; their notices, as "Joined Channel", and
+-- community channels keep the game's names), and taken back with the same function value.
+local function SyncChannels()
+	local add, remove = Registry()
+	if not add then
+		S.channels = false
+		return
+	end
+	local want = ShortNames()
+	if want and not S.channels then
+		pcall(add, "CHAT_MSG_CHANNEL", Channels)
+		S.channels = true
+	elseif not want and S.channels then
+		pcall(remove, "CHAT_MSG_CHANNEL", Channels)
+		S.channels = false
 	end
 end
 
@@ -564,6 +667,7 @@ function ns.ChatLinksSync()
 	end
 	Part(LINKS, SyncLinks)
 	Part(TIPS, SyncTips)
+	Part(CHANNELS, SyncChannels)
 	if not ns.Enabled(KEY) then
 		CloseBox()
 	end

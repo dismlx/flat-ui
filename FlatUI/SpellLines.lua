@@ -5,14 +5,17 @@ local _, ns = ...
 -- attack power lines, With your stats, Less for low ranks), the total of one cast with the player's stats, base and bonus together (Total,
 -- chat.spellTotal; 0.5.20) and its rates (chat.spellRates: the expected value with crits, misses and a spell's piercing, a second of cast time, a
 -- point of mana), its threat on WoW: Forever with each multiplier in force (Threat lines), the lines a stance, form, aura or talent tooltip needs
--- that its own text leaves out, and, while a number shown is from before the fight now on, one dim line that says so, last. SpellModel.lua makes
+-- that its own text leaves out, while a number shown is from before the fight now on, one dim line that says so, and last, on a spell whose next
+-- rank the player has yet to learn, the level of that rank or that it can be learned now (Next rank, chat.spellNextRank; 0.5.35, NextRank, made
+-- fresh for each build from the rank's level in SpellData.lua, the player's level and ns.SpellKnown of Cooldowns.lua). SpellModel.lua makes
 -- the texts (M.PowerLines, M.TotalLines, M.ThreatLines, M.RuleLines, each a block with its title) from the data of SpellData.lua and the player's
 -- state and stats, and listens to the game while a part wants it (M.Want); this file finds the spell, keeps its lines and adds them. It registers
 -- no event, adds to the chat module and has no switch of its own, as ChatTips.lua. SpellModel.lua, SpellData.lua and ns.ActionSpell of
 -- Cooldowns.lua are looked up when asked, never as the files load, since each may load after this one or fail.
 -- What it touches of the game, in the order it does: the frames GameTooltip and ItemRefTooltip, IsForbidden (through ns.Forbidden), the
 -- tooltip's field IsEmbedded, Enum.TooltipDataType and the data's type, IsShiftKeyDown, IsControlKeyDown and IsAltKeyDown, the data's id and
--- lines, the tooltip's field processingInfo, GetActionInfo and GetMacroSpell (through ns.ActionSpell), the tooltip's NumLines, UnitLevel, the
+-- lines, the tooltip's field processingInfo, GetActionInfo and GetMacroSpell (through ns.ActionSpell), the tooltip's NumLines, UnitLevel (of the
+-- pet, and of the player for the next rank), the spells known (through ns.SpellKnown), the
 -- tooltip's AddDoubleLine and AddLine, geterrorhandler, and for /flatui status C_Secrets.ShouldUnitStatsBeSecret and GetTime. No event.
 -- Chat.lua calls ns.SpellTipLines from its post call of the game's tooltip data (TooltipDataProcessor.AddTooltipPostCall, AllTypes) right after
 -- ChatTips.lua's lines and before its own ID and count lines, so Spell ID stays the last line, and ns.SpellLinesSync at the end of each refresh.
@@ -77,9 +80,10 @@ local SL = {
 	-- The rows of the Spell tooltips page this file reads (Config.lua, saved as chat.<key>), and their defaults of design 4.9 for a profile that has
 	-- none of them yet.
 	PATH = { spellPower = "chat.spellPower", spellStats = "chat.spellStats", spellLowRank = "chat.spellLowRank", spellThreat = "chat.spellThreat",
-		spellWhen = "chat.spellWhen", spellTotal = "chat.spellTotal", spellRates = "chat.spellRates", tipDetail = "chat.tipDetail" },
+		spellWhen = "chat.spellWhen", spellTotal = "chat.spellTotal", spellRates = "chat.spellRates", tipDetail = "chat.tipDetail",
+		spellNextRank = "chat.spellNextRank" },
 	DEFAULT = { spellPower = true, spellStats = true, spellLowRank = true, spellThreat = "special", spellWhen = "always", spellTotal = true,
-		spellRates = true, tipDetail = "compact" },
+		spellRates = true, tipDetail = "compact", spellNextRank = true },
 	-- The kinds of tooltip data a spell line goes on, for a client whose Enum.TooltipDataType does not say (TooltipInfoSharedDocumentation.lua:97,
 	-- 107, 121).
 	TYPES = { Spell = 1, PetAction = 11, Macro = 25 },
@@ -90,11 +94,14 @@ local SL = {
 	TRAIT = "GetTraitEntry",
 	-- The colours of the style while SpellModel.lua's (M.Fmt.Style) cannot be read: a block's gold header (the game's NORMAL_FONT_COLOR), a
 	-- figure's light grey label and white value, and a dim note.
-	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, dim = { 0.66, 0.68, 0.62 } },
+	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, dim = { 0.66, 0.68, 0.62 }, good = { 0.1, 1, 0.1 } },
 	-- The notes of a block in Compact are joined into one dim line with this between them (chat.tipDetail).
 	JOIN = "; ",
 	-- The dim line that ends the spell lines while a number shown is from before the fight now on.
 	OLD = "Your stats from before this fight.",
+	-- The line of the next rank (chat.spellNextRank, 0.5.35): dim below its level, green once the player's level reaches it.
+	NEXT = "Next rank: Rank %d at level %d",
+	LEARN = "Rank %d: you can learn it now",
 	-- Spells whose lines are kept at most (design 4.6).
 	MOST = 64,
 	-- The key of the lines of a build that names no talent rank.
@@ -142,10 +149,11 @@ local function Mode()
 	return "special"
 end
 
--- True while the module is on and a row wants lines: the power lines, the total or its rates, or the threat lines with the lines of stances,
--- forms, auras and talents.
+-- True while the module is on and a row wants lines: the power lines, the total or its rates, the threat lines with the lines of stances,
+-- forms, auras and talents, or the next rank.
 local function Wanted()
-	return ns.Enabled(KEY) and (Opt("spellPower") == true or Opt("spellTotal") == true or Opt("spellRates") == true or Mode() ~= "off")
+	return ns.Enabled(KEY) and (Opt("spellPower") == true or Opt("spellTotal") == true or Opt("spellRates") == true or Mode() ~= "off"
+		or Opt("spellNextRank") == true)
 end
 
 -- SpellModel (SpellModel.lua), looked up when asked; nil while it is not there.
@@ -521,6 +529,43 @@ local function LinesOf(M, id, entry, index, rank)
 	return lines
 end
 
+-- The line of the next rank (chat.spellNextRank, 0.5.35), made fresh for each build and never kept, since it follows the player's level and the
+-- spells known: the rank after the one this tooltip is of (its place in the entry's ranks, SpellData.lua: [1] the spell ID, [2] the level it is
+-- learned at), dim as "Next rank: Rank 6 at level 32" below that level and green as "Rank 6: you can learn it now" at it. Nil at the top rank, on
+-- a talent's block (rank, trait), a pet's spell and a judgement (whose ranks follow its seal, entry.seal), and while the player knows that rank or
+-- a higher one, or the game does not say (ns.SpellKnown of Cooldowns.lua answers true then), or the player's level is not plain.
+local function NextRank(entry, index, rank, trait)
+	if rank ~= nil or trait ~= nil or Opt("spellNextRank") ~= true or type(entry) ~= "table" or entry.pet == true or entry.seal ~= nil
+		or not Whole(index) or type(entry.ranks) ~= "table" or type(ns.SpellKnown) ~= "function" or type(UnitLevel) ~= "function" then
+		return nil
+	end
+	local ranks = entry.ranks
+	local after = ranks[index + 1]
+	local learn = type(after) == "table" and after[2] or nil
+	if not Whole(learn) then
+		return nil
+	end
+	for place = index + 1, #ranks do
+		local spell = type(ranks[place]) == "table" and ranks[place][1] or nil
+		if Whole(spell) then
+			local ok, known = pcall(ns.SpellKnown, spell)
+			if not ok or IsSecret(known) or known ~= false then
+				return nil
+			end
+		end
+	end
+	local ok, level = pcall(UnitLevel, "player")
+	if not ok or not ns.Finite(level) or level <= 0 then
+		return nil
+	end
+	local style = Colours()
+	if level >= learn then
+		local good = type(style.good) == "table" and style.good or SL.STYLE.good
+		return { left = SL.LEARN:format(index + 1), colour = good, rightColour = good, wrap = true, note = true }
+	end
+	return { left = SL.NEXT:format(index + 1, learn), colour = style.dim, rightColour = style.dim, wrap = true, note = true }
+end
+
 -- Adding ---------------------------------------------------------------------------------------------------------------------------------
 
 -- Adds one line to the tooltip: a share and its number side by side, or a line alone, wrapped when it asks. True when the game took it.
@@ -550,18 +595,20 @@ local function Work(id, tooltip, data, entry, index, rank, trait)
 		return
 	end
 	local lines = LinesOf(M, id, entry, index, rank)
-	if #lines == 0 then
+	local nextRank = NextRank(entry, index, rank, trait)
+	if #lines == 0 and nextRank == nil then
 		return
 	end
 	local before = nil
 	if record and trait and record.trait == trait and rank and record.rank and rank > record.rank and shown >= record.lines then
 		before = record.notes
 	end
-	local notes = {}
+	local notes, refused = {}, false
 	for _, line in ipairs(lines) do
 		local dim = line.note == true and line.right == nil
 		if not (dim and before and before[line.left]) then
 			if not Put(tooltip, line) then
+				refused = true
 				break
 			end
 			shown = shown + 1
@@ -569,6 +616,10 @@ local function Work(id, tooltip, data, entry, index, rank, trait)
 				notes[line.left] = true
 			end
 		end
+	end
+	-- The next rank's line comes last, after the cached lines, and counts in the lines of the build, so a second post call adds it no more.
+	if nextRank and not refused and Put(tooltip, nextRank) then
+		shown = shown + 1
 	end
 	if not record then
 		record = {}

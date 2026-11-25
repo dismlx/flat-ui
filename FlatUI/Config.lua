@@ -2300,6 +2300,11 @@ ns.PAGES = {
 		{ key = "restoreLines", kind = "number", default = 50, min = 10, max = 200, step = 10, unit = " lines", label = "Lines to show again",
 			tip = "None older than an hour, and no more than three quarters of Lines kept per window, so that the other lines of a login stay in the window.", needs = "restore" },
 		{ key = "restoreChannels", kind = "bool", default = false, label = "Numbered channels too", tip = "General, Trade and the other numbered channels.", needs = "restore" },
+		-- ChatLinks.lua: a chat filter that puts the short label in place of the game's on numbered channel lines (0.5.35).
+		{ section = "Channels" },
+		{ key = "channelNames", kind = "choice", default = "short", label = "Channel names",
+			tip = "The label before a line of General, Trade, LocalDefense and the other numbered channels. A click on it still opens the channel.",
+			choices = { { "game", "As the game has it ([2. Trade - City])" }, { "short", "Number and name ([2. Trade])" } } },
 		{ section = "Links" },
 		{ key = "webLinks", kind = "bool", default = true, label = "Web addresses as links",
 			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy." },
@@ -2376,6 +2381,8 @@ ns.PAGES = {
 			choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } } },
 		{ key = "enchantId", kind = "bool", default = true, label = "Temporary enchant ID", tip = "On a weapon you wear: the ID of its poison, oil, stone or imbue.", needs = "ids" },
 		{ key = "count", kind = "bool", default = true, label = "Item count in bags and bank" },
+		-- Chat.lua (ItemLevelLine): a gold line under the game's own lines of a weapon or a piece of armour (0.5.35).
+		{ key = "itemLevel", kind = "bool", default = true, label = "Item level", tip = "On armor and weapons, as Item level 63 in gold, also in the comparison beside them." },
 		{ key = "icons", kind = "bool", default = true, label = "Item and spell icons",
 			tip = "The icon before the name of an item, a spell, a buff or a debuff: not on the target and focus frames, whose buff tooltip is the game's own." },
 		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you." },
@@ -2401,6 +2408,9 @@ ns.PAGES = {
 		-- serve the window (design 2.5: the low rank factor while its row is on).
 		{ key = "spellLowRank", kind = "bool", default = true, label = "Less for low ranks (estimate)",
 			tip = "On WoW: Forever a rank far below your level gets less of your spell damage and healing. Blizzard gave no formula, so Flat UI uses an estimate from players' tests on heals up to level 30: in full for 17 levels after the rank is learned, then 5% less a level. Marked ~." },
+		-- SpellLines.lua: one line after the spell lines with the rank after the one shown, from the rank's level in SpellData.lua (0.5.35).
+		{ key = "spellNextRank", kind = "bool", default = true, label = "Next rank",
+			tip = "On a spell with more ranks: the level of the next rank, as Next rank: Rank 6 at level 32, or in green that you can learn it now. Not at the top rank or once you know a higher one, nor on talents, pet spells and judgements." },
 		{ key = "spellThreat", kind = "choice", default = "special", label = "Threat lines",
 			choices = { { "special", "Where threat is special or changed" }, { "all", "On every spell" }, { "off", "Off" } },
 			tip = "Where threat is special or changed: abilities with threat of their own, and spells whose threat your stance, form, Righteous Fury, talents or gear change, with what changes it; not a damage dealer's Battle Stance or Cat Form, nor heals at the usual half a point a point healed. Stances, forms and Righteous Fury say what their own text does not. A spell whose threat on WoW: Forever is not known, such as Whirlwind, Execute, Power Word: Shield and the absorbs, gets no line." },

@@ -19,7 +19,8 @@ local _, ns = ...
 -- 3294-3302), so PLAYER_LOGIN, which comes at every login and every reload, is heard through the module (ns.AddEvent) and not on the frame, which
 -- is made in the refresh that the start of the module runs inside that same PLAYER_LOGIN. Once a session, one Flat UI line and then the newest kept
 -- lines go to the main chat window: up to Lines to show again, none older than an hour, oldest first, each as "[hh:mm] [sender]: text" with the
--- kind before the sender as the game names it, in the colour of its kind (ChatTypeInfo, read only: ChatFrameOverrides.lua:145-151 sets it, and
+-- kind before the sender as the game names it (a channel's label as the windows show it now, "[2. Trade]" while Channel names is short:
+-- ns.ChatChannelLabel of ChatLinks.lua, 0.5.35), in the colour of its kind (ChatTypeInfo, read only: ChatFrameOverrides.lua:145-151 sets it, and
 -- Shared/ChatTypeInfoColors.lua gives every kind white until the chat settings come, so the colour kept from the last session comes first),
 -- dimmed. They go out through print(), whose handler writes to DEFAULT_CHAT_FRAME (Blizzard_PrintHandler/Blizzard_PrintHandler.lua:66-72, 93-95),
 -- since the AddMessage of a chat window is a Lua method of the game (Shared/ChatFrame.lua:35-41). The links in a text stay as they came.
@@ -232,7 +233,9 @@ local function Text(line, colours)
 	elseif line.event == "CHAT_MSG_WHISPER_INFORM" then
 		body = "To [" .. name .. "]: " .. line.text
 	elseif line.event == CHANNEL then
-		body = "[" .. line.channel .. "] [" .. name .. "]: " .. line.text
+		-- The label as the windows show it now (Channel names, ChatLinks.lua): "2. Trade" while it is short.
+		local label = type(ns.ChatChannelLabel) == "function" and ns.ChatChannelLabel(line.channel) or line.channel
+		body = "[" .. (Plain(label, "string") and label or line.channel) .. "] [" .. name .. "]: " .. line.text
 	else
 		body = (TAGS[line.event] or "") .. "[" .. name .. "]: " .. line.text
 	end

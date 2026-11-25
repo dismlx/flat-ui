@@ -4,7 +4,7 @@ local _, ns = ...
 -- hidden; art whose alpha the game leaves alone is made transparent. The flat boxes are textures of the addon's own. What the game sets again
 -- is followed with hooksecurefunc on a global function of the game, with HookScript on GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
+-- from the lines the kind of a unit, an item level, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
 -- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
 -- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only.
 -- With Health text on the bar (Percent by default) a frame of the addon's own on GameTooltip's health bar, made out of combat, writes the health
@@ -85,7 +85,7 @@ local queued = setmetatable({}, { __mode = "k" })
 -- be read), unit = true for the data of a unit, kind = "spell", "aura" or "item" (only with the owner read), hostile = whether you can attack the
 -- unit (nil when the game will not say or no row asks), group = true when the owner is one of the game's party or raid frames }.
 local X = { seats = setmetatable({}, { __mode = "k" }), scales = setmetatable({}, { __mode = "k" }), fonts = setmetatable({}, { __mode = "k" }),
-	extras = setmetatable({}, { __mode = "k" }), built = setmetatable({}, { __mode = "k" }), bar = {} }
+	extras = setmetatable({}, { __mode = "k" }), built = setmetatable({}, { __mode = "k" }), bar = {}, levels = setmetatable({}, { __mode = "k" }) }
 local hooked = {}
 local postCall = false
 local barOutline
@@ -811,6 +811,51 @@ local function Extras(tooltip, data)
 	X.extras[tooltip] = { data = data, lines = shown }
 end
 
+-- True when the data already has a line of the kind ItemLevel (Enum.TooltipDataLineType, 31 in TooltipInfoSharedDocumentation.lua:65), which a
+-- client that writes its own item level line gives; a kind the game does not say counts as none.
+local function HasLevelLine(data)
+	local kinds, list = type(Enum) == "table" and Enum.TooltipDataLineType, data.lines
+	local kind = Usable(kinds) and kinds.ItemLevel or nil
+	if not IsNumber(kind) or not Usable(list) then
+		return false
+	end
+	for _, line in ipairs(list) do
+		if Usable(line) and IsNumber(line.type) and line.type == kind then
+			return true
+		end
+	end
+	return false
+end
+
+-- Item level (chat.itemLevel, 0.5.35): a line "Item level 63" in the game's gold (NORMAL_FONT_COLOR) after the game's own lines of a weapon or a
+-- piece of armour and before the spell, gear and ID lines, on every tooltip the game builds from data, so the comparison beside it
+-- (ShoppingTooltip1 and 2) says its level too. The level is ns.Items.LevelOf's (Items.lua: weapons and armour only, C_Item.GetItemInfoInstant and
+-- C_Item.GetDetailedItemLevelInfo) of the data's hyperlink, else of its id; an item the client has not loaded yet gets none, and so does data that
+-- already has the game's own item level line (HasLevelLine). Once for each build, as Extras: the same data with the line still there is the same
+-- build.
+local function ItemLevelLine(tooltip, data)
+	if not ns.Enabled(KEY) or Opt("itemLevel") ~= true or not IsData(data, "Item") or not Usable(tooltip) or ns.Forbidden(tooltip) then
+		return
+	end
+	local items, link = ns.Items, data.hyperlink
+	if ns.IsSecret(link) or type(link) ~= "string" or link == "" then
+		link = data.id
+	end
+	if not Usable(items) or type(items.LevelOf) ~= "function" or not (IsNumber(link) or type(link) == "string") or HasLevelLine(data) then
+		return
+	end
+	local okLevel, level = pcall(items.LevelOf, link)
+	local ok, shown = pcall(tooltip.NumLines, tooltip)
+	local record = X.levels[tooltip]
+	if not okLevel or not ns.Finite(level) or level <= 0 or not ok or not IsNumber(shown)
+		or (record and record.data == data and shown >= record.lines) then
+		return
+	end
+	if pcall(tooltip.AddLine, tooltip, ("Item level %d"):format(math.floor(level + 0.5)), 1, 0.82, 0) then
+		X.levels[tooltip] = { data = data, lines = shown + 1 }
+	end
+end
+
 -- The colour of a unit tooltip's border and of the name on its first line. Called by the game for the name line of a unit, after it is added
 -- (TooltipDataHandler.lua:329-334); the game set the line's colour before that (TooltipDataRules.lua:7-16). Reaction takes that colour, class
 -- takes the class colour of a player and the reaction colour of any other unit, and a token or class the client withholds changes nothing.
@@ -1180,6 +1225,8 @@ local function FollowData()
 		if not ns.IsStopped(KEY) then
 			-- ChatTips.lua: the target line, the class line and the icons, before the kind word so that it stays the last line.
 			ns.Each(KEY, ns.ChatTipLines, tooltip, data)
+			-- The item level of a weapon or a piece of armour, right under the game's own lines (ItemLevelLine).
+			ns.Each(KEY, ItemLevelLine, tooltip, data)
 			-- SpellLines.lua and GearLines.lua: the spell and the gear lines, after the game's own and before the ID and count lines (Extras), so that
 			-- the ID line stays after them. Each runs its work inside ns.EachPart, so a fault there stops that part alone.
 			if type(ns.SpellTipLines) == "function" then
