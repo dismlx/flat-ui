@@ -2542,7 +2542,7 @@ ns.PAGES = {
 		{ key = "questTurnIn", kind = "bool", default = true, label = "Hand in finished quests",
 			tip = "Takes the reward when there is only one; with a choice, the window stays open for you. A quest that takes money, or an item of green quality or better, is left to you." },
 		{ key = "rewardValue", kind = "bool", default = true, label = "Mark the reward worth most",
-			tip = "With a choice of rewards, a gold coin marks the one a merchant pays most for, and its tooltip says how much. You still choose." },
+			tip = "With a choice of rewards, a small gold coin on the item's icon marks the one a merchant pays most for as the window opens, and its tooltip says how much. You still choose." },
 		{ key = "questLow", kind = "bool", default = false, label = "Low-level quests too", needs = "questAccept",
 			tip = "Off: a grey quest is left to you, so the places in your quest log go to quests worth the time." },
 		{ key = "questRepeat", kind = "bool", default = false, label = "Repeatable quests too",

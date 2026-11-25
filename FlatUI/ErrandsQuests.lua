@@ -12,13 +12,15 @@ local _, ns = ...
 -- window (QUEST_COMPLETE) with GetQuestReward when there is one reward or none, as the game's own button does. With a choice of rewards the window
 -- stays open for you. Left to you: a quest that takes money (GetQuestMoneyToGet), a currency, or an item of green quality or better, and one that
 -- can be done again unless its row is ticked.
--- Mark the reward worth most: with a choice of two or more rewards in the quest window (its offer or its rewards), a gold coin of Flat UI's own lies
--- in the top right corner of the choice a merchant pays most for: the sell price (C_Item.GetItemInfo, its 11th answer) times the count
--- (GetQuestItemInfo, GetQuestItemLink). No coin on a tie, when every price is 0, or when a price is not known (a currency, or an item the game
--- has not loaded: GET_ITEM_INFO_RECEIVED looks again, a few times a window). The coin follows the game's QuestInfo_ShowRewards (ns.FollowGlobal),
--- finds the choice's button among QuestInfoRewardsFrame.RewardButtons by its type and ID (fields read only), and is anchored to it with SetPoint
--- of its own frame, which takes no mouse and hides when the button is no longer seen, at QUEST_FINISHED and when the row goes off; never for the
--- quest log. The tooltip of that choice ends with what it sells for, a line added by a post call of the game's item tooltips (as BagsTooltip.lua
+-- Mark the reward worth most: with a choice of two or more rewards in the quest window (its offer or its rewards), a small gold coin of Flat UI's
+-- own, on a soft gold halo, sits on the top right corner of the item's icon of the choice a merchant pays most for: the sell price
+-- (C_Item.GetItemInfo, its 11th answer) times the count (GetQuestItemInfo, GetQuestItemLink). No coin on a tie, when every price is 0, or when a
+-- price is not known (a currency, or an item the game has not loaded: GET_ITEM_INFO_RECEIVED looks again, a few times a window). The coin
+-- follows the game's QuestInfo_Display (each time the offer or reward page opens: the game's elements tables keep their own QuestInfo_ShowRewards,
+-- so that global is not called then) and QuestInfo_ShowRewards (QUEST_ITEM_UPDATE, a learned spell), both with ns.FollowGlobal, finds the
+-- choice's button among QuestInfoRewardsFrame.RewardButtons by its type and ID (fields read only, its Icon too), and is parented to that button
+-- (SetParent of its own frame, as ErrandsPopups.lua parents its cover), so it takes the button's scale and hides with it. It takes no mouse, and
+-- hides when the button is no longer seen, at QUEST_FINISHED and when the row goes off; never for the quest log. The tooltip of that choice ends with what it sells for, a line added by a post call of the game's item tooltips (as BagsTooltip.lua
 -- adds its own) while the coin lies on the button that owns GameTooltip. Nothing is picked for you, and nothing protected is touched.
 -- From an NPC's list (GOSSIP_SHOW with C_GossipInfo, and the old greeting, QUEST_GREETING): a finished quest is picked first, then a new one,
 -- under the same rules, each once in a talk. Gossip options: the options you saved (/flatui gossip), everywhere; and, in the open world only, the
@@ -830,16 +832,19 @@ end
 
 -- The reward worth most -----------------------------------------------------------------------------------------------------------------------
 
--- The coin over the choice a merchant pays most for (the game's gold coin), its size, and how far it lies inside the button's top right corner.
+-- The coin on the choice a merchant pays most for (the game's gold coin), its size, and how far its middle lies inside the top right corner of
+-- the item's icon (39 by 39 at the button's top left; the count is at its bottom right). The halo under it: Media/Glow.tga, its size and alpha.
 local COIN, COIN_SIZE, COIN_INSET = "Interface\\MoneyFrame\\UI-GoldIcon", 14, 3
+local HALO, HALO_SIZE, HALO_ALPHA = "Interface\\AddOns\\" .. (... or "FlatUI") .. "\\Media\\Glow.tga", 26, 0.4
 local COIN_TEXT = { 1, 0.82, 0 }
 -- The choices looked at, at most, and the looks a window gets again when the game comes to know one of its items (GET_ITEM_INFO_RECEIVED).
 local MOST_CHOICES, MOST_TRIES = 10, 10
 -- The kind of tooltip data of an item, when the game does not say (Enum.TooltipDataType.Item).
 local ITEM_TIP = 0
 -- frame: the coin, a frame of the addon's own; button: the game's reward button it lies on; index and value: that choice and what it sells for;
--- waiting: a price was not known, and the next GET_ITEM_INFO_RECEIVED looks again (tries counts those looks); followed and posted: the follow of
--- QuestInfo_ShowRewards and the post call of the tooltip are made; built: for each tooltip, the data whose build has the line.
+-- waiting: a price was not known, and the next GET_ITEM_INFO_RECEIVED looks again (tries counts those looks); followedDisplay, followed and
+-- posted: the follows of QuestInfo_Display and QuestInfo_ShowRewards and the post call of the tooltip are made; built: for each tooltip, the
+-- data whose build has the line.
 local reward = { waiting = false, tries = 0, built = setmetatable({}, { __mode = "k" }) }
 
 function RewardWanted()
@@ -913,7 +918,8 @@ local function ChoiceButton(index)
 	return nil
 end
 
--- The coin, made once: it takes no mouse, and goes when its button is no longer seen, whatever closed the window.
+-- The coin, made once: it takes no mouse, and goes when its button is no longer seen, whatever closed the window. A soft gold halo under it, so
+-- it reads on a dark icon.
 local function Coin()
 	if reward.frame then
 		return reward.frame
@@ -923,6 +929,13 @@ local function Coin()
 	frame:Hide()
 	frame:EnableMouse(false)
 	frame:SetSize(COIN_SIZE, COIN_SIZE)
+	local halo = frame:CreateTexture(nil, "ARTWORK")
+	ns.Own[halo] = true
+	halo:SetSize(HALO_SIZE, HALO_SIZE)
+	halo:SetPoint("CENTER", frame, "CENTER", 0, 0)
+	halo:SetTexture(HALO)
+	halo:SetBlendMode("ADD")
+	halo:SetVertexColor(COIN_TEXT[1], COIN_TEXT[2], COIN_TEXT[3], HALO_ALPHA)
 	local icon = frame:CreateTexture(nil, "OVERLAY")
 	ns.Own[icon] = true
 	icon:SetAllPoints(frame)
@@ -937,10 +950,13 @@ local function Coin()
 	return frame
 end
 
+-- Takes the coin away, back onto UIParent: the game's reward buttons are pooled, so it is parented to one only while it marks it.
 function Unmark()
 	reward.index, reward.value, reward.button = nil, nil, nil
 	if reward.frame then
 		reward.frame:Hide()
+		reward.frame:ClearAllPoints()
+		reward.frame:SetParent(UIParent)
 	end
 end
 
@@ -997,31 +1013,55 @@ function Mark()
 		return
 	end
 	local frame = Coin()
+	-- On the button itself (its scale, layer and visibility), over the item's icon (read only), or the button's own corner without one.
+	local icon = Field(button, "Icon")
+	if type(icon) ~= "table" or ns.Forbidden(icon) then
+		icon = button
+	end
+	frame:SetParent(button)
 	local okStrata, strata = pcall(button.GetFrameStrata, button)
 	local okLevel, level = pcall(button.GetFrameLevel, button)
 	frame:SetFrameStrata(okStrata and type(strata) == "string" and strata or "HIGH")
 	frame:SetFrameLevel(okLevel and ns.Finite(level) and math.min(level + 5, 9000) or 100)
 	frame:ClearAllPoints()
-	frame:SetPoint("TOPRIGHT", button, "TOPRIGHT", -COIN_INSET, -COIN_INSET)
+	if not pcall(frame.SetPoint, frame, "CENTER", icon, "TOPRIGHT", -COIN_INSET, -COIN_INSET) then
+		frame:SetPoint("CENTER", button, "TOPLEFT", 39 - COIN_INSET, -COIN_INSET)
+	end
 	reward.index, reward.value, reward.button = index, value, button
 	frame:Show()
 	Post()
 end
 
--- The game lays out the rewards of a window (QuestInfo_ShowRewards, also at QUEST_ITEM_UPDATE: Mainline/QuestFrame.lua:75-84): the coin follows.
--- A follow cannot be taken back, so it asks the row first.
-function FollowRewards()
-	if reward.followed then
-		return
+-- Marks the window again from the start; when no coin lies yet (the window may still be on its way to the screen), once more a frame later.
+local function Remark()
+	reward.tries = 0
+	Mark()
+	if not reward.index and RewardWanted() and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+		pcall(C_Timer.After, 0, function()
+			if not reward.index then
+				E.Run(part, Mark)
+			end
+		end)
 	end
-	reward.followed = ns.FollowGlobal("QuestInfo_ShowRewards", function()
-		if RewardWanted() or reward.index then
-			E.Run(part, function()
-				reward.tries = 0
-				Mark()
-			end)
-		end
-	end) == true
+end
+
+local function Follow()
+	if RewardWanted() or reward.index then
+		E.Run(part, Remark)
+	end
+end
+
+-- The game lays out a page of the quest window (QuestInfo_Display, from the OnShow of its offer and reward pages: Mainline/QuestFrame.lua:132,
+-- 581; it runs every element, the rewards too, before it returns) and the rewards again (QuestInfo_ShowRewards, at QUEST_ITEM_UPDATE and a
+-- learned spell: Mainline/QuestFrame.lua:75-95): the coin follows both. The pages call the rewards element from their own tables, taken at load,
+-- so the follow of QuestInfo_ShowRewards alone never sees a page open. A follow cannot be taken back, so it asks the row first.
+function FollowRewards()
+	if not reward.followedDisplay then
+		reward.followedDisplay = ns.FollowGlobal("QuestInfo_Display", Follow) == true
+	end
+	if not reward.followed then
+		reward.followed = ns.FollowGlobal("QuestInfo_ShowRewards", Follow) == true
+	end
 end
 
 E.Listen(part, "GOSSIP_SHOW", Gossip)
