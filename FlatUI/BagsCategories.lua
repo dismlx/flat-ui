@@ -15,7 +15,9 @@ local _, ns = ...
 -- record's quest and questStart, from C_Container.GetContainerItemQuestInfo, ContainerDocumentation.lua:281-295) are read by BagsData. With
 -- Equipment set to Weapons, armour and jewellery, Equipment is three sections. The sections are shown in an order of their own (LIST), which is
 -- not the order their rules are tried in: New items first, Keep in place next, Junk and Free slots last; the player may move every section but
--- New items and Free slots (BagsOrder.lua), which changes the order they are shown in and never where an item is filed.
+-- New items and Free slots (BagsOrder.lua), which changes the order they are shown in and never where an item is filed. Sections the player makes
+-- and names (B.Custom, BagsCustom.lua) hold only the items placed in them by hand, and come right after Keep in place in the built-in order
+-- (BagsOrder.lua).
 --
 -- Keep in place holds the items of this character's bags (a live record of bags 0 to 5) that sit in the slot the player pinned for them
 -- (B.Pins.Of, BagsPins.lua). It comes after Junk, so the Junk section and Sell junk always agree; pinning takes an item off the sell list and puts a
@@ -55,6 +57,11 @@ local _, ns = ...
 -- (InCombatLockdown and UnitAffectingCombat, through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands
 -- does, by C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off, or, from its first line while
 -- two or more are placed, every one; with none it says how to place an item.
+-- Sections the player makes and names (keys custom1, custom2 and on, in FlatUIDB.bags.custom; B.Custom.Is, BagsCustom.lua) take placements too,
+-- within the same MOST_PLACED; a placement in a section that is not there is skipped, and deleting a section of the player's own takes its
+-- placements away. Categories.File is the same drop without the cursor, which BagsCustom calls for an item it put in a free slot of the bags and
+-- for the item a new section is made for. Categories.Label names a section of the player's own by its name, so the windows, the rows and the
+-- search's section words use it.
 --
 -- Inside a section, equipment sorts by the place of its slot in the Character window (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-873),
 -- then by item level (ns.Items.LevelOf, Items.lua:425-438), quality and name; everything else by class, subclass, quality, name and count. An item
@@ -65,6 +72,7 @@ local B = ns.Bags
 local Categories = B.Categories
 local New = B.Categories.New
 local Errands = ns.Errands
+local Custom = B.Custom
 
 -- Forever's Enum.ItemClass (wowless, data/products/wowf/enums.yaml:4630-4651) and the Reagent subclass of Miscellaneous (:5009-5016).
 local CONSUMABLE, CONTAINER, WEAPON, GEM, ARMOR, REAGENT, PROJECTILE, TRADEGOODS = 0, 1, 2, 3, 4, 5, 6, 7
@@ -125,6 +133,16 @@ for _, section in ipairs(SECTIONS) do
 	if section.key ~= "new" and section.key ~= "junk" and section.key ~= "free" and section.key ~= "keep" then
 		PLACEABLE[section.key] = true
 	end
+end
+
+-- True for a section that holds items placed by hand: one of PLACEABLE, or a section the player made (B.Custom.Is, BagsCustom.lua, looked up when
+-- called).
+local function Placeable(key)
+	if PLACEABLE[key] then
+		return true
+	end
+	local is = Custom.Is
+	return type(key) == "string" and type(is) == "function" and is(key) == true
 end
 
 local function Opt(key)
@@ -353,8 +371,16 @@ for index, section in ipairs(SECTIONS) do
 	}
 end
 
+-- The label of a section: Flat UI's own, else the name the player gave a section of theirs (B.Custom.Name), else the key.
 function Categories.Label(key)
-	return LABELS[key] or (type(key) == "string" and key or "")
+	if LABELS[key] then
+		return LABELS[key]
+	end
+	local name = type(Custom.Name) == "function" and Custom.Name(key) or nil
+	if type(name) == "string" and not ns.IsSecret(name) and name ~= "" then
+		return name
+	end
+	return type(key) == "string" and key or ""
 end
 
 -- Junk -----------------------------------------------------------------------------------------------------------------------------------
@@ -530,7 +556,7 @@ local function PlacedIn(record)
 		return nil
 	end
 	local key = placed[id]
-	if type(key) ~= "string" or not PLACEABLE[key] then
+	if type(key) ~= "string" or not Placeable(key) then
 		return nil
 	end
 	return Fit(key, record)
@@ -540,7 +566,7 @@ end
 function Categories.Placed()
 	local copy = {}
 	for id, key in pairs(Store(false) or {}) do
-		if Whole(id) and type(key) == "string" and PLACEABLE[key] then
+		if Whole(id) and type(key) == "string" and Placeable(key) then
 			copy[id] = key
 		end
 	end
@@ -554,7 +580,7 @@ function Categories.Place(id, key)
 	if not id or id <= 0 then
 		return false, "id"
 	end
-	if key ~= nil and (type(key) ~= "string" or not PLACEABLE[key]) then
+	if key ~= nil and (type(key) ~= "string" or not Placeable(key)) then
 		return false, "key"
 	end
 	local placed = Store(key ~= nil)
@@ -712,6 +738,34 @@ local function DropOn(key, id, record)
 	return done or unlisted
 end
 
+-- The drop without the cursor: keeps item id in section key as a drop on its title does, but gives nothing back. link, bag, slot: what the caller
+-- read of the item and where it lies now (its record is read there, else the item is judged by its ID). BagsCustom.lua calls it for an item it put
+-- in a free slot of the bags and for the item a new section is made for. True when taken; the layout is asked for then.
+function Categories.File(id, key, link, bag, slot)
+	id = Whole(id)
+	if not id or id <= 0 then
+		return false
+	end
+	if key ~= "junk" and not Placeable(key) then
+		return false
+	end
+	if Errands.Fighting() then
+		Say("Items are not placed in sections in a fight. Try again once it is over.")
+		return false
+	end
+	local record = Probe(id, Source(id, Whole(bag), Whole(slot)))
+	local taken
+	if key == "junk" then
+		taken = DropOnJunk(id, record, Text(link))
+	else
+		taken = DropOn(key, id, record)
+	end
+	if taken then
+		Request("layout")
+	end
+	return taken
+end
+
 -- A click or drop on the title of a section while the cursor holds an item. id: the item ID the caller read, or nil to read the cursor here;
 -- the cursor is what counts. The item always goes back to its slot. True when the drop was taken.
 function Categories.Drop(id, key)
@@ -719,27 +773,8 @@ function Categories.Drop(id, key)
 	if not held then
 		return false
 	end
-	id = held
-	if key ~= "junk" and not PLACEABLE[key] then
-		GiveBack()
-		return false
-	end
-	if Errands.Fighting() then
-		GiveBack()
-		Say("Items are not placed in sections in a fight. Try again once it is over.")
-		return false
-	end
-	local record = Probe(id, Source(id, bag, slot))
-	local taken
-	if key == "junk" then
-		taken = DropOnJunk(id, record, link)
-	else
-		taken = DropOn(key, id, record)
-	end
+	local taken = Categories.File(held, key, link, bag, slot)
 	GiveBack()
-	if taken then
-		Request("layout")
-	end
 	return taken
 end
 

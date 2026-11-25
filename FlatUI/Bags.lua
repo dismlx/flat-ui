@@ -6,8 +6,9 @@ local _, ns = ...
 -- every table the parts fill, for the files that load after it in this order: BagsData.lua (Data, the account cache), BagsCategories.lua
 -- (Categories and Categories.New), BagsSearch.lua (Search), BagsItems.lua (Buttons), BagsLayout.lua (Layout), BagsWindow.lua (Window),
 -- BagsBank.lua (Bank), BagsTooltip.lua (Tips), BagsOrder.lua (Order, the order and the folds of the sections), BagsPins.lua (Pins, pinned slots
--- and Keep in place), BagsSlots.lua (Slots, the bag slots of the bag window) and BagsCurrency.lua (Currency, the currencies in the bag window's
--- footer). A part adds fields to its own table only, adds the events it owns
+-- and Keep in place), BagsSlots.lua (Slots, the bag slots of the bag window), BagsCurrency.lua (Currency, the currencies in the bag window's
+-- footer) and BagsCustom.lua (Custom, the sections the player makes and names, the + slot that ends each section and the drops on a section's
+-- slots). A part adds fields to its own table only, adds the events it owns
 -- with ns.AddEvent while the
 -- files load (Core.lua:2093-2141; so the module is registered here, first), and looks up the functions of the other parts when it calls them,
 -- never at load. This file holds what they share (Opt, Look, On, Part, Request, Me, Viewing), decides when the bag window opens and closes, keeps
@@ -240,6 +241,7 @@ local B = {
 	Pins = {},
 	Slots = {},
 	Currency = {},
+	Custom = {},
 	-- True between MERCHANT_SHOW and MERCHANT_CLOSED.
 	atMerchant = false,
 }

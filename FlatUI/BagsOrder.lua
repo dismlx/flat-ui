@@ -8,7 +8,9 @@ local _, ns = ...
 -- record resets only its v and chars, BagsData.lua:581-600), so the bag window, the bank window and every character's view show the same order.
 -- Order.Ranks merges it with the built-in order (B.Categories.LIST): the saved keys in their saved order, unknown ones left out, then each built-in
 -- key that is not saved right after the nearest key before it in LIST, so a section added later lands at its built-in place; with nothing saved
--- the result is LIST. A move writes the whole merged list, the sections of the Equipment family that the Equipment row hides included, so they
+-- the result is LIST. The sections the player made and named (B.Custom.Keys, BagsCustom.lua) are part of the built-in order, right after Keep in
+-- place in the order they were made, so a new one lands there even while an order is saved, and a deleted one leaves the saved order (BagsCustom
+-- takes it out). A move writes the whole merged list, the sections of the Equipment family that the Equipment row hides included, so they
 -- keep their places when that row changes, and a list that equals LIST again is not kept. The top shelf (New items or Added) always comes first
 -- and Free slots always last: they are shelves, not sections, and never move. BagsLayout.lua reads the ranks when it lays a window out.
 --
@@ -31,7 +33,9 @@ local _, ns = ...
 -- At the live bank (B.Bank.Live), while Deposit and Take out is on (the row that shows those buttons, B.Opt("bankButtons")), a section of the
 -- player's own slots also has Put <section> in the bank in the bag window and Take <section> out in the bank window, which run the pass of Deposit
 -- and Take out of BagsBank.lua with the section (B.Categories.Of) in place of the search, and its tooltip says so; not on Keep in place, whose
--- items stay pinned. On Keep in place it also has BagsPins.lua's lines. The row Section order on the Bags page does the same reset. Moving
+-- items stay pinned. On Keep in place it also has BagsPins.lua's lines; on a section the player made, Rename and Delete this section; and in the
+-- player's own bag window, New section (B.Custom.MenuLines, BagsCustom.lua). + New section, the title after the last section that makes one, never
+-- moves, folds or opens this menu. The row Section order on the Bags page does the same reset. Moving
 -- sections works in a fight: it only lays the windows out, and their buttons are not protected (BagsLayout.lua).
 --
 -- Folds: a left click on a title that can be dragged, with no item on the cursor (BagsLayout.lua's TitleClick, after its check that the click is not
@@ -67,6 +71,8 @@ local TIPS = {
 	-- After each of them: what a click on the title does.
 	fold = "Click to fold it.",
 	unfold = "Folded: click to open it.",
+	-- After those, on a section the player made (BagsCustom.lua).
+	own = "Right-click it to rename or delete this section of yours.",
 }
 local UNFOLD_ALL, FOLD_ALL = "Unfold every section", "Fold every section"
 -- After the tip of a click: what a Shift-click does, on a section among others open and on the one open alone.
@@ -166,14 +172,29 @@ local function Saved()
 	return nil
 end
 
--- The built-in order of the sections that can move: the keys of B.Categories.LIST without the two shelves.
+-- The built-in order of the sections that can move: the keys of B.Categories.LIST without the two shelves, with the sections the player made
+-- (B.Custom.Keys, BagsCustom.lua) right after Keep in place, in the order they were made.
 local function BuiltIn()
 	local keys = {}
 	local list = B.Categories and B.Categories.LIST
+	local okMine, mine = pcall(Call, B.Custom, "Keys")
+	mine = okMine and type(mine) == "table" and mine or {}
+	local placed = false
 	for _, entry in ipairs(type(list) == "table" and list or {}) do
 		local key = type(entry) == "table" and entry.key or nil
 		if type(key) == "string" and not SHELVES[key] then
 			keys[#keys + 1] = key
+			if key == "keep" then
+				for _, own in ipairs(mine) do
+					keys[#keys + 1] = own
+				end
+				placed = true
+			end
+		end
+	end
+	if not placed then
+		for _, own in ipairs(mine) do
+			keys[#keys + 1] = own
 		end
 	end
 	return keys
@@ -363,7 +384,7 @@ end
 -- True for a section of the Sections view whose title can be dragged.
 local function Movable(st, sec)
 	return type(st) == "table" and type(sec) == "table" and st.view == "sections" and st.content ~= nil and not sec.block and not sec.strip
-		and type(sec.key) == "string" and not SHELVES[sec.key]
+		and type(sec.key) == "string" and not SHELVES[sec.key] and not sec.add
 end
 
 -- Whether the cursor is over the part of the window that shows the content (its scroll frame, the parent of the content's parent).
@@ -667,6 +688,11 @@ function Order.Menu(st, sec, anchor)
 			items[#items + 1] = item
 		end
 	end
+	-- Rename and Delete this section on a section the player made, and New section in the player's own bag window (BagsCustom.lua).
+	local okOwn, own = pcall(Call, B.Custom, "MenuLines", st, sec, anchor)
+	for _, item in ipairs(okOwn and type(own) == "table" and own or {}) do
+		items[#items + 1] = item
+	end
 	Call(B.Layout, "Menu", anchor, label, items, st.which)
 end
 
@@ -681,6 +707,10 @@ function Order.Tip(st, sec)
 		click = click .. " " .. (st.which == "bags" and BANK_LINES.putTip or BANK_LINES.takeTip)
 	end
 	if sec.key ~= "keep" then
+		local okOwn, own = pcall(Call, B.Custom, "Is", sec.key)
+		if okOwn and own == true then
+			click = click .. " " .. TIPS.own
+		end
 		return TIPS.drag .. " " .. click
 	end
 	local ok, moves = pcall(Call, B, "Opt", "pinMoves")

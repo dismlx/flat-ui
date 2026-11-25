@@ -1452,7 +1452,7 @@ AREAS = [
         PartySync EnemyCooldowns Threat HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
         TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs PingBar"""),
     ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
-        BagsLayout BagsWindow BagsBank BagsSlots BagsCurrency BagsTooltip BagsOrder BagsPins Windows ItemMarks CharacterDurability CharacterThorns StatTips StatTipsMore Hud MapButtons
+        BagsLayout BagsWindow BagsBank BagsSlots BagsCurrency BagsTooltip BagsOrder BagsPins BagsCustom Windows ItemMarks CharacterDurability CharacterThorns StatTips StatTipsMore Hud MapButtons
         AuraTime XpStats XpBar QuestCount QuestieSkin MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat
         ChatText ChatTips ChatLinks ItemCompare ChatHistory SpellData SpellModel GearModel GearAvoid SpellLines GearLines GearWindow
         ItemIndex RotationData GearSearch GearButton TrinketQueue TrinketQueueWindow TrinketQueueButtons Movers MoversMode MoversSnap Hide Tooltip"""),

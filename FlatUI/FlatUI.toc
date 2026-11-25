@@ -173,6 +173,7 @@ BagsOrder.lua
 BagsPins.lua
 BagsSlots.lua
 BagsCurrency.lua
+BagsCustom.lua
 ConsumableData.lua
 Consumables.lua
 DataPanels.lua
