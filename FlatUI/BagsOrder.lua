@@ -7,12 +7,13 @@ local _, ns = ...
 -- The order is one list of section keys for the whole account, in FlatUIDB.bags.order beside the placements by hand (a new layout of BagsData's
 -- record resets only its v and chars, BagsData.lua:581-600), so the bag window, the bank window and every character's view show the same order.
 -- Order.Ranks merges it with the built-in order (B.Categories.LIST): the saved keys in their saved order, unknown ones left out, then each built-in
--- key that is not saved right after the nearest key before it in LIST, so a section added later lands at its built-in place; with nothing saved
--- the result is LIST. The sections the player made and named (B.Custom.Keys, BagsCustom.lua) are part of the built-in order, right after Keep in
--- place in the order they were made, so a new one lands there even while an order is saved, and a deleted one leaves the saved order (BagsCustom
--- takes it out). A move writes the whole merged list, the sections of the Equipment family that the Equipment row hides included, so they
--- keep their places when that row changes, and a list that equals LIST again is not kept. The top shelf (New items or Added) always comes first
--- and Free slots always last: they are shelves, not sections, and never move. BagsLayout.lua reads the ranks when it lays a window out.
+-- key that is not saved right after the nearest key before it in LIST, so a section added later lands at its built-in place (the sections of a
+-- group's Each kind right after their group's, where an order saved before them has it); with nothing saved the result is LIST. The sections the
+-- player made and named (B.Custom.Keys, BagsCustom.lua) are part of the built-in order, right after Keep in place in the order they were made, so
+-- a new one lands there even while an order is saved, and a deleted one leaves the saved order (BagsCustom takes it out). A move writes the whole
+-- merged list, the sections of a group that its row does not show now and the hidden ones included, so they keep their places when that row
+-- changes or they show again, and a list that equals LIST again is not kept. The top shelf (New items or Added) always comes first and Free slots
+-- always last: they are shelves, not sections, and never move. BagsLayout.lua reads the ranks when it lays a window out.
 --
 -- The drag: each title is a button of Flat UI's own (BagsLayout.lua), whose OnDragStart and OnDragStop come here. A drag gives no click, so
 -- BagsLayout registers for a drag with the left button (RegisterForDrag) only the titles that can move, and the click on the top shelf's title or
@@ -28,8 +29,10 @@ local _, ns = ...
 -- dragging; the wheel still scrolls.
 --
 -- The menu: a right click on a title that can be dragged, with no item on the cursor, opens a menu of BagsLayout's (Layout.Menu) with Move to the
--- top, Move up, Move down and Move to the bottom, among the sections that window shows, Fold or Unfold, and while an order is saved, a line that
--- puts Flat UI's order back, while a section that window shows is open, Fold every section, and while a section is folded, Unfold every section.
+-- top, Move up, Move down and Move to the bottom, among the sections that window shows, Fold or Unfold, Hide this section on every section of Flat
+-- UI's own but Other, the lines of its group's row on a section of a group (below), and while an order is saved, a line that puts Flat UI's order
+-- back, while a section that window shows is open, Fold every section, while a section is folded, Unfold every section, and while a section the
+-- rows show is hidden, Show hidden sections (3), which opens the Hidden button's menu (below) under the title.
 -- At the live bank (B.Bank.Live), while Deposit and Take out is on (the row that shows those buttons, B.Opt("bankButtons")), a section of the
 -- player's own slots also has Put <section> in the bank in the bag window and Take <section> out in the bank window, which run the pass of Deposit
 -- and Take out of BagsBank.lua with the section (B.Categories.Of) in place of the search, and its tooltip says so; not on Keep in place, whose
@@ -52,6 +55,19 @@ local _, ns = ...
 -- (ns.BagsFoldLines, ns.BagsFoldPick) do the same. Folding works in a fight too, as a move does. A fold or an unfold clicked in the bag window (its
 -- title, a Shift-click or its menu) keeps that window's height while the mouse stays on it (B.Window.KeepHeight), so the title clicked stays under
 -- the mouse and its tooltip, drawn again by BagsLayout.lua, says what the next click does; the bank window, which hangs from its top left, shrinks.
+--
+-- Hiding: Hide this section hides the section in both windows and for every character (B.Categories.SetHidden, BagsCategories.lua, which keeps the
+-- set in FlatUIDB.bags.hidden and files its items elsewhere), with one line in chat; a section of the player's own has Delete instead. Its place in
+-- the order and its fold stay, so it comes back where it was. After the last section of the Sections view, in either window and for any character,
+-- BagsLayout.lua draws Hidden (3), a dim title with no cell, while a section the rows show is hidden (Order.HiddenCount); a click on it opens a
+-- menu of Layout.Menu (Order.HiddenMenu) with each hidden section, a click on one showing it again, after Show every hidden section while two or
+-- more are hidden. It never moves, folds or takes a drop. The rows Hidden sections (ns.BagsHiddenLines, ns.BagsHiddenPick), which also lists a
+-- hidden section the rows do not show now marked (not in use now), and Folded sections, which marks a folded one that is hidden, are on the Bags
+-- page. A hide or a show lays both windows out again and, from a window, draws the rows of an open options window again (ns.RefreshPanel).
+-- Groups: on a section of a group (B.Categories.GroupRow: Equipment, Consumables or Trade goods), the menu writes that group's row of the Bags page
+-- as the options window does (ns.Set, Core.lua, which refreshes the module and so lays both windows out again, then ns.RefreshPanel): with two
+-- choices (Trade goods) one line, Split by kind or Join into one section; with three, the row's label and each of its choices (ns.Choices of its
+-- row in Config.lua), the one in use ticked.
 
 local B = ns.Bags
 local Order = B.Order
@@ -66,6 +82,10 @@ local BAR_LEVEL = 50
 local RESET_LINE = "Put the sections back in Flat UI's order"
 local TIPS = {
 	drag = "Drag the title to move this section. Right-click it to move it, or to put Flat UI's order back.",
+	-- A section of Flat UI's own that can be hidden, and one of a group (B.Categories.GroupRow).
+	dragHide = "Drag the title to move this section. Right-click it to move or hide it, or to put Flat UI's order back.",
+	dragGroup = "Drag the title to move this section. Right-click it to move or hide it, to split its group by kind or join it into one, or "
+		.. "to put Flat UI's order back.",
 	keep = "Your pinned slots, in the order of your bags: nothing here is sorted, and after a clean up Flat UI puts each item back in its slot. "
 		.. "Ctrl+right-click an item to pin or unpin its slot. Drag the title to move this section, or right-click it for more.",
 	-- While Put pinned items back is off (BagsPins.lua).
@@ -100,6 +120,21 @@ local FOLD_SAY = {
 	one = "Flat UI: %s is open again.",
 	none = "Flat UI: no bag section is folded.",
 }
+-- Hidden sections: the line of a title's menu, the title and first line of the menu that shows them again (the Hidden button after the last
+-- section, BagsLayout.lua, and Show hidden sections), what the rows Folded sections and Hidden sections add after a label, and what is said.
+local HIDE_LINE, SHOW_HIDDEN, SHOW_TITLE, SHOW_ALL = "Hide this section", "Show hidden sections (%d)", "Show again", "Show every hidden section"
+local HIDDEN_MARK, UNUSED_MARK = " (hidden)", " (not in use now)"
+local HIDDEN_NONE = "No section is hidden. Right-click a section's title in the bag window and choose Hide this section."
+local HIDE_SAY = {
+	hidden = "Flat UI: %s is hidden in both windows, and its items go to the sections that take them. Click Hidden after the last section to "
+		.. "show it again.",
+	all = "Flat UI: every hidden bag section shows again.",
+	one = "Flat UI: %s shows again.",
+	none = "Flat UI: no bag section is hidden.",
+}
+-- The lines of a title's menu that split a group of sections by kind or join it, for a row of two choices (Trade goods); a row of three (Equipment,
+-- Consumables) lists its choices under its label, the one in use ticked.
+local SPLIT_LINE, JOIN_LINE = "Split by kind", "Join into one section"
 
 -- The drag under way: { key, title, st, parts }, or nil.
 local drag = nil
@@ -394,7 +429,7 @@ end
 -- True for a section of the Sections view whose title can be dragged.
 local function Movable(st, sec)
 	return type(st) == "table" and type(sec) == "table" and st.view == "sections" and st.content ~= nil and not sec.block and not sec.strip
-		and type(sec.key) == "string" and not SHELVES[sec.key] and not sec.add
+		and type(sec.key) == "string" and not SHELVES[sec.key] and not sec.add and not sec.unhide
 end
 
 -- Whether the cursor is over the part of the window that shows the content (its scroll frame, the parent of the content's parent).
@@ -551,6 +586,134 @@ function Order.Cancel(which)
 	end
 end
 
+-- Hidden sections and groups ---------------------------------------------------------------------------------------------------------------------
+
+-- The label of a section key (B.Categories.Label), else the key.
+local function SectionLabel(key)
+	local ok, label = pcall(Call, B.Categories, "Label", key)
+	if ok and type(label) == "string" and not ns.IsSecret(label) and label ~= "" then
+		return label
+	end
+	return key
+end
+
+-- Sorts section keys in the order the windows show them (Order.Ranks), else by key.
+local function ByRank(keys)
+	if #keys < 2 then
+		return keys
+	end
+	local ranks = Order.Ranks()
+	table.sort(keys, function(a, b)
+		local ra, rb = ranks[a] or math.huge, ranks[b] or math.huge
+		if ra ~= rb then
+			return ra < rb
+		end
+		return a < b
+	end)
+	return keys
+end
+
+-- The hidden sections (B.Categories.HiddenKeys), in the order the windows show them; with now, only those the rows of the Sections part show now.
+local function HiddenNow(now)
+	local ok, keys = pcall(Call, B.Categories, "HiddenKeys", now)
+	return ByRank(ok and type(keys) == "table" and keys or {})
+end
+
+-- The options window shows the rows again (ns.RefreshPanel, Panel.lua), when it is open.
+local function Repaint()
+	if type(ns.RefreshPanel) == "function" then
+		pcall(ns.RefreshPanel)
+	end
+end
+
+-- Hides a section, or shows it again with on false (B.Categories.SetHidden lays both windows out again), and shows the options window's rows again
+-- unless the row Hidden sections asked (row), which the options window draws again itself. True when it changed.
+local function SetHidden(key, on, row)
+	local ok, changed = pcall(Call, B.Categories, "SetHidden", key, on)
+	if ok and changed == true then
+		if not row then
+			Repaint()
+		end
+		return true
+	end
+	return false
+end
+
+local function ShowAll(row)
+	local ok, changed = pcall(Call, B.Categories, "ShowAll")
+	if ok and changed == true then
+		if row ~= true then
+			Repaint()
+		end
+		return true
+	end
+	return false
+end
+
+-- The menu of the Hidden button after the last section (BagsLayout.lua), and of Show hidden sections in a title's menu: each hidden section the
+-- rows show now, which a click shows again, after a line that shows them all while two or more are hidden. Under anchor, for st's window.
+function Order.HiddenMenu(st, anchor)
+	local keys = HiddenNow(true)
+	local items = {}
+	if #keys >= 2 then
+		items[1] = { text = SHOW_ALL, part = "order", pick = function()
+			ShowAll()
+		end }
+	end
+	for _, key in ipairs(keys) do
+		items[#items + 1] = { text = (SectionLabel(key):gsub("|", "||")), part = "order", pick = function()
+			SetHidden(key, false)
+		end }
+	end
+	Call(B.Layout, "Menu", anchor, SHOW_TITLE, items, type(st) == "table" and st.which or nil)
+end
+
+-- How many hidden sections the rows show now, for the Hidden button's title (BagsLayout.lua).
+function Order.HiddenCount()
+	return #HiddenNow(true)
+end
+
+-- Writes a row of the Bags page from a title's menu as the options window writes it (ns.Set), which refreshes the module and so lays both windows
+-- out again, then shows the options window's rows again.
+local function SetRow(path, value)
+	if ns.Get(path) == value then
+		return
+	end
+	ns.Set(path, value)
+	Repaint()
+	Request()
+end
+
+-- The lines of a title's menu for the row that shows its section's group as one or apart (B.Categories.GroupRow): with two choices, Split by kind
+-- or Join into one section; with more, the row's label and each of its choices (ns.Choices of its row, Config.lua), the one in use ticked.
+local function GroupLines(key, items)
+	local okRow, row = pcall(Call, B.Categories, "GroupRow", key)
+	if not okRow or type(row) ~= "string" then
+		return
+	end
+	local path = "bags." .. row
+	local def = type(ns.Def) == "function" and ns.Def(path) or nil
+	local choices = def and type(ns.Choices) == "function" and ns.Choices(def) or {}
+	local value = ns.Get(path)
+	if #choices == 2 then
+		local one = value == choices[1][1]
+		items[#items + 1] = { text = one and SPLIT_LINE or JOIN_LINE, part = "order", pick = function()
+			SetRow(path, one and choices[2][1] or choices[1][1])
+		end }
+		return
+	end
+	if #choices < 2 then
+		return
+	end
+	items[#items + 1] = { text = type(def.label) == "string" and def.label or row, header = true }
+	for _, choice in ipairs(choices) do
+		local id = choice[1]
+		items[#items + 1] = { text = tostring(choice[2]), tick = value == id, part = "order", pick = function()
+			SetRow(path, id)
+		end }
+	end
+end
+
 -- The menu and the tooltip ------------------------------------------------------------------------------------------------------------------------
 
 -- True when a section's menu can move its items at the bank: Flat UI's bank window is the live bank (B.Bank.Live), the window shows the player's
@@ -690,6 +853,17 @@ function Order.Menu(st, sec, anchor)
 	items[#items + 1] = { text = Order.Folded(key) and "Unfold" or "Fold", part = "order", pick = function()
 		Toggle(st, sec)
 	end }
+	-- A section of Flat UI's own but Other hides, in both windows (B.Categories.SetHidden); a section of the player's own has Delete instead.
+	local okHide, hideable = pcall(Call, B.Categories, "Hideable", key)
+	if okHide and hideable == true then
+		items[#items + 1] = { text = HIDE_LINE, part = "order", pick = function()
+			if SetHidden(key, true) then
+				print(HIDE_SAY.hidden:format(SectionLabel(key)))
+			end
+		end }
+	end
+	-- The row that shows the section's group as one section or apart (Equipment, Consumables, Trade goods).
+	GroupLines(key, items)
 	-- At the live bank, the section's items go into the bank from the bag window, or out of it from the bank window, by the pass of Deposit and Take
 	-- out (BagsBank.lua) with the section in place of the search. Not Keep in place, whose items stay in their pinned slots.
 	local label = type(sec.label) == "string" and sec.label:gsub("|", "||") or key
@@ -720,6 +894,13 @@ function Order.Menu(st, sec, anchor)
 	if Folds() then
 		items[#items + 1] = { text = UNFOLD_ALL, part = "order", pick = function()
 			Order.UnfoldAll(st)
+		end }
+	end
+	-- While a section the rows show is hidden, the menu of the Hidden button opens from here too.
+	local hidden = #HiddenNow(true)
+	if hidden > 0 then
+		items[#items + 1] = { text = SHOW_HIDDEN:format(hidden), part = "order", pick = function()
+			Order.HiddenMenu(st, anchor)
 		end }
 	end
 	if key == "keep" then
@@ -756,7 +937,14 @@ function Order.Tip(st, sec)
 		if placed > 0 then
 			click = click .. " " .. (placed == 1 and PLACED_TIP.one or PLACED_TIP.many:format(placed))
 		end
-		return TIPS.drag .. " " .. click
+		-- What the menu does besides moving: hide a section of Flat UI's own, and split or join its group.
+		local drag = TIPS.drag
+		local okHide, hideable = pcall(Call, B.Categories, "Hideable", sec.key)
+		if okHide and hideable == true then
+			local okRow, row = pcall(Call, B.Categories, "GroupRow", sec.key)
+			drag = (okRow and type(row) == "string") and TIPS.dragGroup or TIPS.dragHide
+		end
+		return drag .. " " .. click
 	end
 	local ok, moves = pcall(Call, B, "Opt", "pinMoves")
 	return ((ok and moves == false) and TIPS.keepStill or TIPS.keep) .. " " .. click
@@ -780,15 +968,13 @@ end
 
 -- The row Folded sections ---------------------------------------------------------------------------------------------------------------------
 
--- The label of a section key for the row (B.Categories.Label), else the key.
-local function FoldLabel(key)
-	local ok, label = pcall(Call, B.Categories, "Label", key)
-	if ok and type(label) == "string" and not ns.IsSecret(label) and label ~= "" then
-		return label
-	end
-	return key
+-- True for a section the player hid (B.Categories.Hidden), which the rows mark.
+local function IsHidden(key)
+	local ok, hidden = pcall(Call, B.Categories, "Hidden", key)
+	return ok and hidden == true
 end
 
+-- Every folded section by its label, in the order the windows show them, a hidden one marked so (it keeps its fold while hidden).
 function ns.BagsFoldLines()
 	local folded = Folds()
 	if not folded then
@@ -800,20 +986,13 @@ function ns.BagsFoldLines()
 			keys[#keys + 1] = key
 		end
 	end
-	local ranks = Order.Ranks()
-	table.sort(keys, function(a, b)
-		local ra, rb = ranks[a] or math.huge, ranks[b] or math.huge
-		if ra ~= rb then
-			return ra < rb
-		end
-		return a < b
-	end)
+	ByRank(keys)
 	local lines = {}
 	if #keys >= 2 then
 		lines[1] = { "all", UNFOLD_ALL }
 	end
 	for _, key in ipairs(keys) do
-		lines[#lines + 1] = { "fold:" .. key, FoldLabel(key) }
+		lines[#lines + 1] = { "fold:" .. key, SectionLabel(key) .. (IsHidden(key) and HIDDEN_MARK or "") }
 	end
 	return lines
 end
@@ -830,5 +1009,40 @@ function ns.BagsFoldPick(id)
 		return false, FOLD_SAY.none
 	end
 	Request()
-	return true, FOLD_SAY.one:format(FoldLabel(key))
+	return true, FOLD_SAY.one:format(SectionLabel(key))
+end
+
+-- The row Hidden sections ---------------------------------------------------------------------------------------------------------------------
+
+-- Every hidden section by its label, in the order the windows show them, one the rows do not show now (Jewellery with Equipment at Each kind)
+-- marked so, after a line that shows them all while two or more are hidden; with none, one line that says how to hide one.
+function ns.BagsHiddenLines()
+	local keys = HiddenNow(false)
+	if #keys == 0 then
+		return { { "none", HIDDEN_NONE } }
+	end
+	local lines = {}
+	if #keys >= 2 then
+		lines[1] = { "all", SHOW_ALL }
+	end
+	for _, key in ipairs(keys) do
+		local ok, exists = pcall(Call, B.Categories, "Exists", key)
+		lines[#lines + 1] = { "hidden:" .. key, SectionLabel(key) .. ((ok and exists == false) and UNUSED_MARK or "") }
+	end
+	return lines
+end
+
+-- Shows one hidden section again, or every one ("all"), with the page on or off; a window that shows is laid out again.
+function ns.BagsHiddenPick(id)
+	if id == "all" then
+		if ShowAll(true) then
+			return true, HIDE_SAY.all
+		end
+		return false, HIDE_SAY.none
+	end
+	local key = type(id) == "string" and id:match("^hidden:(.+)$") or nil
+	if not key or not SetHidden(key, false, true) then
+		return false, HIDE_SAY.none
+	end
+	return true, HIDE_SAY.one:format(SectionLabel(key))
 end
