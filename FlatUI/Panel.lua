@@ -725,6 +725,10 @@ local function AddNumber(row, item)
 		if shift or box:HasFocus() then
 			if row.active then
 				Write(item, Read(item) + (delta > 0 and 1 or -1) * item.step)
+				-- A box with the cursor keeps what is typed (Show), so it takes the stepped value here, else Enter would write the old one back.
+				if box:HasFocus() then
+					box:SetText(("%g"):format(Read(item)))
+				end
 				row.Changed()
 			end
 			return
@@ -3004,9 +3008,14 @@ local function BuildKeys(window)
 		ui.Keys(event ~= "PLAYER_REGEN_DISABLED")
 	end)
 	ui.keys = keys
-	-- Shown while the options pages have the window (no mode) and out of combat; allowed false hides it, at the start of a fight.
+	-- Shown while the options pages have the window (no mode) and out of combat; allowed false hides it, at the start of a fight. It shows letting
+	-- keys through, so a key held as it shows (one that walks) is let go in the game too.
 	function ui.Keys(allowed)
-		keys:SetShown(allowed ~= false and ui.mode == nil and not InCombatLockdown())
+		local shown = allowed ~= false and ui.mode == nil and not InCombatLockdown()
+		if shown then
+			pcall(keys.SetPropagateKeyboardInput, keys, true)
+		end
+		keys:SetShown(shown)
 	end
 	ui.Keys()
 end

@@ -447,7 +447,8 @@ function Home.Build(host)
 		-- Its tip in the strip names the value it puts back; the hover fill of kit.Button stays (HookScript on a frame of Flat UI's own).
 		undo:HookScript("OnEnter", function()
 			if line.entry then
-				kit.Tip("Puts back: " .. ns.PanelTrust.ValueText(line.entry.item, line.entry.old))
+				local old = ns.PanelTrust.ValueText(line.entry.item, line.entry.old)
+				kit.Tip(old == "changed" and "Puts back the value before this change." or ("Puts back: " .. old))
 			end
 		end)
 		undo:HookScript("OnLeave", function()
@@ -557,8 +558,10 @@ function Home.Build(host)
 				local line, entry = Line(index), mine[index]
 				line.entry = entry
 				line.label:SetText(entry.item.label or "")
+				-- Two values that read alike (a list, a value with no words of its own) say nothing.
 				local Value = ns.PanelTrust.ValueText
-				line.value:SetText(("%s to %s"):format(Value(entry.item, entry.old), Value(entry.item, entry.new)))
+				local old, new = Value(entry.item, entry.old), Value(entry.item, entry.new)
+				line.value:SetText(old ~= new and ("%s to %s"):format(old, new) or "")
 				line.crumb:SetText(Crumb(model, entry.item))
 				line.frame:ClearAllPoints()
 				line.frame:SetPoint("TOPLEFT", recent, "TOPLEFT", 16, -(32 + (index - 1) * rowH))

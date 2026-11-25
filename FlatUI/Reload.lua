@@ -587,6 +587,10 @@ local function NoticePlace()
 		end
 		x, y = nil, nil
 	end
+	-- A spot with only one of its two numbers is no spot: the notice stands at its start.
+	if not (Finite(x) and Finite(y)) then
+		x, y = nil, nil
+	end
 	local key = x and ("%.1f:%.1f"):format(x, y) or "start"
 	if notice.placed == key then
 		return
