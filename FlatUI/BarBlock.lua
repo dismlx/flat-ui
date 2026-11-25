@@ -34,7 +34,7 @@ local _, ns = ...
 -- opacity with a target, off by default; UnitExists("target"), a withheld answer counting as a target, read at each pass of the fade), as you
 -- cast (Full opacity as you cast, off by default: while UnitCastingInfo or UnitChannelInfo of the player gives a plain name, and for a moment
 -- after each spell or item used, UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the fade's own frame, so an instant
--- use counts too and Wait before fading holds the block after it),
+-- use holds the block for 1.5 s, a global cooldown, and Wait before fading after it),
 -- with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
 -- child of the totem bar that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107,
 -- MultiCastActionBarFrame.lua:637-641). The arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while
@@ -566,10 +566,11 @@ local function FlyoutOpen()
 	return Answers("SpellFlyout", "IsShown") or Answers(TOTEM_FLYOUT, "IsVisible")
 end
 
--- Whether the player casts or channels now, or used a spell or an item a moment ago (state.castAt, from the fade frame's events). A withheld
--- name does not count.
+-- Whether the player casts or channels now, or used a spell or an item within CAST_HOLD seconds (state.castAt, from the fade frame's events): a
+-- global cooldown, as Fade.lua's CAST_HOLD, so an instant spell's sweep can be read before Wait before fading starts. A withheld name does not count.
+local CAST_HOLD = 1.5
 local function Casting()
-	if state.castAt and GetTime() - state.castAt < 0.15 then
+	if state.castAt and GetTime() - state.castAt < CAST_HOLD then
 		return true
 	end
 	for _, read in ipairs({ "UnitCastingInfo", "UnitChannelInfo" }) do

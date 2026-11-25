@@ -3111,7 +3111,7 @@ ns.PAGES = {
 		{ key = "fadeTarget", kind = "bool", default = false, label = "Full opacity with a target", needs = "fade",
 			tip = "For a pull with a ranged opener, or a buff on a friend, before the fight starts." },
 		{ key = "fadeCast", kind = "bool", default = false, label = "Full opacity as you cast", needs = "fade",
-			tip = "Each spell or item you use brings the faded block back while you cast and for Wait before fading after." },
+			tip = "Each spell or item you use brings the faded block back while you cast, for a moment after each instant spell or item, and for Wait before fading after." },
 	},
 	{
 		key = "blocks", label = "Class and item bars",
@@ -3214,7 +3214,7 @@ ns.PAGES = {
 		{ key = "combat", kind = "bool", default = false, label = "In combat" },
 		{ key = "target", kind = "bool", default = false, label = "With a target" },
 		{ key = "cast", kind = "bool", default = false, label = "While casting",
-			tip = "A spell or item you use brings faded frames back to full while you cast and for Wait before fading after." },
+			tip = "A spell or item you use brings faded frames back to full while you cast, for a moment after each instant spell or item, and for Wait before fading after." },
 	},
 }
 
