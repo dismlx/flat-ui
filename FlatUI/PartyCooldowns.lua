@@ -11,7 +11,8 @@ local _, ns = ...
 -- /flatui move, each row labelled with the member's name. The abilities an account adds or hides, by name or spell ID, are kept in
 -- the account (/flatui party). A member who also runs Flat UI sends his cooldowns as addon messages (PartySync.lua), which start his
 -- timers here and show his ready icons. Pointing at an icon writes the ability with its class, in its kind's colour, the member's name, Ready or
--- the time left, and whether he shares by Flat UI, in GameTooltip (Icon tooltips: On, Out of combat only or Off); the icon takes the mouse's
+-- the time left, and whether he shares by Flat UI, in GameTooltip (Icon tooltips: On, Out of combat only or Off), written again each second
+-- while the mouse stays, so the time counts down and turns to Ready (P.TipTick); the icon takes the mouse's
 -- motion only, never a click, so clicks go through to the party frame below (SetMouseClickEnabled false, as Your buffs does). The border of an
 -- icon takes the colour of its ability's kind (Border colour by kind), and with Flash when ready a white flash plays as its sweep ends
 -- (IconRow.lua's flash); with Show on Only while on cooldown the row waits that half second before the ready icon goes. The helpers are in
@@ -568,6 +569,7 @@ function P.Release(row)
 	P.assigned[row.owner] = nil
 	row.owner, row.unit, row.frame, row.side, row.testing, row.stackAt, row.flashEnd = nil, nil, nil, nil, nil, nil, nil
 	for slot, icon in ipairs(row.icons) do
+		P.Untip(icon)
 		ns.IconClear(icon)
 		row.drawn[slot] = nil
 	end
@@ -591,6 +593,7 @@ function P.Fit(row, size, count, side)
 		end
 		icon.frame:SetScript("OnEnter", function()
 			ns.Try(KEY, P.Tip, row, icon)
+			P.TipTick(row, icon)
 		end)
 		icon.frame:SetScript("OnLeave", function()
 			ns.Try(KEY, P.Untip, icon)
@@ -659,7 +662,8 @@ local function Clock(seconds)
 end
 
 -- The tooltip of an icon: the ability with its class in its kind's colour, the member, Ready or the time left from the timer (plain numbers of
--- Tracking.lua), and whether the member shares by Flat UI. A sample of test mode says so. Out of combat only shows nothing in a fight.
+-- Tracking.lua), and whether the member shares by Flat UI. A sample of test mode says so. Out of combat only shows nothing in a fight. True
+-- when it wrote the tooltip.
 function P.Tip(row, icon)
 	local tips = Opt("tooltips") or "on"
 	local tip = Tooltip()
@@ -703,9 +707,35 @@ function P.Tip(row, icon)
 		end
 		tip:Show()
 	end)
+	return true
+end
+
+-- While the mouse stays on an icon, its tooltip is written again each second (C_Timer.NewTicker), so the time counts down, turns to Ready as
+-- the sweep ends and follows the ability that moves into the slot. The step ends, and the tooltip hides, once GameTooltip is no longer the
+-- icon's, the icon hides, Icon tooltips no longer allows it (Out of combat only in a fight) or the slot is empty.
+function P.TipTick(row, icon)
+	if icon.tipTicker or type(C_Timer) ~= "table" or type(C_Timer.NewTicker) ~= "function" then
+		return
+	end
+	local ok, ticker = pcall(C_Timer.NewTicker, 1, function()
+		ns.Try(KEY, P.Retip, row, icon)
+	end)
+	icon.tipTicker = ok and ticker or nil
+end
+
+function P.Retip(row, icon)
+	local ok, visible = pcall(icon.frame.IsVisible, icon.frame)
+	if not Owned(icon) or not ok or visible ~= true or not P.Tip(row, icon) then
+		P.Untip(icon)
+	end
 end
 
 function P.Untip(icon)
+	local ticker = icon.tipTicker
+	icon.tipTicker = nil
+	if ticker then
+		pcall(ticker.Cancel, ticker)
+	end
 	if Owned(icon) then
 		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 	end

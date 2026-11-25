@@ -1434,11 +1434,15 @@ ns.PAGES = {
 		{ key = "barHeight", kind = "number", default = 16, min = 10, max = 30, step = 1, unit = " px", label = "Bar height", tip = "Also the height of text." },
 		{ key = "barTexture", kind = "choice", default = "default", label = "Bar texture", choices = "BarChoicesDefault" },
 		{ key = "mine", kind = "bool", default = true, label = "Mark your own bar", tip = "A thin white outline round your bar." },
+		{ key = "keepMine", kind = "bool", default = true, label = "Always show your bar",
+			tip = "When you rank below the last bar, your bar takes the place of the last one, with your place before your name." },
 		{ section = "Warning" },
 		{ key = "warn", kind = "bool", default = true, label = "Warn near aggro",
-			tip = "Your bar pulses red while you are not tanking and your share passes Warn at. Not on bosses, where the game hides threat." },
+			tip = "For damage dealers and healers: your bar pulses red while you are not tanking and your share passes Warn at. Not on bosses, where the game hides threat." },
 		{ key = "warnAt", kind = "number", default = 90, min = 50, max = 100, step = 5, unit = "%", label = "Warn at", needs = "warn" },
-		{ key = "warnSound", kind = "choice", default = "raid", label = "Warning sound", needs = "warn", tip = "Plays once for each enemy.",
+		{ key = "lost", kind = "bool", default = true, label = "Warn when you lose aggro",
+			tip = "While you are a tank (your group role, else your stance or form): your bar pulses red and Warning sound plays once when an enemy you held turns to someone else. Not on bosses, where the game hides threat." },
+		{ key = "warnSound", kind = "choice", default = "raid", label = "Warning sound", tip = "Plays once for each enemy as Warn near aggro starts, and once each time you lose aggro.",
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
@@ -1459,6 +1463,8 @@ ns.PAGES = {
 			tip = "0 means never. A bar turns red below it, also in a fight, where the game hides the number." },
 		{ key = "drinking", kind = "bool", default = true, label = "Show who is drinking",
 			tip = "Out of combat, a cup and Drinking show on the bar of a healer who drinks." },
+		{ key = "range", kind = "bool", default = true, label = "Dim healers out of range",
+			tip = "A healer too far from you for the game's range check shows faded, also in a fight." },
 	},
 	-- GroupTools.lua: a row of buttons of Flat UI's own for a group. On by default; it shows in a group with every button. /flatui move places it.
 	{
@@ -1482,6 +1488,8 @@ ns.PAGES = {
 		{ key = "spacing", kind = "number", default = 3, min = 0, max = 12, step = 1, label = "Spacing" },
 		{ key = "layout", kind = "choice", default = "row", label = "Layout",
 			choices = { { "row", "In a row" }, { "rows", "Markers above the rest" }, { "column", "In a column" } } },
+		{ key = "markColours", kind = "bool", default = true, label = "Borders in the marker's colour",
+			tip = "Star yellow, circle orange, diamond purple, triangle green, moon silver-blue, square blue, cross red and skull white, as in the game's menu." },
 	},
 	-- PingBar.lua: a bar of Flat UI's own with a button for each ping of the game, with its key. On by default; it shows in a group. /flatui move
 	-- places it.
@@ -1501,6 +1509,8 @@ ns.PAGES = {
 		{ key = "spacing", kind = "number", default = 3, min = 0, max = 12, step = 1, label = "Spacing" },
 		{ key = "layout", kind = "choice", default = "row", label = "Layout", choices = { { "row", "Horizontal" }, { "column", "Vertical" } } },
 		{ key = "colours", kind = "bool", default = true, label = "Borders in the ping's colour" },
+		{ key = "keys", kind = "bool", default = true, label = "Keys on the buttons",
+			tip = "The key you bound under Flat UI in the game's Key Bindings, short, in the corner of each button." },
 	},
 	{
 		key = "windows", label = "Windows",

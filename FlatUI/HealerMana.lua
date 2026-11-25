@@ -14,14 +14,19 @@ local _, ns = ...
 -- (SimpleRegionAPIDocumentation.lua: SetAlpha, AllowedWhenTainted); a client that refuses leaves the wash off and says so in /flatui status.
 -- With Show who is drinking, out of combat and while the game lets auras be read (C_Secrets.ShouldAurasBeSecret false, as Trackers read the
 -- buffs of the group), a member with the buff named as spell 430 (Drink, in the client's language: C_Spell.GetSpellName) shows a cup and
--- Drinking before his share, from C_UnitAuras.GetAuraDataBySpellName with a plain answer only. The window shows in a dungeon or raid, or in
+-- Drinking before his share, from C_UnitAuras.GetAuraDataBySpellName with a plain answer only. With Dim healers out of range, the bar of a
+-- healer who is not the player (UnitIsUnit, plain answers only) and not offline or dead fades to 45% while UnitInRange says he is out of range,
+-- also in a fight: that answer is always withheld (UnitDocumentation.lua UnitInRange), so it goes as it is to SetAlphaFromBoolean of the bar,
+-- which takes it, as the party frames dim (UnitExtras.lua); a client that refuses leaves the bars bright and says so in /flatui status. The window shows in a dungeon or raid, or in
 -- any group, as Show says, while the group has a healer; it is drawn again on a step of half a second only while it shows, and the group is
 -- read again when it changes (GROUP_ROSTER_UPDATE, PLAYER_ROLES_ASSIGNED, PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA; a burst is read once,
 -- a moment after the first).
 -- The window is a child of UIParent in the LOW strata in the look of the Threat list (Threat.lua): a flat background and a thin border in the
 -- colours of the Flat UI page, its bars in Bar texture (the bar texture of that page by default); it takes no mouse and hides with the
--- interface. /flatui move places it (FlatUIHealerMana in Movers.lua: the window's top left corner is the top left corner of the box).
--- /flatui healers shows sample bars for a few seconds; while test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh.
+-- interface. It fades in over 0.15 seconds as it shows and out over 0.35 as it hides, as the Threat list does (H.Showing); showing again while it
+-- fades out stops the fade at once, and turning the module off hides it at once. /flatui move places it (FlatUIHealerMana in Movers.lua: the
+-- window's top left corner is the top left corner of the box). /flatui healers shows sample bars for a few seconds, the Shaman out of range;
+-- while test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh.
 -- Nothing of the game is changed.
 -- This follows the Healer Mana indicator of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/
 -- GroupTools.lua:485-713): the healers of the group by their role, their mana share through UnitPowerPercent and the curve to 100, and the
@@ -59,9 +64,13 @@ local LOW = { 0.85, 0.15, 0.1, 0.45 }
 local DRINK_SPELL, DRINK_ICON, CROP = 430, "Interface\\Icons\\INV_Drink_07", 0.08
 local LINE_MISSING = "Healer mana: this client has no UnitPowerPercent, so the list stays hidden."
 local LINE_LOW = "Healer mana: the game refused the red wash of Low mana at, so a bar may not turn red."
+local LINE_RANGE = "Healer mana: the game refused to fade a bar by its answer about range, so healers out of range stay bright."
+-- The opacity of the bar of a healer out of range, and how long the window fades in as it shows and out as it hides.
+local FAR = 0.45
+local FADE_IN, FADE_OUT = 0.15, 0.35
 local HELP = { "/flatui healers - sample bars of the healer mana list for a few seconds" }
--- The bars of /flatui healers: a name, a class, the share of mana and whether the member drinks.
-local SAMPLE = { { "Priest", "PRIEST", 82 }, { "Druid", "DRUID", 47, true }, { "Shaman", "SHAMAN", 15 } }
+-- The bars of /flatui healers: a name, a class, the share of mana, whether the member drinks and whether he is out of range.
+local SAMPLE = { { "Priest", "PRIEST", 82 }, { "Druid", "DRUID", 47, true }, { "Shaman", "SHAMAN", 15, false, true } }
 
 local IsSecret = ns.IsSecret
 -- frame: the window, title its line. rows: the bars. healers: the units of the healers, read from the group. pending: a read waits. ticker: the
@@ -264,6 +273,68 @@ local function SetName(text, unit)
 	end
 end
 
+-- The fades of a window of the addon's own: an Alpha animation from 0 to 1, and one from 1 to 0 that hides the window as it ends and puts its
+-- opacity back. Nil for each where the client makes none. The Threat list has the same (Threat.lua).
+local function Fades(frame)
+	local ok, fadeIn, fadeOut = pcall(function()
+		local come = frame:CreateAnimationGroup()
+		local rise = come:CreateAnimation("Alpha")
+		rise:SetFromAlpha(0)
+		rise:SetToAlpha(1)
+		rise:SetDuration(FADE_IN)
+		local go = frame:CreateAnimationGroup()
+		local fall = go:CreateAnimation("Alpha")
+		fall:SetFromAlpha(1)
+		fall:SetToAlpha(0)
+		fall:SetDuration(FADE_OUT)
+		pcall(go.SetToFinalAlpha, go, true)
+		go:SetScript("OnFinished", function()
+			frame:Hide()
+			frame:SetAlpha(1)
+		end)
+		return come, go
+	end)
+	if ok then
+		return fadeIn, fadeOut
+	end
+	return nil, nil
+end
+
+-- Shows the window, fading in when it was hidden and stopping a fade out at once, or fades it out; at once with now or with no fades.
+function H.Showing(on, now)
+	local frame, fadeIn, fadeOut = H.frame, H.fadeIn, H.fadeOut
+	if not frame then
+		return
+	end
+	local fading = fadeOut ~= nil and fadeOut:IsPlaying()
+	if on then
+		if fading then
+			pcall(fadeOut.Stop, fadeOut)
+			frame:SetAlpha(1)
+		end
+		if not frame:IsShown() then
+			frame:SetAlpha(1)
+			frame:Show()
+			if fadeIn and not now then
+				pcall(fadeIn.Play, fadeIn)
+			end
+		end
+		return
+	end
+	if fadeIn and fadeIn:IsPlaying() then
+		pcall(fadeIn.Stop, fadeIn)
+	end
+	if now or not fadeOut or not frame:IsShown() then
+		if fading then
+			pcall(fadeOut.Stop, fadeOut)
+		end
+		frame:Hide()
+		frame:SetAlpha(1)
+	elseif not fading and not pcall(fadeOut.Play, fadeOut) then
+		frame:Hide()
+	end
+end
+
 -- The window, made the first time it shows: a frame of the addon's own on UIParent with a flat background and a thin border, and its title.
 function H.Frame()
 	if H.frame then
@@ -283,6 +354,7 @@ function H.Frame()
 	title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + INSET), -PAD)
 	title:SetText(TITLE)
 	H.title = title
+	H.fadeIn, H.fadeOut = Fades(frame)
 	return frame
 end
 
@@ -357,6 +429,34 @@ function H.Wash(row, unit, sample, word)
 	end
 end
 
+-- Dim healers out of range: the bar of a member who is not the player fades to FAR while UnitInRange says he is out of range, its answer, withheld
+-- or not, going as it is to SetAlphaFromBoolean of the bar. Full opacity for the player, a word (offline, dead), with the row off and where the
+-- client has no answer; a client that refuses is noted for the status. A sample is out of range by its fifth field.
+function H.Range(row, unit, sample, word)
+	local bar = row.bar
+	if Opt("range") == false or word then
+		bar:SetAlpha(1)
+		return
+	end
+	if sample then
+		bar:SetAlpha(sample[5] == true and FAR or 1)
+		return
+	end
+	if Ask(UnitIsUnit, unit, "player") ~= false or type(UnitInRange) ~= "function" or type(bar.SetAlphaFromBoolean) ~= "function" then
+		bar:SetAlpha(1)
+		return
+	end
+	local ok, inRange = pcall(UnitInRange, unit)
+	if not ok or not (IsSecret(inRange) or type(inRange) == "boolean") then
+		bar:SetAlpha(1)
+	elseif pcall(bar.SetAlphaFromBoolean, bar, inRange, 1, FAR) then
+		H.rangeRefused = nil
+	else
+		bar:SetAlpha(1)
+		H.rangeRefused = true
+	end
+end
+
 -- Bar texture, and the height of the text and of the cup, on one bar. A texture the game refuses leaves a flat fill.
 local function Paint(row, file, text)
 	if row.file ~= file then
@@ -399,8 +499,8 @@ function H.Layout(n)
 	H.frame:SetSize(width + 2 * PAD, top + n * height + (n - 1) * GAP + PAD)
 end
 
--- Writes one bar: the class colour, the name and the share of mana, the red wash below Low mana at and the cup while the member drinks; the
--- share goes to the bar, its text and the wash untouched. A sample is a table of SAMPLE.
+-- Writes one bar: the class colour, the name and the share of mana, the red wash below Low mana at, the cup while the member drinks and its
+-- fade out of range; the share goes to the bar, its text and the wash untouched. A sample is a table of SAMPLE.
 function H.Fill(row, unit, sample)
 	local r, g, b
 	if sample then
@@ -421,6 +521,7 @@ function H.Fill(row, unit, sample)
 		row.share:SetText((cup and "Drinking %d%%" or "%d%%"):format(sample[3]))
 		H.Wash(row, nil, sample)
 		H.Cup(row, cup)
+		H.Range(row, nil, sample)
 		return
 	end
 	SetName(row.name, unit)
@@ -431,6 +532,7 @@ function H.Fill(row, unit, sample)
 		word = "Dead"
 	end
 	H.Wash(row, unit, nil, word)
+	H.Range(row, unit, nil, word)
 	if word then
 		row.bar:SetValue(0)
 		row.share:SetText(word)
@@ -480,9 +582,7 @@ function H.Draw()
 	local list = samples or H.healers
 	local n = math.min(#list, Number("rows", 5), MOST_ROWS)
 	if n < 1 then
-		if H.frame then
-			H.frame:Hide()
-		end
+		H.Showing(false)
 		H.Tick(false)
 		return
 	end
@@ -499,7 +599,7 @@ function H.Draw()
 		H.rows[index].bar:Hide()
 	end
 	H.Place()
-	H.frame:Show()
+	H.Showing(true)
 	H.Tick(not samples)
 end
 
@@ -518,7 +618,7 @@ function H.Update()
 	if on or sampling then
 		H.Draw()
 	elseif H.frame then
-		H.frame:Hide()
+		H.Showing(false)
 		H.Tick(false)
 	end
 end
@@ -584,9 +684,7 @@ function H.Refresh()
 	if not ns.Enabled(KEY) then
 		H.sample, H.healers = nil, {}
 		H.Tick(false)
-		if H.frame then
-			H.frame:Hide()
-		end
+		H.Showing(false, true)
 		return
 	end
 	H.Update()
@@ -619,6 +717,9 @@ function H.Status()
 	end
 	if ns.Enabled(KEY) and H.lowRefused and Number("lowAt", 30) > 0 then
 		lines[#lines + 1] = LINE_LOW
+	end
+	if ns.Enabled(KEY) and H.rangeRefused and Opt("range") ~= false then
+		lines[#lines + 1] = LINE_RANGE
 	end
 	return lines
 end
