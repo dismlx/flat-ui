@@ -15,8 +15,12 @@ local _, ns = ...
 -- plays itself as the button shows (AddAuraShownAnimation), so also in a fight; on the icons of a read, a flash of IconRow.lua. The time left
 -- turns amber in its last 5 seconds, coloured by the game (a colour curve on the time text, D.TimeOptions). The samples of the test and of
 -- test mode flash as they appear and play Sound when one lands, not a sound at the end of their sweep. Out of combat with test mode off and no
--- defensive on you, a change of Icon size, Spacing, Caster's name or Icon border shows the samples for 4 seconds in the new look, with no line
--- in the chat (ns.DefensivesLookChanged).
+-- defensive on you (none of the game's buttons shows), a change of Icon size, Spacing, Caster's name, Icon border or Flash when one lands, or a
+-- pick of either sound, shows the samples for 4 seconds in the new look, with no line in the chat (ns.DefensivesLookChanged); the row read out
+-- of combat is read again as a test or such a preview ends. Sound when one ends (None by default) has the game play a sound as a listed
+-- defensive you do not know yourself leaves you (trigger Removed), and /flatui test icons plays it once as its samples go; its line in the chat
+-- names each sound and whether the game played it. The numbers on an icon, the time left and the charges, follow Icon size: today's heights at
+-- the default of 32, grown and shrunk with it (D.TextSize), on the game's buttons, the icons of a read and the samples.
 
 local KEY = "defensives"
 -- The name of the row among the saved spots of the movers.
@@ -238,6 +242,30 @@ function D.TimeOptions()
 	return D.timeOptions or nil
 end
 
+-- The numbers on an icon follow Icon size: the time left (NumberFontNormal) and the charges (NumberFontNormalSmall) at their own heights at
+-- the default Icon size of BASE, grown and shrunk with it, 8 to 24 (IconRow.lua). Gives the two heights for size.
+D.BASE = 32
+function D.TextSize(size)
+	return ns.IconNumberHeight(ns.IconFontHeight("NumberFontNormal", 14), size, D.BASE),
+		ns.IconNumberHeight(ns.IconFontHeight("NumberFontNormalSmall", 12), size, D.BASE)
+end
+
+-- The time left and the charges of a button at the heights of size; true when the game took them.
+function D.SizeText(parts, size)
+	local time, count = D.TextSize(size)
+	local ok = true
+	if parts.left then
+		ok = pcall(parts.left.SetTextHeight, parts.left, time) and ok
+	end
+	if parts.count then
+		ok = pcall(parts.count.SetTextHeight, parts.count, count) and ok
+	end
+	if ok then
+		parts.textSize = size
+	end
+	return ok
+end
+
 -- Makes the parts of one button. Run by the game inside AddAuraGroup while the button is still open; nothing here may raise, and a
 -- part the game refuses is left out and named in the status.
 function D.Init(button)
@@ -336,6 +364,7 @@ function D.Init(button)
 		parts.flashOn = Opt("flash") ~= false
 		flash:SetShown(parts.flashOn)
 	end)
+	D.SizeText(parts, Opt("size"))
 end
 
 -- Changes that wait for the game to open its buttons ------------------------------------------------------------------------------
@@ -386,6 +415,10 @@ function D.ApplySize()
 			else
 				refused = true
 			end
+		end
+		-- The numbers on the icon grow and shrink with it; refused, they are tried again at the next change.
+		if parts.textSize ~= size then
+			D.SizeText(parts, size)
 		end
 	end
 	D.refused.size = refused
@@ -892,6 +925,7 @@ function D.Pass()
 		if icon then
 			-- No kind: the border keeps the colour of the page and Borderless hides it, as on the game's buttons (EdgeColour).
 			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { border = Opt("iconBorder") })
+			ns.IconCountdownHeight(icon, Opt("size"), D.BASE)
 			local landing = item.id .. ":" .. item.expires
 			now[landing] = true
 			if before and not before[landing] and Opt("flash") ~= false then
@@ -978,8 +1012,11 @@ end
 -- each ID of the list that the player does not know as a spell (C_SpellBook.IsSpellKnown, else IsPlayerSpell), so a priest's own Power Word:
 -- Shield stays silent. AddAuraSound has restrictions, so the registrations change only out of combat and while aura values are open
 -- (C_Secrets.ShouldAurasBeSecret); a change that has to wait is tried again on a frame of this file's own at the end of a fight or of a
--- restriction, also while the page is off, so the registrations go once it is turned off. sounds: by spell ID, { id, file }.
+-- restriction, also while the page is off, so the registrations go once it is turned off. Sound when one ends (None by default) is one more
+-- registration for each such ID, with trigger Removed, as the trackers' Sound when it drops is: the game plays it as the defensive leaves the
+-- player. sounds: by spell ID and trigger ("10060:Added"), { id, file }. TRIGGERS: the row of each trigger.
 D.sounds = {}
+D.TRIGGERS = { Added = "sound", Removed = "endSound" }
 
 function D.Knows(id)
 	local known = nil
@@ -1046,31 +1083,44 @@ function D.SyncSounds()
 		return
 	end
 	D.SoundsWait(false)
-	local file = type(ns.TrackerSoundFile) == "function" and ns.TrackerSoundFile(Opt("sound")) or nil
-	local wanted = {}
-	if file and D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off" then
-		for id in pairs(D.Effective()) do
-			if Whole(id) and not D.Knows(id) then
-				wanted[id] = true
+	-- The file of each trigger whose row has a sound: Added for Sound when one lands, Removed for Sound when one ends.
+	local triggers = type(Enum) == "table" and Enum.UnitAuraSoundTrigger or nil
+	local files = {}
+	if D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off" and type(ns.TrackerSoundFile) == "function" then
+		for name, row in pairs(D.TRIGGERS) do
+			local file = ns.TrackerSoundFile(Opt(row))
+			local trigger = type(triggers) == "table" and triggers[name] or nil
+			-- Removed only where the game names it, so that a missing trigger is never taken for another.
+			if file and (trigger ~= nil or name == "Added") then
+				files[name] = { file = file, trigger = trigger }
 			end
 		end
 	end
-	for id, made in pairs(D.sounds) do
-		if not wanted[id] or made.file ~= file then
-			D.sounds[id] = nil
+	local wanted = {}
+	if next(files) ~= nil then
+		for id in pairs(D.Effective()) do
+			if Whole(id) and not D.Knows(id) then
+				for name, want in pairs(files) do
+					wanted[id .. ":" .. name] = { id = id, file = want.file, trigger = want.trigger }
+				end
+			end
+		end
+	end
+	for key, made in pairs(D.sounds) do
+		if not wanted[key] or made.file ~= wanted[key].file then
+			D.sounds[key] = nil
 			if type(remove) == "function" then
 				pcall(remove, made.id)
 			end
 		end
 	end
-	local triggers = type(Enum) == "table" and Enum.UnitAuraSoundTrigger or nil
-	local trigger = type(triggers) == "table" and triggers.Added or nil
 	D.refused.sound = nil
-	for id in pairs(wanted) do
-		if not D.sounds[id] then
-			local ok, handle = pcall(add, trigger, { unitToken = "player", spellID = id, soundFileID = file, outputChannel = "Master", throttleSeconds = 1 })
+	for key, want in pairs(wanted) do
+		if not D.sounds[key] then
+			local ok, handle = pcall(add, want.trigger, { unitToken = "player", spellID = want.id, soundFileID = want.file, outputChannel = "Master",
+				throttleSeconds = 1 })
 			if ok and Plain(handle, "number") then
-				D.sounds[id] = { id = handle, file = file }
+				D.sounds[key] = { id = handle, file = want.file }
 			else
 				D.refused.sound = true
 			end
@@ -1233,8 +1283,9 @@ function D.SampleName(icon, index)
 	icon.name:Show()
 end
 
--- Ends a test: the sweeps are cleared, the icons hidden, and what the game did is said.
-function D.EndTest(token)
+-- Ends a test: the sweeps are cleared, the icons hidden, and what the game did is said, with Sound when one ends played once as the samples go.
+-- cut: a new test takes its place, and plays its own sounds, so this one plays none.
+function D.EndTest(token, cut)
 	local test = D.testing
 	if not test or (token and test ~= token) then
 		return
@@ -1249,22 +1300,51 @@ function D.EndTest(token)
 			icon.name:Hide()
 		end
 	end
-	local sound = ns.IconRow.sound
-	local text = sound == "played" and "played" or (sound == nil and "not tried" or "the game played no sound")
 	if not test.quiet then
-		print(("Test: the sweep ended on %d of 3 icons. Sound: %s."):format(done, text))
+		-- Sound when one ends, once, as the samples go, as a real one leaving does.
+		local ends = Opt("endSound")
+		local line = ("Defensives on you: the sweep ended on %d of 3 icons. Sound when one lands: %s."):format(done,
+			D.SoundWords(Opt("sound"), test.sound))
+		if KITS[ends] and not cut then
+			line = line .. (" Sound when one ends: %s."):format(D.SoundWords(ends, D.SampleSound(ends)))
+		end
+		print(line)
 	end
 	if D.holder and not (ns.Enabled(KEY) and Opt("place") ~= "off") then
 		D.holder:Hide()
 	end
+	-- The read stood down while the samples showed: what is on the player now is read again.
+	if D.path == "reading" then
+		D.Queue()
+	end
 end
 
--- Sound when one lands, once, for the samples: the kit whose file the game plays for a real defensive. None plays nothing.
-function D.SampleSound()
-	local kit = KITS[Opt("sound")]
-	if kit and type(ns.PlayKit) == "function" then
-		ns.PlayKit(kit, KEY)
+-- The words of a sound row in the line of the test: the sound's name and what the game did, or None.
+function D.SoundWords(word, result)
+	local kit = KITS[word]
+	if not kit then
+		return "None"
 	end
+	local name = word
+	for _, sound in ipairs(ns.SOUNDS or {}) do
+		if sound[1] == kit then
+			name = sound[2]
+		end
+	end
+	if result == "played" then
+		return name .. ", played"
+	end
+	return name .. ", the game played no sound"
+end
+
+-- Sound when one lands (or the sound row given), once, for the samples: the kit whose file the game plays for a real defensive. Gives "none"
+-- for None, else "played" or "refused".
+function D.SampleSound(word)
+	local kit = KITS[word or Opt("sound")]
+	if not kit then
+		return "none"
+	end
+	return type(ns.PlayKit) == "function" and ns.PlayKit(kit, KEY) and "played" or "refused"
 end
 
 -- Three samples for 8 seconds, each flashing as it appears as a defensive that lands does, with Sound when one lands once. quiet: for
@@ -1284,7 +1364,7 @@ function D.Test(quiet)
 		return
 	end
 	if D.testing then
-		D.EndTest()
+		D.EndTest(nil, true)
 	end
 	local holder = D.Holder()
 	D.Place()
@@ -1300,10 +1380,10 @@ function D.Test(quiet)
 		icon.done = 0
 		list[index] = icon
 	end
-	ns.IconRow.sound = nil
 	local now, flash = Now(), Opt("flash") ~= false
 	for index, icon in ipairs(list) do
 		ns.IconSet(icon, ns.IconSamplePicture(index), now, 2 * index, D.SampleLook())
+		ns.IconCountdownHeight(icon, Opt("size"), D.BASE)
 		D.SampleName(icon, index)
 		if flash then
 			ns.IconFlash(icon)
@@ -1313,7 +1393,7 @@ function D.Test(quiet)
 	local test = { list = list, quiet = quiet }
 	D.testing = test
 	if not quiet then
-		D.SampleSound()
+		test.sound = D.SampleSound()
 		print("Defensives on you: three sample icons for 8 seconds.")
 	end
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
@@ -1323,9 +1403,19 @@ function D.Test(quiet)
 	end
 end
 
--- True when a defensive the row would show is on the player: one of the list from another player, or with Your own defensives on one of the
--- player's own.
+-- True when a defensive the row would show is on the player. Where the game draws the row, any of its buttons that shows, listed, external or
+-- the player's own, and one that cannot be asked counts as shown; else one of the list from another player, or with Your own defensives on
+-- one of the player's own.
 function D.Up()
+	if D.path == "container" then
+		for _, parts in ipairs(D.list) do
+			local ok, shown = pcall(parts.button.IsShown, parts.button)
+			if not ok or IsSecret(shown) or shown == true then
+				return true
+			end
+		end
+		return false
+	end
 	if #(D.Read() or {}) > 0 then
 		return true
 	end
@@ -1339,10 +1429,12 @@ function D.Up()
 	return false
 end
 
--- A row of the look changed (Icon size, Spacing, Caster's name, Icon border, Flash when one lands): the page is refreshed, as without a changed
--- function of the row (Core.lua's Changed), and out of combat with test mode off (its own samples show then), no test of /flatui test icons
--- under way and no defensive on the player, the three samples show for PREVIEW seconds in the new look with no line in the chat. Each change
--- starts them again, so a slider dragged keeps them up until PREVIEW after its last step.
+-- A row of the look changed (Icon size, Spacing, Caster's name, Icon border, Flash when one lands), or a sound picked (Sound when one lands,
+-- Sound when one ends): the page is refreshed, as without a changed function of the row (Core.lua's Changed), which also registers the game's
+-- sounds for the pick (D.Sync, D.QueueSounds), and out of combat with test mode off (its own samples show then), no test of /flatui test icons
+-- under way and no defensive on the player (none of the game's buttons shows), the three samples show for PREVIEW seconds in the new look,
+-- flashing in as they land, with no line in the chat and no sound of their own: the panel plays a pick once itself. Each change starts them
+-- again, so a slider dragged keeps them up until PREVIEW after its last step.
 function ns.DefensivesLookChanged()
 	ns.Try(KEY, D.Refresh)
 	if InCombatLockdown() or TM.IsOn() or not (D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off") then
@@ -1380,6 +1472,7 @@ function D.Held()
 	for index, icon in ipairs(list) do
 		local fresh = not (icon.held and icon.frame:IsShown())
 		ns.IconSampleHeld(icon, index, KEY, look)
+		ns.IconCountdownHeight(icon, Opt("size"), D.BASE)
 		D.SampleName(icon, index)
 		if fresh and icon.held then
 			came = true
