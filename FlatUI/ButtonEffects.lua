@@ -11,7 +11,8 @@ local _, ns = ...
 -- RegisterUnitEvent "player"; the spell ID is used only when plain) light the buttons that hold the spell (C_ActionBar.FindSpellActionButtons, else
 -- the spell's name), a macro whose spell it is and an item whose use spell it is (GetActionInfo and C_ActionBar.GetSpell, the game's rule): a flat
 -- fill in the cast bar's Cast colour rises from the bottom of the icon over the cast time (UnitCastingInfo, plain for the player) and, in its Channel
--- colour, empties over a channel (UnitChannelInfo). A pushback (UNIT_SPELLCAST_DELAYED, UNIT_SPELLCAST_CHANNEL_UPDATE) reads the times again, so the
+-- colour, empties over a channel (UnitChannelInfo); in the class colour for both while the player cast bar takes it (Class colour on the player
+-- bar, with Flat fill), as the aim pulse and the samples do (FillColour). A pushback (UNIT_SPELLCAST_DELAYED, UNIT_SPELLCAST_CHANNEL_UPDATE) reads the times again, so the
 -- fill follows the real cast. It fades as the cast lands, and a flash in the cast bar's Interrupted colour (castbars.interruptedColour, read at each
 -- interrupt) shows when the cast is interrupted. Aim highlight (on by default): while a spell placed on the ground waits for its spot
 -- (UNIT_SPELLCAST_RETICLE_TARGET, as the game's buttons play their reticle, ActionButton.lua:1100-1103), its buttons pulse in the cast bar's Cast
@@ -352,14 +353,26 @@ local function AimClear()
 	CAST.aimed, CAST.aimSpell = {}, nil
 end
 
--- The buttons pulse in the Cast colour while spellID waits for its spot (0 for a sample).
+-- The colour of the fill and the pulse: the player cast bar's, as Bars.lua paints it. With Class colour on the player bar (castbars.playerClass, which
+-- needs Flat fill) on a cast bars page that is on, the class colour for casts and channels; otherwise the Cast or Channel colour.
+local function FillColour(channel)
+	if ns.Enabled("castbars") and ns.Get("castbars.flat") == true and ns.Get("castbars.playerClass") == true then
+		local r, g, b = ns.ClassColour()
+		if r then
+			return r, g, b
+		end
+	end
+	return ns.Colour(channel and "castbars.channelColour" or "castbars.castColour")
+end
+
+-- The buttons pulse in the cast bar's colour while spellID waits for its spot (0 for a sample).
 local function AimLight(buttons, spellID)
 	AimClear()
 	if not (On() and Opt("aimAnim")) then
 		return
 	end
 	CAST.aimSpell = spellID
-	local r, g, b = ns.Colour("castbars.castColour")
+	local r, g, b = FillColour(false)
 	for _, button in ipairs(buttons) do
 		local made = CAST.frames[button]
 		if made and made.pulse then
@@ -529,7 +542,7 @@ local function CastStart(spellID, channel)
 		return
 	end
 	CAST.lit, CAST.start, CAST.finish, CAST.channel, CAST.spell = CastButtons(spellID), start / 1000, finish / 1000, channel, spellID
-	local r, g, b = ns.Colour(channel and "castbars.channelColour" or "castbars.castColour")
+	local r, g, b = FillColour(channel)
 	for _, button in ipairs(CAST.lit) do
 		local made = CAST.frames[button]
 		if made then
@@ -643,7 +656,7 @@ local function SampleCast(button, force)
 	CastClear()
 	local now = GetTime()
 	CAST.lit, CAST.start, CAST.finish, CAST.channel, CAST.spell = { button }, now, now + CAST.SAMPLE_TIME, false, 0
-	local r, g, b = ns.Colour("castbars.castColour")
+	local r, g, b = FillColour(false)
 	made.fill:SetColorTexture(r, g, b, 1)
 	CastDriver():Show()
 	CastStep()
@@ -699,7 +712,7 @@ end
 
 -- The cast bar's colours changed while samples show: they take them at once (Flat UI's own textures).
 function ns.ButtonEffectsSampleLook()
-	local r, g, b = ns.Colour("castbars.castColour")
+	local r, g, b = FillColour(false)
 	if CAST.spell == 0 then
 		for _, button in ipairs(CAST.lit) do
 			local made = CAST.frames[button]

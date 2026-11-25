@@ -1099,7 +1099,8 @@ local function SampleOff()
 end
 
 -- The cast bar's colours that the samples take, and the rows whose sample plays on buttons 1 to 3 (the role, the button's place in the list).
-local SAMPLE_COLOURS = { ["castbars.castColour"] = true, ["castbars.channelColour"] = true, ["castbars.interruptedColour"] = true }
+local SAMPLE_COLOURS = { ["castbars.castColour"] = true, ["castbars.channelColour"] = true, ["castbars.interruptedColour"] = true,
+	["castbars.playerClass"] = true, ["castbars.flat"] = true }
 local SAMPLE_ROWS = { ["actionbars.castAnim"] = { "cast", 1 }, ["actionbars.interruptAnim"] = { "interrupt", 2 }, ["actionbars.aimAnim"] = { "aim", 3 } }
 
 -- A change while test mode is on: a change of profile plays every sample again; Cast fill animation, Interrupt flash or Aim highlight plays its own
