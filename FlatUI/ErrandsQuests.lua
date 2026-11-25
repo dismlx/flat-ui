@@ -20,8 +20,9 @@ local _, ns = ...
 -- so that global is not called then) and QuestInfo_ShowRewards (QUEST_ITEM_UPDATE, a learned spell), both with ns.FollowGlobal, finds the
 -- choice's button among QuestInfoRewardsFrame.RewardButtons by its type and ID (fields read only, its Icon too), and is parented to that button
 -- (SetParent of its own frame, as ErrandsPopups.lua parents its cover), so it takes the button's scale and hides with it. It takes no mouse, and
--- hides when the button is no longer seen, at QUEST_FINISHED and when the row goes off; never for the quest log. The tooltip of that choice ends with what it sells for, a line added by a post call of the game's item tooltips (as BagsTooltip.lua
--- adds its own) while the coin lies on the button that owns GameTooltip. Nothing is picked for you, and nothing protected is touched.
+-- hides when the button is no longer seen, at QUEST_FINISHED and when the row goes off; never for the quest log. The tooltip of that choice
+-- ends with what it sells for, a line added by a post call of the game's item tooltips (as BagsTooltip.lua adds its own) while the coin lies on
+-- the button that owns GameTooltip. Nothing is picked for you, and nothing protected is touched.
 -- From an NPC's list (GOSSIP_SHOW with C_GossipInfo, and the old greeting, QUEST_GREETING): a finished quest is picked first, then a new one,
 -- under the same rules, each once in a talk. Gossip options: the options you saved (/flatui gossip), everywhere; and, in the open world only, the
 -- one option the game marks (Quest), or the NPC's only option when it has no quest for you, unless the game picks that one itself. An option the

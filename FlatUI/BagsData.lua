@@ -9,8 +9,9 @@ local _, ns = ...
 -- alone (below) is built as the part tooltips, the part of BagsTooltip.lua that it serves. It touches no frame of the game's: it reads the
 -- game, writes FlatUIDB.bags, and looks up the other parts of Bags and the functions of Core.lua when it calls them, never at load. Its one frame
 -- of its own hears PLAYER_ENTERING_WORLD whatever the switches of the pages, for the gold of the session: the money this character had as it
--- logged in, kept in FlatUICharDB.sessionMoney (written at a login, and at a loading screen while nothing is kept, so a /reload keeps the session),
--- which ns.SessionMoney sets against GetMoney for the gold tooltip of the bag window (BagsWindow.lua) and the Gold slot of Data panels.
+-- logged in, kept in FlatUICharDB.sessionMoney with the time it began in FlatUICharDB.sessionStartAt (written at a login, and at a loading screen
+-- while nothing is kept, so a /reload keeps the session), which ns.SessionMoney sets against GetMoney for the gold tooltip of the bag window
+-- (BagsWindow.lua) and the Gold slot of Data panels, which also says what the session made an hour.
 --
 -- The record. FlatUIDB.bags is account data outside every profile, made only while the module is on, as FlatUIDB.datapanels is
 -- (DataPanels.lua:193-212). v is its layout, 1; a store of another layout starts its characters again and keeps placed, the hand placements of
@@ -1660,9 +1661,10 @@ end
 
 -- The gold of this session -------------------------------------------------------------------------------------------------------------------
 
--- The money this character had as it logged in, kept in FlatUICharDB.sessionMoney so a /reload keeps the session: written at the
--- PLAYER_ENTERING_WORLD of a login (its first value, isInitialLogin, SystemDocumentation.lua:136), and at any other one while nothing is kept yet.
--- A frame of this file's own hears it, whatever the switches of the pages, since the Gold slot of Data panels (DataStreams.lua) says it too.
+-- The money this character had as it logged in, kept in FlatUICharDB.sessionMoney so a /reload keeps the session, and when, in
+-- FlatUICharDB.sessionStartAt (time(), the seconds of this computer's clock): written at the PLAYER_ENTERING_WORLD of a login (its first value,
+-- isInitialLogin, SystemDocumentation.lua:136), and at any other one while nothing is kept yet. A frame of this file's own hears it, whatever
+-- the switches of the pages, since the Gold slot of Data panels (DataStreams.lua) says it too.
 local function SessionStart(initial)
 	local char = ns.Character()
 	local money = Count(Ask(Client(nil, "GetMoney")))
@@ -1671,10 +1673,12 @@ local function SessionStart(initial)
 	end
 	if (not IsSecret(initial) and initial == true) or not Count(char.sessionMoney) then
 		char.sessionMoney = money
+		char.sessionStartAt = Count(Ask(Client(nil, "time")))
 	end
 end
 
--- What this character made (more than 0) or spent (less) since it logged in, in copper; nil while the client does not say.
+-- What this character made (more than 0) or spent (less) since it logged in, in copper, then the seconds since then (nil when not known, as for a
+-- session that began before the time was kept); nil while the client does not say. The bag window reads the first value only.
 function ns.SessionMoney()
 	local char = ns.Character()
 	local start = type(char) == "table" and Count(char.sessionMoney) or nil
@@ -1682,7 +1686,8 @@ function ns.SessionMoney()
 	if not (start and money) then
 		return nil
 	end
-	return money - start
+	local began, now = Count(char.sessionStartAt), Count(Ask(Client(nil, "time")))
+	return money - start, began and now and now >= began and (now - began) or nil
 end
 Data.SessionMoney = ns.SessionMoney
 
