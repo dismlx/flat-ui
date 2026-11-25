@@ -46,8 +46,8 @@ ns.SETUP_STEPS = {
 		{ "general.scale", "c", "mock-scale" },
 		{ "general.pixelPerfect", "c", "mock-scale" },
 		{ "general.pixelSize", "o", "mock-scale" },
-		{ "general.scaleBelow", "r", "mock-scale" },
-		{ "general.scaleSmall", "r", "mock-scale" },
+		{ "general.scaleBelow", "c", "mock-scale" },
+		{ "general.scaleSmall", "c", "mock-scale" },
 	} },
 	{ id = "fonts", area = "Look", title = "Fonts", draw = "mock-text", built = true, rows = {
 		{ "fonts.enabled", "c", "mock-text" },

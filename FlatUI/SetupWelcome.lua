@@ -9,7 +9,8 @@ local _, ns = ...
 -- mock-player, D.Card). When the screen shows and
 -- what Keep this look keeps are settings in the Setup section of the Options and setup tab of the Flat UI page (Config.lua). It hides when a fight starts, and no look is put in
 -- use in one; a screen a fight hid says so in chat and opens again on the same view when the fight ends (the after card with the same result, the
--- ticks as they were), unless it was opened or closed meanwhile.
+-- ticks as they were), unless it was opened or closed meanwhile. It fades in with the game's window sounds, as the options window does, its title row
+-- drags it while it is open, and Close at its top right closes it and chooses nothing, as Escape does.
 
 local kit = ns.PanelKit
 local S = ns.Setup
@@ -27,6 +28,8 @@ local BAND_Y, BAND_H, DRAW_H, MOST = 92, 120, 112, 1.8
 local GROUND = { 0.32, 0.27, 0.20 }
 -- The size of a drawn card (SetupDraw.lua) and the room under it for a name and a line of three rows.
 local CARD_W, CARD_H, TEXT_H = 336, 112, 62
+-- How long the screen takes to fade in as it opens, in seconds, as the options window does (Panel.lua's FADE_IN).
+local FADE_IN = 0.12
 
 local function IsText(value)
 	return not ns.IsSecret(value) and type(value) == "string"
@@ -457,6 +460,28 @@ function W.Build()
 		kit.Backing(outline, "window", 0.98)
 	end)
 	W.frame = frame
+	-- Its title row drags it for as long as it is open (W.Open puts it back at the top of the screen as it opens); the client keeps no place of its own.
+	frame:SetMovable(true)
+	frame:SetClampedToScreen(true)
+	pcall(frame.SetDontSavePosition, frame, true)
+	local grip = kit.Frame(frame)
+	grip:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+	grip:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + 60 + 8), 0)
+	grip:SetHeight(PAD + MARK + 6)
+	grip:EnableMouse(true)
+	grip:RegisterForDrag("LeftButton")
+	grip:SetScript("OnDragStart", function()
+		frame:StartMoving()
+	end)
+	grip:SetScript("OnDragStop", function()
+		frame:StopMovingOrSizing()
+		pcall(frame.SetUserPlaced, frame, false)
+	end)
+	-- Close, at the top right of every view, closes it and chooses nothing, as Escape does.
+	W.close = kit.Button(frame, "Close", 60, function()
+		frame:Hide()
+	end)
+	W.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(PAD + (MARK - kit.BUTTON) / 2))
 	-- The mark: an accent square with a notch cut from one corner.
 	W.mark = kit.Fill(frame, "ARTWORK")
 	W.mark:SetSize(MARK, MARK)
@@ -521,11 +546,27 @@ function W.Build()
 	W.parts = { W.band, W.caption, W.setup, W.ready, W.keep, W.same, W.back, W.shareBox, W.shareLabel, W.change, W.move, W.options, W.done, W.backTo,
 		W.foot, W.tickBox, W.tickLabel }
 	-- The view is set before the screen shows (W.Open); the ticks start empty each time.
+	-- It fades in over FADE_IN with the game's sound of a window opening, and plays the sound of one closing as it hides; the reopen after a fight and
+	-- the hide a fight starts play neither (W.reopening, W.fighting).
 	frame:SetScript("OnShow", function()
 		W.tick, W.share = false, false
 		W.tickMark:Hide()
 		W.shareMark:Hide()
 		W.Update()
+		local faded = 0
+		frame:SetAlpha(0)
+		frame:SetScript("OnUpdate", function(self, elapsed)
+			faded = faded + ((not ns.IsSecret(elapsed) and type(elapsed) == "number") and elapsed or FADE_IN)
+			if faded >= FADE_IN then
+				self:SetAlpha(1)
+				self:SetScript("OnUpdate", nil)
+			else
+				self:SetAlpha(faded / FADE_IN)
+			end
+		end)
+		if not W.reopening and type(PlaySound) == "function" and type(SOUNDKIT) == "table" and SOUNDKIT.IG_MAINMENU_OPEN then
+			pcall(PlaySound, SOUNDKIT.IG_MAINMENU_OPEN)
+		end
 	end)
 	-- The events go to a frame of their own: the screen hides itself, and a hidden frame still hears them.
 	local listener = CreateFrame("Frame")
@@ -538,12 +579,19 @@ function W.Build()
 	-- on the same view when the fight ends.
 	frame:SetScript("OnHide", function()
 		W.fought = nil
+		frame:SetScript("OnUpdate", nil)
+		frame:SetAlpha(1)
+		if W.built and not W.fighting and type(PlaySound) == "function" and type(SOUNDKIT) == "table" and SOUNDKIT.IG_MAINMENU_CLOSE then
+			pcall(PlaySound, SOUNDKIT.IG_MAINMENU_CLOSE)
+		end
 	end)
 	listener:SetScript("OnEvent", function(_, event)
 		if event == "PLAYER_REGEN_DISABLED" then
 			local shown = frame:IsShown()
 			local fought = shown and { view = W.view, fromStart = W.fromStart, tick = W.tick, share = W.share } or nil
+			W.fighting = true
 			frame:Hide()
+			W.fighting = nil
 			if fought then
 				W.fought = fought
 				print("Flat UI: the welcome screen comes back after the fight.")
@@ -552,7 +600,9 @@ function W.Build()
 			local fought = W.fought
 			W.fought = nil
 			if not frame:IsShown() then
+				W.reopening = true
 				W.Open(fought.view, W.finished)
+				W.reopening = nil
 				-- The screen comes back as it was left: Back of the tiles and the two ticks (OnShow clears them).
 				W.fromStart = fought.fromStart
 				W.tick, W.share = fought.tick == true, fought.share == true
@@ -569,6 +619,8 @@ function W.Build()
 		table.insert(UISpecialFrames, "FlatUIWelcome")
 	end
 	frame:Hide()
+	-- From here on its hiding plays the game's sound (the hide just above was the build's own).
+	W.built = true
 	return frame
 end
 
@@ -752,6 +804,11 @@ function W.Open(view, finished)
 	if frame:IsShown() then
 		W.Update()
 	else
+		-- A screen dragged aside opens at the top of the screen again, unless it comes back after a fight, where it was.
+		if not W.reopening then
+			frame:ClearAllPoints()
+			frame:SetPoint("TOP", UIParent, "TOP", 0, -100)
+		end
 		frame:Show()
 	end
 	return frame:IsShown() == true
