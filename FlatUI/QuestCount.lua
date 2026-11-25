@@ -10,6 +10,13 @@ local _, ns = ...
 -- It is redrawn on the next frame after the quest log changes, and only while a count can be shown, so a client without the quest log calls
 -- has no text and nothing waiting. It hides with the heading, so there is no count while no quest is tracked. Its row is Quest count on the
 -- Quests and loot page (hud.trackerCount), part "quest count" of the module, which stops alone after a few failures.
+-- Over the count lies a button of the addon's own, a child of the heading the size of the count's text, made with the text (out of combat, or
+-- on a heading the game does not protect) and shown and hidden with it; the heading itself takes no mouse (ObjectiveTrackerModuleHeaderTemplate,
+-- Blizzard_ObjectiveTrackerModule.xml:13-19), so no click of the game's is taken. Pointing at the count, also in a fight, shows the tooltip of
+-- the Quest log data panel (ns.DataPanels.TipAt with its stream "quests": the quests of the most, "Your quest log is full.", those ready to hand
+-- in and their experience) with a dim "Click: open the quest log"; GameTooltip is hidden on leave only while IsOwned says the button owns it. A
+-- click opens the quest log (ToggleQuestLog), in a fight as it ends: chat says once "Flat UI: the quest log opens when the fight ends."
+-- (ns.OpenAfterFight, MapText.lua), and the hint says "after the fight".
 -- It follows EnhanceQoL's quest count on the tracker, adapted with the permission of its author.
 
 local KEY, PART = "hud", "quest count"
@@ -19,8 +26,12 @@ local GAP, EDGE = 4, -22
 local FULL = { 1, 0.3, 0.3 }
 local GOLD = { 1, 0.82, 0 }
 local NOTE = "Quest count: the objective tracker has no Quests heading here, so there is no count."
+local ANCHOR = "ANCHOR_LEFT"
+local HINT, FIGHT_HINT = { "Click: open the quest log" }, { "Click: open the quest log, after the fight" }
+local LATER = "Flat UI: the quest log opens when the fight ends."
 
--- text: the font string; header: the heading it is on; queued: a redraw waits for the next frame; waiting: a make waits for the end of a fight.
+-- text: the font string; button: the button over it; header: the heading it is on; queued: a redraw waits for the next frame; waiting: a make
+-- waits for the end of a fight.
 local S = {}
 
 local function Wanted()
@@ -103,6 +114,60 @@ end
 
 local Queue
 
+-- True while GameTooltip is the button's.
+local function Owns(button)
+	local tip = _G.GameTooltip
+	if tip == nil or ns.Forbidden(tip) or not button then
+		return false
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, button)
+	return ok and not ns.IsSecret(owned) and owned == true
+end
+
+local function Unowned(button)
+	if Owns(button) then
+		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
+	end
+end
+
+-- The tooltip of the Quest log data panel on the button, and its hint; fresh is false when a tooltip that shows is written again.
+local function Tip(_, button, fresh)
+	local panels = ns.DataPanels
+	if type(panels) == "table" and type(panels.TipAt) == "function" then
+		panels.TipAt(button, ANCHOR, "quests", fresh, InCombatLockdown() and FIGHT_HINT or HINT)
+	end
+end
+
+local function Open()
+	if type(_G.ToggleQuestLog) == "function" and ns.OpenAfterFight ~= nil then
+		ns.OpenAfterFight(function()
+			_G.ToggleQuestLog()
+		end, LATER)
+	end
+end
+
+-- The button over the count's text, made with it; nil when the client refuses it.
+local function MakeButton(header, text)
+	local ok, button = pcall(CreateFrame, "Button", nil, header)
+	if not ok or type(button) ~= "table" then
+		return nil
+	end
+	ns.Own[button] = true
+	button:SetAllPoints(text)
+	button:EnableMouse(true)
+	button:RegisterForClicks("LeftButtonUp")
+	button:SetScript("OnClick", function()
+		ns.EachPart(KEY, PART, Open, {})
+	end)
+	button:SetScript("OnEnter", function(self)
+		ns.EachPart(KEY, PART, Tip, {}, self, true)
+	end)
+	button:SetScript("OnLeave", Unowned)
+	button:SetScript("OnHide", Unowned)
+	button:Hide()
+	return button
+end
+
 -- Makes the font string on the heading, once. False while it cannot be made now: in a fight on a heading the game may protect, the make
 -- waits for the end of the fight.
 local function Make(header)
@@ -131,6 +196,7 @@ local function Make(header)
 	end
 	text:SetJustifyH("RIGHT")
 	S.text, S.header = text, header
+	S.button = MakeButton(header, text)
 	return true
 end
 
@@ -160,6 +226,9 @@ end
 local function Hide()
 	if S.text then
 		S.text:Hide()
+	end
+	if S.button then
+		S.button:Hide()
 	end
 end
 
@@ -193,6 +262,13 @@ local function Update()
 	S.text:SetTextColor(r, g, b)
 	S.text:SetText(most and ("%d/%d"):format(quests, most) or tostring(quests))
 	S.text:Show()
+	if S.button then
+		S.button:Show()
+		-- A tooltip that shows follows the new count, while it is still the button's.
+		if Owns(S.button) then
+			ns.EachPart(KEY, PART, Tip, {}, S.button, false)
+		end
+	end
 end
 
 -- Runs the part. Each run has a key of its own, so every failure counts toward stopping the part; a stopped part takes its text away.
