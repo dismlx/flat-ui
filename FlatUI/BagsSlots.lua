@@ -6,35 +6,51 @@ local _, ns = ...
 -- every pass of the window asks for the row again (Row), which draws it from the game as it is then. The three events this file adds to the module
 -- (ns.AddEvent, beside the other parts' handlers of the same events) are the ones the game's bag buttons hear (PaperDollFrame.lua:2002-2013,
 -- 2068-2080; MainMenuBarBagButtons.lua:16, 44-49), and do something only while the row shows (IsVisible): CURSOR_CHANGED keeps the hover tint of
--- each slot whose inventory slot the cursor's item can go in lit (LockHighlight, from C_PaperDollInfo.CursorCanGoInSlot; never the backpack),
+-- each slot whose inventory slot the cursor's item can go in lit (LockHighlight, from C_PaperDollInfo.CursorCanGoInSlot; never the backpack; the
+-- keyring while the item is a key, Enum.ItemClass.Key), and with nothing on the cursor each empty bag slot a spare bag in the bags fits (below),
 -- ITEM_LOCK_CHANGED with no slot (an inventory slot locked or freed) draws that bag's slot again, greyed (SetDesaturated, IsInventoryItemLocked)
 -- while its bag is lifted, and ITEM_PUSH (bagSlot, iconFileID: the backpack's is 0) plays the item's icon on that bag's slot, from FLY_SCALE times
 -- its size down into it while it fades, FLY_SECONDS long, on a texture and an animation group of the slot's own, so loot is seen going in.
 --
 -- The row shows while the bag window shows the player's own live bags and the row Bag slots on the Bags page is on: the backpack, the four bags and
--- the reagent bag (Enum.BagIndex 0 to 5), each a button of Flat UI's own in the shape of BagsBank.lua's bank bag slots (SLOT units, GAP apart, an
--- outline in the Button and slot colour of the Windows page, the white tint under the cursor and the icon cropped by Icon crop). A bag slot's
--- inventory slot is C_Container.ContainerIDToInventoryID(bag), its icon GetInventoryItemTexture("player", slot) or, for an empty slot, the art the
--- game gives that slot (GetInventorySlotInfo, its second answer), and a bag whose inventory slot the client does not give (no reagent bag) has no
--- button. The backpack is fixed: its icon is the game's own of its bag bar (Camelot/MainMenuBarBagButtons.xml, bagIcon), and it takes no drag.
--- The backpack and every bag in a slot show their free slots (C_Container.GetContainerNumFreeSlots) in the bottom right corner, in the game's
--- font of item counts with an outline, white, and red once the bag is full, as a full bag's label is in Bag by bag; an empty slot shows none.
+-- the reagent bag (Enum.BagIndex 0 to 5), and a gap after them the keyring while the game shows one (C_ActionBar.ShouldShowKeyring, the test of
+-- Bags.lua and BagsData.lua; KEYRING_CONTAINER, -1), each a button of Flat UI's own in the shape of BagsBank.lua's bank bag slots (SLOT units,
+-- GAP apart, an outline in the Button and slot colour of the Windows page, the white tint under the cursor and the icon cropped by Icon crop).
+-- A bag slot's inventory slot is C_Container.ContainerIDToInventoryID(bag), its icon GetInventoryItemTexture("player", slot) or, for an empty
+-- slot, the art the game gives that slot (GetInventorySlotInfo, its second answer), and a bag whose inventory slot the client does not give (no
+-- reagent bag) has no button. The backpack and the keyring are fixed: their icons are the game's own of its bag bar
+-- (Camelot/MainMenuBarBagButtons.xml, bagIcon), and they take no drag. The backpack and every bag in a slot show their free slots
+-- (C_Container.GetContainerNumFreeSlots) in the bottom right corner, in the game's font of item counts with an outline, white, gold at LOW (4) or
+-- fewer and red once the bag is full, the colours of the footer's free slots (BagsWindow.lua); an empty slot shows none, and the keyring how many
+-- keys it holds, in white.
 -- BagsWindow.lua puts the row a little apart from the content under a thin line, so it does not read as more slots of the keyring or a bag.
 -- Every answer goes through ns.IsSecret or ns.Finite.
 --
 -- The clicks are the game's own bag buttons' (Blizzard_MainMenuBarBagButtons/Shared/MainMenuBarBagButtons.lua:68-95), out of combat only: a drop,
 -- or a click with an item on the cursor (CursorHasItem), puts it in the slot with PutItemInBag(slot), and on the backpack with PutItemInBackpack; a
--- drag picks the bag up with PickupBagFromSlot(slot), as the game's bag button does (:88-90). None of them is protected. In a fight they say so in
--- one line and do nothing. A plain click with nothing on the cursor, where the game's button opens that bag, keeps that bag lit in the window
+-- drag picks the bag up with PickupBagFromSlot(slot), as the game's bag button does (:88-90). On the keyring a drop or a click with an item puts it
+-- in the first empty keyring slot (C_Container.PickupContainerItem, as the game's keyring button, Camelot/MainMenuBarBagButtons.lua:47-62, 177-200;
+-- the game refuses anything that is not a key), a full keyring says so in one line, and a drag does nothing. A plain click on an empty bag slot
+-- puts in a spare bag from the bags: the largest bag (INVTYPE_BAG, Enum.ItemClass.Container) in the backpack and bags, its size read once per
+-- item from its tooltip (C_TooltipInfo.GetBagItem against the game's CONTAINER_SLOTS), a general bag first of two the same size, and for the
+-- reagent bag slot a reagent bag (Enum.ItemContainerSubclass.Reagent) alone, the only kind it takes; it goes on the cursor
+-- (C_Container.PickupContainerItem) and into the slot with PutItemInBag when C_PaperDollInfo.CursorCanGoInSlot says it can, else back to its place
+-- (ClearCursor). The spares are looked for once a pass of the row, only while a slot is empty, and again at a click or a tooltip. None of them is
+-- protected. In a fight they say so in one line and do nothing. A plain click on a slot that holds a bag (the keyring too) with nothing on the
+-- cursor, where the game's button opens that bag, keeps that bag lit in the window
 -- (B.Layout.Stick, BagsLayout.lua): every other slot dimmed as under the mouse, the search still applied, and the slot's edge in the Highlight
 -- colour of the Windows page (SetOutlineColour); a click on it again, on another slot, or the window closing gives everything back. That touches
 -- frames of Flat UI's own only, so it works in a fight too. A right click with nothing on the cursor opens that bag's settings (B.Layout.BagMenuOf:
 -- Assign To, Ignore Clean Up and Ignore Junk Selling, as on a label of Bag by bag), in either view and in a fight too, since those flags are not
--- protected. The tooltip is the game's of the bag (GameTooltip:SetInventoryItem) out of combat, plain lines in a fight or for an empty slot, a
--- line of the bag's free and total slots (C_Container.GetContainerNumFreeSlots and GetContainerNumSlots), what its settings say (B.Layout.BagFlags:
--- what it is assigned to, and whether clean up or junk selling leaves it alone) and what the clicks do; it is hidden when the cursor leaves the
--- button that owns it (IsOwned). The mouse over a slot that holds a bag lights that bag's items in the window (B.Layout.Light, BagsLayout.lua), as
--- the game's bag bar does with Bags (Bags.lua), and leaving it gives the window back; an empty slot lights nothing.
+-- protected; the keyring has none, as in the game. The tooltip is the game's of the bag (GameTooltip:SetInventoryItem) out of combat, plain lines
+-- in a fight or for an empty slot (with the spare bag a click puts in, "Linen Bag (6 slots)"), a line of the bag's free and total slots
+-- (C_Container.GetContainerNumFreeSlots and GetContainerNumSlots), what its settings say (B.Layout.BagFlags: what it is assigned to, and whether
+-- clean up or junk selling leaves it alone) and what the clicks do; the keyring's says Keyring (KEYRING), how many keys and what the clicks do. It
+-- opens beside the bag window (B.Window.Get, a frame of Flat UI's own; SetOwner with ANCHOR_NONE, ClearAllPoints and SetPoint), left of it while
+-- the window's middle is right of the screen's and right of it otherwise, its bottom at the window's, so it never covers the items the slot lights;
+-- it is hidden when the cursor leaves the button that owns it (IsOwned). The mouse over a slot that holds a bag (the keyring too) lights that
+-- bag's items in the window (B.Layout.Light, BagsLayout.lua), as the game's bag bar does with Bags (Bags.lua), and leaving it gives the window
+-- back; an empty slot lights nothing.
 
 local B = ns.Bags
 if type(B) ~= "table" or type(B.Slots) ~= "table" then
@@ -44,30 +60,44 @@ local Slots = B.Slots
 local E = ns.Errands
 
 local KEY, PART = "bags", "slots"
--- The bags of the row: the backpack, the four bags and the reagent bag (Enum.BagIndex).
+-- The bags of the row: the backpack, the four bags and the reagent bag (Enum.BagIndex), then the keyring while the game shows one
+-- (Enum.BagIndex.Keyring, KEYRING_CONTAINER, -1 when the client does not say), a gap apart.
 local FIRST, LAST = 0, 5
+local KEYRING = ns.Finite(KEYRING_CONTAINER) and KEYRING_CONTAINER or -1
 -- The size of a slot and the space between two, as the bank's bag slots (BagsBank.lua).
 local SLOT, GAP = 28, 4
--- The game's icon of the backpack on its bag bar, and the art of an empty bag slot when the client does not say.
+-- The game's icons of the backpack and the keyring on its bag bar, and the art of an empty bag slot when the client does not say.
 local BACKPACK_ICON = "Interface\\Icons\\ui-hud-actionbar-bag"
+local KEYRING_ICON = "Interface\\Icons\\ui-hud-actionbar-keyring"
 local EMPTY_ART = "Interface\\PaperDoll\\UI-PaperDoll-Slot-Bag"
 -- The inventory slot names of the bags, for the art of an empty one (GetInventorySlotInfo).
 local SLOT_NAMES = { [1] = "Bag0Slot", [2] = "Bag1Slot", [3] = "Bag2Slot", [4] = "Bag3Slot", [5] = "ReagentBag0Slot" }
 -- The tint under the cursor, as on the slots of the windows (Windows.lua:59), and the colour of the plain lines of a tooltip.
 local HOVER = { 1, 1, 1, 0.3 }
 local DIM = { 0.8, 0.8, 0.8 }
--- The free count in a slot's corner: the game's font of item counts at a size of its own with an outline, white, and the red of a full bag's label
--- in Bag by bag (BagsLayout.lua, FULL_HEX) when the bag has no room.
+-- The free count in a slot's corner: the game's font of item counts at a size of its own with an outline, white, gold at LOW free slots or fewer
+-- and the red of a full bag's label in Bag by bag (BagsLayout.lua, FULL_HEX) when the bag has no room, the colours of the footer's free slots
+-- (BagsWindow.lua, LOW_HEX and NONE_HEX).
 local COUNT_FONT, COUNT_SIZE = "NumberFontNormal", 11
-local ROOM, FULL = { 1, 1, 1 }, { 1, 0.35, 0.24 }
+local ROOM, SHORT, FULL, LOW = { 1, 1, 1 }, { 1, 0.82, 0 }, { 1, 0.35, 0.24 }, 4
+-- Item classes and the container subclass of the reagent bag (Enum.ItemClass, Enum.ItemContainerSubclass), the equip slot of a bag, and the game's
+-- words of a bag's size in its tooltip ("6 Slot Bag", CONTAINER_SLOTS).
+local CONTAINER, KEY_CLASS, REAGENT_SUB = 1, 13, 11
+local BAG_EQUIP = "INVTYPE_BAG"
+local SIZE_WORDS = "%d Slot %s"
+-- The tooltip opens this far beside the window.
+local TIP_GAP = 4
 -- The crop of an icon when the Windows page does not say.
 local CROP = 8
 -- Loot going in (ITEM_PUSH): the size its icon starts at, as times the slot's, and how long it takes to shrink into the slot, fading after FLY_FADE.
 local FLY_SCALE, FLY_SECONDS, FLY_FADE = 1.8, 0.45, 0.15
 local FIGHT_LINE = "Flat UI: the bag slots of the bag window take no clicks in a fight."
+local NO_ROOM_LINE = "Flat UI: your keyring is full."
 
--- The row, made by Slots.Row: { frame, parent, slots = { [bag] = slot } }.
+-- The row, made by Slots.Row: { frame, parent, slots = { [bag] = slot }, spares = { bag, reagent } (Spares, worked out once a pass) }.
 local row
+-- The size of a bag by its item ID, read once from its tooltip; 0 when the tooltip never says.
+local sizes = {}
 
 local function Usable(value)
 	return value ~= nil and not ns.IsSecret(value) and type(value) == "table"
@@ -111,7 +141,7 @@ end
 
 -- The inventory slot of a bag, or nil for the backpack and for a bag the client gives none.
 local function InventorySlot(bag)
-	if bag == 0 then
+	if bag == 0 or bag == KEYRING then
 		return nil
 	end
 	local slot = E.Ask(Container("ContainerIDToInventoryID"), bag)
@@ -125,6 +155,8 @@ end
 local function BagIcon(bag)
 	if bag == 0 then
 		return BACKPACK_ICON
+	elseif bag == KEYRING then
+		return KEYRING_ICON
 	end
 	local slot = InventorySlot(bag)
 	return slot and Texture(E.Ask(GetInventoryItemTexture, "player", slot)) or nil
@@ -150,6 +182,128 @@ local function Room(bag)
 		return math.max(0, math.floor(free)), math.floor(total)
 	end
 	return nil, nil
+end
+
+-- The keys on the keyring, its slots and its first empty slot, or nil when the client does not say. A slot the client does not answer for is never
+-- taken as empty, so a key is never put on one that may hold a key already.
+local function Keys()
+	local total = E.Ask(Container("GetContainerNumSlots"), KEYRING)
+	local info = Container("GetContainerItemInfo")
+	if not (info and ns.Finite(total) and total > 0) then
+		return nil, nil, nil
+	end
+	local keys, empty = 0, nil
+	for index = 1, math.floor(total) do
+		local ok, item = pcall(info, KEYRING, index)
+		if ok and not ns.IsSecret(item) and item == nil then
+			empty = empty or index
+		elseif ok and Usable(item) then
+			keys = keys + 1
+		end
+	end
+	return keys, math.floor(total), empty
+end
+
+-- The equip slot, class and subclass of an item (C_Item.GetItemInfoInstant), or nil.
+local function Instant(id)
+	local api = C_Item
+	local fn = Usable(api) and api.GetItemInfoInstant or GetItemInfoInstant
+	if type(fn) ~= "function" or not ns.Finite(id) then
+		return nil
+	end
+	local ok, _, _, _, equip, _, class, sub = pcall(fn, id)
+	if ok and type(equip) == "string" and not ns.IsSecret(equip) and ns.Finite(class) and ns.Finite(sub) then
+		return equip, class, sub
+	end
+	return nil
+end
+
+-- The game's words of a bag's size ("6 Slot Bag", CONTAINER_SLOTS) as a pattern that gives the number, made the first time.
+local sizePattern
+local function SizePattern()
+	if not sizePattern then
+		local words = Word("CONTAINER_SLOTS", SIZE_WORDS)
+		local text = words:gsub("%%%d*%$?d", "\1"):gsub("%%%d*%$?s", "\2")
+		text = text:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")
+		sizePattern = "^" .. text:gsub("\1", "(%%d+)"):gsub("\2", ".+")
+	end
+	return sizePattern
+end
+
+-- The slots of a bag in the bags, read once per item ID from its tooltip (C_TooltipInfo.GetBagItem), 0 when it does not say. A tooltip that has
+-- not loaded yet (one line) is read again next time.
+local function BagSize(bag, slot, id)
+	local known = sizes[id]
+	if known then
+		return known
+	end
+	local api = C_TooltipInfo
+	local get = Usable(api) and api.GetBagItem or nil
+	if type(get) ~= "function" then
+		return 0
+	end
+	local ok, data = pcall(get, bag, slot)
+	if not (ok and Usable(data) and Usable(data.lines)) then
+		return 0
+	end
+	local pattern, size = SizePattern(), 0
+	for _, line in ipairs(data.lines) do
+		local text = Usable(line) and line.leftText or nil
+		if type(text) == "string" and not ns.IsSecret(text) then
+			local n = tonumber(text:match(pattern) or "")
+			if n and n > 0 then
+				size = math.floor(n)
+				break
+			end
+		end
+	end
+	if size > 0 or #data.lines >= 2 then
+		sizes[id] = size
+	end
+	return size
+end
+
+-- The largest spare bag in the backpack and bags, for a bag slot and for the reagent bag slot apart (the reagent bag slot takes reagent bags alone,
+-- and a bag slot none): { bag, slot, size, id, link }, or nil. Of two the same size, a general bag (subclass 0) goes first. A locked item is skipped.
+local function Spares()
+	local count, info = Container("GetContainerNumSlots"), Container("GetContainerItemInfo")
+	if not (count and info) then
+		return nil, nil
+	end
+	local best = {}
+	for bag = FIRST, LAST do
+		local slots = E.Ask(count, bag)
+		for slot = 1, ns.Finite(slots) and math.floor(slots) or 0 do
+			local ok, item = pcall(info, bag, slot)
+			local locked = ok and Usable(item) and item.isLocked
+			local id = ok and Usable(item) and not ns.IsSecret(locked) and locked ~= true and item.itemID or nil
+			local equip, class, sub = Instant(ns.Finite(id) and id or nil)
+			if equip == BAG_EQUIP and class == CONTAINER then
+				local reagent = sub == REAGENT_SUB
+				local size, top = BagSize(bag, slot, id), best[reagent]
+				if not top or size > top.size or (size == top.size and sub == 0 and top.sub ~= 0) then
+					local link = item.hyperlink
+					best[reagent] = { bag = bag, slot = slot, size = size, sub = sub, id = id,
+						link = type(link) == "string" and not ns.IsSecret(link) and link or nil }
+				end
+			end
+		end
+	end
+	return best[false], best[true]
+end
+
+-- A spare bag's name and size for its line: "Linen Bag (6 slots)".
+local function SpareLabel(spare)
+	local name = spare.link and spare.link:match("|h%[(.-)%]|h") or nil
+	if not name then
+		local api = C_Item
+		name = Usable(api) and E.Ask(api.GetItemNameByID, spare.id) or nil
+	end
+	name = type(name) == "string" and name ~= "" and name or "a bag"
+	if spare.size > 0 then
+		return ("%s (%d slots)"):format(name, spare.size)
+	end
+	return name
 end
 
 -- The crop of the icons, from the Windows page (B.Look, Bags.lua), as a share of each edge.
@@ -203,9 +357,96 @@ local function Stuck()
 	return ok and ns.Finite(bag) and bag or nil
 end
 
--- True when the slot of bag holds a bag: the backpack always.
+-- True when the slot of bag holds a bag: the backpack and the keyring always.
 local function Holds(bag)
 	return bag == 0 or BagIcon(bag) ~= nil
+end
+
+-- The spare bag a click on an empty bag slot puts in: the reagent bag slot's own kind, else the largest bag; nil for a slot that holds a bag, the
+-- backpack and the keyring. fresh: looked for now (a click, a tooltip), else as the row's last pass found them.
+local function SpareFor(bag, fresh)
+	if bag == 0 or bag == KEYRING or not row or not InventorySlot(bag) or Holds(bag) then
+		return nil
+	end
+	local general, reagent
+	if fresh then
+		general, reagent = Spares()
+	else
+		general, reagent = row.general, row.reagent
+	end
+	if bag == LAST then
+		return reagent
+	end
+	return general
+end
+
+-- An empty bag slot clicked with nothing on the cursor, out of combat: the spare bag goes on the cursor (C_Container.PickupContainerItem) and into
+-- the slot with PutItemInBag when the game says it can go there (C_PaperDollInfo.CursorCanGoInSlot), else back to where it was (ClearCursor).
+local function Fill(bag)
+	local spare = SpareFor(bag, true)
+	local inventory = InventorySlot(bag)
+	if not (spare and inventory) then
+		return
+	end
+	if E.Fighting() then
+		print(FIGHT_LINE)
+		return
+	end
+	if not E.Call(Container("PickupContainerItem"), spare.bag, spare.slot) or E.Ask(CursorHasItem) ~= true then
+		return
+	end
+	local api = C_PaperDollInfo
+	if E.Ask(Usable(api) and api.CursorCanGoInSlot or nil, inventory) == true then
+		E.Call(PutItemInBag, inventory)
+	else
+		E.Call(ClearCursor)
+	end
+end
+
+-- A key on the cursor goes into the first empty slot of the keyring (C_Container.PickupContainerItem), as the game's keyring button does
+-- (Camelot/MainMenuBarBagButtons.lua:47-62); the game refuses anything that is not a key. A full keyring says so in one line.
+local function PutKey()
+	local _, _, empty = Keys()
+	if empty then
+		E.Call(Container("PickupContainerItem"), KEYRING, empty)
+	else
+		print(NO_ROOM_LINE)
+	end
+end
+
+-- The centre of a frame across the screen, in screen units, or nil.
+local function Middle(frame)
+	local ok, left, right, scale = pcall(function()
+		return frame:GetLeft(), frame:GetRight(), frame:GetEffectiveScale()
+	end)
+	if ok and ns.Finite(left) and ns.Finite(right) and ns.Finite(scale) and scale > 0 then
+		return (left + right) / 2 * scale
+	end
+	return nil
+end
+
+-- The tooltip of a slot opens beside the bag window (B.Window.Get), on the side of the screen with room: left of a window right of the screen's
+-- middle, else right of it, its bottom at the window's, so the window and the bag the slot lights stay in view. Above the slot when the window
+-- does not say where it is.
+local function Anchor(tip, button)
+	local window
+	local get = Usable(B.Window) and B.Window.Get or nil
+	if type(get) == "function" then
+		local ok, frame = pcall(get, "bags")
+		window = ok and Usable(frame) and frame or nil
+	end
+	local at, screen = window and Middle(window), Middle(UIParent)
+	if not (at and screen) then
+		tip:SetOwner(button, "ANCHOR_TOP")
+		return
+	end
+	tip:SetOwner(button, "ANCHOR_NONE")
+	tip:ClearAllPoints()
+	if at > screen then
+		tip:SetPoint("BOTTOMRIGHT", window, "BOTTOMLEFT", -TIP_GAP, 0)
+	else
+		tip:SetPoint("BOTTOMLEFT", window, "BOTTOMRIGHT", TIP_GAP, 0)
+	end
 end
 
 -- The edge of a slot: in the Highlight colour while a click keeps its bag lit, else the outline's own.
@@ -230,18 +471,29 @@ local function Stick(bag)
 	end
 end
 
--- A click, a drag or a drop (how) on the slot of bag. A click with nothing on the cursor keeps that bag lit, in a fight too; else, out of combat
--- only, an item on the cursor goes in on a click or a drop, and a drag lifts the bag onto the cursor.
+-- A click, a drag or a drop (how) on the slot of bag. A click with nothing on the cursor keeps that bag lit, in a fight too, and on an empty slot
+-- puts the spare bag in (Fill); else, out of combat only, an item on the cursor goes in on a click or a drop (a key on the keyring), and a drag
+-- lifts the bag onto the cursor.
 local function Use(bag, how)
 	local holding = E.Ask(CursorHasItem) == true
 	if not holding and how ~= "drag" then
-		if how == "click" then
+		if how == "click" and Holds(bag) then
 			Stick(bag)
+		elseif how == "click" then
+			Fill(bag)
 		end
+		return
+	end
+	-- The keyring takes a key and gives nothing to drag.
+	if bag == KEYRING and not (holding and how ~= "drag") then
 		return
 	end
 	if E.Fighting() then
 		print(FIGHT_LINE)
+		return
+	end
+	if bag == KEYRING then
+		PutKey()
 		return
 	end
 	if bag == 0 then
@@ -261,10 +513,12 @@ local function Use(bag, how)
 	end
 end
 
--- A click on a slot: the right button with nothing on the cursor opens the bag's settings under it (B.Layout.BagMenuOf), any other the click above.
+-- A click on a slot: the right button with nothing on the cursor opens the bag's settings under it (B.Layout.BagMenuOf; nothing on the keyring), any
+-- other the click above.
 local function Click(button, bag, mouse)
 	if mouse == "RightButton" and E.Ask(CursorHasItem) ~= true then
-		local menu = LayoutFn("BagMenuOf")
+		-- The keyring has no settings, as in the game (BagsLayout.lua, Layout.BagMenuOf).
+		local menu = bag ~= KEYRING and LayoutFn("BagMenuOf") or nil
 		if menu then
 			B.Part("layout", menu, "bags", bag, button)
 		end
@@ -294,23 +548,40 @@ local function FlagLines(tip, bag)
 	end
 end
 
--- The game's tooltip of the bag out of combat, plain lines in a fight or for an empty slot; then the bag's free and total slots, its settings and
--- what the clicks do.
+-- The keyring's tooltip: its name, how many keys it holds and what the clicks do.
+local function KeyTip(tip, button)
+	Anchor(tip, button)
+	tip:SetText(Word("KEYRING", "Keyring"), 1, 1, 1)
+	local keys = Keys()
+	if keys then
+		tip:AddLine(keys == 1 and "1 key" or ("%d keys"):format(keys), 1, 1, 1)
+	end
+	tip:AddLine("Drop a key here to put it on your keyring.", DIM[1], DIM[2], DIM[3], true)
+	tip:AddLine(Stuck() == KEYRING and "Click again to show every bag." or "Click to show only your keyring.", DIM[1], DIM[2], DIM[3], true)
+	tip:Show()
+end
+
+-- The game's tooltip of the bag out of combat, plain lines in a fight or for an empty slot (with the spare bag a click puts in); then the bag's
+-- free and total slots, its settings and what the clicks do. It opens beside the window (Anchor).
 local function SlotTip(button, bag)
 	local tip = GameTooltip
 	if not Usable(tip) or ns.Forbidden(tip) then
 		return
 	end
+	if bag == KEYRING then
+		KeyTip(tip, button)
+		return
+	end
 	local slot = InventorySlot(bag)
 	local held = bag == 0 or BagIcon(bag) ~= nil
-	tip:SetOwner(button, "ANCHOR_TOP")
+	Anchor(tip, button)
 	local shown = false
 	if held and slot and not E.Fighting() then
 		local ok, has = pcall(tip.SetInventoryItem, tip, "player", slot)
 		shown = ok and not ns.IsSecret(has) and has == true
 		if not shown then
 			-- The game hides the tooltip when it has nothing to show, so the owner is set again.
-			tip:SetOwner(button, "ANCHOR_TOP")
+			Anchor(tip, button)
 		end
 	end
 	if not shown then
@@ -321,7 +592,13 @@ local function SlotTip(button, bag)
 			tip:SetText(type(name) == "string" and name ~= "" and name or "Bag")
 		else
 			tip:SetText(bag == LAST and Word("EQUIP_CONTAINER_REAGENT", "Equip Reagent Bag") or Word("EQUIP_CONTAINER", "Equip Container"))
-			tip:AddLine("Drag a bag from your bags here to put it in this slot.", DIM[1], DIM[2], DIM[3], true)
+			local spare = SpareFor(bag, true)
+			if spare then
+				tip:AddLine(("Click to put in %s from your bags."):format(SpareLabel(spare)), 1, 1, 1, true)
+				tip:AddLine("Or drag a bag from your bags here.", DIM[1], DIM[2], DIM[3], true)
+			else
+				tip:AddLine("Drag a bag from your bags here to put it in this slot.", DIM[1], DIM[2], DIM[3], true)
+			end
 		end
 	end
 	local free, total = Room(bag)
@@ -407,10 +684,22 @@ local function MakeSlot(bag)
 	return slot
 end
 
--- The free slots of a held bag in the slot's corner, red when it is full; nothing on an empty slot or when the client does not say.
+-- The free slots of a held bag in the slot's corner, gold at LOW or fewer and red when it is full; on the keyring how many keys it holds, in white;
+-- nothing on an empty slot or when the client does not say.
 local function DrawCount(slot, bag, held)
 	local text = slot.count
 	if not text then
+		return
+	end
+	if bag == KEYRING then
+		local keys = Keys()
+		if keys then
+			text:SetTextColor(ROOM[1], ROOM[2], ROOM[3], 1)
+			text:SetText(tostring(keys))
+			text:Show()
+		else
+			text:Hide()
+		end
 		return
 	end
 	local free = held and Room(bag) or nil
@@ -418,7 +707,7 @@ local function DrawCount(slot, bag, held)
 		text:Hide()
 		return
 	end
-	local colour = free == 0 and FULL or ROOM
+	local colour = free == 0 and FULL or free <= LOW and SHORT or ROOM
 	text:SetTextColor(colour[1], colour[2], colour[3], 1)
 	text:SetText(tostring(free))
 	text:Show()
@@ -460,13 +749,34 @@ local function Showing()
 	return ok and visible == true
 end
 
--- Each slot whose bag slot the cursor's item can go in keeps its hover tint lit, as the game's bag buttons do; the backpack never.
+-- True while the cursor holds a key (GetCursorInfo, Enum.ItemClass.Key).
+local function KeyHeld()
+	local kind, id = E.Ask(GetCursorInfo)
+	if kind ~= "item" then
+		return false
+	end
+	local _, class = Instant(id)
+	return class == KEY_CLASS
+end
+
+-- Each slot whose bag slot the cursor's item can go in keeps its hover tint lit, as the game's bag buttons do (the keyring while a key is held);
+-- the backpack never. With nothing on the cursor, each empty bag slot a spare bag in the bags fits stays lit (SpareFor), so it is seen.
 local function Fits()
 	local api = C_PaperDollInfo
 	local can = Usable(api) and api.CursorCanGoInSlot or nil
+	local holding = E.Ask(CursorHasItem) == true
+	local key = holding and row.slots[KEYRING] ~= nil and KeyHeld()
 	for bag, slot in pairs(row.slots) do
 		local inventory = InventorySlot(bag)
-		if inventory and E.Ask(can, inventory) == true then
+		local lit
+		if bag == KEYRING then
+			lit = key
+		elseif holding then
+			lit = inventory ~= nil and E.Ask(can, inventory) == true
+		else
+			lit = SpareFor(bag) ~= nil
+		end
+		if lit then
 			slot.button:LockHighlight()
 		else
 			slot.button:UnlockHighlight()
@@ -520,7 +830,7 @@ end
 -- Lays the row out: a slot for each bag that has an inventory slot, left to right. Returns the width and height it takes in its frame.
 local function Update()
 	local frame = row.frame
-	local crop, x = Crop(), 0
+	local crop, x, empty = Crop(), 0, false
 	for bag = FIRST, LAST do
 		local slot = row.slots[bag]
 		if bag == 0 or InventorySlot(bag) then
@@ -530,9 +840,29 @@ local function Update()
 			DrawSlot(slot, bag, crop)
 			slot.button:Show()
 			x = x + SLOT + GAP
+			empty = empty or not Holds(bag)
 		elseif slot then
 			slot.button:Hide()
 		end
+	end
+	-- The keyring, a gap apart, while the game shows one (C_ActionBar.ShouldShowKeyring, as Bags.lua and BagsData.lua ask).
+	local keyring = row.slots[KEYRING]
+	if Usable(C_ActionBar) and E.Ask(C_ActionBar.ShouldShowKeyring) == true then
+		keyring = keyring or MakeSlot(KEYRING)
+		x = x + GAP
+		keyring.button:ClearAllPoints()
+		keyring.button:SetPoint("LEFT", frame, "LEFT", x, 0)
+		DrawSlot(keyring, KEYRING, crop)
+		keyring.button:Show()
+		x = x + SLOT + GAP
+	elseif keyring then
+		keyring.button:Hide()
+	end
+	-- The spare bags an empty slot offers, looked for only while a slot is empty.
+	if empty then
+		row.general, row.reagent = Spares()
+	else
+		row.general, row.reagent = nil, nil
 	end
 	local width = math.max(x - GAP, 1)
 	frame:SetSize(width, SLOT)

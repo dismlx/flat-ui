@@ -1640,7 +1640,7 @@ ns.SETUP_STEPS = {
 		{ "bags.bankColumns", "r", "behaviour", "Sets how many slots wide the bank window is." },
 		{ "bags.slotSize", "o", "behaviour", "Sets the size of the slots." },
 		{ "bags.freeSlots", "o", "behaviour", "In Sections, shows one counted free slot per kind of bag, or every free slot." },
-		{ "bags.bagSlots", "o", "behaviour", "Puts a row of your bag slots over the bag window's footer, to put a bag in or swap one." },
+		{ "bags.bagSlots", "o", "behaviour", "Puts a row of your bag slots and keyring over the bag window's footer, to put a bag in or swap one." },
 		{ "bags.currencies", "o", "behaviour", "Shows the currencies you mark Show on Backpack on the Currency tab next to your gold under the bag window." },
 		{ "bags.newItems", "o", "behaviour", "Keeps new items at the top until you close the bags." },
 		{ "bags.gear", "o", "behaviour", "Shows equipment in one section, or splits weapons, armour and jewellery." },

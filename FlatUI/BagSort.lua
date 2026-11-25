@@ -1,14 +1,15 @@
 local _, ns = ...
 
--- Clean up bags. A small flat button of this addon's own lies on each bag window and on the bank, and /flatui sort does the same
--- job from the keyboard. Both call the game's sort: C_Container.SortBags for the bags and C_Container.SortBank for the bank that is
--- shown, which sorts every tab of that bank (BANK_CONFIRM_CLEANUP_PROMPT, GlobalStrings enUS.lua:1512). ContainerDocumentation.lua
--- lists neither call with a restriction, and the game's own buttons sort with no check for combat (ContainerFrame.xml:371-374,
--- BankFrameTemplates.lua:1857-1876), so this part has none either. The game has a clean up button of its own on the backpack, the
--- combined bag and the bank (ContainerFrame.xml:360-383, BankFrameTemplates.xml:617-621); this one lies beside it and leaves it as it
--- is. The game hides its button only under the gamepad interface (ContainerFrame.lua:1130-1138), and no button of this addon is made
--- then. The button is a frame of this addon's, made out of combat on the bag window it belongs to. The bank type is read from the field
--- BankPanel.bankType while the panel is shown, as BankFrame:GetActiveBankType does (BankFrameTemplates.lua:93-95).
+-- Clean up bags. A small flat button of this addon's own lies on each bag window and on the bank, and /flatui sort and the clean up key
+-- under Flat UI in Key Bindings (FlatUIBagSortButton, at the end of this file) do the same job from the keyboard. All call the game's sort:
+-- C_Container.SortBags for the bags and C_Container.SortBank for the bank that is shown, which sorts every tab of that bank
+-- (BANK_CONFIRM_CLEANUP_PROMPT, GlobalStrings enUS.lua:1512). ContainerDocumentation.lua lists neither call with a restriction, and the game's
+-- own buttons sort with no check for combat (ContainerFrame.xml:371-374, BankFrameTemplates.lua:1857-1876), so this part has none either.
+-- The game has a clean up button of its own on the backpack, the combined bag and the bank (ContainerFrame.xml:360-383,
+-- BankFrameTemplates.xml:617-621); this one lies beside it and leaves it as it is. The game hides its button only under the gamepad interface
+-- (ContainerFrame.lua:1130-1138), and no button of this addon is made then. The button is a frame of this addon's, made out of combat on the bag
+-- window it belongs to. The bank type is read from the field BankPanel.bankType while the panel is shown, as BankFrame:GetActiveBankType does
+-- (BankFrameTemplates.lua:93-95).
 -- A click plays the sound of the game's own clean up buttons (ContainerFrame.xml:372, BankFrameTemplates.lua:1858). The bank asks first
 -- while the game's setting for that is on, as its own button does (BankFrameTemplates.lua:1871-1875, CVars.lua:101): with a popup of
 -- this addon's own, an entry of StaticPopupDialogs shown with StaticPopup_Show (StaticPopup.lua:309-325), whose Accept sorts the bank.
@@ -701,6 +702,33 @@ end
 -- Run(which) sorts "bags" or "bank" and says why not, returning whether the game was asked (or its question is up); Sound plays the clean up
 -- sound; Watch(fn) adds a function told right after each sort is asked (Sorted).
 ns.BagSort = { Apply = Apply, Logout = Logout, Command = Command, help = HELP, Run = Run, Sound = Sound, Watch = AddWatcher }
+
+-- The clean up key: Bindings.xml binds a click of FlatUIBagSortButton (CLICK FlatUIBagSortButton:LeftButton), a plain button of this addon's own,
+-- a child of UIParent with no size and no point that hears the release only, as the bank key's (BagsBank.lua), named in the game's Key Bindings
+-- by the global BINDING_NAME_CLICK FlatUIBagSortButton:LeftButton. A press cleans up the bags as /flatui sort does (Run, which tells the
+-- watchers, so Bags' sort button looks busy as after a click), with the game's clean up sound when the game was asked; in a fight too, as the
+-- button. While the Windows page is off, which /flatui sort belongs to, it only says so.
+do
+	local name = "FlatUIBagSortButton"
+	_G["BINDING_NAME_CLICK " .. name .. ":LeftButton"] = "Flat UI bags: clean up"
+	local ok, button = pcall(CreateFrame, "Button", name, UIParent)
+	if ok and type(button) == "table" then
+		ns.Own[button] = true
+		pcall(button.RegisterForClicks, button, "LeftButtonUp")
+		button:SetScript("OnClick", function()
+			local okRun, err = pcall(function()
+				if not ns.Enabled(KEY) then
+					print("Flat UI: the clean up key is part of the Windows page, which is off. Turn on Restyle windows there.")
+				elseif Run("bags") then
+					Sound()
+				end
+			end)
+			if not okRun then
+				geterrorhandler()(err)
+			end
+		end)
+	end
+end
 
 -- A page that is off is never started, so a record left by a session in which it was on is put back at login.
 local watcher = CreateFrame("Frame")

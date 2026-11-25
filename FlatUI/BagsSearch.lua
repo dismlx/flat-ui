@@ -25,7 +25,8 @@ local _, ns = ...
 -- and 4, 2, 4), #consumable and its subclasses #potion, #elixir, #flask, #scroll, #food and #bandage (Enum.ItemClass and
 -- Enum.ItemConsumableSubclass, wowless, data/products/wowf/enums.yaml:4630-4651 and 4694-4711), #trade, #reagent, #recipe, #ammo, #bag and #key
 -- (the rules of those sections), #boe (ItemMarks' answer, ns.ItemMarks.BoE, ItemMarks.lua:184-191), #bound, #set, #usable and #unusable (ItemMarks'
--- tooltip test, ns.ItemMarks.Unusable, :247-279), and the qualities #poor to #legendary. q takes 0 to 7, the English names or the client's
+-- tooltip test, ns.ItemMarks.Unusable, :247-279), #learnable (a recipe this character can learn now, ns.ItemMarks.Learnable, the green plus of
+-- BagsItems.lua), and the qualities #poor to #legendary. q takes 0 to 7, the English names or the client's
 -- (ITEM_QUALITY0_DESC to ITEM_QUALITY7_DESC, Enum.ItemQuality, enums.yaml:5101-5111); ilvl compares the item level of weapons and armour
 -- (ns.Items.LevelOf, Items.lua:425-438), and an item with no level never matches it. tip:stamina or tip:"chance to hit" looks for its text,
 -- plainly and in lower case, in the item's tooltip: every left and right text of C_TooltipInfo.GetHyperlink of the record's link (the "item:" link
@@ -34,8 +35,8 @@ local _, ns = ...
 --
 -- A record whose name the client has not loaded yet matches nil, unknown, when only its name could decide: it is drawn dimmed until the name
 -- comes. The search never asks the server for an item: the name, the binding, the tooltips and the item level are read only once
--- C_Item.IsItemDataCachedByID says the client has the item, since the picker of characters counts matches over items no window shows. #usable
--- and #unusable say what this character can use, so another character's items match neither.
+-- C_Item.IsItemDataCachedByID says the client has the item, since the picker of characters counts matches over items no window shows. #usable,
+-- #unusable and #learnable say what this character can use, so another character's items match none of them.
 --
 -- The box is an EditBox of Flat UI's own (CreateFrame), HEIGHT high, in the look of Windows' text boxes (an outline filled with the Button and slot
 -- colour, Windows.lua:1230-1253), with the edge in the Highlight colour while it has the keyboard (HasFocus): GameFontHighlightSmall, a Search
@@ -44,11 +45,16 @@ local _, ns = ...
 -- Escape and Enter give the keyboard back (ClearFocus), so a second Escape is the game's, and a box that hides gives it back too. Pointing at an
 -- empty box that does not have the keyboard, out of a fight (InCombatLockdown and UnitAffectingCombat, through Errands.Fighting), writes the
 -- grammar in GameTooltip in plain lines (SetOwner, SetText, AddLine, Show, and Hide while the box owns it, IsOwned); a box that holds a search
--- gets two short lines instead, the search and what the cross does, and a click in the box or a letter typed takes the tooltip away, so it never
--- lies over the slots the search lights. The search itself, typing and the cross work in a fight too.
+-- gets short lines instead, the search, how many items match and what the cross does, and a click in the box or a letter typed takes the tooltip
+-- away, so it never lies over the slots the search lights. The search itself, typing and the cross work in a fight too. While a search is typed
+-- the box shows how many items match at its right, left of the cross, in the dim text colour and red at 0: its window counts them for the
+-- character it shows, as its character picker does (Search.SetCount, BagsWindow.lua), and the text keeps clear of it (SetTextInsets).
 -- A right click on the box (OnMouseUp) opens a menu of BagsLayout's (B.Layout.Menu) of quick searches, New items, Junk, Bind on equip, Quest items,
--- Cannot use, Consumables, Trade goods, Green and better and Epic and better, each with its term at the right; a pick types the term (the one
--- typed now is ticked), and Clear, while a search is typed, clears it. The menu belongs to the box's window, and closes with it.
+-- Cannot use, Recipes you can learn, Consumables, Trade goods, Green and better and Epic and better, each with its term at the right; a pick
+-- types the term (the one typed now is ticked), and Clear, while a search is typed, clears it. Under a Recent header it lists the last RECENT (5)
+-- searches typed, newest first, the one typed now ticked, and Clear recent: a search is kept when Enter is pressed, when the box loses the keyboard
+-- and when it is cleared (the cross, Clear, the bags closing), but not a quick search, in FlatUIDB.bags.recent for the account (ns.Account;
+-- BagsData.lua resets only its v and chars), so they last between sessions. The menu belongs to the box's window, and closes with it.
 -- The bag search key: Bindings.xml binds a click of FlatUIBagSearchButton (CLICK FlatUIBagSearchButton:LeftButton), a plain button of Flat UI's own
 -- made here as the file loads, a child of UIParent with no size and no point that hears the release only, as the bank key's (BagsBank.lua), named
 -- in the game's Key Bindings by the global BINDING_NAME_CLICK FlatUIBagSearchButton:LeftButton. It opens the bag window with the command hold, as
@@ -69,8 +75,10 @@ local INSET_LEFT, INSET_RIGHT = 6, 18
 local CROSS, CROSS_LINE, CROSS_ALPHA = 7, 1.5, 0.6
 local MOST_LETTERS = 80
 local HINT = "Search"
--- The text-dim of the windows (PanelLook.lua), as the Threat list uses it.
+-- The text-dim of the windows (PanelLook.lua), as the Threat list uses it, and the red of a full bag (BagsWindow.lua, NONE_HEX) for a search
+-- that matches nothing; the space between the count of matches and the cross.
 local DIM = { 0.66, 0.68, 0.62 }
+local NONE_RGB, COUNT_GAP = { 1, 0.35, 0.24 }, 4
 
 -- Enum.ItemClass and Enum.ItemConsumableSubclass on Forever (enums.yaml:4630-4651, 4694-4711).
 local CONSUMABLE, WEAPON, ARMOR = 0, 2, 4
@@ -85,7 +93,7 @@ local HELP = {
 	"Search",
 	"Words look in each item's name, kind and slot, and in the name of its section: potion, cloth, mail, head, consumables.",
 	"A space or & is and, | is or, ! is not, brackets group, and \"quoted text\" is one word.",
-	"#junk  #new  #quest  #boe  #bound  #set  #usable  #unusable",
+	"#junk  #new  #quest  #boe  #bound  #set  #usable  #unusable  #learnable",
 	"#gear  #weapon  #armour  #consumable  #potion  #elixir  #flask  #food  #bandage  #scroll",
 	"#trade  #reagent  #recipe  #ammo  #bag  #key",
 	"#poor  #common  #uncommon  #rare  #epic  #legendary",
@@ -93,10 +101,10 @@ local HELP = {
 	"tip: looks in each item's tooltip: tip:stamina, tip:\"fire resistance\", tip:agility #boe.",
 	"For example: #boe q>=uncommon, !#junk mail, (cloth | leather) #gear.",
 	"Items that do not match are dimmed. Enter or Escape leaves the box, and the cross clears it.",
-	"Right-click the box for quick searches. A key under Flat UI in Key Bindings opens the bags with this box ready.",
+	"Right-click the box for quick searches and your last five searches. A key under Flat UI in Key Bindings opens the bags with this box ready.",
 }
 -- The tooltip of a box that holds a search, under its text.
-local SHORT = "The cross clears it. Right-click the box for quick searches."
+local SHORT = "The cross clears it. Right-click the box for quick searches and your recent ones."
 -- The quick searches of the box's right-click menu: what each line says and the term it types.
 local QUICK = {
 	{ "New items", "#new" },
@@ -104,11 +112,19 @@ local QUICK = {
 	{ "Bind on equip", "#boe" },
 	{ "Quest items", "#quest" },
 	{ "Cannot use", "#unusable" },
+	{ "Recipes you can learn", "#learnable" },
 	{ "Consumables", "#consumable" },
 	{ "Trade goods", "#trade" },
 	{ "Green and better", "q>=uncommon" },
 	{ "Epic and better", "q>=epic" },
 }
+-- The searches the menu keeps under Recent, for the account (FlatUIDB.bags.recent, newest first): at most RECENT, none of them a quick search, and
+-- the room a line of it takes in the menu before it is cut.
+local RECENT, RECENT_LETTERS = 5, 40
+local QUICK_TERMS = {}
+for _, quick in ipairs(QUICK) do
+	QUICK_TERMS[quick[2]] = true
+end
 -- The bag search key: Bindings.xml binds a click of this plain button of Flat UI's own (CLICK FlatUIBagSearchButton:LeftButton).
 local KEY_BUTTON = "FlatUIBagSearchButton"
 local KEY_BINDING = "CLICK " .. KEY_BUTTON .. ":LeftButton"
@@ -305,10 +321,11 @@ local function BoE(record)
 end
 
 -- Whether this character cannot use the item: true, false, nil while the client has not loaded it, or "none" when nobody can say for this
--- character: another character's item, or a build without ItemMarks' answer. The bank away from the banker is asked with no bag and slot.
-local function Unusable(record)
+-- character: another character's item, or a build without ItemMarks' answer. The bank away from the banker is asked with no bag and slot. which:
+-- another answer of ItemMarks asked the same way, "Learnable" (a recipe this character can learn now).
+local function Unusable(record, which)
 	local marks = ns.ItemMarks
-	local answer = type(marks) == "table" and marks.Unusable or nil
+	local answer = type(marks) == "table" and marks[which or "Unusable"] or nil
 	if type(answer) ~= "function" then
 		return "none"
 	end
@@ -386,6 +403,13 @@ local KEYWORDS = {
 			return nil
 		end
 		return answer == false
+	end,
+	learnable = function(record)
+		local answer = Unusable(record, "Learnable")
+		if answer == nil then
+			return nil
+		end
+		return answer == true
 	end,
 	poor = OfQuality(0),
 	common = OfQuality(1),
@@ -867,7 +891,31 @@ local function Paint(box)
 	PaintCross(own)
 end
 
--- The hint shows on an empty box without the keyboard, the cross on a box with text.
+-- The count of matches at the right of a box, left of the cross, while a search is typed and its window gave one (Search.SetCount): dim, red at
+-- 0. The text of the box keeps clear of it (SetTextInsets).
+local function Count(box, own)
+	local label = own.count
+	if not label then
+		return
+	end
+	local inset = INSET_RIGHT
+	if own.matches ~= nil and text ~= "" then
+		local colour = own.matches == 0 and NONE_RGB or DIM
+		label:SetTextColor(colour[1], colour[2], colour[3])
+		label:SetText(tostring(own.matches))
+		label:Show()
+		local ok, width = pcall(label.GetStringWidth, label)
+		inset = INSET_RIGHT + (ok and ns.Finite(width) and math.ceil(width) or 12) + COUNT_GAP
+	else
+		label:Hide()
+	end
+	if own.inset ~= inset then
+		own.inset = inset
+		pcall(box.SetTextInsets, box, INSET_LEFT, inset, 0, 0)
+	end
+end
+
+-- The hint shows on an empty box without the keyboard, the cross on a box with text, and the count of matches while one is known.
 local function Refresh(box)
 	local own = boxes[box]
 	if not own then
@@ -879,6 +927,7 @@ local function Refresh(box)
 		own.hint:SetShown(empty and not Focused(box))
 	end
 	own.clear:SetShown(not empty)
+	Count(box, own)
 end
 
 local function WriteBoxes()
@@ -891,11 +940,49 @@ local function WriteBoxes()
 	end
 end
 
--- Sets the shared text, writes every box that shows another, and asks for the search again in both windows.
+-- The recent searches (FlatUIDB.bags.recent), or nil when none is kept or the saved variables have not loaded.
+local function Recent()
+	local db = ns.Account()
+	local bags = type(db) == "table" and db.bags or nil
+	local list = type(bags) == "table" and bags.recent or nil
+	if type(list) == "table" and #list > 0 then
+		return list
+	end
+	return nil
+end
+
+-- Keeps a search the player typed as the newest of the recent ones: not an empty one or a quick search; one kept already moves to the front, and
+-- the oldest past RECENT goes.
+local function Remember(value)
+	value = Text(value)
+	if not value or not value:find("%S") or QUICK_TERMS[value] then
+		return
+	end
+	local db = ns.Account()
+	if type(db) ~= "table" then
+		return
+	end
+	if type(db.bags) ~= "table" then
+		db.bags = {}
+	end
+	local list = { value }
+	for _, kept in ipairs(Recent() or {}) do
+		if type(kept) == "string" and kept ~= value and #list < RECENT then
+			list[#list + 1] = kept
+		end
+	end
+	db.bags.recent = list
+end
+
+-- Sets the shared text, writes every box that shows another, and asks for the search again in both windows. A search cleared (the cross, Clear, or
+-- the bags closing) is kept as a recent one first.
 function Search.SetText(value)
 	value = Text(value) or ""
 	if value == text then
 		return
+	end
+	if value == "" then
+		Remember(text)
 	end
 	text = value
 	if not writing then
@@ -906,6 +993,18 @@ function Search.SetText(value)
 	local request = B.Request
 	if type(request) == "function" then
 		request("search")
+	end
+end
+
+-- How many items match the search in that window ("bags", "bank"), for the character it shows (BagsWindow.lua, the count of its character
+-- picker), or nil while no search is typed: written at the right of its boxes and in their tooltip.
+function Search.SetCount(owner, n)
+	n = ns.Finite(n) and n >= 0 and math.floor(n) or nil
+	for box, own in pairs(boxes) do
+		if own.owner == owner and own.matches ~= n then
+			own.matches = n
+			Count(box, own)
+		end
 	end
 end
 
@@ -934,6 +1033,11 @@ local function Tip(box)
 	if text ~= "" then
 		-- The text keeps a typed bar as "||", which the tooltip shows as one bar.
 		tip:SetText("Searching: " .. text, 1, 1, 1)
+		local own = boxes[box]
+		local n = own and own.matches or nil
+		if n then
+			tip:AddLine(n == 1 and "1 item matches" or ("%d items match"):format(n), 1, 1, 1)
+		end
 		tip:AddLine(SHORT, DIM[1], DIM[2], DIM[3], true)
 		tip:Show()
 		return
@@ -996,7 +1100,8 @@ local function Cross(box, own)
 end
 
 -- The quick searches of the box: a menu of BagsLayout's (Layout.Menu) under the box, each line a term to type, the one typed now ticked, and Clear
--- while a search is typed. owner: the window of the box, whose closing closes the menu.
+-- while a search is typed; then, while any is kept, Recent with the searches typed before, newest first (a pick types it), and Clear recent.
+-- owner: the window of the box, whose closing closes the menu.
 local function Quick(box, owner)
 	local items = {}
 	for _, quick in ipairs(QUICK) do
@@ -1010,6 +1115,29 @@ local function Quick(box, owner)
 		items[#items + 1] = { text = "Clear", part = "search", pick = function()
 			Search.SetText("")
 			box:ClearFocus()
+		end }
+	end
+	-- The searches typed before, newest first; the box keeps a typed bar as "||", which the menu shows as one bar. A long one is cut.
+	local recent = Recent()
+	if recent then
+		items[#items + 1] = { text = "Recent", header = true }
+		for _, kept in ipairs(recent) do
+			if type(kept) == "string" and kept ~= "" then
+				local shown = kept
+				if #shown > RECENT_LETTERS then
+					shown = shown:sub(1, RECENT_LETTERS - 3):gsub("|+$", "") .. "..."
+				end
+				items[#items + 1] = { text = shown, tick = text == kept, part = "search", pick = function()
+					Search.SetText(kept)
+					box:ClearFocus()
+				end }
+			end
+		end
+		items[#items + 1] = { text = "Clear recent", part = "search", pick = function()
+			local db = ns.Account()
+			if type(db) == "table" and type(db.bags) == "table" then
+				db.bags.recent = nil
+			end
 		end }
 	end
 	local layout = B.Layout
@@ -1029,12 +1157,18 @@ function Search.Box(parent, owner)
 	box:SetFontObject(FONT)
 	box:SetTextInsets(INSET_LEFT, INSET_RIGHT, 0, 0)
 	pcall(box.SetMaxLetters, box, MOST_LETTERS)
-	local own = { outline = ns.SetOutlineArea(ns.Outline(box, box, true), KEY), hover = false }
+	local own = { outline = ns.SetOutlineArea(ns.Outline(box, box, true), KEY), hover = false, owner = owner }
 	own.hint = ns.OwnText(box, "ARTWORK", FONT)
 	if own.hint then
 		own.hint:SetPoint("LEFT", box, "LEFT", INSET_LEFT, 0)
 		own.hint:SetText(HINT)
 		own.hint:SetTextColor(DIM[1], DIM[2], DIM[3])
+	end
+	own.count = ns.OwnText(box, "ARTWORK", FONT)
+	if own.count then
+		own.count:SetPoint("RIGHT", box, "RIGHT", -INSET_RIGHT, 0)
+		own.count:SetJustifyH("RIGHT")
+		own.count:Hide()
 	end
 	boxes[box] = own
 	own.clear = Cross(box, own)
@@ -1050,6 +1184,7 @@ function Search.Box(parent, owner)
 		self:ClearFocus()
 	end)
 	box:SetScript("OnEnterPressed", function(self)
+		Run(Remember, text)
 		self:ClearFocus()
 	end)
 	box:SetScript("OnEditFocusGained", function(self)
@@ -1058,6 +1193,7 @@ function Search.Box(parent, owner)
 		Refresh(self)
 	end)
 	box:SetScript("OnEditFocusLost", function(self)
+		Run(Remember, text)
 		Paint(self)
 		Refresh(self)
 	end)
