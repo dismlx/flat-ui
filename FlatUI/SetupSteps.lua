@@ -802,6 +802,7 @@ ns.SETUP_STEPS = {
 	} },
 	{ id = "win-art", area = "Windows", title = "Window backdrops", draw = "mock-window", built = true, rows = {
 		{ "windows.raceArt", "c", "mock-window" },
+		{ "windows.bookPages", "o", "behaviour", "Gives the Spellbook its parchment pages and dark text back; off, its pages are dark with light text." },
 		{ "windows.bookArt", "c", "mock-window" },
 		{ "windows.eye", "o", "mock-window" },
 		{ "windows.roleArt", "c", "mock-window" },
@@ -1365,6 +1366,7 @@ ns.SETUP_STEPS = {
 		{ "movers.centreWith", "o", "mock-screen" },
 		{ "movers.middleLine", "o", "mock-screen" },
 		{ "movers.centreAll", "o", "mock-screen" },
+		{ "movers.clearUnits", "o", "behaviour", "Opens a window just under the player and target frames when the game would open it over them." },
 		{ "movers.titles", "c", "behaviour", "Lets a window be dragged by its title; right-click the title to put it back." },
 		{ "movers.dragFrom", "o", "behaviour", "Chooses whether a window drags from anywhere or only from its title bar." },
 		{ "movers.dragKey", "o", "behaviour", "Chooses a key that must be held to drag; with it held, a drag also starts on models." },
