@@ -13,6 +13,10 @@ local _, ns = ...
 -- and TrackerSlots.lua as text and fails on a comparison of such a value that has no IsSecret before it.
 -- What was known last is all there is to show while the values are withheld: a buff that was missing then
 -- is drawn as missing only when the player can cast it, since only the player's own cast can end that.
+-- A tracker that Show brings or takes away fades in over 0.2 seconds and out over 0.25 (K.Fade). Row direction lays the trackers out in a row,
+-- or with Column, downward or upward, in a left-aligned column. Tracker tooltips (Out of combat only by default) shows, with the mouse over a
+-- tracker on screen, its name, its state with the time left and charges, and a kind's own lines (a group buff: who lacks it); the frame takes no
+-- click, so a click goes through to the world. Sound when it turns low plays the kit of Sound once as a tracker goes from fine to low.
 
 local KEY = "trackers"
 -- The name of the row among the saved spots of the movers.
@@ -69,7 +73,8 @@ local K = {
 	ORDER = { "resource", "character", "own" },
 	-- The words of /flatui tracker set, and the saved key each one stands for.
 	WORDS = { place = "place", show = "show", low = "low", lowtime = "lowTime", missing = "missing", sound = "sound", kit = "kit",
-		size = "size", x = "x", y = "y", name = "name", on = "on", shape = "shape", colour = "colour", comes = "comes", stacks = "stacks" },
+		size = "size", x = "x", y = "y", name = "name", on = "on", shape = "shape", colour = "colour", comes = "comes", stacks = "stacks",
+		lowsound = "lowSound" },
 	-- Where each place put its row at the last layout, in words.
 	where = {},
 	-- The rows other files add to the Tracker page's editor, each { key, kind }, in the order they were added.
@@ -300,6 +305,9 @@ local OWN = {
 		return type(value) == "boolean"
 	end,
 	stacks = function(value)
+		return type(value) == "boolean"
+	end,
+	lowSound = function(value)
 		return type(value) == "boolean"
 	end,
 	size = function(value)
@@ -1760,8 +1768,21 @@ local function Acquire(parent)
 		rim[index] = edge
 	end
 	-- shape is the way the record is drawn, parts the bar and the text made for it so far and refused the shapes the game refused.
-	return { frame = frame, parent = parent, texture = texture, cooldown = cooldown, top = top, count = count, word = word, rim = rim,
+	local record = { frame = frame, parent = parent, texture = texture, cooldown = cooldown, top = top, count = count, word = word, rim = rim,
 		outline = ns.Outline(frame, frame), shape = "icon", parts = {}, refused = {}, groups = {}, tint = "red" }
+	-- Tracker tooltips: the frame never takes a click, so a click goes through to the world, and hears the mouse while K.Mouse lets it.
+	pcall(frame.SetMouseClickEnabled, frame, false)
+	pcall(frame.SetMouseMotionEnabled, frame, false)
+	record.motion = false
+	frame:SetScript("OnEnter", function()
+		K.TipEnter(record)
+	end)
+	frame:SetScript("OnLeave", function()
+		K.TipLeave(record)
+	end)
+	-- Show fades a tracker in and out (K.Fade); false when the game gives no animation, and the alpha is then set at once.
+	record.fade = K.MakeFade(frame)
+	return record
 end
 
 -- The word fits inside the icon, and the rim is two screen pixels just inside its edges. For a bar or text the rim and the word are on the
@@ -1797,6 +1818,61 @@ local function MakePulse(texture)
 		return made
 	end)
 	return ok and group or false
+end
+
+-- Show fades a tracker in over 0.2 seconds and out over 0.25 (K.FADE_IN, K.FADE_OUT), as the reload notice does: one Alpha animation of the
+-- frame, a frame of Flat UI's own, which the game allows in a fight. The frame's own alpha is set to the end value before the fade plays, so a
+-- fade that stops or ends leaves the frame at it. False when the game gives none.
+K.FADE_IN, K.FADE_OUT = 0.2, 0.25
+function K.MakeFade(frame)
+	local ok, fade = pcall(function()
+		local group = frame:CreateAnimationGroup()
+		local alpha = group:CreateAnimation("Alpha")
+		local made = { group = group, alpha = alpha }
+		group:SetScript("OnFinished", function()
+			made.running = false
+		end)
+		return made
+	end)
+	return ok and fade or false
+end
+
+-- A fade that runs stops, and the frame shows the alpha last set on it.
+function K.StopFade(record)
+	local fade = record.fade
+	if fade and fade.running then
+		fade.running = false
+		pcall(fade.group.Stop, fade.group)
+	end
+end
+
+-- The alpha of a tracker's frame now, with no fade: a fade that runs stops first, so the value set is the one that stays.
+function K.SetAlpha(record, alpha)
+	K.StopFade(record)
+	record.frame:SetAlpha(alpha)
+end
+
+-- The alpha of a tracker's frame by a fade from where it is now to alpha, 0 or 1; at once when the game refused the animation.
+function K.Fade(record, alpha)
+	local fade = record.fade
+	if not fade then
+		record.frame:SetAlpha(alpha)
+		return
+	end
+	local from = alpha == 1 and 0 or 1
+	local ok = pcall(function()
+		fade.group:Stop()
+		fade.alpha:SetFromAlpha(from)
+		fade.alpha:SetToAlpha(alpha)
+		fade.alpha:SetDuration(alpha == 1 and K.FADE_IN or K.FADE_OUT)
+		record.frame:SetAlpha(alpha)
+		fade.group:Play()
+	end)
+	fade.running = ok
+	if not ok then
+		record.fade = false
+		record.frame:SetAlpha(alpha)
+	end
 end
 
 -- The pulse plays on the icon, or on the plate of a bar or text. A pulse on the other one stops.
@@ -2110,9 +2186,17 @@ local function Draw(entry, reading)
 			Apply(record, entry, Looks(entry, reading, how))
 			alpha, reason = Wanted(entry, reading.state, how)
 		end
+		-- A tracker that comes or goes by Show fades in or out (K.Fade). Its first alpha, a curved one and one under the game's own icon it
+		-- takes at once: the game's icon may hide the frame by an alpha it withholds (TrackerSlots.lua's Hide), which a fade would cover.
 		if record.alpha ~= alpha then
-			record.frame:SetAlpha(alpha)
+			if record.alpha == nil or record.curved or how == "game" then
+				K.SetAlpha(record, alpha)
+			else
+				K.Fade(record, alpha)
+			end
 			record.alpha = alpha
+		elseif how == "game" then
+			K.StopFade(record)
 		end
 		local kind, curved = KINDS[entry.kind], false
 		if kind and type(kind.Over) == "function" then
@@ -2120,10 +2204,15 @@ local function Draw(entry, reading)
 				curved = kind.Over(entry, record, how, reason) == true
 			end)
 		end
+		-- The alpha a kind's Over set shows at once: a fade would hold the frame at its own.
+		if curved then
+			K.StopFade(record)
+		end
 		if record.curved and not curved then
 			record.curved = nil
-			record.frame:SetAlpha(record.alpha)
+			K.SetAlpha(record, record.alpha)
 		end
+		K.Mouse(record)
 	end
 	Slot("Show", entry, how == "game", record and record.alpha)
 	-- A border on the action button that fixes a low or missing tracker (TrackerMarks.lua).
@@ -2511,7 +2600,8 @@ function K.Came(entry, old, reading, pending)
 end
 
 -- Keeps a reading and plays the sound for a drop: a tracker that goes from fine or low to missing, and
--- is still missing at the next pass 0.2 seconds later, outside the first 2 seconds after login.
+-- is still missing at the next pass 0.2 seconds later, outside the first 2 seconds after login; and with Sound when it turns low, the sound
+-- for a tracker that goes from fine to low.
 local function Track(entry, reading)
 	local id, state = entry.id, reading.state
 	if state == "unknown" then
@@ -2532,6 +2622,11 @@ local function Track(entry, reading)
 	K.Came(entry, old, reading, pending)
 	-- A kind is told of a change of the state it has shown, once, and does its own sounds: it has no sound for a drop when it says noDrop.
 	local kind = KINDS[entry.kind]
+	-- Sound when it turns low, in the kit of Sound: once as the tracker goes from fine to low, by its Low at rows, Item minimum, Ammunition
+	-- minimum or the pet rows. A buff the game hides in a fight is read again after it, so it turns low by sound between fights.
+	if before == "fine" and state == "low" and Value(entry, "lowSound") == true and not Quiet(Now()) and not (kind and kind.noDrop == true) then
+		Ding(K.KITS[Value(entry, "kit")] or K.KITS.raid)
+	end
 	if kind and before ~= state and type(kind.Changed) == "function" then
 		ns.EachPart(KEY, Part(entry.kind), kind.Changed, entry, before, state)
 	end
@@ -2775,7 +2870,8 @@ end
 
 -- Registers a kind of tracker that is not a buff, and the events it listens for on the watcher of the trackers. The spec is
 -- { Read(entry) -> reading, Clean(entry) -> true when the entry is valid, events = { name, ... }, Add(argument, entries) -> fields, message,
--- Label(entry), Icon(entry), Lines(entry) -> { text }, what = the words after the name in the list, hiddenAble = false for a kind the game never
+-- Label(entry), Icon(entry), Lines(entry) -> { text }, Tip(entry) -> { text } for the tracker's tooltip (K.TipLines), what = the words after the
+-- name in the list, hiddenAble = false for a kind the game never
 -- hides, unitEvents = { EVENT = unit } for an event heard for a unit that is not the player, Event(event, ...) and Cast(spellID) called for each
 -- event of the kind and each cast of the player, Hidden(entry, record, reading) -> true when the kind drew a hidden reading itself, and the
 -- hooks of a kind that has more to show: slot = { unit, filter } for the game's own icon of the kind, noLast (no last reading is shown: "none"
@@ -3041,6 +3137,8 @@ local function Assign(entry, parent)
 		local pool = spec and (spec.unit .. "|" .. spec.filter) or "none"
 		record = table.remove(free[pool] or {}) or Acquire(parent)
 		record.pool = pool
+		-- The tooltip finds the tracker by its id when the mouse comes (K.TipEnter).
+		record.entryId = entry.id
 		records[entry.id] = record
 		ns.Count(KEY)
 	end
@@ -3069,6 +3167,13 @@ local function Release(wanted)
 				pcall(record.hid.Leave)
 			end
 			record.how = nil
+			-- The next tracker on the record takes its first alpha at once (Draw), and a fade of this one ends with it.
+			record.alpha = nil
+			K.StopFade(record)
+			if record.motion then
+				record.motion = not pcall(record.frame.SetMouseMotionEnabled, record.frame, false)
+			end
+			K.TipLeave(record)
 			record.frame:Hide()
 			free[record.pool] = free[record.pool] or {}
 			table.insert(free[record.pool], record)
@@ -3170,10 +3275,23 @@ local function Layout()
 				tallest = math.max(tallest, height)
 			end
 			total = total + spacing * math.max(0, counted - 1)
-			if Place(place, holder, total, tallest, grow) then
+			-- A column (Row direction Column, downward or upward): the trackers under each other, left-aligned, the column as wide as the widest
+			-- and as tall as the heights of the counted ones and the spacing between them. It is placed as a row of that width and height, centred.
+			local column = grow == "down" or grow == "up"
+			local widest, depth = 0, 0
+			if column then
+				for _, item in ipairs(sized) do
+					if not item[2].auto then
+						widest, depth = math.max(widest, item[3]), depth + item[4]
+					end
+				end
+				depth = depth + spacing * math.max(0, counted - 1)
+			end
+			if Place(place, holder, column and widest or total, column and depth or tallest, column and "center" or grow) then
 				refused = true
 			end
 			local x = grow == "right" and 0 or grow == "left" and 0 or -total / 2
+			local y = grow == "down" and depth / 2 or -depth / 2
 			for _, item in ipairs(sized) do
 				local entry, record, width, height = item[1], item[2], item[3], item[4]
 				local frame = record.frame
@@ -3188,7 +3306,16 @@ local function Layout()
 					x = x - width
 				end
 				-- An own X or Y offset replaces the page's: the holder is placed at the page's.
-				frame:SetPoint("LEFT", holder, "CENTER", x + Value(entry, "x") - Opt("x"), Value(entry, "y") - Opt("y"))
+				local ownX, ownY = Value(entry, "x") - Opt("x"), Value(entry, "y") - Opt("y")
+				if grow == "down" then
+					frame:SetPoint("TOPLEFT", holder, "CENTER", -widest / 2 + ownX, y + ownY)
+					y = y - height - spacing
+				elseif grow == "up" then
+					frame:SetPoint("BOTTOMLEFT", holder, "CENTER", -widest / 2 + ownX, y + ownY)
+					y = y + height + spacing
+				else
+					frame:SetPoint("LEFT", holder, "CENTER", x + ownX, ownY)
+				end
 				frame:Show()
 				Fit(record, entry)
 				x = grow == "left" and x - spacing or x + width + spacing
@@ -3292,6 +3419,191 @@ end
 function ns.TrackerFrame(entry)
 	local record = type(entry) == "table" and records[entry.id]
 	return record and record.frame or nil
+end
+
+-- Tracker tooltips ------------------------------------------------------------------------------
+
+-- TIP: the colours of the state line (Up green, Low amber, Missing red) and of the dim lines. TIP_FINE, TIP_MISSING: the word of the state line
+-- for a kind whose fine or missing reads wrong as Up or Missing.
+K.TIP = { fine = { 0.3, 0.85, 0.4 }, low = { 1, 0.7, 0.2 }, missing = RED, dim = { 0.7, 0.7, 0.7 } }
+K.TIP_FINE = { form = "In one of them", tracking = "On", durability = "Fine", pet = "Out" }
+K.TIP_MISSING = { item = "None in your bags", ammo = "None left", durability = "An item is broken", pet = "Gone or dead",
+	tracking = "No tracking on", form = "In none of them", totem = "Not down", debuff = "Not on your target" }
+
+-- The tracker of an id: one of the list, or a proc of your class that shows without being added.
+function K.EntryById(id)
+	if id == nil then
+		return nil
+	end
+	local entries = Entries()
+	for _, list in ipairs({ entries, K.Auto(entries) }) do
+		for _, entry in ipairs(list) do
+			if entry.id == id then
+				return entry
+			end
+		end
+	end
+	return nil
+end
+
+-- The frame hears the mouse while it is seen and Tracker tooltips lets its tooltip show now: never a click (Acquire), and nothing while it is
+-- clear, hidden, or in a fight with Out of combat only, so the world under it keeps its own mouse (a unit's tooltip). A curved alpha (the pet's
+-- health, TrackerKinds.lua) is withheld, so a tracker shown by it alone has no tooltip. Allowed in a fight: the frame is Flat UI's own, and the
+-- secure button of a click is off it there (TrackerClicks.lua).
+function K.Mouse(record)
+	local tips = Opt("tooltips")
+	local want = tips ~= "off" and not (tips ~= "on" and fighting) and record.how ~= "hidden" and record.alpha == 1
+	if record.motion ~= want and pcall(record.frame.SetMouseMotionEnabled, record.frame, want) then
+		record.motion = want
+	end
+end
+
+-- "12:30 left" for a reading with a time, else nil.
+function K.TipTime(reading)
+	local expires = reading.expires
+	if not (Plain(expires, "number") and ns.Finite(expires)) then
+		return nil
+	end
+	local seconds = math.max(0, expires - Now())
+	return ("%d:%02d left"):format(math.floor(seconds / 60), math.floor(seconds % 60))
+end
+
+-- The count of a reading in the words of its kind: charges, stacks, items in the bags, ammunition, durability. A group buff's count is who lacks
+-- it, which its kind's Tip says.
+function K.TipCount(entry, reading)
+	local count = reading.count
+	if not (Plain(count, "number") and ns.Finite(count)) or entry.kind == "group" then
+		return nil
+	end
+	count = math.floor(count)
+	if entry.kind == "item" then
+		return ("%d in your bags"):format(count)
+	elseif entry.kind == "ammo" then
+		return ("%d left"):format(count)
+	elseif entry.kind == "durability" then
+		return ("most worn item at %d%%"):format(count)
+	end
+	return Plural(count, entry.kind == "debuff" and "stack" or "charge")
+end
+
+-- The state line of the tooltip and its colour, and the state ("fine", "low", "missing" or nil when not known): a reading made now, else in a
+-- fight what the tracker shows, the game's own icon or what was known last.
+function K.TipState(entry, record)
+	local reading, prefix = Read(entry), ""
+	local how = record and record.how
+	if reading.state == "unknown" then
+		local kept = mem.kept[entry.id]
+		if how == "last" and kept then
+			reading, prefix = kept, "Last known: "
+		elseif how == "game" then
+			return ("The game hides it in a fight: its own %s shows it."):format(record.shape ~= "icon" and record.shape or "icon"), K.TIP.dim
+		elseif how == "drawn" then
+			return "The game hides it in a fight: its own timer shows it.", K.TIP.dim
+		else
+			return reading.hidden and "Not known: the game hides it in a fight." or "Not known yet.", K.TIP.dim
+		end
+	end
+	local state, words = reading.state, {}
+	if state == "missing" then
+		words[1] = K.TIP_MISSING[entry.kind] or "Missing"
+	else
+		words[1] = state == "low" and "Low" or K.TIP_FINE[entry.kind] or "Up"
+		words[#words + 1] = K.TipTime(reading)
+		words[#words + 1] = K.TipCount(entry, reading)
+	end
+	return prefix .. table.concat(words, ", "), K.TIP[state] or K.TIP.dim, K.TIP[state] and state or nil
+end
+
+-- The lines of a tracker's tooltip, on a tooltip its owner was set for: the name, the state with the time left and charges, the kind's own lines
+-- (a group buff: who lacks it), and where Click to apply takes the tracker's kind and it needs one, that a click fixes it out of combat. noClick
+-- leaves that out, for the tooltip of the click's own button, which says what the click does (TrackerClicks.lua). Only GameTooltip's widget
+-- calls; nothing of the game's is read but the tracker's own reading.
+function K.TipLines(entry, tip, noClick)
+	tip:SetText(Label(entry), 1, 1, 1)
+	local dim = K.TIP.dim
+	local kind = KINDS[entry.kind]
+	local what = kind and kind.what or "buff on you"
+	tip:AddLine((what:gsub("^%l", string.upper)), dim[1], dim[2], dim[3])
+	if K.held or testing[entry.id] then
+		tip:AddLine("A sample of test mode.", dim[1], dim[2], dim[3])
+		return
+	end
+	local text, colour, state = K.TipState(entry, records[entry.id])
+	tip:AddLine(text, colour[1], colour[2], colour[3], true)
+	if kind and type(kind.Tip) == "function" then
+		local ok, extra = pcall(kind.Tip, entry)
+		for _, line in ipairs(ok and type(extra) == "table" and extra or {}) do
+			if Plain(line, "string") then
+				tip:AddLine(line, dim[1], dim[2], dim[3], true)
+			end
+		end
+	end
+	if not noClick and (state == "low" or state == "missing") and type(ns.TrackerClickCovers) == "function" and ns.TrackerClickCovers(entry) then
+		tip:AddLine("Out of combat, a click fixes it.", dim[1], dim[2], dim[3], true)
+	end
+end
+function ns.TrackerTipLines(entry, tip, noClick)
+	if type(entry) == "table" and type(tip) == "table" then
+		K.TipLines(entry, tip, noClick)
+	end
+end
+
+-- The tooltip of a tracker's frame, drawn again each second while the mouse stays: false when Tracker tooltips lets none show now or the tracker
+-- is not on screen, and the tooltip is then hidden if it is the frame's.
+function K.TipShow(record)
+	local tip, tips = GameTooltip, Opt("tooltips")
+	if type(tip) ~= "table" or ns.Forbidden(tip) then
+		return false
+	end
+	local entry = K.EntryById(record.entryId)
+	local wanted = entry ~= nil and tips ~= "off" and not (tips ~= "on" and (fighting or InCombatLockdown())) and record.alpha == 1
+		and record.how ~= "hidden" and ns.Enabled(KEY)
+	if not wanted then
+		K.TipHide(record)
+		return false
+	end
+	return pcall(function()
+		tip:SetOwner(record.frame, "ANCHOR_TOP")
+		K.TipLines(entry, tip)
+		tip:Show()
+	end)
+end
+
+function K.TipHide(record)
+	local tip = GameTooltip
+	if type(tip) ~= "table" or ns.Forbidden(tip) then
+		return
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, record.frame)
+	if ok and not IsSecret(owned) and owned == true then
+		pcall(tip.Hide, tip)
+	end
+end
+
+function K.TipEnter(record)
+	if K.tipTicker then
+		K.tipTicker:Cancel()
+		K.tipTicker = nil
+	end
+	if not K.TipShow(record) or not (C_Timer and C_Timer.NewTicker) then
+		return
+	end
+	K.tipRecord = record
+	K.tipTicker = C_Timer.NewTicker(1, function()
+		local tip = GameTooltip
+		local ok, owned = pcall(tip.IsOwned, tip, record.frame)
+		if not (ok and not IsSecret(owned) and owned == true and K.TipShow(record)) then
+			K.TipLeave(record)
+		end
+	end)
+end
+
+function K.TipLeave(record)
+	if K.tipRecord == record and K.tipTicker then
+		K.tipTicker:Cancel()
+		K.tipTicker, K.tipRecord = nil, nil
+	end
+	K.TipHide(record)
 end
 
 -- The check -------------------------------------------------------------------------------------
@@ -3585,7 +3897,7 @@ local function Bare(entry)
 	local record = records[entry.id]
 	if record then
 		Apply(record, entry, { icon = nil, sweep = "clear" })
-		record.frame:SetAlpha(1)
+		K.SetAlpha(record, 1)
 		record.alpha = 1
 	end
 end
@@ -3596,7 +3908,7 @@ local function Paint(entry, state, length)
 		length = length or 600
 		local reading = { state = state, hidden = false, expires = Now() + length, length = length, icon = EntryIcon(entry), count = entry.charged and 3 or nil }
 		Apply(record, entry, Looks(entry, reading, "live"))
-		record.frame:SetAlpha(1)
+		K.SetAlpha(record, 1)
 		record.alpha = 1
 	end
 end
@@ -3629,9 +3941,10 @@ function K.HeldDraw(entry)
 	Apply(record, entry, Looks(entry, reading, "live"))
 	record.curved = nil
 	if record.alpha ~= 1 then
-		record.frame:SetAlpha(1)
+		K.SetAlpha(record, 1)
 		record.alpha = 1
 	end
+	K.Mouse(record)
 	Slot("Show", entry, false, 1)
 	return true
 end

@@ -978,6 +978,7 @@ ns.SETUP_STEPS = {
 		{ "trackers.mark", "o", "mock-action-row" },
 		{ "trackers.click", "o", "behaviour", "Chooses which trackers a click fixes out of combat: your buffs, forms, pet and group buffs, or those and weapon enchants too." },
 		{ "trackers.clickUse", "o", "behaviour", "Chooses the poison, stone, oil or imbue a click puts on each weapon." },
+		{ "trackers.tooltips", "o", "behaviour", "Shows a tracker's name, state, time left and who lacks a group buff with the mouse over it: always, out of combat only, or never." },
 	} },
 	{ id = "tr-look", area = "Trackers", title = "Tracker look and position", draw = "mock-tracker", built = true, rows = {
 		{ "trackers.shape", "c", "mock-tracker" },
@@ -1002,10 +1003,11 @@ ns.SETUP_STEPS = {
 		{ "trackers.lowTime", "o", "mock-tracker-states" },
 		{ "trackers.lowTimeInstance", "o", "behaviour", "Warns earlier in a dungeon or raid for a buff or weapon enchant that lasts 10 minutes or more." },
 		{ "trackers.missing", "c", "mock-tracker-states" },
-		{ "trackers.sound", "c", "behaviour", "Plays a sound when a tracker drops to low or missing." },
+		{ "trackers.sound", "c", "behaviour", "Plays a sound when a tracker goes missing." },
 		{ "trackers.comes", "r", "behaviour", "Plays a sound when the buff or debuff of a tracker comes." },
 		{ "trackers.stacks", "r", "behaviour", "Plays a sound when the buff or debuff of a tracker gains a stack." },
-		{ "trackers.kit", "r", "behaviour", "Chooses the sound a tracker plays when it drops, comes or stacks." },
+		{ "trackers.lowSound", "r", "behaviour", "Plays a sound once when a tracker goes from fine to low." },
+		{ "trackers.kit", "r", "behaviour", "Chooses the sound a tracker plays when it drops, comes, stacks or turns low." },
 	} },
 	{ id = "tr-proc", area = "Trackers", title = "Proc alerts", draw = "mock-proc", built = true, rows = {
 		{ "trackers.procAuto", "o", "behaviour", "Shows every proc of your class whose spell you know without adding it." },
