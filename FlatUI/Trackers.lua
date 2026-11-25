@@ -3537,7 +3537,26 @@ end
 K.TIP = { fine = { 0.3, 0.85, 0.4 }, low = K.AMBER, missing = RED, dim = { 0.7, 0.7, 0.7 } }
 K.TIP_FINE = { form = "In one of them", tracking = "On", durability = "Fine", pet = "Out" }
 K.TIP_MISSING = { item = "None in your bags", ammo = "None left", durability = "An item is broken", pet = "Gone or dead",
-	tracking = "No tracking on", form = "In none of them", totem = "Not down", debuff = "Not on your target" }
+	tracking = "No tracking on", form = "In none of them", totem = "Not down", debuff = "Not on your target", weapon = "No enchant on it" }
+
+-- The dim line of a timed tracker's tooltip that says what counts as low: "Low at 2 charges or fewer or under 5:00 left (earlier in a raid)", by
+-- the Low at rows that apply here (K.LowTime, with the larger Low in dungeons and raids), or nil when neither does. The other kinds say theirs in
+-- their own Tip (TrackerKinds.lua).
+function K.TipRule(entry)
+	if not K.TIMED[entry.kind] then
+		return nil
+	end
+	local parts = {}
+	local charges = entry.charged and Value(entry, "low") or 0
+	if Plain(charges, "number") and charges > 0 then
+		parts[#parts + 1] = ("at %s or fewer"):format(Plural(math.floor(charges), entry.kind == "debuff" and "stack" or "charge"))
+	end
+	local seconds, where = K.LowTime(entry)
+	if Plain(seconds, "number") and seconds > 0 then
+		parts[#parts + 1] = ("under %d:%02d left%s"):format(math.floor(seconds / 60), math.floor(seconds % 60), where and (" (earlier in a %s)"):format(where) or "")
+	end
+	return #parts > 0 and ("Low " .. table.concat(parts, " or ")) or nil
+end
 
 -- The tracker of an id: one of the list, or a proc of your class that shows without being added.
 function K.EntryById(id)
@@ -3654,6 +3673,10 @@ function K.TipLines(entry, tip, noClick)
 	end
 	local text, colour, state = K.TipState(entry, records[entry.id])
 	tip:AddLine(text, colour[1], colour[2], colour[3], true)
+	local rule = K.TipRule(entry)
+	if rule then
+		tip:AddLine(rule, dim[1], dim[2], dim[3], true)
+	end
 	if kind and type(kind.Tip) == "function" then
 		local ok, extra = pcall(kind.Tip, entry)
 		for _, line in ipairs(ok and type(extra) == "table" and extra or {}) do

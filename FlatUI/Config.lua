@@ -1172,7 +1172,7 @@ ns.PAGES = {
 			tip = "Choose a weapon tracker, then open the list again for what a click puts on that weapon. /flatui tracker use does the same." },
 		{ key = "tooltips", kind = "choice", default = "out", label = "Tracker tooltips",
 			choices = { { "on", "On" }, { "out", "Out of combat only" }, { "off", "Off" } },
-			tip = "The mouse over a tracker on screen shows its name, whether it is up, low or missing, its time left and charges, and for a group buff who lacks it. A click goes through to the world, but on a tracker a click fixes. Settings on the Tooltips page do not change this tooltip." },
+			tip = "The mouse over a tracker on screen shows its name, whether it is up, low or missing, its time left and charges, what counts as low, and for a group buff who lacks it. A click goes through to the world, but on a tracker a click fixes. Settings on the Tooltips page do not change this tooltip." },
 	},
 	{
 		key = "trackerlook", label = "Look and position", parent = "trackers", owner = "trackers", switch = "trackers",
