@@ -835,7 +835,7 @@ Run = function(fn)
 	end
 end
 
--- A refresh: a changed row, the page, the profile, the module stopped. Nothing is read of the game while both rows are off.
+-- A refresh: a changed row, the page, the profile, the module stopped. Nothing is read of the game while the three rows are off.
 local function Apply()
 	local flash, warn = FlashWanted(), WarnWanted()
 	if flash or warn or LowWanted() then
