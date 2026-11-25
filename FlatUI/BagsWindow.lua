@@ -46,6 +46,9 @@ local _, ns = ...
 -- search typed, Deposit (N) and Take out (N), the passes of BagsBank.lua (B.Bank.Deposit, B.Bank.TakeOut, B.Bank.Busy, whose per-click
 -- fallback labels the button with what is left). These three buttons are this file's own, drawn as the title bar's are, and clicked as the
 -- game's buttons are, by the left button let go over them, as Errands.Button's are (Errands.lua:127-201).
+-- Between its gold and its free slots the bag window's footer has the currencies the Currency tab marks Show on Backpack, which are
+-- BagsCurrency.lua's: Footer has B.Currency.Read read them for the character shown, and ArrangeFoot gives B.Currency.Fit the room the shortest
+-- text of the free slots leaves after the gold, and hangs the frame it gives back after the gold, so they never reach either.
 -- Each window keeps room in its least width for the buttons of its footer and the shortest text of its free slots, and the bag window for a gold
 -- of the usual length too, whatever shows now, so it never changes width as a button comes or goes or the gold changes; the free slots are
 -- written as fully as the room left allows, the word Free left out first.
@@ -1439,6 +1442,17 @@ function ArrangeFoot(w)
 			left = gold.frame
 			room = room - goldW - FOOT_GAP
 		end
+		-- The currencies of BagsCurrency.lua come after the gold, in what the shortest text of the free slots leaves (B.Currency.Fit gives back its
+		-- frame and width).
+		local texts = w.freeTexts or { "" }
+		w.free.text:SetText(texts[#texts])
+		local least = math.max(FREE_ROOM, math.ceil(TextWidth(w.free.text)))
+		local coins, coinsW = Call(B.Currency, "Fit", w, room - least - FOOT_GAP)
+		if coins and Finite(coinsW) then
+			coins:ClearAllPoints()
+			coins:SetPoint("LEFT", left, left == foot and "LEFT" or "RIGHT", left == foot and 0 or FOOT_GAP, 0)
+			left, room = coins, room - coinsW - FOOT_GAP
+		end
 		w.free.frame:ClearAllPoints()
 		w.free.frame:SetPoint("LEFT", left, left == foot and "LEFT" or "RIGHT", left == foot and 0 or FOOT_GAP, 0)
 		w.free.frame:SetPoint("RIGHT", right, right == foot and "RIGHT" or "LEFT", gap, 0)
@@ -1479,6 +1493,8 @@ function Footer(w)
 			local money = Call(Data, "Money", key)
 			w.gold.text:SetText(Finite(money) and money >= 0 and Money(money) or "")
 		end
+		-- The currencies shown on the backpack (BagsCurrency.lua): this character's as the game has them, another's as kept.
+		Call(B.Currency, "Read", w, key, mine)
 		if w.sell then
 			local wanted = mine and live and B.atMerchant == true and Opt("sellButton") ~= false
 			local n, waits, value, unknown, selling = 0, 0, 0, false, false
