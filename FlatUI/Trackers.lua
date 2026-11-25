@@ -3524,8 +3524,9 @@ function K.TipLines(entry, tip, noClick)
 	local kind = KINDS[entry.kind]
 	local what = kind and kind.what or "buff on you"
 	tip:AddLine((what:gsub("^%l", string.upper)), dim[1], dim[2], dim[3])
-	if K.held or testing[entry.id] then
-		tip:AddLine("A sample of test mode.", dim[1], dim[2], dim[3])
+	-- Test mode paints samples only out of combat (K.HeldDraw), and the test of /flatui tracker test its own looks.
+	if (K.held and not InCombatLockdown()) or testing[entry.id] then
+		tip:AddLine("A sample of the test.", dim[1], dim[2], dim[3])
 		return
 	end
 	local text, colour, state = K.TipState(entry, records[entry.id])
