@@ -1649,7 +1649,7 @@ ns.PAGES = {
 			choices = { { "one", "One section" }, { "kind", "Weapons, armour and jewellery" } } },
 		{ key = "placed", kind = "list", default = 0, label = "Items placed by hand", none = "Choose one to put it back in its own section", items = "BagsPlacedLines",
 			pick = "BagsPlacedPick",
-			tip = "In Sections, drop an item from your bags on the title of a section to keep it there. Dropped on Junk, whose title is always there, it goes on your sell list (/flatui sell); an item of Junk dropped on another section comes off the sell list, and a grey one goes on your keep list (/flatui keep)." },
+			tip = "In Sections, drop an item from your bags on the title of a section to keep it there. Dropped on Junk, whose title is always there, it goes on your sell list (/flatui sell); an item of Junk dropped on another section comes off the sell list, and a grey one goes on your keep list (/flatui keep). Choose an item here to put it back in its own section, or, with two or more placed, the first line to put them all back." },
 		{ key = "order", kind = "list", default = 0, label = "Section order", none = "Choose one", items = "BagsOrderLines", pick = "BagsOrderPick",
 			tip = "In Sections, drag a section's title to move the section, or right-click the title to move it up, down, to the top or to the bottom. One order for both windows and all your characters; New items stays at the top and Free slots at the bottom. This puts Flat UI's own order back." },
 		{ key = "folded", kind = "list", default = 0, label = "Folded sections", none = "Choose one to open it", items = "BagsFoldLines", pick = "BagsFoldPick",
